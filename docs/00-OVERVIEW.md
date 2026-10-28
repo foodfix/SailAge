@@ -169,8 +169,8 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 旗舰 | Flagship | The ship the player character commands; combat/movement stats derive from it |
 | 货物 | Goods | Tradable commodities; measured in cargo units |
 | 货物舱位 | Cargo unit | Abstract hold space; 1 unit of any good = 1 cargo unit |
-| 补给 | Provisions | Food; 1 unit feeds 1 crew member for 1 day |
-| 淡水 | Fresh water | 1 unit supplies 1 crew member for 1 day |
+| 补给 | Provisions | Food; 1 unit feeds `RATION_SIZE` (5) crew for 1 day (`20-*` §4.5) |
+| 淡水 | Fresh water | 1 unit waters `RATION_SIZE` (5) crew for 1 day (`20-*` §4.5) |
 | 船员 | Crew | Sailors on a ship; consume provisions/water, draw wages |
 | 日薪 | Daily wage | Gold paid per crew member per day at sea and in port |
 | 士气 | Morale | 0–100 crew happiness; low morale causes desertion/mutiny |

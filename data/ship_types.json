@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "ship_types": [
+    {
+      "id": "latin",
+      "name": {"zh": "拉丁帆船", "en": "Latin"},
+      "class": "sail",
+      "base_price": 1200,
+      "durability": 40,
+      "capacity": 30,
+      "speed": 4,
+      "crew_min": 8,
+      "crew_max": 20,
+      "armament_slots": 2
+    },
+    {
+      "id": "sloop",
+      "name": {"zh": "单桅纵帆船", "en": "Sloop"},
+      "class": "sail",
+      "base_price": 3000,
+      "durability": 60,
+      "capacity": 60,
+      "speed": 5,
+      "crew_min": 10,
+      "crew_max": 30,
+      "armament_slots": 4
+    },
+    {
+      "id": "caravel",
+      "name": {"zh": "卡拉维尔帆船", "en": "Caravel"},
+      "class": "sail",
+      "base_price": 8000,
+      "durability": 90,
+      "capacity": 120,
+      "speed": 5,
+      "crew_min": 15,
+      "crew_max": 45,
+      "armament_slots": 6
+    },
+    {
+      "id": "galley",
+      "name": {"zh": "桨帆船", "en": "Galley"},
+      "class": "oar",
+      "base_price": 10000,
+      "durability": 70,
+      "capacity": 50,
+      "speed": 6,
+      "crew_min": 40,
+      "crew_max": 120,
+      "armament_slots": 4
+    },
+    {
+      "id": "brigantine",
+      "name": {"zh": "双桅帆船", "en": "Brigantine"},
+      "class": "sail",
+      "base_price": 15000,
+      "durability": 110,
+      "capacity": 150,
+      "speed": 6,
+      "crew_min": 20,
+      "crew_max": 60,
+      "armament_slots": 10
+    },
+    {
+      "id": "nao",
+      "name": {"zh": "瑙船", "en": "Nao"},
+      "class": "sail",
+      "base_price": 22000,
+      "durability": 140,
+      "capacity": 300,
+      "speed": 4,
+      "crew_min": 25,
+      "crew_max": 80,
+      "armament_slots": 10
+    },
+    {
+      "id": "carrack",
+      "name": {"zh": "卡拉克帆船", "en": "Carrack"},
+      "class": "sail",
+      "base_price": 40000,
+      "durability": 180,
+      "capacity": 450,
+      "speed": 4,
+      "crew_min": 30,
+      "crew_max": 100,
+      "armament_slots": 16
+    },
+    {
+      "id": "galleon",
+      "name": {"zh": "盖伦帆船", "en": "Galleon"},
+      "class": "hybrid",
+      "base_price": 60000,
+      "durability": 240,
+      "capacity": 400,
+      "speed": 5,
+      "crew_min": 40,
+      "crew_max": 150,
+      "armament_slots": 24
+    }
+  ]
+}

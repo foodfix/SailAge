@@ -96,8 +96,8 @@ Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
   flagship; non-flagship hulls require no crew. Consumption pool = flagship
   crew only.
 - **Sinking at sea (non-flagship):** immediate loss of the hull and its
-  cargo; its un-lost what fits? — cargo is lost entirely (locked: no salvage
-  in Phase 1); event dialog `world.ship_lost`.
+  cargo; cargo is lost entirely (locked: no salvage in Phase 1); event dialog
+  `world.ship_lost`.
 - **Flagship sinking with escorts present:** crew/provisions/water/cargo
   relocate in fleet order up to capacity (overflow lost), the next ship
   becomes flagship, event dialog `world.flagship_lost`. With no escort →

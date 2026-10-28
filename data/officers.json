@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "officers": [
+    {
+      "id": "off_mateus_alvares",
+      "name": {"zh": "马特乌斯·阿尔瓦雷斯", "en": "Mateus Álvares"},
+      "nation_id": "portugal",
+      "role": "navigator",
+      "stats": {"leadership": 10, "seamanship": 14, "combat": 6, "navigation": 16},
+      "wage_daily": 30,
+      "recruit_ports": ["lisbon", "madeira"],
+      "bio": {"zh": "一位在老领航员手下学艺的青年,星象与海图无一不精。", "en": "A young pilot schooled by old navigators; at home with stars and charts alike."}
+    },
+    {
+      "id": "off_diego_fernandez",
+      "name": {"zh": "迭戈·费尔南德斯", "en": "Diego Fernández"},
+      "nation_id": "spain",
+      "role": "boatswain",
+      "stats": {"leadership": 12, "seamanship": 15, "combat": 12, "navigation": 8},
+      "wage_daily": 28,
+      "recruit_ports": ["seville", "ceuta"],
+      "bio": {"zh": "在塞维利亚船坞里长大的老水手长,一声令下缆索便各归其位。", "en": "A boatswain raised in the Seville yards, whose whistle sends every rope to its place."}
+    },
+    {
+      "id": "off_thomas_reed",
+      "name": {"zh": "托马斯·里德", "en": "Thomas Reed"},
+      "nation_id": "england",
+      "role": "gunner",
+      "stats": {"leadership": 9, "seamanship": 11, "combat": 16, "navigation": 7},
+      "wage_daily": 32,
+      "recruit_ports": ["london"],
+      "bio": {"zh": "曾在英吉利海峡追捕私掠者的炮手,最看重火药干燥与否。", "en": "A gunner who once chased privateers in the Channel, and cares above all that the powder stays dry."}
+    },
+    {
+      "id": "off_jan_de_vries",
+      "name": {"zh": "扬·德弗里斯", "en": "Jan de Vries"},
+      "nation_id": "holland",
+      "role": "boatswain",
+      "stats": {"leadership": 13, "seamanship": 17, "combat": 9, "navigation": 10},
+      "wage_daily": 28,
+      "recruit_ports": ["amsterdam", "antwerp"],
+      "bio": {"zh": "弗里斯兰出身的水手长,能在暴风里把甲板收拾得井井有条。", "en": "A Frisian boatswain who can keep a deck in order even through a gale."}
+    },
+    {
+      "id": "off_kemal_agha",
+      "name": {"zh": "凯末尔阿迦", "en": "Kemal Agha"},
+      "nation_id": "ottoman",
+      "role": "gunner",
+      "stats": {"leadership": 12, "seamanship": 9, "combat": 17, "navigation": 8},
+      "wage_daily": 30,
+      "recruit_ports": ["istanbul", "smyrna"],
+      "bio": {"zh": "在金角湾炮台服役多年的老炮长,开火前总要亲手校一遍炮位。", "en": "A veteran gun captain from the Golden Horn batteries, who sights each gun himself before firing."}
+    },
+    {
+      "id": "off_marco_bellini",
+      "name": {"zh": "马尔科·贝里尼", "en": "Marco Bellini"},
+      "nation_id": "italy",
+      "role": "navigator",
+      "stats": {"leadership": 8, "seamanship": 12, "combat": 6, "navigation": 17},
+      "wage_daily": 30,
+      "recruit_ports": ["venice", "genoa"],
+      "bio": {"zh": "为威尼斯商船绘制海图的领航员,对亚得里亚海的每一处暗礁都了然于心。", "en": "A chart-maker for Venetian merchantmen, who knows every reef in the Adriatic by heart."}
+    }
+  ]
+}

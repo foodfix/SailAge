@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "goods": [
+    {
+      "id": "wheat",
+      "name": {"zh": "小麦", "en": "Wheat"},
+      "category": "food",
+      "base_price": 8,
+      "unit_size": 1
+    },
+    {
+      "id": "olive_oil",
+      "name": {"zh": "橄榄油", "en": "Olive Oil"},
+      "category": "food",
+      "base_price": 22,
+      "unit_size": 1
+    },
+    {
+      "id": "wine",
+      "name": {"zh": "葡萄酒", "en": "Wine"},
+      "category": "food",
+      "base_price": 30,
+      "unit_size": 1
+    },
+    {
+      "id": "wool",
+      "name": {"zh": "羊毛", "en": "Wool"},
+      "category": "textile",
+      "base_price": 18,
+      "unit_size": 1
+    },
+    {
+      "id": "cotton_cloth",
+      "name": {"zh": "棉布", "en": "Cotton Cloth"},
+      "category": "textile",
+      "base_price": 45,
+      "unit_size": 1
+    },
+    {
+      "id": "silk",
+      "name": {"zh": "丝绸", "en": "Silk"},
+      "category": "textile",
+      "base_price": 120,
+      "unit_size": 1
+    },
+    {
+      "id": "spices",
+      "name": {"zh": "香料", "en": "Spices"},
+      "category": "luxury",
+      "base_price": 150,
+      "unit_size": 1
+    },
+    {
+      "id": "sugar",
+      "name": {"zh": "糖", "en": "Sugar"},
+      "category": "food",
+      "base_price": 40,
+      "unit_size": 1
+    },
+    {
+      "id": "salt",
+      "name": {"zh": "盐", "en": "Salt"},
+      "category": "food",
+      "base_price": 12,
+      "unit_size": 1
+    },
+    {
+      "id": "dried_fish",
+      "name": {"zh": "鱼干", "en": "Dried Fish"},
+      "category": "food",
+      "base_price": 10,
+      "unit_size": 1
+    },
+    {
+      "id": "timber",
+      "name": {"zh": "木材", "en": "Timber"},
+      "category": "material",
+      "base_price": 15,
+      "unit_size": 1
+    },
+    {
+      "id": "iron",
+      "name": {"zh": "铁", "en": "Iron"},
+      "category": "material",
+      "base_price": 35,
+      "unit_size": 1
+    },
+    {
+      "id": "copper",
+      "name": {"zh": "铜", "en": "Copper"},
+      "category": "material",
+      "base_price": 50,
+      "unit_size": 1
+    },
+    {
+      "id": "glassware",
+      "name": {"zh": "玻璃器皿", "en": "Glassware"},
+      "category": "luxury",
+      "base_price": 60,
+      "unit_size": 1
+    },
+    {
+      "id": "leather",
+      "name": {"zh": "皮革", "en": "Leather"},
+      "category": "material",
+      "base_price": 28,
+      "unit_size": 1
+    },
+    {
+      "id": "ceramics",
+      "name": {"zh": "陶瓷", "en": "Ceramics"},
+      "category": "material",
+      "base_price": 25,
+      "unit_size": 1
+    },
+    {
+      "id": "perfume",
+      "name": {"zh": "香水", "en": "Perfume"},
+      "category": "luxury",
+      "base_price": 90,
+      "unit_size": 1
+    },
+    {
+      "id": "carpet",
+      "name": {"zh": "地毯", "en": "Carpet"},
+      "category": "textile",
+      "base_price": 80,
+      "unit_size": 1
+    },
+    {
+      "id": "amber",
+      "name": {"zh": "琥珀", "en": "Amber"},
+      "category": "luxury",
+      "base_price": 110,
+      "unit_size": 1
+    },
+    {
+      "id": "cheese",
+      "name": {"zh": "奶酪", "en": "Cheese"},
+      "category": "food",
+      "base_price": 16,
+      "unit_size": 1
+    }
+  ]
+}

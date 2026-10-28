@@ -1,0 +1,11 @@
+# Godot editor cache (regenerated on open)
+.godot/
+*.translation
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+*.tmp

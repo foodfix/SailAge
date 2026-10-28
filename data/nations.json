@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "nations": [
+    {
+      "id": "portugal",
+      "name": {"zh": "葡萄牙", "en": "Portugal"},
+      "color": "#1a8c4e",
+      "capital_port_id": "lisbon",
+      "start_port_id": "lisbon",
+      "start_ship_type_id": "caravel",
+      "start_gold": 5000,
+      "start_reputation": 20,
+      "description": {
+        "zh": "先驱航海之国。从里斯本出发,以卡拉维尔帆船开拓贸易航线。",
+        "en": "The pioneering seafaring nation. Sail from Lisbon in a caravel and blaze new trade routes."
+      }
+    },
+    {
+      "id": "spain",
+      "name": {"zh": "西班牙", "en": "Spain"},
+      "color": "#b3191f",
+      "capital_port_id": "seville",
+      "start_port_id": "seville",
+      "start_ship_type_id": "nao",
+      "start_gold": 6000,
+      "start_reputation": 15,
+      "description": {
+        "zh": "雄踞伊比利亚的大国,以瑙船与白银船队横渡大洋。",
+        "en": "The great power of Iberia, crossing the ocean with naos and silver fleets."
+      }
+    },
+    {
+      "id": "england",
+      "name": {"zh": "英格兰", "en": "England"},
+      "color": "#274b8f",
+      "capital_port_id": "london",
+      "start_port_id": "london",
+      "start_ship_type_id": "sloop",
+      "start_gold": 4500,
+      "start_reputation": 10,
+      "description": {
+        "zh": "海峡对岸的岛国,凭单桅纵帆船与羊毛贸易起家。",
+        "en": "An island nation across the Channel, rising on sloops and the wool trade."
+      }
+    },
+    {
+      "id": "holland",
+      "name": {"zh": "荷兰", "en": "Holland"},
+      "color": "#d97b1e",
+      "capital_port_id": "amsterdam",
+      "start_port_id": "amsterdam",
+      "start_ship_type_id": "nao",
+      "start_gold": 7000,
+      "start_reputation": 10,
+      "description": {
+        "zh": "低地上的商人之国,以瑙船载着玻璃与奶酪远航。",
+        "en": "A nation of merchants on the lowlands, sailing naos laden with glass and cheese."
+      }
+    },
+    {
+      "id": "ottoman",
+      "name": {"zh": "奥斯曼", "en": "Ottoman"},
+      "color": "#6a3d9a",
+      "capital_port_id": "istanbul",
+      "start_port_id": "istanbul",
+      "start_ship_type_id": "galley",
+      "start_gold": 6000,
+      "start_reputation": 12,
+      "description": {
+        "zh": "横跨两洲的帝国,桨帆船巡弋于东地中海。",
+        "en": "An empire spanning two continents, its galleys patrolling the eastern Mediterranean."
+      }
+    },
+    {
+      "id": "italy",
+      "name": {"zh": "意大利", "en": "Italy"},
+      "color": "#c9a227",
+      "capital_port_id": "venice",
+      "start_port_id": "venice",
+      "start_ship_type_id": "brigantine",
+      "start_gold": 5500,
+      "start_reputation": 10,
+      "description": {
+        "zh": "分裂却富庶的半岛,双桅帆船载着丝绸与香料。",
+        "en": "A divided but wealthy peninsula, its brigantines carrying silk and spices."
+      }
+    }
+  ]
+}
