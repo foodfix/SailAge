@@ -70,6 +70,12 @@ minimum 1 tile/day
 `floor` applies after all multipliers. `seamanship_bonus =
 (seamanship − 10) / 100`, clamped to `[-0.1, +0.2]` (per `50-*`).
 
+**Fleet-speed composition (normative, resolves `40-*` §4.4).** `base_speed` is
+the **slowest `ShipType.speed` among all ships in the fleet**, not the
+flagship's own value; every other factor (`crew`, `crew_min`, `class` for
+`wind_factor`, `seamanship_bonus`) comes from the **flagship**. A one-ship fleet
+therefore reduces to the flagship's own speed.
+
 ### 4.5 Daily ledger (strict order, runs once per day tick at sea and on
 port day-advances)
 
@@ -121,6 +127,22 @@ Rolled once per day tick, zone-dependent:
 - Morale −5 (stacks with §4.8 daily delta).
 - The Atlantic strip exists to guarantee demo-loop step 5 (storm reachable
   within 1 day sailing west of Lisbon at `x = 7`).
+
+**Reachability acceptance (exact arithmetic).** The effective per-day storm
+probability in the strip is `0.50 × (1 − luck/400)` (`50-*` §4.2), so
+`p = 0.4875` at the default `luck = 10`. Compounded over `n` day ticks the
+chance of at least one storm is `1 − (1 − p)^n`:
+
+| n days | p = 0.50 (no luck term) | p = 0.4875 (luck 10) |
+|---|---|---|
+| 5 | 0.96875 | 0.96462 |
+| 6 | 0.98438 | 0.98195 |
+
+Because `1 − 0.5⁵ = 0.96875 < 0.97`, a "≥ 0.97 within 5 days" claim is
+arithmetically unreachable; the acceptance check is therefore fixed as
+**≥ 0.96 within 5 day ticks** and **≥ 0.98 within 6 day ticks**, both computed
+with the luck-modified `p` above (`0.4875` at luck 10). Seeded-RNG frequency
+checks use ±0.02 tolerance.
 
 ### 4.8 Morale
 

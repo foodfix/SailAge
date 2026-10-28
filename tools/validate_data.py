@@ -67,6 +67,7 @@ QUEST_GIVERS = ("guild", "palace")
 # docs/50-CHARACTER-AND-PROGRESSION.md section 4.2 (player) and
 # docs/40-SHIPS-AND-FLEET.md (ship instance stats), for equipment modifiers.
 PLAYER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation", "luck")
+OFFICER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation")
 SHIP_STAT_NAMES = ("durability", "capacity", "speed", "crew_max", "armament_slots")
 EQUIPMENT_STAT_NAMES = frozenset(PLAYER_STAT_NAMES + SHIP_STAT_NAMES)
 
@@ -96,6 +97,10 @@ ENTITY_FILES = {
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
 SPECIAL_FILES = {"map_legend.json", "ui_strings.json"}
+# Of those, only map_legend.json has `version` in its section 4.9 schema.
+# ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
+# as the one key that is not an L10nString rather than a required field.
+SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -309,10 +314,11 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
 
         if name in SPECIAL_FILES:
             # Bespoke envelopes (section 4.9 / 80-UI-UX section 4.4): no plural
-            # entity key, but `version` is required and must be an int (§3.2).
-            if "version" not in obj:
+            # entity key. map_legend.json requires `version`; ui_strings.json
+            # may omit it (T4 owns that file) but it must be an int if present.
+            if name in SPECIAL_REQUIRE_VERSION and "version" not in obj:
                 fail("envelope", name, "missing required key 'version'", 1)
-            if not is_int(obj["version"]):
+            if "version" in obj and not is_int(obj["version"]):
                 fail("envelope", name, "envelope key 'version' must be an integer", 1)
             continue
 
@@ -677,7 +683,7 @@ def _schema_officers(items: list) -> None:
         _require_id(entity["nation_id"], f"{path}.nation_id", "officers.json")
         _require_enum(entity["role"], OFFICER_ROLES, f"{path}.role", "officers.json")
         stats = entity["stats"]
-        if not isinstance(stats, dict) or set(stats) != set(PLAYER_STAT_NAMES[:4]):
+        if not isinstance(stats, dict) or set(stats) != set(OFFICER_STAT_NAMES):
             fail(
                 "schema",
                 "officers.json",
@@ -685,7 +691,7 @@ def _schema_officers(items: list) -> None:
                 f"leadership,seamanship,combat,navigation",
                 3,
             )
-        for stat in PLAYER_STAT_NAMES[:4]:
+        for stat in OFFICER_STAT_NAMES:
             _require_int(stats[stat], f"{path}.stats.{stat}", "officers.json", 1, 20)
         _require_int(entity["wage_daily"], f"{path}.wage_daily", "officers.json", 0)
         _require_id_list(
@@ -984,14 +990,14 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 f"{path} capital_port_id {nation['capital_port_id']!r} is not a known port",
                 4,
             )
-            if nation["start_ship_type_id"] not in ship_type_ids:
-                fail(
-                    "ref",
-                    "nations.json",
-                    f"{path} start_ship_type_id "
-                    f"{nation['start_ship_type_id']!r} is not a known ship type",
-                    4,
-                )
+        if nation["start_ship_type_id"] not in ship_type_ids:
+            fail(
+                "ref",
+                "nations.json",
+                f"{path} start_ship_type_id "
+                f"{nation['start_ship_type_id']!r} is not a known ship type",
+                4,
+            )
 
     for index, officer in enumerate(officers):
         path = f"officers[{index}] ({officer['id']})"
@@ -1265,14 +1271,27 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 
 
 def check_group6(docs: dict[str, object], verbose: bool) -> None:
-    """Map checks: section 8 group 6.
+    """Map checks: docs/10-DATA-SCHEMA.md section 8, group 6.
 
-    # group 6 implemented by T3 -- do not add map logic here before T3 lands.
-    # T3 should extend this function (map file 96x128, legend charset, marker
-    # placement/adjacency, BFS reachability) and call fail(..., code=6).
+    Boundary: this body is intentionally a no-op placeholder.
+    # group 6 implemented by T3
+    T3 replaces the placeholder inside this function with: map file presence and
+    96x128 dimensions, charset membership against `map_legend.tiles`, each port
+    marker appearing exactly once at its section 7.1 `position` (agreement with
+    `map_legend.port_markers` and `Port.marker`), >=1 orthogonally adjacent `#`
+    per marker tile, and 8-directional BFS sea-reachability from Lisbon. All of
+    its failures must call fail(..., code=6); nothing else in this file needs to
+    change, since main() already runs group 6 last.
     """
+    map_path = DATA_DIR / "maps" / "p1_mediterranean.txt"
+    if not map_path.exists():
+        if verbose:
+            print("SKIP group 6 map (data/maps/p1_mediterranean.txt absent; T3)")
+        return
+
+    # Nothing to validate yet: T3 fills this in. Presence alone is not an error.
     if verbose:
-        print("SKIP group 6 map (not implemented until T3)")
+        print("SKIP group 6 map (map file present; checks land with T3)")
 
 
 # ---------------------------------------------------------------------------

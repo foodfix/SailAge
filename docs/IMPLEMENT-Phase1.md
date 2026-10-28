@@ -106,8 +106,10 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   class, storm damage + luck mitigation, HUD weather display.
 - **Done-when:** seeded-random test: 10,000 rolls at x≤6 produce storm
   frequency 0.5±0.02; storm day applies `ceil(0.05×max)×(0.75 if luck≥50)`
-  damage; west of Lisbon (x≤6) a storm occurs within 5 in-game days with
-  probability ≥ 0.97 (scripted check).
+  damage; west of Lisbon (x≤6) a storm occurs within 6 in-game days with
+  probability ≥ 0.98 (equivalently ≥ 0.96 within 5 days) — the original
+  "≥ 0.97 in 5 days" figure is arithmetically unreachable and is superseded
+  by `20-*` §4.7 "Reachability acceptance" (scripted check).
 
 ## T9 — Morale, desertion, mutiny, fail states, game over
 
