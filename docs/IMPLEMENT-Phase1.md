@@ -45,8 +45,11 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   `position`, coastlines plausible for the listed seas; Gibraltar and the
   English Channel open; no landlocked sea pockets containing a port).
 - **Done-when:** validator group 6 passes, *specifically* the BFS check that
-  all 30 markers are sea-reachable from Lisbon's tile (8-directional,
-  passability per legend); each marker has an adjacent `#`.
+  all 30 markers are sea-reachable from Lisbon's tile using the player's real
+  movement rule — 8-directional with **corner-cutting forbidden** (`20-*` §4.2),
+  passability per legend — plus a single-sea-component assertion, a ≥1
+  orthogonally adjacent `#` check, and a ≥1 orthogonally adjacent passable tile
+  (harbour sail-in/sail-out) check per marker.
 
 ## T4 — DataLoader, I18n, EventBus, ui_strings skeleton
 

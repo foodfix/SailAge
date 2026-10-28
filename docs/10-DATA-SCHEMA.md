@@ -571,7 +571,12 @@ the code below. All checks run in order.
 | 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, tilePos bounds, marker charset/length) |
 | 4 | Referential integrity | `port.nation_id ∈ nations`; `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
 | 5 | Locked lists | exactly the §7.1 30 ports, §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
-| 6 | Map | `data/maps/p1_mediterranean.txt` exists; 96 lines × 128 chars; all chars ∈ legend; each port marker appears exactly once and at its §7.1 `position` (agreement with `map_legend.port_markers` and `Port.marker`); each marker tile has ≥1 orthogonally adjacent `#`; BFS from `lisbon`'s tile over passable tiles (8-directional) reaches all 30 markers |
+| 6 | Map | `data/maps/p1_mediterranean.txt` exists; 96 lines × 128 chars; all chars ∈ legend; each port marker appears exactly once and at its §7.1 `position` (agreement with `map_legend.port_markers` and `Port.marker`); each marker tile has ≥1 orthogonally adjacent `#` AND ≥1 orthogonally adjacent **passable** tile (a harbour must be sailable in and out without a diagonal step); BFS from `lisbon`'s tile over passable tiles reaches all 30 markers. **The BFS must use the movement rule players actually have (`20-*` §4.2): 8-directional but with corner-cutting forbidden** — a diagonal step is legal only when both orthogonal neighbours of the corner are passable. Using plain 8-directional BFS is a validator bug: it reports reachability through gaps no fleet can traverse. |
+
+Additionally group 6 asserts **one single sea component** under the strict movement rule:
+every passable non-marker tile must be reachable from Lisbon's tile (this is what
+prevents sealed basins such as a landlocked Black Sea or an enclosed Adriatic).
+Failures name the offending marker ids or the size of each stray component.
 
 `--verbose` prints a per-check pass summary.
 

@@ -1266,32 +1266,238 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Check group 6 — Map (implemented by T3)
+# Check group 6 — Map
 # ---------------------------------------------------------------------------
+
+MAP_FILE = "data/maps/p1_mediterranean.txt"
+LISBON_TILE = (7, 57)
+BFS_STEPS_8 = (
+    (1, 0), (-1, 0), (0, 1), (0, -1),
+    (1, 1), (1, -1), (-1, 1), (-1, -1),
+)
+
+
+def _map_fail(details: str) -> None:
+    fail("map", MAP_FILE, details, 6)
 
 
 def check_group6(docs: dict[str, object], verbose: bool) -> None:
     """Map checks: docs/10-DATA-SCHEMA.md section 8, group 6.
 
-    Boundary: this body is intentionally a no-op placeholder.
-    # group 6 implemented by T3
-    T3 replaces the placeholder inside this function with: map file presence and
-    96x128 dimensions, charset membership against `map_legend.tiles`, each port
-    marker appearing exactly once at its section 7.1 `position` (agreement with
-    `map_legend.port_markers` and `Port.marker`), >=1 orthogonally adjacent `#`
-    per marker tile, and 8-directional BFS sea-reachability from Lisbon. All of
-    its failures must call fail(..., code=6); nothing else in this file needs to
-    change, since main() already runs group 6 last.
+    1. the map file exists;
+    2. exactly MAP_HEIGHT lines of exactly MAP_WIDTH chars;
+    3. every char is a legend tile or a legend port marker;
+    4. the legend agrees with ports.json (exactly the 30 ports, mutual markers,
+       no duplicate marker/position);
+    5. each marker appears exactly once, on its locked Port.position;
+    6. each marker tile has >=1 orthogonally adjacent land AND >=1
+       orthogonally adjacent passable tile (sail in *and* out without a
+       diagonal step);
+    7. BFS from Lisbon over passable tiles, using the player's real movement
+       rule (docs/20-WORLD-AND-SAILING.md section 4.2: 8-directional but
+       corner-cutting forbidden), reaches all 30 markers;
+    8. that same BFS covers every passable tile on the map: exactly one sea
+       component, so no basin can be sealed off.
     """
-    map_path = DATA_DIR / "maps" / "p1_mediterranean.txt"
-    if not map_path.exists():
-        if verbose:
-            print("SKIP group 6 map (data/maps/p1_mediterranean.txt absent; T3)")
-        return
+    map_path = REPO_ROOT / MAP_FILE
+    if not map_path.is_file():
+        _map_fail("map file is missing")
 
-    # Nothing to validate yet: T3 fills this in. Presence alone is not an error.
+    try:
+        text = map_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _map_fail(f"cannot read as UTF-8: {exc}")
+    if text.startswith("\ufeff"):
+        _map_fail("file must not start with a BOM")
+
+    raw_lines = text.split("\n")
+    if raw_lines and raw_lines[-1] == "":
+        raw_lines.pop()
+    else:
+        _map_fail("file must end with a newline")
+    if len(raw_lines) != MAP_HEIGHT:
+        _map_fail(f"expected {MAP_HEIGHT} lines, found {len(raw_lines)}")
+    for index, line in enumerate(raw_lines):
+        if len(line) != MAP_WIDTH:
+            _map_fail(f"line {index} has {len(line)} chars, expected {MAP_WIDTH}")
+        if line != line.rstrip():
+            _map_fail(f"line {index} has trailing whitespace")
+    grid = raw_lines
+
+    legend = docs.get("map_legend.json")
+    if not isinstance(legend, dict):
+        _map_fail("map_legend.json is missing or invalid")
+    tiles = legend.get("tiles")
+    markers = legend.get("port_markers")
+    if not isinstance(tiles, dict) or not isinstance(markers, dict):
+        _map_fail("map_legend.json lacks tiles/port_markers")
+
+    allowed = set(tiles) | set(markers)
+    for y, line in enumerate(grid):
+        for x, char in enumerate(line):
+            if char not in allowed:
+                _map_fail(f"illegal char {char!r} at ({x}, {y})")
+
+    ports = docs["ports.json"]["ports"]
+    port_by_id = {port["id"]: port for port in ports}
+    if len(port_by_id) != len(ports):
+        _map_fail("ports.json has duplicate port ids")
+
+    # 4. legend <-> ports.json agreement
+    if set(markers.values()) != set(port_by_id):
+        missing = sorted(set(port_by_id) - set(markers.values()))
+        extra = sorted(set(markers.values()) - set(port_by_id))
+        details = []
+        if missing:
+            details.append(f"legend missing {', '.join(missing)}")
+        if extra:
+            details.append(f"legend has unknown {', '.join(extra)}")
+        _map_fail("port_markers does not cover exactly the 30 ports: "
+                  + "; ".join(details))
+    if len(set(markers.values())) != len(markers):
+        _map_fail("port_markers maps two markers to the same port")
+    seen_positions: dict[tuple[int, int], str] = {}
+    for marker, port_id in markers.items():
+        port = port_by_id[port_id]
+        if port["marker"] != marker:
+            _map_fail(
+                f"port {port_id} marker is {port['marker']!r} in ports.json "
+                f"but {marker!r} in map_legend.json"
+            )
+        pos = (port["position"]["x"], port["position"]["y"])
+        if pos in seen_positions:
+            _map_fail(
+                f"ports {seen_positions[pos]} and {port_id} share position {pos}"
+            )
+        seen_positions[pos] = port_id
+
+    # 5. each marker exactly once, at its locked position
+    found: dict[str, list[tuple[int, int]]] = {marker: [] for marker in markers}
+    for y, line in enumerate(grid):
+        for x, char in enumerate(line):
+            if char in found:
+                found[char].append((x, y))
+    for marker, port_id in markers.items():
+        hits = found[marker]
+        if len(hits) != 1:
+            _map_fail(
+                f"marker {marker!r} ({port_id}) appears {len(hits)} times, expected 1"
+            )
+        expected = (
+            port_by_id[port_id]["position"]["x"],
+            port_by_id[port_id]["position"]["y"],
+        )
+        if hits[0] != expected:
+            _map_fail(
+                f"marker {marker!r} ({port_id}) is at {hits[0]}, "
+                f"locked position is {expected}"
+            )
+
+    # 6. harbour-on-a-coast: land on one side, sailable water on another
+    for marker, port_id in markers.items():
+        x, y = found[marker][0]
+        neighbours = [
+            grid[y + dy][x + dx]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            if 0 <= x + dx < MAP_WIDTH and 0 <= y + dy < MAP_HEIGHT
+        ]
+        if "#" not in neighbours:
+            _map_fail(f"marker {marker!r} ({port_id}) has no adjacent land '#'")
+        if not any(char in markers or tiles[char].get("passable")
+                   for char in neighbours):
+            _map_fail(
+                f"marker {marker!r} ({port_id}) has no orthogonally adjacent "
+                "passable tile (harbour cannot be sailed into or out of)"
+            )
+
+    # 7/8. strict BFS from Lisbon over every passable tile (corner-cut forbidden)
+    passable = {char for char, tile in tiles.items() if tile.get("passable")}
+    marker_tiles = set(markers)
+
+    def walkable(char: str) -> bool:
+        return char in marker_tiles or char in passable
+
+    def walkable_at(x: int, y: int) -> bool:
+        return (
+            0 <= x < MAP_WIDTH
+            and 0 <= y < MAP_HEIGHT
+            and walkable(grid[y][x])
+        )
+
+    def neighbours(x: int, y: int):
+        """Passable 8-neighbours, corner-cutting forbidden (20-* section 4.2)."""
+        for dx, dy in BFS_STEPS_8:
+            nx, ny = x + dx, y + dy
+            if not walkable_at(nx, ny):
+                continue
+            if dx and dy and not (walkable_at(x + dx, y) and walkable_at(x, y + dy)):
+                continue
+            yield nx, ny
+
+    start = LISBON_TILE
+    if not walkable_at(*start):
+        _map_fail(f"Lisbon tile {start} is not walkable sea")
+    reached = {start}
+    queue = [start]
+    head = 0
+    while head < len(queue):
+        x, y = queue[head]
+        head += 1
+        for neighbour in neighbours(x, y):
+            if neighbour not in reached:
+                reached.add(neighbour)
+                queue.append(neighbour)
+
+    unreachable = [
+        f"{port_id} ({marker!r})"
+        for marker, port_id in sorted(markers.items(), key=lambda kv: kv[1])
+        if found[marker][0] not in reached
+    ]
+    if unreachable:
+        _map_fail(
+            f"{len(unreachable)} port(s) unreachable by sea from Lisbon {start}: "
+            + ", ".join(unreachable)
+        )
+
+    # 8. one single sea component: every passable tile is in Lisbon's component
+    all_passable = {
+        (x, y)
+        for y, line in enumerate(grid)
+        for x, char in enumerate(line)
+        if walkable(char)
+    }
+    stray = all_passable - reached
+    if stray:
+        # size the stray basins so the failure names the damage, not just a tile
+        sizes: list[int] = []
+        seen: set[tuple[int, int]] = set()
+        for cell in sorted(stray - seen):
+            if cell in seen:
+                continue
+            seen.add(cell)
+            basin = [cell]
+            stack = [cell]
+            while stack:
+                cx, cy = stack.pop()
+                for nb in neighbours(cx, cy):
+                    if nb in stray and nb not in seen:
+                        seen.add(nb)
+                        basin.append(nb)
+                        stack.append(nb)
+            sizes.append(len(basin))
+        sizes.sort(reverse=True)
+        _map_fail(
+            "sea splits into components of sizes "
+            + ", ".join(str(size) for size in [len(reached), *sizes])
+            + f" ({len(stray)} passable tile(s) not reachable from Lisbon {start})"
+        )
+
     if verbose:
-        print("SKIP group 6 map (map file present; checks land with T3)")
+        print(
+            f"PASS group 6 map ({MAP_HEIGHT}x{MAP_WIDTH}, "
+            f"{len(markers)} ports placed, {len(all_passable)} passable tiles in "
+            f"one component reachable from Lisbon {start}, no corner-cutting)"
+        )
 
 
 # ---------------------------------------------------------------------------
