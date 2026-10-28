@@ -2,7 +2,9 @@
 
 Ordered backlog (lettered sections, coarser than Phase 1 by design; details
 marked **task-owned** are decided inside the task, following the cited doc).
-Prerequisite: Phase 1 complete (`IMPLEMENT-Phase1.md` T19 passed).
+Execute as background-subagent waves per the plan at the bottom (max 4
+concurrent). Prerequisite: Phase 1 complete (`IMPLEMENT-Phase1.md` T19
+passed).
 
 ## A. Save migration v1 → v2
 
@@ -62,3 +64,44 @@ Prerequisite: Phase 1 complete (`IMPLEMENT-Phase1.md` T19 passed).
 - Scripted E2E: start Phase-1 save → encounter pirate → win by cannons;
   second save: win by boarding+capture; third: retreat; fourth: lose duel as
   last ship → `gameover.captured`. All four run clean.
+
+---
+
+## Subagent execution plan (max 4 background subagents)
+
+Same protocol as `IMPLEMENT-Phase1.md` (background `general` subagents, max 4
+concurrent, wave-gated, orchestrator-owned `data/ui_strings.json`, validator
+run after any wave that touched `data/`); the summary here is self-sufficient.
+
+- **Launch:** per wave, one background subagent per task, all launched as
+  parallel calls in one message; wait for every report + done-when
+  verification before the next wave.
+- **Subagent prompt:** the task block verbatim + cited `60-*`/`80-*`/`10-*`
+  sections + the AGENTS.md hard rules + the wave's pins; the report lists
+  every done-when criterion with its pass/fail result.
+- **Hard rules:** no two running subagents edit the same file (the
+  orchestrator merges `ui_strings.json` keys from reports); a blocked
+  subagent stops and reports — the orchestrator amends the owning doc first,
+  then relaunches.
+
+| Wave | Background subagents (parallel) | Gate (after) |
+|---|---|---|
+| W1 | A, B, E | — |
+| W2 | C, D, F | W1 |
+| W3 | G | W2 |
+| W4 | H | W3 |
+
+Wave notes:
+
+- **W1 ownership split:** A owns GameState/save fields + `MIGRATIONS[1]`;
+  B keeps all battle state local to `battle_sim.gd` (headless, no GameState
+  edits in this wave); E owns `data/equipment.json` + shipyard refit
+  activation.
+- **P2 (C∥D):** C implements `duel_modal.tscn` +
+  `Duel.start(config) -> outcome` per `60-*` §4.6/§6; D's boarding action
+  calls that API. C does not edit battle scenes.
+- **P3 (D∥F):** D exposes `open_battle(encounter) -> result`; F calls it on
+  contact per `60-*` §4.1 and does not edit battle scenes.
+- **Signal boundary:** D/F only emit the battle/duel outcome signals (per
+  `90-*` §5.1); G (W3) applies loot gold, battle XP, and reputation deltas
+  and adds the `battle.*`/`duel.*` strings.

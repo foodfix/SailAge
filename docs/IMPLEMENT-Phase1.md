@@ -1,9 +1,11 @@
 # IMPLEMENT — Phase 1: Sail & Trade
 
-Ordered, checkable task backlog. Execute top to bottom; each task lists the
-docs it draws from, the artifacts it creates, and executable "done-when"
-criteria. Design questions raised by any task must be answered in the owning
-system doc **before** the task proceeds (rule from `00-OVERVIEW.md` §13).
+Ordered, checkable task backlog. Execute as background-subagent waves per the
+plan at the bottom (max 4 concurrent; top-to-bottom order is the dependency
+order); each task lists the docs it draws from, the artifacts it creates, and
+executable "done-when" criteria. Design questions raised by any task must be
+answered in the owning system doc **before** the task proceeds (rule from
+`00-OVERVIEW.md` §13).
 
 Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
@@ -254,6 +256,66 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 ## Task dependency note
 
 T2 feeds T4/T5; T5→T6→T7→T8→T9 are the sailing spine; T10 unblocks
-T11–T15; T16 is parallel after T4; T17 needs T6+GameState settled;
+T12–T15; T11 follows T12–T15 (its routing done-when needs all four facility
+screens); T16 is parallel after T4; T17∥T18 once GameState settles (pin P1);
 T19 requires all. Deviations from this order are fine only if the substitute
-order keeps every task's cited docs implemented elsewhere first.
+order keeps every task's cited docs implemented elsewhere first — the wave
+table below is the sanctioned deviation set.
+
+---
+
+## Subagent execution plan (max 4 background subagents)
+
+Run this backlog with background subagents instead of one task at a time. The
+orchestrating session manages waves and integration; subagents implement.
+
+- **Launch:** each task is implemented by a `general` subagent started in
+  background mode; launch all of a wave's subagents as parallel calls in one
+  message. At most **4** run concurrently; further ready tasks queue FIFO.
+- **Wave gate:** a wave is done when every subagent has reported and the
+  orchestrator has verified each done-when criterion — only then may the
+  next wave launch.
+- **Subagent prompt:** the task block verbatim + the cited doc sections +
+  the AGENTS.md hard rules + the wave's interface pins; the report must list
+  every done-when criterion with its pass/fail result.
+- **Shared files (hard rule):** two running subagents never write the same
+  file. `data/ui_strings.json` is orchestrator-owned during parallel waves:
+  subagents list their new keys (zh + en) in their report and never edit the
+  file; the orchestrator merges after the wave. If two ready tasks cannot
+  avoid a shared file, serialize them instead.
+- **Interface pins:** when two tasks of one wave call each other, the
+  orchestrator fixes the call signatures (P1 below) before launch; subagents
+  implement to the pin.
+- **Design gaps:** a blocked subagent stops and reports; the orchestrator
+  amends the owning system doc first (rule in `00-OVERVIEW.md` §13) and
+  relaunches the task.
+- **Data waves:** after any wave that touched `data/`, the orchestrator runs
+  `python3 tools/validate_data.py` (must exit 0) before the next wave.
+- **Opportunistic fill:** while a wave runs, a later task may start early
+  only if all its dependencies are done and it shares no file with any
+  running subagent.
+
+| Wave | Background subagents (parallel) | Gate (after) |
+|---|---|---|
+| W1 | T1, T2 | — |
+| W2 | T3, T4 | W1 |
+| W3 | T5, T16 | W2 |
+| W4 | T6 | W3 |
+| W5 | T7 | W4 |
+| W6 | T8 | W5 |
+| W7 | T9 | W6 |
+| W8 | T10 | W7 |
+| W9 | T12, T13, T14, T15 | W8 |
+| W10 | T11, T17, T18 | W9 |
+| W11 | T19 | W10 |
+
+- W4–W8 are single-subagent by dependency, not by choice: the sailing spine
+  (T6→T7→T8→T9→T10) is strictly sequential.
+- W9 runs the four facility screens (market/shipyard/tavern/inn) — disjoint
+  files, full 4-way parallelism.
+- In W10, T11 routes the four screens from W9; T17∥T18 share a wave only
+  under the pin below. T19 is orchestrator-led (records the dated manual
+  run); a subagent may build the optional scripted E2E first.
+- **P1 (T17∥T18):** T17 owns `autoload/save_system.gd` and calls
+  `Fleet.normalize_all()` after deserialization; T18 owns `fleet.gd`
+  (normalize/truncate logic + logging). Neither edits the other's file.

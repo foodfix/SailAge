@@ -1,7 +1,9 @@
 # IMPLEMENT — Phase 3: Crown & Horizon
 
 Ordered backlog (lettered, coarse by design; **task-owned** details are
-decided inside the task per the cited docs). Prerequisite: Phase 2 complete.
+decided inside the task per the cited docs). Execute as background-subagent
+waves per the plan at the bottom (max 4 concurrent). Prerequisite: Phase 2
+complete.
 
 ## A. Save migration v2 → v3
 
@@ -84,3 +86,47 @@ decided inside the task per the cited docs). Prerequisite: Phase 2 complete.
   climb to Duke with one nation → win one tournament → retire; plus a piracy
   run: raid → bounty → hunters → clear bounty. All with zh/en spot-checks
   and validator green.
+
+---
+
+## Subagent execution plan (max 4 background subagents)
+
+Same protocol as `IMPLEMENT-Phase1.md` (background `general` subagents, max 4
+concurrent, wave-gated, orchestrator-owned `data/ui_strings.json`, validator
+run after any wave that touched `data/`); the summary here is self-sufficient.
+
+- **Launch:** per wave, one background subagent per task, all launched as
+  parallel calls in one message; wait for every report + done-when
+  verification before the next wave.
+- **Subagent prompt:** the task block verbatim + cited doc sections + the
+  AGENTS.md hard rules + the wave's pins; the report lists every done-when
+  criterion with its pass/fail result.
+- **Hard rules:** no two running subagents edit the same file (the
+  orchestrator merges `ui_strings.json` keys from reports); a blocked
+  subagent stops and reports — the orchestrator amends the owning doc first,
+  then relaunches.
+
+| Wave | Background subagents (parallel) | Gate (after) |
+|---|---|---|
+| W1 | A, G | — |
+| W2 | B, E | W1 |
+| W3 | C, D | W2 |
+| W4 | F, I (optional) | W3 |
+| W5 | H | W4 |
+| W6 | J | W5 |
+
+Wave notes:
+
+- **W1 ownership split:** A owns save fields + `MIGRATIONS[2]`; G owns
+  `data/maps/`, the legend, `data/ports.json`, the validator extension, and
+  the new-game map toggle.
+- **P4 (B∥E):** B spawns bounty-quest fleets through the Phase-2 encounter
+  spawn API unmodified; E owns `encounters.gd` (hunter tables) and
+  `Bounty.pay_off()` (`70-*` §4.5). E's pay-path done-when is verified after
+  W3, when D adds the palace pay-bounty row calling `Bounty.pay_off()`.
+- **P5 (C∥D):** C owns found-discovery state and exposes
+  `Discoveries.found_count()`; D's charting mission reads only that API. C's
+  report UI lands in the guild screen delivered by W2.
+- **W4/W5 split:** F and H both extend the palace screen (tournament entry
+  vs. Retire flow), so H waits one wave. I (art pass) is optional and touches
+  only scene visuals, so it may run beside F — or be skipped entirely.
