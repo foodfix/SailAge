@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/world/world_map.gd" id="1_world"]
+
+[node name="WorldMap" type="Node2D"]
+script = ExtResource("1_world")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(1, 1)
+position_smoothing_enabled = false
+
+[node name="Overlay" type="CanvasLayer" parent="."]
+layer = 2
+visible = false
+
+[node name="ErrorLabel" type="Label" parent="Overlay"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
