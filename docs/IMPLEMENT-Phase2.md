@@ -1,5 +1,26 @@
 # IMPLEMENT — Phase 2: Steel & Gunpowder
 
+**STATUS: 🔄 IN PROGRESS (started 2026-10-29).**
+
+Pre-work done before any code (the Phase-1 lesson: a value left "task-owned"
+gets invented differently by each branch, and the merge then has to reconcile
+two models of one rule):
+
+| Doc | Amendment |
+|---|---|
+| `60-*` §4.1, §4.11.3, §4.11.11.2 | Navy spawn chance (2%/day, 2–4 ships) and the full spawn-roll order pinned |
+| `60-*` §4.11 | New section: every number §4.2–§4.10 left open is now fixed — seed formula, deployment tiles, enemy composition, MP/reload/initiative, cannon & ram formulas (incl. storm rounding), duel tie rules, capture/loss/surrender resolution, AI tie-breaks, end conditions, rewards & rep deltas |
+| `60-*` §4.11.11.1–§4.11.11.3 | Marker movement, contact detection, pursuit cooldown, spawn immunity, `battle_started` handoff |
+| `60-*` §4.11.12–§4.11.13 | Equipment ownership (player vs ship slots), battle/duel effects, and the locked 8-item content set |
+| `60-*` §4.12 | Module interface pins: `BattleSim`, `AiFleet`, `Duel`, `BattleResult`, `BattleRewards`, `Encounters`, the outcome block |
+| `90-*` §8.1/§8.2 | Save v2 shape (`hostile_fleets`, `proximity_cooldowns`), `MIGRATIONS[1]` contents, migration purity rule |
+| `90-*` §5.1/§5.4 | New signals (`battle_started`, `battle_finished`, `duel_finished`), new GameState fields |
+| `40-*` §4.1/§4.3 | Ship `equipment` block, effective max durability, refit row enabled, buy-equipment rule |
+| `50-*` §4.8 | Player `equipment` block |
+| `80-*` §4.1/§4.2/§4.3/§4.4/§4.7.1/§4.7.2 | S10/S11 scenes, battle nav edges, battle input keys, `battle.*`/`duel.*`/`encounter.*` namespaces, battle-screen and shipyard-equipment wireframes |
+| `10-*` §4.6 | Equipment schema now points at the pinned content set |
+| `00-*` §12 | Glossary terms for hostile fleet, loot, equipment, retreat, surrender, captured |
+
 Ordered backlog (lettered sections, coarser than Phase 1 by design; details
 marked **task-owned** are decided inside the task, following the cited doc).
 Execute as background-subagent waves per the plan at the bottom: **max 4
