@@ -19,8 +19,11 @@ extends RefCounted
 ##   * Sell price is `floor(base_price × 0.5 × durability / max_durability)`;
 ##     the flagship can never be sold and the last ship can never be sold.
 ##   * Refit is 100g/cannon, 50g sell-back, 5 cargo units each and capped by
-##     `armament_slots`. Phase 1 has **no** refit UI (§4.3 "present but
-##     disabled"): the maths is unit-tested and ready for Phase 2.
+##     `armament_slots`. Phase 1 had **no** refit UI (§4.3 "present but
+##     disabled"); Phase 2 enables the row (`80-*` §4.7.2).
+##   * Equipment works per `60-*` §4.11.12: `weapon`/`armor` live on the
+##     player, `figurehead`/`sail` on one hull. Buying into an occupied slot
+##     sells the old item back at `floor(price × 0.5)` in the same transaction.
 ##   * Promotion to flagship is free and port-only; it moves the row to
 ##     `fleet[0]` and keeps the order of every other ship.
 
@@ -92,12 +95,13 @@ static func repair_cost_per_point(ship_type_id: String) -> int:
 
 
 ## §4.3/§6: the damage a hull can still take, i.e. the repair cap.
+## docs/40-* §4.1: repairs use the **effective** max durability, so a worn
+## figurehead raises the cap exactly as it raises the hull's maximum.
 static func max_repair_points(index: int) -> int:
 	var ship := _ship(index)
 	if ship.is_empty():
 		return 0
-	var max_durability := FleetLib.ship_stat(ship, "durability")
-	return maxi(0, max_durability - int(ship.get("durability", 0)))
+	return maxi(0, ship_max_durability(index) - int(ship.get("durability", 0)))
 
 
 ## Cost of `points` on `fleet[index]` (0 for a non-positive/invalid request).
@@ -129,15 +133,14 @@ static func can_repair(index: int, points: int) -> bool:
 
 
 ## §4.3 "Repair ship": partial repair is the only kind — exactly `points`
-## durability is restored and exactly `cost` gold is paid.
+## durability is restored and exactly `cost` gold is paid. The cap is the
+## **effective** max (§4.1), so a worn figurehead can be repaired onto.
 static func repair(index: int, points: int) -> bool:
 	if not can_repair(index, points):
 		return false
 	var ship: Dictionary = GameState.fleet[index]
 	var durability := int(ship.get("durability", 0))
-	ship["durability"] = mini(
-		durability + points, FleetLib.ship_stat(ship, "durability")
-	)
+	ship["durability"] = mini(durability + points, ship_max_durability(index))
 	GameState.add_gold(-repair_cost(index, points))
 	FleetLib.notify_changed()
 	return true
@@ -146,11 +149,17 @@ static func repair(index: int, points: int) -> bool:
 # --- Sell ------------------------------------------------------------------
 
 ## §4.3: `floor(base_price × 0.5 × durability / max_durability)`.
+##
+## `max_durability` is the **effective** max of §4.1: a worn figurehead can
+## raise a hull above its `ShipType.durability`, and since equipment leaves
+## with the ship the ratio must stay `≤ 1` (otherwise a figurehead would let a
+## hull sell for more than half its base price). Without equipment this is
+## exactly the Phase-1 formula.
 static func sell_price(index: int) -> int:
 	var ship := _ship(index)
 	if ship.is_empty():
 		return 0
-	var max_durability := FleetLib.ship_stat(ship, "durability")
+	var max_durability := ship_max_durability(index)
 	if max_durability <= 0:
 		return 0
 	var base_price := buy_price(str(ship.get("ship_type_id", "")))
@@ -201,7 +210,7 @@ static func sell(index: int) -> bool:
 	return true
 
 
-# --- Refit (Phase 2 maths; the Phase-1 UI row is disabled) ------------------
+# --- Refit (Phase 2: the UI row is live, `80-*` §4.7.2) ---------------------
 
 ## §4.3: 100g per cannon.
 static func refit_cost(cannons: int) -> int:
@@ -232,13 +241,24 @@ static func max_refit(index: int) -> int:
 
 ## §4.3: at least one cannon, within the slots/cargo cap, affordable.
 static func can_refit(index: int, cannons: int) -> bool:
+	return refit_block_reason(index, cannons).is_empty()
+
+
+## Why a refit of `cannons` is refused, as a `ui_strings.json` key (`""` =
+## allowed). The UI disables the button and shows this as the tooltip (§4.7.2,
+## `80-*` §4.7 "disabled with tooltip-reason").
+static func refit_block_reason(index: int, cannons: int) -> String:
+	if _ship(index).is_empty():
+		return "shipyard.no_selection"
 	if cannons <= 0 or cannons > max_refit(index):
-		return false
-	return GameState.gold >= refit_cost(cannons)
+		return "shipyard.invalid_points"
+	if GameState.gold < refit_cost(cannons):
+		return "shipyard.no_gold"
+	return ""
 
 
-## §4.3 "Refit (armament)". Phase 2 uses this; Phase 1 keeps it unreachable
-## from the UI (label `shipyard.cannons.phase2`).
+## §4.3 "Refit (armament)". Live in Phase 2 (`80-*` §4.7.2); the battle
+## effect is `60-*` §4.11.4.
 static func refit(index: int, cannons: int) -> bool:
 	if not can_refit(index, cannons):
 		return false
@@ -247,6 +267,252 @@ static func refit(index: int, cannons: int) -> bool:
 	GameState.add_gold(-refit_cost(cannons))
 	FleetLib.notify_changed()
 	return true
+
+
+# --- Equipment (Phase 2; `60-*` §4.11.12, `40-*` §4.3, `50-*` §4.8) --------
+
+## `60-*` §4.11.12: `weapon`/`armor` are worn by the player, `figurehead`/`sail`
+## are bound to one hull.
+const PLAYER_SLOTS: Array[String] = ["weapon", "armor"]
+const SHIP_SLOTS: Array[String] = ["figurehead", "sail"]
+## `40-*` §4.3 / `60-*` §4.11.12: selling an item back pays
+## `floor(price × 0.5)`, the same fraction as a hull.
+const EQUIP_SELL_FRACTION := 0.5
+
+
+## `60-*` §4.11.12: every `data/equipment.json` item of `slot`, in **data
+## order** (the shipyard list order, `80-*` §4.7.2). An unknown slot is empty.
+static func equipment_list(slot: String) -> Array:
+	var items: Array = []
+	if not (slot in PLAYER_SLOTS or slot in SHIP_SLOTS):
+		return items
+	for item in DataLoader.equipment_list:
+		if item is Dictionary and str(item.get("slot", "")) == slot:
+			items.append(item)
+	return items
+
+
+## The item id worn in the player's `slot` ("" when empty/absent). Missing
+## `equipment` blocks read as empty slots (`60-*` §4.11.12) — never a crash.
+static func equipped_player(slot: String) -> String:
+	if not (slot in PLAYER_SLOTS):
+		return ""
+	var block = _player_equipment(false)
+	return _slot_value(block, slot)
+
+
+## The item id worn in `fleet[ship_index]`'s `slot` ("" when empty/absent).
+static func equipped_ship(index: int, slot: String) -> String:
+	if not (slot in SHIP_SLOTS):
+		return ""
+	var ship := _ship(index)
+	if ship.is_empty():
+		return ""
+	var block = _ship_equipment(ship, false)
+	return _slot_value(block, slot)
+
+
+## §4.3: the item's `price` (0 for an unknown item).
+static func equip_price(_slot: String, equipment_id: String) -> int:
+	return int(DataLoader.get_equipment(equipment_id).get("price", 0))
+
+
+## §4.3: `floor(price × 0.5)` when selling the item back.
+static func equip_sellback(_slot: String, equipment_id: String) -> int:
+	return int(floor(float(equip_price(_slot, equipment_id)) * EQUIP_SELL_FRACTION))
+
+
+## Why buying `equipment_id` into `slot` is refused, as a `ui_strings.json`
+## key (`""` = allowed): an unknown item or a slot mismatch is
+## `ui.not_available`; an unaffordable net cost is `shipyard.no_gold`.
+##
+## The net cost is `-new_price + old_sellback` (§4.3: the replaced item sells
+## back "in the same action"), so replacing a 400g cutlass with a 1200g rapier
+## only needs 1000g in the purse.
+static func equip_block_reason(slot: String, equipment_id: String,
+		ship_index: int = 0) -> String:
+	var item: Dictionary = DataLoader.get_equipment(equipment_id)
+	if item.is_empty() or str(item.get("slot", "")) != slot:
+		return "ui.not_available"
+	if slot in SHIP_SLOTS and _ship(ship_index).is_empty():
+		return "ui.not_available"
+	# The purse must survive the **net** delta, which is negative for a normal
+	# buy and may even be positive when the replaced item is worth more.
+	if GameState.gold + equip_net_cost(slot, equipment_id, ship_index) < 0:
+		return "shipyard.no_gold"
+	return ""
+
+
+## The gold change of [method equip]'s whole transaction:
+## `−new_price + old_sellback` (§4.3, "in the same action").
+static func equip_net_cost(slot: String, equipment_id: String,
+		ship_index: int = 0) -> int:
+	var old_id := _worn_id(slot, ship_index)
+	var sellback := equip_sellback(slot, old_id) if not old_id.is_empty() else 0
+	return -equip_price(slot, equipment_id) + sellback
+
+
+## §4.3 "Buy equipment": buys `equipment_id` into `slot`, selling whatever the
+## slot held back at half price **in the same transaction** (one
+## `add_gold(net)` call, so the HUD sees one `gold_changed`).
+##
+## `weapon`/`armor` write `GameState.player.equipment`;
+## `figurehead`/`sail` write `GameState.fleet[ship_index].equipment`. The blocks
+## are created when absent (`60-*` §4.11.12: old saves default to empty slots).
+## Returns false without touching gold/state when blocked.
+static func equip(slot: String, equipment_id: String, ship_index: int = 0) -> bool:
+	if not equip_block_reason(slot, equipment_id, ship_index).is_empty():
+		return false
+	var block: Dictionary = _equipment_block(slot, ship_index, true)
+	if block.is_empty():
+		return false
+	var net := equip_net_cost(slot, equipment_id, ship_index)
+	block[slot] = equipment_id
+	GameState.add_gold(net)
+	_clamp_durability(slot, ship_index)
+	_notify_equipped()
+	return true
+
+
+## Clears `slot` and pays the half-price sell-back (§4.3). Returns false when
+## the slot is already empty (nothing to do, nothing to pay).
+static func unequip(slot: String, ship_index: int = 0) -> bool:
+	var worn := _worn_id(slot, ship_index)
+	if worn.is_empty():
+		return false
+	var block: Dictionary = _equipment_block(slot, ship_index, false)
+	if block.is_empty():
+		return false
+	block[slot] = ""
+	GameState.add_gold(equip_sellback(slot, worn))
+	_clamp_durability(slot, ship_index)
+	_notify_equipped()
+	return true
+
+
+## True when `slot` holds nothing ([method unequip] would be a no-op).
+static func can_unequip(slot: String, ship_index: int = 0) -> bool:
+	return not _worn_id(slot, ship_index).is_empty()
+
+
+## A single modifier of one item (`0` for an unknown item or stat).
+static func equipment_modifier(equipment_id: String, stat_name: String) -> int:
+	var item: Dictionary = DataLoader.get_equipment(equipment_id)
+	if item.is_empty():
+		return 0
+	var modifiers = item.get("modifiers", {})
+	if not (modifiers is Dictionary):
+		return 0
+	return int((modifiers as Dictionary).get(stat_name, 0))
+
+
+## `60-*` §4.11.6: the player's duel roll adds Σ `combat` across the two worn
+## player items (`weapon` + `armor`). This is the duel-roll hook `battle_sim`
+## reads; `battle_sim.gd` is a different task's file, so no logic lands there.
+static func player_combat_bonus() -> int:
+	var total := 0
+	for slot in PLAYER_SLOTS:
+		total += equipment_modifier(equipped_player(slot), "combat")
+	return total
+
+
+## `40-*` §4.1 / `60-*` §4.11.12: `ShipType.durability` plus the worn
+## figurehead's `durability` modifier — the effective maximum, which also caps
+## repairs and current durability.
+static func ship_max_durability(index: int) -> int:
+	var ship := _ship(index)
+	if ship.is_empty():
+		return 0
+	return FleetLib.ship_stat(ship, "durability") \
+		+ equipment_modifier(equipped_ship(index, "figurehead"), "durability")
+
+
+## `60-*` §4.11.12: the sail `speed` modifier (MP + initiative in `60-*`
+## §4.11.4).
+static func ship_speed_bonus(index: int) -> int:
+	return equipment_modifier(equipped_ship(index, "sail"), "speed")
+
+
+## The id worn in `slot` on the player (weapon/armor) or on `ship_index`
+## (figurehead/sail); "" for an unknown slot or empty/missing block.
+static func _worn_id(slot: String, ship_index: int) -> String:
+	if slot in PLAYER_SLOTS:
+		return equipped_player(slot)
+	if slot in SHIP_SLOTS:
+		return equipped_ship(ship_index, slot)
+	return ""
+
+
+## Reads the `equipment` block for `slot`'s owner without creating anything.
+static func _equipment_block(slot: String, ship_index: int,
+		create: bool) -> Dictionary:
+	if slot in PLAYER_SLOTS:
+		return _player_equipment(create)
+	if slot in SHIP_SLOTS:
+		var ship := _ship(ship_index)
+		if ship.is_empty():
+			return {}
+		return _ship_equipment(ship, create)
+	return {}
+
+
+## `GameState.player.equipment`, read-only unless `create` (then written in
+## place when absent/invalid — `60-*` §4.11.12 "the accessors default").
+static func _player_equipment(create: bool) -> Dictionary:
+	var player = GameState.player
+	if not (player is Dictionary):
+		return {}
+	var block = (player as Dictionary).get("equipment", null)
+	if block is Dictionary:
+		return block
+	if not create:
+		return {}
+	var fresh := {"weapon": "", "armor": ""}
+	(player as Dictionary)["equipment"] = fresh
+	return fresh
+
+
+## `ship.equipment`, same contract as [method _player_equipment].
+static func _ship_equipment(ship: Dictionary, create: bool) -> Dictionary:
+	var block = ship.get("equipment", null)
+	if block is Dictionary:
+		return block
+	if not create:
+		return {}
+	var fresh := {"figurehead": "", "sail": ""}
+	ship["equipment"] = fresh
+	return fresh
+
+
+## Tolerant slot read: a missing key, a null or a non-string all read as empty.
+static func _slot_value(block: Dictionary, slot: String) -> String:
+	var value = block.get(slot, "")
+	if not (value is String):
+		return ""
+	return value
+
+
+## `40-*` §4.1: "`durability` is clamped to" the effective max. Swapping or
+## removing a figurehead can lower that cap, so the hull is clamped here — the
+## only place equipment can shrink it. Equipping never *heals*: current
+## durability is left where it was when the cap rises.
+static func _clamp_durability(slot: String, ship_index: int) -> void:
+	if not (slot in SHIP_SLOTS) or slot == "sail":
+		return
+	var ship := _ship(ship_index)
+	if ship.is_empty():
+		return
+	var current := int(ship.get("durability", 0))
+	var maximum := ship_max_durability(ship_index)
+	if current > maximum:
+		ship["durability"] = maximum
+
+
+## Both equipment owners are shown on the shipyard screen (`80-*` §4.7.2), so
+## either change announces `fleet_changed` to repaint every equipment row
+## (`90-*` §5.1). Gold rides its own single `gold_changed` from `add_gold`.
+static func _notify_equipped() -> void:
+	FleetLib.notify_changed()
 
 
 # --- Flagship promotion ----------------------------------------------------

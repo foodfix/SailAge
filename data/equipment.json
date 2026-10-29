@@ -1,4 +1,69 @@
 {
   "version": 1,
-  "equipment": []
+  "equipment": [
+    {
+      "id": "eq_cutlass",
+      "name": {"zh": "水手弯刀", "en": "Sailor's Cutlass"},
+      "slot": "weapon",
+      "modifiers": {"combat": 3},
+      "price": 400,
+      "phase": 2
+    },
+    {
+      "id": "eq_rapier",
+      "name": {"zh": "贵族细剑", "en": "Noble's Rapier"},
+      "slot": "weapon",
+      "modifiers": {"combat": 5},
+      "price": 1200,
+      "phase": 2
+    },
+    {
+      "id": "eq_breastplate",
+      "name": {"zh": "胸甲", "en": "Breastplate"},
+      "slot": "armor",
+      "modifiers": {"combat": 2},
+      "price": 700,
+      "phase": 2
+    },
+    {
+      "id": "eq_lucky_charm",
+      "name": {"zh": "幸运护符", "en": "Lucky Charm"},
+      "slot": "armor",
+      "modifiers": {"combat": 1, "luck": 5},
+      "price": 900,
+      "phase": 2
+    },
+    {
+      "id": "eq_mermaid_figurehead",
+      "name": {"zh": "美人鱼船首像", "en": "Mermaid Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 10},
+      "price": 1500,
+      "phase": 2
+    },
+    {
+      "id": "eq_dragon_figurehead",
+      "name": {"zh": "龙首船像", "en": "Dragon Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 20},
+      "price": 3200,
+      "phase": 2
+    },
+    {
+      "id": "eq_cotton_sails",
+      "name": {"zh": "棉帆", "en": "Cotton Sails"},
+      "slot": "sail",
+      "modifiers": {"speed": 1},
+      "price": 1000,
+      "phase": 2
+    },
+    {
+      "id": "eq_storm_sails",
+      "name": {"zh": "风暴帆", "en": "Storm Sails"},
+      "slot": "sail",
+      "modifiers": {"speed": 1, "durability": 5},
+      "price": 2600,
+      "phase": 2
+    }
+  ]
 }

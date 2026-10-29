@@ -1,13 +1,13 @@
 extends Control
-## Shipyard (S6) — buy / repair / sell ships, with the Phase-2 refit row
-## present but disabled (docs/40-SHIPS-AND-FLEET.md §4.3–§4.4, §6; docs/30-*
-## §4.7 shipyard place in the flow; docs/80-UI-UX.md §4.7 dialogs, §4.8
-## palette/sizes; docs/90-* §7 routing).
+## Shipyard (S6) — buy / repair / sell ships, Phase-2 armament refit and the
+## equipment rows (docs/40-SHIPS-AND-FLEET.md §4.3–§4.4, §6; docs/30-* §4.7
+## shipyard place in the flow; docs/80-UI-UX.md §4.7 dialogs, §4.7.2 refit +
+## equipment rows, §4.8 palette/sizes; docs/90-* §7 routing).
 ##
 ## **Every rule lives in [ShipyardEngine]** — this screen only renders and
 ## delegates: no price, cap or eligibility formula is duplicated here. That is
-## what makes the engine's headless tests (`tools/test_shipyard.gd`) meaningful
-## proof for the UI as well.
+## what makes the engine's headless tests (`tools/test_shipyard.gd` and
+## `tools/test_equipment.gd`) meaningful proof for the UI as well.
 ##
 ## Layout (1280×720):
 ##   * header — title (`shipyard.title`), live gold, Esc hint, `Back`;
@@ -15,11 +15,17 @@ extends Control
 ##     each with price + a one-line stats string and a Buy button whose
 ##     disabled reason is the tooltip (`80-*` §4.7 "disabled with
 ##     tooltip-reason");
-##   * right — own fleet, one panel per hull: type, durability bar, crew,
-##     repair picker (1 / 10 / Max + numeric, live cost preview), Promote,
-##     Sell (with the `shipyard.sell.confirm` modal) and the disabled Refit row
-##     carrying the `shipyard.cannons.phase2` label;
+##   * right — the player's two equipment slots (`weapon`/`armor`, `60-*`
+##     §4.11.12), then own fleet, one panel per hull: type, durability bar,
+##     crew, repair picker (1 / 10 / Max + numeric, live cost preview), the
+##     Phase-2 cannons picker (§4.7.2), the ship's two equipment rows
+##     (`figurehead`/`sail`), Promote and Sell (with the
+##     `shipyard.sell.confirm` modal);
 ##   * shared HUD (§4.5: S4–S8 keep the same bars, minimap hidden in port).
+##
+## Equipment rows show the worn item or `ui.empty`, one buy button per
+## `data/equipment.json` item of that slot (price + disabled-reason tooltip)
+## and an Unequip button when something is worn (`80-*` §4.7.2).
 ##
 ## Esc / Back return to the port hub (S6 → S4, `30-*` §4.7). All text is
 ## re-bound on `EventBus.locale_changed` (§6), and the lists re-bind on
@@ -45,6 +51,35 @@ const MAX_FALLBACK_KEY := "market.max"
 ## (a data label + a digit, never hardcoded prose).
 const CANNONS_KEY := "shipyard.cannons_stat"
 const CANNONS_FALLBACK_KEY := "shipyard.refit"
+## Phase-2 refit row (§4.7.2): `shipyard.cannons` is the row's label,
+## `shipyard.cannons_sellback` / `shipyard.cannons_cost` its two numbers; all
+## three are requested for the next merge, with existing keys as fallbacks so
+## no raw "<key>" can reach the screen.
+const CANNONS_LABEL_KEY := "shipyard.cannons"
+const CANNONS_LABEL_FALLBACK_KEY := "shipyard.refit"
+const CANNONS_COST_KEY := "shipyard.cannons_cost"
+const CANNONS_COST_FALLBACK_KEY := "shipyard.repair_cost"
+const CANNONS_SELLBACK_KEY := "shipyard.cannons_sellback"
+const CANNONS_SELLBACK_FALLBACK_KEY := "shipyard.repair_cost"
+## Equipment rows (§4.7.2): the heading, the Unequip button and the toasts
+## after a purchase/removal. New keys requested for the next merge. The
+## heading and the two toasts simply stay hidden/silent while absent (the HUD
+## skips a missing toast key); Unequip falls back to the shared "Sell" verb.
+const EQUIP_HEADING_KEY := "shipyard.equipment"
+const UNEQUIP_KEY := "shipyard.unequip"
+const UNEQUIP_FALLBACK_KEY := "market.sell"
+const EQUIP_BOUGHT_KEY := "shipyard.equipped"
+const UNEQUIPPED_KEY := "shipyard.unequipped"
+## Slot headings: `80-*` §4.7.2 names the four rows by their `10-*` §4.6 slot
+## enum value, so until `shipyard.slot.<slot>` merges the heading shows that
+## data token (`weapon`, `armor`, …) — a schema enum, never invented prose in
+## either locale, and never a raw "<key>".
+const SLOT_LABEL_FALLBACKS := {
+	"weapon": "weapon",
+	"armor": "armor",
+	"figurehead": "figurehead",
+	"sail": "sail",
+}
 
 ## Durability bar geometry (docs/80-* §4.8: 8px base unit).
 const BAR_W := 120.0
@@ -69,8 +104,11 @@ signal went_back
 ## Buy buttons by ship type id (tests + [method _bind_catalog]).
 var _buy_buttons: Dictionary = {}
 ## One widget dict per fleet row, in fleet order. Keys: `index`, `points`,
-## `preview`, `repair`, `sell`, `promote`, `refit`, `refit_note`.
+## `preview`, `repair`, `sell`, `promote`, `refit`, `refit_note`, `cannons`,
+## `refit_sellback`, `equip` (slot → row dict).
 var _fleet_widgets: Array = []
+## The player's own equipment rows (`weapon`/`armor`), slot → row dict.
+var _player_equip_widgets: Dictionary = {}
 ## Fleet index captured by the open sell-confirmation dialog (-1 = none).
 var _pending_sell_index := -1
 ## Guards the LineEdit `text_changed` handler while it rewrites the field.
@@ -87,6 +125,8 @@ var _rebuilding := false
 @onready var _catalog_title: Label = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogTitle
 @onready var _catalog_rows: VBoxContainer = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll/CatalogRows
 @onready var _fleet_title: Label = $Layout/VBox/Body/FleetPanel/Margin/Box/FleetTitle
+@onready var _player_equip_title: Label = $Layout/VBox/Body/FleetPanel/Margin/Box/PlayerEquip/PlayerEquipTitle
+@onready var _player_equip_rows: VBoxContainer = $Layout/VBox/Body/FleetPanel/Margin/Box/PlayerEquip/PlayerEquipRows
 @onready var _fleet_rows: VBoxContainer = $Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll/FleetRows
 @onready var _confirm: Control = $ConfirmDialog
 
@@ -161,6 +201,21 @@ func fleet_widget(index: int) -> Dictionary:
 	if index < 0 or index >= _fleet_widgets.size():
 		return {}
 	return _fleet_widgets[index]
+
+
+## Widget dict of the player's own `slot` row (`weapon`/`armor`), or `{}`.
+func player_equipment_widget(slot: String) -> Dictionary:
+	var value = _player_equip_widgets.get(slot, null)
+	return value if value is Dictionary else {}
+
+
+## Widget dict of `fleet[ship_index]`'s `slot` row (`figurehead`/`sail`), or `{}`.
+func ship_equipment_widget(index: int, slot: String) -> Dictionary:
+	var equip = fleet_widget(index).get("equip", {})
+	if not (equip is Dictionary):
+		return {}
+	var value = (equip as Dictionary).get(slot, null)
+	return value if value is Dictionary else {}
 
 
 ## Rebuilds the gold readout and both lists from `GameState`. Deferred by the
@@ -287,19 +342,34 @@ func _catalog_stats(ship_type: Dictionary) -> String:
 
 # --- Fleet -----------------------------------------------------------------
 
-## Own fleet, one panel per hull in `fleet` order (flagship first).
+## Own fleet, one panel per hull in `fleet` order (flagship first), plus the
+## player's own two equipment slots above the list (`60-*` §4.11.12).
 func _bind_fleet() -> void:
 	_fleet_title.text = I18n.t_key("fleet.title")
+	_bind_player_equipment()
 	_clear(_fleet_rows)
 	_fleet_widgets.clear()
 	for index in GameState.fleet.size():
 		_add_fleet_row(index, GameState.fleet[index])
 
 
+## The player's `weapon` + `armor` rows (§4.7.2 "four slot rows … `weapon`,
+## `armor` on the player").
+func _bind_player_equipment() -> void:
+	_player_equip_title.text = I18n.t_key(EQUIP_HEADING_KEY) \
+		if DataLoader.ui_strings.has(EQUIP_HEADING_KEY) else ""
+	_player_equip_title.visible = not _player_equip_title.text.is_empty()
+	_clear(_player_equip_rows)
+	_player_equip_widgets.clear()
+	for slot in ShipyardLib.PLAYER_SLOTS:
+		_player_equip_widgets[slot] = \
+			_add_equipment_row(_player_equip_rows, slot, -1)
+
+
 func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	var widgets: Dictionary = {"index": index, "sell": null, "promote": null,
 		"repair": null, "refit": null, "refit_note": null, "points": null,
-		"preview": null}
+		"preview": null, "cannons": null, "refit_sellback": null, "equip": {}}
 
 	var panel := PanelContainer.new()
 	panel.name = "Fleet_%d" % index
@@ -359,7 +429,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	stats_row.name = "Stats"
 	stats_row.add_theme_constant_override("separation", 12)
 
-	var max_durability := FleetLib.ship_stat(ship, "durability")
+	var max_durability: int = ShipyardLib.ship_max_durability(index)
 	var durability := int(ship.get("durability", 0))
 	var ratio := float(durability) / float(max_durability) if max_durability > 0 else 0.0
 	stats_row.add_child(_durability_bar(ratio))
@@ -434,27 +504,70 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 
 	box.add_child(bottom)
 
-	# --- line 4: refit stub ----------------------------------------------
-	# Refit: **present but disabled in Phase 1** (§4.3), carrying the explicit
-	# Phase-2 label both as the visible note and the button tooltip.
+	# --- line 4: cannons picker (Phase 2, `80-*` §4.7.2) -------------------
+	# Numeric picker 0 … `max_refit` at 100g/cannon with the 50g sell-back
+	# shown for the current count. Every number comes from the engine.
 	var refit_row := HBoxContainer.new()
 	refit_row.name = "RefitRow"
 	refit_row.add_theme_constant_override("separation", 8)
 
+	var cannons_label := _label(
+		_fmt_or(CANNONS_LABEL_KEY, {}, CANNONS_LABEL_FALLBACK_KEY), PaletteLib.TEXT
+	)
+	cannons_label.name = "CannonsLabel"
+	refit_row.add_child(cannons_label)
+
+	var cannons_field := LineEdit.new()
+	cannons_field.name = "Cannons_%d" % index
+	cannons_field.custom_minimum_size = Vector2(56, PaletteLib.ROW_H)
+	cannons_field.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	cannons_field.max_length = 3
+	cannons_field.tooltip_text = cannons_label.text
+	# §4.7 numeric fields: digits only, live-clamped, empty = invalid.
+	cannons_field.text_changed.connect(_on_cannons_changed.bind(index))
+	refit_row.add_child(cannons_field)
+	widgets["cannons"] = cannons_field
+
+	var cannons_max := _row_button(_fmt_or(MAX_KEY, {}, MAX_FALLBACK_KEY))
+	cannons_max.name = "CannonsMax_%d" % index
+	cannons_max.custom_minimum_size.x = 56
+	cannons_max.pressed.connect(_on_cannons_max_pressed.bind(index))
+	refit_row.add_child(cannons_max)
+
 	var refit := _row_button(I18n.t_key("shipyard.refit"))
 	refit.name = "Refit_%d" % index
-	refit.disabled = true
-	refit.tooltip_text = I18n.t_key("shipyard.cannons.phase2")
+	refit.pressed.connect(_on_refit_pressed.bind(index))
 	refit_row.add_child(refit)
 	widgets["refit"] = refit
 
-	var refit_note := _label(I18n.t_key("shipyard.cannons.phase2"), PaletteLib.PANEL_LINE)
+	# Two notes: live cost preview (left, expands) and the sell-back of the
+	# cannons already aboard (right, fixed), as §4.7.2 asks.
+	var refit_note := _label("", PaletteLib.PANEL_LINE)
 	refit_note.name = "RefitNote_%d" % index
 	refit_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	refit_row.add_child(refit_note)
 	widgets["refit_note"] = refit_note
 
+	var sellback_note := _label("", PaletteLib.PANEL_LINE)
+	sellback_note.name = "RefitSellback_%d" % index
+	refit_row.add_child(sellback_note)
+	widgets["refit_sellback"] = sellback_note
+
 	box.add_child(refit_row)
+
+	# --- lines 5+: ship equipment slots (`figurehead`, `sail`) -------------
+	# `60-*` §4.11.12: the ship slots live on this hull. Each row is built by
+	# the same helper as the player's `weapon`/`armor` rows, so both owners
+	# render identically (§4.7.2).
+	var equip_box := VBoxContainer.new()
+	equip_box.name = "EquipRows"
+	equip_box.add_theme_constant_override("separation", 4)
+	widgets["equip"] = {}
+	for slot in ShipyardLib.SHIP_SLOTS:
+		(widgets["equip"] as Dictionary)[slot] = \
+			_add_equipment_row(equip_box, slot, index)
+	box.add_child(equip_box)
+
 	_fleet_rows.add_child(panel)
 	_fleet_widgets.append(widgets)
 
@@ -462,6 +575,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# repair). The flagship is the hull most worth repairing; it just cannot be
 	# sold.
 	_refresh_repair(index)
+	_refresh_refit(index)
 
 
 ## "Ship 1 · Caravel" plus the flagship tag (§4.4: the flagship is fleet[0]).
@@ -559,6 +673,211 @@ func _on_points_step_pressed(index: int, step: int) -> void:
 	_refresh_repair(index)
 
 
+# --- Cannons picker (Phase 2, `80-*` §4.7.2) -------------------------------
+
+## Current picker value for `index` (0 when empty/invalid).
+func refit_cannons(index: int) -> int:
+	var widgets := fleet_widget(index)
+	if widgets.is_empty():
+		return 0
+	return int((widgets["cannons"] as LineEdit).text.to_int())
+
+
+## Live cost preview + Refit enablement for the picker's current value, plus
+## the sell-back note for the cannons already aboard (§4.7.2).
+func _refresh_refit(index: int) -> void:
+	var widgets := fleet_widget(index)
+	if widgets.is_empty():
+		return
+	var field: LineEdit = widgets["cannons"]
+	var note: Label = widgets["refit_note"]
+	var sellback_note: Label = widgets["refit_sellback"]
+	var refit: Button = widgets["refit"]
+	var ship: Dictionary = GameState.fleet[index]
+	var aboard := int(ship.get("cannons", 0))
+	var requested := field.text.to_int()
+
+	# The 50g/cannon sell-back of what is already mounted is always shown, so
+	# the player can price a refit against it at a glance.
+	sellback_note.text = _fmt_or(CANNONS_SELLBACK_KEY, {
+		"amount": ShipyardLib.refit_sellback(aboard),
+	}, CANNONS_SELLBACK_FALLBACK_KEY)
+
+	var cap: int = ShipyardLib.max_refit(index)
+	field.tooltip_text = I18n.t_key("shipyard.refit")
+	note.text = _fmt_or(CANNONS_COST_KEY, {
+		"amount": ShipyardLib.refit_cost(requested),
+	}, CANNONS_COST_FALLBACK_KEY)
+	note.add_theme_color_override(
+		"font_color",
+		PaletteLib.TEXT if requested > 0 and requested <= cap else PaletteLib.PANEL_LINE
+	)
+	var reason: String = ShipyardLib.refit_block_reason(index, requested)
+	refit.disabled = not reason.is_empty()
+	refit.tooltip_text = _reason_text(reason) if not reason.is_empty() else note.text
+	# A hull with no spare slots/cargo has nothing to pick: the field and the
+	# Max button go inert, exactly like the repair picker at 0 damage (§6).
+	field.editable = cap > 0
+	if cap <= 0:
+		field.text = "0"
+
+
+## §4.7 numeric entry: digits only, live-clamped to `[0, max_refit]`.
+func _on_cannons_changed(_text: String, index: int) -> void:
+	if _normalizing_points or index < 0 or index >= GameState.fleet.size():
+		return
+	var widgets := fleet_widget(index)
+	if widgets.is_empty():
+		return
+	var field: LineEdit = widgets["cannons"]
+	var digits := ""
+	for character in field.text:
+		if character >= "0" and character <= "9":
+			digits += character
+	var clamped := mini(digits.to_int(), ShipyardLib.max_refit(index))
+	var normalized := str(clamped) if not digits.is_empty() else ""
+	if normalized != field.text:
+		_normalizing_points = true
+		field.text = normalized
+		field.caret_column = normalized.length()
+		_normalizing_points = false
+	_refresh_refit(index)
+
+
+func _on_cannons_max_pressed(index: int) -> void:
+	var widgets := fleet_widget(index)
+	if widgets.is_empty():
+		return
+	var field: LineEdit = widgets["cannons"]
+	field.text = str(maxi(ShipyardLib.max_refit(index), 0))
+	field.caret_column = field.text.length()
+	_refresh_refit(index)
+
+
+# --- Equipment rows (`80-*` §4.7.2, `60-*` §4.11.12) ----------------------
+
+## Builds one equipment row into `parent` and returns its widget dict:
+## "{Slot} · <worn item or ui.empty>" plus every item of that slot as a buy
+## button (price on the label, disabled reason as the tooltip) and Unequip when
+## something is worn (`80-*` §4.7.2).
+##
+## `ship_index < 0` means the player's own slots (`weapon`/`armor`).
+## The dict is `{slot, row, heading, worn, buy (id → Button), unequip}`.
+func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictionary:
+	# Two lines per row (§4.8: 32px rows, half-width panel): line 1 is the
+	# slot noun, the worn item and Unequip; line 2 is the buy list, because
+	# "<name> <price>" buttons for two items never fit beside those labels at
+	# 1280×720.
+	var card := VBoxContainer.new()
+	card.name = "Equip_%s_%s" % [slot, "player" if ship_index < 0 else str(ship_index)]
+	card.add_theme_constant_override("separation", 2)
+
+	var row := HBoxContainer.new()
+	row.name = "Worn"
+	row.add_theme_constant_override("separation", 8)
+
+	var worn_id := _worn_equipment(slot, ship_index)
+	var heading := _label(_slot_label(slot), PaletteLib.TEXT)
+	heading.name = "Slot"
+	heading.custom_minimum_size.x = 90
+	row.add_child(heading)
+
+	var worn := _label(
+		_equipment_name(worn_id) if not worn_id.is_empty() else I18n.t_key("ui.empty"),
+		PaletteLib.ACCENT if not worn_id.is_empty() else PaletteLib.PANEL_LINE
+	)
+	worn.name = "ItemName"
+	worn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	worn.tooltip_text = worn.text
+	row.add_child(worn)
+
+	var unequip := _row_button(_fmt_or(UNEQUIP_KEY, {}, UNEQUIP_FALLBACK_KEY))
+	unequip.name = "Unequip_%s_%s" % [slot,
+		"player" if ship_index < 0 else str(ship_index)]
+	unequip.disabled = worn_id.is_empty()
+	unequip.tooltip_text = _reason_text("ui.not_available") \
+		if worn_id.is_empty() else unequip.text
+	unequip.pressed.connect(_on_unequip_pressed.bind(slot, ship_index))
+	row.add_child(unequip)
+
+	card.add_child(row)
+
+	var buy_row := HBoxContainer.new()
+	buy_row.name = "Buy"
+	buy_row.add_theme_constant_override("separation", 8)
+	var buttons: Dictionary = {}
+	for item in ShipyardLib.equipment_list(slot):
+		var equipment_id := str(item.get("id", ""))
+		var price := ShipyardLib.equip_price(slot, equipment_id)
+		var buy := _row_button("%s · %s" % [
+			_equipment_name(equipment_id),
+			I18n.fmt("shipyard.price", {"price": HudLib.format_thousands(price)}),
+		])
+		buy.name = "Buy_%s_%s" % [equipment_id,
+			"player" if ship_index < 0 else str(ship_index)]
+		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var reason := ShipyardLib.equip_block_reason(slot, equipment_id, ship_index)
+		buy.disabled = not reason.is_empty()
+		buy.tooltip_text = _reason_text(reason) if not reason.is_empty() \
+			else _equipment_tooltip(slot, equipment_id)
+		buy.pressed.connect(_on_equip_pressed.bind(slot, equipment_id, ship_index))
+		buy_row.add_child(buy)
+		buttons[equipment_id] = buy
+	card.add_child(buy_row)
+
+	parent.add_child(card)
+	return {
+		"slot": slot, "row": card, "heading": heading, "worn": worn,
+		"buy": buttons, "unequip": unequip,
+	}
+
+
+## The id worn in `slot` on the player (`ship_index < 0`) or on a hull.
+func _worn_equipment(slot: String, ship_index: int) -> String:
+	if ship_index < 0:
+		return ShipyardLib.equipped_player(slot)
+	return ShipyardLib.equipped_ship(ship_index, slot)
+
+
+## Localised item name (the id itself for an unknown id, never a "<key>").
+func _equipment_name(equipment_id: String) -> String:
+	if equipment_id.is_empty():
+		return ""
+	var item: Dictionary = DataLoader.get_equipment(equipment_id)
+	if item.is_empty():
+		return equipment_id
+	return I18n.t(item.get("name", {}))
+
+
+## Row heading: `shipyard.slot.<slot>` once merged, else the `10-*` §4.6 slot
+## enum itself (`weapon`, `armor`, `figurehead`, `sail`) — a data token, never
+## invented prose and never a raw "<key>". The L10n keys are requested for the
+## next `ui_strings.json` merge (see the report).
+func _slot_label(slot: String) -> String:
+	var key := "shipyard.slot.%s" % slot
+	if DataLoader.ui_strings.has(key):
+		return I18n.t_key(key)
+	return str(SLOT_LABEL_FALLBACKS.get(slot, slot))
+
+
+## Tooltip for an enabled buy button: the item's modifiers, rendered as
+## "<stat> +N" pairs with each stat's existing `char.*` noun.
+func _equipment_tooltip(slot: String, equipment_id: String) -> String:
+	var item: Dictionary = DataLoader.get_equipment(equipment_id)
+	var modifiers = item.get("modifiers", {})
+	var parts: Array[String] = []
+	if modifiers is Dictionary:
+		for stat in (modifiers as Dictionary):
+			var delta := int((modifiers as Dictionary)[stat])
+			var stat_key := "char.%s" % str(stat)
+			var stat_name := I18n.t_key(stat_key) \
+				if DataLoader.ui_strings.has(stat_key) else str(stat)
+			parts.append("%s %+d" % [stat_name, delta])
+	if parts.is_empty():
+		return _equipment_name(equipment_id)
+	return "%s: %s" % [_equipment_name(equipment_id), " · ".join(parts)]
+
+
 # --- Actions ---------------------------------------------------------------
 
 func _on_buy_pressed(ship_type_id: String) -> void:
@@ -567,6 +886,44 @@ func _on_buy_pressed(ship_type_id: String) -> void:
 	_toast("shipyard.bought", {"ship": _ship_type_name(ship_type_id)})
 	# `fleet_changed`/`gold_changed` arrive from the engine; rebuild deferred so
 	# this button is not freed inside its own `pressed` handler.
+	_rebuild_deferred()
+
+
+func _on_refit_pressed(index: int) -> void:
+	var cannons := refit_cannons(index)
+	if not ShipyardLib.refit(index, cannons):
+		return
+	# `shipyard.refitted` is requested for the next merge; the HUD skips a
+	# missing key silently, so no "<key>" can be shown in the meantime.
+	_toast("shipyard.refitted", {"cannons": cannons,
+		"amount": ShipyardLib.refit_cost(cannons)})
+	_rebuild_deferred()
+
+
+func _on_equip_pressed(slot: String, equipment_id: String,
+		ship_index: int) -> void:
+	var old_id := _worn_equipment(slot, ship_index)
+	if not ShipyardLib.equip(slot, equipment_id, ship_index):
+		return
+	var values := {
+		"name": _equipment_name(equipment_id),
+		"old": _equipment_name(old_id),
+		"amount": -ShipyardLib.equip_net_cost(slot, equipment_id, ship_index),
+	}
+	# `shipyard.equipped` is requested for the next merge; the HUD skips a
+	# missing key silently (`Hud.toast_key`), so no "<key>" can be shown.
+	_toast(EQUIP_BOUGHT_KEY, values)
+	_rebuild_deferred()
+
+
+func _on_unequip_pressed(slot: String, ship_index: int) -> void:
+	var worn := _worn_equipment(slot, ship_index)
+	if not ShipyardLib.unequip(slot, ship_index):
+		return
+	_toast(UNEQUIPPED_KEY, {
+		"name": _equipment_name(worn),
+		"amount": ShipyardLib.equip_sellback(slot, worn),
+	})
 	_rebuild_deferred()
 
 
