@@ -40,6 +40,9 @@ var proximity_cooldowns: Dictionary = {}
 ## Phase-2/3 fields: present but empty in Phase 1.
 var quests: Array = []
 var discoveries_found: Array = []
+## The encounter a battle scene should open (`60-*` §4.11.11.3). Transient:
+## set by S3 immediately before routing, cleared by S10 on open, never saved.
+var pending_encounter = null
 ## Minimap exploration set; deliberately not saved in Phase 1
 ## (docs/20-* §4.12 known limitation).
 var explored_tiles: Dictionary = {}
@@ -131,6 +134,7 @@ func new_game(nation_id: String, route: bool = true) -> void:
 	# docs/60-* §4.11.11: markers and spawn immunity are per-run state.
 	hostile_fleets = []
 	proximity_cooldowns = {}
+	pending_encounter = null
 	explored_tiles = {}
 	CharacterLib.pending_levelup = false
 

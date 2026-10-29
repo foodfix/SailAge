@@ -142,6 +142,8 @@ marked •):
   present-but-empty before Phase 2
 - `proximity_cooldowns: Dictionary` • — `{kind: day}` spawn immunity
   (`60-*` §4.8); present-but-empty before Phase 2
+- `pending_encounter` — **transient, never saved**: the encounter S3 hands to
+  S10 (`60-*` §4.11.11.3); S10 clears it on open
 - `quests`, `discoveries_found`: Phase-2/3 fields, present-but-empty in P1
 - API: `new_game(nation_id)`, `add_gold(delta)`, `advance_day()`, and thin
   helpers; heavy rules live in `scripts/` engines which mutate GameState.
