@@ -429,6 +429,121 @@ Prices are `money`; modifiers use §4.11.12 semantics.
 Buy price = `price`; sell-back = `floor(price × 0.5)`. All items are sold at
 every Phase-1 shipyard (regional restrictions OUT OF SCOPE (phase 3)).
 
+### 4.12 Module interfaces (pins for `IMPLEMENT-Phase2.md`)
+
+Parallel tasks must not invent two names for one thing (the Phase-1 lesson:
+two divergent reputation models merged). These signatures are fixed; a task
+implements exactly these and calls only these.
+
+#### 4.12.1 `scripts/combat/battle_sim.gd` (`class_name BattleSim`)
+
+Pure `RefCounted`; **never** mutates `GameState`. Callers hand it copies.
+
+```
+BattleSim.new(config: Dictionary)          # see config below
+start() -> void
+round_number() -> int
+is_over() -> bool
+outcome() -> Dictionary                     # §4.12.2, only after is_over()
+current_unit() -> Dictionary                # {} when over
+end_turn() -> void                          # advances to the next unit/round
+unit_cell(unit: Dictionary) -> Vector2i
+legal_moves(unit: Dictionary) -> Array[Vector2i]
+move_to(unit: Dictionary, cell: Vector2i) -> bool
+can_cannon(unit, target) -> bool
+cannon(unit, target) -> Dictionary          # {ok, damage, sunk, log}
+ram(unit, target) -> Dictionary
+board(unit, target) -> Dictionary           # {ok, duel, ...} (duel via §4.12.1.2)
+hold(unit) -> Dictionary
+run_to_completion(policy: Callable, max_rounds: int = 30) -> Dictionary
+```
+
+`config` keys (all required unless marked):
+
+| Key | Type | Meaning |
+|---|---|---|
+| `player_ships` | `[]Dictionary` | §4.11.11 ship instances, index 0 = flagship |
+| `enemy_ships` | `[]Dictionary` | same shape |
+| `enemy_kind` | `String` | `pirate` \| `navy` |
+| `enemy_nation` | `String` | navy's nation id (`""` for pirates) |
+| `day` | `int` | |
+| `gold` | `int` | for the §4.11.1 seed |
+| `contact` | `Vector2i` | world tile at contact |
+| `weather` | `String` | `20-*` §4.7 value (`storm` halves cannon damage) |
+| `seed` | `int` | *optional*; overrides the §4.11.1 formula (tests) |
+
+`unit` is a plain dict with at least `side` (`"player"`/`"enemy"`), `index`,
+`ship` (the instance), `cell` (`Vector2i`), `mp`, `reload_until_round`,
+`alive`.
+
+##### 4.12.1.1 `scripts/combat/ai_fleet.gd` (`class_name AiFleet`)
+
+```
+AiFleet.compose_enemy(kind: String, day: int, rng: RandomNumberGenerator) -> Array
+AiFleet.decide(sim: BattleSim, unit: Dictionary) -> Dictionary
+```
+
+`decide` returns `{action, target, cell}` where `action` ∈
+`cannon|ram|board|move|hold|surrender`; `target` is a unit dict or `{}`;
+`cell` is the destination for `move`. The priority order is §4.9 exactly.
+
+##### 4.12.1.2 Duel resolution (single implementation)
+
+```
+BattleSim.resolve_duel(
+    player_base: int, defender_base: int,
+    rng: RandomNumberGenerator) -> Dictionary
+```
+
+Returns `{result: "capture"|"defeat", rounds: [String], player_wins: int,
+defender_wins: int}`, `rounds[i]` ∈ `"win"|"loss"|"tie"` from the player's
+view, per §4.11.6. The battle's `board` action and the S11 modal both call
+**this** function — never a second copy of the formula.
+
+#### 4.12.2 Outcome block (§4.11.9/§4.11.10 payload)
+
+```json
+{
+  "result": "victory",
+  "rounds": 6,
+  "kind": "pirate",
+  "nation_id": "",
+  "encounter_id": "hf_12_30_40_pirate",
+  "contact": {"x": 30, "y": 40},
+  "sunk_enemy": ["sloop"],
+  "captured_enemy": [],
+  "surrendered_enemy": 0,
+  "sunk_player": [],
+  "lost_player": [],
+  "salvage_gold": 150,
+  "xp": 65,
+  "rep_deltas": {"portugal": 2, "spain": 2},
+  "cargo_overflow_lost": 0
+}
+```
+
+- `sunk_enemy` / `sunk_player` are `ship_type_id` lists (for the log/dialog).
+- `captured_enemy` / `lost_player` are full ship instances (the §4.11.7
+  capture rule consumes them).
+- `salvage_gold`, `xp`, `rep_deltas` are the **pre-computed** §4.11.10 numbers;
+  applying them is `BattleRewards.apply()` (§4.12.3).
+- `result` ∈ `victory` \| `defeat_sunk` \| `defeat_captured` \| `retreat` \|
+  `surrender`.
+
+#### 4.12.3 The three application seams
+
+| Module | Owner task | API |
+|---|---|---|
+| `scripts/combat/battle_result.gd` (`class_name BattleResult`) | C | `apply(sim_outcome: Dictionary, enemy_units: Array, player_fleet_ref: Array) -> Dictionary` — fleet-only effects: captures join the fleet (§4.11.7) or are looted+scuttled, lost player ships are removed, flagship promotion, `gameover.captured`/`sunk` emission; returns the outcome with `cargo_overflow_lost` filled in |
+| `scripts/combat/duel.gd` (`class_name Duel`) | C | `start(config: Dictionary) -> Dictionary` — `config` = `{player_base, defender_base, seed, ship_name, attacker_name, defender_name}`; runs `BattleSim.resolve_duel` and (in a scene tree) presents `duel_modal.tscn`; returns the same dict as `resolve_duel` plus `rounds` |
+| `scripts/combat/battle_rewards.gd` (`class_name BattleRewards`) | G | `apply(outcome: Dictionary) -> Dictionary` — adds `salvage_gold`, awards `xp` through `Character.award_xp`, applies `rep_deltas` through `Character.add_reputation`; returns what it applied |
+| `scripts/world/encounters.gd` (`class_name Encounters`) | F | `tick(is_at_sea: bool) -> Array`, `markers() -> Array`, `nearest_contact(cell: Vector2i) -> Dictionary`, `remove(id: String)`, `set_cooldown(kind: String, until_day: int)`, `spawn(kind, nation_id, day) -> Dictionary` (test seam), `reset_rng(seed: int)` |
+
+`battle_result.gd` and `battle_rewards.gd` are called through
+`ResourceLoader.load(...)` + `has_method` guards where the caller may run
+before the module exists (the Phase-1 `apply_fleet_guard` convention), so no
+task can be blocked by a sibling's merge order.
+
 ## 5. Data Examples
 
 Cannon volley (brigantine, 10 cannons, range 2, gunner effective combat 14):
