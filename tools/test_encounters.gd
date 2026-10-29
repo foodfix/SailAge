@@ -119,6 +119,10 @@ func _make_run(
 	GameState.explored_tiles = {}
 	GameState.hostile_fleets = []
 	GameState.proximity_cooldowns = {}
+	# The §4.11.11.3 handoff is real state as of the merged base (a transient
+	# `GameState` field, `90-*` §5.4), so a previous section's queued encounter
+	# would otherwise leak into this one; a fresh run starts with none.
+	GameState.pending_encounter = null
 	GameState.world = {
 		"position": {"x": cell.x, "y": cell.y},
 		"clock_fraction": 0.0,
