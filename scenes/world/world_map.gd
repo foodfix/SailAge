@@ -472,8 +472,15 @@ func _encounter_for(marker: Dictionary) -> Dictionary:
 
 ## Queues `encounter` on `GameState.pending_encounter`, emits `battle_started`
 ## once and routes to S10 when this scene is the active one and routing is on.
-## Cleared before the emit, so a re-entrant contact cannot open two battles
-## (§4.11.11.3).
+## The pending slot is consumed at battle start, so a re-entrant contact cannot
+## open two battles (§4.11.11.3).
+##
+## The navy piracy delta is charged **here**, exactly once per navy battle
+## (`60-*` §4.11.10: "exactly one −20 per navy battle … at battle start … or on
+## contact with a hunter"; never per ship, never again at battle end). Doing it
+## in this single funnel — behind the same-id guard above — is what makes a
+## double charge impossible by construction, whichever path opened the battle:
+## the player's attack, a hunter making contact, or a chained second marker.
 func _open_encounter(encounter: Dictionary) -> void:
 	if encounter.is_empty():
 		return
@@ -481,10 +488,22 @@ func _open_encounter(encounter: Dictionary) -> void:
 			and not _battle_encounter.is_empty():
 		return
 	_battle_encounter = encounter.duplicate(true)
+	_charge_navy_piracy(encounter)
 	_store_pending_encounter(encounter)
 	if EventBus.has_signal("battle_started"):
 		EventBus.battle_started.emit(encounter)
 	_route_to_battle()
+
+
+## `rep −20` with the navy's nation, once, for a navy battle (`60-*` §4.11.10,
+## `70-*` §4.5). Pirates cost no reputation (§4.1).
+func _charge_navy_piracy(encounter: Dictionary) -> void:
+	if str(encounter.get("kind", "")) != EncountersLib.NAVY:
+		return
+	var nation_id := str(encounter.get("nation_id", ""))
+	if nation_id.is_empty():
+		return
+	CharacterLib.add_reputation(nation_id, EncountersLib.PIRACY_REPUTATION)
 
 
 ## True while a battle this scene opened is unresolved.
@@ -632,16 +651,14 @@ func _close_attack_confirm() -> void:
 	dialog.queue_free()
 
 
-## Attacking a navy marker is piracy: `rep −20` with that nation immediately,
-## before the battle (§4.11.10, `70-*` §4.5, `encounter.attack_confirm` copy).
+## Attacking a navy marker is piracy: `rep −20` with that nation
+## (§4.11.10, `70-*` §4.5, `encounter.attack_confirm` copy). The charge itself
+## happens in [_open_encounter], so a player attack, a hunter contact and a
+## chained marker all go through one place and can never be charged twice.
 ## Pirates cost no reputation.
 func _attack(marker: Dictionary) -> void:
 	if marker.is_empty():
 		return
-	if str(marker.get("kind", "")) == EncountersLib.NAVY:
-		var nation_id := str(marker.get("nation_id", ""))
-		if not nation_id.is_empty():
-			CharacterLib.add_reputation(nation_id, EncountersLib.PIRACY_REPUTATION)
 	_open_encounter(_encounter_for(marker))
 
 

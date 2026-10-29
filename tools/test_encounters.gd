@@ -830,6 +830,39 @@ func _test_attack_navy_reputation() -> void:
 		"route_to_battle=false still records the encounter")
 	spawned[0].queue_free()
 
+	# §4.11.10 pin: exactly one −20 per navy battle, charged at battle start by
+	# whoever opened it — a hunter making contact charges it too, and the
+	# retreat/aftermath path never charges a second time.
+	# A hunter only exists at a bounty (§4.11.11.1: a navy is hostile at ≤ −50),
+	# so the contact fixture starts there.
+	_make_run(OPEN_CELL, {"spain": -50})
+	var spawned6: Array = _spawn_world(false)
+	var world6 = spawned6[1]
+	_place_marker(EncountersLib.NAVY, OPEN_CELL + Vector2i(1, 0), "seville", 1, "spain")
+	world6.sync_from_state()
+	world6._tick_encounters_at(true)
+	_check(world6.pending_encounter_id() != "",
+		"a navy hunter in contact opens a battle")
+	_check(CharacterLib.reputation("spain") == -70,
+		"contact with a navy hunter charges the single −20 (−50 → %d)"
+		% CharacterLib.reputation("spain"))
+	# Re-opening the same battle (a re-entrant contact) must not charge again.
+	var hunter_id: String = world6.pending_encounter_id()
+	if EventBus.has_signal("battle_finished"):
+		EventBus.battle_finished.emit({
+			"result": "retreat", "kind": "navy", "nation_id": "spain",
+			"encounter_id": hunter_id,
+		})
+	else:
+		world6._on_battle_finished({
+			"result": "retreat", "kind": "navy", "nation_id": "spain",
+			"encounter_id": hunter_id,
+		})
+	_check(CharacterLib.reputation("spain") == -70,
+		"battle end (retreat) does not repeat the navy −20 (got %d)"
+		% CharacterLib.reputation("spain"))
+	spawned6[0].queue_free()
+
 	# Clamp at −100, and never a positive overflow.
 	_make_run(OPEN_CELL, {"spain": -90})
 	var spawned2: Array = _spawn_world(false)

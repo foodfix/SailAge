@@ -62,6 +62,9 @@ const SPAWN_IMMUNITY_DAYS := 3
 ## pin the inclusivity, and this reading is the only one that yields an idle
 ## day from a `+1` offset (see the task F report).
 const PURSUIT_COOLDOWN_DAYS := 1## §4.11.10 / `70-*` §4.5: attacking a navy fleet is piracy (−20 reputation).
+## Charged exactly **once per navy battle, at battle start** by `world_map.gd`
+## (§4.11.10 pin) — never per ship and never again at battle end, so this
+## module only owns the constant.
 const PIRACY_REPUTATION := -20
 
 ## §4.10 / `60-*` §4.11.9: the battle outcome that leaves the enemy in place.
