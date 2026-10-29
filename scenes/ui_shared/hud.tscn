@@ -120,6 +120,14 @@ offset_right = 272.0
 offset_bottom = 272.0
 text = "-"
 
+[node name="MinimapTitle" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 272.0
+offset_right = 272.0
+offset_bottom = 296.0
+text = "Chart"
+
 [node name="Minimap" type="Control" parent="."]
 layout_mode = 0
 offset_left = 16.0

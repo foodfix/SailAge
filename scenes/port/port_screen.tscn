@@ -1,0 +1,120 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/port/port_screen.gd" id="1_port"]
+[ext_resource type="PackedScene" path="res://scenes/ui_shared/hud.tscn" id="2_hud"]
+
+[node name="PortScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("1_port")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="Layout" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 40.0
+offset_right = -16.0
+offset_bottom = -32.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="VBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="TitleRow" type="HBoxContainer" parent="Layout/VBox/Header"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="NationSwatch" type="ColorRect" parent="Layout/VBox/Header/TitleRow"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="PortName" type="Label" parent="Layout/VBox/Header/TitleRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Port"
+
+[node name="NationName" type="Label" parent="Layout/VBox/Header/TitleRow"]
+layout_mode = 2
+size_flags_vertical = 8
+text = "Nation"
+
+[node name="Greeting" type="Label" parent="Layout/VBox/Header"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "-"
+autowrap_mode = 3
+
+[node name="DayGreeting" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+text = "-"
+
+[node name="Facilities" type="VBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Placeholder" type="Label" parent="Layout/VBox/Facilities"]
+layout_mode = 2
+text = "Facilities"
+
+[node name="Rows" type="VBoxContainer" parent="Layout/VBox/Facilities"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Footer" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+alignment = 2
+
+[node name="EscHint" type="Label" parent="Layout/VBox/Footer"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Esc to go back"
+
+[node name="SetSail" type="Button" parent="Layout/VBox/Footer"]
+custom_minimum_size = Vector2(240, 40)
+layout_mode = 2
+text = "Set sail"
+
+[node name="HUD" parent="." instance=ExtResource("2_hud")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0

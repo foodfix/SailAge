@@ -34,6 +34,12 @@ const FALLBACK_CELL := Vector2i(7, 57)
 ## Port hub scene (owned by T11).
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
+## Routing seam (the `GameState.new_game(..., route)` convention): a headless
+## suite sets this false so entering a port still runs the whole §4.11 sequence
+## — discovery, desertion, dialog queue, `current_port` — without swapping the
+## test's own scene root. Production always routes.
+var route_to_port: bool = true
+
 ## docs/80-* §4.3 / project.godot: the eight movement actions.
 const MOVE_ACTIONS := {
 	"move_nw": Vector2i(-1, -1),
@@ -231,16 +237,23 @@ func _reject_move(_target: Vector2i) -> void:
 	print("WorldMap: move rejected (land/reef/edge/corner cut); no clock cost")
 
 
-## Port entry (docs/20-* §4.11): discover, remember, announce, then route.
+## Port entry (docs/20-* §4.11, in the doc's numbered order):
+##   1. the harbor tile's move + clock cost (already applied by [_try_step]);
+##   2. discover the port if it was unknown, then dock (`current_port`);
+##   3. queue the §4.7 dialogs: desertion (§4.8.2) → arrival greeting (§4.11);
+##   4. emit `port_entered`, then route to S4 once the queue has drained.
+## The port screen's greeting banner shows `Port.flavor`; the greeting dialog
+## carries `{port}` and `{day}` (§4.11 / `ui_strings world.arrive`).
 func _enter_port(port_id: String) -> void:
+	# 2. Discover-then-dock. Entering an unknown harbor discovers it (§4.11).
 	if not GameState.known_ports.has(port_id):
 		GameState.known_ports.append(port_id)
 	GameState.current_port = port_id
-	EventBus.port_entered.emit(port_id)
-	_sync_hud()
 
-	# §4.8.2 desertion on **every** port entry (morale < 40). The sim owns the
-	# loss; this scene owns the message, queued in §4.7 order with the greeting.
+	# 3. §4.8.2 desertion on **every** port entry (morale < 40). The sim owns
+	# the loss; this scene owns the message, queued in §4.7 order with the
+	# greeting (weather/mutiny entries from the same tick are already queued
+	# and sort ahead of these).
 	var entries: Array = []
 	if _has_game():
 		var lost: int = SailingSimLib.apply_desertion()
@@ -256,12 +269,17 @@ func _enter_port(port_id: String) -> void:
 				"day": GameState.day,
 			},
 		})
+
+	# 4. Announce (docs/90-* §5.1) and refresh the position-derived HUD bits.
+	EventBus.port_entered.emit(port_id)
 	_sync_hud()
 
-	# TODO(T11): the port screen is owned by T11 and does not exist yet. Until
-	# it does, announce and stay on the map (docs/90-* §7 world→port route).
-	if not ResourceLoader.exists(PORT_SCENE):
-		push_warning("WorldMap: %s missing (T11); staying on the world map" % PORT_SCENE)
+	# The port screen (T11 extends the T10 shell). Without one — or when routing
+	# is disabled for a headless suite, or there is no run at all (editor
+	# inspection mode, docs/IMPLEMENT T6-D) — announce and stay on the map.
+	if not route_to_port or not _has_game() or not ResourceLoader.exists(PORT_SCENE):
+		if not ResourceLoader.exists(PORT_SCENE):
+			push_warning("WorldMap: %s missing (T11); staying on the world map" % PORT_SCENE)
 		_show_dialog_entries(entries)
 		return
 	# Route **after** the dialogs so the desertion/greeting chain is not thrown
@@ -291,9 +309,34 @@ func _on_dialogs_finished() -> void:
 func _route_to_pending_port() -> void:
 	var port_id := _pending_port_id
 	_pending_port_id = ""
-	if port_id.is_empty() or not ResourceLoader.exists(PORT_SCENE):
+	if port_id.is_empty() or not route_to_port:
+		return
+	if not ResourceLoader.exists(PORT_SCENE):
+		return
+	# Only the scene the tree is actually showing may be replaced. A tool that
+	# instanced the map as a child (the headless suites do) keeps its own root;
+	# routing there would destroy the test runner instead of the map
+	# (docs/90-* §7 "no scene ever frees another" — the router swaps the root).
+	if not is_active_scene():
 		return
 	GameState.change_scene(PORT_SCENE)
+
+
+## True when this node is the tree's current scene, i.e. a real S3 in
+## production rather than a child instanced by a test or a tool.
+func is_active_scene() -> bool:
+	var tree := get_tree()
+	return tree != null and tree.current_scene == self
+
+
+## The scene this entry would route to (`""` when none is pending). Tests read
+## this instead of letting the router swap their own scene root.
+func port_route_target() -> String:
+	if _pending_port_id.is_empty():
+		return ""
+	if not ResourceLoader.exists(PORT_SCENE):
+		return ""
+	return PORT_SCENE
 
 
 ## §4.5 steps 3–6 produce their reports here, in the §4.7 fixed order. Step 3
@@ -392,6 +435,11 @@ func _is_adjacent(target: Vector2i) -> bool:
 func _modal_open() -> bool:
 	# HUD-hosted queued dialogs.
 	if _hud != null and _hud.has_method("has_modal") and _hud.has_modal():
+		return true
+	# The enlarged chart (`M`, docs/80-* §4.3) is a modal overlay: the fleet
+	# must not step behind it, and `M`/Esc close it before movement resumes.
+	if _hud != null and _hud.has_method("is_minimap_enlarged") \
+			and _hud.is_minimap_enlarged():
 		return true
 	# Any dialog instance anywhere in the tree joins `modal_overlay` while open.
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
