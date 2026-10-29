@@ -23,10 +23,12 @@ const PortScene := preload("res://scenes/port/port_screen.tscn")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 ## §8.1 keys the payload must carry, in the doc's order (minus nothing).
+## Phase 2 (save_version 2) appends `hostile_fleets` / `proximity_cooldowns`.
 const PAYLOAD_KEYS := [
 	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
 	"fleet", "morale", "world", "current_port", "known_ports",
-	"port_investments", "quests", "discoveries_found",
+	"port_investments", "quests", "discoveries_found", "hostile_fleets",
+	"proximity_cooldowns",
 ]
 
 var _failures: Array[String] = []
@@ -177,7 +179,8 @@ func _test_full_round_trip() -> void:
 	_check(missing.is_empty(), "payload has every §8.1 key (missing: %s)" % str(missing))
 	_check(int(raw.get("save_version", 0)) == SaveSystem.SAVE_VERSION,
 		"save_version is %d" % SaveSystem.SAVE_VERSION)
-	_check(int(raw.get("phase", 0)) == 1, "phase is 1")
+	_check(int(raw.get("phase", 0)) == SaveSystem.PHASE,
+		"phase is %d" % SaveSystem.PHASE)
 	_check(typeof(raw.get("saved_at")) in [TYPE_FLOAT, TYPE_INT],
 		"saved_at is numeric")
 	_check(not (raw.get("world", {}) as Dictionary).has("clock_fraction"),
@@ -407,15 +410,16 @@ func _test_migration_path() -> void:
 	v0.erase("morale")
 	_write_json(1, v0)
 
-	# Without the migration the load must fail (the phase-1 shipped table is
-	# empty, which is exactly this case).
-	_check(SaveSystem.MIGRATIONS.is_empty(), "phase 1 ships no migrations")
+	# Without the migration the load must fail (the shipped table has no v0
+	# step, which is exactly this case).
+	_check(SaveSystem.MIGRATIONS.keys() == [1],
+		"the shipped table has only the 1 → 2 step")
 	var before := _expected()
-	_check(SaveSystem.load(1) == false, "v0 fails while MIGRATIONS is empty")
+	_check(SaveSystem.load(1) == false, "v0 fails while MIGRATIONS has no v0 step")
 	_check(_expected() == before, "state untouched when the migration step is missing")
 
-	# Test-only migration table (the shipped one is a `const` and cannot be
-	# extended): v0 → v1 fills in the documented default.
+	# Test-only migration table (merged over the shipped one): v0 → v1 fills in
+	# the documented default; the shipped 1 → 2 step then runs too.
 	var migrations := {
 		0: func(data: Dictionary) -> Dictionary:
 			data["morale"] = 70

@@ -29,6 +29,15 @@ extends Node
 ## Quirk: this script defines a method named `load` (the §5.5 API). Inside this
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
+##
+## Versioning (docs/90-* §8.2): Phase 2 ships `save_version = 2`, so
+## [member MIGRATIONS] is no longer empty — it carries the one migration that
+## upgrades a Phase-1 payload (`1 → 2`: add `hostile_fleets`,
+## `proximity_cooldowns`, the `player`/per-ship `equipment` blocks and
+## `phase = 2`). It is a `static var` rather than a `const` because GDScript
+## rejects a `Callable` inside a constant expression ("Assigned value for
+## constant ... isn't a constant expression"); the table is still treated as
+## read-only: [method _migrate] copies it and never mutates it.
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -45,15 +54,22 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 1 ships version 1).
-const SAVE_VERSION := 1
+## Current payload version (docs/90-* §8.2: Phase 2 ships version 2).
+const SAVE_VERSION := 2
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 1
+const PHASE := 2
 ## Ordered migration table `{n: Callable}`; `MIGRATIONS[n]` upgrades a version-n
-## dict to n+1 (docs/90-* §8.2). Phase 1 ships **no** migrations, and a `const`
-## cannot be extended at runtime, so tests pass their table to [method load]
-## instead of mutating this one.
-const MIGRATIONS := {}
+## dict to n+1 (docs/90-* §8.2). Phase 2 ships exactly one step, `1 → 2`; the
+## value is a `static var` (not a `const`) only because GDScript cannot put a
+## `Callable` in a constant expression — treat it as read-only: [method _migrate]
+## copies it, and tests drive the seam through [method load]'s `migrations`
+## argument instead of mutating this table.
+static var MIGRATIONS := {1: Callable(migrate_v1_to_v2)}
+
+## Documented equipment defaults (docs/60-* §4.11.12, docs/50-* §4.8,
+## docs/40-* §4.1): the empty-slot blocks the `1 → 2` migration inserts.
+const EQUIPMENT_PLAYER_DEFAULT := {"weapon": "", "armor": ""}
+const EQUIPMENT_SHIP_DEFAULT := {"figurehead": "", "sail": ""}
 
 ## Payload key `"weather"` before the first ledger roll (docs/20-* §4.7).
 const DEFAULT_WEATHER := "calm"
@@ -62,18 +78,29 @@ const DEFAULT_WEATHER := "calm"
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "port_investments", "quests",
-	"discoveries_found",
+	"discoveries_found", "hostile_fleets", "proximity_cooldowns",
 ]
 ## Keys every payload must carry for a load to be attempted. `quests` /
-## `discoveries_found` are Phase-2/3 fields (empty in P1) and `saved_at` is
-## display-only, so those three default instead of failing the load.
+## `discoveries_found` are Phase-2/3 fields (empty in P1), `hostile_fleets` /
+## `proximity_cooldowns` arrived with save_version 2 (docs/90-* §8.1) and
+## `saved_at` is display-only, so those five default instead of failing the
+## load — that is what lets a Phase-1 file load at all.
 const REQUIRED_KEYS: Array[String] = [
 	"save_version", "phase", "locale", "day", "gold", "player", "fleet",
 	"morale", "world", "current_port", "known_ports", "port_investments",
 ]
 ## Documented defaults for the optional keys (docs/90-* §12 "load tolerates
-## missing optional keys only where a default is documented").
-const OPTIONAL_DEFAULTS := {"saved_at": 0, "quests": [], "discoveries_found": []}
+## missing optional keys only where a default is documented"). Every value here
+## mirrors docs/90-* §8.1's "Default when absent" column; [method _apply] reads
+## the absent-key value from it. A `const` dictionary is shared state, so every
+## caller `.duplicate(true)`s the value on the way out.
+const OPTIONAL_DEFAULTS := {
+	"saved_at": 0,
+	"quests": [],
+	"discoveries_found": [],
+	"hostile_fleets": [],
+	"proximity_cooldowns": {},
+}
 
 ## Scene paths (docs/90-* §4, §7).
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -169,6 +196,8 @@ func snapshot() -> Dictionary:
 		"port_investments": GameState.port_investments.duplicate(true),
 		"quests": GameState.quests.duplicate(true),
 		"discoveries_found": GameState.discoveries_found.duplicate(true),
+		"hostile_fleets": GameState.hostile_fleets.duplicate(true),
+		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
 	}
 
 
@@ -225,8 +254,8 @@ func delete_save(slot: int) -> bool:
 ## Reads, validates and migrates slot `slot`, then restores `GameState`.
 ##
 ## `migrations` is the test seam for §8.2: an ordered `{n: Callable}` table
-## merged over the shipped [constant MIGRATIONS] (a `const` cannot be extended
-## at runtime). Production callers pass nothing.
+## merged over the shipped [member MIGRATIONS] (test-only steps can thereby be
+## added without touching the shipped table). Production callers pass nothing.
 ##
 ## On any failure: returns false, logs the reason into [member last_read_error],
 ## pushes an error, and **never** writes to `GameState`.
@@ -330,6 +359,13 @@ func validate_payload(data: Dictionary) -> String:
 		return "'quests' is not an array"
 	if not _is_array_or_missing(data, "discoveries_found"):
 		return "'discoveries_found' is not an array"
+	# Phase-2 keys: optional (absent → documented default) but type-checked
+	# whenever they are present, so a hand-edited `hostile_fleets: {}` is a
+	# rejection rather than a silent default (docs/90-* §8.1).
+	if not _is_array_or_missing(data, "hostile_fleets"):
+		return "'hostile_fleets' is not an array"
+	if not _is_dict_or_missing(data, "proximity_cooldowns"):
+		return "'proximity_cooldowns' is not an object"
 	var position = (data["world"] as Dictionary).get("position", null)
 	if not (position is Dictionary):
 		return "'world.position' is not an object"
@@ -343,12 +379,47 @@ func _is_array_or_missing(data: Dictionary, key: String) -> bool:
 	return not data.has(key) or data[key] is Array
 
 
+func _is_dict_or_missing(data: Dictionary, key: String) -> bool:
+	return not data.has(key) or data[key] is Dictionary
+
+
+## docs/90-* §8.2 `MIGRATIONS[1]`: upgrades a Phase-1 payload (version 1) to
+## version 2 by **adding** exactly the Phase-2 keys and touching nothing else:
+##
+##   * `hostile_fleets = []`, `proximity_cooldowns = {}` (docs/90-* §8.1);
+##   * `player.equipment = {"weapon": "", "armor": ""}` when `player` is a
+##     non-empty object (docs/60-* §4.11.12, docs/50-* §4.8) — an absent or
+##     empty `player` is left alone, never synthesised;
+##   * `fleet[i].equipment = {"figurehead": "", "sail": ""}` for every ship
+##     instance dict (docs/60-* §4.11.12, docs/40-* §4.1); a non-dict entry in
+##     `fleet` is left for the fleet capacity guard to report;
+##   * `phase = 2` (docs/90-* §8.1).
+##
+## Pure: it works on `data` (a copy supplied by [method _migrate]) and returns a
+## new dict, so the caller's payload is never mutated. `save_version` is set by
+## [method _migrate], not here.
+static func migrate_v1_to_v2(data: Dictionary) -> Dictionary:
+	var out: Dictionary = data.duplicate(true)
+	out["hostile_fleets"] = []
+	out["proximity_cooldowns"] = {}
+	var player = out.get("player", null)
+	if player is Dictionary and not (player as Dictionary).is_empty():
+		(player as Dictionary)["equipment"] = EQUIPMENT_PLAYER_DEFAULT.duplicate(true)
+	var fleet = out.get("fleet", null)
+	if fleet is Array:
+		for entry in (fleet as Array):
+			if entry is Dictionary:
+				(entry as Dictionary)["equipment"] = EQUIPMENT_SHIP_DEFAULT.duplicate(true)
+	out["phase"] = PHASE
+	return out
+
+
 ## Applies [member MIGRATIONS] plus `overrides` from the file's version up to
 ## [constant SAVE_VERSION] and returns the upgraded payload (`{}` + reason on a
 ## missing step). The input dict is never mutated.
 func _migrate(data: Dictionary, overrides: Dictionary = {}) -> Dictionary:
 	var table: Dictionary = {}
-	# Copied key by key: `MIGRATIONS` is a const (read-only) dictionary.
+	# Copied key by key: the shipped table is shared script state.
 	for version_key in MIGRATIONS:
 		table[version_key] = MIGRATIONS[version_key]
 	for version_key in overrides:
@@ -421,9 +492,20 @@ func _apply(data: Dictionary) -> void:
 		investments[str(port_id)] = int(raw_investments[port_id])
 	GameState.port_investments = investments
 
-	GameState.quests = (data.get("quests", []) as Array).duplicate(true)
+	GameState.quests = \
+		(data.get("quests", OPTIONAL_DEFAULTS["quests"]) as Array).duplicate(true)
 	GameState.discoveries_found = \
-		(data.get("discoveries_found", []) as Array).duplicate(true)
+		(data.get("discoveries_found", OPTIONAL_DEFAULTS["discoveries_found"]) \
+			as Array).duplicate(true)
+	# Phase-2 saved state (docs/90-* §8.1). A pre-v2 file reaches here only via
+	# the `1 → 2` migration, but a hand-written v2 file may omit them: the
+	# documented defaults keep those loads working (§8.1 "Default when absent").
+	GameState.hostile_fleets = \
+		(data.get("hostile_fleets", OPTIONAL_DEFAULTS["hostile_fleets"]) as Array) \
+			.duplicate(true)
+	GameState.proximity_cooldowns = \
+		(data.get("proximity_cooldowns", OPTIONAL_DEFAULTS["proximity_cooldowns"]) \
+			as Dictionary).duplicate(true)
 	# docs/20-* §4.12: explored tiles are not part of the save (known Phase-1
 	# limitation); the minimap re-reveals from the loaded position.
 	GameState.explored_tiles = {}
