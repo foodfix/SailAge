@@ -30,11 +30,15 @@ T19 passed).
 
 ## A. Save migration v1 → v2
 
+✅ **Done** (W1) — `SAVE_VERSION = 2`, `MIGRATIONS[1]` pure migration, `MIGRATIONS` is a `static var` (GDScript rejects a `Callable` in a const); `tools/test_save_v2.tscn` (80).
+
 - Add `hostile_fleets` + battle fields to GameState/save; `MIGRATIONS[1]`.
 - **Docs:** `90-*` §8.2, `60-*` §2. **Done-when:** a Phase-1 save loads in
   Phase-2 code with migrated fields and re-saves as version 2.
 
 ## B. Combat engine core (`battle_sim.gd`)
+
+✅ **Done** (W1) — `BattleSim` + `AiFleet`, 16×10 grid, §4.11 pins implemented verbatim, §5 numbers exact (cannon 16/12 storm, ram 27/11, galley 21); `tools/test_battle.tscn` (218).
 
 - 16×10 grid, deployment bands, initiative order, MP rules, actions
   (cannon/ram/board/hold), reload, damage formulas.
@@ -42,6 +46,8 @@ T19 passed).
   numbers; engine runs headless start-to-finish vs. scripted moves.
 
 ## C. Duel modal (`duel_modal.tscn`)
+
+✅ **Done** (W2) — `Duel.start` byte-equal to `BattleSim.resolve_duel`, `BattleResult.apply` for capture/FLEET_MAX/loot/`gameover.captured`, S11 modal; `tools/test_duel.tscn` (148).
 
 - Best-of-5 flow, equipment modifiers, capture/loss outcomes incl.
   `gameover.captured`.
@@ -51,6 +57,8 @@ T19 passed).
 
 ## D. Battle scene + HUD
 
+✅ **Done** (W2) — S10 grid/tokens/highlight/action menu/log, §4.12.4 end sequence with guarded sibling modules, all six §4.9 AI rules observable; `tools/test_battle_screen.tscn` (122).
+
 - `battle_screen.tscn`: grid rendering (palette placeholders), unit tokens,
   move/attack highlighting, action menu, retreat, after-action loot dialog.
 - **Docs:** `60-*` §4.2–4.10, §4.9 (AI priority list), `80-*` §4.3 (input).
@@ -59,6 +67,8 @@ T19 passed).
 
 ## E. Equipment data + effects
 
+✅ **Done** (W1) — the 8 §4.11.13 items, validator groups 3/4/5 extended, refit enabled, four slots wired; `tools/test_equipment.tscn` (149).
+
 - `data/equipment.json` first content set (~8 items, task-owned list within
   `10-*` §4.6 schema), shipyard refit activation, figurehead/sail slots.
 - **Docs:** `10-*` §4.6, `40-*` §4.3 (refit row enables), `50-*` §4.2.
@@ -66,6 +76,8 @@ T19 passed).
   alters duel rolls per `60-*` §4.6.
 
 ## F. World-map encounters
+
+✅ **Done** (W2) — `Encounters` spawn/move/contact/cooldown, measured 0.986% pirate and 1.99% navy over 100k days, navy −20 once at battle start; `tools/test_encounters.tscn` (156).
 
 - `encounters.gd`: pirate spawn rules, navy hunters (bounty hook from
   Phase 3 noted but navy spawn tables delivered here), contact → battle,
