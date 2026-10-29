@@ -381,8 +381,17 @@ func _test_set_sail_round_trip() -> void:
 	_check(sail.text == I18n.t_key("port.set_sail"),
 		"the Set Sail button uses port.set_sail (%s)" % sail.text)
 	_check(not sail.disabled, "Set Sail is enabled while docked")
-	_check(port.facility_container().get_child_count() == 0,
-		"T10 ships no facility rows (T11 owns them)")
+	# T11 made the hub render rows from the port data. Lisbon is a capital, so
+	# its `facilities` object lists all six ids → six rows, in the §4.1 order.
+	_check(port.facility_row_ids() == ["market", "shipyard", "tavern", "inn",
+			"guild", "palace"],
+		"T11 renders the six Lisbon rows from the port data (got %s)"
+		% str(port.facility_row_ids()))
+	_check(port.facility_row_count() == 6,
+		"facility_row_count() reports the six rows (got %d)"
+		% port.facility_row_count())
+	_check(port.facility_container().get_child_count() > 0,
+		"the rows land in the facility container")
 	_check(port.has_method("add_facility_row"),
 		"the T11 extension point add_facility_row() exists")
 	# The extension point itself: a row binds its label through ui_strings,
@@ -393,15 +402,16 @@ func _test_set_sail_round_trip() -> void:
 	port.route_to_facility = false
 	var requested: Array = []
 	port.facility_requested.connect(func(fid: String) -> void: requested.append(fid))
+	var rows_before: int = port.facility_container().get_child_count()
 	var row: Button = port.add_facility_row("market", "port.market")
 	_check(row.text == I18n.t_key("port.market"),
 		"add_facility_row() binds port.market (%s)" % row.text)
 	_check(row.custom_minimum_size == Vector2(240, PaletteLib.BUTTON_H),
 		"facility rows use the 40px button height (§4.8)")
-	_check(port.facility_container().get_child_count() == 1,
+	_check(port.facility_container().get_child_count() == rows_before + 1,
 		"the row lands in the facility container")
 	row.pressed.emit()
-	_check(requested == ["market"],
+	_check(requested.has("market"),
 		"pressing the row reports the facility id (got %s)" % str(requested))
 	_check(port.is_inside_tree() and tree.current_scene == port,
 		"route_to_facility=false keeps the port screen in place")

@@ -1,19 +1,23 @@
 extends Control
-## Port hub (S4) — shell owned by T10; T11 fills in the facility rows.
-## Docs: 20-* §4.11 (exit), 30-* §4.7 (port hub wireframe),
+## Port hub (S4) — header, facility rows and Set Sail.
+## Docs: 20-* §4.11 (exit), 30-* §4.1/§4.7 (facilities + port hub wireframe),
 ## 80-* §4.1–§4.6 (routing, HUD, input), 90-* §7 (world ↔ port routing).
 ##
-## What this shell *is*:
+## What this screen *is*:
 ##   * the port header (name · nation) and the §4.11 arrival banner — the
 ##     localised `Port.flavor` line, which is the "greeting banner" the doc
 ##     asks for;
 ##   * the shared HUD (`hud.tscn`) so day / gold / morale / provisions stay
 ##     visible (§4.5 "S4 HUD: same bars", with the sea viewport replaced);
-##   * **Set Sail**, the S4 → S3 back edge (§4.2, §4.11).
+##   * the **facility rows**, rendered from the port's own `facilities` object
+##     (§4.1) in the fixed wireframe order, then **Set Sail**, the S4 → S3
+##     back edge (§4.2, §4.11).
 ##
-## What it deliberately is **not** (T11+): the six facility rows. T11 renders
-## them from the port's `facilities` data; the marked placeholder below is the
-## slot it fills, and [method add_facility_row] is the pre-wired way in.
+## Facility rows are data-driven: a row exists iff `facilities` has that key,
+## and is clickable iff its activation phase ≤ 1. Guild (phase 3) is therefore
+## always a disabled stub, and Palace (phase 3, capitals only in the data)
+## appears only where the port JSON lists it. Editing `data/ports.json` changes
+## the hub with no code edit (§4.1, docs/90-* §12).
 ##
 ## Exit contract (docs/20-* §4.11, docs/80-* §4.3 "Esc = step back one edge;
 ## S4's back edge is S3"):
@@ -33,9 +37,9 @@ const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 
-## Facility id → screen path. T12–T15 own those scenes; T11's rows call
-## [method open_facility], which stays a no-op (with a logged warning) while a
-## path does not exist yet, so the shell is usable before they land.
+## Facility id → screen path for the four Phase-1 facilities. Guild/Palace are
+## Phase 3 and have no screen yet ([method open_facility] refuses them, and
+## they render as disabled stubs).
 const FACILITY_SCENES := {
 	"market": "res://scenes/port/market_screen.tscn",
 	"shipyard": "res://scenes/port/shipyard_screen.tscn",
@@ -43,15 +47,38 @@ const FACILITY_SCENES := {
 	"inn": "res://scenes/port/inn_screen.tscn",
 }
 
-## Emitted when T11's rows (or anything else) ask for a facility screen. Not
-## needed for the four P1 facilities — [method open_facility] routes them — but
-## it lets a test or a future stub observe the intent without a scene swap.
+## The §4.1 fixed display order. The *set* of rows comes from the port's
+## `facilities` data (docs/10-* §4.4); this list only fixes the order and
+## supplies the label key for each known facility id.
+const FACILITY_ORDER: Array[String] = [
+	"market", "shipyard", "tavern", "inn", "guild", "palace",
+]
+
+## Facility id → `ui_strings` label key (`port.<id>` for all six).
+const FACILITY_LABEL_KEYS := {
+	"market": "port.market",
+	"shipyard": "port.shipyard",
+	"tavern": "port.tavern",
+	"inn": "port.inn",
+	"guild": "port.guild",
+	"palace": "port.palace",
+}
+
+## §4.1: a facility row is clickable iff its activation phase is ≤ 1. Phase-2/3
+## facilities render as disabled rows carrying the stub label.
+const FACILITY_ENABLED_MAX_PHASE := 1
+## The label every disabled (future-phase) row shows, per §4.1.
+const FACILITY_STUB_KEY := "port.stub.phase3"
+
+## Emitted when a facility row (or anything else) asks for a facility screen;
+## [method open_facility] emits it before deciding, so a test or a future stub
+## can observe the intent without a scene swap.
 signal facility_requested(facility_id: String)
 ## Emitted right before the S4 → S3 route, after the state is already reset.
 ## Tests observe this instead of swapping their own scene root.
 signal sailed
-## Emitted whenever the header/banner is rebuilt (ready, locale change, state
-## change). T11's rows can use it to keep their own values in sync.
+## Emitted whenever the header/banner and the facility rows are rebuilt (ready,
+## locale change, state change).
 signal rebound
 
 @onready var _background: ColorRect = $Background
@@ -61,8 +88,8 @@ signal rebound
 @onready var _nation_name: Label = $Layout/VBox/Header/TitleRow/NationName
 @onready var _greeting: Label = $Layout/VBox/Header/Greeting
 @onready var _day_greeting: Label = $Layout/VBox/Header/DayGreeting
+@onready var _facility_heading: Label = $Layout/VBox/Facilities/Heading
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
-@onready var _facility_placeholder: Label = $Layout/VBox/Facilities/Placeholder
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
@@ -74,22 +101,30 @@ var route_to_world: bool = true
 ## Routing switch for [method open_facility], same convention as
 ## [member route_to_world]: with `false` the call still emits
 ## [signal facility_requested] and returns whether the target exists, but does
-## not replace the scene. T12–T15's acceptance tests and T10's extension-point
-## test use it to observe the wiring without swapping their own scene root.
+## not replace the scene. T12–T15's acceptance tests and the hub's own extension
+## hooks use it to observe the wiring without swapping their own scene root.
 var route_to_facility: bool = true
 
 ## Port currently docked at ("" when the scene is opened standalone, e.g. from
 ## the editor with no run in progress).
 var _port_id: String = ""
 
+## Facility id → row Button for the rows currently rendered, in display order.
+var _row_buttons: Dictionary = {}
+## The rendered facility ids, in display order (empty when standalone).
+var _row_ids: Array[String] = []
+## `id:phase|…` snapshot of the data the rows were built from; a bind whose
+## signature differs rebuilds them ([method _sync_facility_rows]).
+var _rows_signature: String = ""
+
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
-	for label in [_port_name, _nation_name, _greeting, _day_greeting, _facility_placeholder]:
+	for label in [_port_name, _nation_name, _greeting, _day_greeting, _facility_heading]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_greeting.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_day_greeting.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_facility_placeholder.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_facility_heading.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_port_name.add_theme_font_size_override("font_size", 32)
 	_set_sail_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_set_sail_button.pressed.connect(_on_set_sail_pressed)
@@ -145,7 +180,7 @@ func has_modal() -> bool:
 	return false
 
 
-# --- Public API (T11–T15 extension points) ---------------------------------
+# --- Public API (the facility rows + T12–T15 routing) -----------------------
 
 ## Port id currently docked at ("" when opened without a run).
 func port_id() -> String:
@@ -159,41 +194,100 @@ func port_data() -> Dictionary:
 	return DataLoader.get_port(_port_id)
 
 
-## Container T11 fills with the six facility rows (Market … Palace), in the
-## §4.7 wireframe order. It sits between the greeting banner and Set Sail.
+## Container the facility rows live in, in the §4.7 wireframe order. It sits
+## between the greeting banner and Set Sail.
 func facility_container() -> VBoxContainer:
 	return _facility_rows
 
 
+## The facility ids currently rendered as rows, in display order (`[]` when
+## standalone). Derived from [method port_data]'s `facilities` object — never
+## from a hardcoded port list.
+func facility_row_ids() -> Array[String]:
+	return _row_ids.duplicate()
+
+
+## The row Button for `facility_id` (null when that port has no such row).
+func facility_row(facility_id: String) -> Button:
+	var button = _row_buttons.get(facility_id, null)
+	return button as Button
+
+
+## Number of facility rows currently rendered.
+func facility_row_count() -> int:
+	return _row_ids.size()
+
+
+## True when `facility_id` has a row and that row is clickable (phase ≤ 1).
+func is_facility_enabled(facility_id: String) -> bool:
+	var button := facility_row(facility_id)
+	return button != null and not button.disabled
+
+
 ## Adds one facility row inside [method facility_container] and wires it to
-## [method open_facility]. T11 owns *which* rows exist (the port's `facilities`
-## data) and their enabled state (`guild`/`palace` are Phase-3 stubs); this
-## helper only guarantees the wiring, the palette and the button height.
+## [method open_facility]. *Which* rows exist, and their enabled state, are
+## decided by [method _sync_facility_rows] from the port's `facilities` data;
+## this helper only guarantees the wiring, the palette and the button height.
 func add_facility_row(facility_id: String, text_key: String, enabled: bool = true) -> Button:
+	var button := _make_facility_button(facility_id, text_key, enabled)
+	_facility_rows.add_child(button)
+	return button
+
+
+## A facility row Button, not yet parented. Row text/tooltip for stubs is
+## applied by [method _sync_facility_rows] and [method _relabel_facility_rows].
+func _make_facility_button(facility_id: String, text_key: String,
+		enabled: bool) -> Button:
 	var button := Button.new()
 	button.name = "Facility_%s" % facility_id
 	button.text = I18n.t_key(text_key)
 	button.disabled = not enabled
 	button.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
 	button.set_meta("text_key", text_key)
-	button.pressed.connect(func() -> void: open_facility(facility_id))
-	_facility_rows.add_child(button)
+	button.set_meta("facility_id", facility_id)
+	button.set_meta("stub", not enabled)
+	# A disabled stub has no target: `pressed` never fires on a disabled
+	# Button, and the phase check in [method open_facility] is the second
+	# line of defence.
+	button.pressed.connect(func() -> void: _on_facility_row_pressed(facility_id))
 	return button
 
 
-## Routes to a facility screen when it exists. Returns true when the target
-## exists (and a route was started, unless [member route_to_facility] is off);
-## false (with a warning, no crash) while T12–T15 have not landed the screen
-## yet. Always emits [signal facility_requested] so callers can observe the
-## intent.
+## Every facility row Button in the container, recursively (the wireframe pairs
+## open facilities inside `HBoxContainer`s), in display order. Public so tests
+## and future screens can walk the rows without knowing the layout.
+func facility_buttons() -> Array:
+	var buttons: Array = []
+	for child in _facility_rows.get_children():
+		if child is Button and child.has_meta("facility_id"):
+			buttons.append(child)
+		elif child is Container:
+			for grandchild in child.get_children():
+				if grandchild is Button and grandchild.has_meta("facility_id"):
+					buttons.append(grandchild)
+	return buttons
+
+
+## Routes to a facility screen when it exists **and** the docked port offers it
+## at Phase 1. Returns true when the target exists (and a route was started,
+## unless [member route_to_facility] is off); false (with a warning, no crash)
+## otherwise. Always emits [signal facility_requested] so callers can observe
+## the intent.
+##
+## Phase-3 facilities (guild/palace) and facilities absent from this port's
+## `facilities` data are refused here: their rows are disabled stubs, so a
+## click on them changes nothing (§4.1).
 func open_facility(facility_id: String) -> bool:
 	facility_requested.emit(facility_id)
+	if not _facility_available(facility_id):
+		push_warning("PortScreen: facility '%s' is not available in Phase 1" % facility_id)
+		return false
 	var path := str(FACILITY_SCENES.get(facility_id, ""))
 	if path.is_empty():
-		push_warning("PortScreen: unknown facility '%s'" % facility_id)
+		push_warning("PortScreen: no screen for facility '%s'" % facility_id)
 		return false
 	if not ResourceLoader.exists(path):
-		push_warning("PortScreen: %s missing (T12–T15); staying in port" % path)
+		push_warning("PortScreen: %s missing; staying in port" % path)
 		return false
 	if route_to_facility:
 		GameState.change_scene(path)
@@ -264,13 +358,137 @@ func _bind() -> void:
 			"day": GameState.day,
 		})
 	_set_sail_button.text = I18n.t_key("port.set_sail")
-	_facility_placeholder.text = I18n.t_key("port.facilities")
+	_facility_heading.text = I18n.t_key("port.facilities")
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	# Nothing to leave when not docked (standalone load): the button stays
 	# visible for layout but disabled, so no input can start a bogus route.
 	_set_sail_button.disabled = port.is_empty()
+	_sync_facility_rows(port)
 	rebound.emit()
+
+
+## Activation phase of `facility_id` at the docked port (§4.1), or 0 when the
+## port's `facilities` object does not list it (no row / no route for it). JSON
+## numbers parse as floats, hence the `int(...)` (repo gotcha).
+func _facility_phase(facility_id: String) -> int:
+	var facilities = port_data().get("facilities", {})
+	if not facilities is Dictionary:
+		return 0
+	if not (facilities as Dictionary).has(facility_id):
+		return 0
+	var phase = (facilities as Dictionary)[facility_id]
+	if phase == null:
+		return 0
+	return int(phase)
+
+
+## §4.1 gate: a facility is open in Phase 1 iff the port lists it **and** its
+## activation phase is exactly in `[1, FACILITY_ENABLED_MAX_PHASE]`.
+## Phase-3 rows are visible but disabled stubs.
+func _facility_available(facility_id: String) -> bool:
+	var phase := _facility_phase(facility_id)
+	return phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE
+
+
+## Renders the facility rows for the current port from its `facilities` data:
+## a row per present key, in the fixed §4.1 order, enabled iff its phase ≤ 1;
+## Phase-3 rows are disabled stubs labelled `port.stub.phase3`.
+##
+## Layout follows the §4.7 wireframe: the open Phase-1 facilities sit two per
+## line ([Market][Shipyard] / [Tavern][Inn]), while a disabled stub gets a line
+## of its own ([Guild — opens in Phase 3]). The grouping is derived from the
+## row list, so it adapts to whatever the port data contains (a port missing
+## `inn`, or offering an extra phase-1 key, still lays out sensibly).
+##
+## Rebuilds only when the underlying data changed (docked port or phases), so
+## locale/state rebinds stay cheap and keep button focus.
+func _sync_facility_rows(port: Dictionary) -> void:
+	var facilities = port.get("facilities", {})
+	if not facilities is Dictionary:
+		facilities = {}
+	# Signature of the data the rows depend on, in display order.
+	var parts: Array[String] = []
+	for facility_id in FACILITY_ORDER:
+		if (facilities as Dictionary).has(facility_id):
+			parts.append("%s:%d" % [facility_id, int((facilities as Dictionary)[facility_id])])
+	for key in (facilities as Dictionary).keys():
+		# Keys outside the fixed order are data errors; include them in the
+		# signature anyway so a data edit still refreshes the rows.
+		if not str(key) in FACILITY_ORDER:
+			parts.append("%s:?" % str(key))
+	var signature := "|".join(parts)
+	if signature == _rows_signature and _facility_rows.get_child_count() > 0:
+		return
+	_rows_signature = signature
+	_clear_facility_rows()
+
+	var pair: HBoxContainer = null
+	for facility_id in FACILITY_ORDER:
+		if not (facilities as Dictionary).has(facility_id):
+			continue
+		var phase := int((facilities as Dictionary)[facility_id])
+		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE
+		var label_key := str(FACILITY_LABEL_KEYS.get(
+			facility_id, "port.%s" % facility_id))
+		var button := _make_facility_button(facility_id, label_key, enabled)
+		if enabled:
+			# Two open facilities per wireframe line.
+			if pair == null or pair.get_child_count() >= 2:
+				pair = HBoxContainer.new()
+				pair.name = "Pair_%d" % _facility_rows.get_child_count()
+				pair.add_theme_constant_override("separation", 8)
+				_facility_rows.add_child(pair)
+			pair.add_child(button)
+		else:
+			# A stub owns its line (full-width), as in the wireframe.
+			pair = null
+			_facility_rows.add_child(button)
+			# §4.1: disabled rows carry the stub label, e.g.
+			# "Guild — opens in Phase 3". The noun and the note are both
+			# localised; only the separator is punctuation.
+			button.text = "%s — %s" % [
+				I18n.t_key(label_key), I18n.t_key(FACILITY_STUB_KEY),
+			]
+			button.tooltip_text = I18n.t_key(FACILITY_STUB_KEY)
+		_row_buttons[facility_id] = button
+		_row_ids.append(facility_id)
+
+
+func _clear_facility_rows() -> void:
+	for child in _facility_rows.get_children():
+		_facility_rows.remove_child(child)
+		child.queue_free()
+	_row_buttons.clear()
+	_row_ids.clear()
+
+
+## Re-labels every rendered row from its stored key, keeping the stub note for
+## disabled rows (docs/80-* §6: locale change rebinds without a reload). Walks
+## the container rather than the row cache so a row added through
+## [method add_facility_row] by a caller also rebinds.
+func _relabel_facility_rows() -> void:
+	for child in facility_buttons():
+		var button := child as Button
+		var label_key := str(button.get_meta("text_key"))
+		if bool(button.get_meta("stub", false)):
+			button.text = "%s — %s" % [
+				I18n.t_key(label_key), I18n.t_key(FACILITY_STUB_KEY),
+			]
+			button.tooltip_text = I18n.t_key(FACILITY_STUB_KEY)
+		else:
+			button.text = I18n.t_key(label_key)
+
+
+## A row was clicked: disabled stubs never emit `pressed` (Button.disabled), so
+## this only ever sees an enabled row; the phase check in [method open_facility]
+## is the second guard.
+func _on_facility_row_pressed(facility_id: String) -> void:
+	if has_modal():
+		return
+	if not _facility_available(facility_id):
+		return
+	open_facility(facility_id)
 
 
 func _on_set_sail_pressed() -> void:
@@ -279,11 +497,7 @@ func _on_set_sail_pressed() -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	_bind()
-	# T11's rows own their labels; give them the same locale event by rebuilding
-	# from the stored key when they are ours (add_facility_row stamps it).
-	for child in _facility_rows.get_children():
-		if child is Button and child.has_meta("text_key"):
-			(child as Button).text = I18n.t_key(str(child.get_meta("text_key")))
+	_relabel_facility_rows()
 
 
 func _on_state_changed() -> void:
