@@ -201,5 +201,8 @@
   "gameover.return": {"zh": "按任意键返回标题", "en": "Press any key to return to the title"},
   "gameover.starvation": {"zh": "补给断绝,船队饿死在了海上。", "en": "Provisions gone — your fleet starved at sea."},
   "gameover.scurvy": {"zh": "淡水耗尽,坏血病夺走了整支船队。", "en": "The water ran out; scurvy took your fleet."},
-  "gameover.sunk": {"zh": "旗舰沉没了,你也随之葬身大海。", "en": "Your flagship sank, and you went down with her."}
+  "gameover.sunk": {"zh": "旗舰沉没了,你也随之葬身大海。", "en": "Your flagship sank, and you went down with her."},
+  "world.move_blocked": {"zh": "无法向该方向航行(陆地、暗礁或海图边界)。", "en": "You cannot sail that way (land, reef, or the map's edge)."},
+  "char.base": {"zh": "基础值 {amount}", "en": "Base {amount}"},
+  "char.rep_value": {"zh": "声望值 {amount}", "en": "Standing {amount}"}
 }
