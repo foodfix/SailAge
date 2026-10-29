@@ -53,6 +53,15 @@ consumption pooling), `30-*` (shipyard screen wiring), `90-*`.
 figurehead durability modifier` (`60-*` §4.11.12). Ram damage and repairs use
 this value; `durability` is clamped to it.
 
+**Normative clarifications for the effective max.**
+
+- The sell price of §4.3 uses `effective_max_durability` as its denominator, so
+  a figurehead can never raise a sale above `floor(base_price × 0.5)`, and with
+  no figurehead fitted every Phase-1 price is byte-identical.
+- Equipping a figurehead does **not** heal current durability; only the cap
+  moves. Removing a figurehead clamps the current value down to the new cap
+  (a loss, never a gain), which is the only place the cap can shrink.
+
 ### 4.2 Cargo-hold maths
 
 ```
@@ -95,7 +104,7 @@ regional restrictions OUT OF SCOPE (phase 3)):
 | Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). |
 | Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **Phase 2 enables the row**; see `60-*` §4.11.4 for the battle effect. |
 | Buy equipment | `data/equipment.json` item at its `price`; occupies its slot (`weapon`/`armor` player, `figurehead`/`sail` ship); replacing sells the old item back at `floor(price × 0.5)` in the same action (`60-*` §4.11.12). Phase 2. |
-| Sell ship | price `floor(base_price × 0.5 × durability / max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). Equipment leaves with the ship. |
+| Sell ship | price `floor(base_price × 0.5 × durability / effective_max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). Equipment leaves with the ship. |
 
 Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
 150g/pt.
