@@ -179,3 +179,22 @@ func set_world_tile(tile: Vector2i) -> void:
 ## Thin scene router (docs/90-* §7): swaps the root scene.
 func change_scene(path: String) -> void:
 	get_tree().change_scene_to_file(path)
+
+
+## **Debug/editor-build only** — empties `fleet` so the harbor-relief state
+## (`gold < 1200 && fleet.is_empty()` per docs/10-* §5, docs/50-* §4.7) can be
+## exercised: there is no legitimate in-game path to a shipless player in
+## Phase 1 (docs/40-* §6 forbids selling the last ship, and sinking the
+## flagship ends the run), so T15 tests reach the fallback through this hook.
+##
+## Never reachable from any UI: nothing in `scenes/` calls it, and in a release
+## build it is a no-op (returns false, changes nothing). It deliberately does
+## **not** touch `gold`, `day`, `morale`, `player` or `world`, so the caller
+## sets up its own fixture.
+func debug_strip_fleet() -> bool:
+	if not OS.is_debug_build():
+		push_warning("GameState.debug_strip_fleet: debug builds only; ignoring")
+		return false
+	fleet = []
+	EventBus.fleet_changed.emit()
+	return true
