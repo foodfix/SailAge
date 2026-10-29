@@ -23,8 +23,10 @@ const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
-## The three Phase-1 reasons (`20-*` §4.9 / `90-*` §5.1).
-const REASONS: Array[String] = ["starvation", "scurvy", "sunk"]
+## Game-over reasons this screen can render: the Phase-1 sea deaths
+## (`20-*` §4.9) plus Phase-2's `captured` (`60-*` §4.6/§6 "the game-over
+## reason set becomes {starvation, scurvy, sunk, captured}").
+const REASONS: Array[String] = ["starvation", "scurvy", "sunk", "captured"]
 
 ## Emitted right before routing to the title (tests observe it instead of
 ## swapping scenes).
@@ -113,7 +115,13 @@ func reason_text() -> String:
 func _bind() -> void:
 	_title.text = I18n.t_key("gameover.title")
 	_hint.text = I18n.t_key("gameover.return")
-	_reason.visible = reason in REASONS
+	# §6 "missing ui_strings key at runtime → renders the literal `<key>`" is
+	# the bug path, so a reason whose `gameover.<reason>` string has not been
+	# merged yet hides the row instead (the title and return hint still name
+	# the screen). `captured` is pinned for Phase 2 (`60-*` §4.12.5) and turns
+	# itself on the moment the key lands.
+	_reason.visible = reason in REASONS \
+		and DataLoader.ui_strings.has("gameover.%s" % reason)
 	if _reason.visible:
 		_reason.text = I18n.fmt(
 			"gameover.reason", {"reason": I18n.t_key("gameover.%s" % reason)}
