@@ -1,211 +1,883 @@
 {
   "version": 1,
-  "ui.back": {"zh": "返回", "en": "Back"},
-  "ui.confirm": {"zh": "确认", "en": "Confirm"},
-  "ui.cancel": {"zh": "取消", "en": "Cancel"},
-  "ui.ok": {"zh": "确定", "en": "OK"},
-  "ui.close": {"zh": "关闭", "en": "Close"},
-  "ui.yes": {"zh": "是", "en": "Yes"},
-  "ui.no": {"zh": "否", "en": "No"},
-  "ui.gold_abbr": {"zh": "金", "en": "g"},
-  "ui.gold_amount": {"zh": "{gold}金", "en": "{gold}g"},
-  "ui.qty": {"zh": "数量 {qty}", "en": "Qty {qty}"},
-  "ui.reason": {"zh": "原因:{reason}", "en": "Reason: {reason}"},
-  "ui.confirm_title": {"zh": "请确认", "en": "Please confirm"},
-  "ui.not_available": {"zh": "不可用", "en": "Not available"},
-  "ui.language_toggle": {"zh": "中文 / EN", "en": "中文 / EN"},
-  "ui.esc_hint": {"zh": "Esc 返回", "en": "Esc to go back"},
-  "ui.saved": {"zh": "已保存。", "en": "Game saved."},
-  "ui.cant_save_here": {"zh": "只能在港口保存。", "en": "You can only save in port."},
-  "ui.save.invalid": {"zh": "存档损坏或版本不符。", "en": "Save is corrupt or from another version."},
-  "ui.save.title": {"zh": "保存游戏", "en": "Save game"},
-  "ui.load.title": {"zh": "读取游戏", "en": "Load game"},
-  "ui.save.select_slot": {"zh": "选择存档位", "en": "Choose a slot to save"},
-  "ui.load.select_slot": {"zh": "选择要读取的存档", "en": "Choose a save to load"},
-  "ui.slot_n": {"zh": "存档 {slot}", "en": "Slot {slot}"},
-  "ui.empty": {"zh": "空", "en": "Empty"},
-  "ui.overwrite_confirm": {"zh": "覆盖存档 {slot}?", "en": "Overwrite slot {slot}?"},
-  "ui.saved_slot": {"zh": "已保存到存档 {slot}。", "en": "Saved to slot {slot}."},
-  "ui.load_failed": {"zh": "读取失败。", "en": "Load failed."},
-  "ui.save_failed": {"zh": "保存失败。", "en": "Save failed."},
-  "ui.invalid_slot": {"zh": "无效的存档位。", "en": "Invalid save slot."},
-  "ui.f5_hint": {"zh": "F5 快速保存", "en": "F5 quick-save"},
-  "ui.f9_hint": {"zh": "F9 快速读取", "en": "F9 quick-load"},
-  "ui.day_nation_gold": {"zh": "第 {day} 天 · {nation} · {gold} 金", "en": "Day {day} · {nation} · {gold}g"},
-  "ui.timestamp": {"zh": "存档时间 {amount}", "en": "Saved {amount}"},
-  "title.new_game": {"zh": "新游戏", "en": "New game"},
-  "title.load_game": {"zh": "读取存档", "en": "Load game"},
-  "title.quit": {"zh": "退出", "en": "Quit"},
-  "title.language": {"zh": "语言", "en": "Language"},
-  "title.data_error": {"zh": "数据错误:{reason}", "en": "Data error: {reason}"},
-  "title.subtitle": {"zh": "风帆与贸易", "en": "Sail and trade"},
-  "nation.select_title": {"zh": "选择国籍", "en": "Choose your nation"},
-  "nation.select_prompt": {"zh": "选择你的旗帜,船长。", "en": "Choose your flag, captain."},
-  "nation.start_package": {"zh": "初始配置", "en": "Starting package"},
-  "nation.start_port": {"zh": "起始港口:{port}", "en": "Start port: {port}"},
-  "nation.start_ship": {"zh": "起始船只:{ship}", "en": "Start ship: {ship}"},
-  "nation.start_gold": {"zh": "起始资金:{gold} 金", "en": "Start gold: {gold}g"},
-  "nation.confirm": {"zh": "以此国籍开始", "en": "Start with this nation"},
-  "world.day": {"zh": "第 {day} 天", "en": "Day {day}"},
-  "world.gold": {"zh": "{gold} 金", "en": "{gold}g"},
-  "world.morale": {"zh": "士气 {amount}", "en": "Morale {amount}"},
-  "world.weather.calm": {"zh": "无风", "en": "Calm"},
-  "world.weather.fair": {"zh": "顺风", "en": "Fair"},
-  "world.weather.strong": {"zh": "强风", "en": "Strong wind"},
-  "world.weather.storm": {"zh": "风暴", "en": "Storm"},
-  "world.morale.excellent": {"zh": "极佳", "en": "Excellent"},
-  "world.morale.good": {"zh": "良好", "en": "Good"},
-  "world.morale.strained": {"zh": "紧张", "en": "Strained"},
-  "world.morale.dangerous": {"zh": "危险", "en": "Dangerous"},
-  "world.morale.mutinous": {"zh": "欲变", "en": "Mutinous"},
-  "world.provisions": {"zh": "补给 {amount}", "en": "Provisions {amount}"},
-  "world.water": {"zh": "淡水 {amount}", "en": "Water {amount}"},
-  "world.crew": {"zh": "船员 {crew}/{max}", "en": "Crew {crew}/{max}"},
-  "world.cargo": {"zh": "货舱 {amount}/{capacity}", "en": "Cargo {amount}/{capacity}"},
-  "world.speed": {"zh": "航速 {speed}", "en": "Speed {speed}"},
-  "world.open_sea": {"zh": "外海", "en": "Open sea"},
-  "world.arrive": {"zh": "抵达 {port}。第 {day} 天。", "en": "Arrived at {port}. Day {day}."},
-  "world.enter_port": {"zh": "进入 {port}", "en": "Enter {port}"},
-  "world.ship_lost": {"zh": "一艘船沉没了,船上货物尽失。", "en": "A ship has sunk; her cargo is lost."},
-  "world.flagship_lost": {"zh": "旗舰沉没,你转乘下一艘船。", "en": "Your flagship sank; you take command of the next ship."},
-  "world.desertion": {"zh": "士气低落,{count} 名船员在进港时离去。", "en": "Low morale: {count} crew deserted on arrival."},
-  "world.storm_damage": {"zh": "风暴损伤:{name} 损失 {points} 点耐久。", "en": "Storm damage: the {name} loses {points} durability."},
-  "world.storm_notice": {"zh": "{weather}:船队遭遇风暴。", "en": "{weather}: the fleet meets a storm."},
-  "world.starvation_warning": {"zh": "补给见底,船员开始挨饿。", "en": "Provisions are running out; the crew goes hungry."},
-  "world.scurvy_warning": {"zh": "淡水将尽,坏血病蔓延。", "en": "Water is nearly gone; scurvy spreads."},
-  "world.mutiny.title": {"zh": "哗变", "en": "Mutiny"},
-  "world.mutiny.text": {"zh": "船员聚集在甲板上,要求结清欠薪。", "en": "The crew gathers on deck, demanding their arrears."},
-  "world.mutiny.pay": {"zh": "支付 {gold} 金", "en": "Pay {gold}g"},
-  "world.mutiny.suppress": {"zh": "镇压", "en": "Suppress"},
-  "world.mutiny.fizzle": {"zh": "无人响应,人群渐渐散去。", "en": "No one answers; the crowd drifts apart."},
-  "world.minimap": {"zh": "海图", "en": "Chart"},
-  "world.minimap.enlarged": {"zh": "海图(放大)", "en": "Chart (enlarged)"},
-  "port.market": {"zh": "市场", "en": "Market"},
-  "port.shipyard": {"zh": "船坞", "en": "Shipyard"},
-  "port.tavern": {"zh": "酒馆", "en": "Tavern"},
-  "port.inn": {"zh": "旅店", "en": "Inn"},
-  "port.guild": {"zh": "公会", "en": "Guild"},
-  "port.palace": {"zh": "王宫", "en": "Palace"},
-  "port.set_sail": {"zh": "出航", "en": "Set sail"},
-  "port.facilities": {"zh": "港口设施", "en": "Facilities"},
-  "port.day_greeting": {"zh": "{port},第 {day} 天。", "en": "{port}, day {day}."},
-  "port.save": {"zh": "保存", "en": "Save"},
-  "port.load": {"zh": "读取", "en": "Load"},
-  "port.lang": {"zh": "语言", "en": "Language"},
-  "port.stub.phase3": {"zh": "第三阶段开放", "en": "Opens in Phase 3"},
-  "market.title": {"zh": "市场 — {port}", "en": "Market — {port}"},
-  "market.good": {"zh": "货物", "en": "Good"},
-  "market.price": {"zh": "买价/卖价", "en": "Buy/Sell"},
-  "market.you_have": {"zh": "持有", "en": "You have"},
-  "market.qty": {"zh": "数量", "en": "Qty"},
-  "market.buy": {"zh": "购买", "en": "Buy"},
-  "market.sell": {"zh": "出售", "en": "Sell"},
-  "market.max": {"zh": "最大", "en": "Max"},
-  "market.supplies": {"zh": "补给", "en": "Supplies"},
-  "market.provisions": {"zh": "补给 {price}g", "en": "Provisions {price}g"},
-  "market.water": {"zh": "淡水 {price}g", "en": "Water {price}g"},
-  "market.invest": {"zh": "投资 {amount} 金", "en": "Invest {amount}g"},
-  "market.invested_here": {"zh": "本港已投资 {gold} 金(−{count}%)", "en": "Invested here: {gold}g (−{count}%)"},
-  "market.invest_cap": {"zh": "投资已达上限({max}%)。", "en": "Investment cap reached ({max}%)."},
-  "market.hold_full": {"zh": "货舱已满", "en": "Cargo hold is full"},
-  "market.not_enough_gold": {"zh": "需要 {gold} 金。", "en": "You need {gold} gold."},
-  "market.no_gold": {"zh": "金币不足。", "en": "Not enough gold."},
-  "market.invalid_qty": {"zh": "请输入有效数量。", "en": "Enter a valid quantity."},
-  "market.traded": {"zh": "成交:{qty} 单位 {name}。", "en": "Traded: {qty} {name}."},
-  "shipyard.title": {"zh": "船坞 — {port}", "en": "Shipyard — {port}"},
-  "shipyard.buy": {"zh": "购买", "en": "Buy"},
-  "shipyard.repair": {"zh": "修理", "en": "Repair"},
-  "shipyard.refit": {"zh": "改装", "en": "Refit"},
-  "shipyard.sell": {"zh": "出售", "en": "Sell"},
-  "shipyard.catalog": {"zh": "船型目录", "en": "Ship catalog"},
-  "shipyard.durability": {"zh": "耐久 {durability}", "en": "Durability {durability}"},
-  "shipyard.crew_stat": {"zh": "船员 {crew}/{max}", "en": "Crew {crew}/{max}"},
-  "shipyard.speed_stat": {"zh": "航速 {speed}", "en": "Speed {speed}"},
-  "shipyard.capacity_stat": {"zh": "容量 {capacity}", "en": "Capacity {capacity}"},
-  "shipyard.crew_minmax": {"zh": "船员 {crew}–{max}", "en": "Crew {crew}–{max}"},
-  "shipyard.price": {"zh": "价格 {price}g", "en": "Price {price}g"},
-  "shipyard.fleet_full": {"zh": "船队已满({max} 艘)。", "en": "Fleet is full ({max} ships)."},
-  "shipyard.no_sell_flagship": {"zh": "不能出售旗舰。", "en": "The flagship cannot be sold."},
-  "shipyard.no_sell_last": {"zh": "不能出售最后一艘船。", "en": "You cannot sell your last ship."},
-  "shipyard.cargo_not_empty": {"zh": "请先清空货舱。", "en": "Empty the cargo hold first."},
-  "shipyard.no_selection": {"zh": "请先选择一艘船。", "en": "Select a ship first."},
-  "shipyard.repair_points": {"zh": "修理点数", "en": "Repair points"},
-  "shipyard.repair_cost": {"zh": "费用 {amount}g", "en": "Cost {amount}g"},
-  "shipyard.repaired": {"zh": "已修理 {points} 点,花费 {amount} 金。", "en": "Repaired {points} points for {amount} gold."},
-  "shipyard.bought": {"zh": "已购入 {ship}。", "en": "Bought the {ship}."},
-  "shipyard.sold": {"zh": "已出售 {ship},得 {amount} 金。", "en": "Sold the {ship} for {amount} gold."},
-  "shipyard.no_gold": {"zh": "金币不足。", "en": "Not enough gold."},
-  "shipyard.invalid_points": {"zh": "请输入有效的修理点数。", "en": "Enter a valid number of points."},
-  "shipyard.sell.confirm": {"zh": "出售 {ship}?随船船员将离船,货物须已清空。", "en": "Sell the {ship}? Her crew leaves and her hold must be empty."},
-  "shipyard.cannons.phase2": {"zh": "火炮将在第二阶段开放", "en": "Cannons open in Phase 2"},
-  "tavern.title": {"zh": "酒馆 — {port}", "en": "Tavern — {port}"},
-  "tavern.crew_tab": {"zh": "船员", "en": "Crew"},
-  "tavern.officers_tab": {"zh": "官员", "en": "Officers"},
-  "tavern.hire": {"zh": "招募 {qty}", "en": "Hire {qty}"},
-  "tavern.fire": {"zh": "解雇 {qty}", "en": "Fire {qty}"},
-  "tavern.fill": {"zh": "补满", "en": "Fill"},
-  "tavern.down_to_min": {"zh": "降至下限", "en": "Down to min"},
-  "tavern.per_head": {"zh": "每人 {price}g", "en": "{price}g per head"},
-  "tavern.crew_count": {"zh": "船员 {crew}/{max}", "en": "Crew {crew}/{max}"},
-  "tavern.crew_min_note": {"zh": "船员不得低于 {crew} 人。", "en": "Crew cannot drop below {crew}."},
-  "tavern.recruit": {"zh": "招募", "en": "Recruit"},
-  "tavern.dismiss": {"zh": "解雇", "en": "Dismiss"},
-  "tavern.role.navigator": {"zh": "领航员", "en": "Navigator"},
-  "tavern.role.boatswain": {"zh": "水手长", "en": "Boatswain"},
-  "tavern.role.gunner": {"zh": "炮手", "en": "Gunner"},
-  "tavern.wage": {"zh": "日薪 {price}g", "en": "Wage {price}g/day"},
-  "tavern.stats": {"zh": "统{leadership} 航{seamanship} 战{combat} 导{navigation}", "en": "Ld{leadership} Sm{seamanship} Cb{combat} Nv{navigation}"},
-  "tavern.no_officers": {"zh": "此处暂无官员可招募。", "en": "No officers seek a berth here."},
-  "tavern.signing_cost": {"zh": "签约费 {amount}g", "en": "Signing fee {amount}g"},
-  "tavern.recruited": {"zh": "{name} 加入了船队。", "en": "{name} joins your fleet."},
-  "tavern.dismissed": {"zh": "{name} 离船了。", "en": "{name} leaves the ship."},
-  "inn.title": {"zh": "旅店 — {port}", "en": "Inn — {port}"},
-  "inn.rest": {"zh": "休息 {day} 天", "en": "Rest {day} days"},
-  "inn.rest_cost": {"zh": "休息 {day} 天 — {price}g", "en": "Rest {day} days — {price}g"},
-  "inn.morale": {"zh": "士气 {amount}", "en": "Morale {amount}"},
-  "inn.rest_done": {"zh": "休息了 {day} 天,士气回升。", "en": "Rested {day} days; morale recovers."},
-  "inn.no_gold": {"zh": "金币不足。", "en": "Not enough gold."},
-  "inn.odd_job.offer": {"zh": "在码头打零工(+100 金,耗时 1 天)", "en": "Work an odd job at the docks (+100g, 1 day)"},
-  "inn.odd_job.result": {"zh": "你帮工一天,挣得 100 金。", "en": "A day's labor on the docks earns you 100 gold."},
-  "inn.odd_job.ineligible": {"zh": "赈济零工仅面向身无船只且穷困的旅人。", "en": "Relief work is only for the penniless without a ship."},
-  "inn.odd_job.officers": {"zh": "有官员在册时不能打零工,请先解雇。", "en": "Dismiss your officers before taking odd jobs."},
-  "char.title": {"zh": "船长", "en": "Captain"},
-  "char.stats": {"zh": "属性", "en": "Stats"},
-  "char.level": {"zh": "等级 {level}", "en": "Level {level}"},
-  "char.xp": {"zh": "经验 {xp}", "en": "XP {xp}"},
-  "char.next_level": {"zh": "升到下一级还需 {xp} 经验", "en": "{xp} XP to next level"},
-  "char.officers": {"zh": "官员", "en": "Officers"},
-  "char.no_officers": {"zh": "暂无官员。", "en": "No officers."},
-  "char.reputation": {"zh": "声望", "en": "Reputation"},
-  "char.leadership": {"zh": "统率", "en": "Leadership"},
-  "char.seamanship": {"zh": "航海术", "en": "Seamanship"},
-  "char.combat": {"zh": "战斗", "en": "Combat"},
-  "char.navigation": {"zh": "导航", "en": "Navigation"},
-  "char.luck": {"zh": "运气", "en": "Luck"},
-  "char.none": {"zh": "无", "en": "None"},
-  "char.effective": {"zh": "有效值 {amount}", "en": "Effective {amount}"},
-  "char.officer_wage": {"zh": "官员日薪合计 {gold}g", "en": "Officer wages {gold}g/day"},
-  "char.day": {"zh": "第 {day} 天", "en": "Day {day}"},
-  "char.level_up": {"zh": "晋升!你已达到 {level} 级。", "en": "Level up! You are now level {level}."},
-  "char.officers_full": {"zh": "官员名额已满({max} 人)。", "en": "Officer roster is full ({max})."},
-  "fleet.title": {"zh": "船队", "en": "Fleet"},
-  "fleet.flagship": {"zh": "旗舰", "en": "Flagship"},
-  "fleet.ship_n": {"zh": "第 {amount} 艘", "en": "Ship {amount}"},
-  "fleet.promote": {"zh": "设为旗舰", "en": "Make flagship"},
-  "fleet.jettison": {"zh": "抛弃货物", "en": "Jettison cargo"},
-  "fleet.cargo_empty": {"zh": "货舱为空", "en": "Hold is empty"},
-  "fleet.free_capacity": {"zh": "空余 {capacity}", "en": "Free {capacity}"},
-  "fleet.full": {"zh": "船队已满({max} 艘)", "en": "Fleet is full ({max} ships)"},
-  "gameover.title": {"zh": "航程终结", "en": "Voyage's end"},
-  "gameover.reason": {"zh": "原因:{reason}", "en": "Cause: {reason}"},
-  "gameover.return": {"zh": "按任意键返回标题", "en": "Press any key to return to the title"},
-  "gameover.starvation": {"zh": "补给断绝,船队饿死在了海上。", "en": "Provisions gone — your fleet starved at sea."},
-  "gameover.scurvy": {"zh": "淡水耗尽,坏血病夺走了整支船队。", "en": "The water ran out; scurvy took your fleet."},
-  "gameover.sunk": {"zh": "旗舰沉没了,你也随之葬身大海。", "en": "Your flagship sank, and you went down with her."},
-  "world.move_blocked": {"zh": "无法向该方向航行(陆地、暗礁或海图边界)。", "en": "You cannot sail that way (land, reef, or the map's edge)."},
-  "char.base": {"zh": "基础值 {amount}", "en": "Base {amount}"},
-  "char.rep_value": {"zh": "声望值 {amount}", "en": "Standing {amount}"},
-  "tavern.crew_full": {"zh": "船员已满({max} 人)。", "en": "Crew is at full strength ({max})."},
-  "inn.odd_job.has_ship": {"zh": "有船时不能打零工。", "en": "Relief work is only for travellers without a ship."},
-  "inn.odd_job.not_broke": {"zh": "你还买得起一条船,不需要救济。", "en": "You can still afford a hull; no relief is offered."}
+  "ui.back": {
+    "zh": "返回",
+    "en": "Back"
+  },
+  "ui.confirm": {
+    "zh": "确认",
+    "en": "Confirm"
+  },
+  "ui.cancel": {
+    "zh": "取消",
+    "en": "Cancel"
+  },
+  "ui.ok": {
+    "zh": "确定",
+    "en": "OK"
+  },
+  "ui.close": {
+    "zh": "关闭",
+    "en": "Close"
+  },
+  "ui.yes": {
+    "zh": "是",
+    "en": "Yes"
+  },
+  "ui.no": {
+    "zh": "否",
+    "en": "No"
+  },
+  "ui.gold_abbr": {
+    "zh": "金",
+    "en": "g"
+  },
+  "ui.gold_amount": {
+    "zh": "{gold}金",
+    "en": "{gold}g"
+  },
+  "ui.qty": {
+    "zh": "数量 {qty}",
+    "en": "Qty {qty}"
+  },
+  "ui.reason": {
+    "zh": "原因:{reason}",
+    "en": "Reason: {reason}"
+  },
+  "ui.confirm_title": {
+    "zh": "请确认",
+    "en": "Please confirm"
+  },
+  "ui.not_available": {
+    "zh": "不可用",
+    "en": "Not available"
+  },
+  "ui.language_toggle": {
+    "zh": "中文 / EN",
+    "en": "中文 / EN"
+  },
+  "ui.esc_hint": {
+    "zh": "Esc 返回",
+    "en": "Esc to go back"
+  },
+  "ui.saved": {
+    "zh": "已保存。",
+    "en": "Game saved."
+  },
+  "ui.cant_save_here": {
+    "zh": "只能在港口保存。",
+    "en": "You can only save in port."
+  },
+  "ui.save.invalid": {
+    "zh": "存档损坏或版本不符。",
+    "en": "Save is corrupt or from another version."
+  },
+  "ui.save.title": {
+    "zh": "保存游戏",
+    "en": "Save game"
+  },
+  "ui.load.title": {
+    "zh": "读取游戏",
+    "en": "Load game"
+  },
+  "ui.save.select_slot": {
+    "zh": "选择存档位",
+    "en": "Choose a slot to save"
+  },
+  "ui.load.select_slot": {
+    "zh": "选择要读取的存档",
+    "en": "Choose a save to load"
+  },
+  "ui.slot_n": {
+    "zh": "存档 {slot}",
+    "en": "Slot {slot}"
+  },
+  "ui.empty": {
+    "zh": "空",
+    "en": "Empty"
+  },
+  "ui.overwrite_confirm": {
+    "zh": "覆盖存档 {slot}?",
+    "en": "Overwrite slot {slot}?"
+  },
+  "ui.saved_slot": {
+    "zh": "已保存到存档 {slot}。",
+    "en": "Saved to slot {slot}."
+  },
+  "ui.load_failed": {
+    "zh": "读取失败。",
+    "en": "Load failed."
+  },
+  "ui.save_failed": {
+    "zh": "保存失败。",
+    "en": "Save failed."
+  },
+  "ui.invalid_slot": {
+    "zh": "无效的存档位。",
+    "en": "Invalid save slot."
+  },
+  "ui.f5_hint": {
+    "zh": "F5 快速保存",
+    "en": "F5 quick-save"
+  },
+  "ui.f9_hint": {
+    "zh": "F9 快速读取",
+    "en": "F9 quick-load"
+  },
+  "ui.day_nation_gold": {
+    "zh": "第 {day} 天 · {nation} · {gold} 金",
+    "en": "Day {day} · {nation} · {gold}g"
+  },
+  "ui.timestamp": {
+    "zh": "存档时间 {amount}",
+    "en": "Saved {amount}"
+  },
+  "title.new_game": {
+    "zh": "新游戏",
+    "en": "New game"
+  },
+  "title.load_game": {
+    "zh": "读取存档",
+    "en": "Load game"
+  },
+  "title.quit": {
+    "zh": "退出",
+    "en": "Quit"
+  },
+  "title.language": {
+    "zh": "语言",
+    "en": "Language"
+  },
+  "title.data_error": {
+    "zh": "数据错误:{reason}",
+    "en": "Data error: {reason}"
+  },
+  "title.subtitle": {
+    "zh": "风帆与贸易",
+    "en": "Sail and trade"
+  },
+  "nation.select_title": {
+    "zh": "选择国籍",
+    "en": "Choose your nation"
+  },
+  "nation.select_prompt": {
+    "zh": "选择你的旗帜,船长。",
+    "en": "Choose your flag, captain."
+  },
+  "nation.start_package": {
+    "zh": "初始配置",
+    "en": "Starting package"
+  },
+  "nation.start_port": {
+    "zh": "起始港口:{port}",
+    "en": "Start port: {port}"
+  },
+  "nation.start_ship": {
+    "zh": "起始船只:{ship}",
+    "en": "Start ship: {ship}"
+  },
+  "nation.start_gold": {
+    "zh": "起始资金:{gold} 金",
+    "en": "Start gold: {gold}g"
+  },
+  "nation.confirm": {
+    "zh": "以此国籍开始",
+    "en": "Start with this nation"
+  },
+  "world.day": {
+    "zh": "第 {day} 天",
+    "en": "Day {day}"
+  },
+  "world.gold": {
+    "zh": "{gold} 金",
+    "en": "{gold}g"
+  },
+  "world.morale": {
+    "zh": "士气 {amount}",
+    "en": "Morale {amount}"
+  },
+  "world.weather.calm": {
+    "zh": "无风",
+    "en": "Calm"
+  },
+  "world.weather.fair": {
+    "zh": "顺风",
+    "en": "Fair"
+  },
+  "world.weather.strong": {
+    "zh": "强风",
+    "en": "Strong wind"
+  },
+  "world.weather.storm": {
+    "zh": "风暴",
+    "en": "Storm"
+  },
+  "world.morale.excellent": {
+    "zh": "极佳",
+    "en": "Excellent"
+  },
+  "world.morale.good": {
+    "zh": "良好",
+    "en": "Good"
+  },
+  "world.morale.strained": {
+    "zh": "紧张",
+    "en": "Strained"
+  },
+  "world.morale.dangerous": {
+    "zh": "危险",
+    "en": "Dangerous"
+  },
+  "world.morale.mutinous": {
+    "zh": "欲变",
+    "en": "Mutinous"
+  },
+  "world.provisions": {
+    "zh": "补给 {amount}",
+    "en": "Provisions {amount}"
+  },
+  "world.water": {
+    "zh": "淡水 {amount}",
+    "en": "Water {amount}"
+  },
+  "world.crew": {
+    "zh": "船员 {crew}/{max}",
+    "en": "Crew {crew}/{max}"
+  },
+  "world.cargo": {
+    "zh": "货舱 {amount}/{capacity}",
+    "en": "Cargo {amount}/{capacity}"
+  },
+  "world.speed": {
+    "zh": "航速 {speed}",
+    "en": "Speed {speed}"
+  },
+  "world.open_sea": {
+    "zh": "外海",
+    "en": "Open sea"
+  },
+  "world.arrive": {
+    "zh": "抵达 {port}。第 {day} 天。",
+    "en": "Arrived at {port}. Day {day}."
+  },
+  "world.enter_port": {
+    "zh": "进入 {port}",
+    "en": "Enter {port}"
+  },
+  "world.ship_lost": {
+    "zh": "一艘船沉没了,船上货物尽失。",
+    "en": "A ship has sunk; her cargo is lost."
+  },
+  "world.flagship_lost": {
+    "zh": "旗舰沉没,你转乘下一艘船。",
+    "en": "Your flagship sank; you take command of the next ship."
+  },
+  "world.desertion": {
+    "zh": "士气低落,{count} 名船员在进港时离去。",
+    "en": "Low morale: {count} crew deserted on arrival."
+  },
+  "world.storm_damage": {
+    "zh": "风暴损伤:{name} 损失 {points} 点耐久。",
+    "en": "Storm damage: the {name} loses {points} durability."
+  },
+  "world.storm_notice": {
+    "zh": "{weather}:船队遭遇风暴。",
+    "en": "{weather}: the fleet meets a storm."
+  },
+  "world.starvation_warning": {
+    "zh": "补给见底,船员开始挨饿。",
+    "en": "Provisions are running out; the crew goes hungry."
+  },
+  "world.scurvy_warning": {
+    "zh": "淡水将尽,坏血病蔓延。",
+    "en": "Water is nearly gone; scurvy spreads."
+  },
+  "world.mutiny.title": {
+    "zh": "哗变",
+    "en": "Mutiny"
+  },
+  "world.mutiny.text": {
+    "zh": "船员聚集在甲板上,要求结清欠薪。",
+    "en": "The crew gathers on deck, demanding their arrears."
+  },
+  "world.mutiny.pay": {
+    "zh": "支付 {gold} 金",
+    "en": "Pay {gold}g"
+  },
+  "world.mutiny.suppress": {
+    "zh": "镇压",
+    "en": "Suppress"
+  },
+  "world.mutiny.fizzle": {
+    "zh": "无人响应,人群渐渐散去。",
+    "en": "No one answers; the crowd drifts apart."
+  },
+  "world.minimap": {
+    "zh": "海图",
+    "en": "Chart"
+  },
+  "world.minimap.enlarged": {
+    "zh": "海图(放大)",
+    "en": "Chart (enlarged)"
+  },
+  "port.market": {
+    "zh": "市场",
+    "en": "Market"
+  },
+  "port.shipyard": {
+    "zh": "船坞",
+    "en": "Shipyard"
+  },
+  "port.tavern": {
+    "zh": "酒馆",
+    "en": "Tavern"
+  },
+  "port.inn": {
+    "zh": "旅店",
+    "en": "Inn"
+  },
+  "port.guild": {
+    "zh": "公会",
+    "en": "Guild"
+  },
+  "port.palace": {
+    "zh": "王宫",
+    "en": "Palace"
+  },
+  "port.set_sail": {
+    "zh": "出航",
+    "en": "Set sail"
+  },
+  "port.facilities": {
+    "zh": "港口设施",
+    "en": "Facilities"
+  },
+  "port.day_greeting": {
+    "zh": "{port},第 {day} 天。",
+    "en": "{port}, day {day}."
+  },
+  "port.save": {
+    "zh": "保存",
+    "en": "Save"
+  },
+  "port.load": {
+    "zh": "读取",
+    "en": "Load"
+  },
+  "port.lang": {
+    "zh": "语言",
+    "en": "Language"
+  },
+  "port.stub.phase3": {
+    "zh": "第三阶段开放",
+    "en": "Opens in Phase 3"
+  },
+  "market.title": {
+    "zh": "市场 — {port}",
+    "en": "Market — {port}"
+  },
+  "market.good": {
+    "zh": "货物",
+    "en": "Good"
+  },
+  "market.price": {
+    "zh": "买价/卖价",
+    "en": "Buy/Sell"
+  },
+  "market.you_have": {
+    "zh": "持有",
+    "en": "You have"
+  },
+  "market.qty": {
+    "zh": "数量",
+    "en": "Qty"
+  },
+  "market.buy": {
+    "zh": "购买",
+    "en": "Buy"
+  },
+  "market.sell": {
+    "zh": "出售",
+    "en": "Sell"
+  },
+  "market.max": {
+    "zh": "最大",
+    "en": "Max"
+  },
+  "market.supplies": {
+    "zh": "补给",
+    "en": "Supplies"
+  },
+  "market.provisions": {
+    "zh": "补给 {price}g",
+    "en": "Provisions {price}g"
+  },
+  "market.water": {
+    "zh": "淡水 {price}g",
+    "en": "Water {price}g"
+  },
+  "market.invest": {
+    "zh": "投资 {amount} 金",
+    "en": "Invest {amount}g"
+  },
+  "market.invested_here": {
+    "zh": "本港已投资 {gold} 金(−{count}%)",
+    "en": "Invested here: {gold}g (−{count}%)"
+  },
+  "market.invest_cap": {
+    "zh": "投资已达上限({max}%)。",
+    "en": "Investment cap reached ({max}%)."
+  },
+  "market.hold_full": {
+    "zh": "货舱已满",
+    "en": "Cargo hold is full"
+  },
+  "market.not_enough_gold": {
+    "zh": "需要 {gold} 金。",
+    "en": "You need {gold} gold."
+  },
+  "market.no_gold": {
+    "zh": "金币不足。",
+    "en": "Not enough gold."
+  },
+  "market.invalid_qty": {
+    "zh": "请输入有效数量。",
+    "en": "Enter a valid quantity."
+  },
+  "market.traded": {
+    "zh": "成交:{qty} 单位 {name}。",
+    "en": "Traded: {qty} {name}."
+  },
+  "shipyard.title": {
+    "zh": "船坞 — {port}",
+    "en": "Shipyard — {port}"
+  },
+  "shipyard.buy": {
+    "zh": "购买",
+    "en": "Buy"
+  },
+  "shipyard.repair": {
+    "zh": "修理",
+    "en": "Repair"
+  },
+  "shipyard.refit": {
+    "zh": "改装",
+    "en": "Refit"
+  },
+  "shipyard.sell": {
+    "zh": "出售",
+    "en": "Sell"
+  },
+  "shipyard.catalog": {
+    "zh": "船型目录",
+    "en": "Ship catalog"
+  },
+  "shipyard.durability": {
+    "zh": "耐久 {durability}",
+    "en": "Durability {durability}"
+  },
+  "shipyard.crew_stat": {
+    "zh": "船员 {crew}/{max}",
+    "en": "Crew {crew}/{max}"
+  },
+  "shipyard.speed_stat": {
+    "zh": "航速 {speed}",
+    "en": "Speed {speed}"
+  },
+  "shipyard.capacity_stat": {
+    "zh": "容量 {capacity}",
+    "en": "Capacity {capacity}"
+  },
+  "shipyard.crew_minmax": {
+    "zh": "船员 {crew}–{max}",
+    "en": "Crew {crew}–{max}"
+  },
+  "shipyard.price": {
+    "zh": "价格 {price}g",
+    "en": "Price {price}g"
+  },
+  "shipyard.fleet_full": {
+    "zh": "船队已满({max} 艘)。",
+    "en": "Fleet is full ({max} ships)."
+  },
+  "shipyard.no_sell_flagship": {
+    "zh": "不能出售旗舰。",
+    "en": "The flagship cannot be sold."
+  },
+  "shipyard.no_sell_last": {
+    "zh": "不能出售最后一艘船。",
+    "en": "You cannot sell your last ship."
+  },
+  "shipyard.cargo_not_empty": {
+    "zh": "请先清空货舱。",
+    "en": "Empty the cargo hold first."
+  },
+  "shipyard.no_selection": {
+    "zh": "请先选择一艘船。",
+    "en": "Select a ship first."
+  },
+  "shipyard.repair_points": {
+    "zh": "修理点数",
+    "en": "Repair points"
+  },
+  "shipyard.repair_cost": {
+    "zh": "费用 {amount}g",
+    "en": "Cost {amount}g"
+  },
+  "shipyard.repaired": {
+    "zh": "已修理 {points} 点,花费 {amount} 金。",
+    "en": "Repaired {points} points for {amount} gold."
+  },
+  "shipyard.bought": {
+    "zh": "已购入 {ship}。",
+    "en": "Bought the {ship}."
+  },
+  "shipyard.sold": {
+    "zh": "已出售 {ship},得 {amount} 金。",
+    "en": "Sold the {ship} for {amount} gold."
+  },
+  "shipyard.no_gold": {
+    "zh": "金币不足。",
+    "en": "Not enough gold."
+  },
+  "shipyard.invalid_points": {
+    "zh": "请输入有效的修理点数。",
+    "en": "Enter a valid number of points."
+  },
+  "shipyard.sell.confirm": {
+    "zh": "出售 {ship}?随船船员将离船,货物须已清空。",
+    "en": "Sell the {ship}? Her crew leaves and her hold must be empty."
+  },
+  "shipyard.cannons.phase2": {
+    "zh": "火炮将在第二阶段开放",
+    "en": "Cannons open in Phase 2"
+  },
+  "tavern.title": {
+    "zh": "酒馆 — {port}",
+    "en": "Tavern — {port}"
+  },
+  "tavern.crew_tab": {
+    "zh": "船员",
+    "en": "Crew"
+  },
+  "tavern.officers_tab": {
+    "zh": "官员",
+    "en": "Officers"
+  },
+  "tavern.hire": {
+    "zh": "招募 {qty}",
+    "en": "Hire {qty}"
+  },
+  "tavern.fire": {
+    "zh": "解雇 {qty}",
+    "en": "Fire {qty}"
+  },
+  "tavern.fill": {
+    "zh": "补满",
+    "en": "Fill"
+  },
+  "tavern.down_to_min": {
+    "zh": "降至下限",
+    "en": "Down to min"
+  },
+  "tavern.per_head": {
+    "zh": "每人 {price}g",
+    "en": "{price}g per head"
+  },
+  "tavern.crew_count": {
+    "zh": "船员 {crew}/{max}",
+    "en": "Crew {crew}/{max}"
+  },
+  "tavern.crew_min_note": {
+    "zh": "船员不得低于 {crew} 人。",
+    "en": "Crew cannot drop below {crew}."
+  },
+  "tavern.recruit": {
+    "zh": "招募",
+    "en": "Recruit"
+  },
+  "tavern.dismiss": {
+    "zh": "解雇",
+    "en": "Dismiss"
+  },
+  "tavern.role.navigator": {
+    "zh": "领航员",
+    "en": "Navigator"
+  },
+  "tavern.role.boatswain": {
+    "zh": "水手长",
+    "en": "Boatswain"
+  },
+  "tavern.role.gunner": {
+    "zh": "炮手",
+    "en": "Gunner"
+  },
+  "tavern.wage": {
+    "zh": "日薪 {price}g",
+    "en": "Wage {price}g/day"
+  },
+  "tavern.stats": {
+    "zh": "统{leadership} 航{seamanship} 战{combat} 导{navigation}",
+    "en": "Ld{leadership} Sm{seamanship} Cb{combat} Nv{navigation}"
+  },
+  "tavern.no_officers": {
+    "zh": "此处暂无官员可招募。",
+    "en": "No officers seek a berth here."
+  },
+  "tavern.signing_cost": {
+    "zh": "签约费 {amount}g",
+    "en": "Signing fee {amount}g"
+  },
+  "tavern.recruited": {
+    "zh": "{name} 加入了船队。",
+    "en": "{name} joins your fleet."
+  },
+  "tavern.dismissed": {
+    "zh": "{name} 离船了。",
+    "en": "{name} leaves the ship."
+  },
+  "inn.title": {
+    "zh": "旅店 — {port}",
+    "en": "Inn — {port}"
+  },
+  "inn.rest": {
+    "zh": "休息 {day} 天",
+    "en": "Rest {day} days"
+  },
+  "inn.rest_cost": {
+    "zh": "休息 {day} 天 — {price}g",
+    "en": "Rest {day} days — {price}g"
+  },
+  "inn.morale": {
+    "zh": "士气 {amount}",
+    "en": "Morale {amount}"
+  },
+  "inn.rest_done": {
+    "zh": "休息了 {day} 天,士气回升。",
+    "en": "Rested {day} days; morale recovers."
+  },
+  "inn.no_gold": {
+    "zh": "金币不足。",
+    "en": "Not enough gold."
+  },
+  "inn.odd_job.offer": {
+    "zh": "在码头打零工(+100 金,耗时 1 天)",
+    "en": "Work an odd job at the docks (+100g, 1 day)"
+  },
+  "inn.odd_job.result": {
+    "zh": "你帮工一天,挣得 100 金。",
+    "en": "A day's labor on the docks earns you 100 gold."
+  },
+  "inn.odd_job.ineligible": {
+    "zh": "赈济零工仅面向身无船只且穷困的旅人。",
+    "en": "Relief work is only for the penniless without a ship."
+  },
+  "inn.odd_job.officers": {
+    "zh": "有官员在册时不能打零工,请先解雇。",
+    "en": "Dismiss your officers before taking odd jobs."
+  },
+  "char.title": {
+    "zh": "船长",
+    "en": "Captain"
+  },
+  "char.stats": {
+    "zh": "属性",
+    "en": "Stats"
+  },
+  "char.level": {
+    "zh": "等级 {level}",
+    "en": "Level {level}"
+  },
+  "char.xp": {
+    "zh": "经验 {xp}",
+    "en": "XP {xp}"
+  },
+  "char.next_level": {
+    "zh": "升到下一级还需 {xp} 经验",
+    "en": "{xp} XP to next level"
+  },
+  "char.officers": {
+    "zh": "官员",
+    "en": "Officers"
+  },
+  "char.no_officers": {
+    "zh": "暂无官员。",
+    "en": "No officers."
+  },
+  "char.reputation": {
+    "zh": "声望",
+    "en": "Reputation"
+  },
+  "char.leadership": {
+    "zh": "统率",
+    "en": "Leadership"
+  },
+  "char.seamanship": {
+    "zh": "航海术",
+    "en": "Seamanship"
+  },
+  "char.combat": {
+    "zh": "战斗",
+    "en": "Combat"
+  },
+  "char.navigation": {
+    "zh": "导航",
+    "en": "Navigation"
+  },
+  "char.luck": {
+    "zh": "运气",
+    "en": "Luck"
+  },
+  "char.none": {
+    "zh": "无",
+    "en": "None"
+  },
+  "char.effective": {
+    "zh": "有效值 {amount}",
+    "en": "Effective {amount}"
+  },
+  "char.officer_wage": {
+    "zh": "官员日薪合计 {gold}g",
+    "en": "Officer wages {gold}g/day"
+  },
+  "char.day": {
+    "zh": "第 {day} 天",
+    "en": "Day {day}"
+  },
+  "char.level_up": {
+    "zh": "晋升!你已达到 {level} 级。",
+    "en": "Level up! You are now level {level}."
+  },
+  "char.officers_full": {
+    "zh": "官员名额已满({max} 人)。",
+    "en": "Officer roster is full ({max})."
+  },
+  "fleet.title": {
+    "zh": "船队",
+    "en": "Fleet"
+  },
+  "fleet.flagship": {
+    "zh": "旗舰",
+    "en": "Flagship"
+  },
+  "fleet.ship_n": {
+    "zh": "第 {amount} 艘",
+    "en": "Ship {amount}"
+  },
+  "fleet.promote": {
+    "zh": "设为旗舰",
+    "en": "Make flagship"
+  },
+  "fleet.jettison": {
+    "zh": "抛弃货物",
+    "en": "Jettison cargo"
+  },
+  "fleet.cargo_empty": {
+    "zh": "货舱为空",
+    "en": "Hold is empty"
+  },
+  "fleet.free_capacity": {
+    "zh": "空余 {capacity}",
+    "en": "Free {capacity}"
+  },
+  "fleet.full": {
+    "zh": "船队已满({max} 艘)",
+    "en": "Fleet is full ({max} ships)"
+  },
+  "gameover.title": {
+    "zh": "航程终结",
+    "en": "Voyage's end"
+  },
+  "gameover.reason": {
+    "zh": "原因:{reason}",
+    "en": "Cause: {reason}"
+  },
+  "gameover.return": {
+    "zh": "按任意键返回标题",
+    "en": "Press any key to return to the title"
+  },
+  "gameover.starvation": {
+    "zh": "补给断绝,船队饿死在了海上。",
+    "en": "Provisions gone — your fleet starved at sea."
+  },
+  "gameover.scurvy": {
+    "zh": "淡水耗尽,坏血病夺走了整支船队。",
+    "en": "The water ran out; scurvy took your fleet."
+  },
+  "gameover.sunk": {
+    "zh": "旗舰沉没了,你也随之葬身大海。",
+    "en": "Your flagship sank, and you went down with her."
+  },
+  "world.move_blocked": {
+    "zh": "无法向该方向航行(陆地、暗礁或海图边界)。",
+    "en": "You cannot sail that way (land, reef, or the map's edge)."
+  },
+  "char.base": {
+    "zh": "基础值 {amount}",
+    "en": "Base {amount}"
+  },
+  "char.rep_value": {
+    "zh": "声望值 {amount}",
+    "en": "Standing {amount}"
+  },
+  "tavern.crew_full": {
+    "zh": "船员已满({max} 人)。",
+    "en": "Crew is at full strength ({max})."
+  },
+  "inn.odd_job.has_ship": {
+    "zh": "有船时不能打零工。",
+    "en": "Relief work is only for travellers without a ship."
+  },
+  "inn.odd_job.not_broke": {
+    "zh": "你还买得起一条船,不需要救济。",
+    "en": "You can still afford a hull; no relief is offered."
+  },
+  "shipyard.cannons": {
+    "zh": "火炮",
+    "en": "Cannons"
+  },
+  "shipyard.cannons_cost": {
+    "zh": "费用 {amount}g",
+    "en": "Cost {amount}g"
+  },
+  "shipyard.cannons_sellback": {
+    "zh": "回收 {amount}g",
+    "en": "Sell-back {amount}g"
+  },
+  "shipyard.equipment": {
+    "zh": "装备",
+    "en": "Equipment"
+  },
+  "shipyard.slot.weapon": {
+    "zh": "武器",
+    "en": "Weapon"
+  },
+  "shipyard.slot.armor": {
+    "zh": "护甲",
+    "en": "Armor"
+  },
+  "shipyard.slot.figurehead": {
+    "zh": "船首像",
+    "en": "Figurehead"
+  },
+  "shipyard.slot.sail": {
+    "zh": "船帆",
+    "en": "Sails"
+  },
+  "shipyard.unequip": {
+    "zh": "卸下",
+    "en": "Unequip"
+  },
+  "shipyard.equipped": {
+    "zh": "已装备 {name},花费 {amount} 金。",
+    "en": "Equipped the {name} for {amount} gold."
+  },
+  "shipyard.unequipped": {
+    "zh": "已卸下 {name},得 {amount} 金。",
+    "en": "Removed the {name} for {amount} gold."
+  },
+  "shipyard.refitted": {
+    "zh": "已加装 {cannons} 门火炮,花费 {amount} 金。",
+    "en": "Mounted {cannons} cannons for {amount} gold."
+  }
 }
