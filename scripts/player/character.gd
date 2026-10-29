@@ -47,6 +47,13 @@ const ROLE_STAT_BONUS := {
 const REPUTATION_MIN := -100
 const REPUTATION_MAX := 100
 
+## §4.6 "+1 per 1,000g cumulative profit sold at a nation's ports". The two
+## player-block keys back the accumulator and must survive save/load (§4.8) —
+## see [method add_profit_reputation].
+const PROFIT_PER_REP := 1000
+const PROFIT_KEY := "profit_by_nation"
+const PROFIT_AWARDED_KEY := "profit_rep_awarded"
+
 ## Speed bonus clamp from docs/50-* §4.2 / docs/20-* §4.4.
 const SPEED_BONUS_MIN := -0.10
 const SPEED_BONUS_MAX := 0.20
@@ -324,23 +331,45 @@ static func add_reputation(nation_id: String, delta: int) -> int:
 
 
 ## docs/50-* §4.6 Phase-1 source: +1 per 1,000g of **cumulative** sale profit
-## at that nation's ports (T12's market calls this).
+## at that nation's ports, clamped by [method add_reputation].
 ##
-## Cumulative, not per-transaction: the remainder carries across sales in
-## `player.profit_remainder[nation_id]`, so two 500g sales award the 1 point
-## that per-transaction flooring would have lost. Loss sales add nothing.
+## Two `player`-block keys track it — `profit_by_nation` (lifetime profit) and
+## `profit_rep_awarded` (points already paid out) — so the threshold carries
+## across transactions (600g then 400g grants the point neither earns alone),
+## the rule survives save/load, and it can never double-award. Reputation from
+## other sources is left untouched.
+##
+## Returns the reputation points granted (0 for a loss or a sub-threshold gain).
 static func add_profit_reputation(nation_id: String, profit: int) -> int:
+	if nation_id.is_empty() or profit <= 0:
+		return 0
 	var p: Dictionary = _player()
-	if profit <= 0 or p.is_empty():
-		return reputation(nation_id)
-	var remainder: Dictionary = p.get("profit_remainder", {})
-	var carried := int(remainder.get(nation_id, 0)) + profit
-	var credit := int(floor(float(carried) / 1000.0))
-	remainder[nation_id] = carried - credit * 1000
-	p["profit_remainder"] = remainder
-	if credit == 0:
-		return reputation(nation_id)
-	return add_reputation(nation_id, credit)
+	if p.is_empty():
+		push_error("Character.add_profit_reputation: GameState.player is empty")
+		return 0
+	var totals: Dictionary = p.get(PROFIT_KEY, {})
+	var total := int(totals.get(nation_id, 0)) + profit
+	totals[nation_id] = total
+	p[PROFIT_KEY] = totals
+
+	var awarded: Dictionary = p.get(PROFIT_AWARDED_KEY, {})
+	var earned := int(floor(total / float(PROFIT_PER_REP)))
+	var already := int(awarded.get(nation_id, 0))
+	if earned <= already:
+		awarded[nation_id] = already
+		p[PROFIT_AWARDED_KEY] = awarded
+		return 0
+	awarded[nation_id] = earned
+	p[PROFIT_AWARDED_KEY] = awarded
+	add_reputation(nation_id, earned - already)
+	return earned - already
+
+
+## Lifetime sale profit booked against a nation (§4.6; 0 when never traded
+## there). Backed by `player.profit_by_nation`.
+static func profit_by_nation(nation_id: String) -> int:
+	var totals: Dictionary = _player().get(PROFIT_KEY, {})
+	return int(totals.get(nation_id, 0))
 
 
 # --- Helpers ---------------------------------------------------------------

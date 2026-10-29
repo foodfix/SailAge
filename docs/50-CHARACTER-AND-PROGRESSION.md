@@ -111,20 +111,19 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
 - Per nation, integer −100…+100, stored in `player.reputation`.
 - Phase-1 sources: +1 per 1,000g **cumulative** profit sold at a nation's
   ports. No decay.
-- **Cumulative accounting (normative).** Per-transaction `floor(profit/1000)`
-  loses fractions and would award nothing for two 500g sales; the rule is
-  cumulative, so each nation carries a running remainder:
-
-  ```
-  player.profit_remainder[nation_id] += floor(profit_of_this_sale)
-  credit = floor(player.profit_remainder[nation_id] / 1000)
-  player.profit_remainder[nation_id] -= credit * 1000
-  player.reputation[nation_id]      += credit   # clamped −100…+100
-  ```
-
-  `profit_remainder` is **save-relevant** and therefore part of the `player`
-  block (§4.8); it defaults to `{}` when absent (older saves, new game).
-  Loss-making sales add nothing (profit floors at 0) and never reduce it.
+- **Cumulative accounting (normative).** The 1,000g threshold carries across
+  transactions — 600g then 400g at the same nation grants the point neither
+  sale earns alone. Two `player`-block fields track it:
+  `profit_by_nation` (`{nation_id: lifetime sale profit}`) and
+  `profit_rep_awarded` (`{nation_id: reputation points already paid out}`).
+  Only the difference between `floor(profit_by_nation / 1000)` and
+  `profit_rep_awarded` is granted through `add_reputation()`, so the reputation
+  clamp and points from other sources (officers, quests) are unaffected. Both
+  fields are persisted (§4.8) because the accumulator must survive save/load;
+  a save predating the first sale simply omits them, which reads as all-zero.
+  `character.gd#add_profit_reputation()` owns the rule; the market only
+  supplies the transaction's profit. This model is idempotent — replaying a
+  sale cannot double-award, because the paid-out counter is stored.
 - Phase-1 effects: display only (shown on the character panel). Trade refusal
   and title gating OUT OF SCOPE (phase 3, `70-*`).
 
@@ -161,15 +160,17 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
   "level": 1,
   "officers": ["off_mateus_alvares"],
   "reputation": {"portugal": 20, "spain": 0, "england": 0, "holland": 0, "ottoman": 0, "italy": 0},
-  "profit_remainder": {"portugal": 400}
+  "profit_by_nation": {"england": 1100},
+  "profit_rep_awarded": {"england": 1}
 }
 ```
 
 - `officers` stores ids (full records live in `data/officers.json`).
 - `level` is stored but re-derived from `xp` on load (stored value is a
   cache; derivation wins on mismatch, logged).
-- `profit_remainder` is the per-nation carry for the cumulative +1/1,000g
-  reputation rule (§4.6); absent → treated as `{}`.
+- `profit_by_nation` / `profit_rep_awarded` are the §4.6 cumulative-profit
+  accumulator, written by `character.gd#add_profit_reputation()` on every
+  profitable sale; absent keys read as zero.
 
 ## 5. Data Examples
 

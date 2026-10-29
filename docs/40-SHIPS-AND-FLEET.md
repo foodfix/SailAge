@@ -78,7 +78,7 @@ regional restrictions OUT OF SCOPE (phase 3)):
 | Buy ship | cost `ShipType.base_price`; new instance at `durability = max`, `crew = 0`, `provisions/water = 0`, `cannons = 0`, empty cargo. Requires `gold ≥ price` and fleet size < `FLEET_MAX` (§4.4). |
 | Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). |
 | Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **UI present but disabled in Phase 1** (label `shipyard.cannons.phase2`) — combat use OUT OF SCOPE (phase 2). |
-| Sell ship | price `floor(base_price × 0.5 × durability / max_durability)`; cargo aboard must be 0 and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). |
+| Sell ship | price `floor(base_price × 0.5 × durability / max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). |
 
 Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
 150g/pt.
