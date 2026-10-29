@@ -1,0 +1,390 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/combat/battle_screen.gd" id="1_screen"]
+[ext_resource type="Script" path="res://scenes/combat/battle_grid_overlay.gd" id="2_overlay"]
+[ext_resource type="PackedScene" path="res://scenes/ui_shared/confirm_dialog.tscn" id="3_confirm"]
+
+[node name="BattleScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_screen")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="TopBar" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="TopRow" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 4.0
+offset_right = -16.0
+offset_bottom = 36.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Title" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Battle"
+vertical_alignment = 1
+
+[node name="Day" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Day -"
+vertical_alignment = 1
+
+[node name="Round" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Round -"
+vertical_alignment = 1
+
+[node name="Weather" type="Label" parent="TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "-"
+vertical_alignment = 1
+
+[node name="EscHint" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Esc"
+vertical_alignment = 1
+
+[node name="GridArea" type="Control" parent="."]
+layout_mode = 0
+offset_left = 256.0
+offset_top = 56.0
+offset_right = 1024.0
+offset_bottom = 536.0
+mouse_filter = 1
+
+[node name="Sea" type="ColorRect" parent="GridArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0862745, 0.266667, 0.431373, 1)
+
+[node name="Cells" type="Control" parent="GridArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Tokens" type="Control" parent="GridArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Overlay" type="Control" parent="GridArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_overlay")
+
+[node name="BottomPanel" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -168.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="Margin" type="MarginContainer" parent="BottomPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="BottomPanel/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="StatsRow" type="HBoxContainer" parent="BottomPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Flagship" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="DurabilityBar" type="Control" parent="BottomPanel/Margin/VBox/StatsRow"]
+custom_minimum_size = Vector2(160, 12)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Bg" type="ColorRect" parent="BottomPanel/Margin/VBox/StatsRow/DurabilityBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.27451, 0.329412, 0.407843, 1)
+
+[node name="Fill" type="ColorRect" parent="BottomPanel/Margin/VBox/StatsRow/DurabilityBar"]
+layout_mode = 0
+offset_right = 120.0
+offset_bottom = 12.0
+mouse_filter = 2
+color = Color(0.305882, 0.619608, 0.305882, 1)
+
+[node name="Durability" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Crew" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Cannons" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Reload" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+layout_mode = 2
+text = ""
+vertical_alignment = 1
+
+[node name="Target" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "-"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Actions" type="HBoxContainer" parent="BottomPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Cannon" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Cannon"
+
+[node name="Ram" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Ram"
+
+[node name="Board" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Board"
+
+[node name="Hold" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Hold"
+
+[node name="Retreat" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Retreat"
+
+[node name="Surrender" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "Surrender"
+
+[node name="Log" type="VBoxContainer" parent="BottomPanel/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Line0" type="Label" parent="BottomPanel/Margin/VBox/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="Line1" type="Label" parent="BottomPanel/Margin/VBox/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="Line2" type="Label" parent="BottomPanel/Margin/VBox/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="AfterAction" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="AfterAction"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.4)
+
+[node name="Center" type="CenterContainer" parent="AfterAction"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="AfterAction/Center"]
+custom_minimum_size = Vector2(640, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="AfterAction/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Body" type="VBoxContainer" parent="AfterAction/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="AfterAction/Center/Panel/Margin/Body"]
+layout_mode = 2
+text = "-"
+
+[node name="Lines" type="VBoxContainer" parent="AfterAction/Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Footer" type="HBoxContainer" parent="AfterAction/Center/Panel/Margin/Body"]
+layout_mode = 2
+alignment = 2
+
+[node name="Continue" type="Button" parent="AfterAction/Center/Panel/Margin/Body/Footer"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+text = "OK"
+
+[node name="BattleMenu" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="BattleMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.4)
+
+[node name="Center" type="CenterContainer" parent="BattleMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="BattleMenu/Center"]
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="BattleMenu/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Body" type="VBoxContainer" parent="BattleMenu/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="BattleMenu/Center/Panel/Margin/Body"]
+layout_mode = 2
+text = "-"
+
+[node name="Retreat" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Retreat"
+
+[node name="Surrender" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Surrender"
+
+[node name="Back" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Back"
+
+[node name="ConfirmDialog" parent="." instance=ExtResource("3_confirm")]
+layout_mode = 1
