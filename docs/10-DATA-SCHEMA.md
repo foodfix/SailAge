@@ -399,14 +399,23 @@ Locked rule, implemented at the inn (facility `inn`), behavior detailed in
 `50-CHARACTER-AND-PROGRESSION.md`:
 
 - **Availability:** every port inn, from Phase 1.
-- **Condition:** `player_gold < 100` AND the player's fleet contains 0 ships.
+- **Condition:** the player's fleet contains 0 ships AND no officers are
+  employed AND `player_gold < 1200` (the cheapest hull, `latin`, §7.3).
 - **Action:** "Work an odd job" — effect: `gold += 100`, `day += 1`. Repeatable
   while the condition holds (no cooldown beyond the 1-day advance).
 - **Strings:** the offer and result messages are L10nStrings in
   `data/ui_strings.json` (keys `inn.odd_job.offer`, `inn.odd_job.result`).
-- **Rationale:** cheapest hull is `latin` at 1,200g, so at most 12 odd jobs
-  restore a shipless player to sailing — a softlock is unreachable, consistent
-  with the sea-death-only game-over rule.
+- **Rationale:** from 0 gold, 12 odd jobs reach exactly the 1,200g `latin`,
+  so a shipless player always has a finite path back to sailing and a softlock
+  is unreachable — consistent with the sea-death-only game-over rule.
+- **Why the threshold is 1,200, not 100 (amended).** The earlier wording gated
+  on `gold < 100` while paying `+100`, which is self-defeating: one payout
+  leaves exactly 100g, the gate closes, and the purse can never exceed 100g —
+  the 1,200g hull in the rationale was arithmetically unreachable, i.e. the
+  fallback caused the softlock it exists to prevent. Gating on the cheapest
+  hull price is the same intent, stateless, and makes "at most 12 odd jobs"
+  exactly true. The condition is re-evaluated on the inn screen open and after
+  every job, so it self-clears the moment a ship is bought.
 
 ## 6. Map Constants & Legend
 

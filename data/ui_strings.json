@@ -204,5 +204,8 @@
   "gameover.sunk": {"zh": "旗舰沉没了,你也随之葬身大海。", "en": "Your flagship sank, and you went down with her."},
   "world.move_blocked": {"zh": "无法向该方向航行(陆地、暗礁或海图边界)。", "en": "You cannot sail that way (land, reef, or the map's edge)."},
   "char.base": {"zh": "基础值 {amount}", "en": "Base {amount}"},
-  "char.rep_value": {"zh": "声望值 {amount}", "en": "Standing {amount}"}
+  "char.rep_value": {"zh": "声望值 {amount}", "en": "Standing {amount}"},
+  "tavern.crew_full": {"zh": "船员已满({max} 人)。", "en": "Crew is at full strength ({max})."},
+  "inn.odd_job.has_ship": {"zh": "有船时不能打零工。", "en": "Relief work is only for travellers without a ship."},
+  "inn.odd_job.not_broke": {"zh": "你还买得起一条船,不需要救济。", "en": "You can still afford a hull; no relief is offered."}
 }

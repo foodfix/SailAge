@@ -131,13 +131,17 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
 ### 4.7 Harbor relief (full flow; spec constants in `10-*` §5)
 
 1. Condition evaluated whenever `inn_screen` opens and after each odd job:
-   `gold < 100 && fleet.is_empty()`.
+   `fleet.is_empty() && officer_count() == 0 && gold < 1200` — the threshold is
+   the cheapest hull price (`latin`, `10-*` §7.3), not 100; gating on
+   `gold < 100` while paying `+100` would close the gate after one job and
+   make the 1,200g hull unreachable (`10-*` §5 "Why the threshold is 1,200").
 2. If eligible: "Work an odd job" enabled; each click: `gold += 100`,
    advance one ledger day (`20-*` §4.5 — with no fleet there is no
    consumption; wages: no crew, no officers → 0 cost; morale delta +5/day
    applies but morale is moot without crew).
-3. If ineligible: button disabled with reason label (`guest has a ship` /
-   `not broke`), key `inn.odd_job.ineligible`.
+3. If ineligible: button disabled with a specific reason label — key
+   `inn.odd_job.ineligible` plus one of `inn.odd_job.has_ship`,
+   `inn.odd_job.not_broke` (gold ≥ 1,200), `inn.odd_job.officers`.
 4. There is no GUI path to sell your last ship (`40-*` §6), so this state is
    reached only after sinking-without-escort game over — which ends the run —
    OR by starting shipless, which never happens. **Locked clarification:**
