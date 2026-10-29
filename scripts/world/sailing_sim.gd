@@ -6,21 +6,50 @@ extends RefCounted
 ## is static and reads/mutates `GameState` through the singleton, so movement,
 ## the clock and the speed formula are unit-testable headless.
 ##
-## Ownership split (docs/IMPLEMENT-Phase1.md T6/T7):
-##   T6 (this file today): movement validation, applying a move, the
-##       fractional clock accumulator + day boundary, `effective_speed()` and
-##       `move_cost()`.
-##   T7: `_run_daily_ledger()` (consumption, wages, weather, morale, fail
-##       states, mutiny) plus its constants. The hook below is the seam; the
-##       day increment calls it *before* `day_advanced` is emitted so every
-##       listener sees a finished day (§4.3).
+## Ownership split (docs/IMPLEMENT-Phase1.md T6/T7/T8/T9):
+##   T6: movement validation, applying a move, the fractional clock
+##       accumulator + day boundary, `effective_speed()` and `move_cost()`.
+##   T7 (this file today): the §5 constants block, ledger step 1 (consumption)
+##       and step 2 (wages), plus the `advance_port_day()` port-day entry
+##       point. The day increment calls the ledger *before* `day_advanced` is
+##       emitted so every listener sees a finished day (§4.3).
+##   T8: ledger step 3 (weather roll, §4.7).
+##   T9: ledger steps 4–6 (morale, fail states, mutiny, §4.8–§4.9).
 ##
-## Constants that belong to the daily ledger (RATION_SIZE, CREW_WAGE_DAILY, the
-## weather zone table, …) are deliberately NOT defined here yet: §5 says all
-## tunables live at the top of this file, and T7 owns that block.
+## `_run_daily_ledger()` is the single seam for all six steps: they run in the
+## §4.5 order, synchronously, once per day tick at sea **and** on port
+## day-advances.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+
+# --- Ledger constants (docs/20-* §5 "sailing_constants") -------------------
+# §5 is the single source of truth: these are GDScript constants because the
+# §5 JSON block is illustrative for docs validators, not a runtime data file.
+
+## §4.5 step 2: gold per crew member per day (locked).
+const CREW_WAGE_DAILY := 2
+## §4.5 step 1 / §4.10: one unit feeds/waters this many crew for one day.
+const RATION_SIZE := 5
+## §4.10: locked supply prices, unaffected by supply/demand (supplies are not
+## trade goods and never appear in `goods.json`).
+const PROVISIONS_PRICE := 2
+const WATER_PRICE := 1
+## §4.11: base sighting radius (`50-*` §4.2 modifies it by navigation).
+const SIGHTING_RADIUS := 8
+## §4.8: new-game morale and the in-port ceiling.
+const MORALE_START := 70
+const MORALE_PORT_CAP := 80
+## §4.9: fail-state counter limit (starvation and scurvy).
+const STARVATION_LIMIT_DAYS := 7
+## §4.8.3: mutiny trigger threshold and per-day chance at sea.
+const MUTINY_THRESHOLD := 20
+const MUTINY_CHANCE_PER_DAY := 0.25
+## §4.8.2: desertion on port entry below this morale.
+const DESERTION_THRESHOLD := 40
+const DESERTION_FRACTION := 0.10
+## §4.7: storm damage as a fraction of max durability (`ceil(max × 0.05)`).
+const STORM_DAMAGE_FRACTION := 0.05
 
 ## §4.4: "minimum 1 tile/day" — speed can never be 0 (§6).
 const MIN_SPEED := 1
@@ -177,7 +206,101 @@ static func advance_clock(days: float) -> int:
 	return ticks
 
 
-# T7 HOOK: daily ledger steps 1-6 (docs/20-* §4.5) run here, in order,
-# synchronously, before day_advanced is emitted.
+## Port-side day advance (docs/20-* §4.3: "In port, the clock does not advance
+## except by explicit actions that cost a day"; odd jobs, rest). It runs the
+## **same** ledger as a sea day — crews eat and wages are paid in port too
+## (§4.5 "runs once per day tick at sea and on port day-advances").
+## Returns the number of days advanced (always 1 unless a caller batches).
+static func advance_port_day() -> int:
+	return advance_clock(1.0)
+
+
+## True while docked (docs/20-* §4.3/§4.11). The ledger is shared between the
+## two cases; only at-sea-only rules (morale −1, +2 XP/day, mutiny) branch on
+## this.
+static func in_port() -> bool:
+	return GameState.current_port != null
+
+
+# --- Daily ledger (docs/20-* §4.5, strict order) ----------------------------
+
+## Results of the most recent ledger tick. Step 1 records shortages here and
+## T9's steps 4–6 consume them; keeping them as class statics avoids adding
+## transient keys to the §8.1 save block (same pattern as
+## `Character.pending_levelup`). They are deliberately *not* persisted: a
+## pending shortage never survives a save (saving only happens in port).
+static var last_day_shortfalls: Dictionary = {"provisions": false, "water": false}
+## Step 2: true when wages exceeded the purse and gold was clamped to 0.
+## T9's morale step applies the "wages unpaid −5" row (§4.8.1).
+static var last_day_unpaid_wages: bool = false
+## Step 2: wages charged in the most recent tick (HUD/tests; not persisted).
+static var last_day_wages: int = 0
+
+
+## Daily ledger, §4.5 order. Called by [method advance_clock] once per completed
+## day, *before* `day_advanced` is emitted, so every listener observes a
+## finished day (§4.3).
+##
+## T7 implements steps 1–2 only. Steps 3–6 are marked hooks below and must be
+## inserted in place — do not restructure this function.
 static func _run_daily_ledger() -> void:
-	pass  # T7 implements
+	_ledger_consumption()  # T7: step 1
+	_ledger_wages()        # T7: step 2
+	# T8 HOOK: step 3 weather roll (docs/20-* §4.7) — roll for the coming day,
+	#   write `GameState.world["weather"]`, apply storm damage + the storm
+	#   morale flag that step 4 reads.
+	# T9 HOOK: step 4 morale update (docs/20-* §4.8.1) — reads
+	#   `last_day_shortfalls`, `last_day_unpaid_wages`, `in_port()` and the
+	#   weather rolled in step 3; applies the in-port +5 up to MORALE_PORT_CAP
+	#   and clamps to [0, 100]. The `50-*` §4.3 "+2 XP per day tick at sea"
+	#   award belongs here too (at sea only, never on port day-advances).
+	# T9 HOOK: step 5 fail-state checks (docs/20-* §4.9) — starvation, scurvy
+	#   (counters fed by `last_day_shortfalls`), then sinking.
+	# T9 HOOK: step 6 mutiny check (docs/20-* §4.8.3) — at sea only,
+	#   `GameState.morale < MUTINY_THRESHOLD`, `MUTINY_CHANCE_PER_DAY`.
+
+
+## §4.5 step 1 — consumption. `need = ceil(total_crew / RATION_SIZE)` units of
+## provisions **and** the same of water; stock is drained flagship-first
+## (`40-*` §4.2 pooling) and a shortage is recorded for step 5. The fail-state
+## consequence (crew loss, counters) is T9's; this step only eats.
+static func _ledger_consumption() -> void:
+	var crew := FleetLib.total_crew()
+	var need := 0 if crew <= 0 else int(ceil(float(crew) / float(RATION_SIZE)))
+	last_day_shortfalls = {"provisions": false, "water": false}
+	if need <= 0:
+		return  # Crew 0: nothing to feed, no shortage (§4.9 crew floor).
+	var ate := false
+	for kind in ["provisions", "water"]:
+		var stock := FleetLib.supplies(kind)
+		if stock < need:
+			last_day_shortfalls[kind] = true
+		# Clamp the drain at the stock on hand: a shortage consumes to 0.
+		if FleetLib.remove_supplies(kind, mini(need, stock)) > 0:
+			ate = true
+	if ate:
+		FleetLib.notify_changed()
+
+
+## §4.5 step 2 — wages. `gold -= total_crew × CREW_WAGE_DAILY + Σ
+## officer.wage_daily`; a negative result clamps to 0 and raises the unpaid
+## flag (§4.8.1 "wages unpaid −5"). Exactly `wages == gold` is still paid (the
+## doc's condition is `< 0`, not `≤ 0`).
+##
+## Writes `GameState.gold` directly rather than through `GameState.add_gold()`
+## because that helper does not clamp (docs/20-* §4.9) and emits the
+## pre-clamp value: the HUD must never see negative gold. One `gold_changed`
+## is emitted with the clamped value, and only when gold actually changed.
+static func _ledger_wages() -> void:
+	var wages := FleetLib.total_crew() * CREW_WAGE_DAILY \
+		+ CharacterLib.officer_wages()
+	last_day_wages = wages
+	last_day_unpaid_wages = false
+	if wages <= 0:
+		return
+	var before := GameState.gold
+	if before - wages < 0:
+		last_day_unpaid_wages = true
+	GameState.gold = maxi(0, before - wages)
+	if GameState.gold != before:
+		EventBus.gold_changed.emit(GameState.gold)
