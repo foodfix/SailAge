@@ -105,6 +105,11 @@ const RESULT_VALUES: Array[String] = [
 const XP_PER_ENEMY_NEUTRALIZED := 10
 const XP_PER_ROUND := 5
 const PIRATE_REP_GAIN := 2
+## §4.11.10: the navy piracy penalty. Pinned here with the other reward
+## numbers, but **never applied by this engine**: it is charged once at battle
+## start by whoever initiated the navy battle (`encounters.gd`
+## `PIRACY_REPUTATION` / `world_map.gd._charge_navy_piracy`), so it must not
+## appear in an outcome block (see [method _rep_deltas]).
 const NAVY_REP_PENALTY := -20
 const SALVAGE_FRACTION := 0.05
 const NEAREST_PORT_COUNT := 2
@@ -1006,21 +1011,27 @@ func _salvage_gold() -> int:
 
 func _rep_deltas() -> Dictionary:
 	var deltas := {}
+	# §4.11.10/§4.12.2: `rep_deltas` carries **only** the pirate `+2` entries.
+	# The navy `−20` is charged exactly once per navy battle at battle *start*
+	# by whoever initiated it (`encounters.gd` / `world_map.gd`), never per ship
+	# and never here — so applying this block twice can never double-charge it.
 	if enemy_kind == "pirate":
 		# §4.11.10 "Pirates defeated (any outcome except retreat)".
 		if _result != RESULT_RETREAT:
 			for nation_id in _nearest_port_nations():
 				deltas[nation_id] = int(deltas.get(nation_id, 0)) + PIRATE_REP_GAIN
-	elif enemy_kind == "navy" and not enemy_nation.is_empty():
-		# −20 per navy ship sunk or captured, regardless of who won.
-		var acts := _sunk_enemy.size() + _captured_enemy.size()
-		if acts > 0:
-			deltas[enemy_nation] = acts * NAVY_REP_PENALTY
 	return deltas
 
 
 ## Nations of the two nearest ports (Chebyshev from the contact tile; ties by
 ## port id ascending; a nation credited once).
+##
+## §4.11.10 picks **two ports** first and credits their nations, then drops a
+## duplicate: "A nation appearing twice is credited once" only describes a
+## selection that can produce the same nation twice, so a contact whose two
+## nearest ports share a nation credits that nation once and stops there (it
+## does not reach for a third port). `BattleRewards.nearest_nations` mirrors
+## this rule and `tools/test_battle_economy.gd` asserts the two agree.
 func _nearest_port_nations() -> Array:
 	var ports: Array = []
 	for port in DataLoader.ports_list:
@@ -1037,10 +1048,8 @@ func _nearest_port_nations() -> Array:
 			return int(a["distance"]) < int(b["distance"])
 		return str(a["id"]) < str(b["id"]))
 	var nations: Array = []
-	for port in ports:
-		if nations.size() >= NEAREST_PORT_COUNT:
-			break
-		var nation_id := str(port["nation_id"])
+	for index in mini(ports.size(), NEAREST_PORT_COUNT):
+		var nation_id := str((ports[index] as Dictionary)["nation_id"])
 		if nation_id.is_empty() or nation_id in nations:
 			continue
 		nations.append(nation_id)
