@@ -15,6 +15,10 @@ extends Node
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## `character.gd` is preloaded like every other engine: a bare `Character.`
+## reference needs the editor's global-class cache and fails to parse in a
+## fresh checkout / CI worktree (Phase-2 finding).
+const CharacterLib := preload("res://scripts/player/character.gd")
 
 ## Open-water cell whose 8 neighbours are passable (same fixture as T6).
 const OPEN_CELL := Vector2i(20, 20)
@@ -209,8 +213,8 @@ func _test_wages() -> void:
 	# Officer Mateus Álvares (wage_daily 30) → 15 × 2 + 30 = 60g/day.
 	_make_run(15, 10, 10, 1000)
 	GameState.player["officers"] = ["off_mateus_alvares"]
-	_check(Character.officer_wages() == 30,
-		"off_mateus_alvares wage is 30g/day (got %d)" % Character.officer_wages())
+	_check(CharacterLib.officer_wages() == 30,
+		"off_mateus_alvares wage is 30g/day (got %d)" % CharacterLib.officer_wages())
 	_one_day()
 	_check(GameState.gold == 940,
 		"crew 15 + officer 30: −60g (1000 → %d)" % GameState.gold)
