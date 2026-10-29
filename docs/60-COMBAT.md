@@ -476,6 +476,24 @@ run_to_completion(policy: Callable, max_rounds: int = 30) -> Dictionary
 `ship` (the instance), `cell` (`Vector2i`), `mp`, `reload_until_round`,
 `alive`.
 
+Additional additive seams pinned during implementation (they were missing from
+the first draft of this table and are now part of the contract):
+
+```
+BattleSim.units() -> Array              # every unit, both sides, deployment order
+BattleSim.living_units(side) -> Array   # one side's survivors
+BattleSim.flagship_unit() -> Dictionary # side "player", index 0 ({} if gone)
+BattleSim.flagship_index() -> int       # -1 when the player has no ships left
+BattleSim.is_acting(unit) -> bool       # unit is the current actor
+BattleSim.retreat() -> Dictionary       # §4.11.9 `retreat` outcome
+BattleSim.offer_surrender() -> Dictionary  # §4.11.7 player surrender
+```
+
+`config` also accepts an optional `rng` (`RandomNumberGenerator`) so a caller
+can hand over the **same** stream it used for `AiFleet.compose_enemy`, which
+is what §4.11.1 means by "after deployment and enemy composition"; when `rng`
+is absent the engine builds one from `seed`.
+
 ##### 4.12.1.1 `scripts/combat/ai_fleet.gd` (`class_name AiFleet`)
 
 ```
@@ -524,7 +542,9 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
 
 - `sunk_enemy` / `sunk_player` are `ship_type_id` lists (for the log/dialog).
 - `captured_enemy` / `lost_player` are full ship instances (the §4.11.7
-  capture rule consumes them).
+  capture rule consumes them). A ship that **surrendered** also appears in
+  `captured_enemy` (§4.11.7 "resolved exactly as a duel win"), and
+  `surrendered_enemy` is the dialog-wording count only — never add the two.
 - `salvage_gold`, `xp`, `rep_deltas` are the **pre-computed** §4.11.10 numbers;
   applying them is `BattleRewards.apply()` (§4.12.3).
 - `result` ∈ `victory` \| `defeat_sunk` \| `defeat_captured` \| `retreat` \|
