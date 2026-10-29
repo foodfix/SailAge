@@ -387,6 +387,10 @@ func _test_set_sail_round_trip() -> void:
 		"the T11 extension point add_facility_row() exists")
 	# The extension point itself: a row binds its label through ui_strings,
 	# takes the locked button height, and reports the facility id on press.
+	# `route_to_facility = false` keeps the test on S4: the assertion is about
+	# the wiring (intent + target), not about swapping the scene root (T12–T15
+	# own their screens' own routing tests).
+	port.route_to_facility = false
 	var requested: Array = []
 	port.facility_requested.connect(func(fid: String) -> void: requested.append(fid))
 	var row: Button = port.add_facility_row("market", "port.market")
@@ -399,6 +403,8 @@ func _test_set_sail_round_trip() -> void:
 	row.pressed.emit()
 	_check(requested == ["market"],
 		"pressing the row reports the facility id (got %s)" % str(requested))
+	_check(port.is_inside_tree() and tree.current_scene == port,
+		"route_to_facility=false keeps the port screen in place")
 	I18n.set_locale("zh")
 	_check(row.text == I18n.t_key("port.market"),
 		"facility rows rebind on locale_changed (%s)" % row.text)

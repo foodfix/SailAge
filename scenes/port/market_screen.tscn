@@ -1,0 +1,154 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/port/market_screen.gd" id="1_market"]
+
+[node name="MarketScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("1_market")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="Layout" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Market"
+vertical_alignment = 1
+
+[node name="Spacer" type="Control" parent="Layout/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Gold" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+text = "-g"
+vertical_alignment = 1
+
+[node name="Hold" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+text = "Cargo -/-"
+vertical_alignment = 1
+
+[node name="Lang" type="Button" parent="Layout/VBox/Header"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "中文 / EN"
+
+[node name="Back" type="Button" parent="Layout/VBox/Header"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+text = "Back"
+
+[node name="TableFrame" type="PanelContainer" parent="Layout/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="Layout/VBox/TableFrame"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="Table" type="VBoxContainer" parent="Layout/VBox/TableFrame/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="ColumnHeader" type="HBoxContainer" parent="Layout/VBox/TableFrame/Margin/Table"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="GoodsScroll" type="ScrollContainer" parent="Layout/VBox/TableFrame/Margin/Table"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="GoodsRows" type="VBoxContainer" parent="Layout/VBox/TableFrame/Margin/Table/GoodsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="Supplies" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Footer" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Invest" type="Button" parent="Layout/VBox/Footer"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+text = "Invest"
+
+[node name="InvestStatus" type="Label" parent="Layout/VBox/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "-"
+vertical_alignment = 1
+
+[node name="Toast" type="Label" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_top = -96.0
+offset_right = 360.0
+offset_bottom = -56.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+text = "-"
+horizontal_alignment = 1
+vertical_alignment = 1

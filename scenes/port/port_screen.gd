@@ -71,6 +71,13 @@ signal rebound
 ## and emits [signal sailed] but does not replace the scene.
 var route_to_world: bool = true
 
+## Routing switch for [method open_facility], same convention as
+## [member route_to_world]: with `false` the call still emits
+## [signal facility_requested] and returns whether the target exists, but does
+## not replace the scene. T12–T15's acceptance tests and T10's extension-point
+## test use it to observe the wiring without swapping their own scene root.
+var route_to_facility: bool = true
+
 ## Port currently docked at ("" when the scene is opened standalone, e.g. from
 ## the editor with no run in progress).
 var _port_id: String = ""
@@ -174,10 +181,11 @@ func add_facility_row(facility_id: String, text_key: String, enabled: bool = tru
 	return button
 
 
-## Routes to a facility screen when it exists. Returns true when a route was
-## started; false (with a warning, no crash) while T12–T15 have not landed the
-## screen yet. Always emits [signal facility_requested] so callers can observe
-## the intent.
+## Routes to a facility screen when it exists. Returns true when the target
+## exists (and a route was started, unless [member route_to_facility] is off);
+## false (with a warning, no crash) while T12–T15 have not landed the screen
+## yet. Always emits [signal facility_requested] so callers can observe the
+## intent.
 func open_facility(facility_id: String) -> bool:
 	facility_requested.emit(facility_id)
 	var path := str(FACILITY_SCENES.get(facility_id, ""))
@@ -187,7 +195,8 @@ func open_facility(facility_id: String) -> bool:
 	if not ResourceLoader.exists(path):
 		push_warning("PortScreen: %s missing (T12–T15); staying in port" % path)
 		return false
-	GameState.change_scene(path)
+	if route_to_facility:
+		GameState.change_scene(path)
 	return true
 
 

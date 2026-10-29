@@ -225,4 +225,4 @@ Level table (first rows of `level = floor(sqrt(xp/50)) + 1`):
 - [ ] Harbor-relief button state machine matches §6 rules including the
       officers-employed lockout.
 - [ ] Reputation increments on profitable sales at the correct nation's ports
-      only.
+      only, with the 1,000g threshold accumulating across transactions.

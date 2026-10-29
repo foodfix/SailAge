@@ -1,0 +1,876 @@
+extends Control
+## Market screen (S5) — docs/30-PORTS-AND-TRADE.md §4.2–§4.5, §4.7 (wireframe),
+## §6 (edge cases); docs/80-UI-UX.md §4.5 (HUD bars), §4.7 (numeric entry,
+## toasts), §4.8 (palette, 32px rows, 40px buttons, 8px grid).
+##
+## Everything the screen shows comes from data:
+##   * the goods table iterates [method TradeEngine.goods_rows] (every entry of
+##     `data/goods.json`, sorted by `base_price`), so a 21st good is a
+##     data-only change — there is no per-good code anywhere in this file;
+##   * prices, quantity ceilings and trade side effects are the
+##     `trade_engine.gd` formulas, never duplicated here;
+##   * supplies are the two §4.10 kinds at the fixed 2g / 1g prices and are not
+##     sellable, so they get a Buy button only.
+##
+## The screen holds no state of its own beyond the per-row quantity field: on
+## every `gold_changed` / `fleet_changed` the rows are re-read, so a trade
+## updates prices, "You have", the quantity ceiling and the button states
+## immediately (the HUD-bar signal contract applies to the HUD, not to this
+## screen's own table).
+##
+## Palette is preloaded rather than referenced through its global class name so
+## the scene also runs before the editor has written its class cache.
+
+const PaletteLib := preload("res://scripts/palette.gd")
+const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+
+const PORT_SCENE := "res://scenes/port/port_screen.tscn"
+## docs/80 §4.7: toasts are transient (2.5s).
+const TOAST_SECONDS := 2.5
+## Quantity presets, in the §4.4 order 1 / 10 / 100 (+ Max).
+const QTY_PRESETS: Array[int] = [1, 10, 100]
+## Widths of the table's fixed columns (docs/80 §4.8 8px grid). The quantity
+## picker is the numeric field plus the four preset buttons.
+const COL_NAME_W := 200
+const COL_PRICE_W := 140
+const COL_HAVE_W := 100
+const COL_QTY_W := 72
+const COL_PRESET_W := 40
+const COL_MAX_W := 56
+const COL_BUTTON_W := 88
+const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W
+
+## Emitted right before the S5 → S4 route (tests observe it instead of swapping
+## their own scene root, the `port_screen.gd` convention).
+signal went_back
+## Emitted after a successful trade: `"buy"` / `"sell"` / `"supplies"` /
+## `"invest"`, with the good id ("" for supplies/investment) and the quantity.
+signal traded(kind: String, good_id: String, qty: int)
+
+@onready var _background: ColorRect = $Background
+@onready var _title: Label = $Layout/VBox/Header/Title
+@onready var _gold: Label = $Layout/VBox/Header/Gold
+@onready var _hold: Label = $Layout/VBox/Header/Hold
+@onready var _lang_button: Button = $Layout/VBox/Header/Lang
+@onready var _back_button: Button = $Layout/VBox/Header/Back
+@onready var _table_frame: PanelContainer = $Layout/VBox/TableFrame
+@onready var _column_header: HBoxContainer = \
+	$Layout/VBox/TableFrame/Margin/Table/ColumnHeader
+@onready var _goods_scroll: ScrollContainer = \
+	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll
+@onready var _goods_rows: VBoxContainer = \
+	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows
+@onready var _supplies_row: HBoxContainer = $Layout/VBox/Supplies
+@onready var _invest_button: Button = $Layout/VBox/Footer/Invest
+@onready var _invest_status: Label = $Layout/VBox/Footer/InvestStatus
+@onready var _toast: Label = $Toast
+
+## Routing switch for headless tests (the `GameState.new_game(..., route)`
+## convention): with `false`, [method go_back] runs the whole transition and
+## emits [signal went_back] but does not replace the scene.
+var route_to_port: bool = true
+
+## Port currently docked at ("" when the scene is opened standalone).
+var _port_id: String = ""
+## Per-good widget references, `{good_id: {name, price, have, qty, qty_buttons,
+## buy, sell}}`, in the table's display order.
+var _rows: Dictionary = {}
+## Per-supply widget references, `{kind: {qty, buy}}`.
+var _supply_rows: Dictionary = {}
+## True while a `text_changed` handler rewrites its own LineEdit, so the
+## rewrite does not re-enter the sanitiser.
+var _sanitizing := false
+## Toast generation so a replaced toast does not hide its successor.
+var _toast_generation := 0
+## Gold-flash tween (created/destroyed by [_flash_gold]).
+var _gold_tween: Tween = null
+
+
+func _ready() -> void:
+	_background.color = PaletteLib.PANEL_BG
+	for label in [_title, _gold, _hold, _invest_status, _toast]:
+		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_title.add_theme_font_size_override("font_size", 32)
+	_invest_status.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_table_frame.add_theme_stylebox_override("panel", _panel_style())
+	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_lang_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_invest_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_back_button.pressed.connect(go_back)
+	_lang_button.pressed.connect(I18n.toggle_locale)
+	_invest_button.pressed.connect(_on_invest_pressed)
+	_toast.visible = false
+	_goods_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_goods_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+
+	_port_id = _read_current_port()
+	_build()
+	_bind()
+	_refresh()
+
+	# S14 over S5, the same modal the port hub offers (docs/80 §4.3).
+	CharacterPanelLib.attach_to(self)
+
+	EventBus.locale_changed.connect(_on_locale_changed)
+	EventBus.gold_changed.connect(_on_gold_changed)
+	EventBus.fleet_changed.connect(_on_fleet_changed)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("back"):
+		if has_modal():
+			return
+		get_viewport().set_input_as_handled()
+		go_back()
+		return
+	if event.is_action_pressed("toggle_locale"):
+		if has_modal():
+			return
+		get_viewport().set_input_as_handled()
+		I18n.toggle_locale()
+
+
+## True while a modal is up (the S14 panel, or a dialog another screen left in
+## the `modal_overlay` group): Back/Esc must not route underneath it
+## (docs/80 §6 "modals consume all input").
+func has_modal() -> bool:
+	for node in get_tree().get_nodes_in_group("modal_overlay"):
+		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
+			return true
+	var panel := get_node_or_null("CharacterPanel")
+	return panel != null and panel.has_method("is_open") and panel.is_open()
+
+
+# --- Public API (tests + the port hub) -------------------------------------
+
+func port_id() -> String:
+	return _port_id
+
+
+## The goods table's rows, in display order (docs/30 §4.7: `base_price` asc).
+func row_goods_ids() -> Array:
+	return _rows.keys()
+
+
+## Widget bundle for one good (`{}` when it has no row).
+func row(good_id: String) -> Dictionary:
+	return _rows.get(good_id, {})
+
+
+## Quantity currently typed in a good's row, or -1 when the field is empty
+## (docs/80 §4.7: "empty = invalid").
+func row_qty(good_id: String) -> int:
+	var row_refs: Dictionary = _rows.get(good_id, {})
+	if row_refs.is_empty():
+		return -1
+	return _parse_qty((row_refs["qty"] as LineEdit).text)
+
+
+## Types a raw string into a good's quantity field through the same handler a
+## user's keystroke runs (digits-only filter + live clamp).
+func type_qty(good_id: String, text: String) -> void:
+	var row_refs: Dictionary = _rows.get(good_id, {})
+	if row_refs.is_empty():
+		return
+	var field: LineEdit = row_refs["qty"]
+	# Programmatic assignment does not emit `text_changed`; running the handler
+	# directly is what a keystroke does, and it rewrites the field to the
+	# sanitised/clamped value.
+	field.text = text
+	_on_qty_changed(good_id, text)
+
+
+## Presses the header's language toggle (the `L` key path in tests).
+func press_language() -> void:
+	_lang_button.pressed.emit()
+
+
+## Presses one of the row's preset buttons (`1`, `10`, `100`, `max`).
+func press_qty_preset(good_id: String, preset: String) -> void:
+	var row_refs: Dictionary = _rows.get(good_id, {})
+	if row_refs.is_empty():
+		return
+	var buttons: Dictionary = row_refs["qty_buttons"]
+	var button: Button = buttons.get(preset, null)
+	if button != null and not button.disabled:
+		button.pressed.emit()
+
+
+## Clicks a row's Buy / Sell button (no-op when it is disabled, exactly like a
+## real click — the tests use this to prove the disabled state is protective).
+func press_buy(good_id: String) -> bool:
+	var row_refs: Dictionary = _rows.get(good_id, {})
+	if row_refs.is_empty():
+		return false
+	var button: Button = row_refs["buy"]
+	if button.disabled:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func press_sell(good_id: String) -> bool:
+	var row_refs: Dictionary = _rows.get(good_id, {})
+	if row_refs.is_empty():
+		return false
+	var button: Button = row_refs["sell"]
+	if button.disabled:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func supply_row(kind: String) -> Dictionary:
+	return _supply_rows.get(kind, {})
+
+
+## Types into a supply row's quantity field.
+func type_supply_qty(kind: String, text: String) -> void:
+	var refs: Dictionary = _supply_rows.get(kind, {})
+	if refs.is_empty():
+		return
+	var field: LineEdit = refs["qty"]
+	field.text = text
+	_on_supply_qty_changed(kind)
+
+
+func press_supply_buy(kind: String) -> bool:
+	var refs: Dictionary = _supply_rows.get(kind, {})
+	if refs.is_empty():
+		return false
+	var button: Button = refs["buy"]
+	if button.disabled:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func press_invest() -> bool:
+	if _invest_button.disabled:
+		return false
+	_invest_button.pressed.emit()
+	return true
+
+
+## Re-reads prices, holdings, ceilings and button states. Called on open and
+## from `gold_changed` / `fleet_changed`; never rebuilds the rows, so a typed
+## quantity and the field's focus survive a refresh.
+func refresh() -> void:
+	_refresh()
+
+
+## Back / Esc (docs/80 §4.2 "S4 ← S5"): route to the port hub, which re-reads
+## `GameState.current_port` on its own.
+func go_back() -> void:
+	went_back.emit()
+	if route_to_port:
+		GameState.change_scene(PORT_SCENE)
+
+
+# --- Construction ----------------------------------------------------------
+
+## Builds the fixed column header, one row per good in `goods.json`, and the
+## two supplies rows. Called once from `_ready`; a locale change only re-binds
+## the labels ([method _bind]) because no row content changes with locale.
+func _build() -> void:
+	_build_column_header()
+	for child in _goods_rows.get_children():
+		_goods_rows.remove_child(child)
+		child.queue_free()
+	_rows.clear()
+	for good in TradeEngineLib.goods_rows():
+		var good_id := str(good.get("id", ""))
+		if good_id.is_empty():
+			continue
+		_rows[good_id] = _build_good_row(good_id)
+	_build_supplies()
+
+
+func _build_column_header() -> void:
+	for child in _column_header.get_children():
+		_column_header.remove_child(child)
+		child.queue_free()
+	for spec in [
+		["good", COL_NAME_W, HORIZONTAL_ALIGNMENT_LEFT],
+		["price", COL_PRICE_W, HORIZONTAL_ALIGNMENT_RIGHT],
+		["you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
+		["qty", COL_QTY_TOTAL_W, HORIZONTAL_ALIGNMENT_CENTER],
+	]:
+		var label := Label.new()
+		label.name = "Col_%s" % str(spec[0])
+		label.set_meta("text_key", "market.%s" % str(spec[0]))
+		label.custom_minimum_size = Vector2(float(spec[1]), float(PaletteLib.ROW_H))
+		label.horizontal_alignment = int(spec[2])
+		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_column_header.add_child(label)
+	# Buy + Sell column caption, split over the two button widths.
+	for key in ["buy", "sell"]:
+		var label := Label.new()
+		label.name = "Col_%s" % key
+		label.set_meta("text_key", "market.%s" % key)
+		label.custom_minimum_size = Vector2(float(COL_BUTTON_W), float(PaletteLib.ROW_H))
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_column_header.add_child(label)
+
+
+## One table row: Good | Price buy/sell | You have | Qty picker | [Buy][Sell]
+## (docs/30 §4.7). Every widget's text is filled later by [method _refresh].
+func _build_good_row(good_id: String) -> Dictionary:
+	var row := HBoxContainer.new()
+	row.name = "Row_%s" % good_id
+	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
+	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	row.set_meta("good_id", good_id)
+
+	var name_label := Label.new()
+	name_label.name = "Name"
+	name_label.custom_minimum_size.x = float(COL_NAME_W)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+
+	var price_label := Label.new()
+	price_label.name = "Price"
+	price_label.custom_minimum_size.x = float(COL_PRICE_W)
+	price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	price_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+
+	var have_label := Label.new()
+	have_label.name = "Have"
+	have_label.custom_minimum_size.x = float(COL_HAVE_W)
+	have_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	have_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	have_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+
+	# Quantity picker (docs/30 §4.4): 1 / 10 / 100 / Max buttons plus direct
+	# numeric entry (digits only, live-clamped, empty = invalid).
+	var qty_box := HBoxContainer.new()
+	qty_box.name = "QtyPicker"
+	qty_box.add_theme_constant_override("separation", 4)
+	var qty_field := LineEdit.new()
+	qty_field.name = "Qty"
+	qty_field.custom_minimum_size = Vector2(float(COL_QTY_W), float(PaletteLib.ROW_H))
+	qty_field.max_length = 6
+	qty_field.placeholder_text = "0"
+	qty_box.add_child(qty_field)
+	var qty_buttons: Dictionary = {}
+	for preset in QTY_PRESETS:
+		var button := _make_row_button("Qty%d" % preset, str(preset), COL_PRESET_W)
+		button.pressed.connect(_on_qty_preset.bind(good_id, preset))
+		qty_box.add_child(button)
+		qty_buttons[str(preset)] = button
+	var max_button := _make_row_button("QtyMax", I18n.t_key("market.max"), COL_MAX_W)
+	max_button.pressed.connect(_on_qty_preset.bind(good_id, -1))
+	qty_box.add_child(max_button)
+	qty_buttons["max"] = max_button
+
+	var buy_button := _make_row_button("Buy", "", COL_BUTTON_W)
+	buy_button.pressed.connect(_on_buy.bind(good_id))
+	var sell_button := _make_row_button("Sell", "", COL_BUTTON_W)
+	sell_button.pressed.connect(_on_sell.bind(good_id))
+
+	row.add_child(name_label)
+	row.add_child(price_label)
+	row.add_child(have_label)
+	row.add_child(qty_box)
+	row.add_child(buy_button)
+	row.add_child(sell_button)
+	_goods_rows.add_child(row)
+
+	qty_field.text_changed.connect(_on_qty_text_changed.bind(good_id))
+	return {
+		"node": row,
+		"name": name_label,
+		"price": price_label,
+		"have": have_label,
+		"qty": qty_field,
+		"qty_buttons": qty_buttons,
+		"buy": buy_button,
+		"sell": sell_button,
+	}
+
+
+## The two §4.10 supplies rows: fixed 2g / 1g, no sell button (sell-back is not
+## offered for supplies).
+func _build_supplies() -> void:
+	for child in _supplies_row.get_children():
+		_supplies_row.remove_child(child)
+		child.queue_free()
+	_supply_rows.clear()
+
+	var caption := Label.new()
+	caption.name = "Caption"
+	caption.set_meta("text_key", "market.supplies")
+	caption.custom_minimum_size.x = 120
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_supplies_row.add_child(caption)
+
+	for kind in TradeEngineLib.SUPPLY_KINDS:
+		var label := Label.new()
+		label.name = "Label_%s" % kind
+		label.set_meta("text_key", "market.%s" % kind)
+		label.custom_minimum_size.x = 160
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_supplies_row.add_child(label)
+
+		var qty_field := LineEdit.new()
+		qty_field.name = "Qty_%s" % kind
+		qty_field.custom_minimum_size = Vector2(float(COL_QTY_W), float(PaletteLib.BUTTON_H))
+		qty_field.max_length = 6
+		qty_field.placeholder_text = "0"
+		_supplies_row.add_child(qty_field)
+		qty_field.text_changed.connect(_on_supply_qty_text_changed.bind(kind))
+
+		var buy_button := Button.new()
+		buy_button.name = "Buy_%s" % kind
+		buy_button.custom_minimum_size = Vector2(float(COL_BUTTON_W), float(PaletteLib.BUTTON_H))
+		buy_button.focus_mode = Control.FOCUS_ALL
+		buy_button.pressed.connect(_on_supply_buy.bind(kind))
+		_supplies_row.add_child(buy_button)
+
+		var spacer := Control.new()
+		spacer.name = "Spacer_%s" % kind
+		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_supplies_row.add_child(spacer)
+
+		_supply_rows[kind] = {"qty": qty_field, "buy": buy_button, "label": label}
+
+
+func _make_row_button(node_name: String, text: String, width: int) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.custom_minimum_size = Vector2(float(width), float(PaletteLib.ROW_H))
+	button.focus_mode = Control.FOCUS_ALL
+	return button
+
+
+# --- Binding ---------------------------------------------------------------
+
+func _read_current_port() -> String:
+	var value = GameState.current_port
+	if value is String and not (value as String).is_empty():
+		return value
+	return ""
+
+
+## Localised, state-independent labels: the header, the column captions, the
+## buttons and every good/supply name. Cheap enough to re-run on a locale
+## change (20 goods rows).
+func _bind() -> void:
+	var port: Dictionary = DataLoader.get_port(_port_id)
+	var port_name := I18n.t(port.get("name", {})) if not port.is_empty() else "-"
+	_title.text = I18n.fmt("market.title", {"port": port_name})
+	_back_button.text = I18n.t_key("ui.back")
+	_lang_button.text = I18n.t_key("ui.language_toggle")
+	_invest_button.text = I18n.fmt(
+		"market.invest", {"amount": TradeEngineLib.INVEST_CHUNK}
+	)
+	for child in _column_header.get_children():
+		if child.has_meta("text_key"):
+			(child as Label).text = I18n.t_key(str(child.get_meta("text_key")))
+	for good_id in _rows:
+		var refs: Dictionary = _rows[good_id]
+		var good: Dictionary = DataLoader.get_good(good_id)
+		(refs["name"] as Label).text = I18n.t(good.get("name", {}))
+		(refs["buy"] as Button).text = I18n.t_key("market.buy")
+		(refs["sell"] as Button).text = I18n.t_key("market.sell")
+		((refs["qty_buttons"] as Dictionary)["max"] as Button).text = \
+			I18n.t_key("market.max")
+	var caption: Label = _supplies_row.get_node("Caption")
+	caption.text = I18n.t_key("market.supplies")
+	for kind in _supply_rows:
+		var refs: Dictionary = _supply_rows[kind]
+		(refs["label"] as Label).text = I18n.fmt(
+			"market.%s" % kind, {"price": TradeEngineLib.supplies_price(kind)}
+		)
+		(refs["buy"] as Button).text = I18n.t_key("market.buy")
+
+
+# --- Refresh ---------------------------------------------------------------
+
+func _refresh() -> void:
+	_refresh_header()
+	_refresh_rows()
+	_refresh_supplies()
+	_refresh_investment()
+
+
+func _refresh_header() -> void:
+	_gold.text = I18n.fmt(
+		"ui.gold_amount", {"gold": format_thousands(GameState.gold)}
+	)
+	# "Hold 34/120" is the same figure the HUD bottom bar shows, from the same
+	# key (`world.cargo`), so the two can never disagree.
+	_hold.text = I18n.fmt("world.cargo", {
+		"amount": TradeEngineLib.hold_used(),
+		"capacity": TradeEngineLib.hold_capacity(),
+	})
+
+
+func _refresh_rows() -> void:
+	for good_id in _rows:
+		var refs: Dictionary = _rows[good_id]
+		var buy := TradeEngineLib.buy_price(_port_id, good_id)
+		var sell := TradeEngineLib.sell_price(_port_id, good_id)
+		(refs["price"] as Label).text = "%s / %s" % [
+			I18n.fmt("ui.gold_amount", {"gold": format_thousands(buy)}),
+			I18n.fmt("ui.gold_amount", {"gold": format_thousands(sell)}),
+		]
+		(refs["have"] as Label).text = str(FleetLib.held(good_id))
+		_apply_row_limits(good_id)
+
+
+## Re-applies the quantity ceiling and the §4.7/§6 disabled-with-reason rules
+## without touching a still-valid typed quantity.
+##
+## **Clamp vs reason.** The typed field is live-clamped to the *physical* range
+## (the pooled hold, or the held quantity when the hold is full), not to the
+## purse: gold is reported as a disabled-button reason (`market.no_gold` /
+## `market.not_enough_gold`) rather than silently rewriting what the player
+## typed. Clamping to `buy_max` would make the "unaffordable" reason
+## unreachable — every entry would collapse to 0 first. The presets use the
+## same range, and each button then validates against its own maximum
+## (docs/30 §4.4).
+func _apply_row_limits(good_id: String) -> void:
+	var refs: Dictionary = _rows[good_id]
+	var buy_max := TradeEngineLib.buy_max(_port_id, good_id) if not _port_id.is_empty() else 0
+	var held := TradeEngineLib.sell_max(good_id)
+	var field: LineEdit = refs["qty"]
+	# One picker serves both buttons (docs/30 §4.4), so its ceiling is the
+	# larger of what can be bought and what is held: a full hold must still be
+	# sellable, and an empty row must cap at `buy_max`.
+	var ceiling := maxi(_qty_ceiling(held), buy_max)
+	for key in refs["qty_buttons"]:
+		var preset_button: Button = (refs["qty_buttons"] as Dictionary)[key]
+		preset_button.disabled = ceiling <= 0
+	_clamp_field(field, ceiling)
+	var qty := _parse_qty(field.text)
+
+	var buy_button: Button = refs["buy"]
+	var buy_reason := _buy_reason(good_id, qty, buy_max)
+	_set_button_state(buy_button, buy_reason.is_empty(), buy_reason)
+
+	var sell_button: Button = refs["sell"]
+	var sell_reason := _sell_reason(good_id, qty, held)
+	_set_button_state(sell_button, sell_reason.is_empty(), sell_reason)
+
+
+## Physical ceiling of a goods row's quantity field: the pooled free hold plus
+## whatever of the good is already aboard (so a full hold can still be sold).
+func _qty_ceiling(held: int) -> int:
+	if _port_id.is_empty():
+		return 0
+	return maxi(FleetLib.fleet_free(), held)
+
+
+## Why a Buy would fail, as a localised reason ("" = allowed). The order makes
+## every §6 reason reachable: a full hold first, then the empty quantity, then
+## the purse, then the capacity (a quantity larger than `fleet_free`).
+func _buy_reason(good_id: String, qty: int, buy_max: int) -> String:
+	if _port_id.is_empty():
+		return I18n.t_key("market.invalid_qty")
+	if FleetLib.fleet_free() <= 0:
+		return I18n.t_key("market.hold_full")
+	if qty <= 0:
+		return I18n.t_key("market.invalid_qty")
+	var price := TradeEngineLib.buy_price(_port_id, good_id)
+	var cost := price * qty
+	if GameState.gold < cost:
+		if GameState.gold < price:
+			return I18n.t_key("market.no_gold")
+		return I18n.fmt("market.not_enough_gold", {"gold": cost})
+	if qty > buy_max:
+		# Gold is not the limit here, so capacity is (docs/30 §4.4).
+		return I18n.t_key("market.hold_full")
+	return ""
+
+
+## Why a Sell would fail ("" = allowed). Sell max is the held quantity, so an
+## empty row and an over-held quantity are both an invalid quantity.
+func _sell_reason(_good_id: String, qty: int, held: int) -> String:
+	if _port_id.is_empty() or held <= 0:
+		return I18n.t_key("market.invalid_qty")
+	if qty <= 0 or qty > held:
+		return I18n.t_key("market.invalid_qty")
+	return ""
+
+
+func _set_button_state(button: Button, enabled: bool, reason: String) -> void:
+	button.disabled = not enabled
+	button.tooltip_text = reason
+
+
+func _refresh_supplies() -> void:
+	for kind in _supply_rows:
+		var refs: Dictionary = _supply_rows[kind]
+		var field: LineEdit = refs["qty"]
+		var cap := TradeEngineLib.supplies_buy_max(kind) if not _port_id.is_empty() else 0
+		# Same split as the goods rows: the field clamps to the physical hold,
+		# the purse is reported as a disabled-button reason.
+		_clamp_field(field, FleetLib.fleet_free())
+		var qty := _parse_qty(field.text)
+		var reason := ""
+		if _port_id.is_empty():
+			reason = I18n.t_key("market.invalid_qty")
+		elif FleetLib.fleet_free() <= 0:
+			reason = I18n.t_key("market.hold_full")
+		elif qty <= 0:
+			reason = I18n.t_key("market.invalid_qty")
+		elif qty > cap:
+			var price := TradeEngineLib.supplies_price(kind)
+			reason = I18n.t_key("market.no_gold") if GameState.gold < price \
+				else I18n.fmt("market.not_enough_gold", {"gold": price * qty})
+		_set_button_state(refs["buy"] as Button, reason.is_empty(), reason)
+
+
+func _refresh_investment() -> void:
+	var invested := TradeEngineLib.invested(_port_id)
+	var percent := TradeEngineLib.investment_percent(_port_id)
+	_invest_status.text = I18n.fmt("market.invested_here", {
+		"gold": format_thousands(invested),
+		"count": percent,
+	})
+	var at_cap := invested >= TradeEngineLib.INVEST_CAP_GOLD
+	var can := TradeEngineLib.can_invest(_port_id)
+	_invest_button.disabled = not can
+	if at_cap:
+		_invest_button.tooltip_text = I18n.fmt("market.invest_cap", {
+			"max": int(round(TradeEngineLib.DISCOUNT_CAP * 100.0)),
+		})
+	elif not can:
+		_invest_button.tooltip_text = I18n.t_key("market.no_gold")
+	else:
+		_invest_button.tooltip_text = ""
+
+
+# --- Interaction -----------------------------------------------------------
+
+## Direct numeric entry (docs/80 §4.7): digits only, live-clamped to the row's
+## ceiling, empty = invalid (the dependent buttons are disabled, no dialog).
+func _on_qty_text_changed(_text: String, good_id: String) -> void:
+	_on_qty_changed(good_id, (_rows[good_id]["qty"] as LineEdit).text)
+
+
+func _on_qty_changed(good_id: String, text: String) -> void:
+	if _sanitizing:
+		return
+	var refs: Dictionary = _rows.get(good_id, {})
+	if refs.is_empty():
+		return
+	var field: LineEdit = refs["qty"]
+	var ceiling := _qty_ceiling(TradeEngineLib.sell_max(good_id))
+	_set_field_text(field, _sanitize(text, ceiling))
+	_apply_row_limits(good_id)
+
+
+func _on_supply_qty_text_changed(_text: String, kind: String) -> void:
+	_on_supply_qty_changed(kind)
+
+
+func _on_supply_qty_changed(kind: String) -> void:
+	if _sanitizing:
+		return
+	var refs: Dictionary = _supply_rows.get(kind, {})
+	if refs.is_empty():
+		return
+	# Same physical ceiling as [_refresh_supplies]: the free hold. The purse is
+	# a disabled-button reason, not a silent rewrite of what was typed.
+	var ceiling := FleetLib.fleet_free() if not _port_id.is_empty() else 0
+	_set_field_text(refs["qty"] as LineEdit, _sanitize(
+		(refs["qty"] as LineEdit).text, ceiling
+	))
+	_refresh_supplies()
+
+
+## `1 / 10 / 100 / Max` presets. The single picker serves both Buy and Sell, so
+## "Max" is the larger of the two documented maxima — `buy_max` (gold + hold)
+## and `sell_max` (held) — otherwise a full hold could never be emptied from
+## the UI (docs/30 §4.4 "one picker" clarification). Each button then validates
+## against **its own** maximum. A zero result clears the field rather than
+## typing "0": empty and 0 are both invalid, and empty reads as "nothing
+## picked yet" (docs/80 §4.7).
+func _on_qty_preset(good_id: String, preset: int) -> void:
+	var refs: Dictionary = _rows.get(good_id, {})
+	if refs.is_empty():
+		return
+	var buy_max := TradeEngineLib.buy_max(_port_id, good_id) if not _port_id.is_empty() else 0
+	var ceiling := maxi(buy_max, TradeEngineLib.sell_max(good_id))
+	var value := ceiling if preset < 0 else mini(preset, ceiling)
+	_set_field_text(refs["qty"] as LineEdit, "" if value <= 0 else str(value))
+	_apply_row_limits(good_id)
+
+
+func _on_buy(good_id: String) -> void:
+	var qty := row_qty(good_id)
+	if qty <= 0 or qty > TradeEngineLib.buy_max(_port_id, good_id):
+		return
+	if TradeEngineLib.buy(_port_id, good_id, qty):
+		var good: Dictionary = DataLoader.get_good(good_id)
+		_show_toast(I18n.fmt("market.traded", {
+			"qty": qty, "name": I18n.t(good.get("name", {})),
+		}))
+		traded.emit("buy", good_id, qty)
+
+
+func _on_sell(good_id: String) -> void:
+	var qty := row_qty(good_id)
+	if qty <= 0:
+		return
+	if TradeEngineLib.sell(_port_id, good_id, qty):
+		var good: Dictionary = DataLoader.get_good(good_id)
+		_show_toast(I18n.fmt("market.traded", {
+			"qty": qty, "name": I18n.t(good.get("name", {})),
+		}))
+		traded.emit("sell", good_id, qty)
+
+
+func _on_supply_buy(kind: String) -> void:
+	var refs: Dictionary = _supply_rows.get(kind, {})
+	if refs.is_empty():
+		return
+	var qty := _parse_qty((refs["qty"] as LineEdit).text)
+	if qty <= 0:
+		return
+	if TradeEngineLib.buy_supplies(_port_id, kind, qty):
+		_show_toast(I18n.fmt("market.traded", {
+			"qty": qty, "name": _supply_name(kind),
+		}))
+		traded.emit("supplies", kind, qty)
+
+
+func _on_invest_pressed() -> void:
+	if TradeEngineLib.invest(_port_id):
+		_flash_gold()
+		traded.emit("invest", "", TradeEngineLib.INVEST_CHUNK)
+
+
+# --- Signals ---------------------------------------------------------------
+
+func _on_gold_changed(_new_gold: int) -> void:
+	_refresh()
+	_flash_gold()
+
+
+func _on_fleet_changed() -> void:
+	_refresh()
+
+
+func _on_locale_changed(_locale: String) -> void:
+	_bind()
+	_refresh()
+
+
+# --- Helpers ---------------------------------------------------------------
+
+## Digits-only filter + live clamp (docs/80 §4.7). An empty field stays empty so
+## "empty = invalid" can be observed by the disabled buttons.
+static func _sanitize(text: String, cap: int) -> String:
+	var digits := ""
+	for index in text.length():
+		var character := text[index]
+		if character >= "0" and character <= "9":
+			digits += character
+	if digits.is_empty():
+		return ""
+	var value := mini(int(digits), maxi(cap, 0))
+	return str(value)
+
+
+## Re-clamps an existing field after the ceiling moved (a trade, a locale
+## change). An empty field is left alone (still invalid, not silently filled).
+func _clamp_field(field: LineEdit, cap: int) -> void:
+	if field.text.is_empty():
+		return
+	_set_field_text(field, _sanitize(field.text, cap))
+
+
+func _set_field_text(field: LineEdit, text: String) -> void:
+	if field.text == text:
+		return
+	_sanitizing = true
+	field.text = text
+	field.caret_column = text.length()
+	_sanitizing = false
+
+
+## Typed quantity, or -1 for an empty/invalid field.
+static func _parse_qty(text: String) -> int:
+	if text.strip_edges().is_empty():
+		return -1
+	return int(text)
+
+
+## Localised noun for a supply kind in a toast. The only supply strings in
+## `ui_strings.json` are the price-bearing row labels (`market.provisions` =
+## "Provisions 2g"), which read badly inside "Traded: …", so the section name
+## (`market.supplies`) is used instead — no new key is introduced.
+static func _supply_name(_kind: String) -> String:
+	return I18n.t_key("market.supplies")
+
+
+## Transient bottom-center toast (docs/80 §4.7: 2.5s, max one visible).
+## The coroutine may outlive the screen (Back/Esc frees it), so the resume path
+## checks instance validity before touching the label.
+func _show_toast(text: String) -> void:
+	_toast_generation += 1
+	var generation := _toast_generation
+	_toast.text = text
+	_toast.visible = true
+	await get_tree().create_timer(TOAST_SECONDS).timeout
+	if not is_instance_valid(_toast) or not is_inside_tree():
+		return
+	if generation == _toast_generation:
+		_toast.visible = false
+
+
+## Successful trade feedback (docs/30 §4.7 "flashes the gold readout"): the
+## label brightens to ACCENT and fades back. Purely visual — no state read.
+func _flash_gold() -> void:
+	if _gold == null:
+		return
+	_gold.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	if _gold_tween != null and _gold_tween.is_valid():
+		_gold_tween.kill()
+	_gold_tween = create_tween()
+	_gold_tween.tween_interval(0.35)
+	_gold_tween.tween_callback(func() -> void:
+		if is_instance_valid(_gold):
+			_gold.add_theme_color_override("font_color", PaletteLib.TEXT)
+	)
+
+
+## `1,234` — grouping for gold amounts (the L10nString supplies the unit).
+static func format_thousands(value: int) -> String:
+	var digits := str(absi(value))
+	var out := ""
+	var count := 0
+	for index in range(digits.length() - 1, -1, -1):
+		out = digits[index] + out
+		count += 1
+		if count % 3 == 0 and index > 0:
+			out = "," + out
+	return ("-" if value < 0 else "") + out
+
+
+func _panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = PaletteLib.PANEL_BG
+	style.border_color = PaletteLib.PANEL_LINE
+	style.set_border_width_all(2)
+	return style
+
+
+func _exit_tree() -> void:
+	if EventBus.locale_changed.is_connected(_on_locale_changed):
+		EventBus.locale_changed.disconnect(_on_locale_changed)
+	if EventBus.gold_changed.is_connected(_on_gold_changed):
+		EventBus.gold_changed.disconnect(_on_gold_changed)
+	if EventBus.fleet_changed.is_connected(_on_fleet_changed):
+		EventBus.fleet_changed.disconnect(_on_fleet_changed)

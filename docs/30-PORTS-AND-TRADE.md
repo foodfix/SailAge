@@ -82,6 +82,13 @@ investment_discount = 1 − min(0.10, port_investments[port.id] / 500 × 0.01)
 
 - Quantity picker: 1 / 10 / 100 / Max buttons + direct numeric entry
   (validation per `80-*` dialog rules).
+- **One picker per row** serves both the Buy and Sell buttons (the §4.7
+  wireframe has a single Qty column). Its live clamp is the *physical* range —
+  the pooled free hold, or the held quantity when that is larger (so a full
+  hold can always be emptied). Each button then validates against its own
+  maximum, and an entry the purse cannot cover is a disabled button with the
+  price reason, not a silently rewritten field. `Max` selects that same
+  physical ceiling. (Normative clarification, T12.)
 - Buy max = `min(floor(gold / buy_price), free_capacity)` where
   `free_capacity` is pooled fleet free cargo (`40-*` §capacity).
 - Sell max = held quantity. Partial sells allowed.
@@ -89,7 +96,10 @@ investment_discount = 1 − min(0.10, port_investments[port.id] / 500 × 0.01)
   the fixed computed price (no price movement per transaction — dynamic
   pricing OUT OF SCOPE (phase 3)).
 - Transaction errors (insufficient gold/capacity/quantity) show the shared
-  error toast (`80-*`) and change nothing.
+  error toast (`80-*`) and change nothing. In this screen the "shared error"
+  presentation is the disabled button plus its tooltip reason (§4.7); no
+  modal dialog is raised for a rejected trade, so a stray click never spams
+  dialogs (§6 "no dialog spam").
 
 ### 4.5 Tavern: crew hire/fire
 
