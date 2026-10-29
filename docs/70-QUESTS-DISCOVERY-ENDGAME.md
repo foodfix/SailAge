@@ -13,15 +13,21 @@ for `Quest`, `Discovery`, and guild/palace facilities already exist in
 | Path | Contents |
 |---|---|
 | `scenes/port/guild_screen.tscn` | quest offers, discovery reports (S12) |
-| `scenes/port/palace_screen.tscn` | royal missions, titles, retirement (S13) |
+| `scenes/port/palace_screen.tscn` | royal missions, titles, bounty, tournament entry, retirement (S13) |
+| `scenes/ui_shared/ending_screen.tscn` | retirement summary (S16) |
 | `scripts/quests/quest_gen.gd` | procedural quest generation + tracking |
-| `scripts/world/discovery.gd` | discovery sighting/report bookkeeping |
+| `scripts/quests/bounty.gd` | piracy/bounty state, rival bonuses, clearing paths |
+| `scripts/quests/tournament.gd` | monthly bracket, prizes, consolation |
+| `scripts/port/palace_engine.gd` | royal missions, title ladder, ceremony, repair bays |
+| `scripts/world/discovery.gd` | discovery sighting/report/hint bookkeeping |
 | `scripts/player/fame.gd` | fame + title ladder |
 | `data/quests.json` | hand-authored quest templates (procedural fill) |
 | `data/discoveries.json` | full-world discovery entries (~30, content task) |
-| `data/maps/p3_world.txt` + `map_legend` additions | full world, ~100 ports |
+| `data/ports_p3.json` | the 70 Phase-3-only world ports |
+| `data/maps/p3_world.txt` + `map_legend_p3.json` + `maps/maps.json` | full world, 100 ports |
 | GameState additions | `fame`, `titles` (per nation), `bounties`, `active_quests`,
-`completed_royal_missions`; `save_version` bumps to 3 |
+`completed_royal_missions`, `discoveries_reported`, `discovery_hints`,
+`battles_won`, `retired`/`retired_at`; `save_version` bumps to 3 |
 
 ## 3. Dependencies
 
@@ -61,6 +67,9 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
   generator fills `requirements`/`rewards` per the bands above; purely static
   story quests are out of the design (no scripted storylines, `00-*` §6).
 
+**Pins:** the exact template set, seed formula, draw order and all
+completion/failure numbers are fixed in §4.9.3.
+
 ### 4.3 Royal missions & nobility titles
 
 - **Palace access:** capital ports only (`10-*` §7.4). A nation offers royal
@@ -80,6 +89,10 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
 
 - Title grant is a palace ceremony dialog; per-nation independent ladders.
 
+**Pins:** grant arithmetic, the `title_bonus` placement in the `30-*` sell
+formula, the quest-slot rule and the repair discount are fixed in §4.9.2;
+mission kinds, rewards and the one-per-nation rule in §4.9.4.
+
 ### 4.4 Discovery & report
 
 - A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 3
@@ -91,6 +104,36 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
 - `region_hint` strings are sold at taverns for 100g (rumor button, extends
   `30-*` tavern with a third tab `Rumors`); exploration quests give hints
   free.
+
+**Pins (task-owned values fixed before code, §4.9 discipline).**
+
+- **Sighting radius** is `3` exactly (`DiscoverySight.RADIUS`), **not** the
+  port sighting radius of `20-*` §4.11 — a discovery is a much smaller
+  landmark than a harbour, and the world-map `E` action is only offered inside
+  this radius. Chebyshev distance over tiles.
+- **Explore** is a world-map action bound to the `E` key (and a
+  `world.explore` HUD button that appears only when in range, `80-*` §4.3).
+  It finds **every** in-range, unfound discovery in one action and reports
+  each with an `world.discovery_found` dialog; no cooldown, no day cost.
+- **State.** `GameState.discoveries_found` is the array of found discovery
+  ids (found ≠ reported). Found-but-unreported is
+  `discoveries_found − reported`; the reported set is the new saved field
+  `GameState.discoveries_reported` (v3, `90-*` §8.1). Reporting at a guild
+  pays `report_reward_gold` and adds `fame` **once** per discovery, ever.
+- **Hint purchase.** `Rumors` tavern tab lists **up to 3** hints per tavern
+  visit for unfound discoveries, chosen by
+  `seed = day × 1000003 + port_ordinal × 7919` (same ordinal rule as §4.9.3),
+  uniformly without replacement, cheapest-`fame`-first as a stable tie-break.
+  Each click costs `100g` (`tavern.rumor.price`), marks the discovery
+  **hinted** (saved in `GameState.discovery_hints`, a `{id: true}` map) and
+  shows its `region_hint`; buying the same hint twice is impossible (the row
+  is disabled once hinted). Hints never expire.
+- **Content set.** ~30 discoveries (`data/discoveries.json`), positions
+  inside the Phase-3 world map, `fame` in `[50, 300]`,
+  `report_reward_gold` in `[500, 4000]`, every one with a distinct `zh`/`en`
+  `region_hint`. The validator (group 6 extension) requires each position to
+  be **passable or orthogonally adjacent to a passable tile** on the active
+  map, i.e. reachable by the Explore action.
 
 ### 4.5 Piracy & bounty
 
@@ -105,6 +148,10 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
   `500g × |rep|`), or surrender the flagship to a hunter (`60-*` §4.7) — both
   reset rep to −10.
 
+**Pins:** the rival table now lives in `data/nations.json#rivals`; the
+bounty amount is fixed at issue time; closed-port semantics and the
+palace-pay exception are pinned in §4.9.5/§4.9.6.
+
 ### 4.6 Tournaments
 
 - Monthly: on day 1 of each 30-day cycle, one capital (rotating in the
@@ -114,6 +161,10 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
   (brigantine → carrack → galleon class), durability carries between rounds,
   no repairs between rounds. Win all 3: prize 10,000g + 100 fame; loss at any
   round: consolation 500g, ships repaired to 50% free.
+
+**Pins:** the cycle/host/window formulae, per-round fleet composition, the
+`enemy_kind = "tournament"` reputation exemption and the 50% repair floor are
+fixed in §4.9.7.
 
 ### 4.7 Victory / retirement
 
@@ -125,6 +176,28 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
 - There is no fail-ending besides the death game-overs; retirement is the
   win state. Continuing to play after declining retirement is allowed.
 
+**Pins.**
+
+- The palace shows the `Retire` row only while the docked port's nation title
+  is `duke`; choosing it opens a confirm (`palace.retire.confirm`), and
+  declining changes nothing.
+- The ending screen is S16 `scenes/ui_shared/ending_screen.tscn` (`80-*`
+  §4.1), showing exactly these six summary lines, each from a
+  `ending.*` `ui_strings` key with the number composed by the UI:
+  `days sailed` = `GameState.day`, `gold` = `GameState.gold`, `fame`,
+  `titles` = every nation whose rank ≠ none (`{nation} {rank}` rows),
+  `discoveries` = `discoveries_reported.size()`, `battles won` =
+  `GameState.battles_won` (new saved counter, incremented on every
+  `battle_finished` outcome whose `result == "victory"`).
+- **Retired saves.** The payload gains `"retired": true` and
+  `"retired_at": <unix>`; `SaveSystem.load()` on such a slot restores nothing
+  and instead returns a `retired` flag so the title screen routes straight to
+  S16 in summary mode (`ending.retired_title`). A retired slot is never
+  playable; overwriting it with a new save is the documented delete path.
+- Retiring writes no new save by itself: the flag is set on the **next**
+  save the player takes, and the ending screen is shown immediately so the
+  run visibly ends either way.
+
 ### 4.8 Full world map (content scope)
 
 - New file `data/maps/p3_world.txt` with its own legend entry set; ~100 ports
@@ -135,6 +208,243 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
   legend-driven).
 - Phase-1 map remains playable; new-game nation packages unchanged (trade
   routes to the new world are the Phase-3 economy driver).
+
+### 4.9 Phase-3 normative pins (resolves every task-owned value)
+
+Same discipline as `60-*` §4.11: every number §4.1–§4.8 left open is fixed
+here, **before** implementation, so parallel tasks cannot invent two models of
+one rule. A later change to any value below amends this section first.
+
+#### 4.9.1 Fame sources (completes §4.1)
+
+| Source | Fame |
+|---|---|
+| Guild `delivery` quest completed | +10 |
+| Guild `bounty` quest completed | +15 |
+| Guild `exploration` quest completed | +10 |
+| Discovery first report | `Discovery.fame` |
+| Royal mission completed (any kind) | +25 |
+| Tournament won (all 3 rounds) | +100 |
+
+Fame never decreases; no source is repeatable for fame twice (a completed
+quest instance leaves `active_quests`; a reported discovery leaves the
+unreported list).
+
+#### 4.9.2 Title ladder mechanics (completes §4.3)
+
+- `GameState.titles` is `{nation_id: rank}` over all six nations, rank ∈
+  `none|knight|baron|viscount|count|duke`. Order value: `none 0, knight 1,
+  baron 2, viscount 3, count 4, duke 5`.
+- A rank is granted only at that nation's palace, one step at a time, when
+  **both** `fame ≥ rank.fame` **and** `completed_royal_missions[nation] ≥
+  rank.missions`. Grants never regress and never transfer between nations.
+- **`title_bonus`** (sell prices, §4.3): applied as one extra multiplier in
+  the `30-*` §4.2 sell formula,
+  `sell_price = max(1, floor(base_price × factor × 0.8 × investment_discount ×
+  title_bonus))`, where `title_bonus = 1.10` for baron-and-above, `1.05` for
+  knight, `1.00` otherwise, using the **title with the port's own nation**
+  (not the player's). Buy prices are never affected.
+- **Quest slot grant** (viscount): max active quests becomes
+  `3 + 1 = 4` while *any* nation's title is viscount or higher (`max` over
+  nations, not a sum).
+- **Repair discount** (count): at a port of a nation whose title is count or
+  higher, `repair_cost = ceil(points × ceil(ShipType.base_price / 400) × 0.8)`
+  (`40-*` §4.3 per-point price, then the 0.8 factor, floored once at the end
+  of the whole transaction).
+- **Duke**: retirement is offered at the palace of any nation whose title is
+  duke (§4.7).
+
+#### 4.9.3 Guild quest generation (completes §4.2)
+
+- **Template file.** `data/quests.json` carries **9** hand-authored templates:
+  4 `delivery` (`qt_delivery_wheat`, `qt_delivery_timber`,
+  `qt_delivery_spices`, `qt_delivery_silk`), 1 `bounty` (`qt_bounty_hunt`),
+  1 `exploration` (`qt_exploration_rumor`), and the 3 `royal` templates of
+  §4.9.4. A template's `name`/`description` never contain numbers; the UI
+  composes quantity/destination/deadline from `ui_strings` frames
+  (`quest.line.*`, `80-*` §4.4).
+- **Seed.** Offer list identity is `(port id, day // 7)`:
+  `seed = (day / 7) × 1000003 + port_ordinal × 7919`, integer division, where
+  `port_ordinal` is the 0-based index of the port id in the **ids sorted
+  ascending** (map-independent, so the same port always seeds the same list).
+- **Draw order** (one `RandomNumberGenerator` seeded as above, consumed
+  strictly in this order):
+  1. `slot 0` is always a `delivery` template, picked uniformly from the four;
+  2. `type` of slots 1 and 2 each: `rng.randf() < 0.5` → delivery,
+     `< 0.8` → bounty, else exploration;
+  3. per slot, the type's own draws below.
+- **Delivery draws.** `quantity = 20 + 10 × rng.randi_range(0, 3)` (20/30/40/50);
+  `dest_port_id` = uniform pick over ports on the active map with a
+  different `nation_id` from the guild port and a Chebyshev distance from it
+  in `[6, 30]`, sorted by id ascending (if that set is empty, drop the
+  nation filter, then widen the band to `[3, 60]`);
+  `expiry_days = clamp(ceil(distance / 4) + 5, 7, 30)`;
+  `rewards.gold = 2 × Good.base_price(good_id) × quantity`,
+  `rewards.reputation = {dest nation: +5}`, `rewards.fame = 10`.
+- **Bounty draws.** `tier = rng.randi_range(1, 3)`;
+  `rewards.gold = {1: 5000, 2: 10000, 3: 20000}[tier]`,
+  `rewards.reputation = {}`, `rewards.fame = 15`, `expiry_days = 30`.
+  Accepting spawns the target fleet through the Phase-2 `Encounters.spawn`
+  API with `kind = "pirate"` at a tile within Chebyshev 10 of the guild port
+  and `tier` ships; the marker carries `quest_id` so completion is detected
+  from the battle outcome (§4.9.5).
+- **Exploration draws.** Uniform pick over `Discovery` ids not yet found,
+  whose `position` lies within Chebyshev 40 of the guild port, ids sorted
+  ascending; if the set is empty the slot degenerates to a delivery
+  (step 1 rules) rather than offering an impossible quest.
+  `rewards = {gold: 0, reputation: {guild nation: +5}, fame: 10}`,
+  `expiry_days = 30`; the quest carries `requirements.discovery_id` and the
+  discovery's `region_hint` is shown free in the quest row.
+- **Offer lifecycle.** Three offers per guild. The list refreshes when
+  `day // 7` changes and after any completion; accepting an offer removes it
+  from the list; the list is **derived**, not saved — only accepted quests
+  persist in `active_quests`.
+- **Active quests.** `MAX_ACTIVE_QUESTS = 3` (4 at viscount, §4.9.2). Accepting
+  a fourth is refused with `quest.slots_full`. Accepting a delivery quest
+  requires `quantity` units of free hold and grants the goods free; if the
+  hold cannot take them the offer is refused with `quest.no_hold`.
+- **Quest instance shape** (stored in `GameState.active_quests`):
+
+  ```json
+  {
+    "instance_id": "q_lisbon_3_0",
+    "template_id": "qt_delivery_timber",
+    "type": "delivery",
+    "giver": "guild",
+    "origin_port_id": "lisbon",
+    "requirements": {"good_id": "timber", "quantity": 40, "dest_port_id": "tunis"},
+    "rewards": {"gold": 1200, "reputation": {"ottoman": 5}, "fame": 10},
+    "expiry_days": 20,
+    "accepted_day": 12,
+    "deadline_day": 32,
+    "status": "active"
+  }
+  ```
+
+- **Completion / failure** (all deltas exactly as §4.2):
+  * delivery: entering `dest_port_id` with `≥ quantity` of the good in the
+    pooled hold → goods removed, reward paid, +5 rep with that port's nation,
+    +10 fame.
+  * bounty: the `quest_id` target fleet resolved with result `victory`
+    (sunk/captured/surrendered) → reward paid, +15 fame.
+  * exploration: reporting the quest's discovery at any guild → reward paid,
+    +10 fame, on top of the report's own `report_reward_gold` and fame.
+  * expiry (`day > deadline_day`) → −5 rep with `origin_port_id`'s nation, no
+    fame, no gold; the delivery goods (if any) are **not** reclaimed.
+  * delivery cargo no longer held (sold/jettisoned/captured) → immediate
+    failure with the same −5 rep. The check runs on every cargo mutation
+    (`Fleet.add_goods`/`remove_goods`/`jettison_*` funnel through
+    `Quests.on_cargo_changed()`), and at every day tick as a safety net.
+- **Refresh cadence summary:** offers on `day // 7` change or completion;
+  failures checked at every day tick and every cargo mutation.
+
+#### 4.9.4 Royal missions (completes §4.3)
+
+- Offered at the palace of a nation with `reputation ≥ 30`; one active royal
+  mission **per nation** (`active_quests` entries with `giver == "palace"` and
+  that `origin_port_id`'s nation). Reward gold is `3 ×` the equivalent guild
+  delivery reward for `royal_delivery`; the other two are pinned below.
+- `royal_delivery`: as a delivery quest (same good/quantity/destination draw
+  rules, expiry 30) with `rewards.gold × 3`, `reputation {dest nation: +10}`,
+  `fame 25`.
+- `royal_patrol`: `requirements = {"nation_id": <rival nation>, "count": 2}`;
+  accepting spawns **2** navy markers of that rival via `Encounters.spawn`
+  (bypassing the bounty gate, each carrying `quest_id` and
+  `royal_mission = true`); each counts when its battle ends in `victory`.
+  `rewards = {gold: 8000, reputation: {giver nation: +10}, fame: 25}`,
+  `expiry_days = 60`.
+- `royal_chart`: `requirements = {"count": 2}` discovery reports **after**
+  acceptance; `rewards = {gold: 6000, reputation: {giver nation: +10},
+  fame: 25}`, `expiry_days = 60`.
+- Completing a royal mission increments
+  `completed_royal_missions[nation]` and then evaluates the §4.9.2 ladder.
+  Failure (expiry) applies −10 rep with the giver nation and no fame.
+
+#### 4.9.5 Piracy, bounties and rival table (completes §4.5)
+
+- **Rival table (task-owned, pinned).** For piracy against nation N, the two
+  rival nations receiving `+2`:
+
+  | N | rivals |
+  |---|---|
+  | portugal | spain, england |
+  | spain | portugal, italy |
+  | england | holland, portugal |
+  | holland | england, portugal |
+  | italy | ottoman, spain |
+  | ottoman | italy, spain |
+
+  The table lives in `data/nations.json` as `rivals: []id` per nation
+  (data-only to change), and the `+2` is applied **once per battle**, at
+  battle start, next to the Phase-2 `−20` (`60-*` §4.11.10).
+- **Bounty trigger.** After any reputation change, a nation with
+  `reputation ≤ −50` and no active bounty issues one:
+  `GameState.bounties[nation] = {"amount": 500 × abs(rep), "day": day}`.
+  Ports of that nation are closed (§4.9.6); navy hunters already spawn from
+  Phase 2 (`60-*` §4.1/§4.11.11.2, which keys on `rep ≤ −50`).
+- **Clearing.** Two paths, both reset that nation's reputation to exactly
+  `−10` and delete `bounties[nation]`:
+  1. `Bounty.pay_off(nation)` at that nation's palace, cost
+     `bounties[nation].amount` (fixed at issue time, not recomputed);
+  2. surrendering the flagship to a hunter of that nation (`60-*` §4.11.7,
+     `result == "surrender"` with `kind == "navy"`).
+- **No lockout.** The own nation follows the same rule; its palace keeps the
+  single `Pay bounty` row enabled while closed (§4.9.6), and odd jobs at
+  *any* port's inn remain available, so any state is recoverable.
+
+#### 4.9.6 Closed ports (completes §4.5)
+
+- "Ports closed" means: the port hub renders every facility row disabled with
+  the `port.closed_bounty` label and the market/shipyard/tavern/inn/guild/
+  palace rows refuse to open — **with one exception**: at a capital of the
+  bountied nation, the palace row is enabled and offers only `Pay bounty`
+  (and `Leave`). Docking, the port HUD, Save and Set Sail always work.
+- The bounty is per nation, so only that nation's ports close.
+
+#### 4.9.7 Tournaments (completes §4.6)
+
+- `cycle = (day - 1) // 30`; host = the §7.4 capital order
+  (`lisbon, seville, london, amsterdam, istanbul, venice`)[`cycle % 6`].
+- Entry window: `((day - 1) % 30) + 1 ∈ [1, 5]` at the host's palace, fee
+  `1000g` (`tournament.entry_fee`), one entry per cycle.
+- Bracket: three consecutive battles against fleets of class brigantine →
+  carrack → galleon (`ship_type_id` fixed per round, one hull per round, crew
+  = `crew_min`, durability = max, cannons = `armament_slots`), `enemy_kind =
+  "tournament"` so no reputation deltas apply. Durability and crew carry
+  between rounds; no repairs and no resupply between rounds.
+- Win all three: `+10000g`, `+100 fame` (`tournament.prize`), and the host
+  nation learns of it (tavern rumor line).
+- Losing any round: `+500g` consolation, and every surviving ship is repaired
+  to `max(current, ceil(effective_max × 0.5))` for free.
+- A bounty-hostile host (host nation bountied) blocks entry
+  (`tournament.blocked_bounty`, §6).
+
+#### 4.9.8 Full-world map constants (task-owned, pinned)
+
+- **Grid:** `data/maps/p3_world.txt`, `160 × 96` tiles, `tile_size_px 32`,
+  legend `data/map_legend_p3.json`. Nominal scale **1 tile ≈ 1.5° longitude ×
+  1.0° latitude**, so the grid spans 75°W–165°E and 55°N–41°S.
+- **Ports:** exactly **100** — the 30 locked Phase-1 ports (`10-*` §7.1,
+  unchanged names/nations/produces/demands) plus 70 new ports across the
+  Americas, Africa, India, Southeast Asia and East Asia. The 30 Phase-1 ports
+  keep their §7.1 `marker`/`position` for the Phase-1 map and gain a `p3`
+  block (`{"marker": …, "position": {…}}`) for the world map; new ports carry
+  `phase: 3` and only a `p3` block.
+- **Markers:** one character per port, unique within the legend, never one of
+  the locked tile chars `~ . # ^`; the shipped file uses `0-9A-Za-z` first and
+  Latin-1 letters (`À`–`ÿ`) for the overflow past 62.
+- **Geography:** every port marker sits on a passable sea tile with ≥ 1
+  orthogonally adjacent land tile, exactly as `10-*` §6.2 requires; the
+  strict 8-directional no-corner-cutting BFS must reach every port and cover
+  every passable tile (one sea component — the validator extends the Phase-1
+  group 6 rules to the new grid).
+- **New-game choice:** S2 (`nationality_select`, `80-*` §4.2) carries a
+  two-option world selector, `nation.world_p1` / `nation.world_p3`, default
+  P3; the choice is stored as `GameState.world["map_id"]` (`"p1"`/`"p3"`) and
+  is saved (§8.1 v3). `data/maps/maps.json` is the map index
+  (`id`, `file`, `legend`, `name`), so a third map is a data-only addition.
+- **Capitals:** the six nation capitals stay the six Phase-1 capitals; the
+  new-world ports have no palaces (§7.4).
 
 ## 5. Data Examples
 
@@ -168,7 +478,7 @@ Title ladder progress block:
 ## 6. Edge Cases & Fail States
 
 - **Delivery goods sold mid-route** → quest fails immediately (checked at
-  every cargo mutation).
+  every cargo mutation, §4.9.3).
 - **Expired bounty quest while in battle with the target** → quest completes
   if the battle wins; the clock checks at battle end.
 - **Discovery at a tile unreachable in the Phase-1 map** → generator/config
@@ -182,6 +492,23 @@ Title ladder progress block:
   normal slot overwrite.
 - **Acting pirate with 0 cannons (ram-only fleets)** → legal; piracy flags
   on aggression regardless of means.
+- **All discoveries reported** → the guild report row is disabled with
+  `guild.report.none`; tavern Rumors tab shows `tavern.rumor.none`.
+- **Guild offer list with no unfound discovery in range** → the exploration
+  slot degenerates to a delivery (§4.9.3); a guild never offers an
+  impossible quest.
+- **Accepting a delivery with a full hold** → refused, `quest.no_hold`,
+  no state change.
+- **Two royal missions from different nations** → allowed (one per nation);
+  the character panel shows them in separate rows.
+- **Tournament loss on round 1** → consolation 500g and the 50% free repair
+  still apply (the player paid the 1,000g fee).
+- **Bounty paid while in the bountied nation's palace** → ports reopen
+  immediately on the next bind; the lobby row disappears.
+- **Retiring with `gold < 0` impossible** — the ledger clamps, so the
+  summary never shows a negative purse.
+- **`p3` map selected but `p3_world.txt` missing** → DataLoader startup
+  error (`title.data_error`), never a crash (`90-*` §11).
 
 ## 7. Acceptance Criteria
 
@@ -198,3 +525,6 @@ Title ladder progress block:
 - [ ] Retirement marks the save and locks it to the summary screen.
 - [ ] Phase-3 world map loads via the unchanged map-loader pipeline
       (`90-*` §9 data-only swap).
+- [ ] Every pinned number in §4.9 is reproduced by a headless assertion:
+      fame sources, title ladder arithmetic, quest seeds/draws, rival table,
+      bounty amounts, tournament rotation, world-map constants.

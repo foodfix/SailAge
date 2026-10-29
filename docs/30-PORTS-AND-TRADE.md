@@ -37,14 +37,16 @@ Every `Port.facilities` key lists an activation phase (`10-*` §4.4):
 |---|---|---|
 | market | 1 | buy/sell goods; buy provisions & water |
 | shipyard | 1 | buy/repair/refit/sell ships (`40-*`) |
-| tavern | 1 | hire/fire crew; recruit officers (`50-*`) |
+| tavern | 1 | hire/fire crew; recruit officers (`50-*`); Phase 3 adds the `Rumors` tab (`70-*` §4.4) |
 | inn | 1 | rest (+morale), harbor relief odd jobs |
-| guild | 3 | quests; stub button disabled with label key `port.stub.phase3` |
-| palace | 3 | royal missions/titles; same stub (only at capital ports) |
+| guild | 3 | quest offers, discovery reports (`70-*` §4.2/§4.4); stub button disabled with label key `port.stub.phase3` before Phase 3 |
+| palace | 3 | royal missions, titles, bounty payment, tournament entry, retirement (`70-*` §4.3/§4.5–§4.7); same stub (only at capital ports) |
 
 The port hub lists facilities in fixed order: Market, Shipyard, Tavern, Inn,
 Guild, Palace, plus a "Set Sail" button. Phase-3 facilities render as
-disabled rows with the stub label.
+disabled rows with the stub label until Phase 3 activates them; from Phase 3
+on they are enabled (or replaced by `port.closed_bounty` on a bountied
+nation's ports, `70-*` §4.9.6).
 
 ### 4.2 Price formulas
 
@@ -58,8 +60,10 @@ factor(port, good) =
     1.0  otherwise
 
 buy_price  = max(1, floor(base_price × factor × investment_discount))
-sell_price = max(1, floor(base_price × factor × 0.8 × investment_discount))
+sell_price = max(1, floor(base_price × factor × 0.8 × investment_discount
+                          × title_bonus))
 investment_discount = 1 − min(0.10, port_investments[port.id] / 500 × 0.01)
+title_bonus = 1.05 | 1.10 | 1.00   # Phase 3, 70-* §4.9.2
 ```
 
 - The 0.8 sell-side margin is locked; arbitrage within one port is always a
@@ -69,6 +73,18 @@ investment_discount = 1 − min(0.10, port_investments[port.id] / 500 × 0.01)
 - Price band enforcement `[0.5×, 2×]`: `factor × investment_discount` is
   clamped to `[0.5, 2.0]` before use (investment discount cannot push a
   `produces` good below half base price).
+- **`title_bonus` (Phase 3, `70-*` §4.9.2)** multiplies the **sell** side only
+  and only at ports of a nation where the player's title is knight or higher:
+  1.05 at knight, 1.10 at baron/viscount/count/duke, 1.00 otherwise. It is a
+  separate factor after the band clamp and is floored once with the rest of
+  the product, so a title can never raise a sale above `2 × base_price × 0.8`.
+  The multiplier used is the **port's own nation's** title, never another
+  nation's.
+- **Closed ports (Phase 3, `70-*` §4.9.6).** While the player holds a bounty
+  from port's nation, the port's facility rows are all disabled
+  (`port.closed_bounty`) and no facility screen opens — except the bountied
+  nation's capital palace, which offers only `Pay bounty`. Pricing itself is
+  unaffected (the market is simply unreachable).
 
 ### 4.3 Investment
 
@@ -169,7 +185,8 @@ readout (per `80-*` feedback rules) and emits `gold_changed` +
 
 #### Tavern (`tavern_screen`)
 
-Tab row: `Crew | Officers`.
+Tab row: `Crew | Officers` in Phase 1–2; Phase 3 adds a third tab
+`Rumors` (`70-*` §4.4, `80-*` §4.7.3).
 
 - Crew tab: current crew `n / crew_max`, morale tier label, hire/fire buttons
   (§4.5), cost preview "20g per head".
@@ -177,12 +194,59 @@ Tab row: `Crew | Officers`.
   (`Officer.recruit_ports`), each row: name, role, stats line, daily wage,
   bio; `Recruit` button (rules incl. one-time hire in `50-*`). Below: current
   officers with a `Dismiss` button.
+- Rumors tab (Phase 3): up to three hint rows for unfound discoveries at
+  100g each (`70-*` §4.4).
 
 #### Inn (`inn_screen`)
 
 - Status box: morale, days-since? none. Buttons: `[Rest 3 days — 30g]`,
   `[Work an odd job — +100g]` (only when eligible, §4.6), else a disabled
   greyed button with reason key `inn.odd_job.ineligible`.
+
+#### Guild (`guild_screen`, S12, Phase 3)
+
+```
++--------------------------------------------------------------+
+| Guild — <Port>            Gold 7,830g · Fame 480      [Back] |
++--------------------------------------------------------------+
+| Offers (refresh in 3 days)                                   |
+| [Delivery] Timber for Tunis   40 × timber → Tunis  20d  1,200g|
+| [Bounty]   Hunt the Sea Wolf  tier 2               30d 10,000g|
+| [Explore]  Rumour of the Cedars                    30d       |
+|                                        [Accept] [Hint]        |
++--------------------------------------------------------------+
+| Reports                                                       |
+| Cedars of the Atlas  [Report — 2,000g · +150 fame]            |
++--------------------------------------------------------------+
+```
+
+- Offers refresh whenever `day // 7` changes (§`70-*` §4.9.3); a `Rumors`-bought
+  hint shows inline in an exploration offer row.
+- `Accept` on a delivery quest takes the goods from the pool and refuses with
+  `quest.no_hold`/`quest.slots_full` where applicable. `Report` is present
+  only while an unreported discovery exists (`guild.report.none` otherwise).
+
+#### Palace (`palace_screen`, S13, Phase 3; capital ports only)
+
+```
++--------------------------------------------------------------+
+| Palace — <Port> · <Nation>    Rep 42 · Fame 480       [Back] |
++--------------------------------------------------------------+
+| Your title: Baron          [Attend ceremony — Viscount]       |
+| Royal mission:  Deliver the King's dispatches   [Accept]      |
+| Bays: [Repair fleet — 20% off]                                |
+| Bounty: none                                                  |
+| Tournament: Lisbon, day 1 of this cycle   [Enter — 1,000g]    |
+| Retire (Duke only)                                            |
++--------------------------------------------------------------+
+```
+
+- The mission row is disabled below `rep ≥ 30` (`palace.rep_locked`) and while
+  a mission of that nation is already active (`palace.mission_active`).
+- `Attend ceremony` appears only when both ladder requirements are met
+  (`70-*` §4.9.2); `Retire` only at duke.
+- With an active bounty from this nation, every row except `Pay bounty`
+  (`bounty.pay`) and `Leave` is replaced by `port.closed_bounty`.
 
 ## 5. Data Examples
 
@@ -215,6 +279,22 @@ Selling at London (wine ∈ `london.demands`):
 }
 ```
 
+Phase-3 title bonus (same London sale, player is baron of England):
+
+```json
+{
+  "port": "london",
+  "good": "wine",
+  "base_price": 30,
+  "factor": 1.3,
+  "investment_discount": 1.0,
+  "title_bonus": 1.1,
+  "buy_price": 39,
+  "sell_price": 34,
+  "note": "floor(30×1.3×0.8×1.1) = floor(34.32) = 34; the bonus is sell-side only"
+}
+```
+
 ## 6. Edge Cases & Fail States
 
 - **Buy 0 / empty quantity field** → button disabled; no dialog spam.
@@ -233,7 +313,8 @@ Selling at London (wine ∈ `london.demands`):
 ## 7. Acceptance Criteria
 
 - [ ] Worked examples in §5 reproduce exactly when computed by
-      `trade_engine.gd` (unit test asserts 21/16 at Lisbon, 39/31 at London).
+      `trade_engine.gd` (unit test asserts 21/16 at Lisbon, 39/31 at London,
+      and 39/34 at London with a baron's `title_bonus`).
 - [ ] Adding a new good to `goods.json` adds a working market row with zero
       code edits (architecture rule, `90-*` §12).
 - [ ] Investment: 10 clicks (5,000g) caps discount at 10%; 11th click
@@ -241,7 +322,9 @@ Selling at London (wine ∈ `london.demands`):
 - [ ] Provisions/water rows ignore produces/demands/investment everywhere.
 - [ ] Tavern hire cost is 20g/head and respects `crew_max`; fire respects
       `crew_min`.
-- [ ] Harbor-relief button appears iff `gold < 100` and fleet empty, and
+- [ ] Harbor-relief button appears iff `gold < 1200` and fleet empty, and
       grants exactly +100g/+1 day.
 - [ ] All wireframe labels resolve through `ui_strings.json` keys listed in
       `80-*` §string inventory.
+- [ ] A bountied nation's port hub disables every facility row except the
+      capital's `Pay bounty` row (`70-*` §4.9.6).

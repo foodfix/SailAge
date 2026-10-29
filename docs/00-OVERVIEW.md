@@ -206,6 +206,18 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 坏血病 | Scurvy | Fail state: fresh water exhausted too long |
 | 沉没 | Sinking | Fail state: hull integrity reaches 0 at sea |
 | 港口救济 | Harbor relief | Inn odd-job fallback income; prevents softlock |
+| 声望值 | Fame | Permanent, non-decaying renown (`70-*` §4.1); currency of the title ladder |
+| 爵位阶梯 | Title ladder | Per-nation Knight→Duke progression (`70-*` §4.9.2) |
+| 授勋典礼 | Ceremony | The palace dialog that grants the next title |
+| 委托 | Commission | A guild quest instance (`70-*` §4.9.3); see 任务 |
+| 王室委托 | Royal mission | Palace-only mission tied to one nation (`70-*` §4.9.4) |
+| 传闻 | Rumour | A purchased discovery hint (`70-*` §4.4) |
+| 探索 | Explore | The world-map action that finds discoveries within radius 3 |
+| 悬赏金 | Bounty | The price a wanted captain pays to clear a nation's bounty |
+| 封闭港 | Closed port | A bountied nation's port whose facilities are shut (`70-*` §4.9.6) |
+| 比武大会 | Tournament | The monthly 3-round palace bracket (`70-*` §4.9.7) |
+| 退休 | Retirement | The win state: Duke rank plus a locked summary save (`70-*` §4.7) |
+| 环球海图 | World chart | The Phase-3 160×96 map (`70-*` §4.9.8) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 

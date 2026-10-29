@@ -272,6 +272,27 @@ battle opens with a movement phase.
   *Navy with bounty:* the flagship hull itself is taken (same removal rule as
   a lost duel). If that empties the fleet → `gameover.captured`; otherwise the
   bounty is cleared per `70-*` §4.5 (rep resets to −10).
+  *`enemy_kind == "tournament"`:* the battle simply ends, the player keeps
+  every ship and the round is a loss for the bracket (`70-*` §4.9.7); no
+  reputation changes.
+
+#### 4.11.7.1 Tournament battles (Phase 3 seam)
+
+`BattleSim` already accepts any `enemy_kind` string. Phase-3 tournaments pass
+`"tournament"`, which:
+
+- contributes no reputation delta of any kind (`rep_deltas = {}`, no
+  battle-start `−20`, `70-*` §4.9.7);
+- adds one entry to the §4.11.6 `FLEET_TIER` table —
+  `"tournament": 2` (same captain rating as a navy) — the only code change
+  the seam requires;
+- treats **any** non-`victory` result as a bracket loss for the caller — the
+  bracket (`scripts/quests/tournament.gd`) decides prizes, not the battle.
+
+Hull composition per round is pinned in `70-*` §4.9.7 (one hull each:
+brigantine, carrack, galleon), crew `crew_min`, durability max, cannons
+`armament_slots`; the player's fleet durability carries between rounds
+because the bracket never repairs between battles.
 
 #### 4.11.8 AI decision pins (§4.9)
 
@@ -316,6 +337,13 @@ battle opens with a movement phase.
     - the outcome block's `rep_deltas` carries only the pirate `+2` entries,
       and applying it twice is impossible by construction.
     Charged even if the player retreats afterwards (§4.10).
+  - **Piracy rival bonus (Phase 3, `70-*` §4.9.5).** The same battle-start
+    funnel also applies `+2` to each of the victim nation's two
+    `data/nations.json#rivals`, from the data table — never computed from
+    port distances. Pirates have no nation and gain no rivals.
+  - **Tournaments (Phase 3).** `enemy_kind = "tournament"` is not a nation
+    and contributes **no** reputation delta of any kind (no −20, no +2, no
+    bounty).
 - **Return:** the fleet is placed on the contact tile, the hostile marker is
   removed, and a spawn immunity of **3 days** is recorded for that marker kind
   (§4.8). A `retreat` keeps the marker instead (§4.10 pursuit cooldown, §4.12.4
@@ -697,6 +725,11 @@ Duel round sequence (player combat 12 + cutlass 3):
   round sequence.
 - **Game-over reason set** becomes {starvation, scurvy, sunk, captured} from
   Phase 2 on.
+- **Tournament battle with a bounty against its host** — cannot happen: the
+  palace refuses entry before a battle can open (`70-*` §4.9.7).
+- **A tournament battle that ends in `retreat`** — counts as a bracket loss;
+  the consolation and the 50% repair still apply, and the enemy marker never
+  existed on the world map, so nothing is removed from `hostile_fleets`.
 
 ## 7. Acceptance Criteria
 

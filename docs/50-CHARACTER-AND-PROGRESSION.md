@@ -111,6 +111,11 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
 - Per nation, integer −100…+100, stored in `player.reputation`.
 - Phase-1 sources: +1 per 1,000g **cumulative** profit sold at a nation's
   ports. No decay.
+- **Phase-3 sources** (`70-*` §4.2/§4.3/§4.5): quest rewards
+  (`rewards.reputation`), royal missions (+10), piracy (−20 with the victim,
+  +2 with each of its two `rivals`), piracy bounties (rep reset to exactly
+  −10 on clearing), and quest failure (−5, or −10 for a royal mission). Every
+  delta funnels through `add_reputation()` so the clamp is applied once.
 - **Cumulative accounting (normative).** The 1,000g threshold carries across
   transactions — 600g then 400g at the same nation grants the point neither
   sale earns alone. Two `player`-block fields track it:
@@ -125,7 +130,10 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
   supplies the transaction's profit. This model is idempotent — replaying a
   sale cannot double-award, because the paid-out counter is stored.
 - Phase-1 effects: display only (shown on the character panel). Trade refusal
-  and title gating OUT OF SCOPE (phase 3, `70-*`).
+  and title gating OUT OF SCOPE in Phase 1; **Phase 3 activates them**:
+  titles gate retirement and boost sell prices (`70-*` §4.9.2), and a
+  reputation ≤ −50 issues a bounty that closes that nation's ports
+  (`70-*` §4.9.5/§4.9.6).
 
 ### 4.7 Harbor relief (full flow; spec constants in `10-*` §5)
 
@@ -230,3 +238,6 @@ Level table (first rows of `level = floor(sqrt(xp/50)) + 1`):
       officers-employed lockout.
 - [ ] Reputation increments on profitable sales at the correct nation's ports
       only, with the 1,000g threshold accumulating across transactions.
+- [ ] Phase-3 fame/title fields exist on `GameState` and save as v3; every
+      Phase-3 reputation source in §4.6 is applied through
+      `Character.add_reputation()` and clamped once.

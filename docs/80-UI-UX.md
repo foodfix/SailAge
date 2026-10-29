@@ -45,6 +45,7 @@ marked.
 | S13 | Palace | `palace_screen.tscn` | 3 |
 | S14 | Character/status panel | `ui_shared/character_panel.tscn` (modal over S3/S4) | 1 |
 | S15 | Fleet/cargo panel | `ui_shared/fleet_panel.tscn` (modal over S3/S4) | 1 |
+| S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.6).
 
@@ -53,14 +54,16 @@ Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.6).
 ```
 S1 ──New Game──► S2 ──confirm──► S4
 S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependent)
+S1 ──Load retired slot──► S16 (summary only)
 S3 ──enter harbor tile──► S4
 S4 ──Set Sail──► S3
-S4 ──facility──► S5/S6/S7/S8 ──Back/Esc──► S4
+S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
 S10 ──battle ends──► S3 (after-action dialog first)
+S13 ──Retire (Duke)──► S16 ──any key──► S1
 S3 ──sea death / capture──► S9 ──any key──► S1
 S1 ──Quit──► exit
 ```
@@ -87,6 +90,9 @@ No cross-links beyond these; Esc = step back one edge where applicable.
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / back) |
 | S3 | right-click a hostile marker | attack it (navy = piracy, `70-*` §4.5) |
+| S3 | `E` | Explore: find every discovery within Chebyshev 3 (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
+| S2 | click a world radio row | choose the P1 map or the full world map (`70-*` §4.9.8); the choice is `world.map_id` |
+| S12/S13 | `Esc` | back to S4 (same edge as Back) |
 
 Focus outline (2px accent border) always visible on keyboard-focused control.
 
@@ -96,7 +102,9 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
 - Key namespaces by screen: `title.*`, `nation.*`, `world.*`, `port.*`,
   `market.*`, `shipyard.*`, `tavern.*`, `inn.*`, `char.*`, `ui.*` (shared:
   `ui.back`, `ui.confirm`, `ui.cancel`, `ui.gold_abbr`…), `gameover.*`,
-  `battle.*` (S10), `duel.*` (S11), `encounter.*` (hostile-fleet markers).
+  `battle.*` (S10), `duel.*` (S11), `encounter.*` (hostile-fleet markers),
+  `guild.*` (S12), `palace.*` (S13), `quest.*`, `rank.*` (nobility names),
+  `bounty.*`, `tournament.*`, `discovery.*`, `ending.*` (S16).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -230,6 +238,163 @@ Below the per-ship repair row, each hull gains:
   slot. Buying into an occupied slot sells the old item back at half price in
   the same action (`60-*` §4.11.12).
 
+### 4.7.3 Phase-3 screens (S12, S13, S16) and their tabs
+
+Same palette, 8px grid, 32px table rows and 40px buttons as every other
+screen; no textures.
+
+**S12 `guild_screen.tscn`** (wireframe: `30-*` §4.7 "Guild"). Two stacked
+sections:
+
+- *Offers* — one row per generated offer (0–3): a type tag
+  (`quest.type.delivery|bounty|exploration`), the composed objective line
+  (`quest.line.delivery` / `.bounty` / `.exploration`, numbers supplied by
+  code per `10-*` §3.3 rule 5), days remaining, gold reward, and two buttons
+  `Accept` (`quest.accept`) / `Hint` (`quest.hint`, exploration offers only —
+  shows `region_hint` free). A disabled Accept carries its reason
+  (`quest.slots_full`, `quest.no_hold`, `quest.accepted`).
+  The header line `guild.offers_refresh` says when the list changes.
+- *Reports* — one row per found-but-unreported discovery: name, the
+  `discovery.report_reward` line (gold · fame) and a `Report` button; empty
+  state `guild.report.none`.
+
+**S13 `palace_screen.tscn`** (wireframe: `30-*` §4.7 "Palace"). Rows, top to
+bottom:
+
+- Title row: current `rank.<id>` name plus the next rank + its two
+  requirements (`palace.title.next`), and `Attend ceremony`
+  (`palace.ceremony`) when both are met.
+- Royal mission row: current mission objective + days left
+  (`palace.mission.active`), else the offered kind's name and `Accept`.
+  Disabled with `palace.rep_locked` under rep 30 and `palace.mission_active`
+  while one is running.
+- Bays row: `Repair fleet` (`palace.repair`, shows the 20% discount when the
+  title is count+).
+- Bounty row: `bounty.pay` with the amount, or `bounty.none`.
+- Tournament row: host + window (`tournament.status`), `Enter` (1,000g) when
+  the window is open, `tournament.blocked_bounty` / `tournament.closed` (out
+  of window) / `tournament.entered` otherwise.
+- `Retire` row (duke only) → `palace.retire.confirm`.
+
+**S16 `ending_screen.tscn`** (root scene, not a modal): dimmed background, a
+centered panel with `ending.title`, the six summary rows of `70-*` §4.7, and
+one button `ending.continue` → S1. In `retired` load mode the panel title is
+`ending.retired_title` and no Continue route back into play exists.
+
+**Tavern `Rumors` tab (S7, Phase 3).** Third tab beside `Crew | Officers`.
+Rows: up to three unfound discoveries, each showing `region_hint` free (blurred
+until bought is not required — Phase 3 shows the hint text, and the 100g buys
+the **location**, i.e. it reveals the discovery name and marks it hinted for
+the quest/UI) plus `Buy — 100g` (`tavern.rumor.buy`). Disabled reasons:
+`tavern.rumor.bought`, `tavern.rumor.no_gold`; empty state
+`tavern.rumor.none`.
+
+**Character panel `Quests` tab (S14, Phase 3).** A third tab after the stats
+column shows `char.quests`: one row per active quest with type tag, objective,
+destination (`quest.dest`, always naming the port even if unknown), days left
+(`quest.days_left`), and a `quest.abandon` button that fails it (same −5 rep
+path). Above the rows: `quest.slots` = `n / max` (max 3, or 4 at viscount,
+`70-*` §4.9.2).
+
+### 4.7.4 Phase-3 `ui_strings.json` inventory (S12/S13/S16)
+
+Required keys — the master applies them in one commit per wave; subagents must
+not invent any other key (report the need instead). Placeholders must match
+between zh and en (the validator enforces it).
+
+| Key | zh | en |
+|---|---|---|
+| `port.closed_bounty` | 该港因悬赏封闭 | Closed by bounty |
+| `port.stub.phase3` | 第三阶段开放 | Opens in Phase 3 |
+| `rank.none` | 平民 | Commoner |
+| `rank.knight` | 骑士 | Knight |
+| `rank.baron` | 男爵 | Baron |
+| `rank.viscount` | 子爵 | Viscount |
+| `rank.count` | 伯爵 | Count |
+| `rank.duke` | 公爵 | Duke |
+| `guild.title` | 公会 — {port} | Guild — {port} |
+| `guild.offers` | 委托 | Commissions |
+| `guild.offers_refresh` | 委托将在第 {day} 天更新 | New commissions on day {day} |
+| `guild.report.section` | 发现报告 | Discovery reports |
+| `guild.report.none` | 暂无待报告的发现物 | No unreported discoveries |
+| `guild.report.action` | 报告 | Report |
+| `guild.report_reward` | {gold} 金 · 声望 +{fame} | {gold} gold · +{fame} fame |
+| `quest.type.delivery` | 运送 | Delivery |
+| `quest.type.bounty` | 悬赏 | Bounty |
+| `quest.type.exploration` | 探索 | Exploration |
+| `quest.type.royal` | 王室委托 | Royal mission |
+| `quest.line.delivery` | 将 {quantity} 单位{good}送抵{port} | Carry {quantity} {good} to {port} |
+| `quest.line.bounty` | 讨伐{target}(等级 {tier}) | Hunt {target} (tier {tier}) |
+| `quest.line.exploration` | 循着传闻寻找一处发现物 | Follow a rumour to a discovery |
+| `quest.line.royal` | {objective} | {objective} |
+| `quest.accept` | 接受 | Accept |
+| `quest.accepted` | 已接受 | Accepted |
+| `quest.hint` | 提示 | Hint |
+| `quest.slots` | 委托 {used} / {max} | Quests {used} / {max} |
+| `quest.slots_full` | 委托栏已满 | All quest slots are full |
+| `quest.no_hold` | 货舱空间不足 | Not enough hold space |
+| `quest.dest` | 目的地:{port} | Destination: {port} |
+| `quest.days_left` | 剩余 {days} 天 | {days} days left |
+| `quest.abandon` | 放弃委托 | Abandon quest |
+| `quest.completed` | 委托完成:{name} | Commission complete: {name} |
+| `quest.failed` | 委托失败:{name} | Commission failed: {name} |
+| `quest.reward` | +{gold} 金,声望 {rep} | +{gold} gold, reputation {rep} |
+| `char.quests` | 委托 | Quests |
+| `palace.title` | 王宫 — {port} · {nation} | Palace — {port} · {nation} |
+| `palace.title.current` | 你的爵位:{rank} | Your title: {rank} |
+| `palace.title.next` | 下一爵位:{rank}(声望 {fame} · 王室委托 {missions}) | Next rank: {rank} (fame {fame} · royal missions {missions}) |
+| `palace.ceremony` | 参加授勋典礼 | Attend the ceremony |
+| `palace.ceremony.done` | {nation}授予你{rank}爵位。 | {nation} grants you the title of {rank}. |
+| `palace.title.max` | 已是最高的公爵爵位 | You already hold the highest title |
+| `palace.mission.section` | 王室委托 | Royal mission |
+| `palace.mission.accept` | 接受王室委托 | Accept the royal mission |
+| `palace.mission.active` | {objective}(剩余 {days} 天) | {objective} ({days} days left) |
+| `palace.mission_active` | 该国的王室委托仍在进行中 | That nation already has your mission |
+| `palace.rep_locked` | 声望需达到 {rep} 才能接取王室委托 | Requires reputation {rep} for royal missions |
+| `palace.mission.done` | 王室委托完成:{name} | Royal mission complete: {name} |
+| `palace.repair` | 修缮船队 | Repair the fleet |
+| `palace.repair.discount` | 修缮费用减免 {percent}% | Repairs cost {percent}% less |
+| `palace.retire` | 退休 | Retire |
+| `palace.retire.confirm` | 确定要退休,结束这段航程吗? | Retire and end this voyage? |
+| `bounty.pay` | 缴纳悬赏金:{gold} 金 | Pay the bounty: {gold} gold |
+| `bounty.none` | 本国没有针对你的悬赏 | No bounty stands against you |
+| `bounty.issued` | {nation}对你发布了悬赏。 | {nation} has issued a bounty on you. |
+| `bounty.cleared` | 你与{nation}的悬赏已解除。 | Your bounty with {nation} is settled. |
+| `bounty.no_gold` | 金币不足以缴纳悬赏 | Not enough gold to pay the bounty |
+| `tournament.status` | 比武大会:{port}(本月第 {first}–{last} 天) | Tournament: {port} (month days {first}–{last}) |
+| `tournament.enter` | 报名参赛(1,000 金) | Enter the tournament (1,000 gold) |
+| `tournament.entered` | 已报名,本次大会正在等待开赛 | Entry recorded — the tournament is waiting |
+| `tournament.closed` | 本月大会的报名期已结束 | This month's entry window has closed |
+| `tournament.blocked_bounty` | 悬赏在身,王宫拒绝你参赛 | The palace bars a wanted captain |
+| `tournament.round` | 第 {round} 场 | Bout {round} |
+| `tournament.won` | 你赢得了比武大会! | You win the tournament! |
+| `tournament.lost` | 你在第 {round} 场落败。 | You were beaten in bout {round}. |
+| `tournament.prize` | 奖金 {gold} 金,声望 +{fame} | Prize {gold} gold, +{fame} fame |
+| `tournament.consolation` | 安慰奖 {gold} 金,船队免费修复至五成 | Consolation {gold} gold; your fleet is repaired to half |
+| `discovery.explore` | 探索周边(E) | Explore the area (E) |
+| `discovery.found` | 发现:{name}! | Discovery: {name}! |
+| `discovery.found.hint` | 可到公会报告换取报酬 | Report it at any guild for a reward |
+| `discovery.something_near` | 附近似乎有不寻常的事物(E) | Something unusual is nearby (E) |
+| `world.explore.none` | 附近没有任何发现 | Nothing to discover here |
+| `tavern.rumor_tab` | 传闻 | Rumours |
+| `tavern.rumor.price` | 传闻售价 {gold} 金 | Rumours cost {gold} gold |
+| `tavern.rumor.buy` | 购买传闻 | Buy the rumour |
+| `tavern.rumor.bought` | 已购买 | Already known |
+| `tavern.rumor.no_gold` | 金币不足 | Not enough gold |
+| `tavern.rumor.none` | 酒馆里没有新的传闻 | No new rumours in this tavern |
+| `ending.title` | 航程终章 | Voyage's End |
+| `ending.retired_title` | 这位船长已经退休 | This captain has retired |
+| `ending.days` | 航行天数:{days} | Days sailed: {days} |
+| `ending.gold` | 结余:{gold} 金 | Gold: {gold} |
+| `ending.fame` | 声望:{fame} | Fame: {fame} |
+| `ending.titles` | 爵位:{titles} | Titles: {titles} |
+| `ending.discoveries` | 发现物:{count} | Discoveries: {count} |
+| `ending.battles` | 胜战:{count} | Battles won: {count} |
+| `ending.continue` | 返回标题 | Return to the title |
+| `nation.world` | 世界地图 | World map |
+| `nation.world_p1` | 地中海与西欧(30 港) | Mediterranean & Western Europe (30 ports) |
+| `nation.world_p3` | 环球世界(100 港) | The Wider World (100 ports) |
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -310,10 +475,21 @@ Below the per-ship repair row, each hull gains:
   modal flag), no exceptions.
 - **Minimap with zero explored tiles after load** → expected (Phase-1 known
   limitation, `20-*` §4.12), not a bug.
+- **A Phase-3 screen opened with no run** (editor) → renders `-` placeholders
+  and every action is disabled, exactly as the Phase-1 facility screens do.
+- **Palace ceremony while a locale toggle fires** → the ceremony dialog
+  re-translates in place; the granted rank id is never localised at write
+  time (it is stored as `rank.knight`-style id, resolved on display).
+- **Ending screen reached from a retired load** → `ending.continue` returns
+  to S1; it never restores the run.
+- **Explore pressed at sea with nothing in range** → `world.explore.none`
+  toast, no day cost.
 
 ## 7. Acceptance Criteria
 
 - [ ] Every Phase-1 screen (S1–S9, S14) exists and navigates only along §4.2.
+- [ ] Every Phase-3 screen (S12, S13, S16) exists and navigates only along
+      §4.2; the guild/palace hubs open from S4's facility rows and Esc returns.
 - [ ] Input table §4.3 fully implemented; Esc always steps back.
 - [ ] HUD bars (§4.5) show live values driven by `EventBus`, not polling the
       scene tree.

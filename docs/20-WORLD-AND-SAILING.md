@@ -27,8 +27,13 @@ pattern), `40-*` (fleet/cargo schema), `50-*` (stat effects on speed).
 
 ### 4.1 Grid & coordinates
 
-- World grid: 128×96 tiles, origin top-left, `x` east, `y` south
-  (`10-*` §6.1). Tile rendering size 32×32 px.
+- World grid: `map_legend.json#grid` — 128×96 tiles for the Phase-1 map,
+  160×96 for the Phase-3 map (`10-*` §6.1); origin top-left, `x` east, `y`
+  south. Tile rendering size 32×32 px.
+- The active map is `GameState.world["map_id"]` (`"p1"`/`"p3"`), resolved
+  through `data/maps/maps.json` (`90-*` §9.1). Nothing in the sailing code
+  branches on the map id: dimensions come from the legend, and the HUD
+  minimap scales from `MapLoader.width/height`.
 - The fleet occupies exactly one tile (`GameState.world.position`).
 - Passability: `sea ~` and `coastal_sea .` passable; `land #` and `reef ^`
   block; port marker tiles passable (they are sea tiles carrying a marker).
@@ -108,7 +113,7 @@ Rolled once per day tick, zone-dependent:
 
 | Zone | Definition | calm | fair | strong | storm |
 |---|---|---|---|---|---|
-| Atlantic strip | tiles with `x ≤ 6` | 0.05 | 0.30 | 0.15 | 0.50 |
+| Atlantic strip | Phase-1 map: tiles with `x ≤ 6`; Phase-3 map: tiles with `x ≤ 8` | 0.05 | 0.30 | 0.15 | 0.50 |
 | Rest of map | all other tiles | 0.20 | 0.55 | 0.15 | 0.10 |
 
 `wind_factor` by propulsion class (`ShipType.class`):
@@ -237,6 +242,10 @@ then return to title; no save is written or deleted.
   modified by navigation per `50-*` §4.2; Chebyshev distance) of a port's
   harbor tile, that port is added to `known_ports` permanently (marker
   appears on map + minimap). Map exploration (§4.12) uses the same radius.
+- **Discovery sighting (Phase 3)** is a separate, shorter radius: the world
+  map offers the `E` Explore action while a `Discovery` sits within
+  Chebyshev **3** (`70-*` §4.4). Ports and discoveries never share a
+  radius constant.
 - **Entry:** moving onto a known port's harbor tile → port-entry sequence
   (greeting banner with `Port.flavor`, day count, desertion check §4.8.2)
   → route to `port_screen.tscn`. Moving onto an *unknown* port's harbor tile
@@ -248,10 +257,15 @@ then return to title; no save is written or deleted.
 
 - HUD element, 256×192 px (2 px per tile), per `80-*` §HUD.
 - Renders explored tiles only: a tile is explored after being within the
-  sighting radius (§4.11) of the fleet. Explored set is not saved in Phase 1
-  (re-explored on load; known limitation, fixed with Phase-3 map work).
+  sighting radius (§4.11) of the fleet. Explored set is not saved (re-explored
+  on load; known limitation, unchanged in Phase 3 — the minimap is rebuilt
+  from the loaded position at the new map's scale).
 - Known port markers drawn as 2×2 px dots in the port's nation color; fleet
-  as a 2×2 px white dot.
+  as a 2×2 px white dot. On the 160×96 Phase-3 map the minimap keeps its
+  256×192 px box and scales to `floor(256 / width)` px per tile (1 px), so
+  the whole world still fits one glance; the enlarged `M` view keeps 2 px per
+  tile and scrolls.
+- Found discoveries are drawn as 2×2 px `ACCENT` dots once explored.
 
 ## 5. Data Examples
 
@@ -273,7 +287,8 @@ of `sailing_sim.gd` and are listed here (single source of truth):
     "mutiny_chance_per_day": 0.25,
     "desertion_threshold": 40,
     "desertion_fraction": 0.10,
-    "storm_damage_fraction": 0.05
+    "storm_damage_fraction": 0.05,
+    "discovery_radius": 3
   }
 }
 ```
@@ -310,3 +325,5 @@ are GDScript constants, not a data file — game content stays in `data/`.)
 - [ ] Game over fires only from `"starvation"`, `"scurvy"`, `"sunk"`.
 - [ ] Port entry/exit round-trips position and resets `clock_fraction`.
 - [ ] Minimap dimensions and sighting radius (8) match `80-*` HUD spec.
+- [ ] Both maps play with zero sailing-code edits: dimensions come from the
+      legend, and the same movement/weather/port rules apply (`90-*` §9.1).

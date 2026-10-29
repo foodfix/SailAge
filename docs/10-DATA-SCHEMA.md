@@ -21,16 +21,20 @@ owning phase.
 
 | Path | Contents | Owner doc |
 |---|---|---|
-| `data/nations.json` | Nation list | this doc |
+| `data/nations.json` | Nation list (incl. `rivals`, Phase 3) | this doc |
 | `data/goods.json` | Good list | this doc |
 | `data/ship_types.json` | ShipType list | this doc |
-| `data/ports.json` | Port list | this doc |
+| `data/ports.json` | Port list — the 30 locked Phase-1 ports | this doc |
+| `data/ports_p3.json` | Phase-3 world-map ports (~70) | this doc / `70-*` |
 | `data/officers.json` | Officer roster | this doc |
 | `data/discoveries.json` | `[]` until Phase 3 | this doc / `70-*` |
 | `data/quests.json` | `[]` until Phase 3 | this doc / `70-*` |
 | `data/equipment.json` | `[]` until Phase 2 | this doc / `60-*` |
 | `data/map_legend.json` | MapLegend (tiles, markers, constants) | this doc |
+| `data/map_legend_p3.json` | MapLegend for the Phase-3 world map | this doc / `70-*` |
 | `data/maps/p1_mediterranean.txt` | ASCII world map, Phase 1 | this doc / `20-*` |
+| `data/maps/p3_world.txt` | ASCII world map, Phase 3 | `70-*` §4.9.8 / `90-*` §9.1 |
+| `data/maps/maps.json` | Map index (selectable maps) | `90-*` §9.1 |
 | `data/ui_strings.json` | UI-frame L10n strings | `80-UI-UX.md` |
 | `tools/validate_data.py` | Schema/i18n/integrity/map validator | this doc |
 
@@ -91,6 +95,7 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 | `start_ship_type_id` | id | references ShipType; starter ship at new game |
 | `start_gold` | money | gold at new game |
 | `start_reputation` | int −100…100 | initial reputation with own nation; other nations start at 0 |
+| `rivals` | []id | **Phase 3**: exactly 2 other nation ids that gain `+2` reputation when the player commits piracy against this nation (`70-*` §4.9.5). Symmetry is not required. |
 | `description` | L10nString | 1–2 sentences shown on the nationality-select screen |
 
 ```json
@@ -186,16 +191,53 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 30 locked ids (§7.1) |
+| `id` | id | one of the 30 locked ids for `p1_mediterranean.txt`; any id for the Phase-3 map (see `p3`) |
 | `name` | L10nString | |
 | `nation_id` | id | references Nation |
-| `marker` | string | exactly 1 char from `0-9` or `a-t`; unique; must appear at `position` in the map file and in `map_legend.json#port_markers` |
-| `position` | tilePos | the port's harbor tile; locked values in §7.1; the map-authoring task must place this port's marker at exactly this coordinate |
+| `marker` | string | exactly 1 char from `0-9` or `a-t`; unique; must appear at `position` in the Phase-1 map file and in `map_legend.json#port_markers` |
+| `position` | tilePos | the port's harbor tile **on the Phase-1 map**; locked values in §7.1; the map-authoring task must place this port's marker at exactly this coordinate |
 | `produces` | []id | ⊆ Good ids; port sells these cheaper (supply factor in `30-*`) |
 | `demands` | []id | ⊆ Good ids; port buys these dearer |
 | `market_goods` | []id | optional; ⊆ Good ids; when absent, **all 20 goods trade here** (locked for Phase 1) |
 | `facilities` | object | keys with activation phase: `market:1, shipyard:1, tavern:1, inn:1, guild:3, palace:3`. `palace` is **omitted** unless this port is a nation's `capital_port_id` |
 | `flavor` | L10nString | 1 sentence shown in the port-entry greeting |
+| `p3` | object | **Phase-3 world map only** (optional): `{"marker": <1 char>, "position": tilePos}` on `p3_world.txt`. A port without it does not appear on the P3 map. New Phase-3 ports carry `p3` and omit `marker`/`position`/`phase`, and are listed in `data/ports_p3.json` (§4.4.1) so the Phase-1 locked list stays exactly 30. |
+| `phase` | int | optional; `3` on a port that exists **only** in `data/ports_p3.json` |
+
+`marker` stays `0-9a-t` for the Phase-1 map. The P3 marker charset is wider
+(§6.2 "Phase-3 map legend"); `p3.marker` is validated against
+`data/map_legend_p3.json#port_markers`, not against `MARKER_RE`.
+
+#### 4.4.1 Phase-3 port file — `data/ports_p3.json`
+
+The Phase-1 locked list must stay exactly the 30 §7.1 ports, so the 70 new
+world-map ports live in their own envelope with the **same Port schema**
+(`phase: 3`, `p3` block required, no `marker`/`position`):
+
+```json
+{
+  "version": 1,
+  "ports": [
+    {
+      "id": "havana",
+      "name": {"zh": "哈瓦那", "en": "Havana"},
+      "nation_id": "spain",
+      "produces": ["sugar", "amber"],
+      "demands": ["wine", "cotton_cloth"],
+      "facilities": {"market": 1, "shipyard": 1, "tavern": 1, "inn": 1, "guild": 3},
+      "flavor": {"zh": "加勒比海上的良港,蔗糖与烟草在此装船。", "en": "A fine Caribbean haven where sugar and tobacco go aboard."},
+      "p3": {"marker": "A", "position": {"x": 30, "y": 44}},
+      "phase": 3
+    }
+  ]
+}
+```
+
+`DataLoader` merges both port files into one id-keyed table and one ordered
+list (Phase-1 file first), so every existing lookup (`get_port`, market rows,
+encounter anchors) reaches the new ports with no other change. Duplicate ids
+across the two files are a validator error. The full P3 list (100 ports, grid
+160×96) is pinned in `70-*` §4.9.8.
 
 ```json
 {
@@ -345,18 +387,26 @@ battle or a duel) are pinned in `60-*` §4.11.12.
 | `expiry_days` | int > 0 | days after acceptance the quest fails |
 | `phase` | int | locked at `3` |
 
+This file holds **templates** (§`70-*` §4.9.3 pins the 9 rows); the same
+`requirements`/`rewards` keys carry the *draw rules* a template's generator
+fills (`quantity`/`dest_port_id`/`target_fleet_id`/`discovery_id` are chosen
+at offer time). A template row's `requirements` therefore states the fields
+its type will fill, with the placeholder values the §4.9.3 draw rules
+replace, and `rewards` states the band. Royal templates also carry
+`requirements.kind` ∈ `royal_delivery|royal_patrol|royal_chart`.
+
 ```json
 {
   "version": 1,
   "quests": [
     {
-      "id": "quest_wine_to_london",
+      "id": "qt_delivery_wine",
       "type": "delivery",
       "giver": "guild",
-      "name": {"zh": "送往伦敦的葡萄酒", "en": "Wine for London"},
-      "description": {"zh": "公会需要20单位葡萄酒在期限内送抵伦敦。", "en": "The guild needs 20 units of wine delivered to London before the deadline."},
+      "name": {"zh": "葡萄酒的托付", "en": "A Commission of Wine"},
+      "description": {"zh": "公会需要一批葡萄酒送往他乡。", "en": "The guild needs a shipment of wine carried to another shore."},
       "requirements": {"good_id": "wine", "quantity": 20, "dest_port_id": "london"},
-      "rewards": {"gold": 3000, "reputation": {"portugal": 5}, "fame": 10},
+      "rewards": {"gold": 1200, "reputation": {"england": 5}, "fame": 10},
       "expiry_days": 30,
       "phase": 3
     }
@@ -369,9 +419,9 @@ battle or a duel) are pinned in `60-*` §4.11.12.
 | Field | Type | Rule |
 |---|---|---|
 | `tile_size_px` | int | locked `32` |
-| `grid` | object | `{"width": 128, "height": 96}` — locked for the Phase-1 map |
+| `grid` | object | `{"width": 128, "height": 96}` — locked for the Phase-1 map; `160 × 96` for `map_legend_p3.json` |
 | `tiles` | object | char → `{"kind": string, "passable": bool}`; locked keys `~ . # ^` (§6.2) |
-| `port_markers` | object | marker char → Port id; must cover exactly the 30 ports, and each `Port.marker`/`Port.position` must agree with it and with the map file |
+| `port_markers` | object | marker char → Port id; for `map_legend.json` it must cover exactly the 30 §7.1 ports, and each `Port.marker`/`Port.position` must agree with it and with the Phase-1 map file. For `map_legend_p3.json` it covers exactly the ports that carry a `p3` block (30 + 70), and agrees with `Port.p3.marker`/`Port.p3.position`. |
 
 ```json
 {
@@ -396,6 +446,11 @@ battle or a duel) are pinned in `60-*` §4.11.12.
   }
 }
 ```
+
+`map_legend_p3.json` has the same shape with `"grid": {"width": 160,
+"height": 96}` and the 100-port `port_markers` table; its `tiles` table is the
+same four locked chars (`70-*` §4.9.8 pins the marker charset overflow
+`À`–`ÿ`, which the validator accepts for the P3 legend only).
 
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
@@ -427,15 +482,18 @@ Locked rule, implemented at the inn (facility `inn`), behavior detailed in
 
 | Constant | Value | Used by |
 |---|---|---|
-| `MAP_WIDTH` | 128 tiles | map file, `20-*`, `60-*` scale reference |
-| `MAP_HEIGHT` | 96 tiles | map file |
+| `MAP_WIDTH` | 128 tiles | Phase-1 map file, `20-*`, `60-*` scale reference |
+| `MAP_HEIGHT` | 96 tiles | both map files |
 | `TILE_SIZE_PX` | 32 px | TileMap config, `80-*` |
-| Map file | `data/maps/p1_mediterranean.txt` | Phase 1 world |
+| Map file (P1) | `data/maps/p1_mediterranean.txt` | Phase 1 world |
+| Map file (P3) | `data/maps/p3_world.txt`, 160 × 96 | Phase 3 world (`70-*` §4.9.8) |
+| P3 nominal scale | 1 tile ≈ 1.5° lon ≈ 1.0° lat | flavor/speed sanity only |
 | Nominal scale | 1 tile ≈ 0.42° lon ≈ 0.28° lat; 1 tile ≈ 35 km | flavor/speed sanity only |
 
 Grid origin `(0,0)` is the **top-left** tile; `x` increases east, `y`
-increases south. The grid spans roughly 18°W–42°E, 28°N–55°N (Madeira sits on
-the western map edge at column 0).
+increases south. The P1 grid spans roughly 18°W–42°E, 28°N–55°N (Madeira sits
+on the western map edge at column 0); the P3 grid spans roughly 75°W–165°E,
+41°S–55°N.
 
 ### 6.2 Tile legend (locked)
 
@@ -446,19 +504,22 @@ the western map edge at column 0).
 | `#` | `land` | no | blocks movement |
 | `^` | `reef` | no | hazard; blocks movement, reserved for Phase-2 damage rules |
 
-Port markers (`0-9`, `a-t`) occupy a **sea tile** that is passable and
-represents the port's harbor; moving onto it triggers the port-entry flow
-(`20-WORLD-AND-SAILING.md`). Every port marker must have at least one
-orthogonally adjacent land (`#`) tile (harbor-on-a-coast rule, checked by the
-validator).
+The four tile chars are identical in both legends. Port markers (`0-9`, `a-t`
+on P1; `0-9A-Za-z` then Latin-1 letters on P3) occupy a **sea tile** that is
+passable and represents the port's harbor; moving onto it triggers the
+port-entry flow (`20-WORLD-AND-SAILING.md`). Every port marker must have at
+least one orthogonally adjacent land (`#`) tile (harbor-on-a-coast rule,
+checked by the validator).
 
 ### 6.3 Map file format
 
-- Exactly `MAP_HEIGHT` lines; each line exactly `MAP_WIDTH` chars.
-- Allowed chars: the 4 tile kinds + the 30 port markers. No other bytes except
-  the trailing newline per line. No BOM.
+- Exactly the legend's `grid.height` lines; each line exactly
+  `grid.width` chars.
+- Allowed chars: the 4 tile kinds + that legend's port markers. No other bytes
+  except the trailing newline per line. No BOM.
 - The map-authoring task in `IMPLEMENT-Phase1.md` must place each port's
-  marker at exactly the `position` given in §7.1.
+  marker at exactly the `position` given in §7.1. The Phase-3 map authoring
+  task does the same against `p3.position`.
 
 ## 7. Locked Phase-1 Content Lists
 
@@ -579,12 +640,13 @@ the code below. All checks run in order.
 
 | Exit | Check group | Checks |
 |---|---|---|
-| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `ui_strings.json`) |
+| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `map_legend_p3.json`, `maps/maps.json`, `ui_strings.json`) |
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
 | 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, tilePos bounds, marker charset/length) |
-| 4 | Referential integrity | `port.nation_id ∈ nations`; `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
-| 5 | Locked lists | exactly the §7.1 30 ports, §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
+| 4 | Referential integrity | `port.nation_id ∈ nations`; `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
+| 5 | Locked lists | exactly the §7.1 30 ports, §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly (the Phase-1 files only; `ports_p3.json` is checked for uniqueness and schema but is not a locked list) |
 | 6 | Map | `data/maps/p1_mediterranean.txt` exists; 96 lines × 128 chars; all chars ∈ legend; each port marker appears exactly once and at its §7.1 `position` (agreement with `map_legend.port_markers` and `Port.marker`); each marker tile has ≥1 orthogonally adjacent `#` AND ≥1 orthogonally adjacent **passable** tile (a harbour must be sailable in and out without a diagonal step); BFS from `lisbon`'s tile over passable tiles reaches all 30 markers. **The BFS must use the movement rule players actually have (`20-*` §4.2): 8-directional but with corner-cutting forbidden** — a diagonal step is legal only when both orthogonal neighbours of the corner are passable. Using plain 8-directional BFS is a validator bug: it reports reachability through gaps no fleet can traverse. |
+| 7 | Phase-3 map | `data/maps/p3_world.txt` exists; exactly `map_legend_p3.json#grid` lines × chars; all chars ∈ that legend; every `p3` port's marker appears exactly once at its `p3.position` and the legend's `port_markers` covers exactly the ports that carry a `p3` block (both directions); each marker has ≥1 adjacent `#` and ≥1 adjacent passable tile; the same strict BFS from the **first port of the P3 file by id** reaches every P3 marker and covers every passable tile (one component); every `Discovery.position` is passable or orthogonally adjacent to a passable tile (`70-*` §4.4) |
 
 Additionally group 6 asserts **one single sea component** under the strict movement rule:
 every passable non-marker tile must be reachable from Lisbon's tile (this is what
@@ -610,18 +672,28 @@ Failures name the offending marker ids or the size of each stray component.
   required.
 - **Officer hired twice / dead officers** — runtime concern, owned by
   `50-CHARACTER-AND-PROGRESSION.md`; data layer only guarantees id uniqueness.
+- **A P3 port without a `p3` block** → it simply does not exist on the P3
+  map; the legend may not name it (group 7), and the P3 generator's
+  destination draw skips it.
+- **A P1 port whose `p3` position collides with another port** → validator
+  exit 7 (position uniqueness within the P3 legend).
+- **A discovery positioned off the P3 map or in a landlocked pocket** →
+  validator exit 7 (`70-*` §4.4).
+- **`rivals` missing on a Phase-1-era nation** → validator exit 3 (Phase 3
+  makes the key required); the migration cannot invent it, so the data file
+  is amended, not the save.
 
 ## 10. Acceptance Criteria
 
-- [ ] All 12 artifact paths from §2 exist in the doc set's file inventory and
+- [ ] All artifact paths from §2 exist in the doc set's file inventory and
       match these names exactly.
 - [ ] Every JSON example in this doc parses (spot-checked with a parser).
 - [ ] §7 tables contain exactly 30/20/8/6/6 rows and only ids using the §3.1
       `id` regex.
 - [ ] Every non-ASCII display string in tables carries both zh and en.
-- [ ] §6 constants (`128 × 96`, `32px`, file name) are the only grid constants
-      referenced by `20-*`, `60-*`, and `80-*`.
-- [ ] `validate_data.py` check groups (exit 1–6) are implementable from §8
+- [ ] §6 constants (`128 × 96`, `160 × 96`, `32px`, file names) are the only
+      grid constants referenced by `20-*`, `60-*`, `70-*` and `80-*`.
+- [ ] `validate_data.py` check groups (exit 1–7) are implementable from §8
       alone, without further design questions.
-- [ ] Harbor-relief numbers (threshold 100, payout 100, cheapest hull 1,200)
+- [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)
       are consistent with §7.3 and `50-*`.

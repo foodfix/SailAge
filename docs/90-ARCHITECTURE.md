@@ -48,19 +48,28 @@ SailAge/
 │   │   ├── market_screen.tscn
 │   │   ├── shipyard_screen.tscn
 │   │   ├── tavern_screen.tscn
-│   │   └── inn_screen.tscn
+│   │   ├── inn_screen.tscn
+│   │   ├── guild_screen.tscn    # Phase 3 (S12)
+│   │   └── palace_screen.tscn   # Phase 3 (S13)
 │   ├── combat/                 # Phase 2
 │   └── ui_shared/
 │       ├── dialog_box.tscn
 │       ├── confirm_dialog.tscn
 │       ├── gameover_screen.tscn
+│       ├── ending_screen.tscn   # Phase 3 (S16, retirement summary)
 │       └── hud.tscn
 ├── scripts/
 │   ├── world/sailing_sim.gd    # day tick, consumption, weather, morale
 │   ├── world/map_loader.gd     # ASCII map → TileMap (§9)
+│   ├── world/discovery.gd      # Phase 3: explore/report/hints (70-* §4.4)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
 │   ├── port/shipyard_engine.gd
+│   ├── port/palace_engine.gd   # Phase 3: royal missions, titles (70-* §4.3)
+│   ├── quests/quest_gen.gd     # Phase 3: offers + tracking (70-* §4.9.3)
+│   ├── quests/bounty.gd        # Phase 3: piracy/bounty (70-* §4.9.5)
+│   ├── quests/tournament.gd    # Phase 3: bracket + prizes (70-* §4.9.7)
 │   ├── player/character.gd     # stats, XP, officers
+│   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   └── fleet/fleet.gd          # fleet composition, cargo maths
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
 │   └── maps/p1_mediterranean.txt
@@ -95,6 +104,15 @@ Application-wide signals; no state. Canonical signals:
 | `battle_started(encounter: Dictionary)` | encounter descriptor (`60-*` §4.11.11) | S10 opens a battle |
 | `battle_finished(outcome: Dictionary)` | outcome block (`60-*` §4.11.9/§4.11.10) | a battle ends, any outcome |
 | `duel_finished(outcome: Dictionary)` | `{result, rounds, attacker, defender}` | the S11 modal closes |
+| `fame_changed(new_fame: int)` | | any fame delta |
+| `quests_changed()` | | a quest accepted / completed / failed |
+| `title_granted(nation_id: String, rank: String)` | `70-*` §4.9.2 rank id | a palace ceremony grants a title |
+| `discovery_found(discovery_id: String)` | | an Explore action found a discovery |
+| `discovery_reported(discovery_id: String)` | | a guild report paid out |
+| `bounty_issued(nation_id: String)` | | rep hit ≤ −50 and a bounty was created |
+| `bounty_cleared(nation_id: String)` | | either clearing path reset rep to −10 |
+| `tournament_finished(outcome: Dictionary)` | `{won, round_reached, gold, fame}` | a tournament bracket ended |
+| `retired()` | | the ending screen opened |
 
 Any module may `emit`; only view/UI code and `GameState` may `connect`.
 Cross-screen communication never uses direct node references.
@@ -144,9 +162,15 @@ marked •):
   (`60-*` §4.8); present-but-empty before Phase 2
 - `pending_encounter` — **transient, never saved**: the encounter S3 hands to
   S10 (`60-*` §4.11.11.3); S10 clears it on open
-- `quests`, `discoveries_found`: Phase-2/3 fields, present-but-empty in P1
-- API: `new_game(nation_id)`, `add_gold(delta)`, `advance_day()`, and thin
-  helpers; heavy rules live in `scripts/` engines which mutate GameState.
+- `quests` — Phase-1 placeholder, permanently empty from Phase 3 (§8.1)
+- `discoveries_found` • (`[]id`) — discovery ids found by Explore (`70-*`
+  §4.4); found ≠ reported
+- Phase-3 fields (§8.1): `fame` • (int), `titles` •, `bounties` •,
+  `active_quests` •, `completed_royal_missions` •, `discoveries_reported` •,
+  `discovery_hints` •, `battles_won` •, `retired` •, `retired_at` •
+- API: `new_game(nation_id, route, map_id)`, `add_gold(delta)`,
+  `advance_day()`, and thin helpers; heavy rules live in `scripts/` engines
+  which mutate GameState.
 - On `day_advanced`: runs the daily ledger delegation order fixed in
   `20-WORLD-AND-SAILING.md` §5 (consumption before wages before morale).
 
@@ -228,6 +252,29 @@ Phase-2 additions (version 2):
 spawn of that kind is allowed again after a battle (`spawn_immunity_days = 3`,
 `60-*` §4.8).
 
+Phase-3 additions (version 3):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `fame` | `int ≥ 0` | `0` | `70-*` §4.1, §4.9.1 |
+| `titles` | `object nation_id → rank` | all six nations `"none"` | `70-*` §4.3, §4.9.2 |
+| `bounties` | `object nation_id → {amount, day}` | `{}` | `70-*` §4.5, §4.9.5 |
+| `active_quests` | `[]object` | `[]` | `70-*` §4.9.3 |
+| `completed_royal_missions` | `object nation_id → int` | all six nations `0` | `70-*` §4.3 |
+| `discoveries_reported` | `[]id` | `[]` | `70-*` §4.4 |
+| `discovery_hints` | `object id → true` | `{}` | `70-*` §4.4 |
+| `battles_won` | `int ≥ 0` | `0` | `70-*` §4.7 |
+| `world.map_id` | `"p1"`/`"p3"` | `"p1"` | `70-*` §4.9.8 |
+| `retired` | `bool` | `false` | `70-*` §4.7 |
+| `retired_at` | `int` unix | `0` | `70-*` §4.7 |
+
+`quests` (the Phase-1 placeholder) stays **present but permanently empty**:
+it is superseded by `active_quests`, and nothing in Phase-3 code reads or
+writes it. The `2 → 3` migration drops it from the payload (a v3 save has no
+`quests` key); a load with the key absent restores `GameState.quests = []`.
+`world.map_id` is written by `SaveSystem.snapshot()` from `GameState.world`
+(it already serialises `world`'s `position`/`weather`; `map_id` joins them).
+
 ### 8.2 Migration rule
 
 - `save_version` increments on any breaking shape change.
@@ -244,8 +291,23 @@ spawn of that kind is allowed again after a battle (`spawn_immunity_days = 3`,
   the `fleet[i].equipment` block (`{"figurehead": "", "sail": ""}`) to every
   ship instance, and setting `phase = 2`. It never touches any other key, so a
   Phase-1 save re-saves byte-equal apart from the added keys and the version.
+
+- Phase-3 code ships `save_version = 3` and adds exactly one step:
+
+  `MIGRATIONS[2]` — upgrades a version-2 payload by adding every Phase-3 key
+  of §8.1 with its documented default (`fame 0`, `titles`/`completed_royal_
+  missions` all six nations at `"none"`/`0`, `bounties {}`, `active_quests []`,
+  `discoveries_reported []`, `discovery_hints {}`, `battles_won 0`,
+  `retired false`, `retired_at 0`), removing the superseded `quests` key,
+  adding `world.map_id = "p1"` when `world` is a non-empty object (never
+  synthesising a `world`), and setting `phase = 3`. It never mutates its input
+  and never touches any other key, so a Phase-2 save re-saves byte-equal apart
+  from the added/removed keys and the version.
 - Migration functions are pure: they receive a dict and return a new dict; the
   loaded file is never mutated in place.
+- **`titles`/`completed_royal_missions` must cover all six nations** after
+  every migration (the ladder and the quest-slot rule read them by key); the
+  six ids come from `data/nations.json`, never a list in code.
 
 ## 9. ASCII Map → TileMap (loading pipeline)
 
@@ -268,6 +330,42 @@ DataLoader):
 
 The same pipeline serves Phase 3's full-world map by file-name swap only —
 adding a map is a data-only change plus one legend entry set.
+
+#### 9.1 Map index (Phase 3)
+
+Adding a map must **not** require a code edit, so the selectable maps live in
+data:
+
+`data/maps/maps.json`
+
+```json
+{
+  "version": 1,
+  "maps": [
+    {"id": "p1", "file": "data/maps/p1_mediterranean.txt",
+     "legend": "data/map_legend.json",
+     "name": {"zh": "地中海与西欧", "en": "Mediterranean & Western Europe"}},
+    {"id": "p3", "file": "data/maps/p3_world.txt",
+     "legend": "data/map_legend_p3.json",
+     "name": {"zh": "环球世界", "en": "The Wider World"}}
+  ]
+}
+```
+
+- `GameState.world["map_id"]` selects the entry (default `"p1"`); a missing or
+  unknown id falls back to the first entry with a logged warning.
+- `MapLoader.load_map(path, legend)` already takes both as plain arguments;
+  the world scene resolves them from this index through
+  `DataLoader.get_map(id)` → `{file, legend_path, name}` plus
+  `DataLoader.get_map_legend(id)` (a `{id: legend}` cache keyed by the index,
+  so two legend files never overwrite each other).
+- Port coordinates on a non-P1 map live in `Port.p3.position` /
+  `Port.p3.marker` (`10-*` §4.4); a port without a `p3` block simply does not
+  appear on the P3 map. The map legend's `port_markers` table must name a port
+  that has a `p3` block, and vice versa — the validator checks both directions.
+- `data/maps/maps.json` and `data/map_legend_p3.json` are non-entity tables
+  (like `map_legend.json`), so `DataLoader` loads them without an envelope
+  plural key.
 
 ## 10. "Add Content = Data-Only" Rule
 
