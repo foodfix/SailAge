@@ -318,7 +318,8 @@ battle opens with a movement phase.
     Charged even if the player retreats afterwards (§4.10).
 - **Return:** the fleet is placed on the contact tile, the hostile marker is
   removed, and a spawn immunity of **3 days** is recorded for that marker kind
-  (§4.8).
+  (§4.8). A `retreat` keeps the marker instead (§4.10 pursuit cooldown, §4.12.4
+  step 4).
 
 #### 4.11.11 `hostile_fleets` save block (pairs with `90-*` §8.1)
 
@@ -596,6 +597,12 @@ reached through the guards above, so D never edits a sibling's file:
    with `cargo_overflow_lost`.
 3. `BattleRewards.apply(outcome)` — gold, XP, reputation (§4.11.10).
 4. `Encounters.remove(encounter_id)` + `Encounters.set_cooldown(kind, day + 3)`.
+   **Exception — `retreat`:** §4.10's outcome is *not* a resolved battle, so the
+   marker is not removed; step 4 calls
+   `Encounters.set_pursuit_cooldown(id, day + 1)` instead (the marker then holds
+   its tile and raises no contact for that day) and still records the 3-day
+   spawn immunity. §4.11.10's "marker is removed" is the aftermath of a resolved
+   battle only.
 5. `GameState.set_world_tile(contact)`; emit `EventBus.battle_finished(outcome)`;
    show the after-action dialog; route to S3 unless a `gameover.*` fired.
 

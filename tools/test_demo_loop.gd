@@ -302,15 +302,25 @@ func _step7_facilities() -> void:
 	_check(GameState.gold == gold_before - 200,
 		"step 7: repair charges exactly 200g for 10 points")
 	_check(GameState.fleet[0].durability == 60, "step 7: durability restored by 10")
-	# §4.3: refit maths exist for Phase 2 but there is no Phase-1 UI path.
+	# §4.3/§4.7.2: the refit row is live in Phase 2 — present, disabled at 0
+	# cannons (the §6 "invalid points" validation) and enabled once a legal
+	# count is picked. Phase 1 asserted "present and disabled"; the count is
+	# unchanged (this one check now owns the whole Phase-2 truth).
 	GameState.current_port = "lisbon"
 	var shipyard_scene: PackedScene = load("res://scenes/port/shipyard_screen.tscn")
 	var shipyard_ui: Node = shipyard_scene.instantiate()
 	add_child(shipyard_ui)
 	await get_tree().process_frame
 	var refit_button := shipyard_ui.find_child("Refit_0", true, false) as Button
-	_check(refit_button != null and refit_button.disabled,
-		"step 7: the refit row is present and disabled in Phase 1")
+	var cannons_field := shipyard_ui.find_child("Cannons_0", true, false) as LineEdit
+	var disabled_at_zero := refit_button != null and refit_button.disabled
+	if cannons_field != null:
+		cannons_field.text = "5"
+		cannons_field.text_changed.emit("5")
+	var enabled_at_five := refit_button != null and not refit_button.disabled
+	_check(disabled_at_zero and enabled_at_five,
+		"step 7: the refit row is present, disabled at 0 cannons and enabled "
+		+ "once 5 are picked (Phase 2, §4.7.2)")
 	shipyard_ui.queue_free()
 	await get_tree().process_frame
 
