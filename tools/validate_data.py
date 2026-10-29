@@ -245,6 +245,29 @@ LOCKED_OFFICERS = {
                           "navigator", ("venice", "genoa"), 30),
 }
 
+# id: (zh, en, slot, modifiers, price)  -- docs/60-COMBAT.md section 4.11.13
+# (reachable from docs/10-DATA-SCHEMA.md section 4.6). All Phase-2 items.
+LOCKED_EQUIPMENT = {
+    "eq_cutlass": ("水手弯刀", "Sailor's Cutlass", "weapon", {"combat": 3}, 400),
+    "eq_rapier": ("贵族细剑", "Noble's Rapier", "weapon", {"combat": 5}, 1200),
+    "eq_breastplate": ("胸甲", "Breastplate", "armor", {"combat": 2}, 700),
+    "eq_lucky_charm": ("幸运护符", "Lucky Charm", "armor",
+                       {"combat": 1, "luck": 5}, 900),
+    "eq_mermaid_figurehead": ("美人鱼船首像", "Mermaid Figurehead",
+                              "figurehead", {"durability": 10}, 1500),
+    "eq_dragon_figurehead": ("龙首船像", "Dragon Figurehead",
+                             "figurehead", {"durability": 20}, 3200),
+    "eq_cotton_sails": ("棉帆", "Cotton Sails", "sail", {"speed": 1}, 1000),
+    "eq_storm_sails": ("风暴帆", "Storm Sails", "sail",
+                       {"speed": 1, "durability": 5}, 2600),
+}
+
+# docs/60-COMBAT.md section 4.11.12: `figurehead`/`sail` are ship-bound, so
+# they may only touch ship-instance stats; `weapon`/`armor` are player-worn,
+# so they may only touch player stats. Group 4 enforces the split.
+SHIP_EQUIPMENT_SLOTS = ("figurehead", "sail")
+PLAYER_EQUIPMENT_SLOTS = ("weapon", "armor")
+
 CAPITAL_PORT_IDS = tuple(
     row[7] for row in LOCKED_NATIONS.values()
 )  # lisbon, seville, london, amsterdam, istanbul, venice
@@ -255,6 +278,7 @@ LOCKED_COUNTS = {
     "ship_types": 8,
     "ports": 30,
     "officers": 6,
+    "equipment": 8,
 }
 
 
@@ -709,8 +733,21 @@ def _schema_equipment(items: list) -> None:
         modifiers = entity["modifiers"]
         if not isinstance(modifiers, dict):
             fail("schema", "equipment.json", f"{path}.modifiers must be an object", 3)
+        if not modifiers:
+            # docs/10-* section 4.6: an item with no modifiers would be a
+            # pure decoration costing money and changing nothing.
+            fail("schema", "equipment.json", f"{path}.modifiers must not be empty", 3)
         for stat, delta in modifiers.items():
             _require_int(delta, f"{path}.modifiers.{stat}", "equipment.json")
+            # Negative modifiers are legal (a cursed item, section 4.11.13 has
+            # none yet), but a 0 delta is a no-op typo, not content.
+            if delta == 0:
+                fail(
+                    "schema",
+                    "equipment.json",
+                    f"{path}.modifiers.{stat} must have |delta| >= 1 (got 0)",
+                    3,
+                )
         _require_int(entity["price"], f"{path}.price", "equipment.json", 0)
         _require_int(entity["phase"], f"{path}.phase", "equipment.json", 2, 2)
 
@@ -1018,12 +1055,38 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 )
 
     for index, item in enumerate(equipment):
-        for stat in item["modifiers"]:
+        slot = item.get("slot")
+        modifiers = item.get("modifiers")
+        if not isinstance(modifiers, dict):
+            continue  # schema group already reported this
+        for stat in modifiers:
             if stat not in EQUIPMENT_STAT_NAMES:
                 fail(
                     "ref",
                     "equipment.json",
                     f"equipment[{index}] ({item['id']}) modifiers has unknown stat {stat!r}",
+                    4,
+                )
+            # docs/60-* section 4.11.12 slot/stat split: player-worn items
+            # (`weapon`/`armor`) affect player stats only, ship-bound items
+            # (`figurehead`/`sail`) affect ship-instance stats only. Mixing
+            # them would make an engine accessor silently ignore a modifier.
+            if slot in PLAYER_EQUIPMENT_SLOTS and stat in SHIP_STAT_NAMES:
+                fail(
+                    "ref",
+                    "equipment.json",
+                    f"equipment[{index}] ({item['id']}) is a {slot} item and may "
+                    f"only modify player stats "
+                    f"({'|'.join(PLAYER_STAT_NAMES)}), not ship stat {stat!r}",
+                    4,
+                )
+            if slot in SHIP_EQUIPMENT_SLOTS and stat in PLAYER_STAT_NAMES:
+                fail(
+                    "ref",
+                    "equipment.json",
+                    f"equipment[{index}] ({item['id']}) is a {slot} item and may "
+                    f"only modify ship stats "
+                    f"({'|'.join(SHIP_STAT_NAMES)}), not player stat {stat!r}",
                     4,
                 )
 
@@ -1110,12 +1173,14 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
     ship_types = docs["ship_types.json"]["ship_types"]
     nations = docs["nations.json"]["nations"]
     officers = docs["officers.json"]["officers"]
+    equipment = docs["equipment.json"]["equipment"]
 
     _locked_id_sets(ports, LOCKED_PORTS, "ports", "ports.json")
     _locked_id_sets(goods, LOCKED_GOODS, "goods", "goods.json")
     _locked_id_sets(ship_types, LOCKED_SHIP_TYPES, "ship_types", "ship_types.json")
     _locked_id_sets(nations, LOCKED_NATIONS, "nations", "nations.json")
     _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
+    _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
 
     for plural, expected_count in LOCKED_COUNTS.items():
         items = docs[f"{plural}.json"][plural]
@@ -1258,10 +1323,32 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     5,
                 )
 
+    # docs/60-COMBAT.md section 4.11.13: the locked 8-item content set. Mirrors
+    # the doc table field by field, so a data-only edit (a price tweak, a stat
+    # swap, a renamed item) fails loudly instead of drifting from the spec.
+    for index, item in enumerate(equipment):
+        zh, en, slot, modifiers, price = LOCKED_EQUIPMENT[item["id"]]
+        path = f"equipment[{index}]"
+        _check_l10n_text(item, "name", zh, en, path, "equipment.json")
+        expected = {
+            "slot": slot,
+            "modifiers": dict(modifiers),
+            "price": price,
+            "phase": 2,
+        }
+        for field, value in expected.items():
+            if item.get(field) != value:
+                fail(
+                    "locked-content",
+                    "equipment.json",
+                    f"{path} ({item['id']}) {field} must be {value}",
+                    5,
+                )
+
     if verbose:
         print(
             "PASS group 5 locked lists (30 ports, 20 goods, 8 ship types, "
-            "6 nations, 6 officers)"
+            "6 nations, 6 officers, 8 equipment items)"
         )
 
 

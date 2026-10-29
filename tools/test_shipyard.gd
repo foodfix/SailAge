@@ -506,18 +506,21 @@ func _test_screen() -> void:
 		"a loaded escort's Sell button is disabled with 'shipyard.cargo_not_empty'")
 	GameState.fleet[1]["cargo"] = {}
 
-	# Refit is present but disabled with the Phase-2 label (§4.3).
-	_check(screen.fleet_widget(0)["refit"].disabled,
-		"the Refit row is disabled in Phase 1")
+	# Refit is live in Phase 2 (§4.3 "Phase 2 enables the row", `80-*` §4.7.2):
+	# the picker starts at 0 cannons, so the button is disabled with the
+	# validation reason until a legal count is entered.
+	_check(screen.fleet_widget(0)["refit"] != null
+			and screen.fleet_widget(0)["refit"].disabled,
+		"the Phase-2 Refit row is present, disabled at 0 cannons (§6)")
 	_check(screen.fleet_widget(0)["refit"].tooltip_text
-			== I18n.t_key("shipyard.cannons.phase2"),
-		"…with the 'shipyard.cannons.phase2' label (%s)"
+			== I18n.fmt("ui.reason", {"reason": I18n.t_key("shipyard.invalid_points")}),
+		"…with the 'shipyard.invalid_points' reason (%s)"
 		% screen.fleet_widget(0)["refit"].tooltip_text)
 	var refit_note: Label = screen.get_node(
 		"Layout/VBox/Body/FleetPanel/Margin/Box/FleetScroll/FleetRows/Fleet_0"
 		+ "/Margin/Box/RefitRow/RefitNote_0")
-	_check(refit_note.text == I18n.t_key("shipyard.cannons.phase2"),
-		"…and the visible Phase-2 note is bound (%s)" % refit_note.text)
+	_check(refit_note.text == I18n.fmt("shipyard.repair_cost", {"amount": 0}),
+		"…and the live cost note prices 0 cannons (%s)" % refit_note.text)
 
 	# Repair picker: live cost preview, disabled at 0, then repair works.
 	GameState.fleet[0]["durability"] = 60
