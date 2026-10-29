@@ -243,8 +243,15 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 
 	# §4.11.2: deployment is the engine's, from the player's live fleet and the
 	# encounter's seeded enemy composition.
-	var contact := BattleSimLib.to_cell(encounter.get("position",
-		encounter.get("contact", Vector2i.ZERO)))
+	#
+	# §4.11.1 pins `contact` as **the player's world tile at contact**, so the
+	# descriptor's `contact` (written by S3, `world_map._encounter_for`) wins over
+	# the marker's own `position`: the §4.11.1 seed and the §4.11.10 "fleet is
+	# placed on the contact tile" return both use it, and using the marker tile
+	# would reproduce neither. `position` stays the fallback for a hand-built
+	# encounter that carries only the marker shape.
+	var contact := BattleSimLib.to_cell(encounter.get("contact",
+		encounter.get("position", Vector2i.ZERO)))
 	var kind := str(encounter.get("kind", "pirate"))
 	var day := int(encounter.get("day", GameState.day))
 	var enemy_ships = encounter.get("ships", [])
@@ -1277,10 +1284,13 @@ func _finish_battle() -> void:
 	last_outcome = (sim.outcome() as Dictionary).duplicate(true)
 
 	# 2. Fleet effects (task C) — guarded.
+	# §4.12.3 pins the second argument as `BattleSim.units()` (the engine's unit
+	# dicts, used to tag each capture with the enemy fleet index it came from);
+	# handing it bare ship instances made `captured_units[].index` always −1.
 	var result_module = _guarded_apply(BATTLE_RESULT_PATH)
 	if result_module != null:
 		var applied = result_module.call("apply", last_outcome,
-			_enemy_instances(), GameState.fleet)
+			sim.units(), GameState.fleet)
 		if applied is Dictionary:
 			last_outcome = (applied as Dictionary).duplicate(true)
 
@@ -1337,12 +1347,29 @@ func _guarded_module(path: String) -> Variant:
 
 
 ## §4.12.4 step 4: drop the marker and record the 3-day spawn immunity.
+##
+## §4.10/§4.11.11.1 exception: a `retreat` does **not** resolve the battle, so
+## the marker stays on the map and takes the +1 day pursuit cooldown instead of
+## being despawned (§4.11.10's "marker is removed" is the aftermath of a
+## resolved battle only). Deleting it here made the retreat rule unreachable:
+## S3's `battle_finished` handler then had no marker left to put on cooldown, so
+## retreating erased the enemy fleet. Both writes are idempotent (they mutate
+## `GameState.hostile_fleets` by id), so S3 applying the same cooldown again is
+## harmless.
 func _cleanup_encounter(encounters_module) -> void:
 	var encounter_id := str(last_outcome.get("encounter_id", ""))
+	var kind := str(last_outcome.get("kind", ""))
+	var retreated := str(last_outcome.get("result", "")) == BattleSimLib.RESULT_RETREAT
 	if not encounter_id.is_empty() and encounters_module.has_method("remove"):
-		encounters_module.call("remove", encounter_id)
+		if retreated and encounters_module.has_method("set_pursuit_cooldown"):
+			# The +1 day is the module's own pin (`PURSUIT_COOLDOWN_DAYS`,
+			# §4.10/§4.11.11.1); read it instead of restating the number.
+			var cooldown_days: int = int(encounters_module.get("PURSUIT_COOLDOWN_DAYS"))
+			encounters_module.call("set_pursuit_cooldown", encounter_id,
+				int(GameState.day) + cooldown_days)
+		else:
+			encounters_module.call("remove", encounter_id)
 	if encounters_module.has_method("set_cooldown"):
-		var kind := str(last_outcome.get("kind", ""))
 		if not kind.is_empty():
 			encounters_module.call("set_cooldown", kind,
 				int(GameState.day) + SPAWN_IMMUNITY_DAYS)
@@ -1658,18 +1685,6 @@ func _enemy_nation_color() -> Color:
 	if nation.is_empty():
 		return PaletteLib.BAD
 	return PaletteLib.nation_color(str(nation.get("color", "#b3341f")))
-
-
-## The enemy hull instances handed to `BattleResult.apply` (§4.12.3).
-func _enemy_instances() -> Array:
-	var out: Array = []
-	if sim == null:
-		return out
-	for unit in sim.units():
-		if str(unit.get("side", "")) == BattleSimLib.SIDE_ENEMY:
-			var ship = unit.get("ship", {})
-			out.append((ship as Dictionary).duplicate(true) if ship is Dictionary else {})
-	return out
 
 
 func _seed_cursor() -> void:
