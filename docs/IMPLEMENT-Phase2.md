@@ -2,9 +2,10 @@
 
 Ordered backlog (lettered sections, coarser than Phase 1 by design; details
 marked **task-owned** are decided inside the task, following the cited doc).
-Execute as background-subagent waves per the plan at the bottom (max 4
-concurrent). Prerequisite: Phase 1 complete (`IMPLEMENT-Phase1.md` T19
-passed).
+Execute as background-subagent waves per the plan at the bottom: **max 4
+concurrent subagents, one git worktree per subagent, master merges each
+finished branch.** Prerequisite: Phase 1 complete (`IMPLEMENT-Phase1.md`
+T19 passed).
 
 ## A. Save migration v1 → v2
 
@@ -67,41 +68,92 @@ passed).
 
 ---
 
-## Subagent execution plan (max 4 background subagents)
+## Subagent execution plan (max 4 background subagents, one worktree each)
 
-Same protocol as `IMPLEMENT-Phase1.md` (background `general` subagents, max 4
-concurrent, wave-gated, orchestrator-owned `data/ui_strings.json`, validator
-run after any wave that touched `data/`); the summary here is self-sufficient.
+Same protocol as `IMPLEMENT-Phase1.md`, hardened with the W9/W10 lesson from
+that phase: **every subagent works in its own git worktree and never in the
+master's tree; the master agent alone merges.** The summary here is
+self-sufficient.
 
-- **Launch:** per wave, one background subagent per task, all launched as
-  parallel calls in one message; wait for every report + done-when
-  verification before the next wave.
+- **Roles:** the master (orchestrating session) owns the base branch, creates
+  and removes worktrees, runs every merge, resolves conflicts, and is the only
+  writer of `data/ui_strings.json`. Subagents implement one task each inside
+  their worktree and commit there.
+- **Launch:** per wave, the master creates one worktree + branch per task
+  (`git worktree add ../sailage-w1-a -b p2/w1-a main`), then launches one
+  background `general` subagent per task as parallel calls in one message,
+  passing the worktree path. At most **4** run concurrently; further ready
+  tasks queue FIFO. Never launch a subagent without a dedicated worktree.
 - **Subagent prompt:** the task block verbatim + cited `60-*`/`80-*`/`10-*`
-  sections + the AGENTS.md hard rules + the wave's pins; the report lists
-  every done-when criterion with its pass/fail result.
-- **Hard rules:** no two running subagents edit the same file (the
-  orchestrator merges `ui_strings.json` keys from reports); a blocked
-  subagent stops and reports — the orchestrator amends the owning doc first,
-  then relaunches.
+  sections + the AGENTS.md hard rules + the wave's pins + the worktree path
+  and branch name; the report lists every done-when criterion with its
+  pass/fail result, the branch name + commit SHA, the test/validator commands
+  run and their output, and any new `ui_strings.json` keys (zh + en) as text.
+- **Subagent boundaries:** a subagent edits only files under its worktree; it
+  does not touch `main`, does not create other worktrees, does not merge or
+  rebase onto the base branch, and does not edit `data/ui_strings.json`
+  (exception: a wave with a single subagent — W3 — owns that file outright).
+  Uncommitted work in a worktree is a failed report.
+- **Hard rules:** no two running subagents edit the same file (worktrees make
+  ownership physical, but a merge still conflicts if two branches touch one
+  file); the master merges `ui_strings.json` keys from reports itself; a
+  blocked subagent stops and reports — the master amends the owning doc first,
+  then relaunches it in a fresh worktree.
+- **Wave gate:** a wave is done only when every subagent has reported, the
+  master has merged every branch, and the merged tree passes the full check
+  (`python3 tools/validate_data.py` if the wave touched `data/`, plus the
+  relevant headless Godot tests with script-error counts compared against the
+  pre-merge baseline). Only then does the next wave launch.
 
-| Wave | Background subagents (parallel) | Gate (after) |
-|---|---|---|
-| W1 | A, B, E | — |
-| W2 | C, D, F | W1 |
-| W3 | G | W2 |
-| W4 | H | W3 |
+### Merge protocol (master only)
+
+1. Read every report; reject a branch whose done-when results are missing or
+   whose report does not name a commit SHA.
+2. Merge branches **one at a time, in the wave's listed order**, with
+   `git merge --no-ff p2/<wave>-<task>` on the base branch — never a
+   multi-branch octopus merge.
+3. After each merge, run `python3 tools/validate_data.py` (must exit 0) and
+   the touched headless tests; **compare check counts**, not just the
+   `ALL PASS` line (Phase 1 lost 141→103 checks behind a green summary).
+4. On conflict: prefer the branch that matches the owning doc and the wave
+   pin; if the branches encode two different models of the same rule, stop,
+   amend the owning system doc (`00-OVERVIEW.md` §13), and reconcile by hand
+   in the merged tree before continuing.
+5. After the wave is green, apply the collected `ui_strings.json` keys in one
+   commit, re-run the validator, remove the merged worktrees
+   (`git worktree remove ../sailage-w<n>-<task>`), and delete the branches.
+6. Record any deviation (relaunch, pin change, reordering) in a completion
+   record at the bottom of this file, as Phase 1 does.
+
+| Wave | Background subagents (parallel, one worktree each) | Merge order | Gate (after) |
+|---|---|---|---|
+| W1 | A, B, E | A → B → E | — |
+| W2 | C, D, F | C → D → F | W1 |
+| W3 | G | G | W2 |
+| W4 | H | H | W3 |
 
 Wave notes:
 
 - **W1 ownership split:** A owns GameState/save fields + `MIGRATIONS[1]`;
   B keeps all battle state local to `battle_sim.gd` (headless, no GameState
   edits in this wave); E owns `data/equipment.json` + shipyard refit
-  activation.
+  activation. Disjoint files, so the three worktrees share nothing at merge
+  except possibly `ui_strings.json` keys, which the master applies.
 - **P2 (C∥D):** C implements `duel_modal.tscn` +
   `Duel.start(config) -> outcome` per `60-*` §4.6/§6; D's boarding action
-  calls that API. C does not edit battle scenes.
+  calls that API. C does not edit battle scenes. C merges first so D's call
+  resolves; D's worktree must not stub `Duel` itself.
 - **P3 (D∥F):** D exposes `open_battle(encounter) -> result`; F calls it on
-  contact per `60-*` §4.1 and does not edit battle scenes.
+  contact per `60-*` §4.1 and does not edit battle scenes. D merges first;
+  if F's branch was cut before D landed, the master rebases the F branch onto
+  the merged base and re-runs F's tests before merging.
 - **Signal boundary:** D/F only emit the battle/duel outcome signals (per
-  `90-*` §5.1); G (W3) applies loot gold, battle XP, and reputation deltas
-  and adds the `battle.*`/`duel.*` strings.
+  `90-*` §5.1); G (W3, single subagent, own worktree) applies loot gold,
+  battle XP, and reputation deltas and adds the `battle.*`/`duel.*` strings
+  (G *may* edit `ui_strings.json` directly — it is the only subagent in its
+  wave; conflicts are impossible).
+- **H (W4):** the acceptance task runs against the fully merged tree, so its
+  worktree is cut from the post-W3 base and its branch carries only the E2E
+  scripts + completion record; the master verifies all four scenarios before
+  merging.
+
