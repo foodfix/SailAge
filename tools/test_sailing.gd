@@ -427,34 +427,38 @@ func _test_port_day() -> void:
 	_check(not SailingSimLib.in_port(), "in_port() is false at sea")
 
 
-# --- T7 boundary: step 3 (T8) and step 4 (T9) ----------------------------
-# T8 landed the weather roll at step 3, so the T7-era "weather is untouched"
-# assertion is superseded: a ledger day now *must* write `world.weather`. The
-# morale half of the boundary still holds (step 4 is T9's) and is asserted here
-# unchanged. T8's own suite is `tools/test_weather.tscn`.
+# --- T7 boundary: steps 3–6 (T8/T9) --------------------------------------
+# T8 landed the weather roll at step 3 and T9 landed morale/fail states/mutiny
+# at steps 4–6, so the T7-era "no mutation" contract is superseded by the exact
+# §4.8.1 deltas (T9 owns the full matrix in `tools/test_morale.tscn`). What
+# this T7 suite still proves: step 3 writes `world.weather`, step 4 applies the
+# *documented* delta (−1 at sea, +5 in port), and no transient ledger key leaks
+# into the §8.1 save block.
 
 func _test_no_weather_or_morale_mutation() -> void:
-	# 9. One full ledger day must leave step 4 (morale) alone.
+	# 9. One fully-supplied sea day: §4.8.1 "at sea, fully supplied −1".
 	_make_run(15, 10, 10, 1000, "fair")
 	GameState.morale = 63
-	var morale_before := GameState.morale
+	SailingSimLib.set_weather_seed(7)
 	SailingSimLib.last_day_storm = false
 	_one_day()
 	_check(str(GameState.world["weather"]) in SailingSimLib.WEATHER_OUTCOMES,
 		"ledger step 3 rolls a §4.7 weather outcome (T8) (got '%s')"
 		% str(GameState.world["weather"]))
-	_check(GameState.morale == morale_before,
-		"ledger step 1–3 does not touch morale (63 → %d)" % GameState.morale)
+	var expected := 63 - 1 - (5 if SailingSimLib.last_day_storm else 0)
+	_check(GameState.morale == expected,
+		"step 4 applies the §4.8.1 sea delta (−1, −5 on a storm day): 63 → %d (got %d)"
+		% [expected, GameState.morale])
 	_check(not GameState.world.has("last_ledger_day"),
 		"no transient ledger keys leak into GameState.world")
 
-	# Same in port: the +5 morale is T9's, not T7's.
+	# Same in port: step 4 applies the §4.8.1 "+5, up to the port cap 80".
 	_make_run(15, 10, 10, 1000)
 	GameState.current_port = "lisbon"
 	GameState.morale = 63
 	SailingSimLib.advance_port_day()
-	_check(GameState.morale == 63,
-		"in-port day leaves morale at 63 (the +5 is T9's) (got %d)" % GameState.morale)
+	_check(GameState.morale == 68,
+		"in-port day applies the +5 (63 → %d)" % GameState.morale)
 
 
 # --- Harness --------------------------------------------------------------

@@ -170,6 +170,20 @@ Clamp result to [0, 100]. Morale tiers (HUD colors in `80-*`):
 | Dangerous | 20–39 (HUD yellow warning) |
 | Mutinous | 0–19 (HUD red warning) |
 
+**Normative clarifications (resolved while implementing).**
+
+1. **Port cap scope.** The in-port `+5` is raised only up to the cap:
+   `morale = min(morale + 5, max(morale, 80))`. A fleet already above 80 keeps
+   its value (no forced decay to 80), and the cap never suppresses at-sea
+   losses; the outer `[0, 100]` clamp still applies.
+2. **"Wages unpaid" is not at-sea-only.** The −5 row applies on any day the
+   gold clamp fired, in port included (so an unpaid port day nets `+5 −5 = 0`).
+3. **Acceptance sampling.** The mutiny rate is `0.25 × (1 − (leadership−10)/200)`
+   per at-sea day, so the 5-day compounded probability is `1 − 0.75⁵ = 0.7627`
+   at leadership 10. Verify against that value within **±0.02** using ≥ 4000
+   seeded trials; an exact `≥ 0.76` threshold has a 0.0067 standard error at
+   n = 4000 and is flaky.
+
 #### 4.8.2 Desertion
 
 On every port entry, if morale < 40: `crew -= max(1, floor(crew × 0.10))`

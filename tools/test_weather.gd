@@ -100,10 +100,10 @@ func _make_run(
 		"clock_fraction": 0.0,
 		"weather": weather,
 	}
-	SailingSimLib.last_day_shortfalls = {"provisions": false, "water": false}
-	SailingSimLib.last_day_unpaid_wages = false
-	SailingSimLib.last_day_wages = 0
-	SailingSimLib.last_day_storm = false
+	# T9's transient statics: counters, game-over flag, dialog buffer, mutiny
+	# offer and the per-tick flags (a previous scenario's storm/death must never
+	# freeze this one).
+	SailingSimLib.reset_ledger_state()
 
 
 func _one_day() -> int:
@@ -126,6 +126,18 @@ func _sample_storms(count: int) -> int:
 func _tile(x: int, y: int) -> Vector2i:
 	GameState.world["position"] = {"x": x, "y": y}
 	return Vector2i(x, y)
+
+
+## Restores stores and hull for the long weather loops: T9's ledger would
+## otherwise starve or sink the fixture before the loop finishes, and this
+## suite measures the §4.7 roll, not the §4.9 fail states.
+func _refill() -> void:
+	for ship in GameState.fleet:
+		ship["durability"] = FleetLib.ship_stat(ship, "durability")
+		ship["provisions"] = 500
+		ship["water"] = 500
+	GameState.gold = 100000
+	GameState.morale = 70
 
 
 # --- §4.7 zone table -------------------------------------------------------
@@ -391,25 +403,28 @@ func _test_storm_damage_applied_to_fleet() -> void:
 		"a hull already at 0 emits nothing and stays 0")
 
 
-# --- T8 does not touch morale (that is T9's step 4) -----------------------
+# --- T8 rolls the storm; T9's step 4 prices it ----------------------------
+# T8 owns the roll and the damage only. Since T9 landed step 4, a storm day now
+# *does* cost morale (−5) on top of the −1 sea baseline; this suite asserts the
+# §4.8.1 arithmetic so a regression in either step is visible here.
 
 func _test_no_morale_change() -> void:
 	# Force a storm day deterministically by driving the ledger until one lands;
-	# then assert the flag is set and morale is untouched.
+	# then assert the flag is set and morale followed the §4.8.1 delta.
 	_make_run("fair", ATLANTIC_CELL, 10)
 	GameState.morale = 70
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	var storm_days := 0
-	var morale_before: Array[int] = []
 	for day in 6:
 		var before := GameState.morale
 		_one_day()
-		morale_before.append(before)
+		# The flag read *after* the tick describes the day just run.
+		var expected := before - 1 - (5 if SailingSimLib.last_day_storm else 0)
 		if SailingSimLib.last_day_storm:
 			storm_days += 1
-		_check(GameState.morale == before,
-			"storm-or-not day %d leaves morale at %d (T9 owns step 4; got %d)"
-			% [day + 1, before, GameState.morale])
+		_check(GameState.morale == expected,
+			"day %d: §4.8.1 delta −1%s → %d (got %d)"
+			% [day + 1, " −5 (storm)" if SailingSimLib.last_day_storm else "", expected, GameState.morale])
 	_check(storm_days > 0,
 		"the seeded 6-day Atlantic run contains at least one storm (got %d)" % storm_days)
 
@@ -421,6 +436,9 @@ func _test_no_morale_change() -> void:
 	var previous_was_storm := false
 	var mismatches := 0
 	for day in 40:
+		# Weather-only fixture: keep T9's fail states (T9 suffix of the ledger)
+		# out of the measurement by restoring stores and hull each day.
+		_refill()
 		_one_day()
 		var now_storm: bool = str(GameState.world["weather"]) == "storm"
 		if SailingSimLib.last_day_storm != now_storm:
@@ -438,15 +456,15 @@ func _test_no_morale_change() -> void:
 	_check(saw_flag_false_after_storm,
 		"last_day_storm is cleared again on the next non-storm day")
 
-	# In port too: the roll still happens (zone-based) but morale is untouched.
+	# In port too: the roll still happens (zone-based), and step 4 applies the
+	# in-port +5 up to the port cap 80 (§4.8.1) — never a sea delta.
 	_make_run("fair", ATLANTIC_CELL, 10)
 	GameState.current_port = "lisbon"
 	GameState.morale = 70
-	var port_morale := GameState.morale
 	for day in 20:
 		SailingSimLib.advance_port_day()
-	_check(GameState.morale == port_morale,
-		"port day-advances never change morale in T8 (70 → %d)" % GameState.morale)
+	_check(GameState.morale == SailingSimLib.MORALE_PORT_CAP,
+		"port day-advances climb +5 to the cap 80 (70 → %d)" % GameState.morale)
 
 
 # --- Persistence: the roll is written into GameState.world ----------------
@@ -457,6 +475,7 @@ func _test_weather_persists() -> void:
 	var seen := {}
 	var invalid: Array[String] = []
 	for day in 200:
+		_refill()
 		_one_day()
 		var weather := str(GameState.world["weather"])
 		seen[weather] = true

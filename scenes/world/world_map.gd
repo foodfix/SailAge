@@ -20,6 +20,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 
 ## Phase-1 map file (docs/10-* §6.1). Swapping maps is a path change only.
 const MAP_PATH := "res://data/maps/p1_mediterranean.txt"
@@ -61,6 +62,10 @@ var _cell_pixels := 32
 var _fleet_cell := FALLBACK_CELL
 ## One-shot guard so repeated blocked clicks log once instead of spamming.
 var _reject_logged := false
+## Port entry waiting for the §4.7 dialog chain to finish before routing (S4).
+var _pending_port_id: String = ""
+## The S9 overlay (null until a game over fires).
+var _gameover: Control = null
 
 
 func _ready() -> void:
@@ -99,6 +104,14 @@ func _ready() -> void:
 
 	# S14 character panel: parent-agnostic modal that owns `C`/Esc (docs/80-* §4.3).
 	CharacterPanelLib.attach_to(self)
+
+	# T9 signals: day-tick dialogs (weather damage → mutiny → desertion →
+	# greeting, §4.7), the mutiny choice and the S9 game-over overlay.
+	EventBus.day_advanced.connect(_on_day_advanced)
+	EventBus.game_over.connect(_on_game_over)
+	if _hud != null:
+		_hud.mutiny_choice.connect(_on_mutiny_choice)
+		_hud.dialogs_finished.connect(_on_dialogs_finished)
 
 
 func _process(_delta: float) -> void:
@@ -225,15 +238,149 @@ func _enter_port(port_id: String) -> void:
 	GameState.current_port = port_id
 	EventBus.port_entered.emit(port_id)
 	_sync_hud()
+
+	# §4.8.2 desertion on **every** port entry (morale < 40). The sim owns the
+	# loss; this scene owns the message, queued in §4.7 order with the greeting.
+	var entries: Array = []
+	if _has_game():
+		var lost: int = SailingSimLib.apply_desertion()
+		if lost > 0:
+			entries.append({
+				"kind": "desertion", "key": "world.desertion",
+				"values": {"count": lost},
+			})
+		entries.append({
+			"kind": "greeting", "key": "world.arrive",
+			"values": {
+				"port": I18n.t(DataLoader.get_port(port_id).get("name", {})),
+				"day": GameState.day,
+			},
+		})
+	_sync_hud()
+
 	# TODO(T11): the port screen is owned by T11 and does not exist yet. Until
 	# it does, announce and stay on the map (docs/90-* §7 world→port route).
-	if ResourceLoader.exists(PORT_SCENE):
-		GameState.change_scene(PORT_SCENE)
-	else:
+	if not ResourceLoader.exists(PORT_SCENE):
 		push_warning("WorldMap: %s missing (T11); staying on the world map" % PORT_SCENE)
-		_hud.toast_key("world.enter_port", {
-			"port": I18n.t(DataLoader.get_port(port_id).get("name", {})),
+		_show_dialog_entries(entries)
+		return
+	# Route **after** the dialogs so the desertion/greeting chain is not thrown
+	# away by the scene swap (§4.7 "never simultaneously", and an arrival report
+	# the player never sees would hide a crew loss).
+	_pending_port_id = port_id
+	_show_dialog_entries(entries)
+	if not (_hud != null and _hud.has_modal()):
+		_route_to_pending_port()
+
+
+## Shows `entries` through the HUD's single §4.7 queue, sorted by DIALOG_ORDER
+## (weather damage → mutiny → desertion → arrival greeting). Entries queued
+## while another dialog is up are appended, so a port entry during a day-tick
+## chain still reads in order.
+func _show_dialog_entries(entries: Array) -> void:
+	if _hud == null or entries.is_empty():
+		return
+	_hud.show_dialogs(SailingSimLib.sort_dialogs(entries))
+
+
+func _on_dialogs_finished() -> void:
+	if not _pending_port_id.is_empty():
+		_route_to_pending_port()
+
+
+func _route_to_pending_port() -> void:
+	var port_id := _pending_port_id
+	_pending_port_id = ""
+	if port_id.is_empty() or not ResourceLoader.exists(PORT_SCENE):
+		return
+	GameState.change_scene(PORT_SCENE)
+
+
+## §4.5 steps 3–6 produce their reports here, in the §4.7 fixed order. Step 3
+## already ran (storm damage is applied in the ledger); this only *reports* it,
+## then appends the sim's own entries (mutiny, ship lost, …) which step 6 sorted
+## into `last_day_dialogs`, and finally the arrival greeting.
+func _on_day_advanced(_new_day: int) -> void:
+	if not _has_game():
+		return
+	# A fatal tick emits `game_over` *inside* the ledger, i.e. before this
+	# signal: S9 already owns the screen, so the dead day's reports must not be
+	# queued underneath it (§4.7 "never simultaneously").
+	if SailingSimLib.is_game_over() or game_over_open():
+		SailingSimLib.take_last_day_dialogs()
+		return
+	var entries: Array = []
+	# 1. Weather damage (§4.7 first in the queue).
+	if SailingSimLib.was_storm_last_day() and not SailingSimLib.last_day_storm_damage.is_empty():
+		entries.append({
+			"kind": "weather", "key": "world.storm_notice",
+			"values": {"weather": I18n.t_key("world.weather.storm")},
 		})
+		for hit in SailingSimLib.last_day_storm_damage:
+			var ship_type: Dictionary = DataLoader.get_ship_type(
+				str(hit.get("ship_type_id", ""))
+			)
+			entries.append({
+				"kind": "weather", "key": "world.storm_damage",
+				"values": {
+					"name": I18n.t(ship_type.get("name", {})),
+					"points": int(hit.get("points", 0)),
+				},
+			})
+	# 2. / 3. Mutiny and any other sim-raised entry (already ordered); the
+	# desertion entry belongs to port entry (§4.8.2) and the greeting to the
+	# port-entry sequence, so neither is produced here.
+	entries.append_array(SailingSimLib.take_last_day_dialogs())
+	_show_dialog_entries(entries)
+
+
+## §4.8.3 mutiny resolution: the HUD reports which button was pressed; the sim
+## owns every state change, so the scene stays a thin adapter. A resolution can
+## raise its own report (the fizzle message), which is flushed right away.
+func _on_mutiny_choice(choice: String) -> void:
+	match choice:
+		"pay":
+			SailingSimLib.resolve_mutiny_pay()
+		"suppress":
+			SailingSimLib.resolve_mutiny_suppress()
+		_:
+			SailingSimLib.resolve_mutiny_fizzle()
+	_sync_hud()
+	# A resolution changes morale without a matching EventBus signal (there is
+	# no `morale_changed` in docs/90-* §5.1), so the host performs the one
+	# explicit refresh the HUD contract allows (docs/80-* §7).
+	if _hud != null and _hud.has_method("refresh"):
+		_hud.refresh()
+	_show_dialog_entries(SailingSimLib.take_last_day_dialogs())
+
+
+## §4.9 sea death: show S9 over the map (docs/80-* §4.1/§4.2). No save is
+## written or deleted; S9 routes back to the title on any key.
+func _on_game_over(reason: String) -> void:
+	if _gameover != null:
+		return
+	# A dead run's pending reports (storm damage, mutiny, desertion) must not
+	# sit under S9 — the screen is terminal (§4.7 "never simultaneously").
+	_pending_port_id = ""
+	if _hud != null and _hud.has_method("clear_dialogs"):
+		_hud.clear_dialogs()
+	var layer := get_node_or_null("GameOverLayer") as CanvasLayer
+	if layer == null:
+		layer = CanvasLayer.new()
+		layer.name = "GameOverLayer"
+		# Above the HUD (layer 1) and the error overlay (layer 2): S9 is the
+		# topmost thing on a dead run.
+		layer.layer = 3
+		add_child(layer)
+	_gameover = GameOverScene.instantiate()
+	_gameover.name = "GameOverScreen"
+	layer.add_child(_gameover)
+	_gameover.open_reason(reason)
+
+
+## True once S9 is on screen (a fatal tick raises it before `day_advanced`).
+func game_over_open() -> bool:
+	return _gameover != null and _gameover.is_open()
 
 
 func _is_adjacent(target: Vector2i) -> bool:

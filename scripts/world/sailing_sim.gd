@@ -13,9 +13,12 @@ extends RefCounted
 ##       (wages), plus the `advance_port_day()` port-day entry point. The day
 ##       increment calls the ledger *before* `day_advanced` is emitted so every
 ##       listener sees a finished day (§4.3).
-##   T8 (this file today): ledger step 3 — the §4.7 zone/luck weather roll,
-##       the storm damage application and the `last_day_storm` flag T9 reads.
-##   T9: ledger steps 4–6 (morale, fail states, mutiny, §4.8–§4.9).
+##   T8: ledger step 3 — the §4.7 zone/luck weather roll, the storm damage
+##       application and the `last_day_storm` flag T9 reads.
+##   T9 (this file today): ledger steps 4–6 — the §4.8.1 morale delta and the
+##       `50-*` §4.3 sea-day XP, the §4.9 fail states (sinking, starvation,
+##       scurvy) with their counters and game-over emission, the §4.8.3 mutiny
+##       roll with its three resolutions, and §4.8.2 desertion on port entry.
 ##
 ## `_run_daily_ledger()` is the single seam for all six steps: they run in the
 ## §4.5 order, synchronously, once per day tick at sea **and** on port
@@ -56,6 +59,51 @@ const STORM_DAMAGE_FRACTION := 0.05
 ## 7.000000000000001), so the ceiling is taken on `raw − STORM_DAMAGE_EPSILON`.
 ## This can never drop a real fractional value across an integer boundary.
 const STORM_DAMAGE_EPSILON := 1.0e-9
+
+# --- Morale / fail-state / mutiny constants (docs/20-* §4.8–§4.9) -----------
+
+## §4.8.1 daily delta table, exactly as documented. The at-sea baseline is −1;
+## every other at-sea row is an *additional* −5 (they stack). In port the +5
+## replaces the at-sea rows entirely.
+const MORALE_SEA_DAILY := -1
+const MORALE_SHORTFALL := -5
+const MORALE_STORM := -5
+const MORALE_UNPAID_WAGES := -5
+const MORALE_PORT_DAILY := 5
+## Morale is a 0–100 fleet value (§4.8).
+const MORALE_MIN := 0
+const MORALE_MAX := 100
+
+## §4.9: daily crew loss while starved / scurvy-ridden, `max(1, floor(×0.05))`,
+## never below [constant CREW_FLOOR].
+const STARVATION_CREW_LOSS_FRACTION := 0.05
+## §6: "Crew = 0 impossible: all crew-loss rules floor at 1".
+const CREW_FLOOR := 1
+
+## §4.8.3 mutiny modal: pay off at `crew × 20` gold; suppress costs 30% crew.
+const MUTINY_PAY_PER_CREW := 20
+const MUTINY_SUPPRESS_FRACTION := 0.30
+## §4.8.3 morale outcomes of the three resolutions.
+const MUTINY_PAY_MORALE := 50
+const MUTINY_SUPPRESS_MORALE := 40
+const MUTINY_FIZZLE_MORALE := 5
+
+## §4.7 dialog queue order: weather damage → mutiny → desertion → greeting.
+## Entries are stable-sorted by `kind` through [method sort_dialogs]; the rank
+## table is the single source for that order.
+##
+## `sinking` sits between weather and mutiny because it is ledger step 5's
+## consequence of step 3's storm damage (`40-*` §4.4): a hull that went down in
+## the same storm must be reported before the crew's reaction to it. The doc
+## names the other four explicitly; this fifth slot only orders ship-loss
+## reports, which §4.7 does not list.
+const DIALOG_ORDER := {
+	"weather": 0,
+	"sinking": 1,
+	"mutiny": 2,
+	"desertion": 3,
+	"greeting": 4,
+}
 
 ## §4.4: "minimum 1 tile/day" — speed can never be 0 (§6).
 const MIN_SPEED := 1
@@ -121,10 +169,135 @@ static var last_day_storm: bool = false
 ## diagnostic for tests, not saved.
 static var last_weather_zone: String = ""
 
+## §4.7 storm damage dealt in the most recent tick, `[{ship_type_id, points}]`.
+## Step 3 records it so step 4/T9's world wiring can report each damaged hull
+## (`world.storm_damage`). Not persisted (same rule as `last_day_storm`).
+static var last_day_storm_damage: Array = []
+
 
 ## Reseeds the weather RNG so a test (or a replay) gets an identical sequence.
 static func set_weather_seed(seed_value: int) -> void:
 	rng.seed = seed_value
+
+
+# --- Morale / fail-state state (docs/20-* §4.8–§4.9) -----------------------
+
+## §4.9 starvation counter: number of consecutive shortfall days. A day with
+## provisions in stock resets it to 0. Not persisted: it lives and dies with a
+## day tick (saving happens in port, where the counter is already reset by the
+## next supplied day). Exposed for tests.
+static var starvation_days: int = 0
+## §4.9 scurvy counter: the water mirror of [member starvation_days].
+static var scurvy_days: int = 0
+## §4.8.1 delta applied by the most recent step 4 (diagnostic/HUD, not saved).
+static var last_morale_delta: int = 0
+## Dialogs produced by the most recent tick, `[{kind, key, values, ...}]`, in
+## the order they were raised. [method take_last_day_dialogs] hands them to the
+## world scene, which shows them through the HUD's §4.7 queue. Not persisted.
+static var last_day_dialogs: Array = []
+## §4.8.3 mutiny awaiting a player decision (`{}` when none). Holding the offer
+## here (rather than resolving immediately) is what lets the modal be pure UI:
+## the three [method resolve_mutiny_pay] / [method resolve_mutiny_suppress] /
+## [method resolve_mutiny_fizzle] entry points are the only resolutions.
+static var pending_mutiny: Dictionary = {}
+## Reason of the game-over that ended the run (`""` while alive). Sticky for the
+## rest of the run; [method reset_ledger_state] clears it for a fresh fixture.
+static var game_over_reason: String = ""
+
+## Mutiny RNG, deliberately **separate** from the weather [member rng] so a
+## seeded mutiny test is independent of how many weather rolls happened first
+## (and vice versa). Injectable through [method set_mutiny_seed].
+static var mutiny_rng := RandomNumberGenerator.new()
+
+
+## Reseeds the mutiny RNG (the T8 `set_weather_seed` pattern, own stream).
+static func set_mutiny_seed(seed_value: int) -> void:
+	mutiny_rng.seed = seed_value
+
+
+## Clears every transient ledger static: §4.9 counters, the game-over flag, the
+## per-tick dialog list, a pending mutiny offer and the step 1–3 flags. Tests call
+## it from their fixture builders so one scenario cannot leak into the next; a
+## real new game is detected automatically by [method _maybe_reset_for_new_run].
+static func reset_ledger_state() -> void:
+	starvation_days = 0
+	scurvy_days = 0
+	last_morale_delta = 0
+	last_day_dialogs = []
+	pending_mutiny = {}
+	game_over_reason = ""
+	last_day_shortfalls = {"provisions": false, "water": false}
+	last_day_unpaid_wages = false
+	last_day_wages = 0
+	last_day_storm = false
+	last_day_storm_damage = []
+	_last_run_day = -1
+
+
+## Day of the last completed ledger tick (`-1` before the first one), used only
+## to notice a new run: a run starts at day 1, so `GameState.day` going
+## backwards means "new game or save load".
+static var _last_run_day: int = -1
+
+
+## A fresh run (`GameState.new_game()` resets `day` to 1) must not inherit the
+## previous run's starvation counters or its sticky game-over flag. The sim
+## observes the day rather than editing `GameState.new_game()` (an autoload T9
+## does not own): **any** backwards jump from the last ticked day means "new
+## game or a save load", and resetting transient statics there is harmless —
+## none of them are persisted by design (`last_day_shortfalls`, the counters,
+## the dialog buffer).
+static func _maybe_reset_for_new_run() -> void:
+	if _last_run_day >= 0 and GameState.day < _last_run_day:
+		reset_ledger_state()
+
+
+## True once [member game_over_reason] has been set; the ledger never emits a
+## second game over for the same run.
+static func is_game_over() -> bool:
+	return not game_over_reason.is_empty()
+
+
+## Returns the tick's dialogs in §4.7 order and clears the buffer, so a scene
+## can only ever show them once.
+static func take_last_day_dialogs() -> Array:
+	var out := sort_dialogs(last_day_dialogs)
+	last_day_dialogs = []
+	return out
+
+
+# --- Dialog queue order (docs/80-* §4.7) -----------------------------------
+
+## Stable sort of dialog entries by [constant DIALOG_ORDER]:
+## weather damage → mutiny → desertion → arrival greeting. Godot's built-in
+## `sort_custom` is not stable, so this insertion sort is used instead: two
+## entries of the same kind keep the order they were raised in.
+static func sort_dialogs(entries: Array) -> Array:
+	var out: Array = entries.duplicate()
+	for index in range(1, out.size()):
+		var entry = out[index]
+		var rank := _dialog_rank(entry)
+		var cursor := index - 1
+		while cursor >= 0 and _dialog_rank(out[cursor]) > rank:
+			out[cursor + 1] = out[cursor]
+			cursor -= 1
+		out[cursor + 1] = entry
+	return out
+
+
+static func _dialog_rank(entry) -> int:
+	if entry is Dictionary:
+		return int(DIALOG_ORDER.get(str(entry.get("kind", "")), DIALOG_ORDER.size()))
+	return DIALOG_ORDER.size()
+
+
+## Appends one dialog to this tick's buffer. `extra` carries the optional
+## presentation fields the HUD's queue understands (`modal`, `confirm_key`, …).
+static func _queue_dialog(kind: String, key: String, values: Dictionary = {}, extra: Dictionary = {}) -> void:
+	var entry := {"kind": kind, "key": key, "values": values}
+	for field in extra:
+		entry[field] = extra[field]
+	last_day_dialogs.append(entry)
 
 
 ## docs/20-* §4.7: "Atlantic strip = tiles with `x ≤ 6`", else rest of map.
@@ -202,6 +375,7 @@ static func storm_damage_for(durability_max: int) -> int:
 ## (it only needs to see the 0). Emits `fleet_changed` when anything changed.
 static func apply_storm_damage() -> int:
 	var total := 0
+	last_day_storm_damage = []
 	for ship in GameState.fleet:
 		var before := int(ship.get("durability", 0))
 		var damage := storm_damage_for(FleetLib.ship_stat(ship, "durability"))
@@ -209,6 +383,10 @@ static func apply_storm_damage() -> int:
 		if after != before:
 			ship["durability"] = after
 			total += before - after
+			last_day_storm_damage.append({
+				"ship_type_id": str(ship.get("ship_type_id", "")),
+				"points": before - after,
+			})
 	if total > 0:
 		FleetLib.notify_changed()
 	return total
@@ -326,6 +504,12 @@ static func try_move(to: Vector2i, map = null, from = null) -> bool:
 static func advance_clock(days: float) -> int:
 	if days <= 0.0:
 		return 0
+	# A new run / save load clears the previous run's transient fail-state
+	# statics before the game-over gate below can see them.
+	_maybe_reset_for_new_run()
+	# §4.9: a dead run's clock is frozen (S9 is on screen; nothing may tick).
+	if is_game_over():
+		return 0
 	var fraction := float(GameState.world.get("clock_fraction", 0.0)) + days
 	var ticks := 0
 	while fraction >= 1.0 - CLOCK_EPSILON:
@@ -334,6 +518,10 @@ static func advance_clock(days: float) -> int:
 		ticks += 1
 		_run_daily_ledger()
 		EventBus.day_advanced.emit(GameState.day)
+		# §4.9: a run that just died does not tick further days; the world
+		# scene shows S9 from the `game_over` signal.
+		if is_game_over():
+			break
 	# §4.3: the accumulator invariant is [0,1); the clamp above also absorbs
 	# the tiny negative produced by the epsilon.
 	GameState.world["clock_fraction"] = clampf(fraction, 0.0, 0.999999999)
@@ -375,21 +563,21 @@ static var last_day_wages: int = 0
 ## day, *before* `day_advanced` is emitted, so every listener observes a
 ## finished day (§4.3).
 ##
-## T7 implements steps 1–2; T8 adds step 3. Steps 4–6 are marked hooks below
-## and must be inserted in place — do not restructure this function.
+## Steps 1–2 are T7's, step 3 is T8's, steps 4–6 are T9's. The chain short-
+## circuits: step 4/5 return false when the run ended, so no later step and no
+## later day runs (§4.9).
 static func _run_daily_ledger() -> void:
+	# §4.9: a finished run never ticks again (the world scene shows S9).
+	if is_game_over():
+		return
 	_ledger_consumption()  # T7: step 1
 	_ledger_wages()        # T7: step 2
 	_ledger_weather()      # T8: step 3
-	# T9 HOOK: step 4 morale update (docs/20-* §4.8.1) — reads
-	#   `last_day_shortfalls`, `last_day_unpaid_wages`, `in_port()` and the
-	#   weather rolled in step 3; applies the in-port +5 up to MORALE_PORT_CAP
-	#   and clamps to [0, 100]. The `50-*` §4.3 "+2 XP per day tick at sea"
-	#   award belongs here too (at sea only, never on port day-advances).
-	# T9 HOOK: step 5 fail-state checks (docs/20-* §4.9) — starvation, scurvy
-	#   (counters fed by `last_day_shortfalls`), then sinking.
-	# T9 HOOK: step 6 mutiny check (docs/20-* §4.8.3) — at sea only,
-	#   `GameState.morale < MUTINY_THRESHOLD`, `MUTINY_CHANCE_PER_DAY`.
+	if _ledger_morale():   # T9: step 4
+		if _ledger_fail_states():  # T9: step 5
+			_ledger_mutiny()       # T9: step 6
+	# Remember which day this run has reached (see [_maybe_reset_for_new_run]).
+	_last_run_day = GameState.day
 
 
 ## §4.5 step 1 — consumption. `need = ceil(total_crew / RATION_SIZE)` units of
@@ -442,10 +630,10 @@ static func _ledger_wages() -> void:
 ## the fleet's current tile, writes `GameState.world["weather"]` and, on a
 ## storm, damages every hull and raises [member last_day_storm] for T9's step 4.
 ##
-## T8 deliberately stops short of the storm's morale −5 (§4.8.1) and of any
-## sinking check (§4.9 step 5): it only leaves durability at 0 so T9 can detect
-## it. Runs in port too (the roll is a property of the zone, not of being at
-## sea); T9 decides whether a storm day costs morale there.
+## Stops at the damage: step 4 prices the storm's morale −5 (§4.8.1) and step 5
+## turns a durability of 0 into a sinking (§4.9). Runs in port too (the roll is
+## a property of the zone, not of being at sea); in port the storm contributes
+## no morale row (the +5 replaces the at-sea rows).
 static func _ledger_weather() -> void:
 	var tile: Vector2i = GameState.world_tile()
 	var outcome := roll_weather(tile)
@@ -454,3 +642,313 @@ static func _ledger_weather() -> void:
 	if last_day_storm:
 		apply_storm_damage()
 
+
+# --- Ledger step 4: morale (docs/20-* §4.8.1, docs/50-* §4.3) --------------
+
+## §4.5 step 4 — morale. Builds the §4.8.1 delta and applies it, clamped to
+## [0, 100]. Returns true so [method _run_daily_ledger] can chain step 5/6
+## (the seam would let a future rule abort the tick).
+##
+## The delta, with every at-sea row stacking:
+##
+## | condition                       | delta |
+## |---------------------------------|-------|
+## | at sea, fully supplied          | −1    |
+## | at sea, provisions short        | −5    |
+## | at sea, water short             | −5    |
+## | at sea, storm day               | −5    |
+## | in port (any day advance)       | +5, up to the port cap 80 |
+## | wages unpaid (gold clamped)     | −5    |
+##
+## **In port the +5 replaces the sea rows** (port days are not sea days), and
+## the cap is a ceiling on the *gain*, never on a loss: `min(morale + 5, 80)`
+## only applies when it would raise the value, so a docked fleet at 20 climbs
+## 25 → … → 80 and is never capped downwards. The unpaid-wages row has no
+## at-sea qualifier in the doc, so it applies in port too (a crew in harbour
+## that is not paid is just as mutinous).
+##
+## Also here, deferred from T7 (`50-*` §4.3): **+2 XP per day tick at sea
+## only**, never on a port day advance.
+static func _ledger_morale() -> bool:
+	var delta := MORALE_SEA_DAILY if not in_port() else MORALE_PORT_DAILY
+	var before := GameState.morale
+	if not in_port():
+		if bool(last_day_shortfalls.get("provisions", false)):
+			delta += MORALE_SHORTFALL
+		if bool(last_day_shortfalls.get("water", false)):
+			delta += MORALE_SHORTFALL
+		if last_day_storm:
+			delta += MORALE_STORM
+		# docs/50-* §4.3, deferred from T7: +2 XP per day tick **at sea only**.
+		# Guarded so a fleetless/playerless debug fixture (docs/50-* §4.7
+		# harbor relief) still ticks without an error.
+		if not GameState.player.is_empty():
+			CharacterLib.award_xp(2)
+	if last_day_unpaid_wages:
+		delta += MORALE_UNPAID_WAGES
+
+	last_morale_delta = delta
+	var after := before + delta
+	if in_port() and delta > 0:
+		# §4.8.1 "up to the port cap 80": the cap bounds the *rise*; a decrease
+		# is never pulled back up to it.
+		after = mini(after, maxi(before, MORALE_PORT_CAP))
+	GameState.morale = clampi(after, MORALE_MIN, MORALE_MAX)
+	return true
+
+
+# --- Ledger step 5: fail states (docs/20-* §4.9) ---------------------------
+
+## §4.5 step 5 — fail states, in the documented order: **sinking, starvation,
+## scurvy**. Returns false when the run ended, so step 6 and every later day
+## are skipped (§4.9: "game over fires at 7 days regardless", no further ticks).
+static func _ledger_fail_states() -> bool:
+	if _resolve_sinking():
+		return false
+	return _advance_starvation_and_scurvy()
+
+
+## Sinking (docs/20-* §4.9, docs/40-* §4.4). A hull at durability ≤ 0:
+## · non-flagship → hull and cargo lost, `world.ship_lost` dialog;
+## · flagship with escorts → crew/provisions/water/cargo relocate to the next
+##   ship up to capacity (overflow lost), it becomes flagship, and
+##   `world.flagship_lost` is raised;
+## · flagship alone → `game_over("sunk")`.
+## Returns true when a game over fired.
+static func _resolve_sinking() -> bool:
+	# An empty fleet is the harbor-relief state (`50-*` §4.7), not a sinking:
+	# there is no flagship to lose, so there is nothing to check (§6 "the
+	# flagship always sails while the player lives").
+	if GameState.fleet.is_empty():
+		return false
+	# Inspect the flagship first: losing it changes which hull is `fleet[1]`.
+	var flagship: Dictionary = FleetLib.flagship()
+	if int(flagship.get("durability", 0)) <= 0:
+		if GameState.fleet.size() <= 1:
+			return _fire_game_over("sunk")
+		_relocate_flagship_to_escort()
+		_queue_dialog("sinking", "world.flagship_lost")
+		FleetLib.notify_changed()
+		return false
+
+	var lost_escort := false
+	for index in range(GameState.fleet.size() - 1, 0, -1):
+		var ship: Dictionary = GameState.fleet[index]
+		if int(ship.get("durability", 0)) > 0:
+			continue
+		GameState.fleet.remove_at(index)
+		lost_escort = true
+	if lost_escort:
+		_queue_dialog("sinking", "world.ship_lost")
+		FleetLib.notify_changed()
+	return false
+
+
+## docs/40-* §4.4 flagship replacement: the next ship takes the crew (capped at
+## its `crew_max`), then provisions/water/goods up to its free capacity; what
+## does not fit is lost with the old hull (the overflow is reported by the
+## dialog, never silently — §6).
+static func _relocate_flagship_to_escort() -> void:
+	var old: Dictionary = GameState.fleet[0]
+	var next: Dictionary = GameState.fleet[1]
+	var crew := int(old.get("crew", 0))
+	next["crew"] = mini(int(next.get("crew", 0)) + crew, FleetLib.ship_stat(next, "crew_max"))
+	for kind in ["provisions", "water"]:
+		var room := maxi(0, FleetLib.free_capacity(next))
+		var moved := mini(int(old.get(kind, 0)), room)
+		next[kind] = int(next.get(kind, 0)) + moved
+	var old_cargo: Dictionary = old.get("cargo", {})
+	var next_cargo: Dictionary = next.get("cargo", {})
+	for good_id in old_cargo:
+		var room := maxi(0, FleetLib.free_capacity(next))
+		if room <= 0:
+			break
+		var moved := mini(int(old_cargo[good_id]), room)
+		if moved > 0:
+			next_cargo[good_id] = int(next_cargo.get(good_id, 0)) + moved
+	next["cargo"] = next_cargo
+	GameState.fleet.remove_at(0)
+
+
+## §4.9 starvation/scurvy counters and their crew loss. Each shortfall day
+## advances its counter by one and costs `max(1, floor(crew × 0.05))` crew
+## (floored at 1, §6); both counters reset on the first fully-supplied day.
+## The morale −5 is step 4's shortfall row — deliberately **not** re-applied
+## here. Returns false when a counter reached [constant STARVATION_LIMIT_DAYS].
+static func _advance_starvation_and_scurvy() -> bool:
+	var provisions_short: bool = bool(last_day_shortfalls.get("provisions", false))
+	var water_short: bool = bool(last_day_shortfalls.get("water", false))
+	# §4.9: "counters reset to 0 on the first fully-supplied day" — both.
+	if not provisions_short and not water_short:
+		starvation_days = 0
+		scurvy_days = 0
+		return true
+	if provisions_short:
+		starvation_days += 1
+		_apply_crew_loss(STARVATION_CREW_LOSS_FRACTION)
+	if water_short:
+		scurvy_days += 1
+		_apply_crew_loss(STARVATION_CREW_LOSS_FRACTION)
+	if starvation_days >= STARVATION_LIMIT_DAYS:
+		return _fire_game_over("starvation")
+	if scurvy_days >= STARVATION_LIMIT_DAYS:
+		return _fire_game_over("scurvy")
+	return true
+
+
+## `crew -= max(1, floor(crew × fraction))`, never below [constant CREW_FLOOR]
+## (§6 "all crew-loss rules floor at 1"). Returns the crew actually lost.
+static func _apply_crew_loss(fraction: float) -> int:
+	var ship: Dictionary = FleetLib.flagship()
+	if ship.is_empty():
+		return 0
+	var crew := int(ship.get("crew", 0))
+	if crew <= CREW_FLOOR:
+		return 0
+	var loss := maxi(1, int(floor(float(crew) * fraction)))
+	var after := maxi(CREW_FLOOR, crew - loss)
+	ship["crew"] = after
+	FleetLib.notify_changed()
+	return crew - after
+
+
+# --- Ledger step 6: mutiny (docs/20-* §4.8.3) ------------------------------
+
+## §4.5 step 6 — mutiny check. At sea only, below [constant MUTINY_THRESHOLD]:
+## one draw of the **dedicated** [member mutiny_rng] against
+## `MUTINY_CHANCE_PER_DAY × Character.mutiny_multiplier()`. A hit stores the
+## offer in [member pending_mutiny] and queues the `world.mutiny.text` modal in
+## the §4.7 dialog order; the player's choice is resolved by the three pure
+## `resolve_mutiny_*` entry points ([method resolve_mutiny_pay],
+## [method resolve_mutiny_suppress], [method resolve_mutiny_fizzle]).
+##
+## A second offer never stacks: while one is pending the check is skipped, so
+## "modals never simultaneous" (§4.7) holds even across several days.
+static func _ledger_mutiny() -> void:
+	if in_port() or is_game_over():
+		return
+	if not pending_mutiny.is_empty():
+		return
+	if not mutiny_is_possible():
+		return
+	var chance := MUTINY_CHANCE_PER_DAY * CharacterLib.mutiny_multiplier()
+	if mutiny_rng.randf() >= chance:
+		return
+	pending_mutiny = mutiny_offer()
+	# The offer travels with the dialog entry so the HUD can render the Pay price
+	# and disable the impossible buttons without reading sim state itself
+	# (docs/90-* §7: the HUD never mutates or quarantines game state).
+	_queue_dialog(
+		"mutiny", "world.mutiny.text", {},
+		{"mutiny": true, "offer": pending_mutiny.duplicate()}
+	)
+
+
+## True when the §4.8.3 check would roll at all: at sea and strictly below
+## [constant MUTINY_THRESHOLD]. A fleet at exactly 20 is **not** mutinous
+## (the doc's condition is `< 20`).
+static func mutiny_is_possible() -> bool:
+	return not in_port() and GameState.morale < MUTINY_THRESHOLD
+
+
+## The current §4.8.3 offer as `{crew, gap, cost, can_pay, can_suppress,
+## can_fizzle}`; empty when no mutiny is pending. `can_fizzle` is true exactly
+## when neither other option is possible (unpaid **and** crew already at 1).
+static func mutiny_offer() -> Dictionary:
+	var crew := FleetLib.total_crew()
+	var cost := crew * MUTINY_PAY_PER_CREW
+	var can_pay := GameState.gold >= cost
+	var can_suppress := crew > CREW_FLOOR
+	return {
+		"crew": crew,
+		"gap": maxi(0, cost - GameState.gold),
+		"cost": cost,
+		"can_pay": can_pay,
+		"can_suppress": can_suppress,
+		"can_fizzle": not can_pay and not can_suppress,
+	}
+
+
+## §4.8.3 "Pay off": `gold -= crew × 20`, morale = 50. False (state untouched)
+## when nothing is pending or the purse is short; the modal disables the button
+## with `can_pay`, so false only happens on a race or a direct test call.
+static func resolve_mutiny_pay() -> bool:
+	if pending_mutiny.is_empty():
+		return false
+	var offer := mutiny_offer()
+	if not bool(offer["can_pay"]):
+		return false
+	GameState.gold = maxi(0, GameState.gold - int(offer["cost"]))
+	GameState.morale = clampi(MUTINY_PAY_MORALE, MORALE_MIN, MORALE_MAX)
+	pending_mutiny = {}
+	EventBus.gold_changed.emit(GameState.gold)
+	return true
+
+
+## §4.8.3 "Suppress": `crew -= max(1, floor(crew × 0.30))` (floored at 1),
+## morale = 40. False when nothing is pending or the crew is already at 1.
+static func resolve_mutiny_suppress() -> bool:
+	if pending_mutiny.is_empty():
+		return false
+	var offer := mutiny_offer()
+	if not bool(offer["can_suppress"]):
+		return false
+	var ship: Dictionary = FleetLib.flagship()
+	var crew := int(ship.get("crew", 0))
+	ship["crew"] = maxi(CREW_FLOOR, crew - maxi(1, int(floor(float(crew) * MUTINY_SUPPRESS_FRACTION))))
+	GameState.morale = clampi(MUTINY_SUPPRESS_MORALE, MORALE_MIN, MORALE_MAX)
+	pending_mutiny = {}
+	FleetLib.notify_changed()
+	return true
+
+
+## §4.8.3 fizzle: neither pay nor suppress is possible, the crowd disperses and
+## morale rises by 5 (clamped to [0, 100]). Always succeeds when pending.
+static func resolve_mutiny_fizzle() -> void:
+	if pending_mutiny.is_empty():
+		return
+	GameState.morale = clampi(GameState.morale + MUTINY_FIZZLE_MORALE, MORALE_MIN, MORALE_MAX)
+	pending_mutiny = {}
+	_queue_dialog("mutiny", "world.mutiny.fizzle")
+
+
+# --- Desertion on port entry (docs/20-* §4.8.2) ----------------------------
+
+## Every port entry with morale < [constant DESERTION_THRESHOLD] costs
+## `loss = max(1, floor(crew × 0.10 × Character.desertion_multiplier()))` crew,
+## floored at 1. Returns the crew lost (0 when morale is 40+ — the check is
+## `< 40`, so exactly 40 is safe).
+##
+## Pure state, no dialog: the world scene's port-entry sequence queues the
+## `world.desertion` message in §4.7 order, so a headless test can drive the
+## loss without a scene.
+static func apply_desertion() -> int:
+	if GameState.morale >= DESERTION_THRESHOLD:
+		return 0
+	var ship: Dictionary = FleetLib.flagship()
+	if ship.is_empty():
+		return 0
+	var crew := int(ship.get("crew", 0))
+	if crew <= CREW_FLOOR:
+		return 0
+	var raw := float(crew) * DESERTION_FRACTION * CharacterLib.desertion_multiplier()
+	var loss := maxi(1, int(floor(raw)))
+	var after := maxi(CREW_FLOOR, crew - loss)
+	ship["crew"] = after
+	var lost := crew - after
+	if lost > 0:
+		FleetLib.notify_changed()
+	return lost
+
+
+# --- Game over (docs/20-* §4.9) --------------------------------------------
+
+## Emits `EventBus.game_over(reason)` once and records it. Always true so a
+## fail-state check can `return _fire_game_over(...)`. No save is written or
+## deleted (§4.9); the world scene listens and shows S9.
+static func _fire_game_over(reason: String) -> bool:
+	if is_game_over():
+		return true
+	game_over_reason = reason
+	EventBus.game_over.emit(reason)
+	return true

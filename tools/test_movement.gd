@@ -70,9 +70,12 @@ func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 	GameState.fleet = []
 	for ship_id in ship_ids:
 		var ship_type: Dictionary = DataLoader.get_ship_type(str(ship_id))
-		GameState.fleet.append(
-			FleetLib.new_ship(str(ship_id), int(ship_type["crew_min"]))
-		)
+		var ship: Dictionary = FleetLib.new_ship(str(ship_id), int(ship_type["crew_min"]))
+		# T9's ledger consumes supplies and checks fail states, so the movement
+		# fixture has to be a survivable run: ample stores and a healthy morale.
+		ship["provisions"] = 100
+		ship["water"] = 100
+		GameState.fleet.append(ship)
 	GameState.day = 1
 	GameState.gold = 1000
 	GameState.morale = 70
@@ -84,6 +87,47 @@ func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 		"clock_fraction": 0.0,
 		"weather": weather,
 	}
+	# Clear T9's transient ledger statics so one scenario cannot leak into the
+	# next (counters, game-over flag, dialog buffer).
+	SailingSimLib.reset_ledger_state()
+
+
+## Dismisses every queued HUD dialog on `world` (T9 raises weather-damage /
+## mutiny / desertion modals from a day tick, and a modal correctly freezes
+## movement — these tests are about movement, so they close them first).
+## Also closes any modal left over from an earlier test: `queue_free()` is
+## deferred, so a previous host's dialog can still be visible in this frame.
+func _clear_dialogs(world = null) -> void:
+	# Dismiss repeatedly: closing one modal can immediately show the next one
+	# from the §4.7 queue (and free() is deferred inside a single `_ready`), so
+	# a single pass over the group can miss the successor.
+	for pass_index in 64:
+		var visible := []
+		for node in get_tree().get_nodes_in_group("modal_overlay"):
+			if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
+				visible.append(node)
+		if visible.is_empty():
+			break
+		for node in visible:
+			# `confirm_dialog` (the §4.8.3 mutiny modal) has cancel() instead of
+			# close(); both unregister the modal and advance the queue.
+			if node.has_method("close"):
+				node.close()
+			elif node.has_method("cancel"):
+				node.cancel()
+	if world != null:
+		var hud = world.get_node_or_null("HUDLayer/HUD")
+		if hud != null and hud.has_method("has_modal"):
+			var guard := 0
+			while hud.has_modal() and guard < 32:
+				guard += 1
+				var dialog = hud.current_dialog()
+				if dialog == null:
+					break
+				if dialog.has_method("close"):
+					dialog.close()
+				else:
+					dialog.cancel()
 
 
 func _test_map_loads() -> void:
@@ -229,6 +273,7 @@ func _test_eight_direction_stepping() -> void:
 		"move_s": Vector2i(0, 1), "move_se": Vector2i(1, 1),
 	}
 	for action in steps:
+		_clear_dialogs(world)
 		var delta: Vector2i = steps[action]
 		var before: Vector2i = world.fleet_cell()
 		var event := InputEventAction.new()
@@ -241,6 +286,7 @@ func _test_eight_direction_stepping() -> void:
 				action, str(delta), str(after - before), str(GameState.world_tile())
 			])
 		# Step back so every direction starts from the open fixture cell.
+		_clear_dialogs(world)
 		var back: Vector2i = before
 		_check(world.try_step(back), "%s: return step succeeds" % action)
 
@@ -249,6 +295,7 @@ func _test_eight_direction_stepping() -> void:
 		"click maps pixel → the tile under the cursor")
 	_check(world._cell_at(Vector2(OPEN_CELL + Vector2i(1, 0)) * 32.0 + Vector2(4, 4))
 		== OPEN_CELL + Vector2i(1, 0), "click on an adjacent tile maps to it")
+	_clear_dialogs(world)
 	_check(world.try_step(OPEN_CELL + Vector2i(1, 0)),
 		"click-to-step path (try_step) moves east")
 	_check(not world.try_step(OPEN_CELL + Vector2i(5, 5)),
@@ -411,6 +458,7 @@ func _test_port_entry() -> void:
 
 	var ahead := float(GameState.world["clock_fraction"])
 	_check(not GameState.known_ports.has("lisbon"), "lisbon starts unknown in this fixture")
+	_clear_dialogs(world)
 	_check(world.try_step(LISBON), "moving onto Lisbon's harbor tile succeeds")
 	EventBus.port_entered.disconnect(listener)
 
@@ -423,6 +471,7 @@ func _test_port_entry() -> void:
 		"entering an unknown port discovers it (§4.11)")
 	_check(GameState.current_port == "lisbon",
 		"current_port set to lisbon (got %s)" % str(GameState.current_port))
+	_clear_dialogs(world)
 	host.queue_free()
 
 	# Sighting: a nearby port is known without entering it; far ones are not.
@@ -514,6 +563,7 @@ func _test_no_game_and_modal_block() -> void:
 			"no game: crew bar renders '-'")
 
 	# A move with no run still steps (inspection) but cannot touch a clock.
+	_clear_dialogs(world)
 	var before: Vector2i = world.fleet_cell()
 	_check(world.try_step(before + Vector2i(1, 0))
 		or world.try_step(before + Vector2i(0, 1)),
@@ -544,6 +594,7 @@ func _test_no_game_and_modal_block() -> void:
 	_check(not hud2.has_modal(),
 		"closing the only dialog clears has_modal() in the same frame")
 	var after_cell := Vector2i(before_cell.x + 1, before_cell.y)
+	_clear_dialogs(world2)
 	_check(world2.try_step(after_cell), "movement works again after the dialog")
 	host2.queue_free()
 

@@ -124,8 +124,10 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   `EventBus.game_over(reason)`.
 - **Done-when:** scripted scenarios: provisions 0 → 7th day game over
   `starvation` (and mirror for water → `scurvy`); morale forced to 10 →
-  mutiny within 5 days at ≥ 76% probability (1 − 0.75⁵ ≈ 0.763
-  compounding check);
+  mutiny within 5 days matches `1 − 0.75⁵ = 0.7627` within **±0.02** on a
+  seeded sample of ≥ 4000 trials (a bare "≥ 0.76" gate is statistically
+  flaky: at n = 4000 the standard error is 0.0067, so an exact-threshold
+  assertion fails by chance roughly a third of the time);
   desertion at morale 39 removes `max(1, 10%)` crew; dialogs appear in the
   §4.7 queue order.
 

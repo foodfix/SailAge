@@ -24,6 +24,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
+const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
 ## docs/80-* §4.5: minimap 256×192 (2 px/tile); `M` → 512×384 centered.
 const MINIMAP_NORMAL := Vector2(256, 192)
@@ -41,6 +42,10 @@ const STORM_FLASH_HALF_SECONDS := STORM_FLASH_CYCLE_SECONDS * 0.5
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
+## §4.8.3 mutiny modal result: `"pay"`, `"suppress"` or `"fizzle"`. The HUD
+## only renders the choice; the host (world scene) calls the matching
+## `SailingSim.resolve_mutiny_*` (docs/90-* §7: the HUD never mutates state).
+signal mutiny_choice(choice: String)
 
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _bottom_bar: ColorRect = $BottomBar
@@ -70,6 +75,10 @@ var _minimap_enlarged := false
 ## Dialog queue (§4.7): `[{key, values}]`, one modal at a time.
 var _dialog_queue: Array = []
 var _dialog = null
+## §4.8.3 mutiny modal (a `confirm_dialog` with Pay/Suppress), its offer copy
+## and the resolved choice. `_mutiny_dialog == _dialog` while it is up.
+var _mutiny_dialog = null
+var _mutiny_offer: Dictionary = {}
 ## Toast generation counter so a replaced toast does not hide its successor.
 var _toast_generation := 0
 ## Storm-flash tween (created/destroyed by [_apply_weather]).
@@ -170,9 +179,51 @@ func show_dialog(key: String, values: Dictionary = {}) -> void:
 	show_dialogs([{"key": key, "values": values}])
 
 
+## Drops every queued dialog and closes the one on screen without showing the
+## rest. Used when a higher-priority modal takes over the screen (S9 game over:
+## the run is over, so a pending storm-damage report must not underlay it —
+## §4.7 "never simultaneously"). `dialogs_finished` still fires so a host
+## waiting to route is not left hanging.
+func clear_dialogs() -> void:
+	_dialog_queue.clear()
+	var open = _dialog
+	_dialog = null
+	_mutiny_dialog = null
+	_mutiny_offer = {}
+	if open != null:
+		if open.has_method("close"):
+			open.close()
+		elif open.has_method("cancel"):
+			open.cancel()
+		open.queue_free()
+	dialogs_finished.emit()
+
+
 ## The dialog currently on screen (null when none). Tests/T9 read this.
 func current_dialog():
 	return _dialog
+
+
+## The §4.8.3 mutiny offer currently on screen (`{}` when none). Read-only.
+func current_mutiny_offer() -> Dictionary:
+	if _mutiny_dialog == null or not _mutiny_dialog.is_open():
+		return {}
+	return _mutiny_offer
+
+
+## Disables the buttons the offer cannot satisfy: "Pay" needs `can_pay`,
+## "Suppress" needs `can_suppress` (§4.8.3).
+func _apply_mutiny_offer() -> void:
+	if _mutiny_dialog == null:
+		return
+	var confirm: Button = _mutiny_dialog.get_node("Center/Panel/Margin/Body/Footer/Confirm")
+	var cancel: Button = _mutiny_dialog.get_node("Center/Panel/Margin/Body/Footer/Cancel")
+	confirm.disabled = not bool(_mutiny_offer.get("can_pay", false))
+	cancel.disabled = not bool(_mutiny_offer.get("can_suppress", false))
+	confirm.text = I18n.fmt(
+		"world.mutiny.pay", {"gold": int(_mutiny_offer.get("cost", 0))}
+	)
+	cancel.text = I18n.t_key("world.mutiny.suppress")
 
 
 ## True while a modal dialog is on screen or still queued; the world scene
@@ -228,13 +279,14 @@ static func morale_tier(value: int) -> String:
 	return "mutinous"
 
 
-## Tier color: green when healthy, yellow under 40, red under 20 (§4.5).
+## Tier color (docs/80-* §4.5, docs/20-* §4.8): green when healthy, yellow
+## under 40 (`WARN`), red under 20 (`BAD`). "Strained" (40–59) is still a
+## healthy tier, so it keeps `GOOD` — the doc's rule is a two-step warning,
+## not a third colour.
 static func morale_color(value: int) -> Color:
 	match morale_tier(value):
-		"excellent", "good":
+		"excellent", "good", "strained":
 			return PaletteLib.GOOD
-		"strained":
-			return PaletteLib.TEXT
 		"dangerous":
 			return PaletteLib.WARN
 		_:
@@ -415,6 +467,10 @@ func _on_fleet_changed() -> void:
 func _on_locale_changed(_locale: String) -> void:
 	_lang_button.text = I18n.t_key("ui.language_toggle")
 	refresh()
+	# The mutiny dialog re-binds its own labels on the same signal; re-apply the
+	# formatted Pay price (with `{gold}` filled) after it, next idle frame.
+	if _mutiny_dialog != null:
+		call_deferred("_apply_mutiny_offer")
 
 
 func _on_port_entered(_port_id: String) -> void:
@@ -505,6 +561,9 @@ func _show_next_dialog() -> void:
 		dialogs_finished.emit()
 		return
 	var entry: Dictionary = _dialog_queue.pop_front()
+	if bool(entry.get("mutiny", false)):
+		_show_mutiny_dialog(entry)
+		return
 	var dialog = DialogBoxScene.instantiate()
 	dialog.name = "DialogBox"
 	_modal_host.add_child(dialog)
@@ -513,13 +572,59 @@ func _show_next_dialog() -> void:
 	dialog.open_key(str(entry.get("key", "")), entry.get("values", {}))
 
 
+## §4.8.3 mutiny modal: one message (`world.mutiny.text`) with the two
+## resolutions as buttons. The buttons are disabled from the offer, and the
+## result leaves through [signal mutiny_choice] — the HUD itself never changes
+## crew, gold or morale.
+func _show_mutiny_dialog(entry: Dictionary) -> void:
+	_mutiny_offer = entry.get("offer", {}).duplicate()
+	var dialog = ConfirmScene.instantiate()
+	dialog.name = "MutinyDialog"
+	_modal_host.add_child(dialog)
+	_dialog = dialog
+	_mutiny_dialog = dialog
+	dialog.closed.connect(_on_mutiny_dialog_closed)
+	dialog.open_key(
+		str(entry.get("key", "world.mutiny.text")),
+		entry.get("values", {}),
+		"world.mutiny.pay",
+		"world.mutiny.suppress"
+	)
+	_apply_mutiny_offer()
+
+
+func _on_mutiny_dialog_closed(accepted: bool) -> void:
+	if _dialog == null:
+		return
+	var offer := _mutiny_offer
+	var choice := "pay" if accepted else "suppress"
+	# A disabled button cannot be pressed, but a stray key (Enter/N) can reach
+	# a disabled control: route an impossible choice to the §4.8.3 fizzle.
+	if accepted and not bool(offer.get("can_pay", false)):
+		choice = "fizzle"
+	elif not accepted and not bool(offer.get("can_suppress", false)):
+		choice = "fizzle"
+	_mutiny_dialog = null
+	_mutiny_offer = {}
+	# Emit **before** clearing the modal: the host's resolution may produce a
+	# follow-up message (the §4.8.3 fizzle report), which then queues behind the
+	# closed mutiny dialog and is shown as the next modal — never lost to the
+	# "queue drained" signal that `_close_dialog()` can raise.
+	mutiny_choice.emit(choice)
+	_close_dialog()
+
+
 func _on_dialog_closed() -> void:
+	_close_dialog()
+
+
+## Shared teardown: drop the current modal, then show the next queued one (never
+## two at once, but the chain reads as one sequence — §4.7).
+func _close_dialog() -> void:
 	if _dialog == null:
 		return
 	_dialog.queue_free()
 	_dialog = null
-	# Next message in the same frame: never two modals at once, but the chain
-	# reads as one uninterrupted sequence (§4.7).
 	_show_next_dialog()
 
 
