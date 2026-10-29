@@ -306,9 +306,14 @@ battle opens with a movement phase.
     **two nearest ports' nations** measured by Chebyshev distance from the
     contact tile; ties broken by port id ascending. A nation appearing twice
     is credited once.
-  - Navy ships sunk or captured → `−20` with that navy's nation per act
-    (`70-*` §4.5 piracy), regardless of who won. Retreating after sinking
-    navy ships still applies it (§4.10).
+  - **Navy: exactly one `−20` per navy battle**, charged to that navy's nation
+    at **battle start** (`60-*` §4.1 "attacking a navy marker … rep −20"), or
+    on contact with a hunter. It is **not** charged per ship and it is never
+    repeated at battle end, so:
+    - `BattleRewards`/`encounters.gd` apply it on initiation only;
+    - the outcome block's `rep_deltas` carries only the pirate `+2` entries,
+      and applying it twice is impossible by construction.
+    Charged even if the player retreats afterwards (§4.10).
 - **Return:** the fleet is placed on the contact tile, the hostile marker is
   removed, and a spawn immunity of **3 days** is recorded for that marker kind
   (§4.8).
@@ -546,7 +551,9 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
   `captured_enemy` (§4.11.7 "resolved exactly as a duel win"), and
   `surrendered_enemy` is the dialog-wording count only — never add the two.
 - `salvage_gold`, `xp`, `rep_deltas` are the **pre-computed** §4.11.10 numbers;
-  applying them is `BattleRewards.apply()` (§4.12.3).
+  applying them is `BattleRewards.apply()` (§4.12.3). `rep_deltas` holds only
+  pirate `+2` entries — the navy `−20` is charged once at battle start by
+  whoever initiated the battle (§4.11.10), never here.
 - `result` ∈ `victory` \| `defeat_sunk` \| `defeat_captured` \| `retreat` \|
   `surrender`.
 
@@ -566,7 +573,7 @@ task can be blocked by a sibling's merge order.
 
 #### 4.12.4 Call order at battle end (pin — keeps file ownership disjoint)
 
-`battle_screen.gd` (task D) owns the sequence below; every other module is
+| `battle_screen.gd` (task D) owns the sequence below; every other module is
 reached through the guards above, so D never edits a sibling's file:
 
 1. `BattleSim` reports `is_over()`; its `outcome()` is the raw block.
