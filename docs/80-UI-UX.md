@@ -40,7 +40,7 @@ marked.
 | S8 | Inn | `inn_screen.tscn` | 1 |
 | S9 | Game over | `ui_shared/gameover_screen.tscn` (modal over S3) | 1 |
 | S10 | Battle | `scenes/combat/battle_screen.tscn` | 2 |
-| S11 | Duel | (modal over S10) | 2 |
+| S11 | Duel | `scenes/combat/duel_modal.tscn` (modal over S10) | 2 |
 | S12 | Guild | `guild_screen.tscn` | 3 |
 | S13 | Palace | `palace_screen.tscn` | 3 |
 | S14 | Character/status panel | `ui_shared/character_panel.tscn` (modal over S3/S4) | 1 |
@@ -59,7 +59,9 @@ S4 ──facility──► S5/S6/S7/S8 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
-S3 ──sea death──► S9 ──any key──► S1
+S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
+S10 ──battle ends──► S3 (after-action dialog first)
+S3 ──sea death / capture──► S9 ──any key──► S1
 S1 ──Quit──► exit
 ```
 
@@ -80,6 +82,11 @@ No cross-links beyond these; Esc = step back one edge where applicable.
 | S3 | `M` | toggle minimap enlarged mode (512×384, centered) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
+| S10 | left-click tile / enemy token | move / default action |
+| S10 | `Tab` | cycle own ships; arrows move the targeting cursor |
+| S10 | `Enter` | confirm the highlighted move/action |
+| S10 | `Esc` | battle menu (Retreat / Surrender / back) |
+| S3 | right-click a hostile marker | attack it (navy = piracy, `70-*` §4.5) |
 
 Focus outline (2px accent border) always visible on keyboard-focused control.
 
@@ -88,7 +95,8 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
 - Flat key → L10nString: `"market.buy": {"zh": "购买", "en": "Buy"}`.
 - Key namespaces by screen: `title.*`, `nation.*`, `world.*`, `port.*`,
   `market.*`, `shipyard.*`, `tavern.*`, `inn.*`, `char.*`, `ui.*` (shared:
-  `ui.back`, `ui.confirm`, `ui.cancel`, `ui.gold_abbr`…), `gameover.*`.
+  `ui.back`, `ui.confirm`, `ui.cancel`, `ui.gold_abbr`…), `gameover.*`,
+  `battle.*` (S10), `duel.*` (S11), `encounter.*` (hostile-fleet markers).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -165,7 +173,7 @@ the supplies jettison of `20-*` §4.10 refer to.
   reason, because promotion and jettison are port actions.
 - Rows are 32px table rows (§4.8); no textures.
 
-### 4.6 Save / load UX
+### 4.7 Save / load UX
 
 - **Save:** available only at port (S4 menu row + F5). Slot dialog lists 3
   slots with summary line (`Day · Nation · gold · timestamp`) or `Empty`.
@@ -176,6 +184,51 @@ the supplies jettison of `20-*` §4.10 refer to.
 - No autosave in Phase 1.
 - Version-mismatch or corrupt file → slot line shows `ui.save.invalid` and is
   not selectable (`90-*` §8.2).
+
+#### 4.7.1 S10 battle screen (Phase 2)
+
+Layout, 1280×720, placeholder shapes only (§4.8 palette):
+
+```
++------------------------------------------------------------------+
+| Battle · Day 12 · Round 3        [weather]      [Esc: menu]       | top 40px
++------------------------------------------------------------------+
+| battle grid 16×10 tiles at 48px = 768×480, centered               |
+|  ship tokens: 24×24 squares with a letter (§4.8)                  |
+|  highlight: reachable tiles (ACCENT outline), target tiles (BAD)  |
++------------------------------------------------------------------+
+| flagship: durability bar · crew · cannons · reload state           | bottom 96px
+| [Cannon] [Ram] [Board] [Hold] [Retreat] [Surrender]   action menu  |
++------------------------------------------------------------------+
+```
+
+- **Input:** mouse click a highlighted tile = move; click an enemy token in
+  range = the default action against it (cannon if loaded, else ram/board);
+  the action buttons act on the selected target. Keyboard: `Tab` cycles own
+  ships, arrows move the cursor, `Enter` confirms, `Esc` opens the battle menu
+  (Retreat / Surrender / back). All buttons carry `battle.*` keys.
+- **Presentation:** every action appends one log line (bottom panel, last 3
+  lines visible); no animation is required in Phase 2. Tokens are
+  `ColorRect`s; player ships `TEXT` white, pirate `BAD` red, navy the owning
+  nation's `Nation.color` (§4.8).
+- **Duel modal (S11):** `duel_modal.tscn` is instanced over S10 by the
+  boarding action; it shows both sides' rolls per round (three rows max) and
+  closes with `duel.*` result text. It owns all input while open.
+- **After-action:** a `dialog_box`-style modal lists loot gold, captured
+  ships, XP and reputation deltas, then returns to S3 (`60-*` §4.11.10).
+
+### 4.7.2 S6 shipyard refit + equipment rows (Phase 2)
+
+Below the per-ship repair row, each hull gains:
+
+- **Cannons** — numeric picker (0 … `max_refit`) priced at 100g/cannon, with
+  the 50g sell-back shown for the current count, enabled in Phase 2
+  (`ShipyardEngine.refit`).
+- **Equipment** — four slot rows (`weapon`, `armor` on the player;
+  `figurehead`, `sail` on the ship), each with the equipped item name or
+  `ui.empty`, plus a buy list of every `data/equipment.json` item for that
+  slot. Buying into an occupied slot sells the old item back at half price in
+  the same action (`60-*` §4.11.12).
 
 ### 4.7 Dialog & text conventions
 

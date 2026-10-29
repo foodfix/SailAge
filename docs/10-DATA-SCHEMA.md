@@ -280,6 +280,10 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 | `price` | money | |
 | `phase` | int | locked at `2` for all Phase-2 equipment |
 
+Locked Phase-2 content set (8 items): `60-*` §4.11.13. Modifier semantics
+(which slot is player-worn, which ship-bound, and what each stat does in a
+battle or a duel) are pinned in `60-*` §4.11.12.
+
 ```json
 {
   "version": 1,

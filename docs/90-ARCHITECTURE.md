@@ -90,8 +90,11 @@ Application-wide signals; no state. Canonical signals:
 | `gold_changed(new_gold: int)` | | any gold delta |
 | `fleet_changed()` | | ship bought/sold/sunk/repaired/cargo moved |
 | `port_entered(port_id: String)` | | harbor tile reached |
-| `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"` | sea-death |
+| `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"`/`"captured"` | sea-death |
 | `save_completed(slot: int)` | | SaveSystem finished a write |
+| `battle_started(encounter: Dictionary)` | encounter descriptor (`60-*` §4.11.11) | S10 opens a battle |
+| `battle_finished(outcome: Dictionary)` | outcome block (`60-*` §4.11.9/§4.11.10) | a battle ends, any outcome |
+| `duel_finished(outcome: Dictionary)` | `{result, rounds, attacker, defender}` | the S11 modal closes |
 
 Any module may `emit`; only view/UI code and `GameState` may `connect`.
 Cross-screen communication never uses direct node references.
@@ -135,6 +138,10 @@ marked •):
   routing, `80-*` §4.6)
 - `port_investments: Dictionary` • — `{port_id: gold_total}` (`30-*` §4.3)
 - `known_ports: Array[String]` • — discovered ports (§20 port discovery)
+- `hostile_fleets: Array` • — world-map hostile markers (`60-*` §4.11.11);
+  present-but-empty before Phase 2
+- `proximity_cooldowns: Dictionary` • — `{kind: day}` spawn immunity
+  (`60-*` §4.8); present-but-empty before Phase 2
 - `quests`, `discoveries_found`: Phase-2/3 fields, present-but-empty in P1
 - API: `new_game(nation_id)`, `add_gold(delta)`, `advance_day()`, and thin
   helpers; heavy rules live in `scripts/` engines which mutate GameState.
@@ -185,9 +192,9 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 1,
+  "save_version": 2,
   "saved_at": 1793119712,
-  "phase": 1,
+  "phase": 2,
   "locale": "en",
   "day": 12,
   "gold": 7830,
@@ -199,12 +206,25 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   "known_ports": ["lisbon"],
   "port_investments": {"lisbon": 500},
   "quests": [],
-  "discoveries_found": []
+  "discoveries_found": [],
+  "hostile_fleets": [],
+  "proximity_cooldowns": {}
 }
 ```
 
 (`player`/`fleet` interior shapes are owned by docs 50/40; SaveSystem treats
 them opaquely.)
+
+Phase-2 additions (version 2):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `hostile_fleets` | `[]object` | `[]` | `60-*` §4.11.11 |
+| `proximity_cooldowns` | `object` `kind → day` | `{}` | `60-*` §4.8 spawn immunity |
+
+`proximity_cooldowns` records, per hostile `kind`, the first day on which a new
+spawn of that kind is allowed again after a battle (`spawn_immunity_days = 3`,
+`60-*` §4.8).
 
 ### 8.2 Migration rule
 
@@ -213,7 +233,17 @@ them opaquely.)
   where `MIGRATIONS[n]` upgrades a version-n dict to n+1.
 - Loading applies migrations from the file's version up to the current one;
   missing migration step = load failure (returns false, logs).
-- Phase-1 code ships with `save_version = 1` and zero migrations.
+- Phase-2 code ships `save_version = 2` with exactly one migration:
+
+  `MIGRATIONS[1]` — upgrades a Phase-1 payload by adding
+  `"hostile_fleets": []` and `"proximity_cooldowns": {}`, adding the
+  `player.equipment` block of `60-*` §4.11.12
+  (`{"weapon": "", "armor": ""}`) when `player` is a non-empty object, adding
+  the `fleet[i].equipment` block (`{"figurehead": "", "sail": ""}`) to every
+  ship instance, and setting `phase = 2`. It never touches any other key, so a
+  Phase-1 save re-saves byte-equal apart from the added keys and the version.
+- Migration functions are pure: they receive a dict and return a new dict; the
+  loaded file is never mutated in place.
 
 ## 9. ASCII Map → TileMap (loading pipeline)
 

@@ -33,19 +33,25 @@ consumption pooling), `30-*` (shipyard screen wiring), `90-*`.
   "provisions": 60,
   "water": 60,
   "cannons": 0,
-  "cargo": {"wine": 40, "salt": 10}
+  "cargo": {"wine": 40, "salt": 10},
+  "equipment": {"figurehead": "", "sail": ""}
 }
 ```
 
 | Field | Type | Rule |
 |---|---|---|
 | `ship_type_id` | id | → ShipType (static stats from data) |
-| `durability` | int `0..ShipType.durability` | current hull HP; 0 = sunk |
+| `durability` | int `0..effective_max` | current hull HP; 0 = sunk |
 | `crew` | int `0..ShipType.crew_max` | sailors aboard (Phase 1: flagship only, see §4.4) |
 | `provisions` | int ≥ 0 | units aboard |
 | `water` | int ≥ 0 | units aboard |
 | `cannons` | int `0..ShipType.armament_slots` | Phase 2 effect; locked at 0 in P1 |
 | `cargo` | object id → int ≥ 0 | trade goods only; provisions/water are separate fields |
+| `equipment` | object | Phase-2 ship slots: `{"figurehead": id-or-"", "sail": id-or-""}` (`60-*` §4.11.12). Absent in a Phase-1 save; the migration and every accessor default it to empty slots. |
+
+**Effective max durability (Phase 2).** `effective_max = ShipType.durability +
+figurehead durability modifier` (`60-*` §4.11.12). Ram damage and repairs use
+this value; `durability` is clamped to it.
 
 ### 4.2 Cargo-hold maths
 
@@ -87,8 +93,9 @@ regional restrictions OUT OF SCOPE (phase 3)):
 |---|---|
 | Buy ship | cost `ShipType.base_price`; new instance at `durability = max`, `crew = 0`, `provisions/water = 0`, `cannons = 0`, empty cargo. Requires `gold ≥ price` and fleet size < `FLEET_MAX` (§4.4). |
 | Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). |
-| Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **UI present but disabled in Phase 1** (label `shipyard.cannons.phase2`) — combat use OUT OF SCOPE (phase 2). |
-| Sell ship | price `floor(base_price × 0.5 × durability / max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). |
+| Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **Phase 2 enables the row**; see `60-*` §4.11.4 for the battle effect. |
+| Buy equipment | `data/equipment.json` item at its `price`; occupies its slot (`weapon`/`armor` player, `figurehead`/`sail` ship); replacing sells the old item back at `floor(price × 0.5)` in the same action (`60-*` §4.11.12). Phase 2. |
+| Sell ship | price `floor(base_price × 0.5 × durability / max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). Equipment leaves with the ship. |
 
 Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
 150g/pt.

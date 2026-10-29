@@ -193,6 +193,12 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 海战 | Sea battle | Turn-based tactical combat (Phase 2) |
 | 接舷战 | Boarding | Triggering a captain duel by adjacency (Phase 2) |
 | 决斗 | Duel | Simplified best-of-N captain fight (Phase 2) |
+| 敌船队 | Hostile fleet | World-map pirate/navy marker that can start a battle (Phase 2) |
+| 战利品 | Loot | Salvage gold + captured cargo after a battle (Phase 2) |
+| 装备 | Equipment | Weapon/armor (player) or figurehead/sail (ship) items (Phase 2) |
+| 撤退 | Retreat | Leaving a battle without victory (Phase 2) |
+| 投降 | Surrender | Ending a battle by yielding hold or flagship (Phase 2) |
+| 被俘 | Captured | Game-over reason: the player's last ship is taken (Phase 2) |
 | 风暴 | Storm | Weather event damaging ships and pushing them off course |
 | 断粮 | Starvation | Fail state: provisions exhausted too long |
 | 坏血病 | Scurvy | Fail state: fresh water exhausted too long |

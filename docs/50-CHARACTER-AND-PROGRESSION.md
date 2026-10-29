@@ -161,7 +161,8 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
   "officers": ["off_mateus_alvares"],
   "reputation": {"portugal": 20, "spain": 0, "england": 0, "holland": 0, "ottoman": 0, "italy": 0},
   "profit_by_nation": {"england": 1100},
-  "profit_rep_awarded": {"england": 1}
+  "profit_rep_awarded": {"england": 1},
+  "equipment": {"weapon": "eq_cutlass", "armor": ""}
 }
 ```
 
@@ -171,6 +172,9 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
 - `profit_by_nation` / `profit_rep_awarded` are the §4.6 cumulative-profit
   accumulator, written by `character.gd#add_profit_reputation()` on every
   profitable sale; absent keys read as zero.
+- `equipment` is the Phase-2 player-worn block (`60-*` §4.11.12): `weapon` and
+  `armor` hold equipment ids or `""`. Absent in a Phase-1 save; the migration
+  (`90-*` §8.2) and every accessor default it to empty slots.
 
 ## 5. Data Examples
 
