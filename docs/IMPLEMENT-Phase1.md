@@ -1,5 +1,8 @@
 # IMPLEMENT — Phase 1: Sail & Trade
 
+**STATUS: ✅ COMPLETE (2026-10-29).** All 19 tasks implemented and verified;
+the phase definition of done (T19) passes.
+
 Ordered, checkable task backlog. Execute as background-subagent waves per the
 plan at the bottom (max 4 concurrent; top-to-bottom order is the dependency
 order); each task lists the docs it draws from, the artifacts it creates, and
@@ -9,9 +12,23 @@ answered in the owning system doc **before** the task proceeds (rule from
 
 Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
+| | |
+|---|---|
+| Verification | 14 headless suites, **2,516 checks**, all passing |
+| Data validator | `python3 tools/validate_data.py` → exit 0 (groups 1–6) |
+| Main scene | `godot --headless --quit-after 3` → exit 0, zero script errors |
+| Acceptance record | `tools/demo_check.md` |
+| E2E harness | `tools/test_demo_loop.tscn` (87 checks, all 9 loop steps) |
+
+Per-task status is recorded under each heading below; see
+[Completion record](#completion-record) for the design gaps this phase
+surfaced and the doc amendments made to close them.
+
 ---
 
 ## T1 — Godot project scaffold
+
+✅ **Done** (2026-10-29) — `project.godot` matches §6; autoload order EventBus, DataLoader, I18n, GameState, SaveSystem; clean-tree editor import and headless run exit 0 with zero errors.
 
 - **Goal:** runnable empty Godot 4 project matching the architecture doc.
 - **Docs:** `90-ARCHITECTURE.md` §4–6; `80-UI-UX.md` §4.8 (palette script).
@@ -25,6 +42,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T2 — Core data files + validator
 
+✅ **Done** (2026-10-29) — 6/20/8/30/6 entities; validator groups 1–5 green; negative tests return 4/2/3/5/1.
+
 - **Goal:** all Phase-1 data authored and machine-checked.
 - **Docs:** `10-DATA-SCHEMA.md` (all of §§3–8).
 - **Creates:** `data/nations.json` (6), `data/goods.json` (20),
@@ -37,6 +56,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   produces the correct exit code.
 
 ## T3 — ASCII world map + legend
+
+✅ **Done** (2026-10-29) — 96×128 map, 30 markers at locked positions, **one** sea component (4,109 tiles) under the no-corner-cut rule, all 8 straits open. Required a spec fix: the original plain-8-dir BFS greenlit a map that sealed Lisbon in a 2-tile pocket.
 
 - **Goal:** the Phase-1 world authored as text and machine-verified.
 - **Docs:** `10-*` §6, §7.1, §8 (group 6).
@@ -53,6 +74,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T4 — DataLoader, I18n, EventBus, ui_strings skeleton
 
+✅ **Done** (2026-10-29) — DataLoader id-keyed dicts + ordered lists, I18n `t`/`t_key`/`fmt`/`set_locale`, missing key → `<key>` + logged error; 208 `ui_strings` keys, placeholder sets verified.
+
 - **Goal:** data is queryable at runtime; all UI text source exists.
 - **Docs:** `90-*` §5.1–5.3; `80-*` §4.4.
 - **Creates:** `autoload/data_loader.gd`, `autoload/i18n.gd`,
@@ -66,6 +89,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T5 — Map loader: ASCII → TileMap
 
+✅ **Done** (2026-10-29) — `MapLoader` (ASCII → TileMap, layers 0 terrain / 1 ports, in-memory atlas, no imported textures); file-name swap needs zero code edits.
+
 - **Goal:** the world renders from data files.
 - **Docs:** `90-*` §9; `10-*` §6; `80-*` §4.8 (palette).
 - **Creates:** `scripts/world/map_loader.gd`, `scenes/world/world_map.tscn` with
@@ -76,6 +101,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   swapping in a test map file (valid per legend) requires zero code edits.
 
 ## T6 — World scene: movement, camera, HUD shell
+
+✅ **Done** (2026-10-29) — 8-dir + click-to-step, corner cuts rejected at bit-identical clock cost, camera clamped at all four corners, HUD updated from signals only (no `_process`). `tools/test_movement.tscn` (158).
 
 - **Goal:** the fleet steps around the grid.
 - **Docs:** `20-*` §4.1–4.2; `80-*` §4.3, §4.5; `90-*` §7.
@@ -88,6 +115,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   never shows out-of-bounds void; HUD bars update from signal emissions only.
 
 ## T7 — Sailing sim: clock, ledger core, speed
+
+✅ **Done** (2026-10-29) — ledger steps 1–2: 15 crew → 3+3 supplies/day; wages `crew×2 + Σ officer wages`; exactly-wages is a *paid* day. `tools/test_sailing.tscn` (84).
 
 - **Goal:** time passes; ships eat; crews are paid.
 - **Docs:** `20-*` §4.3–4.6, §4.10, §5; `40-*` §4.2; `50-*` §4.5 (officer
@@ -103,6 +132,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T8 — Weather & storms
 
+✅ **Done** (2026-10-29) — step 3 weather; Atlantic storm frequency 0.4873 over 10,000 rolls (0.50 ± 0.02), rest 0.0976; damage `ceil(max×0.05)` with luck ×0.75; seeded deterministic. `tools/test_weather.tscn` (129).
+
 - **Goal:** weather exists, storms hurt, Atlantic strip is dangerous.
 - **Docs:** `20-*` §4.7; `50-*` §4.2 (luck); `80-*` §4.5 (icon).
 - **Creates:** weather roll at ledger step 3, zone table, wind factors by
@@ -115,6 +146,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   by `20-*` §4.7 "Reachability acceptance" (scripted check).
 
 ## T9 — Morale, desertion, mutiny, fail states, game over
+
+✅ **Done** (2026-10-29) — steps 4–6; starvation/scurvy on the 7th consecutive shortfall day, counters reset; mutiny matches `1−0.75⁵ = 0.7627`; desertion `max(1,10%)` floored at 1 crew. `tools/test_morale.tscn` (260).
 
 - **Goal:** the sea can kill the player through crew systems.
 - **Docs:** `20-*` §4.8–4.9; `80-*` §4.7 (dialog queue) — creates
@@ -133,6 +166,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T10 — Port discovery, entry/exit, minimap
 
+✅ **Done** (2026-10-29) — 6 capitals known at new game, Chebyshev sighting, discover-then-enter, Set Sail restores the harbour tile with `clock_fraction = 0`, minimap explored-only at 2 px/tile with `M` enlarged mode. `tools/test_discovery.tscn` (141).
+
 - **Goal:** ports are found, entered, and left.
 - **Docs:** `20-*` §4.11–4.12; `50-*` §4.2 (navigation bonus);
   `80-*` §4.5–4.6 (routing).
@@ -147,6 +182,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T11 — Port hub + facility stubs
 
+✅ **Done** (2026-10-29) — six rows in fixed order from `Port.facilities`, palace only at capitals, guild always a `port.stub.phase3` stub; `open_facility` now gates on the port's own facilities so stubs never route. `tools/test_port_hub.tscn` (140).
+
 - **Goal:** the port menu and Phase-3 stubs exist.
 - **Docs:** `30-*` §4.1, §4.7; `80-*` §4.2.
 - **Creates:** port hub per wireframe: 6 facility rows + Set Sail; guild
@@ -156,6 +193,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   screens and Esc returns; stubs show key `port.stub.phase3`.
 
 ## T12 — Trade engine + market screen
+
+✅ **Done** (2026-10-29) — §5 examples exact (Lisbon 21/16, London 39/31); investment caps at −10% with the 11th click impossible; 21st good is a working row with zero code edits; supplies ignore all factors. `tools/test_trade.tscn` (278).
 
 - **Goal:** the demo-loop economy works.
 - **Docs:** `30-*` §4.2–4.5, §4.7, §5; `40-*` §4.2 (capacity); `50-*` §4.3
@@ -170,6 +209,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T13 — Shipyard engine + screen
 
+✅ **Done** (2026-10-29) — `ceil(base/400)` repair for all 8 types, `floor(base×0.5×dur/max)` sale, `FLEET_MAX = 5`, no flagship/last-ship sale, bought ships at full durability and zero crew; refit maths unit-tested but UI-disabled. `tools/test_shipyard.tscn` (141).
+
 - **Goal:** buy/repair/sell ships; refit stub ready for Phase 2.
 - **Docs:** `40-*` §4.3–4.4, §5; `80-*` §4.7.
 - **Creates:** `scripts/port/shipyard_engine.gd`, `shipyard_screen.tscn`
@@ -181,6 +222,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   matches `ceil(base/400)` pricing.
 
 ## T14 — Tavern: crew hire/fire + officers
+
+✅ **Done** (2026-10-29) — 20g/head hire capped at `crew_max`, fire clamped to `crew_min`, all six officers only at their `recruit_ports`, `wage×10` signing, `OFFICER_MAX = 3`, role bonuses in `effective_stat`. `tools/test_tavern.tscn` (245).
 
 - **Goal:** crewing and officer recruiting work.
 - **Docs:** `30-*` §4.5, §4.7; `50-*` §4.4–4.5; `40-*` §4.4.
@@ -194,6 +237,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T15 — Inn: rest + harbor relief
 
+✅ **Done** (2026-10-29) — rest = 30g + 3 full ledger days (+5 morale/day capped 80, wages paid); harbor relief state machine incl. the officer lockout. Required a spec fix: the 100g gate made the 1,200g hull unreachable. `tools/test_inn.tscn` (116).
+
 - **Goal:** morale recovery and the anti-softlock fallback.
 - **Docs:** `30-*` §4.6; `50-*` §4.7 (+ §6 edge rules); `20-*` §4.5.
 - **Creates:** `inn_screen.tscn` with rest button and conditional odd-job
@@ -203,6 +248,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   (shipless+broke only, officers lockout); each click +100g and +1 day.
 
 ## T16 — Character: nationality select, stats, XP, panel
+
+✅ **Done** (2026-10-29) — 6 data-driven cards, `new_game` per §4.1 for all nations, stat effects at boundaries, level table 0→1 … 18050→20, live character panel. `tools/test_character.tscn` (385).
 
 - **Goal:** new-game flow and progression display.
 - **Docs:** `50-*` §4.1–4.6, §5; `80-*` S2/S14.
@@ -216,6 +263,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T17 — Save / load
 
+✅ **Done** (2026-10-29) — §8.1 shape exactly, atomic write, corrupt/version-mismatched files reported invalid and never crash, F5 at sea shows `ui.cant_save_here`, full round-trip byte-equal with ints preserved. `tools/test_save.tscn` (195).
+
 - **Goal:** full state persistence with the 3-slot UX.
 - **Docs:** `90-*` §8, §5.5; `80-*` §4.6.
 - **Creates:** `autoload/save_system.gd`, slot dialog (title Load; port Save;
@@ -228,6 +277,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 ## T18 — Fleet panel: promote, jettison, capacity guard
 
+✅ **Done** (2026-10-29) — free port-only promote (delegated to `ShipyardEngine`), per-stack jettison updating `fleet_free` immediately, `normalize_all()` truncation guard that does **not** flag healthy saves (integral JSON floats are not a repair). `tools/test_fleet.tscn` (157).
+
 - **Goal:** fleet management UI and invariants.
 - **Docs:** `40-*` §4.4, §6; `20-*` §4.10.
 - **Creates:** fleet/cargo panel (ship rows: type, durability bar, crew,
@@ -239,6 +290,8 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
   impossible to reach via UI.
 
 ## T19 — Demo-loop acceptance
+
+✅ **Done** (2026-10-29) — all nine demo-loop steps pass in `tools/test_demo_loop.tscn` (87 checks) and are recorded in `tools/demo_check.md`. **Phase 1 definition of done met.** The human visual pass in that file is still outstanding.
 
 - **Goal:** Phase 1 is playable end-to-end per `00-OVERVIEW.md` §7.
 - **Docs:** `00-*` §7 (the 9 steps); everything above.
@@ -257,6 +310,74 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
      recruited and visible in the character panel.
   8. Save → quit → Load restores **all** state (list per T17).
   9. Full run repeated in `zh` with zero `<key>` fallbacks visible.
+
+---
+
+## Completion record
+
+Phase 1 closed on 2026-10-29. Every task was independently re-verified by the
+orchestrator (not just by the implementing subagent's own suite), then merged
+and re-tested as a whole.
+
+### Deviations from the sanctioned wave plan
+
+| Deviation | Reason |
+|---|---|
+| W9/W10 tasks ran in **per-task git worktrees**, merged by the orchestrator | Parallel tasks in one shared tree collided: T2 and T3 both edited `tools/validate_data.py`; agents wasted effort verifying each other's files. Worktrees made file ownership physical. The merge step then caught two real integration defects that a shared tree would have hidden (see below). |
+| T1+T2 and T5+T16 were launched as pairs | Disjoint files, no dependency between them; pairing only shortened the wave count. |
+| T3 was **relaunched** after failing its gate | The first map passed a plain 8-directional BFS but was unplayable under `20-*` §4.2. The spec was amended before relaunch, per `00-*` §13. |
+
+### Doc amendments made during implementation
+
+Each of these was a genuine contradiction or gap found while implementing; the
+owning doc was amended **first**, then the code.
+
+| Doc | Change | Why |
+|---|---|---|
+| `10-*` §8 group 6 | BFS must forbid corner-cutting; added a single-sea-component assertion and a per-marker orthogonally-adjacent-passable check | Plain 8-dir BFS certified routes no fleet can sail: the shipped map had 15 disconnected seas and Lisbon sat in a 2-tile pocket |
+| `10-*` §5, `50-*` §4.7 | Harbor relief threshold `gold < 100` → `gold < 1200` (cheapest hull) | The old gate closed after one `+100` payout, so the 1,200g hull its own rationale promised was unreachable — the anti-softlock feature caused a softlock |
+| `20-*` §4.4 | Added the normative "fleet speed = slowest hull, all other factors from flagship" paragraph | `20-*` and `40-*` could be read as computing `base_speed` two different ways |
+| `20-*` §4.7 | Replaced the impossible "≥0.97 storm within 5 days" with the exact compounded table (0.96464 at 5 days, 0.98188 at 6) | `1 − 0.5⁵ = 0.96875 < 0.97`; the criterion was arithmetically unsatisfiable |
+| `20-*` §4.8.1 | Normative clarifications: port-cap scope, unpaid wages applying in port, tolerance-based mutiny sampling | The in-port `+5 … up to 80` and the bare `≥ 0.76` mutiny gate were both ambiguous/flaky (SE 0.0067 at n=4000 fails ~1/3 of the time by chance) |
+| `20-*` §4.10, `40-*` §6 | Jettison is per-stack and port-only | The docs gave jettison no scope; the fleet panel had to invent one |
+| `40-*` §4.3 | Sell requires the ship's **pooled** hold empty (goods + provisions + water) | Checking only `cargo` would let a sale silently destroy pooled supplies, which §6 forbids |
+| `40-*` §4.2, §4.4, §6 | Distribution invariant wording, `normalize_all` truncation order (goods → provisions → water), unknown-hull handling | Load-time repair had no defined behaviour or order |
+| `50-*` §4.3 | Rewrote the self-contradictory XP paragraph into one unambiguous rule | The original text contradicted itself mid-sentence about cost basis |
+| `50-*` §4.6, §4.8 | Cumulative reputation via `profit_by_nation` + `profit_rep_awarded` | Per-transaction flooring awarded nothing for two 500g sales; storing the paid-out counter also makes awards idempotent |
+| `80-*` §4.1/4.2/4.3/4.5.1 | Added S15 (fleet panel), its nav edge, the `F` key, and its wireframe | The T18 task required a panel that no UI doc specified |
+| `00-*` §12 | Provisions/water glossary now states `RATION_SIZE = 5` crew/unit | The glossary said 1 crew/unit, contradicting `20-*` §4.5 |
+
+### Integration defects caught at merge (not by task suites)
+
+1. **Silent test skipping.** A stale node reference (T11 renamed
+   `_facility_placeholder` → `_facility_heading`, T17's branch still used the
+   old name) made `port_screen.gd` fail to *parse*. Godot then skipped whole
+   test sections while still printing `ALL PASS` — discovery 141→103, trade
+   278→274, tavern 245→243. **Only the check counts revealed it.** Always
+   compare counts, never trust the summary line.
+2. **Non-compliant test fixture.** `test_save`'s multi-ship fixture put cargo
+   on the escort while the flagship had 5 free units, violating the §4.2
+   distribution invariant. T18's `normalize_all()` correctly relocated it on
+   load, so "fleet byte-equal" failed. The engine was right; the fixture was
+   wrong data.
+3. **Two divergent reputation models.** T12's worktree predated the base-branch
+   fix and independently rewrote `add_profit_reputation` with a different data
+   model. T12's (lifetime total + paid-out counter) was superior and was
+   adopted; the base-branch version was deleted.
+
+### Known limitations accepted for Phase 1
+
+Carried from `tools/demo_check.md`: explored tiles and `clock_fraction` are not
+saved (both documented, both consequences of save-only-in-port); harbor relief
+is unreachable in normal play and tested via `GameState.debug_strip_fleet()`;
+refit maths exists but the UI is Phase-2 disabled.
+
+### Outstanding before Phase 2
+
+- The **human visual pass** in `tools/demo_check.md` has not been performed —
+  title layout, camera feel, and the zh reading pass need eyes.
+- The world map is left-shifted west because of the locked §7.1 anchor
+  projection; re-proportioning would require amending that table.
 
 ---
 
