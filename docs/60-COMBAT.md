@@ -344,8 +344,9 @@ the `equipment` object of §4.11.12).
 
 #### 4.11.11.1 Marker movement & contact (pin for `encounters.gd`)
 
-- **Anchor port:** a spawn's `anchor_port_id` is the nearest known port to the
-  spawn tile (Chebyshev; ties by port id ascending); it never changes.
+- **Anchor port:** a spawn's `anchor_port_id` is its anchor per §4.11.11.1
+  (nearest known port for pirates, nearest own-nation port for navies;
+  Chebyshev; ties by port id ascending); it never changes.
 - **Zone check:** a pirate spawn candidate must be within Chebyshev 15 of its
   anchor port's `position` **and** at `x ≥ 7` (outside the Atlantic storm
   strip, `20-*` §4.7). Candidate tiles are drawn as described in §4.11.11.2.
@@ -359,8 +360,19 @@ the `equipment` object of §4.11.12).
   player's reputation with its nation is ≤ −50 (`70-*` §4.5).
 - **Pursuit cooldown:** a marker that lost a battle (player retreat) does not
   move for 1 day (`60-*` §4.10), tracked in `marker.cooldown_until_day`.
+  **Inclusive reading:** `cooldown_until_day` is the *last idle day*, so a
+  battle on day D stores `D + 1`, the marker stays put on D+1 and moves again
+  on D+2. While a marker is on pursuit cooldown it also raises **no contact**,
+  which is what stops a retreat (fleet returned to the contact tile, right
+  beside the marker) from re-opening the same battle forever.
+  This deliberately differs from `proximity_cooldowns`, which §4.11.11.2 pins
+  as a *first legal day*.
 - **Spawn immunity:** after any battle the kind's next legal spawn day is
   `day + 3`, stored in `GameState.proximity_cooldowns[kind]` (`90-*` §8.1).
+- **Anchor by kind:** a pirate anchors to the nearest **known** port; a navy
+  anchors to the nearest port **of its own nation** (a patrol belongs to its
+  own navy), else the nearest port. Both use Chebyshev distance, ties by port
+  id. The `x ≥ 7` storm-strip exclusion applies to pirates only.
 
 #### 4.11.11.2 Spawn rolls (pin)
 
@@ -561,8 +573,8 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
 
 | Module | Owner task | API |
 |---|---|---|
-| `scripts/combat/battle_result.gd` (`class_name BattleResult`) | C | `apply(sim_outcome: Dictionary, enemy_units: Array, player_fleet_ref: Array) -> Dictionary` — fleet-only effects: captures join the fleet (§4.11.7) or are looted+scuttled, lost player ships are removed, flagship promotion, `gameover.captured`/`sunk` emission; returns the outcome with `cargo_overflow_lost` filled in |
-| `scripts/combat/duel.gd` (`class_name Duel`) | C | `start(config: Dictionary) -> Dictionary` — `config` = `{player_base, defender_base, seed, ship_name, attacker_name, defender_name}`; runs `BattleSim.resolve_duel` and (in a scene tree) presents `duel_modal.tscn`; returns the same dict as `resolve_duel` plus `rounds` |
+| `scripts/combat/battle_result.gd` (`class_name BattleResult`) | C | `apply(sim_outcome: Dictionary, enemy_units: Array, player_fleet_ref: Array) -> Dictionary` — fleet-only effects: captures join the fleet (§4.11.7) or are looted+scuttled, lost player ships are removed, flagship promotion, `gameover.captured`/`sunk` emission; returns the outcome with `cargo_overflow_lost` filled in. **Sunk player hulls leave the fleet too:** it removes both the `lost_player` instances and the `sunk_player` hull ids, because §4.7 makes this the only fleet mutator in a battle |
+| `scripts/combat/duel.gd` (`class_name Duel`) | C | `start(config: Dictionary) -> Dictionary` — `config` = `{player_base, defender_base, seed, rng?, host?, ship_name, attacker_name, defender_name}`; runs `BattleSim.resolve_duel` and (in a scene tree, unless headless) presents `duel_modal.tscn`; returns **exactly** the `resolve_duel` dict (so it stays byte-comparable to a direct call) |
 | `scripts/combat/battle_rewards.gd` (`class_name BattleRewards`) | G | `apply(outcome: Dictionary) -> Dictionary` — adds `salvage_gold`, awards `xp` through `Character.award_xp`, applies `rep_deltas` through `Character.add_reputation`; returns what it applied |
 | `scripts/world/encounters.gd` (`class_name Encounters`) | F | `tick(is_at_sea: bool) -> Array`, `markers() -> Array`, `nearest_contact(cell: Vector2i) -> Dictionary`, `remove(id: String)`, `set_cooldown(kind: String, until_day: int)`, `spawn(kind, nation_id, day) -> Dictionary` (test seam), `reset_rng(seed: int)` |
 
