@@ -23,6 +23,9 @@ const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## T18: fleet/cargo panel (read-only at sea, docs/40 §4.4).
 const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
+## Phase-2 F: hostile marker spawning/movement/contact (docs/60-* §4.1).
+const EncountersLib := preload("res://scripts/world/encounters.gd")
+const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
 ## Phase-1 map file (docs/10-* §6.1). Swapping maps is a path change only.
 const MAP_PATH := "res://data/maps/p1_mediterranean.txt"
@@ -35,12 +38,21 @@ const FALLBACK_CELL := Vector2i(7, 57)
 
 ## Port hub scene (owned by T11).
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
+## S10 battle screen (owned by task D). Contact routes here; while the scene is
+## absent (a worktree cut before D merged) the encounter is still queued and
+## announced — it just does not swap the root, the same convention as
+## [constant PORT_SCENE].
+const BATTLE_SCENE := "res://scenes/combat/battle_screen.tscn"
 
 ## Routing seam (the `GameState.new_game(..., route)` convention): a headless
 ## suite sets this false so entering a port still runs the whole §4.11 sequence
 ## — discovery, desertion, dialog queue, `current_port` — without swapping the
 ## test's own scene root. Production always routes.
 var route_to_port: bool = true
+## Same seam for S10 (docs/60-* §4.11.11.3): with `false` a contact still emits
+## `battle_started` and records `pending_encounter_id()`, but the root is never
+## swapped — which is also what keeps a contact from replacing a test runner.
+var route_to_battle: bool = true
 
 ## docs/80-* §4.3 / project.godot: the eight movement actions.
 const MOVE_ACTIONS := {
@@ -74,6 +86,22 @@ var _reject_logged := false
 var _pending_port_id: String = ""
 ## The S9 overlay (null until a game over fires).
 var _gameover: Control = null
+## Phase-2 F: hostile markers (docs/60-* §4.11.11). Created in `_ready` and
+## seeded from `GameState.hostile_fleets` — never re-rolled on scene open.
+var _encounters = null
+## Marker id → the placeholder `ColorRect` drawn for it (`80-*` §4.8).
+var _marker_nodes: Dictionary = {}
+## This scene's copy of the §4.11.11.3 handoff — `GameState.pending_encounter`
+## is the contract field, but it is declared by task A/§5.4 on the merged base,
+## so the scene keeps the value itself too (see [_store_pending_encounter]).
+var _pending_encounter: Dictionary = {}
+## Encounter that opened the battle currently in progress (S10 owns the fight
+## from here; `battle_finished` closes the loop).
+var _battle_encounter: Dictionary = {}
+## Parent node for the marker squares (created lazily under the map).
+var _marker_root: Node2D = null
+## The attack confirmation currently on screen (null when none).
+var _attack_confirm: Control = null
 
 
 func _ready() -> void:
@@ -123,6 +151,16 @@ func _ready() -> void:
 		_hud.mutiny_choice.connect(_on_mutiny_choice)
 		_hud.dialogs_finished.connect(_on_dialogs_finished)
 
+	# Phase-2 F: hostile markers (docs/60-* §4.1, §4.11.11). The scene only
+	# *adopts* the saved markers here — `Encounters` is told which day already
+	# ticked so re-opening the map cannot re-roll or re-move them (§4.11.11.2).
+	_init_encounters()
+	# `battle_finished` is declared by docs/90-* §5.1; the connect is guarded by
+	# `has_signal` so this scene also runs on a base whose EventBus predates the
+	# Phase-2 signals (the `ResourceLoader.load` + `has_method` convention).
+	if EventBus.has_signal("battle_finished"):
+		EventBus.battle_finished.connect(_on_battle_finished)
+
 
 func _process(_delta: float) -> void:
 	if _loader == null or not _is_loaded():
@@ -137,6 +175,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	# mouse-transparent, so clicks land here; a modal consumes them first.
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
+			# Right-click on an adjacent hostile marker = attack (§4.1).
+			if _modal_open():
+				return
+			if _try_attack(_cell_at(get_global_mouse_position())):
+				get_viewport().set_input_as_handled()
+			return
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
 			if _modal_open():
 				return
@@ -177,6 +222,8 @@ func sync_from_state() -> void:
 	_update_camera()
 	_reveal()
 	_sync_hud()
+	# A save load replaces `hostile_fleets` wholesale; redraw to it.
+	_sync_marker_nodes()
 
 
 ## Map size in pixels, for camera tests.
@@ -224,6 +271,11 @@ func _try_step(target: Vector2i) -> bool:
 	var port_id: String = _loader.port_id_at(target)
 	if not port_id.is_empty():
 		_enter_port(port_id)
+		return true
+	# docs/60-* §4.11.11.1: contact is measured after the player move — a step
+	# onto a tile beside a hostile marker opens the battle now. S10 owns the
+	# screen from here, so nothing else may run on top of it.
+	_tick_encounters()
 	return true
 
 
@@ -333,6 +385,360 @@ func is_active_scene() -> bool:
 	return tree != null and tree.current_scene == self
 
 
+# --- Hostile markers (docs/60-* §4.1, §4.8, §4.11.11) ----------------------
+
+## Creates the marker module and adopts the saved markers. No roll and no
+## movement happens here: `Encounters` starts on `GameState.day`, i.e. "this
+## day's tick already happened", so opening the map (or saving/loading) can
+## never spawn or herd a fleet (§4.11.11.2 "at each day tick").
+func _init_encounters() -> void:
+	if _encounters == null:
+		_encounters = EncountersLib.new(GameState.day)
+	_sync_marker_nodes()
+
+
+## The marker module (public so a test can seed/observe it without a scene).
+func encounters():
+	return _encounters
+
+
+## Cells of every live hostile marker, `[{"id","kind","nation_id","cell"}]`,
+## sorted by id. The test seam for "markers moved/died as expected".
+func hostile_marker_cells() -> Array:
+	var out: Array = []
+	if _encounters == null:
+		return out
+	var entries: Array = _encounters.markers()
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("id", "")) < str(b.get("id", "")))
+	for marker in entries:
+		out.append({
+			"id": str(marker.get("id", "")),
+			"kind": str(marker.get("kind", "")),
+			"nation_id": str(marker.get("nation_id", "")),
+			"cell": EncountersLib.position_of(marker),
+		})
+	return out
+
+
+## Id of the encounter queued for S10 (`""` when none).
+func pending_encounter_id() -> String:
+	return str(pending_encounter().get("id", ""))
+
+
+## The encounter queued for S10 (`{}` when none). `GameState.pending_encounter`
+## wins when the merged base declares it; otherwise the scene's copy answers.
+func pending_encounter() -> Dictionary:
+	var stored = _stored_pending_encounter()
+	if stored is Dictionary and not (stored as Dictionary).is_empty():
+		return (stored as Dictionary).duplicate()
+	return _pending_encounter.duplicate()
+
+
+## One day tick for the markers. Called after a successful player step and from
+## `day_advanced`, in that order (§4.11.11.1 "after both the player move and the
+## marker step"); `Encounters` itself collapses repeats within one day.
+func _tick_encounters() -> void:
+	if _encounters == null:
+		return
+	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
+		return
+	_tick_encounters_at(GameState.current_port == null)
+
+
+## The tick with an explicit at-sea flag (a test can drive either branch).
+func _tick_encounters_at(is_at_sea: bool) -> void:
+	if _encounters == null:
+		return
+	var contacted: Array = _encounters.tick(is_at_sea)
+	_sync_marker_nodes()
+	if contacted.is_empty():
+		return
+	var encounter: Dictionary = _encounter_for(contacted[0])
+	_open_encounter(encounter)
+
+
+## A marker in contact is opened as a battle (docs/60-* §4.1, §4.11.11.3).
+## The encounter queued on `GameState.pending_encounter` carries the marker's
+## saved fields unchanged — including its §4.11.3 `ships`, so S10 fights
+## exactly the composition the marker had.
+func _encounter_for(marker: Dictionary) -> Dictionary:
+	var encounter := marker.duplicate(true)
+	encounter["contact"] = {
+		"x": GameState.world_tile().x, "y": GameState.world_tile().y,
+	}
+	return encounter
+
+
+## Queues `encounter` on `GameState.pending_encounter`, emits `battle_started`
+## once and routes to S10 when this scene is the active one and routing is on.
+## Cleared before the emit, so a re-entrant contact cannot open two battles
+## (§4.11.11.3).
+func _open_encounter(encounter: Dictionary) -> void:
+	if encounter.is_empty():
+		return
+	if _battle_encounter_id() == str(encounter.get("id", "")) \
+			and not _battle_encounter.is_empty():
+		return
+	_battle_encounter = encounter.duplicate(true)
+	_store_pending_encounter(encounter)
+	if EventBus.has_signal("battle_started"):
+		EventBus.battle_started.emit(encounter)
+	_route_to_battle()
+
+
+## True while a battle this scene opened is unresolved.
+func battle_in_progress() -> bool:
+	return not _battle_encounter.is_empty()
+
+
+## S10 route target ("" when none is pending) — the `port_route_target()` seam.
+func battle_route_target() -> String:
+	if pending_encounter_id().is_empty() and not battle_in_progress():
+		return ""
+	if not ResourceLoader.exists(BATTLE_SCENE):
+		return ""
+	return BATTLE_SCENE
+
+
+func _route_to_battle() -> void:
+	if not route_to_battle:
+		return
+	if not is_active_scene():
+		return
+	if not ResourceLoader.exists(BATTLE_SCENE):
+		# Task D owns S10; a contact on a base without it is still announced
+		# (the encounter is queued) and the map stays usable — never a crash.
+		return
+	GameState.change_scene(BATTLE_SCENE)
+
+
+## Redraws the marker squares to match `GameState.hostile_fleets` (docs/80-*
+## §4.8 placeholder art: a flat ColorRect per marker, no textures).
+func _sync_marker_nodes() -> void:
+	if _loader == null or not _is_loaded():
+		return
+	if _marker_root == null:
+		_marker_root = Node2D.new()
+		_marker_root.name = "HostileMarkers"
+		_marker_root.z_index = 9
+		add_child(_marker_root)
+	var live: Dictionary = {}
+	var entries: Array = _encounters.markers() if _encounters != null else []
+	for marker in entries:
+		if not (marker is Dictionary):
+			continue
+		var id := str(marker.get("id", ""))
+		if id.is_empty():
+			continue
+		live[id] = true
+		var square: ColorRect = _marker_nodes.get(id, null)
+		if square == null:
+			square = ColorRect.new()
+			square.name = "Marker_%s" % id
+			square.size = Vector2(_cell_pixels, _cell_pixels) * 0.7
+			square.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_marker_root.add_child(square)
+			_marker_nodes[id] = square
+		square.color = EncountersLib.marker_color(
+			str(marker.get("kind", "")), str(marker.get("nation_id", ""))
+		)
+		_place_marker_square(square, EncountersLib.position_of(marker))
+	for id in _marker_nodes.keys():
+		if live.has(id):
+			continue
+		var dead: ColorRect = _marker_nodes[id]
+		_marker_nodes.erase(id)
+		dead.queue_free()
+
+
+## Centers a marker square on its tile.
+func _place_marker_square(square: ColorRect, cell: Vector2i) -> void:
+	square.position = Vector2(cell) * float(_cell_pixels) \
+		+ (Vector2(_cell_pixels, _cell_pixels) - square.size) * 0.5
+
+
+## Right-click on an adjacent hostile marker = attack it (docs/60-* §4.1). A
+## pirate opens the battle straight away; a navy asks for
+## `encounter.attack_confirm` first because attacking it is piracy (§4.11.10).
+func _try_attack(cell: Vector2i) -> bool:
+	if _modal_open() or not _has_game():
+		return false
+	if not _is_adjacent(cell):
+		return false
+	var marker: Dictionary = _marker_at(cell)
+	if marker.is_empty():
+		return false
+	if str(marker.get("kind", "")) == EncountersLib.NAVY:
+		_open_attack_confirm(marker)
+		return true
+	_attack(marker)
+	return true
+
+
+## The marker occupying `cell` ({} when none).
+func _marker_at(cell: Vector2i) -> Dictionary:
+	if _encounters == null:
+		return {}
+	for marker in _encounters.markers():
+		if marker is Dictionary and EncountersLib.position_of(marker) == cell:
+			return marker
+	return {}
+
+
+## The navy attack confirmation (S12-style modal, `encounter.attack_confirm`).
+func _open_attack_confirm(marker: Dictionary) -> void:
+	if _attack_confirm != null:
+		return
+	var layer := get_node_or_null("AttackLayer") as CanvasLayer
+	if layer == null:
+		layer = CanvasLayer.new()
+		layer.name = "AttackLayer"
+		layer.layer = 3
+		add_child(layer)
+	var dialog: Control = ConfirmScene.instantiate()
+	dialog.name = "AttackDialog"
+	layer.add_child(dialog)
+	_attack_confirm = dialog
+	var nation_id := str(marker.get("nation_id", ""))
+	var nation := I18n.t(DataLoader.get_nation(nation_id).get("name", {}))
+	if DataLoader.ui_strings.has("encounter.attack_confirm"):
+		dialog.open_key("encounter.attack_confirm", {"nation": nation})
+	else:
+		# Task G owns the `encounter.*` inventory (§4.12.5); until it lands the
+		# modal must still warn (piracy is a permanent −20), so it composes the
+		# nation name and the existing confirm label rather than printing a
+		# raw "<encounter.attack_confirm>".
+		dialog.open_text(
+			"%s · %s" % [nation, I18n.t_key("ui.confirm_title")],
+			"ui.confirm", "ui.cancel"
+		)
+	dialog.confirmed.connect(func() -> void:
+		_close_attack_confirm()
+		_attack(marker))
+	dialog.cancelled.connect(_close_attack_confirm)
+
+
+func _close_attack_confirm() -> void:
+	if _attack_confirm == null:
+		return
+	var dialog := _attack_confirm
+	_attack_confirm = null
+	# Hide first: `queue_free()` is deferred, so a dialog left visible would
+	# keep `_modal_open()` true for the rest of the frame (and eat the next
+	# click) — a real double-input bug, not just a test artefact.
+	dialog.visible = false
+	dialog.remove_from_group("modal_overlay")
+	dialog.queue_free()
+
+
+## Attacking a navy marker is piracy: `rep −20` with that nation immediately,
+## before the battle (§4.11.10, `70-*` §4.5, `encounter.attack_confirm` copy).
+## Pirates cost no reputation.
+func _attack(marker: Dictionary) -> void:
+	if marker.is_empty():
+		return
+	if str(marker.get("kind", "")) == EncountersLib.NAVY:
+		var nation_id := str(marker.get("nation_id", ""))
+		if not nation_id.is_empty():
+			CharacterLib.add_reputation(nation_id, EncountersLib.PIRACY_REPUTATION)
+	_open_encounter(_encounter_for(marker))
+
+
+## `battle_finished` handler (§4.11.10 "Return" + §4.10 retreat): remove the
+## marker, set the kind's 3-day spawn immunity, put the fleet back on the
+## contact tile, and — if a second marker is still in contact — chain straight
+## into that battle (§6 "battles chain").
+##
+## A `retreat` outcome is the exception: the enemy is not defeated, so its
+## marker stays on the map and takes the §4.10 **+1 day pursuit cooldown**
+## instead of despawning (§4.11.10's "marker is removed" belongs to the
+## aftermath of a resolved battle).
+func _on_battle_finished(outcome: Dictionary) -> void:
+	if _battle_encounter.is_empty():
+		return
+	var marker: Dictionary = _battle_encounter
+	_battle_encounter = {}
+	var kind := str(marker.get("kind", ""))
+	var day := int(GameState.day)
+	var retreated := str(outcome.get("result", "")) == EncountersLib.RETREAT
+	if _encounters != null:
+		if not kind.is_empty():
+			_encounters.set_cooldown(kind, day + EncountersLib.SPAWN_IMMUNITY_DAYS)
+		if retreated:
+			# The descriptor is a copy: the cooldown must land on the stored
+			# marker, so it goes through the id lookup.
+			_encounters.set_pursuit_cooldown(
+				str(marker.get("id", "")), day + EncountersLib.PURSUIT_COOLDOWN_DAYS
+			)
+		else:
+			_encounters.remove(str(marker.get("id", "")))
+	# §4.10/§4.11.10: the fleet is placed on the contact tile, which is where
+	# it already stood when contact opened — re-assert it so a S10 that moved
+	# the state cannot leave the marker behind off-tile.
+	_restore_fleet_tile(marker)
+	_clear_stored_pending_encounter()
+	_sync_marker_nodes()
+
+	# §6 chaining: a *different* hostile marker still in contact opens next. The
+	# marker this battle just fought can never re-open — a retreat would
+	# otherwise loop straight back into the battle the player just left.
+	if GameState.current_port == null:
+		_open_chained_battle(str(marker.get("id", "")))
+
+
+## Restores the fleet to the battle's contact tile.
+func _restore_fleet_tile(marker: Dictionary) -> void:
+	var contact = marker.get("contact", null)
+	var tile := GameState.world_tile()
+	if contact is Dictionary:
+		tile = Vector2i(int(contact.get("x", tile.x)), int(contact.get("y", tile.y)))
+	GameState.set_world_tile(tile)
+	_fleet_cell = tile
+	_place_marker()
+	_update_camera()
+
+
+## Opens the next marker in range after a battle ends (§6 chaining), skipping
+## `exclude_id` — the marker whose battle just finished.
+func _open_chained_battle(exclude_id: String = "") -> void:
+	if _encounters == null:
+		return
+	for marker in _encounters.contacts(GameState.world_tile()):
+		if str(marker.get("id", "")) == exclude_id:
+			continue
+		_open_encounter(_encounter_for(marker))
+		return
+
+
+# --- `GameState.pending_encounter` (docs/60-* §4.11.11.3) ------------------
+
+## `GameState.pending_encounter` is the §4.11.11.3 handoff field. It is declared
+## by docs/90-* §5.4 with the rest of the Phase-2 state, so access goes through
+## `set`/`get` and the scene keeps a mirror until the field exists: a missing
+## property on this base must not break contact handling.
+func _stored_pending_encounter():
+	var value = GameState.get("pending_encounter")
+	return value if value is Dictionary else null
+
+
+func _store_pending_encounter(encounter: Dictionary) -> void:
+	_pending_encounter = encounter.duplicate(true)
+	GameState.set("pending_encounter", encounter.duplicate(true))
+
+
+func _clear_stored_pending_encounter() -> void:
+	# §4.11.11.3: the handoff is consumed at battle start; from the world side
+	# that is when the battle *finishes* (or a chained battle replaces it).
+	_pending_encounter = {}
+	GameState.set("pending_encounter", null)
+
+
+## The id of the battle currently in progress ("" when none).
+func _battle_encounter_id() -> String:
+	return str(_battle_encounter.get("id", ""))
+
+
 ## The scene this entry would route to (`""` when none is pending). Tests read
 ## this instead of letting the router swap their own scene root.
 func port_route_target() -> String:
@@ -350,6 +756,11 @@ func port_route_target() -> String:
 func _on_day_advanced(_new_day: int) -> void:
 	if not _has_game():
 		return
+	# Phase-2 F: one marker tick per day, at sea only (docs/60-* §4.11.11.2).
+	# The spawn rolls need a living player and no game-over overlay, so the
+	# tick runs before the dead-run early return below only when the run is
+	# still alive — `_tick_encounters()` re-checks both conditions itself.
+	_tick_encounters()
 	# A fatal tick emits `game_over` *inside* the ledger, i.e. before this
 	# signal: S9 already owns the screen, so the dead day's reports must not be
 	# queued underneath it (§4.7 "never simultaneously").
