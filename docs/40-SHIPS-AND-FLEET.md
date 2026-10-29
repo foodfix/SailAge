@@ -68,6 +68,16 @@ Phase-1 fleet pooling (single trade UI):
   non-flagship non-empty iff the previous ship is full).
 - Market/capacity checks use `fleet_free` (`30-*` §4.4).
 
+**Distribution invariant (locked wording).** For every index `i`,
+`fleet[i]` is non-empty ⟹ `fleet[0..i-1]` are all full. `Fleet.normalize_all()`
+is the single enforcement point: it truncates any over-capacity hold (trade
+goods first, in id order, then provisions, then water — supplies are survival
+resources) and then moves any stranded hold units flagship-first. It returns
+`true` iff it changed something; `SaveSystem` calls it after deserialization
+(§6) and logs every repair. Integral JSON floats (`45.0`) are coerced to int
+silently (parse artifact, not a repair); fractional/negative/null values are
+repairs and are logged.
+
 ### 4.3 Shipyard transactions
 
 All four actions at every Phase-1 shipyard (all 8 ShipTypes sold everywhere;
@@ -87,7 +97,9 @@ Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
 
 - `FLEET_MAX = 5` ships (locked; battle-grid width reference for `60-*`).
 - **Flagship** = `fleet[0]`; moving the flagship row to another slot is a
-  free action at port (fleet panel, drag or "Promote" button per `80-*`).
+  free action at port (fleet panel S15 `80-*` §4.5.1, drag or "Promote" button
+  per `80-*`). The rule itself lives in `ShipyardEngine.can_promote/promote`;
+  `Fleet.can_promote/promote` delegate to it (port = `current_port` non-empty).
 - Fleet speed = `min(effective stats)`: the flagship's speed formula result
   (`20-*` §4.4) computed with the **slowest `ShipType.speed` in the fleet**
   as `base_speed`. (§locked simplification: flagship supplies crew/sim
@@ -174,6 +186,15 @@ Shipyard worked numbers (from `10-*` §7.3):
   reported in the loss dialog (§4.4), never silently.
 - **Capacity invariant violation found at load** → `SaveSystem` logs and
   truncates cargo to fit (data corruption guard; also logged for bug report).
+  `Fleet.normalize_all()` does the work (§4.2) and reports whether anything
+  changed.
+- **Jettison (fleet panel S15, `80-*` §4.5.1)** → drops one whole stack (a
+  trade good, or the provisions/water stack) from one ship after a confirm
+  dialog, freeing `fleet_free` immediately; it is the documented way to make
+  room for supplies (`20-*` §4.10) and is port-only, like promotion.
+- **Unknown `ship_type_id` in a hand-edited save** → the capacity guard is
+  skipped with a logged warning (capacity is unknown, and guessing 0 would
+  destroy the hold blind); every other invariant is still enforced.
 
 ## 7. Acceptance Criteria
 

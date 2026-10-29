@@ -222,7 +222,12 @@ then return to title; no save is written or deleted.
 - Purchased only at port markets: `provisions` 2g/unit, `water` 1g/unit
   (locked prices; not affected by supply/demand — they are supplies, not
   trade goods, and never appear in `goods.json`).
-- Surplus can be jettisoned from the fleet panel; not sellable.
+- Surplus can be jettisoned from the fleet panel (S15, `80-*` §4.5.1); not
+  sellable. Jettison is per **stack**: it drops every unit of one trade good,
+  or the whole provisions or water stack, from one ship, after a confirm
+  dialog, and frees capacity immediately (`Fleet.jettison_good` /
+  `Fleet.jettison_supplies`). It is a port action, like flagship promotion —
+  the panel is read-only at sea.
 
 ### 4.11 Port discovery & entry/exit
 

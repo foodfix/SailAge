@@ -34,6 +34,9 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+## T18: the fleet/cargo panel is a parent-agnostic modal, like S14; the port hub
+## and the world map attach it and offer a row / the `F` key.
+const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 
@@ -91,6 +94,7 @@ signal rebound
 @onready var _facility_heading: Label = $Layout/VBox/Facilities/Heading
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
+@onready var _fleet_button: Button = $Layout/VBox/Footer/Fleet
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
@@ -128,6 +132,9 @@ func _ready() -> void:
 	_port_name.add_theme_font_size_override("font_size", 32)
 	_set_sail_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_set_sail_button.pressed.connect(_on_set_sail_pressed)
+	# T18: one footer row that opens the fleet/cargo panel (docs/20 §4.10).
+	_fleet_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_fleet_button.pressed.connect(open_fleet_panel)
 
 	# S4 keeps the same bars as S3, but the sea viewport (minimap + weather
 	# glyph) is replaced by the port menu (docs/80-* §4.5).
@@ -138,6 +145,8 @@ func _ready() -> void:
 
 	# S14 over S4 (docs/80-* §4.3 "S3/S4 | C"). Parent-agnostic modal.
 	CharacterPanelLib.attach_to(self)
+	# T18: the fleet/cargo panel (same modal contract; `F`, or the Fleet button).
+	FleetPanelLib.attach_to(self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_state_changed)
@@ -176,6 +185,10 @@ func has_modal() -> bool:
 			return true
 	var panel := get_node_or_null("CharacterPanel")
 	if panel != null and panel.has_method("is_open") and panel.is_open():
+		return true
+	var fleet_panel := get_node_or_null("FleetPanel")
+	if fleet_panel != null and fleet_panel.has_method("has_modal") \
+			and fleet_panel.has_modal():
 		return true
 	return false
 
@@ -294,6 +307,23 @@ func open_facility(facility_id: String) -> bool:
 	return true
 
 
+## Opens the T18 fleet/cargo panel (promote + jettison, docs/40 §4.4/§6). The
+## panel is a modal over S4, same contract as the S14 character panel.
+## Returns the panel (null only if `fleet_panel.tscn` failed to load).
+func open_fleet_panel() -> Control:
+	var panel := get_node_or_null("FleetPanel")
+	if panel == null:
+		panel = FleetPanelLib.attach_to(self)
+	if panel != null and panel.has_method("open"):
+		panel.open()
+	return panel
+
+
+## The attached fleet panel (tests / hosts), or null.
+func fleet_panel() -> Control:
+	return get_node_or_null("FleetPanel")
+
+
 ## Set Sail (docs/20-* §4.11 exit; docs/80-* §4.2 S4 → S3):
 ## clears `current_port`, resets `clock_fraction` to 0, keeps the fleet on the
 ## harbor tile, then routes to the world map.
@@ -358,6 +388,7 @@ func _bind() -> void:
 			"day": GameState.day,
 		})
 	_set_sail_button.text = I18n.t_key("port.set_sail")
+	_fleet_button.text = I18n.t_key("fleet.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)

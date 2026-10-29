@@ -43,7 +43,8 @@ marked.
 | S11 | Duel | (modal over S10) | 2 |
 | S12 | Guild | `guild_screen.tscn` | 3 |
 | S13 | Palace | `palace_screen.tscn` | 3 |
-| S14 | Character/status panel | modal over S3/S4 | 1 |
+| S14 | Character/status panel | `ui_shared/character_panel.tscn` (modal over S3/S4) | 1 |
+| S15 | Fleet/cargo panel | `ui_shared/fleet_panel.tscn` (modal over S3/S4) | 1 |
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.6).
 
@@ -57,6 +58,7 @@ S4 ──Set Sail──► S3
 S4 ──facility──► S5/S6/S7/S8 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
+S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S3 ──sea death──► S9 ──any key──► S1
 S1 ──Quit──► exit
 ```
@@ -74,6 +76,7 @@ No cross-links beyond these; Esc = step back one edge where applicable.
 | S3 | arrows / numpad 1–9 | step one tile (8-directional per `20-*` §4.2) |
 | S3 | left-click adjacent tile | step there if legal |
 | S3/S4 | `C` | open/close character panel (S14) |
+| S3/S4 | `F` | open/close fleet/cargo panel (S15) |
 | S3 | `M` | toggle minimap enlarged mode (512×384, centered) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
@@ -126,6 +129,41 @@ Layout (1280×720; tile viewport is the space below the top bar):
   in Phase 1.
 - S4 (port) HUD: same top/bottom bars, viewport replaced by the port menu;
   the bar contents are identical so stats are always visible.
+
+### 4.5.1 Fleet/cargo panel (S15)
+
+Modal over S3/S4 (`ui_shared/fleet_panel.tscn`, 880px wide, 40% dim, `F` to
+toggle). It is the fleet-management surface the fleet panel of `40-*` §4.4 and
+the supplies jettison of `20-*` §4.10 refer to.
+
+```
++--------------------------------------------------------------+
+| Fleet                                                        |
+| 2/5 · Free 100 · Fleet is full (5 ships)                     | header
+| <at-sea banner, hidden in port>                              |
++--------------------------------------------------------------+
+| Ship 1 · Caravel [Flagship]                                  |
+| [====------] Durability 45/90   Crew 15/45        Free 0     |
+| Provisions 45 [Jettison]   Water 45 [Jettison]               |
+| Wine × 30 [Jettison]                                         |
+| Ship 2 · Nao                       [Make flagship]           |
+| ...                                                          |
++--------------------------------------------------------------+
+| Esc to go back                                     [Close]  |
++--------------------------------------------------------------+
+```
+
+- Header: fleet count `n/5`, pooled `fleet_free`, `fleet.full` at the cap.
+- Per ship row: data-driven ship-type name, flagship tag on row 1, durability
+  bar (tier-coloured, same thresholds as S6), crew `crew/crew_max`, per-ship
+  free capacity, then one line per stack — provisions, water, and each trade
+  good — with its own `Jettison` button.
+- Promote sits on non-flagship rows only (§4.4: free, port-only,
+  order-preserving). Jettison drops the **whole** stack after a `ui.confirm`
+  dialog (destructive action, §4.7) and frees capacity immediately.
+- At sea the panel is **read-only**: every action is disabled and states its
+  reason, because promotion and jettison are port actions.
+- Rows are 32px table rows (§4.8); no textures.
 
 ### 4.6 Save / load UX
 
