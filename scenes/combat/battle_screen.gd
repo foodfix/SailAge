@@ -41,7 +41,6 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
-const StringsLib := preload("res://scenes/combat/battle_strings.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 ## The application seams this task calls but must not own (§4.12.3).
@@ -1231,11 +1230,13 @@ func _block_reason(action_id: String, unit: Dictionary, target: Dictionary) -> S
 			return ""
 		"cannon":
 			if int(unit.get("ship", {}).get("cannons", 0)) < 1:
-				return "ui.not_available"
+				return "battle.reason.no_cannons"
 			if int(sim.round_number()) < int(unit.get("reload_until_round", 1)):
 				return "battle.reload"
-			if target.is_empty() or not sim.can_cannon(unit, target):
+			if target.is_empty():
 				return "battle.target.none"
+			if not sim.can_cannon(unit, target):
+				return "battle.reason.out_of_range"
 			return ""
 		"ram":
 			if target.is_empty() or not sim.can_ram(unit, target):
@@ -1421,10 +1422,8 @@ func _result_text(result: String) -> String:
 			return _t("battle.result.defeat")
 
 
-## §4.7.1 "loot gold, captured ships, XP and reputation deltas": the §4.12.5
-## inventory has no reputation line key, so the delta row is composed from the
-## existing `char.reputation` label plus the nation's own name — no invented
-## `battle.after.rep` key (reported as a doc gap instead).
+## §4.7.1 "loot gold, captured ships, XP and reputation deltas", through the
+## `battle.after.rep` key of the §4.12.5 inventory.
 func _reputation_texts() -> Array[String]:
 	var out: Array[String] = []
 	var deltas = last_outcome.get("rep_deltas", {})
@@ -1439,9 +1438,9 @@ func _reputation_texts() -> Array[String]:
 		var nation: Dictionary = DataLoader.get_nation(str(nation_id))
 		var nation_name := I18n.t(nation.get("name", {})) \
 			if not nation.is_empty() else str(nation_id)
-		out.append("%s · %s %+d" % [
-			I18n.t_key("char.reputation"), nation_name, delta,
-		])
+		out.append(_t("battle.after.rep", {
+			"nation": nation_name, "delta": "%+d" % delta,
+		}))
 	return out
 
 
@@ -1553,22 +1552,14 @@ func game_over_open() -> bool:
 
 # --- Localisation helpers --------------------------------------------------
 
-## `battle.*`/`encounter.*` text: the merged `ui_strings.json` entry when task G
-## has landed it, else the verbatim §4.12.5 doc copy (`battle_strings.gd`).
-## Never a raw `<key>` (§6).
+## `battle.*`/`encounter.*` text. Every one of these keys is a
+## `data/ui_strings.json` entry (`docs/60-COMBAT.md` §4.12.5), resolved through
+## the shared formatter (§4.4 `{name}` placeholders). This screen never carries
+## its own copy of a player-facing string (AGENTS.md i18n hard rule); a missing
+## key is a data bug and renders `I18n.t_key()`'s `<key>` marker, which the data
+## validator prevents in shipped data.
 func _t(key: String, values: Dictionary = {}) -> String:
-	if DataLoader.ui_strings.has(key):
-		# The merged data entry, through the shared formatter (§4.4 `{name}`).
-		return I18n.fmt(key, values)
-	var l10n := StringsLib.get_string(key)
-	if l10n.is_empty():
-		push_error("BattleScreen: no §4.12.5 string for '%s'" % key)
-		return "<%s>" % key
-	# The bridge copies the doc's L10nString, so the same formatter applies.
-	var template := I18n.t(l10n)
-	for name in values:
-		template = template.replace("{%s}" % name, str(values[name]))
-	return template
+	return I18n.fmt(key, values)
 
 
 ## `ui.reason` prefix + a localised reason word (§4.7 "disabled with a tooltip

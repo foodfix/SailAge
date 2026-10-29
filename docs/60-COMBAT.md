@@ -636,6 +636,12 @@ Task G owns this list; D/C/F use these keys and **must not invent others**
 | `battle.after.scuttled` | 船队已满,{ship} 被拆解。 | Fleet full — {ship} was scuttled. |
 | `battle.after.overflow` | {count} 单位货物因舱位不足而丢失。 | {count} units of cargo were lost for lack of hold space. |
 | `battle.after.lost` | 你失去了 {ship}。 | You lost {ship}. |
+| `battle.after.rep` | {nation} 声望 {delta} | {nation} reputation {delta} |
+| `battle.log.hold` | {ship} 待命。 | {ship} holds position. |
+| `battle.log.board` | {attacker} 接舷 {target}! | {attacker} boards {target}! |
+| `battle.log.surrender_enemy` | {ship} 投降了。 | {ship} strikes her colours. |
+| `battle.reason.no_cannons` | 本船没有火炮 | This ship carries no cannons |
+| `battle.reason.out_of_range` | 目标不在射程内 | Target out of range |
 | `battle.surrender.confirm` | 确定要投降吗? | Surrender the battle? |
 | `battle.retreat.confirm` | 确定要撤退吗? | Retreat from the battle? |
 | `duel.title` | 船长决斗 | Captain's Duel |

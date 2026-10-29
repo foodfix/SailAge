@@ -1043,5 +1043,29 @@
   "gameover.captured": {
     "zh": "你被俘了,船队落入敌手。",
     "en": "Captured — your fleet is lost to the enemy."
+  },
+  "battle.after.rep": {
+    "zh": "{nation} 声望 {delta}",
+    "en": "{nation} reputation {delta}"
+  },
+  "battle.log.hold": {
+    "zh": "{ship} 待命。",
+    "en": "{ship} holds position."
+  },
+  "battle.log.board": {
+    "zh": "{attacker} 接舷 {target}!",
+    "en": "{attacker} boards {target}!"
+  },
+  "battle.log.surrender_enemy": {
+    "zh": "{ship} 投降了。",
+    "en": "{ship} strikes her colours."
+  },
+  "battle.reason.no_cannons": {
+    "zh": "本船没有火炮",
+    "en": "This ship carries no cannons"
+  },
+  "battle.reason.out_of_range": {
+    "zh": "目标不在射程内",
+    "en": "Target out of range"
   }
 }
