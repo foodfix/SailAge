@@ -82,6 +82,7 @@ func _make_run(
 	SailingSimLib.last_day_shortfalls = {"provisions": false, "water": false}
 	SailingSimLib.last_day_unpaid_wages = false
 	SailingSimLib.last_day_wages = 0
+	SailingSimLib.last_day_storm = false
 
 
 ## Runs exactly one ledger day through the production path (the clock), so the
@@ -426,20 +427,24 @@ func _test_port_day() -> void:
 	_check(not SailingSimLib.in_port(), "in_port() is false at sea")
 
 
-# --- T7 boundary: no weather, no morale ----------------------------------
+# --- T7 boundary: step 3 (T8) and step 4 (T9) ----------------------------
+# T8 landed the weather roll at step 3, so the T7-era "weather is untouched"
+# assertion is superseded: a ledger day now *must* write `world.weather`. The
+# morale half of the boundary still holds (step 4 is T9's) and is asserted here
+# unchanged. T8's own suite is `tools/test_weather.tscn`.
 
 func _test_no_weather_or_morale_mutation() -> void:
-	# 9. One full ledger day must leave step 3 (weather) and step 4 (morale) alone.
+	# 9. One full ledger day must leave step 4 (morale) alone.
 	_make_run(15, 10, 10, 1000, "fair")
 	GameState.morale = 63
-	var weather_before := str(GameState.world["weather"])
 	var morale_before := GameState.morale
+	SailingSimLib.last_day_storm = false
 	_one_day()
-	_check(str(GameState.world["weather"]) == weather_before,
-		"ledger step 1–2 does not roll weather (still '%s')"
+	_check(str(GameState.world["weather"]) in SailingSimLib.WEATHER_OUTCOMES,
+		"ledger step 3 rolls a §4.7 weather outcome (T8) (got '%s')"
 		% str(GameState.world["weather"]))
 	_check(GameState.morale == morale_before,
-		"ledger step 1–2 does not touch morale (63 → %d)" % GameState.morale)
+		"ledger step 1–3 does not touch morale (63 → %d)" % GameState.morale)
 	_check(not GameState.world.has("last_ledger_day"),
 		"no transient ledger keys leak into GameState.world")
 

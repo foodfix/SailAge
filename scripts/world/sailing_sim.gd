@@ -9,11 +9,12 @@ extends RefCounted
 ## Ownership split (docs/IMPLEMENT-Phase1.md T6/T7/T8/T9):
 ##   T6: movement validation, applying a move, the fractional clock
 ##       accumulator + day boundary, `effective_speed()` and `move_cost()`.
-##   T7 (this file today): the §5 constants block, ledger step 1 (consumption)
-##       and step 2 (wages), plus the `advance_port_day()` port-day entry
-##       point. The day increment calls the ledger *before* `day_advanced` is
-##       emitted so every listener sees a finished day (§4.3).
-##   T8: ledger step 3 (weather roll, §4.7).
+##   T7: the §5 constants block, ledger step 1 (consumption) and step 2
+##       (wages), plus the `advance_port_day()` port-day entry point. The day
+##       increment calls the ledger *before* `day_advanced` is emitted so every
+##       listener sees a finished day (§4.3).
+##   T8 (this file today): ledger step 3 — the §4.7 zone/luck weather roll,
+##       the storm damage application and the `last_day_storm` flag T9 reads.
 ##   T9: ledger steps 4–6 (morale, fail states, mutiny, §4.8–§4.9).
 ##
 ## `_run_daily_ledger()` is the single seam for all six steps: they run in the
@@ -50,6 +51,11 @@ const DESERTION_THRESHOLD := 40
 const DESERTION_FRACTION := 0.10
 ## §4.7: storm damage as a fraction of max durability (`ceil(max × 0.05)`).
 const STORM_DAMAGE_FRACTION := 0.05
+## §4.7 storm damage is rounded with `ceil`; binary float noise makes exact
+## integer products evaluate a hair above the integer (140 × 0.05 =
+## 7.000000000000001), so the ceiling is taken on `raw − STORM_DAMAGE_EPSILON`.
+## This can never drop a real fractional value across an integer boundary.
+const STORM_DAMAGE_EPSILON := 1.0e-9
 
 ## §4.4: "minimum 1 tile/day" — speed can never be 0 (§6).
 const MIN_SPEED := 1
@@ -65,9 +71,23 @@ const WIND_FACTORS := {
 	"storm": {"sail": 1.5, "oar": 1.0, "hybrid": 1.2},
 }
 
-## §4.3 default weather before the first ledger roll (§4.7). Read-only: the
+## §4.7 default weather before the first ledger roll (§4.7). Read-only: the
 ## simulation never writes `world.weather` from the movement path (T7/T8 own it).
 const DEFAULT_WEATHER := "calm"
+
+## §4.7 zone table, exactly as documented: zone id → outcome → probability.
+## "Atlantic strip = tiles with x ≤ 6"; every other tile uses "rest_of_map".
+## The values are the *base* table; the luck term (§4.2) only rescales the
+## storm entry and redistributes the freed mass (see [method zone_probabilities]).
+const ATLANTIC_STRIP_MAX_X := 6
+const WEATHER_ZONES := {
+	"atlantic_strip": {"calm": 0.05, "fair": 0.30, "strong": 0.15, "storm": 0.50},
+	"rest_of_map": {"calm": 0.20, "fair": 0.55, "strong": 0.15, "storm": 0.10},
+}
+
+## Outcome order used by the single uniform draw that maps a roll to an
+## outcome. Fixed so a given seed yields the same sequence forever.
+const WEATHER_OUTCOMES: Array[String] = ["calm", "fair", "strong", "storm"]
 
 ## Tolerance for the day boundary. Repeated float additions of a fractional
 ## cost (1/3 three times = 0.9999999999999999) must still tick the day; §4.3's
@@ -83,6 +103,120 @@ const CLOCK_EPSILON := 1.0e-9
 static func wind_factor(weather: String, ship_class: String) -> float:
 	var table: Dictionary = WIND_FACTORS.get(weather, {})
 	return float(table.get(ship_class, 1.0))
+
+
+# --- Weather (docs/20-* §4.7, docs/50-* §4.2) -------------------------------
+
+## Seeded RNG for the weather roll, injectable for deterministic tests via
+## [method set_weather_seed]. Godot's default `RandomNumberGenerator.seed` is
+## random, which is exactly what a real run wants and what a test replaces.
+static var rng := RandomNumberGenerator.new()
+
+## Flag for ledger step 4 (T9): true when the most recent tick rolled a storm.
+## T9's morale step applies the §4.8.1 "at sea, storm day −5" row from this and
+## only this; T8 never touches `GameState.morale` itself. Not persisted (the
+## same rule as `last_day_shortfalls`: saving only happens in port).
+static var last_day_storm: bool = false
+## Zone the most recent roll used ("atlantic_strip" / "rest_of_map"); a
+## diagnostic for tests, not saved.
+static var last_weather_zone: String = ""
+
+
+## Reseeds the weather RNG so a test (or a replay) gets an identical sequence.
+static func set_weather_seed(seed_value: int) -> void:
+	rng.seed = seed_value
+
+
+## docs/20-* §4.7: "Atlantic strip = tiles with `x ≤ 6`", else rest of map.
+static func weather_zone_for(tile: Vector2i) -> String:
+	return "atlantic_strip" if tile.x <= ATLANTIC_STRIP_MAX_X else "rest_of_map"
+
+
+## Outcome probabilities for `zone` with the §4.2 luck term applied.
+##
+## **Redistribution method.** The doc scales *only* the storm chance:
+## `storm' = storm × (1 − luck/400)` (`Character.storm_chance_multiplier()`).
+## The mass freed by that reduction, `base_storm − storm'`, is handed back to
+## the three non-storm outcomes **proportionally to their own base weights**:
+##
+##     scale        = (1 − storm') / (1 − base_storm)
+##     calm'/fair'/strong' = base × scale
+##
+## so the four entries still sum to exactly 1.0. Because every non-storm entry
+## is multiplied by the *same* factor, their relative shares are unchanged: a
+## calm day stays 5/50 of the strip's non-storm days (0.05 vs 0.30 vs 0.15) and
+## only the absolute calm/fair/strong/storm split shifts, which is precisely
+## what "luck reduces storm chance" means. At luck 0 the multiplier is 1.0, the
+## scale is 1.0 and this returns the §4.7 table untouched. No new numbers are
+## introduced.
+static func zone_probabilities(zone: String) -> Dictionary:
+	var base: Dictionary = WEATHER_ZONES.get(zone, WEATHER_ZONES["rest_of_map"])
+	var base_storm := float(base["storm"])
+	# Stats are clamped 1–100 (docs/50-* §4.2), so the multiplier is always in
+	# [0.75, 1.0]; the clamp only keeps a hand-built test state from producing a
+	# negative storm probability that would break the cumulative draw.
+	var storm := clampf(
+		base_storm * CharacterLib.storm_chance_multiplier(), 0.0, base_storm
+	)
+	# (1 − storm) / (1 − base_storm); the divisor is 0.90 / 0.50 — never 0.
+	var scale := (1.0 - storm) / (1.0 - base_storm)
+	var out := {"storm": storm}
+	for outcome in ["calm", "fair", "strong"]:
+		out[outcome] = float(base[outcome]) * scale
+	return out
+
+
+## Rolls one day's weather for `tile` and returns `"calm"|"fair"|"strong"|
+## "storm"`. A single uniform draw over the cumulative sums of
+## [method zone_probabilities] (fixed order `WEATHER_OUTCOMES`), so the seeded
+## sequence is stable.
+static func roll_weather(tile: Vector2i) -> String:
+	var zone := weather_zone_for(tile)
+	var probabilities := zone_probabilities(zone)
+	var roll := rng.randf()
+	var cumulative := 0.0
+	var outcome := "storm"
+	for candidate in WEATHER_OUTCOMES:
+		cumulative += float(probabilities.get(candidate, 0.0))
+		if roll < cumulative:
+			outcome = candidate
+			break
+	last_weather_zone = zone
+	return outcome
+
+
+## §4.7 storm damage for one hull: `ceil(durability_max × 0.05)`, with the
+## luck mitigation (`50-*` §4.2: ×0.75 when luck ≥ 50) applied **before**
+## rounding. The epsilon absorbs binary float noise (140 × 0.05 evaluates to
+## 7.000000000000001, which must still ceil to 7, per §4.7's worked table).
+static func storm_damage_for(durability_max: int) -> int:
+	if durability_max <= 0:
+		return 0
+	var raw := float(durability_max) * STORM_DAMAGE_FRACTION \
+		* CharacterLib.storm_damage_multiplier()
+	return maxi(0, int(ceil(raw - STORM_DAMAGE_EPSILON)))
+
+
+## Applies one storm day to every ship and returns the total damage dealt.
+## Durability clamps at 0 and never goes negative; sinking itself is T9's step 5
+## (it only needs to see the 0). Emits `fleet_changed` when anything changed.
+static func apply_storm_damage() -> int:
+	var total := 0
+	for ship in GameState.fleet:
+		var before := int(ship.get("durability", 0))
+		var damage := storm_damage_for(FleetLib.ship_stat(ship, "durability"))
+		var after := maxi(0, before - damage)
+		if after != before:
+			ship["durability"] = after
+			total += before - after
+	if total > 0:
+		FleetLib.notify_changed()
+	return total
+
+
+## True when the last tick rolled a storm (convenience for T9/the HUD).
+static func was_storm_last_day() -> bool:
+	return last_day_storm
 
 
 ## docs/20-* §4.6: `crew < crew_min ? max(crew/crew_min, 0.25) : 1.0`.
@@ -241,14 +375,12 @@ static var last_day_wages: int = 0
 ## day, *before* `day_advanced` is emitted, so every listener observes a
 ## finished day (§4.3).
 ##
-## T7 implements steps 1–2 only. Steps 3–6 are marked hooks below and must be
-## inserted in place — do not restructure this function.
+## T7 implements steps 1–2; T8 adds step 3. Steps 4–6 are marked hooks below
+## and must be inserted in place — do not restructure this function.
 static func _run_daily_ledger() -> void:
 	_ledger_consumption()  # T7: step 1
 	_ledger_wages()        # T7: step 2
-	# T8 HOOK: step 3 weather roll (docs/20-* §4.7) — roll for the coming day,
-	#   write `GameState.world["weather"]`, apply storm damage + the storm
-	#   morale flag that step 4 reads.
+	_ledger_weather()      # T8: step 3
 	# T9 HOOK: step 4 morale update (docs/20-* §4.8.1) — reads
 	#   `last_day_shortfalls`, `last_day_unpaid_wages`, `in_port()` and the
 	#   weather rolled in step 3; applies the in-port +5 up to MORALE_PORT_CAP
@@ -304,3 +436,21 @@ static func _ledger_wages() -> void:
 	GameState.gold = maxi(0, before - wages)
 	if GameState.gold != before:
 		EventBus.gold_changed.emit(GameState.gold)
+
+
+## §4.5 step 3 — weather roll (docs/20-* §4.7). Rolls for the coming day on
+## the fleet's current tile, writes `GameState.world["weather"]` and, on a
+## storm, damages every hull and raises [member last_day_storm] for T9's step 4.
+##
+## T8 deliberately stops short of the storm's morale −5 (§4.8.1) and of any
+## sinking check (§4.9 step 5): it only leaves durability at 0 so T9 can detect
+## it. Runs in port too (the roll is a property of the zone, not of being at
+## sea); T9 decides whether a storm day costs morale there.
+static func _ledger_weather() -> void:
+	var tile: Vector2i = GameState.world_tile()
+	var outcome := roll_weather(tile)
+	GameState.world["weather"] = outcome
+	last_day_storm = outcome == "storm"
+	if last_day_storm:
+		apply_storm_damage()
+

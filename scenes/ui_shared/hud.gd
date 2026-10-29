@@ -34,8 +34,10 @@ const DOT_NORMAL := 2
 const AREA_RADIUS := 16
 ## docs/80-* §4.7: toasts are transient (2.5s), max one visible.
 const TOAST_SECONDS := 2.5
-## docs/80-* §4.5: the storm glyph flashes on a 0.5s cycle.
-const STORM_FLASH_SECONDS := 0.5
+## docs/80-* §4.5: "in storm it flashes (0.5s cycle)" — a *cycle* is one full
+## fade-out + fade-in, so each half lasts 0.25s.
+const STORM_FLASH_CYCLE_SECONDS := 0.5
+const STORM_FLASH_HALF_SECONDS := STORM_FLASH_CYCLE_SECONDS * 0.5
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
@@ -70,8 +72,11 @@ var _dialog_queue: Array = []
 var _dialog = null
 ## Toast generation counter so a replaced toast does not hide its successor.
 var _toast_generation := 0
-## Storm-flash tween (created/destroyed by [_refresh_weather]).
+## Storm-flash tween (created/destroyed by [_apply_weather]).
 var _weather_tween: Tween = null
+## The weather value currently rendered ("calm"|"fair"|"strong"|"storm"), so a
+## test can assert the label follows `day_advanced` and not GameState.
+var _displayed_weather: String = ""
 
 
 func _ready() -> void:
@@ -299,7 +304,14 @@ func _refresh_bottom() -> void:
 
 
 func _refresh_weather() -> void:
-	var weather := str(GameState.world.get("weather", SailingSimLib.DEFAULT_WEATHER))
+	_apply_weather(str(GameState.world.get("weather", SailingSimLib.DEFAULT_WEATHER)))
+
+
+## Renders one weather value. Split from [_refresh_weather] so the label logic
+## has exactly one GameState read (at the signal handler) and the flash is a
+## pure visibility effect.
+func _apply_weather(weather: String) -> void:
+	_displayed_weather = weather
 	_weather_label.text = I18n.t_key("world.weather.%s" % weather)
 	# §4.5: in storm the weather glyph flashes (0.5s cycle); otherwise steady.
 	_weather_label.add_theme_color_override(
@@ -312,14 +324,31 @@ func _refresh_weather() -> void:
 		_stop_storm_flash()
 
 
-## Looping 0.5s alpha flash for the storm state; the node is the placeholder
-## glyph (default font), never a texture (docs/80-* §4.8).
+## Looping 0.5s flash *cycle* for the storm state (§4.5): 0.25s out, 0.25s in.
+## The node is the placeholder glyph (default font), never a texture
+## (docs/80-* §4.8), and the tween is purely visual — it reads no game state.
 func _start_storm_flash() -> void:
 	if _weather_tween != null and _weather_tween.is_valid():
 		return
 	_weather_tween = create_tween().set_loops()
-	_weather_tween.tween_property(_weather_label, "modulate:a", 0.25, STORM_FLASH_SECONDS)
-	_weather_tween.tween_property(_weather_label, "modulate:a", 1.0, STORM_FLASH_SECONDS)
+	_weather_tween.tween_property(
+		_weather_label, "modulate:a", 0.25, STORM_FLASH_HALF_SECONDS
+	)
+	_weather_tween.tween_property(
+		_weather_label, "modulate:a", 1.0, STORM_FLASH_HALF_SECONDS
+	)
+
+
+## True while the storm glyph is flashing (tests read this instead of polling
+## the tween's internals).
+func is_storm_flashing() -> bool:
+	return _weather_tween != null and _weather_tween.is_valid()
+
+
+## The weather string the HUD is currently displaying, without touching
+## GameState again (test helper for the "signal-only" contract).
+func displayed_weather_key() -> String:
+	return _displayed_weather
 
 
 func _stop_storm_flash() -> void:

@@ -135,8 +135,8 @@ chance of at least one storm is `1 − (1 − p)^n`:
 
 | n days | p = 0.50 (no luck term) | p = 0.4875 (luck 10) |
 |---|---|---|
-| 5 | 0.96875 | 0.96462 |
-| 6 | 0.98438 | 0.98195 |
+| 5 | 0.96875 | 0.96464 |
+| 6 | 0.98438 | 0.98188 |
 
 Because `1 − 0.5⁵ = 0.96875 < 0.97`, a "≥ 0.97 within 5 days" claim is
 arithmetically unreachable; the acceptance check is therefore fixed as
