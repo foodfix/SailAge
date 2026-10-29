@@ -842,7 +842,7 @@
   },
   "shipyard.cannons_sellback": {
     "zh": "回收 {amount}g",
-    "en": "Sell-back {amount}g"
+    "en": "Sell-back: {amount}g"
   },
   "shipyard.equipment": {
     "zh": "装备",

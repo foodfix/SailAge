@@ -540,8 +540,12 @@ func _test_screen() -> void:
 	_check((widgets["refit_note"] as Label).text
 			== I18n.fmt("shipyard.repair_cost", {"amount": 500}),
 		"…with a 500g cost preview (%s)" % (widgets["refit_note"] as Label).text)
+	# The screen prefers `shipyard.cannons_sellback` and falls back to
+	# `shipyard.repair_cost` until that key lands (see _fmt_or); assert the
+	# resolved label either way so the check survives the ui_strings merge.
 	_check((widgets["refit_sellback"] as Label).text
-			== I18n.fmt("shipyard.repair_cost", {"amount": 0}),
+			== _refit_label("shipyard.cannons_sellback",
+				"shipyard.repair_cost", {"amount": 0}),
 		"…and the 0g sell-back of the current 0 cannons (%s)"
 		% (widgets["refit_sellback"] as Label).text)
 	var gold_before := GameState.gold
@@ -554,7 +558,8 @@ func _test_screen() -> void:
 	_check(GameState.gold == gold_before - 500,
 		"…and charges 500g (gold %d → %d)" % [gold_before, GameState.gold])
 	_check((screen.fleet_widget(0)["refit_sellback"] as Label).text
-			== I18n.fmt("shipyard.repair_cost", {"amount": 250}),
+			== _refit_label("shipyard.cannons_sellback",
+				"shipyard.repair_cost", {"amount": 250}),
 		"…and the sell-back note now shows 5 × 50g (%s)"
 		% (screen.fleet_widget(0)["refit_sellback"] as Label).text)
 	# The picker clamps to max_refit.
@@ -718,3 +723,13 @@ func _report() -> void:
 	for failure in _failures:
 		print("  - ", failure)
 	get_tree().quit(1)
+
+
+## The screen's `_fmt_or()` contract (owned by `shipyard_screen.gd`): render the
+## specific key once `ui_strings.json` carries it, else the shared fallback.
+## Tests must mirror it rather than freeze the fallback, or applying the
+## pending keys at merge time breaks a green suite.
+func _refit_label(key: String, fallback_key: String, values: Dictionary) -> String:
+	if DataLoader.ui_strings.has(key):
+		return I18n.fmt(key, values)
+	return I18n.fmt(fallback_key, values)
