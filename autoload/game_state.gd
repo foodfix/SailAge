@@ -31,6 +31,12 @@ var current_port = null
 var port_investments: Dictionary = {}
 ## Discovered port ids (docs/20-* §4.11).
 var known_ports: Array = []
+## World-map hostile markers (docs/60-* §4.11.11); present-but-empty before
+## Phase 2 and saved as of save_version 2 (docs/90-* §8.1).
+var hostile_fleets: Array = []
+## `{kind: day}` spawn immunity after a battle (docs/60-* §4.8, §4.11.11.1);
+## present-but-empty before Phase 2 and saved as of save_version 2.
+var proximity_cooldowns: Dictionary = {}
 ## Phase-2/3 fields: present but empty in Phase 1.
 var quests: Array = []
 var discoveries_found: Array = []
@@ -122,6 +128,9 @@ func new_game(nation_id: String, route: bool = true) -> void:
 	port_investments = {}
 	quests = []
 	discoveries_found = []
+	# docs/60-* §4.11.11: markers and spawn immunity are per-run state.
+	hostile_fleets = []
+	proximity_cooldowns = {}
 	explored_tiles = {}
 	CharacterLib.pending_levelup = false
 
