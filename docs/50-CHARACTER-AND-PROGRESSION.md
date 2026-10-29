@@ -193,8 +193,8 @@ Effective-stat computation (Portugal start + Mateus Álvares aboard):
 Level table (first rows of `level = floor(sqrt(xp/50)) + 1`):
 
 ```json
-{"xp": 0, "level": 1, "next_at": 50}
-// xp 50→L2; 200→L3; 450→L4; 800→L5; 1250→L6; cap L20 at 18050 xp
+{"xp": 0, "level": 1, "next_at": 50,
+ "table": "50→L2; 200→L3; 450→L4; 800→L5; 1250→L6; cap L20 at 18050 xp"}
 ```
 
 ## 6. Edge Cases & Fail States
