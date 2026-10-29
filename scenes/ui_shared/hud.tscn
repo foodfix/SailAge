@@ -1,0 +1,160 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/ui_shared/hud.gd" id="1_hud"]
+
+[node name="HUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+
+[node name="TopBar" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 40.0
+grow_horizontal = 2
+mouse_filter = 0
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="TopRow" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = 4.0
+offset_right = -16.0
+offset_bottom = 36.0
+grow_horizontal = 2
+mouse_filter = 0
+theme_override_constants/separation = 24
+
+[node name="Day" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Day -"
+vertical_alignment = 1
+
+[node name="Gold" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "-g"
+vertical_alignment = 1
+
+[node name="Morale" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "Morale -"
+vertical_alignment = 1
+
+[node name="Area" type="Label" parent="TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "-"
+vertical_alignment = 1
+
+[node name="LangButton" type="Button" parent="TopRow"]
+custom_minimum_size = Vector2(120, 32)
+layout_mode = 2
+focus_mode = 0
+text = "中文 / EN"
+
+[node name="BottomBar" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -32.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 0
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="BottomRow" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -32.0
+offset_right = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 0
+theme_override_constants/separation = 24
+
+[node name="Provisions" type="Label" parent="BottomRow"]
+layout_mode = 2
+text = "Provisions -"
+vertical_alignment = 1
+
+[node name="Water" type="Label" parent="BottomRow"]
+layout_mode = 2
+text = "Water -"
+vertical_alignment = 1
+
+[node name="Crew" type="Label" parent="BottomRow"]
+layout_mode = 2
+text = "Crew -"
+vertical_alignment = 1
+
+[node name="Cargo" type="Label" parent="BottomRow"]
+layout_mode = 2
+text = "Cargo -"
+vertical_alignment = 1
+
+[node name="Speed" type="Label" parent="BottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Speed -"
+vertical_alignment = 1
+
+[node name="Weather" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 248.0
+offset_right = 272.0
+offset_bottom = 272.0
+text = "-"
+
+[node name="Minimap" type="Control" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 56.0
+offset_right = 272.0
+offset_bottom = 248.0
+mouse_filter = 0
+
+[node name="Toast" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -240.0
+offset_top = -80.0
+offset_right = 240.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="ToastLabel" type="Label" parent="Toast"]
+layout_mode = 2
+text = "-"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ModalHost" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
