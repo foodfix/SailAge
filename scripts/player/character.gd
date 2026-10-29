@@ -323,12 +323,24 @@ static func add_reputation(nation_id: String, delta: int) -> int:
 	return value
 
 
-## docs/50-* §4.6 Phase-1 source: +1 per 1,000g of sale profit at that
-## nation's ports, floored per transaction (T12's market calls this).
+## docs/50-* §4.6 Phase-1 source: +1 per 1,000g of **cumulative** sale profit
+## at that nation's ports (T12's market calls this).
+##
+## Cumulative, not per-transaction: the remainder carries across sales in
+## `player.profit_remainder[nation_id]`, so two 500g sales award the 1 point
+## that per-transaction flooring would have lost. Loss sales add nothing.
 static func add_profit_reputation(nation_id: String, profit: int) -> int:
-	if profit <= 0:
+	var p: Dictionary = _player()
+	if profit <= 0 or p.is_empty():
 		return reputation(nation_id)
-	return add_reputation(nation_id, int(floor(profit / 1000.0)))
+	var remainder: Dictionary = p.get("profit_remainder", {})
+	var carried := int(remainder.get(nation_id, 0)) + profit
+	var credit := int(floor(float(carried) / 1000.0))
+	remainder[nation_id] = carried - credit * 1000
+	p["profit_remainder"] = remainder
+	if credit == 0:
+		return reputation(nation_id)
+	return add_reputation(nation_id, credit)
 
 
 # --- Helpers ---------------------------------------------------------------

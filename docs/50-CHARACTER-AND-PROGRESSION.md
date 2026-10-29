@@ -109,8 +109,22 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
 ### 4.6 Reputation
 
 - Per nation, integer −100…+100, stored in `player.reputation`.
-- Phase-1 sources: +1 per 1,000g cumulative profit sold at a nation's ports
-  (per nation, per transaction sum). No decay.
+- Phase-1 sources: +1 per 1,000g **cumulative** profit sold at a nation's
+  ports. No decay.
+- **Cumulative accounting (normative).** Per-transaction `floor(profit/1000)`
+  loses fractions and would award nothing for two 500g sales; the rule is
+  cumulative, so each nation carries a running remainder:
+
+  ```
+  player.profit_remainder[nation_id] += floor(profit_of_this_sale)
+  credit = floor(player.profit_remainder[nation_id] / 1000)
+  player.profit_remainder[nation_id] -= credit * 1000
+  player.reputation[nation_id]      += credit   # clamped −100…+100
+  ```
+
+  `profit_remainder` is **save-relevant** and therefore part of the `player`
+  block (§4.8); it defaults to `{}` when absent (older saves, new game).
+  Loss-making sales add nothing (profit floors at 0) and never reduce it.
 - Phase-1 effects: display only (shown on the character panel). Trade refusal
   and title gating OUT OF SCOPE (phase 3, `70-*`).
 
@@ -142,13 +156,16 @@ Manual ship-role assignment UI OUT OF SCOPE (phase 2, multi-ship crews).
   "xp": 37,
   "level": 1,
   "officers": ["off_mateus_alvares"],
-  "reputation": {"portugal": 20, "spain": 0, "england": 0, "holland": 0, "ottoman": 0, "italy": 0}
+  "reputation": {"portugal": 20, "spain": 0, "england": 0, "holland": 0, "ottoman": 0, "italy": 0},
+  "profit_remainder": {"portugal": 400}
 }
 ```
 
 - `officers` stores ids (full records live in `data/officers.json`).
 - `level` is stored but re-derived from `xp` on load (stored value is a
   cache; derivation wins on mismatch, logged).
+- `profit_remainder` is the per-nation carry for the cumulative +1/1,000g
+  reputation rule (§4.6); absent → treated as `{}`.
 
 ## 5. Data Examples
 
