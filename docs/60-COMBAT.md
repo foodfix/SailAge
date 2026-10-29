@@ -544,6 +544,74 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
 before the module exists (the Phase-1 `apply_fleet_guard` convention), so no
 task can be blocked by a sibling's merge order.
 
+#### 4.12.4 Call order at battle end (pin — keeps file ownership disjoint)
+
+`battle_screen.gd` (task D) owns the sequence below; every other module is
+reached through the guards above, so D never edits a sibling's file:
+
+1. `BattleSim` reports `is_over()`; its `outcome()` is the raw block.
+2. `BattleResult.apply(raw, enemy_units, GameState.fleet)` — fleet effects
+   (captures/losses/flagship promotion, `gameover.*`); returns the outcome
+   with `cargo_overflow_lost`.
+3. `BattleRewards.apply(outcome)` — gold, XP, reputation (§4.11.10).
+4. `Encounters.remove(encounter_id)` + `Encounters.set_cooldown(kind, day + 3)`.
+5. `GameState.set_world_tile(contact)`; emit `EventBus.battle_finished(outcome)`;
+   show the after-action dialog; route to S3 unless a `gameover.*` fired.
+
+`BattleSim` itself never touches `GameState`. `BattleResult` touches only
+`GameState.fleet` (+ emits `gameover.*`/`fleet_changed`). `BattleRewards`
+touches only `gold`, `player.xp` and `player.reputation`.
+
+#### 4.12.5 Required `ui_strings.json` keys (Phase 2 inventory)
+
+Task G owns this list; D/C/F use these keys and **must not invent others**
+(add a note to the report instead). Placeholders must match between zh and en
+(the validator enforces it).
+
+| Key | zh | en |
+|---|---|---|
+| `battle.title` | 海战 | Battle |
+| `battle.round` | 第 {round} 回合 | Round {round} |
+| `battle.action.cannon` | 炮击 | Cannon |
+| `battle.action.ram` | 撞击 | Ram |
+| `battle.action.board` | 接舷 | Board |
+| `battle.action.hold` | 待命 | Hold |
+| `battle.action.retreat` | 撤退 | Retreat |
+| `battle.action.surrender` | 投降 | Surrender |
+| `battle.reload` | 装填中 | Reloading |
+| `battle.target.none` | 未选定目标 | No target selected |
+| `battle.log.cannon` | {attacker} 炮击 {target},造成 {damage} 点伤害。 | {attacker} fires on {target} for {damage} damage. |
+| `battle.log.ram` | {attacker} 撞击 {target},自身受损 {self_damage} 点。 | {attacker} rams {target}, taking {self_damage} damage. |
+| `battle.log.sunk` | {ship} 沉没了。 | {ship} has sunk. |
+| `battle.log.turn` | 轮到 {ship}。 | {ship} to act. |
+| `battle.duel.start` | 接舷战! | Boarding action! |
+| `battle.duel.round` | 第 {round} 回合:{player} 对 {defender} | Round {round}: {player} vs {defender} |
+| `battle.result.victory` | 胜利! | Victory! |
+| `battle.result.defeat` | 战败。 | Defeat. |
+| `battle.result.retreat` | 你脱离了战斗。 | You disengaged from the battle. |
+| `battle.result.surrender` | 你投降了。 | You surrendered. |
+| `battle.after.title` | 战后 | After the battle |
+| `battle.after.loot` | 打捞所得 {gold} 金。 | Salvage: {gold} gold. |
+| `battle.after.xp` | 获得 {xp} 点经验。 | Experience gained: {xp}. |
+| `battle.after.captured` | 俘获 {ship}! | Captured {ship}! |
+| `battle.after.scuttled` | 船队已满,{ship} 被拆解。 | Fleet full — {ship} was scuttled. |
+| `battle.after.overflow` | {count} 单位货物因舱位不足而丢失。 | {count} units of cargo were lost for lack of hold space. |
+| `battle.after.lost` | 你失去了 {ship}。 | You lost {ship}. |
+| `battle.surrender.confirm` | 确定要投降吗? | Surrender the battle? |
+| `battle.retreat.confirm` | 确定要撤退吗? | Retreat from the battle? |
+| `duel.title` | 船长决斗 | Captain's Duel |
+| `duel.round.win` | 胜 | Win |
+| `duel.round.loss` | 负 | Loss |
+| `duel.round.tie` | 平 | Tie |
+| `duel.result.capture` | 你赢得了决斗,敌船投降! | You win the duel — the enemy ship strikes her colours! |
+| `duel.result.defeat` | 你输掉了决斗,舰船被夺。 | You lose the duel and your ship is taken. |
+| `duel.committed` | 接舷战无法撤退。 | Boarding commits — there is no retreat. |
+| `encounter.pirate` | 海盗船队 | Pirate fleet |
+| `encounter.navy` | {nation} 巡逻队 | {nation} patrol |
+| `encounter.contact` | {fleet} 逼近! | {fleet} closes in! |
+| `encounter.attack_confirm` | 攻击{nation}船队即是海盗行为(声望 −20)。确定吗? | Attacking a {nation} fleet is an act of piracy (−20 reputation). Continue? |
+| `gameover.captured` | 你被俘了,船队落入敌手。 | Captured — your fleet is lost to the enemy. |
+
 ## 5. Data Examples
 
 Cannon volley (brigantine, 10 cannons, range 2, gunner effective combat 14):
