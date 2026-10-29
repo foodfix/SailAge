@@ -14,6 +14,74 @@ Two layers of evidence:
 
 ---
 
+## How to launch (play-test)
+
+From the repo root:
+
+```bash
+godot --path .          # runs the title screen at 1280×720
+```
+
+or open the project in the Godot editor and press **F5**. Godot 4.x is
+required (developed against 4.7.stable).
+
+If you prefer to start at a specific screen (the normal flow reaches them by
+clicking, but this is handy for spot-checks):
+
+```bash
+godot --path . scenes/port/port_screen.tscn
+godot --path . scenes/world/world_map.tscn
+```
+
+### First run: getting from the title to the sea
+
+1. **Title** → click **New Game**.
+2. **Nationality select** → click a nation card, then **Confirm**.
+   You start docked in that nation's home port (Portugal → Lisbon).
+3. **Port hub** → click **Set Sail** to go to sea, or open a facility first
+   (Market / Shipyard / Tavern / Inn).
+4. **At sea** → move with the keys below; sail onto a harbour tile to dock.
+
+### Controls
+
+| Where | Input | Action |
+|---|---|---|
+| Any screen | `L` | toggle Chinese ↔ English |
+| Any screen | `Esc` | back / close the current modal |
+| Title | `F9` | quick-load slot 1 (with confirm) |
+| Port | `F5` | quick-save to a slot |
+| Port | `C` / `F` | character panel / fleet panel |
+| At sea | **Arrow keys** | move N / S / E / W |
+| At sea | **Numpad 1–9** | move in all 8 directions (7 = NW … 9 = NE) |
+| At sea | **Left-click an adjacent tile** | step there (also covers diagonals) |
+| At sea | `C` / `F` | character panel / fleet panel (read-only) |
+| At sea | `M` | enlarge the minimap |
+
+> **Laptop note:** the diagonal keys are numpad-only, so on a keyboard without
+> a numpad use **click-to-step** for diagonal moves — it is fully equivalent
+> and needs no extra setup. (Vertical/horizontal movement works on the arrow
+> keys anywhere.)
+
+### Things to try that exercise the whole loop
+
+- Buy 10 wine in Lisbon's market (21g each), Set Sail, sail to London
+  (wine sells for 31g there), and sell — watch gold, cargo, XP and England's
+  reputation move.
+- Sail **west** from Lisbon across the Atlantic strip (x ≤ 6) until a storm
+  hits — the storm glyph under the minimap flashes and ships take damage.
+- Sail west with no provisions to reach the starvation game-over screen.
+- Repair at the shipyard; note the Refit row is deliberately disabled.
+- Recruit Mateus Álvares at the Lisbon tavern, then open `C` to see him.
+
+### Reporting a bug
+
+Note the screen, the exact key/click, and what you expected. Console output
+from the terminal running Godot is the most useful attachment; any
+`SCRIPT ERROR` there is a real defect, but warnings from
+`Fleet.normalize_all` on a hand-edited save are expected.
+
+---
+
 ## Recorded scripted run
 
 | Field | Value |
