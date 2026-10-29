@@ -304,8 +304,10 @@ battle opens with a movement phase.
 - **Reputation:**
   - Pirates defeated (any outcome except retreat) → `+2` with each of the
     **two nearest ports' nations** measured by Chebyshev distance from the
-    contact tile; ties broken by port id ascending. A nation appearing twice
-    is credited once.
+    contact tile. The **two ports** are selected first (ties broken by port id
+    ascending) and **then** their nations are deduplicated, so if both nearest
+    ports belong to one nation that nation is credited once and no third port
+    is considered (the dedupe clause is only observable under that reading).
   - **Navy: exactly one `−20` per navy battle**, charged to that navy's nation
     at **battle start** (`60-*` §4.1 "attacking a navy marker … rep −20"), or
     on contact with a hunter. It is **not** charged per ship and it is never
