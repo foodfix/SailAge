@@ -95,6 +95,8 @@ signal rebound
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
 @onready var _fleet_button: Button = $Layout/VBox/Footer/Fleet
+
+@onready var _save_button: Button = $Layout/VBox/Footer/Save
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
@@ -135,6 +137,11 @@ func _ready() -> void:
 	# T18: one footer row that opens the fleet/cargo panel (docs/20 §4.10).
 	_fleet_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_fleet_button.pressed.connect(open_fleet_panel)
+
+	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
+	# only *allowed* in port; this row is the discoverable entry point.
+	_save_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
+	_save_button.pressed.connect(open_save_dialog)
 
 	# S4 keeps the same bars as S3, but the sea viewport (minimap + weather
 	# glyph) is replaced by the port menu (docs/80-* §4.5).
@@ -323,6 +330,14 @@ func open_fleet_panel() -> Control:
 func fleet_panel() -> Control:
 	return get_node_or_null("FleetPanel")
 
+## Open the 3-slot save dialog (docs/80-* §4.6). Returns the dialog so a test can
+## drive it; null when the shared scene is missing. The button is enabled only
+## while the screen has a run and a docked port (its own precondition).
+func open_save_dialog() -> Control:
+	if _read_current_port().is_empty():
+		return null
+	return SaveSystem.open_save_dialog(self)
+
 
 ## Set Sail (docs/20-* §4.11 exit; docs/80-* §4.2 S4 → S3):
 ## clears `current_port`, resets `clock_fraction` to 0, keeps the fleet on the
@@ -390,6 +405,12 @@ func _bind() -> void:
 	_set_sail_button.text = I18n.t_key("port.set_sail")
 	_fleet_button.text = I18n.t_key("fleet.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
+
+	# T17: docs/80-* §4.6 "Save: available only at port". The row lives on S4,
+	# so it is enabled whenever there is a run docked here; `F5` elsewhere shows
+	# `ui.cant_save_here` through SaveSystem.
+	_save_button.text = I18n.t_key("port.save")
+	_save_button.disabled = port.is_empty()
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	# Nothing to leave when not docked (standalone load): the button stays
