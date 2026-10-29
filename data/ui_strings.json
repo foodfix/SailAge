@@ -1067,5 +1067,37 @@
   "battle.reason.out_of_range": {
     "zh": "目标不在射程内",
     "en": "Target out of range"
+  },
+  "fleet.count": {
+    "zh": "船队 {count}/{max}",
+    "en": "Fleet {count}/{max}"
+  },
+  "fleet.stack": {
+    "zh": "{name} × {qty}",
+    "en": "{name} × {qty}"
+  },
+  "fleet.port_only": {
+    "zh": "此操作只能在港口进行",
+    "en": "This action is only available in port"
+  },
+  "fleet.read_only": {
+    "zh": "海上无法管理船队,请回港操作。",
+    "en": "The fleet cannot be managed at sea — return to port."
+  },
+  "fleet.jettison.confirm": {
+    "zh": "{ship}:抛弃 {good} × {qty}?",
+    "en": "{ship}: jettison {good} × {qty}?"
+  },
+  "shipyard.max": {
+    "zh": "最大",
+    "en": "Max"
+  },
+  "shipyard.cannons_stat": {
+    "zh": "火炮 {slots}",
+    "en": "Cannons {slots}"
+  },
+  "shipyard.no_damage": {
+    "zh": "无需修理",
+    "en": "No damage to repair"
   }
 }
