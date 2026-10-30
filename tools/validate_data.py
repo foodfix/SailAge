@@ -45,8 +45,8 @@ COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 MARKER_RE = re.compile(r"^[0-9a-t]$")
 PLACEHOLDER_RE = re.compile(r"\{([A-Za-z0-9_]+)\}")
 
-MAP_WIDTH = 128
-MAP_HEIGHT = 96
+MAP_WIDTH = 2160
+MAP_HEIGHT = 1080
 
 # docs/10-DATA-SCHEMA.md section 6.2 -- char -> (kind, passable)
 LOCKED_TILE_KINDS = {
@@ -54,6 +54,7 @@ LOCKED_TILE_KINDS = {
     ".": ("coastal_sea", True),
     "#": ("land", False),
     "^": ("reef", False),
+    "I": ("polar_ice", False),
 }
 
 GOOD_CATEGORIES = ("food", "textile", "luxury", "material")
@@ -93,12 +94,11 @@ ENTITY_FILES = {
     "equipment.json": "equipment",
     "discoveries.json": "discoveries",
     "quests.json": "quests",
-    "ports_p3.json": "ports",
 }
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
 SPECIAL_FILES = {
-    "map_legend.json", "map_legend_p3.json", "ui_strings.json", "maps.json",
+    "map_legend.json", "ui_strings.json", "maps.json",
 }
 # Envelope exemption for a file that is *generated* rather than authored: its
 # shape is pinned by the owning doc (docs/10-* §6.3) and has no plural array.
@@ -107,7 +107,7 @@ SPECIAL_FILES |= GENERATED_FILES
 # Of those, only the legends require `version` in their section 4.9 schema.
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
 # as the one key that is not an L10nString rather than a required field.
-SPECIAL_REQUIRE_VERSION = {"map_legend.json", "map_legend_p3.json"}
+SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -151,14 +151,14 @@ LOCKED_GOODS = {
 # id: (zh, en, class, base_price, durability, capacity, speed, crew_min,
 #      crew_max, armament_slots)  -- section 7.3
 LOCKED_SHIP_TYPES = {
-    "latin": ("拉丁帆船", "Latin", "sail", 1200, 40, 30, 4, 8, 20, 2),
-    "sloop": ("单桅纵帆船", "Sloop", "sail", 3000, 60, 60, 5, 10, 30, 4),
-    "caravel": ("卡拉维尔帆船", "Caravel", "sail", 8000, 90, 120, 5, 15, 45, 6),
-    "galley": ("桨帆船", "Galley", "oar", 10000, 70, 50, 6, 40, 120, 4),
-    "brigantine": ("双桅帆船", "Brigantine", "sail", 15000, 110, 150, 6, 20, 60, 10),
-    "nao": ("瑙船", "Nao", "sail", 22000, 140, 300, 4, 25, 80, 10),
-    "carrack": ("卡拉克帆船", "Carrack", "sail", 40000, 180, 450, 4, 30, 100, 16),
-    "galleon": ("盖伦帆船", "Galleon", "hybrid", 60000, 240, 400, 5, 40, 150, 24),
+    "latin": ("拉丁帆船", "Latin", "sail", 1200, 40, 30, 8, 8, 20, 2),
+    "sloop": ("单桅纵帆船", "Sloop", "sail", 3000, 60, 60, 10, 10, 30, 4),
+    "caravel": ("卡拉维尔帆船", "Caravel", "sail", 8000, 90, 120, 10, 15, 45, 6),
+    "galley": ("桨帆船", "Galley", "oar", 10000, 70, 50, 12, 40, 120, 4),
+    "brigantine": ("双桅帆船", "Brigantine", "sail", 15000, 110, 150, 12, 20, 60, 10),
+    "nao": ("瑙船", "Nao", "sail", 22000, 140, 300, 8, 25, 80, 10),
+    "carrack": ("卡拉克帆船", "Carrack", "sail", 40000, 180, 450, 8, 30, 100, 16),
+    "galleon": ("盖伦帆船", "Galleon", "hybrid", 60000, 240, 400, 10, 40, 150, 24),
 }
 
 # id: (zh, en, color, start_port_id, start_ship_type_id, start_gold,
@@ -172,68 +172,211 @@ LOCKED_NATIONS = {
     "italy": ("意大利", "Italy", "#c9a227", "venice", "brigantine", 5500, 10, "venice"),
 }
 
-# id: (zh, en, nation_id, marker, x, y, produces, demands)  -- section 7.1
+# id: (zh, en, nation_id, lat, lon, produces, demands)  -- section 7.1
+# Phase 4: 100 ports keyed by real WGS84 coordinates; the grid tile is derived
+# by section 6.1's harbor-snap rule, never stored. Transcribed from section 7.1
+# and cross-checked against data/ports.json (group 5 asserts both directions).
 LOCKED_PORTS = {
-    "lisbon": ("里斯本", "Lisbon", "portugal", "f", 7, 57,
-               ("wine", "salt"), ("spices", "silk", "timber")),
-    "seville": ("塞维利亚", "Seville", "spain", "m", 13, 65,
-                ("olive_oil", "wine", "wool"), ("sugar", "spices")),
-    "valencia": ("瓦伦西亚", "Valencia", "spain", "r", 27, 55,
+    "lisbon": ("里斯本", "Lisbon", "portugal", 38.72, -9.14,
+                 ("wine", "salt"), ("spices", "silk", "timber")),
+    "seville": ("塞维利亚", "Seville", "spain", 37.0, -6.35,
+                 ("olive_oil", "wine", "wool"), ("sugar", "spices")),
+    "valencia": ("瓦伦西亚", "Valencia", "spain", 39.45, -0.33,
                  ("silk", "ceramics"), ("wheat", "timber")),
-    "barcelona": ("巴塞罗那", "Barcelona", "spain", "5", 33, 48,
-                  ("wool", "cotton_cloth"), ("iron", "spices")),
-    "marseille": ("马赛", "Marseille", "spain", "i", 41, 41,
-                  ("wine", "salt", "perfume"), ("wool", "silk")),
-    "bordeaux": ("波尔多", "Bordeaux", "spain", "7", 26, 33,
+    "barcelona": ("巴塞罗那", "Barcelona", "spain", 41.35, 2.17,
+                 ("wool", "cotton_cloth"), ("iron", "spices")),
+    "marseille": ("马赛", "Marseille", "spain", 43.3, 5.37,
+                 ("wine", "salt", "perfume"), ("wool", "silk")),
+    "bordeaux": ("波尔多", "Bordeaux", "spain", 45.55, -1.15,
                  ("wine", "salt"), ("timber", "wool")),
-    "london": ("伦敦", "London", "england", "g", 30, 13,
-               ("wool", "cotton_cloth"), ("wine", "spices", "timber")),
-    "amsterdam": ("阿姆斯特丹", "Amsterdam", "holland", "2", 40, 9,
-                  ("cheese", "glassware"), ("spices", "silk", "wheat")),
-    "antwerp": ("安特卫普", "Antwerp", "holland", "3", 39, 13,
-                ("glassware", "wool"), ("spices", "wine")),
-    "hamburg": ("汉堡", "Hamburg", "holland", "d", 51, 6,
-                ("dried_fish", "timber", "amber"), ("wine", "salt")),
-    "genoa": ("热那亚", "Genoa", "italy", "c", 49, 37,
-              ("olive_oil", "cotton_cloth"), ("spices", "copper")),
-    "naples": ("那不勒斯", "Naples", "italy", "j", 62, 50,
-               ("olive_oil", "wine"), ("wheat", "timber")),
-    "palermo": ("巴勒莫", "Palermo", "italy", "k", 60, 59,
-                ("wheat", "olive_oil"), ("timber", "iron")),
-    "syracuse": ("锡拉库萨", "Syracuse", "italy", "o", 64, 63,
+    "london": ("伦敦", "London", "england", 51.47, 0.75,
+                 ("wool", "cotton_cloth"), ("wine", "spices", "timber")),
+    "amsterdam": ("阿姆斯特丹", "Amsterdam", "holland", 52.46, 4.6,
+                 ("cheese", "glassware"), ("spices", "silk", "wheat")),
+    "antwerp": ("安特卫普", "Antwerp", "holland", 51.44, 3.6,
+                 ("glassware", "wool"), ("spices", "wine")),
+    "hamburg": ("汉堡", "Hamburg", "holland", 53.87, 8.7,
+                 ("dried_fish", "timber", "amber"), ("wine", "salt")),
+    "genoa": ("热那亚", "Genoa", "italy", 44.41, 8.93,
+                 ("olive_oil", "cotton_cloth"), ("spices", "copper")),
+    "naples": ("那不勒斯", "Naples", "italy", 40.84, 14.25,
+                 ("olive_oil", "wine"), ("wheat", "timber")),
+    "palermo": ("巴勒莫", "Palermo", "italy", 38.12, 13.36,
+                 ("wheat", "olive_oil"), ("timber", "iron")),
+    "syracuse": ("锡拉库萨", "Syracuse", "italy", 37.07, 15.29,
                  ("salt", "wheat"), ("timber", "leather")),
-    "cagliari": ("卡利亚里", "Cagliari", "italy", "8", 50, 56,
+    "cagliari": ("卡利亚里", "Cagliari", "italy", 39.22, 9.11,
                  ("salt", "leather"), ("wheat", "glassware")),
-    "valetta": ("瓦莱塔", "Valetta", "italy", "s", 62, 67,
-                ("cotton_cloth",), ("wheat", "timber", "iron")),
-    "venice": ("威尼斯", "Venice", "italy", "t", 57, 34,
-               ("glassware", "perfume"), ("spices", "silk", "cotton_cloth")),
-    "ragusa": ("拉古萨", "Ragusa", "italy", "l", 71, 44,
-               ("timber", "leather", "wool"), ("wheat",)),
-    "athens": ("雅典", "Athens", "ottoman", "4", 84, 60,
-               ("olive_oil", "wine", "ceramics"), ("timber", "iron")),
-    "candia": ("干地亚", "Candia", "ottoman", "9", 87, 69,
-               ("wine", "olive_oil"), ("wheat", "salt")),
-    "cyprus": ("塞浦路斯", "Cyprus", "ottoman", "b", 107, 70,
-               ("copper", "sugar"), ("wheat", "timber")),
-    "smyrna": ("士麦那", "Smyrna", "ottoman", "n", 92, 58,
-               ("carpet",), ("wheat", "glassware", "iron")),
-    "istanbul": ("伊斯坦布尔", "Istanbul", "ottoman", "e", 96, 49,
+    "valetta": ("瓦莱塔", "Valetta", "italy", 35.9, 14.51,
+                 ("cotton_cloth",), ("wheat", "timber", "iron")),
+    "venice": ("威尼斯", "Venice", "italy", 45.44, 12.33,
+                 ("glassware", "perfume"), ("spices", "silk", "cotton_cloth")),
+    "ragusa": ("拉古萨", "Ragusa", "italy", 42.65, 18.09,
+                 ("timber", "leather", "wool"), ("wheat",)),
+    "athens": ("雅典", "Athens", "ottoman", 37.94, 23.64,
+                 ("olive_oil", "wine", "ceramics"), ("timber", "iron")),
+    "candia": ("干地亚", "Candia", "ottoman", 35.34, 25.13,
+                 ("wine", "olive_oil"), ("wheat", "salt")),
+    "cyprus": ("塞浦路斯", "Cyprus", "ottoman", 34.67, 33.04,
+                 ("copper", "sugar"), ("wheat", "timber")),
+    "smyrna": ("士麦那", "Smyrna", "ottoman", 38.42, 27.14,
+                 ("carpet",), ("wheat", "glassware", "iron")),
+    "istanbul": ("伊斯坦布尔", "Istanbul", "ottoman", 41.01, 28.97,
                  ("carpet", "perfume"), ("wheat", "iron", "timber")),
-    "beirut": ("贝鲁特", "Beirut", "ottoman", "6", 112, 74,
-               ("silk", "timber"), ("wheat", "salt")),
-    "alexandria": ("亚历山大", "Alexandria", "ottoman", "1", 99, 84,
-                   ("cotton_cloth", "sugar", "wheat"), ("timber", "iron", "wine")),
-    "tripoli": ("的黎波里", "Tripoli", "ottoman", "p", 59, 78,
-                ("leather", "salt"), ("wheat", "timber")),
-    "tunis": ("突尼斯", "Tunis", "ottoman", "q", 52, 64,
-              ("olive_oil", "leather"), ("wheat", "iron")),
-    "algiers": ("阿尔及尔", "Algiers", "ottoman", "0", 36, 64,
-                ("leather", "wool"), ("wheat", "timber", "wine")),
-    "ceuta": ("休达", "Ceuta", "portugal", "a", 16, 67,
-              ("wheat", "leather"), ("wine", "cotton_cloth")),
-    "madeira": ("马德拉", "Madeira", "portugal", "h", 0, 78,
-                ("sugar", "wine"), ("wheat", "iron")),
+    "beirut": ("贝鲁特", "Beirut", "ottoman", 33.9, 35.5,
+                 ("silk", "timber"), ("wheat", "salt")),
+    "alexandria": ("亚历山大", "Alexandria", "ottoman", 31.2, 29.92,
+                 ("cotton_cloth", "sugar", "wheat"), ("timber", "iron", "wine")),
+    "tripoli": ("的黎波里", "Tripoli", "ottoman", 32.9, 13.18,
+                 ("leather", "salt"), ("wheat", "timber")),
+    "tunis": ("突尼斯", "Tunis", "ottoman", 36.82, 10.3,
+                 ("olive_oil", "leather"), ("wheat", "iron")),
+    "algiers": ("阿尔及尔", "Algiers", "ottoman", 36.77, 3.06,
+                 ("leather", "wool"), ("wheat", "timber", "wine")),
+    "ceuta": ("休达", "Ceuta", "portugal", 35.89, -5.32,
+                 ("wheat", "leather"), ("wine", "cotton_cloth")),
+    "madeira": ("马德拉", "Madeira", "portugal", 32.65, -16.91,
+                 ("sugar", "wine"), ("wheat", "iron")),
+    "havana": ("哈瓦那", "Havana", "spain", 23.13, -82.38,
+                 ("sugar", "amber"), ("wine", "cotton_cloth")),
+    "vera_cruz": ("韦拉克鲁斯", "Veracruz", "spain", 19.2, -96.13,
+                 ("copper", "sugar"), ("iron", "glassware")),
+    "cartagena": ("卡塔赫纳", "Cartagena", "spain", 10.39, -75.53,
+                 ("amber", "sugar"), ("wine", "wool")),
+    "portobelo": ("波托贝洛", "Portobelo", "spain", 9.55, -79.65,
+                 ("sugar",), ("silk", "spices")),
+    "lima": ("利马", "Lima", "spain", -12.06, -77.15,
+                 ("copper", "sugar"), ("glassware", "wine")),
+    "buenos_aires": ("布宜诺斯艾利斯", "Buenos Aires", "spain", -34.6, -58.37,
+                 ("leather", "wheat"), ("iron", "glassware")),
+    "san_juan": ("圣胡安", "San Juan", "spain", 18.47, -66.11,
+                 ("sugar", "salt"), ("cotton_cloth", "wine")),
+    "santo_domingo": ("圣多明各", "Santo Domingo", "spain", 18.47, -69.88,
+                 ("sugar", "leather"), ("silk", "glassware")),
+    "acapulco": ("阿卡普尔科", "Acapulco", "spain", 16.85, -99.9,
+                 ("silk", "copper"), ("wheat", "glassware")),
+    "panama": ("巴拿马", "Panama", "spain", 8.98, -79.52,
+                 ("amber", "copper"), ("wine", "iron")),
+    "valparaiso": ("瓦尔帕莱索", "Valparaiso", "spain", -33.03, -71.63,
+                 ("copper", "wine"), ("glassware", "wool")),
+    "guayaquil": ("瓜亚基尔", "Guayaquil", "spain", -2.6, -80.3,
+                 ("sugar", "timber"), ("iron", "glassware")),
+    "bahia": ("巴伊亚", "Bahia", "portugal", -12.97, -38.5,
+                 ("sugar", "timber"), ("glassware", "iron")),
+    "rio_de_janeiro": ("里约热内卢", "Rio de Janeiro", "portugal", -22.9, -43.18,
+                 ("sugar", "timber", "amber"), ("iron", "wool")),
+    "recife": ("累西腓", "Recife", "portugal", -8.06, -34.87,
+                 ("sugar", "cotton_cloth"), ("wine", "iron")),
+    "belem": ("贝伦", "Belem", "portugal", -1.35, -48.48,
+                 ("timber", "spices"), ("salt", "glassware")),
+    "boston": ("波士顿", "Boston", "england", 42.36, -71.05,
+                 ("dried_fish", "timber"), ("wine", "salt")),
+    "new_york": ("纽约", "New York", "england", 40.7, -74.02,
+                 ("timber", "dried_fish"), ("wine", "spices")),
+    "jamestown": ("詹姆斯敦", "Jamestown", "england", 37.0, -76.3,
+                 ("timber", "wheat"), ("wine", "iron")),
+    "charleston": ("查尔斯顿", "Charleston", "england", 32.78, -79.93,
+                 ("sugar", "timber"), ("wine", "salt")),
+    "new_foundland": ("纽芬兰", "Newfoundland", "england", 47.56, -52.71,
+                 ("dried_fish", "timber"), ("wine", "salt")),
+    "quebec": ("魁北克", "Quebec", "england", 47.0, -70.5,
+                 ("timber", "dried_fish"), ("wine", "salt")),
+    "curacao": ("库拉索", "Curacao", "holland", 12.11, -68.93,
+                 ("salt", "sugar"), ("timber", "wine")),
+    "suriname": ("苏里南", "Suriname", "holland", 5.9, -55.15,
+                 ("sugar", "timber"), ("iron", "wine")),
+    "elmina": ("埃尔米纳", "Elmina", "portugal", 5.08, -1.35,
+                 ("amber", "salt"), ("cotton_cloth", "iron")),
+    "luanda": ("罗安达", "Luanda", "portugal", -8.78, 13.23,
+                 ("amber", "leather"), ("glassware", "wool")),
+    "mozambique": ("莫桑比克", "Mozambique", "portugal", -15.03, 40.73,
+                 ("amber", "spices"), ("cotton_cloth", "iron")),
+    "mombasa": ("蒙巴萨", "Mombasa", "ottoman", -4.06, 39.68,
+                 ("spices", "amber"), ("glassware", "wine")),
+    "cape_town": ("开普敦", "Cape Town", "holland", -33.92, 18.42,
+                 ("wine", "wheat"), ("timber", "iron")),
+    "safi": ("萨菲", "Safi", "portugal", 32.3, -9.24,
+                 ("salt", "leather"), ("silk", "spices")),
+    "saint_louis": ("圣路易", "Saint-Louis", "holland", 16.0, -16.51,
+                 ("leather", "salt"), ("glassware", "wool")),
+    "accra": ("阿克拉", "Accra", "england", 5.53, -0.2,
+                 ("amber", "salt"), ("cotton_cloth", "wine")),
+    "goa": ("果阿", "Goa", "portugal", 15.5, 73.83,
+                 ("spices", "cotton_cloth"), ("wine", "glassware")),
+    "calicut": ("卡利卡特", "Calicut", "portugal", 11.25, 75.77,
+                 ("spices", "carpet"), ("glassware", "copper")),
+    "cochin": ("科钦", "Cochin", "holland", 9.97, 76.27,
+                 ("spices", "timber"), ("iron", "wine")),
+    "bombay": ("孟买", "Bombay", "england", 18.92, 72.83,
+                 ("cotton_cloth", "spices"), ("iron", "wine")),
+    "surat": ("苏拉特", "Surat", "england", 21.1, 72.7,
+                 ("cotton_cloth", "carpet"), ("glassware", "amber")),
+    "colombo": ("科伦坡", "Colombo", "holland", 6.93, 79.85,
+                 ("spices", "ceramics"), ("wine", "iron")),
+    "pondicherry": ("本地治里", "Pondicherry", "england", 11.93, 79.83,
+                 ("cotton_cloth", "spices"), ("glassware", "amber")),
+    "muscat": ("马斯喀特", "Muscat", "ottoman", 23.62, 58.59,
+                 ("amber", "carpet"), ("wine", "timber")),
+    "basra": ("巴士拉", "Basra", "ottoman", 30.0, 48.5,
+                 ("carpet", "dried_fish"), ("iron", "timber")),
+    "bandar_abbas": ("阿巴斯港", "Bandar Abbas", "ottoman", 27.18, 56.28,
+                 ("carpet", "amber"), ("glassware", "sugar")),
+    "aden": ("亚丁", "Aden", "ottoman", 12.79, 45.03,
+                 ("amber", "salt"), ("wheat", "iron")),
+    "jiddah": ("吉达", "Jiddah", "ottoman", 21.48, 39.18,
+                 ("carpet", "amber"), ("wheat", "timber")),
+    "suakin": ("苏阿金", "Suakin", "ottoman", 19.1, 37.33,
+                 ("salt", "leather"), ("glassware", "wine")),
+    "mogadishu": ("摩加迪沙", "Mogadishu", "ottoman", 2.03, 45.34,
+                 ("spices", "leather"), ("iron", "wine")),
+    "malacca": ("马六甲", "Malacca", "portugal", 2.19, 102.25,
+                 ("spices", "amber"), ("iron", "wool")),
+    "batavia": ("巴达维亚", "Batavia", "holland", -6.13, 106.81,
+                 ("spices", "sugar"), ("wine", "iron")),
+    "macassar": ("望加锡", "Macassar", "holland", -5.13, 119.41,
+                 ("spices", "timber"), ("glassware", "wool")),
+    "amboina": ("安汶", "Amboina", "holland", -3.69, 128.18,
+                 ("spices", "salt"), ("iron", "wine")),
+    "manila": ("马尼拉", "Manila", "spain", 14.58, 120.97,
+                 ("silk", "spices"), ("wheat", "iron")),
+    "macau": ("澳门", "Macao", "portugal", 22.19, 113.54,
+                 ("silk", "ceramics"), ("sugar", "glassware")),
+    "canton": ("广州", "Canton", "england", 22.75, 113.65,
+                 ("silk", "ceramics", "timber"), ("copper", "salt")),
+    "nagasaki": ("长崎", "Nagasaki", "holland", 32.75, 129.88,
+                 ("copper", "silk"), ("sugar", "wine")),
+    "osaka": ("大阪", "Osaka", "holland", 34.65, 135.43,
+                 ("copper", "ceramics"), ("silk", "glassware")),
+    "zeelandia": ("热兰遮", "Zeelandia", "holland", 22.99, 120.16,
+                 ("sugar", "timber"), ("silk", "iron")),
+    "patani": ("北大年", "Patani", "holland", 6.87, 101.25,
+                 ("spices", "timber"), ("cotton_cloth", "iron")),
+    "brunei": ("文莱", "Brunei", "spain", 5.0, 115.05,
+                 ("timber", "spices"), ("glassware", "wool")),
+    "ternate": ("特尔纳特", "Ternate", "holland", 0.79, 127.38,
+                 ("spices", "salt"), ("wine", "iron")),
+    "timor": ("帝汶", "Timor", "portugal", -10.17, 123.6,
+                 ("spices", "timber"), ("glassware", "iron")),
+    "botany_bay": ("植物学湾", "Botany Bay", "england", -33.98, 151.18,
+                 ("timber", "dried_fish"), ("wine", "iron")),
+    "siam": ("暹罗", "Siam", "portugal", 13.5, 100.58,
+                 ("timber", "ceramics"), ("glassware", "wool")),
+    "cadiz": ("加的斯", "Cadiz", "spain", 36.53, -6.29,
+                 ("salt", "wine"), ("spices", "timber")),
+    "oporto": ("波尔图", "Oporto", "portugal", 41.14, -8.68,
+                 ("wine", "leather"), ("spices", "glassware")),
+    "plymouth": ("普利茅斯", "Plymouth", "england", 50.37, -4.14,
+                 ("dried_fish", "wool"), ("wine", "spices")),
+    "bergen": ("卑尔根", "Bergen", "holland", 60.39, 5.32,
+                 ("dried_fish", "timber"), ("wine", "salt")),
+    "danzig": ("但泽", "Danzig", "holland", 54.4, 18.68,
+                 ("timber", "amber"), ("wine", "salt")),
+    "stockholm": ("斯德哥尔摩", "Stockholm", "holland", 59.32, 18.1,
+                 ("copper", "iron"), ("wine", "salt")),
+    "trieste": ("的里雅斯特", "Trieste", "italy", 45.65, 13.77,
+                 ("glassware", "timber"), ("spices", "sugar")),
+    "corfu": ("科孚", "Corfu", "italy", 39.62, 19.92,
+                 ("olive_oil", "salt"), ("wine", "timber")),
 }
 
 # id: (zh, en, nation_id, role, recruit_ports, wage_daily)  -- section 7.5
@@ -283,7 +426,7 @@ LOCKED_COUNTS = {
     "nations": 6,
     "goods": 20,
     "ship_types": 8,
-    "ports": 30,
+    "ports": 100,
     "officers": 6,
     "equipment": 8,
 }
@@ -368,7 +511,7 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
                     1,
                 )
 
-        if not is_int(obj.get("version")):
+        if not is_int(obj.get("version",)):
             fail("envelope", name, "envelope key 'version' must be an integer", 1)
 
         extra = set(obj) - {"version", plural}
@@ -504,6 +647,21 @@ def _require_tile_pos(value, path: str, filename: str,
     _require_int(value["y"], f"{path}.y", filename, 0, height - 1)
 
 
+def _require_number(value, path: str, filename: str,
+                    minimum: float, maximum: float) -> None:
+    """A finite JSON number in [minimum, maximum] (docs/10-* section 3.1 lat/lon)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        fail("schema", filename, f"{path} must be a number (got {value!r})", 3)
+    number = float(value)
+    if not (minimum <= number <= maximum):
+        fail(
+            "schema",
+            filename,
+            f"{path} must be in [{minimum}, {maximum}] (got {number})",
+            3,
+        )
+
+
 def _require_enum(value, allowed: tuple[str, ...], path: str, filename: str) -> None:
     if value not in allowed:
         fail(
@@ -524,7 +682,7 @@ def _check_unique_ids(items: list, plural: str, filename: str) -> None:
                 f"{plural}[{index}] must be an object (got {type(entity).__name__})",
                 3,
             )
-        entity_id = entity.get("id")
+        entity_id = entity.get("id",)
         _require_id(entity_id, f"{plural}[{index}].id", filename)
         if entity_id in seen:
             fail("schema", filename, f"duplicate id {entity_id!r}", 3)
@@ -550,7 +708,7 @@ def _schema_nations(items: list) -> None:
             path,
             "nations.json",
         )
-        if not isinstance(entity.get("color"), str) or not COLOR_RE.match(entity["color"]):
+        if not isinstance(entity.get("color",), str) or not COLOR_RE.match(entity["color"]):
             fail("schema", "nations.json", f"{path}.color must be hex #rrggbb", 3)
         _require_id(entity["capital_port_id"], f"{path}.capital_port_id", "nations.json")
         _require_id(entity["start_port_id"], f"{path}.start_port_id", "nations.json")
@@ -616,66 +774,33 @@ def _schema_ship_types(items: list) -> None:
             )
 
 
-def _schema_ports(items: list, filename: str = "ports.json",
-                  p3_only: bool = False) -> None:
-    """Port schema (docs/10-* section 4.4). `p3_only` is the
-    `data/ports_p3.json` variant: the `p3` block is required and the Phase-1
-    `marker`/`position` pair is absent (the locked P1 list stays 30 ports)."""
-    seen_markers: dict[str, str] = {}
-    seen_positions: dict[tuple[int, int], str] = {}
+def _schema_ports(items: list, filename: str = "ports.json") -> None:
+    """Port schema (docs/10-* section 4.4, Phase 4): `lat`/`lon` are the
+    geographic truth and the grid tile is derived by section 6.1's harbor-snap
+    rule. The retired dual-map keys (`marker`, `position`, `p3`, `phase`) are
+    rejected outright so a stale edit cannot smuggle one back in."""
+    RETIRED = ("marker", "position", "p3", "phase")
     for index, entity in enumerate(items):
         path = f"{filename}[{index}]"
-        required = [
-            "id", "name", "nation_id", "produces", "demands", "facilities",
-            "flavor",
-        ]
-        if p3_only:
-            required += ["p3", "phase"]
-        else:
-            required += ["marker", "position"]
-        _require_keys(entity, tuple(required), path, filename)
+        _require_keys(
+            entity,
+            ("id", "name", "nation_id", "lat", "lon", "produces", "demands",
+             "facilities", "flavor"),
+            path,
+            filename,
+        )
+        for key in RETIRED:
+            if key in entity:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.{key} is retired in Phase 4 "
+                    "(lat/lon are the only coordinates, 10-* 4.4)",
+                    3,
+                )
         _require_id(entity["nation_id"], f"{path}.nation_id", filename)
-        if not p3_only:
-            marker = entity["marker"]
-            if not isinstance(marker, str) or not MARKER_RE.match(marker):
-                fail(
-                    "schema",
-                    filename,
-                    f"{path}.marker must be 1 char from 0-9 or a-t (got {marker!r})",
-                    3,
-                )
-            if marker in seen_markers:
-                fail(
-                    "schema",
-                    filename,
-                    f"{path}.marker {marker!r} already used by {seen_markers[marker]!r}",
-                    3,
-                )
-            seen_markers[marker] = entity["id"]
-            _require_tile_pos(entity["position"], f"{path}.position", filename)
-            pos = (entity["position"]["x"], entity["position"]["y"])
-            if pos in seen_positions:
-                fail(
-                    "schema",
-                    filename,
-                    f"{path}.position {pos} already used by {seen_positions[pos]!r}",
-                    3,
-                )
-            seen_positions[pos] = entity["id"]
-        else:
-            if int(entity["phase"]) != 3:
-                fail("schema", filename, f"{path}.phase is locked at 3", 3)
-        if "p3" in entity:
-            block = entity["p3"]
-            if not isinstance(block, dict):
-                fail("schema", filename, f"{path}.p3 must be an object", 3)
-            _require_keys(block, ("marker", "position"), f"{path}.p3", filename)
-            marker = block["marker"]
-            if not isinstance(marker, str) or len(marker) != 1:
-                fail("schema", filename, f"{path}.p3.marker must be 1 char", 3)
-            # The P3 grid (docs/70-* section 4.9.8) is larger than the P1 one.
-            _require_tile_pos(block["position"], f"{path}.p3.position", filename,
-                              P3_WIDTH, P3_HEIGHT)
+        _require_number(entity["lat"], f"{path}.lat", filename, -90.0, 90.0)
+        _require_number(entity["lon"], f"{path}.lon", filename, -180.0, 180.0)
         _require_id_list(entity["produces"], f"{path}.produces", filename)
         _require_id_list(entity["demands"], f"{path}.demands", filename)
         if "market_goods" in entity:
@@ -699,19 +824,18 @@ def _schema_ports(items: list, filename: str = "ports.json",
                     f"{path}.facilities.{key} is locked at {FACILITY_PHASES[key]}",
                     3,
                 )
-        if not p3_only:
-            for key in PORT_FACILITIES_REQUIRED:
-                if key not in facilities:
-                    fail(
-                        "schema",
-                        filename,
-                        f"{path}.facilities missing required facility {key!r}",
-                        3,
-                    )
-        elif "palace" in facilities:
+        for key in PORT_FACILITIES_REQUIRED:
+            if key not in facilities:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.facilities missing required facility {key!r}",
+                    3,
+                )
+        if "palace" in facilities and entity["id"] not in CAPITAL_PORT_IDS:
             fail(
                 "schema", filename,
-                f"{path}: a Phase-3-only port may not host a palace (10-* 7.4)",
+                f"{path}: only the six capitals may host a palace (10-* 7.4)",
                 3,
             )
 
@@ -783,34 +907,35 @@ def _schema_equipment(items: list) -> None:
 
 
 def _schema_discoveries(items: list, filename: str = "discoveries.json") -> None:
+    """Discovery schema (docs/10-* section 4.7, Phase 4): `lat`/`lon` replace
+    the old tile `position`, and the dead `phase` key is rejected."""
     for index, entity in enumerate(items):
         path = f"discoveries[{index}]"
         _require_keys(
             entity,
             (
-                "id",
-                "name",
-                "category",
-                "position",
-                "fame",
-                "report_reward_gold",
-                "region_hint",
-                "phase",
+                "id", "name", "category", "lat", "lon", "fame",
+                "report_reward_gold", "region_hint",
             ),
             path,
             "discoveries.json",
         )
+        for key in ("position", "phase"):
+            if key in entity:
+                fail(
+                    "schema", "discoveries.json",
+                    f"{path}.{key} is retired in Phase 4 (lat/lon only)",
+                    3,
+                )
         _require_enum(
             entity["category"], DISCOVERY_CATEGORIES, f"{path}.category", "discoveries.json"
         )
-        # Discoveries live on the Phase-3 world map (docs/70-* section 4.4).
-        _require_tile_pos(entity["position"], f"{path}.position",
-                          "discoveries.json", P3_WIDTH, P3_HEIGHT)
+        _require_number(entity["lat"], f"{path}.lat", "discoveries.json", -90.0, 90.0)
+        _require_number(entity["lon"], f"{path}.lon", "discoveries.json", -180.0, 180.0)
         _require_int(entity["fame"], f"{path}.fame", "discoveries.json", 1)
         _require_int(
             entity["report_reward_gold"], f"{path}.report_reward_gold", "discoveries.json", 0
         )
-        _require_int(entity["phase"], f"{path}.phase", "discoveries.json", 3, 3)
 
 
 def _schema_quests(items: list) -> None:
@@ -899,10 +1024,10 @@ def _schema_quests(items: list) -> None:
 
 def _schema_map_legend(legend: dict) -> None:
     """Structural checks for map_legend.json (owned by T3; type-level only)."""
-    _require_int(legend.get("tile_size_px"), "tile_size_px", "map_legend.json", 1)
+    _require_int(legend.get("tile_size_px",), "tile_size_px", "map_legend.json", 1)
     if legend["tile_size_px"] != 32:
         fail("schema", "map_legend.json", "tile_size_px is locked at 32", 3)
-    grid = legend.get("grid")
+    grid = legend.get("grid",)
     if not isinstance(grid, dict) or set(grid) != {"width", "height"}:
         fail(
             "schema",
@@ -919,7 +1044,7 @@ def _schema_map_legend(legend: dict) -> None:
             f"grid is locked at {MAP_WIDTH}x{MAP_HEIGHT}",
             3,
         )
-    tiles = legend.get("tiles")
+    tiles = legend.get("tiles",)
     if not isinstance(tiles, dict):
         fail("schema", "map_legend.json", "tiles must be an object", 3)
     if set(tiles) != set(LOCKED_TILE_KINDS):
@@ -932,9 +1057,9 @@ def _schema_map_legend(legend: dict) -> None:
     for char, tile in tiles.items():
         if not isinstance(tile, dict):
             fail("schema", "map_legend.json", f"tiles[{char!r}] must be an object", 3)
-        if not isinstance(tile.get("kind"), str) or not tile["kind"]:
+        if not isinstance(tile.get("kind",), str) or not tile["kind"]:
             fail("schema", "map_legend.json", f"tiles[{char!r}].kind must be a string", 3)
-        if not isinstance(tile.get("passable"), bool):
+        if not isinstance(tile.get("passable",), bool):
             fail("schema", "map_legend.json", f"tiles[{char!r}].passable must be a boolean", 3)
         expected_kind, expected_passable = LOCKED_TILE_KINDS[char]
         if tile["kind"] != expected_kind or tile["passable"] != expected_passable:
@@ -945,47 +1070,33 @@ def _schema_map_legend(legend: dict) -> None:
                 f"passable={expected_passable}",
                 3,
             )
-    markers = legend.get("port_markers")
-    if not isinstance(markers, dict):
-        fail("schema", "map_legend.json", "port_markers must be an object", 3)
-    for marker, port_id in markers.items():
-        if not isinstance(marker, str) or not MARKER_RE.match(marker):
-            fail(
-                "schema",
-                "map_legend.json",
-                f"port_markers key {marker!r} must be 1 char from 0-9 or a-t",
-                3,
-            )
-        _require_id(port_id, f"port_markers[{marker!r}]", "map_legend.json")
+    # Phase 4: markers left the map (10-* section 6.2 "ports are not terrain").
+    if "port_markers" in legend:
+        fail(
+            "schema",
+            "map_legend.json",
+            "port_markers is retired in Phase 4 (ports are an overlay from "
+            "ports.json lat/lon)",
+            3,
+        )
 
 
 def check_group3(docs: dict[str, object], verbose: bool) -> None:
     """Per-entity fields, types, enums and ranges (section 4)."""
-    # Keyed by the **filename**'s plural but built file by file, because
-    # `ports_p3.json` shares the `ports` plural: the locked-list group (5) must
-    # still see exactly the 30 Phase-1 ports, so it is kept apart here.
+    # Phase 4: one port file. The old dual-file merge is gone, so every entity
+    # file maps to exactly one plural and group 5's locked list is the same set.
     items = {
         plural: docs[filename][plural]
         for filename, plural in ENTITY_FILES.items()
-        if filename != "ports_p3.json"
     }
-    p3_ports = docs["ports_p3.json"]["ports"] if "ports_p3.json" in docs else []
 
-    for plural in ENTITY_FILES.values():
-        _check_unique_ids(items[plural], plural, f"{plural}.json")
-    _check_unique_ids(p3_ports, "ports", "ports_p3.json")
-    # Cross-file: a P3-only port may not reuse a Phase-1 port id.
-    p1_ids = {port["id"] for port in items["ports"]}
-    for port in p3_ports:
-        if port["id"] in p1_ids:
-            fail("schema", "ports_p3.json",
-                 f"port id {port['id']!r} duplicates a Phase-1 port", 3)
+    for filename, plural in ENTITY_FILES.items():
+        _check_unique_ids(items[plural], plural, filename)
 
     _schema_nations(items["nations"])
     _schema_goods(items["goods"])
     _schema_ship_types(items["ship_types"])
     _schema_ports(items["ports"])
-    _schema_ports(p3_ports, "ports_p3.json", True)
     _schema_officers(items["officers"])
     _schema_equipment(items["equipment"])
     _schema_discoveries(items["discoveries"])
@@ -995,7 +1106,7 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
         _schema_map_legend(docs["map_legend.json"])
 
     if verbose:
-        total = sum(len(v) for v in items.values()) + len(p3_ports)
+        total = sum(len(v) for v in items.values())
         print(f"PASS group 3 schema ({total} entities)")
 
 
@@ -1058,7 +1169,7 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 f"{path} ({port['id']}) is a capital port but has no palace facility",
                 4,
             )
-        if port.get("produces") and port.get("demands"):
+        if port.get("produces",) and port.get("demands",):
             overlap = sorted(set(port["produces"]) & set(port["demands"]))
             if overlap and verbose:
                 print(
@@ -1110,8 +1221,8 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 )
 
     for index, item in enumerate(equipment):
-        slot = item.get("slot")
-        modifiers = item.get("modifiers")
+        slot = item.get("slot",)
+        modifiers = item.get("modifiers",)
         if not isinstance(modifiers, dict):
             continue  # schema group already reported this
         for stat in modifiers:
@@ -1156,7 +1267,7 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                     f"{path} good_id {requirements['good_id']!r} is not a known good",
                     4,
                 )
-        if quest["type"] == "exploration" and requirements.get("discovery_id"):
+        if quest["type"] == "exploration" and requirements.get("discovery_id",):
             # Empty on a template (the draw fills it, docs/70-* section 4.9.3).
             if requirements["discovery_id"] not in discovery_ids:
                 fail(
@@ -1213,7 +1324,7 @@ def _check_l10n_text(
     value = entity.get(field_key)
     if not isinstance(value, dict):
         return  # schema group already reported this; keep group 5 focused
-    if value.get("zh") != zh or value.get("en") != en:
+    if value.get("zh",) != zh or value.get("en",) != en:
         fail(
             "locked-content",
             filename,
@@ -1332,22 +1443,13 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                 )
 
     for index, port in enumerate(ports):
-        (
-            zh,
-            en,
-            nation_id,
-            marker,
-            x,
-            y,
-            produces,
-            demands,
-        ) = LOCKED_PORTS[port["id"]]
+        zh, en, nation_id, lat, lon, produces, demands = LOCKED_PORTS[port["id"]]
         path = f"ports[{index}]"
         _check_l10n_text(port, "name", zh, en, path, "ports.json")
         expected = {
             "nation_id": nation_id,
-            "marker": marker,
-            "position": {"x": x, "y": y},
+            "lat": lat,
+            "lon": lon,
             "produces": list(produces),
             "demands": list(demands),
         }
@@ -1403,563 +1505,32 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 
     if verbose:
         print(
-            "PASS group 5 locked lists (30 ports, 20 goods, 8 ship types, "
+            "PASS group 5 locked lists (100 ports, 20 goods, 8 ship types, "
             "6 nations, 6 officers, 8 equipment items)"
         )
 
 
 # ---------------------------------------------------------------------------
-# Check group 6 — Map
+# Check group 6 — World map
 # ---------------------------------------------------------------------------
-
-MAP_FILE = "data/maps/p1_mediterranean.txt"
-LISBON_TILE = (7, 57)
-MAP_FILE_P3 = "data/maps/p3_world.txt"
-## The Phase-3 grid (docs/70-QUESTS-DISCOVERY-ENDGAME.md section 4.9.8).
-P3_WIDTH = 160
-P3_HEIGHT = 96
-P3_LEGEND_FILE = "data/map_legend_p3.json"
-MAPS_INDEX_FILE = "data/maps/maps.json"
-BFS_STEPS_8 = (
-    (1, 0), (-1, 0), (0, 1), (0, -1),
-    (1, 1), (1, -1), (-1, 1), (-1, -1),
-)
-
-
-def _map_fail(details: str) -> None:
-    fail("map", MAP_FILE, details, 6)
-
 
 def check_group6(docs: dict[str, object], verbose: bool) -> None:
-    """Map checks: docs/10-DATA-SCHEMA.md section 8, group 6.
+    """World-map integrity: docs/10-DATA-SCHEMA.md section 8.1.
 
-    1. the map file exists;
-    2. exactly MAP_HEIGHT lines of exactly MAP_WIDTH chars;
-    3. every char is a legend tile or a legend port marker;
-    4. the legend agrees with ports.json (exactly the 30 ports, mutual markers,
-       no duplicate marker/position);
-    5. each marker appears exactly once, on its locked Port.position;
-    6. each marker tile has >=1 orthogonally adjacent land AND >=1
-       orthogonally adjacent passable tile (sail in *and* out without a
-       diagonal step);
-    7. BFS from Lisbon over passable tiles, using the player's real movement
-       rule (docs/20-WORLD-AND-SAILING.md section 4.2: 8-directional but
-       corner-cutting forbidden), reaches all 30 markers;
-    8. that same BFS covers every passable tile on the map: exactly one sea
-       component, so no basin can be sealed off.
+    Task F (W4) replaces this body with the artifact checks: indexed-PNG
+    validation, independent harbor-tile recomputation against
+    `world_report.json`, and the wrap-aware no-corner-cut BFS over all 100
+    harbors and 30 discoveries. Until it lands this group reports the gap
+    explicitly instead of validating the retired ASCII map, so a red here is
+    always attributable (see IMPLEMENT-Phase4.md "Pre-state").
     """
-    map_path = REPO_ROOT / MAP_FILE
-    if not map_path.is_file():
-        _map_fail("map file is missing")
-
-    try:
-        text = map_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        _map_fail(f"cannot read as UTF-8: {exc}")
-    if text.startswith("\ufeff"):
-        _map_fail("file must not start with a BOM")
-
-    raw_lines = text.split("\n")
-    if raw_lines and raw_lines[-1] == "":
-        raw_lines.pop()
-    else:
-        _map_fail("file must end with a newline")
-    if len(raw_lines) != MAP_HEIGHT:
-        _map_fail(f"expected {MAP_HEIGHT} lines, found {len(raw_lines)}")
-    for index, line in enumerate(raw_lines):
-        if len(line) != MAP_WIDTH:
-            _map_fail(f"line {index} has {len(line)} chars, expected {MAP_WIDTH}")
-        if line != line.rstrip():
-            _map_fail(f"line {index} has trailing whitespace")
-    grid = raw_lines
-
-    legend = docs.get("map_legend.json")
-    if not isinstance(legend, dict):
-        _map_fail("map_legend.json is missing or invalid")
-    tiles = legend.get("tiles")
-    markers = legend.get("port_markers")
-    if not isinstance(tiles, dict) or not isinstance(markers, dict):
-        _map_fail("map_legend.json lacks tiles/port_markers")
-
-    allowed = set(tiles) | set(markers)
-    for y, line in enumerate(grid):
-        for x, char in enumerate(line):
-            if char not in allowed:
-                _map_fail(f"illegal char {char!r} at ({x}, {y})")
-
-    ports = docs["ports.json"]["ports"]
-    port_by_id = {port["id"]: port for port in ports}
-    if len(port_by_id) != len(ports):
-        _map_fail("ports.json has duplicate port ids")
-
-    # 4. legend <-> ports.json agreement
-    if set(markers.values()) != set(port_by_id):
-        missing = sorted(set(port_by_id) - set(markers.values()))
-        extra = sorted(set(markers.values()) - set(port_by_id))
-        details = []
-        if missing:
-            details.append(f"legend missing {', '.join(missing)}")
-        if extra:
-            details.append(f"legend has unknown {', '.join(extra)}")
-        _map_fail("port_markers does not cover exactly the 30 ports: "
-                  + "; ".join(details))
-    if len(set(markers.values())) != len(markers):
-        _map_fail("port_markers maps two markers to the same port")
-    seen_positions: dict[tuple[int, int], str] = {}
-    for marker, port_id in markers.items():
-        port = port_by_id[port_id]
-        if port["marker"] != marker:
-            _map_fail(
-                f"port {port_id} marker is {port['marker']!r} in ports.json "
-                f"but {marker!r} in map_legend.json"
-            )
-        pos = (port["position"]["x"], port["position"]["y"])
-        if pos in seen_positions:
-            _map_fail(
-                f"ports {seen_positions[pos]} and {port_id} share position {pos}"
-            )
-        seen_positions[pos] = port_id
-
-    # 5. each marker exactly once, at its locked position
-    found: dict[str, list[tuple[int, int]]] = {marker: [] for marker in markers}
-    for y, line in enumerate(grid):
-        for x, char in enumerate(line):
-            if char in found:
-                found[char].append((x, y))
-    for marker, port_id in markers.items():
-        hits = found[marker]
-        if len(hits) != 1:
-            _map_fail(
-                f"marker {marker!r} ({port_id}) appears {len(hits)} times, expected 1"
-            )
-        expected = (
-            port_by_id[port_id]["position"]["x"],
-            port_by_id[port_id]["position"]["y"],
-        )
-        if hits[0] != expected:
-            _map_fail(
-                f"marker {marker!r} ({port_id}) is at {hits[0]}, "
-                f"locked position is {expected}"
-            )
-
-    # 6. harbour-on-a-coast: land on one side, sailable water on another
-    for marker, port_id in markers.items():
-        x, y = found[marker][0]
-        neighbours = [
-            grid[y + dy][x + dx]
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-            if 0 <= x + dx < MAP_WIDTH and 0 <= y + dy < MAP_HEIGHT
-        ]
-        if "#" not in neighbours:
-            _map_fail(f"marker {marker!r} ({port_id}) has no adjacent land '#'")
-        if not any(char in markers or tiles[char].get("passable")
-                   for char in neighbours):
-            _map_fail(
-                f"marker {marker!r} ({port_id}) has no orthogonally adjacent "
-                "passable tile (harbour cannot be sailed into or out of)"
-            )
-
-    # 7/8. strict BFS from Lisbon over every passable tile (corner-cut forbidden)
-    passable = {char for char, tile in tiles.items() if tile.get("passable")}
-    marker_tiles = set(markers)
-
-    def walkable(char: str) -> bool:
-        return char in marker_tiles or char in passable
-
-    def walkable_at(x: int, y: int) -> bool:
-        return (
-            0 <= x < MAP_WIDTH
-            and 0 <= y < MAP_HEIGHT
-            and walkable(grid[y][x])
-        )
-
-    def neighbours(x: int, y: int):
-        """Passable 8-neighbours, corner-cutting forbidden (20-* section 4.2)."""
-        for dx, dy in BFS_STEPS_8:
-            nx, ny = x + dx, y + dy
-            if not walkable_at(nx, ny):
-                continue
-            if dx and dy and not (walkable_at(x + dx, y) and walkable_at(x, y + dy)):
-                continue
-            yield nx, ny
-
-    start = LISBON_TILE
-    if not walkable_at(*start):
-        _map_fail(f"Lisbon tile {start} is not walkable sea")
-    reached = {start}
-    queue = [start]
-    head = 0
-    while head < len(queue):
-        x, y = queue[head]
-        head += 1
-        for neighbour in neighbours(x, y):
-            if neighbour not in reached:
-                reached.add(neighbour)
-                queue.append(neighbour)
-
-    unreachable = [
-        f"{port_id} ({marker!r})"
-        for marker, port_id in sorted(markers.items(), key=lambda kv: kv[1])
-        if found[marker][0] not in reached
-    ]
-    if unreachable:
-        _map_fail(
-            f"{len(unreachable)} port(s) unreachable by sea from Lisbon {start}: "
-            + ", ".join(unreachable)
-        )
-
-    # 8. one single sea component: every passable tile is in Lisbon's component
-    all_passable = {
-        (x, y)
-        for y, line in enumerate(grid)
-        for x, char in enumerate(line)
-        if walkable(char)
-    }
-    stray = all_passable - reached
-    if stray:
-        # size the stray basins so the failure names the damage, not just a tile
-        sizes: list[int] = []
-        seen: set[tuple[int, int]] = set()
-        for cell in sorted(stray - seen):
-            if cell in seen:
-                continue
-            seen.add(cell)
-            basin = [cell]
-            stack = [cell]
-            while stack:
-                cx, cy = stack.pop()
-                for nb in neighbours(cx, cy):
-                    if nb in stray and nb not in seen:
-                        seen.add(nb)
-                        basin.append(nb)
-                        stack.append(nb)
-            sizes.append(len(basin))
-        sizes.sort(reverse=True)
-        _map_fail(
-            "sea splits into components of sizes "
-            + ", ".join(str(size) for size in [len(reached), *sizes])
-            + f" ({len(stray)} passable tile(s) not reachable from Lisbon {start})"
-        )
-
-    if verbose:
-        print(
-            f"PASS group 6 map ({MAP_HEIGHT}x{MAP_WIDTH}, "
-            f"{len(markers)} ports placed, {len(all_passable)} passable tiles in "
-            f"one component reachable from Lisbon {start}, no corner-cutting)"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Check group 7 — Phase-3 world map (docs/10-DATA-SCHEMA.md section 8)
-# ---------------------------------------------------------------------------
-
-
-def _p3_fail(details: str) -> None:
-    fail("map_p3", P3_LEGEND_FILE, details, 7)
-
-
-def _p3_ports(docs: dict[str, object]) -> list[dict]:
-    """The 30 locked ports (with their `p3` block) plus every P3-only port."""
-    ports = list(docs["ports.json"]["ports"])
-    p3_doc = docs.get("ports_p3.json")
-    if isinstance(p3_doc, dict):
-        ports.extend(p3_doc.get("ports", []))
-    return ports
-
-
-def check_group7(docs: dict[str, object], verbose: bool) -> None:
-    """Phase-3 world-map checks: docs/10-DATA-SCHEMA.md section 8, group 7,
-    pinned by docs/70-QUESTS-DISCOVERY-ENDGAME.md section 4.9.8.
-
-    1. `data/maps/p3_world.txt` exists and matches its legend's grid;
-    2. every char is a legend tile or a legend port marker;
-    3. every port with a `p3` block appears exactly once, at `p3.position`;
-    4. the legend's `port_markers` covers exactly the ports with a `p3` block
-       (both directions — no orphan legend row, no unmapped port);
-    5. each marker has >=1 orthogonal land AND >=1 orthogonal passable tile;
-    6. the strict no-corner-cutting BFS from the first port by id reaches every
-       marker and covers every passable tile (one component);
-    7. every Discovery position is passable or orthogonally adjacent to one
-       (docs/70-* section 4.4: reachable by Explore);
-    8. maps/maps.json names an existing file for every map id, and the P3 id
-       points at this file and legend.
-    """
-    map_path = REPO_ROOT / MAP_FILE_P3
-    if not map_path.is_file():
-        _p3_fail("map file is missing")
-
-    # `docs` is keyed by bare filename (group 1), so the legend lookup uses
-    # the name, not the repo-relative path.
-    legend = docs.get(P3_LEGEND_FILE.rsplit("/", 1)[-1])
-    if not isinstance(legend, dict):
-        _p3_fail(f"{P3_LEGEND_FILE} is missing or invalid")
-    grid_def = legend.get("grid")
-    tiles = legend.get("tiles")
-    markers = legend.get("port_markers")
-    if not isinstance(grid_def, dict) or not isinstance(tiles, dict) \
-            or not isinstance(markers, dict):
-        _p3_fail(f"{P3_LEGEND_FILE} lacks grid/tiles/port_markers")
-    width = int(grid_def.get("width", 0))
-    height = int(grid_def.get("height", 0))
-    if width <= 0 or height <= 0:
-        _p3_fail(f"{P3_LEGEND_FILE} grid must be positive (got {width}x{height})")
-    if int(legend.get("tile_size_px", 0)) != 32:
-        _p3_fail(f"{P3_LEGEND_FILE} tile_size_px must be 32")
-    if set(tiles) != set(LOCKED_TILE_KINDS):
-        _p3_fail(f"{P3_LEGEND_FILE} tiles must be exactly the locked 4 chars")
-    for char, (kind, passable) in LOCKED_TILE_KINDS.items():
-        entry = tiles[char]
-        if entry.get("kind") != kind or bool(entry.get("passable")) != passable:
-            _p3_fail(f"{P3_LEGEND_FILE} tile {char!r} disagrees with 10-* section 6.2")
-
-    # 1. dimensions
-    try:
-        text = map_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        _p3_fail(f"cannot read as UTF-8: {exc}")
-    if text.startswith("\ufeff"):
-        _p3_fail("file must not start with a BOM")
-    raw_lines = text.split("\n")
-    if raw_lines and raw_lines[-1] == "":
-        raw_lines.pop()
-    else:
-        _p3_fail("file must end with a newline")
-    if len(raw_lines) != height:
-        _p3_fail(f"expected {height} lines, found {len(raw_lines)}")
-    for index, line in enumerate(raw_lines):
-        if len(line) != width:
-            _p3_fail(f"line {index} has {len(line)} chars, expected {width}")
-        if line != line.rstrip():
-            _p3_fail(f"line {index} has trailing whitespace")
-    grid = raw_lines
-
-    # 2. legal chars
-    allowed = set(tiles) | set(markers)
-    for y, line in enumerate(grid):
-        for x, char in enumerate(line):
-            if char not in allowed:
-                _p3_fail(f"illegal char {char!r} at ({x}, {y})")
-
-    # 3/4. ports <-> legend
-    ports = _p3_ports(docs)
-    by_id = {}
-    for port in ports:
-        port_id = port["id"]
-        if port_id in by_id:
-            _p3_fail(f"duplicate port id {port_id!r} across ports.json/ports_p3.json")
-        by_id[port_id] = port
-    p3_ids = {
-        port_id for port_id, port in by_id.items()
-        if isinstance(port.get("p3"), dict)
-    }
-    if len(p3_ids) != 100:
-        _p3_fail(f"expected 100 ports with a p3 block, found {len(p3_ids)}")
-    if set(markers.values()) != p3_ids:
-        missing = sorted(p3_ids - set(markers.values()))
-        extra = sorted(set(markers.values()) - p3_ids)
-        details = []
-        if missing:
-            details.append(f"legend missing {', '.join(missing[:6])}")
-        if extra:
-            details.append(f"legend names unknown {', '.join(extra[:6])}")
-        _p3_fail("port_markers does not cover exactly the p3 ports: "
-                 + "; ".join(details))
-    if len(set(markers.values())) != len(markers):
-        _p3_fail("port_markers maps two markers to the same port")
-    if len(set(markers)) != len(markers):
-        _p3_fail("port_markers has duplicate marker chars")
-
-    seen_positions: dict[tuple[int, int], str] = {}
-    for marker, port_id in markers.items():
-        if len(marker) != 1 or marker in tiles:
-            _p3_fail(f"port marker {marker!r} must be one char outside the tile set")
-        port = by_id[port_id]
-        block = port["p3"]
-        if block.get("marker") != marker:
-            _p3_fail(
-                f"port {port_id} p3.marker is {block.get('marker')!r} but the "
-                f"legend says {marker!r}"
-            )
-        pos = (int(block["position"]["x"]), int(block["position"]["y"]))
-        if pos in seen_positions:
-            _p3_fail(
-                f"ports {seen_positions[pos]} and {port_id} share p3 position {pos}"
-            )
-        seen_positions[pos] = port_id
-        if not (0 <= pos[0] < width and 0 <= pos[1] < height):
-            _p3_fail(f"port {port_id} p3 position {pos} is off the {width}x{height} grid")
-
-    found: dict[str, list[tuple[int, int]]] = {marker: [] for marker in markers}
-    for y, line in enumerate(grid):
-        for x, char in enumerate(line):
-            if char in found:
-                found[char].append((x, y))
-    for marker, port_id in markers.items():
-        hits = found[marker]
-        if len(hits) != 1:
-            _p3_fail(
-                f"marker {marker!r} ({port_id}) appears {len(hits)} times, expected 1"
-            )
-        expected = (
-            int(by_id[port_id]["p3"]["position"]["x"]),
-            int(by_id[port_id]["p3"]["position"]["y"]),
-        )
-        if hits[0] != expected:
-            _p3_fail(
-                f"marker {marker!r} ({port_id}) is at {hits[0]}, "
-                f"locked position is {expected}"
-            )
-
-    # 5. harbour-on-a-coast
-    for marker, port_id in markers.items():
-        x, y = found[marker][0]
-        neighbours = [
-            grid[y + dy][x + dx]
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-            if 0 <= x + dx < width and 0 <= y + dy < height
-        ]
-        if "#" not in neighbours:
-            _p3_fail(f"marker {marker!r} ({port_id}) has no adjacent land '#'")
-        if not any(char in markers or tiles[char].get("passable")
-                   for char in neighbours):
-            _p3_fail(
-                f"marker {marker!r} ({port_id}) has no orthogonally adjacent "
-                "passable tile (harbour cannot be sailed into or out of)"
-            )
-
-    # 6. strict BFS from the first port by id
-    passable = {char for char, tile in tiles.items() if tile.get("passable")}
-    marker_tiles = set(markers)
-
-    def walkable(char: str) -> bool:
-        return char in marker_tiles or char in passable
-
-    def walkable_at(x: int, y: int) -> bool:
-        return 0 <= x < width and 0 <= y < height and walkable(grid[y][x])
-
-    def neighbours(x: int, y: int):
-        for dx, dy in BFS_STEPS_8:
-            nx, ny = x + dx, y + dy
-            if not walkable_at(nx, ny):
-                continue
-            if dx and dy and not (walkable_at(x + dx, y) and walkable_at(x, y + dy)):
-                continue
-            yield nx, ny
-
-    first_id = sorted(p3_ids)[0]
-    start = found[str(by_id[first_id]["p3"]["marker"])][0]
-    if not walkable_at(*start):
-        _p3_fail(f"{first_id} tile {start} is not walkable sea")
-    reached = {start}
-    queue = [start]
-    head = 0
-    while head < len(queue):
-        x, y = queue[head]
-        head += 1
-        for neighbour in neighbours(x, y):
-            if neighbour not in reached:
-                reached.add(neighbour)
-                queue.append(neighbour)
-
-    unreachable = [
-        port_id for port_id in sorted(p3_ids)
-        if found[str(by_id[port_id]["p3"]["marker"])][0] not in reached
-    ]
-    if unreachable:
-        _p3_fail(
-            f"{len(unreachable)} port(s) unreachable by sea from {first_id} {start}: "
-            + ", ".join(unreachable)
-        )
-
-    all_passable = {
-        (x, y)
-        for y, line in enumerate(grid)
-        for x, char in enumerate(line)
-        if walkable(char)
-    }
-    stray = all_passable - reached
-    if stray:
-        sizes: list[int] = []
-        seen: set[tuple[int, int]] = set()
-        for cell in sorted(stray - seen):
-            if cell in seen:
-                continue
-            seen.add(cell)
-            basin = [cell]
-            stack = [cell]
-            while stack:
-                cx, cy = stack.pop()
-                for nb in neighbours(cx, cy):
-                    if nb in stray and nb not in seen:
-                        seen.add(nb)
-                        basin.append(nb)
-                        stack.append(nb)
-            sizes.append(len(basin))
-        sizes.sort(reverse=True)
-        _p3_fail(
-            "P3 sea splits into components of sizes "
-            + ", ".join(str(size) for size in [len(reached), *sizes])
-            + f" ({len(stray)} passable tile(s) not reachable from {first_id})"
-        )
-
-    # 7. discoveries on the P3 map (docs/70-* section 4.4)
-    discoveries = docs.get("discoveries.json")
-    discovery_list = discoveries.get("discoveries", []) if isinstance(discoveries, dict) else []
-    for discovery in discovery_list:
-        pos = discovery.get("position", {})
-        x, y = int(pos.get("x", -1)), int(pos.get("y", -1))
-        if not (0 <= x < width and 0 <= y < height):
-            _p3_fail(
-                f"discovery {discovery.get('id')} at ({x}, {y}) is off the "
-                f"{width}x{height} P3 grid"
-            )
-        if walkable_at(x, y):
-            continue
-        if any(
-            walkable_at(x + dx, y + dy)
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-        ):
-            continue
-        _p3_fail(
-            f"discovery {discovery.get('id')} at ({x}, {y}) is land-locked "
-            "(no passable tile or adjacent passable tile)"
-        )
-
-    # 8. the map index
-    index = docs.get("maps.json")
-    if not isinstance(index, dict) or not isinstance(index.get("maps"), list):
-        _p3_fail(f"{MAPS_INDEX_FILE} is missing or has no maps array")
-    ids = []
-    for entry in index["maps"]:
-        if not isinstance(entry, dict):
-            _p3_fail(f"{MAPS_INDEX_FILE}: every entry must be an object")
-        map_id = entry.get("id")
-        if not isinstance(map_id, str) or not ID_RE.match(map_id):
-            _p3_fail(f"{MAPS_INDEX_FILE}: bad map id {map_id!r}")
-        ids.append(map_id)
-        for key in ("file", "legend"):
-            path = entry.get(key)
-            if not isinstance(path, str) or not (REPO_ROOT / path).is_file():
-                _p3_fail(f"{MAPS_INDEX_FILE}: '{map_id}' has no existing {key} {path!r}")
-        if entry.get("name") is None:
-            _p3_fail(f"{MAPS_INDEX_FILE}: '{map_id}' has no name")
-    if len(set(ids)) != len(ids):
-        _p3_fail(f"{MAPS_INDEX_FILE}: duplicate map ids {ids}")
-    if "p1" not in ids or "p3" not in ids:
-        _p3_fail(f"{MAPS_INDEX_FILE}: must index both 'p1' and 'p3' (got {ids})")
-    p3_entry = next(entry for entry in index["maps"] if entry.get("id") == "p3")
-    if p3_entry.get("file") != MAP_FILE_P3:
-        _p3_fail(f"'p3' must point at {MAP_FILE_P3}")
-    if p3_entry.get("legend") != P3_LEGEND_FILE:
-        _p3_fail(f"'p3' must point at {P3_LEGEND_FILE}")
-
-    if verbose:
-        print(
-            f"PASS group 7 phase-3 map ({height}x{width}, "
-            f"{len(markers)} ports placed, {len(all_passable)} passable tiles in "
-            f"one component reachable from {first_id} {start}, "
-            f"{len(discovery_list)} discoveries reachable, {len(ids)} maps indexed)"
-        )
+    fail(
+        "map",
+        "data/maps/world.png",
+        "world-map group 6 is being rewritten for the PNG artifact "
+        "(docs/IMPLEMENT-Phase4.md task F); the retired ASCII checks no longer apply",
+        6,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1982,7 +1553,6 @@ def main(argv: list[str]) -> int:
         ("4", check_group4),
         ("5", check_group5),
         ("6", check_group6),
-        ("7", check_group7),
     )
 
     for group_id, check in groups:
