@@ -107,7 +107,7 @@ derive one of these differently (the Phase-2/3 lesson).
 | Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics | `10-*` §6.3 new (A) |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `10-*` §6.1 (A), built by C |
 | Map index | `maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 (B) |
-| Save | version 4; `DEFAULT_MAP_ID` = `"world"`; pre-release saves need not load (`90-*` §8.2 dev scope) | `90-*` §8.1–8.2 (B) |
+| Save | version 4; `DEFAULT_MAP_ID` = `"world"`; pre-release saves need not load (`90-*` §8.2 dev scope) | `90-*` §8.1–8.2 (B); code in L |
 | Port schema | `lat`, `lon` (WGS84 degrees, truth); `marker`, `position`, `p3`, `phase` keys removed; ports.json holds all 100 ports | `10-*` §4.5, §7.1 (A) |
 
 **Weather bands** (columns per existing `20-*` §4.7 schema order:
@@ -409,26 +409,6 @@ not docking.
   discovery reveal at 18, both visible on chart; ui_strings zero `<key>`
   fallbacks in both locales.
 
-### K — Save v4: map_id + position (pre-release scope)
-
-- **Goal:** saves are written in the Phase-4 shape; old pre-release saves need
-  not load (**dev-stage scope, `90-*` §8.2** — no player saves exist yet, so
-  backward compatibility is explicitly out of scope until the first release).
-- **Docs:** `90-*` §8 as amended (B), §8.2's development-stage scope clause.
-- **Changes:** `SAVE_VERSION := 4`; `DEFAULT_MAP_ID` = `"world"`;
-  `world.map_id` written as `"world"`; `world.position` is always the harbor
-  tile of the save's current port (saves are port-only by design — F5 at sea
-  is refused). `MIGRATIONS[3]` may remain as written (it is already specified
-  above) but is **not a gate**, and a payload with an older `save_version` may
-  simply be refused with a logged "pre-release save". Do not add compatibility
-  scaffolding: no legacy-key repair, no port-id remapping, no `phase`
-  rewrite machinery beyond what already exists.
-- **Done-when:** `test_save_v4` green: the **current** schema round-trips
-  byte-equal; a save/load at sea-refused path still refuses gracefully; a
-  corrupt payload and a *future* `save_version` are refused gracefully (that
-  guard is cheap and stays). A real Phase-1 fixture migrating end-to-end is
-  **not required** (`90-*` §8.2).
-
 ### L — Retire the old maps
 
 - **Goal:** no dual-map code paths survive.
@@ -437,10 +417,21 @@ not docking.
   switching, legend-per-map resolution, and minimap rescale-on-map-change
   code; `map_legend_p3.json` deletion (E) confirmed swept in code; docs
   cross-references in code comments updated.
+- **Save constants folded in (this task, since it sweeps `autoload/**`):**
+  in `autoload/save_system.gd` set `SAVE_VERSION := 4`, `PHASE := 4` and
+  `DEFAULT_MAP_ID := "world"` — the old `"p1"` default is itself one of the
+  stale references this task's grep must clear. There is **no migration
+  task**: pre-release saves need not load (`90-*` §8.2 development-stage
+  scope). Rename `test_save_v3` → `test_save_v4` and update its expectations
+  from 3 to 4; the cheap guards stay (corrupt payload refused, future
+  `save_version` refused, and save-at-sea still refused). Delete
+  `MIGRATIONS[3]` from the backlog as a requirement — if the existing
+  `1 → 2 → 3` steps remain in code they are historical and untested against
+  real fixtures, which is fine.
 - **Done-when:** grep `scripts/` + `scenes/` + `autoload/` for
-  `p1`, `p3`, `mediterranean`, `map_legend_p3` returns only
-  migration/test fixtures; validator + all suites green; headless boot
-  clean.
+  `p1`, `p3`, `mediterranean`, `map_legend_p3` returns nothing (no
+  migration code survives, so there is nothing to except); validator + all
+  suites green with `test_save_v4` passing; headless boot clean.
 
 ### M — Circumnavigation & chokepoint E2E
 
@@ -484,13 +475,11 @@ merges). C needs A's §6.3 format. I needs only B (engine + data
 constants) and runs against C in W2 — disjoint files. D needs C; E needs
 A's §7.1. F needs D + E. G needs C (artifact) and F (green world) — it
 loads the real thing, not a fixture. H needs G's passability API. J needs
-G's explored/passability queries. K needs E (port schema) and G's
-harbor-tile derivation — it does not depend on H/J, so it joins W6
-instead of wasting a solo wave. L needs G + K. M needs H + I + K. N needs
-all. The critical path is A/B → C → D → F → G → (H, J, K) → (L, M) → N:
-**eight waves**. Parallelism peaks at 3 concurrent subagents (W6); the
-fourth worktree slot stays free for master-side merge verification or an
-ad-hoc task.
+G's explored/passability queries. L needs G (it sweeps the world-map code
+paths). M needs H + I. N needs all. The critical path is
+A/B → C → D → F → G → (H, J) → (L, M) → N: **eight waves**. Parallelism
+peaks at 2 concurrent subagents (W6); the remaining worktree slots stay
+free for master-side merge verification or an ad-hoc task.
 
 ## Shared-file pins (hard rule: one writer per file per wave)
 
@@ -504,10 +493,12 @@ ad-hoc task.
 - **W4:** F owns `tools/validate_data.py` alone (I shipped in W2).
 - **W6:** H owns `world_map.gd` input section + new
   `scripts/world/sail_path.gd`; J owns `hud.tscn`, `chart_screen.tscn`,
-  discovery bookkeeping; K owns `autoload/save_system.gd` + the
-  `test_save_v*` suites — fully disjoint from both. H and J both touch
+  discovery bookkeeping — fully disjoint. H and J both touch
   `world_map.tscn` wiring — the wave master applies J's scene wiring
   after H merges.
+- **W7:** L owns `autoload/save_system.gd`, `autoload/data_loader.gd` sweep
+  and the `test_save_v*` suite rename; M owns only its new
+  `tools/test_world_e2e.*` files. Disjoint.
 - **ui_strings.json** remains orchestrator-owned: J (and any task adding
   keys) lists zh/en keys in its report; master merges after the wave.
 
@@ -524,7 +515,7 @@ worktrees, merges every branch, runs the validator between waves, and pins
 | W3 | D, E | W2 |
 | W4 | F | W3 |
 | W5 | G | W4 |
-| W6 | H, J, K | W5 |
+| W6 | H, J | W5 |
 | W7 | L, M | W6 |
 | W8 | N | W7 |
 
@@ -537,8 +528,9 @@ worktrees, merges every branch, runs the validator between waves, and pins
   group 6 pass early by re-authoring ASCII.
 - W4 and W5 are single by dependency: F is the only consumer of both W3
   outputs, and the chunked loader is on every later path.
-- W7 pairs L (deletions, grep-clean) with M (new E2E suite only) — disjoint
-  files; M needs K's save v4 only to persist between legs.
+- W7 pairs L (deletions, grep-clean, save-constant bump) with M (new E2E
+  suite only) — disjoint files. M's legs run inside one process, so they need
+  no save between legs (persistence across legs is not part of the proof).
 - N is orchestrator-led (dated manual run), as in every phase.
 
 ## Phase-5 candidates (spec'd in Phase 5 — owners amend `20-*` first)
@@ -579,7 +571,7 @@ is written, its owners amend the owning system docs first:
 | Caspian/lakes trap the BFS or validator | lake pass rasterizes `ne_10m_lakes` as `#` (Caspian is land); F still lists any > 2000-tile disconnected component informationally (C, F) |
 | River ports snap-fail at 10 nm tiles (hamburg/Elbe, london/Thames) | pinned tidal-river clause in D (move `lat`/`lon` to the estuary mouth first, carve second); hamburg added to F's probe ports (D, F) |
 | Explored-state still unsaved (Phase-1 known limitation) | unchanged, documented; chart and minimap share the session bitset (J) |
-| Old pre-release saves point at vanished coordinates | Out of scope by §8.2 dev-stage clause: old saves may be refused; K only guarantees the current schema (K) |
+| Old pre-release saves point at vanished coordinates | Out of scope by §8.2 dev-stage clause: old saves may be refused; there is no migration task (L) |
 | Someone hand-edits world.png | AGENTS.md hard rule reworded + builder determinism check (A, C) |
 | Shapefile/dependency drift changes the raster between machines | SHA-256 per vendored file in LICENSE-NOTES.md + pinned `tools/requirements.txt` + stable sorted polygon order (C) |
 | Builder and GDScript runtime disagree on snap ties | locked smallest-(y, x) tie-break in the constants + F's build-vs-runtime equality check (D, F) |
