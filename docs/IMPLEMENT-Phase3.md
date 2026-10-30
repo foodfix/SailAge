@@ -2,10 +2,10 @@
 
 **STATUS: ✅ COMPLETE (2026-10-30) — Phase 3 shipped, merged and accepted.**
 All ten tasks A–J done (I skipped as the backlog allows). The full gate is
-`python3 tools/validate_data.py` (exit 0) plus **30 headless suites, 4 542
+`python3 tools/validate_data.py` (exit 0) plus **30 headless suites, 4 545
 checks, zero `SCRIPT ERROR`, `--quit-after 3` clean**; the eight new suites are
-`test_save_v3` (141), `test_world_map` (62), `test_quests` (103),
-`test_bounty` (80), `test_palace` (182), `test_tournament` (144),
+`test_save_v3` (141), `test_world_map` (62), `test_quests` (105),
+`test_bounty` (80), `test_palace` (183), `test_tournament` (144),
 `test_retirement` (78) and `test_phase3_acceptance` (102). Acceptance record:
 `tools/demo_check_phase3.md`; per-task status and the completion record at the
 bottom of this file.
@@ -44,7 +44,7 @@ Prerequisite: Phase 2 complete.
 
 ## B. Guild activation + quest system
 
-✅ **Done** (W2) — `quest_gen.gd` (deterministic per-(port, week) offers over 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, shared `objective_text`), S12 `guild_screen.tscn`, character-panel `Quests` tab, and both documented scene hooks (port-entry completion, immediate cargo-loss failure); `tools/test_quests.tscn` (103).
+✅ **Done** (W2) — `quest_gen.gd` (deterministic per-(port, week) offers over 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, shared `objective_text`), S12 `guild_screen.tscn`, character-panel `Quests` tab, and both documented scene hooks (port-entry completion, immediate cargo-loss failure); `tools/test_quests.tscn` (105).
 
 - `guild_screen.tscn`, `quest_gen.gd` (delivery/bounty/exploration from
   templates), quest tracking UI (character panel tab), refresh cadence,
@@ -67,7 +67,7 @@ Prerequisite: Phase 2 complete.
 
 ## D. Palace activation, royal missions, titles
 
-✅ **Done** (W3) — S13 `palace_screen.tscn`, rep-30 gate, three rotating mission kinds (one per nation), `fame.gd` ladder with all four grants wired into `TradeEngine.title_units`, `ShipyardEngine.repair_cost` and `QuestGen.max_active_quests`; `tools/test_palace.tscn` (182).
+✅ **Done** (W3) — S13 `palace_screen.tscn`, rep-30 gate, three rotating mission kinds (one per nation), `fame.gd` ladder with all four grants wired into `TradeEngine.title_units`, `ShipyardEngine.repair_cost` and `QuestGen.max_active_quests`; `tools/test_palace.tscn` (183).
 
 - `palace_screen.tscn`, rep ≥ 30 gate, three mission kinds, title ladder with
   ceremony and grants (sell-price `title_bonus`, quest slot, repair
@@ -308,9 +308,9 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | Task | Status | Evidence |
 |---|---|---|
 | A — save migration v2 → v3 | ✅ Done | `SAVE_VERSION = 3`, pure `MIGRATIONS[2]` (adds the eleven §8.1 v3 keys, erases `quests`, adds `world.map_id = "p1"`), retired-save path (`last_loaded_retired` / `last_retired_summary`); `test_save_v3` (141) |
-| B — guild activation + quests | ✅ Done | `quest_gen.gd` (seeded offers, 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, `objective_text`/`type_key` shared by both UIs), `guild_screen.tscn`; `test_quests` (103) |
+| B — guild activation + quests | ✅ Done | `quest_gen.gd` (seeded offers, 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, `objective_text`/`type_key` shared by both UIs), `guild_screen.tscn`; `test_quests` (105) |
 | C — discovery system + content | ✅ Done | `scripts/world/discovery.gd` (radius 3, explore, report-once, priced hints), 30 discoveries with zh/en hints, validator group 6/7 position checks, tavern `Rumours` tab (`80-*` §4.7.3); `test_tavern` rumours section (268 total), `test_world_map` (62) |
-| D — palace, royal missions, titles | ✅ Done | `palace_engine.gd` (rep-30 gate, three rotating mission kinds, one per nation, ceremony, repair bays, retire), `fame.gd` ladder + all four grants wired into `TradeEngine.title_units` / `ShipyardEngine.repair_cost` / `QuestGen.max_active_quests`; `test_palace` (182) |
+| D — palace, royal missions, titles | ✅ Done | `palace_engine.gd` (rep-30 gate, three rotating mission kinds, one per nation, ceremony, repair bays, retire), `fame.gd` ladder + all four grants wired into `TradeEngine.title_units` / `ShipyardEngine.repair_cost` / `QuestGen.max_active_quests`; `test_palace` (183) |
 | E — piracy & bounty loop | ✅ Done | `bounty.gd` (rival table from data, −20/+2, issue at ≤ −50 with `500 × |rep|`, both clear paths → exactly −10), closed-port rule + palace pay exception in the hub; `test_bounty` (80) |
 | F — tournaments | ✅ Done | `tournament.gd` (30-day rotation, day 1–5 window, fee, 3 escalating bouts with carry, 10 000g/+100 fame, 500g + 50 % repair), S13 entry + S10 → S13 bracket return; `test_tournament` (144) |
 | G — full world map | ✅ Done | `data/maps/p3_world.txt` (160×96) + `map_legend_p3.json` + `ports_p3.json` (70 new ports, 100 total), `maps/maps.json` index, validator group 7 (BFS, marker/position agreement, discovery positions), S2 world selector, `new_game(..., map_id)`; `test_world_map` (62) |
@@ -318,9 +318,9 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
 | J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (102): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 542 checks**,
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 545 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 892
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 895
 checks plus 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.

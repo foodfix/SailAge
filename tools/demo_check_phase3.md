@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 542 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 545 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -170,11 +170,11 @@ are collected and the closing check asserts none of them contains a raw
 | `test_inn.tscn` | 116 | 1 |
 | `test_morale.tscn` | 260 | 1 |
 | `test_movement.tscn` | 158 | 1 |
-| `test_palace.tscn` | 182 | **3** |
+| `test_palace.tscn` | 183 | **3** |
 | `test_phase2_acceptance.tscn` | 142 | 2 |
 | `test_phase3_acceptance.tscn` | **102** | **3** |
 | `test_port_hub.tscn` | 142 | 1 (+2 for the guild/palace rows) |
-| `test_quests.tscn` | 103 | **3** |
+| `test_quests.tscn` | 105 | **3** |
 | `test_retirement.tscn` | 78 | **3** |
 | `test_sailing.tscn` | 84 | 1 |
 | `test_save.tscn` | 196 | 1 (+1 for the v3 payload) |
@@ -186,12 +186,15 @@ are collected and the closing check asserts none of them contains a raw
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
 | `test_world_map.tscn` | 62 | **3** |
-| **Total** | **4 542** | |
+| **Total** | **4 545** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 892 checks
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 895 checks
 and 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
-Phase-3 behaviour, none a silently dropped count.
+Phase-3 behaviour, none a silently dropped count. The counts above include the
+S12/S13 minimap fix (`f371ad4`, three checks in `test_quests` and one in
+`test_palace`) and the nationality-card layout fix (`161855c`), both folded in
+before this gate run.
 
 ---
 
