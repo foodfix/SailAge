@@ -303,12 +303,51 @@ then return to title; no save is written or deleted.
   **18** tiles (Chebyshev, wrap-aware) — is when the `E` Explore action can
   find a `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
   constant (`sighting_radius` 24 vs `discovery_radius` 18, §5).
-- **Entry:** moving onto a known port's harbor tile → port-entry sequence
-  (greeting banner with `Port.flavor`, day count, desertion check §4.8.2)
-  → route to `port_screen.tscn`. Moving onto an *unknown* port's harbor tile
-  discovers it (adds to `known_ports`) and enters normally.
-- **Exit:** "Set sail" from the port screen returns to `world_map.tscn` with
-  the fleet on the harbor tile and `clock_fraction` reset to 0.
+
+#### 4.11.1 Harbor pair: shore (land) tile + berth (sea) tile (locked)
+
+Every port owns a **pair** of orthogonally adjacent tiles, both derived from
+its `lat`/`lon` (`10-*` §6.1) — neither is stored in data:
+
+| Tile | Derivation | Passable | Role |
+|---|---|---|---|
+| **berth tile** (sea) | §6.1 snap: nearest water within 2 tiles, Chebyshev, tie-break smallest `(y, x)` | **yes** (`~`/`.`) | the fleet's berth; where the fleet stands after leaving port |
+| **shore tile** (land) | nearest `#` tile **orthogonally adjacent** to the berth tile, tie-break smallest `(y, x)` | **never** (it is `#`) | **the port's map location** — this is what the player sees marked |
+
+The pair is mandatory: every port must have a shore tile orthogonally
+adjacent to its berth tile (validator group 6). The berth is ordinary water —
+**standing on it does not open the port screen**.
+
+- **Presentation (locked):** the port overlay (nation-coloured square + label)
+  is drawn on the **shore tile**, not the berth. What the player sees as "the
+  port" is the land tile; the berth next to it is where the ship sits.
+- **Entry (docking):** the fleet docks by **heading into the shore tile**.
+  A direction key or click whose target is a port's shore tile opens the
+  port-entry sequence (greeting banner `Port.flavor`, day count, desertion
+  check §4.8.2) → route to `port_screen.tscn`. The fleet does **not** move
+  onto the land tile: docking is an interaction, not a step.
+  - **Orthogonality (locked):** docking requires the fleet to be
+    **orthogonally adjacent** to the shore tile; a diagonal into it is illegal
+    exactly as any diagonal into land is (§4.2, no corner cutting). Since the
+    berth is orthogonally adjacent to the shore, standing on or beside the
+    berth is the docking position.
+  - **Clock cost (locked):** docking charges one `move_cost()`
+    (`1 / effective_speed` days, §4.4) before the port screen opens, so the
+    "distance is the core resource" pillar is not leaked. `clock_fraction`
+    still resets to 0 at port entry.
+  - Docking an **unknown** port discovers it (`known_ports`) and enters
+    normally.
+  - A land tile that is not a port's shore tile is an ordinary blocked move
+    (§6: silent, no clock cost, `world.move_blocked` toast).
+- **Exit:** "Set sail" returns to `world_map.tscn` with the fleet on the
+  **berth tile** (sea) and `clock_fraction` reset to 0. The fleet never
+  occupies a land tile.
+- **Click-to-sail:** a shore tile is a valid route *destination* — clicking it
+  routes to the adjacent berth and then docks. It is never a routing waypoint;
+  `AStarGrid2D` still treats it as solid.
+- **No accidental docking:** sailing across a berth is ordinary movement. This
+  deliberately removes the old behaviour where stepping onto the berth opened
+  the port.
 
 ### 4.12 Minimap
 

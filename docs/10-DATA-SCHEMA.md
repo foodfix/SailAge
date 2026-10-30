@@ -460,7 +460,8 @@ differently.
 | Latitude edges | impassable (ice band, below) | `20-*` §4.1 |
 | `TILE_SIZE_PX` | `32` (unchanged) | TileMap config, `80-*` §4.5 |
 | Coastal band | `.` iff within 3 tiles (Chebyshev, wrap-aware) of a passable-adjacent land/ice tile, else `~`; `.` is cosmetic only (same passability/speed as `~`) | `tools/build_world.py`, renderer |
-| Harbor snap | harbor tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest `(y, x)` — the Python builder and the GDScript runtime implement this rule exactly and the validator tests they agree | `10-*` §7.1, `tools/build_world.py`, `90-*` §9 |
+| Harbor snap | berth tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest `(y, x)` — the Python builder and the GDScript runtime implement this rule exactly and the validator tests they agree | `10-*` §7.1, `tools/build_world.py`, `90-*` §9 |
+| Harbor pair | every port has a **shore tile**: the nearest `#` tile orthogonally adjacent to its berth, tie-break smallest `(y, x)`. The shore tile is the port's visible location and the docking target; the berth is where the fleet stands (`20-*` §4.11.1). Both are derived, never stored | `20-*` §4.11.1, `90-*` §9, validator group 6 |
 | Port sighting | `24 tiles` (≈ 4° ≈ 240 nm) | `20-*` §4.11 |
 | Discovery sighting | `18 tiles` (≈ 3°) | `70-*` §4.4 |
 | Ship speeds | ×2: base speeds become `{8, 10, 12}` tiles/day = 80–120 nm/day; floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2, `data/ship_types.json` |
@@ -762,11 +763,17 @@ Group 6 has no ASCII input and no markers. Exit 6. It checks:
    index used is in the locked set `0–4` (`~ . # ^ I` in that order). Decode
    with `zlib` and the tool's own PNG reader — stdlib only, no PIL.
 2. **Harbor tiles agree.** For each of the 100 ports, recompute the harbor
-   tile **independently from `Port.lat`/`Port.lon`** with the §6.1 snap rule
-   (within 2 tiles Chebyshev, on water, ≥ 1 orthogonally adjacent water tile,
-   tie-break to smallest `(y, x)`) and compare it with the builder's
+   (berth) tile **independently from `Port.lat`/`Port.lon`** with the §6.1 snap
+   rule (within 2 tiles Chebyshev, on water, ≥ 1 orthogonally adjacent water
+   tile, tie-break to smallest `(y, x)`) and compare it with the builder's
    `data/maps/world_report.json#ports[].harbor_tile`. They must be identical.
    Failures name the port and both tiles.
+2b. **Harbor pair.** Every port must have a **shore tile**: a `#` tile
+   orthogonally adjacent to its berth tile (`20-*` §4.11.1). A port with no
+   such neighbour fails group 6 naming the port — the docking gesture and the
+   overlay both depend on it. The shore tile itself is recomputed the same way
+   (nearest to `lat`/`lon`, tie-break `(y, x)`) and must agree with the
+   builder's `world_report.json#ports[].shore_tile`.
 3. **Reachability.** BFS from Lisbon's harbor tile over **all** passable tiles
    (`~`, `.` — `#`, `^`, `I` are impassable), 8-directional with
    **corner-cutting forbidden** (a diagonal step is legal only when both

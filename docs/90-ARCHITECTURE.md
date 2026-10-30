@@ -402,10 +402,14 @@ DataLoader as `DataLoader.map`):
    camera**, at most **24 live chunks**, freed beyond a margin. The 5 palette
    colours come from `80-*` §4.8 through `scripts/palette.gd` (`SEA`,
    `COAST_SEA`, `LAND`, `REEF`, `ICE`).
-5. Ports = an **overlay layer** from `data/ports.json` (`lat`/`lon` → harbor
-   tile by the `10-*` §6.1 snap rule), drawn as a nation-coloured square plus
-   a label, **wrap-duplicated at the seam** so a port at `x = 0` also shows at
-   `x = 2160`.
+5. Ports = an **overlay layer** from `data/ports.json`. Each port derives the
+   **harbor pair** of `20-*` §4.11.1: a *berth* tile (sea, the `10-*` §6.1
+   snap) and a *shore* tile (the nearest orthogonally adjacent `#` tile). The
+   overlay draws the nation-coloured square + label on the **shore tile** —
+   the port's visible map location — plus a small berth marker on the sea tile
+   so the pairing reads at a glance. Both are **wrap-duplicated at the seam**
+   so a port at `x = 0` also shows at `x = 2160`. The loader exposes
+   `port_cell(id)` (berth) and `shore_cell(id)`; both are memoised.
 6. The camera centers on the fleet and `x` wraps (§7); `y` clamps to the
    1080-tile height.
 7. The world scene queries only the loader; it **never re-reads the PNG**.
