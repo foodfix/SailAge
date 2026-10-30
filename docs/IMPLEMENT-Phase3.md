@@ -2,20 +2,31 @@
 
 **STATUS: ✅ COMPLETE (2026-10-30) — Phase 3 shipped, merged and accepted.**
 
-> **Superseded (2026-10-30):** the shipped dual-map world layer (task G's
+> **Superseded (2026-10-30; replacement completed 2026-10-31):** the shipped
+> dual-map world layer (task G's
 > `p3_world.txt`/`map_legend_p3.json`/`ports_p3.json`, task C's p3-grid
-> discovery positions, and the marker-charset pin of §4.9.8) is replaced by
-> **`IMPLEMENT-Phase4.md`** (single real-Earth map, 2160×1080). The tasks
-> below remain the historical record of what shipped.
+> discovery positions, and the marker-charset pin of §4.9.8) was replaced by
+> **`IMPLEMENT-Phase4.md`** (single real-Earth map, 2160×1080, 100 ports by
+> real `lat`/`lon`). **Phase 4 is now ✅ COMPLETE** — its gate is the same
+> `python3 tools/validate_data.py` (exit 0, groups 1–6) plus **30 headless
+> suites, 5 009 checks**, zero `SCRIPT ERROR`, `--quit-after 3` clean;
+> acceptance record `tools/demo_check_phase4.md`. The tasks below remain the
+> historical record of what shipped in Phase 3.
 
-All ten tasks A–J done (I skipped as the backlog allows). The full gate is
-`python3 tools/validate_data.py` (exit 0) plus **30 headless suites, 4 545
-checks, zero `SCRIPT ERROR`, `--quit-after 3` clean**; the eight new suites are
-`test_save_v3` (141), `test_world_map` (62), `test_quests` (105),
-`test_bounty` (80), `test_palace` (183), `test_tournament` (144),
+All ten tasks A–J done (I skipped as the backlog allows). The gate **at Phase-3
+completion** was `python3 tools/validate_data.py` (exit 0) plus **30 headless
+suites, 4 545 checks, zero `SCRIPT ERROR`, `--quit-after 3` clean**; the eight
+new suites were `test_save_v3` (141), `test_world_map` (62), `test_quests`
+(105), `test_bounty` (80), `test_palace` (183), `test_tournament` (144),
 `test_retirement` (78) and `test_phase3_acceptance` (102). Acceptance record:
 `tools/demo_check_phase3.md`; per-task status and the completion record at the
 bottom of this file.
+
+**Since Phase 4 landed**, three of those suites changed shape and the numbers
+above are history, not the current gate: `test_save_v3` → `test_save_v4`
+(157), `test_world_map` 62 → 172 (rewritten for the PNG world),
+`test_save_v2` was removed with the migration chain. The current gate is
+**30 suites / 5 009 checks** — see `IMPLEMENT-Phase4.md`'s completion record.
 
 Pre-work done before any code (the Phase-1/2 lesson: a value left "task-owned"
 gets invented differently by each branch, and the merge then has to reconcile
@@ -325,8 +336,13 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
 | J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (102): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 545 checks**,
-zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
+**Gate (as of the Phase-3 completion, 2026-10-30):**
+`python3 tools/validate_data.py` exit 0; **30 suites, 4 545 checks**, zero
+`SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
+*(Phase 4 has since moved this gate to **30 suites, 5 009 checks** on the
+generated world map — see `IMPLEMENT-Phase4.md`'s completion record and
+`tools/demo_check_phase4.md`. The per-task evidence below is the Phase-3
+record and is intentionally left as written.)*
 Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 895
 checks plus 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a

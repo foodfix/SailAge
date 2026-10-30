@@ -234,9 +234,15 @@ integration defects the merge itself caught.
 | G — economy & strings | W3 | ✅ Done | `BattleRewards.apply` (salvage/XP/rep, idempotent), the full §4.12.5 inventory (47 keys: 46 `battle.*`/`duel.*`/`encounter.*` plus `gameover.captured`), glossary; `test_battle_economy` (68) |
 | H — Phase-2 acceptance | W4 | ✅ Done | four scripted E2E scenarios from Phase-1 saves; `test_phase2_acceptance` (142); record in `tools/demo_check_phase2.md` |
 
-Gate: `python3 tools/validate_data.py` exit 0; **22 suites, 3 599 checks**
-(Phase-1 14 suites = 2 516 unchanged, Phase-2 8 suites = 1 083), zero
-`SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
+Gate **at Phase-2 completion**: `python3 tools/validate_data.py` exit 0;
+**22 suites, 3 599 checks** (Phase-1 14 suites = 2 516 unchanged, Phase-2 8
+suites = 1 083), zero `SCRIPT ERROR`; `godot --headless --path .
+--quit-after 3` exit 0.
+
+*(Phases 3–4 have since moved the gate to **30 suites / 5 009 checks**; the
+Phase-2 task evidence above is the historical record. Note `test_save_v2` was
+later removed with the save-migration chain (`90-*` §8.2 dev-stage scope) and
+`test_save_v3` became `test_save_v4` — see `IMPLEMENT-Phase4.md`.)*
 
 ### Deviations from the sanctioned wave plan
 

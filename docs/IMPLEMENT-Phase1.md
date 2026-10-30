@@ -18,10 +18,10 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 | | |
 |---|---|
 | Verification | 14 headless suites, **2,566 checks**, all passing (re-verified 2026-10-30) |
-| Data validator | `python3 tools/validate_data.py` → exit 0 (groups 1–7) |
+| Data validator | `python3 tools/validate_data.py` → exit 0 (groups 1–7 at the time; **groups 1–6 since Phase 4**) |
 | Main scene | `godot --headless --quit-after 3` → exit 0, zero script errors |
 | Acceptance record | `tools/demo_check.md` |
-| E2E harness | `tools/test_demo_loop.tscn` (87 checks, all 9 loop steps) |
+| E2E harness | `tools/test_demo_loop.tscn` (82 checks; **all ten** loop steps since Phase 4 added the Chart step) |
 
 The 2,566 figure is the Phase-1 suites **as they stand after Phases 2 and 3**:
 those phases added assertions to four of them (`test_character` 385 → 409,
@@ -29,6 +29,13 @@ those phases added assertions to four of them (`test_character` 385 → 409,
 adding new suites of their own. At the Phase-1 gate itself the same 14 suites
 totaled 2,516 checks; none of the increase is a behaviour change in Phase-1
 code.
+
+**Phase 4 note (2026-10-31).** The counts above are the Phase-3-era figures.
+Phase 4 replaced both maps with the generated world, so a few suites changed
+shape: `test_save_v3` → `test_save_v4` (157), `test_save_v2` removed with the
+migration chain, `test_world_map` 62 → 172, `test_movement` 170 → 297,
+`test_discovery` 138 → 221. The current gate is **30 suites / 5 009 checks**
+(`IMPLEMENT-Phase4.md` completion record).
 
 Per-task status is recorded under each heading below; see
 [Completion record](#completion-record) for the design gaps this phase
