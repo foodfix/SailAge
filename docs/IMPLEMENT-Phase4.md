@@ -8,7 +8,7 @@ background-subagent waves per the plan at the bottom — max 4 concurrent, one
 git worktree per subagent, master merges. Prerequisite: Phase 3 complete
 (it is: 2026-10-30).
 
-Design decisions below were taken in the 2026-10-30 design review; every
+The design decisions below are normative; every
 number lives in the [locked-constants table](#locked-constants) and must be
 copied into the owning system doc by tasks A/B **before** any code task
 starts (`00-OVERVIEW.md` §13 rule). Where this doc and an older doc
@@ -58,15 +58,24 @@ owning doc wins.
    are untouched.
 10. **Google Maps is excluded.** Its ToS forbids derivative game assets.
     Only public-domain sources are vendored, fully offline.
+11. **Monsoons, ocean currents, and seasonal ice are a Phase-5
+    month-indexed layer, not Phase 4.** P4 weather stays latitude-band
+    probabilities; a `20-*` §4.13 placeholder (task B) records the future
+    layer and its public-domain data sources (Phase-5 candidates below);
+    no P4 task pins numbers for it (§11 rule).
 
-## Pre-state (2026-10-30, recorded)
+## Pre-state (2026-10-30)
 
-`data/maps/p3_world.txt` has already been deleted by hand;
-`data/maps/maps.json` still lists it and `data/map_legend_p3.json` /
-`ports_p3.json` still exist. **The repo is expected to be validator-red
-(group 6) until task F lands the generated world. Do not revert the
-deletion and do not "fix" group 6 by re-authoring ASCII — the fix is the
-pipeline below.** All 30 Phase-1–3 test suites (4,545 checks) still pass
+All legacy map artifacts are still tracked and the validator is green:
+`data/maps/p3_world.txt`,
+`data/maps/p1_mediterranean.txt`, `data/map_legend_p3.json`,
+`data/ports_p3.json` all exist, and `maps.json` still lists both maps.
+**The repo turns validator-red (group 6) when task E retires the legacy
+entries, and stays red until task F lands the generated world. Group 6
+must not be "fixed" by re-authoring ASCII, and nothing is deleted before
+its owning task — deletions are task-owned (E: the p3 artifacts; L: p1),
+because a red tree before W1 breaks wave gating.** All 30
+Phase-1–3 test suites (4,545 checks) still pass
 (they are map-content independent except `test_discovery`/`test_world_map`/
 `test_demo_loop`, which exercise the old maps and get reworked in F/G/J).
 
@@ -95,6 +104,8 @@ derive one of these differently (the Phase-2/3 lesson).
 | Ship speeds | ×2: base speeds become {8, 10, 12} tiles/day = 80–120 nm/day; floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2 (B), `data/ship_types.json` (I) |
 | Weather zones | 5 latitude bands (table below) replace "Atlantic strip x ≤ 6/8" | `20-*` §4.7 (B) |
 | Map artifact | `data/maps/world.png` — indexed-color PNG, 2160×1080, 1 px = 1 tile, palette index 0–4 = `~ . # ^ I` | `10-*` §6.3 new (A) |
+| Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics | `10-*` §6.3 new (A) |
+| Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `10-*` §6.1 (A), built by C |
 | Map index | `maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 (B) |
 | Save | version 4; `MIGRATIONS[3]` defined by task K | `90-*` §8.1–8.2 (B) |
 | Port schema | `lat`, `lon` (WGS84 degrees, truth); `marker`, `position`, `p3`, `phase` keys removed; ports.json holds all 100 ports | `10-*` §4.5, §7.1 (A) |
@@ -129,8 +140,10 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Changes:** §3 glossary `tilePos` bounds (2160×1080, wrap note); §4.5
   Port schema → `lat`/`lon` truth, marker/position/p3/phase removed; §6.1
   constants table (grid, tiles/degree, addressing, wrap, coastal band, snap,
-  map artifact pointer); §6.2 tile charset + `I` semantics + ice rule;
-  §6.3 (new) PNG artifact spec: indexed PNG, palette indices 0–4, how the
+  lake rule, map artifact pointer); §6.2 tile charset + `I` semantics + ice
+  rule; §6.3 (new) PNG artifact spec: indexed PNG, palette indices 0–4,
+  append-only palette policy (indices ≥ 5 reserved for cosmetic/seasonal
+  layers, never simulation semantics), how the
   loader must read it (`FileAccess` + `Image.load_png_from_buffer` — it is
   data, not an imported texture; the placeholder-art rule is unaffected);
   §7.1 replaced by the 100-port lat/lon table (transcribe from
@@ -154,7 +167,12 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   §4.2 movement adds hold-to-repeat + click-to-sail (task H spec),
   §4.4 speed scale note, §4.7 the 5-band table replacing the strip table
   (keep the seeded-roll acceptance style), §4.11 sighting 24,
-  §4.12 minimap crop + Chart screen pointer to `80-*`, §5 constants;
+  §4.12 minimap crop + Chart screen pointer to `80-*`, §4.13 (new
+  placeholder) "seasonal wind & ocean currents": monsoon reversal,
+  current drift, and seasonal ice are a Phase-5 month-indexed layer
+  (decision 11); Phase 4 pins no numbers for them (§11 rule) — the
+  placeholder cites the data sources in the Phase-5 candidates section;
+  §5 constants;
   `40-*` §4.2 speed values/units note; `60-*` scale references swept;
   `70-*` §4.4 discovery sighting 18 + positions = lat/lon, §4.8 rewritten
   (world map is the only map; Phase-3 content scope folds in), §4.9.8
@@ -180,8 +198,10 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   (+ `ne_10m_lakes`) shapefiles and a `LICENSE-NOTES.md` (public domain,
   source URLs, download date); `tools/build_world.py`:
   `--degrees-per-tile` (default 1/6), `--ascii` debug export (2160-wide
-  text, `--rows A:B` slicing), `--report` JSON. Scanline or numpy polygon
-  fill → `~`/`#`; ice rule pass → `I`; coastal band pass → `.`; writes
+  text, `--rows A:B` slicing), `--report` JSON. Raster passes in order:
+  land polygon fill → `~`/`#`; lakes pass → `ne_10m_lakes` also `#`
+  (locked: the Caspian is land);
+  ice rule pass → `I`; coastal band pass → `.`; writes
   `data/maps/world.png` (palette per §6.3) + `data/maps/world_report.json`
   (sea fraction, component sizes > 2000 tiles, ice extent, build params).
   Pure-stdlib or numpy/matplotlib only (offline tool; runtime Godot code
@@ -189,7 +209,8 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Done-when:** rerunning twice is byte-identical; report sanity: land
   fraction 25–35 %, one dominant sea component > 1 M tiles; spot-checks in
   a viewer: Iberia, Italy, Greece recognizable; Britain an island; Iceland
-  land (63–66°N, below ice line); no `^` required this phase (reef layer
+  land (63–66°N, below ice line); Caspian interior reads `#` (lake pass
+  applied); no `^` required this phase (reef layer
   explicitly out of scope; `^` count may be 0); `--ascii` slice of the
   Mediterranean readable; build completes < 60 s.
 
@@ -202,7 +223,15 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   [[lat, lon]…], min_width_tiles}`; locked must-list: Gibraltar, Bosphorus,
   Dardanelles, Kerch, Messina, Øresund, Great Belt, Bab-el-Mandeb, Malacca,
   Sunda, Magellan; builder post-pass carves water along each path to
-  `min_width_tiles` (default 1) and logs cells changed. Harbor snap pass:
+  `min_width_tiles` (default 1) and logs cells changed. **Tidal-river
+  clause (pinned):** if a port's snap fails because its real-world
+  location sits up a river narrower than a tile (expected candidates:
+  hamburg/Elbe, london/Thames), the fix is applied in this order —
+  (1) move the port's `lat`/`lon` to its estuary mouth in `ports.json`
+  and the §7.1 table (coordinates are task-owned data; flavor text
+  unchanged), (2) only if the mouth itself is not water, add a
+  "tidal river" carve entry to `map_overrides.json`. The builder names
+  the failing port either way. Harbor snap pass:
   each §7.1 port → nearest water tile within 2 tiles, writes
   `harbor_tile {x, y}` into `world_report.json` (runtime reads ports.json
   lat/lon and re-derives deterministically with the same rule — one
@@ -211,7 +240,9 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   waterway (asserted by the builder, not eyeballed); all 100 ports snap ≤ 2
   tiles with an orthogonally adjacent water tile; builder fails loudly
   (non-zero exit, named port/strait) if any snap or carve is impossible;
-  report lists every override cell-count (expect < 0.5 % of tiles).
+  report lists every override cell-count (expect < 0.5 % of tiles); any
+  §7.1/`ports.json` coordinate amendment made under the tidal-river
+  clause goes through E's owner (W3 pin).
 
 ### E — Port + discovery data migration
 
@@ -222,13 +253,17 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   `phase` removed; ids, nations, goods, facilities, flavor text unchanged.
   `data/discoveries.json`: 30 positions → `lat`/`lon` (placements
   **task-owned** but must match each discovery's zh/en hint text; open
-  ocean or coastal waters only). Delete `ports_p3.json`.
-  `data/map_legend.json` → grid 2160×1080, tiles + `I`; delete
-  `map_legend_p3.json`; `maps.json` → single `world` entry.
+  ocean or coastal waters only). Delete `ports_p3.json`,
+  `data/map_legend_p3.json`, and `data/maps/p3_world.txt` — its
+  `maps.json` entry dies with the single-`world` rewrite, and nothing is
+  deleted by hand before this task (see Pre-state).
+  `data/map_legend.json` → grid 2160×1080, tiles + `I`;
+  `maps.json` → single `world` entry.
 - **Done-when:** validator groups 1–5 exit 0 on the new schema (group 2–5
   checks extended to 100 ports); negative test: port in the Caspian
   (lat 42, lon 50) fails group 6 precursor with a named error; grep
-  `data/` finds no `marker`/`p3` keys; port count in validator summary =
+  `data/` finds no `marker`/`p3` keys and no `p3` filename;
+  `data/maps/` holds no `.txt` files; port count in validator summary =
   100.
 
 ### F — Validator group 6 rewrite (world.png)
@@ -242,8 +277,10 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   forbidden, **wrap-aware**, `~ . ^`-adjacent semantics per legend) reaches
   all 100 harbor tiles and all 30 discovery tiles; probe ports asserted
   reachable: istanbul (Bosphorus), copenhagen (Øresund/Great Belt), aden
-  (Bab-el-Mandeb), nagasaki (Malacca/Sunda), venice, london; disconnected
-  seas > 2000 tiles are listed as informational (Caspian expected).
+  (Bab-el-Mandeb), nagasaki (Malacca/Sunda), venice, london, hamburg
+  (Elbe, per D's tidal-river clause); with the lake
+  pass no disconnected sea is expected, but the informational listing
+  stays (any > 2000-tile component is named).
 - **Done-when:** exit 0 on the C+D+E world; seeded negatives each fail with
   a named message: (1) delete the Gibraltar override from map_overrides.json
   → BFS unreachable named "ceuta or gibraltar-flank port"; (2) move one port
@@ -393,6 +430,9 @@ G + K. M needs H + I + K. N needs all.
 
 ## Shared-file pins (hard rule: one writer per file per wave)
 
+- **W3:** E owns `ports.json`, the legend/map data files, and the §7.1
+  transcription; if D's builder trips the tidal-river clause, the
+  coordinate amendment goes through E's owner (one writer).
 - **W4:** F owns `tools/validate_data.py`; I owns `sailing_sim.gd` +
   `ship_types.json`. Disjoint.
 - **W6:** H owns `world_map.gd` input section + new
@@ -425,6 +465,32 @@ worktrees, merges every branch, runs the validator between waves, and pins
   files; M needs K's save v4 only to persist between legs.
 - N is orchestrator-led (dated manual run), as in every phase.
 
+## Phase-5 candidates (spec'd in Phase 5 — owners amend `20-*` first)
+
+Out of Phase-4 scope by decision 11 (§11 rule); when a Phase-5 backlog
+is written, its owners amend the owning system docs first:
+
+- **Monsoon (seasonal wind):** month-indexed prevailing wind direction
+  per sea region feeding `wind_factor` (`20-*` §4.4) as a season/
+  direction input — additive to the pipeline, not a rewrite. Data:
+  hand-authored region × month table in `data/` (UW2-style, tunable) or
+  NCEP/NCAR Reanalysis-2 monthly mean 10 m winds (public domain) sampled
+  by a builder pass.
+- **Ocean currents:** tile-domain drift layer, ideally a second indexed
+  PNG (`data/maps/currents.png`, 1 px = 1 tile) built like `world.png`
+  from the NOAA Global Drifter Program climatological monthly mean
+  currents (1° grid, public domain); NOAA OSCAR is the heavier
+  alternative. Effect: with/against speed modifier or daily drift.
+- **Seasonal sea ice:** month-indexed passability overlay (Baltic,
+  Hudson Bay) sharing the monsoon/current month-indexed mechanism; the
+  P4 `I` band stays the permanent polar edge.
+- **Cosmetic terrain layer:** a second indexed PNG (land biomes/relief;
+  rivers via `ne_10m_rivers_lake_centerlines`, added to the vendor pass
+  when this lands) consumed only by the tile renderer — never
+  simulation semantics; palette indices ≥ 5 per the append-only policy.
+- **Quest hooks:** monsoon-timed trade voyages (e.g. run the SW monsoon
+  to India) slot into `70-*` mission/quest content.
+
 ## Risks & pinned mitigations
 
 | Risk | Mitigation (pinned here, verified in done-when) |
@@ -434,7 +500,8 @@ worktrees, merges every branch, runs the validator between waves, and pins
 | Harbor lands on a river/land cell at coarse resolution | snap ≤ 2 + adjacency + loud failure (D, F) |
 | GDScript A* too slow for 2000-tile paths | engine `AStarGrid2D` (C++, jumping) pinned (H) |
 | float32 jitter at 69,120 px world coords | camera-centered rendering, chunk culling; jitter checked at max coordinate (G) |
-| Caspian/lakes trap the BFS or validator | single-component requirement scoped to port reachability; Caspian listed informational (F) |
+| Caspian/lakes trap the BFS or validator | lake pass rasterizes `ne_10m_lakes` as `#` (Caspian is land); F still lists any > 2000-tile disconnected component informationally (C, F) |
+| River ports snap-fail at 10 nm tiles (hamburg/Elbe, london/Thames) | pinned tidal-river clause in D (move `lat`/`lon` to the estuary mouth first, carve second); hamburg added to F's probe ports (D, F) |
 | Explored-state still unsaved (Phase-1 known limitation) | unchanged, documented; chart and minimap share the session bitset (J) |
 | Old saves point at vanished p1 coordinates | MIGRATIONS[3] repositions by current port id — saves are port-only by design (K) |
 | Someone hand-edits world.png | AGENTS.md hard rule reworded + builder determinism check (A, C) |
