@@ -46,6 +46,8 @@ SailAge/
 │   │   └── chart_screen.tscn    # S17 whole-world Chart (Phase 4)
 │   ├── port/
 │   │   ├── port_screen.tscn     # port hub (facility menu)
+│   │   ├── provisions_dialog.tscn  # Set-Sail provisioning prompt (§4.6.1)
+│   │   ├── officers_panel.tscn     # officer roster + details, S18 (§4.6.2)
 │   │   ├── market_screen.tscn
 │   │   ├── shipyard_screen.tscn
 │   │   ├── tavern_screen.tscn

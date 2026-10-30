@@ -48,8 +48,11 @@ are named and marked; Phase 4 adds S17 (Chart).
 | S15 | Fleet/cargo panel | `ui_shared/fleet_panel.tscn` (modal over S3/S4) | 1 |
 | S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
 | S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
+| S18 | Officers | `scenes/port/officers_panel.tscn` (officer roster + details, §4.6.2) | 5 |
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.7).
+The provisioning prompt (§4.6.1) is a **modal over S4**, not a screen of its
+own, so it takes no S-number.
 
 ### 4.2 Navigation graph
 
@@ -101,6 +104,10 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S3 | `E` | Explore: find every discovery within Chebyshev 18, wrap-aware (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
 | S17 | `Tab` / `Esc` | toggle back to S3 (the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
+| S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
+| S4 | `O` | open/close the officers panel (S18, §4.6.2) |
+| provisioning | `Enter` | sail (disabled with a stated reason when gated, `20-*` §4.11.2) |
+| provisioning | `Esc` | back to S4 without sailing |
 
 Focus outline (2px accent border) always visible on keyboard-focused control.
 
@@ -167,33 +174,127 @@ toggle). It is the fleet-management surface the fleet panel of `40-*` §4.4 and
 the supplies jettison of `20-*` §4.10 refer to.
 
 ```
-+--------------------------------------------------------------+
-| Fleet                                                        |
-| 2/5 · Free 100 · Fleet is full (5 ships)                     | header
-| <at-sea banner, hidden in port>                              |
-+--------------------------------------------------------------+
-| Ship 1 · Caravel [Flagship]                                  |
-| [====------] Durability 45/90   Crew 15/45        Free 0     |
-| Provisions 45 [Jettison]   Water 45 [Jettison]               |
-| Wine × 30 [Jettison]                                         |
-| Ship 2 · Nao                       [Make flagship]           |
-| ...                                                          |
-+--------------------------------------------------------------+
-| Esc to go back                                     [Close]  |
-+--------------------------------------------------------------+
++----------------------------------------------------------------------+
+| 舰队 / Fleet                    Day 12 · 7,830g · Morale 72 (Good)   | header
+| 2/5 ships · Free 100 · Fleet is full (5 ships)                        |
+| <at-sea banner, hidden in port>                                       |
++----------------------------------------------------------------------+
+| Ship 1 · Caravel [Flagship]                                           |
+| 耐久 Durability  [====------] 45/90     载重 Cargo 0/120 free         |
+| 船员 Crew        15/45        火炮 Guns   6/6                         |
+| 航速 Speed       10/12 tiles/day (wind: fair ×1.0)                    |
+| 补给 Provisions  45 (15 days)  淡水 Water 45 (15 days)                |
+| 货物 Wine × 30 [Jettison]                                             |
+| Ship 2 · Nao                              [Make flagship]             |
+| ...                                                                   |
++----------------------------------------------------------------------+
+| Esc to go back                                              [Close]   |
++----------------------------------------------------------------------+
 ```
 
-- Header: fleet count `n/5`, pooled `fleet_free`, `fleet.full` at the cap.
-- Per ship row: data-driven ship-type name, flagship tag on row 1, durability
-  bar (tier-coloured, same thresholds as S6), crew `crew/crew_max`, per-ship
-  free capacity, then one line per stack — provisions, water, and each trade
-  good — with its own `Jettison` button.
+- **Header:** fleet count `n/5`, pooled `fleet_free`, `fleet.full` at the cap,
+  plus the same day / gold / morale line the HUD shows so the panel is
+  self-contained.
+- **Per ship, three stat lines** (all values from `data/ship_types.json` +
+  the ship instance, never hardcoded):
+  1. durability bar (tier-coloured, same thresholds as S6) `durability /
+     effective_max`, and cargo `used/capacity` with `free` beside it;
+  2. crew `crew/crew_max` and guns `cannons/armament_slots`;
+  3. speed `effective/base` in tiles/day with the wind factor that produced
+     it (§4.4), so a becalmed or storm-lashed fleet explains itself;
+  4. supplies: `provisions` and `water` **each with their days-of-supply**
+     derived by `20-*` §4.10's formula, so the panel answers "can I leave?"
+     without opening the provisioning prompt.
+- Then one line per stack — provisions, water, and each trade good — with its
+  own `Jettison` button.
+- **Fleet totals row** at the bottom of the list: pooled provisions, water and
+  their combined days (the lesser of the two), plus the fleet's effective
+  speed (slowest hull, `20-*` §4.4).
 - Promote sits on non-flagship rows only (§4.4: free, port-only,
   order-preserving). Jettison drops the **whole** stack after a `ui.confirm`
   dialog (destructive action, §4.7) and frees capacity immediately.
 - At sea the panel is **read-only**: every action is disabled and states its
   reason, because promotion and jettison are port actions.
 - Rows are 32px table rows (§4.8); no textures.
+
+### 4.6.1 Provisioning dialog (S4 → S3, Phase 5 polish)
+
+Clicking **Set Sail** (`出航`) — or pressing `ESC` on S4, which is the same
+edge (`§4.2`) — opens a provisioning prompt **before** the world map. This is
+the only place supplies are bought; the market sells trade goods only
+(`20-*` §4.10).
+
+```
++--------------------------------------------------------------+
+| 出航准备 / Prepare to Sail                                    |
+| 里斯本 Lisbon · Day 12 · 7,830g                               |
++--------------------------------------------------------------+
+| 船员 Crew        15 / 45                                      |
+| 补给 Provisions  45  (15 days)   [- 10 +]  [Buy 10 — 20g]      |
+| 淡水 Water       45  (15 days)   [- 10 +]  [Buy 10 — 10g]      |
+| 货舱 Free        0 / 120                                      |
++--------------------------------------------------------------+
+| 可航行天数 Days at sea: 15                                    |
+| 离港后第 7 天起可能断粮。                                      |
++--------------------------------------------------------------+
+| [出航 Set Sail]   [留在港口 Stay in port]                     |
++--------------------------------------------------------------+
+```
+
+- **Readout (locked):** `days = min(floor(provisions / need),
+  floor(water / need))`, `need = ceil(total_crew / 5)` (`20-*` §4.10). Shown
+  large and colour-coded: `GOOD` ≥ 10 days, `WARN` 3–9, `BAD` ≤ 2.
+- **Buying:** fixed prices, provisions 2g / water 1g per unit, buying through
+  `TradeEngine.buy_supplies` (never a second price path). `[- 10 +]` adjust the
+  quantity in steps of 10; `Buy N` is disabled with a reason when the hold is
+  full (`market.hold_full`) or gold is short (`market.no_gold`). Buying
+  **jettison-free**: if the hold is full the player must jettison a cargo
+  stack first (the fleet panel's button, `§4.5.1`) — the prompt says so rather
+  than silently dropping cargo.
+- **Jettison from the prompt:** a `Jettison` affordance per trade-good stack,
+  same confirm as S15, so a full hold can be cleared without leaving the
+  dialog.
+- **Gate (locked, `20-*` §4.11.2):** `Set Sail` is disabled when there are no
+  crew (`port.sail.no_crew`) or fewer than one day of supply
+  (`port.sail.no_supply`), each stating its reason. `Stay in port` always
+  works.
+- `ESC` closes the prompt back to S4 (it does **not** sail) — the standard
+  "Esc steps back one edge" rule (`§4.2`).
+
+### 4.6.2 Officers panel (S18, Phase 5 polish)
+
+A dedicated roster screen, opened from S4's facility list and from the
+character panel (`C`) — the existing officer **summary** in S14's right column
+stays as-is; this panel is the detail view.
+
+```
++--------------------------------------------------------------+
+| 官员 / Officers           3 / 3 · wages 88g/day   [Close]     |
++--------------------------------------------------------------+
+| 马特乌斯·阿尔瓦雷斯  Mateus Álvares        [领航员 Navigator]  |
+|   统率 10  航海术 14  战斗 6  导航 16      日薪 30g            |
+|   效果: 侦察半径 +0 · 航行加成 +0%                             |
+|   雇佣于: 里斯本         [解雇 Dismiss]                       |
++--------------------------------------------------------------+
+| 迭戈·费尔南德斯  Diego Fernández         [水手长 Boatswain]   |
+| ...                                                          |
++--------------------------------------------------------------+
+| 空位 3/3 · 在酒馆招募新官员                                    |
++--------------------------------------------------------------+
+```
+
+- **Rows:** one per employed officer (`player.officers` → `data/officers.json`),
+  sorted by `id`; name (L10n), `role` tag, the four stats, `wage_daily`, the
+  **derived effect** each contributes (navigation → sighting radius,
+  seamanship → speed bonus, leadership → mutiny/desertion, combat → battle /
+  duel), the recruit port, and `Dismiss` (confirm dialog; frees the slot and
+  stops the wage from the next day tick).
+- **Header:** `n / 3` (`OFFICER_MAX`) and the total daily wage bill — the number
+  that shows up in `20-*` §4.5 ledger step 2.
+- **Empty state:** `char.no_officers` plus the tavern hint (`§4.4` is where
+  they are hired).
+- Read-only at sea (dismissal is a port action), same rule as S15.
+- No textures; 32px rows (§4.8).
 
 ### 4.6 Chart screen (S17, Phase 4)
 
@@ -471,6 +572,40 @@ inventing one.
 | `world.move_blocked` | 此处无法通行 | Cannot sail there |
 | `world.sail.no_path` | 无可行航线 | No route by sea |
 | `world.sail.arrived` | 已抵达目的地 | Destination reached |
+
+### 4.7.6 Phase-5 polish `ui_strings` inventory (S15/S18 + provisioning)
+
+Required keys for the §4.5.1 stat block, §4.6.1 prompt and §4.6.2 panel.
+Placeholders must match between zh and en.
+
+| Key | zh | en |
+|---|---|---|
+| `port.sail.prepare` | 出航准备 | Prepare to Sail |
+| `port.sail.days` | 可航行天数:{days} | Days at sea: {days} |
+| `port.sail.days_zero` | 补给不足,无法出航 | Not enough supplies to sail |
+| `port.sail.no_crew` | 没有船员,无法出航 | No crew aboard — cannot sail |
+| `port.sail.no_supply` | 补给不足一天,无法出航 | Less than a day of supplies — cannot sail |
+| `port.sail.short_warning` | 离港后第 {days} 天起可能断粮。 | Supplies may run short after {days} days. |
+| `port.sail.stay` | 留在港口 | Stay in port |
+| `port.sail.buy` | 购买 {qty}({gold}g) | Buy {qty} ({gold}g) |
+| `port.sail.jettison_hint` | 货舱已满,请先抛弃部分货物。 | Hold is full — jettison some cargo first. |
+| `fleet.ship_header` | 舰队 | Fleet |
+| `fleet.stat.durability` | 耐久 {current}/{max} | Durability {current}/{max} |
+| `fleet.stat.cargo` | 载重 {used}/{capacity}(剩余 {free}) | Cargo {used}/{capacity} ({free} free) |
+| `fleet.stat.crew` | 船员 {crew}/{max} | Crew {crew}/{max} |
+| `fleet.stat.guns` | 火炮 {cannons}/{slots} | Guns {cannons}/{slots} |
+| `fleet.stat.speed` | 航速 {speed}/{max} 格/日(风:{wind}) | Speed {speed}/{max} tiles/day (wind: {wind}) |
+| `fleet.stat.supply` | {kind} {amount}({days} 天) | {kind} {amount} ({days} days) |
+| `fleet.totals` | 船队合计 | Fleet totals |
+| `fleet.total_days` | 全队可航行 {days} 天 | Whole fleet: {days} days |
+| `officers.title` | 官员 | Officers |
+| `officers.slots` | {used} / {max} · 日薪 {wage}g | {used} / {max} · wages {wage}g/day |
+| `officers.effect` | 效果:{effect} | Effect: {effect} |
+| `officers.recruited_at` | 雇佣于:{port} | Hired at: {port} |
+| `officers.dismiss` | 解雇 | Dismiss |
+| `officers.dismiss.confirm` | 确定要解雇{name}吗? | Dismiss {name}? |
+| `officers.empty_hint` | 在酒馆招募新官员 | Recruit officers at a tavern |
+| `officers.readonly_sea` | 海上无法解雇官员 | Officers cannot be dismissed at sea |
 
 ### 4.7 Dialog & text conventions
 

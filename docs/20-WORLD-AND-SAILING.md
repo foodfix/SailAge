@@ -280,9 +280,19 @@ then return to title; no save is written or deleted.
 - Both occupy capacity at 1 cargo unit per unit (`10-*` §3.1) and are
   consumed at `ceil(crew / 5)` units each per day (§4.5) — e.g., a 15-crew
   caravel burns 3 + 3 units/day, so 60 + 60 units of cargo = 20 days at sea.
-- Purchased only at port markets: `provisions` 2g/unit, `water` 1g/unit
-  (locked prices; not affected by supply/demand — they are supplies, not
-  trade goods, and never appear in `goods.json`).
+- **Purchased at the Set-Sail provisioning dialog, not the market**
+  (`80-*` §4.6.1): `provisions` 2g/unit, `water` 1g/unit (locked prices; not
+  affected by supply/demand — they are supplies, not trade goods, and never
+  appear in `goods.json`). The market no longer sells them; the provisioning
+  prompt is the single supply purchase point, and it also jettisons surplus.
+  Reasons: (1) supplies are survival, not commerce, so they must not compete
+  with trade rows; (2) leaving port is the moment the player knows where they
+  are going, so it is the moment the number matters.
+- **Days-of-supply readout (locked).** The prompt shows
+  `days = min(floor(provisions / need), floor(water / need))` with
+  `need = ceil(total_crew / RATION_SIZE)` (§4.5) — the number of full days the
+  fleet can stay at sea on the lesser of the two. Zero crew is handled by
+  §4.11.2's sailing gate, not by this formula.
 - Surplus can be jettisoned from the fleet panel (S15, `80-*` §4.5.1); not
   sellable. Jettison is per **stack**: it drops every unit of one trade good,
   or the whole provisions or water stack, from one ship, after a confirm
@@ -348,6 +358,26 @@ adjacent to its berth tile (validator group 6). The berth is ordinary water —
 - **No accidental docking:** sailing across a berth is ordinary movement. This
   deliberately removes the old behaviour where stepping onto the berth opened
   the port.
+
+#### 4.11.2 Sailing gate: crew + supplies (locked)
+
+Leaving port is refused — the Set Sail button is **disabled with a stated
+reason**, and `set_sail()` returns false with state untouched — unless **both**
+hold:
+
+| Condition | Threshold | Key when it fails |
+|---|---|---|
+| Crew aboard | `total_crew ≥ 1` (the fleet is not shipless/crewless) | `port.sail.no_crew` |
+| Days of supply | `days ≥ 1` (§4.10 formula) | `port.sail.no_supply` |
+
+This is a **hard gate**, not a warning: a fleet that cannot survive one day
+must not reach open water, because §4.9's starvation/scurvy counters would
+otherwise start on day 1 with no decision left to the player. The turn-away is
+recoverable by construction — supplies are buyable in the prompt itself and
+the inn's odd-job fallback (`10-*` §5) still pays, so no softlock is created.
+
+`ESC` on S4 is the same edge as Set Sail (`80-*` §4.3): it opens the
+provisioning prompt rather than leaving directly.
 
 ### 4.12 Minimap
 
