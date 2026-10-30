@@ -162,6 +162,10 @@ marked •):
   (`60-*` §4.8); present-but-empty before Phase 2
 - `pending_encounter` — **transient, never saved**: the encounter S3 hands to
   S10 (`60-*` §4.11.11.3); S10 clears it on open
+- `pending_tournament_round` / `last_tournament_outcome` — **transient, never
+  saved**: S10 hands a won bout's next round back to S13, and a settled bracket
+  its outcome block, so the palace screen can resume/announce the bracket
+  (`70-*` §4.9.7)
 - `quests` — Phase-1 placeholder, permanently empty from Phase 3 (§8.1)
 - `discoveries_found` • (`[]id`) — discovery ids found by Explore (`70-*`
   §4.4); found ≠ reported

@@ -251,3 +251,81 @@ completion record.
 deviations from the sanctioned wave plan and why, doc amendments made during
 implementation, integration defects caught at merge, and the final gate —
 validator exit 0 plus the full headless suite with check counts.)*
+
+### Status (2026-10-30)
+
+Phase 3 is **complete and accepted**. Every task A–J is done, the tree is green,
+and both §J scenarios pass end to end on the shipped Phase-3 world. The E2E
+record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
+
+| Task | Status | Evidence |
+|---|---|---|
+| A — save migration v2 → v3 | ✅ Done | `SAVE_VERSION = 3`, pure `MIGRATIONS[2]` (adds the eleven §8.1 v3 keys, erases `quests`, adds `world.map_id = "p1"`), retired-save path (`last_loaded_retired` / `last_retired_summary`); `test_save_v3` (141) |
+| B — guild activation + quests | ✅ Done | `quest_gen.gd` (seeded offers, 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, `objective_text`/`type_key` shared by both UIs), `guild_screen.tscn`; `test_quests` (93) |
+| C — discovery system + content | ✅ Done | `scripts/world/discovery.gd` (radius 3, explore, report-once, priced hints), 30 discoveries with zh/en hints, validator group 6/7 position checks, tavern `Rumours` tab (`80-*` §4.7.3); `test_tavern` rumors section, `test_world_map` (57) |
+| D — palace, royal missions, titles | ✅ Done | `palace_engine.gd` (rep-30 gate, three rotating mission kinds, one per nation, ceremony, repair bays, retire), `fame.gd` ladder + all four grants wired into `TradeEngine.title_units` / `ShipyardEngine.repair_cost` / `QuestGen.max_active_quests`; `test_palace` (181) |
+| E — piracy & bounty loop | ✅ Done | `bounty.gd` (rival table from data, −20/+2, issue at ≤ −50 with `500 × |rep|`, both clear paths → exactly −10), closed-port rule + palace pay exception in the hub; `test_bounty` (72) |
+| F — tournaments | ✅ Done | `tournament.gd` (30-day rotation, day 1–5 window, fee, 3 escalating bouts with carry, 10 000g/+100 fame, 500g + 50 % repair), S13 entry + S10 → S13 bracket return; `test_tournament` (142) |
+| G — full world map | ✅ Done | `data/maps/p3_world.txt` (160×96) + `map_legend_p3.json` + `ports_p3.json` (70 new ports, 100 total), `maps/maps.json` index, validator group 7 (BFS, marker/position agreement, discovery positions), S2 world selector, `new_game(..., map_id)`; `test_world_map` (57) |
+| H — retirement & victory | ✅ Done | duke gate at the docked nation's palace, `palace.retire.confirm`, S16 six-row summary in both modes, retired payload + summary-only load; `test_retirement` (78) |
+| I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
+| J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (100): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
+
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 513 checks**,
+zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 864
+checks plus 50 checks inside five existing suites (character +24, tavern +22,
+port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
+dropped count.
+
+### Deviations from the sanctioned wave plan
+
+| Deviation | Why | Effect |
+|---|---|---|
+| The wave table was executed as **one serial stream in the master tree** instead of background worktrees | Each wave's tasks were finished and committed before the next started, so no two tasks ever held uncommitted edits in one file — the property the worktree split exists to guarantee | Same task order (`A∥G → B∥E → C∥D → F → H → J`); the pins landed **before** any code (`83eeb2c`), which is the part of the protocol that prevents two models of one rule |
+| Task **I** (art pass) was skipped | Optional per the backlog; the placeholder-art rule is still met | No visual change; `palette.gd` remains the single colour source |
+| `data/ports_p3.json` instead of extending `data/ports.json` | `10-*` §7.1's 30-port list is a **locked** content table the validator compares exactly; adding 70 ports there would have required rewriting a locked list | `DataLoader` merges both files; a port carries either a `p1` `position` or a `p3` block, so the P1 map stays byte-compatible and the validator still checks §7.1 verbatim |
+| The p3 grid is 160×96 spanning 80°W–160°E | The task-owned grid was generated together with a validator-equivalent BFS so every one of the 100 ports is reachable with no corner cutting | `70-*` §4.9.8 was amended to the shipped span before the file was generated |
+| Two transient `GameState` fields (`pending_tournament_round`, `last_tournament_outcome`) | §4.9.7's bracket must survive the S13 → S10 → S13 hop; a node reference would violate `90-*` §5.1's "cross-screen communication never uses direct node references" | Both are declared transient/never-saved in `90-*` §5.4 and cleared by `new_game()` |
+| `ShipyardEngine.repair_cost/can_repair/repair` gained an optional `port_id` parameter | The count grant is per **port nation**, and the palace bays repair at a palace, not at the shipyard's docked port | Default preserved (`GameState.current_port`), so every existing call site is unchanged; `test_shipyard` stays at 141 |
+
+### Doc amendments made during Phase-3 implementation
+
+All were made in the owning doc **before** the code that needed them, per
+`00-OVERVIEW.md` §13:
+
+- `70-*` §4.9 new normative section (pins every task-owned value): fame sources
+  §4.9.1, title ladder + grants §4.9.2, quest seeds/draws §4.9.3, royal missions
+  §4.9.4, piracy/rival table §4.9.5, closed ports §4.9.6, tournaments §4.9.7,
+  world-map constants §4.9.8; plus §4.4 discovery radius/state pins and the §4.7
+  retirement save shape.
+- `90-*` §8.1 save v3 fields, §8.2 `MIGRATIONS[2]`, §5.1 the six new signals,
+  §5.4 the two transient tournament fields, §9.1 the map index.
+- `10-*` §4.4.1 the `ports_p3.json` envelope, §4.7 discoveries, validator
+  groups 6/7.
+- `30-*` §4.2 the `title_bonus` term and the closed-port rule, §4.7 tavern
+  `Rumors` / guild / palace wireframes, §7 acceptance line for the 39/34 titled
+  London example.
+- `80-*` §4.1/§4.2/§4.3 S12/S13/S16 + the `E` action + the tournament S13→S10→S13
+  edge, §4.7.3 the three new screens, §4.7.4 the Phase-3 `ui_strings` inventory.
+- `20-*` `world.map_id`, the Explore action and the minimap note.
+- `50-*` Phase-3 reputation sources.
+
+### Integration defects caught at merge
+
+1. **A tournament bout returned to the world map.** `battle_screen`'s
+   after-action `Continue` always routed to S3, so the bracket lost the palace
+   between bouts and the next round never started (§4.9.7's "three successive
+   battles" was unreachable in play). Fixed with `return_scene()`: a
+   `tournament_`-tagged encounter returns to S13, everything else to S3.
+2. **The palace's tournament row hid its own reason.** The entered case was
+   handled before the generic `blocked` branch, so an out-of-window or
+   wrong-host palace still printed `Entry recorded`. Fixed by letting
+   `status.blocked` drive both label and tooltip.
+3. **`PalaceEngine._delivery_offer` drew from `GameState.day` instead of the
+   day it was asked about.** A test or a screen previewing a future day got the
+   live day's delivery; fixed by threading `day` through.
+4. **The palace's repair path refunded a discount instead of quoting it.** Two
+   price implementations could drift; `ShipyardEngine.repair()` now takes the
+   port and charges the discounted amount once.
+

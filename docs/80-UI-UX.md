@@ -64,11 +64,15 @@ S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
 S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
+S13 ──tournament entry──► S10 (3 bouts) ──won bout──► S13 ──last bout──► S13
 S3 ──sea death / capture──► S9 ──any key──► S1
 S1 ──Quit──► exit
 ```
 
 No cross-links beyond these; Esc = step back one edge where applicable.
+The tournament edge is a detail of the S13 row: a bout's after-action
+`Continue` returns to the host palace (not S3), because the bracket continues
+there and the palace starts the next bout (`70-*` §4.9.7).
 
 ### 4.3 Input scheme (keyboard + mouse)
 
