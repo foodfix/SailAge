@@ -93,14 +93,17 @@ ENTITY_FILES = {
     "equipment.json": "equipment",
     "discoveries.json": "discoveries",
     "quests.json": "quests",
+    "ports_p3.json": "ports",
 }
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
-SPECIAL_FILES = {"map_legend.json", "ui_strings.json"}
-# Of those, only map_legend.json has `version` in its section 4.9 schema.
+SPECIAL_FILES = {
+    "map_legend.json", "map_legend_p3.json", "ui_strings.json", "maps.json",
+}
+# Of those, only the legends require `version` in their section 4.9 schema.
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
 # as the one key that is not an L10nString rather than a required field.
-SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
+SPECIAL_REQUIRE_VERSION = {"map_legend.json", "map_legend_p3.json"}
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -316,6 +319,9 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
         fail("parse", "data/", "data directory not found", 1)
 
     files = sorted(p for p in DATA_DIR.glob("*.json"))
+    # `data/maps/maps.json` is the map index (docs/90-* section 9.1); it is a
+    # nested data file, so it is collected explicitly.
+    files += sorted(DATA_DIR.glob("maps/*.json"))
     if not files:
         fail("parse", "data/", "no JSON files found", 1)
 
@@ -486,11 +492,12 @@ def _require_int(value, path: str, filename: str, minimum=None, maximum=None) ->
         fail("schema", filename, f"{path} must be <= {maximum} (got {value})", 3)
 
 
-def _require_tile_pos(value, path: str, filename: str) -> None:
+def _require_tile_pos(value, path: str, filename: str,
+                      width: int = MAP_WIDTH, height: int = MAP_HEIGHT) -> None:
     if not isinstance(value, dict) or set(value) != {"x", "y"}:
         fail("schema", filename, f"{path} must be an object with exactly keys x,y", 3)
-    _require_int(value["x"], f"{path}.x", filename, 0, MAP_WIDTH - 1)
-    _require_int(value["y"], f"{path}.y", filename, 0, MAP_HEIGHT - 1)
+    _require_int(value["x"], f"{path}.x", filename, 0, width - 1)
+    _require_int(value["y"], f"{path}.y", filename, 0, height - 1)
 
 
 def _require_enum(value, allowed: tuple[str, ...], path: str, filename: str) -> None:
@@ -605,85 +612,104 @@ def _schema_ship_types(items: list) -> None:
             )
 
 
-def _schema_ports(items: list) -> None:
+def _schema_ports(items: list, filename: str = "ports.json",
+                  p3_only: bool = False) -> None:
+    """Port schema (docs/10-* section 4.4). `p3_only` is the
+    `data/ports_p3.json` variant: the `p3` block is required and the Phase-1
+    `marker`/`position` pair is absent (the locked P1 list stays 30 ports)."""
     seen_markers: dict[str, str] = {}
     seen_positions: dict[tuple[int, int], str] = {}
     for index, entity in enumerate(items):
-        path = f"ports[{index}]"
-        _require_keys(
-            entity,
-            (
-                "id",
-                "name",
-                "nation_id",
-                "marker",
-                "position",
-                "produces",
-                "demands",
-                "facilities",
-                "flavor",
-            ),
-            path,
-            "ports.json",
-        )
-        _require_id(entity["nation_id"], f"{path}.nation_id", "ports.json")
-        marker = entity["marker"]
-        if not isinstance(marker, str) or not MARKER_RE.match(marker):
-            fail(
-                "schema",
-                "ports.json",
-                f"{path}.marker must be 1 char from 0-9 or a-t (got {marker!r})",
-                3,
-            )
-        if marker in seen_markers:
-            fail(
-                "schema",
-                "ports.json",
-                f"{path}.marker {marker!r} already used by {seen_markers[marker]!r}",
-                3,
-            )
-        seen_markers[marker] = entity["id"]
-        _require_tile_pos(entity["position"], f"{path}.position", "ports.json")
-        pos = (entity["position"]["x"], entity["position"]["y"])
-        if pos in seen_positions:
-            fail(
-                "schema",
-                "ports.json",
-                f"{path}.position {pos} already used by {seen_positions[pos]!r}",
-                3,
-            )
-        seen_positions[pos] = entity["id"]
-        _require_id_list(entity["produces"], f"{path}.produces", "ports.json")
-        _require_id_list(entity["demands"], f"{path}.demands", "ports.json")
+        path = f"{filename}[{index}]"
+        required = [
+            "id", "name", "nation_id", "produces", "demands", "facilities",
+            "flavor",
+        ]
+        if p3_only:
+            required += ["p3", "phase"]
+        else:
+            required += ["marker", "position"]
+        _require_keys(entity, tuple(required), path, filename)
+        _require_id(entity["nation_id"], f"{path}.nation_id", filename)
+        if not p3_only:
+            marker = entity["marker"]
+            if not isinstance(marker, str) or not MARKER_RE.match(marker):
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.marker must be 1 char from 0-9 or a-t (got {marker!r})",
+                    3,
+                )
+            if marker in seen_markers:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.marker {marker!r} already used by {seen_markers[marker]!r}",
+                    3,
+                )
+            seen_markers[marker] = entity["id"]
+            _require_tile_pos(entity["position"], f"{path}.position", filename)
+            pos = (entity["position"]["x"], entity["position"]["y"])
+            if pos in seen_positions:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.position {pos} already used by {seen_positions[pos]!r}",
+                    3,
+                )
+            seen_positions[pos] = entity["id"]
+        else:
+            if int(entity["phase"]) != 3:
+                fail("schema", filename, f"{path}.phase is locked at 3", 3)
+        if "p3" in entity:
+            block = entity["p3"]
+            if not isinstance(block, dict):
+                fail("schema", filename, f"{path}.p3 must be an object", 3)
+            _require_keys(block, ("marker", "position"), f"{path}.p3", filename)
+            marker = block["marker"]
+            if not isinstance(marker, str) or len(marker) != 1:
+                fail("schema", filename, f"{path}.p3.marker must be 1 char", 3)
+            # The P3 grid (docs/70-* section 4.9.8) is larger than the P1 one.
+            _require_tile_pos(block["position"], f"{path}.p3.position", filename,
+                              P3_WIDTH, P3_HEIGHT)
+        _require_id_list(entity["produces"], f"{path}.produces", filename)
+        _require_id_list(entity["demands"], f"{path}.demands", filename)
         if "market_goods" in entity:
-            _require_id_list(entity["market_goods"], f"{path}.market_goods", "ports.json")
+            _require_id_list(entity["market_goods"], f"{path}.market_goods", filename)
         facilities = entity["facilities"]
         if not isinstance(facilities, dict):
-            fail("schema", "ports.json", f"{path}.facilities must be an object", 3)
+            fail("schema", filename, f"{path}.facilities must be an object", 3)
         for key, value in facilities.items():
             if key not in FACILITY_PHASES:
                 fail(
                     "schema",
-                    "ports.json",
+                    filename,
                     f"{path}.facilities has unknown facility {key!r}",
                     3,
                 )
-            _require_int(value, f"{path}.facilities.{key}", "ports.json", 1)
+            _require_int(value, f"{path}.facilities.{key}", filename, 1)
             if value != FACILITY_PHASES[key]:
                 fail(
                     "schema",
-                    "ports.json",
+                    filename,
                     f"{path}.facilities.{key} is locked at {FACILITY_PHASES[key]}",
                     3,
                 )
-        for key in PORT_FACILITIES_REQUIRED:
-            if key not in facilities:
-                fail(
-                    "schema",
-                    "ports.json",
-                    f"{path}.facilities missing required facility {key!r}",
-                    3,
-                )
+        if not p3_only:
+            for key in PORT_FACILITIES_REQUIRED:
+                if key not in facilities:
+                    fail(
+                        "schema",
+                        filename,
+                        f"{path}.facilities missing required facility {key!r}",
+                        3,
+                    )
+        elif "palace" in facilities:
+            fail(
+                "schema", filename,
+                f"{path}: a Phase-3-only port may not host a palace (10-* 7.4)",
+                3,
+            )
 
 
 def _schema_officers(items: list) -> None:
@@ -922,15 +948,31 @@ def _schema_map_legend(legend: dict) -> None:
 
 def check_group3(docs: dict[str, object], verbose: bool) -> None:
     """Per-entity fields, types, enums and ranges (section 4)."""
-    items = {plural: docs[filename][plural] for filename, plural in ENTITY_FILES.items()}
+    # Keyed by the **filename**'s plural but built file by file, because
+    # `ports_p3.json` shares the `ports` plural: the locked-list group (5) must
+    # still see exactly the 30 Phase-1 ports, so it is kept apart here.
+    items = {
+        plural: docs[filename][plural]
+        for filename, plural in ENTITY_FILES.items()
+        if filename != "ports_p3.json"
+    }
+    p3_ports = docs["ports_p3.json"]["ports"] if "ports_p3.json" in docs else []
 
     for plural in ENTITY_FILES.values():
         _check_unique_ids(items[plural], plural, f"{plural}.json")
+    _check_unique_ids(p3_ports, "ports", "ports_p3.json")
+    # Cross-file: a P3-only port may not reuse a Phase-1 port id.
+    p1_ids = {port["id"] for port in items["ports"]}
+    for port in p3_ports:
+        if port["id"] in p1_ids:
+            fail("schema", "ports_p3.json",
+                 f"port id {port['id']!r} duplicates a Phase-1 port", 3)
 
     _schema_nations(items["nations"])
     _schema_goods(items["goods"])
     _schema_ship_types(items["ship_types"])
     _schema_ports(items["ports"])
+    _schema_ports(p3_ports, "ports_p3.json", True)
     _schema_officers(items["officers"])
     _schema_equipment(items["equipment"])
     _schema_discoveries(items["discoveries"])
@@ -940,7 +982,7 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
         _schema_map_legend(docs["map_legend.json"])
 
     if verbose:
-        total = sum(len(v) for v in items.values())
+        total = sum(len(v) for v in items.values()) + len(p3_ports)
         print(f"PASS group 3 schema ({total} entities)")
 
 
@@ -1358,6 +1400,12 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 
 MAP_FILE = "data/maps/p1_mediterranean.txt"
 LISBON_TILE = (7, 57)
+MAP_FILE_P3 = "data/maps/p3_world.txt"
+## The Phase-3 grid (docs/70-QUESTS-DISCOVERY-ENDGAME.md section 4.9.8).
+P3_WIDTH = 160
+P3_HEIGHT = 96
+P3_LEGEND_FILE = "data/map_legend_p3.json"
+MAPS_INDEX_FILE = "data/maps/maps.json"
 BFS_STEPS_8 = (
     (1, 0), (-1, 0), (0, 1), (0, -1),
     (1, 1), (1, -1), (-1, 1), (-1, -1),
@@ -1588,6 +1636,319 @@ def check_group6(docs: dict[str, object], verbose: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Check group 7 — Phase-3 world map (docs/10-DATA-SCHEMA.md section 8)
+# ---------------------------------------------------------------------------
+
+
+def _p3_fail(details: str) -> None:
+    fail("map_p3", P3_LEGEND_FILE, details, 7)
+
+
+def _p3_ports(docs: dict[str, object]) -> list[dict]:
+    """The 30 locked ports (with their `p3` block) plus every P3-only port."""
+    ports = list(docs["ports.json"]["ports"])
+    p3_doc = docs.get("ports_p3.json")
+    if isinstance(p3_doc, dict):
+        ports.extend(p3_doc.get("ports", []))
+    return ports
+
+
+def check_group7(docs: dict[str, object], verbose: bool) -> None:
+    """Phase-3 world-map checks: docs/10-DATA-SCHEMA.md section 8, group 7,
+    pinned by docs/70-QUESTS-DISCOVERY-ENDGAME.md section 4.9.8.
+
+    1. `data/maps/p3_world.txt` exists and matches its legend's grid;
+    2. every char is a legend tile or a legend port marker;
+    3. every port with a `p3` block appears exactly once, at `p3.position`;
+    4. the legend's `port_markers` covers exactly the ports with a `p3` block
+       (both directions — no orphan legend row, no unmapped port);
+    5. each marker has >=1 orthogonal land AND >=1 orthogonal passable tile;
+    6. the strict no-corner-cutting BFS from the first port by id reaches every
+       marker and covers every passable tile (one component);
+    7. every Discovery position is passable or orthogonally adjacent to one
+       (docs/70-* section 4.4: reachable by Explore);
+    8. maps/maps.json names an existing file for every map id, and the P3 id
+       points at this file and legend.
+    """
+    map_path = REPO_ROOT / MAP_FILE_P3
+    if not map_path.is_file():
+        _p3_fail("map file is missing")
+
+    # `docs` is keyed by bare filename (group 1), so the legend lookup uses
+    # the name, not the repo-relative path.
+    legend = docs.get(P3_LEGEND_FILE.rsplit("/", 1)[-1])
+    if not isinstance(legend, dict):
+        _p3_fail(f"{P3_LEGEND_FILE} is missing or invalid")
+    grid_def = legend.get("grid")
+    tiles = legend.get("tiles")
+    markers = legend.get("port_markers")
+    if not isinstance(grid_def, dict) or not isinstance(tiles, dict) \
+            or not isinstance(markers, dict):
+        _p3_fail(f"{P3_LEGEND_FILE} lacks grid/tiles/port_markers")
+    width = int(grid_def.get("width", 0))
+    height = int(grid_def.get("height", 0))
+    if width <= 0 or height <= 0:
+        _p3_fail(f"{P3_LEGEND_FILE} grid must be positive (got {width}x{height})")
+    if int(legend.get("tile_size_px", 0)) != 32:
+        _p3_fail(f"{P3_LEGEND_FILE} tile_size_px must be 32")
+    if set(tiles) != set(LOCKED_TILE_KINDS):
+        _p3_fail(f"{P3_LEGEND_FILE} tiles must be exactly the locked 4 chars")
+    for char, (kind, passable) in LOCKED_TILE_KINDS.items():
+        entry = tiles[char]
+        if entry.get("kind") != kind or bool(entry.get("passable")) != passable:
+            _p3_fail(f"{P3_LEGEND_FILE} tile {char!r} disagrees with 10-* section 6.2")
+
+    # 1. dimensions
+    try:
+        text = map_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _p3_fail(f"cannot read as UTF-8: {exc}")
+    if text.startswith("\ufeff"):
+        _p3_fail("file must not start with a BOM")
+    raw_lines = text.split("\n")
+    if raw_lines and raw_lines[-1] == "":
+        raw_lines.pop()
+    else:
+        _p3_fail("file must end with a newline")
+    if len(raw_lines) != height:
+        _p3_fail(f"expected {height} lines, found {len(raw_lines)}")
+    for index, line in enumerate(raw_lines):
+        if len(line) != width:
+            _p3_fail(f"line {index} has {len(line)} chars, expected {width}")
+        if line != line.rstrip():
+            _p3_fail(f"line {index} has trailing whitespace")
+    grid = raw_lines
+
+    # 2. legal chars
+    allowed = set(tiles) | set(markers)
+    for y, line in enumerate(grid):
+        for x, char in enumerate(line):
+            if char not in allowed:
+                _p3_fail(f"illegal char {char!r} at ({x}, {y})")
+
+    # 3/4. ports <-> legend
+    ports = _p3_ports(docs)
+    by_id = {}
+    for port in ports:
+        port_id = port["id"]
+        if port_id in by_id:
+            _p3_fail(f"duplicate port id {port_id!r} across ports.json/ports_p3.json")
+        by_id[port_id] = port
+    p3_ids = {
+        port_id for port_id, port in by_id.items()
+        if isinstance(port.get("p3"), dict)
+    }
+    if len(p3_ids) != 100:
+        _p3_fail(f"expected 100 ports with a p3 block, found {len(p3_ids)}")
+    if set(markers.values()) != p3_ids:
+        missing = sorted(p3_ids - set(markers.values()))
+        extra = sorted(set(markers.values()) - p3_ids)
+        details = []
+        if missing:
+            details.append(f"legend missing {', '.join(missing[:6])}")
+        if extra:
+            details.append(f"legend names unknown {', '.join(extra[:6])}")
+        _p3_fail("port_markers does not cover exactly the p3 ports: "
+                 + "; ".join(details))
+    if len(set(markers.values())) != len(markers):
+        _p3_fail("port_markers maps two markers to the same port")
+    if len(set(markers)) != len(markers):
+        _p3_fail("port_markers has duplicate marker chars")
+
+    seen_positions: dict[tuple[int, int], str] = {}
+    for marker, port_id in markers.items():
+        if len(marker) != 1 or marker in tiles:
+            _p3_fail(f"port marker {marker!r} must be one char outside the tile set")
+        port = by_id[port_id]
+        block = port["p3"]
+        if block.get("marker") != marker:
+            _p3_fail(
+                f"port {port_id} p3.marker is {block.get('marker')!r} but the "
+                f"legend says {marker!r}"
+            )
+        pos = (int(block["position"]["x"]), int(block["position"]["y"]))
+        if pos in seen_positions:
+            _p3_fail(
+                f"ports {seen_positions[pos]} and {port_id} share p3 position {pos}"
+            )
+        seen_positions[pos] = port_id
+        if not (0 <= pos[0] < width and 0 <= pos[1] < height):
+            _p3_fail(f"port {port_id} p3 position {pos} is off the {width}x{height} grid")
+
+    found: dict[str, list[tuple[int, int]]] = {marker: [] for marker in markers}
+    for y, line in enumerate(grid):
+        for x, char in enumerate(line):
+            if char in found:
+                found[char].append((x, y))
+    for marker, port_id in markers.items():
+        hits = found[marker]
+        if len(hits) != 1:
+            _p3_fail(
+                f"marker {marker!r} ({port_id}) appears {len(hits)} times, expected 1"
+            )
+        expected = (
+            int(by_id[port_id]["p3"]["position"]["x"]),
+            int(by_id[port_id]["p3"]["position"]["y"]),
+        )
+        if hits[0] != expected:
+            _p3_fail(
+                f"marker {marker!r} ({port_id}) is at {hits[0]}, "
+                f"locked position is {expected}"
+            )
+
+    # 5. harbour-on-a-coast
+    for marker, port_id in markers.items():
+        x, y = found[marker][0]
+        neighbours = [
+            grid[y + dy][x + dx]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            if 0 <= x + dx < width and 0 <= y + dy < height
+        ]
+        if "#" not in neighbours:
+            _p3_fail(f"marker {marker!r} ({port_id}) has no adjacent land '#'")
+        if not any(char in markers or tiles[char].get("passable")
+                   for char in neighbours):
+            _p3_fail(
+                f"marker {marker!r} ({port_id}) has no orthogonally adjacent "
+                "passable tile (harbour cannot be sailed into or out of)"
+            )
+
+    # 6. strict BFS from the first port by id
+    passable = {char for char, tile in tiles.items() if tile.get("passable")}
+    marker_tiles = set(markers)
+
+    def walkable(char: str) -> bool:
+        return char in marker_tiles or char in passable
+
+    def walkable_at(x: int, y: int) -> bool:
+        return 0 <= x < width and 0 <= y < height and walkable(grid[y][x])
+
+    def neighbours(x: int, y: int):
+        for dx, dy in BFS_STEPS_8:
+            nx, ny = x + dx, y + dy
+            if not walkable_at(nx, ny):
+                continue
+            if dx and dy and not (walkable_at(x + dx, y) and walkable_at(x, y + dy)):
+                continue
+            yield nx, ny
+
+    first_id = sorted(p3_ids)[0]
+    start = found[str(by_id[first_id]["p3"]["marker"])][0]
+    if not walkable_at(*start):
+        _p3_fail(f"{first_id} tile {start} is not walkable sea")
+    reached = {start}
+    queue = [start]
+    head = 0
+    while head < len(queue):
+        x, y = queue[head]
+        head += 1
+        for neighbour in neighbours(x, y):
+            if neighbour not in reached:
+                reached.add(neighbour)
+                queue.append(neighbour)
+
+    unreachable = [
+        port_id for port_id in sorted(p3_ids)
+        if found[str(by_id[port_id]["p3"]["marker"])][0] not in reached
+    ]
+    if unreachable:
+        _p3_fail(
+            f"{len(unreachable)} port(s) unreachable by sea from {first_id} {start}: "
+            + ", ".join(unreachable)
+        )
+
+    all_passable = {
+        (x, y)
+        for y, line in enumerate(grid)
+        for x, char in enumerate(line)
+        if walkable(char)
+    }
+    stray = all_passable - reached
+    if stray:
+        sizes: list[int] = []
+        seen: set[tuple[int, int]] = set()
+        for cell in sorted(stray - seen):
+            if cell in seen:
+                continue
+            seen.add(cell)
+            basin = [cell]
+            stack = [cell]
+            while stack:
+                cx, cy = stack.pop()
+                for nb in neighbours(cx, cy):
+                    if nb in stray and nb not in seen:
+                        seen.add(nb)
+                        basin.append(nb)
+                        stack.append(nb)
+            sizes.append(len(basin))
+        sizes.sort(reverse=True)
+        _p3_fail(
+            "P3 sea splits into components of sizes "
+            + ", ".join(str(size) for size in [len(reached), *sizes])
+            + f" ({len(stray)} passable tile(s) not reachable from {first_id})"
+        )
+
+    # 7. discoveries on the P3 map (docs/70-* section 4.4)
+    discoveries = docs.get("discoveries.json")
+    discovery_list = discoveries.get("discoveries", []) if isinstance(discoveries, dict) else []
+    for discovery in discovery_list:
+        pos = discovery.get("position", {})
+        x, y = int(pos.get("x", -1)), int(pos.get("y", -1))
+        if not (0 <= x < width and 0 <= y < height):
+            _p3_fail(
+                f"discovery {discovery.get('id')} at ({x}, {y}) is off the "
+                f"{width}x{height} P3 grid"
+            )
+        if walkable_at(x, y):
+            continue
+        if any(
+            walkable_at(x + dx, y + dy)
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        ):
+            continue
+        _p3_fail(
+            f"discovery {discovery.get('id')} at ({x}, {y}) is land-locked "
+            "(no passable tile or adjacent passable tile)"
+        )
+
+    # 8. the map index
+    index = docs.get("maps.json")
+    if not isinstance(index, dict) or not isinstance(index.get("maps"), list):
+        _p3_fail(f"{MAPS_INDEX_FILE} is missing or has no maps array")
+    ids = []
+    for entry in index["maps"]:
+        if not isinstance(entry, dict):
+            _p3_fail(f"{MAPS_INDEX_FILE}: every entry must be an object")
+        map_id = entry.get("id")
+        if not isinstance(map_id, str) or not ID_RE.match(map_id):
+            _p3_fail(f"{MAPS_INDEX_FILE}: bad map id {map_id!r}")
+        ids.append(map_id)
+        for key in ("file", "legend"):
+            path = entry.get(key)
+            if not isinstance(path, str) or not (REPO_ROOT / path).is_file():
+                _p3_fail(f"{MAPS_INDEX_FILE}: '{map_id}' has no existing {key} {path!r}")
+        if entry.get("name") is None:
+            _p3_fail(f"{MAPS_INDEX_FILE}: '{map_id}' has no name")
+    if len(set(ids)) != len(ids):
+        _p3_fail(f"{MAPS_INDEX_FILE}: duplicate map ids {ids}")
+    if "p1" not in ids or "p3" not in ids:
+        _p3_fail(f"{MAPS_INDEX_FILE}: must index both 'p1' and 'p3' (got {ids})")
+    p3_entry = next(entry for entry in index["maps"] if entry.get("id") == "p3")
+    if p3_entry.get("file") != MAP_FILE_P3:
+        _p3_fail(f"'p3' must point at {MAP_FILE_P3}")
+    if p3_entry.get("legend") != P3_LEGEND_FILE:
+        _p3_fail(f"'p3' must point at {P3_LEGEND_FILE}")
+
+    if verbose:
+        print(
+            f"PASS group 7 phase-3 map ({height}x{width}, "
+            f"{len(markers)} ports placed, {len(all_passable)} passable tiles in "
+            f"one component reachable from {first_id} {start}, "
+            f"{len(discovery_list)} discoveries reachable, {len(ids)} maps indexed)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1607,6 +1968,7 @@ def main(argv: list[str]) -> int:
         ("4", check_group4),
         ("5", check_group5),
         ("6", check_group6),
+        ("7", check_group7),
     )
 
     for group_id, check in groups:

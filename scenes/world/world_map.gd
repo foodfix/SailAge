@@ -27,14 +27,19 @@ const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 const EncountersLib := preload("res://scripts/world/encounters.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
-## Phase-1 map file (docs/10-* §6.1). Swapping maps is a path change only.
+## Phase-1 map file (docs/10-* §6.1). Swapping maps is a data-only change:
+## the active map is `GameState.world["map_id"]` resolved through
+## `data/maps/maps.json` (docs/90-* §9.1).
 const MAP_PATH := "res://data/maps/p1_mediterranean.txt"
 ## Overridable copy of [constant MAP_PATH]: a different legend-conformant map
 ## file is a data-only swap (docs/90-* §9 last paragraph), so the path is an
-## inspector property rather than a hard-coded read.
-@export var map_path: String = MAP_PATH
-## Fallback cell before a game exists (Lisbon's harbor tile).
+## inspector property rather than a hard-coded read. An empty value means
+## "resolve `GameState.world.map_id` through the map index".
+@export var map_path: String = ""
+## Fallback cell before a game exists (Lisbon's harbor tile on the P1 map).
 const FALLBACK_CELL := Vector2i(7, 57)
+## `world.map_id` when neither the state nor the index names one.
+const DEFAULT_MAP_ID := "p1"
 
 ## Port hub scene (owned by T11).
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -106,7 +111,7 @@ var _attack_confirm: Control = null
 
 func _ready() -> void:
 	_loader = MapLoaderLib.new()
-	var loaded: bool = _loader.load_map(map_path, DataLoader.map_legend)
+	var loaded: bool = _load_active_map()
 	# Handoff for DataLoader.is_passable()/port_id_at() (docs/90-* §5.2, §9).
 	DataLoader.map = _loader if loaded else null
 
@@ -160,6 +165,35 @@ func _ready() -> void:
 	# Phase-2 signals (the `ResourceLoader.load` + `has_method` convention).
 	if EventBus.has_signal("battle_finished"):
 		EventBus.battle_finished.connect(_on_battle_finished)
+
+
+## The map this scene renders: the `map_path` inspector override when set,
+## else `GameState.world.map_id` resolved through the map index
+## (docs/90-* §9.1). Both the text file and its legend come from the index, so
+## swapping to the Phase-3 world is a data-only change.
+func _load_active_map() -> bool:
+	var map_id := _active_map_id()
+	if not map_path.is_empty():
+		return _loader.load_map(map_path, DataLoader.get_map_legend(map_id))
+	var files: Dictionary = DataLoader.get_map_files(map_id)
+	if files.is_empty():
+		return _loader.load_map(MAP_PATH, DataLoader.map_legend)
+	var path := str(files.get("file", ""))
+	if not path.begins_with("res://"):
+		path = "res://" + path
+	var legend = files.get("legend", {})
+	if not (legend is Dictionary) or (legend as Dictionary).is_empty():
+		return _loader.load_map(MAP_PATH, DataLoader.map_legend)
+	return _loader.load_map(path, legend)
+
+
+## The active map id: `GameState.world.map_id`, else the index's first entry.
+## A save written before Phase 3 has no id, which reads as `p1`.
+func _active_map_id() -> String:
+	var value = GameState.world.get("map_id", DEFAULT_MAP_ID)
+	if value is String and not (value as String).is_empty():
+		return value
+	return DEFAULT_MAP_ID
 
 
 func _process(_delta: float) -> void:
@@ -958,8 +992,10 @@ func _has_game() -> bool:
 ## Initialises the movement keys of `GameState.world` when they are absent
 ## (fresh scene, or a hand-built state in a test). Never overwrites a value.
 func _ensure_world_state() -> void:
+	if not GameState.world.has("map_id"):
+		GameState.world["map_id"] = _active_map_id()
 	if not GameState.world.has("position"):
-		GameState.set_world_tile(FALLBACK_CELL)
+		GameState.set_world_tile(_fallback_cell())
 	if not GameState.world.has("clock_fraction"):
 		GameState.world["clock_fraction"] = 0.0
 	if not GameState.world.has("weather"):
@@ -967,9 +1003,22 @@ func _ensure_world_state() -> void:
 		GameState.world["weather"] = SailingSimLib.DEFAULT_WEATHER
 
 
+## The pre-run parking cell: Lisbon's P1 harbour tile, or — on a bigger map —
+## the first port marker that exists on the loaded grid. Editor inspection
+## only; a real run always has a `world.position`.
+func _fallback_cell() -> Vector2i:
+	if _loader != null and _loader.width > 0:
+		var lisbon: Vector2i = _loader.port_cell("lisbon")
+		if lisbon != Vector2i(-1, -1):
+			return lisbon
+		for cell in _loader.port_at:
+			return cell
+	return FALLBACK_CELL
+
+
 func _read_state_cell() -> Vector2i:
 	if not _has_game() and GameState.world.is_empty():
-		return FALLBACK_CELL
+		return _fallback_cell()
 	return GameState.world_tile()
 
 

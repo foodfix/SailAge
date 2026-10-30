@@ -1099,5 +1099,17 @@
   "shipyard.no_damage": {
     "zh": "无需修理",
     "en": "No damage to repair"
+  },
+  "nation.world": {
+    "zh": "世界地图",
+    "en": "World map"
+  },
+  "nation.world_p1": {
+    "zh": "地中海与西欧(30 港)",
+    "en": "Mediterranean & Western Europe (30 ports)"
+  },
+  "nation.world_p3": {
+    "zh": "环球世界(100 港)",
+    "en": "The Wider World (100 ports)"
   }
 }

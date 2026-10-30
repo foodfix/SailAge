@@ -74,6 +74,13 @@ func load_all() -> void:
 	load_errors.clear()
 
 	ports_list = _load_list("ports", "ports.json")
+	# The Phase-3 world ports live in their own file so the Phase-1 locked list
+	# stays exactly 30 (docs/10-* section 4.4.1); they merge into the same
+	# id-keyed table and ordered list (Phase-1 file first), so every existing
+	# lookup reaches them with no other change. A data folder without the file
+	# (a Phase-1/2 checkout) simply has no world-map ports.
+	if FileAccess.file_exists(DATA_DIR.path_join("ports_p3.json")):
+		ports_list.append_array(_load_list("ports", "ports_p3.json"))
 	ports = _index_by_id(ports_list, "ports.json")
 
 	goods_list = _load_list("goods", "goods.json")

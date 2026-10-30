@@ -22,12 +22,19 @@ const CARD_SIZE := Vector2(360, 208)
 @onready var _title: Label = $Layout/Header/Title
 @onready var _prompt: Label = $Layout/Header/Prompt
 @onready var _grid: GridContainer = $Layout/Cards
+@onready var _world_label: Label = $Layout/WorldRow/WorldLabel
+@onready var _world_buttons: HBoxContainer = $Layout/WorldRow/WorldButtons
 @onready var _back_button: Button = $Layout/Footer/Back
 @onready var _confirm_button: Button = $Layout/Footer/Confirm
 @onready var _lang_button: Button = $Layout/Footer/Lang
 
 ## Selected nation id; the first card is selected until the player picks one.
 var _selected_id: String = ""
+## Selected world map id (`"p1"`/`"p3"`, docs/70-* §4.9.8); defaults to the
+## first indexed map that is not the Phase-1 one, i.e. the full world.
+var _selected_map: String = "p3"
+## map id → its radio Button, rebuilt on every bind.
+var _world_cards: Dictionary = {}
 ## Card buttons in data order, so selection styling can be refreshed cheaply.
 var _cards: Array[Button] = []
 
@@ -45,6 +52,7 @@ func _ready() -> void:
 	_back_button.pressed.connect(_on_back)
 	_confirm_button.pressed.connect(confirm_selection)
 	_lang_button.pressed.connect(I18n.toggle_locale)
+	_world_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	EventBus.locale_changed.connect(_on_locale_changed)
 
 	if not DataLoader.nations_list.is_empty():
@@ -68,6 +76,7 @@ func _rebuild() -> void:
 
 	_title.text = I18n.t_key("nation.select_title")
 	_prompt.text = I18n.t_key("nation.select_prompt")
+	_build_world_row()
 	_back_button.text = I18n.t_key("ui.back")
 	_confirm_button.text = I18n.t_key("nation.confirm")
 	_lang_button.text = I18n.t_key("ui.language_toggle")
@@ -175,12 +184,64 @@ func _on_back() -> void:
 	GameState.change_scene(TITLE_SCENE)
 
 
+## The Phase-3 world choice (docs/70-* §4.9.8, docs/80-* §4.3): one radio row
+## per `data/maps/maps.json` entry, in index order. Data-driven, so a third map
+## needs no code.
+func _build_world_row() -> void:
+	for child in _world_buttons.get_children():
+		_world_buttons.remove_child(child)
+		child.queue_free()
+	_world_cards.clear()
+	_world_label.text = I18n.t_key("nation.world")
+	var ids: Array = DataLoader.map_ids()
+	if not _selected_map in ids and not ids.is_empty():
+		_selected_map = str(ids[ids.size() - 1])
+	for map_id in ids:
+		var entry: Dictionary = DataLoader.get_map(str(map_id))
+		var button := Button.new()
+		button.name = "World_%s" % str(map_id)
+		button.toggle_mode = true
+		button.custom_minimum_size = Vector2(320, PaletteLib.BUTTON_H)
+		button.text = I18n.t(entry.get("name", {}))
+		button.pressed.connect(_on_world_pressed.bind(str(map_id)))
+		_world_buttons.add_child(button)
+		_world_cards[str(map_id)] = button
+	_refresh_world_selection()
+
+
+func _on_world_pressed(map_id: String) -> void:
+	_selected_map = map_id
+	_refresh_world_selection()
+
+
+func _refresh_world_selection() -> void:
+	for map_id in _world_cards:
+		var button: Button = _world_cards[map_id]
+		button.button_pressed = str(map_id) == _selected_map
+		button.add_theme_color_override(
+			"font_color",
+			PaletteLib.ACCENT if button.button_pressed else PaletteLib.TEXT
+		)
+
+
+## The map the confirm will start the run on (tests read this).
+func selected_map() -> String:
+	return _selected_map
+
+
+## Picks a world map programmatically (the radio row's `pressed` path).
+func select_world(map_id: String) -> void:
+	if _world_cards.has(map_id):
+		_on_world_pressed(map_id)
+
+
 ## Confirm: start the run. `GameState.new_game()` owns the §4.1 state block and
-## the routing (port screen once T11 lands, world map until then).
+## the routing (port screen once T11 lands, world map until then); the chosen
+## world becomes `world.map_id` (docs/70-* §4.9.8).
 func confirm_selection() -> void:
 	if _selected_id.is_empty():
 		return
-	GameState.new_game(_selected_id)
+	GameState.new_game(_selected_id, true, _selected_map)
 
 
 func _on_locale_changed(_locale: String) -> void:
