@@ -454,6 +454,14 @@ func _test_guild_screen() -> void:
 	add_child(screen)
 	await get_tree().process_frame
 	_check(screen.port_id() == "lisbon", "the guild screen binds the docked port")
+	var hud: Control = screen.get_node_or_null("HUD")
+	_check(hud != null and not hud.is_minimap_visible(),
+		"S12 replaces the sea viewport: minimap hidden (§4.5)")
+	if hud != null:
+		var minimap_title: Label = hud.get_node("MinimapTitle")
+		var weather: Label = hud.get_node("Weather")
+		_check(not minimap_title.visible and not weather.visible,
+			"the chart captions are hidden too (§4.5)")
 	_check(screen.offer_rows().size() == 3,
 		"the guild screen lists 3 offers (got %d)" % screen.offer_rows().size())
 	_check(screen.report_rows().size() == 1,

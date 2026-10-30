@@ -562,6 +562,9 @@ func _test_palace_screen() -> void:
 	await get_tree().process_frame
 	_check(screen.port_id() == "lisbon", "the palace binds the docked port")
 	_check(screen.nation_id() == "portugal", "the palace knows its nation")
+	var hud: Control = screen.get_node_or_null("HUD")
+	_check(hud != null and not hud.is_minimap_visible(),
+		"S13 replaces the sea viewport: minimap hidden (§4.5)")
 	_check(not screen.is_closed(), "an unbountied palace is open")
 	_check(not screen.retire_row_visible(),
 		"a commoner does not see the Retire row (§4.7)")

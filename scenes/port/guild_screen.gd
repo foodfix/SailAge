@@ -81,6 +81,11 @@ func _ready() -> void:
 	_toast.visible = false
 	_toast_timer.one_shot = true
 	_toast_timer.timeout.connect(func() -> void: _toast.visible = false)
+	# S12 keeps the §4.5 bars but not the sea viewport (docs/80-* §4.5: port
+	# screens replace it with their menu). Without this the 256×192 chart and
+	# its weather/title captions draw over the guild list.
+	if _hud != null:
+		_hud.set_minimap_visible(false)
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
 

@@ -34,6 +34,7 @@ signal retired_here
 signal tournament_started(round_number: int)
 
 @onready var _background: ColorRect = $Background
+@onready var _hud: Control = get_node_or_null("HUD")
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _rep: Label = $Layout/VBox/Header/Rep
 @onready var _fame: Label = $Layout/VBox/Header/Fame
@@ -79,6 +80,10 @@ func _ready() -> void:
 	_toast.visible = false
 	_toast_timer.one_shot = true
 	_toast_timer.timeout.connect(func() -> void: _toast.visible = false)
+	# S13 keeps the §4.5 bars but not the sea viewport, exactly like S4/S6/S8
+	# (docs/80-* §4.5): the chart would otherwise cover the palace rows.
+	if _hud != null:
+		_hud.set_minimap_visible(false)
 	_back_button.pressed.connect(go_back)
 	_ceremony.pressed.connect(attend_ceremony)
 	_mission_button.pressed.connect(accept_mission)
