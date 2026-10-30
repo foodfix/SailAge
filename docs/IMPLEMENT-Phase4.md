@@ -1,6 +1,7 @@
 # IMPLEMENT — Phase 4: Terra Vera (Single Real-Earth World Map)
 
-**STATUS: 📋 PLANNED (2026-10-30).** No task started.
+**STATUS: ✅ COMPLETE (2026-10-31).** All tasks merged; see the
+[completion record](#completion-record) and `tools/demo_check_phase4.md`.
 
 Ordered, checkable task backlog (letters, coarse by design; **task-owned**
 details are decided inside the task per the cited docs). Execute as
@@ -581,3 +582,91 @@ is written, its owners amend the owning system docs first:
 | River port snap-fails surface in W3, needing E-owned data | preflight runs before E freezes `ports.json`; amendments go through E's owner per the W3 pin (D) |
 | Engine A* misses the 1 s budget | pre-named coarse-waypoint fallback, no redesign under pressure (H) |
 | Inland-flavored discoveries can't satisfy both geography and hint text | E's placement-audit table + pinned hint-rewording escape hatch (E) |
+
+---
+
+## Completion record
+
+**Phase 4 finished 2026-10-31.** Eight waves, 13 tasks, executed as
+background subagents in one worktree each with the master merging and gating
+between waves. Manual acceptance run: `tools/demo_check_phase4.md`.
+
+| Wave | Tasks | Result |
+|---|---|---|
+| W1 | A, B | docs re-anchored to one world map |
+| W2 | C, I | coastlines + `build_world.py`; latitude weather, speeds ×2 |
+| W3 | D, E | waterway carves + harbor snap; 100-port lat/lon migration |
+| W4 | F | validator group 6 rewritten for `world.png` |
+| W5 | G | PNG → chunked TileMap loader |
+| W6 | H, J | hold-to-repeat + click-to-sail; minimap crop + Chart |
+| W7 | L, M | old maps retired; circumnavigation/chokepoint E2E |
+| W8 | N | acceptance record + this table |
+
+### Final gate
+
+| Check | Result |
+|---|---|
+| `python3 tools/build_world.py` | deterministic — byte-identical reruns, 1.2 s |
+| `python3 tools/validate_data.py` | **exit 0**, groups 1–6 |
+| suites | **30 suites, 5 009 checks, 0 failures** |
+| `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
+| locale | 163 literal keys + 6 format families, 0 missing in zh and en |
+
+Start of phase: 30 suites / 4 545 checks, validator green on the legacy
+ASCII maps. End: 30 suites / 5 009 checks, validator green on the generated
+PNG world.
+
+### What changed from the plan (and why)
+
+1. **Task K was deleted.** SailAge has not shipped, so no player saves exist;
+   `90-*` §8.2 now states the dev-stage scope (only the current
+   `save_version` must load) and the whole migration chain was removed
+   (~240 lines). The three constants K would have set folded into L.
+2. **The sanctioned red window was wider than predicted.** The plan expected
+   `test_discovery`/`test_world_map`/`test_demo_loop` red from W3; in fact
+   **17 suites** went red with one cause — `map_loader.gd` still required the
+   retired `legend.port_markers` and `Port.position`. Task G's rewrite
+   cleared them all. Validator groups 1–5 were re-pointed at the Phase-4
+   schema by the master in W3 (F owns that file in W4, so the pins held).
+3. **Two design conflicts were resolved doc-first** (the `AGENTS.md` rule),
+   not patched in code:
+   - **Battle MP.** `60-*` defined `MP = ShipType.speed`, which doubled when
+     the world speed doubled. Pinned `MP = battle_mp(speed) + sail_delta`
+     with `battle_mp = speed/2`, which reproduces every Phase-2 budget
+     exactly — `test_battle` went green with **zero fixture changes**.
+   - **Sighting base.** `50-*` still said `8 + floor((navigation−10)/10)`
+     while `20-*` said 24 tiles. Amended `50-*` to the 24 base.
+4. **`test_save_v2` was removed** and `test_save_v3` renamed
+   `test_save_v4`; coverage was absorbed, not lost (see
+   `tools/demo_check_phase4.md`).
+5. **`PIRATE_MIN_X` (the Phase-1 Atlantic strip) was deleted** from
+   `encounters.gd`; its candidates are now port-centric, which cut the
+   candidate build from 6.6 s → 8.8 ms (100 ports: 83.6 s → 176 ms) with a
+   byte-identical candidate set.
+
+### Defects found and fixed during the phase
+
+- `build_world.py`'s first "ends connected" waterway assert was **vacuous** —
+  a path drawn through Anatolia passed it. Replaced with anchor + open-sea
+  checks, proven by three negative cases.
+- `10-*` §4.7's discovery example coordinate was **inland** and failed its
+  own §6.1 snap rule; moved to real coastal water and the rule stated.
+- `20-*` §4.12's minimap dateline example (`[2032..2159] ∪ [0..k]`) was
+  arithmetically impossible — 2032..2159 is already 128 columns. Corrected to
+  the centred window `[2095..2159] ∪ [0..62]`.
+- Two suites (`test_character`, `test_quests`) were **silently skipping checks**
+  because a `SCRIPT ERROR` aborted their own functions; three stale
+  `Port.position` reads fixed. The whole sweep is now zero-error.
+- `save_system.gd` whitelisted only `["p1","p3"]` for `world.map_id`,
+  rejecting every Phase-4 save (3 suites red). Fixed in the W5 gate.
+
+### Known limitations carried forward
+
+- Explored state is not saved (Phase-1 limitation, unchanged) — minimap and
+  Chart rebuild per session from one shared view model, so they never
+  disagree within a session.
+- `WorldMap.try_step()` costs ~2.5 ms/step headless (reveal + minimap redraw)
+  vs 0.009 ms for the pure sim; `test_world_e2e` spends ~36 s of its 40 s
+  there. Throttle the HUD refresh if a future suite needs more voyages.
+- `tools/validate_data.py` still defines an unused `MARKER_RE` constant; it
+  is harmless dead code (task L's scope excluded that file).

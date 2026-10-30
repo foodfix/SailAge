@@ -47,7 +47,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 1 | Sail & Trade | Tile-grid world map (now the single Terra Vera world), 30 ports in Phase 1, free sailing, clock/day tick, crew/provisions/morale, storms, markets, shipyard, tavern, officers, inn, save/load, zh/en toggle | Demo loop (§7) passes end-to-end |
 | 2 | Steel & Gunpowder | Turn-based grid sea combat (cannon/ram/board), captain duels, equipment, loot/capture, enemy fleets, loot economy | See `docs/IMPLEMENT-Phase2.md` |
 | 3 | Crown & Horizon | Guild quests, royal missions, nobility titles, discoveries, piracy/bounty, tournaments, the ~100-port world content (shipped on a provisional grid, replaced in Phase 4), retirement/victory | See `docs/IMPLEMENT-Phase3.md` |
-| 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | See `docs/IMPLEMENT-Phase4.md` N |
+| 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | ✅ complete — `docs/IMPLEMENT-Phase4.md` (completion record) |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -115,19 +115,19 @@ Read in this order. Each doc follows the Doc Template (§10).
 | Order | File | Contents | Phase |
 |---|---|---|---|
 | 1 | `docs/00-OVERVIEW.md` | This file: vision, conventions, glossary, demo loop | all |
-| 2 | `docs/10-DATA-SCHEMA.md` | JSON schemas, i18n rule, validator spec, locked content lists, map legend | all |
+| 2 | `docs/10-DATA-SCHEMA.md` | JSON schemas, i18n rule, validator spec, locked content lists, world artifact | all |
 | 3 | `docs/90-ARCHITECTURE.md` | Godot project layout, autoloads, save format, scene/data split | all |
 | 4 | `docs/20-WORLD-AND-SAILING.md` | Tile grid, movement, clock, consumption, morale, weather, fail states | 1, 4 |
 | 5 | `docs/30-PORTS-AND-TRADE.md` | Port facilities, price formulas, trade UI flows | 1 |
 | 6 | `docs/40-SHIPS-AND-FLEET.md` | Ship stats, buy/repair/refit, fleet & cargo maths | 1, 4 |
-| 7 | `docs/50-CHARACTER-AND-PROGRESSION.md` | Nationality, stats, XP, officers, harbor relief | 1 |
-| 8 | `docs/80-UI-UX.md` | Screen inventory, navigation, HUD, dialog conventions, placeholder palette | 1+ |
-| 9 | `docs/60-COMBAT.md` | Turn-based sea combat, duels, AI | 2 |
+| 7 | `docs/50-CHARACTER-AND-PROGRESSION.md` | Nationality, stats, XP, officers, harbor relief | 1, 4 |
+| 8 | `docs/80-UI-UX.md` | Screen inventory, navigation, HUD, Chart, dialogs, palette | 1, 4 |
+| 9 | `docs/60-COMBAT.md` | Turn-based sea combat, duels, AI | 2, 4 |
 | 10 | `docs/70-QUESTS-DISCOVERY-ENDGAME.md` | Quests, titles, discovery, piracy, tournaments, victory | 3, 4 |
 | — | `docs/IMPLEMENT-Phase1.md` | Ordered Phase-1 task backlog | 1 |
 | — | `docs/IMPLEMENT-Phase2.md` | Ordered Phase-2 task backlog | 2 |
 | — | `docs/IMPLEMENT-Phase3.md` | Ordered Phase-3 task backlog | 3 |
-| — | `docs/IMPLEMENT-Phase4.md` | Ordered Phase-4 task backlog | 4 |
+| — | `docs/IMPLEMENT-Phase4.md` | Phase-4 task backlog + completion record | 4 |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.
