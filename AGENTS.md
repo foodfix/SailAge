@@ -11,7 +11,8 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 3. `docs/90-ARCHITECTURE.md` — project layout, autoloads, save format
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3)
-5. Task backlogs: `docs/IMPLEMENT-Phase1.md` (current), then Phase2/Phase3
+5. Task backlogs: `docs/IMPLEMENT-Phase4.md` (current), then Phase1–Phase3
+   for history
 
 ## Hard rules (violations = rework)
 
@@ -31,9 +32,14 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 - **Architecture:** autoloads, scene flow, and save format follow
   `docs/90-ARCHITECTURE.md` exactly (EventBus signal names, autoload order,
   save versioning with migrations).
-- **World map** is ASCII text under `data/maps/` (legend in
-  `data/map_legend.json`); port coordinates/markers must match
-  `docs/10-DATA-SCHEMA.md` §7.1 — the validator enforces agreement.
+- **World map** is a generated, tool-owned raster artifact:
+  `data/maps/world.png` (indexed PNG, 1 px = 1 tile, 2160 × 1080, palette
+  `~ . # ^ I`; spec in `docs/10-DATA-SCHEMA.md` §6.3). It is built by
+  `tools/build_world.py` from vendored public-domain shorelines plus
+  `tools/map_overrides.json`; ASCII is a debug export of that tool only.
+  **Never hand-edit** the PNG or the ASCII. Port coordinates live as
+  `lat`/`lon` in `data/ports.json`, and the validator enforces that the
+  harbor tiles derived from them agree with the builder's report.
 
 ## Working agreements
 
