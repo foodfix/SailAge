@@ -9,3 +9,6 @@ __pycache__/
 # OS / editor noise
 .DS_Store
 *.tmp
+
+# Kilo Code local plans / scratch (user-local, not part of the repo)
+.kilo/plans/
