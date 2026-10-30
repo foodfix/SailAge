@@ -30,6 +30,8 @@ const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+## Task H: the click-to-sail A* module (docs/20-* §4.2).
+const SailPathLib := preload("res://scripts/world/sail_path.gd")
 
 ## The single world map id (docs/90-* §9.1). The artifact itself is resolved
 ## through `data/maps/maps.json`; the loader takes the path as an argument, so
@@ -109,6 +111,41 @@ var _battle_encounter: Dictionary = {}
 var _marker_root: Node2D = null
 ## The attack confirmation currently on screen (null when none).
 var _attack_confirm: Control = null
+
+# --- Task H: hold-to-repeat + click-to-sail (docs/20-* §4.2) ---------------
+
+## The direction action currently held (`""` when none). Only one direction
+## repeats at a time; a new press replaces it and resets the cadence.
+var _hold_action: String = ""
+## True when the hold came from [method press_direction] (a host/test seam)
+## rather than a real key event. A real hold is re-verified against
+## `Input.is_action_pressed()` every tick, so a lost key-up can never leave the
+## fleet sailing on its own.
+var _hold_forced: bool = false
+## Seconds spent in the current hold, and seconds since the last held step.
+## Together they implement "0.25 s delay, then ~8 tiles/s".
+var _hold_elapsed: float = 0.0
+var _hold_since_step: float = 0.0
+## Left-click route still to walk (Steps **after** the current tile). Empty
+## when there is no sail order.
+var _sail_path: Array[Vector2i] = []
+## The clicked destination, kept so a battle interruption can recompute the
+## remaining route after the battle is dismissed (`-1,-1` when no order).
+var _sail_target := Vector2i(-1, -1)
+## Seconds accumulated toward the next path step (same cadence as the hold).
+var _sail_elapsed: float = 0.0
+## Set while a battle interruption has suspended a sail order; the order is
+## resumed by `_on_battle_finished`.
+var _sail_suspended: bool = false
+## Seconds a held direction must be down before it starts repeating.
+const HOLD_DELAY_SECONDS := 0.25
+## Repeats per second once the delay has elapsed ("~8 tiles/s", §4.2).
+const HOLD_TILES_PER_SECOND := 8.0
+## Seconds between two click-to-sail steps. Deliberately the same as a held
+## step, so a click route is "N steps = N moves" at the same pace.
+const SAIL_STEP_SECONDS := 1.0 / HOLD_TILES_PER_SECOND
+## The A* module instance of the last query (`sail_pathing()`), created lazily.
+var _sail = null
 
 
 func _ready() -> void:
@@ -215,31 +252,43 @@ func _active_map_id() -> String:
 	return known[0] if not known.is_empty() else DEFAULT_MAP_ID
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _loader == null or not _is_loaded():
 		return
 	_update_camera()
+	# Hold-to-repeat / click-to-sail cadence (docs/20-* §4.2, task H).
+	_tick_movement(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_loaded():
 		return
-	# Click-to-step on an adjacent tile (docs/80-* §4.3). The HUD is
-	# mouse-transparent, so clicks land here; a modal consumes them first.
+	# Click-to-sail / click-to-step (docs/80-* §4.3, docs/20-* §4.2). The HUD
+	# is mouse-transparent, so clicks land here; a modal consumes them first.
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
 			# Right-click on an adjacent hostile marker = attack (§4.1).
 			if _modal_open():
 				return
-			if _try_attack(_cell_at(get_global_mouse_position())):
+			var attacked := _try_attack(_cell_at(get_global_mouse_position()))
+			if attacked:
+				# A deliberate attack is manual input: it replaces a sail order.
+				_cancel_sail_order()
 				get_viewport().set_input_as_handled()
 			return
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
 			if _modal_open():
 				return
 			var target := _cell_at(get_global_mouse_position())
-			if _is_adjacent(target) and _try_step(target):
+			# Adjacent tile: the original one-tile click step (a normal move).
+			# Anything else: click-to-sail (path + cadence).
+			if _is_adjacent(target):
+				if _try_step(target):
+					_cancel_sail_order()
+					get_viewport().set_input_as_handled()
+				return
+			if sail_to(target):
 				get_viewport().set_input_as_handled()
 		return
 
@@ -252,11 +301,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	for action in MOVE_ACTIONS:
+		if event.is_action_released(action):
+			# Hold-to-repeat ends. A release never steps.
+			if _hold_action == action:
+				_hold_action = ""
+				_hold_forced = false
+				_reset_cadence()
+			continue
 		if event.is_action_pressed(action):
 			if _modal_open():
 				return
 			get_viewport().set_input_as_handled()
-			_try_step(_fleet_cell + MOVE_ACTIONS[action])
+			# Echo events (a key auto-repeating) are not a new press: the
+			# cadence owns the repeats (§4.2 "hold to repeat").
+			if event is InputEventKey and (event as InputEventKey).echo:
+				continue
+			_press_direction(action)
 			return
 
 
@@ -267,6 +327,130 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Returns true when the fleet actually stepped.
 func try_step(target: Vector2i) -> bool:
 	return _try_step(target)
+
+
+# --- Task H: hold-to-repeat & click-to-sail (docs/20-* §4.2) ---------------
+
+## Presses a direction action as if the key went down (the public test seam for
+## `_unhandled_input`). Steps once immediately (one normal move), starts the
+## 0.25 s hold delay, and cancels any click-to-sail order (manual input).
+## Returns whether that first step actually happened.
+func press_direction(action: String) -> bool:
+	if not MOVE_ACTIONS.has(action) or not _is_loaded():
+		return false
+	_hold_action = action
+	_hold_forced = true
+	_reset_cadence()
+	_cancel_sail_order()
+	return _try_step(_fleet_cell + MOVE_ACTIONS[action])
+
+
+## Releases a direction action (`""` releases whatever is held). Ends the
+## repeat; a release never steps.
+func release_direction(action: String = "") -> void:
+	if action.is_empty() or action == _hold_action:
+		_hold_action = ""
+		_hold_forced = false
+		_reset_cadence()
+
+
+## Drives the cadence with `seconds` of simulated time — the deterministic
+## replacement for `_process(delta)` in headless tests. `100` held steps can be
+## produced exactly as `press_direction(...)` followed by
+## `advance_movement(HOLD_DELAY_SECONDS + 99 * SAIL_STEP_SECONDS)`.
+func advance_movement(seconds: float) -> void:
+	_tick_movement(seconds)
+
+
+## Live cadence state (the test seam that proves the numbers): the held action,
+## seconds held, seconds since the last repeat, the delay and the rate.
+func hold_state() -> Dictionary:
+	return {
+		"action": _hold_action,
+		"elapsed": _hold_elapsed,
+		"since_step": _hold_since_step,
+		"delay": HOLD_DELAY_SECONDS,
+		"tiles_per_second": HOLD_TILES_PER_SECOND,
+		"step_seconds": SAIL_STEP_SECONDS,
+	}
+
+
+## Overwrites the cadence accumulators (test aid for partial-delay cases). A
+## negative `since_step` leaves it alone.
+func set_hold_accumulator(elapsed: float, since_step: float = -1.0) -> void:
+	_hold_elapsed = maxf(0.0, elapsed)
+	if since_step >= 0.0:
+		_hold_since_step = since_step
+
+
+## Click-to-sail: computes the §4.2 route to `target` and starts walking it.
+## Returns true when a route was found and stored.
+##
+## The route then advances on the **same cadence as hold-to-repeat** (one
+## `_try_step` per [constant SAIL_STEP_SECONDS], i.e. ~8 tiles/s), so a click
+## route is N steps = N normal moves — clock, consumption, port entry and
+## encounters included. The first step happens on the first cadence tick, not
+## inside this call, so a click never moves the fleet by itself.
+##
+## A click on land/ice/off-grid costs nothing and shows `world.move_blocked`;
+## a click on water with no sea route costs nothing and shows
+## `world.sail.no_path` (§4.2, `80-*` §4.3/§4.7.5).
+func sail_to(target: Vector2i) -> bool:
+	if _loader == null or not _is_loaded() or _modal_open():
+		return false
+	var cell := target
+	if _loader.width > 0:
+		cell.x = posmod(cell.x, _loader.width)
+	if cell == _fleet_cell:
+		# Clicking the tile the fleet stands on is a no-op (no toast, no order).
+		return false
+	if cell.y < 0 or cell.y >= _loader.height or not _loader.is_passable(cell):
+		# Land / ice / out of range: rejected, no clock cost, no order change.
+		# A click gets its own toast each time (the one-shot guard of
+		# [_reject_move] is for held-direction spam, not for deliberate clicks).
+		if not _toast("world.move_blocked"):
+			print("WorldMap: click on land/ice/off-grid rejected; no clock cost")
+		return false
+	var path: Array[Vector2i] = _sail_compute(cell)
+	if path.is_empty():
+		_reject_sail()
+		return false
+	# A click is manual input: it replaces a held direction and any old order.
+	_hold_action = ""
+	_hold_forced = false
+	_reset_cadence()
+	_sail_path = path
+	_sail_target = cell
+	_sail_elapsed = 0.0
+	_sail_suspended = false
+	return true
+
+
+## Remaining click-to-sail steps (empty when no order).
+func sail_path() -> Array[Vector2i]:
+	return _sail_path.duplicate()
+
+
+## Clicked destination of the current (or suspended) order, `(-1,-1)` when none.
+func sail_target() -> Vector2i:
+	return _sail_target
+
+
+## True while a route is stored (walking or suspended by a battle).
+func sail_active() -> bool:
+	return not _sail_path.is_empty() or _sail_suspended
+
+
+## Cancels the order (manual direction input, a click elsewhere, redirection,
+## docking, a blocked step).
+func cancel_sail() -> void:
+	_cancel_sail_order()
+
+
+## True while a battle interruption has suspended a sail order (it resumes on
+## `battle_finished`).
+func sail_suspended() -> bool:
+	return _sail_suspended
 
 
 ## Current fleet cell (the marker source of truth).
@@ -343,44 +527,81 @@ func visible_world_rect() -> Rect2:
 func _try_step(target: Vector2i) -> bool:
 	if _loader == null or _modal_open():
 		return false
-	# x wraps (§4.1): a step east from x = 2159 lands on x = 0. Normalise first
-	# so legality, the stored position and the marker all agree.
-	if _loader.width > 0:
-		target = Vector2i(posmod(target.x, _loader.width), target.y)
-	if not _is_adjacent(target):
+	# x wraps (§4.1): a step east from x = 2159 lands on x = 0. The move is
+	# evaluated on the **short** delta (±1) and the stored cell is normalised
+	# afterwards, so the seam behaves exactly like any other neighbouring tile.
+	var delta := _wrapped_delta(target)
+	if maxi(absi(delta.x), absi(delta.y)) != 1:
 		# Clicking a non-adjacent tile is a no-op, not a rejected move: no
 		# feedback, no clock (±0 tiles is not a "move" at all).
 		return false
-	if not SailingSimLib.is_move_legal(_fleet_cell, target, _loader):
+	var step_target := _fleet_cell + delta
+	if not SailingSimLib.is_move_legal(_fleet_cell, step_target, _loader):
 		_reject_move(target)
 		return false
 
 	# Leaving a harbor tile: at sea again (docs/20-* §4.11 exit).
 	GameState.current_port = null
 
+	# The cell that gets stored: the un-normalised `step_target` may be -1 or
+	# `width` at the seam, which the move rule accepts but the save shape must
+	# not contain (§4.1 "x taken mod 2160 everywhere").
+	var landed := step_target
+	if _loader.width > 0:
+		landed = Vector2i(posmod(step_target.x, _loader.width), step_target.y)
+
 	if _has_game():
 		# Applies the tile + `1/effective_speed` days + day-boundary loop.
-		SailingSimLib.try_move(target, _loader, _fleet_cell)
-	else:
-		# No run yet: step for inspection, but no game clock exists to advance.
-		GameState.set_world_tile(target)
+		SailingSimLib.try_move(step_target, _loader, _fleet_cell)
+	# The sim stored the un-normalised cell; re-assert the wrapped one.
+	GameState.set_world_tile(landed)
 
 	_reject_logged = false
-	_fleet_cell = target
+	_fleet_cell = landed
 	_place_marker()
 	_update_camera()
 	_reveal()
 	_sync_hud()
 
-	var port_id: String = _loader.port_id_at(target)
+	var port_id: String = _loader.port_id_at(landed)
 	if not port_id.is_empty():
+		# Docking ends any click route: the fleet is not at sea any more.
+		_cancel_sail_order()
 		_enter_port(port_id)
 		return true
 	# docs/60-* §4.11.11.1: contact is measured after the player move — a step
 	# onto a tile beside a hostile marker opens the battle now. S10 owns the
 	# screen from here, so nothing else may run on top of it.
 	_tick_encounters()
+	if battle_in_progress() and not _sail_path.is_empty():
+		# §4.2: a battle interrupts the route. It is **not** thrown away: the
+		# remaining path is kept, walking stops, and `_on_battle_finished`
+		# recomputes the rest toward the same target.
+		_sail_suspended = true
 	return true
+
+
+## The signed delta from the fleet cell to `target` on the wrapping grid: `x`
+## is reduced to `[-width/2, width/2)` so the seam is just another neighbour
+## (§4.1). A magnitude above 1 means "not adjacent".
+func _wrapped_delta(target: Vector2i) -> Vector2i:
+	var dy := target.y - _fleet_cell.y
+	if _loader == null or _loader.width <= 0:
+		return Vector2i(target.x - _fleet_cell.x, dy)
+	return Vector2i(
+		SailPathLib.short_dx(_fleet_cell.x, target.x, _loader.width), dy
+	)
+
+
+## True when `to` is one legal §4.2 step from `from` (seam-aware). Used by the
+## click-route walk, whose tiles are absolute world cells.
+func _step_is_legal(from: Vector2i, to: Vector2i) -> bool:
+	var delta := to - from
+	if _loader != null and _loader.width > 0:
+		delta.x = SailPathLib.short_dx(from.x, to.x, _loader.width)
+	if maxi(absi(delta.x), absi(delta.y)) != 1:
+		return false
+	return SailingSimLib.is_move_legal(from, from + delta, _loader)
 
 
 ## Docs/20-* §4.2/§6: a blocked move is silent and costs nothing; a brief toast
@@ -389,12 +610,166 @@ func _reject_move(_target: Vector2i) -> void:
 	if _reject_logged:
 		return
 	_reject_logged = true
-	# `world.move_blocked` is proposed in the T6 report; until the orchestrator
-	# merges it into data/ui_strings.json toast_key() returns false and the
-	# rejection stays console-only (logged once per scene, never a modal).
-	if _hud != null and _hud.toast_key("world.move_blocked"):
+	if _toast("world.move_blocked"):
 		return
 	print("WorldMap: move rejected (land/reef/edge/corner cut); no clock cost")
+
+
+## A click on water that has no sea route (§4.2): no clock cost, one toast.
+func _reject_sail() -> void:
+	if _toast("world.sail.no_path"):
+		return
+	print("WorldMap: no sea route to the clicked tile; no clock cost")
+
+
+## Shows a ui_strings toast when the HUD offers one and the key exists; false
+## otherwise (the caller keeps its console fallback).
+func _toast(key: String) -> bool:
+	return _hud != null and _hud.has_method("toast_key") and _hud.toast_key(key)
+
+
+# --- Task H: cadence (docs/20-* §4.2) --------------------------------------
+
+## A manual direction press: one immediate normal move, then the hold repeat.
+func _press_direction(action: String, forced: bool = false) -> void:
+	_hold_action = action
+	_hold_forced = forced
+	_reset_cadence()
+	_cancel_sail_order()
+	_try_step(_fleet_cell + MOVE_ACTIONS[action])
+
+
+## The held direction drops to a single step per [constant SAIL_STEP_SECONDS]
+## after [constant HOLD_DELAY_SECONDS]; the click route uses the same clock.
+##
+## Every repeat goes through [_try_step], so each one is a normal move (clock,
+## consumption, port entry, encounters). A blocked step costs nothing and does
+## **not** reset the accumulator: its cadence slot was already consumed, so it
+## simply produces no move and a held key can never bank up free moves.
+func _tick_movement(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	# Nothing to advance: do not pay the modal scan every frame.
+	if _hold_action.is_empty() and (_sail_path.is_empty() or _sail_suspended):
+		return
+	# A modal freezes the world: the cadence holds its phase but does not run.
+	if _modal_open():
+		return
+	if not _hold_action.is_empty():
+		# A real key hold is re-checked every tick: if the key went up without
+		# us seeing the event (focus loss), the repeat stops rather than runs on.
+		if not _hold_forced and not Input.is_action_pressed(_hold_action):
+			_hold_action = ""
+			_reset_cadence()
+		else:
+			_tick_hold(delta)
+	if _sail_path.is_empty() or _sail_suspended:
+		return
+	_sail_elapsed += delta
+	while _sail_elapsed >= SAIL_STEP_SECONDS - SailingSimLib.CLOCK_EPSILON \
+			and not _sail_path.is_empty() and not _sail_suspended:
+		_sail_elapsed -= SAIL_STEP_SECONDS
+		_step_along_sail_path()
+
+
+## One held direction's cadence: 0.25 s delay, then 1 step every 0.125 s.
+func _tick_hold(delta: float) -> void:
+	if _hold_elapsed < HOLD_DELAY_SECONDS:
+		_hold_elapsed += delta
+		if _hold_elapsed < HOLD_DELAY_SECONDS:
+			return
+		# Only the part of this frame that is past the delay counts toward the
+		# first repeat, so the phase does not depend on the frame rate.
+		_hold_since_step = _hold_elapsed - HOLD_DELAY_SECONDS
+		_hold_elapsed = HOLD_DELAY_SECONDS
+	else:
+		_hold_since_step += delta
+	while _hold_since_step >= SAIL_STEP_SECONDS - SailingSimLib.CLOCK_EPSILON:
+		_hold_since_step -= SAIL_STEP_SECONDS
+		if _hold_action.is_empty():
+			return
+		# One normal move; a blocked step is simply a move that did not happen
+		# (its slot is spent, nothing is banked — §4.2 "blocked moves cost
+		# nothing", not "blocked moves are saved up").
+		_try_step(_fleet_cell + MOVE_ACTIONS[_hold_action])
+		# Docking / a battle interruption / a game over ends the hold.
+		if GameState.current_port != null or battle_in_progress() \
+				or game_over_open() or _sail_suspended:
+			_hold_action = ""
+			_reset_cadence()
+			return
+
+
+## Walks one stored path step through the normal movement rules.
+func _step_along_sail_path() -> void:
+	if _sail_path.is_empty():
+		return
+	var next: Vector2i = _sail_path[0]
+	# A route cancels the moment its next tile is no longer a legal step (a
+	# save load, a marker push, a manual host move): never force a bad move.
+	if not _step_is_legal(_fleet_cell, next):
+		_cancel_sail_order()
+		_reject_move(next)
+		return
+	_sail_path.remove_at(0)
+	var moved := _try_step(next)
+	if not moved:
+		_cancel_sail_order()
+		return
+	# A battle on the way: the rest of the route waits for `battle_finished`.
+	if _sail_suspended:
+		return
+	if battle_in_progress():
+		# The battle opened on the final step, so there is nothing left to
+		# resume: the order is over (and no "arrived" toast over a battle).
+		_cancel_sail_order()
+		return
+	# Docking, a game over or the destination all end the order.
+	if _sail_path.is_empty():
+		_finish_sail_order()
+		return
+	if GameState.current_port != null or game_over_open():
+		_cancel_sail_order()
+
+
+## The destination was reached: toast `world.sail.arrived` when the key exists
+## (the Phase-4 inventory lists it; until it lands in `data/ui_strings.json` the
+## arrival stays a console line, never invented copy).
+func _finish_sail_order() -> void:
+	var target := _sail_target
+	_sail_path.clear()
+	_sail_target = Vector2i(-1, -1)
+	_sail_elapsed = 0.0
+	_sail_suspended = false
+	if _fleet_cell != target:
+		return
+	if not _toast("world.sail.arrived"):
+		print("WorldMap: arrived at %s (world.sail.arrived not in ui_strings)"
+			% str(target))
+
+
+func _cancel_sail_order() -> void:
+	_sail_path.clear()
+	_sail_target = Vector2i(-1, -1)
+	_sail_elapsed = 0.0
+	_sail_suspended = false
+
+
+func _reset_cadence() -> void:
+	_hold_elapsed = 0.0
+	_hold_since_step = 0.0
+
+
+## The A* call for the current fleet cell (§4.2, `scripts/world/sail_path.gd`).
+func _sail_compute(target: Vector2i) -> Array[Vector2i]:
+	if _sail == null:
+		_sail = SailPathLib.new()
+	return _sail.find_path(_fleet_cell, target, _loader)
+
+
+## The path module of the last query (diagnostics: `last_ms`, `last_stage`).
+func sail_pathing():
+	return _sail
 
 
 ## Port entry (docs/20-* §4.11, in the doc's numbered order):
@@ -820,7 +1195,35 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 	# marker this battle just fought can never re-open — a retreat would
 	# otherwise loop straight back into the battle the player just left.
 	if GameState.current_port == null:
-		_open_chained_battle(str(marker.get("id", "")))
+		var chained := _open_chained_battle(str(marker.get("id", "")))
+		if chained:
+			# A chained battle is another interruption: the route stays
+			# suspended and resumes when that one finishes too.
+			return
+	# §4.2 (task H): the battle interrupted a click route — recompute the rest
+	# of it toward the original target from wherever the fleet stands now and
+	# keep walking. Disabled routing never reaches here mid-route, and a route
+	# whose target became unreachable is simply dropped.
+	_resume_sail_order()
+
+
+## Recomputes a battle-suspended route toward its original target and resumes
+## the cadence (§4.2 "re-computes remaining path after dismissal"). Any manual
+## input in between cancelled the order, in which case there is nothing to do.
+func _resume_sail_order() -> void:
+	if not _sail_suspended:
+		return
+	_sail_suspended = false
+	var target := _sail_target
+	if target == Vector2i(-1, -1) or _loader == null:
+		_cancel_sail_order()
+		return
+	var remaining: Array[Vector2i] = _sail_compute(target)
+	if remaining.is_empty():
+		_cancel_sail_order()
+		return
+	_sail_path = remaining
+	_sail_elapsed = 0.0
 
 
 ## Restores the fleet to the battle's contact tile.
@@ -836,15 +1239,17 @@ func _restore_fleet_tile(marker: Dictionary) -> void:
 
 
 ## Opens the next marker in range after a battle ends (§6 chaining), skipping
-## `exclude_id` — the marker whose battle just finished.
-func _open_chained_battle(exclude_id: String = "") -> void:
+## `exclude_id` — the marker whose battle just finished. Returns true when a
+## battle was opened (the caller keeps a sail route suspended).
+func _open_chained_battle(exclude_id: String = "") -> bool:
 	if _encounters == null:
-		return
+		return false
 	for marker in _encounters.contacts(GameState.world_tile()):
 		if str(marker.get("id", "")) == exclude_id:
 			continue
 		_open_encounter(_encounter_for(marker))
-		return
+		return true
+	return false
 
 
 # --- `GameState.pending_encounter` (docs/60-* §4.11.11.3) ------------------

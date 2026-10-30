@@ -1527,5 +1527,13 @@
   "chart.legend.discovery": {
     "zh": "发现物线索",
     "en": "Discovery leads"
+  },
+  "world.sail.no_path": {
+    "zh": "无可行航线",
+    "en": "No route by sea"
+  },
+  "world.sail.arrived": {
+    "zh": "已抵达目的地",
+    "en": "Destination reached"
   }
 }
