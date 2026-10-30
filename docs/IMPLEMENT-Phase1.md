@@ -1,7 +1,10 @@
 # IMPLEMENT — Phase 1: Sail & Trade
 
 **STATUS: ✅ COMPLETE (2026-10-29).** All 19 tasks implemented and verified;
-the phase definition of done (T19) passes.
+the phase definition of done (T19) passes. Phases 2 (`IMPLEMENT-Phase2.md`) and
+3 (`IMPLEMENT-Phase3.md`) have since shipped on top of this code without
+changing any Phase-1 behaviour, so this file stays the authoritative Phase-1
+record — only the evidence counts below were refreshed.
 
 Ordered, checkable task backlog. Execute as background-subagent waves per the
 plan at the bottom (max 4 concurrent; top-to-bottom order is the dependency
@@ -14,11 +17,18 @@ Definition of done for the phase: **T19 (demo-loop acceptance) passes.**
 
 | | |
 |---|---|
-| Verification | 14 headless suites, **2,516 checks**, all passing |
-| Data validator | `python3 tools/validate_data.py` → exit 0 (groups 1–6) |
+| Verification | 14 headless suites, **2,566 checks**, all passing (re-verified 2026-10-30) |
+| Data validator | `python3 tools/validate_data.py` → exit 0 (groups 1–7) |
 | Main scene | `godot --headless --quit-after 3` → exit 0, zero script errors |
 | Acceptance record | `tools/demo_check.md` |
 | E2E harness | `tools/test_demo_loop.tscn` (87 checks, all 9 loop steps) |
+
+The 2,566 figure is the Phase-1 suites **as they stand after Phases 2 and 3**:
+those phases added assertions to four of them (`test_character` 385 → 409,
+`test_tavern` 245 → 268, `test_port_hub` 140 → 142, `test_save` 195 → 196) while
+adding new suites of their own. At the Phase-1 gate itself the same 14 suites
+totaled 2,516 checks; none of the increase is a behaviour change in Phase-1
+code.
 
 Per-task status is recorded under each heading below; see
 [Completion record](#completion-record) for the design gaps this phase
@@ -182,7 +192,7 @@ surfaced and the doc amendments made to close them.
 
 ## T11 — Port hub + facility stubs
 
-✅ **Done** (2026-10-29) — six rows in fixed order from `Port.facilities`, palace only at capitals, guild always a `port.stub.phase3` stub; `open_facility` now gates on the port's own facilities so stubs never route. `tools/test_port_hub.tscn` (140).
+✅ **Done** (2026-10-29) — six rows in fixed order from `Port.facilities`, palace only at capitals, guild always a `port.stub.phase3` stub; `open_facility` now gates on the port's own facilities so stubs never route. `tools/test_port_hub.tscn` (142).
 
 - **Goal:** the port menu and Phase-3 stubs exist.
 - **Docs:** `30-*` §4.1, §4.7; `80-*` §4.2.
@@ -223,7 +233,7 @@ surfaced and the doc amendments made to close them.
 
 ## T14 — Tavern: crew hire/fire + officers
 
-✅ **Done** (2026-10-29) — 20g/head hire capped at `crew_max`, fire clamped to `crew_min`, all six officers only at their `recruit_ports`, `wage×10` signing, `OFFICER_MAX = 3`, role bonuses in `effective_stat`. `tools/test_tavern.tscn` (245).
+✅ **Done** (2026-10-29) — 20g/head hire capped at `crew_max`, fire clamped to `crew_min`, all six officers only at their `recruit_ports`, `wage×10` signing, `OFFICER_MAX = 3`, role bonuses in `effective_stat`. `tools/test_tavern.tscn` (268).
 
 - **Goal:** crewing and officer recruiting work.
 - **Docs:** `30-*` §4.5, §4.7; `50-*` §4.4–4.5; `40-*` §4.4.
@@ -249,7 +259,7 @@ surfaced and the doc amendments made to close them.
 
 ## T16 — Character: nationality select, stats, XP, panel
 
-✅ **Done** (2026-10-29) — 6 data-driven cards, `new_game` per §4.1 for all nations, stat effects at boundaries, level table 0→1 … 18050→20, live character panel. `tools/test_character.tscn` (385).
+✅ **Done** (2026-10-29) — 6 data-driven cards, `new_game` per §4.1 for all nations, stat effects at boundaries, level table 0→1 … 18050→20, live character panel. `tools/test_character.tscn` (409).
 
 - **Goal:** new-game flow and progression display.
 - **Docs:** `50-*` §4.1–4.6, §5; `80-*` S2/S14.
@@ -263,7 +273,7 @@ surfaced and the doc amendments made to close them.
 
 ## T17 — Save / load
 
-✅ **Done** (2026-10-29) — §8.1 shape exactly, atomic write, corrupt/version-mismatched files reported invalid and never crash, F5 at sea shows `ui.cant_save_here`, full round-trip byte-equal with ints preserved. `tools/test_save.tscn` (195).
+✅ **Done** (2026-10-29) — §8.1 shape exactly, atomic write, corrupt/version-mismatched files reported invalid and never crash, F5 at sea shows `ui.cant_save_here`, full round-trip byte-equal with ints preserved. `tools/test_save.tscn` (196).
 
 - **Goal:** full state persistence with the 3-slot UX.
 - **Docs:** `90-*` §8, §5.5; `80-*` §4.6.
@@ -319,6 +329,12 @@ Phase 1 closed on 2026-10-29. Every task was independently re-verified by the
 orchestrator (not just by the implementing subagent's own suite), then merged
 and re-tested as a whole.
 
+**Re-verified 2026-10-30** during the Phase-3 close-out: all 14 Phase-1 suites
+still pass with no `SCRIPT ERROR` (2,566 checks, up from 2,516 only because
+Phases 2–3 added assertions to four of them), the validator exits 0 with groups
+1–7, and `--quit-after 3` boots clean. No Phase-1 code was changed to make that
+pass — the numbers above are simply current.
+
 ### Deviations from the sanctioned wave plan
 
 | Deviation | Reason |
@@ -372,12 +388,20 @@ saved (both documented, both consequences of save-only-in-port); harbor relief
 is unreachable in normal play and tested via `GameState.debug_strip_fleet()`;
 refit maths exists but the UI is Phase-2 disabled.
 
-### Outstanding before Phase 2
+### Outstanding (still open after Phases 2–3)
+
+Phase 1's *code* is complete and both later phases shipped on top of it
+unchanged; these two items remain open against the Phase-1 record itself.
 
 - The **human visual pass** in `tools/demo_check.md` has not been performed —
-  title layout, camera feel, and the zh reading pass need eyes.
-- The world map is left-shifted west because of the locked §7.1 anchor
-  projection; re-proportioning would require amending that table.
+  title layout, camera feel, and the zh reading pass need eyes. The checklist
+  there is still all unchecked. (Phase 2 and Phase 3 have their own manual
+  sections in `tools/demo_check_phase2.md` / `demo_check_phase3.md`, likewise
+  unperformed; only the scripted layers are recorded.)
+- The Phase-1 world map is left-shifted west because of the locked §7.1 anchor
+  projection; re-proportioning would require amending that table. Phase 3's
+  `p3_world.txt` is a separate 160×96 grid and is unaffected, so this is a
+  cosmetic limitation of the original map only.
 
 ---
 

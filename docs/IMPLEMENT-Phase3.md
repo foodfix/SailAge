@@ -1,6 +1,13 @@
 # IMPLEMENT — Phase 3: Crown & Horizon
 
 **STATUS: ✅ COMPLETE (2026-10-30) — Phase 3 shipped, merged and accepted.**
+
+> **Superseded (2026-10-30):** the shipped dual-map world layer (task G's
+> `p3_world.txt`/`map_legend_p3.json`/`ports_p3.json`, task C's p3-grid
+> discovery positions, and the marker-charset pin of §4.9.8) is replaced by
+> **`IMPLEMENT-Phase4.md`** (single real-Earth map, 2160×1080). The tasks
+> below remain the historical record of what shipped.
+
 All ten tasks A–J done (I skipped as the backlog allows). The full gate is
 `python3 tools/validate_data.py` (exit 0) plus **30 headless suites, 4 545
 checks, zero `SCRIPT ERROR`, `--quit-after 3` clean**; the eight new suites are
