@@ -98,7 +98,7 @@ derive one of these differently (the Phase-2/3 lesson).
 | Tile charset | `~ . # ^ I`; `I` = polar ice, impassable, not reef, not land for adjacency purposes except edge-blocking | `10-*` §6.2 (A) |
 | Ice rule | a tile is `I` iff lat ≥ 70°N or lat ≤ 60°S (keeps Cape Horn 55.98°S, North Cape 71.2°N is iced: no NE/NW passage) | `10-*` §6.2 (A) |
 | Coastal band | `.` iff within 3 tiles (Chebyshev, wrap-aware) of a passable-adjacent land/ice tile, else `~`; `.` is cosmetic only (same passability/speed as `~`) | `10-*` §6.1 (A) |
-| Harbor snap | harbor tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile | `10-*` §7.1 (A) |
+| Harbor snap | harbor tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest (y, x) — the Python builder and the GDScript runtime implement this rule exactly, and F tests they agree | `10-*` §7.1 (A) |
 | Port sighting | 24 tiles (≈ 4° ≈ 240 nm — same angular generosity as the old radius 8 on p1) | `20-*` §4.11 (B) |
 | Discovery sighting | 18 tiles (≈ 3°; old p3 radius 3 at 1.5°/tile) | `70-*` §4.4 (B) |
 | Ship speeds | ×2: base speeds become {8, 10, 12} tiles/day = 80–120 nm/day; floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2 (B), `data/ship_types.json` (I) |
@@ -124,9 +124,14 @@ boreal band is north-only since south of 60°S is ice):
 
 Storm-reachability acceptance per band uses the T8 methodology (10,000
 seeded rolls, ±0.02 per category). The old demo-loop "sail west from
-Lisbon into the storm strip" step is re-anchored: **Lisbon → Santa Cruz de
-Tenerife** crosses into the trade-wind belt; scripted gate "storm within 6
-days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
+Lisbon into the storm strip" step is re-anchored: **Lisbon → the water
+off Santa Cruz de Tenerife** (≈ 28.3°N 16.5°W) crosses into the
+trade-wind belt; scripted gate "storm within 6 days in-band ≥ 0.90"
+(`1 − 0.65⁶ = 0.9246`). Tenerife is a **coordinate destination** — the
+100-port list has no Canaries port, and none is added for this step
+(`madeira` at 32.7°N sits in the variables band and cannot substitute);
+arrival means crossing the 30°N band edge and sampling weather there,
+not docking.
 
 ---
 
@@ -151,11 +156,14 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   rewritten to task F's spec. AGENTS.md: world-map hard rule reworded
   ("generated, tool-owned raster artifact `data/maps/world.png`; ASCII is a
   debug export; never hand-edit").
-- **Done-when:** grep over `docs/10-*` finds no `128`, `160 × 96`, `p1`,
-  `p3`, `0.42°`, `1.5°`, `marker`, `MARKER_RE` remnants; every locked
-  constant appears exactly once; the §7.1 table has exactly 100 rows with
-  plausible lat/lon (sanity: Lisbon 38.7°N 9.1°W, Nagasaki 32.7°N 129.9°E);
-  AGENTS.md no longer promises ASCII maps.
+- **Done-when:** grep over `docs/10-*` finds no `128 × 96`, `160 × 96`,
+  `0.42°`, `1.5°`, `Port.marker`, or `MARKER_RE` remnants; word-boundary
+  grep finds no standalone `p1`/`p3` map references. Bare-number greps
+  (`128`, `160`) are not gates — they legitimately match lat/lon digits in
+  the new §7.1 table. Every locked constant appears exactly once; the
+  §7.1 table has exactly 100 rows with plausible lat/lon (sanity: Lisbon
+  38.7°N 9.1°W, Nagasaki 32.7°N 129.9°E); AGENTS.md no longer promises
+  ASCII maps.
 
 ### B — Amend `00-*`, `20-*`, `40-*`, `60-*`, `70-*`, `80-*`, `90-*` (doc-first)
 
@@ -163,7 +171,8 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Docs:** locked constants; current system docs.
 - **Changes:** `00-*` §5 phase table (Phase 4 row; Phase-1 gate reworded to
   the world map), §7 demo loop re-anchored (start Lisbon; step 5 =
-  Lisbon→Tenerife per the table above); `20-*` §4.1 grid/wrap/addressing,
+  Lisbon→Tenerife water, coordinate destination per the table above);
+  `20-*` §4.1 grid/wrap/addressing,
   §4.2 movement adds hold-to-repeat + click-to-sail (task H spec),
   §4.4 speed scale note, §4.7 the 5-band table replacing the strip table
   (keep the seeded-roll acceptance style), §4.11 sighting 24,
@@ -185,10 +194,13 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   PNG → bytes, 128×128 chunk TileMaps, live-chunk bound, wrap-aware
   passability, port overlay from JSON.
 - **Done-when:** cross-doc grep for `x ≤ 6`, `x ≤ 8`, `radius 8`,
-  `128`, `160`, `p1`, `p3`, `2160` inconsistencies returns only
-  historical/phase-record mentions; `00-*` §7's nine steps are all
-  satisfiable on the new map (each step names real ports that exist in
-  §7.1); `90-*` §9 and `20-*` §4.2 agree on corner-cut and wrap rules.
+  `128 × 96`, `160 × 96`, `Port.marker` (but not `fleet marker` — J's
+  chart marker is legitimate), word-`p1`, word-`p3`, and `2160`
+  inconsistencies returns only historical/phase-record mentions;
+  `00-*` §7's nine steps are all satisfiable on the new map (each step
+  that names a port names one that exists in §7.1 — Tenerife excepted
+  per the locked re-anchor); `90-*` §9 and `20-*` §4.2 agree on
+  corner-cut and wrap rules.
 
 ### C — Coastline vendor + `tools/build_world.py`
 
@@ -196,18 +208,31 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Docs:** `10-*` §6 as amended (A); locked constants.
 - **Creates:** `tools/assets/` with Natural Earth 10 m land + minor islands
   (+ `ne_10m_lakes`) shapefiles and a `LICENSE-NOTES.md` (public domain,
-  source URLs, download date); `tools/build_world.py`:
+  source URLs, download date, **SHA-256 per vendored file**);
+  `tools/requirements.txt` pinning every non-stdlib dependency
+  (`pip install -r` into a venv per AGENTS.md tooling rules); a vendored
+  pure-Python shapefile reader (e.g. pyshp, MIT) under `tools/vendor/`
+  is explicitly allowed so no binary `.shp` parser is written from scratch;
+  `tools/build_world.py`:
   `--degrees-per-tile` (default 1/6), `--ascii` debug export (2160-wide
-  text, `--rows A:B` slicing), `--report` JSON. Raster passes in order:
+  text, `--rows A:B` slicing), `--report` JSON, and `--check-snaps <json>`
+  dry-run mode (reads a ports lat/lon JSON, applies the locked snap rule
+  including its tie-break, prints one line per port, exits non-zero naming
+  every failure — this is the pinned "group 6 precursor" used by D's
+  preflight and E's negative test, independently of F). Raster passes in
+  order:
   land polygon fill → `~`/`#`; lakes pass → `ne_10m_lakes` also `#`
   (locked: the Caspian is land);
   ice rule pass → `I`; coastal band pass → `.`; writes
   `data/maps/world.png` (palette per §6.3) + `data/maps/world_report.json`
   (sea fraction, component sizes > 2000 tiles, ice extent, build params).
-  Pure-stdlib or numpy/matplotlib only (offline tool; runtime Godot code
-  stays dependency-free).
+  Pure-stdlib, vendored reader, or pinned numpy only (offline tool;
+  runtime Godot code stays dependency-free). Determinism is pinned, not
+  assumed: polygon input order is stable (sorted), so byte-identity holds
+  across machines, not just across reruns.
 - **Done-when:** rerunning twice is byte-identical; report sanity: land
-  fraction 25–35 %, one dominant sea component > 1 M tiles; spot-checks in
+  fraction 25–35 %, one dominant sea component > 1 M tiles, ice extent
+  24–30 % of tiles (70–90°N + 60–90°S rows); spot-checks in
   a viewer: Iberia, Italy, Greece recognizable; Britain an island; Iceland
   land (63–66°N, below ice line); Caspian interior reads `#` (lake pass
   applied); no `^` required this phase (reef layer
@@ -226,12 +251,20 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   `min_width_tiles` (default 1) and logs cells changed. **Tidal-river
   clause (pinned):** if a port's snap fails because its real-world
   location sits up a river narrower than a tile (expected candidates:
-  hamburg/Elbe, london/Thames), the fix is applied in this order —
+  hamburg/Elbe, london/Thames, seville/Guadalquivir, basra/Shatt
+  al-Arab, canton/Pearl River, siam/Chao Phraya; the bordeaux/Gironde
+  and quebec/St. Lawrence estuaries are wide enough to survive unaided
+  but are checked too), the fix is applied in this order —
   (1) move the port's `lat`/`lon` to its estuary mouth in `ports.json`
   and the §7.1 table (coordinates are task-owned data; flavor text
   unchanged), (2) only if the mouth itself is not water, add a
   "tidal river" carve entry to `map_overrides.json`. The builder names
-  the failing port either way. Harbor snap pass:
+  the failing port either way. **Preflight (W2 addendum, master-run):**
+  the moment C merges, the master runs `build_world.py --check-snaps`
+  against the §7.1 lat/lon transcription from A (exported to a temp
+  JSON) so every clause-tripping port is known a full wave before D —
+  and before E freezes `ports.json`; D starts from that report, not
+  from discovery. Harbor snap pass:
   each §7.1 port → nearest water tile within 2 tiles, writes
   `harbor_tile {x, y}` into `world_report.json` (runtime reads ports.json
   lat/lon and re-derives deterministically with the same rule — one
@@ -251,9 +284,16 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Changes:** merge `ports.json` (30) + `ports_p3.json` (70) → single
   `ports.json` (100) with `lat`/`lon` added and `marker`/`position`/`p3`/
   `phase` removed; ids, nations, goods, facilities, flavor text unchanged.
-  `data/discoveries.json`: 30 positions → `lat`/`lon` (placements
-  **task-owned** but must match each discovery's zh/en hint text; open
-  ocean or coastal waters only). Delete `ports_p3.json`,
+  `data/discoveries.json`: 30 positions → `lat`/`lon`, and the now-dead
+  `phase` key is dropped here too (placements **task-owned** but must
+  match each discovery's zh/en hint text; open ocean or coastal waters
+  only). **Placement audit (pinned):** the task report includes a
+  per-discovery table — placement lat/lon → location the hint text
+  implies → match check — so inland-flavored hints (e.g. "deep in the
+  southern mountains") are placed on the nearest matching coast; when
+  geography and flavor cannot both hold, the zh/en hint text may be
+  reworded as a task-owned i18n change (reworded keys listed in the
+  report). Delete `ports_p3.json`,
   `data/map_legend_p3.json`, and `data/maps/p3_world.txt` — its
   `maps.json` entry dies with the single-`world` rewrite, and nothing is
   deleted by hand before this task (see Pre-state).
@@ -261,7 +301,9 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   `maps.json` → single `world` entry.
 - **Done-when:** validator groups 1–5 exit 0 on the new schema (group 2–5
   checks extended to 100 ports); negative test: port in the Caspian
-  (lat 42, lon 50) fails group 6 precursor with a named error; grep
+  (lat 42, lon 50) fails the snap rule with a named error — asserted now
+  via D's `build_world.py --check-snaps` (the pinned precursor; F's
+  rewritten group 6 re-asserts it inside the validator from W4); grep
   `data/` finds no `marker`/`p3` keys and no `p3` filename;
   `data/maps/` holds no `.txt` files; port count in validator summary =
   100.
@@ -276,7 +318,8 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   BFS from Lisbon's harbor over **all** passable tiles (8-dir, corner-cut
   forbidden, **wrap-aware**, `~ . ^`-adjacent semantics per legend) reaches
   all 100 harbor tiles and all 30 discovery tiles; probe ports asserted
-  reachable: istanbul (Bosphorus), copenhagen (Øresund/Great Belt), aden
+  reachable: istanbul (Bosphorus), danzig and stockholm
+  (Øresund/Great Belt — the 100-port list has no `copenhagen`), aden
   (Bab-el-Mandeb), nagasaki (Malacca/Sunda), venice, london, hamburg
   (Elbe, per D's tidal-river clause); with the lake
   pass no disconnected sea is expected, but the informational listing
@@ -314,10 +357,16 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
   (per-step clock/economy rules unchanged — N held-steps = N moves);
   click on any visible water tile → `AStarGrid2D` path (region 2160×1080,
   `DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES` = no corner cutting, jumping on),
-  fleet walks it step-by-step through the normal per-step rules; wrap: if
-  |Δx| > 1080, query the shifted target and normalize the path; path
+  fleet walks it step-by-step through the normal per-step rules; wrap:
+  `AStarGrid2D` rejects out-of-region points, so a seam-crossing query is
+  made in a local frame — shift fleet and target x together (both minus
+  fleet x, mod 2160, then offset into [0, 2160)) before the query, and
+  offset the returned path back; |Δx| > 1080 selects the short way. Path
   cancels on: land reached (never happens), manual input, battle
-  interruption (re-computes remaining path after dismissal).
+  interruption (re-computes remaining path after dismissal). **Pre-named
+  fallback (pinned, implemented only if the 1 s budget fails):** route
+  over a coarse precomputed passable-skeleton (waypoint graph), then
+  refine per chunk with the same A* — no redesign of H under pressure.
 - **Done-when:** scripted: 2000-tile path computed < 1 s; held-key 20 steps
   produce 20 clock-advancing moves with correct provisions math
   (`test_movement` extended); corner-cut injection along an auto-path is
@@ -342,7 +391,7 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 
 ### J — HUD minimap crop + full-screen Chart
 
-- **Goal:** orientation at 233 万 tiles: near window + whole-world chart.
+- **Goal:** orientation at 2.33 M tiles: near window + whole-world chart.
 - **Docs:** `80-*` §4.1/§4.6 as amended (B); `20-*` §4.12.
 - **Changes:** HUD minimap keeps its 256×192 box, becomes a wrap-aware
   128×96-tile crop around the fleet at 2 px/tile from the explored bitset
@@ -391,7 +440,9 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Goal:** proof the Earth works: wrap, straits, bands.
 - **Docs:** `20-*` §4 as amended; locked constants.
 - **Creates:** `tools/test_world_e2e.tscn`: scripted voyages — (1) Lisbon →
-  Tenerife crossing into the trade belt; (2) Lisbon → Istanbul through the
+  the water off Tenerife (≈28.3°N 16.5°W, coordinate arrival — no
+  Canaries port exists) crossing into the trade belt; (2) Lisbon →
+  Istanbul through the
   carved Dardanelles+Bosphorus; (3) Lisbon → Nagasaki via Cape of Good Hope
   + Malacca (the long way, asserts the Indian Ocean path); (4) westward
   circumnavigation from Lisbon through the dateline back to Lisbon
@@ -411,7 +462,8 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 - **Done-when (all nine amended steps, verifying exactly):** title/nation/
   market/save-load steps unchanged from Phase 1 but exercised on the world
   map; sea step uses hold-to-repeat and click-to-sail; storm step = Tenerife
-  leg with the ≥ 0.90/6-day band gate; chart step (new) opens/closes and
+  leg (coordinate sail to open water, no docking) with the ≥ 0.90/6-day
+  band gate; chart step (new) opens/closes and
   shows explored state; zh pass with zero `<key>` fallbacks;
   `python3 tools/validate_data.py` exit 0; all suites green with counts
   recorded in this file's completion record.
@@ -421,24 +473,34 @@ days in-band ≥ 0.90" (`1 − 0.65⁶ = 0.9245`).
 ## Task dependency note
 
 A, B unblock everything (they are pure docs; nothing launches before W1
-merges). C needs A's §6.3 format. D needs C; E needs A's §7.1. F needs
-D + E. G needs C (artifact) and F (green world) — it loads the real thing,
-not a fixture. I is independent of C–G (engine + data constants) and needs
-only B. H needs G's passability API. J needs G's explored/passability
-queries. K needs E (port schema) and G's harbor-tile derivation. L needs
-G + K. M needs H + I + K. N needs all.
+merges). C needs A's §6.3 format. I needs only B (engine + data
+constants) and runs against C in W2 — disjoint files. D needs C; E needs
+A's §7.1. F needs D + E. G needs C (artifact) and F (green world) — it
+loads the real thing, not a fixture. H needs G's passability API. J needs
+G's explored/passability queries. K needs E (port schema) and G's
+harbor-tile derivation — it does not depend on H/J, so it joins W6
+instead of wasting a solo wave. L needs G + K. M needs H + I + K. N needs
+all. The critical path is A/B → C → D → F → G → (H, J, K) → (L, M) → N:
+**eight waves**. Parallelism peaks at 3 concurrent subagents (W6); the
+fourth worktree slot stays free for master-side merge verification or an
+ad-hoc task.
 
 ## Shared-file pins (hard rule: one writer per file per wave)
 
+- **W2:** C owns `tools/**` (builder, vendored assets, requirements) and
+  `data/maps/**`; I owns `scripts/world/sailing_sim.gd`,
+  `data/ship_types.json`, and the `test_weather`/`test_movement` suites.
+  Disjoint.
 - **W3:** E owns `ports.json`, the legend/map data files, and the §7.1
   transcription; if D's builder trips the tidal-river clause, the
   coordinate amendment goes through E's owner (one writer).
-- **W4:** F owns `tools/validate_data.py`; I owns `sailing_sim.gd` +
-  `ship_types.json`. Disjoint.
+- **W4:** F owns `tools/validate_data.py` alone (I shipped in W2).
 - **W6:** H owns `world_map.gd` input section + new
   `scripts/world/sail_path.gd`; J owns `hud.tscn`, `chart_screen.tscn`,
-  discovery bookkeeping. Both touch `world_map.tscn` wiring — the wave
-  master applies J's scene wiring after H merges.
+  discovery bookkeeping; K owns `autoload/save_system.gd` + the
+  `test_save_v*` suites — fully disjoint from both. H and J both touch
+  `world_map.tscn` wiring — the wave master applies J's scene wiring
+  after H merges.
 - **ui_strings.json** remains orchestrator-owned: J (and any task adding
   keys) lists zh/en keys in its report; master merges after the wave.
 
@@ -451,17 +513,24 @@ worktrees, merges every branch, runs the validator between waves, and pins
 | Wave | Tasks (parallel) | Gate (after) |
 |---|---|---|
 | W1 | A, B | — |
-| W2 | C | W1 |
+| W2 | C, I | W1 |
 | W3 | D, E | W2 |
-| W4 | F, I | W3 |
+| W4 | F | W3 |
 | W5 | G | W4 |
-| W6 | H, J | W5 |
-| W7 | K | W6 |
-| W8 | L, M | W7 |
-| W9 | N | W8 |
+| W6 | H, J, K | W5 |
+| W7 | L, M | W6 |
+| W8 | N | W7 |
 
-- W5 is single by dependency: the chunked loader is on every later path.
-- W8 pairs L (deletions, grep-clean) with M (new E2E suite only) — disjoint
+- **Wave gates account for the sanctioned red window (Pre-state):** the W3
+  gate is validator groups 1–5 exit 0 (E deletes group-6's data sources in
+  the same wave); `test_discovery`/`test_world_map`/`test_demo_loop` may
+  stay red from W3 until their rework lands (F/G/J). Full validator green
+  is the W4 gate; all 30 suites green is the W7 gate. No wave merges past
+  a red check that is not in its allowed-red list, and no task may make
+  group 6 pass early by re-authoring ASCII.
+- W4 and W5 are single by dependency: F is the only consumer of both W3
+  outputs, and the chunked loader is on every later path.
+- W7 pairs L (deletions, grep-clean) with M (new E2E suite only) — disjoint
   files; M needs K's save v4 only to persist between legs.
 - N is orchestrator-led (dated manual run), as in every phase.
 
@@ -505,3 +574,9 @@ is written, its owners amend the owning system docs first:
 | Explored-state still unsaved (Phase-1 known limitation) | unchanged, documented; chart and minimap share the session bitset (J) |
 | Old saves point at vanished p1 coordinates | MIGRATIONS[3] repositions by current port id — saves are port-only by design (K) |
 | Someone hand-edits world.png | AGENTS.md hard rule reworded + builder determinism check (A, C) |
+| Shapefile/dependency drift changes the raster between machines | SHA-256 per vendored file in LICENSE-NOTES.md + pinned `tools/requirements.txt` + stable sorted polygon order (C) |
+| Builder and GDScript runtime disagree on snap ties | locked smallest-(y, x) tie-break in the constants + F's build-vs-runtime equality check (D, F) |
+| River ports beyond hamburg/london snap-fail late | W2 `--check-snaps` preflight + expanded candidate list in D (seville, basra, canton, siam) (C, D) |
+| River port snap-fails surface in W3, needing E-owned data | preflight runs before E freezes `ports.json`; amendments go through E's owner per the W3 pin (D) |
+| Engine A* misses the 1 s budget | pre-named coarse-waypoint fallback, no redesign under pressure (H) |
+| Inland-flavored discoveries can't satisfy both geography and hint text | E's placement-audit table + pinned hint-rewording escape hatch (E) |
