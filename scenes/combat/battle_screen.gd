@@ -48,6 +48,8 @@ const BATTLE_RESULT_PATH := "res://scripts/combat/battle_result.gd"
 const BATTLE_REWARDS_PATH := "res://scripts/combat/battle_rewards.gd"
 const DUEL_PATH := "res://scripts/combat/duel.gd"
 const ENCOUNTERS_PATH := "res://scripts/world/encounters.gd"
+## Phase 3: quest/bounty/tournament aftermath (`70-*` §4.5, §4.9.7).
+const PHASE3_HOOKS_PATH := "res://scripts/quests/phase3_hooks.gd"
 ## S9 (a shared Phase-1 scene) is instanced over S10 when a `gameover.*` fires.
 const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
 
@@ -1305,6 +1307,24 @@ func _finish_battle() -> void:
 	var encounters_module = _guarded_module(ENCOUNTERS_PATH)
 	if encounters_module != null:
 		_cleanup_encounter(encounters_module)
+
+	# 4b. Phase 3: win counter, bounty-target quests, patrol kills, the
+	# hunter-surrendered bounty, and a tournament bout's bracket step.
+	var phase3_module = ResourceLoader.load(PHASE3_HOOKS_PATH) \
+		if ResourceLoader.exists(PHASE3_HOOKS_PATH) else null
+	if phase3_module != null:
+		var before_result := str(last_outcome.get("result", ""))
+		var marker_snapshot := last_outcome.duplicate(true)
+		if phase3_module.has_method("on_battle_finished"):
+			last_outcome["phase3"] = phase3_module.call(
+				"on_battle_finished", marker_snapshot)
+		if str(marker_snapshot.get("encounter_id", "")).begins_with("tournament_"):
+			if phase3_module.has_method("on_tournament_bout"):
+				last_outcome["tournament"] = phase3_module.call(
+					"on_tournament_bout", marker_snapshot)
+		# `before_result` is read only to keep the snapshot's result explicit.
+		if before_result != str(marker_snapshot.get("result", "")):
+			push_error("BattleScreen: the Phase-3 hooks mutated the outcome result")
 
 	# 5. Position, signal, dialog, route.
 	GameState.set_world_tile(

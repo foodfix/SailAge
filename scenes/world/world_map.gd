@@ -26,6 +26,8 @@ const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## Phase-2 F: hostile marker spawning/movement/contact (docs/60-* §4.1).
 const EncountersLib := preload("res://scripts/world/encounters.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
+## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
+const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 
 ## Phase-1 map file (docs/10-* §6.1). Swapping maps is a data-only change:
 ## the active map is `GameState.world["map_id"]` resolved through
@@ -224,6 +226,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 		return
 
+	# Phase 3: `E` explores the area for discoveries (`70-*` §4.4, `80-*` §4.3).
+	if event.is_action_pressed("explore"):
+		if _modal_open():
+			return
+		get_viewport().set_input_as_handled()
+		explore_here()
+		return
+
 	for action in MOVE_ACTIONS:
 		if event.is_action_pressed(action):
 			if _modal_open():
@@ -245,6 +255,37 @@ func try_step(target: Vector2i) -> bool:
 ## Current fleet cell (the marker source of truth).
 func fleet_cell() -> Vector2i:
 	return _fleet_cell
+
+
+## The Phase-3 **Explore** action (`70-*` §4.4, `80-*` §4.3): finds every
+## discovery within Chebyshev 3 of the fleet. Returns the ids found, so a test
+## can assert the loop headlessly; the dialogs are the only side effect.
+func explore_here() -> Array:
+	if not _has_game():
+		return []
+	var found: Array = Phase3HooksLib.explore_here(_fleet_cell)
+	var entries: Array = []
+	for discovery_id in found:
+		var discovery: Dictionary = DataLoader.get_discovery(str(discovery_id))
+		entries.append({
+			"kind": "discovery", "key": "discovery.found",
+			"values": {"name": I18n.t(discovery.get("name", {}))},
+		})
+	if entries.is_empty():
+		if _hud != null and _hud.has_method("toast_key"):
+			_hud.toast_key("world.explore.none")
+		return found
+	entries.append({"kind": "discovery", "key": "discovery.found.hint",
+		"values": {}})
+	_show_dialog_entries(entries)
+	_sync_hud()
+	return found
+
+
+## `true` while a discovery is within the Explore radius (the HUD hint and the
+## `E` availability, `70-*` §4.4).
+func something_near() -> bool:
+	return _has_game() and Phase3HooksLib.something_near(_fleet_cell)
 
 
 ## Re-reads `GameState.world.position` (returning from port, save load, tests).
@@ -812,6 +853,9 @@ func _on_day_advanced(_new_day: int) -> void:
 	# tick runs before the dead-run early return below only when the run is
 	# still alive — `_tick_encounters()` re-checks both conditions itself.
 	_tick_encounters()
+	# Phase 3: quest expiry / cargo failures, royal-mission expiry and the
+	# bounty re-evaluation (`70-*` §4.9.3–§4.9.5).
+	var phase3: Dictionary = Phase3HooksLib.on_day_tick(int(GameState.day))
 	# A fatal tick emits `game_over` *inside* the ledger, i.e. before this
 	# signal: S9 already owns the screen, so the dead day's reports must not be
 	# queued underneath it (§4.7 "never simultaneously").
@@ -836,6 +880,12 @@ func _on_day_advanced(_new_day: int) -> void:
 					"points": int(hit.get("points", 0)),
 				},
 			})
+	# Phase-3 quest failures (`70-*` §4.9.3: −5 rep, no fame).
+	for quest in (phase3.get("failed_quests", []) as Array):
+		entries.append({
+			"kind": "quest", "key": "quest.failed",
+			"values": {"name": _quest_name(quest)},
+		})
 	# 2. / 3. Mutiny and any other sim-raised entry (already ordered); the
 	# desertion entry belongs to port entry (§4.8.2) and the greeting to the
 	# port-entry sequence, so neither is produced here.
@@ -1027,6 +1077,38 @@ func _cell_at(world_position: Vector2) -> Vector2i:
 		int(floor(world_position.x / float(_cell_pixels))),
 		int(floor(world_position.y / float(_cell_pixels)))
 	)
+
+
+## A quest's display name: the stored instance has no L10nString (it is
+## generated), so the objective line is composed from its type
+## (`quest.line.*`, `70-*` §4.9.3 / `80-*` §4.7.4).
+func _quest_name(quest) -> String:
+	if not (quest is Dictionary):
+		return ""
+	var q: Dictionary = quest
+	var requirements: Dictionary = q.get("requirements", {})
+	match str(q.get("type", "")):
+		"delivery":
+			return I18n.fmt("quest.line.delivery", {
+				"quantity": int(requirements.get("quantity", 0)),
+				"good": I18n.t(DataLoader.get_good(
+					str(requirements.get("good_id", ""))).get("name", {})),
+				"port": I18n.t(DataLoader.get_port(
+					str(requirements.get("dest_port_id", ""))).get("name", {})),
+			})
+		"bounty":
+			return I18n.fmt("quest.line.bounty", {
+				"target": I18n.t_key("encounter.pirate"),
+				"tier": int(requirements.get("tier", 1)),
+			})
+		"exploration":
+			return I18n.t_key("quest.line.exploration")
+		"royal":
+			var objective: Dictionary = requirements.get("objective", {})
+			if not objective.is_empty():
+				return I18n.t(objective)
+			return I18n.t_key("quest.type.royal")
+	return I18n.t_key("ui.not_available")
 
 
 ## Position-derived HUD bits only (area label + minimap dot). The bars are

@@ -1,4 +1,575 @@
 {
   "version": 1,
-  "discoveries": []
+  "discoveries": [
+    {
+      "id": "disc_atlas_cedars",
+      "name": {
+        "zh": "阿特拉斯雪松林",
+        "en": "Cedars of the Atlas"
+      },
+      "category": "natural",
+      "position": {
+        "x": 53,
+        "y": 23
+      },
+      "fame": 150,
+      "report_reward_gold": 2000,
+      "region_hint": {
+        "zh": "据说在南方的深山里,有参天的古老雪松。",
+        "en": "Deep in the southern mountains, ancient cedars are said to touch the sky."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_nile_cataracts",
+      "name": {
+        "zh": "尼罗河第一瀑布",
+        "en": "First Cataract of the Nile"
+      },
+      "category": "natural",
+      "position": {
+        "x": 78,
+        "y": 31
+      },
+      "fame": 120,
+      "report_reward_gold": 1500,
+      "region_hint": {
+        "zh": "河面上白浪翻涌,据说那里是尼罗河的第一道瀑布。",
+        "en": "White water roars where the Nile is said to break for the first time."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_red_sea_corals",
+      "name": {
+        "zh": "红海珊瑚园",
+        "en": "Red Sea Coral Gardens"
+      },
+      "category": "natural",
+      "position": {
+        "x": 82,
+        "y": 35
+      },
+      "fame": 90,
+      "report_reward_gold": 1200,
+      "region_hint": {
+        "zh": "红海之下的珊瑚如森林般色彩斑斓。",
+        "en": "Beneath the Red Sea the corals bloom like a painted forest."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_jebel_musa",
+      "name": {
+        "zh": "穆萨山",
+        "en": "Jebel Musa"
+      },
+      "category": "natural",
+      "position": {
+        "x": 54,
+        "y": 19
+      },
+      "fame": 110,
+      "report_reward_gold": 1400,
+      "region_hint": {
+        "zh": "海峡南岸的巨岩,古人称之为世界的支柱。",
+        "en": "A giant rock on the strait's southern shore, called a pillar of the world."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_azores_whales",
+      "name": {
+        "zh": "亚速尔鲸群",
+        "en": "Azores Whales"
+      },
+      "category": "creature",
+      "position": {
+        "x": 39,
+        "y": 16
+      },
+      "fame": 130,
+      "report_reward_gold": 1600,
+      "region_hint": {
+        "zh": "远洋之中常有巨鲸成群跃出水面。",
+        "en": "Out in the deep ocean great whales breach in herds."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_sargasso",
+      "name": {
+        "zh": "马尾藻海",
+        "en": "Sargasso Sea"
+      },
+      "category": "natural",
+      "position": {
+        "x": 19,
+        "y": 25
+      },
+      "fame": 160,
+      "report_reward_gold": 1900,
+      "region_hint": {
+        "zh": "一片漂满海藻、无风无浪的奇异海域。",
+        "en": "A strange calm sea choked with drifting weed."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_caribbean_reef",
+      "name": {
+        "zh": "加勒比珊瑚礁",
+        "en": "Caribbean Reef"
+      },
+      "category": "natural",
+      "position": {
+        "x": 8,
+        "y": 38
+      },
+      "fame": 100,
+      "report_reward_gold": 1300,
+      "region_hint": {
+        "zh": "加勒比的浅水下,珊瑚与鱼群斑斓得晃眼。",
+        "en": "In the shallows of the Caribbean the reef dazzles with colour."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_amazon_mouth",
+      "name": {
+        "zh": "亚马逊河口",
+        "en": "Mouth of the Amazon"
+      },
+      "category": "natural",
+      "position": {
+        "x": 25,
+        "y": 54
+      },
+      "fame": 170,
+      "report_reward_gold": 2100,
+      "region_hint": {
+        "zh": "一条大河将整片海染成泥色,河口望不到对岸。",
+        "en": "A river stains the sea with mud, and its far bank cannot be seen."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_iguazu",
+      "name": {
+        "zh": "伊瓜苏瀑布",
+        "en": "Iguazu Falls"
+      },
+      "category": "natural",
+      "position": {
+        "x": 27,
+        "y": 84
+      },
+      "fame": 180,
+      "report_reward_gold": 2200,
+      "region_hint": {
+        "zh": "内陆深处有连绵数里的瀑布轰鸣。",
+        "en": "Inland, a curtain of falls thunders for miles."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_andes_peaks",
+      "name": {
+        "zh": "安第斯雪峰",
+        "en": "Andean Snowpeaks"
+      },
+      "category": "natural",
+      "position": {
+        "x": 11,
+        "y": 70
+      },
+      "fame": 150,
+      "report_reward_gold": 1800,
+      "region_hint": {
+        "zh": "海岸以东的山脉高耸入云,峰顶终年积雪。",
+        "en": "East of the coast the mountains rise snow-capped all year."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_patagonia",
+      "name": {
+        "zh": "巴塔哥尼亚荒原",
+        "en": "Patagonian Waste"
+      },
+      "category": "natural",
+      "position": {
+        "x": 13,
+        "y": 94
+      },
+      "fame": 140,
+      "report_reward_gold": 1700,
+      "region_hint": {
+        "zh": "大陆最南端是一片风大无树的荒原。",
+        "en": "At the continent's end lies a windswept treeless waste."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_cape_horn",
+      "name": {
+        "zh": "合恩角",
+        "en": "Cape Horn"
+      },
+      "category": "natural",
+      "position": {
+        "x": 14,
+        "y": 93
+      },
+      "fame": 200,
+      "report_reward_gold": 2400,
+      "region_hint": {
+        "zh": "绕过大陆尽头的那道海角,风浪之恶名传遍水手。",
+        "en": "The cape past the continent's end has a fearful name among sailors."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_table_mountain",
+      "name": {
+        "zh": "桌山",
+        "en": "Table Mountain"
+      },
+      "category": "natural",
+      "position": {
+        "x": 69,
+        "y": 88
+      },
+      "fame": 120,
+      "report_reward_gold": 1450,
+      "region_hint": {
+        "zh": "非洲南端有一座平顶如桌的巨山。",
+        "en": "At Africa's southern tip stands a mountain flat as a table."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_victoria_falls",
+      "name": {
+        "zh": "维多利亚瀑布",
+        "en": "Victoria Falls"
+      },
+      "category": "natural",
+      "position": {
+        "x": 79,
+        "y": 77
+      },
+      "fame": 190,
+      "report_reward_gold": 2300,
+      "region_hint": {
+        "zh": "内陆大河忽然跌入深谷,水雾冲天。",
+        "en": "A great river plunges into a gorge and its spray climbs to the sky."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_kilimanjaro",
+      "name": {
+        "zh": "乞力马扎罗",
+        "en": "Kilimanjaro"
+      },
+      "category": "natural",
+      "position": {
+        "x": 83,
+        "y": 57
+      },
+      "fame": 170,
+      "report_reward_gold": 2000,
+      "region_hint": {
+        "zh": "赤道附近竟有一座戴雪的高山。",
+        "en": "Near the equator stands a mountain crowned with snow."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_zanzibar_cloves",
+      "name": {
+        "zh": "桑给巴尔丁香园",
+        "en": "Zanzibar Clove Groves"
+      },
+      "category": "natural",
+      "position": {
+        "x": 83,
+        "y": 61
+      },
+      "fame": 100,
+      "report_reward_gold": 1300,
+      "region_hint": {
+        "zh": "那座岛上整片空气都是丁香的甜香。",
+        "en": "The whole island smells sweet with cloves."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_timbuktu",
+      "name": {
+        "zh": "廷巴克图",
+        "en": "Timbuktu"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 50,
+        "y": 43
+      },
+      "fame": 160,
+      "report_reward_gold": 1900,
+      "region_hint": {
+        "zh": "沙漠边缘有一座以学问闻名的泥砖之城。",
+        "en": "At the desert's edge lies a mud-brick city famous for learning."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_great_zimbabwe",
+      "name": {
+        "zh": "大津巴布韦",
+        "en": "Great Zimbabwe"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 80,
+        "y": 75
+      },
+      "fame": 180,
+      "report_reward_gold": 2100,
+      "region_hint": {
+        "zh": "内陆有巨石垒成的古城,不知何人所建。",
+        "en": "Inland stand stone walls of an old city, built by no one knows whom."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_aksum_obelisks",
+      "name": {
+        "zh": "阿克苏姆方尖碑",
+        "en": "Obelisks of Aksum"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 82,
+        "y": 40
+      },
+      "fame": 150,
+      "report_reward_gold": 1750,
+      "region_hint": {
+        "zh": "高原上有直插云霄的整石方尖碑。",
+        "en": "On the highland rise obelisks carved from single stones."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_petra",
+      "name": {
+        "zh": "佩特拉",
+        "en": "Petra"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 80,
+        "y": 24
+      },
+      "fame": 200,
+      "report_reward_gold": 2400,
+      "region_hint": {
+        "zh": "峡谷尽头,岩壁上凿出一座玫瑰色的城。",
+        "en": "At a canyon's end a rose-red city is carved into the cliff."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_babylon",
+      "name": {
+        "zh": "巴比伦",
+        "en": "Babylon"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 85,
+        "y": 22
+      },
+      "fame": 190,
+      "report_reward_gold": 2300,
+      "region_hint": {
+        "zh": "两河之间有传说中的空中花园与高塔。",
+        "en": "Between the rivers lie the fabled gardens and towers."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_persepolis",
+      "name": {
+        "zh": "波斯波利斯",
+        "en": "Persepolis"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 91,
+        "y": 25
+      },
+      "fame": 180,
+      "report_reward_gold": 2200,
+      "region_hint": {
+        "zh": "荒原上残留着巨大石阶与带翼神兽。",
+        "en": "Giant stairs and winged beasts remain on the plain."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_mohenjo_daro",
+      "name": {
+        "zh": "摩亨佐达罗",
+        "en": "Mohenjo-daro"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 101,
+        "y": 27
+      },
+      "fame": 170,
+      "report_reward_gold": 2050,
+      "region_hint": {
+        "zh": "印度河畔有砖砌的古城,街道笔直如棋盘。",
+        "en": "By the Indus lies a brick city whose streets run straight as a grid."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_angkor",
+      "name": {
+        "zh": "吴哥",
+        "en": "Angkor"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 126,
+        "y": 41
+      },
+      "fame": 210,
+      "report_reward_gold": 2500,
+      "region_hint": {
+        "zh": "丛林吞没了一座塔林密布的巨型寺庙城。",
+        "en": "The jungle has swallowed a vast city of towers."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_borobudur",
+      "name": {
+        "zh": "婆罗浮屠",
+        "en": "Borobudur"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 127,
+        "y": 62
+      },
+      "fame": 200,
+      "report_reward_gold": 2400,
+      "region_hint": {
+        "zh": "爪哇岛的山丘上有一座层层而上的石塔。",
+        "en": "On a Javan hill stands a stone tower rising in terraces."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_great_wall",
+      "name": {
+        "zh": "长城",
+        "en": "The Great Wall"
+      },
+      "category": "ruins",
+      "position": {
+        "x": 138,
+        "y": 18
+      },
+      "fame": 190,
+      "report_reward_gold": 2250,
+      "region_hint": {
+        "zh": "北方山脊上有一条蜿蜒万里的石墙。",
+        "en": "A stone wall winds for ten thousand li along the northern ridges."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_terracotta",
+      "name": {
+        "zh": "兵马俑",
+        "en": "Terracotta Army"
+      },
+      "category": "relic",
+      "position": {
+        "x": 134,
+        "y": 25
+      },
+      "fame": 220,
+      "report_reward_gold": 2600,
+      "region_hint": {
+        "zh": "地下埋着一支与真人同高的陶土军队。",
+        "en": "Beneath the earth waits an army of life-sized clay soldiers."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_silk_road_relic",
+      "name": {
+        "zh": "丝路金佛",
+        "en": "Golden Buddha of the Silk Road"
+      },
+      "category": "relic",
+      "position": {
+        "x": 135,
+        "y": 25
+      },
+      "fame": 230,
+      "report_reward_gold": 2700,
+      "region_hint": {
+        "zh": "一艘自丝路而来的沉船里,载着商队供奉的金色佛像。",
+        "en": "In a wreck out of the Silk Road lies a golden Buddha the traders revered."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_solomon_ring",
+      "name": {
+        "zh": "所罗门之印",
+        "en": "Seal of Solomon"
+      },
+      "category": "relic",
+      "position": {
+        "x": 80,
+        "y": 23
+      },
+      "fame": 240,
+      "report_reward_gold": 2800,
+      "region_hint": {
+        "zh": "据说有一枚刻着六角星的古印,能号令风灵。",
+        "en": "An ancient seal cut with a six-pointed star is said to command the winds."
+      },
+      "phase": 3
+    },
+    {
+      "id": "disc_el_dorado",
+      "name": {
+        "zh": "黄金国",
+        "en": "El Dorado"
+      },
+      "category": "relic",
+      "position": {
+        "x": 7,
+        "y": 50
+      },
+      "fame": 260,
+      "report_reward_gold": 3000,
+      "region_hint": {
+        "zh": "内陆湖上有一位以金粉涂身的神秘君王。",
+        "en": "On an inland lake a king is said to anoint himself with gold dust."
+      },
+      "phase": 3
+    }
+  ]
 }

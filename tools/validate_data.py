@@ -778,7 +778,7 @@ def _schema_equipment(items: list) -> None:
         _require_int(entity["phase"], f"{path}.phase", "equipment.json", 2, 2)
 
 
-def _schema_discoveries(items: list) -> None:
+def _schema_discoveries(items: list, filename: str = "discoveries.json") -> None:
     for index, entity in enumerate(items):
         path = f"discoveries[{index}]"
         _require_keys(
@@ -799,7 +799,9 @@ def _schema_discoveries(items: list) -> None:
         _require_enum(
             entity["category"], DISCOVERY_CATEGORIES, f"{path}.category", "discoveries.json"
         )
-        _require_tile_pos(entity["position"], f"{path}.position", "discoveries.json")
+        # Discoveries live on the Phase-3 world map (docs/70-* section 4.4).
+        _require_tile_pos(entity["position"], f"{path}.position",
+                          "discoveries.json", P3_WIDTH, P3_HEIGHT)
         _require_int(entity["fame"], f"{path}.fame", "discoveries.json", 1)
         _require_int(
             entity["report_reward_gold"], f"{path}.report_reward_gold", "discoveries.json", 0
@@ -846,21 +848,28 @@ def _schema_quests(items: list) -> None:
                 requirements["dest_port_id"], f"{path}.requirements.dest_port_id", "quests.json"
             )
         elif entity["type"] == "bounty":
+            # A bounty **template** leaves the target empty: the fleet is
+            # spawned when an offer is accepted (docs/70-* section 4.9.3), so
+            # only a filled-in value has to be an id.
             _require_keys(
                 requirements, ("target_fleet_id",), f"{path}.requirements", "quests.json"
             )
-            _require_id(
-                requirements["target_fleet_id"],
-                f"{path}.requirements.target_fleet_id",
-                "quests.json",
-            )
+            if requirements["target_fleet_id"] != "":
+                _require_id(
+                    requirements["target_fleet_id"],
+                    f"{path}.requirements.target_fleet_id",
+                    "quests.json",
+                )
         elif entity["type"] == "exploration":
             _require_keys(
                 requirements, ("discovery_id",), f"{path}.requirements", "quests.json"
             )
-            _require_id(
-                requirements["discovery_id"], f"{path}.requirements.discovery_id", "quests.json"
-            )
+            if requirements["discovery_id"] != "":
+                _require_id(
+                    requirements["discovery_id"],
+                    f"{path}.requirements.discovery_id",
+                    "quests.json",
+                )
         else:  # royal
             _require_keys(
                 requirements, ("objective", "dest_port_id"), f"{path}.requirements", "quests.json"
@@ -1143,7 +1152,8 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                     f"{path} good_id {requirements['good_id']!r} is not a known good",
                     4,
                 )
-        if quest["type"] == "exploration":
+        if quest["type"] == "exploration" and requirements.get("discovery_id"):
+            # Empty on a template (the draw fills it, docs/70-* section 4.9.3).
             if requirements["discovery_id"] not in discovery_ids:
                 fail(
                     "ref",

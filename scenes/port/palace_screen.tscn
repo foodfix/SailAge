@@ -1,0 +1,195 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/port/palace_screen.gd" id="1_palace"]
+[ext_resource type="PackedScene" path="res://scenes/ui_shared/hud.tscn" id="2_hud"]
+
+[node name="PalaceScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("1_palace")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.109804, 0.133333, 0.188235, 1)
+
+[node name="Layout" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 40.0
+offset_right = -16.0
+offset_bottom = -32.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Title" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 32
+text = "Palace"
+
+[node name="Rep" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Rep 0"
+
+[node name="Fame" type="Label" parent="Layout/VBox/Header"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Fame 0"
+
+[node name="Back" type="Button" parent="Layout/VBox/Header"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+size_flags_vertical = 4
+text = "Back"
+
+[node name="Rows" type="VBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="TitleRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Current" type="Label" parent="Layout/VBox/Rows/TitleRow"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+text = "Your title: -"
+
+[node name="Next" type="Label" parent="Layout/VBox/Rows/TitleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+
+[node name="Ceremony" type="Button" parent="Layout/VBox/Rows/TitleRow"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Attend the ceremony"
+
+[node name="MissionRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Label" type="Label" parent="Layout/VBox/Rows/MissionRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+
+[node name="Action" type="Button" parent="Layout/VBox/Rows/MissionRow"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Accept the royal mission"
+
+[node name="RepairRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Label" type="Label" parent="Layout/VBox/Rows/RepairRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+
+[node name="Action" type="Button" parent="Layout/VBox/Rows/RepairRow"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Repair the fleet"
+
+[node name="BountyRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Label" type="Label" parent="Layout/VBox/Rows/BountyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+
+[node name="Action" type="Button" parent="Layout/VBox/Rows/BountyRow"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Pay the bounty"
+
+[node name="TournamentRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Label" type="Label" parent="Layout/VBox/Rows/TournamentRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+
+[node name="Action" type="Button" parent="Layout/VBox/Rows/TournamentRow"]
+custom_minimum_size = Vector2(260, 40)
+layout_mode = 2
+text = "Enter the tournament"
+
+[node name="RetireRow" type="HBoxContainer" parent="Layout/VBox/Rows"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Retire" type="Button" parent="Layout/VBox/Rows/RetireRow"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Retire"
+
+[node name="Footer" type="HBoxContainer" parent="Layout/VBox"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 2
+
+[node name="EscHint" type="Label" parent="Layout/VBox/Footer"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Esc to go back"
+
+[node name="Toast" type="Label" parent="Layout/VBox"]
+visible = false
+layout_mode = 2
+text = ""
+
+[node name="ToastTimer" type="Timer" parent="."]
+wait_time = 2.5
+one_shot = true
+
+[node name="HUD" parent="." instance=ExtResource("2_hud")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

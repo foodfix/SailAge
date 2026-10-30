@@ -340,6 +340,7 @@ between zh and en (the validator enforces it).
 | `quest.failed` | 委托失败:{name} | Commission failed: {name} |
 | `quest.reward` | +{gold} 金,声望 {rep} | +{gold} gold, reputation {rep} |
 | `char.quests` | 委托 | Quests |
+| `palace.not_capital` | 只有首都才设有王宫 | Only a capital has a palace |
 | `palace.title` | 王宫 — {port} · {nation} | Palace — {port} · {nation} |
 | `palace.title.current` | 你的爵位:{rank} | Your title: {rank} |
 | `palace.title.next` | 下一爵位:{rank}(声望 {fame} · 王室委托 {missions}) | Next rank: {rank} (fame {fame} · royal missions {missions}) |
@@ -361,6 +362,7 @@ between zh and en (the validator enforces it).
 | `bounty.issued` | {nation}对你发布了悬赏。 | {nation} has issued a bounty on you. |
 | `bounty.cleared` | 你与{nation}的悬赏已解除。 | Your bounty with {nation} is settled. |
 | `bounty.no_gold` | 金币不足以缴纳悬赏 | Not enough gold to pay the bounty |
+| `tournament.not_host` | 本月比武大会在别处举行 | This month's tournament is held elsewhere |
 | `tournament.status` | 比武大会:{port}(本月第 {first}–{last} 天) | Tournament: {port} (month days {first}–{last}) |
 | `tournament.enter` | 报名参赛(1,000 金) | Enter the tournament (1,000 gold) |
 | `tournament.entered` | 已报名,本次大会正在等待开赛 | Entry recorded — the tournament is waiting |

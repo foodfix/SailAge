@@ -256,6 +256,12 @@ func set_world_tile(tile: Vector2i) -> void:
 	world["position"] = {"x": tile.x, "y": tile.y}
 
 
+## `true` in an editor/headless run (the debug-hook gate). Centralised so the
+## one debug-only hook has a single, export-safe implementation.
+func is_debug_build() -> bool:
+	return OS.has_feature("debug") or OS.has_feature("editor")
+
+
 ## Thin scene router (docs/90-* §7): swaps the root scene.
 func change_scene(path: String) -> void:
 	get_tree().change_scene_to_file(path)
@@ -271,8 +277,12 @@ func change_scene(path: String) -> void:
 ## build it is a no-op (returns false, changes nothing). It deliberately does
 ## **not** touch `gold`, `day`, `morale`, `player` or `world`, so the caller
 ## sets up its own fixture.
+##
+## `is_debug_build()` rather than `OS.is_debug_build()`: `OS.is_debug_build()`
+## is not available in every export template / script context, and a
+## missing method would make this hook *throw* instead of returning false.
 func debug_strip_fleet() -> bool:
-	if not OS.is_debug_build():
+	if not is_debug_build():
 		push_warning("GameState.debug_strip_fleet: debug builds only; ignoring")
 		return false
 	fleet = []

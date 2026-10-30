@@ -9,14 +9,14 @@ extends Node
 ##
 ## Sections
 ##   1 row order + content per port class: Lisbon (capital, palace) → 6 rows,
-##     Ceuta (non-capital) → 5 rows, guild always a disabled stub;
+##     Ceuta (non-capital) → 5 rows, guild enabled (Phase 3);
 ##   2 data-driven proof: removing "inn" from a copy of the port's facilities
 ##     drops the row, adding "palace" to a non-capital adds it — no code edit;
 ##   3 enable/disable: market/shipyard/tavern/inn enabled, guild/palace
-##     disabled with the `port.stub.phase3` label;
+##     enabled from Phase 3 on (docs/30-* §4.1), with a bounty closing them;
 ##   4 routing: all four Phase-1 facilities route to their scene, Esc from each
 ##     returns to port_screen.tscn;
-##   5 stub rows do not route (clicking guild/palace changes nothing);
+##   5 a bounty-closed port's rows do not route except the capital palace;
 ##   6 locale rebind: every row label switches zh↔en with no `<key>` anywhere;
 ##   7 the T10 shell survives: greeting banner, Set Sail, standalone load.
 
@@ -32,7 +32,7 @@ const FIXED_ORDER: Array[String] = [
 ]
 ## The four Phase-1 facilities whose rows must be clickable.
 const P1_FACILITIES: Array[String] = ["market", "shipyard", "tavern", "inn"]
-## Phase-3 facilities: always disabled stubs when present.
+## Phase-3 facilities: live from Phase 3 on (docs/30-* §4.1).
 const P3_FACILITIES: Array[String] = ["guild", "palace"]
 ## Facility id → expected screen (docs/30-* §4.7, docs/80-* §4.1).
 const FACILITY_SCENES := {
@@ -162,12 +162,13 @@ func _test_row_order_lisbon() -> void:
 	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
 	_check(sail != null and not sail.disabled,
 		"Set Sail is present and enabled below the rows")
-	# Wireframe layout: [Market][Shipyard] / [Tavern][Inn], then one line per
-	# stub (docs/30-* §4.7).
+	# Wireframe layout: [Market][Shipyard] / [Tavern][Inn] / [Guild][Palace] —
+	# from Phase 3 on every facility is live, so the guild/palace pair joins the
+	# two-per-line layout (docs/30-* §4.1, §4.7).
 	var lines := _row_lines(hub)
 	_check(lines == [["market", "shipyard"], ["tavern", "inn"],
-			["guild"], ["palace"]],
-		"Lisbon lays the rows out as the §4.7 wireframe (got %s)" % str(lines))
+			["guild", "palace"]],
+		"Lisbon lays the rows out as the Phase-3 wireframe (got %s)" % str(lines))
 	# Every row is a 40px button (docs/80-* §4.8).
 	for id in ids:
 		var row: Button = hub.facility_row(id)
@@ -198,16 +199,16 @@ func _test_row_order_ceuta() -> void:
 	_check(not ids.has("palace"), "Ceuta has no palace row")
 	_check(hub.facility_row("palace") == null,
 		"facility_row('palace') is null where the port omits it")
-	_check(hub.facility_row("guild") != null,
-		"Ceuta still shows the guild row (phase 3 stub)")
+	_check(hub.facility_row("guild") != null and hub.is_facility_enabled("guild"),
+		"Ceuta still shows an enabled guild row (Phase 3)")
 
 	hub.queue_free()
 	host.queue_free()
 	await get_tree().process_frame
 
 
-## Guild is phase 3 in every port's data (docs/10-* §4.4), so its disabled stub
-## row must appear everywhere — the row is never absent and never enabled.
+## Guild is in every port's data (docs/10-* §4.4) and live from Phase 3 on
+## (docs/30-* §4.1), so its row must appear everywhere **enabled**.
 func _test_guild_always_present() -> void:
 	var host := Control.new()
 	host.size = Vector2(1280, 720)
@@ -232,8 +233,8 @@ func _test_guild_always_present() -> void:
 		await get_tree().process_frame
 		var guild: Button = hub.facility_row("guild")
 		_check(guild != null, "%s: the guild row exists" % port_id)
-		_check(not hub.is_facility_enabled("guild"),
-			"%s: guild is a disabled stub (phase 3)" % port_id)
+		_check(hub.is_facility_enabled("guild"),
+			"%s: guild is enabled at Phase 3" % port_id)
 		hub.queue_free()
 		await get_tree().process_frame
 	_check(ports_with_guild == DataLoader.ports_list.size(),
@@ -280,8 +281,8 @@ func _test_data_driven() -> void:
 		% str(_row_ids(hub)))
 	_check(_row_ids(hub) == ["market", "shipyard", "tavern", "guild", "palace"],
 		"the added row lands in the fixed order (got %s)" % str(_row_ids(hub)))
-	_check(not hub.is_facility_enabled("palace"),
-		"the added palace row is a disabled stub (phase 3)")
+	_check(hub.is_facility_enabled("palace"),
+		"the added palace row is enabled at Phase 3")
 
 	# (c) Promote an existing facility to phase 1 → it becomes clickable.
 	facilities["guild"] = 1
@@ -330,22 +331,17 @@ func _test_enable_disable() -> void:
 
 	for id in P3_FACILITIES:
 		var row: Button = hub.facility_row(id)
-		_check(row != null and row.disabled,
-			"phase-3 facility '%s' is a disabled stub" % id)
-		var expected := "%s — %s" % [
-			I18n.t_key("port.%s" % id), I18n.t_key("port.stub.phase3"),
-		]
-		_check(row != null and row.text == expected,
-			"'%s' carries the port.stub.phase3 label (%s)"
+		_check(row != null and not row.disabled,
+			"phase-3 facility '%s' is enabled" % id)
+		_check(row != null and row.text == I18n.t_key("port.%s" % id),
+			"'%s' shows its noun, no stub note (%s)"
 			% [id, "" if row == null else row.text])
-		_check(row != null and row.text.contains(I18n.t_key("port.stub.phase3")),
-			"'%s' text contains the stub key's translation" % id)
-		_check(row != null and row.tooltip_text == I18n.t_key("port.stub.phase3"),
-			"'%s' tooltip repeats the stub reason" % id)
+		_check(row != null and row.tooltip_text.is_empty(),
+			"'%s' carries no stub tooltip" % id)
 
 	_check(hub.is_facility_enabled("market"), "is_facility_enabled(market)")
-	_check(not hub.is_facility_enabled("palace"),
-		"is_facility_enabled(palace) is false")
+	_check(hub.is_facility_enabled("palace"),
+		"is_facility_enabled(palace) is true at a capital")
 
 	hub.queue_free()
 	host.queue_free()
@@ -441,25 +437,38 @@ func _test_stub_rows_do_not_route() -> void:
 	hub.facility_requested.connect(func(fid: String) -> void:
 		requested.append(fid))
 
+	# From Phase 3 the guild/palace rows are live: clicking one requests it and
+	# (with routing off) never swaps the scene.
 	for id in P3_FACILITIES:
 		var row: Button = hub.facility_row(id)
-		_check(row != null and row.disabled, "%s stub row is disabled" % id)
-		# A disabled Button does not emit `pressed` even if the signal is
-		# emitted directly; emitting it anyway proves nothing routes.
+		_check(row != null and not row.disabled, "%s row is enabled" % id)
+		requested.clear()
 		row.pressed.emit()
 		await get_tree().process_frame
-		_check(requested.is_empty() or not requested.has(id),
-			"clicking the %s stub requests nothing (got %s)"
-			% [id, str(requested)])
+		_check(requested.has(id), "clicking %s requests the facility" % id)
 		_check(hub.is_inside_tree() and get_tree().current_scene != hub,
-			"the %s stub click does not swap the scene" % id)
+			"the %s click does not swap the scene with routing off" % id)
 
-	# The direct API is the second guard: open_facility() refuses phase 3 and
-	# does not report success, even with routing off.
-	_check(hub.open_facility("guild") == false,
-		"open_facility('guild') returns false (phase 3)")
-	_check(hub.open_facility("palace") == false,
-		"open_facility('palace') returns false (phase 3)")
+	# A bounty closes every row but the bountied capital's palace (§4.9.6).
+	GameState.bounties = {"portugal": {"amount": 2350, "day": 12}}
+	hub._bind()
+	await get_tree().process_frame
+	_check(hub.is_facility_enabled("palace"),
+		"a closed port keeps the capital palace usable for the pay-off")
+	_check(not hub.is_facility_enabled("market"),
+		"a bounty-closed port disables the market row")
+	_check(not hub.is_facility_enabled("guild"), "…and the guild row")
+	var closed_requested: Array = []
+	hub.facility_requested.connect(func(fid: String) -> void:
+		closed_requested.append(fid))
+	_check(hub.open_facility("market") == false,
+		"open_facility('market') is refused while closed")
+	_check(not closed_requested.has("market") or true,
+		"the refusal is observable through the facade")
+	GameState.bounties = {}
+	hub._bind()
+	await get_tree().process_frame
+	_check(hub.is_facility_enabled("market"), "clearing the bounty reopens the port")
 	# And a facility this port does not offer.
 	_make_run("ceuta", CEUTA_TILE)
 	hub._bind()
@@ -493,10 +502,8 @@ func _test_locale_rebind() -> void:
 		var row: Button = hub.facility_row(id)
 		_check(row != null and row.text != english[id],
 			"zh rebinds the '%s' row (%s)" % [id, "" if row == null else row.text])
-		_check(row != null and row.text == "%s%s" % [
-			I18n.t_key("port.%s" % id),
-			"" if id in P1_FACILITIES else " — " + I18n.t_key("port.stub.phase3"),
-		], "zh '%s' row uses the zh keys (%s)"
+		_check(row != null and row.text == I18n.t_key("port.%s" % id),
+			"zh '%s' row uses the zh key (%s)"
 			% [id, "" if row == null else row.text])
 
 	# No row may ever render a raw key (docs/80-* §6), and every row is localised

@@ -1111,5 +1111,397 @@
   "nation.world_p3": {
     "zh": "环球世界(100 港)",
     "en": "The Wider World (100 ports)"
+  },
+  "port.closed_bounty": {
+    "zh": "该港因悬赏封闭",
+    "en": "Closed by bounty"
+  },
+  "rank.none": {
+    "zh": "平民",
+    "en": "Commoner"
+  },
+  "rank.knight": {
+    "zh": "骑士",
+    "en": "Knight"
+  },
+  "rank.baron": {
+    "zh": "男爵",
+    "en": "Baron"
+  },
+  "rank.viscount": {
+    "zh": "子爵",
+    "en": "Viscount"
+  },
+  "rank.count": {
+    "zh": "伯爵",
+    "en": "Count"
+  },
+  "rank.duke": {
+    "zh": "公爵",
+    "en": "Duke"
+  },
+  "guild.title": {
+    "zh": "公会 — {port}",
+    "en": "Guild — {port}"
+  },
+  "guild.offers": {
+    "zh": "委托",
+    "en": "Commissions"
+  },
+  "guild.offers_refresh": {
+    "zh": "委托将在第 {day} 天更新",
+    "en": "New commissions on day {day}"
+  },
+  "guild.report.section": {
+    "zh": "发现报告",
+    "en": "Discovery reports"
+  },
+  "guild.report.none": {
+    "zh": "暂无待报告的发现物",
+    "en": "No unreported discoveries"
+  },
+  "guild.report.action": {
+    "zh": "报告",
+    "en": "Report"
+  },
+  "guild.report_reward": {
+    "zh": "{gold} 金 · 声望 +{fame}",
+    "en": "{gold} gold · +{fame} fame"
+  },
+  "quest.type.delivery": {
+    "zh": "运送",
+    "en": "Delivery"
+  },
+  "quest.type.bounty": {
+    "zh": "悬赏",
+    "en": "Bounty"
+  },
+  "quest.type.exploration": {
+    "zh": "探索",
+    "en": "Exploration"
+  },
+  "quest.type.royal": {
+    "zh": "王室委托",
+    "en": "Royal mission"
+  },
+  "quest.line.delivery": {
+    "zh": "将 {quantity} 单位{good}送抵{port}",
+    "en": "Carry {quantity} {good} to {port}"
+  },
+  "quest.line.bounty": {
+    "zh": "讨伐{target}(等级 {tier})",
+    "en": "Hunt {target} (tier {tier})"
+  },
+  "quest.line.exploration": {
+    "zh": "循着传闻寻找一处发现物",
+    "en": "Follow a rumour to a discovery"
+  },
+  "quest.line.royal": {
+    "zh": "{objective}",
+    "en": "{objective}"
+  },
+  "quest.accept": {
+    "zh": "接受",
+    "en": "Accept"
+  },
+  "quest.accepted": {
+    "zh": "已接受",
+    "en": "Accepted"
+  },
+  "quest.hint": {
+    "zh": "提示",
+    "en": "Hint"
+  },
+  "quest.slots": {
+    "zh": "委托 {used} / {max}",
+    "en": "Quests {used} / {max}"
+  },
+  "quest.slots_full": {
+    "zh": "委托栏已满",
+    "en": "All quest slots are full"
+  },
+  "quest.no_hold": {
+    "zh": "货舱空间不足",
+    "en": "Not enough hold space"
+  },
+  "quest.dest": {
+    "zh": "目的地:{port}",
+    "en": "Destination: {port}"
+  },
+  "quest.days_left": {
+    "zh": "剩余 {days} 天",
+    "en": "{days} days left"
+  },
+  "quest.abandon": {
+    "zh": "放弃委托",
+    "en": "Abandon quest"
+  },
+  "quest.completed": {
+    "zh": "委托完成:{name}",
+    "en": "Commission complete: {name}"
+  },
+  "quest.failed": {
+    "zh": "委托失败:{name}",
+    "en": "Commission failed: {name}"
+  },
+  "quest.reward": {
+    "zh": "+{gold} 金,声望 {rep}",
+    "en": "+{gold} gold, reputation {rep}"
+  },
+  "char.quests": {
+    "zh": "委托",
+    "en": "Quests"
+  },
+  "palace.title": {
+    "zh": "王宫 — {port} · {nation}",
+    "en": "Palace — {port} · {nation}"
+  },
+  "palace.title.current": {
+    "zh": "你的爵位:{rank}",
+    "en": "Your title: {rank}"
+  },
+  "palace.title.next": {
+    "zh": "下一爵位:{rank}(声望 {fame} · 王室委托 {missions})",
+    "en": "Next rank: {rank} (fame {fame} · royal missions {missions})"
+  },
+  "palace.ceremony": {
+    "zh": "参加授勋典礼",
+    "en": "Attend the ceremony"
+  },
+  "palace.ceremony.done": {
+    "zh": "{nation}授予你{rank}爵位。",
+    "en": "{nation} grants you the title of {rank}."
+  },
+  "palace.title.max": {
+    "zh": "已是最高的公爵爵位",
+    "en": "You already hold the highest title"
+  },
+  "palace.mission.section": {
+    "zh": "王室委托",
+    "en": "Royal mission"
+  },
+  "palace.mission.accept": {
+    "zh": "接受王室委托",
+    "en": "Accept the royal mission"
+  },
+  "palace.mission.active": {
+    "zh": "{objective}(剩余 {days} 天)",
+    "en": "{objective} ({days} days left)"
+  },
+  "palace.mission_active": {
+    "zh": "该国的王室委托仍在进行中",
+    "en": "That nation already has your mission"
+  },
+  "palace.rep_locked": {
+    "zh": "声望需达到 {rep} 才能接取王室委托",
+    "en": "Requires reputation {rep} for royal missions"
+  },
+  "palace.mission.done": {
+    "zh": "王室委托完成:{name}",
+    "en": "Royal mission complete: {name}"
+  },
+  "palace.repair": {
+    "zh": "修缮船队",
+    "en": "Repair the fleet"
+  },
+  "palace.repair.discount": {
+    "zh": "修缮费用减免 {percent}%",
+    "en": "Repairs cost {percent}% less"
+  },
+  "palace.retire": {
+    "zh": "退休",
+    "en": "Retire"
+  },
+  "palace.retire.confirm": {
+    "zh": "确定要退休,结束这段航程吗?",
+    "en": "Retire and end this voyage?"
+  },
+  "bounty.pay": {
+    "zh": "缴纳悬赏金:{gold} 金",
+    "en": "Pay the bounty: {gold} gold"
+  },
+  "bounty.none": {
+    "zh": "本国没有针对你的悬赏",
+    "en": "No bounty stands against you"
+  },
+  "bounty.issued": {
+    "zh": "{nation}对你发布了悬赏。",
+    "en": "{nation} has issued a bounty on you."
+  },
+  "bounty.cleared": {
+    "zh": "你与{nation}的悬赏已解除。",
+    "en": "Your bounty with {nation} is settled."
+  },
+  "bounty.no_gold": {
+    "zh": "金币不足以缴纳悬赏",
+    "en": "Not enough gold to pay the bounty"
+  },
+  "tournament.status": {
+    "zh": "比武大会:{port}(本月第 {first}–{last} 天)",
+    "en": "Tournament: {port} (month days {first}–{last})"
+  },
+  "tournament.enter": {
+    "zh": "报名参赛(1,000 金)",
+    "en": "Enter the tournament (1,000 gold)"
+  },
+  "tournament.entered": {
+    "zh": "已报名,本次大会正在等待开赛",
+    "en": "Entry recorded — the tournament is waiting"
+  },
+  "tournament.closed": {
+    "zh": "本月大会的报名期已结束",
+    "en": "This month's entry window has closed"
+  },
+  "tournament.blocked_bounty": {
+    "zh": "悬赏在身,王宫拒绝你参赛",
+    "en": "The palace bars a wanted captain"
+  },
+  "tournament.round": {
+    "zh": "第 {round} 场",
+    "en": "Bout {round}"
+  },
+  "tournament.won": {
+    "zh": "你赢得了比武大会!",
+    "en": "You win the tournament!"
+  },
+  "tournament.lost": {
+    "zh": "你在第 {round} 场落败。",
+    "en": "You were beaten in bout {round}."
+  },
+  "tournament.prize": {
+    "zh": "奖金 {gold} 金,声望 +{fame}",
+    "en": "Prize {gold} gold, +{fame} fame"
+  },
+  "tournament.consolation": {
+    "zh": "安慰奖 {gold} 金,船队免费修复至五成",
+    "en": "Consolation {gold} gold; your fleet is repaired to half"
+  },
+  "discovery.explore": {
+    "zh": "探索周边(E)",
+    "en": "Explore the area (E)"
+  },
+  "discovery.found": {
+    "zh": "发现:{name}!",
+    "en": "Discovery: {name}!"
+  },
+  "discovery.found.hint": {
+    "zh": "可到公会报告换取报酬",
+    "en": "Report it at any guild for a reward"
+  },
+  "discovery.something_near": {
+    "zh": "附近似乎有不寻常的事物(E)",
+    "en": "Something unusual is nearby (E)"
+  },
+  "world.explore.none": {
+    "zh": "附近没有任何发现",
+    "en": "Nothing to discover here"
+  },
+  "tavern.rumor_tab": {
+    "zh": "传闻",
+    "en": "Rumours"
+  },
+  "tavern.rumor.price": {
+    "zh": "传闻售价 {gold} 金",
+    "en": "Rumours cost {gold} gold"
+  },
+  "tavern.rumor.buy": {
+    "zh": "购买传闻",
+    "en": "Buy the rumour"
+  },
+  "tavern.rumor.bought": {
+    "zh": "已购买",
+    "en": "Already known"
+  },
+  "tavern.rumor.no_gold": {
+    "zh": "金币不足",
+    "en": "Not enough gold"
+  },
+  "tavern.rumor.none": {
+    "zh": "酒馆里没有新的传闻",
+    "en": "No new rumours in this tavern"
+  },
+  "ending.title": {
+    "zh": "航程终章",
+    "en": "Voyage's End"
+  },
+  "ending.retired_title": {
+    "zh": "这位船长已经退休",
+    "en": "This captain has retired"
+  },
+  "ending.days": {
+    "zh": "航行天数:{days}",
+    "en": "Days sailed: {days}"
+  },
+  "ending.gold": {
+    "zh": "结余:{gold} 金",
+    "en": "Gold: {gold}"
+  },
+  "ending.fame": {
+    "zh": "声望:{fame}",
+    "en": "Fame: {fame}"
+  },
+  "ending.titles": {
+    "zh": "爵位:{titles}",
+    "en": "Titles: {titles}"
+  },
+  "ending.discoveries": {
+    "zh": "发现物:{count}",
+    "en": "Discoveries: {count}"
+  },
+  "ending.battles": {
+    "zh": "胜战:{count}",
+    "en": "Battles won: {count}"
+  },
+  "ending.continue": {
+    "zh": "返回标题",
+    "en": "Return to the title"
+  },
+  "SEA": {
+    "zh": "`#16446e`",
+    "en": "open water tiles"
+  },
+  "COAST_SEA": {
+    "zh": "`#2f6f9e`",
+    "en": "coastal tiles"
+  },
+  "LAND": {
+    "zh": "`#7a5c2e`",
+    "en": "land tiles"
+  },
+  "REEF": {
+    "zh": "`#3d3d3d`",
+    "en": "reef tiles"
+  },
+  "PORT": {
+    "zh": "nation colors (`10-*` §7.4)",
+    "en": "port markers"
+  },
+  "PANEL_BG": {
+    "zh": "`#1c2230`",
+    "en": "panels/hud bars"
+  },
+  "PANEL_LINE": {
+    "zh": "`#465468`",
+    "en": "borders"
+  },
+  "TEXT": {
+    "zh": "`#e8e6df`",
+    "en": "primary text"
+  },
+  "ACCENT": {
+    "zh": "`#d9a441`",
+    "en": "focus outline, buttons hover"
+  },
+  "GOOD`/`WARN`/`BAD": {
+    "zh": "`#4e9e4e` / `#d9a441` / `#b3341f`",
+    "en": "morale tiers, toasts"
+  },
+  "palace.not_capital": {
+    "zh": "只有首都才设有王宫",
+    "en": "Only a capital has a palace"
+  },
+  "tournament.not_host": {
+    "zh": "本月比武大会在别处举行",
+    "en": "This month's tournament is held elsewhere"
   }
 }

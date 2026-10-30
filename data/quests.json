@@ -1,4 +1,242 @@
 {
   "version": 1,
-  "quests": []
+  "quests": [
+    {
+      "id": "qt_delivery_wheat",
+      "type": "delivery",
+      "giver": "guild",
+      "name": {
+        "zh": "粮秣的托付",
+        "en": "A Commission of Grain"
+      },
+      "description": {
+        "zh": "公会需要一批小麦送往他乡。",
+        "en": "The guild needs a shipment of wheat carried to another shore."
+      },
+      "requirements": {
+        "good_id": "wheat",
+        "quantity": 20,
+        "dest_port_id": "lisbon"
+      },
+      "rewards": {
+        "gold": 320,
+        "reputation": {
+          "portugal": 5
+        },
+        "fame": 10
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_delivery_timber",
+      "type": "delivery",
+      "giver": "guild",
+      "name": {
+        "zh": "木材的托付",
+        "en": "A Commission of Timber"
+      },
+      "description": {
+        "zh": "公会需要一批木材送往他乡。",
+        "en": "The guild needs a shipment of timber carried to another shore."
+      },
+      "requirements": {
+        "good_id": "timber",
+        "quantity": 20,
+        "dest_port_id": "tunis"
+      },
+      "rewards": {
+        "gold": 600,
+        "reputation": {
+          "ottoman": 5
+        },
+        "fame": 10
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_delivery_spices",
+      "type": "delivery",
+      "giver": "guild",
+      "name": {
+        "zh": "香料的托付",
+        "en": "A Commission of Spices"
+      },
+      "description": {
+        "zh": "公会需要一批香料送往他乡。",
+        "en": "The guild needs a shipment of spices carried to another shore."
+      },
+      "requirements": {
+        "good_id": "spices",
+        "quantity": 20,
+        "dest_port_id": "london"
+      },
+      "rewards": {
+        "gold": 6000,
+        "reputation": {
+          "england": 5
+        },
+        "fame": 10
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_delivery_silk",
+      "type": "delivery",
+      "giver": "guild",
+      "name": {
+        "zh": "丝绸的托付",
+        "en": "A Commission of Silk"
+      },
+      "description": {
+        "zh": "公会需要一批丝绸送往他乡。",
+        "en": "The guild needs a shipment of silk carried to another shore."
+      },
+      "requirements": {
+        "good_id": "silk",
+        "quantity": 20,
+        "dest_port_id": "venice"
+      },
+      "rewards": {
+        "gold": 4800,
+        "reputation": {
+          "italy": 5
+        },
+        "fame": 10
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_bounty_hunt",
+      "type": "bounty",
+      "giver": "guild",
+      "name": {
+        "zh": "清剿海盗",
+        "en": "Hunt the Sea Wolf"
+      },
+      "description": {
+        "zh": "公会悬赏一支在近海劫掠的海盗船队。",
+        "en": "The guild posts a reward for a pirate fleet raiding the coastal lanes."
+      },
+      "requirements": {
+        "target_fleet_id": ""
+      },
+      "rewards": {
+        "gold": 5000,
+        "reputation": {},
+        "fame": 15
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_exploration_rumor",
+      "type": "exploration",
+      "giver": "guild",
+      "name": {
+        "zh": "循闻觅迹",
+        "en": "Follow the Rumour"
+      },
+      "description": {
+        "zh": "公会想验证一则关于远方奇观的传闻。",
+        "en": "The guild wants a rumour of a distant wonder confirmed."
+      },
+      "requirements": {
+        "discovery_id": ""
+      },
+      "rewards": {
+        "gold": 0,
+        "reputation": {
+          "portugal": 5
+        },
+        "fame": 10
+      },
+      "expiry_days": 30,
+      "phase": 3
+    },
+    {
+      "id": "qt_royal_delivery",
+      "type": "royal",
+      "giver": "palace",
+      "name": {
+        "zh": "国王的急件",
+        "en": "The King's Dispatches"
+      },
+      "description": {
+        "zh": "王宫需要一批货物以最快的速度送到。",
+        "en": "The palace needs a shipment delivered with all haste."
+      },
+      "requirements": {
+        "objective": {
+          "zh": "将国王的急件送达",
+          "en": "Carry the king's dispatches"
+        },
+        "dest_port_id": "lisbon"
+      },
+      "rewards": {
+        "gold": 0,
+        "reputation": {},
+        "fame": 25
+      },
+      "expiry_days": 60,
+      "phase": 3
+    },
+    {
+      "id": "qt_royal_patrol",
+      "type": "royal",
+      "giver": "palace",
+      "name": {
+        "zh": "海上巡防",
+        "en": "Naval Patrol"
+      },
+      "description": {
+        "zh": "王宫要求巡逻海上,击退敌对国家的舰队。",
+        "en": "The palace orders a patrol to drive off a rival nation's fleets."
+      },
+      "requirements": {
+        "objective": {
+          "zh": "击退两艘敌国战舰",
+          "en": "Defeat two hostile warships"
+        },
+        "dest_port_id": "lisbon"
+      },
+      "rewards": {
+        "gold": 8000,
+        "reputation": {},
+        "fame": 25
+      },
+      "expiry_days": 60,
+      "phase": 3
+    },
+    {
+      "id": "qt_royal_chart",
+      "type": "royal",
+      "giver": "palace",
+      "name": {
+        "zh": "绘制海图",
+        "en": "Chart the Waters"
+      },
+      "description": {
+        "zh": "王宫要求你带回两处发现物的报告。",
+        "en": "The palace asks for reports of two discoveries."
+      },
+      "requirements": {
+        "objective": {
+          "zh": "报告两处发现物",
+          "en": "Report two discoveries"
+        },
+        "dest_port_id": "lisbon"
+      },
+      "rewards": {
+        "gold": 6000,
+        "reputation": {},
+        "fame": 25
+      },
+      "expiry_days": 60,
+      "phase": 3
+    }
+  ]
 }

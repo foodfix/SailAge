@@ -33,6 +33,7 @@ func _ready() -> void:
 	_test_no_code_edit_swap()
 	_test_new_game_map_choice()
 	await _test_world_scene_renders_p3()
+	await _test_explore_action()
 	_report()
 
 
@@ -287,6 +288,38 @@ func _test_world_scene_renders_p3() -> void:
 	select.select_world("p1")
 	_check(select.selected_map() == "p1", "the world radio row selects p1")
 	select.queue_free()
+	await get_tree().process_frame
+
+
+# --- 9. The Explore action (docs/70-* §4.4) -----------------------------
+
+## `E` on the world map finds every discovery within Chebyshev 3 of the fleet,
+## and reports nothing when the area is empty. The hook is the same one the key
+## and the HUD hint read.
+func _test_explore_action() -> void:
+	GameState.new_game("portugal", false, "p3")
+	GameState.day = 20
+	var discovery: Dictionary = DataLoader.get_discovery("disc_atlas_cedars")
+	var target := Vector2i(int((discovery["position"] as Dictionary)["x"]),
+		int((discovery["position"] as Dictionary)["y"]))
+	# Park the fleet three tiles away: inside the radius, not on the spot.
+	GameState.set_world_tile(target + Vector2i(3, 0))
+	GameState.discoveries_found = []
+	var world: Node2D = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	await get_tree().process_frame
+	_check(world.something_near(), "something_near() is true within radius 3")
+	var found: Array = world.explore_here()
+	_check(found.has("disc_atlas_cedars"),
+		"Explore finds the discovery at Chebyshev 3 (got %s)" % str(found))
+	_check(not world.something_near(), "the found discovery is no longer in range")
+	_check(world.explore_here().is_empty(), "exploring again finds nothing")
+	# Out of range → nothing, and the HUD hint is silent.
+	GameState.set_world_tile(target + Vector2i(4, 0))
+	_check(not world.something_near(), "Chebyshev 4 is outside the Explore radius")
+	world.queue_free()
 	await get_tree().process_frame
 
 

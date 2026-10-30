@@ -33,6 +33,7 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const BountyLib := preload("res://scripts/quests/bounty.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## T18: the fleet/cargo panel is a parent-agnostic modal, like S14; the port hub
 ## and the world map attach it and offer a row / the `F` key.
@@ -40,14 +41,15 @@ const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 
-## Facility id → screen path for the four Phase-1 facilities. Guild/Palace are
-## Phase 3 and have no screen yet ([method open_facility] refuses them, and
-## they render as disabled stubs).
+## Facility id → screen path. Phase 3 activates Guild (S12) and Palace (S13)
+## alongside the four Phase-1 facilities (`30-*` §4.1).
 const FACILITY_SCENES := {
 	"market": "res://scenes/port/market_screen.tscn",
 	"shipyard": "res://scenes/port/shipyard_screen.tscn",
 	"tavern": "res://scenes/port/tavern_screen.tscn",
 	"inn": "res://scenes/port/inn_screen.tscn",
+	"guild": "res://scenes/port/guild_screen.tscn",
+	"palace": "res://scenes/port/palace_screen.tscn",
 }
 
 ## The §4.1 fixed display order. The *set* of rows comes from the port's
@@ -67,9 +69,10 @@ const FACILITY_LABEL_KEYS := {
 	"palace": "port.palace",
 }
 
-## §4.1: a facility row is clickable iff its activation phase is ≤ 1. Phase-2/3
-## facilities render as disabled rows carrying the stub label.
-const FACILITY_ENABLED_MAX_PHASE := 1
+## §4.1: a facility row is clickable iff its activation phase is ≤ this. From
+## Phase 3 on every documented facility is live; a future-phase key would still
+## render as a disabled stub carrying the stub label.
+const FACILITY_ENABLED_MAX_PHASE := 3
 ## The label every disabled (future-phase) row shows, per §4.1.
 const FACILITY_STUB_KEY := "port.stub.phase3"
 
@@ -435,12 +438,15 @@ func _facility_phase(facility_id: String) -> int:
 	return int(phase)
 
 
-## §4.1 gate: a facility is open in Phase 1 iff the port lists it **and** its
-## activation phase is exactly in `[1, FACILITY_ENABLED_MAX_PHASE]`.
-## Phase-3 rows are visible but disabled stubs.
+## §4.1 gate: a facility is open iff the port lists it **and** its activation
+## phase is in `[1, FACILITY_ENABLED_MAX_PHASE]`. A bounty-closed port
+## (`70-*` §4.9.6) refuses every facility except the bountied capital's palace
+## (the pay-off path), which is what keeps the game recoverable.
 func _facility_available(facility_id: String) -> bool:
 	var phase := _facility_phase(facility_id)
-	return phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE
+	if phase < 1 or phase > FACILITY_ENABLED_MAX_PHASE:
+		return false
+	return BountyLib.can_open_facility(_port_id, facility_id)
 
 
 ## Renders the facility rows for the current port from its `facilities` data:
@@ -469,6 +475,9 @@ func _sync_facility_rows(port: Dictionary) -> void:
 		# signature anyway so a data edit still refreshes the rows.
 		if not str(key) in FACILITY_ORDER:
 			parts.append("%s:?" % str(key))
+	# A bounty closing/reopening the port changes what every row shows, so it
+	# belongs in the rebuild signature (`70-*` §4.9.6).
+	parts.append("closed:%s" % str(BountyLib.is_port_closed(_port_id)))
 	var signature := "|".join(parts)
 	if signature == _rows_signature and _facility_rows.get_child_count() > 0:
 		return
@@ -480,9 +489,13 @@ func _sync_facility_rows(port: Dictionary) -> void:
 		if not (facilities as Dictionary).has(facility_id):
 			continue
 		var phase := int((facilities as Dictionary)[facility_id])
-		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE
+		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE \
+			and BountyLib.can_open_facility(_port_id, facility_id)
 		var label_key := str(FACILITY_LABEL_KEYS.get(
 			facility_id, "port.%s" % facility_id))
+		# §4.9.6: a bounty closes the port's rows (the capital palace stays
+		# usable for the pay-off), with its own reason label.
+		var closed := not BountyLib.can_open_facility(_port_id, facility_id)
 		var button := _make_facility_button(facility_id, label_key, enabled)
 		if enabled:
 			# Two open facilities per wireframe line.
@@ -500,9 +513,14 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			# "Guild — opens in Phase 3". The noun and the note are both
 			# localised; only the separator is punctuation.
 			button.text = "%s — %s" % [
-				I18n.t_key(label_key), I18n.t_key(FACILITY_STUB_KEY),
+				I18n.t_key(label_key),
+				I18n.t_key("port.closed_bounty" if closed else FACILITY_STUB_KEY),
 			]
-			button.tooltip_text = I18n.t_key(FACILITY_STUB_KEY)
+			button.tooltip_text = I18n.t_key(
+				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
+			button.set_meta("stub", true)
+			button.set_meta("stub_key",
+				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
 
@@ -524,10 +542,11 @@ func _relabel_facility_rows() -> void:
 		var button := child as Button
 		var label_key := str(button.get_meta("text_key"))
 		if bool(button.get_meta("stub", false)):
-			button.text = "%s — %s" % [
-				I18n.t_key(label_key), I18n.t_key(FACILITY_STUB_KEY),
-			]
-			button.tooltip_text = I18n.t_key(FACILITY_STUB_KEY)
+			# The reason key is recorded per row so a bounty-closed row relabels
+			# with `port.closed_bounty` and a future-phase stub with its own key.
+			var stub_key := str(button.get_meta("stub_key", FACILITY_STUB_KEY))
+			button.text = "%s — %s" % [I18n.t_key(label_key), I18n.t_key(stub_key)]
+			button.tooltip_text = I18n.t_key(stub_key)
 		else:
 			button.text = I18n.t_key(label_key)
 

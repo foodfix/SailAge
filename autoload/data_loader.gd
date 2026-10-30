@@ -198,6 +198,46 @@ func get_map_files(map_id: String) -> Dictionary:
 	}
 
 
+## Parses the active map into [member map] when no world scene has done it yet.
+##
+## Loading a save straight into port (docs/80-* §4.6 routes to S4 when the save
+## was taken in port) never instantiates S3, so `map` stays null — yet port-side
+## systems need passability and port cells: hostile-fleet spawning (`60-*`
+## §4.11.11, a guild bounty target), discovery range checks, the minimap.
+## This builds the same `MapLoader` the world scene would, from the map index,
+## and is idempotent.
+func ensure_map(map_id: String = "") -> bool:
+	if map != null:
+		return true
+	var resolved := map_id
+	if resolved.is_empty():
+		resolved = "p1"
+		if is_instance_valid(Engine.get_main_loop()):
+			var state := (Engine.get_main_loop() as SceneTree).root.get_node_or_null(
+				"GameState")
+			if state != null:
+				var value = state.get("world")
+				if value is Dictionary and (value as Dictionary).has("map_id"):
+					resolved = str((value as Dictionary)["map_id"])
+	var files := get_map_files(resolved)
+	if files.is_empty():
+		return false
+	var loader_script := load("res://scripts/world/map_loader.gd")
+	if loader_script == null:
+		return false
+	var loader = loader_script.new()
+	var path := str(files.get("file", ""))
+	if not path.begins_with("res://"):
+		path = "res://" + path
+	var legend = files.get("legend", {})
+	if not (legend is Dictionary) or (legend as Dictionary).is_empty():
+		return false
+	if not loader.load_map(path, legend):
+		return false
+	map = loader
+	return true
+
+
 # --- Map handoff (docs/90-* §9) -------------------------------------------
 
 func is_passable(cell: Vector2i) -> bool:
