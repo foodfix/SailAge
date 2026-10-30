@@ -87,8 +87,9 @@ const DUEL_ROUND_MAX_ROLL := 20
 const DUEL_CREW_DIVISOR := 5
 const DUEL_CREW_CAP := 20
 const CAPTAIN_RATING_BASE := 5
-## §4.6 "fleet tier": pirate tier 1, navy tier 2.
-const FLEET_TIER := {"pirate": 1, "navy": 2}
+## §4.6 "fleet tier": pirate tier 1, navy tier 2, and Phase-3 tournament bouts
+## tier 2 as well (`60-*` §4.11.7.1 — the only code change that seam needs).
+const FLEET_TIER := {"pirate": 1, "navy": 2, "tournament": 2}
 
 # --- Outcome (docs/60-* §4.11.9, §4.11.10) --------------------------------
 

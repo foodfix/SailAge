@@ -265,15 +265,15 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | C — discovery system + content | ✅ Done | `scripts/world/discovery.gd` (radius 3, explore, report-once, priced hints), 30 discoveries with zh/en hints, validator group 6/7 position checks, tavern `Rumours` tab (`80-*` §4.7.3); `test_tavern` rumors section, `test_world_map` (57) |
 | D — palace, royal missions, titles | ✅ Done | `palace_engine.gd` (rep-30 gate, three rotating mission kinds, one per nation, ceremony, repair bays, retire), `fame.gd` ladder + all four grants wired into `TradeEngine.title_units` / `ShipyardEngine.repair_cost` / `QuestGen.max_active_quests`; `test_palace` (182) |
 | E — piracy & bounty loop | ✅ Done | `bounty.gd` (rival table from data, −20/+2, issue at ≤ −50 with `500 × |rep|`, both clear paths → exactly −10), closed-port rule + palace pay exception in the hub; `test_bounty` (80) |
-| F — tournaments | ✅ Done | `tournament.gd` (30-day rotation, day 1–5 window, fee, 3 escalating bouts with carry, 10 000g/+100 fame, 500g + 50 % repair), S13 entry + S10 → S13 bracket return; `test_tournament` (142) |
+| F — tournaments | ✅ Done | `tournament.gd` (30-day rotation, day 1–5 window, fee, 3 escalating bouts with carry, 10 000g/+100 fame, 500g + 50 % repair), S13 entry + S10 → S13 bracket return; `test_tournament` (144) |
 | G — full world map | ✅ Done | `data/maps/p3_world.txt` (160×96) + `map_legend_p3.json` + `ports_p3.json` (70 new ports, 100 total), `maps/maps.json` index, validator group 7 (BFS, marker/position agreement, discovery positions), S2 world selector, `new_game(..., map_id)`; `test_world_map` (57) |
 | H — retirement & victory | ✅ Done | duke gate at the docked nation's palace, `palace.retire.confirm`, S16 six-row summary in both modes, retired payload + summary-only load; `test_retirement` (78) |
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
 | J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (102): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 540 checks**,
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 542 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 890
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 892
 checks plus 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.

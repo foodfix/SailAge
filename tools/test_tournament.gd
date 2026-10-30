@@ -8,6 +8,7 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise.
 
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
+const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
@@ -175,6 +176,12 @@ func _test_round_fleets() -> void:
 		"Phase3Hooks recognises the bout")
 	_check(not Phase3HooksLib.is_tournament("hf_1_2_pirate"),
 		"an ordinary marker is not a bout")
+	# `60-*` §4.11.7.1: the only combat-code change the seam needs is the tier.
+	_check(int(BattleSimLib.FLEET_TIER.get("tournament", -1)) == 2,
+		"the tournament tier is 2, like a navy (got %s)"
+		% str(BattleSimLib.FLEET_TIER.get("tournament")))
+	_check(BattleSimLib.FLEET_TIER.get("pirate") == 1,
+		"adding the tier did not disturb the pirate tier")
 
 
 # --- 5. Winner payout (10,000g + 100 fame) ------------------------------
