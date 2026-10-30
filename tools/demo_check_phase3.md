@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 513 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 518 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -185,10 +185,10 @@ are collected and the closing check asserts none of them contains a raw
 | `test_tournament.tscn` | 142 | **3** |
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
-| `test_world_map.tscn` | 57 | **3** |
-| **Total** | **4 513** | |
+| `test_world_map.tscn` | 62 | **3** |
+| **Total** | **4 518** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 864 checks
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 869 checks
 and 50 checks inside five existing suites (character +24, tavern +22,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.

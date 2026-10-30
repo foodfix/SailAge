@@ -48,6 +48,9 @@ signal dialogs_finished
 ## only renders the choice; the host (world scene) calls the matching
 ## `SailingSim.resolve_mutiny_*` (docs/90-* §7: the HUD never mutates state).
 signal mutiny_choice(choice: String)
+## Phase 3: the in-range **Explore** button was pressed (`70-*` §4.4, `80-*`
+## §4.3). Same contract as [signal mutiny_choice]: the host runs the action.
+signal explore_requested
 
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _bottom_bar: ColorRect = $BottomBar
@@ -67,6 +70,8 @@ signal mutiny_choice(choice: String)
 @onready var _toast: PanelContainer = $Toast
 @onready var _toast_label: Label = $Toast/ToastLabel
 @onready var _modal_host: Control = $ModalHost
+@onready var _explore_hint: Label = $ExploreHint
+@onready var _explore_button: Button = $Explore
 
 ## Fleet dot position override for hosts that show the map before a run exists
 ## (the world scene falls back to Lisbon's harbor tile). `(-1,-1)` means "read
@@ -127,6 +132,11 @@ func _ready() -> void:
 	# fleet; the root stays IGNORE so the rest of the map receives clicks.
 	_minimap.mouse_filter = Control.MOUSE_FILTER_STOP
 	_minimap_title.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_explore_hint.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_explore_hint.text = I18n.t_key("discovery.something_near")
+	_explore_button.text = I18n.t_key("discovery.explore")
+	_explore_button.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
+	_explore_button.pressed.connect(_on_explore_pressed)
 	_apply_minimap_rect()
 
 	# The only update path for the bars (docs/80-* §7 acceptance).
@@ -196,6 +206,37 @@ func set_fleet_cell(cell: Vector2i) -> void:
 	# (still once per step, not per frame).
 	_sync_minimap_image()
 	queue_redraw()
+
+
+## Phase 3: shows/hides the in-range Explore affordance (`70-*` §4.4). The
+## world scene drives it from `WorldMap.something_near()` on every move/open,
+## so the button only ever exists while a discovery is within Chebyshev 3.
+func set_explore_available(available: bool) -> void:
+	_explore_hint.visible = available
+	_explore_button.visible = available
+	if available:
+		_explore_hint.text = I18n.t_key("discovery.something_near")
+		_explore_button.text = I18n.t_key("discovery.explore")
+
+
+## `true` while the Explore affordance is on screen (test hook).
+func explore_available() -> bool:
+	return _explore_button.visible
+
+
+## The Explore button's current label (test hook).
+func explore_button_text() -> String:
+	return _explore_button.text
+
+
+## Clicks the Explore button (test hook for the `E`-equivalent path).
+func press_explore() -> void:
+	if _explore_button != null and not _explore_button.disabled:
+		_explore_button.pressed.emit()
+
+
+func _on_explore_pressed() -> void:
+	explore_requested.emit()
 
 
 func toggle_minimap() -> void:
@@ -509,6 +550,9 @@ func _on_locale_changed(_locale: String) -> void:
 	refresh()
 	# The chart's caption is localised too (world.minimap / .enlarged).
 	_apply_minimap_rect()
+	# The Phase-3 Explore affordance re-binds with the rest of the HUD.
+	if _explore_button.visible:
+		set_explore_available(true)
 	# The mutiny dialog re-binds its own labels on the same signal; re-apply the
 	# formatted Pay price (with `{gold}` filled) after it, next idle frame.
 	if _mutiny_dialog != null:

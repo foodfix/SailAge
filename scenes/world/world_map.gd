@@ -157,6 +157,8 @@ func _ready() -> void:
 	if _hud != null:
 		_hud.mutiny_choice.connect(_on_mutiny_choice)
 		_hud.dialogs_finished.connect(_on_dialogs_finished)
+		if _hud.has_signal("explore_requested"):
+			_hud.explore_requested.connect(explore_here)
 
 	# Phase-2 F: hostile markers (docs/60-* §4.1, §4.11.11). The scene only
 	# *adopts* the saved markers here — `Encounters` is told which day already
@@ -286,6 +288,11 @@ func explore_here() -> Array:
 ## `E` availability, `70-*` §4.4).
 func something_near() -> bool:
 	return _has_game() and Phase3HooksLib.something_near(_fleet_cell)
+
+
+## The shared HUD (tests drive its Explore affordance through this).
+func hud() -> Control:
+	return _hud
 
 
 ## Re-reads `GameState.world.position` (returning from port, save load, tests).
@@ -1119,6 +1126,8 @@ func _sync_hud() -> void:
 		return
 	if _hud.has_method("set_fleet_cell"):
 		_hud.set_fleet_cell(_fleet_cell)
+	if _hud.has_method("set_explore_available"):
+		_hud.set_explore_available(something_near())
 
 
 func _is_loaded() -> bool:

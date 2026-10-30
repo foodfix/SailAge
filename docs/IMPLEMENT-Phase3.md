@@ -271,9 +271,9 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
 | J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (100): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 513 checks**,
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 518 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 864
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 869
 checks plus 50 checks inside five existing suites (character +24, tavern +22,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.

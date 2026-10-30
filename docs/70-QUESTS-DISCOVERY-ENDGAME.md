@@ -97,7 +97,7 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 - A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 3
   of its `position` and choosing **Explore** (world-map action when the HUD
-  shows the `world.something_near` hint). First discovery only counts;
+  shows the `discovery.something_near` hint). First discovery only counts;
   repeats are ignored.
 - **Report:** at any guild; reward = `report_reward_gold` + `fame`; removed
   from the unreported list.

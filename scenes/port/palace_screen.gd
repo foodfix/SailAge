@@ -340,12 +340,10 @@ func _bind_title() -> void:
 func _bind_mission() -> void:
 	var active := PalaceEngineLib.active_mission(_nation_id)
 	if not active.is_empty():
-		var requirements: Dictionary = active.get("requirements", {})
-		var objective: Dictionary = requirements.get("objective", {})
-		var text := I18n.t(objective) if not objective.is_empty() \
-			else I18n.t_key("quest.type.royal")
+		# The composed objective line is shared with the guild/panel
+		# (`QuestGen.objective_text`), so a mission reads the same everywhere.
 		_mission_label.text = I18n.fmt("palace.mission.active", {
-			"objective": text,
+			"objective": QuestGenLib.objective_text(active),
 			"days": maxi(0, int(active.get("deadline_day", 0)) - GameState.day),
 		})
 		_set_enabled(_mission_button, false, "palace.mission_active")
@@ -360,28 +358,9 @@ func _bind_mission() -> void:
 		return
 	var offer := PalaceEngineLib.offer(_port_id, GameState.day)
 	_mission_label.text = I18n.t_key("palace.mission.section") if offer.is_empty() \
-		else _mission_text(offer)
+		else QuestGenLib.objective_text(offer)
 	_mission_button.text = I18n.t_key("palace.mission.accept")
 	_set_enabled(_mission_button, not offer.is_empty(), "palace.mission_active")
-
-
-func _mission_text(offer: Dictionary) -> String:
-	var requirements: Dictionary = offer.get("requirements", {})
-	match str(requirements.get("kind", "")):
-		PalaceEngineLib.KIND_PATROL:
-			return I18n.fmt("quest.line.bounty", {
-				"target": I18n.t(_nation_name_l10n()), "tier": 2,
-			})
-		PalaceEngineLib.KIND_CHART:
-			return I18n.t_key("quest.line.exploration")
-		_:
-			return I18n.fmt("quest.line.delivery", {
-				"quantity": int(requirements.get("quantity", 0)),
-				"good": I18n.t(DataLoader.get_good(
-					str(requirements.get("good_id", ""))).get("name", {})),
-				"port": I18n.t(DataLoader.get_port(
-					str(requirements.get("dest_port_id", ""))).get("name", {})),
-			})
 
 
 func _bind_repair() -> void:

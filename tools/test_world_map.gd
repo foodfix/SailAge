@@ -319,6 +319,25 @@ func _test_explore_action() -> void:
 	# Out of range → nothing, and the HUD hint is silent.
 	GameState.set_world_tile(target + Vector2i(4, 0))
 	_check(not world.something_near(), "Chebyshev 4 is outside the Explore radius")
+	world._sync_hud()
+	_check(not world.hud().explore_available(),
+		"the HUD Explore affordance hides out of range")
+	# Back in range: the HUD shows both the hint and the button, and the button
+	# is wired to the same action as `E` (docs/80-* §4.3).
+	GameState.set_world_tile(target + Vector2i(2, 0))
+	GameState.discoveries_found = []
+	world._sync_hud()
+	_check(world.hud().explore_available(),
+		"the HUD Explore affordance shows in range")
+	_check(world.hud().explore_button_text() == I18n.t_key("discovery.explore"),
+		"the button reads discovery.explore (%s)"
+		% world.hud().explore_button_text())
+	world.hud().press_explore()
+	await get_tree().process_frame
+	_check(GameState.discoveries_found.has("disc_atlas_cedars"),
+		"the HUD Explore button runs the same action as E")
+	_check(not world.hud().explore_available(),
+		"the affordance hides once the discovery is found")
 	world.queue_free()
 	await get_tree().process_frame
 
