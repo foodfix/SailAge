@@ -13,6 +13,7 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const GuildScene := preload("res://scenes/port/guild_screen.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
+const WorldScene := preload("res://scenes/world/world_map.tscn")
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -31,6 +32,7 @@ func _ready() -> void:
 	_test_bounty_completion()
 	await _test_guild_screen()
 	await _test_port_hub_activation()
+	await _test_world_hooks()
 	_report()
 
 
@@ -518,6 +520,83 @@ func _test_port_hub_activation() -> void:
 	_check(hub2.is_facility_enabled("guild"), "a non-capital port still has a guild")
 	hub2.queue_free()
 	await get_tree().process_frame
+
+
+# --- The world-map hooks (docs/70-* §4.9.3) -----------------------------
+
+## Both documented scene hooks are wired: a delivery completes on **port entry**
+## (through `world_map._enter_port`) and a delivery whose cargo disappears fails
+## immediately on the **cargo mutation** (through the `fleet_changed` funnel),
+## not only at the next day tick.
+func _test_world_hooks() -> void:
+	# 1. Port entry completes the delivery and queues the report dialog.
+	_new_run("lisbon", 12)
+	_clear_quests()
+	var offer: Dictionary = QuestGenLib.offers("lisbon", 12)[0]
+	var req: Dictionary = offer["requirements"]
+	var dest := str(req["dest_port_id"])
+	var accepted: Dictionary = QuestGenLib.accept(offer, "lisbon", 12)
+	_check(not accepted.is_empty(), "a delivery is accepted for the world hook")
+	GameState.current_port = null
+	GameState.day = 12
+	# Stand on the destination harbor tile and let the map's own `_enter_port`
+	# sequence run (routing disabled: no scene swap).
+	var dest_port: Dictionary = DataLoader.get_port(dest)
+	var cell := Vector2i(int((dest_port["position"] as Dictionary)["x"]),
+		int((dest_port["position"] as Dictionary)["y"]))
+	GameState.set_world_tile(cell)
+	var world: Node2D = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	await get_tree().process_frame
+	var gold_before := GameState.gold
+	world._enter_port(dest)
+	await get_tree().process_frame
+	_check(str(accepted.get("status", "")) == "completed",
+		"entering the destination completes the delivery (%s)"
+		% str(accepted.get("status")))
+	_check(GameState.gold > gold_before,
+		"the delivery reward was paid on port entry (+%d)"
+		% (GameState.gold - gold_before))
+	_check(GameState.current_port == dest, "the map docked at the destination")
+	world.queue_free()
+	await get_tree().process_frame
+
+	# 2. Selling the cargo mid-route fails the quest immediately.
+	_new_run("lisbon", 12)
+	_clear_quests()
+	offer = QuestGenLib.offers("lisbon", 12)[0]
+	req = offer["requirements"]
+	var origin_nation := str(DataLoader.get_port("lisbon")["nation_id"])
+	accepted = QuestGenLib.accept(offer, "lisbon", 12)
+	var rep_before := CharacterLib.reputation(origin_nation)
+	world = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	await get_tree().process_frame
+	# The screen-free path a sale takes (`Fleet.remove_goods` + notify).
+	FleetLib.remove_goods(str(req["good_id"]), int(req["quantity"]))
+	FleetLib.notify_changed()
+	await get_tree().process_frame
+	_check(str(accepted.get("status", "")) == "failed",
+		"losing the cargo fails the delivery at once (%s)"
+		% str(accepted.get("status")))
+	_check(CharacterLib.reputation(origin_nation) == rep_before - 5,
+		"the immediate failure costs −5 rep (%d → %d)"
+		% [rep_before, CharacterLib.reputation(origin_nation)])
+	var dialog_text := ""
+	if world.hud() != null and world.hud().current_dialog() != null:
+		dialog_text = world.hud().current_dialog().message_text()
+	# `quest.failed` is "Commission failed: {name}"; the prefix alone proves the
+	# right key was used without pinning the composed objective text.
+	var failed_prefix := I18n.fmt("quest.failed", {"name": ""}).strip_edges()
+	_check(dialog_text.contains(failed_prefix.rstrip(" :：")) ,
+		"the failure is reported in a dialog (%s)" % dialog_text)
+	world.queue_free()
+	await get_tree().process_frame
+	GameState.active_quests = []
 
 
 # --- Helpers --------------------------------------------------------------

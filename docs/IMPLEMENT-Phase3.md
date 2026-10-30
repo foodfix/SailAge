@@ -261,7 +261,7 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | Task | Status | Evidence |
 |---|---|---|
 | A — save migration v2 → v3 | ✅ Done | `SAVE_VERSION = 3`, pure `MIGRATIONS[2]` (adds the eleven §8.1 v3 keys, erases `quests`, adds `world.map_id = "p1"`), retired-save path (`last_loaded_retired` / `last_retired_summary`); `test_save_v3` (141) |
-| B — guild activation + quests | ✅ Done | `quest_gen.gd` (seeded offers, 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, `objective_text`/`type_key` shared by both UIs), `guild_screen.tscn`; `test_quests` (93) |
+| B — guild activation + quests | ✅ Done | `quest_gen.gd` (seeded offers, 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, `objective_text`/`type_key` shared by both UIs), `guild_screen.tscn`; `test_quests` (100) |
 | C — discovery system + content | ✅ Done | `scripts/world/discovery.gd` (radius 3, explore, report-once, priced hints), 30 discoveries with zh/en hints, validator group 6/7 position checks, tavern `Rumours` tab (`80-*` §4.7.3); `test_tavern` rumors section, `test_world_map` (57) |
 | D — palace, royal missions, titles | ✅ Done | `palace_engine.gd` (rep-30 gate, three rotating mission kinds, one per nation, ceremony, repair bays, retire), `fame.gd` ladder + all four grants wired into `TradeEngine.title_units` / `ShipyardEngine.repair_cost` / `QuestGen.max_active_quests`; `test_palace` (181) |
 | E — piracy & bounty loop | ✅ Done | `bounty.gd` (rival table from data, −20/+2, issue at ≤ −50 with `500 × |rep|`, both clear paths → exactly −10), closed-port rule + palace pay exception in the hub; `test_bounty` (72) |
@@ -271,9 +271,9 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
 | J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (101): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 520 checks**,
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 527 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 871
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 878
 checks plus 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.
@@ -318,14 +318,19 @@ All were made in the owning doc **before** the code that needed them, per
    between bouts and the next round never started (§4.9.7's "three successive
    battles" was unreachable in play). Fixed with `return_scene()`: a
    `tournament_`-tagged encounter returns to S13, everything else to S3.
-2. **The palace's tournament row hid its own reason.** The entered case was
+2. **A delivery quest could never complete in play.** §4.9.3 pins both "port
+   entry of `dest_port_id` completes the delivery" and "a cargo mutation fails it
+   immediately", but neither hook was ever called: `world_map._enter_port` only
+   docked and greeted. Fixed by wiring `Phase3Hooks.on_port_entered` into port
+   entry and `Phase3Hooks.on_cargo_changed` into the `fleet_changed` funnel.
+3. **The palace's tournament row hid its own reason.** The entered case was
    handled before the generic `blocked` branch, so an out-of-window or
    wrong-host palace still printed `Entry recorded`. Fixed by letting
    `status.blocked` drive both label and tooltip.
-3. **`PalaceEngine._delivery_offer` drew from `GameState.day` instead of the
+4. **`PalaceEngine._delivery_offer` drew from `GameState.day` instead of the
    day it was asked about.** A test or a screen previewing a future day got the
    live day's delivery; fixed by threading `day` through.
-4. **The palace's repair path refunded a discount instead of quoting it.** Two
+5. **The palace's repair path refunded a discount instead of quoting it.** Two
    price implementations could drift; `ShipyardEngine.repair()` now takes the
    port and charges the discounted amount once.
 

@@ -28,6 +28,7 @@ const EncountersLib := preload("res://scripts/world/encounters.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
+const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 
 ## Phase-1 map file (docs/10-* §6.1). Swapping maps is a data-only change:
 ## the active map is `GameState.world["map_id"]` resolved through
@@ -154,6 +155,7 @@ func _ready() -> void:
 	# greeting, §4.7), the mutiny choice and the S9 game-over overlay.
 	EventBus.day_advanced.connect(_on_day_advanced)
 	EventBus.game_over.connect(_on_game_over)
+	EventBus.fleet_changed.connect(_on_fleet_changed)
 	if _hud != null:
 		_hud.mutiny_choice.connect(_on_mutiny_choice)
 		_hud.dialogs_finished.connect(_on_dialogs_finished)
@@ -388,11 +390,23 @@ func _enter_port(port_id: String) -> void:
 		GameState.known_ports.append(port_id)
 	GameState.current_port = port_id
 
+	# 2b. Phase 3: complete every delivery quest due here (`70-*` §4.9.3: the
+	# goods are handed over, the reward paid). The report is queued with the
+	# other port-entry dialogs so the player sees it.
+	var completed: Array = Phase3HooksLib.on_port_entered(port_id)
+	var completed_entries: Array = []
+	for quest in completed:
+		completed_entries.append({
+			"kind": "quest", "key": "quest.completed",
+			"values": {"name": _quest_name(quest)},
+		})
+
 	# 3. §4.8.2 desertion on **every** port entry (morale < 40). The sim owns
 	# the loss; this scene owns the message, queued in §4.7 order with the
 	# greeting (weather/mutiny entries from the same tick are already queued
 	# and sort ahead of these).
 	var entries: Array = []
+	entries.append_array(completed_entries)
 	if _has_game():
 		var lost: int = SailingSimLib.apply_desertion()
 		if lost > 0:
@@ -922,6 +936,24 @@ func _on_mutiny_choice(choice: String) -> void:
 
 ## §4.9 sea death: show S9 over the map (docs/80-* §4.1/§4.2). No save is
 ## written or deleted; S9 routes back to the title on any key.
+## Phase 3 (`70-*` §4.9.3): every cargo mutation emits `fleet_changed`, so this
+## is the "immediate failure" check for a delivery whose goods were sold,
+## jettisoned or captured. The day tick still re-checks as a safety net.
+func _on_fleet_changed() -> void:
+	if not _has_game():
+		return
+	var failed: Array = Phase3HooksLib.on_cargo_changed()
+	if failed.is_empty():
+		return
+	var entries: Array = []
+	for quest in failed:
+		entries.append({
+			"kind": "quest", "key": "quest.failed",
+			"values": {"name": _quest_name(quest)},
+		})
+	_show_dialog_entries(entries)
+
+
 func _on_game_over(reason: String) -> void:
 	if _gameover != null:
 		return
@@ -1089,33 +1121,22 @@ func _cell_at(world_position: Vector2) -> Vector2i:
 ## A quest's display name: the stored instance has no L10nString (it is
 ## generated), so the objective line is composed from its type
 ## (`quest.line.*`, `70-*` §4.9.3 / `80-*` §4.7.4).
+## The composed quest line for a dialog. Delegates to the shared composer so a
+## quest reads identically on the world map, in the guild and in the panel
+## (`QuestGen.objective_text`, `80-*` §4.7.4); an exploration quest also shows
+## its hint, which is what the player needs at sea.
 func _quest_name(quest) -> String:
 	if not (quest is Dictionary):
 		return ""
 	var q: Dictionary = quest
-	var requirements: Dictionary = q.get("requirements", {})
-	match str(q.get("type", "")):
-		"delivery":
-			return I18n.fmt("quest.line.delivery", {
-				"quantity": int(requirements.get("quantity", 0)),
-				"good": I18n.t(DataLoader.get_good(
-					str(requirements.get("good_id", ""))).get("name", {})),
-				"port": I18n.t(DataLoader.get_port(
-					str(requirements.get("dest_port_id", ""))).get("name", {})),
-			})
-		"bounty":
-			return I18n.fmt("quest.line.bounty", {
-				"target": I18n.t_key("encounter.pirate"),
-				"tier": int(requirements.get("tier", 1)),
-			})
-		"exploration":
-			return I18n.t_key("quest.line.exploration")
-		"royal":
-			var objective: Dictionary = requirements.get("objective", {})
-			if not objective.is_empty():
-				return I18n.t(objective)
-			return I18n.t_key("quest.type.royal")
-	return I18n.t_key("ui.not_available")
+	var text := QuestGenLib.objective_text(q)
+	if str(q.get("type", "")) == "exploration":
+		var discovery_id := str((q.get("requirements", {}) as Dictionary)
+			.get("discovery_id", ""))
+		if not discovery_id.is_empty():
+			text = "%s — %s" % [text, I18n.t(
+				DataLoader.get_discovery(discovery_id).get("region_hint", {}))]
+	return text
 
 
 ## Position-derived HUD bits only (area label + minimap dot). The bars are

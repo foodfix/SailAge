@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 520 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 527 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -174,7 +174,7 @@ are collected and the closing check asserts none of them contains a raw
 | `test_phase2_acceptance.tscn` | 142 | 2 |
 | `test_phase3_acceptance.tscn` | **101** | **3** |
 | `test_port_hub.tscn` | 142 | 1 (+2 for the guild/palace rows) |
-| `test_quests.tscn` | 93 | **3** |
+| `test_quests.tscn` | 100 | **3** |
 | `test_retirement.tscn` | 78 | **3** |
 | `test_sailing.tscn` | 84 | 1 |
 | `test_save.tscn` | 196 | 1 (+1 for the v3 payload) |
@@ -186,9 +186,9 @@ are collected and the closing check asserts none of them contains a raw
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
 | `test_world_map.tscn` | 62 | **3** |
-| **Total** | **4 520** | |
+| **Total** | **4 527** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 871 checks
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 878 checks
 and 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.
@@ -207,10 +207,23 @@ branch:
    an encounter id tagged `tournament_` returns to S13, everything else to S3,
    and `Phase3Hooks.on_tournament_bout` hands the next round / the settled block
    back through two transient `GameState` fields.
-2. **The palace's tournament row hid its own reason.** The entered case was
+2. **A delivery quest could never complete in play.** §4.9.3 pins "entering
+   `dest_port_id` with ≥ quantity … goods removed, reward paid", and a cargo
+   mutation failing the quest immediately, but neither hook was ever called:
+   `world_map._enter_port` only docked and greeted. Fixed by wiring
+   `Phase3Hooks.on_port_entered` into port entry (report queued as a dialog) and
+   `Phase3Hooks.on_cargo_changed` into the `fleet_changed` funnel every cargo
+   change already emits.
+3. **The palace's tournament row hid its own reason.** The entered case was
    handled before the generic `blocked` branch, so an out-of-window or
    wrong-host palace still printed `Entry recorded`. Fixed by letting
    `status.blocked` drive both the label and the tooltip for every reason.
+4. **`PalaceEngine._delivery_offer` read the live day.** A royal delivery
+   previewed for another day (a test, or a screen showing tomorrow's offer)
+   silently used `GameState.day`; fixed by threading the day through.
+5. **The palace repair path refunded a discount instead of quoting it.** Two
+   prices could drift; `ShipyardEngine.repair()` now takes the port and charges
+   the discounted amount once.
 
 ---
 

@@ -15,6 +15,7 @@ extends RefCounted
 ##   * `world_map._enter_port`      → [method on_port_entered]
 ##   * `battle_screen._finish_battle` → [method on_battle_finished]
 ##   * `world_map` Explore action   → [method explore_here]
+##   * `world_map` `fleet_changed`  → [method on_cargo_changed]
 
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
@@ -52,6 +53,27 @@ static func on_port_entered(port_id: String) -> Array:
 	var done: Array = QuestGenLib.complete_delivery_quests(port_id)
 	QuestGenLib.prune()
 	return done
+
+
+## Runs the cargo-mutation hook (`70-*` §4.9.3: "the check runs on every cargo
+## mutation … `Fleet.add_goods`/`remove_goods`/`jettison_*` funnel through
+## `Quests.on_cargo_changed()`"). Called from the `fleet_changed` handler, which
+## every cargo change already emits, so a delivery whose goods are sold,
+## jettisoned or captured fails immediately with the §4.2 −5 rep. Returns the
+## failed instances.
+static func on_cargo_changed() -> Array:
+	var failed: Array = []
+	for quest in GameState.active_quests:
+		if not (quest is Dictionary):
+			continue
+		if str((quest as Dictionary).get("status", "")) \
+				!= QuestGenLib.STATUS_ACTIVE:
+			continue
+		if not QuestGenLib.delivery_cargo_lost(quest):
+			continue
+		if QuestGenLib.fail(quest):
+			failed.append(quest)
+	return failed
 
 
 # --- Battle end (docs/70-* §4.5, §4.9.3, §4.9.4, §4.9.7) ----------------
