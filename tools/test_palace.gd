@@ -563,6 +563,8 @@ func _test_palace_screen() -> void:
 	_check(screen.port_id() == "lisbon", "the palace binds the docked port")
 	_check(screen.nation_id() == "portugal", "the palace knows its nation")
 	_check(not screen.is_closed(), "an unbountied palace is open")
+	_check(not screen.retire_row_visible(),
+		"a commoner does not see the Retire row (§4.7)")
 
 	# The title row shows the current rank and the next requirement.
 	var current: Label = screen.get_node("Layout/VBox/Rows/TitleRow/Current")

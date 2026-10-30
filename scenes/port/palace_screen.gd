@@ -131,14 +131,24 @@ func nation_id() -> String:
 
 
 ## Every player-facing line this screen shows (the no-raw-key check walks it).
+## Hidden rows are skipped: a line the player cannot see is not "shown".
 func all_text() -> Array:
-	return [
+	var out: Array = [
 		_title.text, _rep.text, _fame.text, _back_button.text, _title_row.text,
 		_title_next.text, _ceremony.text, _mission_label.text,
 		_mission_button.text, _repair_label.text, _repair_button.text,
 		_bounty_label.text, _bounty_button.text, _tournament_label.text,
-		_tournament_button.text, _retire_button.text, _esc_hint.text,
+		_tournament_button.text, _esc_hint.text,
 	]
+	if retire_row_visible():
+		out.append(_retire_button.text)
+	return out
+
+
+## `true` while the §4.7 Retire row is on screen (duke only).
+func retire_row_visible() -> bool:
+	var row: Control = _retire_button.get_parent() as Control
+	return row.visible if row != null else _retire_button.visible
 
 
 ## The `ui_strings` reason key of a disabled row (`""` when enabled).
@@ -408,7 +418,15 @@ func _bind_tournament() -> void:
 
 func _bind_retire() -> void:
 	_retire_button.text = I18n.t_key("palace.retire")
-	_set_enabled(_retire_button, PalaceEngineLib.can_retire(_port_id), "ui.not_available")
+	# `70-*` §4.7 pin: "the palace shows the `Retire` row **only** while the
+	# docked port's nation title is duke", so a commoner never sees the row.
+	var row: Control = _retire_button.get_parent() as Control
+	var eligible := PalaceEngineLib.can_retire(_port_id)
+	if row != null:
+		row.visible = eligible
+	else:
+		_retire_button.visible = eligible
+	_set_enabled(_retire_button, eligible, "ui.not_available")
 
 
 ## §4.9.6: on a bounty-closed port only Pay bounty and Leave stay usable.

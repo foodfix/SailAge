@@ -267,6 +267,7 @@ func _scenario_crown_and_horizon() -> void:
 	_check(ranks_granted == ["knight", "baron", "viscount", "count", "duke"],
 		"S1: the ladder climbs one rung at a time (%s)" % str(ranks_granted))
 	_check(FameLib.is_duke("portugal"), "S1: Portugal grants the dukedom")
+	_check(palace.retire_row_visible(), "S1: the Retire row appears at duke")
 
 	# The grants are mechanically live at the palace's own port.
 	_check(TradeEngineLib.title_units("lisbon") == 1100,

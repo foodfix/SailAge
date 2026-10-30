@@ -21,7 +21,7 @@ Two layers of evidence, the same shape as `tools/demo_check_phase2.md`:
    godot --headless --path . tools/test_phase3_acceptance.tscn
    ```
 
-   → must print `ALL PASS (101 checks)` and exit 0.
+   → must print `ALL PASS (102 checks)` and exit 0.
 2. **Manual** — the play-it-by-hand section below covers what a headless suite
    cannot judge (feel, layout, whether a rumour is *followable*).
 
@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 535 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 537 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -109,7 +109,7 @@ hand-edited save are expected.
 | Branch / commit | `main` — see `git log -1` |
 | Godot | 4.7.stable.official.5b4e0cb0f |
 | Command | `godot --headless --path . tools/test_phase3_acceptance.tscn` |
-| Result | **ALL PASS (101 checks)**, exit 0, zero `SCRIPT ERROR` |
+| Result | **ALL PASS (102 checks)**, exit 0, zero `SCRIPT ERROR` |
 
 ### S1 — trade → 2 discoveries → Duke → tournament → retire
 
@@ -170,9 +170,9 @@ are collected and the closing check asserts none of them contains a raw
 | `test_inn.tscn` | 116 | 1 |
 | `test_morale.tscn` | 260 | 1 |
 | `test_movement.tscn` | 158 | 1 |
-| `test_palace.tscn` | 181 | **3** |
+| `test_palace.tscn` | 182 | **3** |
 | `test_phase2_acceptance.tscn` | 142 | 2 |
-| `test_phase3_acceptance.tscn` | **101** | **3** |
+| `test_phase3_acceptance.tscn` | **102** | **3** |
 | `test_port_hub.tscn` | 142 | 1 (+2 for the guild/palace rows) |
 | `test_quests.tscn` | 100 | **3** |
 | `test_retirement.tscn` | 78 | **3** |
@@ -186,9 +186,9 @@ are collected and the closing check asserts none of them contains a raw
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
 | `test_world_map.tscn` | 62 | **3** |
-| **Total** | **4 535** | |
+| **Total** | **4 537** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 886 checks
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 888 checks
 and 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.
@@ -218,14 +218,17 @@ branch:
    rivals, once per battle, at battle start" never fired: the scene charged the
    −20 alone. Fixed by routing `world_map._charge_navy_piracy` through
    `Bounty.apply_piracy`, which also re-evaluates the bounty threshold.
-4. **The palace's tournament row hid its own reason.** The entered case was
+4. **The Retire row was always visible, just disabled.** §4.7 pins "the palace
+   shows the `Retire` row only while the docked nation's title is duke"; the
+   screen rendered it greyed for everyone. Fixed by hiding it outside the gate.
+5. **The palace's tournament row hid its own reason.** The entered case was
    handled before the generic `blocked` branch, so an out-of-window or
    wrong-host palace still printed `Entry recorded`. Fixed by letting
    `status.blocked` drive both the label and the tooltip for every reason.
-5. **`PalaceEngine._delivery_offer` read the live day.** A royal delivery
+6. **`PalaceEngine._delivery_offer` read the live day.** A royal delivery
    previewed for another day (a test, or a screen showing tomorrow's offer)
    silently used `GameState.day`; fixed by threading the day through.
-6. **The palace repair path refunded a discount instead of quoting it.** Two
+7. **The palace repair path refunded a discount instead of quoting it.** Two
    prices could drift; `ShipyardEngine.repair()` now takes the port and charges
    the discounted amount once.
 
