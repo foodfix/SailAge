@@ -4,49 +4,75 @@
 
 Specifies the tile-grid world model, movement, the game clock and daily
 ledger, consumption (provisions/water/wages), morale with mutiny/desertion,
-weather and storms, sea-death fail states, port discovery and entry/exit, and
-minimap behavior. Gates Phase 1; Phase 2 combat reuses the map and movement
-constants unchanged.
+weather and storms, sea-death fail states, port discovery and entry/exit,
+minimap and Chart behavior. Gates Phase 1 and Phase 4 (the real-Earth grid,
+latitude weather bands, click-to-sail); Phase 2 combat reuses the map and
+movement constants unchanged.
 
 ## 2. Artifacts
 
 | Path | Contents |
 |---|---|
-| `scenes/world/world_map.tscn` | sailing scene: TileMap + fleet marker + HUD |
+| `scenes/world/world_map.tscn` | sailing scene: chunked TileMaps + fleet marker + HUD |
+| `scenes/world/chart_screen.tscn` | full-screen whole-world Chart (S17, `80-*` §4.6) |
 | `scripts/world/sailing_sim.gd` | movement, clock, daily ledger, weather, morale |
-| `scripts/world/map_loader.gd` | ASCII map → TileMap (spec in `90-ARCHITECTURE.md` §9) |
-| `data/maps/p1_mediterranean.txt` | Phase-1 world (constants in `10-DATA-SCHEMA.md` §6) |
-| GameState keys | `day`, `world.position`, `world.weather`, `known_ports`, morale/crew state inside `fleet` (schema in `40-*`) |
+| `scripts/world/sail_path.gd` | click-to-sail `AStarGrid2D` pathing (§4.2, task H) |
+| `scripts/world/map_loader.gd` | PNG world → chunked TileMaps (spec in `90-ARCHITECTURE.md` §9) |
+| `data/maps/world.png` | the single Terra Vera world map (artefact spec `10-*` §6.3, built by `tools/build_world.py`) |
+| GameState keys | `day`, `world.position`, `world.map_id` (always `"world"`), `world.weather`, `known_ports`, morale/crew state inside `fleet` (schema in `40-*`) |
 
 ## 3. Dependencies
 
 `00-OVERVIEW.md`, `10-DATA-SCHEMA.md` (esp. §6 map constants), `90-*` (scene
-pattern), `40-*` (fleet/cargo schema), `50-*` (stat effects on speed).
+pattern, §9 loader), `40-*` (fleet/cargo schema), `50-*` (stat effects on
+speed), `80-*` §4.5/§4.6 (HUD crop and Chart).
 
 ## 4. Systems / Mechanics
 
 ### 4.1 Grid & coordinates
 
-- World grid: `map_legend.json#grid` — 128×96 tiles for the Phase-1 map,
-  160×96 for the Phase-3 map (`10-*` §6.1); origin top-left, `x` east, `y`
-  south. Tile rendering size 32×32 px.
-- The active map is `GameState.world["map_id"]` (`"p1"`/`"p3"`), resolved
-  through `data/maps/maps.json` (`90-*` §9.1). Nothing in the sailing code
-  branches on the map id: dimensions come from the legend, and the HUD
-  minimap scales from `MapLoader.width/height`.
+- World grid: `map_legend.json#grid` = **2160 × 1080** tiles — the whole globe
+  at 6 tiles per degree (`10-*` §6.1); `TILE_SIZE_PX` = 32. Addressing:
+  `lon = x/6 − 180`, `lat = 90 − y/6`; origin top-left, `x` east, `y` south.
+- **Longitude wraps.** `x` is taken mod 2160 everywhere (movement, BFS,
+  camera, click); a fleet at `x = 2159` stepping east lands on `x = 0`. This is
+  a single map: `GameState.world["map_id"]` exists and is always `"world"`
+  (`90-*` §5.4), and no sailing code branches on it.
+- **Latitude edges are impassable:** a tile is `I` (polar ice) iff
+  `lat ≥ 70°N` or `lat ≤ 60°S`, so the fleet can never leave the grid
+  north/south.
 - The fleet occupies exactly one tile (`GameState.world.position`).
-- Passability: `sea ~` and `coastal_sea .` passable; `land #` and `reef ^`
-  block; port marker tiles passable (they are sea tiles carrying a marker).
+- Tile kinds `~ . # ^ I` (`10-*` §6.2): `sea ~` and `coastal_sea .` passable;
+  `land #`, `reef ^` and `polar ice I` block. Passability comes from the
+  decoded PNG's palette index (index 0–4 → `~ . # ^ I`).
+- Ports are an **overlay**, not map characters: their harbor tiles are water
+  and passable (§4.11).
 
 ### 4.2 Movement
 
-- 8-directional, one tile per input (arrow keys / numpad; also click-to-step
-  on an adjacent tile, see `80-*`).
+- 8-directional, one tile per input (arrow keys / numpad).
+- **Hold-to-repeat:** a held direction key steps at ~8 tiles/s after a 0.25 s
+  delay. Each held step is one normal move, so N held-steps = N moves and N
+  clock costs (§4.3) — no batching, no free steps.
+- **Click-to-sail:** clicking any visible water tile computes an `AStarGrid2D`
+  path over the region 2160×1080 with
+  `DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES` (no corner cutting) and jumping on; the
+  fleet then walks it step-by-step through the normal per-step rules (clock,
+  consumption, port entry, encounters). A click on land or ice is rejected
+  with no clock cost. The path cancels on manual input and recomputes after a
+  battle interrupts it.
+- **Seam-crossing path queries** are made in a local frame: shift the fleet
+  and target `x` together by `−fleet.x mod 2160` into `[0, 2160)` before the
+  query (`AStarGrid2D` rejects out-of-region points), then offset the returned
+  path back. `|Δx| > 1080` selects the short way around the seam.
+- **Pre-named fallback (pinned, task H):** if the 1 s path budget fails, route
+  over a coarse precomputed passable-waypoint graph, then refine per chunk with
+  the same A* — no redesign.
 - **No corner cutting:** a diagonal move is blocked if either orthogonal
   neighbor of the target corner is impassable.
 - Each successful tile move advances the fractional clock by
   `1 / effective_speed` days (§4.4). Blocked moves cost nothing.
-- Moving onto a port marker tile triggers port entry (§4.11) instead of
+- Moving onto a port's harbor tile triggers port entry (§4.11) instead of
   consuming further movement input; before docking, the fractional clock cost
   of that tile applies normally.
 
@@ -74,6 +100,11 @@ minimum 1 tile/day
 
 `floor` applies after all multipliers. `seamanship_bonus =
 (seamanship − 10) / 100`, clamped to `[-0.1, +0.2]` (per `50-*`).
+
+**Units (Phase 4).** A tile is 10 nm (§4.1), so `ShipType.speed` is
+**tiles/day on 10 nm tiles**: the Phase-4 base speeds are `{8, 10, 12}`
+tiles/day = 80–120 nm/day, which matches historical daily runs. The formula
+above is unchanged.
 
 **Fleet-speed composition (normative, resolves `40-*` §4.4).** `base_speed` is
 the **slowest `ShipType.speed` among all ships in the fleet**, not the
@@ -109,12 +140,23 @@ pool — full multi-ship crewing model is OUT OF SCOPE (phase 2)).
 
 ### 4.7 Weather
 
-Rolled once per day tick, zone-dependent:
+Rolled once per day tick, **latitude-band** dependent. Band = `|lat|`
+(symmetric N/S, so the same band applies in both hemispheres); the fleet's
+latitude comes from `lat = 90 − y/6` (§4.1). The 60–70°N band is north-only
+because south of 60°S is ice (the `I` band, §4.1).
 
-| Zone | Definition | calm | fair | strong | storm |
-|---|---|---|---|---|---|
-| Atlantic strip | Phase-1 map: tiles with `x ≤ 6`; Phase-3 map: tiles with `x ≤ 8` | 0.05 | 0.30 | 0.15 | 0.50 |
-| Rest of map | all other tiles | 0.20 | 0.55 | 0.15 | 0.10 |
+| Band | clear | overcast | windy | storm |
+|---|---|---|---|---|
+| Doldrums: \|lat\| < 8° | 0.30 | 0.45 | 0.15 | 0.10 |
+| Trade winds: 8–30° | 0.15 | 0.30 | 0.20 | 0.35 |
+| Variables: 30–40° | 0.30 | 0.40 | 0.20 | 0.10 |
+| Westerlies: 40–60° | 0.10 | 0.30 | 0.35 | 0.25 |
+| Boreal: 60–70°N | 0.15 | 0.35 | 0.30 | 0.20 |
+
+The four weather states are the ones the `wind_factor` table below names
+`calm` / `fair` / `strong` / `storm`: **clear = calm**, **overcast = fair**,
+**windy = strong**, **storm = storm** (one state, two labels — the band table
+keeps the Phase-4 column names). Each band row sums to 1.00.
 
 `wind_factor` by propulsion class (`ShipType.class`):
 
@@ -130,24 +172,30 @@ Rolled once per day tick, zone-dependent:
 - Each ship takes `ceil(durability_max × 0.05)` damage, reduced by luck
   mitigation (`50-*`: luck ≥ 50 → damage × 0.75, applied before rounding).
 - Morale −5 (stacks with §4.8 daily delta).
-- The Atlantic strip exists to guarantee demo-loop step 5 (storm reachable
-  within 1 day sailing west of Lisbon at `x = 7`).
+
+**Demo-loop re-anchor (replaces the old Atlantic strip).** The old low-x
+Atlantic-strip thresholds are deleted; storms are now a property of the latitude
+bands. Demo-loop step 5 is satisfied by **Lisbon (38.7°N) → the open water off
+Santa Cruz de Tenerife (≈28.3°N 16.5°W)** — a **coordinate destination**, not a
+port (the 100-port list has no Canaries port and none is added). Arrival means
+crossing the 30°N band edge into the trade-wind belt and sampling weather
+there; `madeira` (32.7°N) sits in the variables band and cannot substitute.
 
 **Reachability acceptance (exact arithmetic).** The effective per-day storm
-probability in the strip is `0.50 × (1 − luck/400)` (`50-*` §4.2), so
-`p = 0.4875` at the default `luck = 10`. Compounded over `n` day ticks the
-chance of at least one storm is `1 − (1 − p)^n`:
+probability in the trade-wind belt is `0.35 × (1 − luck/400)` (`50-*` §4.2),
+i.e. `p = 0.34125` at the default `luck = 10`. The per-day **no-storm** factor
+before the luck term is `1 − 0.35 = 0.65`. Compounded over `n` in-band day
+ticks, the chance of at least one storm is `1 − (1 − p)^n`; the scripted gate
+is computed with the luck-modified `p` in the seeded check:
 
-| n days | p = 0.50 (no luck term) | p = 0.4875 (luck 10) |
-|---|---|---|
-| 5 | 0.96875 | 0.96464 |
-| 6 | 0.98438 | 0.98188 |
+- **"storm within 6 day ticks in-band ≥ 0.90"** — `1 − 0.65⁶ = 0.9246`
+  (no-luck term) and `1 − (1 − 0.34125)⁶ = 0.9183` at luck 10; both clear the
+  gate.
+- A "≥ 0.98 within 12 days" claim is **not** made and must not be asserted.
 
-Because `1 − 0.5⁵ = 0.96875 < 0.97`, a "≥ 0.97 within 5 days" claim is
-arithmetically unreachable; the acceptance check is therefore fixed as
-**≥ 0.96 within 5 day ticks** and **≥ 0.98 within 6 day ticks**, both computed
-with the luck-modified `p` above (`0.4875` at luck 10). Seeded-RNG frequency
-checks use ±0.02 tolerance.
+Band probability acceptance uses **10,000 seeded rolls per band** and must
+match every category within **±0.02**. Every band is validated this way,
+including the north-only boreal row.
 
 ### 4.8 Morale
 
@@ -238,14 +286,15 @@ then return to title; no save is written or deleted.
 
 - **Known ports:** `GameState.known_ports`. At new game: all 6 capital/start
   ports are known (`lisbon, seville, london, amsterdam, istanbul, venice`).
-- **Sighting:** when the fleet is within the sighting radius (base 8,
-  modified by navigation per `50-*` §4.2; Chebyshev distance) of a port's
-  harbor tile, that port is added to `known_ports` permanently (marker
-  appears on map + minimap). Map exploration (§4.12) uses the same radius.
-- **Discovery sighting (Phase 3)** is a separate, shorter radius: the world
-  map offers the `E` Explore action while a `Discovery` sits within
-  Chebyshev **3** (`70-*` §4.4). Ports and discoveries never share a
-  radius constant.
+- **Sighting:** when the fleet is within the sighting radius (**24** tiles,
+  ≈4° ≈ 240 nm; modified by navigation per `50-*` §4.2; Chebyshev distance,
+  **wrap-aware on x**) of a port's harbor tile, that port is added to
+  `known_ports` permanently (marker appears on map + minimap). Map exploration
+  (§4.12) uses the same radius.
+- **Discovery sighting (Phase 3, world map):** a separate, shorter radius —
+  **18** tiles (Chebyshev, wrap-aware) — is when the `E` Explore action can
+  find a `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
+  constant (`sighting_radius` 24 vs `discovery_radius` 18, §5).
 - **Entry:** moving onto a known port's harbor tile → port-entry sequence
   (greeting banner with `Port.flavor`, day count, desertion check §4.8.2)
   → route to `port_screen.tscn`. Moving onto an *unknown* port's harbor tile
@@ -255,17 +304,49 @@ then return to title; no save is written or deleted.
 
 ### 4.12 Minimap
 
-- HUD element, 256×192 px (2 px per tile), per `80-*` §HUD.
-- Renders explored tiles only: a tile is explored after being within the
-  sighting radius (§4.11) of the fleet. Explored set is not saved (re-explored
-  on load; known limitation, unchanged in Phase 3 — the minimap is rebuilt
-  from the loaded position at the new map's scale).
+- HUD element: a **256×192 px** box showing a **wrap-aware 128×96-tile crop**
+  around the fleet at 2 px/tile.
+- Renders explored tiles only, from the session explored bitset (a
+  `PackedByteArray` of 291,600 bytes, one per world tile; not saved):
+  a tile is explored after being within the sighting radius (§4.11) of the
+  fleet. Re-explored on load — known limitation, unchanged.
+- The crop wraps: a fleet at `x = 2159` shows tiles `x ∈ [2032..2159]` then
+  `x ∈ [0..k]`, with no void at the seam.
 - Known port markers drawn as 2×2 px dots in the port's nation color; fleet
-  as a 2×2 px white dot. On the 160×96 Phase-3 map the minimap keeps its
-  256×192 px box and scales to `floor(256 / width)` px per tile (1 px), so
-  the whole world still fits one glance; the enlarged `M` view keeps 2 px per
-  tile and scrolls.
-- Found discoveries are drawn as 2×2 px `ACCENT` dots once explored.
+  as a 2×2 px white dot. Found discoveries are drawn as 2×2 px `ACCENT` dots
+  once explored.
+- The **full world is the separate Chart screen** (S17, `80-*` §4.6): the
+  whole 2160×1080 grid downscaled to fit, explored overlay + known ports +
+  fleet marker. The HUD minimap never scales with a map size (there is one
+  map).
+
+### 4.13 Seasonal wind & ocean currents (Phase-5 placeholder)
+
+Recorded here so no Phase-4 task invents numbers for it: **monsoons, ocean
+currents and seasonal sea ice are a Phase-5 month-indexed layer**
+(`IMPLEMENT-Phase4.md` decision 11). Phase 4 pins **no numbers** for them
+(`00-*` §11 rule).
+
+- **Monsoons (seasonal wind):** a month-indexed prevailing wind direction per
+  sea region feeding `wind_factor` (§4.4) as an additive season/direction
+  input — additive to the pipeline, not a rewrite. Candidate data:
+  hand-authored region × month table in `data/`, or NCEP/NCAR Reanalysis-2
+  monthly mean 10 m winds (public domain) sampled by a builder pass.
+- **Ocean currents:** a tile-domain drift layer, ideally a parallel indexed
+  PNG `data/maps/currents.png` (1 px = 1 tile) built like `world.png` from the
+  NOAA Global Drifter Program climatological monthly mean currents (1° grid,
+  public domain); NOAA OSCAR is the heavier alternative. Effect (with/against
+  speed modifier or daily drift) is Phase-5.
+- **Seasonal sea ice:** a month-indexed passability overlay (Baltic, Hudson
+  Bay) sharing the same month-indexed mechanism. The **Phase-4 `I` band stays
+  the permanent polar edge** (`lat ≥ 70°N`, `lat ≤ 60°S`, §4.1) — seasonal ice
+  only ever *adds* temporary ice inside it.
+- **Cosmetic layer:** a second indexed PNG (biomes/relief; rivers via
+  `ne_10m_rivers_lake_centerlines`) consumed only by the renderer, never by
+  simulation; palette indices ≥ 5 per the append-only policy (`10-*` §6.3).
+
+Every Phase-5 number is pinned in the Phase-5 backlog's owning doc first; this
+section is a pointer, not a spec.
 
 ## 5. Data Examples
 
@@ -279,7 +360,15 @@ of `sailing_sim.gd` and are listed here (single source of truth):
     "ration_size": 5,
     "provisions_price": 2,
     "water_price": 1,
-    "sighting_radius": 8,
+    "sighting_radius": 24,
+    "discovery_radius": 18,
+    "harbor_snap_radius": 2,
+    "tiles_per_degree": 6,
+    "map_width": 2160,
+    "map_height": 1080,
+    "ice_north_lat": 70,
+    "ice_south_lat": -60,
+    "coastal_band_tiles": 3,
     "morale_start": 70,
     "morale_port_cap": 80,
     "starvation_limit_days": 7,
@@ -287,8 +376,7 @@ of `sailing_sim.gd` and are listed here (single source of truth):
     "mutiny_chance_per_day": 0.25,
     "desertion_threshold": 40,
     "desertion_fraction": 0.10,
-    "storm_damage_fraction": 0.05,
-    "discovery_radius": 3
+    "storm_damage_fraction": 0.05
   }
 }
 ```
@@ -310,12 +398,24 @@ are GDScript constants, not a data file — game content stays in `data/`.)
   negatives allowed (purchases validate beforehand, `30-*`).
 - **Storm on entry turn to a port tile:** port entry after the day tick means
   storm damage applies before docking; the greeting banner reports damage.
-- **Entering map edge:** tiles outside 0..127 / 0..95 are impassable.
+- **Map edge (latitude):** `y` out of range `0..1079` is impassable; the ice
+  band `I` (`lat ≥ 70°N`, `lat ≤ 60°S`) is impassable, so the fleet cannot
+  sail off the north/south edge.
+- **Map edge (longitude):** `x` wraps mod 2160 — there is no eastern or
+  western edge and no void; a step east from `x = 2159` lands on `x = 0`.
+- **Click-to-sail across the dateline:** the path is computed in the local
+  frame (§4.2), so a fleet at `x = 2100` clicking `x = 50` sails the short way
+  west through the seam, not the long way around.
+- **Click on land or ice:** rejected with no clock cost and no path; the fleet
+  does not move.
 
 ## 7. Acceptance Criteria
 
-- [ ] From Lisbon, sailing west reaches a 50%-storm zone within one day
-      (demo-loop step 5 reachable).
+- [ ] From Lisbon (38.7°N), sailing to the water off Santa Cruz de Tenerife
+      (≈28.3°N 16.5°W — a coordinate destination, no port) crosses the 30°N
+      band edge; the trade-wind band's storm gate is met: "storm within 6 day
+      ticks in-band ≥ 0.90" (demo-loop step 5 reachable, `1 − 0.65⁶ = 0.9246`,
+      §4.7).
 - [ ] Provisions 2g / water 1g / wage 2g are the only consumption prices and
       match `30-*` market UI and `10-*` harbor-relief math.
 - [ ] Ledger step order (§4.5) is implemented verbatim and unit-testable in
@@ -324,6 +424,8 @@ are GDScript constants, not a data file — game content stays in `data/`.)
       only via the specified checks.
 - [ ] Game over fires only from `"starvation"`, `"scurvy"`, `"sunk"`.
 - [ ] Port entry/exit round-trips position and resets `clock_fraction`.
-- [ ] Minimap dimensions and sighting radius (8) match `80-*` HUD spec.
-- [ ] Both maps play with zero sailing-code edits: dimensions come from the
-      legend, and the same movement/weather/port rules apply (`90-*` §9.1).
+- [ ] Minimap is a 256×192 px box showing a wrap-aware 128×96-tile crop at
+      2 px/tile, and the sighting radius (24) matches `80-*` §4.5.
+- [ ] The single world map plays with wrap-aware movement and the chunked
+      loader (`90-*` §9): x wraps at the dateline, y is ice-bounded, and the
+      loader renders only live chunks.

@@ -31,10 +31,19 @@ equipment modifiers), `80-*` (S10/S11 conventions), `90-*` (save migration).
 
 - A hostile fleet is a world-map marker moving 1 tile/day step toward its
   patrol anchor; kinds: `pirate` (red square), `navy` (nation-color square).
+- **One world grid.** Markers live on the single Terra Vera world grid
+  (`20-*` §4.1): their `position` values are tile coordinates on the
+  2160×1080 grid, and **all x-distance math is wrap-aware** — a marker at
+  `x = 2158` is 2 tiles from a fleet at `x = 0`, and zone/anchor distances
+  never exceed `2160/2 = 1080`. A tile is 10 nm, so every tile distance below
+  is 10 nm per tile.
 - **Pirate spawn:** at each day tick at sea, 1% chance; zone: within 15 tiles
-  of any of that spawn's anchor ports but outside the Atlantic storm strip;
-  composition per §4.11.3 (1–3 ships, hull tiers rolled from
-  `latin…brigantine`, total cannons ≤ 20 + floor(day/30)).
+  (Chebyshev, wrap-aware; 150 nm — the pinned Phase-2 value, not re-derived on
+  the new grid) of any of that spawn's anchor ports; composition per §4.11.3
+  (1–3 ships, hull tiers rolled from `latin…brigantine`, total cannons ≤
+  20 + floor(day/30)). The Phase-2 storm-strip exclusion is retired with the
+  strip itself: weather is now latitude-band (`20-*` §4.7), so no tile-based
+  spawn exclusion remains.
 - **Navy spawn:** only while the player holds a bounty against that nation
   (`70-*` §4.5: rep ≤ −50); chance 2% per day tick at sea, 2–4 ships,
   composition per §4.11.3. (Pinned here in Phase 2; the bounty *trigger* itself
@@ -325,7 +334,8 @@ because the bracket never repairs between battles.
 - **Reputation:**
   - Pirates defeated (any outcome except retreat) → `+2` with each of the
     **two nearest ports' nations** measured by Chebyshev distance from the
-    contact tile. The **two ports** are selected first (ties broken by port id
+    contact tile (wrap-aware on x over the 2160×1080 world grid). The **two
+    ports** are selected first (ties broken by port id
     ascending) and **then** their nations are deduplicated, so if both nearest
     ports belong to one nation that nation is credited once and no third port
     is considered (the dedupe clause is only observable under that reading).
@@ -379,16 +389,21 @@ the `equipment` object of §4.11.12).
   (nearest known port for pirates, nearest own-nation port for navies;
   Chebyshev; ties by port id ascending); it never changes.
 - **Zone check:** a pirate spawn candidate must be within Chebyshev 15 of its
-  anchor port's `position` **and** at `x ≥ 7` (outside the Atlantic storm
-  strip, `20-*` §4.7). Candidate tiles are drawn as described in §4.11.11.2.
+  anchor port's harbor tile, measured **wrap-aware on x** over the 2160×1080
+  world grid. The 15-tile radius is the pinned Phase-2 `ZONE_RADIUS` value, not
+  re-derived: on the Phase-4 grid (1 tile = 10 nm) it is 150 nm. The Phase-2
+  Atlantic-storm-strip exclusion is deleted with the strip; latitude bands
+  (`20-*` §4.7) replace it and impose no spawn exclusion.
+  Candidate tiles are drawn as described in §4.11.11.2.
 - **Movement:** each day tick at sea, after the daily ledger, every marker
   steps **1 tile** toward its anchor port using the greedy Chebyshev reduction
-  of §4.11.8 rule 5 (same tie-breaks), skipping occupied and occupied-by-fleet
-  tiles; a marker never steps onto land/reef and never onto an occupied tile.
-  A marker that reaches its anchor port's cell is removed.
+  of §4.11.8 rule 5 (same tie-breaks, `x` taken mod 2160 so the step picks the
+  short way across the seam), skipping occupied and occupied-by-fleet tiles; a
+  marker never steps onto `#` land, `^` reef or `I` ice, and never onto an
+  occupied tile. A marker that reaches its anchor port's cell is removed.
 - **Contact:** measured after both the player move and the marker step, at
-  Chebyshev distance 1. A pirate is hostile always; a navy only while the
-  player's reputation with its nation is ≤ −50 (`70-*` §4.5).
+  Chebyshev distance 1, wrap-aware on x. A pirate is hostile always; a navy
+  only while the player's reputation with its nation is ≤ −50 (`70-*` §4.5).
 - **Pursuit cooldown:** a marker that lost a battle (player retreat) does not
   move for 1 day (`60-*` §4.10), tracked in `marker.cooldown_until_day`.
   **Inclusive reading:** `cooldown_until_day` is the *last idle day*, so a
@@ -402,8 +417,9 @@ the `equipment` object of §4.11.12).
   `day + 3`, stored in `GameState.proximity_cooldowns[kind]` (`90-*` §8.1).
 - **Anchor by kind:** a pirate anchors to the nearest **known** port; a navy
   anchors to the nearest port **of its own nation** (a patrol belongs to its
-  own navy), else the nearest port. Both use Chebyshev distance, ties by port
-  id. The `x ≥ 7` storm-strip exclusion applies to pirates only.
+  own navy), else the nearest port. Both use Chebyshev distance over the
+  2160×1080 world grid, wrap-aware on x, ties by port id. No storm-strip
+  exclusion exists (deleted with the strip, `20-*` §4.7).
 
 #### 4.11.11.2 Spawn rolls (pin)
 

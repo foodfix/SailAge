@@ -3,8 +3,9 @@
 ## 1. Purpose & Phase
 
 Specifies guild quests, royal missions and the nobility-title ladder, the
-discovery/report system, piracy and bounties, tournaments, the full-world-map
-expansion, and the retirement/victory condition. Gates **Phase 3**. Schemas
+discovery/report system, piracy and bounties, tournaments, the world-map content
+scope (now the single Terra Vera map, §4.8), and the retirement/victory
+condition. Gates **Phase 3** (Phase 4 re-anchors the map, §4.8/§4.9.8). Schemas
 for `Quest`, `Discovery`, and guild/palace facilities already exist in
 `10-DATA-SCHEMA.md`.
 
@@ -22,12 +23,10 @@ for `Quest`, `Discovery`, and guild/palace facilities already exist in
 | `scripts/world/discovery.gd` | discovery sighting/report/hint bookkeeping |
 | `scripts/player/fame.gd` | fame + title ladder |
 | `data/quests.json` | hand-authored quest templates (procedural fill) |
-| `data/discoveries.json` | full-world discovery entries (~30, content task) |
-| `data/ports_p3.json` | the 70 Phase-3-only world ports |
-| `data/maps/p3_world.txt` + `map_legend_p3.json` + `maps/maps.json` | full world, 100 ports |
-| GameState additions | `fame`, `titles` (per nation), `bounties`, `active_quests`,
-`completed_royal_missions`, `discoveries_reported`, `discovery_hints`,
-`battles_won`, `retired`/`retired_at`; `save_version` bumps to 3 |
+| `data/discoveries.json` | discovery entries (~30, content task); positions are `lat`/`lon` |
+| `data/ports.json` | all 100 ports (`lat`/`lon` truth, `10-*` §7.1) |
+| `data/maps/world.png` | the single Terra Vera world map (`10-*` §6.3) |
+| GameState additions | `fame`, `titles` (per nation), `bounties`, `active_quests`, `completed_royal_missions`, `discoveries_reported`, `discovery_hints`, `battles_won`, `retired`/`retired_at` (v3 fields; save version 4 from Phase 4, `90-*` §8.2) |
 
 ## 3. Dependencies
 
@@ -95,10 +94,10 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 ### 4.4 Discovery & report
 
-- A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 3
-  of its `position` and choosing **Explore** (world-map action when the HUD
-  shows the `discovery.something_near` hint). First discovery only counts;
-  repeats are ignored.
+- A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 18
+  of its `lat`/`lon` position and choosing **Explore** (world-map action when
+  the HUD shows the `discovery.something_near` hint). First discovery only
+  counts; repeats are ignored.
 - **Report:** at any guild; reward = `report_reward_gold` + `fame`; removed
   from the unreported list.
 - `region_hint` strings are sold at taverns for 100g (rumor button, extends
@@ -107,10 +106,10 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 **Pins (task-owned values fixed before code, §4.9 discipline).**
 
-- **Sighting radius** is `3` exactly (`DiscoverySight.RADIUS`), **not** the
-  port sighting radius of `20-*` §4.11 — a discovery is a much smaller
+- **Sighting radius** is `18` exactly (`DiscoverySight.RADIUS`), **not** the
+  port sighting radius of `20-*` §4.11 (24) — a discovery is a much smaller
   landmark than a harbour, and the world-map `E` action is only offered inside
-  this radius. Chebyshev distance over tiles.
+  this radius. Chebyshev distance over tiles, **wrap-aware on x**.
 - **Explore** is a world-map action bound to the `E` key (and a
   `discovery.explore` HUD button that appears only when in range, `80-*` §4.3).
   It finds **every** in-range, unfound discovery in one action and reports
@@ -128,12 +127,13 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
   **hinted** (saved in `GameState.discovery_hints`, a `{id: true}` map) and
   shows its `region_hint`; buying the same hint twice is impossible (the row
   is disabled once hinted). Hints never expire.
-- **Content set.** ~30 discoveries (`data/discoveries.json`), positions
-  inside the Phase-3 world map, `fame` in `[50, 300]`,
+- **Content set.** ~30 discoveries (`data/discoveries.json`), positions stored
+  as `lat`/`lon` in open ocean or coastal waters on the single world map,
+  **matching the hint text**, `fame` in `[50, 300]`,
   `report_reward_gold` in `[500, 4000]`, every one with a distinct `zh`/`en`
-  `region_hint`. The validator (group 6 extension) requires each position to
-  be **passable or orthogonally adjacent to a passable tile** on the active
-  map, i.e. reachable by the Explore action.
+  `region_hint`. The validator (group 6 extension) requires each position's
+  derived tile to be **passable or orthogonally adjacent to a passable tile**
+  on the world map, i.e. reachable by the Explore action.
 
 ### 4.5 Piracy & bounty
 
@@ -198,16 +198,23 @@ fixed in §4.9.7.
   save the player takes, and the ending screen is shown immediately so the
   run visibly ends either way.
 
-### 4.8 Full world map (content scope)
+### 4.8 World map (content scope)
 
-- New file `data/maps/p3_world.txt` with its own legend entry set; ~100 ports
-  worldwide (Americas, Africa, India, East Asia) as data-only content per
-  `90-*` §10. Exact port list, grid size, and coordinates are **task-owned**
-  by `IMPLEMENT-Phase3.md` (they must extend, not alter, the Phase-1 grid's
-  semantics; a separate grid size is allowed since map loading is
-  legend-driven).
-- Phase-1 map remains playable; new-game nation packages unchanged (trade
-  routes to the new world are the Phase-3 economy driver).
+- **One map.** The single **Terra Vera** world map (`data/maps/world.png`) is
+  the only map. The Phase-3 content — the 100 ports, the 30 discoveries and
+  the guild/palace economy — folds into it unchanged in scope: exact port list,
+  `lat`/`lon` and trade data live in `10-*` §7.1, discoveries in
+  `data/discoveries.json`.
+- **Grid:** 2160×1080 tiles at 6 tiles per degree (`10-*` §6.1), longitude
+  wrap on, ice at `lat ≥ 70°N` / `lat ≤ 60°S`. No second map exists and
+  `data/maps/maps.json` has exactly one entry, `world` (`90-*` §9.1).
+- **Historical note:** Phase 3 shipped this content on a provisional coarse
+  ASCII grid; Phase 4 replaced that grid (and its map-file mechanics) with the
+  generated real-Earth raster. The port ids, nations, goods and trade
+  behaviour survived the migration (save `MIGRATIONS[3]`, `90-*` §8.2).
+- New-game nation packages unchanged (trade routes to the new world are the
+  Phase-3 economy driver); all 100 ports are on the one map, so no map
+  choice exists.
 
 ### 4.9 Phase-3 normative pins (resolves every task-owned value)
 
@@ -274,10 +281,10 @@ unreported list).
      `< 0.8` → bounty, else exploration;
   3. per slot, the type's own draws below.
 - **Delivery draws.** `quantity = 20 + 10 × rng.randi_range(0, 3)` (20/30/40/50);
-  `dest_port_id` = uniform pick over ports on the active map with a
+  `dest_port_id` = uniform pick over ports on the world map with a
   different `nation_id` from the guild port and a Chebyshev distance from it
-  in `[6, 30]`, sorted by id ascending (if that set is empty, drop the
-  nation filter, then widen the band to `[3, 60]`);
+  in `[6, 30]` tiles (wrap-aware on x), sorted by id ascending (if that set is
+  empty, drop the nation filter, then widen the band to `[3, 60]`);
   `expiry_days = clamp(ceil(distance / 4) + 5, 7, 30)`;
   `rewards.gold = 2 × Good.base_price(good_id) × quantity`,
   `rewards.reputation = {dest nation: +5}`, `rewards.fame = 10`.
@@ -289,10 +296,10 @@ unreported list).
   and `tier` ships; the marker carries `quest_id` so completion is detected
   from the battle outcome (§4.9.5).
 - **Exploration draws.** Uniform pick over `Discovery` ids not yet found,
-  whose `position` lies within Chebyshev 40 of the guild port, ids sorted
-  ascending; if the set is empty the slot degenerates to a delivery
-  (step 1 rules) rather than offering an impossible quest.
-  `rewards = {gold: 0, reputation: {guild nation: +5}, fame: 10}`,
+  whose `lat`/`lon`-derived tile lies within Chebyshev 40 of the guild port
+  (wrap-aware on x), ids sorted ascending; if the set is empty the slot
+  degenerates to a delivery (step 1 rules) rather than offering an impossible
+  quest. `rewards = {gold: 0, reputation: {guild nation: +5}, fame: 10}`,
   `expiry_days = 30`; the quest carries `requirements.discovery_id` and the
   discovery's `region_hint` is shown free in the quest row.
 - **Offer lifecycle.** Three offers per guild. The list refreshes when
@@ -419,32 +426,43 @@ unreported list).
 - A bounty-hostile host (host nation bountied) blocks entry
   (`tournament.blocked_bounty`, §6).
 
-#### 4.9.8 Full-world map constants (task-owned, pinned)
+#### 4.9.8 Full-world map constants (superseded by Phase 4)
 
-- **Grid:** `data/maps/p3_world.txt`, `160 × 96` tiles, `tile_size_px 32`,
-  legend `data/map_legend_p3.json`. Nominal scale **1 tile ≈ 1.5° longitude ×
-  1.0° latitude**, so the grid spans 75°W–165°E and 55°N–41°S.
-- **Ports:** exactly **100** — the 30 locked Phase-1 ports (`10-*` §7.1,
-  unchanged names/nations/produces/demands) plus 70 new ports across the
-  Americas, Africa, India, Southeast Asia and East Asia. The 30 Phase-1 ports
-  keep their §7.1 `marker`/`position` for the Phase-1 map and gain a `p3`
-  block (`{"marker": …, "position": {…}}`) for the world map; new ports carry
-  `phase: 3` and only a `p3` block.
-- **Markers:** one character per port, unique within the legend, never one of
-  the locked tile chars `~ . # ^`; the shipped file uses `0-9A-Za-z` first and
-  Latin-1 letters (`À`–`ÿ`) for the overflow past 62.
-- **Geography:** every port marker sits on a passable sea tile with ≥ 1
-  orthogonally adjacent land tile, exactly as `10-*` §6.2 requires; the
-  strict 8-directional no-corner-cutting BFS must reach every port and cover
-  every passable tile (one sea component — the validator extends the Phase-1
-  group 6 rules to the new grid).
-- **New-game choice:** S2 (`nationality_select`, `80-*` §4.2) carries a
-  two-option world selector, `nation.world_p1` / `nation.world_p3`, default
-  P3; the choice is stored as `GameState.world["map_id"]` (`"p1"`/`"p3"`) and
-  is saved (§8.1 v3). `data/maps/maps.json` is the map index
-  (`id`, `file`, `legend`, `name`), so a third map is a data-only addition.
+The Phase-3 pins in this subsection are **deleted**; the Phase-4 values below
+replace them (`IMPLEMENT-Phase4.md` locked constants, `10-*` §6/§7.1).
+
+- **Grid:** `data/maps/world.png`, **2160 × 1080** tiles at **6 tiles per
+  degree** (1 tile = 10′ lat = 10 nm), `tile_size_px 32`, legend
+  `data/map_legend.json`. Addressing `lon = x/6 − 180`, `lat = 90 − y/6`;
+  longitude wraps, latitude edges close with ice.
+- **Positions are lat/lon truth.** Every port carries `lat`/`lon` (WGS84
+  degrees) and is snapped to a **harbor tile** within **≤ 2** tiles
+  (Chebyshev) by the `10-*` §6.1 rule; the builder (`tools/build_world.py
+  --check-snaps`) and the runtime implement the same rule. No port marker
+  characters exist anywhere: **ports are an overlay** drawn from JSON.
+- **Ice band:** `I` iff `lat ≥ 70°N` or `lat ≤ 60°S`, impassable. Straits
+  narrower than a tile are carved water passages listed in
+  `tools/map_overrides.json`.
+- **Deleted pins:** the old grid size, the `map_legend` marker-charset
+  overflow and the per-map port coordinate blocks are gone — no marker
+  characters, no dual coordinate pairs.
+- **Ports:** exactly **100**, the 30 Phase-1 ports (`10-*` §7.1, unchanged
+  names/nations/produces/demands, now with real coordinates) plus 70 across
+  the Americas, Africa, India, Southeast Asia and East Asia.
+- **Geography:** every harbor tile is passable water with ≥ 1 orthogonally
+  adjacent water tile; the strict 8-directional no-corner-cutting,
+  wrap-aware BFS must reach every port and every discovery tile (validator
+  group 6).
+- **New-game map:** S2 no longer offers a map choice — `world.map_id` is
+  always `"world"` (`90-*` §7, `DEFAULT_MAP_ID`). There is exactly one
+  `maps.json` entry, so a second map would be a data-only addition only if a
+  future phase re-introduces multi-map support.
 - **Capitals:** the six nation capitals stay the six Phase-1 capitals; the
   new-world ports have no palaces (§7.4).
+
+**Historical note (superseded, the only mention kept):** Phase 3 shipped this
+content on a coarse provisional ASCII grid selected by `world.map_id` (`"p1"`
+or `"p3"`); Phase 4 replaced both with the single generated world above.
 
 ## 5. Data Examples
 
@@ -481,9 +499,9 @@ Title ladder progress block:
   every cargo mutation, §4.9.3).
 - **Expired bounty quest while in battle with the target** → quest completes
   if the battle wins; the clock checks at battle end.
-- **Discovery at a tile unreachable in the Phase-1 map** → generator/config
-  error; validator (extended in Phase 3 tasks) checks positions ⊆ the active
-  world map.
+- **Discovery position off the map / unreachable** → generator/config error;
+  the validator checks every derived discovery tile against the world map's
+  passable/adjacent rule.
 - **Rep ≤ −50 with own nation** → allowed; own ports close, bounty via own
   palace (recovery always possible ⇒ no softlock).
 - **Tournament while bounty-hunted by host nation** → palace closed; no
@@ -507,7 +525,7 @@ Title ladder progress block:
   immediately on the next bind; the lobby row disappears.
 - **Retiring with `gold < 0` impossible** — the ledger clamps, so the
   summary never shows a negative purse.
-- **`p3` map selected but `p3_world.txt` missing** → DataLoader startup
+- **`world.png` missing / wrong size / non-indexed** → DataLoader startup
   error (`title.data_error`), never a crash (`90-*` §11).
 
 ## 7. Acceptance Criteria
@@ -518,13 +536,14 @@ Title ladder progress block:
       (sell-price grant verified against `30-*` formula as a separate
       `title_bonus` multiplier).
 - [ ] Discovery flow (hint → sight → explore → report) works with both
-      strings localized.
+      strings localized; sighting radius 18, wrap-aware.
 - [ ] Bounty: rep −50 triggers closure + hunters; both clear paths reset to
       −10.
 - [ ] Tournament: 3 battles, durability persistence, prizes exact.
 - [ ] Retirement marks the save and locks it to the summary screen.
-- [ ] Phase-3 world map loads via the unchanged map-loader pipeline
-      (`90-*` §9 data-only swap).
+- [ ] The single world map loads via the PNG chunked-loader pipeline
+      (`90-*` §9); `maps.json` has exactly one entry.
 - [ ] Every pinned number in §4.9 is reproduced by a headless assertion:
       fame sources, title ladder arithmetic, quest seeds/draws, rival table,
-      bounty amounts, tournament rotation, world-map constants.
+      bounty amounts, tournament rotation, world-map constants (2160×1080,
+      6 tiles/degree, snap ≤ 2, ice band).

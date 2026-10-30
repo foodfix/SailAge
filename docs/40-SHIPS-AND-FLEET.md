@@ -120,6 +120,10 @@ Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
   (`20-*` §4.4) computed with the **slowest `ShipType.speed` in the fleet**
   as `base_speed`. (§locked simplification: flagship supplies crew/sim
   fields; cargo ships tow along.)
+- **Speed units.** `ShipType.speed` is **tiles/day on 10 nm tiles**
+  (`20-*` §4.1): the Phase-4 base speeds are `{8, 10, 12}` tiles/day =
+  80–120 nm/day (`10-*` §7.3). The fleet-speed rule (slowest hull) is
+  unchanged.
 - Phase-1 crew simplification (from `20-*` §4.6): all crew lives on the
   flagship; non-flagship hulls require no crew. Consumption pool = flagship
   crew only.
@@ -139,9 +143,10 @@ rule OUT OF SCOPE (phase 2)).
 
 ## 5. Data Examples
 
-Starter caravel loaded at Lisbon for the Seville hop (9 tiles ≈ 2 days at
-speed 5; 15 crew → `ceil(15/5) = 3` provisions + 3 water per day, `20-*`
-§4.5). Loadout: 15 days of supplies + 30 cargo:
+Starter caravel loaded at Lisbon for the Seville hop (Lisbon 38.72/−9.14 →
+Seville 37.39/−6.00: 3.14° of longitude ≈ 19 tiles at 6 tiles/degree, so
+≈ 2 days at speed 8–10; 15 crew → `ceil(15/5) = 3` provisions + 3 water per
+day, `20-*` §4.5). Loadout: 15 days of supplies + 30 cargo:
 
 ```json
 {

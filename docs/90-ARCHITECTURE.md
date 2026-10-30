@@ -4,8 +4,8 @@
 
 Defines the Godot 4 project structure every implementation task builds into:
 directory tree, scene patterns, autoload singletons, the scene-vs-data split,
-save-file format and versioning, and how the ASCII map files become a runtime
-TileMap. Gates all phases; Phase-1 tasks must not introduce structures that
+save-file format and versioning, and how the world PNG becomes chunked runtime
+TileMaps. Gates all phases; Phase-1 tasks must not introduce structures that
 contradict this doc.
 
 ## 2. Artifacts
@@ -42,7 +42,8 @@ SailAge/
 │   │   ├── title_screen.tscn
 │   │   └── nationality_select.tscn
 │   ├── world/
-│   │   └── world_map.tscn       # TileMap ocean sailing scene
+│   │   ├── world_map.tscn       # chunked-TileMap ocean sailing scene
+│   │   └── chart_screen.tscn    # S17 whole-world Chart (Phase 4)
 │   ├── port/
 │   │   ├── port_screen.tscn     # port hub (facility menu)
 │   │   ├── market_screen.tscn
@@ -60,7 +61,8 @@ SailAge/
 │       └── hud.tscn
 ├── scripts/
 │   ├── world/sailing_sim.gd    # day tick, consumption, weather, morale
-│   ├── world/map_loader.gd     # ASCII map → TileMap (§9)
+│   ├── world/map_loader.gd     # PNG world → chunked TileMaps (§9)
+│   ├── world/sail_path.gd      # click-to-sail A* pathing (20-* §4.2, Phase 4)
 │   ├── world/discovery.gd      # Phase 3: explore/report/hints (70-* §4.4)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
 │   ├── port/shipyard_engine.gd
@@ -72,8 +74,11 @@ SailAge/
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   └── fleet/fleet.gd          # fleet composition, cargo maths
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
-│   └── maps/p1_mediterranean.txt
-└── tools/validate_data.py
+│   └── maps/world.png           # generated, tool-owned (§9)
+└── tools/
+    ├── validate_data.py
+    ├── build_world.py           # Natural Earth → data/maps/world.png (Phase 4)
+    └── map_overrides.json       # carved-strait list (Phase 4)
 ```
 
 Rules:
@@ -122,8 +127,11 @@ Cross-screen communication never uses direct node references.
 - Loads every `data/*.json` at startup into typed dictionaries keyed by id:
   `DataLoader.ports`, `.goods`, `.ship_types`, `.nations`, `.officers`,
   `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`.
+  There is exactly one port file (`data/ports.json`, 100 ports) — **no
+  merge step**.
 - Entry points: `get_port(id) -> Dictionary`, `get_good(id)`, …
-  plus `map_loader` handoff (§9).
+  plus the world-map handoff **`DataLoader.map`**: a `MapLoader` instance
+  built over `data/maps/world.png` (§9).
 - On parse/validation failure: push full error to console and show
   `data_error_screen` text on the title screen; the game must not start with
   invalid data in development builds (release builds may proceed with
@@ -150,10 +158,13 @@ marked •):
   map (shape in `50-CHARACTER-AND-PROGRESSION.md` §save-block)
 - `fleet: Array` • — ship instances (shape in `40-SHIPS-AND-FLEET.md` §ship
   instance schema)
-- `world: Dictionary` • — fleet tile position, movement state, weather state
+- `world: Dictionary` • — fleet tile position, `map_id` (always `"world"`,
+  `DEFAULT_MAP_ID`), movement state, weather state. The explored bitset is a
+  `PackedByteArray` of 291,600 bytes owned by the world scene/HUD, **not**
+  saved and not part of `world`.
 - `morale: int` • — fleet morale 0–100 (`20-*` §4.8)
 - `current_port: String?` • — port id while docked; `null` at sea (save/load
-  routing, `80-*` §4.6)
+  routing, `80-*` §4.7)
 - `port_investments: Dictionary` • — `{port_id: gold_total}` (`30-*` §4.3)
 - `known_ports: Array[String]` • — discovered ports (§20 port discovery)
 - `hostile_fleets: Array` • — world-map hostile markers (`60-*` §4.11.11);
@@ -172,9 +183,10 @@ marked •):
 - Phase-3 fields (§8.1): `fame` • (int), `titles` •, `bounties` •,
   `active_quests` •, `completed_royal_missions` •, `discoveries_reported` •,
   `discovery_hints` •, `battles_won` •, `retired` •, `retired_at` •
-- API: `new_game(nation_id, route, map_id)`, `add_gold(delta)`,
+- API: `new_game(nation_id, route)`, `add_gold(delta)`,
   `advance_day()`, and thin helpers; heavy rules live in `scripts/` engines
-  which mutate GameState.
+  which mutate GameState. `world.map_id` is set to `DEFAULT_MAP_ID = "world"`
+  at new game — there is no map choice.
 - On `day_advanced`: runs the daily ledger delegation order fixed in
   `20-WORLD-AND-SAILING.md` §5 (consumption before wages before morale).
 
@@ -184,7 +196,7 @@ marked •):
 - `save(slot)`, `load(slot) -> bool`, `list_saves() -> Array[Dictionary]`
   (slot, day, nation, port, gold, timestamp for the slot UI).
 - Serializes exactly the •-marked GameState fields plus
-  `{"save_version": 1, "saved_at": <unix>, "phase": 1}`.
+  `{"save_version": 4, "saved_at": <unix>, "phase": 4}`.
 - `load` validates `save_version` and runs migrations (§8.2); on unrecoverable
   version mismatch returns `false` and leaves state untouched.
 
@@ -210,6 +222,10 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 - **World ↔ Port:** reaching a harbor tile emits `port_entered`; the world
   scene reacts by routing to `port_screen.tscn` with `GameState.current_port`
   set. Leaving port returns to `world_map.tscn` at the harbor tile.
+- **World ⇄ Chart:** `S3 ⇄ S17` via `Tab` (open) and `Esc`/`Tab` (close); the
+  Chart is an overlay view of the current session and returns to S3 with state
+  untouched. `world.map_id` is a single value (`"world"`), so **no
+  map-switch routing exists** anywhere in the flow.
 - **Dialogs:** `dialog_box.tscn` / `confirm_dialog.tscn` are instanced as
   modal children of the current screen; results delivered via signals, not
   callbacks into other scenes.
@@ -222,16 +238,16 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 2,
+  "save_version": 4,
   "saved_at": 1793119712,
-  "phase": 2,
+  "phase": 4,
   "locale": "en",
   "day": 12,
   "gold": 7830,
   "player": {},
   "fleet": [],
   "morale": 70,
-  "world": {"position": {"x": 7, "y": 57}, "weather": "calm"},
+  "world": {"position": {"x": 1025, "y": 307}, "map_id": "world", "weather": "calm"},
   "current_port": "lisbon",
   "known_ports": ["lisbon"],
   "port_investments": {"lisbon": 500},
@@ -268,7 +284,7 @@ Phase-3 additions (version 3):
 | `discoveries_reported` | `[]id` | `[]` | `70-*` §4.4 |
 | `discovery_hints` | `object id → true` | `{}` | `70-*` §4.4 |
 | `battles_won` | `int ≥ 0` | `0` | `70-*` §4.7 |
-| `world.map_id` | `"p1"`/`"p3"` | `"p1"` | `70-*` §4.9.8 |
+| `world.map_id` | `"world"` | `"world"` | `90-*` §9.1; value fixed in Phase 4 |
 | `retired` | `bool` | `false` | `70-*` §4.7 |
 | `retired_at` | `int` unix | `0` | `70-*` §4.7 |
 
@@ -278,6 +294,23 @@ writes it. The `2 → 3` migration drops it from the payload (a v3 save has no
 `quests` key); a load with the key absent restores `GameState.quests = []`.
 `world.map_id` is written by `SaveSystem.snapshot()` from `GameState.world`
 (it already serialises `world`'s `position`/`weather`; `map_id` joins them).
+Its value in a v3 payload was the map id current at that time; Phase 4 fixes the
+value to `"world"` (§8.1 Phase-4 row and `MIGRATIONS[3]`).
+
+Phase-4 change (version 4):
+
+| Key | Value at v4 | How it is set |
+|---|---|---|
+| `world.map_id` | `"world"` | `DEFAULT_MAP_ID` (§9.1) |
+| `world.position` | `tilePos` on the 2160×1080 grid | the save's `current_port` harbor tile (`10-*` §6.1 snap rule) |
+
+**No payload keys are added or removed** by version 4 — only values change:
+`world.map_id` becomes `"world"`, `world.position` becomes the harbor tile
+(`10-*` §6.1 snap rule) of the save's `current_port` (saves are port-only by
+design, `20-*` §4.3), `clock_fraction` becomes `0` (it is a runtime
+accumulator, absent from a normal save — the migration normalizes it if a
+hand-edited payload carries one), `known_ports` is kept untouched (port ids
+survived the migration, `10-*` §7.1), and `phase` becomes `4`.
 
 ### 8.2 Migration rule
 
@@ -303,73 +336,97 @@ writes it. The `2 → 3` migration drops it from the payload (a v3 save has no
   missions` all six nations at `"none"`/`0`, `bounties {}`, `active_quests []`,
   `discoveries_reported []`, `discovery_hints {}`, `battles_won 0`,
   `retired false`, `retired_at 0`), removing the superseded `quests` key,
-  adding `world.map_id = "p1"` when `world` is a non-empty object (never
-  synthesising a `world`), and setting `phase = 3`. It never mutates its input
-  and never touches any other key, so a Phase-2 save re-saves byte-equal apart
-  from the added/removed keys and the version.
+  adding `world.map_id` at its then-current default when `world` is a
+  non-empty object (never synthesising a `world`), and setting `phase = 3`. It
+  never mutates its input and never touches any other key, so a Phase-2 save
+  re-saves byte-equal apart from the added/removed keys and the version.
+
+- Phase-4 code ships `save_version = 4` and adds exactly one step:
+
+  `MIGRATIONS[3]` — upgrades a version-3 payload to the single-world save. It
+  rewrites `world.map_id` → `"world"`; rewrites `world.position` → the
+  **harbor tile** of the save's `current_port` (`10-*` §6.1 snap rule: nearest
+  water tile within 2 tiles, Chebyshev, tie-break smallest `(y, x)`), because
+  saves are port-only by design and the old coordinates name tiles that no
+  longer exist on the new grid; sets `clock_fraction` → `0`; leaves
+  `known_ports` **untouched** (every port id survived `10-*` §7.1); and sets
+  `phase = 4`. No key is added or removed. It never mutates its input.
+  (History: the payload it consumes may still carry `map_id` `"p1"`/`"p3"`.)
+- The chain **v1 → v2 → v3 → v4 is preserved and tested end-to-end**
+  (`test_save_v4`, which loads a real Phase-1 fixture and migrates it all the
+  way).
 - Migration functions are pure: they receive a dict and return a new dict; the
   loaded file is never mutated in place.
 - **`titles`/`completed_royal_missions` must cover all six nations** after
   every migration (the ladder and the quest-slot rule read them by key); the
   six ids come from `data/nations.json`, never a list in code.
 
-## 9. ASCII Map → TileMap (loading pipeline)
+## 9. World PNG → chunked TileMap (loading pipeline)
 
-Implemented by `scripts/world/map_loader.gd` (RefCounted, called by
-DataLoader):
+Implemented by `scripts/world/map_loader.gd` (RefCounted, instantiated once by
+DataLoader as `DataLoader.map`):
 
-1. Read `data/maps/p1_mediterranean.txt` → array of 96 strings × 128 chars.
-2. Read `data/map_legend.json` → char semantics + constants (fail if the file
-   dimensions disagree with `grid.width/height`).
-3. Build a `TileMap` with **layer 0 = terrain**: a programmatically generated
-   `TileSet` whose tiles are 32×32 colored squares (placeholder palette from
-   `80-UI-UX.md` §palette: sea, coastal, land, reef). One cell per file char.
-4. Build **layer 1 = ports**: for each of the 30 markers, record
-   `marker_cell → port_id`; place a port placeholder marker (32×32 square in
-   the port's nation color + first letter of its English name as a Label).
-5. Passability lookup (`is_passable(Vector2i)`) consults layer 0 kinds; port
-   marker cells are always passable (they sit on sea per `10-*` §6.2).
-6. The world scene queries only `map_loader`'s output; it never re-parses the
-   text file.
+1. Read `data/maps/world.png` bytes with `FileAccess`, then decode with
+   `Image.load_png_from_buffer`. It is **data, not an imported texture** — no
+   import pipeline, and it works in exports (the placeholder-art rule is
+   unaffected: this is the one shipped raster, `00-*` §6).
+2. Verify size **2160 × 1080** and an indexed palette whose indices are
+   ⊆ `0–4`; anything else is a DataLoader startup error (§11).
+3. Passability = byte lookup on the decoded `Image`'s palette index
+   (0–4 → `~ . # ^ I`, `10-*` §6.2). `is_passable(x, y)` is **wrap-aware on
+   x** (`x` taken mod 2160) and false for `y` out of range and for
+   `#`/`^`/`I`.
+4. Rendering = **128×128-tile chunk TileMaps generated on demand around the
+   camera**, at most **24 live chunks**, freed beyond a margin. The 5 palette
+   colours come from `80-*` §4.8 through `scripts/palette.gd` (`SEA`,
+   `COAST_SEA`, `LAND`, `REEF`, `ICE`).
+5. Ports = an **overlay layer** from `data/ports.json` (`lat`/`lon` → harbor
+   tile by the `10-*` §6.1 snap rule), drawn as a nation-coloured square plus
+   a label, **wrap-duplicated at the seam** so a port at `x = 0` also shows at
+   `x = 2160`.
+6. The camera centers on the fleet and `x` wraps (§7); `y` clamps to the
+   1080-tile height.
+7. The world scene queries only the loader; it **never re-reads the PNG**.
 
-The same pipeline serves Phase 3's full-world map by file-name swap only —
-adding a map is a data-only change plus one legend entry set.
+The loader's passability API does not change movement rules (`20-*` §4.2):
 
-#### 9.1 Map index (Phase 3)
+- **No corner cutting:** a diagonal move is blocked if either orthogonal
+  neighbor of the target corner is impassable.
+- **Longitude wraps.** `x` is taken mod 2160 everywhere (movement, BFS,
+  camera, click); a fleet at `x = 2159` stepping east lands on `x = 0`.
+  Click-to-sail paths obey the same rules, including the local-frame shift for
+  seam crossings.
 
-Adding a map must **not** require a code edit, so the selectable maps live in
-data:
+#### 9.1 Single map index
 
-`data/maps/maps.json`
+`data/maps/maps.json` has **exactly one entry**; resolving it stays
+data-driven:
 
 ```json
 {
   "version": 1,
   "maps": [
-    {"id": "p1", "file": "data/maps/p1_mediterranean.txt",
+    {"id": "world", "file": "data/maps/world.png",
      "legend": "data/map_legend.json",
-     "name": {"zh": "地中海与西欧", "en": "Mediterranean & Western Europe"}},
-    {"id": "p3", "file": "data/maps/p3_world.txt",
-     "legend": "data/map_legend_p3.json",
-     "name": {"zh": "环球世界", "en": "The Wider World"}}
+     "name": {"zh": "世界地图", "en": "World map"}}
   ]
 }
 ```
 
-- `GameState.world["map_id"]` selects the entry (default `"p1"`); a missing or
-  unknown id falls back to the first entry with a logged warning.
-- `MapLoader.load_map(path, legend)` already takes both as plain arguments;
-  the world scene resolves them from this index through
-  `DataLoader.get_map(id)` → `{file, legend_path, name}` plus
-  `DataLoader.get_map_legend(id)` (a `{id: legend}` cache keyed by the index,
-  so two legend files never overwrite each other).
-- Port coordinates on a non-P1 map live in `Port.p3.position` /
-  `Port.p3.marker` (`10-*` §4.4); a port without a `p3` block simply does not
-  appear on the P3 map. The map legend's `port_markers` table must name a port
-  that has a `p3` block, and vice versa — the validator checks both directions.
-- `data/maps/maps.json` and `data/map_legend_p3.json` are non-entity tables
-  (like `map_legend.json`), so `DataLoader` loads them without an envelope
-  plural key.
+- `GameState.world["map_id"]` is always `"world"` (`DEFAULT_MAP_ID`,
+  `90-*` §5.4). An unknown id is a logged data error; there is no fallback
+  ladder and no map-switch routing.
+- `DataLoader.get_map(id)` → `{file, legend_path, name}`; the legend is the
+  single `data/map_legend.json` (`10-*` §6).
+- Adding a second map is not a Phase-4 feature; the index shape exists so a
+  future phase can re-introduce multi-map support as a data-only change.
+
+**Harbor-snap equality contract (pinned).** The builder
+(`tools/build_world.py --check-snaps`) and the GDScript runtime implement the
+**same** rule — harbor tile within 2 tiles (Chebyshev) of `Port.lat`/`lon`, on
+water, with ≥ 1 orthogonally adjacent water tile, equidistant candidates
+tie-breaking to the smallest `(y, x)` — and the validator compares the two
+outputs; a disagreement is a build failure, never a quiet divergence.
 
 ## 10. "Add Content = Data-Only" Rule
 
@@ -389,14 +446,18 @@ data:
 - **Save written mid-day-tick** → saves are only offered at port (Phase-1
   rule from `80-UI-UX.md`) and via title-screen autosave-on-load; GameState
   guarantees day tick is atomic before any save call.
-- **Map file shorter than 96 lines / wrong width** → DataLoader startup error;
-  same path as invalid data.
+- **`world.png` missing / wrong size / non-indexed / palette index > 4** →
+  DataLoader startup error; same path as invalid data (§5.2).
 - **Port entered while a dialog is open** → dialogs are modal; movement input
   is disabled while any modal exists, so this cannot occur.
 - **Two scenes connected to the same EventBus signal after scene switch** →
   scenes connect in `_ready` and Godot frees connections with the node; HUD
   re-connects on each entry. Double-connection is prevented by connecting in
   `_ready` only.
+- **Click-to-sail path across the dateline** → found via the local-frame shift
+  (`20-*` §4.2): fleet and target `x` are shifted together into `[0, 2160)`
+  before the `AStarGrid2D` query and the path is offset back, so a fleet at
+  `x = 2100` clicking `x = 50` gets the short westward route.
 
 ## 12. Acceptance Criteria
 
@@ -407,8 +468,7 @@ data:
 - [ ] `project.godot` matches §6 exactly.
 - [ ] Save file contains at least the §8.1 keys with `save_version` present;
       load tolerates missing optional keys only where a default is documented.
-- [ ] Swapping `data/maps/p1_mediterranean.txt` for a different
-      legend-conformant map file requires zero code edits (verified at the
-      Phase-3 world-map task).
+- [ ] Swapping `data/maps/world.png` for another palette-conformant
+      2160×1080 indexed PNG requires zero code edits.
 - [ ] Adding one new good to `data/goods.json` requires zero code edits
       (verified in the Phase-1 market task acceptance).

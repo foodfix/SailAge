@@ -3,10 +3,10 @@
 ## 1. Purpose & Phase
 
 Specifies the screen inventory and navigation graph, input scheme,
-dialog/text conventions, the sailing HUD layout, save/load UX, the
-`ui_strings.json` key inventory, and the placeholder-art palette + sizing
-grid. Gates Phase 1 for the listed screens; Phase-2/3 screens are named and
-marked.
+dialog/text conventions, the sailing HUD layout, the Chart screen (S17),
+save/load UX, the `ui_strings.json` key inventory, and the placeholder-art
+palette + sizing grid. Gates Phase 1 for the listed screens; Phase-2/3 screens
+are named and marked; Phase 4 adds S17 (Chart).
 
 ## 2. Artifacts
 
@@ -16,8 +16,9 @@ marked.
 | `scenes/ui_shared/dialog_box.tscn` | modal message dialog |
 | `scenes/ui_shared/confirm_dialog.tscn` | modal yes/no dialog |
 | `scenes/ui_shared/hud.tscn` | shared HUD (world + port) |
+| `scenes/world/chart_screen.tscn` | full-screen Chart (S17, §4.6) |
 | all `scenes/**` screens | per `90-*` §4 tree, content per docs 30/50 |
-| Save UX | title-screen Load / port-side Save (§4.6) |
+| Save UX | title-screen Load / port-side Save (§4.7) |
 
 ## 3. Dependencies
 
@@ -46,8 +47,9 @@ marked.
 | S14 | Character/status panel | `ui_shared/character_panel.tscn` (modal over S3/S4) | 1 |
 | S15 | Fleet/cargo panel | `ui_shared/fleet_panel.tscn` (modal over S3/S4) | 1 |
 | S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
+| S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
 
-Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.6).
+Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.7).
 
 ### 4.2 Navigation graph
 
@@ -57,6 +59,7 @@ S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependen
 S1 ──Load retired slot──► S16 (summary only)
 S3 ──enter harbor tile──► S4
 S4 ──Set Sail──► S3
+S3 ──Tab──► S17 ──Esc/Tab──► S3
 S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
@@ -82,11 +85,12 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | Any | `F5` | quick-save (allowed only in port; elsewhere shows toast `ui.cant_save_here`) |
 | Any | `F9` | quick-load to slot 1 (confirm dialog) |
 | S1/S2 | `L` | toggle locale zh/en; also an on-screen button `[ 中文 / EN ]` on every screen's top bar |
-| S3 | arrows / numpad 1–9 | step one tile (8-directional per `20-*` §4.2) |
-| S3 | left-click adjacent tile | step there if legal |
+| S3 | arrows / numpad 1–9 | step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move |
+| S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`) |
 | S3/S4 | `C` | open/close character panel (S14) |
 | S3/S4 | `F` | open/close fleet/cargo panel (S15) |
-| S3 | `M` | toggle minimap enlarged mode (512×384, centered) |
+| S3 | `Tab` | open the Chart (S17, §4.6) |
+| S3 | `Esc` | close the Chart when it is open (otherwise no-op on S3) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
 | S10 | left-click tile / enemy token | move / default action |
@@ -94,8 +98,8 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / back) |
 | S3 | right-click a hostile marker | attack it (navy = piracy, `70-*` §4.5) |
-| S3 | `E` | Explore: find every discovery within Chebyshev 3 (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
-| S2 | click a world radio row | choose the P1 map or the full world map (`70-*` §4.9.8); the choice is `world.map_id` |
+| S3 | `E` | Explore: find every discovery within Chebyshev 18, wrap-aware (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
+| S17 | `Tab` / `Esc` | toggle back to S3 (the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 
 Focus outline (2px accent border) always visible on keyboard-focused control.
@@ -108,7 +112,8 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
   `ui.back`, `ui.confirm`, `ui.cancel`, `ui.gold_abbr`…), `gameover.*`,
   `battle.*` (S10), `duel.*` (S11), `encounter.*` (hostile-fleet markers),
   `guild.*` (S12), `palace.*` (S13), `quest.*`, `rank.*` (nobility names),
-  `bounty.*`, `tournament.*`, `discovery.*`, `ending.*` (S16).
+  `bounty.*`, `tournament.*`, `discovery.*`, `ending.*` (S16),
+  `chart.*` (S17), and the Phase-4 `world.*` sailing keys below.
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -133,7 +138,7 @@ Layout (1280×720; tile viewport is the space below the top bar):
 |                                                                  |
 |                               [fleet ship sprite placeholder]    |
 +------------------------------------------------------------------+
-| Provisions 45 · Water 45 · Crew 15/45 · Cargo 120/120 · Speed 5  | bottom bar 32px
+| Provisions 45 · Water 45 · Crew 15/45 · Cargo 120/120 · Speed 8  | bottom bar 32px
 +------------------------------------------------------------------+
 ```
 
@@ -144,9 +149,14 @@ Layout (1280×720; tile viewport is the space below the top bar):
   all live-updating via `EventBus` signals.
 - Weather icon (placeholder glyph: sun/wind/storm text label) sits under the
   minimap; in storm it flashes (0.5s cycle).
-- Camera: a `Camera2D` centers on the fleet marker every frame and is clamped
-  to the map bounds (no void shown past the 128×96 grid); zoom locked at 1.0
-  in Phase 1.
+- Camera: a `Camera2D` centers on the fleet marker every frame. **`x` wraps**
+  (no clamp at the dateline; the seam shows no void) and `y` is clamped to the
+  1080-tile height; zoom locked at 1.0. Only live chunks are drawn
+  (`90-*` §9).
+- Minimap: the 256×192 px box shows a **wrap-aware 128×96-tile crop** around
+  the fleet at 2 px/tile, drawn from the explored bitset (`20-*` §4.12).
+- The full world is the separate **Chart screen (S17, §4.6)**, opened with
+  `Tab`.
 - S4 (port) HUD: same top/bottom bars, viewport replaced by the port menu;
   the bar contents are identical so stats are always visible.
 
@@ -185,6 +195,41 @@ the supplies jettison of `20-*` §4.10 refer to.
   reason, because promotion and jettison are port actions.
 - Rows are 32px table rows (§4.8); no textures.
 
+### 4.6 Chart screen (S17, Phase 4)
+
+Full-screen panel over S3 (`scenes/world/chart_screen.tscn`); it **never
+mutates state** — a pure view of the session.
+
+```
++------------------------------------------------------------------+
+| 海图 / Chart                                        [关闭海图]     | top 40px
++------------------------------------------------------------------+
+|  whole world 2160×1080 downscaled to fit (≈0.55× at 1280×720)     |
+|   explored tiles: SEA/COAST_SEA at low alpha                      |
+|   unknown tiles: PANEL_BG                                         |
+|   known ports: 3px nation-coloured dots (+ names at zoom)         |
+|   discovery leads: ACCENT cross icons                             |
+|   fleet: white 5px square with black outline                      |
++------------------------------------------------------------------+
+| 已探索海域 · 已知港口 · 船队 · 发现物线索            (legend)      | bottom 32px
++------------------------------------------------------------------+
+```
+
+- **Layers, bottom to top:** canvas background, explored-tiles overlay from
+  the session explored bitset (`PackedByteArray`, `20-*` §4.12), known ports
+  as nation-coloured dots with names shown at zoom, discovery hint icons, the
+  fleet marker.
+- **Scale:** whole 2160×1080 grid downscaled to fit the viewport (scale
+  ≈ 0.55× at 1280×720); no scrolling, no per-region tabs. Dateline handling is
+  implicit in a full-world image (no seam crop).
+- **Input:** `Tab` toggles, `Esc` closes (`§4.3`); the panel owns all input
+  while open. Closing returns to S3 with the fleet unmoved and the clock
+  untouched.
+- **Budget:** open (build + first frame) **< 0.5 s**.
+- **Strings:** every label from `chart.*` (§4.7.5).
+- **Not saved:** explored state and the chart itself are session-only (Phase-1
+  known limitation, unchanged).
+
 ### 4.7 Save / load UX
 
 - **Save:** available only at port (S4 menu row + F5). Slot dialog lists 3
@@ -193,8 +238,10 @@ the supplies jettison of `20-*` §4.10 refer to.
   `ui.saved` + `EventBus.save_completed`.
 - **Load:** title-screen Load (always) + F9 quick-load slot 1 (with confirm).
   Loading routes to S4 if `current_port` set, else S3.
-- No autosave in Phase 1.
-- Version-mismatch or corrupt file → slot line shows `ui.save.invalid` and is
+- No autosave.
+- **Save version:** current format is **version 4** (`90-*` §8.2); loading a v1,
+  v2 or v3 save migrates it forward (`MIGRATIONS[1..3]`).
+- Corrupt or future-version file → slot line shows `ui.save.invalid` and is
   not selectable (`90-*` §8.2).
 
 #### 4.7.1 S10 battle screen (Phase 2)
@@ -259,7 +306,8 @@ sections:
   (`quest.slots_full`, `quest.no_hold`, `quest.accepted`); an empty list shows
   `quest.slots_full` when the slots are the cause, else `ui.empty`.
   The header line `guild.offers_refresh` says when the list changes, and a
-  `tournament.status` line under it announces this month's bracket (§4.6).
+  `tournament.status` line under it announces this month's bracket
+  (`70-*` §4.9.7).
 - *Reports* — one row per found-but-unreported discovery: name, the
   `guild.report_reward` line (gold · fame) and a `Report` button; empty
   state `guild.report.none`.
@@ -402,8 +450,27 @@ between zh and en (the validator enforces it).
 | `ending.battles` | 胜战:{count} | Battles won: {count} |
 | `ending.continue` | 返回标题 | Return to the title |
 | `nation.world` | 世界地图 | World map |
-| `nation.world_p1` | 地中海与西欧(30 港) | Mediterranean & Western Europe (30 ports) |
-| `nation.world_p3` | 环球世界(100 港) | The Wider World (100 ports) |
+
+The Phase-3 `nation.world_p1` / `nation.world_p3` selector labels are retired
+with the S2 map choice (there is exactly one map, `70-*` §4.9.8).
+
+### 4.7.5 Phase-4 `ui_strings.json` inventory (S3 sailing + S17 Chart)
+
+Required Phase-4 keys; placeholders must match between zh and en (the
+validator enforces it). A task needing another key reports it instead of
+inventing one.
+
+| Key | zh | en |
+|---|---|---|
+| `chart.title` | 海图 | Chart |
+| `chart.close` | 关闭海图 | Close the chart |
+| `chart.hint` | 已探索海域 | Explored waters |
+| `chart.legend.port` | 已知港口 | Known ports |
+| `chart.legend.fleet` | 船队 | Fleet |
+| `chart.legend.discovery` | 发现物线索 | Discovery leads |
+| `world.move_blocked` | 此处无法通行 | Cannot sail there |
+| `world.sail.no_path` | 无可行航线 | No route by sea |
+| `world.sail.arrived` | 已抵达目的地 | Destination reached |
 
 ### 4.7 Dialog & text conventions
 
@@ -429,6 +496,7 @@ between zh and en (the validator enforces it).
 | `COAST_SEA` | `#2f6f9e` | coastal tiles |
 | `LAND` | `#7a5c2e` | land tiles |
 | `REEF` | `#3d3d3d` | reef tiles |
+| `ICE` | `#c9d6df` | polar ice tiles (`I`, impassable; `20-*` §4.1) |
 | `PORT` | nation colors (`10-*` §7.4) | port markers |
 | `PANEL_BG` | `#1c2230` | panels/hud bars |
 | `PANEL_LINE` | `#465468` | borders |
@@ -494,12 +562,21 @@ between zh and en (the validator enforces it).
   to S1; it never restores the run.
 - **Explore pressed at sea with nothing in range** → `world.explore.none`
   toast, no day cost.
+- **Click-to-sail with no path** (target enclosed by land, or path budget
+  exhausted) → `world.sail.no_path` toast; the fleet stays put, no clock cost.
+- **Chart opened with zero explored tiles** (fresh run) → renders the port
+  dots and fleet marker over the unexplored background, not a blank crash.
+- **Chart open while a modal exists** → modals consume input; `Tab` does
+  nothing while any modal is up.
 
 ## 7. Acceptance Criteria
 
 - [ ] Every Phase-1 screen (S1–S9, S14) exists and navigates only along §4.2.
 - [ ] Every Phase-3 screen (S12, S13, S16) exists and navigates only along
       §4.2; the guild/palace hubs open from S4's facility rows and Esc returns.
+- [ ] S17 (Chart) opens with `Tab` from S3, closes with `Esc`/`Tab`, renders
+      the whole 2160×1080 world downscaled in under 0.5 s, shows the explored
+      overlay + known ports + fleet marker, and mutates no state.
 - [ ] Input table §4.3 fully implemented; Esc always steps back.
 - [ ] HUD bars (§4.5) show live values driven by `EventBus`, not polling the
       scene tree.
