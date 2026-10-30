@@ -110,13 +110,21 @@ func _build_card(nation: Dictionary) -> Button:
 	box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	card.add_child(box)
 
-	# Flag color block: 24×24 token sized per docs/80-* §4.8.
+	# Head row: 24×24 flag token inline with the nation name (docs/80-* §4.8),
+	# so the card's fixed 208px height fits name + description + start package.
+	var head := HBoxContainer.new()
+	head.name = "Head"
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	box.add_child(head)
+
 	var flag := ColorRect.new()
 	flag.name = "Flag"
 	flag.color = PaletteLib.nation_color(str(nation.get("color", "#ffffff")))
 	flag.custom_minimum_size = Vector2(24, 24)
+	flag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	flag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(flag)
+	head.add_child(flag)
 
 	var name_label := Label.new()
 	name_label.name = "NationName"
@@ -124,13 +132,14 @@ func _build_card(nation: Dictionary) -> Button:
 	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	name_label.add_theme_font_size_override("font_size", 24)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(name_label)
+	head.add_child(name_label)
 
+	# Two lines at font size 12; grows if a locale wraps to a third line.
 	var desc := Label.new()
 	desc.name = "Description"
 	desc.text = I18n.t(nation.get("description", {}))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.custom_minimum_size = Vector2(328, 56)
+	desc.custom_minimum_size = Vector2(328, 40)
 	desc.add_theme_color_override("font_color", PaletteLib.TEXT)
 	desc.add_theme_font_size_override("font_size", 12)
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE

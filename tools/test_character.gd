@@ -443,7 +443,7 @@ func _test_nationality_scene_data_driven() -> void:
 		var nation_id := str(nation["id"])
 		_check(card.name == "Card_%s" % nation_id,
 			"card %d is %s in data order" % [index, nation_id])
-		var name_label: Label = card.get_node_or_null("Content/NationName")
+		var name_label: Label = card.get_node_or_null("Content/Head/NationName")
 		_check(name_label != null and name_label.text == I18n.t(nation["name"]),
 			"card %s name from data (%s)" % [
 				nation_id, name_label.text if name_label != null else "<missing>"
@@ -465,7 +465,7 @@ func _test_nationality_scene_data_driven() -> void:
 			)
 			_check(package.text.contains(I18n.t(ship["name"])),
 				"card %s start ship from data" % nation_id)
-		var flag: ColorRect = card.get_node_or_null("Content/Flag")
+		var flag: ColorRect = card.get_node_or_null("Content/Head/Flag")
 		_check(flag != null and flag.color == Color(str(nation["color"])),
 			"card %s flag color from data" % nation_id)
 
@@ -489,7 +489,7 @@ func _test_nationality_scene_data_driven() -> void:
 		DataLoader.ui_strings["nation.select_title"]["zh"],
 		"S2 title rebinds to zh")
 	var zh_card: Button = grid.get_child(0)
-	var zh_name: Label = zh_card.get_node("Content/NationName")
+	var zh_name: Label = zh_card.get_node("Content/Head/NationName")
 	_check(zh_name.text == DataLoader.nations_list[0]["name"]["zh"],
 		"S2 card name rebinds to zh (%s)" % zh_name.text)
 	I18n.set_locale("en")
