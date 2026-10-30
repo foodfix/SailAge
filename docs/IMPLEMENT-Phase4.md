@@ -316,7 +316,8 @@ not docking.
   2160×1080, palette ⊆ locked indices; harbor-tile rule per port (snap ≤ 2,
   water, adjacent water — recomputed independently of D and compared);
   BFS from Lisbon's harbor over **all** passable tiles (8-dir, corner-cut
-  forbidden, **wrap-aware**, `~ . ^`-adjacent semantics per legend) reaches
+  forbidden, **wrap-aware**, `~`/`.` passable while `#`/`^`/`I` block, per
+  legend) reaches
   all 100 harbor tiles and all 30 discovery tiles; probe ports asserted
   reachable: istanbul (Bosphorus), danzig and stockholm
   (Øresund/Great Belt — the 100-port list has no `copenhagen`), aden
