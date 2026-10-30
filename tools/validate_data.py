@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-5 of docs/10-DATA-SCHEMA.md section 8.
-Group 6 (map) is implemented by task T3 (see check_group6 stub below).
+Implements check groups 1-6 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+the generated world-map artifact check (section 8.1): it decodes
+``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
+independently from ``lat``/``lon`` and compares it with
+``data/maps/world_report.json``, then proves every harbor and discovery is
+reachable from Lisbon by a wrap-aware 8-directional BFS that forbids corner
+cutting (docs/20-WORLD-AND-SAILING.md section 4.2).
 
 Usage (from the repo root):
 
     python3 tools/validate_data.py
     python3 tools/validate_data.py --verbose
+    python3 tools/validate_data.py --self-test-g6      # negative harness
 
 Exit codes:
 
@@ -17,20 +23,33 @@ Exit codes:
     3  schema failure
     4  referential integrity failure
     5  locked-list failure
-    6  map failure (T3)
+    6  world map failure (data/maps/world.png / world_report.json)
 
 On the first failure a single line is printed to stdout:
 
     FAIL <check-id> <file> <details>
 
 and the process exits with that check group's code.
+
+``--self-test-g6`` (or ``SAILAGE_G6_SELFTEST=1``) runs the group-6 mutation
+harness instead of the normal checks: it mutates in-memory copies of the tile
+grid, the port list and the PNG and asserts that group 6 goes red, naming the
+expected entity. It never touches real data and exits 0 only when every
+negative case fails as required.
 """
 
 from __future__ import annotations
 
+import copy
 import json
+import math
+import os
 import re
+import struct
 import sys
+import tempfile
+import zlib
+from collections import deque
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -1514,23 +1533,1222 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 # Check group 6 — World map
 # ---------------------------------------------------------------------------
 
+WORLD_PNG = DATA_DIR / "maps" / "world.png"
+WORLD_REPORT = DATA_DIR / "maps" / "world_report.json"
+WORLD_PNG_LABEL = "data/maps/world.png"
+WORLD_REPORT_LABEL = "data/maps/world_report.json"
+HARBOR_SNAP_TILES = 2
+
+# Palette index order is locked (section 6.3, append-only): 0-4 = ~ . # ^ I.
+WORLD_PALETTE_CHARS = "~.#^I"
+PASSABLE_INDICES = (0, 1)  # ~ and . ; # , ^ and I block movement (section 6.2)
+
+# The probe ports of section 8.1 item 4: each failure names the strait the
+# port proves. No `copenhagen` exists in the 100-port list, so Oresund/Great
+# Belt is proven by its Baltic exits instead.
+PROBE_PORTS = {
+    "istanbul": "Bosphorus",
+    "danzig": "Oresund/Great Belt (Baltic exit)",
+    "stockholm": "Oresund/Great Belt (Baltic exit)",
+    "aden": "Bab-el-Mandeb",
+    "nagasaki": "Malacca/Sunda (Indian Ocean passage)",
+    "venice": "Adriatic",
+    "london": "Thames/English Channel",
+    "hamburg": "Elbe",
+}
+
+# Informational disconnected-component threshold (section 8.1 item 5).
+COMPONENT_REPORT_TILES = 2000
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+# index -> 1 when passable, 0 otherwise; builds the BFS bitmap with one
+# C-level translate() call instead of a 2.3 M-iteration Python loop.
+_PASSABLE_TABLE = bytes(
+    1 if value in PASSABLE_INDICES else 0 for value in range(256)
+)
+
+
+class PngFormatError(Exception):
+    """A structural problem with an indexed PNG (never escapes as a crash)."""
+
+
+class WorldGrid:
+    """Decoded world map: palette indices plus a passability bitmap."""
+
+    __slots__ = ("width", "height", "indices", "passable")
+
+    def __init__(self, width: int, height: int, indices: bytearray):
+        self.width = width
+        self.height = height
+        self.indices = indices
+        self.passable = indices.translate(_PASSABLE_TABLE)
+
+    def char_at(self, index: int) -> str:
+        value = self.indices[index]
+        return WORLD_PALETTE_CHARS[value] if value < len(WORLD_PALETTE_CHARS) else "?"
+
+
+def _unfilter_scanlines(raw: bytes, width: int, height: int) -> bytearray:
+    """Reverse PNG filter types 0-4 for an 8-bit indexed image.
+
+    The builder writes filter 0, but a hand-rebuilt PNG may use any of the five
+    defined filters, so all of them are supported defensively (and a length
+    check makes a truncated IDAT stream fail loudly rather than silently).
+    """
+    stride = width + 1
+    if len(raw) != stride * height:
+        raise PngFormatError(
+            f"IDAT inflates to {len(raw)} bytes, expected {stride * height} "
+            f"for {width}x{height} (one filter byte + {width} index bytes per row)"
+        )
+    out = bytearray(width * height)
+    prev = bytearray(width)
+    pos = 0
+    for y in range(height):
+        filter_type = raw[pos]
+        pos += 1
+        line = bytearray(raw[pos:pos + width])
+        pos += width
+        if filter_type == 0:  # None
+            pass
+        elif filter_type == 1:  # Sub
+            for i in range(1, width):
+                line[i] = (line[i] + line[i - 1]) & 0xFF
+        elif filter_type == 2:  # Up
+            for i in range(width):
+                line[i] = (line[i] + prev[i]) & 0xFF
+        elif filter_type == 3:  # Average
+            for i in range(width):
+                left = line[i - 1] if i else 0
+                line[i] = (line[i] + ((left + prev[i]) >> 1)) & 0xFF
+        elif filter_type == 4:  # Paeth
+            for i in range(width):
+                left = line[i - 1] if i else 0
+                up = prev[i]
+                up_left = prev[i - 1] if i else 0
+                p = left + up - up_left
+                pa, pb, pc = abs(p - left), abs(p - up), abs(p - up_left)
+                if pa <= pb and pa <= pc:
+                    predictor = left
+                elif pb <= pc:
+                    predictor = up
+                else:
+                    predictor = up_left
+                line[i] = (line[i] + predictor) & 0xFF
+        else:
+            raise PngFormatError(
+                f"row {y} uses undefined PNG filter type {filter_type} (0-4 defined)"
+            )
+        out[y * width:(y + 1) * width] = line
+        prev = line
+    return out
+
+
+def decode_indexed_png(data: bytes) -> tuple[int, int, bytearray]:
+    """Decode an 8-bit indexed PNG with zlib + struct; return (w, h, indices).
+
+    Deliberately independent of `tools/build_world.py`: this is the validator's
+    half of the cross-implementation check. Raises `PngFormatError` for every
+    structural problem (signature, chunk framing/CRC, IHDR, palette, IDAT).
+    """
+    if not data.startswith(_PNG_SIGNATURE):
+        raise PngFormatError("not a PNG (bad signature)")
+
+    total = len(data)
+    pos = len(_PNG_SIGNATURE)
+    header = None
+    palette = None
+    idat = bytearray()
+    saw_iend = False
+    while pos < total:
+        if pos + 8 > total:
+            raise PngFormatError("truncated chunk header")
+        chunk_length = struct.unpack(">I", data[pos:pos + 4])[0]
+        tag = data[pos + 4:pos + 8]
+        if pos + 12 + chunk_length > total:
+            raise PngFormatError(f"truncated {tag!r} chunk")
+        payload = data[pos + 8:pos + 8 + chunk_length]
+        crc = struct.unpack(">I", data[pos + 8 + chunk_length:pos + 12 + chunk_length])[0]
+        if crc != (zlib.crc32(tag + payload) & 0xFFFFFFFF):
+            raise PngFormatError(f"bad CRC in chunk {tag!r}")
+        pos += 12 + chunk_length
+        if tag == b"IHDR":
+            if chunk_length != 13:
+                raise PngFormatError(f"IHDR chunk is {chunk_length} bytes, expected 13")
+            header = struct.unpack(">IIBBBBB", payload)
+        elif tag == b"PLTE":
+            palette = payload
+        elif tag == b"IDAT":
+            idat += payload
+        elif tag == b"IEND":
+            saw_iend = True
+            break
+
+    if header is None:
+        raise PngFormatError("no IHDR chunk")
+    if not saw_iend:
+        raise PngFormatError("no IEND chunk (truncated file)")
+    width, height, depth, colour, compression, filter_method, interlace = header
+    if colour != 3:
+        raise PngFormatError(
+            f"not an indexed-colour PNG (IHDR colour type {colour}, expected 3)"
+        )
+    if depth != 8:
+        raise PngFormatError(
+            f"indexed PNG bit depth is {depth}, expected 8 (1 index byte per pixel)"
+        )
+    if compression != 0 or filter_method != 0:
+        raise PngFormatError(
+            f"unsupported PNG compression/filter method {compression}/{filter_method}"
+        )
+    if interlace != 0:
+        raise PngFormatError(f"interlaced PNG not supported (IHDR interlace {interlace})")
+    if palette is None:
+        raise PngFormatError("no PLTE chunk (an indexed PNG needs a palette)")
+    if width == 0 or height == 0:
+        raise PngFormatError(f"zero image dimension {width}x{height}")
+    if not idat:
+        raise PngFormatError("no IDAT chunk (image data is empty)")
+
+    try:
+        raw = zlib.decompress(bytes(idat))
+    except zlib.error as exc:
+        raise PngFormatError(f"IDAT stream does not inflate: {exc}") from exc
+
+    indices = _unfilter_scanlines(raw, width, height)
+
+    palette_entries = len(palette) // 3
+    highest = max(indices)
+    if highest >= palette_entries:
+        raise PngFormatError(
+            f"palette index {highest} is used but PLTE holds only "
+            f"{palette_entries} entries"
+        )
+    return width, height, indices
+
+
+def _load_world_grid(path: Path, label: str) -> WorldGrid:
+    """Artifact check (section 8.1 item 1): exists, indexed, size, indices."""
+    if not path.is_file():
+        fail(
+            "map",
+            label,
+            "artifact is missing (section 6.3: data/maps/world.png, indexed PNG, "
+            f"{MAP_WIDTH}x{MAP_HEIGHT}, 1 px = 1 tile)",
+            6,
+        )
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        fail("map", label, f"cannot read artifact: {exc}", 6)
+    try:
+        width, height, indices = decode_indexed_png(data)
+    except PngFormatError as exc:
+        fail("map", label, str(exc), 6)
+    if width != MAP_WIDTH or height != MAP_HEIGHT:
+        fail(
+            "map",
+            label,
+            f"artifact is {width}x{height} pixels, locked at {MAP_WIDTH}x{MAP_HEIGHT}",
+            6,
+        )
+    highest = max(indices)
+    if highest > len(WORLD_PALETTE_CHARS) - 1:  # indices 0-4 are locked
+        offset = indices.index(highest)
+        fail(
+            "map",
+            label,
+            f"palette index {highest} at ({offset % width}, {offset // width}) is "
+            "outside the locked 0-4 set (~ . # ^ I, section 6.3)",
+            6,
+        )
+    return WorldGrid(width, height, indices)
+
+
+# -- the locked geometry rules, re-derived from section 6.1 -------------------
+def tiles_per_degree(width: int = MAP_WIDTH) -> float:
+    return width / 360.0
+
+
+def lat_lon_floor(value: float) -> int:
+    """`math.floor` as an int (the projection's floor is load-bearing)."""
+    return int(math.floor(value))
+
+
+def tile_of_latlon(lat: float, lon: float) -> tuple[int, int]:
+    """Grid cell containing a WGS84 point: floor projection, x wrapped.
+
+    Matches section 6.1 (`lon = x/6 - 180`, `lat = 90 - y/6`) and the builder's
+    `tile_of_latlon`; y is clamped into the grid (only the exact poles reach
+    the edge).
+    """
+    scale = tiles_per_degree()
+    x = lat_lon_floor((lon + 180.0) * scale) % MAP_WIDTH
+    y = lat_lon_floor((90.0 - lat) * scale)
+    return x, min(max(y, 0), MAP_HEIGHT - 1)
+
+
+def chebyshev_wrap(dx: int, dy: int, width: int = MAP_WIDTH) -> int:
+    """Chebyshev distance with longitude wrap (section 6.1)."""
+    dx = abs(dx) % width
+    return max(min(dx, width - dx), abs(dy))
+
+
+def has_orthogonal_water(grid: WorldGrid, x: int, y: int) -> bool:
+    """>= 1 orthogonally adjacent passable tile; x wraps, y is bounded."""
+    width, height, p = grid.width, grid.height, grid.passable
+    if p[y * width + (x - 1) % width] or p[y * width + (x + 1) % width]:
+        return True
+    if y > 0 and p[(y - 1) * width + x]:
+        return True
+    if y < height - 1 and p[(y + 1) * width + x]:
+        return True
+    return False
+
+
+def snap_harbor(grid: WorldGrid, lat: float, lon: float,
+                radius: int = HARBOR_SNAP_TILES):
+    """Locked harbor rule (section 6.1): water, adjacent water, ties (y, x).
+
+    Returns `(distance, y, x)`, or None when no candidate inside the Chebyshev
+    radius satisfies the rule.
+    """
+    px, py = tile_of_latlon(lat, lon)
+    candidates = []
+    for dy in range(-radius, radius + 1):
+        y = py + dy
+        if not (0 <= y < grid.height):
+            continue
+        for dx in range(-radius, radius + 1):
+            x = (px + dx) % grid.width
+            candidates.append((chebyshev_wrap(dx, dy, grid.width), y, x))
+    candidates.sort()
+    for distance, y, x in candidates:
+        if grid.passable[y * grid.width + x] and has_orthogonal_water(grid, x, y):
+            return distance, y, x
+    return None
+
+
+# -- reachability (section 8.1 item 3, `20-*` section 4.2) -------------------
+def bfs_reachable(passable: bytearray, width: int, height: int,
+                  start: int) -> bytearray:
+    """Wrap-aware 8-directional BFS with corner cutting forbidden.
+
+    A diagonal step (x+dx, y+dy) is legal only when both orthogonal neighbours
+    of the corner — (x+dx, y) and (x, y+dy) — are passable. `x` wraps, `y` is
+    bounded. Returns the visited bitmap (index = y*width + x).
+    """
+    visited = bytearray(width * height)
+    if not passable[start]:
+        return visited
+    visited[start] = 1
+    queue = deque([start])
+    popleft = queue.popleft
+    push = queue.append
+    last_x = width - 1
+    p = passable
+    v = visited
+    while queue:
+        node = popleft()
+        x = node % width
+        y = node // width
+        left = node - 1 if x else node + last_x
+        right = node + 1 if x < last_x else node - last_x
+        if p[left] and not v[left]:
+            v[left] = 1
+            push(left)
+        if p[right] and not v[right]:
+            v[right] = 1
+            push(right)
+        up = node - width
+        if y:
+            if p[up]:
+                if not v[up]:
+                    v[up] = 1
+                    push(up)
+                upper_left = up - 1 if x else up + last_x
+                if p[left] and p[upper_left] and not v[upper_left]:
+                    v[upper_left] = 1
+                    push(upper_left)
+                upper_right = up + 1 if x < last_x else up - last_x
+                if p[right] and p[upper_right] and not v[upper_right]:
+                    v[upper_right] = 1
+                    push(upper_right)
+        if y < height - 1:
+            down = node + width
+            if p[down]:
+                if not v[down]:
+                    v[down] = 1
+                    push(down)
+                lower_left = down - 1 if x else down + last_x
+                if p[left] and p[lower_left] and not v[lower_left]:
+                    v[lower_left] = 1
+                    push(lower_left)
+                lower_right = down + 1 if x < last_x else down - last_x
+                if p[right] and p[lower_right] and not v[lower_right]:
+                    v[lower_right] = 1
+                    push(lower_right)
+    return visited
+
+
+def _corner_cut_self_check() -> None:
+    """Assert `bfs_reachable` refuses a diagonal squeeze and honours wrap.
+
+    A 4x4 all-land grid with only (1,1) and (2,2) passable: a plain 8-direction
+    BFS would leak from one to the other through the corner; the locked rule
+    must not. A 2x1 grid with both tiles passable must join x=0 and x=1 (wrap).
+    """
+    width = height = 4
+    passable = bytearray(width * height)
+    passable[1 * width + 1] = 1
+    passable[2 * width + 2] = 1
+    reached = bfs_reachable(passable, width, height, 1 * width + 1)
+    if reached[2 * width + 2]:
+        fail(
+            "implement",
+            "tools/validate_data.py",
+            "BFS permits corner cutting: the diagonal squeeze (1,1)->(2,2) was "
+            "traversed (docs/20-WORLD-AND-SAILING.md section 4.2 forbids it)",
+            6,
+        )
+    wrapped = bfs_reachable(bytearray([1, 1]), 2, 1, 0)
+    if not wrapped[1]:
+        fail(
+            "implement",
+            "tools/validate_data.py",
+            "BFS is not wrap-aware: x=0 did not reach x=1 on a 2-wide grid",
+            6,
+        )
+
+
+def _passable_components(passable: bytearray, width: int, height: int,
+                         skip: bytearray) -> list[tuple[int, int, int]]:
+    """4-connected passable components not already in `skip` (wrap-aware).
+
+    Returns `[(size, y, x), ...]` where (x, y) is the component's first tile in
+    scan order. 4-connectivity is exactly 8-directional-with-no-corner-cutting,
+    so a component here is a sea a fleet could actually sail.
+    """
+    seen = bytearray(skip)  # copy; `skip` stays the Lisbon-reachable bitmap
+    components = []
+    last_x = width - 1
+    total = width * height
+    for seed in range(total):
+        if not passable[seed] or seen[seed]:
+            continue
+        seen[seed] = 1
+        queue = deque([seed])
+        pop = queue.popleft
+        push = queue.append
+        size = 0
+        while queue:
+            node = pop()
+            size += 1
+            x = node % width
+            y = node // width
+            left = node - 1 if x else node + last_x
+            right = node + 1 if x < last_x else node - last_x
+            if passable[left] and not seen[left]:
+                seen[left] = 1
+                push(left)
+            if passable[right] and not seen[right]:
+                seen[right] = 1
+                push(right)
+            if y:
+                up = node - width
+                if passable[up] and not seen[up]:
+                    seen[up] = 1
+                    push(up)
+            if y < height - 1:
+                down = node + width
+                if passable[down] and not seen[down]:
+                    seen[down] = 1
+                    push(down)
+        components.append((size, seed // width, seed % width))
+    return components
+
+
+# -- report parsing ----------------------------------------------------------
+def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
+    """Read `world_report.json#ports[].harbor_tile` into `{id: (x, y)}`."""
+    if not isinstance(report, dict):
+        fail("map", WORLD_REPORT_LABEL, "builder report is not a JSON object", 6)
+    entries = report.get("ports")
+    if not isinstance(entries, list):
+        fail(
+            "map",
+            WORLD_REPORT_LABEL,
+            "builder report has no 'ports' array (section 6.3)",
+            6,
+        )
+    tiles: dict[str, tuple[int, int]] = {}
+    for index, entry in enumerate(entries):
+        path = f"ports[{index}]"
+        if not isinstance(entry, dict):
+            fail("map", WORLD_REPORT_LABEL, f"{path} is not an object", 6)
+        port_id = entry.get("id")
+        if not isinstance(port_id, str):
+            fail("map", WORLD_REPORT_LABEL, f"{path} has no string 'id'", 6)
+        tile = entry.get("harbor_tile")
+        if not isinstance(tile, dict):
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                f"{path} ({port_id}) has no 'harbor_tile' object",
+                6,
+            )
+        x, y = tile.get("x"), tile.get("y")
+        if not is_int(x) or not is_int(y):
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                f"{path} ({port_id}) harbor_tile needs integer x/y",
+                6,
+            )
+        if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT):
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                f"{path} ({port_id}) harbor_tile ({x}, {y}) is outside the "
+                f"{MAP_WIDTH}x{MAP_HEIGHT} grid",
+                6,
+            )
+        if port_id in tiles:
+            fail("map", WORLD_REPORT_LABEL, f"{path} repeats port id {port_id!r}", 6)
+        tiles[port_id] = (x, y)
+    return tiles
+
+
+# -- the analysis shared by the real run and the mutation harness ------------
+def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
+                      discoveries: list, verbose: bool) -> dict:
+    """Harbor-tile agreement, reachability, probes, component listing.
+
+    Section 8.1 items 2-5. `grid`, `ports`, `report_tiles` and `discoveries`
+    are exactly the values the normal run builds, so the self-test harness can
+    mutate in-memory copies and drive this same code path.
+    """
+    width, height = grid.width, grid.height
+    passable = grid.passable
+    port_ids = [port.get("id") for port in ports]
+    if len(set(port_ids)) != len(port_ids):
+        fail("map", WORLD_PNG_LABEL, "ports.json repeats a port id", 6)
+
+    # -- item 2: recompute every harbor tile from lat/lon, compare to report --
+    computed: dict[str, tuple[int, int]] = {}
+    for port in ports:
+        port_id = port["id"]
+        lat, lon = float(port["lat"]), float(port["lon"])
+        snapped = snap_harbor(grid, lat, lon)
+        if snapped is None:
+            px, py = tile_of_latlon(lat, lon)
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor snap: port '{port_id}' at lat/lon ({lat:.4f}, {lon:.4f}) "
+                f"has no water tile within {HARBOR_SNAP_TILES} tiles of "
+                f"({px}, {py}) with an orthogonally adjacent water tile "
+                "(section 6.1)",
+                6,
+            )
+        distance, y, x = snapped
+        computed[port_id] = (x, y)
+        reported = report_tiles.get(port_id)
+        if reported is None:
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                f"world_report.json has no harbor_tile for port '{port_id}' "
+                f"(validator recomputed ({x}, {y}))",
+                6,
+            )
+        if reported != (x, y):
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor snap: port '{port_id}' recomputes to ({x}, {y}) "
+                f"(distance {distance}) but world_report.json says "
+                f"({reported[0]}, {reported[1]})",
+                6,
+            )
+
+    collisions: dict[tuple[int, int], str] = {}
+    for port in ports:
+        port_id = port["id"]
+        tile = computed[port_id]
+        if tile in collisions:
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor snap: ports '{collisions[tile]}' and '{port_id}' both "
+                f"snap to harbor tile ({tile[0]}, {tile[1]})",
+                6,
+            )
+        collisions[tile] = port_id
+
+    stale = sorted(set(report_tiles) - {port["id"] for port in ports})
+    if stale:
+        fail(
+            "map",
+            WORLD_REPORT_LABEL,
+            f"builder report lists {len(stale)} port(s) that are not in "
+            f"ports.json: {', '.join(stale)} — regenerate with tools/build_world.py",
+            6,
+        )
+
+    # -- item 3: BFS from Lisbon over every passable tile --------------------
+    lisbon = computed.get("lisbon")
+    if lisbon is None:
+        fail(
+            "map",
+            WORLD_PNG_LABEL,
+            "ports.json has no 'lisbon' port to start the reachability BFS from",
+            6,
+        )
+    start = lisbon[1] * width + lisbon[0]
+    _corner_cut_self_check()
+    reached = bfs_reachable(passable, width, height, start)
+    if not reached[start]:
+        fail(
+            "map",
+            WORLD_PNG_LABEL,
+            f"Lisbon's harbor tile ({lisbon[0]}, {lisbon[1]}) is not passable "
+            f"(tile is {grid.char_at(start)})",
+            6,
+        )
+
+    # -- item 4: probe ports (each names the strait it proves) --------------
+    # A missing probe id is a data error on its own; reachability of a probe is
+    # reported together with the harbor list below so one failure names both the
+    # port that lost its water path and the strait that closed.
+    for probe_id, strait in PROBE_PORTS.items():
+        if computed.get(probe_id) is None:
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"probe port '{probe_id}' is missing from ports.json; it proves "
+                f"the {strait} is navigable (section 8.1)",
+                6,
+            )
+
+    # -- item 3: all 100 harbor tiles ---------------------------------------
+    unreachable_ports = [
+        port["id"] for port in ports
+        if not reached[computed[port["id"]][1] * width + computed[port["id"]][0]]
+    ]
+    if unreachable_ports:
+        listed = ", ".join(
+            f"{pid} ({computed[pid][0]}, {computed[pid][1]})"
+            for pid in unreachable_ports
+        )
+        closed_straits = [
+            f"{probe_id} ({strait})"
+            for probe_id, strait in PROBE_PORTS.items()
+            if probe_id in unreachable_ports
+        ]
+        strait_text = (
+            f"; closed straits: {', '.join(closed_straits)}" if closed_straits else ""
+        )
+        fail(
+            "map",
+            WORLD_PNG_LABEL,
+            f"reachability: {len(unreachable_ports)} harbor tile(s) are not "
+            f"reachable from Lisbon ({lisbon[0]}, {lisbon[1]}) by 8-directional "
+            f"no-corner-cut sailing (20-* section 4.2): {listed}{strait_text}",
+            6,
+        )
+
+    # -- item 3: all discovery tiles ---------------------------------------
+    discoveries_checked = 0
+    unreachable_discoveries = []
+    for discovery in discoveries:
+        discovery_id = discovery["id"]
+        lat, lon = float(discovery["lat"]), float(discovery["lon"])
+        x, y = tile_of_latlon(lat, lon)
+        discoveries_checked += 1
+        node = y * width + x
+        if passable[node]:
+            if not reached[node]:
+                unreachable_discoveries.append(
+                    f"{discovery_id} ({x}, {y}) water tile not reached"
+                )
+            continue
+        neighbours = [
+            (yy, (x + dx) % width)
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            for yy in (y + dy,)
+            if 0 <= yy < height and passable[yy * width + (x + dx) % width]
+        ]
+        if not any(reached[yy * width + xx] for yy, xx in neighbours):
+            unreachable_discoveries.append(
+                f"{discovery_id} ({x}, {y}) tile is '{grid.char_at(node)}' with "
+                f"{len(neighbours)} passable orthogonal neighbour(s), none reached"
+            )
+    if unreachable_discoveries:
+        fail(
+            "map",
+            "data/discoveries.json",
+            f"reachability: {len(unreachable_discoveries)} discovery tile(s) are "
+            "not reachable from Lisbon (70-* section 4.4 requires the derived tile "
+            f"to be passable or orthogonally adjacent to reached water): "
+            f"{', '.join(unreachable_discoveries)}",
+            6,
+        )
+
+    # -- item 5: informational disconnected components ---------------------
+    components = _passable_components(passable, width, height, reached)
+    large = [
+        component for component in components
+        if component[0] > COMPONENT_REPORT_TILES
+    ]
+    for size, y, x in sorted(large, reverse=True):
+        print(
+            f"WARN map {WORLD_PNG_LABEL} disconnected passable component of {size} "
+            f"tiles (example tile ({x}, {y})) — informational only, never a "
+            "failure (section 8.1 item 5)"
+        )
+    if verbose:
+        separate_tiles = sum(size for size, _y, _x in components)
+        print(
+            f"INFO group 6 passable components: {len(components) + 1} total, "
+            f"{len(large)} above {COMPONENT_REPORT_TILES} tiles, "
+            f"{separate_tiles + sum(reached)} passable tiles"
+        )
+        if components:
+            size, y, x = max(components)
+            print(
+                f"INFO group 6 largest disconnected component: {size} tiles at "
+                f"({x}, {y}) (informational, never a failure: lakes are land)"
+            )
+
+    return {
+        "ports_snapped": len(computed),
+        "reachable_tiles": sum(reached),
+        "lisbon_tile": lisbon,
+        "discoveries": discoveries_checked,
+        "probes": len(PROBE_PORTS),
+        "large_components": large,
+    }
+
+
 def check_group6(docs: dict[str, object], verbose: bool) -> None:
     """World-map integrity: docs/10-DATA-SCHEMA.md section 8.1.
 
-    Task F (W4) replaces this body with the artifact checks: indexed-PNG
-    validation, independent harbor-tile recomputation against
-    `world_report.json`, and the wrap-aware no-corner-cut BFS over all 100
-    harbors and 30 discoveries. Until it lands this group reports the gap
-    explicitly instead of validating the retired ASCII map, so a red here is
-    always attributable (see IMPLEMENT-Phase4.md "Pre-state").
+    Item 1 (the artifact) is checked by `_load_world_grid`; items 2-5 are
+    `analyse_world_map`. Both are also what the `--self-test-g6` mutation
+    harness drives, so the negatives prove the real code paths.
     """
-    fail(
-        "map",
-        "data/maps/world.png",
-        "world-map group 6 is being rewritten for the PNG artifact "
-        "(docs/IMPLEMENT-Phase4.md task F); the retired ASCII checks no longer apply",
-        6,
+    grid = _load_world_grid(WORLD_PNG, WORLD_PNG_LABEL)
+
+    report = docs.get("world_report.json")
+    if report is None:
+        if not WORLD_REPORT.is_file():
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                "companion builder report is missing (section 6.3)",
+                6,
+            )
+        try:
+            report = json.loads(WORLD_REPORT.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            fail("map", WORLD_REPORT_LABEL, f"cannot read builder report: {exc}", 6)
+    report_tiles = _report_harbor_tiles(report)
+
+    ports = docs["ports.json"]["ports"]
+    discoveries = docs["discoveries.json"]["discoveries"]
+    stats = analyse_world_map(grid, ports, report_tiles, discoveries, verbose)
+
+    if verbose:
+        lisbon = stats["lisbon_tile"]
+        print(
+            f"PASS group 6 world map ({grid.width}x{grid.height}, "
+            f"{stats['ports_snapped']} ports snapped, "
+            f"{stats['reachable_tiles']} passable tiles in one component from "
+            f"Lisbon ({lisbon[0]}, {lisbon[1]}), "
+            f"{stats['discoveries']} discoveries reachable, "
+            f"{stats['probes']} probe ports)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Group 6 mutation harness (`--self-test-g6`)
+# ---------------------------------------------------------------------------
+#
+# Each case mutates an in-memory copy (never real data), drives the same
+# `_load_world_grid` / `analyse_world_map` functions the real run uses, and
+# asserts the expected exit-6 failure naming the expected entity. A case that
+# stays green is a harness failure (exit 1), because it would mean group 6
+# cannot detect that class of world-map drift.
+
+_G6_INLAND_PORT = "valencia"
+_G6_INLAND_TILES = 3
+_G6_BASIN_TILES = 60  # a 60x60 basin is 3600 tiles, above the 2000 threshold
+
+
+def _encode_indexed_png(width: int, height: int, indices: bytes | bytearray,
+                        palette_entries: int,
+                        filter_cycle: tuple[int, ...] = (0,)) -> bytes:
+    """Minimal indexed-PNG writer used only to build corrupted temp artifacts.
+
+    `filter_cycle` selects the per-row PNG filter type, applied for real (the
+    row is filtered, not just labelled), so the decoder's filter support can be
+    exercised end to end.
+    """
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+        )
+
+    raw = bytearray()
+    prev = bytes(width)
+    for y in range(height):
+        row = bytes(indices[y * width:(y + 1) * width])
+        filter_type = filter_cycle[y % len(filter_cycle)]
+        raw.append(filter_type)
+        if filter_type == 0:
+            raw += row
+        else:
+            encoded = bytearray(width)
+            for i in range(width):
+                left = row[i - 1] if i else 0
+                up = prev[i]
+                up_left = prev[i - 1] if i else 0
+                if filter_type == 1:
+                    predictor = left
+                elif filter_type == 2:
+                    predictor = up
+                elif filter_type == 3:
+                    predictor = (left + up) >> 1
+                elif filter_type == 4:
+                    p = left + up - up_left
+                    pa, pb, pc = abs(p - left), abs(p - up), abs(p - up_left)
+                    predictor = (
+                        left if pa <= pb and pa <= pc else (up if pb <= pc else up_left)
+                    )
+                else:
+                    raise ValueError(f"undefined filter {filter_type}")
+                encoded[i] = (row[i] - predictor) & 0xFF
+            raw += encoded
+        prev = row
+
+    palette = bytearray()
+    for entry in range(palette_entries):
+        palette += bytes((entry, entry, entry))
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0)
+    return (
+        _PNG_SIGNATURE
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"PLTE", bytes(palette))
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 6))
+        + chunk(b"IEND", b"")
     )
+
+
+def _g6_mutated_grid(grid: WorldGrid, land_tiles, keep_water) -> WorldGrid:
+    """Copy of `grid` with `land_tiles` turned to land, minus `keep_water`."""
+    indices = bytearray(grid.indices)
+    keep = set(keep_water)
+    for x, y in land_tiles:
+        if (x, y) in keep:
+            continue
+        indices[y * grid.width + x] = 2  # '#'
+    return WorldGrid(grid.width, grid.height, indices)
+
+
+def _expect_g6_failure(case: str, needle: str, action) -> bool:
+    """Run `action`; PASS when it raises exit-6 CheckFailure naming `needle`."""
+    try:
+        action()
+    except CheckFailure as exc:
+        haystack = f"{exc.filename} {exc.details}".lower()
+        if exc.code != 6:
+            print(
+                f"FAIL g6-self-test {case}: expected exit 6 but group 6 raised "
+                f"exit {exc.code}: {exc.details}"
+            )
+            return False
+        if needle.lower() not in haystack:
+            print(
+                f"FAIL g6-self-test {case}: failure does not name {needle!r}: "
+                f"{exc.filename} {exc.details}"
+            )
+            return False
+        print(f"PASS g6 negative {case}: {exc.filename} {exc.details}")
+        return True
+    except Exception as exc:  # a crash is not a check failure
+        print(f"FAIL g6-self-test {case}: unexpected {type(exc).__name__}: {exc}")
+        return False
+    print(f"FAIL g6-self-test {case}: group 6 stayed green; the mutation was not detected")
+    return False
+
+
+def _carve_path_tiles(name: str) -> list[tuple[int, int]]:
+    """Tiles of a named carve in `tools/map_overrides.json`.
+
+    Read-only: the harness never edits the override file (removing the entry and
+    rebuilding is task D's tool). It only needs to know which cells the carve
+    creates so it can fill them with land.
+    """
+    path = REPO_ROOT / "tools" / "map_overrides.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    entries = payload.get("overrides") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        return []
+    tiles = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("name") != name:
+            continue
+        for point in entry.get("path") or []:
+            if isinstance(point, (list, tuple)) and len(point) == 2:
+                tiles.append(tile_of_latlon(float(point[0]), float(point[1])))
+    return tiles
+
+
+def _seal_carve(grid: WorldGrid, name: str, report_tiles: dict) -> WorldGrid | None:
+    """Fill a carve's cells (and its 8-neighbour ring) with land.
+
+    Harbor tiles stay wet so the snap check still passes and the reachability
+    check is the one that fires.
+    """
+    tiles = _carve_path_tiles(name)
+    if not tiles:
+        return None
+    keep_water = set(report_tiles.values())
+    land_tiles = [
+        ((x + dx) % grid.width, y + dy)
+        for x, y in tiles
+        for dy in (-1, 0, 1)
+        for dx in (-1, 0, 1)
+        if 0 <= y + dy < grid.height
+    ]
+    return _g6_mutated_grid(grid, land_tiles, keep_water)
+
+
+def _g6_isolate_harbor(grid: WorldGrid, report_tiles: dict, port_id: str) -> WorldGrid | None:
+    """Copy of `grid` with one harbor turned into a two-tile puddle.
+
+    The harbor tile and one adjacent water tile stay water (so the snap rule's
+    "adjacent water" clause still holds), but every other cell of their combined
+    8-neighbourhood becomes land. The harbor is then snap-valid yet sealed off,
+    which is the probe-port failure of section 8.1 item 4.
+    """
+    tile = report_tiles.get(port_id)
+    if tile is None:
+        return None
+    width, height = grid.width, grid.height
+    x0, y0 = tile
+    # The pocket must keep an *orthogonally* adjacent water tile, otherwise the
+    # snap rule's adjacency clause stops holding for the harbor itself.
+    orthogonal = [
+        ((x0 + dx) % width, y0 + dy)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        if 0 <= y0 + dy < height
+        and grid.passable[(y0 + dy) * width + (x0 + dx) % width]
+    ]
+    if not orthogonal:
+        return None
+    pocket = [(x0, y0), orthogonal[0]]
+    indices = bytearray(grid.indices)
+    for x, y in pocket:
+        for dy in (-1, 0, 1):
+            yy = y + dy
+            if not (0 <= yy < height):
+                continue
+            for dx in (-1, 0, 1):
+                candidate = ((x + dx) % width, yy)
+                if candidate not in pocket:
+                    indices[yy * width + candidate[0]] = 2  # '#'
+    return WorldGrid(width, height, indices)
+
+
+def _g6_desert_basin(grid: WorldGrid, side: int) -> WorldGrid | None:
+    """Copy of `grid` with a `side`x`side` water basin carved from solid land.
+
+    Scans temperate, non-polar solid-land blocks far bigger than the basin and
+    floods the centre with `~`. The result is a disconnected passable component
+    with no harbor and no discovery — exactly the lake-like case section 8.1
+    item 5 says must be *listed*, never failed.
+    """
+    width, height = grid.width, grid.height
+    margin = side // 2 + 4
+    for centre_y in range(140, height - 140, 4):
+        for centre_x in range(margin, width - margin, 4):
+            solid = True
+            for y in range(centre_y - margin, centre_y + margin + 1, 3):
+                row = y * width
+                for x in range(centre_x - margin, centre_x + margin + 1, 3):
+                    # plain land only: polar ice ('I') is not a candidate site
+                    if grid.indices[row + x] != 2:
+                        solid = False
+                        break
+                if not solid:
+                    break
+            if not solid:
+                continue
+            indices = bytearray(grid.indices)
+            for y in range(centre_y - side // 2, centre_y + side // 2):
+                row = y * width
+                indices[row + centre_x - side // 2:row + centre_x + side // 2] = (
+                    bytes([0]) * side  # '~'
+                )
+            return WorldGrid(width, height, indices)
+    return None
+
+
+def _g6_setup() -> tuple[WorldGrid, dict, list, list] | None:
+    """Load the real grid/report/ports/discoveries for the harness."""
+    grid = _load_world_grid(WORLD_PNG, WORLD_PNG_LABEL)
+    try:
+        report = json.loads(WORLD_REPORT.read_text(encoding="utf-8"))
+        ports = json.loads(
+            (DATA_DIR / "ports.json").read_text(encoding="utf-8")
+        )["ports"]
+        discoveries = json.loads(
+            (DATA_DIR / "discoveries.json").read_text(encoding="utf-8")
+        )["discoveries"]
+    except (OSError, KeyError, json.JSONDecodeError) as exc:
+        print(f"FAIL g6-self-test setup: cannot read world data: {exc}")
+        return None
+    return grid, _report_harbor_tiles(report), ports, discoveries
+
+
+def run_group6_self_test() -> int:
+    """Negative harness for group 6: every case must fail with exit code 6."""
+    setup = _g6_setup()
+    if setup is None:
+        return 1
+    grid, report_tiles, ports, discoveries = setup
+    results: list[bool] = []
+
+    # Baseline: the unmutated world is green, otherwise a negative could "fail"
+    # for the wrong reason and prove nothing.
+    try:
+        analyse_world_map(grid, ports, report_tiles, discoveries, False)
+        print("PASS g6 baseline: the unmutated world map validates green")
+        results.append(True)
+    except CheckFailure as exc:
+        print(f"FAIL g6-self-test baseline: real data is already red: {exc.details}")
+        results.append(False)
+
+    # (1) Gibraltar sealed: fill the carve's water cells with land (harbor tiles
+    # stay wet). The Mediterranean loses its Atlantic entrance, so the
+    # reachability failure must name ceuta among the stranded harbors.
+    sealed_gibraltar = _seal_carve(grid, "gibraltar", report_tiles)
+    if sealed_gibraltar is None:
+        print(
+            "FAIL g6-self-test gibraltar-sealed: no gibraltar carve in "
+            "tools/map_overrides.json"
+        )
+        results.append(False)
+    else:
+        results.append(
+            _expect_g6_failure(
+                "gibraltar-sealed",
+                "ceuta",
+                lambda: analyse_world_map(
+                    sealed_gibraltar, ports, report_tiles, discoveries, False
+                ),
+            )
+        )
+
+    # (1b) A single probe harbor sealed off: Istanbul keeps its snap-valid water
+    # (harbor + one adjacent tile) but loses the Bosphorus. The probe rule must
+    # fire and name the port and the strait it proves.
+    isolated = _g6_isolate_harbor(grid, report_tiles, "istanbul")
+    if isolated is None:
+        print("FAIL g6-self-test probe-harbor-sealed: cannot isolate 'istanbul'")
+        results.append(False)
+    else:
+        results.append(
+            _expect_g6_failure(
+                "probe-harbor-sealed",
+                "bosphorus",
+                lambda: analyse_world_map(
+                    isolated, ports, report_tiles, discoveries, False
+                ),
+            )
+        )
+
+    # (2) One port moved 3 tiles inland: the independent snap recomputation must
+    # fail and name that port. Valencia's sea lies east, so a 3-tile westward
+    # shift puts its derived tile deep in the Iberian landmass.
+    inland_ports = copy.deepcopy(ports)
+    for port in inland_ports:
+        if port["id"] == _G6_INLAND_PORT:
+            port["lon"] = float(port["lon"]) - _G6_INLAND_TILES / tiles_per_degree()
+    results.append(
+        _expect_g6_failure(
+            "port-3-tiles-inland",
+            _G6_INLAND_PORT,
+            lambda: analyse_world_map(
+                grid, inland_ports, report_tiles, discoveries, False
+            ),
+        )
+    )
+
+    # (2a) A > 2000-tile disconnected basin must stay informational: flooding a
+    # deep-desert block far from every harbor creates exactly the lake-like sea
+    # section 8.1 item 5 says is listed, never failed.
+    basin = _g6_desert_basin(grid, _G6_BASIN_TILES)
+    if basin is None:
+        print("FAIL g6-self-test large-lake-informational: no all-land basin site found")
+        results.append(False)
+    else:
+        try:
+            stats = analyse_world_map(basin, ports, report_tiles, discoveries, False)
+        except CheckFailure as exc:
+            print(
+                "FAIL g6-self-test large-lake-informational: a large disconnected "
+                f"passable basin failed group 6 (must be informational): {exc.details}"
+            )
+            results.append(False)
+        else:
+            listed = stats["large_components"]
+            ok = any(size >= _G6_BASIN_TILES * _G6_BASIN_TILES // 2
+                     for size, _y, _x in listed)
+            if ok:
+                print(
+                    "PASS g6 negative large-lake-informational: a disconnected "
+                    f"{_G6_BASIN_TILES}x{_G6_BASIN_TILES} basin stayed green and was "
+                    f"listed as {max(listed)[0]} tiles at "
+                    f"({max(listed)[2]}, {max(listed)[1]})"
+                )
+            else:
+                print(
+                    "FAIL g6-self-test large-lake-informational: the basin was not "
+                    f"listed (large_components={listed})"
+                )
+            results.append(ok)
+
+    # (2b) A stale report entry: patch a copy of the report so one port's
+    # harbor_tile disagrees with the independent recomputation. The comparison
+    # must name the port and both tiles.
+    stale_report = dict(report_tiles)
+    lisbon_tile = report_tiles["lisbon"]
+    stale_report["lisbon"] = (
+        (lisbon_tile[0] + 1) % grid.width,
+        (lisbon_tile[1] + 1) % grid.height,
+    )
+    results.append(
+        _expect_g6_failure(
+            "report-harbor-tile-stale",
+            "lisbon",
+            lambda: analyse_world_map(
+                grid, ports, stale_report, discoveries, False
+            ),
+        )
+    )
+
+    # (2c) Two ports on one harbor tile: `safi` is moved onto Lisbon's
+    # coordinates and the report copy follows, so the snap comparison passes
+    # and the collision rule (section 9) is the check that fires.
+    duplicate_ports = copy.deepcopy(ports)
+    duplicate_report = dict(report_tiles)
+    lisbon_port = next(port for port in ports if port["id"] == "lisbon")
+    for port in duplicate_ports:
+        if port["id"] == "safi":
+            port["lat"] = lisbon_port["lat"]
+            port["lon"] = lisbon_port["lon"]
+    duplicate_report["safi"] = report_tiles["lisbon"]
+    results.append(
+        _expect_g6_failure(
+            "duplicate-harbor-tile",
+            "both snap to harbor tile",
+            lambda: analyse_world_map(
+                grid, duplicate_ports, duplicate_report, discoveries, False
+            ),
+        )
+    )
+
+    # (3) Corrupted artifacts, written to temp files and read back through the
+    # real file-level artifact check.
+    with tempfile.TemporaryDirectory(prefix="sailage-g6-") as tmp:
+        tmp_dir = Path(tmp)
+
+        half = grid.height // 2
+        short_path = tmp_dir / "world-short.png"
+        short_path.write_bytes(
+            _encode_indexed_png(
+                grid.width, half, grid.indices[: grid.width * half],
+                len(WORLD_PALETTE_CHARS),
+            )
+        )
+        results.append(
+            _expect_g6_failure(
+                "png-wrong-size",
+                "locked at 2160x1080",
+                lambda: _load_world_grid(short_path, WORLD_PNG_LABEL),
+            )
+        )
+
+        bad_indices = bytearray(grid.indices)
+        bad_index = 5  # above the locked 0-4 set
+        bad_indices[grid.width * 10 + 10] = bad_index
+        bad_index_path = tmp_dir / "world-index5.png"
+        bad_index_path.write_bytes(
+            _encode_indexed_png(
+                grid.width, grid.height, bad_indices,
+                len(WORLD_PALETTE_CHARS) + 1,
+            )
+        )
+        results.append(
+            _expect_g6_failure(
+                "png-palette-index-5",
+                f"palette index {bad_index}",
+                lambda: _load_world_grid(bad_index_path, WORLD_PNG_LABEL),
+            )
+        )
+
+        # The decoder must accept all five PNG filter types, not just the
+        # builder's filter 0. Re-encode a slice of the real grid cycling
+        # filters 0-4 per row and require a byte-identical decode.
+        slice_w, slice_h, slice_y, slice_x = 320, 160, 300, 1000
+        slice_indices = bytearray()
+        for y in range(slice_y, slice_y + slice_h):
+            row = y * grid.width
+            slice_indices += grid.indices[row + slice_x:row + slice_x + slice_w]
+        filters_path = tmp_dir / "world-filters.png"
+        filters_path.write_bytes(
+            _encode_indexed_png(
+                slice_w, slice_h, slice_indices, len(WORLD_PALETTE_CHARS),
+                filter_cycle=(0, 1, 2, 3, 4),
+            )
+        )
+        try:
+            fw, fh, findices = decode_indexed_png(filters_path.read_bytes())
+            same = (
+                (fw, fh) == (slice_w, slice_h)
+                and bytes(findices) == bytes(slice_indices)
+            )
+        except PngFormatError as exc:
+            same = False
+            print(f"INFO g6 filter round-trip raised: {exc}")
+        if same:
+            print(
+                "PASS g6 negative png-filter-types: scanlines using filters 0-4 "
+                f"round-trip byte-identically ({slice_w}x{slice_h} slice)"
+            )
+        else:
+            print(
+                "FAIL g6-self-test png-filter-types: the decoder did not reproduce "
+                "the filtered slice"
+            )
+        results.append(same)
+
+    passed = sum(1 for result in results if result)
+    total = len(results)
+    if passed == total:
+        print(f"OK g6 self-test: {total} negative case(s) all failed as required")
+        return 0
+    print(f"FAIL g6-self-test {total - passed} of {total} negative case(s) did not fail")
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -1540,10 +2758,15 @@ def check_group6(docs: dict[str, object], verbose: bool) -> None:
 
 def main(argv: list[str]) -> int:
     verbose = "--verbose" in argv
-    unknown = [arg for arg in argv[1:] if arg != "--verbose"]
+    self_test = "--self-test-g6" in argv or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
+    known = {"--verbose", "--self-test-g6"}
+    unknown = [arg for arg in argv[1:] if arg not in known]
     if unknown:
-        print(f"usage: python3 tools/validate_data.py [--verbose]")
+        print("usage: python3 tools/validate_data.py [--verbose] [--self-test-g6]")
         return 1
+
+    if self_test:
+        return run_group6_self_test()
 
     docs: dict[str, object] = {}
     groups = (
