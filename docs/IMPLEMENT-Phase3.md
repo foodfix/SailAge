@@ -273,8 +273,8 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 
 **Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 537 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 888
-checks plus 50 checks inside five existing suites (character +24, tavern +23,
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 887
+checks plus 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.
 

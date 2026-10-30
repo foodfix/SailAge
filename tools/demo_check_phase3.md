@@ -33,7 +33,7 @@ From the repo root:
 
 ```bash
 python3 tools/validate_data.py                                   # exit 0
-godot --headless --path . tools/test_phase3_acceptance.tscn       # ALL PASS (100 checks)
+godot --headless --path . tools/test_phase3_acceptance.tscn       # ALL PASS (102 checks)
 for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
@@ -188,8 +188,8 @@ are collected and the closing check asserts none of them contains a raw
 | `test_world_map.tscn` | 62 | **3** |
 | **Total** | **4 537** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 888 checks
-and 50 checks inside five existing suites (character +24, tavern +23,
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 887 checks
+and 51 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.
 
