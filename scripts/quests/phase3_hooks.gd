@@ -138,11 +138,33 @@ static func on_tournament_bout(outcome: Dictionary) -> Dictionary:
 	var round_number := int(encounter_id.get_slice("_", 2)) if encounter_id \
 		.count("_") >= 2 else 1
 	if won and round_number < TournamentLib.ROUNDS:
-		# Advance: the caller starts the next bout (`tournament_started`).
+		# Advance: S10's Continue routes back to S13, whose `_ready` starts the
+		# next bout from this transient field (`70-*` §4.9.7 "3 successive
+		# battles", no repairs between rounds).
+		GameState.pending_tournament_round = round_number + 1
 		return {"won": true, "round_reached": round_number,
 			"next_round": round_number + 1}
-	return TournamentLib.settle(won and round_number >= TournamentLib.ROUNDS,
-		round_number)
+	GameState.pending_tournament_round = 0
+	var settled := TournamentLib.settle(
+		won and round_number >= TournamentLib.ROUNDS, round_number)
+	GameState.last_tournament_outcome = settled.duplicate(true)
+	return settled
+
+
+## Takes the bracket block S13 reports on open (`{}` when there is none), so a
+## settlement is announced exactly once.
+static func take_tournament_outcome() -> Dictionary:
+	var outcome: Dictionary = GameState.last_tournament_outcome
+	GameState.last_tournament_outcome = {}
+	return outcome
+
+
+## Takes the bout S13 should start (`0` when none) — S13 re-opens mid-bracket
+## after each won bout (`70-*` §4.9.7).
+static func take_pending_bout() -> int:
+	var round_number := int(GameState.pending_tournament_round)
+	GameState.pending_tournament_round = 0
+	return round_number
 
 
 # --- Small helpers -------------------------------------------------------

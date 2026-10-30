@@ -8,6 +8,7 @@ extends Node
 
 const CharacterLib := preload("res://scripts/player/character.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 
 ## Six capitals known at new game (docs/20-* §4.11).
 const CAPITALS := ["lisbon", "seville", "london", "amsterdam", "istanbul", "venice"]
@@ -37,6 +38,7 @@ func _ready() -> void:
 	_test_new_game_all_nations()
 	_test_nationality_scene_data_driven()
 	_test_character_panel_live()
+	_test_character_panel_quests_tab()
 	_report()
 
 
@@ -661,6 +663,119 @@ func _test_character_panel_live() -> void:
 	world_host.queue_free()
 
 	host.queue_free()
+
+
+# --- S14 Quests tab (Phase 3, docs/80-* §4.7.3) ---------------------------
+
+func _test_character_panel_quests_tab() -> void:
+	GameState.new_game("portugal", false, "p3")
+	GameState.gold = 20000
+	GameState.day = 12
+	GameState.current_port = "lisbon"
+	GameState.active_quests = []
+	GameState.titles = {}
+	for ship in GameState.fleet:
+		(ship as Dictionary)["cargo"] = {}
+		(ship as Dictionary)["provisions"] = 0
+		(ship as Dictionary)["water"] = 0
+
+	var host := Control.new()
+	host.name = "QuestPanelHost"
+	add_child(host)
+	var panel := CharacterPanelLib.attach_to(host)
+	panel.open()
+	_check(panel.active_tab() == "stats", "the stats column shows first")
+
+	var slots: Label = panel.get_node("Center/Panel/Margin/Body/QuestsPanel/Slots")
+	var rows: VBoxContainer = panel.get_node(
+		"Center/Panel/Margin/Body/QuestsPanel/Scroll/Rows"
+	)
+	var empty: Label = panel.get_node("Center/Panel/Margin/Body/QuestsPanel/Empty")
+
+	panel.select_tab("quests")
+	_check(panel.active_tab() == "quests", "the quests tab can be selected")
+	_check(panel.get_node("Center/Panel/Margin/Body/QuestsPanel").visible,
+		"the quests panel is visible")
+	_check(not panel.get_node("Center/Panel/Margin/Body/Columns").visible,
+		"the stats column is hidden on the quests tab")
+	_check(panel.get_node("Center/Panel/Margin/Body/Tabs/QuestsTab").text
+		== I18n.t_key("char.quests"), "the tab says Quests")
+	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
+		"empty slot counter reads 0/3 (%s)" % slots.text)
+	_check(empty.visible and empty.text == I18n.t_key("ui.empty"),
+		"no quests shows the ui.empty row")
+
+	# Accept a delivery quest → one row with tag, objective, dest, days.
+	var offers: Array = QuestGenLib.available_offers("lisbon", 12)
+	var accepted: Dictionary = {}
+	for offer in offers:
+		if str((offer as Dictionary).get("type", "")) == "delivery":
+			accepted = QuestGenLib.accept(offer, "lisbon", 12)
+			break
+	_check(not accepted.is_empty(), "a delivery offer is accepted for the panel")
+	EventBus.quests_changed.emit()
+	_check(slots.text == I18n.fmt("quest.slots", {"used": 1, "max": 3}),
+		"the counter reads 1/3 (%s)" % slots.text)
+	_check(rows.get_child_count() == 1, "one quest row is listed (%d)"
+		% rows.get_child_count())
+	var row: Control = rows.get_child(0)
+	_check(row.name == "Quest_%s" % str(accepted["instance_id"]),
+		"the row carries the instance id (%s)" % row.name)
+	_check(row.get_node("Top/Tag").text == I18n.t_key("quest.type.delivery"),
+		"the row shows the type tag (%s)" % row.get_node("Top/Tag").text)
+	_check(row.get_node("Top/Objective").text
+		== QuestGenLib.objective_text(accepted),
+		"the row shows the composed objective (%s)"
+		% row.get_node("Top/Objective").text)
+	var requirements: Dictionary = accepted["requirements"]
+	_check(row.get_node("Bottom/Destination").text == I18n.fmt("quest.dest", {
+		"port": I18n.t(DataLoader.get_port(
+			str(requirements["dest_port_id"]))["name"]),
+	}), "the destination names the port (%s)"
+		% row.get_node("Bottom/Destination").text)
+	_check(row.get_node("Top/Days").text == I18n.fmt("quest.days_left", {
+		"days": int(accepted["deadline_day"]) - 12,
+	}), "days left counts down to the deadline (%s)"
+		% row.get_node("Top/Days").text)
+
+	# Abandon through the button: −5 rep with the origin nation, row gone.
+	var rep_before := CharacterLib.reputation("portugal")
+	var abandon: Button = row.get_node("Bottom/Abandon")
+	_check(abandon.text == I18n.t_key("quest.abandon"),
+		"the row has an abandon button (%s)" % abandon.text)
+	abandon.pressed.emit()
+	_check(CharacterLib.reputation("portugal") == rep_before - 5,
+		"abandoning costs 5 reputation (%d → %d)"
+		% [rep_before, CharacterLib.reputation("portugal")])
+	_check(rows.get_child_count() == 0,
+		"the abandoned quest leaves the list (%d rows)" % rows.get_child_count())
+	_check(empty.visible, "the empty row reappears after abandoning")
+	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
+		"the counter drops back to 0/3 (%s)" % slots.text)
+
+	# Viscount grants the fourth slot (§4.9.2): the panel reads the max live.
+	GameState.titles = {"portugal": "viscount"}
+	EventBus.quests_changed.emit()
+	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 4}),
+		"viscount raises the slot cap to 4 (%s)" % slots.text)
+	GameState.titles = {"spain": "knight", "portugal": "none"}
+	EventBus.quests_changed.emit()
+	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
+		"another nation's knight does not add a slot (%s)" % slots.text)
+
+	# Locale rebind.
+	I18n.set_locale("zh")
+	panel.select_tab("quests")
+	_check(panel.get_node("Center/Panel/Margin/Body/Tabs/QuestsTab").text
+		== I18n.t_key("char.quests"), "the tab label rebinds in zh")
+	I18n.set_locale("en")
+
+	panel.select_tab("stats")
+	_check(panel.get_node("Center/Panel/Margin/Body/Columns").visible,
+		"switching back shows the stats column")
+	panel.close()
+	host.queue_free()
+	GameState.active_quests = []
 
 
 # --- Harness --------------------------------------------------------------

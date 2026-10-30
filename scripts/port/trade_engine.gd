@@ -26,6 +26,7 @@ extends RefCounted
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const FameLib := preload("res://scripts/player/fame.gd")
 ## Supply prices are owned by the sailing sim (docs/20 §4.10, §5): reuse the
 ## constants instead of re-declaring the locked 2g / 1g values.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -104,11 +105,24 @@ static func buy_price(port_id: String, good_id: String) -> int:
 	)
 
 
-## Sell price, `max(1, floor(base × factor × 0.8 × discount))`.
+## Sell price, `max(1, floor(base × factor × 0.8 × discount × title_bonus))`
+## (docs/30 §4.2; the Phase-3 multiplier is `70-*` §4.9.2).
 static func sell_price(port_id: String, good_id: String) -> int:
 	return price_from_units(
-		_base_price(good_id), _combined_units(port_id, good_id), true
+		_base_price(good_id), _combined_units(port_id, good_id), true,
+		title_units(port_id)
 	)
+
+
+## The Phase-3 `title_bonus` of a port's **own** nation, in per-thousand units:
+## `1100` at baron and above, `1050` at knight, `1000` otherwise
+## (`70-*` §4.9.2). A separate multiplier after the band clamp, sell-side only.
+static func title_units(port_id: String) -> int:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if port.is_empty():
+		return UNITS
+	return int(round(FameLib.title_bonus(str(port.get("nation_id", "")))
+		* float(UNITS)))
 
 
 ## The band clamp on an arbitrary `factor × discount` product, in per-thousand
@@ -122,7 +136,10 @@ static func band_units(factor_value: float, discount_value: float) -> int:
 
 ## One price from a base and an already-clamped `combined` value in per-thousand
 ## units (buy when `sell_side` is false). Floors the full product exactly once.
-static func price_from_units(base_price: int, combined_units: int, sell_side: bool) -> int:
+## `title` is the Phase-3 sell-side `title_bonus` in per-thousand units and is
+## ignored on the buy side (`30-*` §4.2).
+static func price_from_units(base_price: int, combined_units: int,
+		sell_side: bool, title: int = UNITS) -> int:
 	var base := maxi(base_price, 0)
 	var units := clampi(combined_units, BAND_MIN_UNITS, BAND_MAX_UNITS)
 	var numerator := base * units
@@ -130,6 +147,8 @@ static func price_from_units(base_price: int, combined_units: int, sell_side: bo
 	if sell_side:
 		numerator *= SELL_MARGIN_NUM
 		denominator *= SELL_MARGIN_DEN
+		numerator *= maxi(title, 0)
+		denominator *= UNITS
 	@warning_ignore("integer_division")
 	var price := numerator / denominator
 	return maxi(MIN_PRICE, price)

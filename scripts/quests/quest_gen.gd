@@ -578,6 +578,59 @@ static func abandon(quest: Dictionary) -> bool:
 	return fail(quest)
 
 
+# --- Presentation (docs/80-* §4.7.3, §4.7.4) -----------------------------
+
+## The composed objective line of an offer or stored instance (`quest.line.*`
+## frames from `80-*` §4.7.4; numbers composed by the UI, `10-*` §3.3).
+## Shared by the guild screen and the character panel so a quest reads the same
+## wherever it is listed.
+static func objective_text(quest: Dictionary) -> String:
+	var requirements: Dictionary = quest.get("requirements", {})
+	var type := str(quest.get("type", ""))
+	if type == TYPE_ROYAL:
+		# Royal missions name their objective in the template (`data/quests.json`
+		# `requirements.objective`, `70-*` §4.9.4) and wrap it in the §4.7.4
+		# `quest.line.royal` frame.
+		var template: Dictionary = DataLoader.get_quest(
+			str(quest.get("template_id", "")))
+		var objective: Dictionary = (template.get("requirements", {}) as Dictionary) \
+			.get("objective", {})
+		if not objective.is_empty():
+			return I18n.fmt("quest.line.royal", {"objective": I18n.t(objective)})
+		return I18n.t_key("quest.type.royal")
+	match type:
+		TYPE_DELIVERY:
+			return _delivery_line(requirements)
+		TYPE_BOUNTY:
+			return I18n.fmt("quest.line.bounty", {
+				"target": I18n.t_key("encounter.pirate"),
+				"tier": int(requirements.get("tier", 1)),
+			})
+		TYPE_EXPLORATION:
+			return I18n.t_key("quest.line.exploration")
+	return I18n.t_key("ui.not_available")
+
+
+static func _delivery_line(requirements: Dictionary) -> String:
+	return I18n.fmt("quest.line.delivery", {
+		"quantity": int(requirements.get("quantity", 0)),
+		"good": I18n.t(DataLoader.get_good(str(requirements.get("good_id", "")))
+			.get("name", {})),
+		"port": _port_name(str(requirements.get("dest_port_id", ""))),
+	})
+
+
+static func _port_name(port_id: String) -> String:
+	if port_id.is_empty():
+		return "-"
+	return I18n.t(DataLoader.get_port(port_id).get("name", {}))
+
+
+## The type tag key of a quest (`quest.type.*`, `80-*` §4.7.4).
+static func type_key(quest: Dictionary) -> String:
+	return "quest.type.%s" % str(quest.get("type", ""))
+
+
 # --- Bounty spawn (docs/70-* §4.9.3) ------------------------------------
 
 ## Spawns the pirate fleet a bounty offer names, through the Phase-2

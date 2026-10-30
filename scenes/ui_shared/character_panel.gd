@@ -23,10 +23,15 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 
 const SCENE_PATH := "res://scenes/ui_shared/character_panel.tscn"
 ## Dim strength for modals (docs/80-* §4.7: "dimming the background by 40% black").
 const DIM_ALPHA := 0.4
+
+## Tab ids (docs/80-* §4.7.3: the Phase-3 `Quests` tab sits beside the stats).
+const TAB_STATS := "stats"
+const TAB_QUESTS := "quests"
 
 const STAT_KEYS: Array[String] = [
 	"leadership", "seamanship", "combat", "navigation", "luck",
@@ -57,8 +62,19 @@ const ROLE_KEYS := {
 @onready var _reputation_rows: GridContainer = \
 	$Center/Panel/Margin/Body/Columns/Right/ReputationRows
 @onready var _levelup: Label = $Center/Panel/Margin/Body/LevelUp
+@onready var _stats_tab: Button = $Center/Panel/Margin/Body/Tabs/StatsTab
+@onready var _quests_tab: Button = $Center/Panel/Margin/Body/Tabs/QuestsTab
+@onready var _columns: HBoxContainer = $Center/Panel/Margin/Body/Columns
+@onready var _quests_panel: VBoxContainer = $Center/Panel/Margin/Body/QuestsPanel
+@onready var _quest_slots: Label = $Center/Panel/Margin/Body/QuestsPanel/Slots
+@onready var _quest_rows: VBoxContainer = \
+	$Center/Panel/Margin/Body/QuestsPanel/Scroll/Rows
+@onready var _quest_empty: Label = $Center/Panel/Margin/Body/QuestsPanel/Empty
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
 @onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
+
+## The visible tab ([constant TAB_STATS] / [constant TAB_QUESTS]).
+var _tab: String = TAB_STATS
 
 
 ## Installs a panel under `parent` (idempotent) and returns it. T6/T11 call
@@ -120,13 +136,18 @@ func _ready() -> void:
 	for header in [_stats_header, _officers_header, _reputation_header]:
 		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_quest_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_quest_slots.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_close_button.pressed.connect(close)
+	_stats_tab.pressed.connect(select_tab.bind(TAB_STATS))
+	_quests_tab.pressed.connect(select_tab.bind(TAB_QUESTS))
 	_levelup.visible = false
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_data_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
+	EventBus.quests_changed.connect(_on_data_changed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -174,9 +195,28 @@ func is_open() -> bool:
 	return visible
 
 
+func active_tab() -> String:
+	return _tab
+
+
+## Switches between the stats column and the Phase-3 quest list (docs/80-*
+## §4.7.3). Unknown ids are ignored; the choice is not persisted.
+func select_tab(tab: String) -> void:
+	if tab != TAB_STATS and tab != TAB_QUESTS:
+		return
+	_tab = tab
+	if visible:
+		_refresh()
+	else:
+		_bind_tabs()
+
+
 # --- Rendering -------------------------------------------------------------
 
 func _refresh() -> void:
+	_bind_tabs()
+	_columns.visible = _tab == TAB_STATS
+	_quests_panel.visible = _tab == TAB_QUESTS
 	var player: Dictionary = GameState.player
 	var nation_id := str(player.get("nation_id", ""))
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
@@ -200,6 +240,7 @@ func _refresh() -> void:
 	_build_stats()
 	_build_officers()
 	_build_reputation(nation_id)
+	_build_quests()
 
 	_wage.text = I18n.fmt("char.officer_wage", {"gold": CharacterLib.officer_wages()})
 	_close_button.text = I18n.t_key("ui.close")
@@ -210,6 +251,18 @@ func _refresh() -> void:
 		# Read-only on purpose: the toast owner (HUD, T6) consumes the flag via
 		# CharacterLib.consume_pending_levelup(), so showing the banner here
 		# must not swallow the HUD toast.
+
+
+func _bind_tabs() -> void:
+	_stats_tab.text = I18n.t_key("char.stats")
+	_quests_tab.text = I18n.t_key("char.quests")
+	for pair in [[TAB_STATS, _stats_tab], [TAB_QUESTS, _quests_tab]]:
+		var active: bool = _tab == str(pair[0])
+		var button: Button = pair[1]
+		button.button_pressed = active
+		button.add_theme_color_override(
+			"font_color", PaletteLib.ACCENT if active else PaletteLib.TEXT
+		)
 
 
 ## Stats table: one row per §4.2 stat with base and effective values.
@@ -303,6 +356,90 @@ func _build_reputation(nation_id: String) -> void:
 		_reputation_rows.add_child(value_label)
 
 
+## The Phase-3 `Quests` tab (docs/80-* §4.7.3): slot counter plus one row per
+## active quest — type tag, objective, destination and days left, with
+## `quest.abandon` on each row (the same −5 rep failure path as expiry).
+func _build_quests() -> void:
+	_clear(_quest_rows)
+	var quests: Array = QuestGenLib.active_quests()
+	_quest_slots.text = I18n.fmt("quest.slots", {
+		"used": QuestGenLib.active_count(),
+		"max": QuestGenLib.max_active_quests(),
+	})
+	_quest_empty.visible = quests.is_empty()
+	_quest_empty.text = I18n.t_key("ui.empty")
+	for quest in quests:
+		_quest_rows.add_child(_build_quest_row(quest))
+
+
+func _build_quest_row(quest: Dictionary) -> Control:
+	var row := VBoxContainer.new()
+	row.name = "Quest_%s" % str(quest.get("instance_id", ""))
+	row.add_theme_constant_override("separation", 4)
+
+	var top := HBoxContainer.new()
+	top.name = "Top"
+	top.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	var tag := _make_label(I18n.t_key(QuestGenLib.type_key(quest)))
+	tag.name = "Tag"
+	tag.custom_minimum_size.x = 120
+	tag.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	top.add_child(tag)
+	var objective := _make_label(QuestGenLib.objective_text(quest))
+	objective.name = "Objective"
+	objective.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(objective)
+	var days := _make_label(I18n.fmt("quest.days_left", {
+		"days": maxi(0, int(quest.get("deadline_day", 0)) - int(GameState.day)),
+	}))
+	days.name = "Days"
+	days.custom_minimum_size.x = 140
+	days.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	top.add_child(days)
+	row.add_child(top)
+
+	var bottom := HBoxContainer.new()
+	bottom.name = "Bottom"
+	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	# `quest.dest` always names the port, even when the player has never been
+	# there (docs/80-* §4.7.3).
+	var destination := _make_label(I18n.fmt("quest.dest", {
+		"port": _destination_name(quest),
+	}))
+	destination.name = "Destination"
+	destination.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	destination.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	bottom.add_child(destination)
+	var abandon := Button.new()
+	abandon.name = "Abandon"
+	abandon.text = I18n.t_key("quest.abandon")
+	abandon.custom_minimum_size = Vector2(180, PaletteLib.BUTTON_H)
+	abandon.pressed.connect(func() -> void: abandon_quest(quest))
+	bottom.add_child(abandon)
+	row.add_child(bottom)
+	return row
+
+
+## The port a quest names: its delivery destination, else its origin.
+static func _destination_name(quest: Dictionary) -> String:
+	var requirements: Dictionary = quest.get("requirements", {})
+	var port_id := str(requirements.get("dest_port_id", ""))
+	if port_id.is_empty():
+		port_id = str(quest.get("origin_port_id", ""))
+	return I18n.t(DataLoader.get_port(port_id).get("name", {}))
+
+
+## Abandons `quest` from the panel: the §4.2 failure path (−5 rep with the
+## origin port's nation), then the list rebuilds. Returns whether it failed.
+func abandon_quest(quest: Dictionary) -> bool:
+	var ok := QuestGenLib.abandon(quest)
+	if ok:
+		EventBus.quests_changed.emit()
+	if visible:
+		_refresh()
+	return ok
+
+
 func _make_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -347,3 +484,14 @@ func _on_data_changed() -> void:
 func _on_gold_changed(_new_gold: int) -> void:
 	if visible:
 		_refresh()
+
+
+func _exit_tree() -> void:
+	if EventBus.locale_changed.is_connected(_on_locale_changed):
+		EventBus.locale_changed.disconnect(_on_locale_changed)
+	if EventBus.fleet_changed.is_connected(_on_data_changed):
+		EventBus.fleet_changed.disconnect(_on_data_changed)
+	if EventBus.gold_changed.is_connected(_on_gold_changed):
+		EventBus.gold_changed.disconnect(_on_gold_changed)
+	if EventBus.quests_changed.is_connected(_on_data_changed):
+		EventBus.quests_changed.disconnect(_on_data_changed)

@@ -80,6 +80,12 @@ layout_mode = 2
 toggle_mode = true
 text = "Officers"
 
+[node name="RumorsTab" type="Button" parent="Layout/VBox/Tabs"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+toggle_mode = true
+text = "Rumours"
+
 [node name="Body" type="VBoxContainer" parent="Layout/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -183,6 +189,30 @@ theme_override_constants/separation = 8
 [node name="Reason" type="Label" parent="Layout/VBox/Body/OfficersPanel"]
 layout_mode = 2
 text = ""
+
+[node name="RumorsPanel" type="VBoxContainer" parent="Layout/VBox/Body"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="Price" type="Label" parent="Layout/VBox/Body/RumorsPanel"]
+layout_mode = 2
+text = "Rumours cost 100 gold"
+
+[node name="Scroll" type="ScrollContainer" parent="Layout/VBox/Body/RumorsPanel"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Layout/VBox/Body/RumorsPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Empty" type="Label" parent="Layout/VBox/Body/RumorsPanel"]
+layout_mode = 2
+text = "No new rumours in this tavern"
 
 [node name="Toast" type="Label" parent="Layout/VBox"]
 layout_mode = 2

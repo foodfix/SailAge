@@ -43,6 +43,9 @@ const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
+## Phase 3: a tournament bout returns to the host palace instead of S3, because
+## the bracket continues there (`70-*` §4.9.7).
+const PALACE_SCENE := "res://scenes/port/palace_screen.tscn"
 ## The application seams this task calls but must not own (§4.12.3).
 const BATTLE_RESULT_PATH := "res://scripts/combat/battle_result.gd"
 const BATTLE_REWARDS_PATH := "res://scripts/combat/battle_rewards.gd"
@@ -1532,24 +1535,45 @@ func _continue_after_battle() -> void:
 func _route_to_world() -> void:
 	if not route_to_world:
 		return
-	if not ResourceLoader.exists(WORLD_SCENE):
-		push_warning("BattleScreen: %s missing; staying on S10" % WORLD_SCENE)
+	var target := return_scene()
+	if not ResourceLoader.exists(target):
+		push_warning("BattleScreen: %s missing; staying on S10" % target)
 		return
 	if not is_active_scene():
 		return
-	GameState.change_scene(WORLD_SCENE)
+	GameState.change_scene(target)
 
 
-## The scene this battle would route to now: S3, or "" when routing is off, the
-## after-action dialog is still up (its `Continue` is the edge) or a
-## `gameover.*` fired (S9 owns the screen). The `port_route_target()` seam —
-## tests read this instead of letting the router swap their scene root.
+## The scene the after-action dialog's `Continue` opens. A tournament bout goes
+## back to the host palace, which starts the next bout (`70-*` §4.9.7: "3
+## successive battles", no repairs between rounds); every other battle returns
+## to S3 (§4.12.4 step 5).
+func return_scene() -> String:
+	if is_tournament_battle():
+		return PALACE_SCENE
+	return WORLD_SCENE
+
+
+## `true` for a tournament bout: `Phase3Hooks` tagged the encounter id.
+func is_tournament_battle() -> bool:
+	var id := str(last_outcome.get("encounter_id", ""))
+	if id.is_empty() and not encounter.is_empty():
+		id = str(encounter.get("id", ""))
+	return id.begins_with("tournament_")
+
+
+## The scene this battle would route to now: S3 (or S13 for a tournament bout),
+## or "" when routing is off, the after-action dialog is still up (its
+## `Continue` is the edge) or a `gameover.*` fired (S9 owns the screen). The
+## `world_route_target()` seam — tests read this instead of letting the router
+## swap their scene root.
 func world_route_target() -> String:
 	if game_over_raised or _after_action.visible:
 		return ""
-	if not route_to_world or not ResourceLoader.exists(WORLD_SCENE):
+	var target := return_scene()
+	if not route_to_world or not ResourceLoader.exists(target):
 		return ""
-	return WORLD_SCENE
+	return target
 
 
 ## True when this node is the tree's current scene (production S10) rather than

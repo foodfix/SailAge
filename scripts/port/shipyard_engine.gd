@@ -28,6 +28,7 @@ extends RefCounted
 ##     `fleet[0]` and keeps the order of every other ship.
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const FameLib := preload("res://scripts/player/fame.gd")
 
 ## §4.4: locked fleet size (also the buy cap of §4.3).
 const FLEET_MAX := FleetLib.FLEET_MAX
@@ -105,43 +106,66 @@ static func max_repair_points(index: int) -> int:
 
 
 ## Cost of `points` on `fleet[index]` (0 for a non-positive/invalid request).
-static func repair_cost(index: int, points: int) -> int:
+## Phase 3: at a port of a nation whose title is count or higher the total is
+## multiplied by `0.8` and floored once (`70-*` §4.9.2). `port_id` defaults to
+## the docked port; the palace bays pass their own port explicitly.
+static func repair_cost(index: int, points: int, port_id: String = "") -> int:
+	var raw := raw_repair_cost(index, points)
+	if raw <= 0:
+		return 0
+	var discounted := float(raw) * FameLib.repair_discount(_port_nation(port_id))
+	return maxi(0, int(ceil(discounted)))
+
+
+## The undiscounted §4.3 price of `points` (`points × ceil(base_price / 400)`).
+static func raw_repair_cost(index: int, points: int) -> int:
 	var ship := _ship(index)
 	if ship.is_empty() or points <= 0:
 		return 0
 	return points * repair_cost_per_point(str(ship.get("ship_type_id", "")))
 
 
+## The nation of `port_id` (default: the docked port); `""` outside a port.
+static func _port_nation(port_id: String) -> String:
+	var resolved := port_id
+	if resolved.is_empty():
+		resolved = str(GameState.current_port) if GameState.current_port is String else ""
+	if resolved.is_empty():
+		return ""
+	return str(DataLoader.get_port(resolved).get("nation_id", ""))
+
+
 ## Why a repair of `points` is refused, as a `ui_strings.json` key (`""` =
 ## allowed). §6: 0 points and unaffordable repairs are validation failures, so
 ## the UI disables the button instead of showing a dialog.
-static func repair_block_reason(index: int, points: int) -> String:
+static func repair_block_reason(index: int, points: int,
+		port_id: String = "") -> String:
 	if _ship(index).is_empty():
 		return "shipyard.no_selection"
 	if points <= 0:
 		return "shipyard.invalid_points"
 	if points > max_repair_points(index):
 		return "shipyard.invalid_points"
-	if GameState.gold < repair_cost(index, points):
+	if GameState.gold < repair_cost(index, points, port_id):
 		return "shipyard.no_gold"
 	return ""
 
 
 ## §4.3: `points > 0`, `≤` damage, `gold ≥ cost`.
-static func can_repair(index: int, points: int) -> bool:
-	return repair_block_reason(index, points).is_empty()
+static func can_repair(index: int, points: int, port_id: String = "") -> bool:
+	return repair_block_reason(index, points, port_id).is_empty()
 
 
 ## §4.3 "Repair ship": partial repair is the only kind — exactly `points`
 ## durability is restored and exactly `cost` gold is paid. The cap is the
 ## **effective** max (§4.1), so a worn figurehead can be repaired onto.
-static func repair(index: int, points: int) -> bool:
-	if not can_repair(index, points):
+static func repair(index: int, points: int, port_id: String = "") -> bool:
+	if not can_repair(index, points, port_id):
 		return false
 	var ship: Dictionary = GameState.fleet[index]
 	var durability := int(ship.get("durability", 0))
 	ship["durability"] = mini(durability + points, ship_max_durability(index))
-	GameState.add_gold(-repair_cost(index, points))
+	GameState.add_gold(-repair_cost(index, points, port_id))
 	FleetLib.notify_changed()
 	return true
 

@@ -147,14 +147,14 @@ static func offer(port_id: String, day: int) -> Dictionary:
 				"status": QuestGenLib.STATUS_ACTIVE,
 			}
 		_:
-			return _delivery_offer(instance_id, port_id, nation_id)
+			return _delivery_offer(instance_id, port_id, nation_id, day)
 
 
 ## The royal delivery is a guild delivery with the §4.9.4 multipliers, drawn
 ## from the same deterministic per-(port, day//7) stream.
 static func _delivery_offer(instance_id: String, port_id: String,
-		nation_id: String) -> Dictionary:
-	var deliveries := QuestGenLib.offers(port_id, GameState.day)
+		nation_id: String, day: int) -> Dictionary:
+	var deliveries := QuestGenLib.offers(port_id, day)
 	var template: Dictionary = {}
 	for offer in deliveries:
 		if str((offer as Dictionary).get("type", "")) == QuestGenLib.TYPE_DELIVERY:
@@ -203,7 +203,12 @@ static func _rival_of(nation_id: String) -> String:
 ## Accepts the palace's offer, spawning what its kind needs (a patrol's navy
 ## markers, a royal delivery's cargo). Returns the stored instance or `{}`.
 static func accept(port_id: String, day: int) -> Dictionary:
-	var candidate := offer(port_id, day)
+	return accept_offer(port_id, day, offer(port_id, day))
+
+
+## [method accept] for an already-built `candidate` (the same offer the screen
+## displayed, so a screen click and a test accept the identical instance).
+static func accept_offer(port_id: String, day: int, candidate: Dictionary) -> Dictionary:
 	if candidate.is_empty():
 		return {}
 	var instance: Dictionary = candidate.duplicate(true)
@@ -336,23 +341,10 @@ static func attend_ceremony(port_id: String) -> String:
 ## discount: `ceil(points × ceil(base_price/400) × 0.8)` floored once at the
 ## end of the whole transaction (`40-*` §4.3 price, then `70-*` §4.9.2).
 static func repair_cost(port_id: String, ship_index: int, points: int) -> int:
-	var shipyard_path := "res://scripts/port/shipyard_engine.gd"
-	if not ResourceLoader.exists(shipyard_path):
+	var shipyard = _shipyard()
+	if shipyard == null:
 		return 0
-	var shipyard = ResourceLoader.load(shipyard_path)
-	if shipyard == null or not shipyard.has_method("repair_cost_per_point"):
-		return 0
-	var ship: Dictionary = GameState.fleet[ship_index] if ship_index >= 0 \
-		and ship_index < GameState.fleet.size() \
-		and GameState.fleet[ship_index] is Dictionary else {}
-	if ship.is_empty():
-		return 0
-	var nation_id := nation_of(port_id)
-	var per_point := int(shipyard.call("repair_cost_per_point",
-		str(ship.get("ship_type_id", ""))))
-	var raw := int(ceil(float(per_point * maxi(points, 0)) \
-		* FameLib.repair_discount(nation_id)))
-	return maxi(raw, 0)
+	return int(shipyard.call("repair_cost", ship_index, points, port_id))
 
 
 ## Repairs one hull at the bays, charging [method repair_cost]. Returns the
@@ -360,28 +352,24 @@ static func repair_cost(port_id: String, ship_index: int, points: int) -> int:
 static func repair(port_id: String, ship_index: int, points: int) -> int:
 	if nation_of(port_id).is_empty() or points <= 0:
 		return 0
-	var shipyard_path := "res://scripts/port/shipyard_engine.gd"
-	if not ResourceLoader.exists(shipyard_path):
-		return 0
-	var shipyard = ResourceLoader.load(shipyard_path)
+	var shipyard = _shipyard()
 	if shipyard == null:
 		return 0
 	var max_points := int(shipyard.call("max_repair_points", ship_index))
 	var actual := mini(points, max_points)
 	if actual <= 0:
 		return 0
-	var cost := repair_cost(port_id, ship_index, actual)
-	if GameState.gold < cost:
+	if not bool(shipyard.call("repair", ship_index, actual, port_id)):
 		return 0
-	if not bool(shipyard.call("repair", ship_index, actual)):
-		return 0
-	# `repair()` charged the undiscounted price; refund the difference so the
-	# count-grant discount is exact and there is one repair implementation.
-	var full := int(shipyard.call("repair_cost", ship_index, actual))
-	var refund := full - cost
-	if refund > 0:
-		GameState.add_gold(refund)
 	return actual
+
+
+## The shipyard engine module (rules shared, not re-implemented).
+static func _shipyard():
+	var path := "res://scripts/port/shipyard_engine.gd"
+	if not ResourceLoader.exists(path):
+		return null
+	return ResourceLoader.load(path)
 
 
 # --- Bounty / tournament / retirement edges ------------------------------

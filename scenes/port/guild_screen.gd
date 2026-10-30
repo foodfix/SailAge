@@ -288,29 +288,12 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 
 ## The composed objective line (§4.9.3 names; numbers by the UI, `10-*` §3.3).
 func _objective_text(offer: Dictionary) -> String:
-	var requirements: Dictionary = offer.get("requirements", {})
-	match str(offer.get("type", "")):
-		"delivery":
-			return I18n.fmt("quest.line.delivery", {
-				"quantity": int(requirements.get("quantity", 0)),
-				"good": _good_name(str(requirements.get("good_id", ""))),
-				"port": _port_name(str(requirements.get("dest_port_id", ""))),
-			})
-		"bounty":
-			return I18n.fmt("quest.line.bounty", {
-				"target": I18n.t_key("encounter.pirate"),
-				"tier": int(requirements.get("tier", 1)),
-			})
-		"exploration":
-			return "%s — %s" % [
-				I18n.t_key("quest.line.exploration"),
-				I18n.t(_hint_text(offer)),
-			]
-		"royal":
-			var objective: Dictionary = requirements.get("objective", {})
-			return I18n.t(objective) if not objective.is_empty() \
-				else I18n.t_key("quest.type.royal")
-	return I18n.t_key("ui.not_available")
+	if str(offer.get("type", "")) == "exploration":
+		return "%s — %s" % [
+			QuestGenLib.objective_text(offer),
+			I18n.t(_hint_text(offer)),
+		]
+	return QuestGenLib.objective_text(offer)
 
 
 func _reward_text(offer: Dictionary) -> String:
@@ -371,14 +354,6 @@ func _read_current_port() -> String:
 	if value is String and not (value as String).is_empty():
 		return value
 	return ""
-
-
-func _good_name(good_id: String) -> String:
-	return I18n.t(DataLoader.get_good(good_id).get("name", {}))
-
-
-func _port_name(port_id: String) -> String:
-	return I18n.t(DataLoader.get_port(port_id).get("name", {}))
 
 
 func _make_label(text: String, node_name: String = "") -> Label:

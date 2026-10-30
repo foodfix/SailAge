@@ -10,6 +10,7 @@ const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const TavernScene := preload("res://scenes/port/tavern_screen.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 
@@ -35,6 +36,7 @@ func _ready() -> void:
 	_test_role_bonuses()
 	_test_screen_crew_tab()
 	_test_screen_officers_tab()
+	_test_screen_rumors_tab()
 	_test_screen_back()
 	_report()
 
@@ -719,6 +721,109 @@ func _test_screen_officers_tab() -> void:
 			"port": I18n.t(DataLoader.get_port("lisbon")["name"]),
 		}), "the title rebinds in zh (%s)"
 		% screen.get_node("Layout/VBox/Header/Title").text)
+	I18n.set_locale("en")
+
+	_drop(screen)
+	host.queue_free()
+
+
+# --- Screen: Rumors tab (Phase 3, docs/70-* §4.4) --------------------------
+
+func _test_screen_rumors_tab() -> void:
+	_make_run(CARAVEL_MIN, 1000)
+	GameState.day = 12
+	GameState.discoveries_found = []
+	GameState.discovery_hints = {}
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	var screen = TavernScene.instantiate()
+	screen.route_to_port = false
+	host.add_child(screen)
+
+	screen.select_tab("rumors")
+	_check(screen.active_tab() == "rumors", "the rumours tab can be selected")
+	_check(screen.get_node("Layout/VBox/Body/RumorsPanel").visible,
+		"the rumours panel is visible")
+	_check(not screen.get_node("Layout/VBox/Body/CrewPanel").visible,
+		"the crew panel is hidden on the rumours tab")
+	_check(screen.get_node("Layout/VBox/Tabs/RumorsTab").text
+		== I18n.t_key("tavern.rumor_tab"), "the tab says Rumours")
+
+	var price: Label = screen.get_node("Layout/VBox/Body/RumorsPanel/Price")
+	_check(price.text == I18n.fmt("tavern.rumor.price", {"gold": 100}),
+		"the tab shows the 100g price (%s)" % price.text)
+
+	var rows: VBoxContainer = screen.get_node(
+		"Layout/VBox/Body/RumorsPanel/Scroll/Rows"
+	)
+	_check(rows.get_child_count() == DiscoveryLib.HINTS_PER_VISIT,
+		"up to three hint rows are listed (%d)" % rows.get_child_count())
+	var listed: Array = screen.rumor_rows()
+	_check(listed == DiscoveryLib.hints("lisbon", 12),
+		"the rows are exactly DiscoverySight.hints() (%s)" % str(listed))
+
+	var row: Control = rows.get_child(0)
+	var hint_label: Label = row.get_node("Hint")
+	var discovery_id := str(listed[0])
+	_check(hint_label.text == I18n.t(
+		DataLoader.get_discovery(discovery_id)["region_hint"]),
+		"the row shows the region hint free")
+	var buy: Button = row.get_node("Bottom/Buy")
+	_check(buy.text == I18n.t_key("tavern.rumor.buy"),
+		"the buy button says Buy the rumour (%s)" % buy.text)
+	_check(not buy.disabled, "Buy is enabled with 1000g")
+
+	# Buying through the button: 100g, hinted, name revealed, row disabled.
+	buy.pressed.emit()
+	_check(GameState.gold == 900, "buying a rumour costs 100g (got %d)"
+		% GameState.gold)
+	_check(DiscoveryLib.is_hinted(discovery_id),
+		"the bought hint is marked hinted")
+	row = rows.get_child(0)
+	_check(row.get_node("Bottom/Name").text
+		== I18n.t(DataLoader.get_discovery(discovery_id)["name"]),
+		"the discovery name is revealed after buying")
+	var buy2: Button = row.get_node("Bottom/Buy")
+	_check(buy2.disabled, "a hinted rumour cannot be bought twice")
+	_check(buy2.text == I18n.t_key("tavern.rumor.bought"),
+		"the bought row reads Already known (%s)" % buy2.text)
+
+	# Short of gold: disabled with tavern.rumor.no_gold.
+	GameState.discovery_hints = {}
+	_make_run(CARAVEL_MIN, 99)
+	GameState.day = 12
+	screen.refresh()
+	var poor: Button = rows.get_child(0).get_node("Bottom/Buy")
+	_check(poor.disabled, "Buy is disabled with 99g")
+	_check(poor.tooltip_text == I18n.t_key("tavern.rumor.no_gold"),
+		"the disabled reason is tavern.rumor.no_gold (%s)" % poor.tooltip_text)
+
+	# Every discovery found → the empty state.
+	_make_run(CARAVEL_MIN, 1000)
+	for entry in DataLoader.discoveries_list:
+		GameState.discoveries_found.append(str((entry as Dictionary)["id"]))
+	screen.refresh()
+	var empty: Label = screen.get_node("Layout/VBox/Body/RumorsPanel/Empty")
+	_check(empty.visible and empty.text == I18n.t_key("tavern.rumor.none"),
+		"all discoveries found shows tavern.rumor.none (%s)" % empty.text)
+
+	# Deterministic per (port, day) and distinct per port.
+	_make_run(CARAVEL_MIN, 1000)
+	GameState.discoveries_found = []
+	_check(DiscoveryLib.hints("lisbon", 12) == DiscoveryLib.hints("lisbon", 12),
+		"the same (port, day) yields the same hints")
+	_check(DiscoveryLib.hints("lisbon", 12) != DiscoveryLib.hints("lisbon", 13),
+		"the next day yields a different draw")
+	var others: Array = DiscoveryLib.hints("tunis", 12)
+	_check(not others.is_empty(), "a second port also draws hints (%d)"
+		% others.size())
+
+	# Locale rebind.
+	I18n.set_locale("zh")
+	screen.refresh()
+	_check(price.text == I18n.fmt("tavern.rumor.price", {"gold": 100}),
+		"the price line rebinds in zh (%s)" % price.text)
 	I18n.set_locale("en")
 
 	_drop(screen)

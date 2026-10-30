@@ -66,6 +66,12 @@ var retired_at: int = 0
 ## The encounter a battle scene should open (`60-*` §4.11.11.3). Transient:
 ## set by S3 immediately before routing, cleared by S10 on open, never saved.
 var pending_encounter = null
+## The tournament bout S13 should start next (`70-*` §4.9.7). Transient: set by
+## S10 when a bout is won, consumed by S13's `_ready`; never saved.
+var pending_tournament_round: int = 0
+## The settled bracket block S13 reports on open (`70-*` §4.9.7). Transient:
+## written by `Tournament.settle()`, consumed once by S13; never saved.
+var last_tournament_outcome: Dictionary = {}
 ## Minimap exploration set; deliberately not saved in Phase 1
 ## (docs/20-* §4.12 known limitation).
 var explored_tiles: Dictionary = {}
@@ -163,6 +169,8 @@ func new_game(nation_id: String, route: bool = true,
 	hostile_fleets = []
 	proximity_cooldowns = {}
 	pending_encounter = null
+	pending_tournament_round = 0
+	last_tournament_outcome = {}
 	explored_tiles = {}
 	# docs/90-* §8.1 Phase-3 fields: a fresh run starts at zero everywhere.
 	fame = 0

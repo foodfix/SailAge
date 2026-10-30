@@ -17,6 +17,7 @@ const FameLib := preload("res://scripts/player/fame.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 
@@ -49,6 +50,7 @@ signal tournament_started(round_number: int)
 @onready var _tournament_label: Label = $Layout/VBox/Rows/TournamentRow/Label
 @onready var _tournament_button: Button = $Layout/VBox/Rows/TournamentRow/Action
 @onready var _retire_button: Button = $Layout/VBox/Rows/RetireRow/Retire
+@onready var _confirm: Control = $ConfirmDialog
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 @onready var _toast: Label = $Layout/VBox/Toast
 @onready var _toast_timer: Timer = $ToastTimer
@@ -57,6 +59,8 @@ var _port_id: String = ""
 var _nation_id: String = ""
 ## The tournament bout in progress (0 when none).
 var _bout: int = 0
+## Set when `_ready` auto-started a bout (tests await one frame instead).
+var bout_pending: bool = false
 
 
 func _ready() -> void:
@@ -81,7 +85,9 @@ func _ready() -> void:
 	_repair_button.pressed.connect(repair_fleet)
 	_bounty_button.pressed.connect(pay_bounty)
 	_tournament_button.pressed.connect(enter_tournament)
-	_retire_button.pressed.connect(retire)
+	_retire_button.pressed.connect(request_retire)
+	if _confirm.has_signal("confirmed"):
+		_confirm.confirmed.connect(retire)
 	_port_id = _read_current_port()
 	_nation_id = PalaceEngineLib.nation_of(_port_id)
 	refresh()
@@ -90,9 +96,21 @@ func _ready() -> void:
 	EventBus.fame_changed.connect(_on_fame_changed)
 	EventBus.quests_changed.connect(refresh)
 	EventBus.bounty_cleared.connect(_on_bounty_cleared)
+	# §4.9.7: S10 returns here after a won bout (`Phase3Hooks` set the round) or
+	# after the bracket settled (the outcome block). Both are one-shot reads.
+	var settled := Phase3HooksLib.take_tournament_outcome()
+	if not settled.is_empty():
+		_report_tournament(settled)
+		return
+	var next_round := Phase3HooksLib.take_pending_bout()
+	if next_round > 0:
+		bout_pending = true
+		call_deferred("_start_bout", next_round)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _confirm != null and _confirm.has_method("is_open") and _confirm.is_open():
+		return
 	if event.is_action_pressed("back"):
 		get_viewport().set_input_as_handled()
 		go_back()
@@ -208,6 +226,18 @@ func enter_tournament() -> bool:
 	return true
 
 
+## The Retire row's click: opens the `palace.retire.confirm` modal (§4.7 pin:
+## "choosing it opens a confirm, and declining changes nothing").
+func request_retire() -> bool:
+	if not PalaceEngineLib.can_retire(_port_id):
+		_show_toast("ui.not_available")
+		return false
+	if _confirm == null or not _confirm.has_method("open_key"):
+		return retire()
+	_confirm.open_key("palace.retire.confirm", {})
+	return true
+
+
 ## Retires the run (`70-*` §4.7): flags the save state, announces, routes to
 ## S16. Refused unless the docked nation's title is duke.
 func retire() -> bool:
@@ -229,12 +259,38 @@ func go_back() -> bool:
 
 func _start_bout(round_number: int) -> void:
 	_bout = round_number
+	bout_pending = false
 	tournament_started.emit(round_number)
-	if not route_to_port or not ResourceLoader.exists(BATTLE_SCENE):
-		return
+	# The descriptor is game state (which bout comes next), so it is queued
+	# even when routing is off; only the scene swap is gated.
 	GameState.set("pending_encounter", TournamentLib.encounter(round_number,
 		GameState.day))
+	if not route_to_port or not ResourceLoader.exists(BATTLE_SCENE):
+		return
 	GameState.change_scene(BATTLE_SCENE)
+
+
+## Announces a settled bracket (`70-*` §4.9.7): `tournament.won` + `prize`, or
+## `tournament.lost` + `consolation`. The numbers come from the outcome block,
+## never recomputed here.
+func _report_tournament(outcome: Dictionary) -> void:
+	_bout = 0
+	refresh()
+	if bool(outcome.get("won", false)):
+		_show_toast("tournament.won", {})
+		_tournament_label.text = I18n.fmt("tournament.prize", {
+			"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
+			"fame": int(outcome.get("fame", 0)),
+		})
+		_tournament_label.add_theme_color_override("font_color", PaletteLib.GOOD)
+		return
+	_show_toast("tournament.lost", {
+		"round": int(outcome.get("round_reached", 1)),
+	})
+	_tournament_label.text = I18n.fmt("tournament.consolation", {
+		"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
+	})
+	_tournament_label.add_theme_color_override("font_color", PaletteLib.WARN)
 
 
 # --- Rendering -----------------------------------------------------------
@@ -361,14 +417,12 @@ func _bind_tournament() -> void:
 		"first": int(status.get("window_first", 1)),
 		"last": int(status.get("window_last", 5)),
 	})
-	if bool(status.get("entered", false)):
-		_tournament_button.text = I18n.t_key("tournament.entered")
-		_set_enabled(_tournament_button, false, "tournament.entered")
-		return
 	_tournament_button.text = I18n.fmt("tournament.enter", {
 		"fee": HudLib.format_thousands(int(status.get("fee", 1000))),
 	})
 	var blocked := str(status.get("blocked", ""))
+	if blocked == "tournament.entered":
+		_tournament_button.text = I18n.t_key("tournament.entered")
 	_set_enabled(_tournament_button, bool(status.get("open", false)),
 		blocked if not blocked.is_empty() else "tournament.closed")
 

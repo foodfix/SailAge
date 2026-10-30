@@ -23,6 +23,7 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -30,6 +31,7 @@ const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## Tab ids (`select_tab` argument / [method active_tab] return).
 const TAB_CREW := "crew"
 const TAB_OFFICERS := "officers"
+const TAB_RUMORS := "rumors"
 
 ## How long the transient action toast stays up (docs/80-* §4.7: 2.5s).
 const TOAST_SECONDS := 2.5
@@ -66,8 +68,13 @@ signal back_requested
 @onready var _back_button: Button = $Layout/VBox/Header/Back
 @onready var _crew_tab: Button = $Layout/VBox/Tabs/CrewTab
 @onready var _officers_tab: Button = $Layout/VBox/Tabs/OfficersTab
+@onready var _rumors_tab: Button = $Layout/VBox/Tabs/RumorsTab
 @onready var _crew_panel: VBoxContainer = $Layout/VBox/Body/CrewPanel
 @onready var _officers_panel: VBoxContainer = $Layout/VBox/Body/OfficersPanel
+@onready var _rumors_panel: VBoxContainer = $Layout/VBox/Body/RumorsPanel
+@onready var _rumor_price: Label = $Layout/VBox/Body/RumorsPanel/Price
+@onready var _rumor_rows: VBoxContainer = $Layout/VBox/Body/RumorsPanel/Scroll/Rows
+@onready var _rumor_empty: Label = $Layout/VBox/Body/RumorsPanel/Empty
 @onready var _crew_count: Label = $Layout/VBox/Body/CrewPanel/CrewCount
 @onready var _morale: Label = $Layout/VBox/Body/CrewPanel/Morale
 @onready var _per_head: Label = $Layout/VBox/Body/CrewPanel/PerHead
@@ -95,6 +102,9 @@ var _tab: String = TAB_CREW
 ## Port id read at open time ("" when launched standalone from the editor).
 var _port_id: String = ""
 
+## The rumour hint rows currently rendered (discovery id + fame), in order.
+var _rumors: Array = []
+
 ## True while a TavernEngine/Character transaction is running; the EventBus
 ## refresh handlers do nothing then (see [method hire_heads]).
 var _busy: bool = false
@@ -104,20 +114,23 @@ func _ready() -> void:
 	$Background.color = PaletteLib.PANEL_BG
 	for label in [
 		_title, _gold, _crew_count, _morale, _per_head, _reason, _min_note,
-		_roster_header, _officer_reason, _esc_hint, _toast,
+		_roster_header, _officer_reason, _esc_hint, _toast, _rumor_price,
+		_rumor_empty,
 	]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_per_head.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_rumor_price.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_min_note.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_rumor_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_title.add_theme_font_size_override("font_size", 32)
 	_toast.visible = false
 	_toast_timer.timeout.connect(_on_toast_timeout)
 	_toast_timer.one_shot = true
 
 	for button in [
-		_back_button, _crew_tab, _officers_tab, _hire_1, _hire_10, _fill,
-		_fire_1, _fire_10, _down_to_min,
+		_back_button, _crew_tab, _officers_tab, _rumors_tab, _hire_1, _hire_10,
+		_fill, _fire_1, _fire_10, _down_to_min,
 	]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 		_style_button(button)
@@ -125,6 +138,7 @@ func _ready() -> void:
 	_back_button.pressed.connect(go_back)
 	_crew_tab.pressed.connect(select_tab.bind(TAB_CREW))
 	_officers_tab.pressed.connect(select_tab.bind(TAB_OFFICERS))
+	_rumors_tab.pressed.connect(select_tab.bind(TAB_RUMORS))
 	_hire_1.pressed.connect(_on_hire_pressed.bind(1))
 	_hire_10.pressed.connect(_on_hire_pressed.bind(10))
 	_fill.pressed.connect(_on_fill_pressed)
@@ -160,11 +174,9 @@ func port_id() -> String:
 
 ## Switches the visible panel. Unknown ids are ignored.
 func select_tab(tab: String) -> void:
-	if tab != TAB_CREW and tab != TAB_OFFICERS:
+	if tab != TAB_CREW and tab != TAB_OFFICERS and tab != TAB_RUMORS:
 		return
 	_tab = tab
-	_crew_panel.visible = tab == TAB_CREW
-	_officers_panel.visible = tab == TAB_OFFICERS
 	refresh()
 
 
@@ -229,6 +241,29 @@ func dismiss_officer(officer_id: String) -> bool:
 	return ok
 
 
+## Rumors-tab action (docs/70-* §4.4): buys `discovery_id`'s hint for 100g.
+## Returns the discovery entry (`{}` on refusal — already hinted or short of
+## gold, in which case a reason is toasted).
+func buy_rumor(discovery_id: String) -> Dictionary:
+	var hinted := DiscoveryLib.is_hinted(discovery_id)
+	var entry := DiscoveryLib.buy_hint(discovery_id)
+	if entry.is_empty():
+		_show_toast("tavern.rumor.bought" if hinted else "tavern.rumor.no_gold")
+		refresh()
+		return {}
+	_show_toast("tavern.rumor.buy")
+	refresh()
+	return entry
+
+
+## The discovery ids the Rumors tab currently lists, in display order.
+func rumor_rows() -> Array:
+	var out: Array = []
+	for entry in _rumors:
+		out.append(str((entry as Dictionary).get("id", "")))
+	return out
+
+
 ## Rebuilds every label/row from GameState. Called on open, on locale change
 ## and on `gold_changed` / `fleet_changed` (never polled from `_process`).
 func refresh() -> void:
@@ -236,8 +271,10 @@ func refresh() -> void:
 	_bind_header()
 	_bind_crew()
 	_bind_officers()
+	_bind_rumors()
 	_crew_panel.visible = _tab == TAB_CREW
 	_officers_panel.visible = _tab == TAB_OFFICERS
+	_rumors_panel.visible = _tab == TAB_RUMORS
 
 
 # --- Header / tabs ---------------------------------------------------------
@@ -253,10 +290,12 @@ func _bind_header() -> void:
 	_back_button.text = I18n.t_key("ui.back")
 	_crew_tab.text = I18n.t_key("tavern.crew_tab")
 	_officers_tab.text = I18n.t_key("tavern.officers_tab")
+	_rumors_tab.text = I18n.t_key("tavern.rumor_tab")
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	# Active tab is accent-colored and held down; the inactive one stays
 	# neutral (toggle buttons, so only one reads as "current").
-	for pair in [[TAB_CREW, _crew_tab], [TAB_OFFICERS, _officers_tab]]:
+	for pair in [[TAB_CREW, _crew_tab], [TAB_OFFICERS, _officers_tab],
+			[TAB_RUMORS, _rumors_tab]]:
 		var active: bool = _tab == str(pair[0])
 		var button: Button = pair[1]
 		button.button_pressed = active
@@ -460,6 +499,77 @@ func _build_roster_row(officer_id: String) -> Control:
 	_style_button(button)
 	button.pressed.connect(dismiss_officer.bind(officer_id))
 	row.add_child(button)
+	return row
+
+
+# --- Rumors tab (docs/70-* §4.4) ------------------------------------------
+
+## Up to three unfound discoveries for this tavern visit, each showing its
+## `region_hint` and a `Buy — 100g` button. Buying marks it hinted (the name
+## is then revealed) and the row turns into `tavern.rumor.bought`.
+func _bind_rumors() -> void:
+	_clear(_rumor_rows)
+	_rumors = []
+	_rumor_price.text = I18n.fmt(
+		"tavern.rumor.price", {"gold": DiscoveryLib.HINT_PRICE}
+	)
+	_rumor_empty.text = I18n.t_key("tavern.rumor.none")
+	if _port_id.is_empty():
+		_rumors = []
+	else:
+		for discovery_id in DiscoveryLib.hints(_port_id, GameState.day):
+			_rumors.append({"id": str(discovery_id)})
+	_rumor_empty.visible = _rumors.is_empty()
+	if _rumors.is_empty():
+		return
+	for entry in _rumors:
+		_rumor_rows.add_child(_build_rumor_row(str(entry["id"])))
+
+
+func _build_rumor_row(discovery_id: String) -> Control:
+	var discovery: Dictionary = DataLoader.get_discovery(discovery_id)
+	var hinted := DiscoveryLib.is_hinted(discovery_id)
+	var row := VBoxContainer.new()
+	row.name = "Rumor_%s" % discovery_id
+	row.add_theme_constant_override("separation", 4)
+
+	var hint := _make_label(I18n.t(DiscoveryLib.hint_text(discovery_id)), "Hint")
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(hint)
+
+	var bottom := HBoxContainer.new()
+	bottom.name = "Bottom"
+	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	# The 100g buys the *location*: the name appears only once hinted
+	# (docs/80-* §4.7.3).
+	var name_label := _make_label(
+		I18n.t(discovery.get("name", {})) if hinted else "?", "Name"
+	)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.add_theme_color_override(
+		"font_color", PaletteLib.ACCENT if hinted else PaletteLib.PANEL_LINE
+	)
+	bottom.add_child(name_label)
+
+	var button := Button.new()
+	button.name = "Buy"
+	button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
+	_style_button(button)
+	button.tooltip_text = I18n.fmt(
+		"tavern.rumor.price", {"gold": DiscoveryLib.HINT_PRICE}
+	)
+	if hinted:
+		button.text = I18n.t_key("tavern.rumor.bought")
+		button.disabled = true
+	elif GameState.gold < DiscoveryLib.HINT_PRICE:
+		button.text = I18n.t_key("tavern.rumor.buy")
+		button.disabled = true
+		button.tooltip_text = I18n.t_key("tavern.rumor.no_gold")
+	else:
+		button.text = I18n.t_key("tavern.rumor.buy")
+		button.pressed.connect(func() -> void: buy_rumor(discovery_id))
+	bottom.add_child(button)
+	row.add_child(bottom)
 	return row
 
 
