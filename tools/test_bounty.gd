@@ -39,6 +39,7 @@ func _ready() -> void:
 	_test_hunters_spawn()
 	await _test_no_lockout()
 	_test_own_nation_bounty()
+	await _test_navy_battle_piracy()
 	await _test_palace_and_hub()
 	_report()
 
@@ -354,6 +355,54 @@ func _test_palace_and_hub() -> void:
 		"the closed row shows port.closed_bounty (%s)"
 		% ("" if market == null else market.text))
 	hub.queue_free()
+	await get_tree().process_frame
+
+
+# --- 11. A navy battle start charges the full §4.9.5 piracy block ------
+
+## `world_map._charge_navy_piracy` is the one place `70-*` §4.9.5's "the `+2` is
+## applied once per battle, at battle start, next to the −20" happens. Order the
+## real world scene to fight a navy fleet and both halves must land exactly once.
+func _test_navy_battle_piracy() -> void:
+	_new_run("lisbon", 40)
+	GameState.player["reputation"]["spain"] = -10
+	GameState.player["reputation"]["portugal"] = -10
+	GameState.player["reputation"]["italy"] = -10
+	var world: Node2D = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	await get_tree().process_frame
+	# `-10` for Spain, one raid: -20 with Spain and +2 with its pinned rivals
+	# (portugal, italy).
+	world._charge_navy_piracy({"kind": "navy", "nation_id": "spain"})
+	_check(CharacterLib.reputation("spain") == -30,
+		"a navy battle start charges −20 with Spain (−10 → %d)"
+		% CharacterLib.reputation("spain"))
+	_check(CharacterLib.reputation("portugal") == -8,
+		"Spain's rival Portugal gains +2 (−10 → %d)"
+		% CharacterLib.reputation("portugal"))
+	_check(CharacterLib.reputation("italy") == -8,
+		"Spain's rival Italy gains +2 (−10 → %d)"
+		% CharacterLib.reputation("italy"))
+	_check(CharacterLib.reputation("england") == 0,
+		"a non-rival is untouched (england %d)"
+		% CharacterLib.reputation("england"))
+	# Pirates are not piracy.
+	world._charge_navy_piracy({"kind": "pirate", "nation_id": "spain"})
+	_check(CharacterLib.reputation("spain") == -30,
+		"a pirate battle charges nothing (got %d)"
+		% CharacterLib.reputation("spain"))
+	# A raid that crosses −50 issues the bounty right at battle start.
+	GameState.player["reputation"]["spain"] = -35
+	world._charge_navy_piracy({"kind": "navy", "nation_id": "spain"})
+	_check(CharacterLib.reputation("spain") == -55,
+		"the raid pushes Spain to −55 (%d)" % CharacterLib.reputation("spain"))
+	_check(BountyLib.has_bounty("spain"),
+		"the bounty is issued at battle start")
+	_check(BountyLib.amount("spain") == 500 * 55,
+		"the bounty is 500 × 55 = 27,500 (got %d)" % BountyLib.amount("spain"))
+	world.queue_free()
 	await get_tree().process_frame
 
 

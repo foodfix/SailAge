@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 527 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 535 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -159,7 +159,7 @@ are collected and the closing check asserts none of them contains a raw
 | `test_battle_economy.tscn` | 68 | 2 |
 | `test_battle_screen.tscn` | 122 | 2 |
 | `test_battle.tscn` | 218 | 2 |
-| `test_bounty.tscn` | 72 | **3** |
+| `test_bounty.tscn` | 80 | **3** |
 | `test_character.tscn` | 409 | 1 (+24 for the Quests tab) |
 | `test_demo_loop.tscn` | 87 | 1 |
 | `test_discovery.tscn` | 141 | 1 |
@@ -186,9 +186,9 @@ are collected and the closing check asserts none of them contains a raw
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
 | `test_world_map.tscn` | 62 | **3** |
-| **Total** | **4 527** | |
+| **Total** | **4 535** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 878 checks
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 886 checks
 and 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.
@@ -214,14 +214,18 @@ branch:
    `Phase3Hooks.on_port_entered` into port entry (report queued as a dialog) and
    `Phase3Hooks.on_cargo_changed` into the `fleet_changed` funnel every cargo
    change already emits.
-3. **The palace's tournament row hid its own reason.** The entered case was
+3. **A navy battle start charged only the −20.** §4.9.5's "+2 with the two
+   rivals, once per battle, at battle start" never fired: the scene charged the
+   −20 alone. Fixed by routing `world_map._charge_navy_piracy` through
+   `Bounty.apply_piracy`, which also re-evaluates the bounty threshold.
+4. **The palace's tournament row hid its own reason.** The entered case was
    handled before the generic `blocked` branch, so an out-of-window or
    wrong-host palace still printed `Entry recorded`. Fixed by letting
    `status.blocked` drive both the label and the tooltip for every reason.
-4. **`PalaceEngine._delivery_offer` read the live day.** A royal delivery
+5. **`PalaceEngine._delivery_offer` read the live day.** A royal delivery
    previewed for another day (a test, or a screen showing tomorrow's offer)
    silently used `GameState.day`; fixed by threading the day through.
-5. **The palace repair path refunded a discount instead of quoting it.** Two
+6. **The palace repair path refunded a discount instead of quoting it.** Two
    prices could drift; `ShipyardEngine.repair()` now takes the port and charges
    the discounted amount once.
 

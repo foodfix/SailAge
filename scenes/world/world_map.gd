@@ -25,6 +25,7 @@ const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## Phase-2 F: hostile marker spawning/movement/contact (docs/60-* §4.1).
 const EncountersLib := preload("res://scripts/world/encounters.gd")
+const BountyLib := preload("res://scripts/quests/bounty.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
@@ -591,15 +592,18 @@ func _open_encounter(encounter: Dictionary) -> void:
 	_route_to_battle()
 
 
-## `rep −20` with the navy's nation, once, for a navy battle (`60-*` §4.11.10,
-## `70-*` §4.5). Pirates cost no reputation (§4.1).
+## `rep −20` with the navy's nation plus `+2` with its two rivals, once, for a
+## navy battle (`60-*` §4.11.10, `70-*` §4.5, §4.9.5). The deltas come from
+## `Bounty.piracy_deltas` (the pinned data rival table), and the bounty
+## threshold is re-evaluated right after, so a raid can issue a bounty at
+## battle start. Pirates cost no reputation (§4.1).
 func _charge_navy_piracy(encounter: Dictionary) -> void:
 	if str(encounter.get("kind", "")) != EncountersLib.NAVY:
 		return
 	var nation_id := str(encounter.get("nation_id", ""))
 	if nation_id.is_empty():
 		return
-	CharacterLib.add_reputation(nation_id, EncountersLib.PIRACY_REPUTATION)
+	BountyLib.apply_piracy(nation_id)
 
 
 ## True while a battle this scene opened is unresolved.
