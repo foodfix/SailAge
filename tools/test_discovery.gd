@@ -35,13 +35,13 @@ const OPEN_CELL := Vector2i(20, 20)
 const LISBON := Vector2i(7, 57)
 const SEA_BESIDE_LISBON := Vector2i(8, 57)
 
-## Valencia (27,55) is not a capital, so it starts unknown. The four cells
-## below sit at exactly Chebyshev distance 8/9/10/11 from it and are legal
-## single steps apart along the NW diagonal.
-const VALENCIA_D8 := Vector2i(35, 47)
-const VALENCIA_D9 := Vector2i(36, 46)
-const VALENCIA_D10 := Vector2i(37, 45)
-const VALENCIA_D11 := Vector2i(38, 44)
+## Valencia (27,55) is not a capital, so it starts unknown. The cells below
+## sit at exactly Chebyshev distance d from it along the NW diagonal; the pair
+## (D23, D24) straddles the Phase-4 base radius 24 (`20-*` §4.11), and the
+## four smaller ones remain the single-step fixtures below that.
+const VALENCIA_D26 := Vector2i(1, 29)
+const VALENCIA_D24 := Vector2i(3, 31)
+const VALENCIA_D25 := Vector2i(2, 30)
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -59,7 +59,9 @@ func _ready() -> void:
 			"valencia stands at its data position (got %s)"
 			% str(DataLoader.map.port_cell("valencia")))
 		_check(DataLoader.map.is_passable(OPEN_CELL)
-			and DataLoader.map.is_passable(VALENCIA_D11),
+			and DataLoader.map.is_passable(VALENCIA_D24)
+			and DataLoader.map.is_passable(VALENCIA_D25)
+			and DataLoader.map.is_passable(VALENCIA_D26),
 			"fixture cells are passable sea")
 
 	_test_new_game_capitals()
@@ -190,76 +192,68 @@ func _known_from(cell: Vector2i, navigation: int, officers: Array = []) -> bool:
 
 
 func _test_sighting_radius() -> void:
-	# §4.2 / §5: radius = 8 + floor((navigation − 10)/10).
-	# NOTE: the T10 brief also claims "Portugal start (nav 15) → 9", which
-	# contradicts both the §4.2 formula and the §5 worked example (that 9 needs
-	# the navigator's +10 → nav 25). The docs win: nav 15 alone is 8.
+	# Phase-4 (`20-*` §4.11, `50-*` §4.2): radius = 24 + floor((navigation − 10)/10).
 	_make_run(15)
-	_check(CharacterLib.sighting_radius() == 8,
-		"navigation 15 → sighting radius 8, not 9 (§4.2 formula; got %d)"
+	_check(CharacterLib.sighting_radius() == 24,
+		"navigation 15 → sighting radius 24 (§4.2 formula; got %d)"
 		% CharacterLib.sighting_radius())
 	_make_run(10)
-	_check(CharacterLib.sighting_radius() == 8,
-		"navigation 10 → sighting radius 8 (got %d)" % CharacterLib.sighting_radius())
+	_check(CharacterLib.sighting_radius() == 24,
+		"navigation 10 → sighting radius 24 (got %d)" % CharacterLib.sighting_radius())
 	_make_run(25)
-	_check(CharacterLib.sighting_radius() == 9,
-		"navigation 25 → sighting radius 9 (got %d)" % CharacterLib.sighting_radius())
+	_check(CharacterLib.sighting_radius() == 25,
+		"navigation 25 → sighting radius 25 (got %d)" % CharacterLib.sighting_radius())
 	_make_run(30)
-	_check(CharacterLib.sighting_radius() == 10,
-		"navigation 30 → sighting radius 10 (got %d)" % CharacterLib.sighting_radius())
-	# §5 worked example: Portugal (15) + navigator (+10) = 25 → 9.
+	_check(CharacterLib.sighting_radius() == 26,
+		"navigation 30 → sighting radius 26 (got %d)" % CharacterLib.sighting_radius())
+	# §5 worked example: Portugal (15) + navigator (+10) = 25 → 25.
 	_make_run(15, OPEN_CELL, 70, ["off_mateus_alvares"])
 	_check(CharacterLib.effective_stat("navigation") == 25,
 		"navigator officer gives effective navigation 25 (got %d)"
 		% CharacterLib.effective_stat("navigation"))
-	_check(CharacterLib.sighting_radius() == 9,
-		"Portugal + navigator → sighting radius 9 (§5 worked example, got %d)"
+	_check(CharacterLib.sighting_radius() == 25,
+		"Portugal + navigator → sighting radius 25 (§5 worked example, got %d)"
 		% CharacterLib.sighting_radius())
 
-	# Chebyshev boundary: exactly `radius` reveals, `radius + 1` does not.
-	_check(_known_from(VALENCIA_D8, 10),
-		"nav 10 (radius 8): a port at Chebyshev distance 8 is revealed")
-	_check(not _known_from(VALENCIA_D9, 10),
-		"nav 10 (radius 8): distance 9 is NOT revealed")
-	_check(_known_from(VALENCIA_D9, 25),
-		"nav 25 (radius 9): distance 9 is revealed")
-	_check(not _known_from(VALENCIA_D10, 25),
-		"nav 25 (radius 9): distance 10 is NOT revealed")
-	_check(_known_from(VALENCIA_D10, 30),
-		"nav 30 (radius 10): distance 10 is revealed")
-	_check(not _known_from(VALENCIA_D11, 30),
-		"nav 30 (radius 10): distance 11 is NOT revealed")
+	# Chebyshev boundary at the Phase-4 base: exactly `radius` reveals,
+	# `radius + 1` does not.
+	_check(_known_from(VALENCIA_D24, 10),
+		"nav 10 (radius 24): a port at Chebyshev distance 24 is revealed")
+	_check(not _known_from(VALENCIA_D25, 10),
+		"nav 10 (radius 24): distance 25 is NOT revealed")
+	# +1 navigation per 10 points shifts the boundary by one tile.
+	_check(_known_from(VALENCIA_D25, 20),
+		"nav 20 (radius 25): distance 25 is revealed")
+	_check(not _known_from(VALENCIA_D26, 20),
+		"nav 20 (radius 25): distance 26 is NOT revealed")
 	# The officer path agrees with the raw stat at the same boundary: Portugal
-	# (15) + navigator = 25 → radius 9, identical to a raw 25.
-	_check(_known_from(VALENCIA_D9, 15, ["off_mateus_alvares"])
-		and not _known_from(VALENCIA_D10, 15, ["off_mateus_alvares"]),
-		"nav 15 + navigator (effective 25, radius 9): same boundary as raw 25")
-	# Radius 8 boundary for the Portugal start (nav 15, no officer).
-	_check(_known_from(VALENCIA_D8, 15) and not _known_from(VALENCIA_D9, 15),
-		"nav 15 (radius 8): 8 revealed, 9 not")
+	# (15) + navigator (+10) = 25 → radius 25, identical to a raw 25.
+	_check(_known_from(VALENCIA_D25, 15, ["off_mateus_alvares"])
+		and not _known_from(VALENCIA_D26, 15, ["off_mateus_alvares"]),
+		"nav 15 + navigator (effective 25, radius 25): boundary at 25/26")
 
 
 # --- 3. Discover-then-enter ----------------------------------------------
 
 func _test_discover_then_enter() -> void:
 	# Approach a NOT-yet-known harbor from beyond the sighting radius.
-	_make_run(10, VALENCIA_D9)  # distance 9, radius 8
+	_make_run(10, VALENCIA_D25)  # distance 25, radius 24
 	var spawned: Array = _spawn_world()
 	var world = spawned[1]
 	_check(not GameState.known_ports.has("valencia"),
-		"valencia is unknown from beyond the radius (distance 9, radius 8)")
+		"valencia is unknown from beyond the radius (distance 25, radius 24)")
 	_check(not GameState.explored_tiles.has(Vector2i(27, 55)),
 		"the harbor tile is unexplored from beyond the radius")
 
 	# One step inward: the sighting reveal discovers it without docking (§4.11).
-	_check(world.try_step(VALENCIA_D8), "stepping inward toward valencia succeeds")
+	_check(world.try_step(VALENCIA_D24), "stepping inward toward valencia succeeds")
 	_check(GameState.known_ports.has("valencia"),
 		"approaching within the radius discovers valencia (§4.11)")
 	_check(GameState.current_port == null,
 		"discovery alone does not dock (current_port %s)"
 		% str(GameState.current_port))
 	# Permanent: moving away again keeps it.
-	_check(world.try_step(VALENCIA_D9), "stepping back out succeeds")
+	_check(world.try_step(VALENCIA_D25), "stepping back out succeeds")
 	_check(GameState.known_ports.has("valencia"),
 		"a discovered port stays known after moving away")
 	spawned[0].queue_free()

@@ -8,7 +8,7 @@
       "base_price": 1200,
       "durability": 40,
       "capacity": 30,
-      "speed": 4,
+      "speed": 8,
       "crew_min": 8,
       "crew_max": 20,
       "armament_slots": 2
@@ -20,7 +20,7 @@
       "base_price": 3000,
       "durability": 60,
       "capacity": 60,
-      "speed": 5,
+      "speed": 10,
       "crew_min": 10,
       "crew_max": 30,
       "armament_slots": 4
@@ -32,7 +32,7 @@
       "base_price": 8000,
       "durability": 90,
       "capacity": 120,
-      "speed": 5,
+      "speed": 10,
       "crew_min": 15,
       "crew_max": 45,
       "armament_slots": 6
@@ -44,7 +44,7 @@
       "base_price": 10000,
       "durability": 70,
       "capacity": 50,
-      "speed": 6,
+      "speed": 12,
       "crew_min": 40,
       "crew_max": 120,
       "armament_slots": 4
@@ -56,7 +56,7 @@
       "base_price": 15000,
       "durability": 110,
       "capacity": 150,
-      "speed": 6,
+      "speed": 12,
       "crew_min": 20,
       "crew_max": 60,
       "armament_slots": 10
@@ -68,7 +68,7 @@
       "base_price": 22000,
       "durability": 140,
       "capacity": 300,
-      "speed": 4,
+      "speed": 8,
       "crew_min": 25,
       "crew_max": 80,
       "armament_slots": 10
@@ -80,7 +80,7 @@
       "base_price": 40000,
       "durability": 180,
       "capacity": 450,
-      "speed": 4,
+      "speed": 8,
       "crew_min": 30,
       "crew_max": 100,
       "armament_slots": 16
@@ -92,7 +92,7 @@
       "base_price": 60000,
       "durability": 240,
       "capacity": 400,
-      "speed": 5,
+      "speed": 10,
       "crew_min": 40,
       "crew_max": 150,
       "armament_slots": 24

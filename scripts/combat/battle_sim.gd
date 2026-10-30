@@ -365,13 +365,24 @@ func move_to(unit: Dictionary, cell: Vector2i) -> bool:
 	return true
 
 
-## `MP = ShipType.speed + sail speed delta` (§4.11.4, §4.11.12).
+## `MP = battle_mp(ShipType.speed) + sail speed delta` (§4.2, §4.11.4,
+## §4.11.12). The Phase-4 halving is documented in §4.2: world speeds doubled
+## when a tile became 10 nm, but the 16×10 battle grid did not grow, so battle
+## MP stays exactly the Phase-2 value and the sail delta is added afterwards.
 func effective_speed(unit: Dictionary) -> int:
 	var ship = unit.get("ship", {})
 	if not (ship is Dictionary):
 		return 0
 	var ship_type: Dictionary = DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
-	return int(ship_type.get("speed", 0)) + equipment_modifier(ship, "sail", "speed")
+	return battle_mp(int(ship_type.get("speed", 0))) \
+		+ equipment_modifier(ship, "sail", "speed")
+
+
+## §4.2 Phase-4 pin: `battle_mp(speed) = speed / 2` (integer division).
+## `{8→4, 10→5, 12→6}` reproduces every Phase-2 MP budget exactly, so the
+## doubled world speeds leave battle balance alone.
+static func battle_mp(speed: int) -> int:
+	return maxi(0, speed) / 2
 
 
 ## §4.11.12: base durability + figurehead durability delta. Used for ram

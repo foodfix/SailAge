@@ -15,8 +15,13 @@ extends RefCounted
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 
-## §4.4 pin: this is **not** the port sighting radius (8, `20-*` §4.11).
-const RADIUS := 3
+## §4.4 pin: this is **not** the port sighting radius (24, `20-*` §4.11 /
+## `SailingSim.SIGHTING_RADIUS`); the two constants must not be conflated.
+## Chebyshev over tiles on the world grid, wrap-aware on x (`20-*` §4.1).
+const RADIUS := 18
+## §4.1: the world grid width in tiles (2160 at 6 tiles/degree). Read from the
+## loaded legend when there is one, so a test map does not have to be 2160 wide.
+const MAP_WIDTH_FALLBACK := 2160
 ## §4.4: a tavern hint costs this much.
 const HINT_PRICE := 100
 ## §4.4: up to three hints per tavern visit.
@@ -157,9 +162,38 @@ static func hint_text(discovery_id: String) -> Dictionary:
 # --- Helpers --------------------------------------------------------------
 
 static func _distance(entry: Dictionary, cell: Vector2i) -> int:
+	return chebyshev_to_cell(position_of_entry(entry), cell)
+
+
+## Chebyshev distance between two tiles, **wrap-aware on x** (`20-*` §4.1:
+## `x` is taken mod 2160 everywhere). The grid width comes from the loaded
+## legend when available (`DataLoader.map_legend.grid.width`), else the locked
+## 2160. A short `dx` is preferred: `min(|dx|, width − |dx|)`.
+static func chebyshev_to_cell(other: Vector2i, cell: Vector2i) -> int:
+	var dx := absi(other.x - cell.x)
+	var width := map_width()
+	if width > 0:
+		# Normalise first so an out-of-range coordinate cannot produce a
+		# negative short way; then take the short way around the seam.
+		dx = dx % width
+		dx = mini(dx, width - dx)
+	return maxi(dx, absi(other.y - cell.y))
+
+
+## World grid width in tiles for the wrap arithmetic: the active legend's
+## `grid.width` (2160 for the world map), falling back to
+## [constant MAP_WIDTH_FALLBACK] when no legend is loaded yet.
+static func map_width() -> int:
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var width := int(grid.get("width", 0))
+	return width if width > 0 else MAP_WIDTH_FALLBACK
+
+
+## A discovery's `position` as a tile (its map cell; `Vector2i.ZERO` when the
+## entry has none).
+static func position_of_entry(entry: Dictionary) -> Vector2i:
 	var pos: Dictionary = (entry as Dictionary).get("position", {})
-	var other := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
-	return maxi(absi(other.x - cell.x), absi(other.y - cell.y))
+	return Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
 
 
 static func _port_ordinal(port_id: String) -> int:

@@ -39,8 +39,15 @@ const RATION_SIZE := 5
 ## trade goods and never appear in `goods.json`).
 const PROVISIONS_PRICE := 2
 const WATER_PRICE := 1
-## §4.11: base sighting radius (`50-*` §4.2 modifies it by navigation).
-const SIGHTING_RADIUS := 8
+## §4.11: base port sighting radius, Chebyshev, wrap-aware on x.
+## (`50-*` §4.2 modifies it by navigation at the caller.)
+const SIGHTING_RADIUS := 24
+## §4.11 / `70-*` §4.4: the separate, shorter discovery sighting radius. Kept
+## here because §5 is the single constants location for both radii — the
+## engine value lives in `DiscoverySight.RADIUS`, which must agree.
+const DISCOVERY_RADIUS := 18
+## §4.1: `lat = 90 − y / 6` (6 tiles per degree, 1 tile = 10′ of latitude).
+const TILES_PER_DEGREE := 6
 ## §4.8: new-game morale and the in-port ceiling.
 const MORALE_START := 70
 const MORALE_PORT_CAP := 80
@@ -123,15 +130,27 @@ const WIND_FACTORS := {
 ## simulation never writes `world.weather` from the movement path (T7/T8 own it).
 const DEFAULT_WEATHER := "calm"
 
-## §4.7 zone table, exactly as documented: zone id → outcome → probability.
-## "Atlantic strip = tiles with x ≤ 6"; every other tile uses "rest_of_map".
-## The values are the *base* table; the luck term (§4.2) only rescales the
-## storm entry and redistributes the freed mass (see [method zone_probabilities]).
-const ATLANTIC_STRIP_MAX_X := 6
+## §4.7 latitude weather bands (`20-*` §4.7). Band id → outcome →
+## probability. Keys are the four **engine** ids `calm|fair|strong|storm`
+## (never the display column names clear/overcast/windy/storm — §4.7's mapping
+## is locked). Every row sums to 1.00; the values are the *base* table — the
+## luck term (`50-*` §4.2) only rescales the storm entry and redistributes the
+## freed mass (see [method zone_probabilities]).
+##
+## Band selection is by `|lat|` (symmetric N/S): doldrums < 8°, trade winds
+## 8–30°, variables 30–40°, westerlies 40–60°, boreal 60–70° (+ everything
+## beyond, see [method weather_zone_for]).
 const WEATHER_ZONES := {
-	"atlantic_strip": {"calm": 0.05, "fair": 0.30, "strong": 0.15, "storm": 0.50},
-	"rest_of_map": {"calm": 0.20, "fair": 0.55, "strong": 0.15, "storm": 0.10},
+	"doldrums": {"calm": 0.30, "fair": 0.45, "strong": 0.15, "storm": 0.10},
+	"trade_winds": {"calm": 0.15, "fair": 0.30, "strong": 0.20, "storm": 0.35},
+	"variables": {"calm": 0.30, "fair": 0.40, "strong": 0.20, "storm": 0.10},
+	"westerlies": {"calm": 0.10, "fair": 0.30, "strong": 0.35, "storm": 0.25},
+	"boreal": {"calm": 0.15, "fair": 0.35, "strong": 0.30, "storm": 0.20},
 }
+
+## Fallback band for an unknown zone id (the doldrums row: the mildest table,
+## and never reachable through [method weather_zone_for]).
+const DEFAULT_WEATHER_ZONE := "doldrums"
 
 ## Outcome order used by the single uniform draw that maps a roll to an
 ## outcome. Fixed so a given seed yields the same sequence forever.
@@ -165,8 +184,8 @@ static var rng := RandomNumberGenerator.new()
 ## only this; T8 never touches `GameState.morale` itself. Not persisted (the
 ## same rule as `last_day_shortfalls`: saving only happens in port).
 static var last_day_storm: bool = false
-## Zone the most recent roll used ("atlantic_strip" / "rest_of_map"); a
-## diagnostic for tests, not saved.
+## Latitude weather band the most recent roll used (`doldrums` / `trade_winds`
+## / `variables` / `westerlies` / `boreal`); a diagnostic for tests, not saved.
 static var last_weather_zone: String = ""
 
 ## §4.7 storm damage dealt in the most recent tick, `[{ship_type_id, points}]`.
@@ -300,9 +319,33 @@ static func _queue_dialog(kind: String, key: String, values: Dictionary = {}, ex
 	last_day_dialogs.append(entry)
 
 
-## docs/20-* §4.7: "Atlantic strip = tiles with `x ≤ 6`", else rest of map.
+## docs/20-* §4.7: latitude band id for a tile, from `lat = 90 − y/6` (§4.1,
+## the locked addressing). Locked edges: `< 8` doldrums, `8 ≤ |lat| < 30` trade
+## winds, `30 ≤ |lat| < 40` variables, `40 ≤ |lat| < 60` westerlies,
+## `60 ≤ |lat| < 70` boreal. The function is **total**: `|lat| ≥ 70` also
+## returns `boreal` because that is the ice band (`20-*` §4.1: `I` is
+## impassable, so a real fleet never rolls there); `x` is irrelevant — the bands
+## are zonally uniform, so the old map-column rule is gone.
 static func weather_zone_for(tile: Vector2i) -> String:
-	return "atlantic_strip" if tile.x <= ATLANTIC_STRIP_MAX_X else "rest_of_map"
+	var latitude_degrees := 90.0 - float(tile.y) / float(TILES_PER_DEGREE)
+	return weather_zone_for_latitude(latitude_degrees)
+
+
+## The band lookup behind [method weather_zone_for], split out so a caller that
+## already has a latitude (e.g. a port's `lat` in tests) need not synthesise a
+## tile. Same locked edges.
+static func weather_zone_for_latitude(latitude_degrees: float) -> String:
+	var absolute := absf(latitude_degrees)
+	if absolute < 8.0:
+		return "doldrums"
+	if absolute < 30.0:
+		return "trade_winds"
+	if absolute < 40.0:
+		return "variables"
+	if absolute < 60.0:
+		return "westerlies"
+	# 60 ≤ |lat|, including the impassable ice latitudes beyond 70° (§4.1).
+	return "boreal"
 
 
 ## Outcome probabilities for `zone` with the §4.2 luck term applied.
@@ -316,14 +359,14 @@ static func weather_zone_for(tile: Vector2i) -> String:
 ##     calm'/fair'/strong' = base × scale
 ##
 ## so the four entries still sum to exactly 1.0. Because every non-storm entry
-## is multiplied by the *same* factor, their relative shares are unchanged: a
-## calm day stays 5/50 of the strip's non-storm days (0.05 vs 0.30 vs 0.15) and
-## only the absolute calm/fair/strong/storm split shifts, which is precisely
-## what "luck reduces storm chance" means. At luck 0 the multiplier is 1.0, the
-## scale is 1.0 and this returns the §4.7 table untouched. No new numbers are
-## introduced.
+## is multiplied by the *same* factor, their relative shares are unchanged:
+## a calm day stays 0.30/0.90 of the doldrums' non-storm days (0.30 vs 0.45 vs
+## 0.15) and only the absolute calm/fair/strong/storm split shifts, which is
+## precisely what "luck reduces storm chance" means. At luck 0 the multiplier is
+## 1.0, the scale is 1.0 and this returns the §4.7 table untouched. No new
+## numbers are introduced.
 static func zone_probabilities(zone: String) -> Dictionary:
-	var base: Dictionary = WEATHER_ZONES.get(zone, WEATHER_ZONES["rest_of_map"])
+	var base: Dictionary = WEATHER_ZONES.get(zone, WEATHER_ZONES[DEFAULT_WEATHER_ZONE])
 	var base_storm := float(base["storm"])
 	# Stats are clamped 1–100 (docs/50-* §4.2), so the multiplier is always in
 	# [0.75, 1.0]; the clamp only keeps a hand-built test state from producing a
@@ -331,7 +374,8 @@ static func zone_probabilities(zone: String) -> Dictionary:
 	var storm := clampf(
 		base_storm * CharacterLib.storm_chance_multiplier(), 0.0, base_storm
 	)
-	# (1 − storm) / (1 − base_storm); the divisor is 0.90 / 0.50 — never 0.
+	# (1 − storm) / (1 − base_storm); the divisor is 1 − base_storm ∈ [0.65,
+	# 0.90] for every band — never 0.
 	var scale := (1.0 - storm) / (1.0 - base_storm)
 	var out := {"storm": storm}
 	for outcome in ["calm", "fair", "strong"]:

@@ -52,8 +52,9 @@ func _ready() -> void:
 
 # --- Fixtures --------------------------------------------------------------
 
-## Minimal run: caravel (speed 5, crew_min 15) at full crew, base stats, fair
-## weather → effective speed exactly 5 (§4.4 worked case).
+## Minimal run: caravel (speed 10, crew_min 15) at full crew, base stats, fair
+## weather → effective speed exactly 10 (§4.4 worked case; Phase-4 speeds are
+## the ×2 rescale on 10 nm tiles, `10-*` §7.3).
 func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
@@ -154,54 +155,54 @@ func _test_map_loads() -> void:
 
 func _test_effective_speed() -> void:
 	_make_run("fair", ["caravel"])
-	_check(SailingSimLib.effective_speed() == 5,
-		"fair, full crew, seamanship 10: 5 (got %d)"
+	_check(SailingSimLib.effective_speed() == 10,
+		"fair, full crew, seamanship 10: 10 (got %d)"
 		% SailingSimLib.effective_speed())
-	_check(is_equal_approx(SailingSimLib.move_cost(), 0.2),
-		"move_cost = 1/5 = 0.2 days (got %.4f)" % SailingSimLib.move_cost())
+	_check(is_equal_approx(SailingSimLib.move_cost(), 0.1),
+		"move_cost = 1/10 = 0.1 days (got %.4f)" % SailingSimLib.move_cost())
 
 	_make_run("calm", ["caravel"])
-	_check(SailingSimLib.effective_speed() == 4,
-		"calm sail: floor(5 × 0.8) = 4 (got %d)"
+	_check(SailingSimLib.effective_speed() == 8,
+		"calm sail: floor(10 × 0.8) = 8 (got %d)"
 		% SailingSimLib.effective_speed())
 
 	_make_run("storm", ["caravel"])
-	_check(SailingSimLib.effective_speed() == 7,
-		"storm sail: floor(5 × 1.5) = 7 (got %d)"
+	_check(SailingSimLib.effective_speed() == 15,
+		"storm sail: floor(10 × 1.5) = 15 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Skeleton crew: 1 of crew_min 15 → factor 0.25 → floor(1.25) = 1, never 0.
+	# Skeleton crew: 1 of crew_min 15 → factor 0.25 → floor(2.5) = 2, never 0.
 	_make_run("fair", ["caravel"])
 	GameState.fleet[0]["crew"] = 1
 	_check(is_equal_approx(SailingSimLib.crew_factor(), 0.25),
 		"crew 1/15 → factor 0.25 (got %.4f)" % SailingSimLib.crew_factor())
-	_check(SailingSimLib.effective_speed() == 1,
-		"skeleton crew floors to 1, never 0 (got %d)"
+	_check(SailingSimLib.effective_speed() == 2,
+		"skeleton crew floors to max(1, floor(10 × 0.25)) = 2 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Slowest-hull rule (§4.4 composition): caravel 5 + nao 4 → base 4.
+	# Slowest-hull rule (§4.4 composition): caravel 10 + nao 8 → base 8.
 	_make_run("fair", ["caravel", "nao"])
-	_check(FleetLib.slowest_speed() == 4,
-		"fleet slowest hull speed is the nao's 4 (got %d)"
+	_check(FleetLib.slowest_speed() == 8,
+		"fleet slowest hull speed is the nao's 8 (got %d)"
 		% FleetLib.slowest_speed())
-	_check(SailingSimLib.effective_speed() == 4,
-		"fleet speed uses the slowest hull: 4 (got %d)"
+	_check(SailingSimLib.effective_speed() == 8,
+		"fleet speed uses the slowest hull: 8 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Seamanship bonus: 20 → +0.10 → floor(5.5) = 5.
+	# Seamanship bonus: 20 → +0.10 → floor(11.0) = 11.
 	_make_run("fair", ["caravel"])
 	GameState.player["stats"]["seamanship"] = 20
-	_check(is_equal_approx(SailingSimLib.move_cost(), 0.2),
-		"seamanship 20 gives speed 5 (got %d)" % SailingSimLib.effective_speed())
-	# 25 → +0.15 → floor(5 × 1.15) = 5.
+	_check(SailingSimLib.effective_speed() == 11,
+		"seamanship 20 gives speed 11 (got %d)" % SailingSimLib.effective_speed())
+	# 25 → +0.15 → floor(11.5) = 11.
 	GameState.player["stats"]["seamanship"] = 25
-	_check(SailingSimLib.effective_speed() == 5,
-		"seamanship 25 → floor(5 × 1.15) = 5 (got %d)"
+	_check(SailingSimLib.effective_speed() == 11,
+		"seamanship 25 → floor(10 × 1.15) = 11 (got %d)"
 		% SailingSimLib.effective_speed())
-	# 30 → clamped +0.20 → floor(6.0) = 6.
+	# 30 → clamped +0.20 → floor(12.0) = 12.
 	GameState.player["stats"]["seamanship"] = 30
-	_check(SailingSimLib.effective_speed() == 6,
-		"seamanship 30 → floor(5 × 1.2) = 6 (got %d)"
+	_check(SailingSimLib.effective_speed() == 12,
+		"seamanship 30 → floor(10 × 1.2) = 12 (got %d)"
 		% SailingSimLib.effective_speed())
 
 
@@ -384,7 +385,7 @@ func _test_corner_cut_zero_clock() -> void:
 # --- §4.3 clock & day boundary ------------------------------------------
 
 func _test_clock_and_day_boundary() -> void:
-	_make_run("fair")  # effective speed 5 → 0.2 days per tile
+	_make_run("fair")  # effective speed 10 → 0.1 days per tile
 	GameState.world["position"] = {"x": OPEN_CELL.x, "y": OPEN_CELL.y}
 	GameState.world["clock_fraction"] = 0.0
 	GameState.day = 1
@@ -393,9 +394,9 @@ func _test_clock_and_day_boundary() -> void:
 	var counter := func(day: int) -> void: ticks.append(day)
 	EventBus.day_advanced.connect(counter)
 
-	# 5 moves × 0.2 = exactly one day, emitted once, with the new day number.
+	# 10 moves × 0.1 = exactly one day, emitted once, with the new day number.
 	# Alternating east/west keeps every step legal on real sea.
-	for step in 5:
+	for step in 10:
 		var target := Vector2i(
 			OPEN_CELL.x + (1 if step % 2 == 0 else 0),
 			OPEN_CELL.y
@@ -403,7 +404,7 @@ func _test_clock_and_day_boundary() -> void:
 		_check(SailingSimLib.try_move(target, DataLoader.map),
 			"clock test: move %d succeeds" % (step + 1))
 	_check(ticks.size() == 1,
-		"5 moves at speed 5 emit day_advanced exactly once (got %d)" % ticks.size())
+		"10 moves at speed 10 emit day_advanced exactly once (got %d)" % ticks.size())
 	_check(ticks == [2], "day_advanced reports day 2 (got %s)" % str(ticks))
 	_check(GameState.day == 2, "GameState.day == 2 (got %d)" % GameState.day)
 	var fraction := float(GameState.world["clock_fraction"])
@@ -464,7 +465,7 @@ func _test_port_entry() -> void:
 
 	_check(entered == ["lisbon"], "port_entered('lisbon') emitted (got %s)" % str(entered))
 	# Clock cost of the harbor tile applies normally (§4.2).
-	_check(is_equal_approx(float(GameState.world["clock_fraction"]), ahead + 0.2),
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), ahead + 0.1),
 		"harbor tile still costs its 1/speed day (%.4f)"
 		% float(GameState.world["clock_fraction"]))
 	_check(GameState.known_ports.has("lisbon"),

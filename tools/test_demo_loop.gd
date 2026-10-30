@@ -190,31 +190,33 @@ func _step4_sail() -> void:
 # --- Step 5: storm reachable, starvation fail state ------------------------
 
 func _step5_storm_and_starvation() -> void:
-	# Storm zone reachable within one day sailing west of Lisbon.
+	# Demo-loop step 5 (Phase 4 re-anchor, `20-*` §4.7): the trade-wind belt off
+	# Tenerife (lat ≈ 28.3 → y = round((90 − 28.3) × 6) = 370) is the storm
+	# belt; Lisbon (lat 38.7 → y ≈ 308) sits in the calmer variables band.
+	# This suite still sails the Phase-1 fixture grid, so the storm loop samples
+	# the coordinate row directly (the weather roll reads the fleet tile only).
 	var reached := false
 	GameState.new_game("portugal", false)
 	GameState.current_port = null
-	GameState.set_world_tile(Vector2i(7, 57))
 	for i in range(7):
 		_check_cell_west()
-		GameState.set_world_tile(Vector2i(7, 57))
+		GameState.set_world_tile(Vector2i(3, 370))
 		GameState.world["clock_fraction"] = 0.0
 		SailingLib.reset_ledger_state()
 		SailingLib.set_weather_seed(900 + i)
-		for day in range(5):
+		for day in range(6):
 			SailingLib.advance_clock(1.0)
 			if SailingLib.was_storm_last_day():
 				reached = true
 				break
 		if reached:
 			break
-	_check(reached, "step 5: a storm is reachable within 5 days at x ≤ 6")
+	_check(reached, "step 5: a storm is reachable within 6 days in the trade belt")
 
-	var zone: String = SailingLib.weather_zone_for(Vector2i(6, 57))
-	_check(zone == "atlantic_strip",
-		"step 5: x = 6 is the 50%%-storm Atlantic strip")
-	_check(SailingLib.weather_zone_for(Vector2i(7, 57)) != "atlantic_strip",
-		"step 5: Lisbon itself (x = 7) is outside the strip")
+	_check(SailingLib.weather_zone_for(Vector2i(3, 370)) == "trade_winds",
+		"step 5: the Tenerife water (lat 28.3, y=370) is the trade-wind belt")
+	_check(SailingLib.weather_zone_for(Vector2i(7, 308)) == "variables",
+		"step 5: Lisbon (lat 38.7, y≈308) is the variables band, not the belt")
 
 	# Starvation: 7 days with no provisions → game over.
 	var reasons: Array[String] = []

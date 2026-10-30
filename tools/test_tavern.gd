@@ -455,10 +455,10 @@ func _test_role_bonuses() -> void:
 
 	# The navigator's +10 flows into the §4.2 derived sighting radius.
 	_make_run(CARAVEL_MIN, 20000)
-	_check(CharacterLib.sighting_radius() == 8, "sighting radius 8 without officers")
+	_check(CharacterLib.sighting_radius() == 24, "sighting radius 24 without officers")
 	CharacterLib.recruit("off_mateus_alvares")
-	_check(CharacterLib.sighting_radius() == 9,
-		"navigator raises the sighting radius to 9 (got %d)"
+	_check(CharacterLib.sighting_radius() == 25,
+		"navigator raises the sighting radius to 25 (got %d)"
 		% CharacterLib.sighting_radius())
 
 

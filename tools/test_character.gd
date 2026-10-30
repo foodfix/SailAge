@@ -119,7 +119,7 @@ func _test_effective_stats() -> void:
 	_set_player({"navigation": 15}, ["off_mateus_alvares"])
 	_check(CharacterLib.effective_stat("navigation") == 25,
 		"§5 example navigation effective 25")
-	_check(CharacterLib.sighting_radius() == 9, "§5 example sighting radius 9")
+	_check(CharacterLib.sighting_radius() == 25, "§5 example sighting radius 25")
 	_check(CharacterLib.speed_bonus() == 0.0, "§5 example speed bonus 0.0")
 
 
@@ -141,7 +141,9 @@ func _test_speed_bonus() -> void:
 # --- §4.2 sighting radius -------------------------------------------------
 
 func _test_sighting_radius() -> void:
-	var rows := [[10, 8], [20, 9], [25, 9], [30, 10], [19, 8], [40, 11]]
+	# Phase-4: the base is 24 tiles (`20-*` §4.11, `50-*` §4.2); the navigation
+	# term `floor((navigation − 10)/10)` is unchanged from Phase 1.
+	var rows := [[10, 24], [20, 25], [25, 25], [30, 26], [19, 24], [40, 27]]
 	for row in rows:
 		_set_player({"navigation": row[0]})
 		_check(CharacterLib.sighting_radius() == row[1],

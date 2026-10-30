@@ -96,9 +96,11 @@ static func speed_bonus() -> float:
 	return clampf(raw, SPEED_BONUS_MIN, SPEED_BONUS_MAX)
 
 
-## docs/50-* §4.2 / docs/20-* §4.11: `8 + floor((navigation − 10) / 10)`.
+## docs/50-* §4.2 / docs/20-* §4.11: `24 + floor((navigation − 10) / 10)`.
+## The base is the Phase-4 port sighting radius (24 tiles, `20-*` §4.11); the
+## navigation term is unchanged from Phase 1.
 static func sighting_radius() -> int:
-	return 8 + int(floor((effective_stat("navigation") - BASE_STAT) / 10.0))
+	return 24 + int(floor((effective_stat("navigation") - BASE_STAT) / 10.0))
 
 
 ## docs/50-* §4.2: `1 − (leadership − 10) / 200`.

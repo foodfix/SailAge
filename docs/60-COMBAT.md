@@ -72,9 +72,20 @@ equipment modifiers), `80-*` (S10/S11 conventions), `90-*` (save migration).
 - **Per turn:** up to `MOVE` followed by at most 1 action: cannon / ram /
   board / hold. Actions resolve immediately; animations are Phase-2 polish,
   non-blocking log lines suffice as placeholder.
-- **Movement points (MP):** `MP = ShipType.speed` (no crew/wind modifiers in
-  battle — locked simplification). Orthogonal step = 1 MP, diagonal = 2 MP.
-  Unspent MP does not carry over.
+- **Movement points (MP):** `MP = battle_mp(ShipType.speed)` (no crew/wind
+  modifiers in battle — locked simplification). Orthogonal step = 1 MP,
+  diagonal = 2 MP. Unspent MP does not carry over.
+  **`battle_mp` (Phase-4 pin, required because `ShipType.speed` doubled):**
+  the battle grid is unchanged at 16×10 while world speeds became tiles/day on
+  10 nm tiles, so MP is **not** the raw speed. It is the Phase-1 battle value
+  preserved exactly: `battle_mp(speed) = speed / 2` (integer division), i.e.
+  `{8→4, 10→5, 12→6}`. This reproduces every Phase-2 MP budget and initiative
+  tie-break byte-for-byte (latin 4, sloop 5, caravel 5, galley 6, brigantine 6,
+  nao 4, carrack 4, galleon 5) — no battle balance number changes, and a
+  brigantine still cannot cross a 16-wide field in one turn. A sail
+  equipment's `speed` modifier is added **after** the halving
+  (`MP = battle_mp(ShipType.speed) + sail_speed_delta`), so `+1` sail still
+  buys exactly the Phase-2 step it bought (latin `4 → 5`).
 
 ### 4.4 Cannon
 
@@ -219,10 +230,12 @@ battle opens with a movement phase.
   descending `ShipType.speed` (+ sail-equipment speed delta, §4.11.12), ties
   player-before-enemy, then ascending fleet index. A unit destroyed before its
   slot is skipped and never acts.
-- **MP:** `MP = speed + sail_speed_delta`, refreshed to full at the start of
-  each of the ship's turns; unspent MP is discarded. Orthogonal step 1 MP,
-  diagonal 2 MP. A diagonal step is legal only when both orthogonally adjacent
-  corner tiles are inside the grid (no obstacles exist, §4.2).
+- **MP:** `MP = battle_mp(ShipType.speed) + sail_speed_delta` (§4.2/§4.3,
+  Phase-4 pin: integer division by 2, sail delta added after), refreshed to
+  full at the start of each of the ship's turns; unspent MP is discarded.
+  Orthogonal step 1 MP, diagonal 2 MP. A diagonal step is legal only when both
+  orthogonally adjacent corner tiles are inside the grid (no obstacles exist,
+  §4.2).
 - **Occupancy:** a ship may never enter or pass through an occupied tile.
 - **Reload:** firing sets `reload_until_round = round + 2`; a ship may fire
   only when `round ≥ reload_until_round`. Firing in round 1 therefore blocks

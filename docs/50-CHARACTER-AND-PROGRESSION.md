@@ -57,7 +57,7 @@ Five player stats, each 1–100, base 10 at new game plus the nation bonus:
 | leadership | spain +5, ottoman +5 | desertion losses × (1 − (leadership−10)/200); mutiny chance × (1 − (leadership−10)/200) |
 | seamanship | holland +5 | speed bonus `(seamanship−10)/100`, clamp [−0.10, +0.20] (`20-*` §4.4) |
 | combat | england +5 | no Phase-1 effect (consumed by `60-*`) |
-| navigation | portugal +5 | sighting radius = 8 + floor((navigation−10)/10) (`20-*` §4.11) |
+| navigation | portugal +5 | sighting radius = 24 + floor((navigation−10)/10) (`20-*` §4.11) |
 | luck | italy +5 | storm damage ×0.75 when luck ≥ 50; storm chance ×(1 − luck/400) |
 
 Effects read `player.stats` plus assigned-officer bonuses (§4.5), computed on
@@ -193,8 +193,8 @@ Effective-stat computation (Portugal start + Mateus Álvares aboard):
   "base": {"navigation": 15, "seamanship": 10},
   "officer_bonus": {"navigation": 10, "seamanship": 0},
   "effective": {"navigation": 25, "seamanship": 10},
-  "derived": {"sighting_radius": 9, "speed_bonus": 0.0},
-  "note": "sighting 8 + floor((25-10)/10) = 9; speed (10-10)/100 = 0"
+  "derived": {"sighting_radius": 25, "speed_bonus": 0.0},
+  "note": "sighting 24 + floor((25-10)/10) = 25; speed (10-10)/100 = 0"
 }
 ```
 
