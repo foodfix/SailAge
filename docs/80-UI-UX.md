@@ -256,7 +256,8 @@ sections:
   code per `10-*` §3.3 rule 5), days remaining, gold reward, and two buttons
   `Accept` (`quest.accept`) / `Hint` (`quest.hint`, exploration offers only —
   shows `region_hint` free). A disabled Accept carries its reason
-  (`quest.slots_full`, `quest.no_hold`, `quest.accepted`).
+  (`quest.slots_full`, `quest.no_hold`, `quest.accepted`); an empty list shows
+  `quest.slots_full` when the slots are the cause, else `ui.empty`.
   The header line `guild.offers_refresh` says when the list changes, and a
   `tournament.status` line under it announces this month's bracket (§4.6).
 - *Reports* — one row per found-but-unreported discovery: name, the

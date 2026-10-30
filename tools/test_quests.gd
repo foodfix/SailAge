@@ -467,6 +467,28 @@ func _test_guild_screen() -> void:
 		"the screen's accept stores the quest")
 	_check(screen.offer_rows().size() == 2,
 		"the accepted offer leaves the screen's list")
+	# An empty list states the real reason (docs/80-* §4.7.3).
+	var empty_label: Label = screen.get_node("Layout/VBox/Offers/Empty")
+	_check(not empty_label.visible, "the empty line stays hidden while offers exist")
+	# Fill every slot: the list empties and the line names the slot cap.
+	screen.refresh()
+	while screen.offer_rows().size() > 0:
+		if screen.accept_offer(0).is_empty():
+			break
+	GameState.day = 12
+	var third: Dictionary = {"instance_id": "q_synth_slot", "type": "exploration",
+		"giver": "guild", "origin_port_id": "lisbon",
+		"requirements": {"discovery_id": "disc_atlas_cedars"},
+		"rewards": {}, "expiry_days": 30, "accepted_day": 12,
+		"deadline_day": 42, "status": "active"}
+	while QuestGenLib.active_count() < QuestGenLib.max_active_quests():
+		GameState.active_quests.append(third.duplicate(true))
+	screen.refresh()
+	_check(screen.offer_rows().is_empty(), "a full slot bar empties the offers list")
+	_check(empty_label.visible and empty_label.text
+		== I18n.t_key("quest.slots_full"),
+		"the empty line names the slot cap (%s)" % empty_label.text)
+	GameState.active_quests = []
 	# Reporting through the screen pays out.
 	var gold_before := GameState.gold
 	var report_block = screen.report_discovery("disc_atlas_cedars")

@@ -250,8 +250,11 @@ func _bind_offers() -> void:
 		return
 	_offers = QuestGenLib.available_offers(_port_id, GameState.day)
 	_offers_empty.visible = _offers.is_empty()
-	_offers_empty.text = I18n.t_key("quest.slots_full" if _offers.is_empty()
-		else "ui.not_available")
+	# The empty line states the real reason: no free slot, else "all taken".
+	_offers_empty.text = I18n.t_key(
+		"quest.slots_full"
+		if QuestGenLib.active_count() >= QuestGenLib.max_active_quests()
+		else "ui.empty")
 	if _offers.is_empty():
 		return
 	for index in _offers.size():
