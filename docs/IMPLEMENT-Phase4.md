@@ -107,7 +107,7 @@ derive one of these differently (the Phase-2/3 lesson).
 | Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics | `10-*` §6.3 new (A) |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `10-*` §6.1 (A), built by C |
 | Map index | `maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 (B) |
-| Save | version 4; `MIGRATIONS[3]` defined by task K | `90-*` §8.1–8.2 (B) |
+| Save | version 4; `DEFAULT_MAP_ID` = `"world"`; pre-release saves need not load (`90-*` §8.2 dev scope) | `90-*` §8.1–8.2 (B) |
 | Port schema | `lat`, `lon` (WGS84 degrees, truth); `marker`, `position`, `p3`, `phase` keys removed; ports.json holds all 100 ports | `10-*` §4.5, §7.1 (A) |
 
 **Weather bands** (columns per existing `20-*` §4.7 schema order:
@@ -189,8 +189,9 @@ not docking.
   click-to-sail, chart key `Tab`), §4.5 camera (wrap at dateline: no clamp,
   no void), §4.6 minimap re-spec + new Chart screen wireframe (own S-number),
   §4.8 ice palette hex added; `90-*` §7 world fields (map_id stays, value
-  `"world"`), §8.1 payload (unchanged fields; version 4), §8.2
-  `MIGRATIONS[3]` contract (task K), §9 chunked map loader re-spec (task G):
+  `"world"`), §8.1 payload (unchanged fields; version 4),
+  §8.2 development-stage scope (old pre-release saves need not load),
+  §9 chunked map loader re-spec (task G):
   PNG → bytes, 128×128 chunk TileMaps, live-chunk bound, wrap-aware
   passability, port overlay from JSON.
 - **Done-when:** cross-doc grep for `x ≤ 6`, `x ≤ 8`, `radius 8`,
@@ -408,20 +409,25 @@ not docking.
   discovery reveal at 18, both visible on chart; ui_strings zero `<key>`
   fallbacks in both locales.
 
-### K — Save v4: reposition + map_id
+### K — Save v4: map_id + position (pre-release scope)
 
-- **Goal:** old saves sail again, at the same port, on the new Earth.
-- **Docs:** `90-*` §8 as amended (B).
-- **Changes:** `SAVE_VERSION := 4`; `MIGRATIONS[3]`: `world.map_id` →
-  `"world"`; `world.position` → harbor tile of the save's current port
-  (saves are port-only by design — F5 at sea is refused); `clock_fraction`
-  → 0; `known_ports` untouched (ids survived E). `DEFAULT_MAP_ID` = "world".
-  v1→v2→v3→v4 chain preserved and tested (a real Phase-1 save fixture
-  migrates end-to-end).
-- **Done-when:** `test_save_v2` → `test_save_v4` green: fixtures for v1/v2/
-  v3 saves all load, re-save as v4, round-trip byte-equal; migrated save
-  puts the fleet exactly on its port's harbor tile (spot-check 3 ports);
-  corrupt / future-version saves still refuse gracefully.
+- **Goal:** saves are written in the Phase-4 shape; old pre-release saves need
+  not load (**dev-stage scope, `90-*` §8.2** — no player saves exist yet, so
+  backward compatibility is explicitly out of scope until the first release).
+- **Docs:** `90-*` §8 as amended (B), §8.2's development-stage scope clause.
+- **Changes:** `SAVE_VERSION := 4`; `DEFAULT_MAP_ID` = `"world"`;
+  `world.map_id` written as `"world"`; `world.position` is always the harbor
+  tile of the save's current port (saves are port-only by design — F5 at sea
+  is refused). `MIGRATIONS[3]` may remain as written (it is already specified
+  above) but is **not a gate**, and a payload with an older `save_version` may
+  simply be refused with a logged "pre-release save". Do not add compatibility
+  scaffolding: no legacy-key repair, no port-id remapping, no `phase`
+  rewrite machinery beyond what already exists.
+- **Done-when:** `test_save_v4` green: the **current** schema round-trips
+  byte-equal; a save/load at sea-refused path still refuses gracefully; a
+  corrupt payload and a *future* `save_version` are refused gracefully (that
+  guard is cheap and stays). A real Phase-1 fixture migrating end-to-end is
+  **not required** (`90-*` §8.2).
 
 ### L — Retire the old maps
 
@@ -573,7 +579,7 @@ is written, its owners amend the owning system docs first:
 | Caspian/lakes trap the BFS or validator | lake pass rasterizes `ne_10m_lakes` as `#` (Caspian is land); F still lists any > 2000-tile disconnected component informationally (C, F) |
 | River ports snap-fail at 10 nm tiles (hamburg/Elbe, london/Thames) | pinned tidal-river clause in D (move `lat`/`lon` to the estuary mouth first, carve second); hamburg added to F's probe ports (D, F) |
 | Explored-state still unsaved (Phase-1 known limitation) | unchanged, documented; chart and minimap share the session bitset (J) |
-| Old saves point at vanished p1 coordinates | MIGRATIONS[3] repositions by current port id — saves are port-only by design (K) |
+| Old pre-release saves point at vanished coordinates | Out of scope by §8.2 dev-stage clause: old saves may be refused; K only guarantees the current schema (K) |
 | Someone hand-edits world.png | AGENTS.md hard rule reworded + builder determinism check (A, C) |
 | Shapefile/dependency drift changes the raster between machines | SHA-256 per vendored file in LICENSE-NOTES.md + pinned `tools/requirements.txt` + stable sorted polygon order (C) |
 | Builder and GDScript runtime disagree on snap ties | locked smallest-(y, x) tie-break in the constants + F's build-vs-runtime equality check (D, F) |

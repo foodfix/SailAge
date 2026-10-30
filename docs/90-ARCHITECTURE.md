@@ -314,6 +314,28 @@ survived the migration, `10-*` §7.1), and `phase` becomes `4`.
 
 ### 8.2 Migration rule
 
+**Development-stage scope (normative, 2026-10-30).** SailAge has not shipped;
+there are no player saves in the wild. Backward compatibility across phases is
+therefore **explicitly out of scope until the first release**, and no task may
+spend effort on it. Concretely:
+
+- `save_version` increments on any breaking shape change, and `MIGRATIONS` must
+  still be an ordered pure-function map — but the **only** migration that must
+  exist is the identity: a payload whose `save_version` equals `SAVE_VERSION`
+  loads. Older payloads may be **refused** (`load()` returns false, logs
+  "pre-release save").
+- The `v1 → v2 → v3` steps below are **historical records** of what each phase
+  did. Phase-4 task K keeps `MIGRATIONS[3]` because it is already written, but
+  it is **not** a gate: a missing chain or an unreadable old fixture is not a
+  failure. `test_save_v4` tests the **current** schema round-trip; migrating a
+  real Phase-1 fixture end-to-end is **dropped from the acceptance criteria**.
+- Anything that would only exist to serve an old save (position remapping,
+  port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
+  is cheaper to delete than to maintain, delete it.
+- This section is amended to restore the full compatibility guarantee when a
+  release is planned; until then, treat "old save loads" as **not a
+  requirement** (`00-*` §11: no work without a spec).
+
 - `save_version` increments on any breaking shape change.
 - `SaveSystem.MIGRATIONS` is an ordered map `1: Callable`, `2: Callable`, …
   where `MIGRATIONS[n]` upgrades a version-n dict to n+1.
