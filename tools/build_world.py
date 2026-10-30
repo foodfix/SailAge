@@ -26,6 +26,7 @@ Raster passes, in this exact order (doc-pinned):
   3. ice rule pass          -> ``I``
   4. coastal band pass      -> ``.``
   5. waterway carve pass    -> ``tools/map_overrides.json`` (optional)
+     + band refresh        -> ``.`` again, because carving moved the coast
   6. harbor snap pass       -> per-port ``harbor_tile`` in the report
 
 Notes that matter for determinism (``docs/IMPLEMENT-Phase4.md`` -> Risks):
@@ -105,6 +106,25 @@ PALETTE = [
 ]
 PASSABLE = (SEA, COAST)
 LAND_OR_ICE = (LAND, ICE)
+
+# Locked waterway must-list (docs/IMPLEMENT-Phase4.md task D, `10-*` §6.1).
+# Every one of these must have an entry in ``tools/map_overrides.json``: a
+# missing entry seals a sea the 100 ports are required to reach, so the build
+# refuses to run rather than shipping an unreachable harbor. Names are the
+# report keys and the words every failure message uses.
+LOCKED_WATERWAYS = (
+    "gibraltar",
+    "bosphorus",
+    "dardanelles",
+    "kerch",
+    "messina",
+    "oresund",
+    "great_belt",
+    "bab_el_mandeb",
+    "malacca",
+    "sunda",
+    "magellan",
+)
 
 # Source shapefiles, in the fixed order they are rasterized (record order is
 # stable inside a file; files are concatenated in this order).
@@ -432,8 +452,16 @@ def pass_ice(grid: Grid) -> dict:
     }
 
 
-def pass_coastal_band(grid: Grid, radius: int = COASTAL_BAND_TILES) -> dict:
-    """``.`` iff within ``radius`` tiles of a passable-adjacent land/ice tile."""
+def pass_coastal_band(grid: Grid, radius: int = COASTAL_BAND_TILES,
+                      exact: bool = False) -> dict:
+    """``.`` iff within ``radius`` tiles of a passable-adjacent land/ice tile.
+
+    ``exact`` recomputes both directions (``.`` -> ``~`` where the band moved
+    away as well as ``~`` -> ``.`` where it arrived). The first pass only adds,
+    which is right for a grid that starts all-sea; the post-carve refresh uses
+    ``exact`` so the artifact still satisfies the locked definition after a
+    carve has removed land.
+    """
     width = grid.w
     landice = row_bits(grid.rows, width, LAND_OR_ICE)
     water = row_bits(grid.rows, width, PASSABLE)
@@ -451,20 +479,36 @@ def pass_coastal_band(grid: Grid, radius: int = COASTAL_BAND_TILES) -> dict:
         coast.append(landice[y] & near)
     band = dilate_bits(coast, radius, width)
 
-    changed = 0
+    added = 0
+    reverted = 0
     for y in range(grid.h):
         value = band[y]
-        if not value:
-            continue
         row = grid.rows[y]
+        if not exact and not value:
+            continue
+        if exact:
+            for x in range(width):
+                if row[x] not in PASSABLE:
+                    continue
+                inside = (value >> (width - 1 - x)) & 1
+                if inside and row[x] == SEA:
+                    row[x] = COAST
+                    added += 1
+                elif not inside and row[x] == COAST:
+                    row[x] = SEA
+                    reverted += 1
+            continue
         while value:
             low = value & -value
             x = width - 1 - (low.bit_length() - 1)
             value ^= low
             if row[x] == SEA:
                 row[x] = COAST
-                changed += 1
-    return {"band_tiles": radius, "cells_changed": changed}
+                added += 1
+    result = {"band_tiles": radius, "cells_changed": added}
+    if exact:
+        result["cells_reverted"] = reverted
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -620,16 +664,20 @@ def carve_override(grid: Grid, entry: dict) -> dict:
 
 
 def verify_override(grid: Grid, entry: dict) -> dict:
-    """Assert the carved channel is water, wide enough, and joins its ends.
+    """Assert the carved channel is water, wide enough, and joins a real sea.
 
     Named failures:
     * a channel tile that is not water (the carve did not take);
     * a channel tile whose perpendicular water run is narrower than
       ``min_width_tiles`` (a neighbouring override or coastline ate it);
-    * the channel's first and last tiles are not in the same 4-connected
-      passable component — i.e. the waterway does not actually *join* the two
-      seas it was carved to join (this is the check task D and the F BFS rely
-      on; a carve that stops short still fails here).
+    * a channel tile that does not reach the open sea — i.e. the carve made an
+      inland lake instead of a waterway.
+
+    The caller also checks, *before* carving, that the path is anchored in
+    water at one end (``verify_anchor``); together with the open-sea check that
+    is what stops a path drawn through the middle of a continent from passing:
+    carving it would otherwise manufacture a corridor that "connects" its own
+    two ends and prove nothing.
     """
     width = entry["min_width_tiles"]
     name = entry["name"]
@@ -664,53 +712,139 @@ def verify_override(grid: Grid, entry: dict) -> dict:
                 f"tile ({x}, {y}) [width {best}]"
             )
 
-    started, ended = cells[0], cells[-1]
-    if connected(grid, started, ended) is False:
-        raise BuildError(
-            f"override '{name}': carved channel does not join a waterway — "
-            f"tile {started} and tile {ended} are in different passable "
-            f"components (min_width_tiles={width})"
-        )
+    ocean = open_sea_mask(grid)
+    for x, y in cells:
+        if not ocean[y * grid.w + x]:
+            raise BuildError(
+                f"override '{name}': carved channel does not reach open sea at "
+                f"tile ({x}, {y}), lat {grid.lat_of_y(y):.2f} "
+                f"lon {grid.lon_of_x(x):.2f} — the entry makes an inland lake, "
+                f"not a waterway"
+            )
     return {
         "name": name,
         "min_width_tiles": width,
         "realised_width_tiles": 2 * _channel_radius(width) + 1,
         "path_points": len(entry["path"]),
         "channel_tiles": len(cells),
-        "ends_connected": True,
+        "reaches_open_sea": True,
     }
 
 
-def connected(grid: Grid, start: tuple[int, int],
-              goal: tuple[int, int]) -> bool:
-    """Is there a 4-connected water path between two tiles (x wraps)?"""
-    if not grid.is_water(*start) or not grid.is_water(*goal):
-        return False
-    if start == goal:
-        return True
-    seen = {start}
-    queue = [start]
-    head = 0
-    while head < len(queue):
-        x, y = queue[head]
-        head += 1
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            xx = (x + dx) % grid.w
-            yy = y + dy
-            if yy < 0 or yy >= grid.h:
-                continue
-            if (xx, yy) in seen or not grid.is_water(xx, yy):
-                continue
-            if (xx, yy) == goal:
-                return True
-            seen.add((xx, yy))
-            queue.append((xx, yy))
-    return False
+def verify_anchor(grid: Grid, entry: dict) -> bool:
+    """Pre-carve check: at least one end of the path must already be water.
+
+    A waterway carve is a correction of a too-narrow real strait, so it must
+    start (or finish) in a real sea. A path with both ends on land is either a
+    typo or an invented passage; carving it would "succeed" at every later
+    check and silently be wrong. Tidal-river entries deliberately keep their
+    inland end on land (the river is the point) — hence "at least one".
+    """
+    chain = _chain_tiles(grid, _segments_xy(grid, entry["path"]))
+    ends = (chain[0], chain[-1])
+    if not any(grid.is_water(x, y) for x, y in ends):
+        raise BuildError(
+            f"override '{entry['name']}': neither end of the path is water "
+            f"({ends[0]} and {ends[1]} are both land) — a waterway must be "
+            f"anchored in a real sea"
+        )
+    return True
+
+
+def assert_locked_waterways(overrides: list[dict]) -> None:
+    """Every locked waterway must be present in ``map_overrides.json``.
+
+    The must-list is pinned by the docs: each of those straits is narrower than
+    one 10 nm tile in the source shoreline, so *removing* its entry seals a sea
+    that locked ports sit in (Bosphorus -> Istanbul, Oresund/Great Belt ->
+    Danzig/Stockholm, Bab-el-Mandeb -> Aden, Malacca/Sunda -> Nagasaki, ...).
+    This is the "builder asserts every locked waterway" half of task D: a build
+    that silently ships a sealed sea is worse than a failed build.
+
+    ``tools/map_overrides.json`` may legitimately hold **extra** entries (the
+    tidal-river clauses); only the must-list is mandatory.
+    """
+    present = {entry["name"] for entry in overrides}
+    missing = [name for name in LOCKED_WATERWAYS if name not in present]
+    if missing:
+        raise BuildError(
+            "map_overrides: locked waterway(s) missing from "
+            f"{OVERRIDES_PATH.relative_to(ROOT)}: {', '.join(missing)} — each "
+            "one is a sea passage narrower than a tile, so omitting it seals a "
+            "sea that locked ports must be able to reach"
+        )
+
+
+def assert_harbors_on_ocean(grid: Grid, port_results: list[dict]) -> None:
+    """Every harbor tile must be on the dominant component (sailable sea).
+
+    The snap rule only promises *water next to water*: a harbor in a sealed
+    basin satisfies it while no fleet can ever reach it. That is exactly the
+    "straits narrower than a tile seal seas" risk, so the builder asserts it
+    here and names the stranded port — F's validator then re-proves the same
+    property with its own BFS from Lisbon.
+    """
+    ocean = open_sea_mask(grid)
+    stranded = []
+    for entry in port_results:
+        tile = entry.get("harbor_tile")
+        if not tile:
+            continue
+        if not ocean[tile["y"] * grid.w + tile["x"]]:
+            stranded.append(f"{entry['id']} at ({tile['x']}, {tile['y']})")
+    if stranded:
+        raise BuildError(
+            "harbor snap: "
+            f"{len(stranded)} harbor tile(s) are not on the open sea — a "
+            "sealed basin (a missing or too-narrow waterway carve): "
+            + ", ".join(stranded)
+        )
 
 
 # --------------------------------------------------------------------------
 # Components (passable tiles)
 # --------------------------------------------------------------------------
+_OPEN_SEA_ATTR = "_open_sea_mask"
+
+
+def open_sea_mask(grid: Grid) -> bytearray:
+    """Bitmask of the dominant passable component (the world ocean).
+
+    Every waterway carve must land in this component: a carved channel that
+    only reaches a landlocked puddle — or a basin that some *other* missing
+    waterway has sealed off — is not a passage. The mask is memoised on the
+    grid because the waterway pass asks once per entry.
+    """
+    cached = getattr(grid, _OPEN_SEA_ATTR, None)
+    if cached is not None:
+        return cached
+    width, height = grid.w, grid.h
+    rows = grid.rows
+    components = passable_components(grid, min_report=0)
+    dominant = components["largest_example_tile"]
+    mask = bytearray(width * height)
+    if dominant is None:
+        setattr(grid, _OPEN_SEA_ATTR, mask)
+        return mask
+    y0, x0 = dominant["y"], dominant["x"]
+    mask[y0 * width + x0] = 1
+    stack = [(x0, y0)]
+    while stack:
+        x, y = stack.pop()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            xx = (x + dx) % width
+            yy = y + dy
+            if yy < 0 or yy >= height:
+                continue
+            idx = yy * width + xx
+            if mask[idx] or rows[yy][xx] not in PASSABLE:
+                continue
+            mask[idx] = 1
+            stack.append((xx, yy))
+    setattr(grid, _OPEN_SEA_ATTR, mask)
+    return mask
+
+
 def passable_components(grid: Grid, min_report: int = 2000) -> dict:
     """Connected components of passable tiles, wrap-aware in x.
 
@@ -801,11 +935,17 @@ def passable_components(grid: Grid, min_report: int = 2000) -> dict:
             )
     components.sort(key=lambda c: (-c["size"], c["example_tile"]["y"],
                                    c["example_tile"]["x"]))
+    largest = components[0]["example_tile"] if components else None
+    if roots and largest is None:
+        root = max(roots, key=lambda r: roots[r])
+        y, x = example[root]
+        largest = {"x": x, "y": y}
     return {
         "count": len(roots),
         "passable_tiles": sum(roots.values()),
         "over_2000": components,
         "over_1000000": [c for c in components if c["size"] > 1_000_000],
+        "largest_example_tile": largest,
     }
 
 
@@ -1145,19 +1285,35 @@ def build_grid(degrees_per_tile: float, verbose: bool = False) -> tuple[Grid, di
     ice = pass_ice(grid)
     # Pass 4: coastal band.
     band = pass_coastal_band(grid, COASTAL_BAND_TILES)
-    # Pass 5: waterway carves.
+    # Pass 5: waterway carves, then a band refresh: carving turns land into
+    # water, so the coast moved and the locked `.` band must follow it before
+    # the harbor snap runs (a carved channel through a headland would
+    # otherwise stay open-sea `~` while the doc says shallow `.`).
     overrides = load_overrides(OVERRIDES_PATH)
+    assert_locked_waterways(overrides)
+    # Pre-carve anchor check: every waterway must start or end in water that
+    # already exists, so a path drawn across a continent cannot "succeed".
+    for entry in overrides:
+        verify_anchor(grid, entry)
     override_cells: dict[str, int] = {}
     override_details = []
     for entry in overrides:
         carved = carve_override(grid, entry)
         override_cells[entry["name"]] = carved["cells_changed"]
-        detail = verify_override(grid, entry)
-        detail.update(carved)
-        override_details.append(detail)
+        override_details.append({"name": entry["name"], **carved})
+    # Asserts run after *every* carve so one channel may lean on another (the
+    # Dardanelles' Aegean end, say, may only be water once a neighbour lands).
+    for entry, detail in zip(overrides, override_details):
+        detail.update(verify_override(grid, entry))
         if verbose:
-            print(f"  override {entry['name']}: {carved['cells_changed']} cells "
-                  f"carved, path ok", file=sys.stderr)
+            print(f"  override {entry['name']}: "
+                  f"{detail['cells_changed']} cells carved, path ok",
+                  file=sys.stderr)
+    band_refresh = pass_coastal_band(grid, COASTAL_BAND_TILES, exact=True)
+    if verbose:
+        print(f"  band refresh after carves: {band_refresh['cells_changed']} "
+              f"cells became coastal", file=sys.stderr)
+
 
     elapsed = time.time() - started
     meta = {
@@ -1168,6 +1324,7 @@ def build_grid(degrees_per_tile: float, verbose: bool = False) -> tuple[Grid, di
         "palette_index_order": list(CHARS),
         "ice": ice,
         "coastal_band": band,
+        "coastal_band_refresh": band_refresh,
         "harbor_snap_radius_tiles": HARBOR_SNAP_TILES,
         "lakes_as_land": True,
         "sources": sources,
@@ -1209,6 +1366,11 @@ def build_report(grid: Grid, meta: dict, ports: list[dict],
                 "rows": meta["ice"]["rows"],
             },
             "coastal_band_tiles": meta["coastal_band"]["band_tiles"],
+            "coastal_band_refresh_cells":
+                meta["coastal_band_refresh"]["cells_changed"],
+            "coastal_band_refresh_reverted": meta["coastal_band_refresh"].get(
+                "cells_reverted", 0),
+            "locked_waterways": list(LOCKED_WATERWAYS),
             "harbor_snap_radius_tiles": meta["harbor_snap_radius_tiles"],
             "lakes_as_land": meta["lakes_as_land"],
             "source_sha256": {s["file"]: s["sha256"] for s in meta["sources"]},
@@ -1269,6 +1431,11 @@ def cache_path(degrees_per_tile: float, overrides_text: str) -> Path:
     for name in sorted(EXPECTED_SHA256):
         digest.update(EXPECTED_SHA256[name].encode())
     digest.update(overrides_text.encode("utf-8"))
+    # The builder's own source is an input too: a cache written by an older
+    # pass order must never be served to a newer builder (the band refresh
+    # after the carves, for one, changes the raster without changing any
+    # other input).
+    digest.update(Path(__file__).read_bytes())
     return Path(tempfile.gettempdir()) / f"sailage-world-grid-{digest.hexdigest()[:16]}.bin"
 
 
@@ -1357,6 +1524,21 @@ def cmd_check_snaps(args) -> int:
         print(f"build_world: ports file not found: {path}", file=sys.stderr)
         return 2
     ports = load_ports(path)
+    if not ports_have_coords(ports):
+        # W3 preflight path: `data/ports.json` still carries the pre-Phase-4
+        # schema until task E adds lat/lon. The locked coordinate source is
+        # then the §7.1 table, exactly as the build path falls back — and only
+        # for the shipped file, so a hand-written negative-test JSON (a port
+        # in the Caspian, say) can never be silently swapped out.
+        if path.resolve() != PORTS_PATH.resolve():
+            print(
+                f"build_world: {path} has no lat/lon; --check-snaps needs "
+                f"coordinates (only the shipped {PORTS_PATH.name} falls back "
+                f"to the §7.1 table)",
+                file=sys.stderr,
+            )
+            return 2
+        ports, _source = resolve_build_ports(False)
     grid = grid_for_snaps(args.degrees_per_tile, args.no_cache, args.verbose)
     results, failures = snap_ports(grid, ports)
     for entry in results:
@@ -1423,6 +1605,7 @@ def cmd_build(args) -> int:
         return 1
     for dupe in duplicate_harbors(port_results):
         print(f"build_world: warning: {dupe}", file=sys.stderr)
+    assert_harbors_on_ocean(grid, port_results)
 
     report = build_report(grid, meta, ports, port_results)
     report["build"]["ports_source"] = ports_source

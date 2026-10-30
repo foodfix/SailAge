@@ -30,6 +30,21 @@
       "rows": 301
     },
     "coastal_band_tiles": 3,
+    "coastal_band_refresh_cells": 39,
+    "coastal_band_refresh_reverted": 2,
+    "locked_waterways": [
+      "gibraltar",
+      "bosphorus",
+      "dardanelles",
+      "kerch",
+      "messina",
+      "oresund",
+      "great_belt",
+      "bab_el_mandeb",
+      "malacca",
+      "sunda",
+      "magellan"
+    ],
     "harbor_snap_radius_tiles": 2,
     "lakes_as_land": true,
     "source_sha256": {
@@ -70,24 +85,24 @@
         "note": "no cells changed: Natural Earth encodes inland water as hole rings inside the land records and the fill unions ring interiors, so lakes are already land before this pass (the locked lake rule). The pass still runs and re-asserts them."
       }
     ],
-    "ports_source": "docs/10-DATA-SCHEMA.md#7.1"
+    "ports_source": "data/ports.json"
   },
   "tile_counts": {
-    "~": 1084147,
-    ".": 89516,
-    "#": 508977,
+    "~": 1084149,
+    ".": 89553,
+    "#": 508938,
     "^": 0,
     "I": 650160
   },
   "tiles_total": 2332800,
-  "sea_fraction": 0.503113,
+  "sea_fraction": 0.50313,
   "land_fraction": 0.331355,
   "ice_fraction": 0.278704,
   "reef_fraction": 0.0,
   "fractions": {
-    "sea": 0.464741,
-    "coastal_sea": 0.038373,
-    "land_tiles": 0.218183,
+    "sea": 0.464742,
+    "coastal_sea": 0.038389,
+    "land_tiles": 0.218166,
     "reef": 0.0,
     "ice": 0.278704
   },
@@ -95,32 +110,25 @@
     "note": "coastline mask (land fill + lakes pass) sampled before the ice pass overwrites polar land; this is the number the 25-35 % land-fraction sanity gate refers to",
     "tiles": 772986,
     "fraction": 0.331355,
-    "land_tiles_after_ice": 508977,
-    "land_tiles_after_ice_fraction": 0.218183
+    "land_tiles_after_ice": 508938,
+    "land_tiles_after_ice_fraction": 0.218166
   },
   "components": {
     "law": "4-connected passable tiles, wrap-aware in x (== 8-dir with corner-cutting forbidden)",
-    "count": 589,
-    "passable_tiles": 1173663,
+    "count": 580,
+    "passable_tiles": 1173702,
     "over_2000": [
       {
-        "size": 1164636,
+        "size": 1168747,
         "example_tile": {
           "x": 0,
           "y": 121
-        }
-      },
-      {
-        "size": 2161,
-        "example_tile": {
-          "x": 1213,
-          "y": 145
         }
       }
     ],
     "over_1000000": [
       {
-        "size": 1164636,
+        "size": 1168747,
         "example_tile": {
           "x": 0,
           "y": 121
@@ -128,8 +136,150 @@
       }
     ]
   },
-  "overrides": {},
-  "override_details": [],
+  "overrides": {
+    "gibraltar": 2,
+    "bosphorus": 1,
+    "dardanelles": 3,
+    "kerch": 1,
+    "messina": 1,
+    "oresund": 2,
+    "great_belt": 2,
+    "bab_el_mandeb": 1,
+    "malacca": 5,
+    "sunda": 1,
+    "magellan": 14,
+    "guayas_mouth": 3,
+    "para_mouth": 1,
+    "guanabara": 2
+  },
+  "override_details": [
+    {
+      "name": "gibraltar",
+      "cells_changed": 2,
+      "channel_tiles": 5,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "bosphorus",
+      "cells_changed": 1,
+      "channel_tiles": 3,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "dardanelles",
+      "cells_changed": 3,
+      "channel_tiles": 8,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "kerch",
+      "cells_changed": 1,
+      "channel_tiles": 4,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "messina",
+      "cells_changed": 1,
+      "channel_tiles": 4,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "oresund",
+      "cells_changed": 2,
+      "channel_tiles": 6,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "great_belt",
+      "cells_changed": 2,
+      "channel_tiles": 6,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "bab_el_mandeb",
+      "cells_changed": 1,
+      "channel_tiles": 9,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 4,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "malacca",
+      "cells_changed": 5,
+      "channel_tiles": 62,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 4,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "sunda",
+      "cells_changed": 1,
+      "channel_tiles": 10,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "magellan",
+      "cells_changed": 14,
+      "channel_tiles": 21,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "guayas_mouth",
+      "cells_changed": 3,
+      "channel_tiles": 8,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "para_mouth",
+      "cells_changed": 1,
+      "channel_tiles": 7,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 4,
+      "reaches_open_sea": true
+    },
+    {
+      "name": "guanabara",
+      "cells_changed": 2,
+      "channel_tiles": 6,
+      "min_width_tiles": 1,
+      "realised_width_tiles": 1,
+      "path_points": 3,
+      "reaches_open_sea": true
+    }
+  ],
   "ports": [
     {
       "id": "lisbon",
@@ -546,10 +696,10 @@
       "lat": -2.6,
       "lon": -80.3,
       "harbor_tile": {
-        "x": 599,
+        "x": 598,
         "y": 555
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "bahia",
@@ -567,9 +717,9 @@
       "lon": -43.18,
       "harbor_tile": {
         "x": 820,
-        "y": 676
+        "y": 677
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "recife",
@@ -896,10 +1046,10 @@
       "lat": 2.19,
       "lon": 102.25,
       "harbor_tile": {
-        "x": 1692,
+        "x": 1693,
         "y": 526
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "batavia",

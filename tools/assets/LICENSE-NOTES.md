@@ -95,23 +95,68 @@ Entry shape (the schema the builder consumes):
 ```
 
 - `name` — unique string; it is the key in `world_report.json#overrides` and in
-  every failure message the builder prints.
+  every failure message the builder prints. Names are id-safe slugs
+  (`[a-z0-9_]+`). The **locked must-list** (`build_world.py#LOCKED_WATERWAYS`,
+  from `IMPLEMENT-Phase4.md` task D) is
+  `gibraltar, bosphorus, dardanelles, kerch, messina, oresund, great_belt,
+  bab_el_mandeb, malacca, sunda, magellan`; the builder **refuses to build**
+  if any of them is absent, naming the missing ones. Extra entries beyond the
+  must-list are allowed (this file also carries the three tidal-river mouths,
+  see below).
 - `path` — list of `[lat, lon]` WGS84 points, in order, ≥ 2 points. The
   polyline is walked at 1/20-tile resolution and converted to an ordered
   4-connected tile chain (diagonal steps are bridged with an orthogonal tile),
-  so a one-tile channel is contiguous by construction.
+  so a one-tile channel is contiguous by construction. Put the waypoints
+  **down the middle of the real channel**: the carve follows the polyline, and
+  a point that lands on a headland widens the cut there.
 - `min_width_tiles` — integer ≥ 1; omitted means `1`. The channel is realised
   at Chebyshev radius `min_width_tiles // 2`, i.e. width 1 → 1 tile,
-  width 2–3 → 3 tiles, width 4–5 → 5 tiles. After carving, the builder
-  **asserts** three things and exits non-zero naming the waterway otherwise:
-  every channel tile is water; the perpendicular water run at every channel
-  tile is at least `min_width_tiles`; and the channel's first and last tiles
-  are in the same passable component (the carve actually joins the seas it was
-  meant to join).
+  width 2–3 → 3 tiles, width 4–5 → 5 tiles. `1` is enough (and is used) for
+  every strait in the must-list: the point is a sailable channel, not a
+  surveyed fairway, and every extra tile counts against the 0.5 % carve
+  budget. Raise it only when a harbor needs the water.
 - Overrides may only turn **land/ice into water** (they carve, never fill).
   Cells changed per override are logged in `world_report.json#overrides`;
   `#override_details` records the channel tile count and width actually
   realised.
+
+### Assertions (all fail the build, exit 2, naming the waterway)
+
+1. **Must-list present** — every locked waterway above has an entry.
+2. **Anchor** — at least one end of the path is water *before* carving.
+   A path with both ends on land is a typo or an invented passage; carving it
+   would "succeed" at every later check. (Tidal-river entries deliberately
+   keep their inland end on land — the river is the point — hence "at least
+   one".)
+3. **Water** — every channel tile is water after the carve.
+4. **Width** — the perpendicular water run at every channel tile is at least
+   `min_width_tiles`.
+5. **Open sea** — every channel tile is in the dominant passable component of
+   the final grid. This is what catches a carve into a puddle *and* a carve
+   whose far sea is still sealed by some other missing waterway.
+
+The carve pass runs **after** the coastal-band pass and **before** the harbor
+snap; a second, exact band pass then re-applies the locked `.`/`~` rule so the
+artifact still matches §6.1 after the coastline has moved (`~` → `.` where the
+band arrived, `.` → `~` where it left). The count is in
+`world_report.json#build.coastal_band_refresh_cells`.
+
+### Tidal-river entries (this file, beyond the locked must-list)
+
+Three ports sit up an estuary that pinches shut at 10 nm tiles; all three were
+unreachable with an empty override list and are fixed by a **carve**, not by
+moving the port's `lat`/`lon` (that would also move a locked §7.1 row, which
+is task E's call):
+
+| Entry | Port | Why a carve and not a coordinate move |
+|---|---|---|
+| `guayas_mouth` | `guayaquil` | the Guayas mouth is water; the last tile into the roads is land |
+| `para_mouth` | `belem` | the Pará estuary's southern channel is one tile too narrow |
+| `guanabara` | `rio_de_janeiro` | the Guanabara bay inlet is sealed by one land tile |
+
+The pinned fix order for any future case is: (1) move the port's `lat`/`lon` to
+its estuary mouth in `data/ports.json` **and** the `10-*` §7.1 table (task-E
+owned), (2) only if the mouth itself is not water, add a carve entry here.
 
 ## 5. Credits
 
