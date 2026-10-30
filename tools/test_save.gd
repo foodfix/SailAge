@@ -23,9 +23,11 @@ const PortScene := preload("res://scenes/port/port_screen.tscn")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 ## §8.1 keys the payload must carry, in the doc's order (minus nothing).
-## Phase 2 (save_version 2) appends `hostile_fleets` / `proximity_cooldowns`;
-## Phase 3 (save_version 3) appends the fame/title/quest/discovery/retirement
-## block and **drops** the superseded `quests` key (docs/90-* §8.1).
+## Phase 2 (save_version 2) appended `hostile_fleets` / `proximity_cooldowns`;
+## Phase 3 appended the fame/title/quest/discovery/retirement block and
+## **dropped** the superseded `quests` key; Phase 4 added no key — only the
+## `save_version`/`phase` values and `world.map_id`/`world.position` moved
+## (docs/90-* §8.1, §8.2).
 const PAYLOAD_KEYS := [
 	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
 	"fleet", "morale", "world", "current_port", "known_ports",
@@ -51,7 +53,7 @@ func _ready() -> void:
 	_test_three_independent_slots()
 	_test_corrupt_files()
 	_test_version_mismatch()
-	_test_migration_path()
+	_test_version_window()
 	await _test_f5_at_sea()
 	_test_f5_in_port_and_keys()
 	_test_routing_on_load()
@@ -401,7 +403,7 @@ func _test_version_mismatch() -> void:
 	older["save_version"] = 0
 	_write_json(1, older)
 	_check(SaveSystem.load(1) == false,
-		"save_version 0 with no migration fails to load")
+		"save_version 0 is refused as a pre-release save")
 	_check(_expected() == before, "state untouched after the v0 rejection")
 
 	var missing: Dictionary = SaveSystem.snapshot()
@@ -411,50 +413,61 @@ func _test_version_mismatch() -> void:
 	_check(_expected() == before, "state untouched after the missing-version rejection")
 
 
-# --- 5. Migration path -----------------------------------------------------
+# --- 5. Version window: there is no migration chain ------------------------
 
-func _test_migration_path() -> void:
+## docs/90-* §8.2 development-stage scope: `load()` accepts exactly the current
+## `save_version`. An older payload is a pre-release save and is refused by
+## name — there is no `MIGRATIONS` table and no test seam that could add one.
+func _test_version_window() -> void:
 	_make_rich_run()
-	var v0: Dictionary = SaveSystem.snapshot()
-	v0["save_version"] = 0
-	# A version-0 payload shaped like an early build: the migration has to add
-	# the key that later versions require.
-	v0.erase("morale")
-	_write_json(1, v0)
+	var zero: Dictionary = SaveSystem.snapshot()
+	zero["save_version"] = 0
+	_write_json(1, zero)
 
-	# Without the migration the load must fail (the shipped table has no v0
-	# step, which is exactly this case).
-	_check(SaveSystem.MIGRATIONS.keys() == [1, 2],
-		"the shipped table has the 1 → 2 and 2 → 3 steps")
+	_check(not ("MIGRATIONS" in SaveSystem),
+		"the shipped system has no MIGRATIONS table (dev-stage scope)")
+	_check(not SaveSystem.has_method("_migrate"),
+		"the migration walker is gone with the chain")
+	# `save_version` 0 is not a save this project ever wrote: still refused.
 	var before := _expected()
-	_check(SaveSystem.load(1) == false, "v0 fails while MIGRATIONS has no v0 step")
-	_check(_expected() == before, "state untouched when the migration step is missing")
+	_check(SaveSystem.load(1) == false, "a v0 file fails to load")
+	_check(SaveSystem.last_read_error.contains("invalid save_version"),
+		"the reason names an invalid version (got '%s')" % SaveSystem.last_read_error)
+	_check(_expected() == before, "state untouched when a v0 save is refused")
 
-	# Test-only migration table (merged over the shipped one): v0 → v1 fills in
-	# the documented default; the shipped 1 → 2 step then runs too.
-	var migrations := {
-		0: func(data: Dictionary) -> Dictionary:
-			data["morale"] = 70
-			data["save_version"] = 1
-			return data,
-	}
-	_check(SaveSystem.load(1, migrations), "with MIGRATIONS[0] the v0 file loads")
-	_check(GameState.day == before["day"], "the migrated payload restores day")
-	_check(GameState.morale == 70, "the migration's own change is applied (morale 70)")
-	_check(GameState.gold == before["gold"], "the rest of the migrated payload survives")
+	# A complete payload from an older phase is refused on its version alone —
+	# nothing migrates it (docs/90-* §8.2 development-stage scope).
+	for version in [1, 2, 3]:
+		var older: Dictionary = SaveSystem.snapshot()
+		older["save_version"] = version
+		_write_json(1, older)
+		before = _expected()
+		_check(SaveSystem.load(1) == false,
+			"a save_version %d file fails to load" % version)
+		_check(SaveSystem.last_read_error.contains("pre-release")
+			and SaveSystem.last_read_error.contains(str(version)),
+			"the reason names the pre-release version %d (got '%s')"
+			% [version, SaveSystem.last_read_error])
+		_check(_expected() == before,
+			"state untouched after the v%d rejection" % version)
 
-	# And a current-version file needs no migration at all, even with a table
-	# that would corrupt it if it ran.
+	# A pre-release payload is refused on its version alone, so the shape of an
+	# old file never has to match today's — that is the whole dev-stage rule.
+	var shapeless: Dictionary = SaveSystem.snapshot()
+	shapeless["save_version"] = 1
+	shapeless.erase("morale")
+	_write_json(1, shapeless)
+	before = _expected()
+	_check(SaveSystem.load(1) == false,
+		"an incomplete v1 file is still refused")
+	_check(SaveSystem.last_read_error.contains("pre-release"),
+		"the reason is the version, not the missing key (got '%s')"
+		% SaveSystem.last_read_error)
+	_check(_expected() == before, "state untouched after the incomplete v1 rejection")
+
+	# A current-version file loads unchanged.
 	_check(SaveSystem.save(1), "a current-version save is written")
-	var not_run := [false]
-	var poison := {
-		1: func(data: Dictionary) -> Dictionary:
-			not_run[0] = true
-			data["day"] = -1
-			return data,
-	}
-	_check(SaveSystem.load(1, poison), "a current-version file still loads")
-	_check(not not_run[0], "no migration runs for a current-version file")
+	_check(SaveSystem.load(1), "a current-version file still loads")
 	_check(GameState.day == before["day"], "the current-version payload is unchanged")
 
 

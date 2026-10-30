@@ -20,7 +20,7 @@ extends Node
 ##   S2  piracy → bounty → hunters → clear the bounty
 ##
 ## Both run every player-facing assertion in **both** locales and close with a
-## save → load round trip at `save_version 3`.
+## save → load round trip at the current `save_version` (4 since Phase 4).
 
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
@@ -354,8 +354,9 @@ func _scenario_crown_and_horizon() -> void:
 	# --- Round trip -------------------------------------------------------
 	_check(SaveSystem.save(1), "S1: the retired run saves to slot 1")
 	var on_disk := _read_slot(1)
-	_check(int(on_disk.get("save_version", -1)) == 3,
-		"S1: the file is save_version 3 (%s)" % str(on_disk.get("save_version")))
+	_check(int(on_disk.get("save_version", -1)) == SaveSystem.SAVE_VERSION,
+		"S1: the file is save_version %d (%s)"
+		% [SaveSystem.SAVE_VERSION, str(on_disk.get("save_version"))])
 	_check(bool(on_disk.get("retired", false)),
 		"S1: the file is marked retired")
 	_check((on_disk.get("discoveries_reported", []) as Array).size() >= 2,
@@ -549,8 +550,9 @@ func _scenario_piracy_loop() -> void:
 	GameState.gold = 23456
 	_check(SaveSystem.save(2), "S2: the live run saves to slot 2")
 	var on_disk := _read_slot(2)
-	_check(int(on_disk.get("save_version", -1)) == 3,
-		"S2: the file is save_version 3 (%s)" % str(on_disk.get("save_version")))
+	_check(int(on_disk.get("save_version", -1)) == SaveSystem.SAVE_VERSION,
+		"S2: the file is save_version %d (%s)"
+		% [SaveSystem.SAVE_VERSION, str(on_disk.get("save_version"))])
 	_check(not bool(on_disk.get("retired", true)),
 		"S2: a live run is not retired")
 	_check((on_disk.get("titles", {}) as Dictionary).has("portugal"),
@@ -631,7 +633,7 @@ func _profitable_good(port_id: String) -> Dictionary:
 
 ## `true` when `port_id` exists as a harbor tile on the active world map.
 ## Phase 4 (task G): ports carry `lat`/`lon` only, so the test is the derived
-## harbor tile from `10-*` §6.1, not a stored `p3`/`position` block.
+## harbor tile from `10-*` §6.1, not a stored per-map tile block.
 func _map_has_port(port_id: String) -> bool:
 	if DataLoader.get_port(port_id).is_empty():
 		return false

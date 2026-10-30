@@ -1,13 +1,13 @@
 extends Node2D
-## World map scene (S3) — docs/80-UI-UX.md §4.1–§4.5; docs/20-* §4.1–§4.3,
+## The world scene (S3) — docs/80-UI-UX.md §4.1–§4.5; docs/20-* §4.1–§4.3,
 ## §4.11–§4.12; docs/90-ARCHITECTURE.md §7, §9.
 ##
-## T5 built the ASCII→TileMap rendering and the clamped camera; T6 adds the
-## fleet marker, movement input (keys + click-to-step, no corner cutting), the
-## sighting/exploration reveal, port entry and the shared HUD.
+## Phase 4 renders the generated world (`data/maps/world.png`, docs/90-* §9):
+## the fleet marker, movement input (keys + click-to-sail, no corner cutting),
+## the sighting/exploration reveal, port entry, hostiles and the shared HUD.
 ##
 ## The map is never re-parsed here: the scene asks MapLoader once and lets it
-## build the TileMap (docs/90-* §9 step 6). Movement rules live in
+## build the TileMap (docs/90-* §9 step 7). Movement rules live in
 ## `scripts/world/sailing_sim.gd` (unit-testable); this scene only turns input
 ## into `SailingSimLib.try_move()` calls and keeps the view/UI in sync.
 ##
@@ -33,9 +33,9 @@ const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 ## Task H: the click-to-sail A* module (docs/20-* §4.2).
 const SailPathLib := preload("res://scripts/world/sail_path.gd")
 
-## The single world map id (docs/90-* §9.1). The artifact itself is resolved
-## through `data/maps/maps.json`; the loader takes the path as an argument, so
-## swapping the PNG is a data-only change with no code edit.
+## The single shipped map id (docs/90-* §9.1). Map switching is retired with
+## the dual-map pipeline: `world.map_id` is always this value, so the scene
+## never resolves an id and there is no map-change path to rescale for.
 const DEFAULT_MAP_ID := "world"
 ## Fallback cell before a game exists: Lisbon's harbor tile, re-derived from the
 ## data (`lat`/`lon` → §6.1 snap) once the map is loaded. `(-1,-1)` means "the
@@ -212,44 +212,37 @@ func _ready() -> void:
 		EventBus.battle_finished.connect(_on_battle_finished)
 
 
-## The map this scene renders: `data/maps/maps.json` (exactly one entry,
-## docs/90-* §9.1). A missing index or file is a data error — there is no
-## fallback ladder any more.
+## The map this scene renders: the single index entry in
+## `data/maps/maps.json` (docs/90-* §9.1). A missing index or file is a data
+## error — there is no fallback ladder and no map-switch routing.
 func _load_active_map() -> bool:
-	var map_id := _active_map_id()
-	var files: Dictionary = DataLoader.get_map_files(map_id)
+	var files: Dictionary = DataLoader.get_map_files(DEFAULT_MAP_ID)
 	if files.is_empty():
-		_loader.last_error = "no map index entry for '%s'" % map_id
+		_loader.last_error = "no map index entry for '%s'" % DEFAULT_MAP_ID
 		return false
 	var path := str(files.get("file", ""))
 	if not path.begins_with("res://"):
 		path = "res://" + path
 	var legend = files.get("legend", {})
 	if not (legend is Dictionary) or (legend as Dictionary).is_empty():
-		_loader.last_error = "no legend for '%s'" % map_id
+		_loader.last_error = "no legend for '%s'" % DEFAULT_MAP_ID
 		return false
 	return _loader.load_map(path, legend)
 
 
-## The active map id: `GameState.world["map_id"]` when it names an indexed map,
-## else the locked default. A state value that is not in `maps.json` is logged
-## (docs/90-* §9.1) and the one shipped map is used — the same rule
-## `GameState.new_game` applies, so a new game and a scene opened over the same
-## state can never disagree about which map they are showing.
+## The active map id: always the one shipped map (docs/90-* §9.1). A
+## `world.map_id` naming anything else is a logged data error, never a switch —
+## the same rule `GameState.new_game` applies, so a new game and a scene opened
+## over the same state can never disagree about which map they are showing.
 func _active_map_id() -> String:
-	var known: Array = DataLoader.map_ids()
 	var value = GameState.world.get("map_id", DEFAULT_MAP_ID)
-	if value is String and not (value as String).is_empty():
-		if known.has(value):
-			return value
+	if value is String and not (value as String).is_empty() \
+			and (value as String) != DEFAULT_MAP_ID:
 		push_warning(
-			"WorldMap: world.map_id '%s' is not in data/maps/maps.json %s; "
-			% [value, str(known)]
-			+ "showing '%s' (docs/90-* §9.1)" % DEFAULT_MAP_ID
+			"WorldMap: world.map_id '%s' is not the shipped map id; showing '%s' "
+			% [value, DEFAULT_MAP_ID] + "(docs/90-* §9.1)"
 		)
-	if known.has(DEFAULT_MAP_ID):
-		return DEFAULT_MAP_ID
-	return known[0] if not known.is_empty() else DEFAULT_MAP_ID
+	return DEFAULT_MAP_ID
 
 
 func _process(delta: float) -> void:

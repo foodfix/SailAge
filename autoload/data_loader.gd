@@ -58,9 +58,6 @@ var map_legend: Dictionary = {}
 ## Map index (`data/maps/maps.json`, docs/90-* §9.1): exactly one entry,
 ## `id: "world"`.
 var map_index: Array = []
-## The legend the index names, memoised so `get_map_legend()` cannot disagree
-## with [member map_legend].
-var map_legends: Dictionary = {}
 
 ## MapLoader instance over `data/maps/world.png` (docs/90-* §9). Null until the
 ## world scene (or [method ensure_map]) loads it.
@@ -163,11 +160,11 @@ func get_map(map_id: String) -> Dictionary:
 	return {}
 
 
-## The legend record for `map_id`. Phase 4 has one legend, so this answers for
-## the indexed id only; anything else is `{}`.
+## The legend record for `map_id`. Phase 4 has one legend for one map, so this
+## answers with [member map_legend] for an indexed id and `{}` for anything
+## else — there is no per-map legend cache to disagree with it.
 func get_map_legend(map_id: String) -> Dictionary:
-	var value = map_legends.get(map_id, null)
-	return value if value is Dictionary else {}
+	return map_legend if map_ids().has(map_id) else {}
 
 
 ## Resolves the map's data file and legend together (what the loader needs).
@@ -370,7 +367,7 @@ func _load_ui_strings() -> Dictionary:
 
 
 ## Reads `data/map_legend.json` — the single legend (docs/90-* §9.1). No
-## `port_markers` table exists any more: ports are an overlay from lat/lon
+## per-tile port-marker table exists any more: ports are an overlay from lat/lon
 ## (`10-*` §6.2, decision 7).
 func _load_map_legend() -> Dictionary:
 	var data = _read_json("map_legend.json")
@@ -389,7 +386,6 @@ func _load_map_legend() -> Dictionary:
 ## fallback ladder any more.
 func _load_map_index() -> void:
 	map_index = []
-	map_legends = {}
 	var data = _read_json("maps/maps.json")
 	if not (data is Dictionary) or not (data.get("maps") is Array):
 		_record("maps/maps.json: missing 'maps' array (docs/90-* §9.1)")
@@ -427,6 +423,5 @@ func _load_map_index() -> void:
 				or not (legend as Dictionary).has("tiles"):
 			_record("maps/maps.json: legend '%s' lacks grid/tiles" % legend_path)
 			continue
-		map_legends[id] = legend
 		if id == DEFAULT_MAP_ID:
 			map_legend = legend

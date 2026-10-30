@@ -239,8 +239,7 @@ func _fail(reason: String) -> bool:
 ## Builds a loader over an explicit index grid — the seam for a *synthetic*
 ## map in a unit test (reef/edge fixtures need a tile the shipped world does not
 ## carry). This is the same internal state [method load_png_buffer] produces, so
-## every query below behaves identically; it never touches the ASCII pipeline
-## the retired P1 map used.
+## every query below behaves identically; it parses no text and touches no file.
 static func from_indices(grid_width: int, grid_height: int,
 		values: PackedByteArray, legend: Dictionary, tile_px: int = 32):
 	if grid_width <= 0 or grid_height <= 0:

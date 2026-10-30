@@ -90,11 +90,11 @@ func _test_map_index() -> void:
 	_check(missing.is_empty(),
 		"an unknown map id is not resolved by a fallback ladder (got %s)"
 		% str(missing))
-	# No compatibility ladder: the retired Phase-1–3 ids are simply not in the
+	# No compatibility ladder: the two retired legacy ids are simply not in the
 	# index (docs/90-* §8.2 "development-stage scope"), so nothing maps them.
 	_check(not DataLoader.map_ids().has("p1")
 		and not DataLoader.map_ids().has("p3"),
-		"the retired p1/p3 ids are gone from the index, with no alias")
+		"the retired legacy map ids are gone from the index, with no alias")
 
 
 # --- 2. The legend -------------------------------------------------------
@@ -561,7 +561,7 @@ func _test_new_game_starts() -> void:
 			"%s: the start tile is water" % nation_id)
 	# An unknown map id never wedges a new game (it falls back to the one
 	# documented default with a warning), and no retired id is special-cased.
-	GameState.new_game("portugal", false, "p3")
+	GameState.new_game("portugal", false, "p9")
 	_check(str(GameState.world.get("map_id")) == "world",
 		"an unknown map id falls back to 'world' (got %s)"
 		% str(GameState.world.get("map_id")))

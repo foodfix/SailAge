@@ -1,26 +1,26 @@
 extends Node
-## Phase-3 task A acceptance tests: save migration v2 → v3
-## (docs/IMPLEMENT-Phase3.md A; docs/90-* §8.1, §8.2; docs/70-* §2, §4.7,
-## §4.9.2, §4.9.8).
+## Phase-4 task L acceptance tests: the v4 save schema and the identity-only
+## load rule (docs/IMPLEMENT-Phase4.md L; docs/90-* §8.1, §8.2 development-stage
+## scope; docs/70-* §2, §4.7, §4.9.2, §4.9.8).
 ##
-##   godot --headless --path . tools/test_save_v3.tscn
+##   godot --headless --path . tools/test_save_v4.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
+##
+## **What this suite is.** Phase 4 deleted the `1 → 2 → 3` migration chain
+## (pre-release saves need not load, `90-*` §8.2). This suite therefore tests
+## the **current** schema: a v4 payload round-trips byte-equal, the documented
+## guards still hold (corrupt payload refused, future `save_version` refused,
+## older pre-release versions refused by name, retired runs summarised not
+## resumed), and every Phase-2/Phase-3 field block is real saved state.
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and written back at the end; every file this suite creates is
 ## removed again (start AND end), exactly like `tools/test_save.gd`.
 
-## The Phase-2 §8.1 keys — a v2 file carries exactly these plus the Phase-1
-## ones, and nothing from Phase 3.
-const V2_KEYS := [
-	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
-	"fleet", "morale", "world", "current_port", "known_ports",
-	"port_investments", "quests", "discoveries_found", "hostile_fleets",
-	"proximity_cooldowns",
-]
-## Every Phase-3 key of docs/90-* §8.1 and its documented default.
-const V3_DEFAULTS := {
+## Every Phase-4 §8.1 key and its documented default (the Phase-3 block is
+## unchanged in v4 — only `world.map_id`/`world.position`/`phase` values move).
+const V4_DEFAULTS := {
 	"fame": 0,
 	"bounties": {},
 	"active_quests": [],
@@ -40,31 +40,31 @@ var _backup: Dictionary = {}
 
 func _ready() -> void:
 	_backup_saves()
-	_test_v2_load_and_resave()
-	_test_migration_shape()
-	_test_migration_purity()
-	_test_chain_is_v1_to_v3()
-	_test_corrupt_phase3_field_rejected()
+	_test_v4_round_trip()
+	_test_fixture_shape()
+	_test_no_migration_chain()
+	_test_older_versions_refused()
+	_test_future_version_refused()
+	_test_corrupt_phase_fields_rejected()
+	_test_optional_keys_default()
 	_test_new_fields_round_trip()
 	_test_retired_save()
 	_cleanup()
 	_report()
 
 
-# --- Fixture: a hand-written Phase-2 payload (docs/90-* §8.1) --------------
+# --- Fixture: a hand-written v4 payload (docs/90-* §8.1) -------------------
 
-## A Phase-2 save exactly as a 2.0 build wrote it: every §8.1 key including
-## `hostile_fleets`/`proximity_cooldowns`/the equipment blocks, `phase: 2`,
-## and **no** Phase-3 field and no `world.map_id`.
-##
-## The fleet is capacity-compliant (flagship hold exactly full) so
-## `Fleet.normalize_all()` is a no-op on load and "only the Phase-3 keys
-## changed" can be asserted honestly.
-func _v2_payload() -> Dictionary:
+## A complete v4 save: every §8.1 key, `phase: 4`, `world.map_id: "world"` on
+## the 2160×1080 grid, and the Phase-2/Phase-3 state blocks the shipped build
+## writes. The fleet is capacity-compliant (flagship hold exactly full) so
+## `Fleet.normalize_all()` is a no-op on load and "only what changed" can be
+## asserted honestly.
+func _v4_payload() -> Dictionary:
 	return {
-		"save_version": 2,
+		"save_version": 4,
 		"saved_at": 1793119712,
-		"phase": 2,
+		"phase": 4,
 		"locale": "en",
 		"day": 64,
 		"gold": 12540,
@@ -98,66 +98,65 @@ func _v2_payload() -> Dictionary:
 			},
 		],
 		"morale": 61,
-		"world": {"position": {"x": 14, "y": 50}, "weather": "fair"},
+		"world": {
+			"position": {"x": 1025, "y": 307},
+			"weather": "fair",
+			"map_id": "world",
+		},
 		"current_port": "lisbon",
 		"known_ports": ["lisbon", "seville", "london", "madeira"],
 		"port_investments": {"lisbon": 1000},
-		"quests": [],
 		"discoveries_found": [],
 		"hostile_fleets": [],
 		"proximity_cooldowns": {"pirate": 61},
+		"fame": 0,
+		"titles": {
+			"portugal": "none", "spain": "none", "england": "none",
+			"holland": "none", "ottoman": "none", "italy": "none",
+		},
+		"bounties": {},
+		"active_quests": [],
+		"completed_royal_missions": {
+			"portugal": 0, "spain": 0, "england": 0,
+			"holland": 0, "ottoman": 0, "italy": 0,
+		},
+		"discoveries_reported": [],
+		"discovery_hints": {},
+		"battles_won": 0,
+		"retired": false,
+		"retired_at": 0,
 	}
 
 
-# --- 1. The done-when: a Phase-2 save loads and re-saves as version 3 ------
+# --- 1. The done-when: a v4 save loads and re-saves as v4 ------------------
 
-func _test_v2_load_and_resave() -> void:
-	var fixture := _v2_payload()
+func _test_v4_round_trip() -> void:
+	var fixture := _v4_payload()
 	_ensure_dir()
-	_check(_write_json(1, fixture), "the v2 fixture is written to slot 1")
+	_check(_write_json(1, fixture), "the v4 fixture is written to slot 1")
 
-	# The fixture really is v2-shaped (otherwise the test would prove nothing).
-	var on_disk := _read_json(1)
-	_check(not on_disk.is_empty(), "the written fixture parses as JSON")
-	_check(int(on_disk.get("save_version", -1)) == 2,
-		"the fixture is save_version 2 (got %s)" % str(on_disk.get("save_version")))
-	_check(int(on_disk.get("phase", -1)) == 2, "the fixture is phase 2")
-	var missing := []
-	for key in V2_KEYS:
-		if not on_disk.has(key):
-			missing.append(key)
-	_check(missing.is_empty(), "the fixture has every Phase-2 §8.1 key (missing %s)"
-		% str(missing))
-	_check(not on_disk.has("fame") and not on_disk.has("active_quests")
-		and not on_disk.has("titles"),
-		"the fixture has no Phase-3 keys")
-	_check(not (on_disk["world"] as Dictionary).has("map_id"),
-		"the fixture's world block has no map_id yet")
-
-	# Quit-and-restart: wipe the state, then load the Phase-2 file.
+	# Quit-and-restart: wipe the state, then load the v4 file.
 	_clobber_state()
-	_check(SaveSystem.load(1), "a Phase-2 save loads in Phase-3 code")
+	_check(SaveSystem.load(1), "a v4 save loads")
 	_check(SaveSystem.last_read_error.is_empty(),
 		"the load reports no error (got '%s')" % SaveSystem.last_read_error)
-	_check(GameState.fame == 0, "migration set fame to 0")
+	_check(GameState.fame == 0, "fame restored (0)")
 	_check(_nation_map_is(GameState.titles, "none"),
-		"migration set every nation's title to 'none' (got %s)" % str(GameState.titles))
+		"every nation's title restored as 'none' (got %s)" % str(GameState.titles))
 	_check(_nation_map_is(GameState.completed_royal_missions, 0),
-		"migration zeroed every nation's royal-mission count")
+		"every nation's royal-mission count restored as 0")
 	_check(GameState.bounties == {} and GameState.bounties is Dictionary,
-		"migration set bounties to {}")
+		"bounties restored as {}")
 	_check(GameState.active_quests == [] and GameState.active_quests is Array,
-		"migration set active_quests to []")
-	_check(GameState.discoveries_reported == [], "migration set discoveries_reported to []")
+		"active_quests restored as []")
+	_check(GameState.discoveries_reported == [], "discoveries_reported restored as []")
 	_check(GameState.discovery_hints == {} and GameState.discovery_hints is Dictionary,
-		"migration set discovery_hints to {}")
-	_check(GameState.battles_won == 0, "migration set battles_won to 0")
+		"discovery_hints restored as {}")
+	_check(GameState.battles_won == 0, "battles_won restored as 0")
 	_check(GameState.retired == false and GameState.retired_at == 0,
-		"migration set retired/retired_at to false/0")
-	# Phase 4 (docs/90-* §8.2 dev-stage scope): the migration writes the
-	# *current* default map id, not a historical one.
+		"retired/retired_at restored as false/0")
 	_check(GameState.world.get("map_id") == "world",
-		"migration set world.map_id to the current default (got %s)"
+		"world.map_id restored as the shipped id (got %s)"
 		% str(GameState.world.get("map_id")))
 	_check(GameState.quests == [], "the superseded quests list is empty")
 
@@ -167,7 +166,7 @@ func _test_v2_load_and_resave() -> void:
 	_check(GameState.gold == 12540, "gold restored exactly (12540)")
 	_check(GameState.morale == 61, "morale restored exactly (61)")
 	_check(GameState.current_port == "lisbon", "current_port restored (lisbon)")
-	_check(GameState.world["position"] == {"x": 14, "y": 50},
+	_check(GameState.world["position"] == {"x": 1025, "y": 307},
 		"world.position restored byte-equal")
 	_check(GameState.world["weather"] == "fair", "world.weather restored (fair)")
 	_check(GameState.known_ports == fixture["known_ports"],
@@ -175,125 +174,108 @@ func _test_v2_load_and_resave() -> void:
 	_check(GameState.port_investments == fixture["port_investments"],
 		"port_investments restored byte-equal")
 	_check(GameState.proximity_cooldowns == {"pirate": 61},
-		"proximity_cooldowns untouched by the 2 → 3 step")
+		"proximity_cooldowns restored byte-equal")
 	_check(GameState.player.get("equipment") == {"weapon": "eq_cutlass", "armor": ""},
-		"the player equipment block is untouched")
+		"the player equipment block is restored")
 	_check((GameState.fleet[0] as Dictionary).get("equipment")
 		== {"figurehead": "", "sail": "eq_cotton_sails"},
-		"the ship equipment block is untouched")
+		"the ship equipment block is restored")
 
-	# --- Re-save: the migrated run is written as version 3 -----------------
-	_check(SaveSystem.save(1), "the migrated run re-saves to slot 1")
+	# --- Re-save: the run is written as version 4 -------------------------
+	_check(SaveSystem.save(1), "the run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 3,
-		"the re-saved file is save_version 3 (got %s)"
+	_check(int(resaved.get("save_version", -1)) == 4,
+		"the re-saved file is save_version 4 (got %s)"
 		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 3,
-		"the re-saved file is phase 3 (got %s)" % str(resaved.get("phase")))
-	for key in V3_DEFAULTS:
+	_check(int(resaved.get("phase", -1)) == 4,
+		"the re-saved file is phase 4 (got %s)" % str(resaved.get("phase")))
+	for key in V4_DEFAULTS:
 		_check(resaved.has(key),
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
 	_check(not resaved.has("quests"),
 		"the re-saved file has no superseded 'quests' key")
 	_check((resaved["world"] as Dictionary).get("map_id") == "world",
-		"the re-saved world block carries the current map id")
+		"the re-saved world block carries the shipped map id")
 	_check(not (resaved["world"] as Dictionary).has("clock_fraction")
 		and not resaved.has("explored_tiles"),
 		"the re-save still omits clock_fraction / explored_tiles")
 
-	# …and the version-3 file re-loads to the same state (second cycle).
+	# …and the v4 file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved version-3 file loads")
+	_check(SaveSystem.load(1), "the re-saved v4 file loads")
 	_check(_loaded_values() == first_cycle, "a second save/load cycle changes nothing")
 
 
-# --- 2. The migration's own output shape ----------------------------------
+# --- 2. The fixture really is the v4 §8.1 shape ----------------------------
 
-func _test_migration_shape() -> void:
-	var input := _v2_payload()
-	var out: Dictionary = SaveSystem.MIGRATIONS[2].call(input)
-	_check(out != input, "MIGRATIONS[2] returns a different dict")
-	_check(int(out["phase"]) == 3, "MIGRATIONS[2] sets phase = 3")
-	_check(int(out.get("save_version", 2)) == 2,
-		"MIGRATIONS[2] leaves save_version to _migrate() (still 2 here)")
-	for key in ["fame", "bounties", "active_quests", "discoveries_reported",
-			"discovery_hints", "battles_won", "retired", "retired_at"]:
-		_check(key in out, "MIGRATIONS[2] adds '%s'" % key)
-	_check(out["titles"] is Dictionary
-		and (out["titles"] as Dictionary).size() == 6,
-		"titles covers all six nations (got %s)" % str(out["titles"]))
-	_check(_nation_map_is(out["titles"], "none"), "every title defaults to none")
-	_check(_nation_map_is(out["completed_royal_missions"], 0),
-		"every royal-mission count defaults to 0")
-	_check(not out.has("quests"), "MIGRATIONS[2] drops the superseded 'quests' key")
-	_check((out["world"] as Dictionary).get("map_id") == "world",
-		"MIGRATIONS[2] adds world.map_id at the current default")
-
-	# An absent/empty world block must not be synthesised.
-	var no_world := _v2_payload()
-	no_world["world"] = {}
-	no_world["current_port"] = null
-	var migrated: Dictionary = SaveSystem.MIGRATIONS[2].call(no_world)
-	_check(migrated["world"] == {},
-		"an empty world stays empty (map_id is not invented)")
+func _test_fixture_shape() -> void:
+	var fixture := _v4_payload()
+	_check(int(fixture["save_version"]) == SaveSystem.SAVE_VERSION,
+		"the fixture is save_version %d" % SaveSystem.SAVE_VERSION)
+	_check(int(fixture["phase"]) == SaveSystem.PHASE,
+		"the fixture is phase %d" % SaveSystem.PHASE)
+	_check(SaveSystem.validate_payload(fixture).is_empty(),
+		"validate_payload() accepts the fixture (%s)"
+		% SaveSystem.validate_payload(fixture))
+	_check(SaveSystem.SAVE_VERSION == 4 and SaveSystem.PHASE == 4,
+		"this build ships save_version 4 / phase 4")
+	_check(SaveSystem.DEFAULT_MAP_ID == "world",
+		"the shipped map id is 'world' (docs/90-* §9.1)")
 
 
-# --- 3. The 2 → 3 function is pure ----------------------------------------
+# --- 3. No migration chain survives (docs/90-* §8.2 dev scope) -------------
 
-func _test_migration_purity() -> void:
-	var input := _v2_payload()
-	var before := input.duplicate(true)
-	var out: Dictionary = SaveSystem.MIGRATIONS[2].call(input)
-	_check(input == before, "MIGRATIONS[2] does not mutate its argument")
-	# Dictionary equality is by value in Godot 4, so identity is asserted with
-	# `is_same` — a shared reference would let a caller mutate the input.
-	_check(not is_same(out["player"], input["player"]),
-		"the returned player block is a copy, not the input's object")
-	_check(not is_same(out["fleet"], input["fleet"]),
-		"the returned fleet is a copy, not the input's array")
-	_check(not is_same(out["world"], input["world"]),
-		"the returned world block is a copy")
-
-	# Titles/completed maps are fresh objects, never shared table state.
-	var second: Dictionary = SaveSystem.MIGRATIONS[2].call(_v2_payload())
-	(second["titles"] as Dictionary)["portugal"] = "duke"
-	_check(str((out["titles"] as Dictionary)["portugal"]) == "none",
-		"two migration calls never share the titles map")
+func _test_no_migration_chain() -> void:
+	_check(not ("MIGRATIONS" in SaveSystem),
+		"SaveSystem carries no MIGRATIONS table any more (dev-stage scope)")
+	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4"]:
+		_check(not SaveSystem.has_method(name),
+			"the historical migration step %s() is gone" % name)
 
 
-# --- 4. A Phase-1 save climbs the whole chain ------------------------------
+# --- 4. Older (pre-release) versions are refused by name -------------------
 
-func _test_chain_is_v1_to_v3() -> void:
-	# The v1 fixture from the Phase-2 suite, rebuilt here minimally: the point
-	# is the chain, not the Phase-1 fields (test_save_v2 proves those).
-	var v1 := _v2_payload()
-	v1["save_version"] = 1
-	v1["phase"] = 1
-	v1.erase("hostile_fleets")
-	v1.erase("proximity_cooldowns")
-	(v1["player"] as Dictionary).erase("equipment")
-	((v1["fleet"] as Array)[0] as Dictionary).erase("equipment")
-	_ensure_dir()
-	_write_json(1, v1)
-	_clobber_state()
-	_check(SaveSystem.load(1), "a Phase-1 save climbs 1 → 2 → 3")
-	_check(SaveSystem.last_read_error.is_empty(),
-		"the chained load reports no error (got '%s')" % SaveSystem.last_read_error)
-	_check(SaveSystem.snapshot()["save_version"] == 3,
-		"the chained run snapshots as version 3")
-	_check(GameState.hostile_fleets == [] and GameState.proximity_cooldowns == {},
-		"the 1 → 2 step still ran inside the chain")
-	_check(GameState.player.get("equipment") == {"weapon": "", "armor": ""},
-		"the 1 → 2 equipment default survives the chain")
-	_check(_nation_map_is(GameState.titles, "none"),
-		"the 2 → 3 title defaults survive the chain")
+func _test_older_versions_refused() -> void:
+	_load_fixture_into_memory()
+	var before := _loaded_values()
+	for version in [1, 2, 3]:
+		var older := _v4_payload()
+		older["save_version"] = version
+		older["phase"] = version
+		_write_json(1, older)
+		_check(SaveSystem.load(1) == false,
+			"a save_version %d payload fails to load (pre-release)" % version)
+		_check(SaveSystem.last_read_error.contains("pre-release")
+			and SaveSystem.last_read_error.contains(str(version)),
+			"the reason names the pre-release version %d (got '%s')"
+			% [version, SaveSystem.last_read_error])
+		_check(_loaded_values() == before,
+			"state untouched after rejecting save_version %d" % version)
+		_check(not bool(SaveSystem.list_saves()[0]["valid"]),
+			"list_saves() reports the v%d slot invalid" % version)
 
 
-# --- 5. A wrong-typed Phase-3 field is rejected ----------------------------
+# --- 5. A future version is refused ---------------------------------------
 
-func _test_corrupt_phase3_field_rejected() -> void:
+func _test_future_version_refused() -> void:
+	_load_fixture_into_memory()
+	var before := _loaded_values()
+	var future := _v4_payload()
+	future["save_version"] = SaveSystem.SAVE_VERSION + 1
+	future["phase"] = SaveSystem.PHASE + 1
+	_write_json(1, future)
+	_check(SaveSystem.load(1) == false, "a future save_version fails to load")
+	_check(SaveSystem.last_read_error.contains("newer than"),
+		"the reason names a newer version (got '%s')" % SaveSystem.last_read_error)
+	_check(_loaded_values() == before,
+		"state untouched after the future-version rejection")
+
+
+# --- 6. A wrong-typed Phase-2/3 field is rejected --------------------------
+
+func _test_corrupt_phase_fields_rejected() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
 	for probe in [
@@ -309,6 +291,9 @@ func _test_corrupt_phase3_field_rejected() -> void:
 		{"key": "battles_won", "value": "3", "why": "battles_won as a string"},
 		{"key": "retired", "value": 1, "why": "retired as a number"},
 		{"key": "retired_at", "value": "now", "why": "retired_at as a string"},
+		{"key": "hostile_fleets", "value": {}, "why": "hostile_fleets as an object"},
+		{"key": "proximity_cooldowns", "value": [], "why":
+			"proximity_cooldowns as an array"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		bad[probe["key"]] = probe["value"]
@@ -330,8 +315,50 @@ func _test_corrupt_phase3_field_rejected() -> void:
 		"the reason names map_id (got '%s')" % SaveSystem.last_read_error)
 	_check(_loaded_values() == before, "state untouched after the map-id rejection")
 
+	# read_save() applies the same rule without touching GameState.
+	_check(SaveSystem.read_save(1).is_empty(),
+		"read_save() rejects the same wrong-typed payload")
 
-# --- 6. Every Phase-3 field is real saved state ----------------------------
+
+# --- 7. Every Phase-2/3 field is real saved state --------------------------
+
+## docs/90-* §8.1 "Default when absent": the optional blocks may be omitted by
+## a hand-edited payload and are then restored from the documented default.
+## (This replaces the old `test_save_v2` coverage of the same rule — the
+## defaults are now `_apply()`'s job, not a migration's.)
+func _test_optional_keys_default() -> void:
+	_load_fixture_into_memory()
+	var payload := _v4_payload()
+	for key in ["hostile_fleets", "proximity_cooldowns", "fame", "titles",
+			"bounties", "active_quests", "completed_royal_missions",
+			"discoveries_reported", "discovery_hints", "battles_won",
+			"retired", "retired_at", "discoveries_found"]:
+		payload.erase(key)
+	_write_json(1, payload)
+	_clobber_state()
+	_check(SaveSystem.load(1), "a payload omitting the optional keys loads")
+	_check(GameState.hostile_fleets == [] and GameState.hostile_fleets is Array,
+		"an absent hostile_fleets defaults to []")
+	_check(GameState.proximity_cooldowns == {}
+		and GameState.proximity_cooldowns is Dictionary,
+		"an absent proximity_cooldowns defaults to {}")
+	_check(GameState.fame == 0, "an absent fame defaults to 0")
+	_check(GameState.titles == {}, "an absent titles defaults to {}")
+	_check(GameState.bounties == {}, "an absent bounties defaults to {}")
+	_check(GameState.active_quests == [], "an absent active_quests defaults to []")
+	_check(GameState.completed_royal_missions == {},
+		"an absent completed_royal_missions defaults to {}")
+	_check(GameState.discoveries_reported == [],
+		"an absent discoveries_reported defaults to []")
+	_check(GameState.discovery_hints == {}, "an absent discovery_hints defaults to {}")
+	_check(GameState.battles_won == 0, "an absent battles_won defaults to 0")
+	_check(GameState.retired == false and GameState.retired_at == 0,
+		"absent retired/retired_at default to false/0")
+	_check(GameState.discoveries_found == [],
+		"an absent discoveries_found defaults to []")
+	_check(GameState.day == 64 and GameState.gold == 12540,
+		"the required fields still restore around the defaults")
+
 
 func _test_new_fields_round_trip() -> void:
 	_load_fixture_into_memory()
@@ -362,9 +389,25 @@ func _test_new_fields_round_trip() -> void:
 	GameState.discoveries_reported = ["disc_atlas_cedars", "disc_red_sea_corals"]
 	GameState.discovery_hints = {"disc_atlas_cedars": true}
 	GameState.battles_won = 7
+	GameState.hostile_fleets = [{
+		"id": "hf_7_30_40_pirate",
+		"kind": "pirate",
+		"nation_id": "",
+		"position": {"x": 30, "y": 40},
+		"anchor_port_id": "lisbon",
+		"ships": [{
+			"ship_type_id": "sloop", "durability": 60, "crew": 10,
+			"provisions": 0, "water": 0, "cannons": 4,
+			"equipment": {"figurehead": "", "sail": ""},
+			"cargo": {"wine": 6},
+		}],
+		"spawn_day": 7,
+		"cooldown_until_day": 0,
+	}]
+	GameState.proximity_cooldowns = {"pirate": 12}
 	var expected := _loaded_values()
 
-	_check(SaveSystem.save(1), "a run with Phase-3 state saves")
+	_check(SaveSystem.save(1), "a run with Phase-2/3 state saves")
 	var on_disk := _read_json(1)
 	_check(int(on_disk.get("fame", -1)) == 480, "snapshot() writes fame")
 	_check((on_disk.get("titles") as Dictionary).get("portugal") == "baron",
@@ -378,28 +421,41 @@ func _test_new_fields_round_trip() -> void:
 	_check((on_disk.get("discovery_hints") as Dictionary).has("disc_atlas_cedars"),
 		"snapshot() writes discovery_hints")
 	_check(int(on_disk.get("battles_won", -1)) == 7, "snapshot() writes battles_won")
+	_check((on_disk.get("hostile_fleets") as Array).size() == 1
+		and (on_disk["hostile_fleets"] as Array)[0]["id"] == "hf_7_30_40_pirate",
+		"snapshot() writes the hostile marker (docs/90-* §8.1)")
+	_check(on_disk.get("proximity_cooldowns") == {"pirate": 12},
+		"snapshot() writes proximity_cooldowns")
 
 	_clobber_state()
-	_check(SaveSystem.load(1), "the v3 file with Phase-3 state loads")
+	_check(SaveSystem.load(1), "the v4 file with Phase-2/3 state loads")
 	_check(_loaded_values() == expected,
-		"every Phase-3 field restores byte-equal after a v3 round trip")
+		"every Phase-2/3 field restores byte-equal after a v4 round trip")
 	_check(typeof(((GameState.bounties["spain"] as Dictionary)["amount"])) == TYPE_INT,
 		"the bounty amount comes back as an int, not a json float")
+	_check(typeof((GameState.hostile_fleets[0] as Dictionary)["position"]["x"])
+		== TYPE_INT, "marker coordinates come back as ints, not json floats")
 
 	# The snapshot deep-copies: mutating live state cannot rewrite a save.
 	var snap := SaveSystem.snapshot()
 	GameState.titles["portugal"] = "duke"
 	GameState.active_quests[0]["status"] = "failed"
 	GameState.discoveries_reported.append("disc_mutated")
+	GameState.hostile_fleets[0]["id"] = "mutated"
+	GameState.proximity_cooldowns["pirate"] = 999
 	_check((snap["titles"] as Dictionary)["portugal"] == "baron",
 		"snapshot() deep-copies titles")
 	_check(((snap["active_quests"] as Array)[0] as Dictionary)["status"] == "active",
 		"snapshot() deep-copies active_quests")
 	_check((snap["discoveries_reported"] as Array).size() == 2,
 		"snapshot() deep-copies discoveries_reported")
+	_check((snap["hostile_fleets"] as Array)[0]["id"] == "hf_7_30_40_pirate",
+		"snapshot() deep-copies hostile_fleets")
+	_check(snap["proximity_cooldowns"] == {"pirate": 12},
+		"snapshot() deep-copies proximity_cooldowns")
 
 
-# --- 7. A retired save is never playable ----------------------------------
+# --- 8. A retired save is never playable ----------------------------------
 
 func _test_retired_save() -> void:
 	_load_fixture_into_memory()
@@ -522,13 +578,13 @@ func _loaded_values() -> Dictionary:
 
 
 ## Loads the fixture once so the "before" state of a rejection test is a real
-## migrated run rather than the clobbered sentinel.
+## loaded run rather than the clobbered sentinel.
 func _load_fixture_into_memory() -> void:
 	_ensure_dir()
-	_write_json(1, _v2_payload())
+	_write_json(1, _v4_payload())
 	_clobber_state()
 	if not SaveSystem.load(1):
-		_check(false, "setup: the v2 fixture loads before the rejection test")
+		_check(false, "setup: the v4 fixture loads before the rejection test")
 
 
 func _read_json(slot: int) -> Dictionary:

@@ -248,3 +248,17 @@ had uncommitted edits in the same file. The pins (`83eeb2c`) were still landed
 *before* any code, which is the part of the protocol that prevents two models
 of one rule. Task **I** (the optional art pass) was skipped as the backlog
 allows.
+
+---
+
+## Post-Phase-4 note (task L, save v4)
+
+This record is the **Phase-3 gate** and is kept as history. Two of its facts
+moved in Phase 4 and the counts are no longer current:
+
+- The map is the single generated world (`new_game(..., "world")`), not the
+  retired Phase-3 grid; `tools/test_phase3_acceptance.gd` already drives the
+  world map and asserts `save_version == SaveSystem.SAVE_VERSION`.
+- The save round trip is **version 4** (`autoload/save_system.gd`), and the
+  `1 → 2 → 3` migration chain was deleted with the same task — `test_save_v2`
+  and `test_save_v3` are gone; their coverage lives in `tools/test_save_v4.gd`.

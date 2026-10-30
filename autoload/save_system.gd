@@ -4,7 +4,7 @@ extends Node
 ##
 ## Autoload #5 (last), so it may read every other singleton. It owns:
 ##   * `user://saves/save_%d.json` for slots 1…3 (write / read / list / delete);
-##   * the §8.1 payload shape and the §8.2 migration rule;
+##   * the §8.1 payload shape and the §8.2 version rule;
 ##   * the global `F5` quick-save / `F9` quick-load keys plus the slot dialog
 ##     flow, so every screen (world, port hub, facility screens, title) gets
 ##     the same behaviour from one place (docs/80-* §4.3, §4.6).
@@ -17,9 +17,9 @@ extends Node
 ## `explored_tiles` is deliberately not written (docs/20-* §4.12).
 ##
 ## Load safety: a corrupt payload, a missing key, a version newer than this
-## build or a missing migration step all return `false`, log the reason and
-## leave `GameState` **untouched** (the payload is validated in full before a
-## single field is written).
+## build or a payload from an older (pre-release) version all return `false`,
+## log the reason and leave `GameState` **untouched** (the payload is validated
+## in full before a single field is written).
 ##
 ## JSON gotcha: Godot's parser turns every number into a float, so a naive
 ## load would make `day`/`gold` floats and break the "byte-equal round trip"
@@ -30,15 +30,12 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2): Phase 3 ships `save_version = 3`, so
-## [member MIGRATIONS] carries two steps: `1 → 2` (add `hostile_fleets`,
-## `proximity_cooldowns`, the `player`/per-ship `equipment` blocks and
-## `phase = 2`) and `2 → 3` (add the Phase-3 fame/title/quest/discovery/
-## retirement fields, drop the superseded `quests`, add `world.map_id`, and
-## `phase = 3`). It is a `static var` rather than a `const` because GDScript
-## rejects a `Callable` inside a constant expression ("Assigned value for
-## constant ... isn't a constant expression"); the table is still treated as
-## read-only: [method _migrate] copies it and never mutates it.
+## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 4 ships
+## [constant SAVE_VERSION] 4 and there is **no migration chain**. SailAge has
+## not shipped, so a payload whose `save_version` is anything but 4 is a
+## pre-release save and is refused by name; the only migration that exists is
+## the identity. The historical `1 → 2` / `2 → 3` steps lived here through
+## Phase 3 and were deleted with this task rather than carried as dead weight.
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -55,36 +52,20 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 3 ships version 3).
-const SAVE_VERSION := 3
+## Current payload version (docs/90-* §8.2: Phase 4 ships version 4).
+const SAVE_VERSION := 4
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 3
-## Ordered migration table `{n: Callable}`; `MIGRATIONS[n]` upgrades a version-n
-## dict to n+1 (docs/90-* §8.2). Phase 3 ships two steps, `1 → 2` and `2 → 3`;
-## the value is a `static var` (not a `const`) only because GDScript cannot put
-## a `Callable` in a constant expression — treat it as read-only: [method
-## _migrate] copies it, and tests drive the seam through [method load]'s
-## `migrations` argument instead of mutating this table.
-static var MIGRATIONS := {
-	1: Callable(migrate_v1_to_v2),
-	2: Callable(migrate_v2_to_v3),
-}
+const PHASE := 4
 
-## Documented equipment defaults (docs/60-* §4.11.12, docs/50-* §4.8,
-## docs/40-* §4.1): the empty-slot blocks the `1 → 2` migration inserts.
-const EQUIPMENT_PLAYER_DEFAULT := {"weapon": "", "armor": ""}
-const EQUIPMENT_SHIP_DEFAULT := {"figurehead": "", "sail": ""}
-
-## Phase-3 rank ids (docs/70-* §4.9.2), lowest first. A fresh game and the
-## `2 → 3` migration start every nation at [constant RANK_NONE].
+## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
+## nation at [constant RANK_NONE].
 const RANK_NONE := "none"
 const RANK_ORDER: Array[String] = [
 	"none", "knight", "baron", "viscount", "count", "duke",
 ]
-## The default map id a migrated Phase-2 save resumes on (docs/70-* §4.9.8).
+## The single shipped map id (docs/90-* §9.1, docs/10-* §6).
 const DEFAULT_MAP_ID := "world"
-## `world.map_id` is saved inside the `world` block (docs/90-* §8.1); this is
-## the documented fallback for a payload that predates it.
+## The §4.7 default weather a payload without a `world.weather` restores.
 const DEFAULT_WEATHER := "calm"
 
 ## The •-marked GameState fields, in §8.1 order (minus the three header keys).
@@ -97,10 +78,11 @@ const STATE_KEYS: Array[String] = [
 	"battles_won", "retired", "retired_at",
 ]
 ## Keys every payload must carry for a load to be attempted. `quests` /
-## `discoveries_found` are Phase-2/3 fields (empty in P1), `hostile_fleets` /
-## `proximity_cooldowns` arrived with save_version 2 (docs/90-* §8.1) and
+## `discoveries_found` are optional-but-known fields, `hostile_fleets` /
+## `proximity_cooldowns` are optional Phase-2 fields (docs/90-* §8.1) and
 ## `saved_at` is display-only, so those five default instead of failing the
-## load — that is what lets a Phase-1 file load at all.
+## load (docs/90-* §12 "load tolerates missing optional keys only where a
+## default is documented").
 const REQUIRED_KEYS: Array[String] = [
 	"save_version", "phase", "locale", "day", "gold", "player", "fleet",
 	"morale", "world", "current_port", "known_ports", "port_investments",
@@ -135,8 +117,8 @@ const SLOT_DIALOG_SCENE := "res://scenes/ui_shared/save_slot_dialog.tscn"
 const CONFIRM_DIALOG_SCENE := "res://scenes/ui_shared/confirm_dialog.tscn"
 const DIALOG_BOX_SCENE := "res://scenes/ui_shared/dialog_box.tscn"
 ## S16 retirement summary (docs/70-* §4.7, docs/80-* §4.1).
-## S16 retirement summary (docs/70-* §4.7, docs/80-* §4.1).
-const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"## T18 owns `normalize_all()` in this file (docs/40-* §6); the load path calls
+const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
+## T18 owns `normalize_all()` in this file (docs/40-* §6); the load path calls
 ## it dynamically so this script also runs while that function is still absent.
 const FLEET_PATH := "res://scripts/fleet/fleet.gd"
 ## Transient ledger state (not persisted) is cleared through this path on load.
@@ -299,15 +281,13 @@ func delete_save(slot: int) -> bool:
 
 # --- Load (docs/90-* §8.2) --------------------------------------------------
 
-## Reads, validates and migrates slot `slot`, then restores `GameState`.
-##
-## `migrations` is the test seam for §8.2: an ordered `{n: Callable}` table
-## merged over the shipped [member MIGRATIONS] (test-only steps can thereby be
-## added without touching the shipped table). Production callers pass nothing.
+## Reads, validates and restores slot `slot`.
 ##
 ## On any failure: returns false, logs the reason into [member last_read_error],
-## pushes an error, and **never** writes to `GameState`.
-func load(slot: int, migrations: Dictionary = {}) -> bool:
+## pushes an error, and **never** writes to `GameState`. There is no migration
+## chain (docs/90-* §8.2 development-stage scope): a payload whose version is
+## not [constant SAVE_VERSION] is a pre-release save and is refused.
+func load(slot: int) -> bool:
 	last_read_error = ""
 	last_loaded_retired = false
 	last_retired_summary = {}
@@ -322,7 +302,7 @@ func load(slot: int, migrations: Dictionary = {}) -> bool:
 		push_error("SaveSystem.load: slot %d is not readable (%s)"
 			% [slot, last_read_error])
 		return false
-	var data := _migrate(payload, migrations)
+	var data := _accept(payload)
 	if data.is_empty():
 		push_error("SaveSystem.load: slot %d is unusable (%s)"
 			% [slot, last_read_error])
@@ -367,10 +347,6 @@ func retired_summary(data: Dictionary) -> Dictionary:
 ## sets [member last_read_error] for a missing, unreadable, corrupt or
 ## version-incompatible file — the caller decides how loudly to complain
 ## ([method load] errors, [method list_saves] only warns).
-##
-## This is the "is this slot usable by the current build?" question, so a
-## version that only a migration could rescue is reported invalid here; the
-## migration-aware path is [method load] → [method _parse_slot].
 func read_save(slot: int) -> Dictionary:
 	var data := _parse_slot(slot)
 	if data.is_empty():
@@ -384,7 +360,7 @@ func read_save(slot: int) -> Dictionary:
 
 ## File → parsed dictionary, with only the "is this even a save file?" checks
 ## (exists, non-empty, parseable, top-level object, normalized numbers). The
-## version window and shape belong to [method validate_payload] / migration.
+## version window and shape belong to [method validate_payload].
 func _parse_slot(slot: int) -> Dictionary:
 	if not is_valid_slot(slot):
 		last_read_error = "slot %d out of range" % slot
@@ -415,14 +391,21 @@ func _parse_slot(slot: int) -> Dictionary:
 func validate_payload(data: Dictionary) -> String:
 	if data.is_empty():
 		return "empty payload"
-	for key in REQUIRED_KEYS:
-		if not data.has(key):
-			return "missing required key '%s'" % key
+	# The version window comes first: an old payload is a pre-release save and
+	# its shape may legitimately differ (docs/90-* §8.2 dev-stage scope), so
+	# "pre-release save_version N" is the honest reason, not a missing key.
 	var version := int(data.get("save_version", 0))
 	if version < 1:
 		return "invalid save_version %d" % version
 	if version > SAVE_VERSION:
 		return "save_version %d is newer than %d" % [version, SAVE_VERSION]
+	if version < SAVE_VERSION:
+		return "pre-release save_version %d (this build reads %d)" % [
+			version, SAVE_VERSION
+		]
+	for key in REQUIRED_KEYS:
+		if not data.has(key):
+			return "missing required key '%s'" % key
 	if not (data["player"] is Dictionary):
 		return "'player' is not an object"
 	if not (data["fleet"] is Array):
@@ -474,8 +457,8 @@ func validate_payload(data: Dictionary) -> String:
 	for axis in ["x", "y"]:
 		if not (position as Dictionary).get(axis) is int:
 			return "'world.position.%s' is not an integer" % axis
-	# §8.1/§9.1: the single shipped map id. Phase 4 replaced the p1/p3 pair, so
-	# a payload naming either of those is a pre-release save and is refused
+	# §8.1/§9.1: the single shipped map id. Phase 4 retired the dual-map pair,
+	# so a payload naming either old id is a pre-release save and is refused
 	# (docs/90-* §8.2 development-stage scope).
 	var map_id = (data["world"] as Dictionary).get("map_id", DEFAULT_MAP_ID)
 	if not (map_id is String) or (map_id as String) != "world":
@@ -495,119 +478,6 @@ func _is_int_or_missing(data: Dictionary, key: String) -> bool:
 	if not data.has(key):
 		return true
 	return data[key] is int and not (data[key] is bool)
-
-
-## docs/90-* §8.2 `MIGRATIONS[1]`: upgrades a Phase-1 payload (version 1) to
-## version 2 by **adding** exactly the Phase-2 keys and touching nothing else:
-##
-##   * `hostile_fleets = []`, `proximity_cooldowns = {}` (docs/90-* §8.1);
-##   * `player.equipment = {"weapon": "", "armor": ""}` when `player` is a
-##     non-empty object (docs/60-* §4.11.12, docs/50-* §4.8) — an absent or
-##     empty `player` is left alone, never synthesised;
-##   * `fleet[i].equipment = {"figurehead": "", "sail": ""}` for every ship
-##     instance dict (docs/60-* §4.11.12, docs/40-* §4.1); a non-dict entry in
-##     `fleet` is left for the fleet capacity guard to report;
-##   * `phase = 2` (docs/90-* §8.1).
-##
-## Pure: it works on `data` (a copy supplied by [method _migrate]) and returns a
-## new dict, so the caller's payload is never mutated. `save_version` is set by
-## [method _migrate], not here.
-static func migrate_v1_to_v2(data: Dictionary) -> Dictionary:
-	var out: Dictionary = data.duplicate(true)
-	out["hostile_fleets"] = []
-	out["proximity_cooldowns"] = {}
-	var player = out.get("player", null)
-	if player is Dictionary and not (player as Dictionary).is_empty():
-		(player as Dictionary)["equipment"] = EQUIPMENT_PLAYER_DEFAULT.duplicate(true)
-	var fleet = out.get("fleet", null)
-	if fleet is Array:
-		for entry in (fleet as Array):
-			if entry is Dictionary:
-				(entry as Dictionary)["equipment"] = EQUIPMENT_SHIP_DEFAULT.duplicate(true)
-	# Each step stamps the phase it upgrades **to** (2 here, 3 in the next step),
-	# so a payload stops at the version it reached; [method _migrate] owns
-	# `save_version` and the last step leaves the current phase in place.
-	out["phase"] = 2
-	return out
-
-
-## docs/90-* §8.2 `MIGRATIONS[2]`: upgrades a Phase-2 payload (version 2) to
-## version 3 by **adding** exactly the Phase-3 keys and removing the one
-## superseded key:
-##
-##   * `fame = 0`, `bounties = {}`, `active_quests = []`,
-##     `discoveries_reported = []`, `discovery_hints = {}`, `battles_won = 0`,
-##     `retired = false`, `retired_at = 0`;
-##   * `titles` / `completed_royal_missions` with **every** nation id from
-##     `data/nations.json` at `"none"` / `0` — the ladder and the quest-slot
-##     rule read them by key, so a partial map would be a silent hole. When
-##     `DataLoader` is unavailable (a unit test calling the function directly)
-##     the documented six §7.4 ids are used, which is why they live in
-##     [constant FALLBACK_NATION_IDS] rather than as a magic list here;
-##   * `world.map_id = "p1"` when `world` is a non-empty object — a Phase-2
-##     save predates the world-map choice, and `p1` is the map it was playing;
-##   * the superseded `quests` key is **erased** (§8.1: `active_quests` is the
-##     one quest list from Phase 3 on);
-##   * `phase = 3`.
-##
-## Pure: it works on `data` (a copy supplied by [method _migrate]) and returns a
-## new dict, so the caller's payload is never mutated. `save_version` is set by
-## [method _migrate], not here.
-static func migrate_v2_to_v3(data: Dictionary) -> Dictionary:
-	var out: Dictionary = data.duplicate(true)
-	out["fame"] = 0
-	out["titles"] = _nation_defaults(RANK_NONE)
-	out["bounties"] = {}
-	out["active_quests"] = []
-	out["completed_royal_missions"] = _nation_defaults(0)
-	out["discoveries_reported"] = []
-	out["discovery_hints"] = {}
-	out["battles_won"] = 0
-	out["retired"] = false
-	out["retired_at"] = 0
-	var world = out.get("world", null)
-	if world is Dictionary and not (world as Dictionary).is_empty():
-		(world as Dictionary)["map_id"] = DEFAULT_MAP_ID
-	out.erase("quests")
-	out["phase"] = 3
-	return out
-
-
-## The six §7.4 nation ids, used only when `DataLoader` cannot answer (a pure
-## unit test of [method migrate_v2_to_v3]). At runtime the data file wins, so
-## adding a seventh nation is a data-only change.
-const FALLBACK_NATION_IDS: Array[String] = [
-	"portugal", "spain", "england", "holland", "ottoman", "italy",
-]
-
-
-## `{nation_id: value}` over every nation in `data/nations.json`, falling back
-## to [constant FALLBACK_NATION_IDS] outside a running game.
-static func _nation_defaults(value) -> Dictionary:
-	var out: Dictionary = {}
-	var ids: Array = []
-	var loader := _data_loader()
-	if loader != null:
-		for entry in loader.get("nations_list"):
-			if entry is Dictionary:
-				var id := str((entry as Dictionary).get("id", ""))
-				if not id.is_empty():
-					ids.append(id)
-	if ids.is_empty():
-		for id in FALLBACK_NATION_IDS:
-			ids.append(id)
-	for id in ids:
-		out[str(id)] = value if not (value is Dictionary) else value.duplicate(true)
-	return out
-
-
-## `DataLoader` by name (this script must also run in a headless tool that
-## loaded only some autoloads); null when absent.
-static func _data_loader() -> Node:
-	var engine := Engine.get_main_loop()
-	if engine is SceneTree:
-		return (engine as SceneTree).root.get_node_or_null("DataLoader")
-	return null
 
 
 ## A `{nation_id: rank}` map with an unknown rank repaired to `"none"` (a
@@ -639,42 +509,17 @@ static func _string_list(raw) -> Array:
 	return out
 
 
-## Applies [member MIGRATIONS] plus `overrides` from the file's version up to
-## [constant SAVE_VERSION] and returns the upgraded payload (`{}` + reason on a
-## missing step). The input dict is never mutated.
-func _migrate(data: Dictionary, overrides: Dictionary = {}) -> Dictionary:
-	var table: Dictionary = {}
-	# Copied key by key: the shipped table is shared script state.
-	for version_key in MIGRATIONS:
-		table[version_key] = MIGRATIONS[version_key]
-	for version_key in overrides:
-		table[version_key] = overrides[version_key]
-
-	var version := int(data.get("save_version", 0))
-	if version > SAVE_VERSION:
-		last_read_error = "save_version %d is newer than %d" % [version, SAVE_VERSION]
-		return {}
-	var upgraded: Dictionary = data.duplicate(true)
-	while version < SAVE_VERSION:
-		var step = table.get(version, null)
-		if step == null or not (step is Callable):
-			last_read_error = "no migration from save_version %d to %d" % [
-				version, version + 1
-			]
-			return {}
-		var next = (step as Callable).call(upgraded.duplicate(true))
-		if not (next is Dictionary):
-			last_read_error = "migration %d did not return an object" % version
-			return {}
-		upgraded = next
-		version += 1
-		upgraded["save_version"] = version
-	# A migration may have produced a shape this build still cannot use.
-	var reason := validate_payload(upgraded)
+## Returns the payload when this build can load it, else `{}` with the reason in
+## [member last_read_error]. docs/90-* §8.2 development-stage scope: the only
+## migration is the identity, so a payload must carry exactly
+## [constant SAVE_VERSION] and pass [method validate_payload] — which checks the
+## version window (older = pre-release, newer = unknown build) before the shape.
+func _accept(data: Dictionary) -> Dictionary:
+	var reason := validate_payload(data)
 	if not reason.is_empty():
-		last_read_error = "after migration %d: %s" % [version, reason]
+		last_read_error = reason
 		return {}
-	return upgraded
+	return data
 
 
 ## Copies a validated payload into `GameState`. Only reached from [method load]
@@ -719,25 +564,24 @@ func _apply(data: Dictionary) -> void:
 		investments[str(port_id)] = int(raw_investments[port_id])
 	GameState.port_investments = investments
 
-	GameState.quests = \
-		(data.get("quests", OPTIONAL_DEFAULTS["quests"]) as Array).duplicate(true)
-	GameState.quests = \
-		(data.get("quests", OPTIONAL_DEFAULTS["quests"]) as Array).duplicate(true)
+	# The Phase-1 `quests` placeholder is tolerated on read (§8.1 "Default when
+	# absent") but is permanently empty from Phase 3 on — cleared at the end of
+	# this method, so the payload value never survives.
+	GameState.quests = []
 	GameState.discoveries_found = \
 		(data.get("discoveries_found", OPTIONAL_DEFAULTS["discoveries_found"]) \
 			as Array).duplicate(true)
-	# Phase-2 saved state (docs/90-* §8.1). A pre-v2 file reaches here only via
-	# the `1 → 2` migration, but a hand-written v2 file may omit them: the
-	# documented defaults keep those loads working (§8.1 "Default when absent").
+	# Phase-2 saved state (docs/90-* §8.1). A save this build wrote always
+	# carries them, but a hand-edited file may omit them: the documented
+	# defaults keep those loads working (§8.1 "Default when absent").
 	GameState.hostile_fleets = \
 		(data.get("hostile_fleets", OPTIONAL_DEFAULTS["hostile_fleets"]) as Array) \
 			.duplicate(true)
 	GameState.proximity_cooldowns = \
 		(data.get("proximity_cooldowns", OPTIONAL_DEFAULTS["proximity_cooldowns"]) \
 			as Dictionary).duplicate(true)
-	# Phase-3 saved state (docs/90-* §8.1). A pre-v3 file reaches here only via
-	# the `2 → 3` migration, but a hand-written v3 file may omit them: the
-	# documented defaults keep those loads working (§8.1 "Default when absent").
+	# Phase-3 saved state (docs/90-* §8.1), same optional-with-documented-default
+	# rule as the Phase-2 pair above.
 	GameState.fame = maxi(0, int(data.get("fame", OPTIONAL_DEFAULTS["fame"])))
 	GameState.titles = _rank_map(data.get("titles",
 		OPTIONAL_DEFAULTS["titles"]))
@@ -758,7 +602,8 @@ func _apply(data: Dictionary) -> void:
 	GameState.retired = bool(data.get("retired", OPTIONAL_DEFAULTS["retired"]))
 	GameState.retired_at = int(data.get("retired_at",
 		OPTIONAL_DEFAULTS["retired_at"]))
-	# The superseded Phase-1 placeholder is never saved from v3 on (§8.1).
+	# The superseded `quests` placeholder is never saved (§8.1: `active_quests`
+	# is the one quest list) and is cleared on load even if a payload carries it.
 	GameState.quests = []
 	# docs/20-* §4.12: explored tiles are not part of the save (known Phase-1
 	# limitation); the minimap re-reveals from the loaded position.

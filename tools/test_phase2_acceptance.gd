@@ -8,9 +8,9 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise.
 ##
 ## **What makes this an acceptance test rather than another unit suite.** Every
-## scenario starts from a real **Phase-1 file on disk** (`save_version: 1`,
-## written the way a 1.0 build wrote it), loads it through `SaveSystem.load()`
-## so the v1 → v2 migration actually runs, then drives the *shipped* path:
+## scenario starts from a real **save file on disk** (the current
+## `save_version`, written by a plain JSON dump exactly as `SaveSystem.save()`
+## would), loads it through `SaveSystem.load()`, then drives the *shipped* path:
 ## `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
 ## fight (its buttons for the player, `AiFleet` for the enemy), and the §4.12.4
 ## battle-end sequence for the aftermath. Nothing here calls `BattleResult` /
@@ -30,7 +30,7 @@ extends Node
 ##                                 empty fleet
 ##
 ## Every scenario also asserts the save → load → battle → save round trip
-## (`save_version == 2` on disk, reload succeeds).
+## (`save_version == SaveSystem.SAVE_VERSION` on disk, reload succeeds).
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved into
 ## memory and written back at the end; every file this suite creates is removed
@@ -101,16 +101,16 @@ func _connect_game_over() -> void:
 
 
 # ===========================================================================
-# S1 — start a Phase-1 save, meet a pirate, win by cannons
+# S1 — start from a save, meet a pirate, win by cannons
 # ===========================================================================
 
 func _scenario_cannon_victory() -> void:
-	print("\n=== S1: win by cannons (Phase-1 save → pirate contact → victory) ===")
+	print("\n=== S1: win by cannons (save → pirate contact → victory) ===")
 	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 30,
 		"provisions": 40, "water": 40}),
 		_ship("brigantine", {"cannons": 10, "crew": 30})]
-	_check(_start_from_phase1_save("S1", fleet, RUN_DAY, 5000, 12),
-		"S1: the Phase-1 save loads and the v1→v2 migration runs")
+	_check(_start_from_save("S1", fleet, RUN_DAY, 5000, 12),
+		"S1: the save loads")
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -275,8 +275,8 @@ func _scenario_boarding_capture() -> void:
 	_check(run_day > 0,
 		"S2: a fixture day whose §4.11.1 duel stream is a player win exists (%d)"
 		% run_day)
-	_check(_start_from_phase1_save("S2", fleet, run_day, save_gold, 12),
-		"S2: the Phase-1 save loads (v1→v2 migration)")
+	_check(_start_from_save("S2", fleet, run_day, save_gold, 12),
+		"S2: the save loads")
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -378,8 +378,8 @@ func _scenario_full_fleet_capture() -> void:
 	_check(run_day > 0,
 		"S2b: a full-fleet day whose §4.11.1 duel stream is a player win exists (%d)"
 		% run_day)
-	_check(_start_from_phase1_save("S2b", fleet, run_day, save_gold, 12),
-		"S2b: a 5-ship Phase-1 save loads")
+	_check(_start_from_save("S2b", fleet, run_day, save_gold, 12),
+		"S2b: a 5-ship save loads")
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -447,8 +447,8 @@ func _scenario_retreat() -> void:
 	print("\n=== S3: retreat ===")
 	var fleet: Array = [_ship("caravel", {"cannons": 4, "crew": 15,
 		"provisions": 20, "water": 20})]
-	_check(_start_from_phase1_save("S3", fleet, RUN_DAY, 5000, 10),
-		"S3: the Phase-1 save loads (v1→v2 migration)")
+	_check(_start_from_save("S3", fleet, RUN_DAY, 5000, 10),
+		"S3: the save loads")
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -556,8 +556,8 @@ func _scenario_last_ship_captured() -> void:
 	_check(run_day > 0,
 		"S4: a fixture day whose §4.11.1 duel stream is a player loss exists (%d)"
 		% run_day)
-	_check(_start_from_phase1_save("S4", fleet, run_day, save_gold, 1),
-		"S4: the Phase-1 save loads (v1→v2 migration)")
+	_check(_start_from_save("S4", fleet, run_day, save_gold, 1),
+		"S4: the save loads")
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -641,18 +641,18 @@ func _scenario_last_ship_captured() -> void:
 
 
 # ===========================================================================
-# Phase-1 save fixture (docs/90-* §8.1) + load path (docs/90-* §8.2)
+# Save fixture (docs/90-* §8.1) + load path (docs/90-* §8.2)
 # ===========================================================================
 
-## A Phase-1 payload exactly as a 1.0 build wrote it: every §8.1 key, `phase: 1`,
-## no Phase-2 field (`hostile_fleets`, `proximity_cooldowns`, any `equipment`
-## block). Written to `user://saves/save_1.json` and loaded through
-## `SaveSystem.load(1)`, so the shipped `MIGRATIONS[1]` step is what upgrades it.
-func _phase1_payload(fleet: Array, day: int, gold: int, combat: int) -> Dictionary:
+## A complete current-version payload (`save_version` 4, every §8.1 key) at sea.
+## Written to `user://saves/save_1.json` and loaded through
+## `SaveSystem.load(1)` — the shipped path, with no migration involved
+## (docs/90-* §8.2 development-stage scope: there is no migration chain).
+func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Dictionary:
 	return {
-		"save_version": 1,
+		"save_version": SaveSystem.SAVE_VERSION,
 		"saved_at": 1793119712,
-		"phase": 1,
+		"phase": SaveSystem.PHASE,
 		"locale": "en",
 		"day": day,
 		"gold": gold,
@@ -675,19 +675,41 @@ func _phase1_payload(fleet: Array, day: int, gold: int, combat: int) -> Dictiona
 		"world": {
 			"position": {"x": CONTACT.x, "y": CONTACT.y},
 			"weather": "fair",
+			"map_id": SaveSystem.DEFAULT_MAP_ID,
 		},
 		"current_port": null,
 		"known_ports": ["lisbon", "london", "seville", "amsterdam"],
 		"port_investments": {},
-		"quests": [],
 		"discoveries_found": [],
+		# The Phase-2/3 state blocks every current-version save carries
+		# (docs/90-* §8.1). A fresh fixture starts them at their defaults.
+		"hostile_fleets": [],
+		"proximity_cooldowns": {},
+		"fame": 0,
+		"titles": _nation_map("none"),
+		"bounties": {},
+		"active_quests": [],
+		"completed_royal_missions": _nation_map(0),
+		"discoveries_reported": [],
+		"discovery_hints": {},
+		"battles_won": 0,
+		"retired": false,
+		"retired_at": 0,
 	}
 
 
-func _start_from_phase1_save(label: String, fleet: Array, day: int, gold: int,
+## `{nation_id: value}` over `data/nations.json` (the §8.1 map-shaped keys).
+func _nation_map(value) -> Dictionary:
+	var out: Dictionary = {}
+	for entry in DataLoader.nations_list:
+		out[str(entry.get("id", ""))] = value
+	return out
+
+
+func _start_from_save(label: String, fleet: Array, day: int, gold: int,
 		combat: int) -> bool:
 	_ensure_slot_dir()
-	var payload := _phase1_payload(fleet, day, gold, combat)
+	var payload := _current_payload(fleet, day, gold, combat)
 	var file := FileAccess.open(SaveSystem.slot_path(1), FileAccess.WRITE)
 	if file == null:
 		return false
@@ -697,14 +719,13 @@ func _start_from_phase1_save(label: String, fleet: Array, day: int, gold: int,
 	_clobber_state()
 	var loaded: bool = SaveSystem.load(1)
 	_check(loaded and SaveSystem.last_read_error.is_empty(),
-		"%s: SaveSystem.load(1) restored the Phase-1 file (%s)"
+		"%s: SaveSystem.load(1) restored the save file (%s)"
 		% [label, SaveSystem.last_read_error])
 	_check(GameState.day == day and GameState.gold == gold,
-		"%s: the save's day/gold survive the migration (%d/%d)" % [label, day, gold])
-	_check(GameState.player.get("equipment") != null
-			and GameState.fleet.size() == fleet.size()
+		"%s: the save's day/gold restore exactly (%d/%d)" % [label, day, gold])
+	_check(GameState.fleet.size() == fleet.size()
 			and (GameState.fleet[0] as Dictionary).has("equipment"),
-		"%s: the v1→v2 migration added the equipment blocks" % label)
+		"%s: the fleet and its equipment blocks restore" % label)
 	return loaded
 
 
@@ -940,6 +961,8 @@ func _ship(ship_type_id: String, overrides: Dictionary = {}) -> Dictionary:
 		"water": 0,
 		"cannons": 0,
 		"cargo": {},
+		# The §4.11.12 equipment block every current-version ship carries.
+		"equipment": {"figurehead": "", "sail": ""},
 	}
 	for key in overrides:
 		ship[key] = overrides[key]

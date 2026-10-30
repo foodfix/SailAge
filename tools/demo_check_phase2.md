@@ -231,3 +231,20 @@ suite stays at **87 checks**, and no other Phase-1 assertion was touched.
       to the title with no save written.
 - [ ] A full run in zh: no `<key>` literal and no English leaking through.
 - [ ] No console `SCRIPT ERROR` for the whole session.
+
+---
+
+## Post-Phase-4 note (task L, save v4)
+
+This record is the **Phase-2 gate** and is kept as history. Two of its facts
+moved in Phase 4:
+
+- The fixture is a current-version (`save_version` 4) payload rather than a
+  `save_version: 1` file, because pre-release saves need not load (`90-*` §8.2
+  development-stage scope) and the `1 → 2` migration was deleted.
+- The map is the single generated world (`data/maps/world.png`); the Phase-1
+  ASCII map no longer exists.
+
+`tools/test_phase2_acceptance.tscn` still passes (`ALL PASS (142 checks)`);
+`tools/test_save_v2.tscn` was deleted and its coverage folded into
+`tools/test_save_v4.tscn`.
