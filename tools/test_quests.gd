@@ -145,10 +145,9 @@ func _test_offer_shapes() -> void:
 	var origin: Dictionary = DataLoader.get_port("lisbon")
 	var dest: Dictionary = DataLoader.get_port(
 		str((offer["requirements"] as Dictionary)["dest_port_id"]))
-	var from := Vector2i(int((origin["position"] as Dictionary)["x"]),
-		int((origin["position"] as Dictionary)["y"]))
-	var to := Vector2i(int((dest["position"] as Dictionary)["x"]),
-		int((dest["position"] as Dictionary)["y"]))
+	# Phase 4: a port's tile is derived from lat/lon, never stored.
+	var from: Vector2i = DataLoader.port_cell(str(origin.get("id", "")))
+	var to: Vector2i = DataLoader.port_cell(str(dest.get("id", "")))
 	var distance := maxi(absi(from.x - to.x), absi(from.y - to.y))
 	_check(distance >= 3 and distance <= 60,
 		"the delivery distance is inside [3, 60] (got %d)" % distance)
@@ -571,9 +570,8 @@ func _test_world_hooks() -> void:
 	GameState.day = 12
 	# Stand on the destination harbor tile and let the map's own `_enter_port`
 	# sequence run (routing disabled: no scene swap).
-	var dest_port: Dictionary = DataLoader.get_port(dest)
-	var cell := Vector2i(int((dest_port["position"] as Dictionary)["x"]),
-		int((dest_port["position"] as Dictionary)["y"]))
+	# Phase 4: the destination's harbour tile is derived from lat/lon.
+	var cell: Vector2i = DataLoader.port_cell(str(dest))
 	GameState.set_world_tile(cell)
 	var world: Node2D = WorldScene.instantiate()
 	world.route_to_port = false

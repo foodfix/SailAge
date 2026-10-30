@@ -9,14 +9,18 @@ extends Node
 ##
 ## Sections: 1 new-game capitals, 2 sighting radius + Chebyshev boundary,
 ## 3 discover-then-enter, 4 Set Sail round trip through the real scenes,
-## 5 minimap geometry/explored-only/nation dots, 6 desertion hook, 7 dialog
-## order at entry.
+## 5 minimap crop (geometry/explored-only/nation dots), 5b the dateline crop,
+## 5c the Chart screen S17 (layers, scale, `Tab`/`Esc`, open budget, the
+## zero-explored edge case), 5d minimap/chart identity + the discovery reveal at
+## 18, 6 desertion hook, 7 dialog order at entry.
 
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const HUDScene := preload("res://scenes/ui_shared/hud.tscn")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
@@ -78,6 +82,12 @@ func _ready() -> void:
 	_test_port_screen_standalone()
 	await _settle()
 	_test_minimap()
+	await _settle()
+	_test_dateline_crop()
+	await _settle()
+	await _test_chart_screen()
+	await _settle()
+	await _test_minimap_chart_identity()
 	await _settle()
 	_test_desertion_hook()
 	await _settle()
@@ -513,12 +523,13 @@ func _test_port_screen_standalone() -> void:
 	host.queue_free()
 
 
-# --- 5. Minimap ----------------------------------------------------------
+# --- 5. Minimap crop (docs/20-* §4.12, docs/80-* §4.5 as amended) --------
+
 func _test_minimap() -> void:
 	_make_run(10, OPEN_CELL)
 	# The world scene owns exploration (§4.11/§4.12); spawn it first so the
 	# explored set is populated exactly as it is at sea, then exercise the HUD
-	# chart against that real set.
+	# minimap crop against that real set.
 	var spawned: Array = _spawn_world()
 	var world = spawned[1]
 	_check(GameState.explored_tiles.has(OPEN_CELL),
@@ -531,79 +542,55 @@ func _test_minimap() -> void:
 	host.add_child(hud)
 	hud.set_fleet_cell(OPEN_CELL)
 
-	# Geometry: 256×192 at 2 px/tile, `M` → 512×384 centered.
+	# Geometry: a fixed 256×192 box at 2 px/tile = a 128×96-tile **crop**
+	# (docs/80-* §4.5, docs/20-* §4.12). Phase 4 deleted the `M` enlarged mode,
+	# so the cached image is the crop box, never a whole-world image.
 	_check(hud.minimap_rect().size == Vector2(256, 192),
 		"minimap is 256×192 (got %s)" % str(hud.minimap_rect().size))
 	_check(hud.minimap_px_per_tile() == 2,
 		"minimap draws 2 px per tile (got %d)" % hud.minimap_px_per_tile())
-	# Re-anchored in task G: the HUD still builds a whole-world chart at 2 px per
-	# tile (2160×1080 → 4320×2160). The 128×96-tile crop around the fleet
-	# (`20-*` §4.12 as amended) is task J's re-spec, which owns `hud.tscn`; the
-	# assertion's intent — "2 px/tile over the loaded grid, not a stale size" —
-	# is unchanged and now measures the real 2160×1080 world.
-	_check(hud.minimap_image_size() == Vector2i(2160 * 2, 1080 * 2),
-		"the chart image covers the 2160×1080 grid at 2 px/tile (got %s)"
+	_check(hud.minimap_crop_tiles() == Vector2i(128, 96),
+		"the crop is 128×96 tiles (got %s)" % str(hud.minimap_crop_tiles()))
+	_check(hud.minimap_image_size() == Vector2i(256, 192),
+		"the cached image is the 256×192 crop, not the whole world (got %s)"
 		% str(hud.minimap_image_size()))
 	_check(hud.minimap_rect().position == Vector2(
 		PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN),
 		"minimap sits under the top bar at the 16px margin (got %s)"
 		% str(hud.minimap_rect().position))
+	# The crop is centred on the fleet: 128 wide → origin = fleet.x − 64.
+	_check(hud.minimap_crop_origin() == OPEN_CELL - Vector2i(64, 48),
+		"the crop is centred on the fleet (origin %s)"
+		% str(hud.minimap_crop_origin()))
+
+	# `M` is gone (`80-*` §4.3): its toggle is a no-op and the seam that
+	# `world_map.gd::_modal_open()` still probes reports false, so the minimap
+	# never blocks movement the way the old enlarged overlay did.
 	hud.toggle_minimap()
-	_check(hud.minimap_rect().size == Vector2(512, 384),
-		"`M` enlarges the chart to 512×384 (got %s)" % str(hud.minimap_rect().size))
-	_check(hud.minimap_rect().position == Vector2(384, 168),
-		"the enlarged chart is centered in 1280×720 (got %s)"
-		% str(hud.minimap_rect().position))
-	_check(hud.is_minimap_enlarged(), "is_minimap_enlarged() follows the toggle")
-
-	# Enlarged mode is a modal overlay: movement must not step the fleet behind
-	# it (docs/80-* §4.3, §6 "modals consume all input"). The world scene's own
-	# HUD is the one movement consults.
-	var world_hud = world.get_node("HUDLayer/HUD")
-	world_hud.toggle_minimap()
-	var cell_before: Vector2i = world.fleet_cell()
-	var move := InputEventAction.new()
-	move.action = "move_e"
-	move.pressed = true
-	world._unhandled_input(move)
-	_check(world.fleet_cell() == cell_before,
-		"movement is blocked while the enlarged chart is open (got %s)"
-		% str(world.fleet_cell()))
-	world_hud.toggle_minimap()
-	_check(not world_hud.is_minimap_enlarged(), "the world's chart closes again")
-
-	# `Esc` closes the enlarged chart (docs/80-* §4.3).
-	var esc := InputEventAction.new()
-	esc.action = "back"
-	esc.pressed = true
-	hud._unhandled_input(esc)
-	_check(not hud.is_minimap_enlarged(),
-		"Esc closes the enlarged chart (got enlarged=%s)"
-		% str(hud.is_minimap_enlarged()))
 	_check(hud.minimap_rect().size == Vector2(256, 192),
-		"closing restores 256×192 (got %s)" % str(hud.minimap_rect().size))
+		"the retired `M` toggle leaves the box at 256×192 (got %s)"
+		% str(hud.minimap_rect().size))
+	_check(not hud.is_minimap_enlarged(),
+		"is_minimap_enlarged() is the always-false Phase-4 shim")
+	var world_hud = world.get_node("HUDLayer/HUD")
+	_check(not world_hud.is_minimap_enlarged(),
+		"the world scene's HUD reports no enlarged mode either")
+	_check(not world._modal_open(),
+		"the minimap is no longer a modal overlay (movement is not blocked)")
 
-	# `M` toggles it too, through the HUD's own input path.
-	var m_key := InputEventAction.new()
-	m_key.action = "toggle_minimap"
-	m_key.pressed = true
-	hud._unhandled_input(m_key)
-	_check(hud.is_minimap_enlarged(), "`M` re-opens the enlarged chart")
-	hud._unhandled_input(m_key)
-	_check(not hud.is_minimap_enlarged(), "`M` closes it again")
-
-	# Explored-only: the fleet tile is painted, a far tile stays fog.
-	_check(hud.minimap_pixel_color(OPEN_CELL)
-		== PaletteLib.SEA,
+	# Explored-only: the fleet tile is painted, an explored-square hole stays fog.
+	_check(hud.minimap_pixel_color(OPEN_CELL) == PaletteLib.SEA,
 		"an explored sea tile is painted SEA (got %s)"
 		% str(hud.minimap_pixel_color(OPEN_CELL)))
 	var radius: int = CharacterLib.sighting_radius()
-	_check(not GameState.explored_tiles.has(OPEN_CELL + Vector2i(radius + 1, 0)),
+	var beyond := OPEN_CELL + Vector2i(radius + 1, 0)
+	_check(not GameState.explored_tiles.has(beyond),
 		"a tile beyond the sighting radius is not explored")
-	_check(hud.minimap_pixel_color(OPEN_CELL + Vector2i(radius + 1, 0))
-		== PaletteLib.PANEL_BG,
-		"an unexplored tile stays panel background (got %s)"
-		% str(hud.minimap_pixel_color(OPEN_CELL + Vector2i(radius + 1, 0))))
+	_check(hud.minimap_contains(beyond),
+		"that tile is still inside the 128×96 crop (so the check is sharp)")
+	_check(hud.minimap_pixel_color(beyond) == PaletteLib.PANEL_BG,
+		"an unexplored tile inside the crop stays panel background (got %s)"
+		% str(hud.minimap_pixel_color(beyond)))
 	# A land tile inside the square is painted LAND, not SEA.
 	var land_cell := Vector2i(-1, -1)
 	for dy in range(-radius, radius + 1):
@@ -620,7 +607,7 @@ func _test_minimap() -> void:
 			"explored land is painted LAND (got %s)"
 			% str(hud.minimap_pixel_color(land_cell)))
 
-	# Growth on movement; far tiles stay unexplored.
+	# Growth on movement; far tiles stay unexplored and outside the crop.
 	var before: int = GameState.explored_tiles.size()
 	var next_cell := OPEN_CELL + Vector2i(1, 0)
 	_check(world.try_step(next_cell), "the fixture step succeeds")
@@ -631,13 +618,13 @@ func _test_minimap() -> void:
 		"a tile outside the radius of every visited tile stays unexplored")
 	hud.set_fleet_cell(next_cell)
 	_check(hud.minimap_pixel_color(next_cell) == PaletteLib.SEA,
-		"the chart follows the fleet onto the new tile")
+		"the crop follows the fleet onto the new tile")
 
 	# Known-port dots: nation colors, known ports only.
 	GameState.known_ports = ["lisbon", "valencia"]
 	var dots: Array = hud.minimap_known_ports()
 	_check(dots.size() == 2,
-		"the chart draws one dot per known port (got %d)" % dots.size())
+		"the minimap draws one dot per known port (got %d)" % dots.size())
 	var by_id: Dictionary = {}
 	for entry in dots:
 		by_id[str(entry["port_id"])] = entry
@@ -659,6 +646,11 @@ func _test_minimap() -> void:
 			== PaletteLib.nation_color(str(nation2["color"])),
 			"valencia's dot uses Spain's nation color (got %s)"
 			% str(by_id["valencia"]["color"]))
+	# A port outside the crop is still listed (the layer is world-wide) but its
+	# dot is not drawn — `minimap_contains()` is the single placement rule, and
+	# the known set itself is untouched.
+	_check(not hud.minimap_contains(LISBON),
+		"lisbon is outside this crop, so its dot is not drawn (layer stays whole)")
 	GameState.known_ports = ["lisbon"]
 	_check(hud.minimap_known_ports().size() == 1,
 		"an unknown port gets no dot (only known ports are drawn)")
@@ -678,6 +670,408 @@ func _test_minimap() -> void:
 
 	spawned[0].queue_free()
 	host.queue_free()
+
+
+# --- 5b. The dateline crop (docs/20-* §4.12) ------------------------------
+
+## Fleet at the eastern edge: the crop must wrap to `x = 0` with no void and no
+## duplicated column. The grid is 2160 wide and the crop 128, so the window is
+## `[2095..2159] ∪ [0..62]` (fleet on column 64) — the doc's "`[2032..2159]`
+## then `[0..k]`" union shape, with the fleet centred rather than at the right
+## edge (`20-*` §4.5/§4.12: "a … crop **around** the fleet").
+func _test_dateline_crop() -> void:
+	_make_run(10, Vector2i(2159, 172))
+	GameState.explored_tiles = {}
+	for cell in [Vector2i(2159, 172), Vector2i(0, 172), Vector2i(1, 172),
+			Vector2i(5, 172), Vector2i(62, 172)]:
+		GameState.explored_tiles[cell] = true
+
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	var hud = HUDScene.instantiate()
+	host.add_child(hud)
+	hud.set_fleet_cell(Vector2i(2159, 172))
+
+	_check(hud.minimap_crop_origin().x == 2095,
+		"fleet x=2159: the crop starts at x=2095 (2159 − 64; got %d)"
+		% hud.minimap_crop_origin().x)
+	var columns: Array = hud.minimap_crop_columns()
+	_check(columns.size() == 128,
+		"the crop has 128 columns (got %d)" % columns.size())
+	if columns.size() == 128:
+		_check(columns[64] == 2159,
+			"column 64 (the fleet's) is x=2159 (got %s)" % str(columns[64]))
+		_check(columns[65] == 0,
+			"column 65 wraps to x=0 (got %s)" % str(columns[65]))
+		_check(columns[0] == 2095,
+			"the crop's first column is x=2095 (got %s)" % str(columns[0]))
+		_check(columns[127] == 62,
+			"the crop's last column is x=62, so k = 62 (got %s)" % str(columns[127]))
+		var unique: Dictionary = {}
+		var contiguous := true
+		for index in columns.size():
+			unique[int(columns[index])] = true
+			if index > 0:
+				var expected := posmod(int(columns[index - 1]) + 1, 2160)
+				if int(columns[index]) != expected:
+					contiguous = false
+		_check(unique.size() == 128,
+			"the 128 crop columns are all distinct, no duplicate at the seam (got %d)"
+			% unique.size())
+		_check(contiguous,
+			"the crop columns are contiguous across the seam (no void, no gap)")
+		# The union the doc names: everything east of the fleet, then x=0..k.
+		var east := columns.slice(0, 65)
+		var west := columns.slice(65)
+		_check(east[0] == 2095 and east[east.size() - 1] == 2159,
+			"the eastern half is x∈[2095..2159] (got [%s..%s])"
+			% [str(east[0]), str(east[east.size() - 1])])
+		_check(west[0] == 0 and west[west.size() - 1] == 62,
+			"the western half is x∈[0..62] (got [%s..%s])"
+			% [str(west[0]), str(west[west.size() - 1])])
+
+	# Pixel-level: tiles on both sides of the seam really are painted, and a
+	# crop column just past k is not in the crop at all.
+	for cell in [Vector2i(2159, 172), Vector2i(0, 172), Vector2i(1, 172),
+			Vector2i(5, 172), Vector2i(62, 172)]:
+		_check(hud.minimap_contains(cell),
+			"%s is inside the dateline crop" % str(cell))
+		_check(hud.minimap_pixel_color(cell) != PaletteLib.PANEL_BG,
+			"%s is painted on the minimap (got %s)"
+			% [str(cell), str(hud.minimap_pixel_color(cell))])
+	_check(not hud.minimap_contains(Vector2i(63, 172)),
+		"x=63 is outside the crop (k = 62)")
+	_check(not hud.minimap_contains(Vector2i(2094, 172)),
+		"x=2094 is outside the crop (it starts at 2095)")
+
+	host.queue_free()
+
+
+
+# --- 5c. Chart screen S17 (docs/80-* §4.6, §4.3) --------------------------
+
+## The whole-world Chart: layers, scale, the zero-explored edge case, and the
+## `Tab`/`Esc` round trip from S3 with the fleet and clock untouched.
+func _test_chart_screen() -> void:
+	# --- The reveal at 24 tiles shows up as a known-port dot on the chart ---
+	# Valencia at Chebyshev 24 from the fleet is exactly the sighting boundary
+	# (`20-*` §4.11, radius 24): the ready reveal knows it, so the chart must
+	# draw its nation dot.
+	_make_run(10, VALENCIA_D24)
+	_check(not GameState.known_ports.has("valencia"),
+		"fixture: valencia starts unknown")
+	var spawned: Array = _spawn_world()
+	var world = spawned[1]
+	_check(GameState.known_ports.has("valencia"),
+		"the ready reveal at Chebyshev 24 discovers valencia (§4.11)")
+	var chart = world.get_node_or_null("HUDLayer/ChartScreen")
+	_check(chart != null, "world_map.tscn instances the Chart (S17) over S3")
+	if chart == null:
+		spawned[0].queue_free()
+		return
+	_check(not chart.is_open(), "the chart starts closed on S3")
+	chart.open_chart()
+	_check(chart.is_open(), "open_chart() shows the chart")
+	var markers: Array = chart.port_markers()
+	var marker_ids: Array = []
+	for entry in markers:
+		marker_ids.append(str(entry["port_id"]))
+	_check(marker_ids.has("valencia"),
+		"the port revealed at 24 tiles is a dot on the chart (got %s)"
+		% str(marker_ids))
+	_check(markers.size() == GameState.known_ports.size(),
+		"the chart's known-port set is exactly the session's (chart %d, session %d)"
+		% [markers.size(), GameState.known_ports.size()])
+	# Nation colour, from the same shared layer the minimap uses.
+	var valencia_dot: Dictionary = {}
+	for entry in markers:
+		if str(entry["port_id"]) == "valencia":
+			valencia_dot = entry
+	var valencia: Dictionary = DataLoader.get_port("valencia")
+	var spain: Dictionary = DataLoader.get_nation(str(valencia["nation_id"]))
+	_check(not valencia_dot.is_empty()
+		and valencia_dot["color"] == PaletteLib.nation_color(str(spain["color"])),
+		"valencia's chart dot uses Spain's nation color")
+	_check((valencia_dot.get("cell", Vector2i(-1, -1)) as Vector2i) == VALENCIA_HARBOR,
+		"valencia's chart dot sits on its harbor tile")
+
+	# --- Whole world downscaled to fit (`80-*` §4.6) -----------------------
+	_check(chart.world_image_size() == Vector2i(2160, 1080),
+		"the chart builds the whole 2160×1080 grid (got %s)"
+		% str(chart.world_image_size()))
+	var scale: float = chart.chart_scale()
+	_check(scale > 0.5 and scale < 0.6,
+		"1280×720 fits the world at ≈0.55× (got %.3f)" % scale)
+	var rect: Rect2 = chart.world_rect()
+	var view := Vector2(1280, 720)
+	_check(rect.position.y >= PaletteLib.TOP_BAR_H
+		and rect.end.y <= view.y - PaletteLib.BOTTOM_BAR_H,
+		"the world sits between the 40px top and 32px legend bars (%s)" % str(rect))
+	_check(rect.position.x >= 0.0 and rect.end.x <= view.x,
+		"the world fits horizontally with no scrolling (%s)" % str(rect))
+	_check(is_equal_approx(rect.size.x / 2160.0, rect.size.y / 1080.0),
+		"the downscale keeps the grid's aspect ratio (no distortion)")
+	_check(chart.display_size().x <= int(view.x) and chart.display_size().y <= int(view.y),
+		"the drawn texture fits the viewport (got %s)" % str(chart.display_size()))
+	# Names only at zoom (§4.6); task-owned threshold.
+	_check(not chart.labels_visible(),
+		"at 0.55× the chart draws dots only, no names (§4.6 'names at zoom')")
+	_check(chart.names_shown(1.0) and not chart.names_shown(0.5),
+		"the name threshold turns names on only when the world is drawn large")
+
+	# --- Every label comes from `chart.*` (docs/80-* §4.7.5) --------------
+	I18n.set_locale("en")
+	var english: Array = chart.legend_texts()
+	_check(english.size() == 6, "the chart has 6 visible strings (got %d)"
+		% english.size())
+	var bad: Array = []
+	for text in english:
+		if str(text).begins_with("<"):
+			bad.append(str(text))
+	_check(bad.is_empty(), "no `<key>` fallback in the English chart (got %s)" % str(bad))
+	I18n.set_locale("zh")
+	var chinese: Array = chart.legend_texts()
+	bad = []
+	for text in chinese:
+		if str(text).begins_with("<"):
+			bad.append(str(text))
+	_check(bad.is_empty(), "no `<key>` fallback in the Chinese chart (got %s)" % str(bad))
+	_check(chinese != english, "the chart rebinds its labels on locale_changed")
+	I18n.set_locale("en")
+	_check(chart.legend_texts() == english, "toggling back restores the English labels")
+	# The keys themselves exist in both locales (the `<key>` contract).
+	var chart_keys := [
+		"chart.title", "chart.close", "chart.hint", "chart.legend.port",
+		"chart.legend.fleet", "chart.legend.discovery",
+	]
+	for key in chart_keys:
+		var l10n: Dictionary = DataLoader.ui_strings.get(key, {})
+		_check(not l10n.is_empty()
+			and not str(l10n.get("zh", "")).is_empty()
+			and not str(l10n.get("en", "")).is_empty(),
+			"%s exists in both locales (§4.7.5)" % key)
+
+	# --- `Tab`/`Esc` round trip: fleet and clock untouched (§4.6) ---------
+	chart.close_chart()
+	var cell_before: Vector2i = world.fleet_cell()
+	var clock_before := float(GameState.world["clock_fraction"])
+	var tab := InputEventKey.new()
+	tab.physical_keycode = KEY_TAB
+	tab.pressed = true
+	chart._unhandled_input(tab)
+	_check(chart.is_open(), "`Tab` opens the chart from S3 (§4.3)")
+	_check(world._modal_open(),
+		"the open chart is a modal: the world scene's _modal_open() is true")
+	var move := InputEventAction.new()
+	move.action = "move_e"
+	move.pressed = true
+	world._unhandled_input(move)
+	_check(world.fleet_cell() == cell_before,
+		"movement is blocked while the chart is open (fleet %s)"
+		% str(world.fleet_cell()))
+	var esc := InputEventAction.new()
+	esc.action = "back"
+	esc.pressed = true
+	chart._unhandled_input(esc)
+	_check(not chart.is_open(), "`Esc` closes the chart (§4.3)")
+	_check(not world._modal_open(), "closing the chart releases the modal block")
+	_check(world.fleet_cell() == cell_before,
+		"the fleet is unmoved by the chart round trip (%s)" % str(world.fleet_cell()))
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock_before),
+		"the clock is untouched by the chart round trip (%.4f → %.4f)"
+		% [clock_before, float(GameState.world["clock_fraction"])])
+	# `Tab` closes it too (§4.2: "S3 ──Tab──► S17 ──Esc/Tab──► S3").
+	chart._unhandled_input(tab)
+	_check(chart.is_open(), "`Tab` re-opens the chart")
+	chart._unhandled_input(tab)
+	_check(not chart.is_open(), "`Tab` closes it again")
+	# ... and through the real input tree, not just a direct method call: a
+	# `Tab` key pushed into the viewport must reach the chart's handler with the
+	# HUD and the world scene also listening.
+	get_viewport().push_input(tab)
+	await get_tree().process_frame
+	_check(chart.is_open(),
+		"a viewport-routed `Tab` key opens the chart (real input path)")
+	if chart.is_open():
+		get_viewport().push_input(esc)
+		await get_tree().process_frame
+	_check(not chart.is_open(), "a viewport-routed `Esc` closes it")
+	# `Tab` does nothing while a HUD dialog is up (§6 edge case).
+	var hud = world.get_node("HUDLayer/HUD")
+	hud.show_dialog("ui.saved")
+	chart._unhandled_input(tab)
+	_check(not chart.is_open(), "`Tab` does nothing while a modal is up (§6)")
+	_drain_dialogs(hud)
+
+	# --- Open budget < 0.5 s (`80-*` §4.6) --------------------------------
+	chart.open_chart()
+	var open_ms: float = chart.last_open_ms()
+	_check(open_ms > 0.0, "the chart reports its measured open time (%.1f ms)" % open_ms)
+	_check(open_ms < 500.0,
+		"chart open (build + first frame) is < 0.5 s (measured %.1f ms)" % open_ms)
+	chart.close_chart()
+
+	# --- Zero explored tiles: a fresh run still renders (§6 edge case) ----
+	GameState.explored_tiles = {}
+	chart.open_chart()
+	var painted: Dictionary = {}
+	var all_unknown := true
+	for cell in [Vector2i(0, 0), Vector2i(1080, 540), Vector2i(2159, 1079),
+			VALENCIA_HARBOR, Vector2i(900, 330)]:
+		if chart.world_pixel_color(cell) != PaletteLib.PANEL_BG:
+			all_unknown = false
+			painted[str(cell)] = str(chart.world_pixel_color(cell))
+	_check(all_unknown,
+		"zero explored tiles → the chart is all PANEL_BG fog (painted %s)" % str(painted))
+	_check(not chart.port_markers().is_empty(),
+		"the zero-explored chart still draws its known ports (§6)")
+	_check(chart.fleet_cell() == world.fleet_cell(),
+		"the zero-explored chart still knows where the fleet is (%s)"
+		% str(chart.fleet_cell()))
+	chart.close_chart()
+
+	spawned[0].queue_free()
+
+
+# --- 5d. Minimap/chart identity + discovery reveal at 18 ------------------
+
+## The §J acceptance: explored tiles appear **identically** on the minimap and
+## the chart, and a discovery revealed at Chebyshev 18 shows on the chart.
+func _test_minimap_chart_identity() -> void:
+	# disc_atlas_cedars sits at (1023,347); (1005,329) is exactly Chebyshev 18
+	# away and is open water, so the Explore radius (§4.4) is exercised at its
+	# boundary.
+	var target: Vector2i = DiscoveryLib.position_of("disc_atlas_cedars")
+	var at_18 := Vector2i(1005, 329)
+	var at_19 := Vector2i(1004, 328)
+	_check(target == Vector2i(1023, 347),
+		"disc_atlas_cedars derives to (1023,347) (got %s)" % str(target))
+	_check(maxi(absi(at_18.x - target.x), absi(at_18.y - target.y)) == 18,
+		"the Explore fixture sits at exactly Chebyshev 18")
+	_check(maxi(absi(at_19.x - target.x), absi(at_19.y - target.y)) == 19,
+		"the control fixture sits at Chebyshev 19, outside the radius")
+	_check(DataLoader.map.is_passable(at_18) and DataLoader.map.is_passable(at_19),
+		"the discovery fixtures are open water")
+	_make_run(10, at_18)
+	GameState.discoveries_found = []
+	var spawned: Array = _spawn_world()
+	var world = spawned[1]
+	_check(world.something_near(),
+		"a discovery at exactly Chebyshev 18 is in Explore range (§4.4)")
+	var found: Array = world.explore_here()
+	_check(found.has("disc_atlas_cedars"),
+		"Explore reveals the discovery at 18 tiles (got %s)" % str(found))
+	_drain_dialogs(world.get_node("HUDLayer/HUD"))
+	spawned[0].queue_free()
+
+	# Control: one tile further out (Chebyshev 19) nothing is in range.
+	_make_run(10, at_19)
+	GameState.discoveries_found = []
+	var spawned_b: Array = _spawn_world()
+	_check(not spawned_b[1].something_near(),
+		"Chebyshev 19 is outside the 18-tile discovery radius")
+	spawned_b[0].queue_free()
+
+	# Re-spawn at the boundary with the discovery found, for the chart checks.
+	_make_run(10, at_18)
+	GameState.discoveries_found = ["disc_atlas_cedars"]
+	spawned = _spawn_world()
+	world = spawned[1]
+
+	var chart = world.get_node("HUDLayer/ChartScreen")
+	chart.open_chart()
+	var lead_ids: Array = []
+	for entry in chart.lead_markers():
+		lead_ids.append(str(entry["id"]))
+	_check(lead_ids.has("disc_atlas_cedars"),
+		"the discovery revealed at 18 tiles is a lead cross on the chart (got %s)"
+		% str(lead_ids))
+	var lead_cell := Vector2i(-1, -1)
+	for entry in chart.lead_markers():
+		if str(entry["id"]) == "disc_atlas_cedars":
+			lead_cell = entry["cell"]
+	_check(lead_cell == target,
+		"the lead cross sits on the discovery's tile (%s)" % str(lead_cell))
+	_check(chart.world_pixel_color(target) != PaletteLib.PANEL_BG,
+		"the discovery's tile is explored, so the chart shows terrain there")
+
+	# The chart's explored set == the session's, sampled across the map.
+	var map = DataLoader.map
+	var sampled := 0
+	var mismatches: Array = []
+	for raw_cell in GameState.explored_tiles:
+		if not (raw_cell is Vector2i):
+			continue
+		var cell: Vector2i = raw_cell
+		# The fate of every explored tile is a terrain colour on the chart.
+		if chart.world_pixel_color(cell) == PaletteLib.PANEL_BG \
+				and ChartViewLib.terrain_color(map.terrain_kind(cell)) != PaletteLib.PANEL_BG:
+			mismatches.append(str(cell))
+		sampled += 1
+		if sampled >= 400:
+			break
+	_check(mismatches.is_empty(),
+		"every sampled explored tile is painted on the chart (mismatches %s)"
+		% str(mismatches.slice(0, 3)))
+	# ... and an unexplored tile beyond the sighting square is fog on the chart.
+	var unexplored := at_18 + Vector2i(CharacterLib.sighting_radius() + 2, 0)
+	_check(not GameState.explored_tiles.has(unexplored),
+		"the control tile is unexplored")
+	_check(chart.world_pixel_color(unexplored) == PaletteLib.PANEL_BG,
+		"an unexplored tile is PANEL_BG on the chart, never terrain")
+	chart.close_chart()
+
+	# --- Identity: the same explored tile has the same colour on both views --
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	var hud = HUDScene.instantiate()
+	host.add_child(hud)
+	hud.set_fleet_cell(at_18)
+	var identical := 0
+	var compared := 0
+	var differences: Array = []
+	for raw_cell in GameState.explored_tiles:
+		if not (raw_cell is Vector2i):
+			continue
+		var cell: Vector2i = raw_cell
+		if not hud.minimap_contains(cell):
+			continue
+		compared += 1
+		var minimap_color: Color = hud.minimap_pixel_color(cell)
+		var chart_color: Color = chart.world_pixel_color(cell)
+		if minimap_color == chart_color:
+			identical += 1
+		elif differences.size() < 3:
+			differences.append("%s: minimap %s vs chart %s"
+				% [str(cell), str(minimap_color), str(chart_color)])
+	_check(compared > 0,
+		"the identity sample covers at least one explored tile in the crop (%d)"
+		% compared)
+	_check(identical == compared,
+		"explored tiles are identical on minimap and chart (%d/%d; %s)"
+		% [identical, compared, str(differences)])
+	# Sanity: the shared colour source really is the palette, not a coincidence.
+	_check(hud.minimap_pixel_color(at_18)
+		== ChartViewLib.explored_color(ChartViewLib.palette_colors(DataLoader.map),
+			DataLoader.map, at_18),
+		"both views draw the shared ChartView explored colour for the fleet tile")
+	# The minimap's known-port layer and the chart's are the same list.
+	GameState.known_ports = ["lisbon", "valencia"]
+	chart.open_chart()
+	var minimap_ids: Array = []
+	for entry in hud.minimap_known_ports():
+		minimap_ids.append(str(entry["port_id"]))
+	var chart_ids: Array = []
+	for entry in chart.port_markers():
+		chart_ids.append(str(entry["port_id"]))
+	_check(minimap_ids == chart_ids,
+		"minimap and chart draw the same known ports (%s vs %s)"
+		% [str(minimap_ids), str(chart_ids)])
+	chart.close_chart()
+	host.queue_free()
+	spawned[0].queue_free()
 
 
 # --- 6. Desertion hook at port entry (§4.8.2) -----------------------------

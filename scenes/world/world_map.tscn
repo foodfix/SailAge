@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/world_map.gd" id="1_world"]
 [ext_resource type="PackedScene" path="res://scenes/ui_shared/hud.tscn" id="2_hud"]
+[ext_resource type="PackedScene" path="res://scenes/world/chart_screen.tscn" id="3_chart"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fleet"]
 bg_color = Color(1, 1, 1, 1)
@@ -33,6 +34,13 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_fleet")
 layer = 1
 
 [node name="HUD" parent="HUDLayer" instance=ExtResource("2_hud")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ChartScreen" parent="HUDLayer" instance=ExtResource("3_chart")]
+visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

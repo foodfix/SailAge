@@ -1503,5 +1503,29 @@
   "tournament.not_host": {
     "zh": "本月比武大会在别处举行",
     "en": "This month's tournament is held elsewhere"
+  },
+  "chart.title": {
+    "zh": "海图",
+    "en": "Chart"
+  },
+  "chart.close": {
+    "zh": "关闭海图",
+    "en": "Close the chart"
+  },
+  "chart.hint": {
+    "zh": "已探索海域",
+    "en": "Explored waters"
+  },
+  "chart.legend.port": {
+    "zh": "已知港口",
+    "en": "Known ports"
+  },
+  "chart.legend.fleet": {
+    "zh": "船队",
+    "en": "Fleet"
+  },
+  "chart.legend.discovery": {
+    "zh": "发现物线索",
+    "en": "Discovery leads"
   }
 }

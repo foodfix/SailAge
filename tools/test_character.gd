@@ -371,9 +371,8 @@ func _test_new_game_all_nations() -> void:
 		var pos = GameState.world.get("position", null)
 		_check(pos is Dictionary and pos.has("x") and pos.has("y"),
 			"%s: world.position is a tilePos dict %s" % [nation_id, str(pos)])
-		var expected := Vector2i(
-			int(start_port["position"]["x"]), int(start_port["position"]["y"])
-		)
+		# Phase 4: the start port's harbour tile is derived from lat/lon.
+		var expected: Vector2i = DataLoader.port_cell(str(nation["start_port_id"]))
 		_check(GameState.world_tile() == expected,
 			"%s: world.position == %s (got %s)" % [
 				nation_id, str(expected), str(GameState.world_tile())

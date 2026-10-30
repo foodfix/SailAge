@@ -6,8 +6,11 @@ extends Control
 ## Layout (1280×720):
 ##   * top bar 40px    — day · gold · morale + tier · area · [中文/EN]
 ##   * bottom bar 32px — provisions · water · crew · cargo · speed
-##   * minimap 256×192 (2px per tile, explored tiles only), `M` enlarges it to
-##     512×384 centered; weather label sits underneath (§4.5).
+##   * minimap 256×192 — a **wrap-aware 128×96-tile crop** around the fleet at
+##     2 px/tile, explored tiles only; the weather label sits underneath (§4.5,
+##     `20-*` §4.12). The whole world lives on the separate Chart screen (S17,
+##     `80-*` §4.6, `scenes/world/chart_screen.gd`); the Phase-1 `M` enlarged
+##     minimap is retired (`80-*` §4.3).
 ##
 ## **Update contract.** `_ready` reads GameState once, then every bar is
 ## refreshed *only* from `EventBus` signals — there is no `_process` and no
@@ -23,16 +26,25 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## Shared map-view rules (explored state, terrain colours, port/discovery dots):
+## the minimap crop and the Chart screen must agree by construction
+## (docs/80-* §4.6, docs/20-* §4.12).
+const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
-## docs/80-* §4.5: minimap 256×192 (2 px/tile); `M` → 512×384 centered.
-const MINIMAP_NORMAL := Vector2(256, 192)
-const MINIMAP_ENLARGED := Vector2(512, 384)
-## Minimap port/fleet dots are 2×2 px (§4.12), in both minimap modes.
-const DOT_NORMAL := 2
-## Source pixels per tile in the cached minimap image (docs/20-* §4.12).
+## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
+## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
+const MINIMAP_SIZE := Vector2(256, 192)
 const MINIMAP_PX_PER_TILE := 2
+## The crop size in tiles, derived from the box and the pixel scale (never
+## typed separately, so the two can never disagree).
+const MINIMAP_CROP_TILES := Vector2i(
+	int(MINIMAP_SIZE.x) / MINIMAP_PX_PER_TILE,
+	int(MINIMAP_SIZE.y) / MINIMAP_PX_PER_TILE
+)
+## Minimap port/fleet/discovery dots are 2×2 px (§4.12).
+const DOT_NORMAL := 2
 ## docs/80-* §4.5: "nearest known port within 16 tiles".
 const AREA_RADIUS := 16
 ## docs/80-* §4.7: toasts are transient (2.5s), max one visible.
@@ -78,26 +90,31 @@ signal explore_requested
 ## `GameState.world_tile()`".
 var fleet_cell := Vector2i(-1, -1)
 
-## Cached explored-terrain minimap image (docs/20-* §4.12). Built at the locked
-## 2 px/tile (256×192 = the whole 128×96 grid) and drawn through an
-## `ImageTexture`, so `_draw()` never walks 12k cells per frame. Grows/shrinks
-## with the viewport only when the map (and thus the tile count) changes.
+## Cached minimap crop image (docs/20-* §4.12): 256×192 px = 128×96 tiles at
+## 2 px/tile around the fleet. Rebuilt from `GameState.explored_tiles` whenever
+## a newly explored tile falls inside the current crop, so `_draw()` never walks
+## 12k cells per frame and a normal move usually rebuilds nothing.
 var _minimap_image: Image = null
 var _minimap_texture: ImageTexture = null
-## Cells already painted into [member _minimap_image], so a normal move
-## repaints only the newly revealed ring instead of the whole map.
-var _minimap_painted: Dictionary = {}
-## Identity of the `GameState.explored_tiles` dictionary the cache was painted
-## from. A new game / save load replaces that dict (`explored_tiles = {}`), so
-## identity lets the cache notice it must be repainted from scratch.
-var _minimap_explored: Dictionary = {}
-## Tile dimensions the cached image was built for (a swapped map rebuilds it).
+## The crop's top-left tile for the cached image (x already normalised into
+## `[0, width)`; the crop wraps, so `origin.x + crop.x` may pass the seam).
+var _minimap_origin := Vector2i.ZERO
+## True when [member _minimap_image] must be rebuilt from scratch on the next
+## sync (first build, a fresh explored set, a map swap, or a crop move).
+var _minimap_dirty := true
+## World grid size the cached image was built for (a swapped map rebuilds it).
 var _minimap_tiles := Vector2i.ZERO
+## Number of explored tiles seen at the last rebuild; a larger count means
+## something new was revealed (the explored set only ever grows within a run).
+var _minimap_explored_count := -1
+## Identity of the `GameState.explored_tiles` dictionary the crop was painted
+## from. A new game / save load **replaces** that dict (`explored_tiles = {}`),
+## so identity is what catches a reset whose size happens to match.
+var _minimap_explored_ref: Dictionary = {}
 
-## Minimap state (`M` toggle, docs/80-* §4.3).
-var _minimap_enlarged := false
 ## False on S4, where the port menu replaces the sea viewport (docs/80-* §4.5).
 var _minimap_visible := true
+
 ## Dialog queue (§4.7): `[{key, values}]`, one modal at a time.
 var _dialog_queue: Array = []
 var _dialog = null
@@ -154,27 +171,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	# HUD's own hotkeys.
 	if has_modal():
 		return
-	# No chart on S4: `M` has nothing to enlarge there (docs/80-* §4.5).
+	# No minimap on S4 (the port menu replaces the sea viewport), but the
+	# locale toggle still works there (docs/80-* §4.5).
 	if not _minimap_visible:
 		if event.is_action_pressed("toggle_locale"):
 			get_viewport().set_input_as_handled()
 			I18n.toggle_locale()
-		return
-	# Enlarged chart (`M`, docs/80-* §4.3) behaves as a modal overlay: `M` or
-	# Esc closes it, and nothing underneath (movement, other hotkeys) reacts
-	# while it is open.
-	if _minimap_enlarged:
-		if event.is_action_pressed("toggle_minimap") or event.is_action_pressed("back"):
-			get_viewport().set_input_as_handled()
-			toggle_minimap()
-			return
-		if event is InputEventKey or event is InputEventMouseButton \
-				or event is InputEventMouseMotion:
-			get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed("toggle_minimap"):
-		get_viewport().set_input_as_handled()
-		toggle_minimap()
 		return
 	if event.is_action_pressed("toggle_locale"):
 		get_viewport().set_input_as_handled()
@@ -240,9 +242,11 @@ func _on_explore_pressed() -> void:
 
 
 func toggle_minimap() -> void:
-	_minimap_enlarged = not _minimap_enlarged
-	_apply_minimap_rect()
-	queue_redraw()
+	# Phase 4 retired the `M` enlarged minimap (`80-*` §4.3): the Chart screen
+	# (S17) replaced it. A no-op seam, because stale callers and the old
+	# Phase-1 suites still call it; `chart_screen.gd#toggle_chart` is the real
+	# whole-world view now.
+	pass
 
 
 ## Queues one or more modals, shown strictly one at a time in the given order
@@ -548,7 +552,7 @@ func _on_fleet_changed() -> void:
 func _on_locale_changed(_locale: String) -> void:
 	_lang_button.text = I18n.t_key("ui.language_toggle")
 	refresh()
-	# The chart's caption is localised too (world.minimap / .enlarged).
+	# The minimap caption is localised too (`world.minimap`).
 	_apply_minimap_rect()
 	# The Phase-3 Explore affordance re-binds with the rest of the HUD.
 	if _explore_button.visible:
@@ -570,28 +574,30 @@ func _on_language_pressed() -> void:
 
 # --- Minimap (docs/20-* §4.12, docs/80-* §4.5) ----------------------------
 
+## Places the fixed 256×192 box (16px margin under the 40px top bar, §4.8) and
+## the weather/title captions underneath it. Phase 4 has one mode: the crop
+## (`M`'s 512×384 enlarged view is retired, `80-*` §4.3).
 func _apply_minimap_rect() -> void:
-	var size := MINIMAP_ENLARGED if _minimap_enlarged else MINIMAP_NORMAL
+	var size := MINIMAP_SIZE
 	_minimap.size = size
-	if _minimap_enlarged:
-		# Centered in the 1280×720 viewport.
-		_minimap.position = (get_viewport_rect().size - size) * 0.5
-	else:
-		# 16px margin under the 40px top bar (docs/80-* §4.8 sizing grid).
-		_minimap.position = Vector2(PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN)
+	_minimap.position = Vector2(PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN)
 	_weather_label.position = _minimap.position + Vector2(0, size.y + PaletteLib.BASE_UNIT)
 	_minimap_title.position = _weather_label.position + Vector2(0, 24)
-	_minimap_title.text = I18n.t_key(
-		"world.minimap.enlarged" if _minimap_enlarged else "world.minimap"
-	)
+	_minimap_title.text = I18n.t_key("world.minimap")
 
 
-## True while the 512×384 chart is up (docs/80-* §4.3 `M`).
+## **Phase-4 compatibility shim.** The enlarged `M` minimap is gone (`80-*`
+## §4.3: the Chart screen replaced it), but `scenes/world/world_map.gd`'s
+## `_modal_open()` still asks (`has_method("is_minimap_enlarged") and
+## is_minimap_enlarged()`). That file's movement/input section is owned by task
+## H in this same wave, so this returns a constant `false` instead of deleting
+## the seam out from under it: the call site is harmless and the master can drop
+## both together after H merges. Always false — there is no enlarged mode.
 func is_minimap_enlarged() -> bool:
-	return _minimap_enlarged
+	return false
 
 
-## Hides the chart (and its weather/title captions) on screens where the
+## Hides the minimap (and its weather/title captions) on screens where the
 ## viewport is not the sea map — S4 replaces it with the port menu
 ## (docs/80-* §4.5 "S4 HUD: same top/bottom bars, viewport replaced").
 func set_minimap_visible(value: bool) -> void:
@@ -599,9 +605,6 @@ func set_minimap_visible(value: bool) -> void:
 	_minimap.visible = value
 	_weather_label.visible = value
 	_minimap_title.visible = value
-	if not value and _minimap_enlarged:
-		_minimap_enlarged = false
-		_apply_minimap_rect()
 	queue_redraw()
 
 
@@ -609,166 +612,243 @@ func is_minimap_visible() -> bool:
 	return _minimap_visible
 
 
-## The chart's current screen rect. Tests and the `M` overlay use it instead of
-## recomputing the layout rules.
+## The minimap box's screen rect. Tests read it instead of recomputing the
+## layout rules.
 func minimap_rect() -> Rect2:
 	return Rect2(_minimap.position, _minimap.size)
 
 
-## Source pixels per tile in the cached chart image (docs/20-* §4.12: 2 px).
+## Source pixels per tile in the minimap crop (docs/20-* §4.12: 2 px).
 func minimap_px_per_tile() -> int:
 	return MINIMAP_PX_PER_TILE
 
 
+## The crop's size in tiles (128×96 at 2 px/tile over the 256×192 box).
+func minimap_crop_tiles() -> Vector2i:
+	return MINIMAP_CROP_TILES
+
+
+## World tile coordinate of the crop's top-left column/row. `x` is normalised
+## into `[0, width)`; the crop wraps, so `column + i` may pass the seam.
+func minimap_crop_origin() -> Vector2i:
+	return _minimap_origin
+
+
+## The ordered world column for each of the [constant MINIMAP_CROP_TILES] crop
+## columns, wrap-aware (`20-*` §4.1) and normalised into `[0, width)`: column 65
+## of a fleet at `x = 2159` is `x = 0`, not `x = 2160`. Column 0 is the leftmost
+## pixel column. Exposed so a test can assert the dateline rule without sampling
+## pixels.
+func minimap_crop_columns() -> Array:
+	var out: Array = []
+	var tiles := _map_size()
+	if _fleet_source_cell().x < 0 or tiles.x <= 0:
+		return out
+	var origin := _crop_origin(_fleet_source_cell(), tiles)
+	for column in MINIMAP_CROP_TILES.x:
+		out.append(posmod(origin.x + column, tiles.x))
+	return out
+
+
+## `true` when `cell` is inside the current crop (wrap-aware on x).
+func minimap_contains(cell: Vector2i) -> bool:
+	return _crop_index_of(cell) != Vector2i(-1, -1)
+
+
 # --- Minimap image cache (docs/20-* §4.12) --------------------------------
 
-## (Re)creates the 2 px/tile chart image when the map dimensions changed, then
-## paints every explored cell that is not painted yet. Unexplored cells stay
-## `PANEL_BG` (fog). Called from [method refresh] and [method set_fleet_cell],
-## i.e. once per movement step at most — never per frame.
+## Rebuilds the 256×192 crop image when the fleet moved, the map changed, the
+## explored set grew, or a new run replaced it. Otherwise it is a no-op: called
+## from [method refresh] and [method set_fleet_cell], i.e. at most once per
+## movement step, never per frame.
 func _sync_minimap_image() -> void:
 	var map = DataLoader.map
 	if map == null:
 		_minimap_image = null
 		_minimap_texture = null
 		_minimap_tiles = Vector2i.ZERO
-		_minimap_painted.clear()
+		_minimap_dirty = true
 		return
 	var tiles := Vector2i(int(map.width), int(map.height))
-	if _minimap_image == null or _minimap_tiles != tiles:
+	var cell := _fleet_source_cell()
+	var origin := _crop_origin(cell, tiles)
+	# A swapped map, a new run's explored set, a rebuild request, or the fleet
+	# leaving the crop's top-left all invalidate the image. A growing explored
+	# set is caught by the count (explored_tiles only ever grows within a run).
+	var explored_count: int = ChartViewLib.explored_count()
+	var replaced: bool = not is_same(_minimap_explored_ref, GameState.explored_tiles)
+	if _minimap_image == null or _minimap_tiles != tiles or _minimap_dirty \
+			or origin != _minimap_origin or explored_count != _minimap_explored_count \
+			or replaced:
 		_minimap_tiles = tiles
-		_minimap_image = Image.create_empty(
-			tiles.x * MINIMAP_PX_PER_TILE,
-			tiles.y * MINIMAP_PX_PER_TILE,
-			false,
-			Image.FORMAT_RGBA8
-		)
-		_minimap_image.fill(PaletteLib.PANEL_BG)
-		_minimap_texture = ImageTexture.create_from_image(_minimap_image)
-		_minimap_painted.clear()
-
-	# Explored-only: the doc's §4.12 rule. A fresh `explored_tiles` dict (new
-	# run / save load) invalidates the painted cache because the old cells are
-	# no longer explored. `is_same()` compares object identity, not contents.
-	if not is_same(_minimap_explored, GameState.explored_tiles):
-		_minimap_explored = GameState.explored_tiles
-		_minimap_image.fill(PaletteLib.PANEL_BG)
-		_minimap_painted.clear()
+		_minimap_origin = origin
+		_minimap_explored_count = explored_count
+		_minimap_explored_ref = GameState.explored_tiles
+		_minimap_dirty = false
+		if _minimap_image == null \
+				or _minimap_image.get_size() != Vector2i(MINIMAP_SIZE):
+			_minimap_image = Image.create_empty(
+				int(MINIMAP_SIZE.x), int(MINIMAP_SIZE.y), false, Image.FORMAT_RGBA8
+			)
+			_minimap_texture = ImageTexture.create_from_image(_minimap_image)
+		_paint_minimap(map, origin)
 		_minimap_texture.update(_minimap_image)
+	queue_redraw()
 
-	var painted_any := false
-	for cell in GameState.explored_tiles:
-		if not (cell is Vector2i):
+
+## Paints all 128×96 crop tiles. Unexplored tiles stay `PANEL_BG` (fog), which
+## is exactly the Chart's unknown-tile colour — both views go through
+## [ChartView.is_explored]/[ChartView.index_color] so the content is identical
+## by construction, not by two matching implementations.
+func _paint_minimap(map, origin: Vector2i) -> void:
+	_minimap_image.fill(ChartViewLib.UNKNOWN_COLOR)
+	var colors: Array = ChartViewLib.palette_colors(map)
+	for row in MINIMAP_CROP_TILES.y:
+		var y: int = origin.y + row
+		if y < 0 or y >= int(map.height):
 			continue
-		var tile: Vector2i = cell
-		if tile.x < 0 or tile.y < 0 or tile.x >= tiles.x or tile.y >= tiles.y:
-			continue
-		if _minimap_painted.has(tile):
-			continue
-		var color := _terrain_color(map.terrain_kind(tile))
-		var origin := tile * MINIMAP_PX_PER_TILE
-		_minimap_image.fill_rect(
-			Rect2i(origin.x, origin.y, MINIMAP_PX_PER_TILE, MINIMAP_PX_PER_TILE),
-			color
-		)
-		_minimap_painted[tile] = true
-		painted_any = true
-	if painted_any:
-		_minimap_texture.update(_minimap_image)
+		for column in MINIMAP_CROP_TILES.x:
+			var x := posmod(origin.x + column, int(map.width))
+			if not ChartViewLib.is_explored(Vector2i(x, y), map):
+				continue
+			_minimap_image.fill_rect(
+				Rect2i(
+					column * MINIMAP_PX_PER_TILE, row * MINIMAP_PX_PER_TILE,
+					MINIMAP_PX_PER_TILE, MINIMAP_PX_PER_TILE
+				),
+				ChartViewLib.index_color(colors, map, x, y)
+			)
 
 
 func _draw() -> void:
 	if not _minimap_visible:
 		return
 	var rect := Rect2(_minimap.position, _minimap.size)
-	if _minimap_enlarged:
-		# Modal presentation (docs/80-* §4.3): dim the map behind the chart,
-		# same 40% black as every other modal (§4.7).
-		draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color(0, 0, 0, 0.4), true)
 	draw_rect(rect, PaletteLib.PANEL_BG, true)
 	if _minimap_texture == null:
 		draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
 		return
-	# The cached 256×192 image is drawn scaled to the current rect (1× normal,
-	# 2× enlarged); nearest filtering keeps each tile a crisp square.
+	# 1 screen pixel per image pixel: the image already is 2 px/tile.
 	draw_texture_rect(_minimap_texture, rect, false)
-	var scale: float = rect.size.x / float(_minimap_tiles.x)
 
-	# Known ports: 2×2 px nation-colored dots (§4.12 fixes the size in screen
-	# pixels, so enlarged mode changes the chart's scale, not the dot).
 	var dot := Vector2(DOT_NORMAL, DOT_NORMAL)
+	# Known ports: 2×2 px nation-coloured dots (§4.12).
 	for entry in minimap_known_ports():
-		var cell: Vector2i = entry["cell"]
-		draw_rect(Rect2(
-			rect.position + Vector2(cell) * scale + (Vector2(scale, scale) - dot) * 0.5,
-			dot
-		), entry["color"], true)
+		var at := _crop_screen_pos(entry["cell"], dot)
+		if at.x < 0.0:
+			continue
+		draw_rect(Rect2(rect.position + at, dot), entry["color"], true)
 
-	# Fleet: a 2×2 px white dot (§4.12).
-	var fleet: Vector2i = fleet_cell if fleet_cell.x >= 0 else GameState.world_tile()
-	draw_rect(Rect2(
-		rect.position + Vector2(fleet) * scale + (Vector2(scale, scale) - dot) * 0.5,
-		dot
-	), Color.WHITE, true)
+	# Found discoveries whose tile is explored: 2×2 px `ACCENT` dots (§4.12).
+	for entry in minimap_discovery_dots():
+		var at := _crop_screen_pos(entry["cell"], dot)
+		if at.x < 0.0:
+			continue
+		draw_rect(Rect2(rect.position + at, dot), PaletteLib.ACCENT, true)
+
+	# Fleet: a 2×2 px white dot at the crop's centre (§4.12).
+	var fleet := _fleet_source_cell()
+	var centre := Vector2(MINIMAP_CROP_TILES.x / 2, MINIMAP_CROP_TILES.y / 2) \
+		* float(MINIMAP_PX_PER_TILE)
+	draw_rect(Rect2(rect.position + centre, dot), Color.WHITE, true)
 
 	draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
 
 
-## The port dots the chart draws: `[{port_id, cell, color}]` for **known**
-## ports only, `color` from the port's nation (docs/20-* §4.12). Public so a
-## test can assert the rule without sampling pixels; [_draw] uses the same
-## list, so there is exactly one source of truth.
-func minimap_known_ports() -> Array:
-	var out: Array = []
+## Screen offset (inside the box) of a 2×2 marker centred on `cell`, or
+## `(-1,-1)` when the cell is outside the crop (nothing to draw then).
+func _crop_screen_pos(cell: Vector2i, dot: Vector2) -> Vector2:
+	var index := _crop_index_of(cell)
+	if index == Vector2i(-1, -1):
+		return Vector2(-1, -1)
+	var tile := float(MINIMAP_PX_PER_TILE)
+	return Vector2(index) * tile + (Vector2(tile, tile) - dot) * 0.5
+
+
+## Crop-local (column, row) of `cell`, or `(-1,-1)` when it is outside.
+func _crop_index_of(cell: Vector2i) -> Vector2i:
 	var map = DataLoader.map
 	if map == null:
-		return out
-	for port_id in GameState.known_ports:
-		var cell: Vector2i = map.port_cell(str(port_id))
-		if cell.x < 0:
-			continue
-		var port: Dictionary = DataLoader.get_port(str(port_id))
-		var nation: Dictionary = DataLoader.get_nation(str(port.get("nation_id", "")))
+		return Vector2i(-1, -1)
+	var width := int(map.width)
+	var row := cell.y - _minimap_origin.y
+	if row < 0 or row >= MINIMAP_CROP_TILES.y:
+		return Vector2i(-1, -1)
+	var column := posmod(cell.x - _minimap_origin.x, maxi(width, 1))
+	if column >= MINIMAP_CROP_TILES.x:
+		return Vector2i(-1, -1)
+	return Vector2i(column, row)
+
+
+## Top-left tile of the crop: centred on the fleet, x wrapping (`20-*` §4.12:
+## "a wrap-aware 128×96-tile crop around the fleet"). A fleet at `x = 2159`
+## therefore samples `x ∈ [2095..2159] ∪ [0..62]` with no void at the seam.
+func _crop_origin(cell: Vector2i, tiles: Vector2i) -> Vector2i:
+	if tiles.x <= 0:
+		return cell
+	var x := posmod(cell.x - MINIMAP_CROP_TILES.x / 2, tiles.x)
+	if tiles.y <= 0:
+		return Vector2i(x, cell.y)
+	# y does not wrap: the crop is clamped to the latitude edges instead.
+	var y := mini(cell.y - MINIMAP_CROP_TILES.y / 2, tiles.y - MINIMAP_CROP_TILES.y)
+	return Vector2i(x, maxi(y, 0))
+
+
+func _fleet_source_cell() -> Vector2i:
+	return fleet_cell if fleet_cell.x >= 0 else GameState.world_tile()
+
+
+func _map_size() -> Vector2i:
+	var map = DataLoader.map
+	if map == null:
+		return Vector2i.ZERO
+	return Vector2i(int(map.width), int(map.height))
+
+
+## The port dots the minimap draws: `[{port_id, cell, color}]` for **known**
+## ports only, from the shared [ChartView] layer list — so the Chart and the
+## minimap can never disagree about which ports are known or what colour they
+## are (`20-*` §4.12, `80-*` §4.6).
+func minimap_known_ports() -> Array:
+	var out: Array = []
+	for entry in ChartViewLib.port_dots(DataLoader.map):
 		out.append({
-			"port_id": str(port_id),
-			"cell": cell,
-			"color": PaletteLib.nation_color(str(nation.get("color", "#ffffff"))),
+			"port_id": str(entry["port_id"]),
+			"cell": entry["cell"],
+			"color": entry["color"],
 		})
 	return out
 
 
-## Color of one minimap pixel for `cell` (unexplored → `PANEL_BG`). Test hook
-## for the explored-only rule; reads the same cache [_draw] draws.
+## The discovery dots the minimap draws (`[{id, cell}]`, found + explored only).
+func minimap_discovery_dots() -> Array:
+	return ChartViewLib.lead_cells(DataLoader.map)
+
+
+## Color of the minimap pixel for `cell`: the explored terrain colour, or
+## `PANEL_BG` when the cell is unexplored **or outside the crop** (the minimap
+## is a crop, so it has no opinion about a tile it does not show). Test hook for
+## the explored-only rule; reads the same cache [_draw] draws.
 func minimap_pixel_color(cell: Vector2i) -> Color:
-	if _minimap_image == null:
+	var map = DataLoader.map
+	if _minimap_image == null or map == null:
 		return PaletteLib.PANEL_BG
-	if cell.x < 0 or cell.y < 0 or cell.x >= _minimap_tiles.x or cell.y >= _minimap_tiles.y:
+	var index := _crop_index_of(cell)
+	if index == Vector2i(-1, -1):
 		return PaletteLib.PANEL_BG
-	return _minimap_image.get_pixelv(cell * MINIMAP_PX_PER_TILE)
+	return _minimap_image.get_pixelv(index * MINIMAP_PX_PER_TILE)
 
 
-## Size of the cached chart image in pixels (2 px/tile × map size).
+## Size of the cached minimap image in pixels (the locked 256×192 crop box).
 func minimap_image_size() -> Vector2i:
 	return _minimap_image.get_size() if _minimap_image != null else Vector2i.ZERO
 
 
-## Chart colors per terrain kind (docs/80-* §4.8 palette).
+## Chart colors per terrain kind (docs/80-* §4.8 palette) — the shared
+## implementation, so tests can assert the minimap and the Chart agree.
 static func minimap_terrain_color(kind: String) -> Color:
-	return _terrain_color(kind)
+	return ChartViewLib.terrain_color(kind)
 
-
-static func _terrain_color(kind: String) -> Color:
-	match kind:
-		"sea":
-			return PaletteLib.SEA
-		"coastal_sea":
-			return PaletteLib.COAST_SEA
-		"land":
-			return PaletteLib.LAND
-		"reef":
-			return PaletteLib.REEF
-		_:
-			return PaletteLib.PANEL_LINE
 
 
 # --- Dialog queue (docs/80-* §4.7, docs/90-* §7) ---------------------------

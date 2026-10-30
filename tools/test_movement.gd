@@ -838,18 +838,23 @@ func _test_hud_signal_only() -> void:
 	_check(hud._weather_tween == null and is_equal_approx(weather_label.modulate.a, 1.0),
 		"leaving storm stops the flash and restores alpha")
 
-	# Minimap toggle (M): 256×192 → 512×384 centered.
+	# Phase 4 (`80-*` §4.3, task J): the `M` enlarged minimap is retired — the
+	# HUD's box is a fixed 256×192 wrap-aware crop and the whole world is the
+	# separate Chart screen (S17). `toggle_minimap()` survives as a no-op seam.
 	var minimap: Control = hud.get_node("Minimap")
 	_check(minimap.size == Vector2(256, 192),
 		"minimap default 256×192 (got %s)" % str(minimap.size))
+	_check(hud.minimap_crop_tiles() == Vector2i(128, 96),
+		"the minimap is a 128×96-tile crop at 2 px/tile (got %s)"
+		% str(hud.minimap_crop_tiles()))
+	_check(minimap.position == Vector2(PaletteLib.MARGIN,
+		PaletteLib.TOP_BAR_H + PaletteLib.MARGIN),
+		"the crop keeps its fixed under-the-top-bar position (got %s)"
+		% str(minimap.position))
 	hud.toggle_minimap()
-	_check(minimap.size == Vector2(512, 384),
-		"minimap enlarged 512×384 (got %s)" % str(minimap.size))
-	_check(is_equal_approx(minimap.position.x, (1280.0 - 512.0) * 0.5)
-		and is_equal_approx(minimap.position.y, (720.0 - 384.0) * 0.5),
-		"enlarged minimap is centered (got %s)" % str(minimap.position))
-	hud.toggle_minimap()
-	_check(minimap.size == Vector2(256, 192), "minimap toggles back to 256×192")
+	_check(minimap.size == Vector2(256, 192) and not hud.is_minimap_enlarged(),
+		"the retired `M` toggle leaves the crop at 256×192 (got %s)"
+		% str(minimap.size))
 
 	# The HUD source contains no `_process` (behavioural proof above, textual
 	# proof here so a future edit cannot quietly reintroduce polling).
