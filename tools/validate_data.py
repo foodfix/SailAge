@@ -100,6 +100,10 @@ ENTITY_FILES = {
 SPECIAL_FILES = {
     "map_legend.json", "map_legend_p3.json", "ui_strings.json", "maps.json",
 }
+# Envelope exemption for a file that is *generated* rather than authored: its
+# shape is pinned by the owning doc (docs/10-* §6.3) and has no plural array.
+GENERATED_FILES = {"world_report.json"}
+SPECIAL_FILES |= GENERATED_FILES
 # Of those, only the legends require `version` in their section 4.9 schema.
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
 # as the one key that is not an L10nString rather than a required field.

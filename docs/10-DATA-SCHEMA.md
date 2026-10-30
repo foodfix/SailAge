@@ -510,7 +510,13 @@ flow (`20-WORLD-AND-SAILING.md`).
   never shipped, never hand-edited, not a data source.
 - **Companion report:** `data/maps/world_report.json` records build params,
   sea fraction, ice extent, component sizes > 2000 tiles, and the derived
-  `harbor_tile {x, y}` per port (validator group 6 reads it).
+  `harbor_tile {x, y}` per port (validator group 6 reads it). It is a **tool
+  output, not an entity file**: its envelope is `{"version", "generated_by",
+  "artifact", …}` with no plural entity array, so validator group 1 exempts it
+  exactly like `map_legend.json` (its keys are `version`, `generated_by`,
+  `artifact`, `build`, `tile_counts`, `tiles_total`, `sea_fraction`,
+  `land_fraction`, `ice_fraction`, `reef_fraction`, `fractions`, `land_mask`,
+  `components`, `overrides`, `override_details`, `ports`, `port_count`).
 
 ### 6.4 Weather bands
 
