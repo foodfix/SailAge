@@ -318,8 +318,10 @@ then return to title; no save is written or deleted.
   `PackedByteArray` of 291,600 bytes, one per world tile; not saved):
   a tile is explored after being within the sighting radius (§4.11) of the
   fleet. Re-explored on load — known limitation, unchanged.
-- The crop wraps: a fleet at `x = 2159` shows tiles `x ∈ [2032..2159]` then
-  `x ∈ [0..k]`, with no void at the seam.
+- The crop is **centred on the fleet** (column 64 of the 128, row 48 of 96),
+  so a fleet at `x = 2159` shows tiles `x ∈ [2095..2159]` then `x ∈ [0..62]`
+  — 128 contiguous columns, with no void at the seam. `x = 2094` and
+  `x = 63` are outside the window.
 - Known port markers drawn as 2×2 px dots in the port's nation color; fleet
   as a 2×2 px white dot. Found discoveries are drawn as 2×2 px `ACCENT` dots
   once explored.

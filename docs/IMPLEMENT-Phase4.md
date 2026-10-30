@@ -403,7 +403,8 @@ not docking.
   zoom) + fleet marker + discovery hint icons; `Tab` toggles, `Esc` closes;
   zh/en labels via ui_strings (orchestrator-merged keys).
 - **Done-when:** minimap crop is correct at the dateline (fleet x=2159
-  shows x∈[2032..2159]∪[0..k]); chart renders in < 0.5 s open time;
+  shows the 128 centred columns `[2095..2159] ∪ [0..62]`); chart renders in
+  < 0.5 s open time;
   explored tiles appear identically on minimap and chart; Tab/Esc round-trip
   from world scene; suite `test_discovery` extended: reveal at 24 tiles,
   discovery reveal at 18, both visible on chart; ui_strings zero `<key>`
