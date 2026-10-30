@@ -158,6 +158,14 @@ The four weather states are the ones the `wind_factor` table below names
 **windy = strong**, **storm = storm** (one state, two labels — the band table
 keeps the Phase-4 column names). Each band row sums to 1.00.
 
+**The mapping is normative (locked):** `GameState.world["weather"]` and every
+`wind_factor` key are the engine ids `calm|fair|strong|storm`; the band table's
+`clear|overcast|windy|storm` are display column names only and never appear in
+code or data. `SailingSim.weather_zone_for()` returns a **band id**
+(`doldrums`, `trade_winds`, `variables`, `westerlies`, `boreal`), and
+`SailingSim.zone_probabilities()` returns the four engine ids, so the roll can
+only ever produce a value the `wind_factor` table understands.
+
 `wind_factor` by propulsion class (`ShipType.class`):
 
 | weather | sail | oar | hybrid |
