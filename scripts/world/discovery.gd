@@ -43,7 +43,7 @@ static func in_range(cell: Vector2i) -> Array:
 
 
 ## `true` while a discovery sits in range — what the HUD's
-## `world.something_near` hint and the `E` action availability read.
+## `discovery.something_near` hint and the `E` action availability read.
 static func something_near(cell: Vector2i) -> bool:
 	return not in_range(cell).is_empty()
 

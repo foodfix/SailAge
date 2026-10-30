@@ -112,7 +112,7 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
   landmark than a harbour, and the world-map `E` action is only offered inside
   this radius. Chebyshev distance over tiles.
 - **Explore** is a world-map action bound to the `E` key (and a
-  `world.explore` HUD button that appears only when in range, `80-*` §4.3).
+  `discovery.explore` HUD button that appears only when in range, `80-*` §4.3).
   It finds **every** in-range, unfound discovery in one action and reports
   each with an `world.discovery_found` dialog; no cooldown, no day cost.
 - **State.** `GameState.discoveries_found` is the array of found discovery
@@ -406,7 +406,7 @@ unreported list).
 - `cycle = (day - 1) // 30`; host = the §7.4 capital order
   (`lisbon, seville, london, amsterdam, istanbul, venice`)[`cycle % 6`].
 - Entry window: `((day - 1) % 30) + 1 ∈ [1, 5]` at the host's palace, fee
-  `1000g` (`tournament.entry_fee`), one entry per cycle.
+  `1000g` (`tournament.enter`, the fee is composed by the UI), one entry per cycle.
 - Bracket: three consecutive battles against fleets of class brigantine →
   carrack → galleon (`ship_type_id` fixed per round, one hull per round, crew
   = `crew_min`, durability = max, cannons = `armament_slots`), `enemy_kind =

@@ -21,6 +21,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
+const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -49,6 +50,7 @@ signal discovery_reported(block: Dictionary)
 @onready var _back_button: Button = $Layout/VBox/Header/Back
 @onready var _offers_heading: Label = $Layout/VBox/Offers/Heading
 @onready var _offers_hint: Label = $Layout/VBox/Offers/Refresh
+@onready var _announce: Label = $Layout/VBox/Offers/Announce
 @onready var _offers_rows: VBoxContainer = $Layout/VBox/Offers/Scroll/Rows
 @onready var _offers_empty: Label = $Layout/VBox/Offers/Empty
 @onready var _reports_heading: Label = $Layout/VBox/Reports/Heading
@@ -69,10 +71,11 @@ var _reports: Array = []
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
 	for label in [_title, _gold, _fame, _offers_heading, _offers_hint,
-			_reports_heading, _esc_hint, _toast]:
+			_announce, _reports_heading, _esc_hint, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_fame.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_offers_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_announce.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_title.add_theme_font_size_override("font_size", 32)
 	_toast.visible = false
@@ -124,8 +127,8 @@ func report_rows() -> Array:
 func all_text() -> Array:
 	var out: Array = [
 		_title.text, _gold.text, _fame.text, _back_button.text,
-		_offers_heading.text, _offers_hint.text, _reports_heading.text,
-		_esc_hint.text,
+		_offers_heading.text, _offers_hint.text, _announce.text,
+		_reports_heading.text, _esc_hint.text,
 	]
 	for container in [_offers_rows, _reports_rows]:
 		for child in _walk_labels(container):
@@ -209,6 +212,7 @@ func refresh() -> void:
 	_fame.text = I18n.fmt("ending.fame", {"fame": GameState.fame})
 	_back_button.text = I18n.t_key("ui.back")
 	_offers_heading.text = I18n.t_key("guild.offers")
+	_announce.text = _tournament_announcement()
 	_offers_hint.text = I18n.fmt("guild.offers_refresh", {
 		"day": QuestGenLib.next_refresh_day(GameState.day),
 	})
@@ -216,6 +220,25 @@ func refresh() -> void:
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_bind_offers()
 	_bind_reports()
+
+
+## The monthly tournament announcement (§4.6: "announced via tavern rumor and
+## the guild"), so the guild is a second place to learn where the next bracket
+## is. Empty when there is no run to read a day from.
+func _tournament_announcement() -> String:
+	if _port_id.is_empty():
+		return ""
+	var status := TournamentLib.status(_port_id, GameState.day)
+	var text := I18n.fmt("tournament.status", {
+		"port": I18n.t(DataLoader.get_port(str(status.get("host", "")))
+			.get("name", {})),
+		"first": int(status.get("window_first", 1)),
+		"last": int(status.get("window_last", 5)),
+	})
+	var blocked := str(status.get("blocked", ""))
+	if blocked in ["tournament.not_host", "tournament.closed"]:
+		text += " — %s" % I18n.t_key(blocked)
+	return text
 
 
 func _bind_offers() -> void:

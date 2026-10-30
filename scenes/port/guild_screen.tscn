@@ -87,6 +87,10 @@ text = "Commissions"
 layout_mode = 2
 text = ""
 
+[node name="Announce" type="Label" parent="Layout/VBox/Offers"]
+layout_mode = 2
+text = ""
+
 [node name="Scroll" type="ScrollContainer" parent="Layout/VBox/Offers"]
 layout_mode = 2
 size_flags_vertical = 3

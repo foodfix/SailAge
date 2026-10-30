@@ -11,6 +11,7 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const TavernScene := preload("res://scenes/port/tavern_screen.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 
@@ -753,6 +754,21 @@ func _test_screen_rumors_tab() -> void:
 	var price: Label = screen.get_node("Layout/VBox/Body/RumorsPanel/Price")
 	_check(price.text == I18n.fmt("tavern.rumor.price", {"gold": 100}),
 		"the tab shows the 100g price (%s)" % price.text)
+
+	# The monthly tournament is announced here too (§4.6).
+	var announce: Label = screen.get_node(
+		"Layout/VBox/Body/RumorsPanel/Tournament")
+	var status: Dictionary = TournamentLib.status("lisbon", GameState.day)
+	var expected_announce := I18n.fmt("tournament.status", {
+		"port": I18n.t(DataLoader.get_port(str(status["host"]))["name"]),
+		"first": int(status["window_first"]),
+		"last": int(status["window_last"]),
+	})
+	var blocked := str(status.get("blocked", ""))
+	if blocked in ["tournament.not_host", "tournament.closed"]:
+		expected_announce += " — %s" % I18n.t_key(blocked)
+	_check(announce.text == expected_announce,
+		"the tab announces this month's tournament (%s)" % announce.text)
 
 	var rows: VBoxContainer = screen.get_node(
 		"Layout/VBox/Body/RumorsPanel/Scroll/Rows"

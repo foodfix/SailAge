@@ -182,6 +182,10 @@ func _scenario_crown_and_horizon() -> void:
 	_check(guild.report_rows().size() >= 2,
 		"S1: the guild lists both unreported discoveries (%d)"
 		% guild.report_rows().size())
+	# The guild announces the monthly tournament too (§4.6).
+	var announce: Label = guild.get_node("Layout/VBox/Offers/Announce")
+	_check(announce.text.begins_with(I18n.t_key("tournament.status").split(":")[0]),
+		"S1: the guild announces the tournament (%s)" % announce.text)
 	_collect(guild, "guild", ["header", "rows"])
 	var first_report: Dictionary = guild.report_discovery(first_id)
 	var second_report: Dictionary = guild.report_discovery(second_id)

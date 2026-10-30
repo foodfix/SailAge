@@ -24,6 +24,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -72,6 +73,8 @@ signal back_requested
 @onready var _crew_panel: VBoxContainer = $Layout/VBox/Body/CrewPanel
 @onready var _officers_panel: VBoxContainer = $Layout/VBox/Body/OfficersPanel
 @onready var _rumors_panel: VBoxContainer = $Layout/VBox/Body/RumorsPanel
+@onready var _rumor_tournament: Label = \
+	$Layout/VBox/Body/RumorsPanel/Tournament
 @onready var _rumor_price: Label = $Layout/VBox/Body/RumorsPanel/Price
 @onready var _rumor_rows: VBoxContainer = $Layout/VBox/Body/RumorsPanel/Scroll/Rows
 @onready var _rumor_empty: Label = $Layout/VBox/Body/RumorsPanel/Empty
@@ -115,7 +118,7 @@ func _ready() -> void:
 	for label in [
 		_title, _gold, _crew_count, _morale, _per_head, _reason, _min_note,
 		_roster_header, _officer_reason, _esc_hint, _toast, _rumor_price,
-		_rumor_empty,
+		_rumor_empty, _rumor_tournament,
 	]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_per_head.add_theme_color_override("font_color", PaletteLib.ACCENT)
@@ -510,6 +513,19 @@ func _build_roster_row(officer_id: String) -> Control:
 func _bind_rumors() -> void:
 	_clear(_rumor_rows)
 	_rumors = []
+	# The monthly tournament is announced here (§4.6: "announced via tavern
+	# rumor and the guild"), so a player who never opens a palace can find it.
+	var status := TournamentLib.status(_port_id, GameState.day)
+	_rumor_tournament.text = I18n.fmt("tournament.status", {
+		"port": I18n.t(DataLoader.get_port(str(status.get("host", "")))
+			.get("name", {})),
+		"first": int(status.get("window_first", 1)),
+		"last": int(status.get("window_last", 5)),
+	})
+	var blocked := str(status.get("blocked", ""))
+	if blocked == "tournament.not_host" or blocked == "tournament.closed":
+		_rumor_tournament.text += " — %s" % I18n.t_key(blocked)
+	_rumor_tournament.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_rumor_price.text = I18n.fmt(
 		"tavern.rumor.price", {"gold": DiscoveryLib.HINT_PRICE}
 	)

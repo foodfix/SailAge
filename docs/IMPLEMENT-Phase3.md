@@ -269,12 +269,12 @@ record with the per-leg numbers lives in `tools/demo_check_phase3.md`.
 | G — full world map | ✅ Done | `data/maps/p3_world.txt` (160×96) + `map_legend_p3.json` + `ports_p3.json` (70 new ports, 100 total), `maps/maps.json` index, validator group 7 (BFS, marker/position agreement, discovery positions), S2 world selector, `new_game(..., map_id)`; `test_world_map` (57) |
 | H — retirement & victory | ✅ Done | duke gate at the docked nation's palace, `palace.retire.confirm`, S16 six-row summary in both modes, retired payload + summary-only load; `test_retirement` (78) |
 | I — art pass (optional) | ⏭ Skipped | The backlog marks it optional and Phase 1's placeholder-art rule (colored shapes + `palette.gd`) is still satisfied everywhere |
-| J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (100): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
+| J — Phase-3 acceptance | ✅ Done | `tools/test_phase3_acceptance.tscn` (101): trade → 2 reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales; record in `tools/demo_check_phase3.md` |
 
-**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 518 checks**,
+**Gate:** `python3 tools/validate_data.py` exit 0; **30 suites, 4 520 checks**,
 zero `SCRIPT ERROR`; `godot --headless --path . --quit-after 3` exit 0.
-Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 869
-checks plus 50 checks inside five existing suites (character +24, tavern +22,
+Phase 2 closed at 22 suites / 3 599 checks, so Phase 3 adds 8 suites / 871
+checks plus 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — all of them new Phase-3 assertions, none a
 dropped count.
 

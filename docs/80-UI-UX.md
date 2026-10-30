@@ -257,9 +257,10 @@ sections:
   `Accept` (`quest.accept`) / `Hint` (`quest.hint`, exploration offers only —
   shows `region_hint` free). A disabled Accept carries its reason
   (`quest.slots_full`, `quest.no_hold`, `quest.accepted`).
-  The header line `guild.offers_refresh` says when the list changes.
+  The header line `guild.offers_refresh` says when the list changes, and a
+  `tournament.status` line under it announces this month's bracket (§4.6).
 - *Reports* — one row per found-but-unreported discovery: name, the
-  `discovery.report_reward` line (gold · fame) and a `Report` button; empty
+  `guild.report_reward` line (gold · fame) and a `Report` button; empty
   state `guild.report.none`.
 
 **S13 `palace_screen.tscn`** (wireframe: `30-*` §4.7 "Palace"). Rows, top to
@@ -286,7 +287,9 @@ one button `ending.continue` → S1. In `retired` load mode the panel title is
 `ending.retired_title` and no Continue route back into play exists.
 
 **Tavern `Rumors` tab (S7, Phase 3).** Third tab beside `Crew | Officers`.
-Rows: up to three unfound discoveries, each showing `region_hint` free (blurred
+Above the rows, the monthly tournament announcement (`tournament.status`, plus
+`tournament.not_host`/`tournament.closed` when this port cannot host). Rows: up
+to three unfound discoveries, each showing `region_hint` free (blurred
 until bought is not required — Phase 3 shows the hint text, and the 100g buys
 the **location**, i.e. it reveals the discovery name and marks it hinted for
 the quest/UI) plus `Buy — 100g` (`tavern.rumor.buy`). Disabled reasons:

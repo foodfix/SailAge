@@ -21,7 +21,7 @@ Two layers of evidence, the same shape as `tools/demo_check_phase2.md`:
    godot --headless --path . tools/test_phase3_acceptance.tscn
    ```
 
-   → must print `ALL PASS (100 checks)` and exit 0.
+   → must print `ALL PASS (101 checks)` and exit 0.
 2. **Manual** — the play-it-by-hand section below covers what a headless suite
    cannot judge (feel, layout, whether a rumour is *followable*).
 
@@ -38,7 +38,7 @@ for t in tools/test_*.tscn; do godot --headless --path . "$t"; done
 godot --headless --path . --quit-after 3                          # exit 0, no SCRIPT ERROR
 ```
 
-The full suite count at the Phase-3 gate is **4 518 checks across 30 suites**
+The full suite count at the Phase-3 gate is **4 520 checks across 30 suites**
 (see the table at the bottom). Counts are compared, not just the green summary.
 
 ---
@@ -109,7 +109,7 @@ hand-edited save are expected.
 | Branch / commit | `main` — see `git log -1` |
 | Godot | 4.7.stable.official.5b4e0cb0f |
 | Command | `godot --headless --path . tools/test_phase3_acceptance.tscn` |
-| Result | **ALL PASS (100 checks)**, exit 0, zero `SCRIPT ERROR` |
+| Result | **ALL PASS (101 checks)**, exit 0, zero `SCRIPT ERROR` |
 
 ### S1 — trade → 2 discoveries → Duke → tournament → retire
 
@@ -172,7 +172,7 @@ are collected and the closing check asserts none of them contains a raw
 | `test_movement.tscn` | 158 | 1 |
 | `test_palace.tscn` | 181 | **3** |
 | `test_phase2_acceptance.tscn` | 142 | 2 |
-| `test_phase3_acceptance.tscn` | **100** | **3** |
+| `test_phase3_acceptance.tscn` | **101** | **3** |
 | `test_port_hub.tscn` | 142 | 1 (+2 for the guild/palace rows) |
 | `test_quests.tscn` | 93 | **3** |
 | `test_retirement.tscn` | 78 | **3** |
@@ -181,15 +181,15 @@ are collected and the closing check asserts none of them contains a raw
 | `test_save_v2.tscn` | 81 | 2 (+1, version-agnostic) |
 | `test_save_v3.tscn` | 141 | **3** |
 | `test_shipyard.tscn` | 141 | 1 |
-| `test_tavern.tscn` | 267 | 1 (+22 for the Rumors tab) |
+| `test_tavern.tscn` | 268 | 1 (+23 for the Rumors tab) |
 | `test_tournament.tscn` | 142 | **3** |
 | `test_trade.tscn` | 278 | 1 |
 | `test_weather.tscn` | 129 | 1 |
 | `test_world_map.tscn` | 62 | **3** |
-| **Total** | **4 518** | |
+| **Total** | **4 520** | |
 
-Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 869 checks
-and 50 checks inside five existing suites (character +24, tavern +22,
+Phase-2's gate was 22 suites / 3 599 checks; Phase 3 adds 8 suites / 871 checks
+and 50 checks inside five existing suites (character +24, tavern +23,
 port_hub +2, save +1, save_v2 +1) — every one of them an assertion about a
 Phase-3 behaviour, none a silently dropped count.
 
