@@ -1,5 +1,32 @@
 # IMPLEMENT — Phase 3: Crown & Horizon
 
+**STATUS: ✅ COMPLETE (2026-10-30) — Phase 3 shipped, merged and accepted.**
+All ten tasks A–J done (I skipped as the backlog allows). The full gate is
+`python3 tools/validate_data.py` (exit 0) plus **30 headless suites, 4 542
+checks, zero `SCRIPT ERROR`, `--quit-after 3` clean**; the eight new suites are
+`test_save_v3` (141), `test_world_map` (62), `test_quests` (103),
+`test_bounty` (80), `test_palace` (182), `test_tournament` (144),
+`test_retirement` (78) and `test_phase3_acceptance` (102). Acceptance record:
+`tools/demo_check_phase3.md`; per-task status and the completion record at the
+bottom of this file.
+
+Pre-work done before any code (the Phase-1/2 lesson: a value left "task-owned"
+gets invented differently by each branch, and the merge then has to reconcile
+two models of one rule). Landed as one doc-only commit (`83eeb2c`) ahead of
+implementation:
+
+| Doc | Amendment |
+|---|---|
+| `70-*` §4.9 | New normative section pinning every task-owned value: fame sources §4.9.1, title ladder + grants §4.9.2, quest seeds/draws §4.9.3, royal missions §4.9.4, piracy/rival table §4.9.5, closed ports §4.9.6, tournaments §4.9.7, world-map constants §4.9.8 |
+| `70-*` §2, §4.4, §4.7 | `quests` superseded by `active_quests`; discovery radius/state pins; retirement save shape and the six summary rows |
+| `90-*` §8.1/§8.2 | Save v3 shape (eleven new keys), `MIGRATIONS[2]` contents, migration purity, `quests` erasure |
+| `90-*` §5.1/§5.4/§9.1 | Nine new EventBus signals, the transient tournament handoff fields, the `maps/maps.json` index |
+| `10-*` §4.4.1, §4.7, §8 | `ports_p3.json` envelope, discovery schema, validator groups 6/7 |
+| `30-*` §4.2, §4.7, §7 | `title_bonus` in the sell formula, closed-port rule, tavern/guild/palace wireframes, the 39/34 titled-London worked example |
+| `80-*` §4.1–§4.3, §4.7.3, §4.7.4 | S12/S13/S16 + the `E` action + the S13→S10→S13 bracket edge, the three new screen wireframes, the Phase-3 `ui_strings` inventory |
+| `20-*` §4.11/§4.12 | `world.map_id`, the Explore action, the minimap note |
+| `50-*` §4.6 | Phase-3 reputation sources |
+
 Ordered backlog (lettered, coarse by design; **task-owned** details are
 decided inside the task per the cited docs). Execute as background-subagent
 waves per the plan at the bottom: **max 4 concurrent subagents, one git
@@ -8,12 +35,16 @@ Prerequisite: Phase 2 complete.
 
 ## A. Save migration v2 → v3
 
+✅ **Done** (W1) — `SAVE_VERSION = 3`, pure `MIGRATIONS[2]` (eleven §8.1 v3 keys, `quests` erased, `world.map_id`), retired-save path (`last_loaded_retired` / `last_retired_summary`); `tools/test_save_v3.tscn` (141).
+
 - Add `fame`, `titles`, `bounties`, `active_quests`,
   `completed_royal_missions`; `MIGRATIONS[2]`.
 - **Docs:** `90-*` §8.2, `70-*` §2. **Done-when:** Phase-2 saves migrate and
   re-save as version 3.
 
 ## B. Guild activation + quest system
+
+✅ **Done** (W2) — `quest_gen.gd` (deterministic per-(port, week) offers over 9 templates, delivery/bounty/exploration, accept/complete/fail/tick/prune, shared `objective_text`), S12 `guild_screen.tscn`, character-panel `Quests` tab, and both documented scene hooks (port-entry completion, immediate cargo-loss failure); `tools/test_quests.tscn` (103).
 
 - `guild_screen.tscn`, `quest_gen.gd` (delivery/bounty/exploration from
   templates), quest tracking UI (character panel tab), refresh cadence,
@@ -25,6 +56,8 @@ Prerequisite: Phase 2 complete.
 
 ## C. Discovery system + content
 
+✅ **Done** (W3) — `scripts/world/discovery.gd` (radius 3, Explore, report-once, 100g hints), 30 discoveries with zh/en hints, validator groups 6/7 position checks, tavern `Rumours` tab, world-map `E` plus the in-range HUD hint **and** button; `tools/test_tavern` rumours section (268 total), `tools/test_world_map` (62).
+
 - Explore action, sighting radius 3, report at guild, tavern Rumors tab
   (100g hints), `data/discoveries.json` content set.
 - **Docs:** `70-*` §4.4, `10-*` §4.7. **Task-owned:** ~30 discoveries with
@@ -33,6 +66,8 @@ Prerequisite: Phase 2 complete.
   extended to check discovery positions ⊆ active map.
 
 ## D. Palace activation, royal missions, titles
+
+✅ **Done** (W3) — S13 `palace_screen.tscn`, rep-30 gate, three rotating mission kinds (one per nation), `fame.gd` ladder with all four grants wired into `TradeEngine.title_units`, `ShipyardEngine.repair_cost` and `QuestGen.max_active_quests`; `tools/test_palace.tscn` (182).
 
 - `palace_screen.tscn`, rep ≥ 30 gate, three mission kinds, title ladder with
   ceremony and grants (sell-price `title_bonus`, quest slot, repair
@@ -43,6 +78,8 @@ Prerequisite: Phase 2 complete.
 
 ## E. Piracy & bounty loop
 
+✅ **Done** (W2) — `bounty.gd` (rival table from `data/nations.json#rivals`, −20/+2 at navy battle start, issue at ≤ −50 with `500 × |rep|`, both clear paths → exactly −10), closed-port rows with the palace pay exception, hunter spawns; `tools/test_bounty.tscn` (80).
+
 - Piracy rep deltas, rival-nation bonus table (**task-owned** per
   `70-*` §4.5 note), port closure, hunter integration (Phase-2 encounters),
   both bounty-clearing paths.
@@ -52,12 +89,16 @@ Prerequisite: Phase 2 complete.
 
 ## F. Tournaments
 
+✅ **Done** (W4) — `tournament.gd` (30-day rotation over the §7.4 capitals, day 1–5 window, 1,000g fee, 3 escalating bouts with durability carry, 10,000g/+100 fame vs 500g + 50 % repair), S13 entry with the S10→S13 bracket return, tournament tier pinned in `BattleSim.FLEET_TIER`, tavern+guild announcements; `tools/test_tournament.tscn` (144).
+
 - Monthly rotation, entry window, 3-battle bracket with durability carry,
   prize/consolation, rumor/guild announcements.
 - **Docs:** `70-*` §4.6, `60-*`. **Done-when:** tournament completes in all
   outcomes; prizes exact; bounty-closed host blocks entry.
 
 ## G. Full world map content
+
+✅ **Done** (W1) — `data/maps/p3_world.txt` (160×96) + `map_legend_p3.json` + `ports_p3.json` (70 new, 100 total) + `maps/maps.json` index, validator group 7 (strict BFS, marker/position agreement, discovery positions), S2 world selector, `new_game(..., map_id)`; `tools/test_world_map.tscn` (62). P1 stays playable.
 
 - `data/maps/p3_world.txt` + legend additions + ~100-port list
   (**task-owned**: grid size, coordinates, port table with
@@ -71,17 +112,23 @@ Prerequisite: Phase 2 complete.
 
 ## H. Retirement & victory
 
+✅ **Done** (W5) — duke gate at the docked nation's palace, `palace.retire.confirm`, Retire row hidden outside the gate, S16 six-row summary in live and summary modes, retired payload + summary-only load in both locales; `tools/test_retirement.tscn` (78).
+
 - Duke gate, retirement flow, ending/summary screen, retired-save behavior.
 - **Docs:** `70-*` §4.7, `80-*` §4.2. **Done-when:** full loop from Duke
   ceremony to locked summary save works in both locales.
 
 ## I. Placeholder-art replacement pass (optional)
 
+⏭ **Skipped** — optional per the backlog; Phase 1's placeholder-art rule (colored shapes + `scripts/palette.gd`) is still satisfied on every screen, so Task I is simply not taken.
+
 - Swap coded squares for a free-asset tile/token set; must remain
   palette-conformant fallback if assets missing.
 - **Docs:** `80-*` §4.8. **Task-owned** entirely.
 
 ## J. Phase-3 acceptance
+
+✅ **Done** (W6) — `tools/test_phase3_acceptance.tscn` (102): trade → 2 discovery reports → duke → tournament win → retire, plus raid → bounty → hunters → both clear paths, both locales, save/load round trip at v3; record in `tools/demo_check_phase3.md`.
 
 - E2E: new game → trade to fund expeditions → report 2 discoveries →
   climb to Duke with one nation → win one tournament → retire; plus a piracy
