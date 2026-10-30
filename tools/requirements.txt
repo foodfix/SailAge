@@ -1,0 +1,17 @@
+# tools/build_world.py — developer requirements
+#
+# The world-map builder is pure Python 3 (stdlib only). The shapefile reader
+# (pyshp 3.1.6, MIT) is VENDORED at tools/vendor/pyshp.py with its licence at
+# tools/vendor/LICENSE-pyshp.txt, so it is imported by path and never installed.
+#
+# Nothing to install: there are no external requirements.
+#
+# Deliberately NOT pinned here:
+#   * numpy  — the rasterizer is pure-Python scanline fill (a Phase-4 risk
+#              mitigation in docs/IMPLEMENT-Phase4.md allows numpy, but the
+#              no-numpy path already meets the 60 s cap and keeps the build
+#              reproducible on any machine with `python3`).
+#   * Pillow — PNG I/O is hand-rolled with zlib + struct.
+#
+# Run:  python3 tools/build_world.py
+# Tools with the vendored reader resolved by path; no venv, no network.

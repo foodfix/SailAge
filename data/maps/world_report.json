@@ -1,0 +1,1136 @@
+{
+  "version": 1,
+  "generated_by": "tools/build_world.py",
+  "artifact": "data/maps/world.png",
+  "build": {
+    "degrees_per_tile": 0.16666666666666666,
+    "grid": {
+      "width": 2160,
+      "height": 1080
+    },
+    "tiles_per_degree": 6.0,
+    "charset": "~.#^I",
+    "palette_index_order": [
+      "~",
+      ".",
+      "#",
+      "^",
+      "I"
+    ],
+    "ice_rule": {
+      "expression": "lat >= 70.0 or lat <= -60.0",
+      "north_rows_inclusive": [
+        0,
+        120
+      ],
+      "south_rows_inclusive": [
+        900,
+        1079
+      ],
+      "rows": 301
+    },
+    "coastal_band_tiles": 3,
+    "harbor_snap_radius_tiles": 2,
+    "lakes_as_land": true,
+    "source_sha256": {
+      "ne_10m_lakes.dbf": "0edaa87f76c2221c986f0796ce0b54b1c418e9032afba46f8e302edc41193495",
+      "ne_10m_lakes.shp": "11064fa55ed91b56a0d86733643c1a5bfcc137fdf044e83f471978a5b86617e1",
+      "ne_10m_lakes.shx": "a11ffb02e862b6c4ec8c015e6e0c70502f21bc71dcd79312b8dbc676f7e4c557",
+      "ne_10m_land.dbf": "e422520372e65c6fb8220888580e5331d04699bcd71c27e53ad42e241a531cbd",
+      "ne_10m_land.shp": "4cad3a49bc75c1a4c2f3d7efae04f2f8e63151c96764b2658effabf524331fa6",
+      "ne_10m_land.shx": "f3b02a190c3020eeafd0f48de982619826b57ecd853cbc68e4fc049652891a04",
+      "ne_10m_minor_islands.dbf": "f3ecdcdffe964cfbb855c107c0ea39fff38072ad2d5362a06544145a386bc81b",
+      "ne_10m_minor_islands.shp": "efc446b18c3496c88ccec8cfe937f1af3f3f8c2dd1b63d9722a153b0744f0b48",
+      "ne_10m_minor_islands.shx": "6bbc71e9fce78dca5e7b811155a488358250ab72bf66dd0deb9a697e1f572c59"
+    },
+    "source_passes": [
+      {
+        "shapefile": "ne_10m_land.shp",
+        "records": 11,
+        "rings": 6838,
+        "spans_filled": 12234,
+        "cells_changed": 772986,
+        "pass": "land polygon fill"
+      },
+      {
+        "shapefile": "ne_10m_minor_islands.shp",
+        "records": 2795,
+        "rings": 2795,
+        "spans_filled": 53,
+        "cells_changed": 0,
+        "pass": "land polygon fill"
+      },
+      {
+        "shapefile": "ne_10m_lakes.shp",
+        "records": 1355,
+        "rings": 1597,
+        "spans_filled": 2669,
+        "cells_changed": 0,
+        "pass": "lakes pass (as land)",
+        "note": "no cells changed: Natural Earth encodes inland water as hole rings inside the land records and the fill unions ring interiors, so lakes are already land before this pass (the locked lake rule). The pass still runs and re-asserts them."
+      }
+    ],
+    "ports_source": "docs/10-DATA-SCHEMA.md#7.1"
+  },
+  "tile_counts": {
+    "~": 1084147,
+    ".": 89516,
+    "#": 508977,
+    "^": 0,
+    "I": 650160
+  },
+  "tiles_total": 2332800,
+  "sea_fraction": 0.503113,
+  "land_fraction": 0.331355,
+  "ice_fraction": 0.278704,
+  "reef_fraction": 0.0,
+  "fractions": {
+    "sea": 0.464741,
+    "coastal_sea": 0.038373,
+    "land_tiles": 0.218183,
+    "reef": 0.0,
+    "ice": 0.278704
+  },
+  "land_mask": {
+    "note": "coastline mask (land fill + lakes pass) sampled before the ice pass overwrites polar land; this is the number the 25-35 % land-fraction sanity gate refers to",
+    "tiles": 772986,
+    "fraction": 0.331355,
+    "land_tiles_after_ice": 508977,
+    "land_tiles_after_ice_fraction": 0.218183
+  },
+  "components": {
+    "law": "4-connected passable tiles, wrap-aware in x (== 8-dir with corner-cutting forbidden)",
+    "count": 589,
+    "passable_tiles": 1173663,
+    "over_2000": [
+      {
+        "size": 1164636,
+        "example_tile": {
+          "x": 0,
+          "y": 121
+        }
+      },
+      {
+        "size": 2161,
+        "example_tile": {
+          "x": 1213,
+          "y": 145
+        }
+      }
+    ],
+    "over_1000000": [
+      {
+        "size": 1164636,
+        "example_tile": {
+          "x": 0,
+          "y": 121
+        }
+      }
+    ]
+  },
+  "overrides": {},
+  "override_details": [],
+  "ports": [
+    {
+      "id": "lisbon",
+      "lat": 38.72,
+      "lon": -9.14,
+      "harbor_tile": {
+        "x": 1024,
+        "y": 308
+      },
+      "distance": 1
+    },
+    {
+      "id": "seville",
+      "lat": 37.0,
+      "lon": -6.35,
+      "harbor_tile": {
+        "x": 1040,
+        "y": 318
+      },
+      "distance": 1
+    },
+    {
+      "id": "valencia",
+      "lat": 39.45,
+      "lon": -0.33,
+      "harbor_tile": {
+        "x": 1078,
+        "y": 303
+      },
+      "distance": 0
+    },
+    {
+      "id": "barcelona",
+      "lat": 41.35,
+      "lon": 2.17,
+      "harbor_tile": {
+        "x": 1093,
+        "y": 291
+      },
+      "distance": 0
+    },
+    {
+      "id": "marseille",
+      "lat": 43.3,
+      "lon": 5.37,
+      "harbor_tile": {
+        "x": 1111,
+        "y": 280
+      },
+      "distance": 1
+    },
+    {
+      "id": "bordeaux",
+      "lat": 45.55,
+      "lon": -1.15,
+      "harbor_tile": {
+        "x": 1073,
+        "y": 266
+      },
+      "distance": 0
+    },
+    {
+      "id": "london",
+      "lat": 51.47,
+      "lon": 0.75,
+      "harbor_tile": {
+        "x": 1085,
+        "y": 230
+      },
+      "distance": 1
+    },
+    {
+      "id": "amsterdam",
+      "lat": 52.46,
+      "lon": 4.6,
+      "harbor_tile": {
+        "x": 1106,
+        "y": 224
+      },
+      "distance": 1
+    },
+    {
+      "id": "antwerp",
+      "lat": 51.44,
+      "lon": 3.6,
+      "harbor_tile": {
+        "x": 1101,
+        "y": 231
+      },
+      "distance": 0
+    },
+    {
+      "id": "hamburg",
+      "lat": 53.87,
+      "lon": 8.7,
+      "harbor_tile": {
+        "x": 1132,
+        "y": 216
+      },
+      "distance": 0
+    },
+    {
+      "id": "genoa",
+      "lat": 44.41,
+      "lon": 8.93,
+      "harbor_tile": {
+        "x": 1132,
+        "y": 273
+      },
+      "distance": 1
+    },
+    {
+      "id": "naples",
+      "lat": 40.84,
+      "lon": 14.25,
+      "harbor_tile": {
+        "x": 1164,
+        "y": 295
+      },
+      "distance": 1
+    },
+    {
+      "id": "palermo",
+      "lat": 38.12,
+      "lon": 13.36,
+      "harbor_tile": {
+        "x": 1159,
+        "y": 310
+      },
+      "distance": 1
+    },
+    {
+      "id": "syracuse",
+      "lat": 37.07,
+      "lon": 15.29,
+      "harbor_tile": {
+        "x": 1172,
+        "y": 316
+      },
+      "distance": 1
+    },
+    {
+      "id": "cagliari",
+      "lat": 39.22,
+      "lon": 9.11,
+      "harbor_tile": {
+        "x": 1134,
+        "y": 305
+      },
+      "distance": 1
+    },
+    {
+      "id": "valetta",
+      "lat": 35.9,
+      "lon": 14.51,
+      "harbor_tile": {
+        "x": 1167,
+        "y": 324
+      },
+      "distance": 0
+    },
+    {
+      "id": "venice",
+      "lat": 45.44,
+      "lon": 12.33,
+      "harbor_tile": {
+        "x": 1153,
+        "y": 267
+      },
+      "distance": 0
+    },
+    {
+      "id": "ragusa",
+      "lat": 42.65,
+      "lon": 18.09,
+      "harbor_tile": {
+        "x": 1188,
+        "y": 284
+      },
+      "distance": 0
+    },
+    {
+      "id": "athens",
+      "lat": 37.94,
+      "lon": 23.64,
+      "harbor_tile": {
+        "x": 1221,
+        "y": 312
+      },
+      "distance": 0
+    },
+    {
+      "id": "candia",
+      "lat": 35.34,
+      "lon": 25.13,
+      "harbor_tile": {
+        "x": 1230,
+        "y": 327
+      },
+      "distance": 0
+    },
+    {
+      "id": "cyprus",
+      "lat": 34.67,
+      "lon": 33.04,
+      "harbor_tile": {
+        "x": 1277,
+        "y": 332
+      },
+      "distance": 1
+    },
+    {
+      "id": "smyrna",
+      "lat": 38.42,
+      "lon": 27.14,
+      "harbor_tile": {
+        "x": 1242,
+        "y": 309
+      },
+      "distance": 0
+    },
+    {
+      "id": "istanbul",
+      "lat": 41.01,
+      "lon": 28.97,
+      "harbor_tile": {
+        "x": 1254,
+        "y": 292
+      },
+      "distance": 1
+    },
+    {
+      "id": "beirut",
+      "lat": 33.9,
+      "lon": 35.5,
+      "harbor_tile": {
+        "x": 1292,
+        "y": 335
+      },
+      "distance": 1
+    },
+    {
+      "id": "alexandria",
+      "lat": 31.2,
+      "lon": 29.92,
+      "harbor_tile": {
+        "x": 1259,
+        "y": 352
+      },
+      "distance": 0
+    },
+    {
+      "id": "tripoli",
+      "lat": 32.9,
+      "lon": 13.18,
+      "harbor_tile": {
+        "x": 1158,
+        "y": 341
+      },
+      "distance": 1
+    },
+    {
+      "id": "tunis",
+      "lat": 36.82,
+      "lon": 10.3,
+      "harbor_tile": {
+        "x": 1142,
+        "y": 318
+      },
+      "distance": 1
+    },
+    {
+      "id": "algiers",
+      "lat": 36.77,
+      "lon": 3.06,
+      "harbor_tile": {
+        "x": 1097,
+        "y": 318
+      },
+      "distance": 1
+    },
+    {
+      "id": "ceuta",
+      "lat": 35.89,
+      "lon": -5.32,
+      "harbor_tile": {
+        "x": 1048,
+        "y": 324
+      },
+      "distance": 0
+    },
+    {
+      "id": "madeira",
+      "lat": 32.65,
+      "lon": -16.91,
+      "harbor_tile": {
+        "x": 978,
+        "y": 344
+      },
+      "distance": 0
+    },
+    {
+      "id": "havana",
+      "lat": 23.13,
+      "lon": -82.38,
+      "harbor_tile": {
+        "x": 584,
+        "y": 400
+      },
+      "distance": 1
+    },
+    {
+      "id": "vera_cruz",
+      "lat": 19.2,
+      "lon": -96.13,
+      "harbor_tile": {
+        "x": 503,
+        "y": 424
+      },
+      "distance": 0
+    },
+    {
+      "id": "cartagena",
+      "lat": 10.39,
+      "lon": -75.53,
+      "harbor_tile": {
+        "x": 626,
+        "y": 477
+      },
+      "distance": 0
+    },
+    {
+      "id": "portobelo",
+      "lat": 9.55,
+      "lon": -79.65,
+      "harbor_tile": {
+        "x": 601,
+        "y": 481
+      },
+      "distance": 1
+    },
+    {
+      "id": "lima",
+      "lat": -12.06,
+      "lon": -77.15,
+      "harbor_tile": {
+        "x": 616,
+        "y": 611
+      },
+      "distance": 1
+    },
+    {
+      "id": "buenos_aires",
+      "lat": -34.6,
+      "lon": -58.37,
+      "harbor_tile": {
+        "x": 729,
+        "y": 746
+      },
+      "distance": 1
+    },
+    {
+      "id": "san_juan",
+      "lat": 18.47,
+      "lon": -66.11,
+      "harbor_tile": {
+        "x": 682,
+        "y": 428
+      },
+      "distance": 1
+    },
+    {
+      "id": "santo_domingo",
+      "lat": 18.47,
+      "lon": -69.88,
+      "harbor_tile": {
+        "x": 660,
+        "y": 429
+      },
+      "distance": 0
+    },
+    {
+      "id": "acapulco",
+      "lat": 16.85,
+      "lon": -99.9,
+      "harbor_tile": {
+        "x": 479,
+        "y": 438
+      },
+      "distance": 1
+    },
+    {
+      "id": "panama",
+      "lat": 8.98,
+      "lon": -79.52,
+      "harbor_tile": {
+        "x": 603,
+        "y": 486
+      },
+      "distance": 1
+    },
+    {
+      "id": "valparaiso",
+      "lat": -33.03,
+      "lon": -71.63,
+      "harbor_tile": {
+        "x": 649,
+        "y": 737
+      },
+      "distance": 1
+    },
+    {
+      "id": "guayaquil",
+      "lat": -2.6,
+      "lon": -80.3,
+      "harbor_tile": {
+        "x": 599,
+        "y": 555
+      },
+      "distance": 1
+    },
+    {
+      "id": "bahia",
+      "lat": -12.97,
+      "lon": -38.5,
+      "harbor_tile": {
+        "x": 848,
+        "y": 616
+      },
+      "distance": 1
+    },
+    {
+      "id": "rio_de_janeiro",
+      "lat": -22.9,
+      "lon": -43.18,
+      "harbor_tile": {
+        "x": 820,
+        "y": 676
+      },
+      "distance": 1
+    },
+    {
+      "id": "recife",
+      "lat": -8.06,
+      "lon": -34.87,
+      "harbor_tile": {
+        "x": 871,
+        "y": 587
+      },
+      "distance": 1
+    },
+    {
+      "id": "belem",
+      "lat": -1.35,
+      "lon": -48.48,
+      "harbor_tile": {
+        "x": 788,
+        "y": 547
+      },
+      "distance": 1
+    },
+    {
+      "id": "boston",
+      "lat": 42.36,
+      "lon": -71.05,
+      "harbor_tile": {
+        "x": 654,
+        "y": 285
+      },
+      "distance": 1
+    },
+    {
+      "id": "new_york",
+      "lat": 40.7,
+      "lon": -74.02,
+      "harbor_tile": {
+        "x": 636,
+        "y": 294
+      },
+      "distance": 1
+    },
+    {
+      "id": "jamestown",
+      "lat": 37.0,
+      "lon": -76.3,
+      "harbor_tile": {
+        "x": 622,
+        "y": 317
+      },
+      "distance": 1
+    },
+    {
+      "id": "charleston",
+      "lat": 32.78,
+      "lon": -79.93,
+      "harbor_tile": {
+        "x": 601,
+        "y": 343
+      },
+      "distance": 1
+    },
+    {
+      "id": "new_foundland",
+      "lat": 47.56,
+      "lon": -52.71,
+      "harbor_tile": {
+        "x": 762,
+        "y": 253
+      },
+      "distance": 1
+    },
+    {
+      "id": "quebec",
+      "lat": 47.0,
+      "lon": -70.5,
+      "harbor_tile": {
+        "x": 656,
+        "y": 257
+      },
+      "distance": 1
+    },
+    {
+      "id": "curacao",
+      "lat": 12.11,
+      "lon": -68.93,
+      "harbor_tile": {
+        "x": 666,
+        "y": 467
+      },
+      "distance": 0
+    },
+    {
+      "id": "suriname",
+      "lat": 5.9,
+      "lon": -55.15,
+      "harbor_tile": {
+        "x": 748,
+        "y": 503
+      },
+      "distance": 1
+    },
+    {
+      "id": "elmina",
+      "lat": 5.08,
+      "lon": -1.35,
+      "harbor_tile": {
+        "x": 1072,
+        "y": 509
+      },
+      "distance": 1
+    },
+    {
+      "id": "luanda",
+      "lat": -8.78,
+      "lon": 13.23,
+      "harbor_tile": {
+        "x": 1159,
+        "y": 592
+      },
+      "distance": 0
+    },
+    {
+      "id": "mozambique",
+      "lat": -15.03,
+      "lon": 40.73,
+      "harbor_tile": {
+        "x": 1324,
+        "y": 630
+      },
+      "distance": 0
+    },
+    {
+      "id": "mombasa",
+      "lat": -4.06,
+      "lon": 39.68,
+      "harbor_tile": {
+        "x": 1318,
+        "y": 564
+      },
+      "distance": 0
+    },
+    {
+      "id": "cape_town",
+      "lat": -33.92,
+      "lon": 18.42,
+      "harbor_tile": {
+        "x": 1189,
+        "y": 742
+      },
+      "distance": 1
+    },
+    {
+      "id": "safi",
+      "lat": 32.3,
+      "lon": -9.24,
+      "harbor_tile": {
+        "x": 1023,
+        "y": 345
+      },
+      "distance": 1
+    },
+    {
+      "id": "saint_louis",
+      "lat": 16.0,
+      "lon": -16.51,
+      "harbor_tile": {
+        "x": 980,
+        "y": 444
+      },
+      "distance": 0
+    },
+    {
+      "id": "accra",
+      "lat": 5.53,
+      "lon": -0.2,
+      "harbor_tile": {
+        "x": 1077,
+        "y": 507
+      },
+      "distance": 1
+    },
+    {
+      "id": "goa",
+      "lat": 15.5,
+      "lon": 73.83,
+      "harbor_tile": {
+        "x": 1522,
+        "y": 447
+      },
+      "distance": 0
+    },
+    {
+      "id": "calicut",
+      "lat": 11.25,
+      "lon": 75.77,
+      "harbor_tile": {
+        "x": 1534,
+        "y": 472
+      },
+      "distance": 0
+    },
+    {
+      "id": "cochin",
+      "lat": 9.97,
+      "lon": 76.27,
+      "harbor_tile": {
+        "x": 1536,
+        "y": 479
+      },
+      "distance": 1
+    },
+    {
+      "id": "bombay",
+      "lat": 18.92,
+      "lon": 72.83,
+      "harbor_tile": {
+        "x": 1516,
+        "y": 426
+      },
+      "distance": 0
+    },
+    {
+      "id": "surat",
+      "lat": 21.1,
+      "lon": 72.7,
+      "harbor_tile": {
+        "x": 1516,
+        "y": 413
+      },
+      "distance": 0
+    },
+    {
+      "id": "colombo",
+      "lat": 6.93,
+      "lon": 79.85,
+      "harbor_tile": {
+        "x": 1558,
+        "y": 497
+      },
+      "distance": 1
+    },
+    {
+      "id": "pondicherry",
+      "lat": 11.93,
+      "lon": 79.83,
+      "harbor_tile": {
+        "x": 1559,
+        "y": 467
+      },
+      "distance": 1
+    },
+    {
+      "id": "muscat",
+      "lat": 23.62,
+      "lon": 58.59,
+      "harbor_tile": {
+        "x": 1430,
+        "y": 397
+      },
+      "distance": 1
+    },
+    {
+      "id": "basra",
+      "lat": 30.0,
+      "lon": 48.5,
+      "harbor_tile": {
+        "x": 1371,
+        "y": 360
+      },
+      "distance": 0
+    },
+    {
+      "id": "bandar_abbas",
+      "lat": 27.18,
+      "lon": 56.28,
+      "harbor_tile": {
+        "x": 1416,
+        "y": 377
+      },
+      "distance": 1
+    },
+    {
+      "id": "aden",
+      "lat": 12.79,
+      "lon": 45.03,
+      "harbor_tile": {
+        "x": 1350,
+        "y": 463
+      },
+      "distance": 0
+    },
+    {
+      "id": "jiddah",
+      "lat": 21.48,
+      "lon": 39.18,
+      "harbor_tile": {
+        "x": 1314,
+        "y": 410
+      },
+      "distance": 1
+    },
+    {
+      "id": "suakin",
+      "lat": 19.1,
+      "lon": 37.33,
+      "harbor_tile": {
+        "x": 1304,
+        "y": 424
+      },
+      "distance": 1
+    },
+    {
+      "id": "mogadishu",
+      "lat": 2.03,
+      "lon": 45.34,
+      "harbor_tile": {
+        "x": 1353,
+        "y": 527
+      },
+      "distance": 1
+    },
+    {
+      "id": "malacca",
+      "lat": 2.19,
+      "lon": 102.25,
+      "harbor_tile": {
+        "x": 1692,
+        "y": 526
+      },
+      "distance": 1
+    },
+    {
+      "id": "batavia",
+      "lat": -6.13,
+      "lon": 106.81,
+      "harbor_tile": {
+        "x": 1720,
+        "y": 576
+      },
+      "distance": 0
+    },
+    {
+      "id": "macassar",
+      "lat": -5.13,
+      "lon": 119.41,
+      "harbor_tile": {
+        "x": 1796,
+        "y": 570
+      },
+      "distance": 0
+    },
+    {
+      "id": "amboina",
+      "lat": -3.69,
+      "lon": 128.18,
+      "harbor_tile": {
+        "x": 1849,
+        "y": 562
+      },
+      "distance": 0
+    },
+    {
+      "id": "manila",
+      "lat": 14.58,
+      "lon": 120.97,
+      "harbor_tile": {
+        "x": 1805,
+        "y": 452
+      },
+      "distance": 0
+    },
+    {
+      "id": "macau",
+      "lat": 22.19,
+      "lon": 113.54,
+      "harbor_tile": {
+        "x": 1761,
+        "y": 405
+      },
+      "distance": 1
+    },
+    {
+      "id": "canton",
+      "lat": 22.75,
+      "lon": 113.65,
+      "harbor_tile": {
+        "x": 1761,
+        "y": 403
+      },
+      "distance": 0
+    },
+    {
+      "id": "nagasaki",
+      "lat": 32.75,
+      "lon": 129.88,
+      "harbor_tile": {
+        "x": 1858,
+        "y": 343
+      },
+      "distance": 1
+    },
+    {
+      "id": "osaka",
+      "lat": 34.65,
+      "lon": 135.43,
+      "harbor_tile": {
+        "x": 1891,
+        "y": 332
+      },
+      "distance": 1
+    },
+    {
+      "id": "zeelandia",
+      "lat": 22.99,
+      "lon": 120.16,
+      "harbor_tile": {
+        "x": 1800,
+        "y": 402
+      },
+      "distance": 0
+    },
+    {
+      "id": "patani",
+      "lat": 6.87,
+      "lon": 101.25,
+      "harbor_tile": {
+        "x": 1687,
+        "y": 498
+      },
+      "distance": 0
+    },
+    {
+      "id": "brunei",
+      "lat": 5.0,
+      "lon": 115.05,
+      "harbor_tile": {
+        "x": 1770,
+        "y": 510
+      },
+      "distance": 0
+    },
+    {
+      "id": "ternate",
+      "lat": 0.79,
+      "lon": 127.38,
+      "harbor_tile": {
+        "x": 1843,
+        "y": 534
+      },
+      "distance": 1
+    },
+    {
+      "id": "timor",
+      "lat": -10.17,
+      "lon": 123.6,
+      "harbor_tile": {
+        "x": 1820,
+        "y": 600
+      },
+      "distance": 1
+    },
+    {
+      "id": "botany_bay",
+      "lat": -33.98,
+      "lon": 151.18,
+      "harbor_tile": {
+        "x": 1988,
+        "y": 742
+      },
+      "distance": 1
+    },
+    {
+      "id": "siam",
+      "lat": 13.5,
+      "lon": 100.58,
+      "harbor_tile": {
+        "x": 1683,
+        "y": 459
+      },
+      "distance": 0
+    },
+    {
+      "id": "cadiz",
+      "lat": 36.53,
+      "lon": -6.29,
+      "harbor_tile": {
+        "x": 1042,
+        "y": 320
+      },
+      "distance": 0
+    },
+    {
+      "id": "oporto",
+      "lat": 41.14,
+      "lon": -8.68,
+      "harbor_tile": {
+        "x": 1027,
+        "y": 293
+      },
+      "distance": 0
+    },
+    {
+      "id": "plymouth",
+      "lat": 50.37,
+      "lon": -4.14,
+      "harbor_tile": {
+        "x": 1054,
+        "y": 238
+      },
+      "distance": 1
+    },
+    {
+      "id": "bergen",
+      "lat": 60.39,
+      "lon": 5.32,
+      "harbor_tile": {
+        "x": 1111,
+        "y": 177
+      },
+      "distance": 0
+    },
+    {
+      "id": "danzig",
+      "lat": 54.4,
+      "lon": 18.68,
+      "harbor_tile": {
+        "x": 1192,
+        "y": 213
+      },
+      "distance": 0
+    },
+    {
+      "id": "stockholm",
+      "lat": 59.32,
+      "lon": 18.1,
+      "harbor_tile": {
+        "x": 1190,
+        "y": 183
+      },
+      "distance": 2
+    },
+    {
+      "id": "trieste",
+      "lat": 45.65,
+      "lon": 13.77,
+      "harbor_tile": {
+        "x": 1161,
+        "y": 265
+      },
+      "distance": 1
+    },
+    {
+      "id": "corfu",
+      "lat": 39.62,
+      "lon": 19.92,
+      "harbor_tile": {
+        "x": 1199,
+        "y": 302
+      },
+      "distance": 0
+    }
+  ],
+  "port_count": 100
+}
