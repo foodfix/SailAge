@@ -1,21 +1,12 @@
 {
   "version": 1,
   "tile_size_px": 32,
-  "grid": {"width": 128, "height": 96},
+  "grid": {"width": 2160, "height": 1080},
   "tiles": {
     "~": {"kind": "sea", "passable": true},
     ".": {"kind": "coastal_sea", "passable": true},
     "#": {"kind": "land", "passable": false},
-    "^": {"kind": "reef", "passable": false}
-  },
-  "port_markers": {
-    "0": "algiers", "1": "alexandria", "2": "amsterdam", "3": "antwerp",
-    "4": "athens", "5": "barcelona", "6": "beirut", "7": "bordeaux",
-    "8": "cagliari", "9": "candia", "a": "ceuta", "b": "cyprus",
-    "c": "genoa", "d": "hamburg", "e": "istanbul", "f": "lisbon",
-    "g": "london", "h": "madeira", "i": "marseille", "j": "naples",
-    "k": "palermo", "l": "ragusa", "m": "seville", "n": "smyrna",
-    "o": "syracuse", "p": "tripoli", "q": "tunis", "r": "valencia",
-    "s": "valetta", "t": "venice"
+    "^": {"kind": "reef", "passable": false},
+    "I": {"kind": "polar_ice", "passable": false}
   }
 }

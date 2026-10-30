@@ -8,11 +8,8 @@
         "en": "Lisbon"
       },
       "nation_id": "portugal",
-      "marker": "f",
-      "position": {
-        "x": 7,
-        "y": 57
-      },
+      "lat": 38.72,
+      "lon": -9.14,
       "produces": [
         "wine",
         "salt"
@@ -33,13 +30,6 @@
       "flavor": {
         "zh": "大航海时代的起点,特茹河口帆影如林。",
         "en": "Cradle of the Age of Discovery, its Tagus anchorage thick with sails."
-      },
-      "p3": {
-        "marker": "0",
-        "position": {
-          "x": 51,
-          "y": 16
-        }
       }
     },
     {
@@ -49,11 +39,8 @@
         "en": "Seville"
       },
       "nation_id": "spain",
-      "marker": "m",
-      "position": {
-        "x": 13,
-        "y": 65
-      },
+      "lat": 37.0,
+      "lon": -6.35,
       "produces": [
         "olive_oil",
         "wine",
@@ -74,13 +61,6 @@
       "flavor": {
         "zh": "瓜达尔基维尔河上的白银之城,船坞与货栈昼夜不歇。",
         "en": "City of silver on the Guadalquivir, its docks and warehouses never idle."
-      },
-      "p3": {
-        "marker": "1",
-        "position": {
-          "x": 54,
-          "y": 17
-        }
       }
     },
     {
@@ -90,11 +70,8 @@
         "en": "Valencia"
       },
       "nation_id": "spain",
-      "marker": "r",
-      "position": {
-        "x": 27,
-        "y": 55
-      },
+      "lat": 39.45,
+      "lon": -0.33,
       "produces": [
         "silk",
         "ceramics"
@@ -113,13 +90,6 @@
       "flavor": {
         "zh": "橙树林环绕的黎凡特港,丝绸与陶器在码头上成捆堆积。",
         "en": "A Levantine harbor ringed with orange groves, its quays stacked with silk and pottery."
-      },
-      "p3": {
-        "marker": "2",
-        "position": {
-          "x": 57,
-          "y": 16
-        }
       }
     },
     {
@@ -129,11 +99,8 @@
         "en": "Barcelona"
       },
       "nation_id": "spain",
-      "marker": "5",
-      "position": {
-        "x": 33,
-        "y": 48
-      },
+      "lat": 41.35,
+      "lon": 2.17,
       "produces": [
         "wool",
         "cotton_cloth"
@@ -152,13 +119,6 @@
       "flavor": {
         "zh": "加泰罗尼亚的商港,棉布与羊毛在此装船北运。",
         "en": "Catalonia's merchant port, where cotton and wool are loaded for the north."
-      },
-      "p3": {
-        "marker": "3",
-        "position": {
-          "x": 60,
-          "y": 13
-        }
       }
     },
     {
@@ -168,11 +128,8 @@
         "en": "Marseille"
       },
       "nation_id": "spain",
-      "marker": "i",
-      "position": {
-        "x": 41,
-        "y": 41
-      },
+      "lat": 43.3,
+      "lon": 5.37,
       "produces": [
         "wine",
         "salt",
@@ -192,13 +149,6 @@
       "flavor": {
         "zh": "普罗旺斯的门户,帆船载着葡萄酒与香水驶向东方。",
         "en": "Gateway to Provence, its ships bearing wine and perfume eastward."
-      },
-      "p3": {
-        "marker": "4",
-        "position": {
-          "x": 61,
-          "y": 12
-        }
       }
     },
     {
@@ -208,11 +158,8 @@
         "en": "Bordeaux"
       },
       "nation_id": "spain",
-      "marker": "7",
-      "position": {
-        "x": 26,
-        "y": 33
-      },
+      "lat": 45.55,
+      "lon": -1.15,
       "produces": [
         "wine",
         "salt"
@@ -231,13 +178,6 @@
       "flavor": {
         "zh": "加龙河口的葡萄酒港,英国商人的酒桶常年不断。",
         "en": "The wine port of the Garonne, forever loading casks for English merchants."
-      },
-      "p3": {
-        "marker": "5",
-        "position": {
-          "x": 55,
-          "y": 8
-        }
       }
     },
     {
@@ -247,11 +187,8 @@
         "en": "London"
       },
       "nation_id": "england",
-      "marker": "g",
-      "position": {
-        "x": 30,
-        "y": 13
-      },
+      "lat": 51.47,
+      "lon": 0.75,
       "produces": [
         "wool",
         "cotton_cloth"
@@ -272,13 +209,6 @@
       "flavor": {
         "zh": "泰晤士河畔的贸易巨城,羊毛与布匹堆满河岸。",
         "en": "A trading giant on the Thames, its banks piled with wool and cloth."
-      },
-      "p3": {
-        "marker": "6",
-        "position": {
-          "x": 57,
-          "y": 3
-        }
       }
     },
     {
@@ -288,11 +218,8 @@
         "en": "Amsterdam"
       },
       "nation_id": "holland",
-      "marker": "2",
-      "position": {
-        "x": 40,
-        "y": 9
-      },
+      "lat": 52.46,
+      "lon": 4.6,
       "produces": [
         "cheese",
         "glassware"
@@ -313,13 +240,6 @@
       "flavor": {
         "zh": "运河纵横的商都,玻璃与奶酪从这里流向全欧。",
         "en": "A merchant capital of canals, sending glass and cheese across Europe."
-      },
-      "p3": {
-        "marker": "7",
-        "position": {
-          "x": 60,
-          "y": 3
-        }
       }
     },
     {
@@ -329,11 +249,8 @@
         "en": "Antwerp"
       },
       "nation_id": "holland",
-      "marker": "3",
-      "position": {
-        "x": 39,
-        "y": 13
-      },
+      "lat": 51.44,
+      "lon": 3.6,
       "produces": [
         "glassware",
         "wool"
@@ -352,13 +269,6 @@
       "flavor": {
         "zh": "斯海尔德河上的集市之城,各国商船在此交汇。",
         "en": "A fair city on the Scheldt where merchants of every nation meet."
-      },
-      "p3": {
-        "marker": "8",
-        "position": {
-          "x": 59,
-          "y": 4
-        }
       }
     },
     {
@@ -368,11 +278,8 @@
         "en": "Hamburg"
       },
       "nation_id": "holland",
-      "marker": "d",
-      "position": {
-        "x": 51,
-        "y": 6
-      },
+      "lat": 53.87,
+      "lon": 8.7,
       "produces": [
         "dried_fish",
         "timber",
@@ -392,13 +299,6 @@
       "flavor": {
         "zh": "北海边的汉萨旧港,鱼干与琥珀是码头的常客。",
         "en": "An old Hanse port by the North Sea, its quays known for fish and amber."
-      },
-      "p3": {
-        "marker": "9",
-        "position": {
-          "x": 64,
-          "y": 1
-        }
       }
     },
     {
@@ -408,11 +308,8 @@
         "en": "Genoa"
       },
       "nation_id": "italy",
-      "marker": "c",
-      "position": {
-        "x": 49,
-        "y": 37
-      },
+      "lat": 44.41,
+      "lon": 8.93,
       "produces": [
         "olive_oil",
         "cotton_cloth"
@@ -431,13 +328,6 @@
       "flavor": {
         "zh": "利古里亚海岸的银行家之港,橄榄油与棉布南来北往。",
         "en": "A bankers' harbor on the Ligurian coast, trading oil and cotton."
-      },
-      "p3": {
-        "marker": "A",
-        "position": {
-          "x": 63,
-          "y": 11
-        }
       }
     },
     {
@@ -447,11 +337,8 @@
         "en": "Naples"
       },
       "nation_id": "italy",
-      "marker": "j",
-      "position": {
-        "x": 62,
-        "y": 50
-      },
+      "lat": 40.84,
+      "lon": 14.25,
       "produces": [
         "olive_oil",
         "wine"
@@ -470,13 +357,6 @@
       "flavor": {
         "zh": "维苏威脚下的繁忙港口,酒桶与谷袋堆满码头。",
         "en": "A busy port beneath Vesuvius, its wharves heaped with casks and grain."
-      },
-      "p3": {
-        "marker": "B",
-        "position": {
-          "x": 66,
-          "y": 14
-        }
       }
     },
     {
@@ -486,11 +366,8 @@
         "en": "Palermo"
       },
       "nation_id": "italy",
-      "marker": "k",
-      "position": {
-        "x": 60,
-        "y": 59
-      },
+      "lat": 38.12,
+      "lon": 13.36,
       "produces": [
         "wheat",
         "olive_oil"
@@ -509,13 +386,6 @@
       "flavor": {
         "zh": "西西里西岸的粮仓,小麦由这里运往地中海各地。",
         "en": "The granary of western Sicily, shipping wheat across the Mediterranean."
-      },
-      "p3": {
-        "marker": "C",
-        "position": {
-          "x": 65,
-          "y": 18
-        }
       }
     },
     {
@@ -525,11 +395,8 @@
         "en": "Syracuse"
       },
       "nation_id": "italy",
-      "marker": "o",
-      "position": {
-        "x": 64,
-        "y": 63
-      },
+      "lat": 37.07,
+      "lon": 15.29,
       "produces": [
         "salt",
         "wheat"
@@ -548,13 +415,6 @@
       "flavor": {
         "zh": "锡拉库萨的咸水田与麦田,靠盐与谷物为生。",
         "en": "Syracuse lives on its salt pans and wheat fields by the sea."
-      },
-      "p3": {
-        "marker": "D",
-        "position": {
-          "x": 67,
-          "y": 19
-        }
       }
     },
     {
@@ -564,11 +424,8 @@
         "en": "Cagliari"
       },
       "nation_id": "italy",
-      "marker": "8",
-      "position": {
-        "x": 50,
-        "y": 56
-      },
+      "lat": 39.22,
+      "lon": 9.11,
       "produces": [
         "salt",
         "leather"
@@ -587,13 +444,6 @@
       "flavor": {
         "zh": "撒丁岛南端的盐港,皮革与盐在此上船。",
         "en": "A salt port at the southern tip of Sardinia, loading leather and brine."
-      },
-      "p3": {
-        "marker": "E",
-        "position": {
-          "x": 63,
-          "y": 17
-        }
       }
     },
     {
@@ -603,11 +453,8 @@
         "en": "Valetta"
       },
       "nation_id": "italy",
-      "marker": "s",
-      "position": {
-        "x": 62,
-        "y": 67
-      },
+      "lat": 35.9,
+      "lon": 14.51,
       "produces": [
         "cotton_cloth"
       ],
@@ -626,13 +473,6 @@
       "flavor": {
         "zh": "马耳他骑士团筑起的堡垒港,棉布在此交易。",
         "en": "A fortress harbor built by the Knights of Malta, trading in cotton cloth."
-      },
-      "p3": {
-        "marker": "F",
-        "position": {
-          "x": 66,
-          "y": 19
-        }
       }
     },
     {
@@ -642,11 +482,8 @@
         "en": "Venice"
       },
       "nation_id": "italy",
-      "marker": "t",
-      "position": {
-        "x": 57,
-        "y": 34
-      },
+      "lat": 45.44,
+      "lon": 12.33,
       "produces": [
         "glassware",
         "perfume"
@@ -667,13 +504,6 @@
       "flavor": {
         "zh": "亚得里亚海的女王,商栈与运河之城。",
         "en": "Queen of the Adriatic, city of canals and counting-houses."
-      },
-      "p3": {
-        "marker": "G",
-        "position": {
-          "x": 65,
-          "y": 11
-        }
       }
     },
     {
@@ -683,11 +513,8 @@
         "en": "Ragusa"
       },
       "nation_id": "italy",
-      "marker": "l",
-      "position": {
-        "x": 71,
-        "y": 44
-      },
+      "lat": 42.65,
+      "lon": 18.09,
       "produces": [
         "timber",
         "leather",
@@ -706,13 +533,6 @@
       "flavor": {
         "zh": "杜布罗夫尼克的商船之港,木材与皮革堆满码头。",
         "en": "The merchant port of Dubrovnik, its quays stacked with timber and leather."
-      },
-      "p3": {
-        "marker": "H",
-        "position": {
-          "x": 69,
-          "y": 14
-        }
       }
     },
     {
@@ -722,11 +542,8 @@
         "en": "Athens"
       },
       "nation_id": "ottoman",
-      "marker": "4",
-      "position": {
-        "x": 84,
-        "y": 60
-      },
+      "lat": 37.94,
+      "lon": 23.64,
       "produces": [
         "olive_oil",
         "wine",
@@ -746,13 +563,6 @@
       "flavor": {
         "zh": "雅典港内橄榄与陶器并陈,古代的石柱仍望着海。",
         "en": "Olive oil and pottery fill the harbor, while ancient columns still face the sea."
-      },
-      "p3": {
-        "marker": "I",
-        "position": {
-          "x": 71,
-          "y": 14
-        }
       }
     },
     {
@@ -762,11 +572,8 @@
         "en": "Candia"
       },
       "nation_id": "ottoman",
-      "marker": "9",
-      "position": {
-        "x": 87,
-        "y": 69
-      },
+      "lat": 35.34,
+      "lon": 25.13,
       "produces": [
         "wine",
         "olive_oil"
@@ -785,13 +592,6 @@
       "flavor": {
         "zh": "克里特岛上的威尼斯遗港,酒与橄榄油源源而出。",
         "en": "A Venetian-built port on Crete, pouring out wine and olive oil."
-      },
-      "p3": {
-        "marker": "J",
-        "position": {
-          "x": 71,
-          "y": 21
-        }
       }
     },
     {
@@ -801,11 +601,8 @@
         "en": "Cyprus"
       },
       "nation_id": "ottoman",
-      "marker": "b",
-      "position": {
-        "x": 107,
-        "y": 70
-      },
+      "lat": 34.67,
+      "lon": 33.04,
       "produces": [
         "copper",
         "sugar"
@@ -824,13 +621,6 @@
       "flavor": {
         "zh": "塞浦路斯南岸的铜与糖之港,季风带来东方货物。",
         "en": "A port of copper and sugar on Cyprus, where monsoons bring eastern wares."
-      },
-      "p3": {
-        "marker": "K",
-        "position": {
-          "x": 80,
-          "y": 24
-        }
       }
     },
     {
@@ -840,11 +630,8 @@
         "en": "Smyrna"
       },
       "nation_id": "ottoman",
-      "marker": "n",
-      "position": {
-        "x": 92,
-        "y": 58
-      },
+      "lat": 38.42,
+      "lon": 27.14,
       "produces": [
         "carpet"
       ],
@@ -863,13 +650,6 @@
       "flavor": {
         "zh": "爱琴海东岸的大集市,地毯在码头上铺了一地。",
         "en": "A great market on the Aegean coast, carpets spread along the quay."
-      },
-      "p3": {
-        "marker": "L",
-        "position": {
-          "x": 74,
-          "y": 14
-        }
       }
     },
     {
@@ -879,11 +659,8 @@
         "en": "Istanbul"
       },
       "nation_id": "ottoman",
-      "marker": "e",
-      "position": {
-        "x": 96,
-        "y": 49
-      },
+      "lat": 41.01,
+      "lon": 28.97,
       "produces": [
         "carpet",
         "perfume"
@@ -904,13 +681,6 @@
       "flavor": {
         "zh": "金角湾畔的帝国首都,博斯普鲁斯的风带来两洲的货物。",
         "en": "Imperial capital of the Golden Horn, where Bosphorus winds carry goods from two continents."
-      },
-      "p3": {
-        "marker": "M",
-        "position": {
-          "x": 75,
-          "y": 13
-        }
       }
     },
     {
@@ -920,11 +690,8 @@
         "en": "Beirut"
       },
       "nation_id": "ottoman",
-      "marker": "6",
-      "position": {
-        "x": 112,
-        "y": 74
-      },
+      "lat": 33.9,
+      "lon": 35.5,
       "produces": [
         "silk",
         "timber"
@@ -943,13 +710,6 @@
       "flavor": {
         "zh": "黎凡特海岸的丝绸港,山地木材随之而下。",
         "en": "A silk port on the Levantine coast, with mountain timber floated down to the quay."
-      },
-      "p3": {
-        "marker": "N",
-        "position": {
-          "x": 81,
-          "y": 24
-        }
       }
     },
     {
@@ -959,11 +719,8 @@
         "en": "Alexandria"
       },
       "nation_id": "ottoman",
-      "marker": "1",
-      "position": {
-        "x": 99,
-        "y": 84
-      },
+      "lat": 31.2,
+      "lon": 29.92,
       "produces": [
         "cotton_cloth",
         "sugar",
@@ -984,13 +741,6 @@
       "flavor": {
         "zh": "尼罗河口的古老商都,谷物与糖在灯塔下装船。",
         "en": "An ancient emporium at the Nile's mouth, loading grain and sugar beneath the lighthouse."
-      },
-      "p3": {
-        "marker": "O",
-        "position": {
-          "x": 75,
-          "y": 25
-        }
       }
     },
     {
@@ -1000,11 +750,8 @@
         "en": "Tripoli"
       },
       "nation_id": "ottoman",
-      "marker": "p",
-      "position": {
-        "x": 59,
-        "y": 78
-      },
+      "lat": 32.9,
+      "lon": 13.18,
       "produces": [
         "leather",
         "salt"
@@ -1023,13 +770,6 @@
       "flavor": {
         "zh": "北非海岸的停泊地,皮革与盐是这里的生意。",
         "en": "A roadstead on the North African coast, trading leather and salt."
-      },
-      "p3": {
-        "marker": "P",
-        "position": {
-          "x": 68,
-          "y": 20
-        }
       }
     },
     {
@@ -1039,11 +779,8 @@
         "en": "Tunis"
       },
       "nation_id": "ottoman",
-      "marker": "q",
-      "position": {
-        "x": 52,
-        "y": 64
-      },
+      "lat": 36.82,
+      "lon": 10.3,
       "produces": [
         "olive_oil",
         "leather"
@@ -1062,13 +799,6 @@
       "flavor": {
         "zh": "突尼斯湖畔的港城,橄榄油与皮革由此北运。",
         "en": "A harbor town by the Tunis lake, sending oil and leather north."
-      },
-      "p3": {
-        "marker": "Q",
-        "position": {
-          "x": 64,
-          "y": 18
-        }
       }
     },
     {
@@ -1078,11 +808,8 @@
         "en": "Algiers"
       },
       "nation_id": "ottoman",
-      "marker": "0",
-      "position": {
-        "x": 36,
-        "y": 64
-      },
+      "lat": 36.77,
+      "lon": 3.06,
       "produces": [
         "leather",
         "wool"
@@ -1102,13 +829,6 @@
       "flavor": {
         "zh": "巴巴里海岸的白色港城,皮革与羊毛堆满码头。",
         "en": "The white port of the Barbary coast, its quays heaped with leather and wool."
-      },
-      "p3": {
-        "marker": "R",
-        "position": {
-          "x": 59,
-          "y": 18
-        }
       }
     },
     {
@@ -1118,11 +838,8 @@
         "en": "Ceuta"
       },
       "nation_id": "portugal",
-      "marker": "a",
-      "position": {
-        "x": 16,
-        "y": 67
-      },
+      "lat": 35.89,
+      "lon": -5.32,
       "produces": [
         "wheat",
         "leather"
@@ -1141,13 +858,6 @@
       "flavor": {
         "zh": "直布罗陀门户上的葡属要塞。",
         "en": "A Portuguese stronghold guarding the gates of Gibraltar."
-      },
-      "p3": {
-        "marker": "S",
-        "position": {
-          "x": 53,
-          "y": 18
-        }
       }
     },
     {
@@ -1157,11 +867,8 @@
         "en": "Madeira"
       },
       "nation_id": "portugal",
-      "marker": "h",
-      "position": {
-        "x": 0,
-        "y": 78
-      },
+      "lat": 32.65,
+      "lon": -16.91,
       "produces": [
         "sugar",
         "wine"
@@ -1180,13 +887,2037 @@
       "flavor": {
         "zh": "大西洋边缘的糖与酒之岛,地图最西端的锚地。",
         "en": "An Atlantic isle of sugar and wine, the westernmost anchorage on the chart."
+      }
+    },
+    {
+      "id": "havana",
+      "name": {
+        "zh": "哈瓦那",
+        "en": "Havana"
       },
-      "p3": {
-        "marker": "T",
-        "position": {
-          "x": 50,
-          "y": 24
-        }
+      "nation_id": "spain",
+      "lat": 23.13,
+      "lon": -82.38,
+      "produces": [
+        "sugar",
+        "amber"
+      ],
+      "demands": [
+        "wine",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "加勒比海上的良港,蔗糖与烟草在此装船。",
+        "en": "A fine Caribbean haven where sugar and tobacco go aboard."
+      }
+    },
+    {
+      "id": "vera_cruz",
+      "name": {
+        "zh": "韦拉克鲁斯",
+        "en": "Veracruz"
+      },
+      "nation_id": "spain",
+      "lat": 19.2,
+      "lon": -96.13,
+      "produces": [
+        "copper",
+        "sugar"
+      ],
+      "demands": [
+        "iron",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "白银之路的东大门,骡队在此与船队相会。",
+        "en": "The silver road's eastern gate, where mule trains meet the fleet."
+      }
+    },
+    {
+      "id": "cartagena",
+      "name": {
+        "zh": "卡塔赫纳",
+        "en": "Cartagena"
+      },
+      "nation_id": "spain",
+      "lat": 10.39,
+      "lon": -75.53,
+      "produces": [
+        "amber",
+        "sugar"
+      ],
+      "demands": [
+        "wine",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "环礁之后的设防宝库港,领航员对每条水道铭记于心。",
+        "en": "A walled treasure port behind reefs the pilots know by heart."
+      }
+    },
+    {
+      "id": "portobelo",
+      "name": {
+        "zh": "波托贝洛",
+        "en": "Portobelo"
+      },
+      "nation_id": "spain",
+      "lat": 9.55,
+      "lon": -79.65,
+      "produces": [
+        "sugar"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "闷热多雨的集市,宝船队每年在此装货一次。",
+        "en": "A hot, rain-soaked fair where the treasure fleet loads once a year."
+      }
+    },
+    {
+      "id": "lima",
+      "name": {
+        "zh": "利马",
+        "en": "Lima"
+      },
+      "nation_id": "spain",
+      "lat": -12.06,
+      "lon": -77.15,
+      "produces": [
+        "copper",
+        "sugar"
+      ],
+      "demands": [
+        "glassware",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "卡亚俄锚地在雾后为这座王者之城服务。",
+        "en": "Callao's roadstead serves the City of Kings from behind the fog."
+      }
+    },
+    {
+      "id": "buenos_aires",
+      "name": {
+        "zh": "布宜诺斯艾利斯",
+        "en": "Buenos Aires"
+      },
+      "nation_id": "spain",
+      "lat": -34.6,
+      "lon": -58.37,
+      "produces": [
+        "leather",
+        "wheat"
+      ],
+      "demands": [
+        "iron",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "无垠草原的皮革与油脂在这座泥泞河港装船。",
+        "en": "Hides and tallow from the endless pampas load at this muddy river port."
+      }
+    },
+    {
+      "id": "san_juan",
+      "name": {
+        "zh": "圣胡安",
+        "en": "San Juan"
+      },
+      "nation_id": "spain",
+      "lat": 18.47,
+      "lon": -66.11,
+      "produces": [
+        "sugar",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "扼守加勒比通道的设防锚地。",
+        "en": "A fortified anchorage guarding the passage into the Caribbean."
+      }
+    },
+    {
+      "id": "santo_domingo",
+      "name": {
+        "zh": "圣多明各",
+        "en": "Santo Domingo"
+      },
+      "nation_id": "spain",
+      "lat": 18.47,
+      "lon": -69.88,
+      "produces": [
+        "sugar",
+        "leather"
+      ],
+      "demands": [
+        "silk",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "新大陆上最古老的西班牙治所。",
+        "en": "The oldest seat of Spanish rule in the new world."
+      }
+    },
+    {
+      "id": "acapulco",
+      "name": {
+        "zh": "阿卡普尔科",
+        "en": "Acapulco"
+      },
+      "nation_id": "spain",
+      "lat": 16.85,
+      "lon": -99.9,
+      "produces": [
+        "silk",
+        "copper"
+      ],
+      "demands": [
+        "wheat",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "马尼拉大帆船在此以中国丝绸交换墨西哥白银。",
+        "en": "Where the Manila galleon trades Chinese silk for Mexican silver."
+      }
+    },
+    {
+      "id": "panama",
+      "name": {
+        "zh": "巴拿马",
+        "en": "Panama"
+      },
+      "nation_id": "spain",
+      "lat": 8.98,
+      "lon": -79.52,
+      "produces": [
+        "amber",
+        "copper"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "狭窄的地峡,两洋几乎在此相握。",
+        "en": "The narrow isthmus where two oceans nearly shake hands."
+      }
+    },
+    {
+      "id": "valparaiso",
+      "name": {
+        "zh": "瓦尔帕莱索",
+        "en": "Valparaiso"
+      },
+      "nation_id": "spain",
+      "lat": -33.03,
+      "lon": -71.63,
+      "produces": [
+        "copper",
+        "wine"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "陡坡之下的多风海湾,为太平洋航程补给。",
+        "en": "A windswept bay under steep hills, provisioning the Pacific run."
+      }
+    },
+    {
+      "id": "guayaquil",
+      "name": {
+        "zh": "瓜亚基尔",
+        "en": "Guayaquil"
+      },
+      "nation_id": "spain",
+      "lat": -2.6,
+      "lon": -80.3,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "iron",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "赤道上的可可与造船河港。",
+        "en": "A river port of cacao and shipwrights on the equator."
+      }
+    },
+    {
+      "id": "bahia",
+      "name": {
+        "zh": "巴伊亚",
+        "en": "Bahia"
+      },
+      "nation_id": "portugal",
+      "lat": -12.97,
+      "lon": -38.5,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "glassware",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "万圣湾,制糖作坊靠贩奴船维持。",
+        "en": "The Bay of All Saints, its sugar mills fed by slave ships."
+      }
+    },
+    {
+      "id": "rio_de_janeiro",
+      "name": {
+        "zh": "里约热内卢",
+        "en": "Rio de Janeiro"
+      },
+      "nation_id": "portugal",
+      "lat": -22.9,
+      "lon": -43.18,
+      "produces": [
+        "sugar",
+        "timber",
+        "amber"
+      ],
+      "demands": [
+        "iron",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "群山环抱的海湾,船队可安全下锚。",
+        "en": "A jaw of mountains around a bay the fleet can anchor in safely."
+      }
+    },
+    {
+      "id": "recife",
+      "name": {
+        "zh": "累西腓",
+        "en": "Recife"
+      },
+      "nation_id": "portugal",
+      "lat": -8.06,
+      "lon": -34.87,
+      "produces": [
+        "sugar",
+        "cotton_cloth"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "礁石庇护着糖海岸最繁忙的码头。",
+        "en": "Reefs shelter the sugar coast's busiest landing."
+      }
+    },
+    {
+      "id": "belem",
+      "name": {
+        "zh": "贝伦",
+        "en": "Belem"
+      },
+      "nation_id": "portugal",
+      "lat": -1.35,
+      "lon": -48.48,
+      "produces": [
+        "timber",
+        "spices"
+      ],
+      "demands": [
+        "salt",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "通往大河与香料森林的门户。",
+        "en": "The gateway to the great river and its spice-laden forests."
+      }
+    },
+    {
+      "id": "boston",
+      "name": {
+        "zh": "波士顿",
+        "en": "Boston"
+      },
+      "nation_id": "england",
+      "lat": 42.36,
+      "lon": -71.05,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "寒冷深湾里的鳕鱼、木材与倔强的商人。",
+        "en": "Cod, timber and stubborn merchants on a cold deep bay."
+      }
+    },
+    {
+      "id": "new_york",
+      "name": {
+        "zh": "纽约",
+        "en": "New York"
+      },
+      "nation_id": "england",
+      "lat": 40.7,
+      "lon": -74.02,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "wine",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "河口处的避风良港,是通往内地的水路起点。",
+        "en": "A sheltered harbour at the mouth of a river road into the interior."
+      }
+    },
+    {
+      "id": "jamestown",
+      "name": {
+        "zh": "詹姆斯敦",
+        "en": "Jamestown"
+      },
+      "nation_id": "england",
+      "lat": 37.0,
+      "lon": -76.3,
+      "produces": [
+        "timber",
+        "wheat"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "泥河上的烟草码头,除了土地什么都缺。",
+        "en": "A tobacco landing on a muddy river, short of everything but land."
+      }
+    },
+    {
+      "id": "charleston",
+      "name": {
+        "zh": "查尔斯顿",
+        "en": "Charleston"
+      },
+      "nation_id": "england",
+      "lat": 32.78,
+      "lon": -79.93,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "稻米与靛蓝的驳船在此与远洋贸易相会。",
+        "en": "Rice and indigo barges meet the ocean trade here."
+      }
+    },
+    {
+      "id": "new_foundland",
+      "name": {
+        "zh": "纽芬兰",
+        "en": "Newfoundland"
+      },
+      "nation_id": "england",
+      "lat": 47.56,
+      "lon": -52.71,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "大浅滩的腌鱼滩,每年夏天都挤满人。",
+        "en": "The Grand Banks' curing beaches, busy every summer."
+      }
+    },
+    {
+      "id": "quebec",
+      "name": {
+        "zh": "魁北克",
+        "en": "Quebec"
+      },
+      "nation_id": "england",
+      "lat": 47.0,
+      "lon": -70.5,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "峭壁上的毛皮站,俯瞰渐窄的河流。",
+        "en": "A cliff-top fur post above the narrowing river."
+      }
+    },
+    {
+      "id": "curacao",
+      "name": {
+        "zh": "库拉索",
+        "en": "Curacao"
+      },
+      "nation_id": "holland",
+      "lat": 12.11,
+      "lon": -68.93,
+      "produces": [
+        "salt",
+        "sugar"
+      ],
+      "demands": [
+        "timber",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "干旱小岛,盐田与自由港招来万国旗。",
+        "en": "A dry island whose salt pans and free port draw every flag."
+      }
+    },
+    {
+      "id": "suriname",
+      "name": {
+        "zh": "苏里南",
+        "en": "Suriname"
+      },
+      "nation_id": "holland",
+      "lat": 5.9,
+      "lon": -55.15,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "iron",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "种植园河流缓缓甜甜地流向大海。",
+        "en": "Plantation rivers running slow and sweet to the sea."
+      }
+    },
+    {
+      "id": "elmina",
+      "name": {
+        "zh": "埃尔米纳",
+        "en": "Elmina"
+      },
+      "nation_id": "portugal",
+      "lat": 5.08,
+      "lon": -1.35,
+      "produces": [
+        "amber",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "黄金海岸上的城堡,贸易以人命计量。",
+        "en": "A castle on the Gold Coast, its trade measured in human lives."
+      }
+    },
+    {
+      "id": "luanda",
+      "name": {
+        "zh": "罗安达",
+        "en": "Luanda"
+      },
+      "nation_id": "portugal",
+      "lat": -8.78,
+      "lon": 13.23,
+      "produces": [
+        "amber",
+        "leather"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "刚果以南的炎热海湾,通往内地集市的入口。",
+        "en": "A hot bay south of the Congo, gateway to the interior fairs."
+      }
+    },
+    {
+      "id": "mozambique",
+      "name": {
+        "zh": "莫桑比克",
+        "en": "Mozambique"
+      },
+      "nation_id": "portugal",
+      "lat": -15.03,
+      "lon": 40.73,
+      "produces": [
+        "amber",
+        "spices"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "季风帆船与葡萄牙代理人的岛屿港口。",
+        "en": "An island port of monsoon dhows and Portuguese factors."
+      }
+    },
+    {
+      "id": "mombasa",
+      "name": {
+        "zh": "蒙巴萨",
+        "en": "Mombasa"
+      },
+      "nation_id": "ottoman",
+      "lat": -4.06,
+      "lon": 39.68,
+      "produces": [
+        "spices",
+        "amber"
+      ],
+      "demands": [
+        "glassware",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "珊瑚岛港,扼守斯瓦希里海岸。",
+        "en": "A coral island harbour commanding the Swahili coast."
+      }
+    },
+    {
+      "id": "cape_town",
+      "name": {
+        "zh": "开普敦",
+        "en": "Cape Town"
+      },
+      "nation_id": "holland",
+      "lat": -33.92,
+      "lon": 18.42,
+      "produces": [
+        "wine",
+        "wheat"
+      ],
+      "demands": [
+        "timber",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "桌山之下,为印度航程供给的菜园。",
+        "en": "A table-topped mountain and a garden for the Indies run."
+      }
+    },
+    {
+      "id": "safi",
+      "name": {
+        "zh": "萨菲",
+        "en": "Safi"
+      },
+      "nation_id": "portugal",
+      "lat": 32.3,
+      "lon": -9.24,
+      "produces": [
+        "salt",
+        "leather"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "摩洛哥大西洋岸的陶器与盐港。",
+        "en": "A pottery and salt port on the Atlantic edge of Morocco."
+      }
+    },
+    {
+      "id": "saint_louis",
+      "name": {
+        "zh": "圣路易",
+        "en": "Saint-Louis"
+      },
+      "nation_id": "holland",
+      "lat": 16.0,
+      "lon": -16.51,
+      "produces": [
+        "leather",
+        "salt"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "沙漠边缘的河口贸易站。",
+        "en": "A river-mouth trading post at the edge of the desert."
+      }
+    },
+    {
+      "id": "accra",
+      "name": {
+        "zh": "阿克拉",
+        "en": "Accra"
+      },
+      "nation_id": "england",
+      "lat": 5.53,
+      "lon": -0.2,
+      "produces": [
+        "amber",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "浪花拍岸的码头,独木舟驶向大船。",
+        "en": "A surf-beaten landing where canoes run out to the ships."
+      }
+    },
+    {
+      "id": "goa",
+      "name": {
+        "zh": "果阿",
+        "en": "Goa"
+      },
+      "nation_id": "portugal",
+      "lat": 15.5,
+      "lon": 73.83,
+      "produces": [
+        "spices",
+        "cotton_cloth"
+      ],
+      "demands": [
+        "wine",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "总督驻地,棕榈海岸上方的白色教堂。",
+        "en": "The Viceroy's seat, its churches white above the palm coast."
+      }
+    },
+    {
+      "id": "calicut",
+      "name": {
+        "zh": "卡利卡特",
+        "en": "Calicut"
+      },
+      "nation_id": "portugal",
+      "lat": 11.25,
+      "lon": 75.77,
+      "produces": [
+        "spices",
+        "carpet"
+      ],
+      "demands": [
+        "glassware",
+        "copper"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "胡椒之路的西端,挤满阿拉伯帆船。",
+        "en": "The pepper road's western terminus, crowded with Arab dhows."
+      }
+    },
+    {
+      "id": "cochin",
+      "name": {
+        "zh": "科钦",
+        "en": "Cochin"
+      },
+      "nation_id": "holland",
+      "lat": 9.97,
+      "lon": 76.27,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "iron",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "中国渔网与香料仓库交错的水乡港。",
+        "en": "A backwater of Chinese nets and spice warehouses."
+      }
+    },
+    {
+      "id": "bombay",
+      "name": {
+        "zh": "孟买",
+        "en": "Bombay"
+      },
+      "nation_id": "england",
+      "lat": 18.92,
+      "lon": 72.83,
+      "produces": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "demands": [
+        "iron",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "七岛相连的天然深水港。",
+        "en": "Seven islands joined into one deep natural harbour."
+      }
+    },
+    {
+      "id": "surat",
+      "name": {
+        "zh": "苏拉特",
+        "en": "Surat"
+      },
+      "nation_id": "england",
+      "lat": 21.1,
+      "lon": 72.7,
+      "produces": [
+        "cotton_cloth",
+        "carpet"
+      ],
+      "demands": [
+        "glassware",
+        "amber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "莫卧儿帝国往来红海最繁忙的码头。",
+        "en": "The Mughal empire's busiest quay for the Red Sea run."
+      }
+    },
+    {
+      "id": "colombo",
+      "name": {
+        "zh": "科伦坡",
+        "en": "Colombo"
+      },
+      "nation_id": "holland",
+      "lat": 6.93,
+      "lon": 79.85,
+      "produces": [
+        "spices",
+        "ceramics"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "锡兰背风面的肉桂锚地。",
+        "en": "A cinnamon roadstead on the lee of Ceylon."
+      }
+    },
+    {
+      "id": "pondicherry",
+      "name": {
+        "zh": "本地治里",
+        "en": "Pondicherry"
+      },
+      "nation_id": "england",
+      "lat": 11.93,
+      "lon": 79.83,
+      "produces": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "demands": [
+        "glassware",
+        "amber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "科罗曼德海岸上笔直街道的方格小城。",
+        "en": "A grid of straight streets on the Coromandel coast."
+      }
+    },
+    {
+      "id": "muscat",
+      "name": {
+        "zh": "马斯喀特",
+        "en": "Muscat"
+      },
+      "nation_id": "ottoman",
+      "lat": 23.62,
+      "lon": 58.59,
+      "produces": [
+        "amber",
+        "carpet"
+      ],
+      "demands": [
+        "wine",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "光秃的黑山之后,采珠船聚集的港湾。",
+        "en": "Bare black hills behind a harbour of pearling dhows."
+      }
+    },
+    {
+      "id": "basra",
+      "name": {
+        "zh": "巴士拉",
+        "en": "Basra"
+      },
+      "nation_id": "ottoman",
+      "lat": 30.0,
+      "lon": 48.5,
+      "produces": [
+        "carpet",
+        "dried_fish"
+      ],
+      "demands": [
+        "iron",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "两河合一处的椰枣园。",
+        "en": "The date gardens where the twin rivers become one."
+      }
+    },
+    {
+      "id": "bandar_abbas",
+      "name": {
+        "zh": "阿巴斯港",
+        "en": "Bandar Abbas"
+      },
+      "nation_id": "ottoman",
+      "lat": 27.18,
+      "lon": 56.28,
+      "produces": [
+        "carpet",
+        "amber"
+      ],
+      "demands": [
+        "glassware",
+        "sugar"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "波斯湾的税关,炎热而堆满账册。",
+        "en": "The Persian Gulf's customs house, hot and full of ledgers."
+      }
+    },
+    {
+      "id": "aden",
+      "name": {
+        "zh": "亚丁",
+        "en": "Aden"
+      },
+      "nation_id": "ottoman",
+      "lat": 12.79,
+      "lon": 45.03,
+      "produces": [
+        "amber",
+        "salt"
+      ],
+      "demands": [
+        "wheat",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "光秃火山丘下的火山口港湾。",
+        "en": "A crater harbour under bare volcanic hills."
+      }
+    },
+    {
+      "id": "jiddah",
+      "name": {
+        "zh": "吉达",
+        "en": "Jiddah"
+      },
+      "nation_id": "ottoman",
+      "lat": 21.48,
+      "lon": 39.18,
+      "produces": [
+        "carpet",
+        "amber"
+      ],
+      "demands": [
+        "wheat",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "红海的朝圣之门,道路被尘土染白。",
+        "en": "The Red Sea's pilgrim gate, its roads white with dust."
+      }
+    },
+    {
+      "id": "suakin",
+      "name": {
+        "zh": "苏阿金",
+        "en": "Suakin"
+      },
+      "nation_id": "ottoman",
+      "lat": 19.1,
+      "lon": 37.33,
+      "produces": [
+        "salt",
+        "leather"
+      ],
+      "demands": [
+        "glassware",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "苏丹贸易的珊瑚石港,已半为泥沙所淤。",
+        "en": "A coral-built port of the Sudan trade, half silted already."
+      }
+    },
+    {
+      "id": "mogadishu",
+      "name": {
+        "zh": "摩加迪沙",
+        "en": "Mogadishu"
+      },
+      "nation_id": "ottoman",
+      "lat": 2.03,
+      "lon": 45.34,
+      "produces": [
+        "spices",
+        "leather"
+      ],
+      "demands": [
+        "iron",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "贝纳迪尔海岸上白墙环绕的锚地。",
+        "en": "A white-walled roadstead on the Benadir coast."
+      }
+    },
+    {
+      "id": "malacca",
+      "name": {
+        "zh": "马六甲",
+        "en": "Malacca"
+      },
+      "nation_id": "portugal",
+      "lat": 2.19,
+      "lon": 102.25,
+      "produces": [
+        "spices",
+        "amber"
+      ],
+      "demands": [
+        "iron",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "海峡的税关,每支季风船队都必须经过。",
+        "en": "The strait's toll-house, where every monsoon fleet must pass."
+      }
+    },
+    {
+      "id": "batavia",
+      "name": {
+        "zh": "巴达维亚",
+        "en": "Batavia"
+      },
+      "nation_id": "holland",
+      "lat": -6.13,
+      "lon": 106.81,
+      "produces": [
+        "spices",
+        "sugar"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "运河、货栈与公司的东方首府。",
+        "en": "Canals, warehouses and the Company's eastern capital."
+      }
+    },
+    {
+      "id": "macassar",
+      "name": {
+        "zh": "望加锡",
+        "en": "Macassar"
+      },
+      "nation_id": "holland",
+      "lat": -5.13,
+      "lon": 119.41,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "布吉商人与公司船只的交汇之地。",
+        "en": "A meeting point of Bugis traders and Company ships."
+      }
+    },
+    {
+      "id": "amboina",
+      "name": {
+        "zh": "安汶",
+        "en": "Amboina"
+      },
+      "nation_id": "holland",
+      "lat": -3.69,
+      "lon": 128.18,
+      "produces": [
+        "spices",
+        "salt"
+      ],
+      "demands": [
+        "iron",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "丁香之岛,由星形要塞守卫。",
+        "en": "The clove island, guarded by a star fort."
+      }
+    },
+    {
+      "id": "manila",
+      "name": {
+        "zh": "马尼拉",
+        "en": "Manila"
+      },
+      "nation_id": "spain",
+      "lat": 14.58,
+      "lon": 120.97,
+      "produces": [
+        "silk",
+        "spices"
+      ],
+      "demands": [
+        "wheat",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "设防之城,白银大帆船与中国帆船在此相会。",
+        "en": "A walled city where the silver galleon meets Chinese junks."
+      }
+    },
+    {
+      "id": "macau",
+      "name": {
+        "zh": "澳门",
+        "en": "Macao"
+      },
+      "nation_id": "portugal",
+      "lat": 22.19,
+      "lon": 113.54,
+      "produces": [
+        "silk",
+        "ceramics"
+      ],
+      "demands": [
+        "sugar",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "河口半岛上的教堂与货栈。",
+        "en": "A peninsula of churches and godowns at the river's mouth."
+      }
+    },
+    {
+      "id": "canton",
+      "name": {
+        "zh": "广州",
+        "en": "Canton"
+      },
+      "nation_id": "england",
+      "lat": 22.75,
+      "lon": 113.65,
+      "produces": [
+        "silk",
+        "ceramics",
+        "timber"
+      ],
+      "demands": [
+        "copper",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "大河之城,外国船只只能在黄埔下锚。",
+        "en": "The great river city where foreign ships may anchor only at Whampoa."
+      }
+    },
+    {
+      "id": "nagasaki",
+      "name": {
+        "zh": "长崎",
+        "en": "Nagasaki"
+      },
+      "nation_id": "holland",
+      "lat": 32.75,
+      "lon": 129.88,
+      "produces": [
+        "copper",
+        "silk"
+      ],
+      "demands": [
+        "sugar",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "内湾港,一座小岛承载全部对外贸易。",
+        "en": "A landlocked bay where one small island carries all foreign trade."
+      }
+    },
+    {
+      "id": "osaka",
+      "name": {
+        "zh": "大阪",
+        "en": "Osaka"
+      },
+      "nation_id": "holland",
+      "lat": 34.65,
+      "lon": 135.43,
+      "produces": [
+        "copper",
+        "ceramics"
+      ],
+      "demands": [
+        "silk",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "全国的米市,驳船拥挤。",
+        "en": "The rice market of the realm, thick with barges."
+      }
+    },
+    {
+      "id": "zeelandia",
+      "name": {
+        "zh": "热兰遮",
+        "en": "Zeelandia"
+      },
+      "nation_id": "holland",
+      "lat": 22.99,
+      "lon": 120.16,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "绿岛沙洲上的要塞,岛上多鹿与甘蔗。",
+        "en": "A sandbar fort off a green island of deer and sugar."
+      }
+    },
+    {
+      "id": "patani",
+      "name": {
+        "zh": "北大年",
+        "en": "Patani"
+      },
+      "nation_id": "holland",
+      "lat": 6.87,
+      "lon": 101.25,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "马来渔人与中国商人共处的港口。",
+        "en": "A Malay port of fishermen and Chinese traders."
+      }
+    },
+    {
+      "id": "brunei",
+      "name": {
+        "zh": "文莱",
+        "en": "Brunei"
+      },
+      "nation_id": "spain",
+      "lat": 5.0,
+      "lon": 115.05,
+      "produces": [
+        "timber",
+        "spices"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "苏丹宫殿下高脚屋组成的水上之城。",
+        "en": "A water town of stilt houses under the Sultan's palace."
+      }
+    },
+    {
+      "id": "ternate",
+      "name": {
+        "zh": "特尔纳特",
+        "en": "Ternate"
+      },
+      "nation_id": "holland",
+      "lat": 0.79,
+      "lon": 127.38,
+      "produces": [
+        "spices",
+        "salt"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "生长世界丁香的火山岛。",
+        "en": "A volcano island that grows the world's cloves."
+      }
+    },
+    {
+      "id": "timor",
+      "name": {
+        "zh": "帝汶",
+        "en": "Timor"
+      },
+      "nation_id": "portugal",
+      "lat": -10.17,
+      "lon": 123.6,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "glassware",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "季风之路尽头的干旱檀木岛。",
+        "en": "A dry, sandalwood island at the end of the monsoon road."
+      }
+    },
+    {
+      "id": "botany_bay",
+      "name": {
+        "zh": "植物学湾",
+        "en": "Botany Bay"
+      },
+      "nation_id": "england",
+      "lat": -33.98,
+      "lon": 151.18,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "wine",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "世界尽头空旷宽广的海湾。",
+        "en": "A wide empty bay at the world's far edge."
+      }
+    },
+    {
+      "id": "siam",
+      "name": {
+        "zh": "暹罗",
+        "en": "Siam"
+      },
+      "nation_id": "portugal",
+      "lat": 13.5,
+      "lon": 100.58,
+      "produces": [
+        "timber",
+        "ceramics"
+      ],
+      "demands": [
+        "glassware",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "河都下游的港口,盛产柚木。",
+        "en": "A river capital's downstream port, rich in teak."
+      }
+    },
+    {
+      "id": "cadiz",
+      "name": {
+        "zh": "加的斯",
+        "en": "Cadiz"
+      },
+      "nation_id": "spain",
+      "lat": 36.53,
+      "lon": -6.29,
+      "produces": [
+        "salt",
+        "wine"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "宝船队在大西洋一侧的母港锚地。",
+        "en": "The treasure fleet's home roadstead on the Atlantic side."
+      }
+    },
+    {
+      "id": "oporto",
+      "name": {
+        "zh": "波尔图",
+        "en": "Oporto"
+      },
+      "nation_id": "portugal",
+      "lat": 41.14,
+      "lon": -8.68,
+      "produces": [
+        "wine",
+        "leather"
+      ],
+      "demands": [
+        "spices",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "梯田葡萄园直落花岗岩河口。",
+        "en": "Terraced vineyards falling to a granite river mouth."
+      }
+    },
+    {
+      "id": "plymouth",
+      "name": {
+        "zh": "普利茅斯",
+        "en": "Plymouth"
+      },
+      "nation_id": "england",
+      "lat": 50.37,
+      "lon": -4.14,
+      "produces": [
+        "dried_fish",
+        "wool"
+      ],
+      "demands": [
+        "wine",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "防波堤后的海湾,堆满海军物资。",
+        "en": "A sound behind a breakwater, full of naval stores."
+      }
+    },
+    {
+      "id": "bergen",
+      "name": {
+        "zh": "卑尔根",
+        "en": "Bergen"
+      },
+      "nation_id": "holland",
+      "lat": 60.39,
+      "lon": 5.32,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "多雨的码头,堆满鳕鱼干与汉萨账册。",
+        "en": "A rain-soaked quay of dried cod and Hanseatic ledgers."
+      }
+    },
+    {
+      "id": "danzig",
+      "name": {
+        "zh": "但泽",
+        "en": "Danzig"
+      },
+      "nation_id": "holland",
+      "lat": 54.4,
+      "lon": 18.68,
+      "produces": [
+        "timber",
+        "amber"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "波罗的海东岸的谷物与木材码头。",
+        "en": "The grain and timber wharf of the Baltic's eastern shore."
+      }
+    },
+    {
+      "id": "stockholm",
+      "name": {
+        "zh": "斯德哥尔摩",
+        "en": "Stockholm"
+      },
+      "nation_id": "holland",
+      "lat": 59.32,
+      "lon": 18.1,
+      "produces": [
+        "copper",
+        "iron"
+      ],
+      "demands": [
+        "wine",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "群岛之城,扼守波罗的海内海。",
+        "en": "A city of islands guarding the Baltic's inner sea."
+      }
+    },
+    {
+      "id": "trieste",
+      "name": {
+        "zh": "的里雅斯特",
+        "en": "Trieste"
+      },
+      "nation_id": "italy",
+      "lat": 45.65,
+      "lon": 13.77,
+      "produces": [
+        "glassware",
+        "timber"
+      ],
+      "demands": [
+        "spices",
+        "sugar"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "哈布斯堡王朝的出海之窗,多风而繁忙。",
+        "en": "The Habsburgs' window on the sea, windy and busy."
+      }
+    },
+    {
+      "id": "corfu",
+      "name": {
+        "zh": "科孚",
+        "en": "Corfu"
+      },
+      "nation_id": "italy",
+      "lat": 39.62,
+      "lon": 19.92,
+      "produces": [
+        "olive_oil",
+        "salt"
+      ],
+      "demands": [
+        "wine",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3
+      },
+      "flavor": {
+        "zh": "橄榄覆盖的岛屿,横跨亚得里亚海口。",
+        "en": "An olive-covered island astride the Adriatic's mouth."
       }
     }
   ]

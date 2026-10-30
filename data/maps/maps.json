@@ -1,17 +1,8 @@
 {
   "version": 1,
   "maps": [
-    {
-      "id": "p1",
-      "file": "data/maps/p1_mediterranean.txt",
-      "legend": "data/map_legend.json",
-      "name": {"zh": "地中海与西欧", "en": "Mediterranean & Western Europe"}
-    },
-    {
-      "id": "p3",
-      "file": "data/maps/p3_world.txt",
-      "legend": "data/map_legend_p3.json",
-      "name": {"zh": "环球世界", "en": "The Wider World"}
-    }
+    {"id": "world", "file": "data/maps/world.png",
+     "legend": "data/map_legend.json",
+     "name": {"zh": "世界地图", "en": "World map"}}
   ]
 }

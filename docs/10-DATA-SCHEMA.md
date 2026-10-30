@@ -334,8 +334,8 @@ the placed tile to be passable or orthogonally adjacent to a passable tile
       "id": "disc_atlas_cedars",
       "name": {"zh": "阿特拉斯雪松林", "en": "Cedars of the Atlas"},
       "category": "natural",
-      "lat": 31.2,
-      "lon": -7.9,
+      "lat": 32.08,
+      "lon": -9.42,
       "fame": 150,
       "report_reward_gold": 2000,
       "region_hint": {"zh": "据说在南方的深山里,有参天的古老雪松。", "en": "Deep in the southern mountains, ancient cedars are said to touch the sky."}
@@ -343,6 +343,12 @@ the placed tile to be passable or orthogonally adjacent to a passable tile
   ]
 }
 ```
+
+A discovery's `lat`/`lon` follows the **same water rule as a port harbor**
+(§6.1): the tile it maps to is passable water or orthogonally adjacent to it,
+so the Explore action can reach it (`70-*` §4.4). The illustrative coordinate
+above sits in coastal water off Safi with the High Atlas inland — a hint may
+name an inland feature, but its coordinate is always the sea approach.
 
 ### 4.8 Quest — `data/quests.json` *(Phase 3)*
 
