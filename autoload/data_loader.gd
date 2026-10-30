@@ -51,6 +51,16 @@ var quests_list: Array = []
 var ui_strings: Dictionary = {}
 var map_legend: Dictionary = {}
 
+## Map index (`data/maps/maps.json`, docs/90-* §9.1): the selectable maps, in
+## file order. Its first entry is the fallback for an unknown id.
+var map_index: Array = []
+## `{map_id: legend}` so two legend files (`map_legend.json`,
+## `map_legend_p3.json`) never overwrite one another.
+var map_legends: Dictionary = {}
+## `{map_id: MapLegend}` for the legacy default map, kept as the P1 legend so
+## every Phase-1 caller (`DataLoader.map_legend`) keeps working unchanged.
+var map_legends_loaded: Dictionary = {}
+
 ## MapLoader instance, assigned by T5 (docs/90-* §9). Null until then.
 var map = null
 
@@ -91,6 +101,7 @@ func load_all() -> void:
 	# map_legend.json is authored by T3; a missing file is recorded as an error
 	# but must not abort the rest of the load (docs/90-* §5.2).
 	map_legend = _load_map_legend()
+	_load_map_index()
 
 	load_ok = load_errors.is_empty()
 
@@ -125,6 +136,59 @@ func get_quest(id: String) -> Dictionary:
 func get_ui_string(key: String) -> Dictionary:
 	var value = ui_strings.get(key, null)
 	return value if value is Dictionary else {}
+
+
+# --- Map index (docs/90-* §9.1) -------------------------------------------
+
+## Every selectable map id, in `maps.json` order (["p1", "p3"]). Falls back to
+## `["p1"]` when the index is missing so the P1 game still starts.
+func map_ids() -> Array:
+	var out: Array = []
+	for entry in map_index:
+		if entry is Dictionary:
+			out.append(str((entry as Dictionary).get("id", "")))
+	if out.is_empty():
+		out.append("p1")
+	return out
+
+
+## The index entry for `map_id` (`{id, file, legend, name}`), or the first
+## entry when the id is unknown, or `{}` when the index is unavailable.
+func get_map(map_id: String) -> Dictionary:
+	for entry in map_index:
+		if entry is Dictionary and str((entry as Dictionary).get("id", "")) == map_id:
+			return entry
+	if map_index.is_empty():
+		# Pre-index fallback: the locked Phase-1 map, so a data folder that has
+		# not gained maps.json yet still loads (docs/90-* §9.1).
+		return {
+			"id": "p1", "file": "data/maps/p1_mediterranean.txt",
+			"legend": "data/map_legend.json",
+			"name": {"zh": "地中海与西欧", "en": "Mediterranean & Western Europe"},
+		}
+	var first = map_index[0]
+	return first if first is Dictionary else {}
+
+
+## The MapLegend record for `map_id`, loaded from that entry's `legend` path.
+## A missing or malformed legend file records a load error and returns `{}`.
+func get_map_legend(map_id: String) -> Dictionary:
+	if map_legends.has(map_id):
+		var cached = map_legends[map_id]
+		return cached if cached is Dictionary else {}
+	return {}
+
+
+## Resolves the map's data file and legend together (what a map loader needs).
+func get_map_files(map_id: String) -> Dictionary:
+	var entry := get_map(map_id)
+	if entry.is_empty():
+		return {}
+	return {
+		"id": str(entry.get("id", map_id)),
+		"file": str(entry.get("file", "")),
+		"legend": get_map_legend(str(entry.get("id", map_id))),
+	}
 
 
 # --- Map handoff (docs/90-* §9) -------------------------------------------
@@ -271,3 +335,49 @@ func _load_map_legend() -> Dictionary:
 	if not data.has("grid") or not data.has("tiles"):
 		_record("map_legend.json: missing 'grid' or 'tiles'")
 	return data
+
+
+## Reads `data/maps/maps.json` and every legend it names (docs/90-* §9.1).
+## A missing index is not an error in Phase 1/2 data: [method get_map] then
+## synthesises the single P1 entry, and `map_legends["p1"]` is the P1 legend
+## that [method _load_map_legend] already read.
+func _load_map_index() -> void:
+	map_index = []
+	map_legends = {}
+	map_legends_loaded = {}
+	var data = _read_json("maps/maps.json")
+	if data is Dictionary and data.get("maps") is Array:
+		map_index = (data["maps"] as Array).duplicate(true)
+	if map_index.is_empty():
+		map_index = [{
+			"id": "p1", "file": "data/maps/p1_mediterranean.txt",
+			"legend": "data/map_legend.json",
+			"name": {"zh": "地中海与西欧", "en": "Mediterranean & Western Europe"},
+		}]
+	# The P1 legend is already loaded as `map_legend`; reuse it rather than
+	# re-reading the file so both accessors can never disagree.
+	map_legends["p1"] = map_legend
+	for entry in map_index:
+		if not (entry is Dictionary):
+			_record("maps/maps.json: every entry must be an object")
+			continue
+		var id := str((entry as Dictionary).get("id", ""))
+		var path := str((entry as Dictionary).get("legend", ""))
+		if id.is_empty():
+			_record("maps/maps.json: an entry has no 'id'")
+			continue
+		if map_legends.has(id) and not (map_legends[id] as Dictionary).is_empty():
+			continue
+		if path.is_empty():
+			_record("maps/maps.json: '%s' has no 'legend' path" % id)
+			continue
+		var legend = _read_json(path.trim_prefix("data/"))
+		if not (legend is Dictionary):
+			_record("maps/maps.json: legend '%s' is missing or invalid" % path)
+			continue
+		if not (legend as Dictionary).has("grid") \
+				or not (legend as Dictionary).has("tiles"):
+			_record("maps/maps.json: legend '%s' lacks grid/tiles" % path)
+			continue
+		map_legends[id] = legend
+		map_legends_loaded[id] = true

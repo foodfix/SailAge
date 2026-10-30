@@ -882,11 +882,11 @@ func _assert_round_trip(label: String) -> void:
 	_ensure_slot_dir()
 	_check(SaveSystem.save(1), "%s: the post-battle state saves" % label)
 	var on_disk := _read_slot(1)
-	_check(int(on_disk.get("save_version", -1)) == 2,
-		"%s: the re-saved file is save_version 2 (%s)"
-		% [label, str(on_disk.get("save_version"))])
+	_check(int(on_disk.get("save_version", -1)) == SaveSystem.SAVE_VERSION,
+		"%s: the re-saved file is save_version %d (%s)"
+		% [label, SaveSystem.SAVE_VERSION, str(on_disk.get("save_version"))])
 	_check(on_disk.has("hostile_fleets") and on_disk.has("proximity_cooldowns"),
-		"%s: the v2 file carries the Phase-2 state blocks" % label)
+		"%s: the file carries the Phase-2 state blocks" % label)
 	var hostile_before := _as_array(GameState.hostile_fleets).duplicate(true)
 	var cooldowns_before := _as_dict(GameState.proximity_cooldowns).duplicate(true)
 	var fleet_before: Array = GameState.fleet.duplicate(true)

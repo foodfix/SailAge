@@ -23,13 +23,19 @@ const PortScene := preload("res://scenes/port/port_screen.tscn")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 ## §8.1 keys the payload must carry, in the doc's order (minus nothing).
-## Phase 2 (save_version 2) appends `hostile_fleets` / `proximity_cooldowns`.
+## Phase 2 (save_version 2) appends `hostile_fleets` / `proximity_cooldowns`;
+## Phase 3 (save_version 3) appends the fame/title/quest/discovery/retirement
+## block and **drops** the superseded `quests` key (docs/90-* §8.1).
 const PAYLOAD_KEYS := [
 	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
 	"fleet", "morale", "world", "current_port", "known_ports",
-	"port_investments", "quests", "discoveries_found", "hostile_fleets",
-	"proximity_cooldowns",
+	"port_investments", "discoveries_found", "hostile_fleets",
+	"proximity_cooldowns", "fame", "titles", "bounties", "active_quests",
+	"completed_royal_missions", "discoveries_reported", "discovery_hints",
+	"battles_won", "retired", "retired_at",
 ]
+## Keys a current-version payload must **not** carry any more.
+const FORBIDDEN_KEYS := ["quests"]
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -177,6 +183,12 @@ func _test_full_round_trip() -> void:
 		if not raw.has(key):
 			missing.append(key)
 	_check(missing.is_empty(), "payload has every §8.1 key (missing: %s)" % str(missing))
+	var unexpected: Array = []
+	for key in FORBIDDEN_KEYS:
+		if raw.has(key):
+			unexpected.append(key)
+	_check(unexpected.is_empty(),
+		"payload drops the superseded keys (%s)" % str(unexpected))
 	_check(int(raw.get("save_version", 0)) == SaveSystem.SAVE_VERSION,
 		"save_version is %d" % SaveSystem.SAVE_VERSION)
 	_check(int(raw.get("phase", 0)) == SaveSystem.PHASE,
@@ -412,8 +424,8 @@ func _test_migration_path() -> void:
 
 	# Without the migration the load must fail (the shipped table has no v0
 	# step, which is exactly this case).
-	_check(SaveSystem.MIGRATIONS.keys() == [1],
-		"the shipped table has only the 1 → 2 step")
+	_check(SaveSystem.MIGRATIONS.keys() == [1, 2],
+		"the shipped table has the 1 → 2 and 2 → 3 steps")
 	var before := _expected()
 	_check(SaveSystem.load(1) == false, "v0 fails while MIGRATIONS has no v0 step")
 	_check(_expected() == before, "state untouched when the migration step is missing")

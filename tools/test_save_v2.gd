@@ -103,7 +103,10 @@ func _v1_payload() -> Dictionary:
 	}
 
 
-# --- 1. The done-when: a Phase-1 save loads and re-saves as version 2 ------
+# --- 1. The done-when: a Phase-1 save loads and re-saves as the current
+#        version (Phase 3 makes the chain 1 → 2 → 3; the 2 → 3 step delivered
+#        by IMPLEMENT-Phase3 A is asserted in tools/test_save_v3.gd, and this
+#        suite keeps proving the 1 → 2 half in isolation and in the chain).
 
 func _test_v1_load_and_resave() -> void:
 	var fixture := _v1_payload()
@@ -195,15 +198,21 @@ func _test_v1_load_and_resave() -> void:
 	_check(player_untouched and player_keys == _sorted_keys(fixture["player"]),
 		"the player block keeps every Phase-1 field untouched (only 'equipment' added)")
 
-	# --- Re-save: the migrated run is written as version 2 ------------------
+	# --- Re-save: the migrated run is written as the current version -------
 	_check(SaveSystem.save(1), "the migrated run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 2,
-		"the re-saved file is save_version 2 (got %s)"
-		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 2,
-		"the re-saved file is phase 2 (got %s)" % str(resaved.get("phase")))
+	_check(int(resaved.get("save_version", -1)) == SaveSystem.SAVE_VERSION,
+		"the re-saved file is save_version %d (got %s)"
+		% [SaveSystem.SAVE_VERSION, str(resaved.get("save_version"))])
+	_check(int(resaved.get("phase", -1)) == SaveSystem.PHASE,
+		"the re-saved file is phase %d (got %s)"
+		% [SaveSystem.PHASE, str(resaved.get("phase"))])
+	# The 1 → 2 keys survive the whole chain, byte for byte.
+	_check(resaved.has("hostile_fleets") and resaved["hostile_fleets"] == []
+		and resaved.has("proximity_cooldowns")
+		and resaved["proximity_cooldowns"] == {},
+		"the re-saved file keeps the Phase-2 keys the 1 → 2 step added")
 	_check(resaved.has("hostile_fleets") and resaved["hostile_fleets"] == [],
 		"the re-saved file carries hostile_fleets: []")
 	_check(resaved.has("proximity_cooldowns")
@@ -221,31 +230,32 @@ func _test_v1_load_and_resave() -> void:
 		and not resaved.has("explored_tiles"),
 		"the re-save still omits clock_fraction / explored_tiles")
 
-	# …and the version-2 file re-loads to the same state (second cycle).
+	# …and the re-saved file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved version-2 file loads")
+	_check(SaveSystem.load(1), "the re-saved current-version file loads")
 	_check(_loaded_values() == first_cycle,
 		"a second save/load cycle changes nothing")
 
 
-# --- 2. A version 3 payload is rejected ------------------------------------
+# --- 2. A future version is rejected ---------------------------------------
 
 func _test_v3_rejected() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
 
 	var payload := _v1_payload()
-	payload["save_version"] = 3
-	payload["phase"] = 3
+	payload["save_version"] = SaveSystem.SAVE_VERSION + 1
+	payload["phase"] = SaveSystem.PHASE + 1
 	_write_json(1, payload)
-	_check(SaveSystem.load(1) == false, "a save_version 3 payload fails to load")
+	_check(SaveSystem.load(1) == false,
+		"a future save_version payload fails to load")
 	_check(SaveSystem.last_read_error.contains("newer than"),
 		"the reason names a newer version (got '%s')" % SaveSystem.last_read_error)
 	_check(_loaded_values() == before,
-		"state untouched after the v3 rejection (every field)")
+		"state untouched after the future-version rejection (every field)")
 	_check(not bool(SaveSystem.list_saves()[0]["valid"]),
-		"the v3 slot is reported invalid by list_saves()")
+		"the future-version slot is reported invalid by list_saves()")
 
 
 # --- 3. A v2 payload with a wrong-typed new field is rejected ---------------
@@ -283,8 +293,9 @@ func _test_wrong_types_rejected() -> void:
 func _test_migration_table_is_reached_through_load() -> void:
 	_check(SaveSystem.MIGRATIONS.has(1) and SaveSystem.MIGRATIONS[1] is Callable,
 		"MIGRATIONS has the 1 → 2 step as a Callable")
-	_check(SaveSystem.MIGRATIONS.size() == 1,
-		"MIGRATIONS has exactly one step (got %d)" % SaveSystem.MIGRATIONS.size())
+	_check(SaveSystem.MIGRATIONS.size() == SaveSystem.SAVE_VERSION - 1,
+		"MIGRATIONS has one step per version gap (got %d for version %d)"
+		% [SaveSystem.MIGRATIONS.size(), SaveSystem.SAVE_VERSION])
 
 	# A test-only step for the *same* version is merged over the shipped table:
 	# if `load` consults the table, the counter fires exactly once.
@@ -320,8 +331,9 @@ func _test_migration_table_is_reached_through_load() -> void:
 	_check(_loaded_values() == before,
 		"state untouched when a migration result is unusable")
 
-	# A version with no step at all still fails cleanly (no v3→v4 step exists).
-	_check(not SaveSystem.MIGRATIONS.has(2) and not SaveSystem.MIGRATIONS.has(0),
+	# A version with no step at all still fails cleanly.
+	_check(not SaveSystem.MIGRATIONS.has(0)
+		and not SaveSystem.MIGRATIONS.has(SaveSystem.SAVE_VERSION),
 		"there is no migration step for any other version")
 	var future: Dictionary = _v1_payload()
 	future["save_version"] = 0
@@ -349,7 +361,8 @@ func _test_migration_purity() -> void:
 		"the returned fleet is a copy, not the input's array")
 	_check(out["hostile_fleets"] == [] and out["proximity_cooldowns"] == {},
 		"MIGRATIONS[1] adds the two Phase-2 keys")
-	_check(int(out["phase"]) == 2, "MIGRATIONS[1] sets phase = 2")
+	_check(int(out["phase"]) == 2,
+		"MIGRATIONS[1] sets phase = 2 (the chain then moves it to the current)")
 	_check(not input.has("phase") or int(input["phase"]) == 1,
 		"the input still says phase 1 (the doc's version-1 payload)")
 	_check(int(out.get("save_version", 1)) == 1,

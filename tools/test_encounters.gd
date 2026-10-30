@@ -925,8 +925,9 @@ func _test_save_round_trip() -> void:
 	_wipe_slots()
 	_check(SaveSystem.save(1), "SaveSystem.save(1) writes the fixture")
 	var snapshot: Dictionary = SaveSystem.snapshot()
-	_check(int(snapshot.get("save_version", 0)) == 2,
-		"the payload is save_version 2 (got %d)" % int(snapshot.get("save_version", 0)))
+	_check(int(snapshot.get("save_version", 0)) == SaveSystem.SAVE_VERSION,
+		"the payload is save_version %d (got %d)"
+		% [SaveSystem.SAVE_VERSION, int(snapshot.get("save_version", 0))])
 	_check((snapshot.get("hostile_fleets", null) as Array) == before,
 		"the payload carries hostile_fleets verbatim (%d markers)"
 		% (snapshot.get("hostile_fleets", []) as Array).size())

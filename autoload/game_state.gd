@@ -40,6 +40,29 @@ var proximity_cooldowns: Dictionary = {}
 ## Phase-2/3 fields: present but empty in Phase 1.
 var quests: Array = []
 var discoveries_found: Array = []
+
+# --- Phase 3 saved state (docs/90-* §8.1, save_version 3) -------------------
+
+## Permanent renown (docs/70-* §4.1); never decays.
+var fame: int = 0
+## `{nation_id: rank}` over all six nations (docs/70-* §4.9.2); rank ids are
+## `none|knight|baron|viscount|count|duke`.
+var titles: Dictionary = {}
+## `{nation_id: {amount, day}}` — an issued bounty (docs/70-* §4.9.5).
+var bounties: Dictionary = {}
+## Accepted quest instances (docs/70-* §4.9.3); the offer list is derived.
+var active_quests: Array = []
+## `{nation_id: int}` completed royal missions (docs/70-* §4.3).
+var completed_royal_missions: Dictionary = {}
+## Discovery ids already reported at a guild (docs/70-* §4.4).
+var discoveries_reported: Array = []
+## `{discovery_id: true}` hints bought at a tavern (docs/70-* §4.4).
+var discovery_hints: Dictionary = {}
+## Battles won across the run (docs/70-* §4.7 ending summary).
+var battles_won: int = 0
+## The win state (docs/70-* §4.7): a retired save is never playable again.
+var retired: bool = false
+var retired_at: int = 0
 ## The encounter a battle scene should open (`60-*` §4.11.11.3). Transient:
 ## set by S3 immediately before routing, cleared by S10 on open, never saved.
 var pending_encounter = null
@@ -64,7 +87,10 @@ func add_gold(delta: int) -> void:
 ##
 ## `route` exists for unit tests: with the default `true` the run routes to the
 ## port screen (§4.1 step 4); tests pass `false` to keep the test scene alive.
-func new_game(nation_id: String, route: bool = true) -> void:
+## `map_id` is the Phase-3 world choice (`"p1"`/`"p3"`, docs/70-* §4.9.8); the
+## fleet starts on that map's copy of the nation's start port.
+func new_game(nation_id: String, route: bool = true,
+		map_id: String = "p1") -> void:
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
 	if nation.is_empty():
 		push_error("GameState.new_game: unknown nation_id '%s'" % nation_id)
@@ -76,6 +102,7 @@ func new_game(nation_id: String, route: bool = true) -> void:
 		push_error("GameState.new_game: nation '%s' has unknown start_port_id '%s'"
 			% [nation_id, start_port_id])
 		return
+	var resolved_map := _resolve_map_id(map_id)
 
 	day = 1
 	gold = int(nation.get("start_gold", 0))
@@ -113,8 +140,9 @@ func new_game(nation_id: String, route: bool = true) -> void:
 	# §8.1) and the JSON tilePos shape (docs/10-* §3.1) — so T17 can serialize
 	# it byte-for-byte; use `world_tile()` for the `Vector2i` the map API wants.
 	world = {
-		"position": _tile_dict(start_port),
+		"position": _tile_dict(start_port, resolved_map),
 		"clock_fraction": 0.0,
+		"map_id": resolved_map,
 	}
 	current_port = start_port_id
 
@@ -136,10 +164,21 @@ func new_game(nation_id: String, route: bool = true) -> void:
 	proximity_cooldowns = {}
 	pending_encounter = null
 	explored_tiles = {}
+	# docs/90-* §8.1 Phase-3 fields: a fresh run starts at zero everywhere.
+	fame = 0
+	titles = _nation_map("none")
+	bounties = {}
+	active_quests = []
+	completed_royal_missions = _nation_map(0)
+	discoveries_reported = []
+	discovery_hints = {}
+	battles_won = 0
+	retired = false
+	retired_at = 0
 	CharacterLib.pending_levelup = false
 
-	print("GameState.new_game: %s, %dg, ship %s, port %s, day 1"
-		% [nation_id, gold, start_ship_type_id, start_port_id])
+	print("GameState.new_game: %s, %dg, ship %s, port %s, day 1, map %s"
+		% [nation_id, gold, start_ship_type_id, start_port_id, resolved_map])
 
 	if route:
 		_route_after_new_game(start_port_id)
@@ -162,12 +201,40 @@ func _route_after_new_game(_start_port_id: String) -> void:
 		push_warning("GameState.new_game: neither port nor world scene exists yet")
 
 
-## A port's `position` is already a `tilePos` object (`{"x","y"}`, docs/10-*
-## §3.1); copy it into a fresh dict so the port data can never be mutated
-## through `world.position`.
-func _tile_dict(port: Dictionary) -> Dictionary:
+## A port's `position` on `map_id`: the P1 `position` or its Phase-3 `p3`
+## block (docs/10-* §4.4). Falls back to the P1 position when the port has no
+## `p3` block, so a Phase-3 run whose start port is P1-only still spawns on a
+## real harbor tile.
+func _tile_dict(port: Dictionary, map_id: String = "p1") -> Dictionary:
 	var pos: Dictionary = port.get("position", {})
+	if map_id != "p1":
+		var p3 = port.get("p3", null)
+		if p3 is Dictionary and (p3 as Dictionary).get("position") is Dictionary:
+			pos = (p3 as Dictionary)["position"]
 	return {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
+
+
+## Validates the Phase-3 world choice against `data/maps/maps.json`
+## (docs/70-* §4.9.8, docs/90-* §9.1); an unknown id falls back to `"p1"`
+## with a warning so a hand-edited value can never wedge a new game.
+func _resolve_map_id(map_id: String) -> String:
+	var known: Array = []
+	if DataLoader.has_method("map_ids"):
+		known = DataLoader.map_ids()
+	if known.is_empty():
+		known = ["p1"]
+	if map_id in known:
+		return map_id
+	push_warning("GameState.new_game: unknown map_id '%s'; using p1" % map_id)
+	return "p1"
+
+
+## `{nation_id: value}` over every nation (a fresh save-block default).
+func _nation_map(value) -> Dictionary:
+	var out: Dictionary = {}
+	for entry in DataLoader.nations_list:
+		out[str(entry.get("id", ""))] = value
+	return out
 
 
 ## `world.position` as a `Vector2i` for the map/passability API
