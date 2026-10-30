@@ -17,6 +17,14 @@ const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const TavernLib := preload("res://scripts/port/tavern_engine.gd")
 const InnLib := preload("res://scripts/port/inn_engine.gd")
 const MapLib := preload("res://scripts/world/map_loader.gd")
+## Phase 4 (task G) fixtures on the single world map: Lisbon's derived harbor
+## tile (`10-*` §6.1) and an 8-neighbour open-water cell 8 tiles west of it.
+const LISBON := Vector2i(1024, 308)
+const OPEN_WATER := Vector2i(700, 320)
+## A sailable Atlantic cell in the variables band and one in the trade-wind belt
+## (the amended demo step 5: lat 40°N vs the Tenerife water at 28.3°N).
+const VARIABLES_CELL := Vector2i(700, 300)
+const TRADE_CELL := Vector2i(700, 370)
 const VillageLib := preload("res://scenes/port/port_screen.gd")
 
 var checks := 0
@@ -58,7 +66,7 @@ func _ready() -> void:
 func _ensure_map() -> void:
 	if DataLoader.map == null:
 		var loader = MapLib.new()
-		loader.load_map("res://data/maps/p1_mediterranean.txt", DataLoader.map_legend)
+		loader.load_map("res://data/maps/world.png", DataLoader.map_legend)
 		DataLoader.map = loader
 
 
@@ -145,13 +153,13 @@ func _step4_sail() -> void:
 	GameState.new_game("portugal", false)
 	GameState.current_port = null
 	GameState.world["weather"] = "fair"
-	GameState.set_world_tile(Vector2i(7, 57))
+	GameState.set_world_tile(LISBON)
 	GameState.world["clock_fraction"] = 0.0
 	SailingLib.reset_ledger_state()
 	SailingLib.set_weather_seed(11)
 
 	# 8-directional stepping from open water (Atlantic, west of Lisbon).
-	var start := Vector2i(3, 57)
+	var start := OPEN_WATER
 	var moved := 0
 	for dir in [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1, 0),
 			Vector2i(1, 0), Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)]:
@@ -161,10 +169,11 @@ func _step4_sail() -> void:
 	_check(moved == 8, "step 4: all 8 directions step on open water (got %d)" % moved)
 
 	# Land blocks movement at zero clock cost.
-	GameState.set_world_tile(Vector2i(7, 57))
+	GameState.set_world_tile(LISBON)
 	GameState.world["clock_fraction"] = 0.5
 	var before: float = GameState.world.clock_fraction
-	_check(not SailingLib.try_move(Vector2i(7, 56), DataLoader.map, Vector2i(7, 57)),
+	# (1024,307) is land directly beside Lisbon's harbor tile.
+	_check(not SailingLib.try_move(Vector2i(1024, 307), DataLoader.map, LISBON),
 		"step 4: land blocks movement")
 	_check(GameState.world.clock_fraction == before,
 		"step 4: a blocked move costs no clock")
@@ -200,7 +209,7 @@ func _step5_storm_and_starvation() -> void:
 	GameState.current_port = null
 	for i in range(7):
 		_check_cell_west()
-		GameState.set_world_tile(Vector2i(3, 370))
+		GameState.set_world_tile(TRADE_CELL)
 		GameState.world["clock_fraction"] = 0.0
 		SailingLib.reset_ledger_state()
 		SailingLib.set_weather_seed(900 + i)
@@ -213,10 +222,10 @@ func _step5_storm_and_starvation() -> void:
 			break
 	_check(reached, "step 5: a storm is reachable within 6 days in the trade belt")
 
-	_check(SailingLib.weather_zone_for(Vector2i(3, 370)) == "trade_winds",
+	_check(SailingLib.weather_zone_for(TRADE_CELL) == "trade_winds",
 		"step 5: the Tenerife water (lat 28.3, y=370) is the trade-wind belt")
-	_check(SailingLib.weather_zone_for(Vector2i(7, 308)) == "variables",
-		"step 5: Lisbon (lat 38.7, y≈308) is the variables band, not the belt")
+	_check(SailingLib.weather_zone_for(Vector2i(1024, 308)) == "variables",
+		"step 5: Lisbon (lat 38.7, y=308) is the variables band, not the belt")
 
 	# Starvation: 7 days with no provisions → game over.
 	var reasons: Array[String] = []
@@ -250,9 +259,9 @@ func _step5_storm_and_starvation() -> void:
 
 
 func _check_cell_west() -> void:
-	GameState.set_world_tile(Vector2i(3, 57))
-	_check(DataLoader.is_passable(Vector2i(3, 57)),
-		"step 5: the Atlantic strip tile (3, 57) is sailable")
+	GameState.set_world_tile(VARIABLES_CELL)
+	_check(DataLoader.is_passable(VARIABLES_CELL),
+		"step 5: the Atlantic fixture tile %s is sailable" % str(VARIABLES_CELL))
 
 
 # --- Step 6: second port, supply/demand sale ------------------------------
@@ -365,7 +374,7 @@ func _step8_save_load() -> void:
 	GameState.day = 19
 	GameState.gold = 4310
 	GameState.morale = 58
-	GameState.world.position = {"x": 7, "y": 57}
+	GameState.world.position = {"x": LISBON.x, "y": LISBON.y}
 	GameState.player.officers = ["off_mateus_alvares"]
 	GameState.player.reputation.portugal = 23
 	GameState.known_ports = ["lisbon", "london", "seville"]

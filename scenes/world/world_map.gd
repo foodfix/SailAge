@@ -31,19 +31,14 @@ const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 
-## Phase-1 map file (docs/10-* §6.1). Swapping maps is a data-only change:
-## the active map is `GameState.world["map_id"]` resolved through
-## `data/maps/maps.json` (docs/90-* §9.1).
-const MAP_PATH := "res://data/maps/p1_mediterranean.txt"
-## Overridable copy of [constant MAP_PATH]: a different legend-conformant map
-## file is a data-only swap (docs/90-* §9 last paragraph), so the path is an
-## inspector property rather than a hard-coded read. An empty value means
-## "resolve `GameState.world.map_id` through the map index".
-@export var map_path: String = ""
-## Fallback cell before a game exists (Lisbon's harbor tile on the P1 map).
-const FALLBACK_CELL := Vector2i(7, 57)
-## `world.map_id` when neither the state nor the index names one.
-const DEFAULT_MAP_ID := "p1"
+## The single world map id (docs/90-* §9.1). The artifact itself is resolved
+## through `data/maps/maps.json`; the loader takes the path as an argument, so
+## swapping the PNG is a data-only change with no code edit.
+const DEFAULT_MAP_ID := "world"
+## Fallback cell before a game exists: Lisbon's harbor tile, re-derived from the
+## data (`lat`/`lon` → §6.1 snap) once the map is loaded. `(-1,-1)` means "the
+## first port the map can resolve", then the grid centre if nothing does.
+const FALLBACK_CELL := Vector2i(-1, -1)
 
 ## Port hub scene (owned by T11).
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -74,8 +69,8 @@ const MOVE_ACTIONS := {
 	"move_s": Vector2i(0, 1),
 	"move_se": Vector2i(1, 1),
 }
-## Base sighting radius used before a character exists (docs/20-* §4.11).
-const BASE_SIGHTING_RADIUS := 8
+## Base sighting radius used before a character exists (docs/20-* §4.11/§5).
+const BASE_SIGHTING_RADIUS := SailingSimLib.SIGHTING_RADIUS
 
 @onready var _camera: Camera2D = $Camera2D
 @onready var _fleet_marker: Node2D = $FleetMarker
@@ -86,6 +81,9 @@ const BASE_SIGHTING_RADIUS := 8
 var _loader = null
 var _map_pixels := Vector2.ZERO
 var _cell_pixels := 32
+## The "WorldChunks" root built by the loader (docs/90-* §9 step 4); null when
+## the map failed to load.
+var _chunks_root: Node2D = null
 ## Marker cell. Mirrors `GameState.world_tile()` once a run exists, and is the
 ## Lisbon fallback before that.
 var _fleet_cell := FALLBACK_CELL
@@ -116,7 +114,7 @@ var _attack_confirm: Control = null
 func _ready() -> void:
 	_loader = MapLoaderLib.new()
 	var loaded: bool = _load_active_map()
-	# Handoff for DataLoader.is_passable()/port_id_at() (docs/90-* §5.2, §9).
+	# Handoff for DataLoader.is_passable()/port_cell() (docs/90-* §5.2, §9).
 	DataLoader.map = _loader if loaded else null
 
 	if not loaded:
@@ -126,7 +124,9 @@ func _ready() -> void:
 
 	_map_pixels = Vector2(_loader.width * _loader.tile_size_px, _loader.height * _loader.tile_size_px)
 	_cell_pixels = _loader.tile_size_px
-	_loader.build_tilemap(self, DataLoader.ports, DataLoader.nations)
+	# Chunked rendering: nothing is drawn until the camera position is known, so
+	# the chunk pass runs from [_update_camera] on the first frame.
+	_chunks_root = _loader.build_tilemap(self, DataLoader.ports, DataLoader.nations)
 	_error_layer.visible = false
 	_fleet_marker.z_index = 10
 
@@ -138,6 +138,7 @@ func _ready() -> void:
 	_camera.zoom = Vector2.ONE
 	_camera.make_current()
 	_update_camera()
+	_loader.refresh_port_overlay(DataLoader.ports, DataLoader.nations)
 
 	# Sighting/exploration at scene ready (docs/20-* §4.11/§4.12).
 	_reveal()
@@ -174,33 +175,44 @@ func _ready() -> void:
 		EventBus.battle_finished.connect(_on_battle_finished)
 
 
-## The map this scene renders: the `map_path` inspector override when set,
-## else `GameState.world.map_id` resolved through the map index
-## (docs/90-* §9.1). Both the text file and its legend come from the index, so
-## swapping to the Phase-3 world is a data-only change.
+## The map this scene renders: `data/maps/maps.json` (exactly one entry,
+## docs/90-* §9.1). A missing index or file is a data error — there is no
+## fallback ladder any more.
 func _load_active_map() -> bool:
 	var map_id := _active_map_id()
-	if not map_path.is_empty():
-		return _loader.load_map(map_path, DataLoader.get_map_legend(map_id))
 	var files: Dictionary = DataLoader.get_map_files(map_id)
 	if files.is_empty():
-		return _loader.load_map(MAP_PATH, DataLoader.map_legend)
+		_loader.last_error = "no map index entry for '%s'" % map_id
+		return false
 	var path := str(files.get("file", ""))
 	if not path.begins_with("res://"):
 		path = "res://" + path
 	var legend = files.get("legend", {})
 	if not (legend is Dictionary) or (legend as Dictionary).is_empty():
-		return _loader.load_map(MAP_PATH, DataLoader.map_legend)
+		_loader.last_error = "no legend for '%s'" % map_id
+		return false
 	return _loader.load_map(path, legend)
 
 
-## The active map id: `GameState.world.map_id`, else the index's first entry.
-## A save written before Phase 3 has no id, which reads as `p1`.
+## The active map id: `GameState.world["map_id"]` when it names an indexed map,
+## else the locked default. A state value that is not in `maps.json` is logged
+## (docs/90-* §9.1) and the one shipped map is used — the same rule
+## `GameState.new_game` applies, so a new game and a scene opened over the same
+## state can never disagree about which map they are showing.
 func _active_map_id() -> String:
+	var known: Array = DataLoader.map_ids()
 	var value = GameState.world.get("map_id", DEFAULT_MAP_ID)
 	if value is String and not (value as String).is_empty():
-		return value
-	return DEFAULT_MAP_ID
+		if known.has(value):
+			return value
+		push_warning(
+			"WorldMap: world.map_id '%s' is not in data/maps/maps.json %s; "
+			% [value, str(known)]
+			+ "showing '%s' (docs/90-* §9.1)" % DEFAULT_MAP_ID
+		)
+	if known.has(DEFAULT_MAP_ID):
+		return DEFAULT_MAP_ID
+	return known[0] if not known.is_empty() else DEFAULT_MAP_ID
 
 
 func _process(_delta: float) -> void:
@@ -316,7 +328,10 @@ func map_pixels() -> Vector2:
 	return _map_pixels
 
 
-## World-space rect currently visible through the clamped camera.
+## World-space rect the camera shows. Its **x is unbounded** (the world wraps
+## east–west, so a fleet near the seam shows content past `width * 32` that is
+## the wrapped world); its y is clamped inside the grid. Tests that need the
+## "no void" property intersect x with the map width, which is the seam rule.
 func visible_world_rect() -> Rect2:
 	var half_view := get_viewport_rect().size * 0.5 / _camera.zoom
 	var center := _camera.position
@@ -328,6 +343,10 @@ func visible_world_rect() -> Rect2:
 func _try_step(target: Vector2i) -> bool:
 	if _loader == null or _modal_open():
 		return false
+	# x wraps (§4.1): a step east from x = 2159 lands on x = 0. Normalise first
+	# so legality, the stored position and the marker all agree.
+	if _loader.width > 0:
+		target = Vector2i(posmod(target.x, _loader.width), target.y)
 	if not _is_adjacent(target):
 		# Clicking a non-adjacent tile is a no-op, not a rejected move: no
 		# feedback, no clock (±0 tiles is not a "move" at all).
@@ -985,8 +1004,12 @@ func game_over_open() -> bool:
 	return _gameover != null and _gameover.is_open()
 
 
+## Chebyshev 1, **wrap-aware on x** (§4.1): x = 2159 and x = 0 are neighbours.
 func _is_adjacent(target: Vector2i) -> bool:
-	return maxi(absi(target.x - _fleet_cell.x), absi(target.y - _fleet_cell.y)) == 1
+	var dx := absi(target.x - _fleet_cell.x)
+	if _loader != null and _loader.width > 0:
+		dx = mini(dx % _loader.width, _loader.width - (dx % _loader.width))
+	return maxi(dx, absi(target.y - _fleet_cell.y)) == 1
 
 
 ## Input is ignored while any modal is open (docs/90-* §11 "port entered while
@@ -1018,26 +1041,35 @@ func _modal_open() -> bool:
 
 # --- Sighting & exploration (docs/20-* §4.11, §4.12) -----------------------
 
-## Reveals every port within the sighting radius (Chebyshev) and marks the
-## tiles in that square explored for the minimap.
+## Reveals every port within the sighting radius (Chebyshev, **wrap-aware on
+## x**, docs/20-* §4.11) and marks the square explored for the minimap (§4.12).
+## Both loops wrap: a fleet at `x = 2159` sees `x = 0` and the explored square
+## continues across the seam instead of clipping.
 func _reveal() -> void:
 	if _loader == null:
 		return
 	var radius := CharacterLib.sighting_radius() if _has_game() else BASE_SIGHTING_RADIUS
-	for cell in _loader.port_at:
-		var port_cell: Vector2i = cell
-		if maxi(absi(port_cell.x - _fleet_cell.x), absi(port_cell.y - _fleet_cell.y)) > radius:
+	var known_before := GameState.known_ports.size()
+	for port_id in _loader.harbor_tiles():
+		var port_cell: Vector2i = _loader.port_cell(str(port_id))
+		if port_cell.x < 0:
 			continue
-		var port_id: String = _loader.port_at[cell]
-		if not GameState.known_ports.has(port_id):
-			GameState.known_ports.append(port_id)
+		if _loader.chebyshev(port_cell, _fleet_cell) > radius:
+			continue
+		if not GameState.known_ports.has(str(port_id)):
+			GameState.known_ports.append(str(port_id))
 
 	for dy in range(-radius, radius + 1):
+		var y := _fleet_cell.y + dy
+		if y < 0 or y >= _loader.height:
+			continue
 		for dx in range(-radius, radius + 1):
-			var cell := _fleet_cell + Vector2i(dx, dy)
-			if cell.x < 0 or cell.y < 0 or cell.x >= _loader.width or cell.y >= _loader.height:
-				continue
-			GameState.explored_tiles[cell] = true
+			var x := posmod(_fleet_cell.x + dx, _loader.width)
+			GameState.explored_tiles[Vector2i(x, y)] = true
+	# A sighting pass is the only thing that adds known ports, so the overlay is
+	# refreshed exactly when its inputs changed (docs/90-* §9 step 5).
+	if GameState.known_ports.size() != known_before:
+		_loader.refresh_port_overlay(DataLoader.ports, DataLoader.nations)
 
 
 # --- Marker & camera -------------------------------------------------------
@@ -1049,31 +1081,45 @@ func _place_marker() -> void:
 		+ Vector2(_cell_pixels, _cell_pixels) * 0.5
 
 
+## Centers the camera on the fleet (which wraps) and refreshes the chunk ring.
+## The camera's own y is clamped to the map height; x is **not** clamped — the
+## camera is always centred on the fleet and the chunk layer repeats the grid
+## across the seam (docs/80-* §4.5 "wrap at dateline: no clamp, no void").
 func _update_camera() -> void:
 	_camera.position = _clamp_to_map(_camera_target())
+	_update_chunks()
 
 
+## The camera centre for the fleet's tile.
 func _camera_target() -> Vector2:
 	# Cell coordinates name a tile; the camera aims at that tile's center.
 	return Vector2(_fleet_cell.x * _cell_pixels, _fleet_cell.y * _cell_pixels) \
 		+ Vector2(_cell_pixels, _cell_pixels) * 0.5
 
 
-## Clamps a world-space camera center so the 1280×720 view stays inside the
-## map: no void past the 128×96 grid is ever shown (docs/80-* §4.5).
-## Public so tools/test_movement.gd can check all four corners.
+## Clamps **y only** and leaves x at whatever the target says (the world wraps
+## east–west). Public for `tools/test_movement.gd`'s corner checks.
 func _clamp_to_map(target: Vector2) -> Vector2:
 	var half_view := get_viewport_rect().size * 0.5 / _camera.zoom
 	var out := target
-	if _map_pixels.x <= half_view.x * 2.0:
-		out.x = _map_pixels.x * 0.5
-	else:
-		out.x = clampf(target.x, half_view.x, _map_pixels.x - half_view.x)
 	if _map_pixels.y <= half_view.y * 2.0:
 		out.y = _map_pixels.y * 0.5
 	else:
 		out.y = clampf(target.y, half_view.y, _map_pixels.y - half_view.y)
 	return out
+
+
+## Spawns/frees chunks around the camera. The viewport size is converted to
+## tiles so the loader's 24-chunk ring covers the whole 1280×720 view.
+func _update_chunks() -> void:
+	if _loader == null or _chunks_root == null:
+		return
+	var view := get_viewport_rect().size / float(_cell_pixels)
+	var view_tiles := Vector2i(int(ceil(view.x)) + 2, int(ceil(view.y)) + 2)
+	var center := _camera.position / float(_cell_pixels)
+	_loader.update_chunks(
+		Vector2i(int(floor(center.x)), int(floor(center.y))), view_tiles
+	)
 
 
 # --- State helpers ---------------------------------------------------------
@@ -1096,16 +1142,17 @@ func _ensure_world_state() -> void:
 		GameState.world["weather"] = SailingSimLib.DEFAULT_WEATHER
 
 
-## The pre-run parking cell: Lisbon's P1 harbour tile, or — on a bigger map —
-## the first port marker that exists on the loaded grid. Editor inspection
-## only; a real run always has a `world.position`.
+## The pre-run parking cell: Lisbon's derived harbor tile, else any harbor the
+## map resolves, else the grid centre. Editor inspection only; a real run always
+## has a `world.position`.
 func _fallback_cell() -> Vector2i:
 	if _loader != null and _loader.width > 0:
 		var lisbon: Vector2i = _loader.port_cell("lisbon")
 		if lisbon != Vector2i(-1, -1):
 			return lisbon
-		for cell in _loader.port_at:
-			return cell
+		for port_id in _loader.harbor_tiles():
+			return _loader.port_cell(str(port_id))
+		return Vector2i(_loader.width / 2, _loader.height / 2)
 	return FALLBACK_CELL
 
 
@@ -1115,11 +1162,14 @@ func _read_state_cell() -> Vector2i:
 	return GameState.world_tile()
 
 
+## Cell under a world position. x **wraps** (a click at `x = 2160` is a click
+## on `x = 0`, docs/20-* §4.1) and y is left unbounded for the caller to reject.
 func _cell_at(world_position: Vector2) -> Vector2i:
-	return Vector2i(
-		int(floor(world_position.x / float(_cell_pixels))),
-		int(floor(world_position.y / float(_cell_pixels)))
-	)
+	var x := int(floor(world_position.x / float(_cell_pixels)))
+	var y := int(floor(world_position.y / float(_cell_pixels)))
+	if _loader != null and _loader.width > 0:
+		x = posmod(x, _loader.width)
+	return Vector2i(x, y)
 
 
 ## A quest's display name: the stored instance has no L10nString (it is
@@ -1166,7 +1216,7 @@ func _show_error(reason: String) -> void:
 	if detail.is_empty():
 		detail = " / ".join(DataLoader.load_errors)
 	if detail.is_empty():
-		detail = map_path
+		detail = str(DataLoader.get_map(DEFAULT_MAP_ID).get("file", ""))
 	push_error("WorldMap: cannot load the world map: " + detail)
 	var text := "Data error: %s" % detail
 	# Autoloads are lookup-by-name so this also survives a partial autoload set

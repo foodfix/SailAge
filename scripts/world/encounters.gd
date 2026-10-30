@@ -41,10 +41,16 @@ const MAX_MARKERS := 3
 ## §4.11.11.2 steps 2–3: the per-day spawn chances.
 const PIRATE_SPAWN_CHANCE := 0.01
 const NAVY_SPAWN_CHANCE := 0.02
-## §4.11.11.1: a pirate spawn is within Chebyshev 15 of its anchor port.
+## A hard ceiling on the candidate enumeration: `known_ports × 961` for pirates,
+## `nation_ports × 961` for navies. The shipped worst case is 96 100 cells (all
+## 100 ports known), so 10× headroom still turns any future bug (an unbounded
+## loop, a runaway port list) into a logged error instead of a CI hang.
+const CANDIDATE_SCAN_LIMIT := 1000000
+## §4.11.11.1: a pirate spawn is within Chebyshev 15 of its anchor port,
+## measured **wrap-aware on x** over the 2160-wide world grid. The Phase-2
+## Atlantic strip `x ≥ 7` exclusion is retired with the strip itself
+## (`60-*` §4.1: latitude weather bands replace it, no tile exclusion remains).
 const ZONE_RADIUS := 15
-## §4.11.11.1 / `20-*` §4.7: outside the Atlantic storm strip, i.e. `x ≥ 7`.
-const PIRATE_MIN_X := 7
 ## §4.11.11.1 / `70-*` §4.5: a navy is hostile only at or below this
 ## reputation (`≤ −50` holds a bounty).
 const NAVY_HOSTILE_REPUTATION := -50
@@ -337,16 +343,16 @@ static func set_position(marker: Dictionary, cell: Vector2i) -> void:
 ## Pure so the three tie-break levels are unit-testable without a map; the
 ## world path ([method _best_step]) only supplies the passability filter.
 static func choose_step(from: Vector2i, anchor: Vector2i, candidates: Array) -> Vector2i:
-	var current := _chebyshev(from, anchor)
+	var current := _step_distance(from, anchor)
 	var best := NO_CELL
 	var best_distance := current
 	var best_manhattan := 0
 	for cell_value in candidates:
 		var cell: Vector2i = cell_value
-		var distance := _chebyshev(cell, anchor)
+		var distance := _step_distance(cell, anchor)
 		if distance >= current:
 			continue
-		var manhattan := absi(cell.x - anchor.x) + absi(cell.y - anchor.y)
+		var manhattan := _step_manhattan(cell, anchor)
 		if best == NO_CELL or distance < best_distance \
 				or (distance == best_distance and manhattan < best_manhattan) \
 				or (distance == best_distance and manhattan == best_manhattan
@@ -453,13 +459,14 @@ func _ensure_rng() -> void:
 ## All legal spawn tiles for `kind` as `[[cell, anchor_port_id], …]`, in map
 ## order so a seeded draw is stable.
 ##
-## * Pirate: passable, in bounds, `x ≥ 7`, and the **nearest known port** is
-##   within Chebyshev 15 — that port becomes the anchor (§4.11.11.1).
+## * Pirate: passable, in bounds, and the **nearest known port** is within
+##   Chebyshev 15 (wrap-aware on x) — that port becomes the anchor
+##   (§4.11.11.1). No `x ≥ 7` strip rule exists any more (`60-*` §4.1).
 ## * Navy: within Chebyshev 15 of one of that **nation's own** ports
 ##   (§4.11.11.2 step 3 "inside its own ports' 15-tile zone"); the anchor is the
 ##   nearest own-nation port (ties by port id), because a patrol belongs to its
 ##   own navy — §4.11.11.1's "nearest known port" wording is written for
-##   pirates. No `x ≥ 7` strip rule is applied: the doc pins that for pirates.
+##   pirates. No `x ≥ 7` strip rule is applied (the strip is retired).
 func _candidates(kind: String, nation_id: String) -> Array:
 	var map = _map()
 	if map == null:
@@ -468,22 +475,10 @@ func _candidates(kind: String, nation_id: String) -> Array:
 	var cached = _candidates_cache.get(key, null)
 	if cached is Array:
 		return cached
+	var scanned := 0
 	var out: Array = []
 	if kind == PIRATE:
-		for y in map.height:
-			for x in map.width:
-				var cell := Vector2i(x, y)
-				if cell.x < PIRATE_MIN_X:
-					continue
-				if not map.is_passable(cell):
-					continue
-				var anchor_id := _nearest_known_port(cell)
-				if anchor_id.is_empty():
-					continue
-				var anchor_cell: Vector2i = map.port_cell(anchor_id)
-				if anchor_cell.x < 0 or _chebyshev(cell, anchor_cell) > ZONE_RADIUS:
-					continue
-				out.append([cell, anchor_id])
+		out = _pirate_candidates(map)
 	else:
 		for port_id in _nation_ports(nation_id):
 			var anchor_cell: Vector2i = map.port_cell(port_id)
@@ -491,10 +486,18 @@ func _candidates(kind: String, nation_id: String) -> Array:
 				continue
 			for dy in range(-ZONE_RADIUS, ZONE_RADIUS + 1):
 				for dx in range(-ZONE_RADIUS, ZONE_RADIUS + 1):
-					var cell := anchor_cell + Vector2i(dx, dy)
-					if cell.x < 0 or cell.y < 0:
-						continue
-					if cell.x >= map.width or cell.y >= map.height:
+					scanned += 1
+					if scanned > CANDIDATE_SCAN_LIMIT:
+						push_error(
+							"Encounters: navy candidate scan exceeded %d cells"
+							% CANDIDATE_SCAN_LIMIT
+						)
+						return out
+					# x wraps (§4.1): a zone at the seam continues on the far side.
+					var cell := Vector2i(
+						posmod(anchor_cell.x + dx, map.width), anchor_cell.y + dy
+					)
+					if cell.y < 0 or cell.y >= map.height:
 						continue
 					if not map.is_passable(cell):
 						continue
@@ -512,6 +515,85 @@ func _candidates(kind: String, nation_id: String) -> Array:
 				return ca.y < cb.y
 			return ca.x < cb.x)
 	_candidates_cache[key] = out
+	return out
+
+
+## Every legal pirate spawn tile, enumerated **around the known ports** instead
+## of scanning the 2.33 M-tile world (docs/60-* §4.11.11.1).
+##
+## A candidate must be within Chebyshev `ZONE_RADIUS` of its anchor port, so the
+## search space is `known_ports × (2·15+1)²` (~961 cells per port) rather than
+## the whole grid: < 100 k passability lookups even with every port known.
+## Semantics are unchanged — passable, on the grid, within 15 (wrap-aware on x)
+## of the **nearest** known port (ties by port id ascending) — and the result is
+## sorted into map order `(y, x)`, so a seeded draw picks exactly the tile it
+## picked before. `x` wraps (§4.1); there is no Atlantic-strip exclusion any
+## more (`60-*` §4.1: the strip is retired with the weather strip).
+func _pirate_candidates(map) -> Array:
+	var known: Array = []
+	for raw_id in GameState.known_ports:
+		var port_id := str(raw_id)
+		var anchor_cell: Vector2i = map.port_cell(port_id)
+		if anchor_cell.x >= 0:
+			known.append([port_id, anchor_cell])
+	if known.is_empty():
+		return []
+	known.sort_custom(func(a: Array, b: Array) -> bool: return str(a[0]) < str(b[0]))
+	var width: int = int(map.width)
+	var height: int = int(map.height)
+	# One pass over `known_ports × 961` cells: remember the **best** anchor per
+	# tile (`(distance, port_id)` ascending — the §4.11.11.1 "nearest, ties by
+	# id" rule) instead of re-scanning the port list per candidate. The union of
+	# the zones is exactly the candidate set, because a tile whose nearest port
+	# is `P` always lies inside `P`'s ±15 zone.
+	var best: Dictionary = {}
+	var scanned := 0
+	for entry in known:
+		var anchor_id := str(entry[0])
+		var anchor_cell: Vector2i = entry[1]
+		for dy in range(-ZONE_RADIUS, ZONE_RADIUS + 1):
+			var y: int = anchor_cell.y + dy
+			if y < 0 or y >= height:
+				continue
+			for dx in range(-ZONE_RADIUS, ZONE_RADIUS + 1):
+				scanned += 1
+				if scanned > CANDIDATE_SCAN_LIMIT:
+					# Defensive: a guard, never a code path. Log and stop rather
+					# than spin — a test or CI must never hang on a map bug.
+					push_error(
+						"Encounters: pirate candidate scan exceeded %d cells"
+						% CANDIDATE_SCAN_LIMIT
+					)
+					return []
+				# x wraps (§4.1): a zone at the seam continues on the far side.
+				var x: int = posmod(anchor_cell.x + dx, width)
+				var key: int = y * width + x
+				var wrapped_dx: int = absi(dx) % width
+				var distance: int = maxi(
+					mini(wrapped_dx, width - wrapped_dx), absi(dy)
+				)
+				var previous = best.get(key, null)
+				if previous is Array:
+					var previous_distance: int = previous[0]
+					var previous_id: String = previous[1]
+					if distance > previous_distance:
+						continue
+					if distance == previous_distance and anchor_id > previous_id:
+						continue
+				best[key] = [distance, anchor_id]
+	var out: Array = []
+	for key in best:
+		var y: int = int(key) / width
+		var x: int = int(key) % width
+		if not map.is_passable_xy(x, y):
+			continue
+		out.append([Vector2i(x, y), str((best[key] as Array)[1])])
+	out.sort_custom(func(a: Array, b: Array) -> bool:
+		var ca: Vector2i = a[0]
+		var cb: Vector2i = b[0]
+		if ca.y != cb.y:
+			return ca.y < cb.y
+		return ca.x < cb.x)
 	return out
 
 
@@ -536,6 +618,10 @@ func _nation_ports(nation_id: String) -> Array[String]:
 
 ## Nearest **known** port to `cell` (Chebyshev, ties by port id), "" when the
 ## player knows no port on this map (§4.11.11.1).
+##
+## `map.port_cell()` is O(1) (the loader memoises the §6.1 harbor snap), so this
+## is a handful of dictionary lookups per call, not a scan — which is what keeps
+## the port-centric candidate enumeration above cheap.
 func _nearest_known_port(cell: Vector2i) -> String:
 	var map = _map()
 	if map == null:
@@ -620,7 +706,8 @@ func _best_step(origin: Vector2i, anchor: Vector2i, marker: Dictionary) -> Vecto
 		for dx in range(-1, 2):
 			if dx == 0 and dy == 0:
 				continue
-			var cell := origin + Vector2i(dx, dy)
+			# x wraps (§4.1): a marker at x = 2159 may step east to x = 0.
+			var cell := Vector2i(posmod(origin.x + dx, map.width), origin.y + dy)
 			if not map.is_passable(cell):
 				continue
 			if _is_occupied(cell, marker):
@@ -693,11 +780,36 @@ func _map():
 	return DataLoader.map
 
 
+## Chebyshev distance with longitude wrap (`20-*` §4.1): `min(|dx|, width −
+## |dx|)`. The width comes from the loaded legend (2160), so zones, contact and
+## anchor distances all agree with the validator.
 static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
-	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var width := int(grid.get("width", 0))
+	if width <= 0:
+		width = 2160
+	var dx := absi(a.x - b.x) % width
+	return maxi(mini(dx, width - dx), absi(a.y - b.y))
 
 
 static func _cell_before(a: Vector2i, b: Vector2i) -> bool:
 	if a.y != b.y:
 		return a.y < b.y
 	return a.x < b.x
+
+
+## Chebyshev distance used by [method choose_step]'s tie-breaks: the
+## wrap-aware [method _chebyshev] so a step across the seam is chosen when it
+## really is the short way round.
+static func _step_distance(a: Vector2i, b: Vector2i) -> int:
+	return _chebyshev(a, b)
+
+
+## `|dx| + |dy|` with the same wrapped dx [method _step_distance] makes short.
+static func _step_manhattan(a: Vector2i, b: Vector2i) -> int:
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var width := int(grid.get("width", 0))
+	if width <= 0:
+		width = 2160
+	var dx := absi(a.x - b.x) % width
+	return mini(dx, width - dx) + absi(a.y - b.y)

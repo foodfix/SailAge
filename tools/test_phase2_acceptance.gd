@@ -46,16 +46,25 @@ const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 const BattleScene := preload("res://scenes/combat/battle_screen.tscn")
 
-## Open-water fixture tile (all 8 neighbours passable on the shipped map), four
-## tiles east of Bordeaux and inside no land mass. The pirate is placed on the
-## neighbour to its east, so a real day tick walks it into contact.
-const CONTACT := Vector2i(20, 20)
+## Open-water fixture tile (all 8 neighbours passable) 8 tiles from Lisbon in
+## the world map's variables band (lat 40°N). Phase 4 (task G): re-anchored from
+## the retired P1 grid's (20,20) — that tile is polar ice on the world grid. The
+## pirate is placed on the neighbour to its east, so a real day tick walks it
+## into contact.
+## (1023,300) is open water 8 tiles from Lisbon; the marker one tile east of it
+## steps south-west and lands at Chebyshev 1 on the very next day tick (verified
+## by replaying the exact §4.11.8 rule-5 tie-breaks over the shipped artifact).
+const CONTACT := Vector2i(1023, 300)
 const MARKER_CELL := CONTACT + Vector2i(1, 0)
-const MAP_PATH := "res://data/maps/p1_mediterranean.txt"
+const MAP_PATH := "res://data/maps/world.png"
 
 ## Pre-battle day of every fixture: the day tick that brings the pirate into
 ## contact advances it to [constant BATTLE_DAY], so both numbers are explicit.
-const RUN_DAY := 5
+## The pre-battle day. Phase 4 (task G): the battle seed includes the contact
+## tile (`60-*` §4.11.1), which moved from P1's (20,20) to the world's
+## (1023,300), so the day was re-searched: run day 3 → battle day 4 is the
+## cannon-victory stream for this fixture (2 enemy hulls sunk, 0 captured).
+const RUN_DAY := 3
 const BATTLE_DAY := RUN_DAY + 1
 
 ## A weather seed that rolls `fair` on the fixture tile, so the §4.11.5 cannon

@@ -788,6 +788,23 @@ static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
+## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod 2160). The
+## battle grid itself does not wrap, but port distances from a world contact
+## tile do — a contact at x = 2158 is 2 tiles from a port at x = 0.
+static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
+	var width := _world_width()
+	var dx := absi(a.x - b.x) % maxi(width, 1)
+	return maxi(mini(dx, width - dx), absi(a.y - b.y))
+
+
+## The world grid width for world-space distance math (the loaded legend, else
+## the locked 2160).
+static func _world_width() -> int:
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var width := int(grid.get("width", 0))
+	return width if width > 0 else 2160
+
+
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
@@ -1046,14 +1063,18 @@ func _rep_deltas() -> Dictionary:
 ## this rule and `tools/test_battle_economy.gd` asserts the two agree.
 func _nearest_port_nations() -> Array:
 	var ports: Array = []
+	DataLoader.ensure_map()
 	for port in DataLoader.ports_list:
 		if not (port is Dictionary):
 			continue
-		var position := to_cell(port.get("position", NO_CELL))
+		# Ports carry lat/lon only; the harbor tile is derived (§10-* §6.1).
+		var position: Vector2i = DataLoader.port_cell(str(port.get("id", "")))
+		if position.x < 0:
+			continue
 		ports.append({
 			"id": str(port.get("id", "")),
 			"nation_id": str(port.get("nation_id", "")),
-			"distance": _chebyshev(contact, position),
+			"distance": _world_chebyshev(contact, position),
 		})
 	ports.sort_custom(func(a, b) -> bool:
 		if int(a["distance"]) != int(b["distance"]):

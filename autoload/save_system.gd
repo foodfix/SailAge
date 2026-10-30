@@ -82,7 +82,7 @@ const RANK_ORDER: Array[String] = [
 	"none", "knight", "baron", "viscount", "count", "duke",
 ]
 ## The default map id a migrated Phase-2 save resumes on (docs/70-* §4.9.8).
-const DEFAULT_MAP_ID := "p1"
+const DEFAULT_MAP_ID := "world"
 ## `world.map_id` is saved inside the `world` block (docs/90-* §8.1); this is
 ## the documented fallback for a payload that predates it.
 const DEFAULT_WEATHER := "calm"
@@ -474,11 +474,12 @@ func validate_payload(data: Dictionary) -> String:
 	for axis in ["x", "y"]:
 		if not (position as Dictionary).get(axis) is int:
 			return "'world.position.%s' is not an integer" % axis
-	# §8.1/§4.9.8: only the two shipped map ids exist; a hand-edited third id
-	# would send the loader looking for a legend that is not in the index.
+	# §8.1/§9.1: the single shipped map id. Phase 4 replaced the p1/p3 pair, so
+	# a payload naming either of those is a pre-release save and is refused
+	# (docs/90-* §8.2 development-stage scope).
 	var map_id = (data["world"] as Dictionary).get("map_id", DEFAULT_MAP_ID)
-	if not (map_id is String) or not (map_id as String) in ["p1", "p3"]:
-		return "'world.map_id' is not a known map id"
+	if not (map_id is String) or (map_id as String) != "world":
+		return "'world.map_id' is not the shipped map id"
 	return ""
 
 

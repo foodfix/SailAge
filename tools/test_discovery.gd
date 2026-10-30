@@ -29,19 +29,22 @@ const CAPITALS: Array[String] = [
 	"amsterdam", "istanbul", "lisbon", "london", "seville", "venice",
 ]
 
-## Open-water cell used for the minimap fixture (every neighbour is sea).
-const OPEN_CELL := Vector2i(20, 20)
-## Lisbon (7,57) and the sea tile beside it (8,57).
-const LISBON := Vector2i(7, 57)
-const SEA_BESIDE_LISBON := Vector2i(8, 57)
-
-## Valencia (27,55) is not a capital, so it starts unknown. The cells below
-## sit at exactly Chebyshev distance d from it along the NW diagonal; the pair
-## (D23, D24) straddles the Phase-4 base radius 24 (`20-*` §4.11), and the
-## four smaller ones remain the single-step fixtures below that.
-const VALENCIA_D26 := Vector2i(1, 29)
-const VALENCIA_D24 := Vector2i(3, 31)
-const VALENCIA_D25 := Vector2i(2, 30)
+## Open-water cell for the minimap fixture (every neighbour is sea), in the
+## world map's variables band far from every harbor. Phase 4: re-anchored from
+## the retired P1 grid (20,20) by task G.
+const OPEN_CELL := Vector2i(900, 330)
+## Lisbon's derived harbor tile on the world map (`10-*` §6.1) and the sea tile
+## beside it: (1023,309) is coastal sea (re-anchored from P1's (7,57)/(8,57)).
+const LISBON := Vector2i(1024, 308)
+const SEA_BESIDE_LISBON := Vector2i(1023, 309)
+## Valencia's harbor tile on the world map (derived, not stored). It is not a
+## capital, so it starts unknown. The three cells below sit at exactly Chebyshev
+## 24 / 25 / 26 from it and each is a legal step from the next, so the pair
+## (D24, D25) straddles the Phase-4 base radius 24 (`20-*` §4.11).
+const VALENCIA_HARBOR := Vector2i(1078, 303)
+const VALENCIA_D26 := Vector2i(1052, 277)
+const VALENCIA_D25 := Vector2i(1053, 278)
+const VALENCIA_D24 := Vector2i(1054, 279)
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -50,14 +53,14 @@ var _checks := 0
 func _ready() -> void:
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the discovery fixtures (%s)" % map.last_error)
 	DataLoader.map = map if ok else null
 	if DataLoader.map != null:
-		_check(DataLoader.map.port_cell("valencia") == Vector2i(27, 55),
-			"valencia stands at its data position (got %s)"
-			% str(DataLoader.map.port_cell("valencia")))
+		_check(DataLoader.map.port_cell("valencia") == VALENCIA_HARBOR,
+			"valencia stands at its derived harbor tile %s (got %s)"
+			% [str(VALENCIA_HARBOR), str(DataLoader.map.port_cell("valencia"))])
 		_check(DataLoader.map.is_passable(OPEN_CELL)
 			and DataLoader.map.is_passable(VALENCIA_D24)
 			and DataLoader.map.is_passable(VALENCIA_D25)
@@ -242,7 +245,7 @@ func _test_discover_then_enter() -> void:
 	var world = spawned[1]
 	_check(not GameState.known_ports.has("valencia"),
 		"valencia is unknown from beyond the radius (distance 25, radius 24)")
-	_check(not GameState.explored_tiles.has(Vector2i(27, 55)),
+	_check(not GameState.explored_tiles.has(VALENCIA_HARBOR),
 		"the harbor tile is unexplored from beyond the radius")
 
 	# One step inward: the sighting reveal discovers it without docking (§4.11).
@@ -259,7 +262,9 @@ func _test_discover_then_enter() -> void:
 	spawned[0].queue_free()
 
 	# Entering an *unknown* harbor tile discovers it and enters normally.
-	_make_run(10, Vector2i(28, 54))  # directly NW of valencia's marker
+	# One legal step from valencia's harbor tile (the ready-time sighting knows it,
+	# and the fixture forgets it again below to exercise the entry branch).
+	_make_run(10, Vector2i(1078, 302))
 	var spawned2: Array = _spawn_world()
 	var world2 = spawned2[1]
 	GameState.known_ports = []  # forget everything the ready reveal found
@@ -269,7 +274,7 @@ func _test_discover_then_enter() -> void:
 	var clock_before := float(GameState.world["clock_fraction"])
 	_check(not GameState.known_ports.has("valencia"),
 		"valencia is unknown just before the entry step")
-	var stepped: bool = world2.try_step(Vector2i(27, 55))
+	var stepped: bool = world2.try_step(VALENCIA_HARBOR)
 	EventBus.port_entered.disconnect(listener)
 	_check(stepped, "stepping onto valencia's harbor tile succeeds (no error)")
 	_check(entered == ["valencia"],
@@ -289,7 +294,7 @@ func _test_discover_then_enter() -> void:
 	# With routing enabled the entry targets S4; because this world instance is
 	# a child (not the tree's current scene) the router must not swap the test's
 	# root — docs/90-* §7 "no scene ever frees another".
-	_make_run(10, Vector2i(28, 54))
+	_make_run(10, Vector2i(1078, 302))
 	var spawned3: Array = _spawn_world(true)
 	var world3 = spawned3[1]
 	_check(world3.port_route_target() == "",
@@ -531,8 +536,13 @@ func _test_minimap() -> void:
 		"minimap is 256×192 (got %s)" % str(hud.minimap_rect().size))
 	_check(hud.minimap_px_per_tile() == 2,
 		"minimap draws 2 px per tile (got %d)" % hud.minimap_px_per_tile())
-	_check(hud.minimap_image_size() == Vector2i(256, 192),
-		"the chart image is 128×96 tiles × 2 px (got %s)"
+	# Re-anchored in task G: the HUD still builds a whole-world chart at 2 px per
+	# tile (2160×1080 → 4320×2160). The 128×96-tile crop around the fleet
+	# (`20-*` §4.12 as amended) is task J's re-spec, which owns `hud.tscn`; the
+	# assertion's intent — "2 px/tile over the loaded grid, not a stale size" —
+	# is unchanged and now measures the real 2160×1080 world.
+	_check(hud.minimap_image_size() == Vector2i(2160 * 2, 1080 * 2),
+		"the chart image covers the 2160×1080 grid at 2 px/tile (got %s)"
 		% str(hud.minimap_image_size()))
 	_check(hud.minimap_rect().position == Vector2(
 		PaletteLib.MARGIN, PaletteLib.TOP_BAR_H + PaletteLib.MARGIN),

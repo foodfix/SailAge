@@ -18,16 +18,24 @@ const DialogScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
 ## Open-water cell whose 8 neighbours (and both orthogonals of each diagonal)
-## are all passable, so every one of the 8 directions is legal from here.
-const OPEN_CELL := Vector2i(20, 20)
-## Lisbon marker (7,57); (8,57) is coastal sea, (9,57) is land '#'.
-const LISBON := Vector2i(7, 57)
-const SEA_BESIDE_LISBON := Vector2i(8, 57)
-const LAND_BESIDE_LISBON := Vector2i(9, 57)
-## Real corner cut on the shipped map: (8,1) → (7,0) is diagonal and
-## (8,0) is impassable, so only the (7,1) orthogonal exists.
-const CORNER_FROM := Vector2i(8, 1)
-const CORNER_TO := Vector2i(7, 0)
+## are all passable, so every one of the 8 directions is legal from here. On the
+## world map it sits in the variables band (lat ≈ 36.7°N), far from every harbor.
+const OPEN_CELL := Vector2i(700, 320)
+## Lisbon's harbor tile on the world map (derived from lat/lon, `10-*` §6.1) and
+## its neighbours: (1023,309) is coastal sea, (1024,307) is land '#'.
+const LISBON := Vector2i(1024, 308)
+const SEA_BESIDE_LISBON := Vector2i(1023, 309)
+const LAND_BESIDE_LISBON := Vector2i(1024, 307)
+## A real corner cut on the shipped world: (62,201) → (61,200) is diagonal with
+## (61,201) water but (62,200) land, so only one orthogonal exists. Found by
+## searching the artifact for that exact shape (task G) — a data fact, not a
+## hand-authored fixture like the retired P1 pair.
+const CORNER_FROM := Vector2i(62, 201)
+const CORNER_TO := Vector2i(61, 200)
+## The dominant passable component the artifact reports (> 1 M tiles),
+## `data/maps/world_report.json#components.over_1000000`; the in-game BFS must
+## reach exactly this many tiles from Lisbon.
+const DOMINANT_COMPONENT := 1168747
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -134,21 +142,25 @@ func _clear_dialogs(world = null) -> void:
 func _test_map_loads() -> void:
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the movement tests (%s)" % map.last_error)
 	DataLoader.map = map if ok else null
 	if ok:
-		_check(map.width == 128 and map.height == 96,
-			"grid is 128×96 (got %d×%d)" % [map.width, map.height])
-		_check(map.is_passable(OPEN_CELL), "fixture cell (20,20) is sea")
+		_check(map.width == 2160 and map.height == 1080,
+			"grid is 2160×1080 (got %d×%d)" % [map.width, map.height])
+		_check(map.is_passable(OPEN_CELL),
+			"fixture cell %s is sea" % str(OPEN_CELL))
 		_check(map.is_passable(SEA_BESIDE_LISBON),
-			"(8,57) beside Lisbon is passable sea")
+			"%s beside Lisbon is passable sea" % str(SEA_BESIDE_LISBON))
 		_check(not map.is_passable(LAND_BESIDE_LISBON),
-			"(9,57) beside Lisbon is land and blocks")
-		_check(not map.is_passable(Vector2i(-1, 0)),
-			"map edge is impassable (§6)")
-		_check(map.is_passable(LISBON), "port marker tiles are passable")
+			"%s beside Lisbon is land and blocks" % str(LAND_BESIDE_LISBON))
+		_check(not map.is_passable(Vector2i(OPEN_CELL.x, -1)),
+			"the latitude edge is impassable (§4.1)")
+		_check(map.is_passable(Vector2i(-1, OPEN_CELL.y)),
+			"x = -1 wraps to the last column and is sea (§4.1)")
+		_check(map.is_passable(LISBON),
+			"a harbor tile is passable water (§4.11)")
 
 
 # --- §4.4 effective speed --------------------------------------------------
@@ -213,7 +225,7 @@ func _test_diagonal_rule() -> void:
 	_check(SailingSimLib.is_move_legal(OPEN_CELL, OPEN_CELL + Vector2i(1, 1), map),
 		"open-water diagonal is legal")
 	_check(not SailingSimLib.is_move_legal(CORNER_FROM, CORNER_TO, map),
-		"real corner cut (8,1)→(7,0) is rejected")
+		"real corner cut (62,201)→(61,200) is rejected")
 	_check(SailingSimLib.is_move_legal(
 		CORNER_FROM, CORNER_FROM + Vector2i(-1, -1), map) == false,
 		"the same corner is rejected for the other orthogonal too")
@@ -221,38 +233,108 @@ func _test_diagonal_rule() -> void:
 		CORNER_FROM, CORNER_FROM + Vector2i(-1, 0), map)
 		and not SailingSimLib.is_move_legal(
 			CORNER_FROM, CORNER_FROM + Vector2i(0, -1), map),
-		"the straight alternatives behave per the map (7,1) sea, (8,0) land")
+		"the straight alternatives behave per the map ((61,201) sea, (62,200) land)")
 	_check(not SailingSimLib.is_move_legal(OPEN_CELL, OPEN_CELL + Vector2i(2, 0), map),
 		"a two-tile jump is not a move")
 	_check(not SailingSimLib.is_move_legal(OPEN_CELL, OPEN_CELL, map),
 		"standing still is not a move")
 
-	# Soak: BFS the whole map through the movement rule alone. It must reach
-	# exactly the validator's single sea component (4109 passable tiles,
-	# tools/validate_data.py group 6) from Lisbon — proof the in-game rule is
-	# the same "no corner cutting" rule the data validator enforces.
-	var reached := {LISBON: true}
-	var queue: Array[Vector2i] = [LISBON]
-	var head := 0
-	while head < queue.size():
-		var here: Vector2i = queue[head]
-		head += 1
+	# Soak: BFS the whole world through the movement rule, from Lisbon. It must
+	# reach exactly the dominant sea component the validator reports (> 1 M
+	# tiles, `data/maps/world_report.json#components.over_1000000`) — proof the
+	# in-game rule is the same "no corner cutting, wrap-aware" rule the data
+	# validator enforces. (Re-anchored from the retired 128×96 P1 map's 4109.)
+	#
+	# The walk uses the int passability API (`is_passable_xy`) because 1.17 M
+	# `Vector2i` moves through `is_move_legal` is minutes of GDScript; the rules
+	# are the same and [method _legal_int] below is asserted to agree with
+	# `SailingSim.is_move_legal` on a large sample, so the soak still measures
+	# the production rule.
+	var reached := _bfs_reachable(map, LISBON)
+	_check(reached == DOMINANT_COMPONENT,
+		"BFS through movement rules reaches all %d sea tiles from Lisbon (got %d)"
+		% [DOMINANT_COMPONENT, reached])
+	var disagreements := 0
+	var samples := 0
+	var sample_rng := RandomNumberGenerator.new()
+	sample_rng.seed = 4242
+	for _index in 4000:
+		var here := Vector2i(
+			sample_rng.randi_range(0, int(map.width) - 1),
+			sample_rng.randi_range(1, int(map.height) - 2)
+		)
 		for dx in [-1, 0, 1]:
 			for dy in [-1, 0, 1]:
 				var next := here + Vector2i(dx, dy)
-				if reached.has(next):
+				samples += 1
+				if SailingSimLib.is_move_legal(here, next, map) \
+						!= _legal_int(map, here, next):
+					disagreements += 1
+	_check(disagreements == 0,
+		"is_move_legal agrees with the int BFS rule on %d sampled moves (%d differ)"
+		% [samples, disagreements])
+
+
+## Single-step legality on ints: the same §4.2 rule as
+## `SailingSim.is_move_legal(from, to, map)` — 8-neighbour, passable target, and
+## no corner cutting (both orthogonals of the corner passable). x wraps.
+func _legal_int(world_map, from: Vector2i, to: Vector2i) -> bool:
+	var dx := to.x - from.x
+	var dy := to.y - from.y
+	if dx < -1 or dx > 1 or dy < -1 or dy > 1:
+		return false
+	if dx == 0 and dy == 0:
+		return false
+	if not world_map.is_passable_xy(to.x, to.y):
+		return false
+	if dx != 0 and dy != 0:
+		if not world_map.is_passable_xy(from.x + dx, from.y):
+			return false
+		if not world_map.is_passable_xy(from.x, from.y + dy):
+			return false
+	return true
+
+
+## Every tile reachable from `start` under [method _legal_int] (x wraps, y is
+## bounded). Returns the count.
+func _bfs_reachable(world_map, start: Vector2i) -> int:
+	var width: int = int(world_map.width)
+	var height: int = int(world_map.height)
+	var visited := PackedByteArray()
+	visited.resize(width * height)
+	var queue := PackedInt32Array()
+	var start_index := start.y * width + posmod(start.x, width)
+	visited[start_index] = 1
+	queue.append(start_index)
+	var head := 0
+	var count := 1
+	while head < queue.size():
+		var node: int = queue[head]
+		head += 1
+		var x: int = node % width
+		var y: int = node / width
+		for dy in [-1, 0, 1]:
+			var ny: int = y + dy
+			if ny < 0 or ny >= height:
+				continue
+			for dx in [-1, 0, 1]:
+				if dx == 0 and dy == 0:
 					continue
-				if not SailingSimLib.is_move_legal(here, next, map):
+				var nx: int = posmod(x + dx, width)
+				var index: int = ny * width + nx
+				if visited[index] == 1:
 					continue
-				reached[next] = true
-				queue.append(next)
-	_check(reached.size() == 4109,
-		"BFS through movement rules reaches all 4109 sea tiles from Lisbon (got %d)"
-		% reached.size())
-	for cell in reached:
-		if not map.is_passable(cell):
-			_check(false, "BFS reached an impassable cell %s" % str(cell))
-			break
+				if not world_map.is_passable_xy(nx, ny):
+					continue
+				if dx != 0 and dy != 0:
+					if not world_map.is_passable_xy(x + dx, y):
+						continue
+					if not world_map.is_passable_xy(x, y + dy):
+						continue
+				visited[index] = 1
+				queue.append(index)
+				count += 1
+	return count
 
 
 # --- §4.2 8-directional stepping -----------------------------------------
@@ -331,21 +413,21 @@ func _test_land_and_edge_block() -> void:
 		"moving off the west edge is rejected")
 	_check(GameState.world_tile() == edge, "edge rejection keeps the position")
 
-	# Reef: the shipped Phase-1 map has no '^' tiles, so the rule is proven on
-	# a synthetic legend-conformant map with the same loader (data-driven).
-	var reef_map = MapLoaderLib.parse(
-		"~~~~\n~^~~\n~~~~",
-		{
-			"grid": {"width": 4, "height": 3},
-			"tile_size_px": 32,
-			"tiles": {
-				"~": {"kind": "sea", "passable": true},
-				"^": {"kind": "reef", "passable": false},
-			},
-			"port_markers": {},
-		}
-	)
-	_check(reef_map != null, "synthetic reef map parses")
+	# Reef: the shipped world has no '^' tiles this phase (`^` count may be 0,
+	# build_world.py's done-when), so the rule is proven on a synthetic
+	# index-grid map with the same loader (data-driven, `MapLoader.from_indices`).
+	var reef_legend := {
+		"grid": {"width": 4, "height": 3},
+		"tile_size_px": 32,
+		"tiles": {
+			"~": {"kind": "sea", "passable": true},
+			"^": {"kind": "reef", "passable": false},
+		},
+	}
+	# Palette indices are the locked §6.3 ones: 0 = `~`, 3 = `^` (reef).
+	var reef_map = MapLoaderLib.from_indices(4, 3,
+		PackedByteArray([0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0]), reef_legend)
+	_check(reef_map != null, "synthetic reef map builds")
 	if reef_map != null:
 		_check(not reef_map.is_passable(Vector2i(1, 1)), "reef '^' is impassable")
 		_check(not SailingSimLib.is_move_legal(Vector2i(1, 0), Vector2i(1, 1), reef_map),
@@ -494,16 +576,17 @@ func _test_port_entry() -> void:
 		"moving within the sighting radius discovers Lisbon without docking")
 	_check(GameState.explored_tiles.has(SEA_BESIDE_LISBON),
 		"explored_tiles follows the fleet")
-	# Explored set == the clipped sighting square (§4.12), nothing more.
+	# Explored set == the wrap-aware sighting square (§4.12), nothing more.
+	# Re-anchored in task G: the square wraps on x and clips only at the
+	# latitude edges (the retired P1 test clipped at both x edges).
 	var radius: int = CharacterLib.sighting_radius()
 	var expected := 0
 	for dy in range(-radius, radius + 1):
-		for dx in range(-radius, radius + 1):
-			var cell := Vector2i(SEA_BESIDE_LISBON.x + dx, SEA_BESIDE_LISBON.y + dy)
-			if cell.x >= 0 and cell.y >= 0 and cell.x < 128 and cell.y < 96:
-				expected += 1
+		var y := SEA_BESIDE_LISBON.y + dy
+		if y >= 0 and y < 1080:
+			expected += 2 * radius + 1
 	_check(GameState.explored_tiles.size() == expected,
-		"explored tiles = the sighting square (%d, got %d)"
+		"explored tiles = the wrap-aware sighting square (%d, got %d)"
 		% [expected, GameState.explored_tiles.size()])
 	_check(not GameState.explored_tiles.has(
 		SEA_BESIDE_LISBON + Vector2i(radius + 1, 0)),
@@ -601,6 +684,9 @@ func _test_no_game_and_modal_block() -> void:
 
 
 
+## §4.5 as amended (Phase 4): **x wraps, y clamps.** The visible rect's x may
+## run past the map width at the seam (the chunk layer renders wrapped content),
+## but its y never leaves the grid and the live chunks always cover the view.
 func _test_camera_clamp() -> void:
 	var host := Node2D.new()
 	add_child(host)
@@ -608,29 +694,41 @@ func _test_camera_clamp() -> void:
 	host.add_child(world)
 
 	var bounds := Rect2(Vector2.ZERO, world.map_pixels())
+	# Re-anchored corners: the retired grid's (127,95) became the world's
+	# (2159,1079); the south row is polar ice, so the fixture uses row 900
+	# (60°S, still sea) for the "no void" probe there.
 	var corners := [
-		Vector2i(0, 0), Vector2i(127, 0), Vector2i(0, 95), Vector2i(127, 95),
+		Vector2i(0, 0), Vector2i(2159, 0), Vector2i(0, 900), Vector2i(2159, 900),
 	]
 	for corner in corners:
 		GameState.world["position"] = {"x": corner.x, "y": corner.y}
 		world.sync_from_state()
 		var visible: Rect2 = world.visible_world_rect()
-		var inside: bool = bounds.encloses(visible) \
-			or (visible.position.x >= bounds.position.x - 0.001
-				and visible.position.y >= bounds.position.y - 0.001
-				and visible.end.x <= bounds.end.x + 0.001
-				and visible.end.y <= bounds.end.y + 0.001)
-		_check(inside, "camera at corner %s shows no void (visible %s, map %s)" % [
-			str(corner), str(visible), str(bounds)
-		])
+		_check(visible.position.y >= bounds.position.y - 0.001
+			and visible.end.y <= bounds.end.y + 0.001,
+			"camera at %s keeps y inside the grid (visible y %.1f..%.1f, map 0..%.1f)"
+			% [str(corner), visible.position.y, visible.end.y, bounds.end.y])
+		# The seam rule: x is allowed to run past the map, but the wrapped
+		# content must be there — the chunk layer covers the whole view.
+		_check(DataLoader.map.covers_rect_world(visible),
+			"camera at %s shows wrapped content, never void (visible %s)"
+			% [str(corner), str(visible)])
 
-	# Mid-map: the camera centers on the fleet tile while staying clamped.
-	GameState.world["position"] = {"x": 64, "y": 48}
+	# Mid-map: the camera centers exactly on the fleet tile (x is not clamped).
+	GameState.world["position"] = {"x": 1080, "y": 540}
 	world.sync_from_state()
 	var center: Vector2 = world.get_node("Camera2D").position
-	_check(is_equal_approx(center.x, 64.0 * 32.0 + 16.0)
-		and is_equal_approx(center.y, 48.0 * 32.0 + 16.0),
+	_check(is_equal_approx(center.x, 1080.0 * 32.0 + 16.0)
+		and is_equal_approx(center.y, 540.0 * 32.0 + 16.0),
 		"camera centers on the fleet tile mid-map (%s)" % str(center))
+	# At the west seam the camera stays on the fleet (x not clamped): a fleet at
+	# x = 2 shows x = 2159..2, which is the wrapped world.
+	GameState.world["position"] = {"x": 2, "y": 540}
+	world.sync_from_state()
+	var seam_center: Vector2 = world.get_node("Camera2D").position
+	_check(is_equal_approx(seam_center.x, 2.0 * 32.0 + 16.0),
+		"camera is not x-clamped at the seam (got %.1f, fleet x=2)"
+		% seam_center.x)
 	_check(is_equal_approx(world.get_node("Camera2D").zoom.x, 1.0),
 		"camera zoom locked at 1.0")
 	host.queue_free()
@@ -697,20 +795,20 @@ func _test_hud_signal_only() -> void:
 	# Area label: nearest known port within 16 tiles, else world.open_sea.
 	GameState.known_ports = ["lisbon"]
 	GameState.current_port = null
-	hud.set_fleet_cell(Vector2i(64, 48))
+	hud.set_fleet_cell(Vector2i(1080, 540))
 	var area: Label = hud.get_node("TopRow/Area")
 	_check(area.text == I18n.t_key("world.open_sea"),
 		"area label is open sea when no known port is within 16 tiles (%s)"
 		% area.text)
-	hud.set_fleet_cell(Vector2i(8, 57))
+	hud.set_fleet_cell(SEA_BESIDE_LISBON)
 	_check(area.text == I18n.t(DataLoader.get_port("lisbon")["name"]),
 		"area label names the nearest known port inside 16 tiles (%s)" % area.text)
 	GameState.known_ports = []
-	hud.set_fleet_cell(Vector2i(8, 57))
+	hud.set_fleet_cell(SEA_BESIDE_LISBON)
 	_check(area.text == I18n.t_key("world.open_sea"),
 		"an unknown port does not name the area (%s)" % area.text)
 	GameState.current_port = "lisbon"
-	hud.set_fleet_cell(Vector2i(64, 48))
+	hud.set_fleet_cell(Vector2i(1080, 540))
 	_check(area.text == I18n.t(DataLoader.get_port("lisbon")["name"]),
 		"while docked the area label shows the port (%s)" % area.text)
 	GameState.current_port = null

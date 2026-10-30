@@ -9,6 +9,7 @@ extends Node
 # Preloaded rather than referenced by class_name so this autoload parses
 # before the editor has written Godot's global-class cache.
 const CharacterLib := preload("res://scripts/player/character.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 
 ## UI language; locked default "en" (user toggles via the `L` key / top bar).
@@ -93,10 +94,13 @@ func add_gold(delta: int) -> void:
 ##
 ## `route` exists for unit tests: with the default `true` the run routes to the
 ## port screen (§4.1 step 4); tests pass `false` to keep the test scene alive.
-## `map_id` is the Phase-3 world choice (`"p1"`/`"p3"`, docs/70-* §4.9.8); the
-## fleet starts on that map's copy of the nation's start port.
+## `map_id` names the map. Phase 4 ships exactly one (`DataLoader.DEFAULT_MAP_ID`
+## = `"world"`, docs/90-* §9.1) and there is no compatibility ladder for the
+## retired Phase-1–3 ids (`90-*` §8.2 "development-stage scope": SailAge has not
+## shipped, so no save in the wild names them). The fleet starts on the nation's
+## start port's **derived** harbor tile (`10-*` §6.1), never a stored copy.
 func new_game(nation_id: String, route: bool = true,
-		map_id: String = "p1") -> void:
+		map_id: String = "world") -> void:
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
 	if nation.is_empty():
 		push_error("GameState.new_game: unknown nation_id '%s'" % nation_id)
@@ -140,8 +144,8 @@ func new_game(nation_id: String, route: bool = true,
 			% [nation_id, start_ship_type_id])
 		fleet = []
 
-	# The fleet sits on the start port's harbor tile (docs/20-* §4.1); docking
-	# happens immediately, so the fractional clock resets to 0 (§4.3).
+	# The fleet sits on the start port's derived harbor tile (docs/20-* §4.1,
+	# `10-*` §6.1); docking happens immediately, so the clock resets to 0 (§4.3).
 	# `position` is stored as `{"x","y"}` — the save-block shape (docs/90-*
 	# §8.1) and the JSON tilePos shape (docs/10-* §3.1) — so T17 can serialize
 	# it byte-for-byte; use `world_tile()` for the `Vector2i` the map API wants.
@@ -209,32 +213,35 @@ func _route_after_new_game(_start_port_id: String) -> void:
 		push_warning("GameState.new_game: neither port nor world scene exists yet")
 
 
-## A port's `position` on `map_id`: the P1 `position` or its Phase-3 `p3`
-## block (docs/10-* §4.4). Falls back to the P1 position when the port has no
-## `p3` block, so a Phase-3 run whose start port is P1-only still spawns on a
-## real harbor tile.
-func _tile_dict(port: Dictionary, map_id: String = "p1") -> Dictionary:
-	var pos: Dictionary = port.get("position", {})
-	if map_id != "p1":
-		var p3 = port.get("p3", null)
-		if p3 is Dictionary and (p3 as Dictionary).get("position") is Dictionary:
-			pos = (p3 as Dictionary)["position"]
-	return {"x": int(pos.get("x", 0)), "y": int(pos.get("y", 0))}
+## A port's tile as the §8.1 `{x, y}` save shape. Ports carry `lat`/`lon` only
+## (docs/10-* §4.4), so the tile is the **derived** harbor tile (`10-*` §6.1
+## snap rule via `DataLoader.port_cell`). `map_id` is kept for signature
+## compatibility; there is one world map now (docs/90-* §9.1).
+func _tile_dict(port: Dictionary, _map_id: String = "world") -> Dictionary:
+	var port_id := str(port.get("id", ""))
+	var cell := Vector2i(-1, -1)
+	if DataLoader.ensure_map():
+		cell = DataLoader.port_cell(port_id)
+	if cell.x < 0 and (port.get("lat") is float or port.get("lat") is int):
+		# No loader (a pure unit fixture): run the same floor projection so the
+		# tile is never silently (0,0).
+		cell = DiscoveryLib.tile_of_latlon(
+			float(port.get("lat", 0.0)), float(port.get("lon", 0.0))
+		)
+	return {"x": maxi(cell.x, 0), "y": maxi(cell.y, 0)}
 
 
-## Validates the Phase-3 world choice against `data/maps/maps.json`
-## (docs/70-* §4.9.8, docs/90-* §9.1); an unknown id falls back to `"p1"`
-## with a warning so a hand-edited value can never wedge a new game.
+## Resolves the map choice against `data/maps/maps.json` (docs/90-* §9.1).
+## An id that is not in the index falls back to the one documented default with
+## a warning — a hand-edited value can never wedge a new game, and there is no
+## per-phase id table to maintain.
 func _resolve_map_id(map_id: String) -> String:
-	var known: Array = []
-	if DataLoader.has_method("map_ids"):
-		known = DataLoader.map_ids()
-	if known.is_empty():
-		known = ["p1"]
+	var known: Array = DataLoader.map_ids()
 	if map_id in known:
 		return map_id
-	push_warning("GameState.new_game: unknown map_id '%s'; using p1" % map_id)
-	return "p1"
+	push_warning("GameState.new_game: unknown map_id '%s'; using '%s'"
+		% [map_id, DataLoader.DEFAULT_MAP_ID])
+	return DataLoader.DEFAULT_MAP_ID
 
 
 ## `{nation_id: value}` over every nation (a fresh save-block default).

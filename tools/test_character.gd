@@ -670,7 +670,7 @@ func _test_character_panel_live() -> void:
 # --- S14 Quests tab (Phase 3, docs/80-* §4.7.3) ---------------------------
 
 func _test_character_panel_quests_tab() -> void:
-	GameState.new_game("portugal", false, "p3")
+	GameState.new_game("portugal", false, "world")
 	GameState.gold = 20000
 	GameState.day = 12
 	GameState.current_port = "lisbon"

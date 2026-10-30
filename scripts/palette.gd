@@ -15,6 +15,8 @@ const COAST_SEA := Color("#2f6f9e")
 const LAND := Color("#7a5c2e")
 ## Reef tiles.
 const REEF := Color("#3d3d3d")
+## Polar ice tiles (`I`, impassable; docs/20-* §4.1, docs/80-* §4.8).
+const ICE := Color("#c9d6df")
 ## Panels / HUD bars.
 const PANEL_BG := Color("#1c2230")
 ## Borders.

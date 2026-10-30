@@ -21,8 +21,10 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 
-## Open-water cell whose 8 neighbours are passable (same fixture as T6).
-const OPEN_CELL := Vector2i(20, 20)
+## Open-water cell whose 8 neighbours are passable, in the world map's variables
+## band (lat ≈ 36.7°N) and far from every harbor. Phase 4: the fixture moved
+## from the retired P1 grid to the real Earth (task G).
+const OPEN_CELL := Vector2i(700, 320)
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -31,7 +33,7 @@ var _checks := 0
 func _ready() -> void:
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the movement-driven clock checks (%s)" % map.last_error)
 	DataLoader.map = map if ok else null
@@ -143,18 +145,20 @@ func _test_constants() -> void:
 		is_equal_approx(SailingSimLib.CREW_FACTOR_MIN, 0.25),
 		"T6 MIN_SPEED/CREW_FACTOR_MIN unchanged")
 
-	# §4.11 / `70-*` §4.4: the discovery range check is wrap-aware on x and
-	# takes the grid width from the loaded legend (128 on this suite's p1
-	# fixture), so the seam is 1 tile wide, not 127.
-	_check(DiscoveryLib.map_width() == 128,
+	# §4.11 / `70-*` §4.4: the discovery range check is wrap-aware on x and takes
+	# the grid width from the loaded legend — 2160 on the single world map, so
+	# the seam is 1 tile wide, not 2159. (Re-anchored from the retired P1 grid's
+	# 128 in task G: the assertion's intent — "seam distance is 1, not width−1" —
+	# is unchanged, the width comes from the shipped world.)
+	_check(DiscoveryLib.map_width() == 2160,
 		"discovery wrap uses the loaded legend width (got %d)"
 		% DiscoveryLib.map_width())
-	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(127, 10), Vector2i(0, 10)) == 1,
-		"x=127 and x=0 are 1 tile apart across the seam (got %d)"
-		% DiscoveryLib.chebyshev_to_cell(Vector2i(127, 10), Vector2i(0, 10)))
-	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(64, 10), Vector2i(0, 10)) == 64,
+	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(2159, 10), Vector2i(0, 10)) == 1,
+		"x=2159 and x=0 are 1 tile apart across the seam (got %d)"
+		% DiscoveryLib.chebyshev_to_cell(Vector2i(2159, 10), Vector2i(0, 10)))
+	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(1080, 10), Vector2i(0, 10)) == 1080,
 		"the far side of the seam stays far (got %d)"
-		% DiscoveryLib.chebyshev_to_cell(Vector2i(64, 10), Vector2i(0, 10)))
+		% DiscoveryLib.chebyshev_to_cell(Vector2i(1080, 10), Vector2i(0, 10)))
 
 
 # --- §4.5 step 1 consumption ----------------------------------------------

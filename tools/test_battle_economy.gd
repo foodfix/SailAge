@@ -39,17 +39,22 @@ const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## §4.11.10 worked numbers: sloop 3000 → 150, brigantine 15000 → 750.
 const SALVAGE_SLOOP := 150
 const SALVAGE_BRIGANTINE := 750
-## An open-water cell whose 8 neighbours are all passable (the T6 fixture).
-const OPEN_CELL := Vector2i(20, 20)
-## A contact tile whose two nearest ports are Lisbon (Portugal) and Seville
-## (Spain) — two distinct nations, no tie.
-const LISBON_CONTACT := Vector2i(7, 57)
-## A contact tile whose two nearest ports are both Spanish (Bordeaux, then
-## Barcelona) — the "nation credited once" case.
-const SAME_NATION_CONTACT := Vector2i(30, 40)
-## A contact tile where the two nearest ports tie on distance (Bordeaux 26 /
-## Lisbon 26) so the port-id tie-break decides: bordeaux < lisbon.
-const TIE_CONTACT := Vector2i(0, 31)
+## An open-water cell whose 8 neighbours are all passable. Phase 4 (task G):
+## re-anchored from the retired P1 grid's (20,20) — that tile is polar ice on
+## the 2160×1080 world.
+const OPEN_CELL := Vector2i(700, 320)
+## A contact tile whose two nearest ports are Lisbon (Portugal, d=6) and Seville
+## (Spain, d=10) — two distinct nations, no tie. Re-anchored from P1's (7,57)
+## to the world's Lisbon harbor.
+const LISBON_CONTACT := Vector2i(1030, 310)
+## A contact tile whose two nearest ports are both Portuguese (Lisbon d=15 and
+## Oporto d=15) — the "nation credited once" case. Re-anchored from P1's
+## (30,40) (which no longer sits between two same-nation ports).
+const SAME_NATION_CONTACT := Vector2i(1025, 308)
+## A contact tile where the two nearest ports tie on distance (Amsterdam 26 /
+## London 26), so the port-id tie-break decides: amsterdam < london → Holland
+## before England. Re-anchored from P1's (0,31) (Bordeaux/Lisbon 26/26).
+const TIE_CONTACT := Vector2i(1080, 204)
 
 ## The 47-key §4.12.5 inventory, transcribed from the doc table (the contract:
 ## D/C/F "must not invent others"). Task G verified the *texts* against the
@@ -161,26 +166,26 @@ func _test_xp_formula() -> void:
 
 func _test_nearest_nations() -> void:
 	_check(RewardsLib.NEAREST_PORT_COUNT == 2, "the pin credits two ports")
-	# Lisbon (Portugal) and Seville (Spain) are the two nearest.
+	# Lisbon (Portugal, d=6) and Seville (Spain, d=10) are the two nearest.
 	var near_lisbon := RewardsLib.nearest_nations(LISBON_CONTACT)
 	_check(near_lisbon == ["portugal", "spain"],
 		"near Lisbon the two nearest nations are Portugal then Spain (%s)"
 		% str(near_lisbon))
-	# At (30,40) the two nearest ports are Bordeaux (7) and Barcelona (8), both
-	# Spanish → the nation is credited once, so the list holds one entry.
+	# At (1025,308) the two nearest ports are Lisbon and Oporto (both d=15),
+	# both Portuguese → the nation is credited once, so the list holds one entry.
 	var same_nation := RewardsLib.nearest_nations(SAME_NATION_CONTACT)
-	_check(same_nation == ["spain"],
+	_check(same_nation == ["portugal"],
 		"a same-nation port pair is credited once (%s)" % str(same_nation))
-	# Ties break on port id ascending: Bordeaux (26) before Lisbon (26).
+	# Ties break on port id ascending: amsterdam (26) before london (26).
 	var tie := RewardsLib.nearest_nations(TIE_CONTACT)
-	_check(tie == ["spain", "portugal"],
-		"a distance tie breaks by port id ascending → bordeaux before lisbon (%s)"
+	_check(tie == ["holland", "england"],
+		"a distance tie breaks by port id ascending → amsterdam before london (%s)"
 		% str(tie))
 	# Sanity: the list never repeats a nation and never carries "".
 	var repeated: Array[String] = []
 	var blanks: Array[String] = []
-	for x in range(0, 128, 3):
-		for y in range(0, 96, 3):
+	for x in range(0, 2160, 61):
+		for y in range(0, 1080, 37):
 			var nations := RewardsLib.nearest_nations(Vector2i(x, y))
 			var seen: Array[String] = []
 			for nation_id in nations:
@@ -598,7 +603,7 @@ func _text_in_locale(key: String, locale: String) -> String:
 func _encounter_confirm_leaks(locale: String) -> Array[String]:
 	var leaks: Array[String] = []
 	var map = MapLoaderLib.new()
-	var loaded: bool = map.load_map("res://data/maps/p1_mediterranean.txt",
+	var loaded: bool = map.load_map("res://data/maps/world.png",
 		DataLoader.map_legend)
 	if not loaded:
 		leaks.append("S3/%s map failed to load (%s)" % [locale, map.last_error])

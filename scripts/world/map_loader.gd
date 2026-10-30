@@ -1,295 +1,307 @@
 class_name MapLoader
 extends RefCounted
-## ASCII world map → TileMap (docs/90-ARCHITECTURE.md §9, docs/10-DATA-SCHEMA.md §6).
+## Terra Vera world map: indexed PNG → wrap-aware grid + on-demand chunk TileMaps
+## (docs/90-ARCHITECTURE.md §9/§9.1, docs/10-DATA-SCHEMA.md §6.1–§6.3,
+## docs/20-WORLD-AND-SAILING.md §4.1/§4.11, docs/80-UI-UX.md §4.5/§4.8).
 ##
-## Pure logic plus TileMap construction: no randomness, no GameState access, no
-## imported assets. The only node type this script creates is the TileMap it
-## renders into, so the parsing/passability half stays unit-testable headless.
+## Pure logic plus rendering nodes: no randomness, no GameState writes, no
+## imported assets. The only nodes this script creates are the chunk TileMapLayer
+## and port-overlay nodes it renders, so the load/passability/harbor half stays
+## unit-testable headless.
 ##
-## Pipeline (docs/90-* §9, steps 1–6):
-##   1. read the map text (`load_map`)             → 96 rows × 128 chars
-##   2. read the legend (`DataLoader.map_legend`)  → chars, kinds, constants
-##   3. layer 0 = terrain, one programmatic 32×32 colored-square tile per char
-##   4. layer 1 = ports, a 32×32 nation-colored square + English initial label
-##   5. `is_passable()` consults the legend; marker cells are always passable
-##   6. the scene only ever asks this object, it never re-reads the text file
-##
-## The tileset is built in memory from `Image`/`ImageTexture` rectangles in the
-## locked palette (docs/80-* §4.8). No texture file is imported: the atlas is
-## generated at startup from the same color constants the rest of the UI uses.
+## Pipeline (§9 steps 1–7):
+##   1. read the PNG bytes (`FileAccess`) and decode them (`Image.load_png_from_buffer`);
+##      the artifact is **data, not an imported texture** (§6.3).
+##   2. verify the IHDR: indexed colour (type 3), 8-bit, non-interlaced, and a
+##      2160×1080 grid (the legend's `grid` is the expected size, so a swapped
+##      map needs no code edit). Decode the PLTE palette and map every pixel
+##      colour back to its palette index; an index outside the locked 0–4 set
+##      is a load error naming the index and a sample tile.
+##   3. passability = one byte per tile (`indices`, ~2.3 MB), `is_passable` is
+##      wrap-aware on x and closed at the latitude edges.
+##   4. harbor tiles are derived from `Port.lat/lon` with the locked §6.1 snap
+##      rule (cached; `harbor_tiles()` for all 100) — never stored in the data.
+##   5. rendering = 128×128-tile chunk layers generated on demand around the
+##      camera, at most 24 live, freed beyond a one-chunk margin.
+##   6. ports = an overlay layer (nation square + label) for **known** ports,
+##      wrap-duplicated at the seam.
+##   7. the world scene only ever queries this object; it never re-reads the PNG.
 ##
 ## `Palette` is preloaded instead of referenced through its global class name so
 ## this script also runs before Godot has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 
-## Marker cells sit on sea per docs/10-* §6.2.
-const MARKER_TERRAIN_KIND := "sea"
+# --- Locked constants (docs/10-* §6.1–§6.3) --------------------------------
+
+## §6.3: palette index 0–4 = `~ . # ^ I`, in that locked order (append-only).
+const PALETTE_CHARS := "~.#^I"
+## §6.2: only `~` (index 0) and `.` (index 1) are passable.
+const PASSABLE_INDICES: Array[int] = [0, 1]
+## §6.1: harbor tile within Chebyshev 2 of the port's lat/lon.
+const HARBOR_SNAP_TILES := 2
+
+# --- Rendering (docs/90-* §9 step 4) --------------------------------------
+
+## §9 step 4: 128×128-tile chunk TileMaps, at most 24 live.
+const CHUNK_TILES := 128
+const MAX_LIVE_CHUNKS := 24
+## One chunk ring beyond the viewport, so a camera nudge never shows void.
+const CHUNK_MARGIN := 1
+## 1280×720 at `TILE_SIZE_PX` = 32 → 40×23 tiles. The scene passes its own
+## value; this default keeps [method update_chunks] usable stand-alone.
+const DEFAULT_VIEW_TILES := Vector2i(40, 23)
+## Rough per-cell footprint of a TileMapLayer cell (quadrant + cell data); only
+## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
+const MEMORY_PER_CELL_BYTES := 16
+## A port this close to the seam is also drawn on the other side of it
+## (§9 step 5: `x = 0` also shows at `x = 2160` and vice versa).
+const SEAM_MARGIN := 8
+
+## The one PNG the loader ships with (docs/90-* §9.1); `load_map` takes the
+## path as an argument so swapping it is a data-only change.
+const WORLD_PNG := "res://data/maps/world.png"
 
 var width: int = 0
 var height: int = 0
 ## Rendering size of one cell (docs/10-* §6.1: 32 px).
 var tile_size_px: int = 32
 
-## One string per map row, `height` entries × `width` chars (step 1).
-var tiles: Array[String] = []
-## Marker cell → port id (step 4).
-var port_at: Dictionary = {}
-## Marker char → cell; the inverse of [member port_at].
-var marker_at: Dictionary = {}
+## One palette index per tile, row-major (`width * height` bytes, §9 step 3).
+var indices := PackedByteArray()
 
-## Normalised legend, kept so rendering/passability agree with one source.
+## Normalised legend tiles, `char → {kind, passable}` (one source for rendering
+## and passability).
 var legend_tiles: Dictionary = {}
+## `char → palette index`, the locked §6.3 order. Built from the constant rather
+## than re-typed so a synthetic [method from_indices] map uses the same indices
+## the shipped artifact does.
+var palette_chars: Dictionary = _default_palette()
 
-## Readable reason for the last parse/load failure; "" when loading worked.
+
+static func _default_palette() -> Dictionary:
+	var table: Dictionary = {}
+	for index in PALETTE_CHARS.length():
+		table[PALETTE_CHARS[index]] = index
+	return table
+
+## Readable reason for the last load failure; "" when loading worked.
 var last_error: String = ""
+
+# --- Caches (lazy, invalidated by a load) ----------------------------------
+
+## `port_id → Vector2i` derived from lat/lon (§6.1), computed once.
+var _harbor_tiles: Dictionary = {}
+var _harbor_ready := false
+## `Vector2i(x mod width, y) → port_id`, the inverse of [member _harbor_tiles].
+var _port_at: Dictionary = {}
+var _port_at_ready := false
+
+# --- Rendering state -------------------------------------------------------
+
+var _tile_set: TileSet = null
+var _atlas_source_id := -1
+var _chunks_root: Node2D = null
+var _chunks: Dictionary = {}
+var _port_overlay: Node2D = null
+var _port_nodes: Dictionary = {}
+var _last_center := Vector2i(-1, -1)
+var _last_view := Vector2i(-1, -1)
+## Known-port ids the overlay was last built for (skips a rebuild per step).
+var _overlay_known: Array = []
 
 
 # --- Loading ---------------------------------------------------------------
 
-## Parses map text against the legend. Returns a populated MapLoader, or null
-## after `push_error` on a dimension mismatch or an illegal character.
-## Static + untyped return so a headless run without the editor class cache
-## still resolves it (`preload(...).parse(...)`).
-static func parse(text: String, legend: Dictionary):
-	var loader = new()
-	if not _fill(loader, text, legend):
-		return null
-	return loader
-
-
-## Parses into an existing instance so `load_map` keeps the specific failure
-## reason on [member last_error] instead of throwing it away.
-static func _fill(loader, text: String, legend: Dictionary) -> bool:
-	if not (legend is Dictionary) or legend.is_empty():
-		loader.last_error = "map legend is empty or missing"
-		push_error("MapLoader: " + loader.last_error)
-		return false
-	var grid = legend.get("grid", null)
-	if not (grid is Dictionary):
-		loader.last_error = "legend is missing the 'grid' object"
-		push_error("MapLoader: " + loader.last_error)
-		return false
-	# JSON numbers arrive as floats; cast defensively (never assume int).
-	var map_width := int(grid.get("width", 0))
-	var map_height := int(grid.get("height", 0))
-	if map_width <= 0 or map_height <= 0:
-		loader.last_error = "legend grid.width/height must be positive ints (got %d×%d)" % [
-			map_width, map_height
-		]
-		push_error("MapLoader: " + loader.last_error)
-		return false
-
-	var tile_defs = legend.get("tiles", null)
-	if not (tile_defs is Dictionary) or tile_defs.is_empty():
-		loader.last_error = "legend is missing the 'tiles' table"
-		push_error("MapLoader: " + loader.last_error)
-		return false
-	var markers = legend.get("port_markers", null)
-	if not (markers is Dictionary):
-		loader.last_error = "legend is missing the 'port_markers' table"
-		push_error("MapLoader: " + loader.last_error)
-		return false
-
-	loader.width = map_width
-	loader.height = map_height
-	loader.tile_size_px = int(legend.get("tile_size_px", 32))
-	loader.legend_tiles = _normalize_tiles(tile_defs)
-	loader.tiles.clear()
-	loader.port_at.clear()
-	loader.marker_at.clear()
-
-	var lines := _split_lines(text)
-	if lines.size() != map_height:
-		loader.last_error = "map has %d lines, legend grid.height is %d" % [
-			lines.size(), map_height
-		]
-		push_error("MapLoader: " + loader.last_error)
-		return false
-
-	for y in map_height:
-		var line: String = lines[y]
-		if line.length() != map_width:
-			loader.last_error = "map line %d has %d chars, legend grid.width is %d" % [
-				y, line.length(), map_width
-			]
-			push_error("MapLoader: " + loader.last_error)
-			return false
-		loader.tiles.append(line)
-		for x in map_width:
-			var ch: String = line[x]
-			if loader.legend_tiles.has(ch):
-				continue
-			var port_id = markers.get(ch, null)
-			if port_id is String and not (port_id as String).is_empty():
-				var cell := Vector2i(x, y)
-				if loader.marker_at.has(ch):
-					loader.last_error = "port marker '%s' appears more than once (first at %s, again at %s)" % [
-						ch, loader.marker_at[ch], cell
-					]
-					push_error("MapLoader: " + loader.last_error)
-					return false
-				loader.marker_at[ch] = cell
-				loader.port_at[cell] = port_id
-				continue
-			loader.last_error = "illegal map char '%s' at (%d,%d); not in legend.tiles or legend.port_markers" % [
-				ch, x, y
-			]
-			push_error("MapLoader: " + loader.last_error)
-			return false
-
-	loader.last_error = ""
-	return true
-
-
-## Reads `path` and replaces this instance's parsed state. False (with
-## [member last_error] set) on a missing file or any parse failure.
-## The path is a plain argument, so swapping maps stays a zero-code-edit change.
+## Reads `path` and replaces this instance's loaded state. False (with
+## [member last_error] set) on a missing file or any artifact failure.
+## `legend` supplies the expected grid and the tile table (§6.1/§6.3).
 func load_map(path: String, legend: Dictionary) -> bool:
 	if not FileAccess.file_exists(path):
 		last_error = "map file not found: %s" % path
 		push_error("MapLoader: " + last_error)
 		return false
-	var text := FileAccess.get_file_as_string(path)
-	if text.is_empty():
+	var bytes := FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
 		last_error = "map file is empty or unreadable: %s" % path
 		push_error("MapLoader: " + last_error)
 		return false
-	# Parses in place, so a failure keeps its specific reason for the caller.
-	return _fill(self, text, legend)
+	return load_png_buffer(bytes, path, legend)
 
 
-# --- Queries ---------------------------------------------------------------
+## Decodes an in-memory artifact. Split out so a test can prove the loader is
+## data-driven from an `Image`-built buffer without writing a file.
+func load_png_buffer(bytes: PackedByteArray, label: String, legend: Dictionary) -> bool:
+	if not (legend is Dictionary) or legend.is_empty():
+		return _fail("map legend is empty or missing")
+	var grid = legend.get("grid", null)
+	if not (grid is Dictionary):
+		return _fail("legend is missing the 'grid' object")
+	var expected_width := int((grid as Dictionary).get("width", 0))
+	var expected_height := int((grid as Dictionary).get("height", 0))
+	if expected_width <= 0 or expected_height <= 0:
+		return _fail("legend grid.width/height must be positive ints (got %d×%d)" % [
+			expected_width, expected_height
+		])
+	var tile_defs = legend.get("tiles", null)
+	if not (tile_defs is Dictionary) or (tile_defs as Dictionary).is_empty():
+		return _fail("legend is missing the 'tiles' table")
+	var tiles := _normalize_tiles(tile_defs)
+	for index in PALETTE_CHARS.length():
+		var ch: String = PALETTE_CHARS[index]
+		if not tiles.has(ch):
+			return _fail("legend.tiles has no '%s' entry (palette index %d, §6.3)"
+				% [ch, index])
 
-## Char at `cell`, or "" out of bounds.
-func char_at(cell: Vector2i) -> String:
-	if not _in_bounds(cell):
-		return ""
-	return tiles[cell.y][cell.x]
+	# The artifact is contracted as indexed colour (§6.3), so the PNG header is
+	# checked before decoding: a truecolour PNG is a data error, not a guess.
+	var header := _read_png_header(bytes)
+	if header.is_empty():
+		return _fail("%s: not a PNG or the IHDR chunk is truncated" % label)
+	var png_width := int(header.get("width", 0))
+	var png_height := int(header.get("height", 0))
+	if png_width != expected_width or png_height != expected_height:
+		return _fail("%s: artifact is %d×%d pixels, the locked grid is %d×%d" % [
+			label, png_width, png_height, expected_width, expected_height
+		])
+	if int(header.get("colour_type", -1)) != 3:
+		return _fail(
+			"%s: not an indexed-colour PNG (IHDR colour type %d, expected 3, §6.3)"
+			% [label, int(header.get("colour_type", -1))]
+		)
+	if int(header.get("bit_depth", -1)) != 8:
+		return _fail("%s: indexed bit depth is %d, expected 8" % [
+			label, int(header.get("bit_depth", -1))
+		])
+	if int(header.get("interlace", 0)) != 0:
+		return _fail("%s: interlaced PNGs are not supported" % label)
+	var palette: PackedByteArray = header.get("palette", PackedByteArray())
+	if palette.size() < 3:
+		return _fail("%s: no PLTE chunk (an indexed PNG needs a palette)" % label)
+
+	var image := Image.new()
+	if image.load_png_from_buffer(bytes) != OK:
+		return _fail("%s: Image.load_png_from_buffer rejected the artifact" % label)
+	if image.get_width() != expected_width or image.get_height() != expected_height:
+		return _fail("%s: decoded image is %d×%d, expected %d×%d" % [
+			label, image.get_width(), image.get_height(), expected_width, expected_height
+		])
+
+	# Godot's PNG decoder hands back RGBA8 even for an indexed image, so the
+	# PLTE is the authoritative index↔colour table: every pixel colour is
+	# matched back to its palette index here (5 entries, one pass, ~150 ms).
+	var colour_to_index := {}
+	for index in palette.size() / 3:
+		var key := (palette[index * 3] << 16) | (palette[index * 3 + 1] << 8) \
+			| palette[index * 3 + 2]
+		if not colour_to_index.has(key):
+			colour_to_index[key] = index
+	var data := image.get_data()
+	var bpp := 3 if image.get_format() == Image.FORMAT_RGB8 else 4
+	var count := expected_width * expected_height
+	var out := PackedByteArray()
+	out.resize(count)
+	var max_index := PALETTE_CHARS.length() - 1
+	for pixel in count:
+		var offset := pixel * bpp
+		var key := (data[offset] << 16) | (data[offset + 1] << 8) | data[offset + 2]
+		if not colour_to_index.has(key):
+			return _fail(
+				"%s: pixel (%d,%d) colour #%06x is not in the PLTE palette" % [
+					label, pixel % expected_width, pixel / expected_width, key
+				]
+			)
+		var value: int = colour_to_index[key]
+		if value > max_index:
+			return _fail(
+				"%s: palette index %d at tile (%d,%d) is outside the locked 0-4 set (~ . # ^ I, §6.3)" % [
+					label, value, pixel % expected_width, pixel / expected_width
+				]
+			)
+		out[pixel] = value
+
+	width = expected_width
+	height = expected_height
+	tile_size_px = int(legend.get("tile_size_px", 32))
+	legend_tiles = tiles
+	indices = out
+	last_error = ""
+	_reset_caches()
+	return true
 
 
-## True when a fleet may enter `cell` (docs/20-* §4.1): in bounds, port marker
-## cells always passable, otherwise the legend's `passable` flag.
-func is_passable(cell: Vector2i) -> bool:
-	if not _in_bounds(cell):
-		return false
-	if port_at.has(cell):
-		return true
-	var def = legend_tiles.get(char_at(cell), null)
-	if def is Dictionary:
-		# `== true` (not truthiness) so the contract is a real bool.
-		return def.get("passable", false) == true
+func _fail(reason: String) -> bool:
+	last_error = reason
+	push_error("MapLoader: " + reason)
 	return false
 
 
-## Port id whose marker occupies `cell`, or "" when none.
-func port_id_at(cell: Vector2i) -> String:
-	var value = port_at.get(cell, null)
-	return value if value is String else ""
+## Builds a loader over an explicit index grid — the seam for a *synthetic*
+## map in a unit test (reef/edge fixtures need a tile the shipped world does not
+## carry). This is the same internal state [method load_png_buffer] produces, so
+## every query below behaves identically; it never touches the ASCII pipeline
+## the retired P1 map used.
+static func from_indices(grid_width: int, grid_height: int,
+		values: PackedByteArray, legend: Dictionary, tile_px: int = 32):
+	if grid_width <= 0 or grid_height <= 0:
+		return null
+	if values.size() != grid_width * grid_height:
+		push_error("MapLoader.from_indices: %d values for a %d×%d grid" % [
+			values.size(), grid_width, grid_height
+		])
+		return null
+	var tile_defs = legend.get("tiles", null)
+	if not (tile_defs is Dictionary):
+		push_error("MapLoader.from_indices: legend is missing the 'tiles' table")
+		return null
+	var loader = new()
+	loader.width = grid_width
+	loader.height = grid_height
+	loader.tile_size_px = tile_px
+	loader.legend_tiles = _normalize_tiles(tile_defs)
+	loader.indices = values
+	loader._reset_caches()
+	return loader
 
 
-## Terrain kind at `cell`: a legend `kind` string, "sea" for a marker cell
-## (markers sit on sea, docs/10-* §6.2), or "" out of bounds.
-func terrain_kind(cell: Vector2i) -> String:
-	if not _in_bounds(cell):
-		return ""
-	if port_at.has(cell):
-		return MARKER_TERRAIN_KIND
-	var def = legend_tiles.get(char_at(cell), null)
-	if def is Dictionary:
-		var kind = def.get("kind", "")
-		if kind is String:
-			return kind
-	return ""
-
-
-## Cell of `port_id`'s marker, or (-1,-1) when it does not appear on this map.
-func port_cell(port_id: String) -> Vector2i:
-	for cell in port_at:
-		if port_at[cell] == port_id:
-			return cell
-	return Vector2i(-1, -1)
-
-
-## `{kind: cell_count}` census over the whole grid; marker cells count as sea.
-## Used by the T5 verification and handy for debugging a swapped map.
-func terrain_census() -> Dictionary:
-	var census: Dictionary = {}
-	for y in height:
-		for x in width:
-			var kind := terrain_kind(Vector2i(x, y))
-			census[kind] = int(census.get(kind, 0)) + 1
-	return census
-
-
-# --- Rendering (docs/90-* §9 steps 3–4) ------------------------------------
-
-## Builds the world TileMap under `parent` and returns it.
-##
-## Layer 0 "Terrain": one cell per map char; marker cells draw the underlying
-## sea tile. Layer 1 "Ports": a 32×32 square in the port's nation color plus a
-## Label with the first letter of the port's English name.
-##
-## `ports`/`nations` are the id-keyed tables from DataLoader; passing them in
-## keeps this RefCounted class free of autoload dependencies.
-func build_tilemap(parent: Node2D, ports: Dictionary = {}, nations: Dictionary = {}) -> TileMap:
-	var plan := _build_atlas(nations)
-
-	var tile_map := TileMap.new()
-	tile_map.name = "MapTileMap"
-	tile_map.tile_set = plan["tile_set"]
-	# TileMap starts with one layer (index 0); append the port layer.
-	tile_map.add_layer(-1)
-	tile_map.set_layer_name(0, "Terrain")
-	tile_map.set_layer_name(1, "Ports")
-
-	var source_id: int = plan["source_id"]
-	var kind_index: Dictionary = plan["kind_index"]
-	var cell_size := Vector2i(tile_size_px, tile_size_px)
-
-	# Layer 0 — terrain: one cell per map char, straight 12,288-cell fill that
-	# runs once at load. Batching is the TileMap's job (per-quadrant render).
-	for y in height:
-		for x in width:
-			var kind := terrain_kind(Vector2i(x, y))
-			var index := int(kind_index.get(kind, plan["fallback_index"]))
-			tile_map.set_cell(0, Vector2i(x, y), source_id, Vector2i(index, 0))
-
-	# Layer 1 — port markers, one nation-colored tile per port cell.
-	var nation_index: Dictionary = plan["nation_index"]
-	for cell in port_at:
-		var port_id: String = port_at[cell]
-		var port = ports.get(port_id, null)
-		var nation_id := ""
-		if port is Dictionary:
-			var raw = port.get("nation_id", "")
-			if raw is String:
-				nation_id = raw
-		var index := int(nation_index.get(nation_id, plan["fallback_port_index"]))
-		tile_map.set_cell(1, cell, source_id, Vector2i(index, 0))
-		tile_map.add_child(_build_port_label(cell, port, cell_size))
-
-	parent.add_child(tile_map)
-	return tile_map
-
-
-# --- Internals -------------------------------------------------------------
-
-## Strips an optional BOM/CRs and splits on newlines, dropping the single empty
-## entry produced by a trailing newline. Blank lines inside the file are kept
-## so the line-count check names them.
-static func _split_lines(text: String) -> Array[String]:
-	var clean := text
-	if clean.begins_with("\uFEFF"):
-		clean = clean.substr(1)
-	clean = clean.replace("\r\n", "\n").replace("\r", "\n")
-	var raw := clean.split("\n")
-	if not raw.is_empty() and raw[raw.size() - 1] == "":
-		raw.remove_at(raw.size() - 1)
-	var out: Array[String] = []
-	for line in raw:
-		out.append(line)
+## Reads IHDR (+ PLTE) out of the raw bytes. A tiny PNG chunk walker: it only
+## needs the fixed IHDR layout and the palette payload, so it is not a second
+## decoder — `Image.load_png_from_buffer` still does the pixels.
+static func _read_png_header(bytes: PackedByteArray) -> Dictionary:
+	const SIGNATURE := [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+	if bytes.size() < 33:
+		return {}
+	for i in SIGNATURE.size():
+		if bytes[i] != SIGNATURE[i]:
+			return {}
+	var out := {}
+	var palette := PackedByteArray()
+	var pos := 8
+	while pos + 12 <= bytes.size():
+		var length := _be32(bytes, pos)
+		var tag := bytes.slice(pos + 4, pos + 8).get_string_from_ascii()
+		if length < 0 or pos + 12 + length > bytes.size():
+			return out
+		var payload := bytes.slice(pos + 8, pos + 8 + length)
+		if tag == "IHDR" and payload.size() >= 13:
+			out["width"] = _be32(payload, 0)
+			out["height"] = _be32(payload, 4)
+			out["bit_depth"] = payload[8]
+			out["colour_type"] = payload[9]
+			out["interlace"] = payload[12]
+		elif tag == "PLTE":
+			palette = payload
+		elif tag == "IEND":
+			break
+		pos += 12 + length
+	if not out.is_empty():
+		out["palette"] = palette
 	return out
+
+
+static func _be32(bytes: PackedByteArray, offset: int) -> int:
+	return (bytes[offset] << 24) | (bytes[offset + 1] << 16) \
+		| (bytes[offset + 2] << 8) | bytes[offset + 3]
 
 
 ## Copies legend tile entries into a plain `char → {kind, passable}` table with
@@ -308,104 +320,534 @@ static func _normalize_tiles(tile_defs: Dictionary) -> Dictionary:
 	return out
 
 
-func _in_bounds(cell: Vector2i) -> bool:
-	return cell.x >= 0 and cell.x < width and cell.y >= 0 and cell.y < height
+func _reset_caches() -> void:
+	_harbor_tiles = {}
+	_harbor_ready = false
+	_port_at = {}
+	_port_at_ready = false
+	_tile_set = null
+	_atlas_source_id = -1
+	_chunks_root = null
+	_chunks = {}
+	_port_overlay = null
+	_port_nodes = {}
+	_last_center = Vector2i(-1, -1)
+	_last_view = Vector2i(-1, -1)
+	_overlay_known = []
 
 
-## Builds the in-memory TileSet atlas: one 32×32 colored square per legend
-## terrain kind, then one per nation color, then a fallback marker color.
-## Index 0 of the atlas is always the first terrain kind.
-func _build_atlas(nations: Dictionary) -> Dictionary:
-	var kinds: Array[String] = []
-	for ch in legend_tiles:
-		var kind: String = legend_tiles[ch]["kind"]
-		if not kinds.has(kind):
-			kinds.append(kind)
-	if kinds.is_empty():
-		kinds.append(MARKER_TERRAIN_KIND)
+# --- Grid queries (docs/20-* §4.1, docs/90-* §9 step 3) --------------------
 
-	var colors: Array[Color] = []
-	var kind_index: Dictionary = {}
-	for kind in kinds:
-		kind_index[kind] = colors.size()
-		colors.append(_kind_color(kind))
+## Palette index at `cell` (x wraps, y bounded), or -1 out of bounds.
+func index_at(cell: Vector2i) -> int:
+	return index_xy(cell.x, cell.y)
 
-	# Nation slots, in the sorted nation-id order of the passed table so the
-	# atlas is stable regardless of JSON key order.
-	var nation_index: Dictionary = {}
-	var nation_ids: Array = nations.keys()
-	nation_ids.sort()
-	for nation_id in nation_ids:
-		var nation = nations[nation_id]
-		if not (nation is Dictionary):
+
+func index_xy(x: int, y: int) -> int:
+	if y < 0 or y >= height or width <= 0:
+		return -1
+	return int(indices[y * width + posmod(x, width)])
+
+
+## Legend character at `cell` (`"~"`, `"."`, …), or "" out of bounds.
+func char_at(cell: Vector2i) -> String:
+	var value := index_at(cell)
+	if value < 0:
+		return ""
+	for ch in palette_chars:
+		if int(palette_chars[ch]) == value:
+			return str(ch)
+	return ""
+
+
+## True when a fleet may enter `cell` (§4.1): x wraps, y must be on the grid,
+## and the palette index must be `~` or `.`.
+func is_passable(cell: Vector2i) -> bool:
+	return is_passable_xy(cell.x, cell.y)
+
+
+## Int form of [method is_passable] for the hot loops (movement, BFS, candidate
+## generation): x is taken mod `width`, y is bounded.
+func is_passable_xy(x: int, y: int) -> bool:
+	var value := index_xy(x, y)
+	return value >= 0 and value <= 1
+
+
+## Terrain kind at `cell` (a legend `kind` string), or "" out of bounds.
+func terrain_kind(cell: Vector2i) -> String:
+	var ch := char_at(cell)
+	if ch.is_empty():
+		return ""
+	var def = legend_tiles.get(ch, null)
+	if def is Dictionary:
+		var kind = (def as Dictionary).get("kind", "")
+		if kind is String:
+			return kind
+	return ""
+
+
+## `{kind: tile_count}` census over the whole grid (debug/tests only: it walks
+## 2.3 M tiles). Counts palette indices directly, so it stays O(n).
+func terrain_census() -> Dictionary:
+	var by_index := {}
+	for value in indices:
+		by_index[value] = int(by_index.get(value, 0)) + 1
+	var out: Dictionary = {}
+	for value in by_index:
+		var ch := ""
+		for candidate in palette_chars:
+			if int(palette_chars[candidate]) == int(value):
+				ch = str(candidate)
+				break
+		var def = legend_tiles.get(ch, null)
+		var kind := ch
+		if def is Dictionary and (def as Dictionary).get("kind", "") is String:
+			kind = str((def as Dictionary)["kind"])
+		out[kind] = int(out.get(kind, 0)) + int(by_index[value])
+	return out
+
+
+## Chebyshev distance with longitude wrap (§6.1): `min(|dx|, width − |dx|)`.
+func chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return chebyshev_xy(a.x, a.y, b.x, b.y)
+
+
+func chebyshev_xy(ax: int, ay: int, bx: int, by: int) -> int:
+	var dx := absi(ax - bx) % maxi(width, 1)
+	return maxi(mini(dx, width - dx), absi(ay - by))
+
+
+# --- Harbor tiles (docs/10-* §6.1, docs/90-* §9.1) ------------------------
+
+## Grid cell containing a WGS84 point: `x = floor((lon+180)*scale) mod width`,
+## `y = floor((90-lat)*scale)` clamped into the grid — the same projection as
+## `tools/build_world.py` / validator group 6.
+func tile_of_latlon(lat: float, lon: float) -> Vector2i:
+	var scale := float(width) / 360.0
+	var x := int(floor((lon + 180.0) * scale)) % maxi(width, 1)
+	var y := clampi(int(floor((90.0 - lat) * scale)), 0, maxi(height - 1, 0))
+	return Vector2i(x, y)
+
+
+## Locked §6.1 snap rule, mirroring the validator exactly: candidates inside
+## Chebyshev `radius`, on water with ≥ 1 orthogonally adjacent water tile,
+## tie-breaking to the smallest `(distance, y, x)`. `(-1,-1)` when none.
+func snap_harbor(lat: float, lon: float, radius: int = HARBOR_SNAP_TILES) -> Vector2i:
+	var origin := tile_of_latlon(lat, lon)
+	var candidates: Array = []
+	for dy in range(-radius, radius + 1):
+		var y := origin.y + dy
+		if y < 0 or y >= height:
 			continue
-		var hex = nation.get("color", "")
-		if not (hex is String) or not Color.html_is_valid(hex):
+		for dx in range(-radius, radius + 1):
+			var x := posmod(origin.x + dx, maxi(width, 1))
+			candidates.append([chebyshev_xy(dx, dy, 0, 0), y, x])
+	candidates.sort_custom(_harbor_less)
+	for candidate in candidates:
+		var y: int = candidate[1]
+		var x: int = candidate[2]
+		if not is_passable_xy(x, y):
 			continue
-		nation_index[nation_id] = colors.size()
-		colors.append(PaletteLib.nation_color(hex))
+		if not _has_orthogonal_water(x, y):
+			continue
+		return Vector2i(x, y)
+	return Vector2i(-1, -1)
 
-	var fallback_port_index := colors.size()
-	colors.append(PaletteLib.ACCENT)
 
-	var image := Image.create_empty(colors.size() * tile_size_px, tile_size_px, false, Image.FORMAT_RGBA8)
+static func _harbor_less(a: Array, b: Array) -> bool:
+	if int(a[0]) != int(b[0]):
+		return int(a[0]) < int(b[0])
+	if int(a[1]) != int(b[1]):
+		return int(a[1]) < int(b[1])
+	return int(a[2]) < int(b[2])
+
+
+## ≥ 1 orthogonally adjacent water tile, x wrapping (§6.1).
+func _has_orthogonal_water(x: int, y: int) -> bool:
+	if is_passable_xy(x - 1, y) or is_passable_xy(x + 1, y):
+		return true
+	if y > 0 and is_passable_xy(x, y - 1):
+		return true
+	if y < height - 1 and is_passable_xy(x, y + 1):
+		return true
+	return false
+
+
+## `{port_id: Vector2i}` for every port in `data/ports.json` (§9 step 5).
+## Computed once; a port whose lat/lon cannot snap is omitted (the validator
+## makes that impossible for shipped data).
+func harbor_tiles() -> Dictionary:
+	if _harbor_ready:
+		return _harbor_tiles
+	_harbor_ready = true
+	_harbor_tiles = {}
+	var ports: Dictionary = _ports_table()
+	for port_id in ports:
+		var port = ports[port_id]
+		if not (port is Dictionary):
+			continue
+		var lat = (port as Dictionary).get("lat", null)
+		var lon = (port as Dictionary).get("lon", null)
+		if not (lat is float or lat is int) or not (lon is float or lon is int):
+			continue
+		var cell := snap_harbor(float(lat), float(lon))
+		if cell.x >= 0:
+			_harbor_tiles[str(port_id)] = cell
+	return _harbor_tiles
+
+
+## Harbor tile of `port_id`, or `(-1,-1)` when the id has no derivable tile.
+func port_cell(port_id: String) -> Vector2i:
+	if port_id.is_empty():
+		return Vector2i(-1, -1)
+	var tiles := harbor_tiles()
+	var value = tiles.get(port_id, null)
+	return value if value is Vector2i else Vector2i(-1, -1)
+
+
+## Port id whose harbor tile is `cell` (x wraps), or "" when none.
+func port_id_at(cell: Vector2i) -> String:
+	if cell.y < 0 or cell.y >= height or width <= 0:
+		return ""
+	if not _port_at_ready:
+		_port_at_ready = true
+		_port_at = {}
+		for port_id in harbor_tiles():
+			var tile: Vector2i = harbor_tiles()[port_id]
+			_port_at[tile] = port_id
+	var key := Vector2i(posmod(cell.x, maxi(width, 1)), cell.y)
+	var value = _port_at.get(key, null)
+	return value if value is String else ""
+
+
+## The port table the harbor snap reads. `DataLoader.ports` in production; a
+## test may install `ports_override` (data-driven swap, zero code edits).
+var ports_override: Dictionary = {}
+
+
+func _ports_table() -> Dictionary:
+	if not ports_override.is_empty():
+		return ports_override
+	var node = _autoload("DataLoader")
+	if node != null:
+		var table = node.get("ports")
+		if table is Dictionary:
+			return table
+	return {}
+
+
+static func _autoload(node_name: String):
+	var loop := Engine.get_main_loop()
+	if not (loop is SceneTree):
+		return null
+	return (loop as SceneTree).root.get_node_or_null(node_name)
+
+
+# --- Rendering (docs/90-* §9 steps 4–6) -----------------------------------
+
+## Builds the chunked world under `parent` and returns the "WorldChunks" root.
+##
+## No 2.3 M cells are created here: [method update_chunks] spawns 128×128 chunk
+## layers around the camera on demand. The port overlay is a separate Node2D.
+## `ports`/`nations` are the id-keyed tables from DataLoader; passing them keeps
+## this RefCounted class free of autoload dependencies.
+func build_tilemap(parent: Node2D, ports: Dictionary = {}, nations: Dictionary = {}) -> Node2D:
+	_ensure_tile_set()
+	_chunks_root = Node2D.new()
+	_chunks_root.name = "WorldChunks"
+	_chunks_root.z_index = 0
+	parent.add_child(_chunks_root)
+	_chunks = {}
+	_port_overlay = Node2D.new()
+	_port_overlay.name = "PortOverlay"
+	_port_overlay.z_index = 2
+	parent.add_child(_port_overlay)
+	refresh_port_overlay(ports, nations)
+	return _chunks_root
+
+
+## One in-memory atlas shared by every chunk: five 32×32 palette squares
+## (§6.3 order, colors from `80-*` §4.8 via `scripts/palette.gd`).
+func _ensure_tile_set() -> void:
+	if _tile_set != null:
+		return
+	var colors: Array[Color] = [
+		PaletteLib.SEA, PaletteLib.COAST_SEA, PaletteLib.LAND,
+		PaletteLib.REEF, PaletteLib.ICE,
+	]
+	var image := Image.create_empty(colors.size() * tile_size_px, tile_size_px,
+		false, Image.FORMAT_RGBA8)
 	for index in colors.size():
 		image.fill_rect(
-			Rect2i(index * tile_size_px, 0, tile_size_px, tile_size_px),
-			colors[index]
+			Rect2i(index * tile_size_px, 0, tile_size_px, tile_size_px), colors[index]
 		)
 	var texture := ImageTexture.create_from_image(image)
-
-	var tile_set := TileSet.new()
-	tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
+	_tile_set = TileSet.new()
+	_tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
 	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
 	for index in colors.size():
 		source.create_tile(Vector2i(index, 0))
-	var source_id := tile_set.add_source(source)
-
-	return {
-		"tile_set": tile_set,
-		"source_id": source_id,
-		"kind_index": kind_index,
-		"nation_index": nation_index,
-		"fallback_index": int(kind_index.get(MARKER_TERRAIN_KIND, 0)),
-		"fallback_port_index": fallback_port_index,
-	}
+	_atlas_source_id = _tile_set.add_source(source)
 
 
-static func _kind_color(kind: String) -> Color:
-	match kind:
-		"sea":
-			return PaletteLib.SEA
-		"coastal_sea":
-			return PaletteLib.COAST_SEA
-		"land":
-			return PaletteLib.LAND
-		"reef":
-			return PaletteLib.REEF
-		_:
-			return PaletteLib.PANEL_LINE
+## Spawns the chunks around `center_cell` and frees everything beyond the one
+## chunk ring. `center_cell` is in **unbounded** world cells: sampling wraps per
+## tile (`x mod width`), so `x = 2160` shows `x = 0` and no seam can show void.
+## `view_tiles` is the viewport size in tiles (1280×720 → 40×23 by default).
+func update_chunks(center_cell: Vector2i, view_tiles: Vector2i = DEFAULT_VIEW_TILES) -> void:
+	if _chunks_root == null or width <= 0 or height <= 0:
+		return
+	if center_cell == _last_center and view_tiles == _last_view:
+		return
+	_last_view = view_tiles
+	var half_x := int(ceil(float(view_tiles.x) * 0.5))
+	var half_y := int(ceil(float(view_tiles.y) * 0.5))
+	var cols := _chunk_span(center_cell.x, half_x, CHUNK_MARGIN)
+	var rows := _chunk_span(center_cell.y, half_y, CHUNK_MARGIN)
+	# The 24-chunk bound is a hard cap: drop the ring margin first, then (for an
+	# absurdly large viewport) trim the rows/columns furthest from the centre.
+	if cols.size() * rows.size() > MAX_LIVE_CHUNKS:
+		cols = _chunk_span(center_cell.x, half_x, 0)
+		rows = _chunk_span(center_cell.y, half_y, 0)
+	while cols.size() * rows.size() > MAX_LIVE_CHUNKS and rows.size() > 1:
+		rows.pop_back()
+	while cols.size() * rows.size() > MAX_LIVE_CHUNKS and cols.size() > 1:
+		cols.pop_back()
+	var wanted := {}
+	for chunk_y in rows:
+		if chunk_y < 0 or chunk_y * CHUNK_TILES >= height:
+			continue
+		for chunk_x in cols:
+			wanted[Vector2i(chunk_x, chunk_y)] = true
+	for key in _chunks.keys():
+		if wanted.has(key):
+			continue
+		var stale: Node = _chunks[key]
+		_chunks.erase(key)
+		if is_instance_valid(stale):
+			stale.queue_free()
+	for key in wanted:
+		if not _chunks.has(key):
+			_chunks[key] = _spawn_chunk(key)
+	_last_center = center_cell
 
 
-## 32×32 Label centered on the marker cell with the English name's initial.
-func _build_port_label(cell: Vector2i, port, cell_size: Vector2i) -> Label:
-	var initial := "?"
-	if port is Dictionary:
-		var name = port.get("name", null)
-		if name is Dictionary:
-			var english = name.get("en", "")
-			if english is String and not (english as String).is_empty():
-				initial = (english as String).substr(0, 1)
+## Chunk coordinates covering `center ± half` with `margin` extra chunks each
+## side. Chunk x is **unbounded** (negative values wrap when sampled); chunk y is
+## kept on the grid later by [method update_chunks].
+static func _chunk_span(center: int, half: int, margin: int) -> Array:
+	var first := _floor_div(center - half, CHUNK_TILES) - margin
+	var last := _floor_div(center + half, CHUNK_TILES) + margin
+	var out: Array = []
+	for value in range(first, last + 1):
+		out.append(value)
+	return out
+
+
+static func _floor_div(value: int, divisor: int) -> int:
+	var quotient := value / divisor
+	if (value % divisor) != 0 and ((value < 0) != (divisor < 0)):
+		quotient -= 1
+	return quotient
+
+
+func _spawn_chunk(key: Vector2i) -> TileMapLayer:
+	var layer := TileMapLayer.new()
+	layer.name = "Chunk_%d_%d" % [key.x, key.y]
+	layer.tile_set = _tile_set
+	layer.position = Vector2(
+		key.x * CHUNK_TILES * tile_size_px, key.y * CHUNK_TILES * tile_size_px
+	)
+	var base_x := key.x * CHUNK_TILES
+	var base_y := key.y * CHUNK_TILES
+	for j in CHUNK_TILES:
+		var y := base_y + j
+		if y < 0 or y >= height:
+			continue
+		for i in CHUNK_TILES:
+			var x := base_x + i
+			var value := int(indices[y * width + posmod(x, width)])
+			layer.set_cell(Vector2i(i, j), _atlas_source_id, Vector2i(value, 0))
+	_chunks_root.add_child(layer)
+	return layer
+
+
+## Live chunk count (the §9 debug assert: ≤ 24).
+func live_chunk_count() -> int:
+	return _chunks.size()
+
+
+## Rough memory of the live chunk cell data (< 50 MB per §9).
+func live_chunk_bytes_estimate() -> int:
+	return _chunks.size() * CHUNK_TILES * CHUNK_TILES * MEMORY_PER_CELL_BYTES
+
+
+## True when the live chunks cover every tile under `rect` (world pixels). The
+## camera-pan test uses it to prove "zero void frames" across the dateline:
+## `rect` may extend past `width * tile_size_px`, which is legitimate because
+## the chunk layer repeats the wrapped grid.
+func covers_rect_world(rect: Rect2) -> bool:
+	if _chunks.is_empty() or _chunks_root == null:
+		return false
+	var first := Vector2i(
+		int(floor(rect.position.x / float(tile_size_px))),
+		int(floor(rect.position.y / float(tile_size_px)))
+	)
+	var last := Vector2i(
+		int(ceil(rect.end.x / float(tile_size_px))) - 1,
+		int(ceil(rect.end.y / float(tile_size_px))) - 1
+	)
+	for y in range(first.y, last.y + 1):
+		if y < 0 or y >= height:
+			return false
+		for x in range(first.x, last.x + 1):
+			# Only the chunk key matters: the sampled tile always wraps.
+			var key := Vector2i(_floor_div(x, CHUNK_TILES), _floor_div(y, CHUNK_TILES))
+			if not _chunks.has(key):
+				return false
+	if _port_overlay == null:
+		return false
+	return true
+
+
+# --- Port overlay (§9 step 5) ---------------------------------------------
+
+## Redraws the port overlay: a nation-coloured square plus the name's initial
+## per **known** port, wrap-duplicated at the seam. Idempotent; call after
+## `known_ports` changes.
+func refresh_port_overlay(ports: Dictionary = {}, nations: Dictionary = {}) -> void:
+	if _port_overlay == null:
+		return
+	# The overlay only changes when the known-port set does (a scene calls this
+	# after every sighting pass); rebuilding ~100 Control nodes per step would
+	# be wasted work.
+	var current: Array = _known_ports().duplicate()
+	current.sort()
+	var previous: Array = _overlay_known.duplicate()
+	previous.sort()
+	if current == previous and not _port_nodes.is_empty():
+		return
+	for child in _port_overlay.get_children():
+		_port_overlay.remove_child(child)
+		child.queue_free()
+	_port_nodes = {}
+	var table: Dictionary = ports if not ports.is_empty() else _ports_table()
+	var nation_table: Dictionary = nations
+	if nation_table.is_empty():
+		var node = _autoload("DataLoader")
+		if node != null and node.get("nations") is Dictionary:
+			nation_table = node.get("nations")
+	var known: Array = _known_ports()
+	_overlay_known = known.duplicate()
+	for raw_id in table.keys():
+		var port_id := str(raw_id)
+		if not (port_id in known):
+			continue
+		var port = table[raw_id]
+		if not (port is Dictionary):
+			continue
+		var cell := port_cell(port_id)
+		if cell.x < 0:
+			continue
+		var colour := _nation_colour(str((port as Dictionary).get("nation_id", "")),
+			nation_table)
+		for offset in _seam_offsets(cell.x):
+			var draw_cell := Vector2i(cell.x + offset, cell.y)
+			var key := "%s@%d" % [port_id, offset]
+			_port_nodes[key] = _build_port_node(
+				key, draw_cell, port, colour
+			)
+
+
+## Overlay entries `[{port_id, cell, offset, colour, node}]`, sorted by
+## `port_id` then `offset` — the test hook for "all 100 render with the right
+## nation colour, wrap-duplicated at the seam".
+func port_overlay_entries() -> Array:
+	var out: Array = []
+	var keys: Array = _port_nodes.keys()
+	keys.sort()
+	for key in keys:
+		var node = _port_nodes[key]
+		out.append({
+			"port_id": str(key).get_slice("@", 0),
+			"cell": node.get_meta("cell", Vector2i.ZERO),
+			"offset": int(node.get_meta("offset", 0)),
+			"colour": node.get_meta("colour", Color.BLACK),
+			"node": node,
+		})
+	return out
+
+
+func _known_ports() -> Array:
+	var node = _autoload("GameState")
+	if node != null:
+		var value = node.get("known_ports")
+		if value is Array:
+			return value
+	return []
+
+
+func _seam_offsets(x: int) -> Array:
+	var out: Array = [0]
+	if x < SEAM_MARGIN:
+		out.append(width)
+	if x >= width - SEAM_MARGIN:
+		out.append(-width)
+	return out
+
+
+func _nation_colour(nation_id: String, nations: Dictionary) -> Color:
+	var nation = nations.get(nation_id, null)
+	if nation is Dictionary:
+		var hex = (nation as Dictionary).get("color", "")
+		if hex is String and Color.html_is_valid(hex):
+			return PaletteLib.nation_color(hex)
+	return PaletteLib.ACCENT
+
+
+## A 0.6-tile nation square plus the English name's initial (placeholder art,
+## `80-*` §4.8: plain shapes + the default font, no textures).
+func _build_port_node(key: String, cell: Vector2i, port: Dictionary,
+		colour: Color) -> Control:
+	var origin := Vector2(cell) * float(tile_size_px)
+	var holder := Control.new()
+	holder.name = "Port_%s" % key.replace("@", "_")
+	holder.position = origin
+	holder.size = Vector2(tile_size_px, tile_size_px)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.set_meta("cell", cell)
+	holder.set_meta("colour", colour)
+	var offset := int(str(key).get_slice("@", 1))
+	holder.set_meta("offset", offset)
+	var square := ColorRect.new()
+	square.name = "Square"
+	var side := int(round(tile_size_px * 0.6))
+	square.size = Vector2(side, side)
+	square.position = (Vector2(tile_size_px, tile_size_px) - square.size) * 0.5
+	square.color = colour
+	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(square)
 	var label := Label.new()
-	label.name = "Port_%s" % port_at.get(cell, "unknown")
-	label.text = initial
-	label.position = Vector2(cell.x * cell_size.x, cell.y * cell_size.y)
-	label.size = Vector2(cell_size.x, cell_size.y)
+	label.name = "Initial"
+	label.text = _initial(port)
+	label.position = Vector2.ZERO
+	label.size = Vector2(tile_size_px, tile_size_px)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	label.z_index = 1
-	return label
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(label)
+	_port_overlay.add_child(holder)
+	return holder
+
+
+static func _initial(port: Dictionary) -> String:
+	var name = port.get("name", null)
+	if name is Dictionary:
+		var english = (name as Dictionary).get("en", "")
+		if english is String and not (english as String).is_empty():
+			return (english as String).substr(0, 1)
+	return "?"

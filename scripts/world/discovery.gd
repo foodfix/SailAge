@@ -22,6 +22,8 @@ const RADIUS := 18
 ## §4.1: the world grid width in tiles (2160 at 6 tiles/degree). Read from the
 ## loaded legend when there is one, so a test map does not have to be 2160 wide.
 const MAP_WIDTH_FALLBACK := 2160
+## §6.1: the grid height (1080 at 6 tiles/degree from 90°N to 90°S).
+const MAP_HEIGHT_FALLBACK := 1080
 ## §4.4: a tavern hint costs this much.
 const HINT_PRICE := 100
 ## §4.4: up to three hints per tavern visit.
@@ -189,11 +191,35 @@ static func map_width() -> int:
 	return width if width > 0 else MAP_WIDTH_FALLBACK
 
 
-## A discovery's `position` as a tile (its map cell; `Vector2i.ZERO` when the
-## entry has none).
+## A discovery's map cell, derived from its `lat`/`lon` with the **same floor
+## projection as the grid** (`10-*` §6.1: `x = floor((lon+180)*6) mod width`,
+## `y = floor((90-lat)*6)`), because discovery entries carry no stored tile.
+## `Vector2i.ZERO` when the entry has no coordinates.
 static func position_of_entry(entry: Dictionary) -> Vector2i:
-	var pos: Dictionary = (entry as Dictionary).get("position", {})
-	return Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
+	return tile_of_latlon(
+		float((entry as Dictionary).get("lat", 0.0)),
+		float((entry as Dictionary).get("lon", 0.0))
+	)
+
+
+## `10-*` §6.1 addressing for a WGS84 point. `y` is clamped into the grid (only
+## an exact pole reaches an edge); `x` wraps.
+static func tile_of_latlon(lat: float, lon: float) -> Vector2i:
+	var width := map_width()
+	var scale := float(width) / 360.0
+	var x := int(floor((lon + 180.0) * scale)) % maxi(width, 1)
+	var y := int(floor((90.0 - lat) * scale))
+	var height := map_height()
+	if height > 0:
+		y = clampi(y, 0, height - 1)
+	return Vector2i(x, y)
+
+
+## World grid height in tiles (from the legend, else the locked 1080).
+static func map_height() -> int:
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var height := int(grid.get("height", 0))
+	return height if height > 0 else MAP_HEIGHT_FALLBACK
 
 
 static func _port_ordinal(port_id: String) -> int:
@@ -204,5 +230,4 @@ static func _port_ordinal(port_id: String) -> int:
 
 ## The discovery's map cell (`Vector2i.ZERO` for an unknown id).
 static func position_of(discovery_id: String) -> Vector2i:
-	var pos: Dictionary = DataLoader.get_discovery(discovery_id).get("position", {})
-	return Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
+	return position_of_entry(DataLoader.get_discovery(discovery_id))

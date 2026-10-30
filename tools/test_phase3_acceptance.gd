@@ -7,7 +7,7 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise.
 ##
 ## **What makes this an acceptance test rather than another unit suite.** Both
-## scenarios start on the shipped Phase-3 world (`new_game(..., "p3")`) and drive
+## scenarios start on the single world map (`new_game(..., "world")`) and drive
 ## the *shipped* path of every system they touch: the market engine for the
 ## trading leg, the world map's `E` action for discovering, the guild screen for
 ## reporting, the palace screen for missions/ceremony/tournament/retire, the
@@ -40,7 +40,8 @@ const WorldScene := preload("res://scenes/world/world_map.tscn")
 const BattleScene := preload("res://scenes/combat/battle_screen.tscn")
 const EndingScene := preload("res://scenes/ui_shared/ending_screen.tscn")
 
-const MAP_PATH := "res://data/maps/p3_world.txt"
+## Phase 4 (task G): the single world artifact replaced the retired P3 ASCII map.
+const MAP_PATH := "res://data/maps/world.png"
 ## A run start that leaves room for the whole scenario.
 const START_DAY := 4
 
@@ -575,7 +576,7 @@ func _scenario_piracy_loop() -> void:
 
 func _start_run(port_id: String, day: int) -> void:
 	GameState.new_game("portugal" if port_id == "lisbon" else "spain",
-		false, "p3")
+		false, "world")
 	GameState.day = day
 	GameState.current_port = port_id
 	GameState.fame = 0
@@ -628,12 +629,14 @@ func _profitable_good(port_id: String) -> Dictionary:
 	return best
 
 
-## `true` when `port_id` exists on the active (p3) map.
+## `true` when `port_id` exists as a harbor tile on the active world map.
+## Phase 4 (task G): ports carry `lat`/`lon` only, so the test is the derived
+## harbor tile from `10-*` §6.1, not a stored `p3`/`position` block.
 func _map_has_port(port_id: String) -> bool:
-	var port: Dictionary = DataLoader.get_port(port_id)
-	if port.is_empty():
+	if DataLoader.get_port(port_id).is_empty():
 		return false
-	return port.has("p3") or port.has("position")
+	DataLoader.ensure_map()
+	return DataLoader.port_cell(port_id).x >= 0
 
 
 ## Puts the fleet on the nearest passable tile to `cell` (a discovery sits on
@@ -699,7 +702,7 @@ func _spawn_world() -> Node:
 func _ensure_map() -> void:
 	if DataLoader.map == null:
 		var loader := MapLoaderLib.new()
-		loader.load_map(MAP_PATH, DataLoader.get_map_legend("p3"))
+		loader.load_map(MAP_PATH, DataLoader.map_legend)
 		DataLoader.map = loader
 
 

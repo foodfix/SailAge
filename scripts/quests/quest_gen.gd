@@ -20,6 +20,7 @@ extends RefCounted
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 
 # --- §4.9.3 pinned numbers ------------------------------------------------
 
@@ -267,8 +268,7 @@ static func _exploration_offer(instance_id: String, port_id: String, day: int,
 ## empty the nation filter is dropped, then the band widens to `[3, 60]`.
 static func _pick_destination(port_id: String, rng: RandomNumberGenerator) -> Dictionary:
 	var origin: Dictionary = DataLoader.get_port(port_id)
-	var from := Vector2i(int((origin.get("position", {}) as Dictionary).get("x", 0)),
-		int((origin.get("position", {}) as Dictionary).get("y", 0)))
+	var from: Vector2i = _port_cell(port_id)
 	var origin_nation := str(origin.get("nation_id", ""))
 	for band in [[DELIVERY_DIST_MIN, DELIVERY_DIST_MAX, true],
 			[DELIVERY_DIST_MIN, DELIVERY_DIST_MAX, false],
@@ -292,9 +292,10 @@ static func _destination_candidates(port_id: String, from: Vector2i,
 		if distinct_nation \
 				and str((entry as Dictionary).get("nation_id", "")) == origin_nation:
 			continue
-		var position: Dictionary = (entry as Dictionary).get("position", {})
-		var cell := Vector2i(int(position.get("x", 0)), int(position.get("y", 0)))
-		var distance := maxi(absi(cell.x - from.x), absi(cell.y - from.y))
+		var cell: Vector2i = _port_cell(other_id)
+		if cell.x < 0:
+			continue
+		var distance := _chebyshev(from, cell)
 		if distance < distance_min or distance > distance_max:
 			continue
 		out.append({
@@ -312,16 +313,16 @@ static func _destination_candidates(port_id: String, from: Vector2i,
 ## harbour, sorted ascending (§4.9.3 exploration draw).
 static func _hint_candidates(port_id: String, radius: int) -> Array:
 	var port: Dictionary = DataLoader.get_port(port_id)
-	var position: Dictionary = port.get("position", {})
-	var from := Vector2i(int(position.get("x", 0)), int(position.get("y", 0)))
+	if port.is_empty():
+		return []
+	var from: Vector2i = _port_cell(port_id)
 	var out: Array = []
 	for entry in DataLoader.discoveries_list:
 		var discovery_id := str((entry as Dictionary).get("id", ""))
 		if GameState.discoveries_found.has(discovery_id):
 			continue
-		var pos: Dictionary = (entry as Dictionary).get("position", {})
-		var cell := Vector2i(int(pos.get("x", 0)), int(pos.get("y", 0)))
-		if maxi(absi(cell.x - from.x), absi(cell.y - from.y)) > radius:
+		var cell: Vector2i = DiscoveryLib.position_of_entry(entry as Dictionary)
+		if _chebyshev(from, cell) > radius:
 			continue
 		out.append(discovery_id)
 	out.sort()
@@ -627,6 +628,22 @@ static func _port_name(port_id: String) -> String:
 
 
 ## The type tag key of a quest (`quest.type.*`, `80-*` §4.7.4).
+## A port's derived harbor tile (`10-*` §6.1 snap rule, `DataLoader.port_cell`),
+## or `(-1,-1)` when the map cannot answer. Ports carry `lat`/`lon`, never a
+## stored tile, so this is the one runtime source of port positions.
+static func _port_cell(port_id: String) -> Vector2i:
+	DataLoader.ensure_map()
+	return DataLoader.port_cell(port_id)
+
+
+## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod 2160), the
+## same measure the delivery bands were defined in.
+static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	var width := DiscoveryLib.map_width()
+	var dx := absi(a.x - b.x) % maxi(width, 1)
+	return maxi(mini(dx, width - dx), absi(a.y - b.y))
+
+
 static func type_key(quest: Dictionary) -> String:
 	return "quest.type.%s" % str(quest.get("type", ""))
 

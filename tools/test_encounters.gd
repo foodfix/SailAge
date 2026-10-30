@@ -26,11 +26,14 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 
-## Open-water cell whose 8 neighbours are all passable (the T6 fixture).
-const OPEN_CELL := Vector2i(20, 20)
-## Lisbon (7,57) and the coastal sea tile beside it.
-const LISBON := Vector2i(7, 57)
-const SEA_BESIDE_LISBON := Vector2i(8, 57)
+## Open water (all 8 neighbours sea) in the world map's variables band (lat
+## ≈ 35°N), far from every harbor. Phase 4 (task G): re-anchored from the
+## retired P1 grid's (20,20) — that tile is polar ice on the world grid.
+const OPEN_CELL := Vector2i(700, 320)
+## Lisbon's derived harbor tile on the world map (`10-*` §6.1) and the coastal
+## sea tile beside it (re-anchored from P1's (7,57)/(8,57)).
+const LISBON := Vector2i(1024, 308)
+const SEA_BESIDE_LISBON := Vector2i(1023, 309)
 
 ## The rate fixture: one trial = one seeded day sequence. 100,000 days put the
 ## binomial σ of a 2%/day event at 0.044%, so the pinned ±0.002 band is a
@@ -51,30 +54,97 @@ var _checks := 0
 ## `{slot: bytes}` of saves that existed before the suite ran (restored at end).
 var _backup: Dictionary = {}
 
+## Watchdog deadline (seconds). A Godot test must never be able to idle: if a
+## section raises (an error inside an awaited coroutine silently abandons the
+## caller, so `_report()` would never run), this timer still prints what was
+## collected and quits non-zero. 150 s is far above the suite's real runtime and
+## below any CI job timeout we care about.
+const WATCHDOG_SECONDS := 150.0
+var _watchdog: Timer = null
+var _section := "<startup>"
+
 
 func _ready() -> void:
+	_arm_watchdog()
 	_backup_saves()
+	_section = "map load + fixture cells"
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the encounters fixtures (%s)" % map.last_error)
 	DataLoader.map = map if ok else null
+	_check_fixture_cells()
 
+	_section = "1 spawn rates"
 	_test_spawn_rates()
+	_section = "2 marker cap"
 	_test_marker_cap()
+	_section = "3 spawn immunity"
 	_test_spawn_immunity()
+	_section = "4 id format + uniqueness"
 	_test_id_format_and_uniqueness()
+	_section = "5 zone rules"
 	_test_zone_rules()
+	_section = "6 movement + removal"
 	_test_movement_and_removal()
+	_section = "7 pursuit cooldown"
 	_test_pursuit_cooldown()
+	_section = "8 contact + hostility"
 	_test_contact_and_hostility()
+	_section = "9 composition on contact"
 	_test_composition_on_contact()
+	_section = "10 attack-navy reputation"
 	_test_attack_navy_reputation()
+	_section = "11 save round trip"
 	_test_save_round_trip()
+	_section = "12 world scene integration"
 	await _test_world_scene_integration()
+	_section = "report"
 	_cleanup_saves()
 	_report()
+
+
+## A one-shot timer that reports and exits non-zero if `_report()` never runs.
+## The section label names where a future hang died.
+func _arm_watchdog() -> void:
+	_watchdog = Timer.new()
+	_watchdog.name = "Watchdog"
+	_watchdog.one_shot = true
+	_watchdog.wait_time = WATCHDOG_SECONDS
+	_watchdog.timeout.connect(_on_watchdog)
+	add_child(_watchdog)
+	_watchdog.start()
+
+
+func _on_watchdog() -> void:
+	print("")
+	print("WATCHDOG: no report after %.0f s — the suite stalled in section '%s'"
+		% [WATCHDOG_SECONDS, _section])
+	print("%d checks ran, %d failures so far:" % [_checks, _failures.size()])
+	for failure in _failures:
+		print("  - ", failure)
+	print("  - WATCHDOG: the suite did not reach _report() (section '%s')" % _section)
+	_failures.append("WATCHDOG: stalled in section '%s'" % _section)
+	_cleanup_saves()
+	get_tree().quit(1)
+
+
+## Every hand-picked fixture cell must be real world water: a stale P1
+## coordinate is otherwise a silent "everything is blocked" failure (task G's
+## original bug: (20,20) is polar ice on the 2160×1080 grid).
+func _check_fixture_cells() -> void:
+	for entry in [
+		["OPEN_CELL", OPEN_CELL], ["LISBON", LISBON],
+		["SEA_BESIDE_LISBON", SEA_BESIDE_LISBON], ["LONG_WALK", LONG_WALK],
+	]:
+		var cell: Vector2i = entry[1]
+		_check(DataLoader.map != null and DataLoader.map.is_passable(cell),
+			"fixture %s %s is passable world sea" % [str(entry[0]), str(cell)])
+	_check(DataLoader.map != null
+		and DataLoader.map.port_cell("lisbon") == LISBON,
+		"LISBON is Lisbon's derived harbor tile (%s)"
+		% str(DataLoader.map.port_cell("lisbon") if DataLoader.map != null else Vector2i(-1, -1)))
 
 
 func _settle() -> void:
@@ -264,7 +334,7 @@ func _test_marker_cap() -> void:
 	module.reset_rng(RATE_SEED)
 	# Fill to exactly 3 by hand (a seeded spawn cannot be forced through rolls).
 	var filled := 0
-	for cell in [Vector2i(20, 20), Vector2i(21, 20), Vector2i(22, 20)]:
+	for cell in [Vector2i(700, 320), Vector2i(701, 320), Vector2i(702, 320)]:
 		var marker := _place_marker(EncountersLib.PIRATE, cell, "lisbon")
 		if not marker.is_empty():
 			filled += 1
@@ -357,7 +427,14 @@ func _test_id_format_and_uniqueness() -> void:
 				and parts[3].is_valid_int() and parts[4] == kind \
 				and int(parts[1]) == int(marker.get("spawn_day", -1))
 			if kind == EncountersLib.PIRATE:
-				well_formed = well_formed and int(parts[2]) >= EncountersLib.PIRATE_MIN_X
+				# Phase 4: the Atlantic strip is retired (`60-*` §4.1), so the
+				# id's tile must be **in bounds** on the 2160×1080 world and
+				# passable — not `x >= 7`. Re-anchored from the strip clause.
+				var spawn_cell: Vector2i = EncountersLib.position_of(marker)
+				well_formed = well_formed \
+					and spawn_cell.x >= 0 and spawn_cell.x < 2160 \
+					and spawn_cell.y >= 0 and spawn_cell.y < 1080 \
+					and DataLoader.map.is_passable(spawn_cell)
 			if not well_formed:
 				format_ok = false
 				if sample.is_empty():
@@ -390,7 +467,7 @@ func _test_zone_rules() -> void:
 	module.reset_rng(RATE_SEED)
 	var checked := 0
 	var on_land := 0
-	var in_strip := 0
+	var out_of_bounds := 0
 	var outside_zone := 0
 	var occupied := 0
 	var wrong_anchor := 0
@@ -409,11 +486,13 @@ func _test_zone_rules() -> void:
 			var cell := EncountersLib.position_of(marker)
 			var anchor_id := str(marker.get("anchor_port_id", ""))
 			var anchor_cell: Vector2i = DataLoader.map.port_cell(anchor_id)
-			if cell.x < EncountersLib.PIRATE_MIN_X:
-				in_strip += 1
+			# Phase 4 (`20-*` §4.1): x wraps and the latitude edges close the
+			# grid, so the spawn tile is checked in bounds + passable.
+			if cell.x < 0 or cell.x >= 2160 or cell.y < 0 or cell.y >= 1080:
+				out_of_bounds += 1
 			if not DataLoader.map.is_passable(cell):
 				on_land += 1
-			var distance := maxi(absi(cell.x - anchor_cell.x), absi(cell.y - anchor_cell.y))
+			var distance := _chebyshev_wrap(cell, anchor_cell)
 			if distance > EncountersLib.ZONE_RADIUS:
 				outside_zone += 1
 			if anchor_id != _nearest_known_port(cell):
@@ -429,13 +508,14 @@ func _test_zone_rules() -> void:
 			GameState.hostile_fleets = []
 	_check(checked >= 20,
 		"the zone fixture observed a real pirate sample (%d spawns)" % checked)
-	_check(in_strip == 0,
-		"every pirate spawn is at x ≥ 7, outside the Atlantic strip (%d violations)" % in_strip)
+	_check(out_of_bounds == 0,
+		"every pirate spawn is in bounds on the 2160×1080 world (%d violations)"
+		% out_of_bounds)
 	_check(on_land == 0,
 		"no pirate spawn is on land/reef (%d violations)" % on_land)
 	_check(outside_zone == 0,
-		"every pirate spawn is within Chebyshev 15 of its anchor port (%d violations)"
-		% outside_zone)
+		"every pirate spawn is within Chebyshev 15 of its anchor port, "
+		+ "wrap-aware on x (%d violations)" % outside_zone)
 	_check(wrong_anchor == 0,
 		"every anchor is the nearest known port (Chebyshev, ties by id) (%d violations)"
 		% wrong_anchor)
@@ -461,9 +541,7 @@ func _test_zone_rules() -> void:
 			var cell := EncountersLib.position_of(marker)
 			var anchor_id := str(marker.get("anchor_port_id", ""))
 			var anchor_cell: Vector2i = DataLoader.map.port_cell(anchor_id)
-			var navy_distance := maxi(
-				absi(cell.x - anchor_cell.x), absi(cell.y - anchor_cell.y)
-			)
+			var navy_distance := _chebyshev_wrap(cell, anchor_cell)
 			if navy_distance > EncountersLib.ZONE_RADIUS:
 				navy_outside += 1
 			var port: Dictionary = DataLoader.get_port(anchor_id)
@@ -483,6 +561,12 @@ func _test_zone_rules() -> void:
 		% navy_wrong_nation)
 
 
+## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod 2160).
+func _chebyshev_wrap(a: Vector2i, b: Vector2i) -> int:
+	var dx := absi(a.x - b.x) % 2160
+	return maxi(mini(dx, 2160 - dx), absi(a.y - b.y))
+
+
 func _nearest_known_port(cell: Vector2i) -> String:
 	var best := ""
 	var best_distance := 0
@@ -490,7 +574,7 @@ func _nearest_known_port(cell: Vector2i) -> String:
 		var port_cell: Vector2i = DataLoader.map.port_cell(str(port_id))
 		if port_cell.x < 0:
 			continue
-		var distance := maxi(absi(cell.x - port_cell.x), absi(cell.y - port_cell.y))
+		var distance := _chebyshev_wrap(cell, port_cell)
 		if best.is_empty() or distance < best_distance \
 				or (distance == best_distance and str(port_id) < best):
 			best = str(port_id)
@@ -500,10 +584,11 @@ func _nearest_known_port(cell: Vector2i) -> String:
 
 # --- 6. Movement & removal (§4.11.11.1, §4.11.8 rule 5) ------------------
 
-## A start tile from which the greedy walk reaches Lisbon in 57 steps (found by
-## searching the shipped map for the longest unobstructed greedy route), so the
-## 1-tile/day assertions run over a real multi-day journey.
-const LONG_WALK := Vector2i(19, 0)
+## A start tile from which the greedy walk reaches Lisbon in 112 steps (found by
+## replaying the §4.11.8 rule-5 walk over the shipped world), so the 1-tile/day
+## assertions run over a real multi-day journey. Re-anchored in task G from the
+## retired P1 grid's (19,0) — the old tile is polar ice now.
+const LONG_WALK := Vector2i(950, 420)
 
 func _test_movement_and_removal() -> void:
 	# Pure tie-break levels: Chebyshev first, then Manhattan, then lowest (y,x).
@@ -537,15 +622,17 @@ func _test_movement_and_removal() -> void:
 	var steps_checked := 0
 	var bad_steps := 0
 	var detail := ""
-	for day in range(2, 90):
+	# 112 greedy steps is a real journey; the bound is generous so a slightly
+	# longer route on a future artifact cannot silently truncate the walk.
+	for day in range(2, 240):
 		GameState.day = day
 		module.tick(true)
 		if GameState.hostile_fleets.is_empty():
 			break
 		var current := EncountersLib.position_of(marker)
-		var moved := maxi(absi(current.x - previous.x), absi(current.y - previous.y))
-		var before_distance := maxi(absi(previous.x - anchor.x), absi(previous.y - anchor.y))
-		var after_distance := maxi(absi(current.x - anchor.x), absi(current.y - anchor.y))
+		var moved := _chebyshev_wrap(current, previous)
+		var before_distance := _chebyshev_wrap(previous, anchor)
+		var after_distance := _chebyshev_wrap(current, anchor)
 		if moved != 1:
 			bad_steps += 1
 			if detail.is_empty():
@@ -567,7 +654,7 @@ func _test_movement_and_removal() -> void:
 	# The loop stops the tick the marker is dropped, so the last *observed* tile
 	# is the one before it stepped onto the harbor (that final step is asserted
 	# directly by the `near` fixture below).
-	var last_distance := maxi(absi(previous.x - anchor.x), absi(previous.y - anchor.y))
+	var last_distance := _chebyshev_wrap(previous, anchor)
 	_check(last_distance == 1,
 		"the walker is dropped on the tick it reaches the harbor %s (last seen %s)"
 		% [str(anchor), str(previous)])
@@ -589,9 +676,11 @@ func _test_movement_and_removal() -> void:
 
 	# Markers never step onto land/reef, never share a tile, never sit on the
 	# fleet: a long run of many walkers, checked every day.
-	_make_run(Vector2i(60, 70))
+	_make_run(Vector2i(900, 330))
 	var block_module := _frozen_module()
-	var starts := [Vector2i(19, 0), Vector2i(76, 57), Vector2i(7, 27)]
+	# Three start tiles on real world sea, each a real walk to Lisbon: the long
+	# approach, the short approach and one across the lanes.
+	var starts := [Vector2i(950, 420), Vector2i(980, 360), Vector2i(1024, 340)]
 	for index in starts.size():
 		_place_marker(EncountersLib.PIRATE, starts[index], "lisbon", 1)
 	var illegal := 0
@@ -743,7 +832,7 @@ func _test_composition_on_contact() -> void:
 		% [ships.size(), expected.size()])
 	_check(ships.size() >= 1 and ships.size() <= 3,
 		"a pirate fleet is 1–3 ships (got %d)" % ships.size())
-	var navy := EncountersLib.compose_ships("navy", 100, Vector2i(20, 30))
+	var navy := EncountersLib.compose_ships("navy", 100, Vector2i(700, 330))
 	_check(navy.size() >= 2 and navy.size() <= 4,
 		"a navy fleet is 2–4 ships (got %d)" % navy.size())
 	var total_cannons := 0
@@ -1153,6 +1242,8 @@ func _check(condition: bool, description: String) -> void:
 
 
 func _report() -> void:
+	if _watchdog != null:
+		_watchdog.stop()
 	print("")
 	if _failures.is_empty():
 		print("ALL PASS (%d checks)" % _checks)

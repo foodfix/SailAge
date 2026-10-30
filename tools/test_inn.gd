@@ -51,7 +51,7 @@ var _checks := 0
 func _ready() -> void:
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the port fixtures (%s)" % map.last_error)
 	DataLoader.map = map if ok else null

@@ -48,7 +48,7 @@ func _ready() -> void:
 # --- Fixtures -------------------------------------------------------------
 
 func _new_run(port_id: String = "lisbon", day: int = 1) -> void:
-	GameState.new_game("portugal", false, "p3")
+	GameState.new_game("portugal", false, "world")
 	GameState.day = day
 	GameState.gold = 50000
 	GameState.current_port = port_id

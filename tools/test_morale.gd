@@ -19,9 +19,10 @@ const HUDScene := preload("res://scenes/ui_shared/hud.tscn")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 
-## Rest-of-map open water (x = 60 > 6): storm chance 0.10, so a fail-state test
-## is not disturbed by Atlantic storms. (72,48) and its neighbours are sea.
-const CALM_CELL := Vector2i(72, 48)
+## Calm open water in the doldrums band (lat ≈ 6.7°N < 8°, storm chance 0.10),
+## far from every harbor. Phase 4: re-anchored from the retired P1 strip
+## (72,48) to the real Earth (task G); the cell's 8 neighbours are all sea.
+const CALM_CELL := Vector2i(500, 505)
 
 ## §4.9: game over on the 7th consecutive shortfall day.
 const LIMIT := 7
@@ -41,7 +42,7 @@ var _checks := 0
 func _ready() -> void:
 	var map = MapLoaderLib.new()
 	var ok: bool = map.load_map(
-		"res://data/maps/p1_mediterranean.txt", DataLoader.map_legend
+		"res://data/maps/world.png", DataLoader.map_legend
 	)
 	_check(ok, "map loads for the movement/passability fixtures (%s)" % map.last_error)
 	DataLoader.map = map if ok else null
@@ -977,9 +978,10 @@ func hud_has_modal(world) -> bool:
 	return hud != null and hud.has_modal()
 
 
-## (8,57) beside Lisbon (7,57): the entry tile used by the queue test.
+## The sea tile beside Lisbon's world harbor tile (1024,308) — (1023,309) is
+## coastal sea — the entry tile used by the queue test.
 func _sea_beside_lisbon() -> Vector2i:
-	return Vector2i(7, 57) + Vector2i(1, 0)
+	return Vector2i(1023, 309)
 
 
 # --- 11c. HUD mutiny modal (§4.8.3, §4.7) ---------------------------------

@@ -154,8 +154,10 @@ func _test_v2_load_and_resave() -> void:
 	_check(GameState.battles_won == 0, "migration set battles_won to 0")
 	_check(GameState.retired == false and GameState.retired_at == 0,
 		"migration set retired/retired_at to false/0")
-	_check(GameState.world.get("map_id") == "p1",
-		"migration set world.map_id to p1 (got %s)"
+	# Phase 4 (docs/90-* §8.2 dev-stage scope): the migration writes the
+	# *current* default map id, not a historical one.
+	_check(GameState.world.get("map_id") == "world",
+		"migration set world.map_id to the current default (got %s)"
 		% str(GameState.world.get("map_id")))
 	_check(GameState.quests == [], "the superseded quests list is empty")
 
@@ -194,8 +196,8 @@ func _test_v2_load_and_resave() -> void:
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
 	_check(not resaved.has("quests"),
 		"the re-saved file has no superseded 'quests' key")
-	_check((resaved["world"] as Dictionary).get("map_id") == "p1",
-		"the re-saved world block carries map_id p1")
+	_check((resaved["world"] as Dictionary).get("map_id") == "world",
+		"the re-saved world block carries the current map id")
 	_check(not (resaved["world"] as Dictionary).has("clock_fraction")
 		and not resaved.has("explored_tiles"),
 		"the re-save still omits clock_fraction / explored_tiles")
@@ -226,8 +228,8 @@ func _test_migration_shape() -> void:
 	_check(_nation_map_is(out["completed_royal_missions"], 0),
 		"every royal-mission count defaults to 0")
 	_check(not out.has("quests"), "MIGRATIONS[2] drops the superseded 'quests' key")
-	_check((out["world"] as Dictionary).get("map_id") == "p1",
-		"MIGRATIONS[2] adds world.map_id = p1")
+	_check((out["world"] as Dictionary).get("map_id") == "world",
+		"MIGRATIONS[2] adds world.map_id at the current default")
 
 	# An absent/empty world block must not be synthesised.
 	var no_world := _v2_payload()
@@ -318,7 +320,7 @@ func _test_corrupt_phase3_field_rejected() -> void:
 		_check(_loaded_values() == before,
 			"state untouched after rejecting %s" % probe["why"])
 
-	# An unknown map id is rejected too (§8.1/§4.9.8: only p1/p3 exist).
+	# An unknown map id is rejected too (§8.1/§9.1: "world" is the only id).
 	var bad_map: Dictionary = SaveSystem.snapshot()
 	bad_map["world"] = {"position": {"x": 1, "y": 1}, "weather": "calm",
 		"map_id": "p9"}

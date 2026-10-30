@@ -175,6 +175,18 @@ static func _list_size(value) -> int:
 	return (value as Array).size() if value is Array else 0
 
 
+## Chebyshev distance with longitude wrap (`20-*` §4.1), mirroring
+## `BattleSim._world_chebyshev` exactly — `tools/test_battle_economy.gd` asserts
+## the two agree.
+static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
+	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+	var width := int(grid.get("width", 0))
+	if width <= 0:
+		width = 2160
+	var dx := absi(a.x - b.x) % width
+	return maxi(mini(dx, width - dx), absi(a.y - b.y))
+
+
 # --- Nearest ports (§4.11.10) ----------------------------------------------
 
 ## Nations of the two nearest ports to `contact`, Chebyshev distance, ties by
@@ -189,15 +201,18 @@ static func _list_size(value) -> int:
 ## `rep_deltas` and `tools/test_battle_economy.gd` asserts the two agree.
 static func nearest_nations(contact: Vector2i) -> Array[String]:
 	var ports: Array = []
+	DataLoader.ensure_map()
 	for port in DataLoader.ports_list:
 		if not (port is Dictionary):
 			continue
-		var position := BattleSimLib.to_cell(port.get("position", BattleSimLib.NO_CELL))
+		# Ports carry lat/lon only; the harbor tile is derived (§10-* §6.1).
+		var position: Vector2i = DataLoader.port_cell(str(port.get("id", "")))
+		if position.x < 0:
+			continue
 		ports.append({
 			"id": str(port.get("id", "")),
 			"nation_id": str(port.get("nation_id", "")),
-			"distance": maxi(absi(contact.x - position.x),
-				absi(contact.y - position.y)),
+			"distance": _world_chebyshev(contact, position),
 		})
 	ports.sort_custom(func(a, b) -> bool:
 		if int(a["distance"]) != int(b["distance"]):
