@@ -457,8 +457,9 @@ not docking.
 - **Goal:** the phase definition of done.
 - **Docs:** `00-*` §7 as amended (B); everything above.
 - **Creates:** `tools/demo_check_phase4.md` — dated manual run of the
-  re-anchored 9-step demo loop on the world map, zh and en.
-- **Done-when (all nine amended steps, verifying exactly):** title/nation/
+  re-anchored **ten**-step demo loop (`00-*` §7; step 10 is the Phase-4
+  Chart) on the world map, zh and en.
+- **Done-when (all ten amended steps, verifying exactly):** title/nation/
   market/save-load steps unchanged from Phase 1 but exercised on the world
   map; sea step uses hold-to-repeat and click-to-sail; storm step = Tenerife
   leg (coordinate sail to open water, no docking) with the ≥ 0.90/6-day
