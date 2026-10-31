@@ -69,10 +69,13 @@ demand by `character.gd#effective_stat(name)`.
   - +2 per day tick at sea (ledger day at sea only, not in-port day advances).
   - +1 per 100g of sale profit (floor) on each sell transaction. Locked
     simplification: no cost-basis tracking; per-unit profit is
-    `max(0, sell_price − floor(base_price × 0.7))` (the 0.7 = the
-    `produces`-port factor from `30-*` §4.2), transaction profit is
+    `max(0, sell_price − floor(base_price × 0.7))` (the 0.7 = the resting
+    `produces` factor, 700 per thousand, `30-*` §4.2), transaction profit is
     `qty × per-unit profit`, and `xp += floor(profit / 100)`. A loss-making
-    sale therefore adds 0 XP and never removes XP.
+    sale therefore adds 0 XP and never removes XP. With Phase-5 stock prices
+    (`30-*` §4.2) this basis deliberately stays fixed: `floor(base_price ×
+    0.7)` is a locked metagame approximation, not the dynamic acquisition
+    cost.
 - Level rule: `level = floor(sqrt(xp / 50)) + 1`, recomputed lazily; level
   cap 20.
 - On each level-up (detected after XP award): +1 seamanship, +1 to the
