@@ -158,7 +158,7 @@ func _test_gate_defaults() -> void:
 	if panel_value == null:
 		print("NOTE  SettingsPanel.debug_overlays not landed yet — guard default asserted")
 	_check(chart.debug_available() == false,
-		"pre-merge (and by contract default) the debug row reads OFF")
+		"the debug row reads OFF by contract default (live static or absent symbol)")
 	_check(not chart.debug_layers_active(),
 		"no build has rendered the debug layers with the row off")
 	_check(chart.is_open() == false, "the chart starts closed")
@@ -556,16 +556,21 @@ func _test_real_settings_symbol() -> void:
 	if panel_value == null:
 		print("NOTE  skipping the real-symbol flip (SettingsPanel.debug_overlays not landed)")
 		return
-	panel.set("debug_overlays", true)
-	_check(chart.debug_available(),
-		"the real S19 row ON enables the debug gate")
+	_check(panel_value is bool and panel_value == false,
+		"the real static exists and defaults OFF")
+	# Live-follow through V's OWN write path (the instance method that assigns
+	# the static): `Script.get` must reflect it in this engine version.
+	var panel_view = panel.new()
+	panel_view.apply_debug_overlays(true)
+	_check(chart.debug_available() == true,
+		"the real S19 row ON (via apply_debug_overlays) enables the debug gate")
 	chart.open_chart()
 	_press(KEY_D)
 	_check(chart.omniscient_on(), "the real row on: `D` works end to end")
 	chart.close_chart()
-	panel.set("debug_overlays", false)
-	_check(not chart.debug_available(),
-		"the real S19 row OFF disables the debug gate")
+	panel_view.apply_debug_overlays(false)
+	_check(chart.debug_available() == false,
+		"the real S19 row OFF disables the gate (live value, not presence)")
 	chart.open_chart()
 	_press(KEY_D)
 	_check(not chart.omniscient_on(),
