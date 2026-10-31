@@ -21,8 +21,8 @@ const DEFAULT_MAP_ID := "world"
 ## Loaded from `res://data/`: ports, goods, ship_types, nations, officers,
 ## equipment, discoveries, quests (all envelope files), plus the Phase-5
 ## npc/economy tables npc_config.json, npc_captains.json, named_pirates.json
-## and market_events.json, and the two non-entity tables ui_strings.json and
-## map_legend.json.
+## and market_events.json, the route-builder artifact trade_routes_built.json,
+## and the two non-entity tables ui_strings.json and map_legend.json.
 
 ## True when every data file loaded and passed the light shape checks.
 var load_ok: bool = false
@@ -45,6 +45,11 @@ var npc_captains: Dictionary = {}
 var named_pirates: Dictionary = {}
 ## Demand-event templates (docs/10-* §4.13).
 var market_events: Dictionary = {}
+## The route-builder artifact (`data/trade_routes_built.json`, docs/10-* §4.14):
+## per-lane tile paths, the junction graph the runtime routes over, and the
+## per-port spokes. Tool output of `tools/build_routes.py` — never hand-edited
+## (AGENTS.md); runtime lane routing is Phase-5 task J (`60-*` §4.1).
+var trade_routes_built: Dictionary = {}
 
 # Insertion-ordered lists copied from the JSON arrays. UI iteration uses these
 # (market rows sort by base_price later; the nationality screen needs the
@@ -60,6 +65,10 @@ var quests_list: Array = []
 var npc_captains_list: Array = []
 var named_pirates_list: Array = []
 var market_events_list: Array = []
+## Lanes and spokes of the built route artifact, id-keyed for lookup
+## (`lanes` by lane id, `spokes` by port id — docs/10-* §4.14).
+var route_lanes: Dictionary = {}
+var route_spokes: Dictionary = {}
 
 # Raw (NOT id-keyed) tables.
 var ui_strings: Dictionary = {}
@@ -121,6 +130,11 @@ func load_all() -> void:
 	market_events_list = _load_list("market_events", "market_events.json")
 	market_events = _index_by_id(market_events_list, "market_events.json")
 
+	# Tool-owned route artifact (docs/10-* §4.14) — not an entity file.
+	trade_routes_built = _load_trade_routes_built()
+	route_lanes = _index_route_lanes(trade_routes_built)
+	route_spokes = _index_route_spokes(trade_routes_built)
+
 	ui_strings = _load_ui_strings()
 	map_legend = _load_map_legend()
 	_load_map_index()
@@ -164,6 +178,24 @@ func get_named_pirate(id: String) -> Dictionary:
 
 func get_market_event(id: String) -> Dictionary:
 	return _lookup(market_events, id)
+
+
+## A built lane's tile path etc. by lane id (docs/10-* §4.14).
+func get_route_lane(id: String) -> Dictionary:
+	return _lookup(route_lanes, id)
+
+
+## A port's spoke (kind, connect, tile_path) by port id (docs/10-* §4.14).
+func get_route_spoke(port_id: String) -> Dictionary:
+	return _lookup(route_spokes, port_id)
+
+
+## The junction graph the runtime routes over: `{node_count, nodes,
+## edge_count, edges}` — nodes `[x, y]` tiles, edges `[a, b, tile_length]`
+## index pairs (docs/10-* §4.14; Dijkstra lives in task J).
+func route_junction_graph() -> Dictionary:
+	var graph = trade_routes_built.get("junctions", null)
+	return graph if graph is Dictionary else {}
 
 ## L10nString for a UI key, or {} when the key is absent.
 func get_ui_string(key: String) -> Dictionary:
@@ -416,6 +448,75 @@ func _load_ui_strings() -> Dictionary:
 			if not (text is String) or (text as String).strip_edges().is_empty():
 				_record("ui_strings.json: '%s.%s' is missing or empty" % [key, locale])
 		table[key] = value
+	return table
+
+
+## Reads `data/trade_routes_built.json` — the route-builder artifact
+## (docs/10-* §4.14). A tool output, not an entity file: the envelope is
+## `{version, generated_by, artifact, build, lanes, spokes, junctions}`.
+## Runtime consumption (Dijkstra over the graph, tile-path walking) is task J;
+## this phase only loads and shape-checks it.
+func _load_trade_routes_built() -> Dictionary:
+	var data = _read_json("trade_routes_built.json")
+	if data == null:
+		return {}
+	if not (data is Dictionary):
+		_record("trade_routes_built.json: top-level value must be an object")
+		return {}
+	if not (data.get("version", null) is int):
+		_record("trade_routes_built.json: missing integer 'version'")
+	for key in ["generated_by", "artifact", "build", "lanes", "spokes",
+			"junctions"]:
+		if not data.has(key):
+			_record("trade_routes_built.json: missing '%s' (docs/10-* §4.14)"
+					% key)
+	var junctions = data.get("junctions", null)
+	if junctions is Dictionary:
+		if not (junctions.get("nodes", null) is Array):
+			_record("trade_routes_built.json: junctions.nodes must be an array")
+		if not (junctions.get("edges", null) is Array):
+			_record("trade_routes_built.json: junctions.edges must be an array")
+	return data
+
+
+## Indexes the built lanes by their `id` (light shape check only; the deep
+## structural checks live in validator group 8, §8.3).
+func _index_route_lanes(built: Dictionary) -> Dictionary:
+	var lanes = built.get("lanes", null)
+	if not (lanes is Array):
+		return {}
+	var table: Dictionary = {}
+	for index in lanes.size():
+		var lane = lanes[index]
+		if not (lane is Dictionary) or not (lane.get("id", null) is String):
+			_record("trade_routes_built.json: lanes[%d] has no string 'id'"
+					% index)
+			continue
+		if not (lane.get("tile_path", null) is Array):
+			_record("trade_routes_built.json: lane '%s' has no tile_path"
+					% (lane["id"] as String))
+			continue
+		table[lane["id"] as String] = lane
+	return table
+
+
+## Indexes the built spokes by their `port` (docs/10-* §4.14).
+func _index_route_spokes(built: Dictionary) -> Dictionary:
+	var spokes = built.get("spokes", null)
+	if not (spokes is Array):
+		return {}
+	var table: Dictionary = {}
+	for index in spokes.size():
+		var spoke = spokes[index]
+		if not (spoke is Dictionary) or not (spoke.get("port", null) is String):
+			_record("trade_routes_built.json: spokes[%d] has no string 'port'"
+					% index)
+			continue
+		if not (spoke.get("tile_path", null) is Array):
+			_record("trade_routes_built.json: spoke '%s' has no tile_path"
+					% (spoke["port"] as String))
+			continue
+		table[spoke["port"] as String] = spoke
 	return table
 
 
