@@ -3,6 +3,11 @@ extends Node
 ## (docs/IMPLEMENT-Phase4.md G; docs/90-* §9/§9.1; docs/10-* §6.1–§6.3;
 ## docs/20-* §4.1, §4.11–§4.12; docs/80-* §4.5, §4.8).
 ##
+## Phase-6 task G adds the player-facing sailing surface cases (helm mode,
+## Space wait semantics, trim keys, interpolated rendering purity, the
+## heading-aware docking charge, the §4.18 ice toast path and the §2.9 HUD
+## indicators; docs/IMPLEMENT-Phase6.md task G, §2.5/§2.6/§2.9).
+##
 ##   godot --headless --path . tools/test_world_map.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
@@ -11,6 +16,9 @@ const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase 6: the sailing core whose APIs the world scene consumes.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 ## docs/10-* §6.1: the locked grid and artifact.
 const WORLD_WIDTH := 4320
@@ -45,6 +53,22 @@ const MAX_CHUNK_BYTES := 50 * 1024 * 1024
 ## must stay under this, headless.
 const BOOT_BUDGET_MS := 3000
 
+# --- Phase-6 task-G fixtures (probed data facts, not hand-authored tiles) ---
+
+## A current tile (NE, strength 3) with ≥ 80 open-water tiles eastward on its
+## row: the helm auto-step walk + the HUD current-arrow fixture.
+const HELM_CELL := Vector2i(1320, 600)
+## An open-water cell with no current (the interval-math fixture).
+const OPEN_SEA_CELL := Vector2i(1400, 640)
+## A Baltic water tile just outside the month-1 ice mask, with its icy water
+## neighbour: the §4.18 entry-refusal pair (ice months 12–3, gone by month 7).
+const ICE_OUTSIDE := Vector2i(2378, 380)
+const ICE_CELL := Vector2i(2379, 380)
+## A real diagonal approach on the shipped map whose target is a shore tile
+## (Marseille's): the heading-aware docking-charge fixture (`20-*` §4.11.1).
+const MARSEILLE_SHORE := Vector2i(2224, 560)
+const MARSEILLE_DIAG := Vector2i(2223, 561)
+
 var _failures: Array[String] = []
 var _checks := 0
 ## The `world_report.json` harbor (berth) tiles `{id: Vector2i}` (the builder's
@@ -68,6 +92,15 @@ func _ready() -> void:
 	await _test_chunked_rendering()
 	await _test_port_overlays()
 	await _test_explore_action()
+	# Phase-6 task G: the player-facing sailing surface.
+	await _test_helm_mode()
+	await _test_helm_cancels()
+	await _test_trim_keys()
+	await _test_wait_keys()
+	await _test_interpolation_purity()
+	await _test_docking_cost_pin()
+	await _test_ice_surface()
+	await _test_hud_indicators()
 	_report()
 
 
@@ -1029,6 +1062,566 @@ func _test_explore_action() -> void:
 	await get_tree().process_frame
 	_check(GameState.discoveries_found.has("disc_atlas_cedars"),
 		"the HUD Explore button runs the same action as E")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 12. Phase 6: helm mode (docs/20-* §4.2, §2.6) ------------------------
+
+## Builds a survivable open-sea run (the test_movement fixture shape, local
+## to this suite) at `at` on `day`, with a pinned wind and weather.
+func _make_sea_run(at: Vector2i, day: int = 1, wind_dir: String = "S",
+		weather: String = "fair", trim: String = "normal") -> void:
+	GameState.new_game("portugal", false)
+	GameState.player["stats"] = {
+		"leadership": 10, "seamanship": 10, "combat": 10,
+		"navigation": 10, "luck": 10,
+	}
+	GameState.fleet[0]["provisions"] = 500
+	GameState.fleet[0]["water"] = 500
+	GameState.day = day
+	GameState.gold = 1000
+	GameState.morale = 70
+	GameState.current_port = null
+	GameState.known_ports = []
+	GameState.world = {
+		"position": {"x": at.x, "y": at.y},
+		"clock_fraction": 0.0,
+		"map_id": "world",
+		"weather": weather,
+		"wind_dir": wind_dir,
+		"sail_trim": trim,
+		"heading": "E",
+	}
+	SailingSimLib.reset_ledger_state()
+
+
+## Instantiates the world scene over the current fixture (no routing) and
+## waits one frame so `_ready` + the first `_process` tick complete.
+func _open_world() -> Node2D:
+	var world: Node2D = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	await get_tree().process_frame
+	return world
+
+
+## A pressed (non-echo) input action, for driving `_unhandled_input` directly.
+func _action_event(action: String) -> InputEventAction:
+	var ev := InputEventAction.new()
+	ev.action = action
+	ev.pressed = true
+	return ev
+
+
+func _test_helm_mode() -> void:
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	# Guard-call default: `control_prefs` does not exist until task V lands.
+	_check(world.input_mode() == "step",
+		"the guard-read input mode is step without control_prefs (got %s)"
+			% world.input_mode())
+	# Step-mode cadence numbers are untouched (byte-identity guard).
+	var hold: Dictionary = world.hold_state()
+	_check(is_equal_approx(float(hold["delay"]), 0.25)
+		and is_equal_approx(float(hold["tiles_per_second"]), 8.0)
+		and is_equal_approx(float(hold["step_seconds"]), 0.125),
+		"step-mode hold cadence keeps its W4 numbers (%s)" % str(hold))
+
+	# Steering sets `world.heading` and latches the auto-stepper; the press
+	# itself does not step (the interval cadence owns every step).
+	var start: Vector2i = world.fleet_cell()
+	var clock0 := float(GameState.world["clock_fraction"])
+	_check(world.helm_steer("move_e"), "helm_steer accepts a direction action")
+	_check(world.helm_active(), "the helm auto-stepper latches on steer")
+	_check(str(GameState.world["heading"]) == "E",
+		"steering E persists world.heading 'E' (got %s)"
+			% str(GameState.world["heading"]))
+	_check(world.fleet_cell() == start, "a steer press itself steps nothing")
+	# One interval → exactly one normal step; its clock cost is the heading
+	# form `move_cost("E")` (beam + the (NE,3) current under the start tile:
+	# 20 × 1.24 = 24 tiles/day → 1/24).
+	var interval: float = world.helm_interval()
+	_check(is_equal_approx(interval, 0.12),
+		"the helm interval is the 0.12 s floor at 24 tiles/day (%.4f)" % interval)
+	world.advance_movement(interval)
+	_check(world.fleet_cell() == start + Vector2i(1, 0),
+		"one auto-step after one interval (at %s)" % str(world.fleet_cell()))
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			clock0 + SailingSimLib.move_cost("E")),
+		"the auto-step charges move_cost('E') = 1/24 (%.4f)"
+			% float(GameState.world["clock_fraction"]))
+	# Nine more intervals → nine more steps, still day 1 (≤ 0.5 days total).
+	world.advance_movement(interval * 9.0)
+	_check(world.fleet_cell() == start + Vector2i(10, 0),
+		"10 intervals auto-step exactly 10 tiles (at %s)" % str(world.fleet_cell()))
+	_check(GameState.day == 1, "the walk stays inside day 1 (no batching)")
+
+	# A new direction key re-steers without stopping.
+	world.helm_steer("move_w")
+	_check(str(GameState.world["heading"]) == "W" and world.helm_active(),
+		"a new direction key re-steers and keeps auto-stepping")
+	world.advance_movement(world.helm_interval() * 3.0)
+	_check(world.fleet_cell() == start + Vector2i(7, 0),
+		"the re-steered helm steps west (at %s)" % str(world.fleet_cell()))
+
+	# Stopping: `helm_stop` halts the stepper, the heading persists.
+	world.helm_stop()
+	_check(not world.helm_active() and str(GameState.world["heading"]) == "W",
+		"helm_stop stops the stepper and the heading persists")
+	world.advance_movement(world.helm_interval() * 5.0)
+	_check(world.fleet_cell() == start + Vector2i(7, 0),
+		"no steps while the helm is stopped")
+
+	# Interval math from a current-free cell: trim × wind × the clamp.
+	GameState.set_world_tile(OPEN_SEA_CELL)
+	world.sync_from_state()
+	GameState.world["sail_trim"] = "normal"
+	world.helm_steer("move_s")  # into a southerly wind: 20 × 0.5 = 10 → 0.12 floor
+	_check(is_equal_approx(world.helm_interval(), 0.12),
+		"into-wind normal trim (10 tiles/day) clamps to 0.12 s (%.4f)"
+			% world.helm_interval())
+	GameState.world["sail_trim"] = "reefed"
+	_check(is_equal_approx(world.helm_interval(), 1.0 / 7.0),
+		"reefed into-wind (7 tiles/day) is the unclamped 1/7 s (%.4f)"
+			% world.helm_interval())
+	GameState.world["sail_trim"] = "furled"
+	_check(is_equal_approx(world.helm_interval(), 2.0),
+		"a furled fleet (no speed) reads the 2.0 s cap (%.4f)"
+			% world.helm_interval())
+	world.helm_stop()
+
+	# The `world_wait` / trim actions dispatch through `_unhandled_input` is
+	# covered by their own cases; here: the direction dispatch by input mode.
+	world.input_mode_override = "helm"
+	var before: Vector2i = world.fleet_cell()
+	world._unhandled_input(_action_event("move_e"))
+	_check(world.helm_active() and str(GameState.world["heading"]) == "E"
+		and world.fleet_cell() == before,
+		"helm mode: a direction key sets course without stepping")
+	world.helm_stop()
+	world.input_mode_override = "step"
+	world._unhandled_input(_action_event("move_e"))
+	_check(not world.helm_active()
+		and world.hold_state()["action"] == "move_e"
+		and world.fleet_cell() == before + Vector2i(1, 0),
+		"step mode: the same key steps once and starts the hold (verbatim)")
+	world.release_direction("move_e")
+	world.input_mode_override = ""
+	world.queue_free()
+	await get_tree().process_frame
+
+
+func _test_helm_cancels() -> void:
+	# §4.2 cancel seams: click-to-sail, a battle handoff, docking.
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	world.helm_steer("move_e")
+	_check(world.sail_to(HELM_CELL + Vector2i(30, 0)),
+		"a click route is found from the helming fleet")
+	_check(not world.helm_active(),
+		"click-to-sail cancels the helm")
+	world.cancel_sail()
+	world.queue_free()
+	await get_tree().process_frame
+
+	_make_sea_run(HELM_CELL)
+	world = await _open_world()
+	world.helm_steer("move_e")
+	world._open_encounter({
+		"id": "g_fixture_pirate", "role": "pirate", "nation_id": "",
+		"ships": [],
+		"contact": {"x": HELM_CELL.x + 1, "y": HELM_CELL.y},
+	})
+	_check(world.battle_in_progress() and not world.helm_active(),
+		"a battle handoff cancels the helm (the §4.11.11.3 funnel)")
+	world.queue_free()
+	await get_tree().process_frame
+
+	# Docking cancels the helm; the heading persists (§2.6).
+	var berth: Vector2i = _report_tiles["lisbon"]
+	var shore: Vector2i = _report_shores["lisbon"]
+	_make_sea_run(berth)
+	world = await _open_world()
+	world.helm_steer("move_e")  # the shore tile lies east of the berth
+	_check(world.try_step(shore), "the helming fleet docks into the shore tile")
+	_check(GameState.current_port == "lisbon", "the dock opened the port")
+	_check(not world.helm_active(), "docking cancels the helm")
+	_check(str(GameState.world["heading"]) == "E",
+		"the heading persists through docking (got %s)"
+			% str(GameState.world["heading"]))
+	world.hud().clear_dialogs()
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 13. Phase 6: trim keys (docs/20-* §4.17, §2.5) -----------------------
+
+func _test_trim_keys() -> void:
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	# Forward cycle follows `furled → reefed → normal → full`, wrapping.
+	var forward := ["full", "furled", "reefed", "normal"]
+	for expected in forward:
+		world._unhandled_input(_action_event("trim_forward"))
+		var got := str(GameState.world["sail_trim"])
+		_check(got == expected,
+			"trim_forward cycles normal → %s (got %s)" % [expected, got])
+	# Backward walks the same ring the other way.
+	world._unhandled_input(_action_event("trim_back"))
+	_check(str(GameState.world["sail_trim"]) == "reefed",
+		"trim_back walks the cycle backwards (normal → reefed, got %s)"
+			% str(GameState.world["sail_trim"]))
+	# The next step's cost picks the state up through F's §4.4 pipeline:
+	# at the (NE,3) current tile, E is beam: normal 24 tiles/day, reefed 18.
+	GameState.world["sail_trim"] = "normal"
+	var fast: int = SailingSimLib.effective_speed("E")
+	GameState.world["sail_trim"] = "reefed"
+	var slow: int = SailingSimLib.effective_speed("E")
+	_check(fast == 24 and slow == 18,
+		"trim moves the effective speed 24 → 18 tiles/day (got %d → %d)"
+			% [fast, slow])
+	# The helm interval re-times from the new state without re-steering.
+	GameState.set_world_tile(OPEN_SEA_CELL)
+	world.sync_from_state()
+	GameState.world["sail_trim"] = "normal"
+	world.helm_steer("move_s")
+	GameState.world["sail_trim"] = "reefed"
+	_check(is_equal_approx(world.helm_interval(), 1.0 / 7.0),
+		"the auto-step interval follows a mid-helm trim change (%.4f)"
+			% world.helm_interval())
+	world.helm_stop()
+	# The chip follows the host-side cycle (world → HUD wiring).
+	_check(world.hud().trim_chip_state() == "reefed"
+		and world.hud().trim_chip_highlighted(),
+		"the trim chip follows the cycle and highlights off-normal")
+	# Toast wiring, with the §4.7.10 keys injected (report-only until the
+	# master merges them): the composed chip toast fires, then the injection
+	# is undone so the suite stays hermetic.
+	DataLoader.ui_strings["world.trim.chip"] = {"zh": "帆位：{state}", "en": "Sails: {state}"}
+	DataLoader.ui_strings["world.trim.full"] = {"zh": "满帆", "en": "full sail"}
+	world._unhandled_input(_action_event("trim_forward"))  # reefed → normal
+	world._unhandled_input(_action_event("trim_forward"))  # normal → full
+	_check(world.hud().get_node("Toast").visible,
+		"the trim cycle toasts the composed chip label with the master's keys")
+	DataLoader.ui_strings.erase("world.trim.chip")
+	DataLoader.ui_strings.erase("world.trim.full")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 14. Phase 6: wait keys (docs/20-* §4.17, correction 8) ---------------
+
+func _test_wait_keys() -> void:
+	# Step mode: `Space` waits exactly one day, holding position.
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	var out: Dictionary = world.press_wait()
+	_check(bool(out["waited"]) and not bool(out["stopped"]),
+		"step mode: Space waits one day (%s)" % str(out))
+	_check(GameState.day == 2, "the wait advanced exactly 1 day (got %d)"
+		% GameState.day)
+	_check(world.fleet_cell() == HELM_CELL, "the wait held position")
+	_check(int(GameState.fleet[0]["provisions"]) < 500 and GameState.gold < 1000,
+		"the full ledger ran (provisions %d, gold %d)"
+			% [int(GameState.fleet[0]["provisions"]), GameState.gold])
+	# Refused while docked: nothing surfaced, no day.
+	GameState.current_port = "lisbon"
+	var docked_day: int = GameState.day
+	out = world.press_wait()
+	_check(not bool(out["waited"]) and GameState.day == docked_day,
+		"the wait is refused while docked and costs nothing")
+	GameState.current_port = null
+	world.queue_free()
+	await get_tree().process_frame
+
+	# Helm mode: the first Space stops, the second waits (correction 8).
+	_make_sea_run(HELM_CELL)
+	world = await _open_world()
+	world.input_mode_override = "helm"
+	world.helm_steer("move_e")
+	out = world.press_wait()
+	_check(bool(out["stopped"]) and not bool(out["waited"]),
+		"helm mode: the first Space stops the fleet (%s)" % str(out))
+	_check(not world.helm_active() and GameState.day == 1,
+		"the stop spent no day and ended the auto-stepper")
+	out = world.press_wait()
+	_check(bool(out["waited"]) and GameState.day == 2,
+		"helm mode: the second Space waits one day")
+	# Wait works regardless of trim (§4.17) — even furled.
+	GameState.world["sail_trim"] = "furled"
+	out = world.press_wait()
+	_check(bool(out["waited"]) and GameState.day == 3,
+		"a furled fleet can still wait (day %d)" % GameState.day)
+	world.input_mode_override = ""
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 15. Phase 6: interpolated rendering purity (§2.6) --------------------
+
+## A deterministic scripted walk: 12 held steps east, then a 24-tile click
+## route east. The caller seeds the weather/mutiny streams first so both
+## walks replay identically.
+func _scripted_walk(world: Node2D) -> Dictionary:
+	var start: Vector2i = world.fleet_cell()
+	world.press_direction("move_e")
+	world.advance_movement(0.25 + 11 * 0.125)
+	world.release_direction("move_e")
+	_check(world.sail_to(start + Vector2i(24, 0)), "the click route is found")
+	world.advance_movement(24 * 0.125 + 0.25)
+	return {
+		"cell": world.fleet_cell(),
+		"tile": GameState.world_tile(),
+		"day": GameState.day,
+		"clock": float(GameState.world["clock_fraction"]),
+		"gold": GameState.gold,
+		"morale": GameState.morale,
+		"provisions": int(GameState.fleet[0]["provisions"]),
+		"water": int(GameState.fleet[0]["water"]),
+	}
+
+
+func _test_interpolation_purity() -> void:
+	# Walk 1: interpolation on (the default).
+	_make_sea_run(HELM_CELL)
+	SailingSimLib.set_weather_seed(20261101)
+	SailingSimLib.set_mutiny_seed(7)
+	var world: Node2D = await _open_world()
+	var with_glide: Dictionary = await _scripted_walk(world)
+	world.queue_free()
+	await get_tree().process_frame
+	# Walk 2: identical fixture and seeds, interpolation off.
+	_make_sea_run(HELM_CELL)
+	SailingSimLib.set_weather_seed(20261101)
+	SailingSimLib.set_mutiny_seed(7)
+	world = await _open_world()
+	world.set_marker_glide_enabled(false)
+	var without_glide: Dictionary = await _scripted_walk(world)
+	for field in with_glide:
+		_check(with_glide[field] == without_glide[field],
+			"interpolation never changes logic outcomes: %s (%s == %s)"
+				% [field, str(with_glide[field]), str(without_glide[field])])
+	_check((with_glide["cell"] as Vector2i).x > HELM_CELL.x + 20,
+		"the scripted walk actually moved (at %s)" % str(with_glide["cell"]))
+	world.queue_free()
+	await get_tree().process_frame
+
+	# Structure: the offset lives only on the marker's draw position.
+	_make_sea_run(HELM_CELL)
+	world = await _open_world()
+	var start: Vector2i = world.fleet_cell()
+	world.press_direction("move_e")
+	var landed := start + Vector2i(1, 0)
+	_check(world.fleet_cell() == landed,
+		"the tile truth moves on the step, not on the animation")
+	_check(world.marker_gliding() and world.marker_offset() != Vector2.ZERO,
+		"the marker animates between tiles after the step")
+	world.advance_render(10.0)
+	_check(not world.marker_gliding() and world.marker_offset() == Vector2.ZERO,
+		"the glide snaps onto the destination tile centre")
+	_check(world.fleet_cell() == landed,
+		"advancing the render moved no logic state")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 16. Phase 6: the heading-aware docking charge (master ruling) --------
+
+func _test_docking_cost_pin() -> void:
+	# (a) The step-delta heading: docking east into Lisbon charges
+	# `move_cost("E")` — with the pinned southerly wind that equals the beam
+	# average, which is exactly why the W4 suite stays green.
+	var berth: Vector2i = _report_tiles["lisbon"]
+	var shore: Vector2i = _report_shores["lisbon"]
+	_make_sea_run(berth)
+	var world: Node2D = await _open_world()
+	_check(world.try_step(shore), "the orthogonal docking gesture docks")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			SailingSimLib.move_cost("E")),
+		"the docking charge carries the step-delta heading E (%.4f)"
+			% float(GameState.world["clock_fraction"]))
+	world.hud().clear_dialogs()
+	world.queue_free()
+	await get_tree().process_frame
+
+	# (b) The helm heading is the same delta under helm — the charge follows.
+	_make_sea_run(berth)
+	world = await _open_world()
+	world.helm_steer("move_e")
+	world.try_step(shore)
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			SailingSimLib.move_cost("E")),
+		"under helm the docking charge carries world.heading (%.4f)"
+			% float(GameState.world["clock_fraction"]))
+	world.hud().clear_dialogs()
+	world.queue_free()
+	await get_tree().process_frame
+
+	# (c) A docking move whose delta names a real diagonal heading charges
+	# that heading: NE into Marseille's shore from the diagonal approach is
+	# close-hauled against the southerly wind (0.7 × 20 = 14 → 1/14), not the
+	# beam average 1/20. (A diagonal dock can never arise from try_step — the
+	# no-corner-cut rule — so the seam is driven directly.)
+	_make_sea_run(MARSEILLE_DIAG)
+	world = await _open_world()
+	_check(DataLoader.map.shore_port_at(MARSEILLE_SHORE) == "marseille",
+		"(2224,560) is Marseille's shore tile (data-derived guard)")
+	_check(world._dock_at(MARSEILLE_SHORE),
+		"the direct diagonal dock docks into marseille")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			SailingSimLib.move_cost("NE")),
+		"the diagonal dock charges move_cost('NE') = 1/14, not the average (%.4f)"
+			% float(GameState.world["clock_fraction"]))
+	world.hud().clear_dialogs()
+	world.queue_free()
+	await get_tree().process_frame
+
+	# (d) Fallback: a target whose delta is no 8-dir step charges the
+	# parameterless average (the ruling's "neither applies" branch).
+	_make_sea_run(berth)
+	world = await _open_world()
+	_check(world._dock_at(MARSEILLE_SHORE),
+		"the fallback dock still opens a port (seam-level pin)")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			SailingSimLib.move_cost()),
+		"the fallback dock charges the parameterless move_cost (%.4f)"
+			% float(GameState.world["clock_fraction"]))
+	world.hud().clear_dialogs()
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 17. Phase 6: the §4.18 ice toast path --------------------------------
+
+func _test_ice_surface() -> void:
+	# Month 1 (day 1): the Baltic fixture tile is frozen.
+	_make_sea_run(ICE_OUTSIDE, 1)
+	var world: Node2D = await _open_world()
+	var clock0 := float(GameState.world["clock_fraction"])
+	_check(not world.try_step(ICE_CELL),
+		"a step onto in-month sea ice is refused")
+	_check(world.fleet_cell() == ICE_OUTSIDE
+		and float(GameState.world["clock_fraction"]) == clock0,
+		"the refused ice step moves nothing and costs no clock")
+	_check(SailingSimLib.last_move_blocked_key == SailingSimLib.ICE_BLOCKED_KEY,
+		"the refusal records the sim's ice marker (last_move_blocked_key)")
+	# The toast surfaces through the standard flow once the master merges the
+	# key (injected here, then undone — the suite stays hermetic).
+	DataLoader.ui_strings["world.ice.blocked"] = {
+		"zh": "海冰封冻，无法进入。", "en": "Sea ice blocks the way.",
+	}
+	world.try_step(ICE_CELL)
+	_check(world.hud().get_node("Toast").visible,
+		"the refused ice step surfaces the world.ice.blocked toast")
+	DataLoader.ui_strings.erase("world.ice.blocked")
+	# A helm auto-step into the ice is refused too — and does not cancel the
+	# helm (a blocked step is a spent slot, not a course change).
+	world.helm_steer("move_e")
+	world.advance_movement(world.helm_interval())
+	_check(world.fleet_cell() == ICE_OUTSIDE and world.helm_active(),
+		"the helm auto-step onto ice is refused and the helm keeps running")
+	world.helm_stop()
+	# A click onto the frozen tile pre-checks like a land click.
+	DataLoader.ui_strings["world.ice.blocked"] = {
+		"zh": "海冰封冻，无法进入。", "en": "Sea ice blocks the way.",
+	}
+	_check(not world.sail_to(ICE_CELL) and not world.sail_active(),
+		"a click onto in-month ice is rejected with no route")
+	_check(world.hud().get_node("Toast").visible,
+		"the ice click surfaces the same toast")
+	DataLoader.ui_strings.erase("world.ice.blocked")
+	world.queue_free()
+	await get_tree().process_frame
+
+	# §4.18 "a tile freezing under a standing fleet does not trap it": the
+	# fleet starts ON the frozen tile and sails out west.
+	_make_sea_run(ICE_CELL, 1)
+	world = await _open_world()
+	world.helm_steer("move_w")
+	world.advance_movement(world.helm_interval())
+	_check(world.fleet_cell() == ICE_OUTSIDE,
+		"a fleet standing on frozen water can still move out (at %s)"
+			% str(world.fleet_cell()))
+	world.helm_stop()
+	world.queue_free()
+	await get_tree().process_frame
+
+	# Month 7 (day 200): the same tile is open water and the step succeeds.
+	_make_sea_run(ICE_OUTSIDE, 200)
+	world = await _open_world()
+	_check(world.try_step(ICE_CELL),
+		"out of the ice window the same step is an ordinary move")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- 18. Phase 6: HUD §2.9 indicators (structure, no label text) ----------
+
+func _test_hud_indicators() -> void:
+	_make_sea_run(HELM_CELL, 1)
+	var world: Node2D = await _open_world()
+	var hud = world.hud()
+	# The warm-up ran: both ocean decodes finished before gameplay.
+	var ocean = OceanLayersLib.instance()
+	_check(ocean.decode_ok and ocean.currents_decoded,
+		"the world scene warmed the ocean decodes at load (wind %s, currents %s)"
+			% [str(ocean.decode_ok), str(ocean.currents_decoded)])
+	_check(hud.get_node_or_null("TopRow/Calendar") != null
+		and hud.get_node_or_null("BottomRow/TrimChip") != null
+		and hud.get_node_or_null("WindLabel") != null
+		and hud.get_node_or_null("CurrentLabel") != null,
+		"the §2.9 indicator nodes exist (calendar, trim chip, wind, current)")
+	# Wind arrow: rotates to `world.wind_dir`, always visible at sea.
+	for case in [["N", 0.0], ["NE", 45.0], ["E", 90.0], ["SW", 225.0], ["NW", 315.0]]:
+		GameState.world["wind_dir"] = case[0]
+		hud.refresh_sailing_indicators()
+		_check(is_equal_approx(hud.wind_arrow_angle(), float(case[1])),
+			"the wind arrow rotates to %s = %s° (%.1f)"
+				% [case[0], str(case[1]), hud.wind_arrow_angle()])
+	_check(hud.wind_arrow_visible(), "the wind indicator is visible at sea")
+	# Current arrow: shown on a current tile with the decoded direction,
+	# hidden on a plain-water tile.
+	GameState.set_world_tile(HELM_CELL)
+	world.sync_from_state()
+	_check(hud.current_arrow_visible()
+		and is_equal_approx(hud.current_arrow_angle(), 45.0),
+		"the current arrow shows on a current tile at the decoded NE bearing")
+	GameState.set_world_tile(OPEN_SEA_CELL)
+	world.sync_from_state()
+	_check(not hud.current_arrow_visible(),
+		"the current arrow hides on a no-current tile")
+	# Trim chip: mirrors `world.sail_trim`, highlighted off-normal.
+	GameState.world["sail_trim"] = "normal"
+	hud.refresh_sailing_indicators()
+	_check(hud.trim_chip_state() == "normal" and not hud.trim_chip_highlighted(),
+		"the trim chip reads normal unhighlighted")
+	GameState.world["sail_trim"] = "reefed"
+	hud.refresh_sailing_indicators()
+	_check(hud.trim_chip_state() == "reefed" and hud.trim_chip_highlighted(),
+		"the trim chip highlights while the trim is off-normal")
+	# Calendar: the §4.15 year/month math, composed numerically (§4.7.10).
+	for case in [[1, 1, 1], [31, 1, 2], [361, 2, 1]]:
+		GameState.day = case[0]
+		hud.refresh_sailing_indicators()
+		var cal: Dictionary = hud.calendar_displayed()
+		_check(int(cal["year"]) == case[1] and int(cal["month"]) == case[2],
+			"day %d displays as year %d month %d (got %s)"
+				% [case[0], case[1], case[2], str(cal)])
+	# Read-only: an indicator refresh mutates nothing.
+	GameState.day = 5
+	GameState.world["wind_dir"] = "NE"
+	GameState.world["sail_trim"] = "full"
+	var world_snapshot: Dictionary = GameState.world.duplicate()
+	hud.refresh_sailing_indicators()
+	_check(GameState.world.duplicate() == world_snapshot and GameState.day == 5,
+		"refresh_sailing_indicators never mutates GameState")
+	# Host wiring: a world-side trim cycle reaches the chip without a signal.
+	var cycled: String = world.cycle_trim(true)  # full → wraps to furled
+	_check(cycled == "furled" and hud.trim_chip_state() == "furled"
+		and hud.trim_chip_highlighted(),
+		"cycle_trim repaints the chip through the world→HUD seam")
 	world.queue_free()
 	await get_tree().process_frame
 

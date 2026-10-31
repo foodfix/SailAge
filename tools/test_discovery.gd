@@ -302,11 +302,15 @@ func _test_discover_then_enter() -> void:
 		"entering an unknown port discovers it (§4.11)")
 	_check(GameState.current_port == "valencia",
 		"current_port is valencia after entry (got %s)" % str(GameState.current_port))
-	# §4.11.1: exactly one move_cost() before the screen, and the fleet stays
-	# on the berth (docking never steps onto the land tile).
+	# §4.11.1: exactly one move's worth of days before the screen, and the
+	# fleet stays on the berth (docking never steps onto the land tile).
+	# Phase-6 master ruling: the docking charge carries the docking move's own
+	# heading — here W (shore west of berth), running against the guard-default
+	# easterly wind (`world.wind_dir` default "E") = 1/26, not the beam average.
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-		clock_before + SailingSimLib.move_cost()),
-		"the docking cost is one move_cost() (%.4f → %.4f)"
+		clock_before + SailingSimLib.move_cost(SailingSimLib.heading_of_delta(
+			VALENCIA_SHORE - VALENCIA_HARBOR))),
+		"the docking cost is one move_cost(heading) (%.4f → %.4f)"
 		% [clock_before, float(GameState.world["clock_fraction"])])
 	_check(GameState.world_tile() == VALENCIA_HARBOR,
 		"the fleet stays on the berth after docking (got %s)"
