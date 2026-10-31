@@ -47,7 +47,9 @@ The port hub lists facilities in fixed order: Market, Shipyard, Tavern, Inn,
 Guild, Palace, plus a "Set Sail" button. Phase-3 facilities render as
 disabled rows with the stub label until Phase 3 activates them; from Phase 3
 on they are enabled (or replaced by `port.closed_bounty` on a bountied
-nation's ports, `70-*` §4.9.6).
+nation's ports, `70-*` §4.9.6). Neutral ports (`nation_id: ""`, Phase 6,
+`10-*` §7.1) run the standard market off their `produces`/`demands` resting
+stock — frontier markets that no NPC fleet serves this phase.
 
 ### 4.2 Stock economy & price formulas
 
@@ -232,8 +234,9 @@ score(good, P) = (est_sell_price(P, good) − buy_price) × qty × spec_mult × 
 ```
 
 - **Candidates:** the argmax runs over the nation's **produced** goods ×
-  candidate destinations — own-nation ports within Chebyshev ≤ 60 of A,
-  wrap-aware. No cross-nation reach, no forecasting, no global
+  candidate destinations — own-nation ports within Chebyshev ≤ 120 of A,
+  wrap-aware (Phase-6 grid sweep: 60 → 120 — nm semantics preserved at
+  12 tiles/degree, 5 nm tiles). No cross-nation reach, no forecasting, no global
   coordination: cross-nation arbitrage stays the player's protected profit
   space by construction.
 - **`est_sell_price(P, good)`** is the live §4.2 sell-side price at P's
