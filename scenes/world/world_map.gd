@@ -35,6 +35,10 @@ const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 ## Task H: the click-to-sail A* module (docs/20-* §4.2).
 const SailPathLib := preload("res://scripts/world/sail_path.gd")
+## Phase 6: the single owner of the ocean lookups (correction 15). The scene
+## only warms its decode in `_ready` and pre-checks click destinations; every
+## rule lookup stays behind `SailingSim` / the HUD.
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 ## The single shipped map id (docs/90-* §9.1). Map switching is retired with
 ## the dual-map pipeline: `world.map_id` is always this value, so the scene
@@ -169,6 +173,43 @@ const SAIL_STEP_SECONDS := 1.0 / HOLD_TILES_PER_SECOND
 ## The A* module instance of the last query (`sail_pathing()`), created lazily.
 var _sail = null
 
+# --- Phase 6: helm mode + interpolated rendering (docs/20-* §4.2, §2.6) -----
+
+## Helm auto-step interval clamp, seconds (§4.2: a speed-16 hull lands at
+## ≈ today's hold rate on the lower bound; nothing may step slower than one
+## tile per 2 s or faster than one per 0.12 s).
+const HELM_INTERVAL_MIN := 0.12
+const HELM_INTERVAL_MAX := 2.0
+## True while the helm auto-stepper is running (§4.2 "the fleet then
+## auto-steps that heading"). Latched by a direction key, cleared by `Space`
+## and by the three §4.2 cancel seams (click-to-sail, battle, docking). The
+## heading itself lives in `GameState.world["heading"]` and **persists**.
+var _helm_stepping := false
+## Seconds accumulated toward the next auto-step (re-phased on every steer).
+var _helm_since_step := 0.0
+## The input-mode override (the `SailingSim.drift_mode_override` pattern):
+## `""` means "read `GameState.control_prefs`" — the production path V lands;
+## a non-empty string forces the answer for a W5 fixture (the property does
+## not exist until V merges). Never set it outside a test.
+var input_mode_override: String = ""
+
+## Interpolated rendering (§2.6, render-only): the marker lerps between the
+## tile-centre pixels over each step's interval. **Every rule reads tile
+## positions** — these four fields feed nothing but [_tick_marker_glide],
+## which writes only `_fleet_marker.position`. Never read by the ledger,
+## encounters, docking checks, saves or `fleet_cell()`.
+var _glide_from := Vector2.ZERO
+var _glide_to := Vector2.ZERO
+var _glide_elapsed := 0.0
+var _glide_duration := 0.0
+## Test seam for the interpolation-purity proof: `false` snaps the marker
+## instead of animating (the logic outcome must be identical either way).
+var _glide_enabled := true
+## Phase-6 warm-up (task F handoff): the currents decode is forced on the
+## first `_process` tick, one frame after the boot frame (the wind raster
+## already decodes in `_ready`).
+var _ocean_warmed := false
+
 
 func _ready() -> void:
 	_loader = MapLoaderLib.new()
@@ -206,6 +247,11 @@ func _ready() -> void:
 	# every later update arrives through EventBus signals.
 	if _hud != null:
 		_hud.refresh()
+	# Phase-6 warm-up (task F handoff): decode the wind raster now — its
+	# ~0.9 s must never land on the first day tick. The lazy currents decode
+	# is forced one frame later by [_tick_ocean_warmup], keeping the boot
+	# frame inside the pinned budget.
+	OceanLayersLib.instance()
 
 	# S14 character panel: parent-agnostic modal that owns `C`/Esc (docs/80-* §4.3).
 	CharacterPanelLib.attach_to(self)
@@ -271,9 +317,28 @@ func _active_map_id() -> String:
 func _process(delta: float) -> void:
 	if _loader == null or not _is_loaded():
 		return
+	_tick_ocean_warmup()
 	_update_camera()
-	# Hold-to-repeat / click-to-sail cadence (docs/20-* §4.2, task H).
+	# Hold-to-repeat / click-to-sail / helm cadence (docs/20-* §4.2, tasks H+G).
 	_tick_movement(delta)
+	# Interpolated rendering (§2.6): render-only, after the logic tick.
+	_tick_marker_glide(delta)
+
+
+## Forces the lazy ocean-currents decode on the first frame after boot
+## (docs/20-* §4.16): the ~1 s raster decode + reversal index otherwise land
+## on the first current query — the fleet's first step or the HUD's current
+## arrow. One frame after `_ready` keeps the pinned boot budget intact while
+## still finishing before any input can move the fleet.
+func _tick_ocean_warmup() -> void:
+	if _ocean_warmed:
+		return
+	_ocean_warmed = true
+	OceanLayersLib.instance().current_at(
+		_fleet_cell, SailingSimLib.month_for(GameState.day))
+	# The decode just landed: repaint the HUD's current arrow, which stayed
+	# hidden while the currents raster was still warming.
+	_refresh_hud_indicators()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -301,6 +366,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Anything else: click-to-sail (path + cadence).
 			if _is_adjacent(target):
 				if _try_step(target):
+					# Any click input is a §4.2 helm-cancel seam (80-* §4.3).
+					helm_stop()
 					_cancel_sail_order()
 					get_viewport().set_input_as_handled()
 				return
@@ -316,9 +383,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		explore_here()
 		return
 
+	# Phase 6 (§4.2/§4.17, correction 8): `Space` waits at sea — in helm mode
+	# the first press stops the fleet, a press while stopped waits (below).
+	if event.is_action_pressed("world_wait"):
+		if _modal_open():
+			return
+		get_viewport().set_input_as_handled()
+		press_wait()
+		return
+	# Phase 6 (§4.17): `[` / `]` cycle the sail trim, both input modes.
+	if event.is_action_pressed("trim_forward"):
+		if _modal_open():
+			return
+		get_viewport().set_input_as_handled()
+		cycle_trim(true)
+		return
+	if event.is_action_pressed("trim_back"):
+		if _modal_open():
+			return
+		get_viewport().set_input_as_handled()
+		cycle_trim(false)
+		return
+
 	for action in MOVE_ACTIONS:
 		if event.is_action_released(action):
-			# Hold-to-repeat ends. A release never steps.
+			# Hold-to-repeat ends. A release never steps (and never stops the
+			# helm: a helm course is latched, §4.2).
 			if _hold_action == action:
 				_hold_action = ""
 				_hold_forced = false
@@ -332,7 +422,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			# cadence owns the repeats (§4.2 "hold to repeat").
 			if event is InputEventKey and (event as InputEventKey).echo:
 				continue
-			_press_direction(action)
+			# Input mode is read at use-time (S19 can flip it live mid-run):
+			# step = key-per-tile + hold repeat; helm = set course + auto-step.
+			if input_mode() == "helm":
+				helm_steer(action)
+			else:
+				_press_direction(action)
 			return
 
 
@@ -399,6 +494,145 @@ func set_hold_accumulator(elapsed: float, since_step: float = -1.0) -> void:
 		_hold_since_step = since_step
 
 
+# --- Phase 6: input modes, helm, wait, trim (docs/20-* §4.2, §4.17) ---------
+
+## The persisted control-prefs input mode, guard-read per correction 12:
+## `control_prefs` is task V's key block and may not exist yet — `.get` with
+## the documented default `"step"`. Read at use-time (S19 flips it live).
+## [member input_mode_override] is the test seam.
+func input_mode() -> String:
+	if not input_mode_override.is_empty():
+		return input_mode_override
+	var prefs = GameState.get("control_prefs")
+	if prefs is Dictionary:
+		return str((prefs as Dictionary).get("input_mode", "step"))
+	return "step"
+
+
+## The persisted helm heading (§4.2), guard-read with the pinned default `"E"`
+## (correction 12). It persists through helm stops and mode switches.
+func helm_heading() -> String:
+	var heading := str(GameState.world.get("heading", "E"))
+	return heading if SailingSimLib.heading_index(heading) >= 0 else "E"
+
+
+## True while the helm auto-stepper is running (§4.2).
+func helm_active() -> bool:
+	return _helm_stepping
+
+
+## The current auto-step interval, recomputed on every call (§4.2:
+## `clamp(1 / effective_speed(heading), 0.12, 2.0)` — trim, weather, wind and
+## currents all move it; a furled fleet has no speed and reads the 2.0 cap).
+func helm_interval() -> float:
+	var speed: int = SailingSimLib.effective_speed(helm_heading())
+	if speed <= 0:
+		return HELM_INTERVAL_MAX
+	return clampf(1.0 / float(speed), HELM_INTERVAL_MIN, HELM_INTERVAL_MAX)
+
+
+## Sets the helm heading from a direction action and starts (or re-targets)
+## the auto-stepper (§4.2): a new direction key changes the course without
+## stopping. A course change is manual input, so it replaces any click route.
+## Refused while docked (the fleet is not at sea) and before the map loads.
+## The first auto-step happens on the first interval tick, not here.
+func helm_steer(action: String) -> bool:
+	if not MOVE_ACTIONS.has(action) or not _is_loaded():
+		return false
+	if GameState.current_port != null:
+		return false
+	var heading: String = SailingSimLib.heading_of_delta(MOVE_ACTIONS[action])
+	if heading.is_empty():
+		return false
+	_cancel_sail_order()
+	GameState.world["heading"] = heading
+	# A course change starts a fresh interval on the new heading.
+	_helm_since_step = 0.0
+	_helm_stepping = true
+	return true
+
+
+## Stops the auto-stepper (§4.2 `Space`, or one of the cancel seams). The
+## heading persists in `GameState.world["heading"]` (§4.2/§2.6).
+func helm_stop() -> void:
+	_helm_stepping = false
+	_helm_since_step = 0.0
+
+
+## The 8-dir action id for a compass heading ("" outside the 8-dir domain).
+func _action_of_heading(heading: String) -> String:
+	var index := SailingSimLib.heading_index(heading)
+	if index < 0:
+		return ""
+	for action in MOVE_ACTIONS:
+		if MOVE_ACTIONS[action] == SailingSimLib.COMPASS_DELTAS[index]:
+			return action
+	return ""
+
+
+## The `Space` action (§4.2, §4.17, correction 8). Step mode: wait one day at
+## sea. Helm mode: the first press stops the fleet, a press while stopped
+## waits. Refused while docked (`SailingSim.wait_at_sea` returns false — a
+## port day is `advance_port_day`'s business) with no toast surfaced.
+## Returns `{stopped, waited}` so tests can tell the two helm presses apart.
+func press_wait() -> Dictionary:
+	var out := {"stopped": false, "waited": false}
+	if not _has_game() or not _is_loaded():
+		return out
+	if input_mode() == "helm" and _helm_stepping:
+		helm_stop()
+		out["stopped"] = true
+		return out
+	if not SailingSimLib.wait_at_sea():
+		return out
+	out["waited"] = true
+	_sync_hud()
+	if not _toast("world.wait.done"):
+		print("WorldMap: waited one day (world.wait.done not in ui_strings)")
+	return out
+
+
+## Cycles `GameState.world["sail_trim"]` through
+## `furled → reefed → normal → full` (§4.17): `forward` follows that order and
+## wraps, `false` walks it backwards. Works in both input modes; the next
+## step's cost picks the new state up automatically (the §4.4 pipeline).
+## Returns the new state.
+func cycle_trim(forward: bool) -> String:
+	var states: Array = SailingSimLib.TRIM_STATES
+	var index := states.find(SailingSimLib.sail_trim())
+	if index < 0:
+		index = states.find(SailingSimLib.DEFAULT_TRIM)
+	var next: String = states[posmod(index + (1 if forward else -1), states.size())]
+	GameState.world["sail_trim"] = next
+	_toast_trim(next)
+	_refresh_hud_indicators()
+	return next
+
+
+## The trim-cycle toast (§4.17 / 80-* §4.7.10: the chip label plus the state
+## name — no separate toast key). Until the master merges `world.trim.*` the
+## state change stays a console line, never invented copy.
+func _toast_trim(state: String) -> void:
+	if _hud == null or not _hud.has_method("toast_text"):
+		return
+	if not DataLoader.ui_strings.has("world.trim.chip") \
+			or not DataLoader.ui_strings.has("world.trim.%s" % state):
+		print("WorldMap: sail trim now '%s' (world.trim.* not in ui_strings)"
+			% state)
+		return
+	_hud.toast_text("%s · %s" % [
+		I18n.t_key("world.trim.chip"),
+		I18n.t_key("world.trim.%s" % state),
+	])
+
+
+## Refreshes the HUD's Phase-6 indicators (trim chip, wind/current arrows,
+## calendar) after a host-side change with no EventBus signal (a trim cycle).
+func _refresh_hud_indicators() -> void:
+	if _hud != null and _hud.has_method("refresh_sailing_indicators"):
+		_hud.refresh_sailing_indicators()
+
+
 ## Click-to-sail: computes the §4.2 route to `target` and starts walking it.
 ## Returns true when a route was found and stored.
 ##
@@ -434,11 +668,20 @@ func sail_to(target: Vector2i) -> bool:
 		if not _toast("world.move_blocked"):
 			print("WorldMap: click on land/ice/off-grid rejected; no clock cost")
 		return false
+	# §4.18: a click onto an in-month frozen tile is rejected like a land
+	# click (the destination pre-check; mid-path tiles block on arrival via
+	# the per-step gate in `is_move_legal`).
+	if _click_hits_ice(cell):
+		if not _toast("world.ice.blocked"):
+			print("WorldMap: click on in-month sea ice rejected; no clock cost")
+		return false
 	var path: Array[Vector2i] = _sail_compute(cell)
 	if path.is_empty():
 		_reject_sail()
 		return false
-	# A click is manual input: it replaces a held direction and any old order.
+	# A click is manual input: it replaces a held direction, any old order,
+	# and the helm (§4.2 cancel seams).
+	helm_stop()
 	_hold_action = ""
 	_hold_forced = false
 	_reset_cadence()
@@ -448,6 +691,16 @@ func sail_to(target: Vector2i) -> bool:
 	_sail_elapsed = 0.0
 	_sail_suspended = false
 	return true
+
+
+## §4.18 click pre-check: true when `cell` is water but inside an in-month
+## seasonal-ice polygon (`OceanLayers.ice_blocks`, the month of `GameState.day`).
+## Skipped before a run exists (no calendar yet — the same guard the sim uses).
+func _click_hits_ice(cell: Vector2i) -> bool:
+	if not _has_game() or GameState.day <= 0:
+		return false
+	return OceanLayersLib.instance().ice_blocks(
+		cell, SailingSimLib.month_for(GameState.day))
 
 
 ## The shore-tile branch of [method sail_to]: route to the port's berth and dock
@@ -466,6 +719,7 @@ func _sail_to_shore(shore: Vector2i, port_id: String) -> bool:
 	if path.is_empty():
 		_reject_sail()
 		return false
+	helm_stop()
 	_hold_action = ""
 	_hold_forced = false
 	_reset_cadence()
@@ -620,13 +874,18 @@ func _try_step(target: Vector2i) -> bool:
 
 	if _has_game():
 		# Applies the tile + `1/effective_speed` days + day-boundary loop.
+		# The heading is the move's own 8-dir delta (F's §4.2 pin: "a step is
+		# a step wherever it comes from") — in helm mode the auto-step always
+		# carries `world.heading` as its delta, so the derived heading equals
+		# the helm heading and step mode stays byte-identical to W4.
 		SailingSimLib.try_move(step_target, _loader, _fleet_cell)
 	# The sim stored the un-normalised cell; re-assert the wrapped one.
 	GameState.set_world_tile(landed)
 
 	_reject_logged = false
 	_fleet_cell = landed
-	_place_marker()
+	# §2.6 interpolated rendering: animate over this step's cadence interval.
+	_glide_marker_to(landed, _step_render_seconds())
 	_update_camera()
 	_reveal()
 	_sync_hud()
@@ -674,10 +933,19 @@ func _dock_at(target: Vector2i) -> bool:
 	var berth: Vector2i = _loader.port_cell(port_id)
 	_reject_logged = false
 	# §4.11.1 clock cost: exactly one move's worth of days before the screen.
-	# Deliberately state-only (like `SailingSim.try_move`), then the berth is
-	# re-asserted so a rejected/otherwise odd berth can never strand the fleet.
+	# Master ruling (Phase 6): the docking move charges `move_cost` with the
+	# same heading the docking move carries — the helm heading in helm mode,
+	# or the step-delta direction otherwise (identical here: a docking step
+	# always carries its own delta). The parameterless average survives only
+	# as the fallback for a target that names no 8-dir step. Deliberately
+	# state-only (like `SailingSim.try_move`), then the berth is re-asserted
+	# so a rejected/otherwise odd berth can never strand the fleet.
 	if _has_game():
-		SailingSimLib.advance_clock(SailingSimLib.move_cost())
+		var heading: String = SailingSimLib.heading_of_delta(_wrapped_delta(target))
+		if heading.is_empty():
+			SailingSimLib.advance_clock(SailingSimLib.move_cost())
+		else:
+			SailingSimLib.advance_clock(SailingSimLib.move_cost(heading))
 	if berth.x >= 0:
 		GameState.set_world_tile(berth)
 		_fleet_cell = berth
@@ -685,8 +953,9 @@ func _dock_at(target: Vector2i) -> bool:
 	_update_camera()
 	_reveal()
 	_sync_hud()
-	# Docking ends any click route and any held direction: the fleet is not at
-	# sea any more.
+	# Docking ends any click route, any held direction and the helm (§4.2
+	# cancel seams): the fleet is not at sea any more. The heading persists.
+	helm_stop()
 	_cancel_sail_order()
 	_hold_action = ""
 	_reset_cadence()
@@ -719,14 +988,21 @@ func _step_is_legal(from: Vector2i, to: Vector2i) -> bool:
 
 
 ## Docs/20-* §4.2/§6: a blocked move is silent and costs nothing; a brief toast
-## is the only feedback (never a modal).
+## is the only feedback (never a modal). §4.18: a move refused for in-month
+## seasonal ice names its own toast — the sim records the reason key on the
+## refused `is_move_legal` evaluation, and this maps it to the §4.7.10
+## `world.ice.blocked` ui key (the sim's `ICE_BLOCKED_KEY` marker predates the
+## key table's dotted spelling).
 func _reject_move(_target: Vector2i) -> void:
 	if _reject_logged:
 		return
 	_reject_logged = true
+	if SailingSimLib.last_move_blocked_key == SailingSimLib.ICE_BLOCKED_KEY:
+		if _toast("world.ice.blocked"):
+			return
 	if _toast("world.move_blocked"):
 		return
-	print("WorldMap: move rejected (land/reef/edge/corner cut); no clock cost")
+	print("WorldMap: move rejected (land/reef/edge/corner cut/ice); no clock cost")
 
 
 ## A click on water that has no sea route (§4.2): no clock cost, one toast.
@@ -764,7 +1040,8 @@ func _tick_movement(delta: float) -> void:
 	if delta <= 0.0:
 		return
 	# Nothing to advance: do not pay the modal scan every frame.
-	if _hold_action.is_empty() and (_sail_path.is_empty() or _sail_suspended):
+	if _hold_action.is_empty() and not _helm_stepping \
+			and (_sail_path.is_empty() or _sail_suspended):
 		return
 	# A modal freezes the world: the cadence holds its phase but does not run.
 	if _modal_open():
@@ -777,6 +1054,11 @@ func _tick_movement(delta: float) -> void:
 			_reset_cadence()
 		else:
 			_tick_hold(delta)
+	# §4.2 helm mode: the auto-stepper runs beside the hold cadence with the
+	# same per-step semantics (one normal `try_move`, no batching), and pauses
+	# for modals exactly like the hold does (the early return above).
+	if _helm_stepping:
+		_tick_helm(delta)
 	if _sail_path.is_empty() or _sail_suspended:
 		return
 	_sail_elapsed += delta
@@ -784,6 +1066,28 @@ func _tick_movement(delta: float) -> void:
 			and not _sail_path.is_empty() and not _sail_suspended:
 		_sail_elapsed -= SAIL_STEP_SECONDS
 		_step_along_sail_path()
+
+
+## The helm auto-stepper (§4.2): one normal move along `world.heading` every
+## `helm_interval()` seconds, the interval **recomputed per step** so a trim
+## change, a weather roll or a current edge re-times the cadence immediately.
+## A blocked step costs nothing and consumes its slot (never banked) — the
+## same rule as the hold repeat. Docking, a battle handoff or a game over end
+## the helm; the heading itself persists.
+func _tick_helm(delta: float) -> void:
+	_helm_since_step += delta
+	while _helm_stepping \
+			and _helm_since_step >= helm_interval() - SailingSimLib.CLOCK_EPSILON:
+		_helm_since_step -= helm_interval()
+		var action := _action_of_heading(helm_heading())
+		if action.is_empty():
+			helm_stop()
+			return
+		_try_step(_fleet_cell + MOVE_ACTIONS[action])
+		if GameState.current_port != null or battle_in_progress() \
+				or game_over_open() or _sail_suspended:
+			helm_stop()
+			return
 
 
 ## One held direction's cadence: 0.25 s delay, then 1 step every 0.125 s.
@@ -1145,6 +1449,10 @@ func _open_encounter(encounter: Dictionary) -> void:
 			and not _battle_encounter.is_empty():
 		return
 	_battle_encounter = encounter.duplicate(true)
+	# §4.2: a battle handoff cancels the helm (the single funnel every opener
+	# — contact, chain, the player's own attack — goes through). The route is
+	# only *suspended*; the helm is not resumed after the battle.
+	helm_stop()
 	# Only the player's own right-click attack (see [_attack]) carries the
 	# §4.11.11.2 loot row; every other opener — contact, chain — clears it.
 	_battle_player_initiated = false
@@ -1866,9 +2174,78 @@ func _reveal() -> void:
 
 func _place_marker() -> void:
 	# 24×24 white square, black outline (docs/80-* §4.8): the marker node is
-	# centered on the tile it occupies.
-	_fleet_marker.position = Vector2(_fleet_cell) * float(_cell_pixels) \
+	# centered on the tile it occupies. A `place` is always a snap: teleports
+	# (docking, a battle restore, a save load) never animate (§2.6).
+	_glide_duration = 0.0
+	_fleet_marker.position = _marker_px(_fleet_cell)
+
+
+## The on-screen pixel centre of `cell`.
+func _marker_px(cell: Vector2i) -> Vector2:
+	return Vector2(cell) * float(_cell_pixels) \
 		+ Vector2(_cell_pixels, _cell_pixels) * 0.5
+
+
+## The render duration of one step's animation: the helm auto-step interval
+## under helm, otherwise the hold/click cadence (§2.6).
+func _step_render_seconds() -> float:
+	return helm_interval() if _helm_stepping else SAIL_STEP_SECONDS
+
+
+## §2.6 interpolated rendering: the marker glides from where it is drawn now
+## to `to_cell`'s tile centre over `duration` seconds. **Render-only**: the
+## offset lives in [_glide_from]/[_glide_to]/[_glide_elapsed]/[_glide_duration]
+## and reaches nothing but `_fleet_marker.position` (via
+## [_tick_marker_glide]); `fleet_cell()`, the ledger, encounters, docking,
+## the minimap and saves all keep reading tile positions. A non-positive
+## duration or a disabled seam snaps instead.
+func _glide_marker_to(to_cell: Vector2i, duration: float) -> void:
+	if not _glide_enabled or duration <= 0.0:
+		_glide_duration = 0.0
+		_fleet_marker.position = _marker_px(to_cell)
+		return
+	_glide_from = _fleet_marker.position
+	_glide_to = _marker_px(to_cell)
+	_glide_elapsed = 0.0
+	_glide_duration = duration
+
+
+## Advances the render-only glide. The one writer of the marker's animated
+## position; logic never runs here.
+func _tick_marker_glide(delta: float) -> void:
+	if _glide_duration <= 0.0:
+		return
+	_glide_elapsed += delta
+	var t := _glide_elapsed / _glide_duration
+	if t >= 1.0 or not _glide_enabled:
+		_glide_duration = 0.0
+		_fleet_marker.position = _glide_to
+		return
+	_fleet_marker.position = _glide_from.lerp(_glide_to, t)
+
+
+## True while the marker is between tiles (render-only state).
+func marker_gliding() -> bool:
+	return _glide_duration > 0.0
+
+
+## The marker's current render offset from the destination tile centre
+## (pixels). Diagnostics for the purity test; nothing in the rules reads it.
+func marker_offset() -> Vector2:
+	return _fleet_marker.position - _glide_to
+
+
+## Test seam for the interpolation-purity proof: `false` snaps every step.
+func set_marker_glide_enabled(enabled: bool) -> void:
+	_glide_enabled = enabled
+	if not enabled:
+		_glide_duration = 0.0
+		_fleet_marker.position = _marker_px(_fleet_cell)
+
+
+## Deterministic replacement for `_process`'s glide tick in headless tests.
+func advance_render(seconds: float) -> void:
+	_tick_marker_glide(seconds)
 
 
 ## Centers the camera on the fleet (which wraps) and refreshes the chunk ring.
@@ -1930,6 +2307,14 @@ func _ensure_world_state() -> void:
 	if not GameState.world.has("weather"):
 		# §4.7 weather is rolled by the daily ledger (T7/T8); "calm" until then.
 		GameState.world["weather"] = SailingSimLib.DEFAULT_WEATHER
+	# Phase-6 world keys (correction 12): the same guard defaults F pinned in
+	# `new_game`, so a hand-built state sails like a fresh run.
+	if not GameState.world.has("sail_trim"):
+		GameState.world["sail_trim"] = SailingSimLib.DEFAULT_TRIM
+	if not GameState.world.has("heading"):
+		GameState.world["heading"] = "E"
+	if not GameState.world.has("wind_dir"):
+		GameState.world["wind_dir"] = "E"
 
 
 ## The pre-run parking cell: Lisbon's derived berth tile, else any harbour the
