@@ -63,10 +63,10 @@ custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
 text = "Load game"
 
-[node name="Language" type="Button" parent="Center/Stack/Buttons"]
+[node name="Settings" type="Button" parent="Center/Stack/Buttons"]
 custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
-text = "中文 / EN"
+text = "Settings"
 
 [node name="Quit" type="Button" parent="Center/Stack/Buttons"]
 custom_minimum_size = Vector2(280, 40)

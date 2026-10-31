@@ -87,8 +87,14 @@ func _step1_title() -> void:
 		"step 1: title offers New Game")
 	_check(title.get_node_or_null("Center/Stack/Buttons/Load") != null,
 		"step 1: title offers Load Game")
-	_check(title.get_node_or_null("Center/Stack/Buttons/Language") != null,
-		"step 1: title offers the language toggle")
+	# Amended 2026-10-31: the locale lives only in S19, so S1 offers a
+	# Settings entry instead of a language toggle button.
+	_check(title.get_node_or_null("Center/Stack/Buttons/Settings") != null,
+		"step 1: title offers the Settings entry (locale lives in S19)")
+	var settings_panel = title.open_settings_panel()
+	_check(settings_panel != null
+		and settings_panel.locale_button() != null,
+		"step 1: S19 carries the only language toggle")
 	var proj: Variant = ProjectSettings.get_setting("display/window/size/viewport_width")
 	var proj_h: Variant = ProjectSettings.get_setting("display/window/size/viewport_height")
 	_check(int(proj) == 1280 and int(proj_h) == 720,

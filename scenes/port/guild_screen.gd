@@ -103,9 +103,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		go_back()
 		return
-	if event.is_action_pressed("toggle_locale"):
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 # --- Public API (tests + hosts) ------------------------------------------

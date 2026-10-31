@@ -107,11 +107,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		leave()
 		return
-	if event.is_action_pressed("toggle_locale"):
-		if has_modal():
-			return
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 ## True while a modal is up on this screen (the HUD's queued dialogs or any

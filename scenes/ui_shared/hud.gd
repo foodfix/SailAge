@@ -70,7 +70,6 @@ signal explore_requested
 @onready var _gold_label: Label = $TopRow/Gold
 @onready var _morale_label: Label = $TopRow/Morale
 @onready var _area_label: Label = $TopRow/Area
-@onready var _lang_button: Button = $TopRow/LangButton
 @onready var _provisions_label: Label = $BottomRow/Provisions
 @onready var _water_label: Label = $BottomRow/Water
 @onready var _crew_label: Label = $BottomRow/Crew
@@ -139,9 +138,6 @@ func _ready() -> void:
 		_water_label, _crew_label, _cargo_label, _speed_label, _weather_label,
 	]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_lang_button.custom_minimum_size.y = PaletteLib.TOP_BAR_H
-	_lang_button.text = I18n.t_key("ui.language_toggle")
-	_lang_button.pressed.connect(_on_language_pressed)
 	_toast.visible = false
 	_toast_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_toast.add_theme_stylebox_override("panel", _toast_style())
@@ -172,15 +168,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if has_modal():
 		return
 	# No minimap on S4 (the port menu replaces the sea viewport), but the
-	# locale toggle still works there (docs/80-* §4.5).
 	if not _minimap_visible:
-		if event.is_action_pressed("toggle_locale"):
-			get_viewport().set_input_as_handled()
-			I18n.toggle_locale()
 		return
-	if event.is_action_pressed("toggle_locale"):
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 # --- Public API (hosts + later tasks) ---------------------------------------
@@ -550,7 +539,6 @@ func _on_fleet_changed() -> void:
 
 
 func _on_locale_changed(_locale: String) -> void:
-	_lang_button.text = I18n.t_key("ui.language_toggle")
 	refresh()
 	# The minimap caption is localised too (`world.minimap`).
 	_apply_minimap_rect()
@@ -566,10 +554,6 @@ func _on_locale_changed(_locale: String) -> void:
 func _on_port_entered(_port_id: String) -> void:
 	_refresh_top()
 	queue_redraw()
-
-
-func _on_language_pressed() -> void:
-	I18n.toggle_locale()
 
 
 # --- Minimap (docs/20-* §4.12, docs/80-* §4.5) ----------------------------

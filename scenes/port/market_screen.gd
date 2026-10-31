@@ -72,7 +72,6 @@ signal traded(kind: String, good_id: String, qty: int)
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _gold: Label = $Layout/VBox/Header/Gold
 @onready var _hold: Label = $Layout/VBox/Header/Hold
-@onready var _lang_button: Button = $Layout/VBox/Header/Lang
 @onready var _back_button: Button = $Layout/VBox/Header/Back
 @onready var _table_frame: PanelContainer = $Layout/VBox/TableFrame
 @onready var _column_header: HBoxContainer = \
@@ -118,10 +117,8 @@ func _ready() -> void:
 	_invest_status.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_table_frame.add_theme_stylebox_override("panel", _panel_style())
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_lang_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_invest_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
-	_lang_button.pressed.connect(I18n.toggle_locale)
 	_invest_button.pressed.connect(_on_invest_pressed)
 	_toast.visible = false
 	_goods_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -152,11 +149,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		go_back()
 		return
-	if event.is_action_pressed("toggle_locale"):
-		if has_modal():
-			return
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 ## True while a modal is up (the S14 panel, or a dialog another screen left in
@@ -207,11 +199,6 @@ func type_qty(good_id: String, text: String) -> void:
 	# sanitised/clamped value.
 	field.text = text
 	_on_qty_changed(good_id, text)
-
-
-## Presses the header's language toggle (the `L` key path in tests).
-func press_language() -> void:
-	_lang_button.pressed.emit()
 
 
 ## Presses one of the row's preset buttons (`1`, `10`, `100`, `max`).
@@ -445,7 +432,6 @@ func _bind() -> void:
 	var port_name := I18n.t(port.get("name", {})) if not port.is_empty() else "-"
 	_title.text = I18n.fmt("market.title", {"port": port_name})
 	_back_button.text = I18n.t_key("ui.back")
-	_lang_button.text = I18n.t_key("ui.language_toggle")
 	_invest_button.text = I18n.fmt(
 		"market.invest", {"amount": TradeEngineLib.INVEST_CHUNK}
 	)

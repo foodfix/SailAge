@@ -19,6 +19,9 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 
 const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
+## Phase-5 S19 settings modal, pre-game mount (docs/80-* §4.6.3 amended:
+## density lives here, not on S2).
+const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 
 @onready var _background: ColorRect = $Background
 @onready var _stack: VBoxContainer = $Center/Stack
@@ -28,8 +31,8 @@ const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
 @onready var _buttons: VBoxContainer = $Center/Stack/Buttons
 @onready var _new_game_button: Button = $Center/Stack/Buttons/NewGame
 @onready var _load_button: Button = $Center/Stack/Buttons/Load
+@onready var _settings_button: Button = $Center/Stack/Buttons/Settings
 @onready var _quit_button: Button = $Center/Stack/Buttons/Quit
-@onready var _lang_button: Button = $Center/Stack/Buttons/Language
 @onready var _data_error: Label = $Center/Stack/DataError
 
 ## Routing switch for the New-game edge (the `GameState.new_game(route)` and
@@ -48,24 +51,17 @@ func _ready() -> void:
 	_subtitle.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_phase_tag.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_data_error.add_theme_color_override("font_color", PaletteLib.BAD)
-	for button in [_new_game_button, _load_button, _quit_button, _lang_button]:
+	for button in [_new_game_button, _load_button, _settings_button,
+			_quit_button]:
 		button.custom_minimum_size = Vector2(280, PaletteLib.BUTTON_H)
 
 	_new_game_button.pressed.connect(open_new_game)
 	_load_button.pressed.connect(open_load_dialog)
+	_settings_button.pressed.connect(open_settings_panel)
 	_quit_button.pressed.connect(_on_quit)
-	_lang_button.pressed.connect(I18n.toggle_locale)
 	EventBus.locale_changed.connect(_on_locale_changed)
+	SettingsPanelLib.attach_to(self)
 	_bind()
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	# `L` toggles the locale on S1/S2 (docs/80-* §4.3); Esc is a no-op here.
-	if event.is_action_pressed("toggle_locale"):
-		if has_modal():
-			return
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 ## Opens the New-game edge (S1 → S2, docs/80-* §4.2).
@@ -85,6 +81,23 @@ func open_load_dialog() -> Control:
 	return SaveSystem.open_load_dialog(self)
 
 
+## Opens the S19 settings modal (docs/80-* §4.6.3 amended): pre-game mount,
+## where the sea-traffic dial lives now that S2 has no density row. Returns
+## the panel (null only if the scene is missing) so tests can drive it.
+func open_settings_panel() -> Control:
+	var panel := get_node_or_null("SettingsPanel")
+	if panel == null:
+		panel = SettingsPanelLib.attach_to(self)
+	if panel != null:
+		(panel as Control).call("open")
+	return panel
+
+
+## The attached settings panel (tests / hosts), or null.
+func settings_panel() -> Control:
+	return get_node_or_null("SettingsPanel")
+
+
 ## True while a modal (the slot dialog / a message) is up (docs/90-* §11).
 func has_modal() -> bool:
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
@@ -98,8 +111,8 @@ func _bind() -> void:
 	_subtitle.text = I18n.t_key("title.subtitle")
 	_new_game_button.text = I18n.t_key("title.new_game")
 	_load_button.text = I18n.t_key("title.load_game")
+	_settings_button.text = I18n.t_key("settings.title")
 	_quit_button.text = I18n.t_key("title.quit")
-	_lang_button.text = I18n.t_key("ui.language_toggle")
 	# docs/90-* §5.2/§11: invalid data at startup is shown here, never a crash.
 	_data_error.visible = not DataLoader.load_ok
 	_data_error.text = "" if DataLoader.load_ok else I18n.fmt(

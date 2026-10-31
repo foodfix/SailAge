@@ -54,7 +54,7 @@ Counts are compared, not just the green summary (table at the bottom).
 | 5 | Ride one demand event end-to-end (rumor → buy cheap nearby → sell into the surge → profit) | `test_aliveness` (rotation, telegraph, surge, trader softening, expiry restore); manual step 5 |
 | 6 | 30 days of pirating @ `extreme` doesn't run away the gold curve | `test_density` extreme perf + loot caps (`min(1000, …)` / coaster pin) in `test_ecology` |
 | 7 | Sight a captain in port, pay 20g, verify the position against the map | `test_aliveness` (60/40 facility, 75% presence, posters ≤ 40, exact reveal); manual step 7 |
-| 8 | S2 → S19 round-trip of the density dial | `test_density` (all five presets; raise refills, lower never culls, deserted zero) |
+| 8 | S1 → S19 (pre-game) and S4 → S19 (mid-run) round-trip of the density dial | `test_density` (all five presets; raise refills, lower never culls, deserted zero) |
 | 9 | zh/en parity, zero `<key>` fallbacks | locale audit below (448 keys, 0 bad) |
 | 10 | Save/load reproduces fleets (positions, legs, specialties, captains, respawns) | `test_save_v5` + `test_aliveness` respawn round-trip |
 
@@ -102,7 +102,8 @@ contacts.
 godot --path .
 ```
 
-1. **Title → New Game → Portugal → pick a sea-traffic preset → Confirm.**
+1. **Title → Settings → pick a sea-traffic preset** (the only place; S2 has
+   no density row) → Close → **New Game → Portugal → Confirm.**
    You start docked in Lisbon with 5 000g and a caravel; the sea already
    carries ~130 of the ~272 eventual fleets (half-cap initial fill).
 2. **Watch the water.** Nation-coloured squares (red = pirates) move along
@@ -132,16 +133,20 @@ godot --path .
    stable all day. If a wanted poster shows a pirate within 40 tiles, pay
    **20g** ("buy a round") and read its exact tile + nearest port — then
    check it on the Chart.
-8. **Settings (S19):** from the port hub footer open **Settings**, drop the
-   dial to `deserted` (the sea empties of contacts and spawns), then back to
-   `extreme` and watch it repopulate over the next days. Lowering never
-   removes a fleet already afloat.
+8. **Settings (S19):** open it from the **title screen** (pre-game) or the
+   port-hub footer (mid-run). Drop the dial to `deserted` (the sea empties of
+   contacts and spawns), then back to `extreme` and watch it repopulate over
+   the next days; lowering never removes a fleet already afloat. The mid-run
+   panel also has **Return to main menu** (confirm-first, warns that unsaved
+   progress is lost — save from the S4 row first if you want to keep the run).
 9. **Save / Load:** save in port, quit, load — day, gold, cargo, stocks,
    fleets (positions, route legs, specialties, captain names, respawn
    cooldowns) all return.
-10. **Language:** press **L** anywhere; every label, captain name, rumour,
-    event name and warning flips between 中文 and English with no `<key>`
-    literal (audit: 0 missing in both locales).
+10. **Language:** open **Settings** (S1 or S4) and press the `[中文 / EN]`
+    button — the only language control in the game; every label, captain
+    name, rumour, event name and warning flips between 中文 and English with
+    no `<key>` literal (audit: 0 missing in both locales). The old `L` hotkey
+    and the top-bar / market / S1 / S2 buttons are gone.
 
 ### Reported bug checklist (hand runs)
 

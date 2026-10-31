@@ -54,12 +54,6 @@ size_flags_horizontal = 3
 text = "-"
 vertical_alignment = 1
 
-[node name="LangButton" type="Button" parent="TopRow"]
-custom_minimum_size = Vector2(120, 32)
-layout_mode = 2
-focus_mode = 0
-text = "中文 / EN"
-
 [node name="BottomBar" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 12

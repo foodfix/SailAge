@@ -1159,11 +1159,10 @@ func _test_market_screen_locale_and_back() -> void:
 	I18n.set_locale("en")
 	_check((wine_row["name"] as Label).text == "Wine", "and back to en")
 
-	# The header language toggle works from this screen too (docs/80 §4.3).
-	screen.press_language()
-	_check(I18n.get_locale() == "zh", "the header toggle switches to zh")
-	screen.press_language()
-	_check(I18n.get_locale() == "en", "and back to en")
+	# Amended 2026-10-31: the market no longer owns a language toggle — S19
+	# is the only place (docs/80-* §4.6.3), and the header button is gone.
+	_check(screen.get_node_or_null("Layout/VBox/Header/Lang") == null,
+		"the market header carries no language button (S19 owns the toggle)")
 
 	# Esc / Back → port_screen.tscn; the route target must exist.
 	var script := load("res://scenes/port/market_screen.gd")

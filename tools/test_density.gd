@@ -1,6 +1,7 @@
 extends Node
-## Phase-5 task M acceptance tests: the density dial UI (S2 row + S19 modal)
-## and the measured scaling proof.
+## Phase-5 task M acceptance tests: the density dial UI (S19 modal on S1 and
+## S4; amended 2026-10-31 — S2 has no density row) and the measured scaling
+## proof.
 ## (docs/80-UI-UX.md §4.6.3/§4.2/§4.3/§4.7/§4.7.9; docs/60-COMBAT.md §4.1.2,
 ## §4.11.11.5; docs/10-DATA-SCHEMA.md §4.10; docs/90-* §8.1 `npc_preset`.)
 ##
@@ -9,7 +10,8 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise.
 ##
 ## Sections:
-##   1 the S2 density row (default normal, five presets, feeds new_game);
+##   1 the S19 mounts (S1 pre-game applies before new_game; S4 mid-run) and
+##     the absence of any S2 density row;
 ##   2 preset round-trip through the save payload (all five presets);
 ##   3 the initial fill ≈ half the core cap at normal (the seeded count);
 ##   4 mid-run semantics through S19 (raise refills via the trickle, lowering
@@ -27,6 +29,7 @@ const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const NationalityScene := preload("res://scenes/title/nationality_select.tscn")
+const TitleScene := preload("res://scenes/title/title_screen.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 const SettingsScene := preload("res://scenes/ui_shared/settings_panel.tscn")
 
@@ -146,55 +149,67 @@ func _count_role(role: String) -> int:
 	return count
 
 
-# --- 1. The S2 density row (docs/80-* §4.6.3) --------------------------------
+# --- 1. Settings mounts: S1 pre-game + S4 mid-run (80-* §4.6.3 amended) ------
 
 func _test_s2_row() -> void:
-	var screen = NationalityScene.instantiate()
-	add_child(screen)
+	# Amended 2026-10-31: S2 is the nationality grid only; the sea-traffic
+	# dial lives in S19, mounted on S1 (pre-game) and S4 (mid-run).
+	var s2 = NationalityScene.instantiate()
+	add_child(s2)
 	await get_tree().process_frame
-	# §4.6.3: five presets, normal (the data's default_preset) selected.
-	_check(screen.density_preset() == str(DataLoader.npc_config.get(
-			"default_preset", "normal")),
-		"the S2 row defaults to the data's default_preset (%s)"
-		% screen.density_preset())
-	var ids: Array[String] = []
-	for preset in PRESETS:
-		var button: Button = screen.get_node_or_null(
-			"Layout/DensityRow/DensityPresets/Density_%s" % preset)
-		_check(button != null, "the S2 row renders the '%s' preset" % preset)
-		if button != null:
-			ids.append(preset)
-			_check(button.text == I18n.t_key("settings.density.%s" % preset),
-				"the '%s' toggle uses its settings.* key" % preset)
-	_check(ids == PRESETS,
-		"the S2 row renders the five locked presets in order (%s)"
-		% ", ".join(ids))
-	# A choice lands in GameState.npc_preset on confirm, before new_game's
-	# seeded initial fill — the extreme choice fills to half the EXTREME core
-	# cap (≈ 4× normal), deserted to zero.
-	screen.route_after_confirm = false
-	var normal_fill := _make_run().fleets().size()
-	screen.set_density_preset("extreme")
-	_check(screen.density_preset() == "extreme", "set_density_preset selects")
-	screen.confirm_selection()
-	_check(GameState.npc_preset == "extreme",
-		"confirm writes the S2 choice into GameState.npc_preset")
-	var extreme_sim := _sim_for_preset("extreme")
-	var extreme_fill: int = GameState.npc_fleets.size()
-	var extreme_half: int = extreme_sim.core_cap() / 2
-	_check(extreme_fill <= extreme_half and extreme_fill >= extreme_half - 8,
-		"the S2 extreme choice fills half the extreme core cap (target %d, seeded exact %d)"
-		% [extreme_half, extreme_fill])
-	_check(extreme_fill > 2 * normal_fill,
-		"the extreme fill is visibly multiplied (%d vs %d at normal)"
-		% [extreme_fill, normal_fill])
-	screen.set_density_preset("deserted")
-	screen.confirm_selection()
-	_check(GameState.npc_preset == "deserted",
-		"the S2 deserted choice is written on confirm")
-	_check(GameState.npc_fleets.is_empty(),
-		"the S2 deserted choice starts with zero fleets")
-	screen.queue_free()
+	_check(s2.get_node_or_null("Layout/DensityRow") == null,
+		"S2 no longer carries a density row (80-* §4.6.3 amended)")
+	_check(s2.get_node_or_null("Layout/Cards") != null,
+		"S2 still renders the nationality cards")
+	s2.queue_free()
+	await get_tree().process_frame
+
+	# S1 mount: the Settings button opens the panel; no return action there.
+	var title = TitleScene.instantiate()
+	title.route_to_nationality = false
+	add_child(title)
+	await get_tree().process_frame
+	var panel = title.open_settings_panel()
+	_check(panel != null, "the S1 Settings button opens the S19 panel")
+	if panel != null:
+		_check((panel as Control).visible, "the S1-hosted panel opens visible")
+		_check(not panel.call("host_is_port"),
+			"the S1 mount is not a port host")
+		_check(not (panel.call("return_button") as Control).is_visible_in_tree(),
+			"the S1 mount hides 'Return to main menu' (no run to leave)")
+		_check(panel.call("locale_button") != null,
+			"the S1 mount carries the language toggle")
+		_check(title.get_node_or_null("Center/Stack/Buttons/Language") == null,
+			"S1 no longer has its own language button")
+		_check(s2.get_node_or_null("Layout/Footer/Lang") == null,
+			"S2 no longer has its own language button")
+		# A pre-game choice writes the run input before new_game.
+		_check(panel.call("apply_preset", "extreme"),
+			"the S1 panel applies a preset")
+		_check(GameState.npc_preset == "extreme",
+			"the S1 choice writes GameState.npc_preset before a new game")
+		s2 = NationalityScene.instantiate()
+		s2.route_after_confirm = false
+		add_child(s2)
+		await get_tree().process_frame
+		var extreme_sim := _sim_for_preset("extreme")
+		var normal_fill := _sim_for_preset("normal").fleets().size()
+		s2.confirm_selection()
+		var extreme_fill: int = GameState.npc_fleets.size()
+		var extreme_half: int = extreme_sim.core_cap() / 2
+		_check(extreme_fill <= extreme_half and extreme_fill >= extreme_half - 8,
+			"the pre-game extreme choice survives new_game's fill (target %d, seeded exact %d)"
+			% [extreme_half, extreme_fill])
+		_check(extreme_fill > 2 * normal_fill,
+			"the extreme fill is visibly multiplied (%d vs %d at normal)"
+			% [extreme_fill, normal_fill])
+		panel.call("apply_preset", "deserted")
+		s2.confirm_selection()
+		_check(GameState.npc_fleets.is_empty(),
+			"a deserted pre-game choice starts with zero fleets")
+		s2.queue_free()
+		await get_tree().process_frame
+	title.queue_free()
 	await get_tree().process_frame
 
 
@@ -446,6 +461,22 @@ func _test_s19_modal() -> void:
 	panel.apply_preset("high")
 	_check(GameState.npc_preset == "high",
 		"S19 applies the preset mid-run into GameState.npc_preset")
+	# Amended 2026-10-31: S19 owns the ONLY language toggle — the old `L`
+	# hotkeys and the top-bar/S1/S2/market buttons are gone.
+	_check(panel.locale_button() != null,
+		"S19 carries the language toggle")
+	_check(port.get_node_or_null("Layout/VBox/Header/Lang") == null,
+		"the market header no longer carries a language button")
+	var hud = port.get_node_or_null("HUD")
+	if hud != null:
+		_check(hud.get_node_or_null("TopRow/LangButton") == null,
+			"the HUD top bar no longer carries a language button")
+	var locale_before: String = I18n.get_locale()
+	panel.locale_button().pressed.emit()
+	_check(I18n.get_locale() != locale_before,
+		"the S19 toggle flips the locale (%s -> %s)"
+		% [locale_before, I18n.get_locale()])
+	panel.locale_button().pressed.emit()
 	# zh/en: every label rebinds on locale_changed with no <key> fallbacks.
 	var title: Label = panel.get_node("Center/Panel/Margin/Body/Title")
 	var before_toggle: String = title.text
@@ -467,6 +498,35 @@ func _test_s19_modal() -> void:
 	panel.open()
 	panel.close()
 	_check(not port.has_modal(), "Close leaves S4 without a modal")
+	# S4 mount: the return-to-menu action is visible, confirm-first, and its
+	# confirmation names the unsaved-progress risk (amended §4.6.3).
+	panel.route_to_menu = false
+	panel.open()
+	var ret: Button = panel.return_button()
+	_check(ret != null and ret.is_visible_in_tree(),
+		"the S4 mount shows 'Return to main menu'")
+	if ret != null:
+		_check(ret.text == I18n.t_key("settings.return_menu"),
+			"the return action uses settings.return_menu")
+		var dlg: Control = panel.open_return_confirm()
+		_check(dlg != null and dlg.is_visible_in_tree(),
+			"the return action opens a confirm dialog first")
+		var warned := I18n.t_key("settings.return_menu.confirm")
+		_check(warned.contains("Unsaved") or warned.contains("未保存"),
+			"the confirm text names the lost-unsaved-progress risk")
+		# Cancel leaves the run alone; confirm emits the signal and closes.
+		dlg.call("cancel")
+		_check(not dlg.is_visible_in_tree() and panel.is_open(),
+			"cancelling the return confirm leaves S19 open")
+		var returned: Array = []
+		var on_return := func() -> void: returned.append(true)
+		panel.return_to_menu.connect(on_return)
+		dlg = panel.open_return_confirm()  # cancel closed it; reopen
+		dlg.call("accept")
+		panel.return_to_menu.disconnect(on_return)
+		_check(returned.size() == 1 and not panel.is_open(),
+			"confirming routes out of the panel and emits return_to_menu")
+	_check(panel.host_is_port(), "the S4 mount reports a port host")
 	# The standalone footer row greys out (no run docked).
 	GameState.current_port = null
 	EventBus.day_advanced.emit(GameState.day)

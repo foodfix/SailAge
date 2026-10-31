@@ -1696,6 +1696,14 @@
     "zh": "语言(顶部栏按钮切换)",
     "en": "Language (toggle in the top bar)"
   },
+  "settings.return_menu": {
+    "zh": "返回主菜单",
+    "en": "Return to main menu"
+  },
+  "settings.return_menu.confirm": {
+    "zh": "返回主菜单?未保存的进度将丢失。",
+    "en": "Return to main menu? Unsaved progress will be lost."
+  },
   "captain.section.market": {
     "zh": "港内商船船长",
     "en": "Merchant captains in port"

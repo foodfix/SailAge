@@ -70,11 +70,6 @@ layout_mode = 2
 text = "Cargo -/-"
 vertical_alignment = 1
 
-[node name="Lang" type="Button" parent="Layout/VBox/Header"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
-text = "中文 / EN"
-
 [node name="Back" type="Button" parent="Layout/VBox/Header"]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2

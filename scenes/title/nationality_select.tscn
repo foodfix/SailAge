@@ -67,21 +67,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 
-[node name="DensityRow" type="VBoxContainer" parent="Layout"]
-layout_mode = 2
-theme_override_constants/separation = 8
-alignment = 1
-
-[node name="DensityLabel" type="Label" parent="Layout/DensityRow"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-horizontal_alignment = 1
-
-[node name="DensityPresets" type="HBoxContainer" parent="Layout/DensityRow"]
-layout_mode = 2
-theme_override_constants/separation = 8
-alignment = 1
-
 [node name="Footer" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
 theme_override_constants/separation = 16
@@ -97,7 +82,3 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(240, 40)
 layout_mode = 2
 
-[node name="Lang" type="Button" parent="Layout/Footer"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2

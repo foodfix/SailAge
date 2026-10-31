@@ -1,8 +1,10 @@
 extends Control
 ## Settings panel (S19) — docs/80-UI-UX.md §4.6.3, §4.2, §4.3, §4.7.
 ##
-## A **modal over S4**, opened from the S4 hub's footer `Settings` row
-## (beside `Save · Set Sail · Fleet · Officers`, §4.6.2's entry-point rule).
+## A **modal with two mounts** (docs/80-* §4.6.3 amended 2026-10-31): the
+## S1 title screen (pre-game) and the S4 hub footer (mid-run, beside
+## `Save · Set Sail · Fleet · Officers`, §4.6.2's entry-point rule). One
+## panel, two hosts; `host_is_port()` picks the S4-only extras.
 ## Houses exactly two things this phase (docs/IMPLEMENT-Phase5.md task M;
 ## §4.6.3 "Settings screen scope creep" mitigation):
 ##   * the **sea-traffic density dial** — `GameState.npc_preset`, applying
@@ -11,9 +13,9 @@ extends Control
 ##     toward the new budgets over the next days; lowering **never culls**
 ##     living fleets (the trickle only spawns on a budget deficit);
 ##     `deserted` = zero NPC spawns and zero contacts;
-##   * a **locale pointer line** — the language toggle stays where it is
-##     (`L` on S1/S2 + the top-bar button, §4.3); S19 shows the current
-##     locale and says so, no second toggle.
+##   * the **locale toggle** — the ONLY language control in the game since
+##     the 2026-10-31 amendment (§4.6.3): a `[中文 / EN]` button on both
+##     mounts; the old `L` hotkey and the top-bar/market/S2 buttons are gone.
 ##
 ## How the mid-run application reaches the ecology: sims read
 ## `GameState.npc_preset` when they are constructed (the world scene builds
@@ -22,26 +24,36 @@ extends Control
 ## that keeps a live sim across the change. The preset is part of the save
 ## payload (v5 `npc_preset`), so the dial survives save/load.
 ##
-## Esc / `Close` returns to S4 (§4.2 edge); the panel consumes all input
-## while open and dims the background 40% (modal rule, §4.7). All strings
-## from the merged `settings.*` keys (§4.7.9). No textures; 32px rows,
-## §4.8 palette only.
+## The **S4 mount** additionally shows a confirm-first `Return to main menu`
+## action (the confirmation names the lost-unsaved-progress risk; manual
+## saves only, §4.7) that routes to S1 on accept. It is hidden on the S1
+## mount (no run to leave).
+##
+## Esc / `Close` returns to the host (§4.2 edges); the panel consumes all
+## input while open and dims the background 40% (modal rule, §4.7). All
+## strings from the merged `settings.*` keys (§4.7.9). No textures; 32px
+## rows, §4.8 palette only.
 ##
 ## Palette is preloaded rather than referenced through its global class name
 ## so the scene also runs before the editor has written Godot's class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
 const SCENE_PATH := "res://scenes/ui_shared/settings_panel.tscn"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
+## S1 (the pre-game host) — the return action routes back here.
+const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 
 ## Emitted after a preset was applied through [method apply_preset]
 ## (tests / hosts observe the dial without polling GameState).
 signal preset_changed(preset: String)
-## Emitted when the panel closes back to S4.
+## Emitted when the panel closes back to its host.
 signal closed
+## Emitted when the S4-hosted `Return to main menu` action is confirmed.
+signal return_to_menu
 
 ## The five density presets in `npc_config.json` order — deserted, low,
 ## normal, high, extreme (docs/10-* §4.10; data-driven, never a hardcoded
@@ -50,6 +62,11 @@ var _preset_ids: Array[String] = []
 ## Preset id → its toggle Button, so selection styling refreshes cheaply.
 var _preset_buttons: Dictionary = {}
 
+## Routing switch (the other screens' `route_*` convention): with `false` the
+## confirmed return still emits [signal return_to_menu] and closes, but does
+## not swap scenes — headless tests drive the flow without a scene swap.
+var route_to_menu: bool = true
+
 @onready var _dim: ColorRect = $Dim
 @onready var _panel: PanelContainer = $Center/Panel
 @onready var _title: Label = $Center/Panel/Margin/Body/Title
@@ -57,9 +74,16 @@ var _preset_buttons: Dictionary = {}
 @onready var _preset_row: HBoxContainer = $Center/Panel/Margin/Body/Density/Presets
 @onready var _current: Label = $Center/Panel/Margin/Body/Density/Current
 @onready var _hint: Label = $Center/Panel/Margin/Body/Density/Hint
-@onready var _locale_row: Label = $Center/Panel/Margin/Body/LocaleRow
+@onready var _locale_row: Label = $Center/Panel/Margin/Body/LocaleRow/LocaleLabel
+@onready var _locale_button: Button = $Center/Panel/Margin/Body/LocaleRow/LocaleButton
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
 @onready var _esc_hint: Label = $Center/Panel/Margin/Body/Footer/Hint
+@onready var _return_row: HBoxContainer = $Center/Panel/Margin/Body/ReturnRow
+@onready var _return_button: Button = $Center/Panel/Margin/Body/ReturnRow/ReturnButton
+
+## The S4-mounted return confirmation (`confirm_dialog.tscn`); created on
+## first use and reused (the §4.7 destructive-action rule).
+var _return_confirm: Control = null
 
 
 ## Installs a panel under `parent` (idempotent) and returns it, following the
@@ -114,6 +138,9 @@ func _ready() -> void:
 	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_close_button.pressed.connect(close)
+	_locale_button.pressed.connect(I18n.toggle_locale)
+	_return_button.pressed.connect(_on_return_pressed)
+	_return_row.visible = host_is_port()
 	_build_presets()
 	EventBus.locale_changed.connect(_on_locale_changed)
 
@@ -151,6 +178,53 @@ func is_open() -> bool:
 
 func has_modal() -> bool:
 	return visible
+
+
+## True when this panel is mounted on a port hub (S4) rather than the title
+## screen (S1): the S4 mount is the only one with a run to leave, so it is
+## the only one that shows `Return to main menu` (§4.6.3 amended).
+func host_is_port() -> bool:
+	var parent := get_parent()
+	if parent == null:
+		return false
+	# attach_to() may wrap a Node2D host in a `SettingsLayer` CanvasLayer;
+	# walk up to the first node that is neither the layer nor the panel.
+	var host := parent
+	while host != null and (host.name == "SettingsLayer"
+			or host.name == "SettingsPanel"):
+		host = host.get_parent()
+	if host == null:
+		return false
+	# The S1 host is the title screen (a Control whose scene path names it);
+	# every other mount in the game hangs off S4 (port_screen / its layer).
+	var scene_path := str(host.scene_file_path)
+	return not scene_path.ends_with("title_screen.tscn")
+
+
+## The locale toggle button (tests / hosts) — the only language control.
+func locale_button() -> Button:
+	return _locale_button
+
+
+## The S4-mounted return action button (tests / hosts), or null.
+func return_button() -> Button:
+	return _return_button
+
+
+## Opens the confirm dialog for `Return to main menu` (created on first use).
+## Returns the dialog so tests can drive `accept()` without a real click.
+func open_return_confirm() -> Control:
+	if _return_confirm == null:
+		_return_confirm = ConfirmScene.instantiate()
+		_return_confirm.name = "ReturnConfirm"
+		add_child(_return_confirm)
+		(_return_confirm as Control).connect("confirmed",
+			_confirm_return_to_menu)
+	var dialog := _return_confirm as Control
+	dialog.call("open_text",
+		I18n.t_key("settings.return_menu.confirm"),
+		"settings.return_menu", "ui.cancel")
+	return dialog
 
 
 ## The preset ids on screen, in `npc_config.json` order (tests / hosts).
@@ -193,11 +267,11 @@ func rebuild() -> void:
 		"preset": _preset_name(GameState.npc_preset),
 	})
 	_hint.text = I18n.t_key("settings.density.hint")
-	_locale_row.text = "%s · %s" % [
-		_locale_name(I18n.get_locale()),
-		I18n.t_key("settings.locale"),
-	]
+	_locale_row.text = I18n.t_key("settings.locale")
+	_locale_button.text = I18n.t_key("ui.language_toggle")
 	_close_button.text = I18n.t_key("settings.close")
+	_return_button.text = I18n.t_key("settings.return_menu")
+	_return_row.visible = host_is_port()
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	for preset in _preset_buttons:
 		var button: Button = _preset_buttons[preset]
@@ -238,15 +312,6 @@ static func _preset_name(preset: String) -> String:
 	return I18n.t_key("settings.density.%s" % preset)
 
 
-## The locale's own name for the pointer row, split from the shared
-## `ui.language_toggle` button text ("中文 / EN") — both locales carry the
-## same string, so the split is stable and no new key is minted for it.
-static func _locale_name(locale: String) -> String:
-	var parts := I18n.t_key("ui.language_toggle").split(" / ")
-	var index := 0 if locale == "zh" else mini(1, parts.size() - 1)
-	return parts[index] if index < parts.size() else locale
-
-
 func _on_locale_changed(_locale: String) -> void:
 	if visible:
 		rebuild()
@@ -255,6 +320,22 @@ func _on_locale_changed(_locale: String) -> void:
 func _exit_tree() -> void:
 	if EventBus.locale_changed.is_connected(_on_locale_changed):
 		EventBus.locale_changed.disconnect(_on_locale_changed)
+
+
+# --- Return to main menu (S4 mount) -----------------------------------------
+
+func _on_return_pressed() -> void:
+	open_return_confirm()
+
+
+## Confirmed → leave the run: close the panel, announce, route to S1. The
+## game has manual saves only, so the confirmation already named the risk;
+## nothing is written here (saving is the S4 Save row's job, §4.7).
+func _confirm_return_to_menu() -> void:
+	close()
+	return_to_menu.emit()
+	if route_to_menu:
+		GameState.change_scene(TITLE_SCENE)
 
 
 # --- Helpers ----------------------------------------------------------------

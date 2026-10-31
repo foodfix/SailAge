@@ -70,10 +70,28 @@ custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 autowrap_mode = 3
 
-[node name="LocaleRow" type="Label" parent="Center/Panel/Margin/Body"]
+[node name="LocaleRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="LocaleLabel" type="Label" parent="Center/Panel/Margin/Body/LocaleRow"]
+layout_mode = 2
 theme_override_font_sizes/font_size = 16
+
+[node name="LocaleButton" type="Button" parent="Center/Panel/Margin/Body/LocaleRow"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+
+[node name="ReturnRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+visible = false
+layout_mode = 2
+alignment = 1
+
+[node name="ReturnButton" type="Button" parent="Center/Panel/Margin/Body/ReturnRow"]
+custom_minimum_size = Vector2(240, 40)
+layout_mode = 2
 
 [node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
 layout_mode = 2

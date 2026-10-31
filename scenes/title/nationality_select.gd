@@ -13,8 +13,6 @@ extends Control
 ## the scene also runs before the editor has written Godot's class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
-## Phase-5: the initial-fill replay after `new_game` re-applies the S2
-## density choice (see [method _apply_density_after_new_game]).
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 const NATIONS_PER_ROW := 3
 const CARD_SIZE := Vector2(360, 208)
@@ -24,25 +22,17 @@ const CARD_SIZE := Vector2(360, 208)
 @onready var _prompt: Label = $Layout/Header/Prompt
 @onready var _grid: GridContainer = $Layout/Cards
 @onready var _world_label: Label = $Layout/WorldRow/WorldLabel
-@onready var _density_label: Label = $Layout/DensityRow/DensityLabel
-@onready var _density_presets: HBoxContainer = $Layout/DensityRow/DensityPresets
 @onready var _back_button: Button = $Layout/Footer/Back
 @onready var _confirm_button: Button = $Layout/Footer/Confirm
-@onready var _lang_button: Button = $Layout/Footer/Lang
 
 ## Selected nation id; the first card is selected until the player picks one.
 var _selected_id: String = ""
 ## Card buttons in data order, so selection styling can be refreshed cheaply.
 var _cards: Array[Button] = []
-## The §4.6.3 sea-traffic density row: the chosen preset id (the
-## `npc_config.json` `default_preset` — "normal" — until the player picks).
-var _density_preset: String = ""
-## Density preset → toggle Button, in `npc_config.json` order.
-var _density_buttons: Dictionary = {}
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
 ## convention): with `false`, [method confirm_selection] still runs the whole
-## new-game path (including the density application) but does not route.
+## new-game path but does not route.
 var route_after_confirm: bool = true
 
 
@@ -53,18 +43,16 @@ func _ready() -> void:
 	_grid.columns = NATIONS_PER_ROW
 	_grid.add_theme_constant_override("h_separation", PaletteLib.MARGIN)
 	_grid.add_theme_constant_override("v_separation", PaletteLib.MARGIN)
-	for button in [_back_button, _confirm_button, _lang_button]:
+	for button in [_back_button, _confirm_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 
 	_back_button.pressed.connect(_on_back)
 	_confirm_button.pressed.connect(confirm_selection)
-	_lang_button.pressed.connect(I18n.toggle_locale)
 	_world_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	EventBus.locale_changed.connect(_on_locale_changed)
 
 	if not DataLoader.nations_list.is_empty():
 		_selected_id = str(DataLoader.nations_list[0].get("id", ""))
-	_build_density_row()
 	_rebuild()
 
 
@@ -89,76 +77,12 @@ func _rebuild() -> void:
 	_world_label.text = I18n.t_key("nation.world")
 	_back_button.text = I18n.t_key("ui.back")
 	_confirm_button.text = I18n.t_key("nation.confirm")
-	_lang_button.text = I18n.t_key("ui.language_toggle")
-	_relabel_density_row()
 
 	for nation in DataLoader.nations_list:
 		var card := _build_card(nation)
 		_grid.add_child(card)
 		_cards.append(card)
 	_refresh_selection()
-
-
-# --- The §4.6.3 density row (Phase 5) ----------------------------------------
-
-## Builds the sea-traffic preset row — deserted / low / normal / high /
-## extreme in `npc_config.json` order, `default_preset` ("normal") selected —
-## one sea-traffic row above the confirm button (docs/80-* §4.6.3). The
-## preset list and the default are data; only the row's existence is code.
-func _build_density_row() -> void:
-	var npc_config: Dictionary = DataLoader.npc_config
-	var presets = npc_config.get("presets", {})
-	var ids: Array[String] = []
-	if presets is Dictionary and not (presets as Dictionary).is_empty():
-		for preset in presets:
-			ids.append(str(preset))
-	else:
-		for preset in ["deserted", "low", "normal", "high", "extreme"]:
-			ids.append(preset)
-	if _density_preset.is_empty() or not _density_preset in ids:
-		_density_preset = str(npc_config.get("default_preset", "normal"))
-	for preset in ids:
-		var button := Button.new()
-		button.name = "Density_%s" % preset
-		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(112, PaletteLib.BUTTON_H)
-		button.pressed.connect(_on_density_pressed.bind(preset))
-		_density_presets.add_child(button)
-		_density_buttons[preset] = button
-	_relabel_density_row()
-
-
-## Re-labels the density row from the merged `settings.*` keys (§4.7.9);
-## runs on build and on every `locale_changed`.
-func _relabel_density_row() -> void:
-	_density_label.text = I18n.t_key("settings.density")
-	for preset in _density_buttons:
-		var button: Button = _density_buttons[preset]
-		button.text = I18n.t_key("settings.density.%s" % preset)
-		button.button_pressed = preset == _density_preset
-		button.add_theme_color_override(
-			"font_color",
-			PaletteLib.ACCENT if button.button_pressed else PaletteLib.TEXT
-		)
-
-
-func _on_density_pressed(preset: String) -> void:
-	set_density_preset(preset)
-
-
-## The chosen density preset id (tests / hosts). Written into
-## `GameState.npc_preset` on confirm — before `new_game` runs its seeded
-## initial fill (§4.6.3).
-func density_preset() -> String:
-	return _density_preset
-
-
-## Selects a density preset (unknown ids are refused; the row stands).
-func set_density_preset(preset: String) -> void:
-	if not _density_buttons.has(preset):
-		return
-	_density_preset = preset
-	_relabel_density_row()
 
 
 ## One card: flag color block, name, description and the start package — all
@@ -273,13 +197,12 @@ func _on_back() -> void:
 
 ## Confirm: start the run. `GameState.new_game()` owns the §4.1 state block and
 ## the routing; `world.map_id` is the single shipped map (docs/90-* §9.1).
-## Since Phase 5 the §4.6.3 density row writes `GameState.npc_preset` here,
-## before `new_game`, so the seeded initial fill uses the chosen preset
-## (`new_game` preserves the pre-written choice as run input).
+## S2 is the nationality grid only (docs/80-* §4.6.3 amended 2026-10-31): the
+## sea-traffic dial lives in S19 (S1 pre-game / S4 mid-run), and `new_game`
+## preserves whatever preset S19 last wrote as run input.
 func confirm_selection() -> void:
 	if _selected_id.is_empty():
 		return
-	GameState.npc_preset = _density_preset
 	GameState.new_game(_selected_id, route_after_confirm)
 
 

@@ -215,11 +215,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	# Locale toggle lives in the HUD top bar; keep the key working here too when
 	# the HUD is not the focus owner.
-	if event.is_action_pressed("toggle_locale"):
-		if has_modal():
-			return
-		get_viewport().set_input_as_handled()
-		I18n.toggle_locale()
 
 
 ## True while a modal is up on this screen: the HUD's queued dialogs, any
