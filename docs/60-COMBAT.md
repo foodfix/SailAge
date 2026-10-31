@@ -72,7 +72,7 @@ grid, duel, damage, aftermath (§4.2–§4.11.10) — is unchanged.
 | `courier` | 2/nation | **12** | capital ↔ own-ports dispatch runs (sightings/rumors only — no quest mechanics this phase) |
 | `privateer` | 2/undirected rivalry pair | **12** | stations on its sponsor's rivals' major lanes (chokepoint-biased); hunts only those rivals' fleets; defeating one: +2 rep with **each** of the two sponsor rivals |
 | `pirate` | `8 + unpatrolled_zones` (computed daily: navy 15-tile zones lacking a patrol) | ≈ **25** | camps tagged chokepoints; prefers nearest trader/patrol within Chebyshev 10 |
-| `hunter` | bounty-only, ≤ 1 per bountied nation | transient ≤ 6 | rep ≤ −50 navy hunter; leaves lanes entirely to pursue the player (the one runtime A* user) |
+| `hunter` | bounty-only, ≤ 1 per bountied nation | transient ≤ 6 | rep ≤ −50 navy hunter; sails the lane network to its intel target and pursues only at short range (§4.11.11.1 hunter intel) |
 | `treasure` | 1/nation per season | transient ≤ 6 | see Aliveness table (§4.11.11.4) |
 | Core cap | sum of the above at normal | **272** | + 6 treasure + ≤ 6 hunters = 284, rounded up with slack ⇒ **global cap 288** (wrecks are stored in `GameState.wrecks`, never counted) |
 
@@ -472,9 +472,27 @@ ecology members with a role, a nation, a lane route and a captain:
   Lane-locked: `trader`, `coaster`, `courier`, `treasure`. `patrol` cycles
   its nation's lanes. `pirate`/`privateer` anchor within Chebyshev 3 of
   chokepoint tiles and leave only for prey within Chebyshev 5, returning
-  when prey is beyond 8 or lost (**5/8 hysteresis**). `hunter` ignores lanes
-  while a bounty is active. Fallback on an impossible route (the validator
+  when prey is beyond 8 or lost (**5/8 hysteresis**). `hunter` stays
+  lane-locked too — it sails the junction graph to its intel target (the
+  hunter-intel rule below). Fallback on an impossible route (the validator
   makes this unreachable): one direct A* leg + logged warning.
+- **Hunter intel (locked).** Hunters never free-roam: they navigate the
+  lane network like every other role, guided by two persisted intel fields
+  in the `world` save block (`90-*` §5.4):
+
+  | Rule | Pin |
+  |---|---|
+  | Intel object | `world.last_departed_port` — the port id recorded at every Set Sail; readable by hunting nations (rep ≤ −50) |
+  | Travel | the hunter sails the lane network to that port (junction-graph Dijkstra + tile path — **zero A\***) |
+  | Loiter | camps the port's approaches (the chokepoint-camping pattern) for **10 days**, then routes home via its sponsor's lanes (and despawns if its bounty no longer stands) |
+  | Chase trigger | the player's fleet within **Chebyshev 15** (wrap-aware) ⇒ direct pursuit |
+  | Pursuit | short-range A\* only inside that radius, still under the ≤ 250 ms/day budget; losing the player beyond **Chebyshev 20** ends the chase — the hunter returns to the lane network / the intel port (**15/20 hysteresis**) |
+  | At-sea intel | contact with any fleet of a hunting nation updates `world.hunter_intel_cell` to the contact cell (one assignment on contact) |
+
+  `world.last_departed_port` (port id string) and `world.hunter_intel_cell`
+  (tile position) persist in the v5 `world` block, so hunter placement is
+  exactly reproducible after a reload. A new Set Sail re-targets under-way
+  hunters at their next day tick (deterministic).
 - **Stepping.** Fleets advance along their lane's rasterized tile path at
   **1 tile/day** inside the §4.1.2 flow, skipping occupied tiles and never
   entering `#` land, `^` reef or `I` ice; port-bound roles dwell **2 days**
@@ -482,9 +500,10 @@ ecology members with a role, a nation, a lane route and a captain:
   anchoring keeps a `pirate`/`privateer` within Chebyshev 3 of its
   chokepoint tiles except during a chase (the 5/8 hysteresis above).
 - **Pursuit is the only runtime A\* (locked).** The time-budgeted A*
-  (≤ 250 ms/day, §4.1.2 `path_budget_ms_per_day`) survives only for
-  hunter/pursuit chases; a budget overflow **loses the chase that day**.
-  Lane traffic never pathfinds (the §4.11.11.5 zero-A* gate).
+  (≤ 250 ms/day, §4.1.2 `path_budget_ms_per_day`) survives only for the
+  hunter's short-radius chase (the 15/20 hunter-intel hysteresis above); a
+  budget overflow **loses the chase that day**. Lane traffic — now
+  including hunter travel — never pathfinds (the §4.11.11.5 zero-A* gate).
 - **Contact.** Measured after the fleet step, at Chebyshev distance 1,
   wrap-aware on x — the §4.11.11.2 table's row is the whole rule: only
   `pirate` / `privateer` / `hunter`-with-bounty open battle; every other

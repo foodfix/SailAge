@@ -172,7 +172,10 @@ marked •):
 - `fleet: Array` • — ship instances (shape in `40-SHIPS-AND-FLEET.md` §ship
   instance schema)
 - `world: Dictionary` • — fleet tile position, `map_id` (always `"world"`,
-  `DEFAULT_MAP_ID`), movement state, weather state. The explored bitset is a
+  `DEFAULT_MAP_ID`), movement state, weather state, and the Phase-5 hunter
+  intel keys: `last_departed_port` (port id string, set at every Set Sail)
+  and `hunter_intel_cell` (tile position, set on contact with a hostile
+  nation's fleet — behavior in `60-*` §4.11.11.1). The explored bitset is a
   `PackedByteArray` of 291,600 bytes owned by the world scene/HUD, **not**
   saved and not part of `world`.
 - `morale: int` • — fleet morale 0–100 (`20-*` §4.8)
