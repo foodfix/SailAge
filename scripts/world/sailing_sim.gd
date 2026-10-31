@@ -27,6 +27,9 @@ extends RefCounted
 const CharacterLib := preload("res://scripts/player/character.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## Phase-6: the single owner of the ocean lookups (rasters + ice cache);
+## correction 15 — nothing else reads the ocean rasters.
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 # --- Ledger constants (docs/20-* §5 "sailing_constants") -------------------
 # §5 is the single source of truth: these are GDScript constants because the
@@ -134,6 +137,70 @@ const WIND_FACTORS := {
 ## simulation never writes `world.weather` from the movement path (T7/T8 own it).
 const DEFAULT_WEATHER := "calm"
 
+# --- Phase-6 direction-aware constants (docs/20-* §4.4, §4.7.1, §4.15–§4.18) --
+
+## §4.15: a 360-day year of twelve 30-day months; day 1 is Month 1.
+const MONTH_DAYS := 30
+const YEAR_MONTHS := 12
+
+## §4.4 / §4.16: the 8 compass direction ids every heading/wind/current value
+## lives in. No rule may produce or accept anything outside this domain.
+const COMPASS_DIRS: Array[String] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+## Tile delta of each compass index (y grows southward: `N` is (0, −1)).
+const COMPASS_DELTAS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(1, -1), Vector2i(1, 0), Vector2i(1, 1),
+	Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1),
+]
+## §4.4 direction-factor table, `[angle bucket][class]`. The bucket is the
+## angle between the move heading and the wind-FROM direction, bucketed to the
+## 8-compass grid. Oar rows are the locked §4.17 class rule extended here.
+const DIRECTION_FACTORS := {
+	0: {"sail": 0.50, "hybrid": 0.85, "oar": 1.00},
+	45: {"sail": 0.70, "hybrid": 0.95, "oar": 1.00},
+	90: {"sail": 1.00, "hybrid": 1.00, "oar": 1.00},
+	135: {"sail": 1.15, "hybrid": 1.05, "oar": 1.00},
+	180: {"sail": 1.30, "hybrid": 1.10, "oar": 1.00},
+}
+## §4.4: `current_factor` = 1 ± 0.08 × strength inside the alignment bands.
+const CURRENT_ALIGN_FACTOR := 0.08
+## §4.4 alignment bands in degrees: within 67.5° aligned, ≥ 112.5° opposed.
+const CURRENT_ALIGNED_DEG := 67.5
+const CURRENT_OPPOSED_DEG := 112.5
+
+## §4.17 trim states, speed factors and storm-damage multipliers. The class
+## rule (locked): oar ignores trim entirely — both tables forced to 1.0.
+const TRIM_STATES: Array[String] = ["furled", "reefed", "normal", "full"]
+const DEFAULT_TRIM := "normal"
+const TRIM_SPEED_FACTORS := {
+	"furled": 0.0, "reefed": 0.75, "normal": 1.0, "full": 1.15,
+}
+const TRIM_STORM_MULTIPLIERS := {
+	"furled": 0.5, "reefed": 0.75, "normal": 1.0, "full": 1.5,
+}
+
+## §4.7.1 jitter tables, keyed by the day's just-rolled weather (engine ids).
+## `keep` is the probability the prevailing direction is kept; `offsets` are
+## the pinned deviation draws in 8-grid steps (positive = clockwise, `N→NE`),
+## applied as `posmod(prevailing_index + offset, 8)`.
+const WIND_JITTER := {
+	"calm": {"keep": 0.60, "offsets": [1, -1, 2, -2]},    # ±45°/±90°
+	"fair": {"keep": 0.70, "offsets": [1, -1]},           # ±45°
+	"strong": {"keep": 0.60, "offsets": [1, -1, 2, -2]},  # ±45° or ±90°
+	"storm": {"keep": 0.0, "offsets": []},                # uniform over all 8
+}
+## Unknown weather reads the `fair` row (documented guard default; the engine
+## only ever produces the four §4.7 ids).
+const DEFAULT_WIND_JITTER := "fair"
+
+## §4.16 drift-mode daily push distances, `strength → tiles/day` at 5 nm
+## (= 2.5 / 10 / 20 nm/day). The 0.5 case is why the fractional accumulator
+## exists.
+const DRIFT_TILES_PER_DAY := {1: 0.5, 2: 2.0, 3: 4.0}
+## ui_strings key of the §4.18 ice toast, set on [member last_move_blocked_key]
+## when a move is refused for in-month seasonal ice. The zh/en strings
+## themselves are the orchestrator's inventory (Phase-4/5 protocol).
+const ICE_BLOCKED_KEY := "world.ice_blocked"
+
 ## §4.7 latitude weather bands (`20-*` §4.7). Band id → outcome →
 ## probability. Keys are the four **engine** ids `calm|fair|strong|storm`
 ## (never the display column names clear/overcast/windy/storm — §4.7's mapping
@@ -167,13 +234,116 @@ const WEATHER_OUTCOMES: Array[String] = ["calm", "fair", "strong", "storm"]
 const CLOCK_EPSILON := 1.0e-9
 
 
-# --- Speed (docs/20-* §4.4, §4.6, §4.7) ------------------------------------
+# --- Speed (docs/20-* §4.4, §4.6, §4.7, §4.14–§4.17) ------------------------
 
 ## docs/20-* §4.7: multiplier for the current weather and the flagship's class.
 ## Unknown weather/class combinations fall back to 1.0 (fair/unknown water).
 static func wind_factor(weather: String, ship_class: String) -> float:
 	var table: Dictionary = WIND_FACTORS.get(weather, {})
 	return float(table.get(ship_class, 1.0))
+
+
+## docs/20-* §4.4: the direction factor for `heading` against the day's
+## wind-FROM direction (`world.wind_dir`, §4.7.1), bucketed to the 8-compass
+## grid through [constant DIRECTION_FACTORS].
+##
+## Applied **only when weather ≠ `calm`** — a calm keeps the flat 0.8 sail
+## penalty of the `wind_factor` table and no direction effect (identity 1.0
+## for every class). An unknown heading/wind id (never produced by the
+## movement rules) degrades to the beam bucket's class-neutral 1.0.
+static func direction_factor(heading: String, wind_dir: String,
+		ship_class: String, weather: String) -> float:
+	if weather == "calm":
+		return 1.0
+	var angle := angle_between_dirs(heading, wind_dir)
+	if angle < 0:
+		return 1.0
+	var table: Dictionary = DIRECTION_FACTORS.get(angle, {})
+	return float(table.get(ship_class, 1.0))
+
+
+## docs/20-* §4.16 (modifier mode): alignment between the move heading and the
+## current's flow direction at `cell` — within 67.5° → `1 + 0.08 × strength`;
+## 67.5–112.5° → 1.0; ≥ 112.5° → `1 − 0.08 × strength`. Identity 1.0 on an
+## empty current tile, an unknown heading, and in `current_mode: "drift"`
+## (the current then acts as the daily push instead — see
+## [method _apply_drift_push]).
+static func current_factor(heading: String, cell: Vector2i, month: int) -> float:
+	if drift_mode_active():
+		return 1.0
+	var current: Dictionary = OceanLayersLib.instance().current_at(cell, month)
+	if current.is_empty():
+		return 1.0
+	var angle := angle_between_dirs(heading, str(current["dir"]))
+	if angle < 0:
+		return 1.0
+	var strength := int(current["strength"])
+	if float(angle) < CURRENT_ALIGNED_DEG:
+		return 1.0 + CURRENT_ALIGN_FACTOR * float(strength)
+	if float(angle) > CURRENT_OPPOSED_DEG:
+		return 1.0 - CURRENT_ALIGN_FACTOR * float(strength)
+	return 1.0
+
+
+## docs/20-* §4.4, exactly:
+##   floor(slowest hull speed × wind × [direction × current × trim] × crew
+##         × (1 + seamanship bonus)), min 1.
+## `base_speed` is the slowest ShipType.speed in the fleet ("Fleet-speed
+## composition"); weather class, crew, crew_min and the seamanship bonus come
+## from the flagship.
+##
+## Phase-6 heading forms:
+##   * `effective_speed(heading)` — the §4.4 pipeline: the direction factor
+##     (§4.14, skipped on a calm), the current factor (§4.16 modifier, identity
+##     in drift mode) and the trim factor (§4.17) all join the product.
+##   * `effective_speed()` — the HUD average with no steering context: beam
+##     (1.0) stands in for BOTH the direction and the current term (§4.4).
+## A furled sail/hybrid fleet has no speed at all (§4.17 "furled 0 — cannot
+## move"): this returns 0, and only the oar class exemption keeps a furled
+## galley rowing.
+static func effective_speed(heading: String = "") -> int:
+	var base := FleetLib.slowest_speed()
+	if base <= 0:
+		# No fleet (or an unknown hull): §4.4's floor still applies.
+		return MIN_SPEED
+	var flagship: Dictionary = FleetLib.flagship()
+	var ship_class := _ship_class_of(flagship)
+	var weather := str(GameState.world.get("weather", DEFAULT_WEATHER))
+	var trim := sail_trim()
+	var trim_f := trim_factor(trim, ship_class)
+	if trim_f <= 0.0:
+		return 0
+	var headingless := heading_index(heading) < 0
+	var dir_f := 1.0
+	var current_f := 1.0
+	if not headingless:
+		var wind_dir := str(GameState.world.get("wind_dir", "E"))
+		dir_f = direction_factor(heading, wind_dir, ship_class, weather)
+		current_f = current_factor(
+			heading, GameState.world_tile(), month_for(GameState.day)
+		)
+	var raw := float(base) \
+		* wind_factor(weather, ship_class) \
+		* dir_f \
+		* current_f \
+		* crew_factor() \
+		* (1.0 + CharacterLib.speed_bonus()) \
+		* trim_f
+	return maxi(int(floor(raw)), MIN_SPEED)
+
+
+## docs/20-* §4.2/§4.4: a successful tile move advances the clock by
+## `1 / effective_speed(heading)` days. The parameterless form (no steering
+## context — e.g. today's docking charge) is the HUD-average cost and stays
+## bit-identical to its Phase-4 value. A fleet with no speed at all (furled,
+## §4.17) costs nothing: callers gate the move itself on
+## `effective_speed(heading) > 0`, so the 0 here only ever means "never
+## charged".
+static func move_cost(heading: String = "") -> float:
+	var speed := effective_speed(heading)
+	if speed <= 0:
+		return 0.0
+	return 1.0 / float(speed)
 
 
 # --- Weather (docs/20-* §4.7, docs/50-* §4.2) -------------------------------
@@ -254,6 +424,10 @@ static func reset_ledger_state() -> void:
 	last_day_wages = 0
 	last_day_storm = false
 	last_day_storm_damage = []
+	last_move_blocked_key = ""
+	drift_accumulator = 0.0
+	drift_mode_override = null
+	last_wind_prevailing = ""
 	_last_run_day = -1
 
 
@@ -406,27 +580,155 @@ static func roll_weather(tile: Vector2i) -> String:
 	return outcome
 
 
+# --- Calendar (docs/20-* §4.15, Phase 6) ------------------------------------
+
+## §4.15: `year(day) = floor((day − 1) / 360) + 1`. Day 1 is Year 1 Month 1.
+static func year_for(day: int) -> int:
+	return int(floor(float(day - 1) / 360.0)) + 1
+
+
+## §4.15: `month(day) = floor(((day − 1) mod 360) / 30) + 1` — `posmod` so the
+## 12-month lattice stays anchored at day 1 even for `day ≤ 0` fixtures.
+static func month_for(day: int) -> int:
+	return int(floor(float(posmod(day - 1, MONTH_DAYS * YEAR_MONTHS)) / float(MONTH_DAYS))) + 1
+
+
+# --- Compass domain (docs/20-* §4.4; every heading stays in the 8-dir domain) --
+
+## The 8-dir id of a one-tile move delta, or "" when the delta is not an
+## 8-direction step (zero, or longer than one tile). The single place a move
+## delta becomes a heading.
+static func heading_of_delta(delta: Vector2i) -> String:
+	var index := COMPASS_DELTAS.find(delta)
+	return COMPASS_DIRS[index] if index >= 0 else ""
+
+
+## Index (0..7) of a compass id, or −1 when the value is outside the 8-dir
+## domain. Unknown headings never enter the factor tables as a direction.
+static func heading_index(heading: String) -> int:
+	return COMPASS_DIRS.find(heading)
+
+
+## Angle between two 8-dir ids in degrees, bucketed to the 8-compass grid —
+## always exactly one of 0 / 45 / 90 / 135 / 180. Unknown ids return −1.
+static func angle_between_dirs(a: String, b: String) -> int:
+	var ia := heading_index(a)
+	var ib := heading_index(b)
+	if ia < 0 or ib < 0:
+		return -1
+	var diff := absi(ia - ib) % 8
+	return mini(diff, 8 - diff) * 45
+
+
+# --- Wind-direction roll (docs/20-* §4.7.1, §4.14; ledger step 3, part 2) ----
+
+## Diagnostic of the most recent direction roll: the month's prevailing token
+## the jitter was applied to (or `"VAR"`). Not persisted, tests/HUD only.
+static var last_wind_prevailing: String = ""
+
+
+## The second, directional half of ledger step 3 — **the strength roll happens
+## first, then this**, both drawn from the same seeded [member rng] in that
+## pinned order (§4.5, §4.7.1: deterministic per seed; the same seed replays
+## the same direction sequence).
+##
+## **Pinned draw sequence (stable contract — never reorder):**
+##   1. `prevailing = OceanLayers.prevailing_for(tile, month)` — no RNG.
+##   2. If `weather == "storm"` **or** `prevailing == "VAR"`: exactly one
+##      draw `rng.randi_range(0, 7)` → `COMPASS_DIRS[draw]` (uniform over all
+##      8; a VAR day's jitter table deliberately does not apply — uniform-8
+##      regardless, §4.7.1).
+##   3. Otherwise: draw A `rng.randf()` — the prevailing direction is kept
+##      when `roll < keep` with `keep` from [constant WIND_JITTER] (calm 0.60
+##      / fair 0.70 / strong 0.60; an unknown weather id reads the `fair`
+##      row). Storm's row is 0.00 and unreachable here (handled in step 2).
+##   4. On a miss: draw B `rng.randi_range(0, offsets.size() − 1)` indexes the
+##      pinned [constant WIND_JITTER] offset table in 8-grid steps (positive =
+##      clockwise, `N→NE`): calm/strong `[+1, −1, +2, −2]` (±45°/±90°), fair
+##      `[+1, −1]` (±45°).
+## The result is persisted as `GameState.world["wind_dir"]` (an 8-dir id;
+## master-pinned default `"E"`) and returned. A failed/absent ocean decode
+## degrades to `VAR` (uniform-8) through [method OceanLayers.prevailing_for],
+## which keeps the roll deterministic.
+static func roll_wind_direction(tile: Vector2i, month: int, weather: String) -> String:
+	var ocean = OceanLayersLib.instance()
+	var prevailing: String = ocean.prevailing_for(tile, month)
+	last_wind_prevailing = prevailing
+	var jitter: Dictionary = WIND_JITTER.get(weather, WIND_JITTER[DEFAULT_WIND_JITTER])
+	var result: String
+	if weather == "storm" or prevailing == "VAR":
+		# Storm never keeps the prevailing direction; VAR has none to keep.
+		# One draw, uniform over all 8.
+		result = COMPASS_DIRS[rng.randi_range(0, 7)]
+	else:
+		if rng.randf() < float(jitter["keep"]):
+			result = prevailing
+		else:
+			var offsets: Array = jitter["offsets"]
+			var offset: int = offsets[rng.randi_range(0, offsets.size() - 1)]
+			result = COMPASS_DIRS[posmod(heading_index(prevailing) + offset, 8)]
+	GameState.world["wind_dir"] = result
+	return result
+
+
 ## §4.7 storm damage for one hull: `ceil(durability_max × 0.05)`, with the
 ## luck mitigation (`50-*` §4.2: ×0.75 when luck ≥ 50) applied **before**
 ## rounding. The epsilon absorbs binary float noise (140 × 0.05 evaluates to
 ## 7.000000000000001, which must still ceil to 7, per §4.7's worked table).
-static func storm_damage_for(durability_max: int) -> int:
+##
+## Phase 6 (§4.17): `extra_multiplier` carries the trim storm multiplier —
+## furled ×0.5 / reefed ×0.75 / normal ×1.0 / full ×1.5 (oar forced 1.0 by the
+## caller through [method trim_storm_multiplier]). It multiplies inside the
+## same pre-rounding expression, so the luck-mitigation and epsilon semantics
+## are untouched; the default 1.0 keeps every pre-Phase-6 value exact.
+static func storm_damage_for(durability_max: int, extra_multiplier: float = 1.0) -> int:
 	if durability_max <= 0:
 		return 0
 	var raw := float(durability_max) * STORM_DAMAGE_FRACTION \
-		* CharacterLib.storm_damage_multiplier()
+		* CharacterLib.storm_damage_multiplier() * extra_multiplier
 	return maxi(0, int(ceil(raw - STORM_DAMAGE_EPSILON)))
+
+
+## §4.17 trim factor for one hull's propulsion class: the [constant
+## TRIM_SPEED_FACTORS] table, with the locked class rule — **oar ignores trim
+## entirely** (forced 1.0, speed as well as storm damage); hybrid uses the
+## sail table. An unknown trim state reads `normal` (the pinned default).
+static func trim_factor(trim: String, ship_class: String) -> float:
+	if ship_class == "oar":
+		return 1.0
+	return float(TRIM_SPEED_FACTORS.get(trim, TRIM_SPEED_FACTORS[DEFAULT_TRIM]))
+
+
+## §4.17 storm-damage multiplier for one hull's class: the [constant
+## TRIM_STORM_MULTIPLIERS] table, oar forced 1.0 (the same class rule).
+static func trim_storm_multiplier(trim: String, ship_class: String) -> float:
+	if ship_class == "oar":
+		return 1.0
+	return float(TRIM_STORM_MULTIPLIERS.get(trim, TRIM_STORM_MULTIPLIERS[DEFAULT_TRIM]))
+
+
+## The fleet's persisted trim state (`world.sail_trim`), guard-read with the
+## pinned default (correction 12: writers may not have run yet).
+static func sail_trim() -> String:
+	return str(GameState.world.get("sail_trim", DEFAULT_TRIM))
 
 
 ## Applies one storm day to every ship and returns the total damage dealt.
 ## Durability clamps at 0 and never goes negative; sinking itself is T9's step 5
 ## (it only needs to see the 0). Emits `fleet_changed` when anything changed.
+## Phase 6: each hull's damage carries the §4.17 trim multiplier for its own
+## class (a furled galley still takes unmodified damage — oar ignores trim).
 static func apply_storm_damage() -> int:
 	var total := 0
+	var trim := sail_trim()
 	last_day_storm_damage = []
 	for ship in GameState.fleet:
 		var before := int(ship.get("durability", 0))
-		var damage := storm_damage_for(FleetLib.ship_stat(ship, "durability"))
+		var ship_class := _ship_class_of(ship)
+		var damage := storm_damage_for(
+			FleetLib.ship_stat(ship, "durability"),
+			trim_storm_multiplier(trim, ship_class)
+		)
 		var after := maxi(0, before - damage)
 		if after != before:
 			ship["durability"] = after
@@ -438,6 +740,14 @@ static func apply_storm_damage() -> int:
 	if total > 0:
 		FleetLib.notify_changed()
 	return total
+
+
+## Propulsion class of one ship instance (its ShipType `class`), "" unknown.
+static func _ship_class_of(ship: Dictionary) -> String:
+	var ship_type: Dictionary = DataLoader.get_ship_type(
+		str(ship.get("ship_type_id", ""))
+	)
+	return str(ship_type.get("class", ""))
 
 
 ## True when the last tick rolled a storm (convenience for T9/the HUD).
@@ -456,35 +766,6 @@ static func crew_factor() -> float:
 	if crew_min <= 0 or crew >= crew_min:
 		return 1.0
 	return maxf(float(crew) / float(crew_min), CREW_FACTOR_MIN)
-
-
-## docs/20-* §4.4, exactly:
-##   floor(slowest hull speed × wind × crew × (1 + seamanship bonus)), min 1.
-## `base_speed` is the slowest ShipType.speed in the fleet ("Fleet-speed
-## composition"); weather class, crew, crew_min and the seamanship bonus come
-## from the flagship.
-static func effective_speed() -> int:
-	var base := FleetLib.slowest_speed()
-	if base <= 0:
-		# No fleet (or an unknown hull): §4.4's floor still applies.
-		return MIN_SPEED
-	var flagship: Dictionary = FleetLib.flagship()
-	var ship_type: Dictionary = DataLoader.get_ship_type(
-		str(flagship.get("ship_type_id", ""))
-	)
-	var ship_class := str(ship_type.get("class", "sail"))
-	var weather := str(GameState.world.get("weather", DEFAULT_WEATHER))
-	var raw := float(base) \
-		* wind_factor(weather, ship_class) \
-		* crew_factor() \
-		* (1.0 + CharacterLib.speed_bonus())
-	return maxi(int(floor(raw)), MIN_SPEED)
-
-
-## docs/20-* §4.2: a successful tile move advances the clock by
-## `1 / effective_speed` days.
-static func move_cost() -> float:
-	return 1.0 / float(effective_speed())
 
 
 # --- Days of supply (docs/20-* §4.10, §4.11.2) -----------------------------
@@ -545,7 +826,16 @@ static func supply_block_reason() -> String:
 	return ""
 
 
-# --- Movement (docs/20-* §4.1, §4.2, §6) ------------------------------------
+# --- Movement (docs/20-* §4.1, §4.2, §4.18, §6) -----------------------------
+
+## ui_strings key explaining the most recent `is_move_legal` rejection:
+## `""` for a legal move or any ordinary block (land/reef/edge/corner cut —
+## the world scene toasts `world.move_blocked` for those today), or
+## [constant ICE_BLOCKED_KEY] when the §4.18 in-month seasonal ice refused
+## entry. Reset on every evaluation, so a caller reads it immediately after
+## the rejection it cares about. Diagnostic only, never persisted.
+static var last_move_blocked_key: String = ""
+
 
 ## True when the fleet at `from` may step onto `to`.
 ##
@@ -554,11 +844,16 @@ static func supply_block_reason() -> String:
 ## * **no corner cutting:** a diagonal is blocked when either orthogonal
 ##   neighbour of the target corner is impassable (§4.2, §6 "blocked diagonal
 ##   between two land tiles"). This is the same rule the data validator's
-##   BFS enforces, so the whole shipped map stays reachable.
+##   BFS enforces, so the whole shipped map stays reachable;
+## * **§4.18 seasonal ice refuses entry:** an in-month ice-polygon tile is
+##   impassable to *entering* (a tile freezing under a standing fleet never
+##   traps it — only the target is checked). This is the movement gate G/H
+##   consume; the A* module mirrors §4.2 passability separately.
 ##
 ## `map` defaults to `DataLoader.map` (handed over by the world scene,
 ## docs/90-* §9); tests pass a `MapLoader` instance directly.
 static func is_move_legal(from: Vector2i, to: Vector2i, map = null) -> bool:
+	last_move_blocked_key = ""
 	var delta := to - from
 	if delta == Vector2i.ZERO:
 		return false
@@ -574,7 +869,19 @@ static func is_move_legal(from: Vector2i, to: Vector2i, map = null) -> bool:
 			return false
 		if not world_map.is_passable(Vector2i(from.x, from.y + delta.y)):
 			return false
+	if ice_blocks_entry(to):
+		last_move_blocked_key = ICE_BLOCKED_KEY
+		return false
 	return true
+
+
+## §4.18 gate: true when `cell` is inside an in-month seasonal-ice polygon.
+## A run without a day (fixtures before `new_game`) has no calendar yet, so
+## the check is skipped; the same guard keeps `day ≤ 0` fixtures deterministic.
+static func ice_blocks_entry(cell: Vector2i) -> bool:
+	if GameState.day <= 0:
+		return false
+	return OceanLayersLib.instance().ice_blocks(cell, month_for(GameState.day))
 
 
 ## Applies one fleet move to `to`.
@@ -585,6 +892,11 @@ static func is_move_legal(from: Vector2i, to: Vector2i, map = null) -> bool:
 ## bit-identical (§4.2 "Blocked moves cost nothing"; §6 "no clock cost").
 ## Returns true only when the fleet actually moved and the clock advanced.
 ##
+## Phase 6: the clock cost is the heading-aware `move_cost(heading)` — the
+## heading is the move's own 8-dir delta (a step is a step wherever it comes
+## from, §4.2) — and a fleet with no speed at all (furled sail/hybrid, §4.17)
+## cannot move: the refusal costs nothing, like any blocked move.
+##
 ## Deliberately state-only (§4.11 port entry is the caller's job): this never
 ## emits `port_entered`, never touches `known_ports`/`current_port` and never
 ## routes. The world scene does those after a successful step; T7's port-day
@@ -593,8 +905,12 @@ static func try_move(to: Vector2i, map = null, from = null) -> bool:
 	var origin: Vector2i = GameState.world_tile() if from == null else Vector2i(from)
 	if not is_move_legal(origin, to, map):
 		return false
+	var heading := heading_of_delta(to - origin)
+	if effective_speed(heading) <= 0:
+		# Furled (§4.17): sails in, no way on. No clock cost, no move.
+		return false
 	GameState.set_world_tile(to)
-	advance_clock(move_cost())
+	advance_clock(move_cost(heading))
 	return true
 
 
@@ -633,6 +949,11 @@ static func advance_clock(days: float) -> int:
 		# (`advance_port_day` → `advance_clock`), so both run the step.
 		for changed_port in EconomyLib.day_tick():
 			EventBus.market_changed.emit(str(changed_port))
+		# §4.3 drift-push position (locked, Phase 6): after the economy step
+		# and immediately before `day_advanced` — deterministic and pure, so
+		# the NPC tick sees the drift-corrected cell. No-op unless Drift mode
+		# is selected and the fleet is at sea.
+		_apply_drift_push()
 		EventBus.day_advanced.emit(GameState.day)
 		# §4.9: a run that just died does not tick further days; the world
 		# scene shows S9 from the `game_over` signal.
@@ -658,6 +979,96 @@ static func advance_port_day() -> int:
 ## this.
 static func in_port() -> bool:
 	return GameState.current_port != null
+
+
+# --- Wait at sea (docs/20-* §4.2/§4.17, Phase 6) ----------------------------
+
+## The §4.17 wait: hold position and advance exactly 1 day via
+## `advance_clock(1.0)` — the full ledger runs (provisions, wages, the
+## two-part weather re-roll, morale, and the rest of the §4.3 day-tick order
+## below it, drift push included). Works in both input modes **regardless of
+## trim** — a furled fleet can still wait (it is the only thing a furled
+## fleet can do). Refused while docked (a port day is `advance_port_day`'s
+## business); returns false then, true when the day was spent.
+static func wait_at_sea() -> bool:
+	if in_port():
+		return false
+	advance_clock(1.0)
+	return true
+
+
+# --- Drift push (docs/20-* §4.3 step 3 / §4.16, Drift mode only) -------------
+
+## §4.16 fractional drift accumulator (tiles). Runtime-only: never persisted
+## (saves are port-only), zeroed on load/new-run detection, on docking and by
+## [method reset_ledger_state] for fixtures.
+static var drift_accumulator: float = 0.0
+
+
+## The current-mode selection, guard-read per correction 12: `control_prefs`
+## is task V's key block and may not exist yet — `.get` with the documented
+## default `"modifier"`. Only `"drift"` swaps the current factor for the
+## daily push.
+##
+## [member drift_mode_override] is a test seam (the `set_weather_seed`
+## pattern): `null` means "read `control_prefs`" — the production path, and
+## what G/V's real setting feeds; a bool forces the answer for a W4 fixture
+## (the property does not exist until V lands it). Never set it outside a
+## test.
+static var drift_mode_override = null
+
+
+static func drift_mode_active() -> bool:
+	if drift_mode_override != null:
+		return bool(drift_mode_override)
+	var prefs = GameState.get("control_prefs")
+	if prefs is Dictionary:
+		return str((prefs as Dictionary).get("current_mode", "modifier")) == "drift"
+	return false
+
+
+## §4.3 step 3 (locked position): after the economy step, immediately before
+## `EventBus.day_advanced` fires. Drift mode only, at sea only: the fleet is
+## pushed along the decoded (reversal-applied) current vector —
+## [constant DRIFT_TILES_PER_DAY] tiles per day by strength, whole tiles only;
+## the 0.5-tile strength-1 remainder accrues in [member drift_accumulator].
+## Wrap-aware on x; each candidate tile is tested and the push **stops before
+## impassable tiles** (land, reef, permanent `I`, in-month seasonal ice) — it
+## never lands the fleet on one and deals no damage; the day's unspent
+## remainder is absorbed (no banking against a coast). Suppressed while
+## docked (and the accumulator resets there — the "resets on port/load" rule).
+static func _apply_drift_push() -> void:
+	if in_port():
+		drift_accumulator = 0.0
+		return
+	if is_game_over() or not drift_mode_active():
+		return
+	var cell := GameState.world_tile()
+	var current: Dictionary = OceanLayersLib.instance().current_at(
+		cell, month_for(GameState.day)
+	)
+	if current.is_empty():
+		return
+	var dir_index := heading_index(str(current["dir"]))
+	if dir_index < 0:
+		return
+	drift_accumulator += float(DRIFT_TILES_PER_DAY.get(
+		int(current["strength"]), 0.0))
+	var world_map = DataLoader.map
+	while drift_accumulator >= 1.0 - CLOCK_EPSILON:
+		var candidate: Vector2i = cell + COMPASS_DELTAS[dir_index]
+		var blocked := true
+		if world_map != null and world_map.is_passable(candidate) \
+				and not OceanLayersLib.instance().ice_blocks(
+					candidate, month_for(GameState.day)):
+			blocked = false
+		if blocked:
+			# Stop at the last passable tile; the remainder is absorbed.
+			drift_accumulator = 0.0
+			return
+		GameState.set_world_tile(candidate)
+		cell = candidate
+		drift_accumulator -= 1.0
 
 
 # --- Daily ledger (docs/20-* §4.5, strict order) ----------------------------
@@ -742,9 +1153,11 @@ static func _ledger_wages() -> void:
 		EventBus.gold_changed.emit(GameState.gold)
 
 
-## §4.5 step 3 — weather roll (docs/20-* §4.7). Rolls for the coming day on
-## the fleet's current tile, writes `GameState.world["weather"]` and, on a
-## storm, damages every hull and raises [member last_day_storm] for T9's step 4.
+## §4.5 step 3 — the **two-part weather roll** (docs/20-* §4.7 + §4.7.1). The
+## strength roll draws first, then the wind-direction roll, one seeded stream,
+## pinned order strength → direction. Writes `GameState.world["weather"]` and
+## `GameState.world["wind_dir"]` and, on a storm, damages every hull and
+## raises [member last_day_storm] for T9's step 4.
 ##
 ## Stops at the damage: step 4 prices the storm's morale −5 (§4.8.1) and step 5
 ## turns a durability of 0 into a sinking (§4.9). Runs in port too (the roll is
@@ -753,6 +1166,9 @@ static func _ledger_wages() -> void:
 static func _ledger_weather() -> void:
 	var tile: Vector2i = GameState.world_tile()
 	var outcome := roll_weather(tile)
+	# §4.7.1: the direction draw joins the same stream immediately after the
+	# strength draw; the day's just-rolled strength state keys the jitter.
+	roll_wind_direction(tile, month_for(GameState.day), outcome)
 	GameState.world["weather"] = outcome
 	last_day_storm = outcome == "storm"
 	if last_day_storm:

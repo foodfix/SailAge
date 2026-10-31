@@ -200,6 +200,13 @@ func new_game(nation_id: String, route: bool = true,
 		# Phase-5 hunter intel (docs/60-* §4.11.11.1): no sail yet, no intel.
 		"last_departed_port": "",
 		"hunter_intel_cell": null,
+		# Phase-6 world keys, master-pinned defaults (docs/90-* §5.4,
+		# IMPLEMENT-Phase6 correction 12): sail trim, helm heading and the
+		# daily wind-FROM direction (`world.wind_dir` is overwritten by every
+		# ledger weather roll before any movement consumes it, 20-* §4.7.1).
+		"sail_trim": "normal",
+		"heading": "E",
+		"wind_dir": "E",
 	}
 	current_port = start_port_id
 
