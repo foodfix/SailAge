@@ -51,6 +51,30 @@ offset_right = -16.0
 grow_horizontal = 0
 text = "Close the chart"
 
+[node name="DebugPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchor_left = 1.0
+anchor_bottom = 1.0
+anchor_right = 1.0
+offset_left = -300.0
+offset_top = 52.0
+offset_right = -16.0
+offset_bottom = -44.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 0
+
+[node name="Scroll" type="ScrollContainer" parent="DebugPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="DebugPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
 [node name="BottomBar" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 12
@@ -92,6 +116,23 @@ vertical_alignment = 1
 
 [node name="Discoveries" type="Label" parent="BottomBar/Legend"]
 layout_mode = 2
-size_flags_horizontal = 3
 text = "· Discovery leads"
+vertical_alignment = 1
+
+[node name="Wind" type="Label" parent="BottomBar/Legend"]
+visible = false
+layout_mode = 2
+text = "· Winds"
+vertical_alignment = 1
+
+[node name="Current" type="Label" parent="BottomBar/Legend"]
+visible = false
+layout_mode = 2
+text = "· Currents"
+vertical_alignment = 1
+
+[node name="Ice" type="Label" parent="BottomBar/Legend"]
+visible = false
+layout_mode = 2
+text = "· Sea ice"
 vertical_alignment = 1
