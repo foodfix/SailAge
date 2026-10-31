@@ -5,14 +5,25 @@ extends Control
 ## S1 title screen (pre-game) and the S4 hub footer (mid-run, beside
 ## `Save · Set Sail · Fleet · Officers`, §4.6.2's entry-point rule). One
 ## panel, two hosts; `host_is_port()` picks the S4-only extras.
-## Houses exactly two things this phase (docs/IMPLEMENT-Phase5.md task M;
-## §4.6.3 "Settings screen scope creep" mitigation):
+## Houses exactly the settings that belong here (docs/IMPLEMENT-Phase5.md
+## task M; docs/IMPLEMENT-Phase6.md task V; §4.6.3 "Settings screen scope
+## creep" mitigation):
 ##   * the **sea-traffic density dial** — `GameState.npc_preset`, applying
 ##     mid-run through `npc_fleets.gd`'s existing seams: raising makes the
 ##     daily trickle (`max(4, ceil(cap / 50))`, docs/60-* §4.1.2) refill
 ##     toward the new budgets over the next days; lowering **never culls**
 ##     living fleets (the trickle only spawns on a budget deficit);
 ##     `deserted` = zero NPC spawns and zero contacts;
+##   * the **Phase-6 control-preference rows** (§4.6.3, task V) —
+##     `输入模式 Input mode` writes `GameState.control_prefs.input_mode`
+##     (step | helm, docs/20-* §4.2) and `洋流模式 Current mode` writes
+##     `GameState.control_prefs.current_mode` (modifier | drift, docs/20-*
+##     §4.16), both live, on BOTH mounts, persisted per save (v6
+##     `control_prefs`) and carried by `new_game` like `npc_preset`;
+##   * the **debug-overlays toggle** (§4.6.3, correction 12) — flips ONLY the
+##     static [member debug_overlays] flag, which is **session-only**: it is
+##     never saved, never read from a save, and resets to off when the app
+##     restarts (a static starts fresh every run);
 ##   * the **locale toggle** — the ONLY language control in the game since
 ##     the 2026-10-31 amendment (§4.6.3): a `[中文 / EN]` button on both
 ##     mounts; the old `L` hotkey and the top-bar/market/S2 buttons are gone.
@@ -22,7 +33,10 @@ extends Control
 ## one per scene entry, `world_map._init_fleets`), so writing the field here
 ## is the application; `NpcFleets.set_preset` additionally covers any host
 ## that keeps a live sim across the change. The preset is part of the save
-## payload (v5 `npc_preset`), so the dial survives save/load.
+## payload (v5 `npc_preset`), so the dial survives save/load. The control
+## preferences apply the same way (G/H/I read
+## `GameState.control_prefs` via the guard-call convention, correction 12)
+## and persist through the v6 `control_prefs` block.
 ##
 ## The **S4 mount** additionally shows a confirm-first `Return to main menu`
 ## action (the confirmation names the lost-unsaved-progress risk; manual
@@ -47,9 +61,37 @@ const MODAL_GROUP := "modal_overlay"
 ## S1 (the pre-game host) — the return action routes back here.
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 
+## The two persisted control-preference enums, in §4.6.3 wireframe order
+## (docs/90-* §5.4; docs/20-* §4.2, §4.16). Pinned here exactly as
+## `SaveSystem.INPUT_MODES` / `SaveSystem.CURRENT_MODES` pin them for save
+## validation — the owning docs fix the values, never code taste.
+const INPUT_MODES: Array[String] = ["step", "helm"]
+const CURRENT_MODES: Array[String] = ["modifier", "drift"]
+## The ui_strings key families of the two rows (§4.7.10): the row labels are
+## `settings.input.mode` / `settings.current.mode`, the buttons compose
+## `settings.input.<mode>` / `settings.current.<mode>`.
+const INPUT_KEY := "settings.input"
+const CURRENT_KEY := "settings.current"
+
+## **Session-only debug-chart gate** (docs/80-* §4.6 symbol contract,
+## IMPLEMENT-Phase6 correction 12/C): static, default false, NEVER persisted.
+## Nothing may read it from a save and nothing may write it into one —
+## `SaveSystem.snapshot()` writes only the §8.1 key list, and this flag is
+## not part of `GameState` at all. It resets to off on every app restart
+## because a static starts fresh with the process. The S19 row (below) is
+## its only writer; I's debug chart reads it guard-style.
+static var debug_overlays: bool = false
+
 ## Emitted after a preset was applied through [method apply_preset]
 ## (tests / hosts observe the dial without polling GameState).
 signal preset_changed(preset: String)
+## Emitted after [method apply_input_mode] / [method apply_current_mode]
+## wrote a control preference: `(key, value)` with `key` ∈
+## {`"input_mode"`, `"current_mode"`}.
+signal control_prefs_changed(key: String, value: String)
+## Emitted after [method apply_debug_overlays] flipped the session-only
+## static (observers: tests; the debug chart polls the static directly).
+signal debug_overlays_changed(on: bool)
 ## Emitted when the panel closes back to its host.
 signal closed
 ## Emitted when the S4-hosted `Return to main menu` action is confirmed.
@@ -61,6 +103,9 @@ signal return_to_menu
 var _preset_ids: Array[String] = []
 ## Preset id → its toggle Button, so selection styling refreshes cheaply.
 var _preset_buttons: Dictionary = {}
+## Control-preference id → its toggle Button (`input_mode` and
+## `current_mode` ids in one map; the ids never collide across the rows).
+var _mode_buttons: Dictionary = {}
 
 ## Routing switch (the other screens' `route_*` convention): with `false` the
 ## confirmed return still emits [signal return_to_menu] and closes, but does
@@ -74,6 +119,15 @@ var route_to_menu: bool = true
 @onready var _preset_row: HBoxContainer = $Center/Panel/Margin/Body/Density/Presets
 @onready var _current: Label = $Center/Panel/Margin/Body/Density/Current
 @onready var _hint: Label = $Center/Panel/Margin/Body/Density/Hint
+@onready var _input_label: Label = $Center/Panel/Margin/Body/InputRow/InputLabel
+@onready var _input_buttons: HBoxContainer = $Center/Panel/Margin/Body/InputRow/Buttons
+@onready var _input_current: Label = $Center/Panel/Margin/Body/InputRow/InputCurrent
+@onready var _current_mode_label: Label = $Center/Panel/Margin/Body/CurrentModeRow/CurrentModeLabel
+@onready var _current_mode_buttons: HBoxContainer = $Center/Panel/Margin/Body/CurrentModeRow/Buttons
+@onready var _current_mode_current: Label = $Center/Panel/Margin/Body/CurrentModeRow/CurrentModeCurrent
+@onready var _debug_label: Label = $Center/Panel/Margin/Body/DebugRow/DebugLabel
+@onready var _debug_button: Button = $Center/Panel/Margin/Body/DebugRow/DebugButton
+@onready var _debug_hint: Label = $Center/Panel/Margin/Body/DebugRow/DebugHint
 @onready var _locale_row: Label = $Center/Panel/Margin/Body/LocaleRow/LocaleLabel
 @onready var _locale_button: Button = $Center/Panel/Margin/Body/LocaleRow/LocaleButton
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
@@ -135,15 +189,26 @@ func _ready() -> void:
 	_density_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_input_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_input_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_current_mode_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_current_mode_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_debug_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_debug_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_locale_row.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_close_button.pressed.connect(close)
 	_locale_button.pressed.connect(I18n.toggle_locale)
 	_return_button.pressed.connect(_on_return_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
+	_debug_button.toggle_mode = true
+	_debug_button.pressed.connect(_on_debug_pressed)
 	_return_row.visible = host_is_port()
 	_save_row.visible = host_is_port()
 	_build_presets()
+	_build_mode_row(_input_buttons, INPUT_MODES, _on_input_mode_pressed)
+	_build_mode_row(_current_mode_buttons, CURRENT_MODES,
+		_on_current_mode_pressed)
 	EventBus.locale_changed.connect(_on_locale_changed)
 
 
@@ -275,8 +340,74 @@ func apply_preset(preset: String) -> bool:
 	return true
 
 
-## Rebuilds every label from the merged `settings.*` keys (§4.7.9) and the
-## preset row's selection state. Called on open and on `locale_changed`.
+## True when `mode` is one of the pinned input-mode ids (`INPUT_MODES`).
+func is_known_input_mode(mode: String) -> bool:
+	return mode in INPUT_MODES
+
+
+## True when `mode` is one of the pinned current-mode ids (`CURRENT_MODES`).
+func is_known_current_mode(mode: String) -> bool:
+	return mode in CURRENT_MODES
+
+
+## The input-mode Button for `mode` (null when not rendered).
+func input_mode_button(mode: String) -> Button:
+	return _mode_buttons.get(INPUT_KEY + "." + mode, null) as Button
+
+
+## The current-mode Button for `mode` (null when not rendered).
+func current_mode_button(mode: String) -> Button:
+	return _mode_buttons.get(CURRENT_KEY + "." + mode, null) as Button
+
+
+## The debug-overlays toggle Button (§4.6.3).
+func debug_overlays_button() -> Button:
+	return _debug_button
+
+
+## Applies the input-mode row (§4.6.3, task V): writes
+## `GameState.control_prefs.input_mode` live — the field the world scene
+## reads (guard-call convention, correction 12) and the v6 save persists —
+## and refreshes the panel. Unknown ids are refused (the current mode
+## stands). Returns true when applied. On the S1 mount this is the pre-game
+## write that `new_game` carries into the run (like `npc_preset`).
+func apply_input_mode(mode: String) -> bool:
+	if not is_known_input_mode(mode):
+		push_warning("SettingsPanel.apply_input_mode: unknown mode '%s'" % mode)
+		return false
+	GameState.control_prefs["input_mode"] = mode
+	control_prefs_changed.emit("input_mode", mode)
+	rebuild()
+	return true
+
+
+## Applies the current-mode row (§4.6.3, task V): writes
+## `GameState.control_prefs.current_mode` live (modifier | drift,
+## docs/20-* §4.16) and refreshes the panel. Unknown ids are refused.
+## Returns true when applied.
+func apply_current_mode(mode: String) -> bool:
+	if not is_known_current_mode(mode):
+		push_warning("SettingsPanel.apply_current_mode: unknown mode '%s'" % mode)
+		return false
+	GameState.control_prefs["current_mode"] = mode
+	control_prefs_changed.emit("current_mode", mode)
+	rebuild()
+	return true
+
+
+## Applies the debug-overlays row (§4.6.3, correction 12): flips ONLY the
+## static [member debug_overlays] — session-only, never persisted, so there
+## is deliberately no GameState write and no save-block counterpart.
+func apply_debug_overlays(on: bool) -> void:
+	debug_overlays = on
+	debug_overlays_changed.emit(on)
+	rebuild()
+
+
+## Rebuilds every label from the merged `settings.*` keys (§4.7.9, §4.7.10)
+## and the rows' selection state. Called on open and on `locale_changed`.
+## Until the orchestrator merges the Phase-6 keys the new labels render as
+## the literal `<key>` placeholders (§6) — tests must not assert their text.
 func rebuild() -> void:
 	_title.text = I18n.t_key("settings.title")
 	_density_label.text = I18n.t_key("settings.density")
@@ -284,6 +415,18 @@ func rebuild() -> void:
 		"preset": _preset_name(GameState.npc_preset),
 	})
 	_hint.text = I18n.t_key("settings.density.hint")
+	_input_label.text = I18n.t_key(INPUT_KEY + ".mode")
+	_current_mode_label.text = I18n.t_key(CURRENT_KEY + ".mode")
+	_input_current.text = I18n.fmt(INPUT_KEY + ".current", {
+		"mode": _mode_name(INPUT_KEY,
+			str(GameState.control_prefs.get("input_mode", "step"))),
+	})
+	_current_mode_current.text = I18n.fmt(CURRENT_KEY + ".current", {
+		"mode": _mode_name(CURRENT_KEY,
+			str(GameState.control_prefs.get("current_mode", "modifier"))),
+	})
+	_debug_label.text = I18n.t_key("settings.debug.overlays")
+	_debug_hint.text = I18n.t_key("settings.debug.session_hint")
 	_locale_row.text = I18n.t_key("settings.locale")
 	_locale_button.text = I18n.t_key("ui.language_toggle")
 	_close_button.text = I18n.t_key("settings.close")
@@ -298,6 +441,33 @@ func rebuild() -> void:
 		var button: Button = _preset_buttons[preset]
 		button.text = _preset_name(str(preset))
 		button.button_pressed = str(preset) == GameState.npc_preset
+	for mode_key in _mode_buttons:
+		var mode_button: Button = _mode_buttons[mode_key]
+		var key_text := str(mode_key)
+		var family := key_text.get_slice(".", 0) + "." + key_text.get_slice(".", 1)
+		var mode_id := key_text.get_slice(".", 2)
+		mode_button.text = _mode_name(family, mode_id)
+	mode_buttons_refresh_selection()
+	_debug_button.text = I18n.t_key(
+		"settings.debug.on" if debug_overlays else "settings.debug.off")
+	_debug_button.button_pressed = debug_overlays
+
+
+## Refreshes the two control-preference rows' pressed state from
+## `GameState.control_prefs` (guard-read with the pinned defaults,
+## correction 12).
+func mode_buttons_refresh_selection() -> void:
+	var input_mode := str(GameState.control_prefs.get("input_mode", "step"))
+	var current_mode := str(GameState.control_prefs.get("current_mode",
+		"modifier"))
+	for mode in INPUT_MODES:
+		var button := input_mode_button(mode)
+		if button != null:
+			button.button_pressed = mode == input_mode
+	for mode in CURRENT_MODES:
+		var button := current_mode_button(mode)
+		if button != null:
+			button.button_pressed = mode == current_mode
 
 
 ## The preset row, data-driven from `npc_config.json` (`presets` preserves
@@ -327,10 +497,46 @@ func _on_preset_pressed(preset: String) -> void:
 	apply_preset(preset)
 
 
+## The two control-preference rows, built in §4.6.3 wireframe order from the
+## pinned id lists (`INPUT_MODES` / `CURRENT_MODES`) — the same toggle style
+## as the preset row (128×40, selection refreshed by [method rebuild]).
+func _build_mode_row(row: HBoxContainer, modes: Array[String],
+		handler: Callable) -> void:
+	var family := INPUT_KEY if row == _input_buttons else CURRENT_KEY
+	for mode in modes:
+		var button := Button.new()
+		button.name = "Mode_%s_%s" % [family.get_slice(".", 1), mode]
+		button.toggle_mode = true
+		button.custom_minimum_size = Vector2(128, PaletteLib.BUTTON_H)
+		button.pressed.connect(handler.bind(str(mode)))
+		row.add_child(button)
+		_mode_buttons[family + "." + str(mode)] = button
+
+
+func _on_input_mode_pressed(mode: String) -> void:
+	apply_input_mode(mode)
+
+
+func _on_current_mode_pressed(mode: String) -> void:
+	apply_current_mode(mode)
+
+
+## The debug row's only writer: the session-only static, nothing else
+## (docs/80-* §4.6.3 "never persisted").
+func _on_debug_pressed() -> void:
+	apply_debug_overlays(not debug_overlays)
+
+
 ## Localised preset name (`settings.density.<preset>`; a missing key renders
 ## `<key>` per §6 rather than a raw id).
 static func _preset_name(preset: String) -> String:
 	return I18n.t_key("settings.density.%s" % preset)
+
+
+## Localised mode name (`settings.input.<mode>` / `settings.current.<mode>`)
+## for the rows' `当前 Current:` lines and buttons.
+static func _mode_name(family: String, mode: String) -> String:
+	return I18n.t_key("%s.%s" % [family, mode])
 
 
 func _on_locale_changed(_locale: String) -> void:

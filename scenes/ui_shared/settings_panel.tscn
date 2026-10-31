@@ -70,6 +70,57 @@ custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 autowrap_mode = 3
 
+[node name="InputRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="InputLabel" type="Label" parent="Center/Panel/Margin/Body/InputRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Margin/Body/InputRow"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InputCurrent" type="Label" parent="Center/Panel/Margin/Body/InputRow"]
+layout_mode = 2
+
+[node name="CurrentModeRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="CurrentModeLabel" type="Label" parent="Center/Panel/Margin/Body/CurrentModeRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Margin/Body/CurrentModeRow"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CurrentModeCurrent" type="Label" parent="Center/Panel/Margin/Body/CurrentModeRow"]
+layout_mode = 2
+
+[node name="DebugRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="DebugLabel" type="Label" parent="Center/Panel/Margin/Body/DebugRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="DebugButton" type="Button" parent="Center/Panel/Margin/Body/DebugRow"]
+custom_minimum_size = Vector2(96, 40)
+layout_mode = 2
+
+[node name="DebugHint" type="Label" parent="Center/Panel/Margin/Body/DebugRow"]
+layout_mode = 2
+
 [node name="LocaleRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
