@@ -448,6 +448,26 @@
     "zh": "成交:{qty} 单位 {name}。",
     "en": "Traded: {qty} {name}."
   },
+  "market.stock.header": {
+    "zh": "存货",
+    "en": "Stock"
+  },
+  "market.stock.trend": {
+    "zh": "走势",
+    "en": "Trend"
+  },
+  "market.stock.marginal": {
+    "zh": "边际价",
+    "en": "Marginal price"
+  },
+  "market.stock.trend_up": {
+    "zh": "▲ 回升",
+    "en": "▲ refilling"
+  },
+  "market.stock.trend_down": {
+    "zh": "▼ 消耗",
+    "en": "▼ draining"
+  },
   "shipyard.title": {
     "zh": "船坞 — {port}",
     "en": "Shipyard — {port}"
