@@ -25,6 +25,7 @@ const EconomyLib := preload("res://scripts/port/economy.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
@@ -85,6 +86,18 @@ func _ready() -> void:
 	_test_save_round_trip()
 	_section = "13 hunter intel"
 	_test_hunter_intel()
+	_section = "16 parity factors"
+	_test_parity_factors()
+	_section = "17 variant flip"
+	_test_variant_flip()
+	_section = "18 ice refusal"
+	_test_ice_refusal()
+	_section = "19 neutral docking"
+	_test_neutral_docking()
+	_section = "20 regional lanes"
+	_test_regional_lanes()
+	_section = "21 pursuit budget"
+	_test_pursuit_budget()
 	_section = "14 tick-cost probe"
 	_test_tick_cost()
 	_section = "15 world scene flow"
@@ -803,11 +816,29 @@ func _test_contact_rules() -> void:
 func _test_movement_legality() -> void:
 	var sim := _make_run()
 	GameState.new_game("portugal", false)
-	# 30 ecology days: no fleet ever stands on land/reef/ice, never on the
-	# player's tile, and no two under-way fleets share a tile.
+	# 30 ecology days: no fleet ever stands on land/reef, never on the
+	# player's tile, no two under-way fleets share a tile — and no fleet ever
+	# MOVES INTO in-month seasonal ice (the §4.18 entry rule, task-H: a cell
+	# changing under a standing fleet never traps it, so only transitions
+	# are checked).
+	var ice_entries := 0
+	var ice_entry_at := ""
+	var prev_cells := {}
 	for day in range(2, 32):
 		GameState.day = day
 		sim.tick(day)
+		var ocean = OceanLayersLib.instance()
+		var month := SailingSimLib.month_for(GameState.day)
+		for fleet in GameState.npc_fleets:
+			var id := str((fleet as Dictionary).get("id", ""))
+			var cell := _cell_of(fleet)
+			if prev_cells.has(id) and prev_cells[id] != cell \
+					and ocean.ice_blocks(cell, month):
+				ice_entries += 1
+				if ice_entry_at.is_empty():
+					ice_entry_at = "%s → %s (day %d)" % [str(prev_cells[id]),
+						str(cell), day]
+			prev_cells[id] = cell
 	var on_land := ""
 	var duplicates := 0
 	var seen := {}
@@ -829,10 +860,15 @@ func _test_movement_legality() -> void:
 		seen[key] = str(fleet["id"])
 	_check(on_land.is_empty(),
 		"no fleet ever stepped onto land/reef/ice (first: %s)" % on_land)
+	_check(ice_entries == 0,
+		"no fleet ever entered in-month seasonal ice (%d entries, first %s)"
+		% [ice_entries, ice_entry_at])
 	_check(duplicates == 0,
 		"no two under-way fleets share a tile (%d collisions, %s)"
 		% [duplicates, collision_at])
-	# Every lane-locked fleet is either docked or on its route's leg path.
+	# Every lane-locked fleet is either docked or on its route's leg path —
+	# the ACTIVE geometry (task-H: the in-month variant replaces the tile
+	# path in its window; `_leg_path` alone would read the base path).
 	var off_path := ""
 	var off_path_detail := ""
 	for fleet in GameState.npc_fleets:
@@ -846,7 +882,7 @@ func _test_movement_legality() -> void:
 		if legs.is_empty():
 			continue
 		var leg: Dictionary = legs[0]
-		var path := sim._leg_path(leg)
+		var path := sim._leg_path_active(leg)
 		var found := false
 		for tile in path:
 			if tile == _cell_of(fleet):
@@ -857,7 +893,7 @@ func _test_movement_legality() -> void:
 			off_path_detail = "cell %s leg %s ti %d" % [_cell_of(fleet),
 				JSON.stringify(leg), int(route.get("tile_index", -1))]
 	_check(off_path.is_empty(),
-		"every sailing fleet stands on its own route path (first: %s %s)"
+		"every sailing fleet stands on its own ACTIVE route path (first: %s %s)"
 		% [off_path, off_path_detail])
 
 
@@ -1037,6 +1073,601 @@ func _test_hunter_intel() -> void:
 		"hunter_intel_cell records the contact cell (%s)" % str(cell))
 	sim.remove(str(spy["id"]))
 	GameState.player["reputation"]["england"] = 0
+
+
+# --- 16. Phase-6 parity factors (docs/60-* §4.11.11 amendment; §2.8) ---------
+
+## The forward 8-dir heading of the lane walk at `index` ("" at seam jumps).
+static func _lane_heading_at(path: Array, index: int) -> String:
+	if index + 1 >= path.size():
+		return ""
+	return SailingSimLib.heading_of_delta(
+		(path[index + 1] as Vector2i) - (path[index] as Vector2i))
+
+
+func _test_parity_factors() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	GameState.day = 200  # month 7: no seasonal ice anywhere
+	var month := SailingSimLib.month_for(GameState.day)
+	# A lane with a running (with-the-wind, factor > 1) and a beating
+	# (into-the-wind, factor < 1) stretch in month 7, clear of the fixture
+	# band and of any current-perturbed tile mismatch (the factor used is
+	# the full dir × current product either way).
+	var lane_id := ""
+	var run_index := -1
+	var beat_index := -1
+	var run_factor := 0.0
+	var beat_factor := 0.0
+	var run_current := 1.0
+	var beat_current := 1.0
+	for candidate in sim._lane_ids_sorted:
+		var path: Array = sim._lane_paths[candidate]
+		if path.size() < 60:
+			continue
+		var found_run := -1
+		var found_beat := -1
+		var best_run := 1.09
+		var best_beat := 0.71
+		for index in range(4, path.size() - 4):
+			var cell: Vector2i = path[index]
+			if NpcFleetsLib.chebyshev(cell, OPEN_CELL) <= 4:
+				continue
+			var heading := _lane_heading_at(path, index)
+			if heading.is_empty():
+				continue
+			var f: float = NpcFleetsLib.npc_direction_factor(heading, cell, month)
+			if f > best_run:
+				best_run = f
+				found_run = index
+			if f < best_beat:
+				best_beat = f
+				found_beat = index
+		if found_run >= 0 and found_beat >= 0:
+			lane_id = str(candidate)
+			run_index = found_run
+			beat_index = found_beat
+			var run_heading := _lane_heading_at(path, run_index)
+			var beat_heading := _lane_heading_at(path, beat_index)
+			run_current = NpcFleetsLib.npc_current_factor(
+				run_heading, path[run_index], month)
+			beat_current = NpcFleetsLib.npc_current_factor(
+				beat_heading, path[beat_index], month)
+			run_factor = best_run
+			beat_factor = best_beat
+			break
+	_check(lane_id != "",
+		"a lane with running (%.2f) and beating (%.2f) stretches exists in month %d"
+		% [run_factor, beat_factor, month])
+	if lane_id.is_empty():
+		return
+	var path: Array = sim._lane_paths[lane_id]
+	# A TRADER and a PATROL walk the same lane through `_step_fleets`: each
+	# advances exactly floor(2 × direction × current) tiles — and the
+	# downwind walk advances MORE than the upwind one (the done-when's
+	# upwind-vs-downwind proof).
+	var run_expected := int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
+		* run_factor * run_current))
+	var beat_expected := int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
+		* beat_factor * beat_current))
+	for role in ["trader", "patrol"]:
+		# A fresh board per role: `_step_fleets` walks every fleet on it, and
+		# two roles must not share the same lane cells (an occupied target
+		# would hold the walk for occupancy, not for parity). `_make_run`
+		# resets the clock — restore the probe month (7).
+		var board := _make_run()
+		GameState.day = 200
+		board._refresh_net()
+		var runner := _make_fleet(board, role, "portugal", path[run_index])
+		runner["id"] = "parity_run_%s" % role
+		runner["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+			"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+				"a": run_index, "b": path.size() - 1}]}
+		var beater := _make_fleet(board, role, "portugal", path[beat_index])
+		beater["id"] = "parity_beat_%s" % role
+		beater["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+			"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+				"a": beat_index, "b": path.size() - 1}]}
+		var run_tiles: int = board._lane_tiles_today(runner)
+		var beat_tiles: int = board._lane_tiles_today(beater)
+		_check(run_tiles == run_expected,
+			"%s downwind budget = floor(2 × %.3f) = %d (got %d)"
+			% [role, run_factor * run_current, run_expected, run_tiles])
+		_check(beat_tiles == beat_expected,
+			"%s upwind budget = floor(2 × %.3f) = %d (got %d)"
+			% [role, beat_factor * beat_current, beat_expected, beat_tiles])
+		_check(run_expected > beat_expected,
+			"the downwind %s out-runs the upwind one (%d > %d tiles/day)"
+			% [role, run_expected, beat_expected])
+		# End-to-end: one `_step_fleets` moves each fleet exactly its budget
+		# (fresh day: the probe reads above banked their carry — reset it).
+		board._step_carry.clear()
+		board._step_fleets(GameState.day)
+		_check(_cell_of(runner) == path[run_index + run_tiles],
+			"the downwind %s advanced %d tiles (at %s)"
+			% [role, run_tiles, str(_cell_of(runner))])
+		_check(_cell_of(beater) == path[beat_index + beat_tiles],
+			"the upwind %s advanced %d tiles (at %s)"
+			% [role, beat_tiles, str(_cell_of(beater))])
+	# A HUNTER pays the factors on lane travel too (§2.8) — the same budget
+	# formula through `_hunter_tick` (player far away: no chase). The role
+	# boards above reset the clock — restore the probe month.
+	GameState.day = 200
+	GameState.world["last_departed_port"] = ""
+	var hunter := _make_fleet(sim, "hunter", "england", path[run_index])
+	hunter["id"] = "parity_hunter"
+	hunter["hunter_state"] = NpcFleetsLib.HUNTER_STATE_INTEL
+	hunter["dest_port_id"] = ""
+	hunter["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": run_index, "b": path.size() - 1}]}
+	var before := _cell_of(hunter)
+	sim._hunter_tick(hunter, int(GameState.day), 0.0)
+	var moved := NpcFleetsLib.chebyshev(before, _cell_of(hunter))
+	_check(str(hunter["hunter_state"]) != NpcFleetsLib.HUNTER_STATE_CHASE
+		and moved == run_expected,
+		"the hunter's lane travel pays the parity budget (%d tiles, want %d)"
+		% [moved, run_expected])
+	# The fractional accumulator banks the remainder (task-H pin 3): seed
+	# 0.9 of carry on a fresh downwind walker — floor(2 × 1.3… + 0.9) pays
+	# an EXTRA tile and leaves ≈ 0.5 banked.
+	var banker := _make_fleet(sim, "trader", "portugal", path[run_index])
+	banker["id"] = "parity_banker"
+	banker["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": run_index, "b": path.size() - 1}]}
+	var plain := sim._lane_tiles_today(banker)
+	sim._step_carry[str(banker["id"])] = 0.9
+	var banked := sim._lane_tiles_today(banker)
+	var step_factor := run_factor * run_current
+	_check(banked == int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
+			* step_factor + 0.9)) and banked == plain + 1,
+		"the banked carry pays out (plain %d, banked %d, floor(2×%.3f+0.9) = %d)"
+		% [plain, banked, step_factor,
+		int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY) * step_factor + 0.9))])
+	_check(absf(float(sim._step_carry[str(banker["id"])])) < 1.0,
+		"the accumulator keeps the sub-tile remainder (%.2f)"
+		% float(sim._step_carry[str(banker["id"])]))
+	# Determinism: two identical sims walk identical cells (pure day+cell
+	# inputs — no RNG).
+	var echo := _make_run()
+	GameState.day = 200
+	echo._refresh_net()
+	var twin := _make_fleet(echo, "trader", "portugal", path[run_index])
+	twin["id"] = "parity_run_trader"
+	twin["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": run_index, "b": path.size() - 1}]}
+	echo._step_fleets(GameState.day)
+	_check(_cell_of(twin) == path[run_index + run_expected],
+		"the same seed/day/cells replay identically (%s)" % str(_cell_of(twin)))
+
+
+# --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------
+
+func _test_variant_flip() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	var base: Array = sim._lane_paths["hanseatic_north"]
+	var variants: Array = sim._lane_variants["hanseatic_north"]
+	_check(variants.size() == 1, "hanseatic_north ships exactly one variant")
+	if variants.is_empty() or base.size() < 120:
+		return
+	var vpath: Array = variants[0]["path"]
+	var vmonths: Array = variants[0]["months"]
+	_check(12 in vmonths and not (11 in vmonths),
+		"the winter variant covers month 12, not month 11")
+	# The active-geometry seam: summer walks the base (Baltic) run, winter
+	# walks the variant (Hamburg run).
+	var leg := {"kind": "lane", "id": "hanseatic_north", "reverse": false,
+		"a": 0, "b": base.size() - 1}
+	GameState.day = 210  # month 7
+	_check(sim._leg_path_active(leg).size() == base.size(),
+		"month 7 walks the base path (%d tiles)"
+		% sim._leg_path_active(leg).size())
+	GameState.day = 340  # month 12
+	_check(sim._leg_path_active(leg).size() == vpath.size(),
+		"month 12 walks the variant path (%d tiles)"
+		% sim._leg_path_active(leg).size())
+	# The flip, end-to-end: a patrol on the Baltic leg in month 11 rides the
+	# Hamburg run in month 12, progress remapped BY FRACTION.
+	var start := 100
+	var fleet := _make_fleet(sim, "patrol", "england", base[start])
+	fleet["id"] = "flip_01"
+	fleet["route"] = {"lanes": ["hanseatic_north"], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": "hanseatic_north", "reverse": false,
+			"a": 0, "b": base.size() - 1}]}
+	GameState.day = 320  # month 11: the base (Baltic) run is active
+	for _step in start:  # walk the base path up to tile `start`
+		sim._advance(fleet, 320)
+	_check(int(fleet["route"]["tile_index"]) == start
+		and _cell_of(fleet) == base[start],
+		"the fleet is on the Baltic leg at tile %d (month %d)"
+		% [start, SailingSimLib.month_for(GameState.day)])
+	# …month rolls over: the first step remaps progress by fraction —
+	# round(fraction × (new_len − 1)) over the full variant — and commits
+	# onto the winter path.
+	@warning_ignore("integer_division")
+	var expected_new := roundi(float(start) / float(base.size() - 1)
+		* float(vpath.size() - 1))
+	GameState.day = 331  # month 12
+	sim._advance(fleet, 331)
+	var flipped_cell := _cell_of(fleet)
+	var on_variant := false
+	for tile in vpath:
+		if tile == flipped_cell:
+			on_variant = true
+			break
+	_check(on_variant,
+		"month 12: the fleet rides the Hamburg run (at %s)" % str(flipped_cell))
+	_check(int(fleet["route"]["tile_index"]) == expected_new + 1,
+		"progress remapped by fraction: index %d (round(%d/%d × %d) + 1)"
+		% [int(fleet["route"]["tile_index"]), start, base.size() - 1,
+		vpath.size() - 1])
+	_check(sim._leg_active.has("flip_01")
+		and str((sim._leg_active["flip_01"] as Dictionary)["key"]).contains(
+			"hanseatic_north_winter"),
+		"the fleet's progress state names the active variant")
+	# Determinism: an identical replay flips onto the SAME tile.
+	var echo := _make_run()
+	echo._refresh_net()
+	GameState.day = 320
+	var twin := _make_fleet(echo, "patrol", "england", base[start])
+	twin["id"] = "flip_01"
+	twin["route"] = {"lanes": ["hanseatic_north"], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": "hanseatic_north", "reverse": false,
+			"a": 0, "b": base.size() - 1}]}
+	for _step in start:
+		echo._advance(twin, 320)
+	GameState.day = 331
+	echo._advance(twin, 331)
+	_check(_cell_of(twin) == flipped_cell,
+		"the flip replays identically (%s)" % str(_cell_of(twin)))
+	# The stored route keeps its base-relative shape (save shape unchanged).
+	var stored: Dictionary = fleet["route"]["legs"][0]
+	_check(int(stored["a"]) == 0 and int(stored["b"]) == base.size() - 1,
+		"the persisted leg keeps its base-relative a/b")
+
+
+# --- 18. Ice-aware stepping & pursuit (§2.7/§4.18; task-H item 3) --------------
+
+func _test_ice_refusal() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	var ocean = OceanLayersLib.instance()
+	var base: Array = sim._lane_paths["hanseatic_north"]
+	var frozen_at := -1
+	for index in base.size():
+		if ocean.ice_blocks(base[index], 1):
+			frozen_at = index
+			break
+	_check(frozen_at >= 0,
+		"the hanseatic base path crosses month-1 Baltic ice (tile %d)"
+		% frozen_at)
+	if frozen_at < 0:
+		return
+	var frozen: Vector2i = base[frozen_at]
+	GameState.day = 5  # month 1
+	_check(not sim._passable(frozen),
+		"the frozen tile refuses ENTRY in month 1")
+	_check(ocean.ice_blocks(frozen, 7) == false,
+		"the same tile is plain water in month 7 (the mask is month-keyed)")
+	var saved_day := int(GameState.day)
+	GameState.day = 210  # month 7
+	_check(sim._passable(frozen), "the same tile admits fleets in month 7")
+	GameState.day = saved_day
+	# Entering from open water is refused; a fleet STANDING on ice may still
+	# step out (the never-trapped rule).
+	var outsider := _make_fleet(sim, "pirate", "", frozen + Vector2i(2, 0))
+	outsider["id"] = "ice_outsider"
+	_check(not sim._can_enter(outsider, frozen),
+		"a raider cannot chase INTO in-month ice")
+	var holder := _make_fleet(sim, "pirate", "", frozen)
+	holder["id"] = "ice_holder"
+	var out_cell := Vector2i(-1, -1)
+	for offset in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0),
+			Vector2i(-1, 0)]:
+		var candidate: Vector2i = frozen + offset
+		if DataLoader.is_passable(candidate) \
+				and not ocean.ice_blocks(candidate, 1):
+			out_cell = candidate
+			break
+	_check(out_cell.x >= 0, "an open-water neighbour of the ice exists")
+	if out_cell.x >= 0:
+		_check(sim._can_enter(holder, out_cell),
+			"the fleet standing on the frozen tile may still move OUT")
+		var steps := 0
+		while _cell_of(holder) != out_cell and steps < 8:
+			sim._chase_step(holder, out_cell)
+			steps += 1
+		_check(_cell_of(holder) == out_cell,
+			"the trapped-fleet rule: the holder walked out in %d steps" % steps)
+	# Pursuit A* uses the same in-month passability: across the frozen
+	# basin the month-1 plan differs from the ice-blind one (no path, or a
+	# path that never touches the mask), while month 7 plans freely.
+	var from_cell: Vector2i = base[maxi(0, frozen_at - 8)]
+	var to_cell: Vector2i = base[mini(base.size() - 1, frozen_at + 8)]
+	var blind := FleetPathLib.find_path(from_cell, to_cell, 4320, 2160,
+		func(cell: Vector2i) -> bool: return DataLoader.is_passable(cell))
+	var winter := FleetPathLib.find_path(from_cell, to_cell, 4320, 2160,
+		func(cell: Vector2i) -> bool: return sim._passable(cell))
+	var winter_clean := true
+	for cell in winter:
+		if ocean.ice_blocks(cell, 1):
+			winter_clean = false
+			break
+	_check(blind.size() >= 2,
+		"the ice-blind plan would cross the basin (%d tiles)" % blind.size())
+	_check(winter.is_empty() or winter_clean,
+		"the month-1 pursuit plan never enters the ice (%d tiles)"
+		% winter.size())
+	GameState.day = 210
+	var summer := FleetPathLib.find_path(from_cell, to_cell, 4320, 2160,
+		func(cell: Vector2i) -> bool: return sim._passable(cell))
+	_check(summer.size() >= 2,
+		"the month-7 pursuit plan crosses freely (%d tiles)" % summer.size())
+
+
+# --- 19. The own-nation docking pin (decision 11; task-H item 6) ----------------
+
+func _test_neutral_docking() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	var neutral_id := ""
+	for port in DataLoader.ports_list:
+		if str((port as Dictionary).get("nation_id", "")) == "":
+			neutral_id = str((port as Dictionary).get("id", ""))
+			break
+	_check(not neutral_id.is_empty(), "a neutral port exists to probe")
+	if neutral_id.is_empty():
+		return
+	# (a) structural: neither the candidate scan nor a live decision ever
+	# proposes a neutral destination.
+	var fixture := _trader_fixture(sim)
+	_check(not fixture.is_empty(), "the docking probe has a trader fixture")
+	if fixture.is_empty():
+		return
+	var origin := str(fixture["origin"])
+	for dest in sim._candidate_destinations(origin, "portugal"):
+		_check(str(DataLoader.get_port(str(dest)).get("nation_id", ""))
+			== "portugal",
+			"the candidate scan never proposes %s (nation %s)" % [str(dest),
+			str(DataLoader.get_port(str(dest)).get("nation_id", ""))])
+	var trader := _make_fleet(sim, "trader", "portugal",
+		DataLoader.port_cell(origin))
+	trader["id"] = "docking_probe"
+	trader["dest_port_id"] = origin
+	var candidates: Array = sim.score_all_candidates(trader, origin, 10)
+	for candidate in candidates:
+		_check(str(DataLoader.get_port(str(candidate["dest"]))
+			.get("nation_id", "")) == "portugal",
+			"no decision candidate is a neutral port (got %s)"
+			% str(candidate["dest"]))
+	# (b) a trader standing ON a neutral berth never adopts it: the
+	# own-nation lookup refuses, no sale touches the neutral market, and the
+	# port call falls back to its own-nation destination.
+	var berth := DataLoader.port_cell(neutral_id)
+	if berth.x >= 0:
+		var drifter := _make_fleet(sim, "trader", "portugal", berth)
+		drifter["id"] = "docking_drifter"
+		drifter["dest_port_id"] = "lisbon"
+		drifter["cargo"] = {"wine": 20}
+		var neutral_wine := EconomyLib.stock_of(neutral_id, "wine")
+		_check(sim._own_port_at_cell(drifter, berth) == "",
+			"the own-nation port lookup refuses a neutral berth")
+		GameState.day = 10
+		sim._depart_trader(drifter, "portugal", 10)
+		_check(EconomyLib.stock_of(neutral_id, "wine") == neutral_wine,
+			"no trader ever sells into a neutral port")
+		_check(str(drifter["dest_port_id"]) != neutral_id,
+			"the drifter never adopts the neutral berth as its port call")
+	# (c) the whole-ecology net: over 40 ticks of live traffic, every
+	# trader-family arrival in the port log is at an OWN-nation port.
+	GameState.npc_port_log = []
+	GameState.new_game("portugal", false)
+	var fill_sim: NpcFleetsLib = NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": "normal",
+	})
+	fill_sim.initial_fill(1)
+	for day in range(2, 42):
+		GameState.day = day
+		fill_sim.last_tick_day = -1
+		fill_sim.tick(day)
+	var bad_docking := ""
+	for record in GameState.npc_port_log:
+		var role := str((record as Dictionary).get("role", ""))
+		if not (role in ["trader", "coaster", "courier"]):
+			continue
+		var port_id := str((record as Dictionary).get("port_id", ""))
+		var port_nation := str(DataLoader.get_port(port_id)
+			.get("nation_id", "__missing__"))
+		if port_nation == "" \
+				or port_nation != str((record as Dictionary).get("nation_id", "")):
+			bad_docking = "%s arrived at %s (nation %s)" % [role, port_id,
+				port_nation]
+			break
+	_check(bad_docking.is_empty(),
+		"no trader-family fleet ever docks at a neutral port (%s)"
+		% bad_docking)
+
+
+# --- 20. The 5 regional lanes: presence & chokepoint camping (§2.11.1) ---------
+
+func _test_regional_lanes() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	var new_lanes := ["canton_country_trade", "coromandel_bengal",
+		"swahili_coast", "pacific_america", "west_africa"]
+	for lane_id in new_lanes:
+		_check(sim._lane_paths.has(lane_id)
+			and (sim._lane_paths[lane_id] as Array).size() > 100,
+			"%s is a built lane the ecology walks" % lane_id)
+	# Routing reach: the lane tags' nations reach their lanes through the
+	# spoke network (patrols cycle exactly these lane sets).
+	_check("canton_country_trade" in sim.nation_lanes("portugal"),
+		"portugal's patrol lanes reach the taiwan_strait lane")
+	_check("pacific_america" in sim.nation_lanes("spain"),
+		"spain's patrol lanes reach the pacific_america lane")
+	_check("coromandel_bengal" in sim.nation_lanes("holland")
+		or "coromandel_bengal" in sim.nation_lanes("england"),
+		"holland/england patrol lanes reach the ceylon_south lane")
+	_check("swahili_coast" in sim.nation_lanes("portugal"),
+		"portugal's patrol lanes reach the swahili_coast lane")
+	_check("west_africa" in sim.nation_lanes("portugal"),
+		"portugal's patrol lanes reach the west_africa lane")
+	# Live traffic: the fill + 60 ticks of the trickle put role fleets ON
+	# every new lane (spawn walks reach them; they are visibly worked).
+	GameState.new_game("portugal", false)
+	var fill_sim: NpcFleetsLib = NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": "normal",
+	})
+	fill_sim.initial_fill(1)
+	for day in range(2, 62):
+		GameState.day = day
+		fill_sim.last_tick_day = -1
+		fill_sim.tick(day)
+	var lane_roles := {}
+	for fleet in GameState.npc_fleets:
+		for lane_id in (fleet.get("route", {}) as Dictionary).get("lanes", []):
+			lane_roles[str(lane_id)] = str((fleet as Dictionary)
+				.get("role", ""))
+	for lane_id in new_lanes:
+		_check(lane_roles.has(lane_id),
+			"role traffic visibly works %s (%s)"
+			% [lane_id, lane_roles.get(lane_id, "none")])
+	# Chokepoint camping on the tagged straits: the production anchor
+	# primitive (`_free_tile_near`, the exact `_raider_anchor` draw) sites a
+	# pirate within the swept Chebyshev 6 of BOTH tag lanes' junction tiles —
+	# and the worldwide spawn walk is reported as presence evidence.
+	var camping := {}
+	for lane_id in ["canton_country_trade", "coromandel_bengal"]:
+		var near := {}
+		for tile in sim._lane_paths[lane_id]:
+			for dy in range(-NpcFleetsLib.ANCHOR_RADIUS,
+					NpcFleetsLib.ANCHOR_RADIUS + 1):
+				for dx in range(-NpcFleetsLib.ANCHOR_RADIUS,
+						NpcFleetsLib.ANCHOR_RADIUS + 1):
+					near[Vector2i(
+						posmod((tile as Vector2i).x + dx, 4320),
+						(tile as Vector2i).y + dy)] = true
+		camping[lane_id] = near
+	for lane_id in camping:
+		var site := Vector2i(-1, -1)
+		var junctions: Array = sim._anchor_tiles("pirate", "")
+		for tile in sim._lane_paths[lane_id]:
+			if junctions.has(tile):
+				site = tile
+				break
+		_check(site.x >= 0, "%s carries a campable junction tile" % lane_id)
+		if site.x < 0:
+			continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 20261101
+		var anchor: Vector2i = sim._free_tile_near(site, rng,
+			NpcFleetsLib.ANCHOR_RADIUS, true)
+		if anchor == NpcFleetsLib.NO_CELL:
+			# The strait's every near tile is lane raster (the documented
+			# fallback): the draw takes an on-path anchor after half the
+			# attempts, exactly like `_raider_anchor`.
+			anchor = sim._free_tile_near(site, rng,
+				NpcFleetsLib.ANCHOR_RADIUS, false)
+		_check(anchor != NpcFleetsLib.NO_CELL
+			and (camping[lane_id] as Dictionary).has(anchor),
+			"the anchor draw camps %s within Chebyshev %d (at %s)"
+			% [lane_id, NpcFleetsLib.ANCHOR_RADIUS, str(anchor)])
+	var found := {}
+	for day in range(2, 202):
+		if found.size() == 2:
+			break
+		var pirate := fill_sim.spawn("pirate", "", day)
+		if pirate.is_empty():
+			continue
+		var anchor := _cell_of(pirate)
+		for lane_id in camping:
+			if not found.has(lane_id) \
+					and (camping[lane_id] as Dictionary).has(anchor):
+				found[lane_id] = str(anchor)
+	print("  camping walk (worldwide spawn draws): %s" % str(found))
+
+
+# --- 21. The pursuit A* budget at the quadrupled chase area (correction 13) ----
+
+const PURSUIT_PROBE_DAYS := 40
+
+func _test_pursuit_budget() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	# The roughest reachable water: the passable cell whose sampled radius-24
+	# disc holds the most impassable tiles (an archipelago coast — the
+	# realistic worst case for the 30/40 chase A*).
+	var best := Vector2i(-1, -1)
+	var best_score := -1
+	for y in range(24, 2136, 24):
+		for x in range(24, 4296, 24):
+			var cell := Vector2i(x, y)
+			if not DataLoader.is_passable(cell):
+				continue
+			var score := 0
+			for dy in range(-24, 25, 6):
+				for dx in range(-24, 25, 6):
+					if not DataLoader.is_passable(Vector2i(
+							posmod(x + dx, 4320), y + dy)):
+						score += 1
+			if score > best_score:
+				best_score = score
+				best = cell
+	_check(best_score > 12,
+		"an archipelago pursuit area exists (roughness %d at %s)"
+		% [best_score, str(best)])
+	if best_score < 0:
+		return
+	# The hunter chases across the rough coast; the player jinks 3 tiles a
+	# day so the plan re-runs EVERY day (the worst case the budget gates).
+	var hunter := _make_fleet(sim, "hunter", "spain", best)
+	hunter["id"] = "pursuit_probe"
+	GameState.player["reputation"]["spain"] = -60
+	# The chase target: the nearest passable cell on the radius-34 ring
+	# around the rough anchor (wrap-aware, y bounded).
+	var prey := Vector2i(-1, -1)
+	for radius in [34, 36, 38, 40, 30, 28]:
+		for angle in 64:
+			var dx := roundi(cos(TAU * angle / 64.0) * float(radius))
+			var dy := roundi(sin(TAU * angle / 64.0) * float(radius))
+			var candidate := Vector2i(posmod(best.x + dx, 4320),
+				clampi(best.y + dy, 0, 2159))
+			if DataLoader.is_passable(candidate):
+				prey = candidate
+				break
+		if prey.x >= 0:
+			break
+	_check(prey.x >= 0, "the pursuit target sits on water (ring scan)")
+	if prey.x < 0:
+		return
+	var worst_day_ms := 0.0
+	var total_day_ms := 0.0
+	for offset in PURSUIT_PROBE_DAYS:
+		GameState.day = 100 + offset
+		prey = Vector2i(prey.x + 3, prey.y)  # force a re-plan every day
+		if not DataLoader.is_passable(prey) or prey.y < 0 or prey.y > 2159:
+			prey = Vector2i(prey.x - 3, clampi(prey.y + 1, 0, 2159))
+		if not DataLoader.is_passable(prey):
+			prey = Vector2i(prey.x - 3, prey.y)
+		var started := Time.get_ticks_usec()
+		sim._pursue(hunter, prey, 0.0)
+		var ms := float(Time.get_ticks_usec() - started) / 1000.0
+		total_day_ms += ms
+		worst_day_ms = maxf(worst_day_ms, ms)
+	var avg := total_day_ms / float(PURSUIT_PROBE_DAYS)
+	print("  pursuit probe: %d chase days (a re-plan every day) across roughness-%d water"
+		% [PURSUIT_PROBE_DAYS, best_score])
+	print("  pursuit probe: avg %.2f ms/day, worst day %.2f ms"
+		% [avg, worst_day_ms])
+	print("PROFILE pursuit_worst_ms %d" % int(round(worst_day_ms)))
+	# The locked budget (docs/60-* §4.11.11.5): ≤ 250 ms/day, overflow loses
+	# the chase. Correction 13: windowed only on measured failure.
+	_check(worst_day_ms <= 250.0,
+		"the pursuit A* stays within the 250 ms/day budget (worst %.1f ms)"
+		% worst_day_ms)
 
 
 # --- 14. The tick-cost probe (docs/60-* §4.11.11.5 perf gate) -----------------
