@@ -26,6 +26,8 @@ from pathlib import Path
 SERIAL_SAVE_SET = (
     "test_save", "test_save_v5", "test_world_e2e",
     "test_npc_fleets", "test_phase2_acceptance", "test_phase3_acceptance",
+    # Task L: test_aliveness round-trips save slot 3 through save/load.
+    "test_aliveness",
 )
 DEFAULT_TIMEOUT_S = 300.0
 DEFAULT_JOBS = 8

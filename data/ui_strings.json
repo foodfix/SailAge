@@ -1771,5 +1771,25 @@
   "world.wreck.collected": {
     "zh": "捞起沉船残骸：{cargo}单位货物，{gold}金",
     "en": "Wreck salvaged: {cargo} units of cargo, {gold}g"
+  },
+  "captain.poster.reward": {
+    "zh": "悬赏约 {gold} 金",
+    "en": "Reward: about {gold}g"
+  },
+  "captain.rumor.event": {
+    "zh": "{port}传来消息:{event}。",
+    "en": "Word from {port}: {event}."
+  },
+  "captain.rumor.fleet": {
+    "zh": "据报,一支{nation}船队出没于{port}附近海域。",
+    "en": "A {nation} fleet is reported near {port}."
+  },
+  "captain.rumor.departed": {
+    "zh": "一支{nation}船队刚离港,驶往{port}。",
+    "en": "A {nation} convoy just left, bound for {port}."
+  },
+  "captain.rumor.arrived": {
+    "zh": "一支{nation}船队刚刚进港停靠。",
+    "en": "A {nation} convoy has just docked here."
   }
 }
