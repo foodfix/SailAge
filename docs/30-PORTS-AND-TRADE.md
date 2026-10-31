@@ -47,7 +47,9 @@ The port hub lists facilities in fixed order: Market, Shipyard, Tavern, Inn,
 Guild, Palace, plus a "Set Sail" button. Phase-3 facilities render as
 disabled rows with the stub label until Phase 3 activates them; from Phase 3
 on they are enabled (or replaced by `port.closed_bounty` on a bountied
-nation's ports, `70-*` §4.9.6).
+nation's ports, `70-*` §4.9.6). Neutral ports (`nation_id: ""`, Phase 6,
+`10-*` §7.1) run the standard market off their `produces`/`demands` resting
+stock — frontier markets that no NPC fleet serves this phase.
 
 ### 4.2 Stock economy & price formulas
 
