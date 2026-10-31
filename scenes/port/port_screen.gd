@@ -48,6 +48,9 @@ const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const ProvisionsLib := preload("res://scenes/port/provisions_dialog.gd")
 ## Phase-5: the officers roster panel (S18, docs/80-* §4.6.2).
 const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
+## Phase-5: the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic
+## density dial, opened from this hub's footer row.
+const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 
@@ -109,6 +112,7 @@ signal rebound
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
 @onready var _fleet_button: Button = $Layout/VBox/Footer/Fleet
 @onready var _officers_button: Button = $Layout/VBox/Footer/Officers
+@onready var _settings_button: Button = $Layout/VBox/Footer/Settings
 
 @onready var _save_button: Button = $Layout/VBox/Footer/Save
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
@@ -155,6 +159,11 @@ func _ready() -> void:
 	# so it sits in the same footer row (docs/80-* §4.6.2 "entry point (locked)").
 	_officers_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_officers_button.pressed.connect(open_officers_panel)
+	# Phase-5: the S19 settings modal joins the same footer modal row
+	# (docs/80-* §4.6.3: "a Settings button in the footer beside
+	# Save · Set Sail · Fleet · Officers").
+	_settings_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_settings_button.pressed.connect(open_settings_panel)
 
 	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
 	# only *allowed* in port; this row is the discoverable entry point.
@@ -176,6 +185,7 @@ func _ready() -> void:
 	# roster (§4.6.2) — both modals over S4, both parent-agnostic.
 	ProvisionsLib.attach_to(self, self)
 	OfficersPanelLib.attach_to(self, self)
+	SettingsPanelLib.attach_to(self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_state_changed)
@@ -225,7 +235,7 @@ func has_modal() -> bool:
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
 		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
 			return true
-	for panel_name in ["ProvisionsDialog", "OfficersPanel"]:
+	for panel_name in ["ProvisionsDialog", "OfficersPanel", "SettingsPanel"]:
 		var extra := get_node_or_null(panel_name)
 		if extra != null and extra.has_method("has_modal") and extra.has_modal():
 			return true
@@ -416,6 +426,29 @@ func officers_panel() -> Control:
 	return get_node_or_null("OfficersPanel")
 
 
+## Opens the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic density
+## dial. The footer `Settings` button calls this. Returns the panel (null only
+## if the scene failed to load).
+func open_settings_panel() -> Control:
+	var panel := get_node_or_null("SettingsPanel")
+	if panel == null:
+		panel = SettingsPanelLib.attach_to(self)
+	if panel != null and panel.has_method("open"):
+		panel.open()
+	return panel
+
+
+## The attached settings panel (tests / hosts), or null.
+func settings_panel() -> Control:
+	return get_node_or_null("SettingsPanel")
+
+
+## The S4 footer button that opens the S19 settings modal (§4.6.3). Always
+## present (the footer is built by the scene, not per-port), like `Fleet`.
+func settings_row() -> Button:
+	return _settings_button
+
+
 ## The S4 footer button that opens the S18 officers roster (§4.6.2). Always
 ## present (the footer is built by the scene, not per-port), like `Fleet`.
 func officers_row() -> Button:
@@ -530,6 +563,10 @@ func _bind() -> void:
 	# Same rule as Set Sail: no run docked (standalone load) means no roster to
 	# show, so the footer button greys out instead of opening an empty panel.
 	_officers_button.disabled = port.is_empty()
+	# Same rule for the S19 settings modal: the density dial applies to a live
+	# run's ecology, so it greys out when the scene opened standalone.
+	_settings_button.text = I18n.t_key("settings.title")
+	_settings_button.disabled = port.is_empty()
 	_sync_facility_rows(port)
 	rebound.emit()
 

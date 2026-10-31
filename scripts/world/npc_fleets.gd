@@ -301,6 +301,25 @@ func is_deserted() -> bool:
 	return multiplier() <= 0.0
 
 
+## Density-dial seam (docs/60-* §4.1.1 "budgets multiply by the preset",
+## docs/80-* §4.6.3): applies a mid-run preset change to a **live** sim.
+## Sims read `GameState.npc_preset` at construction (the world scene builds one
+## per scene entry), so S19 only writes the field — this seam covers a host
+## that keeps its sim across the change. Raising makes the daily trickle
+## refill toward the new budgets; lowering **never culls** living fleets (the
+## trickle only spawns on a deficit); `deserted` stops every spawn. Returns
+## the applied preset id.
+func set_preset(preset: String) -> String:
+	var presets: Dictionary = {}
+	var npc_config: Dictionary = _config.get("npc_config", DataLoader.npc_config)
+	if npc_config.get("presets", {}) is Dictionary:
+		presets = npc_config["presets"]
+	_preset = str(preset) if presets.has(str(preset)) else str(
+		npc_config.get("default_preset", "normal"))
+	_config["preset"] = _preset
+	return _preset
+
+
 func _port_counts() -> Dictionary:
 	var counts: Dictionary = {}
 	for port in DataLoader.ports_list:
@@ -566,10 +585,14 @@ func nearest_contact(cell: Vector2i) -> Dictionary:
 
 
 ## Every hostile fleet within Chebyshev 1 of `cell`, nearest first (ties by
-## id ascending).
+## id ascending). `deserted` raises nothing (docs/80-* §4.6.3, docs/10-*
+## density table: zero NPC spawns/contacts) even though living fleets stay on
+## the map — lowering the dial never culls them.
 func contacts(cell: Vector2i) -> Array:
 	var day := GameState.day
 	var out: Array = []
+	if is_deserted():
+		return out
 	for fleet in _within(cell, CONTACT_DISTANCE):
 		if not is_hostile_fleet(fleet):
 			continue
