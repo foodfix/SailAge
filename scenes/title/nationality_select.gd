@@ -13,6 +13,9 @@ extends Control
 ## the scene also runs before the editor has written Godot's class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-5: the initial-fill replay after `new_game` re-applies the S2
+## density choice (see [method _apply_density_after_new_game]).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 const NATIONS_PER_ROW := 3
@@ -23,6 +26,8 @@ const CARD_SIZE := Vector2(360, 208)
 @onready var _prompt: Label = $Layout/Header/Prompt
 @onready var _grid: GridContainer = $Layout/Cards
 @onready var _world_label: Label = $Layout/WorldRow/WorldLabel
+@onready var _density_label: Label = $Layout/DensityRow/DensityLabel
+@onready var _density_presets: HBoxContainer = $Layout/DensityRow/DensityPresets
 @onready var _back_button: Button = $Layout/Footer/Back
 @onready var _confirm_button: Button = $Layout/Footer/Confirm
 @onready var _lang_button: Button = $Layout/Footer/Lang
@@ -31,6 +36,16 @@ const CARD_SIZE := Vector2(360, 208)
 var _selected_id: String = ""
 ## Card buttons in data order, so selection styling can be refreshed cheaply.
 var _cards: Array[Button] = []
+## The §4.6.3 sea-traffic density row: the chosen preset id (the
+## `npc_config.json` `default_preset` — "normal" — until the player picks).
+var _density_preset: String = ""
+## Density preset → toggle Button, in `npc_config.json` order.
+var _density_buttons: Dictionary = {}
+
+## Routing switch for headless tests (the `GameState.new_game(..., route)`
+## convention): with `false`, [method confirm_selection] still runs the whole
+## new-game path (including the density application) but does not route.
+var route_after_confirm: bool = true
 
 
 func _ready() -> void:
@@ -51,6 +66,7 @@ func _ready() -> void:
 
 	if not DataLoader.nations_list.is_empty():
 		_selected_id = str(DataLoader.nations_list[0].get("id", ""))
+	_build_density_row()
 	_rebuild()
 
 
@@ -76,12 +92,75 @@ func _rebuild() -> void:
 	_back_button.text = I18n.t_key("ui.back")
 	_confirm_button.text = I18n.t_key("nation.confirm")
 	_lang_button.text = I18n.t_key("ui.language_toggle")
+	_relabel_density_row()
 
 	for nation in DataLoader.nations_list:
 		var card := _build_card(nation)
 		_grid.add_child(card)
 		_cards.append(card)
 	_refresh_selection()
+
+
+# --- The §4.6.3 density row (Phase 5) ----------------------------------------
+
+## Builds the sea-traffic preset row — deserted / low / normal / high /
+## extreme in `npc_config.json` order, `default_preset` ("normal") selected —
+## one sea-traffic row above the confirm button (docs/80-* §4.6.3). The
+## preset list and the default are data; only the row's existence is code.
+func _build_density_row() -> void:
+	var npc_config: Dictionary = DataLoader.npc_config
+	var presets = npc_config.get("presets", {})
+	var ids: Array[String] = []
+	if presets is Dictionary and not (presets as Dictionary).is_empty():
+		for preset in presets:
+			ids.append(str(preset))
+	else:
+		for preset in ["deserted", "low", "normal", "high", "extreme"]:
+			ids.append(preset)
+	if _density_preset.is_empty() or not _density_preset in ids:
+		_density_preset = str(npc_config.get("default_preset", "normal"))
+	for preset in ids:
+		var button := Button.new()
+		button.name = "Density_%s" % preset
+		button.toggle_mode = true
+		button.custom_minimum_size = Vector2(112, PaletteLib.BUTTON_H)
+		button.pressed.connect(_on_density_pressed.bind(preset))
+		_density_presets.add_child(button)
+		_density_buttons[preset] = button
+	_relabel_density_row()
+
+
+## Re-labels the density row from the merged `settings.*` keys (§4.7.9);
+## runs on build and on every `locale_changed`.
+func _relabel_density_row() -> void:
+	_density_label.text = I18n.t_key("settings.density")
+	for preset in _density_buttons:
+		var button: Button = _density_buttons[preset]
+		button.text = I18n.t_key("settings.density.%s" % preset)
+		button.button_pressed = preset == _density_preset
+		button.add_theme_color_override(
+			"font_color",
+			PaletteLib.ACCENT if button.button_pressed else PaletteLib.TEXT
+		)
+
+
+func _on_density_pressed(preset: String) -> void:
+	set_density_preset(preset)
+
+
+## The chosen density preset id (tests / hosts). Written into
+## `GameState.npc_preset` on confirm — before `new_game` runs its seeded
+## initial fill (§4.6.3).
+func density_preset() -> String:
+	return _density_preset
+
+
+## Selects a density preset (unknown ids are refused; the row stands).
+func set_density_preset(preset: String) -> void:
+	if not _density_buttons.has(preset):
+		return
+	_density_preset = preset
+	_relabel_density_row()
 
 
 ## One card: flag color block, name, description and the start package — all
@@ -196,10 +275,33 @@ func _on_back() -> void:
 
 ## Confirm: start the run. `GameState.new_game()` owns the §4.1 state block and
 ## the routing; `world.map_id` is the single shipped map (docs/90-* §9.1).
+## Since Phase 5 the §4.6.3 density row writes `GameState.npc_preset` here,
+## before `new_game`, so the seeded initial fill uses the chosen preset.
 func confirm_selection() -> void:
 	if _selected_id.is_empty():
 		return
-	GameState.new_game(_selected_id)
+	GameState.npc_preset = _density_preset
+	GameState.new_game(_selected_id, route_after_confirm)
+	_apply_density_after_new_game()
+
+
+## `new_game()` resets the dial to its documented default (`"normal"`) and
+## fills at that preset — the reset seam is autoload-owned (docs/90-* §8.1
+## Phase-5 fields), so when the S2 choice differs, the choice is re-applied
+## and the fill replayed: the default fill is dropped and a fresh seeded sim
+## fills at the chosen preset (same day/world seed family, the
+## `test_npc_fleets` §2 re-fill replay pattern), i.e. the run starts exactly
+## as if `new_game` had read the S2 choice. `deserted` replays to zero
+## fleets (docs/60-* §4.1.2 "deserted fills nothing").
+func _apply_density_after_new_game() -> void:
+	if GameState.npc_preset == _density_preset:
+		return
+	GameState.npc_preset = _density_preset
+	GameState.npc_fleets = []
+	var sim := NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": _density_preset,
+	})
+	sim.initial_fill(GameState.day)
 
 
 func _on_locale_changed(_locale: String) -> void:
