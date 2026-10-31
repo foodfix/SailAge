@@ -108,6 +108,7 @@ signal rebound
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
 @onready var _fleet_button: Button = $Layout/VBox/Footer/Fleet
+@onready var _officers_button: Button = $Layout/VBox/Footer/Officers
 
 @onready var _save_button: Button = $Layout/VBox/Footer/Save
 @onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
@@ -135,10 +136,6 @@ var _row_ids: Array[String] = []
 ## `id:phase|…` snapshot of the data the rows were built from; a bind whose
 ## signature differs rebuilds them ([method _sync_facility_rows]).
 var _rows_signature: String = ""
-## The Phase-5 S18 row appended after the data-driven facility rows (§4.6.2
-## "opened from S4's facility list"). It carries no `facility_id` meta, so it is
-## not a facility and never disturbs the §4.1 order the tests pin.
-var _officers_row: Button = null
 
 
 func _ready() -> void:
@@ -154,6 +151,10 @@ func _ready() -> void:
 	# T18: one footer row that opens the fleet/cargo panel (docs/20 §4.10).
 	_fleet_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_fleet_button.pressed.connect(open_fleet_panel)
+	# Phase-5: the S18 officers roster is a modal over S4 like the fleet panel,
+	# so it sits in the same footer row (docs/80-* §4.6.2 "entry point (locked)").
+	_officers_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_officers_button.pressed.connect(open_officers_panel)
 
 	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
 	# only *allowed* in port; this row is the discoverable entry point.
@@ -390,8 +391,8 @@ func provisions_dialog() -> Control:
 	return get_node_or_null("ProvisionsDialog")
 
 
-## Opens the S18 officers panel (docs/80-* §4.6.2). The `O` key and the
-## `port.officers` facility-style footer row both call this.
+## Opens the S18 officers panel (docs/80-* §4.6.2). The `O` key, the footer
+## `Officers` button and the character panel's button all call this.
 func open_officers_panel() -> Control:
 	var panel := get_node_or_null("OfficersPanel")
 	if panel == null:
@@ -415,10 +416,10 @@ func officers_panel() -> Control:
 	return get_node_or_null("OfficersPanel")
 
 
-## The S4 facility-list row that opens the S18 officers roster (§4.6.2), or null
-## when nothing is docked.
+## The S4 footer button that opens the S18 officers roster (§4.6.2). Always
+## present (the footer is built by the scene, not per-port), like `Fleet`.
 func officers_row() -> Button:
-	return _officers_row
+	return _officers_button
 
 
 ## Why the fleet may not leave port, as a `ui_strings.json` key (`""` = may
@@ -511,8 +512,7 @@ func _bind() -> void:
 		})
 	_set_sail_button.text = I18n.t_key("port.set_sail")
 	_fleet_button.text = I18n.t_key("fleet.title")
-	if _officers_row != null:
-		_officers_row.text = I18n.t_key("officers.title")
+	_officers_button.text = I18n.t_key("officers.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
 
 	# T17: docs/80-* §4.6 "Save: available only at port". The row lives on S4,
@@ -525,6 +525,9 @@ func _bind() -> void:
 	# Nothing to leave when not docked (standalone load): the button stays
 	# visible for layout but disabled, so no input can start a bogus route.
 	_set_sail_button.disabled = port.is_empty()
+	# Same rule as Set Sail: no run docked (standalone load) means no roster to
+	# show, so the footer button greys out instead of opening an empty panel.
+	_officers_button.disabled = port.is_empty()
 	_sync_facility_rows(port)
 	rebound.emit()
 
@@ -629,27 +632,7 @@ func _sync_facility_rows(port: Dictionary) -> void:
 				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
-	_append_officers_row(port)
 
-
-## Adds the S18 officers roster row after the facility rows (docs/80-* §4.6.2
-## "opened from S4's facility list"). It is deliberately **not** a facility: no
-## `facility_id` meta, no phase, no `facility_requested` — the roster is a modal
-## over S4, not a screen swap. Absent when nothing is docked (standalone load),
-## because the hub renders no rows at all then.
-func _append_officers_row(port: Dictionary) -> void:
-	_officers_row = null
-	if port.is_empty():
-		return
-	var button := Button.new()
-	button.name = "Row_Officers"
-	button.text = I18n.t_key("officers.title")
-	button.disabled = GameState.player.is_empty()
-	button.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
-	button.set_meta("officers_row", true)
-	button.pressed.connect(open_officers_panel)
-	_facility_rows.add_child(button)
-	_officers_row = button
 
 
 func _clear_facility_rows() -> void:
@@ -658,7 +641,6 @@ func _clear_facility_rows() -> void:
 		child.queue_free()
 	_row_buttons.clear()
 	_row_ids.clear()
-	_officers_row = null
 
 
 ## Re-labels every rendered row from its stored key, keeping the stub note for

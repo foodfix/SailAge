@@ -1001,23 +1001,29 @@ func _test_officers_panel_entry() -> void:
 	_check(not panel.is_open(), "`O` closes it again (§4.3 toggle)")
 	_check(not hub.has_modal(), "a closed panel is no longer a modal")
 
-	# The facility-list row (docs/80-* §4.6.2 "opened from S4's facility list").
+	# The footer button beside Fleet (docs/80-* §4.6.2 "entry point (locked)"):
+	# S18 is a modal over S4, so it belongs with the footer modals, not in the
+	# facility column (which is reserved for rows that leave S4 for a screen).
 	var row: Button = hub.officers_row()
-	_check(row != null, "S4's facility list carries an Officers row")
+	_check(row != null, "S4's footer carries an Officers button")
 	if row != null:
 		_check(row.text == I18n.t_key("officers.title"),
-			"the Officers row is localised (%s)" % row.text)
-		_check(row.custom_minimum_size.y == 40.0,
-			"the Officers row uses the 40px button height (§4.8)")
+			"the Officers button is localised (%s)" % row.text)
 		_check(not row.has_meta("facility_id"),
-			"the Officers row is not a facility (no facility_id meta)")
+			"the Officers button is not a facility (no facility_id meta)")
 		_check(not hub.facility_row_ids().has("officers"),
 			"…so it never enters facility_row_ids (§4.1 order is untouched)")
-		_check(row.custom_minimum_size == Vector2(240, 40),
-			"the Officers row matches the facility-row geometry")
+		var fleet_button: Button = hub.get_node("Layout/VBox/Footer/Fleet")
+		_check(row.get_parent() == fleet_button.get_parent(),
+			"the Officers button shares the footer with Fleet")
+		_check(row.get_index() == fleet_button.get_index() + 1,
+			"…and sits immediately after it (%d vs %d)"
+			% [row.get_index(), fleet_button.get_index()])
+		_check(row.custom_minimum_size.y == 40.0,
+			"the Officers button uses the 40px button height (§4.8)")
 		row.pressed.emit()
 		await get_tree().process_frame
-		_check(panel.is_open(), "the Officers row opens the panel")
+		_check(panel.is_open(), "the footer Officers button opens the panel")
 		panel.close()
 
 	# Esc is behind the modal rule: it closes the panel, never Set Sail.

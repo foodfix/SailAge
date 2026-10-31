@@ -477,13 +477,15 @@ func _test_entry_points() -> void:
 	_check(not panel.is_open(), "`O` closes it again")
 
 	var row: Button = hub.officers_row()
-	_check(row != null, "S4's facility list has an Officers row (entry point 2)")
+	_check(row != null, "S4's footer has an Officers button (entry point 2)")
 	if row != null:
 		_check(row.text == I18n.t_key("officers.title"),
-			"the row is localised (%s)" % row.text)
+			"the button is localised (%s)" % row.text)
+		_check(row.get_parent().name == "Footer",
+			"the button lives in the footer, beside Fleet (§4.6.2)")
 		row.pressed.emit()
 		await tree.process_frame
-		_check(panel.is_open(), "the facility-list row opens the panel")
+		_check(panel.is_open(), "the footer Officers button opens the panel")
 		panel.close()
 
 	# The character panel's button (entry point 3, §4.6.2).

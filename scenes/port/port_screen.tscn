@@ -123,6 +123,11 @@ custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 text = "Fleet"
 
+[node name="Officers" type="Button" parent="Layout/VBox/Footer"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+text = "Officers"
+
 [node name="HUD" parent="." instance=ExtResource("2_hud")]
 layout_mode = 3
 anchors_preset = 15

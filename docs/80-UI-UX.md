@@ -67,6 +67,7 @@ S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
+S4 ──Officers──► S18 (modal; read-only at sea)
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
 S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
@@ -263,9 +264,15 @@ the only place supplies are bought; the market sells trade goods only
 
 ### 4.6.2 Officers panel (S18, Phase 5 polish)
 
-A dedicated roster screen, opened from S4's facility list and from the
-character panel (`C`) — the existing officer **summary** in S14's right column
-stays as-is; this panel is the detail view.
+A dedicated roster screen, opened from **S4's footer, beside the Fleet button**
+(and from the character panel, `C`) — the existing officer **summary** in S14's
+right column stays as-is; this panel is the detail view.
+
+**Entry point (locked):** S18 is a **modal over S4**, like S15, so it belongs
+with the footer modal buttons (`Save · Set Sail · Fleet · Officers`), **not** in
+the facility list. The facility column is reserved for rows that leave S4 for
+another screen (`§4.2`); a full-width roster row dangling under 公会/王宫 read
+as a seventh facility and was removed.
 
 ```
 +--------------------------------------------------------------+
