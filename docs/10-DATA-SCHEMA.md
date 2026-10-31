@@ -747,6 +747,10 @@ the file basename**, so validator group 1 needs no exception (§3.2).
 | `months` | object | exactly 12 keys `"1"` … `"12"`; each value a direction token naming the **wind-from** direction prevailing that month |
 | `variability` | enum | `steady` \| `variable` |
 
+- **`variability` is authored metadata only in Phase 6** — no runtime rule
+  consumes it this phase: the daily jitter table keys off the day's weather
+  exclusively (`20-*` §4.7.1); the debug chart's info strip may display it.
+  Values remain the locked enum `steady` \| `variable`.
 - **Direction tokens:** the 8 compass directions `N NE E SE S SW W NW`
   (wind-FROM) plus `VAR` — a month with no prevailing direction draws
   uniformly.
@@ -789,7 +793,7 @@ cited per system in `LICENSE-NOTES.md`).
 | `name` | L10nString | |
 | `strength` | int | `1` \| `2` \| `3` |
 | `path` | [][lat, lon] | ≥ 2 pairs (§3.1) — the system's flow axis, downstream order |
-| `width_tiles` | int > 0 | the system's corridor width in tiles, at the §6.1 5 nm grid |
+| `width_tiles` | int > 0 | the system's corridor width in tiles, at the §6.1 5 nm grid. **Corridor expansion (pinned):** the baked corridor is the path tiles dilated by Chebyshev radius `floor((width_tiles − 1) / 2)` per side (wrap-aware on x); authored widths are odd numbers (1/3/5 tiles at 5 nm), so the painted width is exactly `width_tiles`. Overlaps resolve strongest-then-id-order as pinned in §6.5. This is the convention `tools/build_ocean.py` implements and validator group 9's determinism check exercises |
 | `reversal` | object? | optional; exactly `{"summer_months": []int, "direction": "reverse"}` — `summer_months` non-empty month ints; the decoded current vector **flips during these months at lookup time** (§6.5). Initial user: the Somali current |
 
 - **Baked lookup:** `data/maps/currents.png` (§6.5) — index 0 = none,
@@ -810,7 +814,7 @@ cited per system in `LICENSE-NOTES.md`).
       "name": {"zh": "索马里洋流", "en": "Somali Current"},
       "strength": 2,
       "path": [[2.0, 51.0], [8.0, 53.0], [12.0, 55.0]],
-      "width_tiles": 8,
+      "width_tiles": 5,
       "reversal": {"summer_months": [6, 7, 8, 9], "direction": "reverse"}
     }
   ]
