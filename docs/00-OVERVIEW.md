@@ -48,6 +48,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 2 | Steel & Gunpowder | Turn-based grid sea combat (cannon/ram/board), captain duels, equipment, loot/capture, enemy fleets, loot economy | See `docs/IMPLEMENT-Phase2.md` |
 | 3 | Crown & Horizon | Guild quests, royal missions, nobility titles, discoveries, piracy/bounty, tournaments, the ~100-port world content (shipped on a provisional grid, replaced in Phase 4), retirement/victory | See `docs/IMPLEMENT-Phase3.md` |
 | 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | ✅ complete — `docs/IMPLEMENT-Phase4.md` (completion record) |
+| 5 | Living Economy & National NPC Fleets | Stock-based supply/demand pricing with demand events, 8 roles of nation-owned NPC fleets on 12 hand-authored historical trade lanes (traders, coasters, patrols, couriers, privateers, pirates, hunters, treasure fleets), named pirates, convoys & wreckage, captain sightings & wanted posters, density presets, save v5 | See `docs/IMPLEMENT-Phase5.md` |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -99,7 +100,7 @@ Chart step (step 10, `docs/IMPLEMENT-Phase4.md` N):
    modifier; profit/loss is shown in the trade dialog.
 7. Visit the shipyard (repair + refit available), the tavern (recruit one
    officer; officer appears in the character panel with stats), and the inn.
-8. Save from the port menu (save v4, `90-*` §8.2); quit to title; Load Game;
+8. Save from the port menu (save v5, `90-*` §8.2); quit to title; Load Game;
    position, day, gold, cargo, crew, morale, morale tier, officers, and
    reputation are all fully restored.
 9. Toggle language to Chinese and back at runtime; every player-facing string
@@ -117,17 +118,18 @@ Read in this order. Each doc follows the Doc Template (§10).
 | 1 | `docs/00-OVERVIEW.md` | This file: vision, conventions, glossary, demo loop | all |
 | 2 | `docs/10-DATA-SCHEMA.md` | JSON schemas, i18n rule, validator spec, locked content lists, world artifact | all |
 | 3 | `docs/90-ARCHITECTURE.md` | Godot project layout, autoloads, save format, scene/data split | all |
-| 4 | `docs/20-WORLD-AND-SAILING.md` | Tile grid, movement, clock, consumption, morale, weather, fail states | 1, 4 |
-| 5 | `docs/30-PORTS-AND-TRADE.md` | Port facilities, price formulas, trade UI flows | 1 |
+| 4 | `docs/20-WORLD-AND-SAILING.md` | Tile grid, movement, clock, consumption, morale, weather, fail states | 1, 4, 5 |
+| 5 | `docs/30-PORTS-AND-TRADE.md` | Port facilities, price formulas, trade UI flows | 1, 5 |
 | 6 | `docs/40-SHIPS-AND-FLEET.md` | Ship stats, buy/repair/refit, fleet & cargo maths | 1, 4 |
 | 7 | `docs/50-CHARACTER-AND-PROGRESSION.md` | Nationality, stats, XP, officers, harbor relief | 1, 4 |
-| 8 | `docs/80-UI-UX.md` | Screen inventory, navigation, HUD, Chart, dialogs, palette | 1, 4 |
-| 9 | `docs/60-COMBAT.md` | Turn-based sea combat, duels, AI | 2, 4 |
-| 10 | `docs/70-QUESTS-DISCOVERY-ENDGAME.md` | Quests, titles, discovery, piracy, tournaments, victory | 3, 4 |
+| 8 | `docs/80-UI-UX.md` | Screen inventory, navigation, HUD, Chart, dialogs, palette | 1, 4, 5 |
+| 9 | `docs/60-COMBAT.md` | Turn-based sea combat, duels, AI, NPC fleet ecology | 2, 4, 5 |
+| 10 | `docs/70-QUESTS-DISCOVERY-ENDGAME.md` | Quests, titles, discovery, piracy, tournaments, victory | 3, 4, 5 |
 | — | `docs/IMPLEMENT-Phase1.md` | Ordered Phase-1 task backlog | 1 |
 | — | `docs/IMPLEMENT-Phase2.md` | Ordered Phase-2 task backlog | 2 |
 | — | `docs/IMPLEMENT-Phase3.md` | Ordered Phase-3 task backlog | 3 |
 | — | `docs/IMPLEMENT-Phase4.md` | Phase-4 task backlog + completion record | 4 |
+| — | `docs/IMPLEMENT-Phase5.md` | Phase-5 task backlog + wave plan | 5 |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.
@@ -205,7 +207,7 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 海战 | Sea battle | Turn-based tactical combat (Phase 2) |
 | 接舷战 | Boarding | Triggering a captain duel by adjacency (Phase 2) |
 | 决斗 | Duel | Simplified best-of-N captain fight (Phase 2) |
-| 敌船队 | Hostile fleet | World-map pirate/navy marker that can start a battle (Phase 2) |
+| 敌船队 | Hostile fleet | World-map fleet that can start a battle on contact (Phase 2 markers; Phase 5 role fleets, `60-*`) |
 | 战利品 | Loot | Salvage gold + captured cargo after a battle (Phase 2) |
 | 打捞 | Salvage | Reward gold for ships sunk by the player: `Σ floor(base_price × 0.05)` (`60-*` §4.11.10) |
 | 装备 | Equipment | Weapon/armor (player) or figurehead/sail (ship) items (Phase 2) |
@@ -234,6 +236,18 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 海峡 | Strait | A carved water passage forced through narrow real-world channels (`tools/map_overrides.json`, `10-*` §6.1) |
 | 停泊格 | Harbor tile | The water tile a port snaps to, ≤ 2 tiles from its real lat/lon (`10-*` §6.1) |
 | 环球海图 | World chart | The Phase-4 whole-world Chart screen (S17, 2160×1080 downscaled, `80-*` §4.6) |
+| 商队 | Trade convoy | Same-lane NPC traders sailing as one group with a shared escort; auto-resolve treats it as escorted (Phase 5) |
+| 护航舰队 | Escort patrol | Nation-owned patrol fleet; escorts same-nation traders and deters raiders in its zone (Phase 5) |
+| 私掠船 | Privateer | Rivalry-sponsored raider that hunts only its sponsor's rivals' fleets (Phase 5) |
+| 沿岸货船 | Coaster | Small visual-life trader hopping adjacent ports; never triggers contact (Phase 5) |
+| 沉船残骸 | Wreck | Lootable remains of a lost fleet; sailing onto its tile collects it (Phase 5) |
+| 航海密度 | Sea traffic | The NPC fleet population; the density presets scale it (Phase 5) |
+| 船长 | Captain | A fleet's named commander, sightable in port facilities (Phase 5) |
+| 通缉令 | Wanted poster | Tavern notice for a nearby pirate/privateer captain, with a paid exact-position reveal (Phase 5) |
+| 航线 | Trade lane | A hand-authored historical route that lane-locked fleets sail (Phase 5) |
+| 咽喉要道 | Chokepoint | A tagged narrow passage where pirates/privateers camp (Phase 5) |
+| 需求事件 | Demand event | A temporary rest-stock override that creates a tradeable surge; telegraphed in taverns (Phase 5) |
+| 消费档位 | Consumption tier | Staples/middle/luxuries daily-drift band derived from the goods' base-price rank (Phase 5) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 
