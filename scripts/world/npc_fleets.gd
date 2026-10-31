@@ -74,6 +74,10 @@ const NAVY_HOSTILE_REPUTATION := -50
 ## stores `D + 1`; the fleet holds through D+1 and moves again on D+2; while
 ## on cooldown it raises no contact.
 const PURSUIT_COOLDOWN_DAYS := 1
+## §4.11.11.2 / `70-*` §4.5: the battle-start piracy charge owned by
+## `Bounty.apply_piracy` (−20 owner / +2 its rivals). Kept here as the same
+## pinned number so the funnel and the engine constant can be cross-checked.
+const PIRACY_REPUTATION := -20
 ## §4.1.1 patrol zone radius — the pinned 15-tile navy zone, reused for the
 ## daily unpatrolled-zone recount and the escorted-trader rule.
 const ZONE_RADIUS := 15

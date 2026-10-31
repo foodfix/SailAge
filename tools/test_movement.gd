@@ -17,7 +17,10 @@ const WorldScene := preload("res://scenes/world/world_map.tscn")
 const DialogScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 const SailPathLib := preload("res://scripts/world/sail_path.gd")
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase-5 task J: the fleet ecology replaced the 3-marker system; the
+## battle-resume fixtures build §4.15 fleet dicts and drive the world
+## scene's `NpcFleets` sim (docs/60-* §4.11.11, §4.12.3).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 ## Open-water cell whose 8 neighbours (and both orthogonals of each diagonal)
 ## are all passable, so every one of the 8 directions is legal from here. On the
@@ -2031,9 +2034,8 @@ func _test_battle_resume() -> void:
 	GameState.world["position"] = {"x": 700, "y": 320}
 	GameState.world["clock_fraction"] = 0.0
 	GameState.day = 1
-	GameState.hostile_fleets = []
-	GameState.proximity_cooldowns = {EncountersLib.PIRATE: 999999,
-		EncountersLib.NAVY: 999999}
+	GameState.npc_fleets = []
+	GameState.proximity_cooldowns = {}
 	GameState.pending_encounter = null
 	var host := Node2D.new()
 	add_child(host)
@@ -2043,20 +2045,10 @@ func _test_battle_resume() -> void:
 	host.add_child(world)
 	_clear_dialogs(world)
 
-	# A pirate marker 1 tile off the route opens contact on the first step that
-	# lands beside it (§4.11.11.1).
+	# A pirate fleet 1 tile off the route opens contact on the first step
+	# that lands beside it (§4.11.11.2).
 	var marker_cell := Vector2i(702, 321)
-	GameState.hostile_fleets.append({
-		"id": "pirate_resume",
-		"kind": EncountersLib.PIRATE,
-		"nation_id": "",
-		"position": {"x": marker_cell.x, "y": marker_cell.y},
-		"anchor_port_id": "lisbon",
-		"ships": EncountersLib.compose_ships(EncountersLib.PIRATE, 1, marker_cell),
-		"spawn_day": 1,
-		"cooldown_until_day": 0,
-	})
-	world.encounters().last_tick_day = GameState.day
+	_place_pirate(world, "pirate_resume", marker_cell)
 
 	var target := Vector2i(712, 320)
 	_check(world.sail_to(target), "a route is stored before the battle")
@@ -2105,19 +2097,8 @@ func _test_battle_resume() -> void:
 
 	# A manual press during the suspension cancels it for good.
 	var second_marker: Vector2i = world.fleet_cell() + Vector2i(2, 1)
-	GameState.hostile_fleets = [{
-		"id": "pirate_resume2",
-		"kind": EncountersLib.PIRATE,
-		"nation_id": "",
-		"position": {"x": second_marker.x, "y": second_marker.y},
-		"anchor_port_id": "lisbon",
-		"ships": EncountersLib.compose_ships(
-			EncountersLib.PIRATE, GameState.day, second_marker),
-		"spawn_day": GameState.day,
-		"cooldown_until_day": 0,
-	}]
-	# Same day: only the contact check runs (no spawn/move pass).
-	world.encounters().last_tick_day = GameState.day
+	GameState.npc_fleets = []
+	_place_pirate(world, "pirate_resume2", second_marker)
 	var far_target := Vector2i(world.fleet_cell().x + 8, world.fleet_cell().y)
 	_check(world.sail_to(far_target), "a second route is stored")
 	world.advance_movement(1.0 / 8.0)
@@ -2134,25 +2115,13 @@ func _test_battle_resume() -> void:
 
 	# A chained battle (§4.11.11.1 "battles chain") keeps the route suspended:
 	# a second marker still in contact opens before the route resumes.
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.set_world_tile(Vector2i(700, 320))
 	world.sync_from_state()
 	_clear_dialogs(world)
 	var chain_markers := [Vector2i(701, 321), Vector2i(700, 321)]
 	for index in chain_markers.size():
-		var cell: Vector2i = chain_markers[index]
-		GameState.hostile_fleets.append({
-			"id": "chain_%d" % index,
-			"kind": EncountersLib.PIRATE,
-			"nation_id": "",
-			"position": {"x": cell.x, "y": cell.y},
-			"anchor_port_id": "lisbon",
-			"ships": EncountersLib.compose_ships(
-				EncountersLib.PIRATE, GameState.day, cell),
-			"spawn_day": GameState.day,
-			"cooldown_until_day": 0,
-		})
-	world.encounters().last_tick_day = GameState.day
+		_place_pirate(world, "chain_%d" % index, chain_markers[index])
 	var chain_target := Vector2i(712, 320)
 	_check(world.sail_to(chain_target), "a third route is stored")
 	world.advance_movement(1.0 / 8.0)
@@ -2168,8 +2137,8 @@ func _test_battle_resume() -> void:
 		"a chained battle opens from the second marker in contact")
 	_check(world.sail_suspended(),
 		"the route stays suspended through the chained battle")
-	GameState.hostile_fleets = []
-	world.encounters().last_tick_day = GameState.day
+	GameState.npc_fleets = []
+	world.fleet_sim().reset_index()
 	EventBus.battle_finished.emit({
 		"result": "victory", "encounter_id": world.pending_encounter_id(),
 	})
@@ -2203,3 +2172,28 @@ func _report() -> void:
 	for failure in _failures:
 		print("  - ", failure)
 	get_tree().quit(1)
+
+
+## Places a pirate fleet fixture and refreshes the scene sim's spatial index
+## (docs/60-* §4.15 fleet shape; the sim auto-maintains the index only
+## through its own spawn/remove).
+func _place_pirate(world, id: String, cell: Vector2i) -> void:
+	GameState.npc_fleets.append({
+		"id": id,
+		"role": "pirate",
+		"nation_id": "",
+		"cell": {"x": cell.x, "y": cell.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain": {"pool_id": "", "name_index": 0},
+		"cooldown_until_day": 0,
+		"seed": 1,
+		"dest_port_id": "",
+		"dwell_until_day": 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
+	})
+	world.fleet_sim().reset_index()

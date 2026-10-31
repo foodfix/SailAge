@@ -170,7 +170,7 @@ func _build_fixture() -> void:
 	GameState.current_port = null
 	GameState.known_ports = []
 	GameState.explored_tiles = {}
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {"pirate": NO_SPAWNS_UNTIL,
 		"navy": NO_SPAWNS_UNTIL}
 	var start := _port("lisbon")

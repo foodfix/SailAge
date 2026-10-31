@@ -1092,8 +1092,12 @@ func _encounter_for(fleet: Dictionary) -> Dictionary:
 	encounter["kind"] = NpcFleetsLib.composition_kind(
 		str(fleet.get("role", "")))
 	encounter["encounter_id"] = str(fleet.get("id", ""))
-	encounter["ships"] = NpcFleetsLib.compose_fleet_ships(
-		fleet, int(GameState.day))
+	if (fleet.get("ships", []) as Array).is_empty():
+		# §4.11.11.2: the battle draws from the fleet's own seeded stream.
+		encounter["ships"] = NpcFleetsLib.compose_fleet_ships(
+			fleet, int(GameState.day))
+	# else: a fleet-carried `ships` override (a fixture/K seam) is honored
+	# verbatim, exactly like the retired marker block's stored composition.
 	encounter["contact"] = {
 		"x": GameState.world_tile().x, "y": GameState.world_tile().y,
 	}

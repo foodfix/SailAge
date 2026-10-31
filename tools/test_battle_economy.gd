@@ -28,7 +28,9 @@ const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
 const RewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase-5 task J: the S3-leg fixtures build §4.15 fleet dicts over the
+## `NpcFleets` ecology (docs/60-* §4.11.11, §4.12.3).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const ScreenScene := preload("res://scenes/combat/battle_screen.tscn")
 const DuelScene := preload("res://scenes/combat/duel_modal.tscn")
@@ -329,7 +331,7 @@ func _test_apply() -> void:
 		"no rep_deltas entry is ever negative (%s)" % str(negatives))
 	_check(BattleLib.NAVY_REP_PENALTY == -20,
 		"the pinned navy penalty is still −20 (applied elsewhere)")
-	_check(EncountersLib.PIRACY_REPUTATION == BattleLib.NAVY_REP_PENALTY,
+	_check(NpcFleetsLib.PIRACY_REPUTATION == BattleLib.NAVY_REP_PENALTY,
 		"the battle-start piracy charge and the engine constant are the same −20")
 	_make_run()
 	var spain_before := CharacterLib.reputation("spain")
@@ -600,7 +602,7 @@ func _text_in_locale(key: String, locale: String) -> String:
 
 
 ## Rendered-text leaks for S3's `encounter.attack_confirm` modal, built through
-## the real world scene (the map fixture lives in `test_encounters.gd`).
+## the real world scene (the map fixture lives in `test_npc_fleets.gd`).
 func _encounter_confirm_leaks(locale: String) -> Array[String]:
 	var leaks: Array[String] = []
 	var map = MapLoaderLib.new()
@@ -612,17 +614,26 @@ func _encounter_confirm_leaks(locale: String) -> Array[String]:
 	DataLoader.map = map
 	_make_run()
 	GameState.set_world_tile(OPEN_CELL)
-	GameState.hostile_fleets = [{
-		"id": EncountersLib.marker_id(1, OPEN_CELL + Vector2i(1, 0),
-			EncountersLib.NAVY),
-		"kind": EncountersLib.NAVY,
+	# A §4.15 hunter fixture (the retired navy marker's successor): its
+	# battle keeps kind = "navy" (docs/60-* §4.11.11.3) and the seeded
+	# composition comes from the fleet's own stream at contact time.
+	GameState.npc_fleets = [{
+		"id": "fx_hunter_spain",
+		"role": "hunter",
 		"nation_id": "spain",
-		"position": {"x": OPEN_CELL.x + 1, "y": OPEN_CELL.y},
-		"anchor_port_id": "seville",
-		"ships": EncountersLib.compose_ships(EncountersLib.NAVY, 1,
-			OPEN_CELL + Vector2i(1, 0)),
-		"spawn_day": 1,
+		"cell": {"x": OPEN_CELL.x + 1, "y": OPEN_CELL.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain": {"pool_id": "spain", "name_index": 0},
 		"cooldown_until_day": 0,
+		"seed": 1 * 1000003 + (OPEN_CELL.x + 1) * 7919 + OPEN_CELL.y * 104729,
+		"dest_port_id": "",
+		"dwell_until_day": 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
 	}]
 	var host := Node2D.new()
 	add_child(host)
@@ -652,7 +663,7 @@ func _encounter_confirm_leaks(locale: String) -> Array[String]:
 	world._close_attack_confirm()
 	await get_tree().process_frame
 	host.queue_free()
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	await get_tree().process_frame
 	return leaks
 
@@ -698,7 +709,7 @@ func _make_run(fleet: Array = []) -> void:
 	}
 	GameState.fleet = fleet.duplicate(true) if not fleet.is_empty() \
 		else [_ship("caravel", {"cannons": 4, "crew": 15})]
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	if "pending_encounter" in GameState:
 		GameState.set("pending_encounter", null)

@@ -1251,7 +1251,10 @@ func _cleanup_saves() -> void:
 
 func _report() -> void:
 	print("")
-	print("test_npc_fleets: %d checks, %d failures" % [_checks, _failures.size()])
-	for failure in _failures:
-		print("  - ", failure)
+	if _failures.is_empty():
+		print("ALL PASS (%d checks)" % _checks)
+	else:
+		print("%d of %d checks FAILED" % [_failures.size(), _checks])
+		for failure in _failures:
+			print("  - ", failure)
 	get_tree().quit(0 if _failures.is_empty() else 1)

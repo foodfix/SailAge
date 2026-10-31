@@ -21,7 +21,12 @@ import time
 from pathlib import Path
 
 # --- pinned constants (docs/90-* §13) ---------------------------------------
-SERIAL_SAVE_SET = ("test_save", "test_save_v5", "test_world_e2e")
+# Task J: the fleet-ecology and Phase-2/3 acceptance suites also write
+# user://saves/ (SaveSystem round trips), so they join the serial-save set.
+SERIAL_SAVE_SET = (
+    "test_save", "test_save_v5", "test_world_e2e",
+    "test_npc_fleets", "test_phase2_acceptance", "test_phase3_acceptance",
+)
 DEFAULT_TIMEOUT_S = 300.0
 DEFAULT_JOBS = 8
 POLL_S = 2.0            # log/CPU sample cadence

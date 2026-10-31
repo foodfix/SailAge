@@ -51,7 +51,7 @@ func _new_run(port_id: String = "lisbon", day: int = 1) -> void:
 	GameState.fame = 0
 	GameState.bounties = {}
 	GameState.discovery_hints = {}
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.active_quests = []
 	GameState.pending_tournament_round = 0

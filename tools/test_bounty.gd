@@ -9,7 +9,10 @@ extends Node
 
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase-5 task J: the bounty suite speaks to the fleet ecology through the
+## `NpcFleets` API (docs/60-* §4.12.3); `hostile_fleets` became
+## `npc_fleets` with `kind` → `role` (`navy` → `hunter`).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
 const PortScene := preload("res://scenes/port/port_screen.tscn")
@@ -49,7 +52,7 @@ func _new_run(port_id: String = "lisbon", day: int = 40, map_id: String = "world
 	GameState.day = day
 	GameState.gold = 10000
 	GameState.current_port = port_id
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.bounties = {}
 	for nation in DataLoader.nations_list:
@@ -228,29 +231,26 @@ func _test_hunters_spawn() -> void:
 	_new_run("lisbon", 40)
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
-	# The Phase-2 spawn roll keys on `rep <= -50` (`60-*` §4.11.11.2); drive it
-	# through the real Encounters module with a forced navy roll.
+	# The Phase-5 spawn rule keys on `rep <= -50` (`60-*` §4.11.11.1 hunter
+	# intel); drive it through the real NpcFleets module's bounty-only spawn.
 	DataLoader.ensure_map()
-	var encounters = EncountersLib.new()
-	encounters.reset_rng(12345)
-	var bountied: Array = encounters.bountied_nations()
+	var fleets = NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": GameState.npc_preset,
+	})
+	var bountied: Array = fleets.bountied_nations()
 	_check(bountied.has("spain"),
-		"Encounters sees Spain as bountied at −60 (got %s)" % str(bountied))
-	var spawned := false
-	for _attempt in 400:
-		var marker: Dictionary = encounters.call("spawn", "navy", "spain", GameState.day)
-		if not marker.is_empty():
-			spawned = true
-			_check(str(marker.get("kind", "")) == "navy",
-				"the hunter marker is a navy")
-			_check(str(marker.get("nation_id", "")) == "spain",
-				"the hunter belongs to the bountied nation")
-			break
-	_check(spawned, "navy hunters can spawn for a bountied nation")
+		"NpcFleets sees Spain as bountied at −60 (got %s)" % str(bountied))
+	var marker: Dictionary = fleets.spawn("hunter", "spain", int(GameState.day))
+	_check(not marker.is_empty(), "a hunter spawns for a bountied nation")
+	if not marker.is_empty():
+		_check(str(marker.get("role", "")) == "hunter",
+			"the hunter fleet's role is hunter")
+		_check(str(marker.get("nation_id", "")) == "spain",
+			"the hunter belongs to the bountied nation")
 	# No bounty → no bountied nations.
 	GameState.bounties = {}
 	GameState.player["reputation"]["spain"] = -10
-	_check(encounters.bountied_nations().is_empty(),
+	_check(fleets.bountied_nations().is_empty(),
 		"no bounty means no hunter nation")
 
 

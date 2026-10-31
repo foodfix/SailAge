@@ -32,7 +32,9 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase-5 task J: hunters come from the `NpcFleets` ecology
+## (`60-*` §4.11.11.1 hunter intel); `navy` markers became `hunter` fleets.
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const GuildScene := preload("res://scenes/port/guild_screen.tscn")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
@@ -472,26 +474,22 @@ func _scenario_piracy_loop() -> void:
 	# is `Encounters.spawn`; it is called directly here so this leg needs no
 	# world scene, exactly as the §4.11.11.2 day tick does.
 	GameState.current_port = null
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
-	var hunters := 0
-	for spawn_day in range(45, 75):
-		GameState.day = spawn_day
-		var encounters = EncountersLib.new(spawn_day)
-		var spawned: Dictionary = encounters.call("spawn", "navy", "portugal",
-			spawn_day)
-		if not spawned.is_empty():
-			hunters += 1
-			break
-	_check(hunters > 0,
-		"S2: a bounty at or below −50 spawns navy hunters (%d)" % hunters)
+	var fleets = NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": GameState.npc_preset,
+	})
+	var hunter: Dictionary = fleets.spawn("hunter", "portugal",
+		int(GameState.day))
+	_check(not hunter.is_empty(),
+		"S2: a bounty at or below −50 spawns a navy hunter")
 	var hunter_id := ""
-	for marker in GameState.hostile_fleets:
-		if str((marker as Dictionary).get("kind", "")) == "navy" \
+	for marker in GameState.npc_fleets:
+		if str((marker as Dictionary).get("role", "")) == "hunter" \
 				and str((marker as Dictionary).get("nation_id", "")) == "portugal":
 			hunter_id = str((marker as Dictionary).get("id", ""))
 			break
-	_check(not hunter_id.is_empty(), "S2: the hunter marker is on the map")
+	_check(not hunter_id.is_empty(), "S2: the hunter fleet is on the map")
 
 	# Path 1: pay the bounty at the bountied nation's palace.
 	GameState.current_port = "lisbon"
@@ -517,7 +515,7 @@ func _scenario_piracy_loop() -> void:
 	await get_tree().process_frame
 
 	# Path 2: surrender the flagship to a hunter.
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	CharacterLib.add_reputation("portugal", -50)
 	BountyLib.evaluate_all()
 	_check(BountyLib.has_bounty("portugal"),
@@ -610,7 +608,7 @@ func _start_run(port_id: String, day: int) -> void:
 	GameState.battles_won = 0
 	GameState.retired = false
 	GameState.retired_at = 0
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.pending_encounter = null
 	GameState.pending_tournament_round = 0

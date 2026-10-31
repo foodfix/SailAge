@@ -24,7 +24,8 @@ const PortScene := preload("res://scenes/port/port_screen.tscn")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 ## §8.1 keys the payload must carry, in the doc's order (minus nothing).
-## Phase 2 (save_version 2) appended `hostile_fleets` / `proximity_cooldowns`;
+## Phase 2 (save_version 2) appended the fleet block (renamed `npc_fleets`
+## at v5) / `proximity_cooldowns`;
 ## Phase 3 appended the fame/title/quest/discovery/retirement block and
 ## **dropped** the superseded `quests` key; Phase 4 added no key — only the
 ## `save_version`/`phase` values and `world.map_id`/`world.position` moved;
@@ -34,7 +35,7 @@ const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 const PAYLOAD_KEYS := [
 	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
 	"fleet", "morale", "world", "current_port", "known_ports",
-	"port_investments", "discoveries_found", "hostile_fleets",
+	"port_investments", "discoveries_found", "npc_fleets",
 	"proximity_cooldowns", "market_stocks", "wrecks", "npc_preset",
 	"market_events", "fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",

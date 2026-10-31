@@ -15,7 +15,7 @@ extends Node
 ## documented guards still hold (corrupt payload refused, future
 ## `save_version` refused, v4 and older refused by name, retired runs
 ## summarised not resumed), and every Phase-2/3/5 field block is real saved
-## state. `hostile_fleets` keeps its v2 key verbatim (task J owns the
+## state. `npc_fleets` is task J's v5 rename of Phase-2's `hostile_fleets`
 ## rename).
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
@@ -116,7 +116,7 @@ func _v5_payload() -> Dictionary:
 		"known_ports": ["lisbon", "seville", "london", "madeira"],
 		"port_investments": {"lisbon": 1000},
 		"discoveries_found": [],
-		"hostile_fleets": [],
+		"npc_fleets": [],
 		"proximity_cooldowns": {"pirate": 61},
 		"market_stocks": {"lisbon": {"wine": 87, "salt": 12}},
 		"wrecks": [],
@@ -316,7 +316,7 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		{"key": "battles_won", "value": "3", "why": "battles_won as a string"},
 		{"key": "retired", "value": 1, "why": "retired as a number"},
 		{"key": "retired_at", "value": "now", "why": "retired_at as a string"},
-		{"key": "hostile_fleets", "value": {}, "why": "hostile_fleets as an object"},
+		{"key": "npc_fleets", "value": {}, "why": "npc_fleets as an object"},
 		{"key": "proximity_cooldowns", "value": [], "why":
 			"proximity_cooldowns as an array"},
 		{"key": "market_stocks", "value": [], "why":
@@ -360,7 +360,7 @@ func _test_corrupt_phase_fields_rejected() -> void:
 func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
 	var payload := _v5_payload()
-	for key in ["hostile_fleets", "proximity_cooldowns", "market_stocks",
+	for key in ["npc_fleets", "proximity_cooldowns", "market_stocks",
 			"wrecks", "npc_preset", "market_events", "fame", "titles",
 			"bounties", "active_quests", "completed_royal_missions",
 			"discoveries_reported", "discovery_hints", "battles_won",
@@ -369,8 +369,8 @@ func _test_optional_keys_default() -> void:
 	_write_json(1, payload)
 	_clobber_state()
 	_check(SaveSystem.load(1), "a payload omitting the optional keys loads")
-	_check(GameState.hostile_fleets == [] and GameState.hostile_fleets is Array,
-		"an absent hostile_fleets defaults to []")
+	_check(GameState.npc_fleets == [] and GameState.npc_fleets is Array,
+		"an absent npc_fleets defaults to []")
 	_check(GameState.proximity_cooldowns == {}
 		and GameState.proximity_cooldowns is Dictionary,
 		"an absent proximity_cooldowns defaults to {}")
@@ -453,20 +453,25 @@ func _test_new_fields_round_trip() -> void:
 		"start_day": 64, "end_day": 124,
 		"shifts": {"timber": -30, "cannons": -30},
 	}]
-	GameState.hostile_fleets = [{
-		"id": "hf_7_30_40_pirate",
-		"kind": "pirate",
+	# The §4.15 fleet shape (docs/10-* §4.15): the pirate's saved fields are
+	# exactly the pinned set plus the task-owned extensions.
+	GameState.npc_fleets = [{
+		"id": "nf_7_0000_pirate",
+		"role": "pirate",
 		"nation_id": "",
-		"position": {"x": 30, "y": 40},
-		"anchor_port_id": "lisbon",
-		"ships": [{
-			"ship_type_id": "sloop", "durability": 60, "crew": 10,
-			"provisions": 0, "water": 0, "cannons": 4,
-			"equipment": {"figurehead": "", "sail": ""},
-			"cargo": {"wine": 6},
-		}],
-		"spawn_day": 7,
+		"cell": {"x": 30, "y": 40},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain": {"pool_id": "", "name_index": 0},
 		"cooldown_until_day": 0,
+		"seed": 7 * 1000003 + 30 * 7919 + 40 * 104729,
+		"dest_port_id": "",
+		"dwell_until_day": 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
 	}]
 	GameState.proximity_cooldowns = {"pirate": 12}
 	var expected := _loaded_values()
@@ -485,9 +490,9 @@ func _test_new_fields_round_trip() -> void:
 	_check((on_disk.get("discovery_hints") as Dictionary).has("disc_atlas_cedars"),
 		"snapshot() writes discovery_hints")
 	_check(int(on_disk.get("battles_won", -1)) == 7, "snapshot() writes battles_won")
-	_check((on_disk.get("hostile_fleets") as Array).size() == 1
-		and (on_disk["hostile_fleets"] as Array)[0]["id"] == "hf_7_30_40_pirate",
-		"snapshot() writes the hostile marker (docs/90-* §8.1)")
+	_check((on_disk.get("npc_fleets") as Array).size() == 1
+		and (on_disk["npc_fleets"] as Array)[0]["id"] == "nf_7_0000_pirate",
+		"snapshot() writes the fleet (docs/90-* §8.1)")
 	_check(on_disk.get("proximity_cooldowns") == {"pirate": 12},
 		"snapshot() writes proximity_cooldowns")
 	_check((on_disk.get("market_stocks") as Dictionary)["lisbon"]["wine"] == 12,
@@ -509,15 +514,15 @@ func _test_new_fields_round_trip() -> void:
 		"wreck coordinates come back as ints, not json floats")
 	_check(typeof(((GameState.bounties["spain"] as Dictionary)["amount"])) == TYPE_INT,
 		"the bounty amount comes back as an int, not a json float")
-	_check(typeof((GameState.hostile_fleets[0] as Dictionary)["position"]["x"])
-		== TYPE_INT, "marker coordinates come back as ints, not json floats")
+	_check(typeof((GameState.npc_fleets[0] as Dictionary)["cell"]["x"])
+		== TYPE_INT, "fleet coordinates come back as ints, not json floats")
 
 	# The snapshot deep-copies: mutating live state cannot rewrite a save.
 	var snap := SaveSystem.snapshot()
 	GameState.titles["portugal"] = "duke"
 	GameState.active_quests[0]["status"] = "failed"
 	GameState.discoveries_reported.append("disc_mutated")
-	GameState.hostile_fleets[0]["id"] = "mutated"
+	GameState.npc_fleets[0]["id"] = "mutated"
 	GameState.proximity_cooldowns["pirate"] = 999
 	GameState.market_stocks["lisbon"]["wine"] = 999
 	GameState.wrecks[0]["id"] = "mutated"
@@ -529,8 +534,8 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() deep-copies active_quests")
 	_check((snap["discoveries_reported"] as Array).size() == 2,
 		"snapshot() deep-copies discoveries_reported")
-	_check((snap["hostile_fleets"] as Array)[0]["id"] == "hf_7_30_40_pirate",
-		"snapshot() deep-copies hostile_fleets")
+	_check((snap["npc_fleets"] as Array)[0]["id"] == "nf_7_0000_pirate",
+		"snapshot() deep-copies npc_fleets")
 	_check(snap["proximity_cooldowns"] == {"pirate": 12},
 		"snapshot() deep-copies proximity_cooldowns")
 	_check((snap["market_stocks"] as Dictionary)["lisbon"]["wine"] == 12,
@@ -621,7 +626,7 @@ func _clobber_state() -> void:
 	GameState.port_investments = {}
 	GameState.quests = []
 	GameState.discoveries_found = []
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.market_stocks = {"clobber": {"clobber": 1}}
 	GameState.wrecks = ["clobber"]
@@ -652,7 +657,7 @@ func _loaded_values() -> Dictionary:
 		"world": GameState.world.duplicate(true),
 		"known_ports": GameState.known_ports.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
-		"hostile_fleets": GameState.hostile_fleets.duplicate(true),
+		"npc_fleets": GameState.npc_fleets.duplicate(true),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
 		"market_stocks": GameState.market_stocks.duplicate(true),
 		"wrecks": GameState.wrecks.duplicate(true),
