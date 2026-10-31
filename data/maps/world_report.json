@@ -1617,17 +1617,17 @@
     },
     {
       "id": "botany_bay",
-      "lat": -33.98,
-      "lon": 151.18,
+      "lat": -25.5,
+      "lon": 113.5,
       "harbor_tile": {
-        "x": 3975,
-        "y": 1487
+        "x": 3522,
+        "y": 1386
       },
       "shore_tile": {
-        "x": 3974,
-        "y": 1487
+        "x": 3522,
+        "y": 1387
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "siam",
@@ -1754,7 +1754,637 @@
         "y": 604
       },
       "distance": 0
+    },
+    {
+      "id": "quanzhou",
+      "lat": 24.85,
+      "lon": 118.72,
+      "harbor_tile": {
+        "x": 3585,
+        "y": 781
+      },
+      "shore_tile": {
+        "x": 3584,
+        "y": 781
+      },
+      "distance": 1
+    },
+    {
+      "id": "ningbo",
+      "lat": 29.95,
+      "lon": 121.7,
+      "harbor_tile": {
+        "x": 3620,
+        "y": 719
+      },
+      "shore_tile": {
+        "x": 3620,
+        "y": 720
+      },
+      "distance": 1
+    },
+    {
+      "id": "yuegang",
+      "lat": 24.42,
+      "lon": 117.98,
+      "harbor_tile": {
+        "x": 3575,
+        "y": 786
+      },
+      "shore_tile": {
+        "x": 3575,
+        "y": 785
+      },
+      "distance": 0
+    },
+    {
+      "id": "shuangyu",
+      "lat": 29.74,
+      "lon": 122.22,
+      "harbor_tile": {
+        "x": 3625,
+        "y": 722
+      },
+      "shore_tile": {
+        "x": 3625,
+        "y": 723
+      },
+      "distance": 1
+    },
+    {
+      "id": "nanao",
+      "lat": 23.4,
+      "lon": 117.2,
+      "harbor_tile": {
+        "x": 3566,
+        "y": 798
+      },
+      "shore_tile": {
+        "x": 3565,
+        "y": 798
+      },
+      "distance": 1
+    },
+    {
+      "id": "xiamen",
+      "lat": 24.44,
+      "lon": 118.13,
+      "harbor_tile": {
+        "x": 3576,
+        "y": 785
+      },
+      "shore_tile": {
+        "x": 3576,
+        "y": 784
+      },
+      "distance": 1
+    },
+    {
+      "id": "fuzhou",
+      "lat": 26.02,
+      "lon": 119.65,
+      "harbor_tile": {
+        "x": 3595,
+        "y": 767
+      },
+      "shore_tile": {
+        "x": 3594,
+        "y": 767
+      },
+      "distance": 0
+    },
+    {
+      "id": "wenzhou",
+      "lat": 27.97,
+      "lon": 120.68,
+      "harbor_tile": {
+        "x": 3610,
+        "y": 744
+      },
+      "shore_tile": {
+        "x": 3609,
+        "y": 744
+      },
+      "distance": 2
+    },
+    {
+      "id": "zhelin",
+      "lat": 23.62,
+      "lon": 117.13,
+      "harbor_tile": {
+        "x": 3564,
+        "y": 796
+      },
+      "shore_tile": {
+        "x": 3565,
+        "y": 796
+      },
+      "distance": 1
+    },
+    {
+      "id": "qiongzhou",
+      "lat": 20.03,
+      "lon": 110.33,
+      "harbor_tile": {
+        "x": 3483,
+        "y": 839
+      },
+      "shore_tile": {
+        "x": 3482,
+        "y": 839
+      },
+      "distance": 0
+    },
+    {
+      "id": "beihai",
+      "lat": 21.48,
+      "lon": 109.12,
+      "harbor_tile": {
+        "x": 3469,
+        "y": 821
+      },
+      "shore_tile": {
+        "x": 3469,
+        "y": 822
+      },
+      "distance": 1
+    },
+    {
+      "id": "dinghai",
+      "lat": 30.01,
+      "lon": 122.11,
+      "harbor_tile": {
+        "x": 3626,
+        "y": 718
+      },
+      "shore_tile": {
+        "x": 3625,
+        "y": 718
+      },
+      "distance": 1
+    },
+    {
+      "id": "liujiagang",
+      "lat": 31.5,
+      "lon": 121.55,
+      "harbor_tile": {
+        "x": 3617,
+        "y": 701
+      },
+      "shore_tile": {
+        "x": 3617,
+        "y": 700
+      },
+      "distance": 1
+    },
+    {
+      "id": "hirado",
+      "lat": 33.25,
+      "lon": 129.56,
+      "harbor_tile": {
+        "x": 3714,
+        "y": 681
+      },
+      "shore_tile": {
+        "x": 3715,
+        "y": 681
+      },
+      "distance": 0
+    },
+    {
+      "id": "sakai",
+      "lat": 34.5,
+      "lon": 135.42,
+      "harbor_tile": {
+        "x": 3784,
+        "y": 665
+      },
+      "shore_tile": {
+        "x": 3785,
+        "y": 665
+      },
+      "distance": 1
+    },
+    {
+      "id": "yamagawa",
+      "lat": 31.1,
+      "lon": 130.58,
+      "harbor_tile": {
+        "x": 3726,
+        "y": 706
+      },
+      "shore_tile": {
+        "x": 3726,
+        "y": 705
+      },
+      "distance": 0
+    },
+    {
+      "id": "hakata",
+      "lat": 33.59,
+      "lon": 130.39,
+      "harbor_tile": {
+        "x": 3724,
+        "y": 676
+      },
+      "shore_tile": {
+        "x": 3725,
+        "y": 676
+      },
+      "distance": 0
+    },
+    {
+      "id": "funai",
+      "lat": 33.24,
+      "lon": 131.61,
+      "harbor_tile": {
+        "x": 3738,
+        "y": 680
+      },
+      "shore_tile": {
+        "x": 3738,
+        "y": 681
+      },
+      "distance": 1
+    },
+    {
+      "id": "urado",
+      "lat": 33.5,
+      "lon": 133.55,
+      "harbor_tile": {
+        "x": 3762,
+        "y": 678
+      },
+      "shore_tile": {
+        "x": 3762,
+        "y": 677
+      },
+      "distance": 0
+    },
+    {
+      "id": "anotsu",
+      "lat": 34.6,
+      "lon": 136.7,
+      "harbor_tile": {
+        "x": 3799,
+        "y": 664
+      },
+      "shore_tile": {
+        "x": 3799,
+        "y": 665
+      },
+      "distance": 1
+    },
+    {
+      "id": "busan",
+      "lat": 35.1,
+      "lon": 129.04,
+      "harbor_tile": {
+        "x": 3707,
+        "y": 658
+      },
+      "shore_tile": {
+        "x": 3708,
+        "y": 658
+      },
+      "distance": 1
+    },
+    {
+      "id": "yeompo",
+      "lat": 35.5,
+      "lon": 129.43,
+      "harbor_tile": {
+        "x": 3713,
+        "y": 654
+      },
+      "shore_tile": {
+        "x": 3713,
+        "y": 653
+      },
+      "distance": 0
+    },
+    {
+      "id": "hoi_an",
+      "lat": 15.9,
+      "lon": 108.34,
+      "harbor_tile": {
+        "x": 3460,
+        "y": 888
+      },
+      "shore_tile": {
+        "x": 3460,
+        "y": 889
+      },
+      "distance": 1
+    },
+    {
+      "id": "banten",
+      "lat": -5.85,
+      "lon": 105.95,
+      "harbor_tile": {
+        "x": 3432,
+        "y": 1150
+      },
+      "shore_tile": {
+        "x": 3432,
+        "y": 1151
+      },
+      "distance": 1
+    },
+    {
+      "id": "jambi",
+      "lat": -1.12,
+      "lon": 103.8,
+      "harbor_tile": {
+        "x": 3404,
+        "y": 1091
+      },
+      "shore_tile": {
+        "x": 3404,
+        "y": 1092
+      },
+      "distance": 2
+    },
+    {
+      "id": "palembang",
+      "lat": -2.25,
+      "lon": 104.85,
+      "harbor_tile": {
+        "x": 3418,
+        "y": 1106
+      },
+      "shore_tile": {
+        "x": 3418,
+        "y": 1107
+      },
+      "distance": 1
+    },
+    {
+      "id": "gresik",
+      "lat": -7.05,
+      "lon": 113.35,
+      "harbor_tile": {
+        "x": 3518,
+        "y": 1162
+      },
+      "shore_tile": {
+        "x": 3518,
+        "y": 1163
+      },
+      "distance": 2
+    },
+    {
+      "id": "sulu",
+      "lat": 5.98,
+      "lon": 120.98,
+      "harbor_tile": {
+        "x": 3610,
+        "y": 1007
+      },
+      "shore_tile": {
+        "x": 3610,
+        "y": 1008
+      },
+      "distance": 1
+    },
+    {
+      "id": "kedah",
+      "lat": 6.1,
+      "lon": 100.32,
+      "harbor_tile": {
+        "x": 3362,
+        "y": 1005
+      },
+      "shore_tile": {
+        "x": 3363,
+        "y": 1005
+      },
+      "distance": 1
+    },
+    {
+      "id": "nagapattinam",
+      "lat": 10.76,
+      "lon": 79.85,
+      "harbor_tile": {
+        "x": 3118,
+        "y": 950
+      },
+      "shore_tile": {
+        "x": 3117,
+        "y": 950
+      },
+      "distance": 0
+    },
+    {
+      "id": "masulipatnam",
+      "lat": 16.1,
+      "lon": 81.12,
+      "harbor_tile": {
+        "x": 3134,
+        "y": 886
+      },
+      "shore_tile": {
+        "x": 3133,
+        "y": 886
+      },
+      "distance": 1
+    },
+    {
+      "id": "hughli",
+      "lat": 21.65,
+      "lon": 88.05,
+      "harbor_tile": {
+        "x": 3216,
+        "y": 819
+      },
+      "shore_tile": {
+        "x": 3217,
+        "y": 819
+      },
+      "distance": 1
+    },
+    {
+      "id": "syriam",
+      "lat": 16.6,
+      "lon": 96.28,
+      "harbor_tile": {
+        "x": 3316,
+        "y": 882
+      },
+      "shore_tile": {
+        "x": 3316,
+        "y": 881
+      },
+      "distance": 2
+    },
+    {
+      "id": "dianga",
+      "lat": 18.4,
+      "lon": 94.3,
+      "harbor_tile": {
+        "x": 3291,
+        "y": 859
+      },
+      "shore_tile": {
+        "x": 3292,
+        "y": 859
+      },
+      "distance": 0
+    },
+    {
+      "id": "khambhat",
+      "lat": 21.7,
+      "lon": 72.55,
+      "harbor_tile": {
+        "x": 3030,
+        "y": 818
+      },
+      "shore_tile": {
+        "x": 3030,
+        "y": 819
+      },
+      "distance": 1
+    },
+    {
+      "id": "diu",
+      "lat": 20.69,
+      "lon": 70.97,
+      "harbor_tile": {
+        "x": 3011,
+        "y": 831
+      },
+      "shore_tile": {
+        "x": 3011,
+        "y": 830
+      },
+      "distance": 0
+    },
+    {
+      "id": "mocha",
+      "lat": 13.3,
+      "lon": 43.22,
+      "harbor_tile": {
+        "x": 2678,
+        "y": 920
+      },
+      "shore_tile": {
+        "x": 2679,
+        "y": 920
+      },
+      "distance": 0
+    },
+    {
+      "id": "qalhat",
+      "lat": 22.68,
+      "lon": 59.8,
+      "harbor_tile": {
+        "x": 2876,
+        "y": 808
+      },
+      "shore_tile": {
+        "x": 2876,
+        "y": 809
+      },
+      "distance": 1
+    },
+    {
+      "id": "hormuz",
+      "lat": 26.62,
+      "lon": 56.43,
+      "harbor_tile": {
+        "x": 2836,
+        "y": 758
+      },
+      "shore_tile": {
+        "x": 2836,
+        "y": 757
+      },
+      "distance": 2
+    },
+    {
+      "id": "zanzibar",
+      "lat": -6.05,
+      "lon": 38.92,
+      "harbor_tile": {
+        "x": 2626,
+        "y": 1151
+      },
+      "shore_tile": {
+        "x": 2625,
+        "y": 1151
+      },
+      "distance": 1
+    },
+    {
+      "id": "kilwa",
+      "lat": -8.96,
+      "lon": 39.5,
+      "harbor_tile": {
+        "x": 2634,
+        "y": 1187
+      },
+      "shore_tile": {
+        "x": 2633,
+        "y": 1187
+      },
+      "distance": 0
+    },
+    {
+      "id": "sofala",
+      "lat": -19.6,
+      "lon": 35.25,
+      "harbor_tile": {
+        "x": 2583,
+        "y": 1315
+      },
+      "shore_tile": {
+        "x": 2583,
+        "y": 1314
+      },
+      "distance": 0
+    },
+    {
+      "id": "lamu",
+      "lat": -2.3,
+      "lon": 40.6,
+      "harbor_tile": {
+        "x": 2649,
+        "y": 1107
+      },
+      "shore_tile": {
+        "x": 2648,
+        "y": 1107
+      },
+      "distance": 2
+    },
+    {
+      "id": "massawa",
+      "lat": 15.6,
+      "lon": 39.45,
+      "harbor_tile": {
+        "x": 2633,
+        "y": 891
+      },
+      "shore_tile": {
+        "x": 2633,
+        "y": 892
+      },
+      "distance": 1
+    },
+    {
+      "id": "zeila",
+      "lat": 11.35,
+      "lon": 43.47,
+      "harbor_tile": {
+        "x": 2681,
+        "y": 943
+      },
+      "shore_tile": {
+        "x": 2681,
+        "y": 942
+      },
+      "distance": 0
     }
   ],
-  "port_count": 100
+  "port_count": 145
 }
