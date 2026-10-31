@@ -92,12 +92,13 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
     last_cpu = cpu0
     cpu_final = cpu0  # last live sample — /proc is gone once the proc reaps
     idle_since: float | None = None
+    reaped_rusage = None
     while True:
-        try:
-            proc.wait(timeout=POLL_S)
+        waited = os.wait4(proc.pid, os.WNOHANG)
+        if waited[0] == proc.pid:
+            reaped_rusage = waited[2]
+            proc.returncode = os.waitstatus_to_exitcode(waited[1])
             break
-        except subprocess.TimeoutExpired:
-            pass
         if time.monotonic() - started >= timeout_s:
             timed_out = True
             break
@@ -119,14 +120,24 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
         elif time.monotonic() - idle_since >= STUCK_IDLE_S:
             stuck = True
             break
-    if proc.poll() is None:
+        time.sleep(POLL_S)
+    if reaped_rusage is None and proc.poll() is None:
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             proc.kill()
-        proc.wait()
+        try:
+            waited = os.wait4(proc.pid, 0)
+            reaped_rusage = waited[2]
+            proc.returncode = os.waitstatus_to_exitcode(waited[1])
+        except ChildProcessError:
+            proc.wait()
     wall_ms = int((time.monotonic() - started) * 1000)
-    cpu_ms = int(max(cpu_final - cpu0, 0.0) * 1000)
+    if reaped_rusage is not None:
+        # exact per-child CPU from the kernel at reap time
+        cpu_ms = int((reaped_rusage.ru_utime + reaped_rusage.ru_stime) * 1000)
+    else:
+        cpu_ms = int(max(cpu_final - cpu0, 0.0) * 1000)
     log_text = log_path.read_text(errors="replace")
     kind = classify(proc.returncode, log_text, timed_out, stuck)
     return {
