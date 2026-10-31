@@ -119,10 +119,12 @@ ENTITY_FILES = {
     "discoveries.json": "discoveries",
     "quests.json": "quests",
     # Phase 5 (section 8, group 1): npc_captains.json's plural key is `pools`,
-    # named_pirates.json / market_events.json match their filenames.
+    # named_pirates.json / market_events.json match their filenames,
+    # trade_routes.json's plural key is `lanes` (§4.14).
     "npc_captains.json": "pools",
     "named_pirates.json": "named_pirates",
     "market_events.json": "market_events",
+    "trade_routes.json": "lanes",
 }
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
@@ -160,6 +162,9 @@ L10N_FIELDS = {
     "pools": (),
     "named_pirates": ("name",),
     "market_events": ("name",),
+    # §4.14: lanes carry no display strings (ids, numeric waypoints, id lists);
+    # the walker's locale-key heuristic still guards any stray zh/en object.
+    "lanes": (),
 }
 
 # --- Locked content tables (docs/10-DATA-SCHEMA.md section 7) --------------
@@ -529,6 +534,13 @@ CONSUMPTION_TIER_SPLIT = (5, 10, 5)
 # group 3's generic id loop skips them.
 GROUP7_ENTITY_FILES = frozenset({
     "npc_captains.json", "named_pirates.json", "market_events.json",
+})
+
+# §4.14: trade_routes.json's structure (locked 12-id set, waypoints,
+# chokepoints) is group 8's — group 3's generic id loop skips it until the
+# group-8 checks land with the lane builder (IMPLEMENT-Phase5.md task F).
+GROUP8_ENTITY_FILES = frozenset({
+    "trade_routes.json",
 })
 
 
@@ -1191,11 +1203,11 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
     }
 
     for filename, plural in ENTITY_FILES.items():
-        if filename in GROUP7_ENTITY_FILES:
+        if filename in GROUP7_ENTITY_FILES or filename in GROUP8_ENTITY_FILES:
             # Group 7 owns these files' structure, counts and bounds outright
             # (docs/10-* section 8.2 preamble), including pool/pirate/event id
             # uniqueness — a pool has no `id` field at all (its key is
-            # `nation_id`).
+            # `nation_id`). Group 8 likewise owns trade_routes.json (§4.14).
             continue
         _check_unique_ids(items[plural], plural, filename)
 
