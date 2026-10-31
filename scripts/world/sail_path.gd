@@ -12,7 +12,8 @@ extends RefCounted
 ## ## Region and solidity
 ##
 ## `AStarGrid2D` needs every solid cell marked before a query, and the shipped
-## grid is 2160 × 1080 = 2.33 M tiles. Marking the whole grid one
+## grid is 4320 × 2160 = 9.33 M tiles (Phase-6 rescale, `10-*` §6.1). Marking
+## the whole grid one
 ## `set_point_solid()` call at a time through `is_passable_xy()` took ~280 ms on
 ## this machine; the module therefore searches in a **local frame** (§4.2) and
 ## in two stages:
@@ -23,7 +24,7 @@ extends RefCounted
 ##    cells, so the query is sub-millisecond. This is the common case (a click
 ##    a screen or two away).
 ## 2. **Everything else**, and any near query that could not be answered inside
-##    its box: the region is one full turn of the world — 2160 distinct columns
+##    its box: the region is one full turn of the world — 4320 distinct columns
 ##    laid out around the fleet, with the target well inside — over the whole
 ##    latitude range, marked straight from `MapLoader.indices`. (A narrow
 ##    bounding box around two far-apart endpoints cannot work on this map: the
@@ -64,11 +65,11 @@ extends RefCounted
 ## ## Seam handling (pinned)
 ##
 ## `AStarGrid2D` rejects points outside its region, so a seam-crossing query is
-## made in a local frame: both `x` are shifted by `−from.x mod 2160` into the
+## made in a local frame: both `x` are shifted by `−from.x mod 4320` into the
 ## local frame, the query runs there, and the returned path is shifted back with
 ## `posmod`. The target's local `x` is the **short way** around the seam
-## ([method short_dx], `|Δx| ≤ 1080`), so a fleet at `x = 2100` clicking
-## `x = 50` gets the 110-step path across `x = 2159 → 0`, never the 2,050-step
+## ([method short_dx], `|Δx| ≤ 2160`), so a fleet at `x = 4200` clicking
+## `x = 50` gets the 150-step path across `x = 4319 → 0`, never the 4,150-step
 ## way round.
 
 ## Region margin (tiles) around the endpoint bounding box for a near query.
@@ -100,7 +101,7 @@ var last_raw_points: int = 0
 
 ## Shortest signed `dx` between two columns on a wrapping grid:
 ## `|result| ≤ width / 2` and `to_x == from_x + result (mod width)`.
-static func short_dx(from_x: int, to_x: int, width: int = 2160) -> int:
+static func short_dx(from_x: int, to_x: int, width: int = 4320) -> int:
 	if width <= 0:
 		return to_x - from_x
 	var dx := posmod(to_x - from_x, width)
@@ -111,13 +112,13 @@ static func short_dx(from_x: int, to_x: int, width: int = 2160) -> int:
 
 ## Local-frame → world cell; [method world_to_local] is the inverse.
 static func local_to_world(origin: Vector2i, local_cell: Vector2i,
-		width: int = 2160) -> Vector2i:
+		width: int = 4320) -> Vector2i:
 	return Vector2i(posmod(origin.x + local_cell.x, width), local_cell.y)
 
 
 ## The inverse of [method local_to_world].
 static func world_to_local(origin: Vector2i, world_cell: Vector2i,
-		width: int = 2160) -> Vector2i:
+		width: int = 4320) -> Vector2i:
 	return Vector2i(posmod(world_cell.x - origin.x, width), world_cell.y)
 
 
@@ -318,7 +319,7 @@ static func _illegal_steps(map, path: Array) -> bool:
 static func is_step_legal(map, from: Vector2i, to: Vector2i) -> bool:
 	if map == null:
 		return false
-	var width: int = int(map.width) if int(map.width) > 0 else 2160
+	var width: int = int(map.width) if int(map.width) > 0 else 4320
 	var dx := short_dx(from.x, to.x, width)
 	var dy := to.y - from.y
 	if (dx == 0 and dy == 0) or absi(dx) > 1 or absi(dy) > 1:

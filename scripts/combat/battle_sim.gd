@@ -378,11 +378,12 @@ func effective_speed(unit: Dictionary) -> int:
 		+ equipment_modifier(ship, "sail", "speed")
 
 
-## §4.2 Phase-4 pin: `battle_mp(speed) = speed / 2` (integer division).
-## `{8→4, 10→5, 12→6}` reproduces every Phase-2 MP budget exactly, so the
-## doubled world speeds leave battle balance alone.
+## §4.2 Phase-6 pin: `battle_mp(speed) = speed / 4` (integer division).
+## `{16→4, 20→5, 24→6}` reproduces every Phase-2/4 MP budget exactly (the
+## Phase-4 pin `÷2` preserved the pacing once; the Phase-6 doubling to 5 nm
+## tiles repeats it), so the doubled world speeds leave battle balance alone.
 static func battle_mp(speed: int) -> int:
-	return maxi(0, speed) / 2
+	return maxi(0, speed) / 4
 
 
 ## §4.11.12: base durability + figurehead durability delta. Used for ram
@@ -788,9 +789,10 @@ static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
-## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod 2160). The
+## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod width —
+## 4320 at the Phase-6 grid). The
 ## battle grid itself does not wrap, but port distances from a world contact
-## tile do — a contact at x = 2158 is 2 tiles from a port at x = 0.
+## tile do — a contact at x = 4318 is 2 tiles from a port at x = 0.
 static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
 	var width := _world_width()
 	var dx := absi(a.x - b.x) % maxi(width, 1)
@@ -798,11 +800,11 @@ static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
 
 
 ## The world grid width for world-space distance math (the loaded legend, else
-## the locked 2160).
+## the locked 4320).
 static func _world_width() -> int:
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
 	var width := int(grid.get("width", 0))
-	return width if width > 0 else 2160
+	return width if width > 0 else 4320
 
 
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:

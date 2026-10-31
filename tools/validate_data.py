@@ -85,8 +85,8 @@ COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 MARKER_RE = re.compile(r"^[0-9a-t]$")
 PLACEHOLDER_RE = re.compile(r"\{([A-Za-z0-9_]+)\}")
 
-MAP_WIDTH = 2160
-MAP_HEIGHT = 1080
+MAP_WIDTH = 4320
+MAP_HEIGHT = 2160
 
 # docs/10-DATA-SCHEMA.md section 6.2 -- char -> (kind, passable)
 LOCKED_TILE_KINDS = {
@@ -212,16 +212,17 @@ LOCKED_GOODS = {
 }
 
 # id: (zh, en, class, base_price, durability, capacity, speed, crew_min,
-#      crew_max, armament_slots)  -- section 7.3
+#      crew_max, armament_slots)  -- section 7.3 (Phase-6 speed re-pin:
+#      {16, 20, 24} tiles/day on 5 nm tiles = 80–120 nm/day, `10-*` §6.1)
 LOCKED_SHIP_TYPES = {
-    "latin": ("拉丁帆船", "Latin", "sail", 1200, 40, 30, 8, 8, 20, 2),
-    "sloop": ("单桅纵帆船", "Sloop", "sail", 3000, 60, 60, 10, 10, 30, 4),
-    "caravel": ("卡拉维尔帆船", "Caravel", "sail", 8000, 90, 120, 10, 15, 45, 6),
-    "galley": ("桨帆船", "Galley", "oar", 10000, 70, 50, 12, 40, 120, 4),
-    "brigantine": ("双桅帆船", "Brigantine", "sail", 15000, 110, 150, 12, 20, 60, 10),
-    "nao": ("瑙船", "Nao", "sail", 22000, 140, 300, 8, 25, 80, 10),
-    "carrack": ("卡拉克帆船", "Carrack", "sail", 40000, 180, 450, 8, 30, 100, 16),
-    "galleon": ("盖伦帆船", "Galleon", "hybrid", 60000, 240, 400, 10, 40, 150, 24),
+    "latin": ("拉丁帆船", "Latin", "sail", 1200, 40, 30, 16, 8, 20, 2),
+    "sloop": ("单桅纵帆船", "Sloop", "sail", 3000, 60, 60, 20, 10, 30, 4),
+    "caravel": ("卡拉维尔帆船", "Caravel", "sail", 8000, 90, 120, 20, 15, 45, 6),
+    "galley": ("桨帆船", "Galley", "oar", 10000, 70, 50, 24, 40, 120, 4),
+    "brigantine": ("双桅帆船", "Brigantine", "sail", 15000, 110, 150, 24, 20, 60, 10),
+    "nao": ("瑙船", "Nao", "sail", 22000, 140, 300, 16, 25, 80, 10),
+    "carrack": ("卡拉克帆船", "Carrack", "sail", 40000, 180, 450, 16, 30, 100, 16),
+    "galleon": ("盖伦帆船", "Galleon", "hybrid", 60000, 240, 400, 20, 40, 150, 24),
 }
 
 # id: (zh, en, color, start_port_id, start_ship_type_id, start_gold,
@@ -3086,7 +3087,7 @@ def run_group6_self_test() -> int:
         results.append(
             _expect_g6_failure(
                 "png-wrong-size",
-                "locked at 2160x1080",
+                f"locked at {MAP_WIDTH}x{MAP_HEIGHT}",
                 lambda: _load_world_grid(short_path, WORLD_PNG_LABEL),
             )
         )
