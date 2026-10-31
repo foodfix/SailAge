@@ -23,8 +23,8 @@ const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## T18: fleet/cargo panel (read-only at sea, docs/40 §4.4).
 const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
-## Phase-2 F: hostile marker spawning/movement/contact (docs/60-* §4.1).
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase 5 task J: the living NPC fleet ecology (docs/60-* §4.1, §4.11.11).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
@@ -95,10 +95,11 @@ var _reject_logged := false
 var _pending_port_id: String = ""
 ## The S9 overlay (null until a game over fires).
 var _gameover: Control = null
-## Phase-2 F: hostile markers (docs/60-* §4.11.11). Created in `_ready` and
-## seeded from `GameState.hostile_fleets` — never re-rolled on scene open.
-var _encounters = null
-## Marker id → the placeholder `ColorRect` drawn for it (`80-*` §4.8).
+## Phase 5 task J: the NPC fleet sim (docs/60-* §4.11.11). Created in `_ready`
+## over the saved `GameState.npc_fleets` — never re-rolled on scene open.
+var _fleets = null
+## Fleet id → the placeholder marker node drawn for it (`80-*` §4.5.2: a
+## nation-coloured square with the role letter; pirate red).
 var _marker_nodes: Dictionary = {}
 ## This scene's copy of the §4.11.11.3 handoff — `GameState.pending_encounter`
 ## is the contract field, but it is declared by task A/§5.4 on the merged base,
@@ -205,10 +206,11 @@ func _ready() -> void:
 		if _hud.has_signal("explore_requested"):
 			_hud.explore_requested.connect(explore_here)
 
-	# Phase-2 F: hostile markers (docs/60-* §4.1, §4.11.11). The scene only
-	# *adopts* the saved markers here — `Encounters` is told which day already
-	# ticked so re-opening the map cannot re-roll or re-move them (§4.11.11.2).
-	_init_encounters()
+	# Phase 5 task J: the NPC fleet sim (docs/60-* §4.11.11). The scene only
+	# *adopts* the saved fleets here — the sim is told which day already
+	# ticked so re-opening the map cannot re-tick or re-move them (§4.11.11.1
+	# `last_tick_day` dedupe).
+	_init_fleets()
 	# `battle_finished` is declared by docs/90-* §5.1; the connect is guarded by
 	# `has_signal` so this scene also runs on a base whose EventBus predates the
 	# Phase-2 signals (the `ResourceLoader.load` + `has_method` convention).
@@ -541,7 +543,7 @@ func sync_from_state() -> void:
 	_update_camera()
 	_reveal()
 	_sync_hud()
-	# A save load replaces `hostile_fleets` wholesale; redraw to it.
+	# A save load replaces `npc_fleets` wholesale; redraw to it.
 	_sync_marker_nodes()
 
 
@@ -585,7 +587,10 @@ func _try_step(target: Vector2i) -> bool:
 		_reject_move(target)
 		return false
 
-	# Leaving the harbour: at sea again (docs/20-* §4.11 exit).
+	# Leaving the harbour: at sea again (docs/20-* §4.11 exit). The departed
+	# port is recorded for the Phase-5 hunter intel (docs/60-* §4.11.11.1):
+	# hunting nations read `world.last_departed_port`.
+	GameState.world["last_departed_port"] = str(GameState.current_port)
 	GameState.current_port = null
 
 	# The cell that gets stored: the un-normalised `step_target` may be -1 or
@@ -608,10 +613,10 @@ func _try_step(target: Vector2i) -> bool:
 	_reveal()
 	_sync_hud()
 
-	# docs/60-* §4.11.11.1: contact is measured after the player move — a step
-	# onto a tile beside a hostile marker opens the battle now. S10 owns the
+	# docs/60-* §4.11.11.2: contact is measured after the player move — a step
+	# onto a tile beside a hostile fleet opens the battle now. S10 owns the
 	# screen from here, so nothing else may run on top of it.
-	_tick_encounters()
+	_tick_fleet_contacts()
 	if battle_in_progress() and not _sail_path.is_empty():
 		# §4.2: a battle interrupts the route. It is **not** thrown away: the
 		# remaining path is kept, walking stops, and `_on_battle_finished`
@@ -978,38 +983,41 @@ func is_active_scene() -> bool:
 	return tree != null and tree.current_scene == self
 
 
-# --- Hostile markers (docs/60-* §4.1, §4.8, §4.11.11) ----------------------
+# --- NPC fleets (docs/60-* §4.1, §4.11.11) ----------------------------------
 
-## Creates the marker module and adopts the saved markers. No roll and no
-## movement happens here: `Encounters` starts on `GameState.day`, i.e. "this
-## day's tick already happened", so opening the map (or saving/loading) can
-## never spawn or herd a fleet (§4.11.11.2 "at each day tick").
-func _init_encounters() -> void:
-	if _encounters == null:
-		_encounters = EncountersLib.new(GameState.day)
+## Creates the fleet sim and adopts the saved fleets. No tick happens here:
+## the sim starts on `GameState.day`, i.e. "this day's tick already happened",
+## so opening the map (or saving/loading) can never move a fleet (§4.11.11.1).
+func _init_fleets() -> void:
+	if _fleets == null:
+		_fleets = NpcFleetsLib.new({
+			"npc_config": DataLoader.npc_config,
+			"preset": GameState.npc_preset,
+		})
+		_fleets.last_tick_day = int(GameState.day)
 	_sync_marker_nodes()
 
 
-## The marker module (public so a test can seed/observe it without a scene).
-func encounters():
-	return _encounters
+## The fleet sim (public so a test can seed/observe it without a scene).
+func fleet_sim():
+	return _fleets
 
 
-## Cells of every live hostile marker, `[{"id","kind","nation_id","cell"}]`,
-## sorted by id. The test seam for "markers moved/died as expected".
-func hostile_marker_cells() -> Array:
+## Cells of every live fleet, `[{"id","role","nation_id","cell"}]`, sorted by
+## id. The test seam for "fleets moved/died as expected".
+func fleet_marker_cells() -> Array:
 	var out: Array = []
-	if _encounters == null:
+	if _fleets == null:
 		return out
-	var entries: Array = _encounters.markers()
+	var entries: Array = _fleets.markers()
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("id", "")) < str(b.get("id", "")))
 	for marker in entries:
 		out.append({
 			"id": str(marker.get("id", "")),
-			"kind": str(marker.get("kind", "")),
+			"role": str(marker.get("role", "")),
 			"nation_id": str(marker.get("nation_id", "")),
-			"cell": EncountersLib.position_of(marker),
+			"cell": marker.get("cell", NpcFleetsLib.NO_CELL),
 		})
 	return out
 
@@ -1028,35 +1036,64 @@ func pending_encounter() -> Dictionary:
 	return _pending_encounter.duplicate()
 
 
-## One day tick for the markers. Called after a successful player step and from
-## `day_advanced`, in that order (§4.11.11.1 "after both the player move and the
-## marker step"); `Encounters` itself collapses repeats within one day.
-func _tick_encounters() -> void:
-	if _encounters == null:
+## The fleet tick + contact check after a player step. Called after a
+## successful player move (§4.11.11.1 "contact is measured after the player
+## move"); the sim itself collapses repeats within one day, so this is a
+## contact-only check except on the day's first call.
+func _tick_fleet_contacts() -> void:
+	if _fleets == null:
 		return
 	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
 		return
-	_tick_encounters_at(GameState.current_port == null)
+	_check_fleet_contact()
 
 
-## The tick with an explicit at-sea flag (a test can drive either branch).
-func _tick_encounters_at(is_at_sea: bool) -> void:
-	if _encounters == null:
+## The full day tick (docs/20-* §4.3 step 4, the post-`day_advanced`
+## listener): lane stepping, dwell, decisions, trickle — once per day — then
+## the contact check and the marker redraw. `market_changed` for ports the
+## NPC trades moved is emitted here (the pure module never emits).
+func _tick_fleets_day() -> void:
+	if _fleets == null:
 		return
-	var contacted: Array = _encounters.tick(is_at_sea)
+	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
+		return
+	var moved: Array = _fleets.moved_ports
+	_fleets.tick(int(GameState.day))
+	for port_id in (_fleets.moved_ports as Array):
+		if not (moved as Array).has(port_id):
+			EventBus.market_changed.emit(str(port_id))
 	_sync_marker_nodes()
-	if contacted.is_empty():
+	_check_fleet_contact()
+
+
+## A hostile fleet in contact opens a battle (docs/60-* §4.11.11.2: only
+## `pirate` / `privateer` / `hunter`-with-bounty; §4.11.11.3 the S10 handoff).
+## Contact with any fleet of a hunting nation also records the at-sea intel
+## cell (§4.11.11.1: one assignment on contact).
+func _check_fleet_contact() -> void:
+	if _fleets == null:
 		return
-	var encounter: Dictionary = _encounter_for(contacted[0])
+	var tile := GameState.world_tile()
+	_fleets.note_contacts(tile)
+	var contact: Dictionary = _fleets.nearest_contact(tile)
+	if contact.is_empty():
+		return
+	var encounter: Dictionary = _encounter_for(contact)
 	_open_encounter(encounter)
 
 
-## A marker in contact is opened as a battle (docs/60-* §4.1, §4.11.11.3).
-## The encounter queued on `GameState.pending_encounter` carries the marker's
-## saved fields unchanged — including its §4.11.3 `ships`, so S10 fights
-## exactly the composition the marker had.
-func _encounter_for(marker: Dictionary) -> Dictionary:
-	var encounter := marker.duplicate(true)
+## A fleet in contact is opened as a battle. The encounter queued on
+## `GameState.pending_encounter` carries the fleet's saved fields unchanged
+## plus the S10 `kind` mapping (§4.11.11.3: `hunter` battles keep
+## `kind = "navy"`; every other role carries its role id) and the fleet's own
+## seeded composition, so S10 fights exactly what the fleet has.
+func _encounter_for(fleet: Dictionary) -> Dictionary:
+	var encounter := fleet.duplicate(true)
+	encounter["kind"] = NpcFleetsLib.composition_kind(
+		str(fleet.get("role", "")))
+	encounter["encounter_id"] = str(fleet.get("id", ""))
+	encounter["ships"] = NpcFleetsLib.compose_fleet_ships(
+		fleet, int(GameState.day))
 	encounter["contact"] = {
 		"x": GameState.world_tile().x, "y": GameState.world_tile().y,
 	}
@@ -1068,12 +1105,13 @@ func _encounter_for(marker: Dictionary) -> Dictionary:
 ## The pending slot is consumed at battle start, so a re-entrant contact cannot
 ## open two battles (§4.11.11.3).
 ##
-## The navy piracy delta is charged **here**, exactly once per navy battle
-## (`60-*` §4.11.10: "exactly one −20 per navy battle … at battle start … or on
-## contact with a hunter"; never per ship, never again at battle end). Doing it
-## in this single funnel — behind the same-id guard above — is what makes a
-## double charge impossible by construction, whichever path opened the battle:
-## the player's attack, a hunter making contact, or a chained second marker.
+## The piracy delta is charged **here**, exactly once per battle at start
+## (docs/60-* §4.11.11.2: a non-pirate owner pays `Bounty.apply_piracy` —
+## −20 owner, +2 its rivals — once per battle at start). Doing it in this
+## single funnel — behind the same-id guard above — is what makes a double
+## charge impossible by construction, whichever path opened the battle: the
+## player's attack, a hunter contact, or a chained second fleet. Pirates cost
+## no reputation (§4.1).
 func _open_encounter(encounter: Dictionary) -> void:
 	if encounter.is_empty():
 		return
@@ -1081,20 +1119,20 @@ func _open_encounter(encounter: Dictionary) -> void:
 			and not _battle_encounter.is_empty():
 		return
 	_battle_encounter = encounter.duplicate(true)
-	_charge_navy_piracy(encounter)
+	_charge_piracy(encounter)
 	_store_pending_encounter(encounter)
 	if EventBus.has_signal("battle_started"):
 		EventBus.battle_started.emit(encounter)
 	_route_to_battle()
 
 
-## `rep −20` with the navy's nation plus `+2` with its two rivals, once, for a
-## navy battle (`60-*` §4.11.10, `70-*` §4.5, §4.9.5). The deltas come from
-## `Bounty.piracy_deltas` (the pinned data rival table), and the bounty
-## threshold is re-evaluated right after, so a raid can issue a bounty at
-## battle start. Pirates cost no reputation (§4.1).
-func _charge_navy_piracy(encounter: Dictionary) -> void:
-	if str(encounter.get("kind", "")) != EncountersLib.NAVY:
+## `rep −20` with the fleet's nation plus `+2` with its two rivals, once, at
+## battle start, for any non-pirate fleet (`60-*` §4.11.11.2, `70-*` §4.5).
+## The deltas come from `Bounty.piracy_deltas` (the pinned data rival table),
+## and the bounty threshold is re-evaluated right after, so a raid can issue
+## a bounty at battle start.
+func _charge_piracy(encounter: Dictionary) -> void:
+	if str(encounter.get("role", "")) == NpcFleetsLib.PIRATE:
 		return
 	var nation_id := str(encounter.get("nation_id", ""))
 	if nation_id.is_empty():
@@ -1128,18 +1166,19 @@ func _route_to_battle() -> void:
 	GameState.change_scene(BATTLE_SCENE)
 
 
-## Redraws the marker squares to match `GameState.hostile_fleets` (docs/80-*
-## §4.8 placeholder art: a flat ColorRect per marker, no textures).
+## Redraws the fleet marker squares to match the sim's fleets (docs/80-*
+## §4.5.2 placeholder art: a nation-coloured square with the role letter,
+## pirate red — palette only, no textures).
 func _sync_marker_nodes() -> void:
 	if _loader == null or not _is_loaded():
 		return
 	if _marker_root == null:
 		_marker_root = Node2D.new()
-		_marker_root.name = "HostileMarkers"
+		_marker_root.name = "FleetMarkers"
 		_marker_root.z_index = 9
 		add_child(_marker_root)
 	var live: Dictionary = {}
-	var entries: Array = _encounters.markers() if _encounters != null else []
+	var entries: Array = _fleets.markers() if _fleets != null else []
 	for marker in entries:
 		if not (marker is Dictionary):
 			continue
@@ -1155,10 +1194,22 @@ func _sync_marker_nodes() -> void:
 			square.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_marker_root.add_child(square)
 			_marker_nodes[id] = square
-		square.color = EncountersLib.marker_color(
-			str(marker.get("kind", "")), str(marker.get("nation_id", ""))
-		)
-		_place_marker_square(square, EncountersLib.position_of(marker))
+			var letter := Label.new()
+			letter.name = "Letter"
+			letter.add_theme_font_size_override("font_size",
+				int(_cell_pixels * 0.5))
+			letter.add_theme_color_override("font_color",
+				PaletteLib.TEXT)
+			square.add_child(letter)
+		var role := str(marker.get("role", ""))
+		square.color = NpcFleetsLib.marker_color(
+			role, str(marker.get("nation_id", "")))
+		var letter_node: Label = square.get_node_or_null("Letter")
+		var text := str(marker.get("letter", ""))
+		if letter_node != null:
+			letter_node.text = text
+			letter_node.visible = not text.is_empty()
+		_place_marker_square(square, marker.get("cell", Vector2i.ZERO))
 	for id in _marker_nodes.keys():
 		if live.has(id):
 			continue
@@ -1173,36 +1224,35 @@ func _place_marker_square(square: ColorRect, cell: Vector2i) -> void:
 		+ (Vector2(_cell_pixels, _cell_pixels) - square.size) * 0.5
 
 
-## Right-click on an adjacent hostile marker = attack it (docs/60-* §4.1). A
-## pirate opens the battle straight away; a navy asks for
-## `encounter.attack_confirm` first because attacking it is piracy (§4.11.10).
+## Right-click on an adjacent fleet = attack it (docs/60-* §4.11.11.2). A
+## pirate opens the battle straight away; any other fleet asks for
+## `encounter.attack_confirm` first because attacking it is piracy (a
+## non-pirate owner pays `Bounty.apply_piracy` at battle start).
 func _try_attack(cell: Vector2i) -> bool:
 	if _modal_open() or not _has_game():
 		return false
 	if not _is_adjacent(cell):
 		return false
-	var marker: Dictionary = _marker_at(cell)
-	if marker.is_empty():
+	var fleet: Dictionary = _fleet_at_cell(cell)
+	if fleet.is_empty():
 		return false
-	if str(marker.get("kind", "")) == EncountersLib.NAVY:
-		_open_attack_confirm(marker)
+	if str(fleet.get("role", "")) != NpcFleetsLib.PIRATE:
+		_open_attack_confirm(fleet)
 		return true
-	_attack(marker)
+	_attack(fleet)
 	return true
 
 
-## The marker occupying `cell` ({} when none).
-func _marker_at(cell: Vector2i) -> Dictionary:
-	if _encounters == null:
+## The fleet occupying `cell` ({} when none).
+func _fleet_at_cell(cell: Vector2i) -> Dictionary:
+	if _fleets == null:
 		return {}
-	for marker in _encounters.markers():
-		if marker is Dictionary and EncountersLib.position_of(marker) == cell:
-			return marker
-	return {}
+	return _fleets.fleet_at(cell)
 
 
-## The navy attack confirmation (S12-style modal, `encounter.attack_confirm`).
-func _open_attack_confirm(marker: Dictionary) -> void:
+## The attack confirmation (S12-style modal, `encounter.attack_confirm`):
+## attacking a non-pirate fleet is piracy.
+func _open_attack_confirm(fleet: Dictionary) -> void:
 	if _attack_confirm != null:
 		return
 	var layer := get_node_or_null("AttackLayer") as CanvasLayer
@@ -1215,7 +1265,7 @@ func _open_attack_confirm(marker: Dictionary) -> void:
 	dialog.name = "AttackDialog"
 	layer.add_child(dialog)
 	_attack_confirm = dialog
-	var nation_id := str(marker.get("nation_id", ""))
+	var nation_id := str(fleet.get("nation_id", ""))
 	var nation := I18n.t(DataLoader.get_nation(nation_id).get("name", {}))
 	if DataLoader.ui_strings.has("encounter.attack_confirm"):
 		dialog.open_key("encounter.attack_confirm", {"nation": nation})
@@ -1230,7 +1280,7 @@ func _open_attack_confirm(marker: Dictionary) -> void:
 		)
 	dialog.confirmed.connect(func() -> void:
 		_close_attack_confirm()
-		_attack(marker))
+		_attack(fleet))
 	dialog.cancelled.connect(_close_attack_confirm)
 
 
@@ -1247,57 +1297,52 @@ func _close_attack_confirm() -> void:
 	dialog.queue_free()
 
 
-## Attacking a navy marker is piracy: `rep −20` with that nation
-## (§4.11.10, `70-*` §4.5, `encounter.attack_confirm` copy). The charge itself
-## happens in [_open_encounter], so a player attack, a hunter contact and a
-## chained marker all go through one place and can never be charged twice.
-## Pirates cost no reputation.
-func _attack(marker: Dictionary) -> void:
-	if marker.is_empty():
+## Attacking a national fleet is piracy: the charge itself happens in
+## [_open_encounter] (once per battle at start, §4.11.11.2), so a player
+## attack, a hunter contact and a chained fleet all go through one place and
+## can never be charged twice. Pirates cost no reputation.
+func _attack(fleet: Dictionary) -> void:
+	if fleet.is_empty():
 		return
-	_open_encounter(_encounter_for(marker))
+	_open_encounter(_encounter_for(fleet))
 
 
-## `battle_finished` handler (§4.11.10 "Return" + §4.10 retreat): remove the
-## marker, set the kind's 3-day spawn immunity, put the fleet back on the
-## contact tile, and — if a second marker is still in contact — chain straight
-## into that battle (§6 "battles chain").
+## `battle_finished` handler (§4.11.11.2 + §4.10 retreat): remove the fleet,
+## put the fleet back on the contact tile, and — if a second hostile fleet is
+## still in contact — chain straight into that battle (§6 "battles chain").
 ##
 ## A `retreat` outcome is the exception: the enemy is not defeated, so its
-## marker stays on the map and takes the §4.10 **+1 day pursuit cooldown**
-## instead of despawning (§4.11.10's "marker is removed" belongs to the
-## aftermath of a resolved battle).
+## fleet stays and takes the §4.10 **+1 day pursuit cooldown** instead of
+## being despawned (§4.11.11.1 inclusive reading). Spawn immunity is retired
+## with the marker system (§4.11.11.1); the trickle refills the ecology.
 func _on_battle_finished(outcome: Dictionary) -> void:
 	if _battle_encounter.is_empty():
 		return
-	var marker: Dictionary = _battle_encounter
+	var fleet: Dictionary = _battle_encounter
 	_battle_encounter = {}
-	var kind := str(marker.get("kind", ""))
 	var day := int(GameState.day)
-	var retreated := str(outcome.get("result", "")) == EncountersLib.RETREAT
-	if _encounters != null:
-		if not kind.is_empty():
-			_encounters.set_cooldown(kind, day + EncountersLib.SPAWN_IMMUNITY_DAYS)
+	var retreated := str(outcome.get("result", "")) == NpcFleetsLib.RETREAT
+	if _fleets != null:
 		if retreated:
 			# The descriptor is a copy: the cooldown must land on the stored
-			# marker, so it goes through the id lookup.
-			_encounters.set_pursuit_cooldown(
-				str(marker.get("id", "")), day + EncountersLib.PURSUIT_COOLDOWN_DAYS
+			# fleet, so it goes through the id lookup.
+			_fleets.set_pursuit_cooldown(
+				str(fleet.get("id", "")), day + NpcFleetsLib.PURSUIT_COOLDOWN_DAYS
 			)
 		else:
-			_encounters.remove(str(marker.get("id", "")))
-	# §4.10/§4.11.10: the fleet is placed on the contact tile, which is where
-	# it already stood when contact opened — re-assert it so a S10 that moved
-	# the state cannot leave the marker behind off-tile.
-	_restore_fleet_tile(marker)
+			_fleets.remove(str(fleet.get("id", "")))
+	# §4.10: the fleet is placed on the contact tile, which is where it
+	# already stood when contact opened — re-assert it so a S10 that moved
+	# the state cannot leave the fleet behind off-tile.
+	_restore_fleet_tile(fleet)
 	_clear_stored_pending_encounter()
 	_sync_marker_nodes()
 
-	# §6 chaining: a *different* hostile marker still in contact opens next. The
-	# marker this battle just fought can never re-open — a retreat would
+	# §6 chaining: a *different* hostile fleet still in contact opens next.
+	# The fleet this battle just fought can never re-open — a retreat would
 	# otherwise loop straight back into the battle the player just left.
 	if GameState.current_port == null:
-		var chained := _open_chained_battle(str(marker.get("id", "")))
+		var chained := _open_chained_battle(str(fleet.get("id", "")))
 		if chained:
 			# A chained battle is another interruption: the route stays
 			# suspended and resumes when that one finishes too.
@@ -1340,16 +1385,16 @@ func _restore_fleet_tile(marker: Dictionary) -> void:
 	_update_camera()
 
 
-## Opens the next marker in range after a battle ends (§6 chaining), skipping
-## `exclude_id` — the marker whose battle just finished. Returns true when a
-## battle was opened (the caller keeps a sail route suspended).
+## Opens the next hostile fleet in range after a battle ends (§6 chaining),
+## skipping `exclude_id` — the fleet whose battle just finished. Returns true
+## when a battle was opened (the caller keeps a sail route suspended).
 func _open_chained_battle(exclude_id: String = "") -> bool:
-	if _encounters == null:
+	if _fleets == null:
 		return false
-	for marker in _encounters.contacts(GameState.world_tile()):
-		if str(marker.get("id", "")) == exclude_id:
+	for fleet in _fleets.contacts(GameState.world_tile()):
+		if str(fleet.get("id", "")) == exclude_id:
 			continue
-		_open_encounter(_encounter_for(marker))
+		_open_encounter(_encounter_for(fleet))
 		return true
 	return false
 
@@ -1399,11 +1444,12 @@ func port_route_target() -> String:
 func _on_day_advanced(_new_day: int) -> void:
 	if not _has_game():
 		return
-	# Phase-2 F: one marker tick per day, at sea only (docs/60-* §4.11.11.2).
-	# The spawn rolls need a living player and no game-over overlay, so the
-	# tick runs before the dead-run early return below only when the run is
-	# still alive — `_tick_encounters()` re-checks both conditions itself.
-	_tick_encounters()
+	# Phase 5 task J (docs/20-* §4.3 step 4): the NPC fleet tick runs once per
+	# day as this post-`day_advanced` listener (after the ledger and the
+	# economy step, which precede the emit); the sim's `last_tick_day` dedupe
+	# keeps it idempotent. It needs a living player and no game-over overlay —
+	# `_tick_fleets_day()` re-checks both conditions itself.
+	_tick_fleets_day()
 	# Phase 3: quest expiry / cargo failures, royal-mission expiry and the
 	# bounty re-evaluation (`70-*` §4.9.3–§4.9.5).
 	var phase3: Dictionary = Phase3HooksLib.on_day_tick(int(GameState.day))

@@ -176,6 +176,9 @@ func new_game(nation_id: String, route: bool = true,
 		"position": _tile_dict(start_port, resolved_map),
 		"clock_fraction": 0.0,
 		"map_id": resolved_map,
+		# Phase-5 hunter intel (docs/60-* §4.11.11.1): no sail yet, no intel.
+		"last_departed_port": "",
+		"hunter_intel_cell": null,
 	}
 	current_port = start_port_id
 

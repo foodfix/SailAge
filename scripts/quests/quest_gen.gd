@@ -650,26 +650,29 @@ static func type_key(quest: Dictionary) -> String:
 
 # --- Bounty spawn (docs/70-* §4.9.3) ------------------------------------
 
-## Spawns the pirate fleet a bounty offer names, through the Phase-2
-## `Encounters.spawn` API **unmodified** (`IMPLEMENT-Phase3.md` "B4"): the
-## marker is then a normal hostile marker whose battle outcome the completion
-## hook can match by id. Returns the marker id ("" when no spawn happened).
+## Spawns the pirate fleet a bounty offer names, through the Phase-5
+## `NpcFleets.spawn` quest seam (`60-*` §4.12.3): the fleet is then a normal
+## ecology member whose battle outcome the completion hook can match by id.
+## Returns the fleet id ("" when no spawn happened).
 static func _spawn_bounty_target(quest: Dictionary, day: int) -> String:
-	var encounters_path := "res://scripts/world/encounters.gd"
-	if not ResourceLoader.exists(encounters_path):
+	var fleets_path := "res://scripts/world/npc_fleets.gd"
+	if not ResourceLoader.exists(fleets_path):
 		return ""
-	# Spawning walks the map (`60-*` §4.11.11.1 zone), and a save loaded
-	# straight into port never opened S3 — build the loader here if needed.
+	# Spawning walks the map (`60-*` §4.11.11.1), and a save loaded straight
+	# into port never opened S3 — build the loader here if needed.
 	DataLoader.ensure_map()
-	var module = ResourceLoader.load(encounters_path)
+	var module = ResourceLoader.load(fleets_path)
 	if module == null or not module.can_instantiate():
 		return ""
-	var encounters = module.new(day)
-	var marker: Dictionary = encounters.call("spawn", "pirate", "", day)
+	var fleets = module.new({
+		"npc_config": DataLoader.npc_config,
+		"preset": GameState.npc_preset,
+	})
+	var marker: Dictionary = fleets.call("spawn", "pirate", "", day)
 	if marker.is_empty():
 		return ""
 	var id := str(marker.get("id", ""))
-	# Tag the marker with its quest so the battle-end hook can match it, and
+	# Tag the fleet with its quest so the battle-end hook can match it, and
 	# set the tier the reward was priced from.
 	var lookup := _find_marker(id)
 	if not lookup.is_empty():
@@ -680,9 +683,9 @@ static func _spawn_bounty_target(quest: Dictionary, day: int) -> String:
 
 
 static func _find_marker(id: String) -> Dictionary:
-	for marker in GameState.hostile_fleets:
-		if marker is Dictionary and str((marker as Dictionary).get("id", "")) == id:
-			return marker
+	for fleet in GameState.npc_fleets:
+		if fleet is Dictionary and str((fleet as Dictionary).get("id", "")) == id:
+			return fleet
 	return {}
 
 

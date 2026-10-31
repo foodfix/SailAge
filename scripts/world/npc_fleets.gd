@@ -87,6 +87,18 @@ const ESCORT_RADIUS := 10
 const ANCHOR_RADIUS := 3
 const CHASE_ON_RADIUS := 5
 const CHASE_OFF_RADIUS := 8
+## §4.11.11.1 hunter-intel rule (locked): the chase opens inside Chebyshev 15,
+## is lost beyond Chebyshev 20 (the 15/20 hysteresis), and the intel-port
+## loiter lasts 10 days.
+const HUNTER_CHASE_ON := 15
+const HUNTER_CHASE_OFF := 20
+const HUNTER_LOITER_DAYS := 10
+## Hunter states (persisted, docs/60-* §4.11.11.1 hunter intel): sailing to
+## the intel port, camping its approaches, chasing, or routing home.
+const HUNTER_STATE_INTEL := "intel"
+const HUNTER_STATE_LOITER := "loiter"
+const HUNTER_STATE_CHASE := "chase"
+const HUNTER_STATE_HOME := "home"
 ## `30-*` §4.4 trader decision: destinations are own-nation ports within
 ## Chebyshev 60 (wrap-aware).
 const CANDIDATE_RADIUS := 60
@@ -128,6 +140,11 @@ const RISK_SAMPLE_MAX := 8
 ## Global cap slack above the core budgets: 6 treasure + ≤ 6 hunters + 4
 ## spare at normal (docs/60-* §4.1.1: 272 core ⇒ global cap 288).
 const GLOBAL_CAP_SLACK := 16
+## The pirate share of the 272 core: the doc's computed ≈ 25
+## (272 − 247 persistent non-pirate roles). The daily unpatrolled-zone
+## recount drives the *demand* up to `8 + zones`, but the ecology is capped
+## here so the core cap and the 288 global cap hold exactly at normal.
+const PIRATE_CORE_CAP := 25
 ## Bucket size of the wrap-aware cell-bucket spatial index
 ## (docs/60-* §4.11.11.5). 16 keeps a radius-15 patrol-zone query at 4×4
 ## buckets while a radius-1 contact query touches 1.
@@ -142,6 +159,10 @@ const SEED_Y_MULT := 104729
 
 ## "No cell" sentinel for positions off the map.
 const NO_CELL := Vector2i(-1, -1)
+
+## §4.10 / `60-*`: the battle outcome that leaves the fleet in place (the
+## retreat branch of the §4.12.4 aftermath).
+const RETREAT := "retreat"
 
 ## Trader/coaster destination-choice cap per decision (a guard, never a code
 ## path: 6 nations × ≤ 20 ports keeps the candidate loop tiny).
@@ -184,8 +205,11 @@ static var _tile_lanes: Dictionary = {}
 static var _node_tiles: Array = []
 static var _node_index: Dictionary = {}
 static var _adjacency: Dictionary = {}
-## Daily unpatrolled-zone count (the pirate budget's demand term).
+## Daily unpatrolled-zone count (the pirate budget's demand term), plus the
+## day it was computed for — recounted lazily so `budget_for(PIRATE)` and
+## `core_cap()` answer correctly before the world scene's first tick.
 var _unpatrolled_zones: int = 0
+var _zones_day: int = -1
 
 ## Per-owner spawn-failure marks for the current day (`"role|nation" → day`),
 ## so a failed draw is skipped until tomorrow instead of spinning.
@@ -202,6 +226,17 @@ var _hunter_paths: Dictionary = {}
 var _buckets: Dictionary = {}
 var _by_id: Dictionary = {}
 var _index_dirty: bool = true
+
+## Per-nation caches of the derived port/goods lists (data is a per-run
+## constant; `reset_caches()` clears them with the route tables).
+static var _ports_cache: Dictionary = {}
+static var _goods_cache: Dictionary = {}
+## Per-(role|nation) anchor-tile cache — the tile→lanes map is a per-run
+## constant, so the junction candidate list is built once per owner.
+var _anchor_cache: Dictionary = {}
+
+## Handoff from [_hunter_anchor] to [_build_fleet]: the drawn home port.
+var _hunter_home: String = ""
 
 
 ## `config = {npc_config, preset}` (docs/60-* §4.12.3); computes the §4.1.1
@@ -251,7 +286,15 @@ func _port_counts() -> Dictionary:
 
 
 ## The nation's own ports, ids sorted (deterministic iteration everywhere).
+## Cached per nation — `ports.json` is a per-run constant and this list is
+## read on every departure decision and spawn.
 func nation_ports(nation_id: String) -> Array[String]:
+	var cached: Array = _ports_cache.get(nation_id, [])
+	if not cached.is_empty():
+		var out: Array[String] = []
+		for value in cached:
+			out.append(str(value))
+		return out
 	var out: Array[String] = []
 	for port in DataLoader.ports_list:
 		var id := str((port as Dictionary).get("id", ""))
@@ -261,12 +304,23 @@ func nation_ports(nation_id: String) -> Array[String]:
 			continue
 		out.append(id)
 	out.sort()
+	var stored: Array = []
+	for value in out:
+		stored.append(value)
+	_ports_cache[nation_id] = stored
 	return out
 
 
 ## A nation's produced goods — union of its ports' `produces`, id-sorted
 ## (docs/30-* §4.4: the trader candidate goods and the specialty draw).
+## Cached per nation (data is a per-run constant).
 func nation_goods(nation_id: String) -> Array[String]:
+	var cached: Array = _goods_cache.get(nation_id, [])
+	if not cached.is_empty():
+		var out: Array[String] = []
+		for value in cached:
+			out.append(str(value))
+		return out
 	var seen: Dictionary = {}
 	for port in DataLoader.ports_list:
 		if str((port as Dictionary).get("nation_id", "")) != nation_id:
@@ -277,6 +331,10 @@ func nation_goods(nation_id: String) -> Array[String]:
 	for good_id in seen:
 		out.append(good_id)
 	out.sort()
+	var stored: Array = []
+	for value in out:
+		stored.append(value)
+	_goods_cache[nation_id] = stored
 	return out
 
 
@@ -349,7 +407,9 @@ func budget_for(role: String, nation_id: String) -> int:
 		PIRATE:
 			var base := float(budgets.get("pirate_base", 8))
 			var per_zone := float(budgets.get("pirates_per_unpatrolled_zone", 1))
-			return ceili((base + float(_unpatrolled_zones) * per_zone) * mult)
+			_recount_zones(GameState.day)
+			var demand := base + float(_unpatrolled_zones) * per_zone
+			return mini(PIRATE_CORE_CAP, ceili(demand * mult))
 		HUNTER:
 			return 1 if nation_id in bountied_nations() else 0
 		TREASURE:
@@ -376,8 +436,11 @@ func global_cap() -> int:
 	return mini(core_cap() + GLOBAL_CAP_SLACK, absolute)
 
 
-## The daily trickle: `max(4, ceil(cap / 50))` fleets/day (docs/60-* §4.1.2).
+## The daily trickle: `max(4, ceil(cap / 50))` fleets/day (docs/60-* §4.1.2);
+## `deserted` trickles nothing.
 func trickle_per_day() -> int:
+	if is_deserted():
+		return 0
 	var base := float(_flow().get("spawns_per_day_base", 4))
 	@warning_ignore("integer_division")
 	var scaled := ceili(float(global_cap()) / 50.0)
@@ -508,7 +571,10 @@ func remove(id: String) -> void:
 		var fleet = GameState.npc_fleets[index]
 		if fleet is Dictionary and str((fleet as Dictionary).get("id", "")) == id:
 			GameState.npc_fleets.remove_at(index)
-			_index_dirty = true
+			# A full rebuild (O(N), battle-aftermath frequency): kills the
+			# whole stale-key class — fixtures may rename ids after adding,
+			# so an incremental removal can never be trusted here.
+			reset_index()
 			return
 
 
@@ -536,7 +602,7 @@ func spawn(role: String, nation_id: String, day: int) -> Dictionary:
 	if fleet.is_empty():
 		return {}
 	GameState.npc_fleets.append(fleet)
-	_index_dirty = true
+	_index_add(fleet)
 	return fleet
 
 
@@ -564,6 +630,8 @@ static func reset_caches() -> void:
 	_node_tiles = []
 	_node_index = {}
 	_adjacency = {}
+	_ports_cache = {}
+	_goods_cache = {}
 
 
 # --- Fleet shape & ids ------------------------------------------------------
@@ -593,12 +661,17 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 		"cooldown_until_day": 0,
 		# Task-owned extensions of the docs' "…" (reported in the task J
 		# summary): the fleet's seed, its destination port, dwell state, the
-		# raider anchor and K's pursuit target.
+		# raider anchor, and the hunter-intel state machine (docs/60-*
+		# §4.11.11.1): `hunter_state`, its 10-day loiter deadline and its
+		# home port.
 		"seed": 0,
 		"dest_port_id": "",
 		"dwell_until_day": 0,
 		"anchor_cell": null,
 		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
 	}
 	match role:
 		PIRATE, PRIVATEER:
@@ -611,6 +684,14 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 			cell = _hunter_anchor(nation_id, day)
 			if cell == NO_CELL:
 				return {}
+			fleet["home_port_id"] = _hunter_home
+			fleet["hunter_state"] = HUNTER_STATE_INTEL
+			# The intel target: the last port the player sailed from, else
+			# the hunter's home port until a first Set Sail is recorded.
+			var intel_port := _intel_port()
+			fleet["dest_port_id"] = intel_port if not intel_port.is_empty() \
+				else _hunter_home
+			fleet["dwell_until_day"] = int(day) + DWELL_DAYS
 		TREASURE:
 			# Reserved for task L's seasonal scheduler: spawn docked at the
 			# nation's capital so the role is visible but inert.
@@ -717,7 +798,8 @@ func _draw_specialty(nation_id: String, seed_value: int) -> String:
 ## [constant ANCHOR_RADIUS] jitter, passable and unoccupied.
 func _raider_anchor(role: String, nation_id: String, day: int) -> Vector2i:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(day) * SEED_DAY_MULT + hash(role + "|" + nation_id)
+	rng.seed = int(day) * SEED_DAY_MULT + _id_seq * SEED_X_MULT \
+		+ hash(role + "|" + nation_id)
 	var candidates := _anchor_tiles(role, nation_id)
 	for _attempt in 32:
 		if candidates.is_empty():
@@ -730,8 +812,13 @@ func _raider_anchor(role: String, nation_id: String, day: int) -> Vector2i:
 
 
 ## Junction tiles of the role's lane set (all lanes for a pirate, the
-## sponsor's rivals' lanes for a privateer), sorted for determinism.
+## sponsor's rivals' lanes for a privateer), sorted for determinism. Cached
+## per (role, nation) — the tile→lanes map is a per-run constant.
 func _anchor_tiles(role: String, nation_id: String) -> Array:
+	var cache_key := role + "|" + nation_id
+	var cached: Array = _anchor_cache.get(cache_key, [])
+	if not cached.is_empty():
+		return cached
 	var lane_filter: Dictionary = {}
 	if role == PRIVATEER:
 		for rival_id in _rivals_of(nation_id):
@@ -758,22 +845,25 @@ func _anchor_tiles(role: String, nation_id: String) -> Array:
 		if a.y != b.y:
 			return a.y < b.y
 		return a.x < b.x)
+	_anchor_cache[cache_key] = out
 	return out
 
 
-## A hunter spawns inside its nation's 15-tile port zone (the §4.1.1 navy
-## zone), passable and unoccupied.
+## A hunter spawns docked at a seeded own-nation port (the §4.1.1 navy
+## zone's port) so its first journey always boards the lane network.
 func _hunter_anchor(nation_id: String, day: int) -> Vector2i:
 	var ports := nation_ports(nation_id)
 	if ports.is_empty():
 		return NO_CELL
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(day) * SEED_DAY_MULT + hash("hunter|" + nation_id)
+	rng.seed = int(day) * SEED_DAY_MULT + _id_seq * SEED_X_MULT \
+		+ hash("hunter|" + nation_id)
 	var port_id: String = ports[rng.randi_range(0, ports.size() - 1)]
 	var center := _port_cell(port_id)
 	if center.x < 0:
 		return NO_CELL
-	return _free_tile_near(center, rng, ZONE_RADIUS)
+	_hunter_home = port_id
+	return center
 
 
 ## A passable, unoccupied tile within `radius` of `center` (wrap-aware),
@@ -815,23 +905,40 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 	var ports := nation_ports(nation_id)
 	if ports.is_empty():
 		return {}
+	# Per-spawn stream: the fleet's spawn sequence number salts the seed, so
+	# two spawns of one (role, nation, day) draw different journeys while
+	# staying fully deterministic.
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(day) * SEED_DAY_MULT + hash(role + "|" + nation_id)
+	rng.seed = int(day) * SEED_DAY_MULT + _id_seq * SEED_X_MULT \
+		+ hash(role + "|" + nation_id)
 	var origin: String = ports[rng.randi_range(0, ports.size() - 1)]
 	var dest := ""
-	match role:
-		TRADER:
-			dest = _nearest_own_port_excluding(origin, nation_id)
-		COASTER:
-			dest = _nearest_own_port_excluding(origin, nation_id)
-		COURIER:
-			dest = _capital_of(nation_id)
-			if dest == origin:
-				dest = _nearest_own_port_excluding(origin, nation_id)
-		PATROL:
-			origin = _patrol_home_port(nation_id)
-			dest = ""
-	if role != PATROL and (dest.is_empty() or dest == origin):
+	if role == PATROL:
+		origin = _patrol_home_port(nation_id)
+	else:
+		# Lane roles sail between two own-nation ports. Some port pairs share
+		# no lane component (the Pacific runs alone), so the draw retries up
+		# to six origins before the spawn draw fails.
+		for _attempt in 6:
+			origin = ports[rng.randi_range(0, ports.size() - 1)]
+			match role:
+				TRADER:
+					dest = _nearest_own_port_excluding(origin, nation_id)
+				COASTER:
+					dest = _nearest_own_port_excluding(origin, nation_id)
+				COURIER:
+					dest = _capital_of(nation_id)
+					if dest == origin:
+						dest = _nearest_own_port_excluding(origin, nation_id)
+			if dest.is_empty() or dest == origin:
+				continue
+			var route_check := route_between(origin, dest)
+			if not route_check.is_empty():
+				return {
+					"origin": origin, "dest": dest, "cell": _port_cell(origin),
+					"dwell_until_day": int(day) + DWELL_DAYS,
+					"route": (route_check["legs_save"] as Dictionary).duplicate(true),
+				}
 		return {}
 	if role == PATROL:
 		var lanes := nation_lanes(nation_id)
@@ -854,7 +961,19 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 				best_distance = distance
 				best_index = index
 		if _is_occupied(lane_path[best_index], ""):
-			return {}
+			# Boarding tile busy: walk the lane outward to the first free
+			# tile (deterministic), else fail the draw.
+			var step := -1 if best_index > lane_path.size() / 2 else 1
+			var scan := best_index + step
+			var free := -1
+			while scan >= 0 and scan < lane_path.size():
+				if not _is_occupied(lane_path[scan], ""):
+					free = scan
+					break
+				scan += step
+			if free < 0:
+				return {}
+			best_index = free
 		var reverse := best_index > lane_path.size() / 2
 		return {
 			"origin": origin, "dest": "",
@@ -870,7 +989,7 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 	return {
 		"origin": origin, "dest": dest, "cell": _port_cell(origin),
 		"dwell_until_day": int(day) + DWELL_DAYS,
-		"route": route["legs_save"],
+		"route": (route["legs_save"] as Dictionary).duplicate(true),
 	}
 
 
@@ -1045,19 +1164,28 @@ func _build_graph() -> void:
 				edge_min[pair_key] = [length, rank, path_key, i, j]
 	for pair_key in edge_min:
 		var entry: Array = edge_min[pair_key]
-		var parts := (pair_key as String).split("|")
-		var a := int(parts[0])
-		var b := int(parts[1])
 		var path_key := str(entry[2])
 		var i := int(entry[3])
 		var j := int(entry[4])
 		var length := absi(j - i)
-		if not _adjacency.has(a):
-			_adjacency[a] = []
-		(_adjacency[a] as Array).append([b, length, path_key, i, j])
-		if not _adjacency.has(b):
-			_adjacency[b] = []
-		(_adjacency[b] as Array).append([a, length, path_key, j, i])
+		# Orient each adjacency entry by the path: the entry in
+		# `adjacency[node_of_mark_i]` walks marks i→j (and the mirror j→i),
+		# so every hop's walked segment is continuous. Node order
+		# ((y,x)-sorted) is unrelated to marks order — deriving the
+		# direction here is what keeps the routing honest.
+		var path := _path_of(path_key)
+		var node_i = _node_index.get(_cell_key(path[i]), -1)
+		var node_j = _node_index.get(_cell_key(path[j]), -1)
+		if int(node_i) < 0 or int(node_j) < 0 or int(node_i) == int(node_j):
+			continue
+		if not _adjacency.has(int(node_i)):
+			_adjacency[int(node_i)] = []
+		(_adjacency[int(node_i)] as Array).append([int(node_j), length,
+			path_key, i, j])
+		if not _adjacency.has(int(node_j)):
+			_adjacency[int(node_j)] = []
+		(_adjacency[int(node_j)] as Array).append([int(node_i), length,
+			path_key, j, i])
 
 
 static func mini_int(a: int, b: int) -> int:
@@ -1233,15 +1361,29 @@ func _legs_from_nodes(node_path: Array) -> Dictionary:
 		var kind := "lane" if path_key.begins_with("lane:") else "spoke"
 		var id := path_key.trim_prefix("lane:").trim_prefix("spoke:")
 		var forward := j > i
+		# Walked orientation: forward walks min→max, reverse walks max→min.
+		var lo := mini(i, j)
+		var hi := maxi(i, j)
+		var walked_start := lo if forward else hi
 		var last: Dictionary = legs[legs.size() - 1] if not legs.is_empty() else {}
+		# A continuation must start exactly where the previous leg's WALK
+		# ended — the a bound on a reverse leg, the b bound on a forward one.
+		var last_walked_end := -1
+		if not last.is_empty():
+			last_walked_end = int(last["a"]) if bool(last["reverse"]) \
+				else int(last["b"])
 		if not last.is_empty() and str(last["id"]) == id \
 				and bool(last["reverse"]) == (not forward) \
-				and int(last["b"]) == mini(i, j):
-			# Contiguous continuation of the same leg in the same direction.
-			last["b"] = maxi(i, j)
+				and last_walked_end == walked_start:
+			# Contiguous continuation of the same leg in the same direction:
+			# extend toward the new end (downward on a reverse leg).
+			if forward:
+				last["b"] = hi
+			else:
+				last["a"] = lo
 			continue
 		legs.append({"kind": kind, "id": id, "reverse": not forward,
-			"a": mini(i, j), "b": maxi(i, j)})
+			"a": lo, "b": hi})
 	var legs_save: Array = []
 	var full_path: Array = []
 	var length := 0
@@ -1314,10 +1456,10 @@ func _step_fleets(day: int) -> void:
 			_hunter_paths.erase(id)
 			continue
 		if role == HUNTER:
-			# The one runtime-A* user (docs/60-* §4.11.11.1): leaves the
-			# lanes entirely to pursue the player, under the shared
-			# per-day budget; an overflow loses the chase that day.
-			pursuit_ms += _pursue(fleet, pursuit_ms)
+			# §4.11.11.1 hunter intel: lanes to the intel port (zero A*),
+			# 10-day loiter at its approaches, short-radius pursuit only
+			# inside the 15/20 hysteresis.
+			pursuit_ms += _hunter_tick(fleet, day, pursuit_ms)
 			continue
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 		if legs.is_empty():
@@ -1329,17 +1471,132 @@ func _step_fleets(day: int) -> void:
 		remove(id)
 
 
-## One pursuit day for a hunter: follow the cached chase path toward the
-## player, re-planning (budgeted A*) only when the player has moved away from
-## the planned target or the path ran out.
-func _pursue(fleet: Dictionary, budget_used_ms: float) -> float:
-	var id := str(fleet.get("id", ""))
+## One hunter day under the intel rule (docs/60-* §4.11.11.1). Returns the
+## pursuit A* time spent.
+func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
+	var cell := position_of(fleet)
 	var target := GameState.world_tile()
+	var distance := chebyshev(cell, target)
+	# 15/20 hysteresis: the chase opens inside 15, is lost beyond 20.
+	if str(fleet.get("hunter_state", HUNTER_STATE_INTEL)) == HUNTER_STATE_CHASE:
+		if distance > HUNTER_CHASE_OFF:
+			_hunter_route_to_intel(fleet)
+			return 0.0
+		return _pursue(fleet, target, budget_used_ms)
+	if distance <= HUNTER_CHASE_ON:
+		fleet["hunter_state"] = HUNTER_STATE_CHASE
+		_hunter_paths.erase(str(fleet.get("id", "")))
+		return _pursue(fleet, target, budget_used_ms)
+	# A new Set Sail re-targets under-way hunters at their next day tick.
+	var intel_port := _intel_port()
+	var state := str(fleet.get("hunter_state", HUNTER_STATE_INTEL))
+	if state == HUNTER_STATE_INTEL and not intel_port.is_empty() \
+			and str(fleet.get("dest_port_id", "")) != intel_port:
+		_hunter_route_to_intel(fleet)
+		return 0.0
+	var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
+	if not legs.is_empty():
+		_advance(fleet, day)
+		return 0.0
+	# Docked / arrived at a journey end.
+	if int(fleet.get("dwell_until_day", 0)) > day:
+		return 0.0
+	match state:
+		HUNTER_STATE_INTEL:
+			# Arrived at the intel port: camp its approaches for 10 days.
+			fleet["hunter_state"] = HUNTER_STATE_LOITER
+			fleet["loiter_until_day"] = int(day) + HUNTER_LOITER_DAYS
+			_camp_approaches(fleet, str(fleet.get("dest_port_id", "")))
+		HUNTER_STATE_LOITER:
+			# Loiter expired: route home via the sponsor's lanes (the
+			# standing-bounty check above despawns one without a bounty).
+			_hunter_route_home(fleet)
+		HUNTER_STATE_HOME:
+			# Back home with the bounty standing: sail for the intel again.
+			_hunter_route_to_intel(fleet)
+		_:
+			_hunter_route_to_intel(fleet)
+	return 0.0
+
+
+## Lanes (junction-graph Dijkstra + tile path — zero A*) to the current
+## intel target.
+func _hunter_route_to_intel(fleet: Dictionary) -> void:
+	fleet["hunter_state"] = HUNTER_STATE_INTEL
+	fleet["loiter_until_day"] = 0
+	var origin := _port_at_cell(position_of(fleet))
+	if origin.is_empty():
+		origin = str(fleet.get("dest_port_id", ""))
+	var intel_port := _intel_port()
+	if intel_port.is_empty():
+		intel_port = str(fleet.get("home_port_id", ""))
+	if origin.is_empty() or intel_port.is_empty() or origin == intel_port:
+		# Nothing to sail to: hold one dwell cycle (deterministic retry).
+		fleet["route"] = {"lanes": [], "leg": 0, "tile_index": 0, "legs": []}
+		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
+		return
+	var route := route_between(origin, intel_port)
+	if route.is_empty():
+		fleet["route"] = {"lanes": [], "leg": 0, "tile_index": 0, "legs": []}
+		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
+		return
+	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
+	fleet["dest_port_id"] = intel_port
+	fleet["dwell_until_day"] = 0
+
+
+## Lanes home via the sponsor's network.
+func _hunter_route_home(fleet: Dictionary) -> void:
+	fleet["hunter_state"] = HUNTER_STATE_HOME
+	fleet["loiter_until_day"] = 0
+	var origin := _port_at_cell(position_of(fleet))
+	if origin.is_empty():
+		origin = str(fleet.get("dest_port_id", ""))
+	var home := str(fleet.get("home_port_id", ""))
+	if origin.is_empty() or home.is_empty() or origin == home:
+		# Already home (or the home port is unresolvable): re-target intel.
+		_hunter_route_to_intel(fleet)
+		return
+	var route := route_between(origin, home)
+	if route.is_empty():
+		_hunter_route_to_intel(fleet)
+		return
+	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
+	fleet["dest_port_id"] = home
+	fleet["dwell_until_day"] = 0
+
+
+## The chokepoint-camping pattern at the intel port's approaches: a free,
+## passable tile within Chebyshev 1 of the berth (the immediate approach),
+## else the berth itself.
+func _camp_approaches(fleet: Dictionary, port_id: String) -> void:
+	var berth := _port_cell(port_id)
+	if berth.x < 0:
+		return
+	for offset: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0),
+			Vector2i(0, 1), Vector2i(0, -1)]:
+		var y := berth.y + offset.y
+		if y < 0 or y >= _height:
+			continue
+		var cell := Vector2i(posmod(berth.x + offset.x, _width), y)
+		if not _passable(cell):
+			continue
+		if _is_occupied(cell, str(fleet.get("id", ""))):
+			continue
+		_commit_cell(fleet, cell)
+		return
+
+
+## The budgeted short-radius pursuit: A* toward the player inside the chase,
+## re-planning only when the cached path is stale. An overflow loses the
+## chase that day (the fleet holds).
+func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float) -> float:
+	var id := str(fleet.get("id", ""))
 	var plan: Dictionary = _hunter_paths.get(id, {})
 	var path: Array = plan.get("path", []) if plan.get("path", []) is Array else []
 	var needs_plan := path.size() < 2 \
 		or chebyshev(Vector2i(int((plan as Dictionary).get("target_x", -99999)),
-			int((plan as Dictionary).get("target_y", -99999))), target) > 10
+			int((plan as Dictionary).get("target_y", -99999))), target) > 2
 	if needs_plan:
 		var budget_left := float(path_budget_ms()) - budget_used_ms
 		if budget_left <= 0.0:
@@ -1365,36 +1622,66 @@ func _pursue(fleet: Dictionary, budget_used_ms: float) -> float:
 
 
 ## One tile of progress along the current leg, skipping occupied tiles and
-## never entering land/reef/ice (docs/60-* §4.11.11.1).
+## never entering land/reef/ice (docs/60-* §4.11.11.1). The next tile is
+## computed by index arithmetic on the artifact path — no per-step slice
+## allocation (the perf gate makes the day tick allocation-sensitive).
 func _advance(fleet: Dictionary, day: int) -> void:
 	var route: Dictionary = fleet.get("route", {})
 	var legs: Array = route.get("legs", [])
 	if legs.is_empty():
 		return
 	var leg: Dictionary = legs[0]
-	var path := _leg_path(leg)
+	var path := _path_of(("lane:" if str(leg.get("kind", "")) == "lane" else "spoke:")
+		+ str(leg.get("id", "")))
 	if path.is_empty():
 		# A broken leg (unknown id after a hand edit): drop the journey.
 		route["legs"] = []
 		return
-	var next_index := int(route.get("tile_index", 0)) + 1
-	if next_index >= path.size():
-		# Leg end → next leg.
+	var a := clampi(int(leg.get("a", 0)), 0, path.size() - 1)
+	var b := clampi(int(leg.get("b", path.size() - 1)), 0, path.size() - 1)
+	var reverse := bool(leg.get("reverse", false))
+	# Walked index i ↔ artifact index: reverse walks b−i, forward walks a+i.
+	var index := int(route.get("tile_index", 0))
+	var walked_len := b - a + 1
+	if index < 0 or index >= walked_len:
+		# Off the leg (hand edit): restart the leg deterministically.
+		index = 0
+		route["tile_index"] = 0
+	var artifact := (b - index) if reverse else (a + index)
+	if index + 1 >= walked_len:
+		# Leg end: board the next leg's first tile, and only then hand the
+		# leg over — a blocked seam holds with the position still on the
+		# stored leg (so route/position always agree, save/load included).
+		if legs.size() > 1:
+			var head: Dictionary = legs[1]
+			var head_path := _path_of(
+				("lane:" if str(head.get("kind", "")) == "lane" else "spoke:")
+				+ str(head.get("id", "")))
+			if head_path.is_empty():
+				route["legs"] = []
+				return
+			var head_a := clampi(int(head.get("a", 0)), 0, head_path.size() - 1)
+			var head_b := clampi(int(head.get("b", head_path.size() - 1)), 0, head_path.size() - 1)
+			var head_tile: Vector2i = head_path[head_b if bool(head.get("reverse", false)) \
+				else head_a]
+			if not _can_enter(fleet, head_tile):
+				return  # hold at the seam; the next day retries
+			legs.pop_front()
+			route["leg"] = int(route.get("leg", 0)) + 1
+			route["tile_index"] = 0
+			_commit_cell(fleet, head_tile)
+			return
+		# The final leg ended: dock at the destination.
 		legs.pop_front()
 		route["leg"] = int(route.get("leg", 0)) + 1
 		route["tile_index"] = 0
-		if legs.is_empty():
-			_arrive(fleet, day)
-		else:
-			var head := _leg_path(legs[0])
-			if not head.is_empty() and _can_enter(fleet, head[0]):
-				_commit_cell(fleet, head[0])
-			# else: hold at the seam; the next day retries.
+		_arrive(fleet, day)
 		return
-	var target: Vector2i = path[next_index]
+	var dir := -1 if reverse else 1
+	var target: Vector2i = path[artifact + dir]
 	if not _can_enter(fleet, target):
 		return  # occupied/blocked: hold (deterministic retry next day)
-	route["tile_index"] = next_index
+	route["tile_index"] = index + 1
 	_commit_cell(fleet, target)
 
 
@@ -1403,8 +1690,10 @@ func _can_enter(fleet: Dictionary, cell: Vector2i) -> bool:
 
 
 func _commit_cell(fleet: Dictionary, cell: Vector2i) -> void:
+	var before := position_of(fleet)
 	set_position(fleet, cell)
-	_index_dirty = true
+	if before != NO_CELL and _by_id.has(str(fleet.get("id", ""))):
+		_move_bucket(str(fleet.get("id", "")), before, cell)
 
 
 ## Leg list exhausted: dock at the destination port (docked fleets sit at the
@@ -1585,7 +1874,9 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 		fleet["route"] = {"lanes": [], "leg": 0, "tile_index": 0, "legs": []}
 		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
 		return
-	fleet["route"] = route["legs_save"]
+	# The cache entry is shared by every fleet on this pair — fleets mutate
+	# their route (legs pop, tile_index), so each gets its own deep copy.
+	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
 	fleet["dest_port_id"] = dest
 	fleet["dwell_until_day"] = 0
 
@@ -1593,23 +1884,39 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 ## The trader decision (docs/30-* §4.4), exposed as the test seam. Returns
 ## `{good, dest, qty, score, lane_days, risk}` — the argmax candidate — or
 ## `{}` when no live candidate exists.
+## The trader decision (docs/30-* §4.4), exposed as the test seam. Returns
+## `{good, dest, qty, score, lane_days, risk}` — the argmax candidate — or
+## `{}` when no live candidate exists.
 func decide_trade(fleet: Dictionary, origin: String, day: int) -> Dictionary:
+	var candidates := score_all_candidates(fleet, origin, day)
+	return candidates[0] if not candidates.is_empty() else {}
+
+
+## Every live (good, destination) candidate with its §4.4 score, best first
+## (the argmax input of [method decide_trade]; the test seam the risk/score
+## cases build on). Ties keep the first-generated candidate (dest id, then
+## good id order).
+func score_all_candidates(fleet: Dictionary, origin: String,
+		day: int) -> Array:
 	var nation_id := str(fleet.get("nation_id", ""))
 	var goods := nation_goods(nation_id)
 	if goods.is_empty() or origin.is_empty():
-		return {}
+		return []
 	var specialty := str(fleet.get("specialty", ""))
 	if specialty.is_empty():
 		# A fleet predating the field draws lazily from its own seed
 		# (docs/30-* §4.4; no data migration).
 		specialty = _draw_specialty(nation_id, int(fleet.get("seed", 0)))
 		fleet["specialty"] = specialty
-	var origin_cell := _port_cell(origin)
 	var rng := _fleet_rng(fleet, "decision|%d" % day)
 	var free := _free_hold(fleet, TRADER_HOLD_CAPACITY)
-	var best: Dictionary = {}
+	var out: Array = []
 	var draws := 0
 	var dests := _candidate_destinations(origin, nation_id)
+	# The buy side does not depend on the destination: price it once per good.
+	var buy_prices: Dictionary = {}
+	for good in goods:
+		buy_prices[good] = TradeEngineLib.buy_price(origin, str(good))
 	for dest in dests:
 		var route := route_between(origin, str(dest))
 		if route.is_empty():
@@ -1619,23 +1926,24 @@ func decide_trade(fleet: Dictionary, origin: String, day: int) -> Dictionary:
 		for good in goods:
 			draws += 1
 			if draws > CANDIDATE_SCAN_LIMIT:
-				return best
+				break
 			var qty := mini(trade_units_per_call(), free)
 			qty = mini(qty, _saturation_bound(str(dest), str(good)))
 			if qty <= 0:
 				continue
 			var est_sell := TradeEngineLib.sell_price(str(dest), str(good))
-			var buy := TradeEngineLib.buy_price(origin, str(good))
+			var buy := int(buy_prices[good])
 			var spec := SPEC_MULT if str(good) == specialty else 1.0
 			var noise := NOISE_MIN + (NOISE_MAX - NOISE_MIN) * rng.randf()
 			var margin := float(est_sell - buy)
 			var score := margin * float(qty) * spec * noise * risk \
 				/ (lane_days + 2.0)
-			if best.is_empty() or score > float(best["score"]):
-				best = {"good": str(good), "dest": str(dest), "qty": qty,
-					"score": score, "lane_days": lane_days, "risk": risk,
-					"est_sell": est_sell, "buy": buy}
-	return best
+			out.append({"good": str(good), "dest": str(dest), "qty": qty,
+				"score": score, "lane_days": lane_days, "risk": risk,
+				"est_sell": est_sell, "buy": buy})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["score"]) > float(b["score"]))
+	return out
 
 
 ## Own-nation ports within Chebyshev 60 of `origin`, wrap-aware, id-sorted
@@ -1661,18 +1969,26 @@ func _saturation_bound(dest: String, good: String) -> int:
 
 ## The risk discount: ×0.5 when any hostile fleet lies within Chebyshev 5 of
 ## a sample point of the route path — one bucket query per sample
-## (docs/30-* §4.4, deterministic).
+## (docs/30-* §4.4, deterministic). The ≤ 8 samples spread EVENLY over the
+## whole journey (stride = ⌈len / 8⌉), so a raid on any stretch of the lane
+## is felt, not just the shared trunk at the origin.
 func _route_risk(route: Dictionary, _nation_id: String) -> float:
 	var path: Array = route.get("path", [])
-	if path.is_empty():
+	if path.size() < 2:
 		return 1.0
-	var samples := mini(RISK_SAMPLE_MAX, ceili(float(path.size()) / float(RISK_SAMPLE_STRIDE)))
-	for index in samples:
-		var tile: Vector2i = path[mini(path.size() - 1, index * RISK_SAMPLE_STRIDE)]
+	@warning_ignore("integer_division")
+	var stride := maxi(1, ceili(float(path.size()) / float(RISK_SAMPLE_MAX)))
+	var index := 0
+	while index < RISK_SAMPLE_MAX:
+		var at := mini(path.size() - 1, index * stride)
+		var tile: Vector2i = path[at]
 		for fleet in _within(tile, RISK_RADIUS):
 			var role := str(fleet.get("role", ""))
 			if role == PIRATE or role == PRIVATEER:
 				return RISK_MULT
+		index += 1
+		if at == path.size() - 1:
+			break
 	return 1.0
 
 
@@ -1720,12 +2036,14 @@ func _largest_deficit() -> Dictionary:
 	var best: Dictionary = {}
 	var best_count := 0
 	var day := last_tick_day
+	var skipped := func(owner: String) -> bool:
+		return _skip.has(owner) and int(_skip[owner]) == day
 	for role in FILL_ORDER:
 		if role == PIRATE:
 			var live := _count_role(role, "")
 			var want := budget_for(role, "")
 			if want > live and best_count < want - live \
-					and int(_skip.get(role + "|", -1)) != day:
+					and not skipped.call(role + "|"):
 				best = {"role": role, "nation_id": ""}
 				best_count = want - live
 			continue
@@ -1734,7 +2052,7 @@ func _largest_deficit() -> Dictionary:
 			for nation_id in bountied_nations():
 				var hunter_live := _count_role(role, nation_id)
 				if hunter_live == 0 and best_count < 1 \
-						and int(_skip.get(role + "|" + nation_id, -1)) != day:
+						and not skipped.call(role + "|" + nation_id):
 					best = {"role": role, "nation_id": nation_id}
 					best_count = 1
 			continue
@@ -1742,7 +2060,7 @@ func _largest_deficit() -> Dictionary:
 			var want := budget_for(role, nation_id)
 			var live := _count_role(role, nation_id)
 			if want > live and want - live > best_count \
-					and int(_skip.get(role + "|" + nation_id, -1)) != day:
+					and not skipped.call(role + "|" + nation_id):
 				best = {"role": role, "nation_id": nation_id}
 				best_count = want - live
 	return best
@@ -1764,7 +2082,10 @@ func _count_role(role: String, nation_id: String) -> int:
 
 ## The daily unpatrolled-zone recount (docs/60-* §4.1.1): a nation's port
 ## whose 15-tile zone lacks a same-nation patrol. One bucket query per port.
-func _recount_zones(_day: int) -> void:
+func _recount_zones(day: int) -> void:
+	if _zones_day == int(day) and _unpatrolled_zones >= 0:
+		return
+	_zones_day = int(day)
 	var unpatrolled := 0
 	for port in DataLoader.ports_list:
 		var port_id := str((port as Dictionary).get("id", ""))
@@ -1798,6 +2119,27 @@ func is_escorted(fleet: Dictionary) -> bool:
 			continue
 		if str(other.get("nation_id", "")) == str(fleet.get("nation_id", "")):
 			return true
+	return false
+
+
+## The hunter-intel object: the port the player last sailed from
+## (`world.last_departed_port`, docs/60-* §4.11.11.1).
+func _intel_port() -> String:
+	return str(GameState.world.get("last_departed_port", ""))
+
+
+## Records the at-sea intel: contact with any fleet of a hunting nation
+## (rep ≤ −50) updates `world.hunter_intel_cell` to the contact cell — one
+## assignment per contact. Returns true when the cell was set.
+func note_contacts(cell: Vector2i) -> bool:
+	for fleet in _within(cell, CONTACT_DISTANCE):
+		var nation_id := str(fleet.get("nation_id", ""))
+		if nation_id.is_empty():
+			continue
+		if CharacterLib.reputation(nation_id) > NAVY_HOSTILE_REPUTATION:
+			continue
+		GameState.world["hunter_intel_cell"] = {"x": cell.x, "y": cell.y}
+		return true
 	return false
 
 
@@ -1909,8 +2251,11 @@ static func _bucket_of(cell: Vector2i) -> int:
 	return (cell.y / BUCKET_SIZE) * 4096 + posmod(cell.x, 2160) / BUCKET_SIZE
 
 
-## Rebuilds the bucket index after any mutation. O(fleets) — cheap enough
-## that lazy whole-table rebuilds are simpler and never stale.
+## Rebuilds the whole index. Everyday movement updates buckets incrementally
+## ([method _move_bucket]) and spawns/removes maintain them ([method
+## _index_add] / [method _index_remove]), so this only runs once per sim
+## instance (or after an external `GameState.npc_fleets` swap — a save load;
+## the world scene adopts a fresh sim, tests call [method reset_index]).
 func _refresh_index() -> void:
 	if not _index_dirty:
 		return
@@ -1920,14 +2265,47 @@ func _refresh_index() -> void:
 	for fleet in GameState.npc_fleets:
 		if not (fleet is Dictionary):
 			continue
-		var id := str(fleet.get("id", ""))
-		if id.is_empty():
-			continue
-		_by_id[id] = fleet
-		var bucket := _bucket_of(position_of(fleet))
-		if not _buckets.has(bucket):
-			_buckets[bucket] = []
-		(_buckets[bucket] as Array).append(id)
+		_index_add(fleet)
+
+
+## Adds one fleet to the index (O(1)).
+func _index_add(fleet: Dictionary) -> void:
+	var id := str(fleet.get("id", ""))
+	if id.is_empty():
+		return
+	_by_id[id] = fleet
+	var bucket := _bucket_of(position_of(fleet))
+	if not _buckets.has(bucket):
+		_buckets[bucket] = []
+	(_buckets[bucket] as Array).append(id)
+
+
+## Drops one fleet from the index (O(1); the bucket entry is left for the
+## next rebuild — queries skip ids missing from `_by_id`).
+func _index_remove(id: String) -> void:
+	_by_id.erase(id)
+
+
+## Public seam for a fixture that replaced `GameState.npc_fleets` wholesale
+## (a save load into an existing sim): the next query rebuilds the index.
+func reset_index() -> void:
+	_index_dirty = true
+
+
+## Moves one fleet's bucket entry in place (the incremental update that
+## keeps the index maintenance O(1) per fleet-step).
+func _move_bucket(id: String, from_cell: Vector2i, to_cell: Vector2i) -> void:
+	var from_bucket := _bucket_of(from_cell)
+	var to_bucket := _bucket_of(to_cell)
+	if from_bucket == to_bucket:
+		return
+	var entries: Array = _buckets.get(from_bucket, [])
+	entries.erase(id)
+	if entries.is_empty():
+		_buckets.erase(from_bucket)
+	if not _buckets.has(to_bucket):
+		_buckets[to_bucket] = []
+	(_buckets[to_bucket] as Array).append(id)
 
 
 ## EVERY "within N tiles" check in this module goes through here
@@ -1979,16 +2357,22 @@ func _within(cell: Vector2i, radius: int) -> Array:
 ## True when `cell` holds another fleet, a docked fleet's port tile is shared
 ## (docked fleets never block), or the player's fleet stands there
 ## (docs/60-* §4.11.11.1 "skipping occupied tiles"). `ignore_id` skips the
-## stepping fleet's own current cell.
+## stepping fleet's own current cell. Radius 0 reads the exact bucket
+## directly — no query allocation on the per-fleet step path.
 func _is_occupied(cell: Vector2i, ignore_id: String) -> bool:
 	if cell == GameState.world_tile():
 		return true
-	for fleet in _within(cell, 0):
-		if str(fleet.get("id", "")) == ignore_id:
+	_refresh_index()
+	for id in _buckets.get(_bucket_of(cell), []):
+		if str(id) == ignore_id:
+			continue
+		var fleet: Dictionary = _by_id.get(id, {})
+		if fleet.is_empty():
 			continue
 		if int(fleet.get("dwell_until_day", 0)) > 0:
 			continue  # docked fleets share port tiles
-		return true
+		if position_of(fleet) == cell:
+			return true
 	return false
 
 

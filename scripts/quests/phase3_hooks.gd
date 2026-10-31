@@ -194,8 +194,8 @@ static func take_pending_bout() -> int:
 static func _marker(encounter_id: String) -> Dictionary:
 	if encounter_id.is_empty():
 		return {}
-	for marker in GameState.hostile_fleets:
-		if marker is Dictionary \
-				and str((marker as Dictionary).get("id", "")) == encounter_id:
-			return marker
+	for fleet in GameState.npc_fleets:
+		if fleet is Dictionary \
+				and str((fleet as Dictionary).get("id", "")) == encounter_id:
+			return fleet
 	return {}

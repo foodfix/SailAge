@@ -213,6 +213,10 @@ func snapshot() -> Dictionary:
 		"position": {"x": tile.x, "y": tile.y},
 		"weather": str(GameState.world.get("weather", DEFAULT_WEATHER)),
 		"map_id": str(GameState.world.get("map_id", DEFAULT_MAP_ID)),
+		# Phase-5 hunter intel (docs/60-* §4.11.11.1, docs/90-* §5.4):
+		# persisted so hunter placement is exactly reproducible after a load.
+		"last_departed_port": str(GameState.world.get("last_departed_port", "")),
+		"hunter_intel_cell": _intel_cell_payload(GameState.world),
 	}
 	return {
 		"save_version": SAVE_VERSION,
@@ -260,6 +264,18 @@ func snapshot() -> Dictionary:
 ##
 ## The payload is written to `save_%d.json.tmp` and renamed over the real file,
 ## so a crash mid-write can never leave a half-written save behind.
+## The §4.15/`60-*` hunter-intel tile as the `{"x","y"}` payload shape
+## (null when unset).
+static func _intel_cell_payload(world: Dictionary) -> Variant:
+	var cell = world.get("hunter_intel_cell", null)
+	if cell is Vector2i:
+		return {"x": (cell as Vector2i).x, "y": (cell as Vector2i).y}
+	if cell is Dictionary:
+		return {"x": int((cell as Dictionary).get("x", 0)),
+			"y": int((cell as Dictionary).get("y", 0))}
+	return null
+
+
 func save(slot: int) -> bool:
 	if not is_valid_slot(slot):
 		push_error("SaveSystem.save: slot %d out of range %d..%d"
@@ -493,6 +509,14 @@ func validate_payload(data: Dictionary) -> String:
 	var map_id = (data["world"] as Dictionary).get("map_id", DEFAULT_MAP_ID)
 	if not (map_id is String) or (map_id as String) != "world":
 		return "'world.map_id' is not the shipped map id"
+	# Phase-5 hunter intel (docs/60-* §4.11.11.1): optional, type-checked
+	# whenever present — a hand-edited non-tile value is a rejection.
+	var departed = (data["world"] as Dictionary).get("last_departed_port", "")
+	if not (departed is String):
+		return "'world.last_departed_port' is not a string"
+	var intel = (data["world"] as Dictionary).get("hunter_intel_cell", null)
+	if not (intel == null or intel is Dictionary):
+		return "'world.hunter_intel_cell' is neither a tile object nor null"
 	return ""
 
 
@@ -568,15 +592,23 @@ func _apply(data: Dictionary) -> void:
 	_repair_level()
 
 	# docs/20-* §4.3: `clock_fraction` is not saved; a load restarts the
-	# sub-day clock at 0. `weather` and the Phase-3 `map_id` are §8.1 fields
-	# and are restored.
+	# sub-day clock at 0. `weather`, the Phase-3 `map_id` and the Phase-5
+	# hunter-intel keys (docs/60-* §4.11.11.1) are §8.1/§5.4 fields and are
+	# restored — absent keys fall back to the documented defaults ("", null).
 	var world: Dictionary = data["world"]
 	var position: Dictionary = world.get("position", {})
+	var intel_cell = world.get("hunter_intel_cell", null)
+	var intel_cell_value = null
+	if intel_cell is Dictionary:
+		intel_cell_value = {"x": int((intel_cell as Dictionary).get("x", 0)),
+			"y": int((intel_cell as Dictionary).get("y", 0))}
 	GameState.world = {
 		"position": {"x": int(position.get("x", 0)), "y": int(position.get("y", 0))},
 		"clock_fraction": 0.0,
 		"weather": str(world.get("weather", DEFAULT_WEATHER)),
 		"map_id": str(world.get("map_id", DEFAULT_MAP_ID)),
+		"last_departed_port": str(world.get("last_departed_port", "")),
+		"hunter_intel_cell": intel_cell_value,
 	}
 
 	var port = data.get("current_port", null)
