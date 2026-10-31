@@ -12,16 +12,17 @@ stable sort everywhere — two consecutive builds are **byte-identical**
 
 Locked rules implemented here (docs/10-* §4.14, §6.1, §8.3):
 
-  grid            2160 x 1080 tiles, 6 tiles/degree (shared with build_world)
+  grid            4320 x 2160 tiles, 12 tiles/degree (shared with build_world;
+                  Phase-6 rescale, `10-*` §6.1)
   waypoint snap   water within 2 tiles (Chebyshev, wrap-aware) with >= 1
                   orthogonally adjacent water tile, ties -> smallest (y, x)
                   — the §6.1 harbor-snap rule, applied to every lane waypoint
   segment walk    every consecutive waypoint pair is walked on the raster:
                   8-direction straight-line walk, corner cutting forbidden,
-                  x wraps mod 2160; stepping on an impassable tile is a hard
+                  x wraps mod 4320; stepping on an impassable tile is a hard
                   build error naming the lane
   spokes          exactly one per port, in this order:
-                    1. nearest snapped lane waypoint within Chebyshev 20 of
+                    1. nearest snapped lane waypoint within Chebyshev 40 of
                        the port harbor tile (wrap-aware; ties smallest
                        (y, x), then lane file order, then waypoint index) —
                        the spoke is the straight walk to it;
@@ -87,7 +88,7 @@ import build_world as bw  # noqa: E402  (shared PNG decoder + grid + snap rule)
 # Locked constants (docs/10-DATA-SCHEMA.md §4.14, §6.1)
 # --------------------------------------------------------------------------
 WAYPOINT_SNAP_TILES = 2  # §6.1 harbor-snap radius, applied to lane waypoints
-SPOKE_RADIUS_TILES = 20  # §4.14 minor-spoke Chebyshev radius (wrap-aware)
+SPOKE_RADIUS_TILES = 40  # §4.14 minor-spoke Chebyshev radius (Phase-6 sweep: 20 → 40)
 # 8-direction neighbour order, fixed for determinism; diagonals last.
 DELTAS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 SQRT2 = math.sqrt(2.0)
@@ -739,7 +740,7 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
             "waypoint_snap_radius_tiles": WAYPOINT_SNAP_TILES,
             "spoke_radius_tiles": SPOKE_RADIUS_TILES,
             "walk_rule": "8-direction straight-line raster walk, corner "
-                         "cutting forbidden, x wraps mod 2160; per-segment "
+                         "cutting forbidden, x wraps mod 4320; per-segment "
                          "passability is a hard build error",
             "spoke_rule": "one spoke per port: nearest snapped lane waypoint "
                           f"within Chebyshev {SPOKE_RADIUS_TILES} of the "
@@ -749,7 +750,7 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
                           "else the tools/route_overrides.json spoke "
                           "(A*-pathfound); a port with none is a hard error",
             "junction_rule": "node = tile shared by >= 2 distinct paths or a "
-                             "path endpoint, keyed (x mod 2160, y); each path "
+                             "path endpoint, keyed (x mod 4320, y); each path "
                              "splits at its nodes into edges weighted by "
                              "tile steps",
             "sources": {

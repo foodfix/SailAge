@@ -48,16 +48,15 @@ const OPEN_CELL := Vector2i(700, 320)
 ## A contact tile whose two nearest ports are Lisbon (Portugal, d=6) and Seville
 ## (Spain, d=10) — two distinct nations, no tie. Re-anchored from P1's (7,57)
 ## to the world's Lisbon harbor.
-const LISBON_CONTACT := Vector2i(1030, 310)
-## A contact tile whose two nearest ports are both Portuguese (Lisbon d=15 and
-## Oporto d=15) — the "nation credited once" case. Re-anchored from P1's
-## (30,40) (which no longer sits between two same-nation ports).
-const SAME_NATION_CONTACT := Vector2i(1025, 308)
-## A contact tile where the two nearest ports tie on distance (Amsterdam 11 /
-## London 11), so the port-id tie-break decides: amsterdam < london → Holland
-## before England. Re-anchored from (1080,204) after the harbor-pair snap moved
-## Amsterdam's berth one tile east (`20-*` §4.11.1).
-const TIE_CONTACT := Vector2i(1096, 219)
+const LISBON_CONTACT := Vector2i(2054, 620)
+## A contact tile whose two nearest ports are both Portuguese (Lisbon d=5 and
+## Oporto d=34) — the "nation credited once" case. Re-anchored to the Phase-6
+## grid (the finer raster moved Oporto's berth north of Lisbon's latitude).
+const SAME_NATION_CONTACT := Vector2i(2047, 620)
+## A contact tile where the two nearest ports tie on distance (Amsterdam 24 /
+## London 24), so the port-id tie-break decides: amsterdam < london → Holland
+## before England. Re-anchored to the Phase-6 grid (`20-*` §4.11.1).
+const TIE_CONTACT := Vector2i(2190, 438)
 
 ## The 47-key §4.12.5 inventory, transcribed from the doc table (the contract:
 ## D/C/F "must not invent others"). Task G verified the *texts* against the

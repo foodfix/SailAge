@@ -36,23 +36,23 @@ const CAPITALS: Array[String] = [
 ## Open-water cell for the minimap fixture (every neighbour is sea), in the
 ## world map's variables band far from every harbor. Phase 4: re-anchored from
 ## the retired P1 grid (20,20) by task G.
-const OPEN_CELL := Vector2i(900, 330)
+const OPEN_CELL := Vector2i(1800, 660)
 ## Lisbon's derived harbor **berth** (`10-*` §6.1), its **shore** tile (`20-*`
-## §4.11.1) and the sea tile beside it: (1023,309) is coastal sea.
-const LISBON := Vector2i(1024, 308)
-const LISBON_SHORE := Vector2i(1024, 307)
-const SEA_BESIDE_LISBON := Vector2i(1023, 309)
+## §4.11.1) and the sea tile beside it: (2049,615) is carved coastal sea.
+const LISBON := Vector2i(2050, 615)
+const LISBON_SHORE := Vector2i(2051, 615)
+const SEA_BESIDE_LISBON := Vector2i(2049, 615)
 ## Valencia's harbor tile on the world map (derived, not stored). It is not a
 ## capital, so it starts unknown. The three cells below sit at exactly Chebyshev
-## 24 / 25 / 26 from it and each is a legal step from the next, so the pair
-## (D24, D25) straddles the Phase-4 base radius 24 (`20-*` §4.11).
-const VALENCIA_HARBOR := Vector2i(1078, 303)
+## 48 / 49 / 50 from it and each is a legal step from the next, so the pair
+## (D48, D49) straddles the Phase-6 base radius 48 (`20-*` §4.11).
+const VALENCIA_HARBOR := Vector2i(2156, 606)
 ## Valencia's shore tile: the `#` tile orthogonally adjacent to its berth that
 ## the port is drawn on and docked into (`20-*` §4.11.1).
-const VALENCIA_SHORE := Vector2i(1077, 303)
-const VALENCIA_D26 := Vector2i(1052, 277)
-const VALENCIA_D25 := Vector2i(1053, 278)
-const VALENCIA_D24 := Vector2i(1054, 279)
+const VALENCIA_SHORE := Vector2i(2155, 606)
+const VALENCIA_D26 := Vector2i(2104, 554)
+const VALENCIA_D25 := Vector2i(2107, 557)
+const VALENCIA_D24 := Vector2i(2108, 558)
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -209,56 +209,56 @@ func _known_from(cell: Vector2i, navigation: int, officers: Array = []) -> bool:
 
 
 func _test_sighting_radius() -> void:
-	# Phase-4 (`20-*` §4.11, `50-*` §4.2): radius = 24 + floor((navigation − 10)/10).
+	# Phase-6 (`20-*` §4.11, `50-*` §4.2): radius = 48 + floor((navigation − 10)/10).
 	_make_run(15)
-	_check(CharacterLib.sighting_radius() == 24,
-		"navigation 15 → sighting radius 24 (§4.2 formula; got %d)"
+	_check(CharacterLib.sighting_radius() == 48,
+		"navigation 15 → sighting radius 48 (§4.2 formula; got %d)"
 		% CharacterLib.sighting_radius())
 	_make_run(10)
-	_check(CharacterLib.sighting_radius() == 24,
-		"navigation 10 → sighting radius 24 (got %d)" % CharacterLib.sighting_radius())
+	_check(CharacterLib.sighting_radius() == 48,
+		"navigation 10 → sighting radius 48 (got %d)" % CharacterLib.sighting_radius())
 	_make_run(25)
-	_check(CharacterLib.sighting_radius() == 25,
-		"navigation 25 → sighting radius 25 (got %d)" % CharacterLib.sighting_radius())
+	_check(CharacterLib.sighting_radius() == 49,
+		"navigation 25 → sighting radius 49 (got %d)" % CharacterLib.sighting_radius())
 	_make_run(30)
-	_check(CharacterLib.sighting_radius() == 26,
-		"navigation 30 → sighting radius 26 (got %d)" % CharacterLib.sighting_radius())
+	_check(CharacterLib.sighting_radius() == 50,
+		"navigation 30 → sighting radius 50 (got %d)" % CharacterLib.sighting_radius())
 	# §5 worked example: Portugal (15) + navigator (+10) = 25 → 25.
 	_make_run(15, OPEN_CELL, 70, ["off_mateus_alvares"])
 	_check(CharacterLib.effective_stat("navigation") == 25,
 		"navigator officer gives effective navigation 25 (got %d)"
 		% CharacterLib.effective_stat("navigation"))
-	_check(CharacterLib.sighting_radius() == 25,
-		"Portugal + navigator → sighting radius 25 (§5 worked example, got %d)"
+	_check(CharacterLib.sighting_radius() == 49,
+		"Portugal + navigator → sighting radius 49 (§5 worked example, got %d)"
 		% CharacterLib.sighting_radius())
 
-	# Chebyshev boundary at the Phase-4 base: exactly `radius` reveals,
+	# Chebyshev boundary at the Phase-6 base: exactly `radius` reveals,
 	# `radius + 1` does not.
 	_check(_known_from(VALENCIA_D24, 10),
-		"nav 10 (radius 24): a port at Chebyshev distance 24 is revealed")
+		"nav 10 (radius 48): a port at Chebyshev distance 48 is revealed")
 	_check(not _known_from(VALENCIA_D25, 10),
-		"nav 10 (radius 24): distance 25 is NOT revealed")
+		"nav 10 (radius 48): distance 49 is NOT revealed")
 	# +1 navigation per 10 points shifts the boundary by one tile.
 	_check(_known_from(VALENCIA_D25, 20),
-		"nav 20 (radius 25): distance 25 is revealed")
+		"nav 20 (radius 49): distance 49 is revealed")
 	_check(not _known_from(VALENCIA_D26, 20),
-		"nav 20 (radius 25): distance 26 is NOT revealed")
+		"nav 20 (radius 49): distance 50 is NOT revealed")
 	# The officer path agrees with the raw stat at the same boundary: Portugal
-	# (15) + navigator (+10) = 25 → radius 25, identical to a raw 25.
+	# (15) + navigator (+10) = 25 → radius 49, identical to a raw 25.
 	_check(_known_from(VALENCIA_D25, 15, ["off_mateus_alvares"])
 		and not _known_from(VALENCIA_D26, 15, ["off_mateus_alvares"]),
-		"nav 15 + navigator (effective 25, radius 25): boundary at 25/26")
+		"nav 15 + navigator (effective 25, radius 49): boundary at 49/50")
 
 
 # --- 3. Discover-then-enter ----------------------------------------------
 
 func _test_discover_then_enter() -> void:
 	# Approach a NOT-yet-known harbor from beyond the sighting radius.
-	_make_run(10, VALENCIA_D25)  # distance 25, radius 24
+	_make_run(10, VALENCIA_D25)  # distance 49, radius 48
 	var spawned: Array = _spawn_world()
 	var world = spawned[1]
 	_check(not GameState.known_ports.has("valencia"),
-		"valencia is unknown from beyond the radius (distance 25, radius 24)")
+		"valencia is unknown from beyond the radius (distance 49, radius 48)")
 	_check(not GameState.explored_tiles.has(VALENCIA_HARBOR),
 		"the harbor tile is unexplored from beyond the radius")
 
@@ -727,14 +727,14 @@ func _test_minimap() -> void:
 # --- 5b. The dateline crop (docs/20-* §4.12) ------------------------------
 
 ## Fleet at the eastern edge: the crop must wrap to `x = 0` with no void and no
-## duplicated column. The grid is 2160 wide and the crop 128, so the window is
-## `[2095..2159] ∪ [0..62]` (fleet on column 64) — the doc's "`[2032..2159]`
+## duplicated column. The grid is 4320 wide and the crop 128, so the window is
+## `[4255..4319] ∪ [0..62]` (fleet on column 64) — the doc's "`[4256..4319]`
 ## then `[0..k]`" union shape, with the fleet centred rather than at the right
 ## edge (`20-*` §4.5/§4.12: "a … crop **around** the fleet").
 func _test_dateline_crop() -> void:
-	_make_run(10, Vector2i(2159, 172))
+	_make_run(10, Vector2i(4319, 172))
 	GameState.explored_tiles = {}
-	for cell in [Vector2i(2159, 172), Vector2i(0, 172), Vector2i(1, 172),
+	for cell in [Vector2i(4319, 172), Vector2i(0, 172), Vector2i(1, 172),
 			Vector2i(5, 172), Vector2i(62, 172)]:
 		GameState.explored_tiles[cell] = true
 
@@ -743,21 +743,21 @@ func _test_dateline_crop() -> void:
 	add_child(host)
 	var hud = HUDScene.instantiate()
 	host.add_child(hud)
-	hud.set_fleet_cell(Vector2i(2159, 172))
+	hud.set_fleet_cell(Vector2i(4319, 172))
 
-	_check(hud.minimap_crop_origin().x == 2095,
-		"fleet x=2159: the crop starts at x=2095 (2159 − 64; got %d)"
+	_check(hud.minimap_crop_origin().x == 4255,
+		"fleet x=4319: the crop starts at x=4255 (4319 − 64; got %d)"
 		% hud.minimap_crop_origin().x)
 	var columns: Array = hud.minimap_crop_columns()
 	_check(columns.size() == 128,
 		"the crop has 128 columns (got %d)" % columns.size())
 	if columns.size() == 128:
-		_check(columns[64] == 2159,
-			"column 64 (the fleet's) is x=2159 (got %s)" % str(columns[64]))
+		_check(columns[64] == 4319,
+			"column 64 (the fleet's) is x=4319 (got %s)" % str(columns[64]))
 		_check(columns[65] == 0,
 			"column 65 wraps to x=0 (got %s)" % str(columns[65]))
-		_check(columns[0] == 2095,
-			"the crop's first column is x=2095 (got %s)" % str(columns[0]))
+		_check(columns[0] == 4255,
+			"the crop's first column is x=4255 (got %s)" % str(columns[0]))
 		_check(columns[127] == 62,
 			"the crop's last column is x=62, so k = 62 (got %s)" % str(columns[127]))
 		var unique: Dictionary = {}
@@ -765,7 +765,7 @@ func _test_dateline_crop() -> void:
 		for index in columns.size():
 			unique[int(columns[index])] = true
 			if index > 0:
-				var expected := posmod(int(columns[index - 1]) + 1, 2160)
+				var expected := posmod(int(columns[index - 1]) + 1, 4320)
 				if int(columns[index]) != expected:
 					contiguous = false
 		_check(unique.size() == 128,
@@ -776,8 +776,8 @@ func _test_dateline_crop() -> void:
 		# The union the doc names: everything east of the fleet, then x=0..k.
 		var east := columns.slice(0, 65)
 		var west := columns.slice(65)
-		_check(east[0] == 2095 and east[east.size() - 1] == 2159,
-			"the eastern half is x∈[2095..2159] (got [%s..%s])"
+		_check(east[0] == 4255 and east[east.size() - 1] == 4319,
+			"the eastern half is x∈[4255..4319] (got [%s..%s])"
 			% [str(east[0]), str(east[east.size() - 1])])
 		_check(west[0] == 0 and west[west.size() - 1] == 62,
 			"the western half is x∈[0..62] (got [%s..%s])"
@@ -785,7 +785,7 @@ func _test_dateline_crop() -> void:
 
 	# Pixel-level: tiles on both sides of the seam really are painted, and a
 	# crop column just past k is not in the crop at all.
-	for cell in [Vector2i(2159, 172), Vector2i(0, 172), Vector2i(1, 172),
+	for cell in [Vector2i(4319, 172), Vector2i(0, 172), Vector2i(1, 172),
 			Vector2i(5, 172), Vector2i(62, 172)]:
 		_check(hud.minimap_contains(cell),
 			"%s is inside the dateline crop" % str(cell))
@@ -794,8 +794,8 @@ func _test_dateline_crop() -> void:
 			% [str(cell), str(hud.minimap_pixel_color(cell))])
 	_check(not hud.minimap_contains(Vector2i(63, 172)),
 		"x=63 is outside the crop (k = 62)")
-	_check(not hud.minimap_contains(Vector2i(2094, 172)),
-		"x=2094 is outside the crop (it starts at 2095)")
+	_check(not hud.minimap_contains(Vector2i(4254, 172)),
+		"x=4254 is outside the crop (it starts at 4255)")
 
 	host.queue_free()
 
@@ -806,9 +806,9 @@ func _test_dateline_crop() -> void:
 ## The whole-world Chart: layers, scale, the zero-explored edge case, and the
 ## `Tab`/`Esc` round trip from S3 with the fleet and clock untouched.
 func _test_chart_screen() -> void:
-	# --- The reveal at 24 tiles shows up as a known-port dot on the chart ---
-	# Valencia at Chebyshev 24 from the fleet is exactly the sighting boundary
-	# (`20-*` §4.11, radius 24): the ready reveal knows it, so the chart must
+	# --- The reveal at 48 tiles shows up as a known-port dot on the chart ---
+	# Valencia at Chebyshev 48 from the fleet is exactly the sighting boundary
+	# (`20-*` §4.11, radius 48): the ready reveal knows it, so the chart must
 	# draw its nation dot.
 	_make_run(10, VALENCIA_D24)
 	_check(not GameState.known_ports.has("valencia"),
@@ -852,12 +852,12 @@ func _test_chart_screen() -> void:
 		"valencia's chart dot carries its berth tile")
 
 	# --- Whole world downscaled to fit (`80-*` §4.6) -----------------------
-	_check(chart.world_image_size() == Vector2i(2160, 1080),
-		"the chart builds the whole 2160×1080 grid (got %s)"
+	_check(chart.world_image_size() == Vector2i(4320, 2160),
+		"the chart builds the whole 4320×2160 grid (got %s)"
 		% str(chart.world_image_size()))
 	var scale: float = chart.chart_scale()
-	_check(scale > 0.5 and scale < 0.6,
-		"1280×720 fits the world at ≈0.55× (got %.3f)" % scale)
+	_check(scale > 0.27 and scale < 0.30,
+		"1280×720 fits the world at ≈0.29× (got %.3f)" % scale)
 	var rect: Rect2 = chart.world_rect()
 	var view := Vector2(1280, 720)
 	_check(rect.position.y >= PaletteLib.TOP_BAR_H
@@ -865,13 +865,13 @@ func _test_chart_screen() -> void:
 		"the world sits between the 40px top and 32px legend bars (%s)" % str(rect))
 	_check(rect.position.x >= 0.0 and rect.end.x <= view.x,
 		"the world fits horizontally with no scrolling (%s)" % str(rect))
-	_check(is_equal_approx(rect.size.x / 2160.0, rect.size.y / 1080.0),
+	_check(is_equal_approx(rect.size.x / 4320.0, rect.size.y / 2160.0),
 		"the downscale keeps the grid's aspect ratio (no distortion)")
 	_check(chart.display_size().x <= int(view.x) and chart.display_size().y <= int(view.y),
 		"the drawn texture fits the viewport (got %s)" % str(chart.display_size()))
 	# Names only at zoom (§4.6); task-owned threshold.
 	_check(not chart.labels_visible(),
-		"at 0.55× the chart draws dots only, no names (§4.6 'names at zoom')")
+		"at ≈0.29× the chart draws dots only, no names (§4.6 'names at zoom')")
 	_check(chart.names_shown(1.0) and not chart.names_shown(0.5),
 		"the name threshold turns names on only when the world is drawn large")
 
@@ -972,8 +972,8 @@ func _test_chart_screen() -> void:
 	chart.open_chart()
 	var painted: Dictionary = {}
 	var all_unknown := true
-	for cell in [Vector2i(0, 0), Vector2i(1080, 540), Vector2i(2159, 1079),
-			VALENCIA_HARBOR, Vector2i(900, 330)]:
+	for cell in [Vector2i(0, 0), Vector2i(2160, 1080), Vector2i(4319, 2159),
+			VALENCIA_HARBOR, OPEN_CELL]:
 		if chart.world_pixel_color(cell) != PaletteLib.PANEL_BG:
 			all_unknown = false
 			painted[str(cell)] = str(chart.world_pixel_color(cell))
@@ -994,18 +994,18 @@ func _test_chart_screen() -> void:
 ## The §J acceptance: explored tiles appear **identically** on the minimap and
 ## the chart, and a discovery revealed at Chebyshev 18 shows on the chart.
 func _test_minimap_chart_identity() -> void:
-	# disc_atlas_cedars sits at (1023,347); (1005,329) is exactly Chebyshev 18
+	# disc_atlas_cedars sits at (2046,695); (2028,677) is exactly Chebyshev 18
 	# away and is open water, so the Explore radius (§4.4) is exercised at its
 	# boundary.
 	var target: Vector2i = DiscoveryLib.position_of("disc_atlas_cedars")
-	var at_18 := Vector2i(1005, 329)
-	var at_19 := Vector2i(1004, 328)
-	_check(target == Vector2i(1023, 347),
+	var at_18 := Vector2i(2028, 677)
+	var at_19 := Vector2i(2009, 658)
+	_check(target == Vector2i(2046, 695),
 		"disc_atlas_cedars derives to (1023,347) (got %s)" % str(target))
 	_check(maxi(absi(at_18.x - target.x), absi(at_18.y - target.y)) == 18,
 		"the Explore fixture sits at exactly Chebyshev 18")
-	_check(maxi(absi(at_19.x - target.x), absi(at_19.y - target.y)) == 19,
-		"the control fixture sits at Chebyshev 19, outside the radius")
+	_check(maxi(absi(at_19.x - target.x), absi(at_19.y - target.y)) == 37,
+		"the control fixture sits at Chebyshev 37, outside the radius")
 	_check(DataLoader.map.is_passable(at_18) and DataLoader.map.is_passable(at_19),
 		"the discovery fixtures are open water")
 	_make_run(10, at_18)
@@ -1025,7 +1025,7 @@ func _test_minimap_chart_identity() -> void:
 	GameState.discoveries_found = []
 	var spawned_b: Array = _spawn_world()
 	_check(not spawned_b[1].something_near(),
-		"Chebyshev 19 is outside the 18-tile discovery radius")
+		"Chebyshev 37 is outside the 36-tile discovery radius")
 	spawned_b[0].queue_free()
 
 	# Re-spawn at the boundary with the discovery found, for the chart checks.

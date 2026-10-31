@@ -29,7 +29,7 @@ const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 
 ## Open water in the world map's variables band, far from every harbor and
 ## off every lane/spoke tile (the camp fixtures live here).
-const OPEN_CELL := Vector2i(700, 320)
+const OPEN_CELL := Vector2i(1400, 640)
 
 ## The 60% statistical bound: 200 seeded trials, ±0.12 around the pin
 ## (±3.5 σ — a deterministic stream never approaches it).
@@ -252,12 +252,12 @@ func _test_escort_rows() -> void:
 	# The escort is same-nation: a foreign patrol does not escort.
 	escort["nation_id"] = "ottoman"
 	_check(not sim.is_escorted(trader),
-		"a foreign patrol within 10 is no escort")
+		"a foreign patrol within 20 is no escort")
 	escort["nation_id"] = "portugal"
-	escort["cell"] = {"x": OPEN_CELL.x + 12, "y": OPEN_CELL.y}
+	escort["cell"] = {"x": OPEN_CELL.x + 22, "y": OPEN_CELL.y}
 	sim.reset_index()
 	_check(not sim.is_escorted(trader),
-		"a patrol beyond Chebyshev 10 is no escort")
+		"a patrol beyond Chebyshev 20 is no escort")
 	# Convoy (§4.11.11.4): same-lane traders within Chebyshev 3 count
 	# escorted — the query task L's render grouping reuses.
 	escort["cell"] = {"x": OPEN_CELL.x - 20, "y": OPEN_CELL.y}
@@ -450,44 +450,44 @@ func _test_chokepoint_hysteresis() -> void:
 	var anchor_dict: Dictionary = pirate.get("anchor_cell", {})
 	var nearest := _nearest_junction_distance(sim, anchor)
 	_check(nearest >= 0 and nearest <= NpcFleetsLib.ANCHOR_RADIUS,
-		"the pirate anchors within Chebyshev 3 of a chokepoint tile (%d)"
+		"the pirate anchors within Chebyshev 6 of a chokepoint tile (%d)"
 		% nearest)
 	_check(not sim._is_path_tile(anchor),
 		"the anchor sits off the lane raster (the corridor stays clear)")
-	# The chase opens inside 5… (prey at exactly Chebyshev 5)
+	# The chase opens inside 10… (prey at exactly Chebyshev 10)
 	var day := 20
 	var trader := _stationary(_make_fleet(sim, "trader", "portugal",
-		anchor + Vector2i(5, 0)), day)
+		anchor + Vector2i(10, 0)), day)
 	var doomed: Dictionary = {}
 	var remove_ids: Array = []
 	var wrecks: Array = []
 	sim._raider_tick(pirate, day, doomed, remove_ids, wrecks)
 	_check(str(pirate.get("target_fleet_id", "")) == str(trader["id"]),
-		"prey within Chebyshev 5 opens the chase")
-	# …closes 1 tile/day without engaging until contact distance…
+		"prey within Chebyshev 10 opens the chase")
+	# …closes 2 tiles/day without engaging until contact distance…
 	for _walk in range(3):
 		sim._raider_tick(pirate, day + 1 + _walk, doomed, remove_ids, wrecks)
 	var walked_out := NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
-	_check(walked_out == 4 and wrecks.is_empty(),
-		"the raider closes on its prey 1 tile/day (out %d tiles, no resolve yet)"
+	_check(walked_out == 8 and wrecks.is_empty(),
+		"the raider closes on its prey 2 tiles/day (out %d tiles, no resolve yet)"
 		% walked_out)
-	# …and is lost beyond 8: the raider drops the chase and walks home.
+	# …and is lost beyond 16: the raider drops the chase and walks home.
 	trader["cell"] = {"x": (anchor + Vector2i(30, 0)).x, "y": anchor.y}
 	sim.reset_index()
 	sim._raider_tick(pirate, day + 4, doomed, remove_ids, wrecks)
 	_check(str(pirate.get("target_fleet_id", "")) == "",
-		"prey beyond Chebyshev 8 drops the chase")
+		"prey beyond Chebyshev 16 drops the chase")
 	for _home in range(6):
 		sim._raider_tick(pirate, day + 5 + _home, doomed, remove_ids, wrecks)
 	_check(NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
 			<= NpcFleetsLib.ANCHOR_RADIUS,
-		"the lost raider returns within Chebyshev 3 of its chokepoint")
+		"the lost raider returns within Chebyshev 6 of its chokepoint")
 	# Anchored again: no prey ⇒ it holds within 3 of the anchor.
 	for _day in range(day + 12, day + 40):
 		sim._raider_tick(pirate, _day, doomed, remove_ids, wrecks)
 	_check(NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
 			<= NpcFleetsLib.ANCHOR_RADIUS,
-		"an anchored raider stays within Chebyshev 3 of its chokepoint")
+		"an anchored raider stays within Chebyshev 6 of its chokepoint")
 	# Sitting near a tagged chokepoint yields regular sightings; the open
 	# sea stays quiet — the same query, out in the empty band.
 	var quiet := _make_fleet(sim, "pirate", "", OPEN_CELL + Vector2i(200, 60))

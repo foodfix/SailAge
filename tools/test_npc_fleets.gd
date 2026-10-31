@@ -949,7 +949,7 @@ func _test_hunter_intel() -> void:
 	_check(saw_lanes, "the hunter sails the lane network to the intel port")
 	_check(_cell_of(hunter) != start_cell,
 		"the hunter advances along its route (position moved)")
-	# (b) Inside Chebyshev 15 the chase opens and closes distance.
+	# (b) Inside Chebyshev 30 the chase opens and closes distance.
 	GameState.world["position"] = {"x": _cell_of(hunter).x + 10,
 		"y": _cell_of(hunter).y}
 	var before := _cell_of(hunter)
@@ -957,7 +957,7 @@ func _test_hunter_intel() -> void:
 	sim.last_tick_day = -1
 	sim.tick(GameState.day)
 	_check(str(hunter["hunter_state"]) == NpcFleetsLib.HUNTER_STATE_CHASE,
-		"the chase opens inside Chebyshev 15")
+		"the chase opens inside Chebyshev 30")
 	_check(NpcFleetsLib.chebyshev(_cell_of(hunter),
 		Vector2i(int(GameState.world["position"]["x"]),
 		int(GameState.world["position"]["y"])))
@@ -965,15 +965,15 @@ func _test_hunter_intel() -> void:
 			int(GameState.world["position"]["x"]),
 			int(GameState.world["position"]["y"]))),
 		"the pursuit closes distance (budgeted short-range A*)")
-	# (c) Losing the player beyond Chebyshev 20 ends the chase — the hunter
+	# (c) Losing the player beyond Chebyshev 40 ends the chase — the hunter
 	# returns to the lane network.
-	GameState.world["position"] = {"x": _cell_of(hunter).x + 40,
+	GameState.world["position"] = {"x": _cell_of(hunter).x + 45,
 		"y": _cell_of(hunter).y + 12}
 	GameState.day += 1
 	sim.last_tick_day = -1
 	sim.tick(GameState.day)
 	_check(str(hunter["hunter_state"]) != NpcFleetsLib.HUNTER_STATE_CHASE,
-		"the chase breaks beyond Chebyshev 20 (15/20 hysteresis)")
+		"the chase breaks beyond Chebyshev 40 (30/40 hysteresis)")
 	_check(((hunter.get("route", {}) as Dictionary).get("legs", []) as Array).size() > 0
 		or str(hunter["hunter_state"]) == NpcFleetsLib.HUNTER_STATE_INTEL,
 		"the hunter returns to the lane network / the intel port")

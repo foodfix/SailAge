@@ -1,7 +1,7 @@
 {
   "version": 1,
   "tile_size_px": 32,
-  "grid": {"width": 2160, "height": 1080},
+  "grid": {"width": 4320, "height": 2160},
   "tiles": {
     "~": {"kind": "sea", "passable": true},
     ".": {"kind": "coastal_sea", "passable": true},

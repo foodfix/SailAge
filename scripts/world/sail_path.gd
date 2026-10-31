@@ -12,10 +12,10 @@ extends RefCounted
 ## ## Region and solidity
 ##
 ## `AStarGrid2D` needs every solid cell marked before a query, and the shipped
-## grid is 2160 × 1080 = 2.33 M tiles. Marking the whole grid one
-## `set_point_solid()` call at a time through `is_passable_xy()` took ~280 ms on
-## this machine; the module therefore searches in a **local frame** (§4.2) and
-## in two stages:
+## grid is 4320 × 2160 = 9.33 M tiles (Phase-6 rescale, `10-*` §6.1). Marking
+## the whole grid through `is_passable_xy()` per tile took ~280 ms on this
+## machine at the Phase-4 scale; the module therefore searches in a **local
+## frame** (§4.2) and in two stages:
 ##
 ## 1. **Near targets** (local-frame Chebyshev ≤ [constant NEAR_REGION_TILES]):
 ##    the region is the endpoint bounding box expanded by
@@ -23,7 +23,7 @@ extends RefCounted
 ##    cells, so the query is sub-millisecond. This is the common case (a click
 ##    a screen or two away).
 ## 2. **Everything else**, and any near query that could not be answered inside
-##    its box: the region is one full turn of the world — 2160 distinct columns
+##    its box: the region is one full turn of the world — 4320 distinct columns
 ##    laid out around the fleet, with the target well inside — over the whole
 ##    latitude range, marked straight from `MapLoader.indices`. (A narrow
 ##    bounding box around two far-apart endpoints cannot work on this map: the
@@ -32,26 +32,36 @@ extends RefCounted
 ##    inside a box is *longer* than the true one.)
 ##
 ## Measured on the shipped artifact (Godot 4.7, headless Linux, this worktree):
-## the world's longest real sea route (1,742 tiles) in ~0.37 s, Lisbon→Nagasaki
-## (1,145 steps round the Cape of Good Hope) in ~0.29 s, and a 3,387-tile
-## synthetic serpentine corridor in ~0.20 s — all inside the task's
-## [constant BUDGET_MS] budget. The near stage answers a click a few tiles away
-## in well under a millisecond.
+##
+## Phase-6 re-benchmark at 4320² (the budget verdict, `IMPLEMENT-Phase6.md`
+## correction 3 / `20-*` §4.2): the world's longest real sea route (3,430
+## tiles) in ~1.9 s, Lisbon→Nagasaki (2,288 steps round the Cape of Good Hope)
+## in ~1.4 s, and the 3,387-tile synthetic serpentine corridor in ~0.78 s — the
+## full-region stage **exceeds [constant BUDGET_MS]** at 9.33 M cells. The
+## pinned verdict: every legal click is answered by the near stage (sub-ms; the
+## `80-*` viewport is ~40×23 tiles, so chart-scale queries do not exist in this
+## phase's input surface), the chart-click hierarchical router is Phase-7 by
+## the docs' own out-of-scope list, and the pinned coarse-waypoint fallback
+## therefore stays unimplemented — the two-stage design ships as-is with this
+## measurement recorded. The near stage answers a click a few tiles away in
+## well under a millisecond.
 ##
 ## ## Jumping (`jumping_enabled`)
 ##
 ## The task pins `jumping_enabled = true`, and this module sets it on the
 ## **near** stage (where a jump-point search is never slower). On the shipped
 ## world's open ocean the flag is a pessimisation for long routes instead of an
-## optimisation — the same 1,355-tile query measures ~2.0 s with jumping on and
-## ~0.14 s with it off, because jump-point search has to scan whole
-## obstacle-free rows/columns per expansion and this map is mostly open water.
-## The full-grid stage therefore runs the **same** `AStarGrid2D`, region and
-## `DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES` with jumping off. That is the task's
-## pinned escape hatch ("pre-named fallback, implemented only if the 1 s budget
-## fails") at its smallest possible setting: the heavier pinned fallback (a
-## coarse passable-waypoint graph refined per chunk) was **not** needed and is
-## not implemented (see [member last_jumping] / [member last_stage]).
+## optimisation — the Phase-4 1,355-tile query measured ~2.0 s with jumping on
+## and ~0.14 s with it off, because jump-point search has to scan whole
+## obstacle-free rows/columns per expansion and this map is mostly open water
+## (re-confirmed at 4320²: a jumping full-stage query does not finish in
+## minutes). The full-grid stage therefore runs the **same** `AStarGrid2D`,
+## region and `DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES` with jumping off. That is
+## the task's pinned escape hatch ("pre-named fallback, implemented only if
+## the 1 s budget fails") at its smallest possible setting: the heavier pinned
+## fallback (a coarse passable-waypoint graph refined per chunk) stays
+## **unimplemented** — see the Phase-6 budget verdict above and
+## [member last_jumping] / [member last_stage].
 ##
 ## ## No corner cutting
 ##
@@ -64,11 +74,11 @@ extends RefCounted
 ## ## Seam handling (pinned)
 ##
 ## `AStarGrid2D` rejects points outside its region, so a seam-crossing query is
-## made in a local frame: both `x` are shifted by `−from.x mod 2160` into the
+## made in a local frame: both `x` are shifted by `−from.x mod 4320` into the
 ## local frame, the query runs there, and the returned path is shifted back with
 ## `posmod`. The target's local `x` is the **short way** around the seam
-## ([method short_dx], `|Δx| ≤ 1080`), so a fleet at `x = 2100` clicking
-## `x = 50` gets the 110-step path across `x = 2159 → 0`, never the 2,050-step
+## ([method short_dx], `|Δx| ≤ 2160`), so a fleet at `x = 4200` clicking
+## `x = 50` gets the 150-step path across `x = 4319 → 0`, never the 4,150-step
 ## way round.
 
 ## Region margin (tiles) around the endpoint bounding box for a near query.
@@ -100,7 +110,7 @@ var last_raw_points: int = 0
 
 ## Shortest signed `dx` between two columns on a wrapping grid:
 ## `|result| ≤ width / 2` and `to_x == from_x + result (mod width)`.
-static func short_dx(from_x: int, to_x: int, width: int = 2160) -> int:
+static func short_dx(from_x: int, to_x: int, width: int = 4320) -> int:
 	if width <= 0:
 		return to_x - from_x
 	var dx := posmod(to_x - from_x, width)
@@ -111,13 +121,13 @@ static func short_dx(from_x: int, to_x: int, width: int = 2160) -> int:
 
 ## Local-frame → world cell; [method world_to_local] is the inverse.
 static func local_to_world(origin: Vector2i, local_cell: Vector2i,
-		width: int = 2160) -> Vector2i:
+		width: int = 4320) -> Vector2i:
 	return Vector2i(posmod(origin.x + local_cell.x, width), local_cell.y)
 
 
 ## The inverse of [method local_to_world].
 static func world_to_local(origin: Vector2i, world_cell: Vector2i,
-		width: int = 2160) -> Vector2i:
+		width: int = 4320) -> Vector2i:
 	return Vector2i(posmod(world_cell.x - origin.x, width), world_cell.y)
 
 
@@ -245,14 +255,19 @@ func _query(map, origin: Vector2i, local_goal: Vector2i, region: Rect2i,
 ## frame, so local `x` names world column `origin_x + x (mod width)`. Reads the
 ## loader's palette bytes directly (one array index per tile); the fallback via
 ## `is_passable_xy()` keeps synthetic loaders without `indices` working.
+##
+## The world column is a running index with one wrap check per cell (no
+## `posmod()` call): at 9.33 M cells the function-call overhead alone was most
+## of the full-stage cost (Phase-6 re-benchmark: the marking loop dropped from
+## dominating the query to well under half of it).
 func _mark_solid(grid: AStarGrid2D, map, region: Rect2i, origin_x: int) -> void:
 	var width: int = int(map.width)
 	var indices: PackedByteArray = map.indices
 	var direct := indices.size() == width * int(map.height)
 	for y in range(region.position.y, region.end.y):
 		var row := y * width
+		var world_x: int = posmod(origin_x + region.position.x, width)
 		for x in range(region.position.x, region.end.x):
-			var world_x := posmod(origin_x + x, width)
 			var passable: bool
 			if direct:
 				passable = indices[row + world_x] <= 1
@@ -260,6 +275,9 @@ func _mark_solid(grid: AStarGrid2D, map, region: Rect2i, origin_x: int) -> void:
 				passable = map.is_passable_xy(world_x, y)
 			if not passable:
 				grid.set_point_solid(Vector2i(x, y), true)
+			world_x += 1
+			if world_x == width:
+				world_x = 0
 
 
 ## Converts the raw local-frame points to unit steps, expands every jumped
@@ -318,7 +336,7 @@ static func _illegal_steps(map, path: Array) -> bool:
 static func is_step_legal(map, from: Vector2i, to: Vector2i) -> bool:
 	if map == null:
 		return false
-	var width: int = int(map.width) if int(map.width) > 0 else 2160
+	var width: int = int(map.width) if int(map.width) > 0 else 4320
 	var dx := short_dx(from.x, to.x, width)
 	var dy := to.y - from.y
 	if (dx == 0 and dy == 0) or absi(dx) > 1 or absi(dy) > 1:

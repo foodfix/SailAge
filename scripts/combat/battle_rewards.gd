@@ -182,7 +182,7 @@ static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
 	var width := int(grid.get("width", 0))
 	if width <= 0:
-		width = 2160
+		width = 4320
 	var dx := absi(a.x - b.x) % width
 	return maxi(mini(dx, width - dx), absi(a.y - b.y))
 

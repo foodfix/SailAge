@@ -612,7 +612,8 @@ func _try_step(target: Vector2i) -> bool:
 
 	# The cell that gets stored: the un-normalised `step_target` may be -1 or
 	# `width` at the seam, which the move rule accepts but the save shape must
-	# not contain (§4.1 "x taken mod 2160 everywhere").
+	# not contain (§4.1 "x taken mod width everywhere" — 4320 at the Phase-6
+	# grid).
 	var landed := step_target
 	if _loader.width > 0:
 		landed = Vector2i(posmod(step_target.x, _loader.width), step_target.y)
@@ -1951,7 +1952,7 @@ func _read_state_cell() -> Vector2i:
 	return GameState.world_tile()
 
 
-## Cell under a world position. x **wraps** (a click at `x = 2160` is a click
+## Cell under a world position. x **wraps** (a click at `x = 4320` is a click
 ## on `x = 0`, docs/20-* §4.1) and y is left unbounded for the caller to reject.
 func _cell_at(world_position: Vector2) -> Vector2i:
 	var x := int(floor(world_position.x / float(_cell_pixels)))

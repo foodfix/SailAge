@@ -13,11 +13,11 @@ extends RefCounted
 ##   1. read the PNG bytes (`FileAccess`) and decode them (`Image.load_png_from_buffer`);
 ##      the artifact is **data, not an imported texture** (§6.3).
 ##   2. verify the IHDR: indexed colour (type 3), 8-bit, non-interlaced, and a
-##      2160×1080 grid (the legend's `grid` is the expected size, so a swapped
+##      4320×2160 grid (the legend's `grid` is the expected size, so a swapped
 ##      map needs no code edit). Decode the PLTE palette and map every pixel
 ##      colour back to its palette index; an index outside the locked 0–4 set
 ##      is a load error naming the index and a sample tile.
-##   3. passability = one byte per tile (`indices`, ~2.3 MB), `is_passable` is
+##   3. passability = one byte per tile (`indices`, ~9.3 MB), `is_passable` is
 ##      wrap-aware on x and closed at the latitude edges.
 ##   4. the harbor **pair** is derived from `Port.lat/lon`: the berth tile with
 ##      the locked §6.1 snap rule and the shore tile as the nearest orthogonally
@@ -63,7 +63,7 @@ const DEFAULT_VIEW_TILES := Vector2i(40, 23)
 ## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
 const MEMORY_PER_CELL_BYTES := 16
 ## A port this close to the seam is also drawn on the other side of it
-## (§9 step 5: `x = 0` also shows at `x = 2160` and vice versa).
+## (§9 step 5: `x = 0` also shows at `x = 4320` and vice versa).
 const SEAM_MARGIN := 8
 
 ## The one PNG the loader ships with (docs/90-* §9.1); `load_map` takes the
@@ -740,7 +740,7 @@ func _ensure_tile_set() -> void:
 
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
 ## chunk ring. `center_cell` is in **unbounded** world cells: sampling wraps per
-## tile (`x mod width`), so `x = 2160` shows `x = 0` and no seam can show void.
+## tile (`x mod width`), so `x = 4320` shows `x = 0` and no seam can show void.
 ## `view_tiles` is the viewport size in tiles (1280×720 → 40×23 by default).
 func update_chunks(center_cell: Vector2i, view_tiles: Vector2i = DEFAULT_VIEW_TILES) -> void:
 	if _chunks_root == null or width <= 0 or height <= 0:
@@ -903,7 +903,7 @@ func refresh_port_overlay(ports: Dictionary = {}, nations: Dictionary = {}) -> v
 		var colour := _nation_colour(str((port as Dictionary).get("nation_id", "")),
 			nation_table)
 		# Both tiles of the pair get the same seam offsets: a port at x = 0 also
-		# shows at x = 2160, and its berth moves with it.
+		# shows at x = 4320, and its berth moves with it.
 		for offset in _seam_offsets_pair(shore.x, berth.x):
 			var draw_shore := Vector2i(shore.x + offset, shore.y)
 			# The berth is drawn relative to the copied shore tile, so a pair

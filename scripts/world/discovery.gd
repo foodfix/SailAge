@@ -15,15 +15,17 @@ extends RefCounted
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 
-## §4.4 pin: this is **not** the port sighting radius (24, `20-*` §4.11 /
+## §4.4 pin: this is **not** the port sighting radius (48, `20-*` §4.11 /
 ## `SailingSim.SIGHTING_RADIUS`); the two constants must not be conflated.
 ## Chebyshev over tiles on the world grid, wrap-aware on x (`20-*` §4.1).
-const RADIUS := 18
-## §4.1: the world grid width in tiles (2160 at 6 tiles/degree). Read from the
-## loaded legend when there is one, so a test map does not have to be 2160 wide.
-const MAP_WIDTH_FALLBACK := 2160
-## §6.1: the grid height (1080 at 6 tiles/degree from 90°N to 90°S).
-const MAP_HEIGHT_FALLBACK := 1080
+## Phase-6 grid sweep: 18 → 36 tiles (≈ 3°, nm preserved at 5 nm tiles).
+const RADIUS := 36
+## §4.1: the world grid width in tiles (4320 at 12 tiles/degree, Phase 6).
+## Read from the loaded legend when there is one, so a test map does not have
+## to be 4320 wide.
+const MAP_WIDTH_FALLBACK := 4320
+## §6.1: the grid height (2160 at 12 tiles/degree from 90°N to 90°S).
+const MAP_HEIGHT_FALLBACK := 2160
 ## §4.4: a tavern hint costs this much.
 const HINT_PRICE := 100
 ## §4.4: up to three hints per tavern visit.
@@ -168,9 +170,9 @@ static func _distance(entry: Dictionary, cell: Vector2i) -> int:
 
 
 ## Chebyshev distance between two tiles, **wrap-aware on x** (`20-*` §4.1:
-## `x` is taken mod 2160 everywhere). The grid width comes from the loaded
+## `x` is taken mod 4320 everywhere). The grid width comes from the loaded
 ## legend when available (`DataLoader.map_legend.grid.width`), else the locked
-## 2160. A short `dx` is preferred: `min(|dx|, width − |dx|)`.
+## 4320. A short `dx` is preferred: `min(|dx|, width − |dx|)`.
 static func chebyshev_to_cell(other: Vector2i, cell: Vector2i) -> int:
 	var dx := absi(other.x - cell.x)
 	var width := map_width()
@@ -183,7 +185,7 @@ static func chebyshev_to_cell(other: Vector2i, cell: Vector2i) -> int:
 
 
 ## World grid width in tiles for the wrap arithmetic: the active legend's
-## `grid.width` (2160 for the world map), falling back to
+## `grid.width` (4320 for the world map), falling back to
 ## [constant MAP_WIDTH_FALLBACK] when no legend is loaded yet.
 static func map_width() -> int:
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
@@ -192,8 +194,8 @@ static func map_width() -> int:
 
 
 ## A discovery's map cell, derived from its `lat`/`lon` with the **same floor
-## projection as the grid** (`10-*` §6.1: `x = floor((lon+180)*6) mod width`,
-## `y = floor((90-lat)*6)`), because discovery entries carry no stored tile.
+## projection as the grid** (`10-*` §6.1: `x = floor((lon+180)*12) mod width`,
+## `y = floor((90-lat)*12)`), because discovery entries carry no stored tile.
 ## `Vector2i.ZERO` when the entry has no coordinates.
 static func position_of_entry(entry: Dictionary) -> Vector2i:
 	return tile_of_latlon(
@@ -215,7 +217,7 @@ static func tile_of_latlon(lat: float, lon: float) -> Vector2i:
 	return Vector2i(x, y)
 
 
-## World grid height in tiles (from the legend, else the locked 1080).
+## World grid height in tiles (from the legend, else the locked 2160).
 static func map_height() -> int:
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
 	var height := int(grid.get("height", 0))

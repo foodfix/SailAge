@@ -41,14 +41,17 @@ const RATION_SIZE := 5
 const PROVISIONS_PRICE := 2
 const WATER_PRICE := 1
 ## §4.11: base port sighting radius, Chebyshev, wrap-aware on x.
+## Phase-6 grid sweep: 24 → 48 tiles (≈ 240 nm, nm preserved at 5 nm tiles).
 ## (`50-*` §4.2 modifies it by navigation at the caller.)
-const SIGHTING_RADIUS := 24
+const SIGHTING_RADIUS := 48
 ## §4.11 / `70-*` §4.4: the separate, shorter discovery sighting radius. Kept
 ## here because §5 is the single constants location for both radii — the
 ## engine value lives in `DiscoverySight.RADIUS`, which must agree.
-const DISCOVERY_RADIUS := 18
-## §4.1: `lat = 90 − y / 6` (6 tiles per degree, 1 tile = 10′ of latitude).
-const TILES_PER_DEGREE := 6
+## Phase-6 grid sweep: 18 → 36 tiles (≈ 3°).
+const DISCOVERY_RADIUS := 36
+## §4.1: `lat = 90 − y / 12` (12 tiles per degree, 1 tile = 5′ of latitude;
+## Phase-6 grid, `10-*` §6.1).
+const TILES_PER_DEGREE := 12
 ## §4.8: new-game morale and the in-port ceiling.
 const MORALE_START := 70
 const MORALE_PORT_CAP := 80
