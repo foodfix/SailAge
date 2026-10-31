@@ -60,6 +60,14 @@ var wrecks: Array = []
 ## Sea-traffic density preset id (docs/10-* §4.10): chosen on S2, changeable
 ## mid-run in S19 (task M). `npc_fleets.gd` (task J) budgets against it.
 var npc_preset: String = "normal"
+## Phase-6 control preferences (docs/90-* §5.4; docs/80-* §4.6.3): the two
+## S19-only rows — `input_mode` (`"step"|"helm"`, `20-*` §4.2) and
+## `current_mode` (`"modifier"|"drift"`, `20-*` §4.16). Defaults are pinned
+## Step + Modifier. Settable pre-game via the S1 mount and mid-run via the
+## S4 mount; carried by `new_game` exactly like `npc_preset` (the pre-game
+## panel writes the field BEFORE the call, so it is run input); persisted
+## per save as of save_version 6 (`90-*` §8.1).
+var control_prefs: Dictionary = {"input_mode": "step", "current_mode": "modifier"}
 ## Active demand-event instances (docs/30-* §4.5), rotated by
 ## `Economy.market_events_tick` inside the economy day tick; the instance
 ## shape is pinned to `{template_id, port_id, start_day}` (docs/10-* §4.15).
@@ -123,7 +131,9 @@ func add_gold(delta: int) -> void:
 ## Everything comes from `data/nations.json` (nothing hardcoded here), so
 ## editing a nation's `start_gold`/`start_ship_type_id` is a data-only change.
 ## `locale` is deliberately untouched: the player's language choice survives
-## the new game.
+## the new game. So do the two S19 pre-game choices `npc_preset` and
+## `control_prefs` (docs/80-* §4.6.3): each is read BEFORE the reset below and
+## restored as run input (out-of-domain values fall back to the defaults).
 ##
 ## `route` exists for unit tests: with the default `true` the run routes to the
 ## port screen (§4.1 step 4); tests pass `false` to keep the test scene alive.
@@ -157,6 +167,16 @@ func new_game(nation_id: String, route: bool = true,
 	if not config_presets.has(chosen_preset):
 		chosen_preset = str(DataLoader.npc_config.get(
 			"default_preset", "normal"))
+	# 80-* §4.6.3: the S19 input/current rows write `control_prefs` BEFORE
+	# this call — run input like `npc_preset`, so the fresh-run reset below
+	# preserves the choice. An out-of-domain value (never written by the
+	# panel, docs/80-* §4.6.3) falls back to the pinned default.
+	var chosen_input_mode := str(control_prefs.get("input_mode", "step"))
+	if not chosen_input_mode in ["step", "helm"]:
+		chosen_input_mode = "step"
+	var chosen_current_mode := str(control_prefs.get("current_mode", "modifier"))
+	if not chosen_current_mode in ["modifier", "drift"]:
+		chosen_current_mode = "modifier"
 
 	day = 1
 	gold = int(nation.get("start_gold", 0))
@@ -251,6 +271,12 @@ func new_game(nation_id: String, route: bool = true,
 	)
 	wrecks = []
 	npc_preset = chosen_preset
+	# docs/90-* §5.4 / 80-* §4.6.3: the control preferences carry into the
+	# run as exactly the two pinned keys (validated above).
+	control_prefs = {
+		"input_mode": chosen_input_mode,
+		"current_mode": chosen_current_mode,
+	}
 	market_events = []
 	named_pirate_respawns = {}
 	npc_port_log = []

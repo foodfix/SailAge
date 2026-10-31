@@ -30,13 +30,24 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 5 ships
-## [constant SAVE_VERSION] 5 and there is **no migration chain** (decision 5,
-## `IMPLEMENT-Phase5.md`). SailAge has not shipped, so a payload whose
-## `save_version` is anything but 5 — v4 included — is a pre-release save and
+## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 6 ships
+## [constant SAVE_VERSION] 6 and there is **no migration chain** (decision 12,
+## `IMPLEMENT-Phase6.md`). SailAge has not shipped, so a payload whose
+## `save_version` is anything but 6 — v5 included — is a pre-release save and
 ## is refused by name; the only migration that exists is the identity. The
 ## historical `1 → 2` / `2 → 3` steps lived here through Phase 3 and were
-## deleted in Phase 4 rather than carried as dead weight.
+## deleted in Phase 4 rather than carried as dead weight. The v6 bump (task V)
+## absorbs the 4320×2160 coordinate rebase, so a stale v5 payload must never
+## load into the rescaled world at half-scale coordinates.
+##
+## Phase-6 persisted keys (docs/90-* §8.1 "Phase-6 additions"): `control_prefs`
+## (top level) plus the `world` block's `sail_trim` / `heading` / `wind_dir`.
+## The Phase-5 hunter keys (`world.last_departed_port` /
+## `world.hunter_intel_cell`) carry over unchanged in shape. All four new
+## enums are validated on load: an out-of-domain value is refused exactly like
+## an unknown `world.map_id` (see [method validate_payload]). The S19
+## debug-overlays flag (`SettingsPanel.debug_overlays`) is **session-only**
+## and is never part of a payload (docs/80-* §4.6.3).
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -56,10 +67,10 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 5 ships version 5).
-const SAVE_VERSION := 5
+## Current payload version (docs/90-* §8.2: Phase 6 ships version 6).
+const SAVE_VERSION := 6
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 5
+const PHASE := 6
 
 ## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
 ## nation at [constant RANK_NONE].
@@ -71,16 +82,33 @@ const RANK_ORDER: Array[String] = [
 const DEFAULT_MAP_ID := "world"
 ## The §4.7 default weather a payload without a `world.weather` restores.
 const DEFAULT_WEATHER := "calm"
+## The §8.1 Phase-6 defaults for the `world` ocean keys when absent
+## (docs/90-* §5.4): the trim state and the 8-dir heading / wind-FROM ids.
+const DEFAULT_TRIM := "normal"
+const DEFAULT_DIR := "E"
+## The pinned `control_prefs` default (docs/90-* §5.4, docs/80-* §4.6.3).
+## A `const` dictionary is shared state, so every caller duplicates it.
+const DEFAULT_CONTROL_PREFS := {"input_mode": "step", "current_mode": "modifier"}
+## The Phase-6 enum domains every persisted value must stay inside
+## (docs/20-* §4.2, §4.16, §4.17): input modes, current modes, sail-trim
+## states, and the 8-compass direction ids. Mirrored here like `RANK_ORDER`
+## above — the owning doc pins the values, this list only validates.
+const INPUT_MODES: Array[String] = ["step", "helm"]
+const CURRENT_MODES: Array[String] = ["modifier", "drift"]
+const TRIM_STATES: Array[String] = ["furled", "reefed", "normal", "full"]
+const COMPASS_DIRS: Array[String] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 ## The •-marked GameState fields, in §8.1 order (minus the three header keys).
 ## v5 appends the four Phase-5 blocks after the Phase-2 pair (docs/90-* §8.1
 ## order); `npc_fleets` is the v5 rename of Phase-2's `hostile_fleets`.
+## v6 appends `control_prefs` after `npc_preset` (docs/90-* §8.1 Phase-6
+## additions; the three other v6 keys live inside `world`).
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "port_investments", "quests",
 	"discoveries_found", "npc_fleets", "proximity_cooldowns",
-	"market_stocks", "wrecks", "npc_preset", "market_events",
-	"named_pirate_respawns",
+	"market_stocks", "wrecks", "npc_preset", "control_prefs",
+	"market_events", "named_pirate_respawns",
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
@@ -112,6 +140,7 @@ const OPTIONAL_DEFAULTS := {
 	"proximity_cooldowns": {},
 	"wrecks": [],
 	"npc_preset": "normal",
+	"control_prefs": DEFAULT_CONTROL_PREFS,
 	"market_events": [],
 	"named_pirate_respawns": {},
 	"fame": 0,
@@ -219,6 +248,15 @@ func snapshot() -> Dictionary:
 		# persisted so hunter placement is exactly reproducible after a load.
 		"last_departed_port": str(GameState.world.get("last_departed_port", "")),
 		"hunter_intel_cell": _intel_cell_payload(GameState.world),
+		# Phase-6 ocean keys (docs/90-* §5.4, §8.1): the enum values are
+		# sanitized on write so a payload this build produces always
+		# validates (the runtime writers keep the enums, docs/20-* §4.17).
+		"sail_trim": _enum_or(GameState.world.get("sail_trim", DEFAULT_TRIM),
+			TRIM_STATES, DEFAULT_TRIM),
+		"heading": _enum_or(GameState.world.get("heading", DEFAULT_DIR),
+			COMPASS_DIRS, DEFAULT_DIR),
+		"wind_dir": _enum_or(GameState.world.get("wind_dir", DEFAULT_DIR),
+			COMPASS_DIRS, DEFAULT_DIR),
 	}
 	return {
 		"save_version": SAVE_VERSION,
@@ -240,6 +278,11 @@ func snapshot() -> Dictionary:
 		"market_stocks": GameState.market_stocks.duplicate(true),
 		"wrecks": GameState.wrecks.duplicate(true),
 		"npc_preset": GameState.npc_preset,
+		# Phase-6 control preferences (docs/90-* §5.4, §8.1): persisted per
+		# save exactly like `npc_preset`. `SettingsPanel.debug_overlays` is a
+		# session-only static (docs/80-* §4.6.3) and is deliberately absent
+		# here — snapshot() writes only this key list, so it can never leak.
+		"control_prefs": _prefs_payload(GameState.control_prefs),
 		"market_events": GameState.market_events.duplicate(true),
 		"named_pirate_respawns": GameState.named_pirate_respawns.duplicate(true),
 		"fame": GameState.fame,
@@ -277,6 +320,29 @@ static func _intel_cell_payload(world: Dictionary) -> Variant:
 		return {"x": int((cell as Dictionary).get("x", 0)),
 			"y": int((cell as Dictionary).get("y", 0))}
 	return null
+
+
+## An enum-domain value as a sanitized payload string: `value` when it is one
+## of `valid`, else `fallback` (the §8.1 default). Mirrors `_as_locale` — the
+## runtime writers keep the enums, so the fallback only ever covers a
+## hand-mangled in-memory dict, never a real UI state.
+static func _enum_or(value, valid: Array[String], fallback: String) -> String:
+	var text := str(value)
+	return text if text in valid else fallback
+
+
+## The `control_prefs` payload as exactly the two pinned keys (docs/90-*
+## §5.4): an in-memory dict carrying stray keys or out-of-domain values is
+## normalized, so a payload this build writes always round-trips.
+static func _prefs_payload(prefs: Dictionary) -> Dictionary:
+	return {
+		"input_mode": _enum_or(prefs.get("input_mode",
+			DEFAULT_CONTROL_PREFS["input_mode"]), INPUT_MODES,
+			DEFAULT_CONTROL_PREFS["input_mode"]),
+		"current_mode": _enum_or(prefs.get("current_mode",
+			DEFAULT_CONTROL_PREFS["current_mode"]), CURRENT_MODES,
+			DEFAULT_CONTROL_PREFS["current_mode"]),
+	}
 
 
 func save(slot: int) -> bool:
@@ -482,6 +548,24 @@ func validate_payload(data: Dictionary) -> String:
 	# but type-checked whenever present, the same rule as its siblings.
 	if not _is_dict_or_missing(data, "named_pirate_respawns"):
 		return "'named_pirate_respawns' is not an object"
+	# Phase-6 keys (§8.1): optional (absent → the pinned defaults) but
+	# type- AND enum-checked whenever present. An out-of-domain value is a
+	# rejection, mirroring `world.map_id`: these ids select rule paths
+	# (docs/20-* §4.2/§4.16/§4.17), so a hand-edited value must fail loudly
+	# instead of silently re-trimming the fleet.
+	if not _is_dict_or_missing(data, "control_prefs"):
+		return "'control_prefs' is not an object"
+	var prefs = data.get("control_prefs", null)
+	if prefs is Dictionary:
+		var input_mode = (prefs as Dictionary).get("input_mode",
+			DEFAULT_CONTROL_PREFS["input_mode"])
+		if not (input_mode is String) or not (input_mode as String in INPUT_MODES):
+			return "'control_prefs.input_mode' is not an input-mode id"
+		var current_mode = (prefs as Dictionary).get("current_mode",
+			DEFAULT_CONTROL_PREFS["current_mode"])
+		if not (current_mode is String) \
+				or not (current_mode as String in CURRENT_MODES):
+			return "'control_prefs.current_mode' is not a current-mode id"
 	# Phase-3 keys (§8.1): optional (absent → documented default) but
 	# type-checked whenever present, the same rule as the Phase-2 pair above.
 	if not _is_int_or_missing(data, "fame"):
@@ -524,6 +608,17 @@ func validate_payload(data: Dictionary) -> String:
 	var intel = (data["world"] as Dictionary).get("hunter_intel_cell", null)
 	if not (intel == null or intel is Dictionary):
 		return "'world.hunter_intel_cell' is neither a tile object nor null"
+	# Phase-6 ocean keys (§8.1): optional inside `world` (absent → the pinned
+	# defaults), enum-checked whenever present, the same rule as `map_id`.
+	var sail_trim = (data["world"] as Dictionary).get("sail_trim", DEFAULT_TRIM)
+	if not (sail_trim is String) or not ((sail_trim as String) in TRIM_STATES):
+		return "'world.sail_trim' is not a sail-trim state"
+	var heading = (data["world"] as Dictionary).get("heading", DEFAULT_DIR)
+	if not (heading is String) or not ((heading as String) in COMPASS_DIRS):
+		return "'world.heading' is not an 8-dir id"
+	var wind_dir = (data["world"] as Dictionary).get("wind_dir", DEFAULT_DIR)
+	if not (wind_dir is String) or not ((wind_dir as String) in COMPASS_DIRS):
+		return "'world.wind_dir' is not an 8-dir id"
 	return ""
 
 
@@ -616,6 +711,11 @@ func _apply(data: Dictionary) -> void:
 		"map_id": str(world.get("map_id", DEFAULT_MAP_ID)),
 		"last_departed_port": str(world.get("last_departed_port", "")),
 		"hunter_intel_cell": intel_cell_value,
+		# Phase-6 ocean keys (docs/90-* §5.4, §8.1): already enum-validated
+		# above; absent keys take the pinned defaults.
+		"sail_trim": str(world.get("sail_trim", DEFAULT_TRIM)),
+		"heading": str(world.get("heading", DEFAULT_DIR)),
+		"wind_dir": str(world.get("wind_dir", DEFAULT_DIR)),
 	}
 
 	var port = data.get("current_port", null)
@@ -664,6 +764,18 @@ func _apply(data: Dictionary) -> void:
 		(data.get("wrecks", OPTIONAL_DEFAULTS["wrecks"]) as Array).duplicate(true)
 	GameState.npc_preset = str(data.get("npc_preset",
 		OPTIONAL_DEFAULTS["npc_preset"]))
+	# Phase-6 saved state (docs/90-* §8.1): the control preferences restore
+	# as exactly the two pinned keys — an absent block takes the defaults,
+	# a present one was enum-validated in validate_payload. Built fresh so
+	# the OPTIONAL_DEFAULTS const is never aliased into live state.
+	var prefs: Dictionary = data.get("control_prefs",
+		OPTIONAL_DEFAULTS["control_prefs"])
+	GameState.control_prefs = {
+		"input_mode": str((prefs as Dictionary).get("input_mode",
+			DEFAULT_CONTROL_PREFS["input_mode"])),
+		"current_mode": str((prefs as Dictionary).get("current_mode",
+			DEFAULT_CONTROL_PREFS["current_mode"])),
+	}
 	GameState.market_events = \
 		(data.get("market_events", OPTIONAL_DEFAULTS["market_events"]) as Array) \
 			.duplicate(true)

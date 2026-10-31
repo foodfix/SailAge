@@ -1,33 +1,40 @@
 extends Node
-## Phase-5 Task G acceptance tests: the v5 save schema and the identity-only
-## load rule (docs/IMPLEMENT-Phase5.md G, decision 5; docs/90-* §8.1, §8.2
-## development-stage scope; docs/70-* §2, §4.7, §4.9.2, §4.9.8).
+## Phase-6 Task V acceptance tests: the v6 save schema and the identity-only
+## load rule (docs/IMPLEMENT-Phase6.md task V, decision 12; docs/90-* §8.1,
+## §8.2 development-stage scope; docs/80-* §4.6.3; docs/20-* §4.2, §4.16,
+## §4.17).
 ##
-##   godot --headless --path . tools/test_save_v5.tscn
+##   godot --headless --path . tools/test_save_v6.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## **What this suite is.** Phase 4 deleted the migration chain and Phase 5
-## keeps it removed (decision 5: no migration; a v4 payload is refused like
-## any older pre-release save). This suite therefore tests the **current**
-## schema: a v5 payload round-trips byte-equal — including the new
-## `market_stocks` / `wrecks` / `npc_preset` / `market_events` blocks — the
+## **What this suite is.** Phase 4 deleted the migration chain and Phases 5–6
+## keep it removed (decision 12: no migration; a v5 payload is refused like
+## any older pre-release save — the v6 bump absorbs the 4320×2160 coordinate
+## rebase, so a stale v5 file must never load at half-scale coordinates).
+## This suite therefore tests the **current** schema: a v6 payload round-trips
+## byte-equal — including the new `control_prefs` block and the `world` block's
+## `sail_trim` / `heading` / `wind_dir` (docs/90-* §8.1 Phase-6 additions) —
+## the Phase-5 hunter keys carry over unchanged in shape (cell re-based), the
 ## documented guards still hold (corrupt payload refused, future
-## `save_version` refused, v4 and older refused by name, retired runs
-## summarised not resumed), and every Phase-2/3/5 field block is real saved
-## state. `npc_fleets` is task J's v5 rename of Phase-2's `hostile_fleets`
-## rename).
+## `save_version` refused, v5 and older refused by name, retired runs
+## summarised not resumed), an out-of-domain enum value is refused exactly
+## like an unknown `world.map_id`, and the session-only
+## `SettingsPanel.debug_overlays` flag never enters a payload. Sections at the
+## end drive the S19 rows (§4.6.3) through the panel API and its buttons and
+## prove the `new_game` carry.
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and written back at the end; every file this suite creates is
 ## removed again (start AND end), exactly like `tools/test_save.gd`.
 
-## Every Phase-5 §8.1 key and its documented default (the Phase-2/3 blocks
-## are unchanged; `market_stocks`' documented default is the derived
-## resting stock, asserted through the loader in the defaults test).
-const V5_DEFAULTS := {
+## Every Phase-6 §8.1 key and its documented default (the Phase-2/3/5 blocks
+## are unchanged; `market_stocks`' documented default is the derived resting
+## stock, asserted through the loader in the defaults test).
+const V6_DEFAULTS := {
 	"wrecks": [],
 	"npc_preset": "normal",
+	"control_prefs": {"input_mode": "step", "current_mode": "modifier"},
 	"market_events": [],
 	"fame": 0,
 	"bounties": {},
@@ -38,8 +45,13 @@ const V5_DEFAULTS := {
 	"retired": false,
 	"retired_at": 0,
 }
+## The §8.1 Phase-6 `world`-block defaults (docs/90-* §5.4): absent keys take
+## these, and the panel/engines read them guard-style with the same values.
+const V6_WORLD_DEFAULTS := {"sail_trim": "normal", "heading": "E", "wind_dir": "E"}
 const NATION_IDS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 const EconomyLib := preload("res://scripts/port/economy.gd")
+const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
+const SettingsScene := preload("res://scenes/ui_shared/settings_panel.tscn")
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -49,31 +61,34 @@ var _backup: Dictionary = {}
 
 func _ready() -> void:
 	_backup_saves()
-	_test_v5_round_trip()
+	_test_v6_round_trip()
 	_test_fixture_shape()
 	_test_no_migration_chain()
 	_test_older_versions_refused()
+	_test_v5_shape_refused()
 	_test_future_version_refused()
 	_test_corrupt_phase_fields_rejected()
 	_test_optional_keys_default()
 	_test_new_fields_round_trip()
+	_test_debug_overlays_never_saved()
 	_test_retired_save()
+	await _test_s19_rows_and_new_game_carry()
 	_cleanup()
 	_report()
 
 
-# --- Fixture: a hand-written v4 payload (docs/90-* §8.1) -------------------
+# --- Fixtures ---------------------------------------------------------------
 
-## A complete v5 save: every §8.1 key, `phase: 4`, `world.map_id: "world"` on
-## the 2160×1080 grid, and the Phase-2/Phase-3 state blocks the shipped build
-## writes. The fleet is capacity-compliant (flagship hold exactly full) so
-## `Fleet.normalize_all()` is a no-op on load and "only what changed" can be
-## asserted honestly.
-func _v5_payload() -> Dictionary:
+## A complete **v6** save: every §8.1 key, `phase: 6`, the world block on the
+## 4320×2160 grid (the §8.1 Lisbon berth example), the carried Phase-5 hunter
+## keys with the re-based intel cell, and every Phase-6 key at a NON-default
+## value so the round trip can prove exact restoration. The fleet is
+## capacity-compliant so `Fleet.normalize_all()` is a no-op on load.
+func _v6_payload() -> Dictionary:
 	return {
-		"save_version": 5,
+		"save_version": 6,
 		"saved_at": 1793119712,
-		"phase": 5,
+		"phase": 6,
 		"locale": "en",
 		"day": 64,
 		"gold": 12540,
@@ -108,9 +123,14 @@ func _v5_payload() -> Dictionary:
 		],
 		"morale": 61,
 		"world": {
-			"position": {"x": 1025, "y": 307},
+			"position": {"x": 2050, "y": 615},
 			"weather": "fair",
 			"map_id": "world",
+			"last_departed_port": "lisbon",
+			"hunter_intel_cell": {"x": 2213, "y": 1002},
+			"sail_trim": "reefed",
+			"heading": "NW",
+			"wind_dir": "SE",
 		},
 		"current_port": "lisbon",
 		"known_ports": ["lisbon", "seville", "london", "madeira"],
@@ -121,6 +141,7 @@ func _v5_payload() -> Dictionary:
 		"market_stocks": {"lisbon": {"wine": 87, "salt": 12}},
 		"wrecks": [],
 		"npc_preset": "normal",
+		"control_prefs": {"input_mode": "helm", "current_mode": "drift"},
 		"market_events": [],
 		"named_pirate_respawns": {},
 		"fame": 0,
@@ -142,16 +163,35 @@ func _v5_payload() -> Dictionary:
 	}
 
 
-# --- 1. The done-when: a v5 save loads and re-saves as v5 ------------------
+## A **true v5-shaped** payload (what Phase 5 actually wrote): no
+## `control_prefs`, no `world.sail_trim` / `world.heading` / `world.wind_dir`,
+## and — the reason the version bump exists — the old 2160×1080 half-scale
+## berth coordinate. Refused on load, never repaired in place.
+func _v5_payload() -> Dictionary:
+	var payload := _v6_payload()
+	payload["save_version"] = 5
+	payload["phase"] = 5
+	payload.erase("control_prefs")
+	var world: Dictionary = payload["world"]
+	world.erase("sail_trim")
+	world.erase("heading")
+	world.erase("wind_dir")
+	world["position"] = {"x": 1025, "y": 307}
+	world.erase("last_departed_port")
+	world.erase("hunter_intel_cell")
+	return payload
 
-func _test_v5_round_trip() -> void:
-	var fixture := _v5_payload()
+
+# --- 1. The done-when: a v6 save loads and re-saves as v6 ------------------
+
+func _test_v6_round_trip() -> void:
+	var fixture := _v6_payload()
 	_ensure_dir()
-	_check(_write_json(1, fixture), "the v5 fixture is written to slot 1")
+	_check(_write_json(1, fixture), "the v6 fixture is written to slot 1")
 
-	# Quit-and-restart: wipe the state, then load the v5 file.
+	# Quit-and-restart: wipe the state, then load the v6 file.
 	_clobber_state()
-	_check(SaveSystem.load(1), "a v5 save loads")
+	_check(SaveSystem.load(1), "a v6 save loads")
 	_check(SaveSystem.last_read_error.is_empty(),
 		"the load reports no error (got '%s')" % SaveSystem.last_read_error)
 	_check(GameState.fame == 0, "fame restored (0)")
@@ -180,8 +220,8 @@ func _test_v5_round_trip() -> void:
 	_check(GameState.gold == 12540, "gold restored exactly (12540)")
 	_check(GameState.morale == 61, "morale restored exactly (61)")
 	_check(GameState.current_port == "lisbon", "current_port restored (lisbon)")
-	_check(GameState.world["position"] == {"x": 1025, "y": 307},
-		"world.position restored byte-equal")
+	_check(GameState.world["position"] == {"x": 2050, "y": 615},
+		"the re-based world.position restored byte-equal")
 	_check(GameState.world["weather"] == "fair", "world.weather restored (fair)")
 	_check(GameState.known_ports == fixture["known_ports"],
 		"known_ports restored byte-equal")
@@ -204,39 +244,64 @@ func _test_v5_round_trip() -> void:
 		and GameState.market_events == [],
 		"wrecks/npc_preset/market_events restore from the fixture")
 
-	# --- Re-save: the run is written as version 5 -------------------------
+	# The Phase-6 keys restore EXACTLY (docs/90-* §8.1 Phase-6 additions).
+	_check(GameState.control_prefs == {"input_mode": "helm", "current_mode": "drift"},
+		"control_prefs restored exactly (helm + drift, got %s)"
+		% str(GameState.control_prefs))
+	_check(GameState.world["sail_trim"] == "reefed",
+		"world.sail_trim restored exactly (reefed, got '%s')"
+		% str(GameState.world.get("sail_trim")))
+	_check(GameState.world["heading"] == "NW",
+		"world.heading restored exactly (NW, got '%s')"
+		% str(GameState.world.get("heading")))
+	_check(GameState.world["wind_dir"] == "SE",
+		"world.wind_dir restored exactly (SE, got '%s')"
+		% str(GameState.world.get("wind_dir")))
+	# The Phase-5 hunter keys carry over unchanged in shape (docs/90-* §8.1:
+	# cell re-based to the 4320×2160 grid — the breaking change v6 absorbs).
+	_check(GameState.world["last_departed_port"] == "lisbon",
+		"world.last_departed_port carried over (lisbon)")
+	_check(GameState.world["hunter_intel_cell"] == {"x": 2213, "y": 1002},
+		"the re-based hunter_intel_cell carried over (got %s)"
+		% str(GameState.world.get("hunter_intel_cell")))
+
+	# --- Re-save: the run is written as version 6 -------------------------
 	_check(SaveSystem.save(1), "the run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 5,
-		"the re-saved file is save_version 5 (got %s)"
+	_check(int(resaved.get("save_version", -1)) == 6,
+		"the re-saved file is save_version 6 (got %s)"
 		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 5,
-		"the re-saved file is phase 5 (got %s)" % str(resaved.get("phase")))
-	for key in V5_DEFAULTS:
+	_check(int(resaved.get("phase", -1)) == 6,
+		"the re-saved file is phase 6 (got %s)" % str(resaved.get("phase")))
+	for key in V6_DEFAULTS:
 		_check(resaved.has(key),
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
 	_check(resaved.has("market_stocks"),
 		"the re-saved file carries 'market_stocks' (docs/90-* §8.1)")
+	var resaved_world: Dictionary = resaved["world"]
+	for key in V6_WORLD_DEFAULTS:
+		_check(resaved_world.has(key),
+			"the re-saved world block carries '%s' (docs/90-* §8.1)" % key)
 	_check(not resaved.has("quests"),
 		"the re-saved file has no superseded 'quests' key")
-	_check((resaved["world"] as Dictionary).get("map_id") == "world",
+	_check(resaved_world.get("map_id") == "world",
 		"the re-saved world block carries the shipped map id")
-	_check(not (resaved["world"] as Dictionary).has("clock_fraction")
-		and not resaved.has("explored_tiles"),
-		"the re-save still omits clock_fraction / explored_tiles")
+	_check(not resaved_world.has("clock_fraction") and not resaved.has("explored_tiles")
+		and not resaved.has("debug_overlays"),
+		"the re-save still omits clock_fraction / explored_tiles / debug_overlays")
 
-	# …and the v5 file re-loads to the same state (second cycle).
+	# …and the v6 file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved v5 file loads")
+	_check(SaveSystem.load(1), "the re-saved v6 file loads")
 	_check(_loaded_values() == first_cycle, "a second save/load cycle changes nothing")
 
 
-# --- 2. The fixture really is the v5 §8.1 shape ----------------------------
+# --- 2. The fixture really is the v6 §8.1 shape ----------------------------
 
 func _test_fixture_shape() -> void:
-	var fixture := _v5_payload()
+	var fixture := _v6_payload()
 	_check(int(fixture["save_version"]) == SaveSystem.SAVE_VERSION,
 		"the fixture is save_version %d" % SaveSystem.SAVE_VERSION)
 	_check(int(fixture["phase"]) == SaveSystem.PHASE,
@@ -244,8 +309,8 @@ func _test_fixture_shape() -> void:
 	_check(SaveSystem.validate_payload(fixture).is_empty(),
 		"validate_payload() accepts the fixture (%s)"
 		% SaveSystem.validate_payload(fixture))
-	_check(SaveSystem.SAVE_VERSION == 5 and SaveSystem.PHASE == 5,
-		"this build ships save_version 5 / phase 5")
+	_check(SaveSystem.SAVE_VERSION == 6 and SaveSystem.PHASE == 6,
+		"this build ships save_version 6 / phase 6")
 	_check(SaveSystem.DEFAULT_MAP_ID == "world",
 		"the shipped map id is 'world' (docs/90-* §9.1)")
 
@@ -256,7 +321,7 @@ func _test_no_migration_chain() -> void:
 	_check(not ("MIGRATIONS" in SaveSystem),
 		"SaveSystem carries no MIGRATIONS table any more (dev-stage scope)")
 	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4",
-			"migrate_v4_to_v5"]:
+			"migrate_v4_to_v5", "migrate_v5_to_v6"]:
 		_check(not SaveSystem.has_method(name),
 			"the historical migration step %s() is gone" % name)
 
@@ -266,8 +331,8 @@ func _test_no_migration_chain() -> void:
 func _test_older_versions_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	for version in [1, 2, 3, 4]:
-		var older := _v5_payload()
+	for version in [1, 2, 3, 4, 5]:
+		var older := _v6_payload()
 		older["save_version"] = version
 		older["phase"] = version
 		_write_json(1, older)
@@ -283,12 +348,35 @@ func _test_older_versions_refused() -> void:
 			"list_saves() reports the v%d slot invalid" % version)
 
 
+# --- 4b. A true v5-shaped payload is refused -------------------------------
+
+## The §8.2 normative case: a payload exactly as Phase 5 wrote it — old
+## half-scale coordinates, no Phase-6 keys — refused with the standard
+## pre-release message and `GameState` untouched.
+func _test_v5_shape_refused() -> void:
+	_load_fixture_into_memory()
+	var before := _loaded_values()
+	_write_json(1, _v5_payload())
+	_check(SaveSystem.load(1) == false,
+		"a true v5-shaped payload fails to load (pre-release)")
+	_check(SaveSystem.last_read_error.contains("pre-release")
+		and SaveSystem.last_read_error.contains("5"),
+		"the reason is the standard pre-release message (got '%s')"
+		% SaveSystem.last_read_error)
+	_check(_loaded_values() == before,
+		"state untouched after refusing the v5 payload (no half-scale load)")
+	_check(SaveSystem.read_save(1).is_empty(),
+		"read_save() refuses the v5 payload too")
+	_check(GameState.world["position"] == {"x": 2050, "y": 615},
+		"the in-memory re-based position was not overwritten by the v5 file")
+
+
 # --- 5. A future version is refused ---------------------------------------
 
 func _test_future_version_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	var future := _v5_payload()
+	var future := _v6_payload()
 	future["save_version"] = SaveSystem.SAVE_VERSION + 1
 	future["phase"] = SaveSystem.PHASE + 1
 	_write_json(1, future)
@@ -299,8 +387,15 @@ func _test_future_version_refused() -> void:
 		"state untouched after the future-version rejection")
 
 
-# --- 6. A wrong-typed Phase-2/3 field is rejected --------------------------
+# --- 6. A wrong-typed or out-of-domain field is rejected ------------------
 
+## Type probes reuse the file's existing convention: a payload this build
+## wrote, with one field replaced by a wrong-typed value → refused, reason
+## names the key, state untouched. The Phase-6 additions extend both lists:
+## wrong TYPES anywhere in `control_prefs` / the world ocean keys, and
+## out-of-domain enum values, which are refused exactly like an unknown
+## `world.map_id` (docs/90-* §8.1 Phase-6 additions; task V's documented
+## choice — see `save_system.gd` `validate_payload`).
 func _test_corrupt_phase_fields_rejected() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
@@ -324,6 +419,8 @@ func _test_corrupt_phase_fields_rejected() -> void:
 			"market_stocks as an array"},
 		{"key": "wrecks", "value": {}, "why": "wrecks as an object"},
 		{"key": "npc_preset", "value": 3, "why": "npc_preset as a number"},
+		{"key": "control_prefs", "value": [], "why":
+			"control_prefs as an array"},
 		{"key": "market_events", "value": {}, "why":
 			"market_events as an object"},
 		{"key": "named_pirate_respawns", "value": [], "why":
@@ -336,6 +433,53 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		_check(SaveSystem.last_read_error.contains(str(probe["key"])),
 			"the reason names %s (got '%s')"
 			% [probe["key"], SaveSystem.last_read_error])
+		_check(_loaded_values() == before,
+			"state untouched after rejecting %s" % probe["why"])
+
+	# Nested Phase-6 probes: `["path", "to", "key"]` is overwritten by
+	# `value` in an otherwise-valid snapshot.
+	for probe in [
+		{"path": ["control_prefs", "input_mode"], "value": "joystick", "fragment":
+			"control_prefs.input_mode", "why":
+			"an unknown control_prefs.input_mode id"},
+		{"path": ["control_prefs", "input_mode"], "value": 3, "fragment":
+			"control_prefs.input_mode", "why":
+			"control_prefs.input_mode as a number"},
+		{"path": ["control_prefs", "current_mode"], "value": "tidal", "fragment":
+			"control_prefs.current_mode", "why":
+			"an unknown control_prefs.current_mode id"},
+		{"path": ["control_prefs", "current_mode"], "value": [], "fragment":
+			"control_prefs.current_mode", "why":
+			"control_prefs.current_mode as an array"},
+		{"path": ["world", "sail_trim"], "value": "half", "fragment":
+			"world.sail_trim", "why": "an unknown world.sail_trim state"},
+		{"path": ["world", "sail_trim"], "value": 2, "fragment":
+			"world.sail_trim", "why": "world.sail_trim as a number"},
+		{"path": ["world", "heading"], "value": "NNE", "fragment":
+			"world.heading", "why": "an off-domain world.heading id"},
+		{"path": ["world", "heading"], "value": true, "fragment":
+			"world.heading", "why": "world.heading as a boolean"},
+		{"path": ["world", "wind_dir"], "value": 90, "fragment":
+			"world.wind_dir", "why": "world.wind_dir as a number"},
+		{"path": ["world", "wind_dir"], "value": "west", "fragment":
+			"world.wind_dir", "why": "an off-domain world.wind_dir id"},
+		# The carried Phase-5 hunter keys keep their v5 type checks.
+		{"path": ["world", "last_departed_port"], "value": 5, "fragment":
+			"last_departed_port", "why": "world.last_departed_port as a number"},
+		{"path": ["world", "hunter_intel_cell"], "value": 5, "fragment":
+			"hunter_intel_cell", "why": "world.hunter_intel_cell as a number"},
+	]:
+		var bad: Dictionary = SaveSystem.snapshot()
+		var parent: Dictionary = bad
+		var path: Array = probe["path"]
+		for i in range(path.size() - 1):
+			parent = parent[path[i]]
+		parent[path[path.size() - 1]] = probe["value"]
+		_write_json(1, bad)
+		_check(SaveSystem.load(1) == false, "%s is rejected" % probe["why"])
+		_check(SaveSystem.last_read_error.contains(str(probe["fragment"])),
+			"the reason names %s (got '%s')"
+			% [probe["fragment"], SaveSystem.last_read_error])
 		_check(_loaded_values() == before,
 			"state untouched after rejecting %s" % probe["why"])
 
@@ -354,25 +498,39 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		"read_save() rejects the same wrong-typed payload")
 
 
-# --- 7. Every Phase-2/3 field is real saved state --------------------------
+# --- 7. Every optional field defaults when absent --------------------------
 
 ## docs/90-* §8.1 "Default when absent": the optional blocks may be omitted by
 ## a hand-edited payload and are then restored from the documented default.
-## (This replaces the old `test_save_v2` coverage of the same rule — the
-## defaults are now `_apply()`'s job, not a migration's.)
+## Phase 6: an absent `control_prefs` block (and absent `world` ocean keys)
+## restore the pinned Step + Modifier / normal + E + E defaults.
 func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
-	var payload := _v5_payload()
+	var payload := _v6_payload()
 	for key in ["npc_fleets", "proximity_cooldowns", "market_stocks",
-			"wrecks", "npc_preset", "market_events",
-			"named_pirate_respawns", "fame", "titles",
+			"wrecks", "npc_preset", "control_prefs",
+			"market_events", "named_pirate_respawns", "fame", "titles",
 			"bounties", "active_quests", "completed_royal_missions",
 			"discoveries_reported", "discovery_hints", "battles_won",
 			"retired", "retired_at", "discoveries_found"]:
 		payload.erase(key)
+	var world: Dictionary = payload["world"]
+	for key in V6_WORLD_DEFAULTS:
+		world.erase(key)
 	_write_json(1, payload)
 	_clobber_state()
-	_check(SaveSystem.load(1), "a payload omitting the optional keys loads")
+	_check(SaveSystem.load(1),
+		"a payload omitting the optional keys (incl. every Phase-6 key) loads")
+	_check(GameState.control_prefs == {"input_mode": "step", "current_mode": "modifier"}
+		and GameState.control_prefs is Dictionary,
+		"an absent control_prefs defaults to Step + Modifier (got %s)"
+		% str(GameState.control_prefs))
+	_check(GameState.world["sail_trim"] == "normal",
+		"an absent world.sail_trim defaults to 'normal'")
+	_check(GameState.world["heading"] == "E",
+		"an absent world.heading defaults to 'E'")
+	_check(GameState.world["wind_dir"] == "E",
+		"an absent world.wind_dir defaults to 'E'")
 	_check(GameState.npc_fleets == [] and GameState.npc_fleets is Array,
 		"an absent npc_fleets defaults to []")
 	_check(GameState.proximity_cooldowns == {}
@@ -413,6 +571,8 @@ func _test_optional_keys_default() -> void:
 	_check(GameState.day == 64 and GameState.gold == 12540,
 		"the required fields still restore around the defaults")
 
+
+# --- 7b. The Phase-6 blocks are real saved state --------------------------
 
 func _test_new_fields_round_trip() -> void:
 	_load_fixture_into_memory()
@@ -466,6 +626,14 @@ func _test_new_fields_round_trip() -> void:
 		"pirate_redbeard_khair": 94,
 		"successor_2": 70,
 	}
+	# Phase-6 (docs/90-* §8.1): control preferences and the world ocean keys
+	# at non-default values, plus the carried hunter keys.
+	GameState.control_prefs = {"input_mode": "helm", "current_mode": "drift"}
+	GameState.world["sail_trim"] = "furled"
+	GameState.world["heading"] = "SW"
+	GameState.world["wind_dir"] = "NE"
+	GameState.world["last_departed_port"] = "seville"
+	GameState.world["hunter_intel_cell"] = {"x": 1900, "y": 860}
 	# The §4.15 fleet shape (docs/10-* §4.15): the pirate's saved fields are
 	# exactly the pinned set plus the task-owned extensions.
 	GameState.npc_fleets = [{
@@ -489,7 +657,7 @@ func _test_new_fields_round_trip() -> void:
 	GameState.proximity_cooldowns = {"pirate": 12}
 	var expected := _loaded_values()
 
-	_check(SaveSystem.save(1), "a run with Phase-2/3 state saves")
+	_check(SaveSystem.save(1), "a run with Phase-2/3/5/6 state saves")
 	var on_disk := _read_json(1)
 	_check(int(on_disk.get("fame", -1)) == 480, "snapshot() writes fame")
 	_check((on_disk.get("titles") as Dictionary).get("portugal") == "baron",
@@ -519,11 +687,24 @@ func _test_new_fields_round_trip() -> void:
 	_check((on_disk.get("named_pirate_respawns") as Dictionary)
 		.get("pirate_redbeard_khair") == 94,
 		"snapshot() writes named_pirate_respawns")
+	_check(on_disk.get("control_prefs") == {"input_mode": "helm",
+		"current_mode": "drift"}, "snapshot() writes control_prefs")
+	var on_disk_world: Dictionary = on_disk["world"]
+	_check(str(on_disk_world.get("sail_trim")) == "furled",
+		"snapshot() writes world.sail_trim")
+	_check(str(on_disk_world.get("heading")) == "SW",
+		"snapshot() writes world.heading")
+	_check(str(on_disk_world.get("wind_dir")) == "NE",
+		"snapshot() writes world.wind_dir")
+	_check(str(on_disk_world.get("last_departed_port")) == "seville",
+		"snapshot() writes world.last_departed_port")
+	_check(on_disk_world.get("hunter_intel_cell") == {"x": 1900, "y": 860},
+		"snapshot() writes world.hunter_intel_cell")
 
 	_clobber_state()
-	_check(SaveSystem.load(1), "the v5 file with Phase-2/3/5 state loads")
+	_check(SaveSystem.load(1), "the v6 file with Phase-2/3/5/6 state loads")
 	_check(_loaded_values() == expected,
-		"every Phase-2/3/5 field restores byte-equal after a v5 round trip")
+		"every Phase-2/3/5/6 field restores byte-equal after a v6 round trip")
 	_check(typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
 		"stock counts come back as ints, not json floats")
 	_check(typeof(GameState.wrecks[0]["position"]["x"]) == TYPE_INT,
@@ -532,6 +713,8 @@ func _test_new_fields_round_trip() -> void:
 		"the bounty amount comes back as an int, not a json float")
 	_check(typeof((GameState.npc_fleets[0] as Dictionary)["cell"]["x"])
 		== TYPE_INT, "fleet coordinates come back as ints, not json floats")
+	_check(typeof(GameState.world["hunter_intel_cell"]["x"]) == TYPE_INT,
+		"the hunter intel cell comes back with int coordinates")
 
 	# The snapshot deep-copies: mutating live state cannot rewrite a save.
 	var snap := SaveSystem.snapshot()
@@ -545,6 +728,9 @@ func _test_new_fields_round_trip() -> void:
 	GameState.npc_preset = "mutated"
 	GameState.market_events[0]["template_id"] = "mutated"
 	GameState.named_pirate_respawns["pirate_redbeard_khair"] = 999
+	GameState.control_prefs["input_mode"] = "mutated"
+	GameState.world["sail_trim"] = "mutated"
+	GameState.world["hunter_intel_cell"]["x"] = 999
 	_check((snap["titles"] as Dictionary)["portugal"] == "baron",
 		"snapshot() deep-copies titles")
 	_check(((snap["active_quests"] as Array)[0] as Dictionary)["status"] == "active",
@@ -565,6 +751,48 @@ func _test_new_fields_round_trip() -> void:
 	_check(int((snap["named_pirate_respawns"] as Dictionary)
 		.get("pirate_redbeard_khair", -1)) == 94,
 		"snapshot() deep-copies named_pirate_respawns")
+	_check((snap["control_prefs"] as Dictionary)["input_mode"] == "helm",
+		"snapshot() deep-copies control_prefs")
+	_check((snap["world"] as Dictionary)["sail_trim"] == "furled",
+		"snapshot() deep-copies the world block")
+	_check(((snap["world"] as Dictionary)["hunter_intel_cell"]
+		as Dictionary)["x"] == 1900, "snapshot() deep-copies the intel cell")
+
+
+# --- 7c. The session-only debug flag never enters a payload ---------------
+
+## docs/80-* §4.6.3 / §4.6 symbol contract: `SettingsPanel.debug_overlays` is
+## a static, session-only flag — never saved, never read from a save. Asserted
+## on the serialized dict AND the file bytes; and a load must leave the flag
+## exactly as the session set it.
+func _test_debug_overlays_never_saved() -> void:
+	_load_fixture_into_memory()
+	SettingsPanelLib.debug_overlays = true
+	_check(SettingsPanelLib.debug_overlays,
+		"setup: the session-only debug flag is on")
+	var snap := SaveSystem.snapshot()
+	_check(not snap.has("debug_overlays"),
+		"snapshot() carries no top-level debug_overlays")
+	_check(not (snap["world"] as Dictionary).has("debug_overlays"),
+		"the world block carries no debug_overlays")
+	var text := JSON.stringify(snap, "\t")
+	_check(not text.contains("debug_overlays"),
+		"the serialized payload never names debug_overlays")
+	_check(SaveSystem.save(1), "the run with the flag on saves")
+	var on_disk := _read_json(1)
+	_check(not JSON.stringify(on_disk).contains("debug_overlays"),
+		"the on-disk file never names debug_overlays")
+	SettingsPanelLib.debug_overlays = false
+	_clobber_state()
+	_check(SaveSystem.load(1), "the payload loads back")
+	_check(SettingsPanelLib.debug_overlays == false,
+		"loading a save leaves the session-only flag alone (still off)")
+	SettingsPanelLib.debug_overlays = true
+	_clobber_state()
+	_check(SaveSystem.load(1), "the payload loads again")
+	_check(SettingsPanelLib.debug_overlays == true,
+		"loading never resets the session-only flag (still on)")
+	SettingsPanelLib.debug_overlays = false
 
 
 # --- 8. A retired save is never playable ----------------------------------
@@ -619,7 +847,106 @@ func _test_retired_save() -> void:
 		"a playable load restores state again")
 
 
+# --- 9. The S19 rows flip GameState live; new_game carries the choice -----
+
+## docs/80-* §4.6.3 (task V): the input-mode and current-mode rows write
+## `GameState.control_prefs` LIVE on both mounts; the debug row writes ONLY
+## the session-only static. A pre-game S1 choice is carried into the run by
+## `new_game` exactly like `npc_preset` (out-of-domain values fall back to
+## the pinned defaults). Labels are NOT asserted: the Phase-6 ui_strings keys
+## are orchestrator-merged and render as `<key>` placeholders until then.
+func _test_s19_rows_and_new_game_carry() -> void:
+	_ensure_dir()
+	GameState.control_prefs = {"input_mode": "step", "current_mode": "modifier"}
+	var prefs_signals: Array = []
+	var debug_signals: Array = []
+	var panel: Control = SettingsScene.instantiate()
+	add_child(panel)
+	await get_tree().process_frame
+	panel.control_prefs_changed.connect(
+		func(key: String, value: String) -> void:
+			prefs_signals.append([key, value]))
+	panel.debug_overlays_changed.connect(
+		func(on: bool) -> void: debug_signals.append(on))
+
+	# The setters write GameState live.
+	_check(panel.apply_input_mode("helm"), "the input-mode setter applies 'helm'")
+	_check(str(GameState.control_prefs.get("input_mode")) == "helm",
+		"the input-mode row flipped GameState.control_prefs.input_mode live")
+	_check(panel.apply_current_mode("drift"),
+		"the current-mode setter applies 'drift'")
+	_check(str(GameState.control_prefs.get("current_mode")) == "drift",
+		"the current-mode row flipped GameState.control_prefs.current_mode live")
+	_check(prefs_signals == [["input_mode", "helm"], ["current_mode", "drift"]],
+		"control_prefs_changed fired for both rows (got %s)" % str(prefs_signals))
+	# Selection styling follows the applied state (the density-row pattern).
+	var helm_button: Button = panel.input_mode_button("helm")
+	var step_button: Button = panel.input_mode_button("step")
+	_check(helm_button != null and step_button != null,
+		"the input-mode row renders both buttons")
+	_check(helm_button.button_pressed and not step_button.button_pressed,
+		"the applied input mode is the pressed button")
+	_check(panel.current_mode_button("drift").button_pressed
+		and not panel.current_mode_button("modifier").button_pressed,
+		"the applied current mode is the pressed button")
+
+	# The buttons drive the same writers (the density-row test pattern).
+	step_button.emit_signal("pressed")
+	_check(str(GameState.control_prefs.get("input_mode")) == "step",
+		"pressing the Step button flips input_mode back live")
+	panel.current_mode_button("modifier").emit_signal("pressed")
+	_check(str(GameState.control_prefs.get("current_mode")) == "modifier",
+		"pressing the Modifier button flips current_mode back live")
+
+	# Unknown ids are refused (the current mode stands).
+	_check(not panel.apply_input_mode("joystick"),
+		"an unknown input mode is refused")
+	_check(not panel.apply_current_mode("tidal"),
+		"an unknown current mode is refused")
+	_check(GameState.control_prefs == {"input_mode": "step", "current_mode": "modifier"},
+		"the refused ids left control_prefs untouched")
+
+	# The debug row writes ONLY the session-only static.
+	panel.apply_debug_overlays(true)
+	_check(SettingsPanelLib.debug_overlays,
+		"the debug row flips SettingsPanel.debug_overlays")
+	_check(not GameState.control_prefs.has("debug_overlays"),
+		"the debug flag never enters GameState.control_prefs")
+	_check(not JSON.stringify(SaveSystem.snapshot()).contains("debug_overlays"),
+		"the debug flag never enters a snapshot")
+	var debug_button: Button = panel.debug_overlays_button()
+	_check(debug_button != null and debug_button.button_pressed,
+		"the debug button reflects the on state")
+	debug_button.emit_signal("pressed")
+	_check(not SettingsPanelLib.debug_overlays,
+		"pressing the debug button flips the static back off (session-only)")
+	_check(debug_signals == [true, false],
+		"debug_overlays_changed fired for both flips (got %s)" % str(debug_signals))
+	panel.queue_free()
+	await get_tree().process_frame
+
+	# Pre-game carry (docs/80-* §4.6.3): the S1 mount writes the field BEFORE
+	# new_game; the fresh-run reset preserves it as run input.
+	GameState.control_prefs = {"input_mode": "helm", "current_mode": "drift"}
+	GameState.new_game("portugal", false)
+	_check(GameState.control_prefs == {"input_mode": "helm", "current_mode": "drift"},
+		"new_game carries the pre-game control_prefs (helm + drift, got %s)"
+		% str(GameState.control_prefs))
+	_check(GameState.world["sail_trim"] == "normal" and GameState.world["heading"] == "E"
+		and GameState.world["wind_dir"] == "E",
+		"new_game starts the world ocean keys at the pinned defaults")
+	# An out-of-domain pre-game value (never written by the panel) falls back.
+	GameState.control_prefs = {"input_mode": "bogus", "current_mode": "sideways"}
+	GameState.new_game("portugal", false)
+	_check(GameState.control_prefs == {"input_mode": "step", "current_mode": "modifier"},
+		"new_game repairs an out-of-domain carry to the defaults (got %s)"
+		% str(GameState.control_prefs))
+	GameState.control_prefs = {"input_mode": "step", "current_mode": "modifier"}
+
+
 # --- Helpers --------------------------------------------------------------
+# (unchanged from the Phase-5 suite apart from the v6 fields in the state
+# snapshot / clobber pair)
 
 func _nation_map_is(map: Dictionary, value) -> bool:
 	for nation_id in NATION_IDS:
@@ -629,7 +956,9 @@ func _nation_map_is(map: Dictionary, value) -> bool:
 
 
 ## Wipes every GameState field with values that cannot be confused with the
-## fixture, so a load that silently did nothing is visible.
+## fixture, so a load that silently did nothing is visible. The Phase-6 keys
+## are clobbered with out-of-domain sentinels too: a load that skipped them
+## would leave the sentinels in `_loaded_values()` and fail the comparison.
 func _clobber_state() -> void:
 	GameState.locale = "zh"
 	GameState.day = 1
@@ -641,7 +970,12 @@ func _clobber_state() -> void:
 		"officers": [], "reputation": {},
 	}
 	GameState.fleet = []
-	GameState.world = {"position": {"x": 0, "y": 0}, "clock_fraction": 0.0}
+	GameState.world = {
+		"position": {"x": 0, "y": 0}, "clock_fraction": 0.0,
+		"sail_trim": "clobber", "heading": "clobber", "wind_dir": "clobber",
+		"last_departed_port": "clobber", "hunter_intel_cell": "clobber",
+	}
+	GameState.control_prefs = {"input_mode": "clobber", "current_mode": "clobbered"}
 	GameState.known_ports = []
 	GameState.port_investments = {}
 	GameState.quests = []
@@ -676,6 +1010,7 @@ func _loaded_values() -> Dictionary:
 		"player": GameState.player.duplicate(true),
 		"fleet": GameState.fleet.duplicate(true),
 		"world": GameState.world.duplicate(true),
+		"control_prefs": GameState.control_prefs.duplicate(true),
 		"known_ports": GameState.known_ports.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
 		"npc_fleets": GameState.npc_fleets.duplicate(true),
@@ -700,14 +1035,14 @@ func _loaded_values() -> Dictionary:
 	}
 
 
-## Loads the fixture once so the "before" state of a rejection test is a real
-## loaded run rather than the clobbered sentinel.
+## Loads the v6 fixture once so the "before" state of a rejection test is a
+## real loaded run rather than the clobbered sentinel.
 func _load_fixture_into_memory() -> void:
 	_ensure_dir()
-	_write_json(1, _v5_payload())
+	_write_json(1, _v6_payload())
 	_clobber_state()
 	if not SaveSystem.load(1):
-		_check(false, "setup: the v5 fixture loads before the rejection test")
+		_check(false, "setup: the v6 fixture loads before the test")
 
 
 func _read_json(slot: int) -> Dictionary:

@@ -23,8 +23,9 @@ from pathlib import Path
 # --- pinned constants (docs/90-* §13) ---------------------------------------
 # Task J: the fleet-ecology and Phase-2/3 acceptance suites also write
 # user://saves/ (SaveSystem round trips), so they join the serial-save set.
+# Phase 6 (task V): test_save_v5 was renamed test_save_v6 with the v6 bump.
 SERIAL_SAVE_SET = (
-    "test_save", "test_save_v5", "test_world_e2e",
+    "test_save", "test_save_v6", "test_world_e2e",
     "test_npc_fleets", "test_phase2_acceptance", "test_phase3_acceptance",
     # Task L: test_aliveness round-trips save slot 3 through save/load.
     "test_aliveness",
