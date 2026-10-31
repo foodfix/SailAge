@@ -7,7 +7,9 @@ ledger, consumption (provisions/water/wages), morale with mutiny/desertion,
 weather and storms, sea-death fail states, port discovery and entry/exit,
 minimap and Chart behavior. Gates Phase 1 and Phase 4 (the real-Earth grid,
 latitude weather bands, click-to-sail); Phase 2 combat reuses the map and
-movement constants unchanged.
+movement constants unchanged. Phase 5 amends §4.3 (day-tick order: the
+economy step and the NPC fleet tick) and §4.11 (NPC fleet markers — the
+port/discovery radii are unchanged).
 
 ## 2. Artifacts
 
@@ -25,7 +27,8 @@ movement constants unchanged.
 
 `00-OVERVIEW.md`, `10-DATA-SCHEMA.md` (esp. §6 map constants), `90-*` (scene
 pattern, §9 loader), `40-*` (fleet/cargo schema), `50-*` (stat effects on
-speed), `80-*` §4.5/§4.6 (HUD crop and Chart).
+speed), `80-*` §4.5/§4.6 (HUD crop and Chart), `30-*` §4.2/§4.5 (the economy
+drift/events the day tick orders), `60-*` §4.11.11 (the NPC fleet tick).
 
 ## 4. Systems / Mechanics
 
@@ -83,10 +86,20 @@ speed), `80-*` §4.5/§4.6 (HUD crop and Chart).
 - `GameState.day` is an integer; a fractional accumulator
   `world.clock_fraction ∈ [0,1)` holds sub-day progress (not saved — saving
   happens only in port, where the fraction is always reset to 0).
-- When `clock_fraction ≥ 1.0`: subtract 1.0, `day += 1`, run the **daily
-  ledger** (§4.5), emit `EventBus.day_advanced`.
+- **Day-tick order (locked, Phase 5).** When `clock_fraction ≥ 1.0`:
+  subtract 1.0, `day += 1`, then run strictly in order:
+  1. the **daily ledger** (§4.5);
+  2. the **economy step**: stock drift toward resting stock by consumption
+     tier + demand-event start/expiry (`30-*` §4.2/§4.5 — the drift rates
+     and event rules live there, not here); this step also runs on **port
+     day-advances** (`30-*` §4.2);
+  3. emit `EventBus.day_advanced`;
+  4. the **NPC fleet tick** (`60-*` §4.11.11): lane stepping, dwell,
+     auto-resolve and the daily trickle — the world scene ticks it once per
+     day on `day_advanced` (the Phase-4 `last_tick_day` dedupe is kept).
 - In port, the clock does not advance except by explicit actions that cost a
-  day (odd jobs, rest). Port actions advancing the day run the same ledger.
+  day (odd jobs, rest). Port actions advancing the day run the same ledger
+  and the same economy step (order step 2 above).
 
 ### 4.4 Speed formula
 
@@ -315,6 +328,14 @@ then return to title; no save is written or deleted.
   **18** tiles (Chebyshev, wrap-aware) — is when the `E` Explore action can
   find a `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
   constant (`sighting_radius` 24 vs `discovery_radius` 18, §5).
+- **NPC fleet sighting (Phase 5):** national NPC fleets are world-map
+  overlays rendered like ports (`60-*` §4.11.11) — nation-coloured squares,
+  the wreck icon and wake trails (`80-*` §4.5.2). The two radii above are
+  **unchanged** by the fleet layer: port sighting stays **24**, discovery
+  stays **18**, and fleets need no sighting roll of their own (they are
+  simply rendered when on screen). Lane behavior — which routes each role
+  sails, chokepoint camping with the 5/8 hysteresis, and the pursuit
+  exception — is specified in `60-*` §4.11.11, not here.
 
 #### 4.11.1 Harbor pair: shore (land) tile + berth (sea) tile (locked)
 
@@ -515,3 +536,6 @@ are GDScript constants, not a data file — game content stays in `data/`.)
 - [ ] The single world map plays with wrap-aware movement and the chunked
       loader (`90-*` §9): x wraps at the dateline, y is ice-bounded, and the
       loader renders only live chunks.
+- [ ] Day-tick order (§4.3, Phase 5) holds and is unit-testable: ledger →
+      economy step → `day_advanced` → NPC fleet tick, with the economy step
+      also running on port day-advances.

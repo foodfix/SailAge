@@ -6,7 +6,10 @@ Specifies the screen inventory and navigation graph, input scheme,
 dialog/text conventions, the sailing HUD layout, the Chart screen (S17),
 save/load UX, the `ui_strings.json` key inventory, and the placeholder-art
 palette + sizing grid. Gates Phase 1 for the listed screens; Phase-2/3 screens
-are named and marked; Phase 4 adds S17 (Chart).
+are named and marked; Phase 4 adds S17 (Chart). Phase 5 adds the S2 density
+row, **S19 (settings modal)**, the market stock/trend/marginal-price columns,
+world-map fleet markers with wakes and the wreck icon, and the captain
+sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9).
 
 ## 2. Artifacts
 
@@ -49,6 +52,7 @@ are named and marked; Phase 4 adds S17 (Chart).
 | S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
 | S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
 | S18 | Officers | `scenes/port/officers_panel.tscn` (officer roster + details, §4.6.2) | 5 |
+| S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over S4: the sea-traffic density dial, §4.6.3) | 5 |
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.7).
 The provisioning prompt (§4.6.1) is a **modal over S4**, not a screen of its
@@ -68,6 +72,7 @@ S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S4 ──Officers──► S18 (modal; read-only at sea)
+S4 ──Settings──► S19 (modal; sea-traffic density dial, §4.6.3) ──Esc──► S4
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
 S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
@@ -101,12 +106,13 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S10 | `Tab` | cycle own ships; arrows move the targeting cursor |
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / back) |
-| S3 | right-click a hostile marker | attack it (navy = piracy, `70-*` §4.5) |
+| S3 | right-click an NPC fleet marker | attack it — **any** fleet (a non-pirate owner = piracy, `70-*` §4.5; contact rules `60-*` §4.11.11.2) |
 | S3 | `E` | Explore: find every discovery within Chebyshev 18, wrap-aware (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
 | S17 | `Tab` / `Esc` | toggle back to S3 (the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
 | S4 | `O` | open/close the officers panel (S18, §4.6.2) |
+| S19 | `Esc` | close settings, back to S4 (same edge as Close) |
 | provisioning | `Enter` | sail (disabled with a stated reason when gated, `20-*` §4.11.2) |
 | provisioning | `Esc` | back to S4 without sailing |
 
@@ -118,10 +124,12 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
 - Key namespaces by screen: `title.*`, `nation.*`, `world.*`, `port.*`,
   `market.*`, `shipyard.*`, `tavern.*`, `inn.*`, `char.*`, `ui.*` (shared:
   `ui.back`, `ui.confirm`, `ui.cancel`, `ui.gold_abbr`…), `gameover.*`,
-  `battle.*` (S10), `duel.*` (S11), `encounter.*` (hostile-fleet markers),
+  `battle.*` (S10), `duel.*` (S11), `encounter.*` (fleet contacts),
   `guild.*` (S12), `palace.*` (S13), `quest.*`, `rank.*` (nobility names),
   `bounty.*`, `tournament.*`, `discovery.*`, `ending.*` (S16),
-  `chart.*` (S17), and the Phase-4 `world.*` sailing keys below.
+  `chart.*` (S17), the Phase-4 `world.*` sailing keys below, and the
+  Phase-5 families `settings.*` (S19), `market.stock.*` (market columns)
+  and `captain.*` (fleet captain sightings — §4.7.9).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -165,6 +173,9 @@ Layout (1280×720; tile viewport is the space below the top bar):
   the fleet at 2 px/tile, drawn from the explored bitset (`20-*` §4.12).
 - The full world is the separate **Chart screen (S17, §4.6)**, opened with
   `Tab`.
+- NPC fleet markers, wake trails and the wreck icon render per §4.5.2
+  (Phase 5); they are data from `NpcFleets.markers()`, never a second
+  simulation.
 - S4 (port) HUD: same top/bottom bars, viewport replaced by the port menu;
   the bar contents are identical so stats are always visible.
 
@@ -217,6 +228,27 @@ the supplies jettison of `20-*` §4.10 refer to.
 - At sea the panel is **read-only**: every action is disabled and states its
   reason, because promotion and jettison are port actions.
 - Rows are 32px table rows (§4.8); no textures.
+
+#### 4.5.2 World-map fleet markers, wakes & wrecks (Phase 5)
+
+NPC fleets render on S3 as placeholder shapes only (§4.8 palette, no
+textures). All data comes from `NpcFleets.markers()` (`60-*` §4.12.3);
+rendering is viewport-culled and never re-simulates.
+
+- **Role markers (locked set):** every national fleet (`trader`, `coaster`,
+  `courier`, `patrol`, `privateer`, `treasure`) draws as a
+  **nation-coloured square** (`Nation.color`, `10-*` §7.4) with a letter
+  for the role; `pirate` is a `BAD` red square (as today); a `hunter` uses
+  its nation's colour with the navy letter.
+- **Convoys:** same-lane traders within Chebyshev 3 render as **one group
+  with a shared escort square** (`60-*` §4.11.11.4) — the group shares one
+  marker; the member count is a small numeral beside it.
+- **Wreck icon:** a `wreck` draws as an `ACCENT` × glyph (2×2 tiles) at its
+  site; entering the tile collects it (cargo up to free capacity or salvage
+  gold, `60-*` §4.11.11.2). No battle opens on a wreck tile.
+- **Wakes (locked):** each moving marker drags a **5-tile dashed trail** of
+  1 px `PANEL_LINE` lines behind it that fades tile-by-tile; wrecks and
+  docked markers draw none.
 
 ### 4.6.1 Provisioning dialog (S4 → S3, Phase 5 polish)
 
@@ -303,6 +335,43 @@ as a seventh facility and was removed.
 - Read-only at sea (dismissal is a port action), same rule as S15.
 - No textures; 32px rows (§4.8).
 
+#### 4.6.3 Settings: S2 density row + S19 settings modal (Phase 5)
+
+**S2 density row (new game).** The nationality-select screen gains one
+sea-traffic (航海密度) row above the confirm button: five presets —
+`deserted`, `low`, `normal` (default), `high`, `extreme` — chosen on
+**new-game confirm** and written into `GameState.npc_preset` before
+`new_game` runs its seeded initial fill (`60-*` §4.1.2).
+
+**S19 `scenes/ui_shared/settings_panel.tscn`** — a **modal over S4**,
+opened from the S4 hub: a `Settings` button in the footer modal row beside
+`Save · Set Sail · Fleet · Officers` (§4.6.2's entry-point rule).
+
+```
++--------------------------------------------------------------+
+| 设置 / Settings                                    [Close]    |
++--------------------------------------------------------------+
+| 航海密度 Sea traffic                                           |
+|   [荒芜 deserted] [稀少 low] [正常 normal]                     |
+|   [繁忙 high] [极端 extreme]                                   |
+|   当前 Current: normal                                        |
+|   调高后船队将在数日内逐渐补充;调低不会移除现有船队。           |
++--------------------------------------------------------------+
+| 语言 Language: 中文 / EN — 顶部栏按钮切换                      |
++--------------------------------------------------------------+
+```
+
+- **Density control applies mid-run (locked):** `GameState.npc_preset`
+  (string, default `"normal"`) is chosen on S2, changeable mid-run in
+  **S19**; **raising** refills via trickle, **lowering never culls** living
+  fleets; `deserted` = zero NPC spawns/contacts.
+- **Locale pointer stays where it is:** the toggle lives on S1/S2 (`L`) and
+  the top-bar button (§4.3); S19 only shows the current locale and says so —
+  no second toggle is added here.
+- Esc / `Close` returns to S4 (§4.2 edge); the panel consumes all input
+  while open (modal rule, §4.7).
+- Strings: `settings.*` (§4.7.9), zh/en. No textures; 32px rows.
+
 ### 4.6 Chart screen (S17, Phase 4)
 
 Full-screen panel over S3 (`scenes/world/chart_screen.tscn`); it **never
@@ -337,6 +406,11 @@ mutates state** — a pure view of the session.
 - **Strings:** every label from `chart.*` (§4.7.5).
 - **Not saved:** explored state and the chart itself are session-only (Phase-1
   known limitation, unchanged).
+- **Lane heat dots (optional Phase-5 flag):** behind a `chart.lane_heat`
+  flag (default **off**) the chart may draw small `ACCENT` dots along the
+  `trade_routes_built.json` lanes, denser where fleet traffic is higher —
+  purely cosmetic. Implemented only if the wave has slack (tasks L/M);
+  otherwise the flag stays off and the chart ships without the layer.
 
 ### 4.7 Save / load UX
 
@@ -614,6 +688,105 @@ Placeholders must match between zh and en.
 | `officers.empty_hint` | 在酒馆招募新官员 | Recruit officers at a tavern |
 | `officers.readonly_sea` | 海上无法解雇官员 | Officers cannot be dismissed at sea |
 
+#### 4.7.7 Market stock + trend + marginal price (S5, Phase 5)
+
+The market table (wireframe `30-*` §4.7) gains three columns; rows stay
+32px, palette-only, no textures:
+
+```
++------------------------------------------------------------------------+
+| 商品 Good | 存货 Stock | 走势 Trend | 边际价 Marginal | 持有 | 买/卖     |
+|------------------------------------------------------------------------|
+| 葡萄酒    | 87         | ▲ 回升     | 1,020‰ → 96g    | 30   | [买] [卖] |
++------------------------------------------------------------------------+
+```
+
+- **Stock** — the port-good's current stock, `0 … 200`, hard-clamped
+  (`30-*` §4.2).
+- **Trend** — a one-glyph drift arrow (▲ refilling in `GOOD`, ▼ draining in
+  `BAD`) derived from recent stock deltas; no forecast is shown.
+- **Marginal price** — the **marginal (next-tranche) price** (`30-*` §4.4):
+  buying and selling reprice per 10-unit tranche, and the column always
+  shows the price the *next* tranche would trade at, never the average; the
+  ledger sums tranches exactly.
+- Strings: `market.stock.*` (§4.7.9).
+
+#### 4.7.8 Captain sighting surfaces (Phase 5)
+
+Every docked NPC fleet has a named captain (`60-*` §4.11.11.4) that may be
+sighted in port facilities. The rolls are **seeded and visit-stable** — no
+flicker on re-open, re-rolled on the next visit-day (`IMPLEMENT-Phase5.md`
+decision 9).
+
+- **Facility roll (locked):** seeded `(fleet_id, port_id, arrival_day)` —
+  **60%** the primary facility (`trader`→market, `coaster`/`patrol`/
+  `courier`/`privateer`→tavern, `hunter`→palace bounty board; any docked
+  fleet is **inn-eligible**), else **40%** a uniform alternate from the
+  `{market, tavern, inn}` plausible sets; a hunter is **palace-only**.
+- **Presence roll (same seed family, locked):** **75%** sightable that day,
+  else "gone ashore" — absent from every facility that day.
+- **Surfaces:**
+  - *Market (S5):* "merchant captains in port" rows under the trade table —
+    captain name, nation, role (`captain.role.*`).
+  - *Tavern (S7):* a captains section listing sighted captains, plus
+    **wanted posters**: a `pirate`/`privateer` captain within Chebyshev 40
+    of the visited port shows a poster row (name, tier, last-known
+    position, reward hint). One action per poster — **"buy a round — 20g"**
+    (`captain.reveal.buy`) → a rumor text line with the **exact live
+    position** (tile + nearest port). Text only; **at-sea posters only**
+    (a docked captain needs no reveal); no chart ping/marker (Phase-6
+    candidate).
+  - *Inn (S8):* "captains resting" list rows under the odd-job rows.
+  - *Palace (S13):* the bounty board lists docked **hunter** captains.
+- **Tavern rumor rows (locked):** a rumor row source = live fleets within
+  Chebyshev 40 ("an ottoman convoy left Istanbul for Alexandria") +
+  departures/arrivals at this port within 3 days + demand-event telegraphs
+  (all ui_strings zh/en; event telegraphs per `30-*` §4.5).
+- **All sighting strings** are `captain.*` keys (§4.7.9), zh/en.
+
+#### 4.7.9 Phase-5 fleet `ui_strings.json` inventory (`captain.*` / `settings.*` / `market.stock.*`)
+
+Required keys for §4.6.3, §4.7.7 and §4.7.8 — the master applies them in one
+commit per wave; tasks report needs instead of inventing keys. Placeholders
+must match between zh and en (the validator enforces it).
+
+| Key | zh | en |
+|---|---|---|
+| `settings.title` | 设置 | Settings |
+| `settings.close` | 关闭 | Close |
+| `settings.density` | 航海密度 | Sea traffic |
+| `settings.density.current` | 当前:{preset} | Current: {preset} |
+| `settings.density.hint` | 调高后船队将在数日内逐渐补充;调低不会移除现有船队。 | Raising refills fleets over the next days; lowering never removes existing fleets. |
+| `settings.density.deserted` | 荒芜 | Deserted |
+| `settings.density.low` | 稀少 | Low |
+| `settings.density.normal` | 正常 | Normal |
+| `settings.density.high` | 繁忙 | High |
+| `settings.density.extreme` | 极端 | Extreme |
+| `settings.locale` | 语言(顶部栏按钮切换) | Language (toggle in the top bar) |
+| `captain.section.market` | 港内商船船长 | Merchant captains in port |
+| `captain.section.tavern` | 港内船长 | Captains in port |
+| `captain.section.inn` | 歇脚的船长 | Captains resting |
+| `captain.section.palace` | 悬赏猎人 | Bounty hunters |
+| `captain.gone_ashore` | {name} 已上岸。 | {name} has gone ashore. |
+| `captain.role.trader` | 商船队长 | Trading captain |
+| `captain.role.coaster` | 沿岸货船船长 | Coaster captain |
+| `captain.role.courier` | 信使船长 | Courier captain |
+| `captain.role.patrol` | 护航舰队船长 | Escort patrol captain |
+| `captain.role.privateer` | 私掠船长 | Privateer captain |
+| `captain.role.pirate` | 海盗船长 | Pirate captain |
+| `captain.role.hunter` | 追缉船长 | Bounty hunter |
+| `captain.role.treasure` | 宝船船长 | Treasure fleet captain |
+| `captain.poster.title` | 通缉令:{name}(等级 {tier}) | Wanted: {name} (tier {tier}) |
+| `captain.poster.hint` | 最后出没于{port}附近海域 | Last seen near {port} |
+| `captain.reveal.buy` | 请一圈酒 — 20 金 | Buy a round — 20g |
+| `captain.reveal.text` | 据说{name}此刻就在({x}, {y})一带,靠近{port}。 | {name} is said to be at ({x}, {y}), near {port}, right now. |
+| `captain.reveal.no_gold` | 金币不足 | Not enough gold |
+| `market.stock.header` | 存货 | Stock |
+| `market.stock.trend` | 走势 | Trend |
+| `market.stock.marginal` | 边际价 | Marginal price |
+| `market.stock.trend_up` | ▲ 回升 | ▲ refilling |
+| `market.stock.trend_down` | ▼ 消耗 | ▼ draining |
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -729,3 +902,14 @@ Placeholders must match between zh and en.
 - [ ] Palette values used are exactly §4.8 constants (scene files reference
       a shared `palette.gd` constants script).
 - [ ] Save slot dialog shows corrupted saves as invalid, never crashes.
+- [ ] Phase 5: the S2 density row feeds `GameState.npc_preset` on
+      new-game confirm; S19 opens from the S4 hub per §4.2, applies the
+      preset mid-run (raise refills via trickle, lower never culls,
+      `deserted` = zero NPC spawns/contacts), and every string is zh/en.
+- [ ] Phase 5: the market shows stock, trend and the marginal
+      (next-tranche) price; world-map markers render nation-coloured
+      squares, convoy groups, the wreck icon and 5-tile dashed wakes.
+- [ ] Phase 5: captain sightings follow the seeded facility/presence rolls
+      (stable within a visit-day, hunter palace-only), wanted posters
+      appear within Chebyshev 40, and "buy a round — 20g" returns the
+      exact live position as text.
