@@ -630,9 +630,12 @@ routing over the graph is `20-*`/`60-*` material.
 
 ### 4.15 Save-block shapes (Phase 5)
 
-The five living-economy save blocks — keys of the v5 payload (`90-*` §8.1).
+The living-economy save blocks — keys of the v5 payload (`90-*` §8.1).
 Not data files: runtime state whose shapes this doc pins. Shapes only;
-behavior lives in `30-*`/`60-*`:
+behavior lives in `30-*`/`60-*`. (`named_pirate_respawns` is the sixth
+Phase-5 key: a plain `{named_pirate_id: available_day}` map, pinned whole
+in `90-*` §8.1 with its `60-*` §4.11.11.4 semantics — no nested shape to
+add here.)
 
 | GameState field | Type | Shape |
 |---|---|---|

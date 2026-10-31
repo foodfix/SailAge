@@ -80,6 +80,7 @@ const STATE_KEYS: Array[String] = [
 	"current_port", "known_ports", "port_investments", "quests",
 	"discoveries_found", "npc_fleets", "proximity_cooldowns",
 	"market_stocks", "wrecks", "npc_preset", "market_events",
+	"named_pirate_respawns",
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
@@ -112,6 +113,7 @@ const OPTIONAL_DEFAULTS := {
 	"wrecks": [],
 	"npc_preset": "normal",
 	"market_events": [],
+	"named_pirate_respawns": {},
 	"fame": 0,
 	"titles": {},
 	"bounties": {},
@@ -239,6 +241,7 @@ func snapshot() -> Dictionary:
 		"wrecks": GameState.wrecks.duplicate(true),
 		"npc_preset": GameState.npc_preset,
 		"market_events": GameState.market_events.duplicate(true),
+		"named_pirate_respawns": GameState.named_pirate_respawns.duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),
@@ -475,6 +478,10 @@ func validate_payload(data: Dictionary) -> String:
 		return "'npc_preset' is not a string"
 	if not _is_array_or_missing(data, "market_events"):
 		return "'market_events' is not an array"
+	# Phase-5 (task L, docs/60-* §4.11.11.4): optional (absent → {})
+	# but type-checked whenever present, the same rule as its siblings.
+	if not _is_dict_or_missing(data, "named_pirate_respawns"):
+		return "'named_pirate_respawns' is not an object"
 	# Phase-3 keys (§8.1): optional (absent → documented default) but
 	# type-checked whenever present, the same rule as the Phase-2 pair above.
 	if not _is_int_or_missing(data, "fame"):
@@ -660,6 +667,16 @@ func _apply(data: Dictionary) -> void:
 	GameState.market_events = \
 		(data.get("market_events", OPTIONAL_DEFAULTS["market_events"]) as Array) \
 			.duplicate(true)
+	GameState.named_pirate_respawns = \
+		(data.get("named_pirate_respawns",
+			OPTIONAL_DEFAULTS["named_pirate_respawns"]) as Dictionary) \
+			.duplicate(true)
+	# Task L (docs/30-* §4.5, docs/60-* §4.11.11.4): the rest-override table
+	# and the port-traffic log are transient — the former is rebuilt here from
+	# the saved instances (before any port screen can price against it), the
+	# latter starts empty on every load.
+	GameState.npc_port_log = []
+	EconomyLib.ensure_event_overrides()
 	# Phase-3 saved state (docs/90-* §8.1), same optional-with-documented-default
 	# rule as the Phase-2 pair above.
 	GameState.fame = maxi(0, int(data.get("fame", OPTIONAL_DEFAULTS["fame"])))

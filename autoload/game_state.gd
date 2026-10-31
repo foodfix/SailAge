@@ -60,9 +60,20 @@ var wrecks: Array = []
 ## Sea-traffic density preset id (docs/10-* §4.10): chosen on S2, changeable
 ## mid-run in S19 (task M). `npc_fleets.gd` (task J) budgets against it.
 var npc_preset: String = "normal"
-## Active demand-event instances (docs/30-* §4.5); the rotation is task L.
-## The rest-override table they drive lives transiently in `economy.gd`.
+## Active demand-event instances (docs/30-* §4.5), rotated by
+## `Economy.market_events_tick` inside the economy day tick; the instance
+## shape is pinned to `{template_id, port_id, start_day}` (docs/10-* §4.15).
+## The rest-override table they drive lives transiently in `economy.gd` and
+## is re-applied on load.
 var market_events: Array = []
+## `{named_pirate_id: available_day}` — defeated famous pirates' +30-day
+## respawn cooldowns (docs/60-* §4.11.11.4 task L pin); a live famous pirate
+## is derived from the fleets themselves. Saved as of save_version 5.
+var named_pirate_respawns: Dictionary = {}
+## Transient arrival/departure log the ecology appends for tavern rumor rows
+## (docs/60-* §4.11.11.4 task L pin): `{port_id, kind, role, nation_id,
+## fleet_id, day}`, newest last, capped at 128. Never saved.
+var npc_port_log: Array = []
 
 # --- Phase 3 saved state (docs/90-* §8.1, save_version 3) -------------------
 
@@ -226,14 +237,16 @@ func new_game(nation_id: String, route: bool = true,
 	retired_at = 0
 	# docs/90-* §8.1 Phase-5 fields: stocks at derived rest (docs/30-* §4.2,
 	# no RNG), the ecology blocks empty until tasks J/K fill them, the density
-	# dial at its documented default. The transient rest-override table is a
-	# fresh-run reset too (active events are re-applied by their owner, task L).
+	# dial at its run input (S2, task M). The fresh-run resets also clear the
+	# named-pirate respawn cooldowns and the transient event table + port log.
 	market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list
 	)
 	wrecks = []
 	npc_preset = chosen_preset
 	market_events = []
+	named_pirate_respawns = {}
+	npc_port_log = []
 	EconomyLib.reset_overrides()
 	# docs/60-* §4.1.2: the seeded initial fill to half the core cap runs
 	# here and only here, after the stock block exists (the fill never moves

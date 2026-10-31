@@ -620,13 +620,14 @@ static func advance_clock(days: float) -> int:
 		GameState.day += 1
 		ticks += 1
 		_run_daily_ledger()
-		# §4.3 order: the economy step (stock drift + override expiry,
-		# docs/30-* §4.2/§4.5) runs after the ledger and *before*
-		# `day_advanced`, so every listener observes post-drift stocks.
-		# The pure module returns the moved ports; the `market_changed`
-		# emission stays with the caller (docs/90-* §5.1). Sea days and
-		# port day-advances share this tick path (`advance_port_day` →
-		# `advance_clock`), so both run the step.
+		# §4.3 order: the economy step (demand-event rotation + stock drift +
+		# override expiry, docs/30-* §4.2/§4.5) runs after the ledger and
+		# *before* `day_advanced`, so every listener observes post-drift
+		# stocks. The rotation lives inside `Economy.day_tick` (one economy
+		# step, one call site); the pure module returns the moved ports, and
+		# the `market_changed` emission stays with the caller (docs/90-*
+		# §5.1). Sea days and port day-advances share this tick path
+		# (`advance_port_day` → `advance_clock`), so both run the step.
 		for changed_port in EconomyLib.day_tick():
 			EventBus.market_changed.emit(str(changed_port))
 		EventBus.day_advanced.emit(GameState.day)

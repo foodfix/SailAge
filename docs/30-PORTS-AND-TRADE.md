@@ -281,6 +281,24 @@ schema and validator rules in `10-*`):
   world-wide**. The schedule is seeded per template × cadence window
   (formula family), so runs replay exactly; active instances are saved in
   `GameState.market_events` (`90-*`).
+- **Task-L rotation pins (the details §4.5 left to the task):** the
+  rotation is `Economy.market_events_tick(day)`, run **inside the economy
+  day step** (`Economy.day_tick`, after the ledger and before
+  `day_advanced` — `20-*` §4.3; port day-advances share the path), once
+  per day: expiries first (`day ≥ start + duration` — the duration comes
+  from the template, so the instance stays the pinned
+  `{template_id, port_id, start_day}` of `10-*` §4.15), then each
+  template whose seeded fire day is today. Cadence window
+  `w = ⌊(day − 1) / cadence_days⌋`; the fire day and the affected port
+  (uniform over `ports.json`) draw from the §4.11.1 formula family salted
+  by `(window, template index, template id)` — a budget-blocked start is
+  **skipped, never deferred**. Activation appends the instance and writes
+  each shifted good's rest override
+  (`rest += shift`, clamped `[10, 190]`, until `start + duration`); a
+  load re-applies every active instance's overrides
+  (`Economy.ensure_event_overrides`, called from the save `_apply`) before
+  any port screen can price against them. Demand events are market
+  weather, independent of the fleet density dial.
 - **Telegraph.** On start, a tavern rumor row appears in the affected
   region's ports (`ui_strings.json`, zh/en) — information is profit.
 - **Self-limiting by emergence.** NPC traders' §4.4 sell rule swarms the

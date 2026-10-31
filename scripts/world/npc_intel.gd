@@ -214,10 +214,11 @@ static func reveal_position(fleet_id: String) -> Dictionary:
 # --- Rumor row sources (docs/80-* §4.7.8, docs/30-* §4.5) --------------------
 
 ## Tavern rumor rows at `port_id`, in display order: demand-event telegraphs
-## first (information is profit), then live fleets within
-## [constant RUMOR_RADIUS] and departures on this port's spoke, then
-## arrivals docked here. Rows: `{kind: "event"|"fleet"|"departed"|"arrived",
-## …}` — the screen formats each kind with its ui_strings key.
+## first (information is profit), then the port-traffic log's arrivals and
+## departures within 3 days (`GameState.npc_port_log`, §4.11.11.4 task L
+## pin), then live fleets within [constant RUMOR_RADIUS]. Rows:
+## `{kind: "event"|"departed"|"arrived"|"fleet", …}` — the screen formats
+## each kind with its ui_strings key.
 static func rumor_rows(port_id: String) -> Array:
 	var out: Array = []
 	for entry in EconomyLib.event_telegraphs(port_id):
@@ -231,35 +232,48 @@ static func rumor_rows(port_id: String) -> Array:
 				.get("name", {})),
 		})
 	var cell := DataLoader.port_cell(port_id)
+	# Departures/arrivals at this port within 3 days (§4.7.8): the ecology's
+	# transient traffic log, newest last.
+	var traffic: Array = []
+	for record in GameState.npc_port_log:
+		if not (record is Dictionary):
+			continue
+		if str((record as Dictionary).get("port_id", "")) != port_id:
+			continue
+		if int((record as Dictionary).get("day", 0)) < GameState.day - 3:
+			continue
+		traffic.append(record)
+	for record in traffic:
+		var kind := str((record as Dictionary).get("kind", ""))
+		if kind == "arrival":
+			out.append({"kind": "arrived",
+				"id": str((record as Dictionary).get("fleet_id", "")),
+				"role": str((record as Dictionary).get("role", "")),
+				"nation_id": str((record as Dictionary).get("nation_id", "")),
+				"day": int((record as Dictionary).get("day", 0))})
+		elif kind == "departure":
+			var fleet := _fleet_by_id(
+				str((record as Dictionary).get("fleet_id", "")))
+			var dest := str(fleet.get("dest_port_id", ""))
+			out.append({"kind": "departed",
+				"id": str((record as Dictionary).get("fleet_id", "")),
+				"role": str((record as Dictionary).get("role", "")),
+				"nation_id": str((record as Dictionary).get("nation_id", "")),
+				"dest_port": dest,
+				"dest_port_name": _port_name(dest),
+				"day": int((record as Dictionary).get("day", 0))})
 	if cell.x < 0:
 		return out
 	var sim := NpcFleetsLib.new()
 	var spoken_for: Dictionary = {}
+	for entry in traffic:
+		spoken_for[str((entry as Dictionary).get("fleet_id", ""))] = true
 	for fleet in sim._within(cell, RUMOR_RADIUS):
 		var id := str(fleet.get("id", ""))
 		if spoken_for.has(id):
-			continue
+			continue  # already reported through the traffic log
 		spoken_for[id] = true
 		var fleet_cell := NpcFleetsLib.position_of(fleet)
-		var docked := int(fleet.get("dwell_until_day", 0)) > GameState.day
-		if docked:
-			out.append({"kind": "arrived", "id": id,
-				"role": str(fleet.get("role", "")),
-				"nation_id": str(fleet.get("nation_id", ""))})
-			continue
-		var route: Dictionary = fleet.get("route", {})
-		var legs: Array = route.get("legs", [])
-		# A departure: sailing this port's own spoke — it literally just left.
-		if not legs.is_empty() \
-				and str((legs[0] as Dictionary).get("kind", "")) == "spoke" \
-				and str((legs[0] as Dictionary).get("id", "")) == port_id:
-			out.append({"kind": "departed", "id": id,
-				"role": str(fleet.get("role", "")),
-				"nation_id": str(fleet.get("nation_id", "")),
-				"dest_port": str(fleet.get("dest_port_id", "")),
-				"dest_port_name": _port_name(
-					str(fleet.get("dest_port_id", "")))})
-			continue
 		var near := nearest_port(fleet_cell)
 		out.append({"kind": "fleet", "id": id,
 			"role": str(fleet.get("role", "")),
@@ -267,6 +281,16 @@ static func rumor_rows(port_id: String) -> Array:
 			"nearest_port": near,
 			"nearest_port_name": _port_name(near)})
 	return out
+
+
+## A live fleet dict by id (`{}` when gone — a departed fleet may have died
+## since its log entry).
+static func _fleet_by_id(fleet_id: String) -> Dictionary:
+	for fleet in GameState.npc_fleets:
+		if fleet is Dictionary \
+				and str((fleet as Dictionary).get("id", "")) == fleet_id:
+			return fleet
+	return {}
 
 
 # --- Helpers -----------------------------------------------------------------
