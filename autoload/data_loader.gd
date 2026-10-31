@@ -252,7 +252,7 @@ func get_map_files(map_id: String) -> Dictionary:
 ##
 ## Loading a save straight into port (docs/80-* §4.6 routes to S4 when the save
 ## was taken in port) never instantiates S3, so `map` stays null — yet port-side
-## systems need passability and harbor-pair tiles: hostile-fleet spawning (`60-*`
+## systems need passability and harbor-pair tiles: NPC fleet spawning (`60-*``
 ## §4.11.11), discovery range checks, quest destination draws. This builds the
 ## same `MapLoader` the world scene would, from the map index, and is
 ## idempotent.

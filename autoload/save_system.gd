@@ -74,18 +74,18 @@ const DEFAULT_WEATHER := "calm"
 
 ## The •-marked GameState fields, in §8.1 order (minus the three header keys).
 ## v5 appends the four Phase-5 blocks after the Phase-2 pair (docs/90-* §8.1
-## order); `hostile_fleets` keeps its key until task J's rename sweep.
+## order); `npc_fleets` is the v5 rename of Phase-2's `hostile_fleets`.
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "port_investments", "quests",
-	"discoveries_found", "hostile_fleets", "proximity_cooldowns",
+	"discoveries_found", "npc_fleets", "proximity_cooldowns",
 	"market_stocks", "wrecks", "npc_preset", "market_events",
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
 ]
 ## Keys every payload must carry for a load to be attempted. `quests` /
-## `discoveries_found` are optional-but-known fields, `hostile_fleets` /
+## `discoveries_found` are optional-but-known fields, `npc_fleets` /
 ## `proximity_cooldowns` are optional Phase-2 fields (docs/90-* §8.1) and
 ## `saved_at` is display-only, so those five default instead of failing the
 ## load (docs/90-* §12 "load tolerates missing optional keys only where a
@@ -107,7 +107,7 @@ const OPTIONAL_DEFAULTS := {
 	"saved_at": 0,
 	"quests": [],
 	"discoveries_found": [],
-	"hostile_fleets": [],
+	"npc_fleets": [],
 	"proximity_cooldowns": {},
 	"wrecks": [],
 	"npc_preset": "normal",
@@ -229,7 +229,7 @@ func snapshot() -> Dictionary:
 		"known_ports": GameState.known_ports.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
 		"discoveries_found": GameState.discoveries_found.duplicate(true),
-		"hostile_fleets": GameState.hostile_fleets.duplicate(true),
+		"npc_fleets": GameState.npc_fleets.duplicate(true),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
 		"market_stocks": GameState.market_stocks.duplicate(true),
 		"wrecks": GameState.wrecks.duplicate(true),
@@ -441,10 +441,10 @@ func validate_payload(data: Dictionary) -> String:
 	if not _is_array_or_missing(data, "discoveries_found"):
 		return "'discoveries_found' is not an array"
 	# Phase-2 keys: optional (absent → documented default) but type-checked
-	# whenever they are present, so a hand-edited `hostile_fleets: {}` is a
+	# whenever they are present, so a hand-edited `npc_fleets: {}` is a
 	# rejection rather than a silent default (docs/90-* §8.1).
-	if not _is_array_or_missing(data, "hostile_fleets"):
-		return "'hostile_fleets' is not an array"
+	if not _is_array_or_missing(data, "npc_fleets"):
+		return "'npc_fleets' is not an array"
 	if not _is_dict_or_missing(data, "proximity_cooldowns"):
 		return "'proximity_cooldowns' is not an object"
 	# Phase-5 keys (§8.1): optional (absent → documented default) but
@@ -604,8 +604,8 @@ func _apply(data: Dictionary) -> void:
 	# Phase-2 saved state (docs/90-* §8.1). A save this build wrote always
 	# carries them, but a hand-edited file may omit them: the documented
 	# defaults keep those loads working (§8.1 "Default when absent").
-	GameState.hostile_fleets = \
-		(data.get("hostile_fleets", OPTIONAL_DEFAULTS["hostile_fleets"]) as Array) \
+	GameState.npc_fleets = \
+		(data.get("npc_fleets", OPTIONAL_DEFAULTS["npc_fleets"]) as Array) \
 			.duplicate(true)
 	GameState.proximity_cooldowns = \
 		(data.get("proximity_cooldowns", OPTIONAL_DEFAULTS["proximity_cooldowns"]) \
