@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-6 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-7 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
 ``data/maps/world_report.json``, then proves every harbor and discovery is
 reachable from Lisbon by a wrap-aware 8-directional BFS that forbids corner
-cutting (docs/20-WORLD-AND-SAILING.md section 4.2).
+cutting (docs/20-WORLD-AND-SAILING.md section 4.2). Group 7 is the Phase-5
+npc & economy data check (section 8.2): the density-dial config bounds, the
+captain pools, the named pirates, the demand-event templates with their
+rest-band shift bounds, and the consumption-tier split.
 
 Usage (from the repo root):
 
@@ -24,6 +27,8 @@ Exit codes:
     4  referential integrity failure
     5  locked-list failure
     6  world map failure (data/maps/world.png / world_report.json)
+    7  npc & economy data failure (npc_config / npc_captains / named_pirates /
+       market_events)
 
 On the first failure a single line is printed to stdout:
 
@@ -113,6 +118,11 @@ ENTITY_FILES = {
     "equipment.json": "equipment",
     "discoveries.json": "discoveries",
     "quests.json": "quests",
+    # Phase 5 (section 8, group 1): npc_captains.json's plural key is `pools`,
+    # named_pirates.json / market_events.json match their filenames.
+    "npc_captains.json": "pools",
+    "named_pirates.json": "named_pirates",
+    "market_events.json": "market_events",
 }
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
@@ -127,6 +137,10 @@ SPECIAL_FILES |= GENERATED_FILES
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
 # as the one key that is not an L10nString rather than a required field.
 SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
+# Phase 5 (section 8, group 1): npc_config.json is a config block (§4.10), not
+# an entity file — its shape is owned by group 7.
+SPECIAL_FILES.add("npc_config.json")
+SPECIAL_REQUIRE_VERSION.add("npc_config.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -140,6 +154,12 @@ L10N_FIELDS = {
     "equipment": ("name",),
     "discoveries": ("name", "region_hint"),
     "quests": ("name", "description", "objective"),
+    # Phase 5: a pool's `names` is an array of L10nStrings — the walker's
+    # locale-key heuristic covers each entry (no scalar L10n field here);
+    # pirates/events carry their display string in `name`.
+    "pools": (),
+    "named_pirates": ("name",),
+    "market_events": ("name",),
 }
 
 # --- Locked content tables (docs/10-DATA-SCHEMA.md section 7) --------------
@@ -449,6 +469,67 @@ LOCKED_COUNTS = {
     "officers": 6,
     "equipment": 8,
 }
+
+# --- Phase 5 npc & economy data (docs/10-DATA-SCHEMA.md sections 4.10-4.13,
+# normative validator spec section 8.2) --------------------------------------
+
+# npc_config.json: the locked §4.10 key sets. The values are bounds-checked
+# (§8.2 item 1); the key sets themselves are exact.
+NPC_PRESET_KEYS = ("deserted", "low", "normal", "high", "extreme")
+NPC_BUDGET_KEYS = (
+    "traders_mult_per_port",
+    "coasters_mult_per_port",
+    "patrols_div_ports",
+    "patrols_min",
+    "couriers_per_nation",
+    "privateers_per_rivalry",
+    "pirate_base",
+    "pirates_per_unpatrolled_zone",
+)
+NPC_FLOW_KEYS = (
+    "spawns_per_day_base",
+    "path_budget_ms_per_day",
+    "trade_units_per_port_call",
+    "coaster_trade_units",
+)
+NPC_CONFIG_KEYS = ("version", "presets", "default_preset", "budgets", "flow",
+                   "absolute_cap")
+# §4.10: exactly one preset multiplier is 1.0 and `default_preset` names it.
+NEUTRAL_PRESET = "normal"
+# §4.10: hard upper bound on live NPC fleets (group 7 enforces the locked cap).
+ABSOLUTE_CAP_MAX = 2048
+
+# npc_captains.json: §7.7's closed set — the 6 nation ids plus the nationless
+# `""` pool pirates draw from; every pool carries at least this many names.
+NATIONLESS_POOL_ID = ""
+CAPTAIN_POOL_MIN_NAMES = 8
+
+# named_pirates.json: §7.8 locks the count and the tier band (tier semantics:
+# 70-* §4.5 bounty bands 5000/10000/20000 for tiers 1/2/3).
+NAMED_PIRATE_COUNT = 4
+NAMED_PIRATE_TIER_MIN = 1
+NAMED_PIRATE_TIER_MAX = 3
+
+# market_events.json rest-band bounds. Resting stock per port-good takes the
+# §4.2 (`30-*`) resting values: 160 where the good is produced, 40 where it is
+# demanded, 100 otherwise; an event shifts REST and the result is clamped to
+# the §4.13 effect band [10, 190] (§8.2 item 4 asserts the shift stays inside
+# the band for every resting value the good takes across the 100 ports).
+REST_PRODUCED = 160
+REST_DEMANDED = 40
+REST_NEUTRAL = 100
+REST_BAND_MIN = 10
+REST_BAND_MAX = 190
+
+# §8.2 item 5 (`30-*` §4.2): rank goods by (base_price asc, id asc) —
+# indices 0-4 staples, 5-14 middle, 15-19 luxuries.
+CONSUMPTION_TIER_SPLIT = (5, 10, 5)
+
+# Files whose structure/counts/bounds group 7 owns outright (§8.2 preamble);
+# group 3's generic id loop skips them.
+GROUP7_ENTITY_FILES = frozenset({
+    "npc_captains.json", "named_pirates.json", "market_events.json",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -1110,6 +1191,12 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
     }
 
     for filename, plural in ENTITY_FILES.items():
+        if filename in GROUP7_ENTITY_FILES:
+            # Group 7 owns these files' structure, counts and bounds outright
+            # (docs/10-* section 8.2 preamble), including pool/pirate/event id
+            # uniqueness — a pool has no `id` field at all (its key is
+            # `nation_id`).
+            continue
         _check_unique_ids(items[plural], plural, filename)
 
     _schema_nations(items["nations"])
@@ -3035,6 +3122,417 @@ def run_group6_self_test() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Check group 7 — NPC & economy data
+# ---------------------------------------------------------------------------
+
+
+def _is_number(value) -> bool:
+    """True for JSON numbers only (bool is not a number for schema purposes)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _check_complete_l10n(value, path: str, filename: str) -> None:
+    """A self-contained complete-L10nString check (section 8.2: "complete
+    i18n" inside the group-7 files). Group 2's recursion normally covers
+    this; repeating it here keeps group 7's verdicts self-contained."""
+    _check_l10n(value, path, filename)
+
+
+def _check_npc_config(config: object) -> None:
+    """npc_config.json (section 8.2 item 1, section 4.10)."""
+    label = "npc_config.json"
+    if not isinstance(config, dict):
+        fail("npc-config", label, "config block must be a JSON object", 7)
+    if config.get("version") != 1 or not is_int(config.get("version")):
+        fail("npc-config", label, "version must be the integer 1 (section 4.10)", 7)
+    extra = sorted(set(config) - set(NPC_CONFIG_KEYS))
+    missing = sorted(set(NPC_CONFIG_KEYS) - set(config))
+    if extra or missing:
+        details = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if extra:
+            details.append(f"unexpected {', '.join(extra)}")
+        fail("npc-config", label,
+             f"config block keys must be exactly the section 4.10 set: "
+             f"{'; '.join(details)}", 7)
+
+    presets = config["presets"]
+    if not isinstance(presets, dict) or set(presets) != set(NPC_PRESET_KEYS):
+        fail(
+            "npc-config",
+            label,
+            "presets keys must be exactly "
+            f"{', '.join(NPC_PRESET_KEYS)} (section 4.10)",
+            7,
+        )
+    for key, value in presets.items():
+        if not _is_number(value):
+            fail(
+                "npc-config",
+                label,
+                f"presets.{key} must be a number (got {value!r})",
+                7,
+            )
+        if value < 0:
+            fail(
+                "npc-config",
+                label,
+                f"presets.{key} must be >= 0 (got {value}) — a negative "
+                "density multiplier is meaningless (section 8.2 item 1)",
+                7,
+            )
+    neutral = [key for key, value in presets.items() if value == 1.0]
+    if len(neutral) != 1:
+        fail(
+            "npc-config",
+            label,
+            f"exactly one preset multiplier must be 1.0 (found "
+            f"{len(neutral)}: {', '.join(neutral) or 'none'})",
+            7,
+        )
+    default_preset = config["default_preset"]
+    if default_preset not in presets:
+        fail(
+            "npc-config",
+            label,
+            f"default_preset {default_preset!r} is not in presets",
+            7,
+        )
+    if default_preset != neutral[0]:
+        fail(
+            "npc-config",
+            label,
+            f"default_preset {default_preset!r} must name the neutral "
+            f"1.0 preset ({neutral[0]!r}), not the "
+            f"{presets[default_preset]} multiplier",
+            7,
+        )
+
+    for block_name, block_keys in (("budgets", NPC_BUDGET_KEYS),
+                                   ("flow", NPC_FLOW_KEYS)):
+        block = config[block_name]
+        if not isinstance(block, dict) or set(block) != set(block_keys):
+            fail(
+                "npc-config",
+                label,
+                f"{block_name} keys must be exactly "
+                f"{', '.join(block_keys)} (section 4.10)",
+                7,
+            )
+        for key, value in block.items():
+            if not _is_number(value):
+                fail(
+                    "npc-config",
+                    label,
+                    f"{block_name}.{key} must be a number (got {value!r})",
+                    7,
+                )
+            if value <= 0:
+                fail(
+                    "npc-config",
+                    label,
+                    f"{block_name}.{key} must be > 0 (got {value})",
+                    7,
+                )
+
+    absolute_cap = config["absolute_cap"]
+    if not is_int(absolute_cap) or not (0 <= absolute_cap <= ABSOLUTE_CAP_MAX):
+        fail(
+            "npc-config",
+            label,
+            f"absolute_cap must be an integer in [0, {ABSOLUTE_CAP_MAX}] "
+            f"(got {absolute_cap!r}) — the section 4.10 locked cap",
+            7,
+        )
+
+
+def _check_npc_captains(captains: object) -> None:
+    """npc_captains.json (section 8.2 item 2, sections 4.11 / 7.7)."""
+    label = "npc_captains.json"
+    pools = captains.get("pools") if isinstance(captains, dict) else None
+    if not isinstance(pools, list):
+        fail("captain-pools", label, "missing 'pools' array", 7)
+
+    expected_pools = set(LOCKED_NATIONS) | {NATIONLESS_POOL_ID}
+    seen: set[str] = set()
+    for index, pool in enumerate(pools):
+        path = f"pools[{index}]"
+        if not isinstance(pool, dict) or set(pool) != {"nation_id", "names"}:
+            fail(
+                "captain-pools",
+                label,
+                f"{path} must be an object with exactly keys "
+                "nation_id,names (section 4.11)",
+                7,
+            )
+        pool_id = pool["nation_id"]
+        if not isinstance(pool_id, str) or pool_id not in expected_pools:
+            fail(
+                "captain-pools",
+                label,
+                f"{path}.nation_id {pool_id!r} must be one of the 6 locked "
+                f"nation ids or the nationless '' pool (section 7.7)",
+                7,
+            )
+        if pool_id in seen:
+            fail("captain-pools", label,
+                 f"{path} repeats pool {pool_id!r}", 7)
+        seen.add(pool_id)
+
+        names = pool["names"]
+        if not isinstance(names, list) or len(names) < CAPTAIN_POOL_MIN_NAMES:
+            count = len(names) if isinstance(names, list) else "non-array"
+            fail(
+                "captain-pools",
+                label,
+                f"{path} (pool {pool_id!r}) must carry at least "
+                f"{CAPTAIN_POOL_MIN_NAMES} names (got {count})",
+                7,
+            )
+        for name_index, name in enumerate(names):
+            _check_complete_l10n(
+                name, f"{path}.names[{name_index}]", label
+            )
+
+    missing = sorted(expected_pools - seen)
+    if missing:
+        fail(
+            "captain-pools",
+            label,
+            f"missing pool(s) {', '.join(repr(m) for m in missing)} — the "
+            "section 7.7 pool set is closed (6 nations + '')",
+            7,
+        )
+    if len(pools) != len(expected_pools):
+        fail(
+            "captain-pools",
+            label,
+            f"pool count {len(pools)} != the locked {len(expected_pools)} "
+            "(section 7.7)",
+            7,
+        )
+
+
+def _check_named_pirates(pirates_doc: object) -> None:
+    """named_pirates.json (section 8.2 item 3, sections 4.12 / 7.8)."""
+    label = "named_pirates.json"
+    pirates = pirates_doc.get("named_pirates") \
+        if isinstance(pirates_doc, dict) else None
+    if not isinstance(pirates, list):
+        fail("named-pirates", label, "missing 'named_pirates' array", 7)
+    if len(pirates) != NAMED_PIRATE_COUNT:
+        fail(
+            "named-pirates",
+            label,
+            f"exactly {NAMED_PIRATE_COUNT} named pirates are locked "
+            f"(section 7.8), got {len(pirates)}",
+            7,
+        )
+    seen: set[str] = set()
+    for index, pirate in enumerate(pirates):
+        path = f"named_pirates[{index}]"
+        if not isinstance(pirate, dict) or set(pirate) != {"id", "name", "tier"}:
+            fail(
+                "named-pirates",
+                label,
+                f"{path} must be an object with exactly keys "
+                "id,name,tier (section 4.12)",
+                7,
+            )
+        _require_id(pirate["id"], f"{path}.id", label)
+        if pirate["id"] in seen:
+            fail("named-pirates", label,
+                 f"{path} repeats id {pirate['id']!r}", 7)
+        seen.add(pirate["id"])
+        _check_complete_l10n(pirate["name"], f"{path}.name", label)
+        tier = pirate["tier"]
+        if not is_int(tier) or not (NAMED_PIRATE_TIER_MIN <= tier
+                                    <= NAMED_PIRATE_TIER_MAX):
+            fail(
+                "named-pirates",
+                label,
+                f"{path} ({pirate['id']}) tier must be an integer in "
+                f"{NAMED_PIRATE_TIER_MIN}-{NAMED_PIRATE_TIER_MAX} "
+                f"(70-* section 4.5 bounty bands), got {tier!r}",
+                7,
+            )
+
+
+def _rest_classes_for(good_id: str, produced_goods: set, demanded_goods: set) -> list[int]:
+    """Every §4.2 resting value `good_id` takes across the 100 ports."""
+    classes = [REST_NEUTRAL]
+    if good_id in produced_goods:
+        classes.append(REST_PRODUCED)
+    if good_id in demanded_goods:
+        classes.append(REST_DEMANDED)
+    return classes
+
+
+def _check_market_events(events_doc: object, ports: list, good_ids: set) -> None:
+    """market_events.json (section 8.2 item 4, section 4.13)."""
+    label = "market_events.json"
+    events = events_doc.get("market_events") \
+        if isinstance(events_doc, dict) else None
+    if not isinstance(events, list):
+        fail("market-events", label, "missing 'market_events' array", 7)
+
+    produced_goods = {
+        good_id for port in ports for good_id in port.get("produces", [])
+    }
+    demanded_goods = {
+        good_id for port in ports for good_id in port.get("demands", [])
+    }
+
+    seen: set[str] = set()
+    for index, event in enumerate(events):
+        path = f"market_events[{index}]"
+        required = {"id", "scope", "cadence_days", "duration_days",
+                    "shifts", "name"}
+        if not isinstance(event, dict) or set(event) != required:
+            fail(
+                "market-events",
+                label,
+                f"{path} must be an object with exactly keys "
+                "id,scope,cadence_days,duration_days,shifts,name "
+                "(section 4.13)",
+                7,
+            )
+        _require_id(event["id"], f"{path}.id", label)
+        if event["id"] in seen:
+            fail("market-events", label,
+                 f"{path} repeats id {event['id']!r}", 7)
+        seen.add(event["id"])
+        if event["scope"] != "port":
+            fail(
+                "market-events",
+                label,
+                f"{path} ({event['id']}) scope must be \"port\" — the only "
+                "valid value this phase (section 4.13)",
+                7,
+            )
+        for field in ("cadence_days", "duration_days"):
+            if not is_int(event[field]) or event[field] <= 0:
+                fail(
+                    "market-events",
+                    label,
+                    f"{path} ({event['id']}) {field} must be an integer > 0 "
+                    f"(got {event[field]!r})",
+                    7,
+                )
+        _check_complete_l10n(event["name"], f"{path}.name", label)
+
+        shifts = event["shifts"]
+        if not isinstance(shifts, dict):
+            fail(
+                "market-events",
+                label,
+                f"{path} ({event['id']}) shifts must be an object",
+                7,
+            )
+        for good_id, shift in shifts.items():
+            if good_id not in good_ids:
+                fail(
+                    "market-events",
+                    label,
+                    f"{path} ({event['id']}) shifts references unknown good "
+                    f"{good_id!r}",
+                    7,
+                )
+            if not is_int(shift):
+                fail(
+                    "market-events",
+                    label,
+                    f"{path} ({event['id']}) shifts.{good_id} must be an "
+                    f"integer delta (got {shift!r})",
+                    7,
+                )
+            if shift == 0:
+                fail(
+                    "market-events",
+                    label,
+                    f"{path} ({event['id']}) shifts.{good_id} is 0 — a no-op "
+                    "typo, not an event shift",
+                    7,
+                )
+            # Rest-band bound (section 8.2 item 4): the shift must keep rest
+            # inside the §4.13 effect clamp for EVERY resting value the good
+            # takes across the 100 ports.
+            for rest in _rest_classes_for(good_id, produced_goods,
+                                          demanded_goods):
+                shifted = rest + shift
+                if not (REST_BAND_MIN <= shifted <= REST_BAND_MAX):
+                    fail(
+                        "market-events",
+                        label,
+                        f"{path} ({event['id']}) shift {shift:+d} on "
+                        f"'{good_id}' pushes resting stock {rest} to "
+                        f"{shifted}, outside the [{REST_BAND_MIN}, "
+                        f"{REST_BAND_MAX}] effect band (section 8.2 item 4; "
+                        "resting classes 160/40/100 per 30-* section 4.2)",
+                        7,
+                    )
+
+
+def _check_consumption_tiers(goods: list) -> None:
+    """Section 8.2 item 5 (`30-*` section 4.2): the (base_price asc, id asc)
+    ranking splits into 5 staples / 10 middle / 5 luxuries."""
+    ranked = sorted(goods, key=lambda good: (good["base_price"], good["id"]))
+    staples, middle, luxuries = [], [], []
+    for index, good in enumerate(ranked):
+        if index < CONSUMPTION_TIER_SPLIT[0]:
+            staples.append(good["id"])
+        elif index < CONSUMPTION_TIER_SPLIT[0] + CONSUMPTION_TIER_SPLIT[1]:
+            middle.append(good["id"])
+        else:
+            luxuries.append(good["id"])
+    expected = CONSUMPTION_TIER_SPLIT
+    actual = (len(staples), len(middle), len(luxuries))
+    if actual != expected:
+        fail(
+            "consumption-tiers",
+            "goods.json",
+            f"consumption tiers must split {expected[0]}/{expected[1]}/"
+            f"{expected[2]} (30-* section 4.2), got "
+            f"{actual[0]}/{actual[1]}/{actual[2]}",
+            7,
+        )
+    return staples, middle, luxuries
+
+
+def check_group7(docs: dict[str, object], verbose: bool) -> None:
+    """Npc & economy data: docs/10-DATA-SCHEMA.md section 8.2.
+
+    Owns structure, counts and bounds for the four Phase-5 files; L10nString
+    completeness inside them is group 2's recursion.
+    """
+    _check_npc_config(docs.get("npc_config.json"))
+    pools = docs["npc_captains.json"]["pools"]
+    _check_npc_captains(docs["npc_captains.json"])
+    _check_named_pirates(docs["named_pirates.json"])
+    _check_market_events(
+        docs["market_events.json"],
+        docs["ports.json"]["ports"],
+        {good["id"] for good in docs["goods.json"]["goods"]},
+    )
+    staples, middle, luxuries = _check_consumption_tiers(
+        docs["goods.json"]["goods"]
+    )
+
+    if verbose:
+        print(
+            f"PASS group 7 npc & economy data ({len(pools)} captain pools, "
+            f"{NAMED_PIRATE_COUNT} named pirates, "
+            f"{len(docs['market_events.json']['market_events'])} event "
+            f"templates, absolute_cap {docs['npc_config.json']['absolute_cap']})"
+        )
+        print(
+            f"INFO group 7 consumption tiers — staples: {', '.join(staples)}; "
+            f"middle: {len(middle)} goods; luxuries: {', '.join(luxuries)}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -3059,6 +3557,7 @@ def main(argv: list[str]) -> int:
         ("4", check_group4),
         ("5", check_group5),
         ("6", check_group6),
+        ("7", check_group7),
     )
 
     for group_id, check in groups:

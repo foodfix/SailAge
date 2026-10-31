@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "presets": {
+    "deserted": 0.0,
+    "low": 0.5,
+    "normal": 1.0,
+    "high": 2.0,
+    "extreme": 4.0
+  },
+  "default_preset": "normal",
+  "budgets": {
+    "traders_mult_per_port": 1.25,
+    "coasters_mult_per_port": 0.75,
+    "patrols_div_ports": 6,
+    "patrols_min": 1,
+    "couriers_per_nation": 2,
+    "privateers_per_rivalry": 2,
+    "pirate_base": 8,
+    "pirates_per_unpatrolled_zone": 1
+  },
+  "flow": {
+    "spawns_per_day_base": 4,
+    "path_budget_ms_per_day": 250,
+    "trade_units_per_port_call": 30,
+    "coaster_trade_units": 5
+  },
+  "absolute_cap": 2048
+}
