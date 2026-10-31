@@ -56,10 +56,6 @@
     "zh": "中文 / EN",
     "en": "中文 / EN"
   },
-  "ui.esc_hint": {
-    "zh": "Esc 返回",
-    "en": "Esc to go back"
-  },
   "ui.saved": {
     "zh": "已保存。",
     "en": "Game saved."
@@ -1693,8 +1689,8 @@
     "en": "Extreme"
   },
   "settings.locale": {
-    "zh": "语言(顶部栏按钮切换)",
-    "en": "Language (toggle in the top bar)"
+    "zh": "语言",
+    "en": "Language"
   },
   "settings.return_menu": {
     "zh": "返回主菜单",

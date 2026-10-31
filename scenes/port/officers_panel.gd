@@ -256,7 +256,6 @@ func rebuild() -> void:
 	_mode_note.visible = is_read_only()
 	_mode_note.text = I18n.t_key("officers.readonly_sea") if is_read_only() else ""
 	_close_button.text = I18n.t_key("ui.close")
-	_hint.text = I18n.t_key("ui.esc_hint")
 
 	_clear(_rows_box)
 	_rows.clear()

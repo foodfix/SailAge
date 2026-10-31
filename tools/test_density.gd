@@ -527,6 +527,21 @@ func _test_s19_modal() -> void:
 		_check(returned.size() == 1 and not panel.is_open(),
 			"confirming routes out of the panel and emits return_to_menu")
 	_check(panel.host_is_port(), "the S4 mount reports a port host")
+	# The S4 mount also carries the Save action (amended §4.6.3: the footer
+	# row moved into S19); it opens the 3-slot dialog over S4. The return
+	# confirm closed the panel, so reopen first.
+	panel.open()
+	var sb: Button = panel.save_button()
+	_check(sb != null and sb.is_visible_in_tree(),
+		"the S4 mount shows the Save action")
+	if sb != null:
+		_check(sb.text == I18n.t_key("port.save"),
+			"the Save action uses port.save")
+		panel.close()
+		sb.pressed.emit()
+		_check(not panel.is_open(),
+			"Save closes the panel and opens the slot dialog over S4")
+		_check(port.has_modal(), "the save slot dialog is up over S4")
 	# The standalone footer row greys out (no run docked).
 	GameState.current_port = null
 	EventBus.day_advanced.emit(GameState.day)

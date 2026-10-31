@@ -265,7 +265,6 @@ func _refresh() -> void:
 	_wage.text = I18n.fmt("char.officer_wage", {"gold": CharacterLib.officer_wages()})
 	_close_button.text = I18n.t_key("ui.close")
 	_officers_button.text = I18n.t_key("officers.title")
-	_hint.text = I18n.t_key("ui.esc_hint")
 	_levelup.visible = CharacterLib.pending_levelup
 	if _levelup.visible:
 		_levelup.text = I18n.fmt("char.level_up", {"level": level})

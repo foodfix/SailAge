@@ -103,16 +103,6 @@ mouse_filter = 2
 theme_override_constants/separation = 16
 alignment = 2
 
-[node name="Save" type="Button" parent="Layout/VBox/Footer"]
-custom_minimum_size = Vector2(160, 40)
-layout_mode = 2
-text = "Save"
-
-[node name="EscHint" type="Label" parent="Layout/VBox/Footer"]
-layout_mode = 2
-size_flags_vertical = 4
-text = "Esc to go back"
-
 [node name="SetSail" type="Button" parent="Layout/VBox/Footer"]
 custom_minimum_size = Vector2(240, 40)
 layout_mode = 2

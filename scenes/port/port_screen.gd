@@ -114,8 +114,6 @@ signal rebound
 @onready var _officers_button: Button = $Layout/VBox/Footer/Officers
 @onready var _settings_button: Button = $Layout/VBox/Footer/Settings
 
-@onready var _save_button: Button = $Layout/VBox/Footer/Save
-@onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
 ## convention): with `false`, [method set_sail] runs the whole state transition
@@ -167,8 +165,6 @@ func _ready() -> void:
 
 	# T17 (docs/80-* §4.6): the S4 Save row. `F5` works on any screen but is
 	# only *allowed* in port; this row is the discoverable entry point.
-	_save_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
-	_save_button.pressed.connect(open_save_dialog)
 
 	# S4 keeps the same bars as S3, but the sea viewport (minimap + weather
 	# glyph) is replaced by the port menu (docs/80-* §4.5).
@@ -545,13 +541,9 @@ func _bind() -> void:
 	_officers_button.text = I18n.t_key("officers.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
 
-	# T17: docs/80-* §4.6 "Save: available only at port". The row lives on S4,
-	# so it is enabled whenever there is a run docked here; `F5` elsewhere shows
-	# `ui.cant_save_here` through SaveSystem.
-	_save_button.text = I18n.t_key("port.save")
-	_save_button.disabled = port.is_empty()
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# docs/80-* §4.6 amended: the Save row moved into the S19 settings panel
+	# (its Save action opens the same 3-slot dialog); the footer keeps
+	# Set Sail · Fleet · Officers · Settings.
 	# Nothing to leave when not docked (standalone load): the button stays
 	# visible for layout but disabled, so no input can start a bogus route.
 	_set_sail_button.disabled = port.is_empty()

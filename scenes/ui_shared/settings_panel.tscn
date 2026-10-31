@@ -84,6 +84,15 @@ theme_override_font_sizes/font_size = 16
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 
+[node name="SaveRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+visible = false
+layout_mode = 2
+alignment = 1
+
+[node name="SaveButton" type="Button" parent="Center/Panel/Margin/Body/SaveRow"]
+custom_minimum_size = Vector2(240, 40)
+layout_mode = 2
+
 [node name="ReturnRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
 visible = false
 layout_mode = 2
@@ -97,10 +106,6 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/separation = 16
 alignment = 2
-
-[node name="Hint" type="Label" parent="Center/Panel/Margin/Body/Footer"]
-layout_mode = 2
-size_flags_vertical = 4
 
 [node name="Close" type="Button" parent="Center/Panel/Margin/Body/Footer"]
 custom_minimum_size = Vector2(120, 40)

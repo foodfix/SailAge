@@ -120,7 +120,6 @@ var _rebuilding := false
 @onready var _hud: Control = $HUD
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _gold_label: Label = $Layout/VBox/Header/Gold
-@onready var _esc_hint: Label = $Layout/VBox/Header/EscHint
 @onready var _back_button: Button = $Layout/VBox/Header/Back
 @onready var _catalog_title: Label = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogTitle
 @onready var _catalog_rows: VBoxContainer = $Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll/CatalogRows
@@ -136,7 +135,6 @@ func _ready() -> void:
 	_title.add_theme_font_size_override("font_size", 32)
 	for label in [_title, _gold_label, _catalog_title, _fleet_title]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
 	_catalog_title.add_theme_font_size_override("font_size", 20)
@@ -237,7 +235,6 @@ func _bind_header() -> void:
 	_gold_label.text = I18n.fmt(
 		"ui.gold_amount", {"gold": HudLib.format_thousands(GameState.gold)}
 	)
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_back_button.text = I18n.t_key("ui.back")
 
 

@@ -103,7 +103,6 @@ signal back_requested
 @onready var _officer_reason: Label = $Layout/VBox/Body/OfficersPanel/Reason
 @onready var _toast: Label = $Layout/VBox/Toast
 @onready var _toast_timer: Timer = $ToastTimer
-@onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
 ## Currently shown tab ([constant TAB_CREW] / [constant TAB_OFFICERS]).
 var _tab: String = TAB_CREW
@@ -134,14 +133,13 @@ func _ready() -> void:
 	$Background.color = PaletteLib.PANEL_BG
 	for label in [
 		_title, _gold, _crew_count, _morale, _per_head, _reason, _min_note,
-		_roster_header, _officer_reason, _esc_hint, _toast, _rumor_price,
+		_roster_header, _officer_reason, _toast, _rumor_price,
 		_rumor_empty, _rumor_tournament,
 	]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_per_head.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_rumor_price.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_min_note.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_rumor_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_title.add_theme_font_size_override("font_size", 32)
 	_toast.visible = false
@@ -308,7 +306,6 @@ func _bind_header() -> void:
 	_crew_tab.text = I18n.t_key("tavern.crew_tab")
 	_officers_tab.text = I18n.t_key("tavern.officers_tab")
 	_rumors_tab.text = I18n.t_key("tavern.rumor_tab")
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	# Active tab is accent-colored and held down; the inactive one stays
 	# neutral (toggle buttons, so only one reads as "current").
 	for pair in [[TAB_CREW, _crew_tab], [TAB_OFFICERS, _officers_tab],
@@ -612,7 +609,9 @@ func _rumor_text(row: Dictionary) -> String:
 	var nation_id := str(row.get("nation_id", ""))
 	var nation := I18n.t(DataLoader.get_nation(nation_id).get("name", {})) \
 		if not nation_id.is_empty() else "-"
-	var role := I18n.t_key("captain.role.%s" % str(row.get("role", "")))
+	# NOTE: no `captain.role.*` lookup here — the event telegraph rows carry
+	# no role and none of the four rumor texts uses one, so a blind lookup
+	# would log `unknown ui_strings key 'captain.role.'` per event row.
 	match str(row.get("kind", "")):
 		"event":
 			return I18n.fmt("captain.rumor.event", {

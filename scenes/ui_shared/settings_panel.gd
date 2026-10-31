@@ -77,7 +77,8 @@ var route_to_menu: bool = true
 @onready var _locale_row: Label = $Center/Panel/Margin/Body/LocaleRow/LocaleLabel
 @onready var _locale_button: Button = $Center/Panel/Margin/Body/LocaleRow/LocaleButton
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
-@onready var _esc_hint: Label = $Center/Panel/Margin/Body/Footer/Hint
+@onready var _save_row: HBoxContainer = $Center/Panel/Margin/Body/SaveRow
+@onready var _save_button: Button = $Center/Panel/Margin/Body/SaveRow/SaveButton
 @onready var _return_row: HBoxContainer = $Center/Panel/Margin/Body/ReturnRow
 @onready var _return_button: Button = $Center/Panel/Margin/Body/ReturnRow/ReturnButton
 
@@ -135,12 +136,13 @@ func _ready() -> void:
 	_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_locale_row.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_close_button.pressed.connect(close)
 	_locale_button.pressed.connect(I18n.toggle_locale)
 	_return_button.pressed.connect(_on_return_pressed)
+	_save_button.pressed.connect(_on_save_pressed)
 	_return_row.visible = host_is_port()
+	_save_row.visible = host_is_port()
 	_build_presets()
 	EventBus.locale_changed.connect(_on_locale_changed)
 
@@ -184,15 +186,7 @@ func has_modal() -> bool:
 ## screen (S1): the S4 mount is the only one with a run to leave, so it is
 ## the only one that shows `Return to main menu` (§4.6.3 amended).
 func host_is_port() -> bool:
-	var parent := get_parent()
-	if parent == null:
-		return false
-	# attach_to() may wrap a Node2D host in a `SettingsLayer` CanvasLayer;
-	# walk up to the first node that is neither the layer nor the panel.
-	var host := parent
-	while host != null and (host.name == "SettingsLayer"
-			or host.name == "SettingsPanel"):
-		host = host.get_parent()
+	var host := _resolve_host()
 	if host == null:
 		return false
 	# The S1 host is the title screen (a Control whose scene path names it);
@@ -204,6 +198,29 @@ func host_is_port() -> bool:
 ## The locale toggle button (tests / hosts) — the only language control.
 func locale_button() -> Button:
 	return _locale_button
+
+
+## The S4-mounted Save action button (tests / hosts), or null.
+func save_button() -> Button:
+	return _save_button
+
+
+## Pressed `Save` (S4 mount): close the panel and open the 3-slot save dialog
+## on the host — the exact flow the retired footer row drove (§4.7).
+func _on_save_pressed() -> void:
+	var host := _resolve_host()
+	close()
+	if host != null:
+		SaveSystem.open_save_dialog(host)
+
+
+## The node [method attach_to] mounted this panel under (the S1/S4 screen).
+func _resolve_host() -> Node:
+	var host := get_parent()
+	while host != null and (host.name == "SettingsLayer"
+			or host.name == "SettingsPanel"):
+		host = host.get_parent()
+	return host
 
 
 ## The S4-mounted return action button (tests / hosts), or null.
@@ -271,8 +288,12 @@ func rebuild() -> void:
 	_locale_button.text = I18n.t_key("ui.language_toggle")
 	_close_button.text = I18n.t_key("settings.close")
 	_return_button.text = I18n.t_key("settings.return_menu")
+	_save_button.text = I18n.t_key("port.save")
+	# docs/80-* §4.7: saving is offered only while docked — the panel shows
+	# the action on the S4 mount and disables it when the precondition is off.
 	_return_row.visible = host_is_port()
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
+	_save_row.visible = host_is_port()
+	_save_button.disabled = not SaveSystem.can_save_here()
 	for preset in _preset_buttons:
 		var button: Button = _preset_buttons[preset]
 		button.text = _preset_name(str(preset))

@@ -56,7 +56,6 @@ signal discovery_reported(block: Dictionary)
 @onready var _reports_heading: Label = $Layout/VBox/Reports/Heading
 @onready var _reports_rows: VBoxContainer = $Layout/VBox/Reports/Scroll/Rows
 @onready var _reports_empty: Label = $Layout/VBox/Reports/Empty
-@onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 @onready var _toast: Label = $Layout/VBox/Toast
 @onready var _toast_timer: Timer = $ToastTimer
 
@@ -71,12 +70,11 @@ var _reports: Array = []
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
 	for label in [_title, _gold, _fame, _offers_heading, _offers_hint,
-			_announce, _reports_heading, _esc_hint, _toast]:
+			_announce, _reports_heading, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_fame.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_offers_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_announce.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_title.add_theme_font_size_override("font_size", 32)
 	_toast.visible = false
 	_toast_timer.one_shot = true
@@ -130,7 +128,7 @@ func all_text() -> Array:
 	var out: Array = [
 		_title.text, _gold.text, _fame.text, _back_button.text,
 		_offers_heading.text, _offers_hint.text, _announce.text,
-		_reports_heading.text, _esc_hint.text,
+		_reports_heading.text,
 	]
 	for container in [_offers_rows, _reports_rows]:
 		for child in _walk_labels(container):
@@ -219,7 +217,6 @@ func refresh() -> void:
 		"day": QuestGenLib.next_refresh_day(GameState.day),
 	})
 	_reports_heading.text = I18n.t_key("guild.report.section")
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_bind_offers()
 	_bind_reports()
 

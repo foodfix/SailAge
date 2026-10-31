@@ -47,7 +47,6 @@ signal left_inn
 @onready var _odd_job_button: Button = $Layout/VBox/Actions/OddJobButton
 @onready var _odd_job_hint: Label = $Layout/VBox/Actions/OddJobHint
 @onready var _back_button: Button = $Layout/VBox/Footer/Back
-@onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 
 ## Routing switch for headless tests (the `port_screen.route_to_world`
 ## convention): with `false`, [method leave] runs the state transition and
@@ -75,7 +74,6 @@ func _ready() -> void:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_rest_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_odd_job_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_status_panel.add_theme_stylebox_override("panel", _panel_style())
 	_title.add_theme_font_size_override("font_size", 32)
 	for button in [_rest_button, _odd_job_button, _back_button]:
@@ -182,7 +180,6 @@ func _bind() -> void:
 	_bind_captains()
 
 	_back_button.text = I18n.t_key("ui.back")
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 
 
 func _bind_rest() -> void:

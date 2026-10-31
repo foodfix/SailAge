@@ -21,7 +21,7 @@ sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9).
 | `scenes/ui_shared/hud.tscn` | shared HUD (world + port) |
 | `scenes/world/chart_screen.tscn` | full-screen Chart (S17, §4.6) |
 | all `scenes/**` screens | per `90-*` §4 tree, content per docs 30/50 |
-| Save UX | title-screen Load / port-side Save (§4.7) |
+| Save UX | title-screen Load / S19 Save (§4.6.3, §4.7) |
 
 ## 3. Dependencies
 
@@ -339,8 +339,8 @@ as a seventh facility and was removed.
 #### 4.6.3 Settings: S1 title entry + S19 settings modal (Phase 5, amended)
 
 **S1 Settings entry (amended 2026-10-31).** The title screen gains a
-`Settings` button in its button stack (between `Load game` and the language
-toggle), opening the same **S19** modal over S1. **The sea-traffic (航海密度)
+`Settings` button in its button stack (between `Load game` and `Quit`),
+opening the same **S19** modal over S1. **The sea-traffic (航海密度)
 row is NOT on S2.** The new-game flow never asks for a density preset; the
 run always starts at `npc_config.json`'s `default_preset` (`normal`) and the
 dial is changed in S19 only (before a new game via S1, or mid-run via the S4
@@ -364,7 +364,8 @@ rule). One panel, two mounts.
 +--------------------------------------------------------------+
 | 语言 Language: [中文 / EN]                                    |
 +--------------------------------------------------------------+
-| 返回主菜单 Return to main menu                                |
+| 保存 Save (S4 mount only)                                     |
+| 返回主菜单 Return to main menu (S4 mount only)                |
 +--------------------------------------------------------------+
 ```
 
@@ -378,6 +379,11 @@ rule). One panel, two mounts.
   button, the top-bar button on every screen and the market header button are
   all **removed** — Settings is the single place to change the language. The
   `L` key remains bound in `project.godot` but is inert (reserved).
+- **Save lives here too (amended 2026-10-31):** the S4 mount's `Save` action
+  replaces the retired S4 footer row: it opens the same 3-slot dialog
+  (§4.7), offered only while docked (`SaveSystem.can_save_here()`). The
+  footer keeps `Set Sail · Fleet · Officers · Settings`; the per-screen
+  `Esc 返回` hint labels are removed (the Esc bindings themselves stay).
 - **Return to main menu (amended 2026-10-31):** the **S4-hosted** panel shows
   a `Return to main menu` action below the locale row. It is **confirm-first**
   (`confirm_dialog`, destructive-action rule §4.7) and the confirmation says

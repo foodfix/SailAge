@@ -54,7 +54,6 @@ signal tournament_started(round_number: int)
 @onready var _tournament_button: Button = $Layout/VBox/Rows/TournamentRow/Action
 @onready var _retire_button: Button = $Layout/VBox/Rows/RetireRow/Retire
 @onready var _confirm: Control = $ConfirmDialog
-@onready var _esc_hint: Label = $Layout/VBox/Footer/EscHint
 @onready var _toast: Label = $Layout/VBox/Toast
 @onready var _toast_timer: Timer = $ToastTimer
 
@@ -74,11 +73,11 @@ var _hunter_rows: Array = []
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
 	for label in [_title, _title_row, _title_next, _mission_label, _repair_label,
-			_bounty_label, _tournament_label, _esc_hint, _toast]:
+			_bounty_label, _tournament_label, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	for label in [_fame, _title_next]:
 		label.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	for label in [_rep, _esc_hint]:
+	for label in [_rep]:
 		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_title.add_theme_font_size_override("font_size", 32)
 	for button in [_back_button, _ceremony, _mission_button, _repair_button,
@@ -148,7 +147,7 @@ func all_text() -> Array:
 		_title_next.text, _ceremony.text, _mission_label.text,
 		_mission_button.text, _repair_label.text, _repair_button.text,
 		_bounty_label.text, _bounty_button.text, _tournament_label.text,
-		_tournament_button.text, _esc_hint.text,
+		_tournament_button.text,
 	]
 	if retire_row_visible():
 		out.append(_retire_button.text)
@@ -328,7 +327,6 @@ func refresh() -> void:
 	})
 	_fame.text = I18n.fmt("ending.fame", {"fame": GameState.fame})
 	_back_button.text = I18n.t_key("ui.back")
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_bind_title()
 	_bind_mission()
 	_bind_repair()

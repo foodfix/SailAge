@@ -916,14 +916,22 @@ func _test_title_and_port_wiring() -> void:
 	var port: Control = PortScene.instantiate()
 	add_child(port)
 	port.route_to_world = false
-	var save_button: Button = port.get_node("Layout/VBox/Footer/Save")
-	_check(save_button != null, "the port hub has a Save row")
+	# Amended 2026-10-31: the Save row lives in the S19 settings panel, not on
+	# the S4 footer (the footer keeps Set Sail · Fleet · Officers · Settings).
+	_check(port.get_node_or_null("Layout/VBox/Footer/Save") == null,
+		"the S4 footer no longer carries a Save row (Save moved into S19)")
+	_check(port.get_node_or_null("Layout/VBox/Footer/EscHint") == null,
+		"the S4 footer no longer carries an Esc hint")
+	var panel: Control = port.open_settings_panel()
+	var save_button: Button = panel.save_button()
+	_check(save_button != null, "the S19 panel has a Save action")
 	_check(save_button.text == I18n.t_key("port.save"),
-		"the Save row is localised (got '%s')" % save_button.text)
-	_check(save_button.disabled == false, "the Save row is enabled while docked")
+		"the Save action is localised (got '%s')" % save_button.text)
+	_check(save_button.disabled == false, "the Save action is enabled while docked")
+	panel.close()
 	var save_dialog: Control = port.open_save_dialog()
 	_check(save_dialog != null and save_dialog.is_open(),
-		"the port Save row opens the slot dialog")
+		"the port opens the slot dialog")
 	_check(save_dialog != null and save_dialog.mode() == SlotDialogLib.MODE_SAVE,
 		"the port opens it in Save mode")
 	# Choosing a slot in that dialog must actually write through SaveSystem
@@ -936,10 +944,14 @@ func _test_title_and_port_wiring() -> void:
 			"the written slot reports the current day (64)")
 		save_dialog.queue_free()
 
-	# With no docked port the row is disabled and refuses to open.
+	# With no docked port the S19 Save action is disabled and the S4 API
+	# refuses to open.
 	GameState.current_port = null
 	port._bind()
-	_check(save_button.disabled, "the Save row is disabled with no docked port")
+	var panel2: Control = port.open_settings_panel()
+	_check(panel2.save_button().disabled,
+		"the S19 Save action is disabled with no docked port")
+	panel2.close()
 	_check(port.open_save_dialog() == null, "open_save_dialog() refuses without a port")
 	port.queue_free()
 

@@ -141,7 +141,6 @@ var _gameover: Control = null
 @onready var _day: Label = $TopRow/Day
 @onready var _round: Label = $TopRow/Round
 @onready var _weather: Label = $TopRow/Weather
-@onready var _esc_hint: Label = $TopRow/EscHint
 @onready var _grid_area: Control = $GridArea
 @onready var _sea: ColorRect = $GridArea/Sea
 @onready var _cells: Control = $GridArea/Cells
@@ -659,7 +658,6 @@ func _style() -> void:
 	for label in [_title, _day, _round, _flagship_label, _durability, _crew,
 			_cannons, _target_label]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_esc_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_weather.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_reload.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_title.add_theme_font_size_override("font_size", 20)
@@ -801,7 +799,6 @@ func _bind() -> void:
 	_day.text = I18n.fmt("world.day", {"day": int(sim.day)})
 	_round.text = _t("battle.round", {"round": int(sim.round_number())})
 	_weather.text = I18n.t_key("world.weather.%s" % _weather_name())
-	_esc_hint.text = I18n.t_key("ui.esc_hint")
 	_sync_tokens()
 	_bind_stats()
 	_bind_log_records()

@@ -282,7 +282,6 @@ func _bind_header() -> void:
 	_summary.text += " · " + _hud_line()
 	_mode_note.visible = is_read_only()
 	_mode_note.text = _read_only_note()
-	_hint.text = I18n.t_key("ui.esc_hint")
 	_close_button.text = I18n.t_key("ui.close")
 
 

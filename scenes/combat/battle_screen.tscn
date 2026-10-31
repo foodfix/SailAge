@@ -66,11 +66,6 @@ size_flags_horizontal = 3
 text = "-"
 vertical_alignment = 1
 
-[node name="EscHint" type="Label" parent="TopRow"]
-layout_mode = 2
-text = "Esc"
-vertical_alignment = 1
-
 [node name="GridArea" type="Control" parent="."]
 layout_mode = 0
 offset_left = 256.0
