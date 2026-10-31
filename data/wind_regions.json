@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "wind_regions": [
+    {
+      "id": "westerlies_n_atlantic",
+      "name": {"zh": "北大西洋及欧洲西风带", "en": "North Atlantic & European westerlies"},
+      "polygon": [[38.0, -76.0], [70.0, -76.0], [70.0, 21.0], [70.0, 122.0], [48.0, 122.0], [48.0, -1.0], [38.0, -1.0], [38.0, -76.0]],
+      "months": {"1": "SW", "2": "SW", "3": "W", "4": "W", "5": "W", "6": "W", "7": "W", "8": "W", "9": "W", "10": "W", "11": "SW", "12": "SW"},
+      "variability": "steady"
+    },
+    {
+      "id": "mediterranean_winds",
+      "name": {"zh": "地中海风带", "en": "Mediterranean wind belt"},
+      "polygon": [[30.0, -1.0], [48.0, -1.0], [48.0, 54.0], [30.0, 54.0], [30.0, -1.0]],
+      "months": {"1": "W", "2": "W", "3": "W", "4": "W", "5": "N", "6": "N", "7": "N", "8": "N", "9": "N", "10": "W", "11": "W", "12": "W"},
+      "variability": "steady"
+    },
+    {
+      "id": "westerlies_n_pacific_west",
+      "name": {"zh": "西北太平洋西风带", "en": "Northwest Pacific westerlies"},
+      "polygon": [[40.0, 122.0], [70.0, 122.0], [70.0, 180.0], [32.0, 180.0], [32.0, 132.0], [40.0, 132.0], [40.0, 122.0]],
+      "months": {"1": "NW", "2": "NW", "3": "NW", "4": "NW", "5": "S", "6": "S", "7": "S", "8": "S", "9": "W", "10": "W", "11": "NW", "12": "NW"},
+      "variability": "steady"
+    },
+    {
+      "id": "westerlies_n_pacific_east",
+      "name": {"zh": "东北太平洋西风带", "en": "Northeast Pacific westerlies"},
+      "polygon": [[32.0, -180.0], [70.0, -180.0], [70.0, -76.0], [45.0, -76.0], [45.0, -115.0], [38.0, -115.0], [38.0, -130.0], [32.0, -130.0], [32.0, -180.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "S", "5": "NW", "6": "NW", "7": "NW", "8": "NW", "9": "NW", "10": "S", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "winds_gulf_of_mexico",
+      "name": {"zh": "墨西哥湾风带", "en": "Gulf of Mexico wind belt"},
+      "polygon": [[18.0, -98.0], [32.0, -98.0], [32.0, -83.0], [18.0, -83.0], [18.0, -98.0]],
+      "months": {"1": "N", "2": "N", "3": "N", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "N", "10": "N", "11": "N", "12": "N"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_n_atlantic",
+      "name": {"zh": "北大西洋信风带", "en": "North Atlantic trade-wind belt"},
+      "polygon": [[8.0, -83.0], [38.0, -83.0], [38.0, -1.0], [30.0, -1.0], [30.0, -12.0], [8.0, -12.0], [8.0, -83.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "NE", "6": "NE", "7": "NE", "8": "NE", "9": "NE", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_central_america",
+      "name": {"zh": "中美洲信风带", "en": "Central American trade-wind coast"},
+      "polygon": [[8.0, -98.0], [18.0, -98.0], [18.0, -83.0], [8.0, -83.0], [8.0, -98.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "SW", "6": "SW", "7": "SW", "8": "SW", "9": "SW", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "winds_california",
+      "name": {"zh": "加利福尼亚沿岸风带", "en": "California coastal wind belt"},
+      "polygon": [[18.0, -130.0], [38.0, -130.0], [38.0, -115.0], [18.0, -115.0], [18.0, -130.0]],
+      "months": {"1": "NW", "2": "NW", "3": "NW", "4": "NW", "5": "NW", "6": "NW", "7": "NW", "8": "NW", "9": "NW", "10": "NW", "11": "NW", "12": "NW"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_n_pacific_main",
+      "name": {"zh": "北太平洋信风带", "en": "North Pacific trade-wind belt"},
+      "polygon": [[8.0, -180.0], [8.0, -98.0], [38.0, -98.0], [38.0, -115.0], [18.0, -115.0], [18.0, -130.0], [32.0, -130.0], [32.0, -180.0], [8.0, -180.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "NE", "6": "NE", "7": "NE", "8": "NE", "9": "NE", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "doldrums_pacific",
+      "name": {"zh": "太平洋赤道无风带", "en": "Pacific doldrums"},
+      "polygon": [[0.0, -180.0], [8.0, -180.0], [8.0, -88.0], [0.0, -88.0], [0.0, -180.0]],
+      "months": {"1": "VAR", "2": "VAR", "3": "VAR", "4": "VAR", "5": "VAR", "6": "VAR", "7": "VAR", "8": "VAR", "9": "VAR", "10": "VAR", "11": "VAR", "12": "VAR"},
+      "variability": "variable"
+    },
+    {
+      "id": "tropics_w_pacific",
+      "name": {"zh": "西太平洋热带风带", "en": "Western Pacific tropical belt"},
+      "polygon": [[4.0, 118.0], [22.0, 118.0], [22.0, 132.0], [32.0, 132.0], [32.0, 180.0], [4.0, 180.0], [4.0, 118.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "E", "5": "VAR", "6": "VAR", "7": "VAR", "8": "VAR", "9": "VAR", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "variable"
+    },
+    {
+      "id": "monsoon_south_china_sea",
+      "name": {"zh": "南海季风带", "en": "South China Sea monsoon"},
+      "polygon": [[4.0, 100.0], [24.0, 100.0], [24.0, 118.0], [4.0, 118.0], [4.0, 100.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "VAR", "5": "VAR", "6": "SW", "7": "SW", "8": "SW", "9": "VAR", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "variable"
+    },
+    {
+      "id": "monsoon_e_china",
+      "name": {"zh": "中国东部沿海季风带", "en": "East China coast monsoon"},
+      "polygon": [[22.0, 118.0], [22.0, 132.0], [40.0, 132.0], [40.0, 122.0], [41.0, 122.0], [41.0, 118.0], [22.0, 118.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "S", "6": "S", "7": "S", "8": "S", "9": "E", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "monsoon_arabian_sea",
+      "name": {"zh": "阿拉伯海季风带", "en": "Arabian Sea monsoon"},
+      "polygon": [[0.0, 44.0], [30.0, 44.0], [30.0, 75.0], [0.0, 75.0], [0.0, 44.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "SW", "6": "SW", "7": "SW", "8": "SW", "9": "SW", "10": "SW", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "red_sea_northerlies",
+      "name": {"zh": "红海北风带", "en": "Red Sea northerlies"},
+      "polygon": [[12.0, 32.0], [30.0, 32.0], [30.0, 44.0], [12.0, 44.0], [12.0, 32.0]],
+      "months": {"1": "N", "2": "N", "3": "N", "4": "N", "5": "N", "6": "N", "7": "N", "8": "N", "9": "N", "10": "N", "11": "N", "12": "N"},
+      "variability": "steady"
+    },
+    {
+      "id": "monsoon_bay_of_bengal",
+      "name": {"zh": "孟加拉湾季风带", "en": "Bay of Bengal monsoon"},
+      "polygon": [[0.0, 75.0], [30.0, 75.0], [30.0, 100.0], [0.0, 100.0], [0.0, 75.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "SW", "6": "SW", "7": "SW", "8": "SW", "9": "SW", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    },
+    {
+      "id": "doldrums_atlantic",
+      "name": {"zh": "大西洋赤道无风带", "en": "Atlantic doldrums"},
+      "polygon": [[0.0, -88.0], [8.0, -88.0], [8.0, 44.0], [0.0, 44.0], [0.0, -88.0]],
+      "months": {"1": "VAR", "2": "VAR", "3": "VAR", "4": "VAR", "5": "VAR", "6": "VAR", "7": "VAR", "8": "VAR", "9": "VAR", "10": "VAR", "11": "VAR", "12": "VAR"},
+      "variability": "variable"
+    },
+    {
+      "id": "trades_s_atlantic",
+      "name": {"zh": "南大西洋信风带", "en": "South Atlantic trade-wind belt"},
+      "polygon": [[0.0, -80.0], [-32.0, -80.0], [-32.0, 22.0], [0.0, 22.0], [0.0, -80.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "SE", "10": "SE", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_s_indian",
+      "name": {"zh": "南印度洋信风带", "en": "South Indian trade-wind belt"},
+      "polygon": [[0.0, 22.0], [-32.0, 22.0], [-32.0, 100.0], [0.0, 100.0], [0.0, 22.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "SE", "10": "SE", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_indonesian_seas",
+      "name": {"zh": "印尼群岛海域季风带", "en": "Indonesian seas monsoon"},
+      "polygon": [[-12.0, 100.0], [4.0, 100.0], [4.0, 135.0], [-12.0, 135.0], [-12.0, 100.0]],
+      "months": {"1": "W", "2": "W", "3": "W", "4": "VAR", "5": "E", "6": "E", "7": "E", "8": "E", "9": "E", "10": "VAR", "11": "W", "12": "W"},
+      "variability": "variable"
+    },
+    {
+      "id": "trades_s_pacific_west",
+      "name": {"zh": "西南太平洋信风带", "en": "Southwest Pacific trade-wind belt"},
+      "polygon": [[-32.0, 135.0], [4.0, 135.0], [4.0, 180.0], [-32.0, 180.0], [-32.0, 135.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "SE", "10": "SE", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_s_pacific_east",
+      "name": {"zh": "东南太平洋信风带", "en": "Southeast Pacific trade-wind belt"},
+      "polygon": [[0.0, -80.0], [-32.0, -80.0], [-32.0, -180.0], [0.0, -180.0], [0.0, -80.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "SE", "10": "SE", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "trades_australia",
+      "name": {"zh": "澳大利亚北部信风带", "en": "Northern Australian trade-wind belt"},
+      "polygon": [[-12.0, 100.0], [-32.0, 100.0], [-32.0, 135.0], [-12.0, 135.0], [-12.0, 100.0]],
+      "months": {"1": "SE", "2": "SE", "3": "SE", "4": "SE", "5": "SE", "6": "SE", "7": "SE", "8": "SE", "9": "SE", "10": "SE", "11": "SE", "12": "SE"},
+      "variability": "steady"
+    },
+    {
+      "id": "westerlies_s_eastern",
+      "name": {"zh": "南印度洋及澳大利亚西风带", "en": "Southern Indian & Australian westerlies"},
+      "polygon": [[-32.0, 20.0], [-60.0, 20.0], [-60.0, 180.0], [-32.0, 180.0], [-32.0, 20.0]],
+      "months": {"1": "W", "2": "W", "3": "W", "4": "W", "5": "W", "6": "W", "7": "W", "8": "W", "9": "W", "10": "W", "11": "W", "12": "W"},
+      "variability": "steady"
+    },
+    {
+      "id": "westerlies_s_pacific_atlantic",
+      "name": {"zh": "南大西洋及东南太平洋西风带", "en": "South Atlantic & Southeast Pacific westerlies"},
+      "polygon": [[-32.0, 20.0], [-60.0, 20.0], [-60.0, -80.0], [-60.0, -180.0], [-32.0, -180.0], [-32.0, -80.0], [-32.0, 20.0]],
+      "months": {"1": "W", "2": "W", "3": "W", "4": "W", "5": "W", "6": "W", "7": "W", "8": "W", "9": "W", "10": "W", "11": "W", "12": "W"},
+      "variability": "steady"
+    }
+  ]
+}

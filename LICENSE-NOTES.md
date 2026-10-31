@@ -169,3 +169,304 @@ waypoints, nations, goods, and chokepoint tags.
   derrotero; covers the Carreira and the India Run.
 - Willem Jansz. Blaeu, *Het Licht der Zeevaerdt* (1608) — printed pilot.
 - J. H. Parry, *The Age of Reconnaissance* (1963).
+
+---
+
+## Phase 6, task D — ocean seasonal data (`wind_regions`, `ocean_currents`, `ice_regions`)
+
+### Scope & method (Phase-6 decision 3: hand-authored, cited, nothing vendored)
+
+The three files authored by Phase-6 task D are original data compiled from
+published climatology; every value below is a fact recorded from the cited
+sources, and **nothing is copied or vendored from any source**. Authoring
+conventions common to all three files:
+
+- Direction tokens in `wind_regions.json` are **wind-FROM** 8-compass
+  directions (`N NE E SE S SW W NW`) plus `VAR`; month keys are exactly
+  `"1"`–`"12"`.
+- Polygons may include land: only water tiles inside a polygon carry
+  semantics (the §4.16/§6.5 rasterization and validator group 9's
+  water-coverage check consume water tiles). All rings are closed (first
+  pair repeated last) and no segment spans more than 180° of longitude
+  (long edges carry an intermediate vertex) — the antimeridian is only ever
+  touched at an edge, never crossed by a segment.
+- Regions tile all ocean between 70°N–60°S: self-checked at the tile level
+  (0 overlapping water tiles; ~0.01% of band water tiles — sub-degree
+  coastal slivers only — fall back to the documented `VAR` fallback).
+  Where two polygons share an edge, tile-centre membership at the seam may
+  resolve to either side; overlapping polygons were authored out
+  (strongest-then-id-order never needs to arbitrate a real overlap).
+- Current `path` arrays are the system's flow **axis in downstream order**;
+  `width_tiles` is odd (3 or 5) per the §4.17 corridor-expansion pin.
+  Paths are polyline axes; segments crossing the antimeridian are
+  intentional (the raster is wrap-aware on x, §4.17/§6.5).
+
+### Sources used across all three files
+
+Public-domain or fact-cited works; URLs are landing pages (no data copied):
+
+- NOAA Physical Sciences Laboratory — NCEP/NCAR Global Reanalysis
+  (surface-wind climatology background),
+  https://psl.noaa.gov/data/reanalysis/reanalysis.shtml
+- NOAA AOML — Global Drifter Program (GDP), climatological mean surface
+  currents, https://www.aoml.noaa.gov/phod/gdp/
+- NASA JPL — OSCAR ocean surface currents project (current geometry
+  cross-check), https://podaac.jpl.nasa.gov/
+- NOAA Office of Coast Survey — Historical Map & Chart Collection (host of
+  the digitized U.S. Hydrographic Office pilot charts),
+  https://historicalcharts.noaa.gov/
+- M. F. Maury, *The Physical Geography of the Sea* (1855) — the classic
+  wind/current routes of the sailing era.
+- H. U. Sverdrup, M. W. Johnson & R. H. Fleming, *The Oceans: Their
+  Physics, Chemistry, and General Biology* (1942) — gyre geometry, boundary
+  currents, monsoon circulation.
+- C. S. Ramage, *Monsoon Meteorology* (1971) — Asian/Indian monsoon
+  seasonal wind regimes and inter-monsoon variability.
+- M. Tomczak & J. S. Godfrey, *Regional Oceanography: An Introduction*
+  (2nd ed., 2003; author-hosted free edition),
+  http://www.es.flinders.edu.au/~mattom/regoc/pdfversion.html — regional
+  current systems (Indian Ocean monsoon drifts, Indonesian throughflow,
+  East Australian/West Australian).
+- Admiralty / U.S. Hydrographic Office sailing-direction and pilot-chart
+  series (as era-knowledge records, facts only): *The North Sea Pilot*,
+  *The Baltic Pilot*, *The Mediterranean Pilot*, *The West India Pilot*,
+  *The Red Sea and Gulf of Aden Pilot*, *The India Pilot*, *The China Sea
+  Pilot*, and the H.O. *Pilot Chart* series of the North Atlantic, North
+  Pacific, South Atlantic and Indian oceans.
+
+### `data/wind_regions.json` — 25 regions (per-region records)
+
+Monthly prevailing (wind-FROM) tokens, condensed. `steady` unless marked
+**variable**. All regions tile the 70°N–60°S ocean band; polygons are
+rectilinear boxes/notched boxes as authored.
+
+- `westerlies_n_atlantic` — N Atlantic & European westerlies; L-box
+  (38–70°N, 76°W–1°W) + (48–70°N, 1°W–122°E). Months: winter SW, remaining
+  W. Source: Maury (1855); H.O./Admiralty North Atlantic pilot charts;
+  NCEP/NCAR reanalysis climatology. Covers the North Atlantic Drift zone,
+  Iceland/Faroes, North Sea, Baltic and Norwegian coast.
+- `mediterranean_winds` — Mediterranean belt; box (30–48°N, 1°W–54°E).
+  Months: Oct–Apr W, May–Sep N (the etesian regime). Sources: *The
+  Mediterranean Pilot* (Admiralty); NCEP/NCAR reanalysis. The May–Sep N
+  token coarsens the seasonal etesians (peak Jul–Aug). The box's Atlantic
+  fringe (Portugal/Morocco NW coast) shares the summer-northerly (nortada)
+  and winter-W regime; the Black and Caspian seas are folded in (coarse).
+- `westerlies_n_pacific_west` — NW Pacific; L-box (40–70°N, 122°E–180°) +
+  (32–40°N, 132°E–180°). Months: Nov–Apr NW (winter monsoon outflow), May–Aug
+  S, Sep–Oct W. Sources: H.O. Pilot Chart of the North Pacific; Ramage
+  (1971). Covers Sea of Japan/Okhotsk/Kamchatka/Bering west side.
+- `westerlies_n_pacific_east` — NE Pacific; L-box (32–70°N, 180°–130°W) +
+  (38–70°N, 130°W–115°W) + (45–70°N, 115°W–76°W). Months: Nov–Mar SE
+  (Aleutian-low cyclonic regime), Apr S, May–Sep NW, Oct S. Sources: H.O.
+  Pilot Chart of the North Pacific; NCEP/NCAR reanalysis. The east limb
+  (45–70°N) extends the region over Hudson Bay and the Canadian subarctic
+  margin so the bay is tiled; Hudson Bay's local winter flow (NW-ly) is a
+  recorded coarsening.
+- `winds_gulf_of_mexico` — box (18–32°N, 98°W–83°W). Months: Oct–Mar N
+  (winter "northers"), Apr–Sep SE. Sources: *The West India Pilot*; H.O.
+  pilot charts. Includes the Bay of Campeche south to 18°N.
+- `trades_n_atlantic` — box (8–38°N, 83°W–1°W) with the Africa-corner notch
+  (30–38°N, 12°W–1°W). Months: NE year-round. Sources: Maury (1855);
+  H.O./Admiralty North Atlantic pilot charts. Covers the Caribbean,
+  Sargasso, Canaries basin and Morocco NW coast.
+- `trades_central_america` — box (8–18°N, 98°W–83°W). Months: Jan–Apr NE,
+  May–Sep SW, Oct–Dec NE. Sources: H.O. North Pacific pilot charts
+  (Tehuantepec/Papagayo gap-wind coasts); NCEP/NCAR reanalysis. The winter
+  NE / summer SW flip is the Pacific-Central-America regime; the localized
+  gap jets themselves are sub-monthly and coarsened away.
+- `winds_california` — box (18–38°N, 130°W–115°W). Months: NW year-round.
+  Sources: H.O. North Pacific pilot charts; Sverdrup et al. (1942)
+  (upwelling-wind regime). Includes the Baja offshore corridor and (coarse)
+  the Gulf of California margin.
+- `trades_n_pacific_main` — notched box (8–38°N, 180°–98°W) minus
+  (18–38°N, 130°W–115°W) (the California box) and minus
+  (32–38°N, 180°–130°W) (the NE-Pacific box). Months: NE year-round.
+  Sources: Maury (1855); H.O. Pacific pilot charts. Covers Hawaii and the
+  trade-wind core of the E-Pacific.
+- `doldrums_pacific` — box (0–8°N, 180°–88°W). **VAR year-round,
+  variable.** Justification: the equatorial calm belt/ITCZ has no
+  prevailing compass direction (Maury 1855 named it; NCEP/NCAR reanalysis
+  confirms weak variable surface flow).
+- `doldrums_atlantic` — box (0–8°N, 88°W–44°E). **VAR year-round,
+  variable.** Same ITCZ justification; spans the Atlantic equatorial belt
+  and Gulf of Guinea, where the ITCZ sits at or south of 8°N year-round
+  (Ramage 1971). Edges shared with the monsoon boxes at 44°E.
+- `tropics_w_pacific` — L-box (4–22°N, 118°E–132°E) + (4–32°N,
+  132°E–180°). Months: Jan–Mar NE, Apr E, May–Sep **VAR**, Oct–Dec NE.
+  **variable**. VAR justification: the typhoon regime — the region is the
+  world's principal tropical-cyclone basin in Jun–Sep, with no steady
+  prevailing direction (Ramage 1971; *The China Sea Pilot*).
+- `monsoon_south_china_sea` — box (4–24°N, 100°E–118°E). Months: Oct–Mar
+  NE (northeast monsoon), Jun–Aug SW (southwest monsoon), Apr/May/Sep
+  **VAR** (inter-monsoon transitions). **variable**. Sources: Ramage
+  (1971); *The China Sea Pilot*.
+- `monsoon_e_china` — L-box (22–40°N, 118°E–132°E) + (40–41°N, 118°E–122°E).
+  Months: Jan–Apr NE (winter monsoon/cold-air outflow), May–Aug S (summer
+  monsoon inflow), Sep E. Sources: Ramage (1971); *The China Sea Pilot*.
+  Covers the East China/Yellow/Bohai seas and Korea Strait approaches.
+- `monsoon_arabian_sea` — box (0–30°N, 44°E–75°E). Months: Jan–Apr NE,
+  May–Oct SW, Nov–Dec NE. Sources: Ramage (1971); *The India Pilot*;
+  Sverdrup et al. (1942). The SW monsoon (Findlater jet) is among the
+  steadiest winds on Earth — hence `steady`. The Persian Gulf's local
+  Shamal (NW) is a recorded coarsening of the box's north tip.
+- `red_sea_northerlies` — box (12–30°N, 32°E–44°E). Months: N year-round.
+  Sources: *The Red Sea and Gulf of Aden Pilot* (Admiralty); NCEP/NCAR
+  reanalysis. The famous channel northerlies; the southern reach's summer
+  S/SW shift is a recorded coarsening.
+- `monsoon_bay_of_bengal` — box (0–30°N, 75°E–100°E). Months: Jan–Apr NE,
+  May–Sep SW, Oct–Dec NE. Sources: Ramage (1971); *The India Pilot*. Same
+  seasonal flip as the Arabian Sea; `steady` for the same reason.
+- `trades_s_atlantic` — box (32–0°S, 80°W–22°E). Months: SE year-round.
+  Sources: Maury (1855); H.O. South Atlantic pilot charts.
+- `trades_s_indian` — box (32–0°S, 22°E–100°E). Months: SE year-round.
+  Sources: H.O. Indian Ocean pilot charts; Sverdrup et al. (1942)
+  (Mascarene high trades).
+- `trades_indonesian_seas` — box (12°S–4°N, 100°E–135°E). Months: Nov–Mar
+  W (Asian NE monsoon crossing the equator), May–Sep E (Australian winter
+  monsoon), Apr/Oct **VAR** (inter-monsoon). **variable**. Sources:
+  Tomczak & Godfrey (2003); Ramage (1971). Covers Malacca approaches,
+  Java/Banda/Flores/Timor seas, Makassar Strait and the Sulawesi Sea.
+- `trades_s_pacific_west` — box (32°S–4°N, 135°E–180°). Months: SE
+  year-round. Sources: H.O. Pacific pilot charts. Covers the Coral Sea,
+  Tasman margin and (coarse, 0–4°N limb) the equatorial W-Pacific.
+- `trades_s_pacific_east` — box (32–0°S, 180°–80°W). Months: SE year-round.
+  Sources: H.O. Pacific pilot charts; Sverdrup et al. (1942) (South
+  Pacific high trades).
+- `trades_australia` — box (32–12°S, 100°E–135°E). Months: SE year-round.
+  Sources: H.O. Indian Ocean pilot charts; Tomczak & Godfrey (2003)
+  (SE trades over NW Australia).
+- `westerlies_s_eastern` — box (60–32°S, 20°E–180°). Months: W year-round.
+  Sources: Maury (1855); H.O. Indian Ocean pilot charts ("roaring
+  forties": steady west winds).
+- `westerlies_s_pacific_atlantic` — box (60–32°S, 180°–20°E). Months: W
+  year-round. Sources: Maury (1855); H.O. South Atlantic pilot charts.
+  Drake-passage westerlies included.
+
+### `data/ocean_currents.json` — 23 systems (per-system records)
+
+`strength`: 3 = western-boundary jets, 2 = most gyre limbs, 1 = slow
+drifts — per the task's strength map. Widths: 5 tiles for the three jets +
+Antarctic Circumpolar + Monsoon drift, 3 tiles elsewhere. Axis geometry and
+flow direction are facts from the cited sources; axes are smoothed to
+5–12-point polylines.
+
+- `gulf_stream` (3, w5) — Florida Straits → Cape Hatteras → Grand Banks.
+  Sources: GDP climatology; Sverdrup et al. (1942); Maury (1855) (the Gulf
+  Stream's first modern charting).
+- `north_atlantic_drift` (1, w3) — Grand Banks tail → British Isles →
+  Norwegian Sea. Sources: GDP climatology; Sverdrup et al. (1942).
+- `canaries_current` (2, w3) — S-flow off NW Africa. Sources: GDP
+  climatology; Sverdrup et al. (1942).
+- `north_equatorial_atlantic` (2, w3) — W-flow, 13–15°N Atlantic. Sources:
+  GDP climatology; Maury (1855).
+- `labrador_current` (2, w3) — S-flow from the Labrador Sea to the Grand
+  Banks. Sources: GDP climatology; Sverdrup et al. (1942).
+- `kuroshio` (3, w5) — east of Luzon → east of Taiwan → south of Japan →
+  extension. Sources: GDP climatology; Sverdrup et al. (1942); Tomczak &
+  Godfrey (2003).
+- `oyashio` (2, w3) — SW-flow off Kamchatka/Kurils to off Hokkaido.
+  Sources: GDP climatology; Tomczak & Godfrey (2003).
+- `north_pacific_drift` (1, w3) — Kuroshio-extension tail eastward across
+  the dateline to the US west coast. Sources: GDP climatology; Sverdrup et
+  al. (1942). Path crosses the antimeridian (wrap-aware segment).
+- `north_equatorial_pacific` (2, w3) — W-flow 13–17°N, Philippines to
+  Central America (crosses the antimeridian). Sources: GDP climatology;
+  Maury (1855).
+- `california_current` (2, w3) — S-flow off the US/Mexico west coast.
+  Sources: GDP climatology; Sverdrup et al. (1942).
+- `humboldt_current` (2, w3) — N-flow along Chile/Peru, turning west at the
+  equator. Sources: GDP climatology; Sverdrup et al. (1942).
+- `south_equatorial_pacific` (2, w3) — W-flow 5–14°S across the basin
+  (crosses the antimeridian). Sources: GDP climatology; Maury (1855).
+- `south_equatorial_atlantic` (2, w3) — W-flow 7–10°S from the Gulf of
+  Guinea into the open S-Atlantic. Sources: GDP climatology; Sverdrup et
+  al. (1942).
+- `brazil_current` (2, w3) — S-flow along the Brazil coast. Sources: GDP
+  climatology; Sverdrup et al. (1942).
+- `benguela_current` (2, w3) — N-flow up the SW-African coast. Sources: GDP
+  climatology; Sverdrup et al. (1942).
+- `agulhas_current` (3, w5) — S-flow in the Mozambique channel along the
+  African coast, retroflecting east/southeast south of Madagascar. Sources:
+  GDP climatology; Sverdrup et al. (1942); Tomczak & Godfrey (2003).
+- `antarctic_circumpolar` (2, w5) — eastward ring at ~49–52°S, closing the
+  circle through the dateline. Sources: Sverdrup et al. (1942); Tomczak &
+  Godfrey (2003); OSCAR geometry.
+- `somali_current` (2, w3, `reversal {"summer_months": [6,7,8,9],
+  "direction": "reverse"}`) — coast-parallel axis off Somalia, stored in
+  **downstream order of the non-summer (NE-monsoon, Dec–May) regime**
+  (southward along the coast); the pinned summer flip yields the strong
+  SW-monsoon jet flowing northeastward. Sources: Sverdrup et al. (1942);
+  Tomczak & Godfrey (2003); Ramage (1971). See "Open questions" below for
+  the stored-vector wording.
+- `monsoon_drift` (1, w5) — eastward N-Indian equatorial drift axis
+  ~5–7°N, Somalia to the Andaman Sea. Sources: Sverdrup et al. (1942);
+  Tomczak & Godfrey (2003) (the monsoon current's annual-mean axis; the
+  seasonal W/E flip is sub-resolution for a strength-1 drift).
+- `south_equatorial_indian` (2, w3) — W-flow 11–16°S. Sources: GDP
+  climatology; Tomczak & Godfrey (2003).
+- `west_australian_current` (1, w3) — weak N-flow offshore of WA. Sources:
+  Tomczak & Godfrey (2003); GDP climatology.
+- `east_australian_current` (2, w3) — S-flow along the east Australian
+  coast into the Tasman. Sources: Tomczak & Godfrey (2003); GDP
+  climatology.
+- `indonesian_throughflow` (2, w3) — Pacific-to-Indian flow: Sulawesi Sea →
+  Makassar Strait → Flores Sea → open Indian Ocean south of Java. Sources:
+  Tomczak & Godfrey (2003); GDP climatology.
+
+### `data/ice_regions.json` — locked initial set (3 regions)
+
+Months wrap the year end per §4.18; polygons cover the seas' waters (and
+may include land — only water tiles freeze); all stay south of the
+permanent `I` band (≥ 70°N).
+
+- `baltic_ice` — months 12, 1, 2, 3. Baltic seasonal ice (freeze-up
+  Nov–Dec in the northern Bothnian Bay, break-up Apr–May in the far north;
+  coarsened to the locked 12–3 window for the whole basin). Polygon covers
+  the Baltic proper, Gulf of Finland, Gulf of Riga and the Gulf of Bothnia
+  to its head (~66°N) and **excludes the Kattegat/Skagerrak/Danish-sound
+  waters** — the Baltic exits stay navigable all winter, so the winter
+  reachability of the Baltic ports rides on the `hanseatic_north` lane
+  variant (task P), not on the ice. Sources: Finnish Meteorological
+  Institute Baltic ice-climate statistics,
+  https://en.ilmatieteenlaitos.fi/ ; *The Baltic Pilot* (Admiralty).
+- `hudson_bay_ice` — months 11, 12, 1, 2, 3, 4. Hudson Bay freezes
+  west/east-first from Nov and clears from Jun (coarsened to 11–4). Polygon
+  covers the bay, James Bay and Hudson Strait. Sources: Canadian Ice
+  Service regional ice climatology,
+  https://www.canada.ca/en/environment-climate-change/services/ice-forecasts.html
+  ; A. J. W. Catchpole, Hudson Bay sea-ice studies (1980s, historical
+  climatology).
+- `white_sea_ice` — months 11, 12, 1, 2, 3, 4. The White Sea freezes
+  Oct–Nov and clears May–Jun (coarsened to 11–4). Polygon covers the basin,
+  Kandalaksha/Onega/Dvina/Mezen bays and the Gorlo/Voronka entrance, north
+  edge ~67°N — well south of the permanent `I` band. Sources: Arctic and
+  Antarctic Research Institute (AARI) Russian Arctic seas ice climate,
+  http://www.aari.ru/ .
+
+### Open questions & coarsening notes (reported, not invented)
+
+1. **Somali stored-vector wording.** `10-*` §4.17 calls the raster vector
+   the "annual-mean" flow, flipped during `reversal.summer_months` at
+   lookup. The annual-mean Somali flow is dominated by the strong
+   SW-monsoon jet (N-ward); flipping that at lookup would put the S-ward
+   state in summer — backwards. Task D therefore stores the axis in the
+   **non-summer regime's** downstream order (winter, S-ward) so the pinned
+   `summer_months: [6,7,8,9]` flip produces the true summer jet. Task E/F
+   implementers should read "annual-mean" as "the stored, non-flipped
+   state"; no schema change is needed.
+2. The `winds_california` / `trades_n_pacific_main` boundary at 115°W
+   slices the Gulf of California lengthwise; its tiles resolve either way
+   (NW- vs NE-token). Coarse by design; the real gulf has an N-winter /
+   S-summer local regime of its own.
+3. `westerlies_n_pacific_east` carries the Aleutian regime's SE-winter
+   token east to 76°W at high latitudes (Hudson Bay margin). Hudson Bay's
+   local winter flow is NW-ly; accepted coarse to keep the region count at
+   the §4.16 cap of 25 (the set is exactly at the cap — any future new
+   region must merge or remove another).
+4. ~158 water tiles (0.013% of the 70°N–60°S band) sit in sub-degree
+   coastal slivers outside every polygon and fall back to the documented
+   `VAR` + `variable` default; no antimeridian column remains unassigned.
+5. `ui_strings.json`: **no new keys** — none of this task's content is
+   UI-frame text; all display strings live in the three data files as
+   L10nStrings.
+
