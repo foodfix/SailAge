@@ -94,7 +94,6 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | Any | `Esc` | back / close modal; on S1: no-op |
 | Any | `F5` | quick-save (allowed only in port; elsewhere shows toast `ui.cant_save_here`) |
 | Any | `F9` | quick-load to slot 1 (confirm dialog) |
-| S1/S2 | `L` | toggle locale zh/en; also an on-screen button `[ 中文 / EN ]` on every screen's top bar |
 | S3 | arrows / numpad 1–9 | step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move |
 | S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`) |
 | S3/S4 | `C` | open/close character panel (S14) |
@@ -148,7 +147,7 @@ Layout (1280×720; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
-| Day 12   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area] [中文/EN]  top bar 40px
+| Day 12   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]            top bar 40px
 +------------------------------------------------------------------+
 | [minimap 256×192]                                   (viewport)   |
 |  explored tiles only                                             |
@@ -161,7 +160,8 @@ Layout (1280×720; tile viewport is the space below the top bar):
 
 - Top bar: day, gold, morale (value + tier label, tier-colored per `20-*`
   §4.8 — yellow < 40, red < 20), current area label (nearest known port
-  within 16 tiles, else `world.open_sea`), language toggle.
+  within 16 tiles, else `world.open_sea`). **No language control** (amended
+  2026-10-31: the locale lives only in S19, §4.6.3).
 - Bottom bar: provisions / water / crew / cargo / current effective speed —
   all live-updating via `EventBus` signals.
 - Weather icon (placeholder glyph: sun/wind/storm text label) sits under the
@@ -362,7 +362,7 @@ rule). One panel, two mounts.
 |   当前 Current: normal                                        |
 |   调高后船队将在数日内逐渐补充;调低不会移除现有船队。           |
 +--------------------------------------------------------------+
-| 语言 Language: 中文 / EN — 顶部栏按钮切换                      |
+| 语言 Language: [中文 / EN]                                    |
 +--------------------------------------------------------------+
 | 返回主菜单 Return to main menu                                |
 +--------------------------------------------------------------+
@@ -373,16 +373,19 @@ rule). One panel, two mounts.
   trickle, **lowering never culls** living fleets; `deserted` = zero NPC
   spawns/contacts. A pre-game S1 open writes the same field before
   `new_game` (which preserves it as run input).
-- **Locale pointer stays where it is:** the toggle lives on S1/S2 (`L`) and
-  the top-bar button (§4.3); S19 only shows the current locale and says so —
-  no second toggle is added here.
+- **Locale lives only here (amended 2026-10-31):** S19 owns the language
+  toggle (`[中文 / EN]`, both mounts). The old `L` hotkey, the S2 footer
+  button, the top-bar button on every screen and the market header button are
+  all **removed** — Settings is the single place to change the language. The
+  `L` key remains bound in `project.godot` but is inert (reserved).
 - **Return to main menu (amended 2026-10-31):** the **S4-hosted** panel shows
   a `Return to main menu` action below the locale row. It is **confirm-first**
-  (`confirm_dialog`, destructive-action rule §4.7): on confirm the current run
-  is **saved to the active save slot** (the §4.7 save path) and the app routes
-  to **S1**; a save failure leaves the player in-game with the standard error
-  toast and does not route. It is **not** shown on the S1-hosted panel (there
-  is no run to leave).
+  (`confirm_dialog`, destructive-action rule §4.7) and the confirmation says
+  plainly that **unsaved progress is lost** — the game has manual saves only,
+  so the player saves from the S4 row first if they want to keep the run.
+  On confirm the app routes to **S1**; cancel returns to the panel. It is
+  **not** shown on the S1-hosted panel (there is no run to leave). Keys:
+  `settings.return_menu` / `settings.return_menu.confirm` (zh/en).
 - Esc / `Close` returns to S4 (§4.2 edge); the panel consumes all input
   while open (modal rule, §4.7).
 - Strings: `settings.*` (§4.7.9), zh/en. No textures; 32px rows.
@@ -777,7 +780,9 @@ must match between zh and en (the validator enforces it).
 | `settings.density.normal` | 正常 | Normal |
 | `settings.density.high` | 繁忙 | High |
 | `settings.density.extreme` | 极端 | Extreme |
-| `settings.locale` | 语言(顶部栏按钮切换) | Language (toggle in the top bar) |
+| `settings.locale` | 语言 | Language |
+| `settings.return_menu` | 返回主菜单 | Return to main menu |
+| `settings.return_menu.confirm` | 返回主菜单?未保存的进度将丢失。 | Return to main menu? Unsaved progress will be lost. |
 | `captain.section.market` | 港内商船船长 | Merchant captains in port |
 | `captain.section.tavern` | 港内船长 | Captains in port |
 | `captain.section.inn` | 歇脚的船长 | Captains resting |
