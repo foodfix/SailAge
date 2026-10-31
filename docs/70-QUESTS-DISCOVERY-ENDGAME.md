@@ -137,20 +137,35 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 ### 4.5 Piracy & bounty
 
-- **Piracy acts:** attacking a navy marker (`60-*` §4.1), sinking/capturing
-  national ships: rep −20 with that nation per act; rep with its rivals
-  (defined per `70-*` task as top-2 by port-count distance — task-owned
-  table) +2.
-- **Bounty:** rep ≤ −50 → that nation issues a bounty: navy hunter fleets
-  spawn per `60-*` §4.1; its ports are closed to the player (facility rows
-  show `port.closed_bounty`).
+- **Piracy acts:** attacking a national NPC fleet (right-click on any
+  fleet, `60-*` §4.11.11.2) or sinking/capturing national ships: rep −20
+  with that nation **once per battle at start**, through the single
+  `Bounty.apply_piracy` funnel; rep with its rivals
+  (`data/nations.json#rivals`) +2.
+- **Bounty:** rep ≤ −50 → that nation issues a bounty: **bounty-only
+  hunter fleets** spawn per `60-*` §4.11.11 (≤ 1 per bountied nation,
+  transient ≤ 6 — the one role that leaves the lanes to pursue the
+  player); its ports are closed to the player (facility rows show
+  `port.closed_bounty`).
+- **Privateer rep effects (locked):** privateer fleets (2 per undirected
+  rivalry pair) station on their sponsor's rivals' major lanes and hunt
+  only those rivals' fleets; **defeating a privateer pays +2 rep with each
+  of the two sponsor rivals** — the nations whose shipping it was preying
+  on — on top of the normal battle rep rules (`60-*` §4.1.1).
+- **Named pirates (locked):** `data/named_pirates.json` carries 4 captains,
+  zh/en, in **tiers 1–3** — the same guild bounty tiers as §4.9.3
+  (`{1: 5000, 2: 10000, 3: 20000}` gold by tier). A defeated named pirate
+  respawns, after **+30 days**, under a **new name**; `quest_gen` bounty
+  targets prefer named captains (`60-*` §4.11.11.4).
 - **Clearing:** pay the bounty at that nation's palace (cost =
   `500g × |rep|`), or surrender the flagship to a hunter (`60-*` §4.7) — both
   reset rep to −10.
 
 **Pins:** the rival table now lives in `data/nations.json#rivals`; the
 bounty amount is fixed at issue time; closed-port semantics and the
-palace-pay exception are pinned in §4.9.5/§4.9.6.
+palace-pay exception are pinned in §4.9.5/§4.9.6; the Phase-5 fleet-side
+pins (roles, budgets, contact rules, chokepoint hysteresis, treasure
+schedule) live in `60-*` §4.1/§4.11.11.
 
 ### 4.6 Tournaments
 
@@ -294,7 +309,9 @@ unreported list).
   Accepting spawns the target fleet through the Phase-2 `Encounters.spawn`
   API with `kind = "pirate"` at a tile within Chebyshev 10 of the guild port
   and `tier` ships; the marker carries `quest_id` so completion is detected
-  from the battle outcome (§4.9.5).
+  from the battle outcome (§4.9.5). **Phase 5:** the seam is
+  `NpcFleets.spawn(role = "pirate", …)` (`60-*` §4.12.3) and the target
+  prefers a named captain (`60-*` §4.11.11.4).
 - **Exploration draws.** Uniform pick over `Discovery` ids not yet found,
   whose `lat`/`lon`-derived tile lies within Chebyshev 40 of the guild port
   (wrap-aware on x), ids sorted ascending; if the set is empty the slot
@@ -358,6 +375,8 @@ unreported list).
   accepting spawns **2** navy markers of that rival via `Encounters.spawn`
   (bypassing the bounty gate, each carrying `quest_id` and
   `royal_mission = true`); each counts when its battle ends in `victory`.
+  **Phase 5:** the seam is `NpcFleets.spawn(role = "patrol", …)` — the
+  rival's patrol fleets (`60-*` §4.12.3).
   `rewards = {gold: 8000, reputation: {giver nation: +10}, fame: 25}`,
   `expiry_days = 60`.
 - `royal_chart`: `requirements = {"count": 2}` discovery reports **after**
@@ -388,7 +407,10 @@ unreported list).
   `reputation ≤ −50` and no active bounty issues one:
   `GameState.bounties[nation] = {"amount": 500 × abs(rep), "day": day}`.
   Ports of that nation are closed (§4.9.6); navy hunters already spawn from
-  Phase 2 (`60-*` §4.1/§4.11.11.2, which keys on `rep ≤ −50`).
+  Phase 2 (the retired `60-*` §4.11.11.2 spawn rolls, which keyed on
+  `rep ≤ −50`). **Phase 5:** hunters are bounty-only ecology fleets —
+  ≤ 1 per bountied nation, transient ≤ 6, the one runtime A* user
+  (`60-*` §4.1.1).
 - **Clearing.** Two paths, both reset that nation's reputation to exactly
   `−10` and delete `bounties[nation]`:
   1. `Bounty.pay_off(nation)` at that nation's palace, cost
@@ -539,8 +561,11 @@ Title ladder progress block:
       `title_bonus` multiplier).
 - [ ] Discovery flow (hint → sight → explore → report) works with both
       strings localized; sighting radius 18, wrap-aware.
-- [ ] Bounty: rep −50 triggers closure + hunters; both clear paths reset to
-      −10.
+- [ ] Bounty: rep ≤ −50 triggers closure + hunters; both clear paths reset
+      to −10.
+- [ ] Phase 5: named-pirate tiers match the §4.9.3 reward bands; defeating
+      a privateer pays +2 rep with each of the two sponsor rivals; bounty
+      quest targets prefer named captains.
 - [ ] Tournament: 3 battles, durability persistence, prizes exact.
 - [ ] Retirement marks the save and locks it to the summary screen.
 - [ ] The single world map loads via the PNG chunked-loader pipeline
