@@ -191,6 +191,7 @@ func _ensure_currents() -> bool:
 	currents_ok = false
 	if not decode_ok:
 		return false  # the wind decode already named the failure
+	var started := Time.get_ticks_usec()
 	var current_bytes := _read_file(CURRENTS_PNG)
 	if current_bytes.is_empty():
 		return false
@@ -203,7 +204,6 @@ func _ensure_currents() -> bool:
 			GRID_WIDTH, GRID_HEIGHT,
 		])
 		return false
-	var started := Time.get_ticks_usec()
 	_current_indices = currents["indices"]
 	_build_reversal_index()
 	currents_decode_ms = int(Time.get_ticks_usec() - started) / 1000
