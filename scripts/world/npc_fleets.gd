@@ -137,9 +137,9 @@ const LANE_TILES_PER_DAY := 20
 ## small unsellable remainder can never wedge a journey.
 const TRADER_HOLD_CAPACITY := 40
 const COASTER_HOLD_CAPACITY := 10
-## Risk-sample stride/count over a candidate route's tile path (`30-*` §4.4:
-## "a few bucket queries", deterministic).
-const RISK_SAMPLE_STRIDE := 8
+## Risk-sample count over a candidate route's tile path (`30-*` §4.4: "a
+## few bucket queries", deterministic); the stride derives from the route
+## length so the samples spread over the whole journey.
 const RISK_SAMPLE_MAX := 8
 ## Global cap slack above the core budgets: 6 treasure + ≤ 6 hunters + 4
 ## spare at normal (docs/60-* §4.1.1: 272 core ⇒ global cap 288).
