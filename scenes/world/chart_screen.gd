@@ -49,6 +49,8 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
+## Task L: the lane-heat layer reads live fleet cells (flag-gated, OFF).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 const SCENE_PATH := "res://scenes/world/chart_screen.tscn"
 ## Group every open modal joins (docs/90-* §11): the world scene's
@@ -87,6 +89,13 @@ const KEY_HINT := "chart.hint"
 const KEY_LEGEND_PORT := "chart.legend.port"
 const KEY_LEGEND_FLEET := "chart.legend.fleet"
 const KEY_LEGEND_DISCOVERY := "chart.legend.discovery"
+## Task L (docs/80-* §4.6 "Lane heat dots"): the optional cosmetic layer —
+## small `ACCENT` dots along the built lanes, denser where fleet traffic is
+## higher. **Default OFF** per the doc flag; flipping this to true is the
+## whole switch (the layer draws live fleets standing on lane tiles).
+const LANE_HEAT := false
+## Lane-heat dot size (px, screen space).
+const LANE_HEAT_DOT_PX := 2.0
 
 @onready var _background: ColorRect = $Background
 @onready var _top_bar: ColorRect = $TopBar
@@ -440,6 +449,22 @@ func _draw() -> void:
 		var half := LEAD_CROSS_PX * 0.5
 		draw_line(at - Vector2(half, 0), at + Vector2(half, 0), PaletteLib.ACCENT, 1.0)
 		draw_line(at - Vector2(0, half), at + Vector2(0, half), PaletteLib.ACCENT, 1.0)
+
+	# Layer 4.5 (task L, docs/80-* §4.6 flag — default OFF): lane heat dots.
+	# Purely cosmetic: an `ACCENT` dot per live fleet standing on a lane or
+	# spoke tile, so traffic-dense stretches read denser. Read-only.
+	if LANE_HEAT:
+		for fleet in GameState.npc_fleets:
+			if not (fleet is Dictionary):
+				continue
+			var cell := NpcFleetsLib.position_of(fleet)
+			if cell.x < 0 or not NpcFleetsLib._is_path_tile(cell):
+				continue
+			var heat := _to_screen(cell)
+			draw_rect(Rect2(
+				heat - Vector2(LANE_HEAT_DOT_PX, LANE_HEAT_DOT_PX) * 0.5,
+				Vector2(LANE_HEAT_DOT_PX, LANE_HEAT_DOT_PX)
+			), PaletteLib.ACCENT, true)
 
 	# Layer 5: the fleet — a white 5px square with a black 1px outline (§4.6).
 	if _fleet_cell.x >= 0:

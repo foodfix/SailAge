@@ -35,6 +35,8 @@ const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+## Task L (docs/80-* §4.7.8): the "merchant captains in port" rows.
+const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## docs/80 §4.7: toasts are transient (2.5s).
@@ -100,6 +102,12 @@ var _sanitizing := false
 var _toast_generation := 0
 ## Gold-flash tween (created/destroyed by [_flash_gold]).
 var _gold_tween: Tween = null
+## Task L (§4.7.8): the "merchant captains in port" section (code-built under
+## the trade table; the scene file stays untouched) — header + row labels.
+var _captains_header: Label = null
+var _captains_box: VBoxContainer = null
+## The captain rows currently rendered (`{id, name, role, nation_id}`).
+var _captain_rows: Array = []
 
 
 func _ready() -> void:
@@ -123,6 +131,8 @@ func _ready() -> void:
 	_build()
 	_bind()
 	_refresh()
+	_build_captains_section()
+	_refresh_captains()
 
 	# S14 over S5, the same modal the port hub offers (docs/80 §4.3).
 	CharacterPanelLib.attach_to(self)
@@ -455,9 +465,14 @@ func _bind() -> void:
 # --- Refresh ---------------------------------------------------------------
 
 func _refresh() -> void:
+	# Task L: a save loaded straight into port re-applies the active demand
+	# events' rest-overrides before any trend cell reads them (the table is
+	# transient; the saved instances are the truth — docs/30-* §4.5).
+	EconomyLib.ensure_event_overrides()
 	_refresh_header()
 	_refresh_rows()
 	_refresh_investment()
+	_refresh_captains()
 
 
 func _refresh_header() -> void:
@@ -613,6 +628,67 @@ func _refresh_investment() -> void:
 		_invest_button.tooltip_text = I18n.t_key("market.no_gold")
 	else:
 		_invest_button.tooltip_text = ""
+
+
+# --- Merchant captains in port (docs/80-* §4.7.8, task L) -------------------
+
+## The captain rows currently rendered (`{id, name, role, nation_id}`, the
+## test seam — no widget reach-in needed).
+func captain_rows() -> Array:
+	return _captain_rows.duplicate()
+
+
+## Builds the section shell once (header + rows box) under the trade table.
+func _build_captains_section() -> void:
+	var layout: VBoxContainer = $Layout/VBox
+	_captains_header = Label.new()
+	_captains_header.name = "CaptainsHeader"
+	_captains_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	layout.add_child(_captains_header)
+	_captains_box = VBoxContainer.new()
+	_captains_box.name = "CaptainsRows"
+	_captains_box.add_theme_constant_override("separation", 2)
+	layout.add_child(_captains_box)
+
+
+## Re-reads the docked traders sighted at this port's market (the seeded
+## 60/40 + 75% rolls live in `npc_intel.gd`; this only renders).
+func _refresh_captains() -> void:
+	if _captains_box == null:
+		return
+	for child in _captains_box.get_children():
+		_captains_box.remove_child(child)
+		child.queue_free()
+	_captain_rows = []
+	if _port_id.is_empty() or GameState.player.is_empty():
+		_captains_header.visible = false
+		return
+	_captains_header.visible = true
+	_captains_header.text = I18n.t_key("captain.section.market")
+	for entry in NpcIntelLib.sightings(_port_id, NpcIntelLib.FACILITY_MARKET):
+		var role := str(entry.get("role", ""))
+		if role != "trader" and role != "treasure":
+			continue
+		_captain_rows.append({
+			"id": str(entry.get("id", "")),
+			"name": str(entry.get("name", "")),
+			"role": role,
+			"nation_id": str(entry.get("nation_id", "")),
+		})
+	if _captain_rows.is_empty():
+		var empty := Label.new()
+		empty.name = "Empty"
+		empty.text = "-"
+		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_captains_box.add_child(empty)
+		return
+	for entry in _captain_rows:
+		var row := Label.new()
+		row.name = "Captain_%s" % str(entry["id"])
+		row.text = "%s · %s" % [str(entry["name"]),
+			I18n.t_key("captain.role.%s" % str(entry["role"]))]
+		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_captains_box.add_child(row)
 
 
 # --- Interaction -----------------------------------------------------------

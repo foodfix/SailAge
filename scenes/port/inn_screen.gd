@@ -22,6 +22,8 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+## Task L (docs/80-* §4.7.8): the "captains resting" rows.
+const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -60,6 +62,12 @@ var last_message_key: String = ""
 ## Current disabled-reason key for the odd-job button (`""` when enabled).
 var _odd_job_reason: String = ""
 
+## Task L (§4.7.8): the "captains resting" list (code-built under the odd-job
+## rows) — header + row labels and the `{id, name, role}` seam rows.
+var _captains_header: Label = null
+var _captains_box: VBoxContainer = null
+var _captain_rows: Array = []
+
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
@@ -79,6 +87,8 @@ func _ready() -> void:
 	# S8 keeps the S4 bars (docs/80-* §4.5: the port screens share the HUD);
 	# the sea viewport (minimap + weather glyph) stays hidden as on S4.
 	_hud.set_minimap_visible(false)
+
+	_build_captains_section()
 
 	_bind()
 
@@ -174,6 +184,7 @@ func _bind() -> void:
 
 	_bind_rest()
 	_bind_odd_job()
+	_bind_captains()
 
 	_back_button.text = I18n.t_key("ui.back")
 	_esc_hint.text = I18n.t_key("ui.esc_hint")
@@ -221,6 +232,70 @@ func _reason_text() -> String:
 	if not DataLoader.ui_strings.has(_odd_job_reason):
 		return ""
 	return I18n.t_key(_odd_job_reason)
+
+
+# --- Captains resting (docs/80-* §4.7.8, task L) -----------------------------
+
+## The captain rows currently rendered (`{id, name, role, nation_id}`) — the
+## headless seam.
+func captain_rows() -> Array:
+	return _captain_rows.duplicate()
+
+
+## Builds the section shell once (header + rows box) under the odd-job rows.
+func _build_captains_section() -> void:
+	var actions: Control = $Layout/VBox/Actions
+	var footer: Control = $Layout/VBox/Footer
+	var layout: Node = actions.get_parent()
+	var footer_index := footer.get_index()
+	_captains_header = Label.new()
+	_captains_header.name = "CaptainsHeader"
+	_captains_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	layout.add_child(_captains_header)
+	_captains_box = VBoxContainer.new()
+	_captains_box.name = "CaptainsRows"
+	_captains_box.add_theme_constant_override("separation", 2)
+	layout.add_child(_captains_box)
+	layout.move_child(_captains_header, footer_index)
+	layout.move_child(_captains_box, footer_index + 1)
+
+
+## The docked captains whose seeded facility roll landed on the inn (any
+## docked fleet is inn-eligible, §4.7.8), present today.
+func _bind_captains() -> void:
+	if _captains_box == null:
+		return
+	for child in _captains_box.get_children():
+		_captains_box.remove_child(child)
+		child.queue_free()
+	_captain_rows = []
+	if not has_run() or GameState.current_port == null:
+		_captains_header.visible = false
+		return
+	_captains_header.visible = true
+	_captains_header.text = I18n.t_key("captain.section.inn")
+	var port_id := str(GameState.current_port)
+	for entry in NpcIntelLib.sightings(port_id, NpcIntelLib.FACILITY_INN):
+		_captain_rows.append({
+			"id": str(entry.get("id", "")),
+			"name": str(entry.get("name", "")),
+			"role": str(entry.get("role", "")),
+			"nation_id": str(entry.get("nation_id", "")),
+		})
+	if _captain_rows.is_empty():
+		var empty := Label.new()
+		empty.name = "Empty"
+		empty.text = "-"
+		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_captains_box.add_child(empty)
+		return
+	for entry in _captain_rows:
+		var row := Label.new()
+		row.name = "Captain_%s" % str(entry["id"])
+		row.text = "%s · %s" % [str(entry["name"]),
+			I18n.t_key("captain.role.%s" % str(entry["role"]))]
+		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_captains_box.add_child(row)
 
 
 ## The engine's reason, or `inn.odd_job.ineligible` itself when the only
