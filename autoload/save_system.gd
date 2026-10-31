@@ -30,16 +30,20 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 4 ships
-## [constant SAVE_VERSION] 4 and there is **no migration chain**. SailAge has
-## not shipped, so a payload whose `save_version` is anything but 4 is a
-## pre-release save and is refused by name; the only migration that exists is
-## the identity. The historical `1 → 2` / `2 → 3` steps lived here through
-## Phase 3 and were deleted with this task rather than carried as dead weight.
+## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 5 ships
+## [constant SAVE_VERSION] 5 and there is **no migration chain** (decision 5,
+## `IMPLEMENT-Phase5.md`). SailAge has not shipped, so a payload whose
+## `save_version` is anything but 5 — v4 included — is a pre-release save and
+## is refused by name; the only migration that exists is the identity. The
+## historical `1 → 2` / `2 → 3` steps lived here through Phase 3 and were
+## deleted in Phase 4 rather than carried as dead weight.
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
 const CharacterLib := preload("res://scripts/player/character.gd")
+## The v5 `market_stocks` derived-rest default (docs/30-* §4.2) is built
+## through the economy module on load.
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const SlotDialogLib := preload("res://scenes/ui_shared/save_slot_dialog.gd")
 
 ## Smallest/largest usable slot number (docs/90-* §5.5: three slots).
@@ -52,10 +56,10 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 4 ships version 4).
-const SAVE_VERSION := 4
+## Current payload version (docs/90-* §8.2: Phase 5 ships version 5).
+const SAVE_VERSION := 5
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 4
+const PHASE := 5
 
 ## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
 ## nation at [constant RANK_NONE].
@@ -69,10 +73,13 @@ const DEFAULT_MAP_ID := "world"
 const DEFAULT_WEATHER := "calm"
 
 ## The •-marked GameState fields, in §8.1 order (minus the three header keys).
+## v5 appends the four Phase-5 blocks after the Phase-2 pair (docs/90-* §8.1
+## order); `hostile_fleets` keeps its key until task J's rename sweep.
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "port_investments", "quests",
 	"discoveries_found", "hostile_fleets", "proximity_cooldowns",
+	"market_stocks", "wrecks", "npc_preset", "market_events",
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
@@ -92,12 +99,19 @@ const REQUIRED_KEYS: Array[String] = [
 ## mirrors docs/90-* §8.1's "Default when absent" column; [method _apply] reads
 ## the absent-key value from it. A `const` dictionary is shared state, so every
 ## caller `.duplicate(true)`s the value on the way out.
+##
+## `market_stocks` is deliberately absent here: its documented default is the
+## **derived resting stock** (docs/30-* §4.2, no RNG) — computed, not a
+## literal — so `_apply` builds it through `Economy.build_initial_stocks`.
 const OPTIONAL_DEFAULTS := {
 	"saved_at": 0,
 	"quests": [],
 	"discoveries_found": [],
 	"hostile_fleets": [],
 	"proximity_cooldowns": {},
+	"wrecks": [],
+	"npc_preset": "normal",
+	"market_events": [],
 	"fame": 0,
 	"titles": {},
 	"bounties": {},
@@ -217,6 +231,10 @@ func snapshot() -> Dictionary:
 		"discoveries_found": GameState.discoveries_found.duplicate(true),
 		"hostile_fleets": GameState.hostile_fleets.duplicate(true),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
+		"market_stocks": GameState.market_stocks.duplicate(true),
+		"wrecks": GameState.wrecks.duplicate(true),
+		"npc_preset": GameState.npc_preset,
+		"market_events": GameState.market_events.duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),
@@ -429,6 +447,18 @@ func validate_payload(data: Dictionary) -> String:
 		return "'hostile_fleets' is not an array"
 	if not _is_dict_or_missing(data, "proximity_cooldowns"):
 		return "'proximity_cooldowns' is not an object"
+	# Phase-5 keys (§8.1): optional (absent → documented default) but
+	# type-checked whenever present, the same rule as the older blocks.
+	# `market_stocks` absent defaults to the derived resting stock, so only a
+	# *wrong-typed* value is a rejection here.
+	if not _is_dict_or_missing(data, "market_stocks"):
+		return "'market_stocks' is not an object"
+	if not _is_array_or_missing(data, "wrecks"):
+		return "'wrecks' is not an array"
+	if not (not data.has("npc_preset") or data["npc_preset"] is String):
+		return "'npc_preset' is not a string"
+	if not _is_array_or_missing(data, "market_events"):
+		return "'market_events' is not an array"
 	# Phase-3 keys (§8.1): optional (absent → documented default) but
 	# type-checked whenever present, the same rule as the Phase-2 pair above.
 	if not _is_int_or_missing(data, "fame"):
@@ -580,6 +610,24 @@ func _apply(data: Dictionary) -> void:
 	GameState.proximity_cooldowns = \
 		(data.get("proximity_cooldowns", OPTIONAL_DEFAULTS["proximity_cooldowns"]) \
 			as Dictionary).duplicate(true)
+	# Phase-5 saved state (docs/90-* §8.1). `market_stocks` absent → the
+	# documented derived-resting-stock default (docs/30-* §4.2, no RNG); the
+	# other three default through OPTIONAL_DEFAULTS. All type-checked in
+	# validate_payload before we get here.
+	if data.get("market_stocks", null) is Dictionary:
+		GameState.market_stocks = (data["market_stocks"] as Dictionary) \
+			.duplicate(true)
+	else:
+		GameState.market_stocks = EconomyLib.build_initial_stocks(
+			DataLoader.ports_list, DataLoader.goods_list
+		)
+	GameState.wrecks = \
+		(data.get("wrecks", OPTIONAL_DEFAULTS["wrecks"]) as Array).duplicate(true)
+	GameState.npc_preset = str(data.get("npc_preset",
+		OPTIONAL_DEFAULTS["npc_preset"]))
+	GameState.market_events = \
+		(data.get("market_events", OPTIONAL_DEFAULTS["market_events"]) as Array) \
+			.duplicate(true)
 	# Phase-3 saved state (docs/90-* §8.1), same optional-with-documented-default
 	# rule as the Phase-2 pair above.
 	GameState.fame = maxi(0, int(data.get("fame", OPTIONAL_DEFAULTS["fame"])))

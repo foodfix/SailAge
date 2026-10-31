@@ -8,7 +8,10 @@ extends Control
 ##     `data/goods.json`, sorted by `base_price`), so a 21st good is a
 ##     data-only change — there is no per-good code anywhere in this file;
 ##   * prices, quantity ceilings and trade side effects are the
-##     `trade_engine.gd` formulas, never duplicated here.
+##     `trade_engine.gd` formulas, never duplicated here;
+##   * the stock / trend / marginal-price columns read `economy.gd`
+##     directly (docs/80 §4.7.7) — stock 0–200, the ▲/▼ drift glyph
+##     against the effective rest, and the next-tranche price.
 ##
 ## **The market sells trade goods only** (docs/20-* §4.10 as amended, docs/80-*
 ## §4.6.1): provisions and water are survival, not commerce, and are bought at
@@ -28,6 +31,7 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
@@ -38,10 +42,16 @@ const TOAST_SECONDS := 2.5
 ## Quantity presets, in the §4.4 order 1 / 10 / 100 (+ Max).
 const QTY_PRESETS: Array[int] = [1, 10, 100]
 ## Widths of the table's fixed columns (docs/80 §4.8 8px grid). The quantity
-## picker is the numeric field plus the four preset buttons.
-const COL_NAME_W := 200
-const COL_PRICE_W := 140
-const COL_HAVE_W := 100
+## picker is the numeric field plus the four preset buttons. Phase 5 adds
+## the stock / trend / marginal-price columns (docs/80 §4.7.7): the old
+## buy/sell price cell **is** the marginal (next-tranche) price now that
+## every trade reprices per 10-unit tranche (docs/30 §4.4), so the price
+## column shows it under the `market.stock.marginal` caption.
+const COL_NAME_W := 160
+const COL_STOCK_W := 56
+const COL_TREND_W := 96
+const COL_MARGINAL_W := 132
+const COL_HAVE_W := 70
 const COL_QTY_W := 72
 const COL_PRESET_W := 40
 const COL_MAX_W := 56
@@ -120,6 +130,9 @@ func _ready() -> void:
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
+	# docs/30 §4.4: a stock-moving trade (or the daily economy step at this
+	# port) moves the stock/trend/marginal cells immediately.
+	EventBus.market_changed.connect(_on_market_changed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -271,17 +284,22 @@ func _build_column_header() -> void:
 	for child in _column_header.get_children():
 		_column_header.remove_child(child)
 		child.queue_free()
+	# [node-name suffix, ui_strings key, width, alignment] — the keys are the
+	# §4.7.9 captions (`market.` + key); node names stay dot-free.
 	for spec in [
-		["good", COL_NAME_W, HORIZONTAL_ALIGNMENT_LEFT],
-		["price", COL_PRICE_W, HORIZONTAL_ALIGNMENT_RIGHT],
-		["you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
-		["qty", COL_QTY_TOTAL_W, HORIZONTAL_ALIGNMENT_CENTER],
+		["good", "good", COL_NAME_W, HORIZONTAL_ALIGNMENT_LEFT],
+		["stock", "stock.header", COL_STOCK_W, HORIZONTAL_ALIGNMENT_RIGHT],
+		["trend", "stock.trend", COL_TREND_W, HORIZONTAL_ALIGNMENT_LEFT],
+		["marginal", "stock.marginal", COL_MARGINAL_W,
+				HORIZONTAL_ALIGNMENT_RIGHT],
+		["you_have", "you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
+		["qty", "qty", COL_QTY_TOTAL_W, HORIZONTAL_ALIGNMENT_CENTER],
 	]:
 		var label := Label.new()
 		label.name = "Col_%s" % str(spec[0])
-		label.set_meta("text_key", "market.%s" % str(spec[0]))
-		label.custom_minimum_size = Vector2(float(spec[1]), float(PaletteLib.ROW_H))
-		label.horizontal_alignment = int(spec[2])
+		label.set_meta("text_key", "market.%s" % str(spec[1]))
+		label.custom_minimum_size = Vector2(float(spec[2]), float(PaletteLib.ROW_H))
+		label.horizontal_alignment = int(spec[3])
 		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 		_column_header.add_child(label)
 	# Buy + Sell column caption, split over the two button widths.
@@ -295,8 +313,9 @@ func _build_column_header() -> void:
 		_column_header.add_child(label)
 
 
-## One table row: Good | Price buy/sell | You have | Qty picker | [Buy][Sell]
-## (docs/30 §4.7). Every widget's text is filled later by [method _refresh].
+## One table row: Good | Stock | Trend | Marginal | You have | Qty picker |
+## [Buy][Sell] (docs/30 §4.8 + docs/80 §4.7.7). Every widget's text is
+## filled later by [method _refresh].
 func _build_good_row(good_id: String) -> Dictionary:
 	var row := HBoxContainer.new()
 	row.name = "Row_%s" % good_id
@@ -310,12 +329,26 @@ func _build_good_row(good_id: String) -> Dictionary:
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 
-	var price_label := Label.new()
-	price_label.name = "Price"
-	price_label.custom_minimum_size.x = float(COL_PRICE_W)
-	price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	price_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	price_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	var stock_label := Label.new()
+	stock_label.name = "Stock"
+	stock_label.custom_minimum_size.x = float(COL_STOCK_W)
+	stock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	stock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stock_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+
+	# §4.7.7: one drift glyph — ▲ refilling (stock under rest, GOOD) or
+	# ▼ draining (stock over rest, BAD); blank at rest. No forecast shown.
+	var trend_label := Label.new()
+	trend_label.name = "Trend"
+	trend_label.custom_minimum_size.x = float(COL_TREND_W)
+	trend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	var marginal_label := Label.new()
+	marginal_label.name = "Marginal"
+	marginal_label.custom_minimum_size.x = float(COL_MARGINAL_W)
+	marginal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	marginal_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marginal_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 
 	var have_label := Label.new()
 	have_label.name = "Have"
@@ -352,7 +385,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 	sell_button.pressed.connect(_on_sell.bind(good_id))
 
 	row.add_child(name_label)
-	row.add_child(price_label)
+	row.add_child(stock_label)
+	row.add_child(trend_label)
+	row.add_child(marginal_label)
 	row.add_child(have_label)
 	row.add_child(qty_box)
 	row.add_child(buy_button)
@@ -363,7 +398,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 	return {
 		"node": row,
 		"name": name_label,
-		"price": price_label,
+		"stock": stock_label,
+		"trend": trend_label,
+		"marginal": marginal_label,
 		"have": have_label,
 		"qty": qty_field,
 		"qty_buttons": qty_buttons,
@@ -438,14 +475,41 @@ func _refresh_header() -> void:
 func _refresh_rows() -> void:
 	for good_id in _rows:
 		var refs: Dictionary = _rows[good_id]
+		# The marginal (next-tranche) price: what the *next* 10 units would
+		# cost or fetch at the current stock — the first tranche's realized
+		# price, never an average (docs/30 §4.4, docs/80 §4.7.7).
 		var buy := TradeEngineLib.buy_price(_port_id, good_id)
 		var sell := TradeEngineLib.sell_price(_port_id, good_id)
-		(refs["price"] as Label).text = "%s / %s" % [
+		(refs["marginal"] as Label).text = "%s / %s" % [
 			I18n.fmt("ui.gold_amount", {"gold": format_thousands(buy)}),
 			I18n.fmt("ui.gold_amount", {"gold": format_thousands(sell)}),
 		]
+		_refresh_stock_cells(good_id, refs)
 		(refs["have"] as Label).text = str(FleetLib.held(good_id))
 		_apply_row_limits(good_id)
+
+
+## Stock cell (0–200) and the one-glyph trend against the **effective**
+## rest (override-aware, docs/30 §4.5): ▲ refilling below rest, ▼ draining
+## above it, blank exactly at rest (docs/80 §4.7.7 — no forecast).
+func _refresh_stock_cells(good_id: String, refs: Dictionary) -> void:
+	var stock_label: Label = refs["stock"]
+	var trend_label: Label = refs["trend"]
+	if _port_id.is_empty():
+		stock_label.text = "-"
+		trend_label.text = ""
+		return
+	var stock := EconomyLib.stock_of(_port_id, good_id)
+	var rest := EconomyLib.effective_rest(_port_id, good_id)
+	stock_label.text = str(stock)
+	if stock < rest:
+		trend_label.text = I18n.t_key("market.stock.trend_up")
+		trend_label.add_theme_color_override("font_color", PaletteLib.GOOD)
+	elif stock > rest:
+		trend_label.text = I18n.t_key("market.stock.trend_down")
+		trend_label.add_theme_color_override("font_color", PaletteLib.BAD)
+	else:
+		trend_label.text = ""
 
 
 ## Re-applies the quantity ceiling and the §4.7/§6 disabled-with-reason rules
@@ -502,7 +566,10 @@ func _buy_reason(good_id: String, qty: int, buy_max: int) -> String:
 	if qty <= 0:
 		return I18n.t_key("market.invalid_qty")
 	var price := TradeEngineLib.buy_price(_port_id, good_id)
-	var cost := price * qty
+	# The §4.4 walked total, not price × qty: a multi-tranche purchase
+	# costs more than the marginal price suggests, and the reason must say
+	# what the full walk would actually cost.
+	var cost := TradeEngineLib.buy_cost(_port_id, good_id, qty)
 	if GameState.gold < cost:
 		if GameState.gold < price:
 			return I18n.t_key("market.no_gold")
@@ -627,6 +694,13 @@ func _on_fleet_changed() -> void:
 	_refresh()
 
 
+## Only this port's stock changes re-read the table; another port's drift
+## is irrelevant to what is on screen.
+func _on_market_changed(port_id: String) -> void:
+	if port_id == _port_id:
+		_refresh()
+
+
 func _on_locale_changed(_locale: String) -> void:
 	_bind()
 	_refresh()
@@ -731,3 +805,5 @@ func _exit_tree() -> void:
 		EventBus.gold_changed.disconnect(_on_gold_changed)
 	if EventBus.fleet_changed.is_connected(_on_fleet_changed):
 		EventBus.fleet_changed.disconnect(_on_fleet_changed)
+	if EventBus.market_changed.is_connected(_on_market_changed):
+		EventBus.market_changed.disconnect(_on_market_changed)

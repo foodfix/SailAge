@@ -1,26 +1,34 @@
 extends Node
-## Phase-4 task L acceptance tests: the v4 save schema and the identity-only
-## load rule (docs/IMPLEMENT-Phase4.md L; docs/90-* §8.1, §8.2 development-stage
-## scope; docs/70-* §2, §4.7, §4.9.2, §4.9.8).
+## Phase-5 Task G acceptance tests: the v5 save schema and the identity-only
+## load rule (docs/IMPLEMENT-Phase5.md G, decision 5; docs/90-* §8.1, §8.2
+## development-stage scope; docs/70-* §2, §4.7, §4.9.2, §4.9.8).
 ##
-##   godot --headless --path . tools/test_save_v4.tscn
+##   godot --headless --path . tools/test_save_v5.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## **What this suite is.** Phase 4 deleted the `1 → 2 → 3` migration chain
-## (pre-release saves need not load, `90-*` §8.2). This suite therefore tests
-## the **current** schema: a v4 payload round-trips byte-equal, the documented
-## guards still hold (corrupt payload refused, future `save_version` refused,
-## older pre-release versions refused by name, retired runs summarised not
-## resumed), and every Phase-2/Phase-3 field block is real saved state.
+## **What this suite is.** Phase 4 deleted the migration chain and Phase 5
+## keeps it removed (decision 5: no migration; a v4 payload is refused like
+## any older pre-release save). This suite therefore tests the **current**
+## schema: a v5 payload round-trips byte-equal — including the new
+## `market_stocks` / `wrecks` / `npc_preset` / `market_events` blocks — the
+## documented guards still hold (corrupt payload refused, future
+## `save_version` refused, v4 and older refused by name, retired runs
+## summarised not resumed), and every Phase-2/3/5 field block is real saved
+## state. `hostile_fleets` keeps its v2 key verbatim (task J owns the
+## rename).
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and written back at the end; every file this suite creates is
 ## removed again (start AND end), exactly like `tools/test_save.gd`.
 
-## Every Phase-4 §8.1 key and its documented default (the Phase-3 block is
-## unchanged in v4 — only `world.map_id`/`world.position`/`phase` values move).
-const V4_DEFAULTS := {
+## Every Phase-5 §8.1 key and its documented default (the Phase-2/3 blocks
+## are unchanged; `market_stocks`' documented default is the derived
+## resting stock, asserted through the loader in the defaults test).
+const V5_DEFAULTS := {
+	"wrecks": [],
+	"npc_preset": "normal",
+	"market_events": [],
 	"fame": 0,
 	"bounties": {},
 	"active_quests": [],
@@ -31,6 +39,7 @@ const V4_DEFAULTS := {
 	"retired_at": 0,
 }
 const NATION_IDS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
+const EconomyLib := preload("res://scripts/port/economy.gd")
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -40,7 +49,7 @@ var _backup: Dictionary = {}
 
 func _ready() -> void:
 	_backup_saves()
-	_test_v4_round_trip()
+	_test_v5_round_trip()
 	_test_fixture_shape()
 	_test_no_migration_chain()
 	_test_older_versions_refused()
@@ -55,16 +64,16 @@ func _ready() -> void:
 
 # --- Fixture: a hand-written v4 payload (docs/90-* §8.1) -------------------
 
-## A complete v4 save: every §8.1 key, `phase: 4`, `world.map_id: "world"` on
+## A complete v5 save: every §8.1 key, `phase: 4`, `world.map_id: "world"` on
 ## the 2160×1080 grid, and the Phase-2/Phase-3 state blocks the shipped build
 ## writes. The fleet is capacity-compliant (flagship hold exactly full) so
 ## `Fleet.normalize_all()` is a no-op on load and "only what changed" can be
 ## asserted honestly.
-func _v4_payload() -> Dictionary:
+func _v5_payload() -> Dictionary:
 	return {
-		"save_version": 4,
+		"save_version": 5,
 		"saved_at": 1793119712,
-		"phase": 4,
+		"phase": 5,
 		"locale": "en",
 		"day": 64,
 		"gold": 12540,
@@ -109,6 +118,10 @@ func _v4_payload() -> Dictionary:
 		"discoveries_found": [],
 		"hostile_fleets": [],
 		"proximity_cooldowns": {"pirate": 61},
+		"market_stocks": {"lisbon": {"wine": 87, "salt": 12}},
+		"wrecks": [],
+		"npc_preset": "normal",
+		"market_events": [],
 		"fame": 0,
 		"titles": {
 			"portugal": "none", "spain": "none", "england": "none",
@@ -128,16 +141,16 @@ func _v4_payload() -> Dictionary:
 	}
 
 
-# --- 1. The done-when: a v4 save loads and re-saves as v4 ------------------
+# --- 1. The done-when: a v5 save loads and re-saves as v5 ------------------
 
-func _test_v4_round_trip() -> void:
-	var fixture := _v4_payload()
+func _test_v5_round_trip() -> void:
+	var fixture := _v5_payload()
 	_ensure_dir()
-	_check(_write_json(1, fixture), "the v4 fixture is written to slot 1")
+	_check(_write_json(1, fixture), "the v5 fixture is written to slot 1")
 
-	# Quit-and-restart: wipe the state, then load the v4 file.
+	# Quit-and-restart: wipe the state, then load the v5 file.
 	_clobber_state()
-	_check(SaveSystem.load(1), "a v4 save loads")
+	_check(SaveSystem.load(1), "a v5 save loads")
 	_check(SaveSystem.last_read_error.is_empty(),
 		"the load reports no error (got '%s')" % SaveSystem.last_read_error)
 	_check(GameState.fame == 0, "fame restored (0)")
@@ -181,18 +194,29 @@ func _test_v4_round_trip() -> void:
 		== {"figurehead": "", "sail": "eq_cotton_sails"},
 		"the ship equipment block is restored")
 
-	# --- Re-save: the run is written as version 4 -------------------------
+	# The Phase-5 blocks restore byte-equal too.
+	_check(GameState.market_stocks == fixture["market_stocks"],
+		"market_stocks restored byte-equal")
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 87,
+		"a displaced stock restores its exact value (87)")
+	_check(GameState.wrecks == [] and GameState.npc_preset == "normal"
+		and GameState.market_events == [],
+		"wrecks/npc_preset/market_events restore from the fixture")
+
+	# --- Re-save: the run is written as version 5 -------------------------
 	_check(SaveSystem.save(1), "the run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 4,
-		"the re-saved file is save_version 4 (got %s)"
+	_check(int(resaved.get("save_version", -1)) == 5,
+		"the re-saved file is save_version 5 (got %s)"
 		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 4,
-		"the re-saved file is phase 4 (got %s)" % str(resaved.get("phase")))
-	for key in V4_DEFAULTS:
+	_check(int(resaved.get("phase", -1)) == 5,
+		"the re-saved file is phase 5 (got %s)" % str(resaved.get("phase")))
+	for key in V5_DEFAULTS:
 		_check(resaved.has(key),
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
+	_check(resaved.has("market_stocks"),
+		"the re-saved file carries 'market_stocks' (docs/90-* §8.1)")
 	_check(not resaved.has("quests"),
 		"the re-saved file has no superseded 'quests' key")
 	_check((resaved["world"] as Dictionary).get("map_id") == "world",
@@ -201,17 +225,17 @@ func _test_v4_round_trip() -> void:
 		and not resaved.has("explored_tiles"),
 		"the re-save still omits clock_fraction / explored_tiles")
 
-	# …and the v4 file re-loads to the same state (second cycle).
+	# …and the v5 file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved v4 file loads")
+	_check(SaveSystem.load(1), "the re-saved v5 file loads")
 	_check(_loaded_values() == first_cycle, "a second save/load cycle changes nothing")
 
 
-# --- 2. The fixture really is the v4 §8.1 shape ----------------------------
+# --- 2. The fixture really is the v5 §8.1 shape ----------------------------
 
 func _test_fixture_shape() -> void:
-	var fixture := _v4_payload()
+	var fixture := _v5_payload()
 	_check(int(fixture["save_version"]) == SaveSystem.SAVE_VERSION,
 		"the fixture is save_version %d" % SaveSystem.SAVE_VERSION)
 	_check(int(fixture["phase"]) == SaveSystem.PHASE,
@@ -219,8 +243,8 @@ func _test_fixture_shape() -> void:
 	_check(SaveSystem.validate_payload(fixture).is_empty(),
 		"validate_payload() accepts the fixture (%s)"
 		% SaveSystem.validate_payload(fixture))
-	_check(SaveSystem.SAVE_VERSION == 4 and SaveSystem.PHASE == 4,
-		"this build ships save_version 4 / phase 4")
+	_check(SaveSystem.SAVE_VERSION == 5 and SaveSystem.PHASE == 5,
+		"this build ships save_version 5 / phase 5")
 	_check(SaveSystem.DEFAULT_MAP_ID == "world",
 		"the shipped map id is 'world' (docs/90-* §9.1)")
 
@@ -230,7 +254,8 @@ func _test_fixture_shape() -> void:
 func _test_no_migration_chain() -> void:
 	_check(not ("MIGRATIONS" in SaveSystem),
 		"SaveSystem carries no MIGRATIONS table any more (dev-stage scope)")
-	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4"]:
+	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4",
+			"migrate_v4_to_v5"]:
 		_check(not SaveSystem.has_method(name),
 			"the historical migration step %s() is gone" % name)
 
@@ -240,8 +265,8 @@ func _test_no_migration_chain() -> void:
 func _test_older_versions_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	for version in [1, 2, 3]:
-		var older := _v4_payload()
+	for version in [1, 2, 3, 4]:
+		var older := _v5_payload()
 		older["save_version"] = version
 		older["phase"] = version
 		_write_json(1, older)
@@ -262,7 +287,7 @@ func _test_older_versions_refused() -> void:
 func _test_future_version_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	var future := _v4_payload()
+	var future := _v5_payload()
 	future["save_version"] = SaveSystem.SAVE_VERSION + 1
 	future["phase"] = SaveSystem.PHASE + 1
 	_write_json(1, future)
@@ -294,6 +319,12 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		{"key": "hostile_fleets", "value": {}, "why": "hostile_fleets as an object"},
 		{"key": "proximity_cooldowns", "value": [], "why":
 			"proximity_cooldowns as an array"},
+		{"key": "market_stocks", "value": [], "why":
+			"market_stocks as an array"},
+		{"key": "wrecks", "value": {}, "why": "wrecks as an object"},
+		{"key": "npc_preset", "value": 3, "why": "npc_preset as a number"},
+		{"key": "market_events", "value": {}, "why":
+			"market_events as an object"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		bad[probe["key"]] = probe["value"]
@@ -328,8 +359,9 @@ func _test_corrupt_phase_fields_rejected() -> void:
 ## defaults are now `_apply()`'s job, not a migration's.)
 func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
-	var payload := _v4_payload()
-	for key in ["hostile_fleets", "proximity_cooldowns", "fame", "titles",
+	var payload := _v5_payload()
+	for key in ["hostile_fleets", "proximity_cooldowns", "market_stocks",
+			"wrecks", "npc_preset", "market_events", "fame", "titles",
 			"bounties", "active_quests", "completed_royal_missions",
 			"discoveries_reported", "discovery_hints", "battles_won",
 			"retired", "retired_at", "discoveries_found"]:
@@ -342,6 +374,21 @@ func _test_optional_keys_default() -> void:
 	_check(GameState.proximity_cooldowns == {}
 		and GameState.proximity_cooldowns is Dictionary,
 		"an absent proximity_cooldowns defaults to {}")
+	# `market_stocks`' documented default is the DERIVED resting stock
+	# (docs/30-* §4.2, no RNG) — computed at load, not a literal.
+	_check(GameState.market_stocks.size() == DataLoader.ports_list.size(),
+		"an absent market_stocks defaults to the derived resting stock "
+		+ "(all %d ports)" % GameState.market_stocks.size())
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 160,
+		"the derived default stocks lisbon wine at 160 (got %d)"
+		% int(GameState.market_stocks["lisbon"]["wine"]))
+	_check(GameState.wrecks == [] and GameState.wrecks is Array,
+		"an absent wrecks defaults to []")
+	_check(GameState.npc_preset == "normal",
+		"an absent npc_preset defaults to 'normal' (got '%s')"
+		% GameState.npc_preset)
+	_check(GameState.market_events == [] and GameState.market_events is Array,
+		"an absent market_events defaults to []")
 	_check(GameState.fame == 0, "an absent fame defaults to 0")
 	_check(GameState.titles == {}, "an absent titles defaults to {}")
 	_check(GameState.bounties == {}, "an absent bounties defaults to {}")
@@ -389,6 +436,23 @@ func _test_new_fields_round_trip() -> void:
 	GameState.discoveries_reported = ["disc_atlas_cedars", "disc_red_sea_corals"]
 	GameState.discovery_hints = {"disc_atlas_cedars": true}
 	GameState.battles_won = 7
+	GameState.market_stocks = {}
+	var stocks := EconomyLib.build_initial_stocks(
+		DataLoader.ports_list, DataLoader.goods_list
+	)
+	stocks["lisbon"]["wine"] = 12
+	stocks["seville"]["spices"] = 200
+	GameState.market_stocks = stocks
+	GameState.wrecks = [{
+		"id": "wreck_64_100_200", "position": {"x": 100, "y": 200},
+		"day": 64, "cargo": {"silk": 12},
+	}]
+	GameState.npc_preset = "extreme"
+	GameState.market_events = [{
+		"template_id": "ev_war_provisioning", "port_id": "seville",
+		"start_day": 64, "end_day": 124,
+		"shifts": {"timber": -30, "cannons": -30},
+	}]
 	GameState.hostile_fleets = [{
 		"id": "hf_7_30_40_pirate",
 		"kind": "pirate",
@@ -426,11 +490,23 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() writes the hostile marker (docs/90-* §8.1)")
 	_check(on_disk.get("proximity_cooldowns") == {"pirate": 12},
 		"snapshot() writes proximity_cooldowns")
+	_check((on_disk.get("market_stocks") as Dictionary)["lisbon"]["wine"] == 12,
+		"snapshot() writes market_stocks")
+	_check((on_disk.get("wrecks") as Array).size() == 1,
+		"snapshot() writes wrecks")
+	_check(str(on_disk.get("npc_preset")) == "extreme",
+		"snapshot() writes npc_preset")
+	_check((on_disk.get("market_events") as Array).size() == 1,
+		"snapshot() writes market_events")
 
 	_clobber_state()
-	_check(SaveSystem.load(1), "the v4 file with Phase-2/3 state loads")
+	_check(SaveSystem.load(1), "the v5 file with Phase-2/3/5 state loads")
 	_check(_loaded_values() == expected,
-		"every Phase-2/3 field restores byte-equal after a v4 round trip")
+		"every Phase-2/3/5 field restores byte-equal after a v5 round trip")
+	_check(typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
+		"stock counts come back as ints, not json floats")
+	_check(typeof(GameState.wrecks[0]["position"]["x"]) == TYPE_INT,
+		"wreck coordinates come back as ints, not json floats")
 	_check(typeof(((GameState.bounties["spain"] as Dictionary)["amount"])) == TYPE_INT,
 		"the bounty amount comes back as an int, not a json float")
 	_check(typeof((GameState.hostile_fleets[0] as Dictionary)["position"]["x"])
@@ -443,6 +519,10 @@ func _test_new_fields_round_trip() -> void:
 	GameState.discoveries_reported.append("disc_mutated")
 	GameState.hostile_fleets[0]["id"] = "mutated"
 	GameState.proximity_cooldowns["pirate"] = 999
+	GameState.market_stocks["lisbon"]["wine"] = 999
+	GameState.wrecks[0]["id"] = "mutated"
+	GameState.npc_preset = "mutated"
+	GameState.market_events[0]["template_id"] = "mutated"
 	_check((snap["titles"] as Dictionary)["portugal"] == "baron",
 		"snapshot() deep-copies titles")
 	_check(((snap["active_quests"] as Array)[0] as Dictionary)["status"] == "active",
@@ -453,6 +533,13 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() deep-copies hostile_fleets")
 	_check(snap["proximity_cooldowns"] == {"pirate": 12},
 		"snapshot() deep-copies proximity_cooldowns")
+	_check((snap["market_stocks"] as Dictionary)["lisbon"]["wine"] == 12,
+		"snapshot() deep-copies market_stocks")
+	_check((snap["wrecks"] as Array)[0]["id"] == "wreck_64_100_200",
+		"snapshot() deep-copies wrecks")
+	_check(snap["npc_preset"] == "extreme", "snapshot() copies npc_preset")
+	_check((snap["market_events"] as Array)[0]["template_id"]
+		== "ev_war_provisioning", "snapshot() deep-copies market_events")
 
 
 # --- 8. A retired save is never playable ----------------------------------
@@ -536,6 +623,10 @@ func _clobber_state() -> void:
 	GameState.discoveries_found = []
 	GameState.hostile_fleets = []
 	GameState.proximity_cooldowns = {}
+	GameState.market_stocks = {"clobber": {"clobber": 1}}
+	GameState.wrecks = ["clobber"]
+	GameState.npc_preset = "clobbered"
+	GameState.market_events = ["clobber"]
 	GameState.fame = -1
 	GameState.titles = {}
 	GameState.bounties = {}
@@ -563,6 +654,10 @@ func _loaded_values() -> Dictionary:
 		"port_investments": GameState.port_investments.duplicate(true),
 		"hostile_fleets": GameState.hostile_fleets.duplicate(true),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
+		"market_stocks": GameState.market_stocks.duplicate(true),
+		"wrecks": GameState.wrecks.duplicate(true),
+		"npc_preset": GameState.npc_preset,
+		"market_events": GameState.market_events.duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),
@@ -581,10 +676,10 @@ func _loaded_values() -> Dictionary:
 ## loaded run rather than the clobbered sentinel.
 func _load_fixture_into_memory() -> void:
 	_ensure_dir()
-	_write_json(1, _v4_payload())
+	_write_json(1, _v5_payload())
 	_clobber_state()
 	if not SaveSystem.load(1):
-		_check(false, "setup: the v4 fixture loads before the rejection test")
+		_check(false, "setup: the v5 fixture loads before the rejection test")
 
 
 func _read_json(slot: int) -> Dictionary:
