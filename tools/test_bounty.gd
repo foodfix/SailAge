@@ -360,9 +360,12 @@ func _test_palace_and_hub() -> void:
 
 # --- 11. A navy battle start charges the full §4.9.5 piracy block ------
 
-## `world_map._charge_navy_piracy` is the one place `70-*` §4.9.5's "the `+2` is
-## applied once per battle, at battle start, next to the −20" happens. Order the
-## real world scene to fight a navy fleet and both halves must land exactly once.
+## `world_map._charge_piracy` is the one place `70-*` §4.9.5's "the `+2` is
+## applied once per battle, at battle start, next to the −20" happens (task J
+## renamed the Phase-2 `_charge_navy_piracy` and keyed it on the fleet
+## `role` — the fixture speaks the §4.11.11 encounter shape now). Order the
+## real world scene to fight a navy fleet and both halves must land exactly
+## once.
 func _test_navy_battle_piracy() -> void:
 	_new_run("lisbon", 40)
 	GameState.player["reputation"]["spain"] = -10
@@ -375,7 +378,7 @@ func _test_navy_battle_piracy() -> void:
 	await get_tree().process_frame
 	# `-10` for Spain, one raid: -20 with Spain and +2 with its pinned rivals
 	# (portugal, italy).
-	world._charge_navy_piracy({"kind": "navy", "nation_id": "spain"})
+	world._charge_piracy({"kind": "navy", "role": "hunter", "nation_id": "spain"})
 	_check(CharacterLib.reputation("spain") == -30,
 		"a navy battle start charges −20 with Spain (−10 → %d)"
 		% CharacterLib.reputation("spain"))
@@ -389,13 +392,13 @@ func _test_navy_battle_piracy() -> void:
 		"a non-rival is untouched (england %d)"
 		% CharacterLib.reputation("england"))
 	# Pirates are not piracy.
-	world._charge_navy_piracy({"kind": "pirate", "nation_id": "spain"})
+	world._charge_piracy({"kind": "pirate", "role": "pirate", "nation_id": ""})
 	_check(CharacterLib.reputation("spain") == -30,
 		"a pirate battle charges nothing (got %d)"
 		% CharacterLib.reputation("spain"))
 	# A raid that crosses −50 issues the bounty right at battle start.
 	GameState.player["reputation"]["spain"] = -35
-	world._charge_navy_piracy({"kind": "navy", "nation_id": "spain"})
+	world._charge_piracy({"kind": "navy", "role": "hunter", "nation_id": "spain"})
 	_check(CharacterLib.reputation("spain") == -55,
 		"the raid pushes Spain to −55 (%d)" % CharacterLib.reputation("spain"))
 	_check(BountyLib.has_bounty("spain"),
