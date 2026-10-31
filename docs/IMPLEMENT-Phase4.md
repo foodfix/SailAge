@@ -612,9 +612,53 @@ between waves. Manual acceptance run: `tools/demo_check_phase4.md`.
 | `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
 | locale | 163 literal keys + 6 format families, 0 missing in zh and en |
 
+(These are the numbers **at the N acceptance run**. The post-phase
+follow-ups below raised the suite count to 31 / 5 351 checks.)
+
 Start of phase: 30 suites / 4 545 checks, validator green on the legacy
-ASCII maps. End: 30 suites / 5 009 checks, validator green on the generated
-PNG world.
+ASCII maps. End of the 13 planned tasks: 30 suites / 5 009 checks, validator
+green on the generated PNG world.
+
+### Post-phase follow-ups (merged after N)
+
+Two product-owner changes landed after the acceptance run, both spec'd in
+the owning docs first (§13 rule) and gated the same way.
+
+**P1 — Harbor pair: dock into the land tile (`6cc9587`, spec `1bd637e`).**
+Each port now owns a **berth** (sea, the snap target and the fleet's stored
+position) and a **shore** (land, never passable — the visible port and the
+docking target) per `20-*` §4.11.1. Docking is orthogonal-only, detected
+before the legality test, costs one `move_cost()`, and never puts the fleet
+on land; sailing across a berth no longer docks. 14 ports re-snapped by one
+tile to gain a shore. `world.png` is **byte-identical**
+(`21b01368…`) — only `world_report.json` gained `shore_tile`. Validator
+group 6 items 2/2b recompute both halves independently; the self-test grew
+10 → 13 negatives.
+
+**P2 — Set-Sail provisioning, fleet panel, officers panel (`2813ced`, spec
+`6627a91`).** Per `80-*` §4.6.1/§4.6.2/§4.5.1 and `20-*` §4.10/§4.11.2:
+supplies left the market entirely (the provisioning prompt is the only
+purchase point), a locked days-of-supply readout
+`min(floor(prov/need), floor(water/need))` with `need = ceil(crew/5)` now
+drives both the prompt and the fleet panel, Set Sail is **gated** on crew ≥ 1
+and days ≥ 1 with a stated reason, the fleet panel gained per-ship
+durability/cargo/crew/guns/speed+wind/supplies-with-days plus a totals row,
+and S18 is a new officers roster with derived effects and dismissal.
+
+| Check | Result after P1 + P2 |
+|---|---|
+| `python3 tools/validate_data.py` | **exit 0**, groups 1–6 |
+| suites | **31 suites, 5 351 checks, 0 failures** (+342 over the N gate) |
+| `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
+| `data/maps/world.png` | unchanged, `21b01368…` |
+| `data/ui_strings.json` | 409 keys (26 added by P2), zh/en parity green |
+
+Independently re-verified at merge: the 100 harbor pairs (berth water, shore
+land, orthogonally adjacent, all distinct, no overlap); the days formula by
+brute force against a re-implementation; the gate at crew 0, supplies 0, and
+exactly one day; and the full first-sail chain on a **real** `new_game`
+fixture (0 supplies → gate closed → prompt buys → 16 days → `set_sail()`
+succeeds with the fleet left on the berth).
 
 ### What changed from the plan (and why)
 
