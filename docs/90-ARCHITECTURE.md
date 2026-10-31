@@ -60,13 +60,17 @@ SailAge/
 │       ├── confirm_dialog.tscn
 │       ├── gameover_screen.tscn
 │       ├── ending_screen.tscn   # Phase 3 (S16, retirement summary)
+│       ├── settings_panel.tscn  # Phase 5 (S19 settings modal, over S4)
 │       └── hud.tscn
 ├── scripts/
 │   ├── world/sailing_sim.gd    # day tick, consumption, weather, morale
 │   ├── world/map_loader.gd     # PNG world → chunked TileMaps (§9)
 │   ├── world/sail_path.gd      # click-to-sail A* pathing (20-* §4.2, Phase 4)
 │   ├── world/discovery.gd      # Phase 3: explore/report/hints (70-* §4.4)
+│   ├── world/npc_fleets.gd     # Phase 5: the living-sea fleet sim (60-* §4.1)
+│   ├── world/npc_intel.gd      # Phase 5: sightings/posters/rumors queries (60-* §4.1)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
+│   ├── port/economy.gd         # Phase 5: stock/drift/events, pure (30-* §4.2/§4.5)
 │   ├── port/shipyard_engine.gd
 │   ├── port/palace_engine.gd   # Phase 3: royal missions, titles (70-* §4.3)
 │   ├── quests/quest_gen.gd     # Phase 3: offers + tracking (70-* §4.9.3)
@@ -76,11 +80,14 @@ SailAge/
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   └── fleet/fleet.gd          # fleet composition, cargo maths
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
-│   └── maps/world.png           # generated, tool-owned (§9)
+│   ├── maps/world.png           # generated, tool-owned (§9)
+│   └── trade_routes_built.json  # generated, tool-owned (Phase 5; 10-* §4.14)
 └── tools/
     ├── validate_data.py
     ├── build_world.py           # Natural Earth → data/maps/world.png (Phase 4)
-    └── map_overrides.json       # carved-strait list (Phase 4)
+    ├── map_overrides.json       # carved-strait list (Phase 4)
+    ├── build_routes.py          # trade lanes → trade_routes_built.json (Phase 5)
+    └── route_overrides.json     # lane hand-fixes (Phase 5)
 ```
 
 Rules:
@@ -105,6 +112,7 @@ Application-wide signals; no state. Canonical signals:
 | `locale_changed(locale: String)` | `"zh"`/`"en"` | language toggle |
 | `gold_changed(new_gold: int)` | | any gold delta |
 | `fleet_changed()` | | ship bought/sold/sunk/repaired/cargo moved |
+| `market_changed(port_id: String)` | | a trade moved a port-good's stock at that port (economy stock change; market UI refreshes) |
 | `port_entered(port_id: String)` | | a port's shore tile entered (docking, `20-*` §4.11.1) |
 | `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"`/`"captured"` | sea-death |
 | `save_completed(slot: int)` | | SaveSystem finished a write |
@@ -128,7 +136,10 @@ Cross-screen communication never uses direct node references.
 
 - Loads every `data/*.json` at startup into typed dictionaries keyed by id:
   `DataLoader.ports`, `.goods`, `.ship_types`, `.nations`, `.officers`,
-  `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`.
+  `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`,
+  plus the Phase-5 files `.npc_config`, `.npc_captains`, `.named_pirates`,
+  `.market_events`, `.trade_routes`, and the tool-built
+  `.trade_routes_built` (read-only, `10-*` §4.14).
   There is exactly one port file (`data/ports.json`, 100 ports) — **no
   merge step**.
 - Entry points: `get_port(id) -> Dictionary`, `get_good(id)`, …
@@ -169,8 +180,23 @@ marked •):
   routing, `80-*` §4.7)
 - `port_investments: Dictionary` • — `{port_id: gold_total}` (`30-*` §4.3)
 - `known_ports: Array[String]` • — discovered ports (§20 port discovery)
-- `hostile_fleets: Array` • — world-map hostile markers (`60-*` §4.11.11);
-  present-but-empty before Phase 2
+- `npc_fleets: Array` • — every living NPC fleet, 8 roles (`60-*` §4.1);
+  save shape in `10-*` §4.15. Owned by `scripts/world/npc_fleets.gd` — the
+  Phase-5 module that replaces the retired Phase-2
+  `scripts/world/encounters.gd` 3-marker system (the rename
+  `hostile_fleets` → `npc_fleets` with `kind` → `role` mapping,
+  `pirate`→`pirate` / `navy`→`hunter`, is task J's sweep; this doc pins the
+  post-rename state)
+- `market_stocks: Dictionary` • — `{port_id: {good_id: stock}}` (shape in
+  `10-*` §4.15); initialized at `new_game` from the derived resting stock
+  (`30-*` §4.2) — no RNG
+- `wrecks: Array` • — lootable wreck sites (shape in `10-*` §4.15); never
+  counted against the fleet cap
+- `npc_preset: String` • — density preset id (`10-*` §4.10), default
+  `"normal"`; chosen on S2, changeable mid-run in the S19 settings modal;
+  raising refills via the trickle, lowering never culls living fleets
+- `market_events: Array` • — active demand-event instances (shape in
+  `10-*` §4.15); rotation in `30-*` §4.5
 - `proximity_cooldowns: Dictionary` • — `{kind: day}` spawn immunity
   (`60-*` §4.8); present-but-empty before Phase 2
 - `pending_encounter` — **transient, never saved**: the encounter S3 hands to
@@ -189,8 +215,16 @@ marked •):
   `advance_day()`, and thin helpers; heavy rules live in `scripts/` engines
   which mutate GameState. `world.map_id` is set to `DEFAULT_MAP_ID = "world"`
   at new game — there is no map choice.
-- On `day_advanced`: runs the daily ledger delegation order fixed in
-  `20-WORLD-AND-SAILING.md` §5 (consumption before wages before morale).
+- Day-tick listener order (`20-*` §4.3): the daily ledger runs first
+  (`20-*` §5: consumption before wages before morale), then **economy
+  drift + demand-event expiry** (pure `scripts/port/economy.gd`,
+  `30-*` §4.2/§4.5), then `EventBus.day_advanced` fires, and the
+  world-scene listeners (the NPC fleet tick) run on it — economy drift is
+  always before `day_advanced`, on sea days and port day-advances alike.
+- **Cap sizing (Phase 5):** normal ≈ 288 is ecology/balance, not
+  performance; coasters absorb the visual traffic (≤ 5-unit trades) so
+  effective long-haul trading stays ~127 fleets; far-field LOD is the
+  Phase-6 lever beyond `absolute_cap`.
 
 ### 5.5 SaveSystem (`autoload/save_system.gd`)
 
@@ -198,9 +232,10 @@ marked •):
 - `save(slot)`, `load(slot) -> bool`, `list_saves() -> Array[Dictionary]`
   (slot, day, nation, port, gold, timestamp for the slot UI).
 - Serializes exactly the •-marked GameState fields plus
-  `{"save_version": 4, "saved_at": <unix>, "phase": 4}`.
-- `load` validates `save_version` and runs migrations (§8.2); on unrecoverable
-  version mismatch returns `false` and leaves state untouched.
+  `{"save_version": 5, "saved_at": <unix>, "phase": 5}`.
+- `load` validates `save_version` — it must equal `SAVE_VERSION = 5`;
+  **no migration chain** (§8.2): a v4 or older payload is refused
+  ("pre-release save"), `load()` returns `false`, and state is untouched.
 
 ## 6. `project.godot` Requirements (locked values)
 
@@ -241,9 +276,9 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 4,
+  "save_version": 5,
   "saved_at": 1793119712,
-  "phase": 4,
+  "phase": 5,
   "locale": "en",
   "day": 12,
   "gold": 7830,
@@ -256,8 +291,12 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   "port_investments": {"lisbon": 500},
   "quests": [],
   "discoveries_found": [],
-  "hostile_fleets": [],
-  "proximity_cooldowns": {}
+  "npc_fleets": [],
+  "proximity_cooldowns": {},
+  "market_stocks": {},
+  "wrecks": [],
+  "npc_preset": "normal",
+  "market_events": []
 }
 ```
 
@@ -268,7 +307,7 @@ Phase-2 additions (version 2):
 
 | Key | Type | Default when absent | Owner |
 |---|---|---|---|
-| `hostile_fleets` | `[]object` | `[]` | `60-*` §4.11.11 |
+| `hostile_fleets` | `[]object` | `[]` | `60-*` §4.11.11 — **renamed `npc_fleets` at v5** |
 | `proximity_cooldowns` | `object` `kind → day` | `{}` | `60-*` §4.8 spawn immunity |
 
 `proximity_cooldowns` records, per hostile `kind`, the first day on which a new
@@ -293,12 +332,13 @@ Phase-3 additions (version 3):
 
 `quests` (the Phase-1 placeholder) stays **present but permanently empty**:
 it is superseded by `active_quests`, and nothing in Phase-3 code reads or
-writes it. The `2 → 3` migration drops it from the payload (a v3 save has no
-`quests` key); a load with the key absent restores `GameState.quests = []`.
+writes it. A v3+ save has no `quests` key (the retired `2 → 3` migration
+dropped it; that chain no longer exists, §8.2); a load with the key absent
+restores `GameState.quests = []`.
 `world.map_id` is written by `SaveSystem.snapshot()` from `GameState.world`
 (it already serialises `world`'s `position`/`weather`; `map_id` joins them).
-Its value in a v3 payload was the map id current at that time; Phase 4 fixes the
-value to `"world"` (§8.1 Phase-4 row and `MIGRATIONS[3]`).
+Its value in a v3 payload was the map id current at that time; Phase 4 fixes
+the value to `"world"` (§8.1 Phase-4 row).
 
 Phase-4 change (version 4):
 
@@ -311,27 +351,45 @@ Phase-4 change (version 4):
 `world.map_id` becomes `"world"`, `world.position` becomes the **berth** tile
 (`10-*` §6.1 snap rule) of the save's `current_port` (saves are port-only by
 design, `20-*` §4.3), `clock_fraction` becomes `0` (it is a runtime
-accumulator, absent from a normal save — the migration normalizes it if a
-hand-edited payload carries one), `known_ports` is kept untouched (port ids
-survived the migration, `10-*` §7.1), and `phase` becomes `4`.
+accumulator, absent from a normal save — the retired migration normalized it
+if a hand-edited payload carried one), `known_ports` is kept untouched (port ids
+survived intact, `10-*` §7.1), and `phase` becomes `4`.
 
-### 8.2 Migration rule
+Phase-5 additions (version 5):
 
-**Development-stage scope (normative, 2026-10-30).** SailAge has not shipped;
-there are no player saves in the wild. Backward compatibility across phases is
-therefore **explicitly out of scope until the first release**, and no task may
-spend effort on it. Concretely:
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `npc_fleets` | `[]object` | `[]` | `60-*` §4.1; renames v2's `hostile_fleets`; shape in `10-*` §4.15 |
+| `market_stocks` | `object port_id → {good_id → stock}` | derived resting stock (`30-*` §4.2), no RNG | `30-*` §4.2; shape in `10-*` §4.15 |
+| `wrecks` | `[]object` | `[]` | `60-*` auto-resolve; shape in `10-*` §4.15 |
+| `npc_preset` | string preset id | `"normal"` | `10-*` §4.10 |
+| `market_events` | `[]object` | `[]` | `30-*` §4.5; shape in `10-*` §4.15 |
 
-- `save_version` increments on any breaking shape change, and `MIGRATIONS` must
-  still be an ordered pure-function map — but the **only** migration that must
-  exist is the identity: a payload whose `save_version` equals `SAVE_VERSION`
-  loads. Older payloads may be **refused** (`load()` returns false, logs
-  "pre-release save").
-- The `v1 → v2 → v3` steps below are **historical records** of what each phase
-  did. Phase-4 task K keeps `MIGRATIONS[3]` because it is already written, but
-  it is **not** a gate: a missing chain or an unreadable old fixture is not a
-  failure. `test_save_v4` tests the **current** schema round-trip; migrating a
-  real Phase-1 fixture end-to-end is **dropped from the acceptance criteria**.
+**No migration; v4 refused (Phase-5 decision 5).** `SAVE_VERSION = 5`,
+`PHASE = 5`; version 5 adds **no `MIGRATIONS` entry and performs no payload
+transformation**. All new state is initialized by `new_game`; a v4 payload
+is refused like any older version (`load()` false, "pre-release save"
+logged); see §8.2 for the normative rule.
+
+### 8.2 Versioning rule (no migration chain)
+
+**Development-stage scope (normative; amended 2026-10-31, Phase 5).**
+SailAge has not shipped; there are no player saves in the wild. Backward
+compatibility across phases is therefore **explicitly out of scope until
+the first release**, and no task may spend effort on it. Concretely:
+
+- `save_version` increments on any breaking shape change. The current
+  values are `SAVE_VERSION = 5`, `PHASE = 5`.
+- **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
+  contract is the identity: a payload whose `save_version` equals
+  `SAVE_VERSION` loads (round-trip); **any older payload — v4 included —
+  is refused** (`load()` returns false, logs "pre-release save"). There is
+  no v4 → v5 step, and none may be reintroduced: Phase 4 removed the chain
+  (`IMPLEMENT-Phase5.md` correction 4) and Phase 5 keeps it removed
+  (decision 5).
+- All Phase-5 state is initialized by `new_game` (stocks derived; fleets
+  seeded to half the cap there and only there); nothing is back-filled at
+  load.
 - Anything that would only exist to serve an old save (position remapping,
   port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
   is cheaper to delete than to maintain, delete it.
@@ -339,53 +397,18 @@ spend effort on it. Concretely:
   release is planned; until then, treat "old save loads" as **not a
   requirement** (`00-*` §11: no work without a spec).
 
-- `save_version` increments on any breaking shape change.
-- `SaveSystem.MIGRATIONS` is an ordered map `1: Callable`, `2: Callable`, …
-  where `MIGRATIONS[n]` upgrades a version-n dict to n+1.
-- Loading applies migrations from the file's version up to the current one;
-  missing migration step = load failure (returns false, logs).
-- Phase-2 code ships `save_version = 2` with exactly one migration:
-
-  `MIGRATIONS[1]` — upgrades a Phase-1 payload by adding
-  `"hostile_fleets": []` and `"proximity_cooldowns": {}`, adding the
-  `player.equipment` block of `60-*` §4.11.12
-  (`{"weapon": "", "armor": ""}`) when `player` is a non-empty object, adding
-  the `fleet[i].equipment` block (`{"figurehead": "", "sail": ""}`) to every
-  ship instance, and setting `phase = 2`. It never touches any other key, so a
-  Phase-1 save re-saves byte-equal apart from the added keys and the version.
-
-- Phase-3 code ships `save_version = 3` and adds exactly one step:
-
-  `MIGRATIONS[2]` — upgrades a version-2 payload by adding every Phase-3 key
-  of §8.1 with its documented default (`fame 0`, `titles`/`completed_royal_
-  missions` all six nations at `"none"`/`0`, `bounties {}`, `active_quests []`,
-  `discoveries_reported []`, `discovery_hints {}`, `battles_won 0`,
-  `retired false`, `retired_at 0`), removing the superseded `quests` key,
-  adding `world.map_id` at its then-current default when `world` is a
-  non-empty object (never synthesising a `world`), and setting `phase = 3`. It
-  never mutates its input and never touches any other key, so a Phase-2 save
-  re-saves byte-equal apart from the added/removed keys and the version.
-
-- Phase-4 code ships `save_version = 4` and adds exactly one step:
-
-  `MIGRATIONS[3]` — upgrades a version-3 payload to the single-world save. It
-  rewrites `world.map_id` → `"world"`; rewrites `world.position` → the
-  **berth** tile of the save's `current_port` (`10-*` §6.1 snap rule: nearest
-  water tile within 2 tiles, Chebyshev, tie-break smallest `(y, x)`; the
-  fleet's berth, never the shore tile), because
-  saves are port-only by design and the old coordinates name tiles that no
-  longer exist on the new grid; sets `clock_fraction` → `0`; leaves
-  `known_ports` **untouched** (every port id survived `10-*` §7.1); and sets
-  `phase = 4`. No key is added or removed. It never mutates its input.
-  (History: the payload it consumes may still carry `map_id` `"p1"`/`"p3"`.)
-- The chain **v1 → v2 → v3 → v4 is preserved and tested end-to-end**
-  (`test_save_v4`, which loads a real Phase-1 fixture and migrates it all the
-  way).
-- Migration functions are pure: they receive a dict and return a new dict; the
-  loaded file is never mutated in place.
-- **`titles`/`completed_royal_missions` must cover all six nations** after
-  every migration (the ladder and the quest-slot rule read them by key); the
-  six ids come from `data/nations.json`, never a list in code.
+**Historical record (not normative).** Phases 2–4 each shipped one migration
+step — `MIGRATIONS[1]` (add the v2 keys and the equipment blocks),
+`MIGRATIONS[2]` (add the v3 keys with their defaults, drop the superseded
+`quests` key, add `world.map_id`), `MIGRATIONS[3]` (rewrite `world` to the
+single-world payload: `map_id` → `"world"`, `position` → the current port's
+berth tile, `clock_fraction` → `0`) — and were pure functions that never
+mutated their input. That chain, including its end-to-end fixture test, was
+removed in Phase 4's final state; Phase 5's `test_save_v5` (renamed from
+`test_save_v4` by task G) tests the current-schema round-trip and the
+v4-refused path. `titles`/`completed_royal_missions` cover all six nations
+in every v3+ payload (the ladder and the quest-slot rule read them by key);
+the six ids come from `data/nations.json`, never a list in code.
 
 ## 9. World PNG → chunked TileMap (loading pipeline)
 
@@ -500,6 +523,9 @@ is a build failure, never a quiet divergence.
 - [ ] `project.godot` matches §6 exactly.
 - [ ] Save file contains at least the §8.1 keys with `save_version` present;
       load tolerates missing optional keys only where a default is documented.
+- [ ] A v5 payload round-trips exactly (fleet positions, route legs,
+      captains, stocks); a v4 payload is refused with the standard message
+      (`load()` false, "pre-release save" logged — §8.2).
 - [ ] Swapping `data/maps/world.png` for another palette-conformant
       2160×1080 indexed PNG requires zero code edits.
 - [ ] Adding one new good to `data/goods.json` requires zero code edits

@@ -9,7 +9,13 @@ depends on. It defines:
 - The i18n rule for all display strings.
 - The spec for `tools/validate_data.py`, the validator all data must pass.
 - The locked content lists: 100 ports, 20 goods, 8 ship types,
-  6 nations, 6 starter officers — exhaustive, with no open slots.
+  6 nations, 6 starter officers (§7.1–7.5), plus the Phase-5 lists —
+  12 trade lanes (§7.6), 7 captain name pools (§7.7), 4 named pirates
+  (§7.8) — exhaustive, with no open slots.
+- The Phase-5 npc/economy schemas (`npc_config`, `npc_captains`,
+  `named_pirates`, `market_events` — §4.10–4.13), the trade-route pair
+  (`trade_routes.json` hand-authored, `trade_routes_built.json` tool-owned —
+  §4.14), and the living-economy save-block shapes (§4.15).
 - The grid constants, tile legend, and the generated raster world artifact
   (`data/maps/world.png`) with its harbor-snap rule — ports are `lat`/`lon`
   data in `data/ports.json`, never hand-placed cells.
@@ -30,15 +36,23 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/discoveries.json` | Discovery list; `lat`/`lon` are the geographic truth | this doc / `70-*` |
 | `data/quests.json` | Quest templates | this doc / `70-*` |
 | `data/equipment.json` | `[]` until Phase 2 | this doc / `60-*` |
+| `data/npc_config.json` | Density-dial config: presets, budgets, flow, `absolute_cap` (§4.10) | this doc / `80-*` |
+| `data/npc_captains.json` | Captain name pools — 7 incl. the nationless `""` pool (§4.11, §7.7) | this doc / `60-*` |
+| `data/named_pirates.json` | The 4 named pirates, tiers 1–3 (§4.12, §7.8) | this doc / `60-*` / `70-*` |
+| `data/market_events.json` | Demand-event templates (§4.13) | this doc / `30-*` |
+| `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 12 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
 | `data/map_legend.json` | MapLegend (tiles + grid constants) | this doc |
 | `data/maps/maps.json` | Map index (exactly one entry, `id: "world"`) | `90-*` §9.1 |
 | `data/maps/world.png` | Generated world map artifact — indexed PNG, 2160×1080, 1 px = 1 tile (§6.3) | this doc |
 | `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (berth) and `shore_tile` (§6.3, §8.1) | this doc |
+| `data/trade_routes_built.json` | Lane-builder artifact: tile paths + junction graph + per-port spokes (§4.14) — tool-owned, never hand-edited | this doc |
 | `tools/build_world.py` | World generator: shorelines → tiles → `world.png` + `world_report.json` (§6.3); `--ascii` debug export only | this doc / `IMPLEMENT-Phase4.md` task C |
 | `tools/map_overrides.json` | Waterway carves (Gibraltar, Bosphorus, …) and tidal-river carves (§6.1, `IMPLEMENT-Phase4.md` task D) | this doc |
+| `tools/build_routes.py` | Lane builder: `trade_routes.json` → snapped/rasterized lanes, junction graph, spokes → `trade_routes_built.json` (§4.14); `--ascii` debug export only | this doc / `IMPLEMENT-Phase5.md` task F |
+| `tools/route_overrides.json` | Hand fixes consumed by the lane builder (§4.14) | this doc |
 | `tools/assets/` | Vendored public-domain shapefiles (Natural Earth 10 m land + minor islands + lakes) and `LICENSE-NOTES.md` with per-file SHA-256 | this doc |
 | `data/ui_strings.json` | UI-frame L10n strings | `80-UI-UX.md` |
-| `tools/validate_data.py` | Schema/i18n/integrity/map validator | this doc |
+| `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route validator (groups 1–8, §8) | this doc |
 
 ## 3. Shared Conventions
 
@@ -67,7 +81,9 @@ Every entity file under `data/` is a JSON object:
 ```
 
 - `version` (int, required): schema version of the file; starts at 1; bump when
-  the file's schema changes (migration notes in `docs/90-ARCHITECTURE.md`).
+  the file's schema changes. There is no data/save migration chain
+  (`90-*` §8.2) — a version bump is a breaking change the whole tree takes
+  at once.
 - The second key is the plural entity name from §2 and contains the array.
 - UTF-8, 2-space indent, trailing newline. No comments (JSON).
 
@@ -420,6 +436,240 @@ legend carries only `version`, `tile_size_px`, `grid`, and `tiles`.
 }
 ```
 
+### 4.10 NpcConfig — `data/npc_config.json` *(Phase 5)*
+
+The density-dial config. Not an entity file: one config block, no display
+strings (validator group 1 exempts it from the plural-key rule, exactly like
+`map_legend.json`).
+
+| Field | Type | Rule |
+|---|---|---|
+| `version` | int | `1` |
+| `presets` | object | exactly the 5 locked preset ids → multiplier; every multiplier ≥ 0; exactly one multiplier is `1.0` and `default_preset` names it (group 7) |
+| `default_preset` | id | ∈ `presets`; the value `GameState.npc_preset` starts at |
+| `budgets` | object | per-role budget constants, every value > 0 (group 7); the per-role budget formulas that consume them are pinned in `60-*` §4.1 |
+| `flow` | object | spawn-flow constants, every value > 0 (group 7) |
+| `absolute_cap` | int | hard upper bound on live NPC fleets (wrecks are saved in `GameState.wrecks` and never counted); group 7 enforces the locked cap |
+
+The file content is **locked verbatim** — task D copies this block; the
+`presets`/`budgets`/`flow` key sets are exactly these:
+
+```json
+{
+  "version": 1,
+  "presets": {"deserted": 0.0, "low": 0.5, "normal": 1.0, "high": 2.0,
+               "extreme": 4.0},
+  "default_preset": "normal",
+  "budgets": {"traders_mult_per_port": 1.25, "coasters_mult_per_port": 0.75,
+               "patrols_div_ports": 6, "patrols_min": 1,
+               "couriers_per_nation": 2, "privateers_per_rivalry": 2,
+               "pirate_base": 8, "pirates_per_unpatrolled_zone": 1},
+  "flow": {"spawns_per_day_base": 4, "path_budget_ms_per_day": 250,
+            "trade_units_per_port_call": 30, "coaster_trade_units": 5},
+  "absolute_cap": 2048
+}
+```
+
+Preset semantics (`80-*`: the S2 row and the S19 settings modal): the
+multiplier scales every role budget (`ceil` per role); `deserted` means zero
+NPC spawns and contacts; raising the preset refills via the daily trickle,
+lowering **never culls** living fleets.
+
+### 4.11 NpcCaptainPools — `data/npc_captains.json` *(Phase 5)*
+
+Envelope `{"version": 1, "pools": [...]}` — the plural key is `pools`
+(named in the group-1 exception, §8).
+
+| Field | Type | Rule |
+|---|---|---|
+| `nation_id` | id \| `""` | one of the 6 locked nation ids (§7.4) **or** the empty string — the nationless pool |
+| `names` | []L10nString | ≥ 8 entries (§7.7); every entry has non-empty zh and en |
+
+Locked pool set: exactly 7 (§7.7). Every fleet draws
+`captain: {"pool_id": id, "name_index": int}` at spawn from its nation's
+pool — pirates draw from `""` — via its seeded stream (`60-*` §4.1); the
+drawn name is stable for the fleet's life and survives save/load.
+
+```json
+{
+  "version": 1,
+  "pools": [
+    {
+      "nation_id": "portugal",
+      "names": [
+        {"zh": "若昂·阿尔梅达", "en": "João Almeida"},
+        {"zh": "佩德罗·努诺", "en": "Pedro Nuno"},
+        {"zh": "迪奥戈·苏亚雷斯", "en": "Diogo Soares"},
+        {"zh": "费尔南·科埃略", "en": "Fernão Coelho"},
+        {"zh": "阿方索·皮雷斯", "en": "Afonso Pires"},
+        {"zh": "瓦斯科·马丁斯", "en": "Vasco Martins"},
+        {"zh": "努诺·阿尔瓦雷斯", "en": "Nuno Álvares"},
+        {"zh": "吉尔·埃阿尼斯", "en": "Gil Eanes"}
+      ]
+    }
+  ]
+}
+```
+
+### 4.12 NamedPirate — `data/named_pirates.json` *(Phase 5)*
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | unique |
+| `name` | L10nString | the captain's name |
+| `tier` | int | `1 … 3` (§7.8; bounty-tier semantics in `70-*` §4.5) |
+
+Exactly 4 entries (§7.8); names are era-plausible authored content (task D).
+A defeated named pirate respawns under a new name on the `60-*` §4.1
+schedule; `quest_gen` bounty targets prefer named captains (`70-*` §4.9.5).
+
+```json
+{
+  "version": 1,
+  "named_pirates": [
+    {
+      "id": "pirate_murad_red_sail",
+      "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
+      "tier": 2
+    }
+  ]
+}
+```
+
+### 4.13 MarketEvent — `data/market_events.json` *(Phase 5)*
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | unique |
+| `scope` | enum | `"port"` — the only valid value this phase (group 7); rotation binds each instance to a concrete port (`30-*` §4.5) |
+| `cadence_days` | int > 0 | width of the template's seeded scheduling window (`30-*` §4.5) |
+| `duration_days` | int > 0 | how long the rest-override stays active |
+| `shifts` | object | good id → int delta; keys ⊆ goods; each shift bounded by the group-7 rest-band check (§8.2) |
+| `name` | L10nString | tavern-telegraph and rumor display name |
+
+≈ 8 templates are authored from the locked families of `30-*` §4.5
+(seasonal cycles, one-off surges). Effect, budget (≤ 1 active event per
+nation, ≤ 4 world-wide), tavern telegraph, and the self-limiting trader
+response are pinned in `30-*` §4.5; active instances persist in
+`GameState.market_events` (§4.15).
+
+```json
+{
+  "version": 1,
+  "market_events": [
+    {
+      "id": "evt_harvest_festival",
+      "scope": "port",
+      "cadence_days": 120,
+      "duration_days": 14,
+      "shifts": {"wheat": -25, "wine": -20},
+      "name": {"zh": "丰收节宴饮", "en": "Harvest Festival Feasting"}
+    }
+  ]
+}
+```
+
+### 4.14 TradeRoute — `data/trade_routes.json` + `data/trade_routes_built.json` *(Phase 5)*
+
+`data/trade_routes.json` holds **only the major lanes** — exactly the 12
+locked ids of §7.6, hand-authored as historical facts. Envelope
+`{"version": 1, "lanes": [...]}` (group-1 exception: key `lanes`).
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | one of the 12 locked lane ids (§7.6) |
+| `class` | enum | `"major"`; minor spokes are builder-generated and never stored in this file |
+| `nations` | []id | ⊆ Nation ids; the fleets that work the lane |
+| `waypoints` | [][lat, lon] | ≥ 2 pairs in the `ports.json` coordinate space (§3.1); wrap-aware across the dateline — a crossing segment keeps `x` monotonic under wrap (the Manila lane) |
+| `goods` | []id | ⊆ Good ids; the lane's historical trade goods |
+| `chokepoints` | []string | ≥ 1 snake_case tag per lane naming the historical choke points the lane passes |
+
+```json
+{
+  "version": 1,
+  "lanes": [
+    {
+      "id": "carreira_da_india",
+      "class": "major",
+      "nations": ["portugal"],
+      "waypoints": [[38.72, -9.14], [36.5, -8.5], [16.0, -24.0], [-34.8, 18.4], [-20.0, 60.0], [15.50, 73.83]],
+      "goods": ["spices", "cotton_cloth"],
+      "chokepoints": ["strait_of_gibraltar", "cape_of_good_hope"]
+    }
+  ]
+}
+```
+
+Builder rules (locked; `tools/build_routes.py`, mirroring `build_world.py`
+governance):
+
+- **Waypoint snap:** every waypoint snaps to a water tile by the §6.1
+  harbor-snap rule (≤ 2 tiles Chebyshev, wrap-aware, tie-break smallest
+  `(y, x)`); the builder may share `build_world.py`'s PNG decoder.
+- **Segment passability:** every consecutive waypoint pair is walked on the
+  raster; a segment that steps on an impassable tile is a hard build error
+  naming the lane (group 8).
+- **Rasterization + junction graph:** every lane becomes a tile path and the
+  builder extracts the junction graph the runtime routes over (`60-*` §4.1).
+- **Minor spokes:** exactly one generated spoke per port — to the nearest
+  lane waypoint within Chebyshev 20 (wrap-aware), else a direct generated
+  spoke to the port's national capital. A port with neither is a hard
+  build/validator error naming the port, never a runtime stall.
+- **Determinism:** two consecutive builds produce a **byte-identical**
+  `data/trade_routes_built.json` (group 8 re-asserts it). Hand fixes go in
+  `tools/route_overrides.json` — plus minimal, per-lane-reported waypoint
+  edits to this file — never by touching the built file.
+
+`data/trade_routes_built.json` is a **tool-owned artifact** with the same
+standing as `data/maps/world.png`: written only by `tools/build_routes.py`,
+**never hand-edited**. It records the per-lane tile paths, the junction
+graph, the per-port spokes, and build params. Its envelope is
+`{"version", "generated_by", "artifact", …}` — a tool output, not an entity
+file (group 1 exempts it exactly like `maps/world_report.json`). Runtime
+routing over the graph is `20-*`/`60-*` material.
+
+### 4.15 Save-block shapes (Phase 5)
+
+The five living-economy save blocks — keys of the v5 payload (`90-*` §8.1).
+Not data files: runtime state whose shapes this doc pins. Shapes only;
+behavior lives in `30-*`/`60-*`:
+
+| GameState field | Type | Shape |
+|---|---|---|
+| `market_stocks` | object | `{port_id: {good_id: stock int}}` — every port × every good that trades there; initialized at `new_game` from the derived resting stock (`30-*` §4.2), no RNG; stock range per `30-*` §4.2 |
+| `npc_fleets` | []object | fleet dicts (table below); renames the retired `hostile_fleets` |
+| `wrecks` | []object | `{"cell": tilePos, "cargo": {good_id: units}, "salvage_gold": money, "spawn_day": day}` — contents per the `60-*` auto-resolve table (cargo or salvage gold); expiry on the `60-*` schedule |
+| `npc_preset` | id | one of the §4.10 preset keys; default `"normal"` |
+| `market_events` | []object | active instances: `{"template_id": id, "port_id": id, "start_day": day}`; expiry derives from the template's `duration_days` (`30-*` §4.5) |
+
+Fleet dict — the locked save shape (`60-*` §4.1):
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | string | stable fleet id; the seeded streams (captain, specialty, decisions) key off it |
+| `role` | id | one of the 8 fleet roles (`60-*` §4.1) |
+| `nation_id` | id \| `""` | owner nation; pirates keep `""` |
+| `cell` | tilePos | current grid position (§3.1; `x` wraps) |
+| `route` | object | `{"lanes": []id, "leg": int, "tile_index": int}` — position on the built lane network (§4.14) |
+| `cargo` | object | `{good_id: units}` — the actual hold contents |
+| `captain` | object | `{"pool_id": id \| "", "name_index": int}` into `npc_captains.json` (§4.11) |
+| `specialty` | id | optional; the good id drawn at spawn (traders) |
+| `cooldown_until_day` | day | pursuit/spawn cooldown |
+
+```json
+{
+  "id": "fleet_spain_trader_017",
+  "role": "trader",
+  "nation_id": "spain",
+  "cell": {"x": 1025, "y": 307},
+  "route": {"lanes": ["west_indies_flota"], "leg": 1, "tile_index": 42},
+  "cargo": {"wine": 28},
+  "captain": {"pool_id": "spain", "name_index": 3},
+  "specialty": "wine",
+  "cooldown_until_day": 0
+}
+```
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in
@@ -471,7 +721,7 @@ differently.
 | Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics | §6.3 |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `tools/build_world.py` |
 | Map index | `data/maps/maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 |
-| Save | version 4; `MIGRATIONS[3]` | `90-*` §8.1–8.2 |
+| Save | version 5; no migration chain — v4 and older payloads refused | `90-*` §8.1–8.2 |
 | Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds all 100 ports | §4.4, §7.1 |
 
 **Projection.** The grid is the whole globe at 6 tiles/degree: it spans
@@ -740,6 +990,53 @@ One recruit per nation, available at the listed taverns from game start:
 | off_kemal_agha | 凯末尔阿迦 | Kemal Agha | ottoman | gunner | istanbul, smyrna | 30 |
 | off_marco_bellini | 马尔科·贝里尼 | Marco Bellini | italy | navigator | venice, genoa | 30 |
 
+### 7.6 Trade lanes (12, Phase 5)
+
+The locked `data/trade_routes.json` lane id set (§4.14) — exhaustive; the
+`nations`/`goods`/`waypoints`/`chokepoints` values are task-owned authored
+data (`IMPLEMENT-Phase5.md` task E):
+
+| id | zh | en |
+|---|---|---|
+| carreira_da_india | 印度航线（好望角） | The Carreira da Índia (Cape of Good Hope run) |
+| west_indies_flota | 西印度大舰队航线 | The West Indies flota circuit |
+| manila_galleon | 马尼拉大帆船航线 | The Manila galleon run (dateline-crossing) |
+| venice_alexandria | 威尼斯—亚历山大航线 | The Venice–Alexandria run |
+| venice_flanders | 威尼斯—佛兰德斯航线 | The Venice–Flanders run |
+| genoa_grain | 热那亚粮食航线 | The Genoa grain run |
+| hanseatic_north | 汉萨北方航线 | The Hanseatic northern run |
+| aden_gujarat_malacca | 亚丁—古吉拉特—马六甲航线 | The Aden–Gujarat–Malacca run |
+| red_sea_india | 红海—印度航线 | The Red Sea–India run |
+| basra_muscat_india | 巴士拉—马斯喀特—印度航线 | The Basra–Muscat–India run |
+| iceland_cod | 冰岛鳕鱼航线 | The Iceland cod run |
+| grand_banks_cod | 纽芬兰大浅滩鳕鱼航线 | The Grand Banks cod run |
+
+The set is closed: **no Cape Horn lane** (rounding the Horn is a post-1616
+anachronism; the Magellan Strait is the historical south-sea passage where
+one is relevant).
+
+### 7.7 Captain name pools (7, Phase 5)
+
+`data/npc_captains.json` (§4.11) holds exactly 7 pools — one per nation plus
+the nationless `""` pool. Every pool carries **≥ 8 zh/en names**, authored
+era-plausible per nation (task-owned content, task D):
+
+| pool (`nation_id`) | roster |
+|---|---|
+| `portugal` | Portuguese captains |
+| `spain` | Spanish captains |
+| `england` | English captains |
+| `holland` | Dutch captains |
+| `ottoman` | Ottoman captains |
+| `italy` | Italian captains |
+| `""` | Nationless captains — the pool pirates draw from |
+
+### 7.8 Named pirates (4, Phase 5)
+
+`data/named_pirates.json` (§4.12) holds exactly 4 named pirates; every
+`tier` ∈ `1 … 3` (`70-*` §4.5 bounty tiers). Names and tiers are task-owned
+authored content (task D); the count and the tier band are the locked part.
+
 ## 8. `tools/validate_data.py` Spec
 
 Python ≥ 3.10, stdlib only (`json`, `re`, `sys`, `pathlib`, `zlib` for the PNG
@@ -750,12 +1047,14 @@ the code below. All checks run in order.
 
 | Exit | Check group | Checks |
 |---|---|---|
-| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `ui_strings.json`) |
+| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `ui_strings.json`, and the Phase-5 envelopes — `npc_config.json` (config block), `npc_captains.json` (key `pools`), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output)) |
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
 | 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `2160 × 1080`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys) |
 | 4 | Referential integrity | `port.nation_id ∈ nations`; `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
 | 5 | Locked lists | exactly the §7.1 100 ports (the single `data/ports.json` file), §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
+| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band); the `30-*` §4.2 consumption-tier split assertion — normative spec §8.2 |
+| 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's 12; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
 
 ### 8.1 Group 6 — world map, normative spec
 
@@ -816,6 +1115,77 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
 
 `--verbose` prints a per-check pass summary.
 
+### 8.2 Group 7 — npc & economy data, normative spec
+
+Group 7 exits 7. It checks the four Phase-5 data files (L10nString
+completeness inside them is group 2's recursion; group 7 owns structure,
+counts, and bounds):
+
+1. **`npc_config.json`** (§4.10): every `presets` multiplier ≥ 0;
+   `default_preset` ∈ `presets`, and it must be the neutral preset of
+   §4.10; every `budgets` and `flow` value > 0;
+   `absolute_cap` ≤ the §4.10 locked cap; the `presets`/`budgets`/`flow`
+   key sets are exactly the §4.10 keys.
+2. **`npc_captains.json`** (§4.11, §7.7): exactly 7 pools — the 6 locked
+   nation ids plus `""`, no duplicates, no extras; every pool ≥ 8 names;
+   every name a complete L10nString.
+3. **`named_pirates.json`** (§4.12, §7.8): exactly 4 entries; every `tier`
+   an int in the locked band 1–3; ids unique; names complete i18n.
+4. **`market_events.json`** (§4.13): every `scope == "port"` (the only
+   valid value this phase); every `cadence_days` > 0 and `duration_days` >
+   0; every `shifts` key ∈ goods; **rest-band bound:** for every shifted
+   good, `10 ≤ rest + shift ≤ 190` for every resting value that good takes
+   across the 100 ports (produced/demanded/neutral per `30-*` §4.2) — a
+   violation names the template and the good.
+5. **Consumption-tier assertion:** ranking `goods.json` per `30-*` §4.2
+   (`base_price` asc, `id` asc tie-break) yields exactly 5 staples /
+   10 middle / 5 luxuries.
+
+**Negative tests (must provably fail, exit 7, named message):** a negative
+preset; a default whose multiplier is not 1.0; a budget ≤ 0; an
+`absolute_cap` above the cap; a missing or extra captain pool; a pool with
+7 names; a tier-4 pirate; a shift that pushes any applicable rest outside
+the band.
+
+### 8.3 Group 8 — trade routes, normative spec
+
+Group 8 exits 8. It runs after group 6 (same PNG decoder; sharing
+`build_world.py`'s reader is allowed). It checks:
+
+1. **Lane id set.** `data/trade_routes.json` contains exactly the §7.6
+   12 locked ids — none missing, none extra.
+2. **Lane schema.** Every lane: `class == "major"`; `nations` ⊆ nations;
+   `goods` ⊆ goods; ≥ 1 chokepoint tag; ≥ 2 waypoints with in-range
+   lat/lon (§3.1).
+3. **Waypoint snap.** Every waypoint satisfies the §6.1 snap rule as the
+   builder applies it (the §4.14 rule: same radius, wrap-aware,
+   smallest-`(y, x)` tie-break). Failure names the lane and waypoint.
+4. **Segment passability.** The tile walk of every consecutive waypoint
+   pair steps only on passable tiles, corner-cutting forbidden, wrap-aware
+   (the group 6 item 3 movement rules).
+5. **Wrap-aware continuity.** Dateline-crossing segments stay continuous
+   under `x mod 2160` — no segment jumps the seam (`manila_galleon`
+   waypoints keep per-segment `x` monotonic under wrap).
+6. **Port spokes.** Every one of the 100 ports satisfies the §4.14 spoke
+   rule (a lane waypoint within the spoke radius, else the capital
+   fallback). A port with neither is a hard failure naming the port.
+7. **Junction connectivity.** Over the built junction graph every port
+   reaches every lane its nation/goods data implies; the named probes are
+   asserted: `acapulco` ↔ `manila` across the wrap, `hanseatic_north`
+   reaches `danzig`, `carreira_da_india` reaches `goa`.
+8. **Determinism.** Rebuild the artifact with `tools/build_routes.py` and
+   compare against the committed `data/trade_routes_built.json`: equality
+   is byte-exact. Any drift — a hand-edit included — fails naming the
+   differing part; the fix is `data/trade_routes.json` /
+   `tools/route_overrides.json`, never the built file.
+
+**Negative tests (must provably fail, exit 8, named message):** a waypoint
+with no water within the snap radius (landlocked); a segment walked onto an
+impassable tile; a port with no spoke and no capital fallback; a rebuilt
+artifact that differs by one byte.
+
+`--verbose` prints a per-check pass summary for groups 7–8 as for group 6.
+
 ## 9. Edge Cases & Fail States
 
 - **Locale string empty or whitespace-only** → validator exit 2.
@@ -852,7 +1222,25 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
 - **Officer hired twice / dead officers** — runtime concern, owned by
   `50-CHARACTER-AND-PROGRESSION.md`; data layer only guarantees id uniqueness.
 - **`rivals` missing on a nation** → validator exit 3 (the key is required);
-  the migration cannot invent it, so the data file is amended, not the save.
+  the loader cannot invent it, so the data file is amended, not the save.
+- **A lane waypoint has no water within the snap radius** → validator
+  exit 8 naming the lane and waypoint. The fix is
+  `tools/route_overrides.json` or a reported waypoint amendment in
+  `data/trade_routes.json` — never a hand-edit of
+  `data/trade_routes_built.json`.
+- **A port has no lane waypoint within the spoke radius and no capital
+  fallback** → hard build/validator error (exit 8) naming the port — the
+  network, not the runtime, is broken.
+- **`data/trade_routes_built.json` hand-edited or rebuild-drifted** →
+  validator exit 8 (§8.3 determinism); regenerate with
+  `tools/build_routes.py`.
+- **A demand-event shift pushes any applicable rest outside the band
+  (§8.2 item 4)** → validator exit 7 naming the template and good.
+- **`npc_config.json` out of bounds** (negative preset, default not the
+  neutral preset, a budget ≤ 0, `absolute_cap` above the §4.10 cap) →
+  validator exit 7.
+- **A captain pool missing, extra, or under 8 names** → validator exit 7;
+  the §7.7 pool set is closed.
 
 ## 10. Acceptance Criteria
 
@@ -866,10 +1254,18 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
 - [ ] Every non-ASCII display string in tables carries both zh and en.
 - [ ] Every locked constant from `IMPLEMENT-Phase4.md`'s Locked constants
       table appears exactly once in §6.1 with the same value (grid, tiles per
-      degree, sighting radii, ship-speed set, artifact path, save version).
-- [ ] `validate_data.py` check groups (exit 1–6) are implementable from §8
+      degree, sighting radii, ship-speed set, artifact path); the §6.1 save
+      row pins the current version (5, no migration chain — `90-*` §8.2).
+- [ ] Every locked constant with owning doc `10-*` from
+      `IMPLEMENT-Phase5.md` (the §4.10–4.15 schemas, the §7.6–7.8 lists,
+      the §8.2/§8.3 validator specs) appears in this doc exactly once.
+- [ ] `validate_data.py` check groups (exit 1–8) are implementable from §8
       alone, without further design questions — including the §8.1 group 6
-      world-map spec.
+      world-map spec, §8.2 group 7, and §8.3 group 8.
+- [ ] §7.6 lists exactly the 12 locked lane ids; §7.7 exactly 7 pools;
+      §7.8 exactly 4 named pirates.
+- [ ] The v5 save-block shapes of §4.15 match the `90-*` §8.1 key list
+      field-for-field.
 - [ ] The validator summary reports a port count of **100**.
 - [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)
       are consistent with §7.3 and `50-*`.
