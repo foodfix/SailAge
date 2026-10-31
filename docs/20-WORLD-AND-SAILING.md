@@ -30,7 +30,7 @@ sail trim & wait, seasonal sea ice).
 | `data/ocean_currents.json` | ~20 hand-authored current systems (strength 1–3, lat/lon paths, Somali reversal) |
 | `data/ice_regions.json` | seasonal sea-ice polygons (Baltic, Hudson Bay, White Sea) |
 | `data/maps/wind_regions.png` | baked wind-region raster (tool-owned, `tools/build_ocean.py`, never hand-edited) |
-| `data/maps/currents.png` | baked current raster (tool-owned; annual-mean vectors, reversal applied at lookup) |
+| `data/maps/currents.png` | baked current raster (tool-owned; each system's stored non-flipped vector — non-summer regime for reversal systems — reversal applied at lookup) |
 | GameState keys | `day`, `world.position`, `world.map_id` (always `"world"`), `world.weather`, `world.sail_trim`, `world.heading`, `world.wind_dir`, `known_ports`, `control_prefs`, morale/crew state inside `fleet` (schema in `40-*`) |
 
 ## 3. Dependencies
@@ -498,7 +498,10 @@ adjacent to its berth tile (validator group 6). The berth snap therefore
 carries the pair as a **candidate constraint**: a water candidate with no
 orthogonally adjacent `#` is skipped, and the berth is the nearest candidate
 that satisfies both rules (`10-*` §6.1). A port whose plain §6.1 berth already
-has a shore tile does not move; on the shipped map exactly 14 do, by one tile.
+has a shore tile does not move; on the Phase-6 regenerated map exactly 13 do —
+smyrna, beirut, ceuta, havana, portobelo, valparaiso, guayaquil,
+rio_de_janeiro, luanda, mombasa, bombay, malacca, patani (pinned by
+`test_world_map.gd`).
 The berth is ordinary water — **standing on it does not open the port screen**.
 
 - **Presentation (locked):** the port overlay (nation-coloured square + label)
@@ -637,7 +640,10 @@ provisioning prompt rather than leaving directly.
 - **Baked raster:** `data/maps/currents.png` — 1 px = 1 tile; palette index
   0 = no current, indices 1–24 = 8 directions × 3 strengths; overlaps resolve
   strongest-then-id-order. Tool-owned, byte-identical rebuild (validator
-  group 9). **The raster stores the annual-mean vector;** a system's
+  group 9). **The raster stores each system's authored (stored, non-flipped)
+  vector** — for a reversal system that is the **non-summer regime** (e.g. the
+  Somali winter NE flow), so the flip below yields the real summer jet. A
+  system's
   `reversal.summer_months` flips the decoded vector **at lookup time** —
   runtime and debug renderer apply the same one-line flip. One static PNG,
   seasonal Somali.

@@ -315,8 +315,10 @@ unreported list).
   `NpcFleets.spawn(role = "pirate", …)` (`60-*` §4.12.3) and the target
   prefers a named captain (`60-*` §4.11.11.4).
 - **Exploration draws.** Uniform pick over `Discovery` ids not yet found,
-  whose `lat`/`lon`-derived tile lies within Chebyshev 40 of the guild port
-  (wrap-aware on x), ids sorted ascending; if the set is empty the slot
+  whose `lat`/`lon`-derived tile lies within Chebyshev 80 of the guild port
+  (wrap-aware on x; Phase-6 grid sweep: the gameplay draw band doubles with
+  the tile grid, 40 → 80, preserving the geographic reach), ids sorted
+  ascending; if the set is empty the slot
   degenerates to a delivery (step 1 rules) rather than offering an impossible
   quest. `rewards = {gold: 0, reputation: {guild nation: +5}, fame: 10}`,
   `expiry_days = 30`; the quest carries `requirements.discovery_id` and the

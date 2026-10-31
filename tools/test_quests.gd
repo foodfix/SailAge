@@ -90,17 +90,17 @@ func _test_deterministic_offers() -> void:
 # --- 2. Offer shape and reward bands -------------------------------------
 
 func _test_offer_shapes() -> void:
-	# Phase-6 re-baseline: the exploration draw's Chebyshev-40 hint radius
-	# (unchanged pin, `70-*` §4.9.3) is 40 tiles at 5 nm, so the scan runs at
-	# cadiz — a port with an unfound discovery in range (disc_jebel_musa, 10).
-	_new_run("cadiz", 12)
+	# Phase-6: the exploration draw band swept 40 → 80 (70-* §4.9.3, gameplay
+	# ×2), so lisbon's neighbors (disc_atlas_cedars at ~10 tiles) are in range
+	# again and the original anchor works.
+	_new_run("lisbon", 12)
 	# Scan many weeks so every type shows up.
 	var types := {}
 	var bad_delivery: Array = []
 	var bad_band: Array = []
 	for week in range(0, 60):
 		var day := week * 7 + 1
-		for offer in QuestGenLib.offers("cadiz", day):
+		for offer in QuestGenLib.offers("lisbon", day):
 			var o: Dictionary = offer
 			types[str(o.get("type", ""))] = true
 			if str(o["type"]) == "delivery":
@@ -112,7 +112,7 @@ func _test_offer_shapes() -> void:
 					bad_delivery.append("qty %d" % quantity)
 				if int(req.get("dest_port_id", "").length()) == 0:
 					bad_delivery.append("no dest")
-				if str(req.get("dest_port_id", "")) == "cadiz":
+				if str(req.get("dest_port_id", "")) == "lisbon":
 					bad_delivery.append("dest == origin")
 				if int(((o["rewards"] as Dictionary)).get("gold", 0)) \
 						!= 2 * base * quantity:
@@ -370,13 +370,13 @@ func _test_expiry() -> void:
 # --- 9. Exploration completion ------------------------------------------
 
 func _test_exploration_completion() -> void:
-	_new_run("cadiz", 12)
+	_new_run("lisbon", 12)
 	_clear_quests()
 	# Find an exploration offer in any week at a port that has discoveries near
-	# (cadiz: disc_jebel_musa at Chebyshev 10, within the unchanged 40-tile pin).
+	# (lisbon: disc_atlas_cedars ~10 tiles; Phase-6 draw band 80).
 	var chosen: Dictionary = {}
 	for week in range(0, 200):
-		for offer in QuestGenLib.offers("cadiz", week * 7 + 1):
+		for offer in QuestGenLib.offers("lisbon", week * 7 + 1):
 			if str((offer as Dictionary)["type"]) == "exploration":
 				chosen = offer
 				break
@@ -384,7 +384,7 @@ func _test_exploration_completion() -> void:
 			break
 	_check(not chosen.is_empty(), "an exploration offer is found in 200 weeks")
 	var discovery_id := str((chosen["requirements"] as Dictionary)["discovery_id"])
-	var accepted: Dictionary = QuestGenLib.accept(chosen, "cadiz", 12)
+	var accepted: Dictionary = QuestGenLib.accept(chosen, "lisbon", 12)
 	_check(not accepted.is_empty(), "the exploration offer is accepted")
 	# The quest reveals the hint free.
 	_check(not (DataLoader.get_discovery(discovery_id).get("region_hint", {}) as Dictionary).is_empty(),
