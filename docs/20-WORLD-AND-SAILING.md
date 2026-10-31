@@ -143,7 +143,8 @@ the modes differ only in what produces the steps.
 - `GameState.day` is an integer; a fractional accumulator
   `world.clock_fraction ∈ [0,1)` holds sub-day progress (not saved — saving
   happens only in port, where the fraction is always reset to 0).
-- **Day-tick order (locked, Phase 5).** When `clock_fraction ≥ 1.0`:
+- **Day-tick order (locked, Phase 5; Phase 6 inserts the drift push at
+  sea).** When `clock_fraction ≥ 1.0`:
   subtract 1.0, `day += 1`, then run strictly in order:
   1. the **daily ledger** (§4.5) — whose step 3 is now a **two-part weather
      roll**: the strength roll, then the wind-direction roll, one seeded
@@ -152,18 +153,21 @@ the modes differ only in what produces the steps.
      tier + demand-event start/expiry (`30-*` §4.2/§4.5 — the drift rates
      and event rules live there, not here); this step also runs on **port
      day-advances** (`30-*` §4.2);
-  3. emit `EventBus.day_advanced`;
-  4. the **NPC fleet tick** (`60-*` §4.11.11): lane stepping, dwell,
+  3. the **drift push** (Phase 6; Drift mode, at sea only): the §4.16 daily
+     current push along the current vector — a positional push (wrap-aware;
+     stops before impassable tiles), not a clocked move;
+  4. emit `EventBus.day_advanced`;
+  5. the **NPC fleet tick** (`60-*` §4.11.11): lane stepping, dwell,
      auto-resolve and the daily trickle — the world scene ticks it once per
      day on `day_advanced` (the Phase-4 `last_tick_day` dedupe is kept).
 - **Wait is a day-advance source (Phase 6).** The wait action (`Space` at sea,
   §4.2/§4.17) holds position, calls `advance_clock(1.0)` and runs this same
   day-tick sequence — the full ledger and the steps below it, exactly like any
   other day.
-- **Drift push (Phase 6).** In `current_mode: drift`, the daily current push
-  (§4.16) runs once per day tick **at sea, after the ledger** — a positional
-  push along the current vector by the §4.16 rates (wrap-aware; stops before
-  impassable tiles), not a clocked move.
+- **Drift push position (locked, Phase 6).** The push runs **after the
+  economy step and immediately before `EventBus.day_advanced` fires** —
+  deterministic and pure, so the NPC tick sees the drift-corrected cell and
+  contact checks use it.
 - In port, the clock does not advance except by explicit actions that cost a
   day (odd jobs, rest). Port actions advancing the day run the same ledger
   and the same economy step (order step 2 above).
@@ -213,7 +217,8 @@ the move heading and the current's flow direction: within 67.5° →
 current acts as a daily push instead (§4.16).
 
 **Sail-trim factor (§4.17, normative there).** furled 0 (cannot move), reefed
-0.75, normal 1.0, full 1.15. Trim also multiplies storm damage: furled ×0.5,
+0.75, normal 1.0, full 1.15 — oar class exempt (`trim_factor` forced 1.0, the
+§4.17 class rule). Trim also multiplies storm damage: furled ×0.5,
 reefed ×0.75, normal ×1.0, full ×1.5 (§4.17 table).
 
 **Units (Phase 6 re-pin).** A tile is 5 nm (§4.1), so `ShipType.speed` is
@@ -666,6 +671,13 @@ provisioning prompt rather than leaving directly.
   | normal | 1.0 |
   | full | 1.15 |
 
+  **Class rule (locked).** The trim mechanic ignores the oar class entirely:
+  oar ships' `trim_factor` is forced 1.0 — for **speed** as well as storm
+  damage — so a furled galley still rows; hybrid uses the sail table for
+  both speed and storm damage (as does sail). Rationale: this mirrors the
+  §4.7 `wind_factor` convention (the oar 1.0 row) and keeps the §4.4
+  pipeline's `trim_factor` class-qualified like §4.7's oar rule.
+
 - **Storm-damage multiplier** — multiplies `storm_damage_for` (§4.7 storm
   effects): furled ×0.5, reefed ×0.75, normal ×1.0, full ×1.5. **Oar class
   ignores trim; hybrid uses the sail table** (as does sail). A HUD trim chip
@@ -779,8 +791,9 @@ are GDScript constants, not a data file — game content stays in `data/`.)
   *entering* moves (player, NPC, A*, lane stepping) with the
   `world.ice_blocked` toast, but a tile freezing under a standing fleet
   leaves it free to move out.
-- **Furled = anchored:** trim `furled` sets the speed factor to 0 — the fleet
-  cannot move and can only wait (`Space`), in either input mode (§4.17).
+- **Furled = anchored (sail/hybrid):** trim `furled` sets the speed factor
+  to 0 — a sail/hybrid fleet cannot move and can only wait (`Space`), in
+  either input mode (§4.17); an oar galley ignores trim and still rows.
 - **Wait advances exactly one day — even in a storm:** the wait's
   `advance_clock(1.0)` runs the full ledger once (§4.3/§4.17); storm damage
   and morale deltas apply for that single day, then the player re-decides.
@@ -805,9 +818,9 @@ are GDScript constants, not a data file — game content stays in `data/`.)
 - [ ] The single world map plays with wrap-aware movement and the chunked
       loader (`90-*` §9): x wraps at the dateline, y is ice-bounded, and the
       loader renders only live chunks.
-- [ ] Day-tick order (§4.3, Phase 5) holds and is unit-testable: ledger →
-      economy step → `day_advanced` → NPC fleet tick, with the economy step
-      also running on port day-advances.
+- [ ] Day-tick order (§4.3) holds and is unit-testable: ledger → economy
+      step → drift push (Drift mode, at sea only) → `day_advanced` → NPC
+      fleet tick, with the economy step also running on port day-advances.
 - [ ] Both input modes play end-to-end (Phase 6): Step steps key-per-tile;
       Helm auto-steps at `clamp(1.0 / effective_speed(heading), 0.12, 2.0)` s,
       cancels on click-to-sail/battle/docking, and `Esc` keeps its global S4
