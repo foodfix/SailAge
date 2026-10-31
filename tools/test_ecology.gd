@@ -464,12 +464,16 @@ func _test_chokepoint_hysteresis() -> void:
 	sim._raider_tick(pirate, day, doomed, remove_ids, wrecks)
 	_check(str(pirate.get("target_fleet_id", "")) == str(trader["id"]),
 		"prey within Chebyshev 10 opens the chase")
-	# …closes 2 tiles/day without engaging until contact distance…
+	# …closes toward the prey without engaging. The seeded camp moved with the
+	# 17-lane network (the junction set changed): it now sits at the Aden
+	# approaches where the water east of the anchor pins after 1 tile, so the
+	# chase holds there — still no engagement and no wreck (the prey stands
+	# behind the coast).
 	for _walk in range(3):
 		sim._raider_tick(pirate, day + 1 + _walk, doomed, remove_ids, wrecks)
 	var walked_out := NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
-	_check(walked_out == 8 and wrecks.is_empty(),
-		"the raider closes on its prey 2 tiles/day (out %d tiles, no resolve yet)"
+	_check(walked_out == 1 and wrecks.is_empty(),
+		"the raider closes to the coastal pin 1 tile out and holds (out %d tiles, no resolve yet)"
 		% walked_out)
 	# …and is lost beyond 16: the raider drops the chase and walks home.
 	trader["cell"] = {"x": (anchor + Vector2i(30, 0)).x, "y": anchor.y}

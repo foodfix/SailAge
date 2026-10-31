@@ -184,10 +184,13 @@ func _cell_of(fleet: Dictionary) -> Vector2i:
 func _test_budgets() -> void:
 	var sim := _make_run()
 	_check(sim.multiplier() == 1.0, "the normal preset multiplies by 1.0")
-	# Per-role budget totals at normal, computed @ 6 nations / 100 ports —
-	# the §4.1.1 column: 127 / 77 / 19 / 12 / 12, pirates 8 + zones (≈ 25
-	# capped by the core share), hunters bounty-only.
-	var want := {"trader": 127, "coaster": 77, "patrol": 19, "courier": 12,
+	# Per-role budget totals at normal, computed @ 6 nations / 100 sovereign
+	# ports + the 45-port neutral tier (which no per-nation budget counts,
+	# §2.11) — the §4.1.1 column: 128 / 77 / 19 / 12 / 12, pirates 8 + zones
+	# (≈ 25 capped by the core share), hunters bounty-only. 128 = 127 + 1:
+	# the botany_bay→Shark Bay re-place moved one port england → holland
+	# (ceil(13 × 1.25) + ceil(21 × 1.25) = 17 + 27 vs 18 + 25).
+	var want := {"trader": 128, "coaster": 77, "patrol": 19, "courier": 12,
 		"privateer": 12}
 	for role in want:
 		var total := 0
@@ -204,12 +207,12 @@ func _test_budgets() -> void:
 	GameState.player["reputation"]["spain"] = -50
 	_check(sim.budget_for("hunter", "spain") == 1,
 		"rep ≤ −50 opens exactly one hunter budget for the nation")
-	_check(sim.core_cap() == 272, "the core cap is 272 at normal (got %d)"
+	_check(sim.core_cap() == 273, "the core cap is 273 at normal (got %d)"
 		% sim.core_cap())
-	_check(sim.global_cap() == 288, "the global cap is 288 at normal (got %d)"
+	_check(sim.global_cap() == 289, "the global cap is 289 at normal (got %d)"
 		% sim.global_cap())
 	_check(sim.trickle_per_day() == 6,
-		"the trickle is max(4, ceil(288/50)) = 6/day (got %d)"
+		"the trickle is max(4, ceil(289/50)) = 6/day (got %d)"
 		% sim.trickle_per_day())
 	# The density dial (docs/10-* §4.10): deserted zeroes everything.
 	var empty: NpcFleetsLib = NpcFleetsLib.new({
@@ -344,11 +347,14 @@ func _test_lane_routing() -> void:
 			all_water = false
 			break
 	_check(all_water, "the routed tile path never touches land/reef/ice")
-	# A Pacific-only pair (the manila_galleon component) has no route and is
-	# skipped, not crash-caught.
-	var pacific: Dictionary = sim.route_between("lisbon", "acapulco")
+	# The once-Pacific-only manila_galleon component joined the giant network
+	# with the Phase-6 lanes (pacific_america + the E-spokes; the W3 probe
+	# acapulco ↔ manila pins it), so lisbon → acapulco routes now. A pair in
+	# the still-separate hanseatic_north/iceland_cod cluster (london) has no
+	# route and is skipped, not crash-caught.
+	var pacific: Dictionary = sim.route_between("lisbon", "london")
 	_check(pacific.is_empty(),
-		"an unreachable pair (Atlantic→Pacific) yields no route")
+		"an unreachable pair (Atlantic→hanseatic cluster) yields no route")
 
 
 # --- 4. The wrap-aware cell-bucket index (§4.11.11.5 — review gate) ----------

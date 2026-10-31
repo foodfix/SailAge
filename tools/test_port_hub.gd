@@ -248,9 +248,15 @@ func _test_guild_always_present() -> void:
 			"%s: guild is enabled at Phase 3" % port_id)
 		hub.queue_free()
 		await get_tree().process_frame
-	_check(ports_with_guild == DataLoader.ports_list.size(),
-		"every port's data lists guild (phase 3) — %d/%d"
-		% [ports_with_guild, DataLoader.ports_list.size()])
+	# §7.1: the 100 sovereign ports all list a guild; the Phase-6 neutral
+	# tier never carries one (its facilities are market/tavern/inn ± shipyard).
+	var sovereign_count := 0
+	for port_record in DataLoader.ports_list:
+		if str(port_record.get("nation_id", "")) != "":
+			sovereign_count += 1
+	_check(ports_with_guild == sovereign_count,
+		"every sovereign port's data lists guild (phase 3) — %d/%d (neutral tier carries none, §7.1)"
+		% [ports_with_guild, sovereign_count])
 
 	host.queue_free()
 	await get_tree().process_frame
