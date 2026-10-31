@@ -33,6 +33,21 @@ extends RefCounted
 ## The one instance-level stream ([member _rng]) exists only as the
 ## [method reset_rng] test seam.
 ##
+## **Phase-6 parity & seasons** (docs/60-* §4.11.11 amendment, task H): every
+## NPC daily tile budget multiplies by the same `direction_factor` /
+## `current_factor` the player's §4.4 pipeline applies — evaluated per leg
+## heading (the direction of the next tile step), pure functions of day +
+## position, no RNG, so replays stay exact. Lane stepping runs at the base 2
+## tiles/day **before** the factors; the fractional remainder banks in a
+## transient per-fleet accumulator ([member _step_carry] — runtime-only,
+## never persisted, mirroring the player drift accumulator's status). Hunters
+## pay the factors on lane travel and per pursuit step; raider chase/return
+## steps pay them per pursuit heading. Lanes with built `variants`
+## (`trade_routes_built.json`) sail the in-month variant's tile path, with
+## progress remapped by fraction on a month rollover (§2.8); in-month
+## seasonal ice (§4.18) refuses *entry* in [_passable] — a standing fleet is
+## never trapped.
+##
 ## **The spatial index is a review gate** (docs/60-* §4.11.11.5): EVERY
 ## "within N tiles" check in this module goes through the wrap-aware
 ## cell-bucket hash ([method _within]) — occupancy, contact-1, prey-10,
@@ -48,6 +63,11 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Pursuit A* (the only runtime pathfinding; docs/60-* §4.11.11.1).
 const FleetPathLib := preload("res://scripts/world/fleet_path.gd")
+## Phase-6 parity (task H): the calendar/factor tables and the ocean-layer
+## lookups (prevailing wind, currents, in-month ice). No preload cycle —
+## `sailing_sim.gd` never loads this module.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 # --- Locked numbers (docs/60-* §4.1, §4.11.11.1–.2) -------------------------
 
@@ -200,6 +220,12 @@ const LANE_TILES_PER_DAY := 20
 ## task-H parity factors): every lane-travelling fleet advances up to this
 ## many tiles per day tick, and raider chase/return steps match it.
 const LANE_STEP_TILES_PER_DAY := 2
+## Task-H parity pin: every NPC fleet reads the §4.4 direction-factor
+## `sail` column. The fleet's hull classes are not tracked per NPC fleet,
+## so the role-default class pin collapses to "all NPC fleets are sail" —
+## oar/hybrid differentiation is out of scope this phase (documented in
+## [method npc_direction_factor]).
+const NPC_SAIL_CLASS := "sail"
 ## Hold capacities (fleet dicts carry cargo only — no ship list). The
 ## coaster's ≤ 10 hold and ≤ 5-unit calls are doc-pinned (`30-*` §4.4); the
 ## trader capacity is task-owned headroom above the 30-unit call cap so a
@@ -272,6 +298,10 @@ static var _width: int = 4320
 static var _height: int = 2160
 static var _lane_paths: Dictionary = {}
 static var _lane_ids_sorted: Array = []
+## Task-H: per-lane built seasonal variants (`lane_id → [{id, months, path}]`,
+## file order — the built artifact's own order; the shipped data has at most
+## one variant per lane). Empty when the lane sails one path year-round.
+static var _lane_variants: Dictionary = {}
 static var _spoke_paths: Dictionary = {}
 static var _spoke_lane: Dictionary = {}
 static var _tile_lanes: Dictionary = {}
@@ -296,6 +326,23 @@ var _skip: Dictionary = {}
 ## Runtime-only hunter pursuit plans (`fleet_id → {target, path}`); never
 ## saved — a fresh plan from the same state reproduces the same chase.
 var _hunter_paths: Dictionary = {}
+
+## Task-H parity accumulator (docs/60-* §4.11.11 amendment; task-H pin 3):
+## `fleet_id → float` — the fractional tile remainder of the daily
+## `LANE_STEP_TILES_PER_DAY × direction × current` budget (and of every
+## per-step pursuit allowance). Runtime-only, keyed by fleet id, reset on
+## `new_game` ([method initial_fill]) and on load (the world scene adopts a
+## fresh sim) — never persisted, mirroring the player drift accumulator's
+## status. A refused/blocked step never spends the bank.
+var _step_carry: Dictionary = {}
+
+## Task-H variant state (`fleet_id → {key, walked_len}`): the lane-path
+## identity whose progress the fleet's `tile_index` is currently relative
+## to. When [method _leg_geometry] resolves a DIFFERENT identity (first
+## resolution after spawn/load, or a month rollover that swaps base ↔
+## variant), progress remaps by fraction — the §2.8 pin. Runtime-only (the
+## persisted route keeps its base-relative `legs`/`tile_index` shape).
+var _leg_active: Dictionary = {}
 
 ## Task L (docs/80-* §4.5.2): transient wake trails, `fleet_id →
 ## [Vector2i, …]` most recent first, ≤ [constant WAKE_LENGTH] entries —
@@ -560,6 +607,10 @@ func initial_fill(day: int) -> void:
 	last_tick_day = int(day)
 	_successor_cursor = 0  # per-run transient (respawns live in GameState)
 	_wake_trails = {}  # per-run transient (a fresh sim starts empty anyway)
+	# Task-H transients: the fractional budget accumulator and the variant
+	# progress state reset with the run (never persisted, §2.8/task-H pin 3).
+	_step_carry = {}
+	_leg_active = {}
 	if is_deserted():
 		return
 	if not DataLoader.ensure_map():
@@ -752,6 +803,8 @@ func remove(id: String) -> void:
 				] = int(GameState.day) + NAMED_RESPAWN_DAYS
 			GameState.npc_fleets.remove_at(index)
 			_wake_trails.erase(id)  # transient trail of a dead fleet
+			_step_carry.erase(id)  # task-H: dead fleets hold no budget bank
+			_leg_active.erase(id)  # task-H: dead fleets hold no variant state
 			# A full rebuild (O(N), battle-aftermath frequency): kills the
 			# whole stale-key class — fixtures may rename ids after adding,
 			# so an incremental removal can never be trusted here.
@@ -807,6 +860,7 @@ static func reset_caches() -> void:
 	_width = 4320
 	_height = 2160
 	_lane_paths = {}
+	_lane_variants = {}
 	_lane_ids_sorted = []
 	_spoke_paths = {}
 	_spoke_lane = {}
@@ -1290,6 +1344,22 @@ func _refresh_net() -> void:
 			path.append(Vector2i(int((tile as Array)[0]), int((tile as Array)[1])))
 		_lane_paths[str(lane_id)] = path
 		_lane_ids_sorted.append(str(lane_id))
+		# Task-H: the built seasonal variants (`{id, months, tile_count,
+		# tile_path}`), decoded once with the base path. `months` stays the
+		# built int array; `path` is the walked tile list.
+		var variants: Array = []
+		for variant in lane.get("variants", []):
+			if not (variant is Dictionary):
+				continue
+			var vpath: Array = []
+			for tile in variant.get("tile_path", []):
+				vpath.append(Vector2i(int((tile as Array)[0]), int((tile as Array)[1])))
+			variants.append({
+				"id": str(variant.get("id", "")),
+				"months": variant.get("months", []),
+				"path": vpath,
+			})
+		_lane_variants[str(lane_id)] = variants
 	_lane_ids_sorted.sort()
 	for port_id in DataLoader.route_spokes:
 		var spoke: Dictionary = DataLoader.route_spokes[port_id]
@@ -1692,18 +1762,20 @@ func _raider_tick(fleet: Dictionary, day: int, doomed: Dictionary,
 	if not chasing:
 		# Anchored (within 6 of the anchor and off the lane raster) or still
 		# walking home. Parking ON a path tile is forbidden: the anchor rule
-		# keeps the corridor itself clear (§4.11.11.1).
+		# keeps the corridor itself clear (§4.11.11.1). The return steps pay
+		# the parity factors per pursuit heading (task-H pin 3).
 		var anchor := _cell_field(fleet.get("anchor_cell", null))
 		if anchor != NO_CELL and (chebyshev(cell, anchor) > ANCHOR_RADIUS \
 				or _is_path_tile(cell)):
 			for _i in LANE_STEP_TILES_PER_DAY:
-				_step_toward(fleet, anchor)
+				_chase_step(fleet, anchor)
 		return
 	var prey_cell := position_of(target)
-	# The chase steps at the §4.11.11.1 base too (2 tiles/day before the
-	# task-H parity factors — the raider is "like every fleet"). The
-	# engagement fires at most once per tick; a mid-step catch ends the loop
-	# (the loser is `doomed`, so no re-engage and no step past it).
+	# The chase steps at the §4.11.11.1 base too (2 step-slots/day), each
+	# paying the parity factors per pursuit heading (§2.8 — "like every
+	# fleet"). The engagement fires at most once per tick; a mid-step catch
+	# ends the loop (the loser is `doomed`, so no re-engage and no step past
+	# it).
 	for _i in LANE_STEP_TILES_PER_DAY:
 		if doomed.has(str(target.get("id", ""))):
 			break
@@ -1711,7 +1783,7 @@ func _raider_tick(fleet: Dictionary, day: int, doomed: Dictionary,
 		if chebyshev(position_of(fleet), prey_cell) <= CONTACT_DISTANCE:
 			_engage(fleet, target, day, doomed, remove_ids, wrecks)
 			break
-		_step_toward(fleet, prey_cell)
+		_chase_step(fleet, prey_cell)
 
 
 ## The nearest prey candidate within `radius` of the raider (ties by fleet id
@@ -1944,6 +2016,290 @@ static func _share_lane(a: Dictionary, b: Dictionary) -> bool:
 	return false
 
 
+# --- Phase-6 parity factors & seasonal geometry (task H, §2.8) --------------
+
+## The §4.4 direction factor for an NPC step of `heading` at `cell` in
+## `month` (docs/60-* §4.11.11 amendment; task-H master pin 1). The
+## wind-FROM direction is the region's **prevailing** token for the month
+## (`OceanLayers.prevailing_for`) — the player's seeded daily jitter and the
+## calm gate are player-ledger concepts and are NOT applied here: the NPC
+## factor is a pure day+cell function, so the same seed/day/cells replay
+## identically. A `VAR` region contributes 1.0 (no directional penalty or
+## bonus). The angle between the step heading and the wind-FROM direction is
+## bucketed on the 8-grid and read from `SailingSim.DIRECTION_FACTORS` —
+## always the `sail` column ([constant NPC_SAIL_CLASS] pin). An unknown
+## heading (never produced by the movement rules) degrades to 1.0.
+static func npc_direction_factor(heading: String, cell: Vector2i,
+		month: int) -> float:
+	var wind_from: String = OceanLayersLib.instance().prevailing_for(cell, month)
+	if wind_from == "VAR":
+		return 1.0
+	var angle := SailingSimLib.angle_between_dirs(heading, wind_from)
+	if angle < 0:
+		return 1.0
+	var table: Dictionary = SailingSimLib.DIRECTION_FACTORS.get(angle, {})
+	return float(table.get(NPC_SAIL_CLASS, 1.0))
+
+
+## The §4.16 current modifier for an NPC step of `heading` at `cell` in
+## `month` (task-H master pin 2; the `current_factor` line of the docs/20-*
+## §4.4 pipeline). Recomputed locally from the same bands as
+## `SailingSim.current_factor` — that static is gated on the PLAYER's
+## `current_mode: "drift"` (it returns 1.0 there), while NPC parity is
+## unconditional regardless of the player's mode (§2.8), so the 6-line band
+## math is duplicated rather than shared:
+## within 67.5° → `1 + 0.08 × strength`; 67.5–112.5° → 1.0; ≥ 112.5° →
+## `1 − 0.08 × strength`; an empty current tile (and any unknown heading) →
+## 1.0. The reversal flip is `OceanLayers.current_at`'s own lookup-time rule.
+static func npc_current_factor(heading: String, cell: Vector2i,
+		month: int) -> float:
+	var current: Dictionary = OceanLayersLib.instance().current_at(cell, month)
+	if current.is_empty():
+		return 1.0
+	var angle := SailingSimLib.angle_between_dirs(heading, str(current["dir"]))
+	if angle < 0:
+		return 1.0
+	var strength := float(current["strength"])
+	if float(angle) < SailingSimLib.CURRENT_ALIGNED_DEG:
+		return 1.0 + SailingSimLib.CURRENT_ALIGN_FACTOR * strength
+	if float(angle) > SailingSimLib.CURRENT_OPPOSED_DEG:
+		return 1.0 - SailingSimLib.CURRENT_ALIGN_FACTOR * strength
+	return 1.0
+
+
+## The wrapped 8-dir heading from `from` toward `to`: the exact compass delta
+## when the tiles are adjacent, else the dominant-axis bearing (the
+## `_step_toward` primary-offset rule). "" only when `from == to`.
+static func _heading_to(from: Vector2i, to: Vector2i) -> String:
+	var dx := posmod(to.x - from.x, _width)
+	if dx > _width / 2:
+		dx -= _width
+	var dy := to.y - from.y
+	var exact := SailingSimLib.heading_of_delta(Vector2i(dx, dy))
+	if not exact.is_empty():
+		return exact
+	var sx := 1 if dx > 0 else -1
+	var sy := 1 if dy > 0 else -1
+	if absi(dx) >= absi(dy):
+		if dx != 0:
+			return SailingSimLib.heading_of_delta(Vector2i(sx, 0))
+		if dy != 0:
+			return SailingSimLib.heading_of_delta(Vector2i(0, sy))
+	else:
+		if dy != 0:
+			return SailingSimLib.heading_of_delta(Vector2i(0, sy))
+		if dx != 0:
+			return SailingSimLib.heading_of_delta(Vector2i(sx, 0))
+	return ""
+
+
+## The ACTIVE walked geometry of a saved leg (task-H item 2, §2.8 seasonal
+## variants): `{path, start, end, reverse, walked_len, key, saved_walked_len}`
+## — the tile path the fleet walks NOW (base or in-month variant), the
+## effective walked range inside it, and the identity `key` the progress
+## state is keyed on. `{}` for a broken leg (unknown id). Spoke legs have no
+## variants; lane legs resolve the in-month variant
+## ([method _active_lane_variant], file order on overlap — the shipped data
+## has at most one per lane).
+##
+## The variant's walked range maps the saved base range `a..b`
+## proportionally: `round(a / (base_n − 1) × (var_n − 1))` — a full-lane leg
+## (`a = 0, b = base_n − 1`, the patrol/treasure/pin probe shape) maps to the
+## FULL variant path, which is exactly the master-pin form
+## `new_index = round(fraction × (new_len − 1))`; sub-range journey legs map
+## to the same fraction of the variant, so a mid-journey fleet rides the
+## variant at its proportional position instead of touring the whole lane.
+## The persisted leg keeps its base-relative `a`/`b` (clean save shape).
+func _leg_geometry(leg: Dictionary) -> Dictionary:
+	var kind := str(leg.get("kind", ""))
+	var leg_id := str(leg.get("id", ""))
+	var base := _path_of(("lane:" if kind == "lane" else "spoke:") + leg_id)
+	if base.is_empty():
+		return {}
+	var a := clampi(int(leg.get("a", 0)), 0, base.size() - 1)
+	var b := clampi(int(leg.get("b", base.size() - 1)), 0, base.size() - 1)
+	var out := {
+		"path": base,
+		"start": a,
+		"end": b,
+		"reverse": bool(leg.get("reverse", false)),
+		"walked_len": b - a + 1,
+		"key": "%s:%s|" % [kind, leg_id],
+		"saved_walked_len": b - a + 1,
+	}
+	if kind != "lane":
+		return out
+	var month := SailingSimLib.month_for(GameState.day)
+	var variant := _active_lane_variant(leg_id, month)
+	if variant.is_empty():
+		return out
+	var vpath: Array = variant["path"]
+	var vn := vpath.size()
+	if vn < 2 or base.size() < 2:
+		return out  # a degenerate variant cannot carry progress; sail base
+	var va := roundi(float(a) / float(base.size() - 1) * float(vn - 1))
+	var vb := roundi(float(b) / float(base.size() - 1) * float(vn - 1))
+	va = clampi(va, 0, vn - 1)
+	vb = clampi(vb, 0, vn - 1)
+	if va > vb:
+		var swap := va
+		va = vb
+		vb = swap
+	out["path"] = vpath
+	out["start"] = va
+	out["end"] = vb
+	out["walked_len"] = vb - va + 1
+	out["key"] = "%s:%s|%s" % [kind, leg_id, str(variant["id"])]
+	return out
+
+
+## The in-month built variant of `lane_id` (`{id, months, path}`), or `{}`
+## when the lane sails its base path this month.
+func _active_lane_variant(lane_id: String, month: int) -> Dictionary:
+	for variant in _lane_variants.get(lane_id, []):
+		if month in (variant as Dictionary).get("months", []):
+			return variant
+	return {}
+
+
+## The walked tiles of a leg's ACTIVE geometry — the runtime answer to "which
+## tiles does this leg walk this month" (the suites' on-path checks; the
+## base-only walked path stays [_leg_path] for route construction).
+func _leg_path_active(leg: Dictionary) -> Array:
+	var geo := _leg_geometry(leg)
+	if geo.is_empty():
+		return []
+	return _walked_path(geo["path"], int(geo["start"]), int(geo["end"]),
+		bool(geo["reverse"]))
+
+
+## Progress bookkeeping for the active geometry (task-H pin 4): when the
+## resolved identity differs from the fleet's recorded one (first resolution
+## after spawn/load, or a month rollover that swaps base ↔ variant), the
+## saved `tile_index` remaps **by fraction** —
+## `new_index = round(fraction × (new_walked_len − 1))`, clamped — and the
+## new identity is recorded. Deterministic and observable (the
+## `hanseatic_north` flip probe). A seam-start index (0, or 1 after the
+## occupancy hop) carries over unchanged — it is walk-start-relative on any
+## geometry. Returns the effective walked index.
+func _leg_progress(fleet: Dictionary, route: Dictionary, geo: Dictionary) -> int:
+	var id := str(fleet.get("id", ""))
+	var walked_len := int(geo["walked_len"])
+	var index := int(route.get("tile_index", 0))
+	var state: Dictionary = _leg_active.get(id, {}) \
+		if _leg_active.has(id) else {}
+	if str(state.get("key", "")) != str(geo["key"]):
+		var fraction := -1.0
+		var prev_len := int(state.get("walked_len", 0))
+		if prev_len > 1 and index > 1:
+			# Rollover (or a leg change): the index is relative to the
+			# previous active walked length.
+			fraction = clampf(float(index) / float(prev_len - 1), 0.0, 1.0)
+		elif prev_len == 0 and index > 1:
+			# First sight (spawn / load): the saved index is relative to the
+			# leg's own saved walked range.
+			var saved_len := int(geo["saved_walked_len"])
+			if saved_len > 1:
+				fraction = clampf(float(index) / float(saved_len - 1), 0.0, 1.0)
+		if fraction >= 0.0:
+			index = clampi(roundi(fraction * float(walked_len - 1)),
+				0, walked_len - 1)
+			route["tile_index"] = index
+		_leg_active[id] = {"key": str(geo["key"]), "walked_len": walked_len}
+	if index < 0 or index >= walked_len:
+		# Off the leg (a hand edit): restart the leg deterministically.
+		index = 0
+		route["tile_index"] = 0
+	return index
+
+
+## The daily lane-travel budget (task-H pin 3): `tiles_today =
+## floor(LANE_STEP_TILES_PER_DAY × direction_factor × current_factor +
+## carry)` for the fleet's current leg heading (the direction of the next
+## tile step), the fractional remainder banked in [_step_carry]. Pure
+## day+cell inputs — no RNG. A fleet with no resolvable heading banks its
+## carry unchanged.
+func _lane_tiles_today(fleet: Dictionary) -> int:
+	var id := str(fleet.get("id", ""))
+	var carry := float(_step_carry.get(id, 0.0))
+	var heading := _lane_step_heading(fleet)
+	if heading.is_empty():
+		# No resolvable step. With no legs that is the normal docked state;
+		# WITH legs it means a broken leg (unknown id after a hand edit) —
+		# apply the same drop-the-journey rule `_advance` applies, so a
+		# zero-factor day can never wedge the journey open forever.
+		var route: Dictionary = fleet.get("route", {})
+		var legs: Array = route.get("legs", [])
+		if not legs.is_empty() and _leg_geometry(legs[0]).is_empty():
+			route["legs"] = []
+		_step_carry[id] = carry
+		return 0
+	var month := SailingSimLib.month_for(GameState.day)
+	var cell := position_of(fleet)
+	var factor := npc_direction_factor(heading, cell, month) \
+		* npc_current_factor(heading, cell, month)
+	var raw := float(LANE_STEP_TILES_PER_DAY) * factor + carry
+	var tiles := int(floor(raw))
+	_step_carry[id] = raw - float(tiles)
+	return tiles
+
+
+## The heading of the fleet's next lane step (the §2.8 "current leg
+## heading"): the next tile on the active leg geometry, or — at a leg end —
+## toward the seam commit target (the next leg's first tile, else the
+## destination berth, else the current leg's far end). "" with no legs.
+func _lane_step_heading(fleet: Dictionary) -> String:
+	var route: Dictionary = fleet.get("route", {})
+	var legs: Array = route.get("legs", [])
+	if legs.is_empty():
+		return ""
+	var geo := _leg_geometry(legs[0])
+	if geo.is_empty():
+		return ""
+	var cell := position_of(fleet)
+	var index := int(route.get("tile_index", 0))
+	var walked_len := int(geo["walked_len"])
+	var reverse := bool(geo["reverse"])
+	if index < walked_len - 1:
+		var artifact := (int(geo["end"]) - index - 1) if reverse \
+			else (int(geo["start"]) + index + 1)
+		return _heading_to(cell, (geo["path"] as Array)[artifact])
+	if legs.size() > 1:
+		var head_geo := _leg_geometry(legs[1])
+		if not head_geo.is_empty():
+			var head: Vector2i = (head_geo["path"] as Array)[
+				int(head_geo["end"]) if bool(head_geo["reverse"])
+				else int(head_geo["start"])]
+			return _heading_to(cell, head)
+	var berth := _port_cell(str(fleet.get("dest_port_id", "")))
+	if berth.x >= 0:
+		return _heading_to(cell, berth)
+	return _heading_to(cell, (geo["path"] as Array)[
+		int(geo["end"]) if reverse else int(geo["start"])])
+
+
+## One raider chase/return step-slot paying the parity factors **per pursuit
+## heading** (task-H pin 3, second sentence): the allowance
+## `1 × direction × current` for the bearing toward `target` banks in the
+## same per-fleet accumulator, and the greedy step fires only when the bank
+## reaches a full tile. A blocked step spends nothing (the greedy
+## [_step_toward] holds inside itself).
+func _chase_step(fleet: Dictionary, target: Vector2i) -> void:
+	var id := str(fleet.get("id", ""))
+	var cell := position_of(fleet)
+	var heading := _heading_to(cell, target)
+	var carry := float(_step_carry.get(id, 0.0))
+	if not heading.is_empty():
+		var month := SailingSimLib.month_for(GameState.day)
+		carry += npc_direction_factor(heading, cell, month) \
+			* npc_current_factor(heading, cell, month)
+	if carry < 1.0:
+		_step_carry[id] = carry
+		return  # the factor-gated hold (deterministic)
+	_step_carry[id] = carry - 1.0
+	_step_toward(fleet, target)
+
+
 # --- The daily step (docs/60-* §4.11.11.1) ----------------------------------
 
 func _step_fleets(day: int) -> void:
@@ -1990,10 +2346,12 @@ func _step_fleets(day: int) -> void:
 				_depart(fleet, day)
 			continue
 		# §4.11.11.1 Phase-6 stepping base: up to 2 tiles of lane progress
-		# per day tick (before the task-H parity factors). `_advance` is a
-		# no-op once the journey docks mid-loop (legs emptied by `_arrive`),
-		# so the second call after an arrival is safely idle.
-		for _i in LANE_STEP_TILES_PER_DAY:
+		# per day tick, multiplied by the task-H parity factors through the
+		# per-fleet fractional accumulator ([method _lane_tiles_today]).
+		# `_advance` is a no-op once the journey docks mid-loop (legs emptied
+		# by `_arrive`), so extra budget after an arrival is safely idle.
+		var tiles := _lane_tiles_today(fleet)
+		for _i in tiles:
 			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
 					as Array).is_empty():
 				break
@@ -2029,9 +2387,12 @@ func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
 		return 0.0
 	var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 	if not legs.is_empty():
-		# Lane travel at the §4.11.11.1 Phase-6 base (2 tiles/day, before the
-		# task-H parity factors); `_advance` no-ops after a mid-loop arrival.
-		for _i in LANE_STEP_TILES_PER_DAY:
+		# Lane travel at the §4.11.11.1 Phase-6 base (2 tiles/day) multiplied
+		# by the task-H parity factors through the per-fleet accumulator
+		# (hunters pay the factors on lane travel, §2.8); `_advance` no-ops
+		# after a mid-loop arrival.
+		var tiles := _lane_tiles_today(fleet)
+		for _i in tiles:
 			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
 					as Array).is_empty():
 				break
@@ -2141,6 +2502,9 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float) -> floa
 		if budget_left <= 0.0:
 			return 0.0  # overflow: lose the chase today
 		var started := Time.get_ticks_usec()
+		# The passability callback is [_passable] — in-month seasonal ice
+		# refuses entry for the pursuit A* exactly as for lane stepping
+		# (§4.18; task-H ice-aware pursuit).
 		path = FleetPathLib.find_path(position_of(fleet), target, _width,
 			_height, func(cell: Vector2i) -> bool: return _passable(cell))
 		var elapsed := float(Time.get_ticks_usec() - started) / 1000.0
@@ -2150,59 +2514,67 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float) -> floa
 			return elapsed  # overflow: the chase is lost for today
 		if path.size() < 2:
 			return elapsed
-	# Walk one tile along the plan.
+	# Walk one tile along the plan. Task-H parity (§2.8): the pursuit step
+	# pays the same factors per pursuit heading — the allowance banks in the
+	# per-fleet accumulator, a blocked or banked-short step holds the
+	# hunter that day (deterministic).
 	var next: Vector2i = path[1]
 	if not _can_enter(fleet, next):
 		_hunter_paths.erase(id)  # re-plan tomorrow from a clear board
 		return 0.0
+	var cell := position_of(fleet)
+	var heading := _heading_to(cell, next)
+	var carry := float(_step_carry.get(id, 0.0))
+	if not heading.is_empty():
+		var month := SailingSimLib.month_for(GameState.day)
+		carry += npc_direction_factor(heading, cell, month) \
+			* npc_current_factor(heading, cell, month)
+	if carry < 1.0:
+		_step_carry[id] = carry
+		return 0.0  # factor-gated hold: the fresh plan stays for tomorrow
+	_step_carry[id] = carry - 1.0
 	path.remove_at(0)
 	_commit_cell(fleet, next)
 	return 0.0
 
 
-## One tile of progress along the current leg, skipping occupied tiles and
-## never entering land/reef/ice (docs/60-* §4.11.11.1). The next tile is
-## computed by index arithmetic on the artifact path — no per-step slice
-## allocation (the perf gate makes the day tick allocation-sensitive).
+## One tile of progress along the current leg's ACTIVE geometry, skipping
+## occupied tiles and never entering land/reef/in-month-ice (docs/60-*
+## §4.11.11.1 + the Phase-6 amendment). The next tile is computed by index
+## arithmetic on the resolved geometry ([method _leg_geometry] — base or
+## in-month variant path) — no per-step slice allocation (the perf gate
+## makes the day tick allocation-sensitive). A month rollover that swaps the
+## active path remaps progress by fraction through [_leg_progress].
 func _advance(fleet: Dictionary, day: int) -> void:
 	var route: Dictionary = fleet.get("route", {})
 	var legs: Array = route.get("legs", [])
 	if legs.is_empty():
 		return
 	var leg: Dictionary = legs[0]
-	var path := _path_of(("lane:" if str(leg.get("kind", "")) == "lane" else "spoke:")
-		+ str(leg.get("id", "")))
-	if path.is_empty():
+	var geo := _leg_geometry(leg)
+	if geo.is_empty():
 		# A broken leg (unknown id after a hand edit): drop the journey.
 		route["legs"] = []
 		return
-	var a := clampi(int(leg.get("a", 0)), 0, path.size() - 1)
-	var b := clampi(int(leg.get("b", path.size() - 1)), 0, path.size() - 1)
-	var reverse := bool(leg.get("reverse", false))
-	# Walked index i ↔ artifact index: reverse walks b−i, forward walks a+i.
-	var index := int(route.get("tile_index", 0))
-	var walked_len := b - a + 1
-	if index < 0 or index >= walked_len:
-		# Off the leg (hand edit): restart the leg deterministically.
-		index = 0
-		route["tile_index"] = 0
-	var artifact := (b - index) if reverse else (a + index)
+	var path: Array = geo["path"]
+	var walked_len := int(geo["walked_len"])
+	var reverse := bool(geo["reverse"])
+	var index := _leg_progress(fleet, route, geo)
+	var artifact := (int(geo["end"]) - index) if reverse \
+		else (int(geo["start"]) + index)
 	if index + 1 >= walked_len:
-		# Leg end: board the next leg's first tile, and only then hand the
-		# leg over — a blocked seam holds with the position still on the
-		# stored leg (so route/position always agree, save/load included).
+		# Leg end: board the next leg's first ACTIVE tile, and only then
+		# hand the leg over — a blocked seam holds with the position still
+		# on the stored leg (so route/position always agree, save/load
+		# included).
 		if legs.size() > 1:
-			var head: Dictionary = legs[1]
-			var head_path := _path_of(
-				("lane:" if str(head.get("kind", "")) == "lane" else "spoke:")
-				+ str(head.get("id", "")))
-			if head_path.is_empty():
+			var head_geo := _leg_geometry(legs[1])
+			if head_geo.is_empty():
 				route["legs"] = []
 				return
-			var head_a := clampi(int(head.get("a", 0)), 0, head_path.size() - 1)
-			var head_b := clampi(int(head.get("b", head_path.size() - 1)), 0, head_path.size() - 1)
-			var head_tile: Vector2i = head_path[head_b if bool(head.get("reverse", false)) \
-				else head_a]
+			var head_path: Array = head_geo["path"]
+			var head_tile: Vector2i = head_path[int(head_geo["end"]) \
+				if bool(head_geo["reverse"]) else int(head_geo["start"])]
 			if not _can_enter(fleet, head_tile):
 				# §4.11.11.1 "skipping occupied tiles": board the next leg
 				# one tile PAST the blocked head (never stepping onto it).
@@ -2210,10 +2582,11 @@ func _advance(fleet: Dictionary, day: int) -> void:
 				# one-tile-wide spoke deadlock each other forever — the
 				# latent flaw the task-K raider movement exposed (noted in
 				# the task K report).
-				if head_b - head_a > 0:
+				var head_span := int(head_geo["walked_len"]) - 1
+				if head_span > 0:
 					var second: Vector2i = head_path[
-						(head_b - 1) if bool(head.get("reverse", false))
-						else (head_a + 1)]
+						(int(head_geo["end"]) - 1) if bool(head_geo["reverse"])
+						else (int(head_geo["start"]) + 1)]
 					if _can_enter(fleet, second):
 						legs.pop_front()
 						route["leg"] = int(route.get("leg", 0)) + 1
@@ -2238,7 +2611,8 @@ func _advance(fleet: Dictionary, day: int) -> void:
 		# to the following path tile (never stepping ON it); off the leg or
 		# also blocked → hold (deterministic retry next day).
 		if index + 2 < walked_len:
-			var skip_artifact := (b - index - 2) if reverse else (a + index + 2)
+			var skip_artifact := (int(geo["end"]) - index - 2) if reverse \
+				else (int(geo["start"]) + index + 2)
 			var skipped: Vector2i = path[skip_artifact]
 			if _can_enter(fleet, skipped):
 				route["tile_index"] = index + 2
@@ -2374,7 +2748,10 @@ func _free_hold(fleet: Dictionary, capacity: int) -> int:
 ## own-nation ports within Chebyshev 60 (docs/30-* §4.4), buy the bounded
 ## quantity, and sail.
 func _depart_trader(fleet: Dictionary, nation_id: String, day: int) -> void:
-	var origin := _port_at_cell(position_of(fleet))
+	# Decision 11 (task-H item 6): the cell-anchored origin must be the
+	# fleet's OWN nation's port — never a neutral one (fall back to the
+	# destination port, which is own-nation by construction).
+	var origin := _own_port_at_cell(fleet, position_of(fleet))
 	if origin.is_empty():
 		origin = str(fleet.get("dest_port_id", ""))
 	if origin.is_empty():
@@ -2402,7 +2779,7 @@ func _depart_trader(fleet: Dictionary, nation_id: String, day: int) -> void:
 ## (nearest own-nation) ports; never triggers contact (role rule) and is
 ## ignored by raiders (the prey query's rule).
 func _depart_coaster(fleet: Dictionary, nation_id: String, day: int) -> void:
-	var origin := _port_at_cell(position_of(fleet))
+	var origin := _own_port_at_cell(fleet, position_of(fleet))
 	if origin.is_empty():
 		origin = str(fleet.get("dest_port_id", ""))
 	if origin.is_empty():
@@ -2453,26 +2830,34 @@ func _depart_courier(fleet: Dictionary, nation_id: String, day: int) -> void:
 ## The patrol's cycle: walk the lane to its end, dwell 2 days, walk it back
 ## (docs/60-* §4.1.1 "cycles its nation's lanes, docking en route" — the
 ## direction is derived from the end the patrol sits at, so it survives
-## save/load exactly).
+## save/load exactly). Task-H: the end is read on the ACTIVE geometry (the
+## in-month variant replaces the tile path in its window), while the stored
+## leg keeps the base-relative full-lane `a`/`b`.
 func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 	var route: Dictionary = fleet.get("route", {})
 	var lanes: Array = route.get("lanes", [])
 	if lanes.is_empty():
 		return
 	var lane_id := str(lanes[0])
-	var path: Array = _lane_paths.get(lane_id, [])
-	if path.is_empty():
+	var base: Array = _lane_paths.get(lane_id, [])
+	if base.is_empty():
 		return
+	var geo := _leg_geometry({"kind": "lane", "id": lane_id,
+		"reverse": false, "a": 0, "b": base.size() - 1})
+	if geo.is_empty():
+		return
+	var path: Array = geo["path"]
+	var far_end := int(geo["end"])
 	var cell := position_of(fleet)
 	# At the lane's end (or never boarded): walk the short way back.
-	var reverse := chebyshev(cell, path[0]) > chebyshev(cell, path[path.size() - 1])
-	var board := 0 if not reverse else path.size() - 1
+	var reverse := chebyshev(cell, path[0]) > chebyshev(cell, path[far_end])
+	var board := 0 if not reverse else far_end
 	if cell != path[board]:
 		return  # off the lane (hand edit): wait rather than teleport
 	route["leg"] = 0
 	route["tile_index"] = 0
 	route["legs"] = [{"kind": "lane", "id": lane_id, "reverse": reverse,
-		"a": 0, "b": path.size() - 1}]
+		"a": 0, "b": base.size() - 1}]
 	fleet["route"] = route
 	fleet["dwell_until_day"] = 0
 
@@ -2613,6 +2998,12 @@ func coaster_units() -> int:
 
 
 func path_budget_ms() -> int:
+	# Phase-6 re-measurement (task H, correction 13): at the quadrupled
+	# 30/40 chase area the worst observed plan is ≈ 61 ms/day across
+	# roughness-75 archipelago water (test_npc_fleets §21 probe, 40 forced
+	# re-plans/day) — inside the locked 250 ms/day budget, so the shipped
+	# full-region pursuit A* ships unchanged (windowing was gated on
+	# measured failure and did not trigger).
 	return int(_flow().get("path_budget_ms_per_day", 250))
 
 
@@ -3332,13 +3723,40 @@ func _port_at_cell(cell: Vector2i) -> String:
 	return DataLoader.port_id_at(cell)
 
 
+## The port at `cell` when it is the FLEET's own nation's — decision 11's
+## own-nation docking pin (task-H item 6): a trader NEVER docks at (buys or
+## sells into) a `nation_id: ""` neutral port. A trader walking a lane can
+## pass over a neutral port's spoke berth mid-leg; the departure decisions
+## must not adopt that berth as their origin. Nationless roles (pirates)
+## have no port calls at all.
+func _own_port_at_cell(fleet: Dictionary, cell: Vector2i) -> String:
+	var port_id := _port_at_cell(cell)
+	if port_id.is_empty():
+		return ""
+	var nation_id := str(fleet.get("nation_id", ""))
+	if nation_id.is_empty():
+		return ""
+	if str(DataLoader.get_port(port_id).get("nation_id", "")) != nation_id:
+		return ""
+	return port_id
+
+
 func _port_cell(port_id: String) -> Vector2i:
 	var cell: Vector2i = DataLoader.port_cell(port_id)
 	return cell if cell.x >= 0 else NO_CELL
 
 
 func _passable(cell: Vector2i) -> bool:
-	return DataLoader.is_passable(cell)
+	if not DataLoader.is_passable(cell):
+		return false
+	# Phase-6 §4.18 (task-H item 3): in-month seasonal ice refuses ENTRY —
+	# this one rule serves lane stepping, raider chase/return steps, spawn
+	# placement, approach camping and the pursuit A* callback alike. A tile
+	# freezing under a standing fleet never traps it: only the ENTERED cell
+	# is ever checked here, so a fleet standing on a frozen tile may still
+	# move out. The month comes from the sim clock (`GameState.day`).
+	return not OceanLayersLib.instance().ice_blocks(
+		cell, SailingSimLib.month_for(GameState.day))
 
 
 ## Wrap-aware Chebyshev distance (`20-*` §4.1): `min(|dx|, width − |dx|)`.
