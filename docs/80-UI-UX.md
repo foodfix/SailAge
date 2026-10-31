@@ -136,7 +136,7 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
   `"world.arrive": {"zh": "抵达 {port}。第 {day} 天。", "en": "Arrived at {port}. Day {day}."}`.
 - The validator checks both locales non-empty and that zh/en placeholder sets
   match per key.
-- Minimum Phase-1 inventory: every label in the wireframes of `30-*` §4.7,
+- Minimum Phase-1 inventory: every label in the wireframes of `30-*` §4.8,
   every event string referenced in `20/30/40/50`, plus this §'s shared keys.
   Exact list is assembled by the IMPLEMENT-Phase1 task that creates
   `ui_strings.json`; it must cover ≥ the keys cited across docs.
@@ -476,7 +476,7 @@ Below the per-ship repair row, each hull gains:
 Same palette, 8px grid, 32px table rows and 40px buttons as every other
 screen; no textures.
 
-**S12 `guild_screen.tscn`** (wireframe: `30-*` §4.7 "Guild"). Two stacked
+**S12 `guild_screen.tscn`** (wireframe: `30-*` §4.8 "Guild"). Two stacked
 sections:
 
 - *Offers* — one row per generated offer (0–3): a type tag
@@ -494,7 +494,7 @@ sections:
   `guild.report_reward` line (gold · fame) and a `Report` button; empty
   state `guild.report.none`.
 
-**S13 `palace_screen.tscn`** (wireframe: `30-*` §4.7 "Palace"). Rows, top to
+**S13 `palace_screen.tscn`** (wireframe: `30-*` §4.8 "Palace"). Rows, top to
 bottom:
 
 - Title row: current `rank.<id>` name plus the next rank + its two
@@ -690,7 +690,7 @@ Placeholders must match between zh and en.
 
 #### 4.7.7 Market stock + trend + marginal price (S5, Phase 5)
 
-The market table (wireframe `30-*` §4.7) gains three columns; rows stay
+The market table (wireframe `30-*` §4.8) gains three columns; rows stay
 32px, palette-only, no textures:
 
 ```
