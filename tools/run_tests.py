@@ -90,6 +90,7 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
     stuck = False
     last_size = -1
     last_cpu = cpu0
+    cpu_final = cpu0  # last live sample — /proc is gone once the proc reaps
     idle_since: float | None = None
     while True:
         try:
@@ -110,6 +111,7 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
         cpu = proc_cpu_s(proc.pid)
         grew = size != last_size or cpu - last_cpu >= STUCK_CPU_S
         last_size, last_cpu = size, cpu
+        cpu_final = cpu
         if grew:
             idle_since = None
         elif idle_since is None:
@@ -124,7 +126,7 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
             proc.kill()
         proc.wait()
     wall_ms = int((time.monotonic() - started) * 1000)
-    cpu_ms = int(max(proc_cpu_s(proc.pid) - cpu0, 0.0) * 1000)
+    cpu_ms = int(max(cpu_final - cpu0, 0.0) * 1000)
     log_text = log_path.read_text(errors="replace")
     kind = classify(proc.returncode, log_text, timed_out, stuck)
     return {
