@@ -19,7 +19,7 @@ extends Node
 ##     repopulates over days);
 ##   5 the S19 modal over S4 (footer entry, modal rule, Esc, zh/en);
 ##   6 the perf gates (docs/60-* §4.11.11.5): day tick ≤ 50 ms @ normal cap
-##     288, ≤ 150 ms @ extreme, linear marginal cost, save ≤ 2 MB @ extreme.
+##     289, ≤ 150 ms @ extreme, linear marginal cost, save ≤ 2 MB @ extreme.
 ##
 ## Isolation: this suite never writes `user://` (the save round-trip and the
 ## payload-size gate serialize through `SaveSystem.snapshot()` to a string),
@@ -251,8 +251,8 @@ func _test_preset_round_trip() -> void:
 
 func _test_initial_fill() -> void:
 	var sim := _make_run("normal")
-	_check(sim.core_cap() == 272,
-		"the normal core cap is 272 (got %d)" % sim.core_cap())
+	_check(sim.core_cap() == 273,
+		"the normal core cap is 273 (got %d)" % sim.core_cap())
 	var half: int = sim.core_cap() / 2
 	var filled: int = GameState.npc_fleets.size()
 	# The fill targets exactly half the cap; a failed spawn draw (no legal
@@ -558,7 +558,7 @@ func _test_s19_modal() -> void:
 # --- 6. The perf gates (docs/60-* §4.11.11.5) --------------------------------
 
 func _test_perf_gates() -> void:
-	# Normal: settled at cap 288, ≥ 30 timed ticks.
+	# Normal: settled at cap 289, ≥ 30 timed ticks.
 	var sim := _make_run("normal")
 	var settled_day := _drive_to_cap(sim, 2, 220, sim.core_cap())
 	var n_normal: int = GameState.npc_fleets.size()
@@ -569,7 +569,7 @@ func _test_perf_gates() -> void:
 	_check(n_normal >= 250,
 		"the normal probe runs at the filled cap (%d fleets)" % n_normal)
 	_check(normal_avg <= GATE_NORMAL_MS,
-		"the day tick averages ≤ %.0f ms at cap 288 (%.1f ms over %d ticks)"
+		"the day tick averages ≤ %.0f ms at cap 289 (%.1f ms over %d ticks)"
 		% [GATE_NORMAL_MS, normal_avg, PERF_TICKS])
 
 	# Extreme: ×4 budgets (~4× fleets), ≤ 150 ms, linear marginal cost.

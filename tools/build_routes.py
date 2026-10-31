@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """build_routes.py — deterministic trade-route builder (Phase 5, task F).
 
-Turns the hand-authored historical lanes (``data/trade_routes.json``, 12
-locked ids per ``docs/10-DATA-SCHEMA.md`` §7.6) plus the 100 ports and the
-hand fixes in ``tools/route_overrides.json`` into the tool-owned artifact
-``data/trade_routes_built.json``: per-lane tile paths, the junction graph the
-runtime routes over, and exactly one minor spoke per port. Mirror of
+Turns the hand-authored historical lanes (``data/trade_routes.json``, 17
+locked ids per ``docs/10-DATA-SCHEMA.md`` §7.6) plus the 145 ports (the
+sovereign 100 + the Phase-6 neutral tier) and the hand fixes in
+``tools/route_overrides.json`` into the tool-owned artifact
+``data/trade_routes_built.json``: per-lane tile paths (base + seasonal
+``variants``), the junction graph the runtime routes over, and exactly one
+minor spoke per port. Mirror of
 ``build_world.py`` governance: pure stdlib, no timestamps, no randomness,
 stable sort everywhere — two consecutive builds are **byte-identical**
 (docs/10-* §4.14; validator group 8 re-asserts it).
@@ -17,31 +19,49 @@ Locked rules implemented here (docs/10-* §4.14, §6.1, §8.3):
   waypoint snap   water within 2 tiles (Chebyshev, wrap-aware) with >= 1
                   orthogonally adjacent water tile, ties -> smallest (y, x)
                   — the §6.1 harbor-snap rule, applied to every lane waypoint
+                  and to every variant waypoint
   segment walk    every consecutive waypoint pair is walked on the raster:
                   8-direction straight-line walk, corner cutting forbidden,
                   x wraps mod 4320; stepping on an impassable tile is a hard
                   build error naming the lane
+  month windows   per lane and month 1..12 the active path (a variant whose
+                  `months` contain the month, else the base waypoints) must
+                  be walkable with that month's seasonal-ice mask active
+                  (water tiles inside an in-force data/ice_regions.json
+                  polygon are impassable; §4.18) — a violation is a hard
+                  build error naming the lane and month. This is what makes
+                  `hanseatic_north` (base 4-11, winter variant 12-3) build
+                  green: base legs walkable unfrozen, variant legs walkable
+                  while the Baltic is frozen.
   spokes          exactly one per port, in this order:
-                    1. nearest snapped lane waypoint within Chebyshev 40 of
-                       the port harbor tile (wrap-aware; ties smallest
-                       (y, x), then lane file order, then waypoint index) —
-                       the spoke is the straight walk to it;
+                    1. walk-aware lane rule: among the lane waypoints within
+                       Chebyshev 40 of the port harbor tile (wrap-aware) in
+                       Chebyshev order (ties smallest (y, x), then lane file
+                       order, then waypoint index), the FIRST whose straight
+                       walk succeeds; walk-failed candidates are skipped;
                     2. else the passable direct walk to the port's national
-                       capital harbor tile;
+                       capital harbor tile (sovereign ports only);
                     3. else the spoke declared for the port in
                        ``tools/route_overrides.json`` (A*-pathfound on the
                        grid through the declared via points to the declared
                        lane-waypoint connect);
-                    4. a port with none is a hard build error naming the port.
-                  An override on a port that resolves by rule 1 or 2 is an
-                  error (stale data), and a capital spoke is only legal when
-                  no lane waypoint is within the spoke radius.
+                    4. else, for a neutral port (`nation_id: ""`) with no
+                       declared override: the nearest lane waypoint
+                       UNBOUNDED (A*; a hard build error when no water path
+                       exists at all);
+                    5. a port with none is a hard build error naming the
+                       port.
+                  An override is superseded (an error naming the port)
+                  exactly when rule 1 succeeds for that port; an override
+                  whose rule-1 walk fails stays legal.
   junction graph  a junction node is a tile shared by >= 2 distinct paths
-                  (lanes + spokes) or a path endpoint; node key = wrapped
+                  (base lanes + spokes) or a path endpoint; node key = wrapped
                   (x, y); every path is split at its nodes into edges whose
                   weight is the tile step count. Runtime Dijkstra walks this
                   graph (edge weight = tile length; tie-breaks are 60-* §4.1
-                  material, not the builder's).
+                  material, not the builder's). Variant paths are carried
+                  per lane for the runtime's in-month selection and do not
+                  join the graph (the graph stays month-blind).
 
 Artifact: envelope ``{"version", "generated_by", "artifact", ...}`` — a tool
 output like ``maps/world_report.json`` (group 1 exempts it). Never hand-edit
@@ -77,6 +97,7 @@ TOOLS = ROOT / "tools"
 LANES_PATH = DATA / "trade_routes.json"
 PORTS_PATH = DATA / "ports.json"
 NATIONS_PATH = DATA / "nations.json"
+ICE_PATH = DATA / "ice_regions.json"
 OVERRIDES_PATH = TOOLS / "route_overrides.json"
 WORLD_PNG = DATA / "maps" / "world.png"
 BUILT_PATH = DATA / "trade_routes_built.json"
@@ -97,6 +118,7 @@ INPUT_SOURCES = (
     ("trade_routes", LANES_PATH),
     ("ports", PORTS_PATH),
     ("nations", NATIONS_PATH),
+    ("ice_regions", ICE_PATH),
     ("route_overrides", OVERRIDES_PATH),
     ("world_png", WORLD_PNG),
 )
@@ -165,7 +187,8 @@ def snap_waypoint(grid: bw.Grid, lat: float, lon: float,
 # --------------------------------------------------------------------------
 # Segment walk (8-dir, corner cutting forbidden, wrap-aware)
 # --------------------------------------------------------------------------
-def walk_segment(grid: bw.Grid, a: tuple[int, int], b: tuple[int, int]):
+def walk_segment(grid: bw.Grid, a: tuple[int, int], b: tuple[int, int],
+                 blocked: frozenset | None = None):
     """Straight-line tile chain from ``a`` to ``b`` (4-connected output).
 
     The polyline is sampled at 1/20-tile resolution; when the sample moves
@@ -173,6 +196,10 @@ def walk_segment(grid: bw.Grid, a: tuple[int, int], b: tuple[int, int]):
     chain tiles are always 4-adjacent (build_world's ``_chain_tiles`` rule).
     Corner cutting is therefore forbidden by construction: the bridged
     orthogonal tile is part of the chain and must be water too.
+
+    ``blocked`` (a set of wrapped ``(x, y)`` tiles) marks extra impassable
+    tiles on top of the raster — the month's seasonal-ice mask for the
+    §4.14 month-window passability rule; ``None`` keeps the plain walk.
 
     Returns ``(chain, None)`` with every tile passable, or ``(None, bad)``
     where ``bad`` is the first impassable tile.
@@ -211,18 +238,27 @@ def walk_segment(grid: bw.Grid, a: tuple[int, int], b: tuple[int, int]):
     for x, y in chain:
         if not grid.is_water(x, y):
             return None, (x, y)
+        if blocked is not None and (x, y) in blocked:
+            return None, (x, y)
     return chain, None
 
 
 def lane_tile_path(grid: bw.Grid, lane_id: str,
-                   snapped: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Rasterized lane path: the per-segment chains concatenated."""
+                   snapped: list[tuple[int, int]],
+                   variant_id: str = "") -> list[tuple[int, int]]:
+    """Rasterized lane path: the per-segment chains concatenated.
+
+    ``variant_id`` (empty for the base waypoints) only sharpens the error
+    messages; the geometry is identical.
+    """
+    label = f"lane '{lane_id}'" + (f" variant '{variant_id}'" if variant_id
+                                   else "")
     path: list[tuple[int, int]] = []
     for i in range(len(snapped) - 1):
         seg, bad = walk_segment(grid, snapped[i], snapped[i + 1])
         if seg is None:
             raise BuildError(
-                f"lane '{lane_id}' segment {i} "
+                f"{label} segment {i} "
                 f"({snapped[i]}) -> ({snapped[i + 1]}) walks onto an "
                 f"impassable tile at {bad} "
                 f"[{bw.CHARS[grid.rows[bad[1]][bad[0]]]}], lat "
@@ -232,6 +268,239 @@ def lane_tile_path(grid: bw.Grid, lane_id: str,
             seg = seg[1:]
         path.extend(seg)
     return path
+
+
+# --------------------------------------------------------------------------
+# Seasonal ice masks + month-window passability (docs/10-* §4.14, §4.18)
+# --------------------------------------------------------------------------
+def load_ice_masks(grid: bw.Grid) -> tuple[dict[int, frozenset], list[dict]]:
+    """Month-keyed impassable-water sets from data/ice_regions.json.
+
+    For every region, its polygon interior (tile-centre scanline fill, the
+    same primitive build_world uses) is collected once; a month's mask is
+    the union of the regions whose ``months`` include that month. Returns
+    ``(masks, region_sources)`` where ``masks[month]`` is a frozenset of
+    wrapped ``(x, y)`` water-impassable tiles and ``region_sources`` keeps
+    ``{id, months, tiles}`` for error messages and the report.
+    """
+    if not ICE_PATH.is_file():
+        raise BuildError(
+            f"{ICE_PATH.relative_to(ROOT)} not found — the §4.18 seasonal "
+            "ice data is required for the month-window passability rule")
+    doc = json.loads(ICE_PATH.read_text(encoding="utf-8"))
+    regions = doc.get("ice_regions")
+    if not isinstance(regions, list) or not regions:
+        raise BuildError("ice_regions.json: missing non-empty 'ice_regions'")
+    if not isinstance(doc.get("version"), int):
+        raise BuildError("ice_regions.json: missing integer 'version'")
+
+    per_region: list[tuple[set[int], set[tuple[int, int]]]] = []
+    sources: list[dict] = []
+    for index, region in enumerate(regions):
+        where = f"ice_regions.json: ice_regions[{index}] ({region.get('id')!r})"
+        region_id = region.get("id")
+        months = region.get("months")
+        polygon = region.get("polygon")
+        if not isinstance(region_id, str) or not region_id:
+            raise BuildError(f"{where}: missing string 'id'")
+        if (not isinstance(months, list) or not months
+                or not all(isinstance(m, int) and not isinstance(m, bool)
+                           and 1 <= m <= 12 for m in months)):
+            raise BuildError(
+                f"{where}: months must be a non-empty list of ints 1..12")
+        if len(set(months)) != len(months):
+            raise BuildError(f"{where}: months repeats a month")
+        if not isinstance(polygon, list) or len(polygon) < 3:
+            raise BuildError(f"{where}: polygon needs >= 3 [lat, lon] vertices")
+        ring = []
+        for pair in polygon:
+            if (not isinstance(pair, list) or len(pair) != 2
+                    or not all(isinstance(v, (int, float))
+                               and not isinstance(v, bool) for v in pair)):
+                raise BuildError(f"{where}: polygon entry {pair!r} must be "
+                                 "[lat, lon]")
+            lat, lon = float(pair[0]), float(pair[1])
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                raise BuildError(f"{where}: vertex out of range: {pair}")
+            ring.append((lon, lat))
+        tiles = _ring_water_tiles(grid, ring)
+        per_region.append((set(months), tiles))
+        sources.append({"id": region_id, "months": sorted(set(months)),
+                        "tiles": len(tiles)})
+
+    masks: dict[int, frozenset] = {}
+    for month in range(1, 13):
+        combined: set[tuple[int, int]] = set()
+        for months, tiles in per_region:
+            if month in months:
+                combined |= tiles
+        masks[month] = frozenset(combined)
+    return masks, sources
+
+
+def _ring_water_tiles(grid: bw.Grid, ring: list[tuple[float, float]]
+                      ) -> set[tuple[int, int]]:
+    """Water tiles inside one ring (tile-centre scanline fill, wrap-aware).
+
+    Uses ``build_world.fill_ring`` — the same primitive the world builder
+    rasterizes land with — on a scratch grid, then keeps only the tiles the
+    world raster marks passable (only water freezes, §4.18).
+    """
+    scratch = bw.Grid(grid.w, grid.h)
+    bw.fill_ring(scratch, ring, 1)
+    tiles: set[tuple[int, int]] = set()
+    for y in range(grid.h):
+        line = grid.rows[y]
+        row = scratch.rows[y]
+        pos = row.find(1)
+        while pos != -1:
+            if line[pos] in bw.PASSABLE:
+                tiles.add((pos, y))
+            pos = row.find(1, pos + 1)
+    return tiles
+
+
+def validate_month_windows(grid: bw.Grid, lanes: list[dict],
+                           lane_path_sets: dict, variants_by_lane: dict,
+                           masks: dict) -> list[dict]:
+    """The §4.14/§8.5 month-window rule, lane by lane, month by month.
+
+    For every month 1..12 the active path (a variant whose ``months``
+    contain the month, else the base waypoints) must not touch the month's
+    ice mask. The geometric chains are month-invariant, so each path is
+    walked once and checked against 12 masks. Violations are hard build
+    errors naming the lane (and variant) and month. Returns per-lane stats
+    for the report.
+    """
+    stats = []
+    for lane in lanes:
+        lane_id = lane["id"]
+        variants = variants_by_lane.get(lane_id, [])
+        covered = sorted({m for variant in variants
+                          for m in variant["months"]})
+        base_months = [m for m in range(1, 13) if m not in covered]
+        checked = 0
+        for month in base_months:
+            checked += 1
+            bad = lane_path_sets[lane_id].intersection(masks[month])
+            if bad:
+                tile = min(bad)
+                raise BuildError(
+                    f"lane '{lane_id}' month-window {month}: the base path "
+                    f"crosses in-force seasonal ice at {tile} (lat "
+                    f"{grid.lat_of_y(tile[1]):.2f} lon "
+                    f"{grid.lon_of_x(tile[0]):.2f}); the lane must avoid ice "
+                    "year-round or carry a covering variant set (§4.14, "
+                    "§4.18)")
+        for variant in variants:
+            for month in sorted(variant["months"]):
+                checked += 1
+                bad = variant["path_set"].intersection(masks[month])
+                if bad:
+                    tile = min(bad)
+                    raise BuildError(
+                        f"lane '{lane_id}' variant '{variant['id']}' "
+                        f"month-window {month}: the variant path crosses "
+                        f"in-force seasonal ice at {tile} (lat "
+                        f"{grid.lat_of_y(tile[1]):.2f} lon "
+                        f"{grid.lon_of_x(tile[0]):.2f}) (§4.14)")
+        stats.append({"lane": lane_id, "months_checked": checked,
+                      "variant_months": covered,
+                      "base_months": base_months})
+    return stats
+
+
+def build_lane_variants(grid: bw.Grid, lanes: list[dict]) -> dict:
+    """Rasterize every lane ``variants`` entry (§4.14): snap <= 2 + walk.
+
+    Returns ``{lane_id: [{"id", "months", "tile_path", "path_set"}]}``.
+    A waypoint with no water inside the snap radius, a walk onto an
+    impassable tile, or a malformed structure is a hard build error naming
+    the lane and the variant. (The month-window ice check runs later, over
+    every lane including these variants — see validate_month_windows.)
+    """
+    variants_by_lane: dict[str, list[dict]] = {}
+    for lane in lanes:
+        raw = lane.get("variants") or []
+        if not raw:
+            continue
+        lane_id = lane["id"]
+        if not isinstance(raw, list):
+            raise BuildError(
+                f"lane '{lane_id}': variants must be an array of "
+                "{\"id\", \"months\", \"waypoints\"} objects")
+        seen_ids: set[str] = set()
+        seen_months: set[int] = set()
+        out: list[dict] = []
+        for v_index, variant in enumerate(raw):
+            where = f"lane '{lane_id}' variants[{v_index}]"
+            if not isinstance(variant, dict):
+                raise BuildError(f"{where} must be an object")
+            unknown = set(variant) - {"id", "months", "waypoints"}
+            if unknown:
+                raise BuildError(
+                    f"{where} has unknown key(s): "
+                    f"{', '.join(sorted(unknown))}")
+            variant_id = variant.get("id")
+            if not isinstance(variant_id, str) or not variant_id:
+                raise BuildError(f"{where}: missing string 'id'")
+            if variant_id in seen_ids:
+                raise BuildError(
+                    f"{where}: duplicate variant id within the lane")
+            seen_ids.add(variant_id)
+            months = variant.get("months")
+            if (not isinstance(months, list) or not months
+                    or not all(isinstance(m, int) and not isinstance(m, bool)
+                               and 1 <= m <= 12 for m in months)):
+                raise BuildError(
+                    f"{where} ('{variant_id}'): months must be a non-empty "
+                    "list of ints 1..12")
+            if len(set(months)) != len(months):
+                raise BuildError(
+                    f"{where} ('{variant_id}'): months repeats a month")
+            overlap = seen_months & set(months)
+            if overlap:
+                raise BuildError(
+                    f"{where} ('{variant_id}'): months "
+                    f"{sorted(overlap)} overlap another variant's months "
+                    "(§4.14: variant months are pairwise disjoint)")
+            seen_months |= set(months)
+            waypoints = variant.get("waypoints")
+            if (not isinstance(waypoints, list) or len(waypoints) < 2):
+                raise BuildError(
+                    f"{where} ('{variant_id}'): needs >= 2 [lat, lon] "
+                    "waypoints")
+            snapped: list[tuple[int, int]] = []
+            for w_index, point in enumerate(waypoints):
+                if (not isinstance(point, list) or len(point) != 2
+                        or not all(isinstance(v, (int, float))
+                                   and not isinstance(v, bool)
+                                   for v in point)):
+                    raise BuildError(
+                        f"{where} ('{variant_id}') waypoint {w_index} must "
+                        "be [lat, lon]")
+                lat, lon = float(point[0]), float(point[1])
+                if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                    raise BuildError(
+                        f"{where} ('{variant_id}') waypoint {w_index} out of "
+                        f"range: {point}")
+                hit = snap_waypoint(grid, lat, lon)
+                if hit is None:
+                    px, py = grid.tile_of_latlon(lat, lon)
+                    raise BuildError(
+                        f"lane '{lane_id}' variant '{variant_id}' waypoint "
+                        f"{w_index} ({lat}, {lon}) has no water tile within "
+                        f"{WAYPOINT_SNAP_TILES} tiles of ({px}, {py})")
+                snapped.append((hit[0], hit[1]))
+            path = lane_tile_path(grid, lane_id, snapped, variant_id)
+            out.append({
+                "id": variant_id,
+                "months": list(months),
+                "tile_path": path,
+                "path_set": frozenset(path),
+            })
+        variants_by_lane[lane_id] = out
+    return variants_by_lane
 
 
 # --------------------------------------------------------------------------
@@ -428,13 +697,53 @@ def chebyshev_wrap_tiles(grid: bw.Grid, a: tuple[int, int],
     return bw.chebyshev_wrap(b[0] - a[0], b[1] - a[1], grid.w)
 
 
+def lane_waypoint_candidates(grid: bw.Grid, harbor: tuple[int, int],
+                             snapped_by_lane: dict[str, list[tuple[int, int]]],
+                             lane_order: list[str]) -> list[tuple]:
+    """In-radius snapped lane waypoints in locked Chebyshev order.
+
+    Order: ``(distance, y, x, lane_rank, waypoint_index)`` — the §4.14
+    tie-break, restricted to waypoints within ``SPOKE_RADIUS_TILES`` of the
+    port harbor tile (wrap-aware).
+    """
+    out = []
+    for lane_rank, lane_id in enumerate(lane_order):
+        for index, (x, y) in enumerate(snapped_by_lane[lane_id]):
+            distance = chebyshev_wrap_tiles(grid, harbor, (x, y))
+            if distance > SPOKE_RADIUS_TILES:
+                continue
+            out.append((distance, y, x, lane_rank, lane_id, index))
+    out.sort()
+    return out
+
+
+def first_walkable_waypoint(grid: bw.Grid, harbor: tuple[int, int],
+                            candidates: list[tuple],
+                            snapped_by_lane: dict[str, list[tuple[int, int]]]):
+    """Rule 1 (walk-aware, pinned at the W2 gate): the first candidate whose
+    straight spoke walk succeeds; walk-failed candidates are skipped.
+
+    Returns ``(lane_id, waypoint_index, tile, distance, chain)`` or ``None``
+    when no in-radius candidate has a walk (the rule then falls through to
+    the capital/override fallbacks).
+    """
+    for distance, _y, _x, _rank, lane_id, index in candidates:
+        tile = snapped_by_lane[lane_id][index]
+        chain, _bad = walk_segment(grid, harbor, tile)
+        if chain is not None:
+            return lane_id, index, tile, distance, chain
+    return None
+
+
 def nearest_lane_waypoint(grid: bw.Grid, harbor: tuple[int, int],
                           snapped_by_lane: dict[str, list[tuple[int, int]]],
                           lane_order: list[str]):
-    """Nearest snapped lane waypoint within the §4.14 spoke radius.
+    """Nearest in-radius lane waypoint (legacy single-nearest probe).
 
     Tie-break: smallest (distance, y, x), then lane file order, then waypoint
-    index. Returns ``(lane_id, index, tile, distance)`` or ``None``.
+    index. Returns ``(lane_id, index, tile, distance)`` or ``None``. The
+    spoke rule itself is walk-aware now (first_walkable_waypoint); this
+    helper remains for diagnostics and the validator's probes.
     """
     best = None
     for lane_rank, lane_id in enumerate(lane_order):
@@ -455,7 +764,16 @@ def build_spokes(grid: bw.Grid, ports: list[dict], nations: list[dict],
                  snapped_by_lane: dict[str, list[tuple[int, int]]],
                  lane_order: list[str],
                  overrides: dict[str, dict]) -> tuple[list[dict], dict]:
-    """Exactly one spoke per port (§4.14): lane, capital or override.
+    """Exactly one spoke per port (§4.14): lane, capital, override or the
+    neutral nationless fallback.
+
+    Rule 1 is walk-aware (pinned at the W2 gate): among the in-radius lane
+    waypoints in Chebyshev order the first whose walk succeeds wins; only
+    when no in-radius candidate has a walk do the capital/override
+    fallbacks apply. An override is superseded (a build error naming the
+    port) exactly when rule 1 succeeds. A neutral port (`nation_id: ""`)
+    has no capital; with no override declared it takes rule 4 — the nearest
+    lane waypoint unbounded, A*-pathfound.
 
     Returns ``(spoke_records, resolution_summary)``. A port with no possible
     spoke is a hard build error naming the port.
@@ -472,56 +790,53 @@ def build_spokes(grid: bw.Grid, ports: list[dict], nations: list[dict],
         harbors[port["id"]] = (snapped[0], snapped[1])
     nation_of = {port["id"]: port["nation_id"] for port in ports}
     capital_tiles = {pid: harbors[capital_of[nation_of[pid]]]
-                     for pid in harbors}
+                     for pid in harbors if nation_of[pid]}
 
     records: list[dict] = []
-    counts = {"lane": 0, "capital": 0, "override": 0}
+    counts = {"lane": 0, "capital": 0, "override": 0, "fallback": 0}
     for port in ports:
         port_id = port["id"]
         harbor = harbors[port_id]
         override = overrides.pop(port_id, None)
+        is_neutral = port["nation_id"] == ""
 
-        # Rule 1: nearest lane waypoint within the spoke radius.
-        near = nearest_lane_waypoint(grid, harbor, snapped_by_lane, lane_order)
-        lane_ok = False
-        walk_bad = None
-        if near is not None:
-            lane_id, wp_index, tile, distance = near
-            chain, bad = walk_segment(grid, harbor, tile)
-            if chain is not None:
-                lane_ok = True
-                if override is not None:
-                    raise BuildError(
-                        f"port '{port_id}': stale override — the port "
-                        f"resolves by the §4.14 lane rule (lane waypoint "
-                        f"'{lane_id}' #{wp_index} within "
-                        f"{SPOKE_RADIUS_TILES} tiles, walk passable); remove "
-                        f"the entry from tools/route_overrides.json")
-                records.append({
-                    "port": port_id,
-                    "nation_id": port["nation_id"],
-                    "kind": "lane",
-                    "lane": lane_id,
-                    "waypoint_index": wp_index,
-                    "distance": distance,
-                    "tile_path": [[x, y] for x, y in chain],
-                })
-                counts["lane"] += 1
-            else:
-                walk_bad = bad
-        if lane_ok:
+        # Rule 1: walk-aware lane rule — first in-radius candidate that walks.
+        candidates = lane_waypoint_candidates(grid, harbor, snapped_by_lane,
+                                              lane_order)
+        resolved = first_walkable_waypoint(grid, harbor, candidates,
+                                           snapped_by_lane)
+        if resolved is not None:
+            lane_id, wp_index, tile, distance, chain = resolved
+            if override is not None:
+                raise BuildError(
+                    f"port '{port_id}': superseded override — the port "
+                    f"resolves by the §4.14 lane rule (lane waypoint "
+                    f"'{lane_id}' #{wp_index} within "
+                    f"{SPOKE_RADIUS_TILES} tiles, walk passable); remove "
+                    f"the entry from tools/route_overrides.json")
+            records.append({
+                "port": port_id,
+                "nation_id": port["nation_id"],
+                "kind": "lane",
+                "lane": lane_id,
+                "waypoint_index": wp_index,
+                "distance": distance,
+                "tile_path": [[x, y] for x, y in chain],
+            })
+            counts["lane"] += 1
             continue
 
-        # Rule 2: capital fallback — only when no lane waypoint is within
-        # the radius; the direct walk must be passable.
-        if near is None:
+        # No in-radius candidate has a walk: the fallbacks apply (§4.14).
+        # Rule 2: capital fallback — sovereign ports only; the direct walk
+        # must be passable.
+        if not is_neutral:
             capital_id = capital_of[port["nation_id"]]
             capital_tile = capital_tiles[capital_id]
             cap_chain, _bad = walk_segment(grid, harbor, capital_tile)
             if cap_chain is not None:
                 if override is not None:
                     raise BuildError(
-                        f"port '{port_id}': stale override — the port "
+                        f"port '{port_id}': superseded override — the port "
                         f"resolves by the §4.14 capital fallback (direct "
                         f"walk to capital '{capital_id}' is passable); "
                         f"remove the entry from tools/route_overrides.json")
@@ -550,15 +865,53 @@ def build_spokes(grid: bw.Grid, ports: list[dict], nations: list[dict],
             counts["override"] += 1
             continue
 
+        # Rule 4: the neutral nationless fallback — nearest lane waypoint
+        # unbounded, A*-pathfound (§4.14; expected unused on the shipped
+        # sources, implemented so a frontier port can never stall the build
+        # silently).
+        if is_neutral:
+            nearest = None
+            for lane_rank, lane_id in enumerate(lane_order):
+                for index, (x, y) in enumerate(snapped_by_lane[lane_id]):
+                    distance = chebyshev_wrap_tiles(grid, harbor, (x, y))
+                    key = (distance, y, x, lane_rank, index)
+                    if nearest is None or key < nearest[0]:
+                        nearest = (key, lane_id, index, (x, y), distance)
+            if nearest is not None:
+                _key, lane_id, index, tile, distance = nearest
+                path = astar_path(grid, harbor, tile)
+                if path is None:
+                    raise BuildError(
+                        f"port '{port_id}': nationless fallback failed — no "
+                        f"passable water path at all from its harbor "
+                        f"{harbor} to the nearest lane waypoint '{lane_id}' "
+                        f"#{index} {tile}")
+                records.append({
+                    "port": port_id,
+                    "nation_id": "",
+                    "kind": "fallback",
+                    "lane": lane_id,
+                    "waypoint_index": index,
+                    "distance": distance,
+                    "tile_path": [[x, y] for x, y in path],
+                })
+                counts["fallback"] += 1
+                continue
+
         # Nothing applies: the §4.14 hard error, naming the port.
-        if near is not None:
-            lane_id, wp_index, tile, distance = near
+        if candidates:
+            distance, _y, _x, _rank, lane_id, wp_index = candidates[0]
             raise BuildError(
-                f"port '{port_id}': no spoke — lane waypoint '{lane_id}' "
-                f"#{wp_index} is within {SPOKE_RADIUS_TILES} tiles "
-                f"(distance {distance}) but the straight walk is blocked at "
-                f"{walk_bad} and no override is declared in "
+                f"port '{port_id}': no spoke — the in-radius lane waypoint "
+                f"'{lane_id}' #{wp_index} (distance {distance}) and every "
+                f"other candidate within {SPOKE_RADIUS_TILES} tiles fails "
+                f"its straight walk and no override is declared in "
                 f"tools/route_overrides.json")
+        if is_neutral:
+            raise BuildError(
+                f"port '{port_id}': no spoke — no lane waypoint within "
+                f"{SPOKE_RADIUS_TILES} tiles or anywhere on the network, "
+                "and no override declared in tools/route_overrides.json")
         raise BuildError(
             f"port '{port_id}': no spoke — no lane waypoint within "
             f"{SPOKE_RADIUS_TILES} tiles and the direct walk to capital "
@@ -682,6 +1035,16 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
     """
     snapped_by_lane, lane_paths, snap_stats = build_lanes(grid, lanes)
     lane_order = [lane["id"] for lane in lanes]
+
+    # §4.14 variants: rasterized like lanes, then the §4.14/§8.5 month-window
+    # rule over every lane's active path (hard build error naming lane+month).
+    variants_by_lane = build_lane_variants(grid, lanes)
+    masks, ice_sources = load_ice_masks(grid)
+    lane_path_sets = {lane_id: frozenset(lane_paths[lane_id])
+                      for lane_id in lane_order}
+    month_stats = validate_month_windows(grid, lanes, lane_path_sets,
+                                         variants_by_lane, masks)
+
     overrides = load_overrides(overrides_payload, lanes, ports)
     spoke_records, spoke_counts = build_spokes(
         grid, ports, nations, snapped_by_lane, lane_order, overrides)
@@ -701,15 +1064,44 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
     lane_nodes = {lane_id: tile_to_node[lane_paths[lane_id][0]]
                   for lane_id in lane_order}
 
-    # Probes (§8.3 item 7): over the built graph + port spokes.
+    # Probes (§8.3 item 7 + the W3 gate's E-probes): over the built graph
+    # and the built spoke records.
     adj = graph_adjacency(edges)
     acapulco = reachable_from(adj, port_nodes["acapulco"])
+    hirado = reachable_from(adj, port_nodes["hirado"])
+    spoke_by_port = {record["port"]: record for record in spoke_records}
+
+    def spoke_onto(port_id: str, lane_id: str, max_distance=None) -> bool:
+        record = spoke_by_port.get(port_id)
+        if record is None or record.get("kind") != "lane":
+            return False
+        if record.get("lane") != lane_id:
+            return False
+        if max_distance is not None and record.get("distance", 10**9) > max_distance:
+            return False
+        return True
+
+    pacific_ports = ("lima", "valparaiso", "guayaquil", "panama")
+    africa_ports = ("safi", "elmina", "luanda")
     probes = {
         "acapulco_manila_wrap": port_nodes["manila"] in acapulco,
         "hanseatic_reaches_danzig": port_nodes["danzig"] in reachable_from(
             adj, lane_nodes["hanseatic_north"]),
         "carreira_reaches_goa": port_nodes["goa"] in reachable_from(
             adj, lane_nodes["carreira_da_india"]),
+        "macau_hirado_via_canton": (
+            port_nodes["macau"] in hirado
+            and port_nodes["hirado"] in hirado
+            and (spoke_onto("macau", "canton_country_trade")
+                 or spoke_onto("hirado", "canton_country_trade"))
+        ),
+        "busan_spoke_on_canton": spoke_onto("busan", "canton_country_trade"),
+        "mombasa_spoke_le_40_on_swahili": spoke_onto(
+            "mombasa", "swahili_coast", SPOKE_RADIUS_TILES),
+        "pacific_america_spokes": all(
+            spoke_onto(port_id, "pacific_america") for port_id in pacific_ports),
+        "west_africa_spokes": all(
+            spoke_onto(port_id, "west_africa") for port_id in africa_ports),
     }
     if not all(probes.values()):
         failed = [name for name, ok in probes.items() if not ok]
@@ -726,6 +1118,15 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
             "waypoint_count": len(lane["waypoints"]),
             "tile_count": len(lane_paths[lane_id]),
             "tile_path": [[x, y] for x, y in lane_paths[lane_id]],
+            "variants": [
+                {
+                    "id": variant["id"],
+                    "months": variant["months"],
+                    "tile_count": len(variant["tile_path"]),
+                    "tile_path": [[x, y] for x, y in variant["tile_path"]],
+                }
+                for variant in variants_by_lane.get(lane_id, [])
+            ],
         })
 
     tile_total = sum(len(record["tile_path"]) for record in lane_records)
@@ -742,17 +1143,29 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
             "walk_rule": "8-direction straight-line raster walk, corner "
                          "cutting forbidden, x wraps mod 4320; per-segment "
                          "passability is a hard build error",
-            "spoke_rule": "one spoke per port: nearest snapped lane waypoint "
-                          f"within Chebyshev {SPOKE_RADIUS_TILES} of the "
-                          "harbor tile (wrap-aware; ties smallest (y, x), "
-                          "then lane file order, then waypoint index), else "
-                          "the passable direct walk to the national capital, "
-                          "else the tools/route_overrides.json spoke "
-                          "(A*-pathfound); a port with none is a hard error",
+            "spoke_rule": "one spoke per port: walk-aware lane rule — the "
+                          "first in-radius (Chebyshev "
+                          f"{SPOKE_RADIUS_TILES}, wrap-aware; ties smallest "
+                          "(y, x), then lane file order, then waypoint "
+                          "index) lane waypoint whose straight walk "
+                          "succeeds, else the passable direct walk to the "
+                          "national capital, else the "
+                          "tools/route_overrides.json spoke (A*-pathfound), "
+                          "else for a neutral port the nearest lane "
+                          "waypoint unbounded (A*); a port with none is a "
+                          "hard error; an override is superseded exactly "
+                          "when the lane rule succeeds",
             "junction_rule": "node = tile shared by >= 2 distinct paths or a "
                              "path endpoint, keyed (x mod 4320, y); each path "
                              "splits at its nodes into edges weighted by "
                              "tile steps",
+            "month_rule": "per lane and month 1..12 the active path (a "
+                          "variant whose months contain the month, else the "
+                          "base waypoints) must walk with that month's "
+                          "seasonal-ice mask active (data/ice_regions.json "
+                          "polygons; §4.14, §4.18); variant paths are "
+                          "carried per lane for the runtime's in-month "
+                          "selection and do not join the junction graph",
             "sources": {
                 name: {"path": str(path.relative_to(ROOT)),
                        "sha256": sha256_file(path)}
@@ -775,6 +1188,8 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
         "counts": {
             "lanes": len(lanes),
             "waypoints": sum(len(lane["waypoints"]) for lane in lanes),
+            "variant_waypoints": sum(
+                len(lane.get("variants") or []) for lane in lanes),
             "ports": len(ports),
             "spokes": spoke_counts,
             "junction_nodes": len(nodes),
@@ -791,6 +1206,10 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
             "count": sum(len(lane["waypoints"]) - 1 for lane in lanes),
             "failed": [],
         },
+        "months": {
+            "ice_regions": ice_sources,
+            "per_lane": month_stats,
+        },
         "spokes": {
             "by_kind": spoke_counts,
             "capital": [r["port"] for r in spoke_records
@@ -801,10 +1220,52 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
                  "path_tiles": len(r["tile_path"])}
                 for r in spoke_records if r["kind"] == "override"
             ],
+            "lengths": spoke_length_report(spoke_records),
         },
         "probes": probes,
     }
     return artifact, report, paths_by_key
+
+
+def spoke_length_report(records: list[dict], top: int = 20) -> dict:
+    """Spoke-length distribution: histogram + the longest spokes, named.
+
+    The pinned intentional fringes (Oceania/``botany_bay``, the spice
+    fringe, the North-American east coast, ``portobelo``'s portage) must top
+    the longest list — the data input for any future lane decision
+    (IMPLEMENT-Phase6 §2.11.1 fringe policy).
+    """
+    buckets = (
+        ("1", lambda n: n == 1),
+        ("2-5", lambda n: 2 <= n <= 5),
+        ("6-10", lambda n: 6 <= n <= 10),
+        ("11-20", lambda n: 11 <= n <= 20),
+        ("21-40", lambda n: 21 <= n <= 40),
+        ("41-80", lambda n: 41 <= n <= 80),
+        ("81-160", lambda n: 81 <= n <= 160),
+        ("161+", lambda n: n >= 161),
+    )
+    histogram = {name: 0 for name, _ in buckets}
+    for record in records:
+        length = len(record["tile_path"])
+        for name, inside in buckets:
+            if inside(length):
+                histogram[name] += 1
+                break
+    longest = sorted(
+        records, key=lambda r: (-len(r["tile_path"]), r["port"]))[:top]
+    return {
+        "histogram": histogram,
+        "longest": [
+            {
+                "port": r["port"],
+                "kind": r["kind"],
+                "lane": r.get("lane", r.get("capital", "")),
+                "tiles": len(r["tile_path"]),
+            }
+            for r in longest
+        ],
+    }
 
 
 # --------------------------------------------------------------------------
@@ -867,7 +1328,8 @@ def cmd_build(args) -> int:
         f"(max snap {report['snap']['max_distance']}) / "
         f"{counts['ports']} spokes "
         f"({counts['spokes']['lane']} lane, {counts['spokes']['capital']} "
-        f"capital, {counts['spokes']['override']} override) / "
+        f"capital, {counts['spokes']['override']} override, "
+        f"{counts['spokes'].get('fallback', 0)} fallback) / "
         f"{counts['junction_nodes']} junction nodes, "
         f"{counts['junction_edges']} edges | probes "
         f"{'ok' if all(report['probes'].values()) else 'FAILED'}",

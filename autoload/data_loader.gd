@@ -21,8 +21,10 @@ const DEFAULT_MAP_ID := "world"
 ## Loaded from `res://data/`: ports, goods, ship_types, nations, officers,
 ## equipment, discoveries, quests (all envelope files), plus the Phase-5
 ## npc/economy tables npc_config.json, npc_captains.json, named_pirates.json
-## and market_events.json, the route-builder artifact trade_routes_built.json,
-## and the two non-entity tables ui_strings.json and map_legend.json.
+## and market_events.json, the Phase-6 ocean tables wind_regions.json,
+## ocean_currents.json and ice_regions.json, the route-builder artifact
+## trade_routes_built.json, and the two non-entity tables ui_strings.json and
+## map_legend.json.
 
 ## True when every data file loaded and passed the light shape checks.
 var load_ok: bool = false
@@ -45,6 +47,14 @@ var npc_captains: Dictionary = {}
 var named_pirates: Dictionary = {}
 ## Demand-event templates (docs/10-* §4.13).
 var market_events: Dictionary = {}
+## Phase-6 seasonal layers (docs/10-* §4.16–4.18), id-keyed like the entity
+## tables. The baked lookups live in the rasters (wind_regions.png /
+## currents.png, decoded by scripts/world/ocean_layers.gd from Phase 6 task F);
+## these tables are the authored sources — the wind regions' month tables and
+## the ice polygons' month windows.
+var wind_regions: Dictionary = {}
+var ocean_currents: Dictionary = {}
+var ice_regions: Dictionary = {}
 ## The route-builder artifact (`data/trade_routes_built.json`, docs/10-* §4.14):
 ## per-lane tile paths, the junction graph the runtime routes over, and the
 ## per-port spokes. Tool output of `tools/build_routes.py` — never hand-edited
@@ -65,6 +75,13 @@ var quests_list: Array = []
 var npc_captains_list: Array = []
 var named_pirates_list: Array = []
 var market_events_list: Array = []
+## The Phase-6 ocean tables in file order. `wind_regions_list` doubles as the
+## raster's index map: palette index i of wind_regions.png is
+## `wind_regions_list[i - 1]` (docs/10-* §6.5), so the runtime resolves a
+## baked region id without re-deriving any order.
+var wind_regions_list: Array = []
+var ocean_currents_list: Array = []
+var ice_regions_list: Array = []
 ## Lanes and spokes of the built route artifact, id-keyed for lookup
 ## (`lanes` by lane id, `spokes` by port id — docs/10-* §4.14).
 var route_lanes: Dictionary = {}
@@ -130,6 +147,15 @@ func load_all() -> void:
 	market_events_list = _load_list("market_events", "market_events.json")
 	market_events = _index_by_id(market_events_list, "market_events.json")
 
+	# Phase 6 seasonal ocean layers (docs/10-* §4.16–4.18): plural key ==
+	# basename, so the ordinary entity-file path loads them (§3.2).
+	wind_regions_list = _load_list("wind_regions", "wind_regions.json")
+	wind_regions = _index_by_id(wind_regions_list, "wind_regions.json")
+	ocean_currents_list = _load_list("ocean_currents", "ocean_currents.json")
+	ocean_currents = _index_by_id(ocean_currents_list, "ocean_currents.json")
+	ice_regions_list = _load_list("ice_regions", "ice_regions.json")
+	ice_regions = _index_by_id(ice_regions_list, "ice_regions.json")
+
 	# Tool-owned route artifact (docs/10-* §4.14) — not an entity file.
 	trade_routes_built = _load_trade_routes_built()
 	route_lanes = _index_route_lanes(trade_routes_built)
@@ -178,6 +204,21 @@ func get_named_pirate(id: String) -> Dictionary:
 
 func get_market_event(id: String) -> Dictionary:
 	return _lookup(market_events, id)
+
+
+## A wind region by id (docs/10-* §4.16).
+func get_wind_region(id: String) -> Dictionary:
+	return _lookup(wind_regions, id)
+
+
+## An ocean current system by id (docs/10-* §4.17).
+func get_ocean_current(id: String) -> Dictionary:
+	return _lookup(ocean_currents, id)
+
+
+## An ice region by id (docs/10-* §4.18).
+func get_ice_region(id: String) -> Dictionary:
+	return _lookup(ice_regions, id)
 
 
 ## A built lane's tile path etc. by lane id (docs/10-* §4.14).
