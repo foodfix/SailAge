@@ -55,6 +55,8 @@ var _checks := 0
 func _ready() -> void:
 	_test_map_loads()
 	_test_effective_speed()
+	_test_heading_costs()
+	_test_ice_refusal()
 	_test_diagonal_rule()
 	_test_eight_direction_stepping()
 	_test_land_and_edge_block()
@@ -101,8 +103,11 @@ func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 		var ship: Dictionary = FleetLib.new_ship(str(ship_id), int(ship_type["crew_min"]))
 		# T9's ledger consumes supplies and checks fail states, so the movement
 		# fixture has to be a survivable run: ample stores and a healthy morale.
-		ship["provisions"] = 100
-		ship["water"] = 100
+		# Phase 6: 500 (was 100) — walked routes legitimately take more days
+		# when their headings fight the wind (§4.4 direction factor), and the
+		# long walked fixtures must survive the whole route.
+		ship["provisions"] = 500
+		ship["water"] = 500
 		GameState.fleet.append(ship)
 	GameState.day = 1
 	GameState.gold = 1000
@@ -114,6 +119,11 @@ func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 		"position": {"x": OPEN_CELL.x, "y": OPEN_CELL.y},
 		"clock_fraction": 0.0,
 		"weather": weather,
+		# Phase-6 fixture pin: a southerly wind makes east/west steps the beam
+		# bucket (factor 1.0, §4.4), so every pre-Phase-6 clock expectation in
+		# this suite keeps its exact value; heading effects are asserted
+		# explicitly in `_test_heading_costs`.
+		"wind_dir": "S",
 	}
 	# Clear T9's transient ledger statics so one scenario cannot leak into the
 	# next (counters, game-over flag, dialog buffer).
@@ -237,7 +247,193 @@ func _test_effective_speed() -> void:
 		% SailingSimLib.effective_speed())
 
 
-# --- §4.2 no corner cutting -----------------------------------------------
+# --- §4.4 heading-aware costs (Phase 6) ------------------------------------
+
+## The §4.4 pipeline is heading-aware on non-calm days: `move_cost(heading)`
+## replaces the flat cost, the beam bucket stays identity-1.0 (this suite's
+## east/west walks keep their pre-Phase-6 numbers — see `_make_run`), and a
+## furled fleet cannot move at all (§4.17). Also pins the 8-dir domain: every
+## heading the movement rules produce is one of the eight compass ids.
+func _test_heading_costs() -> void:
+	# Beam keeps the flat cost (wind S, fair weather: east is 90° off).
+	_make_run("fair")
+	_check(SailingSimLib.move_cost() == 0.05,
+		"heading-less move_cost is the beam average 1/20 (got %.4f)"
+		% SailingSimLib.move_cost())
+	_check(is_equal_approx(SailingSimLib.move_cost("E"), 0.05),
+		"beam move_cost(E) vs wind S is 1/20 (got %.4f)"
+		% SailingSimLib.move_cost("E"))
+	_check(is_equal_approx(SailingSimLib.move_cost("W"), 0.05),
+		"beam move_cost(W) vs wind S is 1/20 (got %.4f)"
+		% SailingSimLib.move_cost("W"))
+	# Into the wind: 0° bucket, sail 0.50 → floor(20 × 0.5) = 10 → 0.1 days.
+	_check(is_equal_approx(SailingSimLib.move_cost("S"), 0.1),
+		"into-wind move_cost(S) is 1/10 (got %.4f)" % SailingSimLib.move_cost("S"))
+	# Running: 180° bucket, sail 1.30 → floor(26) = 26.
+	_check(is_equal_approx(SailingSimLib.move_cost("N"), 1.0 / 26.0),
+		"running move_cost(N) is 1/26 (got %.4f)" % SailingSimLib.move_cost("N"))
+	# try_move charges the heading cost: one E step vs one S step.
+	var fraction := float(GameState.world["clock_fraction"])
+	SailingSimLib.try_move(OPEN_CELL + Vector2i(1, 0), DataLoader.map)
+	var east_cost := float(GameState.world["clock_fraction"]) - fraction
+	_check(is_equal_approx(east_cost, 0.05),
+		"a beam step costs 0.05 days (got %.4f)" % east_cost)
+	fraction = float(GameState.world["clock_fraction"])
+	SailingSimLib.try_move(Vector2i(OPEN_CELL.x + 1, OPEN_CELL.y + 1), DataLoader.map)
+	var south_cost := float(GameState.world["clock_fraction"]) - fraction
+	_check(is_equal_approx(south_cost, 0.1),
+		"an into-wind step costs 0.1 days (got %.4f)" % south_cost)
+
+	# A calm keeps the flat 0.8 sail penalty and NO direction effect.
+	_make_run("calm")
+	_check(SailingSimLib.direction_factor("S", "S", "sail", "calm") == 1.0,
+		"calm: direction factor is identity even dead into the wind")
+	_check(SailingSimLib.effective_speed("S") == 16,
+		"calm into-wind speed is the flat floor(20 × 0.8) = 16 (got %d)"
+		% SailingSimLib.effective_speed("S"))
+
+	# Every bucket × class of the §4.4 table, straight from the pinned table.
+	_make_run("fair")
+	for bucket in [0, 45, 90, 135, 180]:
+		for ship_class in ["sail", "hybrid", "oar"]:
+			var expected: float = SailingSimLib.DIRECTION_FACTORS[bucket][ship_class]
+			var heading: String = SailingSimLib.COMPASS_DIRS[0]
+			var wind: String = SailingSimLib.COMPASS_DIRS[
+				(bucket / 45) % 8]
+			var got: float = SailingSimLib.direction_factor(
+				heading, wind, ship_class, "fair")
+			_check(is_equal_approx(got, expected),
+				"direction factor bucket %d° %s == %.2f (got %.2f)" % [
+					bucket, ship_class, expected, got])
+			_check(got > 0.0 and got <= 1.30,
+				"direction factor stays inside the table's range (%.2f)" % got)
+
+	# Furled sail/hybrid cannot move; the oar exemption keeps rowing (§4.17).
+	_make_run("fair")
+	GameState.world["sail_trim"] = "furled"
+	_check(SailingSimLib.effective_speed("E") == 0,
+		"a furled fleet has no speed (got %d)" % SailingSimLib.effective_speed("E"))
+	_check(not SailingSimLib.try_move(OPEN_CELL + Vector2i(1, 0), DataLoader.map),
+		"a furled fleet's move is refused")
+	_check(GameState.world_tile() == OPEN_CELL,
+		"the furled refusal leaves the fleet in place")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), 0.0),
+		"the furled refusal costs no clock")
+	# Oar ignores trim: a furled galley still rows at full oar speed.
+	GameState.fleet[0] = FleetLib.new_ship("galley", 40)
+	_check(SailingSimLib.trim_factor("furled", "oar") == 1.0,
+		"oar ignores trim entirely (forced 1.0)")
+	_check(SailingSimLib.effective_speed("E") == 24,
+		"a furled galley still rows at 24 (got %d)" % SailingSimLib.effective_speed("E"))
+
+	# Trim speed table (§4.17): reefed 0.75, normal 1.0, full 1.15 on the sail
+	# class pipeline (base 20, fair, beam).
+	for trim_case in [
+		["reefed", 15], ["normal", 20], ["full", 23],
+	]:
+		_make_run("fair")
+		GameState.world["sail_trim"] = trim_case[0]
+		_check(SailingSimLib.effective_speed("E") == int(trim_case[1]),
+			"trim %s beam speed is %d (got %d)" % [
+				trim_case[0], int(trim_case[1]), SailingSimLib.effective_speed("E")])
+
+	# The heading domain: every delta the movement rules accept maps back into
+	# the 8 compass ids, and nothing else does.
+	for index in SailingSimLib.COMPASS_DIRS.size():
+		var heading: String = SailingSimLib.COMPASS_DIRS[index]
+		_check(SailingSimLib.heading_index(heading) == index,
+			"heading %s stays in the 8-dir domain (index %d)" % [heading, index])
+		_check(SailingSimLib.COMPASS_DELTAS[index]
+			== Vector2i(0, 0) + SailingSimLib.COMPASS_DELTAS[index],
+			"compass delta %d is defined" % index)
+		var back: String = SailingSimLib.heading_of_delta(
+			SailingSimLib.COMPASS_DELTAS[index])
+		_check(back == heading,
+			"heading_of_delta round-trips %s (got %s)" % [heading, back])
+	for bad_delta in [Vector2i(0, 0), Vector2i(2, 0), Vector2i(1, 2)]:
+		_check(SailingSimLib.heading_of_delta(bad_delta) == "",
+			"a non-step delta produces no heading (%s)" % str(bad_delta))
+	_check(SailingSimLib.angle_between_dirs("N", "S") == 180
+		and SailingSimLib.angle_between_dirs("NE", "SW") == 180
+		and SailingSimLib.angle_between_dirs("E", "E") == 0
+		and SailingSimLib.angle_between_dirs("N", "E") == 90,
+		"8-grid angles are always 0/45/90/135/180")
+
+
+# --- §4.18 seasonal ice refuses entry (Phase 6) ------------------------------
+
+## Baltic fixture tiles (water, probed on the shipped artifact): ICE_CELL is
+## inside the polygon, FREE_NEIGHBOUR is one tile west of it and outside.
+## Baltic window: months 12, 1, 2, 3 (`10-*` §4.18).
+const ICE_CELL := Vector2i(2313, 420)
+const ICE_FREE_NEIGHBOUR := Vector2i(2312, 420)
+
+
+func _test_ice_refusal() -> void:
+	var map = DataLoader.map
+	_check(map.is_passable(ICE_CELL) and map.is_passable(ICE_FREE_NEIGHBOUR),
+		"the ice fixture tiles are both water")
+
+	# In-month (January, the fixture's day 1): entering is refused, costs
+	# nothing, and raises the ice toast key on the movement gate.
+	_make_run("fair")
+	_check(SailingSimLib.month_for(GameState.day) == 1, "the fixture day is month 1")
+	_check(SailingSimLib.ice_blocks_entry(ICE_CELL),
+		"the Baltic tile is in-month ice on day 1")
+	var before_clock := float(GameState.world["clock_fraction"])
+	var before := GameState.world_tile()
+	_check(not SailingSimLib.is_move_legal(ICE_FREE_NEIGHBOUR, ICE_CELL, map),
+		"entering in-month ice is refused")
+	_check(SailingSimLib.last_move_blocked_key == "world.ice_blocked",
+		"the refusal carries the world.ice_blocked toast key (got '%s')"
+		% SailingSimLib.last_move_blocked_key)
+	GameState.world["position"] = {"x": ICE_FREE_NEIGHBOUR.x, "y": ICE_FREE_NEIGHBOUR.y}
+	_check(not SailingSimLib.try_move(ICE_CELL, map),
+		"try_move into in-month ice is refused")
+	_check(GameState.world_tile() == ICE_FREE_NEIGHBOUR,
+		"the ice refusal leaves the fleet on its tile")
+	_check(float(GameState.world["clock_fraction"]) == before_clock,
+		"the ice refusal costs no clock (%.6f → %.6f)" % [
+			before_clock, float(GameState.world["clock_fraction"])])
+
+	# Out-of-month (July): the same tile is ordinary water.
+	_make_run("fair")
+	GameState.day = 181  # month 7 of year 1 (days 181–210)
+	_check(SailingSimLib.month_for(GameState.day) == 7, "day 181 is month 7")
+	_check(not SailingSimLib.ice_blocks_entry(ICE_CELL),
+		"the same Baltic tile is open water in month 7")
+	_check(SailingSimLib.last_move_blocked_key == "",
+		"a legal evaluation clears the blocked-key diagnostic")
+	GameState.world["position"] = {"x": ICE_FREE_NEIGHBOUR.x, "y": ICE_FREE_NEIGHBOUR.y}
+	_check(SailingSimLib.try_move(ICE_CELL, map),
+		"entering the tile out-of-month succeeds")
+	_check(GameState.world_tile() == ICE_CELL, "the fleet stands on the summer tile")
+
+	# Standing fleets are never trapped: a tile freezing under the fleet does
+	# not stop it from moving OUT (only entering is ever checked).
+	_make_run("fair")
+	GameState.day = 1
+	GameState.world["position"] = {"x": ICE_CELL.x, "y": ICE_CELL.y}
+	_check(SailingSimLib.ice_blocks_entry(ICE_CELL),
+		"the standing fleet's tile is iced in month 1")
+	_check(SailingSimLib.try_move(ICE_FREE_NEIGHBOUR, map),
+		"a standing fleet moves out of ice freely (only entry is gated)")
+	_check(GameState.world_tile() == ICE_FREE_NEIGHBOUR,
+		"the escape landed on the free neighbour")
+
+	# The month window wraps the year end: month 12 of year 1 is already icy.
+	_make_run("fair")
+	GameState.day = 360  # month 12
+	_check(SailingSimLib.month_for(GameState.day) == 12, "day 360 is month 12")
+	_check(SailingSimLib.ice_blocks_entry(ICE_CELL),
+		"month 12 is inside the Baltic ice window (cyclic months)")
+	GameState.day = 361 + 3 * 30 + 15  # month 4 of year 2
+	_check(SailingSimLib.month_for(GameState.day) == 4, "the day maps to month 4")
+	_check(not SailingSimLib.ice_blocks_entry(ICE_CELL),
+		"month 4 is the first open month after the freeze")
+
+
+
 
 func _test_diagonal_rule() -> void:
 	var map = DataLoader.map
@@ -295,8 +491,11 @@ func _test_diagonal_rule() -> void:
 
 
 ## Single-step legality on ints: the same §4.2 rule as
-## `SailingSim.is_move_legal(from, to, map)` — 8-neighbour, passable target, and
-## no corner cutting (both orthogonals of the corner passable). x wraps.
+## `SailingSim.is_move_legal(from, to, map)` — 8-neighbour, passable target,
+## no corner cutting (both orthogonals of the corner passable), and — Phase 6,
+## §4.18 — the target may not be an in-month seasonal-ice tile (only the
+## *entering* side is checked, so the `from` tile's ice state never matters).
+## x wraps.
 func _legal_int(world_map, from: Vector2i, to: Vector2i) -> bool:
 	var dx := to.x - from.x
 	var dy := to.y - from.y
@@ -311,6 +510,8 @@ func _legal_int(world_map, from: Vector2i, to: Vector2i) -> bool:
 			return false
 		if not world_map.is_passable_xy(from.x, from.y + dy):
 			return false
+	if SailingSimLib.ice_blocks_entry(to):
+		return false
 	return true
 
 
@@ -1592,15 +1793,21 @@ func _test_hold_to_repeat() -> void:
 	host.queue_free()
 
 
-## Clock outcome of `count` plain moves from the same start clock, with the
-## same weather seed as the scene runs (the day ticks must line up).
-func _normal_move_clock(count: int, start_fraction: float) -> Dictionary:
+## Clock outcome of walking `path` as plain `try_move` calls from `start_cell`,
+## with the same weather seed as the scene run (the day ticks must line up).
+## Phase 6: the twin walks the **same cells** so both runs pay the same
+## heading-aware `move_cost(heading)` (§4.4) and cross every day boundary on
+## the same step.
+func _normal_move_clock(path: Array, start_cell: Vector2i,
+		start_fraction: float) -> Dictionary:
 	_make_run("fair")
 	SailingSimLib.set_weather_seed(424242)
 	GameState.world["clock_fraction"] = start_fraction
-	for step in count:
-		GameState.set_world_tile(Vector2i(1400 + step % 20, 640))
-		SailingSimLib.advance_clock(SailingSimLib.move_cost())
+	GameState.set_world_tile(start_cell)
+	var cursor := start_cell
+	for step in path:
+		if SailingSimLib.try_move(step, DataLoader.map, cursor):
+			cursor = step
 	return {"day": GameState.day,
 		"fraction": float(GameState.world["clock_fraction"])}
 
@@ -1757,10 +1964,11 @@ func _test_click_to_sail() -> void:
 	_check(world.fleet_cell() == target and world.sail_target() == Vector2i(-1, -1),
 		"the finished order forgets its target (sail_target %s)"
 		% str(world.sail_target()))
-	# N moves: the clock advanced by N × 1/speed days. Day ticks change the
-	# weather (and therefore the speed), so the reference run is N normal moves
-	# on a twin fixture with identical weather rolls.
-	var reference := _normal_move_clock(steps, clock_at_click)
+	# N moves: the clock advanced by N × 1/effective_speed(heading) days. Day
+	# ticks change the weather (and therefore the speed), so the reference run
+	# is the SAME walk on a twin fixture with identical weather rolls (Phase 6:
+	# both sides pay the heading-aware §4.4 cost per step).
+	var reference := _normal_move_clock(path, Vector2i(1400, 640), clock_at_click)
 	_check(GameState.day == reference["day"]
 		and absf(float(GameState.world["clock_fraction"])
 			- reference["fraction"]) < 1.0e-6,
