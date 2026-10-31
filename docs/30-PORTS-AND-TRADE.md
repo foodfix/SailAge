@@ -234,8 +234,9 @@ score(good, P) = (est_sell_price(P, good) − buy_price) × qty × spec_mult × 
 ```
 
 - **Candidates:** the argmax runs over the nation's **produced** goods ×
-  candidate destinations — own-nation ports within Chebyshev ≤ 60 of A,
-  wrap-aware. No cross-nation reach, no forecasting, no global
+  candidate destinations — own-nation ports within Chebyshev ≤ 120 of A,
+  wrap-aware (Phase-6 grid sweep: 60 → 120 — nm semantics preserved at
+  12 tiles/degree, 5 nm tiles). No cross-nation reach, no forecasting, no global
   coordination: cross-nation arbitrage stays the player's protected profit
   space by construction.
 - **`est_sell_price(P, good)`** is the live §4.2 sell-side price at P's
