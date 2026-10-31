@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-7 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-8 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
@@ -10,7 +10,12 @@ reachable from Lisbon by a wrap-aware 8-directional BFS that forbids corner
 cutting (docs/20-WORLD-AND-SAILING.md section 4.2). Group 7 is the Phase-5
 npc & economy data check (section 8.2): the density-dial config bounds, the
 captain pools, the named pirates, the demand-event templates with their
-rest-band shift bounds, and the consumption-tier split.
+rest-band shift bounds, and the consumption-tier split. Group 8 is the
+Phase-5 trade-route check (section 8.3): the locked 12-lane id set, waypoint
+snap and segment passability (shared with ``tools/build_routes.py``), the
+§4.14 spoke rule for every port, the named junction-graph probes, and the
+byte-exact rebuild equality of the tool-owned
+``data/trade_routes_built.json``.
 
 Usage (from the repo root):
 
@@ -29,6 +34,8 @@ Exit codes:
     6  world map failure (data/maps/world.png / world_report.json)
     7  npc & economy data failure (npc_config / npc_captains / named_pirates /
        market_events)
+    8  trade-route failure (trade_routes / trade_routes_built /
+       route_overrides)
 
 On the first failure a single line is printed to stdout:
 
@@ -59,6 +66,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
+
+# Group 8 shares the lane builder's geometry (docs/10-* §8.3 preamble: same
+# PNG decoder; sharing build_world.py's reader is allowed). Using
+# tools/build_routes.py's own snap/walk helpers here means the validator and
+# the builder can never disagree about the locked waypoint rule, the segment
+# walk or the spoke pathfinding; the world-grid decode is the same stdlib
+# reader group 6 uses for its own grid.
+sys.path.insert(0, str(REPO_ROOT / "tools"))
+import build_routes as route_builder  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Contract tables (docs/10-DATA-SCHEMA.md sections 3, 6, 7)
@@ -132,8 +148,11 @@ SPECIAL_FILES = {
     "map_legend.json", "ui_strings.json", "maps.json",
 }
 # Envelope exemption for a file that is *generated* rather than authored: its
-# shape is pinned by the owning doc (docs/10-* §6.3) and has no plural array.
-GENERATED_FILES = {"world_report.json"}
+# shape is pinned by the owning doc (docs/10-* §4.14 / §6.3) and has no plural
+# array. Both are tool outputs (tools/build_world.py, tools/build_routes.py)
+# and are never hand-edited; determinism of trade_routes_built.json is group
+# 8's rebuild check.
+GENERATED_FILES = {"world_report.json", "trade_routes_built.json"}
 SPECIAL_FILES |= GENERATED_FILES
 # Of those, only the legends require `version` in their section 4.9 schema.
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
@@ -537,8 +556,10 @@ GROUP7_ENTITY_FILES = frozenset({
 })
 
 # §4.14: trade_routes.json's structure (locked 12-id set, waypoints,
-# chokepoints) is group 8's — group 3's generic id loop skips it until the
-# group-8 checks land with the lane builder (IMPLEMENT-Phase5.md task F).
+# chokepoints) is group 8's (§8.3), so groups 2/3 skip the file; group 8
+# owns its full structure since the lane builder landed (IMPLEMENT-Phase5.md
+# task F). The built artifact trade_routes_built.json is a generated tool
+# output (§4.14) — group 1 exempts its envelope and group 8 owns it.
 GROUP8_ENTITY_FILES = frozenset({
     "trade_routes.json",
 })
@@ -3545,6 +3566,646 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Check group 8 — Trade routes (docs/10-DATA-SCHEMA.md section 8.3)
+# ---------------------------------------------------------------------------
+
+# Section 7.6: the locked 12-lane id set — exhaustive, closed.
+LOCKED_LANE_IDS = (
+    "carreira_da_india",
+    "west_indies_flota",
+    "manila_galleon",
+    "venice_alexandria",
+    "venice_flanders",
+    "genoa_grain",
+    "hanseatic_north",
+    "aden_gujarat_malacca",
+    "red_sea_india",
+    "basra_muscat_india",
+    "iceland_cod",
+    "grand_banks_cod",
+)
+
+BUILT_ROUTES_LABEL = "data/trade_routes_built.json"
+OVERRIDES_LABEL = "tools/route_overrides.json"
+SPOKE_RADIUS = 20  # §4.14 minor-spoke Chebyshev radius (wrap-aware)
+
+
+def _check_trade_lane_schema(lanes: list, nation_ids: set, good_ids: set) -> None:
+    """§8.3 item 2: class/nations/goods/chokepoints/waypoint shapes."""
+    label = "trade_routes.json"
+    if len(lanes) != len(LOCKED_LANE_IDS):
+        fail(
+            "trade-routes",
+            label,
+            f"expected exactly {len(LOCKED_LANE_IDS)} lanes (section 7.6), "
+            f"got {len(lanes)}",
+            8,
+        )
+    for index, lane in enumerate(lanes):
+        path = f"lanes[{index}]"
+        if not isinstance(lane, dict):
+            fail("trade-routes", label, f"{path} is not an object", 8)
+        lane_id = lane.get("id")
+        if not isinstance(lane_id, str) or not ID_RE.match(lane_id):
+            fail("trade-routes", label, f"{path} has no well-formed 'id'", 8)
+        where = f"{path} ({lane_id})"
+        if lane.get("class") != "major":
+            fail(
+                "trade-routes",
+                label,
+                f"{where} class must be \"major\" — minor spokes are "
+                "builder-generated and never stored in this file (section "
+                "4.14)",
+                8,
+            )
+        nations = lane.get("nations")
+        if not isinstance(nations, list) or not nations:
+            fail("trade-routes", label, f"{where} needs a non-empty nations array", 8)
+        for nation_id in nations:
+            if nation_id not in nation_ids:
+                fail(
+                    "trade-routes",
+                    label,
+                    f"{where} references unknown nation {nation_id!r}",
+                    8,
+                )
+        goods = lane.get("goods")
+        if not isinstance(goods, list) or not goods:
+            fail("trade-routes", label, f"{where} needs a non-empty goods array", 8)
+        for good_id in goods:
+            if good_id not in good_ids:
+                fail("trade-routes", label, f"{where} references unknown good {good_id!r}", 8)
+        chokepoints = lane.get("chokepoints")
+        if not isinstance(chokepoints, list) or not chokepoints:
+            fail(
+                "trade-routes",
+                label,
+                f"{where} needs >= 1 chokepoint tag (section 4.14)",
+                8,
+            )
+        for tag in chokepoints:
+            if not isinstance(tag, str) or not re.match(r"^[a-z0-9_]+$", tag):
+                fail(
+                    "trade-routes",
+                    label,
+                    f"{where} chokepoint tag {tag!r} must be snake_case",
+                    8,
+                )
+        waypoints = lane.get("waypoints")
+        if not isinstance(waypoints, list) or len(waypoints) < 2:
+            fail(
+                "trade-routes",
+                label,
+                f"{where} needs >= 2 [lat, lon] waypoints (section 4.14)",
+                8,
+            )
+        for w_index, point in enumerate(waypoints):
+            if (not isinstance(point, list) or len(point) != 2
+                    or not all(isinstance(v, (int, float)) and
+                               not isinstance(v, bool) for v in point)):
+                fail(
+                    "trade-routes",
+                    label,
+                    f"{where} waypoint {w_index} must be [lat, lon]",
+                    8,
+                )
+            lat, lon = float(point[0]), float(point[1])
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                fail(
+                    "trade-routes",
+                    label,
+                    f"{where} waypoint {w_index} out of range: {point} "
+                    "(section 3.1)",
+                    8,
+                )
+
+
+def _check_trade_snap_and_segments(grid, lanes: list, lane_index: dict) -> dict:
+    """§8.3 items 3-5: snap, passability, wrap continuity (shared helpers)."""
+    label = "trade_routes.json"
+    stats = {"waypoints": 0, "segments": 0, "max_snap": 0, "at_limit": 0}
+    for lane in lanes:
+        lane_id = lane["id"]
+        for w_index, (lat, lon) in enumerate(lane["waypoints"]):
+            hit = route_builder.snap_waypoint(grid, float(lat), float(lon))
+            stats["waypoints"] += 1
+            if hit is None:
+                px, py = grid.tile_of_latlon(float(lat), float(lon))
+                fail(
+                    "trade-routes",
+                    label,
+                    f"lanes[{lane_index[lane_id]}] ({lane_id}) waypoint "
+                    f"{w_index} ({lat}, {lon}) has no water tile within "
+                    f"{route_builder.WAYPOINT_SNAP_TILES} tiles of ({px}, "
+                    f"{py}) (section 8.3 item 3; fix via "
+                    "tools/route_overrides.json or a reported waypoint "
+                    "amendment)",
+                    8,
+                )
+            stats["max_snap"] = max(stats["max_snap"], hit[2])
+            if hit[2] == route_builder.WAYPOINT_SNAP_TILES:
+                stats["at_limit"] += 1
+        for s_index in range(len(lane["waypoints"]) - 1):
+            a = _snapped_of(grid, lane["waypoints"][s_index])
+            b = _snapped_of(grid, lane["waypoints"][s_index + 1])
+            # item 5: a dateline-crossing segment keeps per-segment x
+            # monotonic under wrap — the shortest wrap step is <= half the
+            # grid, i.e. the segment never jumps the seam.
+            dx = abs(b[0] - a[0]) % grid.w
+            dx = min(dx, grid.w - dx)
+            if dx > grid.w / 2.0:
+                fail(
+                    "trade-routes",
+                    label,
+                    f"lanes[{lane_index[lane_id]}] ({lane_id}) segment "
+                    f"{s_index} jumps the dateline seam (dx {dx} > "
+                    f"{grid.w // 2}; section 8.3 item 5)",
+                    8,
+                )
+            chain, bad = route_builder.walk_segment(grid, a, b)
+            stats["segments"] += 1
+            if chain is None:
+                fail(
+                    "trade-routes",
+                    label,
+                    f"lanes[{lane_index[lane_id]}] ({lane_id}) segment "
+                    f"{s_index} ({a}) -> ({b}) walks onto an impassable "
+                    f"tile at {bad} (section 8.3 item 4, corner cutting "
+                    "forbidden)",
+                    8,
+                )
+    return stats
+
+
+def _snapped_of(grid, waypoint: list):
+    """Re-snap one validated waypoint (must succeed; error text unused)."""
+    hit = route_builder.snap_waypoint(grid, float(waypoint[0]),
+                                      float(waypoint[1]))
+    return (hit[0], hit[1])
+
+
+def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
+                        lane_index: dict, built: dict,
+                        overrides: dict) -> dict:
+    """§8.3 item 6: the §4.14 spoke rule for every one of the 100 ports."""
+    label = BUILT_ROUTES_LABEL
+    spokes = built.get("spokes")
+    if not isinstance(spokes, list):
+        fail("trade-spokes", label, "built artifact has no 'spokes' array", 8)
+
+    # Lane waypoints snapped exactly as the builder snapped them.
+    snapped_by_lane: dict[str, list] = {}
+    for lane in lanes:
+        snapped_by_lane[lane["id"]] = [
+            _snapped_of(grid, point) for point in lane["waypoints"]
+        ]
+    lane_order = [lane["id"] for lane in lanes]
+    capital_of = {nation["id"]: nation["capital_port_id"] for nation in nations}
+    harbors = {}
+    for port in ports:
+        snapped = route_builder.bw.snap_harbor_with_shore(
+            grid, float(port["lat"]), float(port["lon"]))
+        harbors[port["id"]] = (snapped[0], snapped[1])
+
+    by_port: dict[str, dict] = {}
+    for index, spoke in enumerate(spokes):
+        path = f"spokes[{index}]"
+        if not isinstance(spoke, dict):
+            fail("trade-spokes", label, f"{path} is not an object", 8)
+        port_id = spoke.get("port")
+        if port_id not in harbors:
+            fail("trade-spokes", label, f"{path} names unknown port {port_id!r}", 8)
+        if port_id in by_port:
+            fail(
+                "trade-spokes",
+                label,
+                f"{path} ({port_id}) — a second spoke for one port (§4.14: "
+                "exactly one per port)",
+                8,
+            )
+        by_port[port_id] = spoke
+        tile_path = spoke.get("tile_path")
+        if not isinstance(tile_path, list) or not tile_path:
+            fail("trade-spokes", label, f"{path} ({port_id}) has no tile_path", 8)
+        for t_index, tile in enumerate(tile_path):
+            if (not isinstance(tile, list) or len(tile) != 2
+                    or not is_int(tile[0]) or not is_int(tile[1])):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"{path} ({port_id}) tile_path[{t_index}] must be [x, y]",
+                    8,
+                )
+            x, y = tile
+            if not (0 <= x < grid.w and 0 <= y < grid.h):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"{path} ({port_id}) tile_path[{t_index}] ({x}, {y}) is "
+                    "outside the grid",
+                    8,
+                )
+            if not grid.is_water(x, y):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"{path} ({port_id}) tile_path[{t_index}] ({x}, {y}) is "
+                    f"impassable ({grid.rows[y][x]} on the raster)",
+                    8,
+                )
+
+    kinds = {"lane": 0, "capital": 0, "override": 0}
+    for port in ports:
+        port_id = port["id"]
+        spoke = by_port.get(port_id)
+        if spoke is None:
+            fail(
+                "trade-spokes",
+                label,
+                f"port '{port_id}' has no spoke in the built artifact "
+                "(section 8.3 item 6)",
+                8,
+            )
+        harbor = harbors[port_id]
+        kind = spoke.get("kind")
+        path = spoke.get("tile_path") or []
+        chain_tiles = [(tile[0], tile[1]) for tile in path]
+        if chain_tiles[0] != harbor:
+            fail(
+                "trade-spokes",
+                label,
+                f"port '{port_id}' spoke starts at {chain_tiles[0]} but its "
+                f"§6.1 harbor tile is {harbor}",
+                8,
+            )
+        if kind == "lane":
+            kinds["lane"] += 1
+            near = route_builder.nearest_lane_waypoint(
+                grid, harbor, snapped_by_lane, lane_order)
+            if near is None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' claims a lane spoke but no lane "
+                    f"waypoint is within {SPOKE_RADIUS} tiles of {harbor}",
+                    8,
+                )
+            lane_id, wp_index, tile, distance = near
+            if (spoke.get("lane") != lane_id
+                    or spoke.get("waypoint_index") != wp_index
+                    or spoke.get("distance") != distance
+                    or chain_tiles[-1] != tile):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' lane spoke "
+                    f"({spoke.get('lane')} #{spoke.get('waypoint_index')} "
+                    f"d={spoke.get('distance')}) does not match the §4.14 "
+                    f"rule ('{lane_id}' #{wp_index} d={distance}, tile "
+                    f"{tile}; ties smallest (y, x))",
+                    8,
+                )
+            chain, bad = route_builder.walk_segment(grid, harbor, tile)
+            if chain is None or [(x, y) for x, y in chain] != chain_tiles:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' lane spoke tile_path does not match "
+                    f"the straight §4.14 walk to {tile} (first bad tile: "
+                    f"{bad})",
+                    8,
+                )
+        elif kind == "capital":
+            kinds["capital"] += 1
+            near = route_builder.nearest_lane_waypoint(
+                grid, harbor, snapped_by_lane, lane_order)
+            if near is not None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' claims a capital fallback but lane "
+                    f"waypoint '{near[0]}' #{near[1]} is within "
+                    f"{SPOKE_RADIUS} tiles (d={near[3]}) — the lane rule "
+                    "takes precedence (§4.14)",
+                    8,
+                )
+            capital_id = capital_of[port["nation_id"]]
+            if spoke.get("capital") != capital_id:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' capital spoke names "
+                    f"{spoke.get('capital')!r}, not its national capital "
+                    f"'{capital_id}'",
+                    8,
+                )
+            capital_tile = harbors[capital_id]
+            chain, bad = route_builder.walk_segment(grid, harbor, capital_tile)
+            if chain is None or [(x, y) for x, y in chain] != chain_tiles:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' capital spoke tile_path does not "
+                    f"match the direct walk to '{capital_id}' {capital_tile} "
+                    f"(first bad tile: {bad})",
+                    8,
+                )
+        elif kind == "override":
+            kinds["override"] += 1
+            entry = overrides.get(port_id)
+            if entry is None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' has an override spoke but no entry in "
+                    f"{OVERRIDES_LABEL}",
+                    8,
+                )
+            connect_lane = entry["connect"]["lane"]
+            wp_index = entry["connect"]["waypoint_index"]
+            connect_tile = snapped_by_lane[connect_lane][wp_index]
+            if spoke.get("connect") != {"lane": connect_lane,
+                                        "waypoint_index": wp_index}:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' override spoke connect "
+                    f"{spoke.get('connect')!r} does not match the declared "
+                    f"{entry['connect']!r}",
+                    8,
+                )
+            if chain_tiles[-1] != connect_tile:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' override spoke ends at "
+                    f"{chain_tiles[-1]}, not the declared connect tile "
+                    f"{list(connect_tile)} ({connect_lane} #{wp_index})",
+                    8,
+                )
+        else:
+            fail(
+                "trade-spokes",
+                label,
+                f"port '{port_id}' spoke kind {kind!r} is not lane/capital/"
+                "override",
+                8,
+            )
+
+    stale = sorted(set(by_port) - {port["id"] for port in ports})
+    if stale:
+        fail(
+            "trade-spokes",
+            label,
+            f"built artifact lists {len(stale)} spoke port(s) missing from "
+            f"ports.json: {', '.join(stale)} — regenerate with "
+            "tools/build_routes.py",
+            8,
+        )
+    return {
+        "count": len(spokes),
+        "kinds": kinds,
+    }
+
+
+def _check_trade_probes(grid, ports: list, built: dict) -> None:
+    """§8.3 item 7: the named probes over the built junction graph."""
+    junctions = built.get("junctions")
+    if not isinstance(junctions, dict):
+        fail(
+            "trade-probes",
+            BUILT_ROUTES_LABEL,
+            "built artifact has no 'junctions' object",
+            8,
+        )
+    nodes = junctions.get("nodes")
+    edges = junctions.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        fail(
+            "trade-probes",
+            BUILT_ROUTES_LABEL,
+            "junctions needs 'nodes' and 'edges' arrays",
+            8,
+        )
+    node_tiles: dict[tuple[int, int], int] = {}
+    for index, tile in enumerate(nodes):
+        if (not isinstance(tile, list) or len(tile) != 2
+                or not is_int(tile[0]) or not is_int(tile[1])):
+            fail(
+                "trade-probes",
+                BUILT_ROUTES_LABEL,
+                f"junctions.nodes[{index}] must be [x, y]",
+                8,
+            )
+        node_tiles[(tile[0], tile[1])] = index
+    adj = route_builder.graph_adjacency(edges)
+
+    harbor_of = {}
+    for port in ports:
+        snapped = route_builder.bw.snap_harbor_with_shore(
+            grid, float(port["lat"]), float(port["lon"]))
+        harbor_of[port["id"]] = (snapped[0], snapped[1])
+
+    def node_of(tile: tuple[int, int], what: str) -> int:
+        index = node_tiles.get(tile)
+        if index is None:
+            fail(
+                "trade-probes",
+                BUILT_ROUTES_LABEL,
+                f"{what} tile {list(tile)} is not a junction-graph node — "
+                "path endpoints must all be nodes",
+                8,
+            )
+        return index
+
+    probes = (
+        ("port:acapulco", "port:manila",
+         "acapulco <-> manila across the dateline wrap"),
+        ("port:danzig", "lane:hanseatic_north",
+         "hanseatic_north reaches danzig"),
+        ("port:goa", "lane:carreira_da_india",
+         "carreira_da_india reaches goa"),
+    )
+    for source, target, description in probes:
+        source_tile = (harbor_of[source[5:]] if source.startswith("port:")
+                       else _built_lane_start(built, source[5:]))
+        target_tile = (harbor_of[target[5:]] if target.startswith("port:")
+                       else _built_lane_start(built, target[5:]))
+        start = node_of(source_tile, f"probe source {source}")
+        goal = node_of(target_tile, f"probe target {target}")
+        reached = route_builder.reachable_from(adj, start)
+        if goal not in reached:
+            fail(
+                "trade-probes",
+                BUILT_ROUTES_LABEL,
+                f"probe failed: {description} — no path over the built "
+                f"junction graph between node {start} and node {goal} "
+                "(section 8.3 item 7)",
+                8,
+            )
+
+
+def _built_lane_start(built: dict, lane_id: str) -> tuple[int, int]:
+    for lane in built.get("lanes", []):
+        if lane.get("id") == lane_id:
+            start = lane["tile_path"][0]
+            return (start[0], start[1])
+    fail(
+        "trade-probes",
+        BUILT_ROUTES_LABEL,
+        f"built artifact has no lane '{lane_id}'",
+        8,
+    )
+
+
+def _check_trade_determinism(verbose: bool) -> None:
+    """§8.3 item 8: the committed artifact must rebuild byte-identical."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tools" / "build_routes.py"),
+         "--check", "--verbose"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    if verbose and result.stderr:
+        for line in result.stderr.strip().splitlines():
+            print(f"INFO group 8 {line}")
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "").strip().splitlines()
+        detail = tail[-1] if tail else f"exit {result.returncode}"
+        fail(
+            "trade-determinism",
+            BUILT_ROUTES_LABEL,
+            f"rebuild drift: {detail} (tools/build_routes.py --check exited "
+            f"{result.returncode}; section 8.3 item 8 — fix "
+            "data/trade_routes.json or tools/route_overrides.json and "
+            "regenerate, never hand-edit the built file)",
+            8,
+        )
+
+
+def check_group8(docs: dict[str, object], verbose: bool) -> None:
+    """Trade routes: docs/10-DATA-SCHEMA.md section 8.3.
+
+    Runs after group 6 on the same PNG decoder (the builder's reader, per the
+    §8.3 preamble). Items 1-5 check the authored lanes, item 6 the built
+    spokes, item 7 the named connectivity probes over the built junction
+    graph, item 8 the rebuild byte-equality of the tool-owned artifact.
+    """
+    lanes_doc = docs.get("trade_routes.json")
+    if not isinstance(lanes_doc, dict) or not isinstance(
+            lanes_doc.get("lanes"), list):
+        fail("trade-routes", "trade_routes.json", "missing 'lanes' array", 8)
+    lanes = lanes_doc["lanes"]
+    built = docs.get(BUILT_ROUTES_LABEL.split("/")[-1])
+    if not isinstance(built, dict):
+        fail(
+            "trade-built",
+            BUILT_ROUTES_LABEL,
+            "missing (generate with tools/build_routes.py)",
+            8,
+        )
+    for key in ("version", "generated_by", "artifact", "lanes", "spokes",
+                "junctions"):
+        if key not in built:
+            fail(
+                "trade-built",
+                BUILT_ROUTES_LABEL,
+                f"built artifact is missing '{key}' (section 4.14 envelope)",
+                8,
+            )
+
+    nation_ids = {nation["id"] for nation in docs["nations.json"]["nations"]}
+    good_ids = {good["id"] for good in docs["goods.json"]["goods"]}
+
+    # -- item 1: the locked id set ------------------------------------------
+    ids = [lane.get("id") for lane in lanes]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        fail(
+            "trade-routes",
+            "trade_routes.json",
+            f"repeated lane id(s): {', '.join(duplicates)}",
+            8,
+        )
+    missing = [i for i in LOCKED_LANE_IDS if i not in ids]
+    extra = sorted(set(ids) - set(LOCKED_LANE_IDS))
+    if missing or extra:
+        detail = []
+        if missing:
+            detail.append(f"missing {', '.join(missing)}")
+        if extra:
+            detail.append(f"unexpected {', '.join(extra)}")
+        fail(
+            "trade-routes",
+            "trade_routes.json",
+            "lane id set must be exactly the locked 12 (section 7.6): "
+            + "; ".join(detail),
+            8,
+        )
+
+    # -- item 2: lane schema --------------------------------------------------
+    _check_trade_lane_schema(lanes, nation_ids, good_ids)
+    lane_index = {lane["id"]: i for i, lane in enumerate(lanes)}
+
+    # -- items 3-5: snap, passability, wrap continuity ------------------------
+    grid = route_builder.load_world_grid()
+    snap_stats = _check_trade_snap_and_segments(grid, lanes, lane_index)
+
+    # -- item 6: the §4.14 spoke rule over the built artifact -----------------
+    if not route_builder.OVERRIDES_PATH.is_file():
+        fail(
+            "trade-spokes",
+            OVERRIDES_LABEL,
+            "missing (§4.14 hand-fix channel for the lane builder)",
+            8,
+        )
+    try:
+        overrides_payload = json.loads(
+            route_builder.OVERRIDES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(
+            "trade-spokes",
+            OVERRIDES_LABEL,
+            f"cannot read overrides: {exc}",
+            8,
+        )
+    overrides = route_builder.load_overrides(
+        overrides_payload,
+        lanes,
+        docs["ports.json"]["ports"],
+    )
+    spoke_stats = _check_trade_spokes(
+        grid, docs["ports.json"]["ports"],
+        docs["nations.json"]["nations"], lanes, lane_index, built, overrides)
+
+    # -- item 7: named probes --------------------------------------------------
+    _check_trade_probes(grid, docs["ports.json"]["ports"], built)
+
+    # -- item 8: rebuild byte-equality -----------------------------------------
+    _check_trade_determinism(verbose)
+
+    if verbose:
+        kinds = spoke_stats["kinds"]
+        print(
+            f"PASS group 8 trade routes ({len(lanes)} lanes / "
+            f"{snap_stats['waypoints']} waypoints snapped <= "
+            f"{route_builder.WAYPOINT_SNAP_TILES} tiles "
+            f"(max {snap_stats['max_snap']}), "
+            f"{snap_stats['segments']} lane segments passable and "
+            "wrap-continuous, "
+            f"{spoke_stats['count']} spokes "
+            f"[{kinds['lane']} lane / {kinds['capital']} capital / "
+            f"{kinds['override']} override], "
+            f"{built['junctions']['node_count']} junction nodes, "
+            f"{built['junctions']['edge_count']} edges, probes 3/3, "
+            "rebuild byte-identical)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -3570,6 +4231,7 @@ def main(argv: list[str]) -> int:
         ("5", check_group5),
         ("6", check_group6),
         ("7", check_group7),
+        ("8", check_group8),
     )
 
     for group_id, check in groups:
@@ -3582,8 +4244,7 @@ def main(argv: list[str]) -> int:
             print(f"FAIL internal group{group_id} tools/validate_data.py {exc!r}")
             return 3
 
-    if verbose:
-        print("OK all check groups passed")
+    print(f"OK all check groups passed (1-{len(groups)})")
     return 0
 
 

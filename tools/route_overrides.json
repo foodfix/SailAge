@@ -1,4 +1,428 @@
 {
   "version": 1,
-  "overrides": []
+  "overrides": [
+    {
+      "kind": "spoke",
+      "port": "accra",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 5
+      },
+      "note": "Guinea-coast trade joins the flota's outbound Canary/Atlantic track"
+    },
+    {
+      "kind": "spoke",
+      "port": "amboina",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 17
+      },
+      "note": "Moluccas spice trade feeds the galleon via the Philippine-sea leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "amsterdam",
+      "connect": {
+        "lane": "hanseatic_north",
+        "waypoint_index": 9
+      },
+      "note": "IJsselmeer approach: straight walk to the lane clips the Holland coast"
+    },
+    {
+      "kind": "spoke",
+      "port": "barcelona",
+      "connect": {
+        "lane": "venice_flanders",
+        "waypoint_index": 17
+      },
+      "note": "Catalan trade on the run's Spanish east-coast leg; headland dodge"
+    },
+    {
+      "kind": "spoke",
+      "port": "batavia",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 39
+      },
+      "note": "VOC hub joins the strait trade through the Java Sea"
+    },
+    {
+      "kind": "spoke",
+      "port": "beirut",
+      "connect": {
+        "lane": "venice_alexandria",
+        "waypoint_index": 11
+      },
+      "note": "Levant trade on the run's Syrian-coast leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "belem",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 15
+      },
+      "note": "Amazon mouth on the Carreira's Brazil-bulge track"
+    },
+    {
+      "kind": "spoke",
+      "port": "boston",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 67
+      },
+      "note": "New England joins the flota's Atlantic return track"
+    },
+    {
+      "kind": "spoke",
+      "port": "botany_bay",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 17
+      },
+      "note": "Remote Pacific colony: nearest junction is the galleon's Philippine-sea leg, reached north along the Queensland coast"
+    },
+    {
+      "kind": "spoke",
+      "port": "brunei",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 30
+      },
+      "note": "Brunei on the galleon's Borneo-Philippines trade"
+    },
+    {
+      "kind": "spoke",
+      "port": "buenos_aires",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 19
+      },
+      "note": "Rio de la Plata silver and hides join the Brazil-bulge track"
+    },
+    {
+      "kind": "spoke",
+      "port": "cadiz",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 0
+      },
+      "note": "Cadiz bay mouth; straight walk to the flota terminus clips the shore"
+    },
+    {
+      "kind": "spoke",
+      "port": "cagliari",
+      "connect": {
+        "lane": "genoa_grain",
+        "waypoint_index": 4
+      },
+      "note": "Sardinia on the grain run; straight walk clips the gulf headland"
+    },
+    {
+      "kind": "spoke",
+      "port": "candia",
+      "connect": {
+        "lane": "venice_alexandria",
+        "waypoint_index": 7
+      },
+      "note": "Crete on the Venice run; straight walk clips the north-shore headland"
+    },
+    {
+      "kind": "spoke",
+      "port": "canton",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 26
+      },
+      "note": "Canton-Manila silk-for-silver trade (the Sino-Spanish run)"
+    },
+    {
+      "kind": "spoke",
+      "port": "cape_town",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 26
+      },
+      "note": "Table Bay victualling stop; straight walk clips the Cape peninsula"
+    },
+    {
+      "kind": "spoke",
+      "port": "cartagena",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 27
+      },
+      "note": "The flota's Caribbean muster port"
+    },
+    {
+      "kind": "spoke",
+      "port": "charleston",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 65
+      },
+      "note": "Carolina joins the flota's Gulf Stream return track"
+    },
+    {
+      "kind": "spoke",
+      "port": "curacao",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 27
+      },
+      "note": "Dutch Antilles entrepot on the flota circuit"
+    },
+    {
+      "kind": "spoke",
+      "port": "elmina",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 8
+      },
+      "note": "Gold Coast castle trade on the Carreira's Cape Verde leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "guayaquil",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 0
+      },
+      "note": "Cocoa and timber up the Peru-Acapulco coastal run"
+    },
+    {
+      "kind": "spoke",
+      "port": "jamestown",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 66
+      },
+      "note": "Virginia tobacco on the flota's Atlantic track"
+    },
+    {
+      "kind": "spoke",
+      "port": "lima",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 0
+      },
+      "note": "Callao-Acapulco coastal run feeding the galleon"
+    },
+    {
+      "kind": "spoke",
+      "port": "luanda",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 26
+      },
+      "note": "Angola slave port; coast run south to the Carreira's Cape junction"
+    },
+    {
+      "kind": "spoke",
+      "port": "macassar",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 39
+      },
+      "note": "Spice Islands trade through the Java Sea to Malacca"
+    },
+    {
+      "kind": "spoke",
+      "port": "macau",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 26
+      },
+      "note": "Macau-Manila run down the South China Sea coast"
+    },
+    {
+      "kind": "spoke",
+      "port": "marseille",
+      "connect": {
+        "lane": "venice_flanders",
+        "waypoint_index": 15
+      },
+      "note": "Marseille on the run's Gulf of Lion leg; headland dodge"
+    },
+    {
+      "kind": "spoke",
+      "port": "nagasaki",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 36
+      },
+      "note": "Nagasaki on the galleon's Japan leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "naples",
+      "connect": {
+        "lane": "venice_flanders",
+        "waypoint_index": 9
+      },
+      "note": "Naples on the run's Tyrrhenian leg; bay-mouth dodge"
+    },
+    {
+      "kind": "spoke",
+      "port": "new_york",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 67
+      },
+      "note": "Hudson trade joins the flota's Atlantic track"
+    },
+    {
+      "kind": "spoke",
+      "port": "osaka",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 37
+      },
+      "note": "Osaka on the galleon's southern Japan approach"
+    },
+    {
+      "kind": "spoke",
+      "port": "palermo",
+      "connect": {
+        "lane": "genoa_grain",
+        "waypoint_index": 6
+      },
+      "note": "Sicily on the grain run; straight walk clips the strait headland"
+    },
+    {
+      "kind": "spoke",
+      "port": "panama",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 0
+      },
+      "note": "Pacific-side harbor: the Peru-Acapulco run (no isthmus canal exists, so the Caribbean flota is unreachable by sea from Panama)"
+    },
+    {
+      "kind": "spoke",
+      "port": "patani",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 36
+      },
+      "note": "Patani on the strait approach; straight walk clips the Malay coast"
+    },
+    {
+      "kind": "spoke",
+      "port": "pondicherry",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 25
+      },
+      "note": "Coromandel coast on the India run"
+    },
+    {
+      "kind": "spoke",
+      "port": "quebec",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 67
+      },
+      "note": "St Lawrence fur trade down to the flota's Atlantic track"
+    },
+    {
+      "kind": "spoke",
+      "port": "rio_de_janeiro",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 19
+      },
+      "note": "Brazil sugar port on the Carreira's outbound track"
+    },
+    {
+      "kind": "spoke",
+      "port": "saint_louis",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 8
+      },
+      "note": "Senegal gum and slave trade on the Cape Verde leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "siam",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 35
+      },
+      "note": "Ayutthaya trade down the Gulf of Thailand to the strait"
+    },
+    {
+      "kind": "spoke",
+      "port": "smyrna",
+      "connect": {
+        "lane": "genoa_grain",
+        "waypoint_index": 20
+      },
+      "note": "Smyrna on the grain run's Aegean leg; gulf dodge"
+    },
+    {
+      "kind": "spoke",
+      "port": "stockholm",
+      "connect": {
+        "lane": "hanseatic_north",
+        "waypoint_index": 17
+      },
+      "note": "Swedish copper and iron on the Hanseatic Baltic leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "suriname",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 10
+      },
+      "note": "Dutch Guiana plantations on the flota track"
+    },
+    {
+      "kind": "spoke",
+      "port": "ternate",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 17
+      },
+      "note": "Clove monopoly port feeding the galleon via the Philippines"
+    },
+    {
+      "kind": "spoke",
+      "port": "timor",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 39
+      },
+      "note": "Sandalwood trade through the Java Sea to Malacca"
+    },
+    {
+      "kind": "spoke",
+      "port": "trieste",
+      "connect": {
+        "lane": "venice_alexandria",
+        "waypoint_index": 1
+      },
+      "note": "Adriatic head: gulf approach to the Venice run"
+    },
+    {
+      "kind": "spoke",
+      "port": "valparaiso",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 0
+      },
+      "note": "Chile coast run north onto the Peru-Acapulco route"
+    },
+    {
+      "kind": "spoke",
+      "port": "zeelandia",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 34
+      },
+      "note": "Dutch Taiwan on the Manila trade via the Luzon strait"
+    }
+  ]
 }
