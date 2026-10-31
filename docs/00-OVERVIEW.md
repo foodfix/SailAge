@@ -49,7 +49,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 3 | Crown & Horizon | Guild quests, royal missions, nobility titles, discoveries, piracy/bounty, tournaments, the ~100-port world content (shipped on a provisional grid, replaced in Phase 4), retirement/victory | See `docs/IMPLEMENT-Phase3.md` |
 | 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | ✅ complete — `docs/IMPLEMENT-Phase4.md` (completion record) |
 | 5 | Living Economy & National NPC Fleets | Stock-based supply/demand pricing with demand events, 8 roles of nation-owned NPC fleets on 12 hand-authored historical trade lanes (traders, coasters, patrols, couriers, privateers, pirates, hunters, treasure fleets), named pirates, convoys & wreckage, captain sightings & wanted posters, density presets, save v5 | See `docs/IMPLEMENT-Phase5.md` |
-| 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | See `docs/IMPLEMENT-Phase6.md` |
+| 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | ✅ complete — `docs/IMPLEMENT-Phase6.md` (completion record) |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -101,7 +101,7 @@ Chart step (step 10, `docs/IMPLEMENT-Phase4.md` N):
    modifier; profit/loss is shown in the trade dialog.
 7. Visit the shipyard (repair + refit available), the tavern (recruit one
    officer; officer appears in the character panel with stats), and the inn.
-8. Save from the port menu (save v5, `90-*` §8.2); quit to title; Load Game;
+8. Save from the port menu (save v6, `90-*` §8.2 — S19's Save row); quit to title; Load Game;
    position, day, gold, cargo, crew, morale, morale tier, officers, and
    reputation are all fully restored.
 9. Toggle language to Chinese and back at runtime; every player-facing string

@@ -1,6 +1,9 @@
 # IMPLEMENT — Phase 6: Sea Navigation Depth
 
-**Status (2026-10-31):** backlog ratified; W1 (docs) launches first.
+**Status (2026-11-01):** **complete** — all six waves landed and gated; see
+the completion record + final gate at the bottom of this file and
+`tools/demo_check_phase6.md` (dated 2026-11-01).
+**History:** backlog ratified 2026-10-31; W1 (docs) launched first.
 **Prerequisite (verified 2026-10-31):** Phase 5 is **fully complete** —
 final gate green on `main` at `8d3913f` (`tools/demo_check_phase5.md`:
 validator groups 1–8 exit 0, `trade_routes_built.json` rebuild
@@ -943,27 +946,27 @@ budgets, diplomacy, markets beyond the player); **new trade goods**
 
 ## Completion record
 
-*(Filled in by task J.)*
+*(Filled in by task J — 2026-11-01.)*
 
 | Wave | Tasks | Result |
 |---|---|---|
-| W1 | A, B, C | ☐ |
-| W2 | R, D (merged), P (held) | ☐ |
-| W3 | P → E | ☐ |
-| W4 | F | ☐ |
-| W5 | V, G, H, I | ☐ |
-| W6 | J | ☐ |
+| W1 | A, B, C | ✅ merged (`302cd94`, `8eba26b`, `28f92e1`); docs greps clean; tree untouched outside `docs/` + `AGENTS.md`; master pins folded in (oar-trim class rule, drift-push tick position, trader 60→120, `variability` metadata, `width_tiles` dilation) |
+| W2 | R, D (merged), P (held) | ✅ R `b727046` (rescale + sweep + re-baseline; 35/35 suites), D `3a0ac0f` (25 wind regions / 23 currents / 3 ice regions; green-inert per correction 9); gate: validator 1–8 @ 4320² exit 0, rebuilds byte-identical; P `phase6-p` held |
+| W3 | P → E | ✅ P merged `e025b13` (45 neutral ports, 5 lanes, winter variant, botany_bay re-place; W3-prep cleanup `c98ea1a`), E merged `35d4c48` (`build_ocean.py`, variants + walk-aware rule 1 + month windows, groups 9–10, `data_loader`); gate: groups 1–10 exit 0, three artifacts byte-identical, probes 10/10, 35/35 suites |
+| W4 | F | ✅ `ocean_layers.gd` + direction-aware core (calendar, wind roll, factors, trim, wait, drift, ice); gate: 36/36 suites incl. `test_ocean` (133), wind-roll determinism proven, drift position pinned, day tick 25 ms @ cap |
+| W5 | V, G, H, I | ✅ merged (`eb1d314`, `e8f985a`, `dc37eb3`, `588b28d`) + the I gate bounce (`1b055ab`: `debug_row_enabled` returned presence, not the bool — one line, all three REDs); gate: 37/37 suites, day tick 19–29 ms @ 288, pursuit 61 ms ≤ 250 (no windowing), ui_strings orchestrator merge (50 keys → 501), `PORT_NEUTRAL` palette + overlay constant |
+| W6 | J | ✅ this record + `tools/demo_check_phase6.md` + `tools/demo_probe_phase6.tscn` (ALL PASS, 21 checks) |
 
 ### Final gate
 
 | Check | Result |
 |---|---|
-| `python3 tools/validate_data.py` (groups 1–10) | ☐ |
-| `python3 tools/build_world.py` / `build_routes.py` / `build_ocean.py` (rebuilds byte-identical) | ☐ |
-| suites (`tools/run_tests.py`, counts recorded) | ☐ |
-| `godot --headless --quit-after 3` clean | ☐ |
-| day tick @ 288 ≤ 50 ms; pursuit budget verdict | ☐ |
-| locale zh/en parity, zero `<key>` fallbacks | ☐ |
-| save payload size ≤ 2 MB @ extreme | ☐ |
-| demo loop (`00-*` §7) end-to-end at the new scale | ☐ |
-| `tools/demo_check_phase6.md` scenario + debug-chart sanity record | ☐ |
+| `python3 tools/validate_data.py` (groups 1–10) | **exit 0** — 145 ports (100 sovereign + 45 neutral), 17 lanes, 3 ice regions, 2 ocean rasters |
+| `python3 tools/build_world.py` / `build_routes.py` / `build_ocean.py` (rebuilds byte-identical) | **all three byte-identical** (`--check` exits 0; `world.png` unchanged since R's build) |
+| suites (`tools/run_tests.py`, counts recorded) | **37 suites / 6 538 checks, 0 failures, 0 zombie/hang** |
+| `godot --headless --quit-after 3` clean | **exit 0, zero SCRIPT ERROR** |
+| day tick @ 288 ≤ 50 ms; pursuit budget verdict | **19.2–20 ms avg / 28–29 ms worst**; pursuit A* **61 ms worst/day ≤ 250** — no windowing (correction 13) |
+| locale zh/en parity, zero `<key>` fallbacks | **501 keys, 0 bad**; every `t_key` reference resolves |
+| save payload size ≤ 2 MB @ extreme | **1.19 MB**; v6 round-trips, v5 refused |
+| demo loop (`00-*` §7) end-to-end at the new scale | green — `test_demo_loop` (83) + `test_world_e2e` (108, four real voyages in-envelope) |
+| `tools/demo_check_phase6.md` scenario + debug-chart sanity record | **written** — 10 scenarios recorded (probe ALL PASS 21 checks), debug scrub 1↔7 verified, dated 2026-11-01 |

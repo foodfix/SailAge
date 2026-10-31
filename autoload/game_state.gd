@@ -57,7 +57,8 @@ var market_stocks: Dictionary = {}
 ## Lootable wreck sites (docs/60-* auto-resolve, task K); never counted
 ## against the fleet cap. Present-but-empty until the ecology lands.
 var wrecks: Array = []
-## Sea-traffic density preset id (docs/10-* §4.10): chosen on S2, changeable
+## Sea-traffic density preset id (docs/10-* §4.10): chosen in S19 only
+## (80-* §4.6.3, amended 2026-10-31 — the S2 row no longer exists), changeable
 ## mid-run in S19 (task M). `npc_fleets.gd` (task J) budgets against it.
 var npc_preset: String = "normal"
 ## Phase-6 control preferences (docs/90-* §5.4; docs/80-* §4.6.3): the two
@@ -157,7 +158,8 @@ func new_game(nation_id: String, route: bool = true,
 			% [nation_id, start_port_id])
 		return
 	var resolved_map := _resolve_map_id(map_id)
-	# 80-* §4.6.3: the S2 sea-traffic row writes `npc_preset` BEFORE this
+	# 80-* §4.6.3: the S19 settings modal (pre-game, via S1) writes `npc_preset`
+	# BEFORE this
 	# call — it is run input, like `nation_id`, so the fresh-run reset below
 	# preserves it (validated against the §4.10 preset table; anything else
 	# falls back to `default_preset`).
@@ -264,7 +266,7 @@ func new_game(nation_id: String, route: bool = true,
 	retired_at = 0
 	# docs/90-* §8.1 Phase-5 fields: stocks at derived rest (docs/30-* §4.2,
 	# no RNG), the ecology blocks empty until tasks J/K fill them, the density
-	# dial at its run input (S2, task M). The fresh-run resets also clear the
+	# dial at its run input (S19-only, 80-* §4.6.3). The fresh-run resets also clear the
 	# named-pirate respawn cooldowns and the transient event table + port log.
 	market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list
