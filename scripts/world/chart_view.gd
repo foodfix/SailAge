@@ -238,9 +238,12 @@ static func debug_row_enabled() -> bool:
 		return true
 	if _settings_script == null:
 		_settings_script = load("res://scenes/ui_shared/settings_panel.gd")
+	# The VALUE, not presence: `Script.get` answers the static's live value in
+	# Godot 4.7 (null only while task V's symbol is absent — then OFF, the
+	# documented default).
 	var value = _settings_script.get("debug_overlays") \
 		if _settings_script != null else null
-	return true if (value is bool) else false
+	return value if (value is bool) else false
 
 
 ## The neutral-port grey (`80-*` §4.8 pins `PORT_NEUTRAL` in `palette.gd`).
