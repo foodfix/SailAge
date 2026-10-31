@@ -886,12 +886,12 @@ func _test_port_overlays() -> void:
 			wrong_berth.append("%s %s != %s"
 				% [port_id, str(entry["berth_cell"]), str(want_berth)])
 		var port: Dictionary = DataLoader.get_port(str(port_id))
-		# §2.11/§4.8: a neutral-tier port (nation_id "") draws the palette
-		# ACCENT — `get_nation("")` is empty, and the overlay falls back to
-		# ACCENT exactly when the nation lookup misses.
+		# §2.11/§4.8: a neutral-tier port (nation_id "") draws the pinned
+		# PORT_NEUTRAL grey — the §4.8 constant the overlay resolves for the
+		# empty nation id (lookup misses keep the generic ACCENT fallback).
 		var want_colour: Color
 		if str(port.get("nation_id", "")) == "":
-			want_colour = PaletteLib.ACCENT
+			want_colour = PaletteLib.PORT_NEUTRAL
 		else:
 			var nation: Dictionary = DataLoader.get_nation(
 				str(port.get("nation_id", "")))

@@ -976,6 +976,10 @@ func _nation_colour(nation_id: String, nations: Dictionary) -> Color:
 		var hex = (nation as Dictionary).get("color", "")
 		if hex is String and Color.html_is_valid(hex):
 			return PaletteLib.nation_color(hex)
+	if nation_id == "":
+		## 80-* §4.8: the neutral tier draws PORT_NEUTRAL (the pinned grey),
+		## not the generic ACCENT fallback (which stays for lookup misses).
+		return PaletteLib.PORT_NEUTRAL
 	return PaletteLib.ACCENT
 
 

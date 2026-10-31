@@ -1803,5 +1803,205 @@
   "captain.rumor.arrived": {
     "zh": "一支{nation}船队刚刚进港停靠。",
     "en": "A {nation} convoy has just docked here."
+  },
+  "settings.input.mode": {
+    "zh": "输入模式",
+    "en": "Input mode"
+  },
+  "settings.input.step": {
+    "zh": "步进",
+    "en": "Step"
+  },
+  "settings.input.helm": {
+    "zh": "掌舵",
+    "en": "Helm"
+  },
+  "settings.current.mode": {
+    "zh": "洋流模式",
+    "en": "Current mode"
+  },
+  "settings.current.modifier": {
+    "zh": "修正",
+    "en": "Modifier"
+  },
+  "settings.current.drift": {
+    "zh": "漂移",
+    "en": "Drift"
+  },
+  "settings.debug.overlays": {
+    "zh": "调试图层",
+    "en": "Debug overlays"
+  },
+  "settings.input.current": {
+    "zh": "当前：{mode}",
+    "en": "Current: {mode}"
+  },
+  "settings.current.current": {
+    "zh": "当前：{mode}",
+    "en": "Current: {mode}"
+  },
+  "settings.debug.off": {
+    "zh": "关",
+    "en": "Off"
+  },
+  "settings.debug.on": {
+    "zh": "开",
+    "en": "On"
+  },
+  "settings.debug.session_hint": {
+    "zh": "仅本次运行，不会保存。",
+    "en": "This session only; never saved."
+  },
+  "world.wind.label": {
+    "zh": "风向",
+    "en": "Wind"
+  },
+  "world.current.label": {
+    "zh": "洋流",
+    "en": "Current"
+  },
+  "world.trim.chip": {
+    "zh": "帆位：{state}",
+    "en": "Sails: {state}"
+  },
+  "world.trim.furled": {
+    "zh": "收帆",
+    "en": "Furled"
+  },
+  "world.trim.reefed": {
+    "zh": "减帆",
+    "en": "Reefed"
+  },
+  "world.trim.normal": {
+    "zh": "常帆",
+    "en": "Normal"
+  },
+  "world.trim.full": {
+    "zh": "满帆",
+    "en": "Full sail"
+  },
+  "world.wait.done": {
+    "zh": "原地休整一天。",
+    "en": "Held position for one day."
+  },
+  "world.ice.blocked": {
+    "zh": "海冰封冻，无法进入。",
+    "en": "Sea ice blocks the way."
+  },
+  "world.calendar.year_month": {
+    "zh": "{y}年{m}月",
+    "en": "Year {y} · Month {m}"
+  },
+  "world.calendar.month.1": {
+    "zh": "一月",
+    "en": "Month 1"
+  },
+  "world.calendar.month.2": {
+    "zh": "二月",
+    "en": "Month 2"
+  },
+  "world.calendar.month.3": {
+    "zh": "三月",
+    "en": "Month 3"
+  },
+  "world.calendar.month.4": {
+    "zh": "四月",
+    "en": "Month 4"
+  },
+  "world.calendar.month.5": {
+    "zh": "五月",
+    "en": "Month 5"
+  },
+  "world.calendar.month.6": {
+    "zh": "六月",
+    "en": "Month 6"
+  },
+  "world.calendar.month.7": {
+    "zh": "七月",
+    "en": "Month 7"
+  },
+  "world.calendar.month.8": {
+    "zh": "八月",
+    "en": "Month 8"
+  },
+  "world.calendar.month.9": {
+    "zh": "九月",
+    "en": "Month 9"
+  },
+  "world.calendar.month.10": {
+    "zh": "十月",
+    "en": "Month 10"
+  },
+  "world.calendar.month.11": {
+    "zh": "十一月",
+    "en": "Month 11"
+  },
+  "world.calendar.month.12": {
+    "zh": "十二月",
+    "en": "Month 12"
+  },
+  "chart.wind.title": {
+    "zh": "风带",
+    "en": "Wind belts"
+  },
+  "chart.current.title": {
+    "zh": "洋流",
+    "en": "Currents"
+  },
+  "chart.ice.title": {
+    "zh": "海冰",
+    "en": "Sea ice"
+  },
+  "debug.title": {
+    "zh": "调试图层",
+    "en": "Debug layers"
+  },
+  "debug.omniscient": {
+    "zh": "全知视图",
+    "en": "Omniscient view"
+  },
+  "debug.legend.network": {
+    "zh": "航线网络",
+    "en": "Trade network"
+  },
+  "debug.legend.spokes": {
+    "zh": "港口支线",
+    "en": "Port spokes"
+  },
+  "debug.legend.chokepoints": {
+    "zh": "咽喉要地",
+    "en": "Chokepoints"
+  },
+  "debug.legend.fleets": {
+    "zh": "全部船队",
+    "en": "All fleets"
+  },
+  "debug.legend.wrecks": {
+    "zh": "沉船",
+    "en": "Wrecks"
+  },
+  "debug.legend.hunter_intel": {
+    "zh": "猎捕情报",
+    "en": "Hunter intel"
+  },
+  "chart.debug.neutral": {
+    "zh": "中立港",
+    "en": "Neutral ports"
+  },
+  "debug.info.month": {
+    "zh": "预览月份",
+    "en": "Preview month"
+  },
+  "debug.info.preset": {
+    "zh": "密度",
+    "en": "Density"
+  },
+  "debug.info.fleets": {
+    "zh": "船队",
+    "en": "Fleets"
+  },
+  "port.neutral.label": {
+    "zh": "中立港",
+    "en": "Neutral port"
   }
 }

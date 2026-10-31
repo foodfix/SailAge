@@ -32,6 +32,11 @@ const WARN := Color("#d9a441")
 ## Morale tier / toast: bad.
 const BAD := Color("#b3341f")
 
+## 80-* §4.8 (Phase 6): the neutral-port tier's marker/label colour —
+## `nation_id: ""` ports on the world overlay and the debug chart legend
+## (`10-*` §7.1 neutral tier; symbol pinned by the Phase-6 UI doc task).
+const PORT_NEUTRAL := Color("#9a9a9a")
+
 # --- Sizing grid (px, docs/80-UI-UX.md §4.8) --------------------------------
 
 const BASE_UNIT := 8
