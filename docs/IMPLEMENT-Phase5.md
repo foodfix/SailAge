@@ -1,6 +1,8 @@
 # IMPLEMENT — Phase 5: Living Economy & National NPC Fleets
 
-**STATUS: 📋 PLANNED (2026-10-31).** Rewritten from
+**STATUS: ✅ COMPLETE (2026-10-31).** All seven waves merged on `main`;
+the completion record and final gate are at the bottom, and the dated
+acceptance record is `tools/demo_check_phase5.md`. Rewritten from
 `.kilo/plans/1793352418172-npc-fleets-economy-plan.md` after a full repo
 review; the [review corrections](#review-corrections-applied-to-the-source-plan)
 below are already folded in, so this document is the only source of truth.
@@ -831,26 +833,28 @@ only, mirroring the `world.png` rule).
 
 ## Completion record
 
-*(Filled in by task N.)*
+*(Filled in by task N. Run 2026-10-31, `main` at `2c0d31f`+; see
+`tools/demo_check_phase5.md` for the full acceptance record.)*
 
 | Wave | Tasks | Result |
 |---|---|---|
-| W1 | A, B, C | |
-| W2 | D, E | |
-| W3 | F, G | |
-| W4 | J | |
-| W5 | K | |
-| W6 | L, M | |
-| W7 | N | |
+| W1 | A, B, C | ✅ docs ratified: 5 new data schemas + save v5 pins (`10-*`/`90-*`/`00-*`/AGENTS.md); stock economy + tranche + demand-event spec (`30-*`/`50-*`); fleet/ecology/UI spec incl. S19 + `npc_fleets.gd` API (`20-*`/`60-*`/`70-*`/`80-*`). Gate: cross-doc greps clean, tree untouched outside docs. |
+| W2 | D, E | ✅ 4 npc/economy data files + validator group 7 (12 negative tests) + loader; 12 historical lanes (415 waypoints, raster-verified) + `LICENSE-NOTES.md` + empty overrides. Gate: validator groups 1–7, 31 suites green. |
+| W3 | F, G | ✅ `build_routes.py` + 767 KB built artifact (769 nodes/805 edges, 47 documented spokes + 1 capital fallback, 100/100 ports) + validator group 8 with rebuild byte-equality; pure `economy.gd` + tranche-walking trade engine + save v5 + `market_changed` + market columns; new `test_economy`, reworked `test_trade`, `test_save_v5`. Gate: groups 1–8, all suites green. |
+| W4 | J | ✅ `npc_fleets.gd` (8 roles, budgets × preset, half-cap initial fill, cell-bucket index, Dijkstra lane stepping, seeded trader rules, captains) + `fleet_path.gd`; full `hostile_fleets`→`npc_fleets` rename sweep (16 files, 10 suites, `encounters.gd` deleted); hunter-intel amendment (lane-bound hunters, 15/20 hysteresis, persisted intel keys); 290-check suite. Gate: 32/32 green, tick 9–16 ms @ 272. |
+| W5 | K | ✅ seeded 60% auto-resolve, wreck lifecycle (5-day, `salvage_for` reuse), escort/convoy/patrol protection, privateer rival-only targeting, chokepoint 5/8 hysteresis, collect-on-entry, any-fleet piracy funnel + sponsor-rival rep chain; fixed a latent head-on stepping deadlock; coaster loot pin reconciled. Gate: 33/33 green. |
+| W6 | L, M | ✅ L: treasure scheduler (45/60/75/90/105/120), named pirates + persisted +30-day respawns, `npc_intel.gd` sightings/posters/20g reveal/rumors, demand-event rotation + telegraphs, wakes, convoys, port-log; L follow-up reconciled from stray main-tree edits (save key `named_pirate_respawns`, transient wake/log state, load-time override re-apply). M: S2 density row, S19 settings modal, `new_game` preserves the S2 preset, `test_density` perf proof (17/69 ms, 0.95 MB). Gate: 35/35 green. |
+| W7 | N | ✅ acceptance record `tools/demo_check_phase5.md`; final gates below. |
 
 ### Final gate
 
 | Check | Result |
 |---|---|
-| `python3 tools/validate_data.py` | |
-| `python3 tools/build_routes.py` (rebuild) | |
-| suites | |
-| `godot --headless --quit-after 3` | |
-| day tick @ normal 288 / @ extreme | |
-| locale (zh/en) | |
-| `data/maps/world.png` | |
+| `python3 tools/validate_data.py` | **exit 0** — groups 1–8 PASS |
+| `python3 tools/build_routes.py` (rebuild) | **exit 0** — rebuild byte-identical (`--check`) |
+| suites | **35 suites / 5 960 checks, 0 failures, 0 zombie/hang** (`tools/run_tests.py`, 154 s) |
+| `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
+| day tick @ normal 288 / @ extreme | **15.9 ms avg / 26.9 ms worst** (≤ 50) / **69 ms** @ ≈990 fleets (≤ 150); near-linear |
+| locale (zh/en) | **448 ui_strings keys, 0 bad** (validator-enforced placeholder parity) |
+| `data/maps/world.png` | **unchanged** (0 diff since the plan commit) |
+| save payload @ extreme | **953 401 B / 0.91 MB** (≤ 2 MB) |
