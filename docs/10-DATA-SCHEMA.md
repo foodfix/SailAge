@@ -674,6 +674,14 @@ governance):
   its fallback is the **nearest lane waypoint, unbounded**. A port with
   neither is a hard build/validator error naming the port, never a runtime
   stall.
+  **Rule-1 selection is walk-aware (pinned at the W2 gate):** among the
+  in-radius lane waypoints in Chebyshev order, the builder picks the first
+  whose spoke walk succeeds (the builder's own budgeted A*); a candidate
+  whose walk fails is skipped, and only when no in-radius candidate has a
+  walk does the rule fall through to the capital/override fallbacks. An
+  override row is **superseded** (a build error naming the port) exactly
+  when rule 1 succeeds for that port; an override whose rule-1 walk fails
+  stays legal.
 - **Determinism:** two consecutive builds produce a **byte-identical**
   `data/trade_routes_built.json` (group 8 re-asserts it). Hand fixes go in
   `tools/route_overrides.json` — plus minimal, per-lane-reported waypoint
