@@ -30,6 +30,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 ## the minimap crop and the Chart screen must agree by construction
 ## (docs/80-* §4.6, docs/20-* §4.12).
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
+## Phase 6 (§4.5): the current arrow reads the decoded ocean current at the
+## fleet tile through the single ocean owner (F's module).
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 
@@ -53,6 +56,16 @@ const TOAST_SECONDS := 2.5
 ## fade-out + fade-in, so each half lasts 0.25s.
 const STORM_FLASH_CYCLE_SECONDS := 0.5
 const STORM_FLASH_HALF_SECONDS := STORM_FLASH_CYCLE_SECONDS * 0.5
+## Phase-6 indicator layout (§4.5): the wind arrow + caption share the weather
+## glyph's row under the minimap; the current arrow + caption share the
+## minimap-title row. Offsets are relative to the weather label / title label
+## positions that [_apply_minimap_rect] owns.
+const WIND_ARROW_OFFSET := Vector2(96, 12)
+const WIND_CAPTION_OFFSET := Vector2(108, 0)
+const CURRENT_ARROW_OFFSET := Vector2(104, 12)
+const CURRENT_CAPTION_OFFSET := Vector2(120, 0)
+## Compass-arrow placeholder size in px (drawn, no texture — §4.8).
+const ARROW_LENGTH := 14.0
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
@@ -83,6 +96,12 @@ signal explore_requested
 @onready var _modal_host: Control = $ModalHost
 @onready var _explore_hint: Label = $ExploreHint
 @onready var _explore_button: Button = $Explore
+## Phase-6 §2.9 indicators: the Year·Month top-bar label, the 帆位 trim chip in
+## the bottom bar, and the wind/current captions beside the weather glyph.
+@onready var _calendar_label: Label = $TopRow/Calendar
+@onready var _trim_chip: Label = $BottomRow/TrimChip
+@onready var _wind_label: Label = $WindLabel
+@onready var _current_label: Label = $CurrentLabel
 
 ## Fleet dot position override for hosts that show the map before a run exists
 ## (the world scene falls back to Lisbon's berth tile). `(-1,-1)` means "read
@@ -129,6 +148,17 @@ var _weather_tween: Tween = null
 ## test can assert the label follows `day_advanced` and not GameState.
 var _displayed_weather: String = ""
 
+# --- Phase-6 §2.9 indicator state (rendered values, all read-only) ----------
+
+## The 8-dir wind-FROM id the arrow is drawn for (guard-read `world.wind_dir`).
+var _wind_dir_displayed: String = "E"
+## The decoded current at the fleet tile (`{}` = no current → arrow hidden).
+var _current_displayed: Dictionary = {}
+## The trim state the chip is rendered for (guard-read `world.sail_trim`).
+var _trim_state_displayed: String = "normal"
+## The `{year, month}` pair the top-bar label was composed from.
+var _calendar_displayed: Dictionary = {"year": 0, "month": 0}
+
 
 func _ready() -> void:
 	_top_bar.color = PaletteLib.PANEL_BG
@@ -136,6 +166,7 @@ func _ready() -> void:
 	for label in [
 		_day_label, _gold_label, _morale_label, _area_label, _provisions_label,
 		_water_label, _crew_label, _cargo_label, _speed_label, _weather_label,
+		_calendar_label, _wind_label, _current_label,
 	]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_toast.visible = false
@@ -182,17 +213,20 @@ func refresh() -> void:
 	_refresh_top()
 	_refresh_bottom()
 	_refresh_weather()
+	refresh_sailing_indicators()
 	_sync_minimap_image()
 	queue_redraw()
 
 
 ## Sets the fleet dot source and refreshes the position-derived parts only:
-## the area label and the minimap. The bars are deliberately **not** touched
+## the area label, the minimap and — Phase 6 — the current arrow (it reads the
+## tile the fleet stands on). The bars are deliberately **not** touched
 ## here — they change only on EventBus signals (docs/80-* §7), so a host that
 ## moves the fleet cannot smuggle in a poll.
 func set_fleet_cell(cell: Vector2i) -> void:
 	fleet_cell = cell
 	_area_label.text = _area_text()
+	_refresh_current()
 	# Exploration moves with the fleet, so the chart cache is refreshed here
 	# (still once per step, not per frame).
 	_sync_minimap_image()
@@ -485,6 +519,158 @@ func _stop_storm_flash() -> void:
 		_weather_label.modulate.a = 1.0
 
 
+# --- Phase-6 §2.9 indicators (docs/80-* §4.5, read-only) --------------------
+
+## `I18n.fmt` with a bare-key dev fallback. The Phase-6 `world.*` inventory is
+## report-only until the master merges it (the standing Phase-4/5 protocol);
+## until then an unmerged key renders as the **literal key** — without the
+## `<key>` missing-entry marker, so a pre-merge wave never trips the standing
+## "no raw <key> reaches a label" gates (test_shipyard / test_equipment /
+## test_phase3_acceptance). Post-merge this is exactly `I18n.fmt`.
+static func _fmt_key(key: String, values: Dictionary = {}) -> String:
+	if not DataLoader.ui_strings.has(key):
+		return key
+	return I18n.fmt(key, values)
+
+
+## The [method _fmt_key] counterpart for placeholder-free keys.
+static func _t_key(key: String) -> String:
+	return _fmt_key(key)
+
+
+## Re-reads the Phase-6 HUD inputs and repaints every §2.9 indicator: the
+## Year·Month top-bar label, the wind arrow (+ its caption beside the weather
+## glyph), the current arrow (only on a current tile), the 帆位 trim chip.
+## Read-only over GameState, exactly like every other refresh here: hosts call
+## it when a state changed without a matching EventBus signal (a trim cycle,
+## a save load); `refresh()`, `day_advanced` and `set_fleet_cell` cover the
+## signal-driven paths.
+func refresh_sailing_indicators() -> void:
+	_refresh_calendar()
+	_refresh_wind()
+	_refresh_current()
+	_refresh_trim_chip()
+	queue_redraw()
+
+
+## Top bar `Year {y} · Month {m}` (zh `{y}年{m}月`), composed **numerically**
+## per 80-* §4.7.10 (the `world.calendar.month.*` names belong to the chart's
+## month surfaces, not the top bar). Calendar math is `SailingSim`'s (§4.15).
+func _refresh_calendar() -> void:
+	if GameState.day > 0:
+		_calendar_displayed = {
+			"year": SailingSimLib.year_for(GameState.day),
+			"month": SailingSimLib.month_for(GameState.day),
+		}
+	else:
+		_calendar_displayed = {"year": "-", "month": "-"}
+	_calendar_label.text = _fmt_key("world.calendar.year_month", {
+		"y": _calendar_displayed["year"],
+		"m": _calendar_displayed["month"],
+	})
+
+
+## Wind arrow (§4.5): rotates to the day's `world.wind_dir` (8-dir, guard-read
+## default `"E"`). The strength label is the existing weather glyph beside it.
+func _refresh_wind() -> void:
+	_wind_dir_displayed = str(GameState.world.get("wind_dir", "E"))
+	if SailingSimLib.heading_index(_wind_dir_displayed) < 0:
+		_wind_dir_displayed = "E"
+	_wind_label.text = _t_key("world.wind.label")
+
+
+## Current arrow (§4.5): shown only while the fleet stands on a current tile,
+## direction = the decoded (reversal-applied) flow. Hidden on S4 (no minimap,
+## no sea viewport) and whenever the lookup answers empty. **Render never
+## forces the raster decode**: while the lazy currents decode has not run yet
+## (world_map warms it in `_ready`/first frame) the arrow simply stays hidden
+## for that pass, so a HUD shown without a world scene pays no decode.
+func _refresh_current() -> void:
+	_current_displayed = {}
+	if not _minimap_visible:
+		return
+	var ocean = OceanLayersLib.instance()
+	if not ocean.currents_decoded:
+		return
+	_current_displayed = ocean.current_at(
+		_fleet_source_cell(), SailingSimLib.month_for(GameState.day))
+	_current_label.visible = not _current_displayed.is_empty()
+	_current_label.text = _t_key("world.current.label")
+
+
+## 帆位 trim chip (§4.5): the state name beside the speed readout, highlighted
+## (`ACCENT`) while the trim ≠ `normal`.
+func _refresh_trim_chip() -> void:
+	_trim_state_displayed = SailingSimLib.sail_trim()
+	_trim_chip.text = _fmt_key("world.trim.chip", {
+		"state": _t_key("world.trim.%s" % _trim_state_displayed),
+	})
+	_trim_chip.add_theme_color_override("font_color",
+		PaletteLib.ACCENT
+		if _trim_state_displayed != SailingSimLib.DEFAULT_TRIM
+		else PaletteLib.TEXT)
+
+
+## Bearing the wind arrow is drawn at (degrees clockwise from N; N=0, E=90…).
+func wind_arrow_angle() -> float:
+	return _compass_bearing(_wind_dir_displayed)
+
+
+## The wind indicator is always on (§4.5) while the sea viewport is.
+func wind_arrow_visible() -> bool:
+	return _minimap_visible
+
+
+## Bearing the current arrow is drawn at, or -1.0 without a current.
+func current_arrow_angle() -> float:
+	if _current_displayed.is_empty():
+		return -1.0
+	return _compass_bearing(str(_current_displayed.get("dir", "")))
+
+
+## True only while the fleet stands on a current tile (§4.5).
+func current_arrow_visible() -> bool:
+	return _minimap_visible and not _current_displayed.is_empty()
+
+
+## The trim state the chip renders (`furled|reefed|normal|full`).
+func trim_chip_state() -> String:
+	return _trim_state_displayed
+
+
+## True while the chip is highlighted (trim ≠ `normal`, §4.5).
+func trim_chip_highlighted() -> bool:
+	return _trim_state_displayed != SailingSimLib.DEFAULT_TRIM
+
+
+## The `{year, month}` pair the top-bar label was composed from (structure
+## seam; tests never assert label text).
+func calendar_displayed() -> Dictionary:
+	return _calendar_displayed.duplicate()
+
+
+## Degrees clockwise from north for an 8-dir id (-1.0 outside the domain).
+static func _compass_bearing(dir_id: String) -> float:
+	var index := SailingSimLib.heading_index(dir_id)
+	if index < 0:
+		return -1.0
+	return float(index) * 45.0
+
+
+## Draws one placeholder compass arrow (§4.8: drawn shapes, no textures): a
+## shaft with a V head pointing along the 8-dir id's bearing.
+func _draw_compass_arrow(centre: Vector2, dir_id: String, color: Color) -> void:
+	var bearing := _compass_bearing(dir_id)
+	if bearing < 0.0:
+		return
+	var radians := bearing * PI / 180.0
+	var unit := Vector2(sin(radians), -cos(radians))
+	var tip := centre + unit * ARROW_LENGTH
+	draw_line(centre - unit * ARROW_LENGTH, tip, color, 2.0)
+	draw_line(tip, tip - unit.rotated(PI / 6.0) * ARROW_LENGTH * 0.5, color, 2.0)
+	draw_line(tip, tip - unit.rotated(-PI / 6.0) * ARROW_LENGTH * 0.5, color, 2.0)
+
+
 ## Current area: the docked port, else the nearest known port within 16 tiles,
 ## else `world.open_sea` (docs/80-* §4.5).
 func _area_text() -> String:
@@ -527,6 +713,9 @@ func _on_day_advanced(_new_day: int) -> void:
 	_refresh_top()
 	_refresh_bottom()
 	_refresh_weather()
+	# Phase 6: the day roll re-drew `world.wind_dir` and may have flipped the
+	# calendar month; the arrows and the top-bar label follow it.
+	refresh_sailing_indicators()
 
 
 func _on_gold_changed(_new_gold: int) -> void:
@@ -568,6 +757,10 @@ func _apply_minimap_rect() -> void:
 	_weather_label.position = _minimap.position + Vector2(0, size.y + PaletteLib.BASE_UNIT)
 	_minimap_title.position = _weather_label.position + Vector2(0, 24)
 	_minimap_title.text = I18n.t_key("world.minimap")
+	# Phase-6 §2.9 captions ride the same two rows (the weather row and the
+	# title row), so the whole indicator block moves with the minimap box.
+	_wind_label.position = _weather_label.position + WIND_CAPTION_OFFSET
+	_current_label.position = _minimap_title.position + CURRENT_CAPTION_OFFSET
 
 
 ## **Phase-4 compatibility shim.** The enlarged `M` minimap is gone (`80-*`
@@ -589,6 +782,11 @@ func set_minimap_visible(value: bool) -> void:
 	_minimap.visible = value
 	_weather_label.visible = value
 	_minimap_title.visible = value
+	_wind_label.visible = value
+	# A hidden sea viewport has no fleet tile to read a current from.
+	if not value:
+		_current_displayed = {}
+	_current_label.visible = value and not _current_displayed.is_empty()
 	queue_redraw()
 
 
@@ -737,6 +935,16 @@ func _draw() -> void:
 	draw_rect(Rect2(rect.position + centre, dot), Color.WHITE, true)
 
 	draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
+
+	# Phase-6 §2.9 arrows (placeholder drawn shapes): the wind arrow beside
+	# the weather glyph, and the current arrow — only on a current tile.
+	_draw_compass_arrow(
+		_weather_label.position + WIND_ARROW_OFFSET,
+		_wind_dir_displayed, PaletteLib.TEXT)
+	if current_arrow_visible():
+		_draw_compass_arrow(
+			_minimap_title.position + CURRENT_ARROW_OFFSET,
+			str(_current_displayed.get("dir", "")), PaletteLib.ACCENT)
 
 
 ## Screen offset (inside the box) of a 2×2 marker centred on `cell`, or

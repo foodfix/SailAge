@@ -38,6 +38,11 @@ layout_mode = 2
 text = "Day -"
 vertical_alignment = 1
 
+[node name="Calendar" type="Label" parent="TopRow"]
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
 [node name="Gold" type="Label" parent="TopRow"]
 layout_mode = 2
 text = "-g"
@@ -106,6 +111,11 @@ size_flags_horizontal = 3
 text = "Speed -"
 vertical_alignment = 1
 
+[node name="TrimChip" type="Label" parent="BottomRow"]
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
 [node name="Weather" type="Label" parent="."]
 layout_mode = 0
 offset_left = 16.0
@@ -121,6 +131,22 @@ offset_top = 272.0
 offset_right = 272.0
 offset_bottom = 296.0
 text = "Chart"
+
+[node name="WindLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 124.0
+offset_top = 248.0
+offset_right = 200.0
+offset_bottom = 272.0
+text = "-"
+
+[node name="CurrentLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 136.0
+offset_top = 272.0
+offset_right = 272.0
+offset_bottom = 296.0
+text = "-"
 
 [node name="Minimap" type="Control" parent="."]
 layout_mode = 0
