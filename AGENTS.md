@@ -11,8 +11,8 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 3. `docs/90-ARCHITECTURE.md` — project layout, autoloads, save format
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3)
-5. Task backlogs: `docs/IMPLEMENT-Phase5.md` (current), then Phase1–Phase4
-   for history
+5. Task backlogs: `docs/IMPLEMENT-Phase6.md` (current), then
+   `docs/IMPLEMENT-Phase5.md` (complete) and Phase1–Phase4 for history
 
 ## Hard rules (violations = rework)
 
