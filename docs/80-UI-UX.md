@@ -52,7 +52,7 @@ sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9).
 | S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
 | S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
 | S18 | Officers | `scenes/port/officers_panel.tscn` (officer roster + details, §4.6.2) | 5 |
-| S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over S4: the sea-traffic density dial, §4.6.3) | 5 |
+| S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over **S1 and S4**: the sea-traffic density dial + return-to-menu action, §4.6.3) | 5 |
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.7).
 The provisioning prompt (§4.6.1) is a **modal over S4**, not a screen of its
@@ -72,7 +72,8 @@ S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S4 ──Officers──► S18 (modal; read-only at sea)
-S4 ──Settings──► S19 (modal; sea-traffic density dial, §4.6.3) ──Esc──► S4
+S1 ──Settings──► S19 (modal; pre-game density dial, §4.6.3) ──Esc/Close──► S1
+S4 ──Settings──► S19 (modal; density dial + return-to-menu, §4.6.3) ──Esc──► S4
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
 S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
@@ -112,7 +113,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
 | S4 | `O` | open/close the officers panel (S18, §4.6.2) |
-| S19 | `Esc` | close settings, back to S4 (same edge as Close) |
+| S19 | `Esc` | close settings, back to its host (S1 or S4; same edge as Close) |
 | provisioning | `Enter` | sail (disabled with a stated reason when gated, `20-*` §4.11.2) |
 | provisioning | `Esc` | back to S4 without sailing |
 
@@ -335,17 +336,21 @@ as a seventh facility and was removed.
 - Read-only at sea (dismissal is a port action), same rule as S15.
 - No textures; 32px rows (§4.8).
 
-#### 4.6.3 Settings: S2 density row + S19 settings modal (Phase 5)
+#### 4.6.3 Settings: S1 title entry + S19 settings modal (Phase 5, amended)
 
-**S2 density row (new game).** The nationality-select screen gains one
-sea-traffic (航海密度) row above the confirm button: five presets —
-`deserted`, `low`, `normal` (default), `high`, `extreme` — chosen on
-**new-game confirm** and written into `GameState.npc_preset` before
-`new_game` runs its seeded initial fill (`60-*` §4.1.2).
+**S1 Settings entry (amended 2026-10-31).** The title screen gains a
+`Settings` button in its button stack (between `Load game` and the language
+toggle), opening the same **S19** modal over S1. **The sea-traffic (航海密度)
+row is NOT on S2.** The new-game flow never asks for a density preset; the
+run always starts at `npc_config.json`'s `default_preset` (`normal`) and the
+dial is changed in S19 only (before a new game via S1, or mid-run via the S4
+hub). This supersedes the earlier "S2 density row" pin: S2 is the
+nationality card grid again.
 
-**S19 `scenes/ui_shared/settings_panel.tscn`** — a **modal over S4**,
-opened from the S4 hub: a `Settings` button in the footer modal row beside
-`Save · Set Sail · Fleet · Officers` (§4.6.2's entry-point rule).
+**S19 `scenes/ui_shared/settings_panel.tscn`** — a **modal** opened from two
+hosts: the **S1 title screen** (pre-game) and the **S4 port hub** footer
+(mid-run, beside `Save · Set Sail · Fleet · Officers`, §4.6.2's entry-point
+rule). One panel, two mounts.
 
 ```
 +--------------------------------------------------------------+
@@ -359,15 +364,25 @@ opened from the S4 hub: a `Settings` button in the footer modal row beside
 +--------------------------------------------------------------+
 | 语言 Language: 中文 / EN — 顶部栏按钮切换                      |
 +--------------------------------------------------------------+
+| 返回主菜单 Return to main menu                                |
++--------------------------------------------------------------+
 ```
 
 - **Density control applies mid-run (locked):** `GameState.npc_preset`
-  (string, default `"normal"`) is chosen on S2, changeable mid-run in
-  **S19**; **raising** refills via trickle, **lowering never culls** living
-  fleets; `deserted` = zero NPC spawns/contacts.
+  (string, default `"normal"`) is set in S19; **raising** refills via
+  trickle, **lowering never culls** living fleets; `deserted` = zero NPC
+  spawns/contacts. A pre-game S1 open writes the same field before
+  `new_game` (which preserves it as run input).
 - **Locale pointer stays where it is:** the toggle lives on S1/S2 (`L`) and
   the top-bar button (§4.3); S19 only shows the current locale and says so —
   no second toggle is added here.
+- **Return to main menu (amended 2026-10-31):** the **S4-hosted** panel shows
+  a `Return to main menu` action below the locale row. It is **confirm-first**
+  (`confirm_dialog`, destructive-action rule §4.7): on confirm the current run
+  is **saved to the active save slot** (the §4.7 save path) and the app routes
+  to **S1**; a save failure leaves the player in-game with the standard error
+  toast and does not route. It is **not** shown on the S1-hosted panel (there
+  is no run to leave).
 - Esc / `Close` returns to S4 (§4.2 edge); the panel consumes all input
   while open (modal rule, §4.7).
 - Strings: `settings.*` (§4.7.9), zh/en. No textures; 32px rows.
@@ -902,8 +917,10 @@ must match between zh and en (the validator enforces it).
 - [ ] Palette values used are exactly §4.8 constants (scene files reference
       a shared `palette.gd` constants script).
 - [ ] Save slot dialog shows corrupted saves as invalid, never crashes.
-- [ ] Phase 5: the S2 density row feeds `GameState.npc_preset` on
-      new-game confirm; S19 opens from the S4 hub per §4.2, applies the
+- [ ] Phase 5 (amended 2026-10-31): S19 is reachable from **S1** (pre-game
+      density; S2 has no density row) and **S4** (mid-run density + a
+      confirm-first "return to main menu" that saves then routes to S1). S19
+      writes `GameState.npc_preset`; applies the
       preset mid-run (raise refills via trickle, lower never culls,
       `deserted` = zero NPC spawns/contacts), and every string is zh/en.
 - [ ] Phase 5: the market shows stock, trend and the marginal
