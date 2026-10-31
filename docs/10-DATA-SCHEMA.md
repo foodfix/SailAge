@@ -1253,7 +1253,7 @@ file order.
 | dinghai | 定海 | Dinghai (Zhoushan) | — | 30.01 | 122.11 | dried_fish, salt | silk, spices |
 | liujiagang | 刘家港 | Liujiagang (Taicang) | — | 31.50 | 121.55 | cotton_cloth, dried_fish | silk, timber |
 | hirado | 平户 | Hirado | — | 33.25 | 129.56 | copper, ceramics | silk, spices |
-| sakai | 堺 | Sakai | — | 34.51 | 135.42 | cotton_cloth, leather | silk, spices |
+| sakai | 堺 | Sakai | — | 34.50 | 135.42 | cotton_cloth, leather | silk, spices |
 | yamagawa | 山川 | Yamagawa (Satsuma) | — | 31.10 | 130.58 | timber, dried_fish | silk, cotton_cloth |
 | hakata | 博多 | Hakata | — | 33.59 | 130.39 | dried_fish, timber | silk, ceramics |
 | funai | 丰后府内 | Bungo-Funai (Ōita) | — | 33.24 | 131.61 | dried_fish, timber | silk, glassware |
