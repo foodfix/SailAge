@@ -1651,5 +1651,121 @@
   "officers.readonly_sea": {
     "zh": "海上无法解雇官员",
     "en": "Officers cannot be dismissed at sea"
+  },
+  "settings.title": {
+    "zh": "设置",
+    "en": "Settings"
+  },
+  "settings.close": {
+    "zh": "关闭",
+    "en": "Close"
+  },
+  "settings.density": {
+    "zh": "航海密度",
+    "en": "Sea traffic"
+  },
+  "settings.density.current": {
+    "zh": "当前:{preset}",
+    "en": "Current: {preset}"
+  },
+  "settings.density.hint": {
+    "zh": "调高后船队将在数日内逐渐补充;调低不会移除现有船队。",
+    "en": "Raising refills fleets over the next days; lowering never removes existing fleets."
+  },
+  "settings.density.deserted": {
+    "zh": "荒芜",
+    "en": "Deserted"
+  },
+  "settings.density.low": {
+    "zh": "稀少",
+    "en": "Low"
+  },
+  "settings.density.normal": {
+    "zh": "正常",
+    "en": "Normal"
+  },
+  "settings.density.high": {
+    "zh": "繁忙",
+    "en": "High"
+  },
+  "settings.density.extreme": {
+    "zh": "极端",
+    "en": "Extreme"
+  },
+  "settings.locale": {
+    "zh": "语言(顶部栏按钮切换)",
+    "en": "Language (toggle in the top bar)"
+  },
+  "captain.section.market": {
+    "zh": "港内商船船长",
+    "en": "Merchant captains in port"
+  },
+  "captain.section.tavern": {
+    "zh": "港内船长",
+    "en": "Captains in port"
+  },
+  "captain.section.inn": {
+    "zh": "歇脚的船长",
+    "en": "Captains resting"
+  },
+  "captain.section.palace": {
+    "zh": "悬赏猎人",
+    "en": "Bounty hunters"
+  },
+  "captain.gone_ashore": {
+    "zh": "{name} 已上岸。",
+    "en": "{name} has gone ashore."
+  },
+  "captain.role.trader": {
+    "zh": "商船队长",
+    "en": "Trading captain"
+  },
+  "captain.role.coaster": {
+    "zh": "沿岸货船船长",
+    "en": "Coaster captain"
+  },
+  "captain.role.courier": {
+    "zh": "信使船长",
+    "en": "Courier captain"
+  },
+  "captain.role.patrol": {
+    "zh": "护航舰队船长",
+    "en": "Escort patrol captain"
+  },
+  "captain.role.privateer": {
+    "zh": "私掠船长",
+    "en": "Privateer captain"
+  },
+  "captain.role.pirate": {
+    "zh": "海盗船长",
+    "en": "Pirate captain"
+  },
+  "captain.role.hunter": {
+    "zh": "追缉船长",
+    "en": "Bounty hunter"
+  },
+  "captain.role.treasure": {
+    "zh": "宝船船长",
+    "en": "Treasure fleet captain"
+  },
+  "captain.poster.title": {
+    "zh": "通缉令:{name}(等级 {tier})",
+    "en": "Wanted: {name} (tier {tier})"
+  },
+  "captain.poster.hint": {
+    "zh": "最后出没于{port}附近海域",
+    "en": "Last seen near {port}"
+  },
+  "captain.reveal.buy": {
+    "zh": "请一圈酒 — 20 金",
+    "en": "Buy a round — 20g"
+  },
+  "captain.reveal.text": {
+    "zh": "据说{name}此刻就在({x}, {y})一带,靠近{port}。",
+    "en": "{name} is said to be at ({x}, {y}), near {port}, right now."
+  },
+  "captain.reveal.no_gold": {
+    "zh": "金币不足",
+    "en": "Not enough gold"
   }
 }
