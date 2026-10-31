@@ -51,7 +51,8 @@ NPC ships at sea is **out of scope**; captain sightings are **read-only
 intel cards + one paid action** (tavern "buy a round" 20g → a posted
 captain's exact position as rumor text); NPC fleets sail **fixed historical
 routes** (minor spoke → major trunk → minor spoke), authored as historical
-facts, with only hunters/pursuers leaving the lanes.
+facts, with hunters staying lane-locked too — they navigate the junction
+graph to their intel target (`60-*` §4.11.11.1).
 
 ---
 
@@ -252,7 +253,7 @@ Budgets multiply by the preset (`ceil` per role), from `npc_config.json`:
 | `courier` | 2/nation | **12** | capital ↔ own-ports dispatch runs (sightings/rumors only — no quest mechanics this phase) |
 | `privateer` | 2/undirected rivalry pair | **12** | stations on its sponsor's rivals' major lanes (chokepoint-biased); hunts only those rivals' fleets; defeating one: +2 rep with **each** of the two sponsor rivals |
 | `pirate` | `8 + unpatrolled_zones` (computed daily: navy 15-tile zones lacking a patrol) | ≈ **25** | camps tagged chokepoints; prefers nearest trader/patrol within Chebyshev 10 |
-| `hunter` | bounty-only, ≤ 1 per bountied nation | transient ≤ 6 | rep ≤ −50 navy hunter; leaves lanes entirely to pursue the player (the one runtime A* user) |
+| `hunter` | bounty-only, ≤ 1 per bountied nation | transient ≤ 6 | rep ≤ −50 navy hunter; stays lane-locked, navigating the junction graph to its intel target (`60-*` §4.11.11.1; the one runtime A* user) |
 | `treasure` | 1/nation per season | transient ≤ 6 | see Aliveness table |
 | Core cap | sum of the above at normal | **272** | + 6 treasure + ≤ 6 hunters = 284, rounded up with slack ⇒ **global cap 288** (wrecks are stored in `GameState.wrecks`, never counted) |
 
@@ -295,8 +296,9 @@ tiles" check goes through the bucket index** (review gate, tasks J/K).
   Lane-locked: `trader`, `coaster`, `courier`, `treasure`. `patrol` cycles
   its nation's lanes. `pirate`/`privateer` anchor within Chebyshev 3 of
   chokepoint tiles and leave only for prey within Chebyshev 5, returning
-  when prey is beyond 8 or lost (5/8 hysteresis). `hunter` ignores lanes
-  while a bounty is active. Fallback on an impossible route (validator
+  when prey is beyond 8 or lost (5/8 hysteresis). `hunter` stays
+  lane-locked too — it sails the junction graph to its intel target
+  (`60-*` §4.11.11.1). Fallback on an impossible route (validator
   makes this unreachable): one direct A* leg + logged warning.
 
 ### Auto-resolve, wreckage & player combat (`60-*` — task C)

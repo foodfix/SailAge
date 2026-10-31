@@ -120,10 +120,15 @@ Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
   (`20-*` §4.4) computed with the **slowest `ShipType.speed` in the fleet**
   as `base_speed`. (§locked simplification: flagship supplies crew/sim
   fields; cargo ships tow along.)
-- **Speed units.** `ShipType.speed` is **tiles/day on 10 nm tiles**
-  (`20-*` §4.1): the Phase-4 base speeds are `{8, 10, 12}` tiles/day =
-  80–120 nm/day (`10-*` §7.3). The fleet-speed rule (slowest hull) is
-  unchanged.
+- **Speed units.** `ShipType.speed` is **tiles/day on 5 nm tiles**
+  (`20-*` §4.1, Phase-6 grid): the Phase-6 base speeds are `{16, 20, 24}`
+  tiles/day = 80–120 nm/day (`10-*` §7.3; latin 16, sloop 20, caravel 20,
+  galley 24, brigantine 24, nao 16, carrack 16, galleon 20). The
+  fleet-speed rule (slowest hull) is unchanged. The Phase-6 sailing-sim
+  factors — wind strength, heading-relative direction factor, current
+  factor and sail trim (`20-*` §4.4) — act on the composed fleet speed
+  through the same pipeline; the composition rule itself (flagship
+  supplies crew/sim fields, slowest hull as `base_speed`) is untouched.
 - Phase-1 crew simplification (from `20-*` §4.6): all crew lives on the
   flagship; non-flagship hulls require no crew. Consumption pool = flagship
   crew only.
@@ -144,9 +149,12 @@ rule OUT OF SCOPE (phase 2)).
 ## 5. Data Examples
 
 Starter caravel loaded at Lisbon for the Seville hop (Lisbon 38.72/−9.14 →
-Seville 37.39/−6.00: 3.14° of longitude ≈ 19 tiles at 6 tiles/degree, so
-≈ 2 days at speed 8–10; 15 crew → `ceil(15/5) = 3` provisions + 3 water per
-day, `20-*` §4.5). Loadout: 15 days of supplies + 30 cargo:
+Seville 37.39/−6.00: 3.14° of longitude ≈ 38 tiles at 12 tiles/degree, so
+≈ 2 days at speed 16–20 (38 tiles ÷ 16–20 tiles/day); 15 crew →
+`ceil(15/5) = 3` provisions + 3 water per day, `20-*` §4.5). Loadout:
+15 days of supplies + 30 cargo (the per-day consumption arithmetic is
+distance-independent, so the loadout numbers are unchanged by the
+Phase-6 rescale):
 
 ```json
 {
