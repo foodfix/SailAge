@@ -43,6 +43,7 @@ extends RefCounted
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
+const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Pursuit A* (the only runtime pathfinding; docs/60-* §4.11.11.1).
@@ -85,6 +86,9 @@ const ZONE_RADIUS := 15
 ## pirates prefer prey within Chebyshev 10.
 const PREY_RADIUS := 10
 const ESCORT_RADIUS := 10
+## §4.11.11.4: same-lane traders within Chebyshev 3 form a convoy, which
+## auto-resolve treats as escorted (§4.11.11.2).
+const CONVOY_RADIUS := 3
 ## §4.11.11.1: pirate/privateer anchors sit within Chebyshev 3 of chokepoint
 ## tiles; prey is engaged within 5 and released beyond 8 (the 5/8 hysteresis
 ## — the chase itself is task K).
@@ -116,6 +120,19 @@ const NOISE_MIN := 0.8
 const NOISE_MAX := 1.25
 ## Port dwell: 2 days docked at route endpoints (docs/60-* §4.1.1).
 const DWELL_DAYS := 2
+## §4.11.11.2 (task K): a raider (pirate/privateer) beats an unescorted
+## trader on this seeded chance; every other §4.11.11.2 pairing is
+## deterministic (patrol / escorted trader / convoy ⇒ the raider loses).
+const RAIDER_WIN_CHANCE := 0.6
+## §4.11.11.2: a battle's loser despawns into a wreck that despawns after
+## this many days (`despawn_day` is always `spawn_day + 5`).
+const WRECK_DESPAWN_DAYS := 5
+## Roles whose wreck is a warship wreck (§4.11.11.2: salvage gold via
+## `BattleRewards.salvage_for` over the composed hulls); every other role is
+## a merchant wreck carrying its actual cargo.
+const WARSHIP_WRECK_ROLES: Array[String] = [
+	PATROL, PRIVATEER, HUNTER, PIRATE,
+]
 ## `60-*` §4.11.11.2 composition: the role→cannon-budget map that replaces
 ## §4.11.3 step 3's value for its kinds (+ `floor(day / 30)`, applied inside
 ## `AiFleet.cannon_budget`).
@@ -206,6 +223,11 @@ static var _lane_ids_sorted: Array = []
 static var _spoke_paths: Dictionary = {}
 static var _spoke_lane: Dictionary = {}
 static var _tile_lanes: Dictionary = {}
+## Every tile walked by any lane or spoke (task K): the "off the lane network"
+## test for raider anchors — an anchored raider must camp *near* a chokepoint,
+## never ON a path tile, where it would sit in the traffic lane forever
+## (§4.11.11.1: within Chebyshev 3 **of** chokepoint tiles).
+static var _path_tiles: Dictionary = {}
 static var _node_tiles: Array = []
 static var _node_index: Dictionary = {}
 static var _adjacency: Dictionary = {}
@@ -501,6 +523,7 @@ func tick(day: int) -> Array:
 		return []
 	last_tick_day = int(day)
 	moved_ports = []
+	_age_wrecks(int(day))
 	if is_deserted():
 		return []
 	_ensure_rng()
@@ -631,6 +654,7 @@ static func reset_caches() -> void:
 	_spoke_paths = {}
 	_spoke_lane = {}
 	_tile_lanes = {}
+	_path_tiles = {}
 	_node_tiles = []
 	_node_index = {}
 	_adjacency = {}
@@ -799,17 +823,23 @@ func _draw_specialty(nation_id: String, seed_value: int) -> String:
 
 ## A pirate/privateer anchor: a seeded junction tile (a tile shared by ≥ 2
 ## lanes — the network's chokepoints) of the role's lane set, with up to
-## [constant ANCHOR_RADIUS] jitter, passable and unoccupied.
+## [constant ANCHOR_RADIUS] jitter, passable and unoccupied. Task K: the
+## anchor prefers water **off every lane/spoke tile** (§4.11.11.1 anchors sit
+## *within Chebyshev 3 of* chokepoint tiles, never on them — an anchor parked
+## in the traffic lane would sit in the corridor forever); a strait whose
+## every tile is a path tile falls back to an on-path anchor after half the
+## draws (lane traffic hops over it, §4.11.11.1 "skipping occupied tiles").
 func _raider_anchor(role: String, nation_id: String, day: int) -> Vector2i:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(day) * SEED_DAY_MULT + _id_seq * SEED_X_MULT \
 		+ hash(role + "|" + nation_id)
 	var candidates := _anchor_tiles(role, nation_id)
-	for _attempt in 32:
+	for attempt in 32:
 		if candidates.is_empty():
 			break
 		var pick: Vector2i = candidates[rng.randi_range(0, candidates.size() - 1)]
-		var cell := _free_tile_near(pick, rng, ANCHOR_RADIUS)
+		var off_lane := attempt < 16
+		var cell := _free_tile_near(pick, rng, ANCHOR_RADIUS, off_lane)
 		if cell != NO_CELL:
 			return cell
 	return NO_CELL
@@ -871,9 +901,10 @@ func _hunter_anchor(nation_id: String, day: int) -> Vector2i:
 
 
 ## A passable, unoccupied tile within `radius` of `center` (wrap-aware),
-## drawn from `rng` over the ring offsets in deterministic order.
+## drawn from `rng` over the ring offsets in deterministic order. With
+## `avoid_paths` the draw skips lane/spoke tiles (the raider-anchor rule).
 func _free_tile_near(center: Vector2i, rng: RandomNumberGenerator,
-		radius: int) -> Vector2i:
+		radius: int, avoid_paths: bool = false) -> Vector2i:
 	var offsets: Array = []
 	for dy in range(-radius, radius + 1):
 		for dx in range(-radius, radius + 1):
@@ -892,9 +923,17 @@ func _free_tile_near(center: Vector2i, rng: RandomNumberGenerator,
 		var cell := Vector2i(posmod(center.x + step.x, _width), y)
 		if not _passable(cell):
 			continue
+		if avoid_paths and _is_path_tile(cell):
+			continue
 		if not _is_occupied(cell, ""):
 			return cell
 	return NO_CELL
+
+
+## True when `cell` is walked by any lane or spoke (the lane-network raster;
+## exact-tile lookup, not a radius query).
+static func _is_path_tile(cell: Vector2i) -> bool:
+	return _path_tiles.has(_cell_key(cell))
 
 
 ## The journey for a lane-locked role at spawn.
@@ -1094,6 +1133,10 @@ func _refresh_net() -> void:
 			var lanes: Array = _tile_lanes[key]
 			if not lanes.has(lane_id):
 				lanes.append(lane_id)
+			_path_tiles[key] = true
+	for port_id in _spoke_paths:
+		for tile in _spoke_paths[port_id]:
+			_path_tiles[_cell_key(tile)] = true
 	# The built junction graph, re-joined to per-edge tile segments.
 	_build_graph()
 
@@ -1442,15 +1485,297 @@ func _leg_path(leg: Dictionary) -> Array:
 	return _walked_path(path, a, b, bool(leg.get("reverse", false)))
 
 
+# --- Raiders: chokepoint camping & auto-resolve (§4.11.11.1/.2 — task K) -----
+
+## One pirate/privateer day (docs/60-* §4.11.11.1). The raider either camps
+## its chokepoint anchor (within [constant ANCHOR_RADIUS] of a chokepoint
+## tile), chases prey under the **5/8 hysteresis** — the chase opens for the
+## nearest prey within [constant CHASE_ON_RADIUS] and is lost once the prey is
+## beyond [constant CHASE_OFF_RADIUS] or gone — or walks back to the anchor
+## after a lost chase. An engagement (Chebyshev [constant CONTACT_DISTANCE])
+## resolves abstractly via [method resolve_engagement]; the loser is queued
+## into `doomed`/`remove_ids` and its wreck into `wrecks` (applied by the
+## caller after the pass — never mid-iteration).
+func _raider_tick(fleet: Dictionary, day: int, doomed: Dictionary,
+		remove_ids: Array, wrecks: Array) -> void:
+	var cell := position_of(fleet)
+	var target := _find(str(fleet.get("target_fleet_id", "")))
+	var chasing := not target.is_empty()
+	if chasing and (doomed.has(str(target.get("id", ""))) \
+			or chebyshev(cell, position_of(target)) > CHASE_OFF_RADIUS):
+		# §4.11.11.1: the prey is beyond 8 (or lost) — drop the chase.
+		target = {}
+		chasing = false
+		fleet["target_fleet_id"] = ""
+	if not chasing:
+		# The chase opens only inside 5; the *pick* among the candidates is
+		# the nearest of the §4.1.1 prey query (trader/patrol within 10,
+		# coasters ignored, a privateer restricted to its sponsor's rivals).
+		target = _nearest_prey_within(fleet, CHASE_ON_RADIUS, doomed)
+		chasing = not target.is_empty()
+		if chasing:
+			fleet["target_fleet_id"] = str(target.get("id", ""))
+	if not chasing:
+		# Anchored (within 3 of the anchor and off the lane raster) or still
+		# walking home. Parking ON a path tile is forbidden: the anchor rule
+		# keeps the corridor itself clear (§4.11.11.1).
+		var anchor := _cell_field(fleet.get("anchor_cell", null))
+		if anchor != NO_CELL and (chebyshev(cell, anchor) > ANCHOR_RADIUS \
+				or _is_path_tile(cell)):
+			_step_toward(fleet, anchor)
+		return
+	var prey_cell := position_of(target)
+	if chebyshev(cell, prey_cell) <= CONTACT_DISTANCE:
+		_engage(fleet, target, day, doomed, remove_ids, wrecks)
+		return
+	_step_toward(fleet, prey_cell)
+
+
+## The nearest prey candidate within `radius` of the raider (ties by fleet id
+## ascending — deterministic). One bucket-index query via
+## [method prey_candidates]; `doomed` entries are skipped (they already lost
+## an engagement this tick).
+func _nearest_prey_within(fleet: Dictionary, radius: int,
+		doomed: Dictionary) -> Dictionary:
+	var best: Dictionary = {}
+	var best_distance := -1
+	for candidate in prey_candidates(fleet):
+		if doomed.has(str(candidate.get("id", ""))):
+			continue
+		var distance := chebyshev(position_of(fleet), position_of(candidate))
+		if distance > radius:
+			continue
+		var id := str(candidate.get("id", ""))
+		if best.is_empty() or distance < best_distance \
+				or (distance == best_distance and id < str(best.get("id", ""))):
+			best = candidate
+			best_distance = distance
+	return best
+
+
+## One wrap-aware greedy step (1 tile/day like every fleet, §4.11.11.1)
+## reducing the Chebyshev distance to `target`, larger axis first, never onto
+## land/reef/ice or an occupied tile. Lane traffic never pathfinds and the
+## raider chase is no exception (the §4.11.11.5 zero-A* gate: only the
+## hunter's player-chase may A*).
+func _step_toward(fleet: Dictionary, target: Vector2i) -> void:
+	var cell := position_of(fleet)
+	var dx := posmod(target.x - cell.x, _width)
+	if dx > _width / 2:
+		dx -= _width
+	var dy := target.y - cell.y
+	var sx := 1 if dx > 0 else -1
+	var sy := 1 if dy > 0 else -1
+	# Larger axis first (ties: x before y); the diagonal is the fallback.
+	var offsets: Array = []
+	if absi(dx) >= absi(dy):
+		if dx != 0:
+			offsets.append(Vector2i(sx, 0))
+		if dy != 0:
+			offsets.append(Vector2i(0, sy))
+	else:
+		if dy != 0:
+			offsets.append(Vector2i(0, sy))
+		if dx != 0:
+			offsets.append(Vector2i(sx, 0))
+	if dx != 0 and dy != 0:
+		offsets.append(Vector2i(sx, sy))
+	for offset: Vector2i in offsets:
+		var y := cell.y + offset.y
+		if y < 0 or y >= _height:
+			continue
+		var next := Vector2i(posmod(cell.x + offset.x, _width), y)
+		if _can_enter(fleet, next):
+			_commit_cell(fleet, next)
+			return
+	# Fully blocked: hold (deterministic retry next day).
+
+
+## The §4.11.11.2 auto-resolve (locked). Same-role/navy pairings never reach
+## here — the prey query only ever offers `trader`/`patrol` — so the table's
+## three deterministic rows plus the seeded 60% roll are the whole rule.
+## Returns true when the raider wins.
+func resolve_engagement(raider: Dictionary, prey: Dictionary, day: int) -> bool:
+	if str(prey.get("role", "")) == PATROL:
+		return false  # raider vs patrol ⇒ raider loses
+	if is_escorted(prey):
+		return false  # escorted trader ⇒ raider loses
+	if is_convoyed(prey):
+		return false  # convoy ⇒ escorted (§4.11.11.4)
+	var rng := _fleet_rng(raider, "resolve|%d|%s" % [int(day),
+		str(prey.get("id", ""))])
+	return rng.randf() < RAIDER_WIN_CHANCE
+
+
+## Applies one engagement: the loser despawns into a wreck at its site
+## (§4.11.11.2) — queued, like the removal, so the pass in flight stays valid.
+func _engage(raider: Dictionary, prey: Dictionary, day: int,
+		doomed: Dictionary, remove_ids: Array, wrecks: Array) -> void:
+	var raider_wins := resolve_engagement(raider, prey, day)
+	var loser := prey if raider_wins else raider
+	var loser_id := str(loser.get("id", ""))
+	doomed[loser_id] = true
+	remove_ids.append(loser_id)
+	wrecks.append(_make_wreck(loser, day))
+	if raider_wins:
+		raider["target_fleet_id"] = ""  # prey taken: back to camping
+
+
+## The §4.11.11/`10-*` §4.15 wreck at the loser's site: `{id, cell, cargo,
+## salvage_gold, spawn_day}`. A merchant wreck carries the fleet's actual
+## cargo; a warship wreck (patrol/privateer/hunter/pirate — a pirate is a
+## warship of its composed hulls) carries salvage gold from the **single**
+## salvage implementation, `BattleRewards.salvage_for`.
+func _make_wreck(fleet: Dictionary, day: int) -> Dictionary:
+	var cell := position_of(fleet)
+	var wreck := {
+		"id": _wreck_id(int(day), cell),
+		"cell": {"x": cell.x, "y": cell.y},
+		"cargo": {},
+		"salvage_gold": 0,
+		"spawn_day": int(day),
+	}
+	if str(fleet.get("role", "")) in WARSHIP_WRECK_ROLES:
+		var hull_ids: Array = []
+		for ship in compose_fleet_ships(fleet, int(day)):
+			hull_ids.append(str((ship as Dictionary).get("ship_type_id", "")))
+		wreck["salvage_gold"] = BattleRewardsLib.salvage_for(hull_ids)
+	else:
+		var cargo: Dictionary = fleet.get("cargo", {}) \
+			if fleet.get("cargo", {}) is Dictionary else {}
+		wreck["cargo"] = cargo.duplicate(true)
+	return wreck
+
+
+## The §4.11.11 `wk_<day>_<x>_<y>` id, uniqued with a `_n` suffix on a cell
+## that already wrecked this run (deterministic).
+func _wreck_id(day: int, cell: Vector2i) -> String:
+	var id := "wk_%d_%04d_%04d" % [day, posmod(cell.x, _width), cell.y]
+	var seq := 2
+	var taken: Dictionary = {}
+	for wreck in GameState.wrecks:
+		if wreck is Dictionary:
+			taken[str((wreck as Dictionary).get("id", ""))] = true
+	while taken.has(id):
+		id = "wk_%d_%04d_%04d_%d" % [day, posmod(cell.x, _width), cell.y, seq]
+		seq += 1
+	return id
+
+
+## Drops wrecks whose 5 days are up (§4.11.11.2: despawn after 5 days — the
+## wreck of day D is collectable on D…D+4 and gone from D+5's tick).
+func _age_wrecks(day: int) -> void:
+	if GameState.wrecks.is_empty():
+		return
+	for index in range(GameState.wrecks.size() - 1, -1, -1):
+		var wreck = GameState.wrecks[index]
+		if wreck is Dictionary \
+				and int((wreck as Dictionary).get("spawn_day", 0)) \
+				+ WRECK_DESPAWN_DAYS <= int(day):
+			GameState.wrecks.remove_at(index)
+
+
+## The §4.11.11.2 wreck view — the save payload (`GameState.wrecks`, never
+## counted against the §4.1.1 cap).
+func wrecks() -> Array:
+	return GameState.wrecks.duplicate()
+
+
+## The wreck at exactly `cell` ({} when none). Wrecks are not fleets and live
+## outside the cell-bucket index; this is an exact-cell read of a small list,
+## not a radius query.
+func wreck_at(cell: Vector2i) -> Dictionary:
+	for wreck in GameState.wrecks:
+		if not (wreck is Dictionary):
+			continue
+		if position_of(wreck) == cell:
+			return wreck
+	return {}
+
+
+## Player collect (§4.11.11.2): entering the wreck tile collects it — cargo
+## up to `free_capacity` (goods id-ascending, deterministic) plus the salvage
+## gold in full. The wreck is consumed either way; cargo that no longer fit
+## is reported as `leftover` (the hold guard, not a partial wreck).
+## Returns `{id, cargo, gold, leftover}` or {} for an unknown id.
+func collect_wreck(id: String, free_capacity: int) -> Dictionary:
+	for index in range(GameState.wrecks.size()):
+		var wreck = GameState.wrecks[index]
+		if not (wreck is Dictionary) or str((wreck as Dictionary).get("id", "")) != id:
+			continue
+		var cargo: Dictionary = (wreck as Dictionary).get("cargo", {}) \
+			if (wreck as Dictionary).get("cargo", {}) is Dictionary else {}
+		var room := maxi(int(free_capacity), 0)
+		var taken: Dictionary = {}
+		var leftover := 0
+		var good_ids: Array = cargo.keys()
+		good_ids.sort()
+		for good_id in good_ids:
+			var held := maxi(int(cargo[good_id]), 0)
+			var qty := mini(held, room)
+			if qty > 0:
+				taken[str(good_id)] = qty
+				room -= qty
+			leftover += held - qty
+		var result := {
+			"id": id,
+			"cargo": taken,
+			"gold": maxi(int((wreck as Dictionary).get("salvage_gold", 0)), 0),
+			"leftover": leftover,
+		}
+		GameState.wrecks.remove_at(index)
+		return result
+	return {}
+
+
+## §4.11.11.4 convoys: same-lane traders within Chebyshev 3 of `fleet`
+## (including itself); the member list is what task L's render grouping
+## reuses. One bucket-index query.
+func convoy_members(fleet: Dictionary) -> Array:
+	var out: Array = []
+	if str(fleet.get("role", "")) != TRADER:
+		return out
+	for other in _within(position_of(fleet), CONVOY_RADIUS):
+		if str(other.get("role", "")) != TRADER:
+			continue
+		if not _share_lane(fleet, other):
+			continue
+		out.append(other)
+	return out
+
+
+## §4.11.11.2: a trader in a convoy (≥ 2 same-lane traders within
+## Chebyshev 3, §4.11.11.4) counts as escorted.
+func is_convoyed(fleet: Dictionary) -> bool:
+	return convoy_members(fleet).size() >= 2
+
+
+## True when two fleets' saved routes share at least one lane id.
+static func _share_lane(a: Dictionary, b: Dictionary) -> bool:
+	var lanes_a: Array = (a.get("route", {}) as Dictionary).get("lanes", [])
+	var lanes_b: Array = (b.get("route", {}) as Dictionary).get("lanes", [])
+	for lane_id in lanes_a:
+		if lanes_b.has(lane_id):
+			return true
+	return false
+
+
 # --- The daily step (docs/60-* §4.11.11.1) ----------------------------------
 
 func _step_fleets(day: int) -> void:
 	var remove_ids: Array = []
+	# Task K: auto-resolve losses (and the hunter bounty clears above) are
+	# deferred to the end of the pass — a fleet queued mid-loop must neither
+	# step again this tick nor be selectable as prey by a later raider.
+	var doomed: Dictionary = {}
+	var wrecks: Array = []
 	var pursuit_ms := 0.0
 	for fleet in GameState.npc_fleets:
 		if not (fleet is Dictionary):
 			continue
 		var id := str(fleet.get("id", ""))
+		if doomed.has(id):
+			continue  # already lost an auto-resolve this tick
 		# Inclusive: a battle on day D stores D+1, so D+1 is still idle.
 		if int(fleet.get("cooldown_until_day", 0)) >= day:
 			continue
@@ -1465,6 +1790,11 @@ func _step_fleets(day: int) -> void:
 			# inside the 15/20 hysteresis.
 			pursuit_ms += _hunter_tick(fleet, day, pursuit_ms)
 			continue
+		if role == PIRATE or role == PRIVATEER:
+			# §4.11.11.1/§4.11.11.2 (task K): chokepoint camping with the 5/8
+			# hysteresis and the abstract NPC-vs-NPC auto-resolve.
+			_raider_tick(fleet, day, doomed, remove_ids, wrecks)
+			continue
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 		if legs.is_empty():
 			if int(fleet.get("dwell_until_day", 0)) <= day:
@@ -1473,6 +1803,8 @@ func _step_fleets(day: int) -> void:
 		_advance(fleet, day)
 	for id in remove_ids:
 		remove(id)
+	for wreck in wrecks:
+		GameState.wrecks.append(wreck)
 
 
 ## One hunter day under the intel rule (docs/60-* §4.11.11.1). Returns the
@@ -1669,7 +2001,22 @@ func _advance(fleet: Dictionary, day: int) -> void:
 			var head_tile: Vector2i = head_path[head_b if bool(head.get("reverse", false)) \
 				else head_a]
 			if not _can_enter(fleet, head_tile):
-				return  # hold at the seam; the next day retries
+				# §4.11.11.1 "skipping occupied tiles": board the next leg
+				# one tile PAST the blocked head (never stepping onto it).
+				# Without the hop, two fleets meeting head-on in a
+				# one-tile-wide spoke deadlock each other forever — the
+				# latent flaw the task-K raider movement exposed (noted in
+				# the task K report).
+				if head_b - head_a > 0:
+					var second: Vector2i = head_path[
+						(head_b - 1) if bool(head.get("reverse", false))
+						else (head_a + 1)]
+					if _can_enter(fleet, second):
+						legs.pop_front()
+						route["leg"] = int(route.get("leg", 0)) + 1
+						route["tile_index"] = 1
+						_commit_cell(fleet, second)
+				return  # off the head leg / also blocked: hold; retry next day
 			legs.pop_front()
 			route["leg"] = int(route.get("leg", 0)) + 1
 			route["tile_index"] = 0
@@ -1684,7 +2031,16 @@ func _advance(fleet: Dictionary, day: int) -> void:
 	var dir := -1 if reverse else 1
 	var target: Vector2i = path[artifact + dir]
 	if not _can_enter(fleet, target):
-		return  # occupied/blocked: hold (deterministic retry next day)
+		# §4.11.11.1 "skipping occupied tiles": hop over the occupied tile
+		# to the following path tile (never stepping ON it); off the leg or
+		# also blocked → hold (deterministic retry next day).
+		if index + 2 < walked_len:
+			var skip_artifact := (b - index - 2) if reverse else (a + index + 2)
+			var skipped: Vector2i = path[skip_artifact]
+			if _can_enter(fleet, skipped):
+				route["tile_index"] = index + 2
+				_commit_cell(fleet, skipped)
+		return
 	route["tile_index"] = index + 1
 	_commit_cell(fleet, target)
 
@@ -1725,7 +2081,8 @@ func _depart(fleet: Dictionary, day: int) -> void:
 		PATROL:
 			_depart_patrol(fleet, day)
 		PIRATE, PRIVATEER, HUNTER, TREASURE:
-			pass  # anchored / scheduled elsewhere (K / L)
+			pass  # raiders live in [_raider_tick] (task K); hunters in
+			      # [_hunter_tick]; the treasure scheduler is task L
 
 
 ## Sells every cargo good whose live factor is above 1.0 at `port_id` —
@@ -2211,6 +2568,20 @@ static func position_of(fleet: Dictionary) -> Vector2i:
 ## Writes the fleet cell back in the §4.11.11 `{"x","y"}` save shape.
 static func set_position(fleet: Dictionary, cell: Vector2i) -> void:
 	fleet["cell"] = {"x": cell.x, "y": cell.y}
+
+
+## Reads a bare cell field (`{"x","y"}` dict, Vector2i/2) — the shape of
+## `anchor_cell` and other saved cells that are NOT fleet dicts
+## ([method position_of] reads a fleet's `cell` key instead).
+static func _cell_field(value) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Vector2:
+		return Vector2i(value)
+	if value is Dictionary:
+		return Vector2i(int((value as Dictionary).get("x", -1)),
+			int((value as Dictionary).get("y", -1)))
+	return NO_CELL
 
 
 ## Marker colour (docs/80-* §4.5.2): pirate = BAD red, every national fleet =

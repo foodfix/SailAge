@@ -26,6 +26,9 @@ const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## Phase 5 task J: the living NPC fleet ecology (docs/60-* §4.1, §4.11.11).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
+## Phase 5 task K: wreck collect fills the pooled hold flagship-first
+## (docs/40-* §4.2 distribution rule — the same helper the battle loot uses).
+const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
@@ -112,6 +115,13 @@ var _battle_encounter: Dictionary = {}
 var _marker_root: Node2D = null
 ## The attack confirmation currently on screen (null when none).
 var _attack_confirm: Control = null
+## Task K: wreck id → the × glyph node drawn for it (docs/80-* §4.5.2: an
+## `ACCENT` × glyph, 2×2 tiles, at the wreck site; no battle opens on it).
+var _wreck_nodes: Dictionary = {}
+## Task K: true while the battle in progress was opened by the player's own
+## right-click attack (the §4.11.11.2 loot row applies to those only — a
+## hostile contact keeps the §4.11.10 aftermath untouched).
+var _battle_player_initiated: bool = false
 
 # --- Task H: hold-to-repeat + click-to-sail (docs/20-* §4.2) ---------------
 
@@ -612,6 +622,10 @@ func _try_step(target: Vector2i) -> bool:
 	_update_camera()
 	_reveal()
 	_sync_hud()
+
+	# Task K (docs/60-* §4.11.11.2): entering the wreck tile collects it —
+	# cargo up to free hold capacity plus the salvage gold, no battle.
+	_collect_wrecks_at(landed)
 
 	# docs/60-* §4.11.11.2: contact is measured after the player move — a step
 	# onto a tile beside a hostile fleet opens the battle now. S10 owns the
@@ -1123,6 +1137,9 @@ func _open_encounter(encounter: Dictionary) -> void:
 			and not _battle_encounter.is_empty():
 		return
 	_battle_encounter = encounter.duplicate(true)
+	# Only the player's own right-click attack (see [_attack]) carries the
+	# §4.11.11.2 loot row; every other opener — contact, chain — clears it.
+	_battle_player_initiated = false
 	_charge_piracy(encounter)
 	_store_pending_encounter(encounter)
 	if EventBus.has_signal("battle_started"):
@@ -1220,6 +1237,95 @@ func _sync_marker_nodes() -> void:
 		var dead: ColorRect = _marker_nodes[id]
 		_marker_nodes.erase(id)
 		dead.queue_free()
+	_sync_wreck_nodes()
+
+
+## Redraws the wreck × glyphs (docs/80-* §4.5.2, task K): an `ACCENT` × in a
+## 2×2-tile box centred on the wreck tile. Placeholder palette art only; the
+## data comes from `NpcFleets.wrecks()` and nothing re-simulates here.
+func _sync_wreck_nodes() -> void:
+	if _loader == null or not _is_loaded():
+		return
+	if _marker_root == null:
+		return  # no fleet pass ran yet: nothing to hang the glyphs under
+	var live: Dictionary = {}
+	var entries: Array = _fleets.wrecks() if _fleets != null else []
+	for wreck in entries:
+		if not (wreck is Dictionary):
+			continue
+		var id := str((wreck as Dictionary).get("id", ""))
+		if id.is_empty():
+			continue
+		live[id] = true
+		var glyph: Label = _wreck_nodes.get(id, null)
+		if glyph == null:
+			glyph = Label.new()
+			glyph.name = "Wreck_%s" % id
+			glyph.text = "×"
+			glyph.add_theme_color_override("font_color", PaletteLib.ACCENT)
+			glyph.add_theme_font_size_override("font_size",
+				int(float(_cell_pixels) * 1.2))
+			glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			glyph.z_index = 8
+			_marker_root.add_child(glyph)
+			_wreck_nodes[id] = glyph
+		_place_wreck_glyph(glyph, NpcFleetsLib.position_of(wreck))
+	for id in _wreck_nodes.keys():
+		if live.has(id):
+			continue
+		var gone: Label = _wreck_nodes[id]
+		_wreck_nodes.erase(id)
+		gone.queue_free()
+
+
+## Centers a 2×2-tile × glyph box on the wreck tile.
+func _place_wreck_glyph(glyph: Label, cell: Vector2i) -> void:
+	var box := Vector2(float(_cell_pixels) * 2.0, float(_cell_pixels) * 2.0)
+	glyph.size = box
+	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	glyph.position = Vector2(cell) * float(_cell_pixels) \
+		+ (Vector2(float(_cell_pixels), float(_cell_pixels)) - box) * 0.5
+
+
+## Collects every wreck on `cell` (docs/60-* §4.11.11.2, task K): the cargo
+## up to the pooled free hold — `Fleet.add_goods` distributes flagship-first,
+## the same §4.2 rule the battle loot uses — plus the salvage gold in full
+## (already `BattleRewards.salvage_for` money at wreck-spawn time). Overflow
+## units are lost with the wreck (the hold guard, not a partial wreck).
+func _collect_wrecks_at(cell: Vector2i) -> void:
+	if _fleets == null or not _has_game():
+		return
+	var collected := false
+	while true:
+		var wreck: Dictionary = _fleets.wreck_at(cell)
+		if wreck.is_empty():
+			break
+		var result: Dictionary = _fleets.collect_wreck(
+			str(wreck.get("id", "")), FleetLib.fleet_free())
+		if result.is_empty():
+			break
+		var gold := int(result.get("gold", 0))
+		if gold > 0:
+			GameState.add_gold(gold)
+		var moved := 0
+		var cargo: Dictionary = result.get("cargo", {})
+		for good_id in cargo:
+			moved += FleetLib.add_goods(str(good_id), int(cargo[good_id]))
+		if gold > 0 or moved > 0:
+			collected = true
+			# The pure module never emits (docs/90-* §5.1); the host does —
+			# the same convention as the battle-aftermath fleet changes.
+			EventBus.fleet_changed.emit()
+		# No new player-facing copy without a ui_strings key (task rule): the
+		# console line mirrors the `world.sail.arrived` convention; the
+		# needed key (`world.wreck.collected`, zh 捞起沉船残骸 / en Wreck
+		# salvage collected) is listed in the task K report.
+		print("WorldMap: wreck %s collected at %s (%d cargo units, %dg)"
+			% [str(result.get("id", "")), str(cell), moved, gold])
+	if collected:
+		_sync_hud()
+		_sync_marker_nodes()
 
 
 ## Centers a marker square on its tile.
@@ -1305,10 +1411,16 @@ func _close_attack_confirm() -> void:
 ## [_open_encounter] (once per battle at start, §4.11.11.2), so a player
 ## attack, a hunter contact and a chained fleet all go through one place and
 ## can never be charged twice. Pirates cost no reputation.
+## Task K: a player-opened battle also marks [_battle_player_initiated] — the
+## §4.11.11.2 loot row (actual cargo + `min(1000, 100 + 10 × day)`g) applies
+## to a victory over a fleet the player attacked, never to a hostile contact.
 func _attack(fleet: Dictionary) -> void:
 	if fleet.is_empty():
 		return
 	_open_encounter(_encounter_for(fleet))
+	# True only when the attack actually opened this battle (the same-id
+	# guard above leaves a contact battle untouched).
+	_battle_player_initiated = battle_in_progress()
 
 
 ## `battle_finished` handler (§4.11.11.2 + §4.10 retreat): remove the fleet,
@@ -1326,6 +1438,12 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 	_battle_encounter = {}
 	var day := int(GameState.day)
 	var retreated := str(outcome.get("result", "")) == NpcFleetsLib.RETREAT
+	var victory := str(outcome.get("result", "")) == "victory"
+	# Task K (§4.11.11.2): the player-attack loot row and the privateer
+	# sponsor-rival bonus apply to a *resolved victory* only — the §4.11.10
+	# aftermath (salvage/XP/rep) was already applied by S10's §4.12.4 steps.
+	var initiated := _battle_player_initiated
+	_battle_player_initiated = false
 	if _fleets != null:
 		if retreated:
 			# The descriptor is a copy: the cooldown must land on the stored
@@ -1335,6 +1453,11 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 			)
 		else:
 			_fleets.remove(str(fleet.get("id", "")))
+	if victory:
+		if initiated:
+			_apply_attack_loot(fleet, day)
+		if str(fleet.get("role", "")) == NpcFleetsLib.PRIVATEER:
+			_apply_privateer_rival_bonus(fleet)
 	# §4.10: the fleet is placed on the contact tile, which is where it
 	# already stood when contact opened — re-assert it so a S10 that moved
 	# the state cannot leave the fleet behind off-tile.
@@ -1356,6 +1479,41 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 	# keep walking. Disabled routing never reaches here mid-route, and a route
 	# whose target became unreachable is simply dropped.
 	_resume_sail_order()
+
+
+## The §4.11.11.2 player-attack loot row (task K): actual cargo +
+## `min(1000, 100 + 10 × day)`g. The cargo is the fleet's own saved hold —
+## not the §4.11.3 per-ship rolls — distributed flagship-first through the
+## same pooled-hold rule the battle loot uses (`Fleet.add_goods`); overflow
+## units are lost.
+func _apply_attack_loot(fleet: Dictionary, day: int) -> void:
+	var gold := mini(1000, 100 + 10 * maxi(day, 0))
+	if gold > 0:
+		GameState.add_gold(gold)
+	var cargo = fleet.get("cargo", {})
+	var moved := 0
+	if cargo is Dictionary:
+		for good_id in (cargo as Dictionary):
+			moved += FleetLib.add_goods(str(good_id),
+				maxi(int((cargo as Dictionary)[good_id]), 0))
+	if gold > 0 or moved > 0:
+		EventBus.fleet_changed.emit()
+
+
+## §4.1.1/`70-*` §4.5 (task K): defeating a privateer pays `+2` reputation
+## with **each of the two sponsor rivals** — the nations whose shipping it
+## was preying on — on top of the normal battle rep rules. The +2 is
+## `Bounty.RIVAL_REPUTATION` (the pinned funnel delta), applied through the
+## clamped `Character.add_reputation`.
+func _apply_privateer_rival_bonus(fleet: Dictionary) -> void:
+	var sponsor := str(fleet.get("nation_id", ""))
+	if sponsor.is_empty():
+		return
+	for rival in BountyLib.rivals(sponsor):
+		var rival_id := str(rival)
+		if rival_id.is_empty():
+			continue
+		CharacterLib.add_reputation(rival_id, BountyLib.RIVAL_REPUTATION)
 
 
 ## Recomputes a battle-suspended route toward its original target and resumes
