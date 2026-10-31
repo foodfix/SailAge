@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "named_pirates": [
+    {
+      "id": "pirate_redbeard_khair",
+      "name": {"zh": "「红胡子」海雷丁", "en": "Khair ad-Din Redbeard"},
+      "tier": 3
+    },
+    {
+      "id": "pirate_murad_red_sail",
+      "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
+      "tier": 2
+    },
+    {
+      "id": "pirate_limahong_thousand_sails",
+      "name": {"zh": "「千帆」林凤", "en": "Limahong of the Thousand Sails"},
+      "tier": 2
+    },
+    {
+      "id": "pirate_edward_bloodhand",
+      "name": {"zh": "「血手」爱德华", "en": "Edward the Bloodhand"},
+      "tier": 1
+    }
+  ]
+}

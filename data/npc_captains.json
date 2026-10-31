@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "pools": [
+    {
+      "nation_id": "portugal",
+      "names": [
+        {"zh": "若昂·阿尔梅达", "en": "João Almeida"},
+        {"zh": "佩德罗·努诺", "en": "Pedro Nuno"},
+        {"zh": "迪奥戈·苏亚雷斯", "en": "Diogo Soares"},
+        {"zh": "费尔南·科埃略", "en": "Fernão Coelho"},
+        {"zh": "阿方索·皮雷斯", "en": "Afonso Pires"},
+        {"zh": "瓦斯科·马丁斯", "en": "Vasco Martins"},
+        {"zh": "努诺·阿尔瓦雷斯", "en": "Nuno Álvares"},
+        {"zh": "吉尔·埃阿尼斯", "en": "Gil Eanes"},
+        {"zh": "杜阿尔特·帕切科", "en": "Duarte Pacheco"},
+        {"zh": "特里斯唐·达库尼亚", "en": "Tristão da Cunha"}
+      ]
+    },
+    {
+      "nation_id": "spain",
+      "names": [
+        {"zh": "阿隆索·门多萨", "en": "Alonso Mendoza"},
+        {"zh": "阿尔瓦罗·努涅斯", "en": "Álvaro Núñez"},
+        {"zh": "罗德里戈·德莱昂", "en": "Rodrigo de León"},
+        {"zh": "埃尔南多·格瓦拉", "en": "Hernando Guevara"},
+        {"zh": "克里斯托瓦尔·巴斯克斯", "en": "Cristóbal Vázquez"},
+        {"zh": "胡安·庞塞", "en": "Juan Ponce"},
+        {"zh": "佩德罗·德巴尔德斯", "en": "Pedro de Valdés"},
+        {"zh": "马丁·恩里克斯", "en": "Martín Enríquez"},
+        {"zh": "加斯帕尔·德埃斯皮诺萨", "en": "Gaspar de Espinosa"},
+        {"zh": "迭戈·德阿尔马格罗", "en": "Diego de Almagro"}
+      ]
+    },
+    {
+      "nation_id": "england",
+      "names": [
+        {"zh": "托马斯·格雷", "en": "Thomas Grey"},
+        {"zh": "威廉·帕克", "en": "William Parker"},
+        {"zh": "亨利·斯特兰奇维斯", "en": "Henry Strangeways"},
+        {"zh": "理查德·坦普尔", "en": "Richard Temple"},
+        {"zh": "爱德华·霍恩", "en": "Edward Horne"},
+        {"zh": "约翰·瓦茨", "en": "John Watts"},
+        {"zh": "乔治·比斯顿", "en": "George Beeston"},
+        {"zh": "弗朗西斯·诺利斯", "en": "Francis Knollys"},
+        {"zh": "马丁·弗罗比舍", "en": "Martin Frobisher"},
+        {"zh": "汉弗莱·吉尔伯特", "en": "Humphrey Gilbert"}
+      ]
+    },
+    {
+      "nation_id": "holland",
+      "names": [
+        {"zh": "扬·科内利松", "en": "Jan Corneliszoon"},
+        {"zh": "威廉·范德法尔克", "en": "Willem van der Valk"},
+        {"zh": "彼得·海因", "en": "Pieter Heyn"},
+        {"zh": "科内利斯·德维特", "en": "Cornelis de Witt"},
+        {"zh": "亨德里克·布劳威尔", "en": "Hendrik Brouwer"},
+        {"zh": "雅各布·范赫姆斯克尔克", "en": "Jacob van Heemskerck"},
+        {"zh": "迪尔克·哈托赫", "en": "Dirck Hartoch"},
+        {"zh": "马滕·特龙普", "en": "Maarten Tromp"},
+        {"zh": "扬·范里贝克", "en": "Jan van Riebeeck"},
+        {"zh": "阿德里安·布洛克", "en": "Adriaen Block"}
+      ]
+    },
+    {
+      "nation_id": "ottoman",
+      "names": [
+        {"zh": "凯末尔·雷斯", "en": "Kemal Reis"},
+        {"zh": "皮里·雷斯", "en": "Piri Reis"},
+        {"zh": "塞伊迪·阿里·雷斯", "en": "Seydi Ali Reis"},
+        {"zh": "穆拉特·阿迦", "en": "Murat Agha"},
+        {"zh": "哈桑·雷斯", "en": "Hasan Reis"},
+        {"zh": "优素福·帕夏", "en": "Yusuf Pasha"},
+        {"zh": "奥尔乌奇·雷斯", "en": "Oruç Reis"},
+        {"zh": "萨利赫·雷斯", "en": "Salih Reis"},
+        {"zh": "穆斯塔法·阿迦", "en": "Mustafa Agha"},
+        {"zh": "库尔特奥卢·雷斯", "en": "Kurtoğlu Reis"}
+      ]
+    },
+    {
+      "nation_id": "italy",
+      "names": [
+        {"zh": "安德烈亚·多里亚", "en": "Andrea Doria"},
+        {"zh": "乔瓦尼·多里亚", "en": "Giovanni Doria"},
+        {"zh": "马尔科·奎里尼", "en": "Marco Quirini"},
+        {"zh": "弗朗切斯科·维尼尔", "en": "Francesco Venier"},
+        {"zh": "安东尼奥·格里马尼", "en": "Antonio Grimani"},
+        {"zh": "贝内代托·佩萨罗", "en": "Benedetto Pesaro"},
+        {"zh": "斯特凡诺·洛梅利诺", "en": "Stefano Lomellino"},
+        {"zh": "巴尔达萨雷·斯皮诺拉", "en": "Baldassare Spinola"},
+        {"zh": "安布罗焦·迪内加罗", "en": "Ambrogio Di Negro"},
+        {"zh": "洛伦佐·普里乌利", "en": "Lorenzo Priuli"}
+      ]
+    },
+    {
+      "nation_id": "",
+      "names": [
+        {"zh": "「红手」杰克", "en": "Jack Redhand"},
+        {"zh": "「黑心」汤姆", "en": "Tom Blackheart"},
+        {"zh": "「铁钩」皮特", "en": "Pete Ironhook"},
+        {"zh": "「断桅」哈里", "en": "Harry Brokenmast"},
+        {"zh": "「独眼」威尔", "en": "One-Eye Will"},
+        {"zh": "「夜鸦」尼克", "en": "Nick Nightcrow"},
+        {"zh": "「疤脸」萨姆", "en": "Sam Scarface"},
+        {"zh": "「银牙」莫莉", "en": "Molly Silvertooth"},
+        {"zh": "「咸风」本", "en": "Ben Saltwind"},
+        {"zh": "「鬼帆」罗杰", "en": "Roger Ghostsail"}
+      ]
+    }
+  ]
+}

@@ -19,8 +19,10 @@ const DATA_DIR := "res://data"
 const DEFAULT_MAP_ID := "world"
 
 ## Loaded from `res://data/`: ports, goods, ship_types, nations, officers,
-## equipment, discoveries, quests (all envelope files), plus the two
-## non-entity tables ui_strings.json and map_legend.json.
+## equipment, discoveries, quests (all envelope files), plus the Phase-5
+## npc/economy tables npc_config.json, npc_captains.json, named_pirates.json
+## and market_events.json, and the two non-entity tables ui_strings.json and
+## map_legend.json.
 
 ## True when every data file loaded and passed the light shape checks.
 var load_ok: bool = false
@@ -36,6 +38,13 @@ var officers: Dictionary = {}
 var equipment: Dictionary = {}
 var discoveries: Dictionary = {}
 var quests: Dictionary = {}
+## Captain name pools keyed by `nation_id` — the 6 nation ids plus the
+## nationless `""` pool pirates draw from (docs/10-* §4.11).
+var npc_captains: Dictionary = {}
+## The 4 named pirates (docs/10-* §4.12).
+var named_pirates: Dictionary = {}
+## Demand-event templates (docs/10-* §4.13).
+var market_events: Dictionary = {}
 
 # Insertion-ordered lists copied from the JSON arrays. UI iteration uses these
 # (market rows sort by base_price later; the nationality screen needs the
@@ -48,12 +57,19 @@ var officers_list: Array = []
 var equipment_list: Array = []
 var discoveries_list: Array = []
 var quests_list: Array = []
+var npc_captains_list: Array = []
+var named_pirates_list: Array = []
+var market_events_list: Array = []
 
 # Raw (NOT id-keyed) tables.
 var ui_strings: Dictionary = {}
 ## The single map legend (`data/map_legend.json`, docs/90-* §9.1): grid,
 ## tiles and tile size for the one world map.
 var map_legend: Dictionary = {}
+## The density-dial config block (`data/npc_config.json`, docs/10-* §4.10):
+## presets, budgets, flow and the absolute fleet cap. Not an entity file —
+## one config object, no id-keyed array.
+var npc_config: Dictionary = {}
 
 ## Map index (`data/maps/maps.json`, docs/90-* §9.1): exactly one entry,
 ## `id: "world"`.
@@ -96,6 +112,15 @@ func load_all() -> void:
 	quests_list = _load_list("quests", "quests.json")
 	quests = _index_by_id(quests_list, "quests.json")
 
+	# Phase 5 living economy (docs/10-* §4.10–4.13).
+	npc_config = _load_npc_config()
+	npc_captains_list = _load_list("pools", "npc_captains.json")
+	npc_captains = _index_pools_by_nation(npc_captains_list, "npc_captains.json")
+	named_pirates_list = _load_list("named_pirates", "named_pirates.json")
+	named_pirates = _index_by_id(named_pirates_list, "named_pirates.json")
+	market_events_list = _load_list("market_events", "market_events.json")
+	market_events = _index_by_id(market_events_list, "market_events.json")
+
 	ui_strings = _load_ui_strings()
 	map_legend = _load_map_legend()
 	_load_map_index()
@@ -128,6 +153,17 @@ func get_discovery(id: String) -> Dictionary:
 
 func get_quest(id: String) -> Dictionary:
 	return _lookup(quests, id)
+
+## Captain name pool for `pool_id` (a nation id, or `""` for the pirate pool),
+## or {} when absent (docs/10-* §4.11).
+func get_captain_pool(pool_id: String) -> Dictionary:
+	return _lookup(npc_captains, pool_id)
+
+func get_named_pirate(id: String) -> Dictionary:
+	return _lookup(named_pirates, id)
+
+func get_market_event(id: String) -> Dictionary:
+	return _lookup(market_events, id)
 
 ## L10nString for a UI key, or {} when the key is absent.
 func get_ui_string(key: String) -> Dictionary:
@@ -380,6 +416,43 @@ func _load_ui_strings() -> Dictionary:
 			if not (text is String) or (text as String).strip_edges().is_empty():
 				_record("ui_strings.json: '%s.%s' is missing or empty" % [key, locale])
 		table[key] = value
+	return table
+
+
+## Reads `data/npc_config.json` — the density-dial config block
+## (docs/10-* §4.10). A config object, not an entity envelope: presets,
+## budgets, flow and the absolute fleet cap, with no plural array.
+func _load_npc_config() -> Dictionary:
+	var data = _read_json("npc_config.json")
+	if data == null:
+		return {}
+	if not (data is Dictionary):
+		_record("npc_config.json: top-level value must be an object")
+		return {}
+	for key in ["version", "presets", "default_preset", "budgets", "flow",
+			"absolute_cap"]:
+		if not data.has(key):
+			_record("npc_config.json: missing '%s' (docs/10-* §4.10)" % key)
+	return data
+
+
+## Indexes captain pools by their `nation_id` — the pool id (docs/10-* §4.11);
+## the nationless `""` pool is a legal key (pirates draw from it).
+func _index_pools_by_nation(list: Array, file_name: String) -> Dictionary:
+	var table: Dictionary = {}
+	for index in list.size():
+		var entry = list[index]
+		if not (entry is Dictionary):
+			_record("%s[%d]: entry must be an object" % [file_name, index])
+			continue
+		var pool_id = entry.get("nation_id", null)
+		if not (pool_id is String):
+			_record("%s[%d]: entry has no string 'nation_id'" % [file_name, index])
+			continue
+		if table.has(pool_id):
+			_record("%s[%d]: duplicate pool '%s'" % [file_name, index, pool_id])
+			continue
+		table[pool_id] = entry
 	return table
 
 

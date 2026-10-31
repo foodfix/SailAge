@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "market_events": [
+    {
+      "id": "evt_winter_wool",
+      "scope": "port",
+      "cadence_days": 360,
+      "duration_days": 30,
+      "shifts": {"wool": -25, "leather": -20},
+      "name": {"zh": "冬季羊毛紧俏", "en": "Winter Wool Demand"}
+    },
+    {
+      "id": "evt_summer_wine",
+      "scope": "port",
+      "cadence_days": 360,
+      "duration_days": 30,
+      "shifts": {"wine": -25},
+      "name": {"zh": "盛夏酒市", "en": "Summer Wine Season"}
+    },
+    {
+      "id": "evt_harvest_festival",
+      "scope": "port",
+      "cadence_days": 120,
+      "duration_days": 14,
+      "shifts": {"wheat": -25, "wine": -20},
+      "name": {"zh": "丰收节宴饮", "en": "Harvest Festival Feasting"}
+    },
+    {
+      "id": "evt_war_provisioning",
+      "scope": "port",
+      "cadence_days": 180,
+      "duration_days": 60,
+      "shifts": {"timber": -30, "iron": -30},
+      "name": {"zh": "战时备战", "en": "War Provisioning"}
+    },
+    {
+      "id": "evt_plague_quarantine",
+      "scope": "port",
+      "cadence_days": 360,
+      "duration_days": 45,
+      "shifts": {"spices": 30, "silk": 30, "perfume": 30},
+      "name": {"zh": "瘟疫封城", "en": "Plague Quarantine"}
+    },
+    {
+      "id": "evt_sugar_feast",
+      "scope": "port",
+      "cadence_days": 120,
+      "duration_days": 10,
+      "shifts": {"sugar": -25},
+      "name": {"zh": "甜宴", "en": "Feast of Sweets"}
+    },
+    {
+      "id": "evt_pilgrim_procession",
+      "scope": "port",
+      "cadence_days": 180,
+      "duration_days": 10,
+      "shifts": {"wheat": -20, "wine": -15},
+      "name": {"zh": "朝圣大军", "en": "Pilgrim Procession"}
+    },
+    {
+      "id": "evt_bumper_harvest",
+      "scope": "port",
+      "cadence_days": 180,
+      "duration_days": 20,
+      "shifts": {"wheat": 25, "wine": 15},
+      "name": {"zh": "大丰收", "en": "Bumper Harvest"}
+    }
+  ]
+}
