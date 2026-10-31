@@ -136,6 +136,16 @@ func new_game(nation_id: String, route: bool = true,
 			% [nation_id, start_port_id])
 		return
 	var resolved_map := _resolve_map_id(map_id)
+	# 80-* §4.6.3: the S2 sea-traffic row writes `npc_preset` BEFORE this
+	# call — it is run input, like `nation_id`, so the fresh-run reset below
+	# preserves it (validated against the §4.10 preset table; anything else
+	# falls back to `default_preset`).
+	var chosen_preset := str(npc_preset)
+	var config_presets: Dictionary = DataLoader.npc_config.get(
+		"presets", {})
+	if not config_presets.has(chosen_preset):
+		chosen_preset = str(DataLoader.npc_config.get(
+			"default_preset", "normal"))
 
 	day = 1
 	gold = int(nation.get("start_gold", 0))
@@ -222,7 +232,7 @@ func new_game(nation_id: String, route: bool = true,
 		DataLoader.ports_list, DataLoader.goods_list
 	)
 	wrecks = []
-	npc_preset = "normal"
+	npc_preset = chosen_preset
 	market_events = []
 	EconomyLib.reset_overrides()
 	# docs/60-* §4.1.2: the seeded initial fill to half the core cap runs

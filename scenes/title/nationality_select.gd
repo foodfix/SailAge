@@ -15,8 +15,6 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-5: the initial-fill replay after `new_game` re-applies the S2
 ## density choice (see [method _apply_density_after_new_game]).
-const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
-
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
 const NATIONS_PER_ROW := 3
 const CARD_SIZE := Vector2(360, 208)
@@ -276,32 +274,13 @@ func _on_back() -> void:
 ## Confirm: start the run. `GameState.new_game()` owns the §4.1 state block and
 ## the routing; `world.map_id` is the single shipped map (docs/90-* §9.1).
 ## Since Phase 5 the §4.6.3 density row writes `GameState.npc_preset` here,
-## before `new_game`, so the seeded initial fill uses the chosen preset.
+## before `new_game`, so the seeded initial fill uses the chosen preset
+## (`new_game` preserves the pre-written choice as run input).
 func confirm_selection() -> void:
 	if _selected_id.is_empty():
 		return
 	GameState.npc_preset = _density_preset
 	GameState.new_game(_selected_id, route_after_confirm)
-	_apply_density_after_new_game()
-
-
-## `new_game()` resets the dial to its documented default (`"normal"`) and
-## fills at that preset — the reset seam is autoload-owned (docs/90-* §8.1
-## Phase-5 fields), so when the S2 choice differs, the choice is re-applied
-## and the fill replayed: the default fill is dropped and a fresh seeded sim
-## fills at the chosen preset (same day/world seed family, the
-## `test_npc_fleets` §2 re-fill replay pattern), i.e. the run starts exactly
-## as if `new_game` had read the S2 choice. `deserted` replays to zero
-## fleets (docs/60-* §4.1.2 "deserted fills nothing").
-func _apply_density_after_new_game() -> void:
-	if GameState.npc_preset == _density_preset:
-		return
-	GameState.npc_preset = _density_preset
-	GameState.npc_fleets = []
-	var sim := NpcFleetsLib.new({
-		"npc_config": DataLoader.npc_config, "preset": _density_preset,
-	})
-	sim.initial_fill(GameState.day)
 
 
 func _on_locale_changed(_locale: String) -> void:
