@@ -4,7 +4,7 @@ extends Control
 ## keys), §4.8 (palette); docs/20-WORLD-AND-SAILING.md §4.12.
 ##
 ## A **full-screen panel over S3** that shows the whole world at once: the
-## 2160×1080 grid downscaled to fit (≈0.57× at 1280×720 — no scrolling, no
+## 4320×2160 grid downscaled to fit (≈0.29× at 1280×720 — no scrolling, no
 ## per-region tabs, and no seam crop, because a full-world image is inherently
 ## wrap-free).
 ##
@@ -15,9 +15,11 @@ extends Control
 ## |  whole world downscaled to fit                                |
 ## |   explored tiles: SEA/COAST_SEA(/LAND/REEF/ICE) at full colour |
 ## |   unknown tiles: PANEL_BG                                     |
-## |   known ports: 3px nation dots (+ names when the chart is big) |
+## |   known ports: 3px nation dots (+ names when the chart is big)|
 ## |   discovery leads: ACCENT crosses                             |
 ## |   fleet: white 5px square with black outline                  |
+## |   [W] wind arrows · [C] current arrows · [I] ice tint         |
+## |   [debug] omniscient map · ecology · lanes · scrubber         |
 ## +---------------------------------------------------------------+
 ## | 已探索海域 · 已知港口 · 船队 · 发现物线索            (legend)  | bottom 32px
 ## +---------------------------------------------------------------+
@@ -31,25 +33,49 @@ extends Control
 ##
 ## **Open budget < 0.5 s** (`80-*` §4.6): the downscaled world image is built
 ## **once** in [method open_chart] and drawn as one `ImageTexture` per frame —
-## [_draw] never walks the 2.33 M tiles again. [method last_open_ms] reports the
-## measured build time (the test asserts the budget).
+## [_draw] never walks the 9.3 M tiles again. [method last_open_ms] reports the
+## measured build time.
 ##
 ## **Input:** `Tab` toggles, `Esc` closes; while open the panel owns every event
 ## (it joins `modal_overlay`, so the host's `_modal_open()` blocks movement and
 ## nothing underneath reacts). A modal already on screen blocks `Tab` (§6).
+## Seasonal layer keys while open (`80-*` §4.3 S17 rows): `W` wind arrows,
+## `C` current arrows, `I` ice tint — chart-local view state, default off.
+##
+## **Debug chart mode** (`80-*` §4.6 extension, `IMPLEMENT-Phase6.md` §2.12) —
+## gated by the S19 调试图层 row via [method ChartView.debug_row_enabled]
+## (the guard-read of C's pinned `SettingsPanel.debug_overlays` symbol). With
+## the row on the chart adds, **all read-only**: `D` omniscient mode (whole
+## map + every port: nation colors, `PORT_NEUTRAL` grey, capitals ringed),
+## the live ecology (`NpcFleets.markers()` un-culled, wrecks, hunter-intel
+## ring + cross), the lane network (17 lanes — active variant solid, spokes
+## thin grey, chokepoint diamonds, lane ids in the side legend), the
+## `,`/`.` month scrubber (pure view state — `GameState` untouched) and the
+## info strip (Year/Month, density preset, fleet counts by role). With the
+## row off none of that is reachable: `D`/`,`/`.` are ignored and no debug
+## layer builds.
+##
+## **Redraw discipline** (`80-*` §4.6): the chart rebuilds only on open, a
+## layer/month toggle, or `EventBus.day_advanced` (while open) — never per
+## frame. [method build_count] exposes the counter the suite asserts on; the
+## omniscient terrain image is additionally cached per instance (it is static
+## map data), so a debug rebuild is overlays-only.
 ##
 ## Hosting: instance `chart_screen.tscn` anywhere above S3 (`world_map.tscn`
 ## adds it as the last child of `HUDLayer`). It needs no wiring — it reads the
 ## session itself — and [method attach_to] is the escape hatch for a host that
 ## builds its UI in code.
 ##
-## `Palette` and [ChartView] are preloaded rather than referenced through their
-## global class names so this script also runs before Godot has written its
-## class cache.
+## `Palette`, [ChartView] and `NpcFleets` are preloaded rather than referenced
+## through their global class names so this script also runs before Godot has
+## written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
-## Task L: the lane-heat layer reads live fleet cells (flag-gated, OFF).
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+## Task L: the lane-heat layer reads live fleet cells (flag-gated, OFF);
+## the debug ecology renders `NpcFleets.markers()` (the only fleet source).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 const SCENE_PATH := "res://scenes/world/chart_screen.tscn"
@@ -78,9 +104,41 @@ const LEAD_CROSS_PX := 5.0
 ## §4.6 "known ports … (+ names at zoom)". Task-owned threshold: the names are
 ## drawn when the whole world is rendered at least this many screen pixels wide
 ## (0.75 × 2160 = 1620 px), i.e. on any window wider than ~1660 px. At
-## 1280×720 (scale ≈ 0.57) the dots alone carry the information, which is what
+## 1280×720 (scale ≈ 0.29) the dots alone carry the information, which is what
 ## the wireframe shows.
 const NAMES_MIN_SCALE := 0.75
+
+## --- Phase-6 seasonal layers (`80-*` §4.6) ----------------------------------
+
+## Seasonal layer colors (palette only): wind arrows in `TEXT` (the `WARN`/
+## `ACCENT` amber is the discovery-lead color and would collide), current
+## arrows in `GOOD`, ice tint in the `ICE` tile color at a fixed alpha.
+const WIND_ARROW_COLOR := PaletteLib.TEXT
+const WIND_VAR_COLOR := PaletteLib.WARN
+const WIND_ARROW_PX := 12.0
+const CURRENT_ARROW_COLOR := PaletteLib.GOOD
+const ICE_TINT_ALPHA := 0.55
+
+## --- Debug chart mode (`80-*` §4.6, IMPLEMENT-Phase6.md §2.12) --------------
+
+## Side legend width subtracted from the world area while the debug panel is
+## up (the whole world must stay visible, §4.6 "downscaled to fit").
+const DEBUG_PANEL_W := 316.0
+## Debug marker shapes.
+const CAPITAL_RING_PX := 5.0
+const WRECK_CROSS_PX := 5.0
+const INTEL_RING_PX := 6.0
+const INTEL_CROSS_PX := 5.0
+const CHOKEPOINT_PX := 4.0
+const DEBUG_FLEET_SQUARE_PX := 7.0
+## Hunter-intel markers read as danger (`BAD`); chokepoint diamonds too.
+const INTEL_COLOR := PaletteLib.BAD
+## Inactive lane variants + spokes are the layer's dim shapes.
+const INACTIVE_LANE_ALPHA := 0.35
+const SPOKE_ALPHA := 0.45
+## The debug side legend role rows (the §4.5.2 locked marker set + pirate).
+const LEGEND_ROLES: Array[String] = ["trader", "coaster", "courier", "patrol",
+	"privateer", "pirate", "hunter", "treasure"]
 
 ## `chart.*` keys (docs/80-* §4.7.5 — the only inventory this screen may use).
 const KEY_TITLE := "chart.title"
@@ -89,6 +147,24 @@ const KEY_HINT := "chart.hint"
 const KEY_LEGEND_PORT := "chart.legend.port"
 const KEY_LEGEND_FLEET := "chart.legend.fleet"
 const KEY_LEGEND_DISCOVERY := "chart.legend.discovery"
+## Phase-6 keys (docs/80-* §4.7.10, orchestrator-merged — until then every
+## label renders its literal key; the tests never assert label text).
+const KEY_WIND := "chart.wind.title"
+const KEY_CURRENT := "chart.current.title"
+const KEY_ICE := "chart.ice.title"
+const KEY_DEBUG_TITLE := "debug.title"
+const KEY_DEBUG_OMNI := "debug.omniscient"
+const KEY_LEGEND_NETWORK := "debug.legend.network"
+const KEY_LEGEND_SPOKES := "debug.legend.spokes"
+const KEY_LEGEND_CHOKEPOINTS := "debug.legend.chokepoints"
+const KEY_LEGEND_FLEETS := "debug.legend.fleets"
+const KEY_LEGEND_WRECKS := "debug.legend.wrecks"
+const KEY_LEGEND_INTEL := "debug.legend.hunter_intel"
+const KEY_LEGEND_NEUTRAL := "chart.debug.neutral"
+const KEY_INFO_MONTH := "debug.info.month"
+const KEY_INFO_PRESET := "debug.info.preset"
+const KEY_INFO_FLEETS := "debug.info.fleets"
+const KEY_CALENDAR := "world.calendar.year_month"
 ## Task L (docs/80-* §4.6 "Lane heat dots"): the optional cosmetic layer —
 ## small `ACCENT` dots along the built lanes, denser where fleet traffic is
 ## higher. **Default OFF** per the doc flag; flipping this to true is the
@@ -106,8 +182,13 @@ const LANE_HEAT_DOT_PX := 2.0
 @onready var _legend_port: Label = $BottomBar/Legend/Ports
 @onready var _legend_fleet: Label = $BottomBar/Legend/Fleet
 @onready var _legend_discovery: Label = $BottomBar/Legend/Discoveries
+@onready var _legend_wind: Label = $BottomBar/Legend/Wind
+@onready var _legend_current: Label = $BottomBar/Legend/Current
+@onready var _legend_ice: Label = $BottomBar/Legend/Ice
+@onready var _debug_panel: PanelContainer = $DebugPanel
+@onready var _debug_rows: VBoxContainer = $DebugPanel/Scroll/Rows
 
-## The whole-world image at grid resolution (2160×1080, one pixel per tile).
+## The whole-world image at grid resolution (4320×2160, one pixel per tile).
 ## Kept so [method world_pixel_color] can answer "what does the chart show for
 ## this tile?" exactly, without rounding through the downscale.
 var _world_image: Image = null
@@ -125,12 +206,64 @@ var _fleet_cell := Vector2i(-1, -1)
 var _port_dots: Array = []
 var _lead_cells: Array = []
 
+# --- Seasonal layer view state (chart-local, never persisted) ----------------
+
+var _wind_on := false
+var _current_on := false
+var _ice_on := false
+
+# --- Debug chart mode view state (chart-local, never persisted) --------------
+
+## `D` — omniscient base map. Reachable only while the S19 row is on.
+var _omni_on := false
+## `,`/`.` scrubber preview: 0 = live month, else the previewed month 1..12.
+## Reset on close; never written to any `GameState` field.
+var _preview_month := 0
+## True when the last build ran with the S19 row on (the debug layers state).
+var _debug_active := false
+## Read-only hover tooltip text ("" when nothing is under the cursor).
+var _hover_text := ""
+
+# --- Build caches ------------------------------------------------------------
+
+## The omniscient terrain image — static map data, built once per instance and
+## reused by every debug rebuild (only the overlays change per trigger).
+var _omni_image: Image = null
+## The ice tint overlay at display resolution (built per rebuild while `I` is
+## on; a month-keyed view, never GameState state).
+var _ice_texture: ImageTexture = null
+
+## Overlay caches the last build filled ([_draw] only reads these).
+var _wind_arrows: Array = []
+var _current_arrows: Array = []
+var _ice_cells: Array = []
+var _fleet_markers: Array = []
+var _wreck_markers: Array = []
+var _intel_markers: Array = []
+var _network := {}
+## Standalone-host fallback fleet view (created lazily, never ticked).
+var _view_sim = null
+
+## Redraw-discipline counters (the suite's assertions).
+var _build_count := 0
+var _terrain_build_count := 0
+
+## Side-legend rows created once, refreshed per build/locale:
+## `row_id → {box, label, value, swatch}`.
+var _panel_rows: Dictionary = {}
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_background.color = PaletteLib.PANEL_BG
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_bar.color = PaletteLib.PANEL_BG
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(PaletteLib.PANEL_BG, 0.92)
+	panel_style.border_color = PaletteLib.PANEL_LINE
+	panel_style.set_border_width_all(1)
+	panel_style.set_content_margin_all(PaletteLib.MARGIN * 0.5)
+	_debug_panel.add_theme_stylebox_override("panel", panel_style)
 	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_title.add_theme_font_size_override("font_size", 24)
 	_close.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
@@ -140,7 +273,9 @@ func _ready() -> void:
 	visible = false
 	# Bars follow the viewport (a window resize moves/rescales the world image).
 	resized.connect(_relayout)
+	mouse_exited.connect(_clear_hover)
 	EventBus.locale_changed.connect(_on_locale_changed)
+	EventBus.day_advanced.connect(_on_day_advanced)
 	_bind_labels()
 	_relayout()
 
@@ -188,10 +323,14 @@ func open_chart() -> void:
 
 ## Closes the chart. **Mutates nothing**: the fleet tile and `clock_fraction` are
 ## whatever S3 left there (§4.6 "returns to S3 with the fleet unmoved").
+## Chart-local view state: the `W`/`C`/`I`/`D` toggles persist across opens,
+## the month preview resets to the live month.
 func close_chart() -> void:
 	if not visible:
 		return
 	visible = false
+	_preview_month = 0
+	_hover_text = ""
 	remove_from_group(MODAL_GROUP)
 	queue_redraw()
 
@@ -208,7 +347,7 @@ func last_open_ms() -> float:
 	return _open_ms
 
 
-## Screen pixels per world tile in the last build (≈0.57 at 1280×720).
+## Screen pixels per world tile in the last build (≈0.29 at 1280×720).
 func chart_scale() -> float:
 	return _scale
 
@@ -218,7 +357,7 @@ func world_rect() -> Rect2:
 	return _world_rect
 
 
-## Size of the grid-resolution image the chart built (the full 2160×1080 grid).
+## Size of the grid-resolution image the chart built (the full 4320×2160 grid).
 func world_image_size() -> Vector2i:
 	return _world_image.get_size() if _world_image != null else Vector2i.ZERO
 
@@ -229,9 +368,11 @@ func display_size() -> Vector2i:
 
 
 ## The colour the chart shows for `cell`: the explored terrain colour, or
-## `PANEL_BG` for an unexplored tile (`80-*` §4.6 layers). Read from the
-## grid-resolution image, so this is exactly comparable with the minimap's
-## [method Hud.minimap_pixel_color] — that equality is the §J acceptance.
+## `PANEL_BG` for an unexplored tile (`80-*` §4.6 layers); with `D` on, the
+## plain terrain colour everywhere (the omniscient chart ignores the bitset).
+## Read from the grid-resolution image, so this is exactly comparable with the
+## minimap's [method Hud.minimap_pixel_color] — that equality is the §J
+## acceptance (player mode).
 func world_pixel_color(cell: Vector2i) -> Color:
 	if _world_image == null:
 		return ChartViewLib.UNKNOWN_COLOR
@@ -244,8 +385,9 @@ func world_pixel_color(cell: Vector2i) -> Color:
 	return _world_image.get_pixel(x, cell.y)
 
 
-## The known-port markers the chart draws: `[{port_id, cell, color, name}]` —
-## the shared [ChartView] layer, so the minimap and the chart agree.
+## The port markers the chart draws: the known ports (`[{port_id, cell, color,
+## name}]`) in player mode, **every** port in omniscient mode — the shared
+## [ChartView] layers, so the minimap and the chart agree in player mode.
 func port_markers() -> Array:
 	return _port_dots.duplicate()
 
@@ -260,7 +402,9 @@ func fleet_cell() -> Vector2i:
 	return _fleet_cell
 
 
-## Every visible string, for the "zero `<key>` fallbacks" check.
+## Every visible player-mode string, for the "zero `<key>` fallbacks" check
+## (the debug legend may legitimately render literal keys until the
+## orchestrator merges the `debug.*` family — see `_bind_labels`).
 func legend_texts() -> Array:
 	return [_title.text, _close.text, _legend_note.text,
 		_legend_port.text, _legend_fleet.text, _legend_discovery.text]
@@ -275,6 +419,145 @@ static func names_shown(scale: float) -> bool:
 ## `true` when the port names are on screen right now.
 func labels_visible() -> bool:
 	return names_shown(_scale)
+
+
+# --- Seasonal layer API (`80-*` §4.6; keys only while the chart is open) ----
+
+func wind_layer_on() -> bool:
+	return _wind_on
+
+
+func current_layer_on() -> bool:
+	return _current_on
+
+
+func ice_layer_on() -> bool:
+	return _ice_on
+
+
+## Chart-local `W` toggle (current-month wind arrows per region).
+func toggle_wind_layer() -> void:
+	_wind_on = not _wind_on
+	_rebuild_if_open()
+
+
+## Chart-local `C` toggle (current arrows, reversal-applied).
+func toggle_current_layer() -> void:
+	_current_on = not _current_on
+	_rebuild_if_open()
+
+
+## Chart-local `I` toggle (ice tint on explored tiles).
+func toggle_ice_layer() -> void:
+	_ice_on = not _ice_on
+	_rebuild_if_open()
+
+
+# --- Debug chart mode API (`80-*` §4.6, IMPLEMENT-Phase6.md §2.12) ----------
+
+## The S19 调试图层 row, guard-read live (C's pinned symbol contract). When
+## false, none of the debug layers or keys are reachable.
+func debug_available() -> bool:
+	return ChartViewLib.debug_row_enabled()
+
+
+## `true` when the last build rendered the debug layers (row on).
+func debug_layers_active() -> bool:
+	return _debug_active
+
+
+## `D` — the omniscient base map toggle (chart-local, debug-gated).
+func omniscient_on() -> bool:
+	return _omni_on
+
+
+func toggle_omniscient() -> void:
+	if not debug_available():
+		return
+	_omni_on = not _omni_on
+	_rebuild_if_open()
+
+
+## The scrubber preview month: 0 = live month, else 1..12 (chart-local,
+## debug-gated; reset on close; **never** written to `GameState`).
+func preview_month() -> int:
+	return _preview_month
+
+
+## The month the chart's seasonal layers currently render.
+func view_month() -> int:
+	if _preview_month >= 1 and _preview_month <= 12:
+		return _preview_month
+	return _live_month()
+
+
+func _live_month() -> int:
+	return SailingSimLib.month_for(maxi(int(GameState.day), 1))
+
+
+## `,`/`.` — step the preview month (wraps 1..12). A no-op while the S19 row
+## is off (`80-*` §4.3: the scrubber is debug-only).
+func scrub_month(delta: int) -> void:
+	if not debug_available():
+		return
+	var base := _preview_month if (_preview_month >= 1 and _preview_month <= 12) \
+		else _live_month()
+	_preview_month = posmod(base - 1 + delta, 12) + 1
+	_rebuild_if_open()
+
+
+## Direct preview set (tests / a future month-picker); `0` returns to live.
+func set_preview_month(month: int) -> void:
+	if not debug_available():
+		return
+	_preview_month = clampi(month, 0, 12)
+	_rebuild_if_open()
+
+
+## The debug layers the last build prepared (empty unless the row is on):
+## `{"fleets": …, "wrecks": …, "intel": …, "network": …}`.
+func ecology_markers() -> Array:
+	return _fleet_markers.duplicate()
+
+
+func wreck_markers() -> Array:
+	return _wreck_markers.duplicate()
+
+
+func intel_layer() -> Array:
+	return _intel_markers.duplicate()
+
+
+func network_layer() -> Dictionary:
+	return _network.duplicate(true)
+
+
+## The wind/current arrow + ice-tint overlay caches (structure-assert targets).
+func wind_markers() -> Array:
+	return _wind_arrows.duplicate()
+
+
+func current_markers() -> Array:
+	return _current_arrows.duplicate()
+
+
+func ice_marker_cells() -> Array:
+	return _ice_cells.duplicate()
+
+
+## Read-only hover tooltip text (debug mode only).
+func hover_text() -> String:
+	return _hover_text
+
+
+## Redraw-discipline counters: overlay builds (open, layer/month toggle,
+## `day_advanced`) and terrain-image builds (open, `D` flips).
+func build_count() -> int:
+	return _build_count
+
+
+func terrain_build_count() -> int:
+	return _terrain_build_count
 
 
 # --- Input (`80-*` §4.3) ---------------------------------------------------
@@ -294,6 +577,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		close_chart()
 		return
+	# Seasonal layers + debug keys (raw keys — no InputMap actions are bound
+	# for the chart, the same style as its `Tab`).
+	if event is InputEventKey and (event as InputEventKey).pressed:
+		var key := event as InputEventKey
+		if not key.echo:
+			var code := key.physical_keycode \
+				if key.physical_keycode != KEY_NONE else key.keycode
+			match code:
+				KEY_W:
+					toggle_wind_layer()
+				KEY_C:
+					toggle_current_layer()
+				KEY_I:
+					toggle_ice_layer()
+				KEY_D:
+					toggle_omniscient()  # self-gated: no-op while the row is off
+				KEY_COMMA:
+					scrub_month(-1)  # self-gated
+				KEY_PERIOD:
+					scrub_month(1)  # self-gated
 	# Swallow everything else so movement/hotkeys underneath never react.
 	if event is InputEventKey or event is InputEventMouseButton \
 			or event is InputEventMouseMotion or event is InputEventJoypadButton:
@@ -338,27 +641,95 @@ func _other_modal_open() -> bool:
 	return false
 
 
-# --- Build (docs/80-* §4.6 layers) -----------------------------------------
+## Read-only hover tooltips (debug mode): nearest cached marker within 8 px.
+## Updates a Label only — never a rebuild (the redraw-trigger discipline).
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		_update_hover((event as InputEventMouseMotion).position)
+
+
+func _clear_hover() -> void:
+	if not _hover_text.is_empty():
+		_hover_text = ""
+		_refresh_panel()
+
+
+func _update_hover(at: Vector2) -> void:
+	if not visible or not _debug_active:
+		return
+	var best := ""
+	var best_d := 8.0
+	for entry in _fleet_markers:
+		var d := _to_screen(entry["cell"]).distance_to(at)
+		if d < best_d:
+			best_d = d
+			best = "%s · %s · %s" % [str(entry.get("id", "")),
+				str(entry.get("role", "")), str(entry.get("nation_id", ""))]
+	for entry in _wreck_markers:
+		var d := _to_screen(entry["cell"]).distance_to(at)
+		if d < best_d:
+			best_d = d
+			best = str(entry.get("id", ""))
+	for entry in _intel_markers:
+		var d := _to_screen(entry["cell"]).distance_to(at)
+		if d < best_d:
+			best_d = d
+			best = "intel → %s" % str(entry.get("port_id", "")) \
+				if str(entry.get("kind", "")) == "ring" \
+				else "intel cell"
+	for entry in _port_dots:
+		var d := _to_screen(entry["cell"]).distance_to(at)
+		if d < best_d:
+			best_d = d
+			best = str(entry.get("port_id", ""))
+	if best != _hover_text:
+		_hover_text = best
+		_refresh_panel()
+
+
+# --- Rebuild triggers (`80-*` §4.6: open, layer/month toggle, day_advanced) -
+
+func _rebuild_if_open() -> void:
+	if visible:
+		_rebuild()
+
+
+## The pinned `day_advanced` redraw trigger — only while open (the chart is a
+## modal, so in real play the world is frozen while it shows; a test may emit
+## the signal directly).
+func _on_day_advanced(_new_day: int) -> void:
+	_rebuild_if_open()
+
+
+func _on_locale_changed(_locale: String) -> void:
+	_bind_labels()
+
+
+# --- Layout ------------------------------------------------------------------
 
 ## Lays out the world rect. Cheap (no image work) so a resize is not a rebuild;
 ## the texture is stretched to the new rect by [_draw]. The two bars are
 ## anchor-driven in the scene file, so only the world rect is computed here.
+## While the debug side legend is up, the world shrinks left of it — the whole
+## world always stays visible (§4.6 "downscaled to fit", no scrolling).
 func _relayout() -> void:
 	var view := get_viewport_rect().size
+	var panel_w := DEBUG_PANEL_W if _debug_panel.visible else 0.0
 	# World area: between the bars, inset by the §4.8 16px margin.
 	var avail := Vector2(
-		maxf(view.x - MARGIN * 2.0, 1.0),
+		maxf(view.x - MARGIN * 2.0 - panel_w, 1.0),
 		maxf(view.y - TOP_BAR_H - BOTTOM_BAR_H - MARGIN * 2.0, 1.0)
 	)
 	var map = DataLoader.map
-	var grid := Vector2(2160, 1080)
+	var grid := Vector2i(4320, 2160)
 	if map != null and int(map.width) > 0:
-		grid = Vector2(int(map.width), int(map.height))
+		grid = Vector2i(int(map.width), int(map.height))
 	_scale = minf(avail.x / grid.x, avail.y / grid.y)
-	var size := grid * _scale
+	var size := Vector2(grid) * _scale
+	var centre_w := view.x - panel_w
 	_world_rect = Rect2(
 		Vector2(
-			(view.x - size.x) * 0.5,
+			(centre_w - size.x) * 0.5,
 			TOP_BAR_H + (view.y - TOP_BAR_H - BOTTOM_BAR_H - size.y) * 0.5
 		),
 		size
@@ -366,18 +737,84 @@ func _relayout() -> void:
 	queue_redraw()
 
 
-## Builds the whole-world image (and its downscaled texture) once. This is the
-## only function that walks the grid; [_draw] uses the result.
+# --- Build (docs/80-* §4.6 layers + §2.12 debug layers) ---------------------
+
+## Builds the world image + every overlay cache once per trigger. This is the
+## only function that walks the grid; [_draw] uses the results.
 func _rebuild() -> void:
+	_build_count += 1
+	# The S19 row is read live at every trigger: turning it off makes the
+	# debug layers unreachable at the next build.
+	_debug_active = debug_available()
+	if not _debug_active:
+		_omni_on = false
+		_preview_month = 0
+		_hover_text = ""
+	_debug_panel.visible = _debug_active
 	var map = DataLoader.map
-	_world_image = null
-	_texture = null
-	_port_dots = []
 	_lead_cells = []
 	_fleet_cell = _fleet_source_cell()
 	if map == null or int(map.width) <= 0 or int(map.height) <= 0:
+		_world_image = null
+		_texture = null
+		_port_dots = []
+		_wind_arrows = []
+		_current_arrows = []
+		_ice_cells = []
+		_ice_texture = null
+		_fleet_markers = []
+		_wreck_markers = []
+		_intel_markers = []
+		_network = {}
+		_refresh_panel()
+		queue_redraw()
 		return
 	_relayout()
+	var month := view_month()
+	var omniscient := _debug_active and _omni_on
+
+	# Layer 1/2: the terrain — explored-only in player mode, the whole map in
+	# omniscient mode (cached: static map data, built once per instance).
+	_world_image = _terrain_image(map, omniscient)
+	_texture = _downscaled_texture(_world_image)
+
+	# Layer 3: ports — known only (player) or every port with the neutral
+	# grey + capital flags (omniscient); both are shared [ChartView] layers.
+	_port_dots = ChartViewLib.port_dots(map) if not omniscient \
+		else ChartViewLib.all_port_dots(map)
+	_lead_cells = ChartViewLib.lead_cells(map)
+
+	# Seasonal overlays (current month, or the debug preview month).
+	_wind_arrows = ChartViewLib.wind_arrows(month) if _wind_on else []
+	_current_arrows = ChartViewLib.current_arrows(month) if _current_on else []
+	_ice_cells = ChartViewLib.ice_cells(month, omniscient, map) if _ice_on else []
+	_ice_texture = _ice_overlay_texture() if _ice_on else null
+
+	# Debug layers: live ecology, wrecks, hunter intel, the lane network.
+	if _debug_active:
+		_fleet_markers = ChartViewLib.fleet_markers(_fleet_sim())
+		_wreck_markers = ChartViewLib.wreck_cells()
+		_intel_markers = ChartViewLib.intel_markers(map)
+		_network = ChartViewLib.lane_network(month)
+	else:
+		_fleet_markers = []
+		_wreck_markers = []
+		_intel_markers = []
+		_network = {}
+
+	_refresh_panel()
+	queue_redraw()
+
+
+## The terrain image for this build: the session's explored overlay, or the
+## omniscient whole-map render (cached per instance — map data never changes).
+func _terrain_image(map, omniscient: bool) -> Image:
+	if omniscient:
+		if _omni_image == null:
+			_omni_image = _full_terrain_image(map)
+			_terrain_build_count += 1
+		return _omni_image
+	_terrain_build_count += 1
 	var width := int(map.width)
 	var height := int(map.height)
 	var image := Image.create_empty(width, height, false, Image.FORMAT_RGBA8)
@@ -394,12 +831,39 @@ func _rebuild() -> void:
 		if cell.x < 0 or cell.y < 0 or cell.x >= width or cell.y >= height:
 			continue
 		image.set_pixel(cell.x, cell.y, ChartViewLib.index_color(colors, map, cell.x, cell.y))
-	_world_image = image
-	# Layers 3–5 are vector overlays drawn at screen scale by [_draw], so a dot
-	# stays 3px and the fleet square 5px at every window size.
-	_port_dots = ChartViewLib.port_dots(map)
-	_lead_cells = ChartViewLib.lead_cells(map)
-	_texture = _downscaled_texture(image)
+	return image
+
+
+## The omniscient terrain: every tile in its palette colour (a LUT pass over
+## the decoded indices, ~0.4 s once — the debug chart's one heavy build).
+func _full_terrain_image(map) -> Image:
+	var colors: Array = ChartViewLib.palette_colors(map)
+	var width := int(map.width)
+	var height := int(map.height)
+	var image := Image.create_empty(width, height, false, Image.FORMAT_RGBA8)
+	for y in height:
+		for x in width:
+			image.set_pixel(x, y, ChartViewLib.index_color(colors, map, x, y))
+	return image
+
+
+## The ice tint overlay at display resolution (a month view, rebuilt per
+## trigger while `I` is on — the mask walks ~10^5 tiles at most).
+func _ice_overlay_texture() -> ImageTexture:
+	if _world_rect.size.x <= 0.0 or _world_rect.size.y <= 0.0:
+		return null
+	var size := Vector2i(
+		maxi(int(round(_world_rect.size.x)), 1),
+		maxi(int(round(_world_rect.size.y)), 1))
+	var image := Image.create_empty(size.x, size.y, false, Image.FORMAT_RGBA8)
+	var tint := Color(PaletteLib.ICE, ICE_TINT_ALPHA)
+	for cell in _ice_cells:
+		var at := (Vector2(cell) + Vector2(0.5, 0.5)) * _scale
+		var px := Vector2i(at)
+		if px.x < 0 or px.y < 0 or px.x >= size.x or px.y >= size.y:
+			continue
+		image.set_pixel(px.x, px.y, tint)
+	return ImageTexture.create_from_image(image)
 
 
 ## Nearest-neighbour downscale to the on-screen world rect (crisp tiles: the
@@ -413,6 +877,26 @@ func _downscaled_texture(image: Image) -> ImageTexture:
 	return ImageTexture.create_from_image(scaled)
 
 
+## The fleet sim the debug ecology reads: the host world scene's sim when the
+## chart is hosted by one (its `fleet_sim()` seam), else a fresh **never-ticked**
+## read-only view over the same `GameState.npc_fleets`. Neither path mutates
+## sim or session state.
+func _fleet_sim():
+	var node: Node = self
+	while node != null:
+		if node != self and node.has_method("fleet_sim"):
+			var sim = node.call("fleet_sim")
+			if sim != null:
+				return sim
+		node = node.get_parent()
+	if _view_sim == null:
+		_view_sim = NpcFleetsLib.new({
+			"npc_config": DataLoader.npc_config,
+			"preset": GameState.npc_preset,
+		})
+	return _view_sim
+
+
 # --- Drawing (docs/80-* §4.6 layers, bottom to top) -----------------------
 
 func _draw() -> void:
@@ -422,14 +906,29 @@ func _draw() -> void:
 	# Layer 0: the canvas background (§4.6).
 	draw_rect(Rect2(Vector2.ZERO, view), PaletteLib.PANEL_BG, true)
 	if _texture != null:
-		# Layer 1/2: explored tiles over the unknown background, at the §4.6
-		# "low alpha" (the texture carries the plain palette colours, so the
-		# identity read-back stays exact — see [constant EXPLORED_ALPHA]).
+		# Layer 1/2: explored tiles (or the omniscient whole map) over the
+		# unknown background, at the §4.6 "low alpha" (the texture carries the
+		# plain palette colours, so the identity read-back stays exact).
 		draw_texture_rect(_texture, _world_rect, false,
 			Color(1, 1, 1, EXPLORED_ALPHA))
 	draw_rect(_world_rect, PaletteLib.PANEL_LINE, false, 2.0)
 
-	# Layer 3: known ports as nation-coloured dots (+ names at zoom).
+	# Ice tint (the `I` layer; explored-only in player mode).
+	if _ice_texture != null:
+		draw_texture_rect(_ice_texture, _world_rect, false)
+
+	# Debug network (below the ecology, above the terrain).
+	if _debug_active:
+		_draw_network()
+
+	# The seasonal arrow layers (`W`/`C`).
+	if _wind_on:
+		_draw_wind_arrows()
+	if _current_on:
+		_draw_current_arrows()
+
+	# Layer 3: ports as nation-coloured dots (+ names at zoom); omniscient
+	# mode adds the neutral grey and capital rings.
 	var show_names := names_shown(_scale)
 	for entry in _port_dots:
 		var at := _to_screen(entry["cell"])
@@ -437,6 +936,8 @@ func _draw() -> void:
 			at - Vector2(PORT_DOT_PX, PORT_DOT_PX) * 0.5,
 			Vector2(PORT_DOT_PX, PORT_DOT_PX)
 		), entry["color"], true)
+		if _debug_active and not str(entry.get("capital", "")).is_empty():
+			draw_arc(at, CAPITAL_RING_PX, 0.0, TAU, 24, PaletteLib.TEXT, 1.5)
 		if show_names and not str(entry.get("name", "")).is_empty():
 			draw_string(
 				ThemeDB.fallback_font, at + Vector2(PORT_DOT_PX, -PORT_DOT_PX),
@@ -450,6 +951,20 @@ func _draw() -> void:
 		draw_line(at - Vector2(half, 0), at + Vector2(half, 0), PaletteLib.ACCENT, 1.0)
 		draw_line(at - Vector2(0, half), at + Vector2(0, half), PaletteLib.ACCENT, 1.0)
 
+	# Debug ecology: wrecks (ACCENT ×), fleets (§4.5.2 role colors, un-culled),
+	# hunter-intel ring + cross (`60-*` §4.11.11.1 shapes).
+	if _debug_active:
+		for entry in _wreck_markers:
+			_draw_cross(_to_screen(entry["cell"]), WRECK_CROSS_PX, PaletteLib.ACCENT)
+		for entry in _fleet_markers:
+			_draw_fleet_marker(entry)
+		for entry in _intel_markers:
+			var at := _to_screen(entry["cell"])
+			if str(entry.get("kind", "")) == "ring":
+				draw_arc(at, INTEL_RING_PX, 0.0, TAU, 24, INTEL_COLOR, 2.0)
+			else:
+				_draw_cross(at, INTEL_CROSS_PX, INTEL_COLOR)
+
 	# Layer 4.5 (task L, docs/80-* §4.6 flag — default OFF): lane heat dots.
 	# Purely cosmetic: an `ACCENT` dot per live fleet standing on a lane or
 	# spoke tile, so traffic-dense stretches read denser. Read-only.
@@ -458,7 +973,7 @@ func _draw() -> void:
 			if not (fleet is Dictionary):
 				continue
 			var cell := NpcFleetsLib.position_of(fleet)
-			if cell.x < 0 or not NpcFleetsLib._is_path_tile(cell):
+			if cell.x < 0 or not _is_path_tile(cell):
 				continue
 			var heat := _to_screen(cell)
 			draw_rect(Rect2(
@@ -476,9 +991,180 @@ func _draw() -> void:
 			Vector2(FLEET_SQUARE_PX, FLEET_SQUARE_PX)), Color.WHITE, true)
 
 
-## Screen position (centre of the tile) for a world cell.
+## The §2.12 network layer: spokes thin grey, inactive lane variants dim, the
+## active path solid in the lane's legend color, chokepoint diamonds.
+func _draw_network() -> void:
+	if _network.is_empty():
+		return
+	var width := 4320
+	var map = DataLoader.map
+	if map != null and int(map.width) > 0:
+		width = int(map.width)
+	# Spokes: thin grey (the dimmest network shape).
+	var spoke_color := Color(PaletteLib.PANEL_LINE, SPOKE_ALPHA)
+	for spoke in _network.get("spokes", []):
+		for run in _screen_runs(spoke.get("path", []), width):
+			draw_polyline(run, spoke_color, 1.0, false)
+	for lane in _network.get("lanes", []):
+		var lane_color: Color = lane["color"]
+		# Inactive seasonal variants: dim dots of the lane color.
+		var dim := Color(lane_color, INACTIVE_LANE_ALPHA)
+		for variant in lane.get("inactive_paths", []):
+			for run in _screen_runs(variant.get("path", []), width):
+				_draw_dotted_run(run, dim)
+		# The active path solid.
+		for run in _screen_runs(lane.get("active_path", []), width):
+			draw_polyline(run, lane_color, 1.5, false)
+	# Chokepoint diamonds (hollow, rotated squares).
+	for choke in _network.get("chokepoints", []):
+		var at := _to_screen(choke["cell"])
+		var r := CHOKEPOINT_PX
+		var points := PackedVector2Array([
+			at + Vector2(0, -r), at + Vector2(r, 0),
+			at + Vector2(0, r), at + Vector2(-r, 0), at + Vector2(0, -r),
+		])
+		draw_polyline(points, PaletteLib.BAD, 1.5, false)
+
+
+## Dots every ~6 px along a run (the "dotted" inactive-variant rendering).
+func _draw_dotted_run(points: PackedVector2Array, color: Color) -> void:
+	var carry := 0.0
+	for index in range(1, points.size()):
+		var a := points[index - 1]
+		var b := points[index]
+		var seg := a.distance_to(b)
+		if seg <= 0.0:
+			continue
+		var step := 6.0
+		var t := carry
+		while t <= seg:
+			draw_rect(Rect2(a.lerp(b, t / seg) - Vector2(1, 1) * 0.5,
+				Vector2(1, 1)), color, true)
+			t += step
+		carry = t - seg
+
+
+func _draw_wind_arrows() -> void:
+	for arrow in _wind_arrows:
+		var at := _to_screen(arrow["cell"])
+		if arrow.get("variable", false):
+			# The `VAR` region glyph: a hollow amber diamond (distinctive
+			# against every directional arrow).
+			var r := WIND_ARROW_PX * 0.5
+			var points := PackedVector2Array([
+				at + Vector2(0, -r), at + Vector2(r, 0),
+				at + Vector2(0, r), at + Vector2(-r, 0), at + Vector2(0, -r),
+			])
+			draw_polyline(points, WIND_VAR_COLOR, 1.5, false)
+			continue
+		var dir := _compass_vector(str(arrow["token"]))
+		if dir == Vector2.ZERO:
+			continue
+		_draw_arrow(at, dir, WIND_ARROW_PX, WIND_ARROW_COLOR, 1.5)
+
+
+func _draw_current_arrows() -> void:
+	for arrow in _current_arrows:
+		var dir := _compass_vector(str(arrow["dir"]))
+		if dir == Vector2.ZERO:
+			continue
+		var strength := int(arrow.get("strength", 1))
+		# Length/width scale with the decoded strength (§4.16 bands 1..3).
+		_draw_arrow(_to_screen(arrow["cell"]), dir,
+			7.0 + 4.0 * strength, CURRENT_ARROW_COLOR, 1.0 + 0.5 * (strength - 1))
+
+
+## One arrow: shaft along `dir`, a V head at the tip.
+func _draw_arrow(at: Vector2, dir: Vector2, length_px: float,
+		color: Color, width: float) -> void:
+	var tip := at + dir * (length_px * 0.5)
+	var tail := at - dir * (length_px * 0.5)
+	draw_line(tail, tip, color, width)
+	var head := dir.rotated(PI * 0.75) * (length_px * 0.3)
+	draw_line(tip, tip + head, color, width)
+	draw_line(tip, tip + dir.rotated(-PI * 0.75) * (length_px * 0.3), color, width)
+
+
+func _draw_cross(at: Vector2, size_px: float, color: Color) -> void:
+	var half := size_px * 0.5
+	draw_line(at - Vector2(half, 0), at + Vector2(half, 0), color, 1.5)
+	draw_line(at - Vector2(0, half), at + Vector2(0, half), color, 1.5)
+
+
+## The §4.5.2 role marker: a nation-coloured square with the role letter
+## (pirate `BAD`, a hunter its nation's colour with the navy letter).
+func _draw_fleet_marker(entry: Dictionary) -> void:
+	var at := _to_screen(entry["cell"])
+	var color := _role_color(str(entry.get("role", "")), str(entry.get("nation_id", "")))
+	draw_rect(Rect2(
+		at - Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX) * 0.5,
+		Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX)
+	), color, true)
+	var letter := str(entry.get("letter", ""))
+	if not letter.is_empty():
+		draw_string(ThemeDB.fallback_font,
+			at + Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX) * 0.3,
+			letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, PaletteLib.TEXT)
+
+
+## §4.5.2 role colors: pirate is `BAD`; every other role wears its nation's
+## colour (an unknown nation falls back to `ACCENT`, the shared-layer rule).
+func _role_color(role: String, nation_id: String) -> Color:
+	if role == "pirate":
+		return PaletteLib.BAD
+	var nation = DataLoader.nations.get(nation_id, null)
+	if nation is Dictionary:
+		var hex = (nation as Dictionary).get("color", "")
+		if hex is String and Color.html_is_valid(hex):
+			return PaletteLib.nation_color(hex)
+	return PaletteLib.ACCENT
+
+
+func _compass_vector(token: String) -> Vector2:
+	var index := OceanLayersLib.COMPASS_DIRS.find(token)
+	if index < 0:
+		return Vector2.ZERO
+	return OceanLayersLib.COMPASS_VECTORS[index]
+
+
+## Tile path → screen-space polyline runs, thinned to ~1 screen px per point
+## (a 20k-tile lane at 0.29 px/tile needs no more).
+func _screen_runs(path: Array, width: int) -> Array:
+	var stride := maxi(1, int(floor(1.0 / maxf(_scale, 0.0001))))
+	var runs := []
+	for run in ChartViewLib.path_runs(path, width):
+		var points := PackedVector2Array()
+		for index in range(0, run.size(), stride):
+			points.append(_to_screen(run[index]))
+		if (run.size() - 1) % stride != 0:
+			points.append(_to_screen(run[run.size() - 1]))
+		if points.size() >= 2:
+			runs.append(points)
+	return runs
+
+
 func _to_screen(cell: Vector2i) -> Vector2:
 	return _world_rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * _scale
+
+
+## `true` when `cell` carries a lane or spoke tile (the lane-heat flag's
+## filter; the same built-data membership the ecology indexes).
+func _is_path_tile(cell: Vector2i) -> bool:
+	if _network.is_empty():
+		return false
+	var width := 4320
+	var map = DataLoader.map
+	if map != null and int(map.width) > 0:
+		width = int(map.width)
+	for lane in _network.get("lanes", []):
+		if (lane.get("active_path", []) as Array).has(
+				Vector2i(posmod(cell.x, width), cell.y)):
+			return true
+	for spoke in _network.get("spokes", []):
+		if (spoke.get("path", []) as Array).has(
+				Vector2i(posmod(cell.x, width), cell.y)):
+			return true
+	return false
 
 
 ## The fleet position the chart shows: the HUD's cell when the host has one
@@ -494,10 +1180,11 @@ func _fleet_source_cell() -> Vector2i:
 	return Vector2i(-1, -1)
 
 
-# --- Strings (docs/80-* §4.7.5) -------------------------------------------
+# --- Strings (docs/80-* §4.7.5 + §4.7.10) -----------------------------------
 
 func _legend_labels() -> Array:
-	return [_legend_note, _legend_port, _legend_fleet, _legend_discovery]
+	return [_legend_note, _legend_port, _legend_fleet, _legend_discovery,
+		_legend_wind, _legend_current, _legend_ice]
 
 
 func _bind_labels() -> void:
@@ -507,7 +1194,219 @@ func _bind_labels() -> void:
 	_legend_port.text = "· " + I18n.t_key(KEY_LEGEND_PORT)
 	_legend_fleet.text = "· " + I18n.t_key(KEY_LEGEND_FLEET)
 	_legend_discovery.text = "· " + I18n.t_key(KEY_LEGEND_DISCOVERY)
+	_legend_wind.text = "· " + I18n.t_key(KEY_WIND)
+	_legend_current.text = "· " + I18n.t_key(KEY_CURRENT)
+	_legend_ice.text = "· " + I18n.t_key(KEY_ICE)
+	_refresh_panel()
 
 
-func _on_locale_changed(_locale: String) -> void:
-	_bind_labels()
+## Every debug side-legend string, for the suite (these MAY be literal
+## `<key>`s until the orchestrator merges the `debug.*` family — the suite
+## only asserts they are non-empty and locale-reactive).
+func debug_legend_texts() -> Array:
+	var out: Array = []
+	for row_id in _panel_rows:
+		var row: Dictionary = _panel_rows[row_id]
+		out.append(str(row["label"].text))
+		out.append(str(row["value"].text))
+	return out
+
+
+# --- Debug side legend (`80-*` §4.6: lane ids in a side legend + info strip) -
+
+## Creates the panel rows once (structure is static; values refresh per build).
+func _ensure_panel_rows() -> void:
+	if not _panel_rows.is_empty():
+		return
+	_panel_rows["title"] = _panel_section(KEY_DEBUG_TITLE)
+	_panel_rows["omni"] = _panel_row(KEY_DEBUG_OMNI, true)
+	_panel_rows["wind"] = _panel_row(KEY_WIND, true)
+	_panel_rows["current"] = _panel_row(KEY_CURRENT, true)
+	_panel_rows["ice"] = _panel_row(KEY_ICE, true)
+	_panel_rows["calendar"] = _panel_row(KEY_CALENDAR, false)
+	_panel_rows["month"] = _panel_row(KEY_INFO_MONTH, false)
+	_panel_rows["preset"] = _panel_row(KEY_INFO_PRESET, false)
+	_panel_rows["fleets"] = _panel_row(KEY_INFO_FLEETS, false)
+	_panel_rows["sec_network"] = _panel_section(KEY_LEGEND_NETWORK)
+	for lane in _network.get("lanes", []):
+		_panel_rows["lane_" + str(lane["id"])] = _panel_swatch_row(
+			str(lane["id"]), lane["color"])
+	_panel_rows["spokes"] = _panel_swatch_row(KEY_LEGEND_SPOKES, PaletteLib.PANEL_LINE)
+	_panel_rows["chokepoints"] = _panel_swatch_row(KEY_LEGEND_CHOKEPOINTS, PaletteLib.BAD)
+	_panel_rows["sec_fleets"] = _panel_section(KEY_LEGEND_FLEETS)
+	for role in LEGEND_ROLES:
+		_panel_rows["role_" + role] = _panel_swatch_row(
+			_role_letter(role), _legend_role_color(role))
+	_panel_rows["wrecks"] = _panel_swatch_row(KEY_LEGEND_WRECKS, PaletteLib.ACCENT)
+	_panel_rows["intel"] = _panel_swatch_row(KEY_LEGEND_INTEL, PaletteLib.BAD)
+	_panel_rows["neutral"] = _panel_swatch_row(KEY_LEGEND_NEUTRAL,
+		ChartViewLib.port_neutral_color())
+	_panel_rows["hover"] = _panel_row("", false)  # value-only tooltip row
+
+
+static func _role_letter(role: String) -> String:
+	var letter := NpcFleetsLib.marker_letter(role)
+	return letter if not letter.is_empty() else "·"
+
+
+## §4.7.10 "role-color rows": pirate wears `BAD` on its own; every other role
+## marker takes its *fleet's* nation colour at draw time, so the legend row
+## carries the letter in `TEXT` (the color legend is the fleet itself).
+static func _legend_role_color(role: String) -> Color:
+	return PaletteLib.BAD if role == "pirate" else PaletteLib.TEXT
+
+
+## `true` for the i18n row families (`debug.*`/`chart.*`/`world.*` keys —
+## literal keys render until the orchestrator merges the phase-6 strings).
+static func _is_string_key(text: String) -> bool:
+	return text.begins_with("debug.") or text.begins_with("chart.") \
+		or text.begins_with("world.")
+
+
+## A section header row (accent, no value).
+func _panel_section(text_key: String) -> Dictionary:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	label.text = I18n.t_key(text_key)
+	_debug_rows.add_child(label)
+	return {"label": label, "value": label, "swatch": null, "key": text_key}
+
+
+## A label + state-dot row (the dot is `ACCENT` when the row's thing is on).
+## An empty key makes a value-only row (the hover tooltip).
+func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var dot := ColorRect.new()
+	dot.custom_minimum_size = Vector2(8, 8)
+	dot.color = PaletteLib.PANEL_LINE
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if with_dot:
+		box.add_child(dot)
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	if _is_string_key(text_key):
+		label.text = I18n.t_key(text_key)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(label)
+	var value := Label.new()
+	value.add_theme_font_size_override("font_size", 12)
+	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	box.add_child(value)
+	_debug_rows.add_child(box)
+	return {"label": label, "value": value, "swatch": dot if with_dot else null,
+		"key": text_key}
+
+
+## A color-swatch + text row (lane ids, role letters, shape colors). `text`
+## is either a data literal (lane id, role letter) or an i18n key.
+func _panel_swatch_row(text: String, color: Color) -> Dictionary:
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var swatch := ColorRect.new()
+	swatch.custom_minimum_size = Vector2(8, 8)
+	swatch.color = color
+	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.add_child(swatch)
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	if _is_string_key(text):
+		label.text = I18n.t_key(text)
+	else:
+		label.text = text
+	box.add_child(label)
+	var value := Label.new()
+	value.add_theme_font_size_override("font_size", 12)
+	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	box.add_child(value)
+	_debug_rows.add_child(box)
+	return {"label": label, "value": value, "swatch": swatch, "key": text}
+
+
+## Refreshes the panel from the last build's caches (locale-safe: every i18n
+## row rebinds, so a locale flip mid-session never leaves a stale language).
+func _refresh_panel() -> void:
+	if _debug_panel == null or _debug_rows == null:
+		return
+	if _panel_rows.is_empty() and _debug_active:
+		_ensure_panel_rows()
+	if _panel_rows.is_empty():
+		return
+	for row_id in _panel_rows:
+		var row: Dictionary = _panel_rows[row_id]
+		var key := str(row.get("key", ""))
+		if _is_string_key(key):
+			(row["label"] as Label).text = I18n.t_key(key)
+	_set_dot("omni", _omni_on)
+	_set_dot("wind", _wind_on)
+	_set_dot("current", _current_on)
+	_set_dot("ice", _ice_on)
+	(_panel_rows["calendar"]["value"] as Label).text = I18n.fmt(KEY_CALENDAR, {
+		"y": SailingSimLib.year_for(maxi(int(GameState.day), 1)),
+		"m": view_month(),
+	})
+	(_panel_rows["month"]["value"] as Label).text = "" \
+		if _preview_month < 1 \
+		else I18n.t_key("world.calendar.month.%d" % _preview_month)
+	(_panel_rows["preset"]["value"] as Label).text = str(GameState.npc_preset)
+	(_panel_rows["fleets"]["value"] as Label).text = _fleet_counts_text()
+	# Lane rows: the active variant for the viewed month (or "" for the base).
+	for lane in _network.get("lanes", []):
+		var row: Dictionary = _panel_rows.get("lane_" + str(lane["id"]), {})
+		if row.is_empty():
+			continue
+		(row["value"] as Label).text = str(lane.get("active_variant", ""))
+	(_panel_rows["spokes"]["value"] as Label).text = str(
+		(_network.get("spokes", []) as Array).size())
+	(_panel_rows["chokepoints"]["value"] as Label).text = str(
+		(_network.get("chokepoints", []) as Array).size())
+	var counts := _fleet_counts()
+	for role in LEGEND_ROLES:
+		var row: Dictionary = _panel_rows.get("role_" + role, {})
+		if not row.is_empty():
+			(row["value"] as Label).text = str(int(counts.get(role, 0)))
+	(_panel_rows["wrecks"]["value"] as Label).text = str(_wreck_markers.size())
+	var intel_text := ""
+	for entry in _intel_markers:
+		if str(entry.get("kind", "")) == "ring":
+			intel_text = str(entry.get("port_id", ""))
+		else:
+			intel_text = str(entry.get("cell", ""))
+	(_panel_rows["intel"]["value"] as Label).text = intel_text
+	var neutral := 0
+	for entry in _port_dots:
+		if entry.get("neutral", false):
+			neutral += 1
+	(_panel_rows["neutral"]["value"] as Label).text = str(neutral)
+	(_panel_rows["hover"]["value"] as Label).text = _hover_text
+
+
+func _set_dot(row_id: String, on: bool) -> void:
+	var row: Dictionary = _panel_rows.get(row_id, {})
+	if row.is_empty() or row["swatch"] == null:
+		return
+	(row["swatch"] as ColorRect).color = PaletteLib.ACCENT if on \
+		else PaletteLib.PANEL_LINE
+
+
+## `role → live fleet count`, straight off `NpcFleets.markers()`.
+func _fleet_counts() -> Dictionary:
+	var out: Dictionary = {}
+	for entry in _fleet_markers:
+		var role := str(entry.get("role", ""))
+		out[role] = int(out.get(role, 0)) + 1
+	return out
+
+
+## The info-strip fleet text: `<letter>:<count>` per present role, id order.
+func _fleet_counts_text() -> String:
+	var counts := _fleet_counts()
+	var roles: Array = counts.keys()
+	roles.sort()
+	var parts: Array[String] = []
+	for role in roles:
+		parts.append("%s:%d" % [_role_letter(str(role)), int(counts[role])])
+	return " ".join(parts)
