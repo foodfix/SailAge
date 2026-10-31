@@ -8,14 +8,20 @@ depends on. It defines:
 - The exact JSON file layout under `data/` and the schema of every entity type.
 - The i18n rule for all display strings.
 - The spec for `tools/validate_data.py`, the validator all data must pass.
-- The locked content lists: 100 ports, 20 goods, 8 ship types,
-  6 nations, 6 starter officers (§7.1–7.5), plus the Phase-5 lists —
-  12 trade lanes (§7.6), 7 captain name pools (§7.7), 4 named pirates
-  (§7.8) — exhaustive, with no open slots.
+- The locked content lists: 100 sovereign ports plus the Phase-6 neutral
+  tier (§7.1), 20 goods, 8 ship types, 6 nations, 6 starter officers
+  (§7.2–7.5), plus the Phase-5/6 lists — 17 trade lanes (§7.6), 7 captain
+  name pools (§7.7), 4 named pirates (§7.8) — exhaustive, with no open
+  slots.
 - The Phase-5 npc/economy schemas (`npc_config`, `npc_captains`,
   `named_pirates`, `market_events` — §4.10–4.13), the trade-route pair
   (`trade_routes.json` hand-authored, `trade_routes_built.json` tool-owned —
   §4.14), and the living-economy save-block shapes (§4.15).
+- The Phase-6 additions: the three ocean seasonal datasets —
+  `wind_regions.json` (§4.16), `ocean_currents.json` (§4.17),
+  `ice_regions.json` (§4.18) — the lane `variants` schema (§4.14), the
+  neutral-port tier (§7.1), the 17-lane set (§7.6), and the two tool-owned
+  ocean rasters (§6.5).
 - The grid constants, tile legend, and the generated raster world artifact
   (`data/maps/world.png`) with its harbor-snap rule — ports are `lat`/`lon`
   data in `data/ports.json`, never hand-placed cells.
@@ -31,7 +37,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/nations.json` | Nation list (incl. `rivals`) | this doc |
 | `data/goods.json` | Good list | this doc |
 | `data/ship_types.json` | ShipType list | this doc |
-| `data/ports.json` | Port list — all 100 locked ports in one envelope; `lat`/`lon` are the geographic truth | this doc |
+| `data/ports.json` | Port list — the 100 locked sovereign ports plus the Phase-6 neutral tier (§7.1) in one envelope; `lat`/`lon` are the geographic truth | this doc |
 | `data/officers.json` | Officer roster | this doc |
 | `data/discoveries.json` | Discovery list; `lat`/`lon` are the geographic truth | this doc / `70-*` |
 | `data/quests.json` | Quest templates | this doc / `70-*` |
@@ -40,19 +46,25 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/npc_captains.json` | Captain name pools — 7 incl. the nationless `""` pool (§4.11, §7.7) | this doc / `60-*` |
 | `data/named_pirates.json` | The 4 named pirates, tiers 1–3 (§4.12, §7.8) | this doc / `60-*` / `70-*` |
 | `data/market_events.json` | Demand-event templates (§4.13) | this doc / `30-*` |
-| `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 12 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
+| `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 17 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
+| `data/wind_regions.json` | Prevailing-wind regions: month-keyed wind-from directions per ocean region (§4.16) — hand-authored | this doc / `20-*` |
+| `data/ocean_currents.json` | Ocean-current systems: strength, path, width, optional reversal (§4.17) — hand-authored | this doc / `20-*` |
+| `data/ice_regions.json` | Seasonal sea-ice polygons with month windows (§4.18) — hand-authored | this doc / `20-*` |
 | `data/map_legend.json` | MapLegend (tiles + grid constants) | this doc |
 | `data/maps/maps.json` | Map index (exactly one entry, `id: "world"`) | `90-*` §9.1 |
-| `data/maps/world.png` | Generated world map artifact — indexed PNG, 2160×1080, 1 px = 1 tile (§6.3) | this doc |
+| `data/maps/world.png` | Generated world map artifact — indexed PNG, 4320×2160, 1 px = 1 tile (§6.3) | this doc |
+| `data/maps/wind_regions.png` | Baked prevailing-wind lookup — indexed PNG, 4320×2160, 1 px = 1 tile, palette index = region id (§6.5); tool-owned, never hand-edited | this doc |
+| `data/maps/currents.png` | Baked annual-mean current lookup — indexed PNG, 4320×2160, 1 px = 1 tile, index = `dir_index × 3 + strength` (§6.5); tool-owned, never hand-edited | this doc |
 | `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (berth) and `shore_tile` (§6.3, §8.1) | this doc |
 | `data/trade_routes_built.json` | Lane-builder artifact: tile paths + junction graph + per-port spokes (§4.14) — tool-owned, never hand-edited | this doc |
 | `tools/build_world.py` | World generator: shorelines → tiles → `world.png` + `world_report.json` (§6.3); `--ascii` debug export only | this doc / `IMPLEMENT-Phase4.md` task C |
 | `tools/map_overrides.json` | Waterway carves (Gibraltar, Bosphorus, …) and tidal-river carves (§6.1, `IMPLEMENT-Phase4.md` task D) | this doc |
-| `tools/build_routes.py` | Lane builder: `trade_routes.json` → snapped/rasterized lanes, junction graph, spokes → `trade_routes_built.json` (§4.14); `--ascii` debug export only | this doc / `IMPLEMENT-Phase5.md` task F |
+| `tools/build_routes.py` | Lane builder: `trade_routes.json` → snapped/rasterized lanes (incl. per-variant month-window passability, §4.14), junction graph, spokes → `trade_routes_built.json` (§4.14); `--ascii` debug export only | this doc / `IMPLEMENT-Phase5.md` task F |
 | `tools/route_overrides.json` | Hand fixes consumed by the lane builder (§4.14) | this doc |
+| `tools/build_ocean.py` | Ocean-layer rasterizer: `wind_regions.json` + `ocean_currents.json` → `data/maps/wind_regions.png` + `data/maps/currents.png` (§6.5); `--ascii`/`--report` debug exports only | this doc / `IMPLEMENT-Phase6.md` task E |
 | `tools/assets/` | Vendored public-domain shapefiles (Natural Earth 10 m land + minor islands + lakes) and `LICENSE-NOTES.md` with per-file SHA-256 | this doc |
 | `data/ui_strings.json` | UI-frame L10n strings | `80-UI-UX.md` |
-| `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route validator (groups 1–8, §8) | this doc |
+| `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route validator (groups 1–10, §8) | this doc |
 
 ## 3. Shared Conventions
 
@@ -66,7 +78,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `day` | Integer ≥ 0, the game-clock tick unit (1 day per tick) |
 | `tile` | Unit of distance/size on the world grid |
 | `cargo unit` | Abstract hold space; 1 unit of any good, provision, or water = 1 cargo unit |
-| `tilePos` | `{"x": int, "y": int}` with `0 ≤ x < 2160`, `0 ≤ y < 1080` (see §6). `x` wraps: every consumer (movement, BFS, camera, click) takes `x mod 2160`; `y` is bounded and never wraps. |
+| `tilePos` | `{"x": int, "y": int}` with `0 ≤ x < 4320`, `0 ≤ y < 2160` (see §6). `x` wraps: every consumer (movement, BFS, camera, click) takes `x mod 4320`; `y` is bounded and never wraps. |
 | `lat` / `lon` | WGS84 decimal degrees: `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`. The geographic truth for ports and discoveries; the grid cell is derived by §6.1's projection + harbor-snap rule. |
 
 ### 3.2 File envelope
@@ -197,7 +209,7 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
       "base_price": 8000,
       "durability": 90,
       "capacity": 120,
-      "speed": 10,
+      "speed": 20,
       "crew_min": 15,
       "crew_max": 45,
       "armament_slots": 6
@@ -208,14 +220,15 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 
 ### 4.4 Port — `data/ports.json`
 
-`data/ports.json` holds **all 100 ports** in one envelope (§7.1); there is no
-second port file and no per-map port variant.
+`data/ports.json` holds **all ports** in one envelope (§7.1) — the 100
+locked sovereign ports plus the Phase-6 neutral tier (`nation_id: ""`); there
+is no second port file and no per-map port variant.
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 100 locked ids in §7.1 |
+| `id` | id | one of the 100 locked sovereign ids in §7.1, or a Phase-6 neutral-tier id appended there |
 | `name` | L10nString | |
-| `nation_id` | id | references Nation |
+| `nation_id` | id \| `""` | references Nation; `""` marks a Phase-6 neutral-tier port (§7.1) |
 | `lat` | number | WGS84 latitude in degrees, `-90 ≤ lat ≤ 90`; the port's real-world position and the **geographic truth** |
 | `lon` | number | WGS84 longitude in degrees, `-180 ≤ lon ≤ 180`; geographic truth |
 | `produces` | []id | ⊆ Good ids; port sells these cheaper (supply factor in `30-*`) |
@@ -413,7 +426,7 @@ replace, and `rewards` states the band. Royal templates also carry
 | Field | Type | Rule |
 |---|---|---|
 | `tile_size_px` | int | locked `32` |
-| `grid` | object | `{"width": 2160, "height": 1080}` — locked (§6.1) |
+| `grid` | object | `{"width": 4320, "height": 2160}` — locked (§6.1) |
 | `tiles` | object | char → `{"kind": string, "passable": bool}`; locked keys `~ . # ^ I` (§6.2) |
 
 There is no `port_markers` table: port markers left the map (decision 7 in
@@ -425,7 +438,7 @@ legend carries only `version`, `tile_size_px`, `grid`, and `tiles`.
 {
   "version": 1,
   "tile_size_px": 32,
-  "grid": {"width": 2160, "height": 1080},
+  "grid": {"width": 4320, "height": 2160},
   "tiles": {
     "~": {"kind": "sea", "passable": true},
     ".": {"kind": "coastal_sea", "passable": true},
@@ -571,18 +584,19 @@ response are pinned in `30-*` §4.5; active instances persist in
 
 ### 4.14 TradeRoute — `data/trade_routes.json` + `data/trade_routes_built.json` *(Phase 5)*
 
-`data/trade_routes.json` holds **only the major lanes** — exactly the 12
+`data/trade_routes.json` holds **only the major lanes** — exactly the 17
 locked ids of §7.6, hand-authored as historical facts. Envelope
 `{"version": 1, "lanes": [...]}` (group-1 exception: key `lanes`).
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 12 locked lane ids (§7.6) |
+| `id` | id | one of the 17 locked lane ids (§7.6) |
 | `class` | enum | `"major"`; minor spokes are builder-generated and never stored in this file |
 | `nations` | []id | ⊆ Nation ids; the fleets that work the lane |
 | `waypoints` | [][lat, lon] | ≥ 2 pairs in the `ports.json` coordinate space (§3.1); wrap-aware across the dateline — a crossing segment keeps `x` monotonic under wrap (the Manila lane) |
 | `goods` | []id | ⊆ Good ids; the lane's historical trade goods |
 | `chokepoints` | []string | ≥ 1 snake_case tag per lane naming the historical choke points the lane passes |
+| `variants` | []object | optional (Phase 6): seasonal waypoint overrides — each `{"id": id, "months": []int, "waypoints": [][lat, lon]}`; rules below (validator group 10, §8.5) |
 
 ```json
 {
@@ -600,6 +614,48 @@ locked ids of §7.6, hand-authored as historical facts. Envelope
 }
 ```
 
+Lane **`variants`** (Phase 6, seasonal waypoint overrides):
+
+- each variant: `id` unique within its lane; `months` a non-empty list of
+  ints 1–12; `waypoints` ≥ 2 pairs like the base field;
+- `months` sets are pairwise **disjoint** across a lane's variants; months no
+  variant covers use the **base** `waypoints` — so base + variants always
+  cover all 12 months;
+- each variant's waypoint walk must be passable **within its own month
+  window** — the walk is checked with the in-month seasonal-ice mask
+  (§4.18); a violation is a hard build error naming the lane
+  (`tools/build_routes.py`), re-asserted by validator group 10 (§8.5);
+- a lane crossing a seasonal-ice polygon must either carry a covering
+  variant set or avoid ice year-round (§8.5);
+- first customer: `hanseatic_north` carries a winter variant outside the
+  Baltic freeze (§7.6).
+
+Example (variant shape; authored waypoint/chokepoint values are task-owned —
+Phase-6 task P):
+
+```json
+{
+  "version": 1,
+  "lanes": [
+    {
+      "id": "hanseatic_north",
+      "class": "major",
+      "nations": ["holland"],
+      "waypoints": [[60.39, 5.32], [54.40, 18.68], [53.87, 8.70]],
+      "goods": ["dried_fish", "timber"],
+      "chokepoints": ["skagerrak"],
+      "variants": [
+        {
+          "id": "winter_off_baltic",
+          "months": [12, 1, 2, 3],
+          "waypoints": [[60.39, 5.32], [57.70, 10.70], [53.87, 8.70]]
+        }
+      ]
+    }
+  ]
+}
+```
+
 Builder rules (locked; `tools/build_routes.py`, mirroring `build_world.py`
 governance):
 
@@ -612,9 +668,12 @@ governance):
 - **Rasterization + junction graph:** every lane becomes a tile path and the
   builder extracts the junction graph the runtime routes over (`60-*` §4.1).
 - **Minor spokes:** exactly one generated spoke per port — to the nearest
-  lane waypoint within Chebyshev 20 (wrap-aware), else a direct generated
-  spoke to the port's national capital. A port with neither is a hard
-  build/validator error naming the port, never a runtime stall.
+  lane waypoint within Chebyshev 40 (wrap-aware; the Phase-6 rescale of the
+  former 20, §6.1 enumeration), else a direct generated spoke to the port's
+  national capital. A neutral port (`nation_id: ""`, §7.1) has no capital:
+  its fallback is the **nearest lane waypoint, unbounded**. A port with
+  neither is a hard build/validator error naming the port, never a runtime
+  stall.
 - **Determinism:** two consecutive builds produce a **byte-identical**
   `data/trade_routes_built.json` (group 8 re-asserts it). Hand fixes go in
   `tools/route_overrides.json` — plus minimal, per-lane-reported waypoint
@@ -630,12 +689,14 @@ routing over the graph is `20-*`/`60-*` material.
 
 ### 4.15 Save-block shapes (Phase 5)
 
-The living-economy save blocks — keys of the v5 payload (`90-*` §8.1).
-Not data files: runtime state whose shapes this doc pins. Shapes only;
-behavior lives in `30-*`/`60-*`. (`named_pirate_respawns` is the sixth
-Phase-5 key: a plain `{named_pirate_id: available_day}` map, pinned whole
-in `90-*` §8.1 with its `60-*` §4.11.11.4 semantics — no nested shape to
-add here.)
+The living-economy save blocks — keys of the save payload since v5, carried
+into v6 unchanged (`90-*` §8.1; the Phase-6 keys `control_prefs`,
+`world.sail_trim`, `world.heading`, `world.wind_dir` are pinned in
+`90-*` §8.1 only). Not data files: runtime state whose shapes this doc pins.
+Shapes only; behavior lives in `30-*`/`60-*`. (`named_pirate_respawns` is
+the sixth Phase-5 key: a plain `{named_pirate_id: available_day}` map, pinned
+whole in `90-*` §8.1 with its `60-*` §4.11.11.4 semantics — no nested shape
+to add here.)
 
 | GameState field | Type | Shape |
 |---|---|---|
@@ -673,6 +734,129 @@ Fleet dict — the locked save shape (`60-*` §4.1):
 }
 ```
 
+### 4.16 WindRegion — `data/wind_regions.json` *(Phase 6)*
+
+Envelope `{"version": 1, "wind_regions": [...]}` — the plural key **equals
+the file basename**, so validator group 1 needs no exception (§3.2).
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | unique |
+| `name` | L10nString | |
+| `polygon` | [][lat, lon] | closed ring — the first pair is repeated as the last pair; vertices in the `ports.json` coordinate space (§3.1) |
+| `months` | object | exactly 12 keys `"1"` … `"12"`; each value a direction token naming the **wind-from** direction prevailing that month |
+| `variability` | enum | `steady` \| `variable` |
+
+- **Direction tokens:** the 8 compass directions `N NE E SE S SW W NW`
+  (wind-FROM) plus `VAR` — a month with no prevailing direction draws
+  uniformly.
+- **Coverage:** 15–25 regions tile **all ocean between 70°N–60°S**; water no
+  polygon covers falls back to `VAR` + `variable`.
+- **Daily roll:** the ledger's weather step (step 3), after the
+  weather-strength roll, on the same seeded stream — pinned order
+  **strength → direction**; jitter by weather is pinned in `20-*` §4.7. The
+  result persists per day as `GameState.world.wind_dir` (an 8-dir id;
+  `90-*` §5.4).
+- **Baked lookup:** `data/maps/wind_regions.png` (§6.5) — palette index =
+  region id; tool-owned.
+
+```json
+{
+  "version": 1,
+  "wind_regions": [
+    {
+      "id": "trade_winds_n_atlantic",
+      "name": {"zh": "北大西洋信风带", "en": "North Atlantic trade-wind belt"},
+      "polygon": [[8.0, -70.0], [30.0, -70.0], [30.0, -20.0], [20.0, -20.0], [8.0, -30.0], [8.0, -70.0]],
+      "months": {"1": "NE", "2": "NE", "3": "NE", "4": "NE", "5": "NE", "6": "NE",
+                  "7": "NE", "8": "NE", "9": "NE", "10": "NE", "11": "NE", "12": "NE"},
+      "variability": "steady"
+    }
+  ]
+}
+```
+
+### 4.17 OceanCurrent — `data/ocean_currents.json` *(Phase 6)*
+
+Envelope `{"version": 1, "ocean_currents": [...]}` — the plural key **equals
+the file basename**, so validator group 1 needs no exception (§3.2).
+≈ 20 hand-authored systems (exact list task-owned by Phase-6 task D; sources
+cited per system in `LICENSE-NOTES.md`).
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | unique |
+| `name` | L10nString | |
+| `strength` | int | `1` \| `2` \| `3` |
+| `path` | [][lat, lon] | ≥ 2 pairs (§3.1) — the system's flow axis, downstream order |
+| `width_tiles` | int > 0 | the system's corridor width in tiles, at the §6.1 5 nm grid |
+| `reversal` | object? | optional; exactly `{"summer_months": []int, "direction": "reverse"}` — `summer_months` non-empty month ints; the decoded current vector **flips during these months at lookup time** (§6.5). Initial user: the Somali current |
+
+- **Baked lookup:** `data/maps/currents.png` (§6.5) — index 0 = none,
+  indices 1–24 = 8 directions × 3 strengths; overlaps resolved
+  strongest-then-id-order; the raster stores the **annual-mean** vector and
+  `reversal` is applied at lookup time (runtime and debug renderer alike).
+- **Consumption:** the speed-modifier and drift formulas, and the
+  `control_prefs.current_mode` selection between them, are pinned in
+  `20-*` §4.16; the persisted mode lives in `GameState.control_prefs`
+  (`90-*` §5.4).
+
+```json
+{
+  "version": 1,
+  "ocean_currents": [
+    {
+      "id": "somali_current",
+      "name": {"zh": "索马里洋流", "en": "Somali Current"},
+      "strength": 2,
+      "path": [[2.0, 51.0], [8.0, 53.0], [12.0, 55.0]],
+      "width_tiles": 8,
+      "reversal": {"summer_months": [6, 7, 8, 9], "direction": "reverse"}
+    }
+  ]
+}
+```
+
+### 4.18 IceRegion — `data/ice_regions.json` *(Phase 6)*
+
+Envelope `{"version": 1, "ice_regions": [...]}` — the plural key **equals
+the file basename**, so validator group 1 needs no exception (§3.2).
+Initial locked set: Baltic (months 12–3), Hudson Bay (11–4), White Sea
+(11–4); the polygon shapes are authored by Phase-6 task D.
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | unique |
+| `name` | L10nString | |
+| `polygon` | [][lat, lon] | closed ring — the first pair is repeated as the last pair (§3.1) |
+| `months` | []int | non-empty; each an int 1–12 — the months the polygon's water is frozen |
+
+- **Rule:** in-month, water tiles inside a polygon are impassable to
+  **entering** fleets — player, NPC (incl. A\* and lane stepping) alike. A
+  tile freezing under a standing fleet does **not** trap it: it may still
+  move out. A refused move raises the `world.ice_blocked` toast.
+- **Runtime:** a polygon check with a month-keyed tile cache in
+  `scripts/world/ocean_layers.gd` (`90-*` §4) — small data, **no raster**.
+- **Interaction with lanes:** a lane crossing a seasonal-ice polygon must
+  carry a covering `variants` set or avoid ice year-round (§4.14; validator
+  group 10, §8.5).
+- The permanent `I` band rule (§6.2) is unchanged — seasonal ice only adds
+  temporary impassability equatorward of it.
+
+```json
+{
+  "version": 1,
+  "ice_regions": [
+    {
+      "id": "baltic_ice",
+      "name": {"zh": "波罗的海季节海冰", "en": "Baltic seasonal sea ice"},
+      "polygon": [[54.0, 10.5], [54.0, 21.0], [60.0, 27.0], [65.5, 24.0], [65.5, 17.0], [60.0, 17.5], [54.0, 10.5]],
+      "months": [12, 1, 2, 3]
+    }
+  ]
+}
+```
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in
@@ -701,36 +885,76 @@ Locked rule, implemented at the inn (facility `inn`), behavior detailed in
 
 ### 6.1 Locked constants
 
-The single source of truth for the grid. Values are copied verbatim from the
-Locked constants table in `IMPLEMENT-Phase4.md`; no consumer may derive one
-differently.
+The single source of truth for the grid. Values are the Phase-6 locked
+constants — the 4320×2160 rescale of `IMPLEMENT-Phase6.md` §2.0 (the
+Phase-4-era values they superseded are that backlog's historical record); no
+consumer may derive one differently.
 
 | Constant | Value | Used by |
 |---|---|---|
-| Grid | `2160 × 1080` tiles | the single world; `20-*`, `60-*`, `80-*`, `90-*` |
-| Tiles per degree | `6`; 1 tile = 10′ lat = 10 nm | all distance/speed math |
-| Addressing | `lon = x/6 − 180`, `lat = 90 − y/6`; origin top-left, x east, y south | `20-*` §4.1, `90-*` §9 |
-| Longitude wrap | on; `x` taken mod 2160 everywhere (movement, BFS, camera, click) | `20-*` §4.1, `80-*` §4.5, validator group 6 |
+| Grid | `4320 × 2160` tiles | the single world; `20-*`, `60-*`, `80-*`, `90-*` |
+| Tiles per degree | `12`; 1 tile = 5′ lat = 5 nm | all distance/speed math |
+| Addressing | `lon = x/12 − 180`, `lat = 90 − y/12`; origin top-left, x east, y south | `20-*` §4.1, `90-*` §9 |
+| Longitude wrap | on; `x` taken mod 4320 everywhere (movement, BFS, camera, click) | `20-*` §4.1, `80-*` §4.5, validator group 6 |
 | Latitude edges | impassable (ice band, below) | `20-*` §4.1 |
 | `TILE_SIZE_PX` | `32` (unchanged) | TileMap config, `80-*` §4.5 |
-| Coastal band | `.` iff within 3 tiles (Chebyshev, wrap-aware) of a passable-adjacent land/ice tile, else `~`; `.` is cosmetic only (same passability/speed as `~`) | `tools/build_world.py`, renderer |
-| Harbor snap | berth tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest `(y, x)` — the Python builder and the GDScript runtime implement this rule exactly and the validator tests they agree | `10-*` §7.1, `tools/build_world.py`, `90-*` §9 |
+| Coastal band | `.` iff within 6 tiles (Chebyshev, wrap-aware) of a passable-adjacent land/ice tile, else `~`; `.` is cosmetic only (same passability/speed as `~`) — the 6-tile band keeps the shallow-water band at 30 nm | `tools/build_world.py`, renderer |
+| Harbor snap | berth tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest `(y, x)` — the Python builder and the GDScript runtime implement this rule exactly and the validator tests they agree. **Unchanged at 2 tiles** (derivation-accuracy class: the tile count is kept and its nm accuracy improves at 5 nm — see the enumeration below) | `10-*` §7.1, `tools/build_world.py`, `90-*` §9 |
 | Harbor pair | every port has a **shore tile**: the nearest `#` tile orthogonally adjacent to its berth, tie-break smallest `(y, x)`. The shore tile is the port's visible location and the docking target; the berth is where the fleet stands (`20-*` §4.11.1). Both are derived, never stored. The pair constraint is part of the berth snap: a water candidate with no orthogonally adjacent `#` is skipped, so the berth is the nearest candidate satisfying **both** rules | `20-*` §4.11.1, `90-*` §9, validator group 6 |
-| Port sighting | `24 tiles` (≈ 4° ≈ 240 nm) | `20-*` §4.11 |
-| Discovery sighting | `18 tiles` (≈ 3°) | `70-*` §4.4 |
-| Ship speeds | ×2: base speeds become `{8, 10, 12}` tiles/day = 80–120 nm/day; floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2, `data/ship_types.json` |
+| Port sighting | `48 tiles` (≈ 4° ≈ 240 nm) | `20-*` §4.11 |
+| Discovery sighting | `36 tiles` (≈ 3°) | `70-*` §4.4 |
+| Ship speeds | base speeds `{16, 20, 24}` tiles/day on 5 nm tiles = 80–120 nm/day (unchanged); floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2, `data/ship_types.json` |
 | Weather zones | 5 latitude bands (§6.4) | `20-*` §4.7 |
-| Map artifact | `data/maps/world.png` — indexed-color PNG, 2160×1080, 1 px = 1 tile, palette index 0–4 = `~ . # ^ I` | §6.3, `tools/build_world.py` |
-| Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics | §6.3 |
+| Map artifact | `data/maps/world.png` — indexed-color PNG, 4320×2160, 1 px = 1 tile, palette index 0–4 = `~ . # ^ I` | §6.3, `tools/build_world.py` |
+| Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` — indexed-color PNGs, 4320×2160, 1 px = 1 tile, own palette encodings | §6.5, `tools/build_ocean.py` |
+| Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics. The §6.5 ocean rasters are **separate files with their own palettes** — they do not use or extend this one | §6.3, §6.5 |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `tools/build_world.py` |
 | Map index | `data/maps/maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 |
-| Save | version 5; no migration chain — v4 and older payloads refused | `90-*` §8.1–8.2 |
-| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds all 100 ports | §4.4, §7.1 |
+| Save | version 6; no migration chain — v5 and older payloads refused | `90-*` §8.1–8.2 |
+| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 100 sovereign ports plus the Phase-6 neutral tier | §4.4, §7.1 |
 
-**Projection.** The grid is the whole globe at 6 tiles/degree: it spans
+**Projection.** The grid is the whole globe at 12 tiles/degree: it spans
 180°W–180°E and 90°N–90°S, and circumnavigation is a first-class feature
-(`x = 0` and `x = 2159` are neighbours). No Mercator: a uniform grid is
+(`x = 0` and `x = 4319` are neighbours). No Mercator: a uniform grid is
 load-bearing for the engine; display projection is a render concern only.
+
+**Phase-6 rescale enumeration (ratified from `IMPLEMENT-Phase6.md` §2.0).**
+Every tile-domain pin is classified into one of three sweep classes; the
+gameplay semantics live in their owning system docs (`20-*`, `40-*`,
+`60-*`, `80-*`), which re-pin these same values:
+
+- **Physical (nm semantics preserved; tiles ×2):** `ShipType.speed`
+  `{16, 20, 24}` tiles/day (80–120 nm/day unchanged); port sighting
+  24 → **48** tiles (≈ 240 nm); discovery sighting 18 → **36**; trader
+  decision range 60 → **120**; escort radius 10 → **20**; coastal band
+  3 → **6** tiles (cosmetic 30 nm shallow-water band, nm preserved).
+- **Derivation accuracy (tile count kept — nm accuracy improves):**
+  harbor snap ≤ **2** (unchanged); lane waypoint snap ≤ **2** (unchanged);
+  `world_report.json` component-list threshold **2000** tiles
+  (informational diagnostic, unchanged).
+- **Gameplay (default ×2; re-tunable only per `00-*` §11):** patrol zone
+  15 → **30**; chokepoint anchor 3 → **6**; pirate hysteresis 5/8 →
+  **10/16**; hunter hysteresis 15/20 → **30/40** (`60-*` §4.11.11.1);
+  lane spoke 20 → **40**; lane stepping base 1 → **2** tiles/day; current
+  drift rates **0.5 / 2 / 4** tiles/day at 5 nm (currents strengths 1/2/3;
+  `20-*` §4.16).
+
+Seam and code pins of the same sweep:
+
+- **Combat seam:** `battle_mp(speed) = speed / 4` — battle pacing preserved
+  exactly a second time (the Phase-4 pin pattern repeated; `60-*` §4.2).
+- **A\*:** the shipped two-stage `sail_path.gd` is kept — near stage
+  `NEAR_REGION_TILES` 256 / `REGION_MARGIN` 24, `BUDGET_MS` 1000 — and
+  re-benchmarked at 4320²; the 1 s budget and the pinned escape hatch stand.
+- **Minimap/chart:** the 256×192 px box and the 128×96-tile crop at 2 px/tile
+  are unchanged; the chart downscales as today; the explored bitset grows to
+  **9,331,200 bytes (~9.3 MB)** — session-only, not saved.
+- **Width-derived code sites:** `npc_fleets.gd`'s hardcoded `_width`/
+  `_height`, the cell-key packing `cell.y * 4096 + posmod(cell.x, 4096)`,
+  the `_bucket_index` stride, and `buckets_x` all become **width-derived**
+  (they break outright at `x > 4095` on the old packing); `world_map.gd`'s
+  seam double-draw moves to `x = 4320`; `sail_path.gd`'s `short_dx` default
+  width becomes **4320**.
 
 ### 6.2 Tile legend (locked)
 
@@ -756,12 +980,15 @@ orthogonally adjacent tile, which triggers the port-entry flow
 
 ### 6.3 Map artifact format — `data/maps/world.png`
 
-- **Format:** indexed-color (palette) PNG, exactly 2160 × 1080 pixels,
+- **Format:** indexed-color (palette) PNG, exactly 4320 × 2160 pixels,
   1 px = 1 tile. Palette indices 0–4 correspond to `~ . # ^ I` in that order.
 - **Append-only palette policy:** indices 0–4 are locked and their meanings may
   never change. Indices ≥ 5 are reserved for future cosmetic/seasonal layers
   (relief, biomes, seasonal ice) and never carry simulation semantics; adding
-  one is a render-only change.
+  one is a render-only change. The Phase-6 ocean rasters
+  (`data/maps/wind_regions.png` / `data/maps/currents.png`, §6.5) are
+  **separate files with their own palettes** — they do not use or extend this
+  palette.
 - **Loader contract:** read with `FileAccess` +
   `Image.load_png_from_buffer`. The PNG is **data**, not an imported texture —
   no Godot import pipeline, and the placeholder-art rule
@@ -800,21 +1027,73 @@ clear / overcast / windy / storm.
 every category within ±0.02 (the T8 methodology). The demo gate is re-anchored:
 **Lisbon → the water off Santa Cruz de Tenerife** (≈ 28.3°N 16.5°W) crosses into
 the trade-wind belt; the scripted gate is "storm within 6 days in-band ≥ 0.90"
-(`1 − 0.65⁶ = 0.9246`). Tenerife is a **coordinate destination** — the 100-port
-list has no Canaries port and none is added; arrival means crossing the 30°N
-band edge and sampling weather there, not docking.
+(`1 − 0.65⁶ = 0.9246`). Tenerife is a **coordinate destination** — the
+sovereign 100-port list has no Canaries port and none is added; arrival means
+crossing the 30°N band edge and sampling weather there, not docking.
+
+### 6.5 Ocean rasters — `data/maps/wind_regions.png` + `data/maps/currents.png` *(Phase 6)*
+
+Two tool-owned lookup rasters bake the §4.16 wind regions and the §4.17
+currents to O(1) runtime reads (`scripts/world/ocean_layers.gd`, `90-*` §4):
+
+- **Format (both files):** indexed-color (palette) PNG, color type 3, exactly
+  4320 × 2160 pixels — 1 px = 1 tile at the §6.1 grid.
+- **`wind_regions.png` — palette index = region id.** Index 0 = unassigned
+  water → the `VAR` + `variable` fallback (`20-*` §4.14); indices `1..N` are
+  the regions of `data/wind_regions.json` in file order. The palette holds
+  ≤ 1 + 25 entries (§4.16's 15–25 regions).
+- **`currents.png` — index 0 = no current; indices 1–24 = 8 directions × 3
+  strengths,** encoded as `index = dir_index × 3 + strength` with `dir_index`
+  0–7 over the compass order `N NE E SE S SW W NW` and `strength` 1–3
+  (so `N`/1 = 1 … `NW`/3 = 24). A tile's index decodes to a unit direction +
+  strength; the `20-*` §4.16 modifier/drift formulas consume the decoded
+  vector.
+- **Overlap rule (currents):** a tile covered by several systems takes the
+  **strongest** system's vector; strength ties go to the system earliest in
+  `data/ocean_currents.json` file (id) order — "strongest-then-id-order",
+  deterministic.
+- **Reversal at lookup (pinned):** the raster stores the **annual-mean**
+  vector; a system's `reversal.summer_months` flips the decoded vector **at
+  lookup time** — runtime and debug renderer apply the same one-line flip
+  (§4.17). One static PNG, seasonal Somali.
+- **Governance — same standing as `world.png` (§6.3):** written only by
+  `tools/build_ocean.py`, **never hand-edited**; two consecutive builds are
+  **byte-identical** (validator group 9, §8.4 re-asserts it); `--ascii` and
+  `--report` are debug exports only — never shipped, never hand-edited, not
+  data sources. The rasters do **not** use `world.png`'s 5-colour palette:
+  their palettes encode ids/vectors per the rules above.
+- **Session-only:** decoded once at load; never saved (§6.5 state is data,
+  not save state). Ice regions are **not** rasterized — §4.18 stays a runtime
+  polygon check with a month-keyed tile cache.
 
 ## 7. Locked Content Lists
 
 Exhaustive — no additions or removals without amending this doc.
 
-### 7.1 Ports (100)
+### 7.1 Ports (100 sovereign + Phase-6 neutral tier)
 
-All 100 ports live in the single `data/ports.json` envelope. `lat`/`lon` are
-WGS84 degrees (the geographic truth); the harbor pair is derived by §6.1's
-projection + harbor-snap rule, never hand-placed. Nations from §7.4. Ordering
-is the file order: the original 30 Mediterranean/Atlantic ports first, then the
-70 world-expansion ports.
+The **sovereign set** — exactly the 100 ids below — lives in the single
+`data/ports.json` envelope and is **locked and untouched** (exact-set, validator
+group 5). `lat`/`lon` are WGS84 degrees (the geographic truth); the harbor pair
+is derived by §6.1's projection + harbor-snap rule, never hand-placed. Nations
+from §7.4. Ordering is the file order: the original 30 Mediterranean/Atlantic
+ports first, then the 70 world-expansion ports.
+
+**Neutral tier (Phase 6, `IMPLEMENT-Phase6.md` §2.11).** `data/ports.json` may
+additionally hold **40–60 neutral ports** with `nation_id: ""`, appended after
+the sovereign block:
+
+- era-appropriate, cited historical names, zh and en both required;
+- `produces`/`demands` over the **existing 20 goods** — no new goods (the
+  5/10/5 consumption-tier split stays validator-asserted, §8.2);
+- facilities are data-driven per port; default `market + inn + tavern`,
+  `shipyard` only where authored;
+- minimal now-semantics: the market works as-is off the port's
+  produces/demands; **no NPC fleet serves a neutral port this phase**
+  (player-only frontier markets); zero budget churn; **a neutral port can
+  never close**; lane spoke to the nearest lane waypoint within **40** tiles,
+  nationless fallback = nearest lane waypoint unbounded (§4.14);
+- ids are appended by Phase-6 task P and recorded in this § after authoring.
 
 | id | zh | en | Nation | lat | lon | produces | demands |
 |---|---|---|---|---|---|---|---|
@@ -953,17 +1232,17 @@ do not "fix" assignments without amending this doc.
 
 | id | zh | en | class | price | durability | capacity | speed | crew min/max | cannons |
 |---|---|---|---|---|---|---|---|---|---|
-| latin | 拉丁帆船 | Latin | sail | 1200 | 40 | 30 | 8 | 8/20 | 2 |
-| sloop | 单桅纵帆船 | Sloop | sail | 3000 | 60 | 60 | 10 | 10/30 | 4 |
-| caravel | 卡拉维尔帆船 | Caravel | sail | 8000 | 90 | 120 | 10 | 15/45 | 6 |
-| galley | 桨帆船 | Galley | oar | 10000 | 70 | 50 | 12 | 40/120 | 4 |
-| brigantine | 双桅帆船 | Brigantine | sail | 15000 | 110 | 150 | 12 | 20/60 | 10 |
-| nao | 瑙船 | Nao | sail | 22000 | 140 | 300 | 8 | 25/80 | 10 |
-| carrack | 卡拉克帆船 | Carrack | sail | 40000 | 180 | 450 | 8 | 30/100 | 16 |
-| galleon | 盖伦帆船 | Galleon | hybrid | 60000 | 240 | 400 | 10 | 40/150 | 24 |
+| latin | 拉丁帆船 | Latin | sail | 1200 | 40 | 30 | 16 | 8/20 | 2 |
+| sloop | 单桅纵帆船 | Sloop | sail | 3000 | 60 | 60 | 20 | 10/30 | 4 |
+| caravel | 卡拉维尔帆船 | Caravel | sail | 8000 | 90 | 120 | 20 | 15/45 | 6 |
+| galley | 桨帆船 | Galley | oar | 10000 | 70 | 50 | 24 | 40/120 | 4 |
+| brigantine | 双桅帆船 | Brigantine | sail | 15000 | 110 | 150 | 24 | 20/60 | 10 |
+| nao | 瑙船 | Nao | sail | 22000 | 140 | 300 | 16 | 25/80 | 10 |
+| carrack | 卡拉克帆船 | Carrack | sail | 40000 | 180 | 450 | 16 | 30/100 | 16 |
+| galleon | 盖伦帆船 | Galleon | hybrid | 60000 | 240 | 400 | 20 | 40/150 | 24 |
 
-Speeds are the Phase-4 rescaled values (`×2` on the Phase-1 tiles/day, §6.1
-"Ship speeds"): on 10 nm tiles this yields the historical 80–120 nm/day. The
+Speeds are the Phase-6 rescaled values (§6.1 "Ship speeds"): `{16, 20, 24}`
+tiles/day on the 5 nm tiles — the historical 80–120 nm/day is unchanged. The
 1 tile/day floor and "fleet = slowest hull" are unchanged.
 
 ### 7.4 Nations (6)
@@ -993,11 +1272,12 @@ One recruit per nation, available at the listed taverns from game start:
 | off_kemal_agha | 凯末尔阿迦 | Kemal Agha | ottoman | gunner | istanbul, smyrna | 30 |
 | off_marco_bellini | 马尔科·贝里尼 | Marco Bellini | italy | navigator | venice, genoa | 30 |
 
-### 7.6 Trade lanes (12, Phase 5)
+### 7.6 Trade lanes (17, Phase 5 + Phase 6)
 
-The locked `data/trade_routes.json` lane id set (§4.14) — exhaustive; the
-`nations`/`goods`/`waypoints`/`chokepoints` values are task-owned authored
-data (`IMPLEMENT-Phase5.md` task E):
+The locked `data/trade_routes.json` lane id set (§4.14) — exhaustive. The 12
+Phase-5 lanes' `nations`/`goods`/`waypoints`/`chokepoints` values are authored
+data (`IMPLEMENT-Phase5.md` task E); the 5 Phase-6 lanes' ids, waypoints and
+chokepoints are locked by Phase-6 task P (`IMPLEMENT-Phase6.md` §2.11.1):
 
 | id | zh | en |
 |---|---|---|
@@ -1013,10 +1293,18 @@ data (`IMPLEMENT-Phase5.md` task E):
 | basra_muscat_india | 巴士拉—马斯喀特—印度航线 | The Basra–Muscat–India run |
 | iceland_cod | 冰岛鳕鱼航线 | The Iceland cod run |
 | grand_banks_cod | 纽芬兰大浅滩鳕鱼航线 | The Grand Banks cod run |
+| canton_country_trade | 广州—中国沿海贸易航线 | The Canton country trade run |
+| coromandel_bengal | 科罗曼德尔—孟加拉航线 | The Coromandel–Bengal run |
+| swahili_coast | 斯瓦希里海岸航线 | The Swahili coast run |
+| pacific_america | 太平洋美洲航线 | The Pacific America run |
+| west_africa | 西非航线 | The West Africa run |
 
 The set is closed: **no Cape Horn lane** (rounding the Horn is a post-1616
 anachronism; the Magellan Strait is the historical south-sea passage where
-one is relevant).
+one is relevant). The `hanseatic_north` lane carries a winter `variants`
+entry (§4.14) — the first variant customer, avoiding the Baltic freeze
+(§4.18). The Phase-6 lanes carry patrols/treasure fleets/chokepoint pirates
+visibly but no trader traffic docks at a neutral port this phase.
 
 ### 7.7 Captain name pools (7, Phase 5)
 
@@ -1050,24 +1338,26 @@ the code below. All checks run in order.
 
 | Exit | Check group | Checks |
 |---|---|---|
-| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `ui_strings.json`, and the Phase-5 envelopes — `npc_config.json` (config block), `npc_captains.json` (key `pools`), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output)) |
+| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `ui_strings.json`, and the Phase-5 envelopes — `npc_config.json` (config block), `npc_captains.json` (key `pools`), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output)). The Phase-6 ocean files (`wind_regions.json`, `ocean_currents.json`, `ice_regions.json`) use plural == basename and need **no** exception |
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
-| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `2160 × 1080`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys) |
-| 4 | Referential integrity | `port.nation_id ∈ nations`; `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
-| 5 | Locked lists | exactly the §7.1 100 ports (the single `data/ports.json` file), §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
+| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys) |
+| 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
+| 5 | Locked lists | the §7.1 **lock model** — exactly the 100 sovereign port ids (exact set) **plus the neutral tier**: structure, i18n, goods refs over the existing 20 goods, count 40–60, `nation_id: ""` (normative text in §7.1); §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
 | 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band); the `30-*` §4.2 consumption-tier split assertion — normative spec §8.2 |
-| 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's 12; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
+| 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **17**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
+| 9 | Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` decode as 4320×2160 indexed PNGs; palette bounds per the §6.5 encodings; water-coverage vs `world.png`; `tools/build_ocean.py` rebuild determinism — normative spec §8.4 |
+| 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
 
 ### 8.1 Group 6 — world map, normative spec
 
 Group 6 has no ASCII input and no markers. Exit 6. It checks:
 
 1. **Artifact.** `data/maps/world.png` exists, decodes as an **indexed-color**
-   PNG (color type 3), is exactly `2160 × 1080` pixels, and every palette
+   PNG (color type 3), is exactly `4320 × 2160` pixels, and every palette
    index used is in the locked set `0–4` (`~ . # ^ I` in that order). Decode
    with `zlib` and the tool's own PNG reader — stdlib only, no PIL.
-2. **Harbor tiles agree.** For each of the 100 ports, recompute the harbor
+2. **Harbor tiles agree.** For each port of §7.1 (sovereign + neutral), recompute the harbor
    (berth) tile **independently from `Port.lat`/`Port.lon`** with the §6.1 snap
    rule (within 2 tiles Chebyshev, on water, ≥ 1 orthogonally adjacent water
    tile, tie-break to smallest `(y, x)`) **plus the item 2b pair constraint**
@@ -1085,9 +1375,10 @@ Group 6 has no ASCII input and no markers. Exit 6. It checks:
    (`~`, `.` — `#`, `^`, `I` are impassable), 8-directional with
    **corner-cutting forbidden** (a diagonal step is legal only when both
    orthogonal neighbours of the corner are passable) and **wrap-aware**
-   (`x mod 2160`; `x = 0` and `x = 2159` are neighbours). The BFS must reach
-   all 100 berth tiles and all discovery tiles (a discovery's derived tile is
-   passable or orthogonally adjacent to a passable tile — `70-*` §4.4).
+   (`x mod 4320`; `x = 0` and `x = 4319` are neighbours). The BFS must reach
+   every port's berth tile (§7.1: sovereign + neutral) and all discovery
+   tiles (a discovery's derived tile is passable or orthogonally adjacent to
+   a passable tile — `70-*` §4.4).
    Plain 8-directional BFS is a validator bug: it reports reachability through
    gaps no fleet can traverse.
 4. **Probe ports** asserted reachable in the same BFS: `istanbul`
@@ -1138,7 +1429,7 @@ counts, and bounds):
    valid value this phase); every `cadence_days` > 0 and `duration_days` >
    0; every `shifts` key ∈ goods; **rest-band bound:** for every shifted
    good, `10 ≤ rest + shift ≤ 190` for every resting value that good takes
-   across the 100 ports (produced/demanded/neutral per `30-*` §4.2) — a
+   across all ports of §7.1 (produced/demanded/neutral per `30-*` §4.2) — a
    violation names the template and the good.
 5. **Consumption-tier assertion:** ranking `goods.json` per `30-*` §4.2
    (`base_price` asc, `id` asc tie-break) yields exactly 5 staples /
@@ -1156,10 +1447,11 @@ Group 8 exits 8. It runs after group 6 (same PNG decoder; sharing
 `build_world.py`'s reader is allowed). It checks:
 
 1. **Lane id set.** `data/trade_routes.json` contains exactly the §7.6
-   12 locked ids — none missing, none extra.
+   **17** locked ids — none missing, none extra.
 2. **Lane schema.** Every lane: `class == "major"`; `nations` ⊆ nations;
    `goods` ⊆ goods; ≥ 1 chokepoint tag; ≥ 2 waypoints with in-range
-   lat/lon (§3.1).
+   lat/lon (§3.1). Optional `variants` structures are checked by group 10
+   (§8.5).
 3. **Waypoint snap.** Every waypoint satisfies the §6.1 snap rule as the
    builder applies it (the §4.14 rule: same radius, wrap-aware,
    smallest-`(y, x)` tie-break). Failure names the lane and waypoint.
@@ -1167,10 +1459,11 @@ Group 8 exits 8. It runs after group 6 (same PNG decoder; sharing
    pair steps only on passable tiles, corner-cutting forbidden, wrap-aware
    (the group 6 item 3 movement rules).
 5. **Wrap-aware continuity.** Dateline-crossing segments stay continuous
-   under `x mod 2160` — no segment jumps the seam (`manila_galleon`
+   under `x mod 4320` — no segment jumps the seam (`manila_galleon`
    waypoints keep per-segment `x` monotonic under wrap).
-6. **Port spokes.** Every one of the 100 ports satisfies the §4.14 spoke
-   rule (a lane waypoint within the spoke radius, else the capital
+6. **Port spokes.** Every port of §7.1 (sovereign + neutral) satisfies the
+   §4.14 spoke rule (a lane waypoint within the spoke radius, else the
+   capital fallback; a neutral port uses the nationless nearest-waypoint
    fallback). A port with neither is a hard failure naming the port.
 7. **Junction connectivity.** Over the built junction graph every port
    reaches every lane its nation/goods data implies; the named probes are
@@ -1188,6 +1481,67 @@ impassable tile; a port with no spoke and no capital fallback; a rebuilt
 artifact that differs by one byte.
 
 `--verbose` prints a per-check pass summary for groups 7–8 as for group 6.
+
+### 8.4 Group 9 — ocean rasters, normative spec
+
+Group 9 exits 9. It runs after group 6 (same stdlib `zlib` PNG decoder; no
+PIL). It checks both Phase-6 rasters of §6.5:
+
+1. **Artifact decode.** Both `data/maps/wind_regions.png` and
+   `data/maps/currents.png` exist, decode as **indexed-color** PNGs
+   (color type 3), and are exactly **4320 × 2160** pixels.
+2. **Palette bounds — wind.** Every palette index used in
+   `wind_regions.png` is in `0 … region_count`, where `region_count =
+   len(data/wind_regions.json#wind_regions)`; index 0 is the unassigned
+   `VAR`-fallback water (§6.5); no index above the region count ever appears.
+3. **Palette bounds — currents.** Every palette index used in
+   `currents.png` is in `0 … 24` (the §6.5 encoding `index = dir_index × 3 +
+   strength`; index 0 = no current).
+4. **Water coverage vs `world.png`.** A non-zero wind-region index or a
+   non-zero current index on a tile that is land (`#`), reef (`^`) or
+   permanent ice (`I`) in `data/maps/world.png` is a failure naming the tile
+   and the region/system.
+5. **Determinism.** Re-run `tools/build_ocean.py` and compare both artifacts
+   **byte-exactly** against the committed files; any drift fails naming the
+   differing file. The fix lives in the JSON sources or the builder — never
+   the PNGs.
+
+**Negative tests (must provably fail, exit 9, named message):** a raster of
+the wrong size or a non-indexed PNG; a wind index above the region count; a
+current index above 24; a wind/current index on a land tile; a rebuilt raster
+that differs by one byte.
+
+### 8.5 Group 10 — ice & lane variants, normative spec
+
+Group 10 exits 10. It checks the §4.18 ice regions and the §4.14 lane
+`variants`:
+
+1. **`ice_regions.json` structure.** Every polygon is a closed ring (first
+   pair repeated last) whose vertices are in-range lat/lon (§3.1); `months`
+   is a non-empty list of ints within 1–12; ids unique; names complete
+   i18n (group 2's recursion).
+2. **Lane variant structure (§4.14).** Every lane's `variants` entries: `id`
+   unique within the lane; `months` a non-empty list of ints 1–12;
+   `months` sets pairwise **disjoint** across the lane's variants;
+   `waypoints` ≥ 2 pairs — so the lane's month coverage is total across
+   base + variants (base covers the months no variant names).
+3. **Variant passability within month windows.** Each variant's waypoint
+   walk is checked once per month in its own window, with the group-6
+   item-3 movement rules **plus the in-month ice mask** (a water tile inside
+   an `ice_regions.json` polygon whose `months` include the walked month is
+   impassable). A variant walk that hits in-month ice is a hard failure
+   naming the lane and the variant.
+4. **Ice-crossing lanes carry coverage.** Per lane and per month, the walk
+   active in that month (variant if one covers it, else base) must be
+   passable under that month's ice mask. A lane whose base walk crosses a
+   seasonal-ice polygon without a covering variant set is a failure naming
+   the lane.
+
+**Negative tests (must provably fail, exit 10, named message):** an ice
+polygon not closed or with out-of-range vertices; an ice region with an
+empty or out-of-range `months`; two variants of one lane with overlapping
+months; a variant walk stepping onto in-month ice; an ice-crossing lane with
+no variants.
 
 ## 9. Edge Cases & Fail States
 
@@ -1215,7 +1569,18 @@ artifact that differs by one byte.
 - **`data/maps/world.png` hand-edited (palette or geometry drift)** →
   validator exit 6: the artifact must be reproducible by
   `tools/build_world.py`, and any index outside `0–4` or size other than
-  2160 × 1080 fails. Regenerate; never patch pixels.
+  4320 × 2160 fails. Regenerate; never patch pixels.
+- **A lane variant walk hitting in-month ice (§8.5 item 3)** → validator
+  exit 10 naming the lane and the variant. The fix is a rerouted variant or
+  a covering variant set in `data/trade_routes.json` — never a hand-edit of
+  the built file.
+- **A wind-region or current pixel on land/reef/permanent ice (§8.4
+  item 4)** → validator exit 9 naming the tile and the region/system. The
+  fix is the JSON sources and a `tools/build_ocean.py` regeneration.
+- **A neutral port failing tier structure — count outside 40–60, an id
+  colliding with the sovereign 100, a missing locale, a good outside the
+  existing 20, or a non-empty `nation_id` (§7.1, §8 group 5)** → validator
+  exit 5.
 - **`market_goods` absent** → all 20 goods trade; adding the key later with a
   subset is a valid data-only change.
 - **`produces` ∩ `demands` ≠ ∅ for a port** → allowed but pointless; validator
@@ -1250,25 +1615,36 @@ artifact that differs by one byte.
 - [ ] All artifact paths from §2 exist in the doc set's file inventory and
       match these names exactly.
 - [ ] Every JSON example in this doc parses (spot-checked with a parser).
-- [ ] §7 tables contain exactly 100/20/8/6/6 rows and only ids using the §3.1
+- [ ] §7 tables contain exactly 100 sovereign ports / 20 goods / 8 ship
+      types / 6 nations / 6 officers rows and only ids using the §3.1
       `id` regex; every §7.1 `lat`/`lon` is a plausible real-world position
       (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈ 32.7°N 129.9°E) and no port sits in
       the polar ice band (`|lat| ≥ 70` north, `≤ −60` south).
 - [ ] Every non-ASCII display string in tables carries both zh and en.
-- [ ] Every locked constant from `IMPLEMENT-Phase4.md`'s Locked constants
-      table appears exactly once in §6.1 with the same value (grid, tiles per
-      degree, sighting radii, ship-speed set, artifact path); the §6.1 save
-      row pins the current version (5, no migration chain — `90-*` §8.2).
+- [ ] Every locked constant of the Phase-6 rescale (`IMPLEMENT-Phase6.md`
+      §2.0–§2.4, §2.10–§2.11) with owning doc `10-*` appears exactly once in
+      §6.1/§4.14–4.18 with the same value (grid, tiles per degree, sighting
+      radii, ship-speed set, artifact paths, drift rates); the §6.1 save
+      row pins the current version (6, no migration chain — `90-*` §8.2).
 - [ ] Every locked constant with owning doc `10-*` from
       `IMPLEMENT-Phase5.md` (the §4.10–4.15 schemas, the §7.6–7.8 lists,
       the §8.2/§8.3 validator specs) appears in this doc exactly once.
-- [ ] `validate_data.py` check groups (exit 1–8) are implementable from §8
+- [ ] `validate_data.py` check groups (exit 1–10) are implementable from §8
       alone, without further design questions — including the §8.1 group 6
-      world-map spec, §8.2 group 7, and §8.3 group 8.
-- [ ] §7.6 lists exactly the 12 locked lane ids; §7.7 exactly 7 pools;
-      §7.8 exactly 4 named pirates.
-- [ ] The v5 save-block shapes of §4.15 match the `90-*` §8.1 key list
-      field-for-field.
-- [ ] The validator summary reports a port count of **100**.
+      world-map spec, §8.2 group 7, §8.3 group 8, §8.4 group 9, and §8.5
+      group 10.
+- [ ] §4.16–4.18 (WindRegion/OceanCurrent/IceRegion) and §6.5 (ocean
+      rasters) are implementable from this doc alone — envelope plural ==
+      basename, field tables, index encodings, overlap and reversal rules —
+      with no open design questions.
+- [ ] §7.6 lists exactly the **17** locked lane ids (12 Phase-5 + the 5
+      named Phase-6 ids); §7.7 exactly 7 pools; §7.8 exactly 4 named pirates.
+- [ ] §7.3's speed column uses exactly the locked set `{16, 20, 24}`
+      (tiles/day at 5 nm; §6.1).
+- [ ] The save-block shapes of §4.15 match the `90-*` §8.1 key list
+      field-for-field (carried into v6 unchanged; Phase-6 keys live in
+      `90-*` §8.1).
+- [ ] The validator summary reports a port count of **100 sovereign +
+      40–60 neutral**.
 - [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)
       are consistent with §7.3 and `50-*`.

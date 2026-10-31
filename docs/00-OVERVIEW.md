@@ -49,6 +49,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 3 | Crown & Horizon | Guild quests, royal missions, nobility titles, discoveries, piracy/bounty, tournaments, the ~100-port world content (shipped on a provisional grid, replaced in Phase 4), retirement/victory | See `docs/IMPLEMENT-Phase3.md` |
 | 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | ✅ complete — `docs/IMPLEMENT-Phase4.md` (completion record) |
 | 5 | Living Economy & National NPC Fleets | Stock-based supply/demand pricing with demand events, 8 roles of nation-owned NPC fleets on 12 hand-authored historical trade lanes (traders, coasters, patrols, couriers, privateers, pirates, hunters, treasure fleets), named pirates, convoys & wreckage, captain sightings & wanted posters, density presets, save v5 | See `docs/IMPLEMENT-Phase5.md` |
+| 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | See `docs/IMPLEMENT-Phase6.md` |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -235,7 +236,7 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 极冰 | Polar ice | The `I` tile kind: the impassable polar band (`20-*` §4.1) |
 | 海峡 | Strait | A carved water passage forced through narrow real-world channels (`tools/map_overrides.json`, `10-*` §6.1) |
 | 停泊格 | Harbor tile | The water tile a port snaps to, ≤ 2 tiles from its real lat/lon (`10-*` §6.1) |
-| 环球海图 | World chart | The Phase-4 whole-world Chart screen (S17, 2160×1080 downscaled, `80-*` §4.6) |
+| 环球海图 | World chart | The Phase-4 whole-world Chart screen (S17, the world raster downscaled — 4320×2160 since Phase 6, `80-*` §4.6) |
 | 商队 | Trade convoy | Same-lane NPC traders sailing as one group with a shared escort; auto-resolve treats it as escorted (Phase 5) |
 | 护航舰队 | Escort patrol | Nation-owned patrol fleet; escorts same-nation traders and deters raiders in its zone (Phase 5) |
 | 私掠船 | Privateer | Rivalry-sponsored raider that hunts only its sponsor's rivals' fleets (Phase 5) |
@@ -248,6 +249,14 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 咽喉要道 | Chokepoint | A tagged narrow passage where pirates/privateers camp (Phase 5) |
 | 需求事件 | Demand event | A temporary rest-stock override that creates a tradeable surge; telegraphed in taverns (Phase 5) |
 | 消费档位 | Consumption tier | Staples/middle/luxuries daily-drift band derived from the goods' base-price rank (Phase 5) |
+| 洋流 | Ocean current | A directional sea-speed/drift layer, strength 1–3 (`20-*` §4.16, Phase 6) |
+| 季风 | Monsoon | The seasonal wind reversal over the Indian/Pacific oceans (`20-*` §4.14, Phase 6) |
+| 盛行风 | Prevailing wind | A region's month-keyed wind-from direction (`20-*` §4.14, Phase 6) |
+| 帆位 | Sail trim | furled/reefed/normal/full; the speed and storm-damage trade-off (`20-*` §4.17, Phase 6) |
+| 季节海冰 | Seasonal sea ice | Month-windowed impassability; entering a frozen tile is refused, a standing fleet is not trapped (`20-*` §4.18, Phase 6) |
+| 掌舵 | Helm mode | The UW2-style auto-sail input mode; a direction key sets a persisted heading (`20-*` §4.2, Phase 6) |
+| 漂移 | Drift | The optional current mode: a per-day push along the current vector (`20-*` §4.16, Phase 6) |
+| 中立港 | Neutral port | A `nation_id: ""` frontier market no NPC fleet serves this phase (`10-*` §7.1, Phase 6) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 

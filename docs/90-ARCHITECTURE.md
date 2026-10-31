@@ -65,6 +65,7 @@ SailAge/
 ├── scripts/
 │   ├── world/sailing_sim.gd    # day tick, consumption, weather, morale
 │   ├── world/map_loader.gd     # PNG world → chunked TileMaps (§9)
+│   ├── world/ocean_layers.gd   # Phase 6: decodes wind_regions.png/currents.png + ice polygon cache; owns all ocean-layer lookups (10-* §6.5)
 │   ├── world/sail_path.gd      # click-to-sail A* pathing (20-* §4.2, Phase 4)
 │   ├── world/discovery.gd      # Phase 3: explore/report/hints (70-* §4.4)
 │   ├── world/npc_fleets.gd     # Phase 5: the living-sea fleet sim (60-* §4.1)
@@ -80,12 +81,18 @@ SailAge/
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   └── fleet/fleet.gd          # fleet composition, cargo maths
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
+│   ├── wind_regions.json        # Phase 6: prevailing-wind regions (10-* §4.16)
+│   ├── ocean_currents.json      # Phase 6: ocean-current systems (10-* §4.17)
+│   ├── ice_regions.json         # Phase 6: seasonal sea ice (10-* §4.18)
 │   ├── maps/world.png           # generated, tool-owned (§9)
+│   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
+│   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)
 │   └── trade_routes_built.json  # generated, tool-owned (Phase 5; 10-* §4.14)
 └── tools/
     ├── validate_data.py
     ├── build_world.py           # Natural Earth → data/maps/world.png (Phase 4)
     ├── map_overrides.json       # carved-strait list (Phase 4)
+    ├── build_ocean.py           # ocean rasters: wind_regions.png + currents.png (Phase 6)
     ├── build_routes.py          # trade lanes → trade_routes_built.json (Phase 5)
     └── route_overrides.json     # lane hand-fixes (Phase 5)
 ```
@@ -138,10 +145,11 @@ Cross-screen communication never uses direct node references.
   `DataLoader.ports`, `.goods`, `.ship_types`, `.nations`, `.officers`,
   `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`,
   plus the Phase-5 files `.npc_config`, `.npc_captains`, `.named_pirates`,
-  `.market_events`, `.trade_routes`, and the tool-built
-  `.trade_routes_built` (read-only, `10-*` §4.14).
-  There is exactly one port file (`data/ports.json`, 100 ports) — **no
-  merge step**.
+  `.market_events`, `.trade_routes`, the tool-built
+  `.trade_routes_built` (read-only, `10-*` §4.14), and the Phase-6 ocean
+  files `.wind_regions`, `.ocean_currents`, `.ice_regions` (`10-*` §4.16–4.18).
+  There is exactly one port file (`data/ports.json`, the 100 sovereign ports
+  plus the Phase-6 neutral tier, `10-*` §7.1) — **no merge step**.
 - Entry points: `get_port(id) -> Dictionary`, `get_good(id)`, …
   plus the world-map handoff **`DataLoader.map`**: a `MapLoader` instance
   built over `data/maps/world.png` (§9).
@@ -175,8 +183,14 @@ marked •):
   `DEFAULT_MAP_ID`), movement state, weather state, and the Phase-5 hunter
   intel keys: `last_departed_port` (port id string, set at every Set Sail)
   and `hunter_intel_cell` (tile position, set on contact with a hostile
-  nation's fleet — behavior in `60-*` §4.11.11.1). The explored bitset is a
-  `PackedByteArray` of 291,600 bytes owned by the world scene/HUD, **not**
+  nation's fleet — behavior in `60-*` §4.11.11.1). Phase 6 adds three
+  keys with pinned defaults: `sail_trim` (default `"normal"`,
+  `20-*` §4.17), `heading` (default `"E"`; an 8-dir id, `20-*` §4.2), and
+  `wind_dir` (default `"E"`; an 8-dir id — overwritten by every ledger
+  weather roll before any movement consumes it, and persisted for the
+  current day, `20-*` §4.7). The explored bitset is a
+  `PackedByteArray` of **9,331,200** bytes (~9.3 MB at the 4320×2160 grid;
+  session-only) owned by the world scene/HUD, **not**
   saved and not part of `world`.
 - `morale: int` • — fleet morale 0–100 (`20-*` §4.8)
 - `current_port: String?` • — port id while docked; `null` at sea (save/load
@@ -198,6 +212,12 @@ marked •):
 - `npc_preset: String` • — density preset id (`10-*` §4.10), default
   `"normal"`; chosen on S2, changeable mid-run in the S19 settings modal;
   raising refills via the trickle, lowering never culls living fleets
+- `control_prefs: Dictionary` • — Phase-6 control preferences
+  `{input_mode: "step"|"helm", current_mode: "modifier"|"drift"}`; defaults
+  `{input_mode: "step", current_mode: "modifier"}` (**pinned**); **S19-only**
+  rows (`80-*` §4.6.3), settable pre-game via S1 and in-run via S4; carried
+  by `new_game` like `npc_preset`; persisted per save (`90-*` §8.1).
+  Input-mode and current-mode semantics: `20-*` §4.2/§4.16
 - `market_events: Array` • — active demand-event instances (shape in
   `10-*` §4.15); rotation in `30-*` §4.5
 - `named_pirate_respawns: Dictionary` • — `{named_pirate_id: available_day}`
@@ -234,6 +254,9 @@ marked •):
   `30-*` §4.2/§4.5), then `EventBus.day_advanced` fires, and the
   world-scene listeners (the NPC fleet tick) run on it — economy drift is
   always before `day_advanced`, on sea days and port day-advances alike.
+  The Phase-6 wind-direction roll joins the ledger's weather step (step 3)
+  on the same seeded stream, pinned order **strength → direction**
+  (`20-*` §4.5/§4.7).
 - **Cap sizing (Phase 5):** normal ≈ 288 is ecology/balance, not
   performance; coasters absorb the visual traffic (≤ 5-unit trades) so
   effective long-haul trading stays ~127 fleets; far-field LOD is the
@@ -245,9 +268,9 @@ marked •):
 - `save(slot)`, `load(slot) -> bool`, `list_saves() -> Array[Dictionary]`
   (slot, day, nation, port, gold, timestamp for the slot UI).
 - Serializes exactly the •-marked GameState fields plus
-  `{"save_version": 5, "saved_at": <unix>, "phase": 5}`.
-- `load` validates `save_version` — it must equal `SAVE_VERSION = 5`;
-  **no migration chain** (§8.2): a v4 or older payload is refused
+  `{"save_version": 6, "saved_at": <unix>, "phase": 6}`.
+- `load` validates `save_version` — it must equal `SAVE_VERSION = 6`;
+  **no migration chain** (§8.2): a v5 or older payload is refused
   ("pre-release save"), `load()` returns `false`, and state is untouched.
 
 ## 6. `project.godot` Requirements (locked values)
@@ -289,16 +312,16 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 5,
+  "save_version": 6,
   "saved_at": 1793119712,
-  "phase": 5,
+  "phase": 6,
   "locale": "en",
   "day": 12,
   "gold": 7830,
   "player": {},
   "fleet": [],
   "morale": 70,
-  "world": {"position": {"x": 1025, "y": 307}, "map_id": "world", "weather": "calm"},
+  "world": {"position": {"x": 2050, "y": 615}, "map_id": "world", "weather": "calm"},
   "current_port": "lisbon",
   "known_ports": ["lisbon"],
   "port_investments": {"lisbon": 500},
@@ -314,7 +337,8 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 ```
 
 (`player`/`fleet` interior shapes are owned by docs 50/40; SaveSystem treats
-them opaquely.)
+them opaquely. `world.position` is the Lisbon berth on the 4320×2160 grid —
+lon −9.14 → `(−9.14 + 180) × 12 ≈ 2050`, lat 38.72 → `(90 − 38.72) × 12 ≈ 615`.)
 
 Phase-2 additions (version 2):
 
@@ -385,25 +409,45 @@ transformation**. All new state is initialized by `new_game`; a v4 payload
 is refused like any older version (`load()` false, "pre-release save"
 logged); see §8.2 for the normative rule.
 
+Phase-6 additions (version 6):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `control_prefs` | object | `{"input_mode": "step", "current_mode": "modifier"}` | Phase-6 input/current modes (`20-*` §4.2/§4.16; S19-only rows, `80-*` §4.6.3) |
+| `world.sail_trim` | string | `"normal"` | `20-*` §4.17 (sail trim) |
+| `world.heading` | string 8-dir id | `"E"` | `20-*` §4.2 (helm heading) |
+| `world.wind_dir` | string 8-dir id | `"E"` | `20-*` §4.7 (the daily wind-direction roll, persisted for the current day) |
+
+**No migration; v5 refused (Phase-6 decision 12).** `SAVE_VERSION = 6`,
+`PHASE = 6`; version 6 adds **no `MIGRATIONS` entry and performs no payload
+transformation**. The Phase-5 hunter keys carry over unchanged in shape —
+`world.last_departed_port` / `world.hunter_intel_cell` persist as before,
+with `hunter_intel_cell` **re-based to the 4320×2160 grid** (the breaking
+change the version bump absorbs). The drift accumulator is runtime-only and
+resets; wind direction is re-rolled daily on the seeded stream but persisted
+for the current day. All Phase-6 state is initialized by `new_game`; a v5
+payload is refused like any older version (`load()` false, "pre-release
+save" logged); see §8.2 for the normative rule.
+
 ### 8.2 Versioning rule (no migration chain)
 
-**Development-stage scope (normative; amended 2026-10-31, Phase 5).**
+**Development-stage scope (normative; amended 2026-10-31, Phases 5–6).**
 SailAge has not shipped; there are no player saves in the wild. Backward
 compatibility across phases is therefore **explicitly out of scope until
 the first release**, and no task may spend effort on it. Concretely:
 
 - `save_version` increments on any breaking shape change. The current
-  values are `SAVE_VERSION = 5`, `PHASE = 5`.
+  values are `SAVE_VERSION = 6`, `PHASE = 6`.
 - **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
   contract is the identity: a payload whose `save_version` equals
-  `SAVE_VERSION` loads (round-trip); **any older payload — v4 included —
+  `SAVE_VERSION` loads (round-trip); **any older payload — v5 included —
   is refused** (`load()` returns false, logs "pre-release save"). There is
-  no v4 → v5 step, and none may be reintroduced: Phase 4 removed the chain
-  (`IMPLEMENT-Phase5.md` correction 4) and Phase 5 keeps it removed
-  (decision 5).
-- All Phase-5 state is initialized by `new_game` (stocks derived; fleets
-  seeded to half the cap there and only there); nothing is back-filled at
-  load.
+  no v5 → v6 step, and none may be reintroduced: Phase 4 removed the chain
+  (`IMPLEMENT-Phase5.md` correction 4), Phase 5 kept it removed
+  (decision 5), and Phase 6 keeps it removed (decision 12).
+- All Phase-5/Phase-6 state is initialized by `new_game` (stocks derived;
+  fleets seeded to half the cap there and only there; `control_prefs` and
+  the three `world` ocean keys defaulted); nothing is back-filled at load.
 - Anything that would only exist to serve an old save (position remapping,
   port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
   is cheaper to delete than to maintain, delete it.
@@ -433,11 +477,11 @@ DataLoader as `DataLoader.map`):
    `Image.load_png_from_buffer`. It is **data, not an imported texture** — no
    import pipeline, and it works in exports (the placeholder-art rule is
    unaffected: this is the one shipped raster, `00-*` §6).
-2. Verify size **2160 × 1080** and an indexed palette whose indices are
+2. Verify size **4320 × 2160** and an indexed palette whose indices are
    ⊆ `0–4`; anything else is a DataLoader startup error (§11).
 3. Passability = byte lookup on the decoded `Image`'s palette index
    (0–4 → `~ . # ^ I`, `10-*` §6.2). `is_passable(x, y)` is **wrap-aware on
-   x** (`x` taken mod 2160) and false for `y` out of range and for
+   x** (`x` taken mod 4320) and false for `y` out of range and for
    `#`/`^`/`I`.
 4. Rendering = **128×128-tile chunk TileMaps generated on demand around the
    camera**, at most **24 live chunks**, freed beyond a margin. The 5 palette
@@ -449,18 +493,18 @@ DataLoader as `DataLoader.map`):
    overlay draws the nation-coloured square + label on the **shore tile** —
    the port's visible map location — plus a small berth marker on the sea tile
    so the pairing reads at a glance. Both are **wrap-duplicated at the seam**
-   so a port at `x = 0` also shows at `x = 2160`. The loader exposes
+   so a port at `x = 0` also shows at `x = 4320`. The loader exposes
    `port_cell(id)` (berth) and `shore_cell(id)`; both are memoised.
 6. The camera centers on the fleet and `x` wraps (§7); `y` clamps to the
-   1080-tile height.
+   2160-tile height.
 7. The world scene queries only the loader; it **never re-reads the PNG**.
 
 The loader's passability API does not change movement rules (`20-*` §4.2):
 
 - **No corner cutting:** a diagonal move is blocked if either orthogonal
   neighbor of the target corner is impassable.
-- **Longitude wraps.** `x` is taken mod 2160 everywhere (movement, BFS,
-  camera, click); a fleet at `x = 2159` stepping east lands on `x = 0`.
+- **Longitude wraps.** `x` is taken mod 4320 everywhere (movement, BFS,
+  camera, click); a fleet at `x = 4319` stepping east lands on `x = 0`.
   Click-to-sail paths obey the same rules, including the local-frame shift for
   seam crossings.
 
@@ -524,9 +568,9 @@ is a build failure, never a quiet divergence.
   re-connects on each entry. Double-connection is prevented by connecting in
   `_ready` only.
 - **Click-to-sail path across the dateline** → found via the local-frame shift
-  (`20-*` §4.2): fleet and target `x` are shifted together into `[0, 2160)`
+  (`20-*` §4.2): fleet and target `x` are shifted together into `[0, 4320)`
   before the `AStarGrid2D` query and the path is offset back, so a fleet at
-  `x = 2100` clicking `x = 50` gets the short westward route.
+  `x = 4200` clicking `x = 50` gets the short westward route.
 
 ## 12. Acceptance Criteria
 
@@ -537,11 +581,15 @@ is a build failure, never a quiet divergence.
 - [ ] `project.godot` matches §6 exactly.
 - [ ] Save file contains at least the §8.1 keys with `save_version` present;
       load tolerates missing optional keys only where a default is documented.
-- [ ] A v5 payload round-trips exactly (fleet positions, route legs,
-      captains, stocks); a v4 payload is refused with the standard message
+- [ ] A v6 payload round-trips exactly (fleet positions, route legs,
+      captains, stocks, control prefs, trim/heading/wind direction); a v5
+      payload is refused with the standard message
       (`load()` false, "pre-release save" logged — §8.2).
 - [ ] Swapping `data/maps/world.png` for another palette-conformant
-      2160×1080 indexed PNG requires zero code edits.
+      4320×2160 indexed PNG requires zero code edits.
+- [ ] Swapping in rebuilt ocean rasters (`data/maps/wind_regions.png` /
+      `data/maps/currents.png`, `10-*` §6.5) requires zero code edits beyond
+      `ocean_layers.gd`'s decode contract.
 - [ ] Adding one new good to `data/goods.json` requires zero code edits
       (verified in the Phase-1 market task acceptance).
 
@@ -555,7 +603,8 @@ on pass, and prints a completion marker — `ALL PASS (N checks)` or
 built-in profiling, so a wave gate needs exactly one run:
 
 - **Scheduling.** Save-touching suites share `user://saves/` and run
-  one-at-a-time (the serial-save set: `test_save`, `test_save_v5`,
+  one-at-a-time (the serial-save set: `test_save`, `test_save_v6` (renamed
+  from `test_save_v5` in Phase 6 W5),
   `test_world_e2e`); every other suite runs in parallel workers
   (`-j`, default **8**).
 - **Bounded time.** Per-suite wall cap **300 s** (kill the process group).
