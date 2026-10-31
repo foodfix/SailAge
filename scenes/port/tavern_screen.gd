@@ -44,33 +44,13 @@ const TOAST_SECONDS := 2.5
 ## (T4 owns `data/ui_strings.json`; T14 must not edit it). Same zh+en shape as
 ## the JSON so merging them later is a copy-paste, and the screen renders
 ## correctly in the meantime. Resolved by [method _t_key].
+## (Task L's `captain.rumor.*` / `captain.poster.reward` fallbacks were
+## merged into the shared table at the W6 gate and are gone from here — the
+## screen now reads the canonical keys directly.)
 const FALLBACK_STRINGS := {
 	"tavern.crew_full": {
 		"zh": "船员已满({max} 人)。",
 		"en": "Crew is at full strength ({max}).",
-	},
-	# --- Task L (docs/80-* §4.7.8 rumor rows + poster reward hint) ---
-	# ui_strings.json is orchestrator-owned; these keys are LISTED in the
-	# task L report for the master's merge and resolve locally until then.
-	"captain.poster.reward": {
-		"zh": "悬赏约 {gold} 金",
-		"en": "Reward: about {gold}g",
-	},
-	"captain.rumor.event": {
-		"zh": "{port}传来消息:{event}。",
-		"en": "Word from {port}: {event}.",
-	},
-	"captain.rumor.fleet": {
-		"zh": "据报,一支{nation}船队出没于{port}附近海域。",
-		"en": "A {nation} fleet is reported near {port}.",
-	},
-	"captain.rumor.departed": {
-		"zh": "一支{nation}船队刚离港,驶往{port}。",
-		"en": "A {nation} convoy just left, bound for {port}.",
-	},
-	"captain.rumor.arrived": {
-		"zh": "一支{nation}船队刚刚进港停靠。",
-		"en": "A {nation} convoy has just docked here.",
 	},
 }
 
@@ -638,20 +618,20 @@ func _rumor_text(row: Dictionary) -> String:
 	var role := I18n.t_key("captain.role.%s" % str(row.get("role", "")))
 	match str(row.get("kind", "")):
 		"event":
-			return _fmt("captain.rumor.event", {
+			return I18n.fmt("captain.rumor.event", {
 				"port": str(row.get("port_name", "")),
 				"event": str(row.get("event_name", "")),
 			})
 		"fleet":
-			return _fmt("captain.rumor.fleet", {
+			return I18n.fmt("captain.rumor.fleet", {
 				"nation": nation, "port": str(row.get("nearest_port_name", "")),
 			})
 		"departed":
-			return _fmt("captain.rumor.departed", {
+			return I18n.fmt("captain.rumor.departed", {
 				"nation": nation, "port": str(row.get("dest_port_name", "")),
 			})
 		"arrived":
-			return _fmt("captain.rumor.arrived", {"nation": nation})
+			return I18n.fmt("captain.rumor.arrived", {"nation": nation})
 	return ""
 
 
@@ -676,7 +656,7 @@ func _build_poster_row(poster: Dictionary) -> Control:
 	var hint := _make_label("%s · %s" % [
 		I18n.fmt("captain.poster.hint", {
 			"port": str(poster.get("nearest_port_name", ""))}),
-		_fmt("captain.poster.reward", {
+		I18n.fmt("captain.poster.reward", {
 			"gold": int(poster.get("reward_gold", 0))}),
 	], "Hint")
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL

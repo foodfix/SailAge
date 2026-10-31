@@ -200,6 +200,16 @@ marked •):
   raising refills via the trickle, lowering never culls living fleets
 - `market_events: Array` • — active demand-event instances (shape in
   `10-*` §4.15); rotation in `30-*` §4.5
+- `named_pirate_respawns: Dictionary` • — `{named_pirate_id: available_day}`
+  respawn cooldowns (`60-*` §4.11.11.4 task L pin); default `{}`. A famous
+  defeat keys its own `named_pirates.json` id (the slot's tier source); a
+  defeated *successor* books the single interchangeable alias slot as
+  `successor_<tier>`; a live famous pirate is derived from the fleets
+  themselves
+- `npc_port_log` — **transient, never saved**: the last ≤ 128
+  arrival/departure records the ecology appends for tavern rumor rows
+  (`60-*` §4.11.11.4 task L pin); a fresh run and every load start with an
+  empty log
 - `proximity_cooldowns: Dictionary` • — `{kind: day}` spawn immunity
   (`60-*` §4.8); present-but-empty before Phase 2
 - `pending_encounter` — **transient, never saved**: the encounter S3 hands to
@@ -367,6 +377,7 @@ Phase-5 additions (version 5):
 | `wrecks` | `[]object` | `[]` | `60-*` auto-resolve; shape in `10-*` §4.15 |
 | `npc_preset` | string preset id | `"normal"` | `10-*` §4.10 |
 | `market_events` | `[]object` | `[]` | `30-*` §4.5; shape in `10-*` §4.15 |
+| `named_pirate_respawns` | `object named_id → day` | `{}` | `60-*` §4.11.11.4 (task L pin): a defeated famous pirate's respawn-availability day (`day + 30`; a defeated successor books the `successor_<tier>` alias slot); a live famous pirate is derived from the fleets themselves |
 
 **No migration; v4 refused (Phase-5 decision 5).** `SAVE_VERSION = 5`,
 `PHASE = 5`; version 5 adds **no `MIGRATIONS` entry and performs no payload

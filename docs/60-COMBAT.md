@@ -611,6 +611,52 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
   rumor row sources. Tavern rumors source from live fleets within Chebyshev
   40, departures/arrivals at the port within 3 days, and demand-event
   telegraphs.
+- **Task-L implementation pins (details the tables above left open):**
+  - *Named pirates.* A famous identity rides its fleet's captain as
+    `captain.named_id` (famous override; `named_pirates.json` file order —
+    the first spawn while an identity is free takes it). A defeat at the
+    single removal funnel (`remove()`) books
+    `GameState.named_pirate_respawns[named_id] = day + 30` (saved,
+    `90-*` §8.1), retiring the famous name; at fire time a successor
+    pirate spawns under the **next nationless-pool entry** (the rotation
+    cursor steps deterministically, never re-issuing an afloat name) with
+    `captain.named_tier` inherited from the slot — the famous id keys its
+    own `named_pirates.json` tier, a defeated successor re-books the
+    interchangeable `successor_<tier>` slot. A famous entry inside its
+    cooldown is never re-drawn by the trickle.
+  - *Poster eligibility.* Posters are for **named** captains only
+    (famous or successor — the tier carriers); an unnamed pirate sails
+    under no banner worth paper. The reward hint uses the `70-*` §4.9.3
+    bands `{1: 5000, 2: 10000, 3: 20000}`.
+  - *Treasure fleets.* `_schedule_treasure` runs inside the daily tick:
+    on `day − (45 + 15 × nation_index) ≥ 0 ∧ ≡ 0 (mod 90)` while the
+    nation has no live treasure fleet. The fleet boards the lane the
+    **capital's built spoke** attaches to (the historical lane), at the
+    tile nearest the capital (the §4.1.1 patrol boarding rule), walks it
+    end to end at 1 tile/day, dwells 2 days at the far end, then
+    despawns — never a port call. Cargo at spawn: **3 ×** the normal
+    30-unit call cap of one seeded produced good. Composition per
+    §4.11.11.2: `3 + rng(0..2)` merchant hulls + one patrol-escort hull
+    at the patrol cannon budget (`ai_fleet.gd` also carries the
+    `treasure` kind so any recompose path prices it identically).
+    Player-victory loot: carried cargo +
+    `min(3000, 500 + 25 × day)`g at the `world_map` loot seam.
+  - *Convoys (render).* A grouped trader's render leader is the
+    **smallest fleet id** among its `convoy_members`; `markers()` carries
+    `convoy_count` (leaders only, ≥ 2) and `convoy_leader` (members name
+    their leader) — one entry per fleet, the render layer hides members
+    behind the leader's shared square.
+  - *Wakes.* Each fleet's last ≤ 5 cells **left behind** (most recent
+    first) live in the transient `NpcFleets._wake_trails`
+    (`fleet_id → [Vector2i]`), recorded at the movement commit and at
+    spawn; `markers()` exposes the trail only for sailing fleets. Never
+    saved — a reloaded fleet has no trail until it moves.
+  - *Port log.* Arrivals/departures are appended
+    (`{port_id, kind, role, nation_id, fleet_id, day}`, newest last,
+    capped 128) into the transient `GameState.npc_port_log` at the
+    `_arrive` / `_set_route_to` seams — the rumor source
+    "departures/arrivals within 3 days" reads it; a fresh run and every
+    load start with an empty log.
 
 #### 4.11.11.5 Spatial index & performance gates (locked)
 

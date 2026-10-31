@@ -122,6 +122,7 @@ func _v5_payload() -> Dictionary:
 		"wrecks": [],
 		"npc_preset": "normal",
 		"market_events": [],
+		"named_pirate_respawns": {},
 		"fame": 0,
 		"titles": {
 			"portugal": "none", "spain": "none", "england": "none",
@@ -325,6 +326,8 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		{"key": "npc_preset", "value": 3, "why": "npc_preset as a number"},
 		{"key": "market_events", "value": {}, "why":
 			"market_events as an object"},
+		{"key": "named_pirate_respawns", "value": [], "why":
+			"named_pirate_respawns as an array"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		bad[probe["key"]] = probe["value"]
@@ -361,7 +364,8 @@ func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
 	var payload := _v5_payload()
 	for key in ["npc_fleets", "proximity_cooldowns", "market_stocks",
-			"wrecks", "npc_preset", "market_events", "fame", "titles",
+			"wrecks", "npc_preset", "market_events",
+			"named_pirate_respawns", "fame", "titles",
 			"bounties", "active_quests", "completed_royal_missions",
 			"discoveries_reported", "discovery_hints", "battles_won",
 			"retired", "retired_at", "discoveries_found"]:
@@ -389,6 +393,9 @@ func _test_optional_keys_default() -> void:
 		% GameState.npc_preset)
 	_check(GameState.market_events == [] and GameState.market_events is Array,
 		"an absent market_events defaults to []")
+	_check(GameState.named_pirate_respawns == {}
+			and GameState.named_pirate_respawns is Dictionary,
+		"an absent named_pirate_respawns defaults to {}")
 	_check(GameState.fame == 0, "an absent fame defaults to 0")
 	_check(GameState.titles == {}, "an absent titles defaults to {}")
 	_check(GameState.bounties == {}, "an absent bounties defaults to {}")
@@ -453,6 +460,12 @@ func _test_new_fields_round_trip() -> void:
 		"start_day": 64, "end_day": 124,
 		"shifts": {"timber": -30, "cannons": -30},
 	}]
+	# Task L (docs/60-* §4.11.11.4, docs/90-* §8.1): the respawn map is a
+	# bare `{named_pirate_id: available_day}` object, saved as of v5.
+	GameState.named_pirate_respawns = {
+		"pirate_redbeard_khair": 94,
+		"successor_2": 70,
+	}
 	# The §4.15 fleet shape (docs/10-* §4.15): the pirate's saved fields are
 	# exactly the pinned set plus the task-owned extensions.
 	GameState.npc_fleets = [{
@@ -503,6 +516,9 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() writes npc_preset")
 	_check((on_disk.get("market_events") as Array).size() == 1,
 		"snapshot() writes market_events")
+	_check((on_disk.get("named_pirate_respawns") as Dictionary)
+		.get("pirate_redbeard_khair") == 94,
+		"snapshot() writes named_pirate_respawns")
 
 	_clobber_state()
 	_check(SaveSystem.load(1), "the v5 file with Phase-2/3/5 state loads")
@@ -528,6 +544,7 @@ func _test_new_fields_round_trip() -> void:
 	GameState.wrecks[0]["id"] = "mutated"
 	GameState.npc_preset = "mutated"
 	GameState.market_events[0]["template_id"] = "mutated"
+	GameState.named_pirate_respawns["pirate_redbeard_khair"] = 999
 	_check((snap["titles"] as Dictionary)["portugal"] == "baron",
 		"snapshot() deep-copies titles")
 	_check(((snap["active_quests"] as Array)[0] as Dictionary)["status"] == "active",
@@ -545,6 +562,9 @@ func _test_new_fields_round_trip() -> void:
 	_check(snap["npc_preset"] == "extreme", "snapshot() copies npc_preset")
 	_check((snap["market_events"] as Array)[0]["template_id"]
 		== "ev_war_provisioning", "snapshot() deep-copies market_events")
+	_check(int((snap["named_pirate_respawns"] as Dictionary)
+		.get("pirate_redbeard_khair", -1)) == 94,
+		"snapshot() deep-copies named_pirate_respawns")
 
 
 # --- 8. A retired save is never playable ----------------------------------
@@ -632,6 +652,7 @@ func _clobber_state() -> void:
 	GameState.wrecks = ["clobber"]
 	GameState.npc_preset = "clobbered"
 	GameState.market_events = ["clobber"]
+	GameState.named_pirate_respawns = {"clobber": -1}
 	GameState.fame = -1
 	GameState.titles = {}
 	GameState.bounties = {}
@@ -663,6 +684,8 @@ func _loaded_values() -> Dictionary:
 		"wrecks": GameState.wrecks.duplicate(true),
 		"npc_preset": GameState.npc_preset,
 		"market_events": GameState.market_events.duplicate(true),
+		"named_pirate_respawns":
+			GameState.named_pirate_respawns.duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),

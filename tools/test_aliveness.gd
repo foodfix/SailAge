@@ -147,6 +147,8 @@ func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 	GameState.wrecks = []
 	GameState.npc_preset = "normal"
 	GameState.market_events = []
+	GameState.named_pirate_respawns = {}
+	GameState.npc_port_log = []
 	EconomyLib.reset_overrides()
 	return NpcFleetsLib.new({
 		"npc_config": DataLoader.npc_config, "preset": "normal",
@@ -827,6 +829,41 @@ func _test_save_load_captains() -> void:
 			same = false
 			break
 	_check(same, "captain identities (incl. named overrides) survive save/load")
+	# Task L follow-up (docs/60-* §4.11.11.4, docs/90-* §8.1): a pending
+	# +30-day respawn window is now saved — a defeat right before saving must
+	# fire on schedule after the load, not be re-anchored or lost.
+	var named: Dictionary = NpcFleetsLib.preferred_bounty_target()
+	if not named.is_empty():
+		var named_id := str((named.get("captain", {}) as Dictionary)
+			.get("named_id", ""))
+		GameState.day = 20
+		sim.remove(str(named.get("id", "")))
+		_check(int(GameState.named_pirate_respawns.get(named_id, -1)) == 50,
+			"the defeat books available_day = day + 30 (got %s)"
+			% str(GameState.named_pirate_respawns.get(named_id, -1)))
+		_check(SaveSystem.save(SAVE_SLOT), "the run with a pending respawn saves")
+		GameState.named_pirate_respawns = {}
+		_check(SaveSystem.load(SAVE_SLOT), "the pending-respawn save loads")
+		_check(int(GameState.named_pirate_respawns.get(named_id, -1)) == 50,
+			"the respawn window survives the save/load round trip")
+		# Day +29: still pending; day +30: the successor sails.
+		var reloaded := NpcFleetsLib.new({"npc_config": DataLoader.npc_config,
+			"preset": "normal"})
+		GameState.day = 49
+		reloaded.last_tick_day = -1
+		reloaded.tick(49)
+		_check(GameState.named_pirate_respawns.has(named_id),
+			"day +29 keeps the window pending")
+		GameState.day = 50
+		reloaded.last_tick_day = -1
+		reloaded.tick(50)
+		var successor := false
+		for fleet in GameState.npc_fleets:
+			if fleet is Dictionary \
+					and int((fleet.get("captain", {}) as Dictionary)
+						.get("named_tier", 0)) > 0:
+				successor = true
+		_check(successor, "the successor sails at day +30 after the load")
 	_check(SaveSystem.delete_save(SAVE_SLOT) or not SaveSystem.has_save(SAVE_SLOT),
 		"the probe slot is cleaned up")
 
@@ -877,16 +914,15 @@ func _test_convoys_wakes() -> void:
 	sim.reset_index()
 	sim._commit_cell(a, lane_path[1])
 	sim._commit_cell(a, lane_path[0])
-	var wake: Array = a.get("wake", [])
+	var wake: Array = sim._wake_trails.get(str(a.get("id", "")), [])
 	_check(wake.size() == 2, "two steps leave a 2-tile wake (got %d)" % wake.size())
 	for step in 8:
 		var next: Vector2i = lane_path[mini(3 + step, lane_path.size() - 1)]
 		sim._commit_cell(a, next)
-	wake = a.get("wake", [])
+	wake = sim._wake_trails.get(str(a.get("id", "")), [])
 	_check(wake.size() <= NpcFleetsLib.WAKE_LENGTH,
 		"the wake ring caps at %d tiles (got %d)"
 		% [NpcFleetsLib.WAKE_LENGTH, wake.size()])
-	var a_marker: Dictionary = markers.get(str(a.get("id", "")), {})
 	# Markers re-read: a sailing fleet carries wake data, a docked one none.
 	var sailing_markers := {}
 	for marker in sim.markers():

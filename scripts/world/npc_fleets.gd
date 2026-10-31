@@ -163,22 +163,25 @@ const NAMED_RESPAWN_DAYS := 30
 ## Wake trail length behind a moving marker (docs/80-* §4.5.2: a 5-tile dashed
 ## trail; wrecks and docked markers draw none).
 const WAKE_LENGTH := 5
+## Transient port-traffic log cap (docs/90-* §8.1 task L pin): the ecology
+## keeps the last ≤ 128 arrival/departure records for the tavern rumor rows.
+const PORT_LOG_MAX := 128
 
-## Task L: named-pirate respawn bookkeeping — `{id, tier}` entries keyed by
-## the defeated famous identity, with `day` = the day it sails again. The
+## Task L: named-pirate respawn bookkeeping lives in the SAVED
+## `GameState.named_pirate_respawns` (`{named_id: available_day}`,
+## docs/90-* §8.1) — a +30-day window now survives save/load exactly. The
 ## successor's NAME comes from the nationless captain pool
 ## (`npc_captains.json` `""`, ≥ 8 entries — "the next pool entry",
 ## §4.11.11.4): the 4-entry `named_pirates.json` list cannot supply a *new*
 ## name while the other three identities stay afloat, so famous entries
 ## front the ecology and successors rotate through the pool, inheriting the
-## slot's bounty tier. In-process static (the shared-route-cache pattern):
-## it survives scene swaps inside a run; a fresh process loading a
-## mid-respawn save keeps the slot empty until the pirate trickle refills it
-## naturally (reported deviation — the v5 save key list is pinned and
-## carries no respawn block).
-static var _named_respawns: Dictionary = {}
+## slot's bounty tier (a famous defeat keys the slot's id, so the tier is
+## re-derived from `named_pirates.json` at fire time; a successor defeat
+## schedules the interchangeable alias rotation under a `successor_<tier>`
+## key — the map stays the documented bare `{id: day}` shape).
 ## The nationless-pool rotation cursor for successor names (deterministic:
-## each draw takes the next free entry, wrapping).
+## each draw takes the next free entry, wrapping) stays transient — names
+## already afloat are never redrawn, so a fresh cursor cannot duplicate one.
 static var _successor_cursor: int = 0
 
 ## --- Task-owned constants (the docs left these open; see the task J report).
@@ -285,6 +288,12 @@ var _skip: Dictionary = {}
 ## Runtime-only hunter pursuit plans (`fleet_id → {target, path}`); never
 ## saved — a fresh plan from the same state reproduces the same chase.
 var _hunter_paths: Dictionary = {}
+
+## Task L (docs/80-* §4.5.2): transient wake trails, `fleet_id →
+## [Vector2i, …]` most recent first, ≤ [constant WAKE_LENGTH] entries —
+## the cells a fleet has LEFT BEHIND. Never saved (a reloaded fleet simply
+## has no trail until it moves again).
+var _wake_trails: Dictionary = {}
 
 ## Wrap-aware cell-bucket index (docs/60-* §4.11.11.5): `bucket_key →
 ## [fleet_id, …]` and `fleet_id → fleet dict` (references into
@@ -541,8 +550,8 @@ func trickle_per_day() -> int:
 ## `deserted` fills nothing.
 func initial_fill(day: int) -> void:
 	last_tick_day = int(day)
-	_named_respawns.clear()  # per-run state: a fresh run schedules nothing
-	_successor_cursor = 0
+	_successor_cursor = 0  # per-run transient (respawns live in GameState)
+	_wake_trails = {}  # per-run transient (a fresh sim starts empty anyway)
 	if is_deserted():
 		return
 	if not DataLoader.ensure_map():
@@ -606,10 +615,11 @@ func fleets() -> Array:
 
 ## Render dicts for the world scene (docs/80-* §4.5.2): `{id, role,
 ## nation_id, cell, letter}` plus task L's aliveness fields — `sailing` and
-## the ≤ 5-tile `wake` trail (docked markers report no wake), and the convoy
-## grouping (`convoy_count` ≥ 2 marks the leader of one group of same-lane
-## traders within Chebyshev 3, §4.11.11.4; members carry `convoy_leader`).
-## One entry per fleet — the render layer collapses convoys to one marker.
+## the ≤ 5-tile `wake` trail from the transient wake table (docked markers
+## report no wake), and the convoy grouping (`convoy_count` ≥ 2 marks the
+## leader of one group of same-lane traders within Chebyshev 3, §4.11.11.4;
+## members carry `convoy_leader`). One entry per fleet — the render layer
+## collapses convoys to one marker.
 func markers() -> Array:
 	var out: Array = []
 	var convoy_leaders: Dictionary = _convoy_leaders()
@@ -621,9 +631,8 @@ func markers() -> Array:
 			as Dictionary).get("legs", []).is_empty()
 		var wake: Array = []
 		if sailing:
-			for entry in (fleet as Dictionary).get("wake", []):
-				wake.append(Vector2i(int((entry as Dictionary).get("x", 0)),
-					int((entry as Dictionary).get("y", 0))))
+			for cell in _wake_trails.get(id, []):
+				wake.append(cell)
 		var leader_id := str(convoy_leaders.get(id, ""))
 		out.append({
 			"id": id,
@@ -713,7 +722,12 @@ func fleet_at(cell: Vector2i) -> Dictionary:
 ## Removes fleet `id` from the ecology (the §4.12.4 battle-aftermath call).
 ## Task L (§4.11.11.4): defeating a **named** pirate reserves its slot — the
 ## famous identity retires (no trickle spawn can re-take it) and a successor
-## under a new pool name is scheduled for +30 days, inheriting the tier.
+## under a new pool name is scheduled for +30 days, inheriting the tier. The
+## availability day persists in `GameState.named_pirate_respawns`
+## (`{named_id: available_day}`, docs/90-* §8.1), so the window survives
+## save/load; tiers need no storage — a famous defeat keys its own
+## `named_pirates.json` id, a successor defeat books the single
+## interchangeable alias slot as `successor_<tier>`.
 func remove(id: String) -> void:
 	for index in range(GameState.npc_fleets.size() - 1, -1, -1):
 		var fleet = GameState.npc_fleets[index]
@@ -721,19 +735,15 @@ func remove(id: String) -> void:
 			var captain: Dictionary = (fleet as Dictionary).get("captain", {})
 			var named_id := str(captain.get("named_id", ""))
 			if not named_id.is_empty():
-				_named_respawns[named_id] = {
-					"id": named_id,
-					"day": int(GameState.day) + NAMED_RESPAWN_DAYS,
-					"tier": named_tier_of(fleet),
-				}
+				GameState.named_pirate_respawns[named_id] = \
+					int(GameState.day) + NAMED_RESPAWN_DAYS
 			elif int(captain.get("named_tier", 0)) > 0:
-				# A defeated successor: the slot continues rotating.
-				_named_respawns["successor_%d" % int(GameState.day)] = {
-					"id": "",
-					"day": int(GameState.day) + NAMED_RESPAWN_DAYS,
-					"tier": int(captain.get("named_tier", 1)),
-				}
+				# A defeated successor: the alias rotation sails again.
+				GameState.named_pirate_respawns[
+					"successor_%d" % int(captain.get("named_tier", 1))
+				] = int(GameState.day) + NAMED_RESPAWN_DAYS
 			GameState.npc_fleets.remove_at(index)
+			_wake_trails.erase(id)  # transient trail of a dead fleet
 			# A full rebuild (O(N), battle-aftermath frequency): kills the
 			# whole stale-key class — fixtures may rename ids after adding,
 			# so an incremental removal can never be trusted here.
@@ -779,9 +789,10 @@ func reset_rng(seed_value: int) -> void:
 
 ## Test/new-map seam: drops the shared lane-network and route caches (the
 ## network is derived purely from the loaded data, so this only matters to a
-## fixture that swaps `DataLoader`'s tables or map between cases). Task L: the
-## named-pirate respawn bookkeeping is per-run too — a fresh board schedules
-## nothing.
+## fixture that swaps `DataLoader`'s tables or map between cases). Task L:
+## the successor-name cursor is per-run transient too (the respawn schedule
+## lives in `GameState.named_pirate_respawns`; wake trails are per-instance
+## and a fresh sim starts with none).
 static func reset_caches() -> void:
 	_route_cache = {}
 	_net_ready = false
@@ -798,7 +809,6 @@ static func reset_caches() -> void:
 	_adjacency = {}
 	_ports_cache = {}
 	_goods_cache = {}
-	_named_respawns = {}
 	_successor_cursor = 0
 
 
@@ -883,6 +893,7 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 	fleet["id"] = next_fleet_id(day, role)
 	fleet["seed"] = _fleet_seed(day, cell)
 	set_position(fleet, cell)
+	_record_wake(fleet, cell)
 	_draw_captain(fleet)
 	if role == TRADER:
 		fleet["specialty"] = _draw_specialty(nation_id, int(fleet["seed"]))
@@ -899,6 +910,7 @@ func _finish_lane_fleet(fleet: Dictionary, journey: Dictionary,
 	fleet["route"] = journey["route"]
 	fleet["dest_port_id"] = str(journey.get("dest", ""))
 	set_position(fleet, journey["cell"])
+	_record_wake(fleet, journey["cell"])
 	if int(journey.get("dwell_until_day", 0)) > 0:
 		fleet["dwell_until_day"] = int(journey["dwell_until_day"])
 	_draw_captain(fleet)
@@ -2208,33 +2220,68 @@ func _can_enter(fleet: Dictionary, cell: Vector2i) -> bool:
 	return _passable(cell) and not _is_occupied(cell, str(fleet.get("id", "")))
 
 
+## Records `cell` at the front of the fleet's transient wake trail (the
+## cells it leaves behind, most recent first, ≤ [constant WAKE_LENGTH]);
+## docs/80-* §4.5.2 — called at the movement commit and at spawn (the spawn
+## cell becomes the first cell left behind). Never saved.
+func _record_wake(fleet: Dictionary, cell: Vector2i) -> void:
+	if cell == NO_CELL:
+		return
+	var id := str(fleet.get("id", ""))
+	if id.is_empty():
+		return
+	var trail: Array = _wake_trails.get(id, [])
+	if not trail.is_empty() and trail[0] == cell:
+		return  # holding position (a blocked step): no duplicate wake tile
+	trail.push_front(cell)
+	while trail.size() > WAKE_LENGTH:
+		trail.pop_back()
+	_wake_trails[id] = trail
+
+
 func _commit_cell(fleet: Dictionary, cell: Vector2i) -> void:
 	var before := position_of(fleet)
 	set_position(fleet, cell)
-	# Task L wake ring (docs/80-* §4.5.2): the last WAKE_LENGTH cells walked,
-	# persisted with the fleet so the trail survives save/load; render layers
-	# draw it only behind a *moving* marker.
+	# Task L wake trail (docs/80-* §4.5.2): the cell just left is the newest
+	# tile behind the marker (render layers draw it only while moving).
 	if before != NO_CELL and before != cell:
-		var wake: Array = []
-		for entry in (fleet.get("wake", []) as Array):
-			wake.append(entry)
-		wake.append({"x": before.x, "y": before.y})
-		while wake.size() > WAKE_LENGTH:
-			wake.pop_front()
-		fleet["wake"] = wake
+		_record_wake(fleet, before)
 	if before != NO_CELL and _by_id.has(str(fleet.get("id", ""))):
 		_move_bucket(str(fleet.get("id", "")), before, cell)
 
 
 ## Leg list exhausted: dock at the destination port (docked fleets sit at the
-## port's berth tile) for [constant DWELL_DAYS] days.
+## port's berth tile) for [constant DWELL_DAYS] days. The arrival joins the
+## transient port-traffic log (§4.11.11.4 task L pin) for the rumor rows.
 func _arrive(fleet: Dictionary, day: int) -> void:
 	var port_id := str(fleet.get("dest_port_id", ""))
 	if not port_id.is_empty():
 		var berth := _port_cell(port_id)
 		if berth.x >= 0:
 			_commit_cell(fleet, berth)
+		_log_port_traffic(port_id, "arrival", fleet, day)
 	fleet["dwell_until_day"] = int(day) + DWELL_DAYS
+
+
+## Appends one record to the transient `GameState.npc_port_log`
+## (`{port_id, kind, role, nation_id, fleet_id, day}`, newest last, capped at
+## [constant PORT_LOG_MAX] — docs/90-* §8.1 task L pin): the tavern rumor
+## source "departures/arrivals at this port within 3 days" reads it. Pure
+## bookkeeping — never saved, never emitted.
+func _log_port_traffic(port_id: String, kind: String, fleet: Dictionary,
+		day: int) -> void:
+	if port_id.is_empty():
+		return
+	GameState.npc_port_log.append({
+		"port_id": port_id,
+		"kind": kind,
+		"role": str(fleet.get("role", "")),
+		"nation_id": str(fleet.get("nation_id", "")),
+		"fleet_id": str(fleet.get("id", "")),
+		"day": int(day),
+	})
+	while GameState.npc_port_log.size() > PORT_LOG_MAX:
+		GameState.npc_port_log.pop_front()
 
 
 ## Dwell ended: the role's port-call decision (docs/30-* §4.4 for traders).
@@ -2410,6 +2457,8 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
 	fleet["dest_port_id"] = dest
 	fleet["dwell_until_day"] = 0
+	# Task L: the departure joins the transient port-traffic log (§4.11.11.4).
+	_log_port_traffic(origin, "departure", fleet, int(GameState.day))
 
 
 ## The trader decision (docs/30-* §4.4), exposed as the test seam. Returns
@@ -2695,7 +2744,8 @@ static func next_named_pirate_id(after_id: String = "") -> String:
 	for offset in list.size():
 		var entry: Dictionary = list[(start + offset) % list.size()]
 		var id := str(entry.get("id", ""))
-		if id.is_empty() or in_use.has(id) or _named_respawns.has(id):
+		if id.is_empty() or in_use.has(id) \
+				or GameState.named_pirate_respawns.has(id):
 			continue
 		return id
 	return ""
@@ -2765,11 +2815,19 @@ static func _next_successor_index() -> int:
 ## sails again under the next nationless-pool name, inheriting the slot's
 ## bounty tier. The defeated famous identity stays reserved while the entry
 ## is pending; a draw with no legal anchor — or an exhausted pool — retries
-## the next day.
+## the next day. Reading `GameState.named_pirate_respawns` (saved,
+## `{named_id: available_day}`): the tier comes from the key — a famous id
+## looks itself up in `named_pirates.json`, a `successor_<tier>` slot parses
+## its suffix — so the persisted map stays the documented bare-day shape.
 func _named_pirate_tick(day: int) -> void:
-	for slot_id in (_named_respawns.keys() as Array).duplicate():
-		var entry: Dictionary = _named_respawns[slot_id]
-		if int(day) < int(entry.get("day", 0)):
+	for slot_id in (GameState.named_pirate_respawns.keys() as Array).duplicate():
+		var available_day := int(GameState.named_pirate_respawns[slot_id])
+		if int(day) < available_day:
+			continue
+		var tier := _respawn_slot_tier(str(slot_id))
+		if tier <= 0:
+			# Unknown slot key (a hand-edited save): drop it, never wedge.
+			GameState.named_pirate_respawns.erase(slot_id)
 			continue
 		var fleet := spawn(PIRATE, "", int(day))
 		if fleet.is_empty():
@@ -2778,8 +2836,17 @@ func _named_pirate_tick(day: int) -> void:
 		if index < 0:
 			continue
 		fleet["captain"] = {"pool_id": "", "name_index": index,
-			"named_tier": int(entry.get("tier", 1))}
-		_named_respawns.erase(slot_id)
+			"named_tier": tier}
+		GameState.named_pirate_respawns.erase(slot_id)
+
+
+## The bounty tier a respawn slot key carries: a famous id resolves its
+## `named_pirates.json` entry; `successor_<tier>` parses the suffix; 0 for
+## anything else (a hand-edited key is dropped, never wedges the pass).
+static func _respawn_slot_tier(slot_id: String) -> int:
+	if slot_id.begins_with("successor_"):
+		return maxi(0, int(slot_id.trim_prefix("successor_")))
+	return int(DataLoader.get_named_pirate(slot_id).get("tier", 0))
 
 
 ## The live named-pirate fleet a bounty quest prefers (§4.11.11.4): the

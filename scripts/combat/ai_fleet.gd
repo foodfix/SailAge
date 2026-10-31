@@ -21,11 +21,12 @@ const HULL_IDS: Array[String] = ["latin", "sloop", "caravel", "brigantine"]
 
 ## §4.11.3 step 3 cannon budgets; the Phase-5 role map replaces the value for
 ## its kinds (§4.11.11.2: trader 6 / coaster 2 / courier 0 / patrol 30 /
-## privateer 20 / pirate 20, each `+ floor(day / 30)`). Unknown kinds fall
-## back to the pirate budget.
+## privateer 20 / pirate 20, each `+ floor(day / 30)`; §4.11.11.4: a treasure
+## fleet arms 30 whole-fleet cannons). Unknown kinds fall back to the pirate
+## budget.
 const CANNON_BUDGET := {
 	"pirate": 20, "navy": 30, "trader": 6, "coaster": 2, "courier": 0,
-	"patrol": 30, "privateer": 20,
+	"patrol": 30, "privateer": 20, "treasure": 30,
 }
 const CANNON_BUDGET_PER_30_DAYS := 1
 
@@ -63,8 +64,10 @@ static func compose_enemy(kind: String, day: int, rng: RandomNumberGenerator) ->
 
 ## §4.11.3 step 1: pirate 1–3, navy 2–4; the Phase-5 warship roles share the
 ## navy band (§4.11.11.2: `patrol`/`privateer` roll 2–4, the merchant roles
-## 1–3).
+## 1–3); a `treasure` fleet rolls 3–5 merchants plus one escort (§4.11.11.4).
 static func _ship_count(kind: String, rng: RandomNumberGenerator) -> int:
+	if kind == "treasure":
+		return 3 + rng.randi_range(0, 2) + 1
 	var base := 2 if kind == "navy" or kind == "patrol" or kind == "privateer" else 1
 	return base + rng.randi_range(0, 2)
 
