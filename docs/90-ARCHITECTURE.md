@@ -533,3 +533,36 @@ is a build failure, never a quiet divergence.
       2160×1080 indexed PNG requires zero code edits.
 - [ ] Adding one new good to `data/goods.json` requires zero code edits
       (verified in the Phase-1 market task acceptance).
+
+## 13. Test Runner & Gates (Phase 5)
+
+The per-suite contract is unchanged: every suite is
+`tools/test_<name>.tscn`, runs headless (`godot --headless res://…`), exits 0
+on pass, and prints a completion marker — `ALL PASS (N checks)` or
+`X of Y checks FAILED`. `tools/run_tests.py` is the canonical gate runner
+(stdlib-only) that wraps that contract with zombie/hang detection and
+built-in profiling, so a wave gate needs exactly one run:
+
+- **Scheduling.** Save-touching suites share `user://saves/` and run
+  one-at-a-time (the serial-save set: `test_save`, `test_save_v5`,
+  `test_world_e2e`); every other suite runs in parallel workers
+  (`-j`, default **8**).
+- **Bounded time.** Per-suite wall cap **300 s** (kill the process group).
+  Earlier detection for stuck suites: the runner samples each log every
+  **2 s**; **6 s** with zero log growth AND < **0.05 s** child CPU advance
+  AND no completion marker ⇒ stuck. A stuck suite with a script/scene load
+  error in its log (`SCRIPT ERROR`, `Failed to load …`) is a **ZOMBIE**
+  (it never started — e.g. a suite preloading a deleted file); without a
+  load error it is a **HANG** (started, never finished — e.g. awaiting a
+  signal that never fires). Busy suites (CPU advancing, e.g. the
+  long-synchronous `test_world_e2e`) are never mistaken for stuck.
+- **Classification.** GREEN (exit 0 + marker) · RED (marker with failures,
+  or non-zero exit) · ZOMBIE · HANG. Report prints per-suite
+  **wall ms + child-user CPU ms**, slowest first; suites over **30 s** wall
+  are flagged `slow` (informational only — `test_world_e2e` is a known-slow
+  legacy). Optional JSON via `--out`.
+- **Exit codes.** `0` all green · `1` RED present · `2` ZOMBIE or HANG
+  present (a wave may not merge on `2` even if every other suite is green).
+- **Free profiling.** Suites MAY print `PROFILE <key> <int_ms>` lines around
+  hot paths (e.g. day-tick probes); the runner collects them verbatim into
+  the report so timings come with every gate run, never a second run.
