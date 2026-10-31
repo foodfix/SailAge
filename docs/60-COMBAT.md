@@ -51,10 +51,11 @@ grid, duel, damage, aftermath (§4.2–§4.11.10) — is unchanged.
 
 - **One world grid.** Fleets live on the single Terra Vera world grid
   (`20-*` §4.1): their `cell` values are tile coordinates on the
-  2160×1080 grid, and **all x-distance math is wrap-aware** — a fleet at
-  `x = 2158` is 2 tiles from a fleet at `x = 0`, and no distance below ever
-  exceeds `2160/2 = 1080`. A tile is 10 nm, so every tile distance below
-  is 10 nm per tile.
+  **4320×2160** Phase-6 grid (`IMPLEMENT-Phase6.md` §2.0), and **all
+  x-distance math is wrap-aware** — a fleet at `x = 4318` is 2 tiles from a
+  fleet at `x = 0`, and no distance below ever exceeds `4320/2 = 2160`. A
+  tile is 5 nm, so every tile distance below is 5 nm per tile (the Phase-5
+  2160×1080 grid at 10 nm per tile was rescaled by the Phase-6 sweep).
 - **Fleet shape (locked).** All fleets are save-shaped as
   `{id, role, nation_id, cell(vec2), route, cargo, captain, specialty?,
   cooldown_until_day, …}`; pirates keep `nation_id: ""`. Budgets multiply by
@@ -68,10 +69,10 @@ grid, duel, damage, aftermath (§4.2–§4.11.10) — is unchanged.
 |---|---|---|---|
 | `trader` | `ceil(own_ports × 1.25)`/nation | 25+25+23+23+18+13 = **127** | own-nation routes via lane graph; 2-day dwell; joint profit-per-day decision; sells only where `factor > 1.0` |
 | `coaster` | `ceil(own_ports × 0.75)`/nation | 15+15+14+14+11+8 = **77** | visual-life small craft; adjacent-port spokes; hold ≤ 10, trades ≤ 5/call; **never triggers contact**, raiders ignore; attacking one is ordinary piracy; loot `25 + floor(day/10)`g |
-| `patrol` | `ceil(own_ports / 6)`, min 1 | **19** | cycles its nation's lanes, docking en route; same-nation traders within Chebyshev 10 count escorted; halves pirate/privateer spawn rolls in its 15-tile zone |
+| `patrol` | `ceil(own_ports / 6)`, min 1 | **19** | cycles its nation's lanes, docking en route; same-nation traders within Chebyshev 20 count escorted; halves pirate/privateer spawn rolls in its 30-tile zone |
 | `courier` | 2/nation | **12** | capital ↔ own-ports dispatch runs (sightings/rumors only — no quest mechanics this phase) |
 | `privateer` | 2/undirected rivalry pair | **12** | stations on its sponsor's rivals' major lanes (chokepoint-biased); hunts only those rivals' fleets; defeating one: +2 rep with **each** of the two sponsor rivals |
-| `pirate` | `8 + unpatrolled_zones` (computed daily: navy 15-tile zones lacking a patrol) | ≈ **25** | camps tagged chokepoints; prefers nearest trader/patrol within Chebyshev 10 |
+| `pirate` | `8 + unpatrolled_zones` (computed daily: navy 30-tile zones lacking a patrol) | ≈ **25** | camps tagged chokepoints; prefers nearest trader/patrol within Chebyshev 10 |
 | `hunter` | bounty-only, ≤ 1 per bountied nation | transient ≤ 6 | rep ≤ −50 navy hunter; sails the lane network to its intel target and pursues only at short range (§4.11.11.1 hunter intel) |
 | `treasure` | 1/nation per season | transient ≤ 6 | see Aliveness table (§4.11.11.4) |
 | Core cap | sum of the above at normal | **272** | + 6 treasure + ≤ 6 hunters = 284, rounded up with slack ⇒ **global cap 288** (wrecks are stored in `GameState.wrecks`, never counted) |
@@ -111,15 +112,17 @@ immunity are retired with the marker system (§4.11.11.1).
 - **Movement points (MP):** `MP = battle_mp(ShipType.speed)` (no crew/wind
   modifiers in battle — locked simplification). Orthogonal step = 1 MP,
   diagonal = 2 MP. Unspent MP does not carry over.
-  **`battle_mp` (Phase-4 pin, required because `ShipType.speed` doubled):**
-  the battle grid is unchanged at 16×10 while world speeds became tiles/day on
-  10 nm tiles, so MP is **not** the raw speed. It is the Phase-1 battle value
-  preserved exactly: `battle_mp(speed) = speed / 2` (integer division), i.e.
-  `{8→4, 10→5, 12→6}`. This reproduces every Phase-2 MP budget and initiative
-  tie-break byte-for-byte (latin 4, sloop 5, caravel 5, galley 6, brigantine 6,
-  nao 4, carrack 4, galleon 5) — no battle balance number changes, and a
-  brigantine still cannot cross a 16-wide field in one turn. A sail
-  equipment's `speed` modifier is added **after** the halving
+  **`battle_mp` (Phase-6 pin, required because `ShipType.speed` doubled
+  again):** the battle grid is unchanged at 16×10 while world speeds became
+  tiles/day on 5 nm tiles (`20-*` §4.1), so MP is **not** the raw speed. It
+  is the Phase-1 battle value preserved exactly — the same preservation the
+  Phase-4 pin made once already, repeated for the 5 nm grid:
+  `battle_mp(speed) = speed / 4` (integer division), i.e.
+  `{16→4, 20→5, 24→6}`. This reproduces every Phase-2/4 MP budget and
+  initiative tie-break byte-for-byte (latin 4, sloop 5, caravel 5, galley 6,
+  brigantine 6, nao 4, carrack 4, galleon 5) — no battle balance number
+  changes, and a brigantine still cannot cross a 16-wide field in one turn.
+  A sail equipment's `speed` modifier is added **after** the division
   (`MP = battle_mp(ShipType.speed) + sail_speed_delta`), so `+1` sail still
   buys exactly the Phase-2 step it bought (latin `4 → 5`).
 
@@ -267,7 +270,7 @@ battle opens with a movement phase.
   player-before-enemy, then ascending fleet index. A unit destroyed before its
   slot is skipped and never acts.
 - **MP:** `MP = battle_mp(ShipType.speed) + sail_speed_delta` (§4.2/§4.3,
-  Phase-4 pin: integer division by 2, sail delta added after), refreshed to
+  Phase-6 pin: integer division by 4, sail delta added after), refreshed to
   full at the start of each of the ship's turns; unspent MP is discarded.
   Orthogonal step 1 MP, diagonal 2 MP. A diagonal step is legal only when both
   orthogonally adjacent corner tiles are inside the grid (no obstacles exist,
@@ -383,7 +386,7 @@ because the bracket never repairs between battles.
 - **Reputation:**
   - Pirates defeated (any outcome except retreat) → `+2` with each of the
     **two nearest ports' nations** measured by Chebyshev distance from the
-    contact tile (wrap-aware on x over the 2160×1080 world grid). The **two
+    contact tile (wrap-aware on x over the 4320×2160 world grid). The **two
     ports** are selected first (ties broken by port id
     ascending) and **then** their nations are deduplicated, so if both nearest
     ports belong to one nation that nation is credited once and no third port
@@ -470,9 +473,9 @@ ecology members with a role, a nation, a lane route and a captain:
   weight = tile length, tie-break lane id then (y, x)); a fleet persists
   `route: {lanes: [ids], leg, tile_index}` — smaller than a tile path.
   Lane-locked: `trader`, `coaster`, `courier`, `treasure`. `patrol` cycles
-  its nation's lanes. `pirate`/`privateer` anchor within Chebyshev 3 of
-  chokepoint tiles and leave only for prey within Chebyshev 5, returning
-  when prey is beyond 8 or lost (**5/8 hysteresis**). `hunter` stays
+  its nation's lanes. `pirate`/`privateer` anchor within Chebyshev 6 of
+  chokepoint tiles and leave only for prey within Chebyshev 10, returning
+  when prey is beyond 16 or lost (**10/16 hysteresis**). `hunter` stays
   lane-locked too — it sails the junction graph to its intel target (the
   hunter-intel rule below). Fallback on an impossible route (the validator
   makes this unreachable): one direct A* leg + logged warning.
@@ -485,24 +488,29 @@ ecology members with a role, a nation, a lane route and a captain:
   | Intel object | `world.last_departed_port` — the port id recorded at every Set Sail; readable by hunting nations (rep ≤ −50) |
   | Travel | the hunter sails the lane network to that port (junction-graph Dijkstra + tile path — **zero A\***) |
   | Loiter | camps the port's approaches (the chokepoint-camping pattern) for **10 days**, then routes home via its sponsor's lanes (and despawns if its bounty no longer stands) |
-  | Chase trigger | the player's fleet within **Chebyshev 15** (wrap-aware) ⇒ direct pursuit — in **any** hunter state: en route, loitering, or homing |
-  | Pursuit | short-range A\* only inside that radius, still under the ≤ 250 ms/day budget; losing the player beyond **Chebyshev 20** ends the chase — the hunter returns to the lane network / the intel port (**15/20 hysteresis**) |
+  | Chase trigger | the player's fleet within **Chebyshev 30** (wrap-aware) ⇒ direct pursuit — in **any** hunter state: en route, loitering, or homing |
+  | Pursuit | short-range A\* only inside that radius, still under the ≤ 250 ms/day budget (unchanged **as the budget** — task H re-measures it at the quadrupled chase area and windows the region only on measured failure, correction 13); losing the player beyond **Chebyshev 40** ends the chase — the hunter returns to the lane network / the intel port (**30/40 hysteresis**) |
   | At-sea intel | contact with any fleet of a hunting nation updates `world.hunter_intel_cell` to the contact cell (one assignment on contact) |
 
   `world.last_departed_port` (port id string) and `world.hunter_intel_cell`
   (tile position) persist in the v5 `world` block, so hunter placement is
   exactly reproducible after a reload. A new Set Sail re-targets under-way
   hunters at their next day tick (deterministic).
-- **Stepping.** Fleets advance along their lane's rasterized tile path at
-  **1 tile/day** inside the §4.1.2 flow, skipping occupied tiles and never
+- **Stepping.** Fleets advance along their lane's rasterized tile path at a
+  base of **2 tiles/day** (Phase-6 lane-stepping base, before the parity
+  factors of the amendment block below; Phase 5 stepped 1 tile/day on the
+  10 nm grid) inside the §4.1.2 flow, skipping occupied tiles and never
   entering `#` land, `^` reef or `I` ice; port-bound roles dwell **2 days**
   in port (the §4.1.1 trader row pins the trader dwell). Chokepoint
-  anchoring keeps a `pirate`/`privateer` within Chebyshev 3 of its
-  chokepoint tiles except during a chase (the 5/8 hysteresis above).
+  anchoring keeps a `pirate`/`privateer` within Chebyshev 6 of its
+  chokepoint tiles except during a chase (the 10/16 hysteresis above).
 - **Pursuit is the only runtime A\* (locked).** The time-budgeted A*
   (≤ 250 ms/day, §4.1.2 `path_budget_ms_per_day`) survives only for the
-  hunter's short-radius chase (the 15/20 hunter-intel hysteresis above); a
-  budget overflow **loses the chase that day**. Lane traffic — now
+  hunter's short-radius chase (the 30/40 hunter-intel hysteresis above); a
+  budget overflow **loses the chase that day**. The budget itself is
+  unchanged by the Phase-6 rescale; task H re-measures it at the quadrupled
+  chase area and introduces windowing only on measured failure
+  (correction 13). Lane traffic — now
   including hunter travel — never pathfinds (the §4.11.11.5 zero-A* gate).
 - **Contact.** Measured after the fleet step, at Chebyshev distance 1,
   wrap-aware on x — the §4.11.11.2 table's row is the whole rule: only
@@ -520,6 +528,32 @@ ecology members with a role, a nation, a lane route and a captain:
   fleet counts are now governed solely by the §4.1.1 budgets and the
   §4.1.2 trickle (wrecks excluded — they live in `GameState.wrecks`). The
   save-key list is `90-*`'s (task A).
+
+**Phase-6 parity & seasons (amendment).** Every rule above keeps its
+shape; the Phase-6 sea adds four touches, all deterministic:
+
+- **Physics parity.** Each fleet's daily tile budget multiplies by the
+  same `direction_factor`/`current_factor` the player's pipeline applies
+  (`20-*` §4.4), evaluated for the fleet's **current leg heading** — pure
+  functions of day + position, no RNG, so replays stay exact. Hunters pay
+  the factors on their lane travel **and per pursuit step**. Lane stepping
+  runs at base **2 tiles/day** before the factors (the Stepping bullet
+  above).
+- **Seasonal lane variants.** Lanes may carry
+  `variants: [{id, months, waypoints}]` (`10-*`, amended Phase 6); runtime
+  selects the **in-month variant from the built tile paths**
+  (`trade_routes_built.json`). Deterministic per day.
+- **Ice-aware stepping & pursuit.** In-month seasonal ice
+  (`20-*` §4.18) refuses *entry* for player, NPC, A\* and lane stepping
+  alike; a fleet standing on a tile that freezes is **never trapped** — it
+  may still move out. Pursuit A\* uses the same in-month passability.
+- **Radii sweep note.** The Phase-6 grid sweep (5 nm tiles) doubled the
+  gameplay radii pinned above: patrol zone 15 → 30, chokepoint anchor
+  3 → 6, pirate hysteresis 5/8 → 10/16, hunter hysteresis 15/20 → 30/40,
+  escort radius 10 → 20, trader decision range 60 → 120 (the number
+  itself is pinned in `30-*` §4.4), lane stepping base 1 → 2 tiles/day.
+  Values not listed here (e.g. the pirate prey-preference radius, convoy
+  grouping) are unchanged pins.
 
 #### 4.11.11.2 Auto-resolve, wreckage & player combat (locked)
 
@@ -594,7 +628,9 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
   tiers 1–3 (`70-*` §4.5); defeated → respawn as a new name **+30 days**;
   `quest_gen` bounty targets prefer named captains.
 - **Treasure fleets (locked):** 1/nation/season on day `45 + 15 ×
-  nation_index` (mod 90), `nation_index` = `nations.json` file order
+  nation_index` (mod 90 — under the Phase-6 360-day calendar these mod-90
+  "seasons" are 90-day quarters anchored at Month 1 (`20-*` §4.15);
+  behavior unchanged), `nation_index` = `nations.json` file order
   (portugal 0 … italy 5) ⇒ days 45/60/75/90/105/120; 3–5 ships + patrol
   escort on the nation's historical lane; loot = cargo (×3 normal volume) +
   `min(3000, 500 + 25 × day)`g.
@@ -633,7 +669,8 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
     nation has no live treasure fleet. The fleet boards the lane the
     **capital's built spoke** attaches to (the historical lane), at the
     tile nearest the capital (the §4.1.1 patrol boarding rule), walks it
-    end to end at 1 tile/day, dwells 2 days at the far end, then
+    end to end at a base of 2 tiles/day (Phase-6 lane-stepping base,
+    before the parity factors), dwells 2 days at the far end, then
     despawns — never a port call. Cargo at spawn: **3 ×** the normal
     30-unit call cap of one seeded produced good. Composition per
     §4.11.11.2: `3 + rng(0..2)` merchant hulls + one patrol-escort hull
@@ -662,18 +699,25 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
 
 - **Spatial index (locked):** one wrap-aware **cell-bucket hash**
   (cell → fleet) serving occupancy, contact, and neighborhood queries
-  (prey-10, escort-10, patrol zones) — every per-day check linear in fleet
+  (prey-10, escort-20, patrol-30 zones) — every per-day check linear in fleet
   count. **Every "within N tiles" check goes through the bucket index**
   (review gate, tasks J/K).
+- **Phase-6 width-derived keys (correction 6).** The cell-key packing
+  (`cell.y * 4096 + posmod(cell.x, 4096)`) and the bucket strides
+  (`_bucket_index` stride 4096, `buckets_x := 2160 / BUCKET_SIZE`) are
+  hardcoded at the old 2160-tile width and **must become width-derived**
+  at 4320×2160 — the packing breaks outright at `x > 4095`. Task R
+  implements the sweep; task H verifies the semantics against this
+  section.
 
 Perf gates (measured in tools suites — tasks J/M):
 
 | Gate | Pin |
 |---|---|
-| Day tick @ normal (cap 288) | ≤ 50 ms headless, zero runtime pathfinding for lane traffic |
+| Day tick @ normal (cap 288) | ≤ 50 ms headless, zero runtime pathfinding for lane traffic — re-proven at the Phase-6 scale by task H |
 | Day tick @ extreme (≈ 1 100 fleets) | ≤ 150 ms headless |
 | Marginal cost | demonstrably linear (extreme ≈ 4× normal, not 16×) |
-| Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase |
+| Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase — unchanged as the budget; H re-measures at the quadrupled chase area and windows the region only on measured failure (correction 13) |
 | Save payload @ extreme | ≤ 2 MB |
 
 #### 4.11.12 Equipment wiring (pairs with `10-*` §4.6, `40-*` §4.1)
@@ -1035,8 +1079,9 @@ Duel round sequence (player combat 12 + cutlass 3):
       12 couriers / 12 privateers / ≈ 25 pirates at `normal`; core 272,
       global cap 288, `absolute_cap` 2048; `new_game` fills half the cap.
 - [ ] Lane-locked roles (`trader`/`coaster`/`courier`/`treasure`) never
-      leave their rasterized lanes; the pirate/privateer 5/8 chokepoint
-      hysteresis and the hunter's budgeted pursuit A* (≤ 250 ms/day,
+      leave their rasterized lanes; the pirate/privateer 10/16 chokepoint
+      hysteresis (rescaled from Phase 5's 5/8 by the Phase-6 sweep) and the
+      hunter's budgeted pursuit A* (≤ 250 ms/day,
       overflow loses the chase) are unit-testable.
 - [ ] Auto-resolve: 60% seeded raider win vs an unescorted trader; raider
       loses vs patrol/escorted trader/convoy; the loser despawns into a

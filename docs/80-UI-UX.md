@@ -6,10 +6,16 @@ Specifies the screen inventory and navigation graph, input scheme,
 dialog/text conventions, the sailing HUD layout, the Chart screen (S17),
 save/load UX, the `ui_strings.json` key inventory, and the placeholder-art
 palette + sizing grid. Gates Phase 1 for the listed screens; Phase-2/3 screens
-are named and marked; Phase 4 adds S17 (Chart). Phase 5 adds the S2 density
-row, **S19 (settings modal)**, the market stock/trend/marginal-price columns,
+are named and marked; Phase 4 adds S17 (Chart). Phase 5 adds **S19
+(settings modal)** — which owns the sea-traffic density dial (the S2
+density row was removed 2026-10-31, §4.6.3) — the market
+stock/trend/marginal-price columns,
 world-map fleet markers with wakes and the wreck icon, and the captain
-sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9).
+sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9). Phase 6 adds the two
+input modes (Step/Helm), the sail-trim and wait-at-sea keys, the seasonal
+HUD indicators, the chart wind/current/ice layers, the S19 input/current/
+debug rows and the omniscient debug chart (§4.3, §4.5, §4.6, §4.6.3,
+§4.7.10).
 
 ## 2. Artifacts
 
@@ -94,8 +100,10 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | Any | `Esc` | back / close modal; on S1: no-op |
 | Any | `F5` | quick-save (allowed only in port; elsewhere shows toast `ui.cant_save_here`) |
 | Any | `F9` | quick-load to slot 1 (confirm dialog) |
-| S3 | arrows / numpad 1–9 | step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move |
-| S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`) |
+| S3 | arrows / numpad 1–9 | **Step mode:** step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move. **Helm mode:** set the helm heading (persisted `world.heading`); the fleet then auto-sails that heading per `20-*` §4.2 — a new direction key re-steers |
+| S3 | `Space` | **Step mode:** wait one day at sea — the full daily ledger (`advance_clock(1.0)`: provisions, wages, weather reroll, morale; `20-*` §4.17). **Helm mode:** stop the fleet; pressed again while stopped, wait one day |
+| S3 | `[` / `]` | cycle sail trim `furled → reefed → normal → full` (persisted `world.sail_trim`; speed/storm-damage effects per `20-*` §4.17) |
+| S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`); cancels Helm mode |
 | S3/S4 | `C` | open/close character panel (S14) |
 | S3/S4 | `F` | open/close fleet/cargo panel (S15) |
 | S3 | `Tab` | open the Chart (S17, §4.6) |
@@ -107,7 +115,12 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / back) |
 | S3 | right-click an NPC fleet marker | attack it — **any** fleet (a non-pirate owner = piracy, `70-*` §4.5; contact rules `60-*` §4.11.11.2) |
-| S3 | `E` | Explore: find every discovery within Chebyshev 18, wrap-aware (`70-*` §4.4); no-op with a toast `world.explore.none` when nothing is in range |
+| S3 | `E` | Explore: find every discovery within Chebyshev 36, wrap-aware (`70-*` §4.4; Phase-6 sweep of the 18-tile radius); no-op with a toast `world.explore.none` when nothing is in range |
+| S17 (Chart owns input while open) | `W` | toggle the current-month wind-arrow layer per region (§4.6) |
+| S17 | `C` | toggle the current-arrow layer (§4.6) — chart-local; shadows the character-panel `C` only while S17 is open |
+| S17 | `I` | toggle the ice tint on explored tiles (§4.6) |
+| S17 | `D` | debug omniscient mode — reachable only while the S19 调试图层 row is on (§4.6 debug mode) |
+| S17 | `,` / `.` | month scrubber (debug mode only): preview any month's winds/ice/active lane variants — pure view state |
 | S17 | `Tab` / `Esc` | toggle back to S3 (the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
@@ -118,6 +131,14 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 
 Focus outline (2px accent border) always visible on keyboard-focused control.
 
+**Phase-6 key notes (correction 8).** **`Esc` keeps its global meaning
+everywhere** — back / close modal, exactly as the `Any` row pins it; the
+Chart (S17 owns all input while it is open, so its `C` shadows the
+character-panel `C` only while S17 is up) is no exception. Helm mode adds
+**no** `Esc` behavior: the helm is cancelled by **click-to-sail, battle
+and docking** — never by `Esc`. `Space`, `[` and `]` work in both input
+modes regardless of trim (`20-*` §4.17).
+
 ### 4.4 `ui_strings.json` conventions
 
 - Flat key → L10nString: `"market.buy": {"zh": "购买", "en": "Buy"}`.
@@ -127,9 +148,14 @@ Focus outline (2px accent border) always visible on keyboard-focused control.
   `battle.*` (S10), `duel.*` (S11), `encounter.*` (fleet contacts),
   `guild.*` (S12), `palace.*` (S13), `quest.*`, `rank.*` (nobility names),
   `bounty.*`, `tournament.*`, `discovery.*`, `ending.*` (S16),
-  `chart.*` (S17), the Phase-4 `world.*` sailing keys below, and the
+  `chart.*` (S17), the Phase-4 `world.*` sailing keys below, the
   Phase-5 families `settings.*` (S19), `market.stock.*` (market columns)
-  and `captain.*` (fleet captain sightings — §4.7.9).
+  and `captain.*` (fleet captain sightings — §4.7.9), and the Phase-6
+  families `world.wind.*`, `world.current.*`, `world.trim.*`,
+  `world.ice.*`, `world.wait.*`, `world.calendar.*` (HUD/sailing),
+  `settings.input.*`, `settings.current.*`, `settings.debug.*` (S19),
+  `chart.wind.*`, `chart.current.*`, `chart.ice.*` (chart layers) and
+  `debug.*` (debug chart — §4.7.10).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -147,18 +173,20 @@ Layout (1280×720; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
-| Day 12   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]            top bar 40px
+| Day 12 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]  top bar 40px
 +------------------------------------------------------------------+
 | [minimap 256×192]                                   (viewport)   |
 |  explored tiles only                                             |
 |                                                                  |
 |                               [fleet ship sprite placeholder]    |
 +------------------------------------------------------------------+
-| Provisions 45 · Water 45 · Crew 15/45 · Cargo 120/120 · Speed 8  | bottom bar 32px
+| Provisions 45 · Water 45 · Crew 15/45 · Cargo 120/120 · Speed 20 | bottom bar 32px
 +------------------------------------------------------------------+
 ```
 
-- Top bar: day, gold, morale (value + tier label, tier-colored per `20-*`
+- Top bar: day, **`Year {y} · Month {m}` (zh `{y}年{m}月`; Phase 6, calendar
+  per `20-*` §4.15, key `world.calendar.year_month`)**, gold, morale (value +
+  tier label, tier-colored per `20-*`
   §4.8 — yellow < 40, red < 20), current area label (nearest known port
   within 16 tiles, else `world.open_sea`). **No language control** (amended
   2026-10-31: the locale lives only in S19, §4.6.3).
@@ -166,9 +194,19 @@ Layout (1280×720; tile viewport is the space below the top bar):
   all live-updating via `EventBus` signals.
 - Weather icon (placeholder glyph: sun/wind/storm text label) sits under the
   minimap; in storm it flashes (0.5s cycle).
+- **Wind indicator (Phase 6):** beside the weather glyph, an **arrow that
+  rotates to the day's `world.wind_dir`** (8-dir; guard-read with default
+  `"E"`) plus a **strength label** (calm/fair/strong/storm, `20-*` §4.7).
+- **Current indicator (Phase 6):** a **current arrow shown only while the
+  fleet stands on a current tile** — direction = the decoded current vector
+  after the seasonal reversal flip (`20-*` §4.16).
+- **Trim chip (Phase 6):** a 帆位/sail-trim chip (`furled`/`reefed`/
+  `normal`/`full`, `world.sail_trim`, guard-read default `normal`) near the
+  speed readout, **highlighted while the trim ≠ `normal`**.
 - Camera: a `Camera2D` centers on the fleet marker every frame. **`x` wraps**
   (no clamp at the dateline; the seam shows no void) and `y` is clamped to the
-  1080-tile height; zoom locked at 1.0. Only live chunks are drawn
+  2160-tile height (Phase-6 grid; minimap box/crop numbers unchanged per
+  `IMPLEMENT-Phase6.md` §2.0); zoom locked at 1.0. Only live chunks are drawn
   (`90-*` §9).
 - Minimap: the 256×192 px box shows a **wrap-aware 128×96-tile crop** around
   the fleet at 2 px/tile, drawn from the explored bitset (`20-*` §4.12).
@@ -250,6 +288,9 @@ rendering is viewport-culled and never re-simulates.
 - **Wakes (locked):** each moving marker drags a **5-tile dashed trail** of
   1 px `PANEL_LINE` lines behind it that fades tile-by-tile; wrecks and
   docked markers draw none.
+- **Debug chart (Phase 6):** the omniscient debug chart mode (§4.6) renders
+  the **same** `NpcFleets.markers()` data un-culled — every fleet on the
+  whole map, same role colors.
 
 ### 4.6.1 Provisioning dialog (S4 → S3, Phase 5 polish)
 
@@ -371,6 +412,12 @@ rule). One panel, two mounts.
 |   当前 Current: normal                                        |
 |   调高后船队将在数日内逐渐补充;调低不会移除现有船队。           |
 +--------------------------------------------------------------+
+| 输入模式 Input mode                                            |
+|   [步进 Step] [掌舵 Helm]        当前 Current: 步进 step       |
+| 洋流模式 Current mode                                          |
+|   [修正 Modifier] [漂移 Drift]   当前 Current: 修正 modifier   |
+| 调试图层 Debug overlays: [关 off]  (仅本次运行 · session-only)  |
++--------------------------------------------------------------+
 | 语言 Language: [中文 / EN]                                    |
 +--------------------------------------------------------------+
 | 保存 Save (S4 mount only)                                     |
@@ -383,6 +430,24 @@ rule). One panel, two mounts.
   trickle, **lowering never culls** living fleets; `deserted` = zero NPC
   spawns/contacts. A pre-game S1 open writes the same field before
   `new_game` (which preserves it as run input).
+- **Input mode row (Phase 6):** `[步进 Step] [掌舵 Helm]` writes
+  `GameState.control_prefs.input_mode` — persisted per save like
+  `npc_preset`, default `"step"`; effects per §4.3 and `20-*` §4.2.
+- **Current mode row (Phase 6):** `[修正 Modifier] [漂移 Drift]` writes
+  `GameState.control_prefs.current_mode` — default `"modifier"`; effects
+  per `20-*` §4.16. `control_prefs` defaults are exactly
+  `{input_mode: "step", current_mode: "modifier"}`.
+- **Debug overlays row (Phase 6, correction 12):** 调试图层 on/off flips
+  the **static, session-only** `SettingsPanel.debug_overlays` flag (the
+  §4.6 symbol contract; default off). It is **never persisted** — it must
+  never enter a save payload — and only unlocks the chart's debug layers
+  (§4.6) for this session.
+- **All three rows live on BOTH mounts** (S1 pre-game + S4 in-run), like
+  the density row; pre-game values are carried into the run by `new_game`
+  (mirroring `npc_preset`).
+- **S19-only (correction 2):** the input-mode, current-mode and
+  debug-overlays rows exist nowhere else — **no S2 row** (S2 is the
+  nationality card grid); the in-run mount is the S4 footer → Settings.
 - **Locale lives only here (amended 2026-10-31):** S19 owns the language
   toggle (`[中文 / EN]`, both mounts). The old `L` hotkey, the S2 footer
   button, the top-bar button on every screen and the market header button are
@@ -403,7 +468,9 @@ rule). One panel, two mounts.
   `settings.return_menu` / `settings.return_menu.confirm` (zh/en).
 - Esc / `Close` returns to S4 (§4.2 edge); the panel consumes all input
   while open (modal rule, §4.7).
-- Strings: `settings.*` (§4.7.9), zh/en. No textures; 32px rows.
+- Strings: `settings.*` plus the Phase-6 `settings.input.*` /
+  `settings.current.*` / `settings.debug.*` keys (§4.7.10), zh/en. No
+  textures; 32px rows.
 
 ### 4.6 Chart screen (S17, Phase 4)
 
@@ -414,7 +481,7 @@ mutates state** — a pure view of the session.
 +------------------------------------------------------------------+
 | 海图 / Chart                                        [关闭海图]     | top 40px
 +------------------------------------------------------------------+
-|  whole world 2160×1080 downscaled to fit (≈0.55× at 1280×720)     |
+|  whole world 4320×2160 downscaled to fit (≈0.30× at 1280×720)     |
 |   explored tiles: SEA/COAST_SEA at low alpha                      |
 |   unknown tiles: PANEL_BG                                         |
 |   known ports: 3px nation-coloured dots (+ names at zoom)         |
@@ -429,8 +496,8 @@ mutates state** — a pure view of the session.
   the session explored bitset (`PackedByteArray`, `20-*` §4.12), known ports
   as nation-coloured dots with names shown at zoom, discovery hint icons, the
   fleet marker.
-- **Scale:** whole 2160×1080 grid downscaled to fit the viewport (scale
-  ≈ 0.55× at 1280×720); no scrolling, no per-region tabs. Dateline handling is
+- **Scale:** whole 4320×2160 grid downscaled to fit the viewport (scale
+  ≈ 0.30× at 1280×720); no scrolling, no per-region tabs. Dateline handling is
   implicit in a full-world image (no seam crop).
 - **Input:** `Tab` toggles, `Esc` closes (`§4.3`); the panel owns all input
   while open. Closing returns to S3 with the fleet unmoved and the clock
@@ -439,6 +506,45 @@ mutates state** — a pure view of the session.
 - **Strings:** every label from `chart.*` (§4.7.5).
 - **Not saved:** explored state and the chart itself are session-only (Phase-1
   known limitation, unchanged).
+- **Phase-6 seasonal layers (player).** Three toggles while the chart is
+  open — `W` draws the **current month's prevailing wind arrows per
+  region** (from the baked `wind_regions` lookup, `20-*` §4.14), `C` draws
+  **current arrows** (decoded annual-mean vectors with the seasonal
+  reversal flip applied, `20-*` §4.16), `I` tints **ice** on explored
+  tiles (the permanent `I` band plus in-month seasonal polygons,
+  `20-*` §4.18). "Current month" = the calendar month of `GameState.day`
+  (`20-*` §4.15). Placeholder shapes only per §4.8. Layers are view
+  state; they mutate nothing.
+
+**Omniscient debug chart mode (Phase 6, the `IMPLEMENT-Phase6.md` §2.12
+spec).** Gated by the S19 调试图层 row — the symbol contract is exactly
+**`SettingsPanel.debug_overlays: bool` (static, session-only, default
+false)**; the chart reads it guard-style, task V owns the S19 row
+(§4.6.3), and the flag is never persisted. With the row on, opening the
+chart adds:
+
+- **`D` — omniscient mode:** ignores the explored bitset **and**
+  `known_ports` — the whole map renders plus **every** port:
+  nation-colored dots, `PORT_NEUTRAL` grey for `nation_id: ""` ports
+  (§4.8), capitals ringed.
+- **Live ecology:** every fleet from `NpcFleets.markers()` (role colors
+  per §4.5.2, **not viewport-culled**), wrecks, and the hunter-intel
+  markers with their exact shapes — `world.last_departed_port` drawn as a
+  **ring** around its port, `world.hunter_intel_cell` drawn as a
+  **cross**. Tooltips read-only.
+- **Network layer:** all 17 lanes from the built tile paths
+  (`trade_routes_built.json`), per-lane colors, the **active variant
+  solid**, spokes thin grey, chokepoint diamonds, lane ids in a side
+  legend.
+- **`W`/`C`/`I` + `,`/`.` month scrubber (debug):** previews **any**
+  month's prevailing winds, seasonal ice, active lane variants and the
+  reversed Somali — pure view state, `GameState` untouched (a save taken
+  mid-preview round-trips identically).
+- **Info strip:** day → Year/Month, density preset, fleet count by role.
+- **Redraw triggers:** open, layer/month toggle, `day_advanced` — **no
+  per-frame work**.
+- **Governance:** a documented cheat — read-only, never mutates
+  `GameState`, gates nothing gameplay-wise.
 - **Lane heat dots (optional Phase-5 flag):** behind a `chart.lane_heat`
   flag (default **off**) the chart may draw small `ACCENT` dots along the
   `trade_routes_built.json` lanes, denser where fleet traffic is higher —
@@ -824,6 +930,45 @@ must match between zh and en (the validator enforces it).
 | `market.stock.trend_up` | ▲ 回升 | ▲ refilling |
 | `market.stock.trend_down` | ▼ 消耗 | ▼ draining |
 
+#### 4.7.10 Phase-6 navigation `ui_strings.json` inventory (S3 HUD / S17 chart / S19 / neutral ports)
+
+This section is the **orchestrator-merge contract** (§2.9 of
+`IMPLEMENT-Phase6.md`): implementing tasks report their final zh/en
+strings in their task reports; the **master** edits `data/ui_strings.json`
+— no subagent edits the file. Placeholders must match between zh and en.
+New families: `world.wind.*`, `world.current.*`, `world.trim.*`,
+`world.ice.*`, `world.wait.*`, `world.calendar.*`, `settings.input.*`,
+`settings.current.*`, `settings.debug.*`, `chart.wind.*`,
+`chart.current.*`, `chart.ice.*`, `debug.*`, plus the neutral-port keys.
+The keys each implementing task must define:
+
+| Owner | Keys |
+|---|---|
+| V (S19 rows) | `settings.input.mode`, `settings.input.step`, `settings.input.helm`, `settings.current.mode`, `settings.current.modifier`, `settings.current.drift`, `settings.debug.overlays` |
+| G (HUD / sailing toasts) | `world.wind.label`, `world.current.label`, `world.trim.chip`, `world.trim.furled`, `world.trim.reefed`, `world.trim.normal`, `world.trim.full`, `world.wait.done`, `world.ice.blocked`, `world.calendar.year_month` |
+| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.info.*` |
+| neutral ports (§4.8) | `port.neutral.label` (中立港 / Neutral port), `chart.debug.neutral` (the debug-chart legend row for the neutral grey) |
+
+Notes pinning the set exactly:
+
+- `world.calendar.year_month` is the top-bar frame
+  `Year {y} · Month {m}` / `{y}年{m}月` (`20-*` §4.15).
+- `world.trim.chip` is the chip label (帆位 / Trim); the four
+  `world.trim.*` state names also compose the trim-cycle toast — no
+  separate toast key.
+- `world.ice.blocked` is the refused-entry toast (`20-*` §4.18);
+  `world.wait.done` is the waited-one-day toast (`20-*` §4.17).
+- `debug.legend.*` covers the network side legend (lane ids, role-color
+  rows, spokes/chokepoints) and `debug.info.*` the info strip
+  (Year/Month, density preset, fleet counts by role); the neutral row of
+  the port legend uses `chart.debug.neutral`.
+- **Pre-declared per `20-*` §4.15:** `world.calendar.month.1` …
+  `world.calendar.month.12` (一月…十二月 / Month 1–12). They are owed by
+  whichever surface first renders a bare month name (the likely consumer
+  is I's debug scrubber/info strip); the implementing task reports final
+  zh/en at merge — the G list above needs none (the top bar composes
+  `{y}年{m}月` numerically).
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -850,6 +995,7 @@ must match between zh and en (the validator enforces it).
 | `REEF` | `#3d3d3d` | reef tiles |
 | `ICE` | `#c9d6df` | polar ice tiles (`I`, impassable; `20-*` §4.1) |
 | `PORT` | nation colors (`10-*` §7.4) | port markers |
+| `PORT_NEUTRAL` | `#9a9a9a` | neutral-port markers/labels (`nation_id: ""`, the `10-*` §7.1 neutral tier) and the debug chart's neutral grey (§4.6); constant `PORT_NEUTRAL` in `scripts/palette.gd` |
 | `PANEL_BG` | `#1c2230` | panels/hud bars |
 | `PANEL_LINE` | `#465468` | borders |
 | `TEXT` | `#e8e6df` | primary text |
@@ -927,7 +1073,7 @@ must match between zh and en (the validator enforces it).
 - [ ] Every Phase-3 screen (S12, S13, S16) exists and navigates only along
       §4.2; the guild/palace hubs open from S4's facility rows and Esc returns.
 - [ ] S17 (Chart) opens with `Tab` from S3, closes with `Esc`/`Tab`, renders
-      the whole 2160×1080 world downscaled in under 0.5 s, shows the explored
+      the whole 4320×2160 world downscaled in under 0.5 s, shows the explored
       overlay + known ports + fleet marker, and mutates no state.
 - [ ] Input table §4.3 fully implemented; Esc always steps back.
 - [ ] HUD bars (§4.5) show live values driven by `EventBus`, not polling the
@@ -952,3 +1098,19 @@ must match between zh and en (the validator enforces it).
       (stable within a visit-day, hunter palace-only), wanted posters
       appear within Chebyshev 40, and "buy a round — 20g" returns the
       exact live position as text.
+- [ ] Phase 6: both input modes play end-to-end per §4.3 — Step
+      (key-per-tile, `Space` = wait one day) and Helm (direction keys set
+      the persisted heading, auto-sail, `Space` = stop-then-wait, `[`/`]`
+      trim); the helm cancels on click-to-sail, battle and docking and
+      **never** on `Esc`.
+- [ ] Phase 6: the HUD shows every §4.5 Phase-6 indicator — wind arrow +
+      strength label by the weather glyph, current arrow on a current
+      tile, trim chip, and the `Year {y} · Month {m}` top-bar segment
+      (zh `{y}年{m}月`).
+- [ ] Phase 6: the chart layers `W`/`C`/`I` toggle, and the debug mode
+      gates exactly on `SettingsPanel.debug_overlays` — row off ⇒ no
+      debug layer reachable; row on ⇒ the full §4.6 debug list
+      (omniscient, live ecology, network, scrubber, info strip) renders
+      read-only and mutates nothing.
+- [ ] Phase 6: zero `<key>` fallbacks zh/en for the §4.7.10 families
+      (orchestrator merge complete).

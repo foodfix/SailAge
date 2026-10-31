@@ -94,7 +94,7 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 ### 4.4 Discovery & report
 
-- A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 18
+- A `Discovery` (`10-*` §4.7) is found by moving within Chebyshev distance 36
   of its `lat`/`lon` position and choosing **Explore** (world-map action when
   the HUD shows the `discovery.something_near` hint). First discovery only
   counts; repeats are ignored.
@@ -106,10 +106,11 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 **Pins (task-owned values fixed before code, §4.9 discipline).**
 
-- **Sighting radius** is `18` exactly (`DiscoverySight.RADIUS`), **not** the
-  port sighting radius of `20-*` §4.11 (24) — a discovery is a much smaller
+- **Sighting radius** is `36` exactly (`DiscoverySight.RADIUS`), **not** the
+  port sighting radius of `20-*` §4.11 (48) — a discovery is a much smaller
   landmark than a harbour, and the world-map `E` action is only offered inside
-  this radius. Chebyshev distance over tiles, **wrap-aware on x**.
+  this radius. Chebyshev distance over tiles, **wrap-aware on x**. (The
+  Phase-6 grid sweep doubled both radii from the Phase-4/5 values 18/24.)
 - **Explore** is a world-map action bound to the `E` key (and a
   `discovery.explore` HUD button that appears only when in range, `80-*` §4.3).
   It finds **every** in-range, unfound discovery in one action and reports
@@ -220,7 +221,8 @@ fixed in §4.9.7.
   the guild/palace economy — folds into it unchanged in scope: exact port list,
   `lat`/`lon` and trade data live in `10-*` §7.1, discoveries in
   `data/discoveries.json`.
-- **Grid:** 2160×1080 tiles at 6 tiles per degree (`10-*` §6.1), longitude
+- **Grid:** 4320×2160 tiles at 12 tiles per degree (`10-*` §6.1, Phase-6
+  grid; 1 tile = 5 nm), longitude
   wrap on, ice at `lat ≥ 70°N` / `lat ≤ 60°S`. No second map exists and
   `data/maps/maps.json` has exactly one entry, `world` (`90-*` §9.1).
 - **Historical note:** Phase 3 shipped this content on a provisional coarse
@@ -457,6 +459,11 @@ replace them (`IMPLEMENT-Phase4.md` locked constants, `10-*` §6/§7.1).
   degree** (1 tile = 10′ lat = 10 nm), `tile_size_px 32`, legend
   `data/map_legend.json`. Addressing `lon = x/6 − 180`, `lat = 90 − y/6`;
   longitude wraps, latitude edges close with ice.
+- **Phase-6 supersession:** the grid constants above are Phase-4 pins;
+  Phase 6 rescales the world to **4320 × 2160 tiles at 12 tiles per
+  degree** (1 tile = 5 nm) — `10-*` §6.3 as amended
+  (`IMPLEMENT-Phase6.md` §2.0). Ports/discoveries stay lat/lon truth;
+  only the derived tile resolution doubles.
 - **Positions are lat/lon truth.** Every port carries `lat`/`lon` (WGS84
   degrees) and derives a **harbor pair** — a berth (sea) tile within **≤ 2**
   tiles (Chebyshev) of the projection plus the orthogonally adjacent shore
@@ -560,7 +567,7 @@ Title ladder progress block:
       (sell-price grant verified against `30-*` formula as a separate
       `title_bonus` multiplier).
 - [ ] Discovery flow (hint → sight → explore → report) works with both
-      strings localized; sighting radius 18, wrap-aware.
+      strings localized; sighting radius 36, wrap-aware.
 - [ ] Bounty: rep ≤ −50 triggers closure + hunters; both clear paths reset
       to −10.
 - [ ] Phase 5: named-pirate tiers match the §4.9.3 reward bands; defeating
@@ -572,5 +579,5 @@ Title ladder progress block:
       (`90-*` §9); `maps.json` has exactly one entry.
 - [ ] Every pinned number in §4.9 is reproduced by a headless assertion:
       fame sources, title ladder arithmetic, quest seeds/draws, rival table,
-      bounty amounts, tournament rotation, world-map constants (2160×1080,
-      6 tiles/degree, snap ≤ 2, ice band).
+      bounty amounts, tournament rotation, world-map constants (4320×2160,
+      12 tiles/degree at Phase 6, snap ≤ 2, ice band).
