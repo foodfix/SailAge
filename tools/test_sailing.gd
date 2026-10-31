@@ -45,6 +45,7 @@ func _ready() -> void:
 	_test_crew_zero()
 	_test_clock_boundaries()
 	_test_speed_table()
+	_test_heading_pipeline()
 	_test_port_day()
 	_test_no_weather_or_morale_mutation()
 	_report()
@@ -85,6 +86,11 @@ func _make_run(
 		"position": {"x": OPEN_CELL.x, "y": OPEN_CELL.y},
 		"clock_fraction": 0.0,
 		"weather": weather,
+		# Phase-6 fixture pin: a southerly wind makes this suite's east–west
+		# clock walks the beam bucket (factor 1.0, §4.4), so their "speed 20 =
+		# 0.05 days per move" arithmetic stays the exact W3 semantics; the
+		# heading effects themselves are asserted in _test_heading_pipeline.
+		"wind_dir": "S",
 	}
 	# Reset the ledger's per-tick statics so one test cannot leak into another.
 	SailingSimLib.last_day_shortfalls = {"provisions": false, "water": false}
@@ -430,7 +436,85 @@ func _test_speed_table() -> void:
 		"hybrid strong: floor(20 × 1.1) = 22 (got %d)" % SailingSimLib.effective_speed())
 
 
+# --- §4.4 Phase-6 heading pipeline (docs/20-* §4.4, §4.14–§4.17) -----------
+
+## The direction-aware speed core, at the suite level: the rescaled speed
+## data, the heading-aware `move_cost(heading)`, the full §4.4 pipeline
+## (wind × direction × current × crew × seamanship × trim), and the ledger's
+## second weather roll persisting `world.wind_dir`.
+func _test_heading_pipeline() -> void:
+	# The §2.0 sweep: ShipType.speed is tiles/day at 5 nm — {16, 20, 24}.
+	var speeds := {}
+	for ship_id in ["latin", "sloop", "caravel", "galley", "brigantine",
+			"nao", "carrack", "galleon"]:
+		speeds[ship_id] = int(DataLoader.get_ship_type(ship_id)["speed"])
+	_check(speeds["latin"] == 16 and speeds["nao"] == 16
+		and speeds["carrack"] == 16,
+		"the slow hulls sail 16 tiles/day (got %s)" % str(speeds))
+	_check(speeds["sloop"] == 20 and speeds["caravel"] == 20
+		and speeds["galleon"] == 20,
+		"the mid hulls sail 20 tiles/day")
+	_check(speeds["galley"] == 24 and speeds["brigantine"] == 24,
+		"the fast hulls sail 24 tiles/day")
+	var data_min := 99
+	for ship_id in speeds:
+		data_min = mini(data_min, speeds[ship_id])
+	_check(data_min == 16,
+		"the §7.3 speed range starts at 16 tiles/day (got %d)" % data_min)
+
+	# move_cost(heading) with an explicit easterly wind (fair weather).
+	_make_run(15)
+	GameState.world["wind_dir"] = "E"
+	_check(is_equal_approx(SailingSimLib.move_cost("E"), 0.1),
+		"into-wind move_cost(E) == 1/floor(20 × 0.5) = 0.1 (got %.4f)"
+		% SailingSimLib.move_cost("E"))
+	_check(is_equal_approx(SailingSimLib.move_cost("W"), 1.0 / 26.0),
+		"running move_cost(W) == 1/floor(20 × 1.3) (got %.4f)"
+		% SailingSimLib.move_cost("W"))
+	_check(is_equal_approx(SailingSimLib.move_cost("N"), 0.05),
+		"beam move_cost(N) == 1/20 (got %.4f)" % SailingSimLib.move_cost("N"))
+	# The parameterless form (the HUD/docking average) is beam for both new
+	# terms — exactly its W3 value.
+	_check(is_equal_approx(SailingSimLib.move_cost(), 0.05),
+		"heading-less move_cost() stays 1/20 (got %.4f)"
+		% SailingSimLib.move_cost())
+
+	# The default-path claim: with the pinned defaults (wind E) a BEAM move
+	# costs exactly what it cost at the W3 gate.
+	var fraction := float(GameState.world["clock_fraction"])
+	_check(SailingSimLib.try_move(Vector2i(OPEN_CELL.x, OPEN_CELL.y + 1),
+		DataLoader.map), "a beam step succeeds")
+	var beam_cost := float(GameState.world["clock_fraction"]) - fraction
+	_check(is_equal_approx(beam_cost, 0.05),
+		"a beam try_move costs the W3 0.05 days (got %.4f)" % beam_cost)
+
+	# The full §4.4 pipeline multiplies trim too: full sail, running, fair →
+	# floor(20 × 1.0 × 1.3 × 1.15) = floor(29.9) = 29.
+	GameState.world["sail_trim"] = "full"
+	_check(SailingSimLib.effective_speed("W") == 29,
+		"full-sail running speed floor(20 × 1.3 × 1.15) = 29 (got %d)"
+		% SailingSimLib.effective_speed("W"))
+	# …and reefed into the wind: floor(20 × 0.5 × 0.75) = floor(7.5) = 7.
+	GameState.world["sail_trim"] = "reefed"
+	_check(SailingSimLib.effective_speed("E") == 7,
+		"reefed into-wind speed floor(20 × 0.5 × 0.75) = 7 (got %d)"
+		% SailingSimLib.effective_speed("E"))
+
+	# Ledger step 3 is a two-part roll: a day tick leaves both halves in the
+	# world block — the strength id and an 8-dir wind_dir.
+	_make_run(15, 10, 10, 1000, "fair")
+	SailingSimLib.set_weather_seed(7)
+	_one_day()
+	_check(str(GameState.world["weather"]) in SailingSimLib.WEATHER_OUTCOMES,
+		"step 3 part 1 wrote the strength id (%s)"
+		% str(GameState.world["weather"]))
+	_check(SailingSimLib.COMPASS_DIRS.has(str(GameState.world["wind_dir"])),
+		"step 3 part 2 wrote an 8-dir wind_dir (%s)"
+		% str(GameState.world["wind_dir"]))
+
+
 # --- §4.3 / §4.5 in-port day advance shares the ledger --------------------
+
 
 func _test_port_day() -> void:
 	# 8. Dock at Lisbon: the day advance consumes and pays exactly like at sea.

@@ -408,7 +408,12 @@ func _test_mutiny_probability() -> void:
 		elif GameState.morale >= SailingSimLib.MUTINY_THRESHOLD:
 			wrongly_mutinied += 1
 		if not SailingSimLib.pending_mutiny.is_empty():
-			SailingSimLib.resolve_mutiny_suppress()
+			# The §4.8.3 modal offers Pay whenever Suppress is disabled (crew
+			# already at the floor) — the harness resolves like the modal does,
+			# so a legitimate late offer can never stick across the frozen
+			# post-game-over days and masquerade as a morale-≥-20 mutiny.
+			if not SailingSimLib.resolve_mutiny_suppress():
+				SailingSimLib.resolve_mutiny_pay()
 	_check(at_or_above > 0,
 		"%d observed days checked the roll at morale ≥ 20" % at_or_above)
 	_check(wrongly_mutinied == 0,

@@ -645,7 +645,9 @@ func _test_weather_persists() -> void:
 
 	# No transient keys leak into GameState.world (T17 save-block hygiene):
 	# the storm flags are class statics, exactly like last_day_shortfalls.
-	var allowed := ["position", "clock_fraction", "weather"]
+	# Phase 6: `wind_dir` is a *persisted* world key (docs/90-* §5.4, written
+	# by ledger step 3's second roll), not a transient leak.
+	var allowed := ["position", "clock_fraction", "weather", "wind_dir"]
 	for key in GameState.world:
 		_check(str(key) in allowed,
 			"GameState.world carries no transient ledger key ('%s')" % str(key))
