@@ -19,8 +19,14 @@ const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 ## §4.11.3 step 2: the locked hull order (`§4.1 "latin…brigantine"`).
 const HULL_IDS: Array[String] = ["latin", "sloop", "caravel", "brigantine"]
 
-## §4.11.3 step 3 cannon budgets.
-const CANNON_BUDGET := {"pirate": 20, "navy": 30}
+## §4.11.3 step 3 cannon budgets; the Phase-5 role map replaces the value for
+## its kinds (§4.11.11.2: trader 6 / coaster 2 / courier 0 / patrol 30 /
+## privateer 20 / pirate 20, each `+ floor(day / 30)`). Unknown kinds fall
+## back to the pirate budget.
+const CANNON_BUDGET := {
+	"pirate": 20, "navy": 30, "trader": 6, "coaster": 2, "courier": 0,
+	"patrol": 30, "privateer": 20,
+}
 const CANNON_BUDGET_PER_30_DAYS := 1
 
 ## §4.11.3 step 5 cargo: `max(1, floor(capacity / 10))` units of one good.
@@ -55,9 +61,11 @@ static func compose_enemy(kind: String, day: int, rng: RandomNumberGenerator) ->
 	return ships
 
 
-## §4.11.3 step 1: pirate 1–3, navy 2–4.
+## §4.11.3 step 1: pirate 1–3, navy 2–4; the Phase-5 warship roles share the
+## navy band (§4.11.11.2: `patrol`/`privateer` roll 2–4, the merchant roles
+## 1–3).
 static func _ship_count(kind: String, rng: RandomNumberGenerator) -> int:
-	var base := 2 if kind == "navy" else 1
+	var base := 2 if kind == "navy" or kind == "patrol" or kind == "privateer" else 1
 	return base + rng.randi_range(0, 2)
 
 

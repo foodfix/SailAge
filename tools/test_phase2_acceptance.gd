@@ -11,7 +11,7 @@ extends Node
 ## scenario starts from a real **save file on disk** (the current
 ## `save_version`, written by a plain JSON dump exactly as `SaveSystem.save()`
 ## would), loads it through `SaveSystem.load()`, then drives the *shipped* path:
-## `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
+## HISTORICAL (Phase 2): `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
 ## fight (its buttons for the player, `AiFleet` for the enemy), and the §4.12.4
 ## battle-end sequence for the aftermath. Nothing here calls `BattleResult` /
 ## `BattleRewards` directly: those are reached through the screen's guarded
@@ -36,7 +36,11 @@ extends Node
 ## memory and written back at the end; every file this suite creates is removed
 ## again (start AND end), exactly like `tools/test_save*.gd`.
 
-const EncountersLib := preload("res://scripts/world/encounters.gd")
+## Phase-5 task J: the 3-marker system is retired; the scenarios run against
+## the `NpcFleets` ecology (`60-*` §4.11.11, §4.12.3) — `hostile_fleets`
+## became `npc_fleets`, `kind` became `role`, and the per-kind spawn
+## immunity is retired (the trickle refills the ecology).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -119,11 +123,11 @@ func _scenario_cannon_victory() -> void:
 	# The pirate lives in the §4.11.11 save block, composed by the §4.11.3
 	# implementation, two tiles east of the fleet.
 	var marker := _place_marker("pirate", MARKER_CELL, RUN_DAY)
-	_check(not marker.is_empty(), "S1: a pirate marker is in the hostile_fleets block")
+	_check(not marker.is_empty(), "S1: a pirate fleet is in the npc_fleets block")
 	var pair: Array = await _spawn_world()
 	var world = pair[1]
-	_check(world.hostile_marker_cells().size() == 1,
-		"S1: the world map adopts exactly one marker")
+	_check(world.fleet_marker_cells().size() == 1,
+		"S1: the world map adopts exactly one fleet")
 
 	# One real sea day: the marker steps 1 tile toward its anchor and contacts.
 	SailingSimLib.advance_clock(1.0)
@@ -225,19 +229,14 @@ func _scenario_cannon_victory() -> void:
 		% [str(_expected_rep_block(expected_nations)),
 			str(outcome.get("rep_deltas", {}))])
 
-	# §4.11.10 return: marker gone, spawn immunity day + 3, fleet on contact.
+	# §4.11.11.2 return: the defeated fleet is removed; the per-kind spawn
+	# immunity is retired with the marker system (§4.11.11.1).
 	var marker_gone := true
-	for left in GameState.hostile_fleets:
+	for left in GameState.npc_fleets:
 		if str(left.get("id", "")) == str(marker.get("id", "")):
 			marker_gone = false
-	_check(marker_gone and GameState.hostile_fleets.is_empty(),
-		"S1: the marker is removed from the map (%d left)"
-		% GameState.hostile_fleets.size())
-	_check(int(GameState.proximity_cooldowns.get(EncountersLib.PIRATE, 0))
-			== BATTLE_DAY + SPAWN_IMMUNITY_DAYS,
-		"S1: spawn immunity is day + 3 = %d (%d)"
-		% [BATTLE_DAY + SPAWN_IMMUNITY_DAYS,
-			int(GameState.proximity_cooldowns.get(EncountersLib.PIRATE, 0))])
+	_check(marker_gone,
+		"S1: the defeated fleet is removed from the map")
 	_check(GameState.world_tile() == CONTACT,
 		"S1: the fleet is back on the contact tile %s (%s)"
 		% [str(CONTACT), str(GameState.world_tile())])
@@ -465,7 +464,7 @@ func _scenario_retreat() -> void:
 	# The marker walked one tile toward its anchor on the tick that raised the
 	# contact (§4.11.11.1), so this is its *contact-time* cell; retreat must not
 	# move it again.
-	var marker_cell_at_contact := EncountersLib.position_of(marker)
+	var marker_cell_at_contact := NpcFleetsLib.position_of(marker)
 	_check(maxi(absi(marker_cell_at_contact.x - CONTACT.x),
 			absi(marker_cell_at_contact.y - CONTACT.y)) == 1,
 		"S3: the marker is at Chebyshev 1 of the fleet when contact opens (%s)"
@@ -510,23 +509,19 @@ func _scenario_retreat() -> void:
 	# §4.10: the enemy survives and takes the +1 day pursuit cooldown.
 	var survivor: Dictionary = _marker_by_id(str(marker.get("id", "")))
 	_check(not survivor.is_empty(),
-		"S3: the retreated marker still exists (%d markers)"
-		% GameState.hostile_fleets.size())
+		"S3: the retreated fleet still exists (%d fleets)"
+		% GameState.npc_fleets.size())
 	if not survivor.is_empty():
 		_check(int(survivor.get("cooldown_until_day", 0))
 				== GameState.day + PURSUIT_COOLDOWN_DAYS,
 			"S3: §4.10 gives it a +1 day pursuit cooldown = %d (%d)"
 			% [GameState.day + PURSUIT_COOLDOWN_DAYS,
 				int(survivor.get("cooldown_until_day", 0))])
-		_check(EncountersLib.position_of(survivor) == marker_cell_at_contact,
-			"S3: the marker keeps the tile it held at contact %s (%s)"
-			% [str(marker_cell_at_contact), str(EncountersLib.position_of(survivor))])
-		_check(EncountersLib.new().contacts(GameState.world_tile()).is_empty(),
+		_check(NpcFleetsLib.position_of(survivor) == marker_cell_at_contact,
+			"S3: the fleet keeps the tile it held at contact %s (%s)"
+			% [str(marker_cell_at_contact), str(NpcFleetsLib.position_of(survivor))])
+		_check(NpcFleetsLib.new().contacts(GameState.world_tile()).is_empty(),
 			"S3: the cooldown stops it re-opening the same battle right away")
-	_check(int(GameState.proximity_cooldowns.get(EncountersLib.PIRATE, 0))
-			== BATTLE_DAY + SPAWN_IMMUNITY_DAYS,
-		"S3: the 3-day spawn immunity is still recorded (%d)"
-		% int(GameState.proximity_cooldowns.get(EncountersLib.PIRATE, 0)))
 	_check(_game_over_reasons.is_empty(),
 		"S3: a retreat raises no game over (%s)" % str(_game_over_reasons))
 	_check(screen.after_action_dialog().visible,
@@ -683,7 +678,7 @@ func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Diction
 		"discoveries_found": [],
 		# The Phase-2/3 state blocks every current-version save carries
 		# (docs/90-* §8.1). A fresh fixture starts them at their defaults.
-		"hostile_fleets": [],
+		"npc_fleets": [],
 		"proximity_cooldowns": {},
 		"fame": 0,
 		"titles": _nation_map("none"),
@@ -729,22 +724,33 @@ func _start_from_save(label: String, fleet: Array, day: int, gold: int,
 	return loaded
 
 
-## A §4.11.11 marker built from the §4.11.3 composition implementation; the
-## `ships` override exists for the hand-picked duel fixtures.
+## A §4.15 fleet fixture; the `ships` override exists for the hand-picked
+## duel fixtures (the encounter descriptor carries a fleet-provided `ships`
+## verbatim, `60-*` §4.11.11.2's per-fleet stream with a fixture override).
 func _place_marker(kind: String, cell: Vector2i, day: int,
 		nation_id: String = "", ships: Array = []) -> Dictionary:
+	var role := "pirate" if kind == "pirate" else "hunter"
 	var marker := {
-		"id": EncountersLib.marker_id(day, cell, kind),
-		"kind": kind,
+		"id": "fx_%s_%d_%d" % [kind, day, GameState.npc_fleets.size()],
+		"role": role,
 		"nation_id": nation_id,
-		"position": {"x": cell.x, "y": cell.y},
-		"anchor_port_id": "lisbon",
-		"ships": ships.duplicate(true) if not ships.is_empty() \
-			else EncountersLib.compose_ships(kind, day, cell),
-		"spawn_day": day,
+		"cell": {"x": cell.x, "y": cell.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain": {"pool_id": nation_id, "name_index": 0},
 		"cooldown_until_day": 0,
+		"seed": int(day) * 1000003 + cell.x * 7919 + cell.y * 104729,
+		"dest_port_id": "",
+		"dwell_until_day": 0,
+		"anchor_cell": null,
+		"target_fleet_id": "",
+		"hunter_state": "",
+		"loiter_until_day": 0,
+		"home_port_id": "",
 	}
-	GameState.hostile_fleets.append(marker)
+	if not ships.is_empty():
+		marker["ships"] = ships.duplicate(true)
+	GameState.npc_fleets.append(marker)
 	return marker
 
 
@@ -915,9 +921,9 @@ func _assert_round_trip(label: String) -> void:
 	_check(int(on_disk.get("save_version", -1)) == SaveSystem.SAVE_VERSION,
 		"%s: the re-saved file is save_version %d (%s)"
 		% [label, SaveSystem.SAVE_VERSION, str(on_disk.get("save_version"))])
-	_check(on_disk.has("hostile_fleets") and on_disk.has("proximity_cooldowns"),
+	_check(on_disk.has("npc_fleets") and on_disk.has("proximity_cooldowns"),
 		"%s: the file carries the Phase-2 state blocks" % label)
-	var hostile_before := _as_array(GameState.hostile_fleets).duplicate(true)
+	var hostile_before := _as_array(GameState.npc_fleets).duplicate(true)
 	var cooldowns_before := _as_dict(GameState.proximity_cooldowns).duplicate(true)
 	var fleet_before: Array = GameState.fleet.duplicate(true)
 	var reloaded: bool = SaveSystem.load(1)
@@ -925,9 +931,9 @@ func _assert_round_trip(label: String) -> void:
 		"%s: the v2 file reloads cleanly (%s)" % [label, SaveSystem.last_read_error])
 	_check(GameState.fleet == fleet_before,
 		"%s: the fleet survives the reload (%d ships)" % [label, GameState.fleet.size()])
-	_check(_as_array(GameState.hostile_fleets) == hostile_before,
-		"%s: hostile_fleets survive the reload (%d markers)"
-		% [label, GameState.hostile_fleets.size()])
+	_check(_as_array(GameState.npc_fleets) == hostile_before,
+		"%s: npc_fleets survive the reload (%d fleets)"
+		% [label, GameState.npc_fleets.size()])
 	_check(_as_dict(GameState.proximity_cooldowns) == cooldowns_before,
 		"%s: proximity_cooldowns survive the reload (%s)"
 		% [label, str(GameState.proximity_cooldowns)])
@@ -983,13 +989,13 @@ func _clobber_state() -> void:
 	GameState.port_investments = {}
 	GameState.quests = []
 	GameState.discoveries_found = []
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.pending_encounter = null
 
 
 func _marker_by_id(id: String) -> Dictionary:
-	for marker in GameState.hostile_fleets:
+	for marker in GameState.npc_fleets:
 		if marker is Dictionary and str(marker.get("id", "")) == id:
 			return marker
 	return {}

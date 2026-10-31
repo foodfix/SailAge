@@ -108,7 +108,7 @@ const XP_PER_ROUND := 5
 const PIRATE_REP_GAIN := 2
 ## §4.11.10: the navy piracy penalty. Pinned here with the other reward
 ## numbers, but **never applied by this engine**: it is charged once at battle
-## start by whoever initiated the navy battle (`encounters.gd`
+## start by whoever initiated the navy battle (the S3 piracy funnel, `world_map.gd`;\n## historically `encounters.gd`
 ## `PIRACY_REPUTATION` / `world_map.gd._charge_navy_piracy`), so it must not
 ## appear in an outcome block (see [method _rep_deltas]).
 const NAVY_REP_PENALTY := -20
@@ -1042,7 +1042,7 @@ func _rep_deltas() -> Dictionary:
 	var deltas := {}
 	# §4.11.10/§4.12.2: `rep_deltas` carries **only** the pirate `+2` entries.
 	# The navy `−20` is charged exactly once per navy battle at battle *start*
-	# by whoever initiated it (`encounters.gd` / `world_map.gd`), never per ship
+	# by whoever initiated it (the S3 funnel, `world_map.gd`), never per ship
 	# and never here — so applying this block twice can never double-charge it.
 	if enemy_kind == "pirate":
 		# §4.11.10 "Pirates defeated (any outcome except retreat)".

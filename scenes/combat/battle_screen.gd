@@ -50,7 +50,9 @@ const PALACE_SCENE := "res://scenes/port/palace_screen.tscn"
 const BATTLE_RESULT_PATH := "res://scripts/combat/battle_result.gd"
 const BATTLE_REWARDS_PATH := "res://scripts/combat/battle_rewards.gd"
 const DUEL_PATH := "res://scripts/combat/duel.gd"
-const ENCOUNTERS_PATH := "res://scripts/world/encounters.gd"
+## Phase-5 rename: the fleet-ecology module behind §4.12.4 step 4
+## (`NpcFleets.remove` / `set_pursuit_cooldown`; docs/60-* §4.12.3).
+const NPC_FLEETS_PATH := "res://scripts/world/npc_fleets.gd"
 ## Phase 3: quest/bounty/tournament aftermath (`70-*` §4.5, §4.9.7).
 const PHASE3_HOOKS_PATH := "res://scripts/quests/phase3_hooks.gd"
 ## S9 (a shared Phase-1 scene) is instanced over S10 when a `gameover.*` fires.
@@ -67,8 +69,6 @@ const GRID_ORIGIN := Vector2(256, 56)
 const TOKEN_PX := 24
 ## §4.7.1: the log panel shows the last 3 lines.
 const LOG_LINES := 3
-## §4.11.11.1: after any battle the kind's next legal spawn day is `day + 3`.
-const SPAWN_IMMUNITY_DAYS := 3
 ## Default round cap of [method run_to_completion] (§4.11.11.3).
 const DEFAULT_MAX_ROUNDS := 30
 ## Token letters (§4.8 "colored 24×24 squares with a letter"): the player's
@@ -1276,7 +1276,9 @@ func _target_text(unit: Dictionary) -> String:
 ##   1. `BattleSim.outcome()` is the raw block;
 ##   2. `BattleResult.apply(raw, enemy_units, GameState.fleet)`;
 ##   3. `BattleRewards.apply(outcome)`;
-##   4. `Encounters.remove(id)` + `Encounters.set_cooldown(kind, day + 3)`;
+##   4. `NpcFleets.remove(id)` — or, on a retreat,
+##      `NpcFleets.set_pursuit_cooldown(id, day + 1)` (§4.12.4 step 4;
+##      the Phase-2 spawn immunity is retired, docs/60-* §4.11.11.1);
 ##   5. `GameState.set_world_tile(contact)`; `EventBus.battle_finished`;
 ##      after-action dialog; route to S3 unless a `gameover.*` fired.
 func _finish_battle() -> void:
@@ -1306,10 +1308,10 @@ func _finish_battle() -> void:
 		if applied is Dictionary and not (applied as Dictionary).is_empty():
 			last_outcome["rewards"] = (applied as Dictionary).duplicate(true)
 
-	# 4. Marker bookkeeping (task F) — guarded.
-	var encounters_module = _guarded_module(ENCOUNTERS_PATH)
-	if encounters_module != null:
-		_cleanup_encounter(encounters_module)
+	# 4. Fleet-ecology bookkeeping (task J) — guarded.
+	var fleets_module = _guarded_module(NPC_FLEETS_PATH)
+	if fleets_module != null:
+		_cleanup_encounter(fleets_module)
 
 	# 4b. Phase 3: win counter, bounty-target quests, patrol kills, the
 	# hunter-surrendered bounty, and a tournament bout's bracket step.
@@ -1352,50 +1354,44 @@ func _guarded_apply(path: String) -> Variant:
 	return module
 
 
-## The same guard for a module with its own instance API (task F's
-## `Encounters`, whose `remove`/`set_cooldown` mutate `GameState` and are not
-## static). Returns an instance, or null with one warning.
+## The same guard for a module with its own instance API (task J's
+## `NpcFleets`, whose `remove`/`set_pursuit_cooldown` mutate `GameState` and
+## are not static). Returns an instance, or null with one warning.
 func _guarded_module(path: String) -> Variant:
 	var module = ResourceLoader.load(path) if ResourceLoader.exists(path) else null
 	if module == null or not module.can_instantiate():
-		_warn_once(path, "BattleScreen: %s is missing; hostile-marker cleanup "
+		_warn_once(path, "BattleScreen: %s is missing; fleet cleanup "
 			% path + "skipped (docs/60-* §4.12.4)")
 		return null
 	var instance = module.new()
 	if instance == null:
 		_warn_once(path, "BattleScreen: %s cannot be instantiated; "
-			% path + "hostile-marker cleanup skipped")
+			% path + "fleet cleanup skipped")
 		return null
 	return instance
 
 
-## §4.12.4 step 4: drop the marker and record the 3-day spawn immunity.
+## §4.12.4 step 4: drop the fleet, or cool it down after a retreat.
 ##
 ## §4.10/§4.11.11.1 exception: a `retreat` does **not** resolve the battle, so
-## the marker stays on the map and takes the +1 day pursuit cooldown instead of
-## being despawned (§4.11.10's "marker is removed" is the aftermath of a
-## resolved battle only). Deleting it here made the retreat rule unreachable:
-## S3's `battle_finished` handler then had no marker left to put on cooldown, so
-## retreating erased the enemy fleet. Both writes are idempotent (they mutate
-## `GameState.hostile_fleets` by id), so S3 applying the same cooldown again is
-## harmless.
-func _cleanup_encounter(encounters_module) -> void:
+## the fleet stays and takes the +1 day pursuit cooldown instead of being
+## despawned (the inclusive reading, docs/60-* §4.11.11.1). The Phase-2
+## per-kind spawn immunity is retired with the marker system — the trickle
+## refills the ecology (docs/60-* §4.11.11.1). Both writes are idempotent
+## (they mutate `GameState.npc_fleets` by id), so S3 applying the same
+## cooldown again is harmless.
+func _cleanup_encounter(fleets_module) -> void:
 	var encounter_id := str(last_outcome.get("encounter_id", ""))
-	var kind := str(last_outcome.get("kind", ""))
 	var retreated := str(last_outcome.get("result", "")) == BattleSimLib.RESULT_RETREAT
-	if not encounter_id.is_empty() and encounters_module.has_method("remove"):
-		if retreated and encounters_module.has_method("set_pursuit_cooldown"):
+	if not encounter_id.is_empty() and fleets_module.has_method("remove"):
+		if retreated and fleets_module.has_method("set_pursuit_cooldown"):
 			# The +1 day is the module's own pin (`PURSUIT_COOLDOWN_DAYS`,
 			# §4.10/§4.11.11.1); read it instead of restating the number.
-			var cooldown_days: int = int(encounters_module.get("PURSUIT_COOLDOWN_DAYS"))
-			encounters_module.call("set_pursuit_cooldown", encounter_id,
+			var cooldown_days: int = int(fleets_module.get("PURSUIT_COOLDOWN_DAYS"))
+			fleets_module.call("set_pursuit_cooldown", encounter_id,
 				int(GameState.day) + cooldown_days)
 		else:
-			encounters_module.call("remove", encounter_id)
-	if encounters_module.has_method("set_cooldown"):
-		if not kind.is_empty():
-			encounters_module.call("set_cooldown", kind,
-				int(GameState.day) + SPAWN_IMMUNITY_DAYS)
+			fleets_module.call("remove", encounter_id)
 
 
 ## `EventBus.battle_finished(outcome)` — exactly once per battle (docs/90-* §5.1,

@@ -52,7 +52,7 @@ func _new_run(port_id: String = "lisbon", day: int = 1) -> void:
 	GameState.day = day
 	GameState.gold = 50000
 	GameState.current_port = port_id
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.bounties = {}
 	GameState.active_quests = []
@@ -391,7 +391,7 @@ func _test_mission_kinds() -> void:
 	var patrol: Dictionary = _mission_of_kind("patrol")
 	_check(not patrol.is_empty(), "a royal_patrol offer exists")
 	GameState.active_quests = []
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	GameState.day = int(patrol.get("day", 1))
 	GameState.current_port = "lisbon"
 	var accepted := PalaceEngineLib.accept_offer("lisbon", int(patrol["day"]), patrol["offer"])
@@ -403,15 +403,15 @@ func _test_mission_kinds() -> void:
 		"the patrol targets a rival nation (%s)"
 		% str(requirements.get("nation_id")))
 	var tagged := 0
-	for marker in GameState.hostile_fleets:
+	for marker in GameState.npc_fleets:
 		if str((marker as Dictionary).get("quest_id", "")) \
 				== str(accepted["instance_id"]):
 			tagged += 1
 			_check(bool((marker as Dictionary).get("royal_mission", false)),
-				"the patrol marker carries royal_mission")
-			_check(str((marker as Dictionary).get("kind", "")) == "navy",
-				"the patrol marker is a navy fleet")
-	_check(tagged == 2, "accepting spawns two navy markers (%d)" % tagged)
+				"the patrol fleet carries royal_mission")
+			_check(str((marker as Dictionary).get("role", "")) == "privateer",
+				"the patrol fleet is a hostile warship (privateer role)")
+	_check(tagged == 2, "accepting spawns two target fleets (%d)" % tagged)
 
 	# `royal_chart`: two discovery reports after acceptance.
 	_new_run("lisbon", 1)

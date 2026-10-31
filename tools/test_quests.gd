@@ -398,7 +398,7 @@ func _test_exploration_completion() -> void:
 func _test_bounty_completion() -> void:
 	_new_run("lisbon", 1)
 	_clear_quests()
-	GameState.hostile_fleets = []
+	GameState.npc_fleets = []
 	# Find a bounty offer.
 	var chosen: Dictionary = {}
 	for week in range(0, 60):
@@ -417,14 +417,14 @@ func _test_bounty_completion() -> void:
 	_check(target_id is String and not target_id.is_empty(),
 		"accepting spawns a target fleet (got '%s')" % str(target_id))
 	var spawned := false
-	for marker in GameState.hostile_fleets:
+	for marker in GameState.npc_fleets:
 		if str((marker as Dictionary).get("id", "")) == target_id:
 			spawned = true
 			_check(str((marker as Dictionary).get("quest_id", ""))
 				== str(accepted["instance_id"]),
-				"the marker is tagged with its quest id")
+				"the fleet is tagged with its quest id")
 			break
-	_check(spawned, "the target fleet is a normal hostile marker")
+	_check(spawned, "the target fleet is a normal ecology member")
 	var gold_before := GameState.gold
 	var fame_before := GameState.fame
 	var reward := int((accepted["rewards"] as Dictionary)["gold"])

@@ -12,6 +12,9 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## The living-sea fleet sim (docs/60-* §4.12.3); `new_game` runs the seeded
+## initial fill through it (docs/60-* §4.1.2).
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 ## UI language; locked default "en" (user toggles via the `L` key / top bar).
 var locale: String = "en"
@@ -33,9 +36,10 @@ var current_port = null
 var port_investments: Dictionary = {}
 ## Discovered port ids (docs/20-* §4.11).
 var known_ports: Array = []
-## World-map hostile markers (docs/60-* §4.11.11); present-but-empty before
-## Phase 2 and saved as of save_version 2 (docs/90-* §8.1).
-var hostile_fleets: Array = []
+## World-map NPC fleets (docs/60-* §4.11.11, §4.15 fleet shape); owned by
+## `scripts/world/npc_fleets.gd` — the Phase-5 rename of the retired Phase-2
+## `hostile_fleets` 3-marker block (`kind` → `role`).
+var npc_fleets: Array = []
 ## `{kind: day}` spawn immunity after a battle (docs/60-* §4.8, §4.11.11.1);
 ## present-but-empty before Phase 2 and saved as of save_version 2.
 var proximity_cooldowns: Dictionary = {}
@@ -172,6 +176,9 @@ func new_game(nation_id: String, route: bool = true,
 		"position": _tile_dict(start_port, resolved_map),
 		"clock_fraction": 0.0,
 		"map_id": resolved_map,
+		# Phase-5 hunter intel (docs/60-* §4.11.11.1): no sail yet, no intel.
+		"last_departed_port": "",
+		"hunter_intel_cell": null,
 	}
 	current_port = start_port_id
 
@@ -188,8 +195,9 @@ func new_game(nation_id: String, route: bool = true,
 	port_investments = {}
 	quests = []
 	discoveries_found = []
-	# docs/60-* §4.11.11: markers and spawn immunity are per-run state.
-	hostile_fleets = []
+	# docs/60-* §4.11.11: the fleet ecology is per-run state; the retired
+	# Phase-2 spawn-immunity map stays present-but-empty (docs/90-* §8.1).
+	npc_fleets = []
 	proximity_cooldowns = {}
 	pending_encounter = null
 	pending_tournament_round = 0
@@ -217,6 +225,14 @@ func new_game(nation_id: String, route: bool = true,
 	npc_preset = "normal"
 	market_events = []
 	EconomyLib.reset_overrides()
+	# docs/60-* §4.1.2: the seeded initial fill to half the core cap runs
+	# here and only here, after the stock block exists (the fill never moves
+	# stocks — spawns carry empty holds), respecting the density preset
+	# (`deserted` fills nothing).
+	var fleets_sim = NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": npc_preset,
+	})
+	fleets_sim.initial_fill(day)
 	CharacterLib.pending_levelup = false
 
 	print("GameState.new_game: %s, %dg, ship %s, port %s, day 1, map %s"

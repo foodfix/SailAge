@@ -234,21 +234,29 @@ static func accept_offer(port_id: String, day: int, candidate: Dictionary) -> Di
 	return instance
 
 
-## Spawns the patrol's navy markers through the Phase-2 encounter API
-## (bypassing the bounty gate, each tagged with the mission id).
+## Spawns the patrol's target fleets through the Phase-5 fleet seam
+## (`60-*` §4.12.3 quest seam), each tagged with the mission id. The
+## `privateer` role is the always-contact-hostile warship role
+## (`60-*` §4.11.11.2), so the mission plays exactly like the retired
+## Phase-2 navy markers: contact opens the battle, the piracy funnel
+## charges once at battle start, and the §4.12.4 aftermath credits the
+## kill through the quest id.
 static func _spawn_patrol(instance: Dictionary, day: int) -> void:
-	var encounters_path := "res://scripts/world/encounters.gd"
-	if not ResourceLoader.exists(encounters_path):
+	var fleets_path := "res://scripts/world/npc_fleets.gd"
+	if not ResourceLoader.exists(fleets_path):
 		return
 	DataLoader.ensure_map()
-	var module = ResourceLoader.load(encounters_path)
+	var module = ResourceLoader.load(fleets_path)
 	if module == null or not module.can_instantiate():
 		return
-	var encounters = module.new(day)
+	var fleets = module.new({
+		"npc_config": DataLoader.npc_config,
+		"preset": GameState.npc_preset,
+	})
 	var nation_id := str((instance["requirements"] as Dictionary)
 		.get("nation_id", ""))
 	for _index in PATROL_COUNT:
-		var marker: Dictionary = encounters.call("spawn", "navy", nation_id, day)
+		var marker: Dictionary = fleets.call("spawn", "privateer", nation_id, day)
 		if marker.is_empty():
 			continue
 		marker["quest_id"] = str(instance.get("instance_id", ""))

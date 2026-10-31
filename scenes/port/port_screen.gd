@@ -468,7 +468,9 @@ func set_sail() -> bool:
 	# §4.11 exit order: leave the berth tile in place, drop the docked flag,
 	# and reset the fractional clock (a port visit never carries sub-day time
 	# back to sea — §4.3 "saving happens only in port, where the fraction is
-	# always reset to 0").
+	# always reset to 0"). The departed port is recorded for the Phase-5
+	# hunter intel (docs/60-* §4.11.11.1) before the docked flag drops.
+	GameState.world["last_departed_port"] = str(GameState.current_port)
 	GameState.current_port = null
 	GameState.world["clock_fraction"] = 0.0
 	sailed.emit()
