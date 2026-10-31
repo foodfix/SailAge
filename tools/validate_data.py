@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-8 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-10 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
@@ -11,31 +11,41 @@ cutting (docs/20-WORLD-AND-SAILING.md section 4.2). Group 7 is the Phase-5
 npc & economy data check (section 8.2): the density-dial config bounds, the
 captain pools, the named pirates, the demand-event templates with their
 rest-band shift bounds, and the consumption-tier split. Group 8 is the
-Phase-5 trade-route check (section 8.3): the locked 12-lane id set, waypoint
-snap and segment passability (shared with ``tools/build_routes.py``), the
-§4.14 spoke rule for every port, the named junction-graph probes, and the
-byte-exact rebuild equality of the tool-owned
-``data/trade_routes_built.json``.
+trade-route check (section 8.3): the locked 17-lane id set, waypoint snap and
+segment passability (shared with ``tools/build_routes.py``), the §4.14
+walk-aware spoke rule for every port, the named junction-graph probes, and
+the byte-exact rebuild equality of the tool-owned
+``data/trade_routes_built.json``. Group 9 is the Phase-6 ocean-raster check
+(section 8.4): both rasters decode as 4320x2160 indexed PNGs, palette bounds
+per the §6.5 encodings, water coverage against ``world.png``, and the
+byte-exact ``tools/build_ocean.py`` rebuild. Group 10 is the Phase-6 ice &
+lane-variant check (section 8.5): ``ice_regions.json`` structure, lane
+variant month coverage, and per-month-window passability under the in-month
+ice mask.
 
 Usage (from the repo root):
 
     python3 tools/validate_data.py
     python3 tools/validate_data.py --verbose
     python3 tools/validate_data.py --self-test-g6      # negative harness
+    python3 tools/validate_data.py --self-test-g9      # negative harness
+    python3 tools/validate_data.py --self-test-g10     # negative harness
 
 Exit codes:
 
-    0  all checks pass
-    1  parse & envelope failure
-    2  i18n failure
-    3  schema failure
-    4  referential integrity failure
-    5  locked-list failure
-    6  world map failure (data/maps/world.png / world_report.json)
-    7  npc & economy data failure (npc_config / npc_captains / named_pirates /
-       market_events)
-    8  trade-route failure (trade_routes / trade_routes_built /
-       route_overrides)
+    0   all checks pass
+    1   parse & envelope failure
+    2   i18n failure
+    3   schema failure
+    4   referential integrity failure
+    5   locked-list failure
+    6   world map failure (data/maps/world.png / world_report.json)
+    7   npc & economy data failure (npc_config / npc_captains / named_pirates /
+        market_events)
+    8   trade-route failure (trade_routes / trade_routes_built /
+        route_overrides)
+    9   ocean-raster failure (wind_regions.png / currents.png)
+    10  ice & lane-variant failure (ice_regions / trade_routes variants)
 
 On the first failure a single line is printed to stdout:
 
@@ -43,11 +53,12 @@ On the first failure a single line is printed to stdout:
 
 and the process exits with that check group's code.
 
-``--self-test-g6`` (or ``SAILAGE_G6_SELFTEST=1``) runs the group-6 mutation
-harness instead of the normal checks: it mutates in-memory copies of the tile
-grid, the port list and the PNG and asserts that group 6 goes red, naming the
-expected entity. It never touches real data and exits 0 only when every
-negative case fails as required.
+``--self-test-g6`` (or ``SAILAGE_G6_SELFTEST=1``), ``--self-test-g9`` and
+``--self-test-g10`` run the mutation harnesses instead of the normal checks:
+each mutates in-memory copies (g9's one-byte case restores the committed
+raster inside a try/finally) and asserts that the group goes red, naming the
+expected entity. They never leave real data changed and exit 0 only when
+every negative case fails as required.
 """
 
 from __future__ import annotations
@@ -121,8 +132,13 @@ FACILITY_PHASES = {
     "guild": 3,
     "palace": 3,
 }
-# Every Phase-1 port has these; `palace` only for the 6 capitals.
+# Every sovereign Phase-1 port has these; `palace` only for the 6 capitals.
 PORT_FACILITIES_REQUIRED = ("market", "shipyard", "tavern", "inn", "guild")
+# Phase-6 neutral tier (§7.1): `nation_id: ""`, frontier markets — facilities
+# are data-driven per port over the phase-1 keys only; `guild`/`palace` are
+# sovereign institutions the tier never carries.
+NEUTRAL_FACILITY_KEYS = frozenset({"market", "shipyard", "tavern", "inn"})
+NEUTRAL_PORT_NATION_ID = ""
 
 # Entity file -> the single plural key of its envelope.
 ENTITY_FILES = {
@@ -421,8 +437,8 @@ LOCKED_PORTS = {
                  ("spices", "salt"), ("wine", "iron")),
     "timor": ("帝汶", "Timor", "portugal", -10.17, 123.6,
                  ("spices", "timber"), ("glassware", "iron")),
-    "botany_bay": ("植物学湾", "Botany Bay", "england", -33.98, 151.18,
-                 ("timber", "dried_fish"), ("wine", "iron")),
+    "botany_bay": ("鲨鱼湾", "Shark Bay", "holland", -25.5, 113.5,
+                 ("salt", "dried_fish"), ("timber", "iron")),
     "siam": ("暹罗", "Siam", "portugal", 13.5, 100.58,
                  ("timber", "ceramics"), ("glassware", "wool")),
     "cadiz": ("加的斯", "Cadiz", "spain", 36.53, -6.29,
@@ -494,6 +510,11 @@ LOCKED_COUNTS = {
     "officers": 6,
     "equipment": 8,
 }
+
+# §7.1 Phase-6 neutral tier: the count band (the sovereign 100 stay an exact
+# set; the tier's ids are checked structurally in group 5).
+NEUTRAL_PORT_COUNT_MIN = 40
+NEUTRAL_PORT_COUNT_MAX = 60
 
 # --- Phase 5 npc & economy data (docs/10-DATA-SCHEMA.md sections 4.10-4.13,
 # normative validator spec section 8.2) --------------------------------------
@@ -932,7 +953,13 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
                     "(lat/lon are the only coordinates, 10-* 4.4)",
                     3,
                 )
-        _require_id(entity["nation_id"], f"{path}.nation_id", filename)
+        if entity["nation_id"] == NEUTRAL_PORT_NATION_ID:
+            # Phase-6 neutral tier (§7.1): "" is the tier's nation id, not an
+            # id regex violation. Facilities are data-driven over the four
+            # phase-1 keys only — guild/palace are sovereign institutions.
+            pass
+        else:
+            _require_id(entity["nation_id"], f"{path}.nation_id", filename)
         _require_number(entity["lat"], f"{path}.lat", filename, -90.0, 90.0)
         _require_number(entity["lon"], f"{path}.lon", filename, -180.0, 180.0)
         _require_id_list(entity["produces"], f"{path}.produces", filename)
@@ -958,14 +985,26 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
                     f"{path}.facilities.{key} is locked at {FACILITY_PHASES[key]}",
                     3,
                 )
-        for key in PORT_FACILITIES_REQUIRED:
-            if key not in facilities:
-                fail(
-                    "schema",
-                    filename,
-                    f"{path}.facilities missing required facility {key!r}",
-                    3,
-                )
+        if entity["nation_id"] == NEUTRAL_PORT_NATION_ID:
+            for key in facilities:
+                if key not in NEUTRAL_FACILITY_KEYS:
+                    fail(
+                        "schema",
+                        filename,
+                        f"{path} ({entity['id']}) is a neutral-tier port: "
+                        f"facility {key!r} is not one of "
+                        f"{sorted(NEUTRAL_FACILITY_KEYS)} (§7.1)",
+                        3,
+                    )
+        else:
+            for key in PORT_FACILITIES_REQUIRED:
+                if key not in facilities:
+                    fail(
+                        "schema",
+                        filename,
+                        f"{path}.facilities missing required facility {key!r}",
+                        3,
+                    )
         if "palace" in facilities and entity["id"] not in CAPITAL_PORT_IDS:
             fail(
                 "schema", filename,
@@ -1275,7 +1314,12 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
 
     for index, port in enumerate(ports):
         path = f"ports[{index}]"
-        if port["nation_id"] not in nation_ids:
+        if port["nation_id"] == NEUTRAL_PORT_NATION_ID:
+            # Phase-6 neutral tier (§7.1): exempt from `nation_id ∈ nations`
+            # — the tier's whole point. produces/demands/market_goods and the
+            # palace checks below apply unchanged.
+            pass
+        elif port["nation_id"] not in nation_ids:
             fail(
                 "ref",
                 "ports.json",
@@ -1474,27 +1518,136 @@ def _check_l10n_text(
 
 
 def check_group5(docs: dict[str, object], verbose: bool) -> None:
-    """Exact id sets and content against the section 7 tables."""
-    ports = docs["ports.json"]["ports"]
+    """The §7.1 lock model: the sovereign-100 exact set + the neutral tier,
+    then the other section 7 tables."""
+    ports_all = docs["ports.json"]["ports"]
     goods = docs["goods.json"]["goods"]
     ship_types = docs["ship_types.json"]["ship_types"]
     nations = docs["nations.json"]["nations"]
     officers = docs["officers.json"]["officers"]
     equipment = docs["equipment.json"]["equipment"]
 
-    _locked_id_sets(ports, LOCKED_PORTS, "ports", "ports.json")
-    _locked_id_sets(goods, LOCKED_GOODS, "goods", "goods.json")
+    # -- §7.1 lock model (Phase 6): sovereign exact set + neutral tier --------
+    sovereign = [port for port in ports_all
+                 if port.get("nation_id") != NEUTRAL_PORT_NATION_ID]
+    neutral = [port for port in ports_all
+               if port.get("nation_id") == NEUTRAL_PORT_NATION_ID]
+    _locked_id_sets(sovereign, LOCKED_PORTS, "sovereign ports", "ports.json")
+    _locked_id_sets(
+        [entry for entry in goods], LOCKED_GOODS, "goods", "goods.json")
     _locked_id_sets(ship_types, LOCKED_SHIP_TYPES, "ship_types", "ship_types.json")
     _locked_id_sets(nations, LOCKED_NATIONS, "nations", "nations.json")
     _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
     _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
 
+    # The neutral tier (§7.1 Phase-6 amendment): count 40-60, every row
+    # `nation_id: ""` (by construction here), ids unique and disjoint from
+    # the sovereign set, complete i18n, goods refs over the existing 20,
+    # facilities per the tier rule.
+    if not (NEUTRAL_PORT_COUNT_MIN <= len(neutral) <= NEUTRAL_PORT_COUNT_MAX):
+        fail(
+            "locked-count",
+            "ports.json",
+            f"neutral tier: count {len(neutral)} outside the locked "
+            f"{NEUTRAL_PORT_COUNT_MIN}-{NEUTRAL_PORT_COUNT_MAX} band (§7.1)",
+            5,
+        )
+    neutral_ids = set()
+    good_ids = {good["id"] for good in goods}
+    for index, port in enumerate(neutral):
+        port_id = port.get("id")
+        path = f"ports.json neutral tier [{index}]"
+        if not isinstance(port_id, str) or not ID_RE.match(port_id):
+            fail("locked-list", "ports.json", f"{path}: bad id {port_id!r}", 5)
+        if port_id in neutral_ids:
+            fail(
+                "locked-list",
+                "ports.json",
+                f"{path}: repeated neutral port id {port_id!r}",
+                5,
+            )
+        if port_id in LOCKED_PORTS:
+            fail(
+                "locked-list",
+                "ports.json",
+                f"{path}: neutral id {port_id!r} collides with the "
+                "sovereign §7.1 set",
+                5,
+            )
+        neutral_ids.add(port_id)
+        # complete i18n over the tier's display strings (§2.11: zh/en names)
+        for field in ("name", "flavor"):
+            value = port.get(field)
+            if isinstance(value, dict):
+                if set(value) != {"zh", "en"} or not all(
+                        isinstance(value.get(locale), str)
+                        and value.get(locale, "").strip()
+                        for locale in ("zh", "en")):
+                    fail(
+                        "locked-content",
+                        "ports.json",
+                        f"{path} ({port_id}) {field} must be a complete "
+                        "zh/en L10nString (§7.1 neutral tier)",
+                        5,
+                    )
+            else:
+                fail(
+                    "locked-content",
+                    "ports.json",
+                    f"{path} ({port_id}) {field} must be an L10nString "
+                    "(§7.1 neutral tier)",
+                    5,
+                )
+        for field in ("produces", "demands", "market_goods"):
+            for good_id in port.get(field, ()):
+                if good_id not in good_ids:
+                    fail(
+                        "locked-content",
+                        "ports.json",
+                        f"{path} ({port_id}) {field} references unknown good "
+                        f"{good_id!r} (the existing 20, §7.2)",
+                        5,
+                    )
+        facilities = port.get("facilities")
+        if not isinstance(facilities, dict) or not facilities:
+            fail(
+                "locked-content",
+                "ports.json",
+                f"{path} ({port_id}) facilities must be a non-empty object "
+                "per the tier rule (§7.1)",
+                5,
+            )
+        for key, value in facilities.items():
+            if key not in NEUTRAL_FACILITY_KEYS:
+                fail(
+                    "locked-content",
+                    "ports.json",
+                    f"{path} ({port_id}) facility {key!r} is not one of "
+                    f"{sorted(NEUTRAL_FACILITY_KEYS)} — a neutral port "
+                    "carries no guild/palace (§7.1)",
+                    5,
+                )
+            if value != 1:
+                fail(
+                    "locked-content",
+                    "ports.json",
+                    f"{path} ({port_id}) facility {key!r} must be phase 1",
+                    5,
+                )
+
     for plural, expected_count in LOCKED_COUNTS.items():
         items = docs[f"{plural}.json"][plural]
-        if len(items) != expected_count:
+        expected_total = expected_count
+        if plural == "ports":
+            # §7.1: 100 sovereign (exact set above) + the 40-60 neutral tier.
+            expected_total = expected_count + len(neutral)
+        if len(items) != expected_total:
             fail(
                 "locked-count",
                 f"{plural}.json",
+                f"{plural}: count {len(items)} != {expected_total} "
+                f"({expected_count} sovereign + the neutral tier)"
+                if plural == "ports" else
                 f"{plural}: count {len(items)} != {expected_count}",
                 5,
             )
@@ -1582,7 +1735,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     5,
                 )
 
-    for index, port in enumerate(ports):
+    for index, port in enumerate(sovereign):
         zh, en, nation_id, lat, lon, produces, demands = LOCKED_PORTS[port["id"]]
         path = f"ports[{index}]"
         _check_l10n_text(port, "name", zh, en, path, "ports.json")
@@ -1645,7 +1798,10 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
 
     if verbose:
         print(
-            "PASS group 5 locked lists (100 ports, 20 goods, 8 ship types, "
+            "PASS group 5 locked lists "
+            f"({len(sovereign)} sovereign ports + {len(neutral)} neutral "
+            f"(band {NEUTRAL_PORT_COUNT_MIN}-{NEUTRAL_PORT_COUNT_MAX}), "
+            "20 goods, 8 ship types, "
             "6 nations, 6 officers, 8 equipment items)"
         )
 
@@ -2804,6 +2960,30 @@ def _g6_setup() -> tuple[WorldGrid, dict, dict, list, list] | None:
             ports, discoveries)
 
 
+def _recomputed_report_maps(grid: WorldGrid, ports: list) -> tuple[dict, dict]:
+    """Berth + shore maps a given grid yields, for mutated-grid cases.
+
+    A pocket mutation moves the recomputed shore tile of the pocket's port,
+    so the case needs the report maps the mutated grid itself derives (the
+    validator's own snap functions — the same ones `analyse_world_map` uses).
+    """
+    berths: dict[str, tuple[int, int]] = {}
+    shores: dict[str, tuple[int, int]] = {}
+    for port in ports:
+        lat, lon = float(port["lat"]), float(port["lon"])
+        snapped = snap_harbor_with_shore(grid, lat, lon)
+        if snapped is None:
+            continue  # the case wants the probe failure, not a snap failure
+        _distance, y, x = snapped
+        berths[port["id"]] = (x, y)
+        origin = tile_of_latlon(lat, lon)
+        shore = shore_of_berth(grid, x, y, origin)
+        if shore is not None:
+            # validator shore_of_berth returns (distance, sy, sx)
+            shores[port["id"]] = (shore[2], shore[1])
+    return berths, shores
+
+
 def run_group6_self_test() -> int:
     """Negative harness for group 6: every case must fail with exit code 6."""
     setup = _g6_setup()
@@ -2847,19 +3027,22 @@ def run_group6_self_test() -> int:
 
     # (1b) A single probe harbor sealed off: Istanbul keeps its snap-valid water
     # (harbor + one adjacent tile) but loses the Bosphorus. The probe rule must
-    # fire and name the port and the strait it proves.
+    # fire and name the port and the strait it proves. The pocket mutation also
+    # moves the recomputed shore tile, so the case feeds the report maps the
+    # mutated grid itself yields — keeping the case pointed at the probe rule.
     isolated = _g6_isolate_harbor(grid, report_tiles, "istanbul")
     if isolated is None:
         print("FAIL g6-self-test probe-harbor-sealed: cannot isolate 'istanbul'")
         results.append(False)
     else:
+        iso_tiles, iso_shores = _recomputed_report_maps(isolated, ports)
         results.append(
             _expect_g6_failure(
                 "probe-harbor-sealed",
                 "bosphorus",
                 lambda: analyse_world_map(
-                    isolated, ports, report_tiles, discoveries, False,
-                    report_shores,
+                    isolated, ports, iso_tiles, discoveries, False,
+                    iso_shores,
                 ),
             )
         )
@@ -3570,7 +3753,8 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
 # Check group 8 — Trade routes (docs/10-DATA-SCHEMA.md section 8.3)
 # ---------------------------------------------------------------------------
 
-# Section 7.6: the locked 12-lane id set — exhaustive, closed.
+# Section 7.6: the locked 17-lane id set — exhaustive, closed (the 12
+# Phase-5 lanes plus the 5 Phase-6 regional lanes of task P).
 LOCKED_LANE_IDS = (
     "carreira_da_india",
     "west_indies_flota",
@@ -3584,11 +3768,16 @@ LOCKED_LANE_IDS = (
     "basra_muscat_india",
     "iceland_cod",
     "grand_banks_cod",
+    "canton_country_trade",
+    "coromandel_bengal",
+    "swahili_coast",
+    "pacific_america",
+    "west_africa",
 )
 
 BUILT_ROUTES_LABEL = "data/trade_routes_built.json"
 OVERRIDES_LABEL = "tools/route_overrides.json"
-SPOKE_RADIUS = 20  # §4.14 minor-spoke Chebyshev radius (wrap-aware)
+SPOKE_RADIUS = 40  # §4.14 minor-spoke Chebyshev radius (Phase-6 sweep: 20 → 40)
 
 
 def _check_trade_lane_schema(lanes: list, nation_ids: set, good_ids: set) -> None:
@@ -3682,23 +3871,29 @@ def _check_trade_lane_schema(lanes: list, nation_ids: set, good_ids: set) -> Non
 
 
 def _check_trade_snap_and_segments(grid, lanes: list, lane_index: dict) -> dict:
-    """§8.3 items 3-5: snap, passability, wrap continuity (shared helpers)."""
+    """§8.3 items 3-5: snap, passability, wrap continuity (shared helpers).
+
+    Variant waypoints join the snap and unmasked-walk checks (§4.14: each
+    variant's `waypoints` is a waypoint list like the base's); the in-month
+    ice-mask walk is group 10's (§8.5) so its violations exit 10.
+    """
     label = "trade_routes.json"
     stats = {"waypoints": 0, "segments": 0, "max_snap": 0, "at_limit": 0}
-    for lane in lanes:
-        lane_id = lane["id"]
-        for w_index, (lat, lon) in enumerate(lane["waypoints"]):
-            hit = route_builder.snap_waypoint(grid, float(lat), float(lon))
+
+    def check_waypoint_set(lane_id: str, lane_pos: int, waypoints, what: str):
+        for w_index, point in enumerate(waypoints):
+            hit = route_builder.snap_waypoint(grid, float(point[0]),
+                                              float(point[1]))
             stats["waypoints"] += 1
             if hit is None:
-                px, py = grid.tile_of_latlon(float(lat), float(lon))
+                px, py = grid.tile_of_latlon(float(point[0]), float(point[1]))
                 fail(
                     "trade-routes",
                     label,
-                    f"lanes[{lane_index[lane_id]}] ({lane_id}) waypoint "
-                    f"{w_index} ({lat}, {lon}) has no water tile within "
-                    f"{route_builder.WAYPOINT_SNAP_TILES} tiles of ({px}, "
-                    f"{py}) (section 8.3 item 3; fix via "
+                    f"lanes[{lane_pos}] ({lane_id}) {what} waypoint "
+                    f"{w_index} ({point[0]}, {point[1]}) has no water tile "
+                    f"within {route_builder.WAYPOINT_SNAP_TILES} tiles of "
+                    f"({px}, {py}) (section 8.3 item 3; fix via "
                     "tools/route_overrides.json or a reported waypoint "
                     "amendment)",
                     8,
@@ -3706,9 +3901,9 @@ def _check_trade_snap_and_segments(grid, lanes: list, lane_index: dict) -> dict:
             stats["max_snap"] = max(stats["max_snap"], hit[2])
             if hit[2] == route_builder.WAYPOINT_SNAP_TILES:
                 stats["at_limit"] += 1
-        for s_index in range(len(lane["waypoints"]) - 1):
-            a = _snapped_of(grid, lane["waypoints"][s_index])
-            b = _snapped_of(grid, lane["waypoints"][s_index + 1])
+        for s_index in range(len(waypoints) - 1):
+            a = _snapped_of(grid, waypoints[s_index])
+            b = _snapped_of(grid, waypoints[s_index + 1])
             # item 5: a dateline-crossing segment keeps per-segment x
             # monotonic under wrap — the shortest wrap step is <= half the
             # grid, i.e. the segment never jumps the seam.
@@ -3718,7 +3913,7 @@ def _check_trade_snap_and_segments(grid, lanes: list, lane_index: dict) -> dict:
                 fail(
                     "trade-routes",
                     label,
-                    f"lanes[{lane_index[lane_id]}] ({lane_id}) segment "
+                    f"lanes[{lane_pos}] ({lane_id}) {what} segment "
                     f"{s_index} jumps the dateline seam (dx {dx} > "
                     f"{grid.w // 2}; section 8.3 item 5)",
                     8,
@@ -3729,12 +3924,20 @@ def _check_trade_snap_and_segments(grid, lanes: list, lane_index: dict) -> dict:
                 fail(
                     "trade-routes",
                     label,
-                    f"lanes[{lane_index[lane_id]}] ({lane_id}) segment "
+                    f"lanes[{lane_pos}] ({lane_id}) {what} segment "
                     f"{s_index} ({a}) -> ({b}) walks onto an impassable "
                     f"tile at {bad} (section 8.3 item 4, corner cutting "
                     "forbidden)",
                     8,
                 )
+
+    for lane in lanes:
+        lane_id = lane["id"]
+        lane_pos = lane_index[lane_id]
+        check_waypoint_set(lane_id, lane_pos, lane["waypoints"], "base")
+        for variant in lane.get("variants") or []:
+            check_waypoint_set(lane_id, lane_pos, variant["waypoints"],
+                               f"variant '{variant.get('id')}'")
     return stats
 
 
@@ -3815,7 +4018,7 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                     8,
                 )
 
-    kinds = {"lane": 0, "capital": 0, "override": 0}
+    kinds = {"lane": 0, "capital": 0, "override": 0, "fallback": 0}
     for port in ports:
         port_id = port["id"]
         spoke = by_port.get(port_id)
@@ -3839,19 +4042,26 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                 f"§6.1 harbor tile is {harbor}",
                 8,
             )
+        # Walk-aware rule 1, recomputed: the first in-radius candidate whose
+        # straight walk succeeds (§4.14 pin) — every kind's legality keys on
+        # it.
+        candidates = route_builder.lane_waypoint_candidates(
+            grid, harbor, snapped_by_lane, lane_order)
+        resolved = route_builder.first_walkable_waypoint(
+            grid, harbor, candidates, snapped_by_lane)
         if kind == "lane":
             kinds["lane"] += 1
-            near = route_builder.nearest_lane_waypoint(
-                grid, harbor, snapped_by_lane, lane_order)
-            if near is None:
+            if resolved is None:
                 fail(
                     "trade-spokes",
                     label,
-                    f"port '{port_id}' claims a lane spoke but no lane "
-                    f"waypoint is within {SPOKE_RADIUS} tiles of {harbor}",
+                    f"port '{port_id}' claims a lane spoke but no in-radius "
+                    f"lane waypoint's straight walk succeeds (§4.14 "
+                    "walk-aware rule 1)",
                     8,
                 )
-            lane_id, wp_index, tile, distance = near
+            lane_id, wp_index, tile, distance = (
+                resolved[0], resolved[1], resolved[2], resolved[3])
             if (spoke.get("lane") != lane_id
                     or spoke.get("waypoint_index") != wp_index
                     or spoke.get("distance") != distance
@@ -3862,8 +4072,9 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                     f"port '{port_id}' lane spoke "
                     f"({spoke.get('lane')} #{spoke.get('waypoint_index')} "
                     f"d={spoke.get('distance')}) does not match the §4.14 "
-                    f"rule ('{lane_id}' #{wp_index} d={distance}, tile "
-                    f"{tile}; ties smallest (y, x))",
+                    f"walk-aware rule ('{lane_id}' #{wp_index} d={distance}, "
+                    f"tile {tile}; ties smallest (y, x), walk-failed "
+                    "candidates skipped)",
                     8,
                 )
             chain, bad = route_builder.walk_segment(grid, harbor, tile)
@@ -3878,16 +4089,14 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                 )
         elif kind == "capital":
             kinds["capital"] += 1
-            near = route_builder.nearest_lane_waypoint(
-                grid, harbor, snapped_by_lane, lane_order)
-            if near is not None:
+            if resolved is not None:
                 fail(
                     "trade-spokes",
                     label,
-                    f"port '{port_id}' claims a capital fallback but lane "
-                    f"waypoint '{near[0]}' #{near[1]} is within "
-                    f"{SPOKE_RADIUS} tiles (d={near[3]}) — the lane rule "
-                    "takes precedence (§4.14)",
+                    f"port '{port_id}' claims a capital fallback but the "
+                    f"walk-aware lane rule succeeds (lane waypoint "
+                    f"'{resolved[0]}' #{resolved[1]}, d={resolved[3]}) — the "
+                    "lane rule takes precedence (§4.14)",
                     8,
                 )
             capital_id = capital_of[port["nation_id"]]
@@ -3913,6 +4122,16 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                 )
         elif kind == "override":
             kinds["override"] += 1
+            if resolved is not None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}': superseded override — the walk-aware "
+                    f"lane rule succeeds (lane waypoint '{resolved[0]}' "
+                    f"#{resolved[1]}, d={resolved[3]}), so the "
+                    f"{OVERRIDES_LABEL} entry must be removed (§4.14)",
+                    8,
+                )
             entry = overrides.get(port_id)
             if entry is None:
                 fail(
@@ -3944,12 +4163,81 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                     f"{list(connect_tile)} ({connect_lane} #{wp_index})",
                     8,
                 )
+        elif kind == "fallback":
+            # §4.14 nationless fallback: a neutral port with no walkable
+            # in-radius candidate and no override takes the nearest lane
+            # waypoint unbounded, A*-pathfound.
+            kinds["fallback"] += 1
+            if port["nation_id"] != NEUTRAL_PORT_NATION_ID:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' claims a nationless fallback but is "
+                    "not a neutral-tier port (§4.14)",
+                    8,
+                )
+            if resolved is not None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' claims a nationless fallback but the "
+                    f"walk-aware lane rule succeeds ('{resolved[0]}' "
+                    f"#{resolved[1]}) — §4.14 order violated",
+                    8,
+                )
+            if overrides.get(port_id) is not None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' claims a nationless fallback but an "
+                    f"{OVERRIDES_LABEL} entry is declared — the override "
+                    "takes precedence (§4.14)",
+                    8,
+                )
+            nearest = None
+            for rank, lane_id in enumerate(lane_order):
+                for index, (x, y) in enumerate(snapped_by_lane[lane_id]):
+                    distance = route_builder.chebyshev_wrap_tiles(
+                        grid, harbor, (x, y))
+                    key = (distance, y, x, rank, index)
+                    if nearest is None or key < nearest[0]:
+                        nearest = (key, lane_id, index, (x, y), distance)
+            if nearest is None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' nationless fallback: the lane "
+                    "network has no waypoint at all",
+                    8,
+                )
+            _key, lane_id, index, tile, distance = nearest
+            if (spoke.get("lane") != lane_id
+                    or spoke.get("waypoint_index") != index
+                    or chain_tiles[-1] != tile):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' nationless fallback does not end at "
+                    f"the nearest lane waypoint '{lane_id}' #{index} {tile} "
+                    "(§4.14)",
+                    8,
+                )
+            astar = route_builder.astar_path(grid, harbor, tile)
+            if (astar is None
+                    or [(x, y) for x, y in astar] != chain_tiles):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' nationless fallback tile_path is not "
+                    f"the A* water path from {harbor} to {tile} (§4.14)",
+                    8,
+                )
         else:
             fail(
                 "trade-spokes",
                 label,
                 f"port '{port_id}' spoke kind {kind!r} is not lane/capital/"
-                "override",
+                "override/fallback",
                 8,
             )
 
@@ -4019,15 +4307,17 @@ def _check_trade_probes(grid, ports: list, built: dict) -> None:
             )
         return index
 
-    probes = (
+    graph_probes = (
         ("port:acapulco", "port:manila",
          "acapulco <-> manila across the dateline wrap"),
         ("port:danzig", "lane:hanseatic_north",
-         "hanseatic_north reaches danzig"),
+         "hanseatic_north reaches danzig (base months)"),
         ("port:goa", "lane:carreira_da_india",
          "carreira_da_india reaches goa"),
+        ("port:macau", "port:hirado",
+         "macau <-> hirado joined via canton_country_trade"),
     )
-    for source, target, description in probes:
+    for source, target, description in graph_probes:
         source_tile = (harbor_of[source[5:]] if source.startswith("port:")
                        else _built_lane_start(built, source[5:]))
         target_tile = (harbor_of[target[5:]] if target.startswith("port:")
@@ -4044,6 +4334,51 @@ def _check_trade_probes(grid, ports: list, built: dict) -> None:
                 "(section 8.3 item 7)",
                 8,
             )
+
+    # The W3 gate's E-probes (IMPLEMENT-Phase6 task E done-when): spoke
+    # records over the merged P lane content.
+    spoke_by_port = {
+        spoke.get("port"): spoke
+        for spoke in built.get("spokes", []) if isinstance(spoke, dict)
+    }
+
+    def spoke_onto(port_id: str, lane_id: str, max_distance=None,
+                   description: str = "") -> None:
+        record = spoke_by_port.get(port_id)
+        problems = []
+        if record is None:
+            problems.append("no spoke record")
+        else:
+            if record.get("kind") != "lane":
+                problems.append(f"kind {record.get('kind')!r} is not 'lane'")
+            if record.get("lane") != lane_id:
+                problems.append(
+                    f"lands on lane {record.get('lane')!r}, expected "
+                    f"{lane_id!r}")
+            if (max_distance is not None
+                    and isinstance(record.get("distance"), int)
+                    and record["distance"] > max_distance):
+                problems.append(
+                    f"distance {record['distance']} > {max_distance}")
+        if problems:
+            fail(
+                "trade-probes",
+                BUILT_ROUTES_LABEL,
+                f"probe failed: {description or port_id} — "
+                + "; ".join(problems) + " (section 8.3 item 7)",
+                8,
+            )
+
+    spoke_onto("busan", "canton_country_trade",
+               description="busan's spoke lands on canton_country_trade")
+    spoke_onto("mombasa", "swahili_coast", max_distance=SPOKE_RADIUS,
+               description="mombasa spoke <= 40 onto swahili_coast")
+    for port_id in ("lima", "valparaiso", "guayaquil", "panama"):
+        spoke_onto(port_id, "pacific_america",
+                   description=f"{port_id} spoke onto pacific_america")
+    for port_id in ("safi", "elmina", "luanda"):
+        spoke_onto(port_id, "west_africa",
+                   description=f"{port_id} spoke onto west_africa")
 
 
 def _built_lane_start(built: dict, lane_id: str) -> tuple[int, int]:
@@ -4142,7 +4477,8 @@ def check_group8(docs: dict[str, object], verbose: bool) -> None:
         fail(
             "trade-routes",
             "trade_routes.json",
-            "lane id set must be exactly the locked 12 (section 7.6): "
+            "lane id set must be exactly the locked "
+            f"{len(LOCKED_LANE_IDS)} (section 7.6): "
             + "; ".join(detail),
             8,
         )
@@ -4199,11 +4535,926 @@ def check_group8(docs: dict[str, object], verbose: bool) -> None:
             "wrap-continuous, "
             f"{spoke_stats['count']} spokes "
             f"[{kinds['lane']} lane / {kinds['capital']} capital / "
-            f"{kinds['override']} override], "
+            f"{kinds['override']} override / {kinds['fallback']} fallback], "
             f"{built['junctions']['node_count']} junction nodes, "
-            f"{built['junctions']['edge_count']} edges, probes 3/3, "
+            f"{built['junctions']['edge_count']} edges, probes 10/10, "
             "rebuild byte-identical)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Check group 9 — Ocean rasters (docs/10-DATA-SCHEMA.md section 8.4)
+# ---------------------------------------------------------------------------
+
+WIND_PNG = DATA_DIR / "maps" / "wind_regions.png"
+CURRENTS_PNG = DATA_DIR / "maps" / "currents.png"
+WIND_PNG_LABEL = "data/maps/wind_regions.png"
+CURRENTS_PNG_LABEL = "data/maps/currents.png"
+WIND_JSON_LABEL = "data/wind_regions.json"
+CURRENTS_JSON_LABEL = "data/ocean_currents.json"
+ICE_JSON_LABEL = "data/ice_regions.json"
+
+# §6.5 encodings.
+CURRENT_INDEX_MAX = 24
+COMPASS_DIRS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+# Fast per-row violation scan: one int AND + popcount per row; the named
+# iteration runs only on rows that have a violation.
+_LAND_TABLE = bytes(0 if value in PASSABLE_INDICES else 1
+                    for value in range(256))
+_NONZERO_TABLE = bytes(0 if value == 0 else 1 for value in range(256))
+
+
+def _ocean_region_count(wind_json_path: Path) -> int:
+    try:
+        doc = json.loads(wind_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail("ocean-raster", WIND_JSON_LABEL, f"cannot read: {exc}", 9)
+    regions = doc.get("wind_regions") if isinstance(doc, dict) else None
+    if not isinstance(regions, list) or not regions:
+        fail(
+            "ocean-raster",
+            WIND_JSON_LABEL,
+            "missing non-empty 'wind_regions' array (section 4.16)",
+            9,
+        )
+    ids = [region.get("id") for region in regions]
+    if any(not isinstance(i, str) or not i for i in ids):
+        fail(
+            "ocean-raster",
+            WIND_JSON_LABEL,
+            "every region needs a string 'id' (section 4.16)",
+            9,
+        )
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        fail(
+            "ocean-raster",
+            WIND_JSON_LABEL,
+            f"repeated region id(s): {', '.join(dupes)}",
+            9,
+        )
+    for index, region in enumerate(regions):
+        _check_complete_l10n(region.get("name"),
+                             f"wind_regions[{index}] ({ids[index]})",
+                             WIND_JSON_LABEL)
+    return len(regions)
+
+
+def _ocean_system_corridors(currents_json_path: Path, grid: WorldGrid):
+    """Systems of data/ocean_currents.json with their corridor tile sets.
+
+    Used to NAME a violating tile (§8.4 item 4 names the system): the
+    corridor geometry is the builder's own (tile stepping + Chebyshev
+    dilation, §4.17's pinned corridor-expansion rule), while the violation
+    detection itself is PNG-driven and independent of it. Also checks the
+    systems' ids and name i18n (section 4.17) while it is here.
+    """
+    try:
+        doc = json.loads(currents_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail("ocean-raster", CURRENTS_JSON_LABEL, f"cannot read: {exc}", 9)
+    systems = doc.get("ocean_currents") if isinstance(doc, dict) else None
+    if not isinstance(systems, list) or not systems:
+        fail(
+            "ocean-raster",
+            CURRENTS_JSON_LABEL,
+            "missing non-empty 'ocean_currents' array (section 4.17)",
+            9,
+        )
+    sys.path.insert(0, str(REPO_ROOT / "tools"))
+    import build_ocean as ocean_builder  # noqa: E402  (corridor naming only)
+
+    tpd_grid = bw_grid_like(grid)
+    corridors = []
+    ids = []
+    for index, system in enumerate(systems):
+        system_id = system.get("id")
+        where = f"ocean_currents[{index}] ({system_id!r})"
+        if not isinstance(system_id, str) or not system_id:
+            fail("ocean-raster", CURRENTS_JSON_LABEL,
+                 f"{where}: missing string 'id' (section 4.17)", 9)
+        _check_complete_l10n(system.get("name"), where, CURRENTS_JSON_LABEL)
+        path = system.get("path")
+        width = system.get("width_tiles")
+        if (not isinstance(path, list) or len(path) < 2
+                or not isinstance(width, int) or isinstance(width, bool)
+                or width <= 0):
+            fail(
+                "ocean-raster",
+                CURRENTS_JSON_LABEL,
+                f"{where}: needs a >= 2-point path and an int width_tiles > 0 "
+                "(section 4.17)",
+                9,
+            )
+        ids.append(system_id)
+        corridors.append((system_id, ocean_builder.corridor_tiles(
+            tpd_grid, [(float(p[0]), float(p[1])) for p in path], width)))
+    return ids, corridors, ocean_builder
+
+
+def bw_grid_like(grid: WorldGrid):
+    """A build_world.Grid over the same raster (for the corridor geometry)."""
+    import build_world as bw  # local import: group 9's naming aid
+
+    g = bw.Grid(grid.width, grid.height)
+    for y in range(grid.height):
+        g.rows[y][:] = grid.indices[y * grid.width:(y + 1) * grid.width]
+    return g
+
+
+def _check_ocean_raster(label: str, png_path: Path, world: WorldGrid,
+                        index_max: int, name_of_index,
+                        system_namer=None) -> int:
+    """Decode + palette bounds + water coverage for one ocean raster.
+
+    ``index_max`` is the inclusive palette bound (region_count for wind,
+    24 for currents); ``name_of_index`` renders an index for messages;
+    ``system_namer(tile)`` names the current system(s) of a violating tile
+    (currents only). Returns the number of non-zero tiles (informational).
+    """
+    if not png_path.is_file():
+        fail("ocean-raster", label, "missing (generate with "
+             "tools/build_ocean.py)", 9)
+    try:
+        data = png_path.read_bytes()
+        width, height, indices = decode_indexed_png(data)
+    except PngFormatError as exc:
+        fail(
+            "ocean-raster",
+            label,
+            f"artifact decode failed: {exc} (section 8.4 item 1)",
+            9,
+        )
+    if (width, height) != (MAP_WIDTH, MAP_HEIGHT):
+        fail(
+            "ocean-raster",
+            label,
+            f"must be exactly {MAP_WIDTH}x{MAP_HEIGHT}, got {width}x{height} "
+            "(section 8.4 item 1)",
+            9,
+        )
+
+    # item 2/3: palette bounds over the indices actually used.
+    used = sorted(set(indices))
+    too_high = [value for value in used if value > index_max]
+    if too_high:
+        fail(
+            "ocean-raster",
+            label,
+            f"palette bound: index {min(too_high)} used but the §6.5 "
+            f"encoding allows only 0..{index_max} "
+            f"({'region count' if system_namer is None else '8 dirs x 3 strengths'})"
+            " (section 8.4 item 2/3)",
+            9,
+        )
+
+    # item 4: water coverage — a non-zero index on a land/reef/ice tile of
+    # world.png names the tile and the region/system.
+    violations = 0
+    w, h = MAP_WIDTH, MAP_HEIGHT
+    for y in range(h):
+        land = int.from_bytes(
+            world.indices[y * w:(y + 1) * w].translate(_LAND_TABLE), "big")
+        nonzero = int.from_bytes(
+            indices[y * w:(y + 1) * w].translate(_NONZERO_TABLE), "big")
+        bad = land & nonzero
+        if not bad:
+            continue
+        for x in range(w):
+            index = indices[y * w + x]
+            if index and not world.passable[y * w + x]:
+                if system_namer is not None:
+                    who = system_namer((x, y), index)
+                else:
+                    who = name_of_index(index)
+                fail(
+                    "ocean-raster",
+                    label,
+                    f"tile ({x}, {y}) is "
+                    f"'{world.char_at(y * w + x)}' on world.png but carries "
+                    f"{label.split('/')[-1]} index {index} ({who}) — a "
+                    "non-zero index never lands on land/reef/permanent ice "
+                    "(section 8.4 item 4)",
+                    9,
+                )
+        violations += bin(bad).count("1")
+    painted = sum(1 for value in indices if value)
+    if verbose_enabled():
+        print(
+            f"PASS ocean-raster {label}: {painted} non-zero tiles "
+            f"({violations} on land — impossible if this line prints), "
+            f"indices 0..{max(used) if used else 0} <= {index_max}"
+        )
+    return painted
+
+
+_verbose_flag = False
+
+
+def verbose_enabled() -> bool:
+    return _verbose_flag
+
+
+def _check_ocean_determinism(verbose: bool) -> None:
+    """§8.4 item 5: both committed rasters rebuild byte-identical."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tools" / "build_ocean.py"),
+         "--check", "--verbose"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    if verbose and result.stderr:
+        for line in result.stderr.strip().splitlines():
+            print(f"INFO group 9 {line}")
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "").strip().splitlines()
+        detail = tail[-1] if tail else f"exit {result.returncode}"
+        fail(
+            "ocean-determinism",
+            "data/maps/{wind_regions,currents}.png",
+            f"rebuild drift: {detail} (tools/build_ocean.py --check exited "
+            f"{result.returncode}; section 8.4 item 5 — fix the JSON sources "
+            "and regenerate, never hand-edit the rasters)",
+            9,
+        )
+
+
+def check_group9(docs: dict[str, object], verbose: bool) -> None:
+    """Ocean rasters: docs/10-DATA-SCHEMA.md section 8.4."""
+    global _verbose_flag
+    _verbose_flag = verbose
+
+    region_count = _ocean_region_count(DATA_DIR / "wind_regions.json")
+    world = _load_world_grid(WORLD_PNG, WORLD_PNG_LABEL)
+
+    def wind_name(index: int) -> str:
+        try:
+            doc = json.loads(
+                (DATA_DIR / "wind_regions.json").read_text(encoding="utf-8"))
+            region = doc["wind_regions"][index - 1]
+            return f"wind region {index} '{region['id']}'"
+        except (OSError, json.JSONDecodeError, IndexError, KeyError):
+            return f"wind region index {index}"
+
+    # Currents naming needs the corridors; computed lazily on first failure.
+    cached: dict = {}
+
+    def current_namer(tile, index):
+        if "corridors" not in cached:
+            _ids, corridors, _builder = _ocean_system_corridors(
+                DATA_DIR / "ocean_currents.json", world)
+            cached["corridors"] = corridors
+        direction = (index - 1) // 3
+        strength = ((index - 1) % 3) + 1
+        covering = [
+            system_id for system_id, corridor in cached["corridors"]
+            if tile in corridor
+        ]
+        decoded = (f"decodes to {COMPASS_DIRS[direction]}/{strength}")
+        if covering:
+            return f"current system(s) {', '.join(covering)}; {decoded}"
+        return f"no re-computed covering system; {decoded}"
+
+    wind_painted = _check_ocean_raster(
+        WIND_PNG_LABEL, WIND_PNG, world, region_count, wind_name)
+    currents_painted = _check_ocean_raster(
+        CURRENTS_PNG_LABEL, CURRENTS_PNG, world, CURRENT_INDEX_MAX,
+        lambda index: f"current index {index}", current_namer)
+
+    _check_ocean_determinism(verbose)
+
+    if verbose:
+        print(
+            f"PASS group 9 ocean rasters (wind {wind_painted} painted tiles "
+            f"over {region_count} regions, currents {currents_painted} "
+            "painted tiles, palette bounds ok, water coverage ok, rebuild "
+            "byte-identical)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Group 9 mutation harness (`--self-test-g9`)
+# ---------------------------------------------------------------------------
+
+
+def run_group9_self_test() -> int:
+    """Negative harness for group 9: every case must fail with exit code 9."""
+    global _verbose_flag
+    _verbose_flag = False
+    results: list[bool] = []
+    world = _load_world_grid(WORLD_PNG, WORLD_PNG_LABEL)
+    region_count = _ocean_region_count(DATA_DIR / "wind_regions.json")
+    wind_bytes = WIND_PNG.read_bytes()
+    currents_bytes = CURRENTS_PNG.read_bytes()
+
+    def expect_failure(case: str, needle: str, action) -> bool:
+        try:
+            action()
+        except CheckFailure as exc:
+            haystack = f"{exc.filename} {exc.details}".lower()
+            if exc.code != 9:
+                print(
+                    f"FAIL g9-self-test {case}: expected exit 9 but group 9 "
+                    f"raised exit {exc.code}: {exc.details}"
+                )
+                return False
+            if needle.lower() not in haystack:
+                print(
+                    f"FAIL g9-self-test {case}: failure does not name "
+                    f"{needle!r}: {exc.filename} {exc.details}"
+                )
+                return False
+            print(f"PASS g9 negative {case}: {exc.filename} {exc.details}")
+            return True
+        except Exception as exc:  # a crash is not a check failure
+            print(f"FAIL g9-self-test {case}: unexpected "
+                  f"{type(exc).__name__}: {exc}")
+            return False
+        print(f"FAIL g9-self-test {case}: group 9 stayed green; the mutation "
+              "was not detected")
+        return False
+
+    def check_wind(path: Path):
+        _check_ocean_raster(WIND_PNG_LABEL, path, world, region_count,
+                            lambda index: f"wind region index {index}")
+
+    def check_currents(path: Path):
+        _check_ocean_raster(
+            CURRENTS_PNG_LABEL, path, world, CURRENT_INDEX_MAX,
+            lambda index: f"current index {index}",
+            lambda tile, index: f"current index {index}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+
+        # Baseline: the committed rasters are green (otherwise a negative
+        # could pass for the wrong reason).
+        try:
+            check_wind(WIND_PNG)
+            check_currents(CURRENTS_PNG)
+            print("PASS g9 baseline: the committed ocean rasters validate "
+                  "green")
+            results.append(True)
+        except CheckFailure as exc:
+            print(f"FAIL g9-self-test baseline: real data is already red: "
+                  f"{exc.details}")
+            results.append(False)
+
+        # (1) a wind pixel moved onto land: coverage failure naming the tile
+        # and the region. Central Asia is '#' far from every coastline and
+        # below the permanent ice band.
+        _w, _h, indices = decode_indexed_png(wind_bytes)
+        land_tile = None
+        for y in range(300, 900):
+            for x in range(1800, 2400):
+                if not world.passable[y * MAP_WIDTH + x]:
+                    land_tile = (x, y)
+                    break
+            if land_tile:
+                break
+        assert land_tile is not None
+        mutated = bytearray(indices)
+        mutated[land_tile[1] * MAP_WIDTH + land_tile[0]] = 1
+        wind_on_land = _encode_indexed_png(MAP_WIDTH, MAP_HEIGHT, mutated,
+                                           region_count + 1)
+        path = tmpdir / "wind_on_land.png"
+        path.write_bytes(wind_on_land)
+        results.append(expect_failure(
+            "wind-pixel-on-land", f"({land_tile[0]}, {land_tile[1]})",
+            lambda: check_wind(path)))
+
+        # (2) an out-of-range wind index (region_count + 1) on open water.
+        water_tile = None
+        for y in range(900, 1200):
+            for x in range(3600, 4200):
+                if world.passable[y * MAP_WIDTH + x]:
+                    water_tile = (x, y)
+                    break
+            if water_tile:
+                break
+        assert water_tile is not None
+        mutated = bytearray(indices)
+        mutated[water_tile[1] * MAP_WIDTH + water_tile[0]] = region_count + 1
+        wind_out_of_range = _encode_indexed_png(MAP_WIDTH, MAP_HEIGHT,
+                                                mutated, region_count + 2)
+        path = tmpdir / "wind_out_of_range.png"
+        path.write_bytes(wind_out_of_range)
+        results.append(expect_failure(
+            "wind-index-out-of-range", "palette bound",
+            lambda: check_wind(path)))
+
+        # (2b) the same for currents: index 25 above the 24 encoding.
+        _cw, _ch, cindices = decode_indexed_png(currents_bytes)
+        mutated = bytearray(cindices)
+        mutated[water_tile[1] * MAP_WIDTH + water_tile[0]] = 25
+        currents_out_of_range = _encode_indexed_png(
+            MAP_WIDTH, MAP_HEIGHT, mutated, 26)
+        path = tmpdir / "currents_out_of_range.png"
+        path.write_bytes(currents_out_of_range)
+        results.append(expect_failure(
+            "current-index-out-of-range", "palette bound",
+            lambda: check_currents(path)))
+
+        # (3) a corrupted size: the IDAT no longer matches 4320x2160.
+        corrupted = _encode_indexed_png(MAP_WIDTH - 1, MAP_HEIGHT,
+                                        indices[:MAP_WIDTH * MAP_HEIGHT],
+                                        region_count + 1)
+        path = tmpdir / "wind_wrong_size.png"
+        path.write_bytes(corrupted)
+        results.append(expect_failure(
+            "corrupted-size", "exactly 4320x2160",
+            lambda: check_wind(path)))
+
+        # (3b) a non-indexed PNG (colour type flipped to 2 = truecolour, IHDR
+        # CRC recomputed so the decoder reaches the colour-type check).
+        def chunk_bytes(tag: bytes, payload: bytes) -> bytes:
+            return (struct.pack(">I", len(payload)) + tag + payload
+                    + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF))
+
+        ihdr_payload = wind_bytes[16:29]
+        broken = (wind_bytes[:8]
+                  + chunk_bytes(b"IHDR",
+                                ihdr_payload[:9] + b"\x02"
+                                + ihdr_payload[10:])
+                  + wind_bytes[33:])
+        path = tmpdir / "wind_not_indexed.png"
+        path.write_bytes(bytes(broken))
+        results.append(expect_failure(
+            "non-indexed-png", "indexed", lambda: check_wind(path)))
+
+    # (4) a committed raster that differs from the rebuild by one byte: the
+    # determinism check must exit 9 (via build_ocean --check exit 3). The
+    # committed file is restored in a finally block and verified.
+    flipped = bytearray(currents_bytes)
+    mid = len(flipped) // 2
+    flipped[mid] ^= 0xFF
+    restored_ok = False
+    try:
+        CURRENTS_PNG.write_bytes(bytes(flipped))
+        try:
+            _check_ocean_determinism(False)
+            print("FAIL g9-self-test one-byte-drift: the determinism check "
+                  "stayed green over a one-byte mutation")
+            results.append(False)
+        except CheckFailure as exc:
+            if exc.code != 9 or "rebuild drift" not in exc.details:
+                print(f"FAIL g9-self-test one-byte-drift: unexpected failure "
+                      f"(exit {exc.code}): {exc.details}")
+                results.append(False)
+            else:
+                print(f"PASS g9 negative one-byte-drift: {exc.filename} "
+                      f"{exc.details}")
+                results.append(True)
+    finally:
+        CURRENTS_PNG.write_bytes(currents_bytes)
+        restored_ok = CURRENTS_PNG.read_bytes() == currents_bytes
+    if not restored_ok:
+        print("FAIL g9-self-test one-byte-drift: the committed raster was "
+              "not restored byte-exactly")
+        results.append(False)
+
+    if all(results):
+        print(f"OK g9 self-test: all {len(results)} cases behaved as required")
+        return 0
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# Check group 10 — Ice & lane variants (docs/10-DATA-SCHEMA.md section 8.5)
+# ---------------------------------------------------------------------------
+
+ICE_MONTH_MIN = 1
+ICE_MONTH_MAX = 12
+
+
+def _check_ice_structure(ice_doc: object) -> list[dict]:
+    """§8.5 item 1: ice_regions.json structure; returns the parsed regions."""
+    label = ICE_JSON_LABEL
+    regions = ice_doc.get("ice_regions") if isinstance(ice_doc, dict) else None
+    if not isinstance(regions, list) or not regions:
+        fail("ice", label, "missing non-empty 'ice_regions' array (section 4.18)",
+             10)
+    ids = []
+    parsed = []
+    for index, region in enumerate(regions):
+        where = f"ice_regions[{index}]"
+        if not isinstance(region, dict):
+            fail("ice", label, f"{where} is not an object", 10)
+        region_id = region.get("id")
+        if not isinstance(region_id, str) or not region_id:
+            fail("ice", label, f"{where}: missing string 'id'", 10)
+        ids.append(region_id)
+        _check_complete_l10n(region.get("name"),
+                             f"{where} ({region_id})", label)
+        polygon = region.get("polygon")
+        if not isinstance(polygon, list) or len(polygon) < 3:
+            fail(
+                "ice",
+                label,
+                f"{where} ({region_id}): polygon needs >= 3 [lat, lon] "
+                "vertices (section 4.18)",
+                10,
+            )
+        if polygon[0] != polygon[-1]:
+            fail(
+                "ice",
+                label,
+                f"{where} ({region_id}): polygon is not a closed ring — the "
+                "first pair must repeat as the last (section 4.18)",
+                10,
+            )
+        ring = []
+        for v_index, pair in enumerate(polygon):
+            if (not isinstance(pair, list) or len(pair) != 2
+                    or not all(isinstance(v, (int, float))
+                               and not isinstance(v, bool) for v in pair)):
+                fail(
+                    "ice",
+                    label,
+                    f"{where} ({region_id}) vertex {v_index} must be "
+                    "[lat, lon]",
+                    10,
+                )
+            lat, lon = float(pair[0]), float(pair[1])
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                fail(
+                    "ice",
+                    label,
+                    f"{where} ({region_id}) vertex {v_index} out of range: "
+                    f"{pair} (section 3.1)",
+                    10,
+                )
+            ring.append((lon, lat))
+        months = region.get("months")
+        if (not isinstance(months, list) or not months
+                or not all(isinstance(m, int) and not isinstance(m, bool)
+                           and ICE_MONTH_MIN <= m <= ICE_MONTH_MAX
+                           for m in months)):
+            fail(
+                "ice",
+                label,
+                f"{where} ({region_id}): months must be a non-empty list of "
+                f"ints {ICE_MONTH_MIN}-{ICE_MONTH_MAX} (section 4.18)",
+                10,
+            )
+        if len(set(months)) != len(months):
+            fail(
+                "ice",
+                label,
+                f"{where} ({region_id}): months repeats a month",
+                10,
+            )
+        parsed.append({"id": region_id, "months": list(months),
+                       "ring": ring})
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        fail("ice", label, f"repeated ice region id(s): {', '.join(dupes)}",
+             10)
+    return parsed
+
+
+def _ice_masks_for(grid, parsed_regions: list[dict]) -> dict[int, frozenset]:
+    """Month -> impassable water tiles, from the parsed ice regions.
+
+    Same membership primitive as the builder (``build_world.fill_ring`` at
+    tile centres via ``build_routes._ring_water_tiles``), so builder and
+    validator can never disagree about which water is frozen.
+    """
+    masks: dict[int, set] = {month: set() for month in range(1, 13)}
+    for region in parsed_regions:
+        tiles = route_builder._ring_water_tiles(grid, region["ring"])
+        for month in region["months"]:
+            masks[month] |= tiles
+    return {month: frozenset(tiles) for month, tiles in masks.items()}
+
+
+def _check_lane_variant_structure(lanes: list) -> dict[str, list[dict]]:
+    """§8.5 item 2: variant ids/months/waypoints; returns the parsed variants.
+
+    Pairwise-disjoint `months` + base coverage of the complement means a
+    lane's months are total across base + variants by construction.
+    """
+    label = "trade_routes.json"
+    parsed: dict[str, list[dict]] = {}
+    for lane in lanes:
+        lane_id = lane["id"]
+        raw = lane.get("variants") or []
+        if not raw:
+            continue
+        if not isinstance(raw, list):
+            fail("ice-variants", label,
+                 f"lane '{lane_id}': variants must be an array", 10)
+        seen_ids: set[str] = set()
+        seen_months: set[int] = set()
+        out: list[dict] = []
+        for v_index, variant in enumerate(raw):
+            where = f"lanes[{lane_id}] variants[{v_index}]"
+            if not isinstance(variant, dict):
+                fail("ice-variants", label, f"{where} is not an object", 10)
+            variant_id = variant.get("id")
+            if not isinstance(variant_id, str) or not variant_id:
+                fail("ice-variants", label, f"{where}: missing string 'id'",
+                     10)
+            if variant_id in seen_ids:
+                fail(
+                    "ice-variants",
+                    label,
+                    f"lane '{lane_id}': repeated variant id '{variant_id}' "
+                    "(section 8.5 item 2)",
+                    10,
+                )
+            seen_ids.add(variant_id)
+            months = variant.get("months")
+            if (not isinstance(months, list) or not months
+                    or not all(isinstance(m, int) and not isinstance(m, bool)
+                               and ICE_MONTH_MIN <= m <= ICE_MONTH_MAX
+                               for m in months)):
+                fail(
+                    "ice-variants",
+                    label,
+                    f"{where} ('{variant_id}'): months must be a non-empty "
+                    f"list of ints {ICE_MONTH_MIN}-{ICE_MONTH_MAX} "
+                    "(section 8.5 item 2)",
+                    10,
+                )
+            if len(set(months)) != len(months):
+                fail(
+                    "ice-variants",
+                    label,
+                    f"{where} ('{variant_id}'): months repeats a month",
+                    10,
+                )
+            overlap = seen_months & set(months)
+            if overlap:
+                fail(
+                    "ice-variants",
+                    label,
+                    f"lane '{lane_id}': variants '{variant_id}' and an "
+                    f"earlier variant share month(s) {sorted(overlap)} — "
+                    "variant months are pairwise disjoint (section 8.5 "
+                    "item 2)",
+                    10,
+                )
+            seen_months |= set(months)
+            waypoints = variant.get("waypoints")
+            if not isinstance(waypoints, list) or len(waypoints) < 2:
+                fail(
+                    "ice-variants",
+                    label,
+                    f"{where} ('{variant_id}'): needs >= 2 [lat, lon] "
+                    "waypoints (section 8.5 item 2)",
+                    10,
+                )
+            for w_index, point in enumerate(waypoints):
+                if (not isinstance(point, list) or len(point) != 2
+                        or not all(isinstance(v, (int, float))
+                                   and not isinstance(v, bool)
+                                   for v in point)):
+                    fail(
+                        "ice-variants",
+                        label,
+                        f"{where} ('{variant_id}') waypoint {w_index} must "
+                        "be [lat, lon]",
+                        10,
+                    )
+                lat, lon = float(point[0]), float(point[1])
+                if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                    fail(
+                        "ice-variants",
+                        label,
+                        f"{where} ('{variant_id}') waypoint {w_index} out of "
+                        f"range: {point}",
+                        10,
+                    )
+            out.append({"id": variant_id, "months": list(months),
+                        "waypoints": waypoints})
+        parsed[lane_id] = out
+    return parsed
+
+
+def _check_month_windows(grid, lanes: list, variants: dict[str, list[dict]],
+                         masks: dict[int, frozenset]) -> None:
+    """§8.5 items 3-4: per lane and month, the active path must avoid the
+    month's ice. An ice-crossing lane without a covering variant set fails
+    here, naming the lane (and variant) and month."""
+    label = "trade_routes.json"
+
+    def chain_of(waypoints, lane_id, what):
+        snapped = []
+        for index, point in enumerate(waypoints):
+            hit = route_builder.snap_waypoint(grid, float(point[0]),
+                                              float(point[1]))
+            if hit is None:
+                fail(
+                    "ice-variants",
+                    label,
+                    f"lane '{lane_id}' {what} waypoint {index} has no water "
+                    "tile within the snap radius (section 8.5 item 3)",
+                    10,
+                )
+            snapped.append((hit[0], hit[1]))
+        tiles: set[tuple[int, int]] = set()
+        for i in range(len(snapped) - 1):
+            chain, _bad = route_builder.walk_segment(grid, snapped[i],
+                                                     snapped[i + 1])
+            if chain is None:
+                fail(
+                    "ice-variants",
+                    label,
+                    f"lane '{lane_id}' {what} segment {i} walks onto an "
+                    "impassable tile (section 8.5 item 3)",
+                    10,
+                )
+            tiles.update(chain)
+        return tiles
+
+    for lane in lanes:
+        lane_id = lane["id"]
+        lane_variants = variants.get(lane_id, [])
+        covered = sorted({m for variant in lane_variants
+                          for m in variant["months"]})
+        base_tiles = None
+        for month in range(1, 13):
+            if month in covered:
+                continue
+            if base_tiles is None:
+                base_tiles = chain_of(lane["waypoints"], lane_id, "base")
+            bad = base_tiles & masks[month]
+            if bad:
+                tile = min(bad)
+                fail(
+                    "ice-variants",
+                    label,
+                    f"lane '{lane_id}' month {month}: the base path crosses "
+                    f"in-force seasonal ice at tile {tile} — an "
+                    "ice-crossing lane must carry a covering variant set or "
+                    "avoid ice year-round (section 8.5 item 4)",
+                    10,
+                )
+        for variant in lane_variants:
+            variant_tiles = chain_of(variant["waypoints"], lane_id,
+                                     f"variant '{variant['id']}'")
+            for month in sorted(variant["months"]):
+                bad = variant_tiles & masks[month]
+                if bad:
+                    tile = min(bad)
+                    fail(
+                        "ice-variants",
+                        label,
+                        f"lane '{lane_id}' variant '{variant['id']}' month "
+                        f"{month}: the variant path crosses in-force "
+                        f"seasonal ice at tile {tile} (section 8.5 item 3)",
+                        10,
+                    )
+
+
+def check_group10(docs: dict[str, object], verbose: bool) -> None:
+    """Ice & lane variants: docs/10-DATA-SCHEMA.md section 8.5."""
+    ice_doc = docs.get("ice_regions.json")
+    if not isinstance(ice_doc, dict):
+        fail("ice", ICE_JSON_LABEL,
+             "missing (the §4.18 seasonal-ice data is required)", 10)
+    parsed_regions = _check_ice_structure(ice_doc)
+
+    lanes_doc = docs.get("trade_routes.json")
+    lanes = lanes_doc.get("lanes", []) if isinstance(lanes_doc, dict) else []
+    variants = _check_lane_variant_structure(lanes)
+
+    grid = route_builder.load_world_grid()
+    masks = _ice_masks_for(grid, parsed_regions)
+    _check_month_windows(grid, lanes, variants, masks)
+
+    if verbose:
+        frozen_months = sum(
+            1 for month in range(1, 13) if masks[month])
+        total_variants = sum(len(v) for v in variants.values())
+        print(
+            f"PASS group 10 ice & lane variants ({len(parsed_regions)} ice "
+            f"regions freezing {frozen_months} months, {total_variants} "
+            f"lane variant(s) over {len(lanes)} lanes, month-window "
+            "passability 17 lanes x 12 months ok)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Group 10 mutation harness (`--self-test-g10`)
+# ---------------------------------------------------------------------------
+
+
+def run_group10_self_test() -> int:
+    """Negative harness for group 10: every case must fail with exit 10."""
+    results: list[bool] = []
+    try:
+        ice_doc = json.loads(
+            (DATA_DIR / "ice_regions.json").read_text(encoding="utf-8"))
+        lanes = json.loads(
+            (DATA_DIR / "trade_routes.json").read_text(encoding="utf-8")
+        )["lanes"]
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        print(f"FAIL g10-self-test setup: cannot read data: {exc}")
+        return 1
+
+    def expect_failure(case: str, needle: str, action) -> bool:
+        try:
+            action()
+        except CheckFailure as exc:
+            haystack = f"{exc.filename} {exc.details}".lower()
+            if exc.code != 10:
+                print(
+                    f"FAIL g10-self-test {case}: expected exit 10 but group "
+                    f"10 raised exit {exc.code}: {exc.details}"
+                )
+                return False
+            if needle.lower() not in haystack:
+                print(
+                    f"FAIL g10-self-test {case}: failure does not name "
+                    f"{needle!r}: {exc.filename} {exc.details}"
+                )
+                return False
+            print(f"PASS g10 negative {case}: {exc.filename} {exc.details}")
+            return True
+        except Exception as exc:  # a crash is not a check failure
+            print(f"FAIL g10-self-test {case}: unexpected "
+                  f"{type(exc).__name__}: {exc}")
+            return False
+        print(f"FAIL g10-self-test {case}: group 10 stayed green; the "
+              "mutation was not detected")
+        return False
+
+    # Baseline: the shipped ice + lanes validate green.
+    try:
+        grid = route_builder.load_world_grid()
+        parsed = _check_ice_structure(ice_doc)
+        variants = _check_lane_variant_structure(lanes)
+        masks = _ice_masks_for(grid, parsed)
+        _check_month_windows(grid, lanes, variants, masks)
+        print("PASS g10 baseline: the shipped ice regions and lane variants "
+              "validate green")
+        results.append(True)
+    except CheckFailure as exc:
+        print(f"FAIL g10-self-test baseline: real data is already red: "
+              f"{exc.details}")
+        results.append(False)
+
+    # (1) a variant walking into in-month ice: point the hanseatic winter
+    # variant at the BASE waypoints (which enter the frozen Baltic in its
+    # months 12-3).
+    mutated = copy.deepcopy(lanes)
+    for lane in mutated:
+        if lane["id"] == "hanseatic_north":
+            lane["variants"][0]["waypoints"] = copy.deepcopy(lane["waypoints"])
+    results.append(expect_failure(
+        "variant-into-in-month-ice", "hanseatic_north",
+        lambda: _check_month_windows(
+            grid, mutated, _check_lane_variant_structure(mutated), masks)))
+
+    # (2) a lane with a month gap: drop month 3 from the winter variant's
+    # window — month 3 then runs the BASE path through the frozen Baltic.
+    mutated = copy.deepcopy(lanes)
+    for lane in mutated:
+        if lane["id"] == "hanseatic_north":
+            lane["variants"][0]["months"] = [12, 1, 2]
+    results.append(expect_failure(
+        "month-gap-runs-icy-base", "hanseatic_north",
+        lambda: _check_month_windows(
+            grid, mutated, _check_lane_variant_structure(mutated), masks)))
+
+    # (3) an ice polygon vertex out of bounds.
+    mutated_ice = copy.deepcopy(ice_doc)
+    mutated_ice["ice_regions"][0]["polygon"][1] = [95.0, 14.0]
+    results.append(expect_failure(
+        "ice-vertex-out-of-range", "out of range",
+        lambda: _check_ice_structure(mutated_ice)))
+
+    # (4) an open (not closed) ice polygon.
+    mutated_ice = copy.deepcopy(ice_doc)
+    ring = mutated_ice["ice_regions"][0]["polygon"]
+    mutated_ice["ice_regions"][0]["polygon"] = ring[:-1]
+    results.append(expect_failure(
+        "ice-polygon-not-closed", "closed ring",
+        lambda: _check_ice_structure(mutated_ice)))
+
+    # (5) two variants of one lane with overlapping months.
+    mutated = copy.deepcopy(lanes)
+    for lane in mutated:
+        if lane["id"] == "hanseatic_north":
+            lane["variants"].append({
+                "id": "overlap_probe",
+                "months": [1],
+                "waypoints": copy.deepcopy(lane["waypoints"]),
+            })
+    results.append(expect_failure(
+        "variant-months-overlap", "pairwise disjoint",
+        lambda: _check_lane_variant_structure(mutated)))
+
+    if all(results):
+        print(f"OK g10 self-test: all {len(results)} cases behaved as required")
+        return 0
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -4214,14 +5465,22 @@ def check_group8(docs: dict[str, object], verbose: bool) -> None:
 def main(argv: list[str]) -> int:
     verbose = "--verbose" in argv
     self_test = "--self-test-g6" in argv or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
-    known = {"--verbose", "--self-test-g6"}
+    self_test_g9 = "--self-test-g9" in argv
+    self_test_g10 = "--self-test-g10" in argv
+    known = {"--verbose", "--self-test-g6", "--self-test-g9",
+             "--self-test-g10"}
     unknown = [arg for arg in argv[1:] if arg not in known]
     if unknown:
-        print("usage: python3 tools/validate_data.py [--verbose] [--self-test-g6]")
+        print("usage: python3 tools/validate_data.py [--verbose] "
+              "[--self-test-g6] [--self-test-g9] [--self-test-g10]")
         return 1
 
     if self_test:
         return run_group6_self_test()
+    if self_test_g9:
+        return run_group9_self_test()
+    if self_test_g10:
+        return run_group10_self_test()
 
     docs: dict[str, object] = {}
     groups = (
@@ -4233,6 +5492,8 @@ def main(argv: list[str]) -> int:
         ("6", check_group6),
         ("7", check_group7),
         ("8", check_group8),
+        ("9", check_group9),
+        ("10", check_group10),
     )
 
     for group_id, check in groups:
