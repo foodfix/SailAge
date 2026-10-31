@@ -2633,18 +2633,18 @@
     {
       "id": "botany_bay",
       "name": {
-        "zh": "植物学湾",
-        "en": "Botany Bay"
+        "zh": "鲨鱼湾",
+        "en": "Shark Bay"
       },
-      "nation_id": "england",
-      "lat": -33.98,
-      "lon": 151.18,
+      "nation_id": "holland",
+      "lat": -25.5,
+      "lon": 113.5,
       "produces": [
-        "timber",
+        "salt",
         "dried_fish"
       ],
       "demands": [
-        "wine",
+        "timber",
         "iron"
       ],
       "facilities": {
@@ -2655,8 +2655,8 @@
         "guild": 3
       },
       "flavor": {
-        "zh": "世界尽头空旷宽广的海湾。",
-        "en": "A wide empty bay at the world's far edge."
+        "zh": "鲨鱼湾红崖下的锚地，1616年荷兰东印度船在此登岸取水补盐。",
+        "en": "Anchorage under Shark Bay's red cliffs, where a Dutch East-Indiaman landed in 1616 to water and salt."
       }
     },
     {
@@ -2918,6 +2918,1225 @@
       "flavor": {
         "zh": "橄榄覆盖的岛屿,横跨亚得里亚海口。",
         "en": "An olive-covered island astride the Adriatic's mouth."
+      }
+    },
+    {
+      "id": "quanzhou",
+      "name": {
+        "zh": "泉州",
+        "en": "Quanzhou (Zayton)"
+      },
+      "nation_id": "",
+      "lat": 24.85,
+      "lon": 118.72,
+      "produces": [
+        "silk",
+        "ceramics"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "刺桐古港，宋元海船首航之地。",
+        "en": "The old Zayton, first landfall of Song and Yuan sea traders."
+      }
+    },
+    {
+      "id": "ningbo",
+      "name": {
+        "zh": "宁波",
+        "en": "Ningbo"
+      },
+      "nation_id": "",
+      "lat": 29.95,
+      "lon": 121.7,
+      "produces": [
+        "ceramics",
+        "silk"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "甬江口帆樯林立，明州窑货由此出海。",
+        "en": "Forest of masts at the Yong river mouth, where Mingzhou wares ship out."
+      }
+    },
+    {
+      "id": "yuegang",
+      "name": {
+        "zh": "月港",
+        "en": "Yuegang (Zhangzhou)"
+      },
+      "nation_id": "",
+      "lat": 24.42,
+      "lon": 117.98,
+      "produces": [
+        "silk",
+        "sugar"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "隆庆开海后，九龙江口一枝独秀的商港。",
+        "en": "After the 1567 opening of the seas, the one licensed wharf on the Jiulong estuary."
+      }
+    },
+    {
+      "id": "shuangyu",
+      "name": {
+        "zh": "双屿",
+        "en": "Shuangyu"
+      },
+      "nation_id": "",
+      "lat": 29.74,
+      "lon": 122.22,
+      "produces": [
+        "dried_fish",
+        "salt"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "走私商人云集的双屿港，官军焚毁后余烬犹温。",
+        "en": "Smugglers' haven of Shuangyu, its ashes barely cold since the imperial raid."
+      }
+    },
+    {
+      "id": "nanao",
+      "name": {
+        "zh": "南澳",
+        "en": "Nan'ao"
+      },
+      "nation_id": "",
+      "lat": 23.4,
+      "lon": 117.2,
+      "produces": [
+        "salt",
+        "dried_fish"
+      ],
+      "demands": [
+        "silk",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "闽粤交界的岛澳，商盗出没其间。",
+        "en": "An island anchorage between Fujian and Guangdong, haunt of merchants and pirates."
+      }
+    },
+    {
+      "id": "xiamen",
+      "name": {
+        "zh": "厦门",
+        "en": "Xiamen (Amoy)"
+      },
+      "nation_id": "",
+      "lat": 24.44,
+      "lon": 118.13,
+      "produces": [
+        "silk",
+        "sugar"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "鹭岛环列的港湾，月港的外口。",
+        "en": "The gull island's ringed harbor, outer gate of Yuegang."
+      }
+    },
+    {
+      "id": "fuzhou",
+      "name": {
+        "zh": "福州",
+        "en": "Fuzhou"
+      },
+      "nation_id": "",
+      "lat": 26.02,
+      "lon": 119.65,
+      "produces": [
+        "timber",
+        "silk"
+      ],
+      "demands": [
+        "spices",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "闽江口水程尽头，省城的港口。",
+        "en": "Head of the Min river's tidal water, the provincial capital's port."
+      }
+    },
+    {
+      "id": "wenzhou",
+      "name": {
+        "zh": "温州",
+        "en": "Wenzhou"
+      },
+      "nation_id": "",
+      "lat": 27.97,
+      "lon": 120.68,
+      "produces": [
+        "ceramics",
+        "dried_fish"
+      ],
+      "demands": [
+        "silk",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "瓯江口窑货与鱼盐并出。",
+        "en": "The Ou river mouth ships kiln wares alongside fish and salt."
+      }
+    },
+    {
+      "id": "zhelin",
+      "name": {
+        "zh": "柘林",
+        "en": "Zhelin (Chaozhou)"
+      },
+      "nation_id": "",
+      "lat": 23.62,
+      "lon": 117.13,
+      "produces": [
+        "sugar",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "潮州柘林澳，粤东商船必泊之地。",
+        "en": "Zhelin anchorage of Chaozhou prefecture, a required stop for eastern Guangdong shipping."
+      }
+    },
+    {
+      "id": "qiongzhou",
+      "name": {
+        "zh": "琼州",
+        "en": "Qiongzhou (Hainan)"
+      },
+      "nation_id": "",
+      "lat": 20.03,
+      "lon": 110.33,
+      "produces": [
+        "timber",
+        "leather"
+      ],
+      "demands": [
+        "salt",
+        "silk"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "琼州海峡南口的黎汉互市之港。",
+        "en": "On the south side of the Qiongzhou strait, market of Li and Han traders."
+      }
+    },
+    {
+      "id": "beihai",
+      "name": {
+        "zh": "北海",
+        "en": "Beihai (Hepu)"
+      },
+      "nation_id": "",
+      "lat": 21.48,
+      "lon": 109.12,
+      "produces": [
+        "salt",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "合浦珠场故地，北部湾畔的盐埠。",
+        "en": "Old pearl grounds of Hepu, a salt station on the Gulf of Tonkin."
+      }
+    },
+    {
+      "id": "dinghai",
+      "name": {
+        "zh": "定海",
+        "en": "Dinghai (Zhoushan)"
+      },
+      "nation_id": "",
+      "lat": 30.01,
+      "lon": 122.11,
+      "produces": [
+        "dried_fish",
+        "salt"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "舟山群岛的渔港，海禁下的暗市窗口。",
+        "en": "Fishing harbor of the Zhoushan isles, a window of the banned sea trade."
+      }
+    },
+    {
+      "id": "liujiagang",
+      "name": {
+        "zh": "刘家港",
+        "en": "Liujiagang (Taicang)"
+      },
+      "nation_id": "",
+      "lat": 31.5,
+      "lon": 121.55,
+      "produces": [
+        "cotton_cloth",
+        "dried_fish"
+      ],
+      "demands": [
+        "silk",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "郑和宝船昔日启航处，今为松江棉布出海之埠。",
+        "en": "Where Zheng He's treasure ships once sailed, now the outlet for Songjiang cotton cloth."
+      }
+    },
+    {
+      "id": "hirado",
+      "name": {
+        "zh": "平户",
+        "en": "Hirado"
+      },
+      "nation_id": "",
+      "lat": 33.25,
+      "lon": 129.56,
+      "produces": [
+        "copper",
+        "ceramics"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "松浦氏的港町，南蛮船与唐船并泊。",
+        "en": "Port town of the Matsura lords, nanban and Chinese ships moored side by side."
+      }
+    },
+    {
+      "id": "sakai",
+      "name": {
+        "zh": "堺",
+        "en": "Sakai"
+      },
+      "nation_id": "",
+      "lat": 34.51,
+      "lon": 135.42,
+      "produces": [
+        "cotton_cloth",
+        "leather"
+      ],
+      "demands": [
+        "silk",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "自治的濠环之城，缝刃与商货同富。",
+        "en": "The moat-ringed self-governing city, rich in blades and merchandise alike."
+      }
+    },
+    {
+      "id": "yamagawa",
+      "name": {
+        "zh": "山川",
+        "en": "Yamagawa (Satsuma)"
+      },
+      "nation_id": "",
+      "lat": 31.1,
+      "lon": 130.58,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "silk",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "萨摩外港，南蛮船最初驶入的湾口。",
+        "en": "Satsuma's outer harbor, the bay where the first nanban ships entered."
+      }
+    },
+    {
+      "id": "hakata",
+      "name": {
+        "zh": "博多",
+        "en": "Hakata"
+      },
+      "nation_id": "",
+      "lat": 33.59,
+      "lon": 130.39,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "遣明船故地，对唐对朝的门户。",
+        "en": "Old berth of the Ming-mission ships, gateway to China and Korea."
+      }
+    },
+    {
+      "id": "funai",
+      "name": {
+        "zh": "丰后府内",
+        "en": "Bungo-Funai (Ōita)"
+      },
+      "nation_id": "",
+      "lat": 33.24,
+      "lon": 131.61,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "大友宗麟的府内港，南蛮文化登岸之处。",
+        "en": "Funai of the Otomo lord, landing place of nanban learning."
+      }
+    },
+    {
+      "id": "urado",
+      "name": {
+        "zh": "浦户",
+        "en": "Urado (Tosa)"
+      },
+      "nation_id": "",
+      "lat": 33.5,
+      "lon": 133.55,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "silk",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "土佐浦戸湾，长宗我部的海门。",
+        "en": "Urado bay in Tosa, the sea gate of the Chosokabe."
+      }
+    },
+    {
+      "id": "anotsu",
+      "name": {
+        "zh": "安浓津",
+        "en": "Anotsu (Ise)"
+      },
+      "nation_id": "",
+      "lat": 34.6,
+      "lon": 136.7,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "silk",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "日本三津之一，伊势湾头的古港。",
+        "en": "One of Japan's three great harbors, old port at the head of Ise bay."
+      }
+    },
+    {
+      "id": "busan",
+      "name": {
+        "zh": "釜山",
+        "en": "Busan (Pusan)"
+      },
+      "nation_id": "",
+      "lat": 35.1,
+      "lon": 129.04,
+      "produces": [
+        "dried_fish",
+        "salt"
+      ],
+      "demands": [
+        "silk",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "朝鲜南海的要港，倭馆所在之地。",
+        "en": "Key harbor of Korea's southern sea, seat of the Japanese trading house."
+      }
+    },
+    {
+      "id": "yeompo",
+      "name": {
+        "zh": "盐浦",
+        "en": "Yeompo"
+      },
+      "nation_id": "",
+      "lat": 35.5,
+      "lon": 129.43,
+      "produces": [
+        "salt",
+        "dried_fish"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "silk"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "三浦倭馆之一，盐田与渔帆相接。",
+        "en": "One of the three open ports, salt pans joining the fishing sails."
+      }
+    },
+    {
+      "id": "hoi_an",
+      "name": {
+        "zh": "会安",
+        "en": "Hoi An (Faifo)"
+      },
+      "nation_id": "",
+      "lat": 15.9,
+      "lon": 108.34,
+      "produces": [
+        "silk",
+        "ceramics"
+      ],
+      "demands": [
+        "spices",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "阮主开埠的会安，唐船与和船并集。",
+        "en": "Faifo, opened by the Nguyen lords, where Chinese and Japanese ships gather."
+      }
+    },
+    {
+      "id": "banten",
+      "name": {
+        "zh": "万丹",
+        "en": "Banten"
+      },
+      "nation_id": "",
+      "lat": -5.85,
+      "lon": 105.95,
+      "produces": [
+        "spices",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "万丹胡椒码头，华商英商竞市之地。",
+        "en": "Pepper wharf of Banten, where Chinese and English merchants bid against each other."
+      }
+    },
+    {
+      "id": "jambi",
+      "name": {
+        "zh": "占碑",
+        "en": "Jambi"
+      },
+      "nation_id": "",
+      "lat": -1.12,
+      "lon": 103.8,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "詹卑河口的胡椒之国。",
+        "en": "Pepper country at the mouth of the Jambi river."
+      }
+    },
+    {
+      "id": "palembang",
+      "name": {
+        "zh": "巨港",
+        "en": "Palembang"
+      },
+      "nation_id": "",
+      "lat": -2.25,
+      "lon": 104.85,
+      "produces": [
+        "spices",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "salt"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "旧港宣慰司故地，室利佛逝的余晖。",
+        "en": "Old Palembang of the Ming commissioner, afterglow of Srivijaya."
+      }
+    },
+    {
+      "id": "gresik",
+      "name": {
+        "zh": "革儿昔",
+        "en": "Gresik (Surabaya)"
+      },
+      "nation_id": "",
+      "lat": -7.05,
+      "lon": 113.35,
+      "produces": [
+        "salt",
+        "timber"
+      ],
+      "demands": [
+        "spices",
+        "silk"
+      ],
+      "facilities": {
+        "market": 1,
+        "shipyard": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "阇婆商港，爪哇船匠聚居之地。",
+        "en": "Javanese entrepot where the shipwrights of Geresik dwell."
+      }
+    },
+    {
+      "id": "sulu",
+      "name": {
+        "zh": "苏禄",
+        "en": "Sulu (Jolo)"
+      },
+      "nation_id": "",
+      "lat": 5.98,
+      "lon": 120.98,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "ceramics",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "苏禄海的珍珠之国，朝贡船曾至明廷。",
+        "en": "Pearl kingdom of the Sulu sea, whose tribute ships once reached the Ming court."
+      }
+    },
+    {
+      "id": "kedah",
+      "name": {
+        "zh": "吉打",
+        "en": "Kedah"
+      },
+      "nation_id": "",
+      "lat": 6.1,
+      "lon": 100.32,
+      "produces": [
+        "salt",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "吉打港，马来半岛西岸的古老锚地。",
+        "en": "Kedah, the oldest anchorage on the Malay peninsula's western shore."
+      }
+    },
+    {
+      "id": "nagapattinam",
+      "name": {
+        "zh": "内加帕塔姆",
+        "en": "Nagapattinam"
+      },
+      "nation_id": "",
+      "lat": 10.76,
+      "lon": 79.85,
+      "produces": [
+        "cotton_cloth",
+        "salt"
+      ],
+      "demands": [
+        "spices",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "朱罗故都的科罗曼德尔商港。",
+        "en": "Coromandel port of the old Chola capital."
+      }
+    },
+    {
+      "id": "masulipatnam",
+      "name": {
+        "zh": "马苏利帕特南",
+        "en": "Masulipatnam"
+      },
+      "nation_id": "",
+      "lat": 16.1,
+      "lon": 81.12,
+      "produces": [
+        "cotton_cloth",
+        "leather"
+      ],
+      "demands": [
+        "spices",
+        "copper"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "戈尔康达的海门，花布与宝石并出。",
+        "en": "Sea gate of Golconda, shipping painted cloth and gems."
+      }
+    },
+    {
+      "id": "hughli",
+      "name": {
+        "zh": "胡格利",
+        "en": "Hughli (Bengal)"
+      },
+      "nation_id": "",
+      "lat": 21.65,
+      "lon": 88.05,
+      "produces": [
+        "silk",
+        "sugar"
+      ],
+      "demands": [
+        "spices",
+        "timber"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "胡格利河上的葡萄牙商站，孟加拉的绸门。",
+        "en": "The Portuguese settlement on the Hughli river, Bengal's gate of silk."
+      }
+    },
+    {
+      "id": "syriam",
+      "name": {
+        "zh": "沙廉",
+        "en": "Syriam (Pegu)"
+      },
+      "nation_id": "",
+      "lat": 16.6,
+      "lon": 96.28,
+      "produces": [
+        "timber",
+        "salt"
+      ],
+      "demands": [
+        "copper",
+        "cotton_cloth"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "勃固河口的柚木码头，德布里托的要塞。",
+        "en": "Teak wharf at the Pegu river mouth, fortress of de Brito."
+      }
+    },
+    {
+      "id": "dianga",
+      "name": {
+        "zh": "迪昂",
+        "en": "Dianga (Arakan)"
+      },
+      "nation_id": "",
+      "lat": 18.4,
+      "lon": 94.3,
+      "produces": [
+        "dried_fish",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "阿拉干海岸的葡人锚地。",
+        "en": "The Portuguese anchorage on the Arakan coast."
+      }
+    },
+    {
+      "id": "khambhat",
+      "name": {
+        "zh": "坎贝",
+        "en": "Cambay (Khambhat)"
+      },
+      "nation_id": "",
+      "lat": 21.7,
+      "lon": 72.55,
+      "produces": [
+        "cotton_cloth",
+        "leather"
+      ],
+      "demands": [
+        "spices",
+        "copper"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "坎贝湾头的古商港，玛瑙与花布之名。",
+        "en": "Old port at the head of the Cambay gulf, famed for agates and chintz."
+      }
+    },
+    {
+      "id": "diu",
+      "name": {
+        "zh": "第乌",
+        "en": "Diu"
+      },
+      "nation_id": "",
+      "lat": 20.69,
+      "lon": 70.97,
+      "produces": [
+        "salt",
+        "cotton_cloth"
+      ],
+      "demands": [
+        "timber",
+        "wine"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "第乌要塞，1538 年围城的战场。",
+        "en": "The fortress of Diu, battleground of the 1538 siege."
+      }
+    },
+    {
+      "id": "mocha",
+      "name": {
+        "zh": "摩卡",
+        "en": "Mocha"
+      },
+      "nation_id": "",
+      "lat": 13.3,
+      "lon": 43.22,
+      "produces": [
+        "leather",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "红海口的咖啡港，骆驼与帆影相接。",
+        "en": "Coffee port at the Red Sea's gate, camel trains meeting the sails."
+      }
+    },
+    {
+      "id": "qalhat",
+      "name": {
+        "zh": "哈尔哈特",
+        "en": "Qalhat"
+      },
+      "nation_id": "",
+      "lat": 22.68,
+      "lon": 59.8,
+      "produces": [
+        "dried_fish",
+        "leather"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "阿曼湾畔的古城，波斯航海图的常客。",
+        "en": "Old city on the Gulf of Oman, a fixture in the Persian rutters."
+      }
+    },
+    {
+      "id": "hormuz",
+      "name": {
+        "zh": "霍尔木兹",
+        "en": "Hormuz"
+      },
+      "nation_id": "",
+      "lat": 26.62,
+      "lon": 56.43,
+      "produces": [
+        "carpet",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "霍尔木兹岛的要塞，扼波斯湾的咽喉。",
+        "en": "Fortress on Hormuz island, hand on the throat of the Persian Gulf."
+      }
+    },
+    {
+      "id": "zanzibar",
+      "name": {
+        "zh": "桑给巴尔",
+        "en": "Zanzibar"
+      },
+      "nation_id": "",
+      "lat": -6.05,
+      "lon": 38.92,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "温古贾岛的香料锚地，红木输往波斯湾。",
+        "en": "Anchorage of Unguja, shipping mangrove poles to the Persian Gulf."
+      }
+    },
+    {
+      "id": "kilwa",
+      "name": {
+        "zh": "基尔瓦",
+        "en": "Kilwa"
+      },
+      "nation_id": "",
+      "lat": -8.96,
+      "lon": 39.5,
+      "produces": [
+        "salt",
+        "timber"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "glassware"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "基尔瓦古城，黄金之道的出口。",
+        "en": "Old Kilwa, outlet of the gold road from Sofala."
+      }
+    },
+    {
+      "id": "sofala",
+      "name": {
+        "zh": "索法拉",
+        "en": "Sofala"
+      },
+      "nation_id": "",
+      "lat": -19.6,
+      "lon": 35.25,
+      "produces": [
+        "amber",
+        "salt"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "ceramics"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "索法拉的黄金码头，葡人堡垒守着河口。",
+        "en": "Gold wharf of Sofala, the Portuguese fort watching the river mouth."
+      }
+    },
+    {
+      "id": "lamu",
+      "name": {
+        "zh": "拉穆",
+        "en": "Lamu"
+      },
+      "nation_id": "",
+      "lat": -2.3,
+      "lon": 40.6,
+      "produces": [
+        "timber",
+        "dried_fish"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "spices"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "斯瓦希里石城拉穆，独桅帆船的母港。",
+        "en": "The stone town of Lamu, home port of the dhows."
+      }
+    },
+    {
+      "id": "massawa",
+      "name": {
+        "zh": "马萨瓦",
+        "en": "Massawa"
+      },
+      "nation_id": "",
+      "lat": 15.6,
+      "lon": 39.45,
+      "produces": [
+        "salt",
+        "leather"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "iron"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "红海西岸的盐币之港，高原商路的入口。",
+        "en": "Red Sea port of the salt-bar currency, gate of the highland trade roads."
+      }
+    },
+    {
+      "id": "zeila",
+      "name": {
+        "zh": "泽拉",
+        "en": "Zeila"
+      },
+      "nation_id": "",
+      "lat": 11.35,
+      "lon": 43.47,
+      "produces": [
+        "salt",
+        "dried_fish"
+      ],
+      "demands": [
+        "cotton_cloth",
+        "wool"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1
+      },
+      "flavor": {
+        "zh": "非洲之角的古港，埃塞俄比亚商路的海口。",
+        "en": "Ancient port of the Horn, sea outlet of the Ethiopian trade roads."
       }
     }
   ]

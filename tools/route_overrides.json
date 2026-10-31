@@ -30,6 +30,24 @@
     },
     {
       "kind": "spoke",
+      "port": "anotsu",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 37
+      },
+      "note": "Ise bay trade meets the galleon's southern Japan approach"
+    },
+    {
+      "kind": "spoke",
+      "port": "banten",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 6
+      },
+      "note": "Pepper port north through the western Java sea to the South China Sea lane"
+    },
+    {
+      "kind": "spoke",
       "port": "barcelona",
       "connect": {
         "lane": "venice_flanders",
@@ -45,6 +63,15 @@
         "waypoint_index": 39
       },
       "note": "VOC hub joins the strait trade through the Java Sea"
+    },
+    {
+      "kind": "spoke",
+      "port": "beihai",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 18
+      },
+      "note": "Gulf of Tonkin trade threads the Leizhou channel to the lane east of Hainan"
     },
     {
       "kind": "spoke",
@@ -77,10 +104,10 @@
       "kind": "spoke",
       "port": "botany_bay",
       "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 17
+        "lane": "carreira_da_india",
+        "waypoint_index": 24
       },
-      "note": "Remote Pacific colony: nearest junction is the galleon's Philippine-sea leg, reached north along the Queensland coast"
+      "note": "Shark Bay re-place (1616 Hartog landfall): southern-route landfall on the Carreira's Roaring-Forties leg, run east-to-west along lat -38/-40 past Cape Leeuwin"
     },
     {
       "kind": "spoke",
@@ -99,6 +126,15 @@
         "waypoint_index": 19
       },
       "note": "Rio de la Plata silver and hides join the Brazil-bulge track"
+    },
+    {
+      "kind": "spoke",
+      "port": "busan",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Korea's open port joins the lane at Hirado across the Tsushima strait (East-facing sea road)"
     },
     {
       "kind": "spoke",
@@ -174,12 +210,39 @@
     },
     {
       "kind": "spoke",
+      "port": "dianga",
+      "connect": {
+        "lane": "coromandel_bengal",
+        "waypoint_index": 36
+      },
+      "note": "Arakan coast trade to the run's Hughli terminus"
+    },
+    {
+      "kind": "spoke",
       "port": "elmina",
       "connect": {
         "lane": "carreira_da_india",
         "waypoint_index": 8
       },
       "note": "Gold Coast castle trade on the Carreira's Cape Verde leg"
+    },
+    {
+      "kind": "spoke",
+      "port": "funai",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Bungo-Funai joins the lane at Hirado, coasting the Bungo channel and west Kyushu"
+    },
+    {
+      "kind": "spoke",
+      "port": "gresik",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 6
+      },
+      "note": "Java's northeastern port north through the Madura sea to the lane"
     },
     {
       "kind": "spoke",
@@ -192,6 +255,15 @@
     },
     {
       "kind": "spoke",
+      "port": "hakata",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Hakata joins the lane at Hirado, the historic Japan terminus of the China run"
+    },
+    {
+      "kind": "spoke",
       "port": "jamestown",
       "connect": {
         "lane": "west_indies_flota",
@@ -201,12 +273,39 @@
     },
     {
       "kind": "spoke",
+      "port": "khambhat",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 14
+      },
+      "note": "Cambay gulf trade down to the Gujarat run; the gulf-head shoals block a straight walk"
+    },
+    {
+      "kind": "spoke",
+      "port": "lamu",
+      "connect": {
+        "lane": "swahili_coast",
+        "waypoint_index": 11
+      },
+      "note": "Lamu archipelago joins the run north of Mombasa; straight walk clips the coast"
+    },
+    {
+      "kind": "spoke",
       "port": "lima",
       "connect": {
         "lane": "manila_galleon",
         "waypoint_index": 0
       },
       "note": "Callao-Acapulco coastal run feeding the galleon"
+    },
+    {
+      "kind": "spoke",
+      "port": "liujiagang",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 47
+      },
+      "note": "Yangtze-mouth cotton port joins the lane's offshore Zhejiang leg"
     },
     {
       "kind": "spoke",
@@ -246,6 +345,15 @@
     },
     {
       "kind": "spoke",
+      "port": "mocha",
+      "connect": {
+        "lane": "red_sea_india",
+        "waypoint_index": 7
+      },
+      "note": "Mocha roads into the Red Sea run south of the Bab-el-Mandeb approach"
+    },
+    {
+      "kind": "spoke",
       "port": "nagasaki",
       "connect": {
         "lane": "manila_galleon",
@@ -279,6 +387,15 @@
         "waypoint_index": 37
       },
       "note": "Osaka on the galleon's southern Japan approach"
+    },
+    {
+      "kind": "spoke",
+      "port": "palembang",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 6
+      },
+      "note": "Musi pepper up the Bangka strait to the South China Sea lane"
     },
     {
       "kind": "spoke",
@@ -318,6 +435,15 @@
     },
     {
       "kind": "spoke",
+      "port": "qiongzhou",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 18
+      },
+      "note": "Hainan trade crosses the Qiongzhou strait to the lane's seaward leg"
+    },
+    {
+      "kind": "spoke",
       "port": "quebec",
       "connect": {
         "lane": "west_indies_flota",
@@ -345,6 +471,15 @@
     },
     {
       "kind": "spoke",
+      "port": "sakai",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Sakai joins the lane at Hirado, rounding Kii and Shikoku on the Pacific side"
+    },
+    {
+      "kind": "spoke",
       "port": "siam",
       "connect": {
         "lane": "aden_gujarat_malacca",
@@ -363,6 +498,15 @@
     },
     {
       "kind": "spoke",
+      "port": "sofala",
+      "connect": {
+        "lane": "carreira_da_india",
+        "waypoint_index": 32
+      },
+      "note": "Gold-route mouth south down the Mozambique channel to the Carreira's channel leg"
+    },
+    {
+      "kind": "spoke",
       "port": "stockholm",
       "connect": {
         "lane": "hanseatic_north",
@@ -372,12 +516,30 @@
     },
     {
       "kind": "spoke",
+      "port": "sulu",
+      "connect": {
+        "lane": "manila_galleon",
+        "waypoint_index": 21
+      },
+      "note": "Sulu sea trade north to the galleon's Philippine leg (pearl and wax for silk)"
+    },
+    {
+      "kind": "spoke",
       "port": "suriname",
       "connect": {
         "lane": "west_indies_flota",
         "waypoint_index": 10
       },
       "note": "Dutch Guiana plantations on the flota track"
+    },
+    {
+      "kind": "spoke",
+      "port": "syriam",
+      "connect": {
+        "lane": "coromandel_bengal",
+        "waypoint_index": 36
+      },
+      "note": "Pegu teak trade across the bay to the run's Hughli terminus"
     },
     {
       "kind": "spoke",
@@ -408,6 +570,15 @@
     },
     {
       "kind": "spoke",
+      "port": "urado",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Tosa's Urado joins the lane at Hirado, coasting Shikoku south and west"
+    },
+    {
+      "kind": "spoke",
       "port": "valparaiso",
       "connect": {
         "lane": "manila_galleon",
@@ -417,12 +588,66 @@
     },
     {
       "kind": "spoke",
+      "port": "xiamen",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 33
+      },
+      "note": "Xiamen roads join the lane's Fujian coast leg outside the island strait"
+    },
+    {
+      "kind": "spoke",
+      "port": "yamagawa",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Satsuma's outer harbor joins the lane at its Hirado terminus, coasting west Kyushu"
+    },
+    {
+      "kind": "spoke",
+      "port": "yeompo",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 52
+      },
+      "note": "Yeompo joins the lane at Hirado along the Korea strait coasting route"
+    },
+    {
+      "kind": "spoke",
+      "port": "yuegang",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 33
+      },
+      "note": "Jiulong-estuary berth steps out past the Xiamen headland to the lane's Fujian leg"
+    },
+    {
+      "kind": "spoke",
       "port": "zeelandia",
       "connect": {
         "lane": "manila_galleon",
         "waypoint_index": 34
       },
       "note": "Dutch Taiwan on the Manila trade via the Luzon strait"
+    },
+    {
+      "kind": "spoke",
+      "port": "zeila",
+      "connect": {
+        "lane": "red_sea_india",
+        "waypoint_index": 7
+      },
+      "note": "Ethiopian trade outlet joins the Red Sea run off the Gulf of Aden"
+    },
+    {
+      "kind": "spoke",
+      "port": "zhelin",
+      "connect": {
+        "lane": "canton_country_trade",
+        "waypoint_index": 31
+      },
+      "note": "Zhelin bay joins the lane's Guangdong headland leg; straight walk clips the point"
     }
   ]
 }

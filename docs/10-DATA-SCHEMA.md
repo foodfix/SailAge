@@ -1191,7 +1191,7 @@ the sovereign block:
 | brunei | 文莱 | Brunei | spain | 5.00 | 115.05 | timber, spices | glassware, wool |
 | ternate | 特尔纳特 | Ternate | holland | 0.79 | 127.38 | spices, salt | wine, iron |
 | timor | 帝汶 | Timor | portugal | -10.17 | 123.60 | spices, timber | glassware, iron |
-| botany_bay | 植物学湾 | Botany Bay | england | -33.98 | 151.18 | timber, dried_fish | wine, iron |
+| botany_bay | 鲨鱼湾 | Shark Bay | holland | -25.50 | 113.50 | salt, dried_fish | timber, iron |
 | siam | 暹罗 | Siam | portugal | 13.50 | 100.58 | timber, ceramics | glassware, wool |
 | cadiz | 加的斯 | Cadiz | spain | 36.53 | -6.29 | salt, wine | spices, timber |
 | oporto | 波尔图 | Oporto | portugal | 41.14 | -8.68 | wine, leather | spices, glassware |
@@ -1206,6 +1206,77 @@ Historical fidelity is deliberately loose (e.g., French-coast ports assigned
 to Spain, Mediterranean islands split between Italy and the Ottomans, and the
 world-expansion ports' nation assignments) to keep the 6-nation model closed;
 do not "fix" assignments without amending this doc.
+
+**`botany_bay` amendment (Phase 6 task P, master-pinned; 2026-10-31).** The id
+is locked, but the 1770 Cook naming breaks the phase's ~1550–1620s anchor:
+the row above is re-placed to Shark Bay, Western Australia (−25.50, 113.50),
+display name 鲨鱼湾 / Shark Bay, `nation_id` england → **holland** (Dirck
+Hartog's 1616 Dutch landfall — the id/display mismatch is covered by the
+deliberate-fidelity note above), produces salt + dried_fish, demands timber +
+iron. Nothing else about the sovereign 100 changes.
+
+#### Phase-6 neutral tier (task P, 2026-10-31)
+
+Exactly the 45 neutral ports below, appended after the sovereign block in
+`data/ports.json` (count within the 40–60 lock; exact-set enforced by
+validator group 5 after task E's amendment). All rows carry `nation_id: ""`,
+zh/en names, flavor, and the default facilities `market + tavern + inn`
+(`guild`/`palace` omitted — Phase-3 facilities); `shipyard` is authored on
+exactly five rows (quanzhou, sakai, hirado, gresik, funai). Ordering is the
+file order.
+
+| id | zh | en | Nation | lat | lon | produces | demands |
+|---|---|---|---|---|---|---|---|
+| quanzhou | 泉州 | Quanzhou (Zayton) | — | 24.85 | 118.72 | silk, ceramics | spices, timber |
+| ningbo | 宁波 | Ningbo | — | 29.95 | 121.70 | ceramics, silk | spices, timber |
+| yuegang | 月港 | Yuegang (Zhangzhou) | — | 24.42 | 117.98 | silk, sugar | spices, timber |
+| shuangyu | 双屿 | Shuangyu | — | 29.74 | 122.22 | dried_fish, salt | silk, spices |
+| nanao | 南澳 | Nan'ao | — | 23.40 | 117.20 | salt, dried_fish | silk, timber |
+| xiamen | 厦门 | Xiamen (Amoy) | — | 24.44 | 118.13 | silk, sugar | spices, timber |
+| fuzhou | 福州 | Fuzhou | — | 26.02 | 119.65 | timber, silk | spices, salt |
+| wenzhou | 温州 | Wenzhou | — | 27.97 | 120.68 | ceramics, dried_fish | silk, timber |
+| zhelin | 柘林 | Zhelin (Chaozhou) | — | 23.62 | 117.13 | sugar, timber | silk, spices |
+| qiongzhou | 琼州 | Qiongzhou (Hainan) | — | 20.03 | 110.33 | timber, leather | salt, silk |
+| beihai | 北海 | Beihai (Hepu) | — | 21.48 | 109.12 | salt, timber | silk, cotton_cloth |
+| dinghai | 定海 | Dinghai (Zhoushan) | — | 30.01 | 122.11 | dried_fish, salt | silk, spices |
+| liujiagang | 刘家港 | Liujiagang (Taicang) | — | 31.50 | 121.55 | cotton_cloth, dried_fish | silk, timber |
+| hirado | 平户 | Hirado | — | 33.25 | 129.56 | copper, ceramics | silk, spices |
+| sakai | 堺 | Sakai | — | 34.51 | 135.42 | cotton_cloth, leather | silk, spices |
+| yamagawa | 山川 | Yamagawa (Satsuma) | — | 31.10 | 130.58 | timber, dried_fish | silk, cotton_cloth |
+| hakata | 博多 | Hakata | — | 33.59 | 130.39 | dried_fish, timber | silk, ceramics |
+| funai | 丰后府内 | Bungo-Funai (Ōita) | — | 33.24 | 131.61 | dried_fish, timber | silk, glassware |
+| urado | 浦户 | Urado (Tosa) | — | 33.50 | 133.55 | timber, dried_fish | silk, salt |
+| anotsu | 安浓津 | Anotsu (Ise) | — | 34.60 | 136.70 | dried_fish, timber | silk, ceramics |
+| busan | 釜山 | Busan (Pusan) | — | 35.10 | 129.04 | dried_fish, salt | silk, ceramics |
+| yeompo | 盐浦 | Yeompo | — | 35.50 | 129.43 | salt, dried_fish | cotton_cloth, silk |
+| hoi_an | 会安 | Hoi An (Faifo) | — | 15.90 | 108.34 | silk, ceramics | spices, cotton_cloth |
+| banten | 万丹 | Banten | — | -5.85 | 105.95 | spices, salt | cotton_cloth, ceramics |
+| jambi | 占碑 | Jambi | — | -1.12 | 103.80 | spices, timber | cotton_cloth, salt |
+| palembang | 巨港 | Palembang | — | -2.25 | 104.85 | spices, timber | cotton_cloth, salt |
+| gresik | 革儿昔 | Gresik (Surabaya) | — | -7.05 | 113.35 | salt, timber | spices, silk |
+| sulu | 苏禄 | Sulu (Jolo) | — | 5.98 | 120.98 | timber, dried_fish | ceramics, cotton_cloth |
+| kedah | 吉打 | Kedah | — | 6.10 | 100.32 | salt, timber | cotton_cloth, spices |
+| nagapattinam | 内加帕塔姆 | Nagapattinam | — | 10.76 | 79.85 | cotton_cloth, salt | spices, ceramics |
+| masulipatnam | 马苏利帕特南 | Masulipatnam | — | 16.10 | 81.12 | cotton_cloth, leather | spices, copper |
+| hughli | 胡格利 | Hughli (Bengal) | — | 21.65 | 88.05 | silk, sugar | spices, timber |
+| syriam | 沙廉 | Syriam (Pegu) | — | 16.60 | 96.28 | timber, salt | copper, cotton_cloth |
+| dianga | 迪昂 | Dianga (Arakan) | — | 18.40 | 94.30 | dried_fish, timber | cotton_cloth, spices |
+| khambhat | 坎贝 | Cambay (Khambhat) | — | 21.70 | 72.55 | cotton_cloth, leather | spices, copper |
+| diu | 第乌 | Diu | — | 20.69 | 70.97 | salt, cotton_cloth | timber, wine |
+| mocha | 摩卡 | Mocha | — | 13.30 | 43.22 | leather, salt | cotton_cloth, spices |
+| qalhat | 哈尔哈特 | Qalhat | — | 22.68 | 59.80 | dried_fish, leather | cotton_cloth, spices |
+| hormuz | 霍尔木兹 | Hormuz | — | 26.62 | 56.43 | carpet, salt | cotton_cloth, spices |
+| zanzibar | 桑给巴尔 | Zanzibar | — | -6.05 | 38.92 | timber, dried_fish | cotton_cloth, glassware |
+| kilwa | 基尔瓦 | Kilwa | — | -8.96 | 39.50 | salt, timber | cotton_cloth, glassware |
+| sofala | 索法拉 | Sofala | — | -19.60 | 35.25 | amber, salt | cotton_cloth, ceramics |
+| lamu | 拉穆 | Lamu | — | -2.30 | 40.60 | timber, dried_fish | cotton_cloth, spices |
+| massawa | 马萨瓦 | Massawa | — | 15.60 | 39.45 | salt, leather | cotton_cloth, iron |
+| zeila | 泽拉 | Zeila | — | 11.35 | 43.47 | salt, dried_fish | cotton_cloth, wool |
+
+Band allocation: China coast 13 (quanzhou … liujiagang), Japan 7 (hirado …
+anotsu), Korea 2 (busan, yeompo), sovereign SE Asia 7 (hoi_an … kedah),
+Mughal India/Persia/Arabia 10 (nagapattinam … hormuz), Swahili/Red Sea 6
+(zanzibar … zeila).
 
 ### 7.2 Goods (20)
 
@@ -1309,6 +1380,34 @@ one is relevant). The `hanseatic_north` lane carries a winter `variants`
 entry (§4.14) — the first variant customer, avoiding the Baltic freeze
 (§4.18). The Phase-6 lanes carry patrols/treasure fleets/chokepoint pirates
 visibly but no trader traffic docks at a neutral port this phase.
+
+**Phase-6 lane authoring (task P, 2026-10-31).** The 5 new lanes' ids,
+waypoints, nations, goods and chokepoints below are locked **as authored**
+(with the pinned port-touch waypoints at the exact `ports.json` coordinates
+of Malacca/Hoi An/Macau/Quanzhou/Ningbo/Hirado, Goa/Colombo,
+Nagapattinam/Masulipatnam/Hughli, Mozambique/Mombasa/Mogadishu,
+Acapulco/Panama/Guayaquil/Callao-Lima/Valparaíso,
+Madeira/Safi/Saint-Louis/Elmina/Accra/Luanda; intermediate offshore steering
+points authored on the world raster — walkable ≤ 2-tile snap per §4.14):
+
+| id | waypoints (summary) | nations | goods | chokepoints |
+|---|---|---|---|---|
+| canton_country_trade | Malacca → Singapore strait → offshore Vietnam → Hoi An → Gulf of Tonkin → Macau → Guangdong/Fujian coast → Quanzhou → Zhejiang coast → Ningbo → East China Sea → Hirado (53 waypoints) | portugal, holland, spain | silk, ceramics, spices, cotton_cloth | taiwan_strait |
+| coromandel_bengal | Goa → Malabar coast → Gulf of Mannar (south of Sri Lanka) → Colombo → east of Ceylon → Nagapattinam → Coromandel coast → Masulipatnam → Bay of Bengal → Hughli (37 waypoints) | portugal, holland | cotton_cloth, silk, sugar, spices | ceylon_south |
+| swahili_coast | Mozambique Island → Mozambique channel coast → Mombasa → Somali coast → Mogadishu (19 waypoints) | portugal | dried_fish, salt, cotton_cloth | cape_guardafui |
+| pacific_america | Acapulco → offshore Central America → Gulf of Panama → Panama → Ecuador coast → Guayaquil → offshore Peru → Callao/Lima → offshore Chile → Valparaíso (38 waypoints) | spain | sugar, dried_fish, wool, salt | gulf_of_panama |
+| west_africa | Madeira → Moroccan coast → Safi → Saharan coast → Saint-Louis → Guinea coast → Elmina → Accra → Gulf of Guinea → Angola coast → Luanda (41 waypoints) | portugal | dried_fish, salt, cotton_cloth, amber | gulf_of_guinea |
+
+**`hanseatic_north` winter variant (task P, 2026-10-31).** The lane's base
+waypoints enter the Baltic through the Danish straits (Bergen → Dover →
+London/Flanders → sounds → Danzig), which sits inside the §4.18 Baltic freeze
+in months 12–3. The lane therefore carries the variant
+`hanseatic_north_winter` (`months: [12, 1, 2, 3]`): the Hamburg–Bergen North
+Sea run of the Hamburg *Bergenfahrer* (Bergen → North Sea → German bight →
+Hamburg), staying clear of the Baltic freeze polygon entirely. Month
+coverage: base `waypoints` serve months 4–11 (ice-free by §4.18's own
+months), the variant serves 12–3 — base + variants cover all 12 months, no
+overlap.
 
 ### 7.7 Captain name pools (7, Phase 5)
 
