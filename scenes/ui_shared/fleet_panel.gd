@@ -27,6 +27,9 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## Days of supply + effective speed (docs/20-* §4.4, §4.10). The panel renders
+## the sim's numbers; it never recomputes either formula.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 const SCENE_PATH := "res://scenes/ui_shared/fleet_panel.tscn"
 const DIM_ALPHA := 0.4
@@ -66,6 +69,8 @@ var _rebuilding := false
 @onready var _mode_note: Label = $Center/Panel/Margin/Body/ModeNote
 @onready var _rows_box: VBoxContainer = \
 	$Center/Panel/Margin/Body/Scroll/Rows
+@onready var _totals: VBoxContainer = $Center/Panel/Margin/Body/Totals
+@onready var _ships_header: Label = $Center/Panel/Margin/Body/ShipsHeader
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
 @onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
 @onready var _confirm: Control = $ConfirmDialog
@@ -120,6 +125,7 @@ func _ready() -> void:
 	_title.add_theme_font_size_override("font_size", 32)
 	_summary.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_mode_note.add_theme_color_override("font_color", PaletteLib.WARN)
+	_ships_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_close_button.pressed.connect(close)
@@ -249,6 +255,7 @@ func rebuild() -> void:
 		return
 	_rebuilding = true
 	_bind_header()
+	_ships_header.text = I18n.t_key("fleet.ship_header")
 	_bind_rows()
 	_rebuilding = false
 
@@ -270,10 +277,23 @@ func _bind_header() -> void:
 		_summary.text += " · " + I18n.fmt(
 			"fleet.full", {"max": FleetLib.FLEET_MAX}
 		)
+	# §4.5.1 header: "plus the same day / gold / morale line the HUD shows so the
+	# panel is self-contained" — composed from the HUD's own three keys.
+	_summary.text += " · " + _hud_line()
 	_mode_note.visible = is_read_only()
 	_mode_note.text = _read_only_note()
 	_hint.text = I18n.t_key("ui.esc_hint")
 	_close_button.text = I18n.t_key("ui.close")
+
+
+## The day / gold / morale figures the HUD top bar shows (`80-*` §4.5), built
+## from the same three `ui_strings` keys so the panel can never disagree.
+func _hud_line() -> String:
+	return " · ".join([
+		I18n.fmt("world.day", {"day": GameState.day}),
+		I18n.fmt("ui.gold_amount", {"gold": GameState.gold}),
+		I18n.fmt("world.morale", {"amount": GameState.morale}),
+	])
 
 
 ## At-sea banner. `fleet.read_only` is requested for the next `ui_strings.json`
@@ -298,19 +318,81 @@ func _bind_rows() -> void:
 	var fleet: Array = GameState.fleet if GameState.fleet is Array else []
 	for index in fleet.size():
 		_add_row(index, fleet[index])
+	_bind_totals()
+
+
+## The §4.5.1 **fleet totals row**: pooled provisions, water and their combined
+## days (the lesser of the two, by the same §4.10 formula the prompt uses), plus
+## the fleet's effective speed (slowest hull × wind × crew, `20-*` §4.4).
+##
+## This is the authoritative days number: the per-ship lines above show each
+## hull's own stack, while this row pools the fleet the way consumption does
+## (`40-*` §4.2 flagship-first pooling) — and it is the fleet-level figure the
+## provisioning prompt (`80-*` §4.6.1) shows before you sail.
+func _bind_totals() -> void:
+	_clear(_totals)
+	var title := _label(I18n.t_key("fleet.totals"), PaletteLib.ACCENT)
+	title.name = "Title"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var title_row := HBoxContainer.new()
+	title_row.name = "TitleRow"
+	title_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	title_row.add_theme_constant_override("separation", 12)
+	title_row.add_child(title)
+	var speed := _label(I18n.fmt("world.speed", {
+		"speed": SailingSimLib.effective_speed(),
+	}), PaletteLib.PANEL_LINE)
+	speed.name = "Speed"
+	speed.custom_minimum_size.x = 180
+	title_row.add_child(speed)
+	_totals.add_child(title_row)
+
+	var supplies_row := HBoxContainer.new()
+	supplies_row.name = "Supplies"
+	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	supplies_row.add_theme_constant_override("separation", 12)
+	var crew := FleetLib.total_crew()
+	var days := SailingSimLib.fleet_supply_days()
+	for kind in FleetLib.SUPPLY_KINDS:
+		var amount := FleetLib.supplies(kind)
+		var label := _label(I18n.fmt("fleet.stat.supply", {
+			"kind": I18n.fmt("world.%s" % kind, {"amount": ""}).strip_edges(),
+			"amount": amount,
+			"days": SailingSimLib.supply_days(amount, amount, crew),
+		}), PaletteLib.TEXT)
+		label.name = "Total_%s" % kind
+		supplies_row.add_child(label)
+	var total_days := _label(I18n.fmt("fleet.total_days", {"days": days}),
+		_days_color(days))
+	total_days.name = "TotalDays"
+	total_days.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	total_days.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	supplies_row.add_child(total_days)
+	_totals.add_child(supplies_row)
+
+
+## The §4.8 GOOD/WARN/BAD tier for a days-of-supply figure — the same thresholds
+## the provisioning prompt colours its readout with (`80-*` §4.6.1).
+static func _days_color(days: int) -> Color:
+	if days >= 10:
+		return PaletteLib.GOOD
+	if days >= 3:
+		return PaletteLib.WARN
+	return PaletteLib.BAD
 
 
 func _add_row(index: int, ship) -> void:
 	var widgets: Dictionary = {"index": index, "promote": null, "jettison": []}
 	var box := VBoxContainer.new()
 	box.name = "Ship_%d" % index
-	box.add_theme_constant_override("separation", 4)
+	box.add_theme_constant_override("separation", 2)
 
 	var data: Dictionary = ship if ship is Dictionary else {}
 
 	# --- line 1: identity, flagship tag, Promote -------------------------
 	var top := HBoxContainer.new()
 	top.name = "Top"
+	top.custom_minimum_size.y = float(PaletteLib.ROW_H)
 	top.add_theme_constant_override("separation", 12)
 	var name_label := _label(_ship_title(index, data), PaletteLib.TEXT)
 	name_label.name = "Name"
@@ -330,52 +412,108 @@ func _add_row(index: int, ship) -> void:
 		widgets["promote"] = promote
 	box.add_child(top)
 
-	# --- line 2: durability bar, crew, capacity --------------------------
-	var stats := HBoxContainer.new()
+	# --- lines 1–3 of the §4.5.1 stat block ------------------------------
+	# `Stats` stays the block's node name (the pre-existing test hook), now a
+	# VBox of three named 32px lines: `DurabilityLine`, `CrewLine`, `SpeedLine`.
+	var stats := VBoxContainer.new()
 	stats.name = "Stats"
-	stats.add_theme_constant_override("separation", 12)
+	stats.add_theme_constant_override("separation", 0)
+	var durability_line := HBoxContainer.new()
+	durability_line.name = "DurabilityLine"
+	durability_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	durability_line.add_theme_constant_override("separation", 12)
 	var max_durability := FleetLib.ship_stat(data, "durability")
 	var durability := int(data.get("durability", 0))
 	var ratio := float(durability) / float(max_durability) if max_durability > 0 else 0.0
-	stats.add_child(_durability_bar(ratio))
+	durability_line.add_child(_durability_bar(ratio))
 	var durability_label := _label(
-		I18n.fmt("shipyard.durability", {
-			"durability": "%d/%d" % [durability, max_durability],
+		I18n.fmt("fleet.stat.durability", {
+			"current": durability, "max": max_durability,
 		}),
 		PaletteLib.TEXT
 	)
 	durability_label.name = "Durability"
-	durability_label.custom_minimum_size.x = 110
-	stats.add_child(durability_label)
+	durability_label.custom_minimum_size.x = 190
+	durability_line.add_child(durability_label)
+	var capacity := FleetLib.ship_stat(data, "capacity")
+	var used := FleetLib.used_capacity(data)
+	var free := FleetLib.free_capacity(data)
+	var cargo_label := _label(
+		I18n.fmt("fleet.stat.cargo", {
+			"used": used, "capacity": capacity, "free": free,
+		}),
+		PaletteLib.PANEL_LINE
+	)
+	cargo_label.name = "Cargo"
+	cargo_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cargo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	durability_line.add_child(cargo_label)
+	# The pre-existing `Free` label (a test hook from T18) keeps its name and
+	# meaning: the same `free` figure the cargo cell carries.
+	var free_label := _label(
+		I18n.fmt("fleet.free_capacity", {"capacity": free}),
+		PaletteLib.PANEL_LINE
+	)
+	free_label.name = "Free"
+	free_label.visible = false
+	durability_line.add_child(free_label)
+	stats.add_child(durability_line)
+
+	# --- line 3: crew + guns (§4.5.1 line 2) -----------------------------
+	var crew_line := HBoxContainer.new()
+	crew_line.name = "CrewLine"
+	crew_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	crew_line.add_theme_constant_override("separation", 12)
 	var crew := _label(
-		I18n.fmt("world.crew", {
+		I18n.fmt("fleet.stat.crew", {
 			"crew": int(data.get("crew", 0)),
 			"max": FleetLib.ship_stat(data, "crew_max"),
 		}),
-		PaletteLib.PANEL_LINE
+		PaletteLib.TEXT
 	)
 	crew.name = "Crew"
-	stats.add_child(crew)
-	var free := _label(
-		I18n.fmt("fleet.free_capacity", {
-			"capacity": FleetLib.free_capacity(data),
+	crew.custom_minimum_size.x = 190
+	crew_line.add_child(crew)
+	var guns := _label(
+		I18n.fmt("fleet.stat.guns", {
+			"cannons": int(data.get("cannons", 0)),
+			"slots": FleetLib.ship_stat(data, "armament_slots"),
 		}),
 		PaletteLib.PANEL_LINE
 	)
-	free.name = "Free"
-	free.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	free.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	stats.add_child(free)
+	guns.name = "Guns"
+	guns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	crew_line.add_child(guns)
+	stats.add_child(crew_line)
+
+	# --- line 4: current speed vs hull max, with the wind (§4.5.1 line 3) -
+	var speed_line := HBoxContainer.new()
+	speed_line.name = "SpeedLine"
+	speed_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	var speed := _label(
+		I18n.fmt("fleet.stat.speed", {
+			"speed": _row_speed(index),
+			"max": FleetLib.ship_stat(data, "speed"),
+			"wind": _wind_name(),
+		}),
+		PaletteLib.TEXT
+	)
+	speed.name = "Speed"
+	speed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	speed_line.add_child(speed)
+	stats.add_child(speed_line)
 	box.add_child(stats)
 
-	# --- line 3+: one row per stack, each with its own Jettison ---------
+	# --- line 5: supplies, each with its **own** days (§4.5.1 line 4) ----
 	var supplies_row := HBoxContainer.new()
 	supplies_row.name = "Supplies"
+	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
 	supplies_row.add_theme_constant_override("separation", 12)
 	for kind in FleetLib.SUPPLY_KINDS:
 		_add_stack(supplies_row, widgets, index, kind, str(kind), "", int(data.get(kind, 0)))
 	box.add_child(supplies_row)
 
+	# --- then one row per trade-good stack, each with its own Jettison ---
 	var cargo: Dictionary = data.get("cargo", {}) \
 		if data.get("cargo", {}) is Dictionary else {}
 	var good_ids: Array = cargo.keys()
@@ -385,6 +523,7 @@ func _add_row(index: int, ship) -> void:
 		empty.name = "CargoEmpty"
 		var cargo_row := HBoxContainer.new()
 		cargo_row.name = "Cargo"
+		cargo_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
 		cargo_row.add_child(empty)
 		box.add_child(cargo_row)
 	else:
@@ -394,6 +533,7 @@ func _add_row(index: int, ship) -> void:
 				continue
 			var cargo_row := HBoxContainer.new()
 			cargo_row.name = "Cargo_%s" % str(good_id)
+			cargo_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
 			cargo_row.add_theme_constant_override("separation", 12)
 			var good: Dictionary = DataLoader.get_good(str(good_id))
 			var good_name := I18n.t(good.get("name", {})) if not good.is_empty() \
@@ -405,6 +545,52 @@ func _add_row(index: int, ship) -> void:
 	box.custom_minimum_size.y = float(PaletteLib.ROW_H)
 	_rows_box.add_child(box)
 	_rows.append(widgets)
+
+
+## The speed this row shows (docs/80-* §4.5.1 line 3):
+##   * the **flagship** (fleet[0]) shows the fleet's **current effective** speed,
+##     `SailingSim.effective_speed()` — slowest hull × wind × crew × seamanship
+##     (`20-*` §4.4), which is the number the HUD bottom bar shows;
+##   * every other hull shows its own base `ShipType.speed`, because the fleet
+##     moves at the slowest hull and a per-ship "effective" figure would have to
+##     invent a crew/wind split the sim does not have.
+func _row_speed(index: int) -> int:
+	if index == 0:
+		return SailingSimLib.effective_speed()
+	return FleetLib.ship_stat(_row_ship(index), "speed")
+
+
+## The crew whose rations come out of `fleet[ship_index]`'s stack (§4.10).
+##
+## Phase 1 keeps every crew member on the flagship (`40-*` §4.4), and consumption
+## is **pooled** and drained flagship-first (`40-*` §4.2) — a stack stowed on an
+## escort still feeds the fleet. So a hull with crew aboard feeds that crew, and
+## a crewless hull feeds the fleet's crew; either way the number is the §4.10
+## formula's, never a per-ship invention. The pooled fleet figure in the totals
+## row (and the header) is the authoritative one; this is the per-ship view.
+func _crew_sharing(ship_index: int) -> int:
+	var own := int(_row_ship(ship_index).get("crew", 0))
+	return own if own > 0 else FleetLib.total_crew()
+
+
+## `GameState.fleet[index]` as a dictionary (`{}` out of range / non-dict).
+func _row_ship(index: int) -> Dictionary:
+	var fleet: Array = GameState.fleet if GameState.fleet is Array else []
+	if index < 0 or index >= fleet.size():
+		return {}
+	var ship = fleet[index]
+	if not (ship is Dictionary):
+		return {}
+	return ship
+
+
+## The localised weather name that produced the speed (`world.weather.*`), for
+## the `(wind: {wind})` cell of §4.5.1. `fair` is the sim's default before the
+## first weather roll, so a freshly loaded run names a real factor.
+static func _wind_name() -> String:
+	return I18n.t_key("world.weather.%s" % str(
+		GameState.world.get("weather", SailingSimLib.DEFAULT_WEATHER)
+	))
 
 
 ## One "name qty [Jettison]" stack row. `kind` is "cargo", "provisions" or
@@ -420,8 +606,18 @@ func _add_stack(parent: HBoxContainer, widgets: Dictionary, ship_index: int,
 		text = _fmt_or(STACK_KEY, {"name": good_name, "qty": qty},
 			"%s × %d" % [good_name, qty])
 	else:
-		# `world.provisions` / `world.water` already read as "Provisions 45".
-		text = I18n.fmt("world.%s" % kind, {"amount": qty})
+		# `fleet.stat.supply` = "{kind} {amount} ({days} days)": the §4.5.1 line,
+		# with **this ship's** days from the locked §4.10 formula on its own
+		# stack and the crew that eats from it.
+		var ship := _row_ship(ship_index)
+		var stack := int(ship.get(kind, 0))
+		text = I18n.fmt("fleet.stat.supply", {
+			"kind": I18n.fmt("world.%s" % kind, {"amount": ""}).strip_edges(),
+			"amount": stack,
+			"days": SailingSimLib.supply_days(
+				stack, stack, _crew_sharing(ship_index)
+			),
+		})
 	var label := _label(text, PaletteLib.TEXT)
 	label.name = "Stack_%s" % (good_id if kind == "cargo" else kind)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -592,17 +788,20 @@ func _row_button(text: String) -> Button:
 ## Durability bar placeholder (§4.8: ColorRect only, no textures).
 func _durability_bar(ratio: float) -> Control:
 	var bar := Control.new()
+	bar.name = "DurabilityBar"
 	bar.custom_minimum_size = Vector2(BAR_W, BAR_H)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var background := ColorRect.new()
+	background.name = "BarBg"
 	background.color = PaletteLib.PANEL_LINE
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(background)
 
 	var fill := ColorRect.new()
+	fill.name = "BarFill"
 	fill.color = _bar_color(ratio)
 	fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fill.anchor_right = clampf(ratio, 0.0, 1.0)

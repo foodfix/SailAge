@@ -817,33 +817,38 @@ func _test_market_screen() -> void:
 	_check(buy_button.tooltip_text == I18n.t_key("market.hold_full"),
 		"the reason is market.hold_full (%s)" % buy_button.tooltip_text)
 
-	# Supplies rows: fixed prices, buy only.
-	_check(screen.supply_row("provisions")["label"].text
-		== I18n.fmt("market.provisions", {"price": 2}),
-		"provisions row reads 2g (%s)" % screen.supply_row("provisions")["label"].text)
-	_check(screen.supply_row("water")["label"].text
-		== I18n.fmt("market.water", {"price": 1}),
-		"water row reads 1g (%s)" % screen.supply_row("water")["label"].text)
-	_check(not screen.supply_row("provisions").has("sell"),
-		"supplies rows have no Sell button")
-	# Free the hold so the supplies purchase has room (and prove a full hold
-	# disables the supplies Buy with the same §6 reason).
-	screen.type_supply_qty("provisions", "5")
-	_check(screen.supply_row("provisions")["buy"].disabled,
-		"the supplies Buy is disabled with a full hold")
-	_check((screen.supply_row("provisions")["buy"] as Button).tooltip_text
-		== I18n.t_key("market.hold_full"),
-		"the supplies reason is market.hold_full (%s)"
-		% (screen.supply_row("provisions")["buy"] as Button).tooltip_text)
+	# Supplies are **no longer a market row** (docs/20-* §4.10 as amended,
+	# docs/80-* §4.6.1): provisions and water are bought at the Set-Sail
+	# provisioning prompt, which is the single supply purchase point. The screen
+	# must therefore have no supplies row, no supplies API, and no way to spend
+	# gold on a supply kind.
+	_check(not screen.has_method("supply_row"),
+		"the market has no supply_row() any more (supplies left the market)")
+	_check(not screen.has_method("press_supply_buy"),
+		"the market has no press_supply_buy() any more")
+	_check(screen.get_node_or_null("Layout/VBox/Supplies") == null,
+		"the market scene carries no Supplies row node")
 	FleetLib.remove_goods("salt", 10000)
 	EventBus.fleet_changed.emit()
-	screen.type_supply_qty("provisions", "5")
-	_check(not screen.supply_row("provisions")["buy"].disabled,
-		"the supplies Buy enables at a valid qty")
-	gold_before = GameState.gold
-	_check(screen.press_supply_buy("provisions"), "buy 5 provisions")
-	_check(FleetLib.supplies("provisions") == 5, "5 provisions aboard")
-	_check(GameState.gold == gold_before - 10, "5 provisions cost 10g")
+	_check(screen.row_goods_ids().size() == 20,
+		"the market still lists exactly the 20 trade goods (no supply rows)")
+	_check(not screen.row_goods_ids().has("provisions")
+		and not screen.row_goods_ids().has("water"),
+		"provisions and water are not goods rows")
+	var provisions_before := FleetLib.supplies("provisions")
+	_check(TradeEngineLib.buy_supplies("lisbon", "provisions", 5),
+		"the supplies engine still works (the prompt calls it, not the market)")
+	_check(FleetLib.supplies("provisions") == provisions_before + 5,
+		"5 provisions aboard through the engine")
+	# The prompt is the *only* purchase point: the scene that owns the buying UI
+	# is provisions_dialog.tscn and the market script never calls buy_supplies.
+	var market_source := FileAccess.get_file_as_string(
+		"res://scenes/port/market_screen.gd"
+	)
+	_check(not market_source.contains("buy_supplies"),
+		"market_screen.gd never calls TradeEngine.buy_supplies (§4.10)")
+	_check(ResourceLoader.exists("res://scenes/port/provisions_dialog.tscn"),
+		"the provisioning prompt exists as the single supply purchase point")
 
 	# Invest button: 500g chunks, cap 10.
 	_make_run("lisbon", 6000)
@@ -919,10 +924,8 @@ func _test_market_screen_locale_and_back() -> void:
 		"the good name rebinds to zh (%s)" % (wine_row["name"] as Label).text)
 	_check((wine_row["buy"] as Button).text == I18n.t_key("market.buy"),
 		"the buttons rebind to zh (%s)" % (wine_row["buy"] as Button).text)
-	_check(screen.supply_row("water")["label"].text
-		== I18n.fmt("market.water", {"price": 1}),
-		"the supplies labels rebind to zh (%s)"
-		% screen.supply_row("water")["label"].text)
+	_check(screen.get_node_or_null("Layout/VBox/Supplies") == null,
+		"the market still has no supplies row in zh (supplies left the market)")
 	I18n.set_locale("en")
 	_check((wine_row["name"] as Label).text == "Wine", "and back to en")
 

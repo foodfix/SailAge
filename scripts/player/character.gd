@@ -77,10 +77,31 @@ static func base_stat(stat_name: String) -> int:
 
 ## `player.stats[name]` plus every assigned officer's role bonus (§4.5).
 static func effective_stat(stat_name: String) -> int:
-	var total := base_stat(stat_name)
+	return base_stat(stat_name) + _officer_bonus(stat_name, "")
+
+
+## The officer part of [method effective_stat] only: every assigned officer's
+## role bonus for `stat_name` (§4.5). Split out so the S18 officers panel can ask
+## "what does this roster contribute?" from one table.
+static func officer_bonus(stat_name: String) -> int:
+	return _officer_bonus(stat_name, "")
+
+
+## [method officer_bonus] with `officer_id` left out — the "what would my stats be
+## without this officer?" half of S18's per-officer derived effect (§4.5).
+static func officer_bonus_excluding(stat_name: String, officer_id: String) -> int:
+	return _officer_bonus(stat_name, officer_id)
+
+
+## Σ role bonuses for `stat_name` over every employed officer except
+## `exclude_id` ("" excludes nobody).
+static func _officer_bonus(stat_name: String, exclude_id: String) -> int:
+	var total := 0
 	var p: Dictionary = _player()
 	var officers: Array = p.get("officers", [])
 	for officer_id in officers:
+		if exclude_id != "" and str(officer_id) == exclude_id:
+			continue
 		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
 		if officer.is_empty():
 			continue
@@ -92,7 +113,14 @@ static func effective_stat(stat_name: String) -> int:
 
 ## docs/50-* §4.2: `(seamanship − 10) / 100`, clamped [−0.10, +0.20].
 static func speed_bonus() -> float:
-	var raw := (effective_stat("seamanship") - BASE_STAT) / 100.0
+	return speed_bonus_for(effective_stat("seamanship"))
+
+
+## [method speed_bonus] for an explicit seamanship value — the pure formula, so
+## the S18 officers panel can difference "with" against "without" one officer and
+## report that officer's own contribution without a second copy of the rule.
+static func speed_bonus_for(seamanship: int) -> float:
+	var raw := (seamanship - BASE_STAT) / 100.0
 	return clampf(raw, SPEED_BONUS_MIN, SPEED_BONUS_MAX)
 
 
@@ -100,7 +128,13 @@ static func speed_bonus() -> float:
 ## The base is the Phase-4 port sighting radius (24 tiles, `20-*` §4.11); the
 ## navigation term is unchanged from Phase 1.
 static func sighting_radius() -> int:
-	return 24 + int(floor((effective_stat("navigation") - BASE_STAT) / 10.0))
+	return sighting_radius_for(effective_stat("navigation"))
+
+
+## [method sighting_radius] for an explicit navigation value (pure formula; the
+## S18 panel differences it per officer).
+static func sighting_radius_for(navigation: int) -> int:
+	return 24 + int(floor((navigation - BASE_STAT) / 10.0))
 
 
 ## docs/50-* §4.2: `1 − (leadership − 10) / 200`.
@@ -108,12 +142,17 @@ static func sighting_radius() -> int:
 ## a gain, so this implementation floors it at 0 (no desertion possible),
 ## which is also the reading of "losses × multiplier" at high leadership.
 static func desertion_multiplier() -> float:
-	return maxf(0.0, 1.0 - (effective_stat("leadership") - BASE_STAT) / 200.0)
+	return loss_multiplier_for(effective_stat("leadership"))
+
+
+## [method desertion_multiplier] for an explicit leadership value (pure formula).
+static func loss_multiplier_for(leadership: int) -> float:
+	return maxf(0.0, 1.0 - (leadership - BASE_STAT) / 200.0)
 
 
 ## Same formula and clamp as [method desertion_multiplier] (docs/50-* §4.2).
 static func mutiny_multiplier() -> float:
-	return maxf(0.0, 1.0 - (effective_stat("leadership") - BASE_STAT) / 200.0)
+	return loss_multiplier_for(effective_stat("leadership"))
 
 
 ## docs/50-* §4.2: storm damage is ×0.75 once luck reaches 50.

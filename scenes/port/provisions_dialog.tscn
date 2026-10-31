@@ -1,0 +1,127 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/port/provisions_dialog.gd" id="1_provisions"]
+[ext_resource type="PackedScene" path="res://scenes/ui_shared/confirm_dialog.tscn" id="2_confirm"]
+
+[node name="ProvisionsDialog" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("1_provisions")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.4)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(720, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Body" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+
+[node name="Header" type="Label" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="Table" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Crew" type="Label" parent="Center/Panel/Margin/Body/Table"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Center/Panel/Margin/Body/Table"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Hold" type="Label" parent="Center/Panel/Margin/Body/Table"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+
+[node name="DaysRow" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Days" type="Label" parent="Center/Panel/Margin/Body/DaysRow"]
+custom_minimum_size = Vector2(320, 40)
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+
+[node name="Short" type="Label" parent="Center/Panel/Margin/Body/DaysRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_alignment = 1
+
+[node name="Hint" type="Label" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+
+[node name="Cargo" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Scroll" type="ScrollContainer" parent="Center/Panel/Margin/Body/Cargo"]
+custom_minimum_size = Vector2(0, 128)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Stacks" type="VBoxContainer" parent="Center/Panel/Margin/Body/Cargo/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 2
+
+[node name="GateReason" type="Label" parent="Center/Panel/Margin/Body/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_alignment = 1
+
+[node name="Stay" type="Button" parent="Center/Panel/Margin/Body/Footer"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+
+[node name="Sail" type="Button" parent="Center/Panel/Margin/Body/Footer"]
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+
+[node name="ConfirmDialog" parent="." instance=ExtResource("2_confirm")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0

@@ -18,10 +18,18 @@ extends Node
 ##     returns to port_screen.tscn;
 ##   5 a bounty-closed port's rows do not route except the capital palace;
 ##   6 locale rebind: every row label switches zh↔en with no `<key>` anywhere;
-##   7 the T10 shell survives: greeting banner, Set Sail, standalone load.
+##   7 the T10 shell survives: greeting banner, Set Sail, standalone load;
+##   8 the Phase-5 provisioning prompt (docs/80-* §4.6.1, docs/20-* §4.10/§4.11.2):
+##     opens from Set Sail *and* Esc, the locked days formula, buying through
+##     `TradeEngine.buy_supplies`, jettison, the crew/supply gate and the
+##     Stay-in-port / Esc-in-prompt back edges;
+##   9 the S18 officers panel opens from the `O` key and the footer row.
 
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const ProvisionsScene := preload("res://scenes/port/provisions_dialog.tscn")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
@@ -62,6 +70,9 @@ func _ready() -> void:
 	await _test_stub_rows_do_not_route()
 	await _test_shell_intact()
 	await _test_standalone()
+	await _test_provisions_prompt()
+	await _test_provisions_gate()
+	await _test_officers_panel_entry()
 	_report()
 
 
@@ -604,6 +615,429 @@ func _test_standalone() -> void:
 	host.queue_free()
 	await get_tree().process_frame
 
+
+
+
+# --- 8. The provisioning prompt (Phase 5) ---------------------------------
+
+## A starter caravel exactly as `40-*` §5 describes her: 15 crew, 45/45
+## supplies, 30 wine — the fixture the locked days formula is stated against.
+func _make_starter_run() -> void:
+	_make_run("lisbon", LISBON_TILE)
+	var ship: Dictionary = FleetLib.new_ship("caravel", 15)
+	ship["provisions"] = 45
+	ship["water"] = 45
+	ship["cargo"] = {"wine": 30}
+	GameState.fleet = [ship]
+	GameState.gold = 5000
+
+
+func _test_provisions_prompt() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	_make_starter_run()
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+
+	var prompt = hub.provisions_dialog()
+	_check(prompt != null, "the hub attaches the provisioning prompt (S4 modal)")
+	if prompt == null:
+		host.queue_free()
+		return
+	_check(not prompt.is_open(), "the prompt starts closed")
+
+	# --- the locked days-of-supply formula (docs/20-* §4.10) --------------
+	_check(SailingSimLib.RATION_SIZE == 5, "RATION_SIZE is 5 (§4.5)")
+	_check(SailingSimLib.daily_need(15) == 3,
+		"15 crew need ceil(15 / 5) = 3 units/day (got %d)"
+		% SailingSimLib.daily_need(15))
+	_check(SailingSimLib.supply_days(45, 45, 15) == 15,
+		"starter caravel 15 crew, 45/45 → 15 days (got %d)"
+		% SailingSimLib.supply_days(45, 45, 15))
+	_check(SailingSimLib.supply_days(60, 60, 15) == 20,
+		"§4.10's worked example: 60 + 60 units = 20 days")
+	_check(SailingSimLib.supply_days(45, 9, 15) == 3,
+		"the readout takes the lesser stack (water 9 / 3 = 3 days)")
+	_check(SailingSimLib.supply_days(0, 45, 15) == 0,
+		"an empty provisions stack is 0 days")
+	_check(SailingSimLib.supply_days(45, 45, 0) == 0,
+		"zero crew divides into 0 days — the gate, not the formula, reports it")
+
+	# --- Set Sail opens the prompt, it does not route ---------------------
+	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	_check(not sail.disabled, "Set Sail is enabled with a crew and supplies")
+	sail.pressed.emit()
+	await get_tree().process_frame
+	_check(prompt.is_open(), "clicking Set Sail opens the provisioning prompt")
+	_check(GameState.current_port == "lisbon",
+		"…and does not leave port yet (still docked)")
+	_check(hub.has_modal(), "the hub knows the prompt is a modal")
+	_check(get_tree().get_nodes_in_group("modal_overlay").has(prompt),
+		"the open prompt joins modal_overlay (§6)")
+
+	# --- the readout, tier-coloured (§4.8 GOOD ≥ 10) ----------------------
+	var days_label: Label = prompt.get_node(
+		"Center/Panel/Margin/Body/DaysRow/Days"
+	)
+	_check(days_label.text == I18n.fmt("port.sail.days", {"days": 15}),
+		"the readout uses port.sail.days with {days} (%s)" % days_label.text)
+	_check(days_label.get_theme_color("font_color") == Color("#4e9e4e"),
+		"15 days is GOOD green (§4.8)")
+	_check(prompt.days_of_supply() == 15,
+		"days_of_supply() agrees with the label (%d)" % prompt.days_of_supply())
+	var title: Label = prompt.get_node("Center/Panel/Margin/Body/Title")
+	_check(title.text == I18n.t_key("port.sail.prepare"),
+		"the prompt title uses port.sail.prepare (%s)" % title.text)
+
+	# --- buying goes through TradeEngine.buy_supplies, at the fixed price -
+	var row: Dictionary = prompt.supply_row("provisions")
+	_check(not row.is_empty(), "the prompt has a provisions row")
+	_check(not prompt.supply_row("water").is_empty(),
+		"the prompt has a water row")
+	# Free 30 units of hold (the §5 loadout's wine) so a 10-unit step fits: the
+	# prompt never silently drops cargo, so a full hold caps the stepper instead.
+	GameState.fleet[0]["cargo"] = {}
+	prompt.rebuild()
+	await get_tree().process_frame
+	var gold_before := GameState.gold
+	prompt.step("provisions", 1)
+	_check(prompt.pending_qty("provisions") == 10,
+		"the [+] stepper stages 10 units (got %d)"
+		% prompt.pending_qty("provisions"))
+	var buy: Button = prompt.buy_button("provisions")
+	_check(buy.text == I18n.fmt("port.sail.buy", {"qty": 10, "gold": 20}),
+		"the Buy label uses port.sail.buy with {qty}/{gold} (%s)" % buy.text)
+	_check(not buy.disabled, "Buy is enabled at 10 units and 5,000g")
+	_check(prompt.buy("provisions"), "Buy 10 provisions succeeds")
+	_check(FleetLib.supplies("provisions") == 55,
+		"provisions went 45 → 55 (%d)" % FleetLib.supplies("provisions"))
+	_check(GameState.gold == gold_before - 20,
+		"10 provisions cost 10 × 2g = 20g (gold %d)" % GameState.gold)
+	_check(prompt.days_of_supply() == 15,
+		"still 15 days: water is now the binding stack")
+	_check(prompt.pending_qty("provisions") == 0,
+		"the staged quantity resets after a purchase")
+
+	# Buying water raises the binding number (§4.10 min of the two stacks).
+	prompt.step("water", 1)
+	prompt.step("water", 1)
+	_check(prompt.pending_qty("water") == 20, "the stepper reaches 20")
+	_check(prompt.buy("water"), "Buy 20 water succeeds")
+	_check(FleetLib.supplies("water") == 65,
+		"water went 45 → 65 (%d)" % FleetLib.supplies("water"))
+	_check(prompt.days_of_supply() == 18,
+		"buying water raises the readout to floor(55/3) = 18 (got %d)"
+		% prompt.days_of_supply())
+
+	# `[-]` never goes below zero.
+	for i in range(5):
+		prompt.step("water", -1)
+	_check(prompt.pending_qty("water") == 0,
+		"the [-] stepper clamps at 0 (got %d)" % prompt.pending_qty("water"))
+
+	# --- a full hold: disabled with a reason, and a jettison path ---------
+	_make_starter_run()
+	GameState.fleet[0]["cargo"] = {}
+	prompt.rebuild()
+	await get_tree().process_frame
+	FleetLib.add_goods("salt", FleetLib.fleet_free())
+	EventBus.fleet_changed.emit()
+	await get_tree().process_frame
+	_check(FleetLib.fleet_free() == 0, "fixture: the hold is now full")
+	prompt.step("provisions", 1)
+	var full_buy: Button = prompt.buy_button("provisions")
+	_check(full_buy.disabled, "Buy is disabled with a full hold (§4.6.1)")
+	_check(full_buy.tooltip_text == I18n.t_key("market.hold_full"),
+		"the full-hold reason is market.hold_full (%s)" % full_buy.tooltip_text)
+	var hint: Label = prompt.get_node("Center/Panel/Margin/Body/Hint")
+	_check(hint.visible and hint.text == I18n.t_key("port.sail.jettison_hint"),
+		"a full hold shows the jettison hint (%s)" % hint.text)
+	var stacks: Array = prompt.jettison_buttons()
+	_check(not stacks.is_empty(),
+		"a full hold offers a Jettison affordance per trade-good stack (%d)"
+		% stacks.size())
+	var salt_button: Button = prompt.jettison_button(0, "salt")
+	_check(salt_button != null, "the salt stack has its own Jettison button")
+	if salt_button != null:
+		var free_before := FleetLib.fleet_free()
+		salt_button.pressed.emit()
+		await get_tree().process_frame
+		var confirm: Control = prompt.get_node("ConfirmDialog")
+		_check(confirm.is_open(),
+			"jettison opens the shared confirm dialog (§4.7)")
+		_check(FleetLib.held("salt") > 0,
+			"nothing is dropped before the player confirms")
+		confirm.accept()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(FleetLib.held("salt") == 0, "confirming drops the stack")
+		_check(FleetLib.fleet_free() > free_before,
+			"jettison freed capacity immediately (%d → %d)"
+			% [free_before, FleetLib.fleet_free()])
+		_check(not prompt.buy_button("provisions").disabled,
+			"the Buy button re-enables once the hold has room")
+		_check(not hint.visible,
+			"the jettison hint hides once the hold has room again")
+
+	# --- gold too short: disabled with market.no_gold ---------------------
+	_make_starter_run()
+	GameState.fleet[0]["cargo"] = {}
+	GameState.gold = 5
+	prompt.rebuild()
+	await get_tree().process_frame
+	prompt.step("provisions", 1)
+	var poor_buy: Button = prompt.buy_button("provisions")
+	_check(poor_buy.disabled, "Buy is disabled when gold cannot cover it")
+	_check(poor_buy.tooltip_text == I18n.t_key("market.no_gold"),
+		"the short-gold reason is market.no_gold (%s)" % poor_buy.tooltip_text)
+
+	# --- Stay in port / Esc both return to S4 -----------------------------
+	_make_starter_run()
+	prompt.rebuild()
+	GameState.gold = 5000
+	await get_tree().process_frame
+	var stay: Button = prompt.get_node("Center/Panel/Margin/Body/Footer/Stay")
+	_check(stay.text == I18n.t_key("port.sail.stay"),
+		"Stay in port uses port.sail.stay (%s)" % stay.text)
+	stay.pressed.emit()
+	await get_tree().process_frame
+	_check(not prompt.is_open(), "Stay in port closes the prompt")
+	_check(GameState.current_port == "lisbon",
+		"Stay in port leaves the fleet docked at Lisbon")
+	_check(not get_tree().get_nodes_in_group("modal_overlay").has(prompt),
+		"a closed prompt leaves modal_overlay")
+
+	# Esc on S4 re-opens it; Esc *inside* it goes back to S4, never sails.
+	var esc := InputEventAction.new()
+	esc.action = "back"
+	esc.pressed = true
+	hub._unhandled_input(esc)
+	await get_tree().process_frame
+	_check(prompt.is_open(), "Esc on S4 opens the prompt (§4.3)")
+	prompt._unhandled_input(esc)
+	await get_tree().process_frame
+	_check(not prompt.is_open(), "Esc inside the prompt closes it")
+	_check(GameState.current_port == "lisbon",
+		"Esc inside the prompt does not sail (still docked)")
+
+	# The enabled Set Sail runs the existing PortScreen.set_sail() path.
+	hub._unhandled_input(esc)
+	await get_tree().process_frame
+	var sailed: Array = []
+	hub.sailed.connect(func() -> void: sailed.append(true))
+	prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").pressed.emit()
+	await get_tree().process_frame
+	_check(sailed.size() == 1,
+		"the prompt's Set Sail calls PortScreen.set_sail() (one sailed signal)")
+	_check(GameState.current_port == null,
+		"…which clears current_port (the one S4 → S3 path)")
+	_check(float(GameState.world["clock_fraction"]) == 0.0,
+		"…and resets clock_fraction to 0.0")
+
+	# Locale rebind while open.
+	_make_starter_run()
+	prompt.rebuild()
+	prompt.open()
+	await get_tree().process_frame
+	I18n.set_locale("zh")
+	await get_tree().process_frame
+	_check((prompt.get_node("Center/Panel/Margin/Body/Title") as Label).text
+		== "出航准备", "the prompt rebinds on locale_changed (%s)"
+		% (prompt.get_node("Center/Panel/Margin/Body/Title") as Label).text)
+	var zh_buy: Button = prompt.buy_button("provisions")
+	_check(zh_buy.text == I18n.fmt("port.sail.buy",
+			{"qty": prompt.pending_qty("provisions"), "gold": 0}),
+		"the Buy label rebinds to zh (%s)" % zh_buy.text)
+	I18n.set_locale("en")
+	prompt.close()
+	await get_tree().process_frame
+
+	hub.queue_free()
+	host.queue_free()
+	await get_tree().process_frame
+
+
+## The locked §4.11.2 gate: no crew, or less than a day of supplies.
+func _test_provisions_gate() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	_make_starter_run()
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+	var prompt = hub.provisions_dialog()
+	if prompt == null:
+		host.queue_free()
+		return
+
+	# --- crew 0 ----------------------------------------------------------
+	_check(SailingSimLib.supply_block_reason() == "",
+		"the gate is open for the starter caravel")
+	GameState.fleet[0]["crew"] = 0
+	_check(SailingSimLib.supply_block_reason() == "port.sail.no_crew",
+		"crew 0 → port.sail.no_crew (got '%s')"
+		% SailingSimLib.supply_block_reason())
+	prompt.open()
+	await get_tree().process_frame
+	var sail: Button = prompt.get_node("Center/Panel/Margin/Body/Footer/Sail")
+	_check(sail.disabled, "Set Sail is disabled with no crew")
+	var reason: Label = prompt.get_node(
+		"Center/Panel/Margin/Body/Footer/GateReason"
+	)
+	_check(reason.visible and reason.text == I18n.t_key("port.sail.no_crew"),
+		"the reason is visible and uses port.sail.no_crew (%s)" % reason.text)
+	var days_label: Label = prompt.get_node(
+		"Center/Panel/Margin/Body/DaysRow/Days"
+	)
+	_check(days_label.text == I18n.t_key("port.sail.days_zero"),
+		"days == 0 shows port.sail.days_zero (%s)" % days_label.text)
+	# A programmatic press must not leak past the gate either.
+	var sailed: Array = []
+	hub.sailed.connect(func() -> void: sailed.append(true))
+	sail.pressed.emit()
+	_check(sailed.is_empty(), "the gated Set Sail emits nothing")
+	_check(hub.set_sail() == false, "set_sail() itself refuses with no crew")
+	_check(GameState.current_port == "lisbon",
+		"the refused set_sail() leaves current_port untouched")
+
+	# --- supplies 0 ------------------------------------------------------
+	_make_starter_run()
+	GameState.fleet[0]["provisions"] = 0
+	_check(SailingSimLib.supply_block_reason() == "port.sail.no_supply",
+		"provisions 0 → port.sail.no_supply (got '%s')"
+		% SailingSimLib.supply_block_reason())
+	prompt.rebuild()
+	await get_tree().process_frame
+	_check(sail.disabled, "Set Sail is disabled with 0 days of supply")
+	_check(reason.text == I18n.t_key("port.sail.no_supply"),
+		"the reason is port.sail.no_supply (%s)" % reason.text)
+	_check(hub.set_sail() == false,
+		"set_sail() refuses with less than a day of supplies")
+	_check(GameState.current_port == "lisbon",
+		"the refused set_sail() leaves the fleet in port")
+
+	# Two units is still less than one day (15 crew need 3).
+	_make_starter_run()
+	GameState.fleet[0]["provisions"] = 2
+	_check(SailingSimLib.supply_block_reason() == "port.sail.no_supply",
+		"2 provisions at 3/day is still under one day")
+	# Exactly one day opens the gate.
+	_make_starter_run()
+	GameState.fleet[0]["provisions"] = 3
+	GameState.fleet[0]["water"] = 3
+	_check(SailingSimLib.supply_block_reason() == "",
+		"exactly one day of each opens the gate (days ≥ 1)")
+	prompt.rebuild()
+	await get_tree().process_frame
+	_check(not sail.disabled, "Set Sail enables at exactly one day")
+	_check(not reason.visible, "the gate reason hides when the gate is open")
+
+	# --- the short-supply warning (WARN band) ----------------------------
+	_make_starter_run()
+	GameState.fleet[0]["provisions"] = 15
+	GameState.fleet[0]["water"] = 15
+	prompt.rebuild()
+	await get_tree().process_frame
+	var short: Label = prompt.get_node(
+		"Center/Panel/Margin/Body/DaysRow/Short"
+	)
+	_check(prompt.days_of_supply() == 5, "15 / 3 = 5 days (got %d)"
+		% prompt.days_of_supply())
+	_check(short.visible and short.text == I18n.fmt(
+		"port.sail.short_warning", {"days": 5}),
+		"a small but non-zero readout shows port.sail.short_warning (%s)"
+		% short.text)
+	_check(days_label.get_theme_color("font_color") == Color("#d9a441"),
+		"5 days is WARN amber (§4.8)")
+	# BAD ≤ 2.
+	GameState.fleet[0]["provisions"] = 6
+	GameState.fleet[0]["water"] = 6
+	prompt.rebuild()
+	await get_tree().process_frame
+	_check(prompt.days_of_supply() == 2, "6 / 3 = 2 days (got %d)"
+		% prompt.days_of_supply())
+	_check(days_label.get_theme_color("font_color") == Color("#b3341f"),
+		"2 days is BAD red (§4.8)")
+
+	prompt.close()
+	hub.queue_free()
+	host.queue_free()
+	await get_tree().process_frame
+
+
+# --- 9. The officers panel entry points (S18) -----------------------------
+
+func _test_officers_panel_entry() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	_make_run("lisbon", LISBON_TILE)
+	GameState.player["officers"] = ["off_mateus_alvares"]
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+
+	var panel = hub.officers_panel()
+	_check(panel != null, "the hub attaches the S18 officers panel")
+	if panel == null:
+		host.queue_free()
+		return
+	_check(not panel.is_open(), "the officers panel starts closed")
+
+	# `O` on S4 (§4.3).
+	var key := InputEventAction.new()
+	key.action = "toggle_officers"
+	key.pressed = true
+	hub._unhandled_input(key)
+	await get_tree().process_frame
+	_check(panel.is_open(), "`O` opens the officers panel (S18, §4.3)")
+	_check(hub.has_modal(), "the hub knows the officers panel is a modal")
+	_check(panel.officer_ids() == ["off_mateus_alvares"],
+		"the panel lists the employed officer (%s)" % str(panel.officer_ids()))
+	# While the panel is up the hub defers (a modal owns input first, §6), so the
+	# toggle lands on the panel itself — exactly what the real input chain does.
+	panel._unhandled_input(key)
+	await get_tree().process_frame
+	_check(not panel.is_open(), "`O` closes it again (§4.3 toggle)")
+	_check(not hub.has_modal(), "a closed panel is no longer a modal")
+
+	# The facility-list row (docs/80-* §4.6.2 "opened from S4's facility list").
+	var row: Button = hub.officers_row()
+	_check(row != null, "S4's facility list carries an Officers row")
+	if row != null:
+		_check(row.text == I18n.t_key("officers.title"),
+			"the Officers row is localised (%s)" % row.text)
+		_check(row.custom_minimum_size.y == 40.0,
+			"the Officers row uses the 40px button height (§4.8)")
+		_check(not row.has_meta("facility_id"),
+			"the Officers row is not a facility (no facility_id meta)")
+		_check(not hub.facility_row_ids().has("officers"),
+			"…so it never enters facility_row_ids (§4.1 order is untouched)")
+		_check(row.custom_minimum_size == Vector2(240, 40),
+			"the Officers row matches the facility-row geometry")
+		row.pressed.emit()
+		await get_tree().process_frame
+		_check(panel.is_open(), "the Officers row opens the panel")
+		panel.close()
+
+	# Esc is behind the modal rule: it closes the panel, never Set Sail.
+	panel.open()
+	await get_tree().process_frame
+	var esc := InputEventAction.new()
+	esc.action = "back"
+	esc.pressed = true
+	hub._unhandled_input(esc)
+	await get_tree().process_frame
+	_check(panel.is_open(),
+		"Esc behind the open officers panel does not reach S4's Set Sail edge")
+	_check(GameState.current_port == "lisbon",
+		"…so the fleet stays docked (current_port %s)"
+		% str(GameState.current_port))
+	panel.close()
+
+	hub.queue_free()
+	host.queue_free()
+	await get_tree().process_frame
 
 # --- Harness ---------------------------------------------------------------
 

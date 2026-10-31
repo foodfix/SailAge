@@ -159,6 +159,10 @@ alignment = 2
 [node name="Hint" type="Label" parent="Center/Panel/Margin/Body/Footer"]
 layout_mode = 2
 
+[node name="Officers" type="Button" parent="Center/Panel/Margin/Body/Footer"]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+
 [node name="Close" type="Button" parent="Center/Panel/Margin/Body/Footer"]
 custom_minimum_size = Vector2(120, 40)
 layout_mode = 2

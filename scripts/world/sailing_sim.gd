@@ -483,6 +483,64 @@ static func move_cost() -> float:
 	return 1.0 / float(effective_speed())
 
 
+# --- Days of supply (docs/20-* §4.10, §4.11.2) -----------------------------
+
+## `need = ceil(crew / RATION_SIZE)` units of provisions **and** the same of
+## water per day at sea (docs/20-* §4.5, §4.10). Zero crew needs 0, which is
+## why the caller must consult [method supply_block_reason] before dividing
+## (a crewing failure is the sailing gate's business, not the formula's).
+static func daily_need(crew: int) -> int:
+	if crew <= 0:
+		return 0
+	return int(ceil(float(crew) / float(RATION_SIZE)))
+
+
+## docs/20-* §4.10, the **locked** days-of-supply readout:
+##   `days = min(floor(provisions / need), floor(water / need))`
+##
+## Evidence for the locked expectation: a starter caravel (15 crew, 45/45)
+## needs `ceil(15 / 5) = 3` units of each per day, so both stacks give
+## `floor(45 / 3) = 15` days — and §4.10's own worked example (60 + 60 units
+## = 20 days) agrees. The formula is the single implementation for the
+## provisioning prompt (`80-*` §4.6.1) and the fleet panel (`80-*` §4.5.1);
+## nothing else may recompute it.
+##
+## Returns 0 when `need` is 0 (no crew — see [method supply_block_reason]).
+static func supply_days(provisions: int, water: int, crew: int) -> int:
+	var need := daily_need(crew)
+	if need <= 0:
+		return 0
+	return mini(
+		int(floor(float(maxi(provisions, 0)) / float(need))),
+		int(floor(float(maxi(water, 0)) / float(need)))
+	)
+
+
+## Days of supply for the **pooled** fleet (docs/20-* §4.10 totals row).
+static func fleet_supply_days() -> int:
+	return supply_days(
+		FleetLib.supplies("provisions"), FleetLib.supplies("water"),
+		FleetLib.total_crew()
+	)
+
+
+## `ui_strings.json` key explaining why the fleet may not leave port, or `""`
+## when the sailing gate is open (docs/20-* §4.11.2, locked):
+##   * `total_crew >= 1`                  → else `port.sail.no_crew`
+##   * `days >= 1` (the §4.10 formula)    → else `port.sail.no_supply`
+##
+## The key is returned rather than text (the engine never renders), and the
+## crew check comes first because `days` is meaningless with no crew. Every
+## caller — `PortScreen.set_sail()` and the provisioning prompt — asks this
+## one function, so the button state and the refusal can never disagree.
+static func supply_block_reason() -> String:
+	if FleetLib.total_crew() < 1:
+		return "port.sail.no_crew"
+	if fleet_supply_days() < 1:
+		return "port.sail.no_supply"
+	return ""
+
+
 # --- Movement (docs/20-* §4.1, §4.2, §6) ------------------------------------
 
 ## True when the fleet at `from` may step onto `to`.

@@ -1527,5 +1527,109 @@
   "world.sail.arrived": {
     "zh": "已抵达目的地",
     "en": "Destination reached"
+  },
+  "port.sail.prepare": {
+    "zh": "出航准备",
+    "en": "Prepare to Sail"
+  },
+  "port.sail.days": {
+    "zh": "可航行天数:{days}",
+    "en": "Days at sea: {days}"
+  },
+  "port.sail.days_zero": {
+    "zh": "补给不足,无法出航",
+    "en": "Not enough supplies to sail"
+  },
+  "port.sail.no_crew": {
+    "zh": "没有船员,无法出航",
+    "en": "No crew aboard — cannot sail"
+  },
+  "port.sail.no_supply": {
+    "zh": "补给不足一天,无法出航",
+    "en": "Less than a day of supplies — cannot sail"
+  },
+  "port.sail.short_warning": {
+    "zh": "离港后第 {days} 天起可能断粮。",
+    "en": "Supplies may run short after {days} days."
+  },
+  "port.sail.stay": {
+    "zh": "留在港口",
+    "en": "Stay in port"
+  },
+  "port.sail.buy": {
+    "zh": "购买 {qty}({gold}g)",
+    "en": "Buy {qty} ({gold}g)"
+  },
+  "port.sail.jettison_hint": {
+    "zh": "货舱已满,请先抛弃部分货物。",
+    "en": "Hold is full — jettison some cargo first."
+  },
+  "fleet.ship_header": {
+    "zh": "舰队",
+    "en": "Fleet"
+  },
+  "fleet.stat.durability": {
+    "zh": "耐久 {current}/{max}",
+    "en": "Durability {current}/{max}"
+  },
+  "fleet.stat.cargo": {
+    "zh": "载重 {used}/{capacity}(剩余 {free})",
+    "en": "Cargo {used}/{capacity} ({free} free)"
+  },
+  "fleet.stat.crew": {
+    "zh": "船员 {crew}/{max}",
+    "en": "Crew {crew}/{max}"
+  },
+  "fleet.stat.guns": {
+    "zh": "火炮 {cannons}/{slots}",
+    "en": "Guns {cannons}/{slots}"
+  },
+  "fleet.stat.speed": {
+    "zh": "航速 {speed}/{max} 格/日(风:{wind})",
+    "en": "Speed {speed}/{max} tiles/day (wind: {wind})"
+  },
+  "fleet.stat.supply": {
+    "zh": "{kind} {amount}({days} 天)",
+    "en": "{kind} {amount} ({days} days)"
+  },
+  "fleet.totals": {
+    "zh": "船队合计",
+    "en": "Fleet totals"
+  },
+  "fleet.total_days": {
+    "zh": "全队可航行 {days} 天",
+    "en": "Whole fleet: {days} days"
+  },
+  "officers.title": {
+    "zh": "官员",
+    "en": "Officers"
+  },
+  "officers.slots": {
+    "zh": "{used} / {max} · 日薪 {wage}g",
+    "en": "{used} / {max} · wages {wage}g/day"
+  },
+  "officers.effect": {
+    "zh": "效果:{effect}",
+    "en": "Effect: {effect}"
+  },
+  "officers.recruited_at": {
+    "zh": "雇佣于:{port}",
+    "en": "Hired at: {port}"
+  },
+  "officers.dismiss": {
+    "zh": "解雇",
+    "en": "Dismiss"
+  },
+  "officers.dismiss.confirm": {
+    "zh": "确定要解雇{name}吗?",
+    "en": "Dismiss {name}?"
+  },
+  "officers.empty_hint": {
+    "zh": "在酒馆招募新官员",
+    "en": "Recruit officers at a tavern"
+  },
+  "officers.readonly_sea": {
+    "zh": "海上无法解雇官员",
+    "en": "Officers cannot be dismissed at sea"
   }
 }

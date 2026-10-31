@@ -113,11 +113,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="Supplies" type="HBoxContainer" parent="Layout/VBox"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 8
-
 [node name="Footer" type="HBoxContainer" parent="Layout/VBox"]
 layout_mode = 2
 mouse_filter = 2

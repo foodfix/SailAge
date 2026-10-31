@@ -474,11 +474,38 @@ func _test_set_sail_round_trip() -> void:
 		_drain_dialogs(hud)
 		_check(not port.has_modal(), "the dialog queue drains")
 
-	# --- Esc = Set Sail (S4's back edge is S3, §4.3/§4.2) ------------------
+	# --- Esc on S4 = the Set Sail edge, which since Phase 5 opens the
+	# provisioning prompt first (docs/80-* §4.3, §4.6.1; docs/20-* §4.11.2) ---
 	var esc := InputEventAction.new()
 	esc.action = "back"
 	esc.pressed = true
 	port._unhandled_input(esc)
+	await tree.process_frame
+	await tree.process_frame
+
+	_check(tree.current_scene == port,
+		"Esc on S4 opens the provisioning prompt instead of routing directly")
+	var prompt = port.provisions_dialog()
+	_check(prompt != null and prompt.is_open(),
+		"Esc on S4 opens the Set-Sail provisioning prompt (§4.6.1)")
+	_check(GameState.current_port == "lisbon",
+		"the prompt keeps the fleet in port until Set Sail is confirmed")
+	# `Esc` inside the prompt is *back to S4*, not sail.
+	var prompt_esc := InputEventAction.new()
+	prompt_esc.action = "back"
+	prompt_esc.pressed = true
+	prompt._unhandled_input(prompt_esc)
+	await tree.process_frame
+	_check(not prompt.is_open(), "Esc inside the prompt closes it back to S4")
+	_check(GameState.current_port == "lisbon",
+		"Esc inside the prompt does not sail (still docked)")
+	# Re-open and sail through the prompt's own Set Sail — the existing path.
+	port._unhandled_input(esc)
+	await tree.process_frame
+	_check(prompt.is_open(), "Esc re-opens the prompt")
+	_check(not prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").disabled,
+		"Set Sail is enabled with a crew and a day of supplies")
+	prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").pressed.emit()
 	await tree.process_frame
 	await tree.process_frame
 

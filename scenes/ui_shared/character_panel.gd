@@ -24,6 +24,10 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+## S18 officers detail panel (docs/80-* §4.6.2): the footer button opens it, so
+## the roster has the two entry points the doc names (S4's facility list and the
+## character panel). Preloaded by path so a cold class cache is harmless.
+const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
 
 const SCENE_PATH := "res://scenes/ui_shared/character_panel.tscn"
 ## Dim strength for modals (docs/80-* §4.7: "dimming the background by 40% black").
@@ -71,6 +75,7 @@ const ROLE_KEYS := {
 	$Center/Panel/Margin/Body/QuestsPanel/Scroll/Rows
 @onready var _quest_empty: Label = $Center/Panel/Margin/Body/QuestsPanel/Empty
 @onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
+@onready var _officers_button: Button = $Center/Panel/Margin/Body/Footer/Officers
 @onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
 
 ## The visible tab ([constant TAB_STATS] / [constant TAB_QUESTS]).
@@ -140,6 +145,8 @@ func _ready() -> void:
 	_quest_slots.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_close_button.pressed.connect(close)
+	_officers_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
+	_officers_button.pressed.connect(open_officers_panel)
 	_stats_tab.pressed.connect(select_tab.bind(TAB_STATS))
 	_quests_tab.pressed.connect(select_tab.bind(TAB_QUESTS))
 	_levelup.visible = false
@@ -195,6 +202,19 @@ func is_open() -> bool:
 	return visible
 
 
+## Opens the S18 officers detail panel (docs/80-* §4.6.2: "opened from S4's
+## facility list and from the character panel"). The panel is parent-agnostic and
+## attaches itself to whichever host is showing; S14 closes so the two modals
+## never stack.
+func open_officers_panel() -> Control:
+	var host := get_parent()
+	var panel := OfficersPanelLib.attach_to(host if host != null else self)
+	if panel != null and panel.has_method("open"):
+		close()
+		panel.open_on(host)
+	return panel
+
+
 func active_tab() -> String:
 	return _tab
 
@@ -244,6 +264,7 @@ func _refresh() -> void:
 
 	_wage.text = I18n.fmt("char.officer_wage", {"gold": CharacterLib.officer_wages()})
 	_close_button.text = I18n.t_key("ui.close")
+	_officers_button.text = I18n.t_key("officers.title")
 	_hint.text = I18n.t_key("ui.esc_hint")
 	_levelup.visible = CharacterLib.pending_levelup
 	if _levelup.visible:

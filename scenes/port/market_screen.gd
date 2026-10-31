@@ -8,9 +8,15 @@ extends Control
 ##     `data/goods.json`, sorted by `base_price`), so a 21st good is a
 ##     data-only change — there is no per-good code anywhere in this file;
 ##   * prices, quantity ceilings and trade side effects are the
-##     `trade_engine.gd` formulas, never duplicated here;
-##   * supplies are the two §4.10 kinds at the fixed 2g / 1g prices and are not
-##     sellable, so they get a Buy button only.
+##     `trade_engine.gd` formulas, never duplicated here.
+##
+## **The market sells trade goods only** (docs/20-* §4.10 as amended, docs/80-*
+## §4.6.1): provisions and water are survival, not commerce, and are bought at
+## the Set-Sail provisioning prompt (`scenes/port/provisions_dialog.tscn`) — the
+## single supply purchase point. The supplies row that used to live here was
+## removed with the prompt's introduction; `market.provisions` / `market.water`
+## / `market.supplies` are no longer reachable from this screen (see the task
+## report for the key inventory).
 ##
 ## The screen holds no state of its own beyond the per-row quantity field: on
 ## every `gold_changed` / `fleet_changed` the rows are re-read, so a trade
@@ -45,8 +51,9 @@ const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W
 ## Emitted right before the S5 → S4 route (tests observe it instead of swapping
 ## their own scene root, the `port_screen.gd` convention).
 signal went_back
-## Emitted after a successful trade: `"buy"` / `"sell"` / `"supplies"` /
-## `"invest"`, with the good id ("" for supplies/investment) and the quantity.
+## Emitted after a successful trade: `"buy"` / `"sell"` / `"invest"`, with the
+## good id ("" for investment) and the quantity. The `"supplies"` kind is gone
+## with the supplies row (docs/20-* §4.10: supplies are not a market good).
 signal traded(kind: String, good_id: String, qty: int)
 
 @onready var _background: ColorRect = $Background
@@ -62,7 +69,6 @@ signal traded(kind: String, good_id: String, qty: int)
 	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll
 @onready var _goods_rows: VBoxContainer = \
 	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows
-@onready var _supplies_row: HBoxContainer = $Layout/VBox/Supplies
 @onready var _invest_button: Button = $Layout/VBox/Footer/Invest
 @onready var _invest_status: Label = $Layout/VBox/Footer/InvestStatus
 @onready var _toast: Label = $Toast
@@ -77,8 +83,6 @@ var _port_id: String = ""
 ## Per-good widget references, `{good_id: {name, price, have, qty, qty_buttons,
 ## buy, sell}}`, in the table's display order.
 var _rows: Dictionary = {}
-## Per-supply widget references, `{kind: {qty, buy}}`.
-var _supply_rows: Dictionary = {}
 ## True while a `text_changed` handler rewrites its own LineEdit, so the
 ## rewrite does not re-enter the sanitiser.
 var _sanitizing := false
@@ -222,31 +226,6 @@ func press_sell(good_id: String) -> bool:
 	return true
 
 
-func supply_row(kind: String) -> Dictionary:
-	return _supply_rows.get(kind, {})
-
-
-## Types into a supply row's quantity field.
-func type_supply_qty(kind: String, text: String) -> void:
-	var refs: Dictionary = _supply_rows.get(kind, {})
-	if refs.is_empty():
-		return
-	var field: LineEdit = refs["qty"]
-	field.text = text
-	_on_supply_qty_changed(kind)
-
-
-func press_supply_buy(kind: String) -> bool:
-	var refs: Dictionary = _supply_rows.get(kind, {})
-	if refs.is_empty():
-		return false
-	var button: Button = refs["buy"]
-	if button.disabled:
-		return false
-	button.pressed.emit()
-	return true
-
-
 func press_invest() -> bool:
 	if _invest_button.disabled:
 		return false
@@ -271,9 +250,10 @@ func go_back() -> void:
 
 # --- Construction ----------------------------------------------------------
 
-## Builds the fixed column header, one row per good in `goods.json`, and the
-## two supplies rows. Called once from `_ready`; a locale change only re-binds
-## the labels ([method _bind]) because no row content changes with locale.
+## Builds the fixed column header and one row per good in `goods.json`. Called
+## once from `_ready`; a locale change only re-binds the labels ([method _bind])
+## because no row content changes with locale. There is **no** supplies row:
+## provisions and water are bought in the Set-Sail prompt (docs/20-* §4.10).
 func _build() -> void:
 	_build_column_header()
 	for child in _goods_rows.get_children():
@@ -285,7 +265,6 @@ func _build() -> void:
 		if good_id.is_empty():
 			continue
 		_rows[good_id] = _build_good_row(good_id)
-	_build_supplies()
 
 
 func _build_column_header() -> void:
@@ -393,55 +372,6 @@ func _build_good_row(good_id: String) -> Dictionary:
 	}
 
 
-## The two §4.10 supplies rows: fixed 2g / 1g, no sell button (sell-back is not
-## offered for supplies).
-func _build_supplies() -> void:
-	for child in _supplies_row.get_children():
-		_supplies_row.remove_child(child)
-		child.queue_free()
-	_supply_rows.clear()
-
-	var caption := Label.new()
-	caption.name = "Caption"
-	caption.set_meta("text_key", "market.supplies")
-	caption.custom_minimum_size.x = 120
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_supplies_row.add_child(caption)
-
-	for kind in TradeEngineLib.SUPPLY_KINDS:
-		var label := Label.new()
-		label.name = "Label_%s" % kind
-		label.set_meta("text_key", "market.%s" % kind)
-		label.custom_minimum_size.x = 160
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-		_supplies_row.add_child(label)
-
-		var qty_field := LineEdit.new()
-		qty_field.name = "Qty_%s" % kind
-		qty_field.custom_minimum_size = Vector2(float(COL_QTY_W), float(PaletteLib.BUTTON_H))
-		qty_field.max_length = 6
-		qty_field.placeholder_text = "0"
-		_supplies_row.add_child(qty_field)
-		qty_field.text_changed.connect(_on_supply_qty_text_changed.bind(kind))
-
-		var buy_button := Button.new()
-		buy_button.name = "Buy_%s" % kind
-		buy_button.custom_minimum_size = Vector2(float(COL_BUTTON_W), float(PaletteLib.BUTTON_H))
-		buy_button.focus_mode = Control.FOCUS_ALL
-		buy_button.pressed.connect(_on_supply_buy.bind(kind))
-		_supplies_row.add_child(buy_button)
-
-		var spacer := Control.new()
-		spacer.name = "Spacer_%s" % kind
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_supplies_row.add_child(spacer)
-
-		_supply_rows[kind] = {"qty": qty_field, "buy": buy_button, "label": label}
-
-
 func _make_row_button(node_name: String, text: String, width: int) -> Button:
 	var button := Button.new()
 	button.name = node_name
@@ -483,14 +413,6 @@ func _bind() -> void:
 		(refs["sell"] as Button).text = I18n.t_key("market.sell")
 		((refs["qty_buttons"] as Dictionary)["max"] as Button).text = \
 			I18n.t_key("market.max")
-	var caption: Label = _supplies_row.get_node("Caption")
-	caption.text = I18n.t_key("market.supplies")
-	for kind in _supply_rows:
-		var refs: Dictionary = _supply_rows[kind]
-		(refs["label"] as Label).text = I18n.fmt(
-			"market.%s" % kind, {"price": TradeEngineLib.supplies_price(kind)}
-		)
-		(refs["buy"] as Button).text = I18n.t_key("market.buy")
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -498,7 +420,6 @@ func _bind() -> void:
 func _refresh() -> void:
 	_refresh_header()
 	_refresh_rows()
-	_refresh_supplies()
 	_refresh_investment()
 
 
@@ -607,29 +528,6 @@ func _set_button_state(button: Button, enabled: bool, reason: String) -> void:
 	button.tooltip_text = reason
 
 
-func _refresh_supplies() -> void:
-	for kind in _supply_rows:
-		var refs: Dictionary = _supply_rows[kind]
-		var field: LineEdit = refs["qty"]
-		var cap := TradeEngineLib.supplies_buy_max(kind) if not _port_id.is_empty() else 0
-		# Same split as the goods rows: the field clamps to the physical hold,
-		# the purse is reported as a disabled-button reason.
-		_clamp_field(field, FleetLib.fleet_free())
-		var qty := _parse_qty(field.text)
-		var reason := ""
-		if _port_id.is_empty():
-			reason = I18n.t_key("market.invalid_qty")
-		elif FleetLib.fleet_free() <= 0:
-			reason = I18n.t_key("market.hold_full")
-		elif qty <= 0:
-			reason = I18n.t_key("market.invalid_qty")
-		elif qty > cap:
-			var price := TradeEngineLib.supplies_price(kind)
-			reason = I18n.t_key("market.no_gold") if GameState.gold < price \
-				else I18n.fmt("market.not_enough_gold", {"gold": price * qty})
-		_set_button_state(refs["buy"] as Button, reason.is_empty(), reason)
-
-
 func _refresh_investment() -> void:
 	var invested := TradeEngineLib.invested(_port_id)
 	var percent := TradeEngineLib.investment_percent(_port_id)
@@ -668,25 +566,6 @@ func _on_qty_changed(good_id: String, text: String) -> void:
 	var ceiling := _qty_ceiling(TradeEngineLib.sell_max(good_id))
 	_set_field_text(field, _sanitize(text, ceiling))
 	_apply_row_limits(good_id)
-
-
-func _on_supply_qty_text_changed(_text: String, kind: String) -> void:
-	_on_supply_qty_changed(kind)
-
-
-func _on_supply_qty_changed(kind: String) -> void:
-	if _sanitizing:
-		return
-	var refs: Dictionary = _supply_rows.get(kind, {})
-	if refs.is_empty():
-		return
-	# Same physical ceiling as [_refresh_supplies]: the free hold. The purse is
-	# a disabled-button reason, not a silent rewrite of what was typed.
-	var ceiling := FleetLib.fleet_free() if not _port_id.is_empty() else 0
-	_set_field_text(refs["qty"] as LineEdit, _sanitize(
-		(refs["qty"] as LineEdit).text, ceiling
-	))
-	_refresh_supplies()
 
 
 ## `1 / 10 / 100 / Max` presets. The single picker serves both Buy and Sell, so
@@ -729,20 +608,6 @@ func _on_sell(good_id: String) -> void:
 			"qty": qty, "name": I18n.t(good.get("name", {})),
 		}))
 		traded.emit("sell", good_id, qty)
-
-
-func _on_supply_buy(kind: String) -> void:
-	var refs: Dictionary = _supply_rows.get(kind, {})
-	if refs.is_empty():
-		return
-	var qty := _parse_qty((refs["qty"] as LineEdit).text)
-	if qty <= 0:
-		return
-	if TradeEngineLib.buy_supplies(_port_id, kind, qty):
-		_show_toast(I18n.fmt("market.traded", {
-			"qty": qty, "name": _supply_name(kind),
-		}))
-		traded.emit("supplies", kind, qty)
 
 
 func _on_invest_pressed() -> void:
@@ -805,14 +670,6 @@ static func _parse_qty(text: String) -> int:
 	if text.strip_edges().is_empty():
 		return -1
 	return int(text)
-
-
-## Localised noun for a supply kind in a toast. The only supply strings in
-## `ui_strings.json` are the price-bearing row labels (`market.provisions` =
-## "Provisions 2g"), which read badly inside "Traded: …", so the section name
-## (`market.supplies`) is used instead — no new key is introduced.
-static func _supply_name(_kind: String) -> String:
-	return I18n.t_key("market.supplies")
 
 
 ## Transient bottom-center toast (docs/80 §4.7: 2.5s, max one visible).

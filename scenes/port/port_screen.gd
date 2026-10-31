@@ -19,25 +19,35 @@ extends Control
 ## appears only where the port JSON lists it. Editing `data/ports.json` changes
 ## the hub with no code edit (§4.1, docs/90-* §12).
 ##
-## Exit contract (docs/20-* §4.11, docs/80-* §4.3 "Esc = step back one edge;
-## S4's back edge is S3"):
+## Exit contract (docs/20-* §4.11, docs/80-* §4.3/§4.6.1, §4.11.2):
 ##   * `GameState.current_port = null`
 ##   * `GameState.world.clock_fraction = 0.0`
 ##   * `GameState.world.position` stays on the **berth** tile (`20-*` §4.11.1)
 ##   * route to `world_map.tscn`
-## `Esc` performs exactly the same transition as the button: the port screen
-## has no other back edge, so "step back" is "set sail" — documented here
-## because the doc's Esc rule is generic and this is its S4 reading.
+## Since Phase 5 both the `Set Sail` button and `Esc` on S4 open the **provisioning
+## prompt** (`provisions_dialog.tscn`) first — the same edge (`20-*` §4.11.2) —
+## and the prompt's own Set Sail calls [method set_sail]. `set_sail()` is also
+## **gated**: no crew or less than a day of supplies returns false with the state
+## untouched (`SailingSim.supply_block_reason`). `Esc` inside the prompt goes back
+## to S4 and never sails.
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
+## The sailing gate + days-of-supply formula live in the sim (`20-*` §4.10,
+## §4.11.2); S4 only asks.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## T18: the fleet/cargo panel is a parent-agnostic modal, like S14; the port hub
 ## and the world map attach it and offer a row / the `F` key.
 const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
+## Phase-5: the Set-Sail provisioning prompt (docs/80-* §4.6.1). A modal over
+## S4, opened by the Set Sail button **and** by `ESC` (§4.3, `20-*` §4.11.2).
+const ProvisionsLib := preload("res://scenes/port/provisions_dialog.gd")
+## Phase-5: the officers roster panel (S18, docs/80-* §4.6.2).
+const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 
@@ -125,6 +135,10 @@ var _row_ids: Array[String] = []
 ## `id:phase|…` snapshot of the data the rows were built from; a bind whose
 ## signature differs rebuilds them ([method _sync_facility_rows]).
 var _rows_signature: String = ""
+## The Phase-5 S18 row appended after the data-driven facility rows (§4.6.2
+## "opened from S4's facility list"). It carries no `facility_id` meta, so it is
+## not a facility and never disturbs the §4.1 order the tests pin.
+var _officers_row: Button = null
 
 
 func _ready() -> void:
@@ -157,6 +171,10 @@ func _ready() -> void:
 	CharacterPanelLib.attach_to(self)
 	# T18: the fleet/cargo panel (same modal contract; `F`, or the Fleet button).
 	FleetPanelLib.attach_to(self)
+	# Phase-5: the Set-Sail provisioning prompt (§4.6.1) and the S18 officers
+	# roster (§4.6.2) — both modals over S4, both parent-agnostic.
+	ProvisionsLib.attach_to(self, self)
+	OfficersPanelLib.attach_to(self, self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_state_changed)
@@ -166,14 +184,23 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# §4.3 "Esc = back / close modal"; S4's only back edge is Set Sail (§4.2).
+	# §4.3 "Esc = back / close modal". On S4 the back edge is **Set Sail**, and
+	# since Phase 5 that edge opens the provisioning prompt instead of routing
+	# directly (`20-*` §4.11.2 "ESC on S4 is the same edge as Set Sail").
 	# A modal owns input first (§6 "modals consume all input"), so Esc with a
-	# dialog or the S14 panel up closes that instead of leaving harbour.
+	# dialog, S14/S15/S18 or the prompt up closes that instead.
 	if event.is_action_pressed("back"):
 		if has_modal():
 			return
 		get_viewport().set_input_as_handled()
-		set_sail()
+		open_provisions()
+		return
+	# §4.3 "S4 | O | open/close the officers panel (S18)".
+	if event.is_action_pressed("toggle_officers"):
+		if has_modal():
+			return
+		get_viewport().set_input_as_handled()
+		toggle_officers_panel()
 		return
 	# Locale toggle lives in the HUD top bar; keep the key working here too when
 	# the HUD is not the focus owner.
@@ -187,11 +214,19 @@ func _unhandled_input(event: InputEvent) -> void:
 ## True while a modal is up on this screen: the HUD's queued dialogs, any
 ## dialog in the `modal_overlay` group, or the S14 character panel. Set Sail is
 ## never triggered from behind a modal (docs/80-* §6).
+##
+## The provisioning prompt and the S18 officers panel join `modal_overlay` while
+## open, so the group walk already covers them; they are also probed by name so
+## a host that attached them inside a `CanvasLayer` keeps working.
 func has_modal() -> bool:
 	if _hud != null and _hud.has_method("has_modal") and _hud.has_modal():
 		return true
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
 		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
+			return true
+	for panel_name in ["ProvisionsDialog", "OfficersPanel"]:
+		var extra := get_node_or_null(panel_name)
+		if extra != null and extra.has_method("has_modal") and extra.has_modal():
 			return true
 	var panel := get_node_or_null("CharacterPanel")
 	if panel != null and panel.has_method("is_open") and panel.is_open():
@@ -333,6 +368,65 @@ func open_fleet_panel() -> Control:
 func fleet_panel() -> Control:
 	return get_node_or_null("FleetPanel")
 
+
+## Opens the Set-Sail provisioning prompt (docs/80-* §4.6.1) — the S4 → S3 edge.
+## Both the Set Sail button and `ESC` on S4 land here (`20-*` §4.11.2); the
+## prompt's own Set Sail then calls [method set_sail], so the transition exists
+## once. Returns the prompt (null only if the scene failed to load).
+func open_provisions() -> Control:
+	var panel := get_node_or_null("ProvisionsDialog")
+	if panel == null:
+		panel = ProvisionsLib.attach_to(self, self)
+	if panel != null and panel.has_method("open"):
+		# A standalone load (no docked port) has nothing to provision for.
+		if _read_current_port().is_empty():
+			return panel
+		panel.open_on(self)
+	return panel
+
+
+## The attached provisioning prompt (tests / hosts), or null.
+func provisions_dialog() -> Control:
+	return get_node_or_null("ProvisionsDialog")
+
+
+## Opens the S18 officers panel (docs/80-* §4.6.2). The `O` key and the
+## `port.officers` facility-style footer row both call this.
+func open_officers_panel() -> Control:
+	var panel := get_node_or_null("OfficersPanel")
+	if panel == null:
+		panel = OfficersPanelLib.attach_to(self, self)
+	if panel != null and panel.has_method("open"):
+		panel.open_on(self)
+	return panel
+
+
+## `O` on S4 toggles the officers panel (§4.3).
+func toggle_officers_panel() -> void:
+	var panel := get_node_or_null("OfficersPanel")
+	if panel != null and panel.has_method("is_open") and panel.is_open():
+		panel.close()
+		return
+	open_officers_panel()
+
+
+## The attached officers panel (tests / hosts), or null.
+func officers_panel() -> Control:
+	return get_node_or_null("OfficersPanel")
+
+
+## The S4 facility-list row that opens the S18 officers roster (§4.6.2), or null
+## when nothing is docked.
+func officers_row() -> Button:
+	return _officers_row
+
+
+## Why the fleet may not leave port, as a `ui_strings.json` key (`""` = may
+## sail). Delegated to [SailingSim.supply_block_reason] so the prompt's disabled
+## button and this refusal can never disagree (`20-*` §4.11.2).
+func sail_block_reason() -> String:
+	return SailingSimLib.supply_block_reason()
+
 ## Open the 3-slot save dialog (docs/80-* §4.6). Returns the dialog so a test can
 ## drive it; null when the shared scene is missing. The button is enabled only
 ## while the screen has a run and a docked port (its own precondition).
@@ -346,6 +440,11 @@ func open_save_dialog() -> Control:
 ## clears `current_port`, resets `clock_fraction` to 0, keeps the fleet on the
 ## **berth** tile, then routes to the world map.
 ##
+## **Gated** by `20-*` §4.11.2 (locked): a fleet with no crew (`total_crew < 1`)
+## or less than one day of supply (the §4.10 formula) never reaches open water,
+## because §4.9's starvation/scurvy counters would otherwise start on day 1 with
+## no decision left to the player. Returns false with **state untouched**.
+##
 ## Returns false (state untouched) when there is nothing to sail: no run, or no
 ## berth tile to leave from. That only happens when the scene is opened
 ## standalone from the editor.
@@ -358,6 +457,11 @@ func set_sail() -> bool:
 		# A save that was taken in port always has `current_port`; a missing one
 		# means the scene was opened without docking (editor / test).
 		push_warning("PortScreen: set_sail() with no current_port; nothing to exit")
+		return false
+	if not sail_block_reason().is_empty():
+		# §4.11.2 hard gate: the prompt states the reason (`port.sail.no_crew` /
+		# `port.sail.no_supply`) and its Set Sail button is disabled, so this is
+		# the second line of defence for a programmatic caller.
 		return false
 
 	# §4.11 exit order: leave the berth tile in place, drop the docked flag,
@@ -407,6 +511,8 @@ func _bind() -> void:
 		})
 	_set_sail_button.text = I18n.t_key("port.set_sail")
 	_fleet_button.text = I18n.t_key("fleet.title")
+	if _officers_row != null:
+		_officers_row.text = I18n.t_key("officers.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
 
 	# T17: docs/80-* §4.6 "Save: available only at port". The row lives on S4,
@@ -523,6 +629,27 @@ func _sync_facility_rows(port: Dictionary) -> void:
 				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
+	_append_officers_row(port)
+
+
+## Adds the S18 officers roster row after the facility rows (docs/80-* §4.6.2
+## "opened from S4's facility list"). It is deliberately **not** a facility: no
+## `facility_id` meta, no phase, no `facility_requested` — the roster is a modal
+## over S4, not a screen swap. Absent when nothing is docked (standalone load),
+## because the hub renders no rows at all then.
+func _append_officers_row(port: Dictionary) -> void:
+	_officers_row = null
+	if port.is_empty():
+		return
+	var button := Button.new()
+	button.name = "Row_Officers"
+	button.text = I18n.t_key("officers.title")
+	button.disabled = GameState.player.is_empty()
+	button.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
+	button.set_meta("officers_row", true)
+	button.pressed.connect(open_officers_panel)
+	_facility_rows.add_child(button)
+	_officers_row = button
 
 
 func _clear_facility_rows() -> void:
@@ -531,6 +658,7 @@ func _clear_facility_rows() -> void:
 		child.queue_free()
 	_row_buttons.clear()
 	_row_ids.clear()
+	_officers_row = null
 
 
 ## Re-labels every rendered row from its stored key, keeping the stub note for
@@ -562,8 +690,13 @@ func _on_facility_row_pressed(facility_id: String) -> void:
 	open_facility(facility_id)
 
 
+## The Set Sail button is the S4 → S3 edge, and since Phase 5 that edge opens
+## the provisioning prompt first (docs/80-* §4.6.1, `20-*` §4.11.2). The prompt's
+## own Set Sail then calls [method set_sail], so the transition exists once.
 func _on_set_sail_pressed() -> void:
-	set_sail()
+	if _read_current_port().is_empty():
+		return
+	open_provisions()
 
 
 func _on_locale_changed(_locale: String) -> void:

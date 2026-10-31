@@ -59,6 +59,10 @@ visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 
+[node name="ShipsHeader" type="Label" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+
 [node name="Scroll" type="ScrollContainer" parent="Center/Panel/Margin/Body"]
 custom_minimum_size = Vector2(0, 420)
 layout_mode = 2
@@ -70,6 +74,10 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12
+
+[node name="Totals" type="VBoxContainer" parent="Center/Panel/Margin/Body"]
+layout_mode = 2
+theme_override_constants/separation = 2
 
 [node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/Body"]
 layout_mode = 2

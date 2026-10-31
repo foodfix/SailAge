@@ -15,13 +15,18 @@ extends Node
 ##   5 promotion: free, port-only, order-preserving, delegated (§4.4);
 ##   6 jettison per stack, immediate `fleet_free`, `fleet_changed` (§4.10);
 ##   7 the fleet/cargo panel (rows, durability bar, buttons, sea read-only,
-##     confirm dialog, locale rebind, port-hub hook) (§4.7, §4.8).
+##     confirm dialog, locale rebind, port-hub hook) (§4.7, §4.8);
+##   8 the Phase-5 §4.5.1 stat block: three stat lines per ship (durability +
+##     cargo, crew + guns, speed + wind), the per-ship supplies-with-days line,
+##     and the fleet totals row (pooled supplies, combined days, effective
+##     speed).
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const FleetPanelScene := preload("res://scenes/ui_shared/fleet_panel.tscn")
 const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const PortScreenScene := preload("res://scenes/port/port_screen.tscn")
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 ## The §5 worked loadout: 45 provisions + 45 water + 30 wine = 120 = caravel
 ## capacity ("45+45+30=120 = ShipType.capacity", `valid: true`).
@@ -42,6 +47,8 @@ func _ready() -> void:
 	_test_promote()
 	_test_jettison()
 	await _test_panel()
+	_test_days_formula()
+	await _test_stat_block()
 	_report()
 
 
@@ -483,16 +490,19 @@ func _test_panel() -> void:
 	_check(panel.promote_button(1) != null,
 		"a non-flagship row has a Promote button")
 
-	var stats: HBoxContainer = row0.get_node("Stats")
-	var bar: Control = stats.get_child(0)
-	var fill: ColorRect = bar.get_child(1)
+	# §4.5.1 stat block: `Stats` now holds three named lines (durability+cargo,
+	# crew+guns, speed), with one supplies line beneath.
+	var stats: VBoxContainer = row0.get_node("Stats")
+	var durability_line: HBoxContainer = stats.get_node("DurabilityLine")
+	var bar: Control = durability_line.get_child(0)
+	var fill: ColorRect = bar.get_node("BarFill")
 	_check(is_equal_approx(fill.anchor_right, 0.5),
 		"the durability bar fills to durability/max (%.2f)" % fill.anchor_right)
 	_check(fill.color == Color("#d9a441"),
 		"a half-damaged hull paints the WARN tier (§4.8): %s" % str(fill.color))
-	_check((stats.get_node("Crew") as Label).text == I18n.fmt(
-		"world.crew", {"crew": 15, "max": FleetLib.ship_stat(flagship, "crew_max")}),
-		"the crew line is localised through world.crew")
+	_check((stats.get_node("CrewLine/Crew") as Label).text == I18n.fmt(
+		"fleet.stat.crew", {"crew": 15, "max": FleetLib.ship_stat(flagship, "crew_max")}),
+		"the crew line is localised through fleet.stat.crew")
 
 	var supplies: HBoxContainer = row0.get_node("Supplies")
 	_check(supplies.get_child_count() >= 4,
@@ -758,6 +768,205 @@ func _test_panel() -> void:
 				"closing the panel unfreezes the world map")
 		world.queue_free()
 		await get_tree().process_frame
+
+
+
+# --- 8. Days of supply + the §4.5.1 stat block ----------------------------
+
+## The locked §4.10 formula, proven against the doc's own worked examples.
+func _test_days_formula() -> void:
+	_check(SailingSimLib.RATION_SIZE == 5, "RATION_SIZE is 5 (§4.5)")
+	_check(SailingSimLib.daily_need(15) == 3,
+		"15 crew eat ceil(15/5) = 3 units/day")
+	_check(SailingSimLib.daily_need(1) == 1, "1 crew eats 1 unit/day")
+	_check(SailingSimLib.daily_need(6) == 2, "6 crew eat ceil(6/5) = 2")
+	_check(SailingSimLib.daily_need(0) == 0, "0 crew need nothing")
+	_check(SailingSimLib.supply_days(45, 45, 15) == 15,
+		"starter caravel: 15 crew, 45/45 → 15 days")
+	_check(SailingSimLib.supply_days(60, 60, 15) == 20,
+		"§4.10 worked example: 60 + 60 units = 20 days")
+	_check(SailingSimLib.supply_days(45, 9, 15) == 3,
+		"the lesser of the two stacks binds (water 9 / 3 = 3 days)")
+	_check(SailingSimLib.supply_days(0, 0, 0) == 0,
+		"no crew / no stock is 0 days (the gate reports no_crew first)")
+
+
+## The §4.5.1 block: three named stat lines + supplies with days per hull, and
+## the fleet totals row at the bottom.
+func _test_stat_block() -> void:
+	_make_fleet(["caravel", "latin"])
+	var flagship: Dictionary = GameState.fleet[0]
+	flagship["crew"] = 15
+	flagship["provisions"] = 45
+	flagship["water"] = 45
+	flagship["cargo"] = {"wine": 30}
+	flagship["durability"] = 45
+	flagship["cannons"] = 2
+	GameState.fleet[1]["provisions"] = 12
+	GameState.fleet[1]["water"] = 12
+	GameState.world["weather"] = "fair"
+	GameState.gold = 5000
+	GameState.current_port = "lisbon"
+
+	var panel: Control = FleetPanelScene.instantiate()
+	add_child(panel)
+	await get_tree().process_frame
+	panel.open()
+	await get_tree().process_frame
+
+	var rows: VBoxContainer = panel.get_node(
+		"Center/Panel/Margin/Body/Scroll/Rows"
+	)
+	_check(rows.get_child_count() == 2,
+		"one row per hull; the totals row lives outside the list (got %d)"
+		% rows.get_child_count())
+	var ship_row: Node = rows.get_child(0)
+	var stats: VBoxContainer = ship_row.get_node("Stats")
+	_check(stats.get_child_count() == 3,
+		"three stat lines per ship (§4.5.1): got %d" % stats.get_child_count())
+
+	# Line 1: durability bar + `fleet.stat.durability` + `fleet.stat.cargo`.
+	var line1: HBoxContainer = stats.get_node("DurabilityLine")
+	var bar: Control = line1.get_node("DurabilityBar")
+	_check(bar != null, "line 1 carries the durability bar")
+	_check((line1.get_node("Durability") as Label).text == I18n.fmt(
+			"fleet.stat.durability", {"current": 45, "max": 90}),
+		"line 1 uses fleet.stat.durability (%s)"
+		% (line1.get_node("Durability") as Label).text)
+	var used := FleetLib.used_capacity(flagship)
+	var capacity := FleetLib.ship_stat(flagship, "capacity")
+	_check((line1.get_node("Cargo") as Label).text == I18n.fmt(
+			"fleet.stat.cargo", {
+				"used": used, "capacity": capacity,
+				"free": FleetLib.free_capacity(flagship),
+			}),
+		"line 1 uses fleet.stat.cargo with {used}/{capacity} and {free} (%s)"
+		% (line1.get_node("Cargo") as Label).text)
+
+	# Line 2: `fleet.stat.crew` + `fleet.stat.guns`.
+	var line2: HBoxContainer = stats.get_node("CrewLine")
+	_check((line2.get_node("Crew") as Label).text == I18n.fmt(
+			"fleet.stat.crew", {"crew": 15, "max": 45}),
+		"line 2 uses fleet.stat.crew (%s)"
+		% (line2.get_node("Crew") as Label).text)
+	_check((line2.get_node("Guns") as Label).text == I18n.fmt(
+			"fleet.stat.guns", {"cannons": 2, "slots": 6}),
+		"line 2 uses fleet.stat.guns with {cannons}/{slots} (%s)"
+		% (line2.get_node("Guns") as Label).text)
+
+	# Line 3: current effective speed for the flagship + the wind factor.
+	var line3: HBoxContainer = stats.get_node("SpeedLine")
+	var speed_text := (line3.get_node("Speed") as Label).text
+	_check(speed_text == I18n.fmt("fleet.stat.speed", {
+			"speed": SailingSimLib.effective_speed(),
+			"max": FleetLib.ship_stat(flagship, "speed"),
+			"wind": I18n.t_key("world.weather.fair"),
+		}),
+		"the flagship line shows the current effective speed + the wind (%s)"
+		% speed_text)
+	_check(speed_text.contains(I18n.t_key("world.weather.fair")),
+		"the wind factor is the localised weather name (%s)" % speed_text)
+	# A non-flagship shows its hull's base speed (the fleet moves at the slowest).
+	var escort_line: HBoxContainer = rows.get_child(1).get_node("Stats/SpeedLine")
+	_check((escort_line.get_node("Speed") as Label).text == I18n.fmt(
+			"fleet.stat.speed", {
+				"speed": FleetLib.ship_stat(GameState.fleet[1], "speed"),
+				"max": FleetLib.ship_stat(GameState.fleet[1], "speed"),
+				"wind": I18n.t_key("world.weather.fair"),
+			}),
+		"a non-flagship shows its hull's base speed (%s)"
+		% (escort_line.get_node("Speed") as Label).text)
+
+	# Line 4: supplies with days, per ship (§4.10 on its own stack).
+	var supplies: HBoxContainer = ship_row.get_node("Supplies")
+	_check(supplies.get_child_count() >= 4,
+		"provisions and water each render a stat + a Jettison button")
+	var provisions_text := (supplies.get_node("Stack_provisions") as Label).text
+	_check(provisions_text == I18n.fmt("fleet.stat.supply", {
+			"kind": I18n.fmt("world.provisions", {"amount": ""}).strip_edges(),
+			"amount": 45, "days": 15,
+		}),
+		"the provisions line carries its own 15 days (%s)" % provisions_text)
+	var water_text := (supplies.get_node("Stack_water") as Label).text
+	_check(water_text.contains("15"),
+		"the water line carries its own 15 days (%s)" % water_text)
+
+	# The fleet totals row: pooled supplies, combined days, effective speed.
+	var totals: VBoxContainer = panel.get_node(
+		"Center/Panel/Margin/Body/Totals"
+	)
+	_check(totals.get_child_count() == 2,
+		"the totals row renders a title line and a supplies line")
+	var totals_title: Label = totals.get_node("TitleRow/Title")
+	_check(totals_title.text == I18n.t_key("fleet.totals"),
+		"the totals row is labelled fleet.totals (%s)" % totals_title.text)
+	_check(totals.get_node("TitleRow/Speed") != null,
+		"the totals row shows the fleet's effective speed")
+	var pooled_days := SailingSimLib.fleet_supply_days()
+	var total_days: Label = totals.get_node("Supplies/TotalDays")
+	_check(total_days.text == I18n.fmt("fleet.total_days", {"days": pooled_days}),
+		"the totals row uses fleet.total_days with the pooled days (%s)"
+		% total_days.text)
+	_check(pooled_days == SailingSimLib.supply_days(
+			FleetLib.supplies("provisions"), FleetLib.supplies("water"),
+			FleetLib.total_crew()),
+		"the pooled days use the same §4.10 formula (%d)" % pooled_days)
+	_check(pooled_days == 19,
+		"pooled 57 provisions / 57 water at 3/day = 19 days (got %d)"
+		% pooled_days)
+	_check((totals.get_node("Supplies/Total_provisions") as Label).text
+		== I18n.fmt("fleet.stat.supply", {
+			"kind": I18n.fmt("world.provisions", {"amount": ""}).strip_edges(),
+			"amount": 57, "days": 19,
+		}),
+		"the totals row pools provisions across the fleet (%s)"
+		% (totals.get_node("Supplies/Total_provisions") as Label).text)
+	_check((totals.get_node("Supplies/Total_water") as Label).text
+		== I18n.fmt("fleet.stat.supply", {
+			"kind": I18n.fmt("world.water", {"amount": ""}).strip_edges(),
+			"amount": 57, "days": 19,
+		}),
+		"the totals row pools water across the fleet")
+
+	# Locale rebind covers the new lines.
+	I18n.set_locale("zh")
+	await get_tree().process_frame
+	var zh_rows: VBoxContainer = panel.get_node(
+		"Center/Panel/Margin/Body/Scroll/Rows"
+	)
+	_check((zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text
+		== I18n.fmt("fleet.stat.crew", {"crew": 15, "max": 45}),
+		"the crew line rebinds to zh (%s)"
+		% (zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text)
+	_check((panel.get_node("Center/Panel/Margin/Body/Totals/TitleRow/Title")
+		as Label).text == "船队合计", "the totals title rebinds to zh (%s)"
+		% (panel.get_node("Center/Panel/Margin/Body/Totals/TitleRow/Title")
+			as Label).text)
+	I18n.set_locale("en")
+	await get_tree().process_frame
+
+	# The at-sea read-only rule still holds with the new block.
+	GameState.current_port = null
+	panel.rebuild()
+	await get_tree().process_frame
+	_check(panel.is_read_only(), "the richer panel is still read-only at sea")
+	var sea_jettison: Button = panel.jettison_button(0, "cargo", "wine")
+	_check(sea_jettison != null and sea_jettison.disabled,
+		"jettison is still disabled at sea")
+
+	# A degenerate fleet must not crash the new lines (`_row_speed`/totals).
+	GameState.fleet = [{"ship_type_id": "caravel", "cargo": null}, "junk", null]
+	panel.rebuild()
+	await get_tree().process_frame
+	_check(panel.get_node("Center/Panel/Margin/Body/Scroll/Rows")
+		.get_child_count() == 3,
+		"the stat block renders a corrupted fleet without crashing")
+	_check(panel.get_node("Center/Panel/Margin/Body/Totals")
+		.get_child_count() == 2,
+		"the totals row still renders for a corrupted fleet")
+
+	panel.queue_free()
+	await get_tree().process_frame
 
 # --- Harness --------------------------------------------------------------
 
