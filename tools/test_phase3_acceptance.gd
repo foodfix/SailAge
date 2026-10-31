@@ -471,7 +471,7 @@ func _scenario_piracy_loop() -> void:
 	await get_tree().process_frame
 
 	# Hunters spawn at sea from the Phase-2 encounter tick. The shipped spawner
-	# is `Encounters.spawn`; it is called directly here so this leg needs no
+	# is `NpcFleets.spawn` (the §4.12.3 quest seam); it is called directly here so this leg needs no
 	# world scene, exactly as the §4.11.11.2 day tick does.
 	GameState.current_port = null
 	GameState.npc_fleets = []

@@ -11,7 +11,7 @@ extends Node
 ## scenario starts from a real **save file on disk** (the current
 ## `save_version`, written by a plain JSON dump exactly as `SaveSystem.save()`
 ## would), loads it through `SaveSystem.load()`, then drives the *shipped* path:
-## `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
+## HISTORICAL (Phase 2): `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
 ## fight (its buttons for the player, `AiFleet` for the enemy), and the §4.12.4
 ## battle-end sequence for the aftermath. Nothing here calls `BattleResult` /
 ## `BattleRewards` directly: those are reached through the screen's guarded

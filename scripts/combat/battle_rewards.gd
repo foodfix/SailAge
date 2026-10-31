@@ -22,7 +22,7 @@ extends RefCounted
 ##     ([method nearest_nations], Chebyshev from the contact tile, ties by port
 ##     id, a nation credited once). The navy `−20` is **not** here and never
 ##     appears in `rep_deltas`: §4.11.10 charges it once at battle start
-##     (`encounters.gd` / `world_map.gd`), not per ship and not at battle end.
+##     charged at battle start by the S3 funnel (`world_map.gd` `_open_encounter`;\n##     the retired Phase-2 `encounters.gd` funnel it replaces), not per ship and not at battle end.
 ##     [method apply] therefore has no negative consequence to charge, and
 ##     applying an outcome twice cannot repeat one.
 ##

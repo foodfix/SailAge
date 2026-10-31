@@ -388,7 +388,7 @@ func set_hold_accumulator(elapsed: float, since_step: float = -1.0) -> void:
 ## The route then advances on the **same cadence as hold-to-repeat** (one
 ## `_try_step` per [constant SAIL_STEP_SECONDS], i.e. ~8 tiles/s), so a click
 ## route is N steps = N normal moves — clock, consumption, port entry and
-## encounters included. The first step happens on the first cadence tick, not
+## the fleet-contact check included. The first step happens on the first cadence tick, not
 ## inside this call, so a click never moves the fleet by itself.
 ##
 ## A click on land/ice/off-grid costs nothing and shows `world.move_blocked`;
@@ -735,7 +735,7 @@ func _press_direction(action: String, forced: bool = false) -> void:
 ## after [constant HOLD_DELAY_SECONDS]; the click route uses the same clock.
 ##
 ## Every repeat goes through [_try_step], so each one is a normal move (clock,
-## consumption, port entry, encounters). A blocked step costs nothing and does
+## consumption, port entry, the fleet-contact check). A blocked step costs nothing and does
 ## **not** reset the accumulator: its cadence slot was already consumed, so it
 ## simply produces no move and a held key can never bank up free moves.
 func _tick_movement(delta: float) -> void:

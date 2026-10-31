@@ -1062,6 +1062,9 @@ func _test_tick_cost() -> void:
 	var avg := total_ms / float(PERF_TICKS)
 	print("  tick probe: %d fleets, avg %.1f ms/tick, worst %.1f ms/tick"
 		% [n, avg, worst_ms])
+	# docs/90-* §13 free profiling: the day-tick numbers ride every gate run.
+	print("PROFILE day_tick_avg_ms %d" % int(round(avg)))
+	print("PROFILE day_tick_worst_ms %d" % int(round(worst_ms)))
 	_check(n >= 250, "the probe runs at the filled cap (%d fleets)" % n)
 	_check(avg <= PERF_GATE_MS,
 		"the day tick averages ≤ %.0f ms at cap (%.1f ms over %d ticks)"

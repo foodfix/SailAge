@@ -13,7 +13,7 @@ extends RefCounted
 
 ## Hard expansion ceiling: a guard, never a code path — an unreachable goal
 ## must return an empty path instead of spinning (the same defensive rule as
-## encounters' candidate-scan limit).
+## the retired encounters system's candidate-scan limit).
 const MAX_EXPANSIONS := 40000
 
 const NO_CELL := Vector2i(-1, -1)

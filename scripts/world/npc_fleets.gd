@@ -126,7 +126,7 @@ const COMPOSITION_BUDGETS := {
 ## --- Task-owned constants (the docs left these open; see the task J report).
 ##
 ## Lane-days divisor for the trader score: `lane_days = tile length / 20`.
-## The encounters system had no per-day tile rate to stay consistent with,
+## HISTORICAL: the retired encounters system had no per-day tile rate to stay consistent with,
 ## so the 20 tiles/day default named by the task is pinned here. Fleet
 ## *stepping* stays at the §4.11.11.1 pin of 1 tile/day — this constant only
 ## ranks candidate journeys against each other.
