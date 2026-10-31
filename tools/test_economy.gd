@@ -334,17 +334,29 @@ func _test_day_tick_report_and_signal() -> void:
 	_check(moved == ["lisbon"],
 		"day_tick reports exactly the moved ports (got %s)" % str(moved))
 
-	# The wired path: GameState listens on `day_advanced` (docs/20 §4.3 order)
-	# and fans out `market_changed` per moved port.
+	# The wired path (docs/20-* §4.3 order, ratified at the W3 merge): the
+	# economy step runs inside the day tick — after the ledger, BEFORE
+	# `day_advanced` is emitted (`sailing_sim.gd#advance_clock`) — and fans
+	# out `market_changed` per moved port. Drive the real clock, not a bare
+	# signal emit: the step precedes the emit, so a listener connected to
+	# `market_changed` observes the drift, and `day_advanced` listeners see
+	# post-drift stocks.
 	var events: Array = []
 	var handler := func(port_id: String) -> void: events.append(port_id)
 	EventBus.market_changed.connect(handler)
 	EconomyLib.set_stock("lisbon", "wine",
 		EconomyLib.rest_stock("lisbon", "wine") - 2)
 	var stock_before := EconomyLib.stock_of("lisbon", "wine")
-	EventBus.day_advanced.emit(GameState.day)
+	var saw_day_at_emit := {"stock": -1}
+	var day_handler := func(_day: int) -> void:
+		saw_day_at_emit["stock"] = EconomyLib.stock_of("lisbon", "wine")
+	EventBus.day_advanced.connect(day_handler)
+	preload("res://scripts/world/sailing_sim.gd").advance_clock(1.0)
+	EventBus.day_advanced.disconnect(day_handler)
 	_check(EconomyLib.stock_of("lisbon", "wine") == stock_before + 2,
-		"the day_advanced listener runs the economy step (drift +2)")
+		"the day tick runs the economy step (drift +2)")
+	_check(int(saw_day_at_emit["stock"]) == stock_before + 2,
+		"day_advanced listeners observe post-drift stock")
 	_check(events == ["lisbon"],
 		"market_changed(lisbon) fired once for the moved port (got %s)"
 		% str(events))
