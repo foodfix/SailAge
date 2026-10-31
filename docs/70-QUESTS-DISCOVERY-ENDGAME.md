@@ -436,10 +436,12 @@ replace them (`IMPLEMENT-Phase4.md` locked constants, `10-*` §6/§7.1).
   `data/map_legend.json`. Addressing `lon = x/6 − 180`, `lat = 90 − y/6`;
   longitude wraps, latitude edges close with ice.
 - **Positions are lat/lon truth.** Every port carries `lat`/`lon` (WGS84
-  degrees) and is snapped to a **harbor tile** within **≤ 2** tiles
-  (Chebyshev) by the `10-*` §6.1 rule; the builder (`tools/build_world.py
-  --check-snaps`) and the runtime implement the same rule. No port marker
-  characters exist anywhere: **ports are an overlay** drawn from JSON.
+  degrees) and derives a **harbor pair** — a berth (sea) tile within **≤ 2**
+  tiles (Chebyshev) of the projection plus the orthogonally adjacent shore
+  (land) tile the port is drawn on and docked into (`20-*` §4.11.1) — by the
+  `10-*` §6.1 rule; the builder (`tools/build_world.py --check-snaps`) and the
+  runtime implement the same rule. No port marker characters exist anywhere:
+  **ports are an overlay** drawn from JSON.
 - **Ice band:** `I` iff `lat ≥ 70°N` or `lat ≤ 60°S`, impassable. Straits
   narrower than a tile are carved water passages listed in
   `tools/map_overrides.json`.
@@ -449,10 +451,10 @@ replace them (`IMPLEMENT-Phase4.md` locked constants, `10-*` §6/§7.1).
 - **Ports:** exactly **100**, the 30 Phase-1 ports (`10-*` §7.1, unchanged
   names/nations/produces/demands, now with real coordinates) plus 70 across
   the Americas, Africa, India, Southeast Asia and East Asia.
-- **Geography:** every harbor tile is passable water with ≥ 1 orthogonally
-  adjacent water tile; the strict 8-directional no-corner-cutting,
-  wrap-aware BFS must reach every port and every discovery tile (validator
-  group 6).
+- **Geography:** every berth tile is passable water with ≥ 1 orthogonally
+  adjacent water tile and an orthogonally adjacent `#` shore tile; the strict
+  8-directional no-corner-cutting, wrap-aware BFS must reach every port's
+  berth and every discovery tile (validator group 6).
 - **New-game map:** S2 no longer offers a map choice — `world.map_id` is
   always `"world"` (`90-*` §7, `DEFAULT_MAP_ID`). There is exactly one
   `maps.json` entry, so a second map would be a data-only addition only if a

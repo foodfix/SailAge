@@ -33,7 +33,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/map_legend.json` | MapLegend (tiles + grid constants) | this doc |
 | `data/maps/maps.json` | Map index (exactly one entry, `id: "world"`) | `90-*` §9.1 |
 | `data/maps/world.png` | Generated world map artifact — indexed PNG, 2160×1080, 1 px = 1 tile (§6.3) | this doc |
-| `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (§6.3, §8.1) | this doc |
+| `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (berth) and `shore_tile` (§6.3, §8.1) | this doc |
 | `tools/build_world.py` | World generator: shorelines → tiles → `world.png` + `world_report.json` (§6.3); `--ascii` debug export only | this doc / `IMPLEMENT-Phase4.md` task C |
 | `tools/map_overrides.json` | Waterway carves (Gibraltar, Bosphorus, …) and tidal-river carves (§6.1, `IMPLEMENT-Phase4.md` task D) | this doc |
 | `tools/assets/` | Vendored public-domain shapefiles (Natural Earth 10 m land + minor islands + lakes) and `LICENSE-NOTES.md` with per-file SHA-256 | this doc |
@@ -208,10 +208,11 @@ second port file and no per-map port variant.
 | `facilities` | object | keys with activation phase: `market:1, shipyard:1, tavern:1, inn:1, guild:3, palace:3`. `palace` is **omitted** unless this port is a nation's `capital_port_id` |
 | `flavor` | L10nString | 1 sentence shown in the port-entry greeting |
 
-The harbor tile — the grid cell a fleet enters to dock — is **never stored**.
-It is derived at load/build time from `lat`/`lon` by §6.1's projection plus the
-locked harbor-snap rule in §6.1, by both `tools/build_world.py` and the
-GDScript runtime (identical rule, agreement tested by validator group 6, §8).
+The harbor **pair** — the berth tile the fleet stands on and the shore tile it
+docks into (`20-*` §4.11.1) — is **never stored**. Both are derived at
+load/build time from `lat`/`lon` by §6.1's projection plus the locked
+harbor-snap rule in §6.1, by both `tools/build_world.py` and the GDScript
+runtime (identical rule, agreement tested by validator group 6, §8).
 Ports render as an overlay from JSON; no port character appears in the terrain
 (§6.2). The retired per-map keys (`marker`, `position`, the former world-map
 marker block, and `phase`) no longer exist anywhere in a port row.
@@ -322,7 +323,7 @@ battle or a duel) are pinned in `60-*` §4.11.12.
 | `region_hint` | L10nString | 1-sentence rumor text sold at taverns |
 
 The `phase` key is dead and must not appear. Discovery tiles are derived from
-`lat`/`lon` the same way port harbor tiles are (§6.1); the validator requires
+`lat`/`lon` the same way a port's berth tile is (§6.1); the validator requires
 the placed tile to be passable or orthogonally adjacent to a passable tile
 (§8, group 6).
 
@@ -461,7 +462,7 @@ differently.
 | `TILE_SIZE_PX` | `32` (unchanged) | TileMap config, `80-*` §4.5 |
 | Coastal band | `.` iff within 3 tiles (Chebyshev, wrap-aware) of a passable-adjacent land/ice tile, else `~`; `.` is cosmetic only (same passability/speed as `~`) | `tools/build_world.py`, renderer |
 | Harbor snap | berth tile within 2 tiles (Chebyshev) of `Port.lat/lon`, on water, with ≥ 1 orthogonally adjacent water tile; equidistant candidates tie-break to the smallest `(y, x)` — the Python builder and the GDScript runtime implement this rule exactly and the validator tests they agree | `10-*` §7.1, `tools/build_world.py`, `90-*` §9 |
-| Harbor pair | every port has a **shore tile**: the nearest `#` tile orthogonally adjacent to its berth, tie-break smallest `(y, x)`. The shore tile is the port's visible location and the docking target; the berth is where the fleet stands (`20-*` §4.11.1). Both are derived, never stored | `20-*` §4.11.1, `90-*` §9, validator group 6 |
+| Harbor pair | every port has a **shore tile**: the nearest `#` tile orthogonally adjacent to its berth, tie-break smallest `(y, x)`. The shore tile is the port's visible location and the docking target; the berth is where the fleet stands (`20-*` §4.11.1). Both are derived, never stored. The pair constraint is part of the berth snap: a water candidate with no orthogonally adjacent `#` is skipped, so the berth is the nearest candidate satisfying **both** rules | `20-*` §4.11.1, `90-*` §9, validator group 6 |
 | Port sighting | `24 tiles` (≈ 4° ≈ 240 nm) | `20-*` §4.11 |
 | Discovery sighting | `18 tiles` (≈ 3°) | `70-*` §4.4 |
 | Ship speeds | ×2: base speeds become `{8, 10, 12}` tiles/day = 80–120 nm/day; floor 1 tile/day unchanged; fleet = slowest hull, unchanged | `40-*` §4.2, `data/ship_types.json` |
@@ -496,8 +497,9 @@ coastal-band/land rules.
 **Ports are not terrain.** No port character exists in the tile charset. Ports
 render as an overlay layer drawn from `data/ports.json#ports[].lat/lon` snapped
 by §6.1's harbor rule (decision 7 in `IMPLEMENT-Phase4.md`); docking happens
-when the fleet enters the derived harbor tile, which triggers the port-entry
-flow (`20-WORLD-AND-SAILING.md`).
+when the fleet heads into the port's derived **shore tile** from an
+orthogonally adjacent tile, which triggers the port-entry flow
+(`20-WORLD-AND-SAILING.md` §4.11.1).
 
 ### 6.3 Map artifact format — `data/maps/world.png`
 
@@ -517,7 +519,8 @@ flow (`20-WORLD-AND-SAILING.md`).
   never shipped, never hand-edited, not a data source.
 - **Companion report:** `data/maps/world_report.json` records build params,
   sea fraction, ice extent, component sizes > 2000 tiles, and the derived
-  `harbor_tile {x, y}` per port (validator group 6 reads it). It is a **tool
+  `harbor_tile {x, y}` (berth) plus `shore_tile {x, y}` per port (validator
+  group 6 reads both). It is a **tool
   output, not an entity file**: its envelope is `{"version", "generated_by",
   "artifact", …}` with no plural entity array, so validator group 1 exempts it
   exactly like `map_legend.json` (its keys are `version`, `generated_by`,
@@ -555,7 +558,7 @@ Exhaustive — no additions or removals without amending this doc.
 ### 7.1 Ports (100)
 
 All 100 ports live in the single `data/ports.json` envelope. `lat`/`lon` are
-WGS84 degrees (the geographic truth); the harbor tile is derived by §6.1's
+WGS84 degrees (the geographic truth); the harbor pair is derived by §6.1's
 projection + harbor-snap rule, never hand-placed. Nations from §7.4. Ordering
 is the file order: the original 30 Mediterranean/Atlantic ports first, then the
 70 world-expansion ports.
@@ -765,7 +768,9 @@ Group 6 has no ASCII input and no markers. Exit 6. It checks:
 2. **Harbor tiles agree.** For each of the 100 ports, recompute the harbor
    (berth) tile **independently from `Port.lat`/`Port.lon`** with the §6.1 snap
    rule (within 2 tiles Chebyshev, on water, ≥ 1 orthogonally adjacent water
-   tile, tie-break to smallest `(y, x)`) and compare it with the builder's
+   tile, tie-break to smallest `(y, x)`) **plus the item 2b pair constraint**
+   (a candidate water tile with no orthogonally adjacent `#` is skipped — see
+   the §6.1 "Harbor pair" row) and compare it with the builder's
    `data/maps/world_report.json#ports[].harbor_tile`. They must be identical.
    Failures name the port and both tiles.
 2b. **Harbor pair.** Every port must have a **shore tile**: a `#` tile
@@ -774,12 +779,12 @@ Group 6 has no ASCII input and no markers. Exit 6. It checks:
    overlay both depend on it. The shore tile itself is recomputed the same way
    (nearest to `lat`/`lon`, tie-break `(y, x)`) and must agree with the
    builder's `world_report.json#ports[].shore_tile`.
-3. **Reachability.** BFS from Lisbon's harbor tile over **all** passable tiles
+3. **Reachability.** BFS from Lisbon's berth tile over **all** passable tiles
    (`~`, `.` — `#`, `^`, `I` are impassable), 8-directional with
    **corner-cutting forbidden** (a diagonal step is legal only when both
    orthogonal neighbours of the corner are passable) and **wrap-aware**
    (`x mod 2160`; `x = 0` and `x = 2159` are neighbours). The BFS must reach
-   all 100 harbor tiles and all discovery tiles (a discovery's derived tile is
+   all 100 berth tiles and all discovery tiles (a discovery's derived tile is
    passable or orthogonally adjacent to a passable tile — `70-*` §4.4).
    Plain 8-directional BFS is a validator bug: it reports reachability through
    gaps no fleet can traverse.
@@ -799,6 +804,11 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
   unreachable named port (`ceuta`, or the Gibraltar-flank port that loses its
   water path);
 - one port moved 3 tiles inland → snap failure naming that port;
+- one berth stripped of its orthogonally adjacent `#` → harbor-pair failure
+  naming that port (item 2b);
+- a report `shore_tile` made stale → harbor-pair mismatch naming the port and
+  both tiles;
+- two ports sharing a shore tile → shore-collision failure;
 - `world.png` corrupted to a wrong size → artifact failure;
 - `world.png` re-palettized with an index ≥ 5 → artifact failure.
 
@@ -813,6 +823,12 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
   smallest-`(y, x)` tie-break resolves equidistant *candidates* within one
   port; it never permits two ports to occupy the same harbor cell — the
   second one fails with a named collision error.
+- **Two ports share a shore tile** → validator exit 6 (same rule, applied to
+  the harbor pair's land half: only one port could be docked into it).
+- **A berth has no orthogonally adjacent `#`** → validator exit 6 naming the
+  port (`20-*` §4.11.1, group 6 item 2b): the docking gesture and the overlay
+  both depend on the shore tile. On the shipped map 14 ports moved one tile
+  to satisfy this; a future port needs a coordinate or carve amendment.
 - **A port snaps further than 2 tiles from its `lat`/`lon`** → validator
   exit 6 (snap rule unsatisfiable: no water within the 2-tile Chebyshev
   radius, or no orthogonally adjacent water). The fix is a coordinate

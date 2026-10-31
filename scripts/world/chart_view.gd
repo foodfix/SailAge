@@ -121,9 +121,12 @@ static func explored_color(colors: Array, map, cell: Vector2i) -> Color:
 
 # --- Layers (docs/80-* §4.6, docs/20-* §4.12) ------------------------------
 
-## The known-port dots both views draw, `[{port_id, cell, color, name}]` sorted
-## by port id: **known ports only**, at their derived harbor tile, in their
-## nation's colour (`20-*` §4.12, `80-*` §4.6). `name` is the localised port
+## The known-port dots both views draw, `[{port_id, cell, berth_cell, color,
+## name}]` sorted by port id: **known ports only**, at their derived **shore**
+## tile — the land tile the player reads as the port (`20-*` §4.11.1) — in their
+## nation's colour (`20-*` §4.12, `80-*` §4.6). `berth_cell` is the sea tile the
+## fleet stands on (kept for callers that need the water access point, e.g. a
+## proximity test). `name` is the localised port
 ## name (`""` before a locale/data exists); only the Chart's zoomed label uses
 ## it, but both views share the list so they can never disagree about *which*
 ## ports are known.
@@ -136,13 +139,19 @@ static func port_dots(map, nations: Dictionary = {}) -> Array:
 	ids.sort()
 	for raw_id in ids:
 		var port_id := str(raw_id)
-		var cell: Vector2i = map.port_cell(port_id)
-		if cell.x < 0:
+		var berth: Vector2i = map.port_cell(port_id)
+		if berth.x < 0:
 			continue
+		var cell: Vector2i = map.shore_cell(port_id)
+		if cell.x < 0:
+			# A berth with no shore tile is a data error (validator group 6
+			# item 2b); the chart still marks the water access point.
+			cell = berth
 		var port: Dictionary = DataLoader.get_port(port_id)
 		out.append({
 			"port_id": port_id,
 			"cell": cell,
+			"berth_cell": berth,
 			"color": _nation_color(str(port.get("nation_id", "")), nation_table),
 			"name": _port_name(port),
 		})

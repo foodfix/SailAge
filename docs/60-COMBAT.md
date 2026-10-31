@@ -402,7 +402,7 @@ the `equipment` object of §4.11.12).
   (nearest known port for pirates, nearest own-nation port for navies;
   Chebyshev; ties by port id ascending); it never changes.
 - **Zone check:** a pirate spawn candidate must be within Chebyshev 15 of its
-  anchor port's harbor tile, measured **wrap-aware on x** over the 2160×1080
+  anchor port's berth tile, measured **wrap-aware on x** over the 2160×1080
   world grid. The 15-tile radius is the pinned Phase-2 `ZONE_RADIUS` value, not
   re-derived: on the Phase-4 grid (1 tile = 10 nm) it is 150 nm. The Phase-2
   Atlantic-storm-strip exclusion is deleted with the strip; latitude bands

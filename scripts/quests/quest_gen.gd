@@ -628,7 +628,7 @@ static func _port_name(port_id: String) -> String:
 
 
 ## The type tag key of a quest (`quest.type.*`, `80-*` §4.7.4).
-## A port's derived harbor tile (`10-*` §6.1 snap rule, `DataLoader.port_cell`),
+## A port's derived berth tile (`10-*` §6.1 snap rule, `DataLoader.port_cell`),
 ## or `(-1,-1)` when the map cannot answer. Ports carry `lat`/`lon`, never a
 ## stored tile, so this is the one runtime source of port positions.
 static func _port_cell(port_id: String) -> Vector2i:

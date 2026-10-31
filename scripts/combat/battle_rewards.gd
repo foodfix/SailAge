@@ -205,7 +205,7 @@ static func nearest_nations(contact: Vector2i) -> Array[String]:
 	for port in DataLoader.ports_list:
 		if not (port is Dictionary):
 			continue
-		# Ports carry lat/lon only; the harbor tile is derived (§10-* §6.1).
+		# Ports carry lat/lon only; the berth tile is derived (§10-* §6.1).
 		var position: Vector2i = DataLoader.port_cell(str(port.get("id", "")))
 		if position.x < 0:
 			continue

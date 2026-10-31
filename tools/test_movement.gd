@@ -23,11 +23,15 @@ const EncountersLib := preload("res://scripts/world/encounters.gd")
 ## are all passable, so every one of the 8 directions is legal from here. On the
 ## world map it sits in the variables band (lat ≈ 36.7°N), far from every harbor.
 const OPEN_CELL := Vector2i(700, 320)
-## Lisbon's harbor tile on the world map (derived from lat/lon, `10-*` §6.1) and
-## its neighbours: (1023,309) is coastal sea, (1024,307) is land '#'.
+## Lisbon's derived harbor pair on the world map (`10-*` §6.1, `20-*` §4.11.1):
+## the **berth** is (1024,308), the **shore** tile it is drawn on and docked into
+## is (1024,307). (1023,309) is coastal sea beside the berth.
 const LISBON := Vector2i(1024, 308)
+const LISBON_SHORE := Vector2i(1024, 307)
 const SEA_BESIDE_LISBON := Vector2i(1023, 309)
-const LAND_BESIDE_LISBON := Vector2i(1024, 307)
+## A land tile beside the berth that is **not** Lisbon's shore tile: stepping
+## into it stays an ordinary blocked move.
+const LAND_BESIDE_LISBON := Vector2i(1025, 308)
 ## A real corner cut on the shipped world: (62,201) → (61,200) is diagonal with
 ## (61,201) water but (62,200) land, so only one orthogonal exists. Found by
 ## searching the artifact for that exact shape (task G) — a data fact, not a
@@ -52,6 +56,7 @@ func _ready() -> void:
 	_test_corner_cut_zero_clock()
 	_test_clock_and_day_boundary()
 	_test_port_entry()
+	_test_harbor_pair_docking()
 	_test_no_game_and_modal_block()
 	_test_camera_clamp()
 	_test_hud_signal_only()
@@ -529,8 +534,10 @@ func _test_clock_and_day_boundary() -> void:
 
 func _test_port_entry() -> void:
 	_make_run("fair")
+	# Position the fleet on Lisbon's **berth**: docking is a gesture from the
+	# sea tile beside a port's shore tile (20-* §4.11.1).
 	GameState.world["position"] = {
-		"x": SEA_BESIDE_LISBON.x, "y": SEA_BESIDE_LISBON.y,
+		"x": LISBON.x, "y": LISBON.y,
 	}
 	GameState.known_ports = []
 	GameState.current_port = null
@@ -551,14 +558,27 @@ func _test_port_entry() -> void:
 	var ahead := float(GameState.world["clock_fraction"])
 	_check(not GameState.known_ports.has("lisbon"), "lisbon starts unknown in this fixture")
 	_clear_dialogs(world)
-	_check(world.try_step(LISBON), "moving onto Lisbon's harbor tile succeeds")
+	# Re-anchored to the harbor pair (20-* §4.11.1): docking = **heading into the
+	# shore tile** from the berth; the fleet does not step onto the land tile.
+	_check(DataLoader.map.port_cell("lisbon") == LISBON,
+		"Lisbon's derived berth is %s" % str(LISBON))
+	_check(DataLoader.map.shore_cell("lisbon") == LISBON_SHORE,
+		"Lisbon's derived shore tile is %s" % str(LISBON_SHORE))
+	_check(world.try_step(LISBON_SHORE), "heading into Lisbon's shore tile docks")
 	EventBus.port_entered.disconnect(listener)
-
 	_check(entered == ["lisbon"], "port_entered('lisbon') emitted (got %s)" % str(entered))
-	# Clock cost of the harbor tile applies normally (§4.2).
+	# Docking charges exactly one move_cost() (the old harbor-tile day).
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]), ahead + 0.1),
-		"harbor tile still costs its 1/speed day (%.4f)"
+		"docking costs one 1/speed day (%.4f)"
 		% float(GameState.world["clock_fraction"]))
+	# The fleet stays on the berth: docking never moves it onto land.
+	_check(GameState.world_tile() == LISBON,
+		"docking leaves the fleet on the berth %s (got %s)"
+		% [str(LISBON), str(GameState.world_tile())])
+	_check(world.fleet_cell() == LISBON,
+		"the scene marker stays on the berth (got %s)" % str(world.fleet_cell()))
+	_check(DataLoader.map.is_passable(GameState.world_tile()),
+		"world.position is water after docking")
 	_check(GameState.known_ports.has("lisbon"),
 		"entering an unknown port discovers it (§4.11)")
 	_check(GameState.current_port == "lisbon",
@@ -619,8 +639,158 @@ func _test_port_entry() -> void:
 			"marker outline is 2px")
 	host2.queue_free()
 
+# --- §4.11.1 harbor pair: docking rules ----------------------------------
 
-# --- T6-D no-game fallback + modal input block ---------------------------
+## The harbor-pair docking contract (20-* §4.11.1), each clause a check:
+## orthogonal docking charges one `move_cost()` and leaves the fleet on the
+## berth; a diagonal into the shore tile is refused; crossing the berth docks
+## nothing; a land tile that is not a shore tile is a silent blocked move.
+func _test_harbor_pair_docking() -> void:
+	var map = DataLoader.map
+	var lisbon_berth := Vector2i(1024, 308)
+	var lisbon_shore := Vector2i(1024, 307)
+	var diagonal_start := Vector2i(1025, 308)  # land: not usable as a start
+	# A real diagonal approach on the shipped map: Marseille's shore tile has a
+	# sea diagonal whose two orthogonal corner neighbours are both water.
+	var marseille_shore := Vector2i(1112, 280)
+	var marseille_diag := Vector2i(1111, 281)
+
+	# (a) Orthogonal docking: one move_cost(), fleet stays on the berth.
+	_make_run("fair")
+	GameState.world["position"] = {"x": lisbon_berth.x, "y": lisbon_berth.y}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.known_ports = ["lisbon"]
+	GameState.current_port = null
+	var host := Node2D.new()
+	add_child(host)
+	var world = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	host.add_child(world)
+	_clear_dialogs(world)
+	var cost: float = SailingSimLib.move_cost()
+	_check(is_equal_approx(cost, 0.1),
+		"the fixture's move_cost() is 1/speed = %.4f" % cost)
+	var clock0 := float(GameState.world["clock_fraction"])
+	var entered: Array = []
+	var listener := func(port_id: String) -> void: entered.append(port_id)
+	EventBus.port_entered.connect(listener)
+	_check(world.try_step(lisbon_shore), "an orthogonal step into the shore docks")
+	EventBus.port_entered.disconnect(listener)
+	_check(entered == ["lisbon"],
+		"docking emits port_entered once (got %s)" % str(entered))
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock0 + cost),
+		"docking charges exactly one move_cost() (%.4f → %.4f)"
+		% [clock0, float(GameState.world["clock_fraction"])])
+	_check(GameState.world_tile() == lisbon_berth and world.fleet_cell() == lisbon_berth,
+		"the fleet ends on the berth %s (world %s, scene %s)"
+		% [str(lisbon_berth), str(GameState.world_tile()), str(world.fleet_cell())])
+	_check(GameState.current_port == "lisbon",
+		"the port is open after docking (current_port %s)" % str(GameState.current_port))
+	_clear_dialogs(world)
+	host.queue_free()
+
+	# (b) A diagonal into the shore tile is refused: no dock, no clock.
+	_make_run("fair")
+	GameState.world["position"] = {"x": marseille_diag.x, "y": marseille_diag.y}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.known_ports = []
+	GameState.current_port = null
+	var host_b := Node2D.new()
+	add_child(host_b)
+	var world_b = WorldScene.instantiate()
+	world_b.route_to_port = false
+	world_b.route_to_battle = false
+	host_b.add_child(world_b)
+	_clear_dialogs(world_b)
+	_check(DataLoader.map.shore_port_at(marseille_shore) == "marseille",
+		"%s is Marseille's shore tile" % str(marseille_shore))
+	_check(DataLoader.map.is_passable(marseille_diag),
+		"%s (the diagonal approach) is water" % str(marseille_diag))
+	var diag_clock := float(GameState.world["clock_fraction"])
+	var diag_day: int = GameState.day
+	_check(not world_b.try_step(marseille_shore),
+		"a diagonal into the shore tile is refused (no corner cutting)")
+	_check(GameState.current_port == null,
+		"the diagonal does not dock (current_port %s)" % str(GameState.current_port))
+	_check(world_b.fleet_cell() == marseille_diag,
+		"the diagonal leaves the fleet where it was (%s)" % str(world_b.fleet_cell()))
+	_check(float(GameState.world["clock_fraction"]) == diag_clock
+		and GameState.day == diag_day,
+		"the refused diagonal costs no clock")
+	host_b.queue_free()
+
+	# (c) Crossing a berth is ordinary movement: it never docks.
+	_make_run("fair")
+	GameState.world["position"] = {"x": lisbon_berth.x - 1, "y": lisbon_berth.y}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.known_ports = ["lisbon"]
+	GameState.current_port = null
+	var host_c := Node2D.new()
+	add_child(host_c)
+	var world_c = WorldScene.instantiate()
+	world_c.route_to_port = false
+	world_c.route_to_battle = false
+	host_c.add_child(world_c)
+	_clear_dialogs(world_c)
+	_check(DataLoader.map.is_passable(Vector2i(lisbon_berth.x - 1, lisbon_berth.y)),
+		"the tile west of Lisbon's berth is water")
+	_check(world_c.try_step(lisbon_berth), "sailing onto the berth succeeds")
+	_check(GameState.current_port == null,
+		"standing on the berth does not open the port (current_port %s)"
+		% str(GameState.current_port))
+	_check(GameState.world_tile() == lisbon_berth,
+		"the fleet really moved onto the berth (%s)" % str(GameState.world_tile()))
+	host_c.queue_free()
+
+	# (d) Land that is not a shore tile: silent blocked move, no clock.
+	_make_run("fair")
+	# (1025,307) is water; (1026,307) is land '#' but is **not** a shore tile.
+	var non_shore := Vector2i(1026, 307)
+	var land_start := Vector2i(1025, 307)
+	GameState.world["position"] = {"x": land_start.x, "y": land_start.y}
+	GameState.world["clock_fraction"] = 0.25
+	var host_d := Node2D.new()
+	add_child(host_d)
+	var world_d = WorldScene.instantiate()
+	world_d.route_to_port = false
+	world_d.route_to_battle = false
+	host_d.add_child(world_d)
+	_clear_dialogs(world_d)
+	_check(DataLoader.map.is_passable(land_start),
+		"%s (the blocked-move start) is water" % str(land_start))
+	_check(DataLoader.map.shore_port_at(non_shore).is_empty(),
+		"%s is land but not a shore tile" % str(non_shore))
+	_check(DataLoader.map.char_at(non_shore) == "#",
+		"%s is land" % str(non_shore))
+	var land_clock := float(GameState.world["clock_fraction"])
+	var land_day: int = GameState.day
+	_check(not world_d.try_step(non_shore),
+		"a step into non-shore land is refused")
+	_check(GameState.current_port == null,
+		"the blocked land move does not dock (current_port %s)"
+		% str(GameState.current_port))
+	_check(float(GameState.world["clock_fraction"]) == land_clock
+		and GameState.day == land_day,
+		"the blocked land move costs no clock")
+	_check(world_d.fleet_cell() == land_start,
+		"the blocked land move leaves the fleet put (%s)" % str(world_d.fleet_cell()))
+	host_d.queue_free()
+
+	# (e) The same land tile beside the berth: `LAND_BESIDE_LISBON` is '#' and is
+	#     not a shore tile, so it behaves exactly like (d) — the pair rule never
+	#     turns arbitrary coast into a dock.
+	_check(LAND_BESIDE_LISBON == Vector2i(1025, 308),
+		"the fixture land tile beside the berth is (1025,308)")
+	_check(DataLoader.map.char_at(LAND_BESIDE_LISBON) == "#"
+		and DataLoader.map.shore_port_at(LAND_BESIDE_LISBON).is_empty(),
+		"(1025,308) is non-shore land")
+	_check(SailPathLib.is_step_legal(DataLoader.map, marseille_diag,
+			marseille_shore) == false,
+		"the path module also refuses the diagonal onto a shore tile")
+	_check(diagonal_start == LAND_BESIDE_LISBON,
+		"fixture note: the land tile east of Lisbon's berth is '#'")
+
 
 func _test_no_game_and_modal_block() -> void:
 	# A fresh world scene with no run: falls back to Lisbon, HUD shows "-".
@@ -1514,11 +1684,15 @@ func _test_click_to_sail() -> void:
 	host.add_child(world)
 	_clear_dialogs(world)
 
-	# Land: rejected, no clock, no order.
+	# Land: rejected, no clock, no order. The fixture tile is **not** a shore
+	# tile — a click on a port's shore tile is a valid destination now
+	# (20-* §4.11.1), and that case is asserted below.
 	var before_clock := float(GameState.world["clock_fraction"])
 	var before_day := GameState.day
+	_check(DataLoader.map.shore_port_at(LAND_BESIDE_LISBON).is_empty(),
+		"the fixture land tile is not a shore tile")
 	_check(not world.sail_to(LAND_BESIDE_LISBON),
-		"a click on land is rejected")
+		"a click on non-port land is rejected")
 	_check(not world.sail_active(),
 		"a rejected land click starts no route")
 	_check(float(GameState.world["clock_fraction"]) == before_clock
@@ -1577,6 +1751,83 @@ func _test_click_to_sail() -> void:
 			- reference["fraction"]) < 1.0e-6,
 		"the route's %d steps cost the same clock as %d normal moves (day %d, fraction %.9f)"
 		% [steps, steps, GameState.day, float(GameState.world["clock_fraction"])])
+
+	# --- Click on a port's SHORE tile (20-* §4.11.1) ----------------------
+	# A shore tile is a valid destination: the route targets the adjacent berth
+	# and the click docks on arrival, never routing over the land tile.
+	_make_run("fair")
+	GameState.world["position"] = {"x": 700, "y": 320}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.day = 1
+	GameState.known_ports = ["lisbon"]
+	GameState.current_port = null
+	world.sync_from_state()
+	_clear_dialogs(world)
+	var lisbon_shore: Vector2i = DataLoader.map.shore_cell("lisbon")
+	var lisbon_berth: Vector2i = DataLoader.map.port_cell("lisbon")
+	_check(not world.sail_active(), "a fresh fixture has no route")
+	_check(world.sail_to(lisbon_shore),
+		"a click on Lisbon's shore tile stores a route")
+	_check(world.sail_active(), "the shore click is walking")
+	_check(world.sail_target() == lisbon_berth,
+		"the shore click routes to the adjacent berth %s (got %s)"
+		% [str(lisbon_berth), str(world.sail_target())])
+	var shore_path: Array = world.sail_path()
+	_check(not shore_path.is_empty() and shore_path[shore_path.size() - 1] == lisbon_berth,
+		"the route ends on the berth, never on the shore tile (%d steps)"
+		% shore_path.size())
+	var over_land := 0
+	for cell in shore_path:
+		if not DataLoader.map.is_passable(cell):
+			over_land += 1
+	_check(over_land == 0,
+		"no route step is land (the shore tile is never a waypoint)")
+	var berth_clock := float(GameState.world["clock_fraction"])
+	SailingSimLib.set_weather_seed(424242)
+	for step in shore_path.size():
+		world.advance_movement(1.0 / 8.0)
+		_clear_dialogs(world)
+		if GameState.current_port != null:
+			break
+	_check(GameState.current_port == "lisbon",
+		"arriving at the berth via a shore click opens Lisbon (got %s)"
+		% str(GameState.current_port))
+	_check(world.fleet_cell() == lisbon_berth
+		and GameState.world_tile() == lisbon_berth,
+		"the click route leaves the fleet on the berth %s (scene %s)"
+		% [str(lisbon_berth), str(world.fleet_cell())])
+	_check(not world.sail_active(), "docking clears the click route")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			berth_clock + SailingSimLib.move_cost())
+		or GameState.day > 1,
+		"arrival charges the docking day (fraction %.4f)" 
+		% float(GameState.world["clock_fraction"]))
+	_clear_dialogs(world)
+
+	# A click on the shore tile while already beside it docks immediately (the
+	# same gesture as a direction press), and charges one move_cost().
+	_make_run("fair")
+	GameState.world["position"] = {"x": lisbon_berth.x, "y": lisbon_berth.y}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.known_ports = ["lisbon"]
+	GameState.current_port = null
+	world.sync_from_state()
+	_clear_dialogs(world)
+	var dock_clock := float(GameState.world["clock_fraction"])
+	_check(world.sail_to(lisbon_shore),
+		"clicking the shore tile from beside it docks")
+	_check(GameState.current_port == "lisbon",
+		"the adjacent shore click opens the port (got %s)"
+		% str(GameState.current_port))
+	_check(not world.sail_active(), "the adjacent click starts no route")
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			dock_clock + SailingSimLib.move_cost()),
+		"the adjacent shore click charges one move_cost() (%.4f → %.4f)"
+		% [dock_clock, float(GameState.world["clock_fraction"])])
+	_check(world.fleet_cell() == lisbon_berth,
+		"the adjacent click leaves the fleet on the berth")
+	_clear_dialogs(world)
+	GameState.current_port = null
 
 	# Manual input cancels an active route.
 	_check(world.sail_to(Vector2i(700, 340)), "a second route is stored")

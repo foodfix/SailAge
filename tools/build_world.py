@@ -957,6 +957,8 @@ def snap_harbor(grid: Grid, lat: float, lon: float,
     """Locked harbor rule (§6.1): water, adjacent water, ties -> smallest (y, x).
 
     Returns ``(x, y, distance)`` or ``None`` when nothing satisfies the rule.
+    This is the **berth** half only; [func snap_harbor_with_shore] adds the
+    harbor-pair requirement (20-* §4.11.1).
     """
     px, py = grid.tile_of_latlon(lat, lon)
     candidates = []
@@ -976,6 +978,58 @@ def snap_harbor(grid: Grid, lat: float, lon: float,
     return None
 
 
+def shore_of_berth(grid: Grid, x: int, y: int, origin: tuple[int, int]):
+    """Shore tile of a berth (20-* §4.11.1): ``(sx, sy, distance)`` or ``None``.
+
+    The nearest orthogonally adjacent ``#`` tile to the port's derived origin
+    tile (wrap-aware Chebyshev in x), tie-breaking to the smallest ``(y, x)``.
+    """
+    ox, oy = origin
+    candidates = []
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        yy = y + dy
+        if not (0 <= yy < grid.h):
+            continue
+        xx = (x + dx) % grid.w
+        if grid.get(xx, yy) != LAND:
+            continue
+        candidates.append((chebyshev_wrap(xx - ox, yy - oy, grid.w), yy, xx))
+    if not candidates:
+        return None
+    candidates.sort()
+    distance, sy, sx = candidates[0]
+    return sx, sy, distance
+
+
+def snap_harbor_with_shore(grid: Grid, lat: float, lon: float,
+                           radius: int = HARBOR_SNAP_TILES):
+    """The harbor-pair snap (20-* §4.11.1): the §6.1 berth plus a shore tile.
+
+    Candidates keep the locked ``(distance, y, x)`` order, so every port whose
+    plain §6.1 berth already has an orthogonally adjacent ``#`` keeps exactly
+    that tile. Returns ``(x, y, distance, shore)`` (``shore`` = ``(sx, sy)``) or
+    ``None`` when nothing inside the radius has a shore tile.
+    """
+    px, py = grid.tile_of_latlon(lat, lon)
+    candidates = []
+    for dy in range(-radius, radius + 1):
+        y = py + dy
+        if not (0 <= y < grid.h):
+            continue
+        for dx in range(-radius, radius + 1):
+            x = (px + dx) % grid.w
+            candidates.append((chebyshev_wrap(dx, dy, grid.w), y, x))
+    candidates.sort()
+    for distance, y, x in candidates:
+        if not (grid.is_water(x, y) and grid.has_adjacent_water(x, y)):
+            continue
+        shore = shore_of_berth(grid, x, y, (px, py))
+        if shore is None:
+            continue
+        return x, y, distance, (shore[0], shore[1])
+    return None
+
+
 def snap_ports(grid: Grid, ports: list[dict]) -> tuple[list[dict], list[str]]:
     results = []
     failures = []
@@ -986,21 +1040,33 @@ def snap_ports(grid: Grid, ports: list[dict]) -> tuple[list[dict], list[str]]:
         if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
             failures.append(f"{pid}  missing lat/lon")
             results.append({"id": pid, "lat": lat, "lon": lon,
-                            "harbor_tile": None, "distance": None})
+                            "harbor_tile": None, "shore_tile": None,
+                            "distance": None})
             continue
-        snapped = snap_harbor(grid, float(lat), float(lon))
+        snapped = snap_harbor_with_shore(grid, float(lat), float(lon))
         if snapped is None:
             px, py = grid.tile_of_latlon(float(lat), float(lon))
-            failures.append(
-                f"{pid}  no water within {HARBOR_SNAP_TILES} tiles "
-                f"(port tile {px}, {py})"
-            )
+            plain = snap_harbor(grid, float(lat), float(lon))
+            if plain is not None:
+                # The precise failure the harbor-pair rule exists to catch.
+                failures.append(
+                    f"{pid}  berth ({plain[0]}, {plain[1]}) has no "
+                    f"orthogonally adjacent '#' shore tile within "
+                    f"{HARBOR_SNAP_TILES} tiles of port tile ({px}, {py})"
+                )
+            else:
+                failures.append(
+                    f"{pid}  no water within {HARBOR_SNAP_TILES} tiles "
+                    f"(port tile {px}, {py})"
+                )
             results.append({"id": pid, "lat": lat, "lon": lon,
-                            "harbor_tile": None, "distance": None})
+                            "harbor_tile": None, "shore_tile": None,
+                            "distance": None})
         else:
-            x, y, distance = snapped
+            x, y, distance, shore = snapped
             results.append({"id": pid, "lat": lat, "lon": lon,
                             "harbor_tile": {"x": x, "y": y},
+                            "shore_tile": {"x": shore[0], "y": shore[1]},
                             "distance": distance})
     return results, failures
 
@@ -1015,6 +1081,22 @@ def duplicate_harbors(results: list[dict]) -> list[str]:
         key = (tile["x"], tile["y"])
         if key in seen:
             dupes.append(f"{entry['id']} and {seen[key]} share harbor tile {key}")
+        else:
+            seen[key] = entry["id"]
+    return dupes
+
+
+def duplicate_shores(results: list[dict]) -> list[str]:
+    """Two ports may not share a shore tile: only one could be docked into."""
+    seen: dict[tuple[int, int], str] = {}
+    dupes = []
+    for entry in results:
+        tile = entry.get("shore_tile")
+        if not tile:
+            continue
+        key = (tile["x"], tile["y"])
+        if key in seen:
+            dupes.append(f"{entry['id']} and {seen[key]} share shore tile {key}")
         else:
             seen[key] = entry["id"]
     return dupes
@@ -1547,9 +1629,11 @@ def cmd_check_snaps(args) -> int:
             continue
         print(
             f"{entry['id']:<16} {entry['lat']:>8.3f} {entry['lon']:>9.3f}"
-            f"  ->  {tile['x']:>4}, {tile['y']:>4}  (distance {entry['distance']})"
+            f"  ->  {tile['x']:>4}, {tile['y']:>4}"
+            f"  shore {entry['shore_tile']['x']:>4}, {entry['shore_tile']['y']:>4}"
+            f"  (distance {entry['distance']})"
         )
-    for dupe in duplicate_harbors(results):
+    for dupe in duplicate_harbors(results) + duplicate_shores(results):
         print(f"warning: {dupe}", file=sys.stderr)
     if failures:
         print(
@@ -1562,7 +1646,7 @@ def cmd_check_snaps(args) -> int:
         return 1
     print(
         f"build_world: check-snaps OK — {len(ports)} ports snapped within "
-        f"{HARBOR_SNAP_TILES} tiles (file {path})",
+        f"{HARBOR_SNAP_TILES} tiles with a shore tile (file {path})",
         file=sys.stderr,
     )
     return 0
@@ -1605,6 +1689,17 @@ def cmd_build(args) -> int:
         return 1
     for dupe in duplicate_harbors(port_results):
         print(f"build_world: warning: {dupe}", file=sys.stderr)
+    shared_shores = duplicate_shores(port_results)
+    if shared_shores:
+        # Two ports cannot share a shore tile: only one of them could be docked
+        # into (20-* §4.11.1). This is a data error, not a warning.
+        print(
+            "build_world: harbor pair FAILED — a shore tile is shared:",
+            file=sys.stderr,
+        )
+        for dupe in shared_shores:
+            print(f"  FAIL {dupe}", file=sys.stderr)
+        return 1
     assert_harbors_on_ocean(grid, port_results)
 
     report = build_report(grid, meta, ports, port_results)

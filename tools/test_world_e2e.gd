@@ -305,7 +305,9 @@ func _test_leg1() -> void:
 		"leg 1: arrival is exactly %s (got %s)"
 		% [str(TENERIFE_WATER), str(acc["cell"])])
 	_check(DataLoader.map.port_id_at(Vector2i(acc["cell"])).is_empty(),
-		"leg 1: arrival is open water, not a harbour (no Canaries port exists)")
+		"leg 1: arrival is open water, not a berth (no Canaries port exists)")
+	_check(DataLoader.map.shore_port_at(Vector2i(acc["cell"])).is_empty(),
+		"leg 1: arrival is not a port's shore tile either")
 
 	# The band edge: variables → trade_winds, crossed exactly once.
 	var zones: Array = acc["zones"]
@@ -346,11 +348,14 @@ func _test_leg2() -> void:
 
 	_check(ok, "leg 2: the fleet sailed Lisbon → Istanbul")
 	_check(Vector2i(acc["cell"]) == _port("istanbul"),
-		"leg 2: arrival is Istanbul's harbour tile %s (got %s)"
+		"leg 2: arrival is Istanbul's berth tile %s (got %s)"
 		% [str(_port("istanbul")), str(acc["cell"])])
 	_check(GameState.current_port == "istanbul",
-		"leg 2: landing on the harbour docked at Istanbul (got %s)"
+		"leg 2: heading into the shore tile docked at Istanbul (got %s)"
 		% str(GameState.current_port))
+	_check(Vector2i(world.fleet_cell()) == _port("istanbul"),
+		"leg 2: docking leaves the fleet on the berth %s (got %s)"
+		% [str(_port("istanbul")), str(world.fleet_cell())])
 
 	# The carved channels, derived from `tools/map_overrides.json` with the
 	# same projection and the same 1/20-tile walk the builder uses.
@@ -628,6 +633,12 @@ func _sail(acc: Dictionary, goal: Vector2i) -> bool:
 	var from: Vector2i = world.fleet_cell()
 	acc["cell"] = from
 	if from == goal:
+		# Already there (a provisioning hop returned to the exact cell): still
+		# apply the harbor-pair docking gesture if the goal is a port's berth.
+		if GameState.current_port == null:
+			_dock_if_at_berth(acc, from)
+		if GameState.current_port != null:
+			(acc["stops"] as Array).append(str(GameState.current_port))
 		return true
 	var sail := SailPathLib.new()
 	var path: Array[Vector2i] = sail.find_path(from, goal, DataLoader.map)
@@ -688,10 +699,43 @@ func _sail(acc: Dictionary, goal: Vector2i) -> bool:
 		_min_provisions = mini(_min_provisions, FleetLib.supplies("provisions"))
 		_min_water = mini(_min_water, FleetLib.supplies("water"))
 	acc["steps"] = steps
+	# Docking (20-* §4.11.1): arriving on a port's **berth** no longer opens the
+	# port; the voyage docks by heading into the shore tile, exactly like a key
+	# press. The fleet stays on the berth, so `acc["cell"]` is still the goal.
+	if GameState.current_port == null:
+		_dock_if_at_berth(acc, cursor)
 	acc["days"] = int(acc["days"]) + (GameState.day - day0)
 	if GameState.current_port != null:
 		(acc["stops"] as Array).append(str(GameState.current_port))
 	return cursor == goal
+
+
+## If the fleet stands on a port's berth, dock by stepping into that port's shore
+## tile — the harbor-pair gesture (`20-*` §4.11.1). Records the docking step in
+## the leg's counters so the day/wrap math stays honest.
+func _dock_if_at_berth(acc: Dictionary, cell: Vector2i) -> void:
+	var port_id: String = DataLoader.map.port_id_at(cell)
+	if port_id.is_empty():
+		return
+	var shore: Vector2i = DataLoader.map.shore_cell(port_id)
+	if shore.x < 0:
+		return
+	var moved: bool = world.try_step(shore)
+	var guard := 0
+	while not moved and guard < 6:
+		if not _dismiss_modals():
+			break
+		moved = world.try_step(shore)
+		guard += 1
+	_check(moved, "%s: docking into %s's shore tile %s was accepted" % [
+		str(acc["label"]), port_id, str(shore)])
+	if not moved:
+		return
+	acc["steps"] = int(acc["steps"]) + 1
+	if GameState.current_port != null:
+		_check(Vector2i(world.fleet_cell()) == cell,
+			"%s: docking leaves the fleet on the berth %s (got %s)" % [
+				str(acc["label"]), str(cell), str(world.fleet_cell())])
 
 
 ## Closes a leg: the shared assertions every voyage owes (arrival, envelope,

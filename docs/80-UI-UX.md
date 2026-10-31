@@ -60,7 +60,7 @@ own, so it takes no S-number.
 S1 ──New Game──► S2 ──confirm──► S4
 S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependent)
 S1 ──Load retired slot──► S16 (summary only)
-S3 ──enter harbor tile──► S4
+S3 ──dock: head into shore tile──► S4
 S4 ──Set Sail──► S3
 S3 ──Tab──► S17 ──Esc/Tab──► S3
 S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4

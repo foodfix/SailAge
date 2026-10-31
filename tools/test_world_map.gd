@@ -19,6 +19,24 @@ const TILE_SIZE_PX := 32
 ## docs/10-* §6.3: palette index 0–4 = `~ . # ^ I` (append-only).
 const PALETTE_CHARS := "~.#^I"
 const PORT_COUNT := 100
+## The 14 ports whose §6.1 berth moved one tile when the harbor-pair constraint
+## was added (`20-*` §4.11.1) — the map's pinned regression table.
+const HARBOR_PAIR_MOVED := {
+	"amsterdam": Vector2i(1107, 224),
+	"beirut": Vector2i(1293, 335),
+	"belem": Vector2i(789, 547),
+	"cape_town": Vector2i(1190, 742),
+	"ceuta": Vector2i(1047, 323),
+	"curacao": Vector2i(666, 466),
+	"guayaquil": Vector2i(598, 554),
+	"havana": Vector2i(585, 400),
+	"portobelo": Vector2i(602, 481),
+	"suriname": Vector2i(749, 503),
+	"ternate": Vector2i(1844, 534),
+	"timor": Vector2i(1821, 600),
+	"tripoli": Vector2i(1159, 341),
+	"valparaiso": Vector2i(650, 737),
+}
 ## docs/90-* §9 step 4: 128×128-tile chunks, at most 24 live.
 const CHUNK_TILES := 128
 const MAX_LIVE_CHUNKS := 24
@@ -29,12 +47,16 @@ const BOOT_BUDGET_MS := 3000
 
 var _failures: Array[String] = []
 var _checks := 0
-## The `world_report.json` harbor tiles `{id: Vector2i}` (the builder's output).
+## The `world_report.json` harbor (berth) tiles `{id: Vector2i}` (the builder's
+## output).
 var _report_tiles: Dictionary = {}
+## The `world_report.json` shore tiles `{id: Vector2i}` (20-* §4.11.1).
+var _report_shores: Dictionary = {}
 
 
 func _ready() -> void:
-	_report_tiles = _load_report_tiles()
+	_report_tiles = _load_report_tiles("harbor_tile")
+	_report_shores = _load_report_tiles("shore_tile")
 	_test_map_index()
 	_test_legend()
 	_test_png_loads()
@@ -51,7 +73,7 @@ func _ready() -> void:
 
 # --- 0. The builder's harbor tiles (the reference values) -----------------
 
-func _load_report_tiles() -> Dictionary:
+func _load_report_tiles(key: String = "harbor_tile") -> Dictionary:
 	var path := "res://data/maps/world_report.json"
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	var out: Dictionary = {}
@@ -60,7 +82,7 @@ func _load_report_tiles() -> Dictionary:
 	for entry in (data.get("ports", []) as Array):
 		if not (entry is Dictionary):
 			continue
-		var tile = (entry as Dictionary).get("harbor_tile", null)
+		var tile = (entry as Dictionary).get(key, null)
 		if not (tile is Dictionary):
 			continue
 		out[str((entry as Dictionary).get("id", ""))] = Vector2i(
@@ -240,6 +262,84 @@ func _test_harbor_tiles() -> void:
 	var lisbon: Vector2i = _report_tiles["lisbon"]
 	_check(loader.port_id_at(Vector2i(lisbon.x + WORLD_WIDTH, lisbon.y)) == "lisbon",
 		"port_id_at wraps on x (x + 2160 is the same tile)")
+	# --- Harbor pair (20-* §4.11.1) ---------------------------------------
+	var shores: Dictionary = loader.shore_tiles()
+	_check(shores.size() == PORT_COUNT,
+		"all %d ports have a shore tile (got %d)" % [PORT_COUNT, shores.size()])
+	var shore_mismatches: Array = []
+	var shore_not_land: Array = []
+	var shore_not_orthogonal: Array = []
+	var non_unique: Array = []
+	var seen_shores := {}
+	for port_id in _report_shores:
+		var want: Vector2i = _report_shores[port_id]
+		var got: Vector2i = loader.shore_cell(str(port_id))
+		if got != want:
+			shore_mismatches.append("%s %s != %s" % [port_id, str(got), str(want)])
+		if got.x >= 0 and loader.char_at(got) != "#":
+			shore_not_land.append("%s %s" % [port_id, loader.char_at(got)])
+		if got.x >= 0:
+			var berth: Vector2i = loader.port_cell(str(port_id))
+			var ddx := posmod(got.x - berth.x, WORLD_WIDTH)
+			if ddx > WORLD_WIDTH / 2:
+				ddx -= WORLD_WIDTH
+			if absi(ddx) + absi(got.y - berth.y) != 1:
+				shore_not_orthogonal.append("%s %s vs berth %s"
+					% [port_id, str(got), str(berth)])
+		if seen_shores.has(got):
+			non_unique.append("%s/%s" % [seen_shores[got], port_id])
+		seen_shores[got] = port_id
+	_check(shore_mismatches.is_empty(),
+		"all %d shore tiles equal world_report.json's (mismatches: %s)"
+		% [PORT_COUNT, str(shore_mismatches.slice(0, 6))])
+	_check(shore_not_land.is_empty(),
+		"every shore tile is land '#' (%s)" % str(shore_not_land.slice(0, 6)))
+	_check(shore_not_orthogonal.is_empty(),
+		"every shore tile is orthogonally adjacent to its berth (%s)"
+		% str(shore_not_orthogonal.slice(0, 6)))
+	_check(non_unique.is_empty(),
+		"no two ports share a shore tile (%s)" % str(non_unique.slice(0, 6)))
+	_check(loader.shore_cell("nope") == Vector2i(-1, -1),
+		"an unknown port has no shore tile")
+	# Both halves of the pair are memoised: the second call returns the same
+	# answer without re-running the derivation.
+	var lisbon_shore_first := loader.shore_cell("lisbon")
+	var lisbon_berth_first := loader.port_cell("lisbon")
+	var shores_again: Dictionary = loader.shore_tiles()
+	_check(shores_again.size() == PORT_COUNT
+		and shores_again["lisbon"] == lisbon_shore_first
+		and loader.port_cell("lisbon") == lisbon_berth_first,
+		"shore_tiles()/port_cell() are memoised (stable across calls)")
+	# The inverse lookup covers every port and wraps on x.
+	var shore_covered := 0
+	for port_id in shores:
+		if loader.shore_port_at(shores[port_id]) == str(port_id):
+			shore_covered += 1
+	_check(shore_covered == PORT_COUNT,
+		"shore_port_at() reverses every shore tile (%d of %d)"
+		% [shore_covered, PORT_COUNT])
+	var lisbon_shore: Vector2i = _report_shores["lisbon"]
+	_check(loader.shore_port_at(
+			Vector2i(lisbon_shore.x + WORLD_WIDTH, lisbon_shore.y)) == "lisbon",
+		"shore_port_at wraps on x (x + 2160 is the same tile)")
+	# The berth and the shore tile are two different tiles of one pair.
+	_check(lisbon_shore != lisbon,
+		"Lisbon's shore tile %s is not its berth %s"
+		% [str(lisbon_shore), str(lisbon)])
+	# `port_cell` still means **berth**: nothing renamed it.
+	_check(loader.port_cell("lisbon") == lisbon and loader.shore_cell("lisbon") == lisbon_shore,
+		"port_cell() is the berth and shore_cell() the shore (unchanged semantics)")
+	# The 14 berths the pair constraint moved, pinned: every one is exactly the
+	# expected one-tile shift and is no longer the plain §6.1 snap.
+	var moved_wrong: Array = []
+	for port_id in HARBOR_PAIR_MOVED:
+		var want: Vector2i = HARBOR_PAIR_MOVED[port_id]
+		var got: Vector2i = loader.port_cell(str(port_id))
+		if got != want:
+			moved_wrong.append("%s %s != %s" % [port_id, str(got), str(want)])
+	_check(moved_wrong.is_empty(),
+		"the 14 re-snapped berths are exactly the pinned tiles (%s)"
+		% str(moved_wrong.slice(0, 4)))
 	# The data is the truth: every port has lat/lon and no stored tile.
 	var missing_latlon: Array = []
 	var stored_tile: Array = []
@@ -452,6 +552,32 @@ func _test_data_driven_swap() -> void:
 	var cell: Vector2i = loader.port_cell("test_port")
 	_check(cell.x >= 0 and cell.x < test_width and cell.y >= 0 and cell.y < test_height,
 		"a port snaps inside the swapped grid's bounds (%s)" % str(cell))
+	var test_shore: Vector2i = loader.shore_cell("test_port")
+	_check(test_shore.x >= 0 and loader.char_at(test_shore) == "#",
+		"the swapped grid derives a shore tile inside its own bounds (%s)"
+		% str(test_shore))
+	_check(loader.shore_port_at(test_shore) == "test_port",
+		"shore_port_at() reverses the swapped grid's shore tile")
+	# A berth with **no** orthogonally adjacent `#` is a data error: the pair
+	# rule skips it and the loader reports no shore tile at all (§4.11.1).
+	var all_water_bytes := PackedByteArray()
+	all_water_bytes.resize(16 * 16)
+	var all_water = MapLoaderLib.from_indices(16, 16, all_water_bytes, legend)
+	_check(all_water != null, "an all-water synthetic grid builds")
+	if all_water != null:
+		all_water.ports_override = {"water_port": {
+			"id": "water_port", "lat": 0.0, "lon": 0.0}}
+		# The plain §6.1 snap still finds water; the **pair** rule rejects it, so
+		# the port has no berth tile and therefore no shore tile (the validator's
+		# item 2b turns this into a named failure on real data).
+		_check(all_water.snap_harbor(0.0, 0.0) != Vector2i(-1, -1),
+			"the plain snap finds water on the all-water grid")
+		_check(all_water.snap_harbor_with_shore(0.0, 0.0) == Vector2i(-1, -1),
+			"the pair-aware snap rejects a berth with no '#' neighbour")
+		_check(all_water.shore_cell("water_port") == Vector2i(-1, -1),
+			"a berth with no adjacent '#' has no shore tile")
+		_check(all_water.shore_port_at(Vector2i(8, 8)).is_empty(),
+			"…and no shore lookup answers for the all-water grid")
 	# A wrong grid size is rejected by the legend, not silently accepted.
 	var wrong_legend: Dictionary = legend.duplicate(true)
 	(wrong_legend["grid"] as Dictionary)["width"] = 128
@@ -707,6 +833,7 @@ func _test_port_overlays() -> void:
 	_check(by_id.size() == PORT_COUNT,
 		"the overlay covers %d distinct ports (got %d)" % [PORT_COUNT, by_id.size()])
 	var wrong_cell: Array = []
+	var wrong_berth: Array = []
 	var wrong_colour: Array = []
 	var not_known: Array = []
 	for port_id in DataLoader.ports:
@@ -714,10 +841,17 @@ func _test_port_overlays() -> void:
 			not_known.append(str(port_id))
 			continue
 		var entry: Dictionary = by_id[str(port_id)]
-		var want: Vector2i = _report_tiles.get(str(port_id), Vector2i(-1, -1))
+		var want: Vector2i = _report_shores.get(str(port_id), Vector2i(-1, -1))
 		if (entry["cell"] as Vector2i) != want:
 			wrong_cell.append("%s %s != %s"
 				% [port_id, str(entry["cell"]), str(want)])
+		if (entry["shore_cell"] as Vector2i) != want:
+			wrong_cell.append("%s shore_cell %s != %s"
+				% [port_id, str(entry["shore_cell"]), str(want)])
+		var want_berth: Vector2i = _report_tiles.get(str(port_id), Vector2i(-1, -1))
+		if (entry["berth_cell"] as Vector2i) != want_berth:
+			wrong_berth.append("%s %s != %s"
+				% [port_id, str(entry["berth_cell"]), str(want_berth)])
 		var port: Dictionary = DataLoader.get_port(str(port_id))
 		var nation: Dictionary = DataLoader.get_nation(str(port.get("nation_id", "")))
 		var want_colour: Color = PaletteLib.nation_color(
@@ -728,10 +862,40 @@ func _test_port_overlays() -> void:
 	_check(not_known.is_empty(),
 		"every port has an overlay entry (%s)" % str(not_known))
 	_check(wrong_cell.is_empty(),
-		"every overlay square sits on its harbor tile (%s)" % str(wrong_cell.slice(0, 4)))
+		"every overlay square sits on its shore tile (%s)"
+		% str(wrong_cell.slice(0, 4)))
+	_check(wrong_berth.is_empty(),
+		"every overlay entry carries its berth tile (%s)"
+		% str(wrong_berth.slice(0, 4)))
 	_check(wrong_colour.is_empty(),
 		"%d overlay colours are their nation's colour (%s)"
 		% [PORT_COUNT, str(wrong_colour.slice(0, 4))])
+	# The berth marker is drawn on the berth tile, next to the square: the pair
+	# reads at a glance (20-* §4.11.1 presentation rule). The check is exact:
+	# the marker's centre must be the berth tile's centre **relative to the
+	# drawn shore tile**, for the world copy and every seam copy alike.
+	var marker_ok := 0
+	var marker_off: Array = []
+	for entry in entries:
+		var node = (entry as Dictionary)["node"]
+		var marker = node.get_node_or_null("BerthMarker") if node != null else null
+		if marker == null:
+			marker_off.append("%s: no marker" % str((entry as Dictionary)["port_id"]))
+			continue
+		var shore: Vector2i = (entry as Dictionary)["shore_cell"]
+		var berth: Vector2i = (entry as Dictionary)["berth_cell"]
+		var tile := float(TILE_SIZE_PX)
+		var want_centre := Vector2(berth - shore) * tile + Vector2(tile, tile) * 0.5
+		var got_centre: Vector2 = marker.position + marker.size * 0.5
+		if (got_centre - want_centre).length() <= 0.5:
+			marker_ok += 1
+		else:
+			marker_off.append("%s %s != %s"
+				% [str((entry as Dictionary)["port_id"]), str(got_centre),
+					str(want_centre)])
+	_check(marker_ok == PORT_COUNT,
+		"every port draws its berth marker centred on the berth tile (%d of %d; %s)"
+		% [marker_ok, PORT_COUNT, str(marker_off.slice(0, 3))])
 	# The overlay is only for known ports.
 	GameState.known_ports = ["lisbon"]
 	loader.refresh_port_overlay(DataLoader.ports, DataLoader.nations)
@@ -744,16 +908,20 @@ func _test_port_overlays() -> void:
 	# in-memory grid — the same code path, no special case.
 	var seam_ok: Array = _test_seam_duplication()
 	_check(seam_ok[0] == true,
-		"a harbor at x = 0 is wrap-duplicated at x + width (%s)" % str(seam_ok[1]))
+		"a port at x = 0 is wrap-duplicated (shore + berth) at x + width (%s)"
+		% str(seam_ok[1]))
 	_check(seam_ok[2] == true,
-		"a harbor at x = width-1 is wrap-duplicated at x - width (%s)" % str(seam_ok[3]))
+		"a port at x = width-1 is wrap-duplicated (shore + berth) at x - width (%s)"
+		% str(seam_ok[3]))
 	GameState.known_ports.assign(DataLoader.ports.keys())
 	world.queue_free()
 	await get_tree().process_frame
 
 
 ## Builds a 64×32 in-memory world with one port hugging each side of its seam
-## and returns `[left_dup, left_offsets, right_dup, right_offsets]`.
+## and returns `[left_dup, left_detail, right_dup, right_detail]`. Each detail
+## string reports the shore tile, the berth tile and the seam offsets, so a
+## failure says which half of the pair was not duplicated.
 func _test_seam_duplication() -> Array:
 	var legend := {
 		"grid": {"width": 64, "height": 32},
@@ -770,10 +938,11 @@ func _test_seam_duplication() -> Array:
 	var seam_loader = MapLoaderLib.new()
 	if not seam_loader.load_png_buffer(bytes, "test://seam.png", legend):
 		return [false, "load failed: %s" % seam_loader.last_error, false, ""]
-	# Scale = 64/360; lon −180 → x = 0, lon +179 → x = 63.
+	# Scale = 64/360; lon −180 → x = 0; the eastern fixture projects to x = 63
+	# (one step short of the seam, so its `-width` copy is the wrap).
 	seam_loader.ports_override = {
 		"left_port": {"id": "left_port", "lat": 0.0, "lon": -180.0},
-		"right_port": {"id": "right_port", "lat": 0.0, "lon": 179.0},
+		"right_port": {"id": "right_port", "lat": -11.25, "lon": 179.0},
 	}
 	var parent := Node2D.new()
 	add_child(parent)
@@ -783,13 +952,28 @@ func _test_seam_duplication() -> Array:
 		GameState.known_ports = [str(port_id)]
 		seam_loader.refresh_port_overlay(seam_loader.ports_override, {})
 		var offsets: Array = []
+		var both_drawn := true
 		for entry in seam_loader.port_overlay_entries():
-			offsets.append(int((entry as Dictionary)["offset"]))
+			var e: Dictionary = entry
+			offsets.append(int(e["offset"]))
+			var node = e["node"]
+			var marker = node.get_node_or_null("BerthMarker") if node != null else null
+			if marker == null:
+				both_drawn = false
+				continue
+			# The copy's berth marker must sit on its own berth tile, i.e. one
+			# step from the copy's shore tile — not on the un-offset world tile.
+			var shore: Vector2i = e["shore_cell"]
+			var berth: Vector2i = e["berth_cell"]
+			var want_berth := Vector2(berth - shore) * float(TILE_SIZE_PX)
+			if (marker.position - want_berth).length() > float(TILE_SIZE_PX):
+				both_drawn = false
 		offsets.sort()
-		var cell: Vector2i = seam_loader.port_cell(str(port_id))
-		var duplicated := offsets.size() == 2
-		out.append(duplicated)
-		out.append("cell %s offsets %s" % [str(cell), str(offsets)])
+		var shore: Vector2i = seam_loader.shore_cell(str(port_id))
+		var berth: Vector2i = seam_loader.port_cell(str(port_id))
+		out.append(offsets.size() == 2 and both_drawn)
+		out.append("shore %s berth %s offsets %s marker-copy %s"
+			% [str(shore), str(berth), str(offsets), str(both_drawn)])
 	parent.queue_free()
 	return out
 

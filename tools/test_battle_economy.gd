@@ -51,10 +51,11 @@ const LISBON_CONTACT := Vector2i(1030, 310)
 ## Oporto d=15) — the "nation credited once" case. Re-anchored from P1's
 ## (30,40) (which no longer sits between two same-nation ports).
 const SAME_NATION_CONTACT := Vector2i(1025, 308)
-## A contact tile where the two nearest ports tie on distance (Amsterdam 26 /
-## London 26), so the port-id tie-break decides: amsterdam < london → Holland
-## before England. Re-anchored from P1's (0,31) (Bordeaux/Lisbon 26/26).
-const TIE_CONTACT := Vector2i(1080, 204)
+## A contact tile where the two nearest ports tie on distance (Amsterdam 11 /
+## London 11), so the port-id tie-break decides: amsterdam < london → Holland
+## before England. Re-anchored from (1080,204) after the harbor-pair snap moved
+## Amsterdam's berth one tile east (`20-*` §4.11.1).
+const TIE_CONTACT := Vector2i(1096, 219)
 
 ## The 47-key §4.12.5 inventory, transcribed from the doc table (the contract:
 ## D/C/F "must not invent others"). Task G verified the *texts* against the

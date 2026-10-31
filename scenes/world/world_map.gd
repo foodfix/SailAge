@@ -12,7 +12,7 @@ extends Node2D
 ## into `SailingSimLib.try_move()` calls and keeps the view/UI in sync.
 ##
 ## Before a run exists (`GameState.player` empty) the scene is still usable: it
-## parks the fleet on Lisbon's harbor tile and the HUD renders "-" for values
+## parks the fleet on Lisbon's berth tile and the HUD renders "-" for values
 ## it cannot know (docs/IMPLEMENT-Phase1.md T6-D).
 
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
@@ -37,7 +37,7 @@ const SailPathLib := preload("res://scripts/world/sail_path.gd")
 ## the dual-map pipeline: `world.map_id` is always this value, so the scene
 ## never resolves an id and there is no map-change path to rescale for.
 const DEFAULT_MAP_ID := "world"
-## Fallback cell before a game exists: Lisbon's harbor tile, re-derived from the
+## Fallback cell before a game exists: Lisbon's berth tile, re-derived from the
 ## data (`lat`/`lon` → §6.1 snap) once the map is loaded. `(-1,-1)` means "the
 ## first port the map can resolve", then the grid centre if nothing does.
 const FALLBACK_CELL := Vector2i(-1, -1)
@@ -134,6 +134,10 @@ var _sail_path: Array[Vector2i] = []
 var _sail_target := Vector2i(-1, -1)
 ## Seconds accumulated toward the next path step (same cadence as the hold).
 var _sail_elapsed: float = 0.0
+## The port a click-shore route is ultimately heading for (20-* §4.11.1): the
+## route itself ends on the berth, and docking happens on arrival. "" when the
+## current order is an ordinary sea route.
+var _sail_dock_port: String = ""
 ## Set while a battle interruption has suspended a sail order; the order is
 ## resumed by `_on_battle_finished`.
 var _sail_suspended: bool = false
@@ -397,7 +401,14 @@ func sail_to(target: Vector2i) -> bool:
 	if cell == _fleet_cell:
 		# Clicking the tile the fleet stands on is a no-op (no toast, no order).
 		return false
-	if cell.y < 0 or cell.y >= _loader.height or not _loader.is_passable(cell):
+	# 20-* §4.11.1: a port's **shore** tile is a valid destination. The route
+	# goes to the adjacent berth (the shore tile stays solid for A*), and the
+	# port id is remembered so arriving docks — clicking a shore tile the fleet
+	# already stands beside docks immediately, exactly like a direction press.
+	var dock_port: String = _loader.shore_port_at(cell)
+	if not dock_port.is_empty():
+		return _sail_to_shore(cell, dock_port)
+	if not _loader.is_passable(cell):
 		# Land / ice / out of range: rejected, no clock cost, no order change.
 		# A click gets its own toast each time (the one-shot guard of
 		# [_reject_move] is for held-direction spam, not for deliberate clicks).
@@ -414,9 +425,43 @@ func sail_to(target: Vector2i) -> bool:
 	_reset_cadence()
 	_sail_path = path
 	_sail_target = cell
+	_sail_dock_port = ""
 	_sail_elapsed = 0.0
 	_sail_suspended = false
 	return true
+
+
+## The shore-tile branch of [method sail_to]: route to the port's berth and dock
+## on arrival. When the fleet is already orthogonally adjacent to the shore tile
+## the click is a docking gesture, not a route (§4.11.1, the same path as a
+## direction press).
+func _sail_to_shore(shore: Vector2i, port_id: String) -> bool:
+	var berth: Vector2i = _loader.port_cell(port_id)
+	if berth.x < 0:
+		return false
+	if _is_orthogonally_adjacent(shore) or berth == _fleet_cell:
+		# Already beside the shore tile (or standing on its berth): the click is
+		# a docking gesture, not a route — dock now, exactly like a key press.
+		return _dock_at(shore)
+	var path: Array[Vector2i] = _sail_compute(berth)
+	if path.is_empty():
+		_reject_sail()
+		return false
+	_hold_action = ""
+	_hold_forced = false
+	_reset_cadence()
+	_sail_path = path
+	_sail_target = berth
+	_sail_dock_port = port_id
+	_sail_elapsed = 0.0
+	_sail_suspended = false
+	return true
+
+
+## True when `cell` is exactly one **orthogonal** step from the fleet (x wraps).
+func _is_orthogonally_adjacent(cell: Vector2i) -> bool:
+	var delta := _wrapped_delta(cell)
+	return absi(delta.x) + absi(delta.y) == 1
 
 
 ## Remaining click-to-sail steps (empty when no order).
@@ -529,11 +574,18 @@ func _try_step(target: Vector2i) -> bool:
 		# feedback, no clock (±0 tiles is not a "move" at all).
 		return false
 	var step_target := _fleet_cell + delta
+	# Docking (20-* §4.11.1): heading into a port's **shore** tile is an
+	# interaction, not a step. The shore tile is land, so this is detected
+	# before the legality test — and it requires **orthogonal** adjacency,
+	# which is the no-corner-cut rule in disguise: a diagonal into land stays
+	# an illegal move.
+	if _docks(delta, target):
+		return _dock_at(target)
 	if not SailingSimLib.is_move_legal(_fleet_cell, step_target, _loader):
 		_reject_move(target)
 		return false
 
-	# Leaving a harbor tile: at sea again (docs/20-* §4.11 exit).
+	# Leaving the harbour: at sea again (docs/20-* §4.11 exit).
 	GameState.current_port = null
 
 	# The cell that gets stored: the un-normalised `step_target` may be -1 or
@@ -556,12 +608,6 @@ func _try_step(target: Vector2i) -> bool:
 	_reveal()
 	_sync_hud()
 
-	var port_id: String = _loader.port_id_at(landed)
-	if not port_id.is_empty():
-		# Docking ends any click route: the fleet is not at sea any more.
-		_cancel_sail_order()
-		_enter_port(port_id)
-		return true
 	# docs/60-* §4.11.11.1: contact is measured after the player move — a step
 	# onto a tile beside a hostile marker opens the battle now. S10 owns the
 	# screen from here, so nothing else may run on top of it.
@@ -571,6 +617,54 @@ func _try_step(target: Vector2i) -> bool:
 		# remaining path is kept, walking stops, and `_on_battle_finished`
 		# recomputes the rest toward the same target.
 		_sail_suspended = true
+	return true
+
+
+## True when the pending step is a docking gesture: the target is a port's
+## **shore** tile and the fleet is **orthogonally** adjacent to it (20-* §4.11.1).
+## A diagonal into the same land tile is never a dock — it stays an illegal move
+## (the no-corner-cut rule, §4.2).
+func _docks(delta: Vector2i, target: Vector2i) -> bool:
+	if delta.x != 0 and delta.y != 0:
+		return false
+	var cell := target
+	if _loader.width > 0:
+		cell = Vector2i(posmod(cell.x, _loader.width), cell.y)
+	return not _loader.shore_port_at(cell).is_empty()
+
+
+## Charges one `move_cost()` and opens the port; the fleet does **not** move
+## onto the shore tile (docking is an interaction, §4.11.1). The fleet is stored
+## on the **berth** tile instead, so `world.position` is always water and the
+## "Set Sail" exit has somewhere legal to leave from.
+func _dock_at(target: Vector2i) -> bool:
+	var cell := target
+	if _loader.width > 0:
+		cell = Vector2i(posmod(cell.x, _loader.width), cell.y)
+	var port_id: String = _loader.shore_port_at(cell)
+	if port_id.is_empty():
+		return false
+	var berth: Vector2i = _loader.port_cell(port_id)
+	_reject_logged = false
+	# §4.11.1 clock cost: exactly one move's worth of days before the screen.
+	# Deliberately state-only (like `SailingSim.try_move`), then the berth is
+	# re-asserted so a rejected/otherwise odd berth can never strand the fleet.
+	if _has_game():
+		SailingSimLib.advance_clock(SailingSimLib.move_cost())
+	if berth.x >= 0:
+		GameState.set_world_tile(berth)
+		_fleet_cell = berth
+	_place_marker()
+	_update_camera()
+	_reveal()
+	_sync_hud()
+	# Docking ends any click route and any held direction: the fleet is not at
+	# sea any more.
+	_cancel_sail_order()
+	_hold_action = ""
+	_reset_cadence()
+	_sail_dock_port = ""
+	_enter_port(port_id)
 	return true
 
 
@@ -719,6 +813,19 @@ func _step_along_sail_path() -> void:
 		return
 	# Docking, a game over or the destination all end the order.
 	if _sail_path.is_empty():
+		# A shore-tile click (20-* §4.11.1) docks when the route reaches the
+		# berth; the docking itself cancels the order. If the fleet somehow
+		# stopped short of the shore tile's orthogonal ring, the order is simply
+		# dropped (never a forced dock from a diagonal or a distance).
+		if not _sail_dock_port.is_empty():
+			var port_id := _sail_dock_port
+			_sail_dock_port = ""
+			var shore: Vector2i = _loader.shore_cell(port_id)
+			if shore.x >= 0 and _is_orthogonally_adjacent(shore):
+				_dock_at(shore)
+				return
+			_cancel_sail_order()
+			return
 		_finish_sail_order()
 		return
 	if GameState.current_port != null or game_over_open():
@@ -734,6 +841,7 @@ func _finish_sail_order() -> void:
 	_sail_target = Vector2i(-1, -1)
 	_sail_elapsed = 0.0
 	_sail_suspended = false
+	_sail_dock_port = ""
 	if _fleet_cell != target:
 		return
 	if not _toast("world.sail.arrived"):
@@ -746,6 +854,7 @@ func _cancel_sail_order() -> void:
 	_sail_target = Vector2i(-1, -1)
 	_sail_elapsed = 0.0
 	_sail_suspended = false
+	_sail_dock_port = ""
 
 
 func _reset_cadence() -> void:
@@ -766,7 +875,7 @@ func sail_pathing():
 
 
 ## Port entry (docs/20-* §4.11, in the doc's numbered order):
-##   1. the harbor tile's move + clock cost (already applied by [_try_step]);
+##   1. the docking day's move + clock cost (already applied by [_dock_at]);
 ##   2. discover the port if it was unknown, then dock (`current_port`);
 ##   3. queue the §4.7 dialogs: desertion (§4.8.2) → arrival greeting (§4.11);
 ##   4. emit `port_entered`, then route to S4 once the queue has drained.
@@ -1540,7 +1649,7 @@ func _ensure_world_state() -> void:
 		GameState.world["weather"] = SailingSimLib.DEFAULT_WEATHER
 
 
-## The pre-run parking cell: Lisbon's derived harbor tile, else any harbor the
+## The pre-run parking cell: Lisbon's derived berth tile, else any harbour the
 ## map resolves, else the grid centre. Editor inspection only; a real run always
 ## has a `world.position`.
 func _fallback_cell() -> Vector2i:

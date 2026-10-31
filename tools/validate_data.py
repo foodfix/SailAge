@@ -1542,6 +1542,7 @@ HARBOR_SNAP_TILES = 2
 # Palette index order is locked (section 6.3, append-only): 0-4 = ~ . # ^ I.
 WORLD_PALETTE_CHARS = "~.#^I"
 PASSABLE_INDICES = (0, 1)  # ~ and . ; # , ^ and I block movement (section 6.2)
+LAND_INDEX = 2  # `#`: the only tile a port's shore tile may be (20-* section 4.11.1)
 
 # The probe ports of section 8.1 item 4: each failure names the strait the
 # port proves. No `copenhagen` exists in the 100-port list, so Oresund/Great
@@ -1811,7 +1812,8 @@ def snap_harbor(grid: WorldGrid, lat: float, lon: float,
     """Locked harbor rule (section 6.1): water, adjacent water, ties (y, x).
 
     Returns `(distance, y, x)`, or None when no candidate inside the Chebyshev
-    radius satisfies the rule.
+    radius satisfies the rule. This is the **berth** half only; section 8.1
+    item 2b adds the harbor-pair requirement (20-* section 4.11.1).
     """
     px, py = tile_of_latlon(lat, lon)
     candidates = []
@@ -1827,6 +1829,62 @@ def snap_harbor(grid: WorldGrid, lat: float, lon: float,
         if grid.passable[y * grid.width + x] and has_orthogonal_water(grid, x, y):
             return distance, y, x
     return None
+
+
+def snap_harbor_with_shore(grid: WorldGrid, lat: float, lon: float,
+                           radius: int = HARBOR_SNAP_TILES):
+    """The harbor-pair berth (section 6.1 + 20-* section 4.11.1).
+
+    The section 6.1 snap with the pair constraint applied: a candidate water
+    tile that has no orthogonally adjacent `#` shore tile is skipped. Candidates
+    keep the locked `(distance, y, x)` order, so every port whose plain snap
+    already has a shore tile keeps exactly that tile — only a berth with no
+    shore neighbour moves (by one tile on the shipped map).
+
+    Returns `(distance, y, x)` or None.
+    """
+    px, py = tile_of_latlon(lat, lon)
+    candidates = []
+    for dy in range(-radius, radius + 1):
+        y = py + dy
+        if not (0 <= y < grid.height):
+            continue
+        for dx in range(-radius, radius + 1):
+            x = (px + dx) % grid.width
+            candidates.append((chebyshev_wrap(dx, dy, grid.width), y, x))
+    candidates.sort()
+    for distance, y, x in candidates:
+        if not (grid.passable[y * grid.width + x]
+                and has_orthogonal_water(grid, x, y)):
+            continue
+        if shore_of_berth(grid, x, y, (px, py)) is None:
+            continue
+        return distance, y, x
+    return None
+
+
+def shore_of_berth(grid: WorldGrid, x: int, y: int, origin: tuple[int, int],
+                   radius: int = HARBOR_SNAP_TILES):
+    """Shore tile of a berth (20-* section 4.11.1): `(distance, y, x)` or None.
+
+    The nearest orthogonally adjacent `#` tile to the port's derived origin,
+    wrap-aware Chebyshev in x, tie-breaking to the smallest `(y, x)`.
+    """
+    ox, oy = origin
+    candidates = []
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        yy = y + dy
+        if not (0 <= yy < grid.height):
+            continue
+        xx = (x + dx) % grid.width
+        if grid.indices[yy * grid.width + xx] != LAND_INDEX:
+            continue
+        candidates.append((chebyshev_wrap(xx - ox, yy - oy, grid.width), yy, xx))
+    if not candidates:
+        return None
+    candidates.sort()
+    distance, sy, sx = candidates[0]
+    return distance, sy, sx
 
 
 # -- reachability (section 8.1 item 3, `20-*` section 4.2) -------------------
@@ -1969,8 +2027,8 @@ def _passable_components(passable: bytearray, width: int, height: int,
 
 
 # -- report parsing ----------------------------------------------------------
-def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
-    """Read `world_report.json#ports[].harbor_tile` into `{id: (x, y)}`."""
+def _report_port_tiles(report: object, key: str) -> dict[str, tuple[int, int]]:
+    """Read `world_report.json#ports[].<key>` into `{id: (x, y)}`."""
     if not isinstance(report, dict):
         fail("map", WORLD_REPORT_LABEL, "builder report is not a JSON object", 6)
     entries = report.get("ports")
@@ -1989,12 +2047,12 @@ def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
         port_id = entry.get("id")
         if not isinstance(port_id, str):
             fail("map", WORLD_REPORT_LABEL, f"{path} has no string 'id'", 6)
-        tile = entry.get("harbor_tile")
+        tile = entry.get(key)
         if not isinstance(tile, dict):
             fail(
                 "map",
                 WORLD_REPORT_LABEL,
-                f"{path} ({port_id}) has no 'harbor_tile' object",
+                f"{path} ({port_id}) has no '{key}' object",
                 6,
             )
         x, y = tile.get("x"), tile.get("y")
@@ -2002,14 +2060,14 @@ def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
             fail(
                 "map",
                 WORLD_REPORT_LABEL,
-                f"{path} ({port_id}) harbor_tile needs integer x/y",
+                f"{path} ({port_id}) {key} needs integer x/y",
                 6,
             )
         if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT):
             fail(
                 "map",
                 WORLD_REPORT_LABEL,
-                f"{path} ({port_id}) harbor_tile ({x}, {y}) is outside the "
+                f"{path} ({port_id}) {key} ({x}, {y}) is outside the "
                 f"{MAP_WIDTH}x{MAP_HEIGHT} grid",
                 6,
             )
@@ -2019,29 +2077,57 @@ def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
     return tiles
 
 
+def _report_harbor_tiles(report: object) -> dict[str, tuple[int, int]]:
+    """Read `world_report.json#ports[].harbor_tile` (the **berth**) into `{id: (x, y)}`."""
+    return _report_port_tiles(report, "harbor_tile")
+
+
+def _report_shore_tiles(report: object) -> dict[str, tuple[int, int]]:
+    """Read `world_report.json#ports[].shore_tile` into `{id: (x, y)}`."""
+    return _report_port_tiles(report, "shore_tile")
+
+
 # -- the analysis shared by the real run and the mutation harness ------------
 def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
-                      discoveries: list, verbose: bool) -> dict:
-    """Harbor-tile agreement, reachability, probes, component listing.
+                      discoveries: list, verbose: bool,
+                      report_shores: dict | None = None) -> dict:
+    """Harbor-pair agreement, reachability, probes, component listing.
 
     Section 8.1 items 2-5. `grid`, `ports`, `report_tiles` and `discoveries`
     are exactly the values the normal run builds, so the self-test harness can
-    mutate in-memory copies and drive this same code path.
+    mutate in-memory copies and drive this same code path. `report_shores`
+    defaults to `report_tiles` for the older harness cases that only exercise
+    the berth half; the real run passes `world_report.json`'s `shore_tile` map.
     """
     width, height = grid.width, grid.height
     passable = grid.passable
+    if report_shores is None:
+        report_shores = report_tiles
     port_ids = [port.get("id") for port in ports]
     if len(set(port_ids)) != len(port_ids):
         fail("map", WORLD_PNG_LABEL, "ports.json repeats a port id", 6)
 
     # -- item 2: recompute every harbor tile from lat/lon, compare to report --
     computed: dict[str, tuple[int, int]] = {}
+    computed_shores: dict[str, tuple[int, int]] = {}
     for port in ports:
         port_id = port["id"]
         lat, lon = float(port["lat"]), float(port["lon"])
-        snapped = snap_harbor(grid, lat, lon)
+        snapped = snap_harbor_with_shore(grid, lat, lon)
         if snapped is None:
             px, py = tile_of_latlon(lat, lon)
+            plain = snap_harbor(grid, lat, lon)
+            if plain is not None:
+                fail(
+                    "map",
+                    WORLD_PNG_LABEL,
+                    f"harbor pair: port '{port_id}' berth "
+                    f"({plain[2]}, {plain[1]}) has no orthogonally adjacent "
+                    f"'#' shore tile within {HARBOR_SNAP_TILES} tiles of port "
+                    f"tile ({px}, {py}) and no other water candidate does "
+                    "(20-* section 4.11.1)",
+                    6,
+                )
             fail(
                 "map",
                 WORLD_PNG_LABEL,
@@ -2072,6 +2158,39 @@ def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
                 6,
             )
 
+        # -- item 2b: the harbor pair (20-* section 4.11.1) -------------------
+        shore = shore_of_berth(grid, x, y, tile_of_latlon(lat, lon))
+        if shore is None:
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor pair: port '{port_id}' berth ({x}, {y}) has no "
+                f"orthogonally adjacent '#' shore tile — the docking gesture "
+                f"and the port overlay both need one (20-* section 4.11.1)",
+                6,
+            )
+        shore_distance, sy, sx = shore
+        computed_shores[port_id] = (sx, sy)
+        reported_shore = report_shores.get(port_id)
+        if reported_shore is None:
+            fail(
+                "map",
+                WORLD_REPORT_LABEL,
+                f"world_report.json has no shore_tile for port '{port_id}' "
+                f"(validator recomputed ({sx}, {sy}))",
+                6,
+            )
+        if reported_shore != (sx, sy):
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor pair: port '{port_id}' shore tile recomputes to "
+                f"({sx}, {sy}) (distance {shore_distance}) but "
+                f"world_report.json says "
+                f"({reported_shore[0]}, {reported_shore[1]})",
+                6,
+            )
+
     collisions: dict[tuple[int, int], str] = {}
     for port in ports:
         port_id = port["id"]
@@ -2085,6 +2204,21 @@ def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
                 6,
             )
         collisions[tile] = port_id
+
+    shore_collisions: dict[tuple[int, int], str] = {}
+    for port in ports:
+        port_id = port["id"]
+        tile = computed_shores[port_id]
+        if tile in shore_collisions:
+            fail(
+                "map",
+                WORLD_PNG_LABEL,
+                f"harbor pair: ports '{shore_collisions[tile]}' and '{port_id}' "
+                f"share shore tile ({tile[0]}, {tile[1]}) — only one could be "
+                "docked into (20-* section 4.11.1)",
+                6,
+            )
+        shore_collisions[tile] = port_id
 
     stale = sorted(set(report_tiles) - {port["id"] for port in ports})
     if stale:
@@ -2114,6 +2248,28 @@ def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
             WORLD_PNG_LABEL,
             f"Lisbon's harbor tile ({lisbon[0]}, {lisbon[1]}) is not passable "
             f"(tile is {grid.char_at(start)})",
+            6,
+        )
+
+    # -- item 2b: shore tiles are land, so the water BFS must never reach one --
+    # The pair's land half is presented and docked into, never sailed over
+    # (20-* section 4.11.1): a shore tile appearing in the passable BFS would
+    # mean the raster and the derived pair disagree.
+    sailed_shores = [
+        port_id for port_id, (sx, sy) in computed_shores.items()
+        if reached[sy * width + sx]
+    ]
+    if sailed_shores:
+        listed = ", ".join(
+            f"{pid} ({computed_shores[pid][0]}, {computed_shores[pid][1]})"
+            for pid in sailed_shores
+        )
+        fail(
+            "map",
+            WORLD_PNG_LABEL,
+            f"harbor pair: {len(sailed_shores)} shore tile(s) are passable water "
+            f"and therefore inside the sailing BFS — a shore tile is land "
+            f"(20-* section 4.11.1): {listed}",
             6,
         )
 
@@ -2223,6 +2379,7 @@ def analyse_world_map(grid: WorldGrid, ports: list, report_tiles: dict,
 
     return {
         "ports_snapped": len(computed),
+        "shores_snapped": len(computed_shores),
         "reachable_tiles": sum(reached),
         "lisbon_tile": lisbon,
         "discoveries": discoveries_checked,
@@ -2254,16 +2411,19 @@ def check_group6(docs: dict[str, object], verbose: bool) -> None:
         except (OSError, json.JSONDecodeError) as exc:
             fail("map", WORLD_REPORT_LABEL, f"cannot read builder report: {exc}", 6)
     report_tiles = _report_harbor_tiles(report)
+    report_shores = _report_shore_tiles(report)
 
     ports = docs["ports.json"]["ports"]
     discoveries = docs["discoveries.json"]["discoveries"]
-    stats = analyse_world_map(grid, ports, report_tiles, discoveries, verbose)
+    stats = analyse_world_map(grid, ports, report_tiles, discoveries, verbose,
+                              report_shores)
 
     if verbose:
         lisbon = stats["lisbon_tile"]
         print(
             f"PASS group 6 world map ({grid.width}x{grid.height}, "
             f"{stats['ports_snapped']} ports snapped, "
+            f"{stats['shores_snapped']} shore tiles, "
             f"{stats['reachable_tiles']} passable tiles in one component from "
             f"Lisbon ({lisbon[0]}, {lisbon[1]}), "
             f"{stats['discoveries']} discoveries reachable, "
@@ -2284,6 +2444,9 @@ def check_group6(docs: dict[str, object], verbose: bool) -> None:
 _G6_INLAND_PORT = "valencia"
 _G6_INLAND_TILES = 3
 _G6_BASIN_TILES = 60  # a 60x60 basin is 3600 tiles, above the 2000 threshold
+# A port used by the harbor-pair negatives (2b): its berth must have exactly the
+# kind of `#` neighbour the pair rule requires.
+_G6_SHORE_PORT = "lisbon"
 
 
 def _encode_indexed_png(width: int, height: int, indices: bytes | bytearray,
@@ -2502,7 +2665,7 @@ def _g6_desert_basin(grid: WorldGrid, side: int) -> WorldGrid | None:
     return None
 
 
-def _g6_setup() -> tuple[WorldGrid, dict, list, list] | None:
+def _g6_setup() -> tuple[WorldGrid, dict, dict, list, list] | None:
     """Load the real grid/report/ports/discoveries for the harness."""
     grid = _load_world_grid(WORLD_PNG, WORLD_PNG_LABEL)
     try:
@@ -2516,7 +2679,8 @@ def _g6_setup() -> tuple[WorldGrid, dict, list, list] | None:
     except (OSError, KeyError, json.JSONDecodeError) as exc:
         print(f"FAIL g6-self-test setup: cannot read world data: {exc}")
         return None
-    return grid, _report_harbor_tiles(report), ports, discoveries
+    return (grid, _report_harbor_tiles(report), _report_shore_tiles(report),
+            ports, discoveries)
 
 
 def run_group6_self_test() -> int:
@@ -2524,13 +2688,14 @@ def run_group6_self_test() -> int:
     setup = _g6_setup()
     if setup is None:
         return 1
-    grid, report_tiles, ports, discoveries = setup
+    grid, report_tiles, report_shores, ports, discoveries = setup
     results: list[bool] = []
 
     # Baseline: the unmutated world is green, otherwise a negative could "fail"
     # for the wrong reason and prove nothing.
     try:
-        analyse_world_map(grid, ports, report_tiles, discoveries, False)
+        analyse_world_map(grid, ports, report_tiles, discoveries, False,
+                          report_shores)
         print("PASS g6 baseline: the unmutated world map validates green")
         results.append(True)
     except CheckFailure as exc:
@@ -2553,7 +2718,8 @@ def run_group6_self_test() -> int:
                 "gibraltar-sealed",
                 "ceuta",
                 lambda: analyse_world_map(
-                    sealed_gibraltar, ports, report_tiles, discoveries, False
+                    sealed_gibraltar, ports, report_tiles, discoveries, False,
+                    report_shores,
                 ),
             )
         )
@@ -2571,7 +2737,8 @@ def run_group6_self_test() -> int:
                 "probe-harbor-sealed",
                 "bosphorus",
                 lambda: analyse_world_map(
-                    isolated, ports, report_tiles, discoveries, False
+                    isolated, ports, report_tiles, discoveries, False,
+                    report_shores,
                 ),
             )
         )
@@ -2588,7 +2755,8 @@ def run_group6_self_test() -> int:
             "port-3-tiles-inland",
             _G6_INLAND_PORT,
             lambda: analyse_world_map(
-                grid, inland_ports, report_tiles, discoveries, False
+                grid, inland_ports, report_tiles, discoveries, False,
+                report_shores,
             ),
         )
     )
@@ -2602,7 +2770,9 @@ def run_group6_self_test() -> int:
         results.append(False)
     else:
         try:
-            stats = analyse_world_map(basin, ports, report_tiles, discoveries, False)
+            stats = analyse_world_map(
+                basin, ports, report_tiles, discoveries, False, report_shores
+            )
         except CheckFailure as exc:
             print(
                 "FAIL g6-self-test large-lake-informational: a large disconnected "
@@ -2641,31 +2811,144 @@ def run_group6_self_test() -> int:
             "report-harbor-tile-stale",
             "lisbon",
             lambda: analyse_world_map(
-                grid, ports, stale_report, discoveries, False
+                grid, ports, stale_report, discoveries, False, report_shores
             ),
         )
     )
 
+    # (2b-1) A berth with no shore tile: fill every orthogonally adjacent `#`
+    # of one port's berth with water, so the pair rule's mandatory neighbour is
+    # gone. The failure must name that port (item 2b).
+    landless_port = _G6_SHORE_PORT
+    landless_tile = report_tiles.get(landless_port)
+    landless = None
+    if landless_tile is not None:
+        x0, y0 = landless_tile
+        indices = bytearray(grid.indices)
+        removed = 0
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            yy = y0 + dy
+            xx = (x0 + dx) % grid.width
+            if 0 <= yy < grid.height and indices[yy * grid.width + xx] == 2:
+                indices[yy * grid.width + xx] = 0  # '~'
+                removed += 1
+        landless = WorldGrid(grid.width, grid.height, indices)
+    if landless is None or removed == 0:
+        print(
+            "FAIL g6-self-test berth-no-shore: cannot strip the shore tile of "
+            f"'{landless_port}'"
+        )
+        results.append(False)
+    else:
+        results.append(
+            _expect_g6_failure(
+                "berth-no-shore",
+                landless_port,
+                lambda: analyse_world_map(
+                    landless, ports, report_tiles, discoveries, False,
+                    report_shores,
+                ),
+            )
+        )
+
+    # (2b-2) A stale shore_tile in the report: the independent recomputation
+    # must name the port and both tiles (item 2b's comparison clause).
+    stale_shores = dict(report_shores)
+    kenya_shore = report_shores.get(_G6_SHORE_PORT)
+    if kenya_shore is None:
+        print("FAIL g6-self-test report-shore-tile-stale: no shore tile reported")
+        results.append(False)
+    else:
+        stale_shores[_G6_SHORE_PORT] = (
+            (kenya_shore[0] + 1) % grid.width,
+            (kenya_shore[1] + 1) % grid.height,
+        )
+        results.append(
+            _expect_g6_failure(
+                "report-shore-tile-stale",
+                _G6_SHORE_PORT,
+                lambda: analyse_world_map(
+                    grid, ports, report_tiles, discoveries, False, stale_shores
+                ),
+            )
+        )
+
     # (2c) Two ports on one harbor tile: `safi` is moved onto Lisbon's
-    # coordinates and the report copy follows, so the snap comparison passes
-    # and the collision rule (section 9) is the check that fires.
+    # coordinates and both report copies follow, so the snap and pair
+    # comparisons pass and the collision rule (section 9) is what fires.
     duplicate_ports = copy.deepcopy(ports)
     duplicate_report = dict(report_tiles)
+    duplicate_shores = dict(report_shores)
     lisbon_port = next(port for port in ports if port["id"] == "lisbon")
     for port in duplicate_ports:
         if port["id"] == "safi":
             port["lat"] = lisbon_port["lat"]
             port["lon"] = lisbon_port["lon"]
     duplicate_report["safi"] = report_tiles["lisbon"]
+    duplicate_shores["safi"] = report_shores["lisbon"]
     results.append(
         _expect_g6_failure(
             "duplicate-harbor-tile",
             "both snap to harbor tile",
             lambda: analyse_world_map(
-                grid, duplicate_ports, duplicate_report, discoveries, False
+                grid, duplicate_ports, duplicate_report, discoveries, False,
+                duplicate_shores,
             ),
         )
     )
+
+    # (2c-1) Two ports on one **shore** tile: move `safi` beside another port's
+    # shore tile, on a water cell that selects that same shore tile, so both
+    # comparisons pass and the shore-collision rule is what fires.
+    shore_ports = copy.deepcopy(ports)
+    shore_report = dict(report_tiles)
+    shared_shores = dict(report_shores)
+    holder_id = None
+    shore_neighbour = None
+    shared_shore = None
+    for candidate in ports:
+        holder_id = candidate["id"]
+        berth = report_tiles.get(holder_id)
+        shore = report_shores.get(holder_id)
+        if berth is None or shore is None or holder_id == "safi":
+            continue
+        origin = tile_of_latlon(candidate["lat"], candidate["lon"])
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            yy = shore[1] + dy
+            xx = (shore[0] + dx) % grid.width
+            if not (0 <= yy < grid.height) or (xx, yy) == berth:
+                continue
+            if not (grid.passable[yy * grid.width + xx]
+                    and has_orthogonal_water(grid, xx, yy)):
+                continue
+            found = shore_of_berth(grid, xx, yy, origin)
+            if found is not None and (found[2], found[1]) == shore:
+                shore_neighbour = (xx, yy)
+                shared_shore = shore
+                break
+        if shore_neighbour is not None:
+            break
+    if shore_neighbour is None:
+        print("FAIL g6-self-test duplicate-shore-tile: no alternative berth "
+              "selecting another port's shore tile")
+        results.append(False)
+    else:
+        for port in shore_ports:
+            if port["id"] == "safi":
+                port["lat"] = 90.0 - (shore_neighbour[1] + 0.5) / tiles_per_degree()
+                port["lon"] = (shore_neighbour[0] + 0.5) / tiles_per_degree() - 180.0
+        shore_report["safi"] = shore_neighbour
+        shared_shores["safi"] = shared_shore
+        results.append(
+            _expect_g6_failure(
+                "duplicate-shore-tile",
+                "share shore tile",
+                lambda: analyse_world_map(
+                    grid, shore_ports, shore_report, discoveries, False,
+                    shared_shores,
+                ),
+            )
+        )
 
     # (3) Corrupted artifacts, written to temp files and read back through the
     # real file-level artifact check.

@@ -98,7 +98,8 @@ func add_gold(delta: int) -> void:
 ## = `"world"`, docs/90-* §9.1) and there is no compatibility ladder for the
 ## retired Phase-1–3 ids (`90-*` §8.2 "development-stage scope": SailAge has not
 ## shipped, so no save in the wild names them). The fleet starts on the nation's
-## start port's **derived** harbor tile (`10-*` §6.1), never a stored copy.
+## start port's **derived berth** tile (`10-*` §6.1, `20-*` §4.11.1), never
+## a stored copy.
 func new_game(nation_id: String, route: bool = true,
 		map_id: String = "world") -> void:
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
@@ -144,7 +145,7 @@ func new_game(nation_id: String, route: bool = true,
 			% [nation_id, start_ship_type_id])
 		fleet = []
 
-	# The fleet sits on the start port's derived harbor tile (docs/20-* §4.1,
+	# The fleet sits on the start port's derived berth tile (docs/20-* §4.1,
 	# `10-*` §6.1); docking happens immediately, so the clock resets to 0 (§4.3).
 	# `position` is stored as `{"x","y"}` — the save-block shape (docs/90-*
 	# §8.1) and the JSON tilePos shape (docs/10-* §3.1) — so T17 can serialize
@@ -214,7 +215,7 @@ func _route_after_new_game(_start_port_id: String) -> void:
 
 
 ## A port's tile as the §8.1 `{x, y}` save shape. Ports carry `lat`/`lon` only
-## (docs/10-* §4.4), so the tile is the **derived** harbor tile (`10-*` §6.1
+## (docs/10-* §4.4), so the tile is the **derived berth** tile (`10-*` §6.1
 ## snap rule via `DataLoader.port_cell`). `map_id` is kept for signature
 ## compatibility; there is one world map now (docs/90-* §9.1).
 func _tile_dict(port: Dictionary, _map_id: String = "world") -> Dictionary:

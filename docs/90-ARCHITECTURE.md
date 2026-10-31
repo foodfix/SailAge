@@ -105,7 +105,7 @@ Application-wide signals; no state. Canonical signals:
 | `locale_changed(locale: String)` | `"zh"`/`"en"` | language toggle |
 | `gold_changed(new_gold: int)` | | any gold delta |
 | `fleet_changed()` | | ship bought/sold/sunk/repaired/cargo moved |
-| `port_entered(port_id: String)` | | harbor tile reached |
+| `port_entered(port_id: String)` | | a port's shore tile entered (docking, `20-*` §4.11.1) |
 | `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"`/`"captured"` | sea-death |
 | `save_completed(slot: int)` | | SaveSystem finished a write |
 | `battle_started(encounter: Dictionary)` | encounter descriptor (`60-*` §4.11.11) | S10 opens a battle |
@@ -221,9 +221,10 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 - **Screen switching:** a tiny `SceneRouter` (function on GameState,
   `change_scene(path)`) swaps the root scene via
   `get_tree().change_scene_to_file`. No scene ever frees another.
-- **World ↔ Port:** reaching a harbor tile emits `port_entered`; the world
+- **World ↔ Port:** docking (heading into a port's shore tile from an
+  orthogonally adjacent tile, `20-*` §4.11.1) emits `port_entered`; the world
   scene reacts by routing to `port_screen.tscn` with `GameState.current_port`
-  set. Leaving port returns to `world_map.tscn` at the harbor tile.
+  set. Leaving port returns to `world_map.tscn` on the port's **berth** tile.
 - **World ⇄ Chart:** `S3 ⇄ S17` via `Tab` (open) and `Esc`/`Tab` (close); the
   Chart is an overlay view of the current session and returns to S3 with state
   untouched. `world.map_id` is a single value (`"world"`), so **no
@@ -304,10 +305,10 @@ Phase-4 change (version 4):
 | Key | Value at v4 | How it is set |
 |---|---|---|
 | `world.map_id` | `"world"` | `DEFAULT_MAP_ID` (§9.1) |
-| `world.position` | `tilePos` on the 2160×1080 grid | the save's `current_port` harbor tile (`10-*` §6.1 snap rule) |
+| `world.position` | `tilePos` on the 2160×1080 grid | the save's `current_port` **berth** tile (`10-*` §6.1 snap rule, `20-*` §4.11.1) |
 
 **No payload keys are added or removed** by version 4 — only values change:
-`world.map_id` becomes `"world"`, `world.position` becomes the harbor tile
+`world.map_id` becomes `"world"`, `world.position` becomes the **berth** tile
 (`10-*` §6.1 snap rule) of the save's `current_port` (saves are port-only by
 design, `20-*` §4.3), `clock_fraction` becomes `0` (it is a runtime
 accumulator, absent from a normal save — the migration normalizes it if a
@@ -369,8 +370,9 @@ spend effort on it. Concretely:
 
   `MIGRATIONS[3]` — upgrades a version-3 payload to the single-world save. It
   rewrites `world.map_id` → `"world"`; rewrites `world.position` → the
-  **harbor tile** of the save's `current_port` (`10-*` §6.1 snap rule: nearest
-  water tile within 2 tiles, Chebyshev, tie-break smallest `(y, x)`), because
+  **berth** tile of the save's `current_port` (`10-*` §6.1 snap rule: nearest
+  water tile within 2 tiles, Chebyshev, tie-break smallest `(y, x)`; the
+  fleet's berth, never the shore tile), because
   saves are port-only by design and the old coordinates name tiles that no
   longer exist on the new grid; sets `clock_fraction` → `0`; leaves
   `known_ports` **untouched** (every port id survived `10-*` §7.1); and sets
@@ -449,12 +451,14 @@ data-driven:
 - Adding a second map is not a Phase-4 feature; the index shape exists so a
   future phase can re-introduce multi-map support as a data-only change.
 
-**Harbor-snap equality contract (pinned).** The builder
+**Harbor-pair equality contract (pinned).** The builder
 (`tools/build_world.py --check-snaps`) and the GDScript runtime implement the
-**same** rule — harbor tile within 2 tiles (Chebyshev) of `Port.lat`/`lon`, on
+**same** rule — berth within 2 tiles (Chebyshev) of `Port.lat`/`lon`, on
 water, with ≥ 1 orthogonally adjacent water tile, equidistant candidates
-tie-breaking to the smallest `(y, x)` — and the validator compares the two
-outputs; a disagreement is a build failure, never a quiet divergence.
+tie-breaking to the smallest `(y, x)`, skipping any candidate with no
+orthogonally adjacent `#` shore tile (`20-*` §4.11.1) — and the validator
+compares both halves of the pair against the builder's report; a disagreement
+is a build failure, never a quiet divergence.
 
 ## 10. "Add Content = Data-Only" Rule
 

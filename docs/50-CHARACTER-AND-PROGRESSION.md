@@ -41,7 +41,7 @@ player = { nation_id, stats: base 10 + nation bonus (§4.2),
            reputation: { own: Nation.start_reputation, others: 0 } }
 fleet = [ new instance of Nation.start_ship_type_id (40-* §4.3 "Buy ship"
           instance defaults, but crew = ShipType.crew_min ) ]
-world.position = Nation.start_port_id's harbor tile (GameState.current_port set,
+world.position = Nation.start_port_id's harbor-pair berth tile (current_port set,
                  so the game opens on the port screen, not at sea)
 known_ports = the 6 capital ports (20-* §4.11)
 ```

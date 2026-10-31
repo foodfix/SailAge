@@ -597,7 +597,7 @@ func _pirate_candidates(map) -> Array:
 	return out
 
 
-## Port ids of `nation_id` that actually have a harbour tile on this map.
+## Port ids of `nation_id` that actually have a berth tile on this map.
 func _nation_ports(nation_id: String) -> Array[String]:
 	var out: Array[String] = []
 	var map = _map()

@@ -45,8 +45,9 @@ speed), `80-*` §4.5/§4.6 (HUD crop and Chart).
 - Tile kinds `~ . # ^ I` (`10-*` §6.2): `sea ~` and `coastal_sea .` passable;
   `land #`, `reef ^` and `polar ice I` block. Passability comes from the
   decoded PNG's palette index (index 0–4 → `~ . # ^ I`).
-- Ports are an **overlay**, not map characters: their harbor tiles are water
-  and passable (§4.11).
+- Ports are an **overlay**, not map characters: their berth tiles are water
+  and passable, their shore tiles are the land tile the port is drawn on and
+  docked into (§4.11.1).
 
 ### 4.2 Movement
 
@@ -72,9 +73,10 @@ speed), `80-*` §4.5/§4.6 (HUD crop and Chart).
   neighbor of the target corner is impassable.
 - Each successful tile move advances the fractional clock by
   `1 / effective_speed` days (§4.4). Blocked moves cost nothing.
-- Moving onto a port's harbor tile triggers port entry (§4.11) instead of
-  consuming further movement input; before docking, the fractional clock cost
-  of that tile applies normally.
+- Heading into a port's **shore** tile from an orthogonally adjacent tile
+  triggers port entry (§4.11.1) instead of moving the fleet; the docking
+  charges one `move_cost()` before the port screen opens. Sailing across a
+  port's berth tile is ordinary movement and docks nothing.
 
 ### 4.3 Game clock & day tick
 
@@ -306,9 +308,9 @@ then return to title; no save is written or deleted.
   ports are known (`lisbon, seville, london, amsterdam, istanbul, venice`).
 - **Sighting:** when the fleet is within the sighting radius (**24** tiles,
   ≈4° ≈ 240 nm; modified by navigation per `50-*` §4.2; Chebyshev distance,
-  **wrap-aware on x**) of a port's harbor tile, that port is added to
-  `known_ports` permanently (marker appears on map + minimap). Map exploration
-  (§4.12) uses the same radius.
+  **wrap-aware on x**) of a port's harbor pair (measured to its berth tile),
+  that port is added to `known_ports` permanently (marker appears on map +
+  minimap). Map exploration (§4.12) uses the same radius.
 - **Discovery sighting (Phase 3, world map):** a separate, shorter radius —
   **18** tiles (Chebyshev, wrap-aware) — is when the `E` Explore action can
   find a `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
@@ -321,12 +323,16 @@ its `lat`/`lon` (`10-*` §6.1) — neither is stored in data:
 
 | Tile | Derivation | Passable | Role |
 |---|---|---|---|
-| **berth tile** (sea) | §6.1 snap: nearest water within 2 tiles, Chebyshev, tie-break smallest `(y, x)` | **yes** (`~`/`.`) | the fleet's berth; where the fleet stands after leaving port |
+| **berth tile** (sea) | §6.1 snap: nearest water within 2 tiles, Chebyshev, tie-break smallest `(y, x)`, **skipping candidates with no orthogonally adjacent `#`** (the pair constraint below) | **yes** (`~`/`.`) | the fleet's berth; where the fleet stands after leaving port |
 | **shore tile** (land) | nearest `#` tile **orthogonally adjacent** to the berth tile, tie-break smallest `(y, x)` | **never** (it is `#`) | **the port's map location** — this is what the player sees marked |
 
 The pair is mandatory: every port must have a shore tile orthogonally
-adjacent to its berth tile (validator group 6). The berth is ordinary water —
-**standing on it does not open the port screen**.
+adjacent to its berth tile (validator group 6). The berth snap therefore
+carries the pair as a **candidate constraint**: a water candidate with no
+orthogonally adjacent `#` is skipped, and the berth is the nearest candidate
+that satisfies both rules (`10-*` §6.1). A port whose plain §6.1 berth already
+has a shore tile does not move; on the shipped map exactly 14 do, by one tile.
+The berth is ordinary water — **standing on it does not open the port screen**.
 
 - **Presentation (locked):** the port overlay (nation-coloured square + label)
   is drawn on the **shore tile**, not the berth. What the player sees as "the
@@ -391,7 +397,8 @@ provisioning prompt rather than leaving directly.
   so a fleet at `x = 2159` shows tiles `x ∈ [2095..2159]` then `x ∈ [0..62]`
   — 128 contiguous columns, with no void at the seam. `x = 2094` and
   `x = 63` are outside the window.
-- Known port markers drawn as 2×2 px dots in the port's nation color; fleet
+- Known port markers drawn as 2×2 px dots in the port's nation color, on the
+  port's **shore** tile (the pair's visible location, §4.11.1); fleet
   as a 2×2 px white dot. Found discoveries are drawn as 2×2 px `ACCENT` dots
   once explored.
 - The **full world is the separate Chart screen** (S17, `80-*` §4.6): the

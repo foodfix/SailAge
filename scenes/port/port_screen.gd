@@ -23,7 +23,7 @@ extends Control
 ## S4's back edge is S3"):
 ##   * `GameState.current_port = null`
 ##   * `GameState.world.clock_fraction = 0.0`
-##   * `GameState.world.position` stays on the harbor tile
+##   * `GameState.world.position` stays on the **berth** tile (`20-*` §4.11.1)
 ##   * route to `world_map.tscn`
 ## `Esc` performs exactly the same transition as the button: the port screen
 ## has no other back edge, so "step back" is "set sail" — documented here
@@ -344,10 +344,10 @@ func open_save_dialog() -> Control:
 
 ## Set Sail (docs/20-* §4.11 exit; docs/80-* §4.2 S4 → S3):
 ## clears `current_port`, resets `clock_fraction` to 0, keeps the fleet on the
-## harbor tile, then routes to the world map.
+## **berth** tile, then routes to the world map.
 ##
 ## Returns false (state untouched) when there is nothing to sail: no run, or no
-## harbor tile to leave from. That only happens when the scene is opened
+## berth tile to leave from. That only happens when the scene is opened
 ## standalone from the editor.
 func set_sail() -> bool:
 	if GameState.player.is_empty() and GameState.fleet.is_empty():
@@ -360,7 +360,7 @@ func set_sail() -> bool:
 		push_warning("PortScreen: set_sail() with no current_port; nothing to exit")
 		return false
 
-	# §4.11 exit order: leave the harbor tile in place, drop the docked flag,
+	# §4.11 exit order: leave the berth tile in place, drop the docked flag,
 	# and reset the fractional clock (a port visit never carries sub-day time
 	# back to sea — §4.3 "saving happens only in port, where the fraction is
 	# always reset to 0").

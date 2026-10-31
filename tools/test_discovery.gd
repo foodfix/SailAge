@@ -37,15 +37,19 @@ const CAPITALS: Array[String] = [
 ## world map's variables band far from every harbor. Phase 4: re-anchored from
 ## the retired P1 grid (20,20) by task G.
 const OPEN_CELL := Vector2i(900, 330)
-## Lisbon's derived harbor tile on the world map (`10-*` §6.1) and the sea tile
-## beside it: (1023,309) is coastal sea (re-anchored from P1's (7,57)/(8,57)).
+## Lisbon's derived harbor **berth** (`10-*` §6.1), its **shore** tile (`20-*`
+## §4.11.1) and the sea tile beside it: (1023,309) is coastal sea.
 const LISBON := Vector2i(1024, 308)
+const LISBON_SHORE := Vector2i(1024, 307)
 const SEA_BESIDE_LISBON := Vector2i(1023, 309)
 ## Valencia's harbor tile on the world map (derived, not stored). It is not a
 ## capital, so it starts unknown. The three cells below sit at exactly Chebyshev
 ## 24 / 25 / 26 from it and each is a legal step from the next, so the pair
 ## (D24, D25) straddles the Phase-4 base radius 24 (`20-*` §4.11).
 const VALENCIA_HARBOR := Vector2i(1078, 303)
+## Valencia's shore tile: the `#` tile orthogonally adjacent to its berth that
+## the port is drawn on and docked into (`20-*` §4.11.1).
+const VALENCIA_SHORE := Vector2i(1077, 303)
 const VALENCIA_D26 := Vector2i(1052, 277)
 const VALENCIA_D25 := Vector2i(1053, 278)
 const VALENCIA_D24 := Vector2i(1054, 279)
@@ -271,10 +275,11 @@ func _test_discover_then_enter() -> void:
 		"a discovered port stays known after moving away")
 	spawned[0].queue_free()
 
-	# Entering an *unknown* harbor tile discovers it and enters normally.
-	# One legal step from valencia's harbor tile (the ready-time sighting knows it,
-	# and the fixture forgets it again below to exercise the entry branch).
-	_make_run(10, Vector2i(1078, 302))
+	# Entering an *unknown* harbor docks by heading into its **shore** tile from
+	# the berth (20-* §4.11.1) — one legal gesture from valencia's berth, which
+	# the ready-time sighting knows (the fixture forgets it again below to
+	# exercise the entry branch).
+	_make_run(10, VALENCIA_HARBOR)
 	var spawned2: Array = _spawn_world()
 	var world2 = spawned2[1]
 	GameState.known_ports = []  # forget everything the ready reveal found
@@ -284,27 +289,35 @@ func _test_discover_then_enter() -> void:
 	var clock_before := float(GameState.world["clock_fraction"])
 	_check(not GameState.known_ports.has("valencia"),
 		"valencia is unknown just before the entry step")
-	var stepped: bool = world2.try_step(VALENCIA_HARBOR)
+	_check(DataLoader.map.port_cell("valencia") == VALENCIA_HARBOR,
+		"the fleet stands on valencia's berth %s" % str(VALENCIA_HARBOR))
+	_check(DataLoader.map.shore_cell("valencia") == VALENCIA_SHORE,
+		"valencia's shore tile is %s" % str(VALENCIA_SHORE))
+	var stepped: bool = world2.try_step(VALENCIA_SHORE)
 	EventBus.port_entered.disconnect(listener)
-	_check(stepped, "stepping onto valencia's harbor tile succeeds (no error)")
+	_check(stepped, "heading into valencia's shore tile docks (no error)")
 	_check(entered == ["valencia"],
 		"port_entered('valencia') fired exactly once (got %s)" % str(entered))
 	_check(GameState.known_ports.has("valencia"),
 		"entering an unknown port discovers it (§4.11)")
 	_check(GameState.current_port == "valencia",
 		"current_port is valencia after entry (got %s)" % str(GameState.current_port))
-	# §4.2: the harbor tile's clock cost applied before docking.
+	# §4.11.1: exactly one move_cost() before the screen, and the fleet stays
+	# on the berth (docking never steps onto the land tile).
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
 		clock_before + SailingSimLib.move_cost()),
-		"the harbor tile cost applies before docking (%.4f → %.4f)"
+		"the docking cost is one move_cost() (%.4f → %.4f)"
 		% [clock_before, float(GameState.world["clock_fraction"])])
+	_check(GameState.world_tile() == VALENCIA_HARBOR,
+		"the fleet stays on the berth after docking (got %s)"
+		% str(GameState.world_tile()))
 	_drain_dialogs(world2.get_node("HUDLayer/HUD"))
 	spawned2[0].queue_free()
 
 	# With routing enabled the entry targets S4; because this world instance is
 	# a child (not the tree's current scene) the router must not swap the test's
 	# root — docs/90-* §7 "no scene ever frees another".
-	_make_run(10, Vector2i(1078, 302))
+	_make_run(10, VALENCIA_HARBOR)
 	var spawned3: Array = _spawn_world(true)
 	var world3 = spawned3[1]
 	_check(world3.port_route_target() == "",
@@ -324,7 +337,9 @@ func _test_discover_then_enter() -> void:
 # --- 4. Set Sail round trip through the real scenes ----------------------
 
 func _test_set_sail_round_trip() -> void:
-	_make_run(10, SEA_BESIDE_LISBON)
+	# The fleet starts on Lisbon's **berth** and docks by heading into the shore
+	# tile (20-* §4.11.1).
+	_make_run(10, LISBON)
 	GameState.known_ports = ["lisbon"]
 	GameState.world["clock_fraction"] = 0.4
 
@@ -343,13 +358,19 @@ func _test_set_sail_round_trip() -> void:
 	if world == null or world.scene_file_path != WORLD_SCENE:
 		return
 	_check(world.is_active_scene(), "the world scene sees itself as the active scene")
-	_check(world.fleet_cell() == SEA_BESIDE_LISBON,
-		"world restores the fleet on the fixture tile (got %s)"
+	_check(world.fleet_cell() == LISBON,
+		"world restores the fleet on the berth tile (got %s)"
 		% str(world.fleet_cell()))
 
-	# Enter Lisbon through the real input path.
+	# Enter Lisbon through the real input path: dock by heading into its **shore**
+	# tile from the berth (20-* §4.11.1). Set Sail must return the fleet to the
+	# berth, which is where `world.position` already is.
 	var harbor := LISBON
-	_check(world.try_step(harbor), "stepping onto Lisbon's harbor tile succeeds")
+	_check(DataLoader.map.port_cell("lisbon") == harbor,
+		"Lisbon's berth is %s" % str(harbor))
+	_check(DataLoader.map.shore_cell("lisbon") == LISBON_SHORE,
+		"Lisbon's shore tile is %s" % str(LISBON_SHORE))
+	_check(world.try_step(LISBON_SHORE), "heading into Lisbon's shore tile docks")
 	_drain_dialogs(world.get_node("HUDLayer/HUD"))
 	await tree.process_frame
 	await tree.process_frame
@@ -466,8 +487,10 @@ func _test_set_sail_round_trip() -> void:
 		"Esc (Set Sail) routes back to world_map.tscn (got %s)"
 		% ("null" if back == null else back.scene_file_path))
 	_check(GameState.world_tile() == harbor,
-		"Set Sail leaves the fleet on the harbor tile (got %s)"
+		"Set Sail leaves the fleet on the berth tile (got %s)"
 		% str(GameState.world_tile()))
+	_check(DataLoader.map.is_passable(GameState.world_tile()),
+		"the exit tile is water, never a land tile")
 	_check(float(GameState.world["clock_fraction"]) == 0.0,
 		"Set Sail resets clock_fraction to exactly 0.0 (got %.10f)"
 		% float(GameState.world["clock_fraction"]))
@@ -475,9 +498,8 @@ func _test_set_sail_round_trip() -> void:
 		"Set Sail clears current_port (got %s)" % str(GameState.current_port))
 	if back != null and back.scene_file_path == WORLD_SCENE:
 		_check(back.fleet_cell() == harbor,
-			"the returned world scene puts the marker on the harbor tile (got %s)"
+			"the returned world scene puts the marker on the berth tile (got %s)"
 			% str(back.fleet_cell()))
-
 	# Leave the tree in a clean state for the remaining (non-routing) tests.
 	if tree.current_scene != null:
 		tree.current_scene.queue_free()
@@ -636,9 +658,12 @@ func _test_minimap() -> void:
 		_check(by_id["lisbon"]["color"] == PaletteLib.nation_color(str(nation["color"])),
 			"lisbon's dot uses Portugal's nation color (got %s)"
 			% str(by_id["lisbon"]["color"]))
-		_check((by_id["lisbon"]["cell"] as Vector2i) == LISBON,
-			"lisbon's dot sits on its harbor tile (got %s)"
+		_check((by_id["lisbon"]["cell"] as Vector2i) == LISBON_SHORE,
+			"lisbon's dot sits on its shore tile (got %s)"
 			% str(by_id["lisbon"]["cell"]))
+		_check((by_id["lisbon"]["berth_cell"] as Vector2i) == LISBON,
+			"lisbon's dot carries its berth tile too (got %s)"
+			% str(by_id["lisbon"]["berth_cell"]))
 	if by_id.has("valencia"):
 		var valencia: Dictionary = DataLoader.get_port("valencia")
 		var nation2: Dictionary = DataLoader.get_nation(str(valencia["nation_id"]))
@@ -793,8 +818,11 @@ func _test_chart_screen() -> void:
 	_check(not valencia_dot.is_empty()
 		and valencia_dot["color"] == PaletteLib.nation_color(str(spain["color"])),
 		"valencia's chart dot uses Spain's nation color")
-	_check((valencia_dot.get("cell", Vector2i(-1, -1)) as Vector2i) == VALENCIA_HARBOR,
-		"valencia's chart dot sits on its harbor tile")
+	_check((valencia_dot.get("cell", Vector2i(-1, -1)) as Vector2i) == VALENCIA_SHORE,
+		"valencia's chart dot sits on its shore tile")
+	_check((valencia_dot.get("berth_cell", Vector2i(-1, -1)) as Vector2i)
+		== VALENCIA_HARBOR,
+		"valencia's chart dot carries its berth tile")
 
 	# --- Whole world downscaled to fit (`80-*` §4.6) -----------------------
 	_check(chart.world_image_size() == Vector2i(2160, 1080),

@@ -86,7 +86,7 @@ signal explore_requested
 @onready var _explore_button: Button = $Explore
 
 ## Fleet dot position override for hosts that show the map before a run exists
-## (the world scene falls back to Lisbon's harbor tile). `(-1,-1)` means "read
+## (the world scene falls back to Lisbon's berth tile). `(-1,-1)` means "read
 ## `GameState.world_tile()`".
 var fleet_cell := Vector2i(-1, -1)
 
@@ -815,6 +815,7 @@ func minimap_known_ports() -> Array:
 		out.append({
 			"port_id": str(entry["port_id"]),
 			"cell": entry["cell"],
+			"berth_cell": entry.get("berth_cell", entry["cell"]),
 			"color": entry["color"],
 		})
 	return out

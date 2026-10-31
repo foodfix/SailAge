@@ -19,12 +19,13 @@ extends RefCounted
 ##      is a load error naming the index and a sample tile.
 ##   3. passability = one byte per tile (`indices`, ~2.3 MB), `is_passable` is
 ##      wrap-aware on x and closed at the latitude edges.
-##   4. harbor tiles are derived from `Port.lat/lon` with the locked §6.1 snap
-##      rule (cached; `harbor_tiles()` for all 100) — never stored in the data.
+##   4. the harbor **pair** is derived from `Port.lat/lon`: the berth tile with
+##      the locked §6.1 snap rule and the shore tile as the nearest orthogonally
+##      adjacent `#` (20-* §4.11.1) — cached; `harbor_tiles()` for all 100.
 ##   5. rendering = 128×128-tile chunk layers generated on demand around the
 ##      camera, at most 24 live, freed beyond a one-chunk margin.
-##   6. ports = an overlay layer (nation square + label) for **known** ports,
-##      wrap-duplicated at the seam.
+##   6. ports = an overlay layer (nation square + label) on the **shore** tile
+##      plus a berth marker on the sea tile, wrap-duplicated at the seam.
 ##   7. the world scene only ever queries this object; it never re-reads the PNG.
 ##
 ## `Palette` is preloaded instead of referenced through its global class name so
@@ -38,8 +39,15 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const PALETTE_CHARS := "~.#^I"
 ## §6.2: only `~` (index 0) and `.` (index 1) are passable.
 const PASSABLE_INDICES: Array[int] = [0, 1]
-## §6.1: harbor tile within Chebyshev 2 of the port's lat/lon.
+## §6.1: harbor (berth) tile within Chebyshev 2 of the port's lat/lon.
 const HARBOR_SNAP_TILES := 2
+## §6.2: palette index 2 = `#`, the only tile a port's shore tile may be.
+const LAND_INDEX := 2
+## The four orthogonal neighbours; docking and the shore-tile derivation are
+## orthogonal-only (20-* §4.11.1 "never diagonal").
+const ORTHOGONAL_STEPS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+]
 
 # --- Rendering (docs/90-* §9 step 4) --------------------------------------
 
@@ -90,12 +98,20 @@ var last_error: String = ""
 
 # --- Caches (lazy, invalidated by a load) ----------------------------------
 
-## `port_id → Vector2i` derived from lat/lon (§6.1), computed once.
+## `port_id → Vector2i` derived from lat/lon (§6.1), computed once. This is the
+## **berth** tile: the sea tile the fleet stands on.
 var _harbor_tiles: Dictionary = {}
 var _harbor_ready := false
 ## `Vector2i(x mod width, y) → port_id`, the inverse of [member _harbor_tiles].
 var _port_at: Dictionary = {}
 var _port_at_ready := false
+## `port_id → Vector2i` shore tile (20-* §4.11.1), computed once: the `#` tile
+## orthogonally adjacent to the berth nearest the port's lat/lon projection.
+var _shore_tiles: Dictionary = {}
+var _shore_ready := false
+## `Vector2i(x mod width, y) → port_id`, the inverse of [member _shore_tiles].
+var _shore_at: Dictionary = {}
+var _shore_at_ready := false
 
 # --- Rendering state -------------------------------------------------------
 
@@ -324,6 +340,10 @@ func _reset_caches() -> void:
 	_harbor_ready = false
 	_port_at = {}
 	_port_at_ready = false
+	_shore_tiles = {}
+	_shore_ready = false
+	_shore_at = {}
+	_shore_at_ready = false
 	_tile_set = null
 	_atlas_source_id = -1
 	_chunks_root = null
@@ -416,6 +436,16 @@ func chebyshev_xy(ax: int, ay: int, bx: int, by: int) -> int:
 	return maxi(mini(dx, width - dx), absi(ay - by))
 
 
+## The short-way signed `dx` between two columns (`|result| ≤ width / 2`), used
+## to place a berth marker next to the shore tile that a seam copy drew.
+func _short_dx(from_x: int, to_x: int) -> int:
+	var w := maxi(width, 1)
+	var dx := posmod(to_x - from_x, w)
+	if dx > w / 2:
+		dx -= w
+	return dx
+
+
 # --- Harbor tiles (docs/10-* §6.1, docs/90-* §9.1) ------------------------
 
 ## Grid cell containing a WGS84 point: `x = floor((lon+180)*scale) mod width`,
@@ -431,8 +461,47 @@ func tile_of_latlon(lat: float, lon: float) -> Vector2i:
 ## Locked §6.1 snap rule, mirroring the validator exactly: candidates inside
 ## Chebyshev `radius`, on water with ≥ 1 orthogonally adjacent water tile,
 ## tie-breaking to the smallest `(distance, y, x)`. `(-1,-1)` when none.
+##
+## This is the **berth** tile only. The shipped data must also satisfy the
+## harbor-pair rule (20-* §4.11.1), so the builder and validator use
+## [method snap_harbor_with_shore]; this method stays as the plain §6.1 rule the
+## loader and tools/test_world_e2e probe directly.
 func snap_harbor(lat: float, lon: float, radius: int = HARBOR_SNAP_TILES) -> Vector2i:
+	for candidate in _snap_candidates(tile_of_latlon(lat, lon), radius):
+		var y: int = candidate[1]
+		var x: int = candidate[2]
+		if not is_passable_xy(x, y):
+			continue
+		if not _has_orthogonal_water(x, y):
+			continue
+		return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+## The **harbor pair** snap (20-* §4.11.1): the §6.1 berth rule with the added
+## requirement that the berth has an orthogonally adjacent `#` to serve as the
+## port's shore tile. Candidates keep the locked `(distance, y, x)` order, so a
+## port whose plain §6.1 berth already has a shore tile keeps exactly that tile.
+## `(-1,-1)` when nothing inside the radius qualifies (the builder fails loudly).
+func snap_harbor_with_shore(lat: float, lon: float,
+		radius: int = HARBOR_SNAP_TILES) -> Vector2i:
 	var origin := tile_of_latlon(lat, lon)
+	for candidate in _snap_candidates(origin, radius):
+		var y: int = candidate[1]
+		var x: int = candidate[2]
+		if not is_passable_xy(x, y):
+			continue
+		if not _has_orthogonal_water(x, y):
+			continue
+		if shore_of_berth(Vector2i(x, y), origin).x < 0:
+			continue
+		return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+## The `[distance, y, x]` candidates inside Chebyshev `radius` of `origin`,
+## sorted in the locked §6.1 order (distance, then smallest y, then smallest x).
+func _snap_candidates(origin: Vector2i, radius: int) -> Array:
 	var candidates: Array = []
 	for dy in range(-radius, radius + 1):
 		var y := origin.y + dy
@@ -442,15 +511,29 @@ func snap_harbor(lat: float, lon: float, radius: int = HARBOR_SNAP_TILES) -> Vec
 			var x := posmod(origin.x + dx, maxi(width, 1))
 			candidates.append([chebyshev_xy(dx, dy, 0, 0), y, x])
 	candidates.sort_custom(_harbor_less)
-	for candidate in candidates:
-		var y: int = candidate[1]
-		var x: int = candidate[2]
-		if not is_passable_xy(x, y):
+	return candidates
+
+
+## The shore tile of `berth` for a port whose derived lat/lon tile is `origin`
+## (20-* §4.11.1): the `#` tile orthogonally adjacent to the berth nearest
+## `origin` (wrap-aware Chebyshev), tie-break smallest `(y, x)`. `(-1,-1)` when
+## the berth has no orthogonally adjacent land — the pair rule's data error.
+func shore_of_berth(berth: Vector2i, origin: Vector2i) -> Vector2i:
+	if width <= 0 or height <= 0:
+		return Vector2i(-1, -1)
+	var candidates: Array = []
+	for delta in ORTHOGONAL_STEPS:
+		var y := berth.y + delta.y
+		if y < 0 or y >= height:
 			continue
-		if not _has_orthogonal_water(x, y):
+		var x := posmod(berth.x + delta.x, width)
+		if index_xy(x, y) != LAND_INDEX:
 			continue
-		return Vector2i(x, y)
-	return Vector2i(-1, -1)
+		candidates.append([chebyshev_xy(x, y, origin.x, origin.y), y, x])
+	candidates.sort_custom(_harbor_less)
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+	return Vector2i(int(candidates[0][2]), int(candidates[0][1]))
 
 
 static func _harbor_less(a: Array, b: Array) -> bool:
@@ -472,9 +555,10 @@ func _has_orthogonal_water(x: int, y: int) -> bool:
 	return false
 
 
-## `{port_id: Vector2i}` for every port in `data/ports.json` (§9 step 5).
-## Computed once; a port whose lat/lon cannot snap is omitted (the validator
-## makes that impossible for shipped data).
+## `{port_id: Vector2i}` **berth** tiles for every port in `data/ports.json`
+## (§9 step 5). Computed once; a port whose lat/lon cannot snap is omitted (the
+## validator makes that impossible for shipped data). The berth is derived with
+## the harbor-pair rule, so `shore_tiles()` is complete for exactly the same ids.
 func harbor_tiles() -> Dictionary:
 	if _harbor_ready:
 		return _harbor_tiles
@@ -489,13 +573,40 @@ func harbor_tiles() -> Dictionary:
 		var lon = (port as Dictionary).get("lon", null)
 		if not (lat is float or lat is int) or not (lon is float or lon is int):
 			continue
-		var cell := snap_harbor(float(lat), float(lon))
+		var cell := snap_harbor_with_shore(float(lat), float(lon))
 		if cell.x >= 0:
 			_harbor_tiles[str(port_id)] = cell
 	return _harbor_tiles
 
 
-## Harbor tile of `port_id`, or `(-1,-1)` when the id has no derivable tile.
+## `{port_id: Vector2i}` **shore** tiles (20-* §4.11.1) — the land tile each
+## port is drawn on and docked into. Computed once from the berth tiles; a berth
+## with no orthogonally adjacent `#` is omitted (the validator's item 2b).
+func shore_tiles() -> Dictionary:
+	if _shore_ready:
+		return _shore_tiles
+	_shore_ready = true
+	_shore_tiles = {}
+	var ports: Dictionary = _ports_table()
+	for port_id in harbor_tiles():
+		var port = ports.get(port_id, null)
+		if not (port is Dictionary):
+			continue
+		var lat = (port as Dictionary).get("lat", null)
+		var lon = (port as Dictionary).get("lon", null)
+		var origin: Vector2i
+		if (lat is float or lat is int) and (lon is float or lon is int):
+			origin = tile_of_latlon(float(lat), float(lon))
+		else:
+			origin = harbor_tiles()[port_id]
+		var cell := shore_of_berth(harbor_tiles()[port_id], origin)
+		if cell.x >= 0:
+			_shore_tiles[str(port_id)] = cell
+	return _shore_tiles
+
+
+## Berth tile of `port_id` (the fleet's water tile), or `(-1,-1)` when the id
+## has no derivable tile. **Unchanged meaning:** `port_cell` is the berth.
 func port_cell(port_id: String) -> Vector2i:
 	if port_id.is_empty():
 		return Vector2i(-1, -1)
@@ -504,19 +615,55 @@ func port_cell(port_id: String) -> Vector2i:
 	return value if value is Vector2i else Vector2i(-1, -1)
 
 
-## Port id whose harbor tile is `cell` (x wraps), or "" when none.
+## Shore tile of `port_id` (the `#` the port is drawn on and docked into), or
+## `(-1,-1)` when the id has none (20-* §4.11.1).
+func shore_cell(port_id: String) -> Vector2i:
+	if port_id.is_empty():
+		return Vector2i(-1, -1)
+	var tiles := shore_tiles()
+	var value = tiles.get(port_id, null)
+	return value if value is Vector2i else Vector2i(-1, -1)
+
+
+## Port id whose **berth** tile is `cell` (x wraps), or "" when none.
 func port_id_at(cell: Vector2i) -> String:
+	return _port_id_at(cell, true)
+
+
+## Port id whose **shore** tile is `cell` (x wraps), or "" when none — the
+## docking lookup of 20-* §4.11.1.
+func shore_port_at(cell: Vector2i) -> String:
+	return _port_id_at(cell, false)
+
+
+## Shared inverse lookup over the berth (`shore == false`) or shore table. Both
+## are memoised once and keyed by the wrapped cell.
+func _port_id_at(cell: Vector2i, berth: bool) -> String:
 	if cell.y < 0 or cell.y >= height or width <= 0:
 		return ""
-	if not _port_at_ready:
-		_port_at_ready = true
-		_port_at = {}
-		for port_id in harbor_tiles():
-			var tile: Vector2i = harbor_tiles()[port_id]
-			_port_at[tile] = port_id
 	var key := Vector2i(posmod(cell.x, maxi(width, 1)), cell.y)
-	var value = _port_at.get(key, null)
+	if berth:
+		if not _port_at_ready:
+			_port_at_ready = true
+			_port_at = _tile_index(harbor_tiles())
+		var port_id = _port_at.get(key, null)
+		return port_id if port_id is String else ""
+	if not _shore_at_ready:
+		_shore_at_ready = true
+		_shore_at = _tile_index(shore_tiles())
+	var value = _shore_at.get(key, null)
 	return value if value is String else ""
+
+
+## `{Vector2i: port_id}` from a `{port_id: Vector2i}` table, first id winning a
+## duplicate cell (the builder and validator report duplicates long before).
+func _tile_index(tiles: Dictionary) -> Dictionary:
+	var index: Dictionary = {}
+	for port_id in tiles:
+		var tile = tiles[port_id]
+		if tile is Vector2i and not index.has(tile):
+			index[tile] = str(port_id)
+	return index
 
 
 ## The port table the harbor snap reads. `DataLoader.ports` in production; a
@@ -713,9 +860,11 @@ func covers_rect_world(rect: Rect2) -> bool:
 
 # --- Port overlay (§9 step 5) ---------------------------------------------
 
-## Redraws the port overlay: a nation-coloured square plus the name's initial
-## per **known** port, wrap-duplicated at the seam. Idempotent; call after
-## `known_ports` changes.
+## Redraws the port overlay (20-* §4.11.1, §9 step 5): the nation-coloured
+## square plus the name's initial on the port's **shore** tile — the tile the
+## player reads as "the port" — and a small berth marker on the adjacent sea
+## tile so the pair reads at a glance. Both are wrap-duplicated at the seam.
+## Idempotent; call after `known_ports` changes.
 func refresh_port_overlay(ports: Dictionary = {}, nations: Dictionary = {}) -> void:
 	if _port_overlay == null:
 		return
@@ -747,22 +896,30 @@ func refresh_port_overlay(ports: Dictionary = {}, nations: Dictionary = {}) -> v
 		var port = table[raw_id]
 		if not (port is Dictionary):
 			continue
-		var cell := port_cell(port_id)
-		if cell.x < 0:
+		var shore := shore_cell(port_id)
+		var berth := port_cell(port_id)
+		if shore.x < 0:
 			continue
 		var colour := _nation_colour(str((port as Dictionary).get("nation_id", "")),
 			nation_table)
-		for offset in _seam_offsets(cell.x):
-			var draw_cell := Vector2i(cell.x + offset, cell.y)
+		# Both tiles of the pair get the same seam offsets: a port at x = 0 also
+		# shows at x = 2160, and its berth moves with it.
+		for offset in _seam_offsets_pair(shore.x, berth.x):
+			var draw_shore := Vector2i(shore.x + offset, shore.y)
+			# The berth is drawn relative to the copied shore tile, so a pair
+			# straddling x = 0 keeps its adjacency on both copies.
+			var draw_berth := draw_shore \
+				+ Vector2i(_short_dx(shore.x, berth.x), berth.y - shore.y)
 			var key := "%s@%d" % [port_id, offset]
 			_port_nodes[key] = _build_port_node(
-				key, draw_cell, port, colour
+				key, draw_shore, draw_berth, port, colour
 			)
 
 
-## Overlay entries `[{port_id, cell, offset, colour, node}]`, sorted by
-## `port_id` then `offset` — the test hook for "all 100 render with the right
-## nation colour, wrap-duplicated at the seam".
+## Overlay entries `[{port_id, cell, shore_cell, berth_cell, offset, colour,
+## node}]`, sorted by `port_id` then `offset` — the test hook for "all 100
+## render on their shore tile with the right nation colour, wrap-duplicated at
+## the seam". `cell` is the drawn square's cell, i.e. the **shore** tile.
 func port_overlay_entries() -> Array:
 	var out: Array = []
 	var keys: Array = _port_nodes.keys()
@@ -772,6 +929,8 @@ func port_overlay_entries() -> Array:
 		out.append({
 			"port_id": str(key).get_slice("@", 0),
 			"cell": node.get_meta("cell", Vector2i.ZERO),
+			"shore_cell": node.get_meta("shore_cell", Vector2i.ZERO),
+			"berth_cell": node.get_meta("berth_cell", Vector2i.ZERO),
 			"offset": int(node.get_meta("offset", 0)),
 			"colour": node.get_meta("colour", Color.BLACK),
 			"node": node,
@@ -788,6 +947,20 @@ func _known_ports() -> Array:
 	return []
 
 
+## Seam offsets covering **both** tiles of the pair: the union of each tile's
+## own offset set, so a port hugs the seam when either its shore tile or its
+## berth is within [constant SEAM_MARGIN] of an edge.
+func _seam_offsets_pair(shore_x: int, berth_x: int) -> Array:
+	var out: Array = [0]
+	if _seam_offsets(shore_x).has(width) or _seam_offsets(berth_x).has(width):
+		out.append(width)
+	if _seam_offsets(shore_x).has(-width) or _seam_offsets(berth_x).has(-width):
+		out.append(-width)
+	return out
+
+
+## Seam offsets for a single tile: always `0`, plus the wrap copy when the tile
+## is within [constant SEAM_MARGIN] of an edge (§9 step 5).
 func _seam_offsets(x: int) -> Array:
 	var out: Array = [0]
 	if x < SEAM_MARGIN:
@@ -806,17 +979,22 @@ func _nation_colour(nation_id: String, nations: Dictionary) -> Color:
 	return PaletteLib.ACCENT
 
 
-## A 0.6-tile nation square plus the English name's initial (placeholder art,
-## `80-*` §4.8: plain shapes + the default font, no textures).
-func _build_port_node(key: String, cell: Vector2i, port: Dictionary,
-		colour: Color) -> Control:
-	var origin := Vector2(cell) * float(tile_size_px)
+## The port's map node, anchored on its **shore** tile: a 0.6-tile nation square
+## plus the English name's initial, and a small berth marker on the adjacent sea
+## tile so the pair reads at a glance (placeholder art, `80-*` §4.8: plain shapes
+## + the default font, no textures). The holder sits at the shore tile's origin;
+## the berth marker is positioned relative to it, so a seam offset carries both.
+func _build_port_node(key: String, shore: Vector2i, berth: Vector2i,
+		port: Dictionary, colour: Color) -> Control:
+	var origin := Vector2(shore) * float(tile_size_px)
 	var holder := Control.new()
 	holder.name = "Port_%s" % key.replace("@", "_")
 	holder.position = origin
 	holder.size = Vector2(tile_size_px, tile_size_px)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.set_meta("cell", cell)
+	holder.set_meta("cell", shore)
+	holder.set_meta("shore_cell", shore)
+	holder.set_meta("berth_cell", berth)
 	holder.set_meta("colour", colour)
 	var offset := int(str(key).get_slice("@", 1))
 	holder.set_meta("offset", offset)
@@ -828,6 +1006,20 @@ func _build_port_node(key: String, cell: Vector2i, port: Dictionary,
 	square.color = colour
 	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(square)
+	# The berth marker: a small filled dot on the sea tile next to the square
+	# (the fleet's own tile), deliberately smaller than the port square. The
+	# offset is the **short way** round the seam, so a pair straddling x = 0
+	# draws the berth on the correct side of the shore tile.
+	var marker := ColorRect.new()
+	marker.name = "BerthMarker"
+	var marker_side := maxi(int(round(tile_size_px * 0.25)), 3)
+	marker.size = Vector2(marker_side, marker_side)
+	marker.position = Vector2(_short_dx(shore.x, berth.x), berth.y - shore.y) \
+		* float(tile_size_px) \
+		+ (Vector2(tile_size_px, tile_size_px) - marker.size) * 0.5
+	marker.color = colour
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(marker)
 	var label := Label.new()
 	label.name = "Initial"
 	label.text = _initial(port)

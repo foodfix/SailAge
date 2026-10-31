@@ -184,7 +184,7 @@ func get_map_files(map_id: String) -> Dictionary:
 ##
 ## Loading a save straight into port (docs/80-* §4.6 routes to S4 when the save
 ## was taken in port) never instantiates S3, so `map` stays null — yet port-side
-## systems need passability and harbor tiles: hostile-fleet spawning (`60-*`
+## systems need passability and harbor-pair tiles: hostile-fleet spawning (`60-*`
 ## §4.11.11), discovery range checks, quest destination draws. This builds the
 ## same `MapLoader` the world scene would, from the map index, and is
 ## idempotent.
@@ -227,11 +227,19 @@ func is_passable(cell: Vector2i) -> bool:
 	return bool(map.is_passable(cell))
 
 
-## Port id whose harbor tile is `cell`, or "" when none.
+## Port id whose harbor (berth) tile is `cell`, or "" when none.
 func port_id_at(cell: Vector2i) -> String:
 	if map == null:
 		return ""
 	var value = map.port_id_at(cell)
+	return value if value is String else ""
+
+
+## Port id whose **shore** tile is `cell`, or "" when none (20-* §4.11.1).
+func shore_port_at(cell: Vector2i) -> String:
+	if map == null:
+		return ""
+	var value = map.shore_port_at(cell)
 	return value if value is String else ""
 
 
@@ -241,6 +249,15 @@ func port_cell(port_id: String) -> Vector2i:
 	if map == null:
 		return Vector2i(-1, -1)
 	var value = map.port_cell(port_id)
+	return value if value is Vector2i else Vector2i(-1, -1)
+
+
+## Shore tile of `port_id` (the `#` the port is drawn on and docked into), or
+## (-1,-1) when the map is not loaded / the port has no shore tile.
+func shore_cell(port_id: String) -> Vector2i:
+	if map == null:
+		return Vector2i(-1, -1)
+	var value = map.shore_cell(port_id)
 	return value if value is Vector2i else Vector2i(-1, -1)
 
 
