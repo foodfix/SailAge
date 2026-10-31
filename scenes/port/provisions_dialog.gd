@@ -37,6 +37,8 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 const SCENE_PATH := "res://scenes/port/provisions_dialog.tscn"
+const JETTISON_KEY := "port.sail.jettison"
+const JETTISON_CONFIRM_KEY := "port.sail.jettison.confirm"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -258,6 +260,11 @@ func buy_button(kind: String) -> Button:
 	return _rows.get(kind, {}).get("buy", null)
 
 
+## The `抛弃` button of `kind` (null when unknown).
+func jettison_supply_button(kind: String) -> Button:
+	return _rows.get(kind, {}).get("jettison", null)
+
+
 ## The `[-]` / `[+]` stepper buttons of `kind`.
 func minus_button(kind: String) -> Button:
 	return _rows.get(kind, {}).get("minus", null)
@@ -282,7 +289,10 @@ func step(kind: String, direction: int) -> void:
 	var refs: Dictionary = _rows.get(kind, {})
 	if refs.is_empty():
 		return
-	var ceiling := maxi(FleetLib.fleet_free(), 1)
+	# The ceiling covers BOTH staged actions: a buy needs free hold, a
+	# discard needs carried stock (§4.6.1 amended) — so a discard can be
+	# staged even with a full hold.
+	var ceiling := maxi(FleetLib.fleet_free(), FleetLib.supplies(kind))
 	var next := pending_qty(kind) + STEP * signi(direction)
 	if direction < 0:
 		next = maxi(0, next)
@@ -311,6 +321,29 @@ func buy(kind: String) -> bool:
 	supplies_changed.emit(kind, qty)
 	rebuild()
 	return true
+
+
+## Discard supplies (§4.6.1 amended): the staged quantity of `kind` leaves
+## the pooled stock through `Fleet.remove_supplies` — the single
+## supplies-removal path — confirm-first over the shared `_confirm`.
+
+
+## The supply discard action: stages the request through the shared confirm
+## (the same dialog the cargo jettison uses). Returns the confirm dialog so
+## tests can drive `accept()` directly, or null when nothing is staged.
+func open_jettison_confirm(kind: String) -> Control:
+	var staged := pending_qty(kind)
+	if staged <= 0 or FleetLib.supplies(kind) <= 0:
+		return null
+	_pending = {"kind": kind, "qty": staged}
+	_confirm.open_key(JETTISON_CONFIRM_KEY, {
+		"kind": _kind_name(kind), "qty": staged,
+	})
+	return _confirm
+
+
+func _on_supply_jettison_pressed(kind: String) -> void:
+	open_jettison_confirm(kind)
 
 
 ## Jettison buttons rendered in the prompt, in display order: one per trade-good
@@ -392,10 +425,17 @@ func _build_row(kind: String) -> Dictionary:
 	buy.pressed.connect(_on_buy_pressed.bind(kind))
 	row.add_child(buy)
 
+	var jettison := Button.new()
+	jettison.name = "Jettison_%s" % kind
+	jettison.custom_minimum_size = Vector2(float(COL_STEP_W) * 2,
+		float(PaletteLib.BUTTON_H))
+	jettison.pressed.connect(_on_supply_jettison_pressed.bind(kind))
+	row.add_child(jettison)
+
 	_rows_box.add_child(row)
 	return {
 		"node": row, "label": label, "minus": minus, "qty": qty,
-		"plus": plus, "buy": buy,
+		"plus": plus, "buy": buy, "jettison": jettison,
 	}
 
 
@@ -479,9 +519,16 @@ func _refresh_row(kind: String) -> void:
 	buy.text = I18n.fmt("port.sail.buy", {"qty": qty, "gold": price * qty})
 	buy.disabled = not reason.is_empty()
 	buy.tooltip_text = reason
+	var stock := FleetLib.supplies(kind)
+	var jettison: Button = refs["jettison"]
+	jettison.text = I18n.t_key(JETTISON_KEY)
+	jettison.disabled = qty <= 0 or stock <= 0
+	jettison.tooltip_text = "" if not jettison.disabled else (
+		I18n.t_key("market.invalid_qty") if qty <= 0
+		else I18n.t_key("port.sail.days_zero"))
 	(refs["minus"] as Button).disabled = qty <= 0
-	(refs["plus"] as Button).disabled = FleetLib.fleet_free() <= 0 \
-		or qty >= FleetLib.fleet_free()
+	(refs["plus"] as Button).disabled = qty >= maxi(FleetLib.fleet_free(),
+		stock)
 
 
 ## Why a supply purchase is refused, as localised text (`""` = allowed). Order
@@ -632,6 +679,19 @@ func _on_jettison_confirmed() -> void:
 	var pending := _pending
 	_pending = {}
 	if pending.is_empty():
+		return
+	# Supply discard (§4.6.1 amended): the staged quantity leaves the pooled
+	# stock flagship-first, freeing hold immediately, refunding nothing.
+	if str(pending.get("kind", "")) in FleetLib.SUPPLY_KINDS:
+		var kind := str(pending["kind"])
+		var removed := FleetLib.remove_supplies(kind, int(pending["qty"]))
+		if removed > 0:
+			FleetLib.notify_changed()
+			supplies_changed.emit(kind, -removed)
+			var refs: Dictionary = _rows.get(kind, {})
+			if not refs.is_empty():
+				(refs["qty"] as Label).set_meta("qty", 0)
+			rebuild()
 		return
 	var removed := FleetLib.jettison_good(
 		int(pending["ship_index"]), str(pending["good_id"])

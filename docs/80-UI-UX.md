@@ -264,8 +264,8 @@ the only place supplies are bought; the market sells trade goods only
 | 里斯本 Lisbon · Day 12 · 7,830g                               |
 +--------------------------------------------------------------+
 | 船员 Crew        15 / 45                                      |
-| 补给 Provisions  45  (15 days)   [- 10 +]  [Buy 10 — 20g]      |
-| 淡水 Water       45  (15 days)   [- 10 +]  [Buy 10 — 10g]      |
+| 补给 Provisions  45  (15 days)   [- 10 +]  [Buy 10 — 20g] [抛弃] |
+| 淡水 Water       45  (15 days)   [- 10 +]  [Buy 10 — 10g] [抛弃] |
 | 货舱 Free        0 / 120                                      |
 +--------------------------------------------------------------+
 | 可航行天数 Days at sea: 15                                    |
@@ -288,6 +288,15 @@ the only place supplies are bought; the market sells trade goods only
 - **Jettison from the prompt:** a `Jettison` affordance per trade-good stack,
   same confirm as S15, so a full hold can be cleared without leaving the
   dialog.
+- **Discarding supplies (amended 2026-10-31):** each supply row also carries
+  a `抛弃` action: the row's staged quantity is removed from the pooled
+  stock flagship-first (`Fleet.remove_supplies` — the single
+  supplies-removal path), freeing hold capacity immediately and refunding
+  nothing. The stepper's ceiling is therefore
+  `max(free hold, current stock)`, so a discard can be staged even with a
+  full hold. **Confirm-first** (§4.7, same `confirm_dialog` as the cargo
+  jettison): `port.sail.jettison.confirm` names the kind and the quantity
+  before anything is dropped.
 - **Gate (locked, `20-*` §4.11.2):** `Set Sail` is disabled when there are no
   crew (`port.sail.no_crew`) or fewer than one day of supply
   (`port.sail.no_supply`), each stating its reason. `Stay in port` always
@@ -694,6 +703,8 @@ Placeholders must match between zh and en.
 | `port.sail.stay` | 留在港口 | Stay in port |
 | `port.sail.buy` | 购买 {qty}({gold}g) | Buy {qty} ({gold}g) |
 | `port.sail.jettison_hint` | 货舱已满,请先抛弃部分货物。 | Hold is full — jettison some cargo first. |
+| `port.sail.jettison` | 抛弃 | Jettison |
+| `port.sail.jettison.confirm` | 抛弃{kind} × {qty}? | Jettison {kind} × {qty}? |
 | `fleet.ship_header` | 舰队 | Fleet |
 | `fleet.stat.durability` | 耐久 {current}/{max} | Durability {current}/{max} |
 | `fleet.stat.cargo` | 载重 {used}/{capacity}(剩余 {free}) | Cargo {used}/{capacity} ({free} free) |

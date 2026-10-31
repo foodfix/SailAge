@@ -686,6 +686,54 @@ func _test_provisions_prompt() -> void:
 		"15 days is GOOD green (§4.8)")
 	_check(prompt.days_of_supply() == 15,
 		"days_of_supply() agrees with the label (%d)" % prompt.days_of_supply())
+
+	# --- discarding supplies (80-* §4.6.1 amended) -------------------------
+	var prov_j: Button = prompt.jettison_supply_button("provisions")
+	var water_j: Button = prompt.jettison_supply_button("water")
+	_check(prov_j != null and water_j != null,
+		"both supply rows carry a jettison action")
+	if prov_j != null:
+		_check(prov_j.text == I18n.t_key("port.sail.jettison"),
+			"the discard action uses port.sail.jettison")
+		# Nothing staged: disabled with a reason.
+		_check(prov_j.disabled, "the discard is disabled with nothing staged")
+		# Stage 30 (stock 45) — the stepper ceiling covers carried stock even
+		# with a full hold, so a discard can be staged when nothing fits.
+		GameState.fleet[0]["cargo"] = {"wine": 30}
+		prompt.rebuild()
+		for i in range(3):
+			prompt.step("provisions", 1)
+		_check(prompt.pending_qty("provisions") == 30,
+			"the stepper stages 30 units (3 × 10)")
+		_check(not prov_j.disabled,
+			"the discard enables with a staged quantity")
+		var gold_before: int = GameState.gold
+		var free_before: int = FleetLib.fleet_free()
+		var dialog: Control = prompt.open_jettison_confirm("provisions")
+		_check(dialog != null and dialog.is_open(),
+			"discarding is confirm-first (§4.7)")
+		_check(str(dialog._source.get("key", "")) == "port.sail.jettison.confirm"
+			and int(dialog._source.get("values", {}).get("qty", -1)) == 30,
+			"the confirm names the quantity via port.sail.jettison.confirm")
+		dialog.accept()
+		var stock: int = FleetLib.supplies("provisions")
+		_check(stock == 45 - 30,
+			"the confirmed discard removes the staged 30 (stock %d)" % stock)
+		_check(GameState.gold == gold_before,
+			"discarding refunds nothing")
+		_check(prompt.pending_qty("provisions") == 0,
+			"the staged quantity resets after the discard")
+		# The freed capacity is real: exactly the discarded units return to
+		# the free pool (cannons also occupy §4.2 capacity, so compute, don't
+		# hard-code).
+		_check(FleetLib.fleet_free() == free_before + 30,
+			"the discard frees exactly the removed units (free %d → %d)"
+			% [free_before, FleetLib.fleet_free()])
+		# Restore the starter 45 for the sections below.
+		_check(FleetLib.add_supplies("provisions", 30) == 30,
+			"the freed hold takes 30 units back")
+		_check(FleetLib.supplies("provisions") == 45,
+			"back at the starter 45 after the round trip")
 	var title: Label = prompt.get_node("Center/Panel/Margin/Body/Title")
 	_check(title.text == I18n.t_key("port.sail.prepare"),
 		"the prompt title uses port.sail.prepare (%s)" % title.text)

@@ -1580,6 +1580,14 @@
     "zh": "货舱已满,请先抛弃部分货物。",
     "en": "Hold is full — jettison some cargo first."
   },
+  "port.sail.jettison": {
+    "zh": "抛弃",
+    "en": "Jettison"
+  },
+  "port.sail.jettison.confirm": {
+    "zh": "抛弃{kind} × {qty}?",
+    "en": "Jettison {kind} × {qty}?"
+  },
   "fleet.ship_header": {
     "zh": "舰队",
     "en": "Fleet"

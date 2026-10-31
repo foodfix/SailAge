@@ -852,7 +852,7 @@ only, mirroring the `world.png` rule).
 |---|---|
 | `python3 tools/validate_data.py` | **exit 0** — groups 1–8 PASS |
 | `python3 tools/build_routes.py` (rebuild) | **exit 0** — rebuild byte-identical (`--check`) |
-| suites | **35 suites / 5 989 checks, 0 failures, 0 zombie/hang** (`tools/run_tests.py`, 160 s) |
+| suites | **35 suites / 6 008 checks, 0 failures, 0 zombie/hang** (`tools/run_tests.py`, 160 s) |
 | `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
 | day tick @ normal 288 / @ extreme | **15.9 ms avg / 26.9 ms worst** (≤ 50) / **69 ms** @ ≈990 fleets (≤ 150); near-linear |
 | locale (zh/en) | **448 ui_strings keys, 0 bad** (validator-enforced placeholder parity) |
