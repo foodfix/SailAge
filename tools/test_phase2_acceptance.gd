@@ -55,10 +55,11 @@ const BattleScene := preload("res://scenes/combat/battle_screen.tscn")
 ## the retired P1 grid's (20,20) — that tile is polar ice on the world grid. The
 ## pirate is placed on the neighbour to its east, so a real day tick walks it
 ## into contact.
-## (1023,300) is open water 8 tiles from Lisbon; the marker one tile east of it
-## steps south-west and lands at Chebyshev 1 on the very next day tick (verified
-## by replaying the exact §4.11.8 rule-5 tie-breaks over the shipped artifact).
-const CONTACT := Vector2i(1023, 300)
+## (2042,615) is open water 8 tiles from Lisbon (Phase-6 grid); the marker one
+## tile east of it steps south-west and lands at Chebyshev 1 on the very next
+## day tick (verified by replaying the exact §4.11.8 rule-5 tie-breaks over the
+## shipped artifact).
+const CONTACT := Vector2i(2042, 615)
 const MARKER_CELL := CONTACT + Vector2i(1, 0)
 const MAP_PATH := "res://data/maps/world.png"
 

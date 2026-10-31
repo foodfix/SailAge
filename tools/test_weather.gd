@@ -18,14 +18,14 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 const HUDScene := preload("res://scenes/ui_shared/hud.tscn")
 
-## §4.7 latitude weather bands. A tile's latitude is `lat = 90 − y/6` (§4.1),
-## so the representative rows below are `y = round((90 − lat) * 6)`; `x` is
-## irrelevant (the bands are zonal, not map columns).
-const DOLDRUMS_CELL := Vector2i(3, 540)     # lat 0.0
-const TRADE_CELL := Vector2i(3, 370)        # lat 28.3 (Tenerife water)
-const VARIABLES_CELL := Vector2i(3, 308)    # lat 38.7 (Lisbon)
-const WESTERLIES_CELL := Vector2i(3, 240)   # lat 50.0
-const BOREAL_CELL := Vector2i(3, 150)       # lat 65.0
+## §4.7 latitude weather bands. A tile's latitude is `lat = 90 − y/12` (§4.1,
+## Phase-6 grid), so the representative rows below are `y = round((90 − lat) * 12)`;
+## `x` is irrelevant (the bands are zonal, not map columns).
+const DOLDRUMS_CELL := Vector2i(3, 1080)    # lat 0.0
+const TRADE_CELL := Vector2i(3, 740)        # lat 28.3 (Tenerife water)
+const VARIABLES_CELL := Vector2i(3, 616)    # lat 38.7 (Lisbon)
+const WESTERLIES_CELL := Vector2i(3, 480)   # lat 50.0
+const BOREAL_CELL := Vector2i(3, 300)       # lat 65.0
 
 ## The five locked band tables (`20-*` §4.7), in **engine** ids. The frequency
 ## harness runs one 10,000-roll sample per band at luck 10 and compares against
@@ -222,9 +222,9 @@ func _test_band_edges() -> void:
 	for row in cases:
 		var latitude: float = row[0]
 		var expected: String = row[1]
-		var y := int(round((90.0 - latitude) * 6.0))
+		var y := int(round((90.0 - latitude) * 12.0))
 		# Both a sea-column and a far-east column: the bands are zonal.
-		for x in [3, 1079]:
+		for x in [3, 4319]:
 			_check(SailingSimLib.weather_zone_for(Vector2i(x, y)) == expected,
 				"%s → y=%d, x=%d is %s (got %s)" % [
 					str(row[2]), y, x, expected,
@@ -232,35 +232,35 @@ func _test_band_edges() -> void:
 				])
 
 	# The exact positive fixtures the task names.
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 308)) == "variables",
-		"Lisbon row (lat 38.7 → y≈308) is variables")
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 370)) == "trade_winds",
-		"Tenerife row (lat 28.3 → y≈370) is trade_winds")
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 150)) == "boreal",
-		"lat 65 (y=150) is boreal")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 616)) == "variables",
+		"Lisbon row (lat 38.7 → y≈616) is variables")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 740)) == "trade_winds",
+		"Tenerife row (lat 28.3 → y≈740) is trade_winds")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 300)) == "boreal",
+		"lat 65 (y=300) is boreal")
 
 	# South mirror: the same band for the same |lat|, and the ice-band
 	# latitudes stay `boreal` even though the tile would be impassable ice.
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 660)) == "trade_winds",
-		"lat −20 (y=660) mirrors the northern trade winds")
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 840)) == "westerlies",
-		"lat −50 (y=840) mirrors the northern westerlies")
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 930)) == "boreal",
-		"lat −65 (y=930) is boreal by the symmetric table (its tile is ice)")
-	_check(SailingSimLib.weather_zone_for(Vector2i(3, 1079)) == "boreal",
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 1320)) == "trade_winds",
+		"lat −20 (y=1320) mirrors the northern trade winds")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 1680)) == "westerlies",
+		"lat −50 (y=1680) mirrors the northern westerlies")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 1860)) == "boreal",
+		"lat −65 (y=1860) is boreal by the symmetric table (its tile is ice)")
+	_check(SailingSimLib.weather_zone_for(Vector2i(3, 2159)) == "boreal",
 		"the southern ice rows (|lat| ≥ 70) still answer boreal (total function)")
 
 	# Locked band ids only, and `x` is irrelevant (the old strip rule is gone).
 	var seen := {}
-	for y in range(0, 1080, 3):
+	for y in range(0, 2160, 3):
 		seen[SailingSimLib.weather_zone_for(Vector2i(0, y))] = true
 	for band in BAND_TABLES:
 		seen.erase(band)
 	_check(seen.is_empty(),
 		"only the five locked band ids occur (stray: %s)" % str(seen.keys()))
-	_check(SailingSimLib.weather_zone_for(Vector2i(0, 540))
-		== SailingSimLib.weather_zone_for(Vector2i(2159, 540)),
-		"x=0 and x=2159 at the equator are the same band (zonal, not a strip)")
+	_check(SailingSimLib.weather_zone_for(Vector2i(0, 1080))
+		== SailingSimLib.weather_zone_for(Vector2i(4319, 1080)),
+		"x=0 and x=4319 at the equator are the same band (zonal, not a strip)")
 
 
 # --- §4.7 band frequencies: 10,000 seeded rolls per band -------------------
@@ -630,17 +630,17 @@ func _test_weather_persists() -> void:
 		"200 trade-wind days produce several outcomes (saw %s)" % str(seen.keys()))
 
 	# The band follows the tile: same seed, a variables-band tile (tropical
-	# row y=370) vs a westerlies tile (y=240).
+	# row y=740) vs a westerlies tile (y=480).
 	_make_run("fair", TRADE_CELL, 10)
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	_one_day()
 	_check(SailingSimLib.last_weather_zone == "trade_winds",
 		"the roll reads the fleet's current tile, not a cached band (got %s)"
 		% SailingSimLib.last_weather_zone)
-	_tile(3, 240)
+	_tile(3, 480)
 	_one_day()
 	_check(SailingSimLib.last_weather_zone == "westerlies",
-		"moving to lat 50 (y=240) switches the next roll to the westerlies (got %s)"
+		"moving to lat 50 (y=480) switches the next roll to the westerlies (got %s)"
 		% SailingSimLib.last_weather_zone)
 
 	# No transient keys leak into GameState.world (T17 save-block hygiene):
@@ -687,7 +687,7 @@ func _test_reachability() -> void:
 		"both closed forms clear the ≥0.90 / 6-day gate")
 
 	# 2. Empirical: 10,000 seeded 6-day windows at the Tenerife water tile
-	#    (lat 28.3 → y = round((90 − 28.3) × 6) = 370), luck 10. Only the roll
+	#    (lat 28.3 → y = round((90 − 28.3) × 12) = 740), luck 10. Only the roll
 	#    is sampled, so a window cannot be cut short by storm damage or
 	#    starvation; `by_day` counts the first-storm day of each window.
 	SailingSimLib.set_weather_seed(WEATHER_SEED)

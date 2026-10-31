@@ -8,13 +8,15 @@ into ``data/maps/world.png`` (indexed PNG, 1 px = 1 tile) plus
 Everything is locked by ``docs/10-DATA-SCHEMA.md`` §6 and the *Locked
 constants* table of ``docs/IMPLEMENT-Phase4.md``:
 
-  grid            2160 x 1080 tiles, 6 tiles/degree, lon = x/6 - 180,
-                  lat = 90 - y/6 (origin top-left, x east, y south)
+  grid            4320 x 2160 tiles, 12 tiles/degree, lon = x/12 - 180,
+                  lat = 90 - y/12 (origin top-left, x east, y south)
+                  (Phase 6 rescale, `10-*` §6.1 / `IMPLEMENT-Phase6.md` §2.0)
   charset         ``~`` sea, ``.`` coastal sea, ``#`` land, ``^`` reef,
                   ``I`` polar ice
   ice rule        ``I`` iff lat >= 70N or lat <= 60S
-  coastal band    ``.`` iff within 3 tiles (Chebyshev, wrap-aware in x) of a
-                  passable-adjacent land/ice tile
+  coastal band    ``.`` iff within 6 tiles (Chebyshev, wrap-aware in x) of a
+                  passable-adjacent land/ice tile (30 nm — the Phase-6 sweep
+                  doubles the tile count, nm width preserved)
   harbor snap     nearest water tile within 2 tiles (Chebyshev), with >= 1
                   orthogonally adjacent water tile, ties -> smallest (y, x)
   lakes           ``ne_10m_lakes`` rasterized as land (the Caspian is land)
@@ -48,7 +50,7 @@ Usage
     python3 tools/build_world.py                     # build the artifact
     python3 tools/build_world.py --report            # build + print the report
     python3 tools/build_world.py --verify            # build + decode the PNG
-    python3 tools/build_world.py --ascii             # print the 2160-wide map
+    python3 tools/build_world.py --ascii             # print the 4320-wide map
     python3 tools/build_world.py --ascii --rows 300:340
     python3 tools/build_world.py --check-snaps data/ports.json
     python3 tools/build_world.py --check-snaps docs/10-DATA-SCHEMA.md  # §7.1 table
@@ -86,10 +88,10 @@ import pyshp as shapefile  # noqa: E402  (vendored, MIT — see tools/vendor/)
 # --------------------------------------------------------------------------
 # Locked constants (docs/10-DATA-SCHEMA.md §6)
 # --------------------------------------------------------------------------
-DEFAULT_DEGREES_PER_TILE = 1.0 / 6.0  # 6 tiles per degree
-LOCKED_GRID_W = 2160
-LOCKED_GRID_H = 1080
-COASTAL_BAND_TILES = 3
+DEFAULT_DEGREES_PER_TILE = 1.0 / 12.0  # 12 tiles per degree (Phase-6 grid)
+LOCKED_GRID_W = 4320
+LOCKED_GRID_H = 2160
+COASTAL_BAND_TILES = 6
 HARBOR_SNAP_TILES = 2
 ICE_NORTH_MIN_LAT = 70.0
 ICE_SOUTH_MAX_LAT = -60.0
@@ -1766,12 +1768,12 @@ def main(argv=None) -> int:
     )
     parser.add_argument(
         "--degrees-per-tile", type=float, default=DEFAULT_DEGREES_PER_TILE,
-        help="tiles per degree (default %(default)s = 1/6; only 1/6 yields the "
-             "locked 2160x1080 grid)",
+        help="tiles per degree (default %(default)s = 1/12; only 1/12 yields "
+             "the locked 4320x2160 grid)",
     )
     parser.add_argument(
         "--ascii", action="store_true",
-        help="debug export: 2160-char lines of '~ . # ^ I' (stdout unless "
+        help="debug export: 4320-char lines of '~ . # ^ I' (stdout unless "
              "--ascii-out is given; never under data/)",
     )
     parser.add_argument(

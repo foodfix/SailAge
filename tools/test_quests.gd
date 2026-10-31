@@ -90,6 +90,9 @@ func _test_deterministic_offers() -> void:
 # --- 2. Offer shape and reward bands -------------------------------------
 
 func _test_offer_shapes() -> void:
+	# Phase-6: the exploration draw band swept 40 → 80 (70-* §4.9.3, gameplay
+	# ×2), so lisbon's neighbors (disc_atlas_cedars at ~10 tiles) are in range
+	# again and the original anchor works.
 	_new_run("lisbon", 12)
 	# Scan many weeks so every type shows up.
 	var types := {}
@@ -369,7 +372,8 @@ func _test_expiry() -> void:
 func _test_exploration_completion() -> void:
 	_new_run("lisbon", 12)
 	_clear_quests()
-	# Find an exploration offer in any week at a port that has discoveries near.
+	# Find an exploration offer in any week at a port that has discoveries near
+	# (lisbon: disc_atlas_cedars ~10 tiles; Phase-6 draw band 80).
 	var chosen: Dictionary = {}
 	for week in range(0, 200):
 		for offer in QuestGenLib.offers("lisbon", week * 7 + 1):

@@ -243,7 +243,9 @@ static func _exploration_offer(instance_id: String, port_id: String, day: int,
 	var template: Dictionary = _first_template(TYPE_EXPLORATION)
 	if template.is_empty():
 		return {}
-	var candidates := _hint_candidates(port_id, 40)
+	# §4.9.3 draw band, Phase-6 grid sweep: gameplay radius doubles with the
+	# tile grid (40 → 80) so the geographic reach is unchanged.
+	var candidates := _hint_candidates(port_id, 80)
 	if candidates.is_empty():
 		return {}
 	var discovery_id := str(candidates[rng.randi_range(0, candidates.size() - 1)])

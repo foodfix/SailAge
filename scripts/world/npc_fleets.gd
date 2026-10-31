@@ -79,27 +79,29 @@ const PURSUIT_COOLDOWN_DAYS := 1
 ## `Bounty.apply_piracy` (−20 owner / +2 its rivals). Kept here as the same
 ## pinned number so the funnel and the engine constant can be cross-checked.
 const PIRACY_REPUTATION := -20
-## §4.1.1 patrol zone radius — the pinned 15-tile navy zone, reused for the
-## daily unpatrolled-zone recount and the escorted-trader rule.
-const ZONE_RADIUS := 15
-## §4.1.1: same-nation traders within Chebyshev 10 of a patrol are escorted;
-## pirates prefer prey within Chebyshev 10.
+## §4.1.1 patrol zone radius — the pinned 30-tile navy zone (Phase-6 sweep:
+## 15 → 30, `10-*` §6.1), reused for the daily unpatrolled-zone recount and
+## the escorted-trader rule.
+const ZONE_RADIUS := 30
+## §4.1.1: same-nation traders within Chebyshev 20 of a patrol are escorted
+## (Phase-6 sweep: escort 10 → 20); pirates prefer prey within Chebyshev 10
+## (prey-preference pin — unchanged by the sweep).
 const PREY_RADIUS := 10
-const ESCORT_RADIUS := 10
+const ESCORT_RADIUS := 20
 ## §4.11.11.4: same-lane traders within Chebyshev 3 form a convoy, which
-## auto-resolve treats as escorted (§4.11.11.2).
+## auto-resolve treats as escorted (§4.11.11.2) — unchanged pin.
 const CONVOY_RADIUS := 3
-## §4.11.11.1: pirate/privateer anchors sit within Chebyshev 3 of chokepoint
-## tiles; prey is engaged within 5 and released beyond 8 (the 5/8 hysteresis
-## — the chase itself is task K).
-const ANCHOR_RADIUS := 3
-const CHASE_ON_RADIUS := 5
-const CHASE_OFF_RADIUS := 8
-## §4.11.11.1 hunter-intel rule (locked): the chase opens inside Chebyshev 15,
-## is lost beyond Chebyshev 20 (the 15/20 hysteresis), and the intel-port
-## loiter lasts 10 days.
-const HUNTER_CHASE_ON := 15
-const HUNTER_CHASE_OFF := 20
+## §4.11.11.1: pirate/privateer anchors sit within Chebyshev 6 of chokepoint
+## tiles; prey is engaged within 10 and released beyond 16 (the 10/16
+## hysteresis — the chase itself is task K). Phase-6 sweep: 3/5/8 → 6/10/16.
+const ANCHOR_RADIUS := 6
+const CHASE_ON_RADIUS := 10
+const CHASE_OFF_RADIUS := 16
+## §4.11.11.1 hunter-intel rule (locked): the chase opens inside Chebyshev 30,
+## is lost beyond Chebyshev 40 (the 30/40 hysteresis — Phase-6 sweep:
+## 15/20 → 30/40), and the intel-port loiter lasts 10 days.
+const HUNTER_CHASE_ON := 30
+const HUNTER_CHASE_OFF := 40
 const HUNTER_LOITER_DAYS := 10
 ## Hunter states (persisted, docs/60-* §4.11.11.1 hunter intel): sailing to
 ## the intel port, camping its approaches, chasing, or routing home.
@@ -108,10 +110,11 @@ const HUNTER_STATE_LOITER := "loiter"
 const HUNTER_STATE_CHASE := "chase"
 const HUNTER_STATE_HOME := "home"
 ## `30-*` §4.4 trader decision: destinations are own-nation ports within
-## Chebyshev 60 (wrap-aware).
-const CANDIDATE_RADIUS := 60
+## Chebyshev 120 (wrap-aware; Phase-6 sweep: 60 → 120).
+const CANDIDATE_RADIUS := 120
 ## `30-*` §4.4 risk discount: a hostile fleet within Chebyshev 5 of a sample
-## point of the candidate lane path halves the score.
+## point of the candidate lane path halves the score (unchanged pin — not in
+## the Phase-6 sweep's gameplay list).
 const RISK_RADIUS := 5
 const RISK_MULT := 0.5
 ## `30-*` §4.4: specialty multiplier and the seeded noise band.
@@ -189,9 +192,14 @@ static var _successor_cursor: int = 0
 ## Lane-days divisor for the trader score: `lane_days = tile length / 20`.
 ## HISTORICAL: the retired encounters system had no per-day tile rate to stay consistent with,
 ## so the 20 tiles/day default named by the task is pinned here. Fleet
-## *stepping* stays at the §4.11.11.1 pin of 1 tile/day — this constant only
-## ranks candidate journeys against each other.
+## *stepping* runs at the §4.11.11.1 Phase-6 pin of 2 tiles/day
+## ([constant LANE_STEP_TILES_PER_DAY]) — this constant only ranks candidate
+## journeys against each other.
 const LANE_TILES_PER_DAY := 20
+## §4.11.11.1 stepping base (Phase-6 sweep: 1 → 2 tiles/day, before the
+## task-H parity factors): every lane-travelling fleet advances up to this
+## many tiles per day tick, and raider chase/return steps match it.
+const LANE_STEP_TILES_PER_DAY := 2
 ## Hold capacities (fleet dicts carry cargo only — no ship list). The
 ## coaster's ≤ 10 hold and ≤ 5-unit calls are doc-pinned (`30-*` §4.4); the
 ## trader capacity is task-owned headroom above the 30-unit call cap so a
@@ -260,8 +268,8 @@ var _id_seq: int = 0
 static var _route_cache: Dictionary = {}
 ## Lane-network caches (built lazily from the built artifact).
 static var _net_ready: bool = false
-static var _width: int = 2160
-static var _height: int = 1080
+static var _width: int = 4320
+static var _height: int = 2160
 static var _lane_paths: Dictionary = {}
 static var _lane_ids_sorted: Array = []
 static var _spoke_paths: Dictionary = {}
@@ -796,8 +804,8 @@ func reset_rng(seed_value: int) -> void:
 static func reset_caches() -> void:
 	_route_cache = {}
 	_net_ready = false
-	_width = 2160
-	_height = 1080
+	_width = 4320
+	_height = 2160
 	_lane_paths = {}
 	_lane_ids_sorted = []
 	_spoke_paths = {}
@@ -1273,8 +1281,8 @@ func _refresh_net() -> void:
 		return
 	_net_ready = true
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
-	_width = int(grid.get("width", 2160))
-	_height = int(grid.get("height", 1080))
+	_width = int(grid.get("width", 4320))
+	_height = int(grid.get("height", 2160))
 	for lane_id in DataLoader.route_lanes:
 		var lane: Dictionary = DataLoader.route_lanes[lane_id]
 		var path: Array = []
@@ -1655,7 +1663,7 @@ func _leg_path(leg: Dictionary) -> Array:
 
 ## One pirate/privateer day (docs/60-* §4.11.11.1). The raider either camps
 ## its chokepoint anchor (within [constant ANCHOR_RADIUS] of a chokepoint
-## tile), chases prey under the **5/8 hysteresis** — the chase opens for the
+## tile), chases prey under the **10/16 hysteresis** — the chase opens for the
 ## nearest prey within [constant CHASE_ON_RADIUS] and is lost once the prey is
 ## beyond [constant CHASE_OFF_RADIUS] or gone — or walks back to the anchor
 ## after a lost chase. An engagement (Chebyshev [constant CONTACT_DISTANCE])
@@ -1682,19 +1690,28 @@ func _raider_tick(fleet: Dictionary, day: int, doomed: Dictionary,
 		if chasing:
 			fleet["target_fleet_id"] = str(target.get("id", ""))
 	if not chasing:
-		# Anchored (within 3 of the anchor and off the lane raster) or still
+		# Anchored (within 6 of the anchor and off the lane raster) or still
 		# walking home. Parking ON a path tile is forbidden: the anchor rule
 		# keeps the corridor itself clear (§4.11.11.1).
 		var anchor := _cell_field(fleet.get("anchor_cell", null))
 		if anchor != NO_CELL and (chebyshev(cell, anchor) > ANCHOR_RADIUS \
 				or _is_path_tile(cell)):
-			_step_toward(fleet, anchor)
+			for _i in LANE_STEP_TILES_PER_DAY:
+				_step_toward(fleet, anchor)
 		return
 	var prey_cell := position_of(target)
-	if chebyshev(cell, prey_cell) <= CONTACT_DISTANCE:
-		_engage(fleet, target, day, doomed, remove_ids, wrecks)
-		return
-	_step_toward(fleet, prey_cell)
+	# The chase steps at the §4.11.11.1 base too (2 tiles/day before the
+	# task-H parity factors — the raider is "like every fleet"). The
+	# engagement fires at most once per tick; a mid-step catch ends the loop
+	# (the loser is `doomed`, so no re-engage and no step past it).
+	for _i in LANE_STEP_TILES_PER_DAY:
+		if doomed.has(str(target.get("id", ""))):
+			break
+		prey_cell = position_of(target)
+		if chebyshev(position_of(fleet), prey_cell) <= CONTACT_DISTANCE:
+			_engage(fleet, target, day, doomed, remove_ids, wrecks)
+			break
+		_step_toward(fleet, prey_cell)
 
 
 ## The nearest prey candidate within `radius` of the raider (ties by fleet id
@@ -1719,7 +1736,8 @@ func _nearest_prey_within(fleet: Dictionary, radius: int,
 	return best
 
 
-## One wrap-aware greedy step (1 tile/day like every fleet, §4.11.11.1)
+## One wrap-aware greedy step (one of the [constant LANE_STEP_TILES_PER_DAY]
+## per-day fleet steps, §4.11.11.1 — the callers loop it)
 ## reducing the Chebyshev distance to `target`, larger axis first, never onto
 ## land/reef/ice or an occupied tile. Lane traffic never pathfinds and the
 ## raider chase is no exception (the §4.11.11.5 zero-A* gate: only the
@@ -1953,12 +1971,12 @@ func _step_fleets(day: int) -> void:
 		if role == HUNTER:
 			# §4.11.11.1 hunter intel: lanes to the intel port (zero A*),
 			# 10-day loiter at its approaches, short-radius pursuit only
-			# inside the 15/20 hysteresis.
+			# inside the 30/40 hysteresis.
 			pursuit_ms += _hunter_tick(fleet, day, pursuit_ms)
 			continue
 		if role == PIRATE or role == PRIVATEER:
-			# §4.11.11.1/§4.11.11.2 (task K): chokepoint camping with the 5/8
-			# hysteresis and the abstract NPC-vs-NPC auto-resolve.
+			# §4.11.11.1/§4.11.11.2 (task K): chokepoint camping with the
+			# 10/16 hysteresis and the abstract NPC-vs-NPC auto-resolve.
 			_raider_tick(fleet, day, doomed, remove_ids, wrecks)
 			continue
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
@@ -1971,7 +1989,15 @@ func _step_fleets(day: int) -> void:
 					continue
 				_depart(fleet, day)
 			continue
-		_advance(fleet, day)
+		# §4.11.11.1 Phase-6 stepping base: up to 2 tiles of lane progress
+		# per day tick (before the task-H parity factors). `_advance` is a
+		# no-op once the journey docks mid-loop (legs emptied by `_arrive`),
+		# so the second call after an arrival is safely idle.
+		for _i in LANE_STEP_TILES_PER_DAY:
+			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
+					as Array).is_empty():
+				break
+			_advance(fleet, day)
 	for id in remove_ids:
 		remove(id)
 	for wreck in wrecks:
@@ -1984,7 +2010,7 @@ func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
 	var cell := position_of(fleet)
 	var target := GameState.world_tile()
 	var distance := chebyshev(cell, target)
-	# 15/20 hysteresis: the chase opens inside 15, is lost beyond 20.
+	# 30/40 hysteresis: the chase opens inside 30, is lost beyond 40.
 	if str(fleet.get("hunter_state", HUNTER_STATE_INTEL)) == HUNTER_STATE_CHASE:
 		if distance > HUNTER_CHASE_OFF:
 			_hunter_route_to_intel(fleet)
@@ -2003,7 +2029,13 @@ func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
 		return 0.0
 	var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 	if not legs.is_empty():
-		_advance(fleet, day)
+		# Lane travel at the §4.11.11.1 Phase-6 base (2 tiles/day, before the
+		# task-H parity factors); `_advance` no-ops after a mid-loop arrival.
+		for _i in LANE_STEP_TILES_PER_DAY:
+			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
+					as Array).is_empty():
+				break
+			_advance(fleet, day)
 		return 0.0
 	# Docked / arrived at a journey end.
 	if int(fleet.get("dwell_until_day", 0)) > day:
@@ -3136,17 +3168,29 @@ static func marker_letter(role: String) -> String:
 # --- The wrap-aware cell-bucket spatial index (§4.11.11.5 — review gate) ----
 
 ## Bucket key of a cell (y-major; buckets do not wrap — the query does).
+## **Width-derived packing** (Phase-6 correction 6): the stride and wrap come
+## from [member _width] (the loaded legend's `grid.width`), never a hardcoded
+## constant — the old `* 4096 + posmod(cell.x, 4096)` packing broke outright
+## at `x > 4095`. Keys are runtime-only (rebuilt from the artifact on every
+## net refresh; nothing persisted uses this packing).
 static func _cell_key(cell: Vector2i) -> int:
-	return int(cell.y) * 4096 + int(posmod(cell.x, 4096))
+	return int(cell.y) * _width + int(posmod(cell.x, _width))
 
 
 static func _key_to_cell(key: int) -> Vector2i:
-	return Vector2i(int(key) % 4096, int(key) / 4096)
+	return Vector2i(int(key) % _width, int(key) / _width)
 
 
 static func _bucket_of(cell: Vector2i) -> int:
 	@warning_ignore("integer_division")
-	return (cell.y / BUCKET_SIZE) * 4096 + posmod(cell.x, 2160) / BUCKET_SIZE
+	return (cell.y / BUCKET_SIZE) * _buckets_x() \
+		+ posmod(cell.x, _width) / BUCKET_SIZE
+
+
+## Buckets across one wrapped world row (`ceil(width / BUCKET_SIZE)`).
+static func _buckets_x() -> int:
+	@warning_ignore("integer_division")
+	return (_width - 1) / BUCKET_SIZE + 1
 
 
 ## Rebuilds the whole index. Everyday movement updates buckets incrementally
@@ -3214,17 +3258,17 @@ func _within(cell: Vector2i, radius: int) -> Array:
 	var out: Array = []
 	var seen: Dictionary = {}
 	@warning_ignore("integer_division")
-	var buckets_x := 2160 / BUCKET_SIZE
+	var buckets_x := _buckets_x()
 	@warning_ignore("integer_division")
-	var max_bucket_y := (1080 - 1) / BUCKET_SIZE
+	var max_bucket_y := (_height - 1) / BUCKET_SIZE
 	# Wrap the CELL range first, then divide — truncation toward zero on a
 	# negative numerator would otherwise miss the seam bucket.
 	@warning_ignore("integer_division")
-	var min_bx := posmod(posmod(cell.x - radius, 2160), 2160) / BUCKET_SIZE
+	var min_bx := posmod(posmod(cell.x - radius, _width), _width) / BUCKET_SIZE
 	@warning_ignore("integer_division")
-	var max_bx := posmod(posmod(cell.x + radius, 2160), 2160) / BUCKET_SIZE
+	var max_bx := posmod(posmod(cell.x + radius, _width), _width) / BUCKET_SIZE
 	@warning_ignore("integer_division")
-	var by := posmod(cell.y, 1080) / BUCKET_SIZE
+	var by := posmod(cell.y, _height) / BUCKET_SIZE
 	# A radius can straddle the next bucket row: round the span up.
 	@warning_ignore("integer_division")
 	var span_y := (radius + BUCKET_SIZE - 1) / BUCKET_SIZE
@@ -3235,7 +3279,7 @@ func _within(cell: Vector2i, radius: int) -> Array:
 	while true:
 		var bucket_y := min_by
 		while bucket_y <= max_by:
-			var bucket := bucket_y * 4096 + bx
+			var bucket := bucket_y * buckets_x + bx
 			for id in _buckets.get(bucket, []):
 				if seen.has(id):
 					continue
@@ -3302,7 +3346,7 @@ static func chebyshev(a: Vector2i, b: Vector2i) -> int:
 	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
 	var width := int(grid.get("width", 0))
 	if width <= 0:
-		width = 2160
+		width = 4320
 	var dx := absi(a.x - b.x) % width
 	return maxi(mini(dx, width - dx), absi(a.y - b.y))
 

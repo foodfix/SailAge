@@ -39,6 +39,15 @@
     },
     {
       "kind": "spoke",
+      "port": "bandar_abbas",
+      "connect": {
+        "lane": "basra_muscat_india",
+        "waypoint_index": 6
+      },
+      "note": "Phase-6 5 nm raster: the Hormuz north-shore harbor has no straight-walk exit past Qeshm; rule-3 spoke pathfound onto the strait's channel station"
+    },
+    {
+      "kind": "spoke",
       "port": "banten",
       "connect": {
         "lane": "canton_country_trade",
@@ -75,21 +84,21 @@
     },
     {
       "kind": "spoke",
-      "port": "beirut",
-      "connect": {
-        "lane": "venice_alexandria",
-        "waypoint_index": 11
-      },
-      "note": "Levant trade on the run's Syrian-coast leg"
-    },
-    {
-      "kind": "spoke",
       "port": "belem",
       "connect": {
         "lane": "carreira_da_india",
         "waypoint_index": 15
       },
       "note": "Amazon mouth on the Carreira's Brazil-bulge track"
+    },
+    {
+      "kind": "spoke",
+      "port": "bergen",
+      "connect": {
+        "lane": "hanseatic_north",
+        "waypoint_index": 0
+      },
+      "note": "Phase-6 5 nm raster: the Bergen sound pocket has no straight-walk exit past the sound islet; rule-3 spoke pathfound through the archipelago gap"
     },
     {
       "kind": "spoke",
@@ -156,15 +165,6 @@
     },
     {
       "kind": "spoke",
-      "port": "candia",
-      "connect": {
-        "lane": "venice_alexandria",
-        "waypoint_index": 7
-      },
-      "note": "Crete on the Venice run; straight walk clips the north-shore headland"
-    },
-    {
-      "kind": "spoke",
       "port": "canton",
       "connect": {
         "lane": "manila_galleon",
@@ -198,6 +198,15 @@
         "waypoint_index": 65
       },
       "note": "Carolina joins the flota's Gulf Stream return track"
+    },
+    {
+      "kind": "spoke",
+      "port": "corfu",
+      "connect": {
+        "lane": "venice_alexandria",
+        "waypoint_index": 5
+      },
+      "note": "Phase-6 5 nm raster: the Corfu sound pocket has no straight-walk exit past the channel islets; rule-3 spoke pathfound onto the lane's Ionian station"
     },
     {
       "kind": "spoke",
@@ -336,15 +345,6 @@
     },
     {
       "kind": "spoke",
-      "port": "marseille",
-      "connect": {
-        "lane": "venice_flanders",
-        "waypoint_index": 15
-      },
-      "note": "Marseille on the run's Gulf of Lion leg; headland dodge"
-    },
-    {
-      "kind": "spoke",
       "port": "mocha",
       "connect": {
         "lane": "red_sea_india",
@@ -435,6 +435,15 @@
     },
     {
       "kind": "spoke",
+      "port": "portobelo",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 27
+      },
+      "note": "Phase-6 5 nm raster: the direct capital walk no longer threads the Caribbean; rule-3 spoke pathfound onto the flota's Hispaniola station"
+    },
+    {
+      "kind": "spoke",
       "port": "qiongzhou",
       "connect": {
         "lane": "canton_country_trade",
@@ -477,6 +486,24 @@
         "waypoint_index": 52
       },
       "note": "Sakai joins the lane at Hirado, rounding Kii and Shikoku on the Pacific side"
+    },
+    {
+      "kind": "spoke",
+      "port": "san_juan",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 20
+      },
+      "note": "Phase-6 5 nm raster: the north-coast harbor has no straight-walk exit past the cape; rule-3 spoke pathfound onto the flota's Mona-passage station"
+    },
+    {
+      "kind": "spoke",
+      "port": "santo_domingo",
+      "connect": {
+        "lane": "west_indies_flota",
+        "waypoint_index": 23
+      },
+      "note": "Phase-6 5 nm raster: the Ozama river mouth pocket has no straight-walk exit; rule-3 spoke pathfound onto the flota station off the coast"
     },
     {
       "kind": "spoke",
@@ -525,6 +552,15 @@
     },
     {
       "kind": "spoke",
+      "port": "surat",
+      "connect": {
+        "lane": "aden_gujarat_malacca",
+        "waypoint_index": 14
+      },
+      "note": "Phase-6 5 nm raster: the Tapti-mouth pocket sits east of the gulf-head tip; rule-3 spoke pathfound across to the lane's gulf-head station"
+    },
+    {
+      "kind": "spoke",
       "port": "suriname",
       "connect": {
         "lane": "west_indies_flota",
@@ -561,12 +597,12 @@
     },
     {
       "kind": "spoke",
-      "port": "trieste",
+      "port": "tunis",
       "connect": {
-        "lane": "venice_alexandria",
-        "waypoint_index": 1
+        "lane": "genoa_grain",
+        "waypoint_index": 5
       },
-      "note": "Adriatic head: gulf approach to the Venice run"
+      "note": "Phase-6 5 nm raster: the Tunis lagoon pocket has no straight-walk exit; rule-3 spoke pathfound to the lane's Sicily-channel station"
     },
     {
       "kind": "spoke",

@@ -124,7 +124,8 @@ static func speed_bonus_for(seamanship: int) -> float:
 	return clampf(raw, SPEED_BONUS_MIN, SPEED_BONUS_MAX)
 
 
-## docs/50-* §4.2 / docs/20-* §4.11: `24 + floor((navigation − 10) / 10)`.
+## docs/50-* §4.2 / docs/20-* §4.11: `48 + floor((navigation − 10) / 10)`
+## (Phase-6 grid: the base sighting radius doubled to 48, `10-*` §6.1).
 ## The base is the Phase-4 port sighting radius (24 tiles, `20-*` §4.11); the
 ## navigation term is unchanged from Phase 1.
 static func sighting_radius() -> int:
@@ -134,7 +135,7 @@ static func sighting_radius() -> int:
 ## [method sighting_radius] for an explicit navigation value (pure formula; the
 ## S18 panel differences it per officer).
 static func sighting_radius_for(navigation: int) -> int:
-	return 24 + int(floor((navigation - BASE_STAT) / 10.0))
+	return 48 + int(floor((navigation - BASE_STAT) / 10.0))
 
 
 ## docs/50-* §4.2: `1 − (leadership − 10) / 200`.

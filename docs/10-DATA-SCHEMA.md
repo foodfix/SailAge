@@ -54,7 +54,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/maps/maps.json` | Map index (exactly one entry, `id: "world"`) | `90-*` §9.1 |
 | `data/maps/world.png` | Generated world map artifact — indexed PNG, 4320×2160, 1 px = 1 tile (§6.3) | this doc |
 | `data/maps/wind_regions.png` | Baked prevailing-wind lookup — indexed PNG, 4320×2160, 1 px = 1 tile, palette index = region id (§6.5); tool-owned, never hand-edited | this doc |
-| `data/maps/currents.png` | Baked annual-mean current lookup — indexed PNG, 4320×2160, 1 px = 1 tile, index = `dir_index × 3 + strength` (§6.5); tool-owned, never hand-edited | this doc |
+| `data/maps/currents.png` | Baked current lookup — indexed PNG, 4320×2160, 1 px = 1 tile, index = `dir_index × 3 + strength` (§6.5); tool-owned, never hand-edited | this doc |
 | `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (berth) and `shore_tile` (§6.3, §8.1) | this doc |
 | `data/trade_routes_built.json` | Lane-builder artifact: tile paths + junction graph + per-port spokes (§4.14) — tool-owned, never hand-edited | this doc |
 | `tools/build_world.py` | World generator: shorelines → tiles → `world.png` + `world_report.json` (§6.3); `--ascii` debug export only | this doc / `IMPLEMENT-Phase4.md` task C |
@@ -674,6 +674,14 @@ governance):
   its fallback is the **nearest lane waypoint, unbounded**. A port with
   neither is a hard build/validator error naming the port, never a runtime
   stall.
+  **Rule-1 selection is walk-aware (pinned at the W2 gate):** among the
+  in-radius lane waypoints in Chebyshev order, the builder picks the first
+  whose spoke walk succeeds (the builder's own budgeted A*); a candidate
+  whose walk fails is skipped, and only when no in-radius candidate has a
+  walk does the rule fall through to the capital/override fallbacks. An
+  override row is **superseded** (a build error naming the port) exactly
+  when rule 1 succeeds for that port; an override whose rule-1 walk fails
+  stays legal.
 - **Determinism:** two consecutive builds produce a **byte-identical**
   `data/trade_routes_built.json` (group 8 re-asserts it). Hand fixes go in
   `tools/route_overrides.json` — plus minimal, per-lane-reported waypoint
@@ -798,8 +806,10 @@ cited per system in `LICENSE-NOTES.md`).
 
 - **Baked lookup:** `data/maps/currents.png` (§6.5) — index 0 = none,
   indices 1–24 = 8 directions × 3 strengths; overlaps resolved
-  strongest-then-id-order; the raster stores the **annual-mean** vector and
-  `reversal` is applied at lookup time (runtime and debug renderer alike).
+  strongest-then-id-order; the raster stores each system's **authored
+  (stored, non-flipped) vector** — for a reversal system, the non-summer
+  regime — and `reversal` is applied at lookup time (runtime and debug
+  renderer alike).
 - **Consumption:** the speed-modifier and drift formulas, and the
   `control_prefs.current_mode` selection between them, are pinned in
   `20-*` §4.16; the persisted mode lives in `GameState.control_prefs`
@@ -1056,8 +1066,10 @@ currents to O(1) runtime reads (`scripts/world/ocean_layers.gd`, `90-*` §4):
   **strongest** system's vector; strength ties go to the system earliest in
   `data/ocean_currents.json` file (id) order — "strongest-then-id-order",
   deterministic.
-- **Reversal at lookup (pinned):** the raster stores the **annual-mean**
-  vector; a system's `reversal.summer_months` flips the decoded vector **at
+- **Reversal at lookup (pinned):** the raster stores the system's
+  **stored (non-flipped)** vector — for a reversal system the **non-summer
+  regime**, so the flip yields the real summer jet; a system's
+  `reversal.summer_months` flips the decoded vector **at
   lookup time** — runtime and debug renderer apply the same one-line flip
   (§4.17). One static PNG, seasonal Somali.
 - **Governance — same standing as `world.png` (§6.3):** written only by
