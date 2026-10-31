@@ -17,15 +17,16 @@ market, shipyard trade-adjacent actions, tavern, and inn. Gates Phase 1
 | `scenes/port/tavern_screen.tscn` | crew hire/fire, officer recruit |
 | `scenes/port/inn_screen.tscn` | rest, harbor relief |
 | `scripts/port/trade_engine.gd` | price + quantity maths (RefCounted) |
+| `scripts/port/economy.gd` | stock, tier drift, tranche repricing, demand-event rest overrides (Phase 5, RefCounted) |
 | `scripts/port/shipyard_engine.gd` | ship transactions |
-| GameState keys | `port_investments` (per-port invested gold, saved), `current_port` |
+| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved; shapes in `90-*`) |
 
 ## 3. Dependencies
 
 `00-*`, `10-DATA-SCHEMA.md` (Port/Good schemas, locked lists), `20-*`
 (provisions/water prices, port entry), `40-*` (capacity enforcement),
 `50-*` (harbor relief conditions, reputation effects), `80-*` (widget
-conventions), `90-*` (scene routing).
+conventions), `90-*` (scene routing, save blocks).
 
 ## 4. Systems / Mechanics
 
@@ -48,31 +49,74 @@ disabled rows with the stub label until Phase 3 activates them; from Phase 3
 on they are enabled (or replaced by `port.closed_bounty` on a bountied
 nation's ports, `70-*` §4.9.6).
 
-### 4.2 Price formulas
+### 4.2 Stock economy & price formulas
 
-For `good` at `port` (`trade_engine.gd`, all integer gold, floor on every
-multiplication):
+For `good` at `port`, prices are a function of the port-good's **stock**
+(`economy.gd` owns stock state, drift, and the factor; `trade_engine.gd`
+keeps the price plumbing). All arithmetic is integer per-thousand fixed
+point — factors are never floats — and each price is floored exactly once,
+on the full product.
+
+**Stock & resting stock.** Every port-good holds an integer stock,
+hard-clamped `0 … 200` per port-good (saved in `GameState.market_stocks`,
+`90-*`). Resting stock derives from `ports.json` with the same precedence
+as the retired static factors — zero new content data:
 
 ```
-factor(port, good) =
-    0.7  if good.id ∈ port.produces
-    1.3  if good.id ∈ port.demands
-    1.0  otherwise
-
-buy_price  = max(1, floor(base_price × factor × investment_discount))
-sell_price = max(1, floor(base_price × factor × 0.8 × investment_discount
-                          × title_bonus))
-investment_discount = 1 − min(0.10, port_investments[port.id] / 500 × 0.01)
-title_bonus = 1.05 | 1.10 | 1.00   # Phase 3, 70-* §4.9.2
+rest(port, good) = 160  if good ∈ port.produces
+                    40  else if good ∈ port.demands
+                    100 otherwise
 ```
 
-- The 0.8 sell-side margin is locked; arbitrage within one port is always a
-  loss.
-- Provisions and water are exempt from all factors: fixed 2g and 1g
-  (`20-*` §4.10), sell-back not offered.
-- Price band enforcement `[0.5×, 2×]`: `factor × investment_discount` is
-  clamped to `[0.5, 2.0]` before use (investment discount cannot push a
-  `produces` good below half base price).
+`new_game` initializes every port-good at its rest (derived, no RNG).
+
+**Price factor (exact).** The factor is an integer-linear function of
+stock, in per-thousand units, replacing the retired static 0.7/1.3/1.0
+factors:
+
+```
+factor_units(port, good) = clamp(1500 − 5 × stock, 500, 2000)
+```
+
+At resting stock it equals them exactly: produced 700 (0.7), demanded 1300
+(1.3), neutral 1000 (1.0). The stock range maps `factor_units` into
+`[500, 1500]`, already inside the price band; the `2000` bound is a safety
+net only.
+
+**Price plumbing** (`trade_engine.gd`; integer division `/` throughout):
+
+```
+discount_units(port) = 1000 − min(100, port_investments[port] × 10 / 500)
+combined_units       = clamp((factor_units × discount_units) / 1000,
+                             500, 2000)
+buy_price            = max(1, (base_price × combined_units) / 1000)
+sell_price           = max(1, (base_price × combined_units × 8 × title_units)
+                                / (1000 × 10 × 1000))
+title_units          = 1100 | 1050 | 1000   # Phase 3, 70-* §4.9.2
+```
+
+`8/10` is the sell-side margin; every price is floored once on the full
+product (`max(1, …)` guards the floor), never per multiplier.
+
+- **Band interaction.** The stock factor lives inside the existing
+  `[0.5, 2.0]` band: `factor_units` is band-bounded by construction, and
+  `combined_units` re-clamps `factor × discount` to `[0.5, 2.0]`
+  (`500–2000` per thousand) exactly as before, so the investment discount
+  can never push a price outside the band.
+- **Unchanged plumbing.** The 0.8 sell-side margin (arbitrage within one
+  port is always a loss), the investment discount (§4.3), the title bonus,
+  the price band, and the provisions/water exemption (fixed 2g and 1g,
+  `20-*` §4.10, sell-back not offered) are all untouched by the stock
+  economy.
+- **Consumption tiers.** Drift rates derive at load from `goods.json`
+  (zero new data): rank all 20 goods by (`base_price` asc, `id` asc);
+  indices 0–4 are **staples** (drift ±3/day), 5–14 **middle** (±2/day),
+  15–19 **luxuries** (±1/day). The validator asserts the 5/10/5 split.
+- **Daily drift.** Once per day tick — after the ledger, before
+  `EventBus.day_advanced` (`20-*` §4.3); port day-advances (inn rest, odd
+  jobs) run it too — each port-good's stock moves one tier step **toward
+  its rest**, never past it, clamped to the stock range. A demand event
+  temporarily overrides the rest target itself (§4.5).
 - **`title_bonus` (Phase 3, `70-*` §4.9.2)** multiplies the **sell** side only
   and only at ports of a nation where the player's title is knight or higher:
   1.05 at knight, 1.10 at baron/viscount/count/duke, 1.00 otherwise. It is a
@@ -92,32 +136,158 @@ title_bonus = 1.05 | 1.10 | 1.00   # Phase 3, 70-* §4.9.2
   port, stored in `GameState.port_investments` (`{port_id: gold_total}`).
 - Effect: 1% price discount (buy and sell) per chunk, cap 10% (5,000g).
 - Phase 1 has no development/unlock reward — the discount is the whole
-  effect. Wider effects OUT OF SCOPE (phase 3).
+  effect. Wider effects (investment → demand growth) remain a Phase-6
+  candidate (`IMPLEMENT-Phase5.md`, out-of-scope list).
 
-### 4.4 Buy/sell quantity maths
+### 4.4 Tranche repricing & buy/sell maths
+
+**Tranche repricing.** Every trade — buy or sell, player or NPC — moves
+stock and reprices per **10-unit tranche**:
+
+- A quantity `q` splits into `ceil(q / 10)` tranches of 10 units each (the
+  last may be smaller).
+- Each tranche transacts at the §4.2 price computed from the stock **before**
+  the tranche applies: buying lowers stock (price rises per tranche),
+  selling raises it (price falls per tranche).
+- The market screen shows the **marginal (next-tranche) price** — what the
+  *next* 10 units would cost or fetch. It equals the realized price of the
+  first tranche only.
+- The transaction total is the exact integer sum over tranches
+  (`Σ price_t × units_t`), each tranche floored once on its full product;
+  that summed total is what gold, the daily ledger, XP, and reputation book
+  (`50-*` §4.3/§4.6) — never a per-tranche recomputation.
+- Stock stops at its §4.2 hard-clamp: a walk larger than the range parks at
+  the bound, and the price lands there continuously — no clamp jump.
+
+**Worked example — 300 wine sold into London** (wine ∈ `london.demands`,
+rest stock 40, `base_price` 30, no investment, no title; sell side):
+
+| Tranche | Stock before | `factor_units` | Sell price | Stock after |
+|---|---|---|---|---|
+| 1 | 40 | 1300 | 31 | 50 |
+| 2 | 50 | 1250 | 30 | 60 |
+| 3 | 60 | 1200 | 28 | 70 |
+| 4 | 70 | 1150 | 27 | 80 |
+| 5 | 80 | 1100 | 26 | 90 |
+| 6 | 90 | 1050 | 25 | 100 |
+| 7 | 100 | 1000 | 24 | 110 |
+| 8 | 110 | 950 | 22 | 120 |
+| 9 | 120 | 900 | 21 | 130 |
+| 10 | 130 | 850 | 20 | 140 |
+| 11 | 140 | 800 | 19 | 150 |
+| 12 | 150 | 750 | 18 | 160 |
+| 13 | 160 | 700 | 16 | 170 |
+| 14 | 170 | 650 | 15 | 180 |
+| 15 | 180 | 600 | 14 | 190 |
+| 16 | 190 | 550 | 13 | 200 |
+| 17–30 | 200 (clamped) | 500 | 12 | 200 |
+
+16 distinct prices before the stock clamp, reached continuously (13 → 12,
+no jump). Proceeds = 10 × (31+30+28+27+26+25+24+22+21+20+19+18+16+15+14+13)
++ 14 × 120 = 3 490g + 1 680g = **5 170g** — against 9 300g at the displayed
+31g flat, which is exactly why the marginal display matters. Buying walks
+the same ladder upward: 30 wine bought at Lisbon (produced, rest 160) pays
+`factor_units` 700/750/800 → 21g/22g/24g (stock 160 → 130).
+
+**Player quantity maths** (picker rules unchanged from T12):
 
 - Quantity picker: 1 / 10 / 100 / Max buttons + direct numeric entry
   (validation per `80-*` dialog rules).
-- **One picker per row** serves both the Buy and Sell buttons (the §4.7
+- **One picker per row** serves both the Buy and Sell buttons (the §4.8
   wireframe has a single Qty column). Its live clamp is the *physical* range —
   the pooled free hold, or the held quantity when that is larger (so a full
   hold can always be emptied). Each button then validates against its own
   maximum, and an entry the purse cannot cover is a disabled button with the
   price reason, not a silently rewritten field. `Max` selects that same
-  physical ceiling. (Normative clarification, T12.)
-- Buy max = `min(floor(gold / buy_price), free_capacity)` where
-  `free_capacity` is pooled fleet free cargo (`40-*` §capacity).
+  physical ceiling.
+- Buy max = the largest quantity whose **full tranche walk** the purse can
+  pay and `free_capacity` can hold (`40-*` §capacity) — computed by walking
+  tranches, since the marginal price alone no longer decides it.
 - Sell max = held quantity. Partial sells allowed.
-- No market stock limits in Phase 1: ports buy/sell unlimited quantities at
-  the fixed computed price (no price movement per transaction — dynamic
-  pricing OUT OF SCOPE (phase 3)).
+- A stock-moving trade emits `EventBus.market_changed(port_id)` (`90-*`).
 - Transaction errors (insufficient gold/capacity/quantity) show the shared
   error toast (`80-*`) and change nothing. In this screen the "shared error"
-  presentation is the disabled button plus its tooltip reason (§4.7); no
+  presentation is the disabled button plus its tooltip reason (§4.8); no
   modal dialog is raised for a rejected trade, so a stray click never spams
   dialogs (§6 "no dialog spam").
 
-### 4.5 Tavern: crew hire/fire
+**NPC port-call caps.** An NPC fleet loads or unloads ≤ **30 units of one
+good per call** — 1–3 tranches for the walk. Coasters are smaller: hold
+≤ 10 units total, ≤ 5 units traded per call.
+
+**NPC purchase-volume bounds.** A trader buys at most
+`min(30-unit cap, free hold, saturation bound)`, where the saturation bound
+keeps **every projected sale tranche at the destination** transacting above
+`factor_units 1000`: the fleet steps its quantity down by tranches until
+the projected post-trade stock at P stays below the factor-1.0 stock, so it
+can never self-saturate its own market.
+
+**Trader decision (joint, profit-per-day).** At each port call a trader
+picks one (good, destination) jointly by argmax of:
+
+```
+score(good, P) = (est_sell_price(P, good) − buy_price) × qty × spec_mult × noise × risk
+                 ────────────────────────────────────────────────────────────────────
+                                  lane_days(A → P) + 2 dwell days
+```
+
+- **Candidates:** the argmax runs over the nation's **produced** goods ×
+  candidate destinations — own-nation ports within Chebyshev ≤ 60 of A,
+  wrap-aware. No cross-nation reach, no forecasting, no global
+  coordination: cross-nation arbitrage stays the player's protected profit
+  space by construction.
+- **`est_sell_price(P, good)`** is the live §4.2 sell-side price at P's
+  current stock — the same plumbing the market screen shows.
+- **`buy_price`** is the §4.2 buy price at A (the good is own-nation
+  produced, so A always buys on the produced side).
+- **Specialty:** `spec_mult = 1.5` for the fleet's `specialty: good_id`,
+  drawn once at spawn from the nation's produced goods (fleet seed) and
+  persisted; a fleet predating the field draws lazily from its own seed
+  (no data migration).
+- **Noise:** seeded ×`0.8 … 1.25`, redrawn from the fleet's stream at every
+  decision.
+- **Risk:** ×`0.5` if any hostile fleet lies within Chebyshev 5 of a sample
+  point of the candidate lane path, else ×`1.0` — one bucket-index query
+  per sample, deterministic (`60-*`).
+- **Sell rule:** sell cargo only where `factor > 1.0`; else pick the next
+  candidate — never sell into a saturated market.
+- **Not implemented (doc-only Phase-6 lever):** the sub-linear volume knob
+  `round(30/√preset)` — a per-preset scaling of the port-call cap; recorded
+  as a balance candidate only.
+
+### 4.5 Demand events
+
+Demand events are timed rest-overrides that create tradeable surges and
+shortages. Data lives in `data/market_events.json` (~8 templates; full
+schema and validator rules in `10-*`):
+
+```
+{"id", "scope": "port", "cadence_days", "duration_days",
+ "shifts": {"good_id": ±n}, "name": {zh, en}}
+```
+
+- **Effect.** While a port's event is active, each shifted good's §4.2 rest
+  target is overridden: `rest += shift`, the result clamped `[10, 190]`,
+  for `duration_days` — then the derived rest resumes. Drift rates and the
+  price formula are untouched: an event is a temporary rest-override table
+  inside `economy.gd` (pure), with the rotation/expiry hook there.
+- **Template families (locked; authored as data):** seasonal cycles —
+  winter wool/furs, summer wine; one-off surges — harvest festival; war
+  provisioning at a capital — −30 timber/cannons for 60 days; plague =
+  halved demand. `shifts` reference existing `goods.json` ids; the
+  validator asserts each template's worst-case rest after the shift stays
+  inside the effect clamp above.
+- **Budget & schedule.** ≤ **1 active event per nation**, ≤ **4
+  world-wide**. The schedule is seeded per template × cadence window
+  (formula family), so runs replay exactly; active instances are saved in
+  `GameState.market_events` (`90-*`).
+- **Telegraph.** On start, a tavern rumor row appears in the affected
+  region's ports (`ui_strings.json`, zh/en) — information is profit.
+- **Self-limiting by emergence.** NPC traders' §4.4 sell rule swarms the
+  inflated port and partially refills the shortage on its own; events are
+  never clamp-pinned.
+
+### 4.6 Tavern: crew hire/fire
 
 - Hire: 1-click buttons "+1 / +10 / Fill"; cost = `crew_wage_daily × 10` per
   head as signing bonus (locked: 2 × 10 = 20g/head). Hard cap: flagship
@@ -128,7 +298,7 @@ title_bonus = 1.05 | 1.10 | 1.00   # Phase 3, 70-* §4.9.2
 - Officer recruiting UI and rules live in `50-*` §officers; the tavern screen
   hosts that panel under a second tab.
 
-### 4.6 Inn: rest & harbor relief
+### 4.7 Inn: rest & harbor relief
 
 - **Rest:** button "Rest 3 days", cost `10g × 3 = 30g`; each rest day runs
   the daily ledger (wages still paid) and applies the in-port morale delta
@@ -138,7 +308,7 @@ title_bonus = 1.05 | 1.10 | 1.00   # Phase 3, 70-* §4.9.2
   `gold += 100`, one ledger day passes. Strings `inn.odd_job.offer`,
   `inn.odd_job.result`.
 
-### 4.7 UI flows (textual wireframes)
+### 4.8 UI flows (textual wireframes)
 
 Full widget/sizing conventions in `80-*`; these define content and
 interactions per screen.
@@ -189,7 +359,7 @@ Tab row: `Crew | Officers` in Phase 1–2; Phase 3 adds a third tab
 `Rumors` (`70-*` §4.4, `80-*` §4.7.3).
 
 - Crew tab: current crew `n / crew_max`, morale tier label, hire/fire buttons
-  (§4.5), cost preview "20g per head".
+  (§4.6), cost preview "20g per head".
 - Officers tab: list of officers recruitable at this port
   (`Officer.recruit_ports`), each row: name, role, stats line, daily wage,
   bio; `Recruit` button (rules incl. one-time hire in `50-*`). Below: current
@@ -200,7 +370,7 @@ Tab row: `Crew | Officers` in Phase 1–2; Phase 3 adds a third tab
 #### Inn (`inn_screen`)
 
 - Status box: morale, days-since? none. Buttons: `[Rest 3 days — 30g]`,
-  `[Work an odd job — +100g]` (only when eligible, §4.6), else a disabled
+  `[Work an odd job — +100g]` (only when eligible, §4.7), else a disabled
   greyed button with reason key `inn.odd_job.ineligible`.
 
 #### Guild (`guild_screen`, S12, Phase 3)
@@ -250,48 +420,91 @@ Tab row: `Crew | Officers` in Phase 1–2; Phase 3 adds a third tab
 
 ## 5. Data Examples
 
-A worked trade (Lisbon, buys its `produces` good wine):
+All examples at Phase-5 resting stock unless noted (`factor` shown is
+`factor_units / 1000`; arithmetic per §4.2, integer division).
+
+A worked trade at rest (Lisbon buys its `produces` good wine):
 
 ```json
 {
   "port": "lisbon",
   "good": "wine",
+  "stock": 160,
   "base_price": 30,
+  "factor_units": 700,
   "factor": 0.7,
   "investment_discount": 1.0,
   "buy_price": 21,
   "sell_price": 16,
-  "note": "buy floor(30×0.7)=21; sell floor(30×0.7×0.8)=16"
+  "note": "rest 160: 1500 − 5×160 = 700 → 0.7; buy (30×700)/1000 = 21; sell (30×700×8)/10000 = 16"
 }
 ```
 
-Selling at London (wine ∈ `london.demands`):
+Selling at London at rest (wine ∈ `london.demands`):
 
 ```json
 {
   "port": "london",
   "good": "wine",
+  "stock": 40,
   "base_price": 30,
+  "factor_units": 1300,
   "factor": 1.3,
   "buy_price": 39,
   "sell_price": 31,
-  "note": "sell floor(30×1.3×0.8)=31; route Lisbon→London nets 10g/unit before costs"
+  "note": "rest 40: 1500 − 5×40 = 1300 → 1.3; buy (30×1300)/1000 = 39; sell (30×1300×8)/10000 = 31; route Lisbon→London nets 10g/unit at rest, before costs"
 }
 ```
 
-Phase-3 title bonus (same London sale, player is baron of England):
+A neutral port at rest (wine ∉ `valencia.produces`/`demands`):
+
+```json
+{
+  "port": "valencia",
+  "good": "wine",
+  "stock": 100,
+  "base_price": 30,
+  "factor_units": 1000,
+  "factor": 1.0,
+  "buy_price": 30,
+  "sell_price": 24,
+  "note": "rest 100: 1500 − 5×100 = 1000 → 1.0; buy 30; sell (30×1000×8)/10000 = 24"
+}
+```
+
+Phase-3 title bonus (same London sale at rest, player is baron of England):
 
 ```json
 {
   "port": "london",
   "good": "wine",
+  "stock": 40,
   "base_price": 30,
+  "factor_units": 1300,
   "factor": 1.3,
   "investment_discount": 1.0,
   "title_bonus": 1.1,
   "buy_price": 39,
   "sell_price": 34,
-  "note": "floor(30×1.3×0.8×1.1) = floor(34.32) = 34; the bonus is sell-side only"
+  "note": "(30×1300×8×1100)/(1000×10×1000) = 34.32 → 34; the bonus is sell-side only"
+}
+```
+
+A displaced-stock trade (sell 100 wine into London from rest, per §4.4):
+
+```json
+{
+  "port": "london",
+  "good": "wine",
+  "base_price": 30,
+  "before": {"stock": 40, "factor_units": 1300, "marginal_sell": 31},
+  "trade": "sell 100 → 10 tranches",
+  "tranche_sell_prices": [31, 30, 28, 27, 26, 25, 24, 22, 21, 20],
+  "proceeds": 2540,
+  "after": {"stock": 140, "factor_units": 800, "factor": 0.8,
+            "marginal_sell": 19, "buy_price": 24},
+  "drift_10_days": {"stock": 120, "factor_units": 900, "sell": 21, "buy": 27},
+  "note": "proceeds 10×(31+30+28+27+26+25+24+22+21+20) = 2540 vs 3100 flat; wine is tier idx 9 (middle, ±2/day), so 140 drifts toward rest 40 at 2/day"
 }
 ```
 
