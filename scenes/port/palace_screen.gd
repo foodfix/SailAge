@@ -20,6 +20,8 @@ const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+## Task L (docs/80-* §4.7.8): the bounty board lists docked hunter captains.
+const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## S16 (docs/70-* §4.7).
@@ -62,6 +64,11 @@ var _nation_id: String = ""
 var _bout: int = 0
 ## Set when `_ready` auto-started a bout (tests await one frame instead).
 var bout_pending: bool = false
+## Task L (§4.7.8): the bounty board (code-built above the footer) —
+## docked hunter captains. Hunter sightings are palace-only.
+var _board_header: Label = null
+var _board_box: VBoxContainer = null
+var _hunter_rows: Array = []
 
 
 func _ready() -> void:
@@ -95,6 +102,7 @@ func _ready() -> void:
 		_confirm.confirmed.connect(retire)
 	_port_id = _read_current_port()
 	_nation_id = PalaceEngineLib.nation_of(_port_id)
+	_build_bounty_board()
 	refresh()
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
@@ -330,6 +338,7 @@ func refresh() -> void:
 	_bind_bounty()
 	_bind_tournament()
 	_bind_retire()
+	_bind_bounty_board()
 	_apply_closed_state()
 
 
@@ -442,6 +451,70 @@ func _apply_closed_state() -> void:
 			_tournament_button, _retire_button]:
 		button.disabled = true
 		button.tooltip_text = I18n.t_key("port.closed_bounty")
+
+
+# --- Helpers -------------------------------------------------------------
+
+# --- Bounty board (docs/80-* §4.7.8, task L) ---------------------------------
+
+## The hunter-captain rows currently rendered (`{id, name, nation_id}`) —
+## the headless seam.
+func hunter_rows() -> Array:
+	return _hunter_rows.duplicate()
+
+
+## Builds the board shell once (header + rows box) above the footer.
+func _build_bounty_board() -> void:
+	var footer: Control = $Layout/VBox/Footer
+	var layout: Node = footer.get_parent()
+	var footer_index := footer.get_index()
+	_board_header = Label.new()
+	_board_header.name = "BountyBoardHeader"
+	_board_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	layout.add_child(_board_header)
+	_board_box = VBoxContainer.new()
+	_board_box.name = "BountyBoardRows"
+	_board_box.add_theme_constant_override("separation", 2)
+	layout.add_child(_board_box)
+	layout.move_child(_board_header, footer_index)
+	layout.move_child(_board_box, footer_index + 1)
+
+
+## The docked hunter captains sighted at this port (§4.7.8: the bounty board
+## is a hunter's ONLY surface — the facility roll never sends one elsewhere).
+func _bind_bounty_board() -> void:
+	if _board_box == null:
+		return
+	for child in _board_box.get_children():
+		_board_box.remove_child(child)
+		child.queue_free()
+	_hunter_rows = []
+	if _port_id.is_empty() or GameState.player.is_empty():
+		_board_header.visible = false
+		return
+	_board_header.visible = true
+	_board_header.text = I18n.t_key("captain.section.palace")
+	for entry in NpcIntelLib.sightings(_port_id, NpcIntelLib.FACILITY_PALACE):
+		_hunter_rows.append({
+			"id": str(entry.get("id", "")),
+			"name": str(entry.get("name", "")),
+			"role": str(entry.get("role", "")),
+			"nation_id": str(entry.get("nation_id", "")),
+		})
+	if _hunter_rows.is_empty():
+		var empty := Label.new()
+		empty.name = "Empty"
+		empty.text = "-"
+		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_board_box.add_child(empty)
+		return
+	for entry in _hunter_rows:
+		var row := Label.new()
+		row.name = "Hunter_%s" % str(entry["id"])
+		row.text = "%s · %s" % [str(entry["name"]),
+			I18n.t_key("captain.role.%s" % str(entry["role"]))]
+		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_board_box.add_child(row)
 
 
 # --- Helpers -------------------------------------------------------------

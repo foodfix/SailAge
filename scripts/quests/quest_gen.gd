@@ -21,6 +21,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+## Task L (§4.11.11.4): the bounty preference and the target's captain name
+## read the live fleet ecology.
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 # --- §4.9.3 pinned numbers ------------------------------------------------
 
@@ -604,7 +607,10 @@ static func objective_text(quest: Dictionary) -> String:
 			return _delivery_line(requirements)
 		TYPE_BOUNTY:
 			return I18n.fmt("quest.line.bounty", {
-				"target": I18n.t_key("encounter.pirate"),
+				# Task L (§4.11.11.4): a quest whose target fleet is a live
+				# named pirate names the captain; the generic label stays
+				# for an unnamed (about-to-spawn) target.
+				"target": _bounty_target_name(requirements),
 				"tier": int(requirements.get("tier", 1)),
 			})
 		TYPE_EXPLORATION:
@@ -619,6 +625,20 @@ static func _delivery_line(requirements: Dictionary) -> String:
 			.get("name", {})),
 		"port": _port_name(str(requirements.get("dest_port_id", ""))),
 	})
+
+
+## The bounty line's target label: the live target fleet's **named-pirate**
+## captain (§4.11.11.4 preference) when it resolves, else the generic pirate
+## label — an unnamed target keeps today's wording.
+static func _bounty_target_name(requirements: Dictionary) -> String:
+	var target_id := str(requirements.get("target_fleet_id", ""))
+	if not target_id.is_empty():
+		var fleet := _find_marker(target_id)
+		if not fleet.is_empty() and NpcFleetsLib.is_named_captain(fleet):
+			var name := NpcFleetsLib.captain_name(fleet)
+			if not name.is_empty():
+				return name
+	return I18n.t_key("encounter.pirate")
 
 
 static func _port_name(port_id: String) -> String:
@@ -653,7 +673,10 @@ static func type_key(quest: Dictionary) -> String:
 ## Spawns the pirate fleet a bounty offer names, through the Phase-5
 ## `NpcFleets.spawn` quest seam (`60-*` §4.12.3): the fleet is then a normal
 ## ecology member whose battle outcome the completion hook can match by id.
-## Returns the fleet id ("" when no spawn happened).
+## Task L (§4.11.11.4): a **live named pirate is preferred** — the quest
+## targets it (and the tier/reward re-price to its `named_pirates.json`
+## tier) instead of spawning a fresh one. Returns the fleet id ("" when no
+## target materialized).
 static func _spawn_bounty_target(quest: Dictionary, day: int) -> String:
 	var fleets_path := "res://scripts/world/npc_fleets.gd"
 	if not ResourceLoader.exists(fleets_path):
@@ -668,7 +691,17 @@ static func _spawn_bounty_target(quest: Dictionary, day: int) -> String:
 		"npc_config": DataLoader.npc_config,
 		"preset": GameState.npc_preset,
 	})
-	var marker: Dictionary = fleets.call("spawn", "pirate", "", day)
+	# §4.11.11.4 preference: a live named pirate wins over a fresh spawn.
+	var named: Dictionary = fleets.call("preferred_bounty_target")
+	var marker: Dictionary = {}
+	if not named.is_empty():
+		marker = named
+		var tier := int(fleets.call("named_tier_of", named))
+		(quest["requirements"] as Dictionary)["tier"] = tier
+		(quest["rewards"] as Dictionary)["gold"] = \
+			int(BOUNTY_GOLD_BY_TIER.get(tier, 5000))
+	else:
+		marker = fleets.call("spawn", "pirate", "", day)
 	if marker.is_empty():
 		return ""
 	var id := str(marker.get("id", ""))

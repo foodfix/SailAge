@@ -118,6 +118,13 @@ var _attack_confirm: Control = null
 ## Task K: wreck id → the × glyph node drawn for it (docs/80-* §4.5.2: an
 ## `ACCENT` × glyph, 2×2 tiles, at the wreck site; no battle opens on it).
 var _wreck_nodes: Dictionary = {}
+## Task L (docs/80-* §4.5.2): the wake layer — one Control whose `draw`
+## signal paints every moving marker's 5-tile dashed trail (1 px
+## `PANEL_LINE` lines fading tile-by-tile; wrecks and docked markers none).
+var _wake_layer: Control = null
+## Task L: the markers the last [_sync_marker_nodes] pass rendered — the
+## wake layer's draw source (render layers never re-simulate).
+var _last_markers: Array = []
 ## Task K: true while the battle in progress was opened by the player's own
 ## right-click attack (the §4.11.11.2 loot row applies to those only — a
 ## hostile contact keeps the §4.11.10 aftermath untouched).
@@ -1189,7 +1196,11 @@ func _route_to_battle() -> void:
 
 ## Redraws the fleet marker squares to match the sim's fleets (docs/80-*
 ## §4.5.2 placeholder art: a nation-coloured square with the role letter,
-## pirate red — palette only, no textures).
+## pirate red — palette only, no textures). Task L: a convoy (same-lane
+## traders within Chebyshev 3, §4.11.11.4) renders as ONE shared square
+## with a member-count numeral beside it (member squares hide), and every
+## moving marker drags its 5-tile dashed wake (drawn by [_draw_wakes] on
+## the wake layer — docked markers and wrecks draw none).
 func _sync_marker_nodes() -> void:
 	if _loader == null or not _is_loaded():
 		return
@@ -1200,6 +1211,7 @@ func _sync_marker_nodes() -> void:
 		add_child(_marker_root)
 	var live: Dictionary = {}
 	var entries: Array = _fleets.markers() if _fleets != null else []
+	_last_markers = entries
 	for marker in entries:
 		if not (marker is Dictionary):
 			continue
@@ -1222,6 +1234,12 @@ func _sync_marker_nodes() -> void:
 			letter.add_theme_color_override("font_color",
 				PaletteLib.TEXT)
 			square.add_child(letter)
+			var count := Label.new()
+			count.name = "Count"
+			count.add_theme_font_size_override("font_size",
+				int(_cell_pixels * 0.45))
+			count.add_theme_color_override("font_color", PaletteLib.TEXT)
+			square.add_child(count)
 		var role := str(marker.get("role", ""))
 		square.color = NpcFleetsLib.marker_color(
 			role, str(marker.get("nation_id", "")))
@@ -1230,6 +1248,17 @@ func _sync_marker_nodes() -> void:
 		if letter_node != null:
 			letter_node.text = text
 			letter_node.visible = not text.is_empty()
+		# Convoy grouping (§4.11.11.4): members hide behind the leader's
+		# shared escort square; the leader shows the member-count numeral.
+		var leader := str(marker.get("convoy_leader", ""))
+		var member_of_convoy := not leader.is_empty() and leader != id
+		square.visible = not member_of_convoy
+		var count_node: Label = square.get_node_or_null("Count")
+		var convoy_count := int(marker.get("convoy_count", 0))
+		if count_node != null:
+			count_node.text = "×%d" % convoy_count if convoy_count >= 2 else ""
+			count_node.visible = convoy_count >= 2
+			count_node.position = Vector2(square.size.x, 0.0)
 		_place_marker_square(square, marker.get("cell", Vector2i.ZERO))
 	for id in _marker_nodes.keys():
 		if live.has(id):
@@ -1237,7 +1266,44 @@ func _sync_marker_nodes() -> void:
 		var dead: ColorRect = _marker_nodes[id]
 		_marker_nodes.erase(id)
 		dead.queue_free()
+	_sync_wake_layer()
 	_sync_wreck_nodes()
+
+
+## Ensures the wake layer exists and repaints it from the last marker pass.
+func _sync_wake_layer() -> void:
+	if _wake_layer == null:
+		_wake_layer = Control.new()
+		_wake_layer.name = "WakeLayer"
+		_wake_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_wake_layer.z_index = 8
+		_marker_root.add_child(_wake_layer)
+		_wake_layer.draw.connect(_draw_wakes)
+	_wake_layer.queue_redraw()
+
+
+## Paints every moving marker's wake (docs/80-* §4.5.2): a 5-tile dashed
+## trail of 1 px `PANEL_LINE` lines behind the marker, fading tile-by-tile
+## (oldest faintest). Docked markers report no wake from the sim, and wrecks
+## are not fleets at all.
+func _draw_wakes() -> void:
+	if _wake_layer == null:
+		return
+	var unit := float(_cell_pixels)
+	for marker in _last_markers:
+		if not (marker is Dictionary) or not bool((marker as Dictionary)
+				.get("sailing", false)):
+			continue
+		var wake: Array = (marker as Dictionary).get("wake", [])
+		for index in wake.size():
+			if index % 2 == 1:
+				continue  # dashed: every other tile paints
+			var cell: Vector2i = wake[index]
+			var at := Vector2(cell) * unit + Vector2(unit, unit) * 0.5
+			var color := PaletteLib.PANEL_LINE
+			color.a = 1.0 - 0.16 * float(index)
+			_wake_layer.draw_line(at - Vector2(unit * 0.25, 0.0),
+				at + Vector2(unit * 0.25, 0.0), color, 1.0)
 
 
 ## Redraws the wreck × glyphs (docs/80-* §4.5.2, task K): an `ACCENT` × in a
@@ -1484,14 +1550,18 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 ## The §4.11.11.2 player-attack loot row (task K): actual cargo +
 ## `min(1000, 100 + 10 × day)`g. **Coaster exception** (§4.1.1's more
 ## specific row): a coaster's tiny hold (≤ 10) pays its own pin,
-## `25 + floor(day / 10)`g, instead of the general gold. The cargo is the
-## fleet's own saved hold — not the §4.11.3 per-ship rolls — distributed
-## flagship-first through the same pooled-hold rule the battle loot uses
+## `25 + floor(day / 10)`g, instead of the general gold. **Treasure fleet**
+## (§4.11.11.4, task L): cargo at ×3 normal volume (booked into the hold at
+## spawn) plus `min(3000, 500 + 25 × day)`g. The cargo is the fleet's own
+## saved hold — not the §4.11.3 per-ship rolls — distributed flagship-first
+## through the same pooled-hold rule the battle loot uses
 ## (`Fleet.add_goods`); overflow units are lost.
 func _apply_attack_loot(fleet: Dictionary, day: int) -> void:
 	var gold := mini(1000, 100 + 10 * maxi(day, 0))
 	if str(fleet.get("role", "")) == "coaster":
 		gold = 25 + int(floor(float(maxi(day, 0)) / 10.0))
+	elif str(fleet.get("role", "")) == NpcFleetsLib.TREASURE:
+		gold = mini(3000, 500 + 25 * maxi(day, 0))
 	if gold > 0:
 		GameState.add_gold(gold)
 	var cargo = fleet.get("cargo", {})

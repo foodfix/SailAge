@@ -140,6 +140,47 @@ const COMPOSITION_BUDGETS := {
 	TRADER: 6, COASTER: 2, COURIER: 0, PATROL: 30, PRIVATEER: 20, PIRATE: 20,
 }
 
+## --- Task L constants (docs/60-* §4.11.11.4) -------------------------------
+##
+## Treasure fleets: 1/nation/season on day `45 + 15 × nation_index` (mod 90),
+## `nation_index` = `nations.json` file order (portugal 0 … italy 5) ⇒ first
+## sailings on days 45/60/75/90/105/120, then every 90 days per nation.
+const TREASURE_BASE_DAY := 45
+const TREASURE_NATION_STEP := 15
+const TREASURE_SEASON_DAYS := 90
+## §4.11.11.2 composition detail: a treasure fleet rolls `3 + rng(0..2)`
+## merchant hulls (the 3–5 pin, §4.11.11.4) plus **one patrol-escort hull**;
+## the whole-fleet cannon budget is `30 + floor(day/30)` — exactly the patrol
+## budget, so the single `AiFleet.cannon_budget("patrol", day)` answers it.
+const TREASURE_MERCHANT_HULLS := 3
+## Treasure loot (§4.11.11.4): cargo at ×3 the normal volume. "Normal volume"
+## is one trader port call — `flow.trade_units_per_port_call` (30 units) — so
+## the hold is filled with 3 × 30 = 90 units (the gold half of the pin lives
+## with the player-attack loot row, docs/60-* §4.11.11.2/§4.11.11.4).
+const TREASURE_CARGO_MULT := 3
+## §4.11.11.4: a defeated named pirate respawns under a NEW name +30 days.
+const NAMED_RESPAWN_DAYS := 30
+## Wake trail length behind a moving marker (docs/80-* §4.5.2: a 5-tile dashed
+## trail; wrecks and docked markers draw none).
+const WAKE_LENGTH := 5
+
+## Task L: named-pirate respawn bookkeeping — `{id, tier}` entries keyed by
+## the defeated famous identity, with `day` = the day it sails again. The
+## successor's NAME comes from the nationless captain pool
+## (`npc_captains.json` `""`, ≥ 8 entries — "the next pool entry",
+## §4.11.11.4): the 4-entry `named_pirates.json` list cannot supply a *new*
+## name while the other three identities stay afloat, so famous entries
+## front the ecology and successors rotate through the pool, inheriting the
+## slot's bounty tier. In-process static (the shared-route-cache pattern):
+## it survives scene swaps inside a run; a fresh process loading a
+## mid-respawn save keeps the slot empty until the pirate trickle refills it
+## naturally (reported deviation — the v5 save key list is pinned and
+## carries no respawn block).
+static var _named_respawns: Dictionary = {}
+## The nationless-pool rotation cursor for successor names (deterministic:
+## each draw takes the next free entry, wrapping).
+static var _successor_cursor: int = 0
+
 ## --- Task-owned constants (the docs left these open; see the task J report).
 ##
 ## Lane-days divisor for the trader score: `lane_days = tile length / 20`.
@@ -458,7 +499,8 @@ func budget_for(role: String, nation_id: String) -> int:
 		HUNTER:
 			return 1 if nation_id in bountied_nations() else 0
 		TREASURE:
-			return 0  # the seasonal scheduler is task L; the role is reserved
+			return 0  # not a budget role: task L's seasonal scheduler owns it
+			# (1/nation/season, §4.11.11.4; lives in the global-cap slack)
 	return 0
 
 
@@ -499,6 +541,8 @@ func trickle_per_day() -> int:
 ## `deserted` fills nothing.
 func initial_fill(day: int) -> void:
 	last_tick_day = int(day)
+	_named_respawns.clear()  # per-run state: a fresh run schedules nothing
+	_successor_cursor = 0
 	if is_deserted():
 		return
 	if not DataLoader.ensure_map():
@@ -547,6 +591,8 @@ func tick(day: int) -> Array:
 		return []
 	_ensure_rng()
 	_recount_zones(int(day))
+	_schedule_treasure(int(day))
+	_named_pirate_tick(int(day))
 	_step_fleets(int(day))
 	return _trickle(int(day))
 
@@ -559,21 +605,70 @@ func fleets() -> Array:
 
 
 ## Render dicts for the world scene (docs/80-* §4.5.2): `{id, role,
-## nation_id, cell, letter}`. Convoy grouping and wake paths arrive with
-## tasks K/L.
+## nation_id, cell, letter}` plus task L's aliveness fields — `sailing` and
+## the ≤ 5-tile `wake` trail (docked markers report no wake), and the convoy
+## grouping (`convoy_count` ≥ 2 marks the leader of one group of same-lane
+## traders within Chebyshev 3, §4.11.11.4; members carry `convoy_leader`).
+## One entry per fleet — the render layer collapses convoys to one marker.
 func markers() -> Array:
 	var out: Array = []
+	var convoy_leaders: Dictionary = _convoy_leaders()
 	for fleet in GameState.npc_fleets:
 		if not (fleet is Dictionary):
 			continue
+		var id := str((fleet as Dictionary).get("id", ""))
+		var sailing: bool = not ((fleet as Dictionary).get("route", {}) \
+			as Dictionary).get("legs", []).is_empty()
+		var wake: Array = []
+		if sailing:
+			for entry in (fleet as Dictionary).get("wake", []):
+				wake.append(Vector2i(int((entry as Dictionary).get("x", 0)),
+					int((entry as Dictionary).get("y", 0))))
+		var leader_id := str(convoy_leaders.get(id, ""))
 		out.append({
-			"id": str((fleet as Dictionary).get("id", "")),
+			"id": id,
 			"role": str((fleet as Dictionary).get("role", "")),
 			"nation_id": str((fleet as Dictionary).get("nation_id", "")),
 			"cell": position_of(fleet),
 			"letter": marker_letter(str((fleet as Dictionary).get("role", ""))),
+			"sailing": sailing,
+			"wake": wake,
+			"convoy_count": int(convoy_leaders.get(id + "#count", 0)) \
+				if leader_id == id else 0,
+			"convoy_leader": leader_id,
 		})
 	return out
+
+
+## Convoy grouping (§4.11.11.4, render side): greedy over traders in fleet-id
+## order — the first ungrouped trader leads its [method convoy_members] set.
+## Returns `{fleet_id → leader_id}` plus `"<id>#count"` entries for leaders.
+func _convoy_leaders() -> Dictionary:
+	var leaders: Dictionary = {}
+	var grouped: Dictionary = {}
+	var traders: Array = []
+	for fleet in GameState.npc_fleets:
+		if fleet is Dictionary and str((fleet as Dictionary).get("role", "")) == TRADER:
+			traders.append(fleet)
+	traders.sort_custom(func(a, b) -> bool:
+		return str((a as Dictionary).get("id", "")) \
+			< str((b as Dictionary).get("id", "")))
+	for fleet in traders:
+		var id := str((fleet as Dictionary).get("id", ""))
+		if grouped.has(id):
+			continue
+		var members := convoy_members(fleet)
+		for member in members:
+			grouped[str((member as Dictionary).get("id", ""))] = true
+		if members.size() >= 2:
+			leaders[id] = id
+			leaders[id + "#count"] = members.size()
+			for member in members:
+				if member != fleet:
+					leaders[str((member as Dictionary).get("id", ""))] = id
+		else:
+			leaders[id] = ""
+	return leaders
 
 
 ## §4.11.11.2 contact rule: the nearest hostile fleet (pirate / privateer /
@@ -616,10 +711,28 @@ func fleet_at(cell: Vector2i) -> Dictionary:
 
 
 ## Removes fleet `id` from the ecology (the §4.12.4 battle-aftermath call).
+## Task L (§4.11.11.4): defeating a **named** pirate reserves its slot — the
+## famous identity retires (no trickle spawn can re-take it) and a successor
+## under a new pool name is scheduled for +30 days, inheriting the tier.
 func remove(id: String) -> void:
 	for index in range(GameState.npc_fleets.size() - 1, -1, -1):
 		var fleet = GameState.npc_fleets[index]
 		if fleet is Dictionary and str((fleet as Dictionary).get("id", "")) == id:
+			var captain: Dictionary = (fleet as Dictionary).get("captain", {})
+			var named_id := str(captain.get("named_id", ""))
+			if not named_id.is_empty():
+				_named_respawns[named_id] = {
+					"id": named_id,
+					"day": int(GameState.day) + NAMED_RESPAWN_DAYS,
+					"tier": named_tier_of(fleet),
+				}
+			elif int(captain.get("named_tier", 0)) > 0:
+				# A defeated successor: the slot continues rotating.
+				_named_respawns["successor_%d" % int(GameState.day)] = {
+					"id": "",
+					"day": int(GameState.day) + NAMED_RESPAWN_DAYS,
+					"tier": int(captain.get("named_tier", 1)),
+				}
 			GameState.npc_fleets.remove_at(index)
 			# A full rebuild (O(N), battle-aftermath frequency): kills the
 			# whole stale-key class — fixtures may rename ids after adding,
@@ -666,7 +779,9 @@ func reset_rng(seed_value: int) -> void:
 
 ## Test/new-map seam: drops the shared lane-network and route caches (the
 ## network is derived purely from the loaded data, so this only matters to a
-## fixture that swaps `DataLoader`'s tables or map between cases).
+## fixture that swaps `DataLoader`'s tables or map between cases). Task L: the
+## named-pirate respawn bookkeeping is per-run too — a fresh board schedules
+## nothing.
 static func reset_caches() -> void:
 	_route_cache = {}
 	_net_ready = false
@@ -683,6 +798,8 @@ static func reset_caches() -> void:
 	_adjacency = {}
 	_ports_cache = {}
 	_goods_cache = {}
+	_named_respawns = {}
+	_successor_cursor = 0
 
 
 # --- Fleet shape & ids ------------------------------------------------------
@@ -744,16 +861,19 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 				else _hunter_home
 			fleet["dwell_until_day"] = int(day) + DWELL_DAYS
 		TREASURE:
-			# Reserved for task L's seasonal scheduler: spawn docked at the
-			# nation's capital so the role is visible but inert.
-			var capital := _capital_of(nation_id)
-			if capital.is_empty():
+			# Task L (§4.11.11.4): the seasonal fleet sails its nation's
+			# historical lane — the lane the capital's spoke attaches to in
+			# the built artifact. It boards at the tile nearest the capital
+			# and walks the whole lane (the §4.1.1 patrol boarding pattern),
+			# carrying ×3 a normal port call of a seeded nation good.
+			var treasure := _treasure_journey(nation_id, day)
+			if treasure.is_empty():
 				return {}
-			cell = _port_cell(capital)
-			if cell.x < 0:
-				return {}
-			fleet["dest_port_id"] = capital
-			fleet["dwell_until_day"] = int(day) + DWELL_DAYS
+			fleet["route"] = treasure["route"]
+			cell = treasure["cell"]
+			fleet["cargo"] = treasure["cargo"]
+			fleet["dest_port_id"] = ""
+			fleet["dwell_until_day"] = 0
 		_:
 			# Lane-locked roles: a journey between two own-nation ports.
 			var journey := _role_journey(role, nation_id, day)
@@ -800,7 +920,10 @@ func _fleet_rng(fleet: Dictionary, purpose: String) -> RandomNumberGenerator:
 
 
 ## Draws `captain {pool_id, name_index}` from the fleet's nation pool
-## (pirates: the nationless `""` pool) — docs/60-* §4.11.11.4.
+## (pirates: the nationless `""` pool) — docs/60-* §4.11.11.4. A pirate also
+## takes the first free **named-pirate** identity (file order, famous pirates
+## override — §4.11.11.4); reserved names (a pending +30-day respawn) are
+## never handed out.
 func _draw_captain(fleet: Dictionary) -> void:
 	var pool_id := str(fleet.get("nation_id", ""))
 	var pool: Dictionary = DataLoader.get_captain_pool(pool_id)
@@ -817,10 +940,18 @@ func _draw_captain(fleet: Dictionary) -> void:
 	var rng := _fleet_rng(fleet, "captain")
 	fleet["captain"] = {"pool_id": pool_id,
 		"name_index": rng.randi_range(0, names.size() - 1)}
+	if str(fleet.get("role", "")) == PIRATE:
+		var named_id := next_named_pirate_id()
+		if not named_id.is_empty():
+			(fleet["captain"] as Dictionary)["named_id"] = named_id
 
 
-## The captain's display name (read seam for tests/L sightings).
+## The captain's display name (read seam for tests/L sightings). A famous
+## pirate's name (§4.11.11.4 override) wins over the pool draw.
 static func captain_name(fleet: Dictionary) -> String:
+	var named := named_captain_of(fleet)
+	if not named.is_empty():
+		return I18n.t(named.get("name", {}))
 	var captain: Dictionary = fleet.get("captain", {})
 	var pool_id := str(captain.get("pool_id", ""))
 	var index := int(captain.get("name_index", 0))
@@ -1821,6 +1952,11 @@ func _step_fleets(day: int) -> void:
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 		if legs.is_empty():
 			if int(fleet.get("dwell_until_day", 0)) <= day:
+				if role == TREASURE:
+					# Task L: the seasonal run is over — the fleet delivered
+					# and despawns (1/nation/season, §4.11.11.4).
+					remove_ids.append(id)
+					continue
 				_depart(fleet, day)
 			continue
 		_advance(fleet, day)
@@ -2075,6 +2211,17 @@ func _can_enter(fleet: Dictionary, cell: Vector2i) -> bool:
 func _commit_cell(fleet: Dictionary, cell: Vector2i) -> void:
 	var before := position_of(fleet)
 	set_position(fleet, cell)
+	# Task L wake ring (docs/80-* §4.5.2): the last WAKE_LENGTH cells walked,
+	# persisted with the fleet so the trail survives save/load; render layers
+	# draw it only behind a *moving* marker.
+	if before != NO_CELL and before != cell:
+		var wake: Array = []
+		for entry in (fleet.get("wake", []) as Array):
+			wake.append(entry)
+		wake.append({"x": before.x, "y": before.y})
+		while wake.size() > WAKE_LENGTH:
+			wake.pop_front()
+		fleet["wake"] = wake
 	if before != NO_CELL and _by_id.has(str(fleet.get("id", ""))):
 		_move_bucket(str(fleet.get("id", "")), before, cell)
 
@@ -2388,6 +2535,288 @@ func path_budget_ms() -> int:
 	return int(_flow().get("path_budget_ms_per_day", 250))
 
 
+# --- Task L schedulers: treasure fleets & named pirates (§4.11.11.4) ----------
+
+## `nation_index` = the nation's position in `nations.json` file order
+## (portugal 0 … italy 5 — §4.11.11.4).
+static func nation_index(nation_id: String) -> int:
+	for index in DataLoader.nations_list.size():
+		if str((DataLoader.nations_list[index] as Dictionary).get("id", "")) \
+				== nation_id:
+			return index
+	return -1
+
+
+## True on `nation_id`'s treasure day: `45 + 15 × nation_index` (mod 90), from
+## the first season onward (§4.11.11.4 ⇒ days 45/60/75/90/105/120, then +90).
+func treasure_due(nation_id: String, day: int) -> bool:
+	var index := nation_index(nation_id)
+	if index < 0:
+		return false
+	var due := int(day) - (TREASURE_BASE_DAY + TREASURE_NATION_STEP * index)
+	return due >= 0 and due % TREASURE_SEASON_DAYS == 0
+
+
+## The seasonal pass (§4.11.11.4 "1/nation/season"): on each nation's due day,
+## if no treasure fleet of that nation is alive, spawn one on its historical
+## lane. Transient ≤ 6 at normal — they live in the global-cap slack.
+func _schedule_treasure(day: int) -> void:
+	for nation in DataLoader.nations_list:
+		var nation_id := str((nation as Dictionary).get("id", ""))
+		if nation_id.is_empty():
+			continue
+		if not treasure_due(nation_id, int(day)):
+			continue
+		if _count_role(TREASURE, nation_id) > 0:
+			continue
+		spawn(TREASURE, nation_id, int(day))
+
+
+## The treasure fleet's journey: board the capital's historical lane (the lane
+## its built spoke attaches to) at the tile nearest the capital and arm the
+## full-lane leg; hold = ×3 a normal port call of a seeded nation good. `{}`
+## when the nation has no usable lane (the scheduler skips that season).
+func _treasure_journey(nation_id: String, day: int) -> Dictionary:
+	_refresh_net()
+	var capital := _capital_of(nation_id)
+	var lane_id := str(_spoke_lane.get(capital, ""))
+	var lane_path: Array = _lane_paths.get(lane_id, [])
+	if capital.is_empty() or lane_id.is_empty() or lane_path.is_empty():
+		return {}
+	var harbor := _port_cell(capital)
+	if harbor.x < 0:
+		return {}
+	# Board at the lane tile nearest the capital (the §4.1.1 patrol pattern).
+	var best_index := 0
+	var best_distance := -1
+	for index in lane_path.size():
+		var distance := chebyshev(harbor, lane_path[index])
+		if best_distance < 0 or distance < best_distance:
+			best_distance = distance
+			best_index = index
+	if _is_occupied(lane_path[best_index], ""):
+		var step := -1 if best_index > lane_path.size() / 2 else 1
+		var scan := best_index + step
+		var free := -1
+		while scan >= 0 and scan < lane_path.size():
+			if not _is_occupied(lane_path[scan], ""):
+				free = scan
+				break
+			scan += step
+		if free < 0:
+			return {}
+		best_index = free
+	var reverse := best_index > lane_path.size() / 2
+	return {
+		"cell": lane_path[best_index],
+		"route": {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+			"legs": [{"kind": "lane", "id": lane_id, "reverse": reverse,
+				"a": 0, "b": lane_path.size() - 1}]},
+		"cargo": _treasure_cargo(nation_id, day),
+	}
+
+
+## The hold: ×3 a normal port call (`flow.trade_units_per_port_call`) of one
+## seeded good of the nation (§4.11.11.4 "cargo ×3 normal volume"). The gold
+## half of the loot pin is paid by the player-attack loot row (§4.11.11.2).
+func _treasure_cargo(nation_id: String, day: int) -> Dictionary:
+	var goods := nation_goods(nation_id)
+	if goods.is_empty():
+		return {}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(day) * SEED_DAY_MULT + nation_index(nation_id) * SEED_X_MULT \
+		+ hash("treasure|" + nation_id)
+	var good: String = goods[rng.randi_range(0, goods.size() - 1)]
+	var units := TREASURE_CARGO_MULT * trade_units_per_call()
+	return {good: units}
+
+
+## §4.11.11.2 composition detail: `3 + rng(0..2)` merchant hulls plus **one
+## patrol-escort hull**, whole-fleet cannon budget `30 + floor(day/30)` (the
+## patrol budget — one implementation). Draws from the fleet's own stream, so
+## save/load reproduces the composition.
+static func compose_treasure_ships(fleet: Dictionary, day: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(fleet.get("seed", 0)) * 31 + hash("treasure_compose")
+	var ships: Array = []
+	var count := TREASURE_MERCHANT_HULLS + rng.randi_range(0, 2)
+	for _index in count:
+		var hull: String = AiFleetLib.HULL_IDS[rng.randi_range(0, 3)]
+		ships.append(_treasure_hull(hull))
+	ships.append(_treasure_hull(AiFleetLib.HULL_IDS[
+		rng.randi_range(0, AiFleetLib.HULL_IDS.size() - 1)]))
+	AiFleetLib._deal_cannons(ships, AiFleetLib.cannon_budget(PATROL, int(day)))
+	return ships
+
+
+## One §4.11.3 base hull (crew = crew_min, full durability, empty equipment).
+static func _treasure_hull(hull_id: String) -> Dictionary:
+	var ship_type: Dictionary = DataLoader.get_ship_type(hull_id)
+	return {
+		"ship_type_id": hull_id,
+		"durability": int(ship_type.get("durability", 0)),
+		"crew": int(ship_type.get("crew_min", 0)),
+		"provisions": 0,
+		"water": 0,
+		"cannons": 0,
+		"equipment": {"figurehead": "", "sail": ""},
+		"cargo": {},
+	}
+
+
+## The named-pirate ids currently carried by a live pirate fleet.
+static func _named_ids_in_use() -> Dictionary:
+	var in_use: Dictionary = {}
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		var named_id := str(((fleet as Dictionary).get("captain", {}) \
+			as Dictionary).get("named_id", ""))
+		if not named_id.is_empty():
+			in_use[named_id] = true
+	return in_use
+
+
+## The first `named_pirates.json` entry (file order) carried by no live fleet
+## and reserved by no pending respawn. `after_id` starts the scan one entry
+## past a defeated captain ("the next pool entry", §4.11.11.4) — the defeated
+## identity itself is never re-drawn for its own successor.
+static func next_named_pirate_id(after_id: String = "") -> String:
+	var list: Array = DataLoader.named_pirates_list
+	if list.is_empty():
+		return ""
+	var in_use := _named_ids_in_use()
+	var start := 0
+	if not after_id.is_empty():
+		for index in list.size():
+			if str((list[index] as Dictionary).get("id", "")) == after_id:
+				start = (index + 1) % list.size()
+				break
+	for offset in list.size():
+		var entry: Dictionary = list[(start + offset) % list.size()]
+		var id := str(entry.get("id", ""))
+		if id.is_empty() or in_use.has(id) or _named_respawns.has(id):
+			continue
+		return id
+	return ""
+
+
+## The famous named-pirate entry a fleet's captain carries (`{}` when the
+## captain is a successor or unnamed) — the §4.11.11.4 "famous pirates
+## override" identity.
+static func named_captain_of(fleet: Dictionary) -> Dictionary:
+	var named_id := str((fleet.get("captain", {}) as Dictionary)
+		.get("named_id", ""))
+	if named_id.is_empty():
+		return {}
+	return DataLoader.get_named_pirate(named_id)
+
+
+## True when the fleet's captain is a *named* pirate (famous override or a
+## respawned successor) — poster- and bounty-worthy (§4.11.11.4).
+static func is_named_captain(fleet: Dictionary) -> bool:
+	if not named_captain_of(fleet).is_empty():
+		return true
+	return int((fleet.get("captain", {}) as Dictionary)
+		.get("named_tier", 0)) > 0
+
+
+## The named captain's bounty tier (`70-*` §4.5 tiers 1–3; a successor
+## inherits its slot's tier). 0 when the captain is not named.
+static func named_tier_of(fleet: Dictionary) -> int:
+	var named := named_captain_of(fleet)
+	if not named.is_empty():
+		return int(named.get("tier", 1))
+	return int((fleet.get("captain", {}) as Dictionary)
+		.get("named_tier", 0))
+
+
+## The nationless-pool name indexes currently carried by live fleets —
+## successor draws skip them so no name is ever shared.
+static func _pool_indexes_in_use() -> Dictionary:
+	var in_use: Dictionary = {}
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		var captain: Dictionary = (fleet as Dictionary).get("captain", {})
+		if str(captain.get("pool_id", "")) == "":
+			in_use[int(captain.get("name_index", -1))] = true
+	return in_use
+
+
+## The next free nationless-pool entry for a successor name (the rotation
+## cursor steps forward each draw, wrapping; deterministic). −1 when every
+## entry is afloat.
+static func _next_successor_index() -> int:
+	var pool: Dictionary = DataLoader.get_captain_pool("")
+	var names: Array = pool.get("names", []) if pool.get("names", []) is Array else []
+	if names.is_empty():
+		return -1
+	var in_use := _pool_indexes_in_use()
+	for _offset in names.size():
+		var index := posmod(_successor_cursor, names.size())
+		_successor_cursor += 1
+		if not in_use.has(index):
+			return index
+	return -1
+
+
+## The daily respawn pass (§4.11.11.4): a slot whose +30 days have elapsed
+## sails again under the next nationless-pool name, inheriting the slot's
+## bounty tier. The defeated famous identity stays reserved while the entry
+## is pending; a draw with no legal anchor — or an exhausted pool — retries
+## the next day.
+func _named_pirate_tick(day: int) -> void:
+	for slot_id in (_named_respawns.keys() as Array).duplicate():
+		var entry: Dictionary = _named_respawns[slot_id]
+		if int(day) < int(entry.get("day", 0)):
+			continue
+		var fleet := spawn(PIRATE, "", int(day))
+		if fleet.is_empty():
+			continue
+		var index := _next_successor_index()
+		if index < 0:
+			continue
+		fleet["captain"] = {"pool_id": "", "name_index": index,
+			"named_tier": int(entry.get("tier", 1))}
+		_named_respawns.erase(slot_id)
+
+
+## The live named-pirate fleet a bounty quest prefers (§4.11.11.4): the
+## first `named_pirates.json` entry with a live carrier (then lowest fleet
+## id), else the lowest-id successor. `{}` when no named pirate is alive.
+static func preferred_bounty_target() -> Dictionary:
+	for entry in DataLoader.named_pirates_list:
+		var named_id := str((entry as Dictionary).get("id", ""))
+		if named_id.is_empty():
+			continue
+		var best: Dictionary = {}
+		for fleet in GameState.npc_fleets:
+			if not (fleet is Dictionary) or str((fleet as Dictionary)
+					.get("role", "")) != PIRATE:
+				continue
+			if str((((fleet as Dictionary).get("captain", {}) as Dictionary)
+					.get("named_id", ""))) != named_id:
+				continue
+			if best.is_empty() \
+					or str((fleet as Dictionary).get("id", "")) \
+					< str(best.get("id", "")):
+				best = fleet
+		if not best.is_empty():
+			return best
+	var best: Dictionary = {}
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary) or str((fleet as Dictionary)
+				.get("role", "")) != PIRATE:
+			continue
+		if not is_named_captain(fleet):
+			continue
+		if best.is_empty() or str((fleet as Dictionary).get("id", "")) \
+				< str(best.get("id", "")):
+			best = fleet
+	return best
+
+
 # --- Trickle & budgets (docs/60-* §4.1.2) -----------------------------------
 
 func _trickle(day: int) -> Array:
@@ -2568,8 +2997,12 @@ static func composition_kind(role: String) -> String:
 
 ## §4.11.11.2: each battle draws from the fleet's own seeded stream, so
 ## save/load reproduces compositions. `AiFleet.compose_enemy` is unchanged —
-## the role→budget map lives in `ai_fleet.gd`'s `CANNON_BUDGET`.
+## the role→budget map lives in `ai_fleet.gd`'s `CANNON_BUDGET`. A treasure
+## fleet composes per the §4.11.11.2 detail (task L): 3–5 merchant hulls plus
+## one patrol-escort hull at the patrol cannon budget.
 static func compose_fleet_ships(fleet: Dictionary, day: int) -> Array:
+	if str(fleet.get("role", "")) == TREASURE:
+		return compose_treasure_ships(fleet, day)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(fleet.get("seed", 0))
 	return AiFleetLib.compose_enemy(

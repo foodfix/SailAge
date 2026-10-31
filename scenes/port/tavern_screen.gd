@@ -26,6 +26,9 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+## Task L (docs/80-* §4.7.8): captains, wanted posters, the 20g reveal and
+## the live-fleet/departure/event rumor rows.
+const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -45,6 +48,29 @@ const FALLBACK_STRINGS := {
 	"tavern.crew_full": {
 		"zh": "船员已满({max} 人)。",
 		"en": "Crew is at full strength ({max}).",
+	},
+	# --- Task L (docs/80-* §4.7.8 rumor rows + poster reward hint) ---
+	# ui_strings.json is orchestrator-owned; these keys are LISTED in the
+	# task L report for the master's merge and resolve locally until then.
+	"captain.poster.reward": {
+		"zh": "悬赏约 {gold} 金",
+		"en": "Reward: about {gold}g",
+	},
+	"captain.rumor.event": {
+		"zh": "{port}传来消息:{event}。",
+		"en": "Word from {port}: {event}.",
+	},
+	"captain.rumor.fleet": {
+		"zh": "据报,一支{nation}船队出没于{port}附近海域。",
+		"en": "A {nation} fleet is reported near {port}.",
+	},
+	"captain.rumor.departed": {
+		"zh": "一支{nation}船队刚离港,驶往{port}。",
+		"en": "A {nation} convoy just left, bound for {port}.",
+	},
+	"captain.rumor.arrived": {
+		"zh": "一支{nation}船队刚刚进港停靠。",
+		"en": "A {nation} convoy has just docked here.",
 	},
 }
 
@@ -107,6 +133,17 @@ var _port_id: String = ""
 
 ## The rumour hint rows currently rendered (discovery id + fame), in order.
 var _rumors: Array = []
+
+## Task L (§4.7.8): the aliveness rows currently rendered — captain rows,
+## poster rows and rumor texts (the seams a headless test reads).
+var _captain_rows: Array = []
+var _poster_rows: Array = []
+var _rumor_texts: Array = []
+## Fleet ids whose exact position was already bought this visit (§4.7.8: one
+## action per poster).
+var _revealed: Dictionary = {}
+## The reveal text of the most recent "buy a round" ("" before the first).
+var last_reveal_text: String = ""
 
 ## True while a TavernEngine/Character transaction is running; the EventBus
 ## refresh handlers do nothing then (see [method hire_heads]).
@@ -510,19 +547,26 @@ func _build_roster_row(officer_id: String) -> Control:
 ## Up to three unfound discoveries for this tavern visit, each showing its
 ## `region_hint` and a `Buy — 100g` button. Buying marks it hinted (the name
 ## is then revealed) and the row turns into `tavern.rumor.bought`.
+## Task L (docs/80-* §4.7.8): below the discovery rows the rumors tab also
+## carries the aliveness rows — demand-event telegraphs, live-fleet and
+## departure/arrival rumors, the captains section, and the wanted posters
+## with the 20g exact-position reveal.
 func _bind_rumors() -> void:
 	_clear(_rumor_rows)
 	_rumors = []
-	# The monthly tournament is announced here (§4.6: "announced via tavern
-	# rumor and the guild"), so a player who never opens a palace can find it.
-	var status := TournamentLib.status(_port_id, GameState.day)
+	_captain_rows = []
+	_poster_rows = []
+	_rumor_texts = []
+	# Task L: the active demand events' rest-overrides + telegraph rows are
+	# derived from the saved instance list on every rebuild.
+	var tournament_status: Dictionary = TournamentLib.status(_port_id, GameState.day)
 	_rumor_tournament.text = I18n.fmt("tournament.status", {
-		"port": I18n.t(DataLoader.get_port(str(status.get("host", "")))
+		"port": I18n.t(DataLoader.get_port(str(tournament_status.get("host", "")))
 			.get("name", {})),
-		"first": int(status.get("window_first", 1)),
-		"last": int(status.get("window_last", 5)),
+		"first": int(tournament_status.get("window_first", 1)),
+		"last": int(tournament_status.get("window_last", 5)),
 	})
-	var blocked := str(status.get("blocked", ""))
+	var blocked := str(tournament_status.get("blocked", ""))
 	if blocked == "tournament.not_host" or blocked == "tournament.closed":
 		_rumor_tournament.text += " — %s" % I18n.t_key(blocked)
 	_rumor_tournament.add_theme_color_override("font_color", PaletteLib.ACCENT)
@@ -535,11 +579,165 @@ func _bind_rumors() -> void:
 	else:
 		for discovery_id in DiscoveryLib.hints(_port_id, GameState.day):
 			_rumors.append({"id": str(discovery_id)})
-	_rumor_empty.visible = _rumors.is_empty()
-	if _rumors.is_empty():
-		return
 	for entry in _rumors:
 		_rumor_rows.add_child(_build_rumor_row(str(entry["id"])))
+	_bind_aliveness_rows()
+	_rumor_empty.visible = _rumors.is_empty() and _rumor_texts.is_empty()
+
+
+## The task L rows of the rumors tab, in §4.7.8 order: telegraphs, live
+## fleets and departures/arrivals, then the captains section and the posters.
+func _bind_aliveness_rows() -> void:
+	if _port_id.is_empty() or GameState.player.is_empty():
+		return
+	for row in NpcIntelLib.rumor_rows(_port_id):
+		var text := _rumor_text(row)
+		if text.is_empty():
+			continue
+		_rumor_texts.append(text)
+		_rumor_rows.add_child(_make_label(text, "RumorAliveness"))
+	# Captains sighted in the tavern (§4.7.8), then the gone-ashore notes.
+	var captains: Array = NpcIntelLib.sightings(_port_id,
+		NpcIntelLib.FACILITY_TAVERN)
+	if not captains.is_empty() or not NpcIntelLib.gone_ashore(_port_id).is_empty():
+		var header := _make_label(_t_key("captain.section.tavern"),
+			"CaptainsHeader")
+		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+		_rumor_rows.add_child(header)
+		for entry in captains:
+			var row_text := "%s · %s" % [str(entry.get("name", "")),
+				I18n.t_key("captain.role.%s" % str(entry.get("role", "")))]
+			_captain_rows.append({
+				"id": str(entry.get("id", "")),
+				"name": str(entry.get("name", "")),
+				"role": str(entry.get("role", "")),
+				"nation_id": str(entry.get("nation_id", "")),
+			})
+			_rumor_rows.add_child(_make_label(row_text, "CaptainRow"))
+		for entry in NpcIntelLib.gone_ashore(_port_id):
+			var ashore := I18n.fmt("captain.gone_ashore",
+				{"name": str(entry.get("name", ""))})
+			_rumor_texts.append(ashore)
+			var label := _make_label(ashore, "CaptainAshore")
+			label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+			_rumor_rows.add_child(label)
+	# Wanted posters within Chebyshev 40 (§4.7.8) — each row carries its own
+	# `captain.poster.title` line, so no extra section header is invented.
+	var posters: Array = NpcIntelLib.wanted_posters(_port_id)
+	if not posters.is_empty():
+		for poster in posters:
+			_poster_rows.append(poster)
+			_rumor_rows.add_child(_build_poster_row(poster))
+
+
+## One rumor row's localized text (the seeded rows come from `npc_intel`).
+func _rumor_text(row: Dictionary) -> String:
+	var nation_id := str(row.get("nation_id", ""))
+	var nation := I18n.t(DataLoader.get_nation(nation_id).get("name", {})) \
+		if not nation_id.is_empty() else "-"
+	var role := I18n.t_key("captain.role.%s" % str(row.get("role", "")))
+	match str(row.get("kind", "")):
+		"event":
+			return _fmt("captain.rumor.event", {
+				"port": str(row.get("port_name", "")),
+				"event": str(row.get("event_name", "")),
+			})
+		"fleet":
+			return _fmt("captain.rumor.fleet", {
+				"nation": nation, "port": str(row.get("nearest_port_name", "")),
+			})
+		"departed":
+			return _fmt("captain.rumor.departed", {
+				"nation": nation, "port": str(row.get("dest_port_name", "")),
+			})
+		"arrived":
+			return _fmt("captain.rumor.arrived", {"nation": nation})
+	return ""
+
+
+## One wanted poster (§4.7.8): title (name + tier), last-known position hint,
+## reward hint, and the one "buy a round — 20g" reveal action.
+func _build_poster_row(poster: Dictionary) -> Control:
+	var id := str(poster.get("id", ""))
+	var row := VBoxContainer.new()
+	row.name = "Poster_%s" % id
+	row.add_theme_constant_override("separation", 2)
+
+	var title := _make_label(I18n.fmt("captain.poster.title", {
+		"name": str(poster.get("name", "")),
+		"tier": int(poster.get("tier", 1)),
+	}), "Title")
+	title.add_theme_color_override("font_color", PaletteLib.BAD)
+	row.add_child(title)
+
+	var bottom := HBoxContainer.new()
+	bottom.name = "Bottom"
+	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	var hint := _make_label("%s · %s" % [
+		I18n.fmt("captain.poster.hint", {
+			"port": str(poster.get("nearest_port_name", ""))}),
+		_fmt("captain.poster.reward", {
+			"gold": int(poster.get("reward_gold", 0))}),
+	], "Hint")
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	bottom.add_child(hint)
+
+	var button := Button.new()
+	button.name = "Reveal"
+	button.text = I18n.t_key("captain.reveal.buy")
+	button.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
+	_style_button(button)
+	if _revealed.has(id):
+		# §4.7.8: one action per poster — the position is already known.
+		button.disabled = true
+	else:
+		button.pressed.connect(func() -> void: buy_reveal(id))
+	bottom.add_child(button)
+	row.add_child(bottom)
+	return row
+
+
+## The paid reveal (§4.7.8): one action per poster — "buy a round — 20g" →
+## the captain's EXACT live position (tile + nearest port) as rumor text.
+## Text only; no chart ping (Phase-6 candidate). Returns the text ("" on
+## refusal — short of gold — which also toasts `captain.reveal.no_gold`).
+func buy_reveal(fleet_id: String) -> String:
+	var position: Dictionary = NpcIntelLib.reveal_position(fleet_id)
+	if position.is_empty():
+		return ""
+	if _revealed.has(fleet_id):
+		return ""  # one action per poster (§4.7.8)
+	if GameState.gold < NpcIntelLib.REVEAL_COST:
+		_show_toast("captain.reveal.no_gold")
+		return ""
+	# Set before the charge: add_gold fires gold_changed, which rebuilds the
+	# tab synchronously — the fresh row must already show the button spent.
+	_revealed[fleet_id] = true
+	GameState.add_gold(-NpcIntelLib.REVEAL_COST)
+	var cell: Vector2i = position.get("cell", Vector2i.ZERO)
+	last_reveal_text = I18n.fmt("captain.reveal.text", {
+		"name": str(position.get("name", "")),
+		"x": cell.x, "y": cell.y,
+		"port": str(position.get("nearest_port_name", "")),
+	})
+	_rumor_texts.append(last_reveal_text)
+	_rumor_rows.add_child(_make_label(last_reveal_text, "RevealText"))
+	return last_reveal_text
+
+
+## The aliveness seams (§4.7.8) — rows a headless test reads without widget
+## reach-in.
+func captain_rows() -> Array:
+	return _captain_rows.duplicate()
+
+
+func poster_rows() -> Array:
+	return _poster_rows.duplicate()
+
+
+func rumor_texts() -> Array:
+	return _rumor_texts.duplicate()
 
 
 func _build_rumor_row(discovery_id: String) -> Control:
