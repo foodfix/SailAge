@@ -166,7 +166,7 @@ build is refused by design (`pre-release save_version N (this build reads 5)`).
 | World artifact | `data/maps/world.png` — unchanged from Phase 4 (byte-identical; 0 diff since the Phase-5 plan commit) |
 | Route artifact | `data/trade_routes_built.json` — 767 003 B, rebuild byte-identical |
 | Command | `python3 tools/run_tests.py` |
-| Result | **35 suites, 5 960 checks, 0 failures, 0 zombie/hang**, exit 0, 154 s wall |
+| Result | **35 suites, 5 989 checks, 0 failures, 0 zombie/hang**, exit 0, 160 s wall |
 
 ### Gate results
 
@@ -174,7 +174,7 @@ build is refused by design (`pre-release save_version N (this build reads 5)`).
 |---|---|
 | `python3 tools/validate_data.py` | **exit 0** — groups 1–8 PASS |
 | `python3 tools/build_routes.py --check` | **exit 0** — byte-identical rebuild |
-| 35 suites (`tools/run_tests.py`) | **5 960 checks, 0 failures, 0 zombie/hang** |
+| 35 suites (`tools/run_tests.py`) | **5 989 checks, 0 failures, 0 zombie/hang** |
 | `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` |
 | day tick @ normal 288 | **15.9 ms avg / 26.9 ms worst** (gate ≤ 50 ms) |
 | day tick @ extreme ≈990 | **69 ms** (gate ≤ 150 ms); ≈linear |
@@ -192,24 +192,24 @@ build is refused by design (`pre-release save_version N (this build reads 5)`).
 | test_battle_screen | 122 | | test_quests | 105 |
 | test_bounty | 80 | | test_retirement | 78 |
 | test_character | 409 | | test_sailing | 94 |
-| test_demo_loop | 82 | | test_save | 218 |
-| test_density | 71 | | test_save_v5 | 202 |
+| test_demo_loop | 83 | | test_save | 218 |
+| test_density | 78 | | test_save_v5 | 202 |
 | test_discovery | 236 | | test_shipyard | 141 |
 | test_duel | 148 | | test_tavern | 268 |
 | test_ecology | 76 | | test_tournament | 144 |
-| test_economy | 80 | | test_trade | 351 |
+| test_economy | 80 | | test_trade | 350 |
 | test_equipment | 149 | | test_weather | 224 |
-| test_fleet | 193 | | test_world_e2e | 86 |
+| test_fleet | 193 | | test_world_e2e | 108 |
 | test_inn | 116 | | test_world_map | 193 |
 | test_morale | 260 | | test_movement | 345 |
-| test_npc_fleets | 290 | | **total** | **5 960** |
+| test_npc_fleets | 290 | | **total** | **5 989** |
 | test_officers | 104 | | | |
 | test_palace | 183 | | | |
 | test_encounters → test_npc_fleets | — | | (retired suite) | |
 
 ### Phase-5 deltas worth recording
 
-- **Suites 31 → 35**, checks **5 351 → 5 960** (+609). New: `test_economy`,
+- **Suites 31 → 35**, checks **5 351 → 5 989** (+638). New: `test_economy`,
   `test_npc_fleets`, `test_ecology`, `test_aliveness`, `test_density`;
   `test_encounters` retired into `test_npc_fleets`; `test_save_v4` →
   `test_save_v5`.
