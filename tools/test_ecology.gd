@@ -692,6 +692,26 @@ func _test_world_scene_surface() -> void:
 		% [int(GameState.player["reputation"]["portugal"]),
 			int(GameState.player["reputation"]["italy"])])
 
+	# A coaster pays its §4.1.1-specific loot pin (25 + floor(day/10))g
+	# instead of the general min(1000, 100 + 10 × day) row.
+	var coaster := _make_fleet(sim, "coaster", "portugal", tile + Vector2i(0, 1))
+	coaster["cargo"] = {"wine": 5}
+	gold_before = GameState.gold
+	var coaster_wine := FleetLib.held("wine")
+	events.clear()
+	_check(world._try_attack(tile + Vector2i(0, 1)),
+		"the right-click attack engages the coaster")
+	if world._attack_confirm != null:
+		world._attack_confirm.confirmed.emit()
+	await get_tree().process_frame
+	EventBus.battle_finished.emit({"result": "victory"})
+	await get_tree().process_frame
+	_check(GameState.gold == gold_before + 25 + int(40 / 10),
+		"the coaster pays its own loot pin 25 + floor(day/10) = %dg (got %d)"
+		% [25 + int(40 / 10), GameState.gold - gold_before])
+	_check(FleetLib.held("wine") == coaster_wine + 5,
+		"the coaster's actual cargo is looted too")
+
 	# A hostile contact keeps the plain §4.11.10 aftermath (no loot row).
 	var pirate := _make_fleet(sim, "pirate", "", tile + Vector2i(1, 0))
 	gold_before = GameState.gold

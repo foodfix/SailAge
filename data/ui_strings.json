@@ -1767,5 +1767,9 @@
   "captain.reveal.no_gold": {
     "zh": "金币不足",
     "en": "Not enough gold"
+  },
+  "world.wreck.collected": {
+    "zh": "捞起沉船残骸：{cargo}单位货物，{gold}金",
+    "en": "Wreck salvaged: {cargo} units of cargo, {gold}g"
   }
 }

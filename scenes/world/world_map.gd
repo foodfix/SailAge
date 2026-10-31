@@ -1482,12 +1482,16 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 
 
 ## The §4.11.11.2 player-attack loot row (task K): actual cargo +
-## `min(1000, 100 + 10 × day)`g. The cargo is the fleet's own saved hold —
-## not the §4.11.3 per-ship rolls — distributed flagship-first through the
-## same pooled-hold rule the battle loot uses (`Fleet.add_goods`); overflow
-## units are lost.
+## `min(1000, 100 + 10 × day)`g. **Coaster exception** (§4.1.1's more
+## specific row): a coaster's tiny hold (≤ 10) pays its own pin,
+## `25 + floor(day / 10)`g, instead of the general gold. The cargo is the
+## fleet's own saved hold — not the §4.11.3 per-ship rolls — distributed
+## flagship-first through the same pooled-hold rule the battle loot uses
+## (`Fleet.add_goods`); overflow units are lost.
 func _apply_attack_loot(fleet: Dictionary, day: int) -> void:
 	var gold := mini(1000, 100 + 10 * maxi(day, 0))
+	if str(fleet.get("role", "")) == "coaster":
+		gold = 25 + int(floor(float(maxi(day, 0)) / 10.0))
 	if gold > 0:
 		GameState.add_gold(gold)
 	var cargo = fleet.get("cargo", {})

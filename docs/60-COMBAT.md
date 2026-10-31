@@ -536,7 +536,7 @@ the site; no battle screen. Salvage reuses the existing
 | Warship wreck | `BattleRewards.salvage_for(hull ids)` gold (single implementation) |
 | Player collect | entering the wreck tile collects (no battle) |
 | Player contact (Chebyshev 1, wrap-aware) | opens battle only for `pirate` / `privateer` / `hunter`-with-bounty — exactly as today |
-| Player attacks any fleet (right-click) | non-pirate owner pays `Bounty.apply_piracy` (−20 owner, +2 its rivals) **once per battle at start** (existing single funnel); loot = actual cargo + `min(1000, 100 + 10 × day)`g |
+| Player attacks any fleet (right-click) | non-pirate owner pays `Bounty.apply_piracy` (−20 owner, +2 its rivals) **once per battle at start** (existing single funnel); loot = actual cargo + `min(1000, 100 + 10 × day)`g — **except a coaster**, whose §4.1.1 row is the more specific pin: loot = actual cargo + `25 + floor(day / 10)`g |
 | Composition | `AiFleet.compose_enemy` unchanged; per-fleet seeded stream; kind→budget map `{"trader": 6, "coaster": 2, "courier": 0, "patrol": 30, "privateer": 20, "pirate": 20}` + `floor(day/30)` |
 | Chained battles | existing §4.11.11.3 pattern preserved for hostile contacts; S10 descriptor shape unchanged |
 
