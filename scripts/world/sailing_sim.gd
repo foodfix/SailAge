@@ -25,6 +25,7 @@ extends RefCounted
 ## day-advances.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 
 # --- Ledger constants (docs/20-* §5 "sailing_constants") -------------------
@@ -619,6 +620,15 @@ static func advance_clock(days: float) -> int:
 		GameState.day += 1
 		ticks += 1
 		_run_daily_ledger()
+		# §4.3 order: the economy step (stock drift + override expiry,
+		# docs/30-* §4.2/§4.5) runs after the ledger and *before*
+		# `day_advanced`, so every listener observes post-drift stocks.
+		# The pure module returns the moved ports; the `market_changed`
+		# emission stays with the caller (docs/90-* §5.1). Sea days and
+		# port day-advances share this tick path (`advance_port_day` →
+		# `advance_clock`), so both run the step.
+		for changed_port in EconomyLib.day_tick():
+			EventBus.market_changed.emit(str(changed_port))
 		EventBus.day_advanced.emit(GameState.day)
 		# §4.9: a run that just died does not tick further days; the world
 		# scene shows S9 from the `game_over` signal.

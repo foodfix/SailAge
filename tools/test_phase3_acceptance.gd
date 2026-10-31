@@ -30,6 +30,7 @@ const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const EncountersLib := preload("res://scripts/world/encounters.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
@@ -107,10 +108,25 @@ func _scenario_crown_and_horizon() -> void:
 		"S1: the profitable sale awarded trade XP (%d)"
 		% int(GameState.player["xp"]))
 	# Repeat until the purse can fund missions, a fee and the fees ahead.
+	# Phase 5: the dynamic market saturates a same-day grind BY DESIGN
+	# (docs/30-* §4.2/§4.4 — every sale drains stock and the price sinks
+	# with it), so the old unlimited same-day exploit is gone. The
+	# acceptance intent — this Lisbon arbitrage route can fund the
+	# expedition — is preserved by letting the market heal back to rest
+	# between trips (the healing dynamics themselves are test_trade's and
+	# test_economy's subject: 10-day staple / 30-day luxury heals). This
+	# fixture advances no days, so the daily ledger does not run here.
 	var trips := 0
-	while GameState.gold < 55000 and trips < 200:
+	while GameState.gold < 55000 and trips < 1000:
 		trips += 1
-		var affordable := TradeEngineLib.buy_max("lisbon", good_id)
+		GameState.market_stocks = EconomyLib.build_initial_stocks(
+			DataLoader.ports_list, DataLoader.goods_list)
+		# 20 units/trip stays inside the profitable band on BOTH walks:
+		# the buy tail (Lisbon stock 160→140, factor 700→750) and the sell
+		# tail (rest-40 → 60, factor 1300→1150) keep buy < sell per
+		# tranche; a full-hold buy walks into loss-making tail tranches
+		# (docs/30-* §4.4 tranche repricing).
+		var affordable := mini(TradeEngineLib.buy_max("lisbon", good_id), 20)
 		if affordable <= 0:
 			break
 		TradeEngineLib.buy("lisbon", good_id, affordable)

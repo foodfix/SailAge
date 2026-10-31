@@ -336,22 +336,26 @@ returns here; Set Sail → `20-*` §4.11 exit.
 #### Market (`market_screen`)
 
 ```
-+--------------------------------------------------------------+
-| Market — <Port>            Gold 7,830g · Hold 34/120   [Back]|
-+--------------------------------------------------------------+
-| Good        | Price buy/sell | You have | Qty   | [Buy][Sell]|
-| Wheat       |   8g / 6g      |    0     | [ 10 ]| [Buy][Sell]|
-| ... 20 rows, scrollable ...                                  |
-+--------------------------------------------------------------+
-| Supplies: Provisions 2g [  ___ ][Buy]   Water 1g [ ___ ][Buy]|
-| [ Invest 500g ]  invested here: 1,500g (−3%)                 |
-+--------------------------------------------------------------+
++------------------------------------------------------------------------------+
+| Market — <Port>            Gold 7,830g · Hold 34/120                  [Back]|
++------------------------------------------------------------------------------+
+| Good        | Stock | Trend | Marginal buy/sell | You have | Qty   | [Buy][Sell]|
+| Wheat       |  160  |  —    |    8g / 6g        |    0     | [ 10 ]| [Buy][Sell]|
+| ... 20 rows, scrollable ...                                                   |
++------------------------------------------------------------------------------+
+| Supplies: Provisions 2g [  ___ ][Buy]   Water 1g [ ___ ][Buy]                 |
+| [ Invest 500g ]  invested here: 1,500g (−3%)                                  |
++------------------------------------------------------------------------------+
 ```
 
-Rows sorted by `base_price` ascending. Buy/Sell disabled with tooltip-reason
-when unaffordable/over capacity/qty 0. Successful trade flashes the gold
-readout (per `80-*` feedback rules) and emits `gold_changed` +
-`fleet_changed`.
+Rows sorted by `base_price` ascending. **Stock** (0–200) and **Trend**
+(`market.stock.trend_up` when below rest, `market.stock.trend_down` when
+above, blank at rest) come from the §4.2 stock economy; **Marginal
+buy/sell** is the next-tranche price (§4.4), the price the shown quantity
+actually starts at (per `80-*` §4.7.7). Buy/Sell disabled with
+tooltip-reason when unaffordable/over capacity/qty 0. Successful trade
+flashes the gold readout (per `80-*` feedback rules) and emits
+`gold_changed` + `fleet_changed` + `market_changed`.
 
 #### Tavern (`tavern_screen`)
 

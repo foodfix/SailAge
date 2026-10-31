@@ -103,31 +103,6 @@ func add_gold(delta: int) -> void:
 	EventBus.gold_changed.emit(gold)
 
 
-## Autoload #4: registers the economy step on the day clock. The day-tick
-## order (docs/20-* §4.3, docs/90-* §5.4) is ledger → economy step →
-## `day_advanced` → world-scene listeners (the NPC fleet tick). The ledger
-## and the `day_advanced.emit` both live inside
-## `scripts/world/sailing_sim.gd#advance_clock` — **not** in this task's file
-## set — so the economy step (stock drift + override expiry, docs/30-* §4.2/
-## §4.5) runs here as the *first* `day_advanced` listener: GameState is an
-## autoload and connects at engine startup, before every scene listener, so
-## drift and its `market_changed` fan-out always precede the world scene's
-## fleet tick and every screen. Sea days and port day-advances share the same
-## tick path (`advance_port_day` → `advance_clock`), so both run the step.
-func _ready() -> void:
-	EventBus.day_advanced.connect(_on_day_advanced_economy_step)
-
-
-## The §4.3 economy step, once per day tick: drift every port-good one tier
-## step toward its rest, drop expired rest-overrides, then emit
-## `market_changed(port_id)` for exactly the ports whose stock moved
-## (docs/30-* §4.2; the pure module returns the changed ports, the emission
-## stays with the caller per docs/90-* §5.1).
-func _on_day_advanced_economy_step(_new_day: int) -> void:
-	for port_id in EconomyLib.day_tick():
-		EventBus.market_changed.emit(str(port_id))
-
-
 ## Starts a fresh run for `nation_id` exactly per docs/50-* §4.1.
 ##
 ## Everything comes from `data/nations.json` (nothing hardcoded here), so
