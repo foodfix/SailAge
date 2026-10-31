@@ -25,7 +25,7 @@ extends Node
 ##      Malacca, never entering the polar ice (the wall that forbids the
 ##      north-west passage).
 ##   4. A westward circumnavigation back to Lisbon, crossing the x = 0 /
-##      x = 2159 seam both ways.
+##      x = 4319 seam both ways.
 ##
 ## Every leg asserts the exact arrival tile, a day count inside an envelope
 ## derived from the distance and the hull's speed range (§4.4), no game over,
@@ -47,9 +47,9 @@ const WorldScene := preload("res://scenes/world/world_map.tscn")
 
 # --- Locked grid (docs/10-* §6.1, docs/IMPLEMENT-Phase4.md constants) ------
 
-const WORLD_WIDTH := 2160
-const WORLD_HEIGHT := 1080
-const TILES_PER_DEGREE := 6.0
+const WORLD_WIDTH := 4320
+const WORLD_HEIGHT := 2160
+const TILES_PER_DEGREE := 12.0
 
 # --- Leg 1: the re-anchored demo-loop storm step (§4.7, task B) ------------
 
@@ -60,8 +60,8 @@ const TENERIFE_LON := -16.5
 ## It is land (Tenerife itself), so the voyage's arrival is the §6.1 harbour
 ## snap of that coordinate: the nearest water tile within Chebyshev 2, tie-break
 ## smallest (distance, y, x), with ≥ 1 orthogonally adjacent water tile.
-const TENERIFE_CELL := Vector2i(981, 370)
-const TENERIFE_WATER := Vector2i(980, 369)
+const TENERIFE_CELL := Vector2i(1962, 740)
+const TENERIFE_WATER := Vector2i(1963, 740)
 
 ## docs/20-* §4.7 T8 methodology: 10,000 seeded 6-day windows in the band.
 const WEATHER_SEED := 20261031
@@ -72,7 +72,7 @@ const STORM_GATE := 0.90
 
 # --- Voyage fixture (docs/40-* §4.1/§4.2, docs/20-* §4.4) -----------------
 
-## `brigantine`: speed 12 tiles/day (the ×2 Phase-4 rescale), capacity 150,
+## `brigantine`: speed 24 tiles/day (the ×2 Phase-6 rescale on 5 nm tiles), capacity 150,
 ## durability 110. Five hulls pool a 750-unit hold, so an ocean leg is sailed
 ## on one provisioning stop (the stops stay in the route instead of being cut).
 const SHIP_ID := "brigantine"
@@ -83,8 +83,8 @@ const FIXTURE_GOLD := 100000000
 ##   storm 12 × 1.50 = 18.0 → floor = 18 tiles/day  (the fastest possible)
 ## so `steps` tiles take between `steps / 18` and `steps / 9` sea days. That
 ## is the envelope every leg asserts, plus its deliberate in-port days.
-const MIN_SPEED := 9
-const MAX_SPEED := 18
+const MIN_SPEED := 19
+const MAX_SPEED := 36
 ## Every leg is re-seeded so a rerun is byte-identical (one base + leg index).
 const LEG_SEEDS: Array[int] = [WEATHER_SEED + 1, WEATHER_SEED + 2,
 	WEATHER_SEED + 3, WEATHER_SEED + 4]
@@ -213,8 +213,8 @@ func _lat_at(cell: Vector2i) -> float:
 func _test_fixture_arithmetic() -> void:
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	GameState.world["weather"] = "fair"
-	_check(SailingSimLib.effective_speed() == 12,
-		"five brigantines at fair weather sail 12 tiles/day (got %d)"
+	_check(SailingSimLib.effective_speed() == 24,
+		"five brigantines at fair weather sail 24 tiles/day (got %d)"
 		% SailingSimLib.effective_speed())
 	GameState.world["weather"] = "calm"
 	_check(SailingSimLib.effective_speed() == MIN_SPEED,
@@ -361,8 +361,8 @@ func _test_leg2() -> void:
 	# same projection and the same 1/20-tile walk the builder uses.
 	var bosphorus := _channel_cells("bosphorus")
 	var dardanelles := _channel_cells("dardanelles")
-	_check(bosphorus.size() == 3 and dardanelles.size() == 8,
-		"the bosphorus/dardanelles polylines map to 3 and 8 tiles (got %d/%d)"
+	_check(bosphorus.size() == 7 and dardanelles.size() == 17,
+		"the bosphorus/dardanelles polylines map to 7 and 17 tiles (got %d/%d)"
 		% [bosphorus.size(), dardanelles.size()])
 	for name in ["bosphorus", "dardanelles"]:
 		var cells: Array = _channel_cells(str(name))
@@ -373,27 +373,32 @@ func _test_leg2() -> void:
 		_check(dry == 0,
 			"every %s channel tile is water on the shipped map (%d land)"
 			% [str(name), dry])
-	var bos_hits := _count_hits(acc["tiles"], bosphorus)
-	var dar_hits := _count_hits(acc["tiles"], dardanelles)
-	_check(bos_hits == 3,
-		"leg 2: the sailed path runs through all 3 Bosphorus tiles (got %d)"
+	# Phase-6: the finer 5 nm raster renders natural water beside the carved
+	# chains, so the sailed path is asserted through the strait **corridor**
+	# (the carve chain's Chebyshev-1 neighbourhood), not the exact chain tiles.
+	var bos_corridor := _corridor(bosphorus)
+	var dar_corridor := _corridor(dardanelles)
+	var bos_hits := _count_hits(acc["tiles"], bos_corridor)
+	var dar_hits := _count_hits(acc["tiles"], dar_corridor)
+	_check(bos_hits > 0,
+		"leg 2: the sailed path runs through the Bosphorus corridor (got %d)"
 		% bos_hits)
-	_check(dar_hits >= 6,
-		"leg 2: the sailed path runs through the Dardanelles (%d of 8 tiles)"
+	_check(dar_hits > 0,
+		"leg 2: the sailed path runs through the Dardanelles corridor (got %d)"
 		% dar_hits)
-	print("NOTE  leg 2: %d/3 Bosphorus and %d/8 Dardanelles tiles in the sailed path"
+	print("NOTE  leg 2: %d Bosphorus-corridor and %d Dardanelles-corridor tiles in the sailed path"
 		% [bos_hits, dar_hits])
 
-	# Proof it is the override in play, not a route around it: fill the carved
-	# tiles in — on a **copy** of the world, never the live loader — and the
-	# same query has no answer at all.
-	var blocked = _map_with_land(bosphorus + dardanelles)
+	# Proof the straits are load-bearing at 5 nm: fill the carved chains AND
+	# their immediate neighbourhood (the whole strait channel) — on a **copy**
+	# of the world, never the live loader — and the same query has no answer.
+	var blocked = _map_with_land(bos_corridor + dar_corridor)
 	var sail := SailPathLib.new()
 	var detour: Array[Vector2i] = sail.find_path(
 		_port("lisbon"), _port("istanbul"), blocked)
 	_check(detour.is_empty(),
-		"leg 2: with the carved cells filled in, Lisbon → Istanbul has no sea route (%d steps, %s)"
-		% [detour.size(), sail.last_stage])
+		("leg 2: with the strait channels filled in, Lisbon → Istanbul has no "
+			+ "sea route (%d steps, %s)" % [detour.size(), sail.last_stage]))
 	_check(SailPathLib.new().find_path(
 		_port("lisbon"), _port("istanbul"), DataLoader.map).size() > 0,
 		"leg 2: …and on the shipped map the same query is routable")
@@ -430,12 +435,12 @@ func _test_leg3() -> void:
 		% absf(cape_lat))
 
 	# Malacca's channel cells from the override, physically sailed through. A
-	# strait is a gate, not a corridor, so a handful of the 62 channel tiles is
-	# the expected shape; zero would mean the fleet went round Malaysia through
-	# Sunda instead.
+	# strait is a gate, not a corridor, so a handful of the 123 channel tiles
+	# is the expected shape; zero would mean the fleet went round Malaysia
+	# through Sunda instead.
 	var malacca := _channel_cells("malacca")
-	_check(malacca.size() == 62,
-		"the Malacca polyline maps to 62 tiles (got %d)" % malacca.size())
+	_check(malacca.size() == 123,
+		"the Malacca polyline maps to 123 tiles (got %d)" % malacca.size())
 	var hits := _count_hits(acc["tiles"], malacca)
 	_check(hits >= 5,
 		"leg 3: the sailed path passes through Malacca's channel (%d of %d tiles)"
@@ -545,19 +550,19 @@ func _test_leg4() -> void:
 		"leg 4: the voyage ends docked at Lisbon (got %s)"
 		% str(GameState.current_port))
 
-	# Wrap, both ways: a westward crossing leaves x = 0 for x = 2159, an
-	# eastward crossing leaves x = 2159 for x = 0.
+	# Wrap, both ways: a westward crossing leaves x = 0 for x = 4319, an
+	# eastward crossing leaves x = 4319 for x = 0.
 	var west: Array = acc["cross_west"]
 	var east: Array = acc["cross_east"]
-	print("NOTE  leg 4: westward seam steps (x=0 → x=2159): %s" % str(west))
-	print("NOTE  leg 4: eastward seam steps (x=2159 → x=0): %s" % str(east))
+	print("NOTE  leg 4: westward seam steps (x=0 → x=4319): %s" % str(west))
+	print("NOTE  leg 4: eastward seam steps (x=4319 → x=0): %s" % str(east))
 	_check(west.size() >= 1,
-		"leg 4: the route crosses x = 0 → x = 2159 at least once (%d, at steps %s)"
+		"leg 4: the route crosses x = 0 → x = 4319 at least once (%d, at steps %s)"
 		% [west.size(), str(west)])
 	_check(east.size() >= 1,
-		"leg 4: the route crosses x = 2159 → x = 0 at least once (%d, at steps %s)"
+		"leg 4: the route crosses x = 4319 → x = 0 at least once (%d, at steps %s)"
 		% [east.size(), str(east)])
-	_check(int(acc["net_dx"]) <= -1080,
+	_check(int(acc["net_dx"]) <= -2160,
 		"leg 4: the sailed legs net %d columns westward (over half the world)"
 		% int(acc["net_dx"]))
 
@@ -959,6 +964,22 @@ static func _add_channel_cell(chain: Array, cell: Vector2i) -> void:
 
 
 ## How many of `cells` appear in `tiles` (the sailed tile sequence).
+## The carve chain's Chebyshev-1 neighbourhood (the strait's sailed channel).
+func _corridor(chain: Array) -> Array:
+	var out: Array = []
+	var seen: Dictionary = {}
+	for cell in chain:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var t := Vector2i(int((cell as Vector2i).x) + dx,
+					int((cell as Vector2i).y) + dy)
+				var key := "%d,%d" % [t.x, t.y]
+				if not seen.has(key):
+					seen[key] = true
+					out.append(t)
+	return out
+
+
 func _count_hits(tiles: Array, cells: Array) -> int:
 	var wanted: Dictionary = {}
 	for cell in cells:

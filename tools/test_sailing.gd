@@ -24,7 +24,7 @@ const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 ## Open-water cell whose 8 neighbours are passable, in the world map's variables
 ## band (lat ≈ 36.7°N) and far from every harbor. Phase 4: the fixture moved
 ## from the retired P1 grid to the real Earth (task G).
-const OPEN_CELL := Vector2i(700, 320)
+const OPEN_CELL := Vector2i(1400, 640)
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -52,9 +52,9 @@ func _ready() -> void:
 
 # --- Fixtures --------------------------------------------------------------
 
-## Caravel (speed 10, crew_min 15, crew_max 45) at full crew, base stats, fair
-## weather → effective speed exactly 10 (§4.4 worked case; Phase-4 ×2 speeds,
-## `10-*` §7.3). The hold defaults to
+## Caravel (speed 20, crew_min 15, crew_max 45) at full crew, base stats, fair
+## weather → effective speed exactly 20 (§4.4 worked case; Phase-6 ×2 speeds on
+## 5 nm tiles, `10-*` §7.3). The hold defaults to
 ## empty; each test loads what it needs.
 func _make_run(
 	crew: int = 15, provisions: int = 0, water: int = 0,
@@ -112,10 +112,10 @@ func _test_constants() -> void:
 		"§5 provisions_price == 2 (got %d)" % SailingSimLib.PROVISIONS_PRICE)
 	_check(SailingSimLib.WATER_PRICE == 1,
 		"§5 water_price == 1 (got %d)" % SailingSimLib.WATER_PRICE)
-	_check(SailingSimLib.SIGHTING_RADIUS == 24,
-		"§5 sighting_radius == 24 (got %d)" % SailingSimLib.SIGHTING_RADIUS)
-	_check(SailingSimLib.DISCOVERY_RADIUS == 18,
-		"§5 discovery_radius == 18 (got %d)" % SailingSimLib.DISCOVERY_RADIUS)
+	_check(SailingSimLib.SIGHTING_RADIUS == 48,
+		"§5 sighting_radius == 48 (got %d)" % SailingSimLib.SIGHTING_RADIUS)
+	_check(SailingSimLib.DISCOVERY_RADIUS == 36,
+		"§5 discovery_radius == 36 (got %d)" % SailingSimLib.DISCOVERY_RADIUS)
 	# The engine value lives in `DiscoverySight.RADIUS` (70-* §4.4); §5 is the
 	# single documented constants location, so the two must never drift.
 	_check(DiscoveryLib.RADIUS == SailingSimLib.DISCOVERY_RADIUS,
@@ -146,19 +146,20 @@ func _test_constants() -> void:
 		"T6 MIN_SPEED/CREW_FACTOR_MIN unchanged")
 
 	# §4.11 / `70-*` §4.4: the discovery range check is wrap-aware on x and takes
-	# the grid width from the loaded legend — 2160 on the single world map, so
-	# the seam is 1 tile wide, not 2159. (Re-anchored from the retired P1 grid's
+	# the grid width from the loaded legend — 4320 on the single world map
+	# (Phase-6 rescale), so
+	# the seam is 1 tile wide, not 4319. (Re-anchored from the retired P1 grid's
 	# 128 in task G: the assertion's intent — "seam distance is 1, not width−1" —
 	# is unchanged, the width comes from the shipped world.)
-	_check(DiscoveryLib.map_width() == 2160,
+	_check(DiscoveryLib.map_width() == 4320,
 		"discovery wrap uses the loaded legend width (got %d)"
 		% DiscoveryLib.map_width())
-	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(2159, 10), Vector2i(0, 10)) == 1,
-		"x=2159 and x=0 are 1 tile apart across the seam (got %d)"
-		% DiscoveryLib.chebyshev_to_cell(Vector2i(2159, 10), Vector2i(0, 10)))
-	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(1080, 10), Vector2i(0, 10)) == 1080,
+	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(4319, 10), Vector2i(0, 10)) == 1,
+		"x=4319 and x=0 are 1 tile apart across the seam (got %d)"
+		% DiscoveryLib.chebyshev_to_cell(Vector2i(4319, 10), Vector2i(0, 10)))
+	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(2160, 10), Vector2i(0, 10)) == 2160,
 		"the far side of the seam stays far (got %d)"
-		% DiscoveryLib.chebyshev_to_cell(Vector2i(1080, 10), Vector2i(0, 10)))
+		% DiscoveryLib.chebyshev_to_cell(Vector2i(2160, 10), Vector2i(0, 10)))
 
 
 # --- §4.5 step 1 consumption ----------------------------------------------
@@ -316,7 +317,7 @@ func _test_crew_zero() -> void:
 # --- §4.3 day boundary fires once (ledger now runs inside the tick) -------
 
 func _test_clock_boundaries() -> void:
-	# 6a. Ten 0.1-day moves (speed 10) → exactly one day, i.e. one ledger run.
+	# 6a. Twenty 0.05-day moves (speed 20) → exactly one day, i.e. one ledger run.
 	_make_run(15, 100, 100, 1000)
 	GameState.world["clock_fraction"] = 0.0
 	GameState.day = 1
@@ -324,15 +325,15 @@ func _test_clock_boundaries() -> void:
 	var counter := func(day: int) -> void: ticks.append(day)
 	EventBus.day_advanced.connect(counter)
 
-	for step in 10:
+	for step in 20:
 		var target := Vector2i(
 			OPEN_CELL.x + (1 if step % 2 == 0 else 0),
 			OPEN_CELL.y
 		)
 		_check(SailingSimLib.try_move(target, DataLoader.map),
-			"10-move sequence: move %d succeeds" % (step + 1))
+			"20-move sequence: move %d succeeds" % (step + 1))
 	_check(ticks == [2],
-		"10 moves at speed 10 emit day_advanced exactly once for day 2 (got %s)"
+		"20 moves at speed 20 emit day_advanced exactly once for day 2 (got %s)"
 		% str(ticks))
 	_check(FleetLib.supplies("provisions") == 97,
 		"the single tick ran the ledger once: 100 − 3 = %d"
@@ -371,62 +372,62 @@ func _test_clock_boundaries() -> void:
 # --- §4.4 speed table (re-asserted: it is a T7 done-when) -----------------
 
 func _test_speed_table() -> void:
-	# fair / sail / full crew / seamanship 10 → 10.
+	# fair / sail / full crew / seamanship 10 → 20.
 	_make_run(15)
-	_check(SailingSimLib.effective_speed() == 10,
-		"fair, sail, full crew, seamanship 10 → 10 (got %d)"
+	_check(SailingSimLib.effective_speed() == 20,
+		"fair, sail, full crew, seamanship 10 → 20 (got %d)"
 		% SailingSimLib.effective_speed())
-	_check(is_equal_approx(SailingSimLib.move_cost(), 0.1),
-		"move_cost 1/10 = 0.1 days (got %.4f)" % SailingSimLib.move_cost())
+	_check(is_equal_approx(SailingSimLib.move_cost(), 0.05),
+		"move_cost 1/20 = 0.05 days (got %.4f)" % SailingSimLib.move_cost())
 
-	# calm / sail → floor(10 × 0.8) = 8.
+	# calm / sail → floor(20 × 0.8) = 16.
 	_make_run(15, 0, 0, 1000, "calm")
-	_check(SailingSimLib.effective_speed() == 8,
-		"calm sail: floor(10 × 0.8) = 8 (got %d)" % SailingSimLib.effective_speed())
+	_check(SailingSimLib.effective_speed() == 16,
+		"calm sail: floor(20 × 0.8) = 16 (got %d)" % SailingSimLib.effective_speed())
 
-	# storm / sail → floor(10 × 1.5) = 15.
+	# storm / sail → floor(20 × 1.5) = 30.
 	_make_run(15, 0, 0, 1000, "storm")
-	_check(SailingSimLib.effective_speed() == 15,
-		"storm sail: floor(10 × 1.5) = 15 (got %d)" % SailingSimLib.effective_speed())
+	_check(SailingSimLib.effective_speed() == 30,
+		"storm sail: floor(20 × 1.5) = 30 (got %d)" % SailingSimLib.effective_speed())
 
-	# Skeleton crew 1/15 → factor floor 0.25 → floor(10 × 0.25) = 2, never 0.
+	# Skeleton crew 1/15 → factor floor 0.25 → floor(20 × 0.25) = 5, never 0.
 	_make_run(1)
 	_check(is_equal_approx(SailingSimLib.crew_factor(), 0.25),
 		"skeleton crew 1/15 → factor 0.25 (got %.4f)" % SailingSimLib.crew_factor())
-	_check(SailingSimLib.effective_speed() == 2,
-		"skeleton crew floors to max(1, floor(10 × 0.25)) = 2 (got %d)"
+	_check(SailingSimLib.effective_speed() == 5,
+		"skeleton crew floors to max(1, floor(20 × 0.25)) = 5 (got %d)"
 		% SailingSimLib.effective_speed())
-	# Same in the worst wind (calm): floor(10 × 0.8 × 0.25) = 2, never 0.
+	# Same in the worst wind (calm): floor(20 × 0.8 × 0.25) = 4, never 0.
 	_make_run(1, 0, 0, 1000, "calm")
-	_check(SailingSimLib.effective_speed() == 2,
-		"skeleton crew in calm is floor(10 × 0.8 × 0.25) = 2 (got %d)"
+	_check(SailingSimLib.effective_speed() == 4,
+		"skeleton crew in calm is floor(20 × 0.8 × 0.25) = 4 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Slowest hull: caravel 10 + nao 8 → base 8.
+	# Slowest hull: caravel 20 + nao 16 → base 16.
 	_make_run(15)
 	GameState.fleet.append(FleetLib.new_ship("nao", 25))
-	_check(FleetLib.slowest_speed() == 8,
-		"fleet slowest hull is the nao's 8 (got %d)" % FleetLib.slowest_speed())
-	_check(SailingSimLib.effective_speed() == 8,
-		"fleet speed uses the slowest hull → 8 (got %d)"
+	_check(FleetLib.slowest_speed() == 16,
+		"fleet slowest hull is the nao's 16 (got %d)" % FleetLib.slowest_speed())
+	_check(SailingSimLib.effective_speed() == 16,
+		"fleet speed uses the slowest hull → 16 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Oar ignores wind: galley (base 12, crew_min 40) in storm → floor(12 × 1.0) = 12.
+	# Oar ignores wind: galley (base 24, crew_min 40) in storm → floor(24 × 1.0) = 24.
 	_make_run(40, 0, 0, 1000, "storm")
 	GameState.fleet[0] = FleetLib.new_ship("galley", 40)
-	_check(SailingSimLib.effective_speed() == 12,
-		"oar in storm is wind-independent: floor(12 × 1.0) = 12 (got %d)"
+	_check(SailingSimLib.effective_speed() == 24,
+		"oar in storm is wind-independent: floor(24 × 1.0) = 24 (got %d)"
 		% SailingSimLib.effective_speed())
 	# …and matches the calm case exactly.
 	GameState.world["weather"] = "calm"
-	_check(SailingSimLib.effective_speed() == 12,
-		"oar in calm is the same 12 (got %d)" % SailingSimLib.effective_speed())
+	_check(SailingSimLib.effective_speed() == 24,
+		"oar in calm is the same 24 (got %d)" % SailingSimLib.effective_speed())
 
-	# Hybrid in strong wind: galleon (base 10, crew_min 40) → floor(10 × 1.1) = 11.
+	# Hybrid in strong wind: galleon (base 20, crew_min 40) → floor(20 × 1.1) = 22.
 	_make_run(40, 0, 0, 1000, "strong")
 	GameState.fleet[0] = FleetLib.new_ship("galleon", 40)
-	_check(SailingSimLib.effective_speed() == 11,
-		"hybrid strong: floor(10 × 1.1) = 11 (got %d)" % SailingSimLib.effective_speed())
+	_check(SailingSimLib.effective_speed() == 22,
+		"hybrid strong: floor(20 × 1.1) = 22 (got %d)" % SailingSimLib.effective_speed())
 
 
 # --- §4.3 / §4.5 in-port day advance shares the ledger --------------------

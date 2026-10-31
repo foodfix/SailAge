@@ -13,29 +13,28 @@ const WorldScene := preload("res://scenes/world/world_map.tscn")
 const PaletteLib := preload("res://scripts/palette.gd")
 
 ## docs/10-* §6.1: the locked grid and artifact.
-const WORLD_WIDTH := 2160
-const WORLD_HEIGHT := 1080
+const WORLD_WIDTH := 4320
+const WORLD_HEIGHT := 2160
 const TILE_SIZE_PX := 32
 ## docs/10-* §6.3: palette index 0–4 = `~ . # ^ I` (append-only).
 const PALETTE_CHARS := "~.#^I"
 const PORT_COUNT := 100
-## The 14 ports whose §6.1 berth moved one tile when the harbor-pair constraint
-## was added (`20-*` §4.11.1) — the map's pinned regression table.
+## The 13 ports whose §6.1 berth moved when the harbor-pair constraint bit at
+## the Phase-6 grid (`20-*` §4.11.1) — the map's pinned regression table.
 const HARBOR_PAIR_MOVED := {
-	"amsterdam": Vector2i(1107, 224),
-	"beirut": Vector2i(1293, 335),
-	"belem": Vector2i(789, 547),
-	"cape_town": Vector2i(1190, 742),
-	"ceuta": Vector2i(1047, 323),
-	"curacao": Vector2i(666, 466),
-	"guayaquil": Vector2i(598, 554),
-	"havana": Vector2i(585, 400),
-	"portobelo": Vector2i(602, 481),
-	"suriname": Vector2i(749, 503),
-	"ternate": Vector2i(1844, 534),
-	"timor": Vector2i(1821, 600),
-	"tripoli": Vector2i(1159, 341),
-	"valparaiso": Vector2i(650, 737),
+	"smyrna": Vector2i(2484, 617),
+	"beirut": Vector2i(2586, 672),
+	"ceuta": Vector2i(2095, 649),
+	"havana": Vector2i(1171, 801),
+	"portobelo": Vector2i(1204, 964),
+	"valparaiso": Vector2i(1300, 1475),
+	"guayaquil": Vector2i(1197, 1112),
+	"rio_de_janeiro": Vector2i(1640, 1353),
+	"luanda": Vector2i(2318, 1184),
+	"mombasa": Vector2i(2636, 1127),
+	"bombay": Vector2i(3033, 851),
+	"malacca": Vector2i(3386, 1052),
+	"patani": Vector2i(3375, 996),
 }
 ## docs/90-* §9 step 4: 128×128-tile chunks, at most 24 live.
 const CHUNK_TILES := 128
@@ -193,9 +192,9 @@ func _test_png_loads() -> void:
 		total += int(census[kind])
 	_check(total == WORLD_WIDTH * WORLD_HEIGHT,
 		"the census covers every tile (%d)" % total)
-	_check(loader.terrain_kind(Vector2i(1024, 308)) == "coastal_sea",
+	_check(loader.terrain_kind(Vector2i(2050, 615)) == "coastal_sea",
 		"Lisbon's harbor tile reads coastal sea (got '%s')"
-		% loader.terrain_kind(Vector2i(1024, 308)))
+		% loader.terrain_kind(Vector2i(2050, 615)))
 
 	# A missing file and a non-PNG fail cleanly and name a reason.
 	var bad = MapLoaderLib.new()
@@ -261,7 +260,7 @@ func _test_harbor_tiles() -> void:
 		"port_id_at() reverses every harbor tile (%d of %d)" % [covered, PORT_COUNT])
 	var lisbon: Vector2i = _report_tiles["lisbon"]
 	_check(loader.port_id_at(Vector2i(lisbon.x + WORLD_WIDTH, lisbon.y)) == "lisbon",
-		"port_id_at wraps on x (x + 2160 is the same tile)")
+		"port_id_at wraps on x (x + 4320 is the same tile)")
 	# --- Harbor pair (20-* §4.11.1) ---------------------------------------
 	var shores: Dictionary = loader.shore_tiles()
 	_check(shores.size() == PORT_COUNT,
@@ -321,7 +320,7 @@ func _test_harbor_tiles() -> void:
 	var lisbon_shore: Vector2i = _report_shores["lisbon"]
 	_check(loader.shore_port_at(
 			Vector2i(lisbon_shore.x + WORLD_WIDTH, lisbon_shore.y)) == "lisbon",
-		"shore_port_at wraps on x (x + 2160 is the same tile)")
+		"shore_port_at wraps on x (x + 4320 is the same tile)")
 	# The berth and the shore tile are two different tiles of one pair.
 	_check(lisbon_shore != lisbon,
 		"Lisbon's shore tile %s is not its berth %s"
@@ -338,7 +337,7 @@ func _test_harbor_tiles() -> void:
 		if got != want:
 			moved_wrong.append("%s %s != %s" % [port_id, str(got), str(want)])
 	_check(moved_wrong.is_empty(),
-		"the 14 re-snapped berths are exactly the pinned tiles (%s)"
+		"the 13 re-snapped berths are exactly the pinned tiles (%s)"
 		% str(moved_wrong.slice(0, 4)))
 	# The data is the truth: every port has lat/lon and no stored tile.
 	var missing_latlon: Array = []
@@ -420,7 +419,7 @@ func _test_passability_seam() -> void:
 			sample = Vector2i(0, int(rows[index]))
 		else:
 			for y in range(0, loader.height, 7):
-				for x in [0, 1, WORLD_WIDTH - 1, 540, 1080, 1620]:
+				for x in [0, 1, WORLD_WIDTH - 1, 1080, 2160, 3240]:
 					if loader.index_xy(x, y) == index:
 						sample = Vector2i(x, y)
 						break
@@ -449,11 +448,11 @@ func _test_passability_seam() -> void:
 	var wet_y := int(rows.get(0, 0))
 	_check(loader.is_passable_xy(0, wet_y) and loader.is_passable_xy(WORLD_WIDTH, wet_y)
 		and loader.is_passable_xy(-1, wet_y) and loader.is_passable_xy(WORLD_WIDTH - 1, wet_y),
-		"x = 0, 2159, -1 and 2160 all address sea on row %d" % wet_y)
+		"x = 0, 4319, -1 and 4320 all address sea on row %d" % wet_y)
 	# y is bounded: the latitude edges are closed.
 	_check(not loader.is_passable_xy(100, -1)
 		and not loader.is_passable_xy(100, WORLD_HEIGHT),
-		"y = -1 and y = 1080 are impassable (latitude edges, §4.1)")
+		"y = -1 and y = 2160 are impassable (latitude edges, §4.1)")
 	var polar := 0
 	var bad_polar := 0
 	for x in range(0, WORLD_WIDTH, 37):
@@ -465,9 +464,9 @@ func _test_passability_seam() -> void:
 		% [polar - bad_polar, polar])
 	# Spot checks with the doc's own numbers.
 	var lisbon_projection: Vector2i = loader.tile_of_latlon(38.72, -9.14)
-	_check(lisbon_projection == Vector2i(1025, 307),
-		"Lisbon's lat/lon projects into tile (1025,307) "
-		+ "(x = floor((lon+180)*6) = floor(1025.16), §6.1; got %s)"
+	_check(lisbon_projection == Vector2i(2050, 615),
+		"Lisbon's lat/lon projects into tile (2050,615) "
+		+ "(x = floor((lon+180)*12) = floor(2050.32), §6.1; got %s)"
 		% str(lisbon_projection))
 	var lisbon_harbor: Vector2i = loader.port_cell("lisbon")
 	_check(maxi(absi(lisbon_harbor.x - lisbon_projection.x),
@@ -476,9 +475,9 @@ func _test_passability_seam() -> void:
 		% [str(lisbon_harbor), str(lisbon_projection)])
 	_check(loader.tile_of_latlon(0.0, 180.0).x == 0,
 		"lon 180 projects to x = 0 (wrapped)")
-	_check(loader.chebyshev(Vector2i(2158, 500), Vector2i(2, 500)) == 4,
-		"Chebyshev across the seam is 4 for x=2158 vs x=2 (got %d)"
-		% loader.chebyshev(Vector2i(2158, 500), Vector2i(2, 500)))
+	_check(loader.chebyshev(Vector2i(4318, 500), Vector2i(2, 500)) == 4,
+		"Chebyshev across the seam is 4 for x=4318 vs x=2 (got %d)"
+		% loader.chebyshev(Vector2i(4318, 500), Vector2i(2, 500)))
 
 
 # --- 6. Swapping the artifact is data-only --------------------------------
@@ -733,7 +732,7 @@ func _test_world_scene_renders() -> void:
 	# `_cell_at` wraps x, like every other cell lookup (§4.1).
 	var map_width_px := float(WORLD_WIDTH * TILE_SIZE_PX)
 	_check(world._cell_at(Vector2(map_width_px + 16.5, 16.5)).x == 0,
-		"a click past x = 2160 maps to x = 0 (wrap)")
+		"a click past x = 4320 maps to x = 0 (wrap)")
 	_check(world._cell_at(Vector2(-16.5, 16.5)).x == WORLD_WIDTH - 1,
 		"a click at x < 0 maps to the last column (wrap)")
 	world.queue_free()
@@ -765,15 +764,15 @@ func _test_chunked_rendering() -> void:
 	# Pan the camera across the dateline (and to both latitude edges), sampling
 	# the live chunk count, the memory estimate and the "no void" property.
 	var centres := [
-		Vector2i(1024, 308),          # Lisbon
-		Vector2i(0, 308),             # the seam
-		Vector2i(WORLD_WIDTH - 1, 308),  # the far side of the seam
-		Vector2i(WORLD_WIDTH, 308),   # x = 2160: wrapped content, not void
-		Vector2i(WORLD_WIDTH + 40, 308),
-		Vector2i(-40, 308),           # x < 0: wrapped content
+		Vector2i(2050, 615),          # Lisbon
+		Vector2i(0, 615),             # the seam
+		Vector2i(WORLD_WIDTH - 1, 615),  # the far side of the seam
+		Vector2i(WORLD_WIDTH, 615),   # x = 4320: wrapped content, not void
+		Vector2i(WORLD_WIDTH + 40, 615),
+		Vector2i(-40, 615),           # x < 0: wrapped content
 		Vector2i(0, 0),               # polar ice corner
 		Vector2i(WORLD_WIDTH - 1, WORLD_HEIGHT - 1),
-		Vector2i(1080, 540),          # mid-Pacific
+		Vector2i(2160, 1080),         # mid-Pacific
 	]
 	var void_frames := 0
 	for centre in centres:
@@ -799,11 +798,11 @@ func _test_chunked_rendering() -> void:
 		"the widest pan keeps < 50 MB (%d bytes)" % widest_bytes)
 	print("       measured: live chunks ≤ %d, estimate ≤ %d bytes (%d MB)"
 		% [widest, widest_bytes, widest_bytes / (1024 * 1024)])
-	# Chunks tile the grid exactly: 17 columns (2160 / 128 = 16.875) × 9 rows.
+	# Chunks tile the grid exactly: 34 columns (4320 / 128 = 33.75) × 17 rows.
 	var cols := int(ceil(float(WORLD_WIDTH) / float(CHUNK_TILES)))
 	var rows := int(ceil(float(WORLD_HEIGHT) / float(CHUNK_TILES)))
-	_check(cols == 17 and rows == 9,
-		"the chunk grid is 17×9 with a partial last column (%d×%d)" % [cols, rows])
+	_check(cols == 34 and rows == 17,
+		"the chunk grid is 34×17 with a partial last column (%d×%d)" % [cols, rows])
 	world.queue_free()
 	await get_tree().process_frame
 
@@ -994,7 +993,7 @@ func _test_explore_action() -> void:
 	add_child(world)
 	await get_tree().process_frame
 	var radius: int = DiscoveryLib.RADIUS
-	_check(radius == 18, "the discovery radius is 18 (§4.4; got %d)" % radius)
+	_check(radius == 36, "the discovery radius is 36 (§4.4; got %d)" % radius)
 	_check(world.something_near(), "something_near() is true within radius 18")
 	var found: Array = world.explore_here()
 	_check(found.has("disc_atlas_cedars"),

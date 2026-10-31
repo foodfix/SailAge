@@ -173,17 +173,17 @@ func _test_derived_effects() -> void:
 
 	# Navigation → sighting radius. `24 + floor((navigation − 10) / 10)`;
 	# Mateus's role adds +10 navigation, so the radius gains one tile.
-	# navigation 15 + the navigator's 10 = 25 effective ⇒ 24 + floor(15/10) = 25.
-	_check(CharacterLib.sighting_radius() == 25,
-		"the navigator's +10 navigation moves the radius 24 → 25 (got %d)"
+	# navigation 15 + the navigator's 10 = 25 effective ⇒ 48 + floor(15/10) = 49.
+	_check(CharacterLib.sighting_radius() == 49,
+		"the navigator's +10 navigation moves the radius 48 → 49 (got %d)"
 		% CharacterLib.sighting_radius())
 	var mateus_effect: String = panel.effect_text(MATEUS)
 	_check(mateus_effect.contains(I18n.t_key("char.navigation")),
 		"the navigator's effect names navigation (%s)" % mateus_effect)
 	_check(mateus_effect.contains("+10"),
 		"…with the +10 role bonus (%s)" % mateus_effect)
-	_check(mateus_effect.contains("25"),
-		"…and the resulting sighting radius 25 (%s)" % mateus_effect)
+	_check(mateus_effect.contains("49"),
+		"…and the resulting sighting radius 49 (%s)" % mateus_effect)
 	_check((panel.row_widget(MATEUS)["effect"] as Label).text == I18n.fmt(
 			"officers.effect", {"effect": mateus_effect}),
 		"the row renders it through officers.effect")
@@ -235,14 +235,14 @@ func _test_derived_effects() -> void:
 	# Solo officer: the same formulas with no stacking.
 	_make_run([MATEUS])
 	panel.rebuild()
-	_check(CharacterLib.sighting_radius() == 25,
-		"a solo navigator still gives 24 + floor(15/10) = 25 (got %d)"
+	_check(CharacterLib.sighting_radius() == 49,
+		"a solo navigator still gives 48 + floor(15/10) = 49 (got %d)"
 		% CharacterLib.sighting_radius())
 	_check(CharacterLib.effective_stat("navigation") == 25,
 		"§5's worked example: navigation 15 + 10 = 25 (got %d)"
 		% CharacterLib.effective_stat("navigation"))
-	_check(CharacterLib.sighting_radius_for(25) == 25,
-		"§5: sighting 24 + floor((25-10)/10) = 25")
+	_check(CharacterLib.sighting_radius_for(25) == 49,
+		"§5: sighting 48 + floor((25-10)/10) = 49")
 
 	panel.get_parent().queue_free()
 
