@@ -1061,11 +1061,34 @@ currents to O(1) runtime reads (`scripts/world/ocean_layers.gd`, `90-*` §4):
   0–7 over the compass order `N NE E SE S SW W NW` and `strength` 1–3
   (so `N`/1 = 1 … `NW`/3 = 24). A tile's index decodes to a unit direction +
   strength; the `20-*` §4.16 modifier/drift formulas consume the decoded
-  vector.
-- **Overlap rule (currents):** a tile covered by several systems takes the
+  vector. **Per-tile direction (pinned at the W3 gate):** a corridor tile
+  takes its **segment's dominant compass direction** — a bending system
+  paints per-segment bearings, not one system-wide bearing.
+- **Overlap rules:** currents — a tile covered by several systems takes the
   **strongest** system's vector; strength ties go to the system earliest in
   `data/ocean_currents.json` file (id) order — "strongest-then-id-order",
-  deterministic.
+  deterministic. Wind regions — authored regions are **disjoint**; should any
+  overlap, the region **earliest in file order wins** (the builder paints in
+  file order and reports the overlap count; the shipped sources overlap on
+  exactly 0 tiles).
+- **VAR fallback is an expected state (W3 pin):** stray water tiles outside
+  every wind polygon (shipped: 614 tiles, 0.013% — e.g. the Gulf of Alaska
+  margin) decode to index 0 → `VAR` + `variable`; the §4.16 "tile all ocean"
+  wording is the authoring target, not a validator gate (group 9 checks
+  palette bounds, not totality).
+- **JSON structure ownership (W3 pin):** group 9 owns the two ocean JSON
+  files' structural basics — unique ids matching the regex and complete
+  L10nString names; the month tables (`"1"…"12"` → compass token) and
+  `reversal` shape are authored data self-checked at authoring time (task D)
+  and exercised at runtime by task F's determinism tests.
+- **Variants and the junction graph (W3 pin):** lane `variants` are **not**
+  junction-graph members — the graph stays month-blind (base lanes + spokes);
+  each variant's tile path is carried on its lane in the built artifact and
+  the runtime selects the in-month path for stepping (`60-*` §4.11.11
+  amendment).
+- **`months` arrays (W3 pin):** an ice region's or variant's `months` array
+  has **no ordering requirement** — duplicate-free ints 1–12 (the shipped
+  Baltic entry is cyclic: `[12, 1, 2, 3]`).
 - **Reversal at lookup (pinned):** the raster stores the system's
   **stored (non-flipped)** vector — for a reversal system the **non-summer
   regime**, so the flip yields the real summer jet; a system's
