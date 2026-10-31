@@ -485,7 +485,7 @@ ecology members with a role, a nation, a lane route and a captain:
   | Intel object | `world.last_departed_port` — the port id recorded at every Set Sail; readable by hunting nations (rep ≤ −50) |
   | Travel | the hunter sails the lane network to that port (junction-graph Dijkstra + tile path — **zero A\***) |
   | Loiter | camps the port's approaches (the chokepoint-camping pattern) for **10 days**, then routes home via its sponsor's lanes (and despawns if its bounty no longer stands) |
-  | Chase trigger | the player's fleet within **Chebyshev 15** (wrap-aware) ⇒ direct pursuit |
+  | Chase trigger | the player's fleet within **Chebyshev 15** (wrap-aware) ⇒ direct pursuit — in **any** hunter state: en route, loitering, or homing |
   | Pursuit | short-range A\* only inside that radius, still under the ≤ 250 ms/day budget; losing the player beyond **Chebyshev 20** ends the chase — the hunter returns to the lane network / the intel port (**15/20 hysteresis**) |
   | At-sea intel | contact with any fleet of a hunting nation updates `world.hunter_intel_cell` to the contact cell (one assignment on contact) |
 
