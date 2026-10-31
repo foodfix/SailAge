@@ -8,6 +8,11 @@ signal day_advanced(new_day: int)
 signal locale_changed(locale: String)
 signal gold_changed(new_gold: int)
 signal fleet_changed()
+## Phase 5 (docs/90-* §5.1, docs/30-* §4.4): a port-good's stock moved at
+## `port_id` — a player/NPC trade or the daily economy step. The market
+## screen (and any stock reader) re-binds on it. Emitted by the callers of
+## `economy.gd`, never inside the pure module.
+signal market_changed(port_id: String)
 signal port_entered(port_id: String)
 signal game_over(reason: String)
 signal save_completed(slot: int)

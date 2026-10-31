@@ -13,16 +13,21 @@ extends RefCounted
 ## blocks the engines own (`gold`, `port_investments`, `fleet`, `player`), so
 ## every formula is unit-testable from headless GDScript.
 ##
-## **Exact arithmetic.** The §4.2 formulas are rational: the factor is 7/10,
-## 13/10 or 1 and the investment discount is `1 − k/100`. Everything is
+## **Exact arithmetic.** The §4.2 formulas are rational: the factor is an
+## integer per-thousand function of the port-good's stock (`economy.gd`:
+## `clamp(1500 − 5 × stock, 500, 2000)` — 700/1300/1000 exactly at resting
+## stock) and the investment discount is `1 − k/100`. Everything is
 ## therefore computed on a per-thousand fixed point (`combined_units`), which
 ## makes `floor(base × factor × discount)` exact — no float noise can turn
 ## `floor(30 × 0.7) = 21` into 20. Each price is floored exactly once, on the
 ## full product, as the §4.2 formula line specifies.
 ##
-## **No dynamic pricing.** Ports buy and sell unlimited quantities at the
-## fixed computed price (docs/30 §4.4); nothing here moves a price in response
-## to a transaction.
+## **Tranche repricing (Phase 5, docs/30 §4.4).** Every trade moves the
+## port-good's stock and reprices per 10-unit tranche: `buy`/`sell` walk the
+## stock ladder via `Economy.apply_trade` and sum the per-tranche prices into
+## one exact integer total (each tranche priced at the stock *before* it
+## applies, the last tranche possibly smaller). A stock-moving trade emits
+## `EventBus.market_changed(port_id)` (docs/30 §4.4).
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -30,15 +35,12 @@ const FameLib := preload("res://scripts/player/fame.gd")
 ## Supply prices are owned by the sailing sim (docs/20 §4.10, §5): reuse the
 ## constants instead of re-declaring the locked 2g / 1g values.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+## Stock state, daily drift and the per-thousand factor — the docs/30 §4.2
+## ownership split puts the factor in `economy.gd`, the price plumbing here.
+const EconomyLib := preload("res://scripts/port/economy.gd")
 
 # --- §4.2 price factors ----------------------------------------------------
 
-## A good in `port.produces` is cheap here.
-const PRODUCES_FACTOR := 0.7
-## A good in `port.demands` is expensive here.
-const DEMANDS_FACTOR := 1.3
-## Everything else trades at base price.
-const NEUTRAL_FACTOR := 1.0
 ## Locked 0.8 sell-side margin: arbitrage inside one port is always a loss.
 ## Written as an exact fraction for the integer maths in [method price_from_units].
 const SELL_MARGIN_NUM := 8
@@ -82,7 +84,8 @@ const SUPPLY_KINDS := ["provisions", "water"]
 
 # --- Prices (docs/30 §4.2) -------------------------------------------------
 
-## `0.7` when the port produces the good, `1.3` when it demands it, else `1.0`.
+## The current factor as a float (`factor_units / 1000`): 0.7 / 1.3 / 1.0 at
+## resting stock, moving with the port-good's stock (docs/30 §4.2).
 static func factor(port_id: String, good_id: String) -> float:
 	return float(_factor_units(port_id, good_id)) / float(UNITS)
 
@@ -156,14 +159,32 @@ static func price_from_units(base_price: int, combined_units: int,
 
 # --- Quantity limits (docs/30 §4.4) ----------------------------------------
 
-## `min(floor(gold / buy_price), fleet_free)` — the UI's quantity ceiling and
-## the hard limit [method buy] enforces.
+## The UI's quantity ceiling and the hard limit [method buy] enforces:
+## the largest quantity whose **full tranche walk** the purse can pay and
+## `fleet_free` can hold (docs/30 §4.4). Since per-tranche buy prices only
+## rise as stock drains, the walk accumulates full 10-unit tranches while
+## affordable and finishes with the affordable remainder of the next
+## (partial) tranche.
 static func buy_max(port_id: String, good_id: String) -> int:
-	var price := buy_price(port_id, good_id)
-	if price <= 0:
+	var capacity := FleetLib.fleet_free()
+	if capacity <= 0:
 		return 0
-	var affordable := int(floor(float(GameState.gold) / float(price)))
-	return maxi(0, mini(affordable, FleetLib.fleet_free()))
+	var walk := EconomyLib.plan_trade(port_id, good_id, capacity)
+	var base := _base_price(good_id)
+	var discount := _discount_units(port_id)
+	var purse := GameState.gold
+	var bought := 0
+	for tranche in walk:
+		var price := _tranche_price(base, discount, tranche, false, UNITS)
+		var cost := price * int(tranche["units"])
+		if purse >= cost:
+			purse -= cost
+			bought += int(tranche["units"])
+		else:
+			@warning_ignore("integer_division")
+			bought += purse / price
+			break
+	return maxi(0, bought)
 
 
 ## Held quantity pooled across the fleet: partial sells allowed.
@@ -227,13 +248,15 @@ static func _invested_chunks(port_id: String) -> int:
 
 # --- Transactions ----------------------------------------------------------
 
-## Buys `qty` of a good at the port.
+## Buys `qty` of a good at the port, walking the §4.4 tranche ladder.
 ##
 ## Validation is all-or-nothing: an invalid quantity, a quantity above
-## [method buy_max] (gold **and** pooled fleet free capacity), or a failed stock
-## insertion changes nothing at all (docs/30 §4.4 "Transaction errors … change
-## nothing"). On success: gold is charged, goods are stored flagship-first
-## (docs/40 §4.2) and `gold_changed` + `fleet_changed` are emitted.
+## [method buy_max] (the tranche-walked purse ceiling **and** pooled fleet
+## free capacity), or a failed stock insertion changes nothing at all
+## (docs/30 §4.4 "Transaction errors … change nothing"). On success: the
+## exact per-tranche sum is charged, goods are stored flagship-first
+## (docs/40 §4.2), the port-good's stock is booked down, and
+## `gold_changed` + `market_changed(port_id)` + `fleet_changed` are emitted.
 static func buy(port_id: String, good_id: String, qty: int) -> bool:
 	if DataLoader.get_port(port_id).is_empty():
 		push_error("TradeEngine.buy: unknown port '%s'" % port_id)
@@ -245,7 +268,10 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	if qty > buy_max(port_id, good_id):
 		return false
-	var cost := buy_price(port_id, good_id) * qty
+	# The walk is planned before anything mutates, so a refused trade leaves
+	# not even the stock touched (all-or-nothing, docs/30 §4.4).
+	var cost := _walk_total(port_id, good_id,
+		EconomyLib.plan_trade(port_id, good_id, qty), false)
 	if GameState.gold < cost:
 		return false
 	var stored := FleetLib.add_goods(good_id, qty)
@@ -256,17 +282,33 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 			FleetLib.remove_goods(good_id, stored)
 		push_error("TradeEngine.buy: stored %d of %d '%s'" % [stored, qty, good_id])
 		return false
+	# Books the stock walk (identical to the planned one: nothing moved in
+	# between) and then fires the §4.4 market_changed contract.
+	EconomyLib.apply_trade(port_id, good_id, qty)
 	GameState.add_gold(-cost)
+	EventBus.market_changed.emit(port_id)
 	FleetLib.notify_changed()
 	return true
 
 
-## Sells `qty` of a held good at the port.
+## The exact §4.4 cost of buying `qty` (the walked per-tranche sum), for
+## the market screen's disabled-button reason — the flat `price × qty`
+## would understate any multi-tranche purchase.
+static func buy_cost(port_id: String, good_id: String, qty: int) -> int:
+	if qty <= 0:
+		return 0
+	return _walk_total(port_id, good_id,
+		EconomyLib.plan_trade(port_id, good_id, qty), false)
+
+
+## Sells `qty` of a held good at the port, walking the §4.4 tranche ladder.
 ##
-## Pays the sell price, awards the §4.3 profit XP and the §4.6 reputation
-## (+1 per 1,000g cumulative profit at the port's nation). A loss-making sale
-## awards 0 XP and 0 reputation and never removes either. Over-quantity sells
-## fail without changing state.
+## Pays the exact per-tranche sum (docs/30 §4.4: the summed total is what
+## gold, XP and reputation book — never a per-tranche recomputation),
+## awards the §4.3 profit XP and the §4.6 reputation (+1 per 1,000g
+## cumulative profit at the port's nation). A loss-making sale awards 0 XP
+## and 0 reputation and never removes either. Over-quantity sells fail
+## without changing state.
 static func sell(port_id: String, good_id: String, qty: int) -> bool:
 	if DataLoader.get_port(port_id).is_empty():
 		push_error("TradeEngine.sell: unknown port '%s'" % port_id)
@@ -276,7 +318,8 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	if qty <= 0 or qty > FleetLib.held(good_id):
 		return false
-	var price := sell_price(port_id, good_id)
+	var proceeds := _walk_total(port_id, good_id,
+		EconomyLib.plan_trade(port_id, good_id, -qty), true)
 	var removed := FleetLib.remove_goods(good_id, qty)
 	if removed != qty:
 		if removed > 0:
@@ -284,15 +327,22 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 		push_error("TradeEngine.sell: removed %d of %d '%s'" % [removed, qty, good_id])
 		return false
 	var base := _base_price(good_id)
-	GameState.add_gold(price * qty)
-	# docs/50 §4.3 locked XP rule (owned by Character).
-	CharacterLib.add_profit_xp(price, base, qty)
+	EconomyLib.apply_trade(port_id, good_id, -qty)
+	GameState.add_gold(proceeds)
+	# docs/50 §4.3 locked XP rule (owned by Character), booked on the summed
+	# tranche total: Character computes `qty × max(0, price − basis)`; shaping
+	# the call as one unit that fetched the whole cargo's proceeds against the
+	# whole cargo's basis reproduces the §4.4 rule exactly:
+	# proceeds − (qty−1)×basis − basis == proceeds − qty×basis.
+	CharacterLib.add_profit_xp(proceeds - (qty - 1) * _profit_basis(base),
+		base, 1)
 	# docs/50 §4.6: the same profit figure, accumulated per nation (owned by
 	# Character, which keeps the cumulative counters in the player block).
 	var nation_id := str(DataLoader.get_port(port_id).get("nation_id", ""))
 	CharacterLib.add_profit_reputation(
-		nation_id, sale_profit(price, base, qty)
+		nation_id, sale_profit_total(proceeds, base, qty)
 	)
+	EventBus.market_changed.emit(port_id)
 	FleetLib.notify_changed()
 	return true
 
@@ -351,16 +401,28 @@ static func buy_supplies(port_id: String, kind: String, qty: int) -> bool:
 
 # --- Sale profit & reputation (docs/50 §4.3, §4.6) -------------------------
 
+## The locked §4.3 cost basis in gold: `floor(base_price × 0.7)` — a metagame
+## approximation, unchanged by dynamic prices (docs/50 §4.3 as amended).
+static func _profit_basis(base_price: int) -> int:
+	return int(floor(float(base_price) * PROFIT_BASIS_FACTOR))
+
+
 ## docs/50 §4.3: `max(0, sell_price − floor(base_price × 0.7))` per unit.
 static func per_unit_profit(sell_price_value: int, base_price: int) -> int:
-	return maxi(
-		0, sell_price_value - int(floor(float(base_price) * PROFIT_BASIS_FACTOR))
-	)
+	return maxi(0, sell_price_value - _profit_basis(base_price))
 
 
-## Transaction profit, `qty × per-unit` (floored at 0 — never negative).
+## Transaction profit at a flat per-unit price, `qty × per-unit` (floored at
+## 0 — never negative). Kept for single-price callers and tests.
 static func sale_profit(sell_price_value: int, base_price: int, qty: int) -> int:
 	return maxi(qty, 0) * per_unit_profit(sell_price_value, base_price)
+
+
+## Transaction profit of a walked sale, booked on the exact §4.4 summed
+## total: `max(0, proceeds − qty × basis)` — the same figure the XP award
+## and the per-nation reputation book consume (docs/30 §4.4).
+static func sale_profit_total(proceeds: int, base_price: int, qty: int) -> int:
+	return maxi(0, proceeds - maxi(qty, 0) * _profit_basis(base_price))
 
 
 ## Lifetime sale profit booked against a nation (0 when never traded there).
@@ -388,15 +450,10 @@ static func goods_rows() -> Array:
 
 # --- Helpers ---------------------------------------------------------------
 
+## The stock factor in per-thousand units — `Economy.factor_units` is the
+## single source (docs/30 §4.2); an unknown port/good reads as neutral rest.
 static func _factor_units(port_id: String, good_id: String) -> int:
-	var port: Dictionary = DataLoader.get_port(port_id)
-	if port.is_empty():
-		return UNITS
-	if good_id in port.get("produces", []):
-		return int(round(PRODUCES_FACTOR * float(UNITS)))
-	if good_id in port.get("demands", []):
-		return int(round(DEMANDS_FACTOR * float(UNITS)))
-	return int(round(NEUTRAL_FACTOR * float(UNITS)))
+	return EconomyLib.factor_units(port_id, good_id)
 
 
 ## `1 − min(0.10, invested/500 × 0.01)` in per-thousand units. Integer maths:
@@ -405,6 +462,33 @@ static func _discount_units(port_id: String) -> int:
 	@warning_ignore("integer_division")
 	var per_mille := invested(port_id) * DISCOUNT_PER_MILLE / INVEST_CHUNK
 	return UNITS - mini(int(round(DISCOUNT_CAP * float(UNITS))), per_mille)
+
+
+## One tranche's price: the §4.2 price plumbing applied at the tranche's
+## stock-before `factor_units` (band + discount + title, floored once on
+## the full product). Integer only — the §4.4 summed total is exact.
+static func _tranche_price(base_price: int, discount_units: int,
+		tranche: Dictionary, sell_side: bool, title: int) -> int:
+	@warning_ignore("integer_division")
+	var combined := clampi(
+		(int(tranche["factor_units"]) * discount_units) / UNITS,
+		BAND_MIN_UNITS, BAND_MAX_UNITS
+	)
+	return price_from_units(base_price, combined, sell_side, title)
+
+
+## The exact §4.4 transaction total: `Σ price_t × units_t` over the walk,
+## each tranche floored once on its full product.
+static func _walk_total(port_id: String, good_id: String, walk: Array,
+		sell_side: bool) -> int:
+	var base := _base_price(good_id)
+	var discount := _discount_units(port_id)
+	var title := title_units(port_id) if sell_side else UNITS
+	var total := 0
+	for tranche in walk:
+		var price := _tranche_price(base, discount, tranche, sell_side, title)
+		total += price * int(tranche["units"])
+	return total
 
 
 ## `factor × discount`, band-clamped to `[0.5, 2.0]`, in per-thousand units.

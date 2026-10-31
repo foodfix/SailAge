@@ -15,6 +15,7 @@ extends Node
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const HUDScene := preload("res://scenes/ui_shared/hud.tscn")
 const SlotDialogScene := preload("res://scenes/ui_shared/save_slot_dialog.tscn")
 const SlotDialogLib := preload("res://scenes/ui_shared/save_slot_dialog.gd")
@@ -26,13 +27,16 @@ const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 ## Phase 2 (save_version 2) appended `hostile_fleets` / `proximity_cooldowns`;
 ## Phase 3 appended the fame/title/quest/discovery/retirement block and
 ## **dropped** the superseded `quests` key; Phase 4 added no key — only the
-## `save_version`/`phase` values and `world.map_id`/`world.position` moved
+## `save_version`/`phase` values and `world.map_id`/`world.position` moved;
+## Phase 5 (save_version 5) appended the economy/density blocks
+## `market_stocks` / `wrecks` / `npc_preset` / `market_events`
 ## (docs/90-* §8.1, §8.2).
 const PAYLOAD_KEYS := [
 	"save_version", "saved_at", "phase", "locale", "day", "gold", "player",
 	"fleet", "morale", "world", "current_port", "known_ports",
 	"port_investments", "discoveries_found", "hostile_fleets",
-	"proximity_cooldowns", "fame", "titles", "bounties", "active_quests",
+	"proximity_cooldowns", "market_stocks", "wrecks", "npc_preset",
+	"market_events", "fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
 ]
@@ -54,6 +58,7 @@ func _ready() -> void:
 	_test_corrupt_files()
 	_test_version_mismatch()
 	_test_version_window()
+	_test_market_stocks_derived_default()
 	await _test_f5_at_sea()
 	_test_f5_in_port_and_keys()
 	_test_routing_on_load()
@@ -128,6 +133,22 @@ func _make_rich_run() -> void:
 	GameState.quests = []
 	GameState.discoveries_found = []
 	GameState.explored_tiles = {"1,2": true}
+	# Phase-5 blocks (docs/90-* §8.1): a displaced stock, a wreck, a
+	# non-default preset and one active event instance.
+	var stocks := EconomyLib.build_initial_stocks(
+		DataLoader.ports_list, DataLoader.goods_list
+	)
+	stocks["lisbon"]["wine"] = 87
+	GameState.market_stocks = stocks
+	GameState.wrecks = [{
+		"id": "wreck_5_30_40", "position": {"x": 30, "y": 40},
+		"day": 5, "cargo": {"wine": 6},
+	}]
+	GameState.npc_preset = "high"
+	GameState.market_events = [{
+		"template_id": "ev_harvest_festival", "port_id": "lisbon",
+		"start_day": 30, "end_day": 40, "shifts": {"wine": 30},
+	}]
 
 
 ## A completely different state, as if the game had been quit and restarted.
@@ -137,6 +158,10 @@ func _clobber_state() -> void:
 	GameState.gold = 0
 	GameState.morale = 70
 	GameState.current_port = null
+	GameState.market_stocks = {"clobber": {"clobber": 1}}
+	GameState.wrecks = ["clobber"]
+	GameState.npc_preset = "clobbered"
+	GameState.market_events = ["clobber"]
 	GameState.player = {
 		"nation_id": "spain", "stats": {"leadership": 10}, "xp": 0,
 		"level": 1, "officers": [], "reputation": {},
@@ -163,6 +188,10 @@ func _expected() -> Dictionary:
 		"weather": GameState.world["weather"],
 		"known_ports": GameState.known_ports.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
+		"market_stocks": GameState.market_stocks.duplicate(true),
+		"wrecks": GameState.wrecks.duplicate(true),
+		"npc_preset": GameState.npc_preset,
+		"market_events": GameState.market_events.duplicate(true),
 	}
 
 
@@ -251,6 +280,19 @@ func _test_full_round_trip() -> void:
 		"port_investments restored byte-equal (%s)" % str(GameState.port_investments))
 	_check(typeof(GameState.port_investments["lisbon"]) == TYPE_INT,
 		"investment totals are ints after a json round trip")
+	_check(GameState.market_stocks == expected["market_stocks"],
+		"market_stocks restored byte-equal (100 ports × 20 goods, lisbon wine 87)")
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 87
+		and typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
+		"stock counts come back as ints, not json floats")
+	_check(GameState.wrecks == expected["wrecks"]
+		and int(GameState.wrecks[0]["position"]["x"]) == 30,
+		"wrecks restored byte-equal with int coordinates")
+	_check(GameState.npc_preset == "high",
+		"npc_preset restored ('%s')" % GameState.npc_preset)
+	_check(GameState.market_events == expected["market_events"]
+		and int(GameState.market_events[0]["start_day"]) == 30,
+		"market_events restored byte-equal with int days")
 	_check(GameState.explored_tiles.is_empty(),
 		"explored_tiles stays empty after a load (not saved)")
 
@@ -437,7 +479,7 @@ func _test_version_window() -> void:
 
 	# A complete payload from an older phase is refused on its version alone —
 	# nothing migrates it (docs/90-* §8.2 development-stage scope).
-	for version in [1, 2, 3]:
+	for version in [1, 2, 3, 4]:
 		var older: Dictionary = SaveSystem.snapshot()
 		older["save_version"] = version
 		_write_json(1, older)
@@ -469,6 +511,29 @@ func _test_version_window() -> void:
 	_check(SaveSystem.save(1), "a current-version save is written")
 	_check(SaveSystem.load(1), "a current-version file still loads")
 	_check(GameState.day == before["day"], "the current-version payload is unchanged")
+
+
+# --- 5b. An absent market_stocks defaults to derived rest -----------------
+## docs/90-* §8.1: the documented default of an absent `market_stocks` is
+## the DERIVED resting stock (docs/30-* §4.2, no RNG) — computed at load,
+## not a literal.
+func _test_market_stocks_derived_default() -> void:
+	_make_rich_run()
+	var payload: Dictionary = SaveSystem.snapshot()
+	payload.erase("market_stocks")
+	_write_json(1, payload)
+	_clobber_state()
+	_check(SaveSystem.load(1), "a v5 payload without market_stocks loads")
+	_check(GameState.market_stocks.size() == DataLoader.ports_list.size(),
+		"the default stocks every port (%d)" % GameState.market_stocks.size())
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 160,
+		"lisbon wine defaults to its derived rest 160 (got %d)"
+		% int(GameState.market_stocks["lisbon"]["wine"]))
+	_check(int(GameState.market_stocks["london"]["wine"]) == 40,
+		"london wine defaults to its derived rest 40")
+	# The other Phase-5 keys still restore around the default.
+	_check(GameState.npc_preset == "high" and GameState.wrecks.size() == 1,
+		"npc_preset and wrecks restore alongside the stock default")
 
 
 # --- 6. F5 at sea ----------------------------------------------------------

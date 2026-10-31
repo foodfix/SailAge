@@ -10,6 +10,7 @@ extends Node
 # before the editor has written Godot's global-class cache.
 const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 
 ## UI language; locked default "en" (user toggles via the `L` key / top bar).
@@ -41,6 +42,23 @@ var proximity_cooldowns: Dictionary = {}
 ## Phase-2/3 fields: present but empty in Phase 1.
 var quests: Array = []
 var discoveries_found: Array = []
+
+# --- Phase 5 saved state (docs/90-* §8.1, save_version 5) -------------------
+
+## `{port_id: {good_id: stock}}` — every port-good's stock, 0–200
+## (docs/30-* §4.2). Initialized at `new_game` from the derived resting stock
+## (produced 160 / demanded 40 / neutral 100, no RNG) and owned by
+## `scripts/port/economy.gd`; saved as of save_version 5.
+var market_stocks: Dictionary = {}
+## Lootable wreck sites (docs/60-* auto-resolve, task K); never counted
+## against the fleet cap. Present-but-empty until the ecology lands.
+var wrecks: Array = []
+## Sea-traffic density preset id (docs/10-* §4.10): chosen on S2, changeable
+## mid-run in S19 (task M). `npc_fleets.gd` (task J) budgets against it.
+var npc_preset: String = "normal"
+## Active demand-event instances (docs/30-* §4.5); the rotation is task L.
+## The rest-override table they drive lives transiently in `economy.gd`.
+var market_events: Array = []
 
 # --- Phase 3 saved state (docs/90-* §8.1, save_version 3) -------------------
 
@@ -83,6 +101,31 @@ var explored_tiles: Dictionary = {}
 func add_gold(delta: int) -> void:
 	gold += delta
 	EventBus.gold_changed.emit(gold)
+
+
+## Autoload #4: registers the economy step on the day clock. The day-tick
+## order (docs/20-* §4.3, docs/90-* §5.4) is ledger → economy step →
+## `day_advanced` → world-scene listeners (the NPC fleet tick). The ledger
+## and the `day_advanced.emit` both live inside
+## `scripts/world/sailing_sim.gd#advance_clock` — **not** in this task's file
+## set — so the economy step (stock drift + override expiry, docs/30-* §4.2/
+## §4.5) runs here as the *first* `day_advanced` listener: GameState is an
+## autoload and connects at engine startup, before every scene listener, so
+## drift and its `market_changed` fan-out always precede the world scene's
+## fleet tick and every screen. Sea days and port day-advances share the same
+## tick path (`advance_port_day` → `advance_clock`), so both run the step.
+func _ready() -> void:
+	EventBus.day_advanced.connect(_on_day_advanced_economy_step)
+
+
+## The §4.3 economy step, once per day tick: drift every port-good one tier
+## step toward its rest, drop expired rest-overrides, then emit
+## `market_changed(port_id)` for exactly the ports whose stock moved
+## (docs/30-* §4.2; the pure module returns the changed ports, the emission
+## stays with the caller per docs/90-* §5.1).
+func _on_day_advanced_economy_step(_new_day: int) -> void:
+	for port_id in EconomyLib.day_tick():
+		EventBus.market_changed.emit(str(port_id))
 
 
 ## Starts a fresh run for `nation_id` exactly per docs/50-* §4.1.
@@ -188,6 +231,17 @@ func new_game(nation_id: String, route: bool = true,
 	battles_won = 0
 	retired = false
 	retired_at = 0
+	# docs/90-* §8.1 Phase-5 fields: stocks at derived rest (docs/30-* §4.2,
+	# no RNG), the ecology blocks empty until tasks J/K fill them, the density
+	# dial at its documented default. The transient rest-override table is a
+	# fresh-run reset too (active events are re-applied by their owner, task L).
+	market_stocks = EconomyLib.build_initial_stocks(
+		DataLoader.ports_list, DataLoader.goods_list
+	)
+	wrecks = []
+	npc_preset = "normal"
+	market_events = []
+	EconomyLib.reset_overrides()
 	CharacterLib.pending_levelup = false
 
 	print("GameState.new_game: %s, %dg, ship %s, port %s, day 1, map %s"
