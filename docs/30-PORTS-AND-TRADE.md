@@ -5,7 +5,11 @@
 Specifies port facilities, the trade economy (price formulas, supply/demand,
 investment), buy/sell quantity maths, and screen-by-screen UI flows for the
 market, shipyard trade-adjacent actions, tavern, and inn. Gates Phase 1
-(guild/palace are Phase 3 and only stub-marked here).
+(guild/palace are Phase 3 and only stub-marked here). Phase 6 added the
+neutral-tier frontier markets (§4.1); Phase 7 (`IMPLEMENT-Phase7.md`)
+replaces the Phase-5 drift-to-rest stock economy with the **flow economy**
+(§4.2), re-pins demand events as consumption-rate surges (§4.5), and adds
+allegiance & development (§4.9) plus the unified tariff & permits (§4.10).
 
 ## 2. Artifacts
 
@@ -17,9 +21,10 @@ market, shipyard trade-adjacent actions, tavern, and inn. Gates Phase 1
 | `scenes/port/tavern_screen.tscn` | crew hire/fire, officer recruit |
 | `scenes/port/inn_screen.tscn` | rest, harbor relief |
 | `scripts/port/trade_engine.gd` | price + quantity maths (RefCounted) |
-| `scripts/port/economy.gd` | stock, tier drift, tranche repricing, demand-event rest overrides (Phase 5, RefCounted) |
+| `scripts/port/economy.gd` | stock, flow tick, tranche repricing, demand-event consumption surges (Phase 5, RefCounted; flow rework Phase 7) |
+| `scripts/port/allegiance.gd` | port classes, ledgers, dev derivation, monthly counter-investment, treasuries, tariff/permit resolution (Phase 7) |
 | `scripts/port/shipyard_engine.gd` | ship transactions |
-| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved; shapes in `90-*`) |
+| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved), `permits`, `port_allegiance` ({ledger, allegiance} per contestable port), `month_invested`, `nation_treasuries` (Phase 7, saved; shapes in `90-*` §8.2) |
 
 ## 3. Dependencies
 
@@ -48,42 +53,86 @@ Guild, Palace, plus a "Set Sail" button. Phase-3 facilities render as
 disabled rows with the stub label until Phase 3 activates them; from Phase 3
 on they are enabled (or replaced by `port.closed_bounty` on a bountied
 nation's ports, `70-*` §4.9.6). Neutral ports (`nation_id: ""`, Phase 6,
-`10-*` §7.1) run the standard market off their `produces`/`demands` resting
-stock — frontier markets that no NPC fleet serves this phase.
+`10-*` §7.1) run the standard market off their `produces`/`demands` flow
+stock (§4.2). **Docking (Phase 7 amendment, `60-*` §4.11):** the Phase-6
+"no NPC fleet serves a neutral port" pin is retired — traders of nation N
+on **any of the 17 lanes** may dock at any port whose **effective alignment
+== N** (protected own + contestable aligned to N, sovereign non-core and
+neutral alike, §4.9); standing port-call rules (§4.4) are unchanged, and
+every neutral port additionally receives ~1 nationless coaster regardless
+of alignment (`60-*`).
 
 ### 4.2 Stock economy & price formulas
 
 For `good` at `port`, prices are a function of the port-good's **stock**
-(`economy.gd` owns stock state, drift, and the factor; `trade_engine.gd`
-keeps the price plumbing). All arithmetic is integer per-thousand fixed
-point — factors are never floats — and each price is floored exactly once,
-on the full product.
+(`economy.gd` owns stock state, the flow tick, and the factor;
+`trade_engine.gd` keeps the price plumbing). All arithmetic is integer
+per-thousand fixed point — factors are never floats — and each price is
+floored exactly once, on the full product.
 
-**Stock & resting stock.** Every port-good holds an integer stock,
-hard-clamped `0 … 200` per port-good (saved in `GameState.market_stocks`,
-`90-*`). Resting stock derives from `ports.json` with the same precedence
-as the retired static factors — zero new content data:
+**Listing rule (Phase 7).** A port-good exists only if **listed**:
 
 ```
-rest(port, good) = 160  if good ∈ port.produces
-                    40  else if good ∈ port.demands
-                    100 otherwise
+listed(port, good) = good ∈ port.produces ∪ port.demands
 ```
 
-`new_game` initializes every port-good at its rest (derived, no RNG).
+Only listed port-goods hold stock, render market rows, and transact —
+player and NPC alike; unlisted goods vanish from the market entirely (a
+behavior change from the Phase-5/6 list-everything market — correction 7
+of `IMPLEMENT-Phase7.md`). The data rule
+`demands ⊇ (staples ∖ port.produces)` (validator-asserted, `10-*` §4.2)
+keeps every staple listed at every port. `produces ∩ demands = ∅`, so
+every listed port-good is exactly one of a **producer** or a **consumer**.
+
+**Stock & flow (Phase 7 flow economy — replaces the Phase-5
+drift-to-rest, decision 17).** Every listed port-good holds an integer
+stock, hard-clamped `0 … 200` per port-good (saved in
+`GameState.market_stocks`, `90-*`). Once per day tick — after the ledger,
+before `EventBus.day_advanced` (`20-*` §4.3); port day-advances (inn rest,
+odd jobs) run it too — the flow tick moves each port-good's stock by its
+real daily flow:
+
+```
+producer: stock += prod_rate × dev_mult   # clamped at capacity
+consumer: stock −= cons_rate × dev_mult   # floored at 0 — unmet demand sits
+```
+
+A starved port cannot sell what it lacks: at stock 0 there is nothing for
+the player to buy (the shortfall sits as unmet demand — no negative stock,
+and the price stays inside the factor floor). **Tier rates**, read from
+`goods.json` flags (`10-*` §7.2; validator pins the 12/16/12 split):
+**staples 5/day, middle 3/day, luxuries 2/day** — one rate serves both
+production and consumption unless the good's optional
+`flow {prod, cons, capacity}` overrides it.
+
+**Capacity.** By tier **160 / 140 / 120**, plus **+20 per dev level**
+(§4.9), hard ceiling **200** (`STOCK_MAX` stays 200; the factor formula
+and all integer price math stay exact).
+
+**Dev multiplier on both rates.** dev 0/1/2/3 → ×1.0/×1.25/×1.5/×2.0,
+integer math `rate × (4 + dev) / 4` (dev per §4.9).
+
+**Initial stocks (new game).** Producers at capacity; consumers at **60**
+(derived, no RNG).
+
+**Market direction.** A producing port never buys its own produced goods —
+the sell side is disabled there and marked **不收购**; buying requires
+stock > 0 (falls out of the tranche walk, §4.4).
+
+**Steady state (intended).** Producers at capacity (cheap), consumers
+drained to 0 (dear) — the stable gradient. After a trade disturbs it,
+stock recovers at the real flow rates; no rest target exists anymore.
 
 **Price factor (exact).** The factor is an integer-linear function of
-stock, in per-thousand units, replacing the retired static 0.7/1.3/1.0
-factors:
+stock, in per-thousand units — unchanged from Phase 5 (only the stock
+*trajectory* changed):
 
 ```
 factor_units(port, good) = clamp(1500 − 5 × stock, 500, 2000)
 ```
 
-At resting stock it equals them exactly: produced 700 (0.7), demanded 1300
-(1.3), neutral 1000 (1.0). The stock range maps `factor_units` into
-`[500, 1500]`, already inside the price band; the `2000` bound is a safety
-net only.
+The stock range maps `factor_units` into `[500, 1500]`, already inside the
+price band; the `2000` bound is a safety net only.
 
 **Price plumbing** (`trade_engine.gd`; integer division `/` throughout):
 
@@ -98,27 +147,20 @@ title_units          = 1100 | 1050 | 1000   # Phase 3, 70-* §4.9.2
 ```
 
 `8/10` is the sell-side margin; every price is floored once on the full
-product (`max(1, …)` guards the floor), never per multiplier.
+product (`max(1, …)` guards the floor), never per multiplier. The Phase-7
+tariff composes **after** this plumbing, on the transaction totals (§4.10).
 
 - **Band interaction.** The stock factor lives inside the existing
   `[0.5, 2.0]` band: `factor_units` is band-bounded by construction, and
   `combined_units` re-clamps `factor × discount` to `[0.5, 2.0]`
   (`500–2000` per thousand) exactly as before, so the investment discount
   can never push a price outside the band.
-- **Unchanged plumbing.** The 0.8 sell-side margin (arbitrage within one
-  port is always a loss), the investment discount (§4.3), the title bonus,
-  the price band, and the provisions/water exemption (fixed 2g and 1g,
-  `20-*` §4.10, sell-back not offered) are all untouched by the stock
-  economy.
-- **Consumption tiers.** Drift rates derive at load from `goods.json`
-  (zero new data): rank all 20 goods by (`base_price` asc, `id` asc);
-  indices 0–4 are **staples** (drift ±3/day), 5–14 **middle** (±2/day),
-  15–19 **luxuries** (±1/day). The validator asserts the 5/10/5 split.
-- **Daily drift.** Once per day tick — after the ledger, before
-  `EventBus.day_advanced` (`20-*` §4.3); port day-advances (inn rest, odd
-  jobs) run it too — each port-good's stock moves one tier step **toward
-  its rest**, never past it, clamped to the stock range. A demand event
-  temporarily overrides the rest target itself (§4.5).
+- **Unchanged plumbing.** The tranche walk (§4.4), the 0.8 sell-side
+  margin (arbitrage within one port is always a loss), the investment
+  discount (§4.3), the title bonus, the `[0.5, 2.0]` price band, and the
+  provisions/water exemption (fixed 2g and 1g, `20-*` §4.10, sell-back not
+  offered) are all untouched by the flow economy — and the tariff composes
+  after all of it (§4.10).
 - **`title_bonus` (Phase 3, `70-*` §4.9.2)** multiplies the **sell** side only
   and only at ports of a nation where the player's title is knight or higher:
   1.05 at knight, 1.10 at baron/viscount/count/duke, 1.00 otherwise. It is a
@@ -136,10 +178,21 @@ product (`max(1, …)` guards the floor), never per multiplier.
 
 - At the market: "Invest" button, fixed chunk 500g per click, permanent, per
   port, stored in `GameState.port_investments` (`{port_id: gold_total}`).
-- Effect: 1% price discount (buy and sell) per chunk, cap 10% (5,000g).
-- Phase 1 has no development/unlock reward — the discount is the whole
-  effect. Wider effects (investment → demand growth) remain a Phase-6
-  candidate (`IMPLEMENT-Phase5.md`, out-of-scope list).
+- Effect: 1% price discount (buy and sell) per chunk, cap 10% (5,000g) —
+  the arithmetic is unchanged (§4.2 plumbing).
+- **Ledger effect (Phase 7, decision 25).** At a **contestable** port each
+  500g chunk also adds **+500g to the player-nation's ledger** there
+  (§4.9); at a protected port the discount is the whole effect (no ledger).
+- **Monthly cap (Phase 7, decision 26).** Player investment is capped at
+  **≤ 2,000g per contestable port per month**, tracked in
+  `GameState.month_invested` (`{port_id: gold}`, reset at the month tick,
+  §4.9); the Invest button is **three-state** — available /
+  allowance-exhausted / diplomacy-blocked — with the allowance hint
+  (`market.invest_gate.*`, §4.8).
+- **Diplomatic gate (Phase 7, decision 26).** Investing requires
+  **rep ≥ 0** with the port's current alignment nation **and no active
+  bounty from them** (§4.9; the same conditions that void permits, §4.10);
+  unaligned contestable ports have no gate.
 
 ### 4.4 Tranche repricing & buy/sell maths
 
@@ -161,8 +214,17 @@ stock and reprices per **10-unit tranche**:
 - Stock stops at its §4.2 hard-clamp: a walk larger than the range parks at
   the bound, and the price lands there continuously — no clamp jump.
 
+**Listing rule (Phase 7).** Only §4.2's listed port-goods
+(`port.produces ∪ port.demands`) transact — every walk, player or NPC,
+runs on a listed port-good's stock; unlisted goods have no stock and no
+rows. A producing port never buys its own produced good: the sell side is
+disabled there (**不收购**, §4.2). The NPC candidate scopes below already
+run produced → consumer sides, listed by construction; the Phase-7
+docking widening for NPC traders is pinned in §4.1 (spec in `60-*`).
+
 **Worked example — 300 wine sold into London** (wine ∈ `london.demands`,
-rest stock 40, `base_price` 30, no investment, no title; sell side):
+stock 40 — the Phase-5 resting value; the §4.2 factor plumbing shown is
+unchanged, `base_price` 30, no investment, no title; sell side):
 
 | Tranche | Stock before | `factor_units` | Sell price | Stock after |
 |---|---|---|---|---|
@@ -188,8 +250,9 @@ rest stock 40, `base_price` 30, no investment, no title; sell side):
 no jump). Proceeds = 10 × (31+30+28+27+26+25+24+22+21+20+19+18+16+15+14+13)
 + 14 × 120 = 3 490g + 1 680g = **5 170g** — against 9 300g at the displayed
 31g flat, which is exactly why the marginal display matters. Buying walks
-the same ladder upward: 30 wine bought at Lisbon (produced, rest 160) pays
-`factor_units` 700/750/800 → 21g/22g/24g (stock 160 → 130).
+the same ladder upward: 30 wine bought at Lisbon (produced, stock 160 at
+its capacity) pays `factor_units` 700/750/800 → 21g/22g/24g
+(stock 160 → 130).
 
 **Player quantity maths** (picker rules unchanged from T12):
 
@@ -260,26 +323,35 @@ score(good, P) = (est_sell_price(P, good) − buy_price) × qty × spec_mult × 
 
 ### 4.5 Demand events
 
-Demand events are timed rest-overrides that create tradeable surges and
-shortages. Data lives in `data/market_events.json` (~8 templates; full
-schema and validator rules in `10-*`):
+Demand events are timed **consumption-rate surges** that create tradeable
+shortages. Phase 7 re-pin (decision 17 / correction 9 of
+`IMPLEMENT-Phase7.md`): the Phase-5 rest-override semantics are retired —
+an event now **triples consumption** for its duration. The atomic
+`market_events.json` + code + validator transition is task K's (W3); the
+validator's group-7 event checks are untouched until then. Data lives in
+`data/market_events.json` (~8 templates; full schema and validator rules
+in `10-*` §4.13):
 
 ```
 {"id", "scope": "port", "cadence_days", "duration_days",
- "shifts": {"good_id": ±n}, "name": {zh, en}}
+ <rate_override naming the surged goods>, "name": {zh, en}}
 ```
 
-- **Effect.** While a port's event is active, each shifted good's §4.2 rest
-  target is overridden: `rest += shift`, the result clamped `[10, 190]`,
-  for `duration_days` — then the derived rest resumes. Drift rates and the
-  price formula are untouched: an event is a temporary rest-override table
+The Phase-5 `shifts` delta object is re-pinned as a **rate override**
+naming the goods whose consumption is surged; the exact envelope lands
+with K's transition.
+
+- **Effect.** While a port's event is active, each overridden good's
+  **consumption rate is ×3** for `duration_days` — then the normal flow
+  rate (§4.2) resumes. Production, capacities, other tier rates, and the
+  price formula are untouched: an event is a temporary rate-override
   inside `economy.gd` (pure), with the rotation/expiry hook there.
 - **Template families (locked; authored as data):** seasonal cycles —
   winter wool/furs, summer wine; one-off surges — harvest festival; war
-  provisioning at a capital — −30 timber/cannons for 60 days; plague =
-  halved demand. `shifts` reference existing `goods.json` ids; the
-  validator asserts each template's worst-case rest after the shift stays
-  inside the effect clamp above.
+  provisioning at a capital; plague. The Phase-5 shift magnitudes are
+  re-authored as ×3 consumption overrides over the families' goods in K's
+  transition; overrides reference existing `goods.json` ids, and the
+  group-7 event-shape check pins the override shape (`10-*` §8.2).
 - **Budget & schedule.** ≤ **1 active event per nation**, ≤ **4
   world-wide**. The schedule is seeded per template × cadence window
   (formula family), so runs replay exactly; active instances are saved in
@@ -295,10 +367,9 @@ schema and validator rules in `10-*`):
   `w = ⌊(day − 1) / cadence_days⌋`; the fire day and the affected port
   (uniform over `ports.json`) draw from the §4.11.1 formula family salted
   by `(window, template index, template id)` — a budget-blocked start is
-  **skipped, never deferred**. Activation appends the instance and writes
-  each shifted good's rest override
-  (`rest += shift`, clamped `[10, 190]`, until `start + duration`); a
-  load re-applies every active instance's overrides
+  **skipped, never deferred**. Activation appends the instance and applies
+  each overridden good's **×3 consumption rate** until `start + duration`;
+  a load re-applies every active instance's override
   (`Economy.ensure_event_overrides`, called from the save `_apply`) before
   any port screen can price against them. Demand events are market
   weather, independent of the fleet density dial.
@@ -358,25 +429,41 @@ returns here; Set Sail → `20-*` §4.11 exit.
 
 ```
 +------------------------------------------------------------------------------+
-| Market — <Port>            Gold 7,830g · Hold 34/120                  [Back]|
+| Market — <Port>       Gold 7,830g · Hold 34/120 · 势力内 5%           [Back] |
 +------------------------------------------------------------------------------+
+| 特产: 小麦, 葡萄酒                                                            |
 | Good        | Stock | Trend | Marginal buy/sell | You have | Qty   | [Buy][Sell]|
-| Wheat       |  160  |  —    |    8g / 6g        |    0     | [ 10 ]| [Buy][Sell]|
-| ... 20 rows, scrollable ...                                                   |
+| ★ Wheat     |  160  |  ↑    |    8g / —         |    0     | [ 10 ]| [Buy][不收购]|
+| ... listed-goods rows only (produces ∪ demands), scrollable ...              |
 +------------------------------------------------------------------------------+
 | Supplies: Provisions 2g [  ___ ][Buy]   Water 1g [ ___ ][Buy]                 |
 | [ Invest 500g ]  invested here: 1,500g (−3%)                                  |
 +------------------------------------------------------------------------------+
 ```
 
-Rows sorted by `base_price` ascending. **Stock** (0–200) and **Trend**
-(`market.stock.trend_up` when below rest, `market.stock.trend_down` when
-above, blank at rest) come from the §4.2 stock economy; **Marginal
-buy/sell** is the next-tranche price (§4.4), the price the shown quantity
-actually starts at (per `80-*` §4.7.7). Buy/Sell disabled with
-tooltip-reason when unaffordable/over capacity/qty 0. Successful trade
-flashes the gold readout (per `80-*` feedback rules) and emits
-`gold_changed` + `fleet_changed` + `market_changed`.
+Rows are the **per-port listed set** — `port.produces ∪ port.demands`
+only (§4.2); unlisted goods render no row at all (a behavior change from
+the Phase-5/6 all-20-goods market — correction 7). **★** marks
+`port.produces` rows and the `特产:` header line names up to 3 of them
+(`market.specialty.*`); the Sell button is disabled with **不收购** on
+those rows (§4.2 market direction). Exclusive 专营货 rows render for
+everyone but stay grayed with the lock note until dev ≥ 2 at a port
+aligned to the player's nation (§4.9). **Trend**
+(`market.stock.trend_up` / `market.stock.trend_down`) shows the §4.2
+flow direction — produced rows rebuild toward capacity, demanded rows
+drain toward 0 (the rest-relative blank state is gone with rest itself).
+The header badge shows the tariff state — 势力内 5% / 免税 / 外国 20% /
+未同盟 20% — and each buy/sell action adds the tax on a **separate
+displayed line** (`market.tax.*`, §4.10). Rows sorted by `base_price`
+ascending. **Stock** (0–200) comes from the §4.2 flow economy;
+**Marginal buy/sell** is the next-tranche price (§4.4), the price the
+shown quantity actually starts at (per `80-*` §4.7.7). Buy/Sell disabled
+with tooltip-reason when unaffordable/over capacity/qty 0/不收购. The
+**Invest** button is three-state (§4.3): available /
+allowance-exhausted (month hint) / diplomacy-blocked
+(`market.invest_gate.*`). Successful trade flashes the gold readout (per
+`80-*` feedback rules) and emits `gold_changed` + `fleet_changed` +
+`market_changed`.
 
 #### Tavern (`tavern_screen`)
 
@@ -443,10 +530,142 @@ Tab row: `Crew | Officers` in Phase 1–2; Phase 3 adds a third tab
 - With an active bounty from this nation, every row except `Pay bounty`
   (`bounty.pay`) and `Leave` is replaced by `port.closed_bounty`.
 
+### 4.9 Allegiance & development (Phase 7)
+
+Every port is one of two classes (decision 25, `IMPLEMENT-Phase7.md`
+§2.4). `ports.json` carries `protected: true`, the authored `dev` floor,
+and — per contestable port — `sphere: [nation_ids]` (`10-*` §4.4).
+Runtime state is save v7 (`90-*` §8.2):
+`port_allegiance {port_id: {ledger, allegiance}}` (dev is **derived**,
+never saved; `allegiance` is persisted because the tie rule keeps the
+incumbent), `month_invested {port_id: gold}`, and
+`nation_treasuries {nation_id: gold}`.
+
+**Protected ports** (≤ 4 per nation; validator: protected ⊇ the 6
+capitals, ≤ 4 per nation, never a ledger):
+
+- The set (decision 25): portugal {lisbon, oporto}; spain {seville,
+  cadiz, valencia, barcelona}; england {london, plymouth}; holland
+  {amsterdam, antwerp}; ottoman {istanbul, athens, smyrna}; italy
+  {venice, genoa, naples, palermo}.
+- Mechanics: alignment = owner **permanently**; investment =
+  discount-only (the standing §4.3 behavior, no ledger effect); dev =
+  authored floor, never grows (capitals stay dev 3 forever).
+
+**Contestable ports** (everything else — sovereign non-core + all 45
+neutral ports):
+
+- **Ledger & allegiance.** `ledger {nation_id: gold}`, cumulative per
+  nation. Allegiance = strictly the highest **effective** ledger with
+  effective ≥ **5,000g**; effective = raw except the sovereign owner's
+  **× 1.25** (integer `ledger × 5 / 4`); ties keep the incumbent; below
+  5,000g effective → unaligned.
+- **Starting state is the only sovereign/neutral difference:** a
+  contestable sovereign begins `{owner: 6,000}` (allied, above the line,
+  below dev-1's 10,000g); a neutral begins empty.
+- **Development = max(authored floor, ledger thresholds)** — derived at
+  load and on every ledger change: dev 1 at ≥ **10,000g** total ledger,
+  dev 2 ≥ **25,000g**, dev 3 ≥ **50,000g**. Floors (authored `dev` in
+  `ports.json`): capitals/protected **3**; sovereign contestable major
+  **2**, rest **1**; neutral **0**.
+- **Player investment** (§4.3): the 500g chunk buys the standing 1%/chunk
+  discount, cap 10%, **and** adds +500g to the player-nation ledger there.
+- **Flip-campaign rules (decision 26):**
+  - **Monthly cap:** ≤ **2,000g** player investment per contestable port
+    per month; three-state Invest button with hint (`market.invest_gate.*`).
+  - **Home advantage:** the sovereign owner's ledger counts **× 1.25**
+    in the allegiance comparison (a mature foreign sovereign port needs
+    > 7,500 effective value; neutrals have no owner, no bonus).
+  - **Diplomatic gate:** investing requires **rep ≥ 0** with the port's
+    current alignment nation **and no active bounty from them** (the
+    §4.10 permit-void conditions) — wanted pirates cannot buy ports;
+    unaligned contestable ports have no gate.
+  - **Poaching rep hit:** the player's nation **gaining** a foreign
+    sovereign port costs the player **−5 rep** with its previous owner
+    (one-time per flip; none on losing it back).
+
+**NPC counter-investment (monthly, deterministic).** On day 1 of each
+30-day month, each AI nation invests in **0–2 sphere ports** (spheres may
+include foreign contestable sovereigns), seeded
+`seed = month_index × 1000003 + nation_ordinal × 7919 + port_ordinal × 104729`,
+`spend = min(treasury, 1500)` per pick, weighted toward ports on/adjacent
+to their lanes and away from ports they already hold at dev 3. Protected
+ports are never AI-investable.
+
+**Telegraph (decision 24).** Each investment lands as a tavern rumor row
+`{nation} 在 {port} 投资 {amount}g`, visible **30 days** in taverns of
+the invested port's **band** (same plumbing family as `economy.gd`
+`event_telegraphs`); `Allegiance.last_month_investments()` exposes the
+month's rows.
+
+**Nation treasuries (runtime, save v7).** Start **5,000g** each; monthly
+income = **1,000g** baseline + **all tax** collected at their ports and
+allied ports (player and NPC trades alike, §4.10) + **permit sales**;
+NPC-sourced tax capped **2,000g/nation/month**; spend only on
+counter-investment. No decay, no other sinks this phase.
+
+**Month-tick ordering (pinned in `90-*`).** The day ledger calls
+`Economy.day_tick` first (stock movement + event bookkeeping — existing
+position), then, on a month boundary, `allegiance.month_tick()` — which
+resets `month_invested`, credits baseline income, resolves
+counter-investment, and refreshes telegraph windows. One seam, one owner.
+
+**Effects ladder** (both port classes; alignment = allegiance at
+contestable, owner at protected; rates/capacity per §4.2):
+
+| dev | flow rates | capacity | extras |
+|---|---|---|---|
+| 1 | ×1.25 | +20 | — |
+| 2 | ×1.5 | +40 | 专营货 rows activate for the alignment nation |
+| 3 | ×2.0 | +60 (ceiling 200) | contestable ports only: patrol umbrella (alignment-nation escort patrols extend, spoke ≤ 40 tiles; hunters cannot camp it; mechanics in `60-*`) |
+
+Ship/equipment tier availability follows dev via the universal tier
+filter (`40-*`) — no per-level ladder entries.
+
+### 4.10 Tax & permits (Phase 7)
+
+**Unified tariff (decisions 19/20) — one rule for everyone.** Effective
+alignment == trader's nation → **5%** on buy cost **and** sell proceeds;
+otherwise **20%**. Effective alignment = owner at protected, allegiance
+at contestable (§4.9). Unallied contestable ports tax **20% forever** —
+no permit can ever exempt them (no palace to buy one at). Nationless
+coasters are exempt (no host to pay). Provisions/water exempt (the
+standing §4.2 rule). Tax applies **after** all existing price math —
+band, margin, tranches, discount, title bonus, all untouched (§4.2/§4.4)
+— on the transaction totals, and shows as a **separate displayed line**
+(`market.tax.*`).
+
+**Permits (two kinds):**
+
+- **本国免税证 (home charter):** **5,000g**, own palaces only, **no
+  title/rep gate** (the early gold sink); covers every port whose
+  effective alignment == the player's nation (protected own + aligned
+  contestable), 5% → **0%**.
+- **涉外免税证 (foreign permit):** per nation, that nation's palaces,
+  **20,000g**, title ≥ **Knight**, rep ≥ **+20**; covers that nation's
+  protected + aligned contestable ports.
+- Both are **void** while that nation's bounty is held or rep < **−20**;
+  re-buy at full price. State:
+  `GameState.permits {home: bool, foreign: {nation_id: bool}}` (save v7,
+  `90-*` §8.2).
+
+**Treasury flow (decision 19 — tax-only, no profit accounting).** Every
+tax coin flows to the port's effective-alignment nation (player and NPC
+alike); permit purchases flow to the selling nation; NPC-sourced tax is
+capped 2,000g/nation/month (§4.9 treasuries); the player's home-sphere
+5% funds their own nation's counter-investment.
+
+**UI.** Market header badge — 势力内 5% / 免税 / 外国 20% / 未同盟 20%
+— plus a tax line on each side of the trade dialog (`market.tax.*`,
+§4.8).
+
 ## 5. Data Examples
 
-All examples at Phase-5 resting stock unless noted (`factor` shown is
-`factor_units / 1000`; arithmetic per §4.2, integer division).
+All examples are computed at Phase-5 resting stock (that economy is
+retired by the §4.2 flow economy in Phase 7); the §4.2 price plumbing
+they exercise — factor-from-stock, tranches, band, margin, title bonus —
+is unchanged, so the arithmetic stands as written. `factor` shown is
+`factor_units / 1000`; arithmetic per §4.2, integer division.
 
 A worked trade at rest (Lisbon buys its `produces` good wine):
 
@@ -539,6 +758,8 @@ A displaced-stock trade (sell 100 wine into London from rest, per §4.4):
 - **free_capacity = 0** → all Buy buttons disabled with reason `market.hold_full`.
 - **Selling the last unit** → allowed; row updates to 0.
 - **Investment cap reached** → Invest button disabled, shows cap string.
+  Monthly allowance exhausted or the diplomatic gate blocking → same
+  disabled-with-reason presentation (`market.invest_gate.*`, §4.3/§4.9).
 - **gold exactly equals cost** → allowed (gold becomes 0; harbor-relief
   safety net only applies when shipless, so 0-gold-with-ship is valid).
 - **Firing below crew_min** → "Down to min" stops at `crew_min`; −1/−10 clamp
@@ -553,7 +774,8 @@ A displaced-stock trade (sell 100 wine into London from rest, per §4.4):
 - [ ] Worked examples in §5 reproduce exactly when computed by
       `trade_engine.gd` (unit test asserts 21/16 at Lisbon, 39/31 at London,
       and 39/34 at London with a baron's `title_bonus`).
-- [ ] Adding a new good to `goods.json` adds a working market row with zero
+- [ ] Adding a new good to `goods.json` adds a working market row at every
+      port that lists it (`port.produces ∪ port.demands`, §4.2) with zero
       code edits (architecture rule, `90-*` §12).
 - [ ] Investment: 10 clicks (5,000g) caps discount at 10%; 11th click
       impossible.
