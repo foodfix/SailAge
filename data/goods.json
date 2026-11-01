@@ -6,28 +6,32 @@
       "name": {"zh": "小麦", "en": "Wheat"},
       "category": "food",
       "base_price": 8,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "olive_oil",
       "name": {"zh": "橄榄油", "en": "Olive Oil"},
       "category": "food",
       "base_price": 22,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "wine",
       "name": {"zh": "葡萄酒", "en": "Wine"},
       "category": "food",
       "base_price": 30,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "wool",
       "name": {"zh": "羊毛", "en": "Wool"},
       "category": "textile",
       "base_price": 18,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "cotton_cloth",
@@ -41,49 +45,57 @@
       "name": {"zh": "丝绸", "en": "Silk"},
       "category": "textile",
       "base_price": 120,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true
     },
     {
       "id": "spices",
       "name": {"zh": "香料", "en": "Spices"},
       "category": "luxury",
       "base_price": 150,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
     },
     {
       "id": "sugar",
       "name": {"zh": "糖", "en": "Sugar"},
       "category": "food",
       "base_price": 40,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "salt",
       "name": {"zh": "盐", "en": "Salt"},
       "category": "food",
       "base_price": 12,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "dried_fish",
       "name": {"zh": "鱼干", "en": "Dried Fish"},
       "category": "food",
       "base_price": 10,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "timber",
       "name": {"zh": "木材", "en": "Timber"},
       "category": "material",
       "base_price": 15,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "iron",
       "name": {"zh": "铁", "en": "Iron"},
       "category": "material",
       "base_price": 35,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "copper",
@@ -118,28 +130,188 @@
       "name": {"zh": "香水", "en": "Perfume"},
       "category": "luxury",
       "base_price": 90,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true
     },
     {
       "id": "carpet",
       "name": {"zh": "地毯", "en": "Carpet"},
       "category": "textile",
       "base_price": 80,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
     },
     {
       "id": "amber",
       "name": {"zh": "琥珀", "en": "Amber"},
       "category": "luxury",
       "base_price": 110,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true
     },
     {
       "id": "cheese",
       "name": {"zh": "奶酪", "en": "Cheese"},
       "category": "food",
       "base_price": 16,
+      "unit_size": 1,
+      "staple": true
+    },
+    {
+      "id": "rice",
+      "name": {"zh": "稻米", "en": "Rice"},
+      "category": "food",
+      "base_price": 8,
+      "unit_size": 1,
+      "staple": true
+    },
+    {
+      "id": "pitch",
+      "name": {"zh": "沥青", "en": "Pitch"},
+      "category": "material",
+      "base_price": 12,
+      "unit_size": 1,
+      "staple": true
+    },
+    {
+      "id": "linen",
+      "name": {"zh": "亚麻布", "en": "Linen"},
+      "category": "textile",
+      "base_price": 35,
       "unit_size": 1
+    },
+    {
+      "id": "furs",
+      "name": {"zh": "毛皮", "en": "Furs"},
+      "category": "material",
+      "base_price": 60,
+      "unit_size": 1
+    },
+    {
+      "id": "dye_wood",
+      "name": {"zh": "苏木", "en": "Sappanwood"},
+      "category": "material",
+      "base_price": 55,
+      "unit_size": 1
+    },
+    {
+      "id": "indigo",
+      "name": {"zh": "靛蓝", "en": "Indigo"},
+      "category": "material",
+      "base_price": 70,
+      "unit_size": 1
+    },
+    {
+      "id": "ivory",
+      "name": {"zh": "象牙", "en": "Ivory"},
+      "category": "material",
+      "base_price": 85,
+      "unit_size": 1
+    },
+    {
+      "id": "sandalwood",
+      "name": {"zh": "檀香", "en": "Sandalwood"},
+      "category": "material",
+      "base_price": 75,
+      "unit_size": 1
+    },
+    {
+      "id": "coffee",
+      "name": {"zh": "咖啡", "en": "Coffee"},
+      "category": "food",
+      "base_price": 65,
+      "unit_size": 1
+    },
+    {
+      "id": "tobacco",
+      "name": {"zh": "烟草", "en": "Tobacco"},
+      "category": "food",
+      "base_price": 50,
+      "unit_size": 1
+    },
+    {
+      "id": "tea",
+      "name": {"zh": "茶", "en": "Tea"},
+      "category": "food",
+      "base_price": 55,
+      "unit_size": 1
+    },
+    {
+      "id": "rhubarb",
+      "name": {"zh": "大黄", "en": "Rhubarb"},
+      "category": "material",
+      "base_price": 85,
+      "unit_size": 1
+    },
+    {
+      "id": "raw_silk",
+      "name": {"zh": "生丝", "en": "Raw Silk"},
+      "category": "textile",
+      "base_price": 95,
+      "unit_size": 1
+    },
+    {
+      "id": "porcelain",
+      "name": {"zh": "瓷器", "en": "Porcelain"},
+      "category": "luxury",
+      "base_price": 130,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
+    },
+    {
+      "id": "pearls",
+      "name": {"zh": "珍珠", "en": "Pearls"},
+      "category": "luxury",
+      "base_price": 140,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
+    },
+    {
+      "id": "gems",
+      "name": {"zh": "宝石", "en": "Gems"},
+      "category": "luxury",
+      "base_price": 180,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
+    },
+    {
+      "id": "musk",
+      "name": {"zh": "麝香", "en": "Musk"},
+      "category": "luxury",
+      "base_price": 170,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
+    },
+    {
+      "id": "lacquerware",
+      "name": {"zh": "漆器", "en": "Lacquerware"},
+      "category": "luxury",
+      "base_price": 110,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
+    },
+    {
+      "id": "silver",
+      "name": {"zh": "白银", "en": "Silver"},
+      "category": "material",
+      "base_price": 105,
+      "unit_size": 1,
+      "specialty": true
+    },
+    {
+      "id": "gold",
+      "name": {"zh": "黄金", "en": "Gold"},
+      "category": "material",
+      "base_price": 200,
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
     }
   ]
 }
