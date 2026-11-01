@@ -752,6 +752,9 @@ func _update_hover(at: Vector2) -> void:
 				str(entry.get("role", "")), str(entry.get("nation_id", ""))]
 			if not stall.is_empty():
 				best += " · %s×%d" % [stall, holds]
+			if stall == "docked" and entry.has("port") \
+					and not str(entry.get("port", "")).is_empty():
+				best += " @ %s" % str(entry.get("port", ""))
 	for entry in _wreck_markers:
 		var d := _to_screen(entry["cell"]).distance_to(at)
 		if d < best_d:

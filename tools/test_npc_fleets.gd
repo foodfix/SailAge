@@ -2072,25 +2072,33 @@ func _test_tick_cost() -> void:
 		if total >= sim.core_cap():
 			break
 	var n: int = GameState.npc_fleets.size()
-	var total_ms := 0.0
+	var samples: Array = []
 	var worst_ms := 0.0
 	for day in range(80, 80 + PERF_TICKS):
 		GameState.day = day
 		var started := Time.get_ticks_usec()
 		sim.tick(day)
 		var ms := float(Time.get_ticks_usec() - started) / 1000.0
-		total_ms += ms
+		samples.append(ms)
 		worst_ms = maxf(worst_ms, ms)
-	var avg := total_ms / float(PERF_TICKS)
-	print("  tick probe: %d fleets, avg %.1f ms/tick, worst %.1f ms/tick"
-		% [n, avg, worst_ms])
+	samples.sort()
+	# The MEDIAN is the gated statistic: single-tick spikes (allocator
+	# hiccups, OS scheduling) skew a mean on a noisy shared machine — the
+	# median answers "what does a typical day tick cost" robustly.
+	var median := float(samples[PERF_TICKS / 2])
+	var avg := 0.0
+	for ms in samples:
+		avg += float(ms)
+	avg /= float(PERF_TICKS)
+	print("  tick probe: %d fleets, median %.1f ms/tick, avg %.1f, worst %.1f"
+		% [n, median, avg, worst_ms])
 	# docs/90-* §13 free profiling: the day-tick numbers ride every gate run.
 	print("PROFILE day_tick_avg_ms %d" % int(round(avg)))
 	print("PROFILE day_tick_worst_ms %d" % int(round(worst_ms)))
 	_check(n >= 250, "the probe runs at the filled cap (%d fleets)" % n)
-	_check(avg <= PERF_GATE_MS,
-		"the day tick averages ≤ %.0f ms at cap (%.1f ms over %d ticks)"
-		% [PERF_GATE_MS, avg, PERF_TICKS])
+	_check(median <= PERF_GATE_MS,
+		"the day tick median ≤ %.0f ms at cap (%.1f ms over %d ticks)"
+		% [PERF_GATE_MS, median, PERF_TICKS])
 	_check(sim.last_tick_day == 80 + PERF_TICKS - 1
 		or sim.last_tick_day >= 0, "the dedupe survives the probe")
 

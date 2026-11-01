@@ -980,7 +980,7 @@ func markers() -> Array:
 		var stall := stall_state(fleet, holds)
 		if stall == "sailing":
 			stall = ""
-		out.append({
+		var entry := {
 			"id": id,
 			"role": str((fleet as Dictionary).get("role", "")),
 			"nation_id": str((fleet as Dictionary).get("nation_id", "")),
@@ -993,7 +993,11 @@ func markers() -> Array:
 			"convoy_leader": leader_id,
 			"holds": holds,
 			"stall": stall,
-		})
+		}
+		if stall == "docked":
+			# The mooring port (the berth's owner) — the docked-stall detail.
+			entry["port"] = str((fleet as Dictionary).get("dest_port_id", ""))
+		out.append(entry)
 	return out
 
 
@@ -1049,6 +1053,7 @@ func stall_reason(fleet: Dictionary) -> Dictionary:
 	}
 	if state == "docked":
 		out["until"] = int(fleet.get("dwell_until_day", 0))
+		out["port"] = str(fleet.get("dest_port_id", ""))
 	elif state == "cooldown":
 		out["until"] = int(fleet.get("cooldown_until_day", 0))
 	elif state == "camping":
