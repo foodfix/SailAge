@@ -751,9 +751,12 @@ not by owner:
 - `protected` (17): exactly the decision-25 core set. Note: the task
   brief said "16 ports"; the pinned membership list (2+4+2+2+3+4) is 17 —
   the membership, not the count, is the contract (no doc pins a total).
-- `dev` 2 majors (28) — historical rationale per port:
+- `dev` 2 majors (29) — historical rationale per port:
   - malacca — the Strait emporium; Portugal's richest Asian conquest.
   - goa — capital of the Portuguese Estado da Índia.
+  - calicut — the Malabar pepper port; the Portuguese India headquarters
+    before Goa (elevated with the gate-3 monsoon demand edges,
+    2026-11-02).
   - macau — the Macao–Nagasaki silk-for-silver entrepôt.
   - canton — the Ming export gateway (silk, porcelain, musk).
   - nagasaki — Japan's supervised foreign window (Portuguese, then Dutch
@@ -872,7 +875,7 @@ not by owner:
   eq_red_sail) never appear in any list (drop-only).
 - Shape (machine-checked): every list ≥ 2 items with ≥ 1 tier-1 (a
   dev-0/1 port always sells something); all **20** non-rare items appear
-  in ≥ 1 stock list; tier-2 concentrates at the 28 majors, the 17
+  in ≥ 1 stock list; tier-2 concentrates at the 29 majors, the 17
   protected ports and named regional hubs (valetta — the Order's
   fortress, cyprus — the Venetian armory, algiers — the corsair nest,
   cape_town/botany_bay/new_foundland — the albatross stations,

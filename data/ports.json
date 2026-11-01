@@ -2540,7 +2540,8 @@
         "rice",
         "pitch",
         "glassware",
-        "linen"
+        "linen",
+        "gold"
       ],
       "sphere": [
         "portugal",
@@ -3683,7 +3684,9 @@
         "raw_silk",
         "porcelain",
         "musk",
-        "silver"
+        "silver",
+        "spices",
+        "gold"
       ],
       "sphere": [
         "portugal",
@@ -3726,7 +3729,7 @@
       "lat": 11.25,
       "lon": 75.77,
       "band": "india_persia_arabia",
-      "dev": 1,
+      "dev": 2,
       "produces": [
         "spices",
         "rice"

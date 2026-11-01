@@ -1461,10 +1461,10 @@ true` on exactly the decision-25 core set — portugal {lisbon, oporto},
 spain {seville, cadiz, valencia, barcelona}, england {london, plymouth},
 holland {amsterdam, antwerp}, ottoman {istanbul, athens, smyrna}, italy
 {venice, genoa, naples, palermo} — 17 ports, ⊇ the 6 capitals, ≤ 4 per
-nation. Authored `dev` floors: protected `3`; the 28 sovereign
-contestable majors `2` — aden alexandria bahia basra batavia canton
-cartagena colombo danzig goa hamburg havana jiddah luanda macau malacca
-manila marseille mombasa mozambique nagasaki osaka panama recife
+nation. Authored `dev` floors: protected `3`; the 29 sovereign
+contestable majors `2` — aden alexandria bahia basra batavia calicut
+canton cartagena colombo danzig goa hamburg havana jiddah luanda macau
+malacca manila marseille mombasa mozambique nagasaki osaka panama recife
 stockholm surat vera_cruz zeelandia (historical rationale per port in
 `LICENSE-NOTES.md`); all other sovereign contestable ports `1`; all 45
 neutral ports `0`.
