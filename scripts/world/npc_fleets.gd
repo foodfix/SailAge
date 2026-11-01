@@ -1009,6 +1009,19 @@ func markers() -> Array:
 			"speed": _lane_pipe(fleet),
 			"dest": str((fleet as Dictionary).get("dest_port_id", "")),
 			"lanes": (fleet.get("route", {}) as Dictionary).get("lanes", []),
+			"dbg": "cell=(%d,%d) dwell=%d day=%d legs=%d ti=%d holds=%d carry=%.2f mark=%.1f"
+				% [
+				position_of(fleet).x, position_of(fleet).y,
+				int((fleet as Dictionary).get("dwell_until_day", 0)),
+				int(GameState.day),
+				((fleet.get("route", {}) as Dictionary).get("legs", [])
+					as Array).size(),
+				int((fleet.get("route", {}) as Dictionary).get(
+					"tile_index", -1)),
+				int(_hold_ticks.get(id, 0)),
+				float(_step_carry.get(id, 0.0)),
+				float(_fleet_mark.get(id, -1.0)),
+			],
 		}
 		if stall == "docked":
 			# The mooring port (the berth's owner) + berth consistency —
@@ -1025,16 +1038,19 @@ func markers() -> Array:
 # --- Diagnostics (unified-movement amendment, `60-*` §4.12.x) ----------------
 
 ## The one-word stall state of a fleet, evaluated in priority order:
-## `docked` (dwell not expired) → `cooldown` (pursuit cooldown) →
-## `camping` (a targetless raider within its anchor radius, off-lane —
-## the §4.11.11.1 camping pattern) → `chasing`/`pursuing` (raider with a
-## target / hunter in chase) → `blocked` (under way but held
-## `STALL_HOLD_TICKS`+ accrual budgets) → `sailing`. `holds` is the
+## `docked` (dwell not expired **and no route legs** — a fleet with legs is
+## under way even inside its spawn-dwell window) → `cooldown` (pursuit
+## cooldown) → `camping` (a targetless raider within its anchor radius,
+## off-lane — the §4.11.11.1 camping pattern) → `chasing`/`pursuing`
+## (raider with a target / hunter in chase) → `blocked` (under way but
+## held `STALL_HOLD_TICKS`+ accrual budgets) → `sailing`. `holds` is the
 ## current hold streak ([_hold_ticks]). Read-only, no RNG.
 func stall_state(fleet: Dictionary, holds: int) -> String:
 	var day := int(GameState.day)
 	var role := str(fleet.get("role", ""))
-	if int(fleet.get("dwell_until_day", 0)) > day:
+	var legs_empty := ((fleet.get("route", {}) as Dictionary).get("legs", [])
+		as Array).is_empty()
+	if int(fleet.get("dwell_until_day", 0)) > day and legs_empty:
 		return "docked"
 	if int(fleet.get("cooldown_until_day", 0)) >= day:
 		return "cooldown"

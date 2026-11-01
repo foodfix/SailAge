@@ -827,6 +827,7 @@ func _update_hover(at: Vector2) -> void:
 				parts.append(I18n.t_key("debug.info.circuit") + " "
 					+ " · ".join(lane_names))
 			line += "\n  " + " · ".join(parts)
+			line += "\n  [raw] " + str(ship.get("dbg", ""))
 			text += line + "\n"
 	else:
 		# No fleet on the tile: the nearest wreck / intel / port entry.

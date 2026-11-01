@@ -1626,6 +1626,31 @@ func _test_stall_diagnostics() -> void:
 			found = true
 	_check(found, "stalled_fleets finds the blocked fleet (%d entries)"
 		% scan.size())
+	# The all-ports berth sweep (user-reported docking probe): every port's
+	# berth must be WATER + orthogonally adjacent to its own shore tile.
+	var bad_berths: Array = []
+	var all_ports: Array = DataLoader.ports_list
+	for port in all_ports:
+		var pid := str((port as Dictionary).get("id", ""))
+		var probe_berth: Vector2i = sim._port_cell(pid)
+		var probe_shore: Vector2i = DataLoader.shore_cell(pid)
+		if probe_berth.x < 0:
+			bad_berths.append(pid + ":no-berth")
+			continue
+		if probe_shore.x < 0:
+			bad_berths.append(pid + ":no-shore")
+			continue
+		var adjacent := absi(probe_berth.x - probe_shore.x) \
+			+ absi(probe_berth.y - probe_shore.y) == 1
+		if not adjacent:
+			bad_berths.append(pid + ":berth(%d,%d)-shore(%d,%d)-not-adjacent"
+				% [probe_berth.x, probe_berth.y, probe_shore.x, probe_shore.y])
+	if bad_berths.is_empty():
+		print("  berth sweep: all %d ports pass (berth water + orthogonal shore)"
+			% all_ports.size())
+	else:
+		print("  berth sweep FAILURES (%d): %s" % [bad_berths.size(),
+			str(bad_berths)])
 	sim.remove(str(docked["id"]))
 	sim.remove(str(camper["id"]))
 	sim.remove(str(ice_fleet["id"]))
