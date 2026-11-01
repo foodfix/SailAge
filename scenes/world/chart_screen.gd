@@ -801,6 +801,13 @@ func _update_hover(at: Vector2) -> void:
 						str(ship.get("port", "")))
 					if not mooring.is_empty():
 						parts.append("@ " + I18n.t(mooring.get("name", {})))
+				elif stall == "stranded":
+					# Docked in name only: the fleet stands in open water.
+					# Show where it actually is, never a port name it is
+					# nowhere near (the false-mooring report); the [raw3]
+					# `mooring=`/`ev=` lines carry the rest.
+					var here := ship.get("cell", Vector2i.ZERO) as Vector2i
+					parts.append("@ %d,%d" % [here.x, here.y])
 			var heading := str(ship.get("heading", ""))
 			var speed := float(ship.get("speed", 0.0))
 			var dest := str(ship.get("dest", ""))
@@ -831,6 +838,9 @@ func _update_hover(at: Vector2) -> void:
 			var raw2 := str(ship.get("dbg2", ""))
 			if not raw2.is_empty():
 				line += "\n  [raw2] " + raw2
+			var raw3 := str(ship.get("dbg3", ""))
+			if not raw3.is_empty():
+				line += "\n  [raw3] " + raw3
 			text += line + "\n"
 	else:
 		# No fleet on the tile: the nearest wreck / intel / port entry.

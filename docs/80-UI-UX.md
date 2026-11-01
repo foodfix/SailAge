@@ -581,7 +581,22 @@ chart adds:
   and `leg0` (the current leg `id[a..b]R<> ti/walked_len`). A fleet that
   only moves on day jumps shows `lastd≈1.0 moved=1` once per day with
   `pend` untouched between — a per-move accrual that never runs; a
-  frozen fleet shows `pend<0`.
+  frozen fleet shows `pend<0`. A third **`[raw3]`** line (journey
+  history, amended 2026-11-01) carries `dest` (the destination port id,
+  shown even with no heading — the summary line hides it then), `mooring`
+  (the port whose **berth tile the fleet actually stands on**, `-` in
+  open water — never a destination fallback) and `ev` (the per-fleet
+  journey event ring, oldest first, capped 8: `spawn`, `dep a→b` route
+  armed, `depX a->b` no route found, `drop wedge|leg|seam:<id>` a
+  mid-route drop with its cause, `arr <port>`). A fleet stuck in a
+  drop/re-depart cycle shows a `dep→drop→dep→drop` chain here.
+- **Berth truth (`stranded`, amended 2026-11-01):** a legs-empty fleet
+  holding its dwell is `docked` **only** when it stands on a port's berth
+  tile; holding in open water is `stranded` — the summary line shows its
+  cell instead of a port name it is nowhere near, the S3 badge wears `X`,
+  and the day tick snaps it to the nearest resolvable berth (its
+  destination's, else its own nation's nearest port) before any dwell
+  expiry departs. `debug.stall.stranded` localises the state.
   The world-map S3 markers wear the same state letter as a `BAD` badge
   while the S19 row is on (§4.5.2) — `X` marks a docked fleet standing
   OFF its berth (an anomaly the day tick self-heals, `60-*` §4.11.11).

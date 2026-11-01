@@ -1103,6 +1103,23 @@ func markers() -> Array:
 			]
 		dbg2 += " cd=%d leg0=%s" % [
 			int((fleet as Dictionary).get("cooldown_until_day", 0)), leg_txt]
+		# Journey history (80-* §4.6 [raw3]): the event ring + the mooring
+		# truth (a docked-stall fleet reports its real berth owner here; a
+		# fleet off its berth shows `at=-`, which is what the fallback `@
+		# port` display in the summary line is NOT).
+		var events: Array = _fleet_events.get(id, [])
+		var mooring_here := _port_at_cell(position_of(fleet))
+		var here := position_of(fleet)
+		var dest_txt := str((fleet as Dictionary).get("dest_port_id", ""))
+		var dbg3 := "dest=%s mooring=%s cell=%d,%d ev=" % [
+			dest_txt if not dest_txt.is_empty() else "-",
+			mooring_here if not mooring_here.is_empty() else "-",
+			here.x, here.y,
+		]
+		if events.is_empty():
+			dbg3 += "-"
+		else:
+			dbg3 += " ".join(events)
 		var entry := {
 			"id": id,
 			"role": str((fleet as Dictionary).get("role", "")),
@@ -1134,6 +1151,7 @@ func markers() -> Array:
 				float(_fleet_mark.get(id, -1.0)),
 			],
 			"dbg2": dbg2,
+			"dbg3": dbg3,
 		}
 		if stall == "docked":
 			# The mooring port (the berth's owner) + berth consistency —
@@ -1143,6 +1161,12 @@ func markers() -> Array:
 			entry["port"] = mooring if not mooring.is_empty() \
 				else str((fleet as Dictionary).get("dest_port_id", ""))
 			entry["on_berth"] = not mooring.is_empty()
+			# A "docked" fleet standing OFF any berth is STRANDED, not
+			# docked — the summary line must never claim `@ <port>` for a
+			# fleet that is nowhere near it (the false-mooring report).
+			if not entry["on_berth"]:
+				entry["stall"] = "stranded"
+				entry["port"] = ""
 		out.append(entry)
 	return out
 
@@ -1163,7 +1187,13 @@ func stall_state(fleet: Dictionary, holds: int) -> String:
 	var legs_empty := ((fleet.get("route", {}) as Dictionary).get("legs", [])
 		as Array).is_empty()
 	if int(fleet.get("dwell_until_day", 0)) > day and legs_empty:
-		return "docked"
+		# Berth truth (unified-movement amendment, `60-*` §4.11.11):
+		# "docked" means standing ON a port's berth tile — a fleet holding
+		# in open water is `stranded` (the false-mooring report), and the
+		# day tick's berth-consistency heal snaps it back.
+		if not _port_at_cell(position_of(fleet)).is_empty():
+			return "docked"
+		return "stranded"
 	if int(fleet.get("cooldown_until_day", 0)) >= day:
 		return "cooldown"
 	if (role == PIRATE or role == PRIVATEER) \
@@ -1211,6 +1241,13 @@ func stall_reason(fleet: Dictionary) -> Dictionary:
 		out["port"] = mooring if not mooring.is_empty() \
 			else str(fleet.get("dest_port_id", ""))
 		out["on_berth"] = not mooring.is_empty()
+	elif state == "stranded":
+		# Dwell holding in open water: no berth, and the destination name
+		# is NOT a mooring (the false-mooring report) — the day tick's
+		# berth-consistency heal snaps it to a berth next tick.
+		out["until"] = int(fleet.get("dwell_until_day", 0))
+		out["on_berth"] = false
+		out["dest"] = str(fleet.get("dest_port_id", ""))
 	elif state == "cooldown":
 		out["until"] = int(fleet.get("cooldown_until_day", 0))
 	elif state == "camping":
@@ -1397,6 +1434,7 @@ func spawn(role: String, nation_id: String, day: int) -> Dictionary:
 		return {}
 	GameState.npc_fleets.append(fleet)
 	_index_add(fleet)
+	_note_event(str(fleet.get("id", "")), "spawn")
 	# The fresh fleet owes nothing yet: its accrual mark starts now (the
 	# first [method advance_clock] after the spawn grants exactly the
 	# elapsed fraction, never the whole day).
@@ -1883,6 +1921,25 @@ func _nearest_own_port_excluding(port_id: String, nation_id: String) -> String:
 func _capital_of(nation_id: String) -> String:
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
 	return str(nation.get("capital_port_id", ""))
+
+
+## The berth tile of the fleet's own nation's NEAREST port — the stranded
+## fleet's self-heal target when it recorded no destination (a journey was
+## dropped before any depart). `NO_CELL` when the nation owns none.
+func _nearest_own_berth(fleet: Dictionary) -> Vector2i:
+	var nation_id := str(fleet.get("nation_id", ""))
+	var cell := position_of(fleet)
+	var best := NO_CELL
+	var best_distance := 0
+	for port_id in nation_ports(nation_id):
+		var berth := _port_cell(str(port_id))
+		if berth == NO_CELL:
+			continue
+		var distance := chebyshev(cell, berth)
+		if best == NO_CELL or distance < best_distance:
+			best = berth
+			best_distance = distance
+	return best
 
 
 func _rivals_of(nation_id: String) -> Array:
@@ -2847,6 +2904,10 @@ func _lane_tiles_today(fleet: Dictionary) -> int:
 		# it fresh, which re-boards a lane and un-wedges it.
 		var route: Dictionary = fleet.get("route", {})
 		if not (route.get("legs", []) as Array).is_empty():
+			var wedged_legs: Array = route.get("legs", [])
+			_note_event(id, "drop wedge:%s ti=%d" % [
+				str((wedged_legs[0] as Dictionary).get("id", "?")),
+				int(route.get("tile_index", -1))])
 			route["legs"] = []
 		_step_carry[id] = carry
 		return 0
@@ -3024,16 +3085,19 @@ func _step_fleets(day: int) -> void:
 			# Berth consistency (unified-movement amendment, `60-*` §4.11.11
 			# berth pin): a docked fleet stands ON a port's berth tile — the
 			# mooring resolves from the tile itself (`_port_at_cell`).
-			# Docked in open water is an anomaly: snap to the recorded
-			# destination's berth in the same tick (self-heal, bounded).
-			if int(fleet.get("dwell_until_day", 0)) > day:
-				var mooring := _port_at_cell(position_of(fleet))
-				if mooring.is_empty():
-					var dest := str(fleet.get("dest_port_id", ""))
-					if not dest.is_empty():
-						var berth := _port_cell(dest)
-						if berth != NO_CELL:
-							_commit_cell(fleet, berth)
+			# Docked in open water is an anomaly (`stranded`): snap to the
+			# nearest resolvable berth — the recorded destination's, else
+			# the fleet's own nation's nearest port — in the same tick
+			# (self-heal, bounded). Only then may a dwell expiry depart.
+			var mooring := _port_at_cell(position_of(fleet))
+			if mooring.is_empty():
+				var dest := str(fleet.get("dest_port_id", ""))
+				var berth := _port_cell(dest) if not dest.is_empty() \
+					else NO_CELL
+				if berth == NO_CELL:
+					berth = _nearest_own_berth(fleet)
+				if berth != NO_CELL:
+					_commit_cell(fleet, berth)
 			if int(fleet.get("dwell_until_day", 0)) <= day:
 				if role == TREASURE:
 					# Task L: the seasonal run is over — the fleet delivered
@@ -3254,6 +3318,8 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> int:
 		var geo := _leg_geometry(legs[0])
 		if geo.is_empty():
 			# A broken leg (unknown id after a hand edit): drop the journey.
+			_note_event(str(fleet.get("id", "")),
+				"drop leg:%s" % str((legs[0] as Dictionary).get("id", "?")))
 			route["legs"] = []
 			return committed
 		var path: Array = geo["path"]
@@ -3318,6 +3384,8 @@ func _advance(fleet: Dictionary, day: int) -> void:
 	var geo := _leg_geometry(leg)
 	if geo.is_empty():
 		# A broken leg (unknown id after a hand edit): drop the journey.
+		_note_event(str(fleet.get("id", "")),
+			"drop leg:%s" % str(leg.get("id", "?")))
 		route["legs"] = []
 		return
 	var path: Array = geo["path"]
@@ -3334,6 +3402,9 @@ func _advance(fleet: Dictionary, day: int) -> void:
 		if legs.size() > 1:
 			var head_geo := _leg_geometry(legs[1])
 			if head_geo.is_empty():
+				_note_event(str(fleet.get("id", "")),
+					"drop seam:%s" % str((legs[1] as Dictionary).get(
+						"id", "?")))
 				route["legs"] = []
 				return
 			var head_path: Array = head_geo["path"]
@@ -3455,6 +3526,7 @@ func _sync_route_progress(fleet: Dictionary) -> void:
 ## transient port-traffic log (§4.11.11.4 task L pin) for the rumor rows.
 func _arrive(fleet: Dictionary, day: int) -> void:
 	var port_id := str(fleet.get("dest_port_id", ""))
+	_note_event(str(fleet.get("id", "")), "arr %s" % port_id)
 	if not port_id.is_empty():
 		var berth := _port_cell(port_id)
 		if berth.x >= 0:
@@ -3695,6 +3767,7 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 	var route := route_between(origin, dest)
 	if route.is_empty():
 		# The validator makes this unreachable; idle and retry (never stall).
+		_note_event(str(fleet.get("id", "")), "depX %s->%s" % [origin, dest])
 		fleet["route"] = {"lanes": [], "leg": 0, "tile_index": 0, "legs": []}
 		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
 		return
@@ -3703,6 +3776,7 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
 	fleet["dest_port_id"] = dest
 	fleet["dwell_until_day"] = 0
+	_note_event(str(fleet.get("id", "")), "dep %s->%s" % [origin, dest])
 	# Task L: the departure joins the transient port-traffic log (§4.11.11.4).
 	_log_port_traffic(origin, "departure", fleet, int(GameState.day))
 

@@ -1591,8 +1591,9 @@ func _test_stall_diagnostics() -> void:
 	drifter["dwell_until_day"] = 240
 	drifter["dest_port_id"] = port_id
 	var off_reason: Dictionary = sim.stall_reason(drifter)
-	_check(bool(off_reason.get("on_berth", true)) == false,
-		"an off-berth docked fleet reports on_berth=false")
+	_check(str(off_reason.get("state", "")) == "stranded"
+		and bool(off_reason.get("on_berth", true)) == false,
+		"an off-berth dwell fleet is stranded, not docked")
 	# The drifter is a tick's docked branch away from its berth heal
 	# (docking "somewhere at sea" self-heals onto the berth).
 	GameState.day = 200
@@ -1601,6 +1602,18 @@ func _test_stall_diagnostics() -> void:
 	_check(NpcFleetsLib.position_of(drifter) == berth
 		and bool(healed_reason.get("on_berth", false)),
 		"the off-berth docked fleet snaps back to its berth (self-heal)")
+	# A stranded fleet with NO destination (a dropped journey) heals to
+	# its own nation's nearest berth — never left holding in open water.
+	var lost := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
+	lost["dwell_until_day"] = 240
+	lost["dest_port_id"] = ""
+	_check(sim.stall_state(lost, 0) == "stranded",
+		"a dest-less dwell fleet in open water is stranded")
+	sim._step_fleets(int(GameState.day))
+	var healed_lost := sim._port_at_cell(NpcFleetsLib.position_of(lost))
+	_check(not healed_lost.is_empty(),
+		"the dest-less stranded fleet heals to its nearest own berth (%s)"
+		% healed_lost)
 	# BLOCKED (diagnostics): the hold streak comes from the accrual
 	# (passability blocks — e.g. in-month seasonal ice — spend the budget
 	# without progress and are counted per accrual in `_accrue_lane`);
@@ -1694,6 +1707,14 @@ func _test_stall_diagnostics() -> void:
 	_check(raw2.begins_with("now=") and raw2.contains("pend=")
 		and raw2.contains("skip=stale_mark") and raw2.contains("leg0="),
 		"markers() carries the [raw2] telemetry (%s)" % raw2)
+	# [raw3]: the journey history ring + the real mooring truth.
+	var raw3 := ""
+	for marker in sim.markers():
+		if str(marker.get("id", "")) == "tele_01":
+			raw3 = str(marker.get("dbg3", ""))
+	_check(raw3.begins_with("dest=") and raw3.contains("mooring=")
+		and raw3.contains(" ev="),
+		"markers() carries the [raw3] journey history (%s)" % raw3)
 	# The pass after the rebase is a normal per-move accrual again —
 	# the freeze-then-day-jump behavior is gone.
 	GameState.day = int(GameState.day) + 1

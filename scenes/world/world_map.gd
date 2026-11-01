@@ -1632,6 +1632,9 @@ func _sync_marker_nodes() -> void:
 					# always stands on its port's berth tile (60-* §4.11.11).
 					stall_letter = "D" if bool(marker.get("on_berth", true)) \
 						else "X"
+				"stranded":
+					# Dwell holding in OPEN WATER — always the anomaly.
+					stall_letter = "X"
 				"cooldown":
 					stall_letter = "K"
 		var stall_node: Label = square.get_node_or_null("Stall")

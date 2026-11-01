@@ -519,6 +519,14 @@ ecology members with a role, a nation, a lane route and a captain:
   wrap-aware on x — the §4.11.11.2 table's row is the whole rule: only
   `pirate` / `privateer` / `hunter`-with-bounty open battle; every other
   role sails past.
+- **Berth truth for dwell holds (amended 2026-11-01).** A legs-empty
+  fleet holding its dwell is `docked` **only while standing on a port's
+  berth tile** (`_port_at_cell` resolves it from the tile itself);
+  holding in open water is `stranded` — the false-mooring case the hover
+  reported as `@ <destination port>`. The day tick snaps a stranded
+  fleet to the nearest resolvable berth (its recorded destination's, else
+  its own nation's nearest port) **before** any dwell expiry departs, so
+  a dropped journey can never leave a fleet idling at sea indefinitely.
 - **Pursuit cooldown (carried over).** A fleet that lost a battle (player
   retreat) does not move for 1 day (`60-*` §4.10), tracked in
   `cooldown_until_day` with the Phase-2 **inclusive reading**: it is the

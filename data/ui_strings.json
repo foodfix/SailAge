@@ -2135,5 +2135,9 @@
   "port.neutral.label": {
     "zh": "中立港",
     "en": "Neutral port"
+  },
+  "debug.stall.stranded": {
+    "zh": "搁置海上",
+    "en": "Stranded at sea"
   }
 }
