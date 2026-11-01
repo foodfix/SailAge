@@ -1062,7 +1062,28 @@ entities (decision 24's rejected alternative).
 
 ## Completion record
 
-_To be filled by task J._
+_Filled by task J (master-led), 2026-11-02. Full evidence:
+`tools/demo_check_phase7.md`._
+
+| Gate | Result | Date |
+|---|---|---|
+| validator groups 1–10 | **exit 0** (40 goods / 16 ships / 24 equipment / 145 ports / 15 bands / rate-surge events) | 2026-11-02 |
+| `build_world.py` / `build_routes.py` / `build_ocean.py` rebuild byte-identity | **all three exit 0** (`--check`); route artifact rebuilt once over the merged sources by T (sha `dbab2811…`), three consecutive rebuilds byte-identical | 2026-11-02 |
+| `sim_trade.py` gates 1–10 | **10/10 PASS**, two runs byte-identical (5 281 B); worst margins: gate 2 ratio 0.419, gate 3 1.800×, gate 5 exactly 30 days, gate 6 0.718, gate 7 68 970g ≤ 80 000g, gate 9 65 tiles, gate 10 0.985 | 2026-11-02 |
+| test suites (`run_tests.py`) — count / checks | **39 suites / 7 689 checks, 0 failures, 0 zombie/hang** (Phase 6: 37 / 6 538) | 2026-11-02 |
+| `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` | 2026-11-02 |
+| day tick @ cap (ms, ≤ 75) / pursuit A* (ms, ≤ 250) | **61.8 avg / 70.0 worst @ 307 fleets** (dwell-cadence fallback applied; mult 0.75 kept) / **20.6 worst**; extreme day tick 252 ms @ 1 118 (≤ 350) | 2026-11-02 |
+| ui_strings keys zh/en parity | **570 keys, zh/en complete** (535 → 570; the +35 are C's §4.7.15 families, orchestrator-merged) | 2026-11-02 |
+| save size @ extreme (≤ 2 MB) | **1 858 515 B ≈ 1.77 MB** (density probe: 1 752 101 B); save **v7**, v6 refused, mid-month AI replay purity proven | 2026-11-02 |
+| acceptance probe | `tools/demo_probe_phase7.tscn` — **ALL PASS (73 checks)**, the sixteen J scenarios (table in `demo_check_phase7.md`) | 2026-11-02 |
+
+**Phase 7 complete.** All waves landed per the execution plan: W1 (A/B/C
+docs), W2 (G/S/P/T staged-sim, held branches, pinned merge order
+G → S → P → T), W3 (K/L/M/F + one integration-bounce round each), W4
+(N/V), W5 (this record). Master-led completions recorded in
+`demo_check_phase7.md`'s deltas section: the `port_screen` facility-list
+hotfix, the named-pirate drop grant (§4.11.13 had no owning task), the
+orchestrator ui_strings merge, and the two staged-sim rulings.
 
 | Gate | Result | Date |
 |---|---|---|

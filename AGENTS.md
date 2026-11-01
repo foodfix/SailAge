@@ -11,8 +11,11 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 3. `docs/90-ARCHITECTURE.md` — project layout, autoloads, save format
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3)
-5. Task backlogs: `docs/IMPLEMENT-Phase7.md` (current, backlog ratified),
-   then `docs/IMPLEMENT-Phase6.md` (complete) and Phase1–Phase5 for history
+5. Task backlogs: `docs/IMPLEMENT-Phase7.md` (complete — acceptance record
+   `tools/demo_check_phase7.md`), then `docs/IMPLEMENT-Phase6.md` (complete)
+   and Phase1–Phase5 for history. The Phase-8 backlog does not exist yet;
+   `docs/IMPLEMENT-Phase7.md`'s "Out of scope" section is the candidate
+   list.
 
 ## Hard rules (violations = rework)
 
