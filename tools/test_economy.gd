@@ -22,14 +22,33 @@ extends Node
 ## what it lacks); under a ×3 surge the day tick drains 60 → 45 (factor
 ## 1275, buy 38); a 120-unit dump into the drained consumer recovers to
 ## within 10% of steady state in exactly 18 days.
+##
+## **Dev-explicit fixtures (integration bounce):** the rate/capacity pins
+## install a fixture allegiance module at economy.gd's guard path pinning
+## `dev() -> 0` (the §4.2 numbers above) or `-> 2` (the ×1.5 world: capacity
+## 140+40=180, drain 7/day, surge 22/day), and pin the REAL module's answers
+## separately — lisbon/london keep their authored dev 3 (protected; 8/day,
+## the integer ×2) and quanzhou agrees at 0 (guard-vs-real, 0 both ways).
 
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+
+## The allegiance module path — the exact guard path `economy.gd` reads
+## (C's `Allegiance.dev()` symbol contract). The rate/capacity pins below are
+## **dev-explicit**: they install a fixture module at this path (the
+## `take_over_path` seam) pinning `dev() -> 0` (the pre-merge guard default)
+## or `-> 2`, and the REAL module's answers are pinned separately on lisbon
+## (protected capital, authored floor 3) and quanzhou (authored floor 0 —
+## fixture and real agree).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 
 var _failures: Array[String] = []
 var _checks := 0
+## The real module, captured before the first fixture swap so
+## [method _restore_allegiance] can re-publish it at the path.
+var _real_allegiance: Script = null
 
 
 func _ready() -> void:
@@ -87,6 +106,35 @@ func _flow_ticks(count: int) -> void:
 	for tick in count:
 		EconomyLib.day_tick()
 		EconomyLib.reset_events()
+
+
+## Installs a fixture allegiance module answering every port with a fixed
+## dev level — the take_over_path seam (`economy.gd` loads the module by
+## path, so the fixture wins over the real one until restored). Scope it
+## tightly: every section that swaps restores before returning, so the
+## trade-engine sections always see the real module.
+func _install_dev_fixture(dev_value: int) -> void:
+	if _real_allegiance == null:
+		_real_allegiance = load(ALLEGIANCE_PATH)
+	var fixture := GDScript.new()
+	fixture.source_code = (
+		"extends RefCounted\n"
+		+ "static func dev(_port_id: String) -> int:\n"
+		+ "\treturn %d\n" % dev_value
+	)
+	fixture.reload()
+	fixture.take_over_path(ALLEGIANCE_PATH)
+
+
+## Re-publishes the real allegiance module at the guard path.
+func _restore_allegiance() -> void:
+	if _real_allegiance != null:
+		_real_allegiance.take_over_path(ALLEGIANCE_PATH)
+
+
+## The dev level the flow tick will actually read right now (suite seam).
+func _loaded_allegiance() -> Script:
+	return load(ALLEGIANCE_PATH)
 
 
 ## Three synthetic ports covering the §4.2 listing rule (produces ∪ demands),
@@ -388,11 +436,49 @@ func _test_capacity_and_dev_multiplier() -> void:
 			dev_ok = false
 	_check(dev_ok, "dev_level stays in the 0–3 band at every port (guard default 0)")
 
+	# Dev-EXPLICIT capacity + drain pins: the fixture module pins dev → 2
+	# world-wide, so the +20/dev capacity and the ×1.5 rate are asserted
+	# behaviorally, not just through the pure tables above.
+	_install_dev_fixture(2)
+	_check(EconomyLib.dev_level("london") == 2,
+		"the fixture module answers dev 2 at every port (got %d)"
+		% EconomyLib.dev_level("london"))
+	_make_run("lisbon")
+	_check(EconomyLib.capacity_of("london", "dye_wood") == 180,
+		"at dev 2 the middle-tier capacity is 140 + 40 = 180 (got %d)"
+		% EconomyLib.capacity_of("london", "dye_wood"))
+	_check(EconomyLib.capacity_of("london", "wheat") == 200,
+		"at dev 2 the staple capacity is 160 + 40 = 200 (got %d)"
+		% EconomyLib.capacity_of("london", "wheat"))
+	_check(EconomyLib.capacity_of("london", "porcelain") == 160,
+		"at dev 2 the luxury capacity is 120 + 40 = 160 (got %d)"
+		% EconomyLib.capacity_of("london", "porcelain"))
+	var hit_zero_dev2 := -1
+	for tick in range(30):
+		_flow_ticks(1)
+		if EconomyLib.stock_of("london", "wine") == 0:
+			hit_zero_dev2 = tick + 1
+			break
+	_check(hit_zero_dev2 == 9,
+		"at dev 2 the staple consumer drains 60 → 0 in exactly 9 days "
+		+ "(7/day = 5 × 6/4; got %d)" % hit_zero_dev2)
+	_restore_allegiance()
+	_check(_loaded_allegiance() == _real_allegiance,
+		"the real allegiance module is restored after the fixture swap")
+
 
 # --- 6. The flow tick: steady-state gradient --------------------------------
 
 func _test_flow_tick_gradient() -> void:
 	_make_run("lisbon")
+	# The drain-rate pins are dev-EXPLICIT: a fixture allegiance module pins
+	# dev → 0 world-wide (the documented guard default), so the staple rate
+	# is exactly 5/day and every §4.2 number below is exact. The REAL
+	# module's answers are pinned right after the restore.
+	_install_dev_fixture(0)
+	_check(EconomyLib.dev_level("london") == 0,
+		"under the fixture the flow tick reads dev 0 at london (got %d)"
+		% EconomyLib.dev_level("london"))
 	# Consumers drain at the tier rate and FLOOR at 0 — a starved port
 	# cannot sell what it lacks (docs/30 §4.2).
 	var wine_stock := EconomyLib.stock_of("london", "wine")
@@ -466,6 +552,33 @@ func _test_flow_tick_gradient() -> void:
 			if stock < 0 or stock > 200:
 				in_band = false
 	_check(in_band, "every stock stays inside [0, 200]")
+
+	# --- REAL module agreement (the integration pin) ------------------------
+	# Restore the live allegiance.gd and pin its answers explicitly: the
+	# protected capital keeps her authored floor (×2 rates), the dev-0
+	# neutral agrees with the fixture world, and the ×2 rate is behavioral.
+	_restore_allegiance()
+	_check(_loaded_allegiance() == _real_allegiance,
+		"the real allegiance module is restored after the fixture swap")
+	_check(EconomyLib.dev_level("lisbon") == 3,
+		"the REAL Allegiance.dev keeps lisbon at her authored dev 3 "
+		+ "(protected; got %d)" % EconomyLib.dev_level("lisbon"))
+	_check(EconomyLib.dev_level("london") == 3,
+		"the REAL Allegiance.dev keeps london at her authored dev 3 "
+		+ "(protected; got %d)" % EconomyLib.dev_level("london"))
+	_check(EconomyLib.dev_level("quanzhou") == 0,
+		"guard-vs-real agreement: quanzhou is dev 0 under the fixture AND "
+		+ "under the real module (got %d)" % EconomyLib.dev_level("quanzhou"))
+	_make_run("lisbon")
+	var hit_zero_real := -1
+	for tick in range(30):
+		_flow_ticks(1)
+		if EconomyLib.stock_of("london", "wine") == 0:
+			hit_zero_real = tick + 1
+			break
+	_check(hit_zero_real == 8,
+		"with the REAL module the dev-3 capital drains 60 → 0 in exactly "
+		+ "8 days (8/day = 5 × 7/4, the integer ×2; got %d)" % hit_zero_real)
 
 
 # --- 7. Recovery pacing (docs/30 §4.2 / harness gate 5) ---------------------
@@ -657,6 +770,9 @@ func _test_doc_300_unit_case() -> void:
 # --- 11. Demand-event consumption surges (docs/30 §4.5) ---------------------
 
 func _test_rate_surge_events() -> void:
+	# The surge pins are dev-explicit like the drain pins (§6): fixture dev 0
+	# makes the ×3 multiplier exact (15/day); the dev-2 variant follows below.
+	_install_dev_fixture(0)
 	_make_run("lisbon")
 	# The unit effect: a surge triples the CONSUMPTION rate of its good at
 	# its port — and touches nothing else (production, other ports).
@@ -751,6 +867,22 @@ func _test_rate_surge_events() -> void:
 	_check(EconomyLib.EVENTS_PER_NATION_MAX == 1
 		and EconomyLib.EVENTS_WORLD_MAX == 4,
 		"the budget stays ≤ 1 per nation, ≤ 4 world-wide")
+
+	# The ×3 surge composes with dev (integer math): at the fixture's dev 2
+	# the surged staple consumes 15 × 6/4 = 22/day — 60 → 38 in one day.
+	_install_dev_fixture(2)
+	_make_run("lisbon")
+	EconomyLib.set_consumption_surge("london", "wine", GameState.day + 5)
+	_check(EconomyLib.cons_rate_effective("london", "wine") == 15,
+		"cons_rate_effective stays the pre-dev surged rate (15/day, got %d)"
+		% EconomyLib.cons_rate_effective("london", "wine"))
+	_flow_ticks(1)
+	_check(EconomyLib.stock_of("london", "wine") == 38,
+		"the ×3 surge at dev 2 drains 60 → 38 in one day (22/day, got %d)"
+		% EconomyLib.stock_of("london", "wine"))
+	_restore_allegiance()
+	_check(_loaded_allegiance() == _real_allegiance,
+		"the real allegiance module is restored after the fixture swap")
 
 
 # --- 12. Market direction (docs/30 §4.2) ------------------------------------
