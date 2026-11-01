@@ -3101,12 +3101,16 @@ func _step_fleets(day: int) -> void:
 			# Berth consistency (unified-movement amendment, `60-*` §4.11.11
 			# berth pin): a docked fleet stands ON a port's berth tile — the
 			# mooring resolves from the tile itself (`_port_at_cell`).
-			# Docked in open water is an anomaly (`stranded`): snap to the
-			# nearest resolvable berth — the recorded destination's, else
-			# the fleet's own nation's nearest port — in the same tick
-			# (self-heal, bounded). Only then may a dwell expiry depart.
+			# A dwell hold in open water is `stranded`, but the heal waits
+			# until the hold actually EXPIRES: mid-dwell the fleet is
+			# genuinely idle (a fixture's bait, or a just-dropped journey
+			# about to re-depart), and teleporting it mid-hold would move
+			# prey out from under an engagement. On expiry the heal lands
+			# it on a berth first, then the depart uses that berth as the
+			# origin (never a port it is nowhere near).
 			var mooring := _port_at_cell(position_of(fleet))
-			if mooring.is_empty():
+			var dwell_expired := int(fleet.get("dwell_until_day", 0)) <= day
+			if mooring.is_empty() and dwell_expired:
 				var dest := str(fleet.get("dest_port_id", ""))
 				var berth := _port_cell(dest) if not dest.is_empty() \
 					else NO_CELL
@@ -3114,7 +3118,7 @@ func _step_fleets(day: int) -> void:
 					berth = _nearest_own_berth(fleet)
 				if berth != NO_CELL:
 					_commit_cell(fleet, berth)
-			if int(fleet.get("dwell_until_day", 0)) <= day:
+			if dwell_expired:
 				if role == TREASURE:
 					# Task L: the seasonal run is over — the fleet delivered
 					# and despawns (1/nation/season, §4.11.11.4).

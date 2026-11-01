@@ -523,10 +523,14 @@ ecology members with a role, a nation, a lane route and a captain:
   fleet holding its dwell is `docked` **only while standing on a port's
   berth tile** (`_port_at_cell` resolves it from the tile itself);
   holding in open water is `stranded` — the false-mooring case the hover
-  reported as `@ <destination port>`. The day tick snaps a stranded
-  fleet to the nearest resolvable berth (its recorded destination's, else
-  its own nation's nearest port) **before** any dwell expiry departs, so
-  a dropped journey can never leave a fleet idling at sea indefinitely.
+  reported as `@ <destination port>`. The heal fires **on dwell expiry,
+  not mid-hold**: while the hold runs the fleet is genuinely idle (a
+  camp's bait, or a just-dropped journey about to re-depart) and moving
+  it mid-hold would teleport prey out from under an engagement. On
+  expiry the tick snaps it to the nearest resolvable berth (its recorded
+  destination's, else its own nation's nearest port) **before** the
+  departure, so the depart's origin is always a port it actually stands
+  on and a dropped journey can never leave a fleet idling at sea.
 - **Seam junctions are boarding tiles (amended 2026-11-01).** A spoke's
   terminus is frequently the trunk's first tile (a junction, not a hop) —
   `legs[0]` ends **on** the tile where `legs[1]` starts. The leg-end

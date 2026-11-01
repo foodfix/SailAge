@@ -1593,22 +1593,33 @@ func _test_stall_diagnostics() -> void:
 	var off_reason: Dictionary = sim.stall_reason(drifter)
 	_check(str(off_reason.get("state", "")) == "stranded"
 		and bool(off_reason.get("on_berth", true)) == false,
-		"an off-berth dwell fleet is stranded, not docked")
-	# The drifter is a tick's docked branch away from its berth heal
-	# (docking "somewhere at sea" self-heals onto the berth).
-	GameState.day = 200
+		"an off-berth dwell fleet is stranded, not docked (day %d dwell %d)"
+		% [int(GameState.day), int(drifter["dwell_until_day"])])
+	# The heal fires when the dwell hold EXPIRES (mid-hold the fleet is a
+	# legitimate idle bait — `60-*` §4.11.11 berth truth): push the clock
+	# past the hold, then the tick lands it on its berth.
+	GameState.day = 241
+	drifter["dwell_until_day"] = 240
 	sim._step_fleets(int(GameState.day))
-	var healed_reason: Dictionary = sim.stall_reason(drifter)
-	_check(NpcFleetsLib.position_of(drifter) == berth
-		and bool(healed_reason.get("on_berth", false)),
-		"the off-berth docked fleet snaps back to its berth (self-heal)")
+	# On expiry the tick heals the berth FIRST, then departs on a real
+	# route: either it now stands on the berth (a role that idles) or it
+	# has already set sail — what must never happen is a legs-empty fleet
+	# lingering in open water.
+	var drifter_cell := NpcFleetsLib.position_of(drifter)
+	var drifter_legs := (drifter["route"]["legs"] as Array).size()
+	_check(drifter_cell == berth or drifter_legs > 0,
+		"the stranded fleet heals to its berth or sets sail (cell %s berth %s legs %d)"
+		% [str(drifter_cell), str(berth), drifter_legs])
 	# A stranded fleet with NO destination (a dropped journey) heals to
 	# its own nation's nearest berth — never left holding in open water.
+	GameState.day = 200
 	var lost := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
 	lost["dwell_until_day"] = 240
 	lost["dest_port_id"] = ""
 	_check(sim.stall_state(lost, 0) == "stranded",
-		"a dest-less dwell fleet in open water is stranded")
+		"a dest-less dwell fleet in open water is stranded (day %d)"
+		% int(GameState.day))
+	GameState.day = 241
 	sim._step_fleets(int(GameState.day))
 	var healed_lost := sim._port_at_cell(NpcFleetsLib.position_of(lost))
 	_check(not healed_lost.is_empty(),
