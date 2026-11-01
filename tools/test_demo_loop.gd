@@ -10,6 +10,7 @@ extends Node
 ##      (exit 0 = all steps pass; the check count must be 100% of TOTAL)
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingLib := preload("res://scripts/world/sailing_sim.gd")
 const TradeLib := preload("res://scripts/port/trade_engine.gd")
@@ -139,6 +140,10 @@ func _step2_nationality() -> void:
 func _step3_market() -> void:
 	GameState.new_game("portugal", false)
 	GameState.current_port = "lisbon"
+	# Stock-explicit §5 seed (task L integration bounce): the flow economy
+	# starts Lisbon's produced wine at its dev-3 capacity (factor 0.5); the
+	# §5 worked example is computed at the produced rest 160 (factor 0.7).
+	EconomyLib.set_stock("lisbon", "wine", 160)
 	var gold0: int = GameState.gold
 	var price: int = TradeLib.buy_price("lisbon", "wine")
 	_check(price == 21, "step 3: Lisbon wine buy price is 21g (§5 worked example)")
@@ -278,6 +283,10 @@ func _check_cell_west() -> void:
 func _step6_second_port() -> void:
 	GameState.new_game("portugal", false)
 	GameState.current_port = null
+	# Stock-explicit §5 seed (task L integration bounce, docs/30 §5): Lisbon
+	# produced rest 160, London consumer rest 40.
+	EconomyLib.set_stock("lisbon", "wine", 160)
+	EconomyLib.set_stock("london", "wine", 40)
 	# Known-port bookkeeping and entry.
 	_check(GameState.known_ports.has("london"), "step 6: London is known at new game")
 	GameState.set_world_tile(DataLoader.map.port_cell("london"))
