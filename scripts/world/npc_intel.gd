@@ -42,6 +42,9 @@ const POSTER_RADIUS := 40
 const REVEAL_COST := 20
 ## Tavern rumor rows (§4.7.8): live fleets within Chebyshev 40.
 const RUMOR_RADIUS := 40
+## Task L's allegiance module (docs/80-* §4.9 contract) — guarded, never
+## hard-referenced (Phase 7 investment telegraphs, §4.7.14).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 
 # --- The seeded rolls (docs/80-* §4.7.8) -------------------------------------
@@ -214,11 +217,13 @@ static func reveal_position(fleet_id: String) -> Dictionary:
 # --- Rumor row sources (docs/80-* §4.7.8, docs/30-* §4.5) --------------------
 
 ## Tavern rumor rows at `port_id`, in display order: demand-event telegraphs
-## first (information is profit), then the port-traffic log's arrivals and
-## departures within 3 days (`GameState.npc_port_log`, §4.11.11.4 task L
-## pin), then live fleets within [constant RUMOR_RADIUS]. Rows:
-## `{kind: "event"|"departed"|"arrived"|"fleet", …}` — the screen formats
-## each kind with its ui_strings key.
+## first (information is profit), then the allegiance investment telegraphs
+## (Phase 7, docs/80-* §4.7.14 — guarded, default none), then the
+## port-traffic log's arrivals and departures within 3 days
+## (`GameState.npc_port_log`, §4.11.11.4 task L pin), then live fleets within
+## [constant RUMOR_RADIUS]. Rows:
+## `{kind: "event"|"investment"|"departed"|"arrived"|"fleet", …}` — the screen
+## formats each kind with its ui_strings key.
 static func rumor_rows(port_id: String) -> Array:
 	var out: Array = []
 	for entry in EconomyLib.event_telegraphs(port_id):
@@ -231,6 +236,8 @@ static func rumor_rows(port_id: String) -> Array:
 			"event_name": I18n.t((entry.get("template") as Dictionary)
 				.get("name", {})),
 		})
+	for row in investment_rows(port_id):
+		out.append(row)
 	var cell := DataLoader.port_cell(port_id)
 	# Departures/arrivals at this port within 3 days (§4.7.8): the ecology's
 	# transient traffic log, newest last.
@@ -280,6 +287,102 @@ static func rumor_rows(port_id: String) -> Array:
 			"nation_id": str(fleet.get("nation_id", "")),
 			"nearest_port": near,
 			"nearest_port_name": _port_name(near)})
+	return out
+
+
+# --- Investment telegraphs (Phase 7, docs/80-* §4.7.14) ----------------------
+
+## Headless-suite seam: a stand-in for L's allegiance module. The runtime
+## never sets it; when null the real module is used (autoload node first,
+## then the script's statics), else the §4.9 safe default — no rows.
+static var allegiance_override: Variant = null
+
+
+## The object answering `method` — override, live autoload node, script
+## statics (`ResourceLoader.load` + `has_method`, the §4.12.3 pattern), or
+## null (→ caller applies the pinned default).
+static func _allegiance_module(method: String) -> Variant:
+	if allegiance_override != null \
+			and (allegiance_override as Object).has_method(method):
+		return allegiance_override
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var node := (tree as SceneTree).root.get_node_or_null("Allegiance")
+		if node != null and node.has_method(method):
+			return node
+	if ResourceLoader.exists(ALLEGIANCE_PATH):
+		var script: Variant = ResourceLoader.load(ALLEGIANCE_PATH)
+		if script is Script and (script as Script).has_method(method):
+			return script
+	return null
+
+
+## The allegiance module's month-investment query, guarded to `[]` when the
+## module is absent (docs/80-* §4.7.14: default no rows).
+static func _last_month_investments() -> Array:
+	var module: Variant = _allegiance_module("last_month_investments")
+	if module == null:
+		return []
+	var value: Variant = module.call("last_month_investments")
+	return value if value is Array else []
+
+
+## Reads a string field under its candidate key names (L's item shape is
+## `{port, nation, amount, days-left}`; the exact keys are not part of the
+## §4.9 contract, so every reasonable spelling is tried, default "").
+static func _item_str(item: Dictionary, keys: Array) -> String:
+	for key in keys:
+		var value: Variant = item.get(str(key), null)
+		if value is String and not (value as String).is_empty():
+			return value
+	return ""
+
+
+## [method _item_str] for ints, `fallback` when no candidate key answers.
+static func _item_int(item: Dictionary, keys: Array, fallback: int) -> int:
+	for key in keys:
+		var value: Variant = item.get(str(key), null)
+		if value is int or value is float:
+			return int(value)
+	return fallback
+
+
+## The investment telegraph rows visible in `here_port_id`'s tavern
+## (docs/80-* §4.7.14): one row per investment the allegiance module reports
+## for this month whose invested port lies in the **same band** (decision 24 —
+## 30-day visibility, scoped by `ports.json` `band`), still inside its window
+## (`days_left > 0`; a row whose module reported no day count stays visible —
+## the window bookkeeping is the module's). Rows:
+## `{kind: "investment", port_id, port_name, nation_id, nation_name, amount,
+## days_left}`.
+static func investment_rows(here_port_id: String) -> Array:
+	var out: Array = []
+	if here_port_id.is_empty():
+		return out
+	var here_band := str(DataLoader.get_port(here_port_id).get("band", ""))
+	for item in _last_month_investments():
+		if not (item is Dictionary):
+			continue
+		var port_id := _item_str(item, ["port_id", "port"])
+		if port_id.is_empty():
+			continue
+		if str(DataLoader.get_port(port_id).get("band", "")) != here_band:
+			continue
+		var days_left := _item_int(item,
+			["days_left", "days", "days_remaining"], -1)
+		if days_left != -1 and days_left <= 0:
+			continue  # the 30-day window has closed
+		var nation_id := _item_str(item, ["nation_id", "nation"])
+		out.append({
+			"kind": "investment",
+			"port_id": port_id,
+			"port_name": _port_name(port_id),
+			"nation_id": nation_id,
+			"nation_name": "-" if nation_id.is_empty() else I18n.t(
+				DataLoader.get_nation(nation_id).get("name", {})),
+			"amount": _item_int(item, ["amount", "gold"], 0),
+			"days_left": days_left,
+		})
 	return out
 
 
