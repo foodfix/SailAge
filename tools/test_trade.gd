@@ -1,17 +1,23 @@
 extends Node
-## T12 acceptance tests (docs/IMPLEMENT-Phase1.md T12; docs/30-* §4.2–§4.5,
-## §4.7, §5, §6; docs/40-* §4.2; docs/50-* §4.3, §4.6; docs/20-* §4.10).
+## T12 acceptance tests, re-baselined for Phase 7 (task L — correction 7):
+## the listing rule, the §4.10 unified tariff on both sides, the §4.9
+## investment ledger/monthly cap/diplomatic gate, permits and treasury credit
+## (docs/30-* §4.2–§4.4, §4.9, §4.10, §5; docs/40-* §4.2; docs/50-* §4.3,
+## §4.6; docs/20-* §4.10; docs/80-* §4.9 contracts).
 ##
 ##   godot --headless res://tools/test_trade.tscn
+##
+## The market-screen cases moved to task M's `tools/test_market_screen.*`
+## (the W3 pins keep suite files single-owner); this suite stays engine-level.
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const MarketScene := preload("res://scenes/port/market_screen.tscn")
-const PaletteLib := preload("res://scripts/palette.gd")
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 
@@ -23,26 +29,30 @@ func _ready() -> void:
 	_test_worked_examples()
 	_test_factor_and_discount()
 	_test_investment_cap()
+	_test_month_cap_and_gates()
 	_test_band_clamp()
 	_test_quantity_limits()
 	_test_buy_clamps()
 	_test_tranche_repricing()
 	_test_market_changed_on_trades()
-	_test_goods_are_data_driven()
+	_test_listing_rule()
+	_test_tariff_matrix()
+	_test_tariff_on_trades()
+	_test_permits_and_treasury_credit()
 	_test_supplies_ignore_factors()
 	_test_sell_profit_xp_and_reputation()
 	_test_profit_survives_save_roundtrip()
 	_test_capacity_flagship_first()
-	_test_market_screen()
-	_test_market_screen_data_driven()
-	_test_market_screen_locale_and_back()
 	_report()
 
 
 # --- Fixtures --------------------------------------------------------------
 
 ## A livable run docked at `port_id`: one empty caravel (capacity 120), plain
-## stats, no investments, no prior profit bookkeeping.
+## stats, no investments, no prior profit bookkeeping. Every port-good sits at
+## its derived rest (produced 160 / demanded 40), set explicitly per pair so
+## the §5 pins hold whatever initial-stock scheme the flow economy ships; the
+## allegiance state is freshly seeded (treasuries 5,000g, no permits).
 func _make_run(port_id: String, gold: int = 10000, ship_ids: Array = ["caravel"]) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
@@ -66,12 +76,24 @@ func _make_run(port_id: String, gold: int = 10000, ship_ids: Array = ["caravel"]
 	GameState.current_port = port_id
 	GameState.port_investments = {}
 	GameState.known_ports = [port_id]
-	# Phase 5: the stock table at derived rest, so every price below starts
-	# from the §4.2 resting factor (700/1300/1000).
+	# Title/bounty/fame isolation: an earlier fixture's england knighthood
+	# must never leak into this run's §4.2 sell-side title bonus.
+	GameState.titles = {}
+	GameState.bounties = {}
+	GameState.fame = 0
+	# Phase 5 resting stock for every listed pair, explicit so the pins below
+	# are exact and independent of the flow economy's initial stocks.
 	GameState.market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list
 	)
+	for port in DataLoader.ports_list:
+		var pid := str((port as Dictionary).get("id", ""))
+		for good in DataLoader.goods_list:
+			var gid := str((good as Dictionary).get("id", ""))
+			EconomyLib.set_stock(pid, gid,
+				EconomyLib.resting_stock_of(port as Dictionary, gid))
 	EconomyLib.reset_overrides()
+	AllegianceLib.seed_new_game()
 	var port: Dictionary = DataLoader.get_port(port_id)
 	GameState.world = {
 		"position": port.get("position", {"x": 0, "y": 0}).duplicate(),
@@ -89,7 +111,8 @@ func _dock(to_port: String, gold: int = -1) -> void:
 
 
 func _test_worked_examples() -> void:
-	# docs/30 §5: Lisbon produces wine → buy 21 / sell 16.
+	# docs/30 §5: Lisbon produces wine → buy 21 / sell 16 (price plumbing —
+	# the §4.10 tariff composes after it as a separate line).
 	_make_run("lisbon")
 	_check(is_equal_approx(TradeEngineLib.factor("lisbon", "wine"), 0.7),
 		"§5 Lisbon wine factor == 0.7 (got %.3f)"
@@ -114,51 +137,48 @@ func _test_worked_examples() -> void:
 	_check(TradeEngineLib.sell_price("london", "wine") == 31,
 		"§5 London wine sell_price == 31 (got %d)"
 		% TradeEngineLib.sell_price("london", "wine"))
-	# §5 note: the route nets 10g/unit before costs.
+	# §5 note: the route nets 10g/unit at the pre-tax prices.
 	_check(TradeEngineLib.sell_price("london", "wine")
 			- TradeEngineLib.buy_price("lisbon", "wine") == 10,
-		"§5 Lisbon buy 21 → London sell 31 nets 10g/unit")
+		"§5 Lisbon buy 21 → London sell 31 nets 10g/unit before tax")
 
-	# docs/30 §5: a neutral port at rest — wine at Valencia is 30 / 24.
-	_check(is_equal_approx(TradeEngineLib.factor("valencia", "wine"), 1.0),
-		"§5 Valencia wine factor == 1.0 (got %.3f)"
+	# A demanded good trades at 1.3 (the Phase-5 neutral case is retired by
+	# the listing rule — every listed good is produced or demanded): Valencia
+	# demands wine, so it reads like London (protected spain, foreign trader:
+	# the 20% tariff is the tax line's business, not the price's).
+	_check(is_equal_approx(TradeEngineLib.factor("valencia", "wine"), 1.3),
+		"Valencia demands wine → factor 1.3 (got %.3f)"
 		% TradeEngineLib.factor("valencia", "wine"))
-	_check(TradeEngineLib.buy_price("valencia", "wine") == 30,
-		"§5 Valencia wine buy == 30 (got %d)"
+	_check(TradeEngineLib.buy_price("valencia", "wine") == 39,
+		"Valencia wine buy == 39 (got %d)"
 		% TradeEngineLib.buy_price("valencia", "wine"))
-	_check(TradeEngineLib.sell_price("valencia", "wine") == 24,
-		"§5 Valencia wine sell == 24 (got %d)"
-		% TradeEngineLib.sell_price("valencia", "wine"))
-
-	# A neutral good trades at base ± the 0.8 margin: wheat 8 → 8 / 6.
-	_check(TradeEngineLib.factor("lisbon", "wheat") == 1.0,
-		"a good neither produced nor demanded has factor 1.0")
-	_check(TradeEngineLib.buy_price("lisbon", "wheat") == 8,
-		"Lisbon wheat buy == base 8 (got %d)"
+	# A demanded staple at Lisbon: wheat 8g base → 10 / 8.
+	_check(TradeEngineLib.buy_price("lisbon", "wheat") == 10,
+		"Lisbon wheat (demanded, 1.3) buy == 10 (got %d)"
 		% TradeEngineLib.buy_price("lisbon", "wheat"))
-	_check(TradeEngineLib.sell_price("lisbon", "wheat") == 6,
-		"Lisbon wheat sell == floor(8 × 0.8) = 6 (got %d)"
+	_check(TradeEngineLib.sell_price("lisbon", "wheat") == 8,
+		"Lisbon wheat sell == floor(8 × 1.3 × 0.8) = 8 (got %d)"
 		% TradeEngineLib.sell_price("lisbon", "wheat"))
 
 
 func _test_factor_and_discount() -> void:
 	_make_run("lisbon")
-	# Every shipped port/good pair: produces 0.7, demands 1.3, else 1.0.
-	var mismatch := 0
-	for port in DataLoader.ports_list:
-		var port_id := str(port.get("id", ""))
-		for good in DataLoader.goods_list:
-			var good_id := str(good.get("id", ""))
-			var expected := 1.0
-			if good_id in port.get("produces", []):
-				expected = 0.7
-			elif good_id in port.get("demands", []):
-				expected = 1.3
-			if not is_equal_approx(TradeEngineLib.factor(port_id, good_id), expected):
-				mismatch += 1
-	_check(mismatch == 0,
-		"factor matches produces/demands/else at all %d ports × %d goods (mismatches: %d)"
-		% [DataLoader.ports_list.size(), DataLoader.goods_list.size(), mismatch])
+	# The factor is a pure function of the stock (docs/30 §4.2): 160 → 0.7,
+	# 40 → 1.3, 100 → 1.0 — checked at explicit stocks so the pin is
+	# independent of whichever initial stocks the flow economy ships.
+	EconomyLib.set_stock("lisbon", "wine", 160)
+	_check(is_equal_approx(TradeEngineLib.factor("lisbon", "wine"), 0.7),
+		"stock 160 → factor 0.7")
+	EconomyLib.set_stock("lisbon", "wine", 40)
+	_check(is_equal_approx(TradeEngineLib.factor("lisbon", "wine"), 1.3),
+		"stock 40 → factor 1.3")
+	EconomyLib.set_stock("lisbon", "wine", 100)
+	_check(is_equal_approx(TradeEngineLib.factor("lisbon", "wine"), 1.0),
+		"stock 100 → factor 1.0")
+	EconomyLib.set_stock("lisbon", "wine", 0)
+	_check(is_equal_approx(TradeEngineLib.factor("lisbon", "wine"), 1.5),
+		"stock 0 → factor 1.5 (drained extreme)")
+	EconomyLib.set_stock("lisbon", "wine", 160)
 
 	# Investment discount: 1% per 500g, 10% cap (docs/30 §4.3).
 	for chunks in range(0, 10):
@@ -188,7 +208,8 @@ func _test_factor_and_discount() -> void:
 
 
 func _test_investment_cap() -> void:
-	# 10 × 500g = 5,000g → exactly −10%; the 11th click is impossible.
+	# Protected port (lisbon): the discount is the whole effect, so the 5,000g
+	# lifetime cap still ends investment — 10 × 500g → exactly −10%.
 	_make_run("lisbon", 10000)
 	for click in range(1, 11):
 		var paid_before := GameState.gold
@@ -201,6 +222,10 @@ func _test_investment_cap() -> void:
 			% [click, click * 500, TradeEngineLib.invested("lisbon")])
 		_check(GameState.gold == paid_before - 500,
 			"click %d: 500g paid (got %d)" % [click, GameState.gold])
+		_check(AllegianceLib.month_invested_gold("lisbon") == 0,
+			"click %d: protected ports book no monthly allowance" % click)
+		_check(AllegianceLib.ledger_total("lisbon") == 0,
+			"click %d: protected ports write no ledger" % click)
 
 	_check(is_equal_approx(TradeEngineLib.investment_discount("lisbon"), 0.90),
 		"10 chunks → discount exactly 0.90 (got %.4f)"
@@ -220,7 +245,7 @@ func _test_investment_cap() -> void:
 
 	var gold_at_cap := GameState.gold
 	_check(not TradeEngineLib.can_invest("lisbon"),
-		"11th click: can_invest is false")
+		"11th click: can_invest is false (protected cap)")
 	_check(not TradeEngineLib.invest("lisbon"),
 		"11th click: invest() returns false")
 	_check(GameState.gold == gold_at_cap,
@@ -252,6 +277,90 @@ func _test_investment_cap() -> void:
 	_check(TradeEngineLib.buy_price("london", "wine") == 39,
 		"London wine buy is unaffected by Lisbon's investment (got %d)"
 		% TradeEngineLib.buy_price("london", "wine"))
+
+
+## §4.9 flip-campaign rules (decision 26): the ≤ 2,000g monthly allowance at a
+## contestable port (reset at the month tick) and the rep/bounty diplomatic
+## gate, with the ledger effect asserted alongside.
+func _test_month_cap_and_gates() -> void:
+	# madeira: own contestable sovereign — the allowance is 4 × 500g/month and
+	# every chunk also feeds the ledger.
+	_make_run("madeira", 100000)
+	for click in range(4):
+		_check(TradeEngineLib.can_invest("madeira"),
+			"chunk %d investable (allowance %d/2,000)" % [click + 1,
+			AllegianceLib.month_invested_gold("madeira")])
+		_check(AllegianceLib.invest_block_reason("madeira") == "",
+			"chunk %d: no block reason" % (click + 1))
+		_check(TradeEngineLib.invest("madeira"), "chunk %d invests" % (click + 1))
+	_check(AllegianceLib.month_invested_gold("madeira") == 2000,
+		"the monthly counter books 2,000g (got %d)"
+		% AllegianceLib.month_invested_gold("madeira"))
+	_check(AllegianceLib.ledger_of("madeira", "portugal") == 8000,
+		"the ledger books the same chunks: 6,000 seed + 2,000 (got %d)"
+		% AllegianceLib.ledger_of("madeira", "portugal"))
+	_check(TradeEngineLib.invested("madeira") == 2000,
+		"the discount block books the same 2,000g (got %d)"
+		% TradeEngineLib.invested("madeira"))
+	_check(not TradeEngineLib.can_invest("madeira"),
+		"the 5th chunk of the month is refused")
+	_check(AllegianceLib.invest_block_reason("madeira")
+		== "market.invest_gate.exhausted",
+		"the exhausted state names market.invest_gate.exhausted (got %s)"
+		% AllegianceLib.invest_block_reason("madeira"))
+	_check(GameState.gold == 100000 - 2000, "exactly the 4 chunks were paid")
+	# Contestable ports invest past the 5,000g discount cap — the ledger is
+	# the campaign's currency; only the discount readout saturates.
+	AllegianceLib.month_tick()
+	_check(AllegianceLib.month_invested_gold("madeira") == 0,
+		"the month tick resets the allowance")
+	for click in range(4):
+		_check(TradeEngineLib.invest("madeira"),
+			"month 2 chunk %d invests (lifetime %dg)" % [click + 1,
+			TradeEngineLib.invested("madeira")])
+	_check(TradeEngineLib.invested("madeira") == 4000,
+		"contestable investing continues past no lifetime cap (got %d)"
+		% TradeEngineLib.invested("madeira"))
+	_check(TradeEngineLib.investment_percent("madeira") == 8,
+		"the discount readout is still chunks, capped at 10 (got %d)"
+		% TradeEngineLib.investment_percent("madeira"))
+
+	# Diplomatic gate at a foreign aligned port: rep ≥ 0 and no bounty.
+	_make_run("lisbon", 100000)
+	_check(AllegianceLib.invest_block_reason("london") == "",
+		"rep 0 with england: london invests")
+	_check(TradeEngineLib.invest("london"), "london accepts a chunk")
+	CharacterLib.add_reputation("england", -1)
+	_check(AllegianceLib.invest_block_reason("london")
+		== "market.invest_gate.blocked",
+		"rep −1 blocks with market.invest_gate.blocked (got %s)"
+		% AllegianceLib.invest_block_reason("london"))
+	_check(not TradeEngineLib.can_invest("london"), "and can_invest is false")
+	_check(not TradeEngineLib.invest("london"), "and invest() refuses")
+	CharacterLib.add_reputation("england", 1)
+	GameState.bounties["england"] = {"amount": 5000, "day": 1}
+	_check(AllegianceLib.invest_block_reason("london")
+		== "market.invest_gate.blocked",
+		"a standing bounty blocks even at rep 0 (got %s)"
+		% AllegianceLib.invest_block_reason("london"))
+	GameState.bounties = {}
+	_check(AllegianceLib.invest_block_reason("london") == "",
+		"clearing the bounty reopens london")
+	# An unaligned contestable port has no gate at all — holland's opinion is
+	# irrelevant while the port has no allegiance (no investment made there).
+	CharacterLib.add_reputation("holland", -100)
+	GameState.bounties["holland"] = {"amount": 5000, "day": 1}
+	_check(AllegianceLib.effective_alignment("quanzhou") == "",
+		"fixture: quanzhou stays unaligned")
+	_check(AllegianceLib.invest_block_reason("quanzhou") == "",
+		"an unaligned port: no diplomacy gate whatever holland thinks")
+	_check(TradeEngineLib.invest("quanzhou"),
+		"the unaligned port accepts the chunk (into the ledger)")
+	_check(AllegianceLib.ledger_of("quanzhou", "portugal") == 500,
+		"the unaligned chunk books the ledger (got %d)"
+		% AllegianceLib.ledger_of("quanzhou", "portugal"))
+	CharacterLib.add_reputation("holland", 0)
+	GameState.bounties = {}
 
 
 func _test_band_clamp() -> void:
@@ -304,11 +413,12 @@ func _test_band_clamp() -> void:
 func _test_quantity_limits() -> void:
 	_make_run("lisbon", 1000)
 	# buy_max = the largest quantity whose FULL tranche walk the purse pays
-	# and fleet_free holds (docs/30 §4.4). From rest the walk is
-	# 21/22/24/25/…: four tranches cost 920, the fifth (27g) only partly fits
-	# the remaining 80g → 80 / 27 = 2 units.
-	_check(TradeEngineLib.buy_max("lisbon", "wine") == 42,
-		"1,000g walks 4 tranches (920g) + 2 units at 27g = 42 (got %d)"
+	# (tax included, §4.10) and fleet_free can hold (docs/30 §4.4). Lisbon is
+	# portuguese: the aligned 5% rides on the running total. Four tranches
+	# cost 920 + 46 tax = 966; the fifth (27g/unit) fits exactly 1 more unit
+	# (27 + 2 = 29 ≤ 34) → 41.
+	_check(TradeEngineLib.buy_max("lisbon", "wine") == 41,
+		"1,000g walks 4 tranches (966g with 5%% tax) + 1 unit at 27g = 41 (got %d)"
 		% TradeEngineLib.buy_max("lisbon", "wine"))
 	_check(TradeEngineLib.buy_max("lisbon", "wine") <= FleetLib.fleet_free(),
 		"buy_max never exceeds the pooled free capacity")
@@ -318,8 +428,8 @@ func _test_quantity_limits() -> void:
 	FleetLib.add_goods("wine", 30)
 	_check(TradeEngineLib.sell_max("wine") == 30,
 		"sell_max == held 30 (got %d)" % TradeEngineLib.sell_max("wine"))
-	_check(TradeEngineLib.buy_max("lisbon", "wine") == 42,
-		"the purse still binds before capacity does (90 free > 42)")
+	_check(TradeEngineLib.buy_max("lisbon", "wine") == 41,
+		"the purse still binds before capacity does (90 free > 41)")
 	_check(FleetLib.fleet_free() == 90,
 		"caravel 120 − 30 wine = 90 free (got %d)" % FleetLib.fleet_free())
 
@@ -337,16 +447,32 @@ func _test_quantity_limits() -> void:
 		"a full hold has buy_max 0 (got %d)"
 		% TradeEngineLib.buy_max("lisbon", "wine"))
 
+	# Under a home charter the 5% vanishes: the pre-Phase-7 42-unit walk is
+	# back (4 tranches 920g + 2 units at 27g ≤ 1,000g).
+	_make_run("lisbon", 1000)
+	AllegianceLib.set_permit("home", "portugal")
+	_check(TradeEngineLib.tax_mille("lisbon") == 0, "the charter zeroes lisbon")
+	_check(TradeEngineLib.buy_max("lisbon", "wine") == 42,
+		"exempt: 1,000g walks the untaxed 4 tranches + 2 units = 42 (got %d)"
+		% TradeEngineLib.buy_max("lisbon", "wine"))
+
 
 func _test_buy_clamps() -> void:
-	# Gold-limited buy: exactly affordable works, one more unit does not.
-	_make_run("lisbon", 210)
+	# Gold-limited buy: exactly affordable works, one more unit does not (the
+	# 5% tax rides on the total). 220g buys the full first tranche; 219g buys 9.
+	_make_run("lisbon", 220)
 	_check(TradeEngineLib.buy_max("lisbon", "wine") == 10,
-		"210g buys 10 wine (got %d)" % TradeEngineLib.buy_max("lisbon", "wine"))
+		"220g buys 10 wine (210 + 10 tax) (got %d)"
+		% TradeEngineLib.buy_max("lisbon", "wine"))
 	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine succeeds")
 	_check(GameState.gold == 0, "gold exactly spent to 0 (got %d)" % GameState.gold)
 	_check(FleetLib.held("wine") == 10, "10 wine aboard (got %d)"
 		% FleetLib.held("wine"))
+
+	_make_run("lisbon", 219)
+	_check(TradeEngineLib.buy_max("lisbon", "wine") == 9,
+		"219g buys 9 wine (the 10th would cost 220) (got %d)"
+		% TradeEngineLib.buy_max("lisbon", "wine"))
 
 	# Over-max gold buy: refused, nothing changes at all.
 	_make_run("lisbon", 210)
@@ -380,356 +506,17 @@ func _test_buy_clamps() -> void:
 		"an unknown good is refused")
 	_check(not TradeEngineLib.buy("not_a_port", "wine", 1),
 		"an unknown port is refused")
+	# Unlisted pairs never transact (docs/30 §4.4 listing rule).
+	_check(not TradeEngineLib.is_listed("lisbon", "silver"),
+		"silver is unlisted at lisbon")
+	_check(not TradeEngineLib.buy("lisbon", "silver", 1),
+		"an unlisted good cannot be bought")
+	_check(not TradeEngineLib.sell("lisbon", "silver", 1),
+		"an unlisted good cannot be sold")
 
 
-func _test_goods_are_data_driven() -> void:
-	# The market table is built by iterating `DataLoader.goods_list`; today the
-	# locked list has 20 goods, and adding a 21st is a data-only change.
-	_check(DataLoader.goods_list.size() == 20,
-		"goods.json holds the locked 20 goods (got %d)" % DataLoader.goods_list.size())
-	var rows := TradeEngineLib.goods_rows()
-	_check(rows.size() == 20, "goods_rows() returns 20 rows (got %d)" % rows.size())
-	# Sorted by base_price ascending (ties by id), per docs/30 §4.7.
-	var sorted := true
-	for index in range(1, rows.size()):
-		var previous := int(rows[index - 1].get("base_price", 0))
-		var current := int(rows[index].get("base_price", 0))
-		if current < previous:
-			sorted = false
-	_check(sorted, "rows are sorted by base_price ascending")
-	_check(str(rows[0].get("id", "")) == "wheat",
-		"cheapest row is wheat 8g (got %s)" % str(rows[0].get("id", "")))
-	_check(str(rows[rows.size() - 1].get("id", "")) == "spices",
-		"priciest row is spices 150g (got %s)"
-		% str(rows[rows.size() - 1].get("id", "")))
-
-	# Prove the data path: append a synthetic good to the in-memory list and
-	# dict only (no file edit), and the engine prices and ranks it like any
-	# other, with zero code changes.
-	var synthetic := {
-		"id": "test_tea",
-		"name": {"zh": "测试茶", "en": "Test Tea"},
-		"category": "food",
-		"base_price": 11,
-		"unit_size": 1,
-	}
-	DataLoader.goods_list.append(synthetic)
-	DataLoader.goods["test_tea"] = synthetic
-	_make_run("lisbon", 10000)
-	_check(TradeEngineLib.goods_rows().size() == 21,
-		"a 21st good appears in goods_rows() (got %d)"
-		% TradeEngineLib.goods_rows().size())
-	var with_tea := TradeEngineLib.goods_rows()
-	var tea_index := -1
-	for index in with_tea.size():
-		if str(with_tea[index].get("id", "")) == "test_tea":
-			tea_index = index
-			break
-	_check(tea_index >= 0, "the 21st good has a row")
-	# base 11 sits between wheat 8 and dried_fish 10? No: salt 12 → index after
-	# dried_fish(10) and before salt(12).
-	_check(tea_index > 0 and tea_index < with_tea.size() - 1,
-		"the 21st good is sorted into the middle (index %d)" % tea_index)
-	_check(TradeEngineLib.buy_price("lisbon", "test_tea") == 11,
-		"the 21st good prices at its base 11 (got %d)"
-		% TradeEngineLib.buy_price("lisbon", "test_tea"))
-	_check(TradeEngineLib.buy("lisbon", "test_tea", 2),
-		"the 21st good is buyable with no code change")
-	_check(FleetLib.held("test_tea") == 2, "2 test tea aboard")
-
-	# Restore the shipped data (the list and dict are the loader's, not a copy).
-	DataLoader.goods_list.pop_back()
-	DataLoader.goods.erase("test_tea")
-	_check(DataLoader.goods_list.size() == 20, "goods.json data restored to 20")
-
-
-func _test_supplies_ignore_factors() -> void:
-	# At a port that produces wine and demands spices, at max investment, the
-	# supply prices are still the locked 2g / 1g (docs/20 §4.10).
-	_make_run("lisbon", 10000)
-	_check("wine" in DataLoader.get_port("lisbon")["produces"],
-		"fixture port produces wine")
-	_check("spices" in DataLoader.get_port("lisbon")["demands"],
-		"fixture port demands spices")
-	for click in range(10):
-		TradeEngineLib.invest("lisbon")
-	_check(TradeEngineLib.supplies_price("provisions") == 2,
-		"provisions are 2g at max investment (got %d)"
-		% TradeEngineLib.supplies_price("provisions"))
-	_check(TradeEngineLib.supplies_price("water") == 1,
-		"water is 1g at max investment (got %d)"
-		% TradeEngineLib.supplies_price("water"))
-	_check(TradeEngineLib.supplies_price("provisions") == 2,
-		"provisions match SailingSim.PROVISIONS_PRICE (shared constant)")
-	_check(not ("provisions" in DataLoader.goods),
-		"supplies are not trade goods (absent from goods.json)")
-	_check(not ("water" in DataLoader.goods),
-		"water is not a trade good")
-
-	# Buying: 2g and 1g exactly, and they occupy cargo.
-	var gold_before := GameState.gold
-	_check(TradeEngineLib.buy_supplies("lisbon", "provisions", 10),
-		"buy 10 provisions")
-	_check(GameState.gold == gold_before - 20,
-		"10 provisions cost 20g (paid %d)" % (gold_before - GameState.gold))
-	_check(FleetLib.supplies("provisions") == 10, "10 provisions aboard")
-	gold_before = GameState.gold
-	_check(TradeEngineLib.buy_supplies("lisbon", "water", 10), "buy 10 water")
-	_check(GameState.gold == gold_before - 10,
-		"10 water costs 10g (paid %d)" % (gold_before - GameState.gold))
-	_check(FleetLib.used_capacity(GameState.fleet[0]) == 20,
-		"supplies occupy cargo: 10 + 10 = 20 units (got %d)"
-		% FleetLib.used_capacity(GameState.fleet[0]))
-
-	# sell-back is not offered: the engine has no supplies-sell entry point at
-	# all (docs/20 §4.10 "not sellable"), and the screen renders no Sell button.
-	var engine_source := FileAccess.get_file_as_string(
-		"res://scripts/port/trade_engine.gd"
-	)
-	_check(not engine_source.contains("func sell_supplies("),
-		"no sell_supplies API exists (supplies are not sellable)")
-	_check(engine_source.contains("func buy_supplies("),
-		"buy_supplies is the only supplies transaction")
-	# Over-max / over-capacity supplies buys are refused unchanged.
-	var free_before := FleetLib.fleet_free()
-	var gold_now := GameState.gold
-	_check(not TradeEngineLib.buy_supplies("lisbon", "provisions", free_before + 1),
-		"a supplies buy over the free capacity is refused")
-	_check(GameState.gold == gold_now and FleetLib.fleet_free() == free_before,
-		"the refused supplies buy changed nothing")
-	_check(not TradeEngineLib.buy_supplies("lisbon", "rum", 1),
-		"an unknown supply kind is refused")
-
-
-## docs/50 §4.3/§4.6: the XP and reputation rules are unchanged; under the
-## §4.4 tranche walk they book the exact summed proceeds (never a per-tranche
-## recomputation). A tiny oracle recomputes the doc formula per sale.
-func _test_sell_profit_xp_and_reputation() -> void:
-	# Lisbon → London wine run: buy 10 at 21 (one tranche), sell at 31.
-	_make_run("lisbon", 1000)
-	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine at Lisbon")
-	_check(GameState.gold == 1000 - 210, "the 10-buy costs 210 (one tranche)")
-	_dock("london")
-
-	# The profitable walk out of rest only ever earns 450g more (prices fall
-	# to the 21 basis within 8 tranches), so seed the accumulator to 550g —
-	# the walked sales then cross 1,000g exactly.
-	GameState.player["profit_by_nation"] = {"england": 550}
-	GameState.player["profit_rep_awarded"] = {"england": 0}
-	var xp_before := CharacterLib.current_xp()
-	var rep_before := CharacterLib.reputation("england")
-	var gold_before := GameState.gold
-	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 wine at London")
-	_check(GameState.gold == gold_before + 310,
-		"sell earns 10 × 31 = 310g (got +%d)" % (GameState.gold - gold_before))
-
-	# docs/50 §4.3: per-unit profit = 31 − floor(30 × 0.7) = 31 − 21 = 10;
-	# profit 100 → +1 XP.
-	_check(CharacterLib.current_xp() == xp_before + 1,
-		"a 100g-profit sale awards 1 XP (got +%d)"
-		% (CharacterLib.current_xp() - xp_before))
-	# docs/50 §4.6: +1 reputation per 1,000g profit — 100g is below the
-	# threshold, so it accumulates instead of granting.
-	_check(CharacterLib.reputation("england") == rep_before,
-		"100g of profit does not yet earn reputation (england %d)"
-		% CharacterLib.reputation("england"))
-	_check(TradeEngineLib.profit_by_nation("england") == 650,
-		"the 550g seed + 100g booked to England (got %d)"
-		% TradeEngineLib.profit_by_nation("england"))
-
-	# The 1,000g threshold carries across transactions, walked tranche by
-	# tranche: keep selling 10 at a time and let the oracle track the exact
-	# proceeds as London's stock rises (docs/30 §4.4).
-	var stock := 50  # 40 at rest + the first sale's 10
-	var profit_total := 650  # the 550g seed + the first sale's 100g
-	var sale := 0
-	for chunk in range(12):
-		FleetLib.add_goods("wine", 10)
-		gold_before = GameState.gold
-		xp_before = CharacterLib.current_xp()
-		rep_before = CharacterLib.reputation("england")
-		_check(TradeEngineLib.sell("london", "wine", 10),
-			"oracle sale %d: sell 10 more wine at London" % chunk)
-		# Oracle: one tranche of 10 at the current stock's sell price.
-		var factor := 1500 - 5 * stock
-		var price := maxi(1, (30 * factor * 8) / 10000)
-		_check(GameState.gold == gold_before + 10 * price,
-			"oracle sale %d (stock %d): 10 × %dg (got +%d)"
-			% [chunk, stock, price, GameState.gold - gold_before])
-		var profit := maxi(0, 10 * price - 10 * 21)
-		profit_total += profit
-		sale += 1
-		_check(CharacterLib.current_xp() == xp_before + profit / 100,
-			"oracle sale %d awards floor(%d / 100) XP"
-			% [chunk, profit])
-		stock += 10
-		if profit_total >= 1000:
-			break
-	_check(profit_total >= 1000,
-		"the threshold was crossed after %d walked sales (%dg)"
-		% [sale, profit_total])
-	_check(CharacterLib.reputation("england") == 1,
-		"crossing 1,000g cumulative profit grants exactly +1 reputation (got %d)"
-		% CharacterLib.reputation("england"))
-	_check(TradeEngineLib.profit_by_nation("england") == profit_total,
-		"the accumulator books the exact walked total %d (got %d)"
-		% [profit_total, TradeEngineLib.profit_by_nation("england")])
-	# Reputation went to England, not any other nation.
-	_check(CharacterLib.reputation("portugal") == 0,
-		"selling in London leaves Portugal's reputation at 0")
-
-	# A loss-making sale gives 0 XP and 0 reputation and never removes XP.
-	_make_run("lisbon", 10000)
-	FleetLib.add_goods("wine", 10)
-	xp_before = CharacterLib.current_xp()
-	rep_before = CharacterLib.reputation("portugal")
-	GameState.gold = 0
-	# Lisbon sell is 16/unit against a 21 cost basis → a loss every unit.
-	_check(TradeEngineLib.sell("lisbon", "wine", 10), "sell wine at Lisbon")
-	_check(GameState.gold == 160, "the loss sale pays 10 × 16 = 160")
-	_check(CharacterLib.current_xp() == xp_before,
-		"a loss-making sale awards 0 XP (got +%d)"
-		% (CharacterLib.current_xp() - xp_before))
-	_check(CharacterLib.reputation("portugal") == rep_before,
-		"a loss-making sale awards no reputation")
-	_check(TradeEngineLib.profit_by_nation("portugal") == 0,
-		"a loss books no cumulative profit (got %d)"
-		% TradeEngineLib.profit_by_nation("portugal"))
-	# A walked sale that dips under the basis part-way books only the total's
-	# profit (docs/30 §4.4: the summed total, not per-tranche profit).
-	_make_run("london", 10000)
-	FleetLib.add_goods("wine", 20)
-	# 40→60: 31×10 + 30×10 = 610; basis 420 → profit 190 → 1 XP.
-	xp_before = CharacterLib.current_xp()
-	_check(TradeEngineLib.sell("london", "wine", 20), "a two-tranche sale")
-	_check(GameState.gold == 10000 + 610, "the walked total is 610g")
-	_check(CharacterLib.current_xp() == xp_before + 1,
-		"the two-tranche profit (190g) books exactly 1 XP")
-
-	# Reputation is per nation and clamped: the cap holds after a profit.
-	# The accumulator is seeded to 950g so the walked sale (40 units →
-	# 1,160g, +320g profit) crosses 1,000g and awards — into the cap.
-	_make_run("london", 10000)
-	FleetLib.add_goods("wine", 40)
-	CharacterLib.add_reputation("england", 100)
-	GameState.player["profit_by_nation"] = {"england": 950}
-	GameState.player["profit_rep_awarded"] = {"england": 0}
-	TradeEngineLib.sell("london", "wine", 40)
-	_check(TradeEngineLib.profit_by_nation("england") == 1270,
-		"the crossed accumulator books 950 + 320 (got %d)"
-		% TradeEngineLib.profit_by_nation("england"))
-	_check(CharacterLib.reputation("england") == 100,
-		"reputation stays clamped at +100 (got %d)"
-		% CharacterLib.reputation("england"))
-
-	# Over-quantity sells fail without touching state.
-	_make_run("london", 10000)
-	FleetLib.add_goods("wine", 5)
-	gold_before = GameState.gold
-	_check(not TradeEngineLib.sell("london", "wine", 6),
-		"selling 6 of 5 held is refused")
-	_check(FleetLib.held("wine") == 5 and GameState.gold == gold_before,
-		"the refused sell changed nothing")
-	_check(not TradeEngineLib.sell("london", "wine", 0), "sell(0) is refused")
-
-
-## docs/50-* §4.6 + §4.8: the cumulative-profit accumulator sits in the `player`
-## save block, so a JSON round trip must preserve both the running total and
-## the reputation already paid out (otherwise a reload would re-award points).
-func _test_profit_survives_save_roundtrip() -> void:
-	# docs/50 §4.6 + §4.8: the accumulators sit in the `player` save block, so
-	# a JSON round trip must preserve the running total and the reputation
-	# already paid out (otherwise a reload would re-award points).
-	_make_run("lisbon", 10000, ["galleon"])
-	_check(TradeEngineLib.buy("lisbon", "wine", 150), "buy 150 wine")
-	_dock("london")
-	GameState.gold = 0
-	# The walked proceeds of 150 units from rest 40 (docs/30 §4.4 walk):
-	# 31+30+28+27+26+25+24+22+21+20+19+18+16+15+14 = 336 per 10 units.
-	_check(TradeEngineLib.sell("london", "wine", 150), "sell 150 wine")
-	_check(GameState.gold == 3360, "the walked proceeds are exactly 3,360g (%d)"
-		% GameState.gold)
-	_check(TradeEngineLib.profit_by_nation("england") == 210,
-		"the walked profit books 3,360 − 150 × 21 = 210 (got %d)"
-		% TradeEngineLib.profit_by_nation("england"))
-	_check(GameState.player.has("profit_by_nation")
-		and GameState.player.has("profit_rep_awarded"),
-		"both accumulator keys live in the player block")
-
-	# JSON round trip exactly as the save system serialises the block.
-	var encoded := JSON.stringify(GameState.player)
-	var decoded = JSON.parse_string(encoded)
-	GameState.player = decoded
-	_check(CharacterLib.profit_by_nation("england") == 210,
-		"the total survives a JSON round trip (got %d)"
-		% CharacterLib.profit_by_nation("england"))
-	_check(CharacterLib.reputation("england") == 0, "no reputation paid yet")
-
-	# Seed the accumulator to 1,900g/1 awarded, round-trip again, then one
-	# more 100g profit crosses 2,000g → exactly +2 total, no double-award.
-	GameState.player["profit_by_nation"]["england"] = 1900
-	GameState.player["profit_rep_awarded"]["england"] = 1
-	CharacterLib.add_reputation("england", 1)
-	encoded = JSON.stringify(GameState.player)
-	GameState.player = JSON.parse_string(encoded)
-	FleetLib.add_goods("wine", 10)
-	# London is drained to stock 190 by the 150-sale; restock it so the next
-	# 10 transact at the §5 rest price 31 again (a pure state seed).
-	EconomyLib.set_stock("london", "wine", 40)
-	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 more (100g profit)")
-	_check(CharacterLib.profit_by_nation("england") == 2000,
-		"total is 2,000g after the reload (got %d)"
-		% CharacterLib.profit_by_nation("england"))
-	_check(CharacterLib.reputation("england") == 2,
-		"2,000g → exactly +2 total reputation, no double-award (got %d)"
-		% CharacterLib.reputation("england"))
-	# A sub-1,000g remainder never rounds up.
-	FleetLib.add_goods("wine", 5)
-	TradeEngineLib.sell("london", "wine", 5)
-	_check(CharacterLib.reputation("england") == 2,
-		"a remainder grants nothing extra (got %d)"
-		% CharacterLib.reputation("england"))
-
-
-func _test_capacity_flagship_first() -> void:
-	# Two hulls: caravel 120 + latin 30. Buying fills the flagship first.
-	_make_run("lisbon", 100000, ["caravel", "latin"])
-	_check(FleetLib.fleet_free() == 150, "fleet free is 150 (120 + 30)")
-	_check(TradeEngineLib.buy("lisbon", "wine", 100), "buy 100 wine")
-	_check(int(GameState.fleet[0]["cargo"].get("wine", 0)) == 100,
-		"all 100 land on the flagship (got %d)"
-		% int(GameState.fleet[0]["cargo"].get("wine", 0)))
-	_check(int(GameState.fleet[1]["cargo"].get("wine", 0)) == 0,
-		"the escort is still empty")
-	_check(FleetLib.fleet_free() == 50,
-		"fleet_free drops by exactly 100 → 50 (got %d)" % FleetLib.fleet_free())
-
-	# Overflow goes to the second hull, flagship still first.
-	_check(TradeEngineLib.buy("lisbon", "wine", 40), "buy 40 more wine")
-	_check(int(GameState.fleet[0]["cargo"].get("wine", 0)) == 120,
-		"the flagship is full at 120 (got %d)"
-		% int(GameState.fleet[0]["cargo"].get("wine", 0)))
-	_check(int(GameState.fleet[1]["cargo"].get("wine", 0)) == 20,
-		"the escort holds the 20 overflow (got %d)"
-		% int(GameState.fleet[1]["cargo"].get("wine", 0)))
-	_check(FleetLib.fleet_free() == 10, "fleet_free is 10 (got %d)"
-		% FleetLib.fleet_free())
-	_check(FleetLib.held("wine") == 140,
-		"held() pools both hulls: 140 (got %d)" % FleetLib.held("wine"))
-
-	# Buy_max is pooled capacity, so the last 10 are buyable and 11 are not.
-	_check(TradeEngineLib.buy_max("lisbon", "wine") == 10,
-		"buy_max uses pooled free capacity: 10 (got %d)"
-		% TradeEngineLib.buy_max("lisbon", "wine"))
-	_check(not TradeEngineLib.buy("lisbon", "wine", 11), "11 is refused")
-	_check(TradeEngineLib.buy("lisbon", "wine", 10), "exactly 10 succeeds")
-	_check(FleetLib.fleet_free() == 0, "the fleet is full")
-
-
-## Phase 5 (docs/30 §4.4): trades DO move prices — per 10-unit tranche. The
-## done-when anchors: buying 100 wine moves the port's price, the §5
-## displaced-stock example reproduces exactly, and the §4.4 300-unit sale
-## walks down per tranche without jumping to the clamp.
+## The §4.4 tranche walk with the §4.10 tariff composed after it: every gold
+## pin below is `gross ± tax`, never a price change.
 func _test_tranche_repricing() -> void:
 	# --- buy walk at Lisbon (produced, rest 160) -------------------------
 	_make_run("lisbon", 100000)
@@ -737,9 +524,10 @@ func _test_tranche_repricing() -> void:
 	_check(buy_rest == 21, "the rest price is 21 before anything moves")
 	var gold_before := GameState.gold
 	_check(TradeEngineLib.buy("lisbon", "wine", 100), "buy 100 wine")
-	# Tranches at stock 160,150,…,70: 21+22+24+25+27+28+30+31+33+34 = 275.
-	_check(GameState.gold == gold_before - 2750,
-		"100 wine cost the exact tranche sum 2,750g (paid %d)"
+	# Tranches at stock 160,150,…,70: 21+22+24+25+27+28+30+31+33+34 = 2,750;
+	# the 5% tax adds 137 → 2,887 out of pocket.
+	_check(GameState.gold == gold_before - 2887,
+		"100 wine cost the exact tranche sum 2,750 + 137 tax (paid %d)"
 		% (gold_before - GameState.gold))
 	_check(EconomyLib.stock_of("lisbon", "wine") == 60,
 		"the stock booked down 160 → 60 (got %d)"
@@ -755,10 +543,10 @@ func _test_tranche_repricing() -> void:
 	_dock("london")
 	gold_before = GameState.gold
 	_check(TradeEngineLib.sell("london", "wine", 100), "sell 100 at London")
-	# Tranches at stock 40…130: 31+30+28+27+26+25+24+22+21+20 = 254 (docs/30
-	# §5 "proceeds 2540 vs 3100 flat").
-	_check(GameState.gold == gold_before + 2540,
-		"the 100-sale fetches the exact 2,540g (got %d)"
+	# Tranches at stock 40…130: 31+30+28+27+26+25+24+22+21+20 = 2,540 gross;
+	# the 20% foreign tariff takes 508 → 2,032 net.
+	_check(GameState.gold == gold_before + 2032,
+		"the 100-sale nets 2,540 − 508 tax = 2,032 (got %d)"
 		% (GameState.gold - gold_before))
 	_check(EconomyLib.stock_of("london", "wine") == 140,
 		"London's stock rose 40 → 140 (got %d)"
@@ -769,26 +557,15 @@ func _test_tranche_repricing() -> void:
 	_check(TradeEngineLib.buy_price("london", "wine") == 24,
 		"and the buy price 24 (§5, got %d)"
 		% TradeEngineLib.buy_price("london", "wine"))
-	# §5 drift_10_days: wine is a middle good (±2/day) → 140 heals to 120.
-	for tick in range(10):
-		EconomyLib.day_tick()
-	_check(EconomyLib.stock_of("london", "wine") == 120,
-		"10 drift days heal 140 → 120 (§5, got %d)"
-		% EconomyLib.stock_of("london", "wine"))
-	_check(TradeEngineLib.sell_price("london", "wine") == 21,
-		"the healed sell price is 21 (§5 drift_10_days, got %d)"
-		% TradeEngineLib.sell_price("london", "wine"))
-	_check(TradeEngineLib.buy_price("london", "wine") == 27,
-		"and the healed buy price 27 (got %d)"
-		% TradeEngineLib.buy_price("london", "wine"))
 
 	# --- §4.4 worked example: a 300-unit sale walks, never jumps ---------
 	_make_run("london", 10, ["galleon"])
 	FleetLib.add_goods("wine", 300)
 	gold_before = GameState.gold
 	_check(TradeEngineLib.sell("london", "wine", 300), "sell 300 at London")
-	_check(GameState.gold == gold_before + 5170,
-		"the 300-unit sale sums to exactly 5,170g, not 9,300g flat (got %d)"
+	# Gross 5,170; the 20% tariff takes 1,034 → 4,136 net.
+	_check(GameState.gold == gold_before + 4136,
+		"the 300-sale nets 5,170 − 1,034 tax = 4,136, not 9,300 flat (got %d)"
 		% (GameState.gold - gold_before))
 	_check(EconomyLib.stock_of("london", "wine") == 200,
 		"the stock parked at the 200 bound (got %d)"
@@ -858,350 +635,514 @@ func _test_market_changed_on_trades() -> void:
 	EventBus.market_changed.disconnect(handler)
 
 
-# --- Market screen ---------------------------------------------------------
+## The §4.4 listing rule (correction 7): a port lists a good iff it produces
+## or demands it — unlisted goods have no row and never transact.
+func _test_listing_rule() -> void:
+	_make_run("lisbon")
+	_check(DataLoader.goods_list.size() == 40,
+		"goods.json holds the locked 40 goods (got %d)"
+		% DataLoader.goods_list.size())
+	var rows := TradeEngineLib.goods_rows("lisbon")
+	var listed: Array = []
+	for good_id in DataLoader.get_port("lisbon").get("produces", []):
+		listed.append(str(good_id))
+	for good_id in DataLoader.get_port("lisbon").get("demands", []):
+		listed.append(str(good_id))
+	_check(rows.size() == listed.size(),
+		"goods_rows(lisbon) == produces ∪ demands (%d rows, %d listed; got %d)"
+		% [listed.size(), listed.size(), rows.size()])
+	var row_ids: Array = []
+	for row in rows:
+		row_ids.append(str(row.get("id", "")))
+	_check(row_ids.has("wine") and row_ids.has("salt"),
+		"lisbon's produces carry rows (wine, salt)")
+	_check(row_ids.has("gold") and row_ids.has("spices"),
+		"lisbon's demands carry rows (gold, spices)")
+	_check(not row_ids.has("silver") and not row_ids.has("tea"),
+		"unlisted goods never render (silver, tea absent)")
+	# Sorted by base_price ascending (ties by id), per docs/30 §4.4.
+	var sorted := true
+	for index in range(1, rows.size()):
+		var previous := int(rows[index - 1].get("base_price", 0))
+		var current := int(rows[index].get("base_price", 0))
+		if current < previous:
+			sorted = false
+	_check(sorted, "rows are sorted by base_price ascending")
 
-func _instantiate_market() -> Control:
-	var screen: Control = MarketScene.instantiate()
-	add_child(screen)
-	return screen
-
-
-func _test_market_screen() -> void:
-	_make_run("lisbon", 1000)
-	var screen := _instantiate_market()
-	# `_ready` built everything synchronously.
-	_check(screen.row_goods_ids().size() == 20,
-		"market screen renders 20 good rows (got %d)"
-		% screen.row_goods_ids().size())
-	# Rows are in base_price order, cheapest first.
-	_check(str(screen.row_goods_ids()[0]) == "wheat",
-		"the first row is wheat (got %s)" % str(screen.row_goods_ids()[0]))
-	_check(str(screen.row_goods_ids()[19]) == "spices",
-		"the last row is spices (got %s)" % str(screen.row_goods_ids()[19]))
-
-	# Header: title, gold and hold.
-	var title: Label = screen.get_node("Layout/VBox/Header/Title")
-	_check(title.text == I18n.fmt("market.title", {"port": "Lisbon"}),
-		"header title is 'Market — Lisbon' (%s)" % title.text)
-	var gold_label: Label = screen.get_node("Layout/VBox/Header/Gold")
-	_check(gold_label.text == I18n.fmt("ui.gold_amount", {"gold": "1,000"}),
-		"header gold is 1,000g (%s)" % gold_label.text)
-	var hold_label: Label = screen.get_node("Layout/VBox/Header/Hold")
-	_check(hold_label.text.contains("0/120"),
-		"header hold is 0/120 (%s)" % hold_label.text)
-
-	# The table is scrollable (20+ rows; docs/30 §4.7).
-	var scroll: ScrollContainer = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/GoodsScroll"
-	)
-	_check(scroll != null and scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
-		"the goods table scrolls vertically")
-
-	# The marginal column carries the next-tranche prices (at rest, the §5
-	# values), the stock column the 0–200 level, trend blank at rest.
-	var wine_row: Dictionary = screen.row("wine")
-	_check((wine_row["marginal"] as Label).text == "21g / 16g",
-		"wine row shows the marginal 21g / 16g (%s)"
-		% (wine_row["marginal"] as Label).text)
-	_check((wine_row["stock"] as Label).text == "160",
-		"wine row stock shows 160 (%s)" % (wine_row["stock"] as Label).text)
-	_check((wine_row["trend"] as Label).text == "",
-		"at rest the trend cell is blank (%s)"
-		% (wine_row["trend"] as Label).text)
-	_check((wine_row["have"] as Label).text == "0", "wine row have is 0")
-	# Column captions resolve through the §4.7.9 keys.
-	var header_keys: Array = []
-	for child in screen.get_node(
-			"Layout/VBox/TableFrame/Margin/Table/ColumnHeader").get_children():
-		if child.has_meta("text_key"):
-			header_keys.append(str(child.get_meta("text_key")))
-	for key in ["market.stock.header", "market.stock.trend",
-			"market.stock.marginal"]:
-		_check(header_keys.has(key),
-			"the column headers include %s (got %s)" % [key, str(header_keys)])
-	_check((wine_row["buy"] as Button).text == I18n.t_key("market.buy"),
-		"buy button is localised")
-	_check((wine_row["buy"] as Button).disabled,
-		"buy is disabled with an empty quantity (§6)")
-
-	# Empty field = invalid, buttons disabled, no state change.
-	_check(screen.row_qty("wine") == -1, "an empty qty field parses as -1")
-	screen.type_qty("wine", "")
-	_check(screen.row_qty("wine") == -1, "clearing the field keeps it invalid")
-	_check(not screen.press_buy("wine"), "Buy is a no-op while the qty is empty")
-
-	# Digits-only + live clamp: non-digits are dropped, an over-range entry is
-	# clamped to the physical ceiling (the pooled free hold: 120 here).
-	screen.type_qty("wine", "12ab3")
-	_check(screen.row_qty("wine") == 120,
-		"non-digits are dropped: '12ab3' → 123, clamped to the 120 hold (got %d)"
-		% screen.row_qty("wine"))
-	var buy_max := TradeEngineLib.buy_max("lisbon", "wine")
-	_check(buy_max == 42,
-		"the 1,000g purse walks to buy_max 42 (got %d)" % buy_max)
-	screen.type_qty("wine", "999999")
-	_check(screen.row_qty("wine") == 120,
-		"live clamp: 999999 → the 120-unit hold (got %d)" % screen.row_qty("wine"))
-	# Unaffordable at the clamped quantity: disabled **with** the reason.
-	_check((wine_row["buy"] as Button).disabled,
-		"Buy is disabled at a quantity the purse cannot cover")
-	_check((wine_row["buy"] as Button).tooltip_text
-		== I18n.fmt("market.not_enough_gold", {"gold": 3480}),
-		"the reason quotes the walked cost of 120 wine, 3,480g (%s)"
-		% (wine_row["buy"] as Button).tooltip_text)
-
-	# Preset buttons: 1 / 10 / 100 behave per the ceiling (Max = buy_max).
-	screen.press_qty_preset("wine", "1")
-	_check(screen.row_qty("wine") == 1, "preset 1 → qty 1")
-	screen.press_qty_preset("wine", "10")
-	_check(screen.row_qty("wine") == 10, "preset 10 → qty 10")
-	screen.press_qty_preset("wine", "100")
-	_check(screen.row_qty("wine") == mini(100, buy_max),
-		"preset 100 clamps to buy_max (%d)" % screen.row_qty("wine"))
-	screen.press_qty_preset("wine", "max")
-	_check(screen.row_qty("wine") == buy_max,
-		"Max → buy_max %d (got %d)" % [buy_max, screen.row_qty("wine")])
-	_check(not (wine_row["buy"] as Button).disabled,
-		"Buy enables at a valid affordable quantity")
-	_check((wine_row["buy"] as Button).tooltip_text.is_empty(),
-		"no tooltip reason when Buy is allowed")
-
-	# A buy updates gold, holdings, prices and capacity immediately.
-	screen.press_qty_preset("wine", "10")
-	var gold_before := GameState.gold
-	_check(screen.press_buy("wine"), "Buy 10 wine from the screen")
-	_check(FleetLib.held("wine") == 10, "10 wine aboard after the buy")
-	_check(GameState.gold == gold_before - 10 * 21,
-		"gold drops by 210 (got %d)" % GameState.gold)
-	_check((wine_row["have"] as Label).text == "10",
-		"the have cell updated to 10 (%s)" % (wine_row["have"] as Label).text)
-	_check(hold_label.text.contains("10/120"),
-		"the header hold updated to 10/120 (%s)" % hold_label.text)
-	# The trade moved the port's stock: 160 → 150, the trend flips to ▲ and
-	# the marginal re-prices (docs/30 §4.4, docs/80 §4.7.7).
-	_check((wine_row["stock"] as Label).text == "150",
-		"the stock cell updated to 150 (%s)"
-		% (wine_row["stock"] as Label).text)
-	_check((wine_row["trend"] as Label).text
-		== I18n.t_key("market.stock.trend_up"),
-		"the trend shows ▲ refilling below rest (%s)"
-		% (wine_row["trend"] as Label).text)
-	_check((wine_row["trend"] as Label).get_theme_color("font_color")
-		== PaletteLib.GOOD, "the ▲ glyph renders in the GOOD palette color")
-	_check((wine_row["marginal"] as Label).text == "22g / 18g",
-		"the marginal re-priced to 22g / 18g at stock 150 (%s)"
-		% (wine_row["marginal"] as Label).text)
-	_check(gold_label.text == I18n.fmt(
-		"ui.gold_amount", {"gold": screen.format_thousands(GameState.gold)}
-	), "the gold readout updated (%s)" % gold_label.text)
-	# The sell side is now enabled at qty 10.
-	screen.type_qty("wine", "10")
-	_check(not (wine_row["sell"] as Button).disabled,
-		"Sell enables once the good is held")
-	_check(screen.press_sell("wine"), "Sell 10 wine from the screen")
-	_check(FleetLib.held("wine") == 0, "the hold is empty again")
-	_check((wine_row["sell"] as Button).disabled,
-		"Sell disables again at 0 held")
-
-	# A full hold is still sellable: `Max` follows the larger of buy_max and
-	# the held quantity, so the player can always empty the hold from the UI.
-	_make_run("lisbon", 1000)
-	var full_screen := _instantiate_market()
-	FleetLib.add_goods("wine", 120)
-	EventBus.fleet_changed.emit()
-	full_screen.press_qty_preset("wine", "max")
-	_check(full_screen.row_qty("wine") == 120,
-		"Max on a full hold selects the 120 held (got %d)"
-		% full_screen.row_qty("wine"))
-	_check(full_screen.row("wine")["buy"].disabled,
-		"Buy stays disabled at a full hold even with Max selected")
-	_check(full_screen.press_sell("wine"), "Sell 120 wine out of a full hold")
-	_check(FleetLib.held("wine") == 0, "the hold is empty again")
-	_check(TradeEngineLib.buy_max("lisbon", "wine") > 0,
-		"buying is possible again after emptying the hold")
-	full_screen.queue_free()
-
-	# Rebuild the fixture for the tooltip/reason and supplies assertions.
-	_make_run("lisbon", 1000)
-	screen.queue_free()
-	screen = _instantiate_market()
-	wine_row = screen.row("wine")
-
-	# The tooltip reason for an unaffordable buy (§4.7 / §6).
-	GameState.gold = 5
-	EventBus.gold_changed.emit(GameState.gold)
-	screen.type_qty("wine", "1")
-	var buy_button: Button = wine_row["buy"]
-	_check(buy_button.disabled, "Buy is disabled when gold < price")
-	_check(buy_button.tooltip_text == I18n.t_key("market.no_gold"),
-		"the reason is market.no_gold (%s)" % buy_button.tooltip_text)
-	# Clamped entry already prevents over-max; the reason path still explains
-	# a full hold (§6).
-	GameState.gold = 100000
-	EventBus.gold_changed.emit(GameState.gold)
-	FleetLib.add_goods("salt", FleetLib.fleet_free())
-	EventBus.fleet_changed.emit()
-	screen.type_qty("wine", "1")
-	_check(buy_button.disabled, "Buy is disabled with a full hold")
-	_check(buy_button.tooltip_text == I18n.t_key("market.hold_full"),
-		"the reason is market.hold_full (%s)" % buy_button.tooltip_text)
-
-	# Supplies are **no longer a market row** (docs/20-* §4.10 as amended,
-	# docs/80-* §4.6.1): provisions and water are bought at the Set-Sail
-	# provisioning prompt, which is the single supply purchase point. The screen
-	# must therefore have no supplies row, no supplies API, and no way to spend
-	# gold on a supply kind.
-	_check(not screen.has_method("supply_row"),
-		"the market has no supply_row() any more (supplies left the market)")
-	_check(not screen.has_method("press_supply_buy"),
-		"the market has no press_supply_buy() any more")
-	_check(screen.get_node_or_null("Layout/VBox/Supplies") == null,
-		"the market scene carries no Supplies row node")
-	FleetLib.remove_goods("salt", 10000)
-	EventBus.fleet_changed.emit()
-	_check(screen.row_goods_ids().size() == 20,
-		"the market still lists exactly the 20 trade goods (no supply rows)")
-	_check(not screen.row_goods_ids().has("provisions")
-		and not screen.row_goods_ids().has("water"),
-		"provisions and water are not goods rows")
-	var provisions_before := FleetLib.supplies("provisions")
-	_check(TradeEngineLib.buy_supplies("lisbon", "provisions", 5),
-		"the supplies engine still works (the prompt calls it, not the market)")
-	_check(FleetLib.supplies("provisions") == provisions_before + 5,
-		"5 provisions aboard through the engine")
-	# The prompt is the *only* purchase point: the scene that owns the buying UI
-	# is provisions_dialog.tscn and the market script never calls buy_supplies.
-	var market_source := FileAccess.get_file_as_string(
-		"res://scenes/port/market_screen.gd"
-	)
-	_check(not market_source.contains("buy_supplies"),
-		"market_screen.gd never calls TradeEngine.buy_supplies (§4.10)")
-	_check(ResourceLoader.exists("res://scenes/port/provisions_dialog.tscn"),
-		"the provisioning prompt exists as the single supply purchase point")
-
-	# Invest button: 500g chunks, cap 10.
-	_make_run("lisbon", 6000)
-	var invest_screen := _instantiate_market()
-	var invest_button: Button = invest_screen.get_node("Layout/VBox/Footer/Invest")
-	var invest_status: Label = invest_screen.get_node("Layout/VBox/Footer/InvestStatus")
-	_check(not invest_button.disabled, "Invest is enabled with gold")
-	_check(invest_status.text == I18n.fmt(
-		"market.invested_here", {"gold": "0", "count": 0}
-	), "the readout starts at 0g (−0%%) (%s)" % invest_status.text)
-	for click in range(10):
-		invest_screen.press_invest()
-	_check(TradeEngineLib.invested("lisbon") == 5000,
-		"10 clicks invest 5,000g (got %d)" % TradeEngineLib.invested("lisbon"))
-	_check(invest_status.text == I18n.fmt(
-		"market.invested_here", {"gold": "5,000", "count": 10}
-	), "the readout shows 5,000g (−10%%) (%s)" % invest_status.text)
-	_check(invest_button.disabled, "the Invest button is disabled at the cap")
-	_check(invest_button.tooltip_text == I18n.fmt(
-		"market.invest_cap", {"max": 10}
-	), "the cap string is shown (%s)" % invest_button.tooltip_text)
-	_check(invest_status.text.contains("−10%"),
-		"the readout names the −10%% cap (%s)" % invest_status.text)
-	var gold_at_cap := GameState.gold
-	_check(not invest_screen.press_invest(), "the 11th click is impossible")
-	_check(GameState.gold == gold_at_cap, "the 11th click spends nothing")
-
-	screen.queue_free()
-	invest_screen.queue_free()
-
-
-func _test_market_screen_data_driven() -> void:
-	# Add a 21st good to the in-memory data only, then build a fresh screen:
-	# it must grow a functional row with no code change.
+	# The filter is data-driven both ways: a synthetic good is invisible until
+	# the port's produces/demands name it — zero code changes either way.
 	var synthetic := {
-		"id": "test_ink",
-		"name": {"zh": "测试墨", "en": "Test Ink"},
-		"category": "luxury",
+		"id": "test_tea",
+		"name": {"zh": "测试茶", "en": "Test Tea"},
+		"category": "food",
 		"base_price": 11,
 		"unit_size": 1,
 	}
 	DataLoader.goods_list.append(synthetic)
-	DataLoader.goods["test_ink"] = synthetic
-	_make_run("lisbon", 1000)
-	var screen := _instantiate_market()
-	_check(screen.row_goods_ids().size() == 21,
-		"a 21st good adds a market row (got %d)" % screen.row_goods_ids().size())
-	var row_refs: Dictionary = screen.row("test_ink")
-	_check(not row_refs.is_empty(), "the 21st good's row exists")
-	if not row_refs.is_empty():
-		_check((row_refs["name"] as Label).text == "Test Ink",
-			"the row is labelled from data (%s)" % (row_refs["name"] as Label).text)
-		_check((row_refs["marginal"] as Label).text == "11g / 8g",
-			"the row prices from data (%s)"
-			% (row_refs["marginal"] as Label).text)
-		screen.type_qty("test_ink", "2")
-		_check(screen.press_buy("test_ink"), "the 21st row is buyable")
-		_check(FleetLib.held("test_ink") == 2, "2 test ink aboard")
-	screen.queue_free()
+	DataLoader.goods["test_tea"] = synthetic
+	_check(TradeEngineLib.goods_rows("lisbon").size() == rows.size(),
+		"an unlisted 41st good adds no row at lisbon")
+	_check(not TradeEngineLib.is_listed("lisbon", "test_tea"),
+		"and is not listed")
+	var lisbon: Dictionary = DataLoader.get_port("lisbon")
+	(lisbon["produces"] as Array).append("test_tea")
+	var with_tea := TradeEngineLib.goods_rows("lisbon")
+	_check(with_tea.size() == rows.size() + 1,
+		"listing the 41st good adds exactly one row (got %d)" % with_tea.size())
+	var tea_index := -1
+	for index in with_tea.size():
+		if str(with_tea[index].get("id", "")) == "test_tea":
+			tea_index = index
+			break
+	_check(tea_index >= 0, "the 41st good has a row once listed")
+	_check(TradeEngineLib.buy_price("lisbon", "test_tea") == 7,
+		"the listed 41st good prices from data: floor(11 × 0.7) = 7 (got %d)"
+		% TradeEngineLib.buy_price("lisbon", "test_tea"))
+	_check(TradeEngineLib.buy("lisbon", "test_tea", 2),
+		"the listed 41st good is buyable with no code change")
+	_check(FleetLib.held("test_tea") == 2, "2 test tea aboard")
+	# Restore the shipped data (the list, dict and port tuple are the loader's).
+	(lisbon["produces"] as Array).pop_back()
 	DataLoader.goods_list.pop_back()
-	DataLoader.goods.erase("test_ink")
-	_check(DataLoader.goods_list.size() == 20, "goods.json data restored to 20")
+	DataLoader.goods.erase("test_tea")
+	_check(DataLoader.goods_list.size() == 40, "goods.json data restored to 40")
+
+	# 不收购 (docs/30 §4.2 market direction): a producing port never buys its
+	# own produced goods — the engine refuses the sell outright.
+	_check(not TradeEngineLib.port_buys_good("lisbon", "wine"),
+		"lisbon does not buy its own wine")
+	_check(TradeEngineLib.port_buys_good("lisbon", "wheat"),
+		"lisbon buys the wheat it demands")
+	var held_before := FleetLib.held("wine")
+	var gold_before := GameState.gold
+	FleetLib.add_goods("wine", 5)
+	_check(not TradeEngineLib.sell("lisbon", "wine", 5),
+		"selling wine into its producer is refused (不收购)")
+	_check(FleetLib.held("wine") == held_before + 5
+		and GameState.gold == gold_before,
+		"the refused sell changed nothing")
+	FleetLib.remove_goods("wine", 5)
 
 
-func _test_market_screen_locale_and_back() -> void:
+## The §4.10 rate matrix through the engine wrapper: 500 in sphere,
+## 2000 foreign or unallied, 0 under a covering permit.
+func _test_tariff_matrix() -> void:
+	_make_run("lisbon")
+	_check(TradeEngineLib.tax_mille("lisbon") == 500,
+		"own protected lisbon: 5%% (got %d)" % TradeEngineLib.tax_mille("lisbon"))
+	_check(TradeEngineLib.tax_mille("london") == 2000,
+		"foreign protected london: 20%% (got %d)"
+		% TradeEngineLib.tax_mille("london"))
+	_check(TradeEngineLib.tax_mille("valencia") == 2000,
+		"foreign protected valencia: 20%%")
+	_check(TradeEngineLib.tax_mille("madeira") == 500,
+		"own aligned contestable madeira: 5%%")
+	_check(TradeEngineLib.tax_mille("quanzhou") == 2000,
+		"unallied neutral quanzhou: 20%% forever (got %d)"
+		% TradeEngineLib.tax_mille("quanzhou"))
+	_check(TradeEngineLib.tax_amount("lisbon", 210) == 10,
+		"5%% of 210 = 10 (got %d)" % TradeEngineLib.tax_amount("lisbon", 210))
+	_check(TradeEngineLib.tax_amount("london", 310) == 62,
+		"20%% of 310 = 62 (got %d)" % TradeEngineLib.tax_amount("london", 310))
+	_check(TradeEngineLib.tax_amount("lisbon", 0) == 0,
+		"an empty total carries no tax")
+
+
+## The tariff lands on real transactions: out-of-pocket buys, net sells, and
+## the credit flowing to the alignment nation (decision 19).
+func _test_tariff_on_trades() -> void:
 	_make_run("lisbon", 1000)
-	var screen := _instantiate_market()
-	I18n.set_locale("zh")
-	_check(screen.get_node("Layout/VBox/Header/Title").text
-		== I18n.fmt("market.title", {"port": "里斯本"}),
-		"the title rebinds to zh (%s)" % screen.get_node("Layout/VBox/Header/Title").text)
-	var wine_row: Dictionary = screen.row("wine")
-	_check((wine_row["name"] as Label).text == "葡萄酒",
-		"the good name rebinds to zh (%s)" % (wine_row["name"] as Label).text)
-	_check((wine_row["buy"] as Button).text == I18n.t_key("market.buy"),
-		"the buttons rebind to zh (%s)" % (wine_row["buy"] as Button).text)
-	_check(screen.get_node_or_null("Layout/VBox/Supplies") == null,
-		"the market still has no supplies row in zh (supplies left the market)")
-	I18n.set_locale("en")
-	_check((wine_row["name"] as Label).text == "Wine", "and back to en")
-
-	# Amended 2026-10-31: the market no longer owns a language toggle — S19
-	# is the only place (docs/80-* §4.6.3), and the header button is gone.
-	_check(screen.get_node_or_null("Layout/VBox/Header/Lang") == null,
-		"the market header carries no language button (S19 owns the toggle)")
-
-	# Esc / Back → port_screen.tscn; the route target must exist.
-	var script := load("res://scenes/port/market_screen.gd")
-	_check(ResourceLoader.exists(script.PORT_SCENE),
-		"the Back target exists (%s)" % script.PORT_SCENE)
-	_check(script.PORT_SCENE.ends_with("port_screen.tscn"),
-		"Back routes to port_screen.tscn")
-	screen.route_to_port = false
-	var went_back := [false]
-	screen.went_back.connect(func() -> void: went_back[0] = true)
-	var esc := InputEventAction.new()
-	esc.action = "back"
-	esc.pressed = true
-	screen._unhandled_input(esc)
-	_check(went_back[0], "Esc emits went_back (the S5 → S4 edge)")
-
-	# The port hub is reachable to the market: FACILITY_SCENES points here.
-	var port_script := load("res://scenes/port/port_screen.gd")
-	_check(port_script.FACILITY_SCENES.get("market", "")
-		== "res://scenes/port/market_screen.tscn",
-		"port_screen.FACILITY_SCENES['market'] routes to the market")
-	_check(ResourceLoader.exists("res://scenes/port/port_screen.tscn"),
-		"port_screen.tscn exists")
-	# And the hub's open_facility("market") now finds the scene (before T12 it
-	# warned "missing" and stayed in port).
+	var portugal_before := AllegianceLib.treasury("portugal")
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine at lisbon")
+	_check(GameState.gold == 1000 - 220,
+		"the buy charges 210 + 10 tax = 220 (got %d)" % GameState.gold)
+	_check(AllegianceLib.treasury("portugal") == portugal_before + 10,
+		"the 10g tax flows to portugal's treasury (got %d)"
+		% (AllegianceLib.treasury("portugal") - portugal_before))
+	# An unallied host collects nothing (no host to pay).
 	_make_run("lisbon", 1000)
-	var hub: Control = load("res://scenes/port/port_screen.tscn").instantiate()
-	add_child(hub)
-	hub.route_to_facility = false
-	_check(hub.open_facility("market"),
-		"port_screen.open_facility('market') finds the market scene")
-	# All four P1 facilities exist after the W9 wave, so the "missing scene"
-	# branch can no longer be exercised through a real facility id; assert the
-	# branch itself with an unknown id instead (no crash, returns false).
-	_check(hub.open_facility("nonexistent_facility") == false,
-		"an unknown facility id returns false without crashing")
-	hub.queue_free()
+	_check(TradeEngineLib.buy("quanzhou", "wine", 10),
+		"buy 10 wine at unallied quanzhou (demands wine, stock 40)")
+	# 40 → 30: prices 39,43 → 39×10 + 43×0? 10 units = one tranche: 39 × 10
+	# = 390 + 78 tax (20%) = 468.
+	_check(GameState.gold == 1000 - 468,
+		"the quanzhou buy charges 390 + 78 tax = 468 (got %d)" % GameState.gold)
+	_check(AllegianceLib.treasury("portugal") == 5000,
+		"the unallied 78g taxes collect into nothing (portugal untouched)")
+	# A foreign sale: 20% comes off the proceeds into england's treasury.
+	_make_run("london", 10000)
+	var england_before := AllegianceLib.treasury("england")
+	FleetLib.add_goods("wine", 10)
+	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 wine at london")
+	_check(GameState.gold == 10000 + 248,
+		"the sale pays 310 − 62 tax = 248 net (got %d)" % GameState.gold)
+	_check(AllegianceLib.treasury("england") == england_before + 62,
+		"the 62g tax flows to england's treasury (got %d)"
+		% (AllegianceLib.treasury("england") - england_before))
 
-	screen.queue_free()
+
+## Permit resolution through the palace sales (docs/30 §4.10): home 5,000g
+## zeroes own+aligned ports; foreign 20,000g (knight, rep +20) zeroes that
+## nation's ports; the sale price credits the selling nation's treasury.
+func _test_permits_and_treasury_credit() -> void:
+	_make_run("lisbon", 100000)
+	# No permit yet: 5% at lisbon.
+	_check(TradeEngineLib.tax_mille("lisbon") == 500, "no permit: 5% at lisbon")
+	# Home charter at the player's own palace.
+	var gold_before := GameState.gold
+	var portugal_before := AllegianceLib.treasury("portugal")
+	_check(AllegianceLib.has_permit_home() == false, "no home charter held")
+	_check(PalaceEngineLib.buy_permit("lisbon"), "the home charter buys")
+	_check(GameState.gold == gold_before - 5000,
+		"the charter costs 5,000g (got %d)" % GameState.gold)
+	_check(AllegianceLib.has_permit_home(), "the charter is held")
+	_check(AllegianceLib.treasury("portugal") == portugal_before + 5000,
+		"the 5,000g permit sale credits portugal's treasury (got %d)"
+		% (AllegianceLib.treasury("portugal") - portugal_before))
+	_check(TradeEngineLib.tax_mille("lisbon") == 0,
+		"lisbon: 5% → 0%")
+	_check(TradeEngineLib.tax_mille("madeira") == 0,
+		"aligned contestable madeira: 5% → 0%")
+	_check(TradeEngineLib.tax_mille("london") == 2000,
+		"the charter never covers foreign london")
+	_check(not PalaceEngineLib.buy_permit("lisbon"),
+		"re-buying a held (non-void) charter is refused")
+	# The exempt buy books no tax line.
+	var mid_gold := GameState.gold
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "exempt buy 10 wine")
+	_check(GameState.gold == mid_gold - 210,
+		"the exempt buy charges exactly 210 (got %d)" % GameState.gold)
+	# Foreign permit: gates then coverage.
+	_check(AllegianceLib.has_permit_foreign("england") == false,
+		"no england permit held")
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"a knight-less player cannot buy the england permit")
+	CharacterLib.add_reputation("england", 20)
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"rep +20 alone is not enough without the title")
+	GameState.titles = {"england": "knight"}
+	var england_before := AllegianceLib.treasury("england")
+	gold_before = GameState.gold
+	_check(PalaceEngineLib.buy_permit("london"),
+		"knight + rep +20: the england permit buys")
+	_check(GameState.gold == gold_before - 20000,
+		"the foreign permit costs 20,000g (got %d)" % GameState.gold)
+	_check(AllegianceLib.treasury("england") == england_before + 20000,
+		"the 20,000g sale credits england's treasury (got %d)"
+		% (AllegianceLib.treasury("england") - england_before))
+	_check(TradeEngineLib.tax_mille("london") == 0,
+		"london: 20% → 0% under the england permit")
+	_check(TradeEngineLib.tax_mille("valencia") == 2000,
+		"the england permit does not cover spain's valencia")
+	# Void while the covered nation's bounty stands.
+	GameState.bounties["england"] = {"amount": 5000, "day": 1}
+	_check(TradeEngineLib.tax_mille("london") == 2000,
+		"the void permit falls back to 20%")
+	_check(AllegianceLib.permit_void_reason("england")
+		== "palace.permit.void_bounty",
+		"the void state names palace.permit.void_bounty")
+	_check(PalaceEngineLib.buy_permit("london"),
+		"a void permit can be re-bought at full price")
+	_check(GameState.gold == gold_before - 40000,
+		"the re-buy charged the full 20,000g again (got %d)" % GameState.gold)
+	GameState.bounties = {}
+
+
+func _test_supplies_ignore_factors() -> void:
+	# At a port that produces wine and demands spices, at max investment, the
+	# supply prices are still the locked 2g / 1g — and supplies carry no tax.
+	_make_run("lisbon", 10000)
+	_check("wine" in DataLoader.get_port("lisbon")["produces"],
+		"fixture port produces wine")
+	_check("spices" in DataLoader.get_port("lisbon")["demands"],
+		"fixture port demands spices")
+	for click in range(10):
+		TradeEngineLib.invest("lisbon")
+	_check(TradeEngineLib.supplies_price("provisions") == 2,
+		"provisions are 2g at max investment (got %d)"
+		% TradeEngineLib.supplies_price("provisions"))
+	_check(TradeEngineLib.supplies_price("water") == 1,
+		"water is 1g at max investment (got %d)"
+		% TradeEngineLib.supplies_price("water"))
+	_check(not ("provisions" in DataLoader.goods),
+		"supplies are not trade goods (absent from goods.json)")
+	_check(not ("water" in DataLoader.goods),
+		"water is not a trade good")
+
+	# Buying: 2g and 1g exactly — no tariff on either (§4.10 exemption).
+	var gold_before := GameState.gold
+	_check(TradeEngineLib.buy_supplies("lisbon", "provisions", 10),
+		"buy 10 provisions")
+	_check(GameState.gold == gold_before - 20,
+		"10 provisions cost 20g, untaxed (paid %d)" % (gold_before - GameState.gold))
+	_check(FleetLib.supplies("provisions") == 10, "10 provisions aboard")
+	gold_before = GameState.gold
+	_check(TradeEngineLib.buy_supplies("lisbon", "water", 10), "buy 10 water")
+	_check(GameState.gold == gold_before - 10,
+		"10 water costs 10g, untaxed (paid %d)" % (gold_before - GameState.gold))
+	_check(FleetLib.used_capacity(GameState.fleet[0]) == 20,
+		"supplies occupy cargo: 10 + 10 = 20 units (got %d)"
+		% FleetLib.used_capacity(GameState.fleet[0]))
+
+	# sell-back is not offered for supplies (docs/20 §4.10), so this is a buy
+	# ceiling only: `min(floor(gold / price), fleet_free)`.
+	var engine_source := FileAccess.get_file_as_string(
+		"res://scripts/port/trade_engine.gd"
+	)
+	_check(not engine_source.contains("func sell_supplies("),
+		"no sell_supplies API exists (supplies are not sellable)")
+	_check(engine_source.contains("func buy_supplies("),
+		"buy_supplies is the only supplies transaction")
+	# Over-max / over-capacity supplies buys are refused unchanged.
+	var free_before := FleetLib.fleet_free()
+	var gold_now := GameState.gold
+	_check(not TradeEngineLib.buy_supplies("lisbon", "provisions", free_before + 1),
+		"a supplies buy over the free capacity is refused")
+	_check(GameState.gold == gold_now and FleetLib.fleet_free() == free_before,
+		"the refused supplies buy changed nothing")
+	_check(not TradeEngineLib.buy_supplies("lisbon", "rum", 1),
+		"an unknown supply kind is refused")
+
+
+## docs/50 §4.3/§4.6: the XP and reputation rules are unchanged by the tariff —
+## both book the **gross** walked proceeds; the tax composes after (§4.10).
+func _test_sell_profit_xp_and_reputation() -> void:
+	# Lisbon → London wine run: buy 10 at 21 (+10 tax), sell at 31 (−62 tax).
+	_make_run("lisbon", 1000)
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine at Lisbon")
+	_check(GameState.gold == 1000 - 220, "the 10-buy costs 220 with tax (one tranche)")
+	_dock("london")
+
+	# The profitable walk out of rest only ever earns 450g more (prices fall
+	# to the 21 basis within 8 tranches), so seed the accumulator to 550g —
+	# the walked sales then cross 1,000g exactly.
+	GameState.player["profit_by_nation"] = {"england": 550}
+	GameState.player["profit_rep_awarded"] = {"england": 0}
+	var xp_before := CharacterLib.current_xp()
+	var rep_before := CharacterLib.reputation("england")
+	var gold_before := GameState.gold
+	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 wine at London")
+	_check(GameState.gold == gold_before + 248,
+		"sell earns 310 gross − 62 tax = 248 (got +%d)"
+		% (GameState.gold - gold_before))
+
+	# docs/50 §4.3: per-unit profit = 31 − floor(30 × 0.7) = 10; profit 100 →
+	# +1 XP — booked on the GROSS proceeds, the tax never touches XP.
+	_check(CharacterLib.current_xp() == xp_before + 1,
+		"a 100g-profit sale awards 1 XP (got +%d)"
+		% (CharacterLib.current_xp() - xp_before))
+	# docs/50 §4.6: +1 reputation per 1,000g profit — 100g is below the
+	# threshold, so it accumulates instead of granting.
+	_check(CharacterLib.reputation("england") == rep_before,
+		"100g of profit does not yet earn reputation (england %d)"
+		% CharacterLib.reputation("england"))
+	_check(TradeEngineLib.profit_by_nation("england") == 650,
+		"the 550g seed + 100g booked to England (got %d)"
+		% TradeEngineLib.profit_by_nation("england"))
+
+	# The 1,000g threshold carries across transactions, walked tranche by
+	# tranche: keep selling 10 at a time and let the oracle track the exact
+	# net gold as London's stock rises (docs/30 §4.4 + §4.10).
+	var stock := 50  # 40 at rest + the first sale's 10
+	var profit_total := 650  # the 550g seed + the first sale's 100g
+	var sale := 0
+	for chunk in range(12):
+		FleetLib.add_goods("wine", 10)
+		gold_before = GameState.gold
+		xp_before = CharacterLib.current_xp()
+		rep_before = CharacterLib.reputation("england")
+		_check(TradeEngineLib.sell("london", "wine", 10),
+			"oracle sale %d: sell 10 more wine at London" % chunk)
+		# Oracle: one tranche of 10 at the current stock's sell price, taxed 20%.
+		var factor := 1500 - 5 * stock
+		var price := maxi(1, (30 * factor * 8) / 10000)
+		var gross := 10 * price
+		@warning_ignore("integer_division")
+		var net := gross - gross * 2000 / 10000
+		_check(GameState.gold == gold_before + net,
+			"oracle sale %d (stock %d): %d gross − tax = %d net (got +%d)"
+			% [chunk, stock, gross, net, GameState.gold - gold_before])
+		var profit := maxi(0, gross - 10 * 21)
+		profit_total += profit
+		sale += 1
+		_check(CharacterLib.current_xp() == xp_before + profit / 100,
+			"oracle sale %d awards floor(%d / 100) XP"
+			% [chunk, profit])
+		stock += 10
+		if profit_total >= 1000:
+			break
+	_check(profit_total >= 1000,
+		"the threshold was crossed after %d walked sales (%dg)"
+		% [sale, profit_total])
+	_check(CharacterLib.reputation("england") == 1,
+		"crossing 1,000g cumulative profit grants exactly +1 reputation (got %d)"
+		% CharacterLib.reputation("england"))
+	_check(TradeEngineLib.profit_by_nation("england") == profit_total,
+		"the accumulator books the exact walked total %d (got %d)"
+		% [profit_total, TradeEngineLib.profit_by_nation("england")])
+	# Reputation went to England, not any other nation.
+	_check(CharacterLib.reputation("portugal") == 0,
+		"selling in London leaves Portugal's reputation at 0")
+
+	# 不收购 + loss-making sales: a producer refuses its own good outright, and
+	# a sale below the basis gives 0 XP and 0 reputation.
+	_make_run("lisbon", 10000)
+	FleetLib.add_goods("wine", 10)
+	xp_before = CharacterLib.current_xp()
+	_check(not TradeEngineLib.sell("lisbon", "wine", 10),
+		"lisbon refuses its own wine outright (不收购)")
+	_make_run("london", 10000)
+	EconomyLib.set_stock("london", "wine", 200)  # parked: sell price 12
+	FleetLib.add_goods("wine", 10)
+	xp_before = CharacterLib.current_xp()
+	rep_before = CharacterLib.reputation("england")
+	GameState.gold = 0
+	# London sell is 12/unit gross against a 21 cost basis → a loss every unit.
+	_check(TradeEngineLib.sell("london", "wine", 10), "sell wine at parked london")
+	@warning_ignore("integer_division")
+	var loss_net := 120 - 120 * 2000 / 10000
+	_check(GameState.gold == loss_net,
+		"the loss sale pays 120 gross − 24 tax = 96 (got %d)" % GameState.gold)
+	_check(CharacterLib.current_xp() == xp_before,
+		"a loss-making sale awards 0 XP (got +%d)"
+		% (CharacterLib.current_xp() - xp_before))
+	_check(CharacterLib.reputation("england") == rep_before,
+		"a loss-making sale awards no reputation")
+	_check(TradeEngineLib.profit_by_nation("england") == 0,
+		"a loss books no cumulative profit (got %d)"
+		% TradeEngineLib.profit_by_nation("england"))
+	# A walked sale that dips under the basis part-way books only the total's
+	# profit (docs/30 §4.4: the summed total, not per-tranche profit).
+	_make_run("london", 10000)
+	FleetLib.add_goods("wine", 20)
+	# 40→60: 31×10 + 30×10 = 610 gross; basis 420 → profit 190 → 1 XP.
+	xp_before = CharacterLib.current_xp()
+	_check(TradeEngineLib.sell("london", "wine", 20), "a two-tranche sale")
+	_check(GameState.gold == 10000 + 488, "the walked total nets 610 − 122 = 488")
+	_check(CharacterLib.current_xp() == xp_before + 1,
+		"the two-tranche profit (190g) books exactly 1 XP")
+
+	# Reputation is per nation and clamped: the cap holds after a profit.
+	# The accumulator is seeded to 950g so the walked sale (40 units →
+	# 1,160g gross, +320g profit) crosses 1,000g and awards — into the cap.
+	_make_run("london", 10000)
+	FleetLib.add_goods("wine", 40)
+	CharacterLib.add_reputation("england", 100)
+	GameState.player["profit_by_nation"] = {"england": 950}
+	GameState.player["profit_rep_awarded"] = {"england": 0}
+	TradeEngineLib.sell("london", "wine", 40)
+	_check(TradeEngineLib.profit_by_nation("england") == 1270,
+		"the crossed accumulator books 950 + 320 (got %d)"
+		% TradeEngineLib.profit_by_nation("england"))
+	_check(CharacterLib.reputation("england") == 100,
+		"reputation stays clamped at +100 (got %d)"
+		% CharacterLib.reputation("england"))
+
+	# Over-quantity sells fail without touching state.
+	_make_run("london", 10000)
+	FleetLib.add_goods("wine", 5)
+	gold_before = GameState.gold
+	_check(not TradeEngineLib.sell("london", "wine", 6),
+		"selling 6 of 5 held is refused")
+	_check(FleetLib.held("wine") == 5 and GameState.gold == gold_before,
+		"the refused sell changed nothing")
+	_check(not TradeEngineLib.sell("london", "wine", 0), "sell(0) is refused")
+
+
+## docs/50-* §4.6 + §4.8: the cumulative-profit accumulator sits in the `player`
+## save block, so a JSON round trip must preserve both the running total and
+## the reputation already paid out (otherwise a reload would re-award points).
+func _test_profit_survives_save_roundtrip() -> void:
+	_make_run("lisbon", 10000, ["galleon"])
+	_check(TradeEngineLib.buy("lisbon", "wine", 150), "buy 150 wine")
+	_dock("london")
+	GameState.gold = 0
+	# The walked proceeds of 150 units from rest 40 (docs/30 §4.4 walk):
+	# 15 tranches × 10 units summing 336 per 10 → 3,360 gross; the 20%
+	# tariff takes 672.
+	_check(TradeEngineLib.sell("london", "wine", 150), "sell 150 wine")
+	_check(GameState.gold == 2688,
+		"the walked proceeds net 3,360 − 672 tax = 2,688 (%d)"
+		% GameState.gold)
+	_check(TradeEngineLib.profit_by_nation("england") == 210,
+		"the walked profit books 3,360 − 150 × 21 = 210, gross (got %d)"
+		% TradeEngineLib.profit_by_nation("england"))
+	_check(GameState.player.has("profit_by_nation")
+		and GameState.player.has("profit_rep_awarded"),
+		"both accumulator keys live in the player block")
+
+	# JSON round trip exactly as the save system serialises the block.
+	var encoded := JSON.stringify(GameState.player)
+	var decoded = JSON.parse_string(encoded)
+	GameState.player = decoded
+	_check(CharacterLib.profit_by_nation("england") == 210,
+		"the total survives a JSON round trip (got %d)"
+		% CharacterLib.profit_by_nation("england"))
+	_check(CharacterLib.reputation("england") == 0, "no reputation paid yet")
+
+	# Seed the accumulator to 1,900g/1 awarded, round-trip again, then one
+	# more 100g profit crosses 2,000g → exactly +2 total, no double-award.
+	GameState.player["profit_by_nation"]["england"] = 1900
+	GameState.player["profit_rep_awarded"]["england"] = 1
+	CharacterLib.add_reputation("england", 1)
+	encoded = JSON.stringify(GameState.player)
+	GameState.player = JSON.parse_string(encoded)
+	FleetLib.add_goods("wine", 10)
+	# London is drained to stock 190 by the 150-sale; restock it so the next
+	# 10 transact at the §5 rest price 31 again (a pure state seed).
+	EconomyLib.set_stock("london", "wine", 40)
+	var topup_before := GameState.gold
+	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 more (100g profit)")
+	_check(GameState.gold == topup_before + 248,
+		"the top-up sale nets 310 − 62 = 248 (got +%d)"
+		% (GameState.gold - topup_before))
+	_check(CharacterLib.profit_by_nation("england") == 2000,
+		"total is 2,000g after the reload (got %d)"
+		% CharacterLib.profit_by_nation("england"))
+	_check(CharacterLib.reputation("england") == 2,
+		"2,000g → exactly +2 total reputation, no double-award (got %d)"
+		% CharacterLib.reputation("england"))
+	# A sub-1,000g remainder never rounds up.
+	FleetLib.add_goods("wine", 5)
+	TradeEngineLib.sell("london", "wine", 5)
+	_check(CharacterLib.reputation("england") == 2,
+		"a remainder grants nothing extra (got %d)"
+		% CharacterLib.reputation("england"))
+
+
+func _test_capacity_flagship_first() -> void:
+	# Two hulls: caravel 120 + latin 30. Buying fills the flagship first.
+	_make_run("lisbon", 100000, ["caravel", "latin"])
+	_check(FleetLib.fleet_free() == 150, "fleet free is 150 (120 + 30)")
+	_check(TradeEngineLib.buy("lisbon", "wine", 100), "buy 100 wine")
+	_check(int(GameState.fleet[0]["cargo"].get("wine", 0)) == 100,
+		"all 100 land on the flagship (got %d)"
+		% int(GameState.fleet[0]["cargo"].get("wine", 0)))
+	_check(int(GameState.fleet[1]["cargo"].get("wine", 0)) == 0,
+		"the escort is still empty")
+	_check(FleetLib.fleet_free() == 50,
+		"fleet_free drops by exactly 100 → 50 (got %d)" % FleetLib.fleet_free())
+
+	# Overflow goes to the second hull, flagship still first.
+	_check(TradeEngineLib.buy("lisbon", "wine", 40), "buy 40 more wine")
+	_check(int(GameState.fleet[0]["cargo"].get("wine", 0)) == 120,
+		"the flagship is full at 120 (got %d)"
+		% int(GameState.fleet[0]["cargo"].get("wine", 0)))
+	_check(int(GameState.fleet[1]["cargo"].get("wine", 0)) == 20,
+		"the escort holds the 20 overflow (got %d)"
+		% int(GameState.fleet[1]["cargo"].get("wine", 0)))
+	_check(FleetLib.fleet_free() == 10, "fleet_free is 10 (got %d)"
+		% FleetLib.fleet_free())
+	_check(FleetLib.held("wine") == 140,
+		"held() pools both hulls: 140 (got %d)" % FleetLib.held("wine"))
+
+	# Buy_max is pooled capacity, so the last 10 are buyable and 11 are not.
+	_check(TradeEngineLib.buy_max("lisbon", "wine") == 10,
+		"buy_max uses pooled free capacity: 10 (got %d)"
+		% TradeEngineLib.buy_max("lisbon", "wine"))
+	_check(not TradeEngineLib.buy("lisbon", "wine", 11), "11 is refused")
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "exactly 10 succeeds")
+	_check(FleetLib.fleet_free() == 0, "the fleet is full")
 
 
 # --- Harness --------------------------------------------------------------

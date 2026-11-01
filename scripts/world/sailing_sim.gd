@@ -949,6 +949,16 @@ static func advance_clock(days: float) -> int:
 		# (`advance_port_day` → `advance_clock`), so both run the step.
 		for changed_port in EconomyLib.day_tick():
 			EventBus.market_changed.emit(str(changed_port))
+		# Phase 7 month boundary (docs/90-* §5.4 — one seam, one owner: task L):
+		# the day that just ticked INTO a new month (`day % 30 == 1` after the
+		# increment) runs the allegiance month tick — resets `month_invested`,
+		# credits baseline treasury income, resolves the seeded NPC
+		# counter-investment, refreshes the telegraph windows. Guarded dynamic
+		# load per the docs/80-* §4.9 guard-call convention.
+		if GameState.day % 30 == 1:
+			var allegiance := load("res://scripts/port/allegiance.gd")
+			if allegiance != null and allegiance.has_method("month_tick"):
+				allegiance.month_tick()
 		# §4.3 drift-push position (locked, Phase 6): after the economy step
 		# and immediately before `day_advanced` — deterministic and pure, so
 		# the NPC tick sees the drift-corrected cell. No-op unless Drift mode

@@ -18,6 +18,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
+## Port allegiance, tariffs and permits (Phase 7, task L) — the permit state,
+## void rules and treasury credit live there; the sale flow lives here.
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
 
 ## §4.3: a nation offers royal missions only at or above this reputation.
 const MISSION_REPUTATION := 30
@@ -416,3 +419,93 @@ static func tournament_status(port_id: String, day: int) -> Dictionary:
 
 static func enter_tournament(port_id: String, day: int) -> bool:
 	return TournamentLib.enter(port_id, day)
+
+
+# --- Tax permits (docs/30-* §4.10, Phase 7; UI contract 80-* §4.7.13) ------
+#
+# The state (flags, coverage, void rules) is `allegiance.gd`; this section is
+# the sale flow: which kind the palace sells, the price/title/rep gates, the
+# gold charge and the treasury credit. The screen (task F) renders the offer.
+
+## The permit row at `port_id`'s palace (`{}` when the port has no palace).
+## Shape: `{kind, nation_id, price, owned, void_key, title_locked, rep_locked,
+## coverage_key}` — all screen-side strings are ui_strings keys from the
+## `palace.permit.*` family (the orchestrator-merged inventory).
+static func permit_offer(port_id: String) -> Dictionary:
+	var nation_id := nation_of(port_id)
+	if nation_id.is_empty():
+		return {}
+	var player := _player_nation()
+	var kind := "home" if nation_id == player else "foreign"
+	var price := AllegianceLib.PERMIT_HOME_PRICE if kind == "home" \
+		else AllegianceLib.PERMIT_FOREIGN_PRICE
+	var owned := _permit_owned(kind, nation_id)
+	return {
+		"kind": kind,
+		"nation_id": nation_id,
+		"price": price,
+		"owned": owned,
+		"void_key": AllegianceLib.permit_void_reason(nation_id),
+		"title_locked": kind == "foreign"
+			and FameLib.rank_index(FameLib.title(nation_id))
+				< FameLib.rank_index(FameLib.RANK_KNIGHT),
+		"rep_locked": kind == "foreign"
+			and CharacterLib.reputation(nation_id)
+				< AllegianceLib.PERMIT_FOREIGN_MIN_REP,
+		"coverage_key": "palace.permit.home.coverage" if kind == "home"
+			else "palace.permit.foreign.coverage",
+	}
+
+
+## True when the player already holds the permit (`palace.permit.*.owned`).
+static func _permit_owned(kind: String, nation_id: String) -> bool:
+	if kind == "home":
+		return AllegianceLib.has_permit_home()
+	return AllegianceLib.has_permit_foreign(nation_id)
+
+
+## Buys the permit this palace sells (home charter at the player's own nation's
+## palaces, foreign permit for that nation elsewhere). Refused when there is
+## no palace, the permit is already held (non-void), a §4.10 gate locks it, or
+## the purse cannot pay. While **void** a re-buy costs the full price. On
+## success the price flows to the selling nation's treasury (decision 19).
+static func buy_permit(port_id: String) -> bool:
+	var offer := permit_offer(port_id)
+	if offer.is_empty():
+		return false
+	if bool(offer["owned"]) and str(offer["void_key"]).is_empty():
+		return false
+	if bool(offer["title_locked"]) or bool(offer["rep_locked"]):
+		return false
+	var price := int(offer["price"])
+	if GameState.gold < price:
+		return false
+	GameState.add_gold(-price)
+	AllegianceLib.set_permit(str(offer["kind"]), str(offer["nation_id"]))
+	AllegianceLib.credit_permit_sale(str(offer["nation_id"]), price)
+	return true
+
+
+# --- Commendation hook (docs/70-* §4.1; UI contract 80-* §4.7.13) -----------
+#
+# The first time a contestable port flips to the player's nation, the
+# allegiance engine queues a one-time commendation (`fame_commended`); the
+# palace surface (task F) plays the `palace.commend.*` dialog at the player's
+# nation's palaces and dismisses it here. Pull model — no EventBus surface.
+
+## The unshown commendation this palace should play (`{}`, or
+## `{port_id, nation_id}` — both i18n names are the screen's to resolve).
+static func pending_commendation(port_id: String) -> Dictionary:
+	if nation_of(port_id) != _player_nation() or _player_nation().is_empty():
+		return {}
+	return AllegianceLib.pending_commendation()
+
+
+## Dismisses the pending commendation after the dialog played.
+static func dismiss_commendation() -> void:
+	AllegianceLib.mark_commendation_shown()
+
+
+## The player's nation id (`""` before a run exists).
+static func _player_nation() -> String:
+	return str(GameState.player.get("nation_id", ""))

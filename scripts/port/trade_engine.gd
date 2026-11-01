@@ -38,6 +38,9 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Stock state, daily drift and the per-thousand factor — the docs/30 §4.2
 ## ownership split puts the factor in `economy.gd`, the price plumbing here.
 const EconomyLib := preload("res://scripts/port/economy.gd")
+## Port allegiance, the §4.10 tariff/permits and the §4.9 investment ledger
+## (Phase 7, task L). Same wave, same owner — a direct load, not a guard read.
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
 
 # --- §4.2 price factors ----------------------------------------------------
 
@@ -173,16 +176,26 @@ static func buy_max(port_id: String, good_id: String) -> int:
 	var base := _base_price(good_id)
 	var discount := _discount_units(port_id)
 	var purse := GameState.gold
+	# The §4.10 tariff rides on the running total (after all price math), so
+	# the affordability walk compares against `spent + tax`, not `spent`.
+	var mille := tax_mille(port_id)
 	var bought := 0
+	var spent := 0
+	var paid := 0
 	for tranche in walk:
 		var price := _tranche_price(base, discount, tranche, false, UNITS)
-		var cost := price * int(tranche["units"])
-		if purse >= cost:
-			purse -= cost
+		spent += price * int(tranche["units"])
+		var taxed := _taxed_total(spent, mille)
+		if purse >= taxed:
 			bought += int(tranche["units"])
+			paid = taxed
 		else:
+			# Flat-rate remainder against the purse left after the accepted
+			# tranches: n units fit iff n × price × (scale + mille)
+			# ≤ remaining × scale (the tax is linear in the total).
 			@warning_ignore("integer_division")
-			bought += purse / price
+			bought += maxi(0, (purse - paid) * AllegianceLib.TARIFF_SCALE
+				/ (price * (AllegianceLib.TARIFF_SCALE + mille)))
 			break
 	return maxi(0, bought)
 
@@ -213,22 +226,37 @@ static func invested(port_id: String) -> int:
 	return int(GameState.port_investments.get(port_id, 0))
 
 
-## True when another 500g chunk is allowed: below the 5,000g cap and affordable.
+## True when another 500g chunk is allowed: the purse can pay, the §4.9 gates
+## pass ([method Allegiance.invest_block_reason] — monthly allowance at a
+## contestable port, rep/bounty diplomacy everywhere an alignment exists), and
+## at a protected port the 5,000g discount-saturation cap is not yet reached
+## (contestable ports keep investing past it — the ledger is the flip
+## campaign's currency, docs/30 §4.9).
 static func can_invest(port_id: String) -> bool:
-	if port_id.is_empty() or DataLoader.get_port(port_id).is_empty():
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if port_id.is_empty() or port.is_empty():
 		return false
-	if invested(port_id) >= INVEST_CAP_GOLD:
+	if not AllegianceLib.invest_block_reason(port_id).is_empty():
+		return false
+	if bool(port.get("protected", false)) \
+			and invested(port_id) >= INVEST_CAP_GOLD:
 		return false
 	return GameState.gold >= INVEST_CHUNK
 
 
-## Invests one 500g chunk, permanently. Returns false (state untouched) at the
-## cap or when the purse cannot pay — "the 11th click is impossible".
+## Invests one 500g chunk. At a **contestable** port the chunk also feeds the
+## player-nation's ledger there (+500g, docs/30 §4.3) and books against the
+## ≤ 2,000g monthly allowance (docs/30 §4.9); at a **protected** port the
+## discount is the whole effect (no ledger, no allowance — the 5,000g
+## discount-saturation cap still ends investment, as always). Returns false
+## (state untouched) when blocked, capped or unaffordable.
 static func invest(port_id: String) -> bool:
 	if not can_invest(port_id):
 		return false
 	GameState.port_investments[port_id] = invested(port_id) + INVEST_CHUNK
 	GameState.add_gold(-INVEST_CHUNK)
+	if not AllegianceLib.is_protected(port_id):
+		AllegianceLib.player_invest_chunk(port_id)
 	return true
 
 
@@ -264,6 +292,11 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 	if DataLoader.get_good(good_id).is_empty():
 		push_error("TradeEngine.buy: unknown good '%s'" % good_id)
 		return false
+	# Phase 7 listing rule (docs/30 §4.4): an unlisted port-good has no stock
+	# and no rows — it never transacts. A quiet refusal: the market never
+	# offers the row, so this only guards direct engine callers.
+	if not is_listed(port_id, good_id):
+		return false
 	if qty <= 0:
 		return false
 	if qty > buy_max(port_id, good_id):
@@ -272,7 +305,10 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 	# not even the stock touched (all-or-nothing, docs/30 §4.4).
 	var cost := _walk_total(port_id, good_id,
 		EconomyLib.plan_trade(port_id, good_id, qty), false)
-	if GameState.gold < cost:
+	# docs/30 §4.10: the tariff composes after all price math, on the walked
+	# total, and flows to the port's effective-alignment nation.
+	var tax := tax_amount(port_id, cost)
+	if GameState.gold < cost + tax:
 		return false
 	var stored := FleetLib.add_goods(good_id, qty)
 	if stored != qty:
@@ -285,7 +321,8 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 	# Books the stock walk (identical to the planned one: nothing moved in
 	# between) and then fires the §4.4 market_changed contract.
 	EconomyLib.apply_trade(port_id, good_id, qty)
-	GameState.add_gold(-cost)
+	GameState.add_gold(-(cost + tax))
+	AllegianceLib.credit_tax(port_id, _player_nation(), tax)
 	EventBus.market_changed.emit(port_id)
 	FleetLib.notify_changed()
 	return true
@@ -316,10 +353,20 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 	if DataLoader.get_good(good_id).is_empty():
 		push_error("TradeEngine.sell: unknown good '%s'" % good_id)
 		return false
+	# Phase 7 market direction + listing rule (docs/30 §4.2/§4.4): a producing
+	# port never buys its own produced good (不收购) and unlisted goods have
+	# no market at all. Quiet refusals — the screen disables the row.
+	if not port_buys_good(port_id, good_id):
+		return false
 	if qty <= 0 or qty > FleetLib.held(good_id):
 		return false
 	var proceeds := _walk_total(port_id, good_id,
 		EconomyLib.plan_trade(port_id, good_id, -qty), true)
+	# docs/30 §4.10: the tariff comes off the proceeds after all price math
+	# and flows to the port's effective-alignment nation. The §4.3 XP and
+	# §4.6 reputation below keep booking the **gross** walked total — the tax
+	# composes after that plumbing, exactly like on the buy side.
+	var tax := tax_amount(port_id, proceeds)
 	var removed := FleetLib.remove_goods(good_id, qty)
 	if removed != qty:
 		if removed > 0:
@@ -328,7 +375,8 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	var base := _base_price(good_id)
 	EconomyLib.apply_trade(port_id, good_id, -qty)
-	GameState.add_gold(proceeds)
+	GameState.add_gold(proceeds - tax)
+	AllegianceLib.credit_tax(port_id, _player_nation(), tax)
 	# docs/50 §4.3 locked XP rule (owned by Character), booked on the summed
 	# tranche total: Character computes `qty × max(0, price − basis)`; shaping
 	# the call as one unit that fetched the whole cargo's proceeds against the
@@ -431,13 +479,24 @@ static func profit_by_nation(nation_id: String) -> int:
 	return CharacterLib.profit_by_nation(nation_id)
 
 
-# --- Data-driven market rows ----------------------------------------------
+# --- Data-driven market rows (docs/30 §4.4 listing rule, §4.10 tax) ---------
 
-## Every good in `data/goods.json`, sorted by `base_price` ascending (ties by
-## id for a stable order) — docs/30 §4.7. The market screen iterates this list,
-## so adding a 21st good is a data-only change.
-static func goods_rows() -> Array:
-	var rows: Array = DataLoader.goods_list.duplicate()
+## The port's **listed** goods, sorted by `base_price` ascending (ties by id
+## for a stable order). Phase 7 listing rule (docs/30 §4.4, correction 7): a
+## port lists a good iff it produces or demands it — unlisted goods have no
+## stock, no rows, and never transact. The market screen iterates this list,
+## so reshaping a port's `produces`/`demands` stays a data-only change; the
+## tariff side of every row composes after the price math per docs/30 §4.10
+## (see [method tax_mille] / [method tax_amount]).
+static func goods_rows(port_id: String) -> Array:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	var produces: Array = port.get("produces", [])
+	var demands: Array = port.get("demands", [])
+	var rows: Array = []
+	for good in DataLoader.goods_list:
+		var good_id := str((good as Dictionary).get("id", ""))
+		if good_id in produces or good_id in demands:
+			rows.append(good)
 	rows.sort_custom(func(a, b) -> bool:
 		var price_a := int(a.get("base_price", 0))
 		var price_b := int(b.get("base_price", 0))
@@ -446,6 +505,47 @@ static func goods_rows() -> Array:
 		return price_a < price_b
 	)
 	return rows
+
+
+## True when `good_id` is listed at `port_id` (`produces ∪ demands`, docs/30
+## §4.4): the gate every player buy/sell walks through. Unknown pairs no.
+static func is_listed(port_id: String, good_id: String) -> bool:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if port.is_empty():
+		return false
+	return good_id in port.get("produces", []) \
+		or good_id in port.get("demands", [])
+
+
+## True when the port would **buy** `good_id` from the player: listed and not
+## one of its own produces — a producing port never buys its own produced
+## goods (docs/30 §4.2 market direction; the screen renders 不收购).
+static func port_buys_good(port_id: String, good_id: String) -> bool:
+	if not is_listed(port_id, good_id):
+		return false
+	return not (good_id in DataLoader.get_port(port_id).get("produces", []))
+
+
+# --- Tariff (docs/30 §4.10 — composes after all price math) -----------------
+
+## The player's tariff at `port_id` in the C-contract basis points
+## (0 / 500 / 2000 after permits; `Allegiance.tariff_mille` is the rule).
+static func tax_mille(port_id: String) -> int:
+	return AllegianceLib.tariff_mille(port_id, _player_nation())
+
+
+## The tax coin on a walked transaction total (`total × mille / 10,000`,
+## integer division — the same composition `tools/sim_trade.py` mirrors).
+static func tax_amount(port_id: String, total: int) -> int:
+	if total <= 0:
+		return 0
+	@warning_ignore("integer_division")
+	return total * tax_mille(port_id) / AllegianceLib.TARIFF_SCALE
+
+
+## The player's nation id (`""` before a run exists).
+static func _player_nation() -> String:
+	return str(GameState.player.get("nation_id", ""))
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -496,6 +596,13 @@ static func _combined_units(port_id: String, good_id: String) -> int:
 	@warning_ignore("integer_division")
 	var raw := (_factor_units(port_id, good_id) * _discount_units(port_id)) / UNITS
 	return clampi(raw, BAND_MIN_UNITS, BAND_MAX_UNITS)
+
+
+## A gross total plus its §4.10 tariff: `total + total × mille / 10,000`
+## (integer division — the exact composition `tools/sim_trade.py` mirrors).
+static func _taxed_total(total: int, mille: int) -> int:
+	@warning_ignore("integer_division")
+	return total + total * mille / AllegianceLib.TARIFF_SCALE
 
 
 static func _base_price(good_id: String) -> int:
