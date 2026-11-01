@@ -711,3 +711,34 @@ Barbosa's East-Africa chapters; the *Kilwa Chronicle*.
   variant stays west of the Danish straits).
 - Philippe Dollinger, *The German Hansa* (1964) — winter routing practice
   and the Danish-sounds context.
+
+## Phase 7, task S — ships & equipment content (roster 16, equipment 24, pirate drops)
+
+- **Era basis (~1550–1620):** the 8 new hulls (galiot, galleass, fluyt,
+  junk, dhow, pinnace, caravela redonda, xebec) and the 16 new equipment
+  items are authored to Phase 7's era window — the Mediterranean oar-war
+  family, the northern bulk trader, the Indian-Ocean regional hulls, and
+  an arms/armour/sailcloth catalog (backsword, main-gauche, zweihänder,
+  brigandine, three-quarter armour, woven-mat and Flemish-linen sails)
+  all attested inside the window.
+- **Dated exception (one line, per `40-*` §4.3.1):** the `xebec` is a
+  ~1690s hull type — accepted as the roster's single deliberate
+  anachronism for the fast-raider niche.
+- **Roster provenance:** John Francis Guilmartin, *Gunpowder and Galleys*
+  (1974) — the Mediterranean oar-war family (galiot, galleass) and the
+  corsair-raider niche behind the dated xebec exception; Frederic C.
+  Lane, *Venetian Ships and Shipbuilders of the Renaissance* (1934) —
+  the Venetian great galleass; Jan de Vries & Ad van der Woude, *The
+  First Modern Economy* (1997) — the Dutch fluyt; Joseph Needham,
+  *Science and Civilisation in China*, vol. 4:3 — the seagoing junk
+  (Fuchuan 福船); George Fadlo Hourani, *Arab Seafaring* (1951) — the
+  Indian-Ocean dhow; the caravela redonda follows the Estado da Índia
+  route literature already cited for `carreira_da_india`.
+- **Equipment provenance:** Claude Blair, *European Armour circa 1066 to
+  circa 1700* (1958) — brigandine and three-quarter armour; Ewart
+  Oakeshott, *European Weapons and Armour* (1994) — backsword,
+  main-gauche, zweihänder, and the scimitar naming of the Redbeard drop;
+  Fernand Braudel, *Civilization and Capitalism*, vol. 1 — Flemish
+  linen, brocades, and the sailcloth trade. The four named-pirate drops
+  are game fiction keyed to the Phase-5 captains' lore (task D names) —
+  no additional sources.
