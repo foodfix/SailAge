@@ -12,16 +12,6 @@ grow_vertical = 2
 mouse_filter = 0
 script = ExtResource("1_chart")
 
-[node name="Background" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-color = Color(0.109804, 0.133333, 0.188235, 1)
-
 [node name="TopBar" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 10
@@ -57,7 +47,7 @@ layout_mode = 1
 anchor_left = 1.0
 anchor_bottom = 1.0
 anchor_right = 1.0
-offset_left = -300.0
+offset_left = -332.0
 offset_top = 52.0
 offset_right = -16.0
 offset_bottom = -44.0
@@ -68,7 +58,7 @@ mouse_filter = 0
 [node name="Scroll" type="ScrollContainer" parent="DebugPanel"]
 layout_mode = 2
 horizontal_scroll_mode = 0
-vertical_scroll_mode = 0
+vertical_scroll_mode = 1
 
 [node name="Rows" type="VBoxContainer" parent="DebugPanel/Scroll"]
 layout_mode = 2

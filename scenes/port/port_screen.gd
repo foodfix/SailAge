@@ -51,6 +51,9 @@ const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
 ## Phase-5: the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic
 ## density dial, opened from this hub's footer row.
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
+## Amended 2026-11-01 (docs/80-* §4.2/§4.3): the Chart (S17) is instanced in
+## this scene too — `Tab` opens it over the hub, Esc/Tab closes back into S4.
+## The overlay wires itself (input, modal group, session reads); no code here.
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 

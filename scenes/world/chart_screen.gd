@@ -51,7 +51,7 @@ extends Control
 ## ring + cross), the lane network (17 lanes — active variant solid, spokes
 ## thin grey, chokepoint diamonds, lane ids in the side legend), the
 ## `,`/`.` month scrubber (pure view state — `GameState` untouched) and the
-## info strip (Year/Month, density preset, fleet counts by role). With the
+## side-legend role/lane names. With the
 ## row off none of that is reachable: `D`/`,`/`.` are ignored and no debug
 ## layer builds.
 ##
@@ -161,10 +161,6 @@ const KEY_LEGEND_FLEETS := "debug.legend.fleets"
 const KEY_LEGEND_WRECKS := "debug.legend.wrecks"
 const KEY_LEGEND_INTEL := "debug.legend.hunter_intel"
 const KEY_LEGEND_NEUTRAL := "chart.debug.neutral"
-const KEY_INFO_MONTH := "debug.info.month"
-const KEY_INFO_PRESET := "debug.info.preset"
-const KEY_INFO_FLEETS := "debug.info.fleets"
-const KEY_CALENDAR := "world.calendar.year_month"
 ## Task L (docs/80-* §4.6 "Lane heat dots"): the optional cosmetic layer —
 ## small `ACCENT` dots along the built lanes, denser where fleet traffic is
 ## higher. **Default OFF** per the doc flag; flipping this to true is the
@@ -173,7 +169,15 @@ const LANE_HEAT := false
 ## Lane-heat dot size (px, screen space).
 const LANE_HEAT_DOT_PX := 2.0
 
-@onready var _background: ColorRect = $Background
+## --- Mouse view (§4.6, amended 2026-11-01) ----------------------------------
+
+## Wheel-zoom bounds (× the fit view) and the per-notch multiplicative step.
+const ZOOM_MIN := 1.0
+const ZOOM_MAX := 8.0
+const ZOOM_STEP := 1.25
+## A hidden legend row dims to this alpha (§4.6 interactive legend rows).
+const HIDDEN_ROW_ALPHA := 0.35
+
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _title: Label = $TopBar/Title
 @onready var _close: Button = $TopBar/Close
@@ -223,6 +227,16 @@ var _preview_month := 0
 var _debug_active := false
 ## Read-only hover tooltip text ("" when nothing is under the cursor).
 var _hover_text := ""
+## Mouse view (§4.6, amended 2026-11-01): `_zoom` 1.0 = the fit view; `_pan`
+## is the view-rect top-left offset from the fit rect (screen px). Reset on
+## open, clamped to the map; event-driven redraws, never persisted.
+var _zoom := ZOOM_MIN
+var _pan := Vector2.ZERO
+var _dragging := false
+## Interactive legend rows (§4.6, amended 2026-11-01): row id → hidden.
+## Draw-time visibility filters over the build caches — a flip is a
+## `queue_redraw`, never a rebuild. Chart-local, session-only.
+var _layer_hidden := {}
 
 # --- Build caches ------------------------------------------------------------
 
@@ -255,7 +269,10 @@ var _panel_rows: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	_background.color = PaletteLib.PANEL_BG
+	# The full-screen background is painted by the root [_draw] itself (layer 0):
+	# an opaque full-rect *child* ColorRect would render above everything the
+	# root draws and mask the whole map (the z-order rule that shipped the
+	# chart blind — see the scene's node order).
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_bar.color = PaletteLib.PANEL_BG
 	var panel_style := StyleBoxFlat.new()
@@ -308,11 +325,17 @@ func is_open() -> bool:
 
 
 ## Opens the chart: rebuilds the world image once, measures the time, and takes
-## over input (`80-*` §4.6 "build + first frame < 0.5 s"). Idempotent.
+## over input (`80-*` §4.6 "build + first frame < 0.5 s"). Idempotent. Opening
+## restores the fit view (§4.6 mouse view) and — while the S19 row is on —
+## lifts the fog (omniscient default-on, §4.6 amended 2026-11-01).
 func open_chart() -> void:
 	if visible:
 		return
 	var started := Time.get_ticks_usec()
+	_zoom = ZOOM_MIN
+	_pan = Vector2.ZERO
+	_dragging = false
+	_omni_on = debug_available()
 	_rebuild()
 	visible = true
 	add_to_group(MODAL_GROUP)
@@ -323,14 +346,16 @@ func open_chart() -> void:
 
 ## Closes the chart. **Mutates nothing**: the fleet tile and `clock_fraction` are
 ## whatever S3 left there (§4.6 "returns to S3 with the fleet unmoved").
-## Chart-local view state: the `W`/`C`/`I`/`D` toggles persist across opens,
-## the month preview resets to the live month.
+## Chart-local view state: the `W`/`C`/`I` toggles and the legend visibility
+## filters persist across opens, the month preview resets to the live month,
+## the mouse view resets to fit (§4.6, amended 2026-11-01).
 func close_chart() -> void:
 	if not visible:
 		return
 	visible = false
 	_preview_month = 0
 	_hover_text = ""
+	_dragging = false
 	remove_from_group(MODAL_GROUP)
 	queue_redraw()
 
@@ -562,18 +587,31 @@ func terrain_build_count() -> int:
 
 # --- Input (`80-*` §4.3) ---------------------------------------------------
 
+## The Tab edge lives in `_input`, ABOVE the GUI layer: Tab is Godot's UI
+## focus-cycle key, so with any focused Control on screen (the port hub's
+## footer, the chart's own close button) the viewport consumed Tab before
+## `_unhandled_input` ever saw it — the chart would not open at port (§4.3,
+## amended 2026-11-01). Esc and the layer keys stay in `_unhandled_input`.
+func _input(event: InputEvent) -> void:
+	if not _wants_toggle(event):
+		return
+	if visible:
+		get_viewport().set_input_as_handled()
+		close_chart()
+		return
+	# Closed: open — unless a modal already owns the screen (`80-*` §6:
+	# "Tab does nothing while any modal is up").
+	if _other_modal_open():
+		return
+	get_viewport().set_input_as_handled()
+	open_chart()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
-		# `Tab` opens the chart from S3 — unless a modal already owns the
-		# screen (`80-*` §6: "Tab does nothing while any modal is up").
-		if _wants_toggle(event):
-			if _other_modal_open():
-				return
-			get_viewport().set_input_as_handled()
-			open_chart()
 		return
-	# Open: the panel owns all input (§4.6). `Tab` toggles back, `Esc` closes.
-	if _wants_toggle(event) or event.is_action_pressed("back"):
+	# Open: the panel owns all input (§4.6); `Esc` closes.
+	if event.is_action_pressed("back"):
 		get_viewport().set_input_as_handled()
 		close_chart()
 		return
@@ -645,7 +683,51 @@ func _other_modal_open() -> bool:
 ## Updates a Label only — never a rebuild (the redraw-trigger discipline).
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
-		_update_hover((event as InputEventMouseMotion).position)
+		var mm := event as InputEventMouseMotion
+		if _dragging:
+			_pan -= mm.relative
+			_clamp_pan()
+			queue_redraw()
+		else:
+			_update_hover(mm.position)
+		return
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP \
+				or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			_zoom_at(mb.position,
+				ZOOM_STEP if mb.button_index == MOUSE_BUTTON_WHEEL_UP \
+					else 1.0 / ZOOM_STEP)
+			return
+		if mb.button_index == MOUSE_BUTTON_LEFT \
+				or mb.button_index == MOUSE_BUTTON_RIGHT:
+			_dragging = mb.pressed and _zoom > ZOOM_MIN
+
+
+# --- Mouse view (§4.6, amended 2026-11-01) ----------------------------------
+
+## The rect the world occupies on screen right now: the fit rect plus the
+## view transform (pan + zoom). Every draw/coordinate mapping goes through
+## this, so zooming never touches the caches.
+func _view_rect() -> Rect2:
+	return Rect2(_world_rect.position + _pan, _world_rect.size * _zoom)
+
+
+## Keeps the map covering the view: the pan offset is bounded by the zoom
+## surplus, so at fit zoom there is nothing to pan (§4.6 "clamped to the map").
+func _clamp_pan() -> void:
+	var limit := _world_rect.size * (_zoom - 1.0)
+	_pan = _pan.clamp(-limit, Vector2.ZERO)
+
+
+## Wheel zoom anchored at `screen_at`: the world point under the cursor stays
+## under the cursor (§4.6). Pure view state — a `queue_redraw`, no rebuild.
+func _zoom_at(screen_at: Vector2, factor: float) -> void:
+	var world_pt := (screen_at - _view_rect().position) / (_scale * _zoom)
+	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	_pan = screen_at - _world_rect.position - world_pt * _scale * _zoom
+	_clamp_pan()
+	queue_redraw()
 
 
 func _clear_hover() -> void:
@@ -734,6 +816,7 @@ func _relayout() -> void:
 		),
 		size
 	)
+	_clamp_pan()  # a resize moves the fit rect — re-bound the mouse view
 	queue_redraw()
 
 
@@ -750,6 +833,7 @@ func _rebuild() -> void:
 		_omni_on = false
 		_preview_month = 0
 		_hover_text = ""
+		_layer_hidden.clear()
 	_debug_panel.visible = _debug_active
 	var map = DataLoader.map
 	_lead_cells = []
@@ -905,17 +989,19 @@ func _draw() -> void:
 	var view := get_viewport_rect().size
 	# Layer 0: the canvas background (§4.6).
 	draw_rect(Rect2(Vector2.ZERO, view), PaletteLib.PANEL_BG, true)
+	var view_rect := _view_rect()
 	if _texture != null:
 		# Layer 1/2: explored tiles (or the omniscient whole map) over the
 		# unknown background, at the §4.6 "low alpha" (the texture carries the
-		# plain palette colours, so the identity read-back stays exact).
-		draw_texture_rect(_texture, _world_rect, false,
+		# plain palette colours, so the identity read-back stays exact). Drawn
+		# into the view rect — zoom stretches it nearest-neighbour (§4.6).
+		draw_texture_rect(_texture, view_rect, false,
 			Color(1, 1, 1, EXPLORED_ALPHA))
-	draw_rect(_world_rect, PaletteLib.PANEL_LINE, false, 2.0)
+	draw_rect(view_rect, PaletteLib.PANEL_LINE, false, 2.0)
 
 	# Ice tint (the `I` layer; explored-only in player mode).
 	if _ice_texture != null:
-		draw_texture_rect(_ice_texture, _world_rect, false)
+		draw_texture_rect(_ice_texture, view_rect, false)
 
 	# Debug network (below the ecology, above the terrain).
 	if _debug_active:
@@ -931,6 +1017,8 @@ func _draw() -> void:
 	# mode adds the neutral grey and capital rings.
 	var show_names := names_shown(_scale)
 	for entry in _port_dots:
+		if entry.get("neutral", false) and _layer_hidden.get("neutral", false):
+			continue
 		var at := _to_screen(entry["cell"])
 		draw_rect(Rect2(
 			at - Vector2(PORT_DOT_PX, PORT_DOT_PX) * 0.5,
@@ -952,18 +1040,23 @@ func _draw() -> void:
 		draw_line(at - Vector2(0, half), at + Vector2(0, half), PaletteLib.ACCENT, 1.0)
 
 	# Debug ecology: wrecks (ACCENT ×), fleets (§4.5.2 role colors, un-culled),
-	# hunter-intel ring + cross (`60-*` §4.11.11.1 shapes).
+	# hunter-intel ring + cross (`60-*` §4.11.11.1 shapes). Legend rows hide
+	# their category draw-time (§4.6 interactive legend rows).
 	if _debug_active:
-		for entry in _wreck_markers:
-			_draw_cross(_to_screen(entry["cell"]), WRECK_CROSS_PX, PaletteLib.ACCENT)
+		if not _layer_hidden.get("wrecks", false):
+			for entry in _wreck_markers:
+				_draw_cross(_to_screen(entry["cell"]), WRECK_CROSS_PX, PaletteLib.ACCENT)
 		for entry in _fleet_markers:
+			if _layer_hidden.get("role_" + str(entry.get("role", "")), false):
+				continue
 			_draw_fleet_marker(entry)
-		for entry in _intel_markers:
-			var at := _to_screen(entry["cell"])
-			if str(entry.get("kind", "")) == "ring":
-				draw_arc(at, INTEL_RING_PX, 0.0, TAU, 24, INTEL_COLOR, 2.0)
-			else:
-				_draw_cross(at, INTEL_CROSS_PX, INTEL_COLOR)
+		if not _layer_hidden.get("intel", false):
+			for entry in _intel_markers:
+				var at := _to_screen(entry["cell"])
+				if str(entry.get("kind", "")) == "ring":
+					draw_arc(at, INTEL_RING_PX, 0.0, TAU, 24, INTEL_COLOR, 2.0)
+				else:
+					_draw_cross(at, INTEL_CROSS_PX, INTEL_COLOR)
 
 	# Layer 4.5 (task L, docs/80-* §4.6 flag — default OFF): lane heat dots.
 	# Purely cosmetic: an `ACCENT` dot per live fleet standing on a lane or
@@ -992,7 +1085,8 @@ func _draw() -> void:
 
 
 ## The §2.12 network layer: spokes thin grey, inactive lane variants dim, the
-## active path solid in the lane's legend color, chokepoint diamonds.
+## active path solid in the lane's legend color, chokepoint diamonds. Legend
+## rows hide their category draw-time (§4.6 interactive legend rows).
 func _draw_network() -> void:
 	if _network.is_empty():
 		return
@@ -1001,11 +1095,14 @@ func _draw_network() -> void:
 	if map != null and int(map.width) > 0:
 		width = int(map.width)
 	# Spokes: thin grey (the dimmest network shape).
-	var spoke_color := Color(PaletteLib.PANEL_LINE, SPOKE_ALPHA)
-	for spoke in _network.get("spokes", []):
-		for run in _screen_runs(spoke.get("path", []), width):
-			draw_polyline(run, spoke_color, 1.0, false)
+	if not _layer_hidden.get("spokes", false):
+		var spoke_color := Color(PaletteLib.PANEL_LINE, SPOKE_ALPHA)
+		for spoke in _network.get("spokes", []):
+			for run in _screen_runs(spoke.get("path", []), width):
+				draw_polyline(run, spoke_color, 1.0, false)
 	for lane in _network.get("lanes", []):
+		if _layer_hidden.get("lane_" + str(lane["id"]), false):
+			continue
 		var lane_color: Color = lane["color"]
 		# Inactive seasonal variants: dim dots of the lane color.
 		var dim := Color(lane_color, INACTIVE_LANE_ALPHA)
@@ -1016,6 +1113,8 @@ func _draw_network() -> void:
 		for run in _screen_runs(lane.get("active_path", []), width):
 			draw_polyline(run, lane_color, 1.5, false)
 	# Chokepoint diamonds (hollow, rotated squares).
+	if _layer_hidden.get("chokepoints", false):
+		return
 	for choke in _network.get("chokepoints", []):
 		var at := _to_screen(choke["cell"])
 		var r := CHOKEPOINT_PX
@@ -1144,7 +1243,8 @@ func _screen_runs(path: Array, width: int) -> Array:
 
 
 func _to_screen(cell: Vector2i) -> Vector2:
-	return _world_rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * _scale
+	var vr := _view_rect()
+	return vr.position + (Vector2(cell) + Vector2(0.5, 0.5)) * _scale * _zoom
 
 
 ## `true` when `cell` carries a lane or spoke tile (the lane-heat flag's
@@ -1212,7 +1312,7 @@ func debug_legend_texts() -> Array:
 	return out
 
 
-# --- Debug side legend (`80-*` §4.6: lane ids in a side legend + info strip) -
+# --- Debug side legend (`80-*` §4.6: lane ids + role names in a side legend) -
 
 ## Creates the panel rows once (structure is static; values refresh per build).
 func _ensure_panel_rows() -> void:
@@ -1223,30 +1323,103 @@ func _ensure_panel_rows() -> void:
 	_panel_rows["wind"] = _panel_row(KEY_WIND, true)
 	_panel_rows["current"] = _panel_row(KEY_CURRENT, true)
 	_panel_rows["ice"] = _panel_row(KEY_ICE, true)
-	_panel_rows["calendar"] = _panel_row(KEY_CALENDAR, false)
-	_panel_rows["month"] = _panel_row(KEY_INFO_MONTH, false)
-	_panel_rows["preset"] = _panel_row(KEY_INFO_PRESET, false)
-	_panel_rows["fleets"] = _panel_row(KEY_INFO_FLEETS, false)
 	_panel_rows["sec_network"] = _panel_section(KEY_LEGEND_NETWORK)
 	for lane in _network.get("lanes", []):
 		_panel_rows["lane_" + str(lane["id"])] = _panel_swatch_row(
-			str(lane["id"]), lane["color"])
+			_lane_row_key(str(lane["id"])), lane["color"])
 	_panel_rows["spokes"] = _panel_swatch_row(KEY_LEGEND_SPOKES, PaletteLib.PANEL_LINE)
 	_panel_rows["chokepoints"] = _panel_swatch_row(KEY_LEGEND_CHOKEPOINTS, PaletteLib.BAD)
 	_panel_rows["sec_fleets"] = _panel_section(KEY_LEGEND_FLEETS)
 	for role in LEGEND_ROLES:
 		_panel_rows["role_" + role] = _panel_swatch_row(
-			_role_letter(role), _legend_role_color(role))
+			_role_row_key(role), _legend_role_color(role))
+		# §4.7.10 (amended 2026-11-01): the row reads "<marker letter> <name>"
+		# — the prefix is chart-owned, the name is the debug.role.* string.
+		_panel_rows["role_" + role]["prefix"] = _role_letter(role) + " "
 	_panel_rows["wrecks"] = _panel_swatch_row(KEY_LEGEND_WRECKS, PaletteLib.ACCENT)
 	_panel_rows["intel"] = _panel_swatch_row(KEY_LEGEND_INTEL, PaletteLib.BAD)
 	_panel_rows["neutral"] = _panel_swatch_row(KEY_LEGEND_NEUTRAL,
 		ChartViewLib.port_neutral_color())
 	_panel_rows["hover"] = _panel_row("", false)  # value-only tooltip row
+	# §4.6 interactive legend rows (amended 2026-11-01): a click shows/hides
+	# what the row depicts. The children ignore the mouse, so the row box
+	# receives the whole click.
+	for row_id in _panel_rows:
+		if not _row_clickable(str(row_id)):
+			continue
+		var box: Control = _panel_rows[row_id]["box"]
+		box.mouse_filter = Control.MOUSE_FILTER_STOP
+		box.gui_input.connect(_on_row_gui_input.bind(str(row_id)))
+
+
+## The row ids a click may toggle (§4.6 interactive legend rows): the four
+## key-toggle rows, the network shape rows, and every lane/role row.
+func _row_clickable(row_id: String) -> bool:
+	if row_id in ["omni", "wind", "current", "ice", "spokes", "chokepoints",
+			"wrecks", "intel", "neutral"]:
+		return true
+	return row_id.begins_with("lane_") or row_id.begins_with("role_")
+
+
+## What a legend row depicts — `true` when shown. The toggle rows read their
+## key state; every other clickable row reads the visibility filters.
+func _row_shown(row_id: String) -> bool:
+	match row_id:
+		"omni":
+			return _omni_on
+		"wind":
+			return _wind_on
+		"current":
+			return _current_on
+		"ice":
+			return _ice_on
+		_:
+			return not _layer_hidden.get(row_id, false)
+
+
+## A click on a side-legend row (§4.6, amended 2026-11-01). The toggle rows
+## reuse their key handlers (a rebuild); every other row flips a draw-time
+## visibility filter — a redraw, never a rebuild.
+func _on_row_gui_input(event: InputEvent, row_id: String) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if not (mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT):
+		return
+	match row_id:
+		"omni":
+			toggle_omniscient()
+		"wind":
+			toggle_wind_layer()
+		"current":
+			toggle_current_layer()
+		"ice":
+			toggle_ice_layer()
+		_:
+			_layer_hidden[row_id] = not _layer_hidden.get(row_id, false)
+			_refresh_panel()
+			queue_redraw()
 
 
 static func _role_letter(role: String) -> String:
 	var letter := NpcFleetsLib.marker_letter(role)
 	return letter if not letter.is_empty() else "·"
+
+
+## The side-legend row text for a lane id: the `debug.lane.<id>` key when the
+## string exists (§4.7.10 — localized §7.6 names, locale-reactive), else the
+## raw `id` fallback (a missing key must not render as `<debug.lane.…>`).
+static func _lane_row_key(lane_id: String) -> String:
+	var key := "debug.lane." + lane_id
+	return key if DataLoader.ui_strings.has(key) else lane_id
+
+
+## The side-legend row key for a fleet role: the `debug.role.<role>` name
+## (§4.7.10, amended 2026-11-01) when the string exists, else the bare marker
+## letter (the chart prefixes the marker letter either way).
+static func _role_row_key(role: String) -> String:
+	var key := "debug.role." + role
+	return key if DataLoader.ui_strings.has(key) else _role_letter(role)
 
 
 ## §4.7.10 "role-color rows": pirate wears `BAD` on its own; every other role
@@ -1270,7 +1443,8 @@ func _panel_section(text_key: String) -> Dictionary:
 	label.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	label.text = I18n.t_key(text_key)
 	_debug_rows.add_child(label)
-	return {"label": label, "value": label, "swatch": null, "key": text_key}
+	return {"label": label, "value": label, "swatch": null, "box": null,
+		"key": text_key}
 
 
 ## A label + state-dot row (the dot is `ACCENT` when the row's thing is on).
@@ -1282,11 +1456,14 @@ func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 	dot.custom_minimum_size = Vector2(8, 8)
 	dot.color = PaletteLib.PANEL_LINE
 	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if with_dot:
 		box.add_child(dot)
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", 12)
 	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if _is_string_key(text_key):
 		label.text = I18n.t_key(text_key)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1294,10 +1471,12 @@ func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 	var value := Label.new()
 	value.add_theme_font_size_override("font_size", 12)
 	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	value.clip_text = true
+	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(value)
 	_debug_rows.add_child(box)
 	return {"label": label, "value": value, "swatch": dot if with_dot else null,
-		"key": text_key}
+		"box": box, "key": text_key}
 
 
 ## A color-swatch + text row (lane ids, role letters, shape colors). `text`
@@ -1309,21 +1488,28 @@ func _panel_swatch_row(text: String, color: Color) -> Dictionary:
 	swatch.custom_minimum_size = Vector2(8, 8)
 	swatch.color = color
 	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(swatch)
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", 12)
 	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if _is_string_key(text):
 		label.text = I18n.t_key(text)
 	else:
 		label.text = text
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 	var value := Label.new()
 	value.add_theme_font_size_override("font_size", 12)
 	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	value.clip_text = true
+	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(value)
 	_debug_rows.add_child(box)
-	return {"label": label, "value": value, "swatch": swatch, "key": text}
+	return {"label": label, "value": value, "swatch": swatch, "box": box,
+		"key": text}
 
 
 ## Refreshes the panel from the last build's caches (locale-safe: every i18n
@@ -1339,20 +1525,20 @@ func _refresh_panel() -> void:
 		var row: Dictionary = _panel_rows[row_id]
 		var key := str(row.get("key", ""))
 		if _is_string_key(key):
-			(row["label"] as Label).text = I18n.t_key(key)
+			(row["label"] as Label).text = str(row.get("prefix", "")) \
+				+ I18n.t_key(key)
 	_set_dot("omni", _omni_on)
 	_set_dot("wind", _wind_on)
 	_set_dot("current", _current_on)
 	_set_dot("ice", _ice_on)
-	(_panel_rows["calendar"]["value"] as Label).text = I18n.fmt(KEY_CALENDAR, {
-		"y": SailingSimLib.year_for(maxi(int(GameState.day), 1)),
-		"m": view_month(),
-	})
-	(_panel_rows["month"]["value"] as Label).text = "" \
-		if _preview_month < 1 \
-		else I18n.t_key("world.calendar.month.%d" % _preview_month)
-	(_panel_rows["preset"]["value"] as Label).text = str(GameState.npc_preset)
-	(_panel_rows["fleets"]["value"] as Label).text = _fleet_counts_text()
+	# §4.6 interactive legend rows: a hidden row dims (HIDDEN_ROW_ALPHA).
+	for row_id in _panel_rows:
+		if not _row_clickable(str(row_id)):
+			continue
+		var row: Dictionary = _panel_rows[row_id]
+		var shown := _row_shown(str(row_id))
+		(row["box"] as Control).modulate = Color(1, 1, 1,
+			1.0 if shown else HIDDEN_ROW_ALPHA)
 	# Lane rows: the active variant for the viewed month (or "" for the base).
 	for lane in _network.get("lanes", []):
 		var row: Dictionary = _panel_rows.get("lane_" + str(lane["id"]), {})
@@ -1399,14 +1585,3 @@ func _fleet_counts() -> Dictionary:
 		var role := str(entry.get("role", ""))
 		out[role] = int(out.get(role, 0)) + 1
 	return out
-
-
-## The info-strip fleet text: `<letter>:<count>` per present role, id order.
-func _fleet_counts_text() -> String:
-	var counts := _fleet_counts()
-	var roles: Array = counts.keys()
-	roles.sort()
-	var parts: Array[String] = []
-	for role in roles:
-		parts.append("%s:%d" % [_role_letter(str(role)), int(counts[role])])
-	return " ".join(parts)

@@ -10,12 +10,14 @@ extends Node
 ## debug-row gate (off ⇒ `D`/`,`/`.` unreachable), the §2.12 debug layer list
 ## (omniscient map + every port/neutral/capitals, live ecology markers,
 ## wrecks, hunter-intel shapes, the 17-lane network with variants/spokes/
-## chokepoints + legend, the `,`/`.` month scrubber, the info strip), the
+## chokepoints + legend, the `,`/`.` month scrubber), the
 ## redraw-trigger discipline (build counters move only on triggers, never per
-## frame), and the purity guarantees (a `SaveSystem.snapshot()` digest taken
+## frame), the purity guarantees (a `SaveSystem.snapshot()` digest taken
 ## before vs after any debug interaction is identical; a save taken
 ## mid-preview round-trips identically — the preview month appears nowhere in
-## the payload).
+## the payload), and the §4.6 side-legend panel (pinned rect + vertical
+## scroll, localized `debug.lane.*` §7.6 names, and the scene-order rule that
+## no full-rect child masks the root draw).
 ##
 ## The S19 row itself is task V's (parallel W5): the gate is read guard-style
 ## (`ChartView.debug_row_enabled`), so this suite drives the gate through the
@@ -76,6 +78,9 @@ func _ready() -> void:
 	_test_real_settings_symbol()
 	_test_redraw_discipline()
 	_test_locale_and_budget()
+	_test_legend_panel_and_lanes()
+	_test_mouse_view()
+	_test_legend_rows()
 	ChartViewLib.debug_row_override = -1
 	_report()
 
@@ -335,9 +340,14 @@ func _test_debug_layers() -> void:
 		"row on: the chart renders the debug layers")
 	_check(chart.build_count() >= 1, "open rebuilds (build counter moved)")
 
-	# `D` — omniscient: the whole map + every port + neutral grey + capitals.
+	# `D` — omniscient: ON by default with the row on (§4.6, amended
+	# 2026-11-01); `D` toggles the explored view back and forth.
+	_check(chart.omniscient_on(),
+		"row on: the chart opens omniscient (the fog is lifted)")
 	chart.toggle_omniscient()
-	_check(chart.omniscient_on(), "row on: `D` enables the omniscient mode")
+	_check(not chart.omniscient_on(), "row on: `D` toggles the explored view")
+	chart.toggle_omniscient()
+	_check(chart.omniscient_on(), "row on: `D` re-enables the omniscient mode")
 	_check(chart.world_pixel_color(DARK_CELL) != PaletteLib.PANEL_BG,
 		"omniscient: an unexplored tile renders terrain, not the fog colour")
 	var all_ports: Array = chart.port_markers()
@@ -531,7 +541,7 @@ func _test_marker_sources() -> void:
 	_check(cross_cell == Vector2i(2000, 900),
 		"the intel cross sits on the at-sea intel cell (%s)" % str(cross_cell))
 
-	# The info strip: density preset + fleet counts by role, from markers().
+	# The per-role legend counts sum to the live fleet cap, from markers().
 	var counts: Dictionary = {}
 	for entry in shown:
 		counts[str(entry["role"])] = int(counts.get(str(entry["role"]), 0)) + 1
@@ -539,7 +549,7 @@ func _test_marker_sources() -> void:
 	for role in counts:
 		total += int(counts[role])
 	_check(total == GameState.npc_fleets.size(),
-		"the info strip's per-role counts sum to the live fleet cap (%d)" % total)
+		"the legend's per-role counts sum to the live fleet cap (%d)" % total)
 	chart.close_chart()
 	# Restore the seeded debug-only state (these tests are done with it).
 	GameState.wrecks.clear()
@@ -565,13 +575,18 @@ func _test_real_settings_symbol() -> void:
 	_check(chart.debug_available() == true,
 		"the real S19 row ON (via apply_debug_overlays) enables the debug gate")
 	chart.open_chart()
+	_check(chart.omniscient_on(),
+		"the real row on: the chart opens omniscient (end to end)")
 	_press(KEY_D)
-	_check(chart.omniscient_on(), "the real row on: `D` works end to end")
+	_check(not chart.omniscient_on(),
+		"the real row on: `D` toggles the explored view back")
 	chart.close_chart()
 	panel_view.apply_debug_overlays(false)
 	_check(chart.debug_available() == false,
 		"the real S19 row OFF disables the gate (live value, not presence)")
 	chart.open_chart()
+	_check(not chart.omniscient_on(),
+		"the real row off: the chart opens explored")
 	_press(KEY_D)
 	_check(not chart.omniscient_on(),
 		"the real row off: `D` is ignored again")
@@ -597,24 +612,30 @@ func _test_redraw_discipline() -> void:
 	_check(chart.build_count() == builds + 1, "a layer toggle rebuilds once")
 	chart.scrub_month(1)
 	_check(chart.build_count() == builds + 2, "a month scrub rebuilds once")
-	# The terrain image only rebuilds when the explored/omniscient source
-	# flips — a layer toggle or scrub reuses it.
-	_check(chart.terrain_build_count() == terrains + 1,
-		"layer/scrub rebuilds reuse the terrain image (open built it once)")
+	# The terrain image: with the omniscient open (row on ⇒ fog lifted, §4.6
+	# amended 2026-11-01) the whole-map image is cached — layer/scrub/day
+	# rebuilds reuse it and the terrain counter stays flat.
+	_check(chart.terrain_build_count() == terrains,
+		"layer/scrub/day rebuilds reuse the cached whole-map terrain (open built it once)")
 	EventBus.day_advanced.emit(int(GameState.day) + 1)
 	_check(chart.build_count() == builds + 3,
 		"day_advanced rebuilds while open (the pinned trigger)")
-	_check(chart.terrain_build_count() == terrains + 1,
+	_check(chart.terrain_build_count() == terrains,
 		"day_advanced does not re-walk the terrain")
-	# `D` flips the terrain source exactly once.
+	# `D` flips the terrain source: the explored image builds once per flip to
+	# player; flipping back reuses the cached whole-map image.
+	var before_flip: int = chart.terrain_build_count()
 	chart.toggle_omniscient()
-	_check(chart.terrain_build_count() == terrains + 2,
-		"the omniscient flip builds the whole-map terrain (cached afterwards)")
+	_check(chart.terrain_build_count() == before_flip + 1,
+		"the D flip builds the explored terrain image once")
+	chart.toggle_omniscient()
+	_check(chart.terrain_build_count() == before_flip + 1,
+		"flipping back reuses the cached whole-map image")
 	var cached: int = chart.terrain_build_count()
 	chart.toggle_omniscient()
 	chart.toggle_omniscient()
-	_check(chart.terrain_build_count() == cached + 2,
-		"omniscient re-flips reuse the cached whole-map image")
+	_check(chart.terrain_build_count() == cached + 1,
+		"omniscient re-flips only rebuild the explored image (whole-map stays cached)")
 	chart.close_chart()
 	var closed_builds: int = chart.build_count()
 	EventBus.day_advanced.emit(int(GameState.day) + 1)
@@ -658,3 +679,203 @@ func _test_locale_and_budget() -> void:
 	_check(not before_locale.is_empty() and before_locale != zh_locale,
 		"the chart rebinds its labels on locale_changed")
 	chart.close_chart()
+
+
+# --- 11. Side-legend panel + localized §7.6 lane names (§4.6, §4.7.10) -------
+
+## The §4.6 side-legend contract: no opaque full-rect child may sit over the
+## root draw (the shipped `Background` node masked the whole map), the panel
+## scrolls in its pinned rect instead of growing over the top bar, and the
+## lane rows render the `debug.lane.<id>` §7.6 names (zh/en, id fallback).
+func _test_legend_panel_and_lanes() -> void:
+	# Scene order: the root _draw paints the map and must be unmasked.
+	_check(chart.get_node_or_null("Background") == null,
+		"the chart scene keeps no Background child over the root draw")
+	for child in chart.get_children():
+		var covers := child is ColorRect \
+			and (child as ColorRect).anchor_left <= 0.0 \
+			and (child as ColorRect).anchor_top <= 0.0 \
+			and (child as ColorRect).anchor_right >= 1.0 \
+			and (child as ColorRect).anchor_bottom >= 1.0
+		_check(not covers,
+			"no full-rect ColorRect child masks the root draw (%s)" % child.name)
+	# The panel is pinned to its §4.6 rect (width == DEBUG_PANEL_W) and scrolls
+	# instead of growing (grow_* = BEGIN would push it over the Close button).
+	var panel: PanelContainer = chart.get_node("DebugPanel")
+	_check(absf(-panel.offset_left - 16.0 - float(chart.DEBUG_PANEL_W)) < 0.01,
+		"the panel's left offset matches DEBUG_PANEL_W (%d)" % int(-panel.offset_left))
+	var scroll: ScrollContainer = panel.get_node("Scroll")
+	_check(scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
+		"the side legend scrolls vertically instead of overflowing the panel")
+	_check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
+		"the side legend never scrolls horizontally (labels elide)")
+	# The 17 §7.6 lanes each carry a zh/en `debug.lane.<id>` key …
+	ChartViewLib.debug_row_override = 1
+	chart.open_chart()
+	var lanes: Array = chart.network_layer().get("lanes", [])
+	_check(lanes.size() == 17, "the built network lists the 17 §7.6 lanes")
+	var missing: Array[String] = []
+	for lane in lanes:
+		var l10n = DataLoader.ui_strings.get("debug.lane." + str(lane["id"]), {})
+		if not (l10n is Dictionary) or str(l10n.get("zh", "")).is_empty() \
+				or str(l10n.get("en", "")).is_empty():
+			missing.append(str(lane["id"]))
+	_check(missing.is_empty(),
+		"every lane legend row has a zh/en debug.lane.<id> key (missing: %s)"
+			% ", ".join(missing))
+	# … and every role legend row carries a zh/en debug.role.<role> name.
+	var role_missing: Array[String] = []
+	for role in chart.LEGEND_ROLES:
+		var rl10n = DataLoader.ui_strings.get("debug.role." + str(role), {})
+		if not (rl10n is Dictionary) or str(rl10n.get("zh", "")).is_empty() \
+				or str(rl10n.get("en", "")).is_empty():
+			role_missing.append(str(role))
+	_check(role_missing.is_empty(),
+		"every role legend row has a zh/en debug.role.<role> key (missing: %s)"
+			% ", ".join(role_missing))
+	# … and the rows render the localized names (exact §7.6 strings), not ids.
+	I18n.set_locale("zh")
+	var zh_texts: Array = chart.debug_legend_texts()
+	_check(_legend_has(zh_texts, "汉萨北方航线"),
+		"the hanseatic_north row shows its §7.6 zh name")
+	_check(_legend_has(zh_texts, "亚丁—古吉拉特—马六甲航线"),
+		"the aden_gujarat_malacca row shows its §7.6 zh name")
+	_check(not _legend_has(zh_texts, HANSE_LANE),
+		"no legend row renders the raw lane id while localized")
+	# The role rows read "<marker letter> <debug.role.* name>" (§4.7.10).
+	_check(_legend_has(zh_texts, "T 商船"),
+		"the trader role row shows its letter + zh name")
+	_check(_legend_has(zh_texts, "· 海盗"),
+		"the pirate role row shows its marker dot + zh name")
+	I18n.set_locale("en")
+	var en_texts: Array = chart.debug_legend_texts()
+	_check(_legend_has(en_texts, "T Trader"),
+		"the trader role row shows its letter + en name")
+	_check(_legend_has(chart.debug_legend_texts(), "The Hanseatic northern run"),
+		"the hanseatic_north row shows its §7.6 en name")
+	chart.close_chart()
+
+
+## Exact-match probe over the legend's label/value texts.
+func _legend_has(texts: Array, needle: String) -> bool:
+	for entry in texts:
+		if str(entry) == needle:
+			return true
+	return false
+
+
+# --- 12. Mouse view: the zoom/pan state machine (§4.6, amended 2026-11-01) ----
+
+func _test_mouse_view() -> void:
+	ChartViewLib.debug_row_override = 1
+	_reset_view_state()
+	chart.open_chart()
+	var builds: int = chart.build_count()
+	# Wheel zoom: ×1.25 per notch, clamped to [ZOOM_MIN, ZOOM_MAX], and never
+	# a rebuild (only a redraw of the existing caches).
+	chart._zoom_at(Vector2(600, 300), chart.ZOOM_STEP)
+	_check(absf(chart._zoom - chart.ZOOM_STEP) < 0.0001, "one notch zooms ×1.25")
+	_check(chart.build_count() == builds, "zooming never rebuilds")
+	for _i in range(20):
+		chart._zoom_at(Vector2(600, 300), chart.ZOOM_STEP)
+	_check(absf(chart._zoom - chart.ZOOM_MAX) < 0.0001,
+		"zoom clamps at ×8 (%.2f)" % chart._zoom)
+	chart._zoom_at(Vector2(600, 300), 1.0 / chart.ZOOM_STEP)
+	for _i in range(60):
+		chart._zoom_at(Vector2(600, 300), 1.0 / chart.ZOOM_STEP)
+	_check(chart._zoom == chart.ZOOM_MIN, "zoom clamps at the fit view")
+	_check(chart.build_count() == builds, "zoom clamps never rebuild")
+	# The cursor anchor: the world point under the cursor stays under it.
+	chart._zoom_at(Vector2(400, 200), chart.ZOOM_STEP)
+	var world_pt: Vector2 = (Vector2(400, 200) - chart._view_rect().position) \
+		/ (chart.chart_scale() * chart._zoom)
+	chart._zoom_at(Vector2(400, 200), chart.ZOOM_STEP)
+	var world_pt2: Vector2 = (Vector2(400, 200) - chart._view_rect().position) \
+		/ (chart.chart_scale() * chart._zoom)
+	_check(Vector2(world_pt).distance_to(Vector2(world_pt2)) < 0.5,
+		"zoom stays anchored at the cursor (the world point is stable)")
+	# Pan: a 1:1 drag (button press arms it, motion pans) clamped so the map
+	# never leaves the view.
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = Vector2(400, 200)
+	var drag := InputEventMouseMotion.new()
+	drag.relative = Vector2(5000, 5000)
+	drag.button_mask = MOUSE_BUTTON_MASK_LEFT
+	chart._gui_input(press)  # a press at zoom > MIN arms the drag
+	chart._gui_input(drag)
+	var limit: Vector2 = chart.world_rect().size * (chart._zoom - 1.0)
+	_check(absf(chart._pan.x - (-limit.x)) < 0.01 \
+		and absf(chart._pan.y - (-limit.y)) < 0.01,
+		"drag pans 1:1 and clamps to the map bounds (%s)" % str(chart._pan))
+	# At the fit view a press arms nothing: the map cannot pan.
+	chart._zoom = chart.ZOOM_MIN
+	chart._pan = Vector2.ZERO
+	chart._gui_input(press)
+	chart._gui_input(drag)
+	_check(chart._pan == Vector2.ZERO, "dragging at the fit view pans nothing")
+	# Opening restores the fit view (§4.6).
+	chart._zoom_at(Vector2(600, 300), chart.ZOOM_STEP)
+	chart.close_chart()
+	chart.open_chart()
+	_check(chart._zoom == chart.ZOOM_MIN and chart._pan == Vector2.ZERO,
+		"opening restores the fit view")
+	chart.close_chart()
+
+
+# --- 13. Interactive legend rows (§4.6, amended 2026-11-01) -------------------
+
+func _test_legend_rows() -> void:
+	ChartViewLib.debug_row_override = 1
+	_reset_view_state()
+	chart.open_chart()
+	var builds: int = chart.build_count()
+	# A lane row click hides that lane: a draw-time filter, never a rebuild.
+	chart._on_row_gui_input(_click(), "lane_" + HANSE_LANE)
+	_check(chart._layer_hidden.get("lane_" + HANSE_LANE, false) == true,
+		"clicking a lane row hides that lane")
+	_check(chart.build_count() == builds, "a legend filter flip never rebuilds")
+	var row: Dictionary = chart._panel_rows["lane_" + HANSE_LANE]
+	_check(absf((row["box"] as Control).modulate.a - chart.HIDDEN_ROW_ALPHA) < 0.001,
+		"the hidden lane row dims to the documented alpha")
+	chart._on_row_gui_input(_click(), "lane_" + HANSE_LANE)
+	_check(not chart._layer_hidden.get("lane_" + HANSE_LANE, false),
+		"clicking again shows the lane")
+	_check(absf((row["box"] as Control).modulate.a - 1.0) < 0.001,
+		"the shown lane row is fully opaque")
+	# The shape rows round-trip the same way.
+	for row_id in ["spokes", "chokepoints", "wrecks", "intel", "neutral"]:
+		chart._on_row_gui_input(_click(), row_id)
+		if not chart._layer_hidden.get(row_id, false):
+			_check(false, "the %s row hides on click" % row_id)
+		chart._on_row_gui_input(_click(), row_id)
+		if chart._layer_hidden.get(row_id, false):
+			_check(false, "the %s row shows again on click" % row_id)
+	_check(true, "the spokes/chokepoints/wrecks/intel/neutral rows round-trip")
+	# Role rows key per role.
+	chart._on_row_gui_input(_click(), "role_trader")
+	_check(chart._layer_hidden.get("role_trader", false) == true,
+		"a role row hides that role's markers")
+	chart._on_row_gui_input(_click(), "role_trader")
+	_check(not chart._layer_hidden.get("role_trader", false),
+		"a role row shows its role again")
+	# The four toggle rows reuse their key handlers (one rebuild per click).
+	var toggle_builds: int = chart.build_count()
+	for row_id in ["wind", "wind", "current", "current", "ice", "ice",
+			"omni", "omni"]:
+		chart._on_row_gui_input(_click(), row_id)
+	_check(chart.build_count() == toggle_builds + 8,
+		"toggle-row clicks rebuild once each (the same as their keys)")
+	_check(not chart._wind_on and not chart._current_on \
+		and not chart._ice_on and chart._omni_on,
+		"toggle-row round-trips restore the omniscient open state")
+	chart.close_chart()
+
+
+## A left-button press event for the legend-row handlers.
+func _click() -> InputEventMouseButton:
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	return mb

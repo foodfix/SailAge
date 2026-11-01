@@ -918,7 +918,9 @@ func _test_chart_screen() -> void:
 	var tab := InputEventKey.new()
 	tab.physical_keycode = KEY_TAB
 	tab.pressed = true
-	chart._unhandled_input(tab)
+	# The Tab toggle lives in ChartScreen._input since the focus-steal fix
+	# (§4.3, amended 2026-11-01) — Tab above the GUI layer.
+	chart._input(tab)
 	_check(chart.is_open(), "`Tab` opens the chart from S3 (§4.3)")
 	_check(world._modal_open(),
 		"the open chart is a modal: the world scene's _modal_open() is true")
@@ -941,9 +943,9 @@ func _test_chart_screen() -> void:
 		"the clock is untouched by the chart round trip (%.4f → %.4f)"
 		% [clock_before, float(GameState.world["clock_fraction"])])
 	# `Tab` closes it too (§4.2: "S3 ──Tab──► S17 ──Esc/Tab──► S3").
-	chart._unhandled_input(tab)
+	chart._input(tab)
 	_check(chart.is_open(), "`Tab` re-opens the chart")
-	chart._unhandled_input(tab)
+	chart._input(tab)
 	_check(not chart.is_open(), "`Tab` closes it again")
 	# ... and through the real input tree, not just a direct method call: a
 	# `Tab` key pushed into the viewport must reach the chart's handler with the

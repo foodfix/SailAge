@@ -296,10 +296,12 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   orthogonally adjacent tile, `20-*` §4.11.1) emits `port_entered`; the world
   scene reacts by routing to `port_screen.tscn` with `GameState.current_port`
   set. Leaving port returns to `world_map.tscn` on the port's **berth** tile.
-- **World ⇄ Chart:** `S3 ⇄ S17` via `Tab` (open) and `Esc`/`Tab` (close); the
-  Chart is an overlay view of the current session and returns to S3 with state
-  untouched. `world.map_id` is a single value (`"world"`), so **no
-  map-switch routing exists** anywhere in the flow.
+- **World ⇄ Chart:** `S3/S4 ⇄ S17` via `Tab` (open) and `Esc`/`Tab`
+  (close; amended 2026-11-01 — the Chart is also openable from the port
+  hub); the Chart is an overlay view of the current session and closes
+  over whichever screen opened it, with state untouched. `world.map_id`
+  is a single value (`"world"`), so **no map-switch routing exists**
+  anywhere in the flow.
 - **Dialogs:** `dialog_box.tscn` / `confirm_dialog.tscn` are instanced as
   modal children of the current screen; results delivered via signals, not
   callbacks into other scenes.

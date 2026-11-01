@@ -73,6 +73,7 @@ func _ready() -> void:
 	await _test_provisions_prompt()
 	await _test_provisions_gate()
 	await _test_officers_panel_entry()
+	await _test_chart_at_port()
 	_report()
 
 
@@ -384,6 +385,14 @@ func _test_routing_all_four() -> void:
 	for id in P1_FACILITIES:
 		_make_run("lisbon", LISBON_TILE)
 		var tree := get_tree()
+		# Free the previous routed scene explicitly (it is never the test
+		# scene itself after the first pass): change_scene_to_file only frees
+		# what current_scene points at, and nulling that pointer used to
+		# orphan the old hub — whose ChartScreen then hijacked the later
+		# chart-at-port Tab probes (found 2026-11-01).
+		if tree.current_scene != null and tree.current_scene != self:
+			tree.current_scene.queue_free()
+			await tree.process_frame
 		tree.current_scene = null
 		tree.change_scene_to_file(PORT_SCENE)
 		await tree.process_frame
@@ -1095,6 +1104,65 @@ func _test_officers_panel_entry() -> void:
 		% str(GameState.current_port))
 	panel.close()
 
+	hub.queue_free()
+	host.queue_free()
+	await get_tree().process_frame
+
+# --- The Chart over the hub (§4.2/§4.3, amended 2026-11-01) -------------------
+
+## Tab opens the Chart (S17) over the port hub; Esc/Tab closes back into S4.
+## The chart overlay wires itself: it joins the modal group, so the hub's
+## Set-Sail edge is guarded while it shows, and it never mutates state.
+func _test_chart_at_port() -> void:
+	_make_run()
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+	var chart = hub.get_node_or_null("ChartScreen")
+	if chart == null:
+		_check(false, "the port hub hosts the Chart overlay (S17)")
+		hub.queue_free()
+		host.queue_free()
+		await get_tree().process_frame
+		return
+	_check(true, "the port hub hosts the Chart overlay (S17)")
+	_check(not chart.is_open(), "the chart starts closed at port")
+	# The §4.3 focus-steal fix (amended 2026-11-01): a footer button holds
+	# focus (as after any click) and Tab must still open the chart, not cycle
+	# focus — the toggle edge lives in ChartScreen._input, above the GUI layer.
+	var footer: Button = hub.get_node("Layout/VBox/Footer/SetSail")
+	footer.grab_focus()
+	_check(footer.has_focus(), "fixture: a footer button holds focus")
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.physical_keycode = KEY_TAB
+	tab.pressed = true
+	get_viewport().push_input(tab)
+	_check(chart.is_open(), "Tab opens the chart over the port hub (focus held)")
+	_check(hub.has_modal(),
+		"the open chart counts as a port modal (Set Sail guarded)")
+	_check(not chart.debug_layers_active(),
+		"the port chart opens in player mode with the S19 row off")
+	# Tab closes again — even though open_chart focused the close button.
+	get_viewport().push_input(tab)
+	_check(not chart.is_open(), "Tab closes the chart back into S4")
+	# Esc closes too (the §4.3 back edge), after a fresh Tab open.
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	get_viewport().push_input(tab)
+	_check(chart.is_open(), "Tab reopens the chart at port")
+	get_viewport().push_input(esc)
+	_check(not chart.is_open(), "Esc closes the chart back into S4")
+	_check(not hub.has_modal(), "the closed chart leaves the hub modal-free")
+	var world_before: Dictionary = GameState.world.duplicate(true)
+	get_viewport().push_input(tab)
+	chart.close_chart()
+	_check(GameState.world.hash() == world_before.hash(),
+		"open/close at port mutates nothing")
 	hub.queue_free()
 	host.queue_free()
 	await get_tree().process_frame

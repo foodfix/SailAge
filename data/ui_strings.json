@@ -1960,6 +1960,106 @@
     "zh": "全知视图",
     "en": "Omniscient view"
   },
+  "debug.role.trader": {
+    "zh": "商船",
+    "en": "Trader"
+  },
+  "debug.role.coaster": {
+    "zh": "沿海商船",
+    "en": "Coaster"
+  },
+  "debug.role.courier": {
+    "zh": "信使船",
+    "en": "Courier"
+  },
+  "debug.role.patrol": {
+    "zh": "巡逻舰",
+    "en": "Patrol"
+  },
+  "debug.role.privateer": {
+    "zh": "私掠船",
+    "en": "Privateer"
+  },
+  "debug.role.pirate": {
+    "zh": "海盗",
+    "en": "Pirate"
+  },
+  "debug.role.hunter": {
+    "zh": "猎捕舰队",
+    "en": "Hunter"
+  },
+  "debug.role.treasure": {
+    "zh": "运宝船",
+    "en": "Treasure ship"
+  },
+  "debug.lane.carreira_da_india": {
+    "zh": "印度航线（好望角）",
+    "en": "The Carreira da Índia (Cape of Good Hope run)"
+  },
+  "debug.lane.west_indies_flota": {
+    "zh": "西印度大舰队航线",
+    "en": "The West Indies flota circuit"
+  },
+  "debug.lane.manila_galleon": {
+    "zh": "马尼拉大帆船航线",
+    "en": "The Manila galleon run (dateline-crossing)"
+  },
+  "debug.lane.venice_alexandria": {
+    "zh": "威尼斯—亚历山大航线",
+    "en": "The Venice–Alexandria run"
+  },
+  "debug.lane.venice_flanders": {
+    "zh": "威尼斯—佛兰德斯航线",
+    "en": "The Venice–Flanders run"
+  },
+  "debug.lane.genoa_grain": {
+    "zh": "热那亚粮食航线",
+    "en": "The Genoa grain run"
+  },
+  "debug.lane.hanseatic_north": {
+    "zh": "汉萨北方航线",
+    "en": "The Hanseatic northern run"
+  },
+  "debug.lane.aden_gujarat_malacca": {
+    "zh": "亚丁—古吉拉特—马六甲航线",
+    "en": "The Aden–Gujarat–Malacca run"
+  },
+  "debug.lane.red_sea_india": {
+    "zh": "红海—印度航线",
+    "en": "The Red Sea–India run"
+  },
+  "debug.lane.basra_muscat_india": {
+    "zh": "巴士拉—马斯喀特—印度航线",
+    "en": "The Basra–Muscat–India run"
+  },
+  "debug.lane.iceland_cod": {
+    "zh": "冰岛鳕鱼航线",
+    "en": "The Iceland cod run"
+  },
+  "debug.lane.grand_banks_cod": {
+    "zh": "纽芬兰大浅滩鳕鱼航线",
+    "en": "The Grand Banks cod run"
+  },
+  "debug.lane.canton_country_trade": {
+    "zh": "广州—中国沿海贸易航线",
+    "en": "The Canton country trade run"
+  },
+  "debug.lane.coromandel_bengal": {
+    "zh": "科罗曼德尔—孟加拉航线",
+    "en": "The Coromandel–Bengal run"
+  },
+  "debug.lane.swahili_coast": {
+    "zh": "斯瓦希里海岸航线",
+    "en": "The Swahili coast run"
+  },
+  "debug.lane.pacific_america": {
+    "zh": "太平洋美洲航线",
+    "en": "The Pacific America run"
+  },
+  "debug.lane.west_africa": {
+    "zh": "西非航线",
+    "en": "The West Africa run"
+  },
   "debug.legend.network": {
     "zh": "航线网络",
     "en": "Trade network"
@@ -1987,18 +2087,6 @@
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"
-  },
-  "debug.info.month": {
-    "zh": "预览月份",
-    "en": "Preview month"
-  },
-  "debug.info.preset": {
-    "zh": "密度",
-    "en": "Density"
-  },
-  "debug.info.fleets": {
-    "zh": "船队",
-    "en": "Fleets"
   },
   "port.neutral.label": {
     "zh": "中立港",

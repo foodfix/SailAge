@@ -72,7 +72,8 @@ S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependen
 S1 ──Load retired slot──► S16 (summary only)
 S3 ──dock: head into shore tile──► S4
 S4 ──Set Sail──► S3
-S3 ──Tab──► S17 ──Esc/Tab──► S3
+S3 ──Tab──► S17 ──Esc/Tab──► back (S3)
+S4 ──Tab──► S17 ──Esc/Tab──► back (S4)   (amended 2026-11-01)
 S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
@@ -106,7 +107,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`); cancels Helm mode |
 | S3/S4 | `C` | open/close character panel (S14) |
 | S3/S4 | `F` | open/close fleet/cargo panel (S15) |
-| S3 | `Tab` | open the Chart (S17, §4.6) |
+| S3/S4 | `Tab` | open the Chart (S17, §4.6) — from the port hub too (amended 2026-11-01) |
 | S3 | `Esc` | close the Chart when it is open (otherwise no-op on S3) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
@@ -119,9 +120,12 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S17 (Chart owns input while open) | `W` | toggle the current-month wind-arrow layer per region (§4.6) |
 | S17 | `C` | toggle the current-arrow layer (§4.6) — chart-local; shadows the character-panel `C` only while S17 is open |
 | S17 | `I` | toggle the ice tint on explored tiles (§4.6) |
-| S17 | `D` | debug omniscient mode — reachable only while the S19 调试图层 row is on (§4.6 debug mode) |
+| S17 | `D` | debug omniscient mode — reachable only while the S19 调试图层 row is on (§4.6 debug mode); **on by default while the row is on** (amended 2026-11-01) |
 | S17 | `,` / `.` | month scrubber (debug mode only): preview any month's winds/ice/active lane variants — pure view state |
-| S17 | `Tab` / `Esc` | toggle back to S3 (the Chart never mutates state) |
+| S17 | mouse wheel | zoom 1.0×–8.0×, ×1.25 per notch, anchored at the cursor (amended 2026-11-01, §4.6) |
+| S17 | left/right-button drag | pan 1:1, clamped to the map; opening restores the fit view (amended 2026-11-01, §4.6) |
+| S17 | click a debug side-legend row | show/hide what that row depicts (lanes, spokes, chokepoints, roles, wrecks, intel, neutral; §4.6) |
+| S17 | `Tab` / `Esc` | toggle back to the screen it was opened over (S3/S4; the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
 | S4 | `O` | open/close the officers panel (S18, §4.6.2) |
@@ -535,7 +539,9 @@ chart adds:
 - **`D` — omniscient mode:** ignores the explored bitset **and**
   `known_ports` — the whole map renders plus **every** port:
   nation-colored dots, `PORT_NEUTRAL` grey for `nation_id: ""` ports
-  (§4.8), capitals ringed.
+  (§4.8), capitals ringed. **On by default while the S19 row is on** —
+  opening the chart lifts the fog (amended 2026-11-01); `D` toggles back
+  to the explored view.
 - **Live ecology:** every fleet from `NpcFleets.markers()` (role colors
   per §4.5.2, **not viewport-culled**), wrecks, and the hunter-intel
   markers with their exact shapes — `world.last_departed_port` drawn as a
@@ -544,12 +550,37 @@ chart adds:
 - **Network layer:** all 17 lanes from the built tile paths
   (`trade_routes_built.json`), per-lane colors, the **active variant
   solid**, spokes thin grey, chokepoint diamonds, lane ids in a side
-  legend.
+  legend. Legend rows show the lane's **localized name** — the
+  `debug.lane.<id>` key (§4.7.10), whose zh/en strings are §7.6's name
+  columns verbatim; a missing key falls back to the raw `id`.
 - **`W`/`C`/`I` + `,`/`.` month scrubber (debug):** previews **any**
   month's prevailing winds, seasonal ice, active lane variants and the
   reversed Somali — pure view state, `GameState` untouched (a save taken
   mid-preview round-trips identically).
-- **Info strip:** day → Year/Month, density preset, fleet count by role.
+- **Info strip — removed (amended 2026-11-01):** the Year/Month, preview
+  month, density and fleet-count rows went away as chart-local noise (the
+  HUD already carries the calendar); the scrubbed month reads from the
+  `W`/`C`/`I` layers themselves.
+- **Side legend panel:** fixed width, anchored right **between** the bars —
+  never over the top bar (`关闭海图` stays reachable). When its rows
+  overflow the panel's height, the rows **scroll vertically** inside the
+  panel instead of growing it; the whole world stays visible (§4.6
+  "downscaled to fit").
+- **Mouse view (amended 2026-11-01):** the wheel zooms **1.0×–8.0×**
+  (×1.25 per notch, anchored at the cursor — the world point under the
+  pointer stays put); dragging with the left/right button pans **1:1**,
+  clamped so the map never leaves the view; opening the chart (or a window
+  resize) restores the **fit view**. Zoom/pan are event-driven redraws of
+  the existing caches — never a rebuild, never per-frame work; the base
+  raster stretches nearest-neighbour, the vector layers (arrows, lanes,
+  markers) re-project crisply.
+- **Interactive legend rows (amended 2026-11-01):** clicking a side-legend
+  row shows/hides what it depicts — the lane rows, 港口支线 (spokes),
+  咽喉要地 (chokepoints), the role rows, 沉船 (wrecks), 猎捕情报 (hunter
+  intel) and the 中立港 row are **draw-time visibility filters** over the
+  existing caches (no rebuild); the 全知视图/风带/洋流/海冰 rows toggle the
+  same state as their `D`/`W`/`C`/`I` keys. A hidden row dims to **0.35
+  alpha**. Chart-local, session-only, never persisted.
 - **Redraw triggers:** open, layer/month toggle, `day_advanced` — **no
   per-frame work**.
 - **Governance:** a documented cheat — read-only, never mutates
@@ -955,7 +986,7 @@ The keys each implementing task must define:
 |---|---|
 | V (S19 rows) | `settings.input.mode`, `settings.input.step`, `settings.input.helm`, `settings.current.mode`, `settings.current.modifier`, `settings.current.drift`, `settings.debug.overlays` |
 | G (HUD / sailing toasts) | `world.wind.label`, `world.current.label`, `world.trim.chip`, `world.trim.furled`, `world.trim.reefed`, `world.trim.normal`, `world.trim.full`, `world.wait.done`, `world.ice.blocked`, `world.calendar.year_month` |
-| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.info.*` |
+| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.lane.*`, `debug.role.*` |
 | neutral ports (§4.8) | `port.neutral.label` (中立港 / Neutral port), `chart.debug.neutral` (the debug-chart legend row for the neutral grey) |
 
 Notes pinning the set exactly:
@@ -967,10 +998,16 @@ Notes pinning the set exactly:
   separate toast key.
 - `world.ice.blocked` is the refused-entry toast (`20-*` §4.18);
   `world.wait.done` is the waited-one-day toast (`20-*` §4.17).
-- `debug.legend.*` covers the network side legend (lane ids, role-color
-  rows, spokes/chokepoints) and `debug.info.*` the info strip
-  (Year/Month, density preset, fleet counts by role); the neutral row of
-  the port legend uses `chart.debug.neutral`.
+- `debug.legend.*` covers the network side legend (lane-name rows,
+  role-color rows, spokes/chokepoints); the neutral row of the port
+  legend uses `chart.debug.neutral`.
+- `debug.lane.<id>` is one key per locked §7.6 lane id (17, closed set);
+  the zh/en strings are §7.6's name columns verbatim. The chart legend
+  falls back to the raw `id` only when a key is missing.
+- `debug.role.<role>` (8, the locked §4.5.2 role set) names the
+  fleet-marker legend rows; the chart prefixes the role's marker letter
+  (`T c k P p · N X`) itself. `debug.info.*` was **retired** with the
+  info strip (amended 2026-11-01).
 - **Pre-declared per `20-*` §4.15:** `world.calendar.month.1` …
   `world.calendar.month.12` (一月…十二月 / Month 1–12). They are owed by
   whichever surface first renders a bare month name (the likely consumer
