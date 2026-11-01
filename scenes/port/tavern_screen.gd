@@ -118,6 +118,8 @@ var _rumors: Array = []
 var _captain_rows: Array = []
 var _poster_rows: Array = []
 var _rumor_texts: Array = []
+## Phase 7 (§4.7.14): the investment-telegraph rows currently rendered.
+var _invest_rows: Array = []
 ## Fleet ids whose exact position was already bought this visit (§4.7.8: one
 ## action per poster).
 var _revealed: Dictionary = {}
@@ -531,6 +533,7 @@ func _bind_rumors() -> void:
 	_captain_rows = []
 	_poster_rows = []
 	_rumor_texts = []
+	_invest_rows = []
 	# Task L: the active demand events' rest-overrides + telegraph rows are
 	# derived from the saved instance list on every rebuild.
 	var tournament_status: Dictionary = TournamentLib.status(_port_id, GameState.day)
@@ -565,6 +568,11 @@ func _bind_aliveness_rows() -> void:
 	if _port_id.is_empty() or GameState.player.is_empty():
 		return
 	for row in NpcIntelLib.rumor_rows(_port_id):
+		# Phase 7 (docs/80-* §4.7.14): allegiance investment telegraphs, under
+		# their own section header, right after the demand-event rows.
+		if str(row.get("kind", "")) == "investment":
+			_bind_investment_row(row)
+			continue
 		var text := _rumor_text(row)
 		if text.is_empty():
 			continue
@@ -700,6 +708,38 @@ func buy_reveal(fleet_id: String) -> String:
 	_rumor_texts.append(last_reveal_text)
 	_rumor_rows.add_child(_make_label(last_reveal_text, "RevealText"))
 	return last_reveal_text
+
+
+## One investment telegraph (Phase 7, docs/80-* §4.7.14): the first row lays
+## down the `tavern.invest.header` section header, then the row itself as
+## `tavern.invest.row` — `{nation} 在 {port} 投资 {amount} 金` (the names and
+## amount are supplied by the `npc_intel.gd` guard read).
+func _bind_investment_row(row: Dictionary) -> void:
+	if _invest_rows.is_empty():
+		var header := _make_label(I18n.t_key("tavern.invest.header"),
+			"InvestHeader")
+		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+		_rumor_rows.add_child(header)
+	var text := I18n.fmt("tavern.invest.row", {
+		"nation": str(row.get("nation_name", "-")),
+		"port": str(row.get("port_name", "-")),
+		"amount": int(row.get("amount", 0)),
+	})
+	_invest_rows.append({
+		"port_id": str(row.get("port_id", "")),
+		"nation_id": str(row.get("nation_id", "")),
+		"amount": int(row.get("amount", 0)),
+		"days_left": int(row.get("days_left", -1)),
+		"text": text,
+	})
+	_rumor_texts.append(text)
+	_rumor_rows.add_child(_make_label(text, "InvestRow"))
+
+
+## The investment telegraph rows currently rendered (the seams a headless
+## test reads — the captains-pattern).
+func invest_rows() -> Array:
+	return _invest_rows.duplicate()
 
 
 ## The aliveness seams (§4.7.8) — rows a headless test reads without widget
