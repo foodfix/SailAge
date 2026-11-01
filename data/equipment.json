@@ -7,6 +7,7 @@
       "slot": "weapon",
       "modifiers": {"combat": 3},
       "price": 400,
+      "tier": 1,
       "phase": 2
     },
     {
@@ -15,6 +16,44 @@
       "slot": "weapon",
       "modifiers": {"combat": 5},
       "price": 1200,
+      "tier": 1,
+      "phase": 2
+    },
+    {
+      "id": "eq_backsword",
+      "name": {"zh": "单刃剑", "en": "Backsword"},
+      "slot": "weapon",
+      "modifiers": {"combat": 6},
+      "price": 2200,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_main_gauche",
+      "name": {"zh": "左手格挡匕首", "en": "Main-Gauche"},
+      "slot": "weapon",
+      "modifiers": {"combat": 4, "luck": 2},
+      "price": 1900,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_zweihander",
+      "name": {"zh": "双手巨剑", "en": "Zweihänder"},
+      "slot": "weapon",
+      "modifiers": {"combat": 9},
+      "price": 4800,
+      "tier": 3,
+      "phase": 2
+    },
+    {
+      "id": "eq_khair_scimitar",
+      "name": {"zh": "「红胡子」弯刀", "en": "Redbeard's Scimitar"},
+      "slot": "weapon",
+      "modifiers": {"combat": 10},
+      "price": 6000,
+      "tier": 3,
+      "rare": true,
       "phase": 2
     },
     {
@@ -23,6 +62,7 @@
       "slot": "armor",
       "modifiers": {"combat": 2},
       "price": 700,
+      "tier": 1,
       "phase": 2
     },
     {
@@ -31,6 +71,44 @@
       "slot": "armor",
       "modifiers": {"combat": 1, "luck": 5},
       "price": 900,
+      "tier": 1,
+      "phase": 2
+    },
+    {
+      "id": "eq_brigandine",
+      "name": {"zh": "铆钉皮甲", "en": "Brigandine"},
+      "slot": "armor",
+      "modifiers": {"combat": 4},
+      "price": 2400,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_saint_medallion",
+      "name": {"zh": "圣徒徽章", "en": "Saint's Medallion"},
+      "slot": "armor",
+      "modifiers": {"luck": 3, "scurvy_delay_days": 2},
+      "price": 2800,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_three_quarter_armor",
+      "name": {"zh": "四分之三甲", "en": "Three-Quarter Armour"},
+      "slot": "armor",
+      "modifiers": {"combat": 6},
+      "price": 5200,
+      "tier": 3,
+      "phase": 2
+    },
+    {
+      "id": "eq_bloodhand_cuirass",
+      "name": {"zh": "「血手」胸甲", "en": "Bloodhand's Cuirass"},
+      "slot": "armor",
+      "modifiers": {"combat": 5, "luck": 3},
+      "price": 4200,
+      "tier": 3,
+      "rare": true,
       "phase": 2
     },
     {
@@ -39,6 +117,16 @@
       "slot": "figurehead",
       "modifiers": {"durability": 10},
       "price": 1500,
+      "tier": 1,
+      "phase": 2
+    },
+    {
+      "id": "eq_eagle_figurehead",
+      "name": {"zh": "雄鹰船首像", "en": "Eagle Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 8},
+      "price": 700,
+      "tier": 1,
       "phase": 2
     },
     {
@@ -47,6 +135,35 @@
       "slot": "figurehead",
       "modifiers": {"durability": 20},
       "price": 3200,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_albatross_figurehead",
+      "name": {"zh": "信天翁船首像", "en": "Albatross Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 12, "storm_damage_pct": -10},
+      "price": 2600,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_angel_figurehead",
+      "name": {"zh": "天使船首像", "en": "Angel Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 25, "scurvy_delay_days": 3},
+      "price": 4800,
+      "tier": 3,
+      "phase": 2
+    },
+    {
+      "id": "eq_golden_dragon_figurehead",
+      "name": {"zh": "鎏金龙首像", "en": "Gilded Dragon Figurehead"},
+      "slot": "figurehead",
+      "modifiers": {"durability": 30, "scurvy_delay_days": 5},
+      "price": 6000,
+      "tier": 3,
+      "rare": true,
       "phase": 2
     },
     {
@@ -55,6 +172,16 @@
       "slot": "sail",
       "modifiers": {"speed": 1},
       "price": 1000,
+      "tier": 1,
+      "phase": 2
+    },
+    {
+      "id": "eq_matting_sails",
+      "name": {"zh": "棕席帆", "en": "Woven Mat Sails"},
+      "slot": "sail",
+      "modifiers": {"speed": 1},
+      "price": 400,
+      "tier": 1,
       "phase": 2
     },
     {
@@ -63,6 +190,35 @@
       "slot": "sail",
       "modifiers": {"speed": 1, "durability": 5},
       "price": 2600,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_flemish_linen_sails",
+      "name": {"zh": "佛兰芒亚麻帆", "en": "Flemish Linen Sails"},
+      "slot": "sail",
+      "modifiers": {"speed": 2},
+      "price": 3400,
+      "tier": 2,
+      "phase": 2
+    },
+    {
+      "id": "eq_brocade_sails",
+      "name": {"zh": "织金锦帆", "en": "Brocade Sails"},
+      "slot": "sail",
+      "modifiers": {"speed": 1, "durability": 10, "storm_damage_pct": -15},
+      "price": 5000,
+      "tier": 3,
+      "phase": 2
+    },
+    {
+      "id": "eq_red_sail",
+      "name": {"zh": "「红帆」", "en": "The Red Sail"},
+      "slot": "sail",
+      "modifiers": {"speed": 2, "durability": 8, "storm_damage_pct": -20},
+      "price": 6000,
+      "tier": 3,
+      "rare": true,
       "phase": 2
     }
   ]

@@ -4,22 +4,26 @@
     {
       "id": "pirate_redbeard_khair",
       "name": {"zh": "「红胡子」海雷丁", "en": "Khair ad-Din Redbeard"},
-      "tier": 3
+      "tier": 3,
+      "drop": "eq_khair_scimitar"
     },
     {
       "id": "pirate_murad_red_sail",
       "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
-      "tier": 2
+      "tier": 2,
+      "drop": "eq_red_sail"
     },
     {
       "id": "pirate_limahong_thousand_sails",
       "name": {"zh": "「千帆」林凤", "en": "Limahong of the Thousand Sails"},
-      "tier": 2
+      "tier": 2,
+      "drop": "eq_golden_dragon_figurehead"
     },
     {
       "id": "pirate_edward_bloodhand",
       "name": {"zh": "「血手」爱德华", "en": "Edward the Bloodhand"},
-      "tier": 1
+      "tier": 1,
+      "drop": "eq_bloodhand_cuirass"
     }
   ]
 }
