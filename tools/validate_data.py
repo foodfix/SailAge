@@ -59,6 +59,16 @@ each mutates in-memory copies (g9's one-byte case restores the committed
 raster inside a try/finally) and asserts that the group goes red, naming the
 expected entity. They never leave real data changed and exit 0 only when
 every negative case fails as required.
+
+Phase 7 (task T): ``--data-root PATH`` (or the ``SAILAGE_DATA_ROOT`` env)
+checks a different checkout's ``data/`` tree — the staged-sim protocol (W2)
+validates the G/S/P content branches through this flag before anything
+merges. PATH is either the checkout root or its ``data/`` directory. Without
+the flag every path derives from ``Path(__file__).parent.parent / "data"``
+exactly as before and the default behavior is unchanged. When the override
+points into another checkout that carries its own ``tools/build_routes.py``,
+group 8's rebuild-determinism check runs THAT builder over THAT tree (the
+merged sources must rebuild byte-identically where they live).
 """
 
 from __future__ import annotations
@@ -76,7 +86,36 @@ from collections import deque
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = REPO_ROOT / "data"
+
+
+def _default_data_dir() -> Path:
+    return REPO_ROOT / "data"
+
+
+def _resolve_data_dir(raw: str | None) -> Path:
+    """Resolve the data directory from an override value.
+
+    Accepts either the checkout root (a directory containing ``data/``) or the
+    ``data/`` directory itself. Empty/None keeps the locked default
+    ``Path(__file__).parent.parent / "data"`` — byte-identical behavior.
+    """
+    default = _default_data_dir()
+    if not raw:
+        return default
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    else:
+        path = path.resolve()
+    if path.name == "data" or (path / "ports.json").is_file():
+        return path
+    return path / "data"
+
+
+# The env override is read at import so every module-level path constant below
+# (WORLD_PNG, WIND_PNG, …) picks it up; the --data-root flag re-execs with the
+# env set (one resolution point, one code path).
+DATA_DIR = _resolve_data_dir(os.environ.get("SAILAGE_DATA_ROOT"))
 
 # Group 8 shares the lane builder's geometry (docs/10-* §8.3 preamble: same
 # PNG decoder; sharing build_world.py's reader is allowed). Using
@@ -86,6 +125,35 @@ DATA_DIR = REPO_ROOT / "data"
 # reader group 6 uses for its own grid.
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 import build_routes as route_builder  # noqa: E402
+
+if DATA_DIR != _default_data_dir():
+    # Staged-sim protocol (task T, W2): point the imported builder's path
+    # constants at the overridden tree so group 8's snap/spoke/rebuild checks
+    # read the staged data and its route_overrides.json. The rebuild
+    # determinism check (_check_trade_determinism) prefers the overridden
+    # checkout's own builder, so the merged sources rebuild where they live.
+    _override_tree = DATA_DIR.parent
+    route_builder.ROOT = _override_tree
+    route_builder.DATA = DATA_DIR
+    route_builder.TOOLS = _override_tree / "tools"
+    route_builder.LANES_PATH = DATA_DIR / "trade_routes.json"
+    route_builder.PORTS_PATH = DATA_DIR / "ports.json"
+    route_builder.NATIONS_PATH = DATA_DIR / "nations.json"
+    route_builder.ICE_PATH = DATA_DIR / "ice_regions.json"
+    route_builder.OVERRIDES_PATH = route_builder.TOOLS / "route_overrides.json"
+    route_builder.WORLD_PNG = DATA_DIR / "maps" / "world.png"
+    route_builder.BUILT_PATH = DATA_DIR / "trade_routes_built.json"
+    route_builder.INPUT_SOURCES = tuple(
+        (name, path)
+        for name, path in (
+            ("trade_routes", route_builder.LANES_PATH),
+            ("ports", route_builder.PORTS_PATH),
+            ("nations", route_builder.NATIONS_PATH),
+            ("ice_regions", route_builder.ICE_PATH),
+            ("route_overrides", route_builder.OVERRIDES_PATH),
+            ("world_png", route_builder.WORLD_PNG),
+        )
+    )
 
 # ---------------------------------------------------------------------------
 # Contract tables (docs/10-DATA-SCHEMA.md sections 3, 6, 7)
@@ -110,6 +178,10 @@ LOCKED_TILE_KINDS = {
 
 GOOD_CATEGORIES = ("food", "textile", "luxury", "material")
 SHIP_CLASSES = ("sail", "oar", "hybrid")
+# Phase 7 (10-* §4.3): hull vocation enum, locked wording (task A pins).
+SHIP_ROLES = ("war", "trade", "coastal")
+# §6.1 locked ship-speed set (tiles/day) — every hull's final value lies in it.
+LOCKED_SHIP_SPEEDS = frozenset({16, 20, 24})
 OFFICER_ROLES = ("navigator", "boatswain", "gunner")
 EQUIPMENT_SLOTS = ("weapon", "armor", "figurehead", "sail")
 DISCOVERY_CATEGORIES = ("natural", "ruins", "relic", "creature")
@@ -122,6 +194,10 @@ PLAYER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation", "luck")
 OFFICER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation")
 SHIP_STAT_NAMES = ("durability", "capacity", "speed", "crew_max", "armament_slots")
 EQUIPMENT_STAT_NAMES = frozenset(PLAYER_STAT_NAMES + SHIP_STAT_NAMES)
+# Phase 7 (10-* §4.6 / 60-* §4.11.12): the two sideways modifier keys join the
+# equipment modifier vocabulary — `storm_damage_pct` (−%, multiplies
+# `storm_damage_for`) and `scurvy_delay_days`.
+EQUIPMENT_SIDEWAYS_KEYS = frozenset({"storm_damage_pct", "scurvy_delay_days"})
 
 # Facility activation phases (docs/10-DATA-SCHEMA.md section 4.4).
 FACILITY_PHASES = {
@@ -133,11 +209,21 @@ FACILITY_PHASES = {
     "palace": 3,
 }
 # Every sovereign Phase-1 port has these; `palace` only for the 6 capitals.
+# Phase 7: `shipyard` holds an id ARRAY (2–8 hulls, §4.4 — the int form is
+# retired) and `equipment_stock` holds an id array (≥ 2) at shipyard ports;
+# both live outside FACILITY_PHASES' int-locked values.
 PORT_FACILITIES_REQUIRED = ("market", "shipyard", "tavern", "inn", "guild")
+# Array-valued facility keys (Phase 7, §4.4).
+FACILITY_ARRAY_KEYS = frozenset({"shipyard", "equipment_stock"})
+SHIPYARD_STOCK_MIN = 2
+SHIPYARD_STOCK_MAX = 8
+EQUIPMENT_STOCK_MIN = 2
 # Phase-6 neutral tier (§7.1): `nation_id: ""`, frontier markets — facilities
 # are data-driven per port over the phase-1 keys only; `guild`/`palace` are
-# sovereign institutions the tier never carries.
-NEUTRAL_FACILITY_KEYS = frozenset({"market", "shipyard", "tavern", "inn"})
+# sovereign institutions the tier never carries. Phase 7 adds the two array
+# keys where a neutral port authors a shipyard.
+NEUTRAL_FACILITY_KEYS = frozenset(
+    {"market", "shipyard", "tavern", "inn", "equipment_stock"})
 NEUTRAL_PORT_NATION_ID = ""
 
 # Entity file -> the single plural key of its envelope.
@@ -204,7 +290,11 @@ L10N_FIELDS = {
 }
 
 # --- Locked content tables (docs/10-DATA-SCHEMA.md section 7) --------------
-# id: (zh, en, category, base_price)  -- section 7.2
+# Phase 7 (task T, 10-* §8 group 5 lock model): goods lock to the exact 40-id
+# §7.2 set, authored-to-final (no sim loop over this table). The original 20
+# keep their locked zh/en/category/base_price ("prices locked" — §7.2); the 20
+# Phase-7 rows are task-owned by G and finalized from the staged branch
+# (correction 14): id: (zh, en, category, base_price)
 LOCKED_GOODS = {
     "wheat": ("小麦", "Wheat", "food", 8),
     "olive_oil": ("橄榄油", "Olive Oil", "food", 22),
@@ -226,20 +316,53 @@ LOCKED_GOODS = {
     "carpet": ("地毯", "Carpet", "textile", 80),
     "amber": ("琥珀", "Amber", "luxury", 110),
     "cheese": ("奶酪", "Cheese", "food", 16),
+    # -- Phase-7 rows (task G, staged 2026-11-02; §7.2 skeleton ids) ----------
+    "rice": ("稻米", "Rice", "food", 8),
+    "pitch": ("沥青", "Pitch", "material", 12),
+    "linen": ("亚麻布", "Linen", "textile", 35),
+    "furs": ("毛皮", "Furs", "material", 60),
+    "dye_wood": ("苏木", "Sappanwood", "material", 55),
+    "indigo": ("靛蓝", "Indigo", "material", 70),
+    "ivory": ("象牙", "Ivory", "material", 85),
+    "sandalwood": ("檀香", "Sandalwood", "material", 75),
+    "coffee": ("咖啡", "Coffee", "food", 65),
+    "tobacco": ("烟草", "Tobacco", "food", 50),
+    "tea": ("茶", "Tea", "food", 55),
+    "rhubarb": ("大黄", "Rhubarb", "material", 85),
+    "raw_silk": ("生丝", "Raw Silk", "textile", 95),
+    "porcelain": ("瓷器", "Porcelain", "luxury", 130),
+    "pearls": ("珍珠", "Pearls", "luxury", 140),
+    "gems": ("宝石", "Gems", "luxury", 180),
+    "musk": ("麝香", "Musk", "luxury", 170),
+    "lacquerware": ("漆器", "Lacquerware", "luxury", 110),
+    "silver": ("白银", "Silver", "material", 105),
+    "gold": ("黄金", "Gold", "material", 200),
 }
 
-# id: (zh, en, class, base_price, durability, capacity, speed, crew_min,
-#      crew_max, armament_slots)  -- section 7.3 (Phase-6 speed re-pin:
-#      {16, 20, 24} tiles/day on 5 nm tiles = 80–120 nm/day, `10-*` §6.1)
+# id: (zh, en, class, role, tier, base_price, durability, capacity, speed,
+#      crew_min, crew_max, armament_slots)  -- section 7.3
+# Phase-6 speed re-pin: {16, 20, 24} tiles/day on 5 nm tiles = 80–120 nm/day
+# (`10-*` §6.1). Phase 7 (task S, staged 2026-11-02): the exact 16-hull roster
+# with `role` (enum war|trade|coastal) and `tier` (§2.2 first-pass finalized);
+# the original 8 keep every locked stat.
 LOCKED_SHIP_TYPES = {
-    "latin": ("拉丁帆船", "Latin", "sail", 1200, 40, 30, 16, 8, 20, 2),
-    "sloop": ("单桅纵帆船", "Sloop", "sail", 3000, 60, 60, 20, 10, 30, 4),
-    "caravel": ("卡拉维尔帆船", "Caravel", "sail", 8000, 90, 120, 20, 15, 45, 6),
-    "galley": ("桨帆船", "Galley", "oar", 10000, 70, 50, 24, 40, 120, 4),
-    "brigantine": ("双桅帆船", "Brigantine", "sail", 15000, 110, 150, 24, 20, 60, 10),
-    "nao": ("瑙船", "Nao", "sail", 22000, 140, 300, 16, 25, 80, 10),
-    "carrack": ("卡拉克帆船", "Carrack", "sail", 40000, 180, 450, 16, 30, 100, 16),
-    "galleon": ("盖伦帆船", "Galleon", "hybrid", 60000, 240, 400, 20, 40, 150, 24),
+    "latin": ("拉丁帆船", "Latin", "sail", "coastal", 1, 1200, 40, 30, 16, 8, 20, 2),
+    "sloop": ("单桅纵帆船", "Sloop", "sail", "coastal", 1, 3000, 60, 60, 20, 10, 30, 4),
+    "caravel": ("卡拉维尔帆船", "Caravel", "sail", "trade", 2, 8000, 90, 120, 20, 15, 45, 6),
+    "galley": ("桨帆船", "Galley", "oar", "war", 2, 10000, 70, 50, 24, 40, 120, 4),
+    "brigantine": ("双桅帆船", "Brigantine", "sail", "war", 2, 15000, 110, 150, 24, 20, 60, 10),
+    "nao": ("瑙船", "Nao", "sail", "trade", 3, 22000, 140, 300, 16, 25, 80, 10),
+    "carrack": ("卡拉克帆船", "Carrack", "sail", "trade", 3, 40000, 180, 450, 16, 30, 100, 16),
+    "galleon": ("盖伦帆船", "Galleon", "hybrid", "war", 3, 60000, 240, 400, 20, 40, 150, 24),
+    "galiot": ("小型桨帆船", "Galiot", "oar", "war", 1, 2400, 35, 25, 16, 15, 40, 2),
+    "galleass": ("加莱赛战船", "Galleass", "oar", "war", 3, 22000, 110, 70, 16, 60, 160, 6),
+    "fluyt": ("弗鲁特商船", "Fluyt", "sail", "trade", 2, 14000, 70, 180, 16, 12, 30, 2),
+    "junk": ("福船", "Junk", "sail", "trade", 2, 16000, 90, 140, 16, 20, 60, 3),
+    "dhow": ("单桅三角帆船", "Dhow", "sail", "trade", 2, 9000, 60, 90, 20, 10, 30, 2),
+    "pinnace": ("平底船", "Pinnace", "sail", "coastal", 1, 2200, 40, 45, 16, 8, 20, 2),
+    "caravela_redonda": ("卡拉维拉方形帆船", "Caravela Redonda", "sail", "trade", 2,
+                          11000, 70, 100, 20, 15, 40, 3),
+    "xebec": ("小型三桅船", "Xebec", "hybrid", "war", 2, 15000, 60, 60, 24, 25, 80, 4),
 }
 
 # id: (zh, en, color, start_port_id, start_ship_type_id, start_gold,
@@ -253,212 +376,202 @@ LOCKED_NATIONS = {
     "italy": ("意大利", "Italy", "#c9a227", "venice", "brigantine", 5500, 10, "venice"),
 }
 
-# id: (zh, en, nation_id, lat, lon, produces, demands)  -- section 7.1
+# id: (zh, en, nation_id, lat, lon)  -- section 7.1
 # Phase 4: 100 ports keyed by real WGS84 coordinates; the grid tile is derived
 # by section 6.1's harbor-snap rule, never stored. Transcribed from section 7.1
 # and cross-checked against data/ports.json (group 5 asserts both directions).
+# Phase 7 lock model (task T, 10-* §8 group 5): IDENTITY locks only —
+# id/zh/en/nation/lat/lon exact. produces/demands are demoted to the
+# structural §8.2 group-7 economy-graph checks so the graph can be authored.
 LOCKED_PORTS = {
-    "lisbon": ("里斯本", "Lisbon", "portugal", 38.72, -9.14,
-                 ("wine", "salt"), ("spices", "silk", "timber")),
-    "seville": ("塞维利亚", "Seville", "spain", 37.0, -6.35,
-                 ("olive_oil", "wine", "wool"), ("sugar", "spices")),
-    "valencia": ("瓦伦西亚", "Valencia", "spain", 39.45, -0.33,
-                 ("silk", "ceramics"), ("wheat", "timber")),
-    "barcelona": ("巴塞罗那", "Barcelona", "spain", 41.35, 2.17,
-                 ("wool", "cotton_cloth"), ("iron", "spices")),
-    "marseille": ("马赛", "Marseille", "spain", 43.3, 5.37,
-                 ("wine", "salt", "perfume"), ("wool", "silk")),
-    "bordeaux": ("波尔多", "Bordeaux", "spain", 45.55, -1.15,
-                 ("wine", "salt"), ("timber", "wool")),
-    "london": ("伦敦", "London", "england", 51.47, 0.75,
-                 ("wool", "cotton_cloth"), ("wine", "spices", "timber")),
-    "amsterdam": ("阿姆斯特丹", "Amsterdam", "holland", 52.46, 4.6,
-                 ("cheese", "glassware"), ("spices", "silk", "wheat")),
-    "antwerp": ("安特卫普", "Antwerp", "holland", 51.44, 3.6,
-                 ("glassware", "wool"), ("spices", "wine")),
-    "hamburg": ("汉堡", "Hamburg", "holland", 53.87, 8.7,
-                 ("dried_fish", "timber", "amber"), ("wine", "salt")),
-    "genoa": ("热那亚", "Genoa", "italy", 44.41, 8.93,
-                 ("olive_oil", "cotton_cloth"), ("spices", "copper")),
-    "naples": ("那不勒斯", "Naples", "italy", 40.84, 14.25,
-                 ("olive_oil", "wine"), ("wheat", "timber")),
-    "palermo": ("巴勒莫", "Palermo", "italy", 38.12, 13.36,
-                 ("wheat", "olive_oil"), ("timber", "iron")),
-    "syracuse": ("锡拉库萨", "Syracuse", "italy", 37.07, 15.29,
-                 ("salt", "wheat"), ("timber", "leather")),
-    "cagliari": ("卡利亚里", "Cagliari", "italy", 39.22, 9.11,
-                 ("salt", "leather"), ("wheat", "glassware")),
-    "valetta": ("瓦莱塔", "Valetta", "italy", 35.9, 14.51,
-                 ("cotton_cloth",), ("wheat", "timber", "iron")),
-    "venice": ("威尼斯", "Venice", "italy", 45.44, 12.33,
-                 ("glassware", "perfume"), ("spices", "silk", "cotton_cloth")),
-    "ragusa": ("拉古萨", "Ragusa", "italy", 42.65, 18.09,
-                 ("timber", "leather", "wool"), ("wheat",)),
-    "athens": ("雅典", "Athens", "ottoman", 37.94, 23.64,
-                 ("olive_oil", "wine", "ceramics"), ("timber", "iron")),
-    "candia": ("干地亚", "Candia", "ottoman", 35.34, 25.13,
-                 ("wine", "olive_oil"), ("wheat", "salt")),
-    "cyprus": ("塞浦路斯", "Cyprus", "ottoman", 34.67, 33.04,
-                 ("copper", "sugar"), ("wheat", "timber")),
-    "smyrna": ("士麦那", "Smyrna", "ottoman", 38.42, 27.14,
-                 ("carpet",), ("wheat", "glassware", "iron")),
-    "istanbul": ("伊斯坦布尔", "Istanbul", "ottoman", 41.01, 28.97,
-                 ("carpet", "perfume"), ("wheat", "iron", "timber")),
-    "beirut": ("贝鲁特", "Beirut", "ottoman", 33.9, 35.5,
-                 ("silk", "timber"), ("wheat", "salt")),
-    "alexandria": ("亚历山大", "Alexandria", "ottoman", 31.2, 29.92,
-                 ("cotton_cloth", "sugar", "wheat"), ("timber", "iron", "wine")),
-    "tripoli": ("的黎波里", "Tripoli", "ottoman", 32.9, 13.18,
-                 ("leather", "salt"), ("wheat", "timber")),
-    "tunis": ("突尼斯", "Tunis", "ottoman", 36.82, 10.3,
-                 ("olive_oil", "leather"), ("wheat", "iron")),
-    "algiers": ("阿尔及尔", "Algiers", "ottoman", 36.77, 3.06,
-                 ("leather", "wool"), ("wheat", "timber", "wine")),
-    "ceuta": ("休达", "Ceuta", "portugal", 35.89, -5.32,
-                 ("wheat", "leather"), ("wine", "cotton_cloth")),
-    "madeira": ("马德拉", "Madeira", "portugal", 32.65, -16.91,
-                 ("sugar", "wine"), ("wheat", "iron")),
-    "havana": ("哈瓦那", "Havana", "spain", 23.13, -82.38,
-                 ("sugar", "amber"), ("wine", "cotton_cloth")),
-    "vera_cruz": ("韦拉克鲁斯", "Veracruz", "spain", 19.2, -96.13,
-                 ("copper", "sugar"), ("iron", "glassware")),
-    "cartagena": ("卡塔赫纳", "Cartagena", "spain", 10.39, -75.53,
-                 ("amber", "sugar"), ("wine", "wool")),
-    "portobelo": ("波托贝洛", "Portobelo", "spain", 9.55, -79.65,
-                 ("sugar",), ("silk", "spices")),
-    "lima": ("利马", "Lima", "spain", -12.06, -77.15,
-                 ("copper", "sugar"), ("glassware", "wine")),
-    "buenos_aires": ("布宜诺斯艾利斯", "Buenos Aires", "spain", -34.6, -58.37,
-                 ("leather", "wheat"), ("iron", "glassware")),
-    "san_juan": ("圣胡安", "San Juan", "spain", 18.47, -66.11,
-                 ("sugar", "salt"), ("cotton_cloth", "wine")),
-    "santo_domingo": ("圣多明各", "Santo Domingo", "spain", 18.47, -69.88,
-                 ("sugar", "leather"), ("silk", "glassware")),
-    "acapulco": ("阿卡普尔科", "Acapulco", "spain", 16.85, -99.9,
-                 ("silk", "copper"), ("wheat", "glassware")),
-    "panama": ("巴拿马", "Panama", "spain", 8.98, -79.52,
-                 ("amber", "copper"), ("wine", "iron")),
-    "valparaiso": ("瓦尔帕莱索", "Valparaiso", "spain", -33.03, -71.63,
-                 ("copper", "wine"), ("glassware", "wool")),
-    "guayaquil": ("瓜亚基尔", "Guayaquil", "spain", -2.6, -80.3,
-                 ("sugar", "timber"), ("iron", "glassware")),
-    "bahia": ("巴伊亚", "Bahia", "portugal", -12.97, -38.5,
-                 ("sugar", "timber"), ("glassware", "iron")),
-    "rio_de_janeiro": ("里约热内卢", "Rio de Janeiro", "portugal", -22.9, -43.18,
-                 ("sugar", "timber", "amber"), ("iron", "wool")),
-    "recife": ("累西腓", "Recife", "portugal", -8.06, -34.87,
-                 ("sugar", "cotton_cloth"), ("wine", "iron")),
-    "belem": ("贝伦", "Belem", "portugal", -1.35, -48.48,
-                 ("timber", "spices"), ("salt", "glassware")),
-    "boston": ("波士顿", "Boston", "england", 42.36, -71.05,
-                 ("dried_fish", "timber"), ("wine", "salt")),
-    "new_york": ("纽约", "New York", "england", 40.7, -74.02,
-                 ("timber", "dried_fish"), ("wine", "spices")),
-    "jamestown": ("詹姆斯敦", "Jamestown", "england", 37.0, -76.3,
-                 ("timber", "wheat"), ("wine", "iron")),
-    "charleston": ("查尔斯顿", "Charleston", "england", 32.78, -79.93,
-                 ("sugar", "timber"), ("wine", "salt")),
-    "new_foundland": ("纽芬兰", "Newfoundland", "england", 47.56, -52.71,
-                 ("dried_fish", "timber"), ("wine", "salt")),
-    "quebec": ("魁北克", "Quebec", "england", 47.0, -70.5,
-                 ("timber", "dried_fish"), ("wine", "salt")),
-    "curacao": ("库拉索", "Curacao", "holland", 12.11, -68.93,
-                 ("salt", "sugar"), ("timber", "wine")),
-    "suriname": ("苏里南", "Suriname", "holland", 5.9, -55.15,
-                 ("sugar", "timber"), ("iron", "wine")),
-    "elmina": ("埃尔米纳", "Elmina", "portugal", 5.08, -1.35,
-                 ("amber", "salt"), ("cotton_cloth", "iron")),
-    "luanda": ("罗安达", "Luanda", "portugal", -8.78, 13.23,
-                 ("amber", "leather"), ("glassware", "wool")),
-    "mozambique": ("莫桑比克", "Mozambique", "portugal", -15.03, 40.73,
-                 ("amber", "spices"), ("cotton_cloth", "iron")),
-    "mombasa": ("蒙巴萨", "Mombasa", "ottoman", -4.06, 39.68,
-                 ("spices", "amber"), ("glassware", "wine")),
-    "cape_town": ("开普敦", "Cape Town", "holland", -33.92, 18.42,
-                 ("wine", "wheat"), ("timber", "iron")),
-    "safi": ("萨菲", "Safi", "portugal", 32.3, -9.24,
-                 ("salt", "leather"), ("silk", "spices")),
-    "saint_louis": ("圣路易", "Saint-Louis", "holland", 16.0, -16.51,
-                 ("leather", "salt"), ("glassware", "wool")),
-    "accra": ("阿克拉", "Accra", "england", 5.53, -0.2,
-                 ("amber", "salt"), ("cotton_cloth", "wine")),
-    "goa": ("果阿", "Goa", "portugal", 15.5, 73.83,
-                 ("spices", "cotton_cloth"), ("wine", "glassware")),
-    "calicut": ("卡利卡特", "Calicut", "portugal", 11.25, 75.77,
-                 ("spices", "carpet"), ("glassware", "copper")),
-    "cochin": ("科钦", "Cochin", "holland", 9.97, 76.27,
-                 ("spices", "timber"), ("iron", "wine")),
-    "bombay": ("孟买", "Bombay", "england", 18.92, 72.83,
-                 ("cotton_cloth", "spices"), ("iron", "wine")),
-    "surat": ("苏拉特", "Surat", "england", 21.1, 72.7,
-                 ("cotton_cloth", "carpet"), ("glassware", "amber")),
-    "colombo": ("科伦坡", "Colombo", "holland", 6.93, 79.85,
-                 ("spices", "ceramics"), ("wine", "iron")),
-    "pondicherry": ("本地治里", "Pondicherry", "england", 11.93, 79.83,
-                 ("cotton_cloth", "spices"), ("glassware", "amber")),
-    "muscat": ("马斯喀特", "Muscat", "ottoman", 23.62, 58.59,
-                 ("amber", "carpet"), ("wine", "timber")),
-    "basra": ("巴士拉", "Basra", "ottoman", 30.0, 48.5,
-                 ("carpet", "dried_fish"), ("iron", "timber")),
-    "bandar_abbas": ("阿巴斯港", "Bandar Abbas", "ottoman", 27.18, 56.28,
-                 ("carpet", "amber"), ("glassware", "sugar")),
-    "aden": ("亚丁", "Aden", "ottoman", 12.79, 45.03,
-                 ("amber", "salt"), ("wheat", "iron")),
-    "jiddah": ("吉达", "Jiddah", "ottoman", 21.48, 39.18,
-                 ("carpet", "amber"), ("wheat", "timber")),
-    "suakin": ("苏阿金", "Suakin", "ottoman", 19.1, 37.33,
-                 ("salt", "leather"), ("glassware", "wine")),
-    "mogadishu": ("摩加迪沙", "Mogadishu", "ottoman", 2.03, 45.34,
-                 ("spices", "leather"), ("iron", "wine")),
-    "malacca": ("马六甲", "Malacca", "portugal", 2.19, 102.25,
-                 ("spices", "amber"), ("iron", "wool")),
-    "batavia": ("巴达维亚", "Batavia", "holland", -6.13, 106.81,
-                 ("spices", "sugar"), ("wine", "iron")),
-    "macassar": ("望加锡", "Macassar", "holland", -5.13, 119.41,
-                 ("spices", "timber"), ("glassware", "wool")),
-    "amboina": ("安汶", "Amboina", "holland", -3.69, 128.18,
-                 ("spices", "salt"), ("iron", "wine")),
-    "manila": ("马尼拉", "Manila", "spain", 14.58, 120.97,
-                 ("silk", "spices"), ("wheat", "iron")),
-    "macau": ("澳门", "Macao", "portugal", 22.19, 113.54,
-                 ("silk", "ceramics"), ("sugar", "glassware")),
-    "canton": ("广州", "Canton", "england", 22.75, 113.65,
-                 ("silk", "ceramics", "timber"), ("copper", "salt")),
-    "nagasaki": ("长崎", "Nagasaki", "holland", 32.75, 129.88,
-                 ("copper", "silk"), ("sugar", "wine")),
-    "osaka": ("大阪", "Osaka", "holland", 34.65, 135.43,
-                 ("copper", "ceramics"), ("silk", "glassware")),
-    "zeelandia": ("热兰遮", "Zeelandia", "holland", 22.99, 120.16,
-                 ("sugar", "timber"), ("silk", "iron")),
-    "patani": ("北大年", "Patani", "holland", 6.87, 101.25,
-                 ("spices", "timber"), ("cotton_cloth", "iron")),
-    "brunei": ("文莱", "Brunei", "spain", 5.0, 115.05,
-                 ("timber", "spices"), ("glassware", "wool")),
-    "ternate": ("特尔纳特", "Ternate", "holland", 0.79, 127.38,
-                 ("spices", "salt"), ("wine", "iron")),
-    "timor": ("帝汶", "Timor", "portugal", -10.17, 123.6,
-                 ("spices", "timber"), ("glassware", "iron")),
-    "botany_bay": ("鲨鱼湾", "Shark Bay", "holland", -25.5, 113.5,
-                 ("salt", "dried_fish"), ("timber", "iron")),
-    "siam": ("暹罗", "Siam", "portugal", 13.5, 100.58,
-                 ("timber", "ceramics"), ("glassware", "wool")),
-    "cadiz": ("加的斯", "Cadiz", "spain", 36.53, -6.29,
-                 ("salt", "wine"), ("spices", "timber")),
-    "oporto": ("波尔图", "Oporto", "portugal", 41.14, -8.68,
-                 ("wine", "leather"), ("spices", "glassware")),
-    "plymouth": ("普利茅斯", "Plymouth", "england", 50.37, -4.14,
-                 ("dried_fish", "wool"), ("wine", "spices")),
-    "bergen": ("卑尔根", "Bergen", "holland", 60.39, 5.32,
-                 ("dried_fish", "timber"), ("wine", "salt")),
-    "danzig": ("但泽", "Danzig", "holland", 54.4, 18.68,
-                 ("timber", "amber"), ("wine", "salt")),
-    "stockholm": ("斯德哥尔摩", "Stockholm", "holland", 59.32, 18.1,
-                 ("copper", "iron"), ("wine", "salt")),
-    "trieste": ("的里雅斯特", "Trieste", "italy", 45.65, 13.77,
-                 ("glassware", "timber"), ("spices", "sugar")),
-    "corfu": ("科孚", "Corfu", "italy", 39.62, 19.92,
-                 ("olive_oil", "salt"), ("wine", "timber")),
+    "lisbon": ("里斯本", "Lisbon", "portugal", 38.72, -9.14),
+    "seville": ("塞维利亚", "Seville", "spain", 37.0, -6.35),
+    "valencia": ("瓦伦西亚", "Valencia", "spain", 39.45, -0.33),
+    "barcelona": ("巴塞罗那", "Barcelona", "spain", 41.35, 2.17),
+    "marseille": ("马赛", "Marseille", "spain", 43.3, 5.37),
+    "bordeaux": ("波尔多", "Bordeaux", "spain", 45.55, -1.15),
+    "london": ("伦敦", "London", "england", 51.47, 0.75),
+    "amsterdam": ("阿姆斯特丹", "Amsterdam", "holland", 52.46, 4.6),
+    "antwerp": ("安特卫普", "Antwerp", "holland", 51.44, 3.6),
+    "hamburg": ("汉堡", "Hamburg", "holland", 53.87, 8.7),
+    "genoa": ("热那亚", "Genoa", "italy", 44.41, 8.93),
+    "naples": ("那不勒斯", "Naples", "italy", 40.84, 14.25),
+    "palermo": ("巴勒莫", "Palermo", "italy", 38.12, 13.36),
+    "syracuse": ("锡拉库萨", "Syracuse", "italy", 37.07, 15.29),
+    "cagliari": ("卡利亚里", "Cagliari", "italy", 39.22, 9.11),
+    "valetta": ("瓦莱塔", "Valetta", "italy", 35.9, 14.51),
+    "venice": ("威尼斯", "Venice", "italy", 45.44, 12.33),
+    "ragusa": ("拉古萨", "Ragusa", "italy", 42.65, 18.09),
+    "athens": ("雅典", "Athens", "ottoman", 37.94, 23.64),
+    "candia": ("干地亚", "Candia", "ottoman", 35.34, 25.13),
+    "cyprus": ("塞浦路斯", "Cyprus", "ottoman", 34.67, 33.04),
+    "smyrna": ("士麦那", "Smyrna", "ottoman", 38.42, 27.14),
+    "istanbul": ("伊斯坦布尔", "Istanbul", "ottoman", 41.01, 28.97),
+    "beirut": ("贝鲁特", "Beirut", "ottoman", 33.9, 35.5),
+    "alexandria": ("亚历山大", "Alexandria", "ottoman", 31.2, 29.92),
+    "tripoli": ("的黎波里", "Tripoli", "ottoman", 32.9, 13.18),
+    "tunis": ("突尼斯", "Tunis", "ottoman", 36.82, 10.3),
+    "algiers": ("阿尔及尔", "Algiers", "ottoman", 36.77, 3.06),
+    "ceuta": ("休达", "Ceuta", "portugal", 35.89, -5.32),
+    "madeira": ("马德拉", "Madeira", "portugal", 32.65, -16.91),
+    "havana": ("哈瓦那", "Havana", "spain", 23.13, -82.38),
+    "vera_cruz": ("韦拉克鲁斯", "Veracruz", "spain", 19.2, -96.13),
+    "cartagena": ("卡塔赫纳", "Cartagena", "spain", 10.39, -75.53),
+    "portobelo": ("波托贝洛", "Portobelo", "spain", 9.55, -79.65),
+    "lima": ("利马", "Lima", "spain", -12.06, -77.15),
+    "buenos_aires": ("布宜诺斯艾利斯", "Buenos Aires", "spain", -34.6, -58.37),
+    "san_juan": ("圣胡安", "San Juan", "spain", 18.47, -66.11),
+    "santo_domingo": ("圣多明各", "Santo Domingo", "spain", 18.47, -69.88),
+    "acapulco": ("阿卡普尔科", "Acapulco", "spain", 16.85, -99.9),
+    "panama": ("巴拿马", "Panama", "spain", 8.98, -79.52),
+    "valparaiso": ("瓦尔帕莱索", "Valparaiso", "spain", -33.03, -71.63),
+    "guayaquil": ("瓜亚基尔", "Guayaquil", "spain", -2.6, -80.3),
+    "bahia": ("巴伊亚", "Bahia", "portugal", -12.97, -38.5),
+    "rio_de_janeiro": ("里约热内卢", "Rio de Janeiro", "portugal", -22.9, -43.18),
+    "recife": ("累西腓", "Recife", "portugal", -8.06, -34.87),
+    "belem": ("贝伦", "Belem", "portugal", -1.35, -48.48),
+    "boston": ("波士顿", "Boston", "england", 42.36, -71.05),
+    "new_york": ("纽约", "New York", "england", 40.7, -74.02),
+    "jamestown": ("詹姆斯敦", "Jamestown", "england", 37.0, -76.3),
+    "charleston": ("查尔斯顿", "Charleston", "england", 32.78, -79.93),
+    "new_foundland": ("纽芬兰", "Newfoundland", "england", 47.56, -52.71),
+    "quebec": ("魁北克", "Quebec", "england", 47.0, -70.5),
+    "curacao": ("库拉索", "Curacao", "holland", 12.11, -68.93),
+    "suriname": ("苏里南", "Suriname", "holland", 5.9, -55.15),
+    "elmina": ("埃尔米纳", "Elmina", "portugal", 5.08, -1.35),
+    "luanda": ("罗安达", "Luanda", "portugal", -8.78, 13.23),
+    "mozambique": ("莫桑比克", "Mozambique", "portugal", -15.03, 40.73),
+    "mombasa": ("蒙巴萨", "Mombasa", "ottoman", -4.06, 39.68),
+    "cape_town": ("开普敦", "Cape Town", "holland", -33.92, 18.42),
+    "safi": ("萨菲", "Safi", "portugal", 32.3, -9.24),
+    "saint_louis": ("圣路易", "Saint-Louis", "holland", 16.0, -16.51),
+    "accra": ("阿克拉", "Accra", "england", 5.53, -0.2),
+    "goa": ("果阿", "Goa", "portugal", 15.5, 73.83),
+    "calicut": ("卡利卡特", "Calicut", "portugal", 11.25, 75.77),
+    "cochin": ("科钦", "Cochin", "holland", 9.97, 76.27),
+    "bombay": ("孟买", "Bombay", "england", 18.92, 72.83),
+    "surat": ("苏拉特", "Surat", "england", 21.1, 72.7),
+    "colombo": ("科伦坡", "Colombo", "holland", 6.93, 79.85),
+    "pondicherry": ("本地治里", "Pondicherry", "england", 11.93, 79.83),
+    "muscat": ("马斯喀特", "Muscat", "ottoman", 23.62, 58.59),
+    "basra": ("巴士拉", "Basra", "ottoman", 30.0, 48.5),
+    "bandar_abbas": ("阿巴斯港", "Bandar Abbas", "ottoman", 27.18, 56.28),
+    "aden": ("亚丁", "Aden", "ottoman", 12.79, 45.03),
+    "jiddah": ("吉达", "Jiddah", "ottoman", 21.48, 39.18),
+    "suakin": ("苏阿金", "Suakin", "ottoman", 19.1, 37.33),
+    "mogadishu": ("摩加迪沙", "Mogadishu", "ottoman", 2.03, 45.34),
+    "malacca": ("马六甲", "Malacca", "portugal", 2.19, 102.25),
+    "batavia": ("巴达维亚", "Batavia", "holland", -6.13, 106.81),
+    "macassar": ("望加锡", "Macassar", "holland", -5.13, 119.41),
+    "amboina": ("安汶", "Amboina", "holland", -3.69, 128.18),
+    "manila": ("马尼拉", "Manila", "spain", 14.58, 120.97),
+    "macau": ("澳门", "Macao", "portugal", 22.19, 113.54),
+    "canton": ("广州", "Canton", "england", 22.75, 113.65),
+    "nagasaki": ("长崎", "Nagasaki", "holland", 32.75, 129.88),
+    "osaka": ("大阪", "Osaka", "holland", 34.65, 135.43),
+    "zeelandia": ("热兰遮", "Zeelandia", "holland", 22.99, 120.16),
+    "patani": ("北大年", "Patani", "holland", 6.87, 101.25),
+    "brunei": ("文莱", "Brunei", "spain", 5.0, 115.05),
+    "ternate": ("特尔纳特", "Ternate", "holland", 0.79, 127.38),
+    "timor": ("帝汶", "Timor", "portugal", -10.17, 123.6),
+    "botany_bay": ("鲨鱼湾", "Shark Bay", "holland", -25.5, 113.5),
+    "siam": ("暹罗", "Siam", "portugal", 13.5, 100.58),
+    "cadiz": ("加的斯", "Cadiz", "spain", 36.53, -6.29),
+    "oporto": ("波尔图", "Oporto", "portugal", 41.14, -8.68),
+    "plymouth": ("普利茅斯", "Plymouth", "england", 50.37, -4.14),
+    "bergen": ("卑尔根", "Bergen", "holland", 60.39, 5.32),
+    "danzig": ("但泽", "Danzig", "holland", 54.4, 18.68),
+    "stockholm": ("斯德哥尔摩", "Stockholm", "holland", 59.32, 18.1),
+    "trieste": ("的里雅斯特", "Trieste", "italy", 45.65, 13.77),
+    "corfu": ("科孚", "Corfu", "italy", 39.62, 19.92),
 }
+
+# id: (zh, en, lat, lon)  -- section 7.1 Phase-6 neutral tier (45 rows)
+# Phase 7 lock model (task T): the neutral tier joins the identity locks —
+# the tier's count band (40–60) is retired by the §8 group-5 amendment; the
+# set is exactly these 45 ids, zh/en/lat/lon exact (nation is always `""`).
+LOCKED_NEUTRAL_PORTS = {
+    "quanzhou": ("泉州", "Quanzhou (Zayton)", 24.85, 118.72),
+    "ningbo": ("宁波", "Ningbo", 29.95, 121.7),
+    "yuegang": ("月港", "Yuegang (Zhangzhou)", 24.42, 117.98),
+    "shuangyu": ("双屿", "Shuangyu", 29.74, 122.22),
+    "nanao": ("南澳", "Nan'ao", 23.4, 117.2),
+    "xiamen": ("厦门", "Xiamen (Amoy)", 24.44, 118.13),
+    "fuzhou": ("福州", "Fuzhou", 26.02, 119.65),
+    "wenzhou": ("温州", "Wenzhou", 27.97, 120.68),
+    "zhelin": ("柘林", "Zhelin (Chaozhou)", 23.62, 117.13),
+    "qiongzhou": ("琼州", "Qiongzhou (Hainan)", 20.03, 110.33),
+    "beihai": ("北海", "Beihai (Hepu)", 21.48, 109.12),
+    "dinghai": ("定海", "Dinghai (Zhoushan)", 30.01, 122.11),
+    "liujiagang": ("刘家港", "Liujiagang (Taicang)", 31.5, 121.55),
+    "hirado": ("平户", "Hirado", 33.25, 129.56),
+    "sakai": ("堺", "Sakai", 34.5, 135.42),
+    "yamagawa": ("山川", "Yamagawa (Satsuma)", 31.1, 130.58),
+    "hakata": ("博多", "Hakata", 33.59, 130.39),
+    "funai": ("丰后府内", "Bungo-Funai (Ōita)", 33.24, 131.61),
+    "urado": ("浦户", "Urado (Tosa)", 33.5, 133.55),
+    "anotsu": ("安浓津", "Anotsu (Ise)", 34.6, 136.7),
+    "busan": ("釜山", "Busan (Pusan)", 35.1, 129.04),
+    "yeompo": ("盐浦", "Yeompo", 35.5, 129.43),
+    "hoi_an": ("会安", "Hoi An (Faifo)", 15.9, 108.34),
+    "banten": ("万丹", "Banten", -5.85, 105.95),
+    "jambi": ("占碑", "Jambi", -1.12, 103.8),
+    "palembang": ("巨港", "Palembang", -2.25, 104.85),
+    "gresik": ("革儿昔", "Gresik (Surabaya)", -7.05, 113.35),
+    "sulu": ("苏禄", "Sulu (Jolo)", 5.98, 120.98),
+    "kedah": ("吉打", "Kedah", 6.1, 100.32),
+    "nagapattinam": ("内加帕塔姆", "Nagapattinam", 10.76, 79.85),
+    "masulipatnam": ("马苏利帕特南", "Masulipatnam", 16.1, 81.12),
+    "hughli": ("胡格利", "Hughli (Bengal)", 21.65, 88.05),
+    "syriam": ("沙廉", "Syriam (Pegu)", 16.6, 96.28),
+    "dianga": ("迪昂", "Dianga (Arakan)", 18.4, 94.3),
+    "khambhat": ("坎贝", "Cambay (Khambhat)", 21.7, 72.55),
+    "diu": ("第乌", "Diu", 20.69, 70.97),
+    "mocha": ("摩卡", "Mocha", 13.3, 43.22),
+    "qalhat": ("哈尔哈特", "Qalhat", 22.68, 59.8),
+    "hormuz": ("霍尔木兹", "Hormuz", 26.62, 56.43),
+    "zanzibar": ("桑给巴尔", "Zanzibar", -6.05, 38.92),
+    "kilwa": ("基尔瓦", "Kilwa", -8.96, 39.5),
+    "sofala": ("索法拉", "Sofala", -19.6, 35.25),
+    "lamu": ("拉穆", "Lamu", -2.3, 40.6),
+    "massawa": ("马萨瓦", "Massawa", 15.6, 39.45),
+    "zeila": ("泽拉", "Zeila", 11.35, 43.47),
+}
+
+NEUTRAL_PORT_COUNT = 45  # §7.1: the exact neutral-tier count (lock model Phase 7)
+
+# §7.1 (decision 25): the locked protected set — ≤ 4 per nation, ⊇ the 6
+# capitals, permanent alignment, no ledger. Group 7 asserts the exact set.
+LOCKED_PROTECTED_PORTS = frozenset({
+    "lisbon", "oporto",                       # portugal
+    "seville", "cadiz", "valencia", "barcelona",  # spain
+    "london", "plymouth",                     # england
+    "amsterdam", "antwerp",                   # holland
+    "istanbul", "athens", "smyrna",           # ottoman
+    "venice", "genoa", "naples", "palermo",   # italy
+})
+
+# §7.1 "Port region bands (Phase 7)": the locked band-id container — the
+# 15 ids below are task P's recorded set (staged 2026-11-02; partitions all
+# 145 ports, contains the six §7.1 skeleton ids). Group 5/§8.2 item 13 check
+# membership + no-unused-id against this tuple.
+LOCKED_BANDS: tuple[str, ...] = (
+    "africa_atlantic",
+    "africa_levant",
+    "americas_brazil",
+    "americas_caribbean",
+    "americas_north",
+    "americas_pacific",
+    "china_coast",
+    "europe_atlantic",
+    "europe_med",
+    "india_persia_arabia",
+    "indian_ocean_south",
+    "japan",
+    "korea",
+    "southeast_asia",
+    "swahili_red_sea",
+)
 
 # id: (zh, en, nation_id, role, recruit_ports, wage_daily)  -- section 7.5
 LOCKED_OFFICERS = {
@@ -476,21 +589,52 @@ LOCKED_OFFICERS = {
                           "navigator", ("venice", "genoa"), 30),
 }
 
-# id: (zh, en, slot, modifiers, price)  -- docs/60-COMBAT.md section 4.11.13
-# (reachable from docs/10-DATA-SCHEMA.md section 4.6). All Phase-2 items.
+# id: (zh, en, slot, modifiers, price, tier, rare)  -- docs/60-COMBAT.md
+# section 4.11.13 (reachable from docs/10-DATA-SCHEMA.md section 4.6).
+# Phase 7 (task S, staged 2026-11-02): the exact 24-item set — 6 per slot,
+# 2/2/2 tiers per slot, exactly 4 `rare: true` drop-only items (§7.9). The
+# original 8 keep every locked value and gain their authored tier.
 LOCKED_EQUIPMENT = {
-    "eq_cutlass": ("水手弯刀", "Sailor's Cutlass", "weapon", {"combat": 3}, 400),
-    "eq_rapier": ("贵族细剑", "Noble's Rapier", "weapon", {"combat": 5}, 1200),
-    "eq_breastplate": ("胸甲", "Breastplate", "armor", {"combat": 2}, 700),
+    "eq_cutlass": ("水手弯刀", "Sailor's Cutlass", "weapon", {"combat": 3}, 400, 1, False),
+    "eq_rapier": ("贵族细剑", "Noble's Rapier", "weapon", {"combat": 5}, 1200, 1, False),
+    "eq_backsword": ("单刃剑", "Backsword", "weapon", {"combat": 6}, 2200, 2, False),
+    "eq_main_gauche": ("左手格挡匕首", "Main-Gauche", "weapon",
+                       {"combat": 4, "luck": 2}, 1900, 2, False),
+    "eq_zweihander": ("双手巨剑", "Zweihänder", "weapon", {"combat": 9}, 4800, 3, False),
+    "eq_khair_scimitar": ("「红胡子」弯刀", "Redbeard's Scimitar", "weapon",
+                           {"combat": 10}, 6000, 3, True),
+    "eq_breastplate": ("胸甲", "Breastplate", "armor", {"combat": 2}, 700, 1, False),
     "eq_lucky_charm": ("幸运护符", "Lucky Charm", "armor",
-                       {"combat": 1, "luck": 5}, 900),
+                       {"combat": 1, "luck": 5}, 900, 1, False),
+    "eq_brigandine": ("铆钉皮甲", "Brigandine", "armor", {"combat": 4}, 2400, 2, False),
+    "eq_saint_medallion": ("圣徒徽章", "Saint's Medallion", "armor",
+                            {"luck": 3, "scurvy_delay_days": 2}, 2800, 2, False),
+    "eq_three_quarter_armor": ("四分之三甲", "Three-Quarter Armour", "armor",
+                                {"combat": 6}, 5200, 3, False),
+    "eq_bloodhand_cuirass": ("「血手」胸甲", "Bloodhand's Cuirass", "armor",
+                              {"combat": 5, "luck": 3}, 4200, 3, True),
     "eq_mermaid_figurehead": ("美人鱼船首像", "Mermaid Figurehead",
-                              "figurehead", {"durability": 10}, 1500),
+                               "figurehead", {"durability": 10}, 1500, 1, False),
+    "eq_eagle_figurehead": ("雄鹰船首像", "Eagle Figurehead",
+                             "figurehead", {"durability": 8}, 700, 1, False),
     "eq_dragon_figurehead": ("龙首船像", "Dragon Figurehead",
-                             "figurehead", {"durability": 20}, 3200),
-    "eq_cotton_sails": ("棉帆", "Cotton Sails", "sail", {"speed": 1}, 1000),
+                              "figurehead", {"durability": 20}, 3200, 2, False),
+    "eq_albatross_figurehead": ("信天翁船首像", "Albatross Figurehead", "figurehead",
+                                 {"durability": 12, "storm_damage_pct": -10}, 2600, 2, False),
+    "eq_angel_figurehead": ("天使船首像", "Angel Figurehead", "figurehead",
+                             {"durability": 25, "scurvy_delay_days": 3}, 4800, 3, False),
+    "eq_golden_dragon_figurehead": ("鎏金龙首像", "Gilded Dragon Figurehead", "figurehead",
+                                     {"durability": 30, "scurvy_delay_days": 5}, 6000, 3, True),
+    "eq_cotton_sails": ("棉帆", "Cotton Sails", "sail", {"speed": 1}, 1000, 1, False),
+    "eq_matting_sails": ("棕席帆", "Woven Mat Sails", "sail", {"speed": 1}, 400, 1, False),
     "eq_storm_sails": ("风暴帆", "Storm Sails", "sail",
-                       {"speed": 1, "durability": 5}, 2600),
+                       {"speed": 1, "durability": 5}, 2600, 2, False),
+    "eq_flemish_linen_sails": ("佛兰芒亚麻帆", "Flemish Linen Sails", "sail",
+                                {"speed": 2}, 3400, 2, False),
+    "eq_brocade_sails": ("织金锦帆", "Brocade Sails", "sail",
+                          {"speed": 1, "durability": 10, "storm_damage_pct": -15}, 5000, 3, False),
+    "eq_red_sail": ("「红帆」", "The Red Sail", "sail",
+                    {"speed": 2, "durability": 8, "storm_damage_pct": -20}, 6000, 3, True),
 }
 
 # docs/60-COMBAT.md section 4.11.12: `figurehead`/`sail` are ship-bound, so
@@ -505,17 +649,27 @@ CAPITAL_PORT_IDS = tuple(
 
 LOCKED_COUNTS = {
     "nations": 6,
-    "goods": 20,
-    "ship_types": 8,
+    "goods": 40,
+    "ship_types": 16,
     "ports": 100,
     "officers": 6,
-    "equipment": 8,
+    "equipment": 24,
 }
 
-# §7.1 Phase-6 neutral tier: the count band (the sovereign 100 stay an exact
-# set; the tier's ids are checked structurally in group 5).
-NEUTRAL_PORT_COUNT_MIN = 40
-NEUTRAL_PORT_COUNT_MAX = 60
+# §7.1 Phase-6 neutral tier: Phase 7 joins the tier to the identity locks —
+# the 40–60 count band is retired; the set is exactly LOCKED_NEUTRAL_PORTS
+# (45 rows) and the total port count exactly 145 (§8 group 5).
+
+# §8.2 item 5 (`30-*` §4.2): the Phase-7 flag-driven consumption-tier split —
+# exactly 12 `staple: true` / 16 unflagged (middle) / 12 `specialty: true`
+# (luxury tier). The Phase-5 derived base-price-rank split is retired.
+CONSUMPTION_TIER_SPLIT = (12, 16, 12)
+
+# §2.1 flow economy (30-* §4.2): tier flow rates and capacities the harness
+# and (from W3) economy.gd read; the validator pins the split, not these
+# engine numbers — recorded here only as the group-7 fixture constants.
+FLOW_TIER_RATES = {"staple": 5, "middle": 3, "luxury": 2}
+FLOW_TIER_CAPACITIES = {"staple": 160, "middle": 140, "luxury": 120}
 
 # --- Phase 5 npc & economy data (docs/10-DATA-SCHEMA.md sections 4.10-4.13,
 # normative validator spec section 8.2) --------------------------------------
@@ -541,6 +695,12 @@ NPC_FLOW_KEYS = (
 )
 NPC_CONFIG_KEYS = ("version", "presets", "default_preset", "budgets", "flow",
                    "absolute_cap")
+# Phase 7 (correction 15): task N (W4) adds the explicit data line
+# `neutral_coasters_mult` (§2.7 pins := 0.75). The key is allowed (and
+# > 0-bounded) from the W2 validator on; it is NOT yet required — W2's
+# staged/merged data carries no npc_config edit (N owns that file in W4),
+# and the §8.2 negative list pins no missing-key failure.
+NPC_CONFIG_OPTIONAL_KEYS = ("neutral_coasters_mult",)
 # §4.10: exactly one preset multiplier is 1.0 and `default_preset` names it.
 NEUTRAL_PRESET = "normal"
 # §4.10: hard upper bound on live NPC fleets (group 7 enforces the locked cap).
@@ -568,9 +728,8 @@ REST_NEUTRAL = 100
 REST_BAND_MIN = 10
 REST_BAND_MAX = 190
 
-# §8.2 item 5 (`30-*` §4.2): rank goods by (base_price asc, id asc) —
-# indices 0-4 staples, 5-14 middle, 15-19 luxuries.
-CONSUMPTION_TIER_SPLIT = (5, 10, 5)
+# §8.2 item 5: CONSUMPTION_TIER_SPLIT moved up to the locked-constants block
+# (Phase-7 flag-driven 12/16/12); the Phase-5 base-price-rank split is retired.
 
 # Files whose structure/counts/bounds group 7 owns outright (§8.2 preamble);
 # group 3's generic id loop skips them.
@@ -890,6 +1049,31 @@ def _schema_goods(items: list) -> None:
         _require_int(entity["unit_size"], f"{path}.unit_size", "goods.json", 1)
         if entity["unit_size"] != 1:
             fail("schema", "goods.json", f"{path}.unit_size is locked at 1", 3)
+        # Phase 7 (10-* §4.2): tier flags + optional flow overrides. The tier
+        # split counts are group 7's (§8.2 item 5); the flags are bools here.
+        for flag in ("staple", "specialty", "exclusive"):
+            if flag in entity and not isinstance(entity[flag], bool):
+                fail("schema", "goods.json",
+                     f"{path}.{flag} must be a bool (got {entity[flag]!r})", 3)
+        if entity.get("exclusive") and not entity.get("specialty"):
+            fail("schema", "goods.json",
+                 f"{path} ({entity['id']}): exclusive ⇒ specialty (§4.2 — "
+                 "专营货 is the alignment-gated subset of specialties)", 3)
+        if "flow" in entity:
+            flow = entity["flow"]
+            if not isinstance(flow, dict):
+                fail("schema", "goods.json", f"{path}.flow must be an object", 3)
+            keys = set(flow)
+            if keys != {"prod", "cons", "capacity"}:
+                fail("schema", "goods.json",
+                     f"{path}.flow must have exactly keys prod,cons,capacity "
+                     "— all three together or none (§4.2)", 3)
+            for key in ("prod", "cons", "capacity"):
+                _require_int(flow[key], f"{path}.flow.{key}", "goods.json", 1)
+            if flow["capacity"] > 200:
+                fail("schema", "goods.json",
+                     f"{path}.flow.capacity ({flow['capacity']}) is above the "
+                     "hard ceiling 200 (§4.2 STOCK_MAX)", 3)
 
 
 def _schema_ship_types(items: list) -> None:
@@ -913,6 +1097,9 @@ def _schema_ship_types(items: list) -> None:
             "ship_types.json",
         )
         _require_enum(entity["class"], SHIP_CLASSES, f"{path}.class", "ship_types.json")
+        # Phase 7 (10-* §4.3): `role` enum and `tier` gate on every hull.
+        _require_enum(entity.get("role"), SHIP_ROLES, f"{path}.role", "ship_types.json")
+        _require_int(entity.get("tier"), f"{path}.tier", "ship_types.json", 1, 3)
         _require_int(entity["base_price"], f"{path}.base_price", "ship_types.json", 0)
         _require_int(entity["durability"], f"{path}.durability", "ship_types.json", 1)
         _require_int(entity["capacity"], f"{path}.capacity", "ship_types.json", 1)
@@ -928,20 +1115,34 @@ def _schema_ship_types(items: list) -> None:
                 f"({entity['crew_min']})",
                 3,
             )
+        # §6.1 locked speed set: every hull's FINAL speed lies in {16, 20, 24}
+        # (§4.3 — task S snapped the two 18s first-pass values into the set).
+        if entity["speed"] not in LOCKED_SHIP_SPEEDS:
+            fail(
+                "schema",
+                "ship_types.json",
+                f"{path}.speed ({entity['speed']}) is outside the §6.1 locked "
+                "set {16, 20, 24}",
+                3,
+            )
 
 
 def _schema_ports(items: list, filename: str = "ports.json") -> None:
-    """Port schema (docs/10-* section 4.4, Phase 4): `lat`/`lon` are the
-    geographic truth and the grid tile is derived by section 6.1's harbor-snap
-    rule. The retired dual-map keys (`marker`, `position`, `p3`, `phase`) are
-    rejected outright so a stale edit cannot smuggle one back in."""
-    RETIRED = ("marker", "position", "p3", "phase")
+    """Port schema (docs/10-* section 4.4, Phase 4; Phase 7 amendment).
+    `lat`/`lon` are the geographic truth and the grid tile is derived by
+    section 6.1's harbor-snap rule. The retired dual-map keys (`marker`,
+    `position`, `p3`, `phase`) are rejected outright so a stale edit cannot
+    smuggle one back in; Phase 7 retires `market_goods` (the market rows
+    derive from produces ∪ demands, §4.2) and the int form of
+    `facilities.shipyard`, and adds band/protected/dev/sphere plus the two
+    stock-list facilities."""
+    RETIRED = ("marker", "position", "p3", "phase", "market_goods")
     for index, entity in enumerate(items):
         path = f"{filename}[{index}]"
         _require_keys(
             entity,
             ("id", "name", "nation_id", "lat", "lon", "produces", "demands",
-             "facilities", "flavor"),
+             "band", "dev", "sphere", "facilities", "flavor"),
             path,
             filename,
         )
@@ -950,8 +1151,12 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
                 fail(
                     "schema",
                     filename,
-                    f"{path}.{key} is retired in Phase 4 "
-                    "(lat/lon are the only coordinates, 10-* 4.4)",
+                    f"{path}.{key} is retired"
+                    + (" in Phase 4 (lat/lon are the only coordinates, 10-* 4.4)"
+                       if key in ("marker", "position", "p3", "phase") else
+                       " in Phase 7 (market rows derive from produces ∪ "
+                       "demands, 10-* 4.2)")
+                    ,
                     3,
                 )
         if entity["nation_id"] == NEUTRAL_PORT_NATION_ID:
@@ -965,12 +1170,19 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
         _require_number(entity["lon"], f"{path}.lon", filename, -180.0, 180.0)
         _require_id_list(entity["produces"], f"{path}.produces", filename)
         _require_id_list(entity["demands"], f"{path}.demands", filename)
-        if "market_goods" in entity:
-            _require_id_list(entity["market_goods"], f"{path}.market_goods", filename)
+        # -- Phase 7 (§4.4): band / protected / dev / sphere ------------------
+        _require_id(entity.get("band"), f"{path}.band", filename)
+        if "protected" in entity and not isinstance(entity["protected"], bool):
+            fail("schema", filename,
+                 f"{path}.protected must be a bool (got {entity['protected']!r})", 3)
+        _require_int(entity.get("dev"), f"{path}.dev", filename, 0, 3)
+        _require_id_list(entity.get("sphere"), f"{path}.sphere", filename)
         facilities = entity["facilities"]
         if not isinstance(facilities, dict):
             fail("schema", filename, f"{path}.facilities must be an object", 3)
         for key, value in facilities.items():
+            if key in FACILITY_ARRAY_KEYS:
+                continue  # shape-checked right below
             if key not in FACILITY_PHASES:
                 fail(
                     "schema",
@@ -986,6 +1198,63 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
                     f"{path}.facilities.{key} is locked at {FACILITY_PHASES[key]}",
                     3,
                 )
+        # `shipyard` (Phase 7 shape): an id array of 2–8 hulls; the retired
+        # int form is rejected outright (§4.4).
+        if "shipyard" in facilities:
+            shipyard = facilities["shipyard"]
+            if isinstance(shipyard, int):
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.facilities.shipyard is the retired Phase-6 int "
+                    "form — Phase 7 stocks an id array (§4.4)",
+                    3,
+                )
+            _require_id_list(
+                shipyard, f"{path}.facilities.shipyard", filename,
+                allow_empty=False)
+            if not (SHIPYARD_STOCK_MIN <= len(shipyard) <= SHIPYARD_STOCK_MAX):
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.facilities.shipyard must hold "
+                    f"{SHIPYARD_STOCK_MIN}–{SHIPYARD_STOCK_MAX} hull ids "
+                    f"(got {len(shipyard)})",
+                    3,
+                )
+        # `equipment_stock` (Phase 7): ≥ 2 ids, required at every shipyard
+        # port; an equipment stock without a shipyard is a shape error.
+        if "equipment_stock" in facilities:
+            stock = facilities["equipment_stock"]
+            _require_id_list(
+                stock, f"{path}.facilities.equipment_stock", filename,
+                allow_empty=False)
+            if len(stock) < EQUIPMENT_STOCK_MIN:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path}.facilities.equipment_stock must hold at least "
+                    f"{EQUIPMENT_STOCK_MIN} ids (got {len(stock)})",
+                    3,
+                )
+            if "shipyard" not in facilities:
+                fail(
+                    "schema",
+                    filename,
+                    f"{path} ({entity['id']}) carries equipment_stock without "
+                    "a shipyard (§4.4 — the stock list exists at shipyard "
+                    "ports)",
+                    3,
+                )
+        elif "shipyard" in facilities:
+            fail(
+                "schema",
+                filename,
+                f"{path} ({entity['id']}) has a shipyard but no "
+                "facilities.equipment_stock (§4.4 — required at every "
+                "shipyard port)",
+                3,
+            )
         if entity["nation_id"] == NEUTRAL_PORT_NATION_ID:
             for key in facilities:
                 if key not in NEUTRAL_FACILITY_KEYS:
@@ -1055,9 +1324,16 @@ def _schema_equipment(items: list) -> None:
     for index, entity in enumerate(items):
         path = f"equipment[{index}]"
         _require_keys(
-            entity, ("id", "name", "slot", "modifiers", "price", "phase"), path, "equipment.json"
+            entity, ("id", "name", "slot", "modifiers", "price", "tier", "phase"),
+            path, "equipment.json"
         )
         _require_enum(entity["slot"], EQUIPMENT_SLOTS, f"{path}.slot", "equipment.json")
+        # Phase 7 (10-* §4.6): `tier` gate on every item; `rare` marks the 4
+        # drop-only items (exactly-4 count and never-stocked are group 7's).
+        _require_int(entity.get("tier"), f"{path}.tier", "equipment.json", 1, 3)
+        if "rare" in entity and not isinstance(entity["rare"], bool):
+            fail("schema", "equipment.json",
+                 f"{path}.rare must be a bool (got {entity['rare']!r})", 3)
         modifiers = entity["modifiers"]
         if not isinstance(modifiers, dict):
             fail("schema", "equipment.json", f"{path}.modifiers must be an object", 3)
@@ -1076,7 +1352,9 @@ def _schema_equipment(items: list) -> None:
                     f"{path}.modifiers.{stat} must have |delta| >= 1 (got 0)",
                     3,
                 )
-        _require_int(entity["price"], f"{path}.price", "equipment.json", 0)
+        # §4.6 field rule: the whole set sits inside the 300–6,000 g band
+        # (§7.9; the per-tier guideline stays an authoring guideline).
+        _require_int(entity["price"], f"{path}.price", "equipment.json", 300, 6000)
         _require_int(entity["phase"], f"{path}.phase", "equipment.json", 2, 2)
 
 
@@ -1312,13 +1590,15 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
     ship_type_ids = {s["id"] for s in ship_types}
     discovery_ids = {d["id"] for d in discoveries}
     capital_ids = set(CAPITAL_PORT_IDS)
+    # Phase 7 (§8 group 4): rare equipment ids, for the equipment_stock rule.
+    rare_equipment_ids = {e["id"] for e in equipment if e.get("rare") is True}
 
     for index, port in enumerate(ports):
         path = f"ports[{index}]"
         if port["nation_id"] == NEUTRAL_PORT_NATION_ID:
             # Phase-6 neutral tier (§7.1): exempt from `nation_id ∈ nations`
-            # — the tier's whole point. produces/demands/market_goods and the
-            # palace checks below apply unchanged.
+            # — the tier's whole point. produces/demands and the palace
+            # checks below apply unchanged.
             pass
         elif port["nation_id"] not in nation_ids:
             fail(
@@ -1327,7 +1607,7 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 f"{path} ({port['id']}) nation_id {port['nation_id']!r} is not a known nation",
                 4,
             )
-        for field in ("produces", "demands", "market_goods"):
+        for field in ("produces", "demands"):
             if field not in port:
                 continue
             for good_id in port[field]:
@@ -1338,6 +1618,56 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                         f"{path} ({port['id']}) {field} references unknown good {good_id!r}",
                         4,
                     )
+        # Phase 7 (§8 group 4): band ∈ the §7.1 recorded set; sphere ⊆
+        # nations; the shipyard hull list and the equipment stock resolve;
+        # rare drop-only items never sit in a stock list.
+        if port.get("band") not in LOCKED_BANDS:
+            fail(
+                "ref",
+                "ports.json",
+                f"{path} ({port['id']}) band {port.get('band')!r} is outside "
+                "the §7.1 recorded band id set",
+                4,
+            )
+        for nation_id in port.get("sphere", ()):
+            if nation_id not in nation_ids:
+                fail(
+                    "ref",
+                    "ports.json",
+                    f"{path} ({port['id']}) sphere references unknown nation "
+                    f"{nation_id!r}",
+                    4,
+                )
+        facilities = port["facilities"]
+        for hull_id in facilities.get("shipyard", ()):
+            if hull_id not in ship_type_ids:
+                fail(
+                    "ref",
+                    "ports.json",
+                    f"{path} ({port['id']}) facilities.shipyard references "
+                    f"unknown ship type {hull_id!r}",
+                    4,
+                )
+        for item_id in facilities.get("equipment_stock", ()):
+            if item_id not in {e["id"] for e in equipment}:
+                fail(
+                    "ref",
+                    "ports.json",
+                    f"{path} ({port['id']}) facilities.equipment_stock "
+                    f"references unknown equipment {item_id!r}",
+                    4,
+                )
+            # The never-stocked rule itself (§8.2 item 11 wording, exit 7)
+            # lives in group 7; the referential half is here.
+            if item_id in rare_equipment_ids:
+                fail(
+                    "ref",
+                    "ports.json",
+                    f"{path} ({port['id']}) facilities.equipment_stock lists "
+                    f"rare drop-only item {item_id!r} — rare items are never "
+                    "stocked (§4.6/§7.9)",
+                    4,
+                )
         has_palace = "palace" in port["facilities"]
         is_capital = port["id"] in capital_ids
         if has_palace and not is_capital:
@@ -1354,13 +1684,8 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                 f"{path} ({port['id']}) is a capital port but has no palace facility",
                 4,
             )
-        if port.get("produces",) and port.get("demands",):
-            overlap = sorted(set(port["produces"]) & set(port["demands"]))
-            if overlap and verbose:
-                print(
-                    f"WARN produces/demands overlap at port {port['id']}: "
-                    f"{', '.join(overlap)} (allowed, likely pointless)"
-                )
+        # produces ∩ demands ≠ ∅ moved to a group-7 hard failure (§8.2 item 6,
+        # correction 3 — the Phase-4 warning is retired with it).
 
     for index, nation in enumerate(nations):
         path = f"nations[{index}] ({nation['id']})"
@@ -1411,7 +1736,10 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
         if not isinstance(modifiers, dict):
             continue  # schema group already reported this
         for stat in modifiers:
-            if stat not in EQUIPMENT_STAT_NAMES:
+            # §4.6 (Phase 7): the known-stat set gains the two sideways keys —
+            # `storm_damage_pct` and `scurvy_delay_days` (60-* §4.11.12).
+            if stat not in EQUIPMENT_STAT_NAMES and stat not in \
+                    EQUIPMENT_SIDEWAYS_KEYS:
                 fail(
                     "ref",
                     "equipment.json",
@@ -1422,6 +1750,8 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
             # (`weapon`/`armor`) affect player stats only, ship-bound items
             # (`figurehead`/`sail`) affect ship-instance stats only. Mixing
             # them would make an engine accessor silently ignore a modifier.
+            # The sideways keys are ship-system stats and legal on either
+            # slot family (§4.11.12 wording).
             if slot in PLAYER_EQUIPMENT_SLOTS and stat in SHIP_STAT_NAMES:
                 fail(
                     "ref",
@@ -1440,6 +1770,33 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                     f"({'|'.join(SHIP_STAT_NAMES)}), not player stat {stat!r}",
                     4,
                 )
+
+    # Phase 7 (§8 group 4): every named-pirate `drop` references a
+    # `rare: true` equipment item. (The distinctness/1:1 pairing is
+    # group 7 item 12.)
+    pirates = docs["named_pirates.json"].get("named_pirates", [])
+    equipment_by_id = {e["id"]: e for e in equipment}
+    for index, pirate in enumerate(pirates):
+        drop = pirate.get("drop")
+        if drop is None:
+            continue  # group 7 owns the required-key shape
+        if drop not in equipment_by_id:
+            fail(
+                "ref",
+                "named_pirates.json",
+                f"named_pirates[{index}] ({pirate.get('id')}) drop "
+                f"{drop!r} is not a known equipment id",
+                4,
+            )
+        if equipment_by_id[drop].get("rare") is not True:
+            fail(
+                "ref",
+                "named_pirates.json",
+                f"named_pirates[{index}] ({pirate.get('id')}) drop {drop!r} "
+                "does not reference a rare: true item (§4.12 — drops come "
+                "from the four rare items of §7.9)",
+                4,
+            )
 
     for index, quest in enumerate(quests):
         path = f"quests[{index}] ({quest['id']})"
@@ -1541,32 +1898,29 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
     _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
     _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
 
-    # The neutral tier (§7.1 Phase-6 amendment): count 40-60, every row
-    # `nation_id: ""` (by construction here), ids unique and disjoint from
-    # the sovereign set, complete i18n, goods refs over the existing 20,
-    # facilities per the tier rule.
-    if not (NEUTRAL_PORT_COUNT_MIN <= len(neutral) <= NEUTRAL_PORT_COUNT_MAX):
-        fail(
-            "locked-count",
-            "ports.json",
-            f"neutral tier: count {len(neutral)} outside the locked "
-            f"{NEUTRAL_PORT_COUNT_MIN}-{NEUTRAL_PORT_COUNT_MAX} band (§7.1)",
-            5,
-        )
-    neutral_ids = set()
-    good_ids = {good["id"] for good in goods}
+    # -- §7.1 lock model (Phase 7): identity locks ----------------------------
+    # Sovereign 100 + neutral 45: id/zh/en/nation/lat/lon EXACT vs the §7.1
+    # tables; produces/demands are demoted to the structural §8.2 group-7
+    # economy-graph checks (correction 12 — the lock-model amendment).
+    sovereign = [port for port in ports_all
+                 if port.get("nation_id") != NEUTRAL_PORT_NATION_ID]
+    neutral = [port for port in ports_all
+               if port.get("nation_id") == NEUTRAL_PORT_NATION_ID]
+    _locked_id_sets(sovereign, LOCKED_PORTS, "sovereign ports", "ports.json")
+    _locked_id_sets(
+        [entry for entry in goods], LOCKED_GOODS, "goods", "goods.json")
+    _locked_id_sets(ship_types, LOCKED_SHIP_TYPES, "ship_types", "ship_types.json")
+    _locked_id_sets(nations, LOCKED_NATIONS, "nations", "nations.json")
+    _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
+    _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
+    _locked_id_sets(neutral, LOCKED_NEUTRAL_PORTS, "neutral ports", "ports.json")
+
+    # The neutral tier (§7.1): identity-locked 45 rows (Phase 7 joins the
+    # tier to the lock model — the Phase-6 40–60 count band is retired),
+    # complete i18n over name/flavor, facilities per the tier rule.
     for index, port in enumerate(neutral):
         port_id = port.get("id")
         path = f"ports.json neutral tier [{index}]"
-        if not isinstance(port_id, str) or not ID_RE.match(port_id):
-            fail("locked-list", "ports.json", f"{path}: bad id {port_id!r}", 5)
-        if port_id in neutral_ids:
-            fail(
-                "locked-list",
-                "ports.json",
-                f"{path}: repeated neutral port id {port_id!r}",
-                5,
-            )
         if port_id in LOCKED_PORTS:
             fail(
                 "locked-list",
@@ -1575,40 +1929,38 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                 "sovereign §7.1 set",
                 5,
             )
-        neutral_ids.add(port_id)
-        # complete i18n over the tier's display strings (§2.11: zh/en names)
-        for field in ("name", "flavor"):
-            value = port.get(field)
-            if isinstance(value, dict):
-                if set(value) != {"zh", "en"} or not all(
-                        isinstance(value.get(locale), str)
-                        and value.get(locale, "").strip()
-                        for locale in ("zh", "en")):
-                    fail(
-                        "locked-content",
-                        "ports.json",
-                        f"{path} ({port_id}) {field} must be a complete "
-                        "zh/en L10nString (§7.1 neutral tier)",
-                        5,
-                    )
-            else:
+        zh, en, lat, lon = LOCKED_NEUTRAL_PORTS[port_id]
+        _check_l10n_text(port, "name", zh, en, path, "ports.json")
+        if port.get("lat") != lat or port.get("lon") != lon:
+            fail(
+                "locked-content",
+                "ports.json",
+                f"{path} ({port_id}) lat/lon must be {lat}/{lon} per the "
+                "§7.1 neutral-tier table",
+                5,
+            )
+        # complete i18n over the tier's display strings (§2.11: flavor)
+        value = port.get("flavor")
+        if isinstance(value, dict):
+            if set(value) != {"zh", "en"} or not all(
+                    isinstance(value.get(locale), str)
+                    and value.get(locale, "").strip()
+                    for locale in ("zh", "en")):
                 fail(
                     "locked-content",
                     "ports.json",
-                    f"{path} ({port_id}) {field} must be an L10nString "
-                    "(§7.1 neutral tier)",
+                    f"{path} ({port_id}) flavor must be a complete "
+                    "zh/en L10nString (§7.1 neutral tier)",
                     5,
                 )
-        for field in ("produces", "demands", "market_goods"):
-            for good_id in port.get(field, ()):
-                if good_id not in good_ids:
-                    fail(
-                        "locked-content",
-                        "ports.json",
-                        f"{path} ({port_id}) {field} references unknown good "
-                        f"{good_id!r} (the existing 20, §7.2)",
-                        5,
-                    )
+        else:
+            fail(
+                "locked-content",
+                "ports.json",
+                f"{path} ({port_id}) flavor must be an L10nString "
+                "(§7.1 neutral tier)",
+                5,
+            )
         facilities = port.get("facilities")
         if not isinstance(facilities, dict) or not facilities:
             fail(
@@ -1618,7 +1970,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                 "per the tier rule (§7.1)",
                 5,
             )
-        for key, value in facilities.items():
+        for key in facilities:
             if key not in NEUTRAL_FACILITY_KEYS:
                 fail(
                     "locked-content",
@@ -1628,7 +1980,10 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     "carries no guild/palace (§7.1)",
                     5,
                 )
-            if value != 1:
+        # int-valued facilities stay locked at their activation phase; the
+        # array-valued Phase-7 facilities are group 3's (§4.4 shapes).
+        for key in ("market", "tavern", "inn"):
+            if key in facilities and facilities[key] != 1:
                 fail(
                     "locked-content",
                     "ports.json",
@@ -1640,15 +1995,23 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         items = docs[f"{plural}.json"][plural]
         expected_total = expected_count
         if plural == "ports":
-            # §7.1: 100 sovereign (exact set above) + the 40-60 neutral tier.
-            expected_total = expected_count + len(neutral)
-        if len(items) != expected_total:
+            # §7.1 (Phase 7 lock model): exactly 100 sovereign (exact set
+            # above) + exactly the 45 recorded neutral rows.
+            expected_total = expected_count + NEUTRAL_PORT_COUNT
+            if len(items) != expected_total:
+                fail(
+                    "locked-count",
+                    f"{plural}.json",
+                    f"ports: count {len(items)} != {expected_total} "
+                    f"({expected_count} sovereign + {NEUTRAL_PORT_COUNT} "
+                    "neutral, §8 group 5 exact 145-set)",
+                    5,
+                )
+            continue
+        if len(items) != expected_count:
             fail(
                 "locked-count",
                 f"{plural}.json",
-                f"{plural}: count {len(items)} != {expected_total} "
-                f"({expected_count} sovereign + the neutral tier)"
-                if plural == "ports" else
                 f"{plural}: count {len(items)} != {expected_count}",
                 5,
             )
@@ -1677,6 +2040,8 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
             zh,
             en,
             ship_class,
+            role,
+            tier,
             price,
             durability,
             capacity,
@@ -1689,6 +2054,8 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         _check_l10n_text(ship, "name", zh, en, path, "ship_types.json")
         expected = {
             "class": ship_class,
+            "role": role,
+            "tier": tier,
             "base_price": price,
             "durability": durability,
             "capacity": capacity,
@@ -1737,22 +2104,22 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                 )
 
     for index, port in enumerate(sovereign):
-        zh, en, nation_id, lat, lon, produces, demands = LOCKED_PORTS[port["id"]]
+        zh, en, nation_id, lat, lon = LOCKED_PORTS[port["id"]]
         path = f"ports[{index}]"
         _check_l10n_text(port, "name", zh, en, path, "ports.json")
         expected = {
             "nation_id": nation_id,
             "lat": lat,
             "lon": lon,
-            "produces": list(produces),
-            "demands": list(demands),
         }
         for field, value in expected.items():
             if port[field] != value:
                 fail(
                     "locked-content",
                     "ports.json",
-                    f"{path} ({port['id']}) {field} must be {value}",
+                    f"{path} ({port['id']}) {field} must be {value} (§7.1 "
+                    "identity lock — produces/demands are structural, "
+                    "group 7)",
                     5,
                 )
 
@@ -1775,17 +2142,29 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     5,
                 )
 
-    # docs/60-COMBAT.md section 4.11.13: the locked 8-item content set. Mirrors
-    # the doc table field by field, so a data-only edit (a price tweak, a stat
-    # swap, a renamed item) fails loudly instead of drifting from the spec.
+    # docs/60-COMBAT.md section 4.11.13: the locked 24-item content set
+    # (Phase 7 — authored-to-final by task S). Mirrors the doc tables field by
+    # field, so a data-only edit (a price tweak, a stat swap, a renamed item,
+    # a tier flip, a rare-flag change) fails loudly instead of drifting.
     for index, item in enumerate(equipment):
-        zh, en, slot, modifiers, price = LOCKED_EQUIPMENT[item["id"]]
+        zh, en, slot, modifiers, price, tier, rare = \
+            LOCKED_EQUIPMENT[item["id"]]
         path = f"equipment[{index}]"
         _check_l10n_text(item, "name", zh, en, path, "equipment.json")
+        # `rare` is an optional flag (only the 4 drop-only items carry it);
+        # the lock compares the flag's truth, not the key's presence.
+        if (item.get("rare") is True) != rare:
+            fail(
+                "locked-content",
+                "equipment.json",
+                f"{path} ({item['id']}) rare must be {rare}",
+                5,
+            )
         expected = {
             "slot": slot,
             "modifiers": dict(modifiers),
             "price": price,
+            "tier": tier,
             "phase": 2,
         }
         for field, value in expected.items():
@@ -1801,9 +2180,11 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         print(
             "PASS group 5 locked lists "
             f"({len(sovereign)} sovereign ports + {len(neutral)} neutral "
-            f"(band {NEUTRAL_PORT_COUNT_MIN}-{NEUTRAL_PORT_COUNT_MAX}), "
-            "20 goods, 8 ship types, "
-            "6 nations, 6 officers, 8 equipment items)"
+            f"= {len(sovereign) + len(neutral)} (exact 145-set), "
+            f"{LOCKED_COUNTS['goods']} goods, "
+            f"{LOCKED_COUNTS['ship_types']} ship types, "
+            f"6 nations, 6 officers, {LOCKED_COUNTS['equipment']} equipment "
+            "items — identity locks, produces/demands structural)"
         )
 
 
@@ -3414,7 +3795,7 @@ def _check_npc_config(config: object) -> None:
         fail("npc-config", label, "config block must be a JSON object", 7)
     if config.get("version") != 1 or not is_int(config.get("version")):
         fail("npc-config", label, "version must be the integer 1 (section 4.10)", 7)
-    extra = sorted(set(config) - set(NPC_CONFIG_KEYS))
+    extra = sorted(set(config) - set(NPC_CONFIG_KEYS) - set(NPC_CONFIG_OPTIONAL_KEYS))
     missing = sorted(set(NPC_CONFIG_KEYS) - set(config))
     if extra or missing:
         details = []
@@ -3515,6 +3896,21 @@ def _check_npc_config(config: object) -> None:
             7,
         )
 
+    # Phase 7 (§8 group 7 / correction 15): the `neutral_coasters_mult` data
+    # line — optional until task N lands it (W4), bounded > 0 whenever
+    # present. §2.7 pins the authored value := 0.75.
+    if "neutral_coasters_mult" in config:
+        value = config["neutral_coasters_mult"]
+        if not _is_number(value) or value <= 0:
+            fail(
+                "npc-config",
+                label,
+                f"neutral_coasters_mult must be a number > 0 (got {value!r}) "
+                "— the §2.7 nationless-coaster spawn multiplier "
+                "(authored 0.75, correction 15)",
+                7,
+            )
+
 
 def _check_npc_captains(captains: object) -> None:
     """npc_captains.json (section 8.2 item 2, sections 4.11 / 7.7)."""
@@ -3599,14 +3995,16 @@ def _check_named_pirates(pirates_doc: object) -> None:
             7,
         )
     seen: set[str] = set()
+    drops: list[str] = []
     for index, pirate in enumerate(pirates):
         path = f"named_pirates[{index}]"
-        if not isinstance(pirate, dict) or set(pirate) != {"id", "name", "tier"}:
+        if not isinstance(pirate, dict) or set(pirate) != {"id", "name", "tier", "drop"}:
             fail(
                 "named-pirates",
                 label,
                 f"{path} must be an object with exactly keys "
-                "id,name,tier (section 4.12)",
+                "id,name,tier,drop (section 4.12 — Phase 7 adds the rare "
+                "equipment drop)",
                 7,
             )
         _require_id(pirate["id"], f"{path}.id", label)
@@ -3626,6 +4024,22 @@ def _check_named_pirates(pirates_doc: object) -> None:
                 f"(70-* section 4.5 bounty bands), got {tier!r}",
                 7,
             )
+        if not isinstance(pirate["drop"], str) \
+                or not ID_RE.match(pirate["drop"]):
+            fail("named-pirates", label,
+                 f"{path} ({pirate['id']}) drop must be an equipment id "
+                 f"(got {pirate['drop']!r})", 7)
+        drops.append(pirate["drop"])
+    # §8.2 item 12: the 4 drops are distinct (the rare-equipment reference
+    # and the 1:1 pairing with the 4 rare items are checked below in the
+    # economy block, once equipment is in scope).
+    if len(set(drops)) != len(drops):
+        fail(
+            "named-pirates",
+            label,
+            f"drops must be distinct (got {sorted(drops)}) — §8.2 item 12",
+            7,
+        )
 
 
 def _rest_classes_for(good_id: str, produced_goods: set, demanded_goods: set) -> list[int]:
@@ -3743,37 +4157,446 @@ def _check_market_events(events_doc: object, ports: list, good_ids: set) -> None
                     )
 
 
-def _check_consumption_tiers(goods: list) -> None:
-    """Section 8.2 item 5 (`30-*` section 4.2): the (base_price asc, id asc)
-    ranking splits into 5 staples / 10 middle / 5 luxuries."""
-    ranked = sorted(goods, key=lambda good: (good["base_price"], good["id"]))
-    staples, middle, luxuries = [], [], []
-    for index, good in enumerate(ranked):
-        if index < CONSUMPTION_TIER_SPLIT[0]:
-            staples.append(good["id"])
-        elif index < CONSUMPTION_TIER_SPLIT[0] + CONSUMPTION_TIER_SPLIT[1]:
-            middle.append(good["id"])
-        else:
-            luxuries.append(good["id"])
+def _check_consumption_tiers(goods: list) -> tuple[set, set, set]:
+    """Section 8.2 item 5, Phase-7 form (`10-*` §4.2): the tier is read from
+    the goods flags — exactly 12 `staple: true` (staple tier), exactly 12
+    `specialty: true` (luxury tier), the remaining 16 unflagged (middle).
+    `exclusive ⇒ specialty` is asserted here and in group 3. Returns
+    (staple_ids, middle_ids, luxury_ids)."""
+    staples = sorted(g["id"] for g in goods if g.get("staple") is True)
+    luxuries = sorted(g["id"] for g in goods if g.get("specialty") is True)
+    middle = sorted(g["id"] for g in goods
+                    if g.get("staple") is not True
+                    and g.get("specialty") is not True)
     expected = CONSUMPTION_TIER_SPLIT
     actual = (len(staples), len(middle), len(luxuries))
     if actual != expected:
+        detail = []
+        if len(staples) != expected[0]:
+            detail.append(
+                f"{len(staples)} staple: true goods (want {expected[0]}: "
+                f"{', '.join(staples)})")
+        if len(luxuries) != expected[2]:
+            detail.append(
+                f"{len(luxuries)} specialty: true goods (want {expected[2]}: "
+                f"{', '.join(luxuries)})")
         fail(
             "consumption-tiers",
             "goods.json",
-            f"consumption tiers must split {expected[0]}/{expected[1]}/"
-            f"{expected[2]} (30-* section 4.2), got "
-            f"{actual[0]}/{actual[1]}/{actual[2]}",
+            f"flag-driven consumption tiers must split {expected[0]}/"
+            f"{expected[1]}/{expected[2]} (10-* §4.2 — `staple`/`specialty` "
+            f"flags, the base-price-rank split is retired), got "
+            f"{actual[0]}/{actual[1]}/{actual[2]}: {'; '.join(detail)}",
             7,
         )
-    return staples, middle, luxuries
+    return set(staples), set(middle), set(luxuries)
+
+
+# --- Phase-7 economy-graph checks (§8.2 items 6-13, task T) -----------------
+# Normative spec docs/10-DATA-SCHEMA.md §8.2; graph semantics per
+# `30-*` §4.2 / `IMPLEMENT-Phase7.md` §2.1 (decisions 21/22/25/23).
+# The group-7 market-event checks above are UNTOUCHED by Phase 7's W2 wave
+# (correction 9 — task K owns the event-shape transition in W3).
+
+
+def _port_tile(port: dict) -> tuple[int, int]:
+    """The §6.1 grid tile of a port's lat/lon (12 tiles/degree, wrap x).
+
+    Group 7's coverage checks need only the derived tile — no raster decode;
+    group 6 already proves the snapped harbor tiles agree with these.
+    """
+    return tile_of_latlon(port["lat"], port["lon"])
+
+
+def _port_distance(a: dict, b: dict) -> int:
+    """Wrap-aware Chebyshev tile distance between two ports (§6.1 grid)."""
+    ax, ay = _port_tile(a)
+    bx, by = _port_tile(b)
+    return chebyshev_wrap(bx - ax, by - ay)
+
+
+def _check_port_economy_graph(ports: list, staples: set) -> None:
+    """§8.2 item 6 (correction 3): produces ∩ demands = ∅ (hard) and
+    demands ⊇ (staples ∖ produces) per port — every staple not produced
+    here is demanded here, so staples ⊆ produces ∪ demands everywhere."""
+    for port in ports:
+        port_id = port["id"]
+        produces = set(port.get("produces", ()))
+        demands = set(port.get("demands", ()))
+        overlap = sorted(produces & demands)
+        if overlap:
+            fail(
+                "economy-graph",
+                "ports.json",
+                f"port {port_id}: produces ∩ demands = {overlap} must be ∅ "
+                "(§8.2 item 6 — the listing rule makes every listed good "
+                "exactly one of producer or consumer)",
+                7,
+            )
+        missing = sorted(staples - produces - demands)
+        if missing:
+            fail(
+                "economy-graph",
+                "ports.json",
+                f"port {port_id}: demands misses the non-produced staples "
+                f"{missing} — demands ⊇ (staples ∖ produces) "
+                "(§8.2 item 6, correction 3: staples are ubiquitous by "
+                "the data rule)",
+                7,
+            )
+
+
+def _check_graph_shape(ports: list, goods: list) -> None:
+    """§8.2 item 7 (decision 22): every good ≥ 2 producers and ≥ 4 consumers
+    worldwide; every `specialty` good ≤ 6 producers (§4.2)."""
+    for good in goods:
+        good_id = good["id"]
+        producers = sorted(p["id"] for p in ports
+                           if good_id in p.get("produces", ()))
+        consumers = sorted(p["id"] for p in ports
+                           if good_id in p.get("demands", ()))
+        if len(producers) < 2:
+            fail(
+                "graph-shape",
+                "ports.json",
+                f"good {good_id} has {len(producers)} producer(s) "
+                f"({', '.join(producers) or 'none'}) — every good needs "
+                "≥ 2 producers and ≥ 4 consumers (§8.2 item 7)",
+                7,
+            )
+        if len(consumers) < 4:
+            fail(
+                "graph-shape",
+                "ports.json",
+                f"good {good_id} has {len(consumers)} consumer(s) — every "
+                "good needs ≥ 2 producers and ≥ 4 consumers (§8.2 item 7)",
+                7,
+            )
+        if good.get("specialty") is True and len(producers) > 6:
+            fail(
+                "graph-shape",
+                "ports.json",
+                f"specialty good {good_id} is produced at {len(producers)} "
+                "ports — a specialty has ≤ 6 producers worldwide (§4.2)",
+                7,
+            )
+
+
+def _check_staple_coverage(ports: list, staples: set) -> list[tuple]:
+    """§8.2 item 8 (decision 21): from every port a staple producer within
+    120 tiles (Chebyshev, wrap-aware) and ≥ 2 within 240; every band has
+    ≥ 2 staple producers. Returns the (distance, port, producer, good)
+    ranking of nearest-staple runs for the harness report."""
+    producers = [p for p in ports if staples & set(p.get("produces", ()))]
+    ranking: list[tuple] = []
+    for port in ports:
+        best = None
+        best_producer = None
+        best_good = None
+        within_240 = 0
+        for producer in producers:
+            distance = _port_distance(port, producer)
+            if distance <= 240:
+                within_240 += 1
+            if best is None or distance < best:
+                best = distance
+                best_producer = producer["id"]
+                best_good = sorted(
+                    staples & set(producer.get("produces", ())))[0]
+        if best is None or best > 120:
+            fail(
+                "staple-coverage",
+                "ports.json",
+                f"port {port['id']}: nearest staple producer is "
+                f"{best if best is not None else 'unreachable'} tiles away "
+                f"({best_producer}) — every port needs one within 120 tiles "
+                "(§8.2 item 8, decision 21)",
+                7,
+            )
+        if within_240 < 2:
+            fail(
+                "staple-coverage",
+                "ports.json",
+                f"port {port['id']}: {within_240} staple producer(s) within "
+                "240 tiles — every port needs ≥ 2 (§8.2 item 8)",
+                7,
+            )
+        ranking.append((best, port["id"], best_producer, best_good))
+    # ≥ 2 staple producers per band (§7.1 bands; the band set itself is
+    # item 13's check below).
+    by_band: dict[str, int] = {}
+    for producer in producers:
+        by_band[producer["band"]] = by_band.get(producer["band"], 0) + 1
+    for band in sorted({p["band"] for p in ports}):
+        if by_band.get(band, 0) < 2:
+            fail(
+                "staple-coverage",
+                "ports.json",
+                f"band {band}: {by_band.get(band, 0)} staple producer(s) — "
+                "every band needs ≥ 2 (§8.2 item 8, decision 21)",
+                7,
+            )
+    ranking.sort(key=lambda row: (-row[0], row[1]))
+    return ranking
+
+
+def _check_exclusive_coverage(ports: list, goods_by_id: dict) -> None:
+    """§8.2 item 9: every neutral band (any band containing a
+    `nation_id: ""` port) has ≥ 1 exclusive good produced within it."""
+    neutral_bands = sorted({p["band"] for p in ports
+                            if p.get("nation_id") == NEUTRAL_PORT_NATION_ID})
+    produced_exclusive: dict[str, list[str]] = {}
+    for port in ports:
+        for good_id in port.get("produces", ()):
+            good = goods_by_id.get(good_id, {})
+            if good.get("exclusive") is True:
+                produced_exclusive.setdefault(port["band"], [])
+                if port["id"] not in produced_exclusive[port["band"]]:
+                    produced_exclusive[port["band"]].append(port["id"])
+    for band in neutral_bands:
+        if not produced_exclusive.get(band):
+            fail(
+                "exclusive-coverage",
+                "ports.json",
+                f"neutral band {band}: no exclusive good is produced within "
+                "it — every neutral band needs ≥ 1 exclusive producer "
+                "(§8.2 item 9, §4.2)",
+                7,
+            )
+
+
+def _check_port_classes(ports: list) -> None:
+    """§8.2 item 10 (decision 25): protected only on sovereign rows, the set
+    contains every capital and ≤ 4 ports per nation (membership is the
+    contract — master ruling on the W2 staged data; the decision-25 core set
+    is the authored member list), protected rows carry no sphere entries,
+    and the authored `dev` floors: 3 on capitals/protected, 0 on every
+    neutral, {1, 2} on the remaining sovereign contestable rows."""
+    by_id = {p["id"]: p for p in ports}
+    protected = sorted(p["id"] for p in ports if p.get("protected") is True)
+    missing_capitals = sorted(set(CAPITAL_PORT_IDS) - set(protected))
+    if missing_capitals:
+        fail(
+            "port-classes",
+            "ports.json",
+            f"capital(s) {', '.join(missing_capitals)} missing from the "
+            "protected set — protected ⊇ the 6 capitals (§7.1)",
+            7,
+        )
+    per_nation: dict[str, int] = {}
+    for port_id in protected:
+        port = by_id[port_id]
+        if port.get("nation_id") == NEUTRAL_PORT_NATION_ID:
+            fail(
+                "port-classes",
+                "ports.json",
+                f"protected port {port_id} is a neutral-tier row — "
+                "`protected` is sovereign-only (§7.1)",
+                7,
+            )
+            continue
+        per_nation[port["nation_id"]] = per_nation.get(port["nation_id"], 0) + 1
+        if port.get("sphere"):
+            fail(
+                "port-classes",
+                "ports.json",
+                f"protected port {port_id} carries sphere entries — "
+                "protected rows carry none (§7.1, never AI-investable)",
+                7,
+            )
+    for nation_id, count in sorted(per_nation.items()):
+        if count > 4:
+            fail(
+                "port-classes",
+                "ports.json",
+                f"nation {nation_id} has {count} protected ports — "
+                "≤ 4 per nation (§7.1)",
+                7,
+            )
+    for port in ports:
+        port_id = port["id"]
+        dev = port.get("dev")
+        is_capital = port_id in CAPITAL_PORT_IDS
+        is_protected = port.get("protected") is True
+        if port.get("nation_id") == NEUTRAL_PORT_NATION_ID:
+            if dev != 0:
+                fail(
+                    "port-classes",
+                    "ports.json",
+                    f"neutral port {port_id} has authored dev {dev} — the "
+                    "neutral floor is 0 (§7.1)",
+                    7,
+                )
+        elif is_capital or is_protected:
+            if dev != 3:
+                fail(
+                    "port-classes",
+                    "ports.json",
+                    f"{('capital' if is_capital else 'protected')} port "
+                    f"{port_id} has authored dev {dev} — the floor is 3 "
+                    "(§7.1)",
+                    7,
+                )
+        elif dev not in (1, 2):
+            fail(
+                "port-classes",
+                "ports.json",
+                f"sovereign contestable port {port_id} has authored dev "
+                f"{dev} — majors carry 2, the rest 1 (§7.1)",
+                7,
+            )
+
+
+def _check_hardware_tiers(ports: list, ships: list, equipment: list) -> None:
+    """§8.2 item 11 (decision 23): ≥ 2 hulls per tier; equipment 2/2/2 per
+    slot; ≥ 4 dev-3 sovereign ports whose shipyard stocks a tier-3 hull;
+    equipment_stock ≥ 2 at every shipyard port; no `rare` item in any stock
+    list."""
+    ships_per_tier: dict[int, int] = {}
+    for ship in ships:
+        ships_per_tier[ship["tier"]] = ships_per_tier.get(ship["tier"], 0) + 1
+    for tier in (1, 2, 3):
+        if ships_per_tier.get(tier, 0) < 2:
+            fail(
+                "hardware-tiers",
+                "ship_types.json",
+                f"tier {tier} has {ships_per_tier.get(tier, 0)} hull(s) — "
+                "≥ 2 per tier (§8.2 item 11)",
+                7,
+            )
+    slot_tiers: dict[str, dict[int, int]] = {}
+    for item in equipment:
+        per_slot = slot_tiers.setdefault(item["slot"], {})
+        per_slot[item["tier"]] = per_slot.get(item["tier"], 0) + 1
+    rare_ids = {item["id"] for item in equipment if item.get("rare") is True}
+    for slot in sorted(slot_tiers):
+        per_slot = slot_tiers[slot]
+        for tier in (1, 2, 3):
+            if per_slot.get(tier, 0) != 2:
+                fail(
+                    "hardware-tiers",
+                    "equipment.json",
+                    f"slot {slot} tier {tier}: {per_slot.get(tier, 0)} "
+                    "item(s) — exactly 2/2/2 per slot (§7.9)",
+                    7,
+                )
+    tier3_by_id = {ship["id"]: ship["tier"] for ship in ships}
+    dev3_tier3 = sorted(
+        p["id"] for p in ports
+        if p.get("nation_id") != NEUTRAL_PORT_NATION_ID
+        and p.get("dev") == 3
+        and any(tier3_by_id.get(h) == 3
+                for h in p.get("facilities", {}).get("shipyard", ())))
+    if len(dev3_tier3) < 4:
+        fail(
+            "hardware-tiers",
+            "ports.json",
+            f"only {len(dev3_tier3)} dev-3 sovereign port(s) stock a tier-3 "
+            f"hull ({', '.join(dev3_tier3) or 'none'}) — ≥ 4 required "
+            "(§8.2 item 11)",
+            7,
+        )
+    for port in ports:
+        facilities = port.get("facilities", {})
+        if "shipyard" not in facilities:
+            continue
+        stock = facilities.get("equipment_stock", ())
+        if len(stock) < EQUIPMENT_STOCK_MIN:
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"shipyard port {port['id']} carries "
+                f"{len(stock)} equipment_stock id(s) — ≥ "
+                f"{EQUIPMENT_STOCK_MIN} at every shipyard port (§8.2 item 11)",
+                7,
+            )
+        stocked_rare = sorted(set(stock) & rare_ids)
+        if stocked_rare:
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"port {port['id']} equipment_stock lists rare drop-only "
+                f"item(s) {', '.join(stocked_rare)} — rare items are never "
+                "stocked (§8.2 item 11, §7.9)",
+                7,
+            )
+        # Master ruling 3 (W2 staged data): every list carries at least one
+        # tier-1 item (the entry-level buy at every shipyard), and tier-3
+        # items appear only in dev-3 capital lists (high-tier hardware is
+        # development-gated, decision 23 — a stock list never front-runs the
+        # dev gate). Full-set coverage is NOT asserted (content reachability
+        # is the author's, not a lock).
+        tier_by_id = {item["id"]: item["tier"] for item in equipment}
+        if not any(tier_by_id.get(item_id) == 1 for item_id in stock):
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"port {port['id']} equipment_stock has no tier-1 item — "
+                "every shipyard port stocks at least one (W2 ruling)",
+                7,
+            )
+        high = sorted(item_id for item_id in stock
+                      if tier_by_id.get(item_id) == 3)
+        if high and not (port["id"] in CAPITAL_PORT_IDS and port.get("dev") == 3):
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"port {port['id']} equipment_stock lists tier-3 item(s) "
+                f"{', '.join(high)} — tier-3 stock is a dev-3 capital "
+                "prerogative (W2 ruling; decision 23)",
+                7,
+            )
+
+
+def _check_pirate_drop_pairing(pirates: list, equipment: list) -> None:
+    """§8.2 item 12: the 4 drops are distinct (checked in
+    _check_named_pirates) and pair 1:1 with the 4 `rare: true` items."""
+    rare_ids = sorted(item["id"] for item in equipment
+                      if item.get("rare") is True)
+    drops = sorted(p.get("drop") for p in pirates)
+    if drops != rare_ids:
+        fail(
+            "pirate-drops",
+            "named_pirates.json",
+            f"the drops {drops} must pair 1:1 with the 4 rare items "
+            f"{rare_ids} (§8.2 item 12)",
+            7,
+        )
+
+
+def _check_band_set(ports: list) -> None:
+    """§8.2 item 13: every port band ∈ the §7.1 recorded set; the six
+    neutral-region skeleton ids are present; the set covers all 145 ports
+    with no unused id."""
+    used = sorted({p["band"] for p in ports})
+    outside = sorted(set(used) - set(LOCKED_BANDS))
+    if outside:
+        fail(
+            "band-set",
+            "ports.json",
+            f"band id(s) {', '.join(outside)} are outside the §7.1 recorded "
+            "set — bands are authored by task P and recorded in §7.1, "
+            "never invented per port (§8.2 item 13)",
+            7,
+        )
+    missing_skeleton = sorted(set(LOCKED_BANDS) - set(used))
+    if missing_skeleton:
+        fail(
+            "band-set",
+            "ports.json",
+            f"band id(s) {', '.join(missing_skeleton)} are unused — the §7.1 "
+            "set covers all 145 ports with no unused id (§8.2 item 13)",
+            7,
+        )
 
 
 def check_group7(docs: dict[str, object], verbose: bool) -> None:
     """Npc & economy data: docs/10-DATA-SCHEMA.md section 8.2.
 
     Owns structure, counts and bounds for the four Phase-5 files; L10nString
-    completeness inside them is group 2's recursion.
+    completeness inside them is group 2's recursion. Phase 7 adds the
+    economy-data checks of §8.2 items 5-13 (the market-event block above is
+    untouched — correction 9, task K owns it in W3).
     """
     _check_npc_config(docs.get("npc_config.json"))
     pools = docs["npc_captains.json"]["pools"]
@@ -3788,6 +4611,21 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
         docs["goods.json"]["goods"]
     )
 
+    ports = docs["ports.json"]["ports"]
+    goods = docs["goods.json"]["goods"]
+    ships = docs["ship_types.json"]["ship_types"]
+    equipment = docs["equipment.json"]["equipment"]
+    pirates = docs["named_pirates.json"]["named_pirates"]
+    goods_by_id = {good["id"]: good for good in goods}
+    _check_port_economy_graph(ports, staples)
+    _check_graph_shape(ports, goods)
+    staple_ranking = _check_staple_coverage(ports, staples)
+    _check_exclusive_coverage(ports, goods_by_id)
+    _check_port_classes(ports)
+    _check_hardware_tiers(ports, ships, equipment)
+    _check_pirate_drop_pairing(pirates, equipment)
+    _check_band_set(ports)
+
     if verbose:
         print(
             f"PASS group 7 npc & economy data ({len(pools)} captain pools, "
@@ -3796,9 +4634,14 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
             f"templates, absolute_cap {docs['npc_config.json']['absolute_cap']})"
         )
         print(
-            f"INFO group 7 consumption tiers — staples: {', '.join(staples)}; "
-            f"middle: {len(middle)} goods; luxuries: {', '.join(luxuries)}"
+            f"INFO group 7 consumption tiers — staples: {', '.join(sorted(staples))}; "
+            f"middle: {len(middle)} goods; luxuries: {', '.join(sorted(luxuries))}"
         )
+        furthest = ", ".join(
+            f"{port_id} ({distance} tiles → {producer}/{good})"
+            for distance, port_id, producer, good in staple_ranking[:5])
+        print(f"INFO group 7 economy graph — 145 ports / {len(goods)} goods; "
+              f"furthest staple runs: {furthest}")
 
 
 # ---------------------------------------------------------------------------
@@ -4447,15 +5290,26 @@ def _built_lane_start(built: dict, lane_id: str) -> tuple[int, int]:
 
 
 def _check_trade_determinism(verbose: bool) -> None:
-    """§8.3 item 8: the committed artifact must rebuild byte-identical."""
+    """§8.3 item 8: the committed artifact must rebuild byte-identical.
+
+    With a data-root override (staged-sim protocol) the overridden checkout's
+    own builder runs over its own tree when present — the merged sources must
+    rebuild byte-identically where they live. The default run uses this
+    repo's builder from this repo's root, exactly as before.
+    """
     import subprocess
 
+    builder_root = REPO_ROOT
+    if DATA_DIR != _default_data_dir():
+        staged_tools = DATA_DIR.parent / "tools" / "build_routes.py"
+        if staged_tools.is_file():
+            builder_root = DATA_DIR.parent
     result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "build_routes.py"),
+        [sys.executable, str(builder_root / "tools" / "build_routes.py"),
          "--check", "--verbose"],
         capture_output=True,
         text=True,
-        cwd=REPO_ROOT,
+        cwd=builder_root,
     )
     if verbose and result.stderr:
         for line in result.stderr.strip().splitlines():
@@ -5515,17 +6369,51 @@ def run_group10_self_test() -> int:
 
 
 def main(argv: list[str]) -> int:
-    verbose = "--verbose" in argv
-    self_test = "--self-test-g6" in argv or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
-    self_test_g9 = "--self-test-g9" in argv
-    self_test_g10 = "--self-test-g10" in argv
+    # --data-root PATH: parse first, then re-exec with the env override set, so
+    # every module-level path constant and the group-8 subprocess see one
+    # resolution point. Without the flag nothing changes (byte-identical
+    # default behavior; §8 preamble / task T staged-sim protocol).
+    data_root = None
+    rest: list[str] = []
+    index = 0
+    args = list(argv)
+    while index < len(args):
+        arg = args[index]
+        if arg == "--data-root":
+            if index + 1 >= len(args):
+                print("--data-root requires a PATH argument")
+                return 1
+            data_root = args[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--data-root="):
+            data_root = arg.split("=", 1)[1]
+            index += 1
+            continue
+        rest.append(arg)
+        index += 1
+
+    verbose = "--verbose" in rest
+    self_test = "--self-test-g6" in rest or os.environ.get("SAILAGE_G6_SELFTEST") == "1"
+    self_test_g9 = "--self-test-g9" in rest
+    self_test_g10 = "--self-test-g10" in rest
     known = {"--verbose", "--self-test-g6", "--self-test-g9",
              "--self-test-g10"}
-    unknown = [arg for arg in argv[1:] if arg not in known]
+    unknown = [arg for arg in rest[1:] if arg not in known]
     if unknown:
         print("usage: python3 tools/validate_data.py [--verbose] "
-              "[--self-test-g6] [--self-test-g9] [--self-test-g10]")
+              "[--self-test-g6] [--self-test-g9] [--self-test-g10] "
+              "[--data-root PATH]")
         return 1
+
+    if data_root is not None and DATA_DIR != _resolve_data_dir(data_root):
+        env = dict(os.environ)
+        env["SAILAGE_DATA_ROOT"] = data_root
+        # rest[0] is the script path (argv[0] passed through), so the child
+        # argv is [python, script, *flags].
+        os.execve(sys.executable,
+                  [sys.executable, *rest],
+                  env)
 
     if self_test:
         return run_group6_self_test()
