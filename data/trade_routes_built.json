@@ -17,11 +17,11 @@
     "sources": {
       "trade_routes": {
         "path": "data/trade_routes.json",
-        "sha256": "3ab71eee119e40ac210add5988e037f5efcfbf392bcdc70ae90b8873cb9182da"
+        "sha256": "3b44f2ce0ebcc7910fe525eb6f865459757456e78921238b669564ad6c76ce8f"
       },
       "ports": {
         "path": "data/ports.json",
-        "sha256": "a9306a51963629f2b7821d8d4bbfc81edb0f3d64f555517fed918e3693bec8b5"
+        "sha256": "5d27c08ecf205dbe020427f0caadd7353b332b3561c8028d0c4a2223cd894ede"
       },
       "nations": {
         "path": "data/nations.json",

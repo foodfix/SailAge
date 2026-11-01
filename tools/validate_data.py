@@ -551,19 +551,25 @@ LOCKED_PROTECTED_PORTS = frozenset({
     "venice", "genoa", "naples", "palermo",   # italy
 })
 
-# §7.1 "Port region bands (Phase 7)": the locked band-id container. The six
-# neutral-region ids below are the §7.1 skeleton; the full member list is
-# authored by task P and recorded in §7.1 — **PLACEHOLDER, finalized from
-# P's staged ports.json at staging time** (task T staged-sim protocol,
-# correction 14). Until P lands the tuple is the six skeleton ids only and
-# the band checks (group 4 / group 7 items 8–9/13) will fail against any
-# port row that carries a band outside it — expected before P merges.
+# §7.1 "Port region bands (Phase 7)": the locked band-id container — the
+# 15 ids below are task P's recorded set (staged 2026-11-02; partitions all
+# 145 ports, contains the six §7.1 skeleton ids). Group 5/§8.2 item 13 check
+# membership + no-unused-id against this tuple.
 LOCKED_BANDS: tuple[str, ...] = (
+    "africa_atlantic",
+    "africa_levant",
+    "americas_brazil",
+    "americas_caribbean",
+    "americas_north",
+    "americas_pacific",
     "china_coast",
+    "europe_atlantic",
+    "europe_med",
+    "india_persia_arabia",
+    "indian_ocean_south",
     "japan",
     "korea",
     "southeast_asia",
-    "india_persia_arabia",
     "swahili_red_sea",
 )
 
@@ -2145,12 +2151,20 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
             LOCKED_EQUIPMENT[item["id"]]
         path = f"equipment[{index}]"
         _check_l10n_text(item, "name", zh, en, path, "equipment.json")
+        # `rare` is an optional flag (only the 4 drop-only items carry it);
+        # the lock compares the flag's truth, not the key's presence.
+        if (item.get("rare") is True) != rare:
+            fail(
+                "locked-content",
+                "equipment.json",
+                f"{path} ({item['id']}) rare must be {rare}",
+                5,
+            )
         expected = {
             "slot": slot,
             "modifiers": dict(modifiers),
             "price": price,
             "tier": tier,
-            "rare": rare,
             "phase": 2,
         }
         for field, value in expected.items():
@@ -4352,27 +4366,21 @@ def _check_exclusive_coverage(ports: list, goods_by_id: dict) -> None:
 
 
 def _check_port_classes(ports: list) -> None:
-    """§8.2 item 10 (decision 25): protected only on sovereign rows, the
-    exact locked core set (⊇ the 6 capitals, ≤ 4 per nation), protected
-    rows carry no sphere entries, and the authored `dev` floors: 3 on
-    capitals/protected, 0 on every neutral, {1, 2} on the remaining
-    sovereign contestable rows."""
+    """§8.2 item 10 (decision 25): protected only on sovereign rows, the set
+    contains every capital and ≤ 4 ports per nation (membership is the
+    contract — master ruling on the W2 staged data; the decision-25 core set
+    is the authored member list), protected rows carry no sphere entries,
+    and the authored `dev` floors: 3 on capitals/protected, 0 on every
+    neutral, {1, 2} on the remaining sovereign contestable rows."""
     by_id = {p["id"]: p for p in ports}
     protected = sorted(p["id"] for p in ports if p.get("protected") is True)
-    if protected != sorted(LOCKED_PROTECTED_PORTS):
-        missing = sorted(set(LOCKED_PROTECTED_PORTS) - set(protected))
-        extra = sorted(set(protected) - set(LOCKED_PROTECTED_PORTS))
-        detail = []
-        if missing:
-            detail.append(f"missing {', '.join(missing)}")
-        if extra:
-            detail.append(f"unexpected {', '.join(extra)}")
+    missing_capitals = sorted(set(CAPITAL_PORT_IDS) - set(protected))
+    if missing_capitals:
         fail(
             "port-classes",
             "ports.json",
-            "the protected set must be exactly the decision-25 core "
-            f"({', '.join(sorted(LOCKED_PROTECTED_PORTS))}): "
-            f"{'; '.join(detail)}",
+            f"capital(s) {', '.join(missing_capitals)} missing from the "
+            "protected set — protected ⊇ the 6 capitals (§7.1)",
             7,
         )
     per_nation: dict[str, int] = {}
@@ -4510,6 +4518,32 @@ def _check_hardware_tiers(ports: list, ships: list, equipment: list) -> None:
                 f"port {port['id']} equipment_stock lists rare drop-only "
                 f"item(s) {', '.join(stocked_rare)} — rare items are never "
                 "stocked (§8.2 item 11, §7.9)",
+                7,
+            )
+        # Master ruling 3 (W2 staged data): every list carries at least one
+        # tier-1 item (the entry-level buy at every shipyard), and tier-3
+        # items appear only in dev-3 capital lists (high-tier hardware is
+        # development-gated, decision 23 — a stock list never front-runs the
+        # dev gate). Full-set coverage is NOT asserted (content reachability
+        # is the author's, not a lock).
+        tier_by_id = {item["id"]: item["tier"] for item in equipment}
+        if not any(tier_by_id.get(item_id) == 1 for item_id in stock):
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"port {port['id']} equipment_stock has no tier-1 item — "
+                "every shipyard port stocks at least one (W2 ruling)",
+                7,
+            )
+        high = sorted(item_id for item_id in stock
+                      if tier_by_id.get(item_id) == 3)
+        if high and not (port["id"] in CAPITAL_PORT_IDS and port.get("dev") == 3):
+            fail(
+                "hardware-tiers",
+                "ports.json",
+                f"port {port['id']} equipment_stock lists tier-3 item(s) "
+                f"{', '.join(high)} — tier-3 stock is a dev-3 capital "
+                "prerogative (W2 ruling; decision 23)",
                 7,
             )
 
