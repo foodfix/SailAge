@@ -81,17 +81,25 @@ func _make_run(port_id: String, gold: int = 10000, ship_ids: Array = ["caravel"]
 	GameState.titles = {}
 	GameState.bounties = {}
 	GameState.fame = 0
-	# Phase 5 resting stock for every listed pair, explicit so the pins below
-	# are exact and independent of the flow economy's initial stocks.
+	# Phase 7 flow economy (K), stocks EXPLICIT per pair so every price pin
+	# below is seed-independent (the test_economy fixture pattern): producers
+	# at their dev-0 capacity, consumers at the §5 rest 40 — the stock the
+	# docs/30 §5 worked examples were computed at.
 	GameState.market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list
 	)
 	for port in DataLoader.ports_list:
-		var pid := str((port as Dictionary).get("id", ""))
+		var p := port as Dictionary
+		var pid := str(p.get("id", ""))
 		for good in DataLoader.goods_list:
 			var gid := str((good as Dictionary).get("id", ""))
-			EconomyLib.set_stock(pid, gid,
-				EconomyLib.resting_stock_of(port as Dictionary, gid))
+			if not EconomyLib.is_listed_in(p, gid):
+				continue
+			if gid in p.get("produces", []):
+				EconomyLib.set_stock(pid, gid,
+					EconomyLib.initial_stock_for(p, gid, 0))
+			else:
+				EconomyLib.set_stock(pid, gid, 40)
 	EconomyLib.reset_overrides()
 	AllegianceLib.seed_new_game()
 	var port: Dictionary = DataLoader.get_port(port_id)
@@ -201,9 +209,10 @@ func _test_factor_and_discount() -> void:
 	_check(TradeEngineLib.buy_price(cheap_port, "wheat") >= 1
 			and TradeEngineLib.sell_price(cheap_port, "wheat") >= 1,
 		"prices never drop below 1g")
-	# An unknown port/good is neutral, and never crashes.
-	_check(TradeEngineLib.buy_price("nowhere", "wine") == 30,
-		"unknown port is neutral: wine buy == 30 (got %d)"
+	# An unknown port reads as stock-less (flow economy: no derived row →
+	# stock 0 → the drained extreme 1.5), and never crashes.
+	_check(TradeEngineLib.buy_price("nowhere", "wine") == 45,
+		"unknown port is stock-less: wine buy == floor(30 × 1.5) = 45 (got %d)"
 		% TradeEngineLib.buy_price("nowhere", "wine"))
 
 
@@ -695,6 +704,9 @@ func _test_listing_rule() -> void:
 			tea_index = index
 			break
 	_check(tea_index >= 0, "the 41st good has a row once listed")
+	# Stock-explicit pricing: at the §5 produced rest 160 the factor is 0.7,
+	# so the listed 41st good prices floor(11 × 0.7) = 7 — no code changes.
+	EconomyLib.set_stock("lisbon", "test_tea", 160)
 	_check(TradeEngineLib.buy_price("lisbon", "test_tea") == 7,
 		"the listed 41st good prices from data: floor(11 × 0.7) = 7 (got %d)"
 		% TradeEngineLib.buy_price("lisbon", "test_tea"))
