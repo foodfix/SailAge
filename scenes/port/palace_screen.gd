@@ -657,8 +657,40 @@ func _applicable_permit_kind() -> String:
 	return PERMIT_HOME if _nation_id == player_nation else PERMIT_FOREIGN
 
 
+## The bundled engine offer (`permit_offer(port_id)` — task L's real
+## `palace_engine.gd` API), mapped onto the render state; `{}` when the seam
+## does not answer it (the suite's duck-typed spy seam keeps the granular
+## contract) or offers nothing here. The granular C-contract methods stay
+## guard-read below, so both engine shapes drive the same row.
+func _bundle_state(kind: String) -> Dictionary:
+	var target = _seam_target()
+	if target == null or not target.has_method("permit_offer"):
+		return {}
+	var offer = target.call("permit_offer", _port_id)
+	if not (offer is Dictionary) or (offer as Dictionary).is_empty():
+		return {}
+	var offer_d: Dictionary = offer
+	if str(offer_d.get("kind", "")) != kind:
+		return {}
+	var gate_key := ""
+	if bool(offer_d.get("title_locked", false)):
+		gate_key = PERMIT_TITLE_LOCKED_KEY
+	elif bool(offer_d.get("rep_locked", false)):
+		gate_key = PERMIT_REP_LOCKED_KEY
+	return {
+		"price": int(offer_d.get("price", 0)),
+		"owned": bool(offer_d.get("owned", false)),
+		"void_key": str(offer_d.get("void_key", "")),
+		"gate_key": gate_key,
+	}
+
+
 ## Every render fact of one permit row, engine-first with the docs fallbacks.
 func _permit_state(kind: String) -> Dictionary:
+	# Engine-first: the bundled real-API answer wins when the seam speaks it.
+	var bundled := _bundle_state(kind)
+	if not bundled.is_empty():
+		return bundled
 	var nation := _nation_id
 	var price := int(_seam_call("permit_price", [_port_id, kind, nation],
 		HOME_PERMIT_PRICE if kind == PERMIT_HOME else FOREIGN_PERMIT_PRICE))
@@ -762,8 +794,15 @@ func _bind_permit() -> void:
 func buy_permit(kind: String) -> bool:
 	if not _seam_has("buy_permit"):
 		return false
-	var bought := bool(_seam_call("buy_permit",
-		[_port_id, kind, _nation_id], false))
+	# Bundle-style engines (the real `palace_engine.gd`) take the port alone;
+	# duck-typed seams keep the granular contract arguments.
+	var bought := false
+	var target = _seam_target()
+	if target != null and target.has_method("permit_offer"):
+		bought = bool(target.call("buy_permit", _port_id))
+	else:
+		bought = bool(_seam_call("buy_permit",
+			[_port_id, kind, _nation_id], false))
 	if not bought:
 		return false
 	_show_toast(PERMIT_BOUGHT_KEY)
