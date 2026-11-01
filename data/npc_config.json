@@ -8,6 +8,7 @@
     "extreme": 4.0
   },
   "default_preset": "normal",
+  "neutral_coasters_mult": 0.75,
   "budgets": {
     "traders_mult_per_port": 1.25,
     "coasters_mult_per_port": 0.75,

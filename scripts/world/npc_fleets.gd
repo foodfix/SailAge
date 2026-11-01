@@ -54,6 +54,22 @@ extends RefCounted
 ## escort-10, patrol-zone-15, risk-sample-5. Nothing scans the fleet array
 ## per distance check; each query visits only the buckets its radius
 ## touches, so a day tick is linear in fleet count.
+##
+## **Phase-7 ecology amendment** (docs/60-* §4.11.14 — task N): (1) trader
+## docking adopts the **effective alignment** (docs/30-* §4.9) — a nation's
+## traders may port-call at any port aligned to them (protected own +
+## contestable aligned, sovereign non-core and neutral alike), never at a
+## rival-aligned or unallied one; the old own-nation-only pin is rewritten.
+## (2) Every neutral port is served by ~1 **nationless coaster** (中立灰
+## livery, decision 18) hopping to the NEAREST ports regardless of
+## ownership — local only, goods scope staples ∪ middle clamped at buy AND
+## sell (decision 21), never-triggers-contact unchanged. (3) Traders and
+## sovereign coasters credit the unified tariff (docs/30-* §4.10) of their
+## port-call trades into the host treasury through the guard-read
+## `Allegiance.credit_tax` — walked totals reused, nationless coasters
+## exempt, the 2,000g/host/month cap lives inside the allegiance module.
+## The spawn budget gains the `neutral_coasters_mult` data line (correction
+## 15); the nation-line `coasters_mult_per_port` keeps its meaning.
 
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
@@ -68,6 +84,13 @@ const FleetPathLib := preload("res://scripts/world/fleet_path.gd")
 ## `sailing_sim.gd` never loads this module.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+## Phase-7 allegiance guard (docs/60-* §4.11.14, docs/80-* §4.9 contracts).
+## Loaded **by path, never preloaded** — the economy.gd dev-guard pattern —
+## so the suites' `take_over_path` fixtures win over the real module until
+## restored. Guarded defaults while absent: alignment = the data
+## `nation_id`, tariff 500 (aligned) / 2000 (foreign) in the C-contract
+## basis; the crediting is skipped entirely (a no-op world).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 # --- Locked numbers (docs/60-* §4.1, §4.11.11.1–.2) -------------------------
 
@@ -322,6 +345,18 @@ var _zones_day: int = -1
 ## Per-owner spawn-failure marks for the current day (`"role|nation" → day`),
 ## so a failed draw is skipped until tomorrow instead of spinning.
 var _skip: Dictionary = {}
+## Data-static caches (`ports.json` is a per-run constant — the
+## `_ports_cache`/`_goods_cache` precedent): the per-nation port counts and
+## the neutral-port count, read on every budget call.
+var _port_counts_cache: Dictionary = {}
+var _neutral_port_count: int = -1
+## The per-day trickle-deficit ranking cache (the `_largest_deficit` pass):
+## rebuilt on day change or any spawn/remove (`_deficit_day = -1`).
+var _deficit_day: int = -1
+var _deficit_list: Array = []
+## The per-(nation, day) alignment-pool cache (`alignment_ports`): the
+## docking pool is a pure function of the day's ledger state.
+var _align_cache: Dictionary = {}
 
 ## Runtime-only hunter pursuit plans (`fleet_id → {target, path}`); never
 ## saved — a fresh plan from the same state reproduces the same chase.
@@ -530,13 +565,92 @@ func set_preset(preset: String) -> String:
 
 
 func _port_counts() -> Dictionary:
+	if not _port_counts_cache.is_empty():
+		return _port_counts_cache
 	var counts: Dictionary = {}
 	for port in DataLoader.ports_list:
 		var nation_id := str((port as Dictionary).get("nation_id", ""))
 		if nation_id.is_empty():
 			continue
 		counts[nation_id] = int(counts.get(nation_id, 0)) + 1
+	_port_counts_cache = counts
 	return counts
+
+
+# --- Phase-7 allegiance guard (docs/60-* §4.11.14; docs/80-* §4.9) ----------
+
+## The allegiance module or `null`: exists-check, then a per-call `load` by
+## path (Godot's resource cache answers with the path's CURRENT owner, so a
+## suite fixture installed with `take_over_path` wins — the economy.gd
+## dev-guard pattern). Method guards live at the call sites so a partial
+## fixture only replaces what it implements.
+static func _allegiance_lib() -> Script:
+	if not ResourceLoader.exists(ALLEGIANCE_PATH, "Script"):
+		return null
+	var lib: Script = load(ALLEGIANCE_PATH)
+	return lib
+
+
+## The port's effective alignment (docs/30-* §4.9): the persisted allegiance
+## at a contestable port, the owner at a protected one — read through the
+## guard. Default while the module (or the method) is absent: the data
+## `nation_id` (the C-contract default).
+static func port_alignment(port_id: String) -> String:
+	var lib := _allegiance_lib()
+	if lib != null and lib.has_method("effective_alignment"):
+		return str(lib.call("effective_alignment", port_id))
+	return str(DataLoader.get_port(port_id).get("nation_id", ""))
+
+
+## The unified-tariff rate for `payer_nation` trading at `port_id`
+## (docs/30-* §4.10: 0 after a permit, 500 in-sphere, 2000 foreign — the
+## C-contract basis points). Guard default: 500 when the port's effective
+## alignment equals the payer, else 2000 (only a module-less world reads it).
+static func _tariff_mille_for(port_id: String, payer_nation: String) -> int:
+	var lib := _allegiance_lib()
+	if lib != null and lib.has_method("tariff_mille"):
+		return maxi(0, int(lib.call("tariff_mille", port_id, payer_nation)))
+	return 500 if port_alignment(port_id) == payer_nation else 2000
+
+
+## Credits the unified tariff of one NPC port-call trade into the host
+## treasury (docs/60-* §4.11.14, decisions 19/20): the walked `units` at the
+## call's standing `price`, taxed `units × price × mille / 10000` and handed
+## to the guard-read `Allegiance.credit_tax` — host = the port's effective
+## alignment; the 2,000g/host/month NPC cap lives INSIDE credit_tax. A
+## nationless payer (`""` — the grey coasters) is exempt: no call at all.
+func _credit_port_tax(port_id: String, fleet: Dictionary, units: int,
+		price: int) -> void:
+	var payer := str(fleet.get("nation_id", ""))
+	if payer.is_empty() or units <= 0 or price <= 0:
+		return
+	var mille := _tariff_mille_for(port_id, payer)
+	if mille <= 0:
+		return
+	@warning_ignore("integer_division")
+	var tax := units * price * mille / 10000
+	if tax <= 0:
+		return
+	var lib := _allegiance_lib()
+	if lib != null and lib.has_method("credit_tax"):
+		lib.call("credit_tax", port_id, payer, tax)
+
+
+## The neutral-port count (the data `nation_id == ""` tier — 45 ports). The
+## nationless-coaster budget's base (`60-*` §4.11.14: one data line covers
+## the neutral ports; the nation line keeps counting nation ports only).
+## Data-static per run, like `_port_counts`.
+func neutral_port_count() -> int:
+	if _neutral_port_count >= 0:
+		return _neutral_port_count
+	var count := 0
+	for port in DataLoader.ports_list:
+		if str((port as Dictionary).get("id", "")).is_empty():
+			continue
+		if str((port as Dictionary).get("nation_id", "")) == "":
+			count += 1
+	_neutral_port_count = count
+	return count
 
 
 ## The nation's own ports, ids sorted (deterministic iteration everywhere).
@@ -592,6 +706,41 @@ func nation_goods(nation_id: String) -> Array[String]:
 	return out
 
 
+## Ports whose **effective alignment** == `nation_id`, ids sorted (docs/60-*
+## §4.11.14 docking pool: protected own + contestable aligned — sovereign
+## non-core and neutral alike). Day-keyed cache: the docking pool is a pure
+## function of the persisted ledger state, which can only change BETWEEN
+## day ticks (a player flip lands in the port screen; the monthly AI lands
+## on the month seam) — so one build per (nation, day) is exact; the next
+## tick rebuilds. The departure decisions read this 2× per call, and a
+## build scans all 145 ports through the guard — at ~340 fleets the day
+## tick was paying ≈ 10 ms/day uncached.
+func alignment_ports(nation_id: String) -> Array[String]:
+	if nation_id.is_empty():
+		return []
+	var cached: Array = _align_cache.get(nation_id, [])
+	if not cached.is_empty():
+		var day: int = int(cached[0])
+		if day == int(GameState.day):
+			var out: Array[String] = []
+			for index in range(1, cached.size()):
+				out.append(str(cached[index]))
+			return out
+	var out: Array[String] = []
+	for port in DataLoader.ports_list:
+		var id := str((port as Dictionary).get("id", ""))
+		if id.is_empty() or _port_cell(id).x < 0:
+			continue
+		if port_alignment(id) == nation_id:
+			out.append(id)
+	out.sort()
+	var stored: Array = [int(GameState.day)]
+	for value in out:
+		stored.append(value)
+	_align_cache[nation_id] = stored
+	return out
+
+
 ## Undirected rivalry pairs, sorted (docs/10-* §7.4 `nations.json rivals`).
 func rivalry_pairs() -> Array:
 	var seen: Dictionary = {}
@@ -644,10 +793,19 @@ func budget_for(role: String, nation_id: String) -> int:
 	var budgets := _budgets()
 	var ports := _port_counts()
 	var own := int(ports.get(nation_id, 0))
+	var npc_config: Dictionary = _config.get("npc_config", DataLoader.npc_config)
 	match role:
 		TRADER:
 			return ceili(own * float(budgets.get("traders_mult_per_port", 1.25)) * mult)
 		COASTER:
+			if nation_id.is_empty():
+				# The nationless tier (docs/60-* §4.11.14, correction 15):
+				# one top-level data line covers the neutral ports —
+				# ceil(45 × 0.75) = 34 at normal. The nation line below
+				# keeps its meaning.
+				return ceili(neutral_port_count()
+					* float(npc_config.get("neutral_coasters_mult", 0.75))
+					* mult)
 			return ceili(own * float(budgets.get("coasters_mult_per_port", 0.75)) * mult)
 		PATROL:
 			var div := float(budgets.get("patrols_div_ports", 6))
@@ -673,12 +831,14 @@ func budget_for(role: String, nation_id: String) -> int:
 
 
 ## Core cap: the sum of the persistent role budgets across all owners
-## (docs/60-* §4.1.1: 272 at normal).
+## (docs/60-* §4.1.1: 272 at normal — plus the §4.11.14 nationless-coaster
+## line since Phase 7: 273 + ceil(45 × 0.75) = 307).
 func core_cap() -> int:
 	var total := 0
 	for nation_id in _port_counts():
 		for role in [TRADER, COASTER, PATROL, COURIER, PRIVATEER]:
 			total += budget_for(role, nation_id)
+	total += budget_for(COASTER, "")
 	total += budget_for(PIRATE, "")
 	return total
 
@@ -744,6 +904,25 @@ func initial_fill(day: int) -> void:
 						break
 					if not spawn(PIRATE, "", int(day)).is_empty():
 						spawned += 1
+			COASTER:
+				# Phase-7 (§4.11.14): the nationless grey tier fills its own
+				# line first — the neutral ports' local distributors — then
+				# the nation lines (unchanged meaning).
+				var grey_want := budget_for(COASTER, "") / 2
+				for _index in grey_want:
+					if spawned >= target:
+						break
+					if not spawn(COASTER, "", int(day)).is_empty():
+						spawned += 1
+				for nation_id in _port_counts():
+					if spawned >= target:
+						return
+					var nation_want := budget_for(role, nation_id) / 2
+					for _index in nation_want:
+						if spawned >= target:
+							break
+						if not spawn(role, nation_id, int(day)).is_empty():
+							spawned += 1
 			HUNTER:
 				pass  # bounty-only: the trickle owns transient hunters
 			_:
@@ -1402,6 +1581,7 @@ func remove(id: String) -> void:
 			_wake_trails.erase(id)  # transient trail of a dead fleet
 			_step_carry.erase(id)  # task-H: dead fleets hold no budget bank
 			_leg_active.erase(id)  # task-H: dead fleets hold no variant state
+			_deficit_day = -1  # counts changed: the trickle's ranking rebuilds
 			# A full rebuild (O(N), battle-aftermath frequency): kills the
 			# whole stale-key class — fixtures may rename ids after adding,
 			# so an incremental removal can never be trusted here.
@@ -1473,6 +1653,7 @@ static func reset_caches() -> void:
 	_adjacency = {}
 	_ports_cache = {}
 	_goods_cache = {}
+	_scope_goods = []
 	_successor_cursor = 0
 
 
@@ -1793,7 +1974,14 @@ static func _is_path_tile(cell: Vector2i) -> bool:
 ##   reverse at the capital).
 ## * `patrol`: docked at its nation's most-connected port, one lane armed.
 func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
-	var ports := nation_ports(nation_id)
+	# Phase-7 (§4.11.14): the grey coaster sails its own nearest-hop journey.
+	if role == COASTER and nation_id.is_empty():
+		return _grey_coaster_journey(day)
+	# The trader spawn pool is the EFFECTIVE-ALIGNMENT pool (protected own +
+	# contestable aligned — a flip re-serves the port on the new lane at
+	# once); every other lane role stays on the data-ownership pool.
+	var ports: Array[String] = alignment_ports(nation_id) if role == TRADER \
+		else nation_ports(nation_id)
 	if ports.is_empty():
 		return {}
 	# Per-spawn stream: the fleet's spawn sequence number salts the seed, so
@@ -1807,14 +1995,14 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 	if role == PATROL:
 		origin = _patrol_home_port(nation_id)
 	else:
-		# Lane roles sail between two own-nation ports. Some port pairs share
-		# no lane component (the Pacific runs alone), so the draw retries up
-		# to six origins before the spawn draw fails.
+		# Lane roles sail between two ports of their pool. Some port pairs
+		# share no lane component (the Pacific runs alone), so the draw
+		# retries up to six origins before the spawn draw fails.
 		for _attempt in 6:
 			origin = ports[rng.randi_range(0, ports.size() - 1)]
 			match role:
 				TRADER:
-					dest = _nearest_own_port_excluding(origin, nation_id)
+					dest = _nearest_aligned_port_excluding(origin, nation_id)
 				COASTER:
 					dest = _nearest_own_port_excluding(origin, nation_id)
 				COURIER:
@@ -1827,7 +2015,10 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 			if not route_check.is_empty():
 				return {
 					"origin": origin, "dest": dest, "cell": _port_cell(origin),
-					"dwell_until_day": int(day) + DWELL_DAYS,
+					# The coaster role idles on its own cadence (§4.11.14
+					# dwell lever); traders and couriers keep the 2-day dock.
+					"dwell_until_day": int(day) + (_coaster_dwell_days()
+						if role == COASTER else DWELL_DAYS),
 					"route": (route_check["legs_save"] as Dictionary).duplicate(true),
 				}
 		return {}
@@ -1884,6 +2075,74 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 	}
 
 
+## The nationless coaster's journey (docs/60-* §4.11.14, decision 18): a
+## seeded draw from the neutral ports, hopping to the NEAREST port of ANY
+## ownership — border-crossing local trade, never the long lanes. The
+## standing coaster pins ride unchanged (≤ 5-unit calls, hold 10,
+## saturation, never sell into factor ≤ 1.0); the goods scope clamps at
+## buy/sell ([method in_coaster_scope]).
+func _grey_coaster_journey(day: int) -> Dictionary:
+	var neutrals := nation_ports("")
+	if neutrals.is_empty():
+		return {}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(day) * SEED_DAY_MULT + _id_seq * SEED_X_MULT \
+		+ hash("coaster|")
+	var origin: String = neutrals[rng.randi_range(0, neutrals.size() - 1)]
+	var dest := _nearest_port_excluding(origin)
+	if dest.is_empty() or dest == origin:
+		return {}
+	var route_check := route_between(origin, dest)
+	if route_check.is_empty():
+		return {}
+	return {
+		"origin": origin, "dest": dest, "cell": _port_cell(origin),
+		"dwell_until_day": int(day) + _coaster_dwell_days(),
+		"route": (route_check["legs_save"] as Dictionary).duplicate(true),
+	}
+
+
+## The nearest port of ANY ownership (docs/60-* §4.11.14: the grey coasters
+## hop to the nearest ports regardless of ownership). Wrap-aware Chebyshev;
+## ties by port id.
+func _nearest_port_excluding(port_id: String) -> String:
+	var best := ""
+	var best_distance := 0
+	var center := _port_cell(port_id)
+	if center.x < 0:
+		return ""
+	for port in DataLoader.ports_list:
+		var other := str((port as Dictionary).get("id", ""))
+		if other.is_empty() or other == port_id:
+			continue
+		var cell := _port_cell(other)
+		if cell.x < 0:
+			continue
+		var distance := chebyshev(center, cell)
+		if best.is_empty() or distance < best_distance \
+				or (distance == best_distance and other < best):
+			best = other
+			best_distance = distance
+	return best
+
+
+## The nearest port of the trader's ALIGNMENT pool (§4.11.14 docking: the
+## spawn journey lands at an aligned port). Ties by port id.
+func _nearest_aligned_port_excluding(origin: String, nation_id: String) -> String:
+	var best := ""
+	var best_distance := 0
+	var center := _port_cell(origin)
+	for other in alignment_ports(nation_id):
+		if other == origin:
+			continue
+		var distance := chebyshev(center, _port_cell(other))
+		if best.is_empty() or distance < best_distance \
+				or (distance == best_distance and other < best):
+			best = other
+			best_distance = distance
+	return best
+
+
 ## The patrol's home port: the own-nation port whose 15-tile zone holds the
 ## most own-nation ports (the best coverage), ties by port id.
 func _patrol_home_port(nation_id: String) -> String:
@@ -1925,13 +2184,17 @@ func _capital_of(nation_id: String) -> String:
 
 ## The berth tile of the fleet's own nation's NEAREST port — the stranded
 ## fleet's self-heal target when it recorded no destination (a journey was
-## dropped before any depart). `NO_CELL` when the nation owns none.
+## dropped before any depart). A nationless fleet (the grey coaster) heals
+## to the nearest port of ANY ownership (§4.11.14: it serves every coast).
+## `NO_CELL` when no port resolves.
 func _nearest_own_berth(fleet: Dictionary) -> Vector2i:
 	var nation_id := str(fleet.get("nation_id", ""))
 	var cell := position_of(fleet)
 	var best := NO_CELL
 	var best_distance := 0
-	for port_id in nation_ports(nation_id):
+	var ids: Array[String] = _all_port_ids() if nation_id.is_empty() \
+		else nation_ports(nation_id)
+	for port_id in ids:
 		var berth := _port_cell(str(port_id))
 		if berth == NO_CELL:
 			continue
@@ -1940,6 +2203,18 @@ func _nearest_own_berth(fleet: Dictionary) -> Vector2i:
 			best = berth
 			best_distance = distance
 	return best
+
+
+## Every port id with a berth, sorted (the ownership-blind scans' pool).
+func _all_port_ids() -> Array[String]:
+	var out: Array[String] = []
+	for port in DataLoader.ports_list:
+		var id := str((port as Dictionary).get("id", ""))
+		if id.is_empty() or _port_cell(id).x < 0:
+			continue
+		out.append(id)
+	out.sort()
+	return out
 
 
 func _rivals_of(nation_id: String) -> Array:
@@ -3571,7 +3846,11 @@ func _arrive(fleet: Dictionary, day: int) -> void:
 		if berth.x >= 0:
 			_commit_cell(fleet, berth)
 		_log_port_traffic(port_id, "arrival", fleet, day)
-	fleet["dwell_until_day"] = int(day) + DWELL_DAYS
+	# Coasters ride the dwell-day cadence lever (§4.11.14 perf fallback 1);
+	# every other role keeps the standing 2-day dock.
+	var dwell := _coaster_dwell_days() \
+		if str(fleet.get("role", "")) == COASTER else DWELL_DAYS
+	fleet["dwell_until_day"] = int(day) + dwell
 
 
 ## Appends one record to the transient `GameState.npc_port_log`
@@ -3631,13 +3910,20 @@ func _depart(fleet: Dictionary, day: int) -> void:
 
 ## Sells every cargo good whose live factor is above 1.0 at `port_id` —
 ## never sells into a saturated market (docs/30-* §4.4 sell rule). Returns
-## the units sold.
+## the units sold. A COASTER's sale is scope-clamped to staples ∪ middle
+## (decision 21 — never luxury/specialty/exclusive) and credits the unified
+## tariff on each walked sale; lane traders keep the standing scope.
 func _sell_cargo(fleet: Dictionary, port_id: String, cap: int) -> int:
+	var scope_limited := str(fleet.get("role", "")) == COASTER
 	var sold := 0
 	for good_id in (fleet.get("cargo", {}) as Dictionary).keys():
 		var good := str(good_id)
 		var held := int((fleet["cargo"] as Dictionary)[good])
 		if held <= 0:
+			continue
+		if scope_limited and not in_coaster_scope(good):
+			# Decision 21: the goods-scope clamp holds at SELL — a coaster
+			# never unloads a specialty good, however hungry the market.
 			continue
 		if EconomyLib.factor_units(port_id, good) <= 1000:
 			# factor ≤ 1.0 (stock ≥ 100, docs/30-* §4.2): keep sailing with it
@@ -3645,11 +3931,35 @@ func _sell_cargo(fleet: Dictionary, port_id: String, cap: int) -> int:
 		var qty := held if cap <= 0 else mini(held, cap - sold)
 		if qty <= 0:
 			break
+		var price := TradeEngineLib.sell_price(port_id, good)
 		EconomyLib.apply_trade(port_id, good, -qty)
+		_credit_port_tax(port_id, fleet, qty, price)
 		_note_moved(port_id)
 		(fleet["cargo"] as Dictionary).erase(good)
 		sold += qty
 	return sold
+
+
+## The coaster goods scope (decision 21, docs/60-* §4.11.14): staples ∪
+## middle ONLY — never luxury/specialty/exclusive, i.e. never any
+## `specialty: true` good. Clamped at buy AND sell.
+static func in_coaster_scope(good_id: String) -> bool:
+	return EconomyLib.tier_of(good_id) != "luxury"
+
+
+## The scope-pool, id-sorted (the grey coaster's buy-scan universe; data is
+## a per-run constant so the list caches — `reset_caches` clears it).
+static var _scope_goods: Array = []
+static func coaster_scope_goods() -> Array:
+	if not _scope_goods.is_empty():
+		return _scope_goods
+	for good in DataLoader.goods_list:
+		var id := str((good as Dictionary).get("id", ""))
+		if id.is_empty() or not in_coaster_scope(id):
+			continue
+		_scope_goods.append(id)
+	_scope_goods.sort()
+	return _scope_goods
 
 
 func _note_moved(port_id: String) -> void:
@@ -3665,14 +3975,16 @@ func _free_hold(fleet: Dictionary, capacity: int) -> int:
 
 
 ## The trader's port call: sell the factor>1.0 part of the hold, then the
-## joint (good, destination) argmax over the nation's produced goods ×
-## own-nation ports within Chebyshev 60 (docs/30-* §4.4), buy the bounded
-## quantity, and sail.
+## joint (good, destination) argmax over the nation's produced goods × the
+## alignment-pool ports within Chebyshev 120 (docs/30-* §4.4; §4.11.14
+## docking), buy the bounded quantity, credit the tariff, and sail.
 func _depart_trader(fleet: Dictionary, nation_id: String, day: int) -> void:
-	# Decision 11 (task-H item 6): the cell-anchored origin must be the
-	# fleet's OWN nation's port — never a neutral one (fall back to the
-	# destination port, which is own-nation by construction).
-	var origin := _own_port_at_cell(fleet, position_of(fleet))
+	# §4.11.14 docking pin (the rewritten L4679 rule): the cell-anchored
+	# origin must be a port whose EFFECTIVE alignment equals the fleet's
+	# nation — protected own, contestable aligned; never a rival-aligned or
+	# unallied berth (fall back to the destination port, aligned by
+	# construction).
+	var origin := _docking_port_at_cell(fleet, position_of(fleet))
 	if origin.is_empty():
 		origin = str(fleet.get("dest_port_id", ""))
 	if origin.is_empty():
@@ -3688,7 +4000,9 @@ func _depart_trader(fleet: Dictionary, nation_id: String, day: int) -> void:
 	var dest := str(decision["dest"])
 	var qty := int(decision["qty"])
 	if qty > 0 and not good.is_empty():
+		var price := TradeEngineLib.buy_price(origin, good)
 		EconomyLib.apply_trade(origin, good, qty)
+		_credit_port_tax(origin, fleet, qty, price)
 		_note_moved(origin)
 		var cargo: Dictionary = fleet.get("cargo", {})
 		cargo[good] = int(cargo.get(good, 0)) + qty
@@ -3697,35 +4011,57 @@ func _depart_trader(fleet: Dictionary, nation_id: String, day: int) -> void:
 
 
 ## The coaster's port call: ≤ 5 units traded, hold ≤ 10, between adjacent
-## (nearest own-nation) ports; never triggers contact (role rule) and is
-## ignored by raiders (the prey query's rule).
+## ports; never triggers contact (role rule) and is ignored by raiders (the
+## prey query's rule). A sovereign coaster hops own-nation ports (standing
+## rule); a nationless grey coaster hops the NEAREST ports regardless of
+## ownership (§4.11.14, decision 18) and credits no tax (no host to pay —
+## the payer is ""). Both scope-clamp to staples ∪ middle at buy and sell.
 func _depart_coaster(fleet: Dictionary, nation_id: String, day: int) -> void:
-	var origin := _own_port_at_cell(fleet, position_of(fleet))
+	var nationless := nation_id.is_empty()
+	var origin := ""
+	if nationless:
+		# The grey coaster may adopt ANY berth it stands on.
+		origin = _port_at_cell(position_of(fleet))
+	else:
+		origin = _docking_port_at_cell(fleet, position_of(fleet))
 	if origin.is_empty():
 		origin = str(fleet.get("dest_port_id", ""))
 	if origin.is_empty():
-		fleet["dwell_until_day"] = int(day) + DWELL_DAYS
+		fleet["dwell_until_day"] = int(day) + _coaster_dwell_days()
 		return
 	_sell_cargo(fleet, origin, coaster_units())
-	var dest := _nearest_own_port_excluding(origin, nation_id)
+	var dest := ""
+	if nationless:
+		dest = _nearest_port_excluding(origin)
+	else:
+		dest = _nearest_own_port_excluding(origin, nation_id)
 	if dest.is_empty():
-		fleet["dwell_until_day"] = int(day) + DWELL_DAYS
+		fleet["dwell_until_day"] = int(day) + _coaster_dwell_days()
 		return
-	# Buy ≤ the call cap of the best-margin produced good at origin.
+	# Buy ≤ the call cap of the best-margin in-scope good at origin
+	# (decision 21: staples ∪ middle only — a specialty good never enters
+	# the hold, whatever its margin).
+	var pool: Array = coaster_scope_goods() if nationless \
+		else nation_goods(nation_id)
 	var best_good := ""
 	var best_margin := 0
-	for good_id in nation_goods(nation_id):
-		var margin := TradeEngineLib.sell_price(dest, good_id) \
-			- TradeEngineLib.buy_price(origin, good_id)
+	for good_id in pool:
+		var good := str(good_id)
+		if not in_coaster_scope(good):
+			continue
+		var margin := TradeEngineLib.sell_price(dest, good) \
+			- TradeEngineLib.buy_price(origin, good)
 		if margin > best_margin:
 			best_margin = margin
-			best_good = good_id
+			best_good = good
 	if not best_good.is_empty() and best_margin > 0:
 		var saturation := _saturation_bound(dest, best_good)
 		var qty := mini(coaster_units(), _free_hold(fleet, COASTER_HOLD_CAPACITY))
 		qty = mini(qty, saturation)
 		if qty > 0:
+			var price := TradeEngineLib.buy_price(origin, best_good)
 			EconomyLib.apply_trade(origin, best_good, qty)
+			_credit_port_tax(origin, fleet, qty, price)
 			_note_moved(origin)
 			var cargo: Dictionary = fleet.get("cargo", {})
 			cargo[best_good] = int(cargo.get(best_good, 0)) + qty
@@ -3806,9 +4142,12 @@ func _set_route_to(fleet: Dictionary, origin: String, dest: String) -> void:
 	var route := route_between(origin, dest)
 	if route.is_empty():
 		# The validator makes this unreachable; idle and retry (never stall).
+		# A coaster idles on its own cadence (§4.11.14 dwell lever).
 		_note_event(str(fleet.get("id", "")), "depX %s->%s" % [origin, dest])
 		fleet["route"] = {"lanes": [], "leg": 0, "tile_index": 0, "legs": []}
-		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
+		fleet["dwell_until_day"] = int(GameState.day) \
+			+ (_coaster_dwell_days() if str(fleet.get("role", "")) == COASTER
+				else DWELL_DAYS)
 		return
 	# The cache entry is shared by every fleet on this pair — fleets mutate
 	# their route (legs pop, tile_index), so each gets its own deep copy.
@@ -3885,14 +4224,16 @@ func score_all_candidates(fleet: Dictionary, origin: String,
 	return out
 
 
-## Own-nation ports within Chebyshev 60 of `origin`, wrap-aware, id-sorted
-## (docs/30-* §4.4 candidate destinations).
+## Ports aligned to `nation_id` within Chebyshev 120 of `origin`, wrap-
+## aware, id-sorted (docs/30-* §4.4 candidate destinations, the §4.11.14
+## docking pool: the EFFECTIVE-ALIGNMENT ports — a flipped port joins the
+## flipping nation's candidate set at once).
 func _candidate_destinations(origin: String, nation_id: String) -> Array:
 	var out: Array = []
 	var center := _port_cell(origin)
 	if center.x < 0:
 		return out
-	for port_id in nation_ports(nation_id):
+	for port_id in alignment_ports(nation_id):
 		if port_id == origin:
 			continue
 		if chebyshev(center, _port_cell(port_id)) <= CANDIDATE_RADIUS:
@@ -3937,6 +4278,21 @@ func trade_units_per_call() -> int:
 
 func coaster_units() -> int:
 	return int(_flow().get("coaster_trade_units", 5))
+
+
+## The coaster port-call dwell — the §4.11.14 dwell-day cadence constant
+## (the pinned perf fallback 1: "coasters call every ⌈dist/16⌉+2; stretch
+## the cadence"). Shipped value: **4** — re-measured at the Phase-7 spawn
+## count (task N record): the coasters' at-sea duty cycle drops from ~50%
+## to ~33%, pulling the day tick under the §4.11.11.5 gate without touching
+## any budget. Pinned here because the §4.10 npc_config key sets are
+## exactly locked by the validator (a new flow key would fail group 7) —
+## the retune stays a one-constant change reported in the record.
+const COASTER_DWELL_DAYS := 4
+
+
+func _coaster_dwell_days() -> int:
+	return COASTER_DWELL_DAYS
 
 
 func path_budget_ms() -> int:
@@ -4194,11 +4550,15 @@ func _named_pirate_tick(day: int) -> void:
 			# Unknown slot key (a hand-edited save): drop it, never wedge.
 			GameState.named_pirate_respawns.erase(slot_id)
 			continue
-		var fleet := spawn(PIRATE, "", int(day))
-		if fleet.is_empty():
-			continue
+		# Draw the successor name BEFORE spawning: an exhausted nationless
+		# pool must leave the slot pending without leaking an unnamed
+		# pirate past the §4.1.1 budget (the leak compounded daily — every
+		# retry spawned another plain pirate while the slot stayed open).
 		var index := _next_successor_index()
 		if index < 0:
+			continue
+		var fleet := spawn(PIRATE, "", int(day))
+		if fleet.is_empty():
 			continue
 		fleet["captain"] = {"pool_id": "", "name_index": index,
 			"named_tier": tier}
@@ -4255,12 +4615,14 @@ func _trickle(day: int) -> Array:
 	var spawned: Array = []
 	var budget := trickle_per_day()
 	var npc_config: Dictionary = _config.get("npc_config", DataLoader.npc_config)
+	var absolute := int(npc_config.get("absolute_cap", 2048))
+	var cap := global_cap()
 	for _attempt in budget * 4:
 		if spawned.size() >= budget:
 			break
-		if GameState.npc_fleets.size() >= int(npc_config.get("absolute_cap", 2048)):
+		if GameState.npc_fleets.size() >= absolute:
 			break
-		if GameState.npc_fleets.size() >= global_cap():
+		if GameState.npc_fleets.size() >= cap:
 			break
 		var deficit := _largest_deficit()
 		if deficit.is_empty():
@@ -4268,6 +4630,13 @@ func _trickle(day: int) -> Array:
 		var fleet := spawn(str(deficit["role"]), str(deficit["nation_id"]), day)
 		if not fleet.is_empty():
 			spawned.append(fleet)
+			# The ranking stays valid: this owner's deficit shrinks by
+			# exactly one (its entry updates in place — a decrement cannot
+			# reorder other owners; ties keep the scan order, the same
+			# answer a full recompute would give).
+			deficit["deficit"] = int(deficit["deficit"]) - 1
+			if int(deficit["deficit"]) <= 0:
+				_deficit_list.pop_front()
 		else:
 			# The draw failed (no legal tile): skip this owner for today.
 			_skip[deficit["role"] + "|" + deficit["nation_id"]] = int(day)
@@ -4277,38 +4646,71 @@ func _trickle(day: int) -> Array:
 ## The (role, nation) owner with the largest budget deficit, in FILL_ORDER —
 ## so the cap can never starve traders for pirates (role order is the
 ## priority order).
+##
+## The deficit scan is a per-DAY ranking ([method _compute_deficit_list],
+## one O(fleets × owners) pass, rebuilt whenever a spawn changes the counts
+## — the §4.11.11.5 linearity contract): each trickle attempt walks the
+## ranking past owners already skipped today, instead of re-scanning the
+## whole fleet array up to [method trickle_per_day] × 4 times a day.
+## Selection order and results are identical to the per-attempt rescan it
+## replaced (argmax deficit, ties by generation order).
 func _largest_deficit() -> Dictionary:
-	var best: Dictionary = {}
-	var best_count := 0
 	var day := last_tick_day
-	var skipped := func(owner: String) -> bool:
-		return _skip.has(owner) and int(_skip[owner]) == day
+	if _deficit_day != day:
+		_deficit_day = day
+		_deficit_list = _compute_deficit_list()
+	while not _deficit_list.is_empty():
+		var head: Dictionary = _deficit_list[0]
+		var owner := str(head["role"]) + "|" + str(head["nation_id"])
+		if not (_skip.has(owner) and int(_skip[owner]) == day):
+			return head
+		_deficit_list.pop_front()
+	return {}
+
+
+## The per-day deficit ranking, best first. Each entry carries its deficit
+## and its scan-order index; the sort key `(deficit desc, index asc)` is the
+## rescan's argmax-with-earliest-tie semantics, made explicit so the sort's
+## stability never matters. Skips are honored at WALK time (they can fire
+## after the compute pass).
+func _compute_deficit_list() -> Array:
+	var entries: Array = []
 	for role in FILL_ORDER:
 		if role == PIRATE:
 			var live := _count_role(role, "")
 			var want := budget_for(role, "")
-			if want > live and best_count < want - live \
-					and not skipped.call(role + "|"):
-				best = {"role": role, "nation_id": ""}
-				best_count = want - live
+			if want > live:
+				entries.append({"role": role, "nation_id": "",
+					"deficit": want - live, "index": entries.size()})
 			continue
+		if role == COASTER:
+			# Phase-7 (§4.11.14): the nationless tier owns its own budget
+			# line — counted with an exact nation match (`_count_role` with
+			# "" would count the sovereign coasters too).
+			var grey_live := _count_role_nationless(role)
+			var grey_want := budget_for(role, "")
+			if grey_want > grey_live:
+				entries.append({"role": role, "nation_id": "",
+					"deficit": grey_want - grey_live, "index": entries.size()})
 		if role == HUNTER:
 			# Bounty-only: at most one hunter per bountied nation.
 			for nation_id in bountied_nations():
 				var hunter_live := _count_role(role, nation_id)
-				if hunter_live == 0 and best_count < 1 \
-						and not skipped.call(role + "|" + nation_id):
-					best = {"role": role, "nation_id": nation_id}
-					best_count = 1
+				if hunter_live == 0:
+					entries.append({"role": role, "nation_id": nation_id,
+						"deficit": 1, "index": entries.size()})
 			continue
 		for nation_id in _port_counts():
 			var want := budget_for(role, nation_id)
 			var live := _count_role(role, nation_id)
-			if want > live and want - live > best_count \
-					and not skipped.call(role + "|" + nation_id):
-				best = {"role": role, "nation_id": nation_id}
-				best_count = want - live
-	return best
+			if want > live:
+				entries.append({"role": role, "nation_id": nation_id,
+					"deficit": want - live, "index": entries.size()})
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a["deficit"]) != int(b["deficit"]):
+			return int(a["deficit"]) > int(b["deficit"])
+		return int(a["index"]) < int(b["index"]))
+	return entries
 
 
 func _count_role(role: String, nation_id: String) -> int:
@@ -4320,6 +4722,21 @@ func _count_role(role: String, nation_id: String) -> int:
 			continue
 		if not nation_id.is_empty() \
 				and str(fleet.get("nation_id", "")) != nation_id:
+			continue
+		count += 1
+	return count
+
+
+## Exact nationless count of a role (nation_id == "" as a MATCH, not a
+## wildcard): the nationless-coaster budget line's live count (§4.11.14).
+func _count_role_nationless(role: String) -> int:
+	var count := 0
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		if str(fleet.get("role", "")) != role:
+			continue
+		if str(fleet.get("nation_id", "")) != "":
 			continue
 		count += 1
 	return count
@@ -4473,10 +4890,14 @@ static func _cell_field(value) -> Vector2i:
 
 
 ## Marker colour (docs/80-* §4.5.2): pirate = BAD red, every national fleet =
-## its nation colour (hunter included). Placeholder palette only.
+## its nation colour (hunter included), the nationless grey coaster = the
+## neutral-port grey (中立灰 livery, docs/60-* §4.11.14 — the pirate
+## nationless precedent's livery half). Placeholder palette only.
 static func marker_color(role: String, nation_id: String) -> Color:
 	if role == PIRATE:
 		return PaletteLib.BAD
+	if role == COASTER and nation_id.is_empty():
+		return PaletteLib.PORT_NEUTRAL
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
 	var hex := str(nation.get("color", ""))
 	if not Color.html_is_valid(hex):
@@ -4676,19 +5097,30 @@ func _port_at_cell(cell: Vector2i) -> String:
 	return DataLoader.port_id_at(cell)
 
 
-## The port at `cell` when it is the FLEET's own nation's — decision 11's
-## own-nation docking pin (task-H item 6): a trader NEVER docks at (buys or
-## sells into) a `nation_id: ""` neutral port. A trader walking a lane can
-## pass over a neutral port's spoke berth mid-leg; the departure decisions
-## must not adopt that berth as their origin. Nationless roles (pirates)
-## have no port calls at all.
-func _own_port_at_cell(fleet: Dictionary, cell: Vector2i) -> String:
+## The port-call berth at `cell` — the REWRITTEN Phase-6 docking pin
+## (docs/60-* §4.11.14; the Phase-6 task-H "own nation only" rule is
+## amended by the effective-alignment rule, docs/30-* §4.9):
+##   * a TRADER of nation N adopts any port whose effective alignment == N
+##     (protected own + contestable aligned — sovereign non-core and
+##     neutral alike); a rival-aligned or unallied berth returns "";
+##   * a sovereign COASTER stays own-nation (its hops are ownership-
+##     restricted — the standing rule);
+##   * a NATIONLESS coaster adopts ANY berth (it serves every coast);
+##   * other nationless roles (pirates) have no port calls at all.
+## A trader walking a lane can pass over a foreign port's spoke berth
+## mid-leg; the departure decisions must not adopt that berth.
+func _docking_port_at_cell(fleet: Dictionary, cell: Vector2i) -> String:
 	var port_id := _port_at_cell(cell)
 	if port_id.is_empty():
 		return ""
+	var role := str(fleet.get("role", ""))
 	var nation_id := str(fleet.get("nation_id", ""))
+	if role == COASTER and nation_id.is_empty():
+		return port_id
 	if nation_id.is_empty():
 		return ""
+	if role == TRADER:
+		return port_id if port_alignment(port_id) == nation_id else ""
 	if str(DataLoader.get_port(port_id).get("nation_id", "")) != nation_id:
 		return ""
 	return port_id
