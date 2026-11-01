@@ -5,7 +5,9 @@
 Specifies ship instances and their stats, purchase/repair/refit/sale at the
 shipyard, fleet composition and flagship rules, and cargo-hold maths (goods
 vs provisions vs water vs armament sharing capacity). Gates Phase 1; combat
-use of `armament_slots`/`cannons` is Phase 2.
+use of `armament_slots`/`cannons` is Phase 2. **Phase 7** grows the roster
+8 → 16 with a `role` field and per-port stock lists under development-gated
+tiers (§4.3.1).
 
 ## 2. Artifacts
 
@@ -95,19 +97,109 @@ repairs and are logged.
 
 ### 4.3 Shipyard transactions
 
-All four actions at every Phase-1 shipyard (all 8 ShipTypes sold everywhere;
-regional restrictions OUT OF SCOPE (phase 3)):
+The four actions run at every shipyard port. **Phase-7 amendment:** the
+Phase-1 rule "all 8 ShipTypes sold everywhere" is retired — hulls (and
+equipment, `60-*` §4.11.13) come from the port's per-port stock list
+through the universal tier gate (§4.3.1), and Buy requires the item to be
+purchasable there. Every rule in the table below is otherwise unchanged:
 
 | Action | Rule |
 |---|---|
 | Buy ship | cost `ShipType.base_price`; new instance at `durability = max`, `crew = 0`, `provisions/water = 0`, `cannons = 0`, empty cargo. Requires `gold ≥ price` and fleet size < `FLEET_MAX` (§4.4). |
 | Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). |
 | Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **Phase 2 enables the row**; see `60-*` §4.11.4 for the battle effect. |
-| Buy equipment | `data/equipment.json` item at its `price`; occupies its slot (`weapon`/`armor` player, `figurehead`/`sail` ship); replacing sells the old item back at `floor(price × 0.5)` in the same action (`60-*` §4.11.12). Phase 2. |
+| Buy equipment | `data/equipment.json` item at its `price`; occupies its slot (`weapon`/`armor` player, `figurehead`/`sail` ship); replacing sells the old item back at `floor(price × 0.5)` in the same action (`60-*` §4.11.12). Phase 2; **Phase 7:** the buy list becomes the port's `facilities.equipment_stock` under the same §4.3.1 tier gate (`60-*` §4.11.13) — rare items never render in it. |
 | Sell ship | price `floor(base_price × 0.5 × durability / effective_max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). Equipment leaves with the ship. |
 
 Repair pricing examples: latin 3g/pt, caravel 20g/pt, nao 55g/pt, galleon
 150g/pt.
+
+#### 4.3.1 Per-port stock, roles & tier gating (Phase 7)
+
+**Roster 16.** The locked ship list (`10-*` §7.3) grows 8 → 16 — **the
+existing 8 are unchanged** (every locked stat stays byte-identical; they
+gain only `role` + `tier`). New ids with first-pass stats (S may tune
+within ±20% at authoring, then the exact set is locked; zh/en names
+first-pass, S finalizes; speeds are the Phase-6 `{16, 20, 24}` tiles/day
+values — `10-*` §7.3):
+
+| id | zh | en | class | role (first-pass) | tier | dur | cap | spd | crew | slots | price |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| latin | 拉丁帆船 | Latin | sail | *(S)* | 1 | 40 | 30 | 16 | 8/20 | 2 | 1,200g |
+| sloop | 单桅纵帆船 | Sloop | sail | *(S)* | 1 | 60 | 60 | 20 | 10/30 | 4 | 3,000g |
+| caravel | 卡拉维尔帆船 | Caravel | sail | *(S)* | 2 | 90 | 120 | 20 | 15/45 | 6 | 8,000g |
+| galley | 桨帆船 | Galley | oar | **war** (re-role) | 2 | 70 | 50 | 24 | 40/120 | 4 | 10,000g |
+| brigantine | 双桅帆船 | Brigantine | sail | *(S)* | 2 | 110 | 150 | 24 | 20/60 | 10 | 15,000g |
+| nao | 瑙船 | Nao | sail | *(S)* | 3 | 140 | 300 | 16 | 25/80 | 10 | 22,000g |
+| carrack | 卡拉克帆船 | Carrack | sail | *(S)* | 3 | 180 | 450 | 16 | 30/100 | 16 | 40,000g |
+| galleon | 盖伦帆船 | Galleon | hybrid | *(S)* | 3 | 240 | 400 | 20 | 40/150 | 24 | 60,000g |
+| galiot | 小型桨帆船 | Galiot | oar | war (cheap) | 1 | 35 | 25 | 16 | 15/40 | 2 | 2,400g |
+| galleass | 加莱赛战船 | Galleass | oar | war (heavy) | 3 | 110 | 70 | 16 | 60/160 | 6 | 22,000g |
+| fluyt | 弗鲁特商船 | Fluyt | sail | trade (bulk) | 2 | 70 | 180 | 16 | 12/30 | 2 | 14,000g |
+| junk | 福船 | Junk | sail | trade (regional) | 2 | 90 | 140 | 18 | 20/60 | 3 | 16,000g |
+| dhow | 单桅三角帆船 | Dhow | sail | trade (regional) | 2 | 60 | 90 | 18 | 10/30 | 2 | 9,000g |
+| pinnace | 平底船 | Pinnace | sail | trade (coastal) | 1 | 40 | 45 | 16 | 8/20 | 2 | 2,200g |
+| caravela_redonda | 卡拉维拉方形帆船 | Round Caravel | sail | trade (mid) | 2 | 70 | 100 | 20 | 15/40 | 3 | 11,000g |
+| xebec | 小型三桅船 | Xebec | hybrid | war (fast raider) | 2 | 60 | 60 | 24 | 25/80 | 4 | 15,000g |
+
+Role-column note: the new-8 values are the first-pass pins (the
+parentheticals are flavor — the stored value is the enum member); existing
+8 marked *(S)* — S authors them within the role meanings below, except the
+galley whose `war` is pinned. The xebec is the roster's **dated exception
+(~1690s)** — S writes the one-line note in `LICENSE-NOTES.md`.
+
+**`role` meaning** (enum `war | trade | coastal`, locked by A in `10-*`
+§7.3; the semantics live here):
+
+- `war` — combat-first hull: durability and armament dominate the hold.
+- `trade` — hold-first hull for lane cargo runs.
+- `coastal` — small short-range craft (starter- and coaster-class hulls).
+
+Every shipyard row carries the role label 战舰/商船/沿岸
+(`shipyard.role.*`, `80-*` §4.7.12).
+
+**Galley re-role (decision 2 — realism over convenience).** The galley is
+re-rolled as a **warship** by availability and framing, never buffed into
+a trader: `role: "war"`, **price unchanged (10,000g)**, and its stock-list
+entries restricted to **Mediterranean/North-African ports** (P authors the
+lists). Its 2-day endurance stays an **honest warship trait** — a
+raider's hull, not a lane runner.
+
+**Per-port stock.** `facilities.shipyard: 1` (int) becomes
+`facilities.shipyard: [ship_type_ids]` (**≥ 2, ≤ 8**) at all **104**
+shipyard ports (`10-*` §4.4; P is the single writer). Regional flavor:
+Mediterranean → galley/galiot/galleass/xebec; China coast → junk;
+Arabia/India → dhow; Holland → fluyt; capitals stock the widest set.
+Saved ships keep storing `ship_type_id` as today — no save impact.
+
+**Tier gating (decision 23).** Every type gains `tier: 1|2|3` —
+first-pass assignment: tier 1 {latin, sloop, pinnace, galiot}; tier 2
+{caravel, brigantine, galley, dhow, caravela_redonda, fluyt, junk, xebec};
+tier 3 {nao, carrack, galleon, galleass} (S finalizes, then locked;
+validator: ≥ 2 per tier; ≥ 4 dev-3 sovereign ports stock tier-3 hulls).
+The universal filter at **both port kinds** (ships and equipment):
+
+```
+purchasable(port, item) = in_stock ∧ tier ≤ effective_dev(port)
+```
+
+`effective_dev` is the derived development level of `30-*` §4.9 (authored
+floor vs ledger thresholds). An above-dev row grays 需发展度 — it never
+disappears (`80-*` §4.7.12). At start only the 6 dev-3 capitals sell
+tier-3 hulls; a major contestable port grown to dev 3 (the 25,000g ledger
+threshold) unlocks them too.
+
+**Three row states (correction 11).** Shipyard rows render in exactly
+three states — **available / tier-gray 需发展度 / allegiance-gray
+同盟专营** (the render contract is `80-*` §4.7.12). Neutral shipyards
+stock their regional hulls **only under allegiance + dev ≥ 2**; an
+**unallied neutral shows the full list allegiance-grayed** — no
+empty-catalog crash state, and the lock note explains the flip path
+(invest to align the port, grow dev to 2).
+
+**Shared-hold physics kept (decision 2).** `used_capacity` still sums
+cargo + provisions + water (+ cannons × 5, §4.2) on all 16 hulls; no tank
+fields anywhere.
 
 ### 4.4 Fleet composition & flagship rules
 
@@ -224,12 +316,19 @@ Shipyard worked numbers (from `10-*` §7.3):
 - **Unknown `ship_type_id` in a hand-edited save** → the capacity guard is
   skipped with a logged warning (capacity is unknown, and guessing 0 would
   destroy the hold blind); every other invariant is still enforced.
+- **Shipyard at an unallied neutral port** → every hull row renders
+  allegiance-grayed (§4.3.1, `80-*` §4.7.12); the catalog is never empty
+  and never crashes — the stock list exists, it is only buy-gated.
+- **Tier-gray buy attempt** (row above the port's `effective_dev`) → the
+  Buy button is disabled with the 需发展度 note; no transaction path
+  bypasses the §4.3.1 filter.
 
 ## 7. Acceptance Criteria
 
 - [ ] `used_capacity`/`free_capacity` formulas (§4.2) unit-tested incl. the
       cannon term (`cannons × 5`).
-- [ ] Repair per-point prices match `ceil(base_price/400)` for all 8 types.
+- [ ] Repair per-point prices match `ceil(base_price/400)` for all 16
+      types.
 - [ ] Sell price formula exactly `floor(base × 0.5 × dur/max)`.
 - [ ] Flagship promotion is free, port-only, and preserves instance order.
 - [ ] Fleet speed uses the slowest hull (`20-*` §4.4 integration test).
@@ -237,3 +336,19 @@ Shipyard worked numbers (from `10-*` §7.3):
       rejected by invariants and tests.
 - [ ] Cannon UI disabled with the Phase-2 label in P1; refit logic itself
       unit-tested (ready for Phase 2).
+
+**Phase-7 additions (trade empires).**
+
+- [ ] All 16 ShipTypes validate (exact set, i18n parity, ≥ 2 per tier);
+      the existing 8 keep every locked stat byte-identically.
+- [ ] Shipyard rows come from the port's stock list;
+      `purchasable = in_stock ∧ tier ≤ effective_dev` holds at dev-1/2/3
+      ports, tier-3 hulls sell at exactly the dev-3 ports (the 6 capitals
+      at start), and ≥ 4 dev-3 sovereign ports stock tier-3 hulls.
+- [ ] The three row states (§4.3.1) are each reachable in suites,
+      including the unallied-neutral allegiance-gray catalog (no empty
+      state) and the tier-gray 需发展度 note.
+- [ ] The galley sells only at Mediterranean/North-African ports and its
+      price is still 10,000g.
+- [ ] Every stock list includes ≥ 2 hulls at each of the 104 shipyard
+      ports and something buyable at every reachable dev level.

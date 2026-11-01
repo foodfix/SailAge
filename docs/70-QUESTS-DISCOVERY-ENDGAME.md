@@ -42,6 +42,16 @@ battles, tournament battles), `80-*` (S12/S13), `90-*` (migrations).
   (`Quest.rewards.fame`), discovery reports, tournament wins, royal missions.
 - Fame is permanent (no decay) and is the currency of the title ladder (§4.3).
 
+**Phase 7 — allegiance fame & commendation.** **+100 fame** the first
+time each **contestable** port flips to the player's nation — once per
+port per save (`fame_commended`, `90-*` §8.2) — and **+25 fame** each
+time a dev threshold is reached at a contestable port aligned to the
+player's nation (`30-*` §4.9). Each converted port also plays a
+**one-time palace commendation dialog** (ceremony pattern reuse;
+`palace.commend.*`, `80-*` §4.7.13). The title ladder above is untouched.
+The poaching **−5 rep** with the previous owner (`30-*` §4.9) fires
+alongside the fame award.
+
 ### 4.2 Guild quests
 
 - **Offers:** each port guild lists 3 quests; the offer list refreshes every

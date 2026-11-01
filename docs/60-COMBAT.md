@@ -15,6 +15,12 @@ named captains — with runtime pathfinding reduced to pursuit-only A*. The
 battle grid, duel, damage and aftermath rules (§4.2–§4.11.10) are unchanged,
 and the S10 descriptor shape is unchanged (§4.11.11.3).
 
+**Phase 7 (§4.11.12–§4.11.14).** Equipment grows to the 24-item tiered
+content set with two new modifier keys and rare named-pirate drops; the
+ecology docks lane traders at alignment-open ports, serves every neutral
+port with nationless coasters, and credits port-call tariff into host
+treasuries. The battle rules (§4.2–§4.11.10) are unchanged.
+
 ## 2. Artifacts
 
 | Path | Contents |
@@ -24,8 +30,8 @@ and the S10 descriptor shape is unchanged (§4.11.11.3).
 | `scripts/combat/battle_sim.gd` | turn engine (RefCounted, deterministic-seedable) |
 | `scripts/combat/ai_fleet.gd` | enemy decision rules (§4.9) |
 | `scripts/world/npc_fleets.gd` | world-map NPC fleet ecology — 8 roles, lane routing, auto-resolve, wreckage (§4.1, §4.11.11) |
-| `data/npc_config.json` `npc_captains.json` `named_pirates.json` `trade_routes_built.json` | Phase-5 fleet content (schemas `10-*`; authored by tasks A/D/E/F) |
-| `data/equipment.json` | Phase-2 equipment content set (§4.11.13) |
+| `data/npc_config.json` `npc_captains.json` `named_pirates.json` `trade_routes_built.json` | Phase-5 fleet content (schemas `10-*`; authored by tasks A/D/E/F); Phase 7 adds the `neutral_coasters_mult` line (§4.11.14) and `named_pirates.drop` (§4.11.13) |
+| `data/equipment.json` | Phase-2/7 equipment content set (§4.11.13 — 24 tiered items from Phase 7) |
 | GameState additions | `npc_fleets` (fleet dicts, §4.11.11), `wrecks`, battle outcomes; Phase 5 saves as `SAVE_VERSION = 5` (no migration, v4 refused — `90-*` §8.2) |
 
 ## 3. Dependencies
@@ -408,6 +414,10 @@ because the bracket never repairs between battles.
   - **Tournaments (Phase 3).** `enemy_kind = "tournament"` is not a nation
     and contributes **no** reputation delta of any kind (no −20, no +2, no
     bounty).
+- **Rare drops (Phase 7):** a named pirate's captain sunk **or captured**
+  credits that captain's `data/named_pirates.json` `drop` item —
+  captain-id keyed, granted through the §4.11.13 flow — on top of the
+  salvage gold above.
 - **Return:** the fleet is placed on the contact tile, the hostile fleet is
   removed (`NpcFleets.remove`), and — Phase 2 — a spawn immunity of **3
   days** was recorded for that marker kind (§4.8; **retired in Phase 5**,
@@ -866,24 +876,110 @@ Perf gates (measured in tools suites — tasks J/M):
 - Missing `equipment` keys (old save, hand-edited file) read as empty slots —
   the accessors default, they never fail.
 
-#### 4.11.13 Equipment content set (8 items, Phase 2)
+**Phase-7 modifier keys (extends the modifier schema; `10-*` §4.6).** Two
+new optional keys join `combat`/`luck`/`durability`/`speed`:
 
-Locked list for `data/equipment.json` (same field schema as `10-*` §4.6).
-Prices are `money`; modifiers use §4.11.12 semantics.
+- **`storm_damage_pct`** — integer percent (authored **negative** for
+  mitigation). Ship-side: read from that ship's two slots (figurehead +
+  sail, summed). The hull's storm damage (`SailingSimLib.storm_damage_for`,
+  `20-*` §4.7) gains the extra multiplier
+  `(100 + Σ storm_damage_pct) / 100` — the same seam the luck multiplier
+  and the sail-trim multipliers already flow through, floored once with
+  the rest of the product (a −25% sail on a hull taking 4 points takes
+  `floor(4 × 0.75)` = 3).
+- **`scurvy_delay_days`** — integer ≥ 0. Fleet-side (scurvy is one fleet
+  counter, `20-*` §4.9): the water-shortfall counter fires
+  `game_over("scurvy")` at `7 + Σ scurvy_delay_days` shortfall days, the
+  sum over every equipped item aboard the fleet's ships. The
+  per-shortfall-day crew loss (`max(1, floor(crew × 0.05))`) and the
+  reset on a fully supplied day are unchanged — only the game-over
+  threshold moves.
 
-| id | zh | en | slot | modifiers | price |
-|---|---|---|---|---|---|
-| `eq_cutlass` | 水手弯刀 | Sailor's Cutlass | weapon | `combat` +3 | 400 |
-| `eq_rapier` | 贵族细剑 | Noble's Rapier | weapon | `combat` +5 | 1200 |
-| `eq_breastplate` | 胸甲 | Breastplate | armor | `combat` +2 | 700 |
-| `eq_lucky_charm` | 幸运护符 | Lucky Charm | armor | `combat` +1, `luck` +5 | 900 |
-| `eq_mermaid_figurehead` | 美人鱼船首像 | Mermaid Figurehead | figurehead | `durability` +10 | 1500 |
-| `eq_dragon_figurehead` | 龙首船像 | Dragon Figurehead | figurehead | `durability` +20 | 3200 |
-| `eq_cotton_sails` | 棉帆 | Cotton Sails | sail | `speed` +1 | 1000 |
-| `eq_storm_sails` | 风暴帆 | Storm Sails | sail | `speed` +1, `durability` +5 | 2600 |
+Any other modifier key is a validator error (`10-*` §8).
 
-Buy price = `price`; sell-back = `floor(price × 0.5)`. All items are sold at
-every Phase-1 shipyard (regional restrictions OUT OF SCOPE (phase 3)).
+#### 4.11.13 Equipment content set (24 items, Phase 7)
+
+Phase 7 replaces the Phase-2 8-item locked table with the **24-item
+tiered set** (6 items per slot × the 4 slots). S authors the exact list
+(exact-set lock, `10-*` §4.6); the Phase-2 eight — `eq_cutlass`,
+`eq_rapier`, `eq_breastplate`, `eq_lucky_charm`, `eq_mermaid_figurehead`,
+`eq_dragon_figurehead`, `eq_cotton_sails`, `eq_storm_sails` — stay in the
+set, re-tiered, their Phase-2 prices and modifiers preserved (the
+historical table lives in the Phase-2 docs). Rules pinned here:
+
+- **Schema.** Every item keeps `id`, `name {zh,en}`, `slot`, `modifiers`,
+  `price` (`10-*` §4.6) and gains **`tier: 1|2|3`** plus optional
+  **`rare: true`** — exactly **2 tier-1 + 2 tier-2 + 2 tier-3 per slot**
+  (2/2/2). Prices sit in the **300g–6,000g** band; guideline: tier 1 ≤
+  1,500g, tier 2 ≤ 3,500g, tier 3 above (S finalizes, then locked). Buy
+  price = `price`; sell-back = `floor(price × 0.5)` — unchanged.
+- **Per-port stock.** `facilities.equipment_stock: [ids]` (**≥ 2** at
+  every shipyard port), regional flavor as the ships (`40-*` §4.3.1); the
+  universal tier filter applies —
+  `purchasable = in_stock ∧ tier ≤ effective_dev(port)` (`30-*` §4.9) —
+  with the same grayed rows as `40-*` §4.3.1, **including the neutral
+  allegiance gate** (allegiance + dev ≥ 2). The Phase-2 "sold at every
+  shipyard" rule is retired.
+- **Rare drops (4 items; correction 10).** Exactly four items carry
+  `rare: true`:
+  - **never in any stock list** (validator-asserted) and **never
+    tier-gated** — they are never purchasable at all, so no stock UI ever
+    renders them (`80-*` §4.7.12);
+  - `data/named_pirates.json` gains **`drop: <equipment_id>`** per entry,
+    each referencing one `rare: true` item (validator cross-check);
+  - **flow (keyed by the sunk/captured captain id):** when a battle ends
+    with a named pirate's captain sunk or captured (§4.11.10), the
+    aftermath matches `captain.named_id` against the four
+    `named_pirates.json` ids — a match credits that entry's `drop` item;
+    a captain with no famous-id match (unnamed pirates, successor
+    captains) drops nothing. The item equips through the standing replace
+    rule (§4.11.12): `weapon`/`armor` fit the player's slots,
+    `figurehead`/`sail` fit the **flagship**; an occupied slot sells the
+    displaced item back at `floor(price × 0.5)` in the same grant, and
+    the after-action dialog reports what was fitted and what sold back.
+
+#### 4.11.14 NPC trade at ports (Phase-7 amendment — pairs with `30-*` §4.9/§4.10)
+
+**Trader docking at aligned ports (decision 12, generalized by 25).**
+Traders of nation N on any of the 17 lanes may dock at any port whose
+**effective alignment == N** — protected own ports plus contestable ports
+aligned to N (sovereign non-core and neutral alike). Standing port-call
+rules are unchanged (≤ 30 units of one good per call, hold 40, 2-day
+dwell, the `30-*` §4.4 sell rule at `factor > 1.0`). Rival-aligned or
+unallied ports get no lane traders. This **amends the Phase-6
+own-nation-only docking pin** (`npc_fleets.gd` L4679-4694; the `10-*`
+§7.1 "no NPC fleet serves a neutral port" line and the matching `30-*`
+wording are reworded by tasks A/B).
+
+**Nationless coasters everywhere (decision 18; correction 15).** Every
+neutral port — unallied included — receives ~1 nationless coaster
+(中立灰 livery, the nationless-pool precedent) hopping to the **nearest
+ports regardless of ownership** — border-crossing local trade. Standing
+coaster pins are unchanged: ≤ 5 units traded per call, hold 10,
+saturation `qty ≤ 100 − stock`, never sell into `factor ≤ 1.0`, never
+triggers contact (§4.1.1; lootable coasters stay Phase-8).
+
+- **Locality is the anti-imbalance guard:** nearest-port hops only, never
+  lanes — long-distance specialty trade stays the player's domain.
+- **Goods scope (decision 21):** coasters trade **staples ∪ middle only**
+  — never luxury/specialty/exclusive; margin selection stays free within
+  that set. Lane traders keep the standing exclusive rule (`30-*` §4.4).
+- **Spawn budget:** new data line **`neutral_coasters_mult := 0.75`** in
+  `data/npc_config.json` (correction 15; the nation-line
+  `coasters_mult_per_port` keeps its meaning); task N re-derives the
+  fleet-cap **288** arithmetic and re-proves **day tick ≤ 75 ms** and
+  **pursuit A\* ≤ 250 ms** at the added spawn count (correction 2; the
+  §4.11.11.5 gates are unchanged as budgets).
+
+**NPC tax crediting (decisions 19/20).** Traders and sovereign coasters
+pay the unified tariff into the host treasury on their port-call trades —
+through `Allegiance.credit_tax` (the C contract, `80-*` §4.9) reusing the
+walked totals already computed for the call; no profit-and-loss
+accounting anywhere. Nationless coasters credit nothing (no host to pay).
+NPC-sourced tax is capped **2,000g per nation per month** (treasuries,
+`30-*` §4.9); rates are the unified tariff of `30-*` §4.10 (5% aligned /
+20% foreign, permits applied). Flow-economy fit: coasters damp local
+extremes, never erase them (the `IMPLEMENT-Phase7.md` §2.9 gate 6).
 
 ### 4.12 Module interfaces (pins for `IMPLEMENT-Phase2.md`)
 
@@ -1249,6 +1345,27 @@ Duel round sequence (player combat 12 + cutlass 3):
 - [ ] Treasure fleets sail their historical lanes on days
       45/60/75/90/105/120; a defeated named pirate respawns +30 days under
       a new name; captain names survive save/load byte-identically.
-- [ ] Perf gates (§4.11.11.5): day tick ≤ 50 ms @ cap 288 and ≤ 150 ms @
-      extreme (≈ 1100 fleets), linear marginal cost, save ≤ 2 MB @ extreme,
-      zero runtime pathfinding for lane traffic.
+- [ ] Perf gates (§4.11.11.5, as re-pinned by the unified-movement
+      amendment): day tick ≤ 75 ms @ cap 288 and ≤ 350 ms @ extreme
+      (≈ 1100 fleets), linear marginal cost, save ≤ 2 MB @ extreme, zero
+      runtime pathfinding for lane traffic.
+
+**Phase-7 additions (trade empires).**
+
+- [ ] Equipment set: 24 items validate (6 per slot, 2/2/2 tiers, prices
+      300g–6,000g, i18n parity); the Phase-2 eight keep their prices and
+      modifiers.
+- [ ] `storm_damage_pct` / `scurvy_delay_days` act exactly per §4.11.12
+      (ship-side product floored once; scurvy threshold `7 + Σ delay`).
+- [ ] Rare items: never in any stock list, never purchasable; defeating a
+      named pirate credits its `drop` item exactly once (famous-id keyed;
+      successors and unnamed pirates drop nothing); the replace rule
+      sells the displaced item back at half price in the same grant.
+- [ ] A nation-N trader docks at an effective-alignment-N port and never
+      at a rival-aligned or unallied one; an unallied neutral port sees
+      its grey coaster trade; no coaster ever carries
+      luxury/specialty/exclusive goods.
+- [ ] Host treasuries rise deterministically after an NPC port-call trade
+      (`Allegiance.credit_tax`, walked totals reused); nationless
+      coasters credit nothing; the NPC-sourced tax cap is 2,000g per
+      nation per month.
