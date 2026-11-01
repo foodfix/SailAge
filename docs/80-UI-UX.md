@@ -15,7 +15,10 @@ sighting surfaces (§4.5.2, §4.6.3, §4.7.7–§4.7.9). Phase 6 adds the two
 input modes (Step/Helm), the sail-trim and wait-at-sea keys, the seasonal
 HUD indicators, the chart wind/current/ice layers, the S19 input/current/
 debug rows and the omniscient debug chart (§4.3, §4.5, §4.6, §4.6.3,
-§4.7.10).
+§4.7.10). Phase 7 adds the trade-empire surfaces — market listing/特产/
+tariff/invest-gate rows, shipyard role labels + three row states, palace
+permit row + commendation dialog, tavern investment telegraphs
+(§4.7.11–§4.7.15) — and pins the W3/W4 symbol contracts (§4.9).
 
 ## 2. Artifacts
 
@@ -159,7 +162,11 @@ modes regardless of trim (`20-*` §4.17).
   `world.ice.*`, `world.wait.*`, `world.calendar.*` (HUD/sailing),
   `settings.input.*`, `settings.current.*`, `settings.debug.*` (S19),
   `chart.wind.*`, `chart.current.*`, `chart.ice.*` (chart layers) and
-  `debug.*` (debug chart — §4.7.10).
+  `debug.*` (debug chart — §4.7.10), and the Phase-7 families
+  `market.specialty.*`, `market.tax.*`, `market.exclusive.*`,
+  `market.invest_gate.*`, `shipyard.role.*`, `shipyard.tier.*`,
+  `palace.permit.*`, `palace.commend.*`, `tavern.invest.*`
+  (§4.7.15).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - Placeholders use `{name}` syntax, substituted by code:
@@ -649,8 +656,9 @@ chart adds:
 - **Load:** title-screen Load (always) + F9 quick-load slot 1 (with confirm).
   Loading routes to S4 if `current_port` set, else S3.
 - No autosave.
-- **Save version:** current format is **version 4** (`90-*` §8.2); loading a v1,
-  v2 or v3 save migrates it forward (`MIGRATIONS[1..3]`).
+- **Save version:** current format is **version 7** (`90-*` §8.2;
+  Phase 7). There is **no migration chain** — a payload older than v7
+  (v6 included) is refused like any corrupt or future-version file.
 - Corrupt or future-version file → slot line shows `ui.save.invalid` and is
   not selectable (`90-*` §8.2).
 
@@ -739,6 +747,7 @@ bottom:
   the window is open, `tournament.blocked_bounty` / `tournament.closed` (out
   of window) / `tournament.entered` otherwise.
 - `Retire` row (duke only) → `palace.retire.confirm`.
+- Permit row + commendation dialog (Phase 7, §4.7.13).
 
 **S16 `ending_screen.tscn`** (root scene, not a modal): dimmed background, a
 centered panel with `ending.title`, the six summary rows of `70-*` §4.7, and
@@ -971,7 +980,9 @@ decision 9).
 - **Tavern rumor rows (locked):** a rumor row source = live fleets within
   Chebyshev 40 ("an ottoman convoy left Istanbul for Alexandria") +
   departures/arrivals at this port within 3 days + demand-event telegraphs
-  (all ui_strings zh/en; event telegraphs per `30-*` §4.5).
+  (all ui_strings zh/en; event telegraphs per `30-*` §4.5). Phase 7 adds
+  the investment-telegraph source, rumor row kind `"investment"`
+  (§4.7.14).
 - **All sighting strings** are `captain.*` keys (§4.7.9), zh/en.
 
 #### 4.7.9 Phase-5 fleet `ui_strings.json` inventory (`captain.*` / `settings.*` / `market.stock.*`)
@@ -1064,6 +1075,163 @@ Notes pinning the set exactly:
   zh/en at merge — the G list above needs none (the top bar composes
   `{y}年{m}月` numerically).
 
+#### 4.7.11 Market rows (S5, Phase 7 — pairs with `30-*` §4.2/§4.4/§4.9/§4.10)
+
+The trade table becomes listing-rule driven and gains the allegiance
+surfaces. Rows stay 32px, palette-only (§4.8); every new string is
+§4.7.15's.
+
+- **Listing rule (`30-*` §4.2, behavior change):** a port lists a good
+  iff it produces or demands it (staples ubiquitous by the data rule) —
+  **unlisted goods never render**; the Phase-≤6 "20 rows everywhere"
+  behavior is gone.
+- **★ 特产 badge + header:** rows for `port.produces` members carry the
+  ★ badge (`market.specialty.badge`); a header line above the table names
+  **up to 3** of them (`market.specialty.header`, `特产:{names}`).
+- **不收购 rows (flow-economy market direction):** a producing port never
+  buys its own produced goods — those rows' Sell button is disabled with
+  the reason `market.not_bought` (`30-*` §4.2).
+- **Exclusive (专营货) rows:** an exclusive good renders for everyone but
+  buy/sell is alignment-gated — a non-entitled player sees the row grayed
+  with the lock note `market.exclusive.locked` (the port aligned to the
+  player's nation **and dev ≥ 2** activates it; `30-*` §4.9/§4.10).
+- **Tax badge + lines (`30-*` §4.10):** the header badge has **4 states**
+  — `market.tax.badge.in_sphere` (势力内 5%), `market.tax.badge.exempt`
+  (免税), `market.tax.badge.foreign` (外国 20%),
+  `market.tax.badge.unallied` (未同盟 20%) — and the trade dialog carries
+  a tax line **each side** of the totals (`market.tax.buy_line` /
+  `market.tax.sell_line`; the tariff applies after all price math,
+  provisions/water exempt).
+- **Three-state Invest button (decision 26):** the standing Invest 500g
+  button renders (a) **available** (label `market.invest` unchanged);
+  (b) **allowance-exhausted** — disabled with
+  `market.invest_gate.exhausted` plus the hint
+  `market.invest_gate.allowance` (≤ 2,000g per contestable port per
+  month, reset at the month tick, `30-*` §4.9); (c)
+  **diplomacy-blocked** — disabled with `market.invest_gate.blocked`
+  (rep ≥ 0 and no bounty vs the port's current alignment nation). The
+  state comes from the allegiance module's block-reason contract (§4.9).
+- The invested-here discount line (`market.invested_here`) and the
+  §4.7.7 stock/trend/marginal columns are unchanged.
+
+#### 4.7.12 Shipyard row states (S6, Phase 7 — pairs with `40-*` §4.3.1)
+
+Hull rows come from the port's stock list and render in exactly **three
+states** (correction 11); every row also carries its role label
+(`shipyard.role.*`: 战舰/商船/沿岸):
+
+1. **Available** — `in_stock ∧ tier ≤ effective_dev(port)` (effective
+   dev per `30-*` §4.9; guard default 0, §4.9): the normal buy row.
+2. **Tier-gray 需发展度** — in stock but `tier > effective_dev`: grayed,
+   Buy disabled, note `shipyard.tier.need_dev` (需发展度 {dev}).
+3. **Allegiance-gray 同盟专营** — neutral-port rows: neutral shipyards
+   stock their regional hulls **only under allegiance + dev ≥ 2**, so an
+   **unallied neutral shows the full list allegiance-grayed** with the
+   lock note `shipyard.tier.allegiance_locked` — never an empty or
+   crashing state; the note explains the flip path (invest to align the
+   port, grow dev to 2).
+
+The refit tab (§4.7.2) and the equipment buy list are stock-aware too:
+equipment rows follow the same three states under the port's
+`equipment_stock` (`60-*` §4.11.13). **Rare items never render in any
+stock UI** (`60-*` §4.11.13 — drop-only).
+
+#### 4.7.13 Palace permit row + commendation dialog (S13, Phase 7 — pairs with `30-*` §4.10, `70-*` §4.1)
+
+- **Permit row (`palace.permit.*`).** One row under the bays row:
+  - at the player's **own nation's** palaces: 本国免税证 (home charter,
+    **5,000g**, no title/rep gate) — covers every port whose effective
+    alignment == the player's nation, tariff 5% → 0%
+    (`palace.permit.home` + `palace.permit.home.coverage`);
+  - at any **other nation's** palace: 涉外免税证 for **that nation**
+    (**20,000g**, title ≥ Knight, rep ≥ +20) — covers that nation's
+    protected + aligned contestable ports (`palace.permit.foreign` +
+    `palace.permit.foreign.coverage`);
+  - disabled gates: `palace.permit.title_locked` /
+    `palace.permit.rep_locked`;
+  - both kinds are **void** while that nation's bounty stands or rep <
+    −20 — the row shows the void state (`palace.permit.void_bounty` /
+    `palace.permit.void_rep`) and a re-buy costs full price;
+  - held state `palace.permit.home.owned` / `palace.permit.foreign.owned`;
+    purchase toast `palace.permit.bought`; section header
+    `palace.permit.section`.
+- **Commendation dialog (`palace.commend.*`).** The first time a
+  contestable port flips to the player's nation, the palace plays a
+  **one-time** commendation dialog (ceremony pattern reuse; tracked per
+  port per save, `70-*` §4.1): `palace.commend.title` /
+  `palace.commend.body` / `palace.commend.close`.
+
+#### 4.7.14 Tavern investment-telegraph rows (S7, Phase 7 — pairs with `30-*` §4.9)
+
+The Rumors tab gains a second row source, rumor row kind
+**`"investment"`** (the kind string is part of the symbol contract,
+§4.9): monthly NPC counter-investments render as rows
+`{nation} 在 {port} 投资 {amount}g` (`tavern.invest.row`) under the
+section header `tavern.invest.header`. Rows are visible for a **30-day
+window**, scoped to the **invested port's band** — a tavern shows exactly
+the rows whose invested port lies in the same band. Rows come from the
+allegiance module's month-investment query (§4.9) through the
+`npc_intel.gd` guard read (default: no rows); they expire with the
+window like the demand-event telegraphs (§4.7.8).
+
+#### 4.7.15 Phase-7 `ui_strings.json` inventory (orchestrator-merge contract)
+
+This table is the **checklist the master merges into
+`data/ui_strings.json`** after W1 (no subagent edits the file — the
+Phase-6 §4.7.10 protocol). M (market/tavern) and F (shipyard/palace) use
+exactly these keys and must not invent others; zh/en complete,
+placeholders matched per key (validator-enforced).
+
+| Key | zh | en |
+|---|---|---|
+| `market.specialty.badge` | 特产 | Specialty |
+| `market.specialty.header` | 特产:{names} | Specialties: {names} |
+| `market.not_bought` | 不收购 | Not bought here |
+| `market.tax.badge.in_sphere` | 势力内 5% | In sphere 5% |
+| `market.tax.badge.exempt` | 免税 | Tax-free |
+| `market.tax.badge.foreign` | 外国 20% | Foreign 20% |
+| `market.tax.badge.unallied` | 未同盟 20% | Unallied 20% |
+| `market.tax.buy_line` | 买入关税({rate}%):−{gold} 金 | Buy tariff ({rate}%): −{gold} gold |
+| `market.tax.sell_line` | 卖出关税({rate}%):−{gold} 金 | Sell tariff ({rate}%): −{gold} gold |
+| `market.exclusive.locked` | 同盟专营:同盟且发展度 ≥ 2 后开放 | Allegiance-exclusive: opens when aligned at dev ≥ 2 |
+| `market.invest_gate.allowance` | 本月已投 {invested} / {cap} 金 | Invested {invested} / {cap}g this month |
+| `market.invest_gate.exhausted` | 本月投资上限已达 | Monthly investment allowance used up |
+| `market.invest_gate.blocked` | 声望不足或与{nation}悬赏在身,无法投资 | Blocked: rep below 0 or a bounty with {nation} |
+| `shipyard.role.war` | 战舰 | Warship |
+| `shipyard.role.trade` | 商船 | Trade ship |
+| `shipyard.role.coastal` | 沿岸 | Coastal |
+| `shipyard.tier.need_dev` | 需发展度 {dev} | Requires development {dev} |
+| `shipyard.tier.allegiance_locked` | 同盟专营:投资使其归属本国且发展度 ≥ 2 后开放 | Allegiance-exclusive: align it by investing; opens at dev ≥ 2 |
+| `palace.permit.section` | 免税证 | Tax permits |
+| `palace.permit.home` | 本国免税证 — 5,000 金 | Home charter — 5,000g |
+| `palace.permit.home.coverage` | 覆盖本国及同盟港:关税 5% → 0% | Covers own + aligned ports: tariff 5% → 0% |
+| `palace.permit.home.owned` | 本国免税证:已持有 | Home charter: held |
+| `palace.permit.foreign` | 涉外免税证({nation})— 20,000 金 | Foreign permit ({nation}) — 20,000g |
+| `palace.permit.foreign.coverage` | 覆盖该国的保护港与同盟港:关税 5% → 0% | Covers that nation's protected + aligned ports: tariff 5% → 0% |
+| `palace.permit.foreign.owned` | 涉外免税证({nation}):已持有 | Foreign permit ({nation}): held |
+| `palace.permit.title_locked` | 爵位需达到骑士 | Requires the title of Knight |
+| `palace.permit.rep_locked` | 声望需达到 +20 | Requires reputation +20 |
+| `palace.permit.void_bounty` | 悬赏在身,免税证失效;需全价重购 | Void while your bounty stands; rebuy at full price |
+| `palace.permit.void_rep` | 声望低于 −20,免税证失效;需全价重购 | Void below −20 reputation; rebuy at full price |
+| `palace.permit.bought` | 已购入免税证。 | Permit purchased. |
+| `palace.commend.title` | 褒奖令 | Commendation |
+| `palace.commend.body` | {nation}为{port}归入版图向你颁授褒奖令。 | {nation} commends you for bringing {port} into its fold. |
+| `palace.commend.close` | 领受 | Accept with thanks |
+| `tavern.invest.header` | 投资动向 | Investment news |
+| `tavern.invest.row` | {nation} 在 {port} 投资 {amount} 金 | {nation} invested {amount}g in {port} |
+
+Notes pinning the set exactly:
+
+- `market.invest` / `market.invested_here` / `market.invest_cap` already
+  exist (Phase 1); only the keys above are new.
+- `market.not_bought` is the 不收购 sell-disabled reason — it lives in the
+  plain `market.*` namespace beside its siblings, not in a new family.
+- `tavern.invest.row` composes the telegraph text; the amounts and names
+  are supplied by code (`30-*` §4.9 format `{nation} 在 {port} 投资
+  {amount}g`).
+- The role labels 战舰/商船/沿岸 are the §2.2-locked zh texts
+  (`40-*` §4.3.1).
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -1104,6 +1272,41 @@ Notes pinning the set exactly:
 - **Audio (placeholder note):** silence in Phase 1; hook method
   `EventBus.play_sfx(name)` exists as a no-op; free-asset replacement pass is
   a Phase-3 task.
+
+### 4.9 W3/W4 symbol contracts (Phase 7 — the launch condition)
+
+These are the cross-worktree contracts for the Phase-7 W3/W4 code tasks
+(K/L/M/F/N/V): **names exact**, quoted verbatim from the ratified backlog
+(`IMPLEMENT-Phase7.md`, task C). This section is the **single statement**
+of the list — implementing tasks, suites and wave prompts reference it by
+section number and never restate it.
+
+```
+Allegiance.effective_alignment(port_id) -> String
+Allegiance.dev(port_id) -> int
+Allegiance.tariff_mille(port_id, nation_id) -> int        # 0/500/2000 after permits — called by trade_engine and the NPC crediting
+Allegiance.invest_block_reason(port_id) -> String         # "" or a ui_strings key
+Allegiance.last_month_investments() -> Array
+Allegiance.credit_tax(port_id, payer_nation, gold) -> void
+Allegiance.seed_new_game() -> void
+Allegiance.month_tick() -> void
+
+npc_config.json key: neutral_coasters_mult
+rumor row kind: "investment"
+```
+
+- `Allegiance` is a **new autoload** (`scripts/port/allegiance.gd`, task L
+  owns the implementation, `90-*` module row). L implements exactly these
+  signatures; K/M/F/N/V call only these.
+- **Guard-call convention (order-independent merges).** Every W3/W4
+  module **guard-reads** `Allegiance` (autoload-present check, the
+  Phase-6 guard pattern of `60-*` §4.12.3) and falls back to the safe
+  defaults: **dev 0 / alignment = the port's data `nation_id` / tariff
+  2000 / no telegraph rows** — so a module merges green before, with, or
+  after the allegiance engine lands.
+- Consumers of the block-reason contract resolve a non-empty return
+  through `I18n.t` (it is a `ui_strings` key, §4.7.15's
+  `market.invest_gate.*` states).
 
 ## 5. Data Examples
 
@@ -1208,4 +1411,25 @@ Notes pinning the set exactly:
       (omniscient, live ecology, network, scrubber, info strip) renders
       read-only and mutates nothing.
 - [ ] Phase 6: zero `<key>` fallbacks zh/en for the §4.7.10 families
+      (orchestrator merge complete).
+
+**Phase-7 additions (trade empires).**
+
+- [ ] Market rows follow the listing rule — unlisted goods never render;
+      the ★ badge + 特产 header, 不收购 disabled sells, grayed exclusive
+      rows with the lock note, the 4-state tax badge and both tax lines
+      all render from §4.7.15's keys (zero `<key>` fallbacks zh/en).
+- [ ] The Invest button renders its three states — available /
+      allowance-exhausted with the hint / diplomacy-blocked — matching
+      the §4.9 block-reason contract.
+- [ ] Shipyard rows render the three §4.7.12 states: tier-gray 需发展度
+      at an above-dev port, allegiance-gray 同盟专营 on every hull row at
+      an unallied neutral (no empty state), role labels on every row;
+      rare equipment never appears in any stock UI.
+- [ ] The palace permit row plays purchase and void end-to-end for both
+      kinds (5,000g home / 20,000g foreign, title/rep gates); the
+      commendation dialog plays exactly once per converted port.
+- [ ] Tavern telegraph rows of kind `"investment"` appear for the 30-day
+      window, scoped to the invested port's band, and expire.
+- [ ] Phase 7: zero `<key>` fallbacks zh/en for the §4.7.15 families
       (orchestrator merge complete).
