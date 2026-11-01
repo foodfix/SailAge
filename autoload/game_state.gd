@@ -15,6 +15,11 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 ## The living-sea fleet sim (docs/60-* §4.12.3); `new_game` runs the seeded
 ## initial fill through it (docs/60-* §4.1.2).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+## The Phase-7 allegiance module's path (`90-*` §4 project layout): the fresh
+## run's allegiance/permit/treasury seeding is a guarded dynamic call, the
+## docs/80-* §4.9 guard-call convention — a no-op keeps a fixture without the
+## module alive (the module itself always ships on main).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 ## UI language; locked default "en" (user toggles via the `L` key / top bar).
 var locale: String = "en"
@@ -83,6 +88,20 @@ var named_pirate_respawns: Dictionary = {}
 ## (docs/60-* §4.11.11.4 task L pin): `{port_id, kind, role, nation_id,
 ## fleet_id, day}`, newest last, capped at 128. Never saved.
 var npc_port_log: Array = []
+
+# --- Phase 7 saved state (docs/90-* §8.1, save_version 7) -------------------
+#
+# The five v7 keys — `permits`, `port_allegiance`, `month_invested`,
+# `nation_treasuries`, `fame_commended` — are deliberately **not** GameState
+# fields: their runtime owner is `scripts/port/allegiance.gd` (statics, the
+# persistence seam documented there), so the ledgers/flags can never desync
+# from the allegiance resolution that reads them (the correction-8 logic —
+# `90-*` §8.2). SaveSystem.snapshot() writes `Allegiance.dump_state()`
+# verbatim and every load restores through `Allegiance.restore_state()`
+# (missing keys keep the seeded defaults). `new_game` seeds a fresh run
+# through `Allegiance.seed_new_game()`: contestable sovereigns
+# `{owner: 6,000}`, neutrals empty, treasuries 5,000g, permits/fame/counters
+# reset (docs/30-* §4.9, `80-*` §4.9 contract).
 
 # --- Phase 3 saved state (docs/90-* §8.1, save_version 3) -------------------
 
@@ -283,6 +302,13 @@ func new_game(nation_id: String, route: bool = true,
 	named_pirate_respawns = {}
 	npc_port_log = []
 	EconomyLib.reset_overrides()
+	# docs/90-* §8.1 Phase-7 fields: the allegiance/permit/treasury state is
+	# seeded right after the reset (the persistence seam — `80-*` §4.9
+	# contract): contestable sovereigns `{owner: 6,000}` (allied, below
+	# dev-1's 10,000g), neutrals empty, every treasury 5,000g, permits/fame
+	# flags/counters/telegraphs cleared. Runs before the fleet fill so the
+	# first frames already see the seeded world.
+	_seed_allegiance()
 	# docs/60-* §4.1.2: the seeded initial fill to half the core cap runs
 	# here and only here, after the stock block exists (the fill never moves
 	# stocks — spawns carry empty holds), respecting the density preset
@@ -315,6 +341,23 @@ func _route_after_new_game(_start_port_id: String) -> void:
 		change_scene(WORLD_SCENE)
 	else:
 		push_warning("GameState.new_game: neither port nor world scene exists yet")
+
+
+## The Phase-7 allegiance seeding (`90-*` §8.2, `80-*` §4.9 contract):
+## `Allegiance.seed_new_game()` — contestable sovereigns `{owner: 6,000}`,
+## neutrals empty, treasuries 5,000g, permits/fame/counters reset. Guarded
+## dynamic call per the docs/80-* §4.9 guard-call convention: a missing
+## module (never a shipped state) is a logged no-op, not a wedge.
+func _seed_allegiance() -> void:
+	if not ResourceLoader.exists(ALLEGIANCE_PATH, "Script"):
+		push_warning("GameState.new_game: %s missing; allegiance state stays unseeded"
+			% ALLEGIANCE_PATH)
+		return
+	var allegiance: Script = load(ALLEGIANCE_PATH)
+	if allegiance == null or not allegiance.has_method("seed_new_game"):
+		push_warning("GameState.new_game: Allegiance.seed_new_game() unavailable; allegiance state stays unseeded")
+		return
+	allegiance.call("seed_new_game")
 
 
 ## A port's tile as the §8.1 `{x, y}` save shape. Ports carry `lat`/`lon` only
