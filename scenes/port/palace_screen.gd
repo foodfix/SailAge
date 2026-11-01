@@ -1,8 +1,9 @@
 extends Control
 ## Palace (S13) — royal missions, titles, repair bays, bounty pay-off,
-## tournament entry and retirement
-## (docs/70-* §4.3, §4.5, §4.7, §4.9.2, §4.9.4, §4.9.5, §4.9.7;
-## docs/30-* §4.2, §4.7; docs/80-* §4.1, §4.2, §4.7.3).
+## tournament entry, retirement, and the Phase-7 permit row + commendation
+## dialog
+## (docs/70-* §4.3, §4.5, §4.7, §4.9.2, §4.9.4, §4.9.5, §4.9.7, §4.1;
+## docs/30-* §4.2, §4.7, §4.10; docs/80-* §4.1, §4.2, §4.7.3, §4.7.13).
 ##
 ## Every rule lives in `scripts/port/palace_engine.gd`, `scripts/player/fame.gd`,
 ## `scripts/quests/bounty.gd` and `scripts/quests/tournament.gd`; this screen
@@ -10,6 +11,17 @@ extends Control
 ##
 ## With an active bounty from this nation the §4.9.6 exception applies: every
 ## row except `Pay bounty` and `Leave` is disabled (`port.closed_bounty`).
+##
+## Phase 7 (docs/80-* §4.7.13): the §4.10 permit row renders under the bays
+## row — the home charter (5,000g) at the player's own nation's palaces, the
+## foreign permit (20,000g, title ≥ Knight, rep ≥ +20) for the host nation
+## elsewhere, with held / void (`palace.permit.void_*`) / locked
+## (`palace.permit.*_locked`) states — and the first flip of a contestable
+## port plays the one-time commendation dialog (`palace.commend.*`). Both
+## surfaces guard-read task L's `palace_engine.gd` seam (the `engine_override`
+## member is the suite's spy seam; the fallbacks are the §4.10 docs numbers
+## and live `Fame`/`Character`/`Bounty` answers), so this screen works against
+## today's engine AND the upgraded one.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
@@ -20,6 +32,7 @@ const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+const CharacterLib := preload("res://scripts/player/character.gd")
 ## Task L (docs/80-* §4.7.8): the bounty board lists docked hunter captains.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
@@ -29,7 +42,43 @@ const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
 ## S10 battle screen, for tournament bouts (`70-*` §4.9.7).
 const BATTLE_SCENE := "res://scenes/combat/battle_screen.tscn"
 
+# --- Phase-7 permit + commendation constants (docs/30-* §4.10, 70-* §4.1,
+# --- 80-* §4.7.13) ---------------------------------------------------------
+
+## The two §4.10 permit kinds.
+const PERMIT_HOME := "home"
+const PERMIT_FOREIGN := "foreign"
+## §4.10 prices — also the guard defaults when task L's engine has not landed.
+const HOME_PERMIT_PRICE := 5000
+const FOREIGN_PERMIT_PRICE := 20000
+## §4.10 gates: the foreign permit needs title ≥ Knight and rep ≥ +20; both
+## kinds void while that nation's bounty stands or rep < −20.
+const FOREIGN_PERMIT_MIN_REP := 20
+const PERMIT_VOID_MIN_REP := -20
+## ui_strings families (C's §4.7.15 inventory — the master merges them; every
+## render path below falls back silently until then, never "<key>").
+const PERMIT_SECTION_KEY := "palace.permit.section"
+const PERMIT_HOME_KEY := "palace.permit.home"
+const PERMIT_HOME_COVERAGE_KEY := "palace.permit.home.coverage"
+const PERMIT_HOME_OWNED_KEY := "palace.permit.home.owned"
+const PERMIT_FOREIGN_KEY := "palace.permit.foreign"
+const PERMIT_FOREIGN_COVERAGE_KEY := "palace.permit.foreign.coverage"
+const PERMIT_FOREIGN_OWNED_KEY := "palace.permit.foreign.owned"
+const PERMIT_TITLE_LOCKED_KEY := "palace.permit.title_locked"
+const PERMIT_REP_LOCKED_KEY := "palace.permit.rep_locked"
+const PERMIT_VOID_BOUNTY_KEY := "palace.permit.void_bounty"
+const PERMIT_VOID_REP_KEY := "palace.permit.void_rep"
+const PERMIT_BOUGHT_KEY := "palace.permit.bought"
+const COMMEND_TITLE_KEY := "palace.commend.title"
+const COMMEND_BODY_KEY := "palace.commend.body"
+const COMMEND_CLOSE_KEY := "palace.commend.close"
+
 var route_to_port: bool = true
+## Test seam (the `route_to_port` convention): when set, the permit /
+## commendation engine calls go to this duck-typed object instead of
+## `PalaceEngineLib` statics, so a suite can drive every row state and assert
+## the call-through while task L's engine is still in flight.
+var engine_override: Object = null
 signal back_requested
 signal title_granted_here(nation_id: String, rank: String)
 signal retired_here
@@ -56,6 +105,26 @@ signal tournament_started(round_number: int)
 @onready var _confirm: Control = $ConfirmDialog
 @onready var _toast: Label = $Layout/VBox/Toast
 @onready var _toast_timer: Timer = $ToastTimer
+## Phase-7 permit section (§4.7.13): header + one row per applicable kind.
+@onready var _permit_header: Label = $Layout/VBox/Rows/PermitHeader
+@onready var _permit_rows: Dictionary = {
+	PERMIT_HOME: {
+		"row": $Layout/VBox/Rows/PermitHomeRow,
+		"label": $Layout/VBox/Rows/PermitHomeRow/Label,
+		"note": $Layout/VBox/Rows/PermitHomeRow/Note,
+		"buy": $Layout/VBox/Rows/PermitHomeRow/Action,
+	},
+	PERMIT_FOREIGN: {
+		"row": $Layout/VBox/Rows/PermitForeignRow,
+		"label": $Layout/VBox/Rows/PermitForeignRow/Label,
+		"note": $Layout/VBox/Rows/PermitForeignRow/Note,
+		"buy": $Layout/VBox/Rows/PermitForeignRow/Action,
+	},
+}
+## The §4.7.13 commendation dialog (message + OK chrome, `dialog_box.tscn`).
+@onready var _commend: Control = $CommendDialog
+## Ids behind the open commendation, so a locale change recomposes the text.
+var _commend_info: Dictionary = {}
 
 var _port_id: String = ""
 var _nation_id: String = ""
@@ -97,6 +166,10 @@ func _ready() -> void:
 	_bounty_button.pressed.connect(pay_bounty)
 	_tournament_button.pressed.connect(enter_tournament)
 	_retire_button.pressed.connect(request_retire)
+	(_permit_rows[PERMIT_HOME]["buy"] as Button).pressed.connect(
+		buy_permit.bind(PERMIT_HOME))
+	(_permit_rows[PERMIT_FOREIGN]["buy"] as Button).pressed.connect(
+		buy_permit.bind(PERMIT_FOREIGN))
 	if _confirm.has_signal("confirmed"):
 		_confirm.confirmed.connect(retire)
 	_port_id = _read_current_port()
@@ -151,6 +224,15 @@ func all_text() -> Array:
 	]
 	if retire_row_visible():
 		out.append(_retire_button.text)
+	for kind in [PERMIT_HOME, PERMIT_FOREIGN]:
+		var widgets := permit_widget(kind)
+		if widgets.is_empty() or not (widgets["row"] as Control).visible:
+			continue
+		out.append((widgets["label"] as Label).text)
+		out.append((widgets["note"] as Label).text)
+		out.append((widgets["buy"] as Button).text)
+	if commendation_open():
+		out.append((_commend as Control).message_text())
 	return out
 
 
@@ -330,11 +412,13 @@ func refresh() -> void:
 	_bind_title()
 	_bind_mission()
 	_bind_repair()
+	_bind_permit()
 	_bind_bounty()
 	_bind_tournament()
 	_bind_retire()
 	_bind_bounty_board()
 	_apply_closed_state()
+	_check_commendation()
 
 
 func _bind_title() -> void:
@@ -443,7 +527,8 @@ func _apply_closed_state() -> void:
 	if not is_closed():
 		return
 	for button in [_ceremony, _mission_button, _repair_button,
-			_tournament_button, _retire_button]:
+			_tournament_button, _retire_button,
+			_permit_rows[PERMIT_HOME]["buy"], _permit_rows[PERMIT_FOREIGN]["buy"]]:
 		button.disabled = true
 		button.tooltip_text = I18n.t_key("port.closed_bounty")
 
@@ -512,6 +597,234 @@ func _bind_bounty_board() -> void:
 		_board_box.add_child(row)
 
 
+# --- Permits (docs/30-* §4.10, 80-* §4.7.13 — Phase 7) ------------------------
+
+## True when the engine seam answers `method` (the suite's `engine_override`
+## duck-types first; task L's `palace_engine.gd` methods are guard-read so
+## this screen merges green before, with, or after the engine lands).
+func _seam_has(method: String) -> bool:
+	return _seam_target().has_method(method)
+
+
+## The permit/commendation engine target as a Variant (`engine_override` when
+## the suite set it, else `palace_engine.gd` loaded by path — the same lazy
+## pattern `palace_engine._shipyard()` uses for this screen's own engine,
+## because a `class_name` script blocks instance-method calls at parse time).
+func _seam_target() -> Variant:
+	if engine_override != null:
+		return engine_override
+	var path := "res://scripts/port/palace_engine.gd"
+	if not ResourceLoader.exists(path):
+		return null
+	return ResourceLoader.load(path)
+
+
+## Guarded engine call returning `default` when the seam or method is absent.
+## The seam contract (engine-first answers; the defaults below are the docs
+## fallbacks, `30-*` §4.10):
+##   permit_price(port_id, kind, nation_id) -> int
+##   permit_owned(port_id, kind, nation_id) -> bool
+##   permit_void_reason(port_id, kind, nation_id) -> String   # "" or a key
+##   permit_block_reason(port_id, kind, nation_id) -> String  # "" or a key
+##   buy_permit(port_id, kind, nation_id) -> bool
+##   take_commendation() -> Dictionary                        # {} or {nation_id, port_id}
+func _seam_call(method: String, args: Array, default: Variant) -> Variant:
+	var target = _seam_target()
+	if target == null or not target.has_method(method):
+		return default
+	return target.callv(method, args)
+
+
+## The widget dict of a permit row (`{row, label, note, buy}`) — the headless
+## seam for the suites.
+func permit_widget(kind: String) -> Dictionary:
+	var value = _permit_rows.get(kind, null)
+	return value if value is Dictionary else {}
+
+
+## `true` when the §4.7.13 section header is on screen.
+func permit_section_visible() -> bool:
+	return _permit_header != null and _permit_header.visible
+
+
+## The kind this palace sells: the home charter at the player's own nation's
+## palaces, the foreign permit for the host nation elsewhere (`30-*` §4.10:
+## own palaces only / that nation's palaces). `""` outside a capital.
+func _applicable_permit_kind() -> String:
+	if _nation_id.is_empty():
+		return ""
+	var player_nation := str(GameState.player.get("nation_id", ""))
+	return PERMIT_HOME if _nation_id == player_nation else PERMIT_FOREIGN
+
+
+## Every render fact of one permit row, engine-first with the docs fallbacks.
+func _permit_state(kind: String) -> Dictionary:
+	var nation := _nation_id
+	var price := int(_seam_call("permit_price", [_port_id, kind, nation],
+		HOME_PERMIT_PRICE if kind == PERMIT_HOME else FOREIGN_PERMIT_PRICE))
+	var owned := bool(_seam_call("permit_owned", [_port_id, kind, nation], false))
+	var void_key := str(_seam_call("permit_void_reason",
+		[_port_id, kind, nation], _default_void_key(nation)))
+	var gate_key := str(_seam_call("permit_block_reason",
+		[_port_id, kind, nation], _default_gate_key(kind)))
+	return {
+		"price": price, "owned": owned,
+		"void_key": void_key, "gate_key": gate_key,
+	}
+
+
+## Void fallback (the §4.10 conditions, live from the standing modules).
+func _default_void_key(nation: String) -> String:
+	if nation.is_empty():
+		return ""
+	if BountyLib.has_bounty(nation):
+		return PERMIT_VOID_BOUNTY_KEY
+	if CharacterLib.reputation(nation) < PERMIT_VOID_MIN_REP:
+		return PERMIT_VOID_REP_KEY
+	return ""
+
+
+## Gate fallback: the foreign permit needs title ≥ Knight and rep ≥ +20; the
+## home charter has none (`30-*` §4.10).
+func _default_gate_key(kind: String) -> String:
+	if kind != PERMIT_FOREIGN or _nation_id.is_empty():
+		return ""
+	var ranks: Array = FameLib.RANKS
+	if ranks.find(FameLib.title(_nation_id)) < ranks.find(FameLib.RANK_KNIGHT):
+		return PERMIT_TITLE_LOCKED_KEY
+	if CharacterLib.reputation(_nation_id) < FOREIGN_PERMIT_MIN_REP:
+		return PERMIT_REP_LOCKED_KEY
+	return ""
+
+
+func _bind_permit() -> void:
+	var applicable := _applicable_permit_kind()
+	# The whole section stays hidden until its keys merge (and outside a
+	# capital) — labels never print a raw "<key>".
+	var keys_ready := DataLoader.ui_strings.has(PERMIT_SECTION_KEY) \
+		and DataLoader.ui_strings.has(PERMIT_HOME_KEY) \
+		and DataLoader.ui_strings.has(PERMIT_FOREIGN_KEY)
+	_permit_header.visible = keys_ready and not applicable.is_empty()
+	if _permit_header.visible:
+		_permit_header.text = I18n.t_key(PERMIT_SECTION_KEY)
+	for kind: String in [PERMIT_HOME, PERMIT_FOREIGN]:
+		var widgets: Dictionary = _permit_rows[kind]
+		var row: Control = widgets["row"]
+		var show: bool = keys_ready and kind == applicable
+		row.visible = show
+		if not show:
+			continue
+		var state := _permit_state(kind)
+		var is_home: bool = kind == PERMIT_HOME
+		var label: Label = widgets["label"]
+		label.text = I18n.t_key(PERMIT_HOME_KEY) if is_home \
+			else I18n.fmt(PERMIT_FOREIGN_KEY, {"nation": _nation_name()})
+		var note: Label = widgets["note"]
+		var buy: Button = widgets["buy"]
+		buy.text = I18n.t_key("market.buy")
+		buy.tooltip_text = ""
+		var note_key := ""
+		if bool(state["owned"]):
+			note_key = PERMIT_HOME_OWNED_KEY if is_home \
+				else PERMIT_FOREIGN_OWNED_KEY
+			buy.disabled = true
+		elif not str(state["void_key"]).is_empty():
+			note_key = str(state["void_key"])
+			buy.disabled = true
+		elif not str(state["gate_key"]).is_empty():
+			note_key = str(state["gate_key"])
+			buy.disabled = true
+		else:
+			note_key = PERMIT_HOME_COVERAGE_KEY if is_home \
+				else PERMIT_FOREIGN_COVERAGE_KEY
+			# The purchase only exists once the engine seam does; before that
+			# the row renders honestly locked (`ui.not_available`).
+			buy.disabled = not _seam_has("buy_permit")
+			buy.tooltip_text = I18n.t_key("ui.not_available") if buy.disabled \
+				else ""
+		# The note localises with the nation for the foreign row's owned key;
+		# all other note keys are plain.
+		if DataLoader.ui_strings.has(note_key):
+			note.text = I18n.fmt(note_key, {"nation": _nation_name()}) \
+				if (not is_home and note_key == PERMIT_FOREIGN_OWNED_KEY) \
+				else I18n.t_key(note_key)
+			if buy.disabled and note_key in [PERMIT_TITLE_LOCKED_KEY,
+					PERMIT_REP_LOCKED_KEY, PERMIT_VOID_BOUNTY_KEY,
+					PERMIT_VOID_REP_KEY]:
+				buy.tooltip_text = note.text
+		else:
+			note.text = ""
+
+
+## The permit row's click: one call through the engine seam (`30-*` §4.10 —
+## pricing, gates, `GameState.permits` and the treasury credit are all the
+## engine's). Returns false when the seam refuses (or has not landed).
+func buy_permit(kind: String) -> bool:
+	if not _seam_has("buy_permit"):
+		return false
+	var bought := bool(_seam_call("buy_permit",
+		[_port_id, kind, _nation_id], false))
+	if not bought:
+		return false
+	_show_toast(PERMIT_BOUGHT_KEY)
+	refresh()
+	return true
+
+
+# --- Commendation (docs/70-* §4.1, 80-* §4.7.13) -------------------------------
+
+## The commendation dialog is open (suite seam).
+func commendation_open() -> bool:
+	return _commend != null and _commend.is_open()
+
+
+## The one-time per-converted-port dialog, taken through the engine seam.
+## The take only happens once all three `palace.commend.*` keys have merged —
+## an unrenderable commendation is never consumed.
+func _check_commendation() -> void:
+	if _commend == null or commendation_open():
+		return
+	if not (DataLoader.ui_strings.has(COMMEND_TITLE_KEY)
+			and DataLoader.ui_strings.has(COMMEND_BODY_KEY)
+			and DataLoader.ui_strings.has(COMMEND_CLOSE_KEY)):
+		return
+	if not _seam_has("take_commendation"):
+		return
+	var info = _seam_call("take_commendation", [], {})
+	if not (info is Dictionary) or (info as Dictionary).is_empty():
+		return
+	_commend_info = info
+	_commend.open_text(_commend_message())
+	_set_commend_button()
+
+
+## `title` over `body` (the §4.7 message+OK chrome has no title row).
+func _commend_message() -> String:
+	return "%s\n%s" % [I18n.t_key(COMMEND_TITLE_KEY),
+		I18n.fmt(COMMEND_BODY_KEY, {
+			"nation": _commend_nation_name(),
+			"port": _commend_port_name(),
+		})]
+
+
+func _commend_nation_name() -> String:
+	var nation_id := str(_commend_info.get("nation_id", ""))
+	return I18n.t(DataLoader.get_nation(nation_id).get("name", {}))
+
+
+func _commend_port_name() -> String:
+	var port_id := str(_commend_info.get("port_id", ""))
+	return I18n.t(DataLoader.get_port(port_id).get("name", {}))
+
+
+## The pinned close label (`palace.commend.close`) on the dialog's OK button.
+func _set_commend_button() -> void:
+	var ok: Button = _commend.get_node_or_null(
+		"Center/Panel/Margin/Body/Footer/OK")
+	if ok != null and DataLoader.ui_strings.has(COMMEND_CLOSE_KEY):
+		ok.text = I18n.t_key(COMMEND_CLOSE_KEY)
+
+
 # --- Helpers -------------------------------------------------------------
 
 func _read_current_port() -> String:
@@ -549,6 +862,10 @@ func _button_for(key: String) -> Button:
 			return _tournament_button
 		"retire":
 			return _retire_button
+		"permit_home":
+			return _permit_rows[PERMIT_HOME]["buy"]
+		"permit_foreign":
+			return _permit_rows[PERMIT_FOREIGN]["buy"]
 	return null
 
 
@@ -569,6 +886,11 @@ func _show_toast(key: String, values: Dictionary = {}) -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	refresh()
+	# An open commendation recomposes from its ids so the title/body follow
+	# the toggle (§6: every visible string re-binds).
+	if commendation_open() and not _commend_info.is_empty():
+		_commend.open_text(_commend_message())
+		_set_commend_button()
 
 
 func _on_gold_changed(_new_gold: int) -> void:

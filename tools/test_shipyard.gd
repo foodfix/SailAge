@@ -6,15 +6,19 @@ extends Node
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## Sections: 1 repair pricing (§4.3, all 8 types + the §4.3 worked values),
+## Sections: 1 repair pricing (§4.3, all 16 types + the §4.3 worked values),
 ## 2 sell pricing (§4.3/§5), 3 FLEET_MAX buys (§4.3/§4.4/§6), 4 buy defaults,
 ## 5 no-sell rules, 6 partial repair, 7 promote, 8 refit maths (Phase-2 logic,
-## disabled UI), 9 the S6 screen itself (catalog, disabled reasons, pickers,
-## confirm, locale rebind, Esc/Back).
+## disabled UI), 9 per-port stock + the three §4.7.12 row states (Phase 7),
+## 10 the S6 screen itself (stock catalog, role labels, gray notes, disabled
+## reasons, pickers, confirm, locale rebind, Esc/Back), 11 the S13 palace
+## screen's permit row + commendation dialog (Phase 7, `80-*` §4.7.13 — screen
+## cases live here because `tools/test_palace.gd` is task L's file).
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const ShipyardScene := preload("res://scenes/port/shipyard_screen.tscn")
+const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
 const PortScreenLib := preload("res://scenes/port/port_screen.gd")
 
 ## The four repair prices printed in docs/40 §4.3 ("latin 3g/pt, caravel
@@ -22,6 +26,44 @@ const PortScreenLib := preload("res://scenes/port/port_screen.gd")
 const DOC_REPAIR_PRICES := {"latin": 3, "caravel": 20, "nao": 55, "galleon": 150}
 ## The §4.3 repair divisor (`ceil(base_price / 400)`).
 const REPAIR_DIVISOR := 400
+## Lisbon's locked stock list (`ports.json`, P-authored): 8 hulls at the
+## dev-3 capital, from tier-1 starters to tier-3 flagships.
+const LISBON_STOCK: Array[String] = [
+	"latin", "sloop", "pinnace", "caravel", "caravela_redonda",
+	"nao", "carrack", "galleon",
+]
+## The four unallied neutral shipyard ports (correction 11's allegiance-gray
+## state): nationless China-coast/Java ports at dev floor 0.
+const UNALLIED_NEUTRAL_SHIPYARDS: Array[String] = [
+	"quanzhou", "hirado", "sakai", "gresik",
+]
+## The §4.7.15 keys this suite renders (zh/en verbatim from docs/80-*). They
+## are injected into the loaded `ui_strings` for the screen sections only —
+## `data/ui_strings.json` itself is orchestrator-owned (the master merges).
+const SHIPYARD_UI_KEYS := {
+	"shipyard.role.war": {"zh": "战舰", "en": "Warship"},
+	"shipyard.role.trade": {"zh": "商船", "en": "Trade ship"},
+	"shipyard.role.coastal": {"zh": "沿岸", "en": "Coastal"},
+	"shipyard.tier.need_dev": {"zh": "需发展度 {dev}", "en": "Requires development {dev}"},
+	"shipyard.tier.allegiance_locked": {"zh": "同盟专营:投资使其归属本国且发展度 ≥ 2 后开放", "en": "Allegiance-exclusive: align it by investing; opens at dev ≥ 2"},
+}
+const PALACE_UI_KEYS := {
+	"palace.permit.section": {"zh": "免税证", "en": "Tax permits"},
+	"palace.permit.home": {"zh": "本国免税证 — 5,000 金", "en": "Home charter — 5,000g"},
+	"palace.permit.home.coverage": {"zh": "覆盖本国及同盟港:关税 5% → 0%", "en": "Covers own + aligned ports: tariff 5% → 0%"},
+	"palace.permit.home.owned": {"zh": "本国免税证:已持有", "en": "Home charter: held"},
+	"palace.permit.foreign": {"zh": "涉外免税证({nation})— 20,000 金", "en": "Foreign permit ({nation}) — 20,000g"},
+	"palace.permit.foreign.coverage": {"zh": "覆盖该国的保护港与同盟港:关税 5% → 0%", "en": "Covers that nation's protected + aligned ports: tariff 5% → 0%"},
+	"palace.permit.foreign.owned": {"zh": "涉外免税证({nation}):已持有", "en": "Foreign permit ({nation}): held"},
+	"palace.permit.title_locked": {"zh": "爵位需达到骑士", "en": "Requires the title of Knight"},
+	"palace.permit.rep_locked": {"zh": "声望需达到 +20", "en": "Requires reputation +20"},
+	"palace.permit.void_bounty": {"zh": "悬赏在身,免税证失效;需全价重购", "en": "Void while your bounty stands; rebuy at full price"},
+	"palace.permit.void_rep": {"zh": "声望低于 −20,免税证失效;需全价重购", "en": "Void below −20 reputation; rebuy at full price"},
+	"palace.permit.bought": {"zh": "已购入免税证。", "en": "Permit purchased."},
+	"palace.commend.title": {"zh": "褒奖令", "en": "Commendation"},
+	"palace.commend.body": {"zh": "{nation}为{port}归入版图向你颁授褒奖令。", "en": "{nation} commends you for bringing {port} into its fold."},
+	"palace.commend.close": {"zh": "领受", "en": "Accept with thanks"},
+}
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -36,7 +78,10 @@ func _ready() -> void:
 	_test_partial_repair()
 	_test_promote()
 	_test_refit_maths()
+	_test_per_port_stock()
 	await _test_screen()
+	await _test_palace_screen()
+	_test_allegiance_guard_path()
 	_report()
 
 
@@ -87,8 +132,25 @@ func _test_repair_pricing() -> void:
 		])
 		if actual != expected:
 			all_match = false
-	_check(DataLoader.ship_types_list.size() == 8,
-		"data holds all 8 ShipTypes (docs/10-* §7.3)")
+	var roster := {"war": 0, "trade": 0, "coastal": 0}
+	var tiers := {1: 0, 2: 0, 3: 0}
+	for ship_type in DataLoader.ship_types_list:
+		var role := str(ship_type.get("role", ""))
+		var tier := int(ship_type.get("tier", 0))
+		if roster.has(role):
+			roster[role] += 1
+		if tiers.has(tier):
+			tiers[tier] += 1
+	_check(DataLoader.ship_types_list.size() == 16,
+		"data holds all 16 ShipTypes (docs/10-* §7.3)")
+	_check(tiers == {1: 4, 2: 8, 3: 4},
+		"the tiers split 4/8/4 (40-* §4.3.1: latin/sloop/pinnace/galiot, "
+		+ "nao/carrack/galleon/galleass at the ends): %s" % str(tiers))
+	_check(roster["war"] > 0 and roster["trade"] > 0 and roster["coastal"] > 0,
+		"every role enum member is used (war %d / trade %d / coastal %d)"
+		% [roster["war"], roster["trade"], roster["coastal"]])
+	_check(str(DataLoader.get_ship_type("galley").get("role", "")) == "war",
+		"the galley keeps its pinned war role (40-* §4.3.1)")
 	_check(all_match,
 		"all 8 repair per-point prices equal ceil(base_price/400): %s"
 		% ", ".join(printed))
@@ -436,7 +498,204 @@ func _test_refit_maths() -> void:
 		"99g cannot pay for a 100g cannon")
 
 
-# --- 9. The S6 screen ----------------------------------------------------
+# --- 9. Per-port stock & the three row states (Phase 7; 40-* §4.3.1) ------
+
+func _test_per_port_stock() -> void:
+	# Data shape: every shipyard facility is the Phase-7 id-list form, ≥2 ≤8
+	# valid ids; equipment_stock ≥2 known non-rare items at the same ports.
+	var stock_ports := 0
+	var lists_valid := true
+	var equipment_ports := 0
+	var equipment_valid := true
+	for port in DataLoader.ports_list:
+		var data: Dictionary = port
+		var shipyard = data.get("facilities", {}).get("shipyard", null)
+		if shipyard is Array:
+			stock_ports += 1
+			if (shipyard as Array).size() < 2 or (shipyard as Array).size() > 8:
+				lists_valid = false
+			for id in shipyard:
+				if DataLoader.get_ship_type(str(id)).is_empty():
+					lists_valid = false
+		var stock = data.get("facilities", {}).get("equipment_stock", null)
+		if stock is Array:
+			equipment_ports += 1
+			if (stock as Array).size() < 2:
+				equipment_valid = false
+			for id in stock:
+				if DataLoader.get_equipment(str(id)).is_empty() \
+						or ShipyardLib.is_rare_equipment(str(id)):
+					equipment_valid = false
+	_check(stock_ports == 104,
+		"104 shipyard ports carry id lists (got %d)" % stock_ports)
+	_check(lists_valid, "every shipyard list holds 2–8 valid ship type ids")
+	_check(equipment_ports == 104,
+		"104 ports carry equipment_stock lists (got %d)" % equipment_ports)
+	_check(equipment_valid,
+		"every equipment_stock holds ≥2 known, non-rare items (60-* §4.11.13)")
+	# The rare four are drop-only: never in any stock list, and every named
+	# pirate's drop references one of them (correction 10).
+	var rare_ids := {}
+	for item in DataLoader.equipment_list:
+		if bool((item as Dictionary).get("rare", false)):
+			rare_ids[str((item as Dictionary).get("id", ""))] = true
+	_check(rare_ids.size() == 4,
+		"exactly 4 items carry rare: true (got %s)" % str(rare_ids))
+	var drops_ok := true
+	for pirate in DataLoader.named_pirates_list:
+		var drop := str((pirate as Dictionary).get("drop", ""))
+		if not rare_ids.has(drop):
+			drops_ok = false
+	_check(drops_ok and DataLoader.named_pirates_list.size() == 4,
+		"all 4 named_pirate drops reference rare items")
+
+	# --- stock accessors ---------------------------------------------------
+	_make_run(50000, ["caravel"], "lisbon")
+	var lisbon_stock: Array[String] = ShipyardLib.shipyard_stock("lisbon")
+	_check(lisbon_stock.size() == LISBON_STOCK.size()
+		and _same_set(lisbon_stock, LISBON_STOCK),
+		"lisbon stocks her locked 8-hull list (got %s)" % str(lisbon_stock))
+	_check(_same_set(ShipyardLib.shipyard_stock(), lisbon_stock),
+		"shipyard_stock() resolves the docked port")
+	_check(not ShipyardLib.shipyard_stock("lisbon").has("junk")
+		and ShipyardLib.shipyard_stock("quanzhou").has("junk"),
+		"regional flavor: no junk at lisbon, junk at the China-coast neutral")
+	_make_run(50000, ["caravel"], "")
+	_check(ShipyardLib.shipyard_stock().size() == 16,
+		"standalone (no docked port) falls back to the full catalog")
+
+	# --- effective dev / alignment guard defaults (80-* §4.9) ---------------
+	_make_run(50000, ["caravel"], "lisbon")
+	_check(ShipyardLib.effective_dev("lisbon") == 3,
+		"guard default: lisbon's authored floor is dev 3 (got %d)"
+		% ShipyardLib.effective_dev("lisbon"))
+	_check(ShipyardLib.effective_dev("bordeaux") == 1
+		and ShipyardLib.effective_dev("quanzhou") == 0,
+		"guard default: authored floors (bordeaux 1, quanzhou 0)")
+	_check(ShipyardLib.effective_alignment("lisbon") == "portugal"
+		and ShipyardLib.effective_alignment("quanzhou") == "",
+		"guard default: alignment = the data nation_id (neutral stays \"\")")
+	_check(not ShipyardLib.is_unallied_neutral("lisbon")
+		and not ShipyardLib.is_unallied_neutral("bordeaux"),
+		"sovereign ports are never allegiance-gray")
+	for neutral_port in UNALLIED_NEUTRAL_SHIPYARDS:
+		if not ShipyardLib.is_unallied_neutral(neutral_port):
+			_check(false, "%s should be an unallied neutral" % neutral_port)
+	_check(true, "the 4 neutral shipyards (quanzhou/hirado/sakai/gresik) "
+		+ "are unallied")
+
+	# --- the three row states ----------------------------------------------
+	# (1) available at a dev-3 capital even for tier-3 flagships:
+	_check(ShipyardLib.row_state("lisbon", "galleon") == ShipyardLib.ROW_AVAILABLE
+		and ShipyardLib.row_state("lisbon", "latin") == ShipyardLib.ROW_AVAILABLE,
+		"at a dev-3 capital tier-3 and tier-1 rows are both available")
+	_check(ShipyardLib.row_note_key("lisbon", "galleon").is_empty(),
+		"…with no lock note")
+	# (2) tier-gray at a dev-1 port: only tier-1 hulls stay buyable.
+	_check(ShipyardLib.row_state("bordeaux", "pinnace") == ShipyardLib.ROW_AVAILABLE
+		and ShipyardLib.row_state("bordeaux", "sloop") == ShipyardLib.ROW_AVAILABLE,
+		"at a dev-1 port the tier-1 stock is available")
+	for above_tier in ["caravel", "caravela_redonda", "nao", "carrack"]:
+		if ShipyardLib.row_state("bordeaux", above_tier) != ShipyardLib.ROW_TIER_GRAY:
+			_check(false, "bordeaux's %s should be tier-gray" % above_tier)
+	_check(ShipyardLib.row_note_key("bordeaux", "caravel")
+		== "shipyard.tier.need_dev",
+		"tier-gray rows carry the 需发展度 note key")
+	# (3) allegiance-gray: the unallied neutral's whole list is locked.
+	for hull_id in ShipyardLib.shipyard_stock("quanzhou"):
+		if ShipyardLib.row_state("quanzhou", hull_id) \
+				!= ShipyardLib.ROW_ALLEGIANCE_GRAY:
+			_check(false, "quanzhou's %s should be allegiance-gray" % hull_id)
+	_check(ShipyardLib.row_note_key("quanzhou", "junk")
+		== "shipyard.tier.allegiance_locked",
+		"allegiance-gray rows carry the 同盟专营 note key")
+
+	# --- buy gating through the states --------------------------------------
+	# dev-1 port: tier-1 buys, tier-2/3 refused with the dev note.
+	_make_run(100000, ["latin"], "bordeaux")
+	_check(ShipyardLib.buy_block_reason("latin") == "ui.not_available",
+		"latin is not in bordeaux's stock ('ui.not_available')")
+	_check(ShipyardLib.buy_block_reason("pinnace").is_empty()
+		and ShipyardLib.buy("pinnace"),
+		"a stocked tier-1 hull buys at the dev-1 port")
+	_check(ShipyardLib.buy_block_reason("caravel") == "shipyard.tier.need_dev"
+		and not ShipyardLib.buy("caravel")
+		and GameState.fleet.size() == 2,
+		"a stocked tier-2 hull is refused with 'shipyard.tier.need_dev'")
+	var gold_before := GameState.gold
+	_check(not ShipyardLib.buy("nao") and GameState.gold == gold_before,
+		"a stocked tier-3 hull cannot be bought at dev 1 either")
+	_check(ShipyardLib.buy_block_reason("nao") == "shipyard.tier.need_dev",
+		"the tier-3 refusal carries the dev note")
+	_check(ShipyardLib.buy_block_reason("junk") == "ui.not_available",
+		"an unstocked hull is 'ui.not_available' even when affordable")
+
+	# dev-3 capital: the tier-3 flagship buys (decision 23's §2.2 done-when).
+	_make_run(60000, ["latin"], "lisbon")
+	_check(ShipyardLib.buy_block_reason("galleon").is_empty()
+		and ShipyardLib.buy("galleon")
+		and GameState.gold == 0 and GameState.fleet.size() == 2,
+		"a dev-3 capital sells the 60,000g tier-3 galleon")
+
+	# unallied neutral: the allegiance gate refuses everything.
+	_make_run(1000000, ["latin"], "quanzhou")
+	_check(ShipyardLib.buy_block_reason("latin")
+			== "shipyard.tier.allegiance_locked"
+		and not ShipyardLib.buy("latin")
+		and GameState.fleet.size() == 1,
+		"at an unallied neutral every hull is refused with the lock note")
+
+	# --- equipment gating (60-* §4.11.13 + the same three states) ----------
+	_make_run(5000, ["latin"], "lisbon")
+	var weapon_ids: Array[String] = []
+	for item in ShipyardLib.equipment_list("weapon"):
+		weapon_ids.append(str((item as Dictionary).get("id", "")))
+	_check(_same_set(weapon_ids, ["eq_zweihander", "eq_cutlass"] as Array[String])
+		and weapon_ids.size() == 2,
+		"lisbon's weapon list is her stocked pair (got %s)" % str(weapon_ids))
+	_check(ShipyardLib.equip_block_reason("weapon", "eq_rapier")
+			== "ui.not_available",
+		"an item off this port's equipment_stock is 'ui.not_available'")
+	_check(ShipyardLib.equip_block_reason("weapon", "eq_zweihander").is_empty()
+		and ShipyardLib.equip("weapon", "eq_zweihander")
+		and GameState.gold == 200,
+		"the dev-3 capital sells the 4,800g tier-3 zweihander")
+	_check(ShipyardLib.equip_block_reason("weapon", "eq_khair_scimitar")
+			== "ui.not_available",
+		"the rare scimitar is refused even at the dev-3 capital (drop-only)")
+	for slot in ShipyardLib.PLAYER_SLOTS + ShipyardLib.SHIP_SLOTS:
+		for item in ShipyardLib.equipment_list(slot):
+			if ShipyardLib.is_rare_equipment(str((item as Dictionary).get("id", ""))):
+				_check(false, "a rare item leaked into the %s list" % slot)
+	_check(true, "no slot list at lisbon ever carries a rare item")
+	# tier-gray equipment: dev-1 valetta stocks a tier-2 medallion.
+	_make_run(5000, ["latin"], "valetta")
+	_check(ShipyardLib.equip_block_reason("armor", "eq_saint_medallion")
+			== "shipyard.tier.need_dev"
+		and not ShipyardLib.equip("armor", "eq_saint_medallion"),
+		"a tier-2 item is refused at the dev-1 port with the dev note")
+	_check(ShipyardLib.equip_block_reason("armor", "eq_breastplate").is_empty()
+		and ShipyardLib.equip("armor", "eq_breastplate"),
+		"…while her tier-1 armor buys")
+	# allegiance-gray equipment at the unallied neutral.
+	_make_run(5000, ["latin"], "quanzhou")
+	_check(ShipyardLib.equip_block_reason("weapon", "eq_cutlass")
+			== "shipyard.tier.allegiance_locked"
+		and not ShipyardLib.equip("weapon", "eq_cutlass"),
+		"the neutral's stocked cutlass is allegiance-locked too")
+
+
+## Order-insensitive string-array comparison.
+func _same_set(a: Array[String], b: Array[String]) -> bool:
+	if a.size() != b.size():
+		return false
+	for value in a:
+		if not b.has(value):
+			return false
+	return true
+
+
+# --- 10. The S6 screen ---------------------------------------------------
 
 func _test_screen() -> void:
 	var locale_before: String = GameState.locale
@@ -448,13 +707,32 @@ func _test_screen() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# Catalog: all 8 types, no regional restrictions.
+	# Catalog: the port's stock list (lisbon's 8 locked hulls), not the
+	# global 16-type roster — Phase 7's per-port rows (40-* §4.3.1).
 	var catalog: VBoxContainer = screen.get_node(
 		"Layout/VBox/Body/CatalogPanel/Margin/Box/CatalogScroll/CatalogRows")
 	_check(catalog.get_child_count() == 8,
-		"the catalog lists all 8 ShipTypes (got %d)" % catalog.get_child_count())
-	_check(screen.buy_button("galleon") != null,
-		"every type has a Buy button (galleon present)")
+		"the catalog mirrors lisbon's 8-hull stock list (got %d)"
+		% catalog.get_child_count())
+	_check(screen.buy_button("galleon") != null
+		and screen.buy_button("junk") == null,
+		"stocked hulls have Buy buttons and unstocked ones have none")
+	# Role labels: the raw enum token until `shipyard.role.*` merges (never
+	# a raw "<key>"), then the localised 战舰/商船/沿岸.
+	var galleon_role: Label = catalog.get_node(
+		"Catalog_galleon/Top/Role")
+	_check(galleon_role.text == "war",
+		"the galleon's role falls back to the data token (got '%s')"
+		% galleon_role.text)
+	_check(catalog.get_node("Catalog_latin/Top/Role").text == "coastal",
+		"the latin carries the coastal role token")
+	_inject_keys(SHIPYARD_UI_KEYS)
+	screen.rebuild()
+	await get_tree().process_frame
+	_check((catalog.get_node("Catalog_galleon/Top/Role") as Label).text
+			== I18n.t_key("shipyard.role.war"),
+		"role labels localise once the keys merge (%s)"
+		% (catalog.get_node("Catalog_galleon/Top/Role") as Label).text)
 	# No unresolved key may ever reach a label (`I18n.t_key` returns "<key>"
 	# for a missing entry), including the awaiting-merge stat/picker keys.
 	var unresolved: Array[String] = []
@@ -470,6 +748,73 @@ func _test_screen() -> void:
 			I18n.t_key("shipyard.no_gold")),
 		"…and its tooltip states 'shipyard.no_gold' (%s)"
 		% screen.buy_button("galleon").tooltip_text)
+
+	# The three §4.7.12 states on screen, keyed by the docked port.
+	# (2) tier-gray at the dev-1 port: 需发展度 note, Buy disabled.
+	GameState.current_port = "bordeaux"
+	screen.rebuild()
+	await get_tree().process_frame
+	var caravel_buy: Button = screen.buy_button("caravel")
+	_check(caravel_buy != null and caravel_buy.disabled,
+		"at the dev-1 port the stocked tier-2 caravel is grayed")
+	_check(caravel_buy.tooltip_text.contains(I18n.fmt(
+			"shipyard.tier.need_dev", {"dev": 1})),
+		"…with the 需发展度 1 note as the tooltip (%s)" % caravel_buy.tooltip_text)
+	var caravel_note: Label = catalog.get_node("Catalog_caravel/Note")
+	_check(caravel_note.visible
+		and caravel_note.text == I18n.fmt("shipyard.tier.need_dev", {"dev": 1}),
+		"…and the row renders the note line (%s)" % caravel_note.text)
+	_check(not screen.buy_button("sloop").disabled,
+		"…while the tier-1 sloop stays buyable")
+	_check(catalog.get_node_or_null("Catalog_sloop/Note") == null,
+		"available rows carry no note")
+	# (3) allegiance-gray at the unallied neutral: the whole list locked.
+	GameState.current_port = "quanzhou"
+	screen.rebuild()
+	await get_tree().process_frame
+	var all_locked := true
+	for hull_id in ShipyardLib.shipyard_stock("quanzhou"):
+		var button: Button = screen.buy_button(hull_id)
+		if button == null or not button.disabled:
+			all_locked = false
+	_check(all_locked, "at the unallied neutral every hull row is disabled")
+	_check(screen.buy_button("junk").tooltip_text.contains(
+			I18n.t_key("shipyard.tier.allegiance_locked")),
+		"…with the 同盟专营 lock note (%s)"
+		% screen.buy_button("junk").tooltip_text)
+	var junk_note: Label = catalog.get_node("Catalog_junk/Note")
+	_check(junk_note.visible and junk_note.text
+			== I18n.t_key("shipyard.tier.allegiance_locked"),
+		"…and the allegiance note line explains the flip path")
+	# (1) available back at the dev-3 capital.
+	GameState.current_port = "lisbon"
+	screen.rebuild()
+	await get_tree().process_frame
+	_check(not screen.buy_button("nao").disabled
+		and screen.buy_button("nao").tooltip_text.contains("22,000"),
+		"back at lisbon the tier-3 nao is buyable")
+	# Equipment rows stock-aware: lisbon's lists, rare items never shown.
+	_check(_button_ids(screen.player_equipment_widget("weapon")["buy"])
+			== ["eq_zweihander", "eq_cutlass"],
+		"the weapon row lists lisbon's stocked pair (got %s)" % str(
+			_button_ids(screen.player_equipment_widget("weapon")["buy"])))
+	_check(_button_ids(screen.player_equipment_widget("armor")["buy"])
+			== ["eq_saint_medallion"],
+		"the armor row lists only the stocked medallion (no rare cuirass)")
+	_check(_button_ids(screen.ship_equipment_widget(0, "figurehead")["buy"]).is_empty(),
+		"lisbon stocks no figurehead, so that row lists none")
+	# The tier-gray equipment note: bordeaux's equipment stock is tier-1
+	# only, so use valetta (dev 1, stocked tier-2 medallion).
+	GameState.current_port = "valetta"
+	screen.rebuild()
+	await get_tree().process_frame
+	var medallion: Button = screen.player_equipment_widget("armor")["buy"]["eq_saint_medallion"]
+	_check(medallion != null and medallion.disabled
+		and medallion.tooltip_text.contains(I18n.fmt(
+			"shipyard.tier.need_dev", {"dev": 1})),
+		"valetta's tier-2 medallion is grayed with the dev note (%s)"
+		% medallion.tooltip_text)
+	GameState.current_port = "lisbon"
 
 	# A full fleet disables every Buy button with the fleet reason.
 	var saved_fleet := GameState.fleet
@@ -709,20 +1054,351 @@ func _test_screen() -> void:
 	GameState.locale = locale_before
 
 
+# --- 11. The S13 palace screen: permits + commendation (Phase 7) ----------
+# Screen cases live in this suite because `tools/test_palace.gd` is task L's
+# file (one writer per file per wave). The seam spy drives every permit state
+# while task L's engine is still in flight; the guard defaults (no engine)
+# are asserted against today's main.
+
+## The duck-typed `palace_engine` seam spy (the screen's `engine_override`).
+class SeamSpy extends RefCounted:
+	var calls: Array = []
+	var answers: Dictionary = {}
+
+	func _record(method: String) -> void:
+		calls.append(method)
+
+	func permit_price(_port_id: String, _kind: String, _nation_id: String) -> int:
+		_record("permit_price")
+		return int(answers.get("permit_price", 0))
+
+	func permit_owned(_port_id: String, _kind: String, _nation_id: String) -> bool:
+		_record("permit_owned")
+		return bool(answers.get("permit_owned", false))
+
+	func permit_void_reason(_port_id: String, _kind: String,
+			_nation_id: String) -> String:
+		_record("permit_void_reason")
+		return str(answers.get("permit_void_reason", ""))
+
+	func permit_block_reason(_port_id: String, _kind: String,
+			_nation_id: String) -> String:
+		_record("permit_block_reason")
+		return str(answers.get("permit_block_reason", ""))
+
+	func buy_permit(_port_id: String, _kind: String, _nation_id: String) -> bool:
+		_record("buy_permit")
+		return bool(answers.get("buy_permit", false))
+
+	func take_commendation() -> Dictionary:
+		_record("take_commendation")
+		var value = answers.get("take_commendation", {})
+		return value if value is Dictionary else {}
+
+
+## A palace run at `port_id` with a one-ship portugal fleet (the permit rows
+## need the player nation, rep map and empty bounty book).
+func _make_palace_run(port_id: String) -> void:
+	GameState.gold = 50000
+	GameState.current_port = port_id
+	GameState.day = 1
+	GameState.player = {
+		"nation_id": "portugal",
+		"stats": {
+			"leadership": 10, "seamanship": 10, "combat": 10,
+			"navigation": 10, "luck": 10,
+		},
+		"xp": 0, "level": 1, "officers": [],
+		"reputation": {"portugal": 40, "spain": 0, "italy": 40},
+	}
+	GameState.fleet = [FleetLib.new_ship("caravel", 0)]
+	GameState.npc_fleets = []
+	GameState.bounties = {}
+	GameState.active_quests = []
+	GameState.titles = {"portugal": "count", "spain": "none", "italy": "count"}
+
+
+func _test_palace_screen() -> void:
+	var locale_before: String = GameState.locale
+	GameState.locale = "en"
+	# Keys unmerged (today's main): the section stays hidden, nothing crashes,
+	# and every visible line stays clean.
+	_make_palace_run("lisbon")
+	var screen = PalaceScene.instantiate()
+	screen.route_to_port = false
+	add_child(screen)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(not screen.permit_section_visible(),
+		"with the permit keys unmerged the section header stays hidden")
+	_check(not (screen.permit_widget("home")["row"] as Control).visible
+		and not (screen.permit_widget("foreign")["row"] as Control).visible,
+		"…and both permit rows stay hidden")
+	_check(not screen.commendation_open(),
+		"no commendation without the seam and its keys")
+	# With the §4.7.15 keys injected the own-nation palace shows the home
+	# charter row; the foreign row stays hidden (30-* §4.10: own palaces
+	# only sell the home charter).
+	_inject_keys(PALACE_UI_KEYS)
+	screen.refresh()
+	await get_tree().process_frame
+	_check(screen.permit_section_visible()
+		and (screen.permit_widget("home")["row"] as Control).visible
+		and not (screen.permit_widget("foreign")["row"] as Control).visible,
+		"at the player's own capital the home charter row shows alone")
+	var home: Dictionary = screen.permit_widget("home")
+	_check((home["label"] as Label).text == I18n.t_key("palace.permit.home"),
+		"the home row names the 5,000g charter (%s)"
+		% (home["label"] as Label).text)
+	# Guard defaults (no engine seam yet): the buy is honestly locked.
+	_check((home["buy"] as Button).disabled,
+		"without the engine seam the permit Buy is disabled")
+	_check((home["buy"] as Button).tooltip_text
+			== I18n.t_key("ui.not_available"),
+		"…with the 'ui.not_available' tooltip (no fake purchase)")
+	_check((home["note"] as Label).text
+			== I18n.t_key("palace.permit.home.coverage"),
+		"…and the row carries the coverage note (%s)"
+		% (home["note"] as Label).text)
+
+	# The spy seam drives the §4.7.13 states; every press must call through.
+	var spy := SeamSpy.new()
+	screen.engine_override = spy
+	# Available: gates pass, not owned, not void → Buy enabled.
+	spy.answers = {
+		"permit_price": 5000, "permit_owned": false,
+		"permit_void_reason": "", "permit_block_reason": "",
+		"buy_permit": true,
+	}
+	screen.refresh()
+	await get_tree().process_frame
+	home = screen.permit_widget("home")
+	_check(not (home["buy"] as Button).disabled,
+		"with the seam answering 'available' the Buy enables")
+	var gold_before := GameState.gold
+	(home["buy"] as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(spy.calls.has("buy_permit"),
+		"the press called through to the engine seam (calls %s)" % str(spy.calls))
+	_check(GameState.gold == gold_before,
+		"the spy seam owns pricing, so the screen touched no gold itself")
+	# Owned: held state text, Buy disabled (the engine seam would also refuse
+	# a second purchase; the screen at minimum locks the row).
+	spy.answers["permit_owned"] = true
+	spy.calls.clear()
+	screen.refresh()
+	await get_tree().process_frame
+	home = screen.permit_widget("home")
+	_check((home["buy"] as Button).disabled
+		and (home["note"] as Label).text == I18n.t_key("palace.permit.home.owned"),
+		"the held state shows the owned note and locks Buy (%s)"
+		% (home["note"] as Label).text)
+	# Void: bounty note, disabled.
+	spy.answers["permit_owned"] = false
+	spy.answers["permit_void_reason"] = "palace.permit.void_bounty"
+	screen.refresh()
+	await get_tree().process_frame
+	home = screen.permit_widget("home")
+	_check((home["buy"] as Button).disabled
+		and (home["note"] as Label).text == I18n.t_key("palace.permit.void_bounty"),
+		"the void-bounty state shows the void note (%s)"
+		% (home["note"] as Label).text)
+	spy.answers["permit_void_reason"] = "palace.permit.void_rep"
+	screen.refresh()
+	await get_tree().process_frame
+	_check((screen.permit_widget("home")["note"] as Label).text
+			== I18n.t_key("palace.permit.void_rep"),
+		"the void-rep state shows its own note")
+
+	# Foreign palace: the foreign row (host nation), title gate first.
+	_make_palace_run("seville")
+	GameState.player["reputation"]["spain"] = 0
+	screen.refresh()
+	await get_tree().process_frame
+	_check(not (screen.permit_widget("home")["row"] as Control).visible
+		and (screen.permit_widget("foreign")["row"] as Control).visible,
+		"at spain's palace only the foreign row shows")
+	var foreign: Dictionary = screen.permit_widget("foreign")
+	_check((foreign["label"] as Label).text == I18n.fmt(
+			"palace.permit.foreign", {"nation": I18n.t(
+				DataLoader.get_nation("spain").get("name", {}))}),
+		"the foreign row names the host nation (%s)"
+		% (foreign["label"] as Label).text)
+	# Guard fallback (no spy answers yet? the spy is still installed): clear it
+	# to prove the Fame/Character fallbacks derive the title gate.
+	screen.engine_override = null
+	screen.refresh()
+	await get_tree().process_frame
+	foreign = screen.permit_widget("foreign")
+	_check((foreign["buy"] as Button).disabled
+		and (foreign["note"] as Label).text
+			== I18n.t_key("palace.permit.title_locked"),
+		"a non-knight sees the title gate on the foreign permit (%s)"
+		% (foreign["note"] as Label).text)
+	# Knight + rep 0 → the rep gate.
+	GameState.titles["spain"] = "knight"
+	screen.refresh()
+	await get_tree().process_frame
+	_check((screen.permit_widget("foreign")["note"] as Label).text
+			== I18n.t_key("palace.permit.rep_locked"),
+		"a knight at rep 0 sees the rep gate instead")
+	# Knight + rep ≥ 20 → covered; the seam returns so Buy enables.
+	GameState.player["reputation"]["spain"] = 25
+	screen.engine_override = spy
+	spy.answers = {
+		"permit_price": 20000, "permit_owned": false,
+		"permit_void_reason": "", "permit_block_reason": "",
+		"buy_permit": true,
+	}
+	screen.refresh()
+	await get_tree().process_frame
+	foreign = screen.permit_widget("foreign")
+	_check(not (foreign["buy"] as Button).disabled
+		and (foreign["note"] as Label).text
+			== I18n.t_key("palace.permit.foreign.coverage"),
+		"a knight at rep 25 is offered the 20,000g permit")
+	spy.calls.clear()
+	(foreign["buy"] as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(spy.calls.has("buy_permit"),
+		"the foreign purchase also calls through to the seam")
+
+	# Commendation: the fixture event through the same seam (70-* §4.1).
+	_make_palace_run("lisbon")
+	spy.answers["take_commendation"] = {
+		"nation_id": "portugal", "port_id": "bordeaux",
+	}
+	screen.refresh()
+	await get_tree().process_frame
+	_check(screen.commendation_open(),
+		"the commendation dialog opens on the fixture event")
+	var commend: Control = screen.get_node("CommendDialog")
+	_check(commend.message_text().contains(I18n.t_key("palace.commend.title"))
+		and commend.message_text().contains("Bordeaux"),
+		"the dialog reads title + body with the port named (%s)"
+		% commend.message_text().replace("\n", " "))
+	var ok_button: Button = commend.get_node(
+		"Center/Panel/Margin/Body/Footer/OK")
+	_check(ok_button.text == I18n.t_key("palace.commend.close"),
+		"the OK button carries the pinned close label (%s)" % ok_button.text)
+	ok_button.pressed.emit()
+	await get_tree().process_frame
+	_check(not screen.commendation_open(), "…and closes on 领受")
+	# One-time: the consumed take returns {} → no second dialog.
+	spy.answers["take_commendation"] = {}
+	screen.refresh()
+	await get_tree().process_frame
+	_check(not screen.commendation_open(),
+		"the consumed commendation never replays")
+	screen.engine_override = null
+
+	# Locale rebind (§6) walks every visible line; then the scene frees.
+	I18n.set_locale("zh")
+	await get_tree().process_frame
+	var unresolved: Array[String] = []
+	_collect_unresolved(screen, unresolved)
+	_check(unresolved.is_empty(),
+		"zh rebind leaves no raw <key> anywhere (found %s)" % str(unresolved))
+	I18n.set_locale("en")
+	screen.queue_free()
+	await get_tree().process_frame
+	GameState.locale = locale_before
+
+
+# --- 12. The Allegiance guard path (80-* §4.9) -----------------------------
+# Installed LAST: `take_over_path` publishes a fixture allegiance module at
+# the C-contract path, proving every guard call switches from the authored
+# defaults to the engine answers when task L's file lands.
+
+## A fixture `allegiance.gd` answering every port with `dev`/`alignment`.
+func _install_allegiance_fixture(dev_value: int, alignment_value: String):
+	var script := GDScript.new()
+	script.source_code = (
+		"extends RefCounted\n"
+		+ "static func dev(_port_id: String) -> int:\n"
+		+ "\treturn %d\n" % dev_value
+		+ "static func effective_alignment(_port_id: String) -> String:\n"
+		+ "\treturn \"%s\"\n" % alignment_value
+	)
+	script.reload()
+	script.take_over_path(ShipyardLib.ALLEGIANCE_PATH)
+	return script
+
+
+func _test_allegiance_guard_path() -> void:
+	# Engine reads.
+	var fixture = _install_allegiance_fixture(2, "portugal")
+	_check(ShipyardLib.effective_dev("lisbon") == 2,
+		"guard path: Allegiance.dev() wins over the authored floor (got %d)"
+		% ShipyardLib.effective_dev("lisbon"))
+	_check(ShipyardLib.effective_alignment("quanzhou") == "portugal",
+		"guard path: Allegiance.effective_alignment() wins over the data")
+	_check(not ShipyardLib.is_unallied_neutral("quanzhou"),
+		"an aligned neutral is no longer unallied")
+	_check(ShipyardLib.row_state("lisbon", "caravel") == ShipyardLib.ROW_AVAILABLE
+		and ShipyardLib.row_state("lisbon", "nao") == ShipyardLib.ROW_TIER_GRAY,
+		"the fixture's dev 2 re-gates lisbon: tier-2 available, tier-3 gray")
+	# The aligned dev-2 neutral unlocks her regional hulls (the §2.2 flip path).
+	_make_run(100000, ["latin"], "quanzhou")
+	_check(ShipyardLib.buy_block_reason("junk").is_empty()
+		and ShipyardLib.buy("junk"),
+		"at the aligned dev-2 neutral the tier-2 junk buys (correction 11)")
+	# Screen reads: with the fixture live, lisbon's nao row is tier-gray.
+	GameState.current_port = "lisbon"
+	_make_run(50000, ["caravel"], "lisbon")
+	var screen = ShipyardScene.instantiate()
+	screen.route_to_hub = false
+	add_child(screen)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(screen.buy_button("nao").disabled
+		and screen.buy_button("caravel") != null
+		and not screen.buy_button("caravel").disabled,
+		"the screen re-gates through the guard path (nao gray, caravel buyable)")
+	_check(screen.buy_button("nao").tooltip_text.contains(I18n.fmt(
+			"shipyard.tier.need_dev", {"dev": 2})),
+		"…with 需发展度 2 from the fixture dev (%s)"
+		% screen.buy_button("nao").tooltip_text)
+	screen.queue_free()
+	await get_tree().process_frame
+	fixture.free()
+
+
 # --- Harness --------------------------------------------------------------
 
-## Walks every Label/Button under `node` and collects any text still shaped like
-## `"<a.b.c>"` — the `I18n.t_key` missing-entry marker (§6), which must never
-## reach a player.
+## Injects `data/ui_strings.json`-shaped fixture keys into the loaded table
+## (the file itself is orchestrator-owned; the screen sections need the
+## §4.7.15 strings to prove the merged rendering).
+func _inject_keys(keys: Dictionary) -> void:
+	for key in keys:
+		DataLoader.ui_strings[key] = keys[key]
+
+
+## The equipment ids behind a slot row's buy-button dict, in display order.
+func _button_ids(buttons: Dictionary) -> Array[String]:
+	var ids: Array[String] = []
+	for id in buttons:
+		ids.append(str(id))
+	return ids
+
+
+## Walks every Label/Button (texts and tooltips) under `node` and collects any
+## text still shaped like `"<a.b.c>"` — the `I18n.t_key` missing-entry marker
+## (§6), which must never reach a player.
 func _collect_unresolved(node: Node, found: Array[String]) -> void:
-	var text := ""
+	var texts: Array[String] = []
 	if node is Label:
-		text = (node as Label).text
+		texts.append((node as Label).text)
 	elif node is Button:
-		text = (node as Button).text
-	if text.begins_with("<") and text.ends_with(">") and text.length() > 2 \
-			and not text.contains(" "):
-		found.append("%s: %s" % [node.get_path(), text])
+		texts.append((node as Button).text)
+	if node is Control:
+		texts.append((node as Control).tooltip_text)
+	for text in texts:
+		if text.begins_with("<") and text.ends_with(">") and text.length() > 2 \
+				and not text.contains(" "):
+			found.append("%s: %s" % [node.get_path(), text])
 	for child in node.get_children():
 		_collect_unresolved(child, found)
 

@@ -11,10 +11,12 @@ extends Control
 ##
 ## Layout (1280×720):
 ##   * header — title (`shipyard.title`), live gold, Esc hint, `Back`;
-##   * left — the catalog: all 8 ShipTypes (docs/40 §4.3 "sold everywhere"),
-##     each with price + a one-line stats string and a Buy button whose
-##     disabled reason is the tooltip (`80-*` §4.7 "disabled with
-##     tooltip-reason");
+##   * left — the catalog: the docked port's stock list (`facilities.shipyard`,
+##     docs/40 §4.3.1), each row with its role label (`shipyard.role.*`), price
+##     + a one-line stats string and a Buy button whose disabled reason is the
+##     tooltip (`80-*` §4.7 "disabled with tooltip-reason"). Rows render the
+##     three §4.7.12 states: available, tier-gray 需发展度, allegiance-gray
+##     同盟专营 (unallied neutrals lock the whole list);
 ##   * right — the player's two equipment slots (`weapon`/`armor`, `60-*`
 ##     §4.11.12), then own fleet, one panel per hull: type, durability bar,
 ##     crew, repair picker (1 / 10 / Max + numeric, live cost preview), the
@@ -23,9 +25,10 @@ extends Control
 ##     `shipyard.sell.confirm` modal);
 ##   * shared HUD (§4.5: S4–S8 keep the same bars, minimap hidden in port).
 ##
-## Equipment rows show the worn item or `ui.empty`, one buy button per
-## `data/equipment.json` item of that slot (price + disabled-reason tooltip)
-## and an Unequip button when something is worn (`80-*` §4.7.2).
+## Equipment rows show the worn item or `ui.empty`, one buy button per stock
+## item of that slot (the same three §4.7.12 states; rare drop-only items are
+## never listed, `60-*` §4.11.13) and an Unequip button when something is worn
+## (`80-*` §4.7.2).
 ##
 ## Esc / Back return to the port hub (S6 → S4, `30-*` §4.7). All text is
 ## re-bound on `EventBus.locale_changed` (§6), and the lists re-bind on
@@ -245,23 +248,33 @@ func _port_data() -> Dictionary:
 	return {}
 
 
+## The docked port id (`""` standalone — the engine's catalog fallback).
+func _port_id() -> String:
+	var value = GameState.current_port
+	return value if value is String else ""
+
+
 # --- Catalog ---------------------------------------------------------------
 
-## All 8 ShipTypes, in the locked data order (`ship_types.json`), no regional
-## restrictions (§4.3).
+## The docked port's stock list (`facilities.shipyard`, 40-* §4.3.1), rendered
+## with the §4.7.12 three row states. With no docked port the engine falls
+## back to the full catalog so a standalone screen never renders empty.
 func _bind_catalog() -> void:
 	_catalog_title.text = I18n.t_key("shipyard.catalog")
 	_clear(_catalog_rows)
 	_buy_buttons.clear()
-	for ship_type in DataLoader.ship_types_list:
-		_add_catalog_row(ship_type)
+	for ship_type_id in ShipyardLib.shipyard_stock():
+		_add_catalog_row(DataLoader.get_ship_type(ship_type_id))
 
 
 func _add_catalog_row(ship_type: Dictionary) -> void:
 	var ship_type_id := str(ship_type.get("id", ""))
+	var port := _port_id()
+	var state: String = ShipyardLib.row_state(port, ship_type_id)
+	var note_text := _row_note_text(port, ship_type_id)
 	# §4.8: 32px table row. Two lines per entry (identity/price/action, then the
 	# stats) so the long localised stat string can wrap instead of overflowing
-	# the half-width catalog panel at 1280×720.
+	# the half-width catalog panel at 1280×720; gray rows add the note line.
 	var card := VBoxContainer.new()
 	card.name = "Catalog_%s" % ship_type_id
 	card.custom_minimum_size.y = float(PaletteLib.ROW_H)
@@ -271,11 +284,20 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 	row.name = "Top"
 	row.add_theme_constant_override("separation", 12)
 
-	var name_label := _label(I18n.t(ship_type.get("name", {})), PaletteLib.TEXT)
+	var name_color := PaletteLib.TEXT if state == ShipyardLib.ROW_AVAILABLE \
+		else PaletteLib.PANEL_LINE
+	var name_label := _label(I18n.t(ship_type.get("name", {})), name_color)
 	name_label.name = "Name"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.tooltip_text = name_label.text
 	row.add_child(name_label)
+
+	# 40-* §4.3.1: every row carries its role label (战舰/商船/沿岸 via
+	# `shipyard.role.*`; the raw enum until the keys merge, never "<key>").
+	var role_label := _label(_role_label(ship_type), PaletteLib.PANEL_LINE)
+	role_label.name = "Role"
+	role_label.tooltip_text = role_label.text
+	row.add_child(role_label)
 
 	var price := _label(
 		I18n.fmt("shipyard.price", {"price": HudLib.format_thousands(
@@ -292,8 +314,10 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 	var reason := ShipyardLib.buy_block_reason(ship_type_id)
 	buy.disabled = not reason.is_empty()
 	# §4.7: a disabled action states its reason as a tooltip; an enabled one
-	# shows the price instead of a stale reason.
-	buy.tooltip_text = _reason_text(reason) if not reason.is_empty() else price.text
+	# shows the price instead of a stale reason. A gray state renders the
+	# 需发展度/同盟专营 note (falling back to the shared reason while the
+	# note keys await their merge).
+	buy.tooltip_text = _gate_tooltip(reason, note_text, price.text)
 	buy.pressed.connect(_on_buy_pressed.bind(ship_type_id))
 	row.add_child(buy)
 
@@ -305,8 +329,58 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 	stats.tooltip_text = _catalog_stats(ship_type)
 	card.add_child(stats)
 
+	if state != ShipyardLib.ROW_AVAILABLE:
+		var note := _label(note_text, PaletteLib.WARN)
+		note.name = "Note"
+		note.visible = not note_text.is_empty()
+		card.add_child(note)
+
 	_buy_buttons[ship_type_id] = buy
 	_catalog_rows.add_child(card)
+
+
+## The §4.7.12 note text of a gray row: 需发展度 {dev} for tier-gray,
+## 同盟专营 for allegiance-gray (`shipyard.tier.*`, C's §4.7.15 inventory).
+## Empty while those keys await their merge — the screen then falls back to
+## the shared `ui.not_available` reason instead of printing a raw "<key>".
+func _row_note_text(port: String, item_id: String) -> String:
+	var state: String = ShipyardLib.row_state(port, item_id)
+	if state == ShipyardLib.ROW_TIER_GRAY:
+		var need_key := ShipyardLib.TIER_NEED_DEV_KEY
+		if DataLoader.ui_strings.has(need_key):
+			return I18n.fmt(need_key, {"dev": ShipyardLib.effective_dev(port)})
+	elif state == ShipyardLib.ROW_ALLEGIANCE_GRAY:
+		var lock_key := ShipyardLib.ALLEGIANCE_LOCKED_KEY
+		if DataLoader.ui_strings.has(lock_key):
+			return I18n.t_key(lock_key)
+	return ""
+
+
+## The role label of a catalog row: `shipyard.role.<role>` once merged, else
+## the `40-*` §4.3.1 role enum itself (`war`/`trade`/`coastal`) — a schema
+## token, never invented prose and never a raw "<key>".
+func _role_label(ship_type: Dictionary) -> String:
+	var role := str(ship_type.get("role", ""))
+	if role.is_empty():
+		return ""
+	var key := "shipyard.role.%s" % role
+	if DataLoader.ui_strings.has(key):
+		return I18n.t_key(key)
+	return role
+
+
+## Tooltip of a disabled buy button: the gray-state note when there is one,
+## else the engine reason through `ui.reason` — or the shared
+## `ui.not_available` when the reason is a note key that has not merged yet.
+func _gate_tooltip(reason: String, note_text: String,
+		enabled_text: String = "") -> String:
+	if not note_text.is_empty():
+		return I18n.fmt("ui.reason", {"reason": note_text})
+	if reason.is_empty():
+		return enabled_text
+	if DataLoader.ui_strings.has(reason):
+		return _reason_text(reason)
+	return _reason_text("ui.not_available")
 
 
 ## One-line stat string for a catalog row: durability · capacity · speed ·
@@ -798,6 +872,7 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 	buy_row.name = "Buy"
 	buy_row.add_theme_constant_override("separation", 8)
 	var buttons: Dictionary = {}
+	var port := _port_id()
 	for item in ShipyardLib.equipment_list(slot):
 		var equipment_id := str(item.get("id", ""))
 		var price := ShipyardLib.equip_price(slot, equipment_id)
@@ -808,10 +883,13 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 		buy.name = "Buy_%s_%s" % [equipment_id,
 			"player" if ship_index < 0 else str(ship_index)]
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Phase 7 (80-* §4.7.12): the same three row states as the hull rows —
+		# the gray-state note as the tooltip, the engine reason otherwise.
+		var note_text := _row_note_text(port, equipment_id)
 		var reason := ShipyardLib.equip_block_reason(slot, equipment_id, ship_index)
 		buy.disabled = not reason.is_empty()
-		buy.tooltip_text = _reason_text(reason) if not reason.is_empty() \
-			else _equipment_tooltip(slot, equipment_id)
+		buy.tooltip_text = _gate_tooltip(reason, note_text,
+			_equipment_tooltip(slot, equipment_id))
 		buy.pressed.connect(_on_equip_pressed.bind(slot, equipment_id, ship_index))
 		buy_row.add_child(buy)
 		buttons[equipment_id] = buy
