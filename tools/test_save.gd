@@ -282,7 +282,7 @@ func _test_full_round_trip() -> void:
 	_check(typeof(GameState.port_investments["lisbon"]) == TYPE_INT,
 		"investment totals are ints after a json round trip")
 	_check(GameState.market_stocks == expected["market_stocks"],
-		"market_stocks restored byte-equal (100 ports × 20 goods, lisbon wine 87)")
+		"market_stocks restored byte-equal (the full fixture table, lisbon wine 87)")
 	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 87
 		and typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
 		"stock counts come back as ints, not json floats")
@@ -514,24 +514,25 @@ func _test_version_window() -> void:
 	_check(GameState.day == before["day"], "the current-version payload is unchanged")
 
 
-# --- 5b. An absent market_stocks defaults to derived rest -----------------
+# --- 5b. An absent market_stocks defaults to the derived initial stock ----
 ## docs/90-* §8.1: the documented default of an absent `market_stocks` is
-## the DERIVED resting stock (docs/30-* §4.2, no RNG) — computed at load,
-## not a literal.
+## the DERIVED initial stock (docs/30-* §4.2 flow economy, no RNG) —
+## producers at capacity, consumers at 60 — computed at load, not a literal.
 func _test_market_stocks_derived_default() -> void:
 	_make_rich_run()
 	var payload: Dictionary = SaveSystem.snapshot()
 	payload.erase("market_stocks")
 	_write_json(1, payload)
 	_clobber_state()
-	_check(SaveSystem.load(1), "a v5 payload without market_stocks loads")
+	_check(SaveSystem.load(1), "a payload without market_stocks loads")
 	_check(GameState.market_stocks.size() == DataLoader.ports_list.size(),
 		"the default stocks every port (%d)" % GameState.market_stocks.size())
-	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 160,
-		"lisbon wine defaults to its derived rest 160 (got %d)"
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 200,
+		"lisbon wine defaults to its derived initial stock 200 (flow economy: "
+		+ "staple capacity 160 + dev 3, ceiling 200; got %d)"
 		% int(GameState.market_stocks["lisbon"]["wine"]))
-	_check(int(GameState.market_stocks["london"]["wine"]) == 40,
-		"london wine defaults to its derived rest 40")
+	_check(int(GameState.market_stocks["london"]["wine"]) == 60,
+		"london wine defaults to the derived consumer seed 60 (flow economy)")
 	# The other Phase-5 keys still restore around the default.
 	_check(GameState.npc_preset == "high" and GameState.wrecks.size() == 1,
 		"npc_preset and wrecks restore alongside the stock default")

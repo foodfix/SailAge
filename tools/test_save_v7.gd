@@ -1,37 +1,43 @@
 extends Node
-## Phase-6 Task V acceptance tests: the v6 save schema and the identity-only
-## load rule (docs/IMPLEMENT-Phase6.md task V, decision 12; docs/90-* §8.1,
-## §8.2 development-stage scope; docs/80-* §4.6.3; docs/20-* §4.2, §4.16,
-## §4.17).
+## Phase-7 Task V acceptance tests: the v7 save schema and the identity-only
+## load rule (docs/IMPLEMENT-Phase7.md task V, decision 13; docs/90-* §8.1,
+## §8.2 development-stage scope; docs/30-* §4.9/§4.10 the allegiance state).
 ##
-##   godot --headless --path . tools/test_save_v6.tscn
+##   godot --headless --path . res://tools/test_save_v7.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## **What this suite is.** Phase 4 deleted the migration chain and Phases 5–6
-## keep it removed (decision 12: no migration; a v5 payload is refused like
-## any older pre-release save — the v6 bump absorbs the 4320×2160 coordinate
-## rebase, so a stale v5 file must never load at half-scale coordinates).
-## This suite therefore tests the **current** schema: a v6 payload round-trips
-## byte-equal — including the new `control_prefs` block and the `world` block's
-## `sail_trim` / `heading` / `wind_dir` (docs/90-* §8.1 Phase-6 additions) —
-## the Phase-5 hunter keys carry over unchanged in shape (cell re-based), the
-## documented guards still hold (corrupt payload refused, future
-## `save_version` refused, v5 and older refused by name, retired runs
-## summarised not resumed), an out-of-domain enum value is refused exactly
-## like an unknown `world.map_id`, and the session-only
-## `SettingsPanel.debug_overlays` flag never enters a payload. Sections at the
-## end drive the S19 rows (§4.6.3) through the panel API and its buttons and
-## prove the `new_game` carry.
+## **What this suite is.** Phase 4 deleted the migration chain and Phases 5–7
+## keep it removed (decision 13: no migration; a v6 payload is refused like
+## any older pre-release save — the v7 bump absorbs the allegiance/permit/
+## treasury state, so a stale v6 file must never load into a run whose
+## allegiance tug-of-war would silently restart from the seed). This suite
+## therefore tests the **current** schema: a v7 payload round-trips byte-equal
+## — including the five new keys (`permits`, `port_allegiance` in the
+## correction-8 `{ledger, allegiance}` shape with the tie-incumbent allegiance
+## persisted, `month_invested`, `nation_treasuries`, `fame_commended`) —
+## the older blocks carry over unchanged, the documented guards still hold
+## (corrupt payload refused, future `save_version` refused, v6 and older
+## refused by name, retired runs summarised not resumed), an out-of-shape
+## value is refused exactly like any other wrong-typed block, and two
+## Phase-7-specific proofs run at the end: **mid-month AI replay purity**
+## (a save/load on day 17 replays month-tick 2's counter-investment
+## identically to a never-saved run reaching the same day) and the **2 MB
+## extreme-save budget** (measured size printed for the task report).
+## Sections at the end drive the S19 rows (§4.6.3) through the panel API and
+## prove the `new_game` carry — including the `Allegiance.seed_new_game()`
+## seeding contract (contestable sovereign `{owner: 6,000}`, neutrals empty).
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and written back at the end; every file this suite creates is
 ## removed again (start AND end), exactly like `tools/test_save.gd`.
 
-## Every Phase-6 §8.1 key and its documented default (the Phase-2/3/5 blocks
-## are unchanged; `market_stocks`' documented default is the derived resting
-## stock, asserted through the loader in the defaults test).
-const V6_DEFAULTS := {
+## Every Phase-7 §8.1 optional key and its documented default (the
+## Phase-2/3/5/6 blocks are unchanged; `market_stocks`' documented default is
+## the derived resting stock, asserted through the loader in the defaults
+## test; the five Phase-7 keys' documented default is the **seeded**
+## new-game state — asserted through `Allegiance.dump_state()`).
+const V7_DEFAULTS := {
 	"wrecks": [],
 	"npc_preset": "normal",
 	"control_prefs": {"input_mode": "step", "current_mode": "modifier"},
@@ -45,13 +51,24 @@ const V6_DEFAULTS := {
 	"retired": false,
 	"retired_at": 0,
 }
-## The §8.1 Phase-6 `world`-block defaults (docs/90-* §5.4): absent keys take
+## The §8.1 Phase-7 payload keys, exactly `Allegiance.dump_state()`'s five
+## (docs/90-* §8.1 Phase-7 additions; docs/30-* §4.9).
+const V7_ALLEGIANCE_KEYS: Array[String] = [
+	"permits", "port_allegiance", "month_invested", "nation_treasuries",
+	"fame_commended",
+]
+## The §8.1 `world`-block defaults (docs/90-* §5.4): absent keys take
 ## these, and the panel/engines read them guard-style with the same values.
-const V6_WORLD_DEFAULTS := {"sail_trim": "normal", "heading": "E", "wind_dir": "E"}
+const WORLD_DEFAULTS := {"sail_trim": "normal", "heading": "E", "wind_dir": "E"}
 const NATION_IDS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 const EconomyLib := preload("res://scripts/port/economy.gd")
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 const SettingsScene := preload("res://scenes/ui_shared/settings_panel.tscn")
+
+## The extreme-save budget (docs/90-* completion gate: save ≤ 2 MB @ extreme).
+const EXTREME_SAVE_BUDGET := 2000000
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -61,17 +78,19 @@ var _backup: Dictionary = {}
 
 func _ready() -> void:
 	_backup_saves()
-	_test_v6_round_trip()
+	_test_v7_round_trip()
 	_test_fixture_shape()
 	_test_no_migration_chain()
 	_test_older_versions_refused()
-	_test_v5_shape_refused()
+	_test_v6_shape_refused()
 	_test_future_version_refused()
 	_test_corrupt_phase_fields_rejected()
 	_test_optional_keys_default()
 	_test_new_fields_round_trip()
 	_test_debug_overlays_never_saved()
 	_test_retired_save()
+	_test_mid_month_replay_purity()
+	_test_extreme_save_size()
 	await _test_s19_rows_and_new_game_carry()
 	_cleanup()
 	_report()
@@ -79,16 +98,24 @@ func _ready() -> void:
 
 # --- Fixtures ---------------------------------------------------------------
 
-## A complete **v6** save: every §8.1 key, `phase: 6`, the world block on the
+## A complete **v7** save: every §8.1 key, `phase: 7`, the world block on the
 ## 4320×2160 grid (the §8.1 Lisbon berth example), the carried Phase-5 hunter
-## keys with the re-based intel cell, and every Phase-6 key at a NON-default
-## value so the round trip can prove exact restoration. The fleet is
-## capacity-compliant so `Fleet.normalize_all()` is a no-op on load.
-func _v6_payload() -> Dictionary:
+## keys, every Phase-6 key at a NON-default value, and every Phase-7 key at a
+## NON-default value so the round trip can prove exact restoration:
+## `permits` home + a two-nation foreign map, `port_allegiance` with the
+## sovereign-seed shape (madeira), the **tie-incumbent** allegiance (malacca:
+## england and holland tie at 6,000g and the persisted allegiance holland
+## wins over sorted-first england — the reason allegiance is persisted at
+## all, correction 8) and an empty neutral (quanzhou), a spent
+## `month_invested` counter, `nation_treasuries` with a nation pinned at the
+## 2,000g NPC-tax cap constant, one drained to 0 and one large, and two
+## `fame_commended` flags. The fleet is capacity-compliant so
+## `Fleet.normalize_all()` is a no-op on load.
+func _v7_payload() -> Dictionary:
 	return {
-		"save_version": 6,
+		"save_version": 7,
 		"saved_at": 1793119712,
-		"phase": 6,
+		"phase": 7,
 		"locale": "en",
 		"day": 64,
 		"gold": 12540,
@@ -160,38 +187,46 @@ func _v6_payload() -> Dictionary:
 		"battles_won": 0,
 		"retired": false,
 		"retired_at": 0,
+		# Phase-7 keys (docs/90-* §8.1 Phase-7 additions): non-default values
+		# everywhere, `port_allegiance` entries exactly the correction-8
+		# shape {ledger, allegiance} (docs/30-* §4.9 — no `development`).
+		"permits": {"home": true, "foreign": {"spain": true, "holland": true}},
+		"port_allegiance": {
+			"madeira": {"ledger": {"portugal": 6000}, "allegiance": "portugal"},
+			"malacca": {"ledger": {"england": 6000, "holland": 6000},
+				"allegiance": "holland"},
+			"quanzhou": {"ledger": {}, "allegiance": ""},
+		},
+		"month_invested": {"madeira": 1500},
+		"nation_treasuries": {
+			"portugal": 4200, "spain": 2000, "england": 0, "ottoman": 999999,
+		},
+		"fame_commended": {"malacca": true, "madeira": true},
 	}
 
 
-## A **true v5-shaped** payload (what Phase 5 actually wrote): no
-## `control_prefs`, no `world.sail_trim` / `world.heading` / `world.wind_dir`,
-## and — the reason the version bump exists — the old 2160×1080 half-scale
-## berth coordinate. Refused on load, never repaired in place.
-func _v5_payload() -> Dictionary:
-	var payload := _v6_payload()
-	payload["save_version"] = 5
-	payload["phase"] = 5
-	payload.erase("control_prefs")
-	var world: Dictionary = payload["world"]
-	world.erase("sail_trim")
-	world.erase("heading")
-	world.erase("wind_dir")
-	world["position"] = {"x": 1025, "y": 307}
-	world.erase("last_departed_port")
-	world.erase("hunter_intel_cell")
+## A **true v6-shaped** payload (what Phase 6 actually wrote): exactly the v7
+## fixture minus the five Phase-7 keys, with `save_version` / `phase` 6.
+## Refused on load, never repaired in place.
+func _v6_payload() -> Dictionary:
+	var payload := _v7_payload()
+	payload["save_version"] = 6
+	payload["phase"] = 6
+	for key in V7_ALLEGIANCE_KEYS:
+		payload.erase(key)
 	return payload
 
 
-# --- 1. The done-when: a v6 save loads and re-saves as v6 ------------------
+# --- 1. The done-when: a v7 save loads and re-saves as v7 ------------------
 
-func _test_v6_round_trip() -> void:
-	var fixture := _v6_payload()
+func _test_v7_round_trip() -> void:
+	var fixture := _v7_payload()
 	_ensure_dir()
-	_check(_write_json(1, fixture), "the v6 fixture is written to slot 1")
+	_check(_write_json(1, fixture), "the v7 fixture is written to slot 1")
 
-	# Quit-and-restart: wipe the state, then load the v6 file.
+	# Quit-and-restart: wipe the state, then load the v7 file.
 	_clobber_state()
-	_check(SaveSystem.load(1), "a v6 save loads")
+	_check(SaveSystem.load(1), "a v7 save loads")
 	_check(SaveSystem.last_read_error.is_empty(),
 		"the load reports no error (got '%s')" % SaveSystem.last_read_error)
 	_check(GameState.fame == 0, "fame restored (0)")
@@ -258,29 +293,74 @@ func _test_v6_round_trip() -> void:
 		"world.wind_dir restored exactly (SE, got '%s')"
 		% str(GameState.world.get("wind_dir")))
 	# The Phase-5 hunter keys carry over unchanged in shape (docs/90-* §8.1:
-	# cell re-based to the 4320×2160 grid — the breaking change v6 absorbs).
+	# cell re-based to the 4320×2160 grid — the breaking change v6 absorbed).
 	_check(GameState.world["last_departed_port"] == "lisbon",
 		"world.last_departed_port carried over (lisbon)")
 	_check(GameState.world["hunter_intel_cell"] == {"x": 2213, "y": 1002},
 		"the re-based hunter_intel_cell carried over (got %s)"
 		% str(GameState.world.get("hunter_intel_cell")))
 
-	# --- Re-save: the run is written as version 6 -------------------------
+	# The Phase-7 keys restore EXACTLY (docs/90-* §8.1 Phase-7 additions),
+	# read back through the runtime owner's dump (the persistence seam).
+	var dump: Dictionary = AllegianceLib.dump_state()
+	_check(dump["permits"] == fixture["permits"],
+		"permits restored exactly (home + foreign {spain, holland}, got %s)"
+		% str(dump.get("permits")))
+	_check(AllegianceLib.has_permit_home() and AllegianceLib.has_permit_foreign("spain")
+		and AllegianceLib.has_permit_foreign("holland"),
+		"the restored permits read live through the allegiance accessors")
+	_check((dump["port_allegiance"] as Dictionary).get("madeira")
+		== {"ledger": {"portugal": 6000}, "allegiance": "portugal"},
+		"port_allegiance: the sovereign-seed shape restored exactly (madeira)")
+	_check((dump["port_allegiance"] as Dictionary).get("malacca")
+		== {"ledger": {"england": 6000, "holland": 6000}, "allegiance": "holland"},
+		"port_allegiance: the tie-incumbent allegiance restored exactly "
+		+ "(malacca keeps holland, not sorted-first england — correction 8)")
+	_check((dump["port_allegiance"] as Dictionary).get("quanzhou")
+		== {"ledger": {}, "allegiance": ""},
+		"port_allegiance: the empty neutral restored exactly (quanzhou)")
+	_check(AllegianceLib.effective_alignment("malacca") == "holland",
+		"the restored tie-incumbent allegiance drives effective_alignment")
+	_check(dump["month_invested"] == fixture["month_invested"],
+		"month_invested restored exactly (madeira 1,500, got %s)"
+		% str(dump.get("month_invested")))
+	_check(AllegianceLib.month_invested_gold("madeira") == 1500,
+		"the restored allowance counter reads live (madeira 1,500)")
+	_check(dump["nation_treasuries"].get("portugal") == 4200
+		and dump["nation_treasuries"].get("spain") == 2000
+		and dump["nation_treasuries"].get("england") == 0
+		and dump["nation_treasuries"].get("ottoman") == 999999,
+		"nation_treasuries restored exactly (2,000g-cap literal, a 0, a large)")
+	_check(dump["fame_commended"] == fixture["fame_commended"],
+		"fame_commended restored exactly ({malacca, madeira}, got %s)"
+		% str(dump.get("fame_commended")))
+	# Unlisted contestable ports keep the seeded defaults (the payload is the
+	# delta over `seed_new_game`, docs/90-* §8.1 "Default when absent").
+	_check((dump["port_allegiance"] as Dictionary).size() == _contestable_count(),
+		"every contestable port is serialized (%d, got %d)"
+		% [_contestable_count(), (dump["port_allegiance"] as Dictionary).size()])
+	_check(not (dump["port_allegiance"] as Dictionary).has("lisbon"),
+		"the protected port lisbon is never serialized (no ledger exists)")
+
+	# --- Re-save: the run is written as version 7 -------------------------
 	_check(SaveSystem.save(1), "the run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 6,
-		"the re-saved file is save_version 6 (got %s)"
+	_check(int(resaved.get("save_version", -1)) == 7,
+		"the re-saved file is save_version 7 (got %s)"
 		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 6,
-		"the re-saved file is phase 6 (got %s)" % str(resaved.get("phase")))
-	for key in V6_DEFAULTS:
+	_check(int(resaved.get("phase", -1)) == 7,
+		"the re-saved file is phase 7 (got %s)" % str(resaved.get("phase")))
+	for key in V7_DEFAULTS:
 		_check(resaved.has(key),
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
 	_check(resaved.has("market_stocks"),
 		"the re-saved file carries 'market_stocks' (docs/90-* §8.1)")
+	for key in V7_ALLEGIANCE_KEYS:
+		_check(resaved.has(key),
+			"the re-saved file carries the Phase-7 key '%s' (docs/90-* §8.1)" % key)
 	var resaved_world: Dictionary = resaved["world"]
-	for key in V6_WORLD_DEFAULTS:
+	for key in WORLD_DEFAULTS:
 		_check(resaved_world.has(key),
 			"the re-saved world block carries '%s' (docs/90-* §8.1)" % key)
 	_check(not resaved.has("quests"),
@@ -290,18 +370,38 @@ func _test_v6_round_trip() -> void:
 	_check(not resaved_world.has("clock_fraction") and not resaved.has("explored_tiles")
 		and not resaved.has("debug_overlays"),
 		"the re-save still omits clock_fraction / explored_tiles / debug_overlays")
+	# Correction 8: the persisted allegiance shape is exactly
+	# {ledger, allegiance} — development is derived and never serialized.
+	var resaved_pa: Dictionary = resaved["port_allegiance"]
+	_check(resaved_pa.size() == _contestable_count(),
+		"the re-saved port_allegiance covers every contestable port (%d)"
+		% resaved_pa.size())
+	var shape_ok := true
+	for port_id in resaved_pa:
+		var entry: Dictionary = resaved_pa[port_id]
+		if entry.keys().size() != 2 or not entry.has("ledger") \
+				or not entry.has("allegiance"):
+			shape_ok = false
+	_check(shape_ok, "every re-saved port_allegiance entry is exactly {ledger, allegiance}")
+	_check(not JSON.stringify(resaved).contains("development"),
+		"the re-saved file never names the derived 'development' field")
+	_check(resaved_pa.get("malacca") == {"ledger": {"england": 6000, "holland": 6000},
+		"allegiance": "holland"},
+		"the re-saved malacca entry keeps the tie-incumbent allegiance")
+	_check(int((resaved["nation_treasuries"] as Dictionary).get("spain", -1)) == 2000,
+		"the re-saved treasuries keep the 2,000g-cap literal")
 
-	# …and the v6 file re-loads to the same state (second cycle).
+	# …and the v7 file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved v6 file loads")
+	_check(SaveSystem.load(1), "the re-saved v7 file loads")
 	_check(_loaded_values() == first_cycle, "a second save/load cycle changes nothing")
 
 
-# --- 2. The fixture really is the v6 §8.1 shape ----------------------------
+# --- 2. The fixture really is the v7 §8.1 shape ----------------------------
 
 func _test_fixture_shape() -> void:
-	var fixture := _v6_payload()
+	var fixture := _v7_payload()
 	_check(int(fixture["save_version"]) == SaveSystem.SAVE_VERSION,
 		"the fixture is save_version %d" % SaveSystem.SAVE_VERSION)
 	_check(int(fixture["phase"]) == SaveSystem.PHASE,
@@ -309,8 +409,8 @@ func _test_fixture_shape() -> void:
 	_check(SaveSystem.validate_payload(fixture).is_empty(),
 		"validate_payload() accepts the fixture (%s)"
 		% SaveSystem.validate_payload(fixture))
-	_check(SaveSystem.SAVE_VERSION == 6 and SaveSystem.PHASE == 6,
-		"this build ships save_version 6 / phase 6")
+	_check(SaveSystem.SAVE_VERSION == 7 and SaveSystem.PHASE == 7,
+		"this build ships save_version 7 / phase 7 (decision 13)")
 	_check(SaveSystem.DEFAULT_MAP_ID == "world",
 		"the shipped map id is 'world' (docs/90-* §9.1)")
 
@@ -321,7 +421,7 @@ func _test_no_migration_chain() -> void:
 	_check(not ("MIGRATIONS" in SaveSystem),
 		"SaveSystem carries no MIGRATIONS table any more (dev-stage scope)")
 	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4",
-			"migrate_v4_to_v5", "migrate_v5_to_v6"]:
+			"migrate_v4_to_v5", "migrate_v5_to_v6", "migrate_v6_to_v7"]:
 		_check(not SaveSystem.has_method(name),
 			"the historical migration step %s() is gone" % name)
 
@@ -331,8 +431,8 @@ func _test_no_migration_chain() -> void:
 func _test_older_versions_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	for version in [1, 2, 3, 4, 5]:
-		var older := _v6_payload()
+	for version in [1, 2, 3, 4, 5, 6]:
+		var older := _v7_payload()
 		older["save_version"] = version
 		older["phase"] = version
 		_write_json(1, older)
@@ -348,27 +448,28 @@ func _test_older_versions_refused() -> void:
 			"list_saves() reports the v%d slot invalid" % version)
 
 
-# --- 4b. A true v5-shaped payload is refused -------------------------------
+# --- 4b. A true v6-shaped payload is refused -------------------------------
 
-## The §8.2 normative case: a payload exactly as Phase 5 wrote it — old
-## half-scale coordinates, no Phase-6 keys — refused with the standard
-## pre-release message and `GameState` untouched.
-func _test_v5_shape_refused() -> void:
+## The §8.2 normative case (Phase-7 decision 13): a payload exactly as
+## Phase 6 wrote it — no `permits`, no `port_allegiance`, no `month_invested`,
+## no `nation_treasuries`, no `fame_commended` — refused with the standard
+## pre-release message and `GameState` (and the allegiance statics) untouched.
+func _test_v6_shape_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	_write_json(1, _v5_payload())
+	_write_json(1, _v6_payload())
 	_check(SaveSystem.load(1) == false,
-		"a true v5-shaped payload fails to load (pre-release)")
+		"a true v6-shaped payload fails to load (pre-release)")
 	_check(SaveSystem.last_read_error.contains("pre-release")
-		and SaveSystem.last_read_error.contains("5"),
+		and SaveSystem.last_read_error.contains("6"),
 		"the reason is the standard pre-release message (got '%s')"
 		% SaveSystem.last_read_error)
 	_check(_loaded_values() == before,
-		"state untouched after refusing the v5 payload (no half-scale load)")
+		"state untouched after refusing the v6 payload (no allegiance reseed)")
 	_check(SaveSystem.read_save(1).is_empty(),
-		"read_save() refuses the v5 payload too")
-	_check(GameState.world["position"] == {"x": 2050, "y": 615},
-		"the in-memory re-based position was not overwritten by the v5 file")
+		"read_save() refuses the v6 payload too")
+	_check(AllegianceLib.dump_state() == before["allegiance"],
+		"the allegiance statics were not reseeded by the refused v6 file")
 
 
 # --- 5. A future version is refused ---------------------------------------
@@ -376,7 +477,7 @@ func _test_v5_shape_refused() -> void:
 func _test_future_version_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	var future := _v6_payload()
+	var future := _v7_payload()
 	future["save_version"] = SaveSystem.SAVE_VERSION + 1
 	future["phase"] = SaveSystem.PHASE + 1
 	_write_json(1, future)
@@ -387,15 +488,15 @@ func _test_future_version_refused() -> void:
 		"state untouched after the future-version rejection")
 
 
-# --- 6. A wrong-typed or out-of-domain field is rejected ------------------
+# --- 6. A wrong-typed or out-of-shape field is rejected -------------------
 
 ## Type probes reuse the file's existing convention: a payload this build
 ## wrote, with one field replaced by a wrong-typed value → refused, reason
-## names the key, state untouched. The Phase-6 additions extend both lists:
-## wrong TYPES anywhere in `control_prefs` / the world ocean keys, and
-## out-of-domain enum values, which are refused exactly like an unknown
-## `world.map_id` (docs/90-* §8.1 Phase-6 additions; task V's documented
-## choice — see `save_system.gd` `validate_payload`).
+## names the key, state untouched. The Phase-7 additions extend both lists:
+## wrong TYPES anywhere in the five allegiance keys, and the correction-8
+## shape rule — a `port_allegiance` entry that is not exactly
+## `{ledger, allegiance}` (a retired `development` key, a missing allegiance)
+## is a rejection, not a silent repair (docs/30-* §4.9).
 func _test_corrupt_phase_fields_rejected() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
@@ -425,6 +526,13 @@ func _test_corrupt_phase_fields_rejected() -> void:
 			"market_events as an object"},
 		{"key": "named_pirate_respawns", "value": [], "why":
 			"named_pirate_respawns as an array"},
+		# Phase-7 keys: wrong top-level types are rejections like any block.
+		{"key": "permits", "value": [], "why": "permits as an array"},
+		{"key": "port_allegiance", "value": [], "why": "port_allegiance as an array"},
+		{"key": "month_invested", "value": [], "why": "month_invested as an array"},
+		{"key": "nation_treasuries", "value": [], "why":
+			"nation_treasuries as an array"},
+		{"key": "fame_commended", "value": [], "why": "fame_commended as an array"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		bad[probe["key"]] = probe["value"]
@@ -436,8 +544,8 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		_check(_loaded_values() == before,
 			"state untouched after rejecting %s" % probe["why"])
 
-	# Nested Phase-6 probes: `["path", "to", "key"]` is overwritten by
-	# `value` in an otherwise-valid snapshot.
+	# Nested probes: `["path", "to", "key"]` is overwritten by `value` in an
+	# otherwise-valid snapshot.
 	for probe in [
 		{"path": ["control_prefs", "input_mode"], "value": "joystick", "fragment":
 			"control_prefs.input_mode", "why":
@@ -468,6 +576,39 @@ func _test_corrupt_phase_fields_rejected() -> void:
 			"last_departed_port", "why": "world.last_departed_port as a number"},
 		{"path": ["world", "hunter_intel_cell"], "value": 5, "fragment":
 			"hunter_intel_cell", "why": "world.hunter_intel_cell as a number"},
+		# Phase-7 nested probes (docs/90-* §8.1 Phase-7 additions).
+		{"path": ["permits", "home"], "value": "yes", "fragment":
+			"permits.home", "why": "permits.home as a string"},
+		{"path": ["permits", "home"], "value": 1, "fragment":
+			"permits.home", "why": "permits.home as a number"},
+		{"path": ["permits", "foreign"], "value": 3, "fragment":
+			"permits.foreign", "why": "permits.foreign as a number"},
+		{"path": ["permits", "foreign", "spain"], "value": "yes", "fragment":
+			"permits.foreign.spain", "why": "a foreign permit flag as a string"},
+		{"path": ["port_allegiance", "malacca"], "value": 5, "fragment":
+			"port_allegiance.malacca", "why": "a port_allegiance entry as a number"},
+		{"path": ["port_allegiance", "malacca", "ledger"], "value": [], "fragment":
+			"port_allegiance.malacca.ledger", "why":
+			"a port ledger as an array"},
+		{"path": ["port_allegiance", "malacca", "ledger", "england"], "value": "6k",
+			"fragment": "port_allegiance.malacca.ledger.england", "why":
+			"a ledger entry as a string"},
+		{"path": ["port_allegiance", "malacca", "allegiance"], "value": 7, "fragment":
+			"port_allegiance.malacca.allegiance", "why":
+			"a persisted allegiance as a number"},
+		# Correction 8: the retired `development` key is a shape rejection.
+		{"path": ["port_allegiance", "malacca", "development"], "value": 2, "fragment":
+			"correction-8 shape", "why":
+			"a port_allegiance entry carrying the retired 'development' key"},
+		{"path": ["month_invested", "madeira"], "value": "1500", "fragment":
+			"month_invested.madeira", "why":
+			"a month_invested counter as a string"},
+		{"path": ["nation_treasuries", "spain"], "value": "2000", "fragment":
+			"nation_treasuries.spain", "why":
+			"a treasury as a string"},
+		{"path": ["fame_commended", "malacca"], "value": 1, "fragment":
+			"fame_commended.malacca", "why":
+			"a commendation flag as a number"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		var parent: Dictionary = bad
@@ -482,6 +623,20 @@ func _test_corrupt_phase_fields_rejected() -> void:
 			% [probe["fragment"], SaveSystem.last_read_error])
 		_check(_loaded_values() == before,
 			"state untouched after rejecting %s" % probe["why"])
+
+	# The ledger-only entry shape (allegiance key missing) is the other
+	# correction-8 rejection: the tie rule needs the persisted allegiance.
+	var ledger_only: Dictionary = SaveSystem.snapshot()
+	(ledger_only["port_allegiance"] as Dictionary)["malacca"] \
+		.erase("allegiance")
+	_write_json(1, ledger_only)
+	_check(SaveSystem.load(1) == false,
+		"a ledger-only port_allegiance entry (no allegiance) is rejected")
+	_check(SaveSystem.last_read_error.contains("correction-8 shape"),
+		"the reason names the correction-8 shape (got '%s')"
+		% SaveSystem.last_read_error)
+	_check(_loaded_values() == before,
+		"state untouched after the ledger-only rejection")
 
 	# An unknown map id is rejected too (§8.1/§9.1: "world" is the only id).
 	var bad_map: Dictionary = SaveSystem.snapshot()
@@ -502,11 +657,13 @@ func _test_corrupt_phase_fields_rejected() -> void:
 
 ## docs/90-* §8.1 "Default when absent": the optional blocks may be omitted by
 ## a hand-edited payload and are then restored from the documented default.
-## Phase 6: an absent `control_prefs` block (and absent `world` ocean keys)
-## restore the pinned Step + Modifier / normal + E + E defaults.
+## Phase 7: an absent allegiance quintet restores the **seeded** new-game
+## state (`Allegiance.restore_state` seeds first): contestable sovereigns
+## `{owner: 6,000}`, neutrals empty, treasuries 5,000g, no permits, no
+## commendations, no spent allowance.
 func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
-	var payload := _v6_payload()
+	var payload := _v7_payload()
 	for key in ["npc_fleets", "proximity_cooldowns", "market_stocks",
 			"wrecks", "npc_preset", "control_prefs",
 			"market_events", "named_pirate_respawns", "fame", "titles",
@@ -514,13 +671,15 @@ func _test_optional_keys_default() -> void:
 			"discoveries_reported", "discovery_hints", "battles_won",
 			"retired", "retired_at", "discoveries_found"]:
 		payload.erase(key)
+	for key in V7_ALLEGIANCE_KEYS:
+		payload.erase(key)
 	var world: Dictionary = payload["world"]
-	for key in V6_WORLD_DEFAULTS:
+	for key in WORLD_DEFAULTS:
 		world.erase(key)
 	_write_json(1, payload)
 	_clobber_state()
 	_check(SaveSystem.load(1),
-		"a payload omitting the optional keys (incl. every Phase-6 key) loads")
+		"a payload omitting the optional keys (incl. every Phase-7 key) loads")
 	_check(GameState.control_prefs == {"input_mode": "step", "current_mode": "modifier"}
 		and GameState.control_prefs is Dictionary,
 		"an absent control_prefs defaults to Step + Modifier (got %s)"
@@ -536,14 +695,18 @@ func _test_optional_keys_default() -> void:
 	_check(GameState.proximity_cooldowns == {}
 		and GameState.proximity_cooldowns is Dictionary,
 		"an absent proximity_cooldowns defaults to {}")
-	# `market_stocks`' documented default is the DERIVED resting stock
-	# (docs/30-* §4.2, no RNG) — computed at load, not a literal.
+	# `market_stocks`' documented default is the DERIVED initial stock
+	# (docs/30-* §4.2 flow economy, no RNG) — computed at load, not a literal.
 	_check(GameState.market_stocks.size() == DataLoader.ports_list.size(),
-		"an absent market_stocks defaults to the derived resting stock "
+		"an absent market_stocks defaults to the derived initial stock "
 		+ "(all %d ports)" % GameState.market_stocks.size())
-	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 160,
-		"the derived default stocks lisbon wine at 160 (got %d)"
+	_check(int(GameState.market_stocks["lisbon"]["wine"]) == 200,
+		"the derived default stocks lisbon wine at its capacity 200 "
+		+ "(staple 160 + dev 3, ceiling 200; got %d)"
 		% int(GameState.market_stocks["lisbon"]["wine"]))
+	_check(int(GameState.market_stocks["london"]["wine"]) == 60,
+		"the derived default stocks london wine at the consumer seed 60 "
+		+ "(got %d)" % int(GameState.market_stocks["london"]["wine"]))
 	_check(GameState.wrecks == [] and GameState.wrecks is Array,
 		"an absent wrecks defaults to []")
 	_check(GameState.npc_preset == "normal",
@@ -568,11 +731,40 @@ func _test_optional_keys_default() -> void:
 		"absent retired/retired_at default to false/0")
 	_check(GameState.discoveries_found == [],
 		"an absent discoveries_found defaults to []")
+	# The Phase-7 quintet defaults to the SEEDED state (docs/90-* §8.1:
+	# "{}` — then Allegiance.seed_new_game() reseeds").
+	var dump: Dictionary = AllegianceLib.dump_state()
+	_check(dump["permits"] == {"home": false, "foreign": {}},
+		"absent permits default to the seeded none (got %s)" % str(dump.get("permits")))
+	_check((dump["port_allegiance"] as Dictionary).size() == _contestable_count(),
+		"absent port_allegiance defaults to the full seeded map (%d contestable)"
+		% _contestable_count())
+	_check((dump["port_allegiance"] as Dictionary).get("madeira")
+		== {"ledger": {"portugal": 6000}, "allegiance": "portugal"},
+		"absent port_allegiance seeds the contestable sovereign {owner: 6,000} "
+		+ "(madeira, got %s)"
+		% str((dump["port_allegiance"] as Dictionary).get("madeira")))
+	_check((dump["port_allegiance"] as Dictionary).get("quanzhou")
+		== {"ledger": {}, "allegiance": ""},
+		"absent port_allegiance seeds the neutral empty (quanzhou)")
+	_check(not (dump["port_allegiance"] as Dictionary).has("lisbon"),
+		"the seeded map never carries a protected port (lisbon)")
+	var treasuries: Dictionary = dump["nation_treasuries"]
+	var treasuries_ok := treasuries.size() == NATION_IDS.size()
+	for nation_id in NATION_IDS:
+		treasuries_ok = treasuries_ok and int(treasuries.get(nation_id, -1)) == 5000
+	_check(treasuries_ok,
+		"absent nation_treasuries default to the seeded 5,000g each (got %s)"
+		% str(treasuries))
+	_check(dump["month_invested"] == {},
+		"an absent month_invested defaults to the seeded empty")
+	_check(dump["fame_commended"] == {},
+		"an absent fame_commended defaults to the seeded empty")
 	_check(GameState.day == 64 and GameState.gold == 12540,
 		"the required fields still restore around the defaults")
 
 
-# --- 7b. The Phase-6 blocks are real saved state --------------------------
+# --- 7b. The Phase-7 blocks are real saved state --------------------------
 
 func _test_new_fields_round_trip() -> void:
 	_load_fixture_into_memory()
@@ -608,17 +800,16 @@ func _test_new_fields_round_trip() -> void:
 		DataLoader.ports_list, DataLoader.goods_list
 	)
 	stocks["lisbon"]["wine"] = 12
-	stocks["seville"]["spices"] = 200
+	stocks["seville"]["olive_oil"] = 200
 	GameState.market_stocks = stocks
 	GameState.wrecks = [{
 		"id": "wreck_64_100_200", "position": {"x": 100, "y": 200},
-		"day": 64, "cargo": {"silk": 12},
+		"day": 64, "cargo": {"raw_silk": 12},
 	}]
 	GameState.npc_preset = "extreme"
 	GameState.market_events = [{
 		"template_id": "ev_war_provisioning", "port_id": "seville",
 		"start_day": 64, "end_day": 124,
-		"shifts": {"timber": -30, "cannons": -30},
 	}]
 	# Task L (docs/60-* §4.11.11.4, docs/90-* §8.1): the respawn map is a
 	# bare `{named_pirate_id: available_day}` object, saved as of v5.
@@ -655,9 +846,17 @@ func _test_new_fields_round_trip() -> void:
 		"home_port_id": "",
 	}]
 	GameState.proximity_cooldowns = {"pirate": 12}
+	# Phase-7 (docs/90-* §8.1): drive the allegiance runtime APIs — the state
+	# the five keys persist — from the fixture's loaded values.
+	AllegianceLib.set_permit("home", "")
+	AllegianceLib.set_permit("foreign", "ottoman")
+	AllegianceLib.add_investment("malacca", "england", 3000)
+	AllegianceLib.player_invest_chunk("malacca")
+	AllegianceLib.credit_permit_sale("spain", 20000)
+	AllegianceLib.credit_tax("malacca", "england", 700)
 	var expected := _loaded_values()
 
-	_check(SaveSystem.save(1), "a run with Phase-2/3/5/6 state saves")
+	_check(SaveSystem.save(1), "a run with Phase-2/3/5/6/7 state saves")
 	var on_disk := _read_json(1)
 	_check(int(on_disk.get("fame", -1)) == 480, "snapshot() writes fame")
 	_check((on_disk.get("titles") as Dictionary).get("portugal") == "baron",
@@ -700,11 +899,30 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() writes world.last_departed_port")
 	_check(on_disk_world.get("hunter_intel_cell") == {"x": 1900, "y": 860},
 		"snapshot() writes world.hunter_intel_cell")
+	# Phase-7 keys: snapshot() writes the live allegiance state verbatim.
+	_check(on_disk.get("permits") == {"home": true,
+		"foreign": {"spain": true, "holland": true, "ottoman": true}},
+		"snapshot() writes permits (home + the grown foreign map)")
+	var disk_pa: Dictionary = on_disk["port_allegiance"]
+	_check((disk_pa.get("malacca") as Dictionary).get("ledger")
+		== {"england": 9000, "holland": 6000, "portugal": 500},
+		"snapshot() writes the grown malacca ledger (england +3,000, "
+		+ "player chunk +500)")
+	_check(str((disk_pa.get("malacca") as Dictionary).get("allegiance")) == "england",
+		"snapshot() writes the re-resolved allegiance (england 9,000 > holland 6,000)")
+	_check((on_disk["month_invested"] as Dictionary).get("madeira") == 1500
+		and (on_disk["month_invested"] as Dictionary).get("malacca") == 500,
+		"snapshot() writes month_invested (fixture counter + the new chunk)")
+	_check((on_disk["nation_treasuries"] as Dictionary).get("spain") == 22000
+		and (on_disk["nation_treasuries"] as Dictionary).get("england") == 700,
+		"snapshot() writes nation_treasuries (permit sale + the capped tax credit)")
+	_check((on_disk["fame_commended"] as Dictionary).get("madeira") == true,
+		"snapshot() writes fame_commended")
 
 	_clobber_state()
-	_check(SaveSystem.load(1), "the v6 file with Phase-2/3/5/6 state loads")
+	_check(SaveSystem.load(1), "the v7 file with Phase-2/3/5/6/7 state loads")
 	_check(_loaded_values() == expected,
-		"every Phase-2/3/5/6 field restores byte-equal after a v6 round trip")
+		"every Phase-2/3/5/6/7 field restores byte-equal after a v7 round trip")
 	_check(typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
 		"stock counts come back as ints, not json floats")
 	_check(typeof(GameState.wrecks[0]["position"]["x"]) == TYPE_INT,
@@ -715,6 +933,12 @@ func _test_new_fields_round_trip() -> void:
 		== TYPE_INT, "fleet coordinates come back as ints, not json floats")
 	_check(typeof(GameState.world["hunter_intel_cell"]["x"]) == TYPE_INT,
 		"the hunter intel cell comes back with int coordinates")
+	_check(typeof((AllegianceLib.dump_state()["month_invested"]
+		as Dictionary)["malacca"]) == TYPE_INT,
+		"the month_invested counter comes back as an int, not a json float")
+	_check(typeof((AllegianceLib.dump_state()["nation_treasuries"]
+		as Dictionary)["spain"]) == TYPE_INT,
+		"treasury gold comes back as an int, not a json float")
 
 	# The snapshot deep-copies: mutating live state cannot rewrite a save.
 	var snap := SaveSystem.snapshot()
@@ -731,6 +955,9 @@ func _test_new_fields_round_trip() -> void:
 	GameState.control_prefs["input_mode"] = "mutated"
 	GameState.world["sail_trim"] = "mutated"
 	GameState.world["hunter_intel_cell"]["x"] = 999
+	AllegianceLib.set_permit("foreign", "italy")
+	AllegianceLib.add_investment("malacca", "holland", 12000)
+	AllegianceLib.credit_permit_sale("italy", 999999)
 	_check((snap["titles"] as Dictionary)["portugal"] == "baron",
 		"snapshot() deep-copies titles")
 	_check(((snap["active_quests"] as Array)[0] as Dictionary)["status"] == "active",
@@ -757,6 +984,15 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() deep-copies the world block")
 	_check(((snap["world"] as Dictionary)["hunter_intel_cell"]
 		as Dictionary)["x"] == 1900, "snapshot() deep-copies the intel cell")
+	_check(not ((snap["permits"] as Dictionary)["foreign"]
+		as Dictionary).has("italy"),
+		"snapshot() deep-copies permits")
+	_check(((snap["port_allegiance"] as Dictionary)["malacca"]
+		as Dictionary)["ledger"] == {"england": 9000, "holland": 6000,
+		"portugal": 500},
+		"snapshot() deep-copies port_allegiance ledgers")
+	_check(int((snap["nation_treasuries"] as Dictionary).get("italy", -1)) == 5000,
+		"snapshot() deep-copies nation_treasuries")
 
 
 # --- 7c. The session-only debug flag never enters a payload ---------------
@@ -820,6 +1056,8 @@ func _test_retired_save() -> void:
 		"load() reports the slot as retired")
 	_check(_loaded_values() == before,
 		"a retired load restores no play state (GameState untouched)")
+	_check(AllegianceLib.dump_state() == before["allegiance"],
+		"a retired load restores no allegiance state either (statics untouched)")
 
 	var summary: Dictionary = SaveSystem.last_retired_summary
 	_check(int(summary.get("day", -1)) == 64, "the summary carries the day count")
@@ -847,14 +1085,191 @@ func _test_retired_save() -> void:
 		"a playable load restores state again")
 
 
-# --- 9. The S19 rows flip GameState live; new_game carries the choice -----
+# --- 9. Mid-month AI replay purity (the Phase-7 proof) ---------------------
+#
+# docs/90-* §8.2 / docs/30-* §4.9: a save/load mid-month replays the month's
+# counter-investment identically — the persisted ledger/allegiance state is
+# the AI's only input, so `restore_state` re-deriving the transient trackers
+# must leave the month tick a pure function of the payload. Two full
+# re-creations of the same timeline: one saves at day 17 and loads back
+# before month-tick 2, the other never touches a slot. L's determinism
+# fixture pattern (test_allegiance.gd), extended across a save/load boundary.
+
+## A lean but fully saveable run (player/fleet/world/stocks) with a clean
+## allegiance seed, standing at `day`.
+func _make_replay_run(day: int) -> void:
+	var reputation: Dictionary = {}
+	for nation_id in NATION_IDS:
+		reputation[nation_id] = 0
+	GameState.locale = "en"
+	GameState.player = {
+		"nation_id": "portugal",
+		"stats": {
+			"leadership": 10, "seamanship": 10, "combat": 10,
+			"navigation": 10, "luck": 10,
+		},
+		"xp": 0,
+		"level": 1,
+		"officers": [],
+		"reputation": reputation,
+	}
+	GameState.fleet = []
+	GameState.day = day
+	GameState.gold = 50000
+	GameState.morale = 70
+	GameState.current_port = "lisbon"
+	GameState.known_ports = ["lisbon"]
+	GameState.port_investments = {}
+	GameState.bounties = {}
+	GameState.fame = 0
+	GameState.world = {
+		"position": {"x": 2050, "y": 615},
+		"clock_fraction": 0.0,
+		"weather": "fair",
+		"map_id": "world",
+		"last_departed_port": "",
+		"hunter_intel_cell": null,
+		"sail_trim": "normal",
+		"heading": "E",
+		"wind_dir": "E",
+	}
+	GameState.market_stocks = EconomyLib.build_initial_stocks(
+		DataLoader.ports_list, DataLoader.goods_list)
+	AllegianceLib.seed_new_game()
+
+
+## One timeline: seed → month-tick 1 (day 1) → mid-month day 17 → (save/load
+## when `save_mid_month`) → month-tick 2 (day 31). Returns everything the
+## purity claim covers: the telegraph sequence, the full allegiance dump and
+## the player-facing ledgers the flip hooks write.
+func _replay_branch(save_mid_month: bool) -> Dictionary:
+	_make_replay_run(1)
+	AllegianceLib.month_tick()
+	GameState.day = 17
+	var mid_state: Dictionary = AllegianceLib.dump_state()
+	if save_mid_month:
+		_check(SaveSystem.save(1), "the day-17 state saves mid-month")
+		_clobber_state()
+		_check(SaveSystem.load(1), "the day-17 state loads back")
+		_check(AllegianceLib.dump_state() == mid_state,
+			"the day-17 round trip restores the allegiance state byte-equal")
+		_check(GameState.day == 17 and GameState.gold == 50000,
+			"the day-17 load restores the clock and purse")
+	GameState.day = 31
+	AllegianceLib.month_tick()
+	var rows: Array = []
+	for row in AllegianceLib.last_month_investments():
+		rows.append("%s@%s=%d" % [row.get("nation_id", ""),
+			row.get("port_id", ""), int(row.get("amount", 0))])
+	return {
+		"telegraphs": rows,
+		"state": AllegianceLib.dump_state(),
+		"fame": GameState.fame,
+		"reputation": (GameState.player.get("reputation", {}) as Dictionary)
+			.duplicate(true),
+		"fame_commended": (AllegianceLib.dump_state()["fame_commended"]
+			as Dictionary).duplicate(true),
+	}
+
+
+func _test_mid_month_replay_purity() -> void:
+	var saved := _replay_branch(true)
+	var never := _replay_branch(false)
+	var saved_rows: Array = saved["telegraphs"]
+	_check(not saved_rows.is_empty(),
+		"the month-2 tick produced %d telegraph rows (the AI is alive)"
+		% saved_rows.size())
+	_check(saved["telegraphs"] == never["telegraphs"],
+		"REPLAY PURITY: the save/load branch's month-2 investment sequence "
+		+ "is identical to the never-saved branch's")
+	_check(saved["state"] == never["state"],
+		"REPLAY PURITY: ledgers, allegiances, treasuries and flags are "
+		+ "identical after month-tick 2")
+	_check(saved["fame"] == never["fame"] and saved["reputation"] == never["reputation"],
+		"REPLAY PURITY: the flip hooks (fame, poaching rep) replay identically")
+	var window_ok := true
+	for row in AllegianceLib.last_month_investments():
+		if int(row.get("day", -1)) != 31:
+			window_ok = false
+	_check(window_ok,
+		"the telegraph window holds only month-2 rows in both branches "
+		+ "(the day-1 rows aged out identically)")
+	print("REPLAY PROOF month 31: ", saved_rows)
+
+
+# --- 10. The extreme-save budget -------------------------------------------
+
+## docs/90-* completion gate: save ≤ 2 MB @ extreme. The honest extreme
+## world, measured the way `test_density` measures it (on the exact
+## slot-write bytes of a REAL payload): the extreme density preset seeds the
+## fleet ecology through `new_game`'s initial fill, a 90-day trickle window
+## grows it toward the 288 cap, the full derived stock table rides along
+## (145 ports × the listed goods), and the allegiance state is a
+## late-campaign world — every contestable port carrying a six-nation
+## ledger, a player sweep flipping the contestables, the monthly allowance
+## spent at 40 ports, every foreign permit held. Measured size printed for
+## the task report.
+func _test_extreme_save_size() -> void:
+	GameState.npc_preset = "extreme"
+	GameState.new_game("portugal", false)
+	var sim := NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": "extreme",
+	})
+	for offset in range(90):
+		GameState.day = 200 + offset
+		sim.tick(GameState.day)
+	# A late-campaign allegiance world on top of the populated ecology.
+	var flipped := 0
+	for port in DataLoader.ports_list:
+		var port_id := str((port as Dictionary).get("id", ""))
+		if port_id.is_empty() or AllegianceLib.is_protected(port_id):
+			continue
+		for nation_id in NATION_IDS:
+			AllegianceLib.add_investment(port_id, nation_id, 2500)
+		AllegianceLib.add_investment(port_id, "portugal", 6000)
+		flipped += 1
+	var invested := 0
+	for port in DataLoader.ports_list:
+		var port_id := str((port as Dictionary).get("id", ""))
+		if port_id.is_empty() or AllegianceLib.is_protected(port_id) \
+				or invested >= 40:
+			continue
+		AllegianceLib.player_invest_chunk(port_id)
+		invested += 1
+	AllegianceLib.set_permit("home", "")
+	for nation_id in ["spain", "england", "holland", "ottoman", "italy"]:
+		AllegianceLib.set_permit("foreign", nation_id)
+	# The payload validates and measures within the budget.
+	var payload := SaveSystem.snapshot()
+	var reason := SaveSystem.validate_payload(payload)
+	_check(reason.is_empty(), "the extreme payload validates (%s)" % reason)
+	var payload_bytes: int = JSON.stringify(payload, "\t").to_utf8_buffer().size()
+	print("MEASURED extreme save payload: %d bytes (%.2f MB; budget %d)"
+		% [payload_bytes, payload_bytes / 1048576.0, EXTREME_SAVE_BUDGET])
+	print("PROFILE save_v7_extreme_bytes %d" % payload_bytes)
+	_check(payload_bytes <= EXTREME_SAVE_BUDGET,
+		"the extreme save stays within the 2 MB budget (%d bytes)" % payload_bytes)
+	_check((payload["npc_fleets"] as Array).size() >= 100,
+		"the extreme fixture carries a populated fleet ecology (%d fleets)"
+		% (payload["npc_fleets"] as Array).size())
+	_check((payload["port_allegiance"] as Dictionary).size() == _contestable_count(),
+		"the extreme fixture serializes every contestable port (%d)"
+		% _contestable_count())
+	_check((payload["market_stocks"] as Dictionary).size() == DataLoader.ports_list.size(),
+		"the extreme fixture carries the full stock table (%d ports)"
+		% (payload["market_stocks"] as Dictionary).size())
+
+
+# --- 11. The S19 rows flip GameState live; new_game carries the choice -----
 
 ## docs/80-* §4.6.3 (task V): the input-mode and current-mode rows write
 ## `GameState.control_prefs` LIVE on both mounts; the debug row writes ONLY
 ## the session-only static. A pre-game S1 choice is carried into the run by
 ## `new_game` exactly like `npc_preset` (out-of-domain values fall back to
-## the pinned defaults). Labels are NOT asserted: the Phase-6 ui_strings keys
-## are orchestrator-merged and render as `<key>` placeholders until then.
+## the pinned defaults), and the fresh run seeds the allegiance quintet
+## through `Allegiance.seed_new_game()` (docs/30-* §4.9). Labels are NOT
+## asserted: the ui_strings keys are orchestrator-merged and render as
+## `<key>` placeholders until then.
 func _test_s19_rows_and_new_game_carry() -> void:
 	_ensure_dir()
 	GameState.control_prefs = {"input_mode": "step", "current_mode": "modifier"}
@@ -926,7 +1341,8 @@ func _test_s19_rows_and_new_game_carry() -> void:
 	await get_tree().process_frame
 
 	# Pre-game carry (docs/80-* §4.6.3): the S1 mount writes the field BEFORE
-	# new_game; the fresh-run reset preserves it as run input.
+	# new_game; the fresh-run reset preserves it as run input — and seeds the
+	# allegiance quintet (task V's new_game wiring, docs/30-* §4.9).
 	GameState.control_prefs = {"input_mode": "helm", "current_mode": "drift"}
 	GameState.new_game("portugal", false)
 	_check(GameState.control_prefs == {"input_mode": "helm", "current_mode": "drift"},
@@ -935,6 +1351,22 @@ func _test_s19_rows_and_new_game_carry() -> void:
 	_check(GameState.world["sail_trim"] == "normal" and GameState.world["heading"] == "E"
 		and GameState.world["wind_dir"] == "E",
 		"new_game starts the world ocean keys at the pinned defaults")
+	var seeded: Dictionary = AllegianceLib.dump_state()
+	_check((seeded["port_allegiance"] as Dictionary).get("madeira")
+		== {"ledger": {"portugal": 6000}, "allegiance": "portugal"},
+		"new_game seeds the contestable sovereign {owner: 6,000} (madeira)")
+	_check((seeded["port_allegiance"] as Dictionary).get("quanzhou")
+		== {"ledger": {}, "allegiance": ""},
+		"new_game seeds the neutral empty (quanzhou)")
+	_check(int((seeded["nation_treasuries"] as Dictionary).get("portugal", -1)) == 5000
+		and (seeded["nation_treasuries"] as Dictionary).size() == NATION_IDS.size(),
+		"new_game seeds every treasury at 5,000g")
+	_check(seeded["permits"] == {"home": false, "foreign": {}},
+		"new_game resets the permits (got %s)" % str(seeded.get("permits")))
+	_check(seeded["fame_commended"] == {} and seeded["month_invested"] == {},
+		"new_game resets the commendation flags and the monthly allowance")
+	_check(AllegianceLib.last_month_investments().is_empty(),
+		"new_game starts with no investment telegraphs")
 	# An out-of-domain pre-game value (never written by the panel) falls back.
 	GameState.control_prefs = {"input_mode": "bogus", "current_mode": "sideways"}
 	GameState.new_game("portugal", false)
@@ -945,8 +1377,16 @@ func _test_s19_rows_and_new_game_carry() -> void:
 
 
 # --- Helpers --------------------------------------------------------------
-# (unchanged from the Phase-5 suite apart from the v6 fields in the state
-# snapshot / clobber pair)
+# (the Phase-5/6 pair, extended with the allegiance dump so the "state
+# untouched" comparisons cover the runtime statics too)
+
+func _contestable_count() -> int:
+	var count := 0
+	for port in DataLoader.ports_list:
+		if not bool((port as Dictionary).get("protected", false)):
+			count += 1
+	return count
+
 
 func _nation_map_is(map: Dictionary, value) -> bool:
 	for nation_id in NATION_IDS:
@@ -957,8 +1397,10 @@ func _nation_map_is(map: Dictionary, value) -> bool:
 
 ## Wipes every GameState field with values that cannot be confused with the
 ## fixture, so a load that silently did nothing is visible. The Phase-6 keys
-## are clobbered with out-of-domain sentinels too: a load that skipped them
-## would leave the sentinels in `_loaded_values()` and fail the comparison.
+## are clobbered with out-of-domain sentinels and the allegiance statics are
+## reseeded to a **sentinel state** (a home permit, a `clobber` nation
+## everywhere) — a load that skipped the restore seam would leave those
+## sentinels in `_loaded_values()` and fail the comparison.
 func _clobber_state() -> void:
 	GameState.locale = "zh"
 	GameState.day = 1
@@ -997,9 +1439,18 @@ func _clobber_state() -> void:
 	GameState.battles_won = -1
 	GameState.retired = false
 	GameState.retired_at = -1
+	# The allegiance sentinel (seed first, then out-of-fixture keys).
+	AllegianceLib.restore_state({
+		"permits": {"home": true, "foreign": {"clobber_nation": true}},
+		"month_invested": {"clobber_port": 7},
+		"nation_treasuries": {"clobber_nation": 7},
+		"fame_commended": {"clobber_port": true},
+	})
 
 
-## Everything a load must reproduce (used for "state untouched" comparisons).
+## Everything a load must reproduce (used for "state untouched" comparisons):
+## the GameState fields plus the allegiance quintet through the runtime
+## owner's dump.
 func _loaded_values() -> Dictionary:
 	return {
 		"locale": GameState.locale,
@@ -1032,17 +1483,18 @@ func _loaded_values() -> Dictionary:
 		"battles_won": GameState.battles_won,
 		"retired": GameState.retired,
 		"retired_at": GameState.retired_at,
+		"allegiance": AllegianceLib.dump_state(),
 	}
 
 
-## Loads the v6 fixture once so the "before" state of a rejection test is a
+## Loads the v7 fixture once so the "before" state of a rejection test is a
 ## real loaded run rather than the clobbered sentinel.
 func _load_fixture_into_memory() -> void:
 	_ensure_dir()
-	_write_json(1, _v6_payload())
+	_write_json(1, _v7_payload())
 	_clobber_state()
 	if not SaveSystem.load(1):
-		_check(false, "setup: the v6 fixture loads before the test")
+		_check(false, "setup: the v7 fixture loads before the test")
 
 
 func _read_json(slot: int) -> Dictionary:

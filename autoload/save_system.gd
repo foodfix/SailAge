@@ -30,15 +30,16 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 6 ships
-## [constant SAVE_VERSION] 6 and there is **no migration chain** (decision 12,
-## `IMPLEMENT-Phase6.md`). SailAge has not shipped, so a payload whose
-## `save_version` is anything but 6 — v5 included — is a pre-release save and
+## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 7 ships
+## [constant SAVE_VERSION] 7 and there is **no migration chain** (decision 13,
+## `IMPLEMENT-Phase7.md`). SailAge has not shipped, so a payload whose
+## `save_version` is anything but 7 — v6 included — is a pre-release save and
 ## is refused by name; the only migration that exists is the identity. The
 ## historical `1 → 2` / `2 → 3` steps lived here through Phase 3 and were
-## deleted in Phase 4 rather than carried as dead weight. The v6 bump (task V)
-## absorbs the 4320×2160 coordinate rebase, so a stale v5 payload must never
-## load into the rescaled world at half-scale coordinates.
+## deleted in Phase 4 rather than carried as dead weight. The v7 bump (task V)
+## absorbs the allegiance/permit/treasury state, so a stale v6 payload — whose
+## shape predates the five Phase-7 keys — must never load into a run whose
+## allegiance tug-of-war would silently restart from the seed.
 ##
 ## Phase-6 persisted keys (docs/90-* §8.1 "Phase-6 additions"): `control_prefs`
 ## (top level) plus the `world` block's `sail_trim` / `heading` / `wind_dir`.
@@ -48,6 +49,20 @@ extends Node
 ## an unknown `world.map_id` (see [method validate_payload]). The S19
 ## debug-overlays flag (`SettingsPanel.debug_overlays`) is **session-only**
 ## and is never part of a payload (docs/80-* §4.6.3).
+##
+## Phase-7 persisted keys (docs/90-* §8.1 "Phase-7 additions"): `permits`,
+## `port_allegiance` (the correction-8 shape `{ledger, allegiance}` for **all**
+## contestable ports — development is derived, never serialized, docs/30-*
+## §4.9), `month_invested`, `nation_treasuries`, `fame_commended`. The runtime
+## owner is `scripts/port/allegiance.gd` (the documented persistence seam):
+## [method snapshot] writes `Allegiance.dump_state()` verbatim and
+## [method _apply] hands the payload to `Allegiance.restore_state()` — it
+## seeds first, so an absent key keeps the seeded new-game default, then
+## re-derives the transient trackers, which is what keeps a mid-month
+## save/load replaying the month's counter-investment identically. All five
+## keys are shape-checked on load: a malformed value is refused exactly like
+## any other wrong-typed block (docs/90-* §8.2; `tools/test_save_v7.gd`
+## asserts the round trips and the refusal wording).
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -55,6 +70,11 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 ## The v5 `market_stocks` derived-rest default (docs/30-* §4.2) is built
 ## through the economy module on load.
 const EconomyLib := preload("res://scripts/port/economy.gd")
+## The Phase-7 allegiance state's runtime owner (docs/30-* §4.9/§4.10): the
+## five v7 payload keys are exactly this module's `dump_state()` / the input
+## of its `restore_state()` (the persistence seam documented there — the
+## statics are the single source of truth, GameState never mirrors them).
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
 const SlotDialogLib := preload("res://scenes/ui_shared/save_slot_dialog.gd")
 
 ## Smallest/largest usable slot number (docs/90-* §5.5: three slots).
@@ -67,10 +87,10 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 6 ships version 6).
-const SAVE_VERSION := 6
+## Current payload version (docs/90-* §8.2: Phase 7 ships version 7).
+const SAVE_VERSION := 7
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 6
+const PHASE := 7
 
 ## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
 ## nation at [constant RANK_NONE].
@@ -103,6 +123,9 @@ const COMPASS_DIRS: Array[String] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 ## order); `npc_fleets` is the v5 rename of Phase-2's `hostile_fleets`.
 ## v6 appends `control_prefs` after `npc_preset` (docs/90-* §8.1 Phase-6
 ## additions; the three other v6 keys live inside `world`).
+## v7 appends the five Phase-7 allegiance keys after the Phase-3 tail
+## (docs/90-* §8.1 Phase-7 additions) — the payload blocks of the runtime
+## state that lives in `Allegiance`'s statics (see [member AllegianceLib]).
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "port_investments", "quests",
@@ -112,6 +135,8 @@ const STATE_KEYS: Array[String] = [
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
+	"permits", "port_allegiance", "month_invested", "nation_treasuries",
+	"fame_commended",
 ]
 ## Keys every payload must carry for a load to be attempted. `quests` /
 ## `discoveries_found` are optional-but-known fields, `npc_fleets` /
@@ -132,6 +157,11 @@ const REQUIRED_KEYS: Array[String] = [
 ## `market_stocks` is deliberately absent here: its documented default is the
 ## **derived resting stock** (docs/30-* §4.2, no RNG) — computed, not a
 ## literal — so `_apply` builds it through `Economy.build_initial_stocks`.
+## The five Phase-7 keys are deliberately absent too: their documented
+## "default when absent" is the seeded new-game state (docs/90-* §8.1 —
+## `Allegiance.seed_new_game()` reseeds), so `_apply` hands the whole payload
+## to `Allegiance.restore_state`, which seeds first and then applies whatever
+## keys are present.
 const OPTIONAL_DEFAULTS := {
 	"saved_at": 0,
 	"quests": [],
@@ -258,6 +288,12 @@ func snapshot() -> Dictionary:
 		"wind_dir": _enum_or(GameState.world.get("wind_dir", DEFAULT_DIR),
 			COMPASS_DIRS, DEFAULT_DIR),
 	}
+	# Phase-7 allegiance state (docs/90-* §8.1 Phase-7 additions): written
+	# verbatim from the runtime owner's dump — `dump_state()` returns exactly
+	# these five keys, already deep-copied, with every contestable port
+	# serialized in the correction-8 `{ledger, allegiance}` shape and no
+	# `development` anywhere (it is derived, docs/30-* §4.9).
+	var allegiance_state: Dictionary = AllegianceLib.dump_state()
 	return {
 		"save_version": SAVE_VERSION,
 		"saved_at": int(Time.get_unix_time_from_system()),
@@ -283,6 +319,16 @@ func snapshot() -> Dictionary:
 		# session-only static (docs/80-* §4.6.3) and is deliberately absent
 		# here — snapshot() writes only this key list, so it can never leak.
 		"control_prefs": _prefs_payload(GameState.control_prefs),
+		# Phase-7 allegiance keys (docs/90-* §8.1 Phase-7 additions), exactly
+		# `Allegiance.dump_state()`'s five — no other key may leak in, and a
+		# missing one would fail the round trip loudly (`restore_state`
+		# reseeds it, which the suites assert never happens for a payload
+		# this build wrote).
+		"permits": allegiance_state["permits"],
+		"port_allegiance": allegiance_state["port_allegiance"],
+		"month_invested": allegiance_state["month_invested"],
+		"nation_treasuries": allegiance_state["nation_treasuries"],
+		"fame_commended": allegiance_state["fame_commended"],
 		"market_events": GameState.market_events.duplicate(true),
 		"named_pirate_respawns": GameState.named_pirate_respawns.duplicate(true),
 		"fame": GameState.fame,
@@ -566,6 +612,69 @@ func validate_payload(data: Dictionary) -> String:
 		if not (current_mode is String) \
 				or not (current_mode as String in CURRENT_MODES):
 			return "'control_prefs.current_mode' is not a current-mode id"
+	# Phase-7 keys (§8.1): optional (absent → the seeded new-game state via
+	# Allegiance.restore_state) but shape-checked whenever present, the same
+	# rule as every older block. `port_allegiance` entries must be exactly the
+	# correction-8 shape `{ledger, allegiance}` (docs/30-* §4.9): a payload
+	# carrying the retired `development` key is a rejection, not a silent
+	# repair — dev is derived and persisting it invites desync.
+	if not _is_dict_or_missing(data, "permits"):
+		return "'permits' is not an object"
+	var permits = data.get("permits", null)
+	if permits is Dictionary:
+		var permit_home = (permits as Dictionary).get("home", false)
+		if not (permit_home is bool):
+			return "'permits.home' is not a boolean"
+		var permit_foreign = (permits as Dictionary).get("foreign", {})
+		if not (permit_foreign is Dictionary):
+			return "'permits.foreign' is not an object"
+		for nation_id in (permit_foreign as Dictionary):
+			if not ((permit_foreign as Dictionary)[nation_id] is bool):
+				return "'permits.foreign.%s' is not a boolean" % str(nation_id)
+	if not _is_dict_or_missing(data, "port_allegiance"):
+		return "'port_allegiance' is not an object"
+	var port_allegiance = data.get("port_allegiance", null)
+	if port_allegiance is Dictionary:
+		for port_id in (port_allegiance as Dictionary):
+			var entry = (port_allegiance as Dictionary)[port_id]
+			if not (entry is Dictionary):
+				return "'port_allegiance.%s' is not an object" % str(port_id)
+			var entry_keys: Array = (entry as Dictionary).keys()
+			if entry_keys.size() != 2 \
+					or not (entry as Dictionary).has("ledger") \
+					or not (entry as Dictionary).has("allegiance"):
+				return "'port_allegiance.%s' is not the correction-8 shape {ledger, allegiance}" % str(port_id)
+			var ledger = (entry as Dictionary)["ledger"]
+			if not (ledger is Dictionary):
+				return "'port_allegiance.%s.ledger' is not an object" % str(port_id)
+			for nation_id in (ledger as Dictionary):
+				if not _is_int((ledger as Dictionary)[nation_id]):
+					return "'port_allegiance.%s.ledger.%s' is not an integer" % [
+						str(port_id), str(nation_id)
+					]
+			if not ((entry as Dictionary)["allegiance"] is String):
+				return "'port_allegiance.%s.allegiance' is not a nation id" % str(port_id)
+	if not _is_dict_or_missing(data, "month_invested"):
+		return "'month_invested' is not an object"
+	var month_invested = data.get("month_invested", null)
+	if month_invested is Dictionary:
+		for port_id in (month_invested as Dictionary):
+			if not _is_int((month_invested as Dictionary)[port_id]):
+				return "'month_invested.%s' is not an integer" % str(port_id)
+	if not _is_dict_or_missing(data, "nation_treasuries"):
+		return "'nation_treasuries' is not an object"
+	var treasuries = data.get("nation_treasuries", null)
+	if treasuries is Dictionary:
+		for nation_id in (treasuries as Dictionary):
+			if not _is_int((treasuries as Dictionary)[nation_id]):
+				return "'nation_treasuries.%s' is not an integer" % str(nation_id)
+	if not _is_dict_or_missing(data, "fame_commended"):
+		return "'fame_commended' is not an object"
+	var commended = data.get("fame_commended", null)
+	if commended is Dictionary:
+		for port_id in (commended as Dictionary):
+			if not ((commended as Dictionary)[port_id] is bool):
+				return "'fame_commended.%s' is not a boolean" % str(port_id)
 	# Phase-3 keys (§8.1): optional (absent → documented default) but
 	# type-checked whenever present, the same rule as the Phase-2 pair above.
 	if not _is_int_or_missing(data, "fame"):
@@ -633,7 +742,13 @@ func _is_dict_or_missing(data: Dictionary, key: String) -> bool:
 func _is_int_or_missing(data: Dictionary, key: String) -> bool:
 	if not data.has(key):
 		return true
-	return data[key] is int and not (data[key] is bool)
+	return _is_int(data[key])
+
+
+## True for a JSON integer (a bool is its own type and never counts — the
+## same rule as [method _is_int_or_missing], applied to map values).
+func _is_int(value) -> bool:
+	return value is int and not (value is bool)
 
 
 ## A `{nation_id: rank}` map with an unknown rank repaired to `"none"` (a
@@ -811,6 +926,17 @@ func _apply(data: Dictionary) -> void:
 	GameState.retired = bool(data.get("retired", OPTIONAL_DEFAULTS["retired"]))
 	GameState.retired_at = int(data.get("retired_at",
 		OPTIONAL_DEFAULTS["retired_at"]))
+	# Phase-7 saved state (docs/90-* §8.1 Phase-7 additions): the five
+	# allegiance keys restore through the runtime owner's seam —
+	# `Allegiance.restore_state` seeds first, so an absent key keeps the
+	# seeded new-game default, applies the payload defensively, then
+	# re-derives the transient trackers (the dev-threshold fame baseline).
+	# That re-derivation is what keeps a mid-month save/load replaying the
+	# month's counter-investment identically: the persisted ledger/allegiance
+	# state is the AI's only input (docs/30-* §4.9; `tools/test_save_v7.gd`
+	# asserts the purity end-to-end). Runs after every GameState block above,
+	# per the seam documented in scripts/port/allegiance.gd.
+	AllegianceLib.restore_state(data)
 	# The superseded `quests` placeholder is never saved (§8.1: `active_quests`
 	# is the one quest list) and is cleared on load even if a payload carries it.
 	GameState.quests = []
