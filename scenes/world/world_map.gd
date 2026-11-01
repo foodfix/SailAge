@@ -447,6 +447,16 @@ func try_step(target: Vector2i) -> bool:
 	return _try_step(target)
 
 
+## Removes one NPC fleet by id — the test seam the world_e2e movement proof
+## uses to suppress raiders along its route (`60-*` §4.11.11: the proof's
+## contract pins no random contact; the ecology trickle keeps raiders alive
+## and the unified-movement amendment made them mobile). Delegates to
+## [method NpcFleets.remove] so the sim's cell/id indexes stay coherent.
+func npc_remove(id: String) -> void:
+	if _fleets != null:
+		_fleets.remove(id)
+
+
 # --- Task H: hold-to-repeat & click-to-sail (docs/20-* §4.2) ---------------
 
 ## Presses a direction action as if the key went down (the public test seam for

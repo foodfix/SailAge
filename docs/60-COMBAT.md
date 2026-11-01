@@ -823,6 +823,7 @@ Perf gates (measured in tools suites — tasks J/M):
 | Marginal cost | demonstrably linear (extreme ≈ 4× normal, not 16×) |
 | Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase — unchanged as the budget; H re-measures at the quadrupled chase area and windows the region only on measured failure (correction 13) |
 | Save payload @ extreme | ≤ 2 MB |
+| world_e2e wall budget | **runner kill timer 540 s for this suite only** (amended 2026-11-01): the unified-movement amendment accrues every fleet on every player move, so the movement proof pays the designed per-move cost × thousands of steps; its fixture scales the ecology budgets ×0.1 process-locally (`test_world_e2e.gd`) and suppresses raiders within Chebyshev 60 of the route — the proof's contract is movement, not population or combat (those stay with test_density / test_npc_fleets / the battle suites) |
 
 #### 4.11.12 Equipment wiring (pairs with `10-*` §4.6, `40-*` §4.1)
 

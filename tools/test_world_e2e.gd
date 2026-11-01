@@ -36,6 +36,7 @@ extends Node
 
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SailPathLib := preload("res://scripts/world/sail_path.gd")
@@ -88,10 +89,16 @@ const MAX_SPEED := 36
 ## Every leg is re-seeded so a rerun is byte-identical (one base + leg index).
 const LEG_SEEDS: Array[int] = [WEATHER_SEED + 1, WEATHER_SEED + 2,
 	WEATHER_SEED + 3, WEATHER_SEED + 4]
-## Hostile spawns are combat's proof, not movement's: park both §4.11.11 spawn
-## immunities far in the future — a real save field — so no random pirate/navy
-## contact can replace the movement proof with a battle.
-const NO_SPAWNS_UNTIL := 999999
+## Hostile suppression (the movement proof's contract): the ecology trickle
+## keeps a live pirate population (and the unified-movement amendment made
+## raiders fully mobile — the wedge-freeze era is gone), so a raider can
+## close on the route and open an encounter mid-leg. The proof removes
+## raiders that close inside [constant SUPPRESS_RADIUS] of the fleet
+## ([_suppress_hostiles]) — contact needs a hostile adjacent after a move;
+## with none near the corridor there is none. Combat stays pinned by its
+## own suites (the old `proximity_cooldowns` immunity field has no reader
+## in the sim any more).
+const SUPPRESS_RADIUS := 60
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -171,8 +178,29 @@ func _build_fixture() -> void:
 	GameState.known_ports = []
 	GameState.explored_tiles = {}
 	GameState.npc_fleets = []
-	GameState.proximity_cooldowns = {"pirate": NO_SPAWNS_UNTIL,
-		"navy": NO_SPAWNS_UNTIL}
+	# The movement proof scales the ecology's BUDGETS down (fixture-level,
+	# process-local — `DataLoader.npc_config` is per-suite): the
+	# unified-movement amendment accrues every fleet on every player move,
+	# so the proof's wall clock scales with the population, and the full
+	# port graph at the shipped budgets holds ~500+ fleets. ×0.1 keeps the
+	# whole trickle/deficit/dwell/departure/accrual machinery exercised
+	# inside the runner's budget; the density/perf suites pin their own
+	# populations (`60-*` §4.11.11.5). The `low` preset (a real S19 dial)
+	# halves it further.
+	GameState.npc_preset = "low"
+	DataLoader.npc_config = DataLoader.npc_config.duplicate(true)
+	var budgets: Dictionary = DataLoader.npc_config["budgets"]
+	budgets["traders_mult_per_port"] = budgets["traders_mult_per_port"] * 0.1
+	budgets["coasters_mult_per_port"] = budgets["coasters_mult_per_port"] * 0.1
+	budgets["patrols_div_ports"] = budgets["patrols_div_ports"] * 10.0
+	budgets["pirate_base"] = maxi(1, int(budgets["pirate_base"] * 0.1))
+	budgets["pirates_per_unpatrolled_zone"] = \
+		budgets["pirates_per_unpatrolled_zone"] * 0.1
+	budgets["couriers_per_nation"] = maxi(1,
+		int(budgets["couriers_per_nation"] * 0.1))
+	budgets["privateers_per_rivalry"] = maxi(1,
+		int(budgets["privateers_per_rivalry"] * 0.1))
+	DataLoader.npc_config["budgets"] = budgets
 	var start := _port("lisbon")
 	GameState.world = {
 		"position": {"x": start.x, "y": start.y},
@@ -533,6 +561,7 @@ func _test_leg4() -> void:
 		ok = _sail(acc, _port("macassar"))
 	if ok:
 		acc["port_days"] = int(acc["port_days"]) + _provision("macassar")
+		acc["port_days"] = int(acc["port_days"]) + _provision("macassar")
 		ok = _sail(acc, _port("colombo"))
 	if ok:
 		acc["port_days"] = int(acc["port_days"]) + _provision("colombo")
@@ -632,7 +661,29 @@ func _new_leg(label: String, start: Vector2i) -> Dictionary:
 ## Sails one segment: the A* route (§4.2 click-to-sail) then a step-by-step
 ## walk through `WorldMap.try_step()`, i.e. the shipping movement path. Returns
 ## true when the fleet stands on `goal`.
+## Removes raiders inside [constant SUPPRESS_RADIUS] of the fleet — the
+## movement proof's hostile suppression (top-of-file pin). Reads the live
+## fleet cells through [method NpcFleetsLib.position_of] and removes via
+## the world's sim passthrough ([method WorldMap.npc_remove] — the sim's
+## indexes stay coherent). The ecology trickle respawns elsewhere; the
+## sea stays alive outside the corridor.
+func _suppress_hostiles() -> void:
+	var here := Vector2i(world.fleet_cell())
+	for fleet in GameState.npc_fleets.duplicate():
+		if not (fleet is Dictionary):
+			continue
+		var role := str(fleet.get("role", ""))
+		if role != "pirate" and role != "privateer" and role != "hunter":
+			continue
+		var fc: Vector2i = NpcFleetsLib.position_of(fleet)
+		if maxi(absi(fc.x - here.x), absi(fc.y - here.y)) <= SUPPRESS_RADIUS:
+			world.npc_remove(str(fleet.get("id", "")))
+
+
 func _sail(acc: Dictionary, goal: Vector2i) -> bool:
+	# The corridor sweep before the first step (the leg may start beside a
+	# raider that spawned since the last leg).
+	_suppress_hostiles()
 	# The fleet cell is the source of truth: a provisioning hop above may have
 	# moved it without sailing.
 	var from: Vector2i = world.fleet_cell()
@@ -660,6 +711,12 @@ func _sail(acc: Dictionary, goal: Vector2i) -> bool:
 	var steps := int(acc["steps"])
 	var cursor := from
 	for cell in path:
+		# Suppression every 40 steps (≈ 2 sailing days): a raider closer
+		# than SUPPRESS_RADIUS cannot close to contact or open pursuit
+		# before the next sweep — the movement proof's wall clock stays
+		# driver-shaped (no pursuit A* per move).
+		if steps % 40 == 0:
+			_suppress_hostiles()
 		var moved: bool = world.try_step(cell)
 		var guard := 0
 		while not moved and guard < 6:

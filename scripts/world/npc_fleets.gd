@@ -405,6 +405,28 @@ var _hold_ticks: Dictionary = {}
 ## with the run, never saved.
 var _accrual_dbg: Dictionary = {}
 
+## Per-fleet journey event ring (`fleet_id → Array[String]`, oldest
+## first, capped at [constant FLEET_EVENT_MAX]): `spawn`, `dep origin→dest`
+## (a route was armed), `depX origin` (`route_between` empty — idle
+## retry), `drop wedge|leg|seam` (the journey was dropped mid-route: the
+## heading-empty wedge / a broken leg / a broken seam head), `arr port`
+## (docked at the destination). The drop/re-depart cycle detector — a
+## fleet idling at sea shows a `dep→drop→dep→drop` chain here. Runtime
+## only, for the hover's `[raw3]` line (80-* §4.6); reset with the run.
+var _fleet_events: Dictionary = {}
+
+## The event ring cap (80-* §4.6 [raw3]).
+const FLEET_EVENT_MAX := 8
+
+## Appends one timestamped event to the fleet's ring (runtime-only).
+func _note_event(id: String, text: String) -> void:
+	var ring: Array = _fleet_events.get(id, [])
+	if ring.is_empty():
+		_fleet_events[id] = ring
+	ring.append("%s@%d" % [text, int(GameState.day)])
+	while ring.size() > FLEET_EVENT_MAX:
+		ring.pop_front()
+
 ## Render reporting (80-* §4.5.2 amendment): `{id, from, to}` per fleet
 ## that moved in the last accrual — the world scene's marker glides. Never
 ## saved; drained by [method take_fleet_moves] (re-accumulates until

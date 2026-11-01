@@ -36,6 +36,12 @@ SERIAL_SAVE_SET = (
     "test_density", "test_ecology",
 )
 DEFAULT_TIMEOUT_S = 300.0
+# Per-suite wall budgets. The unified-movement amendment accrues every NPC
+# fleet on every player move (`60-*` §4.11.11) — the world_e2e movement
+# proof pays that designed cost thousands of times across four legs, so its
+# wall budget sits above the default. The density/perf gates keep their own
+# pins (`60-*` §4.11.11.5); this only widens the runner's kill timer.
+SUITE_TIMEOUTS_S = {"test_world_e2e": 540.0}
 DEFAULT_JOBS = 8
 POLL_S = 2.0            # log/CPU sample cadence
 STUCK_IDLE_S = 6.0      # zero log growth + < STUCK_CPU_S child CPU ⇒ stuck
@@ -198,9 +204,11 @@ def main() -> int:
     results: list[dict] = []
     t0 = time.monotonic()
     for name in serial:
-        results.append(run_one(name, repo, log_dir, args.timeout))
+        results.append(run_one(name, repo, log_dir,
+            SUITE_TIMEOUTS_S.get(name, args.timeout)))
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = {pool.submit(run_one, n, repo, log_dir, args.timeout): n for n in parallel}
+        futures = {pool.submit(run_one, n, repo, log_dir,
+            SUITE_TIMEOUTS_S.get(n, args.timeout)): n for n in parallel}
         for fut in concurrent.futures.as_completed(futures):
             results.append(fut.result())
     results.sort(key=lambda r: -r["wall_ms"])
