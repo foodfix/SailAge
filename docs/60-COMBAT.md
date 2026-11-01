@@ -500,7 +500,9 @@ ecology members with a role, a nation, a lane route and a captain:
   base of **2 tiles/day** (Phase-6 lane-stepping base, before the parity
   factors of the amendment block below — **both superseded by the
   unified-movement amendment further below**; Phase 5 stepped 1 tile/day on the
-  10 nm grid) inside the §4.1.2 flow, skipping occupied tiles and never
+  10 nm grid) inside the §4.1.2 flow, skipping occupied tiles (that rule
+  itself **superseded by the co-location pin below** — fleets share tiles
+  under the unified-movement amendment) and never
   entering `#` land, `^` reef or `I` ice; port-bound roles dwell **2 days**
   in port (the §4.1.1 trader row pins the trader dwell). Chokepoint
   anchoring keeps a `pirate`/`privateer` within Chebyshev 6 of its
@@ -618,6 +620,20 @@ per day tick:
   self-heals a docked fleet found off its berth back onto the berth in
   the same tick; the diagnostics report `on_berth` (and the S3 badge
   flags `X` until healed, `80-*` §4.5.2).
+- **Co-location (fleet-sharing pin, supersedes the occupancy rule).**
+  Fleets MAY share tiles: movement entry is gated by **passability only**
+  (land / reef / in-month seasonal ice) — tile occupancy never blocks a
+  step, and the task-K "skipping occupied tiles" hop rule is retired.
+  Interactions are governed by the encounter/contact rules
+  (§4.11.11.2 — the Chebyshev 1 encounter, the abstract NPC-vs-NPC
+  auto-resolve) and the radius queries (escort, convoy, prey), never by
+  tiles. Rationale: tile occupancy was the root of every lane jam (the
+  boarding-slice queue and the head-of-queue deadlock — surfaced by the
+  stall diagnostics as `blocked×N` holds); with co-location the entire
+  jam class is structurally impossible. The `blocked` stall state now
+  means passability holds only (in-month seasonal ice on a walked span).
+  Docked fleets still share port berths (unchanged), and spawn/camp
+  placement keeps its spread preference (aesthetics only).
 - **Contact is sampled per tile entered**, not only after the day step:
   any fleet stepping within Chebyshev 1 of the player's tile mid-step
   engages under the §4.11.11.2 row exactly as an end-of-step proximity

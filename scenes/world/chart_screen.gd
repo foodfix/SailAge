@@ -765,8 +765,9 @@ func _update_hover(at: Vector2) -> void:
 		# Localized blocks (unified-movement amendment; the §4.7.10 rule —
 		# debug surfaces speak the ui_strings locale): `id` stays raw (an
 		# identifier), every other term resolves — `debug.role.*`,
-		# the nation's L10n name, `debug.stall.*`, the mooring port's L10n
-		# name. `holds` shows only where it means something (blocked).
+		# the nation's L10n name, `debug.stall.*`, `debug.info.*` labels,
+		# the mooring/destination port's L10n name. `holds` shows only
+		# where it means something (blocked).
 		for ship in ships:
 			var role := str(ship.get("role", ""))
 			var stall := str(ship.get("stall", ""))
@@ -784,10 +785,27 @@ func _update_hover(at: Vector2) -> void:
 					parts.append("×%d" % holds)
 				elif stall == "docked" and ship.has("port") \
 						and not str(ship.get("port", "")).is_empty():
-					var port: Dictionary = DataLoader.get_port(
+					var mooring: Dictionary = DataLoader.get_port(
 						str(ship.get("port", "")))
+					if not mooring.is_empty():
+						parts.append("@ " + I18n.t(mooring.get("name", {})))
+			var heading := str(ship.get("heading", ""))
+			var speed := float(ship.get("speed", 0.0))
+			var dest := str(ship.get("dest", ""))
+			if stall != "docked":
+				# Under-way detail: heading · speed · destination.
+				if not heading.is_empty():
+					parts.append(I18n.t_key("debug.info.heading") + " "
+						+ heading)
+				if speed > 0.0:
+					parts.append(I18n.t_key("debug.info.speed") + " "
+						+ str(int(round(speed))) + " "
+						+ I18n.t_key("debug.info.speed_unit"))
+				if not dest.is_empty():
+					var port: Dictionary = DataLoader.get_port(dest)
 					if not port.is_empty():
-						parts.append("@ " + I18n.t(port.get("name", {})))
+						parts.append(I18n.t_key("debug.info.dest") + " "
+							+ I18n.t(port.get("name", {})))
 			line += "\n  " + " · ".join(parts)
 			text += line + "\n"
 	else:

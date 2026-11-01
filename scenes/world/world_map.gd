@@ -332,7 +332,6 @@ func _process(delta: float) -> void:
 	_tick_marker_glide(delta)
 	_tick_npc_glides(delta)
 
-
 ## Forces the lazy ocean-currents decode on the first frame after boot
 ## (docs/20-* §4.16): the ~1 s raster decode + reversal index otherwise land
 ## on the first current query — the fleet's first step or the HUD's current

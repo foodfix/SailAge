@@ -740,16 +740,20 @@ func tick(day: int) -> Array:
 	_ensure_rng()
 	_tick_scoped = true
 	_tick_player_tile = GameState.world_tile()
-	# Movement accrual first (unified-movement amendment): catch up every
-	# elapsed fraction of the world clock — in headless drivers and after
-	# port day-skips this is the whole day; in real play the per-move
-	# callers (world scene) already accrued the fractions and this call
-	# nets zero. The clock-sync guard makes both orders safe.
+	# State machines first (unified-movement ordering): prey picks, chase
+	# opens, dwell departures — then the clock accrual moves every fleet
+	# under the decisions just made, so a chase opened this tick pursues
+	# this tick (the hunter-intel flow's one-tick closure pin).
+	_step_fleets(int(day))
+	# Movement accrual: catch up every elapsed fraction of the world clock
+	# — in headless drivers and after port day-skips this is the whole day;
+	# in real play the per-move callers (world scene) already accrued the
+	# fractions and this call nets zero. The clock-sync guard makes both
+	# orders safe.
 	advance_clock()
 	_recount_zones(int(day))
 	_schedule_treasure(int(day))
 	_named_pirate_tick(int(day))
-	_step_fleets(int(day))
 	var out := _trickle(int(day))
 	_tick_scoped = false
 	return out
@@ -866,16 +870,24 @@ func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
 	if ((fleet.get("route", {}) as Dictionary).get("legs", [])
 			as Array).is_empty():
 		return
+	var id := str(fleet.get("id", ""))
+	var pre := position_of(fleet)
 	for _d in int(floor(delta)):
 		_walk_lane(fleet, day, _lane_tiles_today(fleet))
 	var fraction: float = delta - floor(delta)
-	if fraction <= 0.0 or _lane_step_heading(fleet).is_empty():
-		return
-	var id := str(fleet.get("id", ""))
-	var raw: float = _lane_pipe(fleet) * fraction + float(_step_carry.get(id, 0.0))
-	var tiles := int(floor(raw))
-	_step_carry[id] = raw - float(tiles)
-	_walk_lane(fleet, day, tiles)
+	if fraction > 0.0 and not _lane_step_heading(fleet).is_empty():
+		var raw: float = _lane_pipe(fleet) * fraction \
+			+ float(_step_carry.get(id, 0.0))
+		var tiles := int(floor(raw))
+		_step_carry[id] = raw - float(tiles)
+		_walk_lane(fleet, day, tiles)
+	# Diagnostics ([method stall_reason]): an accrual without forward
+	# progress is a hold — the streak feeds the blocked state. Any real
+	# move resets it.
+	if position_of(fleet) == pre:
+		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
+	else:
+		_hold_ticks[id] = 0
 
 
 ## The §4.4 lane pipeline for the fleet's current leg heading — tiles per
@@ -993,6 +1005,9 @@ func markers() -> Array:
 			"convoy_leader": leader_id,
 			"holds": holds,
 			"stall": stall,
+			"heading": _lane_step_heading(fleet),
+			"speed": _lane_pipe(fleet),
+			"dest": str((fleet as Dictionary).get("dest_port_id", "")),
 		}
 		if stall == "docked":
 			# The mooring port (the berth's owner) + berth consistency —
@@ -1049,12 +1064,17 @@ func stall_state(fleet: Dictionary, holds: int) -> String:
 func stall_reason(fleet: Dictionary) -> Dictionary:
 	var holds := int(_hold_ticks.get(str(fleet.get("id", "")), 0))
 	var state := stall_state(fleet, holds)
+	var heading := _lane_step_heading(fleet)
+	var pipe := _lane_pipe(fleet)
 	var out := {
 		"id": str(fleet.get("id", "")),
 		"role": str(fleet.get("role", "")),
 		"cell": position_of(fleet),
 		"state": state,
 		"holds": holds,
+		"heading": heading,
+		"speed": pipe,
+		"dest": str(fleet.get("dest_port_id", "")),
 	}
 	if state == "docked":
 		out["until"] = int(fleet.get("dwell_until_day", 0))
@@ -1370,8 +1390,11 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 	fleet["id"] = next_fleet_id(day, role)
 	fleet["seed"] = _fleet_seed(day, cell)
 	# Unified-movement amendment: the §4.11.3 composition rides on the fleet
-	# (it now drives the §4.4 base speed — `60-*` §4.11.11).
+	# (it now drives the §4.4 base speed — `60-*` §4.11.11), and the derived
+	# speed pair is cached HERE so reads (markers/diagnostics) never mutate
+	# a fleet — the snapshot-purity invariant (`80-*` §4.6 probe).
 	fleet["ships"] = compose_fleet_ships(fleet, int(day))
+	_fleet_base(fleet)
 	set_position(fleet, cell)
 	_sync_route_progress(fleet)
 	_record_wake(fleet, cell)
@@ -1389,8 +1412,11 @@ func _finish_lane_fleet(fleet: Dictionary, journey: Dictionary,
 	fleet["id"] = next_fleet_id(day, role)
 	fleet["seed"] = _fleet_seed(day, journey["cell"])
 	# Unified-movement amendment: the §4.11.3 composition rides on the fleet
-	# (it now drives the §4.4 base speed — `60-*` §4.11.11).
+	# (it now drives the §4.4 base speed — `60-*` §4.11.11), and the derived
+	# speed pair is cached HERE so reads (markers/diagnostics) never mutate
+	# a fleet — the snapshot-purity invariant (`80-*` §4.6 probe).
 	fleet["ships"] = compose_fleet_ships(fleet, int(day))
+	_fleet_base(fleet)
 	fleet["route"] = journey["route"]
 	fleet["dest_port_id"] = str(journey.get("dest", ""))
 	set_position(fleet, journey["cell"])
@@ -2685,13 +2711,13 @@ func _lane_tiles_today(fleet: Dictionary) -> int:
 	var carry := float(_step_carry.get(id, 0.0))
 	var heading := _lane_step_heading(fleet)
 	if heading.is_empty():
-		# No resolvable step. With no legs that is the normal docked state;
-		# WITH legs it means a broken leg (unknown id after a hand edit) —
-		# apply the same drop-the-journey rule `_advance` applies, so a
-		# zero-factor day can never wedge the journey open forever.
+		# A fleet with legs but no resolvable step is WEDGED: a broken leg,
+		# or parked exactly on its span's far end with no berth to head for
+		# (a patrol boarded at a lane terminus, pre-existing stall — surfaced
+		# by the stall diagnostics). Drop the journey: the day tick departs
+		# it fresh, which re-boards a lane and un-wedges it.
 		var route: Dictionary = fleet.get("route", {})
-		var legs: Array = route.get("legs", [])
-		if not legs.is_empty() and _leg_geometry(legs[0]).is_empty():
+		if not (route.get("legs", []) as Array).is_empty():
 			route["legs"] = []
 		_step_carry[id] = carry
 		return 0
@@ -3090,7 +3116,6 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float,
 ## arrival), detected at the loop head.
 func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 	var walked := 0
-	var id := str(fleet.get("id", ""))
 	while walked < budget:
 		var route: Dictionary = fleet.get("route", {})
 		var legs: Array = route.get("legs", [])
@@ -3107,27 +3132,23 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 		var index := _leg_progress(fleet, route, geo)
 		if index + 1 >= walked_len:
 			# Leg end (seam / arrival): the full `_advance` logic owns it.
-			var pre := position_of(fleet)
 			_advance(fleet, day)
 			walked += 1
-			# Diagnostics: unchanged position = a hold tick.
-			_note_progress(fleet, id, pre)
 			continue
 		var dir := -1 if reverse else 1
 		var artifact := (int(geo["end"]) - index) if reverse \
 			else (int(geo["start"]) + index)
 		var target: Vector2i = path[artifact + dir]
-		if not _can_enter(fleet, target):
-			# Occupied: the hop/hold rule — full `_advance` logic.
-			var pre := position_of(fleet)
-			_advance(fleet, day)
+		if not _passable(target):
+			# Impassable step (in-month seasonal ice on the walked span):
+			# hold — the budget is spent and the accrual-level hold streak
+			# records the block (fleets share tiles, so occupancy never
+			# blocks a step under the unified-movement amendment).
 			walked += 1
-			_note_progress(fleet, id, pre)
 			continue
 		route["tile_index"] = index + 1
 		_commit_cell(fleet, target)
 		walked += 1
-		_hold_ticks[id] = 0  # real progress: the hold streak clears
 
 
 ## The docked-consistency helper (unified-movement amendment, `60-*`
@@ -3144,16 +3165,6 @@ func _docked_berth(fleet: Dictionary) -> Vector2i:
 	if dest.is_empty():
 		return NO_CELL
 	return _port_cell(dest)
-
-
-## The hold-streak bookkeeping behind [method stall_reason]: an accrual
-## budget spent without forward position change is a hold; any real move
-## resets the streak.
-func _note_progress(fleet: Dictionary, id: String, pre: Vector2i) -> void:
-	if position_of(fleet) == pre:
-		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
-	else:
-		_hold_ticks[id] = 0
 
 
 ## One tile of progress along the current leg's ACTIVE geometry, skipping
@@ -3193,24 +3204,11 @@ func _advance(fleet: Dictionary, day: int) -> void:
 			var head_path: Array = head_geo["path"]
 			var head_tile: Vector2i = head_path[int(head_geo["end"]) \
 				if bool(head_geo["reverse"]) else int(head_geo["start"])]
-			if not _can_enter(fleet, head_tile):
-				# §4.11.11.1 "skipping occupied tiles": board the next leg
-				# one tile PAST the blocked head (never stepping onto it).
-				# Without the hop, two fleets meeting head-on in a
-				# one-tile-wide spoke deadlock each other forever — the
-				# latent flaw the task-K raider movement exposed (noted in
-				# the task K report).
-				var head_span := int(head_geo["walked_len"]) - 1
-				if head_span > 0:
-					var second: Vector2i = head_path[
-						(int(head_geo["end"]) - 1) if bool(head_geo["reverse"])
-						else (int(head_geo["start"]) + 1)]
-					if _can_enter(fleet, second):
-						legs.pop_front()
-						route["leg"] = int(route.get("leg", 0)) + 1
-						route["tile_index"] = 1
-						_commit_cell(fleet, second)
-				return  # off the head leg / also blocked: hold; retry next day
+			if not _passable(head_tile):
+				# In-month seasonal ice on the seam head: hold — the fleet
+				# keeps its position on the stored leg (route/position
+				# agree, save/load included); retry after the melt.
+				return
 			legs.pop_front()
 			route["leg"] = int(route.get("leg", 0)) + 1
 			route["tile_index"] = 0
@@ -3224,24 +3222,25 @@ func _advance(fleet: Dictionary, day: int) -> void:
 		return
 	var dir := -1 if reverse else 1
 	var target: Vector2i = path[artifact + dir]
-	if not _can_enter(fleet, target):
-		# §4.11.11.1 "skipping occupied tiles": hop over the occupied tile
-		# to the following path tile (never stepping ON it); off the leg or
-		# also blocked → hold (deterministic retry next day).
-		if index + 2 < walked_len:
-			var skip_artifact := (int(geo["end"]) - index - 2) if reverse \
-				else (int(geo["start"]) + index + 2)
-			var skipped: Vector2i = path[skip_artifact]
-			if _can_enter(fleet, skipped):
-				route["tile_index"] = index + 2
-				_commit_cell(fleet, skipped)
+	if not _passable(target):
+		# Impassable step (in-month seasonal ice on the walked span): hold
+		# — the budget is spent and the accrual-level hold streak records
+		# the block. Lane paths never cross land, so this is ice-only;
+		# fleets SHARE tiles under the unified-movement amendment, so
+		# occupancy never blocks a step (the task-K hop rule is retired).
 		return
 	route["tile_index"] = index + 1
 	_commit_cell(fleet, target)
 
 
+## Movement entry (unified-movement amendment — CO-LOCATION): fleets MAY
+## share tiles; entry is gated by passability only (land / reef / in-month
+## seasonal ice). Interactions are governed by the contact rules
+## (§4.11.11.2 — Chebyshev 1 encounter) and the abstract NPC-vs-NPC
+## auto-resolve, never by tile occupancy. (Spawn/camp placement keeps its
+## own spread preference via [_is_occupied] — aesthetics, not a rule.)
 func _can_enter(fleet: Dictionary, cell: Vector2i) -> bool:
-	return _passable(cell) and not _is_occupied(cell, str(fleet.get("id", "")))
+	return _passable(cell)
 
 
 ## Records `cell` at the front of the fleet's transient wake trail (the
@@ -3525,13 +3524,25 @@ func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 	var path: Array = geo["path"]
 	var far_end := int(geo["end"])
 	var cell := position_of(fleet)
-	# At the lane's end (or never boarded): walk the short way back.
+	# Board the lane at the NEAREST tile: a mid-lane un-wedged patrol is
+	# already standing on the lane (teleport-free re-boarding — the wedge
+	# drop hands `legs: []` patrols back here); a fleet genuinely off the
+	# lane waits rather than teleport (hand edit).
+	var nearest := 0
+	var best_d := -1
+	for index in path.size():
+		var d := chebyshev(cell, path[index])
+		if best_d < 0 or d < best_d:
+			best_d = d
+			nearest = index
+	# The walk direction: from the nearer end toward the other.
 	var reverse := chebyshev(cell, path[0]) > chebyshev(cell, path[far_end])
 	var board := 0 if not reverse else far_end
-	if cell != path[board]:
-		return  # off the lane (hand edit): wait rather than teleport
+	var ti := nearest
+	if reverse:
+		ti = far_end - nearest
 	route["leg"] = 0
-	route["tile_index"] = 0
+	route["tile_index"] = ti
 	route["legs"] = [{"kind": "lane", "id": lane_id, "reverse": reverse,
 		"a": 0, "b": base.size() - 1}]
 	fleet["route"] = route
@@ -4374,6 +4385,11 @@ func _player_tile_now() -> Vector2i:
 	return _tick_player_tile if _tick_scoped else GameState.world_tile()
 
 
+## Spawn/aesthetic placement preference (NOT a movement rule — the
+## unified-movement amendment allows fleets to share tiles): a cell is
+## "taken" for spawn/camp placement when it is the player's tile or holds
+## another under-way fleet (docked fleets share port tiles). Spread checks
+## only; movement never consults this.
 func _is_occupied(cell: Vector2i, ignore_id: String) -> bool:
 	if cell == _player_tile_now():
 		return true

@@ -2112,6 +2112,22 @@
     "zh": "冷却中",
     "en": "Cooling down"
   },
+  "debug.info.heading": {
+    "zh": "航向",
+    "en": "Heading"
+  },
+  "debug.info.speed": {
+    "zh": "航速",
+    "en": "Speed"
+  },
+  "debug.info.speed_unit": {
+    "zh": "格/天",
+    "en": "tiles/day"
+  },
+  "debug.info.dest": {
+    "zh": "目的地",
+    "en": "Destination"
+  },
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"
