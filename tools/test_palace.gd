@@ -13,6 +13,7 @@ const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+const EconomyLib := preload("res://scripts/port/economy.gd")
 const ShipyardEngineLib := preload("res://scripts/port/shipyard_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
@@ -180,7 +181,10 @@ func _test_per_nation_independence() -> void:
 func _test_sell_bonus() -> void:
 	_new_run()
 	# Worked example (docs/30-* §5): London wine, factor 1.3, no investment.
+	# Stock-explicit per the flow economy (K): the §5 examples are computed
+	# at the consumer rest 40 (factor 1300), not the flow seed 60.
 	var port := "london"
+	EconomyLib.set_stock("london", "wine", 40)
 	GameState.titles["england"] = "none"
 	GameState.port_investments = {}
 	_check(TradeEngineLib.buy_price(port, "wine") == 39,
@@ -221,6 +225,7 @@ func _test_sell_bonus() -> void:
 		% TradeEngineLib.sell_price(port, "wine"))
 	GameState.titles["portugal"] = "none"
 	GameState.titles["holland"] = "duke"
+	EconomyLib.set_stock("amsterdam", "wine", 40)
 	_check(TradeEngineLib.sell_price("amsterdam", "wine")
 		> TradeEngineLib.price_from_units(
 			int(DataLoader.get_good("wine")["base_price"]),
@@ -229,7 +234,9 @@ func _test_sell_bonus() -> void:
 
 	# An actual sale pays the bonus (not just the readout). The §4.10 tariff
 	# composes after the title bonus: 340 gross − 68 tax (20%) = 272 net.
+	# Stock-explicit again (the _new_run flow seed would price at 31/unit).
 	_new_run()
+	EconomyLib.set_stock("london", "wine", 40)
 	GameState.titles["england"] = "baron"
 	GameState.gold = 1000
 	FleetLib.add_goods("wine", 10)
