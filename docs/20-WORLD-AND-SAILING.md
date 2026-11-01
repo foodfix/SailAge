@@ -501,7 +501,7 @@ its `lat`/`lon` (`10-*` §6.1) — neither is stored in data:
 
 | Tile | Derivation | Passable | Role |
 |---|---|---|---|
-| **berth tile** (sea) | §6.1 snap: nearest water within 2 tiles, Chebyshev, tie-break smallest `(y, x)`, **skipping candidates with no orthogonally adjacent `#`** (the pair constraint below) | **yes** (`~`/`.`) | the fleet's berth; where the fleet stands after leaving port |
+| **berth tile** (sea) | §6.1 snap: nearest water within 2 tiles, Chebyshev, tie-break smallest `(y, x)`, **skipping candidates with no orthogonally adjacent `#`** (the pair constraint below) | **yes** (`~`/`.`) | the fleet's berth; where the fleet stands after leaving port. **The berth definition is pinned (unified-movement amendment): exactly ONE berth water tile per port, orthogonally adjacent to the port's land tile — and it is the ONLY tile any fleet may dock into** (`_arrive`/`_dock_at`/the berth self-heal all commit `_port_cell(port_id)`; multiple fleets may share that one tile — co-location). **Persisted**: the build writes every port's berth + shore tiles to `data/maps/harbors.json` (tool-owned, §6.3); the runtime READS the table (`map_loader.harbor_tiles`) instead of re-snapping lat/lon per session, and the validator proves the table matches this rule exactly. |
 | **shore tile** (land) | nearest `#` tile **orthogonally adjacent** to the berth tile, tie-break smallest `(y, x)` | **never** (it is `#`) | **the port's map location** — this is what the player sees marked |
 
 The pair is mandatory: every port must have a shore tile orthogonally

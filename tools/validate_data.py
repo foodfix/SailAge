@@ -168,7 +168,8 @@ SPECIAL_FILES = {
 # array. Both are tool outputs (tools/build_world.py, tools/build_routes.py)
 # and are never hand-edited; determinism of trade_routes_built.json is group
 # 8's rebuild check.
-GENERATED_FILES = {"world_report.json", "trade_routes_built.json"}
+GENERATED_FILES = {"world_report.json", "trade_routes_built.json",
+    "harbors.json"}
 SPECIAL_FILES |= GENERATED_FILES
 # Of those, only the legends require `version` in their section 4.9 schema.
 # ui_strings.json (owned by T4) may omit it; section 8 group 2 treats `version`
@@ -2689,6 +2690,57 @@ def check_group6(docs: dict[str, object], verbose: bool) -> None:
             fail("map", WORLD_REPORT_LABEL, f"cannot read builder report: {exc}", 6)
     report_tiles = _report_harbor_tiles(report)
     report_shores = _report_shore_tiles(report)
+
+    # -- harbors.json (unified-movement amendment): the persisted berth/
+    # -- shore table the runtime READS (map_loader) — must exist, cover
+    # -- every port, and match the builder report byte-for-value.
+    harbors_path = DATA_DIR / "maps" / "harbors.json"
+    if not harbors_path.is_file():
+        fail(
+            "map",
+            "data/maps/harbors.json",
+            "persisted harbors table is missing (run tools/build_world.py)",
+            6,
+        )
+    try:
+        harbors_doc = json.loads(harbors_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail("map", "data/maps/harbors.json", f"cannot read: {exc}", 6)
+    if not isinstance(harbors_doc, dict) \
+            or harbors_doc.get("version") != 1 \
+            or not isinstance(harbors_doc.get("harbors"), list):
+        fail("map", "data/maps/harbors.json", "malformed envelope", 6)
+    loaded_harbors: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {}
+    for entry in harbors_doc["harbors"]:
+        if not isinstance(entry, dict) or "id" not in entry \
+                or not isinstance(entry.get("berth"), list) \
+                or not isinstance(entry.get("shore"), list) \
+                or len(entry["berth"]) != 2 or len(entry["shore"]) != 2:
+            fail("map", "data/maps/harbors.json", "malformed harbor entry", 6)
+        loaded_harbors[str(entry["id"])] = (
+            (int(entry["berth"][0]), int(entry["berth"][1])),
+            (int(entry["shore"][0]), int(entry["shore"][1])),
+        )
+    if set(loaded_harbors) != set(report_tiles):
+        missing = sorted(set(report_tiles) - set(loaded_harbors))
+        extra = sorted(set(loaded_harbors) - set(report_tiles))
+        fail(
+            "map",
+            "data/maps/harbors.json",
+            f"harbor coverage mismatch: missing {missing[:4]}, extra {extra[:4]}",
+            6,
+        )
+    for port_id in sorted(loaded_harbors):
+        berth, shore = loaded_harbors[port_id]
+        if berth != report_tiles[port_id] or shore != report_shores[port_id]:
+            fail(
+                "map",
+                "data/maps/harbors.json",
+                f"{port_id}: persisted tiles disagree with the §6.1 snap "
+                f"(berth {berth} vs {report_tiles[port_id]}; shore {shore} "
+                f"vs {report_shores[port_id]})",
+                6,
+            )
 
     ports = docs["ports.json"]["ports"]
     discoveries = docs["discoveries.json"]["discoveries"]

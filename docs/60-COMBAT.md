@@ -619,7 +619,12 @@ per day tick:
   `20-*` §6.1) — docking "somewhere at sea" is not allowed. The day tick
   self-heals a docked fleet found off its berth back onto the berth in
   the same tick; the diagnostics report `on_berth` (and the S3 badge
-  flags `X` until healed, `80-*` §4.5.2).
+  flags `X` until healed, `80-*` §4.5.2). **Patrols anchor to their home
+  port:** `_depart_patrol` sets `dest_port_id` = `_patrol_home_port`,
+  so a patrol walking its lane span arrives at the span end into the
+  home-port berth (the §4.1.1 dock-2-days cycle) and `_lane_step_heading`'s
+  berth fallback always resolves — a span-end 0-budget wedge cannot recur
+  for patrols.
 - **Co-location (fleet-sharing pin, supersedes the occupancy rule).**
   Fleets MAY share tiles: movement entry is gated by **passability only**
   (land / reef / in-month seasonal ice) — tile occupancy never blocks a

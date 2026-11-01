@@ -1636,6 +1636,9 @@ func _sync_marker_nodes() -> void:
 			square.add_child(stall_node)
 		stall_node.text = stall_letter
 		stall_node.visible = not stall_letter.is_empty()
+		# Docked fleets render at their simulated position: the port's SEA
+		# berth tile (the only legal docking tile — ships never dock on the
+		# land/shore tile; §4.11.1/§6.1 anchorage, per the established pin).
 		_place_marker_square(square, marker.get("cell", Vector2i.ZERO), id)
 	for id in _marker_nodes.keys():
 		if live.has(id):

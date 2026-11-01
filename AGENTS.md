@@ -41,7 +41,10 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
   `world.png` is built by `tools/build_world.py` from vendored public-domain
   shorelines plus `tools/map_overrides.json`; the ocean rasters are built by
   `tools/build_ocean.py` from the ocean JSON sources; ASCII exports are
-  debug outputs of those tools only. **Never hand-edit** any of the rasters
+  debug outputs of those tools only. `build_world.py` also persists every
+  port's berth + shore tiles to `data/maps/harbors.json` (unified-movement
+  amendment — the runtime reads the table instead of re-snapping). **Never
+  hand-edit** any of the rasters
   or the ASCII. Port coordinates live as `lat`/`lon` in `data/ports.json`,
   and the validator enforces that the harbor tiles derived from them agree
   with the builder's report.

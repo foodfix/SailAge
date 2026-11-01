@@ -783,6 +783,18 @@ func _update_hover(at: Vector2) -> void:
 				parts.append(I18n.t_key("debug.stall." + stall))
 				if stall == "blocked":
 					parts.append("×%d" % holds)
+					# The why: heading + rate for the blocked fleet.
+					var b_heading := str(ship.get("heading", ""))
+					if not b_heading.is_empty():
+						parts.append(I18n.t_key("debug.info.heading") + " "
+							+ b_heading)
+					var b_speed := float(ship.get("speed", 0.0))
+					parts.append(I18n.t_key("debug.info.speed") + " "
+						+ str(int(round(b_speed))) + " "
+						+ I18n.t_key("debug.info.speed_unit"))
+				elif stall == "camping":
+					parts.append("@ " + str((ship.get("cell",
+						Vector2i.ZERO) as Vector2i)))
 				elif stall == "docked" and ship.has("port") \
 						and not str(ship.get("port", "")).is_empty():
 					var mooring: Dictionary = DataLoader.get_port(
@@ -792,11 +804,9 @@ func _update_hover(at: Vector2) -> void:
 			var heading := str(ship.get("heading", ""))
 			var speed := float(ship.get("speed", 0.0))
 			var dest := str(ship.get("dest", ""))
-			if stall != "docked":
+			if not heading.is_empty():
 				# Under-way detail: heading · speed · destination.
-				if not heading.is_empty():
-					parts.append(I18n.t_key("debug.info.heading") + " "
-						+ heading)
+				parts.append(I18n.t_key("debug.info.heading") + " " + heading)
 				if speed > 0.0:
 					parts.append(I18n.t_key("debug.info.speed") + " "
 						+ str(int(round(speed))) + " "
@@ -806,6 +816,16 @@ func _update_hover(at: Vector2) -> void:
 					if not port.is_empty():
 						parts.append(I18n.t_key("debug.info.dest") + " "
 							+ I18n.t(port.get("name", {})))
+			var lanes: Array = ship.get("lanes", []) \
+				if ship.get("lanes", []) is Array else []
+			if parts.size() < 2 and not lanes.is_empty():
+				# The drop/re-depart gap state (no heading/speed yet): show
+				# the fleet's patrol circuit so the entry is never bare.
+				var lane_names: Array = []
+				for lane_id in lanes:
+					lane_names.append(I18n.t_key("debug.lane." + str(lane_id)))
+				parts.append(I18n.t_key("debug.info.circuit") + " "
+					+ " · ".join(lane_names))
 			line += "\n  " + " · ".join(parts)
 			text += line + "\n"
 	else:

@@ -146,18 +146,27 @@ def run_one(name: str, repo: Path, log_dir: Path, timeout_s: float) -> dict:
         cpu_ms = int((reaped_rusage.ru_utime + reaped_rusage.ru_stime) * 1000)
     else:
         cpu_ms = int(max(cpu_final - cpu0, 0.0) * 1000)
-    log_text = log_path.read_text(errors="replace")
+    log_text = ""
+    try:
+        log_text = log_path.read_text(errors="replace")
+    except OSError:
+        # The godot process died before creating its log (e.g. an instant
+        # startup crash under memory pressure): classify without a log
+        # instead of crashing the whole runner.
+        pass
     kind = classify(proc.returncode, log_text, timed_out, stuck)
     return {
         "suite": name,
-        "class": kind,
+        "class": kind if log_text else "RED",
         "exit": proc.returncode,
         "wall_ms": wall_ms,
         "cpu_ms": cpu_ms,
         "slow": wall_ms > SLOW_WALL_MS,
         "profiles": {k: int(v) for k, v in PROFILE_RE.findall(log_text)},
         "log": str(log_path),
-        "detail": ("timeout" if timed_out else "stuck-idle") if kind in ("ZOMBIE", "HANG") else "",
+        "detail": ("no log" if not log_text else "") + (
+            ("timeout" if timed_out else "stuck-idle")
+            if kind in ("ZOMBIE", "HANG") else ""),
     }
 
 

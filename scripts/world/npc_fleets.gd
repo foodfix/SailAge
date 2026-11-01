@@ -1008,6 +1008,7 @@ func markers() -> Array:
 			"heading": _lane_step_heading(fleet),
 			"speed": _lane_pipe(fleet),
 			"dest": str((fleet as Dictionary).get("dest_port_id", "")),
+			"lanes": (fleet.get("route", {}) as Dictionary).get("lanes", []),
 		}
 		if stall == "docked":
 			# The mooring port (the berth's owner) + berth consistency —
@@ -3513,6 +3514,13 @@ func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 	var lanes: Array = route.get("lanes", [])
 	if lanes.is_empty():
 		return
+	# The patrol's dockable anchor: its home port (§4.1.1 — patrols dock at
+	# a PORT berth, never in place). Setting `dest_port_id` lets `_arrive`
+	# commit the home berth at the span end and gives `_lane_step_heading`'s
+	# berth fallback a resolvable target (no 0-budget wedge).
+	var home := _patrol_home_port(str(fleet.get("nation_id", "")))
+	if not home.is_empty():
+		fleet["dest_port_id"] = home
 	var lane_id := str(lanes[0])
 	var base: Array = _lane_paths.get(lane_id, [])
 	if base.is_empty():

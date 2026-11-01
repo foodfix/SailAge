@@ -300,7 +300,9 @@ rendering is viewport-culled and never re-simulates.
   keep reading tile positions, and the seam honours the same
   glide-disabled test switch. Before this amendment NPC markers snapped
   to their released cells; with hull-scale accrual the snap read as
-  teleporting every player move.
+  teleporting every player move. Docked fleets render at their simulated
+  cell — the port's **sea berth tile**, the only legal docking tile
+  (established pin; ships never dock on the shore tile).
 - **Debug chart (Phase 6):** the omniscient debug chart mode (§4.6) renders
   the **same** `NpcFleets.markers()` data un-culled — every fleet on the
   whole map, same role colors.

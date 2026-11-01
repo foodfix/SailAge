@@ -559,14 +559,46 @@ func _has_orthogonal_water(x: int, y: int) -> bool:
 ## (§9 step 5). Computed once; a port whose lat/lon cannot snap is omitted (the
 ## validator makes that impossible for shipped data). The berth is derived with
 ## the harbor-pair rule, so `shore_tiles()` is complete for exactly the same ids.
+## `{port_id: Vector2i}` **berth** tiles — READ from `data/maps/harbors.json`
+## (unified-movement amendment): the build's §6.1 snap output, persisted so
+## the runtime never re-snaps lat/lon per session (`80-*` §4.6 purity; the
+## validator proves the table covers every port and matches the §6.1 rule).
+## The paired **shore** tiles land in [_shore_tiles] from the same file.
 func harbor_tiles() -> Dictionary:
 	if _harbor_ready:
 		return _harbor_tiles
 	_harbor_ready = true
-	_harbor_tiles = {}
-	var ports: Dictionary = _ports_table()
-	for port_id in ports:
-		var port = ports[port_id]
+	var path := "res://data/maps/harbors.json"
+	if not FileAccess.file_exists(path):
+		push_error("MapLoader: harbors table missing: %s "
+			+ "(run tools/build_world.py)" % path)
+		return _harbor_tiles
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (parsed is Dictionary) \
+			or not ((parsed as Dictionary).get("harbors", null) is Array):
+		push_error("MapLoader: harbors.json malformed")
+		return _harbor_tiles
+	for entry in (parsed as Dictionary)["harbors"]:
+		if not (entry is Dictionary):
+			continue
+		var id := str(entry.get("id", ""))
+		var berth = entry.get("berth", null)
+		var shore = entry.get("shore", null)
+		if not (berth is Array) or (berth as Array).size() != 2:
+			continue
+		_harbor_tiles[id] = Vector2i(int((berth as Array)[0]),
+			int((berth as Array)[1]))
+		if shore is Array and (shore as Array).size() == 2:
+			_shore_tiles[id] = Vector2i(int((shore as Array)[0]),
+				int((shore as Array)[1]))
+	# 2. Ports absent from the persisted table (synthetic test grids via
+	# `ports_override`): derive per §6.1 as before — the persisted table
+	# covers every REAL port (the validator proves full coverage), so this
+	# fallback only ever serves fixture ports.
+	for port_id in _ports_table():
+		if _harbor_tiles.has(port_id):
+			continue
+		var port = _ports_table()[port_id]
 		if not (port is Dictionary):
 			continue
 		var lat = (port as Dictionary).get("lat", null)
@@ -582,14 +614,18 @@ func harbor_tiles() -> Dictionary:
 ## `{port_id: Vector2i}` **shore** tiles (20-* §4.11.1) — the land tile each
 ## port is drawn on and docked into. Computed once from the berth tiles; a berth
 ## with no orthogonally adjacent `#` is omitted (the validator's item 2b).
+## The paired **shore** tiles — READ from the persisted harbors table
+## ([method harbor_tiles] loads both columns from `data/maps/harbors.json`);
+## ports absent from it (synthetic fixture grids) derive per §6.1 as before.
 func shore_tiles() -> Dictionary:
 	if _shore_ready:
 		return _shore_tiles
 	_shore_ready = true
-	_shore_tiles = {}
-	var ports: Dictionary = _ports_table()
-	for port_id in harbor_tiles():
-		var port = ports.get(port_id, null)
+	harbor_tiles()  # loads berth + shore columns from the persisted table
+	for port_id in _ports_table():
+		if _shore_tiles.has(port_id):
+			continue
+		var port = _ports_table()[port_id]
 		if not (port is Dictionary):
 			continue
 		var lat = (port as Dictionary).get("lat", null)

@@ -56,6 +56,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/maps/wind_regions.png` | Baked prevailing-wind lookup — indexed PNG, 4320×2160, 1 px = 1 tile, palette index = region id (§6.5); tool-owned, never hand-edited | this doc |
 | `data/maps/currents.png` | Baked current lookup — indexed PNG, 4320×2160, 1 px = 1 tile, index = `dir_index × 3 + strength` (§6.5); tool-owned, never hand-edited | this doc |
 | `data/maps/world_report.json` | Builder report: build params, sea fraction, ice extent, component sizes > 2000 tiles, per-port `harbor_tile` (berth) and `shore_tile` (§6.3, §8.1) | this doc |
+| `data/maps/harbors.json` | Persisted per-port berth + shore tiles (the §6.3/§8.1 snap output, unified-movement amendment): `{"version": 1, "harbors": [{"id", "berth": [x, y], "shore": [x, y]}, …]}` — the runtime READS this table (`map_loader.harbor_tiles`) instead of re-snapping lat/lon per session; tool-owned, never hand-edited; the validator proves it matches the §6.1 recomputation for every port (§8.1 group 6) | this doc |
 | `data/trade_routes_built.json` | Lane-builder artifact: tile paths + junction graph + per-port spokes (§4.14) — tool-owned, never hand-edited | this doc |
 | `tools/build_world.py` | World generator: shorelines → tiles → `world.png` + `world_report.json` (§6.3); `--ascii` debug export only | this doc / `IMPLEMENT-Phase4.md` task C |
 | `tools/map_overrides.json` | Waterway carves (Gibraltar, Bosphorus, …) and tidal-river carves (§6.1, `IMPLEMENT-Phase4.md` task D) | this doc |

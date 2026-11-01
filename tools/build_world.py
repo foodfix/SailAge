@@ -80,6 +80,7 @@ OVERRIDES_PATH = TOOLS / "map_overrides.json"
 PORTS_PATH = ROOT / "data" / "ports.json"
 PNG_PATH = DATA_MAPS / "world.png"
 REPORT_PATH = DATA_MAPS / "world_report.json"
+HARBORS_PATH = DATA_MAPS / "harbors.json"
 
 sys.path.insert(0, str(VENDOR))
 import pyshp as shapefile  # noqa: E402  (vendored, MIT — see tools/vendor/)
@@ -1503,6 +1504,31 @@ def write_report(report: dict) -> None:
     REPORT_PATH.write_text(text, encoding="utf-8")
 
 
+def write_harbors(port_results: list[dict]) -> None:
+    """Persists every port's §6.1 berth + shore tiles to `data/maps/harbors.json`.
+
+    Unified-movement amendment: the runtime READS this table (map_loader's
+    `harbor_tiles`) instead of re-snapping lat/lon per session — one
+    build-computed source of truth, proven by the validator. Sorted by id
+    for byte-stable rebuilds.
+    """
+    HARBORS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    harbors = {
+        "version": 1,
+        "harbors": [
+            {
+                "id": entry["id"],
+                "berth": [entry["harbor_tile"]["x"], entry["harbor_tile"]["y"]],
+                "shore": [entry["shore_tile"]["x"], entry["shore_tile"]["y"]],
+            }
+            for entry in sorted(port_results, key=lambda e: e["id"])
+            if entry.get("harbor_tile") and entry.get("shore_tile")
+        ],
+    }
+    text = json.dumps(harbors, indent=2, ensure_ascii=False) + "\n"
+    HARBORS_PATH.write_text(text, encoding="utf-8")
+
+
 # --------------------------------------------------------------------------
 # Grid cache (for --check-snaps; never under data/)
 # --------------------------------------------------------------------------
@@ -1710,6 +1736,7 @@ def cmd_build(args) -> int:
     png = encode_png(grid)
     PNG_PATH.write_bytes(png)
     write_report(report)
+    write_harbors(port_results)
     save_cached_grid(cache_path(args.degrees_per_tile,
                                 OVERRIDES_PATH.read_text(encoding="utf-8")
                                 if OVERRIDES_PATH.exists() else ""), grid)
