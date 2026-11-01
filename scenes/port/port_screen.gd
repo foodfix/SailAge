@@ -563,7 +563,9 @@ func _bind() -> void:
 
 ## Activation phase of `facility_id` at the docked port (§4.1), or 0 when the
 ## port's `facilities` object does not list it (no row / no route for it). JSON
-## numbers parse as floats, hence the `int(...)` (repo gotcha).
+## numbers parse as floats, hence the `int(...)` (repo gotcha). Phase 7 turns
+## the shipyard entry into the stock list (`10-*` §4.4): any non-int payload
+## is presence-shaped and counts as level 1.
 func _facility_phase(facility_id: String) -> int:
 	var facilities = port_data().get("facilities", {})
 	if not facilities is Dictionary:
@@ -573,7 +575,7 @@ func _facility_phase(facility_id: String) -> int:
 	var phase = (facilities as Dictionary)[facility_id]
 	if phase == null:
 		return 0
-	return int(phase)
+	return int(phase) if phase is int else 1
 
 
 ## §4.1 gate: a facility is open iff the port lists it **and** its activation
@@ -607,7 +609,7 @@ func _sync_facility_rows(port: Dictionary) -> void:
 	var parts: Array[String] = []
 	for facility_id in FACILITY_ORDER:
 		if (facilities as Dictionary).has(facility_id):
-			parts.append("%s:%d" % [facility_id, int((facilities as Dictionary)[facility_id])])
+			parts.append("%s:%d" % [facility_id, _facility_phase(facility_id)])
 	for key in (facilities as Dictionary).keys():
 		# Keys outside the fixed order are data errors; include them in the
 		# signature anyway so a data edit still refreshes the rows.
@@ -626,7 +628,7 @@ func _sync_facility_rows(port: Dictionary) -> void:
 	for facility_id in FACILITY_ORDER:
 		if not (facilities as Dictionary).has(facility_id):
 			continue
-		var phase := int((facilities as Dictionary)[facility_id])
+		var phase := _facility_phase(facility_id)
 		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE \
 			and BountyLib.can_open_facility(_port_id, facility_id)
 		var label_key := str(FACILITY_LABEL_KEYS.get(
