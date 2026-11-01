@@ -872,22 +872,30 @@ func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
 		return
 	var id := str(fleet.get("id", ""))
 	var pre := position_of(fleet)
+	var committed_total := 0
 	for _d in int(floor(delta)):
-		_walk_lane(fleet, day, _lane_tiles_today(fleet))
+		committed_total += _walk_lane(fleet, day, _lane_tiles_today(fleet))
 	var fraction: float = delta - floor(delta)
 	if fraction > 0.0 and not _lane_step_heading(fleet).is_empty():
 		var raw: float = _lane_pipe(fleet) * fraction \
 			+ float(_step_carry.get(id, 0.0))
 		var tiles := int(floor(raw))
 		_step_carry[id] = raw - float(tiles)
-		_walk_lane(fleet, day, tiles)
-	# Diagnostics ([method stall_reason]): an accrual without forward
-	# progress is a hold — the streak feeds the blocked state. Any real
-	# move resets it.
-	if position_of(fleet) == pre:
-		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
-	else:
+		committed_total += _walk_lane(fleet, day, tiles)
+	# Diagnostics + escalation ([method stall_reason]): the hold streak
+	# counts accruals whose walks COMMITTED ZERO tiles — a fleet banking
+	# sub-tile fractions (a slow hull against wind/current) is healthy,
+	# never a hold; any committed tile resets the streak. **Escalation**
+	# (unified-movement amendment): at `STALL_HOLD_TICKS`+ consecutive
+	# zero-commit accruals the journey is DROPPED — the day tick's docked
+	# branch re-departs the fleet fresh from the nearest resolvable port,
+	# so no wedge (seam, terminus, or otherwise) can stall a fleet
+	# permanently. `blocked` remains visible while the holds accumulate
+	# (the S3 badge / hover / scan).
+	if committed_total > 0:
 		_hold_ticks[id] = 0
+	else:
+		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
 
 
 ## The §4.4 lane pipeline for the fleet's current leg heading — tiles per
@@ -3131,26 +3139,30 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float,
 ## (consuming one budget unit, exactly as the unbatched loop did). The
 ## route is re-read whenever `_advance` may have mutated it (seam or
 ## arrival), detected at the loop head.
-func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
+func _walk_lane(fleet: Dictionary, day: int, budget: int) -> int:
 	var walked := 0
+	var committed := 0
 	while walked < budget:
 		var route: Dictionary = fleet.get("route", {})
 		var legs: Array = route.get("legs", [])
 		if legs.is_empty():
-			return  # docked / arrived mid-walk
+			return committed  # docked / arrived mid-walk
 		var geo := _leg_geometry(legs[0])
 		if geo.is_empty():
 			# A broken leg (unknown id after a hand edit): drop the journey.
 			route["legs"] = []
-			return
+			return committed
 		var path: Array = geo["path"]
 		var walked_len := int(geo["walked_len"])
 		var reverse := bool(geo["reverse"])
 		var index := _leg_progress(fleet, route, geo)
 		if index + 1 >= walked_len:
 			# Leg end (seam / arrival): the full `_advance` logic owns it.
+			var pre := position_of(fleet)
 			_advance(fleet, day)
 			walked += 1
+			if position_of(fleet) != pre:
+				committed += 1
 			continue
 		var dir := -1 if reverse else 1
 		var artifact := (int(geo["end"]) - index) if reverse \
@@ -3165,7 +3177,9 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 			continue
 		route["tile_index"] = index + 1
 		_commit_cell(fleet, target)
+		committed += 1
 		walked += 1
+	return committed
 
 
 ## The docked-consistency helper (unified-movement amendment, `60-*`

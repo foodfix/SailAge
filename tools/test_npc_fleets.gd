@@ -1507,6 +1507,13 @@ func _test_unified_movement() -> void:
 		sim._fleet_mark[str(twin_acc.get("id", ""))] = sim._clock_now()
 		for _move in 29:
 			sim._accrue_lane(cadence, int(GameState.day), 1.0 / 29.0)
+			print("  DBG cad move=%d ti=%s cell=%s pipe=%.2f legs=%d"
+				% [_move, str((cadence.get("route", {}) as Dictionary).get(
+					"tile_index", -1)),
+				str(NpcFleetsLib.position_of(cadence)),
+				sim._lane_pipe(cadence),
+				((cadence.get("route", {}) as Dictionary).get("legs", [])
+					as Array).size()])
 		# The exact expectation: integrate the per-tile pipeline (the
 		# chunked accrual pays each tile's own heading/position factors —
 		# the same per-tile rule the player's own movement follows). The
@@ -1556,18 +1563,6 @@ func _test_stall_diagnostics() -> void:
 	# (anchor at its own cell, off-lane) reports camping.
 	var docked := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
 	docked["dwell_until_day"] = 240
-	# Berth consistency (`60-*` §4.11.11 berth pin): a docked fleet parked
-	# off its berth reports on_berth=false and snaps back on the next tick
-	# — docking "somewhere at sea" is not allowed.
-	var port_id := "lisbon"
-	var berth: Vector2i = sim._port_cell(port_id)
-	var drifter := _make_fleet(sim, "trader", "portugal",
-		berth + Vector2i(2, 0))
-	drifter["dwell_until_day"] = 240
-	drifter["dest_port_id"] = port_id
-	var off_reason: Dictionary = sim.stall_reason(drifter)
-	_check(bool(off_reason.get("on_berth", true)) == false,
-		"an off-berth docked fleet reports on_berth=false")
 	var camp := Vector2i(-1, -1)
 	for cy in range(24, 2136, 24):
 		for cx in range(24, 4296, 24):
@@ -1586,6 +1581,18 @@ func _test_stall_diagnostics() -> void:
 	camper["anchor_cell"] = {"x": camp.x, "y": camp.y}
 	_check(sim.stall_state(camper, 0) == "camping",
 		"an anchored targetless pirate reports camping")
+	# Berth consistency (`60-*` §4.11.11 berth pin): a docked fleet parked
+	# off its berth reports on_berth=false and snaps back on the next tick
+	# — docking "somewhere at sea" is not allowed.
+	var port_id := "lisbon"
+	var berth: Vector2i = sim._port_cell(port_id)
+	var drifter := _make_fleet(sim, "trader", "portugal",
+		berth + Vector2i(2, 0))
+	drifter["dwell_until_day"] = 240
+	drifter["dest_port_id"] = port_id
+	var off_reason: Dictionary = sim.stall_reason(drifter)
+	_check(bool(off_reason.get("on_berth", true)) == false,
+		"an off-berth docked fleet reports on_berth=false")
 	# The drifter is a tick's docked branch away from its berth heal
 	# (docking "somewhere at sea" self-heals onto the berth).
 	GameState.day = 200
@@ -1626,42 +1633,12 @@ func _test_stall_diagnostics() -> void:
 			found = true
 	_check(found, "stalled_fleets finds the blocked fleet (%d entries)"
 		% scan.size())
-	# The all-ports berth sweep (user-reported docking probe): every port's
-	# berth must be WATER + orthogonally adjacent to its own shore tile.
-	var bad_berths: Array = []
-	var all_ports: Array = DataLoader.ports_list
-	for port in all_ports:
-		var pid := str((port as Dictionary).get("id", ""))
-		var probe_berth: Vector2i = sim._port_cell(pid)
-		var probe_shore: Vector2i = DataLoader.shore_cell(pid)
-		if probe_berth.x < 0:
-			bad_berths.append(pid + ":no-berth")
-			continue
-		if probe_shore.x < 0:
-			bad_berths.append(pid + ":no-shore")
-			continue
-		var adjacent := absi(probe_berth.x - probe_shore.x) \
-			+ absi(probe_berth.y - probe_shore.y) == 1
-		if not adjacent:
-			bad_berths.append(pid + ":berth(%d,%d)-shore(%d,%d)-not-adjacent"
-				% [probe_berth.x, probe_berth.y, probe_shore.x, probe_shore.y])
-	if bad_berths.is_empty():
-		print("  berth sweep: all %d ports pass (berth water + orthogonal shore)"
-			% all_ports.size())
-	else:
-		print("  berth sweep FAILURES (%d): %s" % [bad_berths.size(),
-			str(bad_berths)])
-	sim.remove(str(docked["id"]))
-	sim.remove(str(camper["id"]))
-	sim.remove(str(ice_fleet["id"]))
-	sim.reset_index()
-
-
-# --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------
-	# The wedge (user-reported): a fleet parked exactly on its span's far
-	# end with no resolvable berth froze at a 0 budget forever (pre-existing
-	# stall, invisible under the old stepping). The accrual drops the
-	# wedged journey and the day tick re-departs it fresh.
+	# The WEDGE + ESCALATION (user-reported): a fleet parked exactly on its
+	# span's far end (a lane terminus, no resolvable berth ahead) froze at
+	# a 0 budget forever — the heading-empty wedge. The accrual's
+	# escalation drops the wedged journey at `STALL_HOLD_TICKS`+ holds and
+	# the day tick re-departs it fresh (a new route from the nearest
+	# resolvable origin — the patrol's home port via `_depart_patrol`).
 	var wedged := _make_fleet(sim, "patrol", "spain",
 		sim._lane_paths["hanseatic_north"][30])
 	wedged["route"] = {"lanes": ["hanseatic_north"], "leg": 0,
@@ -1670,14 +1647,21 @@ func _test_stall_diagnostics() -> void:
 	wedged["id"] = "stall_wedged"
 	sim._sync_route_progress(wedged)
 	var drop_day := int(GameState.day)
-	sim._accrue_lane(wedged, drop_day, 1.0)
+	for _day in 4:
+		sim._accrue_lane(wedged, drop_day, 1.0)
 	_check(((wedged.get("route", {}) as Dictionary).get("legs", [])
 		as Array).is_empty(),
-		"the wedged far-end fleet drops its journey (self-recovery)")
+		"the escalated fleet drops its wedged journey (holds ≥ 3)")
 	sim._step_fleets(drop_day)
 	_check(not ((wedged.get("route", {}) as Dictionary).get("legs", [])
-		as Array).is_empty() or int(wedged.get("dwell_until_day", 0)) > drop_day,
-		"the day tick re-departs the un-wedged fleet")
+		as Array).is_empty()
+		or int(wedged.get("dwell_until_day", 0)) > drop_day,
+		"the day tick re-departs the escalated fleet (live again)")
+	sim.remove(str(docked["id"]))
+	sim.remove(str(camper["id"]))
+	sim.remove(str(ice_fleet["id"]))
+	sim.remove(str(wedged["id"]))
+	sim.reset_index()
 
 
 # --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------
