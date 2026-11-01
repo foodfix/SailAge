@@ -159,6 +159,7 @@ const KEY_LEGEND_SPOKES := "debug.legend.spokes"
 const KEY_LEGEND_CHOKEPOINTS := "debug.legend.chokepoints"
 const KEY_LEGEND_FLEETS := "debug.legend.fleets"
 const KEY_LEGEND_WRECKS := "debug.legend.wrecks"
+const KEY_LEGEND_STALLS := "debug.legend.stalls"
 const KEY_LEGEND_INTEL := "debug.legend.hunter_intel"
 const KEY_LEGEND_NEUTRAL := "chart.debug.neutral"
 ## Task L (docs/80-* §4.6 "Lane heat dots"): the optional cosmetic layer —
@@ -745,8 +746,12 @@ func _update_hover(at: Vector2) -> void:
 		var d := _to_screen(entry["cell"]).distance_to(at)
 		if d < best_d:
 			best_d = d
+			var stall := str(entry.get("stall", ""))
+			var holds := int(entry.get("holds", 0))
 			best = "%s · %s · %s" % [str(entry.get("id", "")),
 				str(entry.get("role", "")), str(entry.get("nation_id", ""))]
+			if not stall.is_empty():
+				best += " · %s×%d" % [stall, holds]
 	for entry in _wreck_markers:
 		var d := _to_screen(entry["cell"]).distance_to(at)
 		if d < best_d:
@@ -1337,6 +1342,7 @@ func _ensure_panel_rows() -> void:
 		# — the prefix is chart-owned, the name is the debug.role.* string.
 		_panel_rows["role_" + role]["prefix"] = _role_letter(role) + " "
 	_panel_rows["wrecks"] = _panel_swatch_row(KEY_LEGEND_WRECKS, PaletteLib.ACCENT)
+	_panel_rows["stalls"] = _panel_swatch_row(KEY_LEGEND_STALLS, PaletteLib.BAD)
 	_panel_rows["intel"] = _panel_swatch_row(KEY_LEGEND_INTEL, PaletteLib.BAD)
 	_panel_rows["neutral"] = _panel_swatch_row(KEY_LEGEND_NEUTRAL,
 		ChartViewLib.port_neutral_color())
@@ -1531,6 +1537,20 @@ func _refresh_panel() -> void:
 	_set_dot("wind", _wind_on)
 	_set_dot("current", _current_on)
 	_set_dot("ice", _ice_on)
+	# Unified-movement diagnostics row: the stall census over the last
+	# marker pass (`B blocked · C camping · D docked · K cooldown` counts).
+	var stall_row: Dictionary = _panel_rows.get("stalls", {})
+	if not stall_row.is_empty():
+		var census := {}
+		for entry in _fleet_markers:
+			var state := str(entry.get("stall", ""))
+			if not state.is_empty():
+				census[state] = int(census.get(state, 0)) + 1
+		var parts: Array = []
+		for state in ["blocked", "camping", "docked", "cooldown"]:
+			if census.has(state):
+				parts.append("%s×%d" % [state, int(census[state])])
+		(stall_row["value"] as Label).text = " · ".join(parts)
 	# §4.6 interactive legend rows: a hidden row dims (HIDDEN_ROW_ALPHA).
 	for row_id in _panel_rows:
 		if not _row_clickable(str(row_id)):

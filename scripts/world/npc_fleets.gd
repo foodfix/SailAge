@@ -88,6 +88,12 @@ const FILL_ORDER: Array[String] = [
 
 ## §4.11.11.1: contact is measured at Chebyshev distance 1.
 const CONTACT_DISTANCE := 1
+## Unified-movement diagnostics (`60-*` §4.12.x, read-only): a lane fleet
+## that consumes its accrual budget without forward progress this many
+## ticks reports `blocked` in [method stall_reason] / [method
+## stalled_fleets] — the hold counter is the observability the unified
+## model needed (blocked fleets are invisible in position data alone).
+const STALL_HOLD_TICKS := 3
 ## §4.11.11.1 / `70-*` §4.5: a hunter is hostile only at or below this
 ## reputation (the player holds a bounty).
 const NAVY_HOSTILE_REPUTATION := -50
@@ -382,6 +388,13 @@ var _pending_delta := 0.0
 ## Runtime-only, reset with the run.
 var _fleet_mark: Dictionary = {}
 
+## Diagnostics (unified-movement amendment, `60-*` §4.12.x): `fleet_id →
+## int` — consecutive accrual budgets consumed without forward progress
+## (a blocked fleet holds its position while its budget spends). Reset on
+## any real step; runtime-only, reset with the run, never saved. The
+## observability behind [method stall_reason] / [method stalled_fleets].
+var _hold_ticks: Dictionary = {}
+
 ## Render reporting (80-* §4.5.2 amendment): `{id, from, to}` per fleet
 ## that moved in the last accrual — the world scene's marker glides. Never
 ## saved; drained by [method take_fleet_moves] (re-accumulates until
@@ -674,6 +687,7 @@ func initial_fill(day: int) -> void:
 	_last_clock = -1.0
 	_pending_delta = 0.0
 	_fleet_mark = {}
+	_hold_ticks = {}
 	moved_fleet_moves = []
 	_geo_cache = {}
 	_passable_cache = {}
@@ -959,6 +973,13 @@ func markers() -> Array:
 			for cell in _wake_trails.get(id, []):
 				wake.append(cell)
 		var leader_id := str(convoy_leaders.get(id, ""))
+		# Diagnostics (unified-movement amendment, `60-*` §4.12.x): the
+		# hold streak + stall state ride the marker entry for the debug
+		# surfaces (S3 badge, chart tooltip). `stall` is "" while sailing.
+		var holds := int(_hold_ticks.get(id, 0))
+		var stall := stall_state(fleet, holds)
+		if stall == "sailing":
+			stall = ""
 		out.append({
 			"id": id,
 			"role": str((fleet as Dictionary).get("role", "")),
@@ -970,7 +991,97 @@ func markers() -> Array:
 			"convoy_count": int(convoy_leaders.get(id + "#count", 0)) \
 				if leader_id == id else 0,
 			"convoy_leader": leader_id,
+			"holds": holds,
+			"stall": stall,
 		})
+	return out
+
+
+# --- Diagnostics (unified-movement amendment, `60-*` §4.12.x) ----------------
+
+## The one-word stall state of a fleet, evaluated in priority order:
+## `docked` (dwell not expired) → `cooldown` (pursuit cooldown) →
+## `camping` (a targetless raider within its anchor radius, off-lane —
+## the §4.11.11.1 camping pattern) → `chasing`/`pursuing` (raider with a
+## target / hunter in chase) → `blocked` (under way but held
+## `STALL_HOLD_TICKS`+ accrual budgets) → `sailing`. `holds` is the
+## current hold streak ([_hold_ticks]). Read-only, no RNG.
+func stall_state(fleet: Dictionary, holds: int) -> String:
+	var day := int(GameState.day)
+	var role := str(fleet.get("role", ""))
+	if int(fleet.get("dwell_until_day", 0)) > day:
+		return "docked"
+	if int(fleet.get("cooldown_until_day", 0)) >= day:
+		return "cooldown"
+	if (role == PIRATE or role == PRIVATEER) \
+			and str(fleet.get("target_fleet_id", "")).is_empty():
+		var anchor := _cell_field(fleet.get("anchor_cell", null))
+		var cell := position_of(fleet)
+		if anchor != NO_CELL and chebyshev(cell, anchor) <= ANCHOR_RADIUS \
+				and not _is_path_tile(cell):
+			return "camping"
+	if (role == PIRATE or role == PRIVATEER) \
+			and not str(fleet.get("target_fleet_id", "")).is_empty():
+		return "chasing"
+	if role == HUNTER \
+			and str(fleet.get("hunter_state", "")) == HUNTER_STATE_CHASE:
+		return "pursuing"
+	if holds >= STALL_HOLD_TICKS \
+			and not ((fleet.get("route", {}) as Dictionary).get("legs", [])
+				as Array).is_empty():
+		return "blocked"
+	return "sailing"
+
+
+## The full stall record for one fleet: `{id, role, cell, state, holds}`
+## plus the state's detail (`until` for docked/cooldown, `radius` for
+## camping, `pipe` for sailing — the §4.4 tiles/day rate, so a headwind
+## crawl shows its tiny rate instead of looking like a bug). Read-only.
+func stall_reason(fleet: Dictionary) -> Dictionary:
+	var holds := int(_hold_ticks.get(str(fleet.get("id", "")), 0))
+	var state := stall_state(fleet, holds)
+	var out := {
+		"id": str(fleet.get("id", "")),
+		"role": str(fleet.get("role", "")),
+		"cell": position_of(fleet),
+		"state": state,
+		"holds": holds,
+	}
+	if state == "docked":
+		out["until"] = int(fleet.get("dwell_until_day", 0))
+	elif state == "cooldown":
+		out["until"] = int(fleet.get("cooldown_until_day", 0))
+	elif state == "camping":
+		var anchor := _cell_field(fleet.get("anchor_cell", null))
+		if anchor != NO_CELL:
+			out["radius"] = chebyshev(position_of(fleet), anchor)
+	elif state == "sailing":
+		out["pipe"] = _lane_pipe(fleet)
+	return out
+
+
+## Every fleet in a suspicious state — `blocked` at or above `min_hold`
+## hold ticks, or `camping` (by design, but observable). Read-only; the
+## debug chart row and console sweeps are its consumers.
+func stalled_fleets(min_hold: int = STALL_HOLD_TICKS) -> Array:
+	var out: Array = []
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		var holds := int(_hold_ticks.get(str(fleet.get("id", "")), 0))
+		var state := stall_state(fleet, holds)
+		if state == "blocked" and holds >= min_hold:
+			out.append({
+				"id": str(fleet.get("id", "")),
+				"role": str(fleet.get("role", "")),
+				"cell": position_of(fleet),
+				"state": state,
+				"holds": holds,
+			})
+		elif state == "camping":
+			var reason := stall_reason(fleet)
+			reason["holds"] = holds
+			out.append(reason)
 	return out
 
 
@@ -2953,6 +3064,7 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float,
 ## arrival), detected at the loop head.
 func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 	var walked := 0
+	var id := str(fleet.get("id", ""))
 	while walked < budget:
 		var route: Dictionary = fleet.get("route", {})
 		var legs: Array = route.get("legs", [])
@@ -2969,8 +3081,11 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 		var index := _leg_progress(fleet, route, geo)
 		if index + 1 >= walked_len:
 			# Leg end (seam / arrival): the full `_advance` logic owns it.
+			var pre := position_of(fleet)
 			_advance(fleet, day)
 			walked += 1
+			# Diagnostics: unchanged position = a hold tick.
+			_note_progress(fleet, id, pre)
 			continue
 		var dir := -1 if reverse else 1
 		var artifact := (int(geo["end"]) - index) if reverse \
@@ -2978,12 +3093,25 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 		var target: Vector2i = path[artifact + dir]
 		if not _can_enter(fleet, target):
 			# Occupied: the hop/hold rule — full `_advance` logic.
+			var pre := position_of(fleet)
 			_advance(fleet, day)
 			walked += 1
+			_note_progress(fleet, id, pre)
 			continue
 		route["tile_index"] = index + 1
 		_commit_cell(fleet, target)
 		walked += 1
+		_hold_ticks[id] = 0  # real progress: the hold streak clears
+
+
+## The hold-streak bookkeeping behind [method stall_reason]: an accrual
+## budget spent without forward position change is a hold; any real move
+## resets the streak.
+func _note_progress(fleet: Dictionary, id: String, pre: Vector2i) -> void:
+	if position_of(fleet) == pre:
+		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
+	else:
+		_hold_ticks[id] = 0
 
 
 ## One tile of progress along the current leg's ACTIVE geometry, skipping

@@ -93,6 +93,8 @@ func _ready() -> void:
 	_test_parity_factors()
 	_section = "16b unified movement"
 	_test_unified_movement()
+	_section = "16c stall diagnostics"
+	_test_stall_diagnostics()
 	_section = "17 variant flip"
 	_test_variant_flip()
 	_section = "18 ice refusal"
@@ -1514,6 +1516,116 @@ func _test_unified_movement() -> void:
 			"29 fast-player moves integrate the per-tile pipeline exactly "
 			+ "(%d chunked vs %d integrated; one-shot first-heading walk %d)"
 			% [walked_chunked, walked_expect, walked_oneshot])
+
+
+# --- 16c. Stall diagnostics (the unified-movement observability) -------------
+
+func _test_stall_diagnostics() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	GameState.day = 200
+	# A clear lane stretch away from the fixture band: two stacked fleets
+	# jam the first trader so every accrual budget spends without progress.
+	var lane_id := ""
+	var jam_path: Array = []
+	for candidate in sim._lane_paths.keys():
+		var path: Array = sim._lane_paths[candidate]
+		if path.size() < 120:
+			continue
+		var clear := true
+		for dx in range(0, 6):
+			if not DataLoader.is_passable(path[10 + dx]) \
+					or NpcFleetsLib.chebyshev(path[10 + dx], OPEN_CELL) <= 40:
+				clear = false
+				break
+		if clear:
+			lane_id = str(candidate)
+			jam_path = path
+			break
+	_check(lane_id != "", "a quiet lane stretch exists for the stall probe")
+	if lane_id.is_empty():
+		return
+	# The jammed trader walks INTO the two stacked fleets: its budget
+	# spends, its position never changes — the hold streak climbs into
+	# `blocked`.
+	var jammed := _make_fleet(sim, "trader", "portugal", jam_path[10])
+	jammed["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": 10, "b": jam_path.size() - 1}]}
+	jammed["id"] = "stall_jammed"
+	sim._sync_route_progress(jammed)
+	var block1 := _make_fleet(sim, "trader", "portugal", jam_path[11])
+	block1["id"] = "stall_block_1"
+	var block2 := _make_fleet(sim, "trader", "portugal", jam_path[12])
+	block2["id"] = "stall_block_2"
+	sim.reset_index()
+	# A DOCKED fleet reports docked with its until-day; a CAMPING pirate
+	# (anchor at its own cell, off-lane) reports camping.
+	var docked := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
+	docked["dwell_until_day"] = 240
+	var camp := Vector2i(-1, -1)
+	for cy in range(24, 2136, 24):
+		for cx in range(24, 4296, 24):
+			var candidate := Vector2i(cx, cy)
+			if DataLoader.is_passable(candidate) \
+					and not sim._is_path_tile(candidate) \
+					and NpcFleetsLib.chebyshev(candidate, OPEN_CELL) > 60:
+				camp = candidate
+				break
+		if camp.x >= 0:
+			break
+	_check(camp.x >= 0, "an off-lane camping cell exists")
+	if camp.x < 0:
+		return
+	var camper := _make_fleet(sim, "pirate", "", camp)
+	camper["anchor_cell"] = {"x": camp.x, "y": camp.y}
+	_check(sim.stall_state(camper, 0) == "camping",
+		"an anchored targetless pirate reports camping")
+	# Four accrual days against the jam: the hold streak climbs and the
+	# reason flips to blocked; the global scan finds it.
+	for _day in 4:
+		sim._accrue(1.0)
+	var reason: Dictionary = sim.stall_reason(jammed)
+	_check(str(reason.get("state", "")) == "blocked"
+		and int(reason.get("holds", 0)) >= 3,
+		"the jammed trader reports blocked (%s, holds %d)"
+		% [str(reason.get("state", "")), int(reason.get("holds", 0))])
+	var scan: Array = sim.stalled_fleets()
+	var found := false
+	for entry in scan:
+		if str(entry.get("id", "")) == "stall_jammed":
+			found = true
+	_check(found, "stalled_fleets finds the jammed trader (%d entries)"
+		% scan.size())
+	# A sailing fleet (fresh leg, free path) stays `sailing` with its pipe
+	# rate reported — a headwind crawl is observable, not a bug.
+	var sailor := _make_fleet(sim, "trader", "portugal", jam_path[40])
+	sailor["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": 40, "b": jam_path.size() - 1}]}
+	sailor["id"] = "stall_sailor"
+	sim._sync_route_progress(sailor)
+	sim._accrue(0.1)
+	var sailor_reason: Dictionary = sim.stall_reason(sailor)
+	_check(str(sailor_reason.get("state", "")) == "sailing"
+		and float(sailor_reason.get("pipe", 0.0)) > 0.0,
+		"a moving fleet reports sailing with its pipe rate (%.1f tiles/day)"
+		% float(sailor_reason.get("pipe", 0.0)))
+	# The markers carry the diagnostics for the S3 badge and chart tooltip.
+	var marker_stall := ""
+	var marker_holds := -1
+	for marker in sim.markers():
+		if str(marker.get("id", "")) == "stall_jammed":
+			marker_stall = str(marker.get("stall", ""))
+			marker_holds = int(marker.get("holds", -1))
+	_check(marker_stall == "blocked" and marker_holds >= 3,
+		"markers() carries the stall state + holds (blocked, %d)"
+		% marker_holds)
+	sim.remove(str(docked["id"]))
+	sim.remove(str(camper["id"]))
+	sim.remove(str(jammed["id"]))
+	sim.remove(str(sailor["id"]))
+	sim.reset_index()
 
 
 # --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------

@@ -557,6 +557,12 @@ chart adds:
   month's prevailing winds, seasonal ice, active lane variants and the
   reversed Somali — pure view state, `GameState` untouched (a save taken
   mid-preview round-trips identically).
+- **Stalled-fleets row + stall tooltips (unified-movement amendment):**
+  every fleet entry carries `holds`/`stall` (`60-*` §4.12.3) — the side
+  legend's 停滞舰队 (`debug.legend.stalls`) row shows the census
+  (`blocked/camping/docked/cooldown` counts) and a fleet tooltip appends
+  its stall line (`blocked×14` etc.). The world-map S3 markers wear the
+  same state letter as a `BAD` badge while the S19 row is on (§4.5.2).
 - **Info strip — removed (amended 2026-11-01):** the Year/Month, preview
   month, density and fleet-count rows went away as chart-local noise (the
   HUD already carries the calendar); the scrubbed month reads from the
@@ -986,7 +992,7 @@ The keys each implementing task must define:
 |---|---|
 | V (S19 rows) | `settings.input.mode`, `settings.input.step`, `settings.input.helm`, `settings.current.mode`, `settings.current.modifier`, `settings.current.drift`, `settings.debug.overlays` |
 | G (HUD / sailing toasts) | `world.wind.label`, `world.current.label`, `world.trim.chip`, `world.trim.furled`, `world.trim.reefed`, `world.trim.normal`, `world.trim.full`, `world.wait.done`, `world.ice.blocked`, `world.calendar.year_month` |
-| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.lane.*`, `debug.role.*` |
+| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.lane.*`, `debug.role.*`, `debug.legend.stalls` (unified-movement amendment) |
 | neutral ports (§4.8) | `port.neutral.label` (中立港 / Neutral port), `chart.debug.neutral` (the debug-chart legend row for the neutral grey) |
 
 Notes pinning the set exactly:

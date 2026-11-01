@@ -974,6 +974,10 @@ spawn(role: String, nation_id: String, day: int) -> Dictionary
 wrecks() -> Array
 collect_wreck(id: String, free_capacity: int) -> Dictionary
 reset_rng(seed: int)
+advance_clock() -> void
+take_fleet_moves() -> Array
+stall_reason(fleet: Dictionary) -> Dictionary
+stalled_fleets(min_hold: int = 3) -> Array
 ```
 
 - `new(config)` — `config = {npc_config, preset}`; computes the §4.1.1
@@ -986,7 +990,9 @@ reset_rng(seed: int)
 - `fleets()` — every live fleet dict (the §4.11.11 shape); the save payload.
 - `markers()` — render dicts for `world_map.gd` (`role`, `nation_id`,
   `cell`, `convoy_id` when convoy-grouped, wake path); viewport-culled
-  rendering upstream (`80-*` §4.5.2).
+  rendering upstream (`80-*` §4.5.2). Each entry also carries the
+  diagnostics fields `holds` (the hold streak) and `stall` (the stall
+  state, `""` while sailing) — the S3 badge and chart tooltip data.
 - `nearest_contact(cell)` — the §4.11.11.2 contact rule: `pirate` /
   `privateer` / `hunter`-with-bounty within Chebyshev 1, wrap-aware;
   `{}` when none.
@@ -996,6 +1002,19 @@ reset_rng(seed: int)
   (§4.12.4 step 4).
 - `spawn(role, nation_id, day)` — single seeded spawn (test seam; also the
   quest seam, `70-*` §4.9.3 Phase-5 note).
+- **Clock accrual + diagnostics (unified-movement amendment, 2026-11-01).**
+  `advance_clock()` — accrues every fleet's movement for the elapsed world
+  time (`Δ = day + clock_fraction − its per-fleet mark`; the world scene
+  calls it per player move, `tick()` catches up — idempotent, no
+  double-count) and reports fleet moves for the marker glides (`80-*`
+  §4.5.2). `take_fleet_moves()` — drains that render report.
+  `stall_reason(fleet)` / `stalled_fleets(min_hold = 3)` — the read-only
+  stall diagnostics: per-fleet state
+  (`docked → cooldown → camping → chasing/pursuing → blocked → sailing`,
+  with detail — docked/cooldown until-day, camping radius, sailing pipe
+  rate) over the runtime-only hold counter (accrual budgets consumed
+  without forward progress). Feeds the S19-gated debug badge and the
+  debug chart's stalled-fleets row (`80-*` §4.5.2/§4.6).
 - `wrecks()` / `collect_wreck(id, free_capacity)` — the §4.11.11.2 wreck
   view and player collect (cargo up to free capacity + salvage gold via
   `BattleRewards.salvage_for`).

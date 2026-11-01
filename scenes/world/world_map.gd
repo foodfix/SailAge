@@ -25,6 +25,7 @@ const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## Phase 5 task J: the living NPC fleet ecology (docs/60-* §4.1, §4.11.11).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 ## Phase 5 task K: wreck collect fills the pooled hold flagship-first
 ## (docs/40-* §4.2 distribution rule — the same helper the battle loot uses).
@@ -1605,6 +1606,34 @@ func _sync_marker_nodes() -> void:
 			count_node.text = "×%d" % convoy_count if convoy_count >= 2 else ""
 			count_node.visible = convoy_count >= 2
 			count_node.position = Vector2(square.size.x, 0.0)
+		# Diagnostics badge (unified-movement amendment, 80-* §4.5.2): with
+		# the S19 debug row on, a fleet in a suspicious stall state wears a
+		# BAD-coloured state letter (B blocked · C camping · D docked ·
+		# K cooldown) — normal play (row off) never sees it.
+		var stall_state_name := str(marker.get("stall", ""))
+		var stall_letter := ""
+		if ChartViewLib.debug_row_enabled():
+			match stall_state_name:
+				"blocked":
+					stall_letter = "B"
+				"camping":
+					stall_letter = "C"
+				"docked":
+					stall_letter = "D"
+				"cooldown":
+					stall_letter = "K"
+		var stall_node: Label = square.get_node_or_null("Stall")
+		if stall_node == null:
+			stall_node = Label.new()
+			stall_node.name = "Stall"
+			stall_node.add_theme_font_size_override("font_size",
+				int(_cell_pixels * 0.4))
+			stall_node.add_theme_color_override("font_color",
+				PaletteLib.BAD)
+			stall_node.position = Vector2(0.0, 0.0)
+			square.add_child(stall_node)
+		stall_node.text = stall_letter
+		stall_node.visible = not stall_letter.is_empty()
 		_place_marker_square(square, marker.get("cell", Vector2i.ZERO), id)
 	for id in _marker_nodes.keys():
 		if live.has(id):

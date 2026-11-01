@@ -2084,6 +2084,10 @@
     "zh": "猎捕情报",
     "en": "Hunter intel"
   },
+  "debug.legend.stalls": {
+    "zh": "停滞舰队",
+    "en": "Stalled fleets"
+  },
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"
