@@ -176,9 +176,9 @@ static func apply_named_drop(outcome: Dictionary, captain_named_id: String) -> S
 		var equipment: Dictionary = player.get("equipment", {})
 		if not (equipment is Dictionary):
 			equipment = {}
-			player["equipment"] = equipment
 		occupied = str(equipment.get(slot, ""))
 		equipment[slot] = item_id
+		player["equipment"] = equipment  # assign back: .get() orphans a fresh {}
 	else:
 		# `figurehead`/`sail` fit the flagship (fleet index 0, §4.11.2).
 		var fleet: Array = GameState.fleet
@@ -188,9 +188,9 @@ static func apply_named_drop(outcome: Dictionary, captain_named_id: String) -> S
 		var ship_equipment: Dictionary = flagship.get("equipment", {})
 		if not (ship_equipment is Dictionary):
 			ship_equipment = {}
-			flagship["equipment"] = ship_equipment
 		occupied = str(ship_equipment.get(slot, ""))
 		ship_equipment[slot] = item_id
+		flagship["equipment"] = ship_equipment
 	var sold_back := ""
 	if not occupied.is_empty() and occupied != item_id:
 		var displaced: Dictionary = DataLoader.equipment.get(occupied, {}) \
