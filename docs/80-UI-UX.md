@@ -288,6 +288,15 @@ rendering is viewport-culled and never re-simulates.
 - **Wakes (locked):** each moving marker drags a **5-tile dashed trail** of
   1 px `PANEL_LINE` lines behind it that fades tile-by-tile; wrecks and
   docked markers draw none.
+- **Marker glide (unified-movement amendment, 2026-11-01):** NPC markers
+  glide across their accrual steps exactly like the player marker's §2.6
+  interpolation — when a fleet's clock accrual steps it from cell to cell,
+  the marker eases between the two tile centres over the current step
+  cadence (`_step_render_seconds`), render-only: logic, contact and saves
+  keep reading tile positions, and the seam honours the same
+  glide-disabled test switch. Before this amendment NPC markers snapped
+  to their released cells; with hull-scale accrual the snap read as
+  teleporting every player move.
 - **Debug chart (Phase 6):** the omniscient debug chart mode (§4.6) renders
   the **same** `NpcFleets.markers()` data un-culled — every fleet on the
   whole map, same role colors.

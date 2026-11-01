@@ -232,11 +232,22 @@ flagship's own value; every other factor (`crew`, `crew_min`, `class` for
 `wind_factor`, `seamanship_bonus`) comes from the **flagship**. A one-ship fleet
 therefore reduces to the flagship's own speed.
 
-**NPC parity (cross-reference, Phase 6).** NPC fleet daily tile budgets
-multiply by the same `direction_factor`/`current_factor` for the current leg
-heading, lane stepping runs at base **2 tiles/day** before factors, and lanes
-carry seasonal variants — normative in `60-*` §4.11.11 (Phase-6 amendment),
-not here.
+**NPC parity (cross-reference, Phase 6, unified-movement amendment).** NPC
+fleets run the **same §4.4 pipeline as the player**: `base_speed` is the
+slowest `ShipType.speed` among the fleet's composed ships (`60-*` §4.11.3
+composition, stored on the fleet at spawn — `10-*` §4.15), multiplied by
+`wind_factor` for the global day weather at the **flagship's class** (the
+first composed ship), the `direction_factor` for the step heading (NPCs read
+the region's **prevailing** wind token — the seeded daily jitter is a
+player-ledger roll and is not re-rolled for NPCs), and the `current_factor`.
+The three player-ledger terms are pinned neutral for NPCs (they own no such
+state): `crew_factor = 1.0`, seamanship bonus `0`, sail trim `normal`
+(1.0). Movement accrues with elapsed world time — each fleet banks
+`Δ × pipeline` tiles per elapsed Δ and steps one tile per accrued tile,
+released in step with the player's own clock (whole-day catch-up walks
+exactly the daily budget); raiders and hunters pay the same pipeline per
+pursuit bearing. Lanes still carry seasonal variants —
+normative in `60-*` §4.11.11 (unified-movement amendment), not here.
 
 ### 4.5 Daily ledger (strict order, runs once per day tick at sea and on
 port day-advances)

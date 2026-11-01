@@ -396,7 +396,7 @@ Phase-5 additions (version 5):
 
 | Key | Type | Default when absent | Owner |
 |---|---|---|---|
-| `npc_fleets` | `[]object` | `[]` | `60-*` §4.1; renames v2's `hostile_fleets`; shape in `10-*` §4.15 |
+| `npc_fleets` | `[]object` | `[]` | `60-*` §4.1; renames v2's `hostile_fleets`; shape in `10-*` §4.15; each fleet carries its `ships` composition (unified-movement amendment, `60-*` §4.11.11) — absent on an older payload ⇒ lazily recomposed from the fleet's `seed`, bit-identical, no version bump |
 | `market_stocks` | `object port_id → {good_id → stock}` | derived resting stock (`30-*` §4.2), no RNG | `30-*` §4.2; shape in `10-*` §4.15 |
 | `wrecks` | `[]object` | `[]` | `60-*` auto-resolve; shape in `10-*` §4.15 |
 | `npc_preset` | string preset id | `"normal"` | `10-*` §4.10 |

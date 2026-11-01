@@ -468,9 +468,11 @@ func _test_chokepoint_hysteresis() -> void:
 	# 17-lane network (the junction set changed): it now sits at the Aden
 	# approaches where the water east of the anchor pins after 1 tile, so the
 	# chase holds there — still no engagement and no wreck (the prey stands
-	# behind the coast).
+	# behind the coast). Movement + engagement are clock accrual now
+	# ([method _accrue_raider]); the `_raider_tick` above opened the chase.
 	for _walk in range(3):
-		sim._raider_tick(pirate, day + 1 + _walk, doomed, remove_ids, wrecks)
+		sim._accrue_raider(pirate, day + 1 + _walk, 1.0, doomed, remove_ids,
+			wrecks)
 	var walked_out := NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
 	_check(walked_out == 1 and wrecks.is_empty(),
 		"the raider closes to the coastal pin 1 tile out and holds (out %d tiles, no resolve yet)"
@@ -482,7 +484,10 @@ func _test_chokepoint_hysteresis() -> void:
 	_check(str(pirate.get("target_fleet_id", "")) == "",
 		"prey beyond Chebyshev 16 drops the chase")
 	for _home in range(6):
-		sim._raider_tick(pirate, day + 5 + _home, doomed, remove_ids, wrecks)
+		# The return walk is clock accrual (the targetless raider walks its
+		# anchor allowance — [method _accrue_raider]).
+		sim._accrue_raider(pirate, day + 5 + _home, 1.0, doomed, remove_ids,
+			wrecks)
 	_check(NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
 			<= NpcFleetsLib.ANCHOR_RADIUS,
 		"the lost raider returns within Chebyshev 6 of its chokepoint")
@@ -528,6 +533,7 @@ func _test_depletion_runs() -> void:
 	var lost := 0
 	var tick_total_ms := 0.0
 	var ticks := 0
+	var wrecks_ever := {}
 	for wave in waves:
 		var day := 30 + wave * 6
 		var trader := _stationary(_make_fleet(sim, "trader", "portugal",
@@ -536,14 +542,25 @@ func _test_depletion_runs() -> void:
 		for step in range(6):
 			GameState.day = day + step
 			var started := Time.get_ticks_usec()
-			sim._step_fleets(GameState.day)
+			# One day = the full tick: state machines + clock accrual
+			# (the unified-movement movement path).
+			sim.tick(GameState.day)
 			tick_total_ms += float(Time.get_ticks_usec() - started) / 1000.0
 			ticks += 1
 			pirate_alive = _fleet_exists(str(pirate["id"]))
 			if not pirate_alive:
 				break
+		# Accumulate wreck ids across the run — despawns (5 days) remove
+		# old entries from the live array before the end-of-run checks.
+		for wreck in GameState.wrecks:
+			wrecks_ever[str(wreck.get("id", ""))] = true
 		if not _fleet_exists(str(trader["id"])):
 			lost += 1
+		else:
+			# One wave = one bait trader: a survivor is removed so the next
+			# wave's engagement targets the new bait (nearest-prey ties
+			# would otherwise re-engage the oldest survivor first).
+			sim.remove(str(trader["id"]))
 		if not pirate_alive:
 			# The trickle's refill: the next seeded raider takes the camp.
 			pirate = _make_fleet(sim, "pirate", "", camp, 777777 + wave + 1)
@@ -551,9 +568,9 @@ func _test_depletion_runs() -> void:
 	_check(lost >= 6,
 		"raiders measurably deplete unescorted traders (%d of %d waves)"
 		% [lost, waves])
-	_check(GameState.wrecks.size() >= lost,
-		"every loss left a wreck (%d wrecks for %d losses)"
-		% [GameState.wrecks.size(), lost])
+	_check(wrecks_ever.size() >= lost,
+		"every loss left a wreck (%d wrecks ever, for %d losses)"
+		% [wrecks_ever.size(), lost])
 	var avg_ms := tick_total_ms / float(maxi(ticks, 1))
 	print("  ecology probe: %d step ticks, avg %.2f ms" % [ticks, avg_ms])
 	print("PROFILE ecology_tick_avg_ms %d" % int(round(avg_ms)))
@@ -565,6 +582,7 @@ func _test_depletion_runs() -> void:
 	var pirate2 := _make_fleet(sim2, "pirate", "", camp, 777777)
 	pirate2["anchor_cell"] = {"x": camp.x, "y": camp.y}
 	var survived := 0
+	var salvage_ever := false
 	for wave in waves:
 		var day := 30 + wave * 6
 		var trader := _stationary(_make_fleet(sim2, "trader", "portugal",
@@ -573,9 +591,12 @@ func _test_depletion_runs() -> void:
 			camp + Vector2i(4, 8)), day)
 		for step in range(6):
 			GameState.day = day + step
-			sim2._step_fleets(GameState.day)
+			sim2.tick(GameState.day)
 			if not _fleet_exists(str(pirate2["id"])):
 				break
+		for wreck in GameState.wrecks:
+			if int(wreck.get("salvage_gold", 0)) > 0:
+				salvage_ever = true
 		if _fleet_exists(str(trader["id"])):
 			survived += 1
 	_check(survived == waves,
@@ -583,8 +604,7 @@ func _test_depletion_runs() -> void:
 		% [survived, waves])
 	_check(not _fleet_exists(str(pirate2["id"])),
 		"the escorted engagement costs the raider its fleet")
-	_check(not GameState.wrecks.is_empty()
-		and int(GameState.wrecks[0].get("salvage_gold", 0)) > 0,
+	_check(salvage_ever,
 		"the spent raider leaves a salvage-paying warship wreck")
 
 

@@ -727,6 +727,7 @@ Fleet dict — the locked save shape (`60-*` §4.1):
 | `captain` | object | `{"pool_id": id \| "", "name_index": int}` into `npc_captains.json` (§4.11) |
 | `specialty` | id | optional; the good id drawn at spawn (traders) |
 | `cooldown_until_day` | day | pursuit/spawn cooldown |
+| `ships` | []object | the §4.11.3 composed ship list, stored at spawn (unified-movement amendment, `60-*` §4.11.11): each entry `{"ship_type_id": id, "durability": int, "crew": int, "provisions": int, "water": int, "cannons": int, "equipment": {"figurehead": id \| "", "sail": id \| ""}, "cargo": {good_id: units}}`; hull draws key off `seed` only (never the day), so a fleet missing the field (older save) backfills it lazily, bit-identical to the spawn draw; drives the fleet's §4.4 base speed (slowest hull), cached in the derived `speed` (int) + `speed_class` (id) pair written beside the list and backfilled under the same lazy rule |
 
 ```json
 {
@@ -738,7 +739,15 @@ Fleet dict — the locked save shape (`60-*` §4.1):
   "cargo": {"wine": 28},
   "captain": {"pool_id": "spain", "name_index": 3},
   "specialty": "wine",
-  "cooldown_until_day": 0
+  "cooldown_until_day": 0,
+  "ships": [
+    {"ship_type_id": "caravel", "durability": 90, "crew": 15,
+      "provisions": 0, "water": 0, "cannons": 2,
+      "equipment": {"figurehead": "", "sail": ""}, "cargo": {"wine": 3}},
+    {"ship_type_id": "latin", "durability": 40, "crew": 8,
+      "provisions": 0, "water": 0, "cannons": 0,
+      "equipment": {"figurehead": "", "sail": ""}, "cargo": {"wine": 3}}
+  ]
 }
 ```
 

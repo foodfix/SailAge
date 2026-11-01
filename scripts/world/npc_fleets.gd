@@ -211,20 +211,14 @@ static var _successor_cursor: int = 0
 ##
 ## Lane-days divisor for the trader score: `lane_days = tile length / 20`.
 ## HISTORICAL: the retired encounters system had no per-day tile rate to stay consistent with,
-## so the 20 tiles/day default named by the task is pinned here. Fleet
-## *stepping* runs at the §4.11.11.1 Phase-6 pin of 2 tiles/day
-## ([constant LANE_STEP_TILES_PER_DAY]) — this constant only ranks candidate
-## journeys against each other.
+## so the 20 tiles/day default named by the task is pinned here. This is a
+## ranking constant only — real stepping runs the unified §4.4 pipeline
+## (the `60-*` §4.11.11 amendment; [method _lane_tiles_today]).
 const LANE_TILES_PER_DAY := 20
-## §4.11.11.1 stepping base (Phase-6 sweep: 1 → 2 tiles/day, before the
-## task-H parity factors): every lane-travelling fleet advances up to this
-## many tiles per day tick, and raider chase/return steps match it.
-const LANE_STEP_TILES_PER_DAY := 2
-## Task-H parity pin: every NPC fleet reads the §4.4 direction-factor
-## `sail` column. The fleet's hull classes are not tracked per NPC fleet,
-## so the role-default class pin collapses to "all NPC fleets are sail" —
-## oar/hybrid differentiation is out of scope this phase (documented in
-## [method npc_direction_factor]).
+## Task-H parity pin (amended by the unified-movement model): the
+## direction-factor **fallback** column. The column now follows the fleet's
+## flagship class ([method _fleet_base]); every §4.11.3 hull in the
+## composition pool is `sail`, so fallback and practice agree.
 const NPC_SAIL_CLASS := "sail"
 ## Hold capacities (fleet dicts carry cargo only — no ship list). The
 ## coaster's ≤ 10 hold and ≤ 5-unit calls are doc-pinned (`30-*` §4.4); the
@@ -328,13 +322,78 @@ var _skip: Dictionary = {}
 var _hunter_paths: Dictionary = {}
 
 ## Task-H parity accumulator (docs/60-* §4.11.11 amendment; task-H pin 3):
-## `fleet_id → float` — the fractional tile remainder of the daily
-## `LANE_STEP_TILES_PER_DAY × direction × current` budget (and of every
-## per-step pursuit allowance). Runtime-only, keyed by fleet id, reset on
-## `new_game` ([method initial_fill]) and on load (the world scene adopts a
-## fresh sim) — never persisted, mirroring the player drift accumulator's
-## status. A refused/blocked step never spends the bank.
+## `fleet_id → float` — the fractional tile remainder of the daily unified
+## §4.4 budget `base × wind × direction × current` (and of every per-step
+## pursuit allowance). Runtime-only, keyed by fleet id, reset on `new_game`
+## ([method initial_fill]) and on load (the world scene adopts a fresh sim)
+## — never persisted, mirroring the player drift accumulator's status. A
+## refused/blocked step never spends the bank.
 var _step_carry: Dictionary = {}
+
+## Pass-through contacts (unified-movement amendment, `60-*` §4.11.11): ids
+## of fleets that stepped within Chebyshev [constant CONTACT_DISTANCE] of
+## the player's tile mid-step this day tick — the engagement rule applied
+## to the pass-through exactly as to an end-of-step proximity. Consumed by
+## [method nearest_contact] (one engagement per pass), reset with the run.
+var _pass_contacts: Array = []
+
+## Per-day memo of [method _leg_geometry] resolutions (unified-movement
+## amendment: the tick walks each leg up to hull-speed budgets, so the
+## per-call dict allocation + month-variant lookup is cached for the day).
+## Invalidated on day change and on any net/route-table rebuild
+## ([method _refresh_net]). Callers treat results as read-only.
+var _geo_cache: Dictionary = {}
+var _geo_cache_day: int = -1
+
+## Small stable ints for the geometry-memo keys, split by kind
+## (`leg_id → int`, assigned on first use — [method _leg_geometry]; the
+## split tables keep the hot lookup free of string concatenation).
+var _lane_path_ids: Dictionary = {}
+var _spoke_path_ids: Dictionary = {}
+
+## Per-day memo of [_passable] (see the memo note there): keyed by cell,
+## invalidated on day change, reset with the run.
+var _passable_cache: Dictionary = {}
+var _passable_day: int = -1
+
+## The player's tile, cached for the scope of one [method tick] (the tick
+## commits thousands of cells and each commit compares against it; the
+## player cannot move mid-tick). Outside a tick the live lookup runs
+## ([method _player_tile_now]).
+var _tick_player_tile := Vector2i(-1, -1)
+var _tick_scoped := false
+
+## The world-clock mark of the last per-move accrual bookkeeping — the
+## `_pending_delta` sync guard only (movement itself is tracked PER FLEET
+## in [_fleet_mark]). Runtime-only.
+var _last_clock := -1.0
+
+## The Δ the last [method advance_clock] consumed: a fleet routed by the
+## day tick's departures owes exactly this remainder of the day (the old
+## same-pass stepping guarantee — a just-departed fleet is never observed
+## in its raw pre-step state).
+var _pending_delta := 0.0
+
+## Per-fleet accrual marks (`fleet_id → world clock`): each fleet accrues
+## `now − its own mark` and is marked `now` — docked time never accrues,
+## a fleet routed by a departure accrues the day's remainder exactly once
+## ([method _depart] marks it `now` before granting [_pending_delta]), and
+## a fresh sim's missing marks mean zero catch-up (the load sentinel).
+## Runtime-only, reset with the run.
+var _fleet_mark: Dictionary = {}
+
+## Render reporting (80-* §4.5.2 amendment): `{id, from, to}` per fleet
+## that moved in the last accrual — the world scene's marker glides. Never
+## saved; drained by [method take_fleet_moves] (re-accumulates until
+## consumed, so both the per-move callers and the day tick report).
+var moved_fleet_moves: Array = []
+
+
+## Drains (and returns) the render-move report since the last take.
+func take_fleet_moves() -> Array:
+	var out: Array = moved_fleet_moves
+	moved_fleet_moves = []
+	return out
 
 ## Task-H variant state (`fleet_id → {key, walked_len}`): the lane-path
 ## identity whose progress the fleet's `tile_index` is currently relative
@@ -611,6 +670,13 @@ func initial_fill(day: int) -> void:
 	# progress state reset with the run (never persisted, §2.8/task-H pin 3).
 	_step_carry = {}
 	_leg_active = {}
+	_pass_contacts = []
+	_last_clock = -1.0
+	_pending_delta = 0.0
+	_fleet_mark = {}
+	moved_fleet_moves = []
+	_geo_cache = {}
+	_passable_cache = {}
 	if is_deserted():
 		return
 	if not DataLoader.ensure_map():
@@ -658,11 +724,211 @@ func tick(day: int) -> Array:
 	if is_deserted():
 		return []
 	_ensure_rng()
+	_tick_scoped = true
+	_tick_player_tile = GameState.world_tile()
+	# Movement accrual first (unified-movement amendment): catch up every
+	# elapsed fraction of the world clock — in headless drivers and after
+	# port day-skips this is the whole day; in real play the per-move
+	# callers (world scene) already accrued the fractions and this call
+	# nets zero. The clock-sync guard makes both orders safe.
+	advance_clock()
 	_recount_zones(int(day))
 	_schedule_treasure(int(day))
 	_named_pirate_tick(int(day))
 	_step_fleets(int(day))
-	return _trickle(int(day))
+	var out := _trickle(int(day))
+	_tick_scoped = false
+	return out
+
+
+## Movement accrual (unified-movement amendment, `60-*` §4.11.11): NPC
+## movement is a pure function of elapsed world time — every fleet accrues
+## its §4.4 pipeline progress (`Δ × base × wind × direction × current`
+## tiles per Δ days) and steps one tile per accrued tile, released in step
+## with the player's own clock. A player helm move advances ≈ one tile on
+## every fleet (player and NPC speeds are now the same pipeline), so the
+## sea never jumps at a day boundary and no remainder is ever flushed.
+## Idempotent on the world clock: repeated calls accrue only the
+## not-yet-accrued fraction, so the per-move callers and the day tick's
+## catch-up (port day-skips, headless drivers) can never double-step.
+## The sync mark is runtime-only: a freshly adopted sim syncs without
+## catching up — a reloaded fleet resumes accrual from the load instant.
+func advance_clock() -> void:
+	var now := _clock_now()
+	if _last_clock < 0.0:
+		_last_clock = now
+		_pending_delta = 0.0
+		return
+	var delta := now - _last_clock
+	var prev_clock := _last_clock
+	_last_clock = now
+	_pending_delta = delta
+	if delta <= 0.0 or is_deserted() or SailingSimLib.is_game_over():
+		return
+	var day := int(GameState.day)
+	var remove_ids: Array = []
+	var wrecks: Array = []
+	# The pass's engagement ledger (the day tick's `doomed` shape): a prey
+	# resolved by one raider can never be re-engaged by a later one.
+	var doomed: Dictionary = {}
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		# Inclusive pursuit cooldown: a battle on day D stores D+1, so the
+		# fleet holds through D+1 — movement included (the day tick's
+		# stepping skip carried over).
+		if int(fleet.get("cooldown_until_day", 0)) >= day:
+			continue
+		var id := str(fleet.get("id", ""))
+		# Per-fleet accrual: `now − own mark`. A fleet without a mark (a
+		# test fixture) owes the full tick delta — only [method spawn] and
+		# [method _depart] pre-mark fleets.
+		var mark := float(_fleet_mark.get(id, prev_clock))
+		var fleet_delta := now - mark
+		if fleet_delta <= 0.0:
+			continue
+		_fleet_mark[id] = now
+		# Render reporting (80-* §4.5.2 amendment): from → to for the
+		# marker glide; multi-tile walks report the first and last cell.
+		var moved_from := position_of(fleet)
+		match str(fleet.get("role", "")):
+			PIRATE, PRIVATEER:
+				_accrue_raider(fleet, day, fleet_delta, doomed, remove_ids,
+					wrecks)
+			HUNTER:
+				_accrue_hunter(fleet, day, fleet_delta)
+			_:
+				_accrue_lane(fleet, day, fleet_delta)
+		var moved_to := position_of(fleet)
+		if moved_to != moved_from:
+			moved_fleet_moves.append({"id": id, "from": moved_from,
+				"to": moved_to})
+	for id in remove_ids:
+		remove(id)
+	for wreck in wrecks:
+		GameState.wrecks.append(wreck)
+
+
+## The absolute world clock (`day + clock_fraction`) — the accrual's time
+## base ([method advance_clock]).
+func _clock_now() -> float:
+	return float(GameState.day) + float(
+		GameState.world.get("clock_fraction", 0.0))
+
+
+func _accrue(delta: float) -> void:
+	var day := int(GameState.day)
+	var remove_ids: Array = []
+	var wrecks: Array = []
+	for fleet in GameState.npc_fleets:
+		if not (fleet is Dictionary):
+			continue
+		# Inclusive pursuit cooldown: a battle on day D stores D+1, so the
+		# fleet holds through D+1 — movement included (the day tick's
+		# stepping skip carried over).
+		if int(fleet.get("cooldown_until_day", 0)) >= day:
+			continue
+		match str(fleet.get("role", "")):
+			PIRATE, PRIVATEER:
+				_accrue_raider(fleet, day, delta, {}, remove_ids, wrecks)
+			HUNTER:
+				_accrue_hunter(fleet, day, delta)
+			_:
+				_accrue_lane(fleet, day, delta)
+	for id in remove_ids:
+		remove(id)
+	for wreck in wrecks:
+		GameState.wrecks.append(wreck)
+
+
+## Lane accrual for one fleet: whole days walk exactly the day budgets
+## ([method _lane_tiles_today] — the same pins headless drivers assert);
+## the fractional remainder of Δ accrues at the current leg heading's
+## pipeline and banks its sub-tile remainder. Arrivals mid-accrual end the
+## walk (the fleet dwells; the day tick departs it).
+func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
+	# Docked fleets owe no movement (the day tick departs them; the fast
+	# path keeps the per-move accrual O(fleets) with no geometry work).
+	if ((fleet.get("route", {}) as Dictionary).get("legs", [])
+			as Array).is_empty():
+		return
+	for _d in int(floor(delta)):
+		_walk_lane(fleet, day, _lane_tiles_today(fleet))
+	var fraction: float = delta - floor(delta)
+	if fraction <= 0.0 or _lane_step_heading(fleet).is_empty():
+		return
+	var id := str(fleet.get("id", ""))
+	var raw: float = _lane_pipe(fleet) * fraction + float(_step_carry.get(id, 0.0))
+	var tiles := int(floor(raw))
+	_step_carry[id] = raw - float(tiles)
+	_walk_lane(fleet, day, tiles)
+
+
+## The §4.4 lane pipeline for the fleet's current leg heading — tiles per
+## day before banking (the [method _lane_tiles_today] budget's rate term).
+func _lane_pipe(fleet: Dictionary) -> float:
+	var heading := _lane_step_heading(fleet)
+	if heading.is_empty():
+		return 0.0
+	var base: Array = _fleet_base(fleet)
+	var ship_class := str(base[1])
+	var month := SailingSimLib.month_for(GameState.day)
+	var weather := str(GameState.world.get("weather",
+		SailingSimLib.DEFAULT_WEATHER))
+	var cell := position_of(fleet)
+	return float(int(base[0])) \
+		* SailingSimLib.wind_factor(weather, ship_class) \
+		* npc_direction_factor(heading, cell, month, ship_class) \
+		* npc_current_factor(heading, cell, month)
+
+
+## Raider accrual: a chasing raider walks its §4.4 allowance toward the
+## prey with the engagement re-checked per committed tile — a mid-day
+## catch resolves now (queued into the pass's removal lists, applied by
+## [method advance_clock]); an off-lane raider accrues toward its anchor
+## under the unchanged return rule. Prey picking/chasing state stays with
+## the day tick ([method _raider_tick]); `doomed` is the pass's ledger —
+## a prey resolved by an earlier raider is never re-engaged.
+func _accrue_raider(fleet: Dictionary, day: int, delta: float,
+		doomed: Dictionary, remove_ids: Array, wrecks: Array) -> void:
+	var target := _find(str(fleet.get("target_fleet_id", "")))
+	if not target.is_empty() and (doomed.has(str(target.get("id", ""))) \
+			or chebyshev(position_of(fleet),
+				position_of(target)) > CHASE_OFF_RADIUS):
+		fleet["target_fleet_id"] = ""  # §4.11.11.1: lost/beyond 16 — drop
+		target = {}
+	if target.is_empty():
+		var cell := position_of(fleet)
+		var anchor := _cell_field(fleet.get("anchor_cell", null))
+		if anchor != NO_CELL and (chebyshev(cell, anchor) > ANCHOR_RADIUS \
+				or _is_path_tile(cell)):
+			for _i in _chase_budget(fleet, anchor, delta):
+				_step_toward(fleet, anchor)
+		return
+	var prey_cell := position_of(target)
+	var tiles := _chase_budget(fleet, prey_cell, delta)
+	for _i in tiles:
+		target = _find(str(fleet.get("target_fleet_id", "")))
+		if target.is_empty():
+			break  # the prey is gone (a wreck this tick): hold
+		prey_cell = position_of(target)
+		if chebyshev(position_of(fleet), prey_cell) <= CONTACT_DISTANCE:
+			_engage(fleet, target, day, doomed, remove_ids, wrecks)
+			break
+		_step_toward(fleet, prey_cell)
+
+
+## Hunter accrual: a chasing hunter pursues on the clock (per-step §4.4
+## allowance through the cached A* plan); every other hunter walks its
+## lanes exactly like a lane role. The intel state machine (chase open,
+## loiter, route home) stays with the day tick ([method _hunter_tick]).
+func _accrue_hunter(fleet: Dictionary, day: int, delta: float) -> void:
+	if str(fleet.get("hunter_state", HUNTER_STATE_INTEL)) == HUNTER_STATE_CHASE:
+		var target := GameState.world_tile()
+		if chebyshev(position_of(fleet), target) <= HUNTER_CHASE_OFF:
+			_pursue(fleet, target, 0.0, delta)
+			return
+	_accrue_lane(fleet, day, delta)
 
 
 ## Every live fleet dict (the §4.11.11 shape) — the save payload. Shallow
@@ -744,7 +1010,28 @@ func _convoy_leaders() -> Dictionary:
 ## its pursuit cooldown raises no contact. `{}` when none.
 func nearest_contact(cell: Vector2i) -> Dictionary:
 	var found := contacts(cell)
-	return found[0] if not found.is_empty() else {}
+	# Unified-movement amendment: consume the tick's pass-through contacts —
+	# a hostile fleet that touched the player mid-step engages even though it
+	# has since moved on (one engagement per pass; the fleet's own
+	# cooldown/hostility rules re-checked here exactly as `contacts` does).
+	var passed: Array = _pass_contacts.duplicate()
+	_pass_contacts.clear()
+	for id in passed:
+		var fleet := _find(str(id))
+		if fleet.is_empty() or not is_hostile_fleet(fleet):
+			continue
+		if int(fleet.get("cooldown_until_day", 0)) >= GameState.day:
+			continue
+		found.append(fleet)
+	if found.is_empty():
+		return {}
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var da := chebyshev(cell, position_of(a))
+		var db := chebyshev(cell, position_of(b))
+		if da != db:
+			return da < db
+		return str(a.get("id", "")) < str(b.get("id", "")))
+	return found[0]
 
 
 ## Every hostile fleet within Chebyshev 1 of `cell`, nearest first (ties by
@@ -837,6 +1124,10 @@ func spawn(role: String, nation_id: String, day: int) -> Dictionary:
 		return {}
 	GameState.npc_fleets.append(fleet)
 	_index_add(fleet)
+	# The fresh fleet owes nothing yet: its accrual mark starts now (the
+	# first [method advance_clock] after the spawn grants exactly the
+	# elapsed fraction, never the whole day).
+	_fleet_mark[str(fleet.get("id", ""))] = _clock_now()
 	return fleet
 
 
@@ -954,7 +1245,11 @@ func _build_fleet(role: String, nation_id: String, day: int) -> Dictionary:
 			return _finish_lane_fleet(fleet, journey, nation_id, day)
 	fleet["id"] = next_fleet_id(day, role)
 	fleet["seed"] = _fleet_seed(day, cell)
+	# Unified-movement amendment: the §4.11.3 composition rides on the fleet
+	# (it now drives the §4.4 base speed — `60-*` §4.11.11).
+	fleet["ships"] = compose_fleet_ships(fleet, int(day))
 	set_position(fleet, cell)
+	_sync_route_progress(fleet)
 	_record_wake(fleet, cell)
 	_draw_captain(fleet)
 	if role == TRADER:
@@ -969,9 +1264,17 @@ func _finish_lane_fleet(fleet: Dictionary, journey: Dictionary,
 	var role := str(fleet["role"])
 	fleet["id"] = next_fleet_id(day, role)
 	fleet["seed"] = _fleet_seed(day, journey["cell"])
+	# Unified-movement amendment: the §4.11.3 composition rides on the fleet
+	# (it now drives the §4.4 base speed — `60-*` §4.11.11).
+	fleet["ships"] = compose_fleet_ships(fleet, int(day))
 	fleet["route"] = journey["route"]
 	fleet["dest_port_id"] = str(journey.get("dest", ""))
 	set_position(fleet, journey["cell"])
+	# The boarding cell may sit mid-leg (the tile nearest the port): sync
+	# the route progress to the ACTIVE geometry now — under clock accrual
+	# the first step may be a fraction away, and the fleet must stand on
+	# `path[a + tile_index]` from the instant it is under way.
+	_sync_route_progress(fleet)
 	_record_wake(fleet, journey["cell"])
 	if int(journey.get("dwell_until_day", 0)) > 0:
 		fleet["dwell_until_day"] = int(journey["dwell_until_day"])
@@ -1740,50 +2043,27 @@ func _leg_path(leg: Dictionary) -> Array:
 ## resolves abstractly via [method resolve_engagement]; the loser is queued
 ## into `doomed`/`remove_ids` and its wreck into `wrecks` (applied by the
 ## caller after the pass — never mid-iteration).
-func _raider_tick(fleet: Dictionary, day: int, doomed: Dictionary,
-		remove_ids: Array, wrecks: Array) -> void:
+func _raider_tick(fleet: Dictionary, _day: int, doomed: Dictionary,
+		_remove_ids: Array, _wrecks: Array) -> void:
 	var cell := position_of(fleet)
 	var target := _find(str(fleet.get("target_fleet_id", "")))
-	var chasing := not target.is_empty()
-	if chasing and (doomed.has(str(target.get("id", ""))) \
+	if not target.is_empty() and (doomed.has(str(target.get("id", ""))) \
 			or chebyshev(cell, position_of(target)) > CHASE_OFF_RADIUS):
-		# §4.11.11.1: the prey is beyond 8 (or lost) — drop the chase.
+		# §4.11.11.1: the prey is beyond 16 (or lost) — drop the chase.
 		target = {}
-		chasing = false
 		fleet["target_fleet_id"] = ""
-	if not chasing:
-		# The chase opens only inside 5; the *pick* among the candidates is
+	if target.is_empty():
+		# The chase opens only inside 10; the *pick* among the candidates is
 		# the nearest of the §4.1.1 prey query (trader/patrol within 10,
 		# coasters ignored, a privateer restricted to its sponsor's rivals).
-		target = _nearest_prey_within(fleet, CHASE_ON_RADIUS, doomed)
-		chasing = not target.is_empty()
-		if chasing:
-			fleet["target_fleet_id"] = str(target.get("id", ""))
-	if not chasing:
-		# Anchored (within 6 of the anchor and off the lane raster) or still
-		# walking home. Parking ON a path tile is forbidden: the anchor rule
-		# keeps the corridor itself clear (§4.11.11.1). The return steps pay
-		# the parity factors per pursuit heading (task-H pin 3).
-		var anchor := _cell_field(fleet.get("anchor_cell", null))
-		if anchor != NO_CELL and (chebyshev(cell, anchor) > ANCHOR_RADIUS \
-				or _is_path_tile(cell)):
-			for _i in LANE_STEP_TILES_PER_DAY:
-				_chase_step(fleet, anchor)
-		return
-	var prey_cell := position_of(target)
-	# The chase steps at the §4.11.11.1 base too (2 step-slots/day), each
-	# paying the parity factors per pursuit heading (§2.8 — "like every
-	# fleet"). The engagement fires at most once per tick; a mid-step catch
-	# ends the loop (the loser is `doomed`, so no re-engage and no step past
-	# it).
-	for _i in LANE_STEP_TILES_PER_DAY:
-		if doomed.has(str(target.get("id", ""))):
-			break
-		prey_cell = position_of(target)
-		if chebyshev(position_of(fleet), prey_cell) <= CONTACT_DISTANCE:
-			_engage(fleet, target, day, doomed, remove_ids, wrecks)
-			break
-		_chase_step(fleet, prey_cell)
+		var prey := _nearest_prey_within(fleet, CHASE_ON_RADIUS, doomed)
+		if not prey.is_empty():
+			fleet["target_fleet_id"] = str(prey.get("id", ""))
+	# Unified-movement amendment: the chase and the anchor-return are pure
+	# clock accrual now ([method _accrue_raider]) — the day tick owns the
+	# state (prey pick, chase drop, anchor rule) and no movement. The
+	# engagement fires from the accrual walk the moment a committed tile
+	# lands within [constant CONTACT_DISTANCE] of the prey.
 
 
 ## The nearest prey candidate within `radius` of the raider (ties by fleet id
@@ -1808,10 +2088,11 @@ func _nearest_prey_within(fleet: Dictionary, radius: int,
 	return best
 
 
-## One wrap-aware greedy step (one of the [constant LANE_STEP_TILES_PER_DAY]
-## per-day fleet steps, §4.11.11.1 — the callers loop it)
-## reducing the Chebyshev distance to `target`, larger axis first, never onto
-## land/reef/ice or an occupied tile. Lane traffic never pathfinds and the
+## One wrap-aware greedy step reducing the Chebyshev distance to `target`,
+## larger axis first, never onto
+## land/reef/ice or an occupied tile (the day's unified allowance decides
+## how many of these fire — the callers bank it). Lane traffic never
+## pathfinds and the
 ## raider chase is no exception (the §4.11.11.5 zero-A* gate: only the
 ## hunter's player-chase may A*).
 func _step_toward(fleet: Dictionary, target: Vector2i) -> void:
@@ -1893,7 +2174,7 @@ func _make_wreck(fleet: Dictionary, day: int) -> Dictionary:
 	}
 	if str(fleet.get("role", "")) in WARSHIP_WRECK_ROLES:
 		var hull_ids: Array = []
-		for ship in compose_fleet_ships(fleet, int(day)):
+		for ship in _fleet_ships(fleet):
 			hull_ids.append(str((ship as Dictionary).get("ship_type_id", "")))
 		wreck["salvage_gold"] = BattleRewardsLib.salvage_for(hull_ids)
 	else:
@@ -2018,27 +2299,47 @@ static func _share_lane(a: Dictionary, b: Dictionary) -> bool:
 
 # --- Phase-6 parity factors & seasonal geometry (task H, §2.8) --------------
 
+## Per-day factor memos (unified-movement perf work): the prevailing-wind
+## token and the current band per cell, cleared when the month rolls —
+## the accrual evaluates these per fleet per tick over the same lanes.
+## Static like the factors themselves; pure day+cell functions, so the
+## memos never change replay determinism.
+static var _prevailing_memo: Dictionary = {}
+static var _current_memo: Dictionary = {}
+static var _factor_memo_month: int = -1
+
 ## The §4.4 direction factor for an NPC step of `heading` at `cell` in
-## `month` (docs/60-* §4.11.11 amendment; task-H master pin 1). The
-## wind-FROM direction is the region's **prevailing** token for the month
-## (`OceanLayers.prevailing_for`) — the player's seeded daily jitter and the
-## calm gate are player-ledger concepts and are NOT applied here: the NPC
-## factor is a pure day+cell function, so the same seed/day/cells replay
-## identically. A `VAR` region contributes 1.0 (no directional penalty or
-## bonus). The angle between the step heading and the wind-FROM direction is
-## bucketed on the 8-grid and read from `SailingSim.DIRECTION_FACTORS` —
-## always the `sail` column ([constant NPC_SAIL_CLASS] pin). An unknown
-## heading (never produced by the movement rules) degrades to 1.0.
+## `month` (docs/60-* §4.11.11 amendment; task-H master pin 1, amended by
+## the unified-movement model). The wind-FROM direction is the region's
+## **prevailing** token for the month (`OceanLayers.prevailing_for`) — the
+## player's seeded daily jitter and the calm gate are player-ledger concepts
+## and are NOT applied here: the NPC factor is a pure day+cell function, so
+## the same seed/day/cells replay identically. A `VAR` region contributes
+## 1.0 (no directional penalty or bonus). The angle between the step heading
+## and the wind-FROM direction is bucketed on the 8-grid and read from
+## `SailingSim.DIRECTION_FACTORS` at `ship_class` — the fleet's flagship
+## class per the amendment ([method _fleet_base]; the `sail` column stays
+## the fallback via [constant NPC_SAIL_CLASS]). An unknown heading (never
+## produced by the movement rules) degrades to 1.0.
 static func npc_direction_factor(heading: String, cell: Vector2i,
-		month: int) -> float:
-	var wind_from: String = OceanLayersLib.instance().prevailing_for(cell, month)
+		month: int, ship_class: String = NPC_SAIL_CLASS) -> float:
+	# Per-day memo of the region's prevailing token (unified-movement perf
+	# work: the accrual evaluates this per fleet per tick over the same
+	# lane cells). Cleared when the month rolls.
+	if _factor_memo_month != month:
+		_prevailing_memo = {}
+		_factor_memo_month = month
+	var wind_from: String = _prevailing_memo.get(cell, "")
+	if wind_from.is_empty():
+		wind_from = OceanLayersLib.instance().prevailing_for(cell, month)
+		_prevailing_memo[cell] = wind_from
 	if wind_from == "VAR":
 		return 1.0
 	var angle := SailingSimLib.angle_between_dirs(heading, wind_from)
 	if angle < 0:
 		return 1.0
 	var table: Dictionary = SailingSimLib.DIRECTION_FACTORS.get(angle, {})
-	return float(table.get(NPC_SAIL_CLASS, 1.0))
+	return float(table.get(ship_class, table.get(NPC_SAIL_CLASS, 1.0)))
 
 
 ## The §4.16 current modifier for an NPC step of `heading` at `cell` in
@@ -2053,7 +2354,17 @@ static func npc_direction_factor(heading: String, cell: Vector2i,
 ## 1.0. The reversal flip is `OceanLayers.current_at`'s own lookup-time rule.
 static func npc_current_factor(heading: String, cell: Vector2i,
 		month: int) -> float:
-	var current: Dictionary = OceanLayersLib.instance().current_at(cell, month)
+	# Per-day memo (see [method npc_direction_factor]): the current band
+	# lookup is shared by every fleet crossing the same cell.
+	if _factor_memo_month != month:
+		_current_memo = {}
+		_factor_memo_month = month
+	var current: Dictionary
+	if _current_memo.has(cell):
+		current = _current_memo[cell]
+	else:
+		current = OceanLayersLib.instance().current_at(cell, month)
+		_current_memo[cell] = current
 	if current.is_empty():
 		return 1.0
 	var angle := SailingSimLib.angle_between_dirs(heading, str(current["dir"]))
@@ -2113,11 +2424,30 @@ static func _heading_to(from: Vector2i, to: Vector2i) -> String:
 func _leg_geometry(leg: Dictionary) -> Dictionary:
 	var kind := str(leg.get("kind", ""))
 	var leg_id := str(leg.get("id", ""))
-	var base := _path_of(("lane:" if kind == "lane" else "spoke:") + leg_id)
+	# The per-tile hot path (unified-movement: the tick walks each active
+	# leg up to its hull-speed budget) — a memo hit must be allocation-free:
+	# the base path resolves by direct id lookup (no "kind:" prefix build),
+	# the id→int maps are split by kind, and the memo key is pure int math.
+	var table: Dictionary = _lane_paths if kind == "lane" else _spoke_paths
+	var base: Array = table.get(leg_id, [])
 	if base.is_empty():
 		return {}
+	# Per-day memo: one dict allocation + the month-variant lookup per
+	# DISTINCT leg per day, invalidated on day change. Callers treat the
+	# shared result as READ-ONLY (the movement rules only read fields).
+	if _geo_cache_day != int(GameState.day):
+		_geo_cache = {}
+		_geo_cache_day = int(GameState.day)
 	var a := clampi(int(leg.get("a", 0)), 0, base.size() - 1)
 	var b := clampi(int(leg.get("b", base.size() - 1)), 0, base.size() - 1)
+	var ids: Dictionary = _lane_path_ids if kind == "lane" else _spoke_path_ids
+	var pid := int(ids.get(leg_id, 0))
+	if pid == 0:
+		pid = ids.size() + 1
+		ids[leg_id] = pid
+	var cache_key := pid * 140737488355328 + a * 8388608 + b
+	if _geo_cache.has(cache_key):
+		return _geo_cache[cache_key]
 	var out := {
 		"path": base,
 		"start": a,
@@ -2128,15 +2458,20 @@ func _leg_geometry(leg: Dictionary) -> Dictionary:
 		"saved_walked_len": b - a + 1,
 	}
 	if kind != "lane":
+		out["key"] = "%s:%s" % [kind, leg_id]
+		_geo_cache[cache_key] = out
 		return out
 	var month := SailingSimLib.month_for(GameState.day)
 	var variant := _active_lane_variant(leg_id, month)
 	if variant.is_empty():
+		_geo_cache[cache_key] = out
 		return out
 	var vpath: Array = variant["path"]
 	var vn := vpath.size()
 	if vn < 2 or base.size() < 2:
-		return out  # a degenerate variant cannot carry progress; sail base
+		# a degenerate variant cannot carry progress; sail base
+		_geo_cache[cache_key] = out
+		return out
 	var va := roundi(float(a) / float(base.size() - 1) * float(vn - 1))
 	var vb := roundi(float(b) / float(base.size() - 1) * float(vn - 1))
 	va = clampi(va, 0, vn - 1)
@@ -2150,6 +2485,7 @@ func _leg_geometry(leg: Dictionary) -> Dictionary:
 	out["end"] = vb
 	out["walked_len"] = vb - va + 1
 	out["key"] = "%s:%s|%s" % [kind, leg_id, str(variant["id"])]
+	_geo_cache[cache_key] = out
 	return out
 
 
@@ -2213,12 +2549,13 @@ func _leg_progress(fleet: Dictionary, route: Dictionary, geo: Dictionary) -> int
 	return index
 
 
-## The daily lane-travel budget (task-H pin 3): `tiles_today =
-## floor(LANE_STEP_TILES_PER_DAY × direction_factor × current_factor +
-## carry)` for the fleet's current leg heading (the direction of the next
-## tile step), the fractional remainder banked in [_step_carry]. Pure
-## day+cell inputs — no RNG. A fleet with no resolvable heading banks its
-## carry unchanged.
+## The daily lane-travel budget (unified-movement amendment, `60-*`
+## §4.11.11): the full §4.4 pipeline for the fleet's current leg heading —
+## `tiles_today = floor(base × wind × direction × current + carry)`, where
+## `base` is the slowest hull among the fleet's composed ships and `wind`
+## is the global day weather at the flagship's class. The fractional
+## remainder banks in [_step_carry]. Pure day+cell inputs — no RNG. A fleet
+## with no resolvable heading banks its carry unchanged.
 func _lane_tiles_today(fleet: Dictionary) -> int:
 	var id := str(fleet.get("id", ""))
 	var carry := float(_step_carry.get(id, 0.0))
@@ -2234,14 +2571,80 @@ func _lane_tiles_today(fleet: Dictionary) -> int:
 			route["legs"] = []
 		_step_carry[id] = carry
 		return 0
-	var month := SailingSimLib.month_for(GameState.day)
-	var cell := position_of(fleet)
-	var factor := npc_direction_factor(heading, cell, month) \
-		* npc_current_factor(heading, cell, month)
-	var raw := float(LANE_STEP_TILES_PER_DAY) * factor + carry
+	var raw := _lane_pipe(fleet) + carry
 	var tiles := int(floor(raw))
 	_step_carry[id] = raw - float(tiles)
 	return tiles
+
+
+## The fleet's composed ships (unified-movement amendment): the §4.11.3
+## list stored at spawn; a fleet without it (an older save, or a
+## hand-edited payload) composes lazily from its persisted `seed` —
+## bit-identical to the spawn draw, because the hull draws key off the
+## seed only (never the day; the day term of the composer only budgets
+## cannons, which no speed rule reads).
+func _fleet_ships(fleet: Dictionary) -> Array:
+	var ships: Array = fleet.get("ships", []) \
+		if fleet.get("ships", []) is Array else []
+	if ships.is_empty():
+		ships = compose_fleet_ships(fleet, int(GameState.day))
+		fleet["ships"] = ships
+	return ships
+
+
+## The §4.4 base terms of a fleet (unified-movement amendment): returns
+## `[base_speed, flagship_class]` — `base_speed` is the slowest
+## `ShipType.speed` among the composed ships (the same "slowest hull in the
+## fleet" rule the player fleet follows, `20-*` §4.4), floored at 1 so a
+## composed fleet always moves (§4.4's "minimum 1 tile/day"); the
+## **flagship is the first composed ship** and its class drives the
+## wind/direction factor columns (all §4.11.3 pool hulls are `sail`). The
+## derived pair is cached on the fleet (`speed` / `speed_class` — computed
+## once at spawn or lazy backfill; the composition is seed-stable, so the
+## cache can never drift) — the day tick calls this per fleet, and the
+## cached read keeps that O(1).
+func _fleet_base(fleet: Dictionary) -> Array:
+	if fleet.has("speed") and fleet.has("speed_class"):
+		return [int(fleet["speed"]), str(fleet["speed_class"])]
+	var ships := _fleet_ships(fleet)
+	var slowest := 0
+	var flagship_class := NPC_SAIL_CLASS
+	if not ships.is_empty():
+		var flagship: Dictionary = DataLoader.get_ship_type(str(
+			(ships[0] as Dictionary).get("ship_type_id", "")))
+		var cls := str(flagship.get("class", ""))
+		if not cls.is_empty():
+			flagship_class = cls
+	for ship in ships:
+		var ship_type: Dictionary = DataLoader.get_ship_type(str(
+			(ship as Dictionary).get("ship_type_id", "")))
+		var speed := int(ship_type.get("speed", 0))
+		if speed > 0 and (slowest == 0 or speed < slowest):
+			slowest = speed
+	var base := maxi(slowest, 1)
+	fleet["speed"] = base
+	fleet["speed_class"] = flagship_class
+	return [base, flagship_class]
+
+
+## The §4.4 step allowance for a bearing toward `target` (unified-movement
+## amendment): `base × wind_factor × direction_factor × current_factor` for
+## the fleet's bearing — the same pipeline the day's lane budget uses. 0.0
+## when the bearing is unresolvable (co-located).
+func _step_allowance(fleet: Dictionary, target: Vector2i) -> float:
+	var cell := position_of(fleet)
+	var heading := _heading_to(cell, target)
+	if heading.is_empty():
+		return 0.0
+	var base: Array = _fleet_base(fleet)
+	var ship_class := str(base[1])
+	var month := SailingSimLib.month_for(GameState.day)
+	var weather := str(GameState.world.get("weather",
+		SailingSimLib.DEFAULT_WEATHER))
+	return float(int(base[0])) \
+		* SailingSimLib.wind_factor(weather, ship_class) \
+		* npc_direction_factor(heading, cell, month, ship_class) \
+		* npc_current_factor(heading, cell, month)
 
 
 ## The heading of the fleet's next lane step (the §2.8 "current leg
@@ -2278,26 +2681,28 @@ func _lane_step_heading(fleet: Dictionary) -> String:
 		int(geo["end"]) if reverse else int(geo["start"])])
 
 
-## One raider chase/return step-slot paying the parity factors **per pursuit
-## heading** (task-H pin 3, second sentence): the allowance
-## `1 × direction × current` for the bearing toward `target` banks in the
-## same per-fleet accumulator, and the greedy step fires only when the bank
-## reaches a full tile. A blocked step spends nothing (the greedy
-## [_step_toward] holds inside itself).
-func _chase_step(fleet: Dictionary, target: Vector2i) -> void:
+## One chase/return allowance paying the full §4.4 pipeline **per pursuit
+## bearing** (unified-movement amendment, `60-*` §4.11.11): `delta` days of
+## the allowance `base × wind × direction × current` for the bearing toward
+## `target` bank in the same per-fleet accumulator, and the walk fires
+## greedily for every banked tile (a blocked [_step_toward] holds inside
+## itself — the day's spend is consumed either way, retrying next tick).
+func _chase_step(fleet: Dictionary, target: Vector2i, delta: float = 1.0) -> void:
+	for _i in _chase_budget(fleet, target, delta):
+		_step_toward(fleet, target)
+
+
+## Banks `delta` days of the §4.4 chase allowance toward `target` and
+## returns the walkable tile count — the caller walks (and, in the chase,
+## re-checks the engagement) per tile.
+func _chase_budget(fleet: Dictionary, target: Vector2i, delta: float) -> int:
 	var id := str(fleet.get("id", ""))
-	var cell := position_of(fleet)
-	var heading := _heading_to(cell, target)
-	var carry := float(_step_carry.get(id, 0.0))
-	if not heading.is_empty():
-		var month := SailingSimLib.month_for(GameState.day)
-		carry += npc_direction_factor(heading, cell, month) \
-			* npc_current_factor(heading, cell, month)
-	if carry < 1.0:
-		_step_carry[id] = carry
-		return  # the factor-gated hold (deterministic)
-	_step_carry[id] = carry - 1.0
-	_step_toward(fleet, target)
+	_step_carry[id] = float(_step_carry.get(id, 0.0)) \
+		+ _step_allowance(fleet, target) * delta
+	var carry := float(_step_carry[id])
+	var tiles := int(floor(carry))
+	_step_carry[id] = carry - float(tiles)
+	return tiles
 
 
 # --- The daily step (docs/60-* §4.11.11.1) ----------------------------------
@@ -2345,17 +2750,9 @@ func _step_fleets(day: int) -> void:
 					continue
 				_depart(fleet, day)
 			continue
-		# §4.11.11.1 Phase-6 stepping base: up to 2 tiles of lane progress
-		# per day tick, multiplied by the task-H parity factors through the
-		# per-fleet fractional accumulator ([method _lane_tiles_today]).
-		# `_advance` is a no-op once the journey docks mid-loop (legs emptied
-		# by `_arrive`), so extra budget after an arrival is safely idle.
-		var tiles := _lane_tiles_today(fleet)
-		for _i in tiles:
-			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
-					as Array).is_empty():
-				break
-			_advance(fleet, day)
+		# Unified-movement amendment: lane stepping is clock accrual
+		# ([method advance_clock] → [method _accrue_lane]) — the day tick
+		# owns dwell, departures and despawns only.
 	for id in remove_ids:
 		remove(id)
 	for wreck in wrecks:
@@ -2364,7 +2761,7 @@ func _step_fleets(day: int) -> void:
 
 ## One hunter day under the intel rule (docs/60-* §4.11.11.1). Returns the
 ## pursuit A* time spent.
-func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
+func _hunter_tick(fleet: Dictionary, _day: int, _budget_used_ms: float) -> float:
 	var cell := position_of(fleet)
 	var target := GameState.world_tile()
 	var distance := chebyshev(cell, target)
@@ -2373,11 +2770,14 @@ func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
 		if distance > HUNTER_CHASE_OFF:
 			_hunter_route_to_intel(fleet)
 			return 0.0
-		return _pursue(fleet, target, budget_used_ms)
+		# Unified-movement amendment: the pursuit itself is clock accrual
+		# ([method _accrue_hunter] → [method _pursue]) — the day tick owns
+		# only the chase-drop decision here.
+		return 0.0
 	if distance <= HUNTER_CHASE_ON:
 		fleet["hunter_state"] = HUNTER_STATE_CHASE
 		_hunter_paths.erase(str(fleet.get("id", "")))
-		return _pursue(fleet, target, budget_used_ms)
+		return 0.0
 	# A new Set Sail re-targets under-way hunters at their next day tick.
 	var intel_port := _intel_port()
 	var state := str(fleet.get("hunter_state", HUNTER_STATE_INTEL))
@@ -2387,25 +2787,17 @@ func _hunter_tick(fleet: Dictionary, day: int, budget_used_ms: float) -> float:
 		return 0.0
 	var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 	if not legs.is_empty():
-		# Lane travel at the §4.11.11.1 Phase-6 base (2 tiles/day) multiplied
-		# by the task-H parity factors through the per-fleet accumulator
-		# (hunters pay the factors on lane travel, §2.8); `_advance` no-ops
-		# after a mid-loop arrival.
-		var tiles := _lane_tiles_today(fleet)
-		for _i in tiles:
-			if ((fleet.get("route", {}) as Dictionary).get("legs", [])
-					as Array).is_empty():
-				break
-			_advance(fleet, day)
+		# Lane travel is clock accrual now ([method _accrue_hunter] →
+		# [method _accrue_lane]); the day tick owns the state below.
 		return 0.0
 	# Docked / arrived at a journey end.
-	if int(fleet.get("dwell_until_day", 0)) > day:
+	if int(fleet.get("dwell_until_day", 0)) > int(GameState.day):
 		return 0.0
 	match state:
 		HUNTER_STATE_INTEL:
 			# Arrived at the intel port: camp its approaches for 10 days.
 			fleet["hunter_state"] = HUNTER_STATE_LOITER
-			fleet["loiter_until_day"] = int(day) + HUNTER_LOITER_DAYS
+			fleet["loiter_until_day"] = int(GameState.day) + HUNTER_LOITER_DAYS
 			_camp_approaches(fleet, str(fleet.get("dest_port_id", "")))
 		HUNTER_STATE_LOITER:
 			# Loiter expired: route home via the sponsor's lanes (the
@@ -2443,6 +2835,7 @@ func _hunter_route_to_intel(fleet: Dictionary) -> void:
 	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
 	fleet["dest_port_id"] = intel_port
 	fleet["dwell_until_day"] = 0
+	_sync_route_progress(fleet)
 
 
 ## Lanes home via the sponsor's network.
@@ -2464,6 +2857,7 @@ func _hunter_route_home(fleet: Dictionary) -> void:
 	fleet["route"] = (route["legs_save"] as Dictionary).duplicate(true)
 	fleet["dest_port_id"] = home
 	fleet["dwell_until_day"] = 0
+	_sync_route_progress(fleet)
 
 
 ## The chokepoint-camping pattern at the intel port's approaches: a free,
@@ -2489,8 +2883,12 @@ func _camp_approaches(fleet: Dictionary, port_id: String) -> void:
 
 ## The budgeted short-radius pursuit: A* toward the player inside the chase,
 ## re-planning only when the cached path is stale. An overflow loses the
-## chase that day (the fleet holds).
-func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float) -> float:
+## chase that day (the fleet holds). `delta` scales the accrual (unified
+## amendment): each planned step banks its own heading's §4.4 allowance ×
+## the elapsed fraction, walking every banked tile — the default 1.0 is a
+## full day's pursuit.
+func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float,
+		delta: float = 1.0) -> float:
 	var id := str(fleet.get("id", ""))
 	var plan: Dictionary = _hunter_paths.get(id, {})
 	var path: Array = plan.get("path", []) if plan.get("path", []) is Array else []
@@ -2514,28 +2912,78 @@ func _pursue(fleet: Dictionary, target: Vector2i, budget_used_ms: float) -> floa
 			return elapsed  # overflow: the chase is lost for today
 		if path.size() < 2:
 			return elapsed
-	# Walk one tile along the plan. Task-H parity (§2.8): the pursuit step
-	# pays the same factors per pursuit heading — the allowance banks in the
-	# per-fleet accumulator, a blocked or banked-short step holds the
-	# hunter that day (deterministic).
-	var next: Vector2i = path[1]
-	if not _can_enter(fleet, next):
-		_hunter_paths.erase(id)  # re-plan tomorrow from a clear board
-		return 0.0
-	var cell := position_of(fleet)
-	var heading := _heading_to(cell, next)
-	var carry := float(_step_carry.get(id, 0.0))
-	if not heading.is_empty():
-		var month := SailingSimLib.month_for(GameState.day)
-		carry += npc_direction_factor(heading, cell, month) \
-			* npc_current_factor(heading, cell, month)
-	if carry < 1.0:
-		_step_carry[id] = carry
-		return 0.0  # factor-gated hold: the fresh plan stays for tomorrow
-	_step_carry[id] = carry - 1.0
-	path.remove_at(0)
-	_commit_cell(fleet, next)
+	# Walk the plan. Unified-movement amendment (`60-*` §4.11.11): the
+	# pursuit pays the full §4.4 pipeline PER pursuit step heading — each
+	# step banks its own heading's allowance × the elapsed `delta` and the
+	# walk fires for every banked tile; a blocked step erases the plan
+	# (re-plan tomorrow) and ends the walk; the factor-gated hold keeps the
+	# fresh plan for tomorrow (deterministic).
+	while path.size() >= 2 and delta > 0.0:
+		var next: Vector2i = path[1]
+		if not _can_enter(fleet, next):
+			_hunter_paths.erase(id)  # re-plan tomorrow from a clear board
+			break
+		var allowance := _step_allowance(fleet, next)
+		var carry := float(_step_carry.get(id, 0.0)) + allowance * delta
+		if carry < 1.0:
+			_step_carry[id] = carry  # factor-gated hold
+			break
+		var tiles := int(floor(carry))
+		_step_carry[id] = carry - float(tiles)
+		for _i in tiles:
+			if path.size() < 2:
+				break
+			var step_tile: Vector2i = path[1]
+			if not _can_enter(fleet, step_tile):
+				_hunter_paths.erase(id)  # re-plan tomorrow from a clear board
+				break
+			path.remove_at(0)
+			_commit_cell(fleet, step_tile)
+		delta = 0.0
 	return 0.0
+
+
+## Walks up to `budget` tiles of lane progress for one fleet — the batched
+## form of the `_advance` loop (unified-movement perf work, §4.11.11.5):
+## the leg geometry and progress resolve ONCE per leg, the common
+## straight-line step is index arithmetic + commit, and every seam /
+## leg-end / hop / blocked case delegates to [method _advance] verbatim
+## (consuming one budget unit, exactly as the unbatched loop did). The
+## route is re-read whenever `_advance` may have mutated it (seam or
+## arrival), detected at the loop head.
+func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
+	var walked := 0
+	while walked < budget:
+		var route: Dictionary = fleet.get("route", {})
+		var legs: Array = route.get("legs", [])
+		if legs.is_empty():
+			return  # docked / arrived mid-walk
+		var geo := _leg_geometry(legs[0])
+		if geo.is_empty():
+			# A broken leg (unknown id after a hand edit): drop the journey.
+			route["legs"] = []
+			return
+		var path: Array = geo["path"]
+		var walked_len := int(geo["walked_len"])
+		var reverse := bool(geo["reverse"])
+		var index := _leg_progress(fleet, route, geo)
+		if index + 1 >= walked_len:
+			# Leg end (seam / arrival): the full `_advance` logic owns it.
+			_advance(fleet, day)
+			walked += 1
+			continue
+		var dir := -1 if reverse else 1
+		var artifact := (int(geo["end"]) - index) if reverse \
+			else (int(geo["start"]) + index)
+		var target: Vector2i = path[artifact + dir]
+		if not _can_enter(fleet, target):
+			# Occupied: the hop/hold rule — full `_advance` logic.
+			_advance(fleet, day)
+			walked += 1
+			continue
+		route["tile_index"] = index + 1
+		_commit_cell(fleet, target)
+		walked += 1
 
 
 ## One tile of progress along the current leg's ACTIVE geometry, skipping
@@ -2648,12 +3096,54 @@ func _record_wake(fleet: Dictionary, cell: Vector2i) -> void:
 func _commit_cell(fleet: Dictionary, cell: Vector2i) -> void:
 	var before := position_of(fleet)
 	set_position(fleet, cell)
+	# Unified-movement amendment (`60-*` §4.11.11): contact is sampled per
+	# tile entered — every committed tile within Chebyshev 1 of the player
+	# queues the pass-through engagement (consumed by [method
+	# nearest_contact] after the tick).
+	_note_pass_contact(fleet, cell)
 	# Task L wake trail (docs/80-* §4.5.2): the cell just left is the newest
 	# tile behind the marker (render layers draw it only while moving).
 	if before != NO_CELL and before != cell:
 		_record_wake(fleet, before)
 	if before != NO_CELL and _by_id.has(str(fleet.get("id", ""))):
 		_move_bucket(str(fleet.get("id", "")), before, cell)
+
+
+## The pass-through contact rule (unified-movement amendment): a fleet
+## stepping within Chebyshev [constant CONTACT_DISTANCE] of the player's
+## tile mid-step engages exactly as an end-of-step proximity would — the id
+## queues in [_pass_contacts]; a hunting-nation fleet also records the
+## at-sea intel cell on the passed tile (the §4.11.11.1 rule
+## `note_contacts` applies, evaluated on the pass).
+func _note_pass_contact(fleet: Dictionary, cell: Vector2i) -> void:
+	if chebyshev(cell, _player_tile_now()) > CONTACT_DISTANCE:
+		return
+	var id := str(fleet.get("id", ""))
+	if not id.is_empty() and not _pass_contacts.has(id):
+		_pass_contacts.append(id)
+	var nation_id := str(fleet.get("nation_id", ""))
+	if nation_id.is_empty():
+		return
+	if CharacterLib.reputation(nation_id) > NAVY_HOSTILE_REPUTATION:
+		return
+	GameState.world["hunter_intel_cell"] = {"x": cell.x, "y": cell.y}
+
+
+## Syncs `route.tile_index` to the fleet's actual position on the ACTIVE
+## leg geometry ([method _leg_progress]'s nearest-position remap, run
+## eagerly at departure/spawn — under clock accrual a fleet can be
+## observed between its departure and its first accrued step, and the
+## save/consistency invariants require `cell == path[a + tile_index]`
+## from that instant).
+func _sync_route_progress(fleet: Dictionary) -> void:
+	var route: Dictionary = fleet.get("route", {})
+	var legs: Array = route.get("legs", [])
+	if legs.is_empty():
+		return
+	var geo := _leg_geometry(legs[0])
+	if geo.is_empty():
+		return
+	route["tile_index"] = _leg_progress(fleet, route, geo)
 
 
 ## Leg list exhausted: dock at the destination port (docked fleets sit at the
@@ -2706,6 +3196,22 @@ func _depart(fleet: Dictionary, day: int) -> void:
 		PIRATE, PRIVATEER, HUNTER, TREASURE:
 			pass  # raiders live in [_raider_tick] (task K); hunters in
 			      # [_hunter_tick]; the treasure scheduler is task L
+	# Unified-movement amendment: a fleet routed by this tick owes the same
+	# day-remainder the accrual just paid everyone else — walk it now, so a
+	# just-departed fleet is never observed in its raw pre-step state (the
+	# old same-pass stepping guarantee). The mark jumps to `now` first:
+	# docked time never accrues, and the next advance grants exactly one
+	# more day — never a double-count of this one.
+	if not ((fleet.get("route", {}) as Dictionary).get("legs", [])
+			as Array).is_empty():
+		_sync_route_progress(fleet)
+		_fleet_mark[str(fleet.get("id", ""))] = _clock_now()
+		var moved_from := position_of(fleet)
+		_accrue_lane(fleet, day, _pending_delta)
+		var moved_to := position_of(fleet)
+		if moved_to != moved_from:
+			moved_fleet_moves.append({"id": str(fleet.get("id", "")),
+				"from": moved_from, "to": moved_to})
 
 
 ## Sells every cargo good whose live factor is above 1.0 at `port_id` —
@@ -3692,8 +4198,14 @@ func _within(cell: Vector2i, radius: int) -> Array:
 ## (docs/60-* §4.11.11.1 "skipping occupied tiles"). `ignore_id` skips the
 ## stepping fleet's own current cell. Radius 0 reads the exact bucket
 ## directly — no query allocation on the per-fleet step path.
+## The player's tile — the tick-scoped cache inside a tick, the live
+## lookup otherwise (a direct query between ticks must see a fresh move).
+func _player_tile_now() -> Vector2i:
+	return _tick_player_tile if _tick_scoped else GameState.world_tile()
+
+
 func _is_occupied(cell: Vector2i, ignore_id: String) -> bool:
-	if cell == GameState.world_tile():
+	if cell == _player_tile_now():
 		return true
 	_refresh_index()
 	for id in _buckets.get(_bucket_of(cell), []):
@@ -3747,24 +4259,38 @@ func _port_cell(port_id: String) -> Vector2i:
 
 
 func _passable(cell: Vector2i) -> bool:
-	if not DataLoader.is_passable(cell):
-		return false
-	# Phase-6 §4.18 (task-H item 3): in-month seasonal ice refuses ENTRY —
-	# this one rule serves lane stepping, raider chase/return steps, spawn
-	# placement, approach camping and the pursuit A* callback alike. A tile
-	# freezing under a standing fleet never traps it: only the ENTERED cell
-	# is ever checked here, so a fleet standing on a frozen tile may still
-	# move out. The month comes from the sim clock (`GameState.day`).
-	return not OceanLayersLib.instance().ice_blocks(
-		cell, SailingSimLib.month_for(GameState.day))
+	# Per-day memo (unified-movement amendment): the tick evaluates entry on
+	# thousands of tiles over the same lanes — one bitmask + ice-mask sample
+	# per DISTINCT cell per day instead of per step.
+	if _passable_day != int(GameState.day):
+		_passable_cache = {}
+		_passable_day = int(GameState.day)
+	if _passable_cache.has(cell):
+		return _passable_cache[cell]
+	var out := false
+	if DataLoader.is_passable(cell):
+		# Phase-6 §4.18 (task-H item 3): in-month seasonal ice refuses
+		# ENTRY — this one rule serves lane stepping, raider chase/return
+		# steps, spawn placement, approach camping and the pursuit A*
+		# callback alike. A tile freezing under a standing fleet never
+		# traps it: only the ENTERED cell is ever checked here, so a fleet
+		# standing on a frozen tile may still move out. The month comes
+		# from the sim clock (`GameState.day`).
+		out = not OceanLayersLib.instance().ice_blocks(
+			cell, SailingSimLib.month_for(GameState.day))
+	_passable_cache[cell] = out
+	return out
 
 
 ## Wrap-aware Chebyshev distance (`20-*` §4.1): `min(|dx|, width − |dx|)`.
+static var _cheb_width: int = 0
 static func chebyshev(a: Vector2i, b: Vector2i) -> int:
-	var grid: Dictionary = DataLoader.map_legend.get("grid", {})
-	var width := int(grid.get("width", 0))
-	if width <= 0:
-		width = 4320
+	if _cheb_width <= 0:
+		var grid: Dictionary = DataLoader.map_legend.get("grid", {})
+		_cheb_width = int(grid.get("width", 0))
+		if _cheb_width <= 0:
+			_cheb_width = 4320
+	var width := _cheb_width
 	var dx := absi(a.x - b.x) % width
 	return maxi(mini(dx, width - dx), absi(a.y - b.y))
 

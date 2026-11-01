@@ -970,3 +970,64 @@ budgets, diplomacy, markets beyond the player); **new trade goods**
 | save payload size ≤ 2 MB @ extreme | **1.19 MB**; v6 round-trips, v5 refused |
 | demo loop (`00-*` §7) end-to-end at the new scale | green — `test_demo_loop` (83) + `test_world_e2e` (108, four real voyages in-envelope) |
 | `tools/demo_check_phase6.md` scenario + debug-chart sanity record | **written** — 10 scenarios recorded (probe ALL PASS 21 checks), debug scrub 1↔7 verified, dated 2026-11-01 |
+
+---
+
+## Post-completion amendment task
+
+### U — Unified fleet movement (player/NPC parity through the §4.4 pipeline)
+
+- **Goal:** player and NPC fleets share ONE movement model; NPC speed stops
+  being the fixed 2-tiles/day lane base and becomes the §4.4 pipeline over
+  each fleet's own composed ships — so two fleets of the same role generally
+  sail at different speeds.
+- **Docs amended (done in this task, doc-first):** `20-*` §4.4 NPC-parity
+  block (full pipeline: slowest-hull base × wind × direction × current;
+  crew/seamanship/trim pinned neutral for NPCs); `60-*` §4.11.11
+  unified-movement amendment (base speed = slowest composed hull; flagship =
+  first composed ship; lane/chase/return/pursuit budgets; **contact sampled
+  per tile entered**; balance note); `10-*` §4.15 fleet-dict `ships` row +
+  example; `90-*` §8.1 save note (additive field, no version bump, lazy
+  bit-identical backfill from `seed`).
+- **Code:** `scripts/world/npc_fleets.gd` — `_build_fleet` /
+  `_finish_lane_fleet` store `compose_fleet_ships` at spawn; `_fleet_ships` /
+  `_fleet_base` (slowest hull + flagship class, lazy backfill);
+  `_lane_tiles_today` = `base × wind_factor × direction × current + carry`;
+  `_chase_step` banks the same allowance per bearing (one call per day
+  tick); raider chase walks its allowance with the engagement re-checked
+  per committed tile; hunter `_pursue` pays the allowance per pursuit step
+  heading; `npc_direction_factor` takes the flagship's class (sail column
+  fallback); pass-through contact via `_commit_cell` →
+  `_pass_contacts` → `nearest_contact` consumption; `_make_wreck` reads the
+  stored `ships`.
+- **Tests:** `tools/test_npc_fleets.gd` — stepping pins rewritten from the
+  2-tile base to the pipeline (slowest-hull budget, weather term, carry);
+  same-seed ⇒ same `ships`/speed; same-role fleets differ; per-tile contact
+  (a fleet passing through the player's tile mid-step engages); pursuit
+  closes on a slower player under the 30/40 hysteresis; old-save lazy
+  backfill equals the spawn draw. `tools/test_sailing.gd` — NPC allowance
+  cross-checked against `SailingSim.effective_speed` inputs.
+- **Cadence extension (same task, user-reported):** NPC movement is
+  released in step with the player's clock — `advance_clock()` accrues
+  per fleet against per-fleet marks (`Δ = day + clock_fraction − mark`),
+  so there is no day-boundary batching and no flush: a fast or slow
+  player cannot batch or starve NPC motion (displacement is per elapsed
+  game-day, independent of player speed). Departures accrue the current
+  day-remainder immediately and mark accrued-through-now (the old
+  same-pass stepping guarantee — a just-departed fleet is never observed
+  raw); NPC-vs-NPC engagement fires from the accrual walk on adjacency.
+  Route progress syncs eagerly at departure (`_sync_route_progress`).
+  Marks are runtime-only transients — `10-*` §4.15 / `90-*` §8.1 shapes
+  unchanged.
+- **Perf re-pin (same task):** `60-*` §4.11.11.5 day-tick gates re-measured
+  and re-pinned — normal **50 → 75 ms** (measured ≈ 53), extreme
+  **150 → 350 ms** (measured ≈ 276 at the ×4 preset): every fleet now
+  steps its hull-scale budget per day tick and departed fleets walk their
+  new route in the same pass (~10× the retired base per tick).
+  `tools/test_density.gd` + `tools/test_npc_fleets.gd` constants follow
+  the doc pins; the perf suites join the runner's serial set
+  (quiet-machine measurement).
+- **Done-when:** docs greps clean (no live "2 tiles/day" normative
+  statement outside history/supersession notes); suites green; validator
+  exit 0; day-tick budget re-measured at the ~10× stepping work (≤ 250
+  ms/day pin); replay determinism preserved (same seed/day ⇒ same positions).

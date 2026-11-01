@@ -36,9 +36,12 @@ const OPEN_CELL := Vector2i(700, 320)
 const LISBON := Vector2i(1024, 308)
 
 ## The perf probe: the gate measures the day tick at the filled cap over 50
-## ticks (docs/60-* §4.11.11.5: ≤ 50 ms headless at cap 288).
+## ticks (docs/60-* §4.11.11.5: ≤ 75 ms headless at cap 288 — the
+## unified-movement re-pin).
 const PERF_TICKS := 50
-const PERF_GATE_MS := 50.0
+## Unified-movement amendment: re-pinned with the §4.11.11.5 gate
+## (50 → 75 ms — every fleet steps its hull-scale budget per day tick).
+const PERF_GATE_MS := 75.0
 
 const WATCHDOG_SECONDS := 240.0
 const SAVE_SLOT := 3
@@ -88,6 +91,8 @@ func _ready() -> void:
 	_test_hunter_intel()
 	_section = "16 parity factors"
 	_test_parity_factors()
+	_section = "16b unified movement"
+	_test_unified_movement()
 	_section = "17 variant flip"
 	_test_variant_flip()
 	_section = "18 ice refusal"
@@ -1109,9 +1114,12 @@ func _test_parity_factors() -> void:
 		var found_beat := -1
 		var best_run := 1.09
 		var best_beat := 0.71
-		for index in range(4, path.size() - 4):
+		for index in range(4, path.size() - 52):
 			var cell: Vector2i = path[index]
-			if NpcFleetsLib.chebyshev(cell, OPEN_CELL) <= 4:
+			# Clear of the player by more than the hunter's chase-on radius:
+			# a lane stretch inside Chebyshev 30 would flip `_hunter_tick`
+			# into pursuit instead of the lane travel under probe.
+			if NpcFleetsLib.chebyshev(cell, OPEN_CELL) <= 40:
 				continue
 			var heading := _lane_heading_at(path, index)
 			if heading.is_empty():
@@ -1143,13 +1151,12 @@ func _test_parity_factors() -> void:
 		return
 	var path: Array = sim._lane_paths[lane_id]
 	# A TRADER and a PATROL walk the same lane through `_step_fleets`: each
-	# advances exactly floor(2 × direction × current) tiles — and the
-	# downwind walk advances MORE than the upwind one (the done-when's
-	# upwind-vs-downwind proof).
-	var run_expected := int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
-		* run_factor * run_current))
-	var beat_expected := int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
-		* beat_factor * beat_current))
+	# advances exactly floor(base × wind × direction × current) tiles — the
+	# unified §4.4 pipeline, `base` the slowest hull of the fleet's composed
+	# ships and `wind` the day weather at the flagship class ("fair" ⇒ 1.0
+	# sail) — and the downwind walk advances MORE than the upwind one (the
+	# done-when's upwind-vs-downwind proof).
+	var run_expected := -1  # hoisted for the hunter/banker checks below
 	for role in ["trader", "patrol"]:
 		# A fresh board per role: `_step_fleets` walks every fleet on it, and
 		# two roles must not share the same lane cells (an occupied target
@@ -1168,30 +1175,45 @@ func _test_parity_factors() -> void:
 		beater["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
 			"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
 				"a": beat_index, "b": path.size() - 1}]}
+		var run_base: Array = board._fleet_base(runner)
+		var beat_base: Array = board._fleet_base(beater)
+		var weather := str(GameState.world.get("weather", "fair"))
+		var run_pipe := float(int(run_base[0])) \
+			* SailingSimLib.wind_factor(weather, str(run_base[1]))
+		var beat_pipe := float(int(beat_base[0])) \
+			* SailingSimLib.wind_factor(weather, str(beat_base[1]))
+		run_expected = int(floor(run_pipe * run_factor * run_current))
+		var beat_expected := int(floor(beat_pipe * beat_factor * beat_current))
+		_check(run_expected >= 8,
+			"the unified budget is hull-scale, not the retired 2-tile base (%d tiles/day)"
+			% run_expected)
 		var run_tiles: int = board._lane_tiles_today(runner)
 		var beat_tiles: int = board._lane_tiles_today(beater)
 		_check(run_tiles == run_expected,
-			"%s downwind budget = floor(2 × %.3f) = %d (got %d)"
+			"%s downwind budget = floor(base × %.3f) = %d (got %d)"
 			% [role, run_factor * run_current, run_expected, run_tiles])
 		_check(beat_tiles == beat_expected,
-			"%s upwind budget = floor(2 × %.3f) = %d (got %d)"
+			"%s upwind budget = floor(base × %.3f) = %d (got %d)"
 			% [role, beat_factor * beat_current, beat_expected, beat_tiles])
 		_check(run_expected > beat_expected,
 			"the downwind %s out-runs the upwind one (%d > %d tiles/day)"
 			% [role, run_expected, beat_expected])
-		# End-to-end: one `_step_fleets` moves each fleet exactly its budget
+		# End-to-end: one day of accrual moves each fleet exactly its budget
 		# (fresh day: the probe reads above banked their carry — reset it).
 		board._step_carry.clear()
-		board._step_fleets(GameState.day)
+		board._accrue(1.0)
 		_check(_cell_of(runner) == path[run_index + run_tiles],
 			"the downwind %s advanced %d tiles (at %s)"
 			% [role, run_tiles, str(_cell_of(runner))])
 		_check(_cell_of(beater) == path[beat_index + beat_tiles],
 			"the upwind %s advanced %d tiles (at %s)"
 			% [role, beat_tiles, str(_cell_of(beater))])
-	# A HUNTER pays the factors on lane travel too (§2.8) — the same budget
-	# formula through `_hunter_tick` (player far away: no chase). The role
-	# boards above reset the clock — restore the probe month.
+	# The role boards above leave their runners on the shared lane
+	# (`GameState.npc_fleets` is the fixture's global) — wipe them so the
+	# hunter's walk meets no occupancy holds. The hunter walk itself is one
+	# day of accrual now (the day tick owns no movement).
+	GameState.npc_fleets = []
+	sim.reset_index()
 	GameState.day = 200
 	GameState.world["last_departed_port"] = ""
 	var hunter := _make_fleet(sim, "hunter", "england", path[run_index])
@@ -1202,15 +1224,22 @@ func _test_parity_factors() -> void:
 		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
 			"a": run_index, "b": path.size() - 1}]}
 	var before := _cell_of(hunter)
-	sim._hunter_tick(hunter, int(GameState.day), 0.0)
-	var moved := NpcFleetsLib.chebyshev(before, _cell_of(hunter))
+	sim._accrue(1.0)
+	# The HUNTER's own composition sets its base (navy-band hulls differ
+	# from the trader runner's); the walk lands on the lane path exactly
+	# (Chebyshev displacement would under-count a curving leg).
+	var hunter_base: Array = sim._fleet_base(hunter)
+	var hunter_pipe := float(int(hunter_base[0])) * SailingSimLib.wind_factor(
+		str(GameState.world.get("weather", "fair")), str(hunter_base[1]))
+	var hunter_expected := int(floor(hunter_pipe * run_factor * run_current))
 	_check(str(hunter["hunter_state"]) != NpcFleetsLib.HUNTER_STATE_CHASE
-		and moved == run_expected,
-		"the hunter's lane travel pays the parity budget (%d tiles, want %d)"
-		% [moved, run_expected])
-	# The fractional accumulator banks the remainder (task-H pin 3): seed
-	# 0.9 of carry on a fresh downwind walker — floor(2 × 1.3… + 0.9) pays
-	# an EXTRA tile and leaves ≈ 0.5 banked.
+		and _cell_of(hunter) == path[run_index + hunter_expected],
+		"the hunter's lane travel pays the unified budget (%d tiles, want %d)"
+		% [NpcFleetsLib.chebyshev(before, _cell_of(hunter)), hunter_expected])
+	# The fractional accumulator banks the remainder (task-H pin 3, carried
+	# into the unified model): seed 0.9 of carry on a fresh downwind walker —
+	# floor(base × wind × factor + 0.9) pays an EXTRA tile and leaves a
+	# sub-tile remainder banked.
 	var banker := _make_fleet(sim, "trader", "portugal", path[run_index])
 	banker["id"] = "parity_banker"
 	banker["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
@@ -1220,11 +1249,13 @@ func _test_parity_factors() -> void:
 	sim._step_carry[str(banker["id"])] = 0.9
 	var banked := sim._lane_tiles_today(banker)
 	var step_factor := run_factor * run_current
-	_check(banked == int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY)
-			* step_factor + 0.9)) and banked == plain + 1,
-		"the banked carry pays out (plain %d, banked %d, floor(2×%.3f+0.9) = %d)"
-		% [plain, banked, step_factor,
-		int(floor(float(NpcFleetsLib.LANE_STEP_TILES_PER_DAY) * step_factor + 0.9))])
+	var bank_base: Array = sim._fleet_base(banker)
+	var bank_pipe := float(int(bank_base[0])) * SailingSimLib.wind_factor(
+		str(GameState.world.get("weather", "fair")), str(bank_base[1]))
+	var bank_expected := int(floor(bank_pipe * step_factor + 0.9))
+	_check(banked == bank_expected and banked == plain + 1,
+		"the banked carry pays out (plain %d, banked %d, floor(base×%.3f+0.9) = %d)"
+		% [plain, banked, step_factor, bank_expected])
 	_check(absf(float(sim._step_carry[str(banker["id"])])) < 1.0,
 		"the accumulator keeps the sub-tile remainder (%.2f)"
 		% float(sim._step_carry[str(banker["id"])]))
@@ -1238,9 +1269,251 @@ func _test_parity_factors() -> void:
 	twin["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
 		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
 			"a": run_index, "b": path.size() - 1}]}
-	echo._step_fleets(GameState.day)
+	echo._accrue(1.0)
 	_check(_cell_of(twin) == path[run_index + run_expected],
 		"the same seed/day/cells replay identically (%s)" % str(_cell_of(twin)))
+
+
+# --- 16b. Unified fleet movement (the §4.4-parity amendment) -----------------
+
+func _test_unified_movement() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	GameState.day = 200
+	# Composition stability: the hull draws key off the fleet seed ONLY —
+	# the same fleet composed on two far-apart days draws identical hulls
+	# (the day term only budgets cannons, which no speed rule reads).
+	var seeded := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
+	seeded["seed"] = 424242
+	var day_a: Array = sim.compose_fleet_ships(seeded, 100)
+	var day_b: Array = sim.compose_fleet_ships(seeded, 250)
+	var hulls_a: Array = []
+	var hulls_b: Array = []
+	for ship in day_a:
+		hulls_a.append(str((ship as Dictionary).get("ship_type_id", "")))
+	for ship in day_b:
+		hulls_b.append(str((ship as Dictionary).get("ship_type_id", "")))
+	_check(hulls_a == hulls_b and not hulls_a.is_empty(),
+		"the composition is seed-only (day 100 == day 250: %s)"
+		% str(hulls_a))
+	# The spawn-time storage agrees with the composer, and the old-save
+	# backfill (drop `ships`) recomposes it bit-identically.
+	sim._fleet_ships(seeded)
+	var stored: Array = seeded.get("ships", [])
+	var stored_hulls: Array = []
+	for ship in stored:
+		stored_hulls.append(str((ship as Dictionary).get("ship_type_id", "")))
+	_check(stored_hulls == hulls_a,
+		"the stored composition equals the composer's draw")
+	var base_with: Array = sim._fleet_base(seeded)
+	# Erase the list AND its derived cache pair — the cache is the point of
+	# the lazy rule (a backfilled fleet never recomposes again).
+	seeded.erase("ships")
+	seeded.erase("speed")
+	seeded.erase("speed_class")
+	var base_backfilled: Array = sim._fleet_base(seeded)
+	_check(base_with == base_backfilled and seeded.has("ships"),
+		"the lazy backfill reproduces the spawn draw (base %s)"
+		% str(base_with))
+	# Same seed ⇒ same base speed; a same-role sample with distinct seeds
+	# generally sails at DISTINCT speeds (the user-visible point of the
+	# amendment). Fixtures are removed as soon as they are measured — the
+	# contact/pursuit phases below need a clean board around the player.
+	var sample_ids: Array = []
+	var distinct_speeds: Dictionary = {}
+	for index in 12:
+		var fleet := _make_fleet(sim, "pirate", "", OPEN_CELL)
+		fleet["seed"] = 1000 + index * 7919
+		fleet["id"] = "unified_sample_%d" % index
+		sample_ids.append(str(fleet["id"]))
+		distinct_speeds[int(sim._fleet_base(fleet)[0])] = true
+	var twin := _make_fleet(sim, "pirate", "", OPEN_CELL)
+	twin["seed"] = 1000
+	twin["id"] = "unified_twin"
+	var twin2 := _make_fleet(sim, "pirate", "", OPEN_CELL)
+	twin2["seed"] = 1000
+	twin2["id"] = "unified_twin2"
+	_check(int(sim._fleet_base(twin)[0]) == int(sim._fleet_base(twin2)[0]),
+		"the same seed draws the same base speed (%d)"
+		% int(sim._fleet_base(twin)[0]))
+	sim.remove(str(twin2["id"]))
+	_check(distinct_speeds.size() >= 2,
+		"same-role fleets sail distinct speeds (%d distinct in 12)"
+		% distinct_speeds.size())
+	# The base is the SLOWEST composed hull (the player fleet's rule).
+	var slowest := 0
+	for ship in sim._fleet_ships(twin):
+		var ship_type: Dictionary = DataLoader.get_ship_type(str(
+			(ship as Dictionary).get("ship_type_id", "")))
+		var speed := int(ship_type.get("speed", 0))
+		if speed > 0 and (slowest == 0 or speed < slowest):
+			slowest = speed
+	_check(int(sim._fleet_base(twin)[0]) == slowest and slowest >= 16,
+		"base speed = slowest composed hull (%d)" % slowest)
+	sim.remove(str(seeded["id"]))
+	sim.remove(str(twin["id"]))
+	for sample_id in sample_ids:
+		sim.remove(str(sample_id))
+	# Pass-through contact: a pirate marching PAST the player's tile
+	# mid-step engages, even though it ends the day beyond Chebyshev 1.
+	# The probe picks its own mid-ocean arena (OPEN_CELL's coast need not
+	# hold a clear row): the marcher row is the anchor's own row, and the
+	# pursuit row is a parallel clear row east of it.
+	var arena := Vector2i(-1, -1)
+	var pursuit_row := 0
+	for y in range(24, 2136, 24):
+		if arena.x >= 0:
+			break
+		for x in range(24, 4296, 24):
+			if not DataLoader.is_passable(Vector2i(x, y)):
+				continue
+			var row_clear := true
+			for band_dy in [-1, 0, 1]:
+				for dx in range(-8, 9):
+					if not DataLoader.is_passable(Vector2i(
+							posmod(x + dx, 4320), y + band_dy)):
+						row_clear = false
+						break
+				if not row_clear:
+					break
+			if not row_clear:
+				continue
+			for dy in [1, -1, 2, -2, 3, -3, 4, -4]:
+				var chase_clear := true
+				for dx in range(0, 20):
+					if not DataLoader.is_passable(Vector2i(
+							posmod(x + dx, 4320), y + dy)):
+						chase_clear = false
+						break
+				if chase_clear:
+					arena = Vector2i(x, y)
+					pursuit_row = dy
+					break
+			if arena.x >= 0:
+				break
+	_check(arena.x >= 0, "a mid-ocean pass-through/pursuit arena exists")
+	if arena.x < 0:
+		return
+	GameState.world["position"] = {"x": arena.x, "y": arena.y}
+	# The marcher flanks PAST the player on the diagonal: fleets never enter
+	# the player's tile ([method _is_occupied] reserves it), so a same-row
+	# march would correctly stop adjacent — the flank crosses at Chebyshev 1
+	# and moves on beyond it.
+	var marcher := _make_fleet(sim, "pirate", "",
+		Vector2i(posmod(arena.x - 6, 4320), arena.y - 1))
+	var goal := Vector2i(posmod(arena.x + 6, 4320), arena.y + 1)
+	var walks := 0
+	while NpcFleetsLib.position_of(marcher) != goal and walks < 6:
+		sim._chase_step(marcher, goal)
+		walks += 1
+	var end_cell := NpcFleetsLib.position_of(marcher)
+	_check(NpcFleetsLib.chebyshev(end_cell, arena) > 1,
+		"the marcher passed the player and moved on (at %s, %d walks)"
+		% [str(end_cell), walks])
+	var passed: Dictionary = sim.nearest_contact(arena)
+	_check(not passed.is_empty() and str(passed["id"]) == str(marcher["id"]),
+		"the pass-through pirate is the contact (mid-step sampling)")
+	_check(sim.nearest_contact(arena).is_empty(),
+		"the pass queue is consumed — one engagement per pass")
+	# Pursuit is speed-matched: a bounty hunter opening the chase 12 tiles
+	# out on its own row closes a hull-scale distance in ONE tick (the
+	# retired model walked a single tile per day). The ≥ 5 floor is the
+	# worst legal pipeline day (base 16 × beat 0.5 × opposed current 0.76).
+	GameState.player["reputation"]["spain"] = -60
+	var hunter := _make_fleet(sim, "hunter", "spain",
+		Vector2i(posmod(arena.x + 12, 4320), arena.y + pursuit_row))
+	hunter["hunter_state"] = NpcFleetsLib.HUNTER_STATE_CHASE
+	var gap := NpcFleetsLib.chebyshev(
+		NpcFleetsLib.position_of(hunter), arena)
+	sim._accrue_hunter(hunter, int(GameState.day), 1.0)
+	var gap_after := NpcFleetsLib.chebyshev(
+		NpcFleetsLib.position_of(hunter), arena)
+	_check(gap - gap_after >= 5,
+		"the pursuit closes ≥ 5 tiles in one tick (%d → %d)"
+		% [gap, gap_after])
+	GameState.player["reputation"]["spain"] = 0
+	# Cadence (user question: "if the player is very fast, do NPCs ever
+	# stop moving?"): NPC displacement is per ELAPSED game-day and
+	# independent of player speed — a fast player's small Δ per move
+	# chunks the same total into banked fractions. 29 moves of Δ = 1/29
+	# day must advance a fleet ≈ exactly its full pipeline budget
+	# (±1 tile of rounding at the walk boundaries).
+	var cadence := _make_fleet(sim, "trader", "portugal",
+		Vector2i(posmod(arena.x - 6, 4320), arena.y - 1))
+	cadence["route"] = {"lanes": [], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": "equatorial", "reverse": false,
+			"a": 0, "b": 0}]}
+	var cadence_cell := Vector2i(-1, -1)
+	var cadence_lane := ""
+	for candidate in sim._lane_paths.keys():
+		var lane_path: Array = sim._lane_paths[candidate]
+		if lane_path.size() >= 120 \
+				and DataLoader.is_passable(lane_path[4]) \
+				and NpcFleetsLib.chebyshev(lane_path[4], arena) > 40:
+			cadence_cell = lane_path[4]
+			cadence_lane = str(candidate)
+			break
+	if cadence_cell.x >= 0:
+		sim.set_position(cadence, cadence_cell)
+		cadence["route"]["lanes"] = [cadence_lane]
+		cadence["route"]["legs"][0]["id"] = cadence_lane
+		cadence["route"]["legs"][0]["a"] = 4
+		cadence["route"]["legs"][0]["b"] = (sim._lane_paths[cadence_lane]
+			as Array).size() - 1
+		sim._sync_route_progress(cadence)
+		# The twin: identical fleet/route/position, accrued in ONE shot.
+		# Chunked-vs-oneshot must agree (±1 tile of rounding at the walk
+		# boundary) — chunking loses nothing, whatever the pipeline does
+		# along the lane (wind regions legitimately vary the rate).
+		var twin_acc := _make_fleet(sim, "trader", "portugal", cadence_cell)
+		twin_acc["route"] = {
+			"lanes": [cadence_lane], "leg": 0, "tile_index": 0,
+			"legs": [{
+				"kind": "lane", "id": cadence_lane, "reverse": false,
+				"a": 4, "b": (sim._lane_paths[cadence_lane] as Array).size() - 1,
+			}],
+		}
+		twin_acc["id"] = "cadence_twin"
+		sim._fleet_mark[str(twin_acc.get("id", ""))] = sim._clock_now()
+		for _move in 29:
+			sim._accrue_lane(cadence, int(GameState.day), 1.0 / 29.0)
+		# The exact expectation: integrate the per-tile pipeline (the
+		# chunked accrual pays each tile's own heading/position factors —
+		# the same per-tile rule the player's own movement follows). The
+		# one-shot walk pays the FIRST heading's factors for the whole day
+		# and legitimately diverges where the lane crosses wind/current
+		# regions — chunked is the more faithful model, and it must match
+		# the integral exactly (±0: the carry banks the fractions).
+		var base_pair: Array = sim._fleet_base(cadence)
+		var month := SailingSimLib.month_for(GameState.day)
+		var total_cost := 0.0
+		var walked_expect := 0
+		var idx := 4
+		var cadence_path: Array = sim._lane_paths[cadence_lane]
+		while idx + 1 < cadence_path.size() and total_cost < 1.0:
+			var tile_heading := _lane_heading_at(cadence_path, idx)
+			if tile_heading.is_empty():
+				break
+			var pipe_i := float(int(base_pair[0])) \
+				* SailingSimLib.wind_factor("fair", str(base_pair[1])) \
+				* NpcFleetsLib.npc_direction_factor(tile_heading,
+					cadence_path[idx], month, str(base_pair[1])) \
+				* NpcFleetsLib.npc_current_factor(tile_heading,
+					cadence_path[idx], month)
+			if pipe_i <= 0.0:
+				break
+			total_cost += 1.0 / pipe_i
+			if total_cost <= 1.0:
+				walked_expect += 1
+			idx += 1
+		var walked_chunked := int((cadence.get("route", {}) as Dictionary).get(
+			"tile_index", -1))
+		var walked_oneshot := int((twin_acc.get("route", {}) as Dictionary).get(
+			"tile_index", -1))
+		_check(walked_chunked == walked_expect and walked_chunked >= 8,
+			"29 fast-player moves integrate the per-tile pipeline exactly "
+			+ "(%d chunked vs %d integrated; one-shot first-heading walk %d)"
+			% [walked_chunked, walked_expect, walked_oneshot])
 
 
 # --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------

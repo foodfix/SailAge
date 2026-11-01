@@ -24,11 +24,16 @@ from pathlib import Path
 # Task J: the fleet-ecology and Phase-2/3 acceptance suites also write
 # user://saves/ (SaveSystem round trips), so they join the serial-save set.
 # Phase 6 (task V): test_save_v5 was renamed test_save_v6 with the v6 bump.
+# Unified-movement amendment (2026-11-01): the perf-gated suites join too —
+# the §4.11.11.5 gate timings (day tick ≤ 50/200 ms, pursuit ≤ 250 ms) must
+# be measured without synthetic parallel load.
 SERIAL_SAVE_SET = (
     "test_save", "test_save_v6", "test_world_e2e",
     "test_npc_fleets", "test_phase2_acceptance", "test_phase3_acceptance",
     # Task L: test_aliveness round-trips save slot 3 through save/load.
     "test_aliveness",
+    # Perf gates: quiet-machine measurement.
+    "test_density", "test_ecology",
 )
 DEFAULT_TIMEOUT_S = 300.0
 DEFAULT_JOBS = 8

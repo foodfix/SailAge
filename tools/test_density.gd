@@ -44,8 +44,13 @@ const OPEN_CELL := Vector2i(700, 320)
 ## The perf gates (docs/60-* §4.11.11.5). ≥ 30 timed ticks each; kept modest
 ## so the whole suite stays well under a minute.
 const PERF_TICKS := 35
-const GATE_NORMAL_MS := 50.0
-const GATE_EXTREME_MS := 150.0
+## Unified-movement amendment (2026-11-01): both day-tick gates re-measured
+## and re-pinned in `60-*` §4.11.11.5 — every fleet steps its §4.4
+## hull-scale budget per day and departed fleets walk their new route in
+## the same pass (~10× the retired 2-tile base per tick); measured
+## ≈ 53 ms normal / ≈ 276 ms extreme.
+const GATE_NORMAL_MS := 75.0
+const GATE_EXTREME_MS := 350.0
 ## Marginal cost ≈ linear: extreme (×4 fleets) must stay under 8× the normal
 ## average (16× would be quadratic).
 const LINEARITY_RATIO := 8.0

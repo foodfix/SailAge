@@ -108,6 +108,12 @@ var _fleets = null
 ## Fleet id → the placeholder marker node drawn for it (`80-*` §4.5.2: a
 ## nation-coloured square with the role letter; pirate red).
 var _marker_nodes: Dictionary = {}
+
+## Render-only NPC marker glides (unified-movement amendment, §2.6
+## extended): `fleet_id → {from_px, to_px, elapsed, duration}` — advanced
+## per frame by [_tick_npc_glides], read by [_place_marker_square]. Never
+## reaches logic; a fleet's tile position is the only simulated truth.
+var _npc_glides: Dictionary = {}
 ## This scene's copy of the §4.11.11.3 handoff — `GameState.pending_encounter`
 ## is the contract field, but it is declared by task A/§5.4 on the merged base,
 ## so the scene keeps the value itself too (see [_store_pending_encounter]).
@@ -323,6 +329,7 @@ func _process(delta: float) -> void:
 	_tick_movement(delta)
 	# Interpolated rendering (§2.6): render-only, after the logic tick.
 	_tick_marker_glide(delta)
+	_tick_npc_glides(delta)
 
 
 ## Forces the lazy ocean-currents decode on the first frame after boot
@@ -882,6 +889,15 @@ func _try_step(target: Vector2i) -> bool:
 	# The sim stored the un-normalised cell; re-assert the wrapped one.
 	GameState.set_world_tile(landed)
 
+	# Unified-movement amendment: NPC movement accrues with the clock —
+	# release the fraction this move just advanced, so every fleet steps
+	# ≈ one tile per player move (idempotent; the day tick's catch-up call
+	# nets zero when this ran). After the tile re-assert, so the accrual's
+	# contact sampling measures against the landed tile.
+	if _has_game() and _fleets != null:
+		_fleets.advance_clock()
+		_glide_fleet_moves()
+
 	_reject_logged = false
 	_fleet_cell = landed
 	# §2.6 interpolated rendering: animate over this step's cadence interval.
@@ -949,6 +965,12 @@ func _dock_at(target: Vector2i) -> bool:
 	if berth.x >= 0:
 		GameState.set_world_tile(berth)
 		_fleet_cell = berth
+	# Unified-movement amendment: NPC movement accrues with the clock —
+	# after the berth re-assert, so the accrual's contact sampling measures
+	# against the docked tile (idempotent with the day tick's catch-up).
+	if _has_game() and _fleets != null:
+		_fleets.advance_clock()
+		_glide_fleet_moves()
 	_place_marker()
 	_update_camera()
 	_reveal()
@@ -1366,6 +1388,18 @@ func pending_encounter() -> Dictionary:
 ## successful player move (§4.11.11.1 "contact is measured after the player
 ## move"); the sim itself collapses repeats within one day, so this is a
 ## contact-only check except on the day's first call.
+## Consumes the accrual's render-move report and starts the NPC marker
+## glides (render-only — the report feeds nothing but marker positions).
+func _glide_fleet_moves() -> void:
+	if _fleets == null:
+		return
+	for move in _fleets.take_fleet_moves():
+		_start_npc_glide(str(move.get("id", "")),
+			move.get("from", Vector2i.ZERO) as Vector2i,
+			move.get("to", Vector2i.ZERO) as Vector2i,
+			_step_render_seconds())
+
+
 func _tick_fleet_contacts() -> void:
 	if _fleets == null:
 		return
@@ -1389,6 +1423,9 @@ func _tick_fleets_day() -> void:
 		if not (moved as Array).has(port_id):
 			EventBus.market_changed.emit(str(port_id))
 	_sync_marker_nodes()
+	# Unified-movement amendment: the day tick's accrual (catch-up) also
+	# reports fleet moves — glide those markers too.
+	_glide_fleet_moves()
 	_check_fleet_contact()
 
 
@@ -1568,7 +1605,7 @@ func _sync_marker_nodes() -> void:
 			count_node.text = "×%d" % convoy_count if convoy_count >= 2 else ""
 			count_node.visible = convoy_count >= 2
 			count_node.position = Vector2(square.size.x, 0.0)
-		_place_marker_square(square, marker.get("cell", Vector2i.ZERO))
+		_place_marker_square(square, marker.get("cell", Vector2i.ZERO), id)
 	for id in _marker_nodes.keys():
 		if live.has(id):
 			continue
@@ -1704,9 +1741,69 @@ func _collect_wrecks_at(cell: Vector2i) -> void:
 
 
 ## Centers a marker square on its tile.
-func _place_marker_square(square: ColorRect, cell: Vector2i) -> void:
-	square.position = Vector2(cell) * float(_cell_pixels) \
-		+ (Vector2(_cell_pixels, _cell_pixels) - square.size) * 0.5
+## Places one NPC marker square at `cell`'s tile centre — or, while a
+## render-only glide is active for `id` (the §2.6 mechanism extended to
+## NPC markers by the unified-movement amendment; logic never runs here),
+## at the glide's interpolated position.
+func _place_marker_square(square: ColorRect, cell: Vector2i,
+		id: String = "") -> void:
+	square.position = _marker_square_px(cell)
+	if id.is_empty() or not _npc_glides.has(id):
+		return
+	var glide: Dictionary = _npc_glides[id]
+	var t := 1.0
+	if float(glide["duration"]) > 0.0:
+		t = clampf(float(glide["elapsed"]) / float(glide["duration"]), 0.0, 1.0)
+	square.position = (glide["from_px"] as Vector2).lerp(
+		glide["to_px"] as Vector2, t)
+
+
+## The tile-centre origin for one marker square (the snap formula's
+## position term, shared by the glide state).
+func _marker_square_px(cell: Vector2i) -> Vector2:
+	return Vector2(cell) * float(_cell_pixels) \
+		+ (Vector2(_cell_pixels, _cell_pixels) - Vector2(_cell_pixels,
+		_cell_pixels) * 0.7) * 0.5
+
+
+## Starts (or restarts) one NPC marker glide (render-only, §2.6 extended):
+## the marker eases from `from_cell` to `to_cell` over `duration` seconds —
+## the accrual releases ≈ one tile per player move, so the marker glides in
+## step with the player's own marker instead of teleporting.
+func _start_npc_glide(id: String, from_cell: Vector2i, to_cell: Vector2i,
+		duration: float) -> void:
+	if not _glide_enabled or duration <= 0.0 or from_cell == to_cell:
+		_npc_glides.erase(id)
+		return
+	var centre := (Vector2(_cell_pixels, _cell_pixels)
+		- Vector2(_cell_pixels, _cell_pixels) * 0.7) * 0.5
+	_npc_glides[id] = {
+		"from_px": Vector2(from_cell) * float(_cell_pixels) + centre,
+		"to_px": Vector2(to_cell) * float(_cell_pixels) + centre,
+		"elapsed": 0.0,
+		"duration": duration,
+	}
+
+
+## Advances every NPC marker glide; an expired glide snaps its square to
+## the destination and drops the state.
+func _tick_npc_glides(delta: float) -> void:
+	if _npc_glides.is_empty():
+		return
+	for id in _npc_glides.keys():
+		var glide: Dictionary = _npc_glides[id]
+		glide["elapsed"] = float(glide["elapsed"]) + delta
+		var square: ColorRect = _marker_nodes.get(id, null)
+		if square == null:
+			continue
+		var t := 1.0
+		if float(glide["duration"]) > 0.0:
+			t = clampf(float(glide["elapsed"]) / float(glide["duration"]),
+				0.0, 1.0)
+		square.position = (glide["from_px"] as Vector2).lerp(
+			glide["to_px"] as Vector2, t)
+		if t >= 1.0:
+			_npc_glides.erase(id)
 
 
 ## Right-click on an adjacent fleet = attack it (docs/60-* §4.11.11.2). A
@@ -2246,6 +2343,7 @@ func set_marker_glide_enabled(enabled: bool) -> void:
 ## Deterministic replacement for `_process`'s glide tick in headless tests.
 func advance_render(seconds: float) -> void:
 	_tick_marker_glide(seconds)
+	_tick_npc_glides(seconds)
 
 
 ## Centers the camera on the fleet (which wraps) and refreshes the chunk ring.

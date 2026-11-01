@@ -498,7 +498,8 @@ ecology members with a role, a nation, a lane route and a captain:
   hunters at their next day tick (deterministic).
 - **Stepping.** Fleets advance along their lane's rasterized tile path at a
   base of **2 tiles/day** (Phase-6 lane-stepping base, before the parity
-  factors of the amendment block below; Phase 5 stepped 1 tile/day on the
+  factors of the amendment block below — **both superseded by the
+  unified-movement amendment further below**; Phase 5 stepped 1 tile/day on the
   10 nm grid) inside the §4.1.2 flow, skipping occupied tiles and never
   entering `#` land, `^` reef or `I` ice; port-bound roles dwell **2 days**
   in port (the §4.1.1 trader row pins the trader dwell). Chokepoint
@@ -538,7 +539,7 @@ shape; the Phase-6 sea adds four touches, all deterministic:
   functions of day + position, no RNG, so replays stay exact. Hunters pay
   the factors on their lane travel **and per pursuit step**. Lane stepping
   runs at base **2 tiles/day** before the factors (the Stepping bullet
-  above).
+  above; **superseded by the unified-movement amendment below**).
 - **Seasonal lane variants.** Lanes may carry
   `variants: [{id, months, waypoints}]` (`10-*`, amended Phase 6); runtime
   selects the **in-month variant from the built tile paths**
@@ -554,6 +555,72 @@ shape; the Phase-6 sea adds four touches, all deterministic:
   itself is pinned in `30-*` §4.4), lane stepping base 1 → 2 tiles/day.
   Values not listed here (e.g. the pirate prey-preference radius, convoy
   grouping) are unchanged pins.
+
+**Unified fleet movement (closing Phase-6 amendment; supersedes the
+stepping base and the factor-only parity above).** Player and NPC fleets
+share ONE movement model — the `20-*` §4.4 pipeline, evaluated per fleet
+per day tick:
+
+- **Base speed** is the **slowest `ShipType.speed` among the fleet's
+  composed ships** (the §4.11.3 composition, stored on the fleet dict at
+  spawn as `ships` — `10-*` §4.15; a fleet without the field composes it
+  lazily from its persisted `seed`, bit-identical to the spawn draw). The
+  composition's hull draws key off the fleet seed only — never the day —
+  so a fleet's base speed is fixed for its life, and two fleets of the
+  same role generally differ (pirate 1–3 hulls, navy-band roles 2–4,
+  merchant roles 1–3, treasure 4–6, drawn from `latin` 16 / `sloop` 20 /
+  `caravel` 20 / `brigantine` 24).
+- **Pipeline.** `day allowance = base × wind_factor × direction_factor ×
+  current_factor`, with `wind_factor` applied from the global day weather
+  (`20-*` §4.7) at the **flagship's class** (the first composed ship);
+  `direction_factor` keeps reading the region's **prevailing** wind token
+  (the seeded daily jitter is a player-ledger roll, not re-rolled for
+  NPCs); `current_factor` unchanged. The player-ledger terms are pinned
+  neutral for NPCs: `crew_factor = 1.0`, seamanship bonus `0`, sail trim
+  `normal` (1.0). Pure day + position + global-weather inputs — no RNG —
+  so replays stay exact. The direction table's class column follows the
+  flagship's class (the `sail` column remains the fallback for an unknown
+  class).
+- **Lane travel** banks `floor(allowance + carry)` tiles through the
+  per-fleet fractional accumulator (a sub-tile day banks and holds — the
+  task-H carry shape, unchanged). **Raider chase/return** pays one
+  allowance per day tick for the bearing to its target and walks it
+  greedily tile by tile (the engagement re-checked after every committed
+  tile). **Hunter pursuit** pays the allowance **per pursuit step
+  heading** — each A* step banks its own heading's allowance — so
+  pursuit is speed-matched with the player under the unchanged 30/40
+  hysteresis and the unchanged ≤ 250 ms/day budget.
+- **Clock accrual (cadence amendment; supersedes the per-day-tick
+  reading of the bullets above).** Movement is a pure function of
+  elapsed world time: every fleet accrues
+  `Δ × base × wind × direction × current` tiles per elapsed Δ
+  (`Δ = day + clock_fraction − its own accrual mark`) and steps one tile
+  per accrued tile, released in step with the player's own clock — a
+  player helm move advances ≈ one tile on every fleet, so the sea never
+  jumps at a day boundary and no remainder is ever flushed. Whole-day
+  catch-up (port day-skips, headless drivers) walks exactly the daily
+  budgets above; a fleet routed by a departure accrues the current
+  day-remainder immediately and marks itself accrued-through-now (docked
+  time never accrues; the per-fleet marks are runtime-only — a reloaded
+  fleet resumes accrual from the load instant). The day tick owns state,
+  not stepping: dwell, departures (with the eager route-progress sync),
+  the raider/hunter state machines, spawns, wrecks. NPC-vs-NPC
+  engagement fires from the accrual walk the moment a raider's committed
+  tile lands within Chebyshev 1 of its prey; contact with the player is
+  sampled per tile entered exactly as below. Whole-day catch-up evaluates
+  the pipeline at the leg's current heading for the batch (the daily-budget
+  shape); live fractional accrual pays each tile's own position/heading
+  factors — the more faithful reading where a lane crosses wind or
+  current regions.
+- **Contact is sampled per tile entered**, not only after the day step:
+  any fleet stepping within Chebyshev 1 of the player's tile mid-step
+  engages under the §4.11.11.2 row exactly as an end-of-step proximity
+  would (hostile roles only, cooldown excepted), and a hunting-nation
+  pass-through records the at-sea intel cell on the passed tile.
+- **Balance note (recorded, not tuned here):** lane ecology timing
+  contracts accordingly — a long lane crossing now takes days-to-weeks
+  instead of a season — raising encounter turnover at unchanged §4.1.1
+  fleet budgets and unchanged port dwell (2 days).
 
 #### 4.11.11.2 Auto-resolve, wreckage & player combat (locked)
 
@@ -669,8 +736,9 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
     nation has no live treasure fleet. The fleet boards the lane the
     **capital's built spoke** attaches to (the historical lane), at the
     tile nearest the capital (the §4.1.1 patrol boarding rule), walks it
-    end to end at a base of 2 tiles/day (Phase-6 lane-stepping base,
-    before the parity factors), dwells 2 days at the far end, then
+    end to end at the unified §4.4 budget (Phase-6 lane-stepping base
+    superseded — see the unified-movement amendment above), dwells 2
+    days at the far end, then
     despawns — never a port call. Cargo at spawn: **3 ×** the normal
     30-unit call cap of one seeded produced good. Composition per
     §4.11.11.2: `3 + rng(0..2)` merchant hulls + one patrol-escort hull
@@ -714,8 +782,8 @@ Perf gates (measured in tools suites — tasks J/M):
 
 | Gate | Pin |
 |---|---|
-| Day tick @ normal (cap 288) | ≤ 50 ms headless, zero runtime pathfinding for lane traffic — re-proven at the Phase-6 scale by task H |
-| Day tick @ extreme (≈ 1 100 fleets) | ≤ 150 ms headless |
+| Day tick @ normal (cap 288) | ≤ 75 ms headless, zero runtime pathfinding for lane traffic — re-proven at the Phase-6 scale by task H; **re-pinned 50 → 75 by the unified-movement amendment** (measured ≈ 53) |
+| Day tick @ extreme (≈ 1 100 fleets) | **re-pinned ≤ 350 ms by the unified-movement amendment** (was ≤ 150; 2026-11-01: every fleet now steps its §4.4 hull-scale budget per day and departed fleets walk their new route in the same pass, ~10× the retired 2-tile base per tick; measured ≈ 276) |
 | Marginal cost | demonstrably linear (extreme ≈ 4× normal, not 16×) |
 | Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase — unchanged as the budget; H re-measures at the quadrupled chase area and windows the region only on measured failure (correction 13) |
 | Save payload @ extreme | ≤ 2 MB |
