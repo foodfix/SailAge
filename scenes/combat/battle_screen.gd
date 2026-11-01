@@ -1305,6 +1305,21 @@ func _finish_battle() -> void:
 		if applied is Dictionary and not (applied as Dictionary).is_empty():
 			last_outcome["rewards"] = (applied as Dictionary).duplicate(true)
 
+	# 3b. Phase 7 rare drop (60-* §4.11.13): a named pirate's captain sunk or
+	# captured (any fleet-removed outcome — victory/surrender; a retreat keeps
+	# the fleet) credits that captain's `named_pirates.json` `drop` item
+	# through the standing replace rule. Guarded, like every aftermath hook.
+	var end_result := str(last_outcome.get("result", ""))
+	if end_result == BattleSimLib.RESULT_VICTORY \
+			or end_result == BattleSimLib.RESULT_SURRENDER:
+		var captain: Dictionary = (encounter.get("captain", {}) as Dictionary) \
+			if (encounter.get("captain", {}) is Dictionary) else {}
+		if rewards_module != null \
+				and rewards_module.has_method("apply_named_drop") \
+				and not str(captain.get("named_id", "")).is_empty():
+			rewards_module.call("apply_named_drop",
+				last_outcome, str(captain.get("named_id", "")))
+
 	# 4. Fleet-ecology bookkeeping (task J) — guarded.
 	var fleets_module = _guarded_module(NPC_FLEETS_PATH)
 	if fleets_module != null:

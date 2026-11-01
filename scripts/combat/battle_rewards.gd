@@ -62,6 +62,8 @@ const CAPTURED_ENEMY_KEY := "captured_enemy"
 const GOLD_KEY := "gold"
 const XP_KEY := "xp"
 const REP_DELTAS_KEY := "rep_deltas"
+const DROP_ITEM_KEY := "drop_item"
+const DROP_SOLD_BACK_KEY := "drop_sold_back"
 
 
 # --- Application seam (§4.12.3) --------------------------------------------
@@ -137,6 +139,69 @@ static func _apply_reputation(value) -> Dictionary:
 
 
 # --- The §4.11.10 formulas -------------------------------------------------
+
+## The Phase-7 rare-drop flow (§4.11.13, keyed by the sunk/captured captain
+## id): match `captain_named_id` against `data/named_pirates.json`, credit the
+## match's `drop` item, and equip it through the standing replace rule
+## (§4.11.12) — `weapon`/`armor` fit `GameState.player.equipment`,
+## `figurehead`/`sail` fit the flagship (fleet index 0); an occupied slot
+## sells the displaced item back at `floor(price × 0.5)` in the same grant.
+## Writes `drop_item` (+ `drop_sold_back` when a displaced item sold) into
+## `outcome` and returns the granted item id ("" when nothing matched or the
+## run/flagship cannot carry it — an unnamed or successor captain drops
+## nothing). Rare items are never tier-gated (never purchasable at all).
+static func apply_named_drop(outcome: Dictionary, captain_named_id: String) -> String:
+	if not (outcome is Dictionary) or outcome.is_empty():
+		return ""
+	var named_id := str(captain_named_id)
+	if named_id.is_empty():
+		return ""
+	var pirate: Dictionary = DataLoader.named_pirates.get(named_id, {}) \
+		if DataLoader.named_pirates is Dictionary else {}
+	var item_id := str((pirate as Dictionary).get("drop", ""))
+	if item_id.is_empty():
+		return ""
+	var item: Dictionary = DataLoader.equipment.get(item_id, {}) \
+		if DataLoader.equipment is Dictionary else {}
+	if item.is_empty():
+		push_warning("BattleRewards.apply_named_drop: unknown drop item %s" % item_id)
+		return ""
+	var slot := str((item as Dictionary).get("slot", ""))
+	var price := int((item as Dictionary).get("price", 0))
+	var occupied := ""
+	if slot == "weapon" or slot == "armor":
+		var player: Dictionary = GameState.player
+		if player.is_empty():
+			return ""
+		var equipment: Dictionary = player.get("equipment", {})
+		if not (equipment is Dictionary):
+			equipment = {}
+			player["equipment"] = equipment
+		occupied = str(equipment.get(slot, ""))
+		equipment[slot] = item_id
+	else:
+		# `figurehead`/`sail` fit the flagship (fleet index 0, §4.11.2).
+		var fleet: Array = GameState.fleet
+		if fleet.is_empty() or not (fleet[0] is Dictionary):
+			return ""
+		var flagship: Dictionary = fleet[0]
+		var ship_equipment: Dictionary = flagship.get("equipment", {})
+		if not (ship_equipment is Dictionary):
+			ship_equipment = {}
+			flagship["equipment"] = ship_equipment
+		occupied = str(ship_equipment.get(slot, ""))
+		ship_equipment[slot] = item_id
+	var sold_back := ""
+	if not occupied.is_empty() and occupied != item_id:
+		var displaced: Dictionary = DataLoader.equipment.get(occupied, {}) \
+			if DataLoader.equipment is Dictionary else {}
+		if not displaced.is_empty():
+			sold_back = occupied
+			GameState.add_gold(int(floor(float(int(displaced.get("price", 0))) * 0.5)))
+	outcome[DROP_ITEM_KEY] = item_id
+	outcome[DROP_SOLD_BACK_KEY] = sold_back
+	return item_id
+
 
 ## `Σ floor(base_price × 0.05)` over the `ship_type_id`s of ships the player
 ## sank this battle. Unknown ids contribute `floor(0 × 0.05) = 0` rather than
