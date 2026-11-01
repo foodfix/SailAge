@@ -56,10 +56,11 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
+          "eq_zweihander",
+          "eq_brocade_sails",
           "eq_cutlass",
-          "eq_rapier",
           "eq_cotton_sails",
-          "eq_mermaid_figurehead"
+          "eq_saint_medallion"
         ]
       },
       "flavor": {
@@ -121,10 +122,11 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
-          "eq_cutlass",
+          "eq_three_quarter_armor",
+          "eq_angel_figurehead",
+          "eq_main_gauche",
           "eq_breastplate",
-          "eq_cotton_sails",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -179,8 +181,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_brigandine",
+          "eq_main_gauche",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -235,6 +238,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_brigandine",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -296,6 +300,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_rapier",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -419,10 +424,11 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_rapier",
+          "eq_zweihander",
+          "eq_backsword",
           "eq_storm_sails",
-          "eq_dragon_figurehead"
+          "eq_lucky_charm",
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -489,8 +495,9 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
+          "eq_brocade_sails",
+          "eq_flemish_linen_sails",
           "eq_cutlass",
-          "eq_lucky_charm",
           "eq_storm_sails",
           "eq_mermaid_figurehead"
         ]
@@ -552,8 +559,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_flemish_linen_sails",
+          "eq_brigandine",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -612,7 +620,8 @@
         "guild": 3,
         "equipment_stock": [
           "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_eagle_figurehead",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -671,8 +680,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_rapier"
+          "eq_rapier",
+          "eq_main_gauche",
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -727,8 +737,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -781,6 +792,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
+          "eq_breastplate",
           "eq_cotton_sails"
         ]
       },
@@ -895,7 +907,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -951,8 +963,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -1020,8 +1033,9 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
-          "eq_cutlass",
+          "eq_angel_figurehead",
           "eq_rapier",
+          "eq_breastplate",
           "eq_storm_sails",
           "eq_mermaid_figurehead"
         ]
@@ -1081,6 +1095,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_mermaid_figurehead",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -1137,6 +1152,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
+          "eq_breastplate",
           "eq_cotton_sails"
         ]
       },
@@ -1194,6 +1210,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
+          "eq_breastplate",
           "eq_cotton_sails"
         ]
       },
@@ -1252,8 +1269,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -1309,8 +1327,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_backsword",
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -1378,10 +1397,10 @@
         "guild": 3,
         "palace": 3,
         "equipment_stock": [
-          "eq_cutlass",
+          "eq_zweihander",
+          "eq_backsword",
           "eq_breastplate",
-          "eq_cotton_sails",
-          "eq_dragon_figurehead"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -1498,6 +1517,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -1616,7 +1636,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -1673,8 +1693,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_backsword",
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -1731,7 +1752,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -1847,8 +1868,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -1906,8 +1929,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -1966,8 +1991,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -2021,8 +2048,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2079,8 +2107,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -2135,8 +2165,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2189,8 +2220,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_breastplate",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -2244,8 +2275,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2301,8 +2333,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2356,8 +2389,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -2411,8 +2446,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2465,8 +2501,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2523,6 +2560,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -2579,6 +2618,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -2636,6 +2676,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_flemish_linen_sails",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -2746,7 +2787,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -2802,7 +2844,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -2857,7 +2900,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -2913,7 +2956,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -2968,8 +3011,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_albatross_figurehead",
           "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -3023,7 +3067,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -3078,8 +3123,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_mermaid_figurehead",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -3132,8 +3178,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_mermaid_figurehead",
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -3191,6 +3238,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_lucky_charm",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3248,6 +3296,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3305,6 +3354,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_saint_medallion",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3362,6 +3412,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_backsword",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3417,8 +3468,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_albatross_figurehead",
           "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -3653,8 +3705,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_rapier"
+          "eq_saint_medallion",
+          "eq_rapier",
+          "eq_breastplate",
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -3824,6 +3878,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_lucky_charm",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3885,6 +3940,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_backsword",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -3942,6 +3998,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_saint_medallion",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4054,6 +4111,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4114,6 +4172,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4174,6 +4233,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_flemish_linen_sails",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4461,6 +4521,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4523,6 +4585,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_mermaid_figurehead",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -4695,8 +4759,10 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -4754,8 +4820,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_saint_medallion",
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -4820,8 +4887,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -4883,8 +4951,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_storm_sails"
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -4944,8 +5013,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -5001,8 +5071,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_flemish_linen_sails",
+          "eq_cutlass",
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -5058,6 +5129,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
+          "eq_matting_sails",
           "eq_cotton_sails"
         ]
       },
@@ -5113,7 +5185,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -5169,6 +5241,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_breastplate",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -5278,8 +5351,9 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_albatross_figurehead",
           "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -5335,7 +5409,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -5389,6 +5463,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_main_gauche",
           "eq_cutlass",
           "eq_cotton_sails"
         ]
@@ -5498,6 +5573,7 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
+          "eq_backsword",
           "eq_storm_sails",
           "eq_cotton_sails"
         ]
@@ -5554,7 +5630,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -5613,7 +5690,8 @@
         "guild": 3,
         "equipment_stock": [
           "eq_storm_sails",
-          "eq_cotton_sails"
+          "eq_eagle_figurehead",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -5671,7 +5749,8 @@
         "inn": 1,
         "guild": 3,
         "equipment_stock": [
-          "eq_storm_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
           "eq_cotton_sails"
         ]
       },
@@ -5728,7 +5807,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_rapier"
+          "eq_cotton_sails"
         ]
       },
       "flavor": {
@@ -5784,7 +5863,7 @@
         "guild": 3,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_breastplate"
         ]
       },
       "flavor": {
@@ -5839,8 +5918,8 @@
         "tavern": 1,
         "inn": 1,
         "equipment_stock": [
-          "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails",
+          "eq_cutlass"
         ]
       },
       "flavor": {
@@ -6427,7 +6506,7 @@
         "inn": 1,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_storm_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -6484,7 +6563,7 @@
         "inn": 1,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {
@@ -7025,7 +7104,7 @@
         "inn": 1,
         "equipment_stock": [
           "eq_cutlass",
-          "eq_cotton_sails"
+          "eq_matting_sails"
         ]
       },
       "flavor": {

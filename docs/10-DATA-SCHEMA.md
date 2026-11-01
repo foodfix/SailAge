@@ -1347,7 +1347,9 @@ Exactly the 45 neutral ports below, appended after the sovereign block in
 validator group 5 after task E's amendment). All rows carry `nation_id: ""`,
 zh/en names, flavor, and the default facilities `market + tavern + inn`
 (`guild`/`palace` omitted — Phase-3 facilities); `shipyard` is authored on
-exactly five rows (quanzhou, sakai, hirado, gresik, funai). Ordering is the
+exactly four rows (quanzhou, hirado, sakai, gresik) — the `funai` row
+carries no shipyard (data is ground truth; the former "five rows incl.
+funai" wording was stale). Ordering is the
 file order.
 
 | id | zh | en | Nation | lat | lon | produces | demands |
@@ -1541,15 +1543,15 @@ producer counts: silk 4 (canton venice smyrna bandar_abbas), spices 6
 (malacca ternate amboina banten jambi calicut), carpet 5, perfume 4, amber
 4 (hamburg danzig stockholm sofala), porcelain 5 (canton macau ningbo
 quanzhou busan), pearls 5 (hormuz basra sulu cartagena beihai), gems 3,
-musk 2, lacquerware 2, silver 5, gold 6. Band-exclusive candidates P's graph offers for G's
-`exclusive` flags: china_coast → **musk** (band-only) / porcelain; japan →
-**lacquerware** (band-only) / silver; korea → **porcelain** (shared with
-china_coast); southeast_asia → **spices** or **pearls** (shared; no
-band-only luxury exists in the 40-good set for this band); india_persia_arabia
-→ **gems** (band-only) / pearls / coffee (middle tier); swahili_red_sea →
-**gold** or **amber** (both shared). If G's flag subset cannot cover korea,
-southeast_asia, or swahili_red_sea under these sets, bounce through the
-master rather than re-shaping the graph.
+musk 2, lacquerware 2, silver 5, gold 6. Band-exclusive coverage of the
+six neutral bands is **final**: G's
+`exclusive: true` set is {spices, carpet, porcelain, pearls, gems, musk,
+lacquerware, gold} (master-ruled 2026-11-02), and P's graph satisfies
+every band under it — china_coast → **musk** (band-only) / porcelain;
+japan → **lacquerware** (band-only); korea → **porcelain**; southeast_asia
+→ **spices** / **pearls**; india_persia_arabia → **gems** (band-only) /
+pearls; swahili_red_sea → **gold**. (amber, silver, silk, perfume are not
+flagged exclusive; no band relies on them.)
 
 ### 7.3 ShipTypes (16, Phase 7)
 

@@ -858,22 +858,42 @@ not by owner:
   shipyard flavor (Pacific shipbuilding), hirado/sakai small-craft
   lists under the allegiance gate.
 
-### Per-port equipment stock (existing 8 ids)
+### Per-port equipment stock (S's finalized 24-item set)
 
-- Authored over the existing 8 ids only (the task's PREFERRED path; no
-  placeholder ids). Slot coverage of the 8: weapon {eq_cutlass,
-  eq_rapier}, armor {eq_breastplate, eq_lucky_charm}, figurehead
-  {eq_mermaid_figurehead, eq_dragon_figurehead}, sail {eq_cotton_sails,
-  eq_storm_sails} — 2 per slot, so every port can list 2+ items across 2
-  slots without new ids.
-- Every list carries eq_cutlass or eq_cotton_sails (the two cheapest
-  items) so a dev-1 floor port always sells something under any S
-  tiering; storm sails cluster in the North Sea/Baltic/Caribbean-typhoon
-  belts; figureheads and rapiers enrich the capitals. If S's final
-  tiers differ from the assumed {t1: cutlass/cotton/breastplate/lucky
-  charm}, the master bounces a re-tiered pass during the staged-sim
-  loop; lists that need slot-specific new ids (none currently) would be
-  the bounce material.
+- Authored over the staged `phase7-s` tier structure (master bounce 1,
+  2026-11-02): tier-1 {eq_cutlass, eq_rapier, eq_breastplate,
+  eq_lucky_charm, eq_mermaid_figurehead, eq_cotton_sails,
+  eq_eagle_figurehead, eq_matting_sails}, tier-2 {eq_backsword,
+  eq_main_gauche, eq_brigandine, eq_saint_medallion,
+  eq_dragon_figurehead, eq_albatross_figurehead, eq_storm_sails,
+  eq_flemish_linen_sails}, tier-3 {eq_zweihander, eq_three_quarter_armor,
+  eq_angel_figurehead, eq_brocade_sails}. The 4 rares
+  (eq_khair_scimitar, eq_bloodhand_cuirass, eq_golden_dragon_figurehead,
+  eq_red_sail) never appear in any list (drop-only).
+- Shape (machine-checked): every list ≥ 2 items with ≥ 1 tier-1 (a
+  dev-0/1 port always sells something); all **20** non-rare items appear
+  in ≥ 1 stock list; tier-2 concentrates at the 28 majors, the 17
+  protected ports and named regional hubs (valetta — the Order's
+  fortress, cyprus — the Venetian armory, algiers — the corsair nest,
+  cape_town/botany_bay/new_foundland — the albatross stations,
+  bandar_abbas — the VOC factory, lima — the viceroyalty); tier-3 only
+  at the 6 dev-3 capitals (zweihander lisbon/london/istanbul,
+  three_quarter_armor seville, angel_figurehead venice, brocade_sails
+  lisbon/amsterdam) — parity with the ship rule that only capitals sell
+  tier-3 at start. List sizes 2–5.
+- Regional flavor: mat sails + dragon figureheads on the China-Japan
+  junks (eq_matting_sails, eq_dragon_figurehead), Flemish linen at the
+  VOC orbit (amsterdam antwerp batavia zeelandia bandar_abbas recife),
+  storm sails in the North Sea/Baltic/hurricane belts and at the three
+  majors that face them, brigandines in Iberia and Flanders
+  (valencia barcelona antwerp), backswords from England to the Ottoman
+  gate (plymouth london istanbul algiers mombasa surat), main-gauche
+  pairs in Spain and Italy, saint medallions at the Catholic fortresses
+  and missions (lisbon valetta goa malacca manila macau bahia mozambique
+  lima), eagle figureheads at the imperial ports (danzig hamburg),
+  albatross figureheads on the Roaring-Forties stations. The Barbary
+  khair scimitar is deliberately NOT stocked — it is a named pirate's
+  drop.
 
 ### Lane `goods` extensions (`trade_routes.json`)
 
