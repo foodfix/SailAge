@@ -46,7 +46,8 @@
       "category": "textile",
       "base_price": 120,
       "unit_size": 1,
-      "specialty": true
+      "specialty": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "spices",
@@ -55,7 +56,8 @@
       "base_price": 150,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "sugar",
@@ -131,7 +133,8 @@
       "category": "luxury",
       "base_price": 90,
       "unit_size": 1,
-      "specialty": true
+      "specialty": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "carpet",
@@ -140,7 +143,8 @@
       "base_price": 80,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "amber",
@@ -148,7 +152,8 @@
       "category": "luxury",
       "base_price": 110,
       "unit_size": 1,
-      "specialty": true
+      "specialty": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "cheese",
@@ -258,7 +263,8 @@
       "base_price": 130,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "pearls",
@@ -267,7 +273,8 @@
       "base_price": 140,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "gems",
@@ -276,7 +283,8 @@
       "base_price": 180,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "musk",
@@ -285,7 +293,8 @@
       "base_price": 170,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "lacquerware",
@@ -294,7 +303,8 @@
       "base_price": 110,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "silver",
@@ -302,7 +312,8 @@
       "category": "material",
       "base_price": 105,
       "unit_size": 1,
-      "specialty": true
+      "specialty": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     },
     {
       "id": "gold",
@@ -311,7 +322,8 @@
       "base_price": 200,
       "unit_size": 1,
       "specialty": true,
-      "exclusive": true
+      "exclusive": true,
+      "flow": {"prod": 2, "cons": 3, "capacity": 120}
     }
   ]
 }
