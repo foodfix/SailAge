@@ -20,6 +20,12 @@ const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const ShipyardScene := preload("res://scenes/port/shipyard_screen.tscn")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
 const PortScreenLib := preload("res://scenes/port/port_screen.gd")
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+
+## The real palace engine, loaded by path — a `class_name` script cannot be
+## const-preloaded for instance-method probes (`has_method`) in GDScript 4;
+## the screen loads it the same way (`palace_screen.gd#_seam_target`).
+var _palace_engine_script: Script = load("res://scripts/port/palace_engine.gd")
 
 ## The four repair prices printed in docs/40 §4.3 ("latin 3g/pt, caravel
 ## 20g/pt, nao 55g/pt, galleon 150g/pt").
@@ -717,24 +723,66 @@ func _test_screen() -> void:
 	_check(screen.buy_button("galleon") != null
 		and screen.buy_button("junk") == null,
 		"stocked hulls have Buy buttons and unstocked ones have none")
-	# Role labels: the raw enum token until `shipyard.role.*` merges (never
-	# a raw "<key>"), then the localised 战舰/商船/沿岸.
-	var galleon_role: Label = catalog.get_node(
-		"Catalog_galleon/Top/Role")
-	_check(galleon_role.text == "war",
-		"the galleon's role falls back to the data token (got '%s')"
-		% galleon_role.text)
-	_check(catalog.get_node("Catalog_latin/Top/Role").text == "coastal",
-		"the latin carries the coastal role token")
-	_inject_keys(SHIPYARD_UI_KEYS)
+	# Role labels: the §4.7.15 keys are MERGED now, so rows localise — the
+	# raw enum token survives only as the documented fallback (exercised
+	# below with fixture-local key absence, never the shipped data).
+	var galleon_role: Label = catalog.get_node("Catalog_galleon/Top/Role")
+	_check(galleon_role.text == I18n.t_key("shipyard.role.war"),
+		"the merged role key localises the galleon (%s)" % galleon_role.text)
+	_check(catalog.get_node("Catalog_latin/Top/Role").text
+			== I18n.t_key("shipyard.role.coastal"),
+		"the latin carries the coastal role label (%s)"
+		% (catalog.get_node("Catalog_latin/Top/Role") as Label).text)
+	_check(catalog.get_node("Catalog_caravel/Top/Role").text
+			== I18n.t_key("shipyard.role.trade"),
+		"the caravel carries the trade role label (%s)"
+		% (catalog.get_node("Catalog_caravel/Top/Role") as Label).text)
+	# zh pass (40-* §4.3.1): 战舰 / 商船 / 沿岸 — plus the zh tier note
+	# 需发展度 {dev} at the dev-1 port.
+	GameState.locale = "zh"
+	screen.rebuild()
+	await get_tree().process_frame
+	var zh_roles := "%s|%s|%s" % [
+		(catalog.get_node("Catalog_galleon/Top/Role") as Label).text,
+		(catalog.get_node("Catalog_caravel/Top/Role") as Label).text,
+		(catalog.get_node("Catalog_latin/Top/Role") as Label).text]
+	_check(zh_roles == "%s|%s|%s" % [I18n.t_key("shipyard.role.war"),
+			I18n.t_key("shipyard.role.trade"),
+			I18n.t_key("shipyard.role.coastal")],
+		"the zh roles render 战舰/商船/沿岸 (%s)" % zh_roles)
+	GameState.current_port = "bordeaux"
+	screen.rebuild()
+	await get_tree().process_frame
+	var zh_note: Label = catalog.get_node_or_null("Catalog_caravel/Note")
+	_check(zh_note != null
+		and zh_note.text == I18n.fmt("shipyard.tier.need_dev", {"dev": 1}),
+		"the zh tier note renders 需发展度 1 (%s)"
+		% (zh_note.text if zh_note != null else "<absent>"))
+	GameState.current_port = "lisbon"
+	# The documented fallback, fixture-locally: with the role keys stripped
+	# the rows show the raw schema token (war/trade/coastal), never "<key>".
+	var role_stash := _stash_ui_keys(["shipyard.role.war",
+		"shipyard.role.trade", "shipyard.role.coastal"])
+	screen.rebuild()
+	await get_tree().process_frame
+	_check((catalog.get_node("Catalog_galleon/Top/Role") as Label).text == "war",
+		"with the keys stripped the role falls back to the data token (got '%s')"
+		% (catalog.get_node("Catalog_galleon/Top/Role") as Label).text)
+	_check((catalog.get_node("Catalog_latin/Top/Role") as Label).text == "coastal",
+		"the stripped latin carries the coastal role token")
+	_unstash_ui_keys(role_stash)
+	GameState.locale = "en"
 	screen.rebuild()
 	await get_tree().process_frame
 	_check((catalog.get_node("Catalog_galleon/Top/Role") as Label).text
 			== I18n.t_key("shipyard.role.war"),
-		"role labels localise once the keys merge (%s)"
+		"restoring the keys re-localises the roles (%s)"
 		% (catalog.get_node("Catalog_galleon/Top/Role") as Label).text)
+	_inject_keys(SHIPYARD_UI_KEYS)
+	screen.rebuild()
+	await get_tree().process_frame
 	# No unresolved key may ever reach a label (`I18n.t_key` returns "<key>"
-	# for a missing entry), including the awaiting-merge stat/picker keys.
+	# for a missing entry).
 	var unresolved: Array[String] = []
 	_collect_unresolved(screen, unresolved)
 	_check(unresolved.is_empty(),
@@ -1097,7 +1145,8 @@ class SeamSpy extends RefCounted:
 
 
 ## A palace run at `port_id` with a one-ship portugal fleet (the permit rows
-## need the player nation, rep map and empty bounty book).
+## need the player nation, rep map and empty bounty book). Re-seeds the
+## allegiance module so permits/treasuries/commendations start fresh.
 func _make_palace_run(port_id: String) -> void:
 	GameState.gold = 50000
 	GameState.current_port = port_id
@@ -1116,50 +1165,114 @@ func _make_palace_run(port_id: String) -> void:
 	GameState.bounties = {}
 	GameState.active_quests = []
 	GameState.titles = {"portugal": "count", "spain": "none", "italy": "count"}
+	AllegianceLib.seed_new_game()
 
 
 func _test_palace_screen() -> void:
 	var locale_before: String = GameState.locale
 	GameState.locale = "en"
-	# Keys unmerged (today's main): the section stays hidden, nothing crashes,
-	# and every visible line stays clean.
+	# MERGED STATE: the §4.7.15 keys live in data/ui_strings.json and task
+	# L's real palace_engine answers the bundled permit API — the section
+	# renders and the row speaks the real engine's facts (no spy here).
 	_make_palace_run("lisbon")
 	var screen = PalaceScene.instantiate()
 	screen.route_to_port = false
 	add_child(screen)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(not screen.permit_section_visible(),
-		"with the permit keys unmerged the section header stays hidden")
-	_check(not (screen.permit_widget("home")["row"] as Control).visible
-		and not (screen.permit_widget("foreign")["row"] as Control).visible,
-		"…and both permit rows stay hidden")
-	_check(not screen.commendation_open(),
-		"no commendation without the seam and its keys")
-	# With the §4.7.15 keys injected the own-nation palace shows the home
-	# charter row; the foreign row stays hidden (30-* §4.10: own palaces
-	# only sell the home charter).
-	_inject_keys(PALACE_UI_KEYS)
-	screen.refresh()
-	await get_tree().process_frame
-	_check(screen.permit_section_visible()
-		and (screen.permit_widget("home")["row"] as Control).visible
+	# Real-engine conformance: the merged engine surface is the BUNDLED API
+	# (`permit_offer(port)` + `buy_permit(port)` + the commendation pair).
+	# The granular C-contract names are absent on the real engine (reported
+	# to the master); the screen guard-reads both shapes, so either engine
+	# drives the rows.
+	_check(_palace_engine_script.has_method("permit_offer")
+		and _palace_engine_script.has_method("buy_permit")
+		and _palace_engine_script.has_method("pending_commendation")
+		and _palace_engine_script.has_method("dismiss_commendation"),
+		"the real engine answers the bundled permit API")
+	_check(not _palace_engine_script.has_method("permit_price")
+		and not _palace_engine_script.has_method("take_commendation"),
+		"the granular C-contract names stay absent (bundle engine shape)")
+	_check(screen.permit_section_visible(),
+		"with the merged keys the permit section header renders")
+	_check((screen.permit_widget("home")["row"] as Control).visible
 		and not (screen.permit_widget("foreign")["row"] as Control).visible,
 		"at the player's own capital the home charter row shows alone")
 	var home: Dictionary = screen.permit_widget("home")
 	_check((home["label"] as Label).text == I18n.t_key("palace.permit.home"),
 		"the home row names the 5,000g charter (%s)"
 		% (home["label"] as Label).text)
-	# Guard defaults (no engine seam yet): the buy is honestly locked.
-	_check((home["buy"] as Button).disabled,
-		"without the engine seam the permit Buy is disabled")
-	_check((home["buy"] as Button).tooltip_text
-			== I18n.t_key("ui.not_available"),
-		"…with the 'ui.not_available' tooltip (no fake purchase)")
 	_check((home["note"] as Label).text
 			== I18n.t_key("palace.permit.home.coverage"),
 		"…and the row carries the coverage note (%s)"
 		% (home["note"] as Label).text)
+	_check(not (home["buy"] as Button).disabled,
+		"the real engine answers the seam, so the permit Buy is enabled")
+	# zh pass (§6): the section header is 免税证, the row label follows.
+	GameState.locale = "zh"
+	screen.refresh()
+	await get_tree().process_frame
+	_check(screen.permit_section_visible()
+		and (screen.permit_widget("home")["label"] as Label).text
+			== I18n.t_key("palace.permit.home"),
+		"the zh section renders 免税证 with the home row (%s)"
+		% (screen.permit_widget("home")["label"] as Label).text)
+	GameState.locale = "en"
+	screen.refresh()
+	await get_tree().process_frame
+	home = screen.permit_widget("home")
+	# THE REAL BUY PATH at the dev-3 home capital: −5,000g, the permit flag
+	# sets, the sale credits portugal's treasury (decision 19), and the row
+	# flips to the held state with Buy locked.
+	var real_gold_before := GameState.gold
+	(home["buy"] as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(GameState.gold == real_gold_before - 5000,
+		"the real home-charter buy costs exactly 5,000g (gold %d)"
+		% GameState.gold)
+	_check(AllegianceLib.has_permit_home(),
+		"…and the home charter is held")
+	_check(AllegianceLib.treasury("portugal")
+			== AllegianceLib.TREASURY_START + 5000,
+		"…and the sale credits portugal's treasury (+5,000g)")
+	home = screen.permit_widget("home")
+	_check((home["buy"] as Button).disabled
+		and (home["note"] as Label).text
+			== I18n.t_key("palace.permit.home.owned"),
+		"…and the row flips to the held state, Buy locked (%s)"
+		% (home["note"] as Label).text)
+	(home["buy"] as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(GameState.gold == real_gold_before - 5000
+		and AllegianceLib.has_permit_home(),
+		"a second press is refused — no double purchase, no double charge")
+	# The documented pre-merge fallback, fixture-locally: with the three gate
+	# keys stripped the section and both rows hide again — nothing crashes
+	# and no raw "<key>" reaches any label.
+	var permit_stash := _stash_ui_keys(["palace.permit.section",
+		"palace.permit.home", "palace.permit.foreign"])
+	screen.refresh()
+	await get_tree().process_frame
+	_check(not screen.permit_section_visible(),
+		"with the keys stripped the section header stays hidden")
+	_check(not (screen.permit_widget("home")["row"] as Control).visible
+		and not (screen.permit_widget("foreign")["row"] as Control).visible,
+		"…and both permit rows stay hidden")
+	var stripped_unresolved: Array[String] = []
+	_collect_unresolved(screen, stripped_unresolved)
+	_check(stripped_unresolved.is_empty(),
+		"the stripped state leaves no raw <key> anywhere (found %s)"
+		% str(stripped_unresolved))
+	_unstash_ui_keys(permit_stash)
+	screen.refresh()
+	await get_tree().process_frame
+	_check(screen.permit_section_visible()
+		and (screen.permit_widget("home")["row"] as Control).visible,
+		"restoring the keys re-renders the section and the home row")
+	_check(not screen.commendation_open(),
+		"no commendation without a pending conversion")
 
 	# The spy seam drives the §4.7.13 states; every press must call through.
 	var spy := SeamSpy.new()
@@ -1225,8 +1338,8 @@ func _test_palace_screen() -> void:
 				DataLoader.get_nation("spain").get("name", {}))}),
 		"the foreign row names the host nation (%s)"
 		% (foreign["label"] as Label).text)
-	# Guard fallback (no spy answers yet? the spy is still installed): clear it
-	# to prove the Fame/Character fallbacks derive the title gate.
+	# Real-engine gates (the spy is cleared): the bundled offer derives the
+	# foreign title gate — a non-knight sees 爵位需达到骑士, Buy locked.
 	screen.engine_override = null
 	screen.refresh()
 	await get_tree().process_frame
@@ -1374,6 +1487,26 @@ func _test_allegiance_guard_path() -> void:
 func _inject_keys(keys: Dictionary) -> void:
 	for key in keys:
 		DataLoader.ui_strings[key] = keys[key]
+
+
+## Fixture-local key ABSENCE: removes the named keys from the loaded table
+## and returns the removed entries for [method _unstash_ui_keys]. The merged
+## `data/ui_strings.json` always carries the §4.7.15 keys now, so the
+## documented pre-merge fallbacks are exercised by stripping keys HERE —
+## never by the shipped data (which the suite must not mutate).
+func _stash_ui_keys(key_names: Array) -> Dictionary:
+	var stash: Dictionary = {}
+	for key in key_names:
+		if DataLoader.ui_strings.has(key):
+			stash[key] = DataLoader.ui_strings[key]
+			DataLoader.ui_strings.erase(key)
+	return stash
+
+
+## Restores entries removed by [method _stash_ui_keys].
+func _unstash_ui_keys(stash: Dictionary) -> void:
+	for key in stash:
+		DataLoader.ui_strings[key] = stash[key]
 
 
 ## The equipment ids behind a slot row's buy-button dict, in display order.
