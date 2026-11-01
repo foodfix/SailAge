@@ -9,10 +9,10 @@ depends on. It defines:
 - The i18n rule for all display strings.
 - The spec for `tools/validate_data.py`, the validator all data must pass.
 - The locked content lists: 100 sovereign ports plus the Phase-6 neutral
-  tier (§7.1), 20 goods, 8 ship types, 6 nations, 6 starter officers
-  (§7.2–7.5), plus the Phase-5/6 lists — 17 trade lanes (§7.6), 7 captain
-  name pools (§7.7), 4 named pirates (§7.8) — exhaustive, with no open
-  slots.
+  tier (§7.1), 40 goods (§7.2), 16 ship types (§7.3), 6 nations, 6 starter
+  officers (§7.4–7.5), plus the Phase-5/6/7 lists — 17 trade lanes (§7.6),
+  7 captain name pools (§7.7), 4 named pirates (§7.8), 24 equipment items
+  (§7.9) — exhaustive, with no open slots.
 - The Phase-5 npc/economy schemas (`npc_config`, `npc_captains`,
   `named_pirates`, `market_events` — §4.10–4.13), the trade-route pair
   (`trade_routes.json` hand-authored, `trade_routes_built.json` tool-owned —
@@ -22,6 +22,13 @@ depends on. It defines:
   `ice_regions.json` (§4.18) — the lane `variants` schema (§4.14), the
   neutral-port tier (§7.1), the 17-lane set (§7.6), and the two tool-owned
   ocean rasters (§6.5).
+- The Phase-7 additions (trade empires): goods flags
+  `staple`/`specialty`/`exclusive`/`flow` and the 40-good list (§4.2, §7.2),
+  ship `role`/`tier` and the 16-hull list (§4.3, §7.3), equipment
+  `tier`/`rare` and the 24-item list (§4.6, §7.9), the named-pirate `drop`
+  refs (§4.12), the port fields `band`/`protected`/`dev`/`sphere` plus the
+  per-port `shipyard`/`equipment_stock` stock lists and the port region
+  bands (§4.4, §7.1), and the group-3/4/5/7 validator amendments (§8).
 - The grid constants, tile legend, and the generated raster world artifact
   (`data/maps/world.png`) with its harbor-snap rule — ports are `lat`/`lon`
   data in `data/ports.json`, never hand-placed cells.
@@ -35,16 +42,16 @@ are fully specified here; each data file ships when its owning phase lands.
 | Path | Contents | Owner doc |
 |---|---|---|
 | `data/nations.json` | Nation list (incl. `rivals`) | this doc |
-| `data/goods.json` | Good list | this doc |
-| `data/ship_types.json` | ShipType list | this doc |
-| `data/ports.json` | Port list — the 100 locked sovereign ports plus the Phase-6 neutral tier (§7.1) in one envelope; `lat`/`lon` are the geographic truth | this doc |
+| `data/goods.json` | Good list — 40 entries with `staple`/`specialty`/`exclusive`/`flow` since Phase 7 (§4.2, §7.2) | this doc |
+| `data/ship_types.json` | ShipType list — 16 entries with `role`/`tier` since Phase 7 (§4.3, §7.3) | this doc |
+| `data/ports.json` | Port list — the 100 locked sovereign ports plus the Phase-6 neutral tier (§7.1) in one envelope; `lat`/`lon` are the geographic truth; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the per-port `shipyard`/`equipment_stock` stock lists (§4.4) | this doc |
 | `data/officers.json` | Officer roster | this doc |
 | `data/discoveries.json` | Discovery list; `lat`/`lon` are the geographic truth | this doc / `70-*` |
 | `data/quests.json` | Quest templates | this doc / `70-*` |
-| `data/equipment.json` | `[]` until Phase 2 | this doc / `60-*` |
+| `data/equipment.json` | Equipment list — 24 entries with `tier`/`rare` since Phase 7 (§4.6, §7.9) | this doc / `60-*` |
 | `data/npc_config.json` | Density-dial config: presets, budgets, flow, `absolute_cap` (§4.10) | this doc / `80-*` |
 | `data/npc_captains.json` | Captain name pools — 7 incl. the nationless `""` pool (§4.11, §7.7) | this doc / `60-*` |
-| `data/named_pirates.json` | The 4 named pirates, tiers 1–3 (§4.12, §7.8) | this doc / `60-*` / `70-*` |
+| `data/named_pirates.json` | The 4 named pirates, tiers 1–3, each with a rare-equipment `drop` (§4.12, §7.8) | this doc / `60-*` / `70-*` |
 | `data/market_events.json` | Demand-event templates (§4.13) | this doc / `30-*` |
 | `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 17 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
 | `data/wind_regions.json` | Prevailing-wind regions: month-keyed wind-from directions per ocean region (§4.16) — hand-authored | this doc / `20-*` |
@@ -156,11 +163,30 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 20 locked ids (§7.2) |
+| `id` | id | one of the 40 locked ids (§7.2) |
 | `name` | L10nString | |
-| `category` | enum | `food` \| `textile` \| `luxury` \| `material` |
+| `category` | enum | `food` \| `textile` \| `luxury` \| `material` — descriptive only; it does **not** drive the economy (the tier flags below do) |
 | `base_price` | money | global baseline price per cargo unit, before port modifiers (formula in `30-PORTS-AND-TRADE.md`) |
-| `unit_size` | int | cargo units per unit of good; locked at `1` for all Phase-1 goods |
+| `unit_size` | int | cargo units per unit of good; locked at `1` for all goods |
+| `staple` | bool | optional; `true` marks a staple — the cheap basics (exactly **12** of the 40, §7.2). Authoring rule (validator-asserted, `IMPLEMENT-Phase7.md` correction 3): for every port, `demands ⊇ (staples ∖ port.produces)`; every port lists every staple it does not produce |
+| `specialty` | bool | optional; `true` marks a specialty — produced at **≤ 6 ports worldwide** (validator-asserted); exactly **12** goods. A specialty good is the good's luxury consumption tier (below); a subset of specialties carries `exclusive` |
+| `exclusive` | bool | optional; `true` marks 专营货 — the alignment-gated subset of specialties (**≥ 1 produced per neutral region band**, machine-checked via the port `band` field, §4.4/§7.1). Buy/sell gating is `30-*` §4.9/§4.10 behavior, not schema |
+| `flow` | object | optional; `{prod: int, cons: int, capacity: int}` — per-good overrides of the tier defaults (rates/capacities in `30-*` §4.2). All three keys together or none; values > 0; `capacity ≤ 200` |
+
+**Consumption tier (flag-driven; Phase 7).** A good's tier is read from its
+flags, never derived from base-price order (the Phase-5 derived 5/10/5 split
+is retired): `staple: true` → **staple** tier; `specialty: true` → **luxury**
+tier; neither flag → **middle** tier. The split is exactly **12 staples /
+16 middle / 12 luxuries** (validator group 7, §8.2); tier flow rates and
+capacities are pinned in `30-*` §4.2. The economy tier is the only tier
+notion on goods — `tier` as a purchasable-hardware gate exists on ship types
+and equipment only (§4.3, §4.6).
+
+**Listing (data-side).** A port's market rows draw exactly from
+`produces ∪ demands` (staples ubiquitously by the `staple` authoring rule
+above) — the former optional `market_goods` key is **retired in Phase 7** and
+must not appear in any port row (§4.4). Engine/screen semantics: `30-*`
+§4.4/§4.8.
 
 ```json
 {
@@ -171,14 +197,17 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
       "name": {"zh": "葡萄酒", "en": "Wine"},
       "category": "food",
       "base_price": 30,
-      "unit_size": 1
+      "unit_size": 1,
+      "staple": true
     },
     {
       "id": "spices",
       "name": {"zh": "香料", "en": "Spices"},
       "category": "luxury",
       "base_price": 150,
-      "unit_size": 1
+      "unit_size": 1,
+      "specialty": true,
+      "exclusive": true
     }
   ]
 }
@@ -188,16 +217,22 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 8 locked ids (§7.3) |
+| `id` | id | one of the 16 locked ids (§7.3) |
 | `name` | L10nString | |
 | `class` | enum | `sail` \| `oar` \| `hybrid` (oar/hybrid ignore wind modifiers, defined in `20-WORLD-AND-SAILING.md`) |
+| `role` | enum | `war` \| `trade` \| `coastal` *(Phase 7)* — hull vocation shown on every shipyard row (wording `40-*`/`80-*`); first-pass assignments in §7.3, finalized by task S |
+| `tier` | int | `1 \| 2 \| 3` *(Phase 7)* — development-gated availability: `purchasable = in_stock ∧ tier ≤ effective_dev(port)` at both port kinds (`30-*` §4.9; rows above dev grayed 需发展度). ≥ 2 hulls per tier (validator §8.2); first-pass assignment §7.3, finalized by S |
 | `base_price` | money | purchase price of a new hull at 100% durability |
 | `durability` | int > 0 | max hull HP; 0 at sea = sinking |
 | `capacity` | int > 0 | max cargo units (goods + provisions + water combined; armament shares capacity per `40-SHIPS-AND-FLEET.md`) |
-| `speed` | int > 0 | tiles per day before modifiers |
+| `speed` | int > 0 | tiles per day before modifiers; every hull's final value lies in the §6.1 locked set `{16, 20, 24}` |
 | `crew_min` | int > 0 | below this, speed penalty applies (formula in `20-*`) |
 | `crew_max` | int ≥ crew_min | hard crew cap |
 | `armament_slots` | int ≥ 0 | max cannon count (Phase 2) |
+
+Per-port availability: `facilities.shipyard` holds the hull **id list** this
+port stocks (§4.4); a hull is offered iff it is on that list and passes the
+`tier` gate. Save ships store `ship_type_id` as before — no save impact.
 
 ```json
 {
@@ -207,6 +242,8 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
       "id": "caravel",
       "name": {"zh": "卡拉维尔帆船", "en": "Caravel"},
       "class": "sail",
+      "role": "trade",
+      "tier": 2,
       "base_price": 8000,
       "durability": 90,
       "capacity": 120,
@@ -232,11 +269,23 @@ is no second port file and no per-map port variant.
 | `nation_id` | id \| `""` | references Nation; `""` marks a Phase-6 neutral-tier port (§7.1) |
 | `lat` | number | WGS84 latitude in degrees, `-90 ≤ lat ≤ 90`; the port's real-world position and the **geographic truth** |
 | `lon` | number | WGS84 longitude in degrees, `-180 ≤ lon ≤ 180`; geographic truth |
-| `produces` | []id | ⊆ Good ids; port sells these cheaper (supply factor in `30-*`) |
-| `demands` | []id | ⊆ Good ids; port buys these dearer |
-| `market_goods` | []id | optional; ⊆ Good ids; when absent, **all 20 goods trade here** |
-| `facilities` | object | keys with activation phase: `market:1, shipyard:1, tavern:1, inn:1, guild:3, palace:3`. `palace` is **omitted** unless this port is a nation's `capital_port_id` |
+| `band` | id | *(Phase 7)* the port's region band — one of the §7.1 band id set; required on **all 145 ports**. Consumers: the staple-coverage and exclusive-coverage checks (§8.2) and tavern telegraph scoping (`30-*` §4.9) |
+| `produces` | []id | ⊆ Good ids; port sells these cheaper (supply factor in `30-*`); `produces ∩ demands = ∅` (hard rule, Phase 7 — validator §8.2) |
+| `demands` | []id | ⊆ Good ids; port buys these dearer; must include every staple the port does not produce — `demands ⊇ (staples ∖ produces)` (`IMPLEMENT-Phase7.md` correction 3, validator §8.2) |
+| `protected` | bool | *(Phase 7)* optional; `true` marks a **protected port**: permanent alignment to its owner, never a ledger, discount-only investment, `dev` floor never grows. ≤ 4 per nation, and the set must include every nation capital (§7.1 lists the locked set). Sovereign ports only — never on a `nation_id: ""` row |
+| `dev` | int | *(Phase 7)* authored development **floor** `0…3`: capitals and `protected` ports `3`, sovereign contestable majors `2`, remaining sovereign contestable `1`, neutral tier `0` (majors chosen with historical rationale by task P). Runtime dev = `max(floor, ledger thresholds)` and is **never saved** (`90-*` §8.1); thresholds and effects in `30-*` §4.9 |
+| `sphere` | []id | *(Phase 7)* nation ids — the AI claimants that may counter-invest here; **required on every contestable port** (sovereign non-core and neutral alike — foreign contestable sovereigns may appear in rival spheres); protected ports carry none; ids ⊆ Nations |
+| `facilities` | object | keys with activation phase: `market:1, tavern:1, inn:1, guild:3, palace:3`; `shipyard` *(Phase 7 shape)*: an array `[]id` of **2–8** ShipType ids this port stocks (was the int `1`; the int form is retired) — present on exactly the 104 shipyard ports; `equipment_stock`: array `[]id` of equipment ids stocked (≥ **2**, required at every shipyard port); rare (`rare: true`) items never appear in any list. `palace` is **omitted** unless this port is a nation's `capital_port_id` |
 | `flavor` | L10nString | 1 sentence shown in the port-entry greeting |
+
+**Allegiance classes (Phase 7, `30-*` §4.9).** `protected: true` marks the
+protected class (the decision-25 core set in §7.1); every other port —
+sovereign non-core and all 45 neutrals — is **contestable**: its allegiance
+is resolved at runtime from per-nation investment ledgers (save key
+`port_allegiance`, `90-*` §8.1) and its development from the `dev` floor vs
+the ledger thresholds. The data files carry only the fields above; ledger
+arithmetic, monthly AI, and tariffs are `30-*` §4.9/§4.10 and `90-*` §8.1
+material.
 
 The harbor **pair** — the berth tile the fleet stands on and the shore tile it
 docks into (`20-*` §4.11.1) — is **never stored**. Both are derived at
@@ -245,7 +294,9 @@ harbor-snap rule in §6.1, by both `tools/build_world.py` and the GDScript
 runtime (identical rule, agreement tested by validator group 6, §8).
 Ports render as an overlay from JSON; no port character appears in the terrain
 (§6.2). The retired per-map keys (`marker`, `position`, the former world-map
-marker block, and `phase`) no longer exist anywhere in a port row.
+marker block, and `phase`) — plus, since Phase 7, `market_goods` (listing is
+derived from `produces ∪ demands`, §4.2) and the int form of
+`facilities.shipyard` — no longer exist anywhere in a port row.
 
 ```json
 {
@@ -257,9 +308,13 @@ marker block, and `phase`) no longer exist anywhere in a port row.
       "nation_id": "portugal",
       "lat": 38.72,
       "lon": -9.14,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": ["wine", "salt"],
       "demands": ["spices", "silk", "timber"],
-      "facilities": {"market": 1, "shipyard": 1, "tavern": 1, "inn": 1, "guild": 3, "palace": 3},
+      "sphere": [],
+      "facilities": {"market": 1, "shipyard": ["caravel", "nao"], "equipment_stock": ["eq_cutlass", "eq_cotton_sails"], "tavern": 1, "inn": 1, "guild": 3, "palace": 3},
       "flavor": {"zh": "大航海时代的起点,特茹河口帆影如林。", "en": "Cradle of the Age of Discovery, its Tagus anchorage thick with sails."}
     },
     {
@@ -268,14 +323,25 @@ marker block, and `phase`) no longer exist anywhere in a port row.
       "nation_id": "italy",
       "lat": 45.44,
       "lon": 12.33,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": ["glassware", "perfume"],
       "demands": ["spices", "silk", "cotton_cloth"],
-      "facilities": {"market": 1, "shipyard": 1, "tavern": 1, "inn": 1, "guild": 3, "palace": 3},
+      "sphere": [],
+      "facilities": {"market": 1, "shipyard": ["galley", "galleass"], "equipment_stock": ["eq_rapier", "eq_storm_sails"], "tavern": 1, "inn": 1, "guild": 3, "palace": 3},
       "flavor": {"zh": "亚得里亚海的女王,商栈与运河之城。", "en": "Queen of the Adriatic, city of canals and counting-houses."}
     }
   ]
 }
 ```
+
+(`band` ids above are illustrative — the locked band id set is authored by
+task P and recorded in §7.1; `protected` rows carry an empty `sphere`, and a
+contestable row would list its claimant nations. The `produces`/`demands`
+values predate the Phase-7 40-good rewrite and are illustrative only — they
+do not yet satisfy the §8.2 staple-ubiquity rule, which task P's rewrite
+enforces on every port.)
 
 ### 4.5 Officer — `data/officers.json`
 
@@ -308,18 +374,20 @@ marker block, and `phase`) no longer exist anywhere in a port row.
 }
 ```
 
-### 4.6 Equipment — `data/equipment.json` *(Phase 2)*
+### 4.6 Equipment — `data/equipment.json` *(Phase 2; Phase 7 extension)*
 
 | Field | Type | Rule |
 |---|---|---|
 | `id` | id | |
 | `name` | L10nString | |
 | `slot` | enum | `weapon` \| `armor` \| `figurehead` \| `sail` |
-| `modifiers` | object | stat-name → int delta; stat names from `50-*` (player) or `40-*` (ship) |
-| `price` | money | |
-| `phase` | int | locked at `2` for all Phase-2 equipment |
+| `modifiers` | object | stat-name → int delta; stat names from `50-*` (player) or `40-*` (ship); Phase 7 adds the sideways keys `storm_damage_pct` (−%, multiplies `storm_damage_for`) and `scurvy_delay_days` (semantics `60-*` §4.11.12) |
+| `price` | money | 300–6,000 g band (§7.9 guideline: tier 1 ≤ 1,500, tier 2 ≤ 3,500, tier 3 above) |
+| `tier` | int | `1 \| 2 \| 3` *(Phase 7)* — **2 tier-1 + 2 tier-2 + 2 tier-3 items per slot** (§7.9); same `tier ≤ effective_dev(port)` gate as ships (§4.3) |
+| `rare` | bool | *(Phase 7)* optional; `true` on exactly **4** items — one per slot, obtainable **only** as a named-pirate `drop` (§4.12); never in any `facilities.equipment_stock` list, never tier-gated (never purchasable at all) — both validator-asserted (§8.2) |
+| `phase` | int | locked at `2` for all equipment |
 
-Locked Phase-2 content set (8 items): `60-*` §4.11.13. Modifier semantics
+Locked content set (24 items, Phase 7): §7.9. Modifier semantics
 (which slot is player-worn, which ship-bound, and what each stat does in a
 battle or a duel) are pinned in `60-*` §4.11.12.
 
@@ -333,6 +401,7 @@ battle or a duel) are pinned in `60-*` §4.11.12.
       "slot": "weapon",
       "modifiers": {"combat": 3},
       "price": 400,
+      "tier": 1,
       "phase": 2
     }
   ]
@@ -525,13 +594,14 @@ drawn name is stable for the fleet's life and survives save/load.
 }
 ```
 
-### 4.12 NamedPirate — `data/named_pirates.json` *(Phase 5)*
+### 4.12 NamedPirate — `data/named_pirates.json` *(Phase 5; Phase 7 `drop`)*
 
 | Field | Type | Rule |
 |---|---|---|
 | `id` | id | unique |
 | `name` | L10nString | the captain's name |
 | `tier` | int | `1 … 3` (§7.8; bounty-tier semantics in `70-*` §4.5) |
+| `drop` | id | *(Phase 7)* the equipment id this captain's sunk/captured hull yields (`60-*` §4.11 loot flow keys off the captain id); must reference a `rare: true` equipment item of §7.9 — validator-asserted (§8.2). The 4 drops pair 1:1 with the 4 captains (S authors the pairing) |
 
 Exactly 4 entries (§7.8); names are era-plausible authored content (task D).
 A defeated named pirate respawns under a new name on the `60-*` §4.1
@@ -544,11 +614,15 @@ schedule; `quest_gen` bounty targets prefer named captains (`70-*` §4.9.5).
     {
       "id": "pirate_murad_red_sail",
       "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
-      "tier": 2
+      "tier": 2,
+      "drop": "eq_golden_cutlass"
     }
   ]
 }
 ```
+
+(`drop` id illustrative — task S authors the four rare items of §7.9 and
+their pairing to the four captains.)
 
 ### 4.13 MarketEvent — `data/market_events.json` *(Phase 5)*
 
@@ -934,8 +1008,8 @@ consumer may derive one differently.
 | Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics. The §6.5 ocean rasters are **separate files with their own palettes** — they do not use or extend this one | §6.3, §6.5 |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `tools/build_world.py` |
 | Map index | `data/maps/maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 |
-| Save | version 6; no migration chain — v5 and older payloads refused | `90-*` §8.1–8.2 |
-| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 100 sovereign ports plus the Phase-6 neutral tier | §4.4, §7.1 |
+| Save | version 7; no migration chain — v6 and older payloads refused | `90-*` §8.1–8.2 |
+| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 100 sovereign ports plus the Phase-6 neutral tier; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the list-form `shipyard`/`equipment_stock` (§4.4) | §4.4, §7.1 |
 
 **Projection.** The grid is the whole globe at 12 tiles/degree: it spans
 180°W–180°E and 90°N–90°S, and circumnavigation is a first-class feature
@@ -1134,12 +1208,18 @@ the sovereign block:
 
 - era-appropriate, cited historical names, zh and en both required;
 - `produces`/`demands` over the **existing 20 goods** — no new goods (the
-  5/10/5 consumption-tier split stays validator-asserted, §8.2);
+  5/10/5 consumption-tier split stays validator-asserted, §8.2)
+  **(superseded Phase 7)**: task P rewrites every port's
+  `produces`/`demands` over the 40 goods of §7.2 under the §8.2 rules —
+  this line's 20-good scope is the Phase-6 history only;
 - facilities are data-driven per port; default `market + inn + tavern`,
   `shipyard` only where authored;
 - minimal now-semantics: the market works as-is off the port's
   produces/demands; **no NPC fleet serves a neutral port this phase**
-  (player-only frontier markets); zero budget churn; **a neutral port can
+  (player-only frontier markets; amended Phase 7 — nationless coasters serve
+  every neutral port and lane traders dock at ports aligned to their nation,
+  `IMPLEMENT-Phase7.md` §2.7 and `30-*` §4.9); zero budget churn; **a neutral
+  port can
   never close**; lane spoke to the nearest lane waypoint within **40** tiles,
   nationless fallback = nearest lane waypoint unbounded (§4.14);
 - ids are appended by Phase-6 task P and recorded in this § after authoring.
@@ -1323,47 +1403,144 @@ anotsu), Korea 2 (busan, yeompo), sovereign SE Asia 7 (hoi_an … kedah),
 Mughal India/Persia/Arabia 10 (nagapattinam … hormuz), Swahili/Red Sea 6
 (zanzibar … zeila).
 
-### 7.2 Goods (20)
+#### Port region bands (Phase 7)
 
-| id | zh | en | category | base_price |
+The **band id set** is a locked container defined here; task P authors its
+members (the §4.4 `band` field references it). Rules:
+
+- Ids follow the §3.1 `id` regex (snake_case); every band id is unique.
+- The set **partitions all 145 ports**: every port's `band` ∈ the set, and
+  the validator asserts membership (§8.2) plus that no band id goes unused.
+- The set is a **superset of the six Phase-6 neutral-region bands** above —
+  skeleton ids `china_coast`, `japan`, `korea`, `southeast_asia`,
+  `india_persia_arabia`, `swahili_red_sea` (P may finalize exact id wording;
+  the six regions themselves are locked by the allocation paragraph above) —
+  plus bands covering the remaining sovereign ports (Europe, Africa's
+  Atlantic coast, the New World).
+- A band containing at least one `nation_id: ""` port is a **neutral
+  band**; the §8.2 checks keyed on bands (≥ 2 staple producers per band,
+  ≥ 1 exclusive good produced per neutral band, tavern telegraph scoping)
+  use this field.
+- The final member list is recorded in this subsection after task P
+  authors it (same protocol as the §7.1 neutral-tier table).
+
+### 7.2 Goods (40, Phase 7)
+
+The schema (the `staple`/`specialty`/`exclusive`/`flow` fields and the
+flag-driven tier rule) is §4.2; this section locks the **40-id list**. The
+original 20 keep their zh/en names and `base_price` (prices locked; the
+Phase-7 task adds tier flags — no other value changes). The 20 new ids
+complete the list; their zh/en display names and `base_price` values are
+**task-owned by G** — the zh/en below are skeleton suggestions. Tier
+columns are the A-pinned skeleton: G finalizes members within the locked
+12/16/12 split (validator §8.2).
+
+**Existing 20 — tier skeleton (assigned):**
+
+| id | zh | en | category | base_price | tier |
+|---|---|---|---|---|---|
+| wheat | 小麦 | Wheat | food | 8 | staple |
+| salt | 盐 | Salt | food | 12 | staple |
+| dried_fish | 鱼干 | Dried Fish | food | 10 | staple |
+| timber | 木材 | Timber | material | 15 | staple |
+| cheese | 奶酪 | Cheese | food | 16 | staple |
+| wool | 羊毛 | Wool | textile | 18 | staple |
+| olive_oil | 橄榄油 | Olive Oil | food | 22 | staple |
+| wine | 葡萄酒 | Wine | food | 30 | staple |
+| sugar | 糖 | Sugar | food | 40 | staple |
+| iron | 铁 | Iron | material | 35 | staple |
+| cotton_cloth | 棉布 | Cotton Cloth | textile | 45 | middle |
+| ceramics | 陶瓷 | Ceramics | material | 25 | middle |
+| leather | 皮革 | Leather | material | 28 | middle |
+| copper | 铜 | Copper | material | 50 | middle |
+| glassware | 玻璃器皿 | Glassware | luxury | 60 | middle |
+| silk | 丝绸 | Silk | textile | 120 | luxury |
+| spices | 香料 | Spices | luxury | 150 | luxury |
+| carpet | 地毯 | Carpet | textile | 80 | luxury |
+| perfume | 香水 | Perfume | luxury | 90 | luxury |
+| amber | 琥珀 | Amber | luxury | 110 | luxury |
+
+**Phase-7 skeleton — the 20 new ids** (the 15 backlog-named ids are the
+fixed core; the 5 era fillers `rice`/`pitch`/`linen`/`furs`/`ivory` G may
+substitute era-appropriately, keeping the 40 total — era anchor
+~1550–1620; ids snake_case):
+
+| id | zh (skeleton) | en (skeleton) | tier | era note |
 |---|---|---|---|---|
-| wheat | 小麦 | Wheat | food | 8 |
-| olive_oil | 橄榄油 | Olive Oil | food | 22 |
-| wine | 葡萄酒 | Wine | food | 30 |
-| wool | 羊毛 | Wool | textile | 18 |
-| cotton_cloth | 棉布 | Cotton Cloth | textile | 45 |
-| silk | 丝绸 | Silk | textile | 120 |
-| spices | 香料 | Spices | luxury | 150 |
-| sugar | 糖 | Sugar | food | 40 |
-| salt | 盐 | Salt | food | 12 |
-| dried_fish | 鱼干 | Dried Fish | food | 10 |
-| timber | 木材 | Timber | material | 15 |
-| iron | 铁 | Iron | material | 35 |
-| copper | 铜 | Copper | material | 50 |
-| glassware | 玻璃器皿 | Glassware | luxury | 60 |
-| leather | 皮革 | Leather | material | 28 |
-| ceramics | 陶瓷 | Ceramics | material | 25 |
-| perfume | 香水 | Perfume | luxury | 90 |
-| carpet | 地毯 | Carpet | textile | 80 |
-| amber | 琥珀 | Amber | luxury | 110 |
-| cheese | 奶酪 | Cheese | food | 16 |
+| rice | 稻米 | Rice | staple | the Asian staple grain |
+| pitch | 沥青 | Pitch | staple | naval stores (tar/pitch) |
+| linen | 亚麻布 | Linen | middle | North-European cloth |
+| furs | 毛皮 | Furs | middle | Baltic/Russian pelts |
+| dye_wood | 苏木 | Sappanwood | middle | SE-Asia dyewood, the Japan-trade staple |
+| indigo | 靛蓝 | Indigo | middle | Indian dyestuff |
+| ivory | 象牙 | Ivory | middle | East-African/Indian trade |
+| sandalwood | 檀香 | Sandalwood | middle | Timor/Indies aromatic wood |
+| coffee | 咖啡 | Coffee | middle | Yemen/Mocha trade |
+| tobacco | 烟草 | Tobacco | middle | New-World colonies |
+| tea | 茶 | Tea | middle | China export novelty |
+| rhubarb | 大黄 | Rhubarb | middle | Chinese medicinal root |
+| raw_silk | 生丝 | Raw Silk | middle | Ming mass-export silk |
+| porcelain | 瓷器 | Porcelain | luxury | China export ware |
+| pearls | 珍珠 | Pearls | luxury | Gulf pearl fisheries |
+| gems | 宝石 | Gems | luxury | India/Ceylon stones |
+| musk | 麝香 | Musk | luxury | Tibet/Yunnan aromatics |
+| lacquerware | 漆器 | Lacquerware | luxury | East-Asian craft ware |
+| silver | 白银 | Silver | luxury | bullion flowing to China |
+| gold | 黄金 | Gold | luxury | West-African/Andean bullion |
 
-### 7.3 ShipTypes (8)
+Split check (validator §8.2): 12 staples / 16 middle / 12 luxuries — the
+skeleton above lands exactly on it. Every `specialty` (= luxury tier, §4.2)
+is authored at ≤ 6 producers, and ≥ 1 exclusive good is produced per
+neutral band (P's graph).
 
-| id | zh | en | class | price | durability | capacity | speed | crew min/max | cannons |
-|---|---|---|---|---|---|---|---|---|---|
-| latin | 拉丁帆船 | Latin | sail | 1200 | 40 | 30 | 16 | 8/20 | 2 |
-| sloop | 单桅纵帆船 | Sloop | sail | 3000 | 60 | 60 | 20 | 10/30 | 4 |
-| caravel | 卡拉维尔帆船 | Caravel | sail | 8000 | 90 | 120 | 20 | 15/45 | 6 |
-| galley | 桨帆船 | Galley | oar | 10000 | 70 | 50 | 24 | 40/120 | 4 |
-| brigantine | 双桅帆船 | Brigantine | sail | 15000 | 110 | 150 | 24 | 20/60 | 10 |
-| nao | 瑙船 | Nao | sail | 22000 | 140 | 300 | 16 | 25/80 | 10 |
-| carrack | 卡拉克帆船 | Carrack | sail | 40000 | 180 | 450 | 16 | 30/100 | 16 |
-| galleon | 盖伦帆船 | Galleon | hybrid | 60000 | 240 | 400 | 20 | 40/150 | 24 |
+### 7.3 ShipTypes (16, Phase 7)
 
-Speeds are the Phase-6 rescaled values (§6.1 "Ship speeds"): `{16, 20, 24}`
-tiles/day on the 5 nm tiles — the historical 80–120 nm/day is unchanged. The
-1 tile/day floor and "fleet = slowest hull" are unchanged.
+The 16-hull roster. The original 8 keep every locked stat; the 8 Phase-7
+hulls enter with the `IMPLEMENT-Phase7.md` §2.2 first-pass stats below —
+task S may tune within ±20% at authoring, then the values are locked
+(exact-set validator tuples, §8 group 5).
+
+| id | zh | en | class | role | tier | price | durability | capacity | speed | crew min/max | cannons |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| latin | 拉丁帆船 | Latin | sail | — (S) | 1 | 1200 | 40 | 30 | 16 | 8/20 | 2 |
+| sloop | 单桅纵帆船 | Sloop | sail | — (S) | 1 | 3000 | 60 | 60 | 20 | 10/30 | 4 |
+| caravel | 卡拉维尔帆船 | Caravel | sail | — (S) | 2 | 8000 | 90 | 120 | 20 | 15/45 | 6 |
+| galley | 桨帆船 | Galley | oar | war | 2 | 10000 | 70 | 50 | 24 | 40/120 | 4 |
+| brigantine | 双桅帆船 | Brigantine | sail | — (S) | 2 | 15000 | 110 | 150 | 24 | 20/60 | 10 |
+| nao | 瑙船 | Nao | sail | — (S) | 3 | 22000 | 140 | 300 | 16 | 25/80 | 10 |
+| carrack | 卡拉克帆船 | Carrack | sail | — (S) | 3 | 40000 | 180 | 450 | 16 | 30/100 | 16 |
+| galleon | 盖伦帆船 | Galleon | hybrid | — (S) | 3 | 60000 | 240 | 400 | 20 | 40/150 | 24 |
+| galiot | 小型桨帆船 | Galiot | oar | war | 1 | 2400 | 35 | 25 | 16 | 15/40 | 2 |
+| galleass | 加莱赛战船 | Galleass | oar | war | 3 | 22000 | 110 | 70 | 16 | 60/160 | 6 |
+| fluyt | 弗鲁特商船 | Fluyt | sail | trade | 2 | 14000 | 70 | 180 | 16 | 12/30 | 2 |
+| junk | 福船 | Junk | sail | trade | 2 | 16000 | 90 | 140 | 18 | 20/60 | 3 |
+| dhow | 单桅三角帆船 | Dhow | sail | trade | 2 | 9000 | 60 | 90 | 18 | 10/30 | 2 |
+| pinnace | 平底船 | Pinnace | sail | coastal | 1 | 2200 | 40 | 45 | 16 | 8/20 | 2 |
+| caravela_redonda | 卡拉维拉方形帆船 | Caravela Redonda | sail | trade | 2 | 11000 | 70 | 100 | 20 | 15/40 | 3 |
+| xebec | 小型三桅船 | Xebec | hybrid | war | 2 | 15000 | 60 | 60 | 24 | 25/80 | 4 |
+
+- **`role` enum (locked): `war | trade | coastal`** (§4.3; row wording
+  `40-*`/`80-*`). First-pass values above are §2.2's: the galley re-roles to
+  `war` (price unchanged), the new hulls as shown; the 7 unassigned
+  originals are **task-owned by S** (coordinated with C's `40-*` wording).
+  The galley's stock list is restricted to Mediterranean/North-African
+  ports (P).
+- **`tier` first-pass (§2.2; S finalizes, then locked):** tier 1 = {latin,
+  sloop, pinnace, galiot}; tier 2 = {caravel, brigantine, galley, dhow,
+  caravela_redonda, fluyt, junk, xebec}; tier 3 = {nao, carrack, galleon,
+  galleass} — ≥ 2 hulls per tier (validator §8.2).
+- **Speeds:** first-pass values above; every hull's **final** `speed` must
+  lie in the §6.1 locked set `{16, 20, 24}` — the two 18s (junk, dhow) snap
+  within S's ±20% budget (S finalizes; validator exact-set re-pins them).
+  The xebec is the dated ~1690s exception, recorded as a one-line note in
+  `LICENSE-NOTES.md`. The 1 tile/day floor and "fleet = slowest hull" are
+  unchanged.
+- **Per-port stock:** `facilities.shipyard` lists 2–8 hull ids per shipyard
+  port (§4.4); regional flavor (Mediterranean → galley/galiot/galleass/
+  xebec; China coast → junk; Arabia/India → dhow; Holland → fluyt; capitals
+  the widest set) and ≥ 4 dev-3 sovereign ports stocking tier-3 hulls are
+  P's authoring under the §8.2 checks. At start only the 6 dev-3 capitals
+  sell tier-3 hulls.
 
 ### 7.4 Nations (6)
 
@@ -1475,6 +1652,34 @@ era-plausible per nation (task-owned content, task D):
 `data/named_pirates.json` (§4.12) holds exactly 4 named pirates; every
 `tier` ∈ `1 … 3` (`70-*` §4.5 bounty tiers). Names and tiers are task-owned
 authored content (task D); the count and the tier band are the locked part.
+Phase 7 adds the `drop` field (§4.12): each captain yields one of the four
+`rare: true` equipment items of §7.9 when sunk or captured — the pairing is
+task-owned by S; validator §8.2 asserts every `drop` references a rare item.
+
+### 7.9 Equipment (24, Phase 7)
+
+`data/equipment.json` (§4.6) holds exactly **24 items — 6 per slot**
+(weapon/armor player-worn; figurehead/sail ship-bound; semantics
+`60-*` §4.11.12). Locked structure:
+
+- **Tier split per slot: 2 tier-1 / 2 tier-2 / 2 tier-3** (§4.6 `tier`;
+  price guideline: tier 1 ≤ 1,500 g, tier 2 ≤ 3,500 g, tier 3 above; whole
+  set inside the 300–6,000 g band). S finalizes prices/tiers.
+- **Rare drops:** exactly **4** items carry `rare: true` — one per slot;
+  never in any `facilities.equipment_stock` list, never tier-gated
+  (never purchasable at all); each is some named pirate's `drop` (§4.12,
+  §7.8). Validator-asserted (§8.2).
+- **Modifier keys:** the existing `combat`/`luck`/`durability`/`speed` plus
+  the Phase-7 sideways keys `storm_damage_pct` and `scurvy_delay_days`
+  (§4.6; semantics `60-*` §4.11.12).
+- **Existing 8 ids stay** (exact-set lock moves to the 24-id set, §8
+  group 5): `eq_cutlass`, `eq_rapier`, `eq_breastplate`, `eq_lucky_charm`,
+  `eq_mermaid_figurehead`, `eq_dragon_figurehead`, `eq_cotton_sails`,
+  `eq_storm_sails`. The 16 new ids, zh/en names, prices, tiers, and the
+  rare pairing are **task-owned by S** and recorded here after authoring.
+- **Per-port stock:** `facilities.equipment_stock` lists ≥ 2 ids at every
+  shipyard port (§4.4); regional flavor as ships; same tier filter and the
+  neutral allegiance gate (`30-*` §4.9).
 
 ## 8. `tools/validate_data.py` Spec
 
@@ -1488,11 +1693,11 @@ the code below. All checks run in order.
 |---|---|---|
 | 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `ui_strings.json`, and the Phase-5 envelopes — `npc_config.json` (config block), `npc_captains.json` (key `pools`), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output)). The Phase-6 ocean files (`wind_regions.json`, `ocean_currents.json`, `ice_regions.json`) use plural == basename and need **no** exception |
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
-| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys) |
-| 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ∪ port.market_goods ⊆ goods`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names |
-| 5 | Locked lists | the §7.1 **lock model** — exactly the 100 sovereign port ids (exact set) **plus the neutral tier**: structure, i18n, goods refs over the existing 20 goods, count 40–60, `nation_id: ""` (normative text in §7.1); §7.2 20 goods, §7.3 8 ship types, §7.4 6 nations, §7.5 6 officers — id sets must match exactly |
+| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key |
+| 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ⊆ goods`; `port.band ∈ the §7.1 band id set`; `facilities.shipyard[] ⊆ ship_types`; `facilities.equipment_stock[] ⊆ equipment` and never contains a `rare: true` item; `port.sphere ⊆ nations`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names (incl. the Phase-7 `storm_damage_pct`/`scurvy_delay_days`); `named_pirates.drop ∈ equipment ∧ drop.target.rare == true` |
+| 5 | Locked lists | the §7.1 **lock model** — *Phase-7 amendment:* for ports, **identity locks only** (id/zh/en/nation/lat/lon exact vs the §7.1 tables; the port id set is exactly the 100 sovereign **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 6 officers, §7.9 **24 equipment** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop); the §7.1 band id set matches the P-recorded list |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
-| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band); the `30-*` §4.2 consumption-tier split assertion — normative spec §8.2 |
+| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n, §7.9-referencing `drop`s); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2 |
 | 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **17**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
 | 9 | Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` decode as 4320×2160 indexed PNGs; palette bounds per the §6.5 encodings; water-coverage vs `world.png`; `tools/build_ocean.py` rebuild determinism — normative spec §8.4 |
 | 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
@@ -1579,15 +1784,59 @@ counts, and bounds):
    good, `10 ≤ rest + shift ≤ 190` for every resting value that good takes
    across all ports of §7.1 (produced/demanded/neutral per `30-*` §4.2) — a
    violation names the template and the good.
-5. **Consumption-tier assertion:** ranking `goods.json` per `30-*` §4.2
-   (`base_price` asc, `id` asc tie-break) yields exactly 5 staples /
-   10 middle / 5 luxuries.
+5. **Consumption-tier assertion (Phase-7 form):** the tier split is
+   **flag-driven** per §4.2 — exactly **12** goods with `staple: true`
+   (staple tier), exactly **12** with `specialty: true` (luxury tier), the
+   remaining **16** unflagged (middle tier); the derived
+   `base_price`-rank split of Phase 5 is retired. Every
+   `specialty`/`exclusive` carrier must also satisfy `exclusive ⇒ specialty`.
+6. **Port economy graph (correction 3):** for every port,
+   `produces ∩ demands = ∅` (hard fail, was a warning) and
+   `demands ⊇ (staples ∖ produces)` — i.e. every staple not produced here
+   is demanded here, so `staples ⊆ produces ∪ demands` everywhere; every
+   referenced good ∈ the §7.2 40.
+7. **Graph shape:** every good has **≥ 2 producers** and **≥ 4 consumers**
+   worldwide; every `specialty: true` good has **≤ 6 producers** (§4.2).
+8. **Staple coverage (decision 21):** computing on the §6.1 grid at 12
+   tiles/degree — from every port there is a staple producer within **120**
+   tiles (Chebyshev) and ≥ **2** within **240**; every band of §7.1 has
+   **≥ 2 staple producers**.
+9. **Exclusive coverage:** every **neutral band** (§7.1 definition — any
+   band containing a `nation_id: ""` port) has **≥ 1 exclusive good
+   produced within it**.
+10. **Port class rules (§7.1, decision 25):** `protected: true` only on
+    sovereign rows; protected ⊇ the 6 capitals (lisbon, seville, london,
+    amsterdam, istanbul, venice); **≤ 4 protected per nation** — the locked
+    core set is portugal {lisbon, oporto}; spain {seville, cadiz, valencia,
+    barcelona}; england {london, plymouth}; holland {amsterdam, antwerp};
+    ottoman {istanbul, athens, smyrna}; italy {venice, genoa, naples,
+    palermo}; protected rows carry no `sphere` entries; `dev` floors: 3 on
+    capitals/protected, 2 on authored sovereign majors, 1 on remaining
+    sovereign contestable, 0 on every neutral.
+11. **Hardware tiers:** ship types ≥ **2 per tier**; equipment **2/2/2 per
+    slot** (§7.9); **≥ 4 dev-3 sovereign ports** whose
+    `facilities.shipyard` includes a tier-3 hull; every shipyard port's
+    `equipment_stock` ≥ 2 ids; no `rare: true` item in any
+    `equipment_stock` list.
+12. **Named-pirate drops:** every `drop` ∈ equipment with
+    `rare: true` (§4.12); the 4 drops are distinct and pair 1:1 with the 4
+    captains.
+13. **Band id set:** every port `band` ∈ the §7.1 recorded set; the set
+    contains the six neutral-region bands (§7.1 skeleton ids) and covers
+    all 145 ports with no unused id.
 
 **Negative tests (must provably fail, exit 7, named message):** a negative
 preset; a default whose multiplier is not 1.0; a budget ≤ 0; an
 `absolute_cap` above the cap; a missing or extra captain pool; a pool with
 7 names; a tier-4 pirate; a shift that pushes any applicable rest outside
-the band.
+the band. Phase-7 additions: a 13th good flagged `staple`; a specialty with
+7 producers; a good with 1 producer or 3 consumers; a port demanding only
+half of its non-produced staples; `produces ∩ demands ≠ ∅`; a port > 120
+tiles from any staple producer; a neutral band with no exclusive producer;
+a 5th protected port of one nation; a capital missing from `protected`;
+a neutral-tier port row with authored `dev > 0`; a tier with 1 ship; a rare
+item inside an `equipment_stock` list; a `drop` referencing a non-rare or
+unknown equipment id; a port `band` outside the recorded set.
 
 ### 8.3 Group 8 — trade routes, normative spec
 
@@ -1725,14 +1974,21 @@ no variants.
 - **A wind-region or current pixel on land/reef/permanent ice (§8.4
   item 4)** → validator exit 9 naming the tile and the region/system. The
   fix is the JSON sources and a `tools/build_ocean.py` regeneration.
-- **A neutral port failing tier structure — count outside 40–60, an id
-  colliding with the sovereign 100, a missing locale, a good outside the
-  existing 20, or a non-empty `nation_id` (§7.1, §8 group 5)** → validator
-  exit 5.
-- **`market_goods` absent** → all 20 goods trade; adding the key later with a
-  subset is a valid data-only change.
-- **`produces` ∩ `demands` ≠ ∅ for a port** → allowed but pointless; validator
-  `--verbose` prints a warning, not a failure.
+- **A neutral port failing tier structure — a count ≠ 45 (the §8 group 5
+  exact 145-set), an id colliding with the sovereign 100, a missing locale,
+  a good outside the §7.2 40, or a non-empty `nation_id` (§7.1, §8
+  group 5)** → validator exit 5.
+- **`market_goods` present** → validator exit 3: the key is retired
+  (Phase 7); a port's market rows are derived from `produces ∪ demands`
+  (§4.2).
+- **`produces` ∩ `demands` ≠ ∅ for a port** → validator exit 7 (§8.2 item
+  6): the listing rule makes the overlap a data bug, not a curiosity.
+- **A port's `demands` missing a non-produced staple** → validator exit 7
+  (§8.2 item 6, correction 3): staple access is the data rule, never a
+  code special case.
+- **A `band` id outside the §7.1 recorded set** → validator exit 7 (§8.2
+  item 13); bands are authored by task P and recorded in §7.1, never
+  invented per port.
 - **Phase-2 files (`equipment`) may be `[]`** — valid; schema checks skip
   empty arrays, envelope/version still required.
 - **Officer hired twice / dead officers** — runtime concern, owned by
@@ -1763,17 +2019,26 @@ no variants.
 - [ ] All artifact paths from §2 exist in the doc set's file inventory and
       match these names exactly.
 - [ ] Every JSON example in this doc parses (spot-checked with a parser).
-- [ ] §7 tables contain exactly 100 sovereign ports / 20 goods / 8 ship
-      types / 6 nations / 6 officers rows and only ids using the §3.1
-      `id` regex; every §7.1 `lat`/`lon` is a plausible real-world position
-      (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈ 32.7°N 129.9°E) and no port sits in
-      the polar ice band (`|lat| ≥ 70` north, `≤ −60` south).
+- [ ] §7 tables contain exactly 100 sovereign + 45 neutral ports / 40 goods
+      / 16 ship types / 6 nations / 6 officers / 24 equipment rows and only
+      ids using the §3.1 `id` regex; every §7.1 `lat`/`lon` is a plausible
+      real-world position (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈ 32.7°N 129.9°E)
+      and no port sits in the polar ice band (`|lat| ≥ 70` north,
+      `≤ −60` south).
 - [ ] Every non-ASCII display string in tables carries both zh and en.
 - [ ] Every locked constant of the Phase-6 rescale (`IMPLEMENT-Phase6.md`
       §2.0–§2.4, §2.10–§2.11) with owning doc `10-*` appears exactly once in
       §6.1/§4.14–4.18 with the same value (grid, tiles per degree, sighting
       radii, ship-speed set, artifact paths, drift rates); the §6.1 save
-      row pins the current version (6, no migration chain — `90-*` §8.2).
+      row pins the current version (7, no migration chain — `90-*` §8.2).
+- [ ] Every locked constant of `IMPLEMENT-Phase7.md` §2.1–§2.9 with owning
+      doc `10-*` appears in this doc exactly once: the goods fields and
+      40-id skeleton with the flag-driven 12/16/12 split (§4.2, §7.2), the
+      16-hull list with `role`/`tier` (§4.3, §7.3), the 24-item equipment
+      structure with `rare` (§4.6, §7.9), the named-pirate `drop` (§4.12),
+      the port fields `band`/`protected`/`dev`/`sphere` and the
+      shipyard/equipment stock lists plus the band container (§4.4, §7.1),
+      and the group-3/4/5/7 validator amendments (§8, §8.2).
 - [ ] Every locked constant with owning doc `10-*` from
       `IMPLEMENT-Phase5.md` (the §4.10–4.15 schemas, the §7.6–7.8 lists,
       the §8.2/§8.3 validator specs) appears in this doc exactly once.
@@ -1786,13 +2051,16 @@ no variants.
       basename, field tables, index encodings, overlap and reversal rules —
       with no open design questions.
 - [ ] §7.6 lists exactly the **17** locked lane ids (12 Phase-5 + the 5
-      named Phase-6 ids); §7.7 exactly 7 pools; §7.8 exactly 4 named pirates.
-- [ ] §7.3's speed column uses exactly the locked set `{16, 20, 24}`
-      (tiles/day at 5 nm; §6.1).
+      named Phase-6 ids); §7.7 exactly 7 pools; §7.8 exactly 4 named pirates;
+      §7.9 exactly 24 equipment items in the 2/2/2-per-slot tier structure.
+- [ ] §7.3's **final** speed values use exactly the locked set
+      `{16, 20, 24}` (tiles/day at 5 nm; §6.1) — the table's two 18s are
+      first-pass values that task S snaps into the set within its ±20%
+      budget before the exact-set lock.
 - [ ] The save-block shapes of §4.15 match the `90-*` §8.1 key list
-      field-for-field (carried into v6 unchanged; Phase-6 keys live in
-      `90-*` §8.1).
+      field-for-field (carried into v7 unchanged; Phase-6 keys and the
+      Phase-7 allegiance/permit/treasury keys live in `90-*` §8.1).
 - [ ] The validator summary reports a port count of **100 sovereign +
-      40–60 neutral**.
+      45 neutral** (the group-5 exact 145-set).
 - [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)
       are consistent with §7.3 and `50-*`.

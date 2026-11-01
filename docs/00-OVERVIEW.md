@@ -50,6 +50,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 4 | Terra Vera | Single real-Earth world map: 2160×1080 whole-globe grid (6 tiles/degree, 1 tile = 10 nm), 100 ports by real lat/lon, carved straits, latitude weather bands, double speeds, HUD minimap crop + Chart screen, save v4 | ✅ complete — `docs/IMPLEMENT-Phase4.md` (completion record) |
 | 5 | Living Economy & National NPC Fleets | Stock-based supply/demand pricing with demand events, 8 roles of nation-owned NPC fleets on 12 hand-authored historical trade lanes (traders, coasters, patrols, couriers, privateers, pirates, hunters, treasure fleets), named pirates, convoys & wreckage, captain sightings & wanted posters, density presets, save v5 | See `docs/IMPLEMENT-Phase5.md` |
 | 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | ✅ complete — `docs/IMPLEMENT-Phase6.md` (completion record) |
+| 7 | Trade Empires | Flow economy over 40 goods (`staple`/`specialty`/`exclusive` flags, per-port listing rule), 16 ships with `role`/`tier` + per-port shipyard stock, 24 equipment items with rare named-pirate drops, development-gated hardware, allegiance tug-of-war (protected vs contestable ports, per-nation ledgers, monthly seeded NPC counter-investment, nation treasuries), unified 5%/20% tariff + two tax permits, fame/commendation tie-ins, nationless coasters at every neutral port, `tools/sim_trade.py` gates 1–10, save v7 | See `docs/IMPLEMENT-Phase7.md` |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -101,7 +102,7 @@ Chart step (step 10, `docs/IMPLEMENT-Phase4.md` N):
    modifier; profit/loss is shown in the trade dialog.
 7. Visit the shipyard (repair + refit available), the tavern (recruit one
    officer; officer appears in the character panel with stats), and the inn.
-8. Save from the port menu (save v6, `90-*` §8.2 — S19's Save row); quit to title; Load Game;
+8. Save from the port menu (save v7, `90-*` §8.2 — S19's Save row); quit to title; Load Game;
    position, day, gold, cargo, crew, morale, morale tier, officers, and
    reputation are all fully restored.
 9. Toggle language to Chinese and back at runtime; every player-facing string
@@ -131,6 +132,8 @@ Read in this order. Each doc follows the Doc Template (§10).
 | — | `docs/IMPLEMENT-Phase3.md` | Ordered Phase-3 task backlog | 3 |
 | — | `docs/IMPLEMENT-Phase4.md` | Phase-4 task backlog + completion record | 4 |
 | — | `docs/IMPLEMENT-Phase5.md` | Phase-5 task backlog + wave plan | 5 |
+| — | `docs/IMPLEMENT-Phase6.md` | Phase-6 task backlog + completion record | 6 |
+| — | `docs/IMPLEMENT-Phase7.md` | Phase-7 task backlog + wave plan (current) | 7 |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.
@@ -240,7 +243,7 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 商队 | Trade convoy | Same-lane NPC traders sailing as one group with a shared escort; auto-resolve treats it as escorted (Phase 5) |
 | 护航舰队 | Escort patrol | Nation-owned patrol fleet; escorts same-nation traders and deters raiders in its zone (Phase 5) |
 | 私掠船 | Privateer | Rivalry-sponsored raider that hunts only its sponsor's rivals' fleets (Phase 5) |
-| 沿岸货船 | Coaster | Small visual-life trader hopping adjacent ports; never triggers contact (Phase 5) |
+| 沿岸货船 | Coaster | Small visual-life trader hopping nearest ports; a local distributor at every port — nationless (中立灰 livery) at neutral ports; trades staples ∪ middle only; never triggers contact (Phase 5; scope widened Phase 7) |
 | 沉船残骸 | Wreck | Lootable remains of a lost fleet; sailing onto its tile collects it (Phase 5) |
 | 航海密度 | Sea traffic | The NPC fleet population; the density presets scale it (Phase 5) |
 | 船长 | Captain | A fleet's named commander, sightable in port facilities (Phase 5) |
@@ -248,7 +251,7 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 航线 | Trade lane | A hand-authored historical route that lane-locked fleets sail (Phase 5) |
 | 咽喉要道 | Chokepoint | A tagged narrow passage where pirates/privateers camp (Phase 5) |
 | 需求事件 | Demand event | A temporary rest-stock override that creates a tradeable surge; telegraphed in taverns (Phase 5) |
-| 消费档位 | Consumption tier | Staples/middle/luxuries daily-drift band derived from the goods' base-price rank (Phase 5) |
+| 消费档位 | Consumption tier | Staples/middle/luxuries flow band; from Phase 7 read from the goods' data flags (12/16/12), no longer derived from base-price rank (`10-*` §4.2) |
 | 洋流 | Ocean current | A directional sea-speed/drift layer, strength 1–3 (`20-*` §4.16, Phase 6) |
 | 季风 | Monsoon | The seasonal wind reversal over the Indian/Pacific oceans (`20-*` §4.14, Phase 6) |
 | 盛行风 | Prevailing wind | A region's month-keyed wind-from direction (`20-*` §4.14, Phase 6) |
@@ -256,7 +259,18 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 季节海冰 | Seasonal sea ice | Month-windowed impassability; entering a frozen tile is refused, a standing fleet is not trapped (`20-*` §4.18, Phase 6) |
 | 掌舵 | Helm mode | The UW2-style auto-sail input mode; a direction key sets a persisted heading (`20-*` §4.2, Phase 6) |
 | 漂移 | Drift | The optional current mode: a per-day push along the current vector (`20-*` §4.16, Phase 6) |
-| 中立港 | Neutral port | A `nation_id: ""` frontier market no NPC fleet serves this phase (`10-*` §7.1, Phase 6) |
+| 中立港 | Neutral port | A `nation_id: ""` port (Phase 6); from Phase 7 it is contestable (allegiance by investment ledger) and is served by nationless coasters (`10-*` §7.1, `30-*` §4.9) |
+| 流动经济 | Flow economy | Daily production/consumption stock tick replacing the Phase-5 drift-to-rest; producers fill toward capacity, consumers drain (`30-*` §4.2, Phase 7) |
+| 仓储上限 | Market capacity | The per-port, per-good stock ceiling: tier 160/140/120, +20 per development level, hard ceiling 200 (`30-*` §4.2, Phase 7) |
+| 特产 | Specialty | A good produced at ≤ 6 ports worldwide; ★ badge on market rows; the luxury consumption tier (`10-*` §4.2, Phase 7) |
+| 专营货 | Exclusive goods | The alignment-gated subset of specialties: buy/sell restricted to the alignment nation at dev ≥ 2 (`30-*` §4.9, Phase 7) |
+| 战舰 | Warship role | The `war` ship role: combat-first hulls (galley, galiot, galleass, xebec) (`40-*`, Phase 7) |
+| 保护港 | Protected port | A permanent-alignment core port (≤ 4 per nation, capitals included): no ledger, discount-only investment, dev floor never grows (`30-*` §4.9, Phase 7) |
+| 可争港 | Contestable port | Any non-protected port (sovereign non-core + all neutrals): allegiance resolved from per-nation investment ledgers (`30-*` §4.9, Phase 7) |
+| 同盟港 | Allied port | A contestable port whose allegiance is held by a nation; that nation's traders pay the in-sphere tariff there (`30-*` §4.9/§4.10, Phase 7) |
+| 国库 | Treasury | A nation's war chest — started at 5,000g, funded by tariffs and permit sales, spent only on monthly NPC counter-investment (`30-*` §4.9, Phase 7) |
+| 关税 | Tariff | The unified trade tax: 5% in-sphere / 20% foreign on both buy and sell, one rule for player and NPC alike (`30-*` §4.10, Phase 7) |
+| 免税证 | Tax permit | A palace-bought exemption from the tariff — 本国免税证 home charter (5,000g; covers own + aligned ports) or 涉外免税证 foreign permit (20,000g; covers that nation's sphere) (`30-*` §4.10, Phase 7) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 

@@ -6,7 +6,9 @@ Defines the Godot 4 project structure every implementation task builds into:
 directory tree, scene patterns, autoload singletons, the scene-vs-data split,
 save-file format and versioning, and how the world PNG becomes chunked runtime
 TileMaps. Gates all phases; Phase-1 tasks must not introduce structures that
-contradict this doc.
+contradict this doc. Phase 7 (trade empires) adds the `allegiance.gd` engine
+module, five allegiance/permit/treasury GameState fields, the month-tick
+ordering pin (§5.4), and save v7 (§8).
 
 ## 2. Artifacts
 
@@ -71,7 +73,8 @@ SailAge/
 │   ├── world/npc_fleets.gd     # Phase 5: the living-sea fleet sim (60-* §4.1)
 │   ├── world/npc_intel.gd      # Phase 5: sightings/posters/rumors queries (60-* §4.1)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
-│   ├── port/economy.gd         # Phase 5: stock/drift/events, pure (30-* §4.2/§4.5)
+│   ├── port/economy.gd         # Phase 5/7: flow-economy stock tick + events, pure (30-* §4.2/§4.5)
+│   ├── port/allegiance.gd      # Phase 7: port classes, ledgers, dev, treasuries, tariffs/permits inputs (30-* §4.9/§4.10)
 │   ├── port/shipyard_engine.gd
 │   ├── port/palace_engine.gd   # Phase 3: royal missions, titles (70-* §4.3)
 │   ├── quests/quest_gen.gd     # Phase 3: offers + tracking (70-* §4.9.3)
@@ -220,6 +223,24 @@ marked •):
   Input-mode and current-mode semantics: `20-*` §4.2/§4.16
 - `market_events: Array` • — active demand-event instances (shape in
   `10-*` §4.15); rotation in `30-*` §4.5
+- `permits: Dictionary` • — Phase 7: `{home: bool, foreign: {nation_id: bool}}`
+  (`30-*` §4.10); defaults `{home: false, foreign: {}}`; void/re-buy rules in
+  `30-*` §4.10
+- `port_allegiance: Dictionary` • — Phase 7: `{port_id: {ledger: {nation_id:
+  gold}, allegiance: nation_id \| ""}}` for **all contestable ports** (`30-*`
+  §4.9; save shape `90-*` §8.1). `allegiance` is persisted because the tie
+  rule keeps the incumbent; **development is derived on load and on every
+  ledger change — never saved**. Seeded by `Allegiance.seed_new_game()`
+  (contestable sovereigns `{owner: 6,000}`, neutrals empty)
+- `month_invested: Dictionary` • — Phase 7: `{port_id: gold}` — the
+  ≤ 2,000g/port/month player-investment counter (decision 26); reset at the
+  month tick
+- `nation_treasuries: Dictionary` • — Phase 7: `{nation_id: gold}` — start
+  5,000g each; funded by tax + permit sales, spent on monthly NPC
+  counter-investment only (`30-*` §4.9/§4.10)
+- `fame_commended: Dictionary` • — Phase 7: `{port_id: true}` — one palace
+  commendation per port converted to the player's nation (`70-*` §4.1
+  extension)
 - `named_pirate_respawns: Dictionary` • — `{named_pirate_id: available_day}`
   respawn cooldowns (`60-*` §4.11.11.4 task L pin); default `{}`. A famous
   defeat keys its own `named_pirates.json` id (the slot's tier source); a
@@ -257,6 +278,15 @@ marked •):
   The Phase-6 wind-direction roll joins the ledger's weather step (step 3)
   on the same seeded stream, pinned order **strength → direction**
   (`20-*` §4.5/§4.7).
+- **Month-tick ordering (Phase 7, pinned — one seam, one owner: task L):**
+  the day ledger calls `Economy.day_tick` first (flow-economy stock
+  movement + event bookkeeping — the existing position above, unchanged),
+  then, when the day crosses a month boundary (30-day months), it calls
+  `allegiance.month_tick()` — which resets `month_invested`, credits each
+  nation's baseline treasury income, resolves the seeded NPC
+  counter-investment, and refreshes the tavern telegraph windows
+  (`30-*` §4.9). No other module performs month-boundary allegiance work;
+  there is no second month tick anywhere in the frame.
 - **Cap sizing (Phase 5):** normal ≈ 288 is ecology/balance, not
   performance; coasters absorb the visual traffic (≤ 5-unit trades) so
   effective long-haul trading stays ~127 fleets; far-field LOD is the
@@ -268,9 +298,9 @@ marked •):
 - `save(slot)`, `load(slot) -> bool`, `list_saves() -> Array[Dictionary]`
   (slot, day, nation, port, gold, timestamp for the slot UI).
 - Serializes exactly the •-marked GameState fields plus
-  `{"save_version": 6, "saved_at": <unix>, "phase": 6}`.
-- `load` validates `save_version` — it must equal `SAVE_VERSION = 6`;
-  **no migration chain** (§8.2): a v5 or older payload is refused
+  `{"save_version": 7, "saved_at": <unix>, "phase": 7}`.
+- `load` validates `save_version` — it must equal `SAVE_VERSION = 7`;
+  **no migration chain** (§8.2): a v6 or older payload is refused
   ("pre-release save"), `load()` returns `false`, and state is untouched.
 
 ## 6. `project.godot` Requirements (locked values)
@@ -314,16 +344,16 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 6,
+  "save_version": 7,
   "saved_at": 1793119712,
-  "phase": 6,
+  "phase": 7,
   "locale": "en",
   "day": 12,
   "gold": 7830,
   "player": {},
   "fleet": [],
   "morale": 70,
-  "world": {"position": {"x": 2050, "y": 615}, "map_id": "world", "weather": "calm"},
+  "world": {"position": {"x": 2050, "y": 615}, "map_id": "world", "weather": "calm", "sail_trim": "normal", "heading": "E", "wind_dir": "E"},
   "current_port": "lisbon",
   "known_ports": ["lisbon"],
   "port_investments": {"lisbon": 500},
@@ -334,7 +364,13 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   "market_stocks": {},
   "wrecks": [],
   "npc_preset": "normal",
-  "market_events": []
+  "market_events": [],
+  "control_prefs": {"input_mode": "step", "current_mode": "modifier"},
+  "permits": {"home": false, "foreign": {}},
+  "port_allegiance": {},
+  "month_invested": {},
+  "nation_treasuries": {},
+  "fame_commended": {}
 }
 ```
 
@@ -431,6 +467,33 @@ for the current day. All Phase-6 state is initialized by `new_game`; a v5
 payload is refused like any older version (`load()` false, "pre-release
 save" logged); see §8.2 for the normative rule.
 
+Phase-7 additions (version 7):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `permits` | object `{home: bool, foreign: {nation_id: bool}}` | `{home: false, foreign: {}}` | `30-*` §4.10 (two permit kinds, void rules) |
+| `port_allegiance` | object `port_id → {ledger: {nation_id: gold}, allegiance: nation_id \| ""}` | `{}` — then `Allegiance.seed_new_game()` reseeds | `30-*` §4.9; the **correction-8 shape**: exactly `{ledger, allegiance}` per contestable port — **`development` is never saved** (derived on load / ledger change: `max(authored dev floor, ledger thresholds)`), while `allegiance` **is** persisted because the resolution tie rule keeps the incumbent |
+| `month_invested` | object `port_id → gold` | `{}` | decision 26 monthly cap; reset at the month tick |
+| `nation_treasuries` | object `nation_id → gold` | all six `5,000` | `30-*` §4.9 (tax + permit income; counter-investment spend) |
+| `fame_commended` | object `port_id → true` | `{}` | `70-*` §4.1 extension (one commendation per converted port) |
+
+`market_stocks` keeps its shape (the flow economy changes tick semantics, not
+the format). Every contestable port appears in `port_allegiance` — the
+sovereign non-core set (seeded `{owner: 6,000}`) and all 45 neutrals (empty
+ledger); protected ports never appear (no ledger exists for them). All five
+keys are written by `SaveSystem.snapshot()` from the GameState fields of
+§5.4; new-game seeding runs through `Allegiance.seed_new_game()` so v7
+payloads replay pure (a mid-month save/load replays the month's
+counter-investment identically).
+
+**No migration; v6 refused (Phase-7 decision 13).** `SAVE_VERSION = 7`,
+`PHASE = 7`; version 7 adds **no `MIGRATIONS` entry and performs no payload
+transformation**. All Phase-7 state is initialized by `new_game` through
+`Allegiance.seed_new_game()`; a v6 payload is refused like any older version
+(`load()` false, "pre-release save" logged); see §8.2 for the normative rule.
+One owner task (V, `tools/test_save_v7.*` renamed from `test_save_v6`), the
+Phase-5/6 single-breaking-bump pattern.
+
 ### 8.2 Versioning rule (no migration chain)
 
 **Development-stage scope (normative; amended 2026-10-31, Phases 5–6).**
@@ -439,17 +502,20 @@ compatibility across phases is therefore **explicitly out of scope until
 the first release**, and no task may spend effort on it. Concretely:
 
 - `save_version` increments on any breaking shape change. The current
-  values are `SAVE_VERSION = 6`, `PHASE = 6`.
+  values are `SAVE_VERSION = 7`, `PHASE = 7`.
 - **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
   contract is the identity: a payload whose `save_version` equals
-  `SAVE_VERSION` loads (round-trip); **any older payload — v5 included —
+  `SAVE_VERSION` loads (round-trip); **any older payload — v6 included —
   is refused** (`load()` returns false, logs "pre-release save"). There is
-  no v5 → v6 step, and none may be reintroduced: Phase 4 removed the chain
+  no v6 → v7 step, and none may be reintroduced: Phase 4 removed the chain
   (`IMPLEMENT-Phase5.md` correction 4), Phase 5 kept it removed
-  (decision 5), and Phase 6 keeps it removed (decision 12).
-- All Phase-5/Phase-6 state is initialized by `new_game` (stocks derived;
+  (decision 5), Phase 6 kept it removed (decision 12), and Phase 7 keeps
+  it removed (decision 13).
+- All Phase-5/6/7 state is initialized by `new_game` (stocks derived;
   fleets seeded to half the cap there and only there; `control_prefs` and
-  the three `world` ocean keys defaulted); nothing is back-filled at load.
+  the three `world` ocean keys defaulted; the allegiance/permit/treasury
+  blocks seeded through `Allegiance.seed_new_game()`); nothing is
+  back-filled at load.
 - Anything that would only exist to serve an old save (position remapping,
   port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
   is cheaper to delete than to maintain, delete it.
@@ -583,8 +649,10 @@ is a build failure, never a quiet divergence.
 - [ ] `project.godot` matches §6 exactly.
 - [ ] Save file contains at least the §8.1 keys with `save_version` present;
       load tolerates missing optional keys only where a default is documented.
-- [ ] A v6 payload round-trips exactly (fleet positions, route legs,
-      captains, stocks, control prefs, trim/heading/wind direction); a v5
+- [ ] A v7 payload round-trips exactly (fleet positions, route legs,
+      captains, stocks, control prefs, trim/heading/wind direction, permits,
+      port allegiance ledgers, month investment counters, treasuries,
+      commendation flags); a v6
       payload is refused with the standard message
       (`load()` false, "pre-release save" logged — §8.2).
 - [ ] Swapping `data/maps/world.png` for another palette-conformant
@@ -605,8 +673,9 @@ on pass, and prints a completion marker — `ALL PASS (N checks)` or
 built-in profiling, so a wave gate needs exactly one run:
 
 - **Scheduling.** Save-touching suites share `user://saves/` and run
-  one-at-a-time (the serial-save set: `test_save`, `test_save_v6` (renamed
-  from `test_save_v5` in Phase 6 W5),
+  one-at-a-time (the serial-save set: `test_save`, `test_save_v7` (renamed
+  from `test_save_v6` in Phase 7 W4; itself renamed from `test_save_v5` in
+  Phase 6 W5),
   `test_world_e2e`); every other suite runs in parallel workers
   (`-j`, default **8**).
 - **Bounded time.** Per-suite wall cap **300 s** (kill the process group).
