@@ -113,11 +113,26 @@ func _on_watchdog() -> void:
 # --- Fixtures ---------------------------------------------------------------
 
 ## A fresh run at `preset`, docked nowhere, day 1 — the `GameState.new_game`
-## path (so the initial fill respects the preset), with routing off.
+## path (so the initial fill respects the preset), with routing off. The
+## allegiance runtime seeds first (task N): the spawn pools read the
+## effective alignment, and the seeded state equals the data-ownership
+## pools until a flip — without the seed the trader pools collapse to the
+## protected-only subset and the fill draws fail en masse.
 func _make_run(preset: String = "normal") -> NpcFleetsLib:
+	_seed_allegiance()
 	GameState.npc_preset = preset
 	GameState.new_game("portugal", false)
+	_seed_allegiance()
 	return _sim_for_preset(preset)
+
+
+## The allegiance runtime seed (L's `seed_new_game`, guarded).
+func _seed_allegiance() -> void:
+	if not ResourceLoader.exists("res://scripts/port/allegiance.gd", "Script"):
+		return
+	var lib: Script = load("res://scripts/port/allegiance.gd")
+	if lib != null and lib.has_method("seed_new_game"):
+		lib.call("seed_new_game")
 
 
 ## The sim the way the world scene builds it (one per scene entry, reading
@@ -199,10 +214,14 @@ func _test_s2_row() -> void:
 		await get_tree().process_frame
 		var extreme_sim := _sim_for_preset("extreme")
 		var normal_fill := _sim_for_preset("normal").fleets().size()
+		_seed_allegiance()  # the fill's spawn pools read the alignment
 		s2.confirm_selection()
 		var extreme_fill: int = GameState.npc_fleets.size()
 		var extreme_half: int = extreme_sim.core_cap() / 2
-		_check(extreme_fill <= extreme_half and extreme_fill >= extreme_half - 8,
+		# Task N re-pin: at the 4× fill the per-draw spawn failures multiply
+		# too (a draw whose six origin attempts all land unroutable pairs),
+		# so the tolerance grows with the fill (−8 at normal's 153, −16 here).
+		_check(extreme_fill <= extreme_half and extreme_fill >= extreme_half - 16,
 			"the pre-game extreme choice survives new_game's fill (target %d, seeded exact %d)"
 			% [extreme_half, extreme_fill])
 		_check(extreme_fill > 2 * normal_fill,
@@ -256,8 +275,9 @@ func _test_preset_round_trip() -> void:
 
 func _test_initial_fill() -> void:
 	var sim := _make_run("normal")
-	_check(sim.core_cap() == 273,
-		"the normal core cap is 273 (got %d)" % sim.core_cap())
+	_check(sim.core_cap() == 307,
+		"the normal core cap is 307 (273 nation roles + 34 grey, got %d)"
+		% sim.core_cap())
 	var half: int = sim.core_cap() / 2
 	var filled: int = GameState.npc_fleets.size()
 	# The fill targets exactly half the cap; a failed spawn draw (no legal

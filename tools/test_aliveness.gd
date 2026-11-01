@@ -481,7 +481,8 @@ func _test_demand_events() -> void:
 	if instance.is_empty():
 		return
 	var good := "timber"
-	var rest_before := EconomyLib.rest_stock("seville", good)
+	# The flow-era reads (task N re-pin): the consumer's derived initial
+	# stock (rest_stock → initial_stock_of) and its live stock.
 	var stock_before := EconomyLib.stock_of("seville", good)
 	# Telegraph: a tavern rumor row in the affected region (spain's ports),
 	# visible at the affected port itself and a fellow-national port, not
@@ -493,20 +494,21 @@ func _test_demand_events() -> void:
 	_check(other_rows.is_empty() or _telegraph_names(other_rows).find(
 			_event_name(instance)) < 0,
 		"a foreign port does not carry this telegraph")
-	# Surge: the override drives the effective rest (clamped [10,190]) and
-	# the drift moves the stock toward it, raising the factor.
-	var shifted_rest := clampi(rest_before - 30, 10, 190)
-	_check(EconomyLib.effective_rest("seville", good, 100) == shifted_rest,
-		"effective rest = derived %d − 30 = %d, clamped (got %d)"
-		% [rest_before, shifted_rest,
-			EconomyLib.effective_rest("seville", good, 100)])
+	# Surge (flow-economy re-pin, task N — K's rate-override transition): the
+	# event multiplies the good's consumption rate ×3 while active (production,
+	# capacities and the price formula untouched), and the flow tick drains the
+	# stock toward the 0 floor faster than the derived rate, raising the factor.
+	var rate := EconomyLib.cons_rate(good)
+	_check(EconomyLib.cons_rate_effective("seville", good, 100) == rate * 3,
+		"the surge drives the consumption rate ×3 (got %d, base %d)"
+		% [EconomyLib.cons_rate_effective("seville", good, 100), rate])
 	var factor_before := EconomyLib.factor_units("seville", good)
 	for day in range(101, 111):
 		GameState.day = day
 		EconomyLib.day_tick()
 	var drifted := EconomyLib.stock_of("seville", good)
 	_check(drifted < stock_before,
-		"the shortage drifts the stock down toward the override (%d → %d)"
+		"the surge drains the stock toward the floor (%d → %d)"
 		% [stock_before, drifted])
 	_check(EconomyLib.factor_units("seville", good) > factor_before,
 		"the price factor surges (%d‰ → %d‰)"
@@ -522,19 +524,29 @@ func _test_demand_events() -> void:
 	_check(softened == 90 and softened <= 100,
 		"an arriving trader softens the shortage (60 → %d, capped at the margin)"
 		% softened)
-	# Expiry restores the derived rest (day 100 + 60 = 160).
+	# Expiry (flow re-pin): the instance drops at start + duration and the
+	# rate override clears — the derived base consumption rate resumes.
 	GameState.day = 160
 	EconomyLib.market_events_tick(160)
 	_check(not _has_active_instance("evt_war_provisioning", "seville"),
 		"the instance expires at start + duration")
-	_check(EconomyLib.effective_rest("seville", good, 160) == rest_before,
-		"expiry restores the derived rest (%d)" % rest_before)
+	_check(EconomyLib.cons_rate_effective("seville", good, 160) == rate
+		and not EconomyLib.consumption_surged("seville", good, 160),
+		"expiry restores the derived consumption rate (%d)" % rate)
+	# The restored flow: refill the shelf and watch the base rate drain it —
+	# exactly `dev_rate(rate, dev)` a day, no surge.
+	var dev := EconomyLib.dev_level("seville")
+	var base_drain := EconomyLib.dev_rate(rate, dev)
+	EconomyLib.set_stock("seville", good, 60)
 	for day in range(161, 171):
 		GameState.day = day
 		EconomyLib.day_tick()
-	_check(EconomyLib.effective_rest("seville", good, 170) == rest_before
-			and not _has_active_instance("evt_war_provisioning", "seville"),
-		"the drift resumes toward the derived rest after expiry")
+	var resumed := EconomyLib.stock_of("seville", good)
+	_check(resumed == maxi(0, 60 - 10 * base_drain),
+		"the flow resumes at the derived base rate (%d/day, stock %d)"
+		% [base_drain, resumed])
+	_check(not _has_active_instance("evt_war_provisioning", "seville"),
+		"no event instance survives the expiry")
 	# Perf profile: 400 rotation passes on a live economy.
 	var rotation_started := Time.get_ticks_usec()
 	_make_run()

@@ -1,19 +1,26 @@
 extends Node
 ## Phase-5 task J acceptance tests: the living NPC fleet ecology and the
 ## `hostile_fleets` → `npc_fleets` rename
-## (docs/60-COMBAT.md §4.1, §4.11.11–§4.11.11.5, §4.12.3; docs/30-*
-## PORTS-AND-TRADE.md §4.4; docs/20-WORLD-AND-SAILING.md §4.3; docs/10-*
-## DATA-SCHEMA.md §4.14–§4.15; docs/90-ARCHITECTURE.md §5.4, §8.1).
+## (docs/60-COMBAT.md §4.1, §4.11.11–§4.11.11.5, §4.11.14, §4.12.3;
+## docs/30-* PORTS-AND-TRADE.md §4.4, §4.9/§4.10; docs/20-WORLD-AND-SAILING.md
+## §4.3; docs/10-* DATA-SCHEMA.md §4.14–§4.15; docs/90-ARCHITECTURE.md §5.4,
+## §8.1). Phase-7 amendment (task N): alignment docking, nationless grey
+## coasters, the NPC tariff crediting and the re-derived cap arithmetic.
 ##
 ##   godot --headless res://tools/test_npc_fleets.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## Sections: budgets · fill determinism · lane routing · the bucket index ·
-## trader decisions (per-day score, specialty, herding, risk, sell rule,
-## volume bounds) · captains · contact & coaster rules · movement legality ·
-## save/load exactness · the hunter-intel state machine (docs/60-*
-## §4.11.11.1 as amended) · the tick-cost probe · world-scene battle flow.
+## Sections: budgets (incl. the §4.11.14 nationless line) · fill determinism
+## (same seed ⇒ same spawn set with the grey coasters) · lane routing · the
+## bucket index · trader decisions (per-day score, specialty, herding, risk,
+## sell rule, volume bounds) · captains · contact & coaster rules · movement
+## legality · save/load exactness · the hunter-intel state machine (docs/60-*
+## §4.11.11.1 as amended) · alignment docking (flipped sovereign adopted,
+## rival/unallied refused — the rewritten §4.11.14 pin) · nationless grey
+## coasters (nearest-hop regardless of ownership, scope clamp, grey livery,
+## never contact/prey) · the NPC tariff (treasury rises deterministically;
+## nationless exempt) · the tick-cost probe · world-scene battle flow.
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and restored at the end; every file this suite creates is
@@ -22,11 +29,17 @@ extends Node
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const FleetPathLib := preload("res://scripts/world/fleet_path.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
+const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+const PaletteLib := preload("res://scripts/palette.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
+
+## The allegiance guard path (task N's load-by-path seam — the fixture wins
+## over L's real module until restored).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 
@@ -101,8 +114,12 @@ func _ready() -> void:
 	_test_variant_flip()
 	_section = "18 ice refusal"
 	_test_ice_refusal()
-	_section = "19 neutral docking"
+	_section = "19 alignment docking"
 	_test_neutral_docking()
+	_section = "22 nationless grey coasters"
+	_test_grey_coasters()
+	_section = "23 npc tariff crediting"
+	_test_npc_tax()
 	_section = "20 regional lanes"
 	_test_regional_lanes()
 	_section = "21 pursuit budget"
@@ -140,6 +157,71 @@ func _on_watchdog() -> void:
 
 # --- Fixtures ---------------------------------------------------------------
 
+## The allegiance fixture seam (the take_over_path pattern, test_shipyard
+## §12/test_economy precedent): a generated module answering
+## `effective_alignment` from a per-port map, `tariff_mille` from the
+## alignment basis (500 aligned / 2000 foreign / 2000 unaligned host),
+## `credit_tax` into a fixture treasury map, and `dev` at the unallied
+## floor 0 — everything the engine guard reads, deterministic. Installed
+## per section; `_restore_allegiance` re-publishes the real module.
+var _real_allegiance: Script = null
+var _fixture_allegiance: Script = null
+
+
+func _install_allegiance_fixture(overrides: Dictionary) -> void:
+	if _real_allegiance == null:
+		_real_allegiance = load(ALLEGIANCE_PATH)
+	var map_json := JSON.stringify(overrides)
+	var script := GDScript.new()
+	script.source_code = (
+		"extends RefCounted\n"
+		+ "const _M := {\n%s\n}\n" % map_json.substr(1, map_json.length() - 2)
+		+ "static func dev(_port_id: String) -> int:\n\treturn 0\n"
+		+ "static func effective_alignment(port_id: String) -> String:\n"
+		+ "\treturn str(_M.get(port_id, \"\"))\n"
+		+ "static func tariff_mille(port_id: String, payer_nation: String)"
+		+ " -> int:\n"
+		+ "\tvar alignment := str(_M.get(port_id, \"\"))\n"
+		+ "\tif alignment.is_empty():\n\t\treturn 2000\n"
+		+ "\treturn 500 if alignment == payer_nation else 2000\n"
+		+ "static var treasury_delta := {}\n"
+		+ "static func credit_tax(port_id: String, payer_nation: String,"
+		+ " gold: int) -> void:\n"
+		+ "\tif payer_nation.is_empty() or gold <= 0:\n\t\treturn\n"
+		+ "\tvar host := str(_M.get(port_id, \"\"))\n"
+		+ "\tif host.is_empty():\n\t\treturn\n"
+		+ "\ttreasury_delta[host] = int(treasury_delta.get(host, 0)) + gold\n"
+	)
+	script.reload()
+	script.take_over_path(ALLEGIANCE_PATH)
+	_fixture_allegiance = script
+
+
+func _restore_allegiance() -> void:
+	if _real_allegiance != null:
+		_real_allegiance.take_over_path(ALLEGIANCE_PATH)
+	_fixture_allegiance = null
+
+
+## The fixture's credit_tax ledger (the section's deterministic treasury).
+func _fixture_treasury(host: String) -> int:
+	if _fixture_allegiance == null:
+		return -1
+	return int(_fixture_allegiance.treasury_delta.get(host, 0))
+
+
+## Seeds the allegiance runtime for determinism (L's `seed_new_game`): the
+## contestable sovereigns read {owner: 6000} → aligned to their owner, the
+## neutrals "" — so the seeded docking pools equal the data-ownership pools
+## until a probe flips a port. Treasure/ledger/fame counters reset with it.
+func _seed_allegiance() -> void:
+	if not ResourceLoader.exists(ALLEGIANCE_PATH, "Script"):
+		return
+	var lib: Script = load(ALLEGIANCE_PATH)
+	if lib != null and lib.has_method("seed_new_game"):
+		lib.call("seed_new_game")
+
+
 ## A livable run with the ecology emptied (most sections seed their own).
 func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 	GameState.player = {
@@ -167,7 +249,13 @@ func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 		DataLoader.ports_list, DataLoader.goods_list
 	)
 	GameState.npc_fleets = []
+	GameState.wrecks = []
 	GameState.npc_preset = "normal"
+	GameState.market_events = []
+	GameState.named_pirate_respawns = {}
+	GameState.npc_port_log = []
+	_restore_allegiance()
+	_seed_allegiance()
 	EconomyLib.reset_overrides()
 	var sim: NpcFleetsLib = NpcFleetsLib.new({
 		"npc_config": DataLoader.npc_config, "preset": "normal",
@@ -221,6 +309,14 @@ func _test_budgets() -> void:
 		_check(total == int(want[role]),
 			"%s budget sums to %d at normal (got %d)"
 			% [role, int(want[role]), total])
+	# Phase-7 (§4.11.14, correction 15): the nationless-coaster line — one
+	# top-level data multiplier over the 45 neutral ports; the nation line
+	# above keeps its meaning (nation ports only).
+	_check(sim.neutral_port_count() == 45,
+		"the neutral tier counts 45 ports (got %d)" % sim.neutral_port_count())
+	_check(sim.budget_for("coaster", "") == 34,
+		"the nationless coaster budget is ceil(45 × 0.75) = 34 (got %d)"
+		% sim.budget_for("coaster", ""))
 	_check(sim.budget_for("pirate", "") == 25,
 		"the pirate budget is capped at the 25-core share (got %d)"
 		% sim.budget_for("pirate", ""))
@@ -229,12 +325,14 @@ func _test_budgets() -> void:
 	GameState.player["reputation"]["spain"] = -50
 	_check(sim.budget_for("hunter", "spain") == 1,
 		"rep ≤ −50 opens exactly one hunter budget for the nation")
-	_check(sim.core_cap() == 273, "the core cap is 273 at normal (got %d)"
+	# Cap arithmetic (the task N record): 128 + 77 + 19 + 12 + 12 + 34 + 25
+	# = 307 core; + 16 slack = 323 global; trickle max(4, ceil(323/50)) = 7.
+	_check(sim.core_cap() == 307, "the core cap is 307 at normal (got %d)"
 		% sim.core_cap())
-	_check(sim.global_cap() == 289, "the global cap is 289 at normal (got %d)"
+	_check(sim.global_cap() == 323, "the global cap is 323 at normal (got %d)"
 		% sim.global_cap())
-	_check(sim.trickle_per_day() == 6,
-		"the trickle is max(4, ceil(289/50)) = 6/day (got %d)"
+	_check(sim.trickle_per_day() == 7,
+		"the trickle is max(4, ceil(323/50)) = 7/day (got %d)"
 		% sim.trickle_per_day())
 	# The density dial (docs/10-* §4.10): deserted zeroes everything.
 	var empty: NpcFleetsLib = NpcFleetsLib.new({
@@ -260,16 +358,39 @@ func _test_budgets() -> void:
 # --- 2. Initial fill + determinism (docs/60-* §4.1.2) ------------------------
 
 func _test_initial_fill_and_determinism() -> void:
+	_seed_allegiance()
 	GameState.new_game("portugal", false)
 	var filled: int = GameState.npc_fleets.size()
-	_check(filled >= 120 and filled <= 150,
-		"new_game fills ≈ half the core cap (%d of 136)" % filled)
+	_check(filled >= 140 and filled <= 165,
+		"new_game fills ≈ half the core cap (%d of 153)" % filled)
 	var counts := {}
+	var grey := 0
 	for fleet in GameState.npc_fleets:
 		counts[fleet["role"]] = int(counts.get(fleet["role"], 0)) + 1
+		if str(fleet["role"]) == "coaster" and str(fleet["nation_id"]) == "":
+			grey += 1
 	_check(int(counts.get("trader", 0)) >= 55
 		and int(counts.get("coaster", 0)) >= 30,
 		"the fill spreads across trader and coaster roles (%s)" % str(counts))
+	_check(grey >= 8,
+		"the fill seats the nationless grey tier at the neutral ports (%d)"
+		% grey)
+	# Every grey coaster dwells at a NEUTRAL port berth (its journey origin).
+	var neutrals := {}
+	for port in DataLoader.ports_list:
+		if str((port as Dictionary).get("nation_id", "")) == "":
+			neutrals[str((port as Dictionary).get("id", ""))] = true
+	var berth_ok := true
+	for fleet in GameState.npc_fleets:
+		if str(fleet.get("role", "")) != "coaster" \
+				or str(fleet.get("nation_id", "")) != "":
+			continue
+		var cell := Vector2i(int(fleet["cell"]["x"]), int(fleet["cell"]["y"]))
+		var here := DataLoader.port_id_at(cell)
+		if not neutrals.has(str(here)):
+			berth_ok = false
+			break
+	_check(berth_ok, "every grey coaster spawns docked at a neutral berth")
 	# Same seed ⇒ same ids, positions and routes (a full re-fill replay).
 	var first: Array = GameState.npc_fleets.duplicate(true)
 	GameState.npc_fleets = []
@@ -291,6 +412,29 @@ func _test_initial_fill_and_determinism() -> void:
 			same = false
 			break
 	_check(same, "same seed ⇒ identical ids, positions and route legs")
+	# Same seed ⇒ the same DOCKING SEQUENCE with the grey tier afloat (the
+	# §4.11.14 probe): two identical fresh runs replay byte-identical
+	# port-traffic logs — the docking sets are pure functions of the
+	# persisted state (the ledger, the seeded alignment, the fleet seed).
+	var replay := func() -> String:
+		_seed_allegiance()
+		GameState.new_game("portugal", false)
+		_seed_allegiance()
+		GameState.npc_port_log = []
+		var day_sim: NpcFleetsLib = NpcFleetsLib.new({
+			"npc_config": DataLoader.npc_config, "preset": "normal",
+		})
+		day_sim.initial_fill(1)
+		for day in range(2, 14):
+			GameState.day = day
+			day_sim.last_tick_day = -1
+			day_sim.tick(day)
+		return JSON.stringify(GameState.npc_port_log)
+	var log_a: String = replay.call()
+	var log_b: String = replay.call()
+	_check(log_a == log_b and log_a.length() > 100,
+		"same seed ⇒ identical docking sequence with the coasters added"
+		+ " (%d logged events)" % log_a.length())
 	# The deserted preset fills nothing.
 	var stocks: Dictionary = GameState.market_stocks.duplicate(true)
 	GameState.npc_fleets = []
@@ -492,13 +636,16 @@ func _test_trader_decisions() -> void:
 			"the purchase quantity is within the 30-unit call cap (got %d)"
 			% int(decision["qty"]))
 		# (b) Two same-nation traders with different specialties buy
-		# different goods in identical markets. The origin stocks pin both
-		# buys on the produced side (factor 0.7); the dest stocks pin cloth
-		# (base 35) marginally above wine (base 30); the ×1.5 specialty
-		# flips the argmax. Noise redraws per day, so the assertion allows
-		# a few days.
+		# different goods in identical markets. Re-pinned for the 40-good
+		# world (task N): portugal's produce set no longer carries
+		# cotton_cloth, so the pair is wine vs leather — both buyable at
+		# lisbon, both hot at ceuta with an EXACTLY equal walked margin
+		# (10 a unit: wine at stock 40 → factor 1300; leather at 41 →
+		# 1295), so only the ×1.5 specialty separates them and the seeded
+		# noise band (0.8–1.25) cannot overturn a 1.5× edge. Noise redraws
+		# per day, so the assertion allows a few days.
 		var wine := "wine"
-		var cloth := "cotton_cloth"
+		var cloth := "leather"
 		var hot := str(dests[0])
 		EconomyLib.set_stock(origin, wine, 160)
 		EconomyLib.set_stock(origin, cloth, 160)
@@ -507,10 +654,10 @@ func _test_trader_decisions() -> void:
 				# Saturate every other (dest, good): qty 0, candidate dead.
 				EconomyLib.set_stock(str(dest), str(good_id), 100)
 		EconomyLib.set_stock(hot, wine, 40)
-		EconomyLib.set_stock(hot, cloth, 40)
+		EconomyLib.set_stock(hot, cloth, 41)
 		var d1 := {}
 		var d2 := {}
-		for attempt_day in range(2, 12):
+		for attempt_day in range(2, 14):
 			fleet["specialty"] = wine
 			d1 = sim.decide_trade(fleet, origin, attempt_day)
 			fleet["specialty"] = cloth
@@ -532,9 +679,13 @@ func _test_trader_herding() -> void:
 	_check(not fixture.is_empty(), "the herding fixture port exists")
 	var origin := str(fixture["origin"])
 	var good := str(fixture["good"])
-	var rest: int = EconomyLib.rest_stock(origin, good)
-	_check(rest == 160, "%s produces %s at rest 160 (got %d)"
-		% [origin, good, rest])
+	# Flow-economy re-pin (task N): a producer's initial stock is its §4.2
+	# capacity (dev-driven; the retired drift rest was 160 flat).
+	var rest: int = EconomyLib.initial_stock_of(origin, good)
+	var capacity: int = EconomyLib.capacity_of(origin, good)
+	_check(rest == capacity and capacity > 0,
+		"%s produces %s at its flow capacity %d (rest %d)"
+		% [origin, good, capacity, rest])
 	# Five identical traders dwelling at the origin, all fixated on `good`
 	# (the specialty makes it their favourite).
 	var herd: Array = []
@@ -733,6 +884,51 @@ func _test_coaster_rules() -> void:
 		"the coaster's hold books exactly what it sold")
 	_check(sim.COASTER_HOLD_CAPACITY == 10,
 		"the coaster hold is the pinned 10")
+	# Decision 21 (§4.11.14): the goods scope — staples ∪ middle only —
+	# clamps at SELL: a specialty good stays aboard however hungry the
+	# market (ceuta is a portugal wine consumer at factor > 1.0; silk is
+	# never unloads).
+	var scope_fleet := _make_fleet(sim, "coaster", "portugal",
+		DataLoader.port_cell("ceuta"))
+	scope_fleet["id"] = "scope_sell"
+	scope_fleet["cargo"] = {"wine": 5, "silk": 5}
+	GameState.day = 10
+	var silk_before := EconomyLib.stock_of("ceuta", "silk")
+	sold = sim._sell_cargo(scope_fleet, "ceuta", sim.coaster_units())
+	_check(sold > 0,
+		"the sell probe's market was hungry (sold %d at ceuta)" % sold)
+	_check(int((scope_fleet["cargo"] as Dictionary).get("silk", 0)) == 5,
+		"the scope clamp holds at sell: silk (specialty) never unloads")
+	_check(EconomyLib.stock_of("ceuta", "silk") == silk_before,
+		"no specialty units moved into the market from a coaster")
+	_check(not sim.in_coaster_scope("silk") and sim.in_coaster_scope("wine"),
+		"the scope read: silk out, wine in (staples ∪ middle)")
+	# …and at BUY: the margin scan never picks a specialty good even with
+	# the specialty wide open at origin and every in-scope candidate dead
+	# (saturated) at the destination.
+	var macau := "macau"  # portugal contestable, produces porcelain (specialty)
+	var dest_macau: String = sim._nearest_own_port_excluding(macau, "portugal")
+	var coaster2 := _make_fleet(sim, "coaster", "portugal",
+		DataLoader.port_cell(macau))
+	coaster2["id"] = "scope_buy"
+	coaster2["dwell_until_day"] = 1
+	coaster2["dest_port_id"] = dest_macau
+	coaster2["cargo"] = {}
+	# Kill every in-scope good at the destination (saturation bound 0);
+	# leave porcelain — out of scope — untouched at both ends.
+	for good_id in sim.nation_goods("portugal"):
+		if not sim.in_coaster_scope(str(good_id)):
+			continue
+		EconomyLib.set_stock(dest_macau, str(good_id), 100)
+	GameState.day = 10
+	sim._depart_coaster(coaster2, "portugal", 10)
+	var carried_specialty := false
+	for good_id in (coaster2["cargo"] as Dictionary):
+		if not sim.in_coaster_scope(str(good_id)):
+			carried_specialty = true
+	_check(not carried_specialty,
+		"the scope clamp holds at buy: no coaster ever picks up a specialty"
+		+ " (cargo %s)" % str(coaster2["cargo"]))
 
 
 # --- 9. Captains (docs/60-* §4.11.11.4) --------------------------------------
@@ -1934,62 +2130,110 @@ func _test_ice_refusal() -> void:
 func _test_neutral_docking() -> void:
 	var sim := _make_run()
 	sim._refresh_net()
-	var neutral_id := ""
+	# Phase-7 (§4.11.14): the docking pin is EFFECTIVE ALIGNMENT — a portugal
+	# trader may port-call at any portugal-aligned port (protected own +
+	# contestable aligned, sovereign non-core and neutral alike) and never
+	# at a rival-aligned or unallied one. marseille is a contestable spain
+	# sovereign; the fixture flips it to portugal. quanzhou stays unallied.
+	var fixture_map := {}
 	for port in DataLoader.ports_list:
-		if str((port as Dictionary).get("nation_id", "")) == "":
-			neutral_id = str((port as Dictionary).get("id", ""))
-			break
-	_check(not neutral_id.is_empty(), "a neutral port exists to probe")
-	if neutral_id.is_empty():
-		return
-	# (a) structural: neither the candidate scan nor a live decision ever
-	# proposes a neutral destination.
+		var pid := str((port as Dictionary).get("id", ""))
+		fixture_map[pid] = NpcFleetsLib.port_alignment(pid)
+	fixture_map["marseille"] = "portugal"
+	_install_allegiance_fixture(fixture_map)
+	# (a) structural: the candidate scan proposes only aligned ports — the
+	# flipped sovereign in, the unallied neutral out.
 	var fixture := _trader_fixture(sim)
 	_check(not fixture.is_empty(), "the docking probe has a trader fixture")
 	if fixture.is_empty():
+		_restore_allegiance()
 		return
 	var origin := str(fixture["origin"])
-	for dest in sim._candidate_destinations(origin, "portugal"):
-		_check(str(DataLoader.get_port(str(dest)).get("nation_id", ""))
-			== "portugal",
-			"the candidate scan never proposes %s (nation %s)" % [str(dest),
-			str(DataLoader.get_port(str(dest)).get("nation_id", ""))])
+	var dests: Array = sim._candidate_destinations(origin, "portugal")
+	var scan_bad := ""
+	for dest in dests:
+		if NpcFleetsLib.port_alignment(str(dest)) != "portugal":
+			scan_bad = str(dest)
+	_check(scan_bad.is_empty(),
+		"the candidate scan proposes only portugal-aligned ports (got %s)"
+		% scan_bad)
+	# The flip's POOL membership (radius-free): marseille joins portugal's
+	# spawn/docking pool and leaves spain's at once.
+	var pools := sim.alignment_ports("portugal")
+	var spain_pool := sim.alignment_ports("spain")
+	_check(pools.has("marseille") and not spain_pool.has("marseille"),
+		"the flipped sovereign (marseille, alignment portugal) joins the"
+		+ " portugal pool and leaves spain's")
 	var trader := _make_fleet(sim, "trader", "portugal",
 		DataLoader.port_cell(origin))
 	trader["id"] = "docking_probe"
 	trader["dest_port_id"] = origin
 	var candidates: Array = sim.score_all_candidates(trader, origin, 10)
+	var cand_bad := ""
 	for candidate in candidates:
-		_check(str(DataLoader.get_port(str(candidate["dest"]))
-			.get("nation_id", "")) == "portugal",
-			"no decision candidate is a neutral port (got %s)"
-			% str(candidate["dest"]))
-	# (b) a trader standing ON a neutral berth never adopts it: the
-	# own-nation lookup refuses, no sale touches the neutral market, and the
-	# port call falls back to its own-nation destination.
-	var berth := DataLoader.port_cell(neutral_id)
+		if NpcFleetsLib.port_alignment(str(candidate["dest"])) != "portugal":
+			cand_bad = str(candidate["dest"])
+	_check(cand_bad.is_empty(),
+		"no decision candidate is a rival-aligned or unallied port (got %s)"
+		% cand_bad)
+	# (b) berth adoption: a portugal trader standing ON the flipped berth
+	# adopts it as its port call (sell + buy land there); a spain trader on
+	# the same berth refuses it (rival-aligned now); an unallied neutral
+	# berth refuses everyone.
+	var berth := DataLoader.port_cell("marseille")
 	if berth.x >= 0:
-		var drifter := _make_fleet(sim, "trader", "portugal", berth)
+		var adopter := _make_fleet(sim, "trader", "portugal", berth)
+		adopter["id"] = "docking_adopter"
+		adopter["dest_port_id"] = origin
+		adopter["cargo"] = {"wheat": 20}
+		GameState.day = 10
+		_check(sim._docking_port_at_cell(adopter, berth) == "marseille",
+			"the flipped sovereign berth is adopted by the aligned trader")
+		var marseille_wheat := EconomyLib.stock_of("marseille", "wheat")
+		sim._depart_trader(adopter, "portugal", 10)
+		_check(EconomyLib.stock_of("marseille", "wheat") != marseille_wheat,
+			"the port call lands on the flipped port (its market moved)")
+		var rival := _make_fleet(sim, "trader", "spain", berth)
+		rival["id"] = "docking_rival"
+		rival["dest_port_id"] = "seville"
+		rival["cargo"] = {"wheat": 20}
+		var before_rival := EconomyLib.stock_of("marseille", "wheat")
+		_check(sim._docking_port_at_cell(rival, berth) == "",
+			"the rival-aligned berth is refused (marseille was spain's)")
+		sim._depart_trader(rival, "spain", 10)
+		_check(EconomyLib.stock_of("marseille", "wheat") == before_rival,
+			"no rival trader ever sells into the flipped port")
+	var neutral_id := "quanzhou"
+	var neutral_berth := DataLoader.port_cell(neutral_id)
+	if neutral_berth.x >= 0:
+		var drifter := _make_fleet(sim, "trader", "portugal", neutral_berth)
 		drifter["id"] = "docking_drifter"
 		drifter["dest_port_id"] = "lisbon"
 		drifter["cargo"] = {"wine": 20}
 		var neutral_wine := EconomyLib.stock_of(neutral_id, "wine")
-		_check(sim._own_port_at_cell(drifter, berth) == "",
-			"the own-nation port lookup refuses a neutral berth")
+		_check(sim._docking_port_at_cell(drifter, neutral_berth) == "",
+			"the unallied neutral berth is refused (quanzhou, alignment \"\")")
 		GameState.day = 10
 		sim._depart_trader(drifter, "portugal", 10)
 		_check(EconomyLib.stock_of(neutral_id, "wine") == neutral_wine,
-			"no trader ever sells into a neutral port")
+			"no lane trader ever sells into an unallied port")
 		_check(str(drifter["dest_port_id"]) != neutral_id,
-			"the drifter never adopts the neutral berth as its port call")
-	# (c) the whole-ecology net: over 40 ticks of live traffic, every
-	# trader-family arrival in the port log is at an OWN-nation port.
+			"the drifter never adopts the unallied berth as its port call")
+	_restore_allegiance()
+	# (c) the whole-ecology net: over 40 ticks of live traffic (seeded
+	# allegiance, so the pools equal the ownership pools), every
+	# trader/courier/sovereign-coaster arrival is at an OWN-nation port;
+	# the nationless grey coasters are the exception — they dock anywhere
+	# and must appear in the log at all.
 	GameState.npc_port_log = []
+	_seed_allegiance()
 	GameState.new_game("portugal", false)
+	_seed_allegiance()
 	var fill_sim: NpcFleetsLib = NpcFleetsLib.new({
 		"npc_config": DataLoader.npc_config, "preset": "normal",
 	})
 	fill_sim.initial_fill(1)
+	var grey_arrivals := 0
 	for day in range(2, 42):
 		GameState.day = day
 		fill_sim.last_tick_day = -1
@@ -1997,19 +2241,203 @@ func _test_neutral_docking() -> void:
 	var bad_docking := ""
 	for record in GameState.npc_port_log:
 		var role := str((record as Dictionary).get("role", ""))
+		var nation := str((record as Dictionary).get("nation_id", ""))
+		var port_id := str((record as Dictionary).get("port_id", ""))
+		if role == "coaster" and nation == "":
+			grey_arrivals += 1
+			continue
 		if not (role in ["trader", "coaster", "courier"]):
 			continue
-		var port_id := str((record as Dictionary).get("port_id", ""))
 		var port_nation := str(DataLoader.get_port(port_id)
 			.get("nation_id", "__missing__"))
-		if port_nation == "" \
-				or port_nation != str((record as Dictionary).get("nation_id", "")):
+		if port_nation == "" or port_nation != nation:
 			bad_docking = "%s arrived at %s (nation %s)" % [role, port_id,
 				port_nation]
 			break
 	_check(bad_docking.is_empty(),
-		"no trader-family fleet ever docks at a neutral port (%s)"
+		"no lane fleet ever docks at a rival or unallied port (%s)"
 		% bad_docking)
+	_check(grey_arrivals >= 1,
+		"the grey coasters dock in the live traffic (%d arrivals)" % grey_arrivals)
+
+
+# --- 22. The nationless grey coasters (docs/60-* §4.11.14, decision 18) -------
+
+func _test_grey_coasters() -> void:
+	var sim := _make_run()
+	# (a) budget + livery: ceil(45 × 0.75) = 34 grey coasters, the neutral
+	# grey marker, the nationless captain pool.
+	_check(sim.budget_for("coaster", "") == 34,
+		"the grey tier's budget line is 34 (got %d)"
+		% sim.budget_for("coaster", ""))
+	_check(NpcFleetsLib.marker_color("coaster", "") == PaletteLib.PORT_NEUTRAL,
+		"the grey coaster draws the neutral-grey livery (中立灰)")
+	_check(NpcFleetsLib.marker_color("coaster", "portugal")
+		!= PaletteLib.PORT_NEUTRAL,
+		"a sovereign coaster keeps its nation colour")
+	var grey: Dictionary = sim.spawn("coaster", "", 10)
+	_check(not grey.is_empty(), "a grey coaster spawns")
+	if grey.is_empty():
+		return
+	_check(str(grey["nation_id"]) == "",
+		"the grey coaster is nationless (its captain draws the \"\" pool)")
+	_check(not str(NpcFleetsLib.captain_name(grey)).is_empty(),
+		"the grey coaster's captain resolves from the nationless pool")
+	var origin := str(grey.get("dest_port_id", ""))
+	# The journey: origin = a neutral port; dest = the NEAREST port of ANY
+	# ownership (argmin over all ports, computed here independently).
+	var spawn_cell := Vector2i(int(grey["cell"]["x"]), int(grey["cell"]["y"]))
+	var spawn_port := DataLoader.port_id_at(spawn_cell)
+	_check(str(DataLoader.get_port(str(spawn_port)).get("nation_id", "")) == "",
+		"the grey coaster spawns docked at a neutral berth (%s)" % str(spawn_port))
+	var best := ""
+	var best_d := -1
+	for port in DataLoader.ports_list:
+		var pid := str((port as Dictionary).get("id", ""))
+		if pid == "" or pid == str(spawn_port):
+			continue
+		var d := NpcFleetsLib.chebyshev(DataLoader.port_cell(str(spawn_port)),
+			DataLoader.port_cell(pid))
+		if best_d < 0 or d < best_d or (d == best_d and pid < best):
+			best_d = d
+			best = pid
+	_check(origin == best,
+		"the grey hop targets the nearest port regardless of ownership (%s → %s)"
+		% [str(spawn_port), origin])
+	# …and across the tier's deterministic spawn draw at least one grey
+	# coaster crosses an ownership border (a sovereign destination).
+	var sovereign_dests := 0
+	var grey_spawns := 1
+	for index in 8:
+		var more: Dictionary = sim.spawn("coaster", "", 10)
+		if more.is_empty():
+			continue
+		grey_spawns += 1
+		var dest_id := str(more.get("dest_port_id", ""))
+		if str(DataLoader.get_port(dest_id).get("nation_id", "")) != "":
+			sovereign_dests += 1
+	_check(grey_spawns == 9 and sovereign_dests >= 1,
+		"the grey hops cross the ownership border (%d of %d headed for a"
+		+ " sovereign berth)" % [sovereign_dests, grey_spawns])
+	# (b) never-triggers-contact, invisible to raiders — the grey tier rides
+	# the coaster role rules unchanged.
+	var contacts: Array = sim.contacts(
+		Vector2i(int(grey["cell"]["x"]), int(grey["cell"]["y"])) + Vector2i(1, 0))
+	for entry in contacts:
+		_check(str(entry.get("id", "")) != str(grey["id"]),
+			"the grey coaster never appears in the contact list")
+	var pirate := _make_fleet(sim, "pirate", "",
+		Vector2i(int(grey["cell"]["x"]), int(grey["cell"]["y"])) + Vector2i(3, 0))
+	var prey: Array = sim.prey_candidates(pirate)
+	for candidate in prey:
+		_check(str(candidate.get("id", "")) != str(grey["id"]),
+			"raiders ignore the grey coaster (prey of a pirate)")
+	# (c) the unallied China-coast port sees its grey coaster trade: a grey
+	# fleet port-calls at quanzhou (alignment "", dev 0), sells its in-scope
+	# cargo into the hungry market, buys ≤ 5 in-scope units for the nearest
+	# port, and the market stocks move (the damping read).
+	var quanzhou_berth := DataLoader.port_cell("quanzhou")
+	var coaster := _make_fleet(sim, "coaster", "", quanzhou_berth)
+	coaster["id"] = "grey_trader"
+	coaster["cargo"] = {"wheat": 5}
+	coaster["dest_port_id"] = "quanzhou"
+	coaster["dwell_until_day"] = 1
+	GameState.day = 10
+	var q_wheat := EconomyLib.stock_of("quanzhou", "wheat")
+	var sold: int = sim._sell_cargo(coaster, "quanzhou", sim.coaster_units())
+	_check(sold == 5 and EconomyLib.stock_of("quanzhou", "wheat") == q_wheat + 5,
+		"the unallied neutral port's grey coaster trades (sold %d wheat)" % sold)
+	sim._depart_coaster(coaster, "", 10)
+	var carried_scope := true
+	for good_id in (coaster["cargo"] as Dictionary):
+		if not sim.in_coaster_scope(str(good_id)):
+			carried_scope = false
+	_check(carried_scope,
+		"the grey coaster's hold stays inside staples ∪ middle (%s)"
+		% str(coaster["cargo"]))
+	_check(str(coaster["dest_port_id"]) != "quanzhou",
+		"the grey coaster sailed on to its nearest port (%s)"
+		% str(coaster["dest_port_id"]))
+	# (d) tax exemption: the grey tier credits nothing, even docked at a
+	# SOVEREIGN host (sakai's nearest berth is holland's osaka) — the payer
+	# is "" and the crediting call never fires.
+	var treasury_before := _allegiance_treasury("holland")
+	var osaka_berth := DataLoader.port_cell("sakai")
+	var exempt := _make_fleet(sim, "coaster", "", osaka_berth)
+	exempt["id"] = "grey_exempt"
+	exempt["cargo"] = {"wheat": 5}
+	exempt["dest_port_id"] = "sakai"
+	exempt["dwell_until_day"] = 1
+	sim._sell_cargo(exempt, "sakai", sim.coaster_units())
+	_check(_allegiance_treasury("holland") == treasury_before,
+		"the nationless coaster credits no tax at a sovereign host (%d)"
+		% (_allegiance_treasury("holland") - treasury_before))
+	_restore_allegiance()
+
+
+# --- 23. The NPC tariff crediting (docs/60-* §4.11.14; docs/30-* §4.10) -------
+
+func _test_npc_tax() -> void:
+	# Real allegiance module (seeded): the trader tariff rides the walked
+	# totals — `units × price × mille / 10000`, 500 in-sphere / 2000
+	# foreign for NPCs (no permits), host = the effective alignment.
+	var sim := _make_run()
+	_check(_allegiance_treasury("portugal") == 5000,
+		"the seeded treasury starts at 5,000g (%d)"
+		% _allegiance_treasury("portugal"))
+	# (a) aligned host: a portugal trader sells 30 wine at ceuta (portugal
+	# consumer, factor > 1.0) — the treasury rises by exactly the 5% coin.
+	var ceuta_berth := DataLoader.port_cell("ceuta")
+	var fleet := _make_fleet(sim, "trader", "portugal", ceuta_berth)
+	fleet["id"] = "tax_seller"
+	fleet["dest_port_id"] = "ceuta"
+	fleet["cargo"] = {"wine": 30}
+	var price := TradeEngineLib.sell_price("ceuta", "wine")
+	var want_tax := 30 * price * 500 / 10000
+	var before := _allegiance_treasury("portugal")
+	GameState.day = 10
+	var sold: int = sim._sell_cargo(fleet, "ceuta", 0)
+	_check(sold == 30, "the tax probe's sale walks 30 units (sold %d)" % sold)
+	_check(_allegiance_treasury("portugal") == before + want_tax,
+		"the aligned host treasury rises by units × price × 500 / 10000"
+		+ " (+%d g, want %d)" % [
+			_allegiance_treasury("portugal") - before, want_tax])
+	# (b) foreign host: a portugal trader sells wine at valencia (spain) —
+	# the 2000-basis coin lands in the SPAIN treasury.
+	var valencia_berth := DataLoader.port_cell("valencia")
+	var foreign := _make_fleet(sim, "trader", "portugal", valencia_berth)
+	foreign["id"] = "tax_foreign"
+	foreign["dest_port_id"] = "valencia"
+	foreign["cargo"] = {"wine": 30}
+	var fprice := TradeEngineLib.sell_price("valencia", "wine")
+	var fwant := 30 * fprice * 2000 / 10000
+	var spain_before := _allegiance_treasury("spain")
+	sold = sim._sell_cargo(foreign, "valencia", 0)
+	_check(_allegiance_treasury("spain") == spain_before + fwant,
+		"the foreign host (spain) collects the 2000-basis tariff (+%d g)"
+		% (_allegiance_treasury("spain") - spain_before))
+	# (c) determinism: the same call sequence replays the same coin.
+	var fresh := _make_run()
+	var fleet2 := _make_fleet(fresh, "trader", "portugal", ceuta_berth)
+	fleet2["id"] = "tax_seller"
+	fleet2["dest_port_id"] = "ceuta"
+	fleet2["cargo"] = {"wine": 30}
+	GameState.day = 10
+	var before2 := _allegiance_treasury("portugal")
+	fresh._sell_cargo(fleet2, "ceuta", 0)
+	_check(_allegiance_treasury("portugal") == before2 + want_tax,
+		"the same port call credits the same coin (deterministic)")
+	_restore_allegiance()
+
+
+## The seeded allegiance module's treasury read (guarded).
+func _allegiance_treasury(nation_id: String) -> int:
+	if not ResourceLoader.exists(ALLEGIANCE_PATH, "Script"):
+		return -1
+	var lib: Script = load(ALLEGIANCE_PATH)
+	if lib == null or not lib.has_method("treasury"):
+		return -1
+	return int(lib.call("treasury", nation_id))
 
 
 # --- 20. The 5 regional lanes: presence & chokepoint camping (§2.11.1) ---------
@@ -2231,7 +2659,8 @@ func _test_tick_cost() -> void:
 	# docs/90-* §13 free profiling: the day-tick numbers ride every gate run.
 	print("PROFILE day_tick_avg_ms %d" % int(round(avg)))
 	print("PROFILE day_tick_worst_ms %d" % int(round(worst_ms)))
-	_check(n >= 250, "the probe runs at the filled cap (%d fleets)" % n)
+	_check(n >= 280,
+		"the probe runs at the filled cap incl. the grey tier (%d fleets)" % n)
 	_check(median <= PERF_GATE_MS,
 		"the day tick median ≤ %.0f ms at cap (%.1f ms over %d ticks)"
 		% [PERF_GATE_MS, median, PERF_TICKS])
