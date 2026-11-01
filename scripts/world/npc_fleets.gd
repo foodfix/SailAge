@@ -395,6 +395,16 @@ var _fleet_mark: Dictionary = {}
 ## observability behind [method stall_reason] / [method stalled_fleets].
 var _hold_ticks: Dictionary = {}
 
+## Per-fleet accrual telemetry (`fleet_id → Dictionary`): what the LAST
+## accrual pass did for the fleet — `delta` (the Δ it was granted),
+## `committed` (lane tiles actually walked), `budget`/`pipe` (the day
+## budget + the §4.4 rate at recording time), `moved` (the position
+## changed), `skip` (why a pass granted nothing: `cooldown`,
+## `stale_mark` — the mark is ahead of the clock, `docked`). Runtime-only
+## observability for the chart hover's `[raw2]` line (80-* §4.6); reset
+## with the run, never saved.
+var _accrual_dbg: Dictionary = {}
+
 ## Render reporting (80-* §4.5.2 amendment): `{id, from, to}` per fleet
 ## that moved in the last accrual — the world scene's marker glides. Never
 ## saved; drained by [method take_fleet_moves] (re-accumulates until
@@ -688,6 +698,7 @@ func initial_fill(day: int) -> void:
 	_pending_delta = 0.0
 	_fleet_mark = {}
 	_hold_ticks = {}
+	_accrual_dbg = {}
 	moved_fleet_moves = []
 	_geo_cache = {}
 	_passable_cache = {}
@@ -796,6 +807,8 @@ func advance_clock() -> void:
 		# fleet holds through D+1 — movement included (the day tick's
 		# stepping skip carried over).
 		if int(fleet.get("cooldown_until_day", 0)) >= day:
+			_accrual_dbg[str(fleet.get("id", ""))] = {
+				"delta": 0.0, "skip": "cooldown"}
 			continue
 		var id := str(fleet.get("id", ""))
 		# Per-fleet accrual: `now − own mark`. A fleet without a mark (a
@@ -804,8 +817,21 @@ func advance_clock() -> void:
 		var mark := float(_fleet_mark.get(id, prev_clock))
 		var fleet_delta := now - mark
 		if fleet_delta <= 0.0:
+			# Clock-rewind rebase (60-* §4.11.11): a mark AHEAD of the
+			# clock — set sail resets `clock_fraction` to 0 (20-* §4.3,
+			# port time is day-granular), rewinding the clock under marks
+			# set inside the rewound window. Snap the mark to the clock:
+			# the rewound window is forfeit (those fleets already walked
+			# it), so the next pass accrues its own per-move slice.
+			# Freezing until the clock re-passed the mark — then lumping
+			# the owed days at the roll — was the "moves once a day"
+			# day-jump bug.
+			_fleet_mark[id] = now
+			_accrual_dbg[id] = {"delta": fleet_delta,
+				"skip": "stale_mark"}
 			continue
 		_fleet_mark[id] = now
+		_accrual_dbg[id] = {"delta": fleet_delta}
 		# Render reporting (80-* §4.5.2 amendment): from → to for the
 		# marker glide; multi-tile walks report the first and last cell.
 		var moved_from := position_of(fleet)
@@ -818,6 +844,8 @@ func advance_clock() -> void:
 			_:
 				_accrue_lane(fleet, day, fleet_delta)
 		var moved_to := position_of(fleet)
+		if _accrual_dbg.has(id):
+			(_accrual_dbg[id] as Dictionary)["moved"] = moved_to != moved_from
 		if moved_to != moved_from:
 			moved_fleet_moves.append({"id": id, "from": moved_from,
 				"to": moved_to})
@@ -865,13 +893,13 @@ func _accrue(delta: float) -> void:
 ## pipeline and banks its sub-tile remainder. Arrivals mid-accrual end the
 ## walk (the fleet dwells; the day tick departs it).
 func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
+	var id := str(fleet.get("id", ""))
 	# Docked fleets owe no movement (the day tick departs them; the fast
 	# path keeps the per-move accrual O(fleets) with no geometry work).
 	if ((fleet.get("route", {}) as Dictionary).get("legs", [])
 			as Array).is_empty():
+		_accrual_dbg[id] = {"delta": delta, "skip": "docked"}
 		return
-	var id := str(fleet.get("id", ""))
-	var pre := position_of(fleet)
 	var committed_total := 0
 	for _d in int(floor(delta)):
 		committed_total += _walk_lane(fleet, day, _lane_tiles_today(fleet))
@@ -896,6 +924,14 @@ func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
 		_hold_ticks[id] = 0
 	else:
 		_hold_ticks[id] = int(_hold_ticks.get(id, 0)) + 1
+	# Telemetry (80-* §4.6 hover [raw2]): what this pass granted and did.
+	var telemetry: Dictionary = _accrual_dbg.get(id, {})
+	if telemetry.is_empty():
+		_accrual_dbg[id] = telemetry
+	telemetry["delta"] = delta
+	telemetry["committed"] = committed_total
+	telemetry["budget"] = _lane_tiles_today(fleet)
+	telemetry["pipe"] = _lane_pipe(fleet)
 
 
 ## The §4.4 lane pipeline for the fleet's current leg heading — tiles per
@@ -978,7 +1014,13 @@ func fleets() -> Array:
 ## report no wake), and the convoy grouping (`convoy_count` ≥ 2 marks the
 ## leader of one group of same-lane traders within Chebyshev 3, §4.11.11.4;
 ## members carry `convoy_leader`). One entry per fleet — the render layer
-## collapses convoys to one marker.
+## collapses convoys to one marker. Diagnostics (unified-movement
+## amendment, 80-* §4.6): `holds`/`stall` feed the S3 badge + hover census,
+## and `dbg`/`dbg2` are the hover's raw lines — `dbg` the live fleet
+## state, `dbg2` the accrual telemetry (`now/pend/lastd/moved/skip/
+## committed/budget/pipe/cd/leg0`) that discriminates per-move accrual
+## from day-jump movement and stale-mark freezes. Read-only over the
+## fleets; no RNG.
 func markers() -> Array:
 	var out: Array = []
 	var convoy_leaders: Dictionary = _convoy_leaders()
@@ -1000,6 +1042,45 @@ func markers() -> Array:
 		var stall := stall_state(fleet, holds)
 		if stall == "sailing":
 			stall = ""
+		# Accrual telemetry (80-* §4.6 [raw2]): the clock vs this fleet's
+		# mark + what the last accrual pass granted/did — the per-move vs
+		# day-jump discriminator (pend<0 ⇒ frozen at a stale mark;
+		# lastd≈1.0 moved=1 once per day ⇒ only the day tick accrues).
+		var now := _clock_now()
+		var mark := float(_fleet_mark.get(id, NAN))
+		var pend := "n/a"
+		if not is_nan(mark):
+			pend = "%.3f" % (now - mark)
+		var acc: Dictionary = _accrual_dbg.get(id, {})
+		var legs_arr: Array = (fleet.get("route", {}) as Dictionary).get(
+			"legs", [])
+		var leg_txt := "-"
+		if not legs_arr.is_empty():
+			var leg0: Dictionary = legs_arr[0]
+			var geo := _leg_geometry(leg0)
+			leg_txt = "%s[%s..%s]R%d %d/%d" % [
+				str(leg0.get("id", "?")), str(leg0.get("a", "?")),
+				str(leg0.get("b", "?")),
+				1 if bool(leg0.get("reverse", false)) else 0,
+				int((fleet.get("route", {}) as Dictionary).get(
+					"tile_index", -1)),
+				int(geo.get("walked_len", -1)) if not geo.is_empty()
+					else -1,
+			]
+		var dbg2 := "now=%.3f pend=%s" % [now, pend]
+		if acc.is_empty():
+			dbg2 += " last=-"
+		else:
+			dbg2 += " lastd=%.3f moved=%d skip=%s committed=%s budget=%s pipe=%.1f" % [
+				float(acc.get("delta", 0.0)),
+				1 if bool(acc.get("moved", false)) else 0,
+				str(acc.get("skip", "-")),
+				str(acc.get("committed", "-")),
+				str(acc.get("budget", "-")),
+				float(acc.get("pipe", 0.0)),
+			]
+		dbg2 += " cd=%d leg0=%s" % [
+			int((fleet as Dictionary).get("cooldown_until_day", 0)), leg_txt]
 		var entry := {
 			"id": id,
 			"role": str((fleet as Dictionary).get("role", "")),
@@ -1017,7 +1098,7 @@ func markers() -> Array:
 			"speed": _lane_pipe(fleet),
 			"dest": str((fleet as Dictionary).get("dest_port_id", "")),
 			"lanes": (fleet.get("route", {}) as Dictionary).get("lanes", []),
-			"dbg": "cell=(%d,%d) dwell=%d day=%d legs=%d ti=%d holds=%d carry=%.2f mark=%.1f"
+			"dbg": "cell=(%d,%d) dwell=%d day=%d legs=%d ti=%d holds=%d carry=%.2f mark=%.3f"
 				% [
 				position_of(fleet).x, position_of(fleet).y,
 				int((fleet as Dictionary).get("dwell_until_day", 0)),
@@ -1030,6 +1111,7 @@ func markers() -> Array:
 				float(_step_carry.get(id, 0.0)),
 				float(_fleet_mark.get(id, -1.0)),
 			],
+			"dbg2": dbg2,
 		}
 		if stall == "docked":
 			# The mooring port (the berth's owner) + berth consistency —

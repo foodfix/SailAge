@@ -567,6 +567,21 @@ chart adds:
   hovered tile**, each with its own debug block
   (`id · role · nation · stall×holds`, docked adds `@ port`) — stacked
   fleets all report; wrecks, ports and intel keep single-line entries.
+  Each block ends in two developer-facing raw lines: **`[raw]`** — the
+  live fleet state (`cell / dwell / day / legs / ti / holds / carry /
+  mark`, `mark` at 10⁻³ clock precision, never rounded to the day) — and
+  **`[raw2]`** (accrual telemetry, amended 2026-11-01): `now` (the
+  absolute world clock `day + clock_fraction`), `pend` = `now − mark`
+  (what the fleet's NEXT accrual would grant; **negative ⇒ frozen** —
+  its mark is ahead of the clock), `lastd` (the Δ the last accrual
+  granted), `moved` (that accrual changed the position), `skip`
+  (`cooldown` / `stale_mark` / `docked` when a pass granted nothing),
+  `committed` / `budget` / `pipe` (lane tiles actually walked / the day
+  budget / the §4.4 rate at recording time), `cd` (cooldown_until_day)
+  and `leg0` (the current leg `id[a..b]R<> ti/walked_len`). A fleet that
+  only moves on day jumps shows `lastd≈1.0 moved=1` once per day with
+  `pend` untouched between — a per-move accrual that never runs; a
+  frozen fleet shows `pend<0`.
   The world-map S3 markers wear the same state letter as a `BAD` badge
   while the S19 row is on (§4.5.2) — `X` marks a docked fleet standing
   OFF its berth (an anomaly the day tick self-heals, `60-*` §4.11.11).

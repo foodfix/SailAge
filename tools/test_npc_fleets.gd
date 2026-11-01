@@ -1657,6 +1657,52 @@ func _test_stall_diagnostics() -> void:
 		as Array).is_empty()
 		or int(wedged.get("dwell_until_day", 0)) > drop_day,
 		"the day tick re-departs the escalated fleet (live again)")
+	# Accrual TELEMETRY (80-* §4.6 [raw2]): every pass records what it
+	# granted and did — the per-move vs day-jump discriminator.
+	var tele := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
+	tele["id"] = "tele_01"
+	tele["route"] = {"lanes": ["hanseatic_north"], "leg": 0,
+		"tile_index": 0, "legs": [{"kind": "lane", "id": "hanseatic_north",
+		"reverse": false, "a": 0, "b": 99}]}
+	sim._fleet_mark["tele_01"] = sim._clock_now()
+	sim._accrue_lane(tele, int(GameState.day), 1.0)
+	var rec: Dictionary = sim._accrual_dbg.get("tele_01", {})
+	_check(rec.has("committed") and rec.has("budget")
+		and rec.has("pipe") and float(rec.get("delta", -1.0)) == 1.0,
+		"the lane accrual records delta/committed/budget/pipe telemetry")
+	# A mark AHEAD of the clock (a clock rewind — set sail resets the
+	# fraction, 20-* §4.3) REBASES on the pass: the mark snaps to the
+	# clock (the rewound window is forfeit — those fleets already walked
+	# it), the pass grants nothing, and the NEXT pass accrues its own
+	# slice — never a freeze, never a day-lump (60-* §4.11.11).
+	# advance_clock arms on its first call (the load sentinel) — arm,
+	# then run the rebase pass.
+	sim._fleet_mark["tele_01"] = sim._clock_now() + 10.0
+	GameState.day = int(GameState.day) + 1
+	sim.advance_clock()
+	GameState.day = int(GameState.day) + 1
+	sim.advance_clock()
+	rec = sim._accrual_dbg.get("tele_01", {})
+	_check(str(rec.get("skip", "")) == "stale_mark"
+		and float(sim._fleet_mark.get("tele_01", -1.0)) == sim._clock_now(),
+		"a mark ahead of the clock rebases to it (skip=stale_mark, no freeze)")
+	# The markers carry the [raw2] telemetry string for the hover window.
+	var raw2 := ""
+	for marker in sim.markers():
+		if str(marker.get("id", "")) == "tele_01":
+			raw2 = str(marker.get("dbg2", ""))
+	_check(raw2.begins_with("now=") and raw2.contains("pend=")
+		and raw2.contains("skip=stale_mark") and raw2.contains("leg0="),
+		"markers() carries the [raw2] telemetry (%s)" % raw2)
+	# The pass after the rebase is a normal per-move accrual again —
+	# the freeze-then-day-jump behavior is gone.
+	GameState.day = int(GameState.day) + 1
+	sim.advance_clock()
+	rec = sim._accrual_dbg.get("tele_01", {})
+	_check(str(rec.get("skip", "")) == ""
+		and float(rec.get("delta", 0.0)) == 1.0,
+		"the post-rebase pass accrues normally (delta 1.0, no skip)")
+	sim.remove("tele_01")
 	sim.remove(str(docked["id"]))
 	sim.remove(str(camper["id"]))
 	sim.remove(str(ice_fleet["id"]))

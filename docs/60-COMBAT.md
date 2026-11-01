@@ -604,7 +604,16 @@ per day tick:
   budgets above; a fleet routed by a departure accrues the current
   day-remainder immediately and marks itself accrued-through-now (docked
   time never accrues; the per-fleet marks are runtime-only — a reloaded
-  fleet resumes accrual from the load instant). The day tick owns state,
+  fleet resumes accrual from the load instant). **Clock-rewind rebase
+  (amendment):** set sail resets `clock_fraction` to 0 (`20-*` §4.3 —
+  port time is day-granular), rewinding the absolute clock; a pass whose
+  fleet Δ ≤ 0 (a mark left inside the rewound window) **rebases** — the
+  mark snaps to the clock, the pass grants nothing, and the next pass
+  accrues its own per-move slice. The rewound window is forfeit, never
+  re-walked (those fleets already moved through it) and never owed:
+  freezing until the clock re-passed the mark — then lumping the owed
+  days at a roll — was the "fleet moves only once a day" day-jump bug.
+  The day tick owns state,
   not stepping: dwell, departures (with the eager route-progress sync),
   the raider/hunter state machines, spawns, wrecks. NPC-vs-NPC
   engagement fires from the accrual walk the moment a raider's committed
@@ -1034,7 +1043,15 @@ stalled_fleets(min_hold: int = 3) -> Array
   time (`Δ = day + clock_fraction − its per-fleet mark`; the world scene
   calls it per player move, `tick()` catches up — idempotent, no
   double-count) and reports fleet moves for the marker glides (`80-*`
-  §4.5.2). `take_fleet_moves()` — drains that render report.
+  §4.5.2). **Clock-rewind rebase:** set sail resets `clock_fraction` to 0
+  (`20-*` §4.3 — port time is day-granular), rewinding the absolute
+  clock; a pass whose fleet Δ ≤ 0 (a mark left inside the rewound
+  window) **rebases** — the mark snaps to the clock, the pass grants
+  nothing, and the next pass accrues its own per-move slice. The rewound
+  window is forfeit, never re-walked (those fleets already moved through
+  it) and never owed: freezing until the clock re-passed the mark — then
+  lumping the owed days at a roll — was the "fleet moves only once a
+  day" day-jump bug. `take_fleet_moves()` — drains that render report.
   `stall_reason(fleet)` / `stalled_fleets(min_hold = 3)` — the read-only
   stall diagnostics: per-fleet state
   (`docked → cooldown → camping → chasing/pursuing → blocked → sailing`,
