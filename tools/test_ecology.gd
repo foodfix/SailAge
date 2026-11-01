@@ -165,8 +165,16 @@ func _make_fleet(sim: NpcFleetsLib, role: String, nation_id: String,
 
 
 ## A stationary fleet (docked semantics: it holds its tile, never blocks,
-## never moves — the prey the camp fixtures bait).
+## never moves — the prey the camp fixtures bait). Berth truth (`60-*`
+## §4.11.11): a legs-empty hold is `docked` only ON a berth tile — holding
+## in open water is `stranded`, and the day tick's self-heal snaps it to a
+## berth (which would teleport the bait away from the camp). Park the bait
+## on the camp port's berth: still perfectly huntable, and the dwell state
+## is a true dock.
 func _stationary(fleet: Dictionary, day: int, days: int = 60) -> Dictionary:
+	var berth: Vector2i = DataLoader.port_cell("boston")
+	if berth.x >= 0:
+		NpcFleetsLib.set_position(fleet, berth)
 	fleet["dwell_until_day"] = day + days
 	return fleet
 
