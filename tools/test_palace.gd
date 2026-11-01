@@ -12,6 +12,7 @@ const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
 const ShipyardEngineLib := preload("res://scripts/port/shipyard_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
@@ -41,6 +42,8 @@ func _ready() -> void:
 	_test_mission_kinds()
 	_test_mission_completion()
 	_test_mission_failure()
+	_test_permit_sales()
+	_test_commendation_hook()
 	await _test_palace_screen()
 	_report()
 
@@ -224,15 +227,17 @@ func _test_sell_bonus() -> void:
 			TradeEngineLib.band_units(1.0, 1.0), true),
 		"the dutch title does raise an Amsterdam sale")
 
-	# An actual sale pays the bonus (not just the readout).
+	# An actual sale pays the bonus (not just the readout). The §4.10 tariff
+	# composes after the title bonus: 340 gross − 68 tax (20%) = 272 net.
 	_new_run()
 	GameState.titles["england"] = "baron"
 	GameState.gold = 1000
 	FleetLib.add_goods("wine", 10)
 	var before := GameState.gold
 	_check(TradeEngineLib.sell("london", "wine", 10), "a titled sale succeeds")
-	_check(GameState.gold == before + 34 * 10,
-		"the sale pays 34g/unit (got %d)" % (GameState.gold - before))
+	_check(GameState.gold == before + 272,
+		"the sale pays 34g/unit gross − 20%% tax = 272 net (got %d)"
+		% (GameState.gold - before))
 
 
 # --- 5. Repair discount (docs/70-* §4.9.2 count grant) -------------------
@@ -550,6 +555,138 @@ func _test_mission_failure() -> void:
 
 
 # --- 11. The palace screen (S13) ---------------------------------------
+
+# --- Phase 7 (task L): permit sales gates (docs/30-* §4.10, 80-* §4.7.13) ---
+
+## The palace fixture with a freshly seeded allegiance state (the W4/V
+## `new_game` wiring does not exist yet, so the suite seeds explicitly).
+func _new_run7(port_id: String = "lisbon", gold: int = 100000) -> void:
+	_new_run(port_id, 1)
+	GameState.gold = gold
+	AllegianceLib.seed_new_game()
+
+
+func _test_permit_sales() -> void:
+	# The offer matrix: home charter at the player's own palace, foreign
+	# permit at every other nation's, nothing where there is no palace.
+	_new_run7("lisbon")
+	var offer := PalaceEngineLib.permit_offer("lisbon")
+	_check(offer.get("kind", "") == "home" and int(offer.get("price", 0)) == 5000,
+		"lisbon offers the home charter at 5,000g (%s/%s)"
+		% [str(offer.get("kind")), str(offer.get("price"))])
+	_check(bool(offer.get("title_locked", true)) == false
+		and bool(offer.get("rep_locked", true)) == false,
+		"the home charter has no title/rep gate (the early gold sink)")
+	_check(str(offer.get("coverage_key", "")) == "palace.permit.home.coverage",
+		"the coverage line names palace.permit.home.coverage")
+	_check(str(offer.get("void_key", "x")) == "",
+		"a clean player holds no void state")
+	_check(PalaceEngineLib.permit_offer("madeira").is_empty(),
+		"a non-capital port has no permit row")
+	var foreign := PalaceEngineLib.permit_offer("london")
+	_check(foreign.get("kind", "") == "foreign"
+		and int(foreign.get("price", 0)) == 20000
+		and str(foreign.get("nation_id", "")) == "england",
+		"london offers england's foreign permit at 20,000g")
+	_check(bool(foreign.get("title_locked", false)),
+		"a commoner is title-locked out of the foreign permit")
+	_check(bool(foreign.get("rep_locked", false)),
+		"rep 0 is rep-locked out of the foreign permit")
+
+	# The home-charter purchase: gold, held state, treasury credit.
+	var gold_before := GameState.gold
+	var portugal_treasury := AllegianceLib.treasury("portugal")
+	_check(PalaceEngineLib.buy_permit("lisbon"), "the home charter buys")
+	_check(GameState.gold == gold_before - 5000,
+		"5,000g charged (got %d)" % GameState.gold)
+	_check(AllegianceLib.has_permit_home(), "the charter is held")
+	_check(AllegianceLib.treasury("portugal") == portugal_treasury + 5000,
+		"the sale credits portugal's treasury (+5,000)")
+	_check(bool(PalaceEngineLib.permit_offer("lisbon").get("owned", false)),
+		"the row flips to the owned state")
+	_check(not PalaceEngineLib.buy_permit("lisbon"),
+		"re-buying a held charter is refused")
+	_check(GameState.gold == gold_before - 5000, "and no gold moved")
+
+	# Void while a bounty stands: the row shows it and a re-buy is allowed
+	# (full price), per docs/30 §4.10.
+	GameState.bounties["portugal"] = {"amount": 5000, "day": 1}
+	_check(PalaceEngineLib.permit_offer("lisbon").get("void_key", "")
+		== "palace.permit.void_bounty",
+		"the bounty voids the row (palace.permit.void_bounty)")
+	gold_before = GameState.gold
+	_check(PalaceEngineLib.buy_permit("lisbon"),
+		"the void charter can be re-bought at full price")
+	_check(GameState.gold == gold_before - 5000,
+		"the re-buy charged the full 5,000g again")
+	GameState.bounties = {}
+	# Void below −20 reputation as well (portugal starts at +20 → −41 lands
+	# at −21).
+	CharacterLib.add_reputation("portugal", -41)
+	_check(PalaceEngineLib.permit_offer("lisbon").get("void_key", "")
+		== "palace.permit.void_rep",
+		"rep < −20 voids the row (palace.permit.void_rep)")
+	CharacterLib.add_reputation("portugal", 21)
+	_check(PalaceEngineLib.permit_offer("lisbon").get("void_key", "") == "",
+		"restored reputation clears the void state")
+
+	# The foreign permit's gates, then the purchase with its own credit.
+	_new_run7("london")
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"a commoner at rep 0 cannot buy the england permit")
+	CharacterLib.add_reputation("england", 19)
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"rep +19 is still rep-locked")
+	CharacterLib.add_reputation("england", 1)
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"rep +20 alone is not enough without the knight title")
+	_set_rank("england", "knight")
+	_check(not bool(PalaceEngineLib.permit_offer("london").get("title_locked", true))
+		and not bool(PalaceEngineLib.permit_offer("london").get("rep_locked", true)),
+		"knight + rep +20 unlock the row")
+	GameState.gold = 19999
+	_check(not PalaceEngineLib.buy_permit("london"),
+		"19,999g cannot pay the 20,000g price")
+	GameState.gold = 20000
+	gold_before = GameState.gold
+	var england_treasury := AllegianceLib.treasury("england")
+	_check(PalaceEngineLib.buy_permit("london"), "the england permit buys")
+	_check(GameState.gold == gold_before - 20000,
+		"20,000g charged (got %d)" % GameState.gold)
+	_check(AllegianceLib.has_permit_foreign("england"),
+		"the england permit is held")
+	_check(AllegianceLib.treasury("england") == england_treasury + 20000,
+		"the sale credits england's treasury (+20,000)")
+	_check(bool(PalaceEngineLib.permit_offer("london").get("owned", false)),
+		"the row shows the owned state")
+
+
+# --- Phase 7 (task L): the commendation hook (docs/70-* §4.1) ---------------
+
+func _test_commendation_hook() -> void:
+	_new_run7("lisbon")
+	_check(PalaceEngineLib.pending_commendation("lisbon").is_empty(),
+		"no commendation is pending before any flip")
+	# A contestable port flips to the player's nation → the dialog is pending
+	# at the player's own palaces only, and it dismisses once.
+	AllegianceLib.add_investment("quanzhou", "portugal", 6000)
+	_check(AllegianceLib.effective_alignment("quanzhou") == "portugal",
+		"the quanzhou flip lands")
+	var pending := PalaceEngineLib.pending_commendation("lisbon")
+	_check(pending.get("port_id", "") == "quanzhou"
+		and pending.get("nation_id", "") == "portugal",
+		"the own-nation palace plays the commendation (%s)"
+		% str(pending))
+	_check(PalaceEngineLib.pending_commendation("london").is_empty(),
+		"a foreign palace plays nothing")
+	PalaceEngineLib.dismiss_commendation()
+	_check(PalaceEngineLib.pending_commendation("lisbon").is_empty(),
+		"the commendation dismisses after being shown")
+	# The engine-level API stays the single source (task F renders it).
+	AllegianceLib.add_investment("malacca", "holland", 100)
+	_check(PalaceEngineLib.pending_commendation("lisbon").is_empty(),
+		"a non-player ledger add queues nothing")
+
 
 func _test_palace_screen() -> void:
 	_new_run("lisbon", 1)

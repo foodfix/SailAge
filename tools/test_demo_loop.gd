@@ -146,8 +146,11 @@ func _step3_market() -> void:
 		"step 3: Lisbon wine sell price is 16g")
 	var ok: bool = TradeLib.buy("lisbon", "wine", 10)
 	_check(ok, "step 3: buying 10 wine succeeds")
-	_check(GameState.gold == gold0 - 210,
-		"step 3: gold drops by exactly 210 (%d → %d)" % [gold0, GameState.gold])
+	# Phase 7 (docs/30 §4.10): the 5% in-sphere tariff composes after the
+	# price math — 210 + 10 tax = 220 out of pocket (task L re-baseline).
+	_check(GameState.gold == gold0 - 220,
+		"step 3: gold drops by exactly 220 = 210 + 10 tax (%d → %d)"
+		% [gold0, GameState.gold])
 	_check(FleetLib.held("wine") == 10, "step 3: cargo shows 10 wine immediately")
 	_check(FleetLib.used_capacity(GameState.fleet[0]) == 10,
 		"step 3: hold usage tracks the purchase immediately")
@@ -295,8 +298,10 @@ func _step6_second_port() -> void:
 	var gold0: int = GameState.gold
 	var ok: bool = TradeLib.sell("london", "wine", 10)
 	_check(ok, "step 6: selling 10 wine at London succeeds")
-	_check(GameState.gold == gold0 + 310,
-		"step 6: sale revenue is exactly 10 × 31 = 310g")
+	# Phase 7 (task L re-baseline): the 20% foreign tariff composes after the
+	# price math — 310 gross − 62 tax = 248 net (docs/30 §4.10).
+	_check(GameState.gold == gold0 + 248,
+		"step 6: sale revenue is 310 gross − 62 tax = 248g")
 	_check(FleetLib.held("wine") == 0, "step 6: cargo updates on sale")
 	_check(GameState.player.xp > xp0, "step 6: a profitable sale awards XP")
 	_check(CharacterLib.profit_by_nation("england") == 100,

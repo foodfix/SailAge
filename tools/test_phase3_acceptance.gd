@@ -119,7 +119,13 @@ func _scenario_crown_and_horizon() -> void:
 	# test_economy's subject: 10-day staple / 30-day luxury heals). This
 	# fixture advances no days, so the daily ledger does not run here.
 	var trips := 0
-	while GameState.gold < 55000 and trips < 1000:
+	# Phase 7 (task L re-baseline): the §4.10 tariff now composes on both
+	# legs (5% out of Lisbon, 20% at the foreign dest), so the same grind
+	# needs ~1.4× the trips to reach the same purse. The cap widens to 2,000
+	# and the 55,000g target is unchanged — the acceptance intent ("this
+	# route can fund the expedition") survives the tax, as sim_trade gate 1
+	# asserts for every starter ship.
+	while GameState.gold < 55000 and trips < 2000:
 		trips += 1
 		GameState.market_stocks = EconomyLib.build_initial_stocks(
 			DataLoader.ports_list, DataLoader.goods_list)
