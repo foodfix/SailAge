@@ -3013,6 +3013,22 @@ func _lane_step_heading(fleet: Dictionary) -> String:
 			var head: Vector2i = (head_geo["path"] as Array)[
 				int(head_geo["end"]) if bool(head_geo["reverse"])
 				else int(head_geo["start"])]
+			if head != cell:
+				return _heading_to(cell, head)
+			# The seam IS the fleet's tile: the spoke's last tile is also
+			# the trunk's boarding tile (a lane junction, not a hop). The
+			# fleet is already standing on the next leg's head — head for
+			# the tile AFTER it (the next leg's first real step), so the
+			# read-only heading query never reports a false wedge. The
+			# day tick's `_advance` boards the leg (pops it, ti=0) on the
+			# same accrual.
+			var next_len := int(head_geo["walked_len"])
+			if next_len > 1:
+				var head_dir := -1 if bool(head_geo["reverse"]) else 1
+				var head_artifact := (int(head_geo["end"]) - 1) \
+					if bool(head_geo["reverse"]) else (int(head_geo["start"]) + 1)
+				return _heading_to(cell,
+					(head_geo["path"] as Array)[head_artifact])
 			return _heading_to(cell, head)
 	var berth := _port_cell(str(fleet.get("dest_port_id", "")))
 	if berth.x >= 0:
@@ -3415,10 +3431,29 @@ func _advance(fleet: Dictionary, day: int) -> void:
 				# keeps its position on the stored leg (route/position
 				# agree, save/load included); retry after the melt.
 				return
+			# Whether the fleet already STOOD on the seam tile before the
+			# boarding commit — captured pre-commit (`_commit_cell` makes
+			# the position equal `head_tile` either way).
+			var stood_on_head := head_tile == position_of(fleet)
 			legs.pop_front()
 			route["leg"] = int(route.get("leg", 0)) + 1
 			route["tile_index"] = 0
 			_commit_cell(fleet, head_tile)
+			# The seam IS the fleet's tile (the spoke's terminus is the
+			# trunk's boarding tile): the hand-over above is a no-op step.
+			# Consume the next leg's first real step in the SAME accrual so
+			# the budget is never swallowed at a junction (the false-wedge
+			# that dropped healthy journeys at ceuta).
+			if stood_on_head:
+				var next_len := int(head_geo["walked_len"])
+				if next_len > 1:
+					var nd := -1 if bool(head_geo["reverse"]) else 1
+					var na := (int(head_geo["end"]) - 1) \
+						if bool(head_geo["reverse"]) else (int(head_geo["start"]) + 1)
+					var next_tile: Vector2i = (head_geo["path"] as Array)[na]
+					if _passable(next_tile) and next_tile != position_of(fleet):
+						route["tile_index"] = 1
+						_commit_cell(fleet, next_tile)
 			return
 		# The final leg ended: dock at the destination.
 		legs.pop_front()

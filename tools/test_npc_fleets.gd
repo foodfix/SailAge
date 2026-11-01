@@ -1724,6 +1724,28 @@ func _test_stall_diagnostics() -> void:
 		and float(rec.get("delta", 0.0)) == 1.0,
 		"the post-rebase pass accrues normally (delta 1.0, no skip)")
 	sim.remove("tele_01")
+	# SEAM WEDGE (user-reported "船在海上发呆"): a spoke whose terminus IS
+	# the trunk's boarding tile — leg-end heading must resolve to the next
+	# leg's first real step, never "" (the false wedge that dropped healthy
+	# journeys and stranded coasters at ceuta, 60-* §4.11.11).
+	var seam := _make_fleet(sim, "coaster", "portugal", Vector2i(2094, 648))
+	seam["id"] = "seam_01"
+	seam["route"] = sim.route_between("ceuta", "lisbon")
+	seam["route"] = (seam["route"]["legs_save"] as Dictionary).duplicate(true)
+	seam["route"]["tile_index"] = int(
+		sim._leg_geometry((seam["route"]["legs"] as Array)[0])["walked_len"]) - 1
+	seam["dest_port_id"] = "lisbon"
+	sim.set_position(seam, Vector2i(2094, 648))
+	var seam_heading := sim._lane_step_heading(seam)
+	_check(not seam_heading.is_empty() and sim._lane_pipe(seam) > 0.0,
+		"the spoke/trunk seam tile resolves a heading and a rate (%s, %.1f)"
+		% [seam_heading, sim._lane_pipe(seam)])
+	var seam_before := NpcFleetsLib.position_of(seam)
+	sim._accrue_lane(seam, int(GameState.day), 1.0)
+	_check(NpcFleetsLib.position_of(seam) != seam_before
+		and not ((seam["route"]["legs"]) as Array).is_empty(),
+		"the seam-junction fleet boards the trunk and moves (no dropped journey)")
+	sim.remove("seam_01")
 	sim.remove(str(docked["id"]))
 	sim.remove(str(camper["id"]))
 	sim.remove(str(ice_fleet["id"]))

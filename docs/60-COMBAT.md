@@ -527,6 +527,17 @@ ecology members with a role, a nation, a lane route and a captain:
   fleet to the nearest resolvable berth (its recorded destination's, else
   its own nation's nearest port) **before** any dwell expiry departs, so
   a dropped journey can never leave a fleet idling at sea indefinitely.
+- **Seam junctions are boarding tiles (amended 2026-11-01).** A spoke's
+  terminus is frequently the trunk's first tile (a junction, not a hop) —
+  `legs[0]` ends **on** the tile where `legs[1]` starts. The leg-end
+  heading must therefore resolve to the next leg's **first real step**
+  (index 1), never `_heading_to(cell, cell)` → `""`: an empty heading
+  read as a wedge, dropped a healthy journey, and stranded every coaster
+  whose spoke fed a trunk at that tile (the user-reported "船在海上发呆",
+  `ev=drop wedge:ceuta ti=2`). `_advance` hands the leg over *and* pays
+  the next leg's first step in the same accrual, so a junction never
+  swallows a day's budget. Header-tile equality is the test seam
+  (`test_npc_fleets` "spoke/trunk seam tile").
 - **Pursuit cooldown (carried over).** A fleet that lost a battle (player
   retreat) does not move for 1 day (`60-*` §4.10), tracked in
   `cooldown_until_day` with the Phase-2 **inclusive reading**: it is the
