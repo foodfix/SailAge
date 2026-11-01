@@ -21,7 +21,7 @@
       },
       "ports": {
         "path": "data/ports.json",
-        "sha256": "87091cb3ce753649fa9777d04536faca846b1153c5d918f1e0e789c449e73c76"
+        "sha256": "32c4deb8c7426f9d69898dd519306f21f183295ab39eccba4bffa329cf4d8642"
       },
       "nations": {
         "path": "data/nations.json",
