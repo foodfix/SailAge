@@ -631,8 +631,8 @@ their pairing to the four captains.)
 | `id` | id | unique |
 | `scope` | enum | `"port"` — the only valid value this phase (group 7); rotation binds each instance to a concrete port (`30-*` §4.5) |
 | `cadence_days` | int > 0 | width of the template's seeded scheduling window (`30-*` §4.5) |
-| `duration_days` | int > 0 | how long the rest-override stays active |
-| `shifts` | object | good id → int delta; keys ⊆ goods; each shift bounded by the group-7 rest-band check (§8.2) |
+| `duration_days` | int > 0 | how long the rate-surge stays active (Phase 7: consumption ×3, `30-*` §4.5) |
+| `rate_override` | array | the template's goods as a non-empty id list, each ∈ goods, no duplicates — consumption of every listed good is ×3 for the duration (Phase 7 replaced the `shifts` rest-override; §8.2 item 4) |
 | `name` | L10nString | tavern-telegraph and rumor display name |
 
 ≈ 8 templates are authored from the locked families of `30-*` §4.5
@@ -650,7 +650,7 @@ response are pinned in `30-*` §4.5; active instances persist in
       "scope": "port",
       "cadence_days": 120,
       "duration_days": 14,
-      "shifts": {"wheat": -25, "wine": -20},
+      "rate_override": ["wheat", "wine"],
       "name": {"zh": "丰收节宴饮", "en": "Harvest Festival Feasting"}
     }
   ]
@@ -1840,10 +1840,10 @@ counts, and bounds):
    an int in the locked band 1–3; ids unique; names complete i18n.
 4. **`market_events.json`** (§4.13): every `scope == "port"` (the only
    valid value this phase); every `cadence_days` > 0 and `duration_days` >
-   0; every `shifts` key ∈ goods; **rest-band bound:** for every shifted
-   good, `10 ≤ rest + shift ≤ 190` for every resting value that good takes
-   across all ports of §7.1 (produced/demanded/neutral per `30-*` §4.2) — a
-   violation names the template and the good.
+   0; `rate_override` a non-empty good-id list, no duplicates, every id ∈
+   goods (Phase 7 rate-surge shape — the W2-era note about `shifts` and the
+   rest-band bound is retired with the K transition, `IMPLEMENT-Phase7.md`
+   correction 9).
 5. **Consumption-tier assertion (Phase-7 form):** the tier split is
    **flag-driven** per §4.2 — exactly **12** goods with `staple: true`
    (staple tier), exactly **12** with `specialty: true` (luxury tier), the

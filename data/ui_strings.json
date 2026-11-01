@@ -2139,5 +2139,145 @@
   "debug.stall.stranded": {
     "zh": "搁置海上",
     "en": "Stranded at sea"
+  },
+  "market.specialty.badge": {
+    "zh": "特产",
+    "en": "Specialty"
+  },
+  "market.specialty.header": {
+    "zh": "特产:{names}",
+    "en": "Specialties: {names}"
+  },
+  "market.not_bought": {
+    "zh": "不收购",
+    "en": "Not bought here"
+  },
+  "market.tax.badge.in_sphere": {
+    "zh": "势力内 5%",
+    "en": "In sphere 5%"
+  },
+  "market.tax.badge.exempt": {
+    "zh": "免税",
+    "en": "Tax-free"
+  },
+  "market.tax.badge.foreign": {
+    "zh": "外国 20%",
+    "en": "Foreign 20%"
+  },
+  "market.tax.badge.unallied": {
+    "zh": "未同盟 20%",
+    "en": "Unallied 20%"
+  },
+  "market.tax.buy_line": {
+    "zh": "买入关税({rate}%):−{gold} 金",
+    "en": "Buy tariff ({rate}%): −{gold} gold"
+  },
+  "market.tax.sell_line": {
+    "zh": "卖出关税({rate}%):−{gold} 金",
+    "en": "Sell tariff ({rate}%): −{gold} gold"
+  },
+  "market.exclusive.locked": {
+    "zh": "同盟专营:同盟且发展度 ≥ 2 后开放",
+    "en": "Allegiance-exclusive: opens when aligned at dev ≥ 2"
+  },
+  "market.invest_gate.allowance": {
+    "zh": "本月已投 {invested} / {cap} 金",
+    "en": "Invested {invested} / {cap}g this month"
+  },
+  "market.invest_gate.exhausted": {
+    "zh": "本月投资上限已达",
+    "en": "Monthly investment allowance used up"
+  },
+  "market.invest_gate.blocked": {
+    "zh": "声望不足或与{nation}悬赏在身,无法投资",
+    "en": "Blocked: rep below 0 or a bounty with {nation}"
+  },
+  "shipyard.role.war": {
+    "zh": "战舰",
+    "en": "Warship"
+  },
+  "shipyard.role.trade": {
+    "zh": "商船",
+    "en": "Trade ship"
+  },
+  "shipyard.role.coastal": {
+    "zh": "沿岸",
+    "en": "Coastal"
+  },
+  "shipyard.tier.need_dev": {
+    "zh": "需发展度 {dev}",
+    "en": "Requires development {dev}"
+  },
+  "shipyard.tier.allegiance_locked": {
+    "zh": "同盟专营:投资使其归属本国且发展度 ≥ 2 后开放",
+    "en": "Allegiance-exclusive: align it by investing; opens at dev ≥ 2"
+  },
+  "palace.permit.section": {
+    "zh": "免税证",
+    "en": "Tax permits"
+  },
+  "palace.permit.home": {
+    "zh": "本国免税证 — 5,000 金",
+    "en": "Home charter — 5,000g"
+  },
+  "palace.permit.home.coverage": {
+    "zh": "覆盖本国及同盟港:关税 5% → 0%",
+    "en": "Covers own + aligned ports: tariff 5% → 0%"
+  },
+  "palace.permit.home.owned": {
+    "zh": "本国免税证:已持有",
+    "en": "Home charter: held"
+  },
+  "palace.permit.foreign": {
+    "zh": "涉外免税证({nation})— 20,000 金",
+    "en": "Foreign permit ({nation}) — 20,000g"
+  },
+  "palace.permit.foreign.coverage": {
+    "zh": "覆盖该国的保护港与同盟港:关税 5% → 0%",
+    "en": "Covers that nation's protected + aligned ports: tariff 5% → 0%"
+  },
+  "palace.permit.foreign.owned": {
+    "zh": "涉外免税证({nation}):已持有",
+    "en": "Foreign permit ({nation}): held"
+  },
+  "palace.permit.title_locked": {
+    "zh": "爵位需达到骑士",
+    "en": "Requires the title of Knight"
+  },
+  "palace.permit.rep_locked": {
+    "zh": "声望需达到 +20",
+    "en": "Requires reputation +20"
+  },
+  "palace.permit.void_bounty": {
+    "zh": "悬赏在身,免税证失效;需全价重购",
+    "en": "Void while your bounty stands; rebuy at full price"
+  },
+  "palace.permit.void_rep": {
+    "zh": "声望低于 −20,免税证失效;需全价重购",
+    "en": "Void below −20 reputation; rebuy at full price"
+  },
+  "palace.permit.bought": {
+    "zh": "已购入免税证。",
+    "en": "Permit purchased."
+  },
+  "palace.commend.title": {
+    "zh": "褒奖令",
+    "en": "Commendation"
+  },
+  "palace.commend.body": {
+    "zh": "{nation}为{port}归入版图向你颁授褒奖令。",
+    "en": "{nation} commends you for bringing {port} into its fold."
+  },
+  "palace.commend.close": {
+    "zh": "领受",
+    "en": "Accept with thanks"
+  },
+  "tavern.invest.header": {
+    "zh": "投资动向",
+    "en": "Investment news"
+  },
+  "tavern.invest.row": {
+    "zh": "{nation} 在 {port} 投资 {amount} 金",
+    "en": "{nation} invested {amount}g in {port}"
   }
 }
