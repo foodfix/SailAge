@@ -717,16 +717,13 @@ NAMED_PIRATE_COUNT = 4
 NAMED_PIRATE_TIER_MIN = 1
 NAMED_PIRATE_TIER_MAX = 3
 
-# market_events.json rest-band bounds. Resting stock per port-good takes the
-# §4.2 (`30-*`) resting values: 160 where the good is produced, 40 where it is
-# demanded, 100 otherwise; an event shifts REST and the result is clamped to
-# the §4.13 effect band [10, 190] (§8.2 item 4 asserts the shift stays inside
-# the band for every resting value the good takes across the 100 ports).
-REST_PRODUCED = 160
-REST_DEMANDED = 40
-REST_NEUTRAL = 100
-REST_BAND_MIN = 10
-REST_BAND_MAX = 190
+# market_events.json demand events (30-* section 4.5, Phase-7 re-pin):
+# every template names its surged goods as a `rate_override` list — while an
+# instance is active each listed good's consumption rate is ×3 for
+# `duration_days` (`Economy.EVENT_CONSUMPTION_MULT`); production, capacities
+# and the price formula are untouched. The Phase-5 `shifts` rest-delta shape
+# and its rest-band bound are retired with the drift-to-rest model
+# (IMPLEMENT-Phase7.md correction 9 — task K owns the atomic transition).
 
 # §8.2 item 5: CONSUMPTION_TIER_SPLIT moved up to the locked-constants block
 # (Phase-7 flag-driven 12/16/12); the Phase-5 base-price-rank split is retired.
@@ -4042,45 +4039,30 @@ def _check_named_pirates(pirates_doc: object) -> None:
         )
 
 
-def _rest_classes_for(good_id: str, produced_goods: set, demanded_goods: set) -> list[int]:
-    """Every §4.2 resting value `good_id` takes across the 100 ports."""
-    classes = [REST_NEUTRAL]
-    if good_id in produced_goods:
-        classes.append(REST_PRODUCED)
-    if good_id in demanded_goods:
-        classes.append(REST_DEMANDED)
-    return classes
-
-
 def _check_market_events(events_doc: object, ports: list, good_ids: set) -> None:
-    """market_events.json (section 8.2 item 4, section 4.13)."""
+    """market_events.json (section 8.2 item 4, Phase-7 rate-surge form —
+    30-* section 4.5, IMPLEMENT-Phase7.md correction 9)."""
     label = "market_events.json"
     events = events_doc.get("market_events") \
         if isinstance(events_doc, dict) else None
     if not isinstance(events, list):
         fail("market-events", label, "missing 'market_events' array", 7)
 
-    produced_goods = {
-        good_id for port in ports for good_id in port.get("produces", [])
-    }
-    demanded_goods = {
-        good_id for port in ports for good_id in port.get("demands", [])
-    }
-
     seen: set[str] = set()
     for index, event in enumerate(events):
         path = f"market_events[{index}]"
         required = {"id", "scope", "cadence_days", "duration_days",
-                    "shifts", "name"}
+                    "rate_override", "name"}
         if not isinstance(event, dict) or set(event) != required:
             fail(
                 "market-events",
                 label,
                 f"{path} must be an object with exactly keys "
-                "id,scope,cadence_days,duration_days,shifts,name "
-                "(section 4.13)",
+                "id,scope,cadence_days,duration_days,rate_override,name "
+                "(section 4.13, Phase-7 rate_override form)",
                 7,
             )
+            continue
         _require_id(event["id"], f"{path}.id", label)
         if event["id"] in seen:
             fail("market-events", label,
@@ -4105,56 +4087,47 @@ def _check_market_events(events_doc: object, ports: list, good_ids: set) -> None
                 )
         _check_complete_l10n(event["name"], f"{path}.name", label)
 
-        shifts = event["shifts"]
-        if not isinstance(shifts, dict):
+        overrides = event["rate_override"]
+        if not isinstance(overrides, list):
             fail(
                 "market-events",
                 label,
-                f"{path} ({event['id']}) shifts must be an object",
+                f"{path} ({event['id']}) rate_override must be a list of "
+                "good ids whose consumption the event surges ×3 "
+                "(section 4.5)",
                 7,
             )
-        for good_id, shift in shifts.items():
-            if good_id not in good_ids:
+            continue
+        if not overrides:
+            fail(
+                "market-events",
+                label,
+                f"{path} ({event['id']}) rate_override is empty — an event "
+                "surging nothing is a no-op, not a template",
+                7,
+            )
+        surged: set[str] = set()
+        for good_id in overrides:
+            if not isinstance(good_id, str) or good_id not in good_ids:
                 fail(
                     "market-events",
                     label,
-                    f"{path} ({event['id']}) shifts references unknown good "
-                    f"{good_id!r}",
+                    f"{path} ({event['id']}) rate_override references "
+                    f"unknown good {good_id!r}",
                     7,
                 )
-            if not is_int(shift):
+                continue
+            if good_id in surged:
                 fail(
                     "market-events",
                     label,
-                    f"{path} ({event['id']}) shifts.{good_id} must be an "
-                    f"integer delta (got {shift!r})",
+                    f"{path} ({event['id']}) rate_override repeats good "
+                    f"{good_id!r} — a ×3 surge listed twice would read as "
+                    "a magnitude",
                     7,
                 )
-            if shift == 0:
-                fail(
-                    "market-events",
-                    label,
-                    f"{path} ({event['id']}) shifts.{good_id} is 0 — a no-op "
-                    "typo, not an event shift",
-                    7,
-                )
-            # Rest-band bound (section 8.2 item 4): the shift must keep rest
-            # inside the §4.13 effect clamp for EVERY resting value the good
-            # takes across the 100 ports.
-            for rest in _rest_classes_for(good_id, produced_goods,
-                                          demanded_goods):
-                shifted = rest + shift
-                if not (REST_BAND_MIN <= shifted <= REST_BAND_MAX):
-                    fail(
-                        "market-events",
-                        label,
-                        f"{path} ({event['id']}) shift {shift:+d} on "
-                        f"'{good_id}' pushes resting stock {rest} to "
-                        f"{shifted}, outside the [{REST_BAND_MIN}, "
-                        f"{REST_BAND_MAX}] effect band (section 8.2 item 4; "
-                        "resting classes 160/40/100 per 30-* section 4.2)",
-                        7,
-                    )
+                continue
+            surged.add(good_id)
 
 
 def _check_consumption_tiers(goods: list) -> tuple[set, set, set]:

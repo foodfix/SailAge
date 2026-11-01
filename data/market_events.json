@@ -6,7 +6,7 @@
       "scope": "port",
       "cadence_days": 360,
       "duration_days": 30,
-      "shifts": {"wool": -25, "leather": -20},
+      "rate_override": ["wool", "leather"],
       "name": {"zh": "冬季羊毛紧俏", "en": "Winter Wool Demand"}
     },
     {
@@ -14,7 +14,7 @@
       "scope": "port",
       "cadence_days": 360,
       "duration_days": 30,
-      "shifts": {"wine": -25},
+      "rate_override": ["wine"],
       "name": {"zh": "盛夏酒市", "en": "Summer Wine Season"}
     },
     {
@@ -22,7 +22,7 @@
       "scope": "port",
       "cadence_days": 120,
       "duration_days": 14,
-      "shifts": {"wheat": -25, "wine": -20},
+      "rate_override": ["wheat", "wine"],
       "name": {"zh": "丰收节宴饮", "en": "Harvest Festival Feasting"}
     },
     {
@@ -30,7 +30,7 @@
       "scope": "port",
       "cadence_days": 180,
       "duration_days": 60,
-      "shifts": {"timber": -30, "iron": -30},
+      "rate_override": ["timber", "iron"],
       "name": {"zh": "战时备战", "en": "War Provisioning"}
     },
     {
@@ -38,7 +38,7 @@
       "scope": "port",
       "cadence_days": 360,
       "duration_days": 45,
-      "shifts": {"spices": 30, "silk": 30, "perfume": 30},
+      "rate_override": ["spices", "silk", "perfume"],
       "name": {"zh": "瘟疫封城", "en": "Plague Quarantine"}
     },
     {
@@ -46,7 +46,7 @@
       "scope": "port",
       "cadence_days": 120,
       "duration_days": 10,
-      "shifts": {"sugar": -25},
+      "rate_override": ["sugar"],
       "name": {"zh": "甜宴", "en": "Feast of Sweets"}
     },
     {
@@ -54,7 +54,7 @@
       "scope": "port",
       "cadence_days": 180,
       "duration_days": 10,
-      "shifts": {"wheat": -20, "wine": -15},
+      "rate_override": ["wheat", "wine"],
       "name": {"zh": "朝圣大军", "en": "Pilgrim Procession"}
     },
     {
@@ -62,7 +62,7 @@
       "scope": "port",
       "cadence_days": 180,
       "duration_days": 20,
-      "shifts": {"wheat": 25, "wine": 15},
+      "rate_override": ["wheat", "wine"],
       "name": {"zh": "大丰收", "en": "Bumper Harvest"}
     }
   ]
