@@ -1,17 +1,35 @@
 extends Control
 ## Market screen (S5) — docs/30-PORTS-AND-TRADE.md §4.2–§4.5, §4.7 (wireframe),
 ## §6 (edge cases); docs/80-UI-UX.md §4.5 (HUD bars), §4.7 (numeric entry,
-## toasts), §4.8 (palette, 32px rows, 40px buttons, 8px grid).
+## toasts), §4.8 (palette, 32px rows, 40px buttons, 8px grid);
+## Phase 7 (task M): §4.7.11 market rows — the listing rule, the ★ 特产
+## badge + header, the 不收购 sell-disabled own produces, the grayed
+## 专营货 rows, the 4-state tariff badge + per-side tax lines, and the
+## three-state Invest button (docs/30 §4.9/§4.10, decision 26).
 ##
 ## Everything the screen shows comes from data:
-##   * the goods table iterates [method TradeEngine.goods_rows] (every entry of
-##     `data/goods.json`, sorted by `base_price`), so a 21st good is a
-##     data-only change — there is no per-good code anywhere in this file;
+##   * the goods table iterates [method TradeEngine.goods_rows] and keeps the
+##     **listed** rows only — a port lists a good iff it produces or demands
+##     it (docs/30 §4.2 listing rule; unlisted goods never render). The
+##     engine call is guarded: task L's listing-filtered
+##     `goods_rows(port_id)` payload is used when present, today's
+##     argument-less row list otherwise, and the screen filters against
+##     `ports.json` either way (idempotent — correction 7);
 ##   * prices, quantity ceilings and trade side effects are the
 ##     `trade_engine.gd` formulas, never duplicated here;
 ##   * the stock / trend / marginal-price columns read `economy.gd`
 ##     directly (docs/80 §4.7.7) — stock 0–200, the ▲/▼ drift glyph
 ##     against the effective rest, and the next-tranche price.
+##
+## **Allegiance reads are guarded** (docs/80 §4.9 guard-call convention):
+## L's `allegiance.gd` may land before or after this screen, so every read
+## goes through [method _allegiance_module] (`has_method` + `call`) with the
+## pinned safe defaults — dev 0, alignment = the port's data `nation_id`,
+## tariff 2000, no invest block. `allegiance_override` is the headless-suite
+## seam (a stand-in module); the runtime never sets it. Likewise the tax
+## line amounts come from the engine row payload's `tax_buy` / `tax_sell`
+## (and `tax_mille`), read defensively with defaults so this screen works
+## against today's payloads and L's upgraded ones alike.
 ##
 ## **The market sells trade goods only** (docs/20-* §4.10 as amended, docs/80-*
 ## §4.6.1): provisions and water are survival, not commerce, and are bought at
@@ -59,6 +77,20 @@ const COL_PRESET_W := 40
 const COL_MAX_W := 56
 const COL_BUTTON_W := 88
 const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W
+## Task L's allegiance module (docs/80-* §4.9 contract) — loaded through the
+## guard helpers, never hard-referenced (it may not exist yet).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
+## The guard-default tariff when no allegiance module answers
+## (docs/80-* §4.9: 未同盟 20%).
+const DEFAULT_TARIFF_MILLE := 2000
+## The 20% and 5% tariff rates in per-mille (docs/30-* §4.10 unified tariff).
+const FOREIGN_TARIFF_MILLE := 2000
+const SPHERE_TARIFF_MILLE := 500
+## Player investment allowance per contestable port per month
+## (decision 26 / docs/30-* §4.9). Display-only here — task L's allegiance
+## module enforces the same cap; this feeds the `market.invest_gate.allowance`
+## hint. Reset at the month tick (`month_tick`).
+const INVEST_MONTHLY_CAP := 2000
 
 ## Emitted right before the S5 → S4 route (tests observe it instead of swapping
 ## their own scene root, the `port_screen.gd` convention).
@@ -107,6 +139,95 @@ var _captains_header: Label = null
 var _captains_box: VBoxContainer = null
 ## The captain rows currently rendered (`{id, name, role, nation_id}`).
 var _captain_rows: Array = []
+## Phase 7 (task M): this port's `produces` / `demands` from `ports.json`
+## (cached at open; the dock never changes while the screen is up).
+var _produces: Array = []
+var _demands: Array = []
+## The engine's row payloads per good id (`{good_id: payload}`) — L's
+## upgraded `goods_rows(port_id)` rows carry `tax_buy` / `tax_sell` /
+## `tax_mille`; today's rows are the raw goods entries. Read defensively.
+var _payloads: Dictionary = {}
+## The good whose tax lines the strip shows (the last row whose quantity the
+## player touched — docs/30 §4.8: the tax lines accompany a trade dialog).
+var _selected_good: String = ""
+## Phase 7 widgets built in code (the captains-section pattern): the
+## `特产:` header above the table, the header tariff badge, and the tax-line
+## strip below the goods table.
+var _specialty_header: Label = null
+var _tax_badge: Label = null
+var _tax_lines: Label = null
+
+
+# --- Guarded Allegiance reads (docs/80-* §4.9) ------------------------------
+
+## Headless-suite seam: a stand-in for L's allegiance module. The runtime
+## never sets it; when null the real module (autoload node, then script) is
+## used, else the §4.9 safe defaults.
+static var allegiance_override: Variant = null
+
+
+## The object answering `method` — the suite's override first, then L's
+## live autoload node (`/root/Allegiance`), then the script's statics
+## (the §4.12.3 `ResourceLoader.load` + `has_method` guard pattern) — or
+## null, which every caller turns into its pinned default.
+static func _allegiance_module(method: String) -> Variant:
+	if allegiance_override != null \
+			and (allegiance_override as Object).has_method(method):
+		return allegiance_override
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var node := (tree as SceneTree).root.get_node_or_null("Allegiance")
+		if node != null and node.has_method(method):
+			return node
+	if ResourceLoader.exists(ALLEGIANCE_PATH):
+		var script: Variant = ResourceLoader.load(ALLEGIANCE_PATH)
+		if script is Script and (script as Script).has_method(method):
+			return script
+	return null
+
+
+static func _allegiance_str(method: String, port_id: String,
+		fallback: String) -> String:
+	if port_id.is_empty():
+		return fallback
+	var module: Variant = _allegiance_module(method)
+	if module == null:
+		return fallback
+	return str(module.call(method, port_id))
+
+
+static func _allegiance_int(method: String, port_id: String,
+		fallback: int) -> int:
+	if port_id.is_empty():
+		return fallback
+	var module: Variant = _allegiance_module(method)
+	if module == null:
+		return fallback
+	return int(module.call(method, port_id))
+
+
+## The tariff in per-mille for the *player's* nation at this port
+## (`tariff_mille(port_id, nation_id)`; guard default 2000 — docs/80 §4.9).
+func _tariff_mille() -> int:
+	if _port_id.is_empty():
+		return DEFAULT_TARIFF_MILLE
+	var module: Variant = _allegiance_module("tariff_mille")
+	if module == null:
+		return DEFAULT_TARIFF_MILLE
+	return int(module.call("tariff_mille", _port_id, _player_nation()))
+
+
+## The port's effective alignment (guard default: the port's data
+## `nation_id` — docs/80 §4.9).
+func _effective_alignment() -> String:
+	return _allegiance_str("effective_alignment", _port_id,
+		str(DataLoader.get_port(_port_id).get("nation_id", "")))
+
+
+func _player_nation() -> String:
+	if GameState.player.is_empty():
+		return ""
+	return str(GameState.player.get("nation_id", ""))
 
 
 func _ready() -> void:
@@ -125,6 +246,10 @@ func _ready() -> void:
 	_goods_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 	_port_id = _read_current_port()
+	_cache_port_lists()
+	_build_specialty_header()
+	_build_tax_badge()
+	_build_tax_lines()
 	_build()
 	_bind()
 	_refresh()
@@ -260,20 +385,79 @@ func go_back() -> void:
 
 # --- Construction ----------------------------------------------------------
 
-## Builds the fixed column header and one row per good in `goods.json`. Called
-## once from `_ready`; a locale change only re-binds the labels ([method _bind])
-## because no row content changes with locale. There is **no** supplies row:
-## provisions and water are bought in the Set-Sail prompt (docs/20-* §4.10).
+## Caches this port's `produces` / `demands` (the §4.2 listing rule inputs).
+func _cache_port_lists() -> void:
+	var port: Dictionary = DataLoader.get_port(_port_id) \
+		if not _port_id.is_empty() else {}
+	_produces = (port.get("produces", []) as Array).duplicate() \
+		if port.has("produces") else []
+	_demands = (port.get("demands", []) as Array).duplicate() \
+		if port.has("demands") else []
+
+
+## The §4.2 listing rule: a port lists a good iff it produces or demands it.
+func _is_listed(good_id: String) -> bool:
+	return good_id in _produces or good_id in _demands
+
+
+## Whether the port produces `good_id` (the ★ 特产 rows + the 不收购 rule).
+func _is_own_produce(good_id: String) -> bool:
+	return good_id in _produces
+
+
+## Whether `good_id` is a 专营货 (exclusive) — the goods.json flag.
+func _is_exclusive(good_id: String) -> bool:
+	return DataLoader.get_good(good_id).get("exclusive", false) == true
+
+
+## The §4.9 entitlement: an exclusive row activates when the port's effective
+## alignment is the player's nation **and** dev ≥ 2 (guard default dev 0, so
+## the rows stay locked until the allegiance module lands).
+func _exclusive_unlocked() -> bool:
+	var player := _player_nation()
+	if player.is_empty():
+		return false
+	if _allegiance_int("dev", _port_id, 0) < 2:
+		return false
+	return _allegiance_str("effective_alignment", _port_id,
+		str(DataLoader.get_port(_port_id).get("nation_id", ""))) == player
+
+
+## TradeEngine.goods_rows gains the port argument with L's listing filter
+## (correction 7); today's signature is argument-less. The arity check runs
+## through the Script-typed resource (the analyzer pins today's 0-arg call),
+## and the upgraded shape is invoked dynamically so this parses before L
+## lands. The screen filters by `ports.json` regardless (idempotent).
+static func _engine_goods_rows(port_id: String) -> Array:
+	var script: Script = TradeEngineLib
+	for info in script.get_script_method_list():
+		if str(info.get("name", "")) != "goods_rows":
+			continue
+		var args: Array = info.get("args", []) if info.has("args") else []
+		if args.size() >= 1:
+			var value: Variant = script.call("goods_rows", port_id)
+			return value if value is Array else []
+		break
+	return TradeEngineLib.goods_rows()
+
+
+## Builds the fixed column header and one row per **listed** good, keeping the
+## engine's `base_price` order. Called once from `_ready`; a locale change
+## only re-binds the labels ([method _bind]) because no row content changes
+## with locale. There is **no** supplies row: provisions and water are bought
+## in the Set-Sail prompt (docs/20-* §4.10).
 func _build() -> void:
 	_build_column_header()
 	for child in _goods_rows.get_children():
 		_goods_rows.remove_child(child)
 		child.queue_free()
 	_rows.clear()
-	for good in TradeEngineLib.goods_rows():
+	_payloads.clear()
+	for good in _engine_goods_rows(_port_id):
 		var good_id := str(good.get("id", ""))
-		if good_id.is_empty():
-			continue
+		if good_id.is_empty() or not _is_listed(good_id):
+			continue  # unlisted goods never render (docs/30 §4.2)
+		_payloads[good_id] = good
 		_rows[good_id] = _build_good_row(good_id)
 
 
@@ -320,11 +504,23 @@ func _build_good_row(good_id: String) -> Dictionary:
 	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	row.set_meta("good_id", good_id)
 
+	var name_cell := HBoxContainer.new()
+	name_cell.name = "NameCell"
+	name_cell.add_theme_constant_override("separation", 4)
+	# The ★ 特产 badge (docs/80 §4.7.11): present only on `port.produces`
+	# rows; text is bound per locale in [method _bind].
+	var badge_label := Label.new()
+	badge_label.name = "Badge"
+	badge_label.custom_minimum_size.x = 56
+	badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	name_cell.add_child(badge_label)
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.custom_minimum_size.x = float(COL_NAME_W)
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	name_cell.add_child(name_label)
 
 	var stock_label := Label.new()
 	stock_label.name = "Stock"
@@ -381,7 +577,7 @@ func _build_good_row(good_id: String) -> Dictionary:
 	var sell_button := _make_row_button("Sell", "", COL_BUTTON_W)
 	sell_button.pressed.connect(_on_sell.bind(good_id))
 
-	row.add_child(name_label)
+	row.add_child(name_cell)
 	row.add_child(stock_label)
 	row.add_child(trend_label)
 	row.add_child(marginal_label)
@@ -394,6 +590,8 @@ func _build_good_row(good_id: String) -> Dictionary:
 	qty_field.text_changed.connect(_on_qty_text_changed.bind(good_id))
 	return {
 		"node": row,
+		"name_cell": name_cell,
+		"badge": badge_label,
 		"name": name_label,
 		"stock": stock_label,
 		"trend": trend_label,
@@ -413,6 +611,42 @@ func _make_row_button(node_name: String, text: String, width: int) -> Button:
 	button.custom_minimum_size = Vector2(float(width), float(PaletteLib.ROW_H))
 	button.focus_mode = Control.FOCUS_ALL
 	return button
+
+
+## The `特产:` header line above the table (docs/80 §4.7.11): names up to 3 of
+## the port's produces. Text is bound per locale in [method _bind].
+func _build_specialty_header() -> void:
+	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
+	_specialty_header = Label.new()
+	_specialty_header.name = "SpecialtyHeader"
+	_specialty_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	table.add_child(_specialty_header)
+	table.move_child(_specialty_header, 0)
+
+
+## The header tariff badge (docs/30 §4.8 / docs/80 §4.7.11): 势力内 5% /
+## 免税 / 外国 20% / 未同盟 20%, placed before the Back button like the
+## wireframe's `· 势力内 5%` slot. Text/color bound in [method
+## _refresh_header].
+func _build_tax_badge() -> void:
+	var header: HBoxContainer = $Layout/VBox/Header
+	_tax_badge = Label.new()
+	_tax_badge.name = "TaxBadge"
+	header.add_child(_tax_badge)
+	header.move_child(_tax_badge, _back_button.get_index())
+
+
+## The per-side tax lines (docs/30 §4.10: "separate displayed line") — a
+## strip below the goods table showing the selected row's `market.tax.buy_line`
+## / `market.tax.sell_line` from the engine payload. Hidden until a payload
+## carries tax fields (pre-L payloads have none) and until a row is selected.
+func _build_tax_lines() -> void:
+	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
+	_tax_lines = Label.new()
+	_tax_lines.name = "TaxLines"
+	_tax_lines.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_tax_lines.visible = false
+	table.add_child(_tax_lines)
 
 
 # --- Binding ---------------------------------------------------------------
@@ -442,10 +676,39 @@ func _bind() -> void:
 		var refs: Dictionary = _rows[good_id]
 		var good: Dictionary = DataLoader.get_good(good_id)
 		(refs["name"] as Label).text = I18n.t(good.get("name", {}))
+		# ★ 特产 badge: produces members only (docs/80 §4.7.11).
+		var badge: Label = refs["badge"]
+		badge.visible = _is_own_produce(good_id)
+		badge.text = ("%s %s" % ["★", I18n.t_key("market.specialty.badge")]) \
+			if badge.visible else ""
 		(refs["buy"] as Button).text = I18n.t_key("market.buy")
 		(refs["sell"] as Button).text = I18n.t_key("market.sell")
 		((refs["qty_buttons"] as Dictionary)["max"] as Button).text = \
 			I18n.t_key("market.max")
+	_refresh_specialty_header()
+
+
+## The `特产: <names>` header — up to 3 of the port's produces
+## (docs/30 §4.8 wireframe, `market.specialty.header`). Hidden at a port
+## that produces nothing and when no port is docked.
+func _refresh_specialty_header() -> void:
+	if _specialty_header == null:
+		return
+	var names: Array[String] = []
+	for member in _produces.slice(0, 3):
+		names.append(I18n.t(DataLoader.get_good(str(member)).get("name", {})))
+	_specialty_header.visible = not names.is_empty()
+	if names.is_empty():
+		_specialty_header.text = ""
+		return
+	_specialty_header.text = I18n.fmt("market.specialty.header", {
+		"names": ", ".join(names),
+	})
+
+
+## The specialty header's current text (the suite's seam, captains-pattern).
+func specialty_header_text() -> String:
+	return _specialty_header.text if _specialty_header != null else ""
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -457,6 +720,7 @@ func _refresh() -> void:
 	EconomyLib.ensure_event_overrides()
 	_refresh_header()
 	_refresh_rows()
+	_refresh_tax_lines()
 	_refresh_investment()
 	_refresh_captains()
 
@@ -471,6 +735,88 @@ func _refresh_header() -> void:
 		"amount": TradeEngineLib.hold_used(),
 		"capacity": TradeEngineLib.hold_capacity(),
 	})
+	_refresh_tax_badge()
+
+
+## The 4-state tariff badge (docs/80 §4.7.11): 免税 (permit, mille 0) /
+## 势力内 5% (mille 500) / 外国 20% vs 未同盟 20% (mille 2000, split by
+## the effective alignment — the player's nation reads 势力内, an absent
+## alignment reads 未同盟, anything else 外国).
+static func tax_badge_key(mille: int, alignment: String,
+		player_nation: String) -> String:
+	if mille == 0:
+		return "market.tax.badge.exempt"
+	if mille == SPHERE_TARIFF_MILLE:
+		return "market.tax.badge.in_sphere"
+	if not player_nation.is_empty() and alignment == player_nation:
+		return "market.tax.badge.in_sphere"
+	if alignment.is_empty():
+		return "market.tax.badge.unallied"
+	return "market.tax.badge.foreign"
+
+
+func _refresh_tax_badge() -> void:
+	if _tax_badge == null:
+		return
+	if _port_id.is_empty():
+		_tax_badge.visible = false
+		_tax_badge.text = ""
+		return
+	_tax_badge.visible = true
+	var key := tax_badge_key(_tariff_mille(), _effective_alignment(),
+		_player_nation())
+	_tax_badge.text = I18n.t_key(key)
+	# Cheaper trade reads ACCENT; the 20% walls read BAD (docs/80 §4.8 palette).
+	_tax_badge.add_theme_color_override("font_color",
+		PaletteLib.ACCENT if key != "market.tax.badge.foreign"
+				and key != "market.tax.badge.unallied" else PaletteLib.BAD)
+
+
+## The header badge's current key + text (the suite's seam).
+func tax_badge_state() -> Dictionary:
+	return {
+		"key": tax_badge_key(_tariff_mille(), _effective_alignment(),
+			_player_nation()),
+		"text": _tax_badge.text if _tax_badge != null else "",
+	}
+
+
+# --- Tax lines (docs/30 §4.10, docs/80 §4.7.11) -----------------------------
+
+## The two tax lines for `good_id`'s engine payload: `market.tax.buy_line` /
+## `market.tax.sell_line` from `tax_buy` / `tax_sell` (rate from `tax_mille`,
+## else the guarded tariff). Empty when the payload carries no tax fields —
+## today's engine rows pre-date task L's tariff compose.
+func tax_line_texts(good_id: String) -> Array:
+	var payload: Variant = _payloads.get(good_id, {})
+	if not (payload is Dictionary):
+		return []
+	var data: Dictionary = payload
+	if not (data.has("tax_buy") or data.has("tax_sell")):
+		return []
+	@warning_ignore("integer_division")
+	var rate := int(data.get("tax_mille", _tariff_mille())) / 100
+	var out: Array = []
+	if data.has("tax_buy"):
+		out.append(I18n.fmt("market.tax.buy_line", {
+			"rate": rate,
+			"gold": format_thousands(int(data.get("tax_buy", 0))),
+		}))
+	if data.has("tax_sell"):
+		out.append(I18n.fmt("market.tax.sell_line", {
+			"rate": rate,
+			"gold": format_thousands(int(data.get("tax_sell", 0))),
+		}))
+	return out
+
+
+func _refresh_tax_lines() -> void:
+	if _tax_lines == null:
+		return
+	var texts := tax_line_texts(_selected_good) \
+		if not _selected_good.is_empty() else []
+	_tax_lines.visible = not texts.is_empty()
+	_tax_lines.text = "\n".join(PackedStringArray(texts))
 
 
 func _refresh_rows() -> void:
@@ -539,6 +885,16 @@ func _apply_row_limits(good_id: String) -> void:
 	_clamp_field(field, ceiling)
 	var qty := _parse_qty(field.text)
 
+	# 专营货 rows (docs/80 §4.7.11): grayed with the lock note until the
+	# port is aligned to the player at dev ≥ 2 — both buttons disabled.
+	if _is_exclusive(good_id) and not _exclusive_unlocked():
+		var lock_note := I18n.t_key("market.exclusive.locked")
+		_set_button_state(refs["buy"] as Button, false, lock_note)
+		_set_button_state(refs["sell"] as Button, false, lock_note)
+		_set_row_grayed(refs, true)
+		return
+	_set_row_grayed(refs, false)
+
 	var buy_button: Button = refs["buy"]
 	var buy_reason := _buy_reason(good_id, qty, buy_max)
 	_set_button_state(buy_button, buy_reason.is_empty(), buy_reason)
@@ -546,6 +902,14 @@ func _apply_row_limits(good_id: String) -> void:
 	var sell_button: Button = refs["sell"]
 	var sell_reason := _sell_reason(good_id, qty, held)
 	_set_button_state(sell_button, sell_reason.is_empty(), sell_reason)
+
+
+## The exclusive lock's visual state: the name and marginal cells gray to
+## PANEL_LINE while the row is gated (docs/80 §4.7.11 "grayed exclusive rows").
+func _set_row_grayed(refs: Dictionary, grayed: bool) -> void:
+	var color := PaletteLib.PANEL_LINE if grayed else PaletteLib.TEXT
+	for key in ["name", "marginal"]:
+		(refs[key] as Label).add_theme_color_override("font_color", color)
 
 
 ## Physical ceiling of a goods row's quantity field: the pooled free hold plus
@@ -581,9 +945,14 @@ func _buy_reason(good_id: String, qty: int, buy_max: int) -> String:
 	return ""
 
 
-## Why a Sell would fail ("" = allowed). Sell max is the held quantity, so an
-## empty row and an over-held quantity are both an invalid quantity.
-func _sell_reason(_good_id: String, qty: int, held: int) -> String:
+## Why a Sell would fail ("" = allowed). A producing port never buys its own
+## produced goods (docs/30 §4.2 market direction), so own-produce rows are
+## disabled with 不收购 before any quantity is even looked at. Sell max is the
+## held quantity, so an empty row and an over-held quantity are both an
+## invalid quantity.
+func _sell_reason(good_id: String, qty: int, held: int) -> String:
+	if _is_own_produce(good_id):
+		return I18n.t_key("market.not_bought")
 	if _port_id.is_empty() or held <= 0:
 		return I18n.t_key("market.invalid_qty")
 	if qty <= 0 or qty > held:
@@ -596,6 +965,14 @@ func _set_button_state(button: Button, enabled: bool, reason: String) -> void:
 	button.tooltip_text = reason
 
 
+## The three-state Invest button (docs/80 §4.7.11, decision 26):
+## (a) available — the standing engine gates (chunk affordability, the
+## §4.3 discount cap) apply; (b) allowance-exhausted —
+## `market.invest_gate.exhausted` plus the `market.invest_gate.allowance`
+## hint (≤ 2,000g per contestable port per month, reset at the month tick);
+## (c) diplomacy-blocked — `market.invest_gate.blocked` (rep ≥ 0 and no
+## bounty vs the alignment nation). The state comes from the allegiance
+## module's block-reason contract, guarded to "" (available) pre-L.
 func _refresh_investment() -> void:
 	var invested := TradeEngineLib.invested(_port_id)
 	var percent := TradeEngineLib.investment_percent(_port_id)
@@ -603,6 +980,11 @@ func _refresh_investment() -> void:
 		"gold": format_thousands(invested),
 		"count": percent,
 	})
+	var reason := _invest_block_reason()
+	if not reason.is_empty():
+		_invest_button.disabled = true
+		_invest_button.tooltip_text = _invest_gate_text(reason)
+		return
 	var at_cap := invested >= TradeEngineLib.INVEST_CAP_GOLD
 	var can := TradeEngineLib.can_invest(_port_id)
 	_invest_button.disabled = not can
@@ -614,6 +996,44 @@ func _refresh_investment() -> void:
 		_invest_button.tooltip_text = I18n.t_key("market.no_gold")
 	else:
 		_invest_button.tooltip_text = ""
+
+
+## The guard-read block reason ("" or a ui_strings key — docs/80 §4.9).
+func _invest_block_reason() -> String:
+	if _port_id.is_empty():
+		return ""
+	var module: Variant = _allegiance_module("invest_block_reason")
+	if module == null:
+		return ""
+	return str(module.call("invest_block_reason", _port_id))
+
+
+## The disabled Invest tooltip: the blocked key plus, for the
+## allowance-exhausted state, the `market.invest_gate.allowance` hint
+## (month-to-date vs the 2,000g cap, decision 26). `month_invested` is read
+## defensively — the key arrives with save v7 (task V); 0 before that.
+func _invest_gate_text(reason: String) -> String:
+	if reason == "market.invest_gate.exhausted":
+		return "%s\n%s" % [
+			I18n.t_key(reason),
+			I18n.fmt("market.invest_gate.allowance", {
+				"invested": format_thousands(_month_invested_here()),
+				"cap": format_thousands(INVEST_MONTHLY_CAP),
+			}),
+		]
+	if reason == "market.invest_gate.blocked":
+		var alignment := _effective_alignment()
+		var nation_name := "-" if alignment.is_empty() else I18n.t(
+			DataLoader.get_nation(alignment).get("name", {}))
+		return I18n.fmt(reason, {"nation": nation_name})
+	return I18n.t_key(reason)
+
+
+func _month_invested_here() -> int:
+	var value: Variant = GameState.get("month_invested")
+	if value is Dictionary:
+		return int((value as Dictionary).get(_port_id, 0))
+	return 0
 
 
 # --- Merchant captains in port (docs/80-* §4.7.8, task L) -------------------
@@ -691,10 +1111,12 @@ func _on_qty_changed(good_id: String, text: String) -> void:
 	var refs: Dictionary = _rows.get(good_id, {})
 	if refs.is_empty():
 		return
+	_selected_good = good_id
 	var field: LineEdit = refs["qty"]
 	var ceiling := _qty_ceiling(TradeEngineLib.sell_max(good_id))
 	_set_field_text(field, _sanitize(text, ceiling))
 	_apply_row_limits(good_id)
+	_refresh_tax_lines()
 
 
 ## `1 / 10 / 100 / Max` presets. The single picker serves both Buy and Sell, so
@@ -708,11 +1130,13 @@ func _on_qty_preset(good_id: String, preset: int) -> void:
 	var refs: Dictionary = _rows.get(good_id, {})
 	if refs.is_empty():
 		return
+	_selected_good = good_id
 	var buy_max := TradeEngineLib.buy_max(_port_id, good_id) if not _port_id.is_empty() else 0
 	var ceiling := maxi(buy_max, TradeEngineLib.sell_max(good_id))
 	var value := ceiling if preset < 0 else mini(preset, ceiling)
 	_set_field_text(refs["qty"] as LineEdit, "" if value <= 0 else str(value))
 	_apply_row_limits(good_id)
+	_refresh_tax_lines()
 
 
 func _on_buy(good_id: String) -> void:
