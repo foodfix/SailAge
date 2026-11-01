@@ -1274,6 +1274,38 @@ func _test_palace_screen() -> void:
 	_check(not screen.commendation_open(),
 		"no commendation without a pending conversion")
 
+	# THE REAL COMMENDATION PATH (70-* §4.1): a contestable port flips to the
+	# player's nation through the allegiance engine → the palace plays the
+	# one-time dialog at the own-nation palace; 领受 closes it AND dismisses
+	# the pending (the real pending is a peek — dismissal is the screen's
+	# close hook, `palace_screen.gd#_on_commend_closed`).
+	AllegianceLib.add_investment("quanzhou", "portugal", 6000)
+	_check(AllegianceLib.effective_alignment("quanzhou") == "portugal",
+		"the fixture flip lands (quanzhou aligned to portugal)")
+	screen.refresh()
+	await get_tree().process_frame
+	_check(screen.commendation_open(),
+		"the real pending commendation opens the dialog")
+	var real_commend: Control = screen.get_node("CommendDialog")
+	_check(real_commend.message_text().contains(
+			I18n.t_key("palace.commend.title"))
+		and real_commend.message_text().contains("Quanzhou"),
+		"the real dialog reads title + body with the port named (%s)"
+		% real_commend.message_text().replace("\n", " "))
+	(real_commend.get_node(
+		"Center/Panel/Margin/Body/Footer/OK") as Button).pressed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(not screen.commendation_open(), "领受 closes the dialog")
+	_check(_palace_engine_script.call("pending_commendation", "lisbon").is_empty()
+		and _palace_engine_script.call("pending_commendation",
+			"london").is_empty(),
+		"…and the close dismissed the pending commendation (one-time)")
+	screen.refresh()
+	await get_tree().process_frame
+	_check(not screen.commendation_open(),
+		"the dismissed commendation never replays on refresh")
+
 	# The spy seam drives the §4.7.13 states; every press must call through.
 	var spy := SeamSpy.new()
 	screen.engine_override = spy
