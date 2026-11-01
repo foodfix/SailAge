@@ -64,6 +64,16 @@ const UI_STRING_SEED := {
 var _failures: Array[String] = []
 var _checks := 0
 
+## Script-load gate paths (integration-bounce hardening): a screen script
+## that fails to PARSE instantiates as a bare Control, every widget check
+## silently no-ops on Nil errors, and the harness still prints ALL PASS with
+## a handful of checks. The suite therefore loads each script explicitly and
+## refuses to run the widget cases unless every one loads as a Script and
+## defines the methods/properties these cases exercise.
+const MARKET_SCREEN_PATH := "res://scenes/port/market_screen.gd"
+const TAVERN_SCREEN_PATH := "res://scenes/port/tavern_screen.gd"
+const NPC_INTEL_PATH := "res://scripts/world/npc_intel.gd"
+
 
 ## A stand-in for task L's allegiance module (docs/80-* §4.9 contract) —
 ## fed to the screens' `allegiance_override` test seams.
@@ -92,6 +102,9 @@ class FakeAllegiance extends RefCounted:
 
 func _ready() -> void:
 	_seed_ui_strings()
+	if not _scripts_loaded():
+		_report()  # fail fast — the widget cases cannot run without the scripts
+		return
 	_test_string_seeds()
 	_test_listing_rule()
 	_test_specialty_badge_and_header()
@@ -105,6 +118,52 @@ func _ready() -> void:
 	_test_tavern_renders_investment()
 	_test_locale_swap()
 	_report()
+
+
+# --- Script-load gate -------------------------------------------------------
+
+func _scripts_loaded() -> bool:
+	var ok := true
+	var market: Variant = ResourceLoader.load(MARKET_SCREEN_PATH)
+	ok = _script_ok(market, MARKET_SCREEN_PATH, [
+		"row_goods_ids", "row", "row_qty", "type_qty", "press_qty_preset",
+		"press_buy", "press_sell", "press_invest", "refresh",
+		"tax_badge_key", "tax_badge_state", "tax_line_texts",
+		"specialty_header_text",
+	], ["route_to_port"]) and ok
+	var tavern: Variant = ResourceLoader.load(TAVERN_SCREEN_PATH)
+	ok = _script_ok(tavern, TAVERN_SCREEN_PATH, [
+		"select_tab", "active_tab", "invest_rows", "rumor_texts", "refresh",
+	], ["route_to_port"]) and ok
+	var intel: Variant = ResourceLoader.load(NPC_INTEL_PATH)
+	ok = _script_ok(intel, NPC_INTEL_PATH, [
+		"rumor_rows", "investment_rows",
+	], []) and ok
+	return ok
+
+
+## One script's load + shape: is a Script, defines every listed method and
+## property. Each miss is a failed check (so a parse-arity regression shows
+## as RED with the reason, never as a silently-short ALL PASS).
+func _script_ok(script: Variant, path: String, methods: Array,
+		properties: Array) -> bool:
+	if not (script is Script):
+		_check(false, "%s loads as a Script (parse error? got %s)"
+			% [path.get_file(), str(script)])
+		return false
+	var defined: Array = []
+	for info in (script as Script).get_script_method_list():
+		defined.append(str(info.get("name", "")))
+	for method in methods:
+		_check(defined.has(str(method)),
+			"%s defines %s()" % [path.get_file(), str(method)])
+	var props: Array = []
+	for info in (script as Script).get_script_property_list():
+		props.append(str(info.get("name", "")))
+	for prop in properties:
+		_check(props.has(str(prop)),
+			"%s defines the %s seam property" % [path.get_file(), str(prop)])
+	return (script is Script)
 
 
 # --- Fixtures --------------------------------------------------------------
@@ -158,14 +217,22 @@ func _make_run(port_id: String, gold: int = 10000,
 
 func _instantiate_market() -> Control:
 	var screen: Control = MarketScene.instantiate()
-	screen.route_to_port = false
+	# Belt-and-braces for the script-load gate: a scene whose script failed to
+	# parse instantiates as a bare Control — fail visibly, never silently.
+	# (`set` is a no-op on a property the script would define, so a bare
+	# Control cannot spam errors past the failed check.)
+	_check(screen.has_method("row_goods_ids"),
+		"the market screen instantiates with its script attached")
+	screen.set("route_to_port", false)
 	add_child(screen)
 	return screen
 
 
 func _instantiate_tavern() -> Control:
 	var screen: Control = TavernScene.instantiate()
-	screen.route_to_port = false
+	_check(screen.has_method("invest_rows"),
+		"the tavern screen instantiates with its script attached")
+	screen.set("route_to_port", false)
 	add_child(screen)
 	return screen
 
@@ -356,16 +423,18 @@ func _test_not_bought_rows() -> void:
 # --- §4.7.11 exclusive (专营货) rows ----------------------------------------
 
 func _test_exclusive_rows() -> void:
-	# Guard defaults (no allegiance module): dev 0 → locked even at the
-	# player's own aligned capital.
-	_make_run("lisbon", 100000)
+	# Default path — no seam, so L's merged allegiance module answers: a
+	# **foreign-aligned** capital is locked (dev irrelevant). This holds under
+	# the §4.9 guard defaults too (alignment falls back to the port's data
+	# nation), so the check is stable across merge orders.
+	_make_run("london", 100000)
 	var screen := _instantiate_market()
-	for exclusive in ["porcelain", "gems", "gold"]:
+	for exclusive in ["porcelain", "spices", "lacquerware"]:
 		var row: Dictionary = screen.row(exclusive)
 		var buy: Button = row["buy"]
 		var sell: Button = row["sell"]
 		_check(buy.disabled and sell.disabled,
-			"%s row is gated under the guard defaults" % exclusive)
+			"%s row is gated at a foreign-aligned port" % exclusive)
 		var lock_note := I18n.t_key("market.exclusive.locked")
 		_check(buy.tooltip_text == lock_note and sell.tooltip_text == lock_note,
 			"%s rows show the lock note (%s)" % [exclusive, buy.tooltip_text])
@@ -455,7 +524,7 @@ func _test_tax_badge_states() -> void:
 	_make_run("lisbon")
 	var screen := _instantiate_market()
 	_check(screen.tax_badge_state()["key"] == "market.tax.badge.in_sphere",
-		"lisbon's default badge is 势力内 (guard defaults)")
+		"lisbon's default badge is 势力内 (5%% merged, same key as the 2000+own-nation default)")
 	_check(screen.tax_badge_state()["text"]
 		== I18n.t_key("market.tax.badge.in_sphere"),
 		"the badge text is the localized key (%s)"
@@ -522,12 +591,17 @@ func _test_tax_lines() -> void:
 	_check(screen2.get_node(
 		"Layout/VBox/TableFrame/Margin/Table/TaxLines").visible,
 		"the strip shows once a taxed row is selected")
-	# Without tax_mille the rate falls back to the guarded tariff (2000 → 20%).
+	# Without tax_mille the rate falls back to the guarded tariff; pin it to
+	# 2000 through the seam (with L merged, lisbon's real tariff is 500).
+	var fake := FakeAllegiance.new()
+	fake.tariff_value = 2000
+	MarketScreenLib.allegiance_override = fake
 	screen2._payloads["salt"] = {"id": "salt", "tax_buy": 2, "tax_sell": 1}
 	var fallback: Array = screen2.tax_line_texts("salt")
 	_check(fallback[0].contains("20"),
 		"the rate falls back to the guarded tariff 20%% (%s)" % str(fallback[0]))
 	_drop(screen2)
+	MarketScreenLib.allegiance_override = null
 
 
 # --- §4.7.11 three-state Invest button (decision 26) ------------------------
@@ -537,7 +611,8 @@ func _test_invest_states() -> void:
 	_make_run("lisbon", 6000)
 	var screen := _instantiate_market()
 	var button: Button = screen.get_node("Layout/VBox/Footer/Invest")
-	_check(not button.disabled, "Invest is available under the guard defaults")
+	_check(not button.disabled,
+		"Invest is available (merged module answers \"\" at the protected capital)")
 	_check(screen.press_invest(), "press_invest works in the available state")
 	_check(TradeEngineLib.invested("lisbon") == 500,
 		"the press invested one 500g chunk")

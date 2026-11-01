@@ -8,13 +8,11 @@ extends Control
 ## three-state Invest button (docs/30 §4.9/§4.10, decision 26).
 ##
 ## Everything the screen shows comes from data:
-##   * the goods table iterates [method TradeEngine.goods_rows] and keeps the
-##     **listed** rows only — a port lists a good iff it produces or demands
-##     it (docs/30 §4.2 listing rule; unlisted goods never render). The
-##     engine call is guarded: task L's listing-filtered
-##     `goods_rows(port_id)` payload is used when present, today's
-##     argument-less row list otherwise, and the screen filters against
-##     `ports.json` either way (idempotent — correction 7);
+##   * the goods table iterates [method TradeEngine.goods_rows] (L's merged,
+##     listing-filtered per-port payload) and keeps the **listed** rows only —
+##     a port lists a good iff it produces or demands it (docs/30 §4.2 listing
+##     rule; unlisted goods never render); the screen filters against
+##     `ports.json` downstream as an idempotent second gate;
 ##   * prices, quantity ceilings and trade side effects are the
 ##     `trade_engine.gd` formulas, never duplicated here;
 ##   * the stock / trend / marginal-price columns read `economy.gd`
@@ -423,22 +421,13 @@ func _exclusive_unlocked() -> bool:
 		str(DataLoader.get_port(_port_id).get("nation_id", ""))) == player
 
 
-## TradeEngine.goods_rows gains the port argument with L's listing filter
-## (correction 7); today's signature is argument-less. The arity check runs
-## through the Script-typed resource (the analyzer pins today's 0-arg call),
-## and the upgraded shape is invoked dynamically so this parses before L
-## lands. The screen filters by `ports.json` regardless (idempotent).
+## L's merged, pinned listing-filtered payload (docs/30 §4.4/§4.10 — the
+## engine owns the listing rule and the tariff side of each transaction).
+## The screen still filters against `ports.json` downstream as a cheap second
+## gate (idempotent), so the visible listing rule holds regardless of which
+## layer produced the rows.
 static func _engine_goods_rows(port_id: String) -> Array:
-	var script: Script = TradeEngineLib
-	for info in script.get_script_method_list():
-		if str(info.get("name", "")) != "goods_rows":
-			continue
-		var args: Array = info.get("args", []) if info.has("args") else []
-		if args.size() >= 1:
-			var value: Variant = script.call("goods_rows", port_id)
-			return value if value is Array else []
-		break
-	return TradeEngineLib.goods_rows()
+	return TradeEngineLib.goods_rows(port_id)
 
 
 ## Builds the fixed column header and one row per **listed** good, keeping the
