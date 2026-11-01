@@ -1347,7 +1347,9 @@ Exactly the 45 neutral ports below, appended after the sovereign block in
 validator group 5 after task E's amendment). All rows carry `nation_id: ""`,
 zh/en names, flavor, and the default facilities `market + tavern + inn`
 (`guild`/`palace` omitted — Phase-3 facilities); `shipyard` is authored on
-exactly five rows (quanzhou, sakai, hirado, gresik, funai). Ordering is the
+exactly four rows (quanzhou, hirado, sakai, gresik) — the `funai` row
+carries no shipyard (data is ground truth; the former "five rows incl.
+funai" wording was stale). Ordering is the
 file order.
 
 | id | zh | en | Nation | lat | lon | produces | demands |
@@ -1424,6 +1426,49 @@ members (the §4.4 `band` field references it). Rules:
 - The final member list is recorded in this subsection after task P
   authors it (same protocol as the §7.1 neutral-tier table).
 
+**Band members (final, task P, 2026-11-02).** Exactly the 15 band ids
+below partition all 145 ports (member ids in file order); the first six
+are the locked Phase-6 neutral-region regions. No further band id may be
+added without amending this table.
+
+| band id | ports | members |
+|---|---|---|
+| europe_atlantic | 13 | lisbon oporto seville cadiz bordeaux london plymouth amsterdam antwerp hamburg bergen danzig stockholm |
+| europe_med | 17 | marseille valencia barcelona genoa naples palermo syracuse cagliari valetta venice trieste ragusa corfu athens istanbul smyrna candia |
+| africa_levant | 8 | ceuta safi algiers tunis tripoli alexandria beirut cyprus |
+| africa_atlantic | 5 | saint_louis elmina accra luanda madeira |
+| swahili_red_sea | 10 | mozambique mombasa suakin mogadishu zanzibar kilwa sofala lamu massawa zeila |
+| india_persia_arabia | 22 | aden jiddah muscat basra bandar_abbas goa calicut cochin bombay surat colombo pondicherry nagapattinam masulipatnam hughli syriam dianga khambhat diu mocha qalhat hormuz |
+| southeast_asia | 17 | malacca batavia macassar amboina manila patani brunei ternate timor siam hoi_an banten jambi palembang gresik sulu kedah |
+| china_coast | 16 | macau canton zeelandia quanzhou ningbo yuegang shuangyu nanao xiamen fuzhou wenzhou zhelin qiongzhou beihai dinghai liujiagang |
+| japan | 9 | nagasaki osaka hirado sakai yamagawa hakata funai urado anotsu |
+| korea | 2 | busan yeompo |
+| americas_north | 6 | boston new_york jamestown charleston new_foundland quebec |
+| americas_caribbean | 8 | havana san_juan santo_domingo curacao suriname cartagena portobelo vera_cruz |
+| americas_pacific | 5 | acapulco panama guayaquil lima valparaiso |
+| americas_brazil | 5 | bahia rio_de_janeiro recife belem buenos_aires |
+| indian_ocean_south | 2 | cape_town botany_bay |
+
+Neutral bands (contain `nation_id: ""` ports): swahili_red_sea,
+india_persia_arabia, southeast_asia, china_coast, japan, korea — the six
+Phase-6 regions, unchanged. Banding rationale (Atlantic/Baltic split, the
+Brouwer-route `indian_ocean_south` pair, `africa_levant` naming, and
+`botany_bay`'s placement) is in `LICENSE-NOTES.md` ("Phase 7 region
+bands").
+
+**Port classes & dev floors (final, task P, 2026-11-02).** `protected:
+true` on exactly the decision-25 core set — portugal {lisbon, oporto},
+spain {seville, cadiz, valencia, barcelona}, england {london, plymouth},
+holland {amsterdam, antwerp}, ottoman {istanbul, athens, smyrna}, italy
+{venice, genoa, naples, palermo} — 17 ports, ⊇ the 6 capitals, ≤ 4 per
+nation. Authored `dev` floors: protected `3`; the 29 sovereign
+contestable majors `2` — aden alexandria bahia basra batavia calicut
+canton cartagena colombo danzig goa hamburg havana jiddah luanda macau
+malacca manila marseille mombasa mozambique nagasaki osaka panama recife
+stockholm surat vera_cruz zeelandia (historical rationale per port in
+`LICENSE-NOTES.md`); all other sovereign contestable ports `1`; all 45
+neutral ports `0`.
+
 ### 7.2 Goods (40, Phase 7)
 
 The schema (the `staple`/`specialty`/`exclusive`/`flow` fields and the
@@ -1492,6 +1537,21 @@ Split check (validator §8.2): 12 staples / 16 middle / 12 luxuries — the
 skeleton above lands exactly on it. Every `specialty` (= luxury tier, §4.2)
 is authored at ≤ 6 producers, and ≥ 1 exclusive good is produced per
 neutral band (P's graph).
+
+**Producer sets as authored by task P's port graph (2026-11-02).** Luxury
+producer counts: silk 4 (canton venice smyrna bandar_abbas), spices 6
+(malacca ternate amboina banten jambi calicut), carpet 5, perfume 4, amber
+4 (hamburg danzig stockholm sofala), porcelain 5 (canton macau ningbo
+quanzhou busan), pearls 5 (hormuz basra sulu cartagena beihai), gems 3,
+musk 2, lacquerware 2, silver 5, gold 6. Band-exclusive coverage of the
+six neutral bands is **final**: G's
+`exclusive: true` set is {spices, carpet, porcelain, pearls, gems, musk,
+lacquerware, gold} (master-ruled 2026-11-02), and P's graph satisfies
+every band under it — china_coast → **musk** (band-only) / porcelain;
+japan → **lacquerware** (band-only); korea → **porcelain**; southeast_asia
+→ **spices** / **pearls**; india_persia_arabia → **gems** (band-only) /
+pearls; swahili_red_sea → **gold**. (amber, silver, silk, perfume are not
+flagged exclusive; no band relies on them.)
 
 ### 7.3 ShipTypes (16, Phase 7)
 

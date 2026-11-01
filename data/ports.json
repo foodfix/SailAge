@@ -10,22 +10,58 @@
       "nation_id": "portugal",
       "lat": 38.72,
       "lon": -9.14,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "wine",
         "salt"
       ],
       "demands": [
-        "spices",
+        "wheat",
+        "olive_oil",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "silk",
-        "timber"
+        "spices",
+        "copper",
+        "leather",
+        "tobacco",
+        "porcelain",
+        "gems",
+        "musk",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "nao",
+          "carrack",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_zweihander",
+          "eq_brocade_sails",
+          "eq_cutlass",
+          "eq_cotton_sails",
+          "eq_saint_medallion"
+        ]
       },
       "flavor": {
         "zh": "大航海时代的起点,特茹河口帆影如林。",
@@ -41,22 +77,57 @@
       "nation_id": "spain",
       "lat": 37.0,
       "lon": -6.35,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "olive_oil",
         "wine",
         "wool"
       ],
       "demands": [
+        "wheat",
         "sugar",
-        "spices"
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "perfume",
+        "carpet",
+        "tobacco",
+        "porcelain",
+        "pearls",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao",
+          "carrack",
+          "galleon",
+          "brigantine"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_three_quarter_armor",
+          "eq_angel_figurehead",
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "瓜达尔基维尔河上的白银之城,船坞与货栈昼夜不歇。",
@@ -72,20 +143,48 @@
       "nation_id": "spain",
       "lat": 39.45,
       "lon": -0.33,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
-        "silk",
-        "ceramics"
+        "ceramics",
+        "rice"
       ],
       "demands": [
         "wheat",
-        "timber"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "galley",
+          "galiot",
+          "caravel",
+          "caravela_redonda"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_brigandine",
+          "eq_main_gauche",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "橙树林环绕的黎凡特港,丝绸与陶器在码头上成捆堆积。",
@@ -101,20 +200,48 @@
       "nation_id": "spain",
       "lat": 41.35,
       "lon": 2.17,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "wool",
-        "cotton_cloth"
+        "iron"
       ],
       "demands": [
-        "iron",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware",
+        "leather"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "galley",
+          "galiot",
+          "caravel",
+          "brigantine"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_brigandine",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "加泰罗尼亚的商港,棉布与羊毛在此装船北运。",
@@ -130,21 +257,53 @@
       "nation_id": "spain",
       "lat": 43.3,
       "lon": 5.37,
+      "band": "europe_med",
+      "dev": 2,
       "produces": [
         "wine",
         "salt",
         "perfume"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wool",
-        "silk"
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "silk",
+        "spices",
+        "carpet"
+      ],
+      "sphere": [
+        "spain",
+        "italy",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_rapier",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "普罗旺斯的门户,帆船载着葡萄酒与香水驶向东方。",
@@ -160,20 +319,49 @@
       "nation_id": "spain",
       "lat": 45.55,
       "lon": -1.15,
+      "band": "europe_atlantic",
+      "dev": 1,
       "produces": [
         "wine",
         "salt"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wool",
+        "sugar",
+        "dried_fish",
         "timber",
-        "wool"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware"
+      ],
+      "sphere": [
+        "spain",
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "nao",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "加龙河口的葡萄酒港,英国商人的酒桶常年不断。",
@@ -189,22 +377,59 @@
       "nation_id": "england",
       "lat": 51.47,
       "lon": 0.75,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "wool",
-        "cotton_cloth"
+        "cotton_cloth",
+        "cheese"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "rice",
+        "pitch",
+        "silk",
         "spices",
-        "timber"
+        "perfume",
+        "carpet",
+        "amber",
+        "linen",
+        "tobacco",
+        "porcelain",
+        "lacquerware"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "caravela_redonda",
+          "nao",
+          "carrack",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_zweihander",
+          "eq_backsword",
+          "eq_storm_sails",
+          "eq_lucky_charm",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "泰晤士河畔的贸易巨城,羊毛与布匹堆满河岸。",
@@ -220,22 +445,62 @@
       "nation_id": "holland",
       "lat": 52.46,
       "lon": 4.6,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
-        "cheese",
-        "glassware"
+        "glassware",
+        "cheese"
       ],
       "demands": [
-        "spices",
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "rice",
+        "pitch",
         "silk",
-        "wheat"
+        "spices",
+        "copper",
+        "carpet",
+        "amber",
+        "linen",
+        "furs",
+        "tobacco",
+        "tea",
+        "porcelain",
+        "lacquerware",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "brigantine",
+          "caravel",
+          "nao",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_brocade_sails",
+          "eq_flemish_linen_sails",
+          "eq_cutlass",
+          "eq_storm_sails",
+          "eq_mermaid_figurehead"
+        ]
       },
       "flavor": {
         "zh": "运河纵横的商都,玻璃与奶酪从这里流向全欧。",
@@ -251,20 +516,53 @@
       "nation_id": "holland",
       "lat": 51.44,
       "lon": 3.6,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
+        "wool",
         "glassware",
-        "wool"
+        "cheese",
+        "linen"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "rice",
+        "pitch",
+        "silk",
         "spices",
-        "wine"
+        "carpet",
+        "amber",
+        "furs",
+        "porcelain",
+        "gems",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "caravel",
+          "brigantine"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_brigandine",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "斯海尔德河上的集市之城,各国商船在此交汇。",
@@ -280,21 +578,51 @@
       "nation_id": "holland",
       "lat": 53.87,
       "lon": 8.7,
+      "band": "europe_atlantic",
+      "dev": 2,
       "produces": [
         "dried_fish",
         "timber",
-        "amber"
+        "amber",
+        "pitch",
+        "linen"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "silk",
+        "glassware",
+        "furs"
+      ],
+      "sphere": [
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "brigantine",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_storm_sails",
+          "eq_eagle_figurehead",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "北海边的汉萨旧港,鱼干与琥珀是码头的常客。",
@@ -310,20 +638,52 @@
       "nation_id": "italy",
       "lat": 44.41,
       "lon": 8.93,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "olive_oil",
         "cotton_cloth"
       ],
       "demands": [
+        "wheat",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
         "spices",
-        "copper"
+        "copper",
+        "leather",
+        "ivory",
+        "raw_silk",
+        "gems"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "brigantine"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_rapier",
+          "eq_main_gauche",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "利古里亚海岸的银行家之港,橄榄油与棉布南来北往。",
@@ -339,20 +699,48 @@
       "nation_id": "italy",
       "lat": 40.84,
       "lon": 14.25,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
+        "wheat",
         "olive_oil",
         "wine"
       ],
       "demands": [
-        "wheat",
-        "timber"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware",
+        "leather",
+        "raw_silk"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "维苏威脚下的繁忙港口,酒桶与谷袋堆满码头。",
@@ -368,20 +756,45 @@
       "nation_id": "italy",
       "lat": 38.12,
       "lon": 13.36,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "wheat",
         "olive_oil"
       ],
       "demands": [
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
         "timber",
-        "iron"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "西西里西岸的粮仓,小麦由这里运往地中海各地。",
@@ -397,20 +810,48 @@
       "nation_id": "italy",
       "lat": 37.07,
       "lon": 15.29,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
-        "salt",
-        "wheat"
+        "wheat",
+        "salt"
       ],
       "demands": [
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
         "timber",
-        "leather"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "锡拉库萨的咸水田与麦田,靠盐与谷物为生。",
@@ -426,20 +867,48 @@
       "nation_id": "italy",
       "lat": 39.22,
       "lon": 9.11,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
         "salt",
         "leather"
       ],
       "demands": [
         "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "spices",
         "glassware"
+      ],
+      "sphere": [
+        "italy",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "sloop",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "撒丁岛南端的盐港,皮革与盐在此上船。",
@@ -455,20 +924,49 @@
       "nation_id": "italy",
       "lat": 35.9,
       "lon": 14.51,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
-        "cotton_cloth"
+        "cotton_cloth",
+        "salt"
       ],
       "demands": [
         "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
         "timber",
-        "iron"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "马耳他骑士团筑起的堡垒港,棉布在此交易。",
@@ -484,22 +982,63 @@
       "nation_id": "italy",
       "lat": 45.44,
       "lon": 12.33,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
+        "silk",
         "glassware",
         "perfume"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "spices",
-        "silk",
-        "cotton_cloth"
+        "copper",
+        "carpet",
+        "amber",
+        "indigo",
+        "rhubarb",
+        "raw_silk",
+        "porcelain",
+        "pearls",
+        "musk",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "galleass",
+          "xebec",
+          "caravel",
+          "galleon",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_angel_figurehead",
+          "eq_rapier",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_mermaid_figurehead"
+        ]
       },
       "flavor": {
         "zh": "亚得里亚海的女王,商栈与运河之城。",
@@ -515,20 +1054,51 @@
       "nation_id": "italy",
       "lat": 42.65,
       "lon": 18.09,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
+        "wool",
         "timber",
-        "leather",
-        "wool"
+        "leather"
       ],
       "demands": [
-        "wheat"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "silk",
+        "spices"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "杜布罗夫尼克的商船之港,木材与皮革堆满码头。",
@@ -544,21 +1114,47 @@
       "nation_id": "ottoman",
       "lat": 37.94,
       "lon": 23.64,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "olive_oil",
         "wine",
         "ceramics"
       ],
       "demands": [
+        "wheat",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
         "timber",
-        "iron"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "glassware",
+        "leather"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "雅典港内橄榄与陶器并陈,古代的石柱仍望着海。",
@@ -574,20 +1170,49 @@
       "nation_id": "ottoman",
       "lat": 35.34,
       "lon": 25.13,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
-        "wine",
-        "olive_oil"
+        "olive_oil",
+        "wine"
       ],
       "demands": [
         "wheat",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "italy"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "克里特岛上的威尼斯遗港,酒与橄榄油源源而出。",
@@ -603,20 +1228,51 @@
       "nation_id": "ottoman",
       "lat": 34.67,
       "lon": 33.04,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
-        "copper",
-        "sugar"
+        "sugar",
+        "salt",
+        "copper"
       ],
       "demands": [
         "wheat",
-        "timber"
+        "olive_oil",
+        "wine",
+        "wool",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "italy",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "塞浦路斯南岸的铜与糖之港,季风带来东方货物。",
@@ -632,20 +1288,49 @@
       "nation_id": "ottoman",
       "lat": 38.42,
       "lon": 27.14,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
+        "wool",
+        "silk",
         "carpet"
       ],
       "demands": [
         "wheat",
-        "glassware",
-        "iron"
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "indigo",
+        "raw_silk",
+        "porcelain",
+        "musk"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_backsword",
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "爱琴海东岸的大集市,地毯在码头上铺了一地。",
@@ -661,22 +1346,62 @@
       "nation_id": "ottoman",
       "lat": 41.01,
       "lon": 28.97,
+      "band": "europe_med",
+      "protected": true,
+      "dev": 3,
       "produces": [
-        "carpet",
-        "perfume"
+        "perfume",
+        "carpet"
       ],
       "demands": [
         "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
         "iron",
-        "timber"
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "copper",
+        "leather",
+        "coffee",
+        "rhubarb",
+        "raw_silk",
+        "porcelain",
+        "pearls",
+        "gems",
+        "musk",
+        "gold"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "galleass",
+          "xebec",
+          "caravel",
+          "nao",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
         "guild": 3,
-        "palace": 3
+        "palace": 3,
+        "equipment_stock": [
+          "eq_zweihander",
+          "eq_backsword",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "金角湾畔的帝国首都,博斯普鲁斯的风带来两洲的货物。",
@@ -692,20 +1417,48 @@
       "nation_id": "ottoman",
       "lat": 33.9,
       "lon": 35.5,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
-        "silk",
-        "timber"
+        "timber",
+        "pitch"
       ],
       "demands": [
         "wheat",
-        "salt"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "spices",
+        "glassware",
+        "indigo"
+      ],
+      "sphere": [
+        "ottoman",
+        "italy"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "黎凡特海岸的丝绸港,山地木材随之而下。",
@@ -721,22 +1474,53 @@
       "nation_id": "ottoman",
       "lat": 31.2,
       "lon": 29.92,
+      "band": "africa_levant",
+      "dev": 2,
       "produces": [
-        "cotton_cloth",
+        "wheat",
         "sugar",
-        "wheat"
+        "rice"
       ],
       "demands": [
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
         "timber",
         "iron",
-        "wine"
+        "cheese",
+        "pitch",
+        "spices",
+        "leather",
+        "indigo",
+        "coffee",
+        "porcelain",
+        "pearls",
+        "musk"
+      ],
+      "sphere": [
+        "ottoman",
+        "italy"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "尼罗河口的古老商都,谷物与糖在灯塔下装船。",
@@ -752,20 +1536,48 @@
       "nation_id": "ottoman",
       "lat": 32.9,
       "lon": 13.18,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
-        "leather",
-        "salt"
+        "salt",
+        "leather"
       ],
       "demands": [
         "wheat",
-        "timber"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "北非海岸的停泊地,皮革与盐是这里的生意。",
@@ -781,20 +1593,51 @@
       "nation_id": "ottoman",
       "lat": 36.82,
       "lon": 10.3,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
         "olive_oil",
         "leather"
       ],
       "demands": [
         "wheat",
-        "iron"
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "spices",
+        "copper",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "spain",
+        "italy"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "突尼斯湖畔的港城,橄榄油与皮革由此北运。",
@@ -810,21 +1653,50 @@
       "nation_id": "ottoman",
       "lat": 36.77,
       "lon": 3.06,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
-        "leather",
-        "wool"
+        "wheat",
+        "wool",
+        "leather"
       ],
       "demands": [
-        "wheat",
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "dried_fish",
         "timber",
-        "wine"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "ottoman",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_backsword",
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "巴巴里海岸的白色港城,皮革与羊毛堆满码头。",
@@ -840,20 +1712,48 @@
       "nation_id": "portugal",
       "lat": 35.89,
       "lon": -5.32,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
-        "wheat",
+        "salt",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "cotton_cloth"
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "glassware"
+      ],
+      "sphere": [
+        "portugal",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "直布罗陀门户上的葡属要塞。",
@@ -869,20 +1769,47 @@
       "nation_id": "portugal",
       "lat": 32.65,
       "lon": -16.91,
+      "band": "africa_atlantic",
+      "dev": 1,
       "produces": [
-        "sugar",
-        "wine"
+        "wine",
+        "sugar"
       ],
       "demands": [
         "wheat",
-        "iron"
+        "olive_oil",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "大西洋边缘的糖与酒之岛,地图最西端的锚地。",
@@ -898,20 +1825,54 @@
       "nation_id": "spain",
       "lat": 23.13,
       "lon": -82.38,
+      "band": "americas_caribbean",
+      "dev": 2,
       "produces": [
         "sugar",
-        "amber"
+        "leather",
+        "tobacco"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "cotton_cloth"
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "perfume",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "nao",
+          "caravel",
+          "pinnace",
+          "sloop",
+          "brigantine",
+          "caravela_redonda"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "加勒比海上的良港,蔗糖与烟草在此装船。",
@@ -927,20 +1888,52 @@
       "nation_id": "spain",
       "lat": 19.2,
       "lon": -96.13,
+      "band": "americas_caribbean",
+      "dev": 2,
       "produces": [
-        "copper",
-        "sugar"
+        "sugar",
+        "leather",
+        "silver"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
         "iron",
-        "glassware"
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "perfume",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "nao",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "白银之路的东大门,骡队在此与船队相会。",
@@ -956,20 +1949,53 @@
       "nation_id": "spain",
       "lat": 10.39,
       "lon": -75.53,
+      "band": "americas_caribbean",
+      "dev": 2,
       "produces": [
-        "amber",
-        "sugar"
+        "pearls",
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "wool"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "perfume",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "nao",
+          "caravel",
+          "pinnace",
+          "sloop",
+          "brigantine"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "环礁之后的设防宝库港,领航员对每条水道铭记于心。",
@@ -985,19 +2011,47 @@
       "nation_id": "spain",
       "lat": 9.55,
       "lon": -79.65,
+      "band": "americas_caribbean",
+      "dev": 1,
       "produces": [
-        "sugar"
+        "sugar",
+        "timber"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "闷热多雨的集市,宝船队每年在此装货一次。",
@@ -1013,20 +2067,51 @@
       "nation_id": "spain",
       "lat": -12.06,
       "lon": -77.15,
+      "band": "americas_pacific",
+      "dev": 1,
       "produces": [
-        "copper",
-        "sugar"
+        "wine",
+        "sugar",
+        "silver"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
         "glassware",
-        "wine"
+        "perfume",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "卡亚俄锚地在雾后为这座王者之城服务。",
@@ -1042,20 +2127,48 @@
       "nation_id": "spain",
       "lat": -34.6,
       "lon": -58.37,
+      "band": "americas_brazil",
+      "dev": 1,
       "produces": [
-        "leather",
-        "wheat"
+        "wheat",
+        "leather"
       ],
       "demands": [
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
         "iron",
-        "glassware"
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "caravel",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "无垠草原的皮革与油脂在这座泥泞河港装船。",
@@ -1071,20 +2184,45 @@
       "nation_id": "spain",
       "lat": 18.47,
       "lon": -66.11,
+      "band": "americas_caribbean",
+      "dev": 1,
       "produces": [
         "sugar",
         "salt"
       ],
       "demands": [
-        "cotton_cloth",
-        "wine"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "扼守加勒比通道的设防锚地。",
@@ -1100,20 +2238,47 @@
       "nation_id": "spain",
       "lat": 18.47,
       "lon": -69.88,
+      "band": "americas_caribbean",
+      "dev": 1,
       "produces": [
         "sugar",
         "leather"
       ],
       "demands": [
-        "silk",
-        "glassware"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "新大陆上最古老的西班牙治所。",
@@ -1129,20 +2294,49 @@
       "nation_id": "spain",
       "lat": 16.85,
       "lon": -99.9,
+      "band": "americas_pacific",
+      "dev": 1,
       "produces": [
-        "silk",
-        "copper"
+        "wheat",
+        "silver"
       ],
       "demands": [
-        "wheat",
-        "glassware"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "nao",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "马尼拉大帆船在此以中国丝绸交换墨西哥白银。",
@@ -1158,20 +2352,48 @@
       "nation_id": "spain",
       "lat": 8.98,
       "lon": -79.52,
+      "band": "americas_pacific",
+      "dev": 2,
       "produces": [
-        "amber",
-        "copper"
+        "timber",
+        "pitch"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "狭窄的地峡,两洋几乎在此相握。",
@@ -1187,20 +2409,47 @@
       "nation_id": "spain",
       "lat": -33.03,
       "lon": -71.63,
+      "band": "americas_pacific",
+      "dev": 1,
       "produces": [
-        "copper",
+        "wheat",
         "wine"
       ],
       "demands": [
+        "olive_oil",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "glassware",
-        "wool"
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "caravel",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "陡坡之下的多风海湾,为太平洋航程补给。",
@@ -1216,20 +2465,46 @@
       "nation_id": "spain",
       "lat": -2.6,
       "lon": -80.3,
+      "band": "americas_pacific",
+      "dev": 1,
       "produces": [
-        "sugar",
-        "timber"
+        "timber",
+        "pitch"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
         "iron",
-        "glassware"
+        "cheese",
+        "rice",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "赤道上的可可与造船河港。",
@@ -1245,20 +2520,52 @@
       "nation_id": "portugal",
       "lat": -12.97,
       "lon": -38.5,
+      "band": "americas_brazil",
+      "dev": 2,
       "produces": [
         "sugar",
-        "timber"
+        "dye_wood",
+        "tobacco"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "glassware",
-        "iron"
+        "linen",
+        "gold"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "caravel",
+          "caravela_redonda",
+          "nao",
+          "galleon",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "万圣湾,制糖作坊靠贩奴船维持。",
@@ -1274,21 +2581,48 @@
       "nation_id": "portugal",
       "lat": -22.9,
       "lon": -43.18,
+      "band": "americas_brazil",
+      "dev": 1,
       "produces": [
         "sugar",
         "timber",
-        "amber"
+        "dye_wood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
         "iron",
-        "wool"
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "caravel",
+          "caravela_redonda",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "群山环抱的海湾,船队可安全下锚。",
@@ -1304,20 +2638,49 @@
       "nation_id": "portugal",
       "lat": -8.06,
       "lon": -34.87,
+      "band": "americas_brazil",
+      "dev": 2,
       "produces": [
         "sugar",
-        "cotton_cloth"
+        "dye_wood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "caravel",
+          "pinnace",
+          "sloop",
+          "brigantine",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "礁石庇护着糖海岸最繁忙的码头。",
@@ -1333,20 +2696,46 @@
       "nation_id": "portugal",
       "lat": -1.35,
       "lon": -48.48,
+      "band": "americas_brazil",
+      "dev": 1,
       "produces": [
         "timber",
-        "spices"
+        "dye_wood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
         "salt",
-        "glassware"
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "caravel",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "通往大河与香料森林的门户。",
@@ -1362,20 +2751,47 @@
       "nation_id": "england",
       "lat": 42.36,
       "lon": -71.05,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
         "dried_fish",
-        "timber"
+        "timber",
+        "pitch",
+        "linen"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "glassware"
+      ],
+      "sphere": [
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "brigantine",
+          "fluyt",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "寒冷深湾里的鳕鱼、木材与倔强的商人。",
@@ -1391,20 +2807,48 @@
       "nation_id": "england",
       "lat": 40.7,
       "lon": -74.02,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
         "timber",
-        "dried_fish"
+        "furs"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "spices"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "河口处的避风良港,是通往内地的水路起点。",
@@ -1420,20 +2864,46 @@
       "nation_id": "england",
       "lat": 37.0,
       "lon": -76.3,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
         "timber",
-        "wheat"
+        "pitch",
+        "linen",
+        "tobacco"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "glassware"
+      ],
+      "sphere": [
+        "england",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "pinnace",
+          "sloop",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "泥河上的烟草码头,除了土地什么都缺。",
@@ -1449,20 +2919,46 @@
       "nation_id": "england",
       "lat": 32.78,
       "lon": -79.93,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
         "sugar",
         "timber"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "england",
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "稻米与靛蓝的驳船在此与远洋贸易相会。",
@@ -1478,20 +2974,48 @@
       "nation_id": "england",
       "lat": 47.56,
       "lon": -52.71,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
-        "dried_fish",
-        "timber"
+        "salt",
+        "dried_fish"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen",
+        "furs"
+      ],
+      "sphere": [
+        "england",
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_albatross_figurehead",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "大浅滩的腌鱼滩,每年夏天都挤满人。",
@@ -1507,20 +3031,47 @@
       "nation_id": "england",
       "lat": 47.0,
       "lon": -70.5,
+      "band": "americas_north",
+      "dev": 1,
       "produces": [
+        "dried_fish",
         "timber",
-        "dried_fish"
+        "furs"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "pinnace",
+          "sloop",
+          "fluyt",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "峭壁上的毛皮站,俯瞰渐窄的河流。",
@@ -1536,20 +3087,47 @@
       "nation_id": "holland",
       "lat": 12.11,
       "lon": -68.93,
+      "band": "americas_caribbean",
+      "dev": 1,
       "produces": [
         "salt",
-        "sugar"
+        "timber"
       ],
       "demands": [
-        "timber",
-        "wine"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "pinnace",
+          "sloop",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "干旱小岛,盐田与自由港招来万国旗。",
@@ -1565,20 +3143,46 @@
       "nation_id": "holland",
       "lat": 5.9,
       "lon": -55.15,
+      "band": "americas_caribbean",
+      "dev": 1,
       "produces": [
         "sugar",
         "timber"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
         "iron",
-        "wine"
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "pinnace",
+          "sloop",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "种植园河流缓缓甜甜地流向大海。",
@@ -1594,20 +3198,51 @@
       "nation_id": "portugal",
       "lat": 5.08,
       "lon": -1.35,
+      "band": "africa_atlantic",
+      "dev": 1,
       "produces": [
-        "amber",
-        "salt"
+        "salt",
+        "ivory",
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "iron"
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "fluyt",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_lucky_charm",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "黄金海岸上的城堡,贸易以人命计量。",
@@ -1623,20 +3258,49 @@
       "nation_id": "portugal",
       "lat": -8.78,
       "lon": 13.23,
+      "band": "africa_atlantic",
+      "dev": 2,
       "produces": [
-        "amber",
-        "leather"
+        "salt",
+        "leather",
+        "ivory"
       ],
       "demands": [
-        "glassware",
-        "wool"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "刚果以南的炎热海湾,通往内地集市的入口。",
@@ -1652,20 +3316,49 @@
       "nation_id": "portugal",
       "lat": -15.03,
       "lon": 40.73,
+      "band": "swahili_red_sea",
+      "dev": 2,
       "produces": [
-        "amber",
-        "spices"
+        "ivory",
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "iron"
+        "glassware"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "季风帆船与葡萄牙代理人的岛屿港口。",
@@ -1681,20 +3374,49 @@
       "nation_id": "ottoman",
       "lat": -4.06,
       "lon": 39.68,
+      "band": "swahili_red_sea",
+      "dev": 2,
       "produces": [
-        "spices",
-        "amber"
+        "timber",
+        "ivory"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
         "glassware",
-        "wine"
+        "porcelain"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_backsword",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "珊瑚岛港,扼守斯瓦希里海岸。",
@@ -1710,20 +3432,47 @@
       "nation_id": "holland",
       "lat": -33.92,
       "lon": 18.42,
+      "band": "indian_ocean_south",
+      "dev": 1,
       "produces": [
-        "wine",
-        "wheat"
+        "wheat",
+        "salt"
       ],
       "demands": [
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
         "timber",
-        "iron"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_albatross_figurehead",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "桌山之下,为印度航程供给的菜园。",
@@ -1739,20 +3488,50 @@
       "nation_id": "portugal",
       "lat": 32.3,
       "lon": -9.24,
+      "band": "africa_levant",
+      "dev": 1,
       "produces": [
         "salt",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "silk",
-        "spices"
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "摩洛哥大西洋岸的陶器与盐港。",
@@ -1768,20 +3547,48 @@
       "nation_id": "holland",
       "lat": 16.0,
       "lon": -16.51,
+      "band": "africa_atlantic",
+      "dev": 1,
       "produces": [
-        "leather",
-        "salt"
+        "salt",
+        "leather"
       ],
       "demands": [
-        "glassware",
-        "wool"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "沙漠边缘的河口贸易站。",
@@ -1797,20 +3604,49 @@
       "nation_id": "england",
       "lat": 5.53,
       "lon": -0.2,
+      "band": "africa_atlantic",
+      "dev": 1,
       "produces": [
-        "amber",
-        "salt"
+        "salt",
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "wine"
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "england",
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "浪花拍岸的码头,独木舟驶向大船。",
@@ -1826,20 +3662,57 @@
       "nation_id": "portugal",
       "lat": 15.5,
       "lon": 73.83,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
-        "spices",
-        "cotton_cloth"
+        "iron",
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "glassware"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "cheese",
+        "pitch",
+        "glassware",
+        "rhubarb",
+        "raw_silk",
+        "porcelain",
+        "musk",
+        "silver",
+        "spices",
+        "gold"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "galleon",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_rapier",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "总督驻地,棕榈海岸上方的白色教堂。",
@@ -1855,20 +3728,47 @@
       "nation_id": "portugal",
       "lat": 11.25,
       "lon": 75.77,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
         "spices",
-        "carpet"
+        "rice"
       ],
       "demands": [
-        "glassware",
-        "copper"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "胡椒之路的西端,挤满阿拉伯帆船。",
@@ -1884,20 +3784,46 @@
       "nation_id": "holland",
       "lat": 9.97,
       "lon": 76.27,
+      "band": "india_persia_arabia",
+      "dev": 1,
       "produces": [
-        "spices",
-        "timber"
+        "timber",
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
         "iron",
-        "wine"
+        "cheese",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "中国渔网与香料仓库交错的水乡港。",
@@ -1913,20 +3839,52 @@
       "nation_id": "england",
       "lat": 18.92,
       "lon": 72.83,
+      "band": "india_persia_arabia",
+      "dev": 1,
       "produces": [
         "cotton_cloth",
-        "spices"
+        "salt"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
         "iron",
-        "wine"
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "tea",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "england",
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "brigantine",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_lucky_charm",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "七岛相连的天然深水港。",
@@ -1942,20 +3900,53 @@
       "nation_id": "england",
       "lat": 21.1,
       "lon": 72.7,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
         "cotton_cloth",
-        "carpet"
+        "indigo"
       ],
       "demands": [
-        "glassware",
-        "amber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "raw_silk",
+        "porcelain",
+        "musk",
+        "silver"
+      ],
+      "sphere": [
+        "england",
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_backsword",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "莫卧儿帝国往来红海最繁忙的码头。",
@@ -1971,20 +3962,49 @@
       "nation_id": "holland",
       "lat": 6.93,
       "lon": 79.85,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
-        "spices",
-        "ceramics"
+        "rice",
+        "gems"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "锡兰背风面的肉桂锚地。",
@@ -2000,20 +4020,47 @@
       "nation_id": "england",
       "lat": 11.93,
       "lon": 79.83,
+      "band": "india_persia_arabia",
+      "dev": 1,
       "produces": [
         "cotton_cloth",
-        "spices"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
         "glassware",
-        "amber"
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "england",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "科罗曼德海岸上笔直街道的方格小城。",
@@ -2029,20 +4076,48 @@
       "nation_id": "ottoman",
       "lat": 23.62,
       "lon": 58.59,
+      "band": "india_persia_arabia",
+      "dev": 1,
       "produces": [
-        "amber",
+        "dried_fish",
         "carpet"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "timber"
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "光秃的黑山之后,采珠船聚集的港湾。",
@@ -2058,20 +4133,52 @@
       "nation_id": "ottoman",
       "lat": 30.0,
       "lon": 48.5,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
-        "carpet",
-        "dried_fish"
+        "salt",
+        "pearls"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
         "iron",
-        "timber"
+        "cheese",
+        "rice",
+        "pitch",
+        "indigo",
+        "coffee",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "两河合一处的椰枣园。",
@@ -2087,20 +4194,52 @@
       "nation_id": "ottoman",
       "lat": 27.18,
       "lon": 56.28,
+      "band": "india_persia_arabia",
+      "dev": 1,
       "produces": [
-        "carpet",
-        "amber"
+        "silk",
+        "carpet"
       ],
       "demands": [
-        "glassware",
-        "sugar"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "tea",
+        "rhubarb",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "ottoman",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "波斯湾的税关,炎热而堆满账册。",
@@ -2116,20 +4255,50 @@
       "nation_id": "ottoman",
       "lat": 12.79,
       "lon": 45.03,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
-        "amber",
-        "salt"
+        "salt",
+        "coffee"
       ],
       "demands": [
         "wheat",
-        "iron"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "indigo",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "光秃火山丘下的火山口港湾。",
@@ -2145,20 +4314,49 @@
       "nation_id": "ottoman",
       "lat": 21.48,
       "lon": 39.18,
+      "band": "india_persia_arabia",
+      "dev": 2,
       "produces": [
-        "carpet",
-        "amber"
+        "leather",
+        "coffee"
       ],
       "demands": [
         "wheat",
-        "timber"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware",
+        "indigo"
+      ],
+      "sphere": [
+        "ottoman",
+        "italy"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "红海的朝圣之门,道路被尘土染白。",
@@ -2174,20 +4372,46 @@
       "nation_id": "ottoman",
       "lat": 19.1,
       "lon": 37.33,
+      "band": "swahili_red_sea",
+      "dev": 1,
       "produces": [
         "salt",
         "leather"
       ],
       "demands": [
-        "glassware",
-        "wine"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "苏丹贸易的珊瑚石港,已半为泥沙所淤。",
@@ -2203,20 +4427,47 @@
       "nation_id": "ottoman",
       "lat": 2.03,
       "lon": 45.34,
+      "band": "swahili_red_sea",
+      "dev": 1,
       "produces": [
-        "spices",
+        "dried_fish",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
         "iron",
-        "wine"
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "贝纳迪尔海岸上白墙环绕的锚地。",
@@ -2232,20 +4483,52 @@
       "nation_id": "portugal",
       "lat": 2.19,
       "lon": 102.25,
+      "band": "southeast_asia",
+      "dev": 2,
       "produces": [
         "spices",
-        "amber"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
         "iron",
-        "wool"
+        "cheese",
+        "pitch",
+        "raw_silk",
+        "porcelain",
+        "musk",
+        "silver"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda",
+          "galleon",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "海峡的税关,每支季风船队都必须经过。",
@@ -2261,20 +4544,55 @@
       "nation_id": "holland",
       "lat": -6.13,
       "lon": 106.81,
+      "band": "southeast_asia",
+      "dev": 2,
       "produces": [
-        "spices",
-        "sugar"
+        "sugar",
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "coffee",
+        "tea",
+        "raw_silk",
+        "porcelain",
+        "musk",
+        "lacquerware",
+        "silver"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "galleon"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "运河、货栈与公司的东方首府。",
@@ -2290,20 +4608,48 @@
       "nation_id": "holland",
       "lat": -5.13,
       "lon": 119.41,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
-        "spices",
-        "timber"
+        "rice",
+        "sandalwood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
         "glassware",
-        "wool"
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "dhow",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "布吉商人与公司船只的交汇之地。",
@@ -2319,20 +4665,47 @@
       "nation_id": "holland",
       "lat": -3.69,
       "lon": 128.18,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
         "spices",
-        "salt"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
         "iron",
-        "wine"
+        "cheese",
+        "pitch",
+        "cotton_cloth",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "sloop",
+          "pinnace",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "丁香之岛,由星形要塞守卫。",
@@ -2348,20 +4721,52 @@
       "nation_id": "spain",
       "lat": 14.58,
       "lon": 120.97,
+      "band": "southeast_asia",
+      "dev": 2,
       "produces": [
-        "silk",
-        "spices"
+        "timber",
+        "rice"
       ],
       "demands": [
         "wheat",
-        "iron"
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
+        "tea",
+        "rhubarb",
+        "porcelain",
+        "musk",
+        "lacquerware",
+        "silver"
+      ],
+      "sphere": [
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "galleon",
+          "nao",
+          "caravel",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_main_gauche",
+          "eq_breastplate",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "设防之城,白银大帆船与中国帆船在此相会。",
@@ -2377,20 +4782,51 @@
       "nation_id": "portugal",
       "lat": 22.19,
       "lon": 113.54,
+      "band": "china_coast",
+      "dev": 2,
       "produces": [
-        "silk",
-        "ceramics"
+        "rice",
+        "porcelain"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
         "sugar",
-        "glassware"
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "ivory",
+        "sandalwood",
+        "musk",
+        "lacquerware"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "latin",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_saint_medallion",
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "河口半岛上的教堂与货栈。",
@@ -2406,21 +4842,58 @@
       "nation_id": "england",
       "lat": 22.75,
       "lon": 113.65,
+      "band": "china_coast",
+      "dev": 2,
       "produces": [
         "silk",
-        "ceramics",
-        "timber"
+        "rice",
+        "tea",
+        "rhubarb",
+        "porcelain",
+        "musk"
       ],
       "demands": [
-        "copper",
-        "salt"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "perfume",
+        "dye_wood",
+        "ivory",
+        "sandalwood",
+        "pearls"
+      ],
+      "sphere": [
+        "england",
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "pinnace",
+          "sloop",
+          "latin",
+          "brigantine",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "大河之城,外国船只只能在黄埔下锚。",
@@ -2436,20 +4909,55 @@
       "nation_id": "holland",
       "lat": 32.75,
       "lon": 129.88,
+      "band": "japan",
+      "dev": 2,
       "produces": [
         "copper",
-        "silk"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
         "sugar",
-        "wine"
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "ceramics",
+        "dye_wood",
+        "rhubarb",
+        "raw_silk",
+        "porcelain",
+        "musk",
+        "silver"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "fluyt",
+          "pinnace",
+          "sloop",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "内湾港,一座小岛承载全部对外贸易。",
@@ -2465,20 +4973,53 @@
       "nation_id": "holland",
       "lat": 34.65,
       "lon": 135.43,
+      "band": "japan",
+      "dev": 2,
       "produces": [
+        "cotton_cloth",
         "copper",
-        "ceramics"
+        "rice"
       ],
       "demands": [
-        "silk",
-        "glassware"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "ceramics",
+        "dye_wood",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "pinnace",
+          "sloop",
+          "latin",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_dragon_figurehead",
+          "eq_matting_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "全国的米市,驳船拥挤。",
@@ -2494,20 +5035,49 @@
       "nation_id": "holland",
       "lat": 22.99,
       "lon": 120.16,
+      "band": "china_coast",
+      "dev": 2,
       "produces": [
         "sugar",
-        "timber"
+        "leather"
       ],
       "demands": [
-        "silk",
-        "iron"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "raw_silk",
+        "musk"
+      ],
+      "sphere": [
+        "holland",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "fluyt",
+          "junk",
+          "pinnace",
+          "sloop",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_flemish_linen_sails",
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "绿岛沙洲上的要塞,岛上多鹿与甘蔗。",
@@ -2523,20 +5093,48 @@
       "nation_id": "holland",
       "lat": 6.87,
       "lon": 101.25,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
-        "spices",
-        "timber"
+        "timber",
+        "rice"
       ],
       "demands": [
-        "cotton_cloth",
-        "iron"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "ceramics",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "马来渔人与中国商人共处的港口。",
@@ -2552,20 +5150,46 @@
       "nation_id": "spain",
       "lat": 5.0,
       "lon": 115.05,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
-        "timber",
-        "spices"
+        "dried_fish",
+        "timber"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "glassware",
-        "wool"
+        "ceramics",
+        "porcelain"
+      ],
+      "sphere": [
+        "spain",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "苏丹宫殿下高脚屋组成的水上之城。",
@@ -2581,20 +5205,49 @@
       "nation_id": "holland",
       "lat": 0.79,
       "lon": 127.38,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
         "spices",
-        "salt"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "iron"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "cotton_cloth",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "spain"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_breastplate",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "生长世界丁香的火山岛。",
@@ -2610,20 +5263,47 @@
       "nation_id": "portugal",
       "lat": -10.17,
       "lon": 123.6,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
-        "spices",
-        "timber"
+        "rice",
+        "sandalwood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "cotton_cloth",
         "glassware",
-        "iron"
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "季风之路尽头的干旱檀木岛。",
@@ -2639,20 +5319,45 @@
       "nation_id": "holland",
       "lat": -25.5,
       "lon": 113.5,
+      "band": "indian_ocean_south",
+      "dev": 1,
       "produces": [
         "salt",
         "dried_fish"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
         "timber",
-        "iron"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_albatross_figurehead",
+          "eq_storm_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "鲨鱼湾红崖下的锚地，1616年荷兰东印度船在此登岸取水补盐。",
@@ -2668,20 +5373,47 @@
       "nation_id": "portugal",
       "lat": 13.5,
       "lon": 100.58,
+      "band": "southeast_asia",
+      "dev": 1,
       "produces": [
         "timber",
-        "ceramics"
+        "rice",
+        "dye_wood"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
         "glassware",
-        "wool"
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "sloop",
+          "pinnace",
+          "nao"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "河都下游的港口,盛产柚木。",
@@ -2697,20 +5429,47 @@
       "nation_id": "spain",
       "lat": 36.53,
       "lon": -6.29,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
-        "salt",
-        "wine"
+        "wine",
+        "salt"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
         "spices",
-        "timber"
+        "glassware"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "caravela_redonda"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_main_gauche",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "宝船队在大西洋一侧的母港锚地。",
@@ -2726,20 +5485,46 @@
       "nation_id": "portugal",
       "lat": 41.14,
       "lon": -8.68,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
         "wine",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
         "spices",
         "glassware"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "sloop",
+          "pinnace",
+          "caravel",
+          "caravela_redonda"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "梯田葡萄园直落花岗岩河口。",
@@ -2755,20 +5540,46 @@
       "nation_id": "england",
       "lat": 50.37,
       "lon": -4.14,
+      "band": "europe_atlantic",
+      "protected": true,
+      "dev": 3,
       "produces": [
-        "dried_fish",
-        "wool"
+        "wool",
+        "dried_fish"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "spices"
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen",
+        "furs"
       ],
+      "sphere": [],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "brigantine",
+          "caravela_redonda"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_backsword",
+          "eq_storm_sails",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "防波堤后的海湾,堆满海军物资。",
@@ -2784,20 +5595,48 @@
       "nation_id": "holland",
       "lat": 60.39,
       "lon": 5.32,
+      "band": "europe_atlantic",
+      "dev": 1,
       "produces": [
         "dried_fish",
-        "timber"
+        "timber",
+        "furs"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "salt",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "多雨的码头,堆满鳕鱼干与汉萨账册。",
@@ -2813,20 +5652,50 @@
       "nation_id": "holland",
       "lat": 54.4,
       "lon": 18.68,
+      "band": "europe_atlantic",
+      "dev": 2,
       "produces": [
+        "wheat",
         "timber",
-        "amber"
+        "amber",
+        "pitch"
       ],
       "demands": [
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "glassware",
+        "linen",
+        "furs"
+      ],
+      "sphere": [
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "brigantine",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_storm_sails",
+          "eq_eagle_figurehead",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "波罗的海东岸的谷物与木材码头。",
@@ -2842,20 +5711,51 @@
       "nation_id": "holland",
       "lat": 59.32,
       "lon": 18.1,
+      "band": "europe_atlantic",
+      "dev": 2,
       "produces": [
+        "iron",
         "copper",
-        "iron"
+        "amber",
+        "pitch"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
         "wine",
-        "salt"
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "cheese",
+        "rice",
+        "silk",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "fluyt",
+          "brigantine",
+          "caravel",
+          "carrack"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_mermaid_figurehead",
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "群岛之城,扼守波罗的海内海。",
@@ -2871,20 +5771,47 @@
       "nation_id": "italy",
       "lat": 45.65,
       "lon": 13.77,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
-        "glassware",
-        "timber"
+        "timber",
+        "glassware"
       ],
       "demands": [
-        "spices",
-        "sugar"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "caravel",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
       },
       "flavor": {
         "zh": "哈布斯堡王朝的出海之窗,多风而繁忙。",
@@ -2900,20 +5827,47 @@
       "nation_id": "italy",
       "lat": 39.62,
       "lon": 19.92,
+      "band": "europe_med",
+      "dev": 1,
       "produces": [
         "olive_oil",
         "salt"
       ],
       "demands": [
+        "wheat",
         "wine",
-        "timber"
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "silk",
+        "glassware"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "latin",
+          "galley",
+          "galiot",
+          "xebec",
+          "sloop",
+          "galleass"
+        ],
         "tavern": 1,
         "inn": 1,
-        "guild": 3
+        "guild": 3,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_breastplate"
+        ]
       },
       "flavor": {
         "zh": "橄榄覆盖的岛屿,横跨亚得里亚海口。",
@@ -2929,19 +5883,47 @@
       "nation_id": "",
       "lat": 24.85,
       "lon": 118.72,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "silk",
-        "ceramics"
+        "raw_silk",
+        "porcelain",
+        "musk"
       ],
       "demands": [
-        "spices",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "dye_wood",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "pinnace",
+          "latin"
+        ],
         "tavern": 1,
-        "inn": 1
+        "inn": 1,
+        "equipment_stock": [
+          "eq_matting_sails",
+          "eq_cutlass"
+        ]
       },
       "flavor": {
         "zh": "刺桐古港，宋元海船首航之地。",
@@ -2957,13 +5939,32 @@
       "nation_id": "",
       "lat": 29.95,
       "lon": 121.7,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "ceramics",
-        "silk"
+        "rice",
+        "porcelain"
       ],
       "demands": [
-        "spices",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "dye_wood",
+        "ivory",
+        "sandalwood",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -2984,13 +5985,32 @@
       "nation_id": "",
       "lat": 24.42,
       "lon": 117.98,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "silk",
-        "sugar"
+        "sugar",
+        "raw_silk"
       ],
       "demands": [
-        "spices",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "dye_wood",
+        "ivory",
+        "sandalwood",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3011,13 +6031,29 @@
       "nation_id": "",
       "lat": 29.74,
       "lon": 122.22,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "dried_fish",
-        "salt"
+        "salt",
+        "dried_fish"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3038,13 +6074,29 @@
       "nation_id": "",
       "lat": 23.4,
       "lon": 117.2,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "salt",
         "dried_fish"
       ],
       "demands": [
-        "silk",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3065,13 +6117,32 @@
       "nation_id": "",
       "lat": 24.44,
       "lon": 118.13,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "silk",
-        "sugar"
+        "sugar",
+        "raw_silk"
       ],
       "demands": [
-        "spices",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "dye_wood",
+        "ivory",
+        "sandalwood",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3092,13 +6163,32 @@
       "nation_id": "",
       "lat": 26.02,
       "lon": 119.65,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "timber",
-        "silk"
+        "tea",
+        "rhubarb",
+        "raw_silk"
       ],
       "demands": [
-        "spices",
-        "salt"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3119,13 +6209,29 @@
       "nation_id": "",
       "lat": 27.97,
       "lon": 120.68,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "ceramics",
-        "dried_fish"
+        "dried_fish",
+        "ceramics"
       ],
       "demands": [
-        "silk",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3146,13 +6252,29 @@
       "nation_id": "",
       "lat": 23.62,
       "lon": 117.13,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "sugar",
-        "timber"
+        "rice"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3173,13 +6295,29 @@
       "nation_id": "",
       "lat": 20.03,
       "lon": 110.33,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "timber",
-        "leather"
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
         "salt",
-        "silk"
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
+        "ivory",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3200,13 +6338,30 @@
       "nation_id": "",
       "lat": 21.48,
       "lon": 109.12,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "salt",
-        "timber"
+        "pearls"
       ],
       "demands": [
-        "silk",
-        "cotton_cloth"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3227,13 +6382,29 @@
       "nation_id": "",
       "lat": 30.01,
       "lon": 122.11,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
-        "dried_fish",
-        "salt"
+        "salt",
+        "dried_fish"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "sandalwood"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3254,13 +6425,29 @@
       "nation_id": "",
       "lat": 31.5,
       "lon": 121.55,
+      "band": "china_coast",
+      "dev": 0,
       "produces": [
         "cotton_cloth",
         "dried_fish"
       ],
       "demands": [
-        "silk",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3281,19 +6468,49 @@
       "nation_id": "",
       "lat": 33.25,
       "lon": 129.56,
+      "band": "japan",
+      "dev": 0,
       "produces": [
         "copper",
-        "ceramics"
+        "silver"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ceramics",
+        "dye_wood",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "pinnace",
+          "sloop"
+        ],
         "tavern": 1,
-        "inn": 1
+        "inn": 1,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "松浦氏的港町，南蛮船与唐船并泊。",
@@ -3309,19 +6526,48 @@
       "nation_id": "",
       "lat": 34.5,
       "lon": 135.42,
+      "band": "japan",
+      "dev": 0,
       "produces": [
-        "cotton_cloth",
-        "leather"
+        "iron",
+        "lacquerware"
       ],
       "demands": [
-        "silk",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "cheese",
+        "rice",
+        "pitch",
+        "ceramics",
+        "dye_wood",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "pinnace",
+          "latin"
+        ],
         "tavern": 1,
-        "inn": 1
+        "inn": 1,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "自治的濠环之城，缝刃与商货同富。",
@@ -3337,13 +6583,29 @@
       "nation_id": "",
       "lat": 31.1,
       "lon": 130.58,
+      "band": "japan",
+      "dev": 0,
       "produces": [
-        "timber",
-        "dried_fish"
+        "dried_fish",
+        "timber"
       ],
       "demands": [
-        "silk",
-        "cotton_cloth"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3364,13 +6626,29 @@
       "nation_id": "",
       "lat": 33.59,
       "lon": 130.39,
+      "band": "japan",
+      "dev": 0,
       "produces": [
         "dried_fish",
-        "timber"
+        "rice"
       ],
       "demands": [
-        "silk",
-        "ceramics"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3391,13 +6669,34 @@
       "nation_id": "",
       "lat": 33.24,
       "lon": 131.61,
+      "band": "japan",
+      "dev": 0,
       "produces": [
-        "dried_fish",
-        "timber"
+        "lacquerware",
+        "silver"
       ],
       "demands": [
-        "silk",
-        "glassware"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ceramics",
+        "dye_wood",
+        "raw_silk",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3418,13 +6717,29 @@
       "nation_id": "",
       "lat": 33.5,
       "lon": 133.55,
+      "band": "japan",
+      "dev": 0,
       "produces": [
-        "timber",
-        "dried_fish"
+        "dried_fish",
+        "timber"
       ],
       "demands": [
-        "silk",
-        "salt"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3445,13 +6760,29 @@
       "nation_id": "",
       "lat": 34.6,
       "lon": 136.7,
+      "band": "japan",
+      "dev": 0,
       "produces": [
         "dried_fish",
-        "timber"
+        "rice"
       ],
       "demands": [
-        "silk",
-        "ceramics"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3472,13 +6803,29 @@
       "nation_id": "",
       "lat": 35.1,
       "lon": 129.04,
+      "band": "korea",
+      "dev": 0,
       "produces": [
-        "dried_fish",
-        "salt"
+        "rice",
+        "porcelain"
       ],
       "demands": [
-        "silk",
-        "ceramics"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3499,13 +6846,29 @@
       "nation_id": "",
       "lat": 35.5,
       "lon": 129.43,
+      "band": "korea",
+      "dev": 0,
       "produces": [
         "salt",
-        "dried_fish"
+        "dried_fish",
+        "rice"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
         "cotton_cloth",
-        "silk"
+        "raw_silk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3526,13 +6889,32 @@
       "nation_id": "",
       "lat": 15.9,
       "lon": 108.34,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
-        "silk",
-        "ceramics"
+        "dye_wood",
+        "raw_silk"
       ],
       "demands": [
-        "spices",
-        "cotton_cloth"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3553,13 +6935,33 @@
       "nation_id": "",
       "lat": -5.85,
       "lon": 105.95,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
         "spices",
-        "salt"
+        "rice"
       ],
       "demands": [
-        "cotton_cloth",
-        "ceramics"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "ceramics",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3580,13 +6982,31 @@
       "nation_id": "",
       "lat": -1.12,
       "lon": 103.8,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
         "spices",
         "timber"
       ],
       "demands": [
-        "cotton_cloth",
-        "salt"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3607,13 +7027,29 @@
       "nation_id": "",
       "lat": -2.25,
       "lon": 104.85,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
-        "spices",
-        "timber"
+        "timber",
+        "rice"
       ],
       "demands": [
-        "cotton_cloth",
-        "salt"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
@@ -3634,19 +7070,45 @@
       "nation_id": "",
       "lat": -7.05,
       "lon": 113.35,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
         "salt",
-        "timber"
+        "rice"
       ],
       "demands": [
-        "spices",
-        "silk"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal",
+        "england"
       ],
       "facilities": {
         "market": 1,
-        "shipyard": 1,
+        "shipyard": [
+          "junk",
+          "sloop",
+          "pinnace"
+        ],
         "tavern": 1,
-        "inn": 1
+        "inn": 1,
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_matting_sails"
+        ]
       },
       "flavor": {
         "zh": "阇婆商港，爪哇船匠聚居之地。",
@@ -3662,13 +7124,32 @@
       "nation_id": "",
       "lat": 5.98,
       "lon": 120.98,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
-        "timber",
-        "dried_fish"
+        "dried_fish",
+        "pearls"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
         "ceramics",
-        "cotton_cloth"
+        "porcelain"
+      ],
+      "sphere": [
+        "spain",
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
@@ -3689,13 +7170,29 @@
       "nation_id": "",
       "lat": 6.1,
       "lon": 100.32,
+      "band": "southeast_asia",
+      "dev": 0,
       "produces": [
-        "salt",
-        "timber"
+        "timber",
+        "rice"
       ],
       "demands": [
-        "cotton_cloth",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "holland",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
@@ -3716,13 +7213,32 @@
       "nation_id": "",
       "lat": 10.76,
       "lon": 79.85,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "cotton_cloth",
         "salt"
       ],
       "demands": [
-        "spices",
-        "ceramics"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3743,13 +7259,33 @@
       "nation_id": "",
       "lat": 16.1,
       "lon": 81.12,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "cotton_cloth",
-        "leather"
+        "iron",
+        "gems"
       ],
       "demands": [
-        "spices",
-        "copper"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "cheese",
+        "rice",
+        "pitch",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3770,13 +7306,33 @@
       "nation_id": "",
       "lat": 21.65,
       "lon": 88.05,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
-        "silk",
-        "sugar"
+        "sugar",
+        "rice",
+        "raw_silk"
       ],
       "demands": [
-        "spices",
-        "timber"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "pitch",
+        "silk",
+        "tea",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3797,13 +7353,30 @@
       "nation_id": "",
       "lat": 16.6,
       "lon": 96.28,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
-        "timber",
-        "salt"
+        "salt",
+        "timber"
       ],
       "demands": [
-        "copper",
-        "cotton_cloth"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "raw_silk",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3824,13 +7397,29 @@
       "nation_id": "",
       "lat": 18.4,
       "lon": 94.3,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "dried_fish",
         "timber"
       ],
       "demands": [
-        "cotton_cloth",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3851,13 +7440,35 @@
       "nation_id": "",
       "lat": 21.7,
       "lon": 72.55,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "cotton_cloth",
-        "leather"
+        "leather",
+        "indigo"
       ],
       "demands": [
-        "spices",
-        "copper"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
       ],
       "facilities": {
         "market": 1,
@@ -3878,13 +7489,30 @@
       "nation_id": "",
       "lat": 20.69,
       "lon": 70.97,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "salt",
-        "cotton_cloth"
+        "dried_fish"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
         "timber",
-        "wine"
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3905,13 +7533,34 @@
       "nation_id": "",
       "lat": 13.3,
       "lon": 43.22,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
+        "salt",
         "leather",
-        "salt"
+        "coffee"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "spices"
+        "indigo",
+        "porcelain",
+        "gems"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3932,13 +7581,30 @@
       "nation_id": "",
       "lat": 22.68,
       "lon": 59.8,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
         "dried_fish",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "spices"
+        "glassware"
+      ],
+      "sphere": [
+        "ottoman",
+        "portugal"
       ],
       "facilities": {
         "market": 1,
@@ -3959,13 +7625,34 @@
       "nation_id": "",
       "lat": 26.62,
       "lon": 56.43,
+      "band": "india_persia_arabia",
+      "dev": 0,
       "produces": [
+        "salt",
         "carpet",
-        "salt"
+        "pearls"
       ],
       "demands": [
-        "cotton_cloth",
-        "spices"
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "ivory",
+        "raw_silk",
+        "porcelain",
+        "musk"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman",
+        "holland"
       ],
       "facilities": {
         "market": 1,
@@ -3986,13 +7673,30 @@
       "nation_id": "",
       "lat": -6.05,
       "lon": 38.92,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
-        "timber",
-        "dried_fish"
+        "dried_fish",
+        "timber"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "glassware"
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
@@ -4013,13 +7717,31 @@
       "nation_id": "",
       "lat": -8.96,
       "lon": 39.5,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
         "salt",
-        "timber"
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "glassware"
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
@@ -4040,13 +7762,32 @@
       "nation_id": "",
       "lat": -19.6,
       "lon": 35.25,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
+        "salt",
         "amber",
-        "salt"
+        "gold"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "ceramics"
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
@@ -4067,13 +7808,30 @@
       "nation_id": "",
       "lat": -2.3,
       "lon": 40.6,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
-        "timber",
-        "dried_fish"
+        "dried_fish",
+        "timber"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "salt",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "spices"
+        "glassware",
+        "porcelain"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
@@ -4094,13 +7852,31 @@
       "nation_id": "",
       "lat": 15.6,
       "lon": 39.45,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
         "salt",
         "leather"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "iron"
+        "glassware",
+        "indigo"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
@@ -4121,13 +7897,29 @@
       "nation_id": "",
       "lat": 11.35,
       "lon": 43.47,
+      "band": "swahili_red_sea",
+      "dev": 0,
       "produces": [
         "salt",
         "dried_fish"
       ],
       "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
         "cotton_cloth",
-        "wool"
+        "glassware"
+      ],
+      "sphere": [
+        "portugal",
+        "ottoman"
       ],
       "facilities": {
         "market": 1,
