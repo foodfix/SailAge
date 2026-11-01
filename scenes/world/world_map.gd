@@ -1619,7 +1619,10 @@ func _sync_marker_nodes() -> void:
 				"camping":
 					stall_letter = "C"
 				"docked":
-					stall_letter = "D"
+					# Off its berth = the anomaly badge (X); a docked fleet
+					# always stands on its port's berth tile (60-* §4.11.11).
+					stall_letter = "D" if bool(marker.get("on_berth", true)) \
+						else "X"
 				"cooldown":
 					stall_letter = "K"
 		var stall_node: Label = square.get_node_or_null("Stall")

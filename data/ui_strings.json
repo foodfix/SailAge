@@ -2088,6 +2088,30 @@
     "zh": "停滞舰队",
     "en": "Stalled fleets"
   },
+  "debug.stall.docked": {
+    "zh": "停靠中",
+    "en": "Docked"
+  },
+  "debug.stall.camping": {
+    "zh": "锚点驻扎",
+    "en": "Camping"
+  },
+  "debug.stall.blocked": {
+    "zh": "受阻",
+    "en": "Blocked"
+  },
+  "debug.stall.chasing": {
+    "zh": "追猎中",
+    "en": "Chasing"
+  },
+  "debug.stall.pursuing": {
+    "zh": "追捕中",
+    "en": "Pursuing"
+  },
+  "debug.stall.cooldown": {
+    "zh": "冷却中",
+    "en": "Cooling down"
+  },
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"

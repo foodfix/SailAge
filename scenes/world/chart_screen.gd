@@ -174,7 +174,10 @@ const LANE_HEAT_DOT_PX := 2.0
 
 ## Wheel-zoom bounds (× the fit view) and the per-notch multiplicative step.
 const ZOOM_MIN := 1.0
-const ZOOM_MAX := 8.0
+## Unified-movement amendment (2026-11-01): 8 → 64 — fleet-level inspection
+## (the stall diagnostics read per-fleet state, which needs per-tile zoom;
+## the terrain texture is native-resolution, so deep zoom stays crisp).
+const ZOOM_MAX := 64.0
 const ZOOM_STEP := 1.25
 ## A hidden legend row dims to this alpha (§4.6 interactive legend rows).
 const HIDDEN_ROW_ALPHA := 0.35
@@ -571,7 +574,11 @@ func ice_marker_cells() -> Array:
 	return _ice_cells.duplicate()
 
 
-## Read-only hover tooltip text (debug mode only).
+## Read-only hover tooltip (debug mode only). The fleet debug info shows in
+## a floating window at the cursor — every fleet on the hovered tile gets
+## its own block (id · role · nation · stall×holds · port); wrecks, ports
+## and intel keep single-line entries. The side panel's hover row carries
+## the first line as a summary.
 func hover_text() -> String:
 	return _hover_text
 
@@ -735,46 +742,126 @@ func _clear_hover() -> void:
 	if not _hover_text.is_empty():
 		_hover_text = ""
 		_refresh_panel()
+	if _hover_window != null:
+		_hover_window.visible = false
 
 
 func _update_hover(at: Vector2) -> void:
 	if not visible or not _debug_active:
 		return
-	var best := ""
-	var best_d := 8.0
+	# The hovered TILE (the inverse of `_to_screen`'s centre mapping): every
+	# fleet standing on it gets its own debug block in the floating window
+	# (unified-movement amendment — stacked fleets all report).
+	var width := _world_image.get_width() if _world_image != null else 4320
+	var u := (at - _view_rect().position) / (_scale * _zoom)
+	var cell := Vector2i(posmod(int(floor(u.x)), width), int(floor(u.y)))
+	var ships: Array = []
 	for entry in _fleet_markers:
-		var d := _to_screen(entry["cell"]).distance_to(at)
-		if d < best_d:
-			best_d = d
-			var stall := str(entry.get("stall", ""))
-			var holds := int(entry.get("holds", 0))
-			best = "%s · %s · %s" % [str(entry.get("id", "")),
-				str(entry.get("role", "")), str(entry.get("nation_id", ""))]
+		var c: Vector2i = entry["cell"]
+		if Vector2i(posmod(c.x, width), c.y) == cell:
+			ships.append(entry)
+	var text := ""
+	if not ships.is_empty():
+		# Localized blocks (unified-movement amendment; the §4.7.10 rule —
+		# debug surfaces speak the ui_strings locale): `id` stays raw (an
+		# identifier), every other term resolves — `debug.role.*`,
+		# the nation's L10n name, `debug.stall.*`, the mooring port's L10n
+		# name. `holds` shows only where it means something (blocked).
+		for ship in ships:
+			var role := str(ship.get("role", ""))
+			var stall := str(ship.get("stall", ""))
+			var holds := int(ship.get("holds", 0))
+			var line := str(ship.get("id", ""))
+			var parts: Array = [I18n.t_key("debug.role." + role)]
+			var nation := str(ship.get("nation_id", ""))
+			if not nation.is_empty():
+				var n = DataLoader.nations.get(nation, null)
+				if n is Dictionary:
+					parts.append(I18n.t(n.get("name", {})))
 			if not stall.is_empty():
-				best += " · %s×%d" % [stall, holds]
-			if stall == "docked" and entry.has("port") \
-					and not str(entry.get("port", "")).is_empty():
-				best += " @ %s" % str(entry.get("port", ""))
-	for entry in _wreck_markers:
-		var d := _to_screen(entry["cell"]).distance_to(at)
-		if d < best_d:
-			best_d = d
-			best = str(entry.get("id", ""))
-	for entry in _intel_markers:
-		var d := _to_screen(entry["cell"]).distance_to(at)
-		if d < best_d:
-			best_d = d
-			best = "intel → %s" % str(entry.get("port_id", "")) \
-				if str(entry.get("kind", "")) == "ring" \
-				else "intel cell"
-	for entry in _port_dots:
-		var d := _to_screen(entry["cell"]).distance_to(at)
-		if d < best_d:
-			best_d = d
-			best = str(entry.get("port_id", ""))
-	if best != _hover_text:
-		_hover_text = best
+				parts.append(I18n.t_key("debug.stall." + stall))
+				if stall == "blocked":
+					parts.append("×%d" % holds)
+				elif stall == "docked" and ship.has("port") \
+						and not str(ship.get("port", "")).is_empty():
+					var port: Dictionary = DataLoader.get_port(
+						str(ship.get("port", "")))
+					if not port.is_empty():
+						parts.append("@ " + I18n.t(port.get("name", {})))
+			line += "\n  " + " · ".join(parts)
+			text += line + "\n"
+	else:
+		# No fleet on the tile: the nearest wreck / intel / port entry.
+		var best := ""
+		var best_d := 8.0
+		for entry in _wreck_markers:
+			var d := _to_screen(entry["cell"]).distance_to(at)
+			if d < best_d:
+				best_d = d
+				best = str(entry.get("id", ""))
+		for entry in _intel_markers:
+			var d := _to_screen(entry["cell"]).distance_to(at)
+			if d < best_d:
+				best_d = d
+				best = "intel → %s" % str(entry.get("port_id", "")) \
+					if str(entry.get("kind", "")) == "ring" \
+					else "intel cell"
+		for entry in _port_dots:
+			var d := _to_screen(entry["cell"]).distance_to(at)
+			if d < best_d:
+				best_d = d
+				best = str(entry.get("port_id", ""))
+		text = best
+	if text != _hover_text:
+		# The side row carries the FIRST line only — the full multi-ship
+		# report lives in the floating window.
+		_hover_text = text.split("\n")[0] if not text.is_empty() else ""
 		_refresh_panel()
+	_show_hover_window(text, at)
+
+
+## The floating hover window (unified-movement amendment): a bordered
+## panel at the cursor, mouse-transparent, clipped to the viewport.
+var _hover_window: PanelContainer = null
+var _hover_window_label: Label = null
+
+
+func _ensure_hover_window() -> void:
+	if _hover_window != null:
+		return
+	_hover_window = PanelContainer.new()
+	_hover_window.name = "HoverWindow"
+	_hover_window.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_window.z_index = 100
+	var style := StyleBoxFlat.new()
+	style.bg_color = PaletteLib.PANEL_BG
+	style.border_color = PaletteLib.PANEL_LINE
+	style.set_border_width_all(1.0)
+	style.content_margin_left = 6.0
+	style.content_margin_right = 6.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	_hover_window.add_theme_stylebox_override("panel", style)
+	_hover_window_label = Label.new()
+	_hover_window_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_window.add_child(_hover_window_label)
+	add_child(_hover_window)
+	_hover_window.visible = false
+
+
+## Shows/hides + positions the floating window (clamped to the viewport).
+func _show_hover_window(text: String, at: Vector2) -> void:
+	_ensure_hover_window()
+	if text.is_empty():
+		_hover_window.visible = false
+		return
+	_hover_window_label.text = text
+	_hover_window.visible = true
+	var view := get_viewport_rect().size
+	var pos := at + Vector2(14.0, 14.0)
+	var size := _hover_window.get_minimum_size()
+	_hover_window.position = pos.clamp(Vector2.ZERO,
+		(view - size).clamp(Vector2.ZERO, view))
 
 
 # --- Rebuild triggers (`80-*` §4.6: open, layer/month toggle, day_advanced) -
@@ -960,13 +1047,13 @@ func _ice_overlay_texture() -> ImageTexture:
 
 ## Nearest-neighbour downscale to the on-screen world rect (crisp tiles: the
 ## same look the minimap has, `80-*` §4.6 "downscaled to fit").
+## The terrain texture at the MAP's NATIVE resolution (4320×2160) — the GPU
+## scales it per the view rect, so deep zoom-in (the unified-movement
+## amendment raised ZOOM_MAX to 64 for fleet-level inspection) stays crisp
+## instead of magnifying a fit-view downscale. ~37 MB VRAM per texture;
+## desktop debug tool only, event-driven redraws.
 func _downscaled_texture(image: Image) -> ImageTexture:
-	var target := Vector2i(
-		maxi(int(round(_world_rect.size.x)), 1), maxi(int(round(_world_rect.size.y)), 1)
-	)
-	var scaled := image.duplicate()
-	scaled.resize(target.x, target.y, Image.INTERPOLATE_NEAREST)
-	return ImageTexture.create_from_image(scaled)
+	return ImageTexture.create_from_image(image)
 
 
 ## The fleet sim the debug ecology reads: the host world scene's sim when the
@@ -1203,14 +1290,17 @@ func _draw_cross(at: Vector2, size_px: float, color: Color) -> void:
 func _draw_fleet_marker(entry: Dictionary) -> void:
 	var at := _to_screen(entry["cell"])
 	var color := _role_color(str(entry.get("role", "")), str(entry.get("nation_id", "")))
+	# Zoom-scaled square (unified-movement amendment): deep inspection zoom
+	# keeps the marker readable — half a screen-tile, at least the base px.
+	var sq := maxf(float(DEBUG_FLEET_SQUARE_PX), _scale * _zoom * 0.5)
 	draw_rect(Rect2(
-		at - Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX) * 0.5,
-		Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX)
+		at - Vector2(sq, sq) * 0.5,
+		Vector2(sq, sq)
 	), color, true)
 	var letter := str(entry.get("letter", ""))
 	if not letter.is_empty():
 		draw_string(ThemeDB.fallback_font,
-			at + Vector2(DEBUG_FLEET_SQUARE_PX, DEBUG_FLEET_SQUARE_PX) * 0.3,
+			at + Vector2(sq, sq) * 0.3,
 			letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, PaletteLib.TEXT)
 
 

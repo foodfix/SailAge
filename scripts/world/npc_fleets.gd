@@ -995,8 +995,13 @@ func markers() -> Array:
 			"stall": stall,
 		}
 		if stall == "docked":
-			# The mooring port (the berth's owner) — the docked-stall detail.
-			entry["port"] = str((fleet as Dictionary).get("dest_port_id", ""))
+			# The mooring port (the berth's owner) + berth consistency —
+			# the docked-stall detail (a fleet docked in open water is an
+			# anomaly the day tick self-heals).
+			var mooring := _port_at_cell(position_of(fleet))
+			entry["port"] = mooring if not mooring.is_empty() \
+				else str((fleet as Dictionary).get("dest_port_id", ""))
+			entry["on_berth"] = not mooring.is_empty()
 		out.append(entry)
 	return out
 
@@ -1053,7 +1058,10 @@ func stall_reason(fleet: Dictionary) -> Dictionary:
 	}
 	if state == "docked":
 		out["until"] = int(fleet.get("dwell_until_day", 0))
-		out["port"] = str(fleet.get("dest_port_id", ""))
+		var mooring := _port_at_cell(position_of(fleet))
+		out["port"] = mooring if not mooring.is_empty() \
+			else str(fleet.get("dest_port_id", ""))
+		out["on_berth"] = not mooring.is_empty()
 	elif state == "cooldown":
 		out["until"] = int(fleet.get("cooldown_until_day", 0))
 	elif state == "camping":
@@ -2858,6 +2866,19 @@ func _step_fleets(day: int) -> void:
 			continue
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
 		if legs.is_empty():
+			# Berth consistency (unified-movement amendment, `60-*` §4.11.11
+			# berth pin): a docked fleet stands ON a port's berth tile — the
+			# mooring resolves from the tile itself (`_port_at_cell`).
+			# Docked in open water is an anomaly: snap to the recorded
+			# destination's berth in the same tick (self-heal, bounded).
+			if int(fleet.get("dwell_until_day", 0)) > day:
+				var mooring := _port_at_cell(position_of(fleet))
+				if mooring.is_empty():
+					var dest := str(fleet.get("dest_port_id", ""))
+					if not dest.is_empty():
+						var berth := _port_cell(dest)
+						if berth != NO_CELL:
+							_commit_cell(fleet, berth)
 			if int(fleet.get("dwell_until_day", 0)) <= day:
 				if role == TREASURE:
 					# Task L: the seasonal run is over — the fleet delivered
@@ -3107,6 +3128,22 @@ func _walk_lane(fleet: Dictionary, day: int, budget: int) -> void:
 		_commit_cell(fleet, target)
 		walked += 1
 		_hold_ticks[id] = 0  # real progress: the hold streak clears
+
+
+## The docked-consistency helper (unified-movement amendment, `60-*`
+## §4.11.11 berth pin): a docked fleet's berth is the berth tile it
+## currently occupies — the mooring resolves from the tile itself
+## (`_port_at_cell`); a fleet docked in open water (no berth under it)
+## has none here, and the day-tick heal falls back to its `dest_port_id`
+## berth. Diagnostics + the heal share this definition.
+func _docked_berth(fleet: Dictionary) -> Vector2i:
+	var mooring := _port_at_cell(position_of(fleet))
+	if not mooring.is_empty():
+		return _port_cell(mooring)
+	var dest := str(fleet.get("dest_port_id", ""))
+	if dest.is_empty():
+		return NO_CELL
+	return _port_cell(dest)
 
 
 ## The hold-streak bookkeeping behind [method stall_reason]: an accrual

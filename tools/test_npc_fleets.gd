@@ -1554,15 +1554,38 @@ func _test_stall_diagnostics() -> void:
 			"a": 10, "b": jam_path.size() - 1}]}
 	jammed["id"] = "stall_jammed"
 	sim._sync_route_progress(jammed)
+	# The blockers: STATIONARY UNDER-WAY fleets (routes set, dwell 0) —
+	# they occupy their tiles (`_is_occupied` skips docked fleets) and are
+	# never accrued, so the jam holds for the whole probe.
 	var block1 := _make_fleet(sim, "trader", "portugal", jam_path[11])
+	block1["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": 11, "b": jam_path.size() - 1}]}
 	block1["id"] = "stall_block_1"
+	sim._sync_route_progress(block1)
 	var block2 := _make_fleet(sim, "trader", "portugal", jam_path[12])
+	block2["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
+			"a": 12, "b": jam_path.size() - 1}]}
 	block2["id"] = "stall_block_2"
+	sim._sync_route_progress(block2)
 	sim.reset_index()
 	# A DOCKED fleet reports docked with its until-day; a CAMPING pirate
 	# (anchor at its own cell, off-lane) reports camping.
 	var docked := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
 	docked["dwell_until_day"] = 240
+	# Berth consistency (`60-*` §4.11.11 berth pin): a docked fleet parked
+	# off its berth reports on_berth=false and snaps back on the next tick
+	# — docking "somewhere at sea" is not allowed.
+	var port_id := "lisbon"
+	var berth: Vector2i = sim._port_cell(port_id)
+	var drifter := _make_fleet(sim, "trader", "portugal",
+		berth + Vector2i(2, 0))
+	drifter["dwell_until_day"] = 240
+	drifter["dest_port_id"] = port_id
+	var off_reason: Dictionary = sim.stall_reason(drifter)
+	_check(bool(off_reason.get("on_berth", true)) == false,
+		"an off-berth docked fleet reports on_berth=false")
 	var camp := Vector2i(-1, -1)
 	for cy in range(24, 2136, 24):
 		for cx in range(24, 4296, 24):
@@ -1581,10 +1604,18 @@ func _test_stall_diagnostics() -> void:
 	camper["anchor_cell"] = {"x": camp.x, "y": camp.y}
 	_check(sim.stall_state(camper, 0) == "camping",
 		"an anchored targetless pirate reports camping")
-	# Four accrual days against the jam: the hold streak climbs and the
-	# reason flips to blocked; the global scan finds it.
+	# Four accrual days against the jam (per-fleet: the blockers are never
+	# accrued, so the jam holds) — the hold streak climbs and the reason
+	# flips to blocked; the global scan finds it. The drifter above is a
+	# tick's docked branch away from its berth heal.
+	GameState.day = 200
+	sim._step_fleets(int(GameState.day))
+	var healed_reason: Dictionary = sim.stall_reason(drifter)
+	_check(NpcFleetsLib.position_of(drifter) == berth
+		and bool(healed_reason.get("on_berth", false)),
+		"the off-berth docked fleet snaps back to its berth (self-heal)")
 	for _day in 4:
-		sim._accrue(1.0)
+		sim._accrue_lane(jammed, int(GameState.day), 1.0)
 	var reason: Dictionary = sim.stall_reason(jammed)
 	_check(str(reason.get("state", "")) == "blocked"
 		and int(reason.get("holds", 0)) >= 3,
@@ -1597,15 +1628,16 @@ func _test_stall_diagnostics() -> void:
 			found = true
 	_check(found, "stalled_fleets finds the jammed trader (%d entries)"
 		% scan.size())
-	# A sailing fleet (fresh leg, free path) stays `sailing` with its pipe
-	# rate reported — a headwind crawl is observable, not a bug.
+	# A sailing fleet (fresh leg, free path — accrued per-fleet so the
+	# blockers stay put) stays `sailing` with its pipe rate reported — a
+	# headwind crawl is observable, not a bug.
 	var sailor := _make_fleet(sim, "trader", "portugal", jam_path[40])
 	sailor["route"] = {"lanes": [lane_id], "leg": 0, "tile_index": 0,
 		"legs": [{"kind": "lane", "id": lane_id, "reverse": false,
 			"a": 40, "b": jam_path.size() - 1}]}
 	sailor["id"] = "stall_sailor"
 	sim._sync_route_progress(sailor)
-	sim._accrue(0.1)
+	sim._accrue_lane(sailor, int(GameState.day), 0.1)
 	var sailor_reason: Dictionary = sim.stall_reason(sailor)
 	_check(str(sailor_reason.get("state", "")) == "sailing"
 		and float(sailor_reason.get("pipe", 0.0)) > 0.0,

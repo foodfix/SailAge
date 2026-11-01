@@ -560,9 +560,20 @@ chart adds:
 - **Stalled-fleets row + stall tooltips (unified-movement amendment):**
   every fleet entry carries `holds`/`stall` (`60-*` §4.12.3) — the side
   legend's 停滞舰队 (`debug.legend.stalls`) row shows the census
-  (`blocked/camping/docked/cooldown` counts) and a fleet tooltip appends
-  its stall line (`blocked×14` etc.). The world-map S3 markers wear the
-  same state letter as a `BAD` badge while the S19 row is on (§4.5.2).
+  (`blocked/camping/docked/cooldown` counts). Hovering the map opens a
+  **floating window at the cursor** that lists **every fleet on the
+  hovered tile**, each with its own debug block
+  (`id · role · nation · stall×holds`, docked adds `@ port`) — stacked
+  fleets all report; wrecks, ports and intel keep single-line entries.
+  The world-map S3 markers wear the same state letter as a `BAD` badge
+  while the S19 row is on (§4.5.2) — `X` marks a docked fleet standing
+  OFF its berth (an anomaly the day tick self-heals, `60-*` §4.11.11).
+- **Deep inspection zoom (unified-movement amendment):**
+  `ZOOM_MAX` 8 → **64** (wheel ×1.25 per notch unchanged) and the terrain
+  texture renders at the **map's native 4320×2160** — deep zoom stays
+  crisp instead of magnifying a fit-view downscale; fleet squares scale
+  to half a screen-tile. Pure view state. Per-fleet debug info shows in
+  the hover window, never drawn on the map itself.
 - **Info strip — removed (amended 2026-11-01):** the Year/Month, preview
   month, density and fleet-count rows went away as chart-local noise (the
   HUD already carries the calendar); the scrubbed month reads from the

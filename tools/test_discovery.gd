@@ -871,8 +871,14 @@ func _test_chart_screen() -> void:
 		"the world fits horizontally with no scrolling (%s)" % str(rect))
 	_check(is_equal_approx(rect.size.x / 4320.0, rect.size.y / 2160.0),
 		"the downscale keeps the grid's aspect ratio (no distortion)")
-	_check(chart.display_size().x <= int(view.x) and chart.display_size().y <= int(view.y),
-		"the drawn texture fits the viewport (got %s)" % str(chart.display_size()))
+	# Unified-movement amendment: the terrain texture renders at the MAP's
+	# NATIVE 4320×2160 (the GPU scales per the view rect) so the raised
+	# ZOOM_MAX (8 → 64) inspection stays crisp — the drawn texture no
+	# longer fits the viewport by design; it covers it and never exceeds
+	# the native map size.
+	_check(chart.display_size().x == 4320 and chart.display_size().y == 2160,
+		"the drawn terrain texture is native-resolution (got %s)"
+		% str(chart.display_size()))
 	# Names only at zoom (§4.6); task-owned threshold.
 	_check(not chart.labels_visible(),
 		"at ≈0.29× the chart draws dots only, no names (§4.6 'names at zoom')")

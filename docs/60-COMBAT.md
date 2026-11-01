@@ -612,6 +612,12 @@ per day tick:
   shape); live fractional accrual pays each tile's own position/heading
   factors — the more faithful reading where a lane crosses wind or
   current regions.
+- **Berth consistency (docking pin).** A docked fleet always stands on
+  its port's **berth tile** (the water tile within 2 of the shore,
+  `20-*` §6.1) — docking "somewhere at sea" is not allowed. The day tick
+  self-heals a docked fleet found off its berth back onto the berth in
+  the same tick; the diagnostics report `on_berth` (and the S3 badge
+  flags `X` until healed, `80-*` §4.5.2).
 - **Contact is sampled per tile entered**, not only after the day step:
   any fleet stepping within Chebyshev 1 of the player's tile mid-step
   engages under the §4.11.11.2 row exactly as an end-of-step proximity
