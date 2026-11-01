@@ -26,6 +26,22 @@ extends RefCounted
 ##     sells the old item back at `floor(price × 0.5)` in the same transaction.
 ##   * Promotion to flagship is free and port-only; it moves the row to
 ##     `fleet[0]` and keeps the order of every other ship.
+##
+## Phase 7 (docs/40-* §4.3.1, docs/60-* §4.11.13, docs/80-* §4.7.12): the
+## global catalog rows are replaced by **per-port stock** (`facilities.shipyard`
+## / `facilities.equipment_stock` id lists) under the universal filter
+## `purchasable = in_stock ∧ tier ≤ effective_dev(port)`. Rows render in
+## exactly **three states** — available / tier-gray 需发展度 / allegiance-gray
+## 同盟专营 (correction 11: an unallied neutral shows its full list
+## allegiance-locked, never an empty catalog). Rare equipment (`rare: true`)
+## is drop-only (60-* §4.11.13) and is filtered out defensively even if a
+## stock list ever carried one.
+##
+## `effective_dev` / `effective_alignment` **guard-read** the allegiance
+## module (task L, `scripts/port/allegiance.gd`, the C contract of 80-* §4.9)
+## with the safe fallbacks: the port's authored data floor (`ports.json` `dev`)
+## and the port's data `nation_id`. The guard (order-independent merges) is the
+## Phase-6 pattern: `ResourceLoader.exists` + `has_method` before any call.
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
@@ -42,6 +58,180 @@ const REPAIR_DIVISOR := 400
 ## §4.3 sell: `floor(base_price × 0.5 × dur / max_dur)`.
 const SELL_FRACTION := 0.5
 
+# --- Per-port stock & tier gating (Phase 7; 40-* §4.3.1, 80-* §4.7.12) ------
+
+## The three §4.7.12 row states (strings so screens and suites can switch on
+## them without an enum registry).
+const ROW_AVAILABLE := "available"
+const ROW_TIER_GRAY := "tier_gray"
+const ROW_ALLEGIANCE_GRAY := "allegiance_gray"
+## The gray-state notes (`80-*` §4.7.15 inventory — the master merges them;
+## until then the screens fall back, never printing a raw "<key>").
+const TIER_NEED_DEV_KEY := "shipyard.tier.need_dev"
+const ALLEGIANCE_LOCKED_KEY := "shipyard.tier.allegiance_locked"
+## The allegiance module guard-read path (the C contract, `80-*` §4.9).
+const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
+
+
+## The allegiance module when task L's file has landed, else `null`. Loads by
+## path (not `preload`) so this module merges green before it exists.
+static func _allegiance():
+	if not ResourceLoader.exists(ALLEGIANCE_PATH):
+		return null
+	return ResourceLoader.load(ALLEGIANCE_PATH)
+
+
+## Guarded one-argument allegiance call: `fallback` when the module or the
+## method is absent (the 80-* §4.9 guard convention).
+static func _allegiance_call(method: String, port_id: String,
+		fallback: Variant) -> Variant:
+	var module = _allegiance()
+	if module == null or not module.has_method(method):
+		return fallback
+	return module.call(method, port_id)
+
+
+## `port_id` when given, else the docked port (`""` at sea / standalone).
+static func _resolve_port(port_id: String) -> String:
+	if not port_id.is_empty():
+		return port_id
+	var value = GameState.current_port
+	return value if value is String else ""
+
+
+## The authored development floor of `ports.json` (`30-*` §4.9: capitals and
+## protected ports 3, sovereign majors 2, the rest 1, neutrals 0). This IS the
+## guard fallback for [method effective_dev].
+static func authored_dev(port_id: String) -> int:
+	return int(DataLoader.get_port(port_id).get("dev", 0))
+
+
+## §4.9 effective development: the allegiance module's derived level
+## (authored floor vs ledger thresholds) when present, else the authored
+## floor itself.
+static func effective_dev(port_id: String) -> int:
+	var guarded = _allegiance_call("dev", port_id, null)
+	return int(guarded) if guarded != null else authored_dev(port_id)
+
+
+## §4.9 effective alignment: the allegiance module's answer when present,
+## else the port's data `nation_id`.
+static func effective_alignment(port_id: String) -> String:
+	var guarded = _allegiance_call("effective_alignment", port_id, null)
+	if guarded is String:
+		return guarded
+	return str(DataLoader.get_port(port_id).get("nation_id", ""))
+
+
+## An **unallied neutral**: `nation_id: ""` and no allegiance either (the
+## §4.7.12 allegiance-gray condition).
+static func is_unallied_neutral(port_id: String) -> bool:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if str(port.get("nation_id", "")) != "":
+		return false
+	return effective_alignment(port_id) == ""
+
+
+## `tier: 1|2|3` of a ship type or equipment item (1 when absent — never a
+## crash on hand-edited data).
+static func item_tier(item_id: String) -> int:
+	var ship_type: Dictionary = DataLoader.get_ship_type(item_id)
+	if not ship_type.is_empty():
+		return maxi(1, int(ship_type.get("tier", 1)))
+	return maxi(1, int(DataLoader.get_equipment(item_id).get("tier", 1)))
+
+
+## `60-*` §4.11.13: rare items are drop-only and never stocked.
+static func is_rare_equipment(equipment_id: String) -> bool:
+	return bool(DataLoader.get_equipment(equipment_id).get("rare", false))
+
+
+## The §4.7.12 state of `item_id` (ship or equipment) at `port_id`.
+static func row_state(port_id: String, item_id: String) -> String:
+	if is_unallied_neutral(port_id):
+		return ROW_ALLEGIANCE_GRAY
+	if item_tier(item_id) > effective_dev(port_id):
+		return ROW_TIER_GRAY
+	return ROW_AVAILABLE
+
+
+## The `ui_strings` note of the gray state (`""` when available).
+static func row_note_key(port_id: String, item_id: String) -> String:
+	match row_state(port_id, item_id):
+		ROW_TIER_GRAY:
+			return TIER_NEED_DEV_KEY
+		ROW_ALLEGIANCE_GRAY:
+			return ALLEGIANCE_LOCKED_KEY
+	return ""
+
+
+## The ids this port's `facility` (`shipyard` / `equipment_stock`) stocks, in
+## the port's data order, filtered to known ids (and to non-rare equipment —
+## `60-*` §4.11.13 "never in any stock list", defensively). An empty
+## `resolved` port (standalone / at sea) returns the full catalog minus rares,
+## so a standalone screen never renders an empty crash state.
+static func _stock_ids(port_id: String, facility: String, catalog: Array,
+		rare_gated: bool) -> Array[String]:
+	var ids: Array[String] = []
+	var known := {}
+	for entry in catalog:
+		if entry is Dictionary:
+			var entry_id := str((entry as Dictionary).get("id", ""))
+			if rare_gated and is_rare_equipment(entry_id):
+				continue
+			known[entry_id] = true
+	if port_id.is_empty():
+		# Insertion order = the catalog's data order (Dictionary keeps it).
+		for id in known:
+			ids.append(str(id))
+		return ids
+	var facilities = DataLoader.get_port(port_id).get("facilities", {})
+	if not (facilities is Dictionary):
+		return ids
+	var payload = (facilities as Dictionary).get(facility, null)
+	if not (payload is Array):
+		return ids
+	for entry in payload:
+		var id := str(entry)
+		if known.has(id) and not (rare_gated and is_rare_equipment(id)):
+			ids.append(id)
+	return ids
+
+
+## The hull ids stocked at `port_id` ("" = docked port; no port = the full
+## catalog fallback, `40-*` §4.3.1).
+static func shipyard_stock(port_id: String = "") -> Array[String]:
+	return _stock_ids(_resolve_port(port_id), "shipyard",
+		DataLoader.ship_types_list, false)
+
+
+## The equipment ids stocked at `port_id` ("" = docked port; no port = the
+## full non-rare catalog fallback, `60-*` §4.11.13).
+static func equipment_stock(port_id: String = "") -> Array[String]:
+	return _stock_ids(_resolve_port(port_id), "equipment_stock",
+		DataLoader.equipment_list, true)
+
+
+## `60-*` §4.11.12: every item of `slot` the docked port stocks (its
+## `equipment_stock` order), non-rare only. With no docked port the fallback
+## is every non-rare item of the slot in data order (standalone screens).
+## Above-dev and allegiance-locked items stay in the list — graying them is
+## the screen's §4.7.12 job; refusing them is [method equip_block_reason]'s.
+static func equipment_list(slot: String, port_id: String = "") -> Array:
+	var items: Array = []
+	if not (slot in PLAYER_SLOTS or slot in SHIP_SLOTS):
+		return items
+	var stock := equipment_stock(port_id)
+	var by_id := {}
+	for item in DataLoader.equipment_list:
+		if item is Dictionary and str((item as Dictionary).get("slot", "")) == slot:
+			by_id[str((item as Dictionary).get("id", ""))] = item
+	for id in stock:
+		if by_id.has(id):
+			items.append(by_id[id])
+	return items
+
+
 # --- Buy -------------------------------------------------------------------
 
 ## §4.3: `ShipType.base_price` is the whole cost.
@@ -56,11 +246,24 @@ static func can_buy(ship_type_id: String) -> bool:
 
 
 ## Why the Buy button of `ship_type_id` is disabled, as a `ui_strings.json`
-## key (`""` = allowed). Order matters for the §6 message: the fleet cap wins
-## over affordability, because buying at 5 ships is impossible at any price.
+## key (`""` = allowed). Order matters for the §6 message: the port gates come
+## first (an unstocked or above-dev hull is unbuyable at any price or fleet
+## size), then the fleet cap (buying at 5 ships is impossible at any price),
+## then affordability.
+##
+## The gray-state keys (`shipyard.tier.need_dev` / `.allegiance_locked`) carry
+## a `{dev}` placeholder in the first case — the screen renders the note
+## (80-* §4.7.12) rather than the raw key.
 static func buy_block_reason(ship_type_id: String) -> String:
 	if DataLoader.get_ship_type(ship_type_id).is_empty():
 		return "ui.not_available"
+	var port := _resolve_port("")
+	if not port.is_empty():
+		if not shipyard_stock(port).has(ship_type_id):
+			return "ui.not_available"
+		var note := row_note_key(port, ship_type_id)
+		if not note.is_empty():
+			return note
 	if GameState.fleet.size() >= FLEET_MAX:
 		return "shipyard.fleet_full"
 	if GameState.gold < buy_price(ship_type_id):
@@ -304,19 +507,7 @@ const SHIP_SLOTS: Array[String] = ["figurehead", "sail"]
 const EQUIP_SELL_FRACTION := 0.5
 
 
-## `60-*` §4.11.12: every `data/equipment.json` item of `slot`, in **data
-## order** (the shipyard list order, `80-*` §4.7.2). An unknown slot is empty.
-static func equipment_list(slot: String) -> Array:
-	var items: Array = []
-	if not (slot in PLAYER_SLOTS or slot in SHIP_SLOTS):
-		return items
-	for item in DataLoader.equipment_list:
-		if item is Dictionary and str(item.get("slot", "")) == slot:
-			items.append(item)
-	return items
-
-
-## The item id worn in the player's `slot` ("" when empty/absent). Missing
+## `60-*` §4.11.12: the item id worn in the player's `slot` ("" when empty/absent). Missing
 ## `equipment` blocks read as empty slots (`60-*` §4.11.12) — never a crash.
 static func equipped_player(slot: String) -> String:
 	if not (slot in PLAYER_SLOTS):
@@ -348,7 +539,11 @@ static func equip_sellback(_slot: String, equipment_id: String) -> int:
 
 ## Why buying `equipment_id` into `slot` is refused, as a `ui_strings.json`
 ## key (`""` = allowed): an unknown item or a slot mismatch is
-## `ui.not_available`; an unaffordable net cost is `shipyard.no_gold`.
+## `ui.not_available`; a missing hull for a ship slot likewise; Phase 7 adds
+## the stock gates — a rare item, an item not on this port's
+## `equipment_stock`, or a gray-state row (`ui.not_available` /
+## `shipyard.tier.*` note keys) — and finally an unaffordable net cost is
+## `shipyard.no_gold`.
 ##
 ## The net cost is `-new_price + old_sellback` (§4.3: the replaced item sells
 ## back "in the same action"), so replacing a 400g cutlass with a 1200g rapier
@@ -360,6 +555,16 @@ static func equip_block_reason(slot: String, equipment_id: String,
 		return "ui.not_available"
 	if slot in SHIP_SLOTS and _ship(ship_index).is_empty():
 		return "ui.not_available"
+	var port := _resolve_port("")
+	if not port.is_empty():
+		# Rare items are drop-only (60-* §4.11.13) and never stocked; the
+		# rare flag is checked first so a corrupt stock list cannot leak one.
+		if is_rare_equipment(equipment_id) \
+				or not equipment_stock(port).has(equipment_id):
+			return "ui.not_available"
+		var note := row_note_key(port, equipment_id)
+		if not note.is_empty():
+			return note
 	# The purse must survive the **net** delta, which is negative for a normal
 	# buy and may even be positive when the replaced item is worth more.
 	if GameState.gold + equip_net_cost(slot, equipment_id, ship_index) < 0:
