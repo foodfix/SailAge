@@ -170,6 +170,10 @@ func _ready() -> void:
 		buy_permit.bind(PERMIT_HOME))
 	(_permit_rows[PERMIT_FOREIGN]["buy"] as Button).pressed.connect(
 		buy_permit.bind(PERMIT_FOREIGN))
+	# The commendation's dismissal lives on the dialog close for the bundled
+	# real engine (its pending is a PEEK — see `_on_commend_closed`); the
+	# granular `take_commendation` contract consumed on take instead.
+	_commend.closed.connect(_on_commend_closed)
 	if _confirm.has_signal("confirmed"):
 		_confirm.confirmed.connect(retire)
 	_port_id = _read_current_port()
@@ -827,14 +831,37 @@ func _check_commendation() -> void:
 			and DataLoader.ui_strings.has(COMMEND_BODY_KEY)
 			and DataLoader.ui_strings.has(COMMEND_CLOSE_KEY)):
 		return
-	if not _seam_has("take_commendation"):
-		return
-	var info = _seam_call("take_commendation", [], {})
+	var info = _commendation_take()
 	if not (info is Dictionary) or (info as Dictionary).is_empty():
 		return
 	_commend_info = info
 	_commend.open_text(_commend_message())
 	_set_commend_button()
+
+
+## The pending commendation through the seam, engine shape first: task L's
+## real pair answers `pending_commendation(port_id)` — a PEEK, dismissed on
+## the dialog close (see `_on_commend_closed`) — else the granular
+## `take_commendation()` contract, which consumes on take. `{}` when neither
+## seam exists or nothing is pending.
+func _commendation_take() -> Dictionary:
+	if _seam_has("pending_commendation"):
+		var info = _seam_call("pending_commendation", [_port_id], {})
+		return info if info is Dictionary else {}
+	if _seam_has("take_commendation"):
+		var taken = _seam_call("take_commendation", [], {})
+		return taken if taken is Dictionary else {}
+	return {}
+
+
+## The commend dialog closed: under the bundled real engine the pending is a
+## peek, so the played commendation is dismissed here (`dismiss_commendation()`
+## — one-time per converted port, `70-*` §4.1). The granular
+## `take_commendation` contract already consumed on take — nothing to do.
+## `dialog_box.gd` emits `closed` with no argument.
+func _on_commend_closed() -> void:
+	if _seam_has("dismiss_commendation"):
+		_seam_call("dismiss_commendation", [], null)
 
 
 ## `title` over `body` (the §4.7 message+OK chrome has no title row).
@@ -945,6 +972,8 @@ func _on_bounty_cleared(_nation_id: String) -> void:
 
 
 func _exit_tree() -> void:
+	if _commend.closed.is_connected(_on_commend_closed):
+		_commend.closed.disconnect(_on_commend_closed)
 	if EventBus.locale_changed.is_connected(_on_locale_changed):
 		EventBus.locale_changed.disconnect(_on_locale_changed)
 	if EventBus.gold_changed.is_connected(_on_gold_changed):
