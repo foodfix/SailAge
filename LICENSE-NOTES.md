@@ -711,3 +711,215 @@ Barbosa's East-Africa chapters; the *Kilwa Chronicle*.
   variant stays west of the Danish straits).
 - Philippe Dollinger, *The German Hansa* (1964) — winter routing practice
   and the Danish-sounds context.
+
+## Phase 7 port economy & region bands (task P, 2026-11-02)
+
+This section records the historical basis of every authored decision in
+the Phase-7 `ports.json` rewrite (economy graph over the 40 goods,
+`band`, `protected`, `dev` floors, `sphere`, per-port shipyard/equipment
+stock, lane `goods` extensions). All names/coordinates/nations/flavor are
+the locked Phase-5/6 data, untouched.
+
+### Region bands (15, `10-*` §7.1)
+
+The six Phase-6 neutral-region bands keep their locked skeleton ids and
+members. The nine new bands group the sovereign ports by sailing reach,
+not by owner:
+
+- `europe_atlantic` — Iberian, British, Dutch and Baltic-North-Sea ports:
+  the Atlantic façade one coastal system (Baltic legs ride the
+  `hanseatic_north` lane).
+- `europe_med` — western Mediterranean to the Black Sea entrance
+  (Istanbul/Smyrna sit on the Aegean-Marmara system; the Great-Siege and
+  Candia-war rivalries stay inside one telegraph band).
+- `africa_levant` — the Barbary coast plus the Egyptian-Levantine shore
+  and Cyprus: one Saracen littoral for the galley/xebec trade (Alexandria
+  and Beirut share the Cairo–Damascus caravan hinterland).
+- `africa_atlantic` — the Guinea/Angola castle coast plus Madeira (the
+  Portugal-Brazil sailing reach).
+- `indian_ocean_south` — Cape Town + Shark Bay (`botany_bay`): the
+  Brouwer-route pair (1611) — India-bound ships rounded the Cape and rode
+  the Roaring Forties to the Western-Australian coast; these two ports
+  share no other coast.
+- `americas_north` / `americas_caribbean` / `americas_pacific` /
+  `americas_brazil` — the four colonial sailing systems (cod fleet,
+  Spanish Main + flota, the Peru-Panama-Acapulco Pacific runs, the Brazil
+  sugar coast with the Río de la Plata approach).
+
+### Port classes & development floors
+
+- `protected` (17): exactly the decision-25 core set. Note: the task
+  brief said "16 ports"; the pinned membership list (2+4+2+2+3+4) is 17 —
+  the membership, not the count, is the contract (no doc pins a total).
+- `dev` 2 majors (28) — historical rationale per port:
+  - malacca — the Strait emporium; Portugal's richest Asian conquest.
+  - goa — capital of the Portuguese Estado da Índia.
+  - macau — the Macao–Nagasaki silk-for-silver entrepôt.
+  - canton — the Ming export gateway (silk, porcelain, musk).
+  - nagasaki — Japan's supervised foreign window (Portuguese, then Dutch
+    and English factories).
+  - manila — terminus of the Manila galleon (founded 1571).
+  - batavia — the VOC Asian headquarters (founded 1619).
+  - zeelandia — the VOC Formosa entrepôt (1620s; the id's era edge is
+    inherited from the locked Phase-6 data, not re-authored here).
+  - alexandria — the Cairo-route spice terminus of the Ottoman-Venetian
+    trade.
+  - basra — head of the Persian Gulf, the Baghdad–Basra caravan-river
+    route; Portuguese factory presence in the 1620s.
+  - aden — gate of the Bab-el-Mandeb under Ottoman rule.
+  - jiddah — Mecca's port; Red-Sea trade and the coffee landfall.
+  - surat — Gujarat's great Mughal port; first English factory (1612).
+  - colombo — Ceylon's cinnamon court (Portuguese, then Dutch).
+  - mozambique — the Estado da Índia's way-station fortress.
+  - mombasa — Fort Jesus (1593); Portuguese-Ottoman East Africa.
+  - havana — rendezvous of the New-Spain flota.
+  - cartagena — the Tierra Firme treasure fair.
+  - vera_cruz — New Spain's Atlantic gate (San Juan de Ulúa).
+  - bahia — Salvador, capital of Portuguese Brazil (1549); sugar coast.
+  - recife — Pernambuco's sugar port.
+  - luanda — São Paulo de Luanda (1576); the Angola trade.
+  - hamburg — Hanseatic transshipment between Baltic grain and the west.
+  - danzig — the Baltic grain emporium.
+  - marseille — France's Levant-trade port (in-game Spain per the
+    deliberate-fidelity note).
+  - stockholm — the Bergslagen copper/iron export port.
+  - panama — the Pacific treasury hub and Portobelo's partner (1519).
+  - osaka — Toyotomi-era metropolis, Japan's rice market (1583).
+  All remaining sovereign contestable ports are `dev` 1; every neutral
+  port is `dev` 0 and can only grow through the allegiance ledger.
+
+### produces/demands rewrite (40-good graph)
+
+- The listing rule (`demands ⊇ staples ∖ produces`, disjoint sets) is
+  mechanical; the authored content is (a) each port's production set and
+  (b) its extra consumption `wants`.
+- Luxury (specialty) producer caps (≤ 6 ports each) forced era-honest
+  concentration: spices only at the Maluku/Sumatra/Malabar sources
+  (ternate amboina banten jambi calicut malacca); silk at China (canton),
+  Bengal (hughli), Vietnam (hoi_an has raw_silk; silk stays at canton),
+  Venice, Bursa (smyrna) and Persian Bandar Abbas; pearls at the Gulf
+  (hormuz, basra), Sulu, Margarita-via-cartagena and Hepu (beihai);
+  lacquerware only in Japan (sakai, funai); musk only at the two
+  Yunnan-route Chinese gates (canton, quanzhou); Baltic amber at hamburg
+  danzig stockholm, plus sofala where the early-modern trade called East
+  African copal "amber" (a deliberate reuse of the Phase-6 locked tag).
+- Gold: sofala/kilwa (Monomotapa's gold route to the Swahili coast),
+  elmina/accra (the Gold Coast — "Elmina", a Costa do Ouro), mozambique,
+  cartagena (New-Granada gold). Replaces the old "amber" tags at the
+  Guinea ports, which were never an amber source.
+- Silver: Japanese mines via hirado/funai (Iwami Ginzan), Mexican silver
+  via acapulco (Manila trade) and vera_cruz (Zacatecas), Potosí via lima.
+  Chinese ports (canton, macau) and Japan/Manila lanes demand it — the
+  silver-for-silk drain.
+- Notable produce re-placements, all cited: valencia rice (the Albufera
+  paddy), alexandria rice/sugar (the Nile delta), cheddar-cheese at
+  london and Flemish cheese at antwerp (with amsterdam) so `cheese` has
+  its three producers, linen at hamburg/antwerp/boston/jamestown
+  (Flemish and New-England flax), pitch as naval stores at hamburg
+  danzig stockholm beirut (cedar) boston jamestown panama guayaquil
+  (the Guayaquil Pacific shipyard), brazilwood at bahia/rio/recife/belem
+  and sappanwood at siam/hoi_an, Bengal raw silk and musk/rhubarb/tea at
+  the Fujian-Canton gates, tobacco at havana/bahia/jamestown (1612
+  Rolfe), Sulu pearls (the famous Sulu Sea fisheries), Joseon porcelain
+  at busan (the Japan export ware through the waegwan), Iwami silver and
+  Sakai lacquerware/blades in Japan.
+- Staple-coverage metric (task-P self-checks): equirectangular tile
+  distance at 12 tiles/degree, longitude wrap-aware, no cos correction
+  (conservative east-west), straight-line in tile space. Worst case:
+  **cape_town** — no other port exists within 240 tiles of it under any
+  straight-line metric (nearest other staple producer, luanda, is ~300
+  tiles); it self-supplies (salt + wheat) and is reported to the master
+  as needing either the self-counting convention or a gate exception.
+  botany_bay, new_foundland and valparaiso satisfy the ≥2-in-240 ring
+  only when a port's own production counts as distance 0 (their second
+  producer is 160–220 tiles out); flagged for T's validator wording.
+
+### Per-port shipyard stock (16 hulls, `40-*` §4.3.1)
+
+- The galley restriction is honored: galleys (and galiots/galleasses,
+  xebecs) only in `europe_med`/`africa_levant`; the dated xebec
+  exception itself is S's LICENSE-NOTES line.
+- Regional families: junk on the China coast and the archipelago
+  (patani brunei siam gresik and the Japan ports, where Japanese-built
+  junks and red-seal ships fit), dhow from the Red Sea to India, fluyt in
+  Holland's ports and VOC posts (amsterdam antwerp batavia zeelandia
+  bandar_abbas cape_town and the Dutch Atlantic), galleons at the
+  Manila-Havana-Vera Cruz-Cartagena system and the Brazil sugar ports,
+  caravels/caravelas on the Portuguese runs, carracks at the Hanseatic
+  and Baltic ports.
+- Tier design (`10-*` §7.3): the six capitals stock tier 1–3 and are the
+  only tier-3 sellers at start (§2.2 pin) — non-capital protected ports
+  deliberately stock tier 1–2 only; every contestable sovereign
+  shipyard stocks one tier-3 hull (grayed 需发展度 until the port grows),
+  and neutral shipyards stock tier 1–2 (the allegiance gate covers the
+  rest).
+- Named one-offs: manila's galleon-first list (the galleon trade), macau
+  carrying the nao (the "great ship" of the Macao run), guayaquil's
+  shipyard flavor (Pacific shipbuilding), hirado/sakai small-craft
+  lists under the allegiance gate.
+
+### Per-port equipment stock (existing 8 ids)
+
+- Authored over the existing 8 ids only (the task's PREFERRED path; no
+  placeholder ids). Slot coverage of the 8: weapon {eq_cutlass,
+  eq_rapier}, armor {eq_breastplate, eq_lucky_charm}, figurehead
+  {eq_mermaid_figurehead, eq_dragon_figurehead}, sail {eq_cotton_sails,
+  eq_storm_sails} — 2 per slot, so every port can list 2+ items across 2
+  slots without new ids.
+- Every list carries eq_cutlass or eq_cotton_sails (the two cheapest
+  items) so a dev-1 floor port always sells something under any S
+  tiering; storm sails cluster in the North Sea/Baltic/Caribbean-typhoon
+  belts; figureheads and rapiers enrich the capitals. If S's final
+  tiers differ from the assumed {t1: cutlass/cotton/breastplate/lucky
+  charm}, the master bounces a re-tiered pass during the staged-sim
+  loop; lists that need slot-specific new ids (none currently) would be
+  the bounce material.
+
+### Lane `goods` extensions (`trade_routes.json`)
+
+Additive except one removal; all new tags are 40-good ids:
+
+- carreira_da_india + indigo/gems — the carrack return cargo.
+- west_indies_flota + gold/silver/tobacco/leather — bullion and colonial
+  produce (the flota's actual manifest).
+- manila_galleon + raw_silk/porcelain/silver — the silver-for-silk
+  exchange (tea deliberately NOT tagged: the mass tea trade post-dates
+  the ~1620 anchor; the 1610 Dutch purchase is a single lot).
+- venice_alexandria + indigo — the Levant dyestuff route.
+- venice_flanders + linen — Flemish cloth north.
+- hanseatic_north + pitch/furs/linen — naval stores, Russian pelts,
+  northern cloth.
+- aden_gujarat_malacca + indigo/gems/coffee — Gujarat cloth-out,
+  Golconda stones, Yemen coffee.
+- red_sea_india + indigo/coffee; basra_muscat_india + pearls/indigo —
+  Gulf pearls ride Basra.
+- grand_banks_cod + furs — the Newfoundland fur traffic.
+- canton_country_trade + raw_silk/porcelain/silver/musk — the Ming
+  export set.
+- coromandel_bengal + raw_silk/indigo/gems; swahili_coast + ivory/gold —
+  the classic Swahili exports; pacific_america + silver/wine — Potosí
+  bullion and Peruvian wine; west_africa + ivory/gold — and **amber
+  removed** from that lane (amber is now Baltic + Sofala copal; no West
+  African source exists in the 40-good graph).
+- Builder effect: `build_routes.py` does not read lane goods; the rebuilt
+  artifact differs from the committed one ONLY in the recorded input
+  sha256s (`trade_routes.json`, `ports.json`) — verified locally
+  (lanes/junction/spokes/ports byte-identical). The committed artifact is
+  left untouched; T rebuilds over the merged sources at the W2 gate.
+
+### Sphere claimants (`sphere`)
+
+- Owner nation first, then historical rivals with a documented presence
+  or claim: Dutch sieges of malacca/batavia-orbit (1606+), Portuguese
+  forts at muscat/mombasa/hormuz, English factories at surat/hirado
+  (1613), the Lepanto coalition at cyprus, Venice-Ragusa-Ottoman
+  contests in the Aegean, Drake's raids (san_juan, santo_domingo,
+  cartagena, valparaiso, acapulco), Dutch Brazil (bahia/recife), New
+  Amsterdam (new_york), Kirke's Quebec (1628).
+- korea (busan, yeompo): the European Japan-trade orbit
+  [portugal, holland] proxies the only plausible claimants (no direct
+  European presence; flagged in the report).
+- botany_bay: [holland] alone — no second claimant plausibly reached the
+  Shark Bay coast in-era.
+- Protected ports carry an empty sphere (never AI-investable).
+

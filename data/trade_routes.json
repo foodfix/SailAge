@@ -209,7 +209,9 @@
         "spices",
         "silk",
         "cotton_cloth",
-        "copper"
+        "copper",
+        "indigo",
+        "gems"
       ],
       "chokepoints": [
         "cape_of_good_hope",
@@ -535,7 +537,11 @@
         "salt",
         "sugar",
         "spices",
-        "silk"
+        "silk",
+        "gold",
+        "silver",
+        "tobacco",
+        "leather"
       ],
       "chokepoints": [
         "strait_of_gibraltar",
@@ -782,7 +788,10 @@
         "spices",
         "silk",
         "sugar",
-        "cotton_cloth"
+        "cotton_cloth",
+        "raw_silk",
+        "porcelain",
+        "silver"
       ],
       "chokepoints": [
         "san_bernardino_strait"
@@ -856,7 +865,8 @@
         "spices",
         "silk",
         "cotton_cloth",
-        "olive_oil"
+        "olive_oil",
+        "indigo"
       ],
       "chokepoints": [
         "otranto_strait"
@@ -1059,7 +1069,8 @@
         "silk",
         "wool",
         "cotton_cloth",
-        "glassware"
+        "glassware",
+        "linen"
       ],
       "chokepoints": [
         "strait_of_gibraltar",
@@ -1298,7 +1309,10 @@
         "wheat",
         "wool",
         "amber",
-        "salt"
+        "salt",
+        "pitch",
+        "furs",
+        "linen"
       ],
       "chokepoints": [
         "dover_strait",
@@ -1527,7 +1541,10 @@
         "spices",
         "silk",
         "cotton_cloth",
-        "sugar"
+        "sugar",
+        "indigo",
+        "gems",
+        "coffee"
       ],
       "chokepoints": [
         "strait_of_malacca"
@@ -1628,7 +1645,9 @@
       "goods": [
         "spices",
         "silk",
-        "cotton_cloth"
+        "cotton_cloth",
+        "indigo",
+        "coffee"
       ],
       "chokepoints": [
         "bab_el_mandeb"
@@ -1742,7 +1761,9 @@
         "silk",
         "cotton_cloth",
         "spices",
-        "carpet"
+        "carpet",
+        "pearls",
+        "indigo"
       ],
       "chokepoints": [
         "hormuz"
@@ -1934,7 +1955,8 @@
       "goods": [
         "dried_fish",
         "salt",
-        "wool"
+        "wool",
+        "furs"
       ],
       "chokepoints": [
         "dover_strait"
@@ -2206,7 +2228,11 @@
         "silk",
         "ceramics",
         "spices",
-        "cotton_cloth"
+        "cotton_cloth",
+        "raw_silk",
+        "porcelain",
+        "silver",
+        "musk"
       ],
       "chokepoints": [
         "taiwan_strait"
@@ -2385,7 +2411,10 @@
         "cotton_cloth",
         "silk",
         "sugar",
-        "spices"
+        "spices",
+        "raw_silk",
+        "indigo",
+        "gems"
       ],
       "chokepoints": [
         "ceylon_south"
@@ -2494,7 +2523,9 @@
       "goods": [
         "dried_fish",
         "salt",
-        "cotton_cloth"
+        "cotton_cloth",
+        "ivory",
+        "gold"
       ],
       "chokepoints": [
         "cape_guardafui"
@@ -2672,7 +2703,9 @@
         "sugar",
         "dried_fish",
         "wool",
-        "salt"
+        "salt",
+        "silver",
+        "wine"
       ],
       "chokepoints": [
         "gulf_of_panama"
@@ -2862,7 +2895,8 @@
         "dried_fish",
         "salt",
         "cotton_cloth",
-        "amber"
+        "ivory",
+        "gold"
       ],
       "chokepoints": [
         "gulf_of_guinea"
