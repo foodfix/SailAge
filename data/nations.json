@@ -13,6 +13,8 @@
       "start_ship_type_id": "caravel",
       "start_gold": 5000,
       "start_reputation": 20,
+      "bonus_attribute": "intellect",
+      "bonus_skill": "navigation",
       "rivals": [
         "spain",
         "england"
@@ -34,6 +36,8 @@
       "start_ship_type_id": "nao",
       "start_gold": 6000,
       "start_reputation": 15,
+      "bonus_attribute": "courage",
+      "bonus_skill": "swordplay",
       "rivals": [
         "portugal",
         "italy"
@@ -55,6 +59,8 @@
       "start_ship_type_id": "sloop",
       "start_gold": 4500,
       "start_reputation": 10,
+      "bonus_attribute": "charisma",
+      "bonus_skill": "gunnery",
       "rivals": [
         "holland",
         "portugal"
@@ -76,6 +82,8 @@
       "start_ship_type_id": "nao",
       "start_gold": 7000,
       "start_reputation": 10,
+      "bonus_attribute": "luck",
+      "bonus_skill": "negotiation",
       "rivals": [
         "england",
         "portugal"
@@ -97,6 +105,8 @@
       "start_ship_type_id": "galley",
       "start_gold": 6000,
       "start_reputation": 12,
+      "bonus_attribute": "courage",
+      "bonus_skill": "seamanship",
       "rivals": [
         "italy",
         "spain"
@@ -118,6 +128,8 @@
       "start_ship_type_id": "brigantine",
       "start_gold": 5500,
       "start_reputation": 10,
+      "bonus_attribute": "luck",
+      "bonus_skill": "appraisal",
       "rivals": [
         "ottoman",
         "spain"

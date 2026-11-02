@@ -25,7 +25,7 @@
       },
       "nations": {
         "path": "data/nations.json",
-        "sha256": "64d285ee5886d05cf8c35a210d71dcec73498ef00ebc4ba054fe5f893a164479"
+        "sha256": "6d08a44ccc736bef13c4e991345afed3cc6777252142ad3da55c604b8194b208"
       },
       "ice_regions": {
         "path": "data/ice_regions.json",

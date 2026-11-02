@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "officer_posts": [
+    {
+      "post_id": "pilot",
+      "slot_type": "flagship",
+      "prereq": {"navigation": 20},
+      "desc": {"zh": "执掌海图与罗盘,舰队看得更远。", "en": "Master of chart and compass; the fleet sees farther."},
+      "advice": {"wind_band": {}}
+    },
+    {
+      "post_id": "boatswain",
+      "slot_type": "flagship",
+      "prereq": {"seamanship": 20},
+      "desc": {"zh": "调教帆缆水手,舰队跑得更快。", "en": "Drills the hands and the rigging; the fleet sails faster."},
+      "advice": {"storm_sail": {}}
+    },
+    {
+      "post_id": "gunner",
+      "slot_type": "flagship",
+      "prereq": {"gunnery": 20},
+      "desc": {"zh": "校准火炮,炮火更准更狠。", "en": "Sights the cannon; shot flies truer and hits harder."},
+      "advice": {"first_contact": {}}
+    },
+    {
+      "post_id": "surgeon",
+      "slot_type": "flagship",
+      "prereq": {"medicine": 20},
+      "desc": {"zh": "船医随船,坏血病更晚到来。", "en": "A surgeon aboard delays the scurvy."},
+      "advice": {"water_low": {"days": 5}}
+    },
+    {
+      "post_id": "carpenter",
+      "slot_type": "flagship",
+      "prereq": {"carpentry": 20},
+      "desc": {"zh": "打理船体与帆具,修理花费更低。", "en": "Keeps hull and rigging sound; repairs cost less."},
+      "advice": {"durability_low": {"pct": 50}}
+    },
+    {
+      "post_id": "cook",
+      "slot_type": "flagship",
+      "prereq": {"cooking": 20},
+      "desc": {"zh": "一锅热饭稳住士气,不满更慢滋生。", "en": "A hot meal steadies the crew; discontent grows more slowly."},
+      "advice": {"morale_low": {"threshold": 40}}
+    },
+    {
+      "post_id": "captain",
+      "slot_type": "captain",
+      "prereq": {"seamanship": 25, "courage": 30},
+      "desc": {"zh": "一艘分舰船的船长席位。", "en": "The captain's seat of one escort ship."}
+    }
+  ]
+}
