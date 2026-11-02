@@ -27,6 +27,10 @@ const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 ## The verb rule + the display name are the interaction layer's (W5-A): the
 ## picker renders what `Interactions` computes.
 const InteractionsLib := preload("res://scripts/world/interactions.gd")
+## §4.12.1 (W6-A): the inspect verb renders the unified character card (the
+## NPC entry) in place; the dossier is one more click (§4.11.3).
+const CardLib := preload("res://scenes/ui/character_card.gd")
+const DossierPanelLib := preload("res://scenes/ui/dossier_panel.gd")
 
 ## Emitted when a fleet row's verb button is pressed.
 signal verb_chosen(verb: String, fleet: Dictionary)
@@ -54,6 +58,12 @@ var _appoint_reason: String = ""
 var _row_verbs: Array[Dictionary] = []
 ## The port-context mode's row buttons ({} in fleet mode).
 var _port_buttons: Dictionary = {}
+## §4.12.1 (W6-A): the inspect verb's card view (the NPC entry). The fleet
+## whose card is showing ({} = the pick list is up).
+var _card_mode: bool = false
+var _card_fleet: Dictionary = {}
+## The card widget rendered in card mode (the card-identity pin's read seam).
+var _card: Control = null
 
 @onready var _dim: ColorRect = $Dim
 @onready var _panel: PanelContainer = $Center/Panel
@@ -79,7 +89,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Modal: nothing underneath may react (§6).
 	get_viewport().set_input_as_handled()
 	if event.is_action_pressed("back"):
-		close()
+		# In card mode `Esc` returns to the pick list first (§4.10.1 → §4.12.1).
+		if _card_mode:
+			close_card()
+		else:
+			close()
 		return
 	# lists: ↑↓ + Enter walk the rows (§4.3); the buttons' focus chain
 	# handles it natively, Enter activates the focused verb.
@@ -90,6 +104,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func open_fleets(fleets: Array) -> void:
 	_fleets = (fleets as Array).duplicate()
 	_port_id = ""
+	_card_mode = false
+	_card_fleet = {}
 	_rebuild()
 	_show()
 
@@ -102,6 +118,8 @@ func open_port_context(port_id: String, appoint_enabled: bool,
 	_port_id = port_id
 	_appoint_enabled = appoint_enabled
 	_appoint_reason = appoint_reason
+	_card_mode = false
+	_card_fleet = {}
 	_rebuild()
 	_show()
 
@@ -156,6 +174,16 @@ func title_text() -> String:
 	return _title.text
 
 
+## True while the inspect verb's card view is up (§4.12.1).
+func is_card_mode() -> bool:
+	return _card_mode
+
+
+## The card rendered in card mode (null while the pick list is up).
+func card_widget() -> Control:
+	return _card if _card_mode else null
+
+
 # --- Build -------------------------------------------------------------------
 
 func _rebuild() -> void:
@@ -164,10 +192,65 @@ func _rebuild() -> void:
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
-	if not _port_id.is_empty():
+	if _card_mode:
+		_rebuild_card()
+	elif not _port_id.is_empty():
 		_rebuild_port()
 	else:
 		_rebuild_fleets()
+
+
+## The inspect verb's card view (§4.12.1, the NPC entry): the unified card,
+## identified = full reveal, plus the dossier entry (§4.11.3) and the way
+## back to the pick list. No state is touched here (the §4.12 card-identity
+## pin compares this card's data against the dossier's — a side effect here
+## would break it).
+func _rebuild_card() -> void:
+	var captain_id := str(_card_fleet.get("captain_id", ""))
+	_title.text = I18n.fmt("dossier.title",
+		{"name": InteractionsLib.display_name(_card_fleet)})
+	if captain_id.is_empty() or DataLoader.get_captain(captain_id).is_empty():
+		# An unidentified fleet has no canon card to render; the fallback
+		# line is the same one the row already showed.
+		_set_status(I18n.t_key("interact.unknown_name"))
+		_rows.add_child(_wrap_row(_back_button()))
+		_card = null
+		return
+	_set_status("")
+	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
+	_card = card_scene.instantiate()
+	_card.name = "CaptainCard"
+	_rows.add_child(_card)
+	_card.setup_person(CardLib.KIND_NPC, CardLib.card_data(
+		CardLib.KIND_NPC, captain_id))
+	# The dossier entry (§4.11.3: opened from any captain entry).
+	var dossier := _verb_button(I18n.fmt("dossier.title",
+		{"name": InteractionsLib.display_name(_card_fleet)}))
+	dossier.pressed.connect(func() -> void:
+		DossierPanelLib.open_for(captain_id, get_parent()))
+	_rows.add_child(_wrap_row(dossier))
+	_rows.add_child(_wrap_row(_back_button()))
+
+
+func _back_button() -> Button:
+	var button := _verb_button(I18n.t_key("ui.back"))
+	button.pressed.connect(close_card)
+	return button
+
+
+## Switches the picker into the inspect card view (the inspect verb's action).
+func open_card(fleet: Dictionary) -> void:
+	_card_mode = true
+	_card_fleet = fleet.duplicate(true)
+	_rebuild()
+
+
+## Back to the pick list.
+func close_card() -> void:
+	_card_mode = false
+	_card_fleet = {}
+	_card = null
+	_rebuild()
 
 
 func _rebuild_fleets() -> void:
@@ -254,9 +337,14 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 			# Grayed with the distance reason beyond Chebyshev 2 (§4.10.1).
 			button.disabled = true
 		var captured := fleet
-		button.pressed.connect(func() -> void:
-			close()
-			verb_chosen.emit(verb, captured))
+		if verb == InteractionsLib.VERB_INSPECT:
+			# §4.12.1 (W6-A): inspect renders the unified card in place; the
+			# verb stays on the row (the surface pin), only its action moved.
+			button.pressed.connect(func() -> void: open_card(captured))
+		else:
+			button.pressed.connect(func() -> void:
+				close()
+				verb_chosen.emit(verb, captured))
 		verb_map[verb] = button
 		row.add_child(button)
 	_row_verbs.append(verb_map)

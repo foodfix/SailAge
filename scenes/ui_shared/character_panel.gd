@@ -1,7 +1,26 @@
 class_name CharacterPanel
 extends Control
-## Character / status panel (S14) — docs/80-UI-UX.md §4.1, §4.2, §4.3;
-## docs/50-* §4.2–§4.6.
+## Character / status panel (S14) — docs/80-UI-UX.md §4.12.3 (the Phase-8
+## three-tab rework), §4.6.2; docs/50-* §4.2–§4.6.
+##
+## The person side reorganizes into **three tabs**; the Phase-3 委托 Quests
+## tab keeps its place beside them:
+##   * **属性 Attributes** — the §4.12 player card (attribute bars, level/XP,
+##     the §4.12.2 allocation steppers + the effective-values split) and the
+##     six-nation reputation table;
+##   * **技能 Skills + gates** — the same card's skill bars with their usage
+##     counters, plus every locked feature rendered from
+##     `data/skill_gates.json` (the one `gate.*` reason renderer: grayed row
+##     + threshold + reason, shared with the S18 post column);
+##   * **官员与岗位 Officers & posts** — the roster with the post column
+##     (current post or idle, per-officer wage); the four-action detail view
+##     stays S18 (§4.6.2 "this panel is the detail view"), reachable from the
+##     footer button as before;
+##   * **委托 Quests** — unchanged (§4.7.3).
+##
+## ONE §4.12 card instance (the player entry) is shared by the attributes and
+## skills tabs — the card is reparented onto the active tab, so both tabs
+## render the identical data by construction.
 ##
 ## Parent-agnostic modal: it can be dropped into any scene with
 ## [method attach_to], and from then on it owns the `C` key
@@ -10,19 +29,15 @@ extends Control
 ##
 ## Shows LIVE state: the panel rebuilds from `GameState` every time it opens
 ## and again on `EventBus.fleet_changed` / `gold_changed` while open, so a
-## mid-panel change can never show stale numbers.
-##
-## Host wiring: the panel registers as `class_name CharacterPanel` (used by
-## T6/T11 as `CharacterPanel.attach_to(self)`), which needs Godot's global
-## class cache — open the project in the editor once before running. A host
-## that must survive a cold cache can instead use
-## `preload("res://scenes/ui_shared/character_panel.gd").attach_to(self)`.
+## mid-panel change can never show stale numbers. An in-progress allocation
+## draft survives the refresh ([method CharacterCard.restage_draft]).
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written Godot's class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 ## The clock text in the header day label (`20-*` §4.3 amended).
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -30,47 +45,49 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## the roster has the two entry points the doc names (S4's facility list and the
 ## character panel). Preloaded by path so a cold class cache is harmless.
 const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
+## The §4.12 unified card (the player entry lives on the person tabs).
+const CardLib := preload("res://scenes/ui/character_card.gd")
 
 const SCENE_PATH := "res://scenes/ui_shared/character_panel.tscn"
 ## Dim strength for modals (docs/80-* §4.7: "dimming the background by 40% black").
 const DIM_ALPHA := 0.4
 
-## Tab ids (docs/80-* §4.7.3: the Phase-3 `Quests` tab sits beside the stats).
-const TAB_STATS := "stats"
+## Tab ids (docs/80-* §4.12.3; the Phase-3 `quests` id is unchanged).
+const TAB_ATTRIBUTES := "attributes"
+const TAB_SKILLS := "skills"
+const TAB_OFFICERS := "officers"
 const TAB_QUESTS := "quests"
-
-const STAT_KEYS: Array[String] = [
-	"leadership", "seamanship", "combat", "navigation", "luck",
-]
-## docs/50-* §4.5: Phase-1 hint that gunner bonuses are combat-only (P2).
-const ROLE_KEYS := {
-	"navigator": "tavern.role.navigator",
-	"boatswain": "tavern.role.boatswain",
-	"gunner": "tavern.role.gunner",
-}
 
 @onready var _dim: ColorRect = $Dim
 @onready var _panel: PanelContainer = $Center/Panel
 @onready var _title: Label = $Center/Panel/Margin/Body/Title
 @onready var _nation: Label = $Center/Panel/Margin/Body/Nation
-@onready var _level: Label = $Center/Panel/Margin/Body/Columns/Left/Level
-@onready var _xp: Label = $Center/Panel/Margin/Body/Columns/Left/Xp
-@onready var _next: Label = $Center/Panel/Margin/Body/Columns/Left/Next
-@onready var _stats_header: Label = $Center/Panel/Margin/Body/Columns/Left/StatsHeader
-@onready var _stats_rows: VBoxContainer = $Center/Panel/Margin/Body/Columns/Left/StatsRows
-@onready var _officers_header: Label = \
-	$Center/Panel/Margin/Body/Columns/Right/OfficersHeader
-@onready var _officers_rows: VBoxContainer = \
-	$Center/Panel/Margin/Body/Columns/Right/OfficersRows
-@onready var _wage: Label = $Center/Panel/Margin/Body/Columns/Right/Wage
-@onready var _reputation_header: Label = \
-	$Center/Panel/Margin/Body/Columns/Right/ReputationHeader
-@onready var _reputation_rows: GridContainer = \
-	$Center/Panel/Margin/Body/Columns/Right/ReputationRows
 @onready var _levelup: Label = $Center/Panel/Margin/Body/LevelUp
-@onready var _stats_tab: Button = $Center/Panel/Margin/Body/Tabs/StatsTab
+@onready var _attributes_tab: Button = \
+	$Center/Panel/Margin/Body/Tabs/AttributesTab
+@onready var _skills_tab: Button = $Center/Panel/Margin/Body/Tabs/SkillsTab
+@onready var _officers_tab: Button = $Center/Panel/Margin/Body/Tabs/OfficersTab
 @onready var _quests_tab: Button = $Center/Panel/Margin/Body/Tabs/QuestsTab
-@onready var _columns: HBoxContainer = $Center/Panel/Margin/Body/Columns
+@onready var _attributes_panel: VBoxContainer = \
+	$Center/Panel/Margin/Body/AttributesPanel
+@onready var _card_host: VBoxContainer = \
+	$Center/Panel/Margin/Body/AttributesPanel/CardHost
+@onready var _reputation_header: Label = \
+	$Center/Panel/Margin/Body/AttributesPanel/ReputationHeader
+@onready var _reputation_rows: GridContainer = \
+	$Center/Panel/Margin/Body/AttributesPanel/ReputationRows
+@onready var _skills_panel: VBoxContainer = \
+	$Center/Panel/Margin/Body/SkillsPanel
+@onready var _gates_header: Label = $Center/Panel/Margin/Body/SkillsPanel/GatesHeader
+@onready var _gates_rows: VBoxContainer = \
+	$Center/Panel/Margin/Body/SkillsPanel/Scroll/Rows
+@onready var _officers_panel_box: VBoxContainer = \
+	$Center/Panel/Margin/Body/OfficersTabPanel
+@onready var _officers_header: Label = \
+	$Center/Panel/Margin/Body/OfficersTabPanel/OfficersHeader
+@onready var _officers_rows: VBoxContainer = \
+	$Center/Panel/Margin/Body/OfficersTabPanel/Scroll/Rows
+@onready var _wage: Label = $Center/Panel/Margin/Body/OfficersTabPanel/Wage
 @onready var _quests_panel: VBoxContainer = $Center/Panel/Margin/Body/QuestsPanel
 @onready var _quest_slots: Label = $Center/Panel/Margin/Body/QuestsPanel/Slots
 @onready var _quest_rows: VBoxContainer = \
@@ -80,8 +97,10 @@ const ROLE_KEYS := {
 @onready var _officers_button: Button = $Center/Panel/Margin/Body/Footer/Officers
 @onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
 
-## The visible tab ([constant TAB_STATS] / [constant TAB_QUESTS]).
-var _tab: String = TAB_STATS
+## The visible tab (one of the TAB_* constants).
+var _tab: String = TAB_ATTRIBUTES
+## The ONE §4.12 card instance (the player entry) shared by the person tabs.
+var _card: Control = null
 
 
 ## Installs a panel under `parent` (idempotent) and returns it. T6/T11 call
@@ -135,12 +154,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
 	_panel.add_theme_stylebox_override("panel", _panel_style())
-	for label in [_title, _nation, _level, _xp, _next, _wage, _levelup]:
-		label.add_theme_color_override(
-			"font_color",
-			PaletteLib.ACCENT if label == _levelup else PaletteLib.TEXT
-		)
-	for header in [_stats_header, _officers_header, _reputation_header]:
+	for label in [_title, _nation, _wage]:
+		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_levelup.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	for header in [_reputation_header, _officers_header, _gates_header]:
 		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_quest_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
@@ -149,9 +166,17 @@ func _ready() -> void:
 	_close_button.pressed.connect(close)
 	_officers_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
 	_officers_button.pressed.connect(open_officers_panel)
-	_stats_tab.pressed.connect(select_tab.bind(TAB_STATS))
+	_attributes_tab.pressed.connect(select_tab.bind(TAB_ATTRIBUTES))
+	_skills_tab.pressed.connect(select_tab.bind(TAB_SKILLS))
+	_officers_tab.pressed.connect(select_tab.bind(TAB_OFFICERS))
 	_quests_tab.pressed.connect(select_tab.bind(TAB_QUESTS))
 	_levelup.visible = false
+
+	# The ONE §4.12 card (the player entry, allocation steppers on).
+	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
+	_card = card_scene.instantiate()
+	_card.name = "PlayerCard"
+	_card_host.add_child(_card)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_data_changed)
@@ -221,10 +246,11 @@ func active_tab() -> String:
 	return _tab
 
 
-## Switches between the stats column and the Phase-3 quest list (docs/80-*
-## §4.7.3). Unknown ids are ignored; the choice is not persisted.
+## Switches tabs (docs/80-* §4.12.3). Unknown ids are ignored; the choice is
+## not persisted.
 func select_tab(tab: String) -> void:
-	if tab != TAB_STATS and tab != TAB_QUESTS:
+	if tab != TAB_ATTRIBUTES and tab != TAB_SKILLS \
+			and tab != TAB_OFFICERS and tab != TAB_QUESTS:
 		return
 	_tab = tab
 	if visible:
@@ -237,13 +263,15 @@ func select_tab(tab: String) -> void:
 
 func _refresh() -> void:
 	_bind_tabs()
-	_columns.visible = _tab == TAB_STATS
+	_attributes_panel.visible = _tab == TAB_ATTRIBUTES
+	_skills_panel.visible = _tab == TAB_SKILLS
+	_officers_panel_box.visible = _tab == TAB_OFFICERS
 	_quests_panel.visible = _tab == TAB_QUESTS
+
+	_title.text = I18n.t_key("char.title")
 	var player: Dictionary = GameState.player
 	var nation_id := str(player.get("nation_id", ""))
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
-
-	_title.text = I18n.t_key("char.title")
 	_nation.text = "%s · %s" % [
 		I18n.t(nation.get("name", {})),
 		I18n.fmt("char.day", {
@@ -252,19 +280,25 @@ func _refresh() -> void:
 		}),
 	]
 
-	var level := CharacterLib.current_level()
-	var xp := CharacterLib.current_xp()
-	_level.text = I18n.fmt("char.level", {"level": level})
-	_xp.text = I18n.fmt("char.xp", {"xp": xp})
-	var remaining := CharacterLib.xp_to_next_level()
-	_next.visible = remaining >= 0
-	if remaining >= 0:
-		_next.text = I18n.fmt("char.next_level", {"xp": remaining})
+	# The §4.12 player card feeds both person tabs; an in-progress allocation
+	# draft survives the rebuild (§4.12.2: the draft is local to the card).
+	var draft: Dictionary = _card.alloc_draft() if _card != null else {}
+	if _card != null:
+		_card.setup_person(CardLib.KIND_PLAYER, CardLib.card_data(
+			CardLib.KIND_PLAYER, "", {"alloc": true}))
+		_card.restage_draft(draft)
+		var card_parent := _card.get_parent()
+		if card_parent != null:
+			card_parent.remove_child(_card)
+		if _tab == TAB_SKILLS:
+			_skills_panel.add_child(_card)
+			_skills_panel.move_child(_card, 0)
+		else:
+			_card_host.add_child(_card)
 
-	_stats_header.text = I18n.t_key("char.stats")
-	_build_stats()
-	_build_officers()
 	_build_reputation(nation_id)
+	_build_gates()
+	_build_officers()
 	_build_quests()
 
 	_wage.text = I18n.fmt("char.officer_wage", {"gold": CharacterLib.officer_wages()})
@@ -272,88 +306,28 @@ func _refresh() -> void:
 	_officers_button.text = I18n.t_key("officers.title")
 	_levelup.visible = CharacterLib.pending_levelup
 	if _levelup.visible:
-		_levelup.text = I18n.fmt("char.level_up", {"level": level})
+		_levelup.text = I18n.fmt("char.level_up", {
+			"level": CharacterLib.current_level()})
 		# Read-only on purpose: the toast owner (HUD, T6) consumes the flag via
 		# CharacterLib.consume_pending_levelup(), so showing the banner here
 		# must not swallow the HUD toast.
 
 
 func _bind_tabs() -> void:
-	_stats_tab.text = I18n.t_key("char.stats")
+	_attributes_tab.text = I18n.t_key("char.stats")
+	_skills_tab.text = I18n.t_key("char.card.skills")
+	_officers_tab.text = I18n.t_key("char.officers")
 	_quests_tab.text = I18n.t_key("char.quests")
-	for pair in [[TAB_STATS, _stats_tab], [TAB_QUESTS, _quests_tab]]:
+	for pair in [[TAB_ATTRIBUTES, _attributes_tab],
+			[TAB_SKILLS, _skills_tab],
+			[TAB_OFFICERS, _officers_tab],
+			[TAB_QUESTS, _quests_tab]]:
 		var active: bool = _tab == str(pair[0])
 		var button: Button = pair[1]
 		button.button_pressed = active
 		button.add_theme_color_override(
 			"font_color", PaletteLib.ACCENT if active else PaletteLib.TEXT
 		)
-
-
-## Stats table: one row per §4.2 stat with base and effective values.
-func _build_stats() -> void:
-	_clear(_stats_rows)
-	for stat_key in STAT_KEYS:
-		var row := HBoxContainer.new()
-		row.name = "Stat_%s" % stat_key
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		var name_label := _make_label(I18n.t_key("char.%s" % stat_key))
-		name_label.custom_minimum_size.x = 160
-		name_label.name = "Name"
-		# Base cell reads "10 →" so the unlabelled number is unambiguous next to
-		# the localised "Effective N" cell (no `char.base` key exists; adding
-		# one is listed in the T16 report for the orchestrator).
-		var base_label := _make_label("%d →" % CharacterLib.base_stat(stat_key))
-		base_label.name = "Base"
-		base_label.custom_minimum_size.x = 64
-		base_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		base_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-		var effective := CharacterLib.effective_stat(stat_key)
-		var effective_label := _make_label(
-			I18n.fmt("char.effective", {"amount": effective})
-		)
-		effective_label.name = "Effective"
-		effective_label.custom_minimum_size.x = 200
-		effective_label.add_theme_color_override(
-			"font_color",
-			PaletteLib.ACCENT if effective > CharacterLib.base_stat(stat_key)
-			else PaletteLib.TEXT
-		)
-		row.add_child(name_label)
-		row.add_child(base_label)
-		row.add_child(effective_label)
-		_stats_rows.add_child(row)
-
-
-## Officer roster: name, role and daily wage per §4.4/§4.5.
-func _build_officers() -> void:
-	_officers_header.text = I18n.t_key("char.officers")
-	_clear(_officers_rows)
-	var officers: Array = CharacterLib.employed_officers()
-	if officers.is_empty():
-		_officers_rows.add_child(_make_label(I18n.t_key("char.no_officers")))
-		return
-	for officer_id in officers:
-		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
-		if officer.is_empty():
-			continue
-		var row := HBoxContainer.new()
-		row.name = "Officer_%s" % str(officer_id)
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		var name_label := _make_label(I18n.t(officer.get("name", {})))
-		name_label.custom_minimum_size.x = 200
-		var role_key := str(ROLE_KEYS.get(str(officer.get("role", "")), "char.none"))
-		var role_label := _make_label(I18n.t_key(role_key))
-		role_label.custom_minimum_size.x = 110
-		role_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-		var wage_label := _make_label(I18n.fmt(
-			"tavern.wage", {"price": int(officer.get("wage_daily", 0))}
-		))
-		wage_label.custom_minimum_size.x = 120
-		row.add_child(name_label)
-		row.add_child(role_label)
-		row.add_child(wage_label)
-		_officers_rows.add_child(row)
 
 
 ## Reputation table: all six nations, own row highlighted (docs/50-* §4.6,
@@ -379,6 +353,90 @@ func _build_reputation(nation_id: String) -> void:
 		)
 		_reputation_rows.add_child(name_label)
 		_reputation_rows.add_child(value_label)
+
+
+## The §4.12.3 skills tab's gates section: every `data/skill_gates.json` row,
+## grayed + reason while locked, good-tinted once the player's stat/skill
+## (effective, §4.5.3) reaches the threshold.
+func _build_gates() -> void:
+	_gates_header.text = I18n.t_key("gate.locked")
+	_clear(_gates_rows)
+	for gate in DataLoader.skill_gates_list:
+		_gates_rows.add_child(_build_gate_row(gate))
+
+
+func _build_gate_row(gate: Dictionary) -> Control:
+	var feature := str(gate.get("feature_id", ""))
+	var stat := str(gate.get("stat_or_skill", ""))
+	var threshold := int(gate.get("threshold", 0))
+	var current := CharacterLib.attribute(stat) if stat in CharacterLib.ATTRIBUTES \
+		else SkillsLib.effective_skill(stat)
+	var locked := current < threshold
+	var row := HBoxContainer.new()
+	row.name = "Gate_%s" % feature
+	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	var name_label := _make_label(feature)
+	name_label.name = "Feature"
+	name_label.custom_minimum_size.x = 200.0
+	name_label.add_theme_color_override("font_color",
+		PaletteLib.PANEL_LINE if locked else PaletteLib.GOOD)
+	row.add_child(name_label)
+	var requires := _make_label(I18n.fmt("gate.requires", {
+		"stat": I18n.t_key("skill.%s" % stat), "n": threshold,
+	}))
+	requires.name = "Requires"
+	requires.custom_minimum_size.x = 180.0
+	requires.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	row.add_child(requires)
+	var reason := _make_label(I18n.t(gate.get("reason", {})))
+	reason.name = "Reason"
+	reason.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reason.add_theme_color_override("font_color",
+		PaletteLib.WARN if locked else PaletteLib.PANEL_LINE)
+	row.add_child(reason)
+	return row
+
+
+## The officers tab's roster: name + post column + wage per employed officer
+## (the summary; the four-action detail view is S18, §4.6.2).
+func _build_officers() -> void:
+	_officers_header.text = I18n.t_key("char.officers")
+	_clear(_officers_rows)
+	var officers: Array = CharacterLib.employed_officers()
+	if officers.is_empty():
+		_officers_rows.add_child(_make_label(I18n.t_key("char.no_officers")))
+		return
+	for officer_id in officers:
+		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
+		if officer.is_empty():
+			continue
+		var row := HBoxContainer.new()
+		row.name = "Officer_%s" % str(officer_id)
+		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		var name_label := _make_label(I18n.t(officer.get("name", {})))
+		name_label.custom_minimum_size.x = 200
+		row.add_child(name_label)
+		# The post column (current post, or idle — §4.12.3).
+		var state: Dictionary = GameState.officer_states.get(str(officer_id), {})
+		var post_id := str(state.get("post_id", ""))
+		var post_label := _make_label(I18n.t_key("officer.post.%s" % post_id)
+			if not post_id.is_empty() else I18n.t_key("officer.post.idle"))
+		post_label.name = "Post"
+		post_label.custom_minimum_size.x = 140
+		post_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
+		row.add_child(post_label)
+		var role_label := _make_label(I18n.t_key(
+			"skill.%s" % str(officer.get("main_skill", ""))))
+		role_label.name = "Role"
+		role_label.custom_minimum_size.x = 110
+		role_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		row.add_child(role_label)
+		var wage_label := _make_label(I18n.fmt(
+			"tavern.wage", {"price": int(officer.get("wage_daily", 0))}))
+		wage_label.name = "Wage"
+		wage_label.custom_minimum_size.x = 120
+		row.add_child(wage_label)
+		_officers_rows.add_child(row)
 
 
 ## The Phase-3 `Quests` tab (docs/80-* §4.7.3): slot counter plus one row per

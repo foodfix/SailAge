@@ -59,6 +59,11 @@ visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 
+[node name="Result" type="Label" parent="Center/Panel/Margin/Body"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
 [node name="Scroll" type="ScrollContainer" parent="Center/Panel/Margin/Body"]
 custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
