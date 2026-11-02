@@ -25,8 +25,15 @@ extends RefCounted
 ##     instances) and `sunk_player` (ship_type_ids). A sunk hull leaves the
 ##     fleet here because §4.12.4 makes this seam the only fleet mutator, and
 ##     §4.7 says a hull at durability 0 leaves the battle immediately.
+##   * Phase 8 (W4-C): the idle-officer capture gate (§4.11.7/§4.11.15) — a
+##     prize joins only with fleet room AND >= 1 idle officer (the new hull's
+##     captain); otherwise the loot-convert fallback fires and the report
+##     names the failed gate (`capture_gate_failed`); plus the
+##     `flagship_duel_lost` report field, the captain `win` hook's input.
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
+const CharacterLib := preload("res://scripts/player/character.gd")
 
 ## §4.11.7 capture transform: `max(1, floor(current durability × 0.25))`.
 const CAPTURE_DURABILITY_FRACTION := 0.25
@@ -35,6 +42,27 @@ const CAPTURE_DURABILITY_FRACTION := 0.25
 ## "game-over reason set becomes {starvation, scurvy, sunk, captured}").
 const GAME_OVER_CAPTURED := "captured"
 const GAME_OVER_SUNK := "sunk"
+
+## --- Phase 8 capture gate (§4.11.7/§4.11.15, W4-C) -------------------------
+
+## The §4.11.7 capture gate needs BOTH: fleet room (§4.11.7's original clause)
+## **and** ≥ 1 idle officer (employed, `post_id == ""` —
+## `Skills.officers_in_post("")`) to take the prize's captain post (§4.11.15;
+## `40-*` §4.4, `OFFICER_MAX = 12`, `50-*` §4.5.2). A hull that fails either
+## gate is loot-converted: its §4.11.7 loot resolution (cargo to fleet capacity
+## flagship-first, the rest reported lost) and scuttled. The report names the
+## gate that failed so the after-action dialog can render it (§4.11.15) —
+## these are its values, `""` when the capture joined.
+const CAPTURE_GATE_KEY := "capture_gate_failed"
+const CAPTURE_GATE_FLEET_FULL := "fleet_full"
+const CAPTURE_GATE_NO_IDLE_OFFICER := "no_idle_officer"
+
+## BattleResult's report field for the §4.11.7 player-loses branch: true when
+## a `lost_player` hull was the flagship (`fleet[0]` — §4.11.7 "If it was the
+## flagship, the next ship becomes flagship"). `BattleRewards` reads it for
+## the captain `win` hook (the §4.11.15 lifecycle): the captain who took the
+## player's flagship beat the player's own duel.
+const FLAGSHIP_DUEL_LOST_KEY := "flagship_duel_lost"
 
 
 ## Applies the fleet-only part of a finished battle and returns the outcome
@@ -55,10 +83,16 @@ const GAME_OVER_SUNK := "sunk"
 ##
 ##   `cargo_overflow_lost`  hold units lost for lack of space (§4.12.2)
 ##   `captured_ships`       ship_type_ids that joined the fleet
-##   `scuttled_ships`       ship_type_ids looted and scuttled (fleet was full)
+##   `scuttled_ships`       ship_type_ids looted and scuttled (a capture gate
+##                          failed — fleet full **or** no idle officer)
 ##   `lost_ships`           ship_type_ids the player lost this battle
 ##   `sunk_ships`           ship_type_ids removed because they sank
 ##   `captured_units`       `[{index, ship_type_id}]`, enemy index per capture
+##   `capture_gate_failed`  `""`/`"fleet_full"`/`"no_idle_officer"` — the
+##                          §4.11.7/§4.11.15 gate that loot-converted a prize
+##                          (first failure wins; the dialog names it)
+##   `flagship_duel_lost`   a lost player hull was the flagship (`fleet[0]`,
+##                          §4.11.7) — `BattleRewards`'s captain `win` input
 ##   `game_over`            `""`/`"captured"`/`"sunk"` (what was emitted)
 static func apply(sim_outcome: Dictionary, enemy_units: Array,
 		player_fleet_ref: Array) -> Dictionary:
@@ -70,6 +104,8 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 		"lost_ships": [],
 		"sunk_ships": [],
 		"captured_units": [],
+		CAPTURE_GATE_KEY: "",
+		FLAGSHIP_DUEL_LOST_KEY: false,
 		"game_over": "",
 	}
 	var fleet: Array = player_fleet_ref
@@ -77,6 +113,11 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 	var swapped := not is_same(previous_fleet, fleet)
 	if swapped:
 		GameState.fleet = fleet
+	# The §4.11.7 flagship is `fleet[0]` and captures only ever append (§4.11.7
+	# "order preserved"), so this snapshot is the flagship however the battle
+	# ends; the loss loop below matches `lost_player` against it.
+	var flagship: Dictionary = fleet[0] \
+		if not fleet.is_empty() and fleet[0] is Dictionary else {}
 
 	var changed := false
 	var joined := false
@@ -90,7 +131,7 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 			var hull: Dictionary = ship
 			var ship_type_id := str(hull.get("ship_type_id", ""))
 			var enemy_index := _enemy_index(enemy_units, hull)
-			if fleet.size() < FleetLib.FLEET_MAX:
+			if _capture_gate_open(fleet):
 				fleet.append(_capture_copy(hull))
 				(report["captured_ships"] as Array).append(ship_type_id)
 				(report["captured_units"] as Array).append(
@@ -98,11 +139,15 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 				joined = true
 				changed = true
 			else:
-				# §4.11.7: fleet full → cargo to capacity flagship-first, the
-				# rest reported lost, then the hull is scuttled.
+				# §4.11.7/§4.11.15: a capture gate failed → cargo to capacity
+				# flagship-first, the rest reported lost, the hull scuttled —
+				# the loot-convert fallback. The first failed gate is the one
+				# the dialog names.
 				report["cargo_overflow_lost"] = \
 					int(report["cargo_overflow_lost"]) + _loot_cargo(hull)
 				(report["scuttled_ships"] as Array).append(ship_type_id)
+				if str(report[CAPTURE_GATE_KEY]).is_empty():
+					report[CAPTURE_GATE_KEY] = _failed_capture_gate(fleet)
 				changed = true
 
 	# §4.11.7: "If the hold is then over capacity, Fleet.normalize_all()
@@ -122,6 +167,10 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 		for ship in lost:
 			if not (ship is Dictionary):
 				continue
+			if _is_flagship_hull(flagship, ship):
+				# §4.11.7: the boarded-from ship was the flagship — the
+				# captain lifecycle's `win` input (§4.11.15).
+				report[FLAGSHIP_DUEL_LOST_KEY] = true
 			if _remove_first_match(fleet, ship):
 				(report["lost_ships"] as Array).append(
 					str((ship as Dictionary).get("ship_type_id", "")))
@@ -145,6 +194,47 @@ static func apply(sim_outcome: Dictionary, enemy_units: Array,
 
 
 # --- Capture / loot --------------------------------------------------------
+
+## The §4.11.7/§4.11.15 capture gate: `true` when the prize may join the
+## fleet — fleet room **and** ≥ 1 idle officer (employed, `post_id == ""`,
+## `Skills.officers_in_post("")`) to take the new hull's captain post.
+## Re-evaluated per capture (a joined prize's captain post is filled by the
+## appointment flow, not here).
+##
+## The roster cap (`Character.OFFICER_MAX`) never gates a capture: the idle
+## officer is already employed, so manning the prize is a post appointment,
+## not a 13th recruit — `50-*` §4.5.2 keeps exactly the 2-slot idle bench so
+## this gate stays reachable when the roster is fully staffed.
+static func _capture_gate_open(fleet: Array) -> bool:
+	if fleet.size() >= FleetLib.FLEET_MAX:
+		return false
+	return not SkillsLib.officers_in_post("").is_empty()
+
+
+## Which §4.11.7 gate failed, in the pin's own order (fleet size first,
+## `60-*` §4.11.7 "With a full fleet **or no idle officer**"): the value the
+## after-action dialog names (§4.11.15).
+static func _failed_capture_gate(fleet: Array) -> String:
+	if fleet.size() >= FleetLib.FLEET_MAX:
+		return CAPTURE_GATE_FLEET_FULL
+	return CAPTURE_GATE_NO_IDLE_OFFICER
+
+
+## True when `ship` is the flagship hull: the snapshot's deep-equal first (the
+## common case — the flagship was never touched), else the same hull type (the
+## instance the battle changed before it was taken). Carries the same
+## identical-twin caveat as `_remove_first_match` below: with two hulls of one
+## type the removed entry is indistinguishable, which changes neither the
+## remaining types nor their holds.
+static func _is_flagship_hull(flagship: Dictionary, ship: Dictionary) -> bool:
+	if flagship.is_empty():
+		return false
+	if flagship == ship:
+		return true
+	var ship_type_id := str(flagship.get("ship_type_id", ""))
+	return not ship_type_id.is_empty() \
+		and str(ship.get("ship_type_id", "")) == ship_type_id
+
 
 ## §4.11.7: `max(1, floor(current durability × 0.25))`, `crew = 0`, and the
 ## hold, cannons and equipment travel with the hull untouched.

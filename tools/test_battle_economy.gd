@@ -14,6 +14,22 @@ extends Node
 ##   3 the two nearest ports' nations (Chebyshev, ties by id, nation once);
 ##   4 `BattleRewards.apply()`: gold/XP/reputation exactly, ±100 clamp,
 ##     idempotent, and never a navy `−20` (§4.11.10, §4.12.3);
+##   4b haul valuation (Phase 8, W4-C): every haul gold credited
+##     ×`clamp(1 + (appraisal + negotiation)/400, 1.0, 1.5)` (§4.8/§4.11.10);
+##   4c battle XP multiplier (Phase 8): credited ×(1 + level/20), floored
+##     once, at levels 1/10/20 (§4.8, `50-*` §4.4);
+##   4d boarding morale (Phase 8): the outcome's `morale_bonus` moves
+##     `GameState.morale` once, clamped (§4.8);
+##   4e the capture officer gate (Phase 8): ≥ 1 idle officer joins the prize,
+##     otherwise loot-convert + scuttle with the failed gate named
+##     (§4.11.7/§4.11.15);
+##   4f the captain lifecycle hooks (Phase 8): defeat (return day +60,
+##     crushed on a wiped fleet), the nemesis stance −2 extra, the win on a
+##     lost flagship duel (§4.11.15);
+##   4g the piracy-fame extension hook (Phase 8): rep −20/+2 rivals unchanged,
+##     plus −20 fame and the victim stance −1 (§4.11.10/§4.11.15);
+##   4h the 4 named-pirate `drop`s still grant through the captain-id keying
+##     on the v2 `named_pirates.json` (§4.11.13, Phase 8 correction 7);
 ##   5 engine agreement: `BattleSim.outcome()`'s `salvage_gold`/`xp` are the
 ##     `BattleRewards` formulas over a seeded sweep of pirate and navy battles;
 ##   6 the whole reward pipeline through `battle_screen.gd`: one battle via
@@ -27,7 +43,14 @@ extends Node
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
 const RewardsLib := preload("res://scripts/combat/battle_rewards.gd")
+const ResultLib := preload("res://scripts/combat/battle_result.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
+const FleetLib := preload("res://scripts/fleet/fleet.gd")
+## W4-C: the lifecycle hooks call slot A's contract through the guarded load;
+## the stub this worktree carries implements the same names (the master keeps
+## slot A's normative `captains.gd` at the merge).
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 ## Phase-5 task J: the S3-leg fixtures build §4.15 fleet dicts over the
 ## `NpcFleets` ecology (docs/60-* §4.11.11, §4.12.3).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
@@ -93,6 +116,13 @@ func _ready() -> void:
 	_test_xp_formula()
 	_test_nearest_nations()
 	_test_apply()
+	_test_haul_valuation()
+	_test_battle_xp_multiplier()
+	_test_boarding_morale()
+	_test_capture_gate()
+	_test_captain_lifecycle()
+	_test_piracy_attack()
+	_test_named_drops_canon()
 	_test_engine_agreement()
 	await _test_scene_pipeline()
 	await _test_locale_completeness()
@@ -234,6 +264,12 @@ func _test_apply() -> void:
 	var gold_before := GameState.gold
 	var xp_before := CharacterLib.current_xp()
 	var rep_before := CharacterLib.reputation("portugal")
+	# Phase 8: the credited XP is the outcome total ×(1 + level/20) — at the
+	# fixture's level 1 that is floor(65 × 1.05) = 68 (§4.11.10, 4c below).
+	var expected_xp := RewardsLib.battle_xp_for(65)
+	_check(expected_xp == 68,
+		"the level multiplier is exact at level 1: floor(65 × 1.05) = 68 (%d)"
+		% expected_xp)
 	var applied := RewardsLib.apply(_outcome({
 		"salvage_gold": 900, "xp": 65,
 		"rep_deltas": {"portugal": 2, "spain": 2},
@@ -243,8 +279,8 @@ func _test_apply() -> void:
 	_check(GameState.gold == gold_before + 900,
 		"apply() adds the salvage gold exactly (%d → %d)"
 		% [gold_before, GameState.gold])
-	_check(CharacterLib.current_xp() == xp_before + 65,
-		"apply() awards the battle XP exactly (%d → %d)"
+	_check(CharacterLib.current_xp() == xp_before + expected_xp,
+		"apply() awards the battle XP exactly, ×(1 + level/20) (%d → %d)"
 		% [xp_before, CharacterLib.current_xp()])
 	_check(CharacterLib.reputation("portugal") == rep_before + 2
 			and CharacterLib.reputation("spain") == 2,
@@ -345,6 +381,398 @@ func _test_apply() -> void:
 		"…but it still pays the salvage (%d)" % int(navy_applied["gold"]))
 
 
+# --- 4b. Haul valuation (Phase 8: §4.8/§4.11.10) --------------------------
+
+func _test_haul_valuation() -> void:
+	_check(RewardsLib.HAUL_SKILL_DIVISOR == 400.0,
+		"the haul divisor is the pinned 400 (§4.11.10)")
+	_check(RewardsLib.HAUL_MULT_MIN == 1.0 and RewardsLib.HAUL_MULT_MAX == 1.5,
+		"the haul multiplier clamps to [1.0, 1.5] (§4.11.10)")
+	# The three pinned points: the two skills at 0 / 50 / 100 each —
+	# sums 0 / 100 / 200 over the divisor → ×1.00 / ×1.25 / ×1.50 (the last
+	# exactly at the clamp).
+	var cases := [[0, 1.0], [50, 1.25], [100, 1.5]]
+	for case in cases:
+		_make_run()
+		_set_haul_skills(int(case[0]), int(case[0]))
+		var mult := RewardsLib.haul_multiplier()
+		_check(absf(mult - float(case[1])) < 0.0001,
+			"appraisal %d + negotiation %d → ×%.2f (got %.4f)"
+			% [int(case[0]), int(case[0]), float(case[1]), mult])
+	# The credited form floors once: 900 raw → 900 / 1125 / 1350.
+	_make_run()
+	_set_haul_skills(0, 0)
+	_check(RewardsLib.haul_gold(900) == 900,
+		"a ×1.00 haul credits the raw gold (900 → %d)" % RewardsLib.haul_gold(900))
+	_set_haul_skills(50, 50)
+	_check(RewardsLib.haul_gold(900) == 1125,
+		"a ×1.25 haul floors once (900 → %d)" % RewardsLib.haul_gold(900))
+	_set_haul_skills(100, 100)
+	_check(RewardsLib.haul_gold(900) == 1350,
+		"a ×1.50 haul floors once (900 → %d)" % RewardsLib.haul_gold(900))
+	# apply() credits the salvage through the same multiplier (skills 50/50):
+	_make_run()
+	_set_haul_skills(50, 50)
+	var gold_before := GameState.gold
+	var applied := RewardsLib.apply(_outcome({"salvage_gold": 900}))
+	_check(GameState.gold == gold_before + 1125 and int(applied["gold"]) == 1125,
+		"apply() credits salvage_gold × haul_multiplier (%d → %d)"
+		% [gold_before, GameState.gold])
+	# It prices gold, never goods: a negative raw line stays at 0.
+	_check(RewardsLib.haul_gold(-5) == 0, "a nonsensical raw haul credits 0")
+
+
+# --- 4c. Battle XP multiplier (Phase 8: §4.8, 50-* §4.4) -------------------
+
+func _test_battle_xp_multiplier() -> void:
+	_check(RewardsLib.XP_LEVEL_DIVISOR == 20.0,
+		"the XP level divisor is the pinned 20 (§4.11.10)")
+	# The raw bases are unchanged (§4.11.10 kept: +10/neutralised, +5/round);
+	# xp_for stays the raw engine-mirror formula.
+	_check(RewardsLib.xp_for(1, 1) == 15, "the raw bases are unchanged (1,1 → 15)")
+	# ×(1 + level/20) at the three pinned levels, floored once, on the level
+	# held BEFORE the award (raw 65 → 68 / 97 / 130).
+	var cases := [[1, 68], [10, 97], [20, 130]]
+	for case in cases:
+		_make_run()
+		var level := int(case[0])
+		CharacterLib.award_xp(0)  # no-op guard: the fixture starts at 0 XP
+		var p: Dictionary = GameState.player
+		p["xp"] = CharacterLib.xp_for_level(level)
+		p["level"] = level
+		GameState.player = p
+		_check(CharacterLib.current_level() == level,
+			"the fixture holds level %d (got %d)"
+			% [level, CharacterLib.current_level()])
+		_check(RewardsLib.battle_xp_for(65) == int(case[1]),
+			"level %d credits floor(65 × (1 + %d/20)) = %d (got %d)"
+			% [level, level, int(case[1]), RewardsLib.battle_xp_for(65)])
+	# The multiplier belongs to battle rewards only (50-* §4.4): the sea-day
+	# and profit paths call award_xp directly and are untouched.
+	_make_run()
+	CharacterLib.add_profit_xp(1000, 700, 10)
+	_check(CharacterLib.current_xp() == 51,
+		"the profit-XP path stays unscaled (10 × (1000 − 490) → floor(5100/100)"
+		+ " = %d XP)" % CharacterLib.current_xp())
+
+
+# --- 4d. Boarding morale (Phase 8: §4.8) -----------------------------------
+
+func _test_boarding_morale() -> void:
+	_make_run()
+	GameState.morale = 70
+	# The W3-C engine field exists; without a won boarding it is 0 and morale
+	# never moves.
+	var outcome := _outcome({"xp": 0, "morale_bonus": 5})
+	var applied := RewardsLib.apply(outcome)
+	_check(GameState.morale == 75,
+		"a won boarding's morale_bonus +5 moves fleet morale (70 → %d)"
+		% GameState.morale)
+	_check(int(applied["morale"]) == 5,
+		"apply() reports the morale it applied (%d)" % int(applied["morale"]))
+	# Idempotent: the replay is a no-op under the same rewards_applied marker.
+	var replay := RewardsLib.apply(outcome)
+	_check(GameState.morale == 75 and int(replay["morale"]) == 0,
+		"a replayed block cannot double the morale (70+5 stays %d)"
+		% GameState.morale)
+	_make_run()
+	GameState.morale = 98
+	var clamped := RewardsLib.apply(_outcome({"morale_bonus": 5}))
+	_check(GameState.morale == 100,
+		"the morale gain clamps at 100 (98 → %d)" % GameState.morale)
+	_check(int(clamped["morale"]) == 2,
+		"the clamped step is reported as applied (+2, not +5) (%d)"
+		% int(clamped["morale"]))
+	# No boarding, no bonus: morale_bonus 0 leaves morale untouched.
+	_make_run()
+	GameState.morale = 70
+	RewardsLib.apply(_outcome({"morale_bonus": 0}))
+	_check(GameState.morale == 70, "morale_bonus 0 leaves morale untouched")
+
+
+# --- 4e. The capture officer gate (Phase 8: §4.11.7/§4.11.15) --------------
+
+func _test_capture_gate() -> void:
+	var prize := _ship("sloop", {"cargo": {"wine": 4}})
+
+	# With an idle officer the prize joins (it needs a captain).
+	_make_run()
+	_make_officer("fx_cap_a", "")
+	var joined := ResultLib.apply(_outcome({"captured_enemy": [prize]}),
+		[], GameState.fleet)
+	_check((joined["captured_ships"] as Array) == ["sloop"],
+		"with an idle officer the captured hull joins the fleet (%s)"
+		% str(joined["captured_ships"]))
+	_check(GameState.fleet.size() == 2,
+		"the prize is the fleet's second hull (%d)" % GameState.fleet.size())
+	_check(str(joined["capture_gate_failed"]) == "",
+		"a joined capture reports no failed gate (%s)"
+		% str(joined["capture_gate_failed"]))
+
+	# Employed but none idle (both in posts) → the loot-convert fallback.
+	_make_run()
+	_make_officer("fx_cap_b", "pilot")
+	_make_officer("fx_cap_c", "gunner")
+	GameState.fleet = [_ship("caravel", {"cannons": 4, "crew": 15})]
+	var converted := ResultLib.apply(_outcome({"captured_enemy": [prize]}),
+		[], GameState.fleet)
+	_check((converted["scuttled_ships"] as Array) == ["sloop"],
+		"with no idle officer the prize is loot-converted and scuttled (%s)"
+		% str(converted["scuttled_ships"]))
+	_check((converted["captured_ships"] as Array).is_empty(),
+		"the fallback prize never joins (%s)" % str(converted["captured_ships"]))
+	_check(str(converted["capture_gate_failed"]) == "no_idle_officer",
+		"the report names the no-idle-officer gate (%s)"
+		% str(converted["capture_gate_failed"]))
+	_check(FleetLib.held("wine") == 4,
+		"the fallback still moves the prize cargo to the hold (%d wine)"
+		% FleetLib.held("wine"))
+
+	# A full fleet names the fleet-full gate (the §4.11.7 first clause).
+	_make_run()
+	var full_fleet: Array = []
+	for index in FleetLib.FLEET_MAX:
+		full_fleet.append(_ship("sloop"))
+	GameState.fleet = full_fleet
+	var full := ResultLib.apply(_outcome({"captured_enemy": [prize]}),
+		[], GameState.fleet)
+	_check(str(full["capture_gate_failed"]) == "fleet_full",
+		"with a full fleet the report names the fleet-full gate (%s)"
+		% str(full["capture_gate_failed"]))
+	_check(GameState.fleet.size() == FleetLib.FLEET_MAX,
+		"the full fleet stays at FLEET_MAX (%d)" % GameState.fleet.size())
+
+	# The flagship-duel-lost marker (the captain `win` hook's input).
+	_make_run()
+	var flagship := _ship("caravel", {"cannons": 4, "crew": 15})
+	GameState.fleet = [flagship, _ship("sloop")]
+	var lost_flagship := ResultLib.apply(
+		_outcome({"lost_player": [flagship]}), [], GameState.fleet)
+	_check(bool(lost_flagship["flagship_duel_lost"]),
+		"a lost flagship hull is reported to the captain `win` hook")
+	_check(GameState.fleet.size() == 1
+			and str(GameState.fleet[0]["ship_type_id"]) == "sloop",
+		"the next ship becomes flagship (fleet[0], order preserved)")
+	_make_run()
+	GameState.fleet = [flagship, _ship("brigantine")]
+	var lost_escort := ResultLib.apply(
+		_outcome({"lost_player": [_ship("sloop", {"durability": 3})]}),
+		[], GameState.fleet)
+	_check(not bool(lost_escort["flagship_duel_lost"]),
+		"an escort loss does not mark the flagship lost")
+
+
+# --- 4f. The captain lifecycle hooks (Phase 8: §4.11.15) -------------------
+
+func _test_captain_lifecycle() -> void:
+	_make_run()
+	GameState.day = 12
+	GameState.captain_states = {}
+
+	# Defeat: a victory outcome with a captain_id → the return queue at
+	# day + 60, defeats + 1. The fleet was wiped (no hull joined, none
+	# surrendered) → crushed → the tier drifts −1 (from the seeded 2).
+	GameState.captain_states["cap_wiped"] = {
+		"status": CaptainsLib.STATUS_ACTIVE, "return_day": 0, "tier_now": 2,
+		"stance": 0, "familiarity": 0, "dossier_seen": false,
+		"defeats": 0, "wins": 0,
+	}
+	# apply()'s return carries the lifecycle report under `captain_lifecycle`
+	# (the §4.12.3 return shape) — every read below goes through it.
+	var report: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": "cap_wiped", "result": "victory",
+		"captured_ships": [], "surrendered_enemy": 0,
+		"sunk_enemy": ["sloop", "sloop"],
+	}))["captain_lifecycle"]
+	var wiped_state := CaptainsLib.state("cap_wiped")
+	_check(bool(report["defeat"]) and bool(report["crushed"]),
+		"a wiped fleet's defeat reports crushed (%s)" % str(report))
+	_check(int(wiped_state["return_day"]) == 72,
+		"the defeat queues the captain's return at day + 60 (12 + 60 = %d)"
+		% int(wiped_state["return_day"]))
+	_check(int(wiped_state["defeats"]) == 1,
+		"the defeat is booked on the captain's record (%d)"
+		% int(wiped_state["defeats"]))
+	_check(int(wiped_state["tier_now"]) == 1,
+		"a crushed defeat drifts the tier −1 (2 → %d)" % int(wiped_state["tier_now"]))
+
+	# Not crushed: a hull was captured into the fleet → no tier drift.
+	GameState.captain_states["cap_spared"] = {
+		"status": CaptainsLib.STATUS_ACTIVE, "return_day": 0, "tier_now": 2,
+		"stance": 0, "familiarity": 0, "dossier_seen": false,
+		"defeats": 0, "wins": 0,
+	}
+	var spared: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": "cap_spared", "result": "victory",
+		"captured_ships": ["sloop"], "surrendered_enemy": 0,
+	}))["captain_lifecycle"]
+	_check(bool(spared["defeat"]) and not bool(spared["crushed"]),
+		"a victory with a joined hull is not crushed (%s)" % str(spared))
+	_check(int(CaptainsLib.state("cap_spared")["tier_now"]) == 2,
+		"a non-crushed defeat leaves the tier (2 → %d)"
+		% int(CaptainsLib.state("cap_spared")["tier_now"]))
+
+	# Not crushed either: a surrendered hull (the §4.12.2 sub-tally).
+	var surrendered: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": "cap_spared", "result": "victory",
+		"captured_ships": [], "surrendered_enemy": 1,
+	}))["captain_lifecycle"]
+	_check(not bool(surrendered["crushed"]),
+		"a surrendered hull keeps the defeat from being crushed")
+
+	# Nemesis extra: stance ≤ −3 → the defeat also moves stance −2.
+	var nemesis := "cap_grudge"
+	CaptainsLib.adjust_stance(nemesis, -3)
+	var grudge: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": nemesis, "result": "victory",
+	}))["captain_lifecycle"]
+	_check(bool(grudge["defeat"]) and int(grudge["nemesis_stance"]) == -5,
+		"a nemesis defeat adds the pinned stance −2 (−3 → %d)"
+		% int(grudge["nemesis_stance"]))
+	_check(int(CaptainsLib.state(nemesis)["stance"]) == -5,
+		"the stance state carries the nemesis extra (%d)"
+		% int(CaptainsLib.state(nemesis)["stance"]))
+	_check(CaptainsLib.is_nemesis(nemesis), "stance −5 reads as a nemesis")
+	# The clamp: a nemesis already at the floor stays there.
+	CaptainsLib.adjust_stance(nemesis, CaptainsLib.STANCE_NEMESIS_DEFEAT * 4)
+	_check(int(CaptainsLib.state(nemesis)["stance"]) == -10,
+		"the stance clamps at −10 (%d)" % int(CaptainsLib.state(nemesis)["stance"]))
+
+	# Win: the flagship fell to the captain (BattleResult's report field) —
+	# the captain beat the player's duel even though his fleet lost.
+	var duelist := "cap_duelist"
+	var win_report: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": duelist, "result": "victory",
+		"flagship_duel_lost": true,
+	}))["captain_lifecycle"]
+	_check(bool(win_report["win"]) and bool(win_report["defeat"]),
+		"a won battle with a lost flagship fires defeat AND win (%s)"
+		% str(win_report))
+	_check(int(CaptainsLib.state(duelist)["wins"]) == 1,
+		"the captain's win is booked (%d)" % int(CaptainsLib.state(duelist)["wins"]))
+	_check(int(CaptainsLib.state(duelist)["tier_now"]) == 2,
+		"a win drifts the tier +1 (1 → %d)"
+		% int(CaptainsLib.state(duelist)["tier_now"]))
+
+	# No defeat on a retreat (the fleet stays, §4.10) and none on a player
+	# defeat; the nemesis extra never fires without the defeat either.
+	GameState.captain_states = {}
+	var retreat: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": "cap_untouched", "result": "retreat",
+		"flagship_duel_lost": true,
+	}))["captain_lifecycle"]
+	_check(not bool(retreat["defeat"]) and bool(retreat["win"]),
+		"a retreat is not a defeat but a lost flagship is still a win (%s)"
+		% str(retreat))
+	_check(int(CaptainsLib.state("cap_untouched")["defeats"]) == 0,
+		"no defeat is booked on a retreat")
+	var player_lost: Dictionary = RewardsLib.apply(_outcome({
+		"captain_id": "cap_untouched", "result": "defeat_captured",
+	}))["captain_lifecycle"]
+	_check(not bool(player_lost["defeat"]),
+		"a player defeat does not defeat the enemy captain")
+
+	# No captain id → the hooks no-op (legacy/successor fleets).
+	var anonymous: Dictionary = RewardsLib.apply(
+		_outcome({"result": "victory"}))["captain_lifecycle"]
+	_check(str(anonymous["captain_id"]) == "" and not bool(anonymous["defeat"]),
+		"an outcome without a captain_id fires nothing (%s)" % str(anonymous))
+
+	# The hull-instance fallback: a W4-B ship instance carries captain_id
+	# through the deep-copied captured_enemy list.
+	var hull_captain := "cap_on_hull"
+	var with_hull := _outcome({
+		"result": "victory",
+		"captured_enemy": [_ship("sloop", {"captain_id": hull_captain})],
+	})
+	var hull_report: Dictionary = RewardsLib.apply(with_hull)["captain_lifecycle"]
+	_check(str(hull_report["captain_id"]) == hull_captain
+			and bool(hull_report["defeat"]),
+		"the captured hull's own captain_id drives the defeat hook (%s)"
+		% str(hull_report))
+
+
+# --- 4g. The piracy-fame extension hook (Phase 8: §4.11.10/§4.11.15) -------
+
+func _test_piracy_attack() -> void:
+	_make_run()
+	GameState.fame = 40
+	GameState.captain_states = {}
+	var applied := RewardsLib.apply_piracy_attack("spain", "cap_victim")
+	# 1. The unchanged rep funnel: −20 owner, +2 its two rivals.
+	_check(int(applied["rep_deltas"]["spain"]) == -20,
+		"the piracy hook keeps the −20 owner rep (%s)"
+		% str(applied["rep_deltas"]))
+	_check(int(CharacterLib.reputation("spain")) == -20,
+		"spain's reputation moved −20 (%d)" % CharacterLib.reputation("spain"))
+	_check(int(CharacterLib.reputation("portugal")) == 22
+			and int(CharacterLib.reputation("italy")) == 2,
+		"spain's two rivals gained +2 each (portugal %d, italy %d)"
+		% [CharacterLib.reputation("portugal"), CharacterLib.reputation("italy")])
+	# 2. The fame extension: −20 once.
+	_check(GameState.fame == 20 and int(applied["fame"]) == -20,
+		"the attack costs −20 fame (40 → %d, reported %d)"
+		% [GameState.fame, int(applied["fame"])])
+	# 3. The victim captain's grudge: STANCE_ATTACK_NONHOSTILE = −1.
+	_check(int(CaptainsLib.STANCE_ATTACK_NONHOSTILE) == -1,
+		"the pinned non-hostile attack stance is −1")
+	_check(int(applied["stance"]) == -1
+			and int(CaptainsLib.state("cap_victim")["stance"]) == -1,
+		"the victim captain's stance drops −1 (%s)"
+		% str(CaptainsLib.state("cap_victim")))
+	# The fame floor: −20 at fame 5 clamps to 0 and reports the real step.
+	GameState.fame = 5
+	var floored := RewardsLib.apply_piracy_attack("portugal", "")
+	_check(GameState.fame == 0 and int(floored["fame"]) == -5,
+		"the fame penalty floors at 0 (5 → %d, reported %d)"
+		% [GameState.fame, int(floored["fame"])])
+	# Pirates have no nation: an empty nation id applies nothing.
+	var pirate_case := RewardsLib.apply_piracy_attack("", "cap_victim")
+	_check(int(pirate_case["fame"]) == 0
+			and (pirate_case["rep_deltas"] as Dictionary).is_empty(),
+		"an empty victim nation (a pirate) applies nothing (%s)"
+		% str(pirate_case))
+
+
+# --- 4h. The named-pirate drops on the v2 cards (Phase 7 flow, §4.11.13) ---
+
+func _test_named_drops_canon() -> void:
+	# The v2 named_pirates.json still keys the drop by captain id, and the
+	# canon cards carry the same drop (Phase 8 correction 7).
+	_check(DataLoader.named_pirates_list.size() == 4,
+		"the v2 file carries the 4 named pirates (%d)"
+		% DataLoader.named_pirates_list.size())
+	for pirate in DataLoader.named_pirates_list:
+		var pirate_id := str(pirate.get("id", ""))
+		var drop_id := str(pirate.get("drop", ""))
+		var card: Dictionary = DataLoader.captains.get(pirate_id, {}) \
+			if DataLoader.captains is Dictionary else {}
+		_check(not drop_id.is_empty(),
+			"%s carries a drop on the v2 file" % pirate_id)
+		_check(str(card.get("drop", "")) == drop_id,
+			"%s's canon card carries the same drop (%s)"
+			% [pirate_id, str(card.get("drop", ""))])
+		# The grant fires through the captain-id keying into an empty slot.
+		_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
+		var outcome := _outcome({})
+		var granted := RewardsLib.apply_named_drop(outcome, pirate_id)
+		_check(granted == drop_id and str(outcome["drop_item"]) == drop_id,
+			"%s's drop grants through the captain-id keying (%s)"
+			% [pirate_id, granted])
+		var item: Dictionary = DataLoader.equipment.get(drop_id, {}) \
+			if DataLoader.equipment is Dictionary else {}
+		var slot := str(item.get("slot", ""))
+		var carried := ""
+		if slot == "weapon" or slot == "armor":
+			carried = str((GameState.player.get("equipment", {}) as Dictionary)
+				.get(slot, ""))
+		else:
+			carried = str((GameState.fleet[0].get("equipment", {}) as Dictionary)
+				.get(slot, ""))
+		_check(carried == drop_id,
+			"%s is equipped into its %s slot (%s)" % [drop_id, slot, carried])
+
+
 # --- 5. Engine agreement (§4.12.2 vs the formulas) ------------------------
 
 func _test_engine_agreement() -> void:
@@ -429,13 +857,15 @@ func _test_scene_pipeline() -> void:
 	_check(bool(outcome.get("rewards_applied", false)),
 		"the scene applied the reward block (rewards_applied)")
 
-	# Exactly the outcome block's numbers, once.
+	# Exactly the outcome block's numbers, once — the XP through the Phase-8
+	# level multiplier (the fixture holds level 1 → ×1.05).
+	var expected_xp := RewardsLib.battle_xp_for(int(outcome.get("xp", 0)))
 	_check(GameState.gold == gold_before + int(outcome.get("salvage_gold", 0)),
 		"gold rose by exactly the outcome salvage (%d + %d = %d)"
 		% [gold_before, int(outcome.get("salvage_gold", 0)), GameState.gold])
-	_check(CharacterLib.current_xp() == xp_before + int(outcome.get("xp", 0)),
-		"XP rose by exactly the outcome xp (%d + %d = %d)"
-		% [xp_before, int(outcome.get("xp", 0)), CharacterLib.current_xp()])
+	_check(CharacterLib.current_xp() == xp_before + expected_xp,
+		"XP rose by exactly the outcome xp ×(1 + level/20) (%d + %d = %d)"
+		% [xp_before, expected_xp, CharacterLib.current_xp()])
 	var rep_ok := true
 	var rep_report: Array[String] = []
 	for nation_id in (outcome.get("rep_deltas", {}) as Dictionary):
@@ -454,7 +884,7 @@ func _test_scene_pipeline() -> void:
 	var rewards = outcome.get("rewards", {})
 	_check(rewards is Dictionary and int((rewards as Dictionary).get("gold", -1))
 			== int(outcome.get("salvage_gold", 0))
-			and int((rewards as Dictionary).get("xp", -1)) == int(outcome.get("xp", 0)),
+			and int((rewards as Dictionary).get("xp", -1)) == expected_xp,
 		"the screen records what BattleRewards applied (%s)" % str(rewards))
 
 	# A second call on the same block (a retried sequence) pays nothing more.
@@ -713,24 +1143,57 @@ func _make_run(fleet: Array = []) -> void:
 	GameState.locale = "en"
 	GameState.day = 12
 	GameState.gold = 3000
+	GameState.morale = 70
+	GameState.fame = 0
 	GameState.current_port = null
 	GameState.world = {"position": {"x": 30, "y": 40}, "clock_fraction": 0.0,
 		"weather": "calm"}
+	# The v9 Person block (docs/50-* §4.8): the two haul skills read 0, so the
+	# Phase-7-era gold pins stay ×1.00 and the XP pins carry only the level
+	# term (level 1 → ×1.05).
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {"leadership": 10, "seamanship": 10, "combat": 12,
-			"navigation": 10, "luck": 10},
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {},
+		"alloc_pending": 0,
 		"xp": 0, "level": 1, "officers": [],
 		"equipment": {"weapon": "", "armor": ""},
 		"reputation": {"portugal": 20, "spain": 0, "england": 0, "holland": 0,
 			"ottoman": 0, "italy": 0},
 	}
+	GameState.officer_states = {}
+	GameState.captain_states = {}
 	GameState.fleet = fleet.duplicate(true) if not fleet.is_empty() \
 		else [_ship("caravel", {"cannons": 4, "crew": 15})]
 	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	if "pending_encounter" in GameState:
 		GameState.set("pending_encounter", null)
+
+
+## An employed officer fixture: the roster row plus the §4.8 officer_states
+## entry at `post_id` ("" = the idle bench the capture gate queries).
+func _make_officer(officer_id: String, post_id: String) -> void:
+	var officers: Array = GameState.player.get("officers", [])
+	officers.append(officer_id)
+	GameState.player["officers"] = officers
+	GameState.officer_states[officer_id] = {
+		"loyalty": 50, "sea_days": 0, "post_id": post_id, "ship_id": "",
+		"talk_cd_day": 0, "gift_cd_day": 0, "defeats": 0, "wage_mult": 1.0,
+	}
+
+
+## Sets the player's own appraisal/negotiation (the haul-valuation inputs;
+## no officer post maps to either skill, §4.5.3).
+func _set_haul_skills(appraisal: int, negotiation: int) -> void:
+	var skills: Dictionary = GameState.player.get("skills", {})
+	skills["appraisal"] = appraisal
+	skills["negotiation"] = negotiation
+	GameState.player["skills"] = skills
 
 
 ## A §4.11.11 ship instance (the `40-*` §4.1 shape + §4.11.12 equipment).
@@ -792,7 +1255,8 @@ func _pirate_encounter(enemy_count: int, hull_id: String) -> Dictionary:
 	}
 
 
-## A §4.12.2 outcome block skeleton with `fields` merged over it.
+## A §4.12.2 outcome block skeleton with `fields` merged over it (the W3-C
+## `morale_bonus` field included — the engine reports it on every block).
 func _outcome(fields: Dictionary) -> Dictionary:
 	var outcome := {
 		"result": "victory", "rounds": 6, "kind": "pirate", "nation_id": "",
@@ -800,6 +1264,7 @@ func _outcome(fields: Dictionary) -> Dictionary:
 		"sunk_enemy": [], "captured_enemy": [], "surrendered_enemy": 0,
 		"sunk_player": [], "lost_player": [],
 		"salvage_gold": 0, "xp": 0, "rep_deltas": {},
+		"morale_bonus": 0,
 		"cargo_overflow_lost": 0,
 	}
 	outcome.merge(fields, true)

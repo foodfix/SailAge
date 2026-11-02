@@ -494,7 +494,15 @@ func _run_start(config: Dictionary) -> void:
 
 # --- 6. Capture into the fleet (§4.11.7) ---------------------------------
 
+## Phase 8 capture gate (60-* §4.11.7/§4.11.15): a prize joins only with an
+## idle officer to take its captain post. A roster row with no officer_states
+## entry reads idle (`post_id == ""`), so the bare id is the whole fixture.
+func _seat_idle_capture_officer() -> void:
+	GameState.player["officers"] = ["fx_duel_idle"]
+
+
 func _test_capture_full_fleet() -> void:
+	_seat_idle_capture_officer()
 	# §4.11.7 `FLEET_MAX`: a 4-ship fleet takes the captured hull → 5 ships.
 	GameState.fleet = [
 		_ship("sloop"), _ship("latin"), _ship("caravel"), _ship("brigantine"),
@@ -573,6 +581,7 @@ func _test_capture_full_fleet() -> void:
 
 
 func _test_capture_transform() -> void:
+	_seat_idle_capture_officer()
 	# §4.11.7: durability floor + cargo/cannons/equipment intact. 1 × 0.25
 	# floors to 0, which the `max(1, …)` rule lifts to 1. (An empty fleet, so
 	# `normalize_all` has no earlier hull to redistribute the hold into — the
@@ -753,6 +762,7 @@ func _test_loss_paths() -> void:
 func _test_boarding_end_to_end() -> void:
 	_person(12)
 	GameState.player["equipment"] = {"weapon": "", "armor": ""}
+	_seat_idle_capture_officer()
 	# A pirate sloop (crew 10 → 2, + rating 6 = 8) boarded by a swordplay-12
 	# captain: seed 2 gives win/loss/win/win → capture 3–1.
 	var sim := _sim({
