@@ -2156,6 +2156,234 @@
     "zh": "目的地",
     "en": "Destination"
   },
+  "debug.port.sec.overview": {
+    "zh": "概览",
+    "en": "Overview"
+  },
+  "debug.port.sec.market": {
+    "zh": "市场",
+    "en": "Market"
+  },
+  "debug.port.sec.ledger": {
+    "zh": "账本",
+    "en": "Ledger"
+  },
+  "debug.port.sec.facilities": {
+    "zh": "设施",
+    "en": "Facilities"
+  },
+  "debug.port.sec.fleets": {
+    "zh": "舰队",
+    "en": "Fleets"
+  },
+  "debug.port.sec.geometry": {
+    "zh": "几何",
+    "en": "Geometry"
+  },
+  "debug.port.sec.data": {
+    "zh": "数据",
+    "en": "Data"
+  },
+  "debug.port.sec.player": {
+    "zh": "玩家",
+    "en": "Player"
+  },
+  "debug.port.class.protected": {
+    "zh": "保护港",
+    "en": "protected port"
+  },
+  "debug.port.class.contestable": {
+    "zh": "争夺港",
+    "en": "contestable port"
+  },
+  "debug.port.neutral": {
+    "zh": "中立",
+    "en": "neutral"
+  },
+  "debug.port.unaligned": {
+    "zh": "未同盟",
+    "en": "unaligned"
+  },
+  "debug.port.f.alignment": {
+    "zh": "同盟",
+    "en": "alignment"
+  },
+  "debug.port.f.dev": {
+    "zh": "开发度",
+    "en": "dev"
+  },
+  "debug.port.f.dev_floor": {
+    "zh": "基准开发度",
+    "en": "dev floor"
+  },
+  "debug.port.f.capital": {
+    "zh": "首都",
+    "en": "capital"
+  },
+  "debug.port.f.produces": {
+    "zh": "特产",
+    "en": "produces"
+  },
+  "debug.port.f.demands": {
+    "zh": "需求",
+    "en": "demands"
+  },
+  "debug.port.f.listed": {
+    "zh": "上市",
+    "en": "listed"
+  },
+  "debug.port.f.starved": {
+    "zh": "缺货",
+    "en": "starved"
+  },
+  "debug.port.f.capped": {
+    "zh": "满仓",
+    "en": "capped"
+  },
+  "debug.port.f.event": {
+    "zh": "事件",
+    "en": "event"
+  },
+  "debug.port.f.event_none": {
+    "zh": "无",
+    "en": "none"
+  },
+  "debug.port.f.remaining": {
+    "zh": "余 {days} 天",
+    "en": "{days}d left"
+  },
+  "debug.port.f.docked": {
+    "zh": "停靠",
+    "en": "docked"
+  },
+  "debug.port.f.inbound": {
+    "zh": "在途",
+    "en": "inbound"
+  },
+  "debug.port.f.berth_cell": {
+    "zh": "泊格",
+    "en": "berth tile"
+  },
+  "debug.port.f.shore_cell": {
+    "zh": "岸格",
+    "en": "shore tile"
+  },
+  "debug.port.f.latlon": {
+    "zh": "坐标",
+    "en": "position"
+  },
+  "debug.port.f.band": {
+    "zh": "海域",
+    "en": "band"
+  },
+  "debug.port.f.tariff": {
+    "zh": "关税",
+    "en": "tariff"
+  },
+  "debug.port.f.discount": {
+    "zh": "投资折扣",
+    "en": "discount"
+  },
+  "debug.port.f.month_invested": {
+    "zh": "本月已投",
+    "en": "month invested"
+  },
+  "debug.port.f.sphere": {
+    "zh": "势力圈",
+    "en": "sphere"
+  },
+  "debug.port.f.ships": {
+    "zh": "可建船",
+    "en": "buildable"
+  },
+  "debug.port.f.equipment": {
+    "zh": "装备",
+    "en": "equipment"
+  },
+  "debug.port.f.total": {
+    "zh": "总账本",
+    "en": "total ledger"
+  },
+  "debug.port.f.effective": {
+    "zh": "有效",
+    "en": "effective"
+  },
+  "debug.port.f.aligned": {
+    "zh": "已过同盟线",
+    "en": "over the line"
+  },
+  "debug.port.f.unaligned": {
+    "zh": "未过同盟线",
+    "en": "below the line"
+  },
+  "debug.port.f.rep": {
+    "zh": "好感",
+    "en": "rep"
+  },
+  "debug.port.f.permits": {
+    "zh": "免税证",
+    "en": "permits"
+  },
+  "debug.port.f.title": {
+    "zh": "爵位加成",
+    "en": "title bonus"
+  },
+  "debug.port.ledger_none": {
+    "zh": "保护港无账本",
+    "en": "protected: no ledger"
+  },
+  "debug.port.closed_for_player": {
+    "zh": "对玩家关闭",
+    "en": "closed to you"
+  },
+  "debug.port.side.prod": {
+    "zh": "产",
+    "en": "prod"
+  },
+  "debug.port.side.demand": {
+    "zh": "需",
+    "en": "dem"
+  },
+  "debug.port.factor": {
+    "zh": "因子",
+    "en": "factor"
+  },
+  "debug.port.buy": {
+    "zh": "买",
+    "en": "buy"
+  },
+  "debug.port.sell": {
+    "zh": "卖",
+    "en": "sell"
+  },
+  "debug.port.no_buy": {
+    "zh": "不收购",
+    "en": "no buy"
+  },
+  "debug.port.surge": {
+    "zh": "×3涌动",
+    "en": "×3 surge"
+  },
+  "debug.port.open": {
+    "zh": "开",
+    "en": "open"
+  },
+  "debug.port.closed": {
+    "zh": "闭",
+    "en": "closed"
+  },
+  "debug.port.permit_home": {
+    "zh": "本国",
+    "en": "home"
+  },
+  "debug.port.permit_foreign": {
+    "zh": "涉外",
+    "en": "foreign"
+  },
+  "debug.port.permit_void": {
+    "zh": "失效",
+    "en": "void"
+  },
   "debug.raw.sec.state": {
     "zh": "状态",
     "en": "State"

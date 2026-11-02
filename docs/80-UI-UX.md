@@ -133,6 +133,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S17 | mouse wheel | zoom 1.0×–8.0×, ×1.25 per notch, anchored at the cursor (amended 2026-11-01, §4.6) |
 | S17 | left/right-button drag | pan 1:1, clamped to the map; opening restores the fit view (amended 2026-11-01, §4.6) |
 | S17 | click a debug side-legend row | show/hide what that row depicts (lanes, spokes, chokepoints, roles, wrecks, intel, neutral; §4.6) |
+| S17 | click a port dot (debug row on) | toggle the port debug panel (full report, §4.6) — a press that lands on a port is a click, never a pan; clicking elsewhere closes the panel and pans; `Esc` closes the panel first, then the chart |
 | S17 | `Tab` / `Esc` | toggle back to the screen it was opened over (S3/S4; the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
@@ -708,6 +709,44 @@ chart adds:
   The world-map S3 markers wear the same state letter as a `BAD` badge
   while the S19 row is on (§4.5.2) — `X` marks a docked fleet standing
   OFF its berth (an anomaly the day tick self-heals, `60-*` §4.11.11).
+- **Port hover + click-to-inspect (Phase-8 amendment, 2026-11-02):** while
+  the S19 row is on, hovering a port (within 8 px of its dot, or on its
+  shore/berth tile — the same hit rule the bare-id fallback used) replaces
+  that bare id with a **port summary block** in the same floating window,
+  appended after any fleet blocks on the tile: name (L10n + raw id) ·
+  nation/class (`debug.port.class.*`; 中立 neutral) · alignment + derived
+  dev · market pulse (特产/需求/缺货 stock-0/满仓 at-capacity counts + the
+  active demand event's name and days left) · fleet counts (停靠 docked /
+  在途 inbound, read off the same `markers()` pass) · the player line
+  (tariff badge reusing `market.tax.badge.*`, investment discount, month
+  allowance at contestable ports, `debug.port.closed_for_player` while a
+  bounty closes the port) · berth/shore tiles. The summary's second line
+  appends the `debug.port.f.capital` tag at a nation's capital. **Clicking
+  a port opens a
+  pinned, scrollable full report panel at the port** (hit-tested on press:
+  a press on a port is a click, never a pan; clicking elsewhere closes the
+  panel and pans as before; `Esc` closes the panel first). The panel reads
+  at the hover window's 13 px font, folds at a fixed **440 px** width
+  (autowrap safety net) and caps at **62 % of the viewport height** — the
+  world stays visible behind it. The panel has
+  eight sections (`debug.port.sec.*`): 概览 overview (the hover summary),
+  市场 market (every listed port-good as one line — 产/需 side, stock /
+  capacity, price factor, marginal buy/sell prices, `debug.port.no_buy`
+  on produced rows, `debug.port.surge` while a demand event surges the
+  good ×3; produces first, demands by factor descending), 账本 ledger
+  (contestable only: per-nation raw → effective (owner ×1.25) values,
+  the 5,000g alignment line state, the total; protected ports print
+  `debug.port.ledger_none`), 设施 facilities (each row open/closed right
+  now + its `{open}–{close}` hours, the shipyard's buildable ships,
+  the equipment stock), 舰队 fleets (docked fleets one line each —
+  id · role · nation · dwell deadline — and inbound ones likewise; the
+  per-fleet raw blocks stay tile-hover-only), 几何 geometry (berth/shore
+  tiles, lat/lon, band), 数据 data (raw produces/demands id lists,
+  sphere, authored dev floor vs derived), 玩家 player (rep with the
+  alignment nation, permit coverage, title sell bonus, closed state).
+  Read-only throughout: neither the hover nor the panel ever mutates
+  `GameState` (the §4.6 debug governance), and the panel is a one-shot
+  build per open — no per-frame work.
 - **Deep inspection zoom (unified-movement amendment):**
   `ZOOM_MAX` 8 → **64** (wheel ×1.25 per notch unchanged) and the terrain
   texture renders at the **map's native 4320×2160** — deep zoom stays
@@ -1154,7 +1193,7 @@ The keys each implementing task must define:
 |---|---|
 | V (S19 rows) | `settings.input.mode`, `settings.input.step`, `settings.input.helm`, `settings.current.mode`, `settings.current.modifier`, `settings.current.drift`, `settings.debug.overlays` |
 | G (HUD / sailing toasts) | `world.wind.label`, `world.current.label`, `world.trim.chip`, `world.trim.furled`, `world.trim.reefed`, `world.trim.normal`, `world.trim.full`, `world.wait.done`, `world.ice.blocked`, `world.calendar.year_month` |
-| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.lane.*`, `debug.role.*`, `debug.legend.stalls` (unified-movement amendment) |
+| I (chart layers / debug chart) | `chart.wind.title`, `chart.current.title`, `chart.ice.title`, `debug.title`, `debug.omniscient`, `debug.legend.*`, `debug.lane.*`, `debug.role.*`, `debug.legend.stalls` (unified-movement amendment), `debug.port.*` (the port hover/panel family, §4.6 Phase-8 amendment) |
 | neutral ports (§4.8) | `port.neutral.label` (中立港 / Neutral port), `chart.debug.neutral` (the debug-chart legend row for the neutral grey) |
 
 Notes pinning the set exactly:
@@ -1169,6 +1208,19 @@ Notes pinning the set exactly:
 - `debug.legend.*` covers the network side legend (lane-name rows,
   role-color rows, spokes/chokepoints); the neutral row of the port
   legend uses `chart.debug.neutral`.
+- `debug.port.*` (Phase-8 amendment, 2026-11-02): the port hover/panel
+  family — 8 section titles (`debug.port.sec.overview/market/ledger/
+  facilities/fleets/geometry/data/player`), the per-field glosses
+  (`debug.port.f.*`), the class labels (`debug.port.class.protected/
+  contestable`, `debug.port.neutral` for `nation_id: ""`), the market
+  tokens (`debug.port.side.prod/demand`, `debug.port.factor/buy/sell/
+  no_buy/surge`), the ledger state pair (`debug.port.f.aligned/
+  unaligned`) and `debug.port.ledger_none` (protected), the open/closed
+  facility pair, `debug.port.closed_for_player`, `debug.port.permit_home/
+  foreign`, and `debug.port.f.remaining` (`{days}` — the demand event's
+  days left). Facility names reuse the `port.<facility>` keys, the
+  tariff badge reuses `market.tax.badge.*`; goods and nations read their
+  own data L10n names. Ids stay raw (the §4.6 fallback rule).
 - `debug.lane.<id>` is one key per locked §7.6 lane id (17, closed set);
   the zh/en strings are §7.6's name columns verbatim. The chart legend
   falls back to the raw `id` only when a key is missing.

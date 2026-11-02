@@ -42,6 +42,14 @@ const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+## Phase-8 port debug payload (docs/95-* §7): the market/ledger/player
+## reads go through the same pure port libs the market screen uses, so
+## the debug report cannot disagree with the game's own arithmetic.
+const EconomyLib := preload("res://scripts/port/economy.gd")
+const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
+const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+const BountyLib := preload("res://scripts/quests/bounty.gd")
+const CharacterLib := preload("res://scripts/player/character.gd")
 
 ## The fog colour of an unexplored tile: `PANEL_BG` on the Chart (`80-*` §4.6)
 ## and the minimap's background (`20-*` §4.12).
@@ -699,3 +707,267 @@ static func path_runs(path: Array, width: int) -> Array:
 	if not run.is_empty():
 		runs.append(run)
 	return runs
+
+
+# --- Phase-8 port debug payload (`80-*` §4.6, docs/95-* §7) -----------------
+
+## The facility ids in the §4.1 fixed hub order (the debug panel's 设施
+## rows render in the same order the port hub lists them).
+const PORT_FACILITY_IDS: Array[String] = ["market", "shipyard", "tavern",
+	"inn", "guild", "palace"]
+
+## The debug port report for `port_id` (`docs/95-DEBUG-HOVER.md` §7): one
+## raw read-only Dictionary the chart screen localizes — the same
+## payload-in-lib / annotation-on-screen split as `NpcFleets.markers()`.
+## **Never mutates anything**: every read goes through `GameState`,
+## `DataLoader` or the pure port libs. `fleet_markers` is the caller's
+## cached `markers()` pass (docked/inbound are partitioned from it, so
+## the panel can never disagree with the map's own ecology layer).
+## Unknown port → `{}`.
+static func port_debug_payload(port_id: String, fleet_markers: Array,
+		map) -> Dictionary:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if port.is_empty():
+		return {}
+	var nation_id := str(port.get("nation_id", ""))
+	var protected := bool(port.get("protected", false))
+	var berth: Vector2i = map.port_cell(port_id) if map != null \
+		else Vector2i(-1, -1)
+	var shore: Vector2i = map.shore_cell(port_id) if map != null \
+		else Vector2i(-1, -1)
+	if shore.x < 0:
+		shore = berth  # the port_dots fallback (a berth with no shore tile)
+	var alignment := AllegianceLib.effective_alignment(port_id)
+	var payload := {
+		"id": port_id,
+		"nation_id": nation_id,
+		"neutral": nation_id.is_empty(),
+		"protected": protected,
+		"capital_of": str(port_debug_capitals().get(port_id, "")),
+		"alignment": alignment,
+		"dev": AllegianceLib.dev(port_id),
+		"dev_floor": maxi(0, int(port.get("dev", 0))),
+		"band": str(port.get("band", "")),
+		"lat": float(port.get("lat", 0.0)),
+		"lon": float(port.get("lon", 0.0)),
+		"berth_cell": berth,
+		"shore_cell": shore,
+		"produces": (port.get("produces", []) as Array).duplicate(),
+		"demands": (port.get("demands", []) as Array).duplicate(),
+		"sphere": (port.get("sphere", []) as Array).duplicate(),
+	}
+	payload["market"] = _port_market_pulse(port)
+	payload["market_rows"] = _port_market_rows(port_id)
+	payload["ledger"] = _port_ledger_view(port_id, protected)
+	payload["facilities"] = _port_facilities(port_id, port)
+	# The shipyard payload + the equipment stock are raw id lists inside
+	# `facilities` (the §4.4 port schema) — the panel prints them as its
+	# 设施 section's tail lines (docs/95-* §7.2).
+	var facilities_data: Dictionary = port.get("facilities", {})
+	payload["shipyard_ships"] = (facilities_data.get("shipyard", [])
+		as Array).duplicate() \
+		if facilities_data.get("shipyard") is Array else []
+	payload["equipment"] = (facilities_data.get("equipment_stock", [])
+		as Array).duplicate() \
+		if facilities_data.get("equipment_stock") is Array else []
+	payload["docked"] = _port_fleets(port_id, fleet_markers, true)
+	payload["inbound"] = _port_fleets(port_id, fleet_markers, false)
+	payload["player"] = _port_player_view(port_id, alignment, protected)
+	return payload
+
+
+## `port_id → nation_id` for the capital ring (the same derivation
+## `all_port_dots` uses, kept local so the payload needs no caller state).
+static func port_debug_capitals() -> Dictionary:
+	return nation_capitals()
+
+
+## The hover's market pulse (line 3 of the §7.1 summary): the listed counts,
+## the stock-0 (缺货) and at-capacity (满仓) counts, and the port's active
+## demand event (`{id, name, days_left}` or `{}` — `GameState.market_events`
+## instances against the template's duration, `30-*` §4.5).
+static func _port_market_pulse(port: Dictionary) -> Dictionary:
+	var port_id := str(port.get("id", ""))
+	var produces: Array = port.get("produces", [])
+	var demands: Array = port.get("demands", [])
+	var starved := 0
+	var capped := 0
+	for good_id in produces:
+		if EconomyLib.stock_of(port_id, str(good_id)) <= 0:
+			starved += 1
+	for good_id in demands:
+		var stock := EconomyLib.stock_of(port_id, str(good_id))
+		if stock <= 0:
+			starved += 1
+		elif stock >= EconomyLib.capacity_of(port_id, str(good_id)):
+			capped += 1
+	var event := {}
+	for instance in GameState.market_events:
+		if not (instance is Dictionary):
+			continue
+		if str((instance as Dictionary).get("port_id", "")) != port_id:
+			continue
+		var template: Dictionary = DataLoader.get_market_event(
+			str((instance as Dictionary).get("template_id", "")))
+		if template.is_empty():
+			continue
+		var days_left := int(template.get("duration_days", 0)) \
+			- maxi(0, int(GameState.day) - int((instance as Dictionary).get("start_day", 0)))
+		event = {
+			"id": str((instance as Dictionary).get("template_id", "")),
+			"name": template.get("name", {}),
+			"days_left": maxi(0, days_left),
+		}
+		break
+	return {
+		"listed": produces.size() + demands.size(),
+		"produces": produces.size(),
+		"demands": demands.size(),
+		"starved": starved,
+		"capped": capped,
+		"event": event,
+	}
+
+
+## The full market table (the panel's 市场 section): one row per listed
+## port-good — side, stock/capacity, factor units, the marginal §4.2
+## buy price and (on consumer rows only — a producing port never buys its
+## own produced good, `30-*` §4.2) the marginal sell price, plus the
+## ×3 surge flag. Produces first (stock desc), then demands by factor
+## descending — the best sell opportunities on top (`docs/95-*` §7.2).
+static func _port_market_rows(port_id: String) -> Array:
+	var port: Dictionary = DataLoader.get_port(port_id)
+	var produces: Array = port.get("produces", [])
+	var demands: Array = port.get("demands", [])
+	var rows: Array = []
+	for side in [["prod", produces], ["dem", demands]]:
+		var is_prod: bool = str(side[0]) == "prod"
+		var rows_part: Array = []
+		for good_raw in side[1]:
+			var good_id := str(good_raw)
+			var good: Dictionary = DataLoader.get_good(good_id)
+			if good.is_empty():
+				continue
+			var stock := EconomyLib.stock_of(port_id, good_id)
+			var capacity := EconomyLib.capacity_of(port_id, good_id)
+			var factor_units := EconomyLib.factor_units(port_id, good_id)
+			var row := {
+				"good_id": good_id,
+				"side": str(side[0]),
+				"stock": stock,
+				"capacity": capacity,
+				"factor_units": factor_units,
+				"buy": TradeEngineLib.buy_price(port_id, good_id),
+				"sell": TradeEngineLib.sell_price(port_id, good_id)
+					if not is_prod else -1,
+				"surged": EconomyLib.consumption_surged(port_id, good_id),
+			}
+			rows_part.append(row)
+		if is_prod:
+			rows_part.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				return int(a["stock"]) > int(b["stock"]))
+		else:
+			rows_part.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				if int(a["factor_units"]) == int(b["factor_units"]):
+					return str(a["good_id"]) < str(b["good_id"])
+				return int(a["factor_units"]) > int(b["factor_units"]))
+		rows.append_array(rows_part)
+	return rows
+
+
+## The panel's 账本 section: per-nation raw → effective values (the owner's
+## ×1.25, `30-*` §4.9), nations sorted by id; `aligned` = the effective
+## alignment is non-empty; `protected` ports carry an empty entries list
+## (the panel prints the `debug.port.ledger_none` note instead).
+static func _port_ledger_view(port_id: String, protected: bool) -> Dictionary:
+	var out := {"entries": [], "total": 0, "aligned": false, "protected": protected}
+	if protected:
+		return out
+	var ledger := AllegianceLib.port_ledger(port_id)
+	var nation_ids: Array = ledger.keys()
+	nation_ids.sort()
+	var entries: Array = []
+	for nation in nation_ids:
+		var nation_id := str(nation)
+		entries.append({
+			"nation_id": nation_id,
+			"raw": int(ledger[nation_id]),
+			"effective": AllegianceLib.effective_value(port_id, nation_id),
+		})
+	out["entries"] = entries
+	out["total"] = AllegianceLib.ledger_total(port_id)
+	out["aligned"] = not AllegianceLib.effective_alignment(port_id).is_empty()
+	return out
+
+
+## The panel's 设施 section: the §4.1 fixed order, each row carrying its
+## activation phase, open/closed right now (`SailingSim.facility_open`,
+## `30-*` §4.1b) and its hours window (`{open, close}` or `{}` = 24h).
+static func _port_facilities(port_id: String, port: Dictionary) -> Array:
+	var facilities: Dictionary = port.get("facilities", {})
+	var rows: Array = []
+	for facility_id in PORT_FACILITY_IDS:
+		if not facilities.has(facility_id):
+			continue
+		var raw = facilities.get(facility_id)
+		var phase := 1
+		if raw is int:
+			phase = int(raw)
+		rows.append({
+			"id": str(facility_id),
+			"phase": phase,
+			"open": SailingSimLib.facility_open(port_id, str(facility_id)),
+			"window": SailingSimLib.facility_window_text(port_id,
+				str(facility_id)),
+		})
+	return rows
+
+
+## The hover's fleet counts (line 4) and the panel's 舰队 rows, partitioned
+## off the caller's `markers()` pass: docked = berth-truth at this port
+## (`stall = docked` standing on its berth, `60-*` §4.11.11), inbound =
+## bound for it (`dest = id`) and not docked here.
+static func _port_fleets(port_id: String, fleet_markers: Array,
+		docked: bool) -> Array:
+	var out: Array = []
+	for entry in fleet_markers:
+		if not (entry is Dictionary):
+			continue
+		var marker: Dictionary = entry
+		var here := docked and str(marker.get("stall", "")) == "docked" \
+			and str(marker.get("port", "")) == port_id
+		var bound := not docked \
+			and str(marker.get("dest", "")) == port_id \
+			and not (str(marker.get("stall", "")) == "docked"
+				and str(marker.get("port", "")) == port_id)
+		if here or bound:
+			out.append(marker)
+	return out
+
+
+## The panel's 玩家 section + the hover's player line: tariff mille
+## (`30-*` §4.10), investment state, the contestable month allowance,
+## the closed state (`70-*` §4.9.6), rep with the alignment, permit
+## coverage and void state, the title sell bonus units.
+static func _port_player_view(port_id: String, alignment: String,
+		protected: bool) -> Dictionary:
+	var player_nation := str(GameState.player.get("nation_id", ""))
+	var alignment_rep := CharacterLib.reputation(alignment) \
+		if not alignment.is_empty() else 0
+	return {
+		"nation_id": player_nation,
+		"alignment": alignment,
+		"tariff_mille": AllegianceLib.tariff_mille(port_id, player_nation),
+		"invested": TradeEngineLib.invested(port_id),
+		"discount_percent": TradeEngineLib.investment_percent(port_id),
+		"month_invested": AllegianceLib.month_invested_gold(port_id),
+		"month_capped": not protected,
+		"closed": BountyLib.is_port_closed(port_id),
+		"rep": alignment_rep,
+		"permit_home": AllegianceLib.has_permit_home(),
+		"permit_foreign": AllegianceLib.has_permit_foreign(alignment)
+			if not alignment.is_empty() else false,
+		"permit_void": AllegianceLib.permit_void(alignment)
+			if not alignment.is_empty() else false,
+		"title_units": TradeEngineLib.title_units(port_id),
+	}

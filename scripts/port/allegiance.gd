@@ -207,6 +207,13 @@ static func ledger_total(port_id: String) -> int:
 	return total
 
 
+## Read-only copy of one port's raw ledger (`{nation_id: gold}`) — the
+## chart's debug port panel per-nation rows (docs/95-* §7.2). Empty at a
+## protected port (no ledger exists there).
+static func port_ledger(port_id: String) -> Dictionary:
+	return (_ledgers.get(port_id, {}) as Dictionary).duplicate(true)
+
+
 # --- Development (derived — never saved, correction 8) -----------------------
 
 ## `max(authored floor, ledger thresholds)` (docs/30 §4.9): protected ports

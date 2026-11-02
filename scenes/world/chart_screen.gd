@@ -360,6 +360,8 @@ func close_chart() -> void:
 	_preview_month = 0
 	_hover_text = ""
 	_dragging = false
+	_close_port_panel()
+	_port_payloads.clear()
 	remove_from_group(MODAL_GROUP)
 	queue_redraw()
 
@@ -618,9 +620,13 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
-	# Open: the panel owns all input (§4.6); `Esc` closes.
+	# Open: the panel owns all input (§4.6); `Esc` closes — the pinned port
+	# report first (§4.6 Phase-8), the chart itself on a second press.
 	if event.is_action_pressed("back"):
 		get_viewport().set_input_as_handled()
+		if _port_panel != null and _port_panel.visible:
+			_close_port_panel()
+			return
 		close_chart()
 		return
 	# Seasonal layers + debug keys (raw keys — no InputMap actions are bound
@@ -709,6 +715,25 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT \
 				or mb.button_index == MOUSE_BUTTON_RIGHT:
+			# §4.6 Phase-8: a left press that lands on a port is a CLICK —
+			# it toggles the pinned report and never starts a pan. A press
+			# elsewhere closes the pinned panel, then pans as before.
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT \
+					and _debug_active:
+				var width := _world_image.get_width() \
+					if _world_image != null else 4320
+				var u := (mb.position - _view_rect().position) \
+					/ (_scale * _zoom)
+				var cell := Vector2i(posmod(int(floor(u.x)), width),
+					int(floor(u.y)))
+				var port_id := _port_hit(mb.position, cell)
+				if not port_id.is_empty():
+					_open_port_panel(port_id)
+					_dragging = false
+					return
+			if mb.pressed and _port_panel != null \
+					and _port_panel.visible:
+				_close_port_panel()
 			_dragging = mb.pressed and _zoom > ZOOM_MIN
 
 
@@ -746,6 +771,25 @@ func _clear_hover() -> void:
 		_hover_window.visible = false
 
 
+## The port under `at` (screen px), or "" — the §4.6 Phase-8 hit rule:
+## within 8 px of the port dot, or standing on its shore/berth tile. The
+## hovered-tile form needs `cell` (the inverse-mapped tile) so a deep-zoom
+## click away from the tiny dot still lands.
+func _port_hit(at: Vector2, cell := Vector2i(-1, -1)) -> String:
+	var best := ""
+	var best_d := 8.0
+	for entry in _port_dots:
+		var d := _to_screen(entry["cell"]).distance_to(at)
+		if d < best_d:
+			best_d = d
+			best = str(entry.get("port_id", ""))
+		var berth: Vector2i = entry.get("berth_cell", Vector2i(-1, -1))
+		if cell.x >= 0 and (cell == (entry["cell"] as Vector2i) \
+				or cell == berth):
+			return str(entry.get("port_id", ""))
+	return best
+
+
 func _update_hover(at: Vector2) -> void:
 	if not visible or not _debug_active:
 		return
@@ -760,6 +804,8 @@ func _update_hover(at: Vector2) -> void:
 		var c: Vector2i = entry["cell"]
 		if Vector2i(posmod(c.x, width), c.y) == cell:
 			ships.append(entry)
+	# The §4.6 Phase-8 port hit: the hovered dot/tile's port (may be empty).
+	var port_id := _port_hit(at, cell)
 	var text := ""
 	if not ships.is_empty():
 		# Localized blocks (unified-movement amendment; the §4.7.10 rule —
@@ -854,7 +900,9 @@ func _update_hover(at: Vector2) -> void:
 			# A blank line keeps stacked fleet blocks apart (§4.6).
 			text += line + "\n\n"
 	else:
-		# No fleet on the tile: the nearest wreck / intel / port entry.
+		# No fleet on the tile: the nearest wreck / intel entry (the bare
+		# port-id fallback is gone — ports report through the §4.6 Phase-8
+		# port block below).
 		var best := ""
 		var best_d := 8.0
 		for entry in _wreck_markers:
@@ -869,12 +917,13 @@ func _update_hover(at: Vector2) -> void:
 				best = "intel → %s" % str(entry.get("port_id", "")) \
 					if str(entry.get("kind", "")) == "ring" \
 					else "intel cell"
-		for entry in _port_dots:
-			var d := _to_screen(entry["cell"]).distance_to(at)
-			if d < best_d:
-				best_d = d
-				best = str(entry.get("port_id", ""))
 		text = best
+	# The §4.6 Phase-8 port block: appended after any fleet blocks — docked
+	# fleets stand on the port's berth tile, so a port hover reports both.
+	if not port_id.is_empty():
+		var port_block := _port_summary_text(port_id)
+		if not port_block.is_empty():
+			text += ("\n\n" if not text.is_empty() else "") + port_block
 	if text != _hover_text:
 		# The side row carries the FIRST line only — the full multi-ship
 		# report lives in the floating window.
@@ -1150,6 +1199,372 @@ func _show_hover_window(text: String, at: Vector2) -> void:
 		(view - size).clamp(Vector2.ZERO, view))
 
 
+# --- Port debug hover + panel (`80-*` §4.6 Phase-8, docs/95-* §7) -----------
+
+## The pinned port report panel's fixed width (the fold target; the label
+## autowraps — arbitrary table lines must never clip) and its height cap
+## (a fraction of the viewport — the world stays visible behind it).
+const PORT_PANEL_W := 440.0
+const PORT_PANEL_H_RATIO := 0.62
+const PORT_PANEL_FONT_SIZE := 13
+
+## The payload cache (port_id → payload), rebuilt per `_rebuild` — stocks
+## and ledgers move on a day tick, so a stale snapshot must not survive one.
+var _port_payloads: Dictionary = {}
+## The pinned panel (built lazily like the hover window) and its port.
+var _port_panel: PanelContainer = null
+var _port_panel_label: Label = null
+var _port_panel_port := ""
+
+
+## The hover summary block (docs/95-* §7.1): the ≤ 6 localized lines. ""
+## for an unknown port.
+func _port_summary_text(port_id: String) -> String:
+	var p := _port_payload(port_id)
+	if p.is_empty():
+		return ""
+	return "\n".join(_port_summary_lines(p))
+
+
+## The cached payload for `port_id` ("" when the port is unknown) — one
+## `port_debug_payload` read per build, not per mouse motion.
+func _port_payload(port_id: String) -> Dictionary:
+	if _port_payloads.has(port_id):
+		return _port_payloads[port_id]
+	var payload: Dictionary = ChartViewLib.port_debug_payload(port_id,
+		_fleet_markers, DataLoader.map)
+	_port_payloads[port_id] = payload
+	return payload
+
+
+## The summary lines shared by the hover block and the panel's 概览 section.
+func _port_summary_lines(p: Dictionary) -> Array:
+	var port: Dictionary = DataLoader.get_port(str(p.get("id", "")))
+	if port.is_empty():
+		return []
+	var lines: Array = []
+	# 1 · name (L10n) + raw id (ids never localize, §4.7.10).
+	lines.append("%s %s" % [I18n.t(port.get("name", {})), p["id"]])
+	# 2 · nation · class · capital · alignment · derived dev.
+	var parts: Array = []
+	if bool(p.get("neutral", false)):
+		parts.append(I18n.t_key("debug.port.neutral"))
+	else:
+		var nation: Dictionary = DataLoader.nations.get(
+			str(p.get("nation_id", "")), {})
+		if nation is Dictionary and not nation.is_empty():
+			parts.append(I18n.t(nation.get("name", {})))
+	parts.append(I18n.t_key("debug.port.class.protected"
+		if bool(p.get("protected", false))
+		else "debug.port.class.contestable"))
+	if not str(p.get("capital_of", "")).is_empty():
+		parts.append(I18n.t_key("debug.port.f.capital"))
+	var alignment := str(p.get("alignment", ""))
+	if alignment.is_empty():
+		parts.append(I18n.t_key("debug.port.unaligned"))
+	else:
+		parts.append(I18n.t_key("debug.port.f.alignment") + " "
+			+ _port_nation_name(alignment))
+	parts.append(I18n.t_key("debug.port.f.dev") + " " + str(p.get("dev", 0)))
+	lines.append(" · ".join(parts))
+	# 3 · the market pulse + the active demand event.
+	var market: Dictionary = p.get("market", {})
+	var pulse: Array = [
+		"%s %d" % [I18n.t_key("debug.port.f.produces"),
+			int(market.get("produces", 0))],
+		"%s %d" % [I18n.t_key("debug.port.f.demands"),
+			int(market.get("demands", 0))],
+		"%s %d" % [I18n.t_key("debug.port.f.starved"),
+			int(market.get("starved", 0))],
+		"%s %d" % [I18n.t_key("debug.port.f.capped"),
+			int(market.get("capped", 0))],
+	]
+	var event: Dictionary = market.get("event", {})
+	pulse.append(I18n.t_key("debug.port.f.event") + " "
+		+ (I18n.t_key("debug.port.f.event_none") if event.is_empty()
+			else "%s (%s)" % [I18n.t(event.get("name", {})),
+				I18n.fmt("debug.port.f.remaining",
+					{"days": int(event.get("days_left", 0))})]))
+	lines.append(" · ".join(pulse))
+	# 4 · the fleet counts off the same markers pass the map drew.
+	lines.append("%s %d · %s %d" % [
+		I18n.t_key("debug.port.f.docked"), (p.get("docked", []) as Array).size(),
+		I18n.t_key("debug.port.f.inbound"), (p.get("inbound", []) as Array).size()])
+	# 5 · the player line: tariff badge · discount · month allowance · closed.
+	var player: Dictionary = p.get("player", {})
+	var pp: Array = [I18n.t_key("debug.port.f.tariff") + " "
+		+ _port_tariff_text(player)]
+	pp.append("%s −%d%%" % [I18n.t_key("debug.port.f.discount"),
+		int(player.get("discount_percent", 0))])
+	if bool(player.get("month_capped", false)):
+		pp.append("%s %d/%dg" % [I18n.t_key("debug.port.f.month_invested"),
+			int(player.get("month_invested", 0)),
+			ChartViewLib.AllegianceLib.MONTHLY_INVEST_CAP])
+	if bool(player.get("closed", false)):
+		pp.append(I18n.t_key("debug.port.closed_for_player"))
+	lines.append(" · ".join(pp))
+	# 6 · the harbor tiles (grep-compatible with a fleet's 所在格).
+	var berth: Vector2i = p.get("berth_cell", Vector2i(-1, -1))
+	var shore: Vector2i = p.get("shore_cell", Vector2i(-1, -1))
+	lines.append("%s (%d,%d) · %s (%d,%d)" % [
+		I18n.t_key("debug.port.f.berth_cell"), berth.x, berth.y,
+		I18n.t_key("debug.port.f.shore_cell"), shore.x, shore.y])
+	return lines
+
+
+## A nation id → localized name (the raw id fallback, the legend rule).
+func _port_nation_name(nation_id: String) -> String:
+	var nation: Dictionary = DataLoader.nations.get(nation_id, {})
+	if nation is Dictionary and not nation.is_empty():
+		return I18n.t(nation.get("name", {}))
+	return nation_id
+
+
+## The tariff badge (the `market.tax.badge.*` wording — mille → badge key;
+## 2000 splits foreign vs unallied on the alignment).
+func _port_tariff_text(player: Dictionary) -> String:
+	var mille := int(player.get("tariff_mille", 0))
+	if mille <= 0:
+		return I18n.t_key("market.tax.badge.exempt")
+	if mille <= 500:
+		return I18n.t_key("market.tax.badge.in_sphere")
+	return I18n.t_key("market.tax.badge.unallied"
+		if str(player.get("alignment", "")).is_empty()
+		else "market.tax.badge.foreign")
+
+
+## A good id → localized name (raw id fallback).
+func _port_good_name(good_id: String) -> String:
+	var good: Dictionary = DataLoader.get_good(good_id)
+	if good.is_empty():
+		return good_id
+	return I18n.t(good.get("name", {}))
+
+
+## The full report text (the panel's body, docs/95-* §7.2): the eight
+## `debug.port.sec.*` sections, one line per field — pre-folded, the label
+## autowraps only as a safety net.
+func _port_panel_text(port_id: String) -> String:
+	var p := _port_payload(port_id)
+	if p.is_empty():
+		return ""
+	var out: Array = _port_summary_lines(p)
+	# 市场 — every listed port-good, one line (produces first stock desc,
+	# demands by factor desc; the §4.2 marginal prices).
+	var market_lines: Array = []
+	for row in p.get("market_rows", []):
+		var line := "%s %s %d/%d · %s ×%0.2f · %s %d" % [
+			_port_good_name(str(row.get("good_id", ""))),
+			I18n.t_key("debug.port.side.prod" if str(row.get("side", "")) == "prod"
+				else "debug.port.side.demand"),
+			int(row.get("stock", 0)), int(row.get("capacity", 0)),
+			I18n.t_key("debug.port.factor"),
+			float(row.get("factor_units", 1000)) / 1000.0,
+			I18n.t_key("debug.port.buy"), int(row.get("buy", 0)),
+		]
+		if int(row.get("sell", -1)) >= 0:
+			line += " · %s %d" % [I18n.t_key("debug.port.sell"),
+				int(row.get("sell", 0))]
+		else:
+			line += " · %s" % I18n.t_key("debug.port.no_buy")
+		if bool(row.get("surged", false)):
+			line += " · %s" % I18n.t_key("debug.port.surge")
+		market_lines.append(line)
+	# 账本 — per-nation raw → effective (owner ×1.25), the 5,000g line state.
+	var ledger_lines: Array = []
+	var ledger: Dictionary = p.get("ledger", {})
+	if bool(ledger.get("protected", false)):
+		ledger_lines.append(I18n.t_key("debug.port.ledger_none"))
+	else:
+		for entry in ledger.get("entries", []):
+			ledger_lines.append("%s %d (%s %d)" % [
+				_port_nation_name(str(entry.get("nation_id", ""))),
+				int(entry.get("raw", 0)),
+				I18n.t_key("debug.port.f.effective"),
+				int(entry.get("effective", 0))])
+		ledger_lines.append("%s %d · %s" % [
+			I18n.t_key("debug.port.f.total"), int(ledger.get("total", 0)),
+			I18n.t_key("debug.port.f.aligned" if bool(ledger.get("aligned", false))
+				else "debug.port.f.unaligned")])
+	# 设施 — open/closed right now + the hours window.
+	var facility_lines: Array = []
+	for facility in p.get("facilities", []):
+		var window: Dictionary = facility.get("window", {})
+		var hours := "24h" if window.is_empty() \
+			else "%s–%s" % [window.get("open", ""), window.get("close", "")]
+		facility_lines.append("%s %s %s" % [
+			I18n.t_key("port." + str(facility.get("id", ""))),
+			I18n.t_key("debug.port.open" if bool(facility.get("open", false))
+				else "debug.port.closed"),
+			hours])
+	var shipyard_ships: Array = p.get("shipyard_ships", [])
+	if not shipyard_ships.is_empty():
+		facility_lines.append("%s: %s" % [I18n.t_key("debug.port.f.ships"),
+			", ".join(shipyard_ships)])
+	var equipment: Array = p.get("equipment", [])
+	if not equipment.is_empty():
+		facility_lines.append("%s: %s" % [I18n.t_key("debug.port.f.equipment"),
+			", ".join(equipment)])
+	# 舰队 — docked then inbound, one line each (the raw blocks stay
+	# tile-hover-only).
+	var fleet_lines: Array = []
+	for docked in p.get("docked", []):
+		fleet_lines.append(_port_fleet_line(docked, true))
+	for inbound in p.get("inbound", []):
+		fleet_lines.append(_port_fleet_line(inbound, false))
+	# 几何 — tiles, lat/lon, band.
+	var berth: Vector2i = p.get("berth_cell", Vector2i(-1, -1))
+	var shore: Vector2i = p.get("shore_cell", Vector2i(-1, -1))
+	var lat := float(p.get("lat", 0.0))
+	var lon := float(p.get("lon", 0.0))
+	var geometry_lines: Array = [
+		"%s (%d,%d) · %s (%d,%d)" % [
+			I18n.t_key("debug.port.f.berth_cell"), berth.x, berth.y,
+			I18n.t_key("debug.port.f.shore_cell"), shore.x, shore.y],
+		"%s %0.2f°%s %0.2f°%s · %s %s" % [
+			I18n.t_key("debug.port.f.latlon"), absf(lat),
+			"N" if lat >= 0.0 else "S", absf(lon),
+			"E" if lon >= 0.0 else "W",
+			I18n.t_key("debug.port.f.band"), str(p.get("band", ""))],
+	]
+	# 数据 — raw id lists + the dev floor vs the derived dev.
+	var data_lines: Array = [
+		"%s: %s" % [I18n.t_key("debug.port.f.produces"),
+			", ".join(p.get("produces", []))],
+		"%s: %s" % [I18n.t_key("debug.port.f.demands"),
+			", ".join(p.get("demands", []))],
+	]
+	var sphere: Array = p.get("sphere", [])
+	data_lines.append("%s: %s" % [I18n.t_key("debug.port.f.sphere"),
+		", ".join(sphere) if not sphere.is_empty() else "-"])
+	data_lines.append("%s %d · %s %d" % [
+		I18n.t_key("debug.port.f.dev_floor"), int(p.get("dev_floor", 0)),
+		I18n.t_key("debug.port.f.dev"), int(p.get("dev", 0))])
+	# 玩家 — rep · permits · title bonus (+ the closed state rides the 概览).
+	var player: Dictionary = p.get("player", {})
+	var player_lines: Array = []
+	var alignment := str(p.get("alignment", ""))
+	if not alignment.is_empty():
+		player_lines.append("%s(%s) %+d" % [I18n.t_key("debug.port.f.rep"),
+			_port_nation_name(alignment), int(player.get("rep", 0))])
+	player_lines.append("%s ×%0.2f" % [I18n.t_key("debug.port.f.title"),
+		float(player.get("title_units", 1000)) / 1000.0])
+	var permit_text := "%s %s · %s %s" % [
+		I18n.t_key("debug.port.f.permits"),
+		I18n.t_key("debug.port.permit_home")
+			+ ("✓" if bool(player.get("permit_home", false)) else "✗"),
+		I18n.t_key("debug.port.permit_foreign")
+			+ ("✓" if bool(player.get("permit_foreign", false)) else "✗"),
+		I18n.t_key("debug.port.permit_void")
+			if bool(player.get("permit_void", false)) else ""]
+	player_lines.append(permit_text.strip_edges())
+	for section in [
+		["debug.port.sec.overview", []],
+		["debug.port.sec.market", market_lines],
+		["debug.port.sec.ledger", ledger_lines],
+		["debug.port.sec.facilities", facility_lines],
+		["debug.port.sec.fleets", fleet_lines],
+		["debug.port.sec.geometry", geometry_lines],
+		["debug.port.sec.data", data_lines],
+		["debug.port.sec.player", player_lines],
+	]:
+		# The 概览 body is the summary lines already in `out` — every other
+		# non-empty section prints its title first.
+		var body: Array = section[1]
+		if body.is_empty():
+			continue
+		if str(section[0]) != "debug.port.sec.overview":
+			out.append(I18n.t_key(str(section[0])))
+		out.append_array(body)
+	return "\n".join(out)
+
+
+## One 舰队 section line: `id · role · nation · dwell-deadline` (docked)
+## or `id · role · nation` (inbound) — the same localization rules as the
+## hover window's fleet blocks.
+func _port_fleet_line(marker: Dictionary, docked: bool) -> String:
+	var parts: Array = [str(marker.get("id", "")),
+		I18n.t_key("debug.role." + str(marker.get("role", "")))]
+	var nation := str(marker.get("nation_id", ""))
+	if not nation.is_empty():
+		parts.append(_port_nation_name(nation))
+	if docked:
+		parts.append(I18n.t_key("debug.raw.f.dwell") + " "
+			+ str(int(marker.get("dwell", 0))))
+	return " · ".join(parts)
+
+
+## Lazily builds the pinned panel (a bordered panel like the hover window,
+## but interactive — the ScrollContainer must own its wheel events).
+func _ensure_port_panel() -> void:
+	if _port_panel != null:
+		return
+	_port_panel = PanelContainer.new()
+	_port_panel.name = "PortPanel"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(PaletteLib.PANEL_BG, 0.94)
+	style.border_color = PaletteLib.PANEL_LINE
+	style.set_border_width_all(1.0)
+	style.set_content_margin_all(6.0)
+	_port_panel.add_theme_stylebox_override("panel", style)
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_port_panel_label = Label.new()
+	_port_panel_label.name = "Report"
+	_port_panel_label.add_theme_font_size_override("font_size",
+		PORT_PANEL_FONT_SIZE)
+	_port_panel_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_port_panel_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_port_panel_label.custom_minimum_size = Vector2(
+		PORT_PANEL_W - 12.0, 0.0)
+	_port_panel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_port_panel_label)
+	_port_panel.add_child(scroll)
+	add_child(_port_panel)
+	_port_panel.visible = false
+
+
+## Opens (or toggles closed) the pinned report at the port's screen position.
+## `toggle` false re-renders in place (the rebuild refresh path).
+func _open_port_panel(port_id: String, toggle := true) -> void:
+	_ensure_port_panel()
+	if toggle and _port_panel.visible and _port_panel_port == port_id:
+		_close_port_panel()
+		return
+	var text := _port_panel_text(port_id)
+	if text.is_empty():
+		# An unknown port (or a build with no map) closes rather than
+		# leaving a stale report pinned.
+		_close_port_panel()
+		return
+	_port_panel_port = port_id
+	_port_panel_label.text = text
+	_port_panel.reset_size()
+	_port_panel.visible = true
+	# Cap the height (the world stays visible behind the panel) and clamp
+	# the position next to the port dot.
+	var dot := Vector2.ZERO
+	for entry in _port_dots:
+		if str(entry.get("port_id", "")) == port_id:
+			dot = _to_screen(entry["cell"])
+			break
+	var view := get_viewport_rect().size
+	if _port_panel.size.y > view.y * PORT_PANEL_H_RATIO:
+		_port_panel.size.y = view.y * PORT_PANEL_H_RATIO
+	var pos := dot + Vector2(14.0, 14.0)
+	_port_panel.position = pos.clamp(Vector2.ZERO,
+		(view - _port_panel.size).clamp(Vector2.ZERO, view))
+
+
+func _close_port_panel() -> void:
+	_port_panel_port = ""
+	if _port_panel != null:
+		_port_panel.visible = false
+
+
 # --- Rebuild triggers (`80-*` §4.6: open, layer/month toggle, day_advanced) -
 
 func _rebuild_if_open() -> void:
@@ -1215,6 +1630,13 @@ func _rebuild() -> void:
 		_preview_month = 0
 		_hover_text = ""
 		_layer_hidden.clear()
+		_close_port_panel()
+	# Stocks/ledgers/fleets move between builds — the port payload cache
+	# (and an open report) must re-read after every trigger.
+	_port_payloads.clear()
+	if _port_panel != null and _port_panel.visible \
+			and not _port_panel_port.is_empty():
+		_open_port_panel(_port_panel_port, false)
 	_debug_panel.visible = _debug_active
 	var map = DataLoader.map
 	_lead_cells = []

@@ -47,8 +47,9 @@ const HANSE_LANE := "hanseatic_north"
 const HANSE_WINTER := "hanseatic_north_winter"
 ## The reversal system (`20-*` §4.16: summer months flip the Somali).
 const SOMALI_SYSTEM := "somali_current"
-## A port from the neutral tier (`nation_id: ""`, task P's content).
-const NEUTRAL_PORT := "guangzhou"
+## A port from the neutral tier (`nation_id: ""`, task P's content) —
+## unaligned over an empty ledger in a fresh run (dev floor 0).
+const NEUTRAL_PORT := "quanzhou"
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -80,6 +81,7 @@ func _ready() -> void:
 	_test_debug_layers()
 	_test_scrub_purity()
 	_test_marker_sources()
+	_test_port_debug()
 	_test_real_settings_symbol()
 	_test_redraw_discipline()
 	_test_locale_and_budget()
@@ -455,6 +457,161 @@ func _test_debug_layers() -> void:
 	_check(spring_variant == "",
 		"month 4 preview: the Hanse base path is active again (%s)" % spring_variant)
 	chart.set_preview_month(0)
+
+
+func _test_port_debug() -> void:
+	ChartViewLib.debug_row_override = 1
+	_reset_view_state()
+	chart.open_chart()
+	var markers: Array = chart.ecology_markers()
+	_check(markers.size() > 0,
+		"port debug: the ecology pass has fleets to partition")
+	var dwell_ok := true
+	for marker in markers:
+		if not (marker as Dictionary).has("dwell"):
+			dwell_ok = false
+	_check(dwell_ok, "every marker carries the dwell field (the dock deadline)")
+
+	# --- the payload contract (lisbon: protected portugal capital) ---
+	var p: Dictionary = ChartViewLib.port_debug_payload("lisbon", markers,
+		DataLoader.map)
+	_check(not p.is_empty(), "port debug: lisbon's payload builds")
+	_check(str(p.get("id", "")) == "lisbon" and bool(p.get("protected", false)),
+		"lisbon reports as a protected port")
+	_check(str(p.get("capital_of", "")) == "portugal"
+		and str(p.get("alignment", "")) == "portugal",
+		"lisbon is the portuguese capital, aligned to portugal")
+	_check(int(p.get("dev", -1)) == 3 and int(p.get("dev_floor", -1)) == 3,
+		"protected dev == authored floor == 3")
+	var port_data: Dictionary = DataLoader.get_port("lisbon")
+	var listed: int = (port_data.get("produces", []) as Array).size() \
+		+ (port_data.get("demands", []) as Array).size()
+	var market: Dictionary = p.get("market", {})
+	_check(int(market.get("listed", -1)) == listed,
+		"the market pulse counts the listed set (%d)" % listed)
+	_check(int(market.get("produces", -1)) \
+			== (port_data.get("produces", []) as Array).size(),
+		"the pulse's produces count reads the data list")
+	var rows: Array = p.get("market_rows", [])
+	_check(rows.size() == listed,
+		"the market table has one row per listed good (%d)" % rows.size())
+	var factor_ok := true
+	var side_ok := true
+	var prod_sorted := true
+	var prod_count: int = (port_data.get("produces", []) as Array).size()
+	for index in rows.size():
+		var row: Dictionary = rows[index]
+		var stock := int(row.get("stock", 0))
+		if int(row.get("factor_units", 0)) != clampi(1500 - 5 * stock, 500, 2000):
+			factor_ok = false
+		var is_prod := str(row.get("side", "")) == "prod"
+		if is_prod and int(row.get("sell", 0)) != -1:
+			side_ok = false
+		if not is_prod and int(row.get("sell", -1)) < 0:
+			side_ok = false
+		if index < prod_count:
+			if not is_prod:
+				prod_sorted = false
+			elif index > 0 and int(rows[index - 1].get("stock", 0)) < stock:
+				prod_sorted = false
+		elif is_prod:
+			prod_sorted = false
+	_check(factor_ok, "every row's factor is the §4.2 closed form")
+	_check(side_ok, "produced rows have no sell side; demand rows do")
+	_check(prod_sorted, "produces sort first, stock descending")
+	var ledger: Dictionary = p.get("ledger", {})
+	_check(bool(ledger.get("protected", false))
+		and (ledger.get("entries", []) as Array).is_empty(),
+		"protected port: no ledger rows")
+	var facility_ids: Array = []
+	for facility in p.get("facilities", []):
+		facility_ids.append(str((facility as Dictionary).get("id", "")))
+	_check(facility_ids == ["market", "shipyard", "tavern", "inn", "guild",
+		"palace"], "facilities render in the §4.1 hub order")
+	var facilities_data: Dictionary = port_data.get("facilities", {})
+	_check(p.get("shipyard_ships", []) == facilities_data.get("shipyard", [])
+		and (p.get("shipyard_ships", []) as Array).size() > 0,
+		"the payload carries the shipyard's buildable list verbatim")
+	_check(p.get("equipment", []) == facilities_data.get("equipment_stock", [])
+		and (p.get("equipment", []) as Array).size() > 0,
+		"the payload carries the equipment stock verbatim")
+	var player: Dictionary = p.get("player", {})
+	_check(int(player.get("tariff_mille", -1)) == 500,
+		"a portugal player at lisbon pays the in-sphere 5%")
+	_check(not bool(player.get("closed", true)),
+		"no bounty seeded: lisbon is open to the player")
+
+	# --- the neutral contestable contract (fresh run: empty ledger) ---
+	var gn: Dictionary = ChartViewLib.port_debug_payload(NEUTRAL_PORT, markers,
+		DataLoader.map)
+	_check(bool(gn.get("neutral", false))
+		and not bool(gn.get("protected", true)),
+		"%s reports neutral contestable" % NEUTRAL_PORT)
+	_check(str(gn.get("alignment", "")).is_empty()
+		and not bool((gn.get("ledger", {}) as Dictionary).get("aligned", true)),
+		"fresh run: the neutral port sits unaligned over an empty ledger")
+
+	# --- the docked/inbound partition (the rule, on synthetic markers) ---
+	var synthetic: Array = [
+		{"id": "t1", "stall": "docked", "port": "lisbon", "dest": "seville",
+			"dwell": 5},
+		{"id": "t2", "stall": "sailing", "port": "", "dest": "lisbon",
+			"dwell": 0},
+		{"id": "t3", "stall": "docked", "port": "seville", "dest": "lisbon",
+			"dwell": 7},
+	]
+	var pl: Dictionary = ChartViewLib.port_debug_payload("lisbon", synthetic,
+		DataLoader.map)
+	var docked: Array = pl.get("docked", [])
+	var inbound: Array = pl.get("inbound", [])
+	_check(docked.size() == 1
+		and str((docked[0] as Dictionary).get("id", "")) == "t1"
+		and int((docked[0] as Dictionary).get("dwell", -1)) == 5,
+		"partition: only the fleet berthed at lisbon is docked (dwell carried)")
+	_check(inbound.size() == 2,
+		"partition: bound-for-lisbon is inbound, docked-at-seville included")
+
+	# --- hover summary, hit rule, pinned panel, Esc ordering ---
+	var dot := Vector2i(-1, -1)
+	for entry in chart.port_markers():
+		if str(entry.get("port_id", "")) == "lisbon":
+			dot = entry["cell"]
+	_check(dot.x >= 0, "lisbon draws on the debug chart")
+	var screen: Vector2 = chart._to_screen(dot)
+	_check(chart._port_hit(screen, dot) == "lisbon",
+		"hit: the dot position and its shore tile both hit lisbon")
+	_check(chart._port_hit(screen + Vector2(400, 400)) != "lisbon",
+		"miss: a distant point does not hit lisbon")
+	var summary: String = chart._port_summary_text("lisbon")
+	_check(summary.contains("lisbon"),
+		"the hover summary names the raw id")
+	_check(summary.split("\n").size() >= 6,
+		"the hover summary is the 6-line block (%d lines)"
+			% summary.split("\n").size())
+	chart._open_port_panel("lisbon")
+	_check(chart._port_panel != null and chart._port_panel.visible,
+		"clicking lisbon opens the pinned report")
+	var report: String = chart._port_panel_label.text
+	_check(report.contains("lisbon"), "the report names the port")
+	for section_id in ["debug.port.sec.market", "debug.port.sec.ledger",
+			"debug.port.sec.facilities", "debug.port.sec.fleets",
+			"debug.port.sec.geometry", "debug.port.sec.data",
+			"debug.port.sec.player"]:
+		_check_quiet(report.contains(I18n.t_key(section_id)),
+			"the report carries the %s section" % section_id)
+	chart._open_port_panel("lisbon")
+	_check(not chart._port_panel.visible,
+		"clicking the same port again toggles the report closed")
+	chart._open_port_panel("lisbon")
+	var esc := InputEventAction.new()
+	esc.action = "back"
+	esc.pressed = true
+	chart._unhandled_input(esc)
+	_check(not chart._port_panel.visible and chart.is_open(),
+		"Esc closes the report first — the chart stays open")
+	chart._unhandled_input(esc)
+	_check(not chart.is_open(),
+		"a second Esc closes the chart (the §4.2 edge, unchanged)")
 
 
 func _lane_field(network: Dictionary, lane_id: String, field: String) -> String:

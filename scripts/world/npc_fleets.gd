@@ -1324,6 +1324,10 @@ func markers() -> Array:
 			"convoy_leader": leader_id,
 			"holds": holds,
 			"stall": stall,
+			# Phase-8 port panel wire addition (docs/95-* §7.2): the dock
+			# deadline as a first-class field — the 舰队 section reads it
+			# instead of parsing the `dbg` string.
+			"dwell": int((fleet as Dictionary).get("dwell_until_day", 0)),
 			"heading": _lane_step_heading(fleet),
 			"speed": _lane_pipe(fleet),
 			"dest": str((fleet as Dictionary).get("dest_port_id", "")),

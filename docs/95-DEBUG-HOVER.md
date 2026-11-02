@@ -5,10 +5,13 @@ hover report over a fleet marker). It decodes every field so you never
 have to re-read the code to interpret a screenshot.
 
 Ownership: the payload is built by `NpcFleetsLib.markers()`
-(`scripts/world/npc_fleets.gd`, the `dbg`/`dbg2`/`dbg3` strings); the
+(`scripts/world/npc_fleets.gd`, the `dbg`/`dbg2`/`dbg3` strings) — and,
+since the Phase-8 port amendment, `ChartViewLib.port_debug_payload()`
+(`scripts/world/chart_view.gd`, §7); the
 localization and line-folding live in `scenes/world/chart_screen.gd`
 (`_annotate_raw_line`, `80-*` §4.6); every label is
-`debug.raw.*`/`debug.stall.*`/`debug.role.*` in `data/ui_strings.json`
+`debug.raw.*`/`debug.stall.*`/`debug.role.*`/`debug.port.*` in
+`data/ui_strings.json`
 (the §4.7.10 rule — debug surfaces speak the ui_strings locale). The
 sim semantics behind the numbers are `60-*` §4.11.11 (unified
 movement). Labels below are quoted as `zh / en`.
@@ -176,3 +179,70 @@ it is legitimately docked until day 5. The 2026-11-02 bug was that
 skipped the hold both in the day tick and in the accrual, and the port
 midnight tick never ensured the sim); after the fix the hold is
 reported as 停靠中 and released on schedule.
+
+---
+
+## 7. The port debug window (Phase-8 amendment, 2026-11-02)
+
+The chart's floating window grew a **port block**: with the S19 row on,
+hovering a port dot (within 8 px, or on its shore/berth tile) shows a
+summary; **clicking** the port opens a pinned, scrollable full-report
+panel (§`80-*` §4.6). The payload is built by
+`ChartViewLib.port_debug_payload()` (`scripts/world/chart_view.gd`,
+pure reads over `GameState`/`DataLoader`/the port libs); the
+localization and composition live in `scenes/world/chart_screen.gd`;
+every label is `debug.port.*` in `data/ui_strings.json` (facility
+names reuse `port.<facility>`, the tariff badge reuses
+`market.tax.badge.*` — the §4.7.10 rule). Ids stay raw. Fleets quoted
+below are the same `markers()` entries as §1–§4.
+
+### 7.1 The hover summary (≤ 6 lines)
+
+    里斯本 lisbon
+    葡萄牙 · 保护港 · 首都 · 同盟 葡萄牙 · dev 3
+    特产 2 · 需求 19 · 缺货 3 · 满仓 2 · 事件 无
+    停靠 4 · 在途 3
+    关税 势力内 5% · 投资折扣 −3% · 本月已投 500/2000g
+    泊格 (2095,649) · 岸格 (2096,649)
+
+| Line | Fields | Source / meaning |
+|---|---|---|
+| 1 | 港名 + raw id | identity; the id never localizes (§4.7.10) |
+| 2 | nation · class (`保护港`/`争夺港`, 中立 for `nation_id: ""`) · 同盟 alignment · dev | allegiance health — the alignment is `Allegiance.effective_alignment` (owner at protected, persisted allegiance at contestable, `未同盟` unaligned), dev is **derived** (`Allegiance.dev`), never the authored floor |
+| 3 | 特产/需求 counts · 缺货 `stock = 0` · 满仓 `stock = capacity` · 事件 | the market pulse over the listed port-goods; 事件 names the port's active demand event (`GameState.market_events`) with `{days}` left, 无 when none |
+| 4 | 停靠 N · 在途 N | fleets with berth-truth at this port (`stall = docked`, `port = id`) vs fleets bound for it (`dest = id`, not docked here) — the same pass as the map's markers |
+| 5 | 关税 (the `market.tax.badge.*` wording) · 投资折扣 · 本月已投 X/2000g · `对玩家关闭` | the player line; the month cap prints only at contestable ports; `对玩家关闭` (`debug.port.closed_for_player`) fires while `Bounty.is_port_closed` holds |
+| 6 | 泊格 · 岸格 | the harbor table's tiles (`harbors.json` via the map) — grep-compatible with a fleet's 所在格 |
+
+### 7.2 The click panel (eight `debug.port.sec.*` sections)
+
+概览 = the hover block. The rest:
+
+| Section | Content |
+|---|---|
+| 市场 | every listed port-good, one line: `产/需` side · stock/capacity · factor (×0.70 style) · marginal buy price (卖 on demand rows; produced rows print 不收购) · `×3涌动` while the event surges the good. Produces first (stock desc), then demands by factor desc — the best sell opportunities on top |
+| 账本 | contestable only: per-nation `raw (有效 effective)` with the owner's ×1.25 applied, whether the 5,000g alignment line is crossed, the total; protected ports print 保护港无账本 |
+| 设施 | one row per facility: 开/闭 right now + its hours window (`24h` for the inn); the shipyard's buildable ship ids and the equipment stock as raw id lists |
+| 舰队 | docked fleets one line each (id · role · nation · dwell deadline), then inbound (id · role · nation); a fleet's full raw block remains tile-hover-only (§2–§4) |
+| 几何 | 泊格/岸格 · lat/lon · band |
+| 数据 | the raw produces/demands id lists, the sphere list, the authored dev floor vs the derived dev |
+| 玩家 | rep with the alignment nation (`Character.reputation`), permit coverage (`本国` home / `涉外` per-nation, void noted), the title sell bonus (`1100/1050/1000` per-thousand), the closed state |
+
+### 7.3 Recipe: why does this port look wrong?
+
+1. **同盟 ≠ 国籍 at a contestable port** — a flip happened (or the
+   ledger is below the line): read the 账本 section, check the ×1.25
+   owner bonus against the 5,000g threshold.
+2. **缺货 N large** — consumers drained to 0 (starved; the shortfall
+   sits as unmet demand). In play that is the §4.2 flow economy's dear
+   side — prices pin at the band floor's opposite end.
+3. **事件 with days left** — the port's consumption is ×3 on the
+   template's goods (the `×3涌动` marks in the market table); NPC
+   traders swarm it (§4.5 self-limiting).
+4. **对玩家关闭** — a bounty from the port's nation; only the
+   bountied capital's palace pay-off stays reachable.
+5. **停靠 0 while fleets are inbound** — check the inbound fleets'
+   own blocks (§6): a wedge/drop cycle or ice holds upstream.
+6. **dev lower than expected** — dev is `max(floor, ledger
+   thresholds)`; the 数据 section shows the floor, 账本 the total
+   that drives the derivation.
