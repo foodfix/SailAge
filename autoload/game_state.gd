@@ -27,7 +27,8 @@ var locale: String = "en"
 var day: int = 0
 ## Player purse in gold pieces.
 var gold: int = 0
-## Nation, stats, XP/level, officers, reputation map (shape: docs/50-* §4.8).
+## Nation, Person attributes/skills, XP/level, officers, reputation map
+## (the v9 Person block: docs/50-* §4.8).
 var player: Dictionary = {}
 ## Ship instances, flagship at index 0 (shape: docs/40-* §4.1).
 var fleet: Array = []
@@ -140,6 +141,23 @@ var last_tournament_outcome: Dictionary = {}
 ## payload encoding. `new_game` still clears it.
 var explored_tiles: Dictionary = {}
 
+# --- Phase-8 run state (docs/90-* §5.4, §8.1 save v9) ------------------------
+#
+# Both blocks are save-relevant from v9 on; their payload wiring
+# (`SaveSystem.snapshot`/`_apply` key list) is W6-C's task — a payload this
+# build writes simply does not carry them yet, and nothing here reads them
+# back from a payload, so save/load stays green.
+
+## Phase 8: `{officer_id: {loyalty, sea_days, post_id, ship_id, talk_cd_day,
+## gift_cd_day, defeats, wage_mult}}` per employed officer
+## (docs/90-* §5.4; behavior docs/50-* §4.5). `post_id = ""` = idle;
+## `ship_id` non-empty only on a captain post. Seeded by `Character.recruit`.
+var officer_states: Dictionary = {}
+## Phase 8: `{captain_id: {status, return_day, tier_now, stance, familiarity,
+## dossier_seen, defeats, wins}}` — full entries only for met captains
+## (docs/90-* §5.4; the state machine is W4-A's `scripts/world/captains.gd`).
+var captain_states: Dictionary = {}
+
 
 ## Applies a gold delta and announces it. Clamping/ledger rules live in the
 ## sailing/port engines (docs/20-* §4.9), not here.
@@ -148,10 +166,17 @@ func add_gold(delta: int) -> void:
 	EventBus.gold_changed.emit(gold)
 
 
-## Starts a fresh run for `nation_id` exactly per docs/50-* §4.1.
+## Starts a fresh run for `nation_id` exactly per docs/50-* §4.1 (the
+## Phase-8 two-step creation: nationality → background → free points).
 ##
-## Everything comes from `data/nations.json` (nothing hardcoded here), so
-## editing a nation's `start_gold`/`start_ship_type_id` is a data-only change.
+## Everything comes from data (nothing hardcoded here): the nation's
+## start package from `data/nations.json`, the Person block (attributes +
+## skills with the §4.1 nation/background bonuses and free-point allocs)
+## from `Character.starting_person`. `background_id` persists in the v9
+## player block (§4.8). An unknown background id simply grants no bonus, so
+## the two-argument legacy call sites (`new_game(nation_id, route)`) keep
+## working untouched.
+##
 ## `locale` is deliberately untouched: the player's language choice survives
 ## the new game. So do the two S19 pre-game choices `npc_preset` and
 ## `control_prefs` (docs/80-* §4.6.3): each is read BEFORE the reset below and
@@ -159,14 +184,14 @@ func add_gold(delta: int) -> void:
 ##
 ## `route` exists for unit tests: with the default `true` the run routes to the
 ## port screen (§4.1 step 4); tests pass `false` to keep the test scene alive.
-## `map_id` names the map. Phase 4 ships exactly one (`DataLoader.DEFAULT_MAP_ID`
-## = `"world"`, docs/90-* §9.1) and there is no compatibility ladder for the
-## retired Phase-1–3 ids (`90-*` §8.2 "development-stage scope": SailAge has not
-## shipped, so no save in the wild names them). The fleet starts on the nation's
+## There is exactly one map (`DataLoader.DEFAULT_MAP_ID = "world"`, docs/90-*
+## §9.1) — the retired Phase-1–3 map ids have no compatibility ladder
+## (`90-*` §8.2 "development-stage scope"). The fleet starts on the nation's
 ## start port's **derived berth** tile (`10-*` §6.1, `20-*` §4.11.1), never
 ## a stored copy.
 func new_game(nation_id: String, route: bool = true,
-		map_id: String = "world") -> void:
+		background_id: String = "", attr_alloc: Dictionary = {},
+		skill_alloc: Dictionary = {}) -> void:
 	var nation: Dictionary = DataLoader.get_nation(nation_id)
 	if nation.is_empty():
 		push_error("GameState.new_game: unknown nation_id '%s'" % nation_id)
@@ -178,7 +203,7 @@ func new_game(nation_id: String, route: bool = true,
 		push_error("GameState.new_game: nation '%s' has unknown start_port_id '%s'"
 			% [nation_id, start_port_id])
 		return
-	var resolved_map := _resolve_map_id(map_id)
+	var resolved_map := _resolve_map_id(DataLoader.DEFAULT_MAP_ID)
 	# 80-* §4.6.3: the S19 settings modal (pre-game, via S1) writes `npc_preset`
 	# BEFORE this
 	# call — it is run input, like `nation_id`, so the fresh-run reset below
@@ -204,22 +229,18 @@ func new_game(nation_id: String, route: bool = true,
 	day = 1
 	gold = int(nation.get("start_gold", 0))
 
-	# Reputation keys cover all six nations so the panel/save shape is stable
+	# Reputation keys cover all six nations so the card/save shape is stable
 	# (docs/50-* §4.6, §4.8); only the player's own nation starts non-zero.
-	var reputation: Dictionary = {}
-	for entry in DataLoader.nations_list:
-		var other_id := str(entry.get("id", ""))
-		reputation[other_id] = 0
-	reputation[nation_id] = int(nation.get("start_reputation", 0))
-
-	player = {
-		"nation_id": nation_id,
-		"stats": CharacterLib.starting_stats(nation_id),
-		"xp": 0,
-		"level": 1,
-		"officers": [],
-		"reputation": reputation,
-	}
+	# The whole §4.1 Person block (attributes + nation/background bonuses +
+	# free-point allocs, counters, `alloc_pending` 0, xp/level, empty roster,
+	# reputation, profit accumulators, equipment) is built by the model:
+	player = CharacterLib.starting_person(
+		nation_id, background_id, attr_alloc, skill_alloc
+	)
+	# Phase-8 state blocks start empty on every fresh run (docs/90-* §8.2:
+	# "the Phase-8 officer_states/captain_states blocks ... start empty").
+	officer_states = {}
+	captain_states = {}
 
 	# Starter hull: §4.3 "buy ship" defaults except crew = ShipType.crew_min.
 	var start_ship_type_id := str(nation.get("start_ship_type_id", ""))
@@ -320,6 +341,7 @@ func new_game(nation_id: String, route: bool = true,
 	})
 	fleets_sim.initial_fill(day)
 	CharacterLib.pending_levelup = false
+	CharacterLib.set_pending_raise(false)
 
 	print("GameState.new_game: %s, %dg, ship %s, port %s, day 1, map %s"
 		% [nation_id, gold, start_ship_type_id, start_port_id, resolved_map])

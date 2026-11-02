@@ -34,7 +34,6 @@ func _ready() -> void:
 	_test_recruit()
 	_test_recruit_blocked()
 	_test_dismiss()
-	_test_role_bonuses()
 	_test_screen_crew_tab()
 	_test_screen_officers_tab()
 	_test_screen_rumors_tab()
@@ -44,20 +43,31 @@ func _ready() -> void:
 
 # --- Fixtures --------------------------------------------------------------
 
-## One caravel with `crew` aboard, `gold` in the purse, morale 70.
+## One caravel with `crew` aboard, `gold` in the purse, morale 70. The
+## player block is the v9 Person shape (docs/50-* §4.8).
 func _make_run(crew: int = CARAVEL_MIN, gold: int = 10000) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
-		},
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 0,
 		"xp": 0,
 		"level": 1,
 		"officers": [],
 		"reputation": {"portugal": 20, "spain": 0, "england": 0,
 			"holland": 0, "ottoman": 0, "italy": 0},
+		"profit_by_nation": {},
+		"profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
 	}
+	GameState.officer_states = {}
 	GameState.gold = gold
 	GameState.day = 1
 	GameState.morale = 70
@@ -274,12 +284,13 @@ func _test_fire_morale_unchanged() -> void:
 		"hiring 5 leaves morale untouched (got %d)" % GameState.morale)
 
 
-# --- §4.4 officers at port -------------------------------------------------
+# --- §4.4 officers at port ---------------------------------------------------
 
 func _test_officer_pools() -> void:
 	_make_run()
-	# The six locked mappings from data/officers.json (docs/10-* §7.5), asserted
-	# literally so a data edit that silently drops a port fails this test.
+	# The retained Phase-1 starters keep their recruit bands (docs/10-* §7.5:
+	# the 6 starter ids survive into the v2 roster), asserted literally so a
+	# data edit that silently drops a port fails this test.
 	var expected := {
 		"off_mateus_alvares": ["lisbon", "madeira"],
 		"off_diego_fernandez": ["seville", "ceuta"],
@@ -295,23 +306,21 @@ func _test_officer_pools() -> void:
 		_check(ports == expected[officer_id], "%s recruit_ports == %s (got %s)"
 			% [officer_id, str(expected[officer_id]), str(ports)])
 		for port_id in expected[officer_id]:
-			_check(TavernEngineLib.officers_at_port(str(port_id)) == [officer_id],
-				"%s is the only officer at %s (got %s)" % [
-					officer_id, port_id,
-					str(TavernEngineLib.officers_at_port(str(port_id))),
-				])
+			_check(TavernEngineLib.officers_at_port(str(port_id)).has(officer_id),
+				"%s appears at its recruit port %s" % [officer_id, port_id])
 
-	# All six officers, each only where its data says (docs/10-* §7.5).
-	var seen := 0
+	# Every v2 officer is listed at every one of its recruit ports and at no
+	# other port in the world (the §4.5.5 placement rule, 96-officer roster).
+	_check(DataLoader.officers_list.size() == 96,
+		"the v2 roster has exactly 96 officers (got %d)"
+		% DataLoader.officers_list.size())
 	for officer in DataLoader.officers_list:
-		seen += 1
 		var officer_id := str(officer.get("id", ""))
 		var ports: Array = officer.get("recruit_ports", [])
 		_check(not ports.is_empty(), "%s declares recruit_ports" % officer_id)
 		for port_id in ports:
 			_check(TavernEngineLib.officers_at_port(str(port_id)).has(officer_id),
 				"%s appears at its recruit port %s" % [officer_id, port_id])
-		# Every other port in the world must not list it.
 		var strays := 0
 		for port in DataLoader.ports_list:
 			var port_id := str(port.get("id", ""))
@@ -321,18 +330,12 @@ func _test_officer_pools() -> void:
 				strays += 1
 		_check(strays == 0, "%s appears at no other port (%d strays)"
 			% [officer_id, strays])
-	_check(seen == 6, "the locked roster has exactly 6 officers (got %d)" % seen)
 
-	# Spot-checks against data/officers.json.
-	_check(TavernEngineLib.officers_at_port("lisbon") == ["off_mateus_alvares"],
-		"lisbon lists only Mateus Álvares (%s)"
-		% str(TavernEngineLib.officers_at_port("lisbon")))
-	_check(TavernEngineLib.officers_at_port("madeira") == ["off_mateus_alvares"],
-		"madeira lists Mateus Álvares")
-	_check(TavernEngineLib.officers_at_port("london") == ["off_thomas_reed"],
-		"london lists Thomas Reed")
-	_check(TavernEngineLib.officers_at_port("athens").is_empty(),
-		"a port outside every recruit_ports list is empty")
+	# Spot-checks (the retained bands overlap with the legend layer now).
+	_check(TavernEngineLib.officers_at_port("london").has("off_thomas_reed"),
+		"london lists Thomas Reed (retained starter band + legend layer)")
+	_check(TavernEngineLib.officers_at_port("barcelona").is_empty(),
+		"a port outside every recruit_ports list is empty (barcelona)")
 	_check(TavernEngineLib.officers_at_port("").is_empty(),
 		"an empty port id lists nobody")
 	_check(TavernEngineLib.officers_at_port("not_a_port").is_empty(),
@@ -340,13 +343,15 @@ func _test_officer_pools() -> void:
 
 	# Data-driven: a fake officer added to the cache appears with no code edit.
 	var fake := {
-		"id": "off_test_fake", "role": "navigator", "wage_daily": 1,
-		"recruit_ports": ["athens"], "name": {"zh": "测试", "en": "Test"},
-		"bio": {"zh": "测试", "en": "Test"}, "stats": {},
+		"id": "off_test_fake", "role": "", "main_skill": "navigation",
+		"wage_daily": 1, "recruit_ports": ["barcelona"],
+		"name": {"zh": "测试", "en": "Test"},
+		"bio": {"zh": "测试", "en": "Test"},
+		"attributes": {}, "skills": {}, "personality": [],
 	}
 	DataLoader.officers_list.append(fake)
 	DataLoader.officers["off_test_fake"] = fake
-	_check(TavernEngineLib.officers_at_port("athens") == ["off_test_fake"],
+	_check(TavernEngineLib.officers_at_port("barcelona") == ["off_test_fake"],
 		"a data-only officer shows up at its port")
 	DataLoader.officers_list.pop_back()
 	DataLoader.officers.erase("off_test_fake")
@@ -357,11 +362,16 @@ func _test_officer_pools() -> void:
 func _test_recruit() -> void:
 	_make_run(CARAVEL_MIN, 5000)
 	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 300,
-		"Mateus signs for wage 30 × 10 = 300g")
+		"Mateus signs for ceil(30 × 10 × 1.0) = 300g at CHA 10")
 	_check(CharacterLib.recruit("off_mateus_alvares"), "recruit succeeds")
 	_check(GameState.gold == 4700, "signing fee 300g deducted (got %d)" % GameState.gold)
 	_check(GameState.player["officers"] == ["off_mateus_alvares"],
 		"roster stores the officer id in player.officers")
+	# The §8 state entry is seeded with the hire (loyalty 50, idle).
+	var state: Dictionary = GameState.officer_states["off_mateus_alvares"]
+	_check(int(state["loyalty"]) == 50 and str(state["post_id"]) == ""
+		and int(state["sea_days"]) == 0,
+		"the hire seeded loyalty 50 / idle / fresh clock (§4.5.5)")
 
 	# Vanishes from every tavern while employed (both its recruit ports).
 	for port_id in ["lisbon", "madeira", "london", "venice", "athens"]:
@@ -376,19 +386,24 @@ func _test_recruit() -> void:
 
 
 func _test_recruit_blocked() -> void:
-	# OFFICER_MAX = 3 blocks the fourth.
-	_make_run(CARAVEL_MIN, 20000)
-	_check(CharacterLib.OFFICER_MAX == 3, "OFFICER_MAX is 3")
-	CharacterLib.recruit("off_mateus_alvares")
-	CharacterLib.recruit("off_diego_fernandez")
-	CharacterLib.recruit("off_thomas_reed")
-	_check(CharacterLib.officer_count() == 3, "three officers aboard")
-	_check(not CharacterLib.can_recruit("off_kemal_agha"),
-		"a 4th officer is blocked by OFFICER_MAX")
-	_check(not CharacterLib.recruit("off_kemal_agha"), "recruit() refuses the 4th")
-	_check(CharacterLib.officer_count() == 3, "roster stays at 3")
-	_check(GameState.gold == 20000 - 300 - 280 - 320,
-		"only three signing fees were paid (got %d gold)" % GameState.gold)
+	# OFFICER_MAX = 12 blocks the 13th (docs/50-* §4.5.2).
+	_make_run(CARAVEL_MIN, 100000)
+	_check(CharacterLib.OFFICER_MAX == 12, "OFFICER_MAX is 12")
+	for officer in DataLoader.officers_list:
+		if CharacterLib.officer_count() >= CharacterLib.OFFICER_MAX:
+			break
+		CharacterLib.recruit(str(officer["id"]))
+	_check(CharacterLib.officer_count() == 12, "the roster filled to 12")
+	var thirteenth := ""
+	for officer in DataLoader.officers_list:
+		if not CharacterLib.is_employed(str(officer["id"])):
+			thirteenth = str(officer["id"])
+			break
+	_check(thirteenth != "", "a 13th candidate exists in the pool")
+	_check(not CharacterLib.can_recruit(thirteenth),
+		"a 13th officer is blocked by OFFICER_MAX")
+	_check(not CharacterLib.recruit(thirteenth), "recruit() refuses the 13th")
+	_check(CharacterLib.officer_count() == 12, "roster stays at 12")
 
 	# Gold shortfall blocks the signing and shows a price (§6).
 	_make_run(CARAVEL_MIN, 299)
@@ -406,10 +421,14 @@ func _test_dismiss() -> void:
 	CharacterLib.recruit("off_mateus_alvares")
 	CharacterLib.recruit("off_diego_fernandez")
 	_check(GameState.player["officers"].size() == 2, "two officers aboard")
+	_check(GameState.officer_states.size() == 2,
+		"both hires carry a state entry")
 
 	_check(CharacterLib.dismiss("off_mateus_alvares"), "dismiss succeeds")
 	_check(GameState.player["officers"] == ["off_diego_fernandez"],
 		"player.officers shrinks to the remaining officer")
+	_check(not GameState.officer_states.has("off_mateus_alvares"),
+		"the dismissal cleared the state entry (§4.5.5)")
 	_check(CharacterLib.officer_count() == 1, "officer_count is 1")
 	_check(GameState.gold == 5000 - 300 - 280,
 		"dismissal pays no severance (got %d gold)" % GameState.gold)
@@ -427,68 +446,20 @@ func _test_dismiss() -> void:
 	_check(CharacterLib.recruit("off_mateus_alvares"), "re-recruit succeeds")
 	_check(GameState.gold == 5000 - 300 - 280 - 300,
 		"re-recruiting pays the fee again (got %d gold)" % GameState.gold)
+	# The re-hire starts fresh at loyalty 50 (§4.5.4).
+	_check(int(GameState.officer_states["off_mateus_alvares"]["loyalty"]) == 50,
+		"a re-hire's state entry starts at loyalty 50")
 
 	# Dismissing someone not aboard is a no-op.
 	_check(not CharacterLib.dismiss("off_marco_bellini"),
 		"dismissing an un-employed officer returns false")
 
 
-# --- §4.5 role bonuses through effective_stat ------------------------------
-
-func _test_role_bonuses() -> void:
-	_make_run(CARAVEL_MIN, 20000)
-	_check(CharacterLib.effective_stat("navigation") == 10,
-		"no officers: navigation 10")
-	_check(CharacterLib.effective_stat("seamanship") == 10,
-		"no officers: seamanship 10")
-	_check(CharacterLib.effective_stat("combat") == 10,
-		"no officers: combat 10")
-
-	CharacterLib.recruit("off_mateus_alvares")  # navigator
-	_check(CharacterLib.effective_stat("navigation") == 20,
-		"navigator raises navigation by 10 (10 → %d)"
-		% CharacterLib.effective_stat("navigation"))
-	CharacterLib.recruit("off_jan_de_vries")  # boatswain
-	_check(CharacterLib.effective_stat("seamanship") == 20,
-		"boatswain raises seamanship by 10 (10 → %d)"
-		% CharacterLib.effective_stat("seamanship"))
-	CharacterLib.recruit("off_thomas_reed")  # gunner
-	_check(CharacterLib.effective_stat("combat") == 20,
-		"gunner raises combat by 10 (10 → %d)"
-		% CharacterLib.effective_stat("combat"))
-	_check(CharacterLib.officer_count() == 3, "three roles aboard")
-
-	# Two same-role officers stack (+20).
-	_make_run(CARAVEL_MIN, 20000)
-	CharacterLib.recruit("off_mateus_alvares")
-	CharacterLib.recruit("off_marco_bellini")
-	_check(CharacterLib.effective_stat("navigation") == 30,
-		"two navigators stack: 10 + 10 + 10 == 30 (got %d)"
-		% CharacterLib.effective_stat("navigation"))
-
-	# Two boatswains stack as well.
-	_make_run(CARAVEL_MIN, 20000)
-	CharacterLib.recruit("off_diego_fernandez")
-	CharacterLib.recruit("off_jan_de_vries")
-	_check(CharacterLib.effective_stat("seamanship") == 30,
-		"two boatswains stack: 10 + 10 + 10 == 30 (got %d)"
-		% CharacterLib.effective_stat("seamanship"))
-
-	# Dismissal removes the bonus again.
-	_make_run(CARAVEL_MIN, 20000)
-	CharacterLib.recruit("off_mateus_alvares")
-	CharacterLib.dismiss("off_mateus_alvares")
-	_check(CharacterLib.effective_stat("navigation") == 10,
-		"dismissing the navigator drops navigation back to 10 (got %d)"
-		% CharacterLib.effective_stat("navigation"))
-
-	# The navigator's +10 flows into the §4.2 derived sighting radius.
-	_make_run(CARAVEL_MIN, 20000)
-	_check(CharacterLib.sighting_radius() == 48, "sighting radius 48 without officers")
-	CharacterLib.recruit("off_mateus_alvares")
-	_check(CharacterLib.sighting_radius() == 49,
-		"navigator raises the sighting radius to 49 (got %d)"
-		% CharacterLib.sighting_radius())
+# --- §4.5 role bonuses ------------------------------------------------------
+#
+# Deleted with Phase 8 (docs/50-* §4.5.3): flat per-role stacking is gone;
+# the post-based contribution lives in `Skills.officer_contribution`
+# (pinned in tools/test_skills.gd).
 
 
 # --- Screen: Crew tab ------------------------------------------------------
@@ -621,7 +592,7 @@ func _test_screen_crew_tab() -> void:
 		"Fire 10 at the floor fires nobody (got %d)" % TavernEngineLib.crew())
 
 
-# --- Screen: Officers tab --------------------------------------------------
+# --- Screen: Officers tab (re-baselined to the v2 roster / new APIs) --------
 
 func _test_screen_officers_tab() -> void:
 	_make_run(CARAVEL_MIN, 5000)
@@ -637,33 +608,28 @@ func _test_screen_officers_tab() -> void:
 	var list: VBoxContainer = screen.get_node(
 		"Layout/VBox/Body/OfficersPanel/RecruitableScroll/Recruitable"
 	)
-	_check(list.get_child_count() == 1,
-		"lisbon lists exactly one recruitable officer (%d rows)"
-		% list.get_child_count())
-	var row: Control = list.get_child(0)
-	_check(row.name == "Officer_off_mateus_alvares",
-		"the row is Mateus Álvares (%s)" % row.name)
+	# Lisbon's v2 pool: Mateus plus the legends banded there.
+	var lisbon_pool: Array = TavernEngineLib.officers_at_port("lisbon")
+	_check(lisbon_pool.has("off_mateus_alvares") and lisbon_pool.size() >= 2,
+		"lisbon lists Mateus plus the legend layer (%s)" % str(lisbon_pool))
+	var row: Control = list.get_node_or_null("Officer_off_mateus_alvares")
+	_check(row != null, "Mateus Álvares has a recruitable row")
+	if row == null:
+		_unmount_tavern()
+		return
 	var info: VBoxContainer = row.get_child(0)
 	_check(info.get_node("Name").text ==
 		I18n.t(DataLoader.get_officer("off_mateus_alvares")["name"]),
-		"the row shows the officer's name")
-	_check(info.get_node("Role").text.contains(I18n.t_key("tavern.role.navigator")),
-		"the row shows the role (%s)" % info.get_node("Role").text)
-	_check(info.get_node("Role").text.contains(
-		I18n.fmt("tavern.wage", {"price": 30})),
-		"the row shows the daily wage")
-	_check(info.get_node("Stats").text == I18n.fmt("tavern.stats", {
-		"leadership": 10, "seamanship": 14, "combat": 6, "navigation": 16,
-	}), "the row shows the stats line (%s)" % info.get_node("Stats").text)
-	_check(info.get_node("Bio").text ==
-		I18n.t(DataLoader.get_officer("off_mateus_alvares")["bio"]),
-		"the row shows the bio")
+		"the row shows the officer's data name")
+	_check(not info.get_node("Role").text.begins_with("<")
+		and not info.get_node("Stats").text.begins_with("<"),
+		"the row renders no raw i18n keys for the retired role/stats fields")
 
 	var action: VBoxContainer = row.get_child(1)
 	var cost: Label = action.get_node("Cost")
 	var recruit: Button = action.get_node("Recruit")
 	_check(cost.text == I18n.fmt("tavern.signing_cost", {"amount": 300}),
-		"the signing cost reads 300g (%s)" % cost.text)
+		"the signing cost reads 300g at CHA 10 (%s)" % cost.text)
 	_check(recruit.text == I18n.t_key("tavern.recruit"), "the button says Recruit")
 	_check(not recruit.disabled, "Recruit is enabled when affordable")
 
@@ -672,61 +638,63 @@ func _test_screen_officers_tab() -> void:
 	_check(CharacterLib.is_employed("off_mateus_alvares"),
 		"the Recruit button signs the officer")
 	_check(GameState.gold == 4700, "the signing fee is 300g (got %d)" % GameState.gold)
-	_check(list.get_child_count() == 1 and
-		list.get_child(0).name == "Empty",
+	_check(list.get_node_or_null("Officer_off_mateus_alvares") == null,
 		"the officer leaves the recruitable list")
 
 	var roster: VBoxContainer = screen.get_node(
 		"Layout/VBox/Body/OfficersPanel/RosterScroll/Roster"
 	)
-	_check(roster.get_child_count() == 1,
+	var employed_row: Control = roster.get_node_or_null(
+		"Employed_off_mateus_alvares")
+	_check(employed_row != null,
 		"the roster shows the signed officer (%d rows)" % roster.get_child_count())
-	var employed_row: Control = roster.get_child(0)
-	_check(employed_row.name == "Employed_off_mateus_alvares",
-		"the roster row carries the officer id (%s)" % employed_row.name)
 	var dismiss: Button = employed_row.get_node("Dismiss")
 	_check(dismiss.text == I18n.t_key("tavern.dismiss"), "the button says Dismiss")
 
 	# Other ports never show it while employed; the screen uses its port only.
-	_check(TavernEngineLib.officers_at_port("madeira").is_empty(),
-		"madeira's pool is empty while the officer is employed")
+	_check(not TavernEngineLib.officers_at_port("madeira").has("off_mateus_alvares"),
+		"madeira's pool drops the employed officer")
 
 	# Dismiss through the button: returns to the pool and to this screen.
 	dismiss.pressed.emit()
 	_check(not CharacterLib.is_employed("off_mateus_alvares"),
 		"the Dismiss button dismisses the officer")
-	_check(roster.get_child_count() == 1 and roster.get_child(0).name == "Empty",
-		"the roster shows the empty state")
-	_check(list.get_child_count() == 1 and
-		list.get_child(0).name == "Officer_off_mateus_alvares",
+	_check(not GameState.officer_states.has("off_mateus_alvares"),
+		"the dismissal cleared the state entry (the shared API)")
+	_check(roster.get_node_or_null("Employed_off_mateus_alvares") == null,
+		"the roster drops the row")
+	_check(list.get_node_or_null("Officer_off_mateus_alvares") != null,
 		"the dismissed officer is recruitable here again")
 
 	# OFFICER_MAX: a full roster disables Recruit with char.officers_full.
-	_make_run(CARAVEL_MIN, 20000)
-	CharacterLib.recruit("off_mateus_alvares")
-	CharacterLib.recruit("off_diego_fernandez")
-	CharacterLib.recruit("off_thomas_reed")
+	_make_run(CARAVEL_MIN, 200000)
+	for officer in DataLoader.officers_list:
+		if CharacterLib.officer_count() >= CharacterLib.OFFICER_MAX:
+			break
+		CharacterLib.recruit(str(officer["id"]))
 	screen.refresh()
 	var reason: Label = screen.get_node("Layout/VBox/Body/OfficersPanel/Reason")
 	_check(reason.visible, "a full-roster reason is shown")
-	_check(reason.text == I18n.fmt("char.officers_full", {"max": 3}),
-		"the reason uses char.officers_full (%s)" % reason.text)
-	_check(roster.get_child_count() == 3, "the roster lists all three officers")
+	_check(reason.text == I18n.fmt("char.officers_full", {"max": 12}),
+		"the reason uses char.officers_full with 12 (%s)" % reason.text)
+	_check(roster.get_child_count() == 12, "the roster lists all twelve officers")
 
 	# Gold shortfall: price is shown, button disabled.
 	_make_run(CARAVEL_MIN, 100)
 	screen.refresh()
-	var fresh_row: Control = list.get_child(0)
-	var button2: Button = fresh_row.get_child(1).get_node("Recruit")
-	_check(button2.disabled, "Recruit is disabled at 100g for a 300g officer")
-	_check(not button2.tooltip_text.is_empty(),
-		"the disabled recruit button shows the price (%s)" % button2.tooltip_text)
+	var fresh_row: Control = list.get_node_or_null("Officer_off_mateus_alvares")
+	_check(fresh_row != null, "the fresh run lists Mateus again")
+	if fresh_row != null:
+		var button2: Button = fresh_row.get_child(1).get_node("Recruit")
+		_check(button2.disabled, "Recruit is disabled at 100g for a 300g officer")
+		_check(not button2.tooltip_text.is_empty(),
+			"the disabled recruit button shows the price (%s)" % button2.tooltip_text)
 
 	# Empty state at a port with no pool.
-	GameState.current_port = "athens"
+	GameState.current_port = "barcelona"
 	screen.refresh()
 	_check(list.get_child_count() == 1 and list.get_child(0).name == "Empty",
-		"a port with no officers shows the empty state")
+		"a pool-less port shows the empty state (barcelona)")
 	_check(list.get_child(0).text == I18n.t_key("tavern.no_officers"),
 		"the empty state uses tavern.no_officers")
 

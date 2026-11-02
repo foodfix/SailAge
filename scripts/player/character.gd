@@ -1,47 +1,75 @@
 class_name Character
 extends RefCounted
-## Player stats, XP/level, officers and reputation
-## (docs/50-CHARACTER-AND-PROGRESSION.md §4.2–§4.6, §5).
+## Player Person, XP/level/`alloc_pending`, officers and reputation
+## (docs/50-CHARACTER-AND-PROGRESSION.md §4.1–§4.6, §4.8, §5).
 ##
 ## Pure logic, no node references (docs/90-ARCHITECTURE.md §4): every function
 ## is static and reads/mutates the `GameState.player` save block through the
 ## singleton, so the formulas are unit-testable from headless GDScript.
 ##
-## The player block shape is owned by docs/50-* §4.8. This file never adds
-## transient keys to it (the level-up flag is a class static, see
-## [member pending_levelup]) so a save written by T17 stays schema-clean.
+## The player block shape is the v9 Person block (docs/50-* §4.8):
+## `{nation_id, background_id, attributes{5}, skills{8}, skill_counters{8},
+## alloc_pending, xp, level, officers[], reputation, profit_by_nation,
+## profit_rep_awarded, equipment}` — `autopilot` stays absent until W5 writes
+## it. This file never adds transient keys to the block (the level-up toast
+## flag is a class static, see [member pending_levelup]).
+##
+## Skill values/counters and the officer contribution live in
+## `scripts/player/skills.gd` (`SkillsLib` below — preloaded, the KEYS table
+## is single-sourced there; skills.gd must never preload this file back).
 
-## Locked constants (docs/50-* §4.3–§4.5).
-const OFFICER_MAX := 3
+## The skill layer (docs/50-* §4.3): keys, thresholds, contribution, loyalty.
+const SkillsLib := preload("res://scripts/player/skills.gd")
+
+## Locked constants (docs/50-* §4.1–§4.5).
+const OFFICER_MAX := 12
 const LEVEL_CAP := 20
-## `level = floor(sqrt(xp / XP_LEVEL_UNIT)) + 1` (docs/50-* §4.3).
+## `level = floor(sqrt(xp / XP_LEVEL_UNIT)) + 1` (docs/50-* §4.4).
 const XP_LEVEL_UNIT := 50.0
-## Base value of every stat at new game; the nation bonus is added on top.
-const BASE_STAT := 10
-## Flat +5 nation bonus (docs/50-* §4.2 table).
+## Base value of every attribute at new game (docs/50-* §4.2).
+const BASE_ATTRIBUTE := 10
+## Attribute bounds (docs/50-* §4.4: allocation clamps to [1, 100]; every
+## attribute/skill write clamps everywhere, §6).
+const ATTR_MIN := 1
+const ATTR_MAX := 100
+## Flat +5 nation bonus on one attribute and one signature skill
+## (docs/50-* §4.2.2; the pair per nation lives in `data/nations.json`
+## `bonus_attribute`/`bonus_skill` — nothing hardcoded here).
 const NATION_BONUS_AMOUNT := 5
-## Stat order used by the character panel / save block.
-const STAT_KEYS: Array[String] = [
-	"leadership", "seamanship", "combat", "navigation", "luck",
+## Background bonuses (docs/50-* §4.1 step ①): one attribute +3, one skill +5,
+## from `data/backgrounds.json`.
+const BACKGROUND_ATTR_BONUS := 3
+const BACKGROUND_SKILL_BONUS := 5
+
+## Attribute order used by the character card / save block (docs/50-* §4.2).
+const ATTRIBUTES: Array[String] = [
+	"constitution", "intellect", "charisma", "courage", "luck",
 ]
+## The 8 player skills, single-sourced in skills.gd (docs/50-* §4.3).
+const SKILL_KEYS: Array[String] = SkillsLib.KEYS
 
-## docs/50-* §4.2: nation → the single stat that gets +5 at new game.
-const NATION_BONUS_STAT := {
-	"portugal": "navigation",
-	"spain": "leadership",
-	"england": "combat",
-	"holland": "seamanship",
-	"ottoman": "leadership",
-	"italy": "luck",
-}
+## Creation free points (docs/50-* §4.1 step ②): attributes +5 total and
+## skills +3 total, single-item cap +3, must spend all before confirm.
+const ATTR_ALLOC_TOTAL := 5
+const SKILL_ALLOC_TOTAL := 3
+const ALLOC_ITEM_CAP := 3
 
-## docs/50-* §4.5: assigned-officer role → flat effective-stat bonus.
-## Multiple officers with the same role stack.
-const ROLE_STAT_BONUS := {
-	"navigator": {"navigation": 10},
-	"boatswain": {"seamanship": 10},
-	"gunner": {"combat": 10},
-}
+## Creation extremes (docs/50-* §4.1 step 4, normative): the closed forms
+## `10 + 5 (nation) + 3 (background) + 3 (cap) = 21` and
+## `0 + 5 + 5 + 3 = 13`.
+const CREATION_ATTR_MAX := 21
+const CREATION_SKILL_MAX := 13
+
+## Level-up allocation (docs/50-* §4.4): +2 pending points per level gained,
+## persisted in the player block; the toast flag below stays session-transient.
+const ALLOC_PER_LEVEL := 2
+
+## Signing cost / loyalty-gain price multiplier (docs/50-* §4.2.1 charisma row,
+## §4.5.2): `clamp(1 − (CHA−10)/200, 0.5, 1.0)` — CHA 10 → ×1.0, 60 → ×0.75,
+## 100 → ×0.5. Also applied to rumour purchases and bounty pinpoints (their
+## base prices live in `30-*`/`70-*`; this doc owns the multiplier).
+const CHA_PRICE_DIVISOR := 200.0
+const CHA_PRICE_MULT_MIN := 0.5
 
 ## Reputation is an integer −100…+100 per nation (docs/50-* §4.6).
 const REPUTATION_MIN := -100
@@ -54,137 +82,276 @@ const PROFIT_PER_REP := 1000
 const PROFIT_KEY := "profit_by_nation"
 const PROFIT_AWARDED_KEY := "profit_rep_awarded"
 
-## Speed bonus clamp from docs/50-* §4.2 / docs/20-* §4.4.
-const SPEED_BONUS_MIN := -0.10
-const SPEED_BONUS_MAX := 0.20
+## Speed bonus clamp from docs/50-* §4.3.1 / docs/20-* §4.4: `skill/300`,
+## clamp [0, +0.30] (the old `(S−10)/100` clamp [−0.10, +0.20] is deleted).
+const SPEED_BONUS_MIN := 0.0
+const SPEED_BONUS_MAX := 0.30
+const SPEED_BONUS_DIVISOR := 300.0
 
 ## Set by [method award_xp] when a level was gained. The toast itself belongs
-## to the HUD (T6); the side panel/HUD can read this flag and call
-## [method consume_pending_levelup] to render `char.level_up` once. It is a
-## class static rather than a `player` key so the T17 save block keeps exactly
-## the §4.8 shape; a still-pending toast is not worth persisting.
+## to the HUD; the panel/HUD can read this flag and call
+## [method consume_pending_levelup] to render the level-up banner. It is a
+## class static rather than a `player` key so the save block keeps exactly
+## the §4.8 shape; a still-pending toast is not worth persisting
+## (docs/50-* §4.4, §4.8).
 static var pending_levelup: bool = false
 
-
-# --- Stats (docs/50-* §4.2) ------------------------------------------------
-
-## Raw stat without officer bonuses.
-static func base_stat(stat_name: String) -> int:
-	var p: Dictionary = _player()
-	var stats: Dictionary = p.get("stats", {})
-	return int(stats.get(stat_name, 0))
+## Set by the officer day-tick (`SkillsLib.officer_day_tick`) while any
+## employed officer's loyalty sits below 30 — the §4.5.4 raise-demand event.
+## Session-transient like [member pending_levelup] (the decision lives in
+## `Skills.accept_raise`/`refuse_raise`; never saved, docs/50-* §4.8).
+static var pending_raise: bool = false
 
 
-## `player.stats[name]` plus every assigned officer's role bonus (§4.5).
-static func effective_stat(stat_name: String) -> int:
-	return base_stat(stat_name) + _officer_bonus(stat_name, "")
+## The raise-demand flag setters used by `Skills.officer_day_tick` (this file
+## is lazily loaded there — a parse-time cycle is a GDScript error — and
+## statics are called through the loaded script, not `.set()`).
+static func set_pending_raise(value: bool) -> void:
+	pending_raise = value
 
 
-## The officer part of [method effective_stat] only: every assigned officer's
-## role bonus for `stat_name` (§4.5). Split out so the S18 officers panel can ask
-## "what does this roster contribute?" from one table.
-static func officer_bonus(stat_name: String) -> int:
-	return _officer_bonus(stat_name, "")
+# --- Person attributes (docs/50-* §4.2) -------------------------------------
+
+## The player's own attribute value for `key`, clamped to 1–100.
+static func attribute(key: String) -> int:
+	var values: Dictionary = _player().get("attributes", {})
+	return clampi(int(values.get(key, BASE_ATTRIBUTE)), ATTR_MIN, ATTR_MAX)
 
 
-## [method officer_bonus] with `officer_id` left out — the "what would my stats be
-## without this officer?" half of S18's per-officer derived effect (§4.5).
-static func officer_bonus_excluding(stat_name: String, officer_id: String) -> int:
-	return _officer_bonus(stat_name, officer_id)
+## A copy of the player's five attributes (the §4.8 block; missing keys read
+## as the base 10).
+static func attributes() -> Dictionary:
+	var out: Dictionary = {}
+	for key in ATTRIBUTES:
+		out[key] = attribute(key)
+	return out
 
 
-## Σ role bonuses for `stat_name` over every employed officer except
-## `exclude_id` ("" excludes nobody).
-static func _officer_bonus(stat_name: String, exclude_id: String) -> int:
+# --- New-game Person (docs/50-* §4.1) ---------------------------------------
+
+## Builds the fresh §4.1 player block: attributes base 10 + the nation's
+## `bonus_attribute` +5 + the background's attribute +3 + `attr_alloc`;
+## skills 0 + the nation's `bonus_skill` +5 + the background's skill +5 +
+## `skill_alloc`; `skill_counters` all 0, `alloc_pending` 0, xp 0 / level 1,
+## no officers, the §4.6 reputation map, the two profit accumulators empty
+## and the §4.8 equipment block. `autopilot` is deliberately absent (§4.8:
+## present only while an appointed voyage is active — W5 writes it).
+##
+## Free-point allocations are capped here (§4.1 step ②: per-item +3, totals
+## +5/+3) so a caller cannot break the §4.1 step-4 creation extremes
+## (attribute ≤ 21, skill ≤ 13). An unknown nation/background id simply
+## contributes no bonus.
+static func starting_person(nation_id: String, background_id: String,
+		attr_alloc: Dictionary = {}, skill_alloc: Dictionary = {}) -> Dictionary:
+	var nation: Dictionary = DataLoader.get_nation(nation_id)
+	var background: Dictionary = DataLoader.get_background(background_id)
+	var bonus_attribute := str(nation.get("bonus_attribute", ""))
+	var bonus_skill := str(nation.get("bonus_skill", ""))
+
+	var attributes: Dictionary = {}
+	for key in ATTRIBUTES:
+		var value := BASE_ATTRIBUTE
+		if key == bonus_attribute:
+			value += NATION_BONUS_AMOUNT
+		value += _capped_alloc(attr_alloc, key, ATTR_ALLOC_TOTAL, attr_alloc_total(attr_alloc))
+		attributes[key] = clampi(value, ATTR_MIN, ATTR_MAX)
+
+	var skills: Dictionary = {}
+	var bg_skill_key := str(
+		(background.get("skill_bonus", {}) as Dictionary).keys()[0]
+	) if not (background.get("skill_bonus", {}) as Dictionary).is_empty() else ""
+	for key in SKILL_KEYS:
+		var value := 0
+		if key == bonus_skill:
+			value += NATION_BONUS_AMOUNT
+		if key == bg_skill_key:
+			value += BACKGROUND_SKILL_BONUS
+		value += _capped_alloc(skill_alloc, key, SKILL_ALLOC_TOTAL, skill_alloc_total(skill_alloc))
+		skills[key] = clampi(value, 0, SkillsLib.SKILL_MAX)
+	# The background's attribute +3 lands on exactly the one key the data names.
+	var bg_attr_key := str(
+		(background.get("attribute_bonus", {}) as Dictionary).keys()[0]
+	) if not (background.get("attribute_bonus", {}) as Dictionary).is_empty() else ""
+	if not bg_attr_key.is_empty() and attributes.has(bg_attr_key):
+		attributes[bg_attr_key] = clampi(
+			int(attributes[bg_attr_key]) + BACKGROUND_ATTR_BONUS,
+			ATTR_MIN, ATTR_MAX)
+
+	var reputation: Dictionary = {}
+	for entry in DataLoader.nations_list:
+		reputation[str(entry.get("id", ""))] = 0
+	if not nation.is_empty():
+		reputation[nation_id] = int(nation.get("start_reputation", 0))
+
+	return {
+		"nation_id": nation_id,
+		"background_id": background_id,
+		"attributes": attributes,
+		"skills": skills,
+		"skill_counters": _zero_counters(),
+		"alloc_pending": 0,
+		"xp": 0,
+		"level": 1,
+		"officers": [],
+		"reputation": reputation,
+		PROFIT_KEY: {},
+		PROFIT_AWARDED_KEY: {},
+		"equipment": {"weapon": "", "armor": ""},
+	}
+
+
+## The total free points in an allocation draft (§4.1 step ② bookkeeping).
+static func attr_alloc_total(alloc: Dictionary) -> int:
+	return _alloc_sum(alloc)
+
+
+static func skill_alloc_total(alloc: Dictionary) -> int:
+	return _alloc_sum(alloc)
+
+
+static func _alloc_sum(alloc: Dictionary) -> int:
 	var total := 0
-	var p: Dictionary = _player()
-	var officers: Array = p.get("officers", [])
-	for officer_id in officers:
-		if exclude_id != "" and str(officer_id) == exclude_id:
-			continue
-		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
-		if officer.is_empty():
-			continue
-		var role := str(officer.get("role", ""))
-		var bonuses: Dictionary = ROLE_STAT_BONUS.get(role, {})
-		total += int(bonuses.get(stat_name, 0))
+	for key in alloc:
+		total += maxi(0, int(alloc[key]))
 	return total
 
 
-## docs/50-* §4.2: `(seamanship − 10) / 100`, clamped [−0.10, +0.20].
+## One item of a creation draft, capped per-item at +3 and (when the whole
+## draft exceeds its total budget) trimmed proportionally to the budget —
+## the creation UI enforces "spend all"; this keeps any caller inside §4.1.
+static func _capped_alloc(alloc: Dictionary, key: String, budget: int,
+		draft_total: int) -> int:
+	var requested := maxi(0, int(alloc.get(key, 0)))
+	var capped := mini(requested, ALLOC_ITEM_CAP)
+	if draft_total > budget:
+		capped = mini(capped, requested - (draft_total - budget))
+	return maxi(0, capped)
+
+
+static func _zero_counters() -> Dictionary:
+	var counters: Dictionary = {}
+	for key in SKILL_KEYS:
+		counters[key] = 0
+	return counters
+
+
+# --- Legacy stat shims (docs/50-* §4.2.3 migration) -------------------------
+#
+# The four-stat "leadership/seamanship/combat/navigation/luck" block is
+# REMOVED from the save (v9, no migration) — but un-owned consumers
+# (`battle_sim.gd`, `duel.gd`, the S14/S18 panels) still call these names.
+# Each shim reads the new model through one table:
+#   leadership → attribute charisma; combat → skill swordplay;
+#   seamanship/navigation → the same-named skills; luck → attribute luck.
+# W5/W6 retire the panel callers; W3-C rewires the combat callers to Skills.
+
+## The legacy-name → new-model map (§4.2.3 migration table).
+const LEGACY_STAT_MAP := {
+	"leadership": "charisma",
+	"combat": "swordplay",
+	"seamanship": "seamanship",
+	"navigation": "navigation",
+	"luck": "luck",
+}
+
+## The Phase-1 role table, kept only so un-owned panel code keeps parsing;
+## nothing in the new model reads it (§4.5.3: flat role bonuses are deleted).
+const ROLE_STAT_BONUS := {
+	"navigator": {"navigation": 10},
+	"boatswain": {"seamanship": 10},
+	"gunner": {"gunnery": 10},
+}
+
+
+## Legacy read: the new-model value behind an old stat name (0 for an unknown
+## name). Officers no longer add anything here (§4.5.3 — contribution is
+## per-post and lives in `SkillsLib.officer_contribution`).
+static func base_stat(stat_name: String) -> int:
+	var mapped := str(LEGACY_STAT_MAP.get(stat_name, ""))
+	if mapped.is_empty():
+		return 0
+	if mapped in ATTRIBUTES:
+		return attribute(mapped)
+	return SkillsLib.skill(mapped)
+
+
+## Legacy read: `base_stat` (the officer term is gone; see the shim header).
+static func effective_stat(stat_name: String) -> int:
+	return base_stat(stat_name)
+
+
+## Legacy: the officer contribution to a legacy stat — always 0 (§4.5.3).
+static func officer_bonus(_stat_name: String) -> int:
+	return 0
+
+
+## Legacy twin of [method officer_bonus] (the "without this officer" diff).
+static func officer_bonus_excluding(_stat_name: String, _officer_id: String) -> int:
+	return 0
+
+
+## docs/50-* §4.3.1 / `20-*` §4.4: `skill/300`, clamped [0, +0.30].
 static func speed_bonus() -> float:
-	return speed_bonus_for(effective_stat("seamanship"))
+	return speed_bonus_for(SkillsLib.effective_skill("seamanship"))
 
 
-## [method speed_bonus] for an explicit seamanship value — the pure formula, so
-## the S18 officers panel can difference "with" against "without" one officer and
-## report that officer's own contribution without a second copy of the rule.
+## [method speed_bonus] for an explicit effective seamanship value — the pure
+## formula, so derived-effect rows can difference "with" against "without"
+## one officer without a second copy of the rule.
 static func speed_bonus_for(seamanship: int) -> float:
-	var raw := (seamanship - BASE_STAT) / 100.0
+	var raw := seamanship / SPEED_BONUS_DIVISOR
 	return clampf(raw, SPEED_BONUS_MIN, SPEED_BONUS_MAX)
 
 
-## docs/50-* §4.2 / docs/20-* §4.11: `48 + floor((navigation − 10) / 10)`
-## (Phase-6 grid: the base sighting radius doubled to 48, `10-*` §6.1).
-## The base is the Phase-4 port sighting radius (24 tiles, `20-*` §4.11); the
-## navigation term is unchanged from Phase 1.
+## docs/50-* §4.3.1 / `20-*` §4.11: `48 + floor(navigation skill / 12)`
+## (the Phase-1 `48 + floor((nav − 10)/10)` is migrated, §4.2.3).
 static func sighting_radius() -> int:
-	return sighting_radius_for(effective_stat("navigation"))
+	return sighting_radius_for(SkillsLib.effective_skill("navigation"))
 
 
-## [method sighting_radius] for an explicit navigation value (pure formula; the
-## S18 panel differences it per officer).
+## [method sighting_radius] for an explicit effective navigation value.
 static func sighting_radius_for(navigation: int) -> int:
-	return 48 + int(floor((navigation - BASE_STAT) / 10.0))
+	return 48 + int(floor(navigation / 12.0))
 
 
-## docs/50-* §4.2: `1 − (leadership − 10) / 200`.
+## docs/50-* §4.2.1 charisma row: desertion × `(1 − (CHA−10)/200)` — the
+## formula is unchanged from the leadership era; only the source moved.
 ## The doc gives no lower clamp; a negative multiplier would turn a loss into
-## a gain, so this implementation floors it at 0 (no desertion possible),
-## which is also the reading of "losses × multiplier" at high leadership.
+## a gain, so this implementation floors it at 0 (no desertion possible).
 static func desertion_multiplier() -> float:
-	return loss_multiplier_for(effective_stat("leadership"))
+	return loss_multiplier_for(attribute("charisma"))
 
 
-## [method desertion_multiplier] for an explicit leadership value (pure formula).
-static func loss_multiplier_for(leadership: int) -> float:
-	return maxf(0.0, 1.0 - (leadership - BASE_STAT) / 200.0)
+## [method desertion_multiplier] for an explicit charisma value (pure formula).
+static func loss_multiplier_for(charisma: int) -> float:
+	return maxf(0.0, 1.0 - (charisma - BASE_ATTRIBUTE) / 200.0)
 
 
-## Same formula and clamp as [method desertion_multiplier] (docs/50-* §4.2).
+## Same formula and clamp as [method desertion_multiplier] (docs/50-* §4.2.1).
 static func mutiny_multiplier() -> float:
-	return loss_multiplier_for(effective_stat("leadership"))
+	return loss_multiplier_for(attribute("charisma"))
 
 
-## docs/50-* §4.2: storm damage is ×0.75 once luck reaches 50.
+## docs/50-* §4.2.1 luck row: storm damage × `(1 − luck/250)` — CONTINUOUS
+## (the Phase-1 `luck ≥ 50 → ×0.75` step is deleted; player-only).
 static func storm_damage_multiplier() -> float:
-	return 0.75 if effective_stat("luck") >= 50 else 1.0
+	return 1.0 - attribute("luck") / 250.0
 
 
-## docs/50-* §4.2: storm chance `× (1 − luck / 400)`.
+## docs/50-* §4.2.1: storm chance `× (1 − luck / 400)` (unchanged).
 static func storm_chance_multiplier() -> float:
-	return 1.0 - effective_stat("luck") / 400.0
+	return 1.0 - attribute("luck") / 400.0
 
 
-## Stats granted at new game: base 10 plus the nation's +5 on its own stat.
-## Kept here so the §4.2 table lives in one place (GameState.new_game calls it).
-static func starting_stats(nation_id: String) -> Dictionary:
-	var stats: Dictionary = {}
-	for key in STAT_KEYS:
-		stats[key] = BASE_STAT
-	var bonus_stat := nation_bonus_stat(nation_id)
-	if not bonus_stat.is_empty():
-		stats[bonus_stat] = int(stats[bonus_stat]) + NATION_BONUS_AMOUNT
-	return stats
+## The charisma price multiplier `clamp(1 − (CHA−10)/200, 0.5, 1.0)`
+## (§4.2.1): applied to the officer signing fee (§4.5.2), rumour purchases
+## and bounty pinpoints (`70-*` §4.5 owns those base prices).
+static func charisma_price_multiplier() -> float:
+	return clampf(1.0 - (attribute("charisma") - BASE_ATTRIBUTE) / CHA_PRICE_DIVISOR,
+		CHA_PRICE_MULT_MIN, 1.0)
 
 
-## The stat boosted for a nation, or "" when the id is unknown
-## (docs/50-* §4.2).
-static func nation_bonus_stat(nation_id: String) -> String:
-	return str(NATION_BONUS_STAT.get(nation_id, ""))
-
-
-# --- XP & levels (docs/50-* §4.3) ------------------------------------------
+# --- XP, levels & allocation (docs/50-* §4.4) -------------------------------
 
 ## `floor(sqrt(xp / 50)) + 1`, capped at 20.
 static func level_for_xp(xp: int) -> int:
@@ -205,12 +372,12 @@ static func current_xp() -> int:
 
 static func current_level() -> int:
 	# Derivation wins over the stored cache (docs/50-* §4.8: "stored value is a
-	# cache; derivation wins on mismatch"); the panel therefore can never show
+	# cache; derivation wins on mismatch"); the card therefore can never show
 	# a level that disagrees with the XP it prints next to it.
 	return level_for_xp(current_xp())
 
 
-## XP still needed for the next level, or −1 at the cap (panel hides the row).
+## XP still needed for the next level, or −1 at the cap (the card hides the row).
 static func xp_to_next_level() -> int:
 	var xp := current_xp()
 	var level := level_for_xp(xp)
@@ -219,12 +386,18 @@ static func xp_to_next_level() -> int:
 	return xp_for_level(level + 1) - xp
 
 
-## Adds XP and applies the §4.3 level-up rewards. Non-positive amounts are
-## ignored (a loss-making sale awards 0 XP and must not touch the level cache).
+## The persisted free-point counter (docs/50-* §4.4/§4.8: `alloc_pending`).
+static func alloc_pending() -> int:
+	return maxi(0, int(_player().get("alloc_pending", 0)))
+
+
+## Adds XP and applies the §4.4 level rule. Non-positive amounts are ignored
+## (a loss-making sale awards 0 XP and must not touch the level cache).
 ##
-## On each level gained: +1 seamanship and +1 to the player's nation-bonus
-## stat, clamped to the §4.2 1–100 stat range. Gaining several levels at once
-## applies the reward once per level, matching "on each level-up".
+## On each level gained: `alloc_pending += 2` (the Phase-1 auto-grant of
+## +1 seamanship / +1 nation stat is deleted, §4.4). Gaining several levels
+## at once applies the grant once per level, matching "on each level-up";
+## past the level cap no further points are granted (the derivation clamps).
 static func award_xp(amount: int) -> void:
 	if amount <= 0:
 		return
@@ -239,10 +412,11 @@ static func award_xp(amount: int) -> void:
 	var gained := after - before
 	if gained <= 0:
 		return
-	_apply_level_up(p, gained)
+	p["alloc_pending"] = alloc_pending() + ALLOC_PER_LEVEL * gained
 	pending_levelup = true
-	# Toast rendering lands with the HUD (T6, docs/80-* §4.7); log meanwhile.
-	print("Character: level up to %d (xp %d)" % [after, int(p["xp"])])
+	# Toast + badge rendering lands with the W6 UI (`char.level_up.alloc`).
+	print("Character: level up to %d (xp %d, alloc_pending %d)"
+		% [after, int(p["xp"]), int(p["alloc_pending"])])
 
 
 ## Reads and clears the pending-level-up flag; true exactly once per award.
@@ -252,7 +426,7 @@ static func consume_pending_levelup() -> bool:
 	return was_pending
 
 
-## docs/50-* §4.3 locked profit-XP rule:
+## docs/50-* §4.4 locked profit-XP rule:
 ## per-unit profit = max(0, sell_price − floor(base_price × 0.7)),
 ## profit = qty × per-unit, XP = floor(profit / 100).
 static func add_profit_xp(sell_price: int, base_price: int, qty: int) -> void:
@@ -261,22 +435,39 @@ static func add_profit_xp(sell_price: int, base_price: int, qty: int) -> void:
 	award_xp(int(floor(profit / 100.0)))
 
 
-static func _apply_level_up(p: Dictionary, gained: int) -> void:
-	var stats: Dictionary = p.get("stats", {})
-	if stats.is_empty():
-		return
-	stats["seamanship"] = clampi(
-		int(stats.get("seamanship", BASE_STAT)) + gained, 1, 100
-	)
-	var bonus_stat := nation_bonus_stat(str(p.get("nation_id", "")))
-	if not bonus_stat.is_empty():
-		stats[bonus_stat] = clampi(
-			int(stats.get(bonus_stat, BASE_STAT)) + gained, 1, 100
-		)
-	p["stats"] = stats
+## The §4.4 allocation draft: `{attribute_key: +n}`. Accepted only when every
+## key is a real attribute, every amount is positive, the total fits the
+## pending counter AND no attribute would pass 100 — a draft that would
+## overflow any attribute is refused whole (the caller reports it; points
+## are never partially spent, §4.4/§6). On success the attributes move and
+## the spent points leave `alloc_pending`.
+static func allocate(draft: Dictionary) -> bool:
+	if draft.is_empty():
+		return false
+	var pending := alloc_pending()
+	var total := 0
+	for key in draft:
+		if not (key in ATTRIBUTES):
+			return false
+		var amount := int(draft[key])
+		if amount <= 0:
+			return false
+		total += amount
+		if attribute(key) + amount > ATTR_MAX:
+			return false
+	if total > pending:
+		return false
+	var p: Dictionary = _player()
+	var values: Dictionary = p.get("attributes", {})
+	for key in draft:
+		values[key] = clampi(int(values.get(key, BASE_ATTRIBUTE))
+			+ int(draft[key]), ATTR_MIN, ATTR_MAX)
+	p["attributes"] = values
+	p["alloc_pending"] = pending - total
+	return true
 
 
-# --- Officers (docs/50-* §4.4–§4.5) ----------------------------------------
+# --- Officers (docs/50-* §4.5) ----------------------------------------------
 
 static func employed_officers() -> Array:
 	var officers: Array = _player().get("officers", [])
@@ -291,17 +482,24 @@ static func is_employed(officer_id: String) -> bool:
 	return officer_id in employed_officers()
 
 
-## One-time signing cost, `wage_daily × 10` (docs/50-* §4.4).
+## The §4.2.1 charisma price multiplier applied to the one-time signing cost
+## `ceil(wage_daily × 10)` (docs/50-* §4.5.2). Computed in exact integer
+## arithmetic (`wage × 10 × (210 − CHA) / 200` after the multiplier's clamps)
+## so float noise can never bump a boundary fee up a whole gold.
 static func recruit_cost(officer_id: String) -> int:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	if officer.is_empty():
 		return 0
-	return int(officer.get("wage_daily", 0)) * 10
+	# multiplier = clamp(1 − (CHA−10)/200, 0.5, 1.0) → numerator ∈ [100, 200].
+	var numerator := clampi(210 - attribute("charisma"), 100, 200)
+	var product := int(officer.get("wage_daily", 0)) * 10 * numerator
+	return (product + 199) / 200  # integer ceil(product / 200)
 
 
 ## True when the officer exists, is not already aboard, there is roster room
-## (OFFICER_MAX = 3) and the signing cost is affordable — the §6 edge rule
-## makes the recruit button disabled (with the price shown) when gold is short.
+## (OFFICER_MAX = 12, §4.5.2) and the signing cost is affordable — the §6
+## edge rule keeps the recruit button disabled (with the price shown) when
+## gold is short.
 static func can_recruit(officer_id: String) -> bool:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	if officer.is_empty():
@@ -313,8 +511,10 @@ static func can_recruit(officer_id: String) -> bool:
 	return GameState.gold >= recruit_cost(officer_id)
 
 
-## Adds the officer to `player.officers` and pays the signing cost.
-## Returns false (state untouched) whenever [method can_recruit] is false.
+## Adds the officer to `player.officers` and pays the signing cost (§4.5.5).
+## Seeds the §4.8/`90-*` §8 `officer_states` entry: loyalty 50, fresh clocks,
+## idle (`post_id = ""`), `wage_mult` 1.0. Returns false (state untouched)
+## whenever [method can_recruit] is false.
 static func recruit(officer_id: String) -> bool:
 	if not can_recruit(officer_id):
 		return false
@@ -324,11 +524,23 @@ static func recruit(officer_id: String) -> bool:
 	var officers: Array = p.get("officers", [])
 	officers.append(officer_id)
 	p["officers"] = officers
+	GameState.officer_states[officer_id] = {
+		"loyalty": SkillsLib.LOYALTY_START,
+		"sea_days": 0,
+		"post_id": "",
+		"ship_id": "",
+		"talk_cd_day": 0,
+		"gift_cd_day": 0,
+		"defeats": 0,
+		"wage_mult": 1.0,
+	}
 	print("Character: recruited %s for %dg" % [officer_id, cost])
 	return true
 
 
-## Removes the officer; no severance (docs/50-* §4.4).
+## Removes the officer; no severance (docs/50-* §4.5.5). The state entry is
+## cleared with the roster row, which also frees any post the officer held
+## (the post is derived from the state, §4.8) and resets a re-hire to 50.
 static func dismiss(officer_id: String) -> bool:
 	var p: Dictionary = _player()
 	var officers: Array = p.get("officers", [])
@@ -337,20 +549,27 @@ static func dismiss(officer_id: String) -> bool:
 		return false
 	officers.remove_at(index)
 	p["officers"] = officers
+	GameState.officer_states.erase(officer_id)
 	print("Character: dismissed %s" % officer_id)
 	return true
 
 
-## Σ `wage_daily` for the daily ledger (docs/50-* §4.4; consumed by T7).
+## Σ `wage_daily × wage_mult` for the daily ledger (docs/50-* §4.5.2; the
+## ×1.25 raise event lives in the §4.5.4 `wage_mult`). Officer skills,
+## loyalty and posts live in `SkillsLib`.
 static func officer_wages() -> int:
 	var total := 0
 	for officer_id in employed_officers():
 		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
-		total += int(officer.get("wage_daily", 0))
+		var mult := 1.0
+		var state: Dictionary = GameState.officer_states.get(str(officer_id), {})
+		if not state.is_empty():
+			mult = float(state.get("wage_mult", 1.0))
+		total += int(round(int(officer.get("wage_daily", 0)) * mult))
 	return total
 
 
-# --- Reputation (docs/50-* §4.6) -------------------------------------------
+# --- Reputation (docs/50-* §4.6) --------------------------------------------
 
 static func reputation(nation_id: String) -> int:
 	var rep: Dictionary = _player().get("reputation", {})

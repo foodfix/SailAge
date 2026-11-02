@@ -1,48 +1,112 @@
 extends Node
-## T16 acceptance tests (docs/50-* §7). Headless scene test:
+## Phase-8 W3-A Person-model acceptance tests
+## (docs/50-CHARACTER-AND-PROGRESSION.md §4.1–§4.6, §4.8, §5, §7).
 ##
 ##   godot --headless res://tools/test_character.tscn
 ##
-## Exits 0 when every check passes, 1 otherwise. Kept as a proper
-## `tools/test_*.gd` + `.tscn` pair so the T16 done-when list can be re-run.
+## Exits 0 when every check passes, 1 otherwise. The S14/S18 panel and S2
+## scene sections that lived here through Phase 7 are re-homed with the W5/W6
+## UI rebuilds; this suite pins the model only.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
-const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
-const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
+const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
 
 ## Six capitals known at new game (docs/20-* §4.11).
 const CAPITALS := ["lisbon", "seville", "london", "amsterdam", "istanbul", "venice"]
 const NATION_ORDER := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
-const BONUS_STAT := {
-	"portugal": "navigation",
-	"spain": "leadership",
-	"england": "combat",
-	"holland": "seamanship",
-	"ottoman": "leadership",
-	"italy": "luck",
-}
 
 var _failures: Array[String] = []
 var _checks := 0
 
+## Fake filler officers for the OFFICER_MAX = 12 capacity test (data-only
+## fixtures, injected and removed by the suite).
+const FILLERS := 13
+
 
 func _ready() -> void:
+	_inject_fillers()
 	_test_level_formula()
-	_test_effective_stats()
-	_test_speed_bonus()
-	_test_sighting_radius()
-	_test_other_effects()
+	_test_attribute_reads()
+	_test_allocation()
+	_test_award_xp_alloc()
 	_test_profit_xp()
-	_test_award_xp_levelup()
-	_test_officers()
+	_test_profit_reputation()
+	_test_legacy_shims()
+	_test_new_game_person()
+	_test_creation_extremes()
 	_test_new_game_all_nations()
-	_test_nationality_scene_data_driven()
-	_test_character_panel_live()
-	_test_character_panel_quests_tab()
+	_test_officers_cap_and_states()
+	_test_signing_price_mult()
+	_remove_fillers()
 	_report()
 
 
-# --- §4.3 level formula ----------------------------------------------------
+# --- Fixtures ---------------------------------------------------------------
+
+## A new-shape Person block with explicit attributes/skills.
+func _set_player(attributes: Dictionary = {}, skills: Dictionary = {},
+		officers: Array = []) -> void:
+	GameState.player = {
+		"nation_id": "portugal",
+		"background_id": "",
+		"attributes": {
+			"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10,
+		},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 0,
+		"xp": 0,
+		"level": 1,
+		"officers": officers.duplicate(),
+		"reputation": {"portugal": 20, "spain": 0, "england": 0,
+			"holland": 0, "ottoman": 0, "italy": 0},
+		"profit_by_nation": {},
+		"profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
+	}
+	for key in attributes:
+		GameState.player["attributes"][key] = attributes[key]
+	for key in skills:
+		GameState.player["skills"][key] = skills[key]
+	GameState.officer_states = {}
+
+
+func _inject_fillers() -> void:
+	for i in FILLERS:
+		var officer := {
+			"id": "off_test_fill_%02d" % i, "role": "",
+			"main_skill": "seamanship", "wage_daily": 20,
+			"recruit_ports": ["lisbon"], "personality": [],
+			"attributes": {"constitution": 10, "intellect": 10,
+				"charisma": 10, "courage": 40, "luck": 10},
+			"skills": {"seamanship": 30, "navigation": 0, "swordplay": 0,
+				"gunnery": 0, "appraisal": 0, "negotiation": 0,
+				"cartography": 0, "rumour": 0, "medicine": 0, "carpentry": 0,
+				"cooking": 0},
+			"name": {"zh": "试·补充 %d" % i, "en": "Test Filler %d" % i},
+			"bio": {"zh": "测试", "en": "Fixture"},
+		}
+		var card: Dictionary = (officer as Dictionary).duplicate(true)
+		DataLoader.officers_list.append(card)
+		DataLoader.officers[card["id"]] = card
+
+
+func _remove_fillers() -> void:
+	for i in FILLERS:
+		var id := "off_test_fill_%02d" % i
+		DataLoader.officers_list.erase(DataLoader.officers.get(id, {}))
+		DataLoader.officers.erase(id)
+		GameState.officer_states.erase(id)
+
+
+# --- §4.4 level formula (unchanged from Phase 1) ----------------------------
 
 func _test_level_formula() -> void:
 	var rows := [
@@ -56,7 +120,6 @@ func _test_level_formula() -> void:
 				row[0], row[1], CharacterLib.level_for_xp(row[0])
 			]
 		)
-	# xp_for_level is the inverse at every level up to the cap.
 	for level in range(1, 21):
 		_check(
 			CharacterLib.level_for_xp(CharacterLib.xp_for_level(level)) == level,
@@ -64,257 +127,305 @@ func _test_level_formula() -> void:
 				level, CharacterLib.xp_for_level(level)
 			]
 		)
-	# "next at" rows from docs/50-* §5.
 	_check(CharacterLib.xp_for_level(2) == 50, "next_at after xp 0 is 50")
 	_check(CharacterLib.xp_for_level(20) == 18050, "level 20 needs 18050 xp")
 
 
-# --- §4.2 effective stats --------------------------------------------------
+# --- §4.2 attribute reads and bounds ----------------------------------------
 
-func _set_player(stats: Dictionary, officers: Array = []) -> void:
-	GameState.player = {
-		"nation_id": "portugal",
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
-		},
-		"xp": 0,
-		"level": 1,
-		"officers": officers.duplicate(),
-		"reputation": {"portugal": 20, "spain": 0, "england": 0,
-			"holland": 0, "ottoman": 0, "italy": 0},
-	}
-	for key in stats:
-		GameState.player["stats"][key] = stats[key]
-
-
-func _test_effective_stats() -> void:
-	_set_player({})
-	_check(CharacterLib.effective_stat("navigation") == 10,
-		"effective navigation at base 10 is 10")
-	_set_player({"navigation": 15})
-	_check(CharacterLib.effective_stat("navigation") == 15,
-		"no officers: effective == base (15)")
-
-	# One navigator (+10 navigation), two navigators stack to +20 (§4.5).
-	_set_player({"navigation": 15}, ["off_mateus_alvares"])
-	_check(CharacterLib.effective_stat("navigation") == 25,
-		"one navigator: 15 + 10 == 25 (got %d)"
-		% CharacterLib.effective_stat("navigation"))
-	_set_player({"navigation": 15}, ["off_mateus_alvares", "off_marco_bellini"])
-	_check(CharacterLib.effective_stat("navigation") == 35,
-		"two navigators: 15 + 20 == 35 (got %d)"
-		% CharacterLib.effective_stat("navigation"))
-
-	# Role bonuses are per-stat only.
-	_set_player({}, ["off_thomas_reed"])  # gunner
-	_check(CharacterLib.effective_stat("combat") == 20, "gunner: combat 10 + 10 == 20")
-	_check(CharacterLib.effective_stat("seamanship") == 10,
-		"gunner leaves seamanship untouched")
-	_set_player({}, ["off_jan_de_vries"])  # boatswain
-	_check(CharacterLib.effective_stat("seamanship") == 20,
-		"boatswain: seamanship 10 + 10 == 20")
-
-	# §5 worked example: Portugal start + Mateus Álvares aboard.
-	_set_player({"navigation": 15}, ["off_mateus_alvares"])
-	_check(CharacterLib.effective_stat("navigation") == 25,
-		"§5 example navigation effective 25")
-	_check(CharacterLib.sighting_radius() == 49, "§5 example sighting radius 49")
-	_check(CharacterLib.speed_bonus() == 0.0, "§5 example speed bonus 0.0")
+func _test_attribute_reads() -> void:
+	_set_player()
+	for key in CharacterLib.ATTRIBUTES:
+		_check(CharacterLib.attribute(key) == 10,
+			"a base attribute reads 10 (%s)" % key)
+	_check(CharacterLib.ATTRIBUTES == ["constitution", "intellect", "charisma",
+			"courage", "luck"], "the five attribute keys are pinned")
+	_check(CharacterLib.SKILL_KEYS == SkillsLib.KEYS,
+		"SKILL_KEYS is single-sourced through Skills")
+	_check(CharacterLib.BASE_ATTRIBUTE == 10 and CharacterLib.ATTR_MAX == 100,
+		"the attribute bounds are base 10 / max 100")
+	_set_player({"charisma": 20, "luck": 100})
+	var attrs: Dictionary = CharacterLib.attributes()
+	_check(attrs["charisma"] == 20 and attrs["luck"] == 100
+		and attrs.size() == 5, "attributes() copies the five values")
+	_check(CharacterLib.attribute("charisma") == 20,
+		"attribute() reads the stored 20")
+	GameState.player["attributes"]["luck"] = 500
+	_check(CharacterLib.attribute("luck") == 100,
+		"an over-range stored attribute clamps at 100 (§6)")
+	GameState.player["attributes"].erase("courage")
+	_check(CharacterLib.attribute("courage") == 10,
+		"a missing attribute key reads the base 10")
 
 
-# --- §4.2 speed bonus boundaries ------------------------------------------
+# --- §4.4 allocation: draft / confirm / refuse / alloc_pending --------------
 
-func _test_speed_bonus() -> void:
-	var rows := [
-		[10, 0.0], [20, 0.10], [0, -0.10], [5, -0.05],
-		[100, 0.20], [50, 0.20], [30, 0.20], [12, 0.02],
-	]
-	for row in rows:
-		_set_player({"seamanship": row[0]})
-		var got := CharacterLib.speed_bonus()
-		_check(is_equal_approx(got, row[1]),
-			"speed_bonus(seamanship %d) == %.2f (got %.4f)"
-			% [row[0], row[1], got])
-
-
-# --- §4.2 sighting radius -------------------------------------------------
-
-func _test_sighting_radius() -> void:
-	# Phase-6: the base is 48 tiles (`20-*` §4.11, `10-*` §6.1); the navigation
-	# term `floor((navigation − 10)/10)` is unchanged from Phase 1.
-	var rows := [[10, 48], [20, 49], [25, 49], [30, 50], [19, 48], [40, 51]]
-	for row in rows:
-		_set_player({"navigation": row[0]})
-		_check(CharacterLib.sighting_radius() == row[1],
-			"sighting_radius(navigation %d) == %d (got %d)"
-			% [row[0], row[1], CharacterLib.sighting_radius()])
-
-
-# --- §4.2 leadership / luck effects ---------------------------------------
-
-func _test_other_effects() -> void:
-	_set_player({"leadership": 10})
-	_check(is_equal_approx(CharacterLib.desertion_multiplier(), 1.0),
-		"desertion ×1.0 at leadership 10")
-	_check(is_equal_approx(CharacterLib.mutiny_multiplier(), 1.0),
-		"mutiny ×1.0 at leadership 10")
-	_set_player({"leadership": 30})
-	_check(is_equal_approx(CharacterLib.desertion_multiplier(), 0.9),
-		"desertion ×0.9 at leadership 30")
-	_set_player({"leadership": 100})
-	_check(is_equal_approx(CharacterLib.desertion_multiplier(), 0.55),
-		"desertion ×0.55 at leadership 100")
-	# Below base leadership the multiplier is above 1 (more losses); the clamp
-	# chosen in character.gd only guarantees it never goes negative (§4.2 has
-	# no lower bound, a negative multiplier would flip the loss into a gain).
-	_set_player({"leadership": 1})
-	_check(is_equal_approx(CharacterLib.desertion_multiplier(), 1.045),
-		"desertion ×1.045 at leadership 1 (above base → more losses)")
-	_set_player({"leadership": 400})
-	var clamped := CharacterLib.desertion_multiplier()
-	_check(clamped == 0.0, "desertion multiplier clamped at 0.0 (got %.3f)" % clamped)
-
-	_set_player({"luck": 10})
-	_check(is_equal_approx(CharacterLib.storm_damage_multiplier(), 1.0),
-		"storm damage ×1.0 at luck 10")
-	_set_player({"luck": 49})
-	_check(is_equal_approx(CharacterLib.storm_damage_multiplier(), 1.0),
-		"storm damage ×1.0 at luck 49")
-	_set_player({"luck": 50})
-	_check(is_equal_approx(CharacterLib.storm_damage_multiplier(), 0.75),
-		"storm damage ×0.75 at luck 50 (boundary)")
-	_set_player({"luck": 10})
-	_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 0.975),
-		"storm chance ×0.975 at luck 10")
-	_set_player({"luck": 100})
-	_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 0.75),
-		"storm chance ×0.75 at luck 100")
+func _test_allocation() -> void:
+	_set_player({"charisma": 40})
+	GameState.player["alloc_pending"] = 3
+	# A draft is data: nothing moves until allocate() confirms it.
+	var draft := {"charisma": 2}
+	_check(CharacterLib.attribute("charisma") == 40,
+		"building a draft does not move attributes")
+	_check(CharacterLib.allocate(draft), "a fitting draft allocates")
+	_check(CharacterLib.attribute("charisma") == 42
+		and CharacterLib.attribute("courage") == 10,
+		"the confirmed draft moved exactly its own attribute")
+	_check(CharacterLib.alloc_pending() == 1, "spent points left alloc_pending")
+	_check(int(GameState.player["alloc_pending"]) == 1,
+		"alloc_pending is the persisted player-block key (§4.8)")
+	# Insufficient pending: refused whole.
+	_check(not CharacterLib.allocate({"charisma": 2}),
+		"a draft larger than the pending counter is refused")
+	_check(CharacterLib.attribute("charisma") == 42,
+		"a refused draft changes nothing (§4.4 rollback = no-op)")
+	# Any attribute passing 100 refuses the WHOLE draft.
+	_set_player({"charisma": 99})
+	GameState.player["alloc_pending"] = 5
+	_check(not CharacterLib.allocate({"charisma": 2}),
+		"a +2 over 100 refuses the whole draft")
+	_check(CharacterLib.attribute("charisma") == 99
+		and CharacterLib.alloc_pending() == 5,
+		"the refused overflow spent no points")
+	_check(CharacterLib.allocate({"charisma": 1}),
+		"a +1 that lands exactly on 100 is allowed")
+	_check(CharacterLib.attribute("charisma") == 100,
+		"the attribute sits at its 100 clamp (§6: the stepper disables)")
+	# Malformed drafts are refused.
+	_check(not CharacterLib.allocate({}), "an empty draft is refused")
+	_check(not CharacterLib.allocate({"not_an_attr": 1}),
+		"an unknown attribute key is refused")
+	_check(not CharacterLib.allocate({"luck": 0}), "a zero amount is refused")
+	_check(not CharacterLib.allocate({"luck": -1}), "a negative amount is refused")
 
 
-# --- §4.3 profit XP -------------------------------------------------------
+# --- §4.4 level-up grants +2 alloc_pending ----------------------------------
+
+func _test_award_xp_alloc() -> void:
+	_set_player({}, {"seamanship": 8})
+	GameState.player["xp"] = 49
+	GameState.player["level"] = 1
+	CharacterLib.pending_levelup = false
+	CharacterLib.award_xp(1)
+	_check(CharacterLib.current_level() == 2, "xp 49 → 50 gives level 2")
+	_check(int(GameState.player.get("level", 0)) == 2,
+		"the stored level cache is written (§4.8)")
+	_check(CharacterLib.alloc_pending() == 2,
+		"one level grants exactly +2 alloc_pending (§4.4)")
+	_check(CharacterLib.attribute("charisma") == 10,
+		"level-up no longer auto-grants the Phase-1 stat points (§4.4)")
+	_check(SkillsLib.skill("seamanship") == 8,
+		"skills never allocate from levels (§4.3)")
+	_check(CharacterLib.pending_levelup, "pending_levelup raised for the toast")
+	_check(CharacterLib.consume_pending_levelup()
+		and not CharacterLib.pending_levelup, "pending_levelup consumed once")
+	# The auto-grant is per level gained, once each.
+	_set_player()
+	CharacterLib.award_xp(450)  # level 1 → 4
+	_check(CharacterLib.current_level() == 4, "450 xp → level 4")
+	_check(CharacterLib.alloc_pending() == 6, "3 level-ups grant 6 points")
+	# At the cap no further points accrue.
+	_set_player()
+	GameState.player["xp"] = 999999  # level 20
+	CharacterLib.pending_levelup = false
+	CharacterLib.award_xp(1000)
+	_check(CharacterLib.current_level() == 20, "the level clamps at 20")
+	_check(CharacterLib.alloc_pending() == 0,
+		"past the cap no alloc_pending is granted (§4.4)")
+	_check(not CharacterLib.pending_levelup, "a capped award fires no toast")
+	# Non-positive amounts are ignored.
+	_set_player()
+	CharacterLib.award_xp(0)
+	CharacterLib.award_xp(-5)
+	_check(CharacterLib.current_xp() == 0 and CharacterLib.alloc_pending() == 0,
+		"award_xp(0/negative) is a no-op")
+
+
+# --- §4.4 profit XP (unchanged) ---------------------------------------------
 
 func _test_profit_xp() -> void:
-	# Locked rule: sell 31 vs base 30, qty 10 → 31 − floor(21) = 10/unit,
-	# profit 100 → +1 XP.
-	_set_player({})
+	_set_player()
 	CharacterLib.add_profit_xp(31, 30, 10)
 	_check(CharacterLib.current_xp() == 1,
 		"add_profit_xp(31,30,10) awards 1 XP (got %d)" % CharacterLib.current_xp())
-
-	# Loss-making sale: per-unit floors at 0, XP never decreases.
-	_set_player({})
+	_set_player()
 	GameState.player["xp"] = 37
 	CharacterLib.add_profit_xp(10, 30, 10)
 	_check(CharacterLib.current_xp() == 37,
-		"loss-making sale leaves xp at 37 (got %d)" % CharacterLib.current_xp())
-
-	# Floor on the profit term: 249g profit → 2 XP.
-	_set_player({})
+		"a loss-making sale leaves xp at 37 (got %d)" % CharacterLib.current_xp())
+	_set_player()
 	CharacterLib.add_profit_xp(55, 30, 9)  # per-unit 34, profit 306 → 3
 	_check(CharacterLib.current_xp() == 3,
 		"add_profit_xp(55,30,9) awards 3 XP (got %d)" % CharacterLib.current_xp())
 
 
-# --- §4.3 level-up rewards ------------------------------------------------
+# --- §4.6 reputation ---------------------------------------------------------
 
-func _test_award_xp_levelup() -> void:
-	_set_player({"seamanship": 10, "navigation": 15})
-	GameState.player["nation_id"] = "portugal"
-	GameState.player["xp"] = 49
-	GameState.player["level"] = 1
-	CharacterLib.pending_levelup = false
-	CharacterLib.award_xp(1)
-	_check(CharacterLib.level_for_xp(CharacterLib.current_xp()) == 2,
-		"xp 49 → 50 gives level 2")
-	_check(CharacterLib.current_level() == 2, "level cache updated to 2")
-	_check(int(GameState.player.get("level", 0)) == 2,
-		"stored level cache written to the save block (got %d)"
-		% int(GameState.player.get("level", 0)))
-	_check(CharacterLib.base_stat("seamanship") == 11,
-		"level-up: seamanship 10 → 11 (got %d)"
-		% CharacterLib.base_stat("seamanship"))
-	_check(CharacterLib.base_stat("navigation") == 16,
-		"level-up: nation stat navigation 15 → 16 (got %d)"
-		% CharacterLib.base_stat("navigation"))
-	_check(CharacterLib.base_stat("combat") == 10,
-		"level-up leaves non-nation stats alone")
-	_check(CharacterLib.pending_levelup, "pending_levelup raised for the HUD toast")
-	_check(CharacterLib.consume_pending_levelup() and
-		not CharacterLib.pending_levelup, "pending_levelup consumed once")
-
-	# No XP source at zero/negative amount must not fire rewards.
-	_set_player({})
-	CharacterLib.award_xp(0)
-	_check(CharacterLib.current_xp() == 0 and CharacterLib.base_stat("seamanship") == 10,
-		"award_xp(0) is a no-op")
-
-	# Multi-level jump applies the reward once per level.
-	_set_player({"seamanship": 10, "navigation": 15})
-	GameState.player["nation_id"] = "portugal"
-	GameState.player["xp"] = 0
-	CharacterLib.award_xp(450)  # level 1 → 4
-	_check(CharacterLib.current_level() == 4, "450 xp → level 4")
-	_check(CharacterLib.base_stat("seamanship") == 13,
-		"3 level-ups: seamanship 10 → 13 (got %d)"
-		% CharacterLib.base_stat("seamanship"))
-	_check(CharacterLib.base_stat("navigation") == 18,
-		"3 level-ups: nation stat navigation 15 → 18 (got %d)"
-		% CharacterLib.base_stat("navigation"))
-
-	# Holland's nation stat IS seamanship, so its level reward doubles there.
-	_set_player({"seamanship": 10})
-	GameState.player["nation_id"] = "holland"
-	GameState.player["xp"] = 0
-	CharacterLib.award_xp(450)
-	_check(CharacterLib.base_stat("seamanship") == 16,
-		"holland 3 level-ups: seamanship 10 → 16 (got %d)"
-		% CharacterLib.base_stat("seamanship"))
+func _test_profit_reputation() -> void:
+	_set_player()
+	# The 1,000g threshold carries across transactions.
+	_check(CharacterLib.add_profit_reputation("spain", 600) == 0,
+		"600g pays nothing yet")
+	_check(CharacterLib.add_profit_reputation("spain", 400) == 1,
+		"the next 400g completes the 1,000g threshold")
+	_check(CharacterLib.reputation("spain") == 1
+		and CharacterLib.profit_by_nation("spain") == 1000
+		and int(GameState.player["profit_rep_awarded"]["spain"]) == 1,
+		"the accumulator and the paid marker are both stored (§4.6)")
+	_check(CharacterLib.add_profit_reputation("spain", 999) == 0,
+		"a sub-threshold repeat pays nothing (idempotent)")
+	_check(CharacterLib.add_profit_reputation("spain", 1) == 1,
+		"the stored counter makes the next point exact")
+	_check(CharacterLib.add_reputation("spain", 200) == 100,
+		"add_reputation clamps at +100")
+	_check(CharacterLib.add_reputation("spain", -500) == -100,
+		"add_reputation clamps at −100")
 
 
-# --- §4.4 officers --------------------------------------------------------
+# --- §4.2.3 legacy shims -----------------------------------------------------
 
-func _test_officers() -> void:
-	_set_player({})
-	GameState.gold = 10000
-	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 300,
-		"recruit cost = wage 30 × 10 = 300")
-	_check(CharacterLib.can_recruit("off_mateus_alvares"), "can recruit when rich")
-	_check(CharacterLib.recruit("off_mateus_alvares"), "recruit succeeds")
-	_check(GameState.gold == 9700, "signing fee deducted (got %d)" % GameState.gold)
-	_check(CharacterLib.is_employed("off_mateus_alvares"), "officer is employed")
-	_check(not CharacterLib.can_recruit("off_mateus_alvares"),
-		"cannot recruit an employed officer")
+func _test_legacy_shims() -> void:
+	_set_player({"charisma": 40, "luck": 10}, {"swordplay": 22,
+		"seamanship": 30, "navigation": 24})
+	_check(CharacterLib.base_stat("leadership") == 40,
+		"legacy leadership reads the charisma attribute")
+	_check(CharacterLib.effective_stat("leadership") == 40,
+		"effective_stat == base_stat (the officer term is gone, §4.5.3)")
+	_check(CharacterLib.base_stat("combat") == 22,
+		"legacy combat reads the swordplay skill")
+	_check(CharacterLib.base_stat("seamanship") == 30
+		and CharacterLib.base_stat("navigation") == 24,
+		"legacy seamanship/navigation read the same-named skills")
+	_check(CharacterLib.base_stat("luck") == 10, "legacy luck reads the attribute")
+	_check(CharacterLib.base_stat("not_a_stat") == 0, "an unknown name reads 0")
+	_check(CharacterLib.officer_bonus("navigation") == 0,
+		"officer_bonus() returns 0 (ROLE_STAT_BONUS deleted, §4.5.3)")
+	_check(CharacterLib.officer_bonus_excluding("navigation", "x") == 0,
+		"officer_bonus_excluding() returns 0")
+	# The pure formulas with their new shapes.
+	for row in [[0, 0.0], [15, 0.05], [45, 0.15], [90, 0.30], [300, 0.30]]:
+		var got := CharacterLib.speed_bonus_for(row[0])
+		_check(is_equal_approx(got, row[1]),
+			"speed_bonus_for(%d) == %.2f clamp [0, +0.30] (got %.4f)"
+			% [row[0], row[1], got])
+	for row in [[0, 48], [11, 48], [12, 49], [24, 50], [96, 56]]:
+		_check(CharacterLib.sighting_radius_for(row[0]) == row[1],
+			"sighting_radius_for(%d) == %d = 48 + floor(skill/12)"
+			% [row[0], row[1]])
+	for row in [[10, 1.0], [30, 0.9], [100, 0.55], [1, 1.045]]:
+		_check(is_equal_approx(CharacterLib.loss_multiplier_for(row[0]), row[1]),
+			"loss_multiplier_for(%d) == %.3f (formula unchanged, charisma now)"
+			% [row[0], row[1]])
+	_check(CharacterLib.desertion_multiplier() == CharacterLib.mutiny_multiplier(),
+		"desertion and mutiny share the charisma multiplier")
+	# Storm damage is CONTINUOUS now — no luck ≥ 50 step (§4.2.1).
+	for row in [[10, 0.96], [49, 0.804], [50, 0.80], [100, 0.60]]:
+		_set_player({"luck": row[0]})
+		_check(is_equal_approx(CharacterLib.storm_damage_multiplier(), row[1]),
+			"storm damage ×(1 − luck/250) at luck %d == %.3f (continuous)"
+			% [row[0], row[1]])
+	# The effective-value wrappers read the skills (re-set: the storm rows
+	# above rebuilt the fixture).
+	_set_player({}, {"seamanship": 30, "navigation": 24})
+	_storm_chance_rows()
+	_set_player({}, {"seamanship": 30, "navigation": 24})
+	_check(is_equal_approx(CharacterLib.speed_bonus(), 0.10),
+		"speed_bonus() reads the effective seamanship (30/300)")
+	_check(CharacterLib.sighting_radius() == 50,
+		"sighting_radius() reads the effective navigation (48 + 24/12)")
 
-	# OFFICER_MAX = 3.
-	CharacterLib.recruit("off_diego_fernandez")
-	CharacterLib.recruit("off_thomas_reed")
-	_check(CharacterLib.officer_count() == 3, "roster holds 3 officers")
-	_check(not CharacterLib.can_recruit("off_jan_de_vries"),
-		"4th officer is blocked by OFFICER_MAX")
-	_check(not CharacterLib.recruit("off_jan_de_vries"),
-		"recruit() returns false when the roster is full")
 
-	# Dismiss returns the officer to the pool.
-	_check(CharacterLib.dismiss("off_thomas_reed"), "dismiss succeeds")
-	_check(CharacterLib.officer_count() == 2, "roster back to 2 after dismiss")
-	_check(CharacterLib.can_recruit("off_thomas_reed"),
-		"dismissed officer is recruitable again")
-	_check(not CharacterLib.dismiss("off_thomas_reed"),
-		"dismissing an un-employed officer returns false")
-
-	# Gold shortfall → disabled (§6 edge rule).
-	GameState.gold = 100
-	_check(not CharacterLib.can_recruit("off_thomas_reed"),
-		"recruit blocked when gold < signing cost")
-
-	# Officer wages for the ledger.
-	_set_player({}, ["off_mateus_alvares", "off_diego_fernandez"])
-	_check(CharacterLib.officer_wages() == 58, "officer wages 30 + 28 = 58 (got %d)"
-		% CharacterLib.officer_wages())
+func _storm_chance_rows() -> void:
+	_set_player({"luck": 10})
+	_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 0.975),
+		"storm chance ×0.975 at luck 10 (unchanged)")
+	_set_player({"luck": 100})
+	_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 0.75),
+		"storm chance ×0.75 at luck 100 (unchanged)")
 
 
-# --- §4.1 new game, all six nations ---------------------------------------
+# --- §4.1 starting_person: the worked example, bonuses and alloc caps -------
+
+func _test_new_game_person() -> void:
+	# The §5 worked Person: Portugal + deckhand + full alloc.
+	var person: Dictionary = CharacterLib.starting_person("portugal",
+		"background_deckhand", {"constitution": 3, "intellect": 2},
+		{"seamanship": 3})
+	var attrs: Dictionary = person["attributes"]
+	_check(int(attrs["constitution"]) == 16 and int(attrs["intellect"]) == 17,
+		"§5 example: CON 16, INT 17 (base 10 + nation 5 + bg 3 + alloc)")
+	_check(int(attrs["charisma"]) == 10 and int(attrs["luck"]) == 10
+		and int(attrs["courage"]) == 10, "§5 example: untouched attributes at 10")
+	var skills: Dictionary = person["skills"]
+	_check(int(skills["seamanship"]) == 8 and int(skills["navigation"]) == 5,
+		"§5 example: seamanship 8, navigation 5 (0 + nation 5 + bg 5 + alloc 3)")
+	_check(int(skills["swordplay"]) == 0, "§5 example: all other skills 0")
+	_check((person["skill_counters"] as Dictionary).values().all(
+		func(v): return int(v) == 0), "counters all 0 (§4.1)")
+	_check(int(person["alloc_pending"]) == 0 and int(person["xp"]) == 0
+		and int(person["level"]) == 1, "xp 0, level 1, alloc_pending 0")
+	_check((person["officers"] as Array).is_empty()
+		and (person[CharacterLib.PROFIT_KEY] as Dictionary).is_empty()
+		and (person[CharacterLib.PROFIT_AWARDED_KEY] as Dictionary).is_empty(),
+		"empty roster and empty profit accumulators")
+	_check(person["equipment"] == {"weapon": "", "armor": ""},
+		"the §4.8 equipment block starts empty")
+	_check(not person.has("autopilot"),
+		"autopilot is absent until W5 appoints a voyage (§4.8)")
+	_check(int(person["reputation"]["portugal"]) == 20
+		and int(person["reputation"]["spain"]) == 0,
+		"own-nation start reputation 20, others 0 (§4.6)")
+	_check(str(person["background_id"]) == "background_deckhand",
+		"background_id persists in the player block (§4.1 step 5)")
+
+	# Free-point caps: per-item +3 and totals +5/+3 are enforced here, so no
+	# caller can break the creation extremes (§4.1 step ②).
+	var capped: Dictionary = CharacterLib.starting_person("holland",
+		"", {"charisma": 9}, {"negotiation": 9})
+	_check(int(capped["attributes"]["charisma"]) == 13,
+		"a per-item attribute alloc clamps at +3 (10 + 3; holland's +5 is luck)")
+	_check(int(capped["attributes"]["luck"]) == 15,
+		"holland's luck reads 10 + 5 (the nation bonus)")
+	_check(int(capped["skills"]["negotiation"]) == 8,
+		"a skill alloc clamps at +3 (0 + 5 nation + 3; no background)")
+	# An unknown background id grants nothing (the legacy 2-arg caller).
+	var legacy: Dictionary = CharacterLib.starting_person("spain", "world")
+	_check(int(legacy["attributes"]["courage"]) == 15
+		and int(legacy["skills"]["swordplay"]) == 5
+		and int(legacy["attributes"]["luck"]) == 10,
+		"an unknown background_id (the retired map-id positional) adds no bonus")
+
+
+# --- §4.1 step 4: creation extremes (normative 21 / 13) ---------------------
+
+func _test_creation_extremes() -> void:
+	# Attribute 21 = 10 + 5 (ottoman courage) + 3 (fencing student courage)
+	# + 3 (the per-item alloc cap).
+	var max_attr: Dictionary = CharacterLib.starting_person("ottoman",
+		"background_fencing_student", {"courage": 3}, {})
+	_check(int(max_attr["attributes"]["courage"]) == 21,
+		"the attribute extreme is exactly 21 (§4.1 step 4)")
+	# Skill 13 = 0 + 5 (portugal navigation) + 5 (naval cadet navigation)
+	# + 3 (the per-item alloc cap).
+	var max_skill: Dictionary = CharacterLib.starting_person("portugal",
+		"background_navy_cadet", {}, {"navigation": 3})
+	_check(int(max_skill["skills"]["navigation"]) == 13,
+		"the skill extreme is exactly 13 (§4.1 step 4)")
+	_check(CharacterLib.CREATION_ATTR_MAX == 21
+		and CharacterLib.CREATION_SKILL_MAX == 13,
+		"the extreme constants match the §4.1 closed forms")
+	# No build can exceed them: max nation+background misalignment stays ≤ 21/13.
+	var mixed: Dictionary = CharacterLib.starting_person("italy",
+		"background_tavern_errand", {"luck": 3, "charisma": 2},
+		{"rumour": 3, "appraisal": 0})
+	_check(int(mixed["attributes"]["luck"]) == 21
+		and int(mixed["skills"]["rumour"]) == 8
+		and int(mixed["skills"]["appraisal"]) == 5,
+		"the aligned-attribute build hits the 21 cap; the skill side reads "
+		+ "italy's appraisal 5 + the background's rumour 5 + alloc 3 = 8")
+
+
+# --- §4.1 new game through GameState (all six nations) ----------------------
 
 func _test_new_game_all_nations() -> void:
 	_check(DataLoader.nations_list.size() == 6, "six nations in data")
@@ -324,12 +435,6 @@ func _test_new_game_all_nations() -> void:
 
 	for nation_id in NATION_ORDER:
 		var nation: Dictionary = DataLoader.get_nation(nation_id)
-		var start_port: Dictionary = DataLoader.get_port(
-			str(nation["start_port_id"])
-		)
-		var ship_type: Dictionary = DataLoader.get_ship_type(
-			str(nation["start_ship_type_id"])
-		)
 		GameState.locale = "zh"
 		GameState.new_game(nation_id, false)
 
@@ -339,452 +444,188 @@ func _test_new_game_all_nations() -> void:
 			% [nation_id, int(nation["start_gold"]), GameState.gold])
 		_check(GameState.morale == 70, "%s: morale == 70" % nation_id)
 		_check(GameState.locale == "zh", "%s: locale untouched" % nation_id)
-		_check(GameState.port_investments.is_empty(), "%s: investments cleared" % nation_id)
-		_check(GameState.quests.is_empty(), "%s: quests cleared" % nation_id)
-		_check(GameState.discoveries_found.is_empty(),
-			"%s: discoveries cleared" % nation_id)
+		_check(GameState.port_investments.is_empty(),
+			"%s: investments cleared" % nation_id)
 		_check(GameState.current_port == str(nation["start_port_id"]),
 			"%s: current_port == %s (got %s)" % [
 				nation_id, nation["start_port_id"], str(GameState.current_port)
 			])
 
-		# Fleet: exactly one starter hull at full durability, crew_min aboard.
+		# Fleet: exactly one starter hull, crew_min aboard, full durability.
 		_check(GameState.fleet.size() == 1, "%s: one starter ship" % nation_id)
 		var ship: Dictionary = GameState.fleet[0]
+		var ship_type: Dictionary = DataLoader.get_ship_type(
+			str(nation["start_ship_type_id"]))
 		_check(str(ship.get("ship_type_id", "")) == str(nation["start_ship_type_id"]),
 			"%s: ship_type_id == %s" % [nation_id, nation["start_ship_type_id"]])
 		_check(int(ship.get("crew", -1)) == int(ship_type["crew_min"]),
-			"%s: crew == crew_min %d (got %d)" % [
-				nation_id, int(ship_type["crew_min"]), int(ship.get("crew", -1))
-			])
-		_check(int(ship.get("durability", -1)) == int(ship_type["durability"]),
-			"%s: durability at max (%d)" % [nation_id, int(ship_type["durability"])])
-		_check(int(ship.get("provisions", -1)) == 0 and
-			int(ship.get("water", -1)) == 0 and
-			int(ship.get("cannons", -1)) == 0,
-			"%s: empty supplies/cannons per §4.3 defaults" % nation_id)
-		_check((ship.get("cargo", {"x": 1}) as Dictionary).is_empty(),
-			"%s: empty cargo hold" % nation_id)
+			"%s: crew == crew_min %d" % [nation_id, int(ship_type["crew_min"])])
 
-		# World position is the start port's harbor tile (§4.1), stored in the
-		# §8.1 save shape (`{"x","y"}`) and readable as a Vector2i.
-		var pos = GameState.world.get("position", null)
-		_check(pos is Dictionary and pos.has("x") and pos.has("y"),
-			"%s: world.position is a tilePos dict %s" % [nation_id, str(pos)])
-		# Phase 4: the start port's harbour tile is derived from lat/lon.
-		var expected: Vector2i = DataLoader.port_cell(str(nation["start_port_id"]))
-		_check(GameState.world_tile() == expected,
-			"%s: world.position == %s (got %s)" % [
-				nation_id, str(expected), str(GameState.world_tile())
-			])
-		# §4.1b (amended 2026-11-02): a new run spawns docked at day 1 00:00 —
-		# no docking action has run yet, so no hour has been charged. The
-		# facilities open at their windows (the hub's Space wait reaches them).
-		var fraction_spawn := float(GameState.world.get("clock_fraction", -1.0))
-		_check(fraction_spawn == 0.0,
-			"%s: a new run spawns at 00:00 (fraction %s)"
-			% [nation_id, str(fraction_spawn)])
-
-		# known_ports = the six capitals (§20 §4.11), order-insensitive.
-		var known: Array = GameState.known_ports.duplicate()
-		known.sort()
-		var expected_known: Array = CAPITALS.duplicate()
-		expected_known.sort()
-		_check(known == expected_known,
-			"%s: known_ports == six capitals (got %s)" % [nation_id, str(known)])
-
-		# Player block: stats = base 10 + the nation bonus on exactly one stat.
-		var stats: Dictionary = GameState.player["stats"]
-		for key in CharacterLib.STAT_KEYS:
-			var expected_stat := 10
-			if key == BONUS_STAT[nation_id]:
-				expected_stat = 15
-			_check(int(stats[key]) == expected_stat,
-				"%s: %s == %d (got %d)" % [
-					nation_id, key, expected_stat, int(stats[key])
-				])
-		_check(int(GameState.player["xp"]) == 0, "%s: xp == 0" % nation_id)
-		_check(int(GameState.player["level"]) == 1, "%s: level == 1" % nation_id)
+		# The v9 Person block: attributes = 10 + the nation's bonus attribute
+		# (+5); skills = 0 everywhere except the signature skill (+5).
+		var bonus_attribute := str(nation["bonus_attribute"])
+		var bonus_skill := str(nation["bonus_skill"])
+		for key in CharacterLib.ATTRIBUTES:
+			var expected_attr := 10
+			if key == bonus_attribute:
+				expected_attr = 15
+			_check(CharacterLib.attribute(key) == expected_attr,
+				"%s: %s == %d (got %d)" % [nation_id, key, expected_attr,
+					CharacterLib.attribute(key)])
+		for key in SkillsLib.KEYS:
+			var expected_skill := 0
+			if key == bonus_skill:
+				expected_skill = 5
+			_check(SkillsLib.skill(key) == expected_skill,
+				"%s: skill %s == %d" % [nation_id, key, expected_skill])
+		for key in SkillsLib.KEYS:
+			_check(int(GameState.player["skill_counters"][key]) == 0,
+				"%s: counter %s starts 0" % [nation_id, key])
+		_check(int(GameState.player["alloc_pending"]) == 0,
+			"%s: alloc_pending 0" % nation_id)
+		_check(str(GameState.player["background_id"]) == "",
+			"%s: the legacy 2-arg new_game leaves background_id empty" % nation_id)
+		_check(not GameState.player.has("autopilot"),
+			"%s: no autopilot key on a fresh block" % nation_id)
 		_check((GameState.player["officers"] as Array).is_empty(),
 			"%s: no officers" % nation_id)
 		var rep: Dictionary = GameState.player["reputation"]
 		_check(rep.size() == 6, "%s: reputation covers all 6 nations" % nation_id)
 		_check(int(rep.get(nation_id, -999)) == int(nation["start_reputation"]),
-			"%s: own reputation == start_reputation %d (got %d)" % [
-				nation_id, int(nation["start_reputation"]),
-				int(rep.get(nation_id, -999))
-			])
-		for other in NATION_ORDER:
-			if other == nation_id:
-				continue
-			_check(int(rep.get(other, -999)) == 0,
-				"%s: reputation with %s == 0" % [nation_id, other])
+			"%s: own reputation == start_reputation %d" % [
+				nation_id, int(nation["start_reputation"])])
 
-		# Effective-stat §5 example for Portugal's start.
-		if nation_id == "portugal":
-			_check(CharacterLib.effective_stat("navigation") == 15,
-				"portugal start navigation effective 15")
+		# The Phase-8 state blocks seed empty on every fresh run (§8.2).
+		_check(GameState.officer_states.is_empty(),
+			"%s: officer_states == {}" % nation_id)
+		_check(GameState.captain_states.is_empty(),
+			"%s: captain_states == {}" % nation_id)
 
+		# World position is the start port's berth tile in the save shape.
+		var pos = GameState.world.get("position", null)
+		_check(pos is Dictionary and pos.has("x") and pos.has("y"),
+			"%s: world.position is a tilePos dict" % nation_id)
+		var expected: Vector2i = DataLoader.port_cell(str(nation["start_port_id"]))
+		_check(GameState.world_tile() == expected,
+			"%s: world.position == %s (got %s)" % [
+				nation_id, str(expected), str(GameState.world_tile())])
 
-# --- S2 data-driven cards -------------------------------------------------
-
-func _test_nationality_scene_data_driven() -> void:
-	var scene: PackedScene = load("res://scenes/title/nationality_select.tscn")
-	_check(scene != null, "nationality_select.tscn loads")
-	if scene == null:
-		return
-	var screen := scene.instantiate()
-	add_child(screen)
-	# `_ready` built the cards synchronously.
-	var grid: GridContainer = screen.get_node_or_null("Layout/Cards")
-	_check(grid != null, "nationality_select has a Cards grid")
-	if grid == null:
-		screen.queue_free()
-		return
-	_check(grid.get_child_count() == 6,
-		"exactly 6 nation cards (got %d)" % grid.get_child_count())
-	for index in grid.get_child_count():
-		var card := grid.get_child(index)
-		var nation: Dictionary = DataLoader.nations_list[index]
-		var nation_id := str(nation["id"])
-		_check(card.name == "Card_%s" % nation_id,
-			"card %d is %s in data order" % [index, nation_id])
-		var name_label: Label = card.get_node_or_null("Content/Head/NationName")
-		_check(name_label != null and name_label.text == I18n.t(nation["name"]),
-			"card %s name from data (%s)" % [
-				nation_id, name_label.text if name_label != null else "<missing>"
-			])
-		var package: Label = card.get_node_or_null("Content/StartPackage")
-		_check(package != null, "card %s has a start package label" % nation_id)
-		if package != null:
-			# The card must render the live DataLoader gold value, not a copy.
-			var gold_text := nationality_select_format(int(nation["start_gold"]))
-			_check(package.text.contains(gold_text),
-				"card %s start gold matches data (%s) in %s" % [
-					nation_id, gold_text, package.text.replace("\n", " | ")
-				])
-			var port: Dictionary = DataLoader.get_port(str(nation["start_port_id"]))
-			_check(package.text.contains(I18n.t(port["name"])),
-				"card %s start port from data" % nation_id)
-			var ship: Dictionary = DataLoader.get_ship_type(
-				str(nation["start_ship_type_id"])
-			)
-			_check(package.text.contains(I18n.t(ship["name"])),
-				"card %s start ship from data" % nation_id)
-		var flag: ColorRect = card.get_node_or_null("Content/Head/Flag")
-		_check(flag != null and flag.color == Color(str(nation["color"])),
-			"card %s flag color from data" % nation_id)
-
-	# Data-driven proof: mutate the in-memory Nation record (a copy of the
-	# data, no file written), force a rebuild, and the card must follow.
-	var first: Dictionary = DataLoader.nations_list[0]
-	var original_gold := int(first["start_gold"])
-	first["start_gold"] = original_gold + 1234
-	screen._rebuild()
-	var rebuilt: Button = grid.get_child(0)
-	var rebuilt_package: Label = rebuilt.get_node("Content/StartPackage")
-	var mutated_text := nationality_select_format(original_gold + 1234)
-	_check(rebuilt_package.text.contains(mutated_text),
-		"edited start_gold (%s) shows on the card with no scene edit" % mutated_text)
-	first["start_gold"] = original_gold
-	screen._rebuild()
-
-	# Locale rebind: section headings and card data both come from I18n.
-	I18n.set_locale("zh")
-	_check((screen.get_node("Layout/Header/Title") as Label).text ==
-		DataLoader.ui_strings["nation.select_title"]["zh"],
-		"S2 title rebinds to zh")
-	var zh_card: Button = grid.get_child(0)
-	var zh_name: Label = zh_card.get_node("Content/Head/NationName")
-	_check(zh_name.text == DataLoader.nations_list[0]["name"]["zh"],
-		"S2 card name rebinds to zh (%s)" % zh_name.text)
-	I18n.set_locale("en")
-	_check((screen.get_node("Layout/Header/Title") as Label).text ==
-		DataLoader.ui_strings["nation.select_title"]["en"],
-		"S2 title rebinds back to en")
-
-	# Back/Esc routing: assert the target exists and the Esc action is bound,
-	# rather than swapping scenes inside the unit test.
-	var s2_script := load("res://scenes/title/nationality_select.gd")
-	_check(ResourceLoader.exists(s2_script.TITLE_SCENE),
-		"S2 Back target exists (%s)" % s2_script.TITLE_SCENE)
-	var back_event := InputEventAction.new()
-	back_event.action = "back"
-	back_event.pressed = true
-	_check(back_event.is_action_pressed("back"), "back action is bound (Esc)")
-
-	screen.queue_free()
+	# The two-step creation signature: background + free points ride through.
+	GameState.new_game("portugal", false, "background_deckhand",
+		{"constitution": 3, "intellect": 2}, {"seamanship": 3})
+	_check(str(GameState.player["background_id"]) == "background_deckhand"
+		and CharacterLib.attribute("constitution") == 16
+		and SkillsLib.skill("seamanship") == 8,
+		"new_game(nation, route, background, attr_alloc, skill_alloc) builds §4.1")
+	# The spread-evenly shortcut's draft behaves like any other draft.
+	GameState.new_game("portugal", false, "", {"constitution": 1, "intellect": 1,
+		"charisma": 1, "courage": 1, "luck": 1},
+		{"seamanship": 1, "navigation": 1, "swordplay": 1})
+	_check(CharacterLib.attribute("constitution") == 11
+		and CharacterLib.attribute("intellect") == 16
+		and SkillsLib.skill("seamanship") == 1
+		and SkillsLib.skill("navigation") == 6
+		and SkillsLib.skill("swordplay") == 1,
+		"the spread-evenly draft allocates +1 attributes / first three skills "
+		+ "(portugal's navigation rides to 5 + 1)")
 
 
-func nationality_select_format(value: int) -> String:
-	var script := load("res://scenes/title/nationality_select.gd")
-	return script.format_thousands(value)
+# --- §4.5.5 roster capacity, state seeding and dismissal --------------------
+
+func _test_officers_cap_and_states() -> void:
+	_set_player()
+	GameState.gold = 100000
+	_check(CharacterLib.OFFICER_MAX == 12, "OFFICER_MAX is 12 (§4.5.2)")
+	# 12 recruits fit; the 13th is refused.
+	for i in 12:
+		_check(CharacterLib.recruit("off_test_fill_%02d" % i),
+			"recruit %d/12 succeeds" % (i + 1))
+	_check(CharacterLib.officer_count() == 12, "the roster holds 12 officers")
+	_check(not CharacterLib.can_recruit("off_test_fill_12"),
+		"the 13th recruit is blocked by OFFICER_MAX (§6)")
+	_check(not CharacterLib.recruit("off_test_fill_12"),
+		"recruit() refuses the 13th")
+	_check(CharacterLib.officer_count() == 12, "the roster stays at 12")
+	# A recruited officer seeds the §8 officer_states entry.
+	var state: Dictionary = GameState.officer_states["off_test_fill_00"]
+	_check(int(state["loyalty"]) == 50, "hire loyalty starts at 50 (§4.5.4)")
+	_check(int(state["sea_days"]) == 0 and str(state["post_id"]) == ""
+		and str(state["ship_id"]) == "", "idle, fresh growth clock (§4.8)")
+	_check(int(state["talk_cd_day"]) == 0 and int(state["gift_cd_day"]) == 0
+		and int(state["defeats"]) == 0, "fresh cooldowns and defeat counter")
+	_check(is_equal_approx(float(state["wage_mult"]), 1.0),
+		"wage_mult defaults to 1.0 (the master-approved §8 extension)")
+	# Dismissal clears the state and frees any post.
+	_check(SkillsLib.appoint("off_test_fill_00", "boatswain"),
+		"fixture: filler 00 takes the boatswain post")
+	_check(SkillsLib.post_holder("boatswain") == "off_test_fill_00",
+		"the post holder is seated")
+	_check(CharacterLib.dismiss("off_test_fill_00"), "dismiss succeeds")
+	_check(not GameState.officer_states.has("off_test_fill_00"),
+		"dismissal cleared the state entry (post freed with it, §4.5.5)")
+	_check(SkillsLib.post_holder("boatswain") == "",
+		"the freed post has no holder")
+	_check(CharacterLib.can_recruit("off_test_fill_00"),
+		"a dismissed officer is recruitable again")
+	_check(not CharacterLib.dismiss("off_test_fill_00"),
+		"dismissing an un-employed officer returns false")
+	# Wages read the roster Σ wage_daily (× wage_mult).
+	_set_player()
+	GameState.gold = 100000
+	CharacterLib.recruit("off_mateus_alvares")  # wage_daily 30
+	_check(CharacterLib.officer_wages() == 30, "one officer: 30g/day")
+	_check(SkillsLib.accept_raise("off_mateus_alvares"),
+		"the officer accepts a raise")
+	_check(CharacterLib.officer_wages() == 38,
+		"the wage bill reads ×1.25 (30 × 1.25 → 38)")
 
 
-## Reads the value cell next to the `Rep_<nation>` name cell.
-func _reputation_cell(rows: GridContainer, nation_id: String) -> String:
-	for index in rows.get_child_count():
-		var child := rows.get_child(index)
-		if child is Label and (child as Label).name == "Rep_%s" % nation_id:
-			return (rows.get_child(index + 1) as Label).text
-	return "<missing>"
+# --- §4.5.2 / §4.2.1 signing cost with the charisma multiplier --------------
+
+func _test_signing_price_mult() -> void:
+	_set_player({"charisma": 10})
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 1.0),
+		"the price multiplier at CHA 10 is ×1.0")
+	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 300,
+		"wage 30 × 10 × 1.0 = 300g at CHA 10")
+	_set_player({"charisma": 60})
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 0.75),
+		"the price multiplier at CHA 60 is ×0.75")
+	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 225,
+		"wage 30 × 10 × 0.75 = 225g at CHA 60")
+	_set_player({"charisma": 100})
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 0.55),
+		"the multiplier at CHA 100 is ×0.55 (the normative closed form "
+		+ "1 − 90/200; the doc's illustrative ×0.5 disagrees)")
+	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 165,
+		"wage 30 × 10 × 0.55 = 165g at CHA 100")
+	_set_player({"charisma": 300})
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 0.55),
+		"the attribute clamp (100) bounds the multiplier at ×0.55 — the 0.5 "
+		+ "formula floor stays unreachable through reads")
+	_set_player({"charisma": 1})
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 1.0),
+		"the multiplier clamps at its 1.0 ceiling")
+	# Gold shortfall: can_recruit reads the multiplied cost (§6).
+	_set_player({"charisma": 60})
+	GameState.gold = 224
+	_check(not CharacterLib.can_recruit("off_mateus_alvares"),
+		"224g is short for the 225g CHA-60 fee")
+	GameState.gold = 225
+	_check(CharacterLib.can_recruit("off_mateus_alvares"),
+		"gold exactly == the multiplied fee is allowed")
+	_check(CharacterLib.recruit("off_mateus_alvares"), "the signing succeeds")
+	_check(GameState.gold == 0, "the multiplied fee is deducted exactly")
+	# An employed officer cannot be re-recruited; an unknown id never signs.
+	_check(not CharacterLib.can_recruit("off_mateus_alvares"),
+		"an employed officer is not recruitable")
+	_check(not CharacterLib.can_recruit("off_nobody"),
+		"an unknown officer id is never recruitable")
+	_check(not TavernEngineLib.officers_at_port("lisbon").has("off_mateus_alvares"),
+		"an employed officer left every tavern pool (§4.5.5)")
 
 
-# --- S14 live panel -------------------------------------------------------
-
-func _test_character_panel_live() -> void:
-	# Start a real run so the panel has data to show.
-	GameState.new_game("holland", false)
-	GameState.gold = 7000
-	var host := Control.new()
-	host.name = "PanelHost"
-	add_child(host)
-	var panel := CharacterPanelLib.attach_to(host)
-	_check(panel != null, "CharacterPanel.attach_to instantiates the panel")
-	if panel == null:
-		host.queue_free()
-		return
-	_check(CharacterPanelLib.attach_to(host) == panel, "attach_to is idempotent")
-	_check(not panel.is_open(), "panel starts closed")
-	panel.open()
-	_check(panel.is_open(), "open() shows the panel")
-
-	# Live data: the displayed stats follow GameState without a reopen.
-	var stats_rows: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Columns/Left/StatsRows"
-	)
-	_check(stats_rows.get_child_count() == 5, "panel renders 5 stat rows")
-	var sea_row := stats_rows.get_node("Stat_seamanship")
-	var effective_label: Label = sea_row.get_node("Effective")
-	_check(effective_label.text == I18n.fmt("char.effective", {"amount": 15}),
-		"holland seamanship effective 15 (%s)" % effective_label.text)
-
-	GameState.player["stats"]["seamanship"] = 40
-	EventBus.fleet_changed.emit()
-	effective_label = stats_rows.get_node("Stat_seamanship/Effective")
-	_check(effective_label.text == I18n.fmt("char.effective", {"amount": 40}),
-		"panel refreshes on fleet_changed (%s)" % effective_label.text)
-
-	# Gold-driven refresh path (recruit changes gold + roster).
-	GameState.player["stats"]["seamanship"] = 15
-	EventBus.gold_changed.emit(GameState.gold)
-
-	# Officer roster: recruit one and it must appear in the panel with role+wage.
-	var officer_rows: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Columns/Right/OfficersRows"
-	)
-	_check(officer_rows.get_child_count() == 1, "empty roster shows one placeholder row")
-	_check((officer_rows.get_child(0) as Label).text == I18n.t_key("char.no_officers"),
-		"placeholder uses char.no_officers")
-	GameState.gold = 5000
-	_check(CharacterLib.recruit("off_jan_de_vries"), "recruit a boatswain mid-panel")
-	EventBus.fleet_changed.emit()
-	var officer_row: HBoxContainer = officer_rows.get_node("Officer_off_jan_de_vries")
-	_check(officer_row != null, "recruited officer appears in the panel")
-	if officer_row != null:
-		_check((officer_row.get_child(0) as Label).text ==
-			I18n.t(DataLoader.get_officer("off_jan_de_vries")["name"]),
-			"officer row shows the data name")
-		_check((officer_row.get_child(1) as Label).text ==
-			I18n.t_key("tavern.role.boatswain"),
-			"officer row shows the localised role")
-		_check((officer_row.get_child(2) as Label).text ==
-			I18n.fmt("tavern.wage", {"price": 28}),
-			"officer row shows the data wage")
-	var wage_label: Label = panel.get_node("Center/Panel/Margin/Body/Columns/Right/Wage")
-	_check(wage_label.text == I18n.fmt("char.officer_wage", {"gold": 28}),
-		"wage total reflects the roster (%s)" % wage_label.text)
-
-	# Reputation table covers all six nations.
-	var rep_rows: GridContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Columns/Right/ReputationRows"
-	)
-	_check(rep_rows.get_child_count() == 12,
-		"reputation table has 6 nation rows (got %d labels)"
-		% rep_rows.get_child_count())
-
-	# Live reputation: +1 for a profitable sale at a nation's ports (§4.6).
-	CharacterLib.add_profit_reputation("spain", 1000)
-	EventBus.gold_changed.emit(GameState.gold)
-	_check(CharacterLib.reputation("spain") == 1, "reputation stored as +1")
-	_check(_reputation_cell(rep_rows, "spain") == "+1",
-		"reputation value refreshes live (got '%s')"
-		% _reputation_cell(rep_rows, "spain"))
-	var own: Label = rep_rows.get_node("Rep_holland")
-	_check(own != null and own.text == I18n.t(DataLoader.get_nation("holland")["name"]),
-		"own nation row uses its data name")
-
-	# Locale rebinds while open.
-	I18n.set_locale("zh")
-	_check(stats_rows.get_child_count() == 5, "stats survive a locale change")
-	var nav_row := stats_rows.get_node("Stat_navigation")
-	var nav_name: Label = nav_row.get_child(0)
-	_check(nav_name.text == I18n.t_key("char.navigation"),
-		"stat labels rebind on locale change (%s)" % nav_name.text)
-	I18n.set_locale("en")
-
-	# Esc closes.
-	var esc := InputEventAction.new()
-	esc.action = "back"
-	esc.pressed = true
-	panel._unhandled_input(esc)
-	_check(not panel.is_open(), "Esc (back action) closes the panel")
-
-	# Toggle action opens/closes (the `C` binding path).
-	var toggle := InputEventAction.new()
-	toggle.action = "toggle_character"
-	toggle.pressed = true
-	panel._unhandled_input(toggle)
-	_check(panel.is_open(), "toggle_character opens the panel")
-	panel._unhandled_input(toggle)
-	_check(not panel.is_open(), "toggle_character closes it again")
-
-	# Level-up banner reads the pending flag without consuming it (the HUD
-	# toast in T6 owns the consume call).
-	GameState.player["xp"] = 49
-	CharacterLib.award_xp(1)
-	panel.open()
-	var banner: Label = panel.get_node("Center/Panel/Margin/Body/LevelUp")
-	_check(banner.visible, "panel shows the level-up banner")
-	_check(banner.text == I18n.fmt("char.level_up", {"level": 2}),
-		"banner uses char.level_up (%s)" % banner.text)
-	panel.close()
-	_check(not banner.visible, "banner hidden after close")
-	_check(CharacterLib.pending_levelup,
-		"closing the panel leaves the HUD toast pending")
-
-	# Host wiring over a Node2D screen (the world map, S3): the panel must land
-	# in a CanvasLayer and fill the viewport, not collapse to zero size.
-	var world_host := Node2D.new()
-	world_host.name = "WorldHost"
-	add_child(world_host)
-	var world_panel := CharacterPanelLib.attach_to(world_host)
-	_check(world_panel != null, "attach_to works on a Node2D (S3) host")
-	if world_panel != null:
-		_check(world_panel.get_parent() is CanvasLayer,
-			"Node2D host gets a CanvasLayer wrapper (got %s)"
-			% world_panel.get_parent().get_class())
-		_check(CharacterPanelLib.attach_to(world_host) == world_panel,
-			"attach_to is idempotent through the CanvasLayer wrapper")
-	world_host.queue_free()
-
-	host.queue_free()
-
-
-# --- S14 Quests tab (Phase 3, docs/80-* §4.7.3) ---------------------------
-
-func _test_character_panel_quests_tab() -> void:
-	GameState.new_game("portugal", false, "world")
-	GameState.gold = 20000
-	GameState.day = 12
-	GameState.current_port = "lisbon"
-	GameState.active_quests = []
-	GameState.titles = {}
-	for ship in GameState.fleet:
-		(ship as Dictionary)["cargo"] = {}
-		(ship as Dictionary)["provisions"] = 0
-		(ship as Dictionary)["water"] = 0
-
-	var host := Control.new()
-	host.name = "QuestPanelHost"
-	add_child(host)
-	var panel := CharacterPanelLib.attach_to(host)
-	panel.open()
-	_check(panel.active_tab() == "stats", "the stats column shows first")
-
-	var slots: Label = panel.get_node("Center/Panel/Margin/Body/QuestsPanel/Slots")
-	var rows: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/QuestsPanel/Scroll/Rows"
-	)
-	var empty: Label = panel.get_node("Center/Panel/Margin/Body/QuestsPanel/Empty")
-
-	panel.select_tab("quests")
-	_check(panel.active_tab() == "quests", "the quests tab can be selected")
-	_check(panel.get_node("Center/Panel/Margin/Body/QuestsPanel").visible,
-		"the quests panel is visible")
-	_check(not panel.get_node("Center/Panel/Margin/Body/Columns").visible,
-		"the stats column is hidden on the quests tab")
-	_check(panel.get_node("Center/Panel/Margin/Body/Tabs/QuestsTab").text
-		== I18n.t_key("char.quests"), "the tab says Quests")
-	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
-		"empty slot counter reads 0/3 (%s)" % slots.text)
-	_check(empty.visible and empty.text == I18n.t_key("ui.empty"),
-		"no quests shows the ui.empty row")
-
-	# Accept a delivery quest → one row with tag, objective, dest, days.
-	var offers: Array = QuestGenLib.available_offers("lisbon", 12)
-	var accepted: Dictionary = {}
-	for offer in offers:
-		if str((offer as Dictionary).get("type", "")) == "delivery":
-			accepted = QuestGenLib.accept(offer, "lisbon", 12)
-			break
-	_check(not accepted.is_empty(), "a delivery offer is accepted for the panel")
-	EventBus.quests_changed.emit()
-	_check(slots.text == I18n.fmt("quest.slots", {"used": 1, "max": 3}),
-		"the counter reads 1/3 (%s)" % slots.text)
-	_check(rows.get_child_count() == 1, "one quest row is listed (%d)"
-		% rows.get_child_count())
-	var row: Control = rows.get_child(0)
-	_check(row.name == "Quest_%s" % str(accepted["instance_id"]),
-		"the row carries the instance id (%s)" % row.name)
-	_check(row.get_node("Top/Tag").text == I18n.t_key("quest.type.delivery"),
-		"the row shows the type tag (%s)" % row.get_node("Top/Tag").text)
-	_check(row.get_node("Top/Objective").text
-		== QuestGenLib.objective_text(accepted),
-		"the row shows the composed objective (%s)"
-		% row.get_node("Top/Objective").text)
-	var requirements: Dictionary = accepted["requirements"]
-	_check(row.get_node("Bottom/Destination").text == I18n.fmt("quest.dest", {
-		"port": I18n.t(DataLoader.get_port(
-			str(requirements["dest_port_id"]))["name"]),
-	}), "the destination names the port (%s)"
-		% row.get_node("Bottom/Destination").text)
-	_check(row.get_node("Top/Days").text == I18n.fmt("quest.days_left", {
-		"days": int(accepted["deadline_day"]) - 12,
-	}), "days left counts down to the deadline (%s)"
-		% row.get_node("Top/Days").text)
-
-	# Abandon through the button: −5 rep with the origin nation, row gone.
-	var rep_before := CharacterLib.reputation("portugal")
-	var abandon: Button = row.get_node("Bottom/Abandon")
-	_check(abandon.text == I18n.t_key("quest.abandon"),
-		"the row has an abandon button (%s)" % abandon.text)
-	abandon.pressed.emit()
-	_check(CharacterLib.reputation("portugal") == rep_before - 5,
-		"abandoning costs 5 reputation (%d → %d)"
-		% [rep_before, CharacterLib.reputation("portugal")])
-	_check(rows.get_child_count() == 0,
-		"the abandoned quest leaves the list (%d rows)" % rows.get_child_count())
-	_check(empty.visible, "the empty row reappears after abandoning")
-	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
-		"the counter drops back to 0/3 (%s)" % slots.text)
-
-	# Viscount grants the fourth slot (§4.9.2): the panel reads the max live.
-	GameState.titles = {"portugal": "viscount"}
-	EventBus.quests_changed.emit()
-	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 4}),
-		"viscount raises the slot cap to 4 (%s)" % slots.text)
-	GameState.titles = {"spain": "knight", "portugal": "none"}
-	EventBus.quests_changed.emit()
-	_check(slots.text == I18n.fmt("quest.slots", {"used": 0, "max": 3}),
-		"another nation's knight does not add a slot (%s)" % slots.text)
-
-	# Locale rebind.
-	I18n.set_locale("zh")
-	panel.select_tab("quests")
-	_check(panel.get_node("Center/Panel/Margin/Body/Tabs/QuestsTab").text
-		== I18n.t_key("char.quests"), "the tab label rebinds in zh")
-	I18n.set_locale("en")
-
-	panel.select_tab("stats")
-	_check(panel.get_node("Center/Panel/Margin/Body/Columns").visible,
-		"switching back shows the stats column")
-	panel.close()
-	host.queue_free()
-	GameState.active_quests = []
-
-
-# --- Harness --------------------------------------------------------------
+# --- Harness ----------------------------------------------------------------
 
 func _check(condition: bool, description: String) -> void:
 	_checks += 1

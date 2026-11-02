@@ -131,10 +131,16 @@ func _v8_payload() -> Dictionary:
 		"gold": 12540,
 		"player": {
 			"nation_id": "portugal",
-			"stats": {
-				"leadership": 12, "seamanship": 14, "combat": 11,
-				"navigation": 21, "luck": 10,
-			},
+			"background_id": "background_deckhand",
+			"attributes": {"constitution": 16, "intellect": 17, "charisma": 10,
+				"courage": 10, "luck": 10},
+			"skills": {"seamanship": 8, "navigation": 5, "swordplay": 0,
+				"gunnery": 0, "appraisal": 0, "negotiation": 0,
+				"cartography": 0, "rumour": 0},
+			"skill_counters": {"seamanship": 12, "navigation": 5,
+				"swordplay": 0, "gunnery": 0, "appraisal": 0, "negotiation": 0,
+				"cartography": 0, "rumour": 0},
+			"alloc_pending": 2,
 			"xp": 400,
 			"level": 3,
 			"officers": ["off_mateus_alvares"],
@@ -1276,14 +1282,23 @@ func _make_replay_run(day: int) -> void:
 	GameState.locale = "en"
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
-		},
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 0,
 		"xp": 0,
 		"level": 1,
 		"officers": [],
 		"reputation": reputation,
+		"profit_by_nation": {},
+		"profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
 	}
 	GameState.fleet = []
 	GameState.day = day
@@ -1577,8 +1592,11 @@ func _clobber_state() -> void:
 	GameState.morale = 99
 	GameState.current_port = null
 	GameState.player = {
-		"nation_id": "spain", "stats": {}, "xp": 0, "level": 1,
-		"officers": [], "reputation": {},
+		"nation_id": "spain", "background_id": "", "attributes": {},
+		"skills": {}, "skill_counters": {}, "alloc_pending": 0,
+		"xp": 0, "level": 1, "officers": [], "reputation": {},
+		"profit_by_nation": {}, "profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
 	}
 	GameState.fleet = []
 	GameState.world = {

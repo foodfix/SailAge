@@ -64,6 +64,14 @@ var trade_routes_built: Dictionary = {}
 ## added 2026-11-02): `default` windows per facility id + per-port
 ## `overrides`. Read through `SailingSim.facility_open`, never directly.
 var facility_hours: Dictionary = {}
+## Phase-8 canon/data files (docs/10-* §4.11, §4.20–§4.22): the tool-built
+## captain canon (read-only, `10-*` §4.11) and the three authored tables —
+## creation backgrounds, the data-driven skill/stat gates, and the officer
+## post table. Gates are keyed by `feature_id`, posts by `post_id`.
+var captains: Dictionary = {}
+var backgrounds: Dictionary = {}
+var skill_gates: Dictionary = {}
+var officer_posts: Dictionary = {}
 
 # Insertion-ordered lists copied from the JSON arrays. UI iteration uses these
 # (market rows sort by base_price later; the nationality screen needs the
@@ -79,6 +87,11 @@ var quests_list: Array = []
 var npc_captains_list: Array = []
 var named_pirates_list: Array = []
 var market_events_list: Array = []
+## Phase-8 lists, file order (docs/10-* §4.11, §4.20–§4.22).
+var captains_list: Array = []
+var backgrounds_list: Array = []
+var skill_gates_list: Array = []
+var officer_posts_list: Array = []
 ## The Phase-6 ocean tables in file order. `wind_regions_list` doubles as the
 ## raster's index map: palette index i of wind_regions.png is
 ## `wind_regions_list[i - 1]` (docs/10-* §6.5), so the runtime resolves a
@@ -169,6 +182,18 @@ func load_all() -> void:
 	# plain object file, like npc_config.
 	facility_hours = _load_facility_hours()
 
+	# Phase-8 canon/data files (docs/10-* §4.11, §4.20–§4.22): plural key ==
+	# basename, so the ordinary entity-file path loads them. Captains are the
+	# tool-built canon (never hand-edited); the other three are authored.
+	captains_list = _load_list("captains", "captains.json")
+	captains = _index_by_id(captains_list, "captains.json")
+	backgrounds_list = _load_list("backgrounds", "backgrounds.json")
+	backgrounds = _index_by_id(backgrounds_list, "backgrounds.json")
+	skill_gates_list = _load_list("skill_gates", "skill_gates.json")
+	skill_gates = _index_by_key(skill_gates_list, "feature_id", "skill_gates.json")
+	officer_posts_list = _load_list("officer_posts", "officer_posts.json")
+	officer_posts = _index_by_key(officer_posts_list, "post_id", "officer_posts.json")
+
 	ui_strings = _load_ui_strings()
 	map_legend = _load_map_legend()
 	_load_map_index()
@@ -212,6 +237,26 @@ func get_named_pirate(id: String) -> Dictionary:
 
 func get_market_event(id: String) -> Dictionary:
 	return _lookup(market_events, id)
+
+
+## A captain-canon card by id (docs/10-* §4.11; built, read-only).
+func get_captain(id: String) -> Dictionary:
+	return _lookup(captains, id)
+
+
+## A creation background by id (docs/10-* §4.22).
+func get_background(id: String) -> Dictionary:
+	return _lookup(backgrounds, id)
+
+
+## A data-driven skill/stat gate by `feature_id` (docs/10-* §4.20).
+func get_skill_gate(feature_id: String) -> Dictionary:
+	return _lookup(skill_gates, feature_id)
+
+
+## An officer post by `post_id` (docs/10-* §4.21).
+func get_officer_post(post_id: String) -> Dictionary:
+	return _lookup(officer_posts, post_id)
 
 
 ## A wind region by id (docs/10-* §4.16).
@@ -459,15 +504,22 @@ func _load_list(plural: String, file_name: String) -> Array:
 
 
 func _index_by_id(list: Array, file_name: String) -> Dictionary:
+	return _index_by_key(list, "id", file_name)
+
+
+## Indexes a list by an arbitrary string key field (`feature_id` for the
+## gates, `post_id` for the posts — docs/10-* §4.20–§4.21). Same light shape
+## checks as [method _index_by_id].
+func _index_by_key(list: Array, key_field: String, file_name: String) -> Dictionary:
 	var table: Dictionary = {}
 	for index in list.size():
 		var entry = list[index]
 		if not (entry is Dictionary):
 			_record("%s[%d]: entry must be an object" % [file_name, index])
 			continue
-		var id = entry.get("id", null)
+		var id = entry.get(key_field, null)
 		if not (id is String) or (id as String).is_empty():
-			_record("%s[%d]: entry has no string 'id'" % [file_name, index])
+			_record("%s[%d]: entry has no string '%s'" % [file_name, index, key_field])
 			continue
 		if table.has(id):
 			_record("%s[%d]: duplicate id '%s'" % [file_name, index, id])

@@ -81,16 +81,26 @@ func _make_run(
 ) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
-		},
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 0,
 		"xp": 0,
 		"level": 1,
 		"officers": officers.duplicate(),
 		"reputation": {"portugal": 20, "spain": 0, "england": 0,
 			"holland": 0, "ottoman": 0, "italy": 0},
+		"profit_by_nation": {},
+		"profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
 	}
+	GameState.officer_states = {}
 	GameState.gold = gold
 	GameState.day = day
 	GameState.morale = morale

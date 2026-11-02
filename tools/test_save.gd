@@ -93,16 +93,23 @@ func _make_rich_run() -> void:
 
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {
-			"leadership": 11, "seamanship": 13, "combat": 10,
-			"navigation": 20, "luck": 10,
-		},
+		"background_id": "background_deckhand",
+		"attributes": {"constitution": 16, "intellect": 17, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 8, "navigation": 5, "swordplay": 2,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 12, "navigation": 5, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 4,
 		"xp": 240,
 		"level": 3,
 		"officers": ["off_mateus_alvares", "off_diego_fernandez"],
 		"reputation": reputation,
 		"profit_by_nation": {"england": 1100, "holland": 250},
 		"profit_rep_awarded": {"england": 1, "holland": 0},
+		"equipment": {"weapon": "eq_cutlass", "armor": ""},
 	}
 
 	# The flagship's hold must be FULL before an escort carries anything
@@ -172,8 +179,24 @@ func _clobber_state() -> void:
 	GameState.npc_preset = "clobbered"
 	GameState.market_events = ["clobber"]
 	GameState.player = {
-		"nation_id": "spain", "stats": {"leadership": 10}, "xp": 0,
-		"level": 1, "officers": [], "reputation": {},
+		"nation_id": "spain",
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 15, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 5,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0, "cartography": 0,
+			"rumour": 0},
+		"alloc_pending": 0,
+		"xp": 0,
+		"level": 1,
+		"officers": [],
+		"reputation": {},
+		"profit_by_nation": {},
+		"profit_rep_awarded": {},
+		"equipment": {"weapon": "", "armor": ""},
 	}
 	GameState.fleet = []
 	GameState.world = {"position": {"x": 0, "y": 0}, "clock_fraction": 0.0}
@@ -280,6 +303,10 @@ func _test_full_round_trip() -> void:
 	_check(typeof((GameState.fleet[0] as Dictionary)["cannons"]) == TYPE_INT,
 		"fleet cannon counts are ints after a json round trip")
 	_check(GameState.player == expected["player"], "player block restored byte-equal")
+	_check(int(GameState.player["alloc_pending"]) == 4,
+		"alloc_pending round-trips (the persisted counter, docs/50-* §4.8)")
+	_check(int(GameState.player["skill_counters"]["seamanship"]) == 12,
+		"the usage counters round-trip (docs/50-* §4.3.3)")
 	_check(GameState.player["officers"] == ["off_mateus_alvares", "off_diego_fernandez"],
 		"officer ids restored in order")
 	_check(typeof(GameState.player["xp"]) == TYPE_INT
