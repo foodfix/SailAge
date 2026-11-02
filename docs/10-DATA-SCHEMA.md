@@ -153,6 +153,8 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
 | `start_ship_type_id` | id | references ShipType; starter ship at new game |
 | `start_gold` | money | gold at new game |
 | `start_reputation` | int −100…100 | initial reputation with own nation; other nations start at 0 |
+| `bonus_attribute` | id | **Phase 8**: exactly one of the 5 attribute ids (`constitution`/`intellect`/`charisma`/`courage`/`luck`) — the nation's +5 attribute at new game (`50-*` §4.2) |
+| `bonus_skill` | id | **Phase 8**: exactly one of the 8 player skill ids (`seamanship`…`rumour`) — the nation's +5 signature skill at new game (`50-*` §4.2); the pair per nation is the locked decision-2 mapping |
 | `rivals` | []id | **Phase 3**: exactly 2 other nation ids that gain `+2` reputation when the player commits piracy against this nation (`70-*` §4.9.5). Symmetry is not required. |
 | `description` | L10nString | 1–2 sentences shown on the nationality-select screen |
 
@@ -734,8 +736,8 @@ personality pools and the appearance vocabulary:
 |---|---|---|
 | `surnames` | object `nation_id → []L10nString` | the 6 nation keys **plus** `""` (the nationless set pirates draw from); ≈ 30 parts per set, era-plausible per nation, zh and en |
 | `given_names` | object `nation_id → []L10nString` | same key set; ≈ 30 parts per set |
-| `personalities` | object `{all: []id, roles: {role: []id}}` | one shared tag vocabulary (`all`; snake_case ids; ≥ 8 tags) and per-role pools (`roles.<pool_id>` ⊆ `all`, 2–5 tags each) — one pool per §4.11 captain role, plus one per officer native role (pool id = the native-role id; the native-role list is `50-*` §4.5's pin); every tag has a `personality.<tag>` `ui_strings.json` row |
-| `appearance` | object of exactly 4 axes | `face`, `beard`, `eyes`, `hair`; ≥ 4 values per axis; every value has an `appearance.<axis>.<value>` `ui_strings.json` row |
+| `personalities` | object `{all: []id, roles: {role: []id}}` | one shared tag vocabulary (`all`; snake_case ids; ≥ 8 tags) and per-role pools (`roles.<pool_id>` ⊆ `all`, 2–5 tags each) — one pool per §4.11 captain role, plus one per officer native role (pool id = the native-role id; the native-role list is `50-*` §4.5's pin); every tag has a `char.personality.<tag>` `ui_strings.json` row |
+| `appearance` | object of exactly 4 axes | `face`, `beard`, `eyes`, `hair`; ≥ 4 values per axis; every value has a `char.appearance.<axis>.<value>` `ui_strings.json` row |
 
 Assembly: a generated person's display name is drawn without replacement
 from its nation's `given_names` × `surnames` (assembled in the locale's

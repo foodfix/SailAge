@@ -1849,9 +1849,11 @@ Notes pinning the set exactly:
 - Post prereq reasons are `gate.*` keys (the renderer is shared, the
   `skill_gates.json` shape); `officer.post.*` owns only the post names
   and the `officer.post.no_captain` state line.
-- The 6 background cards are `creation.background.<id>` (name) +
-  `creation.background.<id>.bio` (bio line); the S16 bio line reuses the
-  same `bio` value.
+- The 6 backgrounds' name + bio live in `data/backgrounds.json`
+  (L10nString per the `10-*` §4.22 schema — content stays data, `00-*` §9);
+  `creation.*` owns only the flow chrome (step titles, point counters, the
+  spread-evenly button, validation messages). The S16 bio line reads the
+  same `bio` value from the data file.
 - The retirement segment's strings **extend the existing `ending.*`
   family** (`ending.rpg.nemesis_title`, `ending.rpg.grudge`,
   `ending.rpg.veteran`, `ending.rpg.bio` + their row-composition keys) —
