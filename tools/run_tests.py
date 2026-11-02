@@ -25,13 +25,13 @@ from pathlib import Path
 # user://saves/ (SaveSystem round trips), so they join the serial-save set.
 # Phase 6 (task V): test_save_v5 was renamed test_save_v6 with the v6 bump.
 # Phase 7 (task V): test_save_v6 was renamed test_save_v7 with the v7 bump.
-# Explored-state amendment (2026-11-02): test_save_v7 renamed test_save_v8
+# Explored-state amendment (2026-11-02): test_save_v8 renamed test_save_v9
 # with the v8 bump.
 # Unified-movement amendment (2026-11-01): the perf-gated suites join too —
 # the §4.11.11.5 gate timings (day tick ≤ 50/200 ms, pursuit ≤ 250 ms) must
 # be measured without synthetic parallel load.
 SERIAL_SAVE_SET = (
-    "test_save", "test_save_v8", "test_world_e2e",
+    "test_save", "test_save_v9", "test_world_e2e",
     "test_npc_fleets", "test_phase2_acceptance", "test_phase3_acceptance",
     # Task L: test_aliveness round-trips save slot 3 through save/load.
     "test_aliveness",

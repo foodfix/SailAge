@@ -120,8 +120,16 @@ func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 	NpcFleetsLib.reset_caches()
 	GameState.player = {
 		"nation_id": player_nation,
-		"stats": {"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10},
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0,
+			"cartography": 0, "rumour": 0},
+		"skill_counters": {"seamanship": 0, "navigation": 0, "swordplay": 0,
+			"gunnery": 0, "appraisal": 0, "negotiation": 0,
+			"cartography": 0, "rumour": 0},
+		"alloc_pending": 0,
 		"xp": 0, "level": 1, "officers": [],
 		"reputation": {},
 	}

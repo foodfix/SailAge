@@ -739,12 +739,15 @@ func _check(condition: bool, message: String) -> void:
 
 
 func _report() -> void:
+	# Free every node the sections left behind (cards/panels/drops) — a
+	# leak-free exit keeps the runner's exit-code contract clean.
+	for child in get_children():
+		child.free()
 	if _failures.is_empty():
-		print("test_character_card: %d checks passed" % _checks)
+		print("ALL PASS (%d checks)" % _checks)
 		set_exit_code(0)
 	else:
-		print("test_character_card: %d/%d checks FAILED"
-			% [_failures.size(), _checks])
+		print("%d of %d checks FAILED" % [_failures.size(), _checks])
 		for failure in _failures:
 			print("  - %s" % failure)
 		set_exit_code(1)

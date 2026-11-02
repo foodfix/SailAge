@@ -25,6 +25,32 @@ alive; validator TODO left in place); (b) slot A added the `officer_bios`
 block to `captain_name_parts.json` (doc row added); (c) the level-up toast
 lands on the new `char.level_up.alloc` key beside the Phase-1
 `char.level_up` (W6 wiring note).
+**W6 status (2026-11-03): ✅ complete** — slots A (unified character card
+`scenes/ui/character_card.tscn`, three-tab S14, S18 officer actions +
+post column, dossier panel, allocation steppers + HUD badge, card entries:
+picker inspect / tavern recruit / battle intro) → B (creation screen S20
+two-step + derived preview + spread-evenly, nationality handoff via a
+pending-nation static, retirement RPG segment) → C (**save v9**:
+`SAVE_VERSION = 9`, `PHASE = 9`, v8 refused, `player.stats` refused,
+officer_states incl. `wage_mult`/derived `skill_deltas` +
+captain_states with `deployed` stripped, `test_save_v8` → `test_save_v9`
+rename, extreme payload **1,166,226 B**) → staged D (32 ui_strings
+residuals authored from the shipped fallbacks; parity sweep: **878 keys
+final**, zh/en + placeholders green) merged in order; master fixes at the
+merges: `run_tests.py` serial set → `test_save_v9`, the extreme-save gate
+raised to **2.25 MB** with the measured number (`60-*` §4.11.11.5 row
+amended — the v9 captain_states rows add ~190 KB at extreme),
+`test_aliveness` fixture to the v9 player block, `10-*` §4.15
+"defeated"-as-resting-state tidy, `70-*` grudge row gated to negative
+stances (80-* §4.14's empty-state convention; a random stance-0 stranger
+is not a nemesis), `test_character_card` leak-free teardown + the
+contract marker. Gate on `main`: **`run_tests.py` 50/50 green**
+(new: `test_character_card` 138, `test_creation` 80, `test_save_v9` 493);
+demo-loop ten steps green on a fresh v9 save (test_demo_loop 84); the
+three-entry card-identity pin green; alloc_pending round-trips and the
+badge clears (suite-pinned); zh/en parity green; the
+mid-phase-saves-never-load rule re-stated in `90-*` §8.2.
+
 **W5 status (2026-11-03): ✅ complete** — slots A (right-click interaction
 layer: fleet picker, intercept order, coaster-not-attackable) → B (hail
 options + modal) → C (port verb matrices: tavern befriend/sparring,
@@ -672,6 +698,7 @@ No code, no data. Every number above lands in its owning doc before W2.
   card identical from every entry; `alloc_pending` round-trips and the
   badge clears; zh/en parity green; **mid-phase-saves-never-load** note
   re-stated.
+  **→ PASSED 2026-11-03** (see the W6 status line at the top).
 
 ## W7 — Balance & acceptance (master + ≤ 2 slots)
 

@@ -56,7 +56,12 @@ const GATE_EXTREME_MS := 350.0
 ## Marginal cost ≈ linear: extreme (×4 fleets) must stay under 8× the normal
 ## average (16× would be quadratic).
 const LINEARITY_RATIO := 8.0
-const GATE_SAVE_BYTES := 2 * 1024 * 1024
+## Phase-8 amendment (2026-11-03, W6-C): the v9 `captain_states` block adds
+## one §4.15 met-captain row per fleet — ~190 KB at the settled extreme
+## ecology (measured 2,111,818 B) — so the gate rises from 2 MiB to 2.25 MiB
+## (measured + headroom; `60-*` §4.11.11.5's "≤ 2 MB" row amended the same
+## day).
+const GATE_SAVE_BYTES := 2250000
 
 const WATCHDOG_SECONDS := 240.0
 
@@ -700,7 +705,7 @@ func _test_perf_gates() -> void:
 		% [payload_bytes, payload_bytes / 1048576.0])
 	print("PROFILE density_extreme_save_bytes %d" % payload_bytes)
 	_check(payload_bytes <= GATE_SAVE_BYTES,
-		"the save payload at extreme stays ≤ 2 MB (%d bytes)" % payload_bytes)
+		"the save payload at extreme stays ≤ 2.25 MB (%d bytes)" % payload_bytes)
 
 
 ## Times `ticks` day ticks, returns the average ms (each tick exactly the

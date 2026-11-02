@@ -980,7 +980,7 @@ Perf gates (measured in tools suites — tasks J/M):
 | Day tick @ extreme (≈ 1 100 fleets) | **re-pinned ≤ 350 ms by the unified-movement amendment** (was ≤ 150; 2026-11-01: every fleet now steps its §4.4 hull-scale budget per day and departed fleets walk their new route in the same pass, ~10× the retired 2-tile base per tick; measured ≈ 276) |
 | Marginal cost | demonstrably linear (extreme ≈ 4× normal, not 16×) |
 | Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase — unchanged as the budget; H re-measures at the quadrupled chase area and windows the region only on measured failure (correction 13) |
-| Save payload @ extreme | ≤ 2 MB |
+| Save payload @ extreme | ≤ 2.25 MB (2 MiB through Phase 7; the Phase-8 `captain_states` block adds one §4.15 row per fleet — measured 2,111,818 B at the settled extreme, 2026-11-03) |
 | world_e2e wall budget | **runner kill timer 300 s for this suite only** (amended 2026-11-01; re-pinned 540 → 300 by the 2026-11-02 overkill-sweep removal — leg 4 ends at Cape Town instead of re-sailing leg 3's corridor in reverse, and the storm-gate Monte Carlo was retired for the closed form): the unified-movement amendment accrues every fleet on every player move, so the movement proof pays the designed per-move cost × thousands of steps; its fixture scales the ecology budgets ×0.1 process-locally (`test_world_e2e.gd`) and suppresses raiders within Chebyshev 60 of the route — the proof's contract is movement, not population or combat (those stay with test_density / test_npc_fleets / the battle suites) |
 
 #### 4.11.12 Equipment wiring (pairs with `10-*` §4.6, `40-*` §4.1)
@@ -1553,7 +1553,7 @@ cutlass +3; the defender defends with charisma 40 → +2):
       byte-identically.
 - [ ] Perf gates (§4.11.11.5, as re-pinned by the unified-movement
       amendment): day tick ≤ 75 ms @ cap 288 and ≤ 350 ms @ extreme
-      (≈ 1100 fleets), linear marginal cost, save ≤ 2 MB @ extreme, zero
+      (≈ 1100 fleets), linear marginal cost, save ≤ 2.25 MB @ extreme (amended 2026-11-03, the v9 captain_states rows), zero
       runtime pathfinding for lane traffic.
 
 **Phase-7 additions (trade empires).**
