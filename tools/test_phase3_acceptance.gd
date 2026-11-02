@@ -485,10 +485,10 @@ func _scenario_piracy_loop() -> void:
 	_check(not hub.is_facility_enabled("market"),
 		"S2: the bountied nation's market row is disabled")
 	var market_row: Button = hub.facility_row("market")
-	_check(market_row != null and market_row.text.contains(
-		I18n.t_key("port.closed_bounty")),
-		"S2: the closed row shows port.closed_bounty (%s)"
-		% ("" if market_row == null else market_row.text))
+	_check(market_row != null and hub.facility_card_texts("market")["status"]
+		.contains(I18n.t_key("port.closed_bounty")),
+		"S2: the closed card shows port.closed_bounty on its status line (%s)"
+		% ("" if market_row == null else str(hub.facility_card_texts("market"))))
 	_collect(hub, "hub", ["header", "rows"])
 	hub.queue_free()
 	await get_tree().process_frame

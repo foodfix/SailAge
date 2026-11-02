@@ -177,8 +177,12 @@ modes regardless of trim (`20-*` §4.17).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - **Port-hours keys (amended 2026-11-02, `30-*` §4.1b):** `port.facility.closed`
-  = `营业时间 {open}–{close}` / `Open {open}–{close}` (the disabled hub row's
-  label for a closed facility) and `port.wait.hour` = `等待 1 小时 (空格)` /
+  = `营业时间 {open}–{close}` / `Closed · Opens {open}–{close}` (the disabled
+  facility card's status line, §4.8.1), `port.facility.open_now` =
+  `营业中 · {open}–{close}` / `Open · {open}–{close}` (an open card's status
+  line; a 24h facility has no window to quote and shows
+  `port.facility.open_always` = `全天营业` / `Open around the clock`
+  instead) and `port.wait.hour` = `等待 1 小时 (空格)` /
   `Wait 1 hour (Space)` (the hub's wait affordance label).
 - Placeholders use `{name}` syntax, substituted by code:
   `"world.arrive": {"zh": "抵达 {port}。第 {day} 天。", "en": "Arrived at {port}. Day {day}."}`.
@@ -1443,6 +1447,38 @@ Notes pinning the set exactly:
 - **Audio (placeholder note):** silence in Phase 1; hook method
   `EventBus.play_sfx(name)` exists as a no-op; free-asset replacement pass is
   a Phase-3 task.
+
+#### 4.8.1 Port hub facility cards (S4, added 2026-11-02)
+
+The S4 facility list is a **fixed card grid**: the open/closed state never
+changes the layout. (The §4.1b first build laid open facilities two per line
+and gave every closed/stub row a full-width line of its own, so the hub
+visibly jumped at every opening/closing hour.)
+
+- **Grid:** two columns, **left-aligned**, 8px separation, cells filled in
+  the §4.1 fixed order (Market · Shipyard / Tavern · Inn / Guild · Palace).
+  A port whose data omits a facility simply renders one card fewer; the
+  cards never stretch with window width.
+- **Card:** a **320×64 px** Button whose whole surface is clickable. Inside,
+  a full-rect VBoxContainer (alignment center, `mouse_filter` ignore on the
+  box and both labels) holds two centered labels: the facility name
+  (default font size; `TEXT` when the card is enabled, `PANEL_LINE` when
+  disabled) above a **12px** status line.
+- **Status line (locked):**
+
+| Card state | Status key | Color |
+|---|---|---|
+| open (windowed) | `port.facility.open_now` | `GOOD` |
+| open 24h (no window) | `port.facility.open_always` | `GOOD` |
+| hours-closed (`30-*` §4.1b) | `port.facility.closed` | `PANEL_LINE` |
+| bounty-closed (`70-*` §4.9.6) | `port.closed_bounty` | `PANEL_LINE` |
+| future-phase stub (`30-*` §4.1) | `port.stub.phase3` | `PANEL_LINE` |
+
+  Precedence when several states collide: bounty > hours > phase stub.
+- Clickability is unchanged: the card is disabled exactly when the §4.1b
+  entry gate (`port_screen._facility_available`) refuses it; the Space wait
+  (`30-*` §4.3) re-enables it on the next crossing hour. Routing, gating and
+  the rebuild signature never move — only the rendering is fixed.
 
 ### 4.9 W3/W4 symbol contracts (Phase 7 — the launch condition)
 

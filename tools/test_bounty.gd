@@ -369,9 +369,10 @@ func _test_palace_and_hub() -> void:
 	_check(not hub.is_facility_enabled("market"), "the hub disables the market row")
 	_check(hub.is_facility_enabled("palace"), "the hub keeps the palace row usable")
 	var market: Button = hub.facility_row("market")
-	_check(market != null and market.text.contains(I18n.t_key("port.closed_bounty")),
-		"the closed row shows port.closed_bounty (%s)"
-		% ("" if market == null else market.text))
+	_check(market != null and hub.facility_card_texts("market")["status"]
+		.contains(I18n.t_key("port.closed_bounty")),
+		"the closed card shows port.closed_bounty on its status line (%s)"
+		% ("" if market == null else str(hub.facility_card_texts("market"))))
 	hub.queue_free()
 	await get_tree().process_frame
 

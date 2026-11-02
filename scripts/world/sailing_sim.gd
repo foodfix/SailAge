@@ -1108,7 +1108,8 @@ static func _window_minutes(text: String) -> int:
 
 
 ## The facility's window as `{open, close}` display strings (`""` when always
-## open or unknown) — the `port.facility.closed` row label's `{open}/{close}`.
+## open or unknown) — the hub card's `port.facility.open_now` /
+## `port.facility.closed` status line's `{open}/{close}` (docs/80-* §4.8.1).
 static func facility_window_text(port_id: String, facility_id: String) -> Dictionary:
 	var table: Dictionary = DataLoader.facility_hours
 	var window = table.get("default", {}).get(facility_id)

@@ -19,8 +19,10 @@ extends Node
 ##   6 the ecology keeps moving in port: the FleetSim autoload ticks on every
 ##     port day-advance (`last_tick_day` follows), and the closed rule gates
 ##     the market engine at the closed hour but passes inside the window;
-##   7 hub rows: a closed facility renders disabled with its window label and
-##     re-enables once the Space wait reaches the opening hour.
+##   7 hub cards: a closed facility renders disabled with its window on the
+##     §4.8.1 status line and re-enables (green `open_now` line) once the
+##     Space wait reaches the opening hour; the 24h inn shows the plain
+##     `open_always` label.
 
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
@@ -441,16 +443,24 @@ func _test_hub_closed_rows() -> void:
 		gate_hits.append(facility_id))
 	var market = hub.facility_row("market")
 	var inn = hub.facility_row("inn")
+	var market_texts: Dictionary = hub.facility_card_texts("market")
+	var inn_texts: Dictionary = hub.facility_card_texts("inn")
 	_check(market != null and market.disabled,
-		"06:00 the market row is disabled (closed)")
-	_check(str(market.text).contains("08:00") and str(market.text).contains("18:00"),
-		"the closed row names its window (%s)" % market.text)
+		"06:00 the market card is disabled (closed)")
+	_check(str(market_texts["status"]).contains("08:00")
+		and str(market_texts["status"]).contains("18:00"),
+		"the closed card names its window on the status line (%s)"
+		% str(market_texts))
 	_check(inn != null and not inn.disabled,
-		"06:00 the inn row stays open (24h)")
+		"06:00 the inn card stays open (24h)")
+	_check(inn_texts["status"] == I18n.t_key("port.facility.open_always"),
+		"the 24h inn shows the plain open_always status line (%s)"
+		% str(inn_texts))
 	_check(not hub.open_facility("market") and gate_hits == ["market"],
 		"the entry gate refuses a closed facility (signal still emitted)")
 
-	# Space-wait to opening: the rows rebuild with the market enabled.
+	# Space-wait to opening: the cards rebuild with the market enabled and its
+	# green open-now line.
 	var press := InputEventKey.new()
 	press.physical_keycode = KEY_SPACE
 	press.pressed = true
@@ -459,7 +469,12 @@ func _test_hub_closed_rows() -> void:
 		if hub.is_facility_enabled("market"):
 			break
 	_check(hub.is_facility_enabled("market"),
-		"waiting to 08:00 re-enables the market row")
+		"waiting to 08:00 re-enables the market card")
+	_check(hub.facility_card_texts("market")["status"]
+		== I18n.fmt("port.facility.open_now",
+			SailingSimLib.facility_window_text("lisbon", "market")),
+		"the re-opened card shows the open_now status line (%s)"
+		% str(hub.facility_card_texts("market")))
 	_check(hub.open_facility("market"), "the entry gate opens it after opening")
 
 	hub.queue_free()

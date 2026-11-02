@@ -9,15 +9,17 @@ extends Control
 ##     asks for;
 ##   * the shared HUD (`hud.tscn`) so day / gold / morale / provisions stay
 ##     visible (§4.5 "S4 HUD: same bars", with the sea viewport replaced);
-##   * the **facility rows**, rendered from the port's own `facilities` object
-##     (§4.1) in the fixed wireframe order, then **Set Sail**, the S4 → S3
-##     back edge (§4.2, §4.11).
+##   * the **facility cards** (docs/80-* §4.8.1 fixed grid), rendered from the
+##     port's own `facilities` object (§4.1) in the fixed §4.1 order, then
+##     **Set Sail**, the S4 → S3 back edge (§4.2, §4.11).
 ##
-## Facility rows are data-driven: a row exists iff `facilities` has that key,
-## and is clickable iff its activation phase ≤ 1. Guild (phase 3) is therefore
-## always a disabled stub, and Palace (phase 3, capitals only in the data)
-## appears only where the port JSON lists it. Editing `data/ports.json` changes
-## the hub with no code edit (§4.1, docs/90-* §12).
+## Facility cards are data-driven: a card exists iff `facilities` has that
+## key, and is clickable iff its activation phase ≤ 3. Guild and Palace
+## (phase 3) are live; Palace (capitals only in the data) appears only where
+## the port JSON lists it. Editing `data/ports.json` changes
+## the hub with no code edit (§4.1, docs/90-* §12). The §4.8.1 grid is
+## **fixed**: open/closed/bounty/stub states change a card's status line,
+## colors and disabled flag — never the layout.
 ##
 ## Exit contract (docs/20-* §4.11, docs/80-* §4.3/§4.6.1, §4.11.2):
 ##   * `GameState.current_port = null`
@@ -87,12 +89,18 @@ const FACILITY_LABEL_KEYS := {
 	"palace": "port.palace",
 }
 
-## §4.1: a facility row is clickable iff its activation phase is ≤ this. From
+## §4.1: a facility card is clickable iff its activation phase is ≤ this. From
 ## Phase 3 on every documented facility is live; a future-phase key would still
-## render as a disabled stub carrying the stub label.
+## render as a disabled stub carrying the stub status line.
 const FACILITY_ENABLED_MAX_PHASE := 3
-## The label every disabled (future-phase) row shows, per §4.1.
+## The status line every disabled (future-phase) card shows, per §4.1.
 const FACILITY_STUB_KEY := "port.stub.phase3"
+## The fixed §4.8.1 card spec: every facility renders the same 320×64 card at
+## the same two-column, left-aligned grid slot, whatever its open/closed
+## state — the state lives in the card's status line + disabled flag only.
+const FACILITY_CARD_SIZE := Vector2(320, 64)
+## The status line's font size (docs/80-* §4.8.1).
+const FACILITY_STATUS_FONT_SIZE := 12
 
 ## Emitted when a facility row (or anything else) asks for a facility screen;
 ## [method open_facility] emits it before deciding, so a test or a future stub
@@ -136,7 +144,8 @@ var route_to_facility: bool = true
 ## the editor with no run in progress).
 var _port_id: String = ""
 
-## Facility id → row Button for the rows currently rendered, in display order.
+## Facility id → card Button for the cards currently rendered, in display
+## order.
 var _row_buttons: Dictionary = {}
 ## The rendered facility ids, in display order (empty when standalone).
 var _row_ids: Array[String] = []
@@ -307,28 +316,59 @@ func is_facility_enabled(facility_id: String) -> bool:
 	return button != null and not button.disabled
 
 
-## Adds one facility row inside [method facility_container] and wires it to
-## [method open_facility]. *Which* rows exist, and their enabled state, are
+## Adds one facility card inside [method facility_container] and wires it to
+## [method open_facility]. *Which* cards exist, and their enabled state, are
 ## decided by [method _sync_facility_rows] from the port's `facilities` data;
-## this helper only guarantees the wiring, the palette and the button height.
+## this helper only guarantees the wiring, the §4.8.1 card spec and the
+## name/status labels.
 func add_facility_row(facility_id: String, text_key: String, enabled: bool = true) -> Button:
 	var button := _make_facility_button(facility_id, text_key, enabled)
 	_facility_rows.add_child(button)
+	_apply_card_labels(button)
 	return button
 
 
-## A facility row Button, not yet parented. Row text/tooltip for stubs is
-## applied by [method _sync_facility_rows] and [method _relabel_facility_rows].
+## A facility card Button (docs/80-* §4.8.1), not yet parented: a 320×64
+## Button whose surface is covered by a mouse-transparent, centered VBox
+## holding the facility-name label over the 12px status line (Godot Button
+## text is single-line, so the two lines live in child labels, referenced
+## through the button's `name_label`/`status_label` metas). Name/status text
+## and colors are applied by [method _apply_card_labels].
 func _make_facility_button(facility_id: String, text_key: String,
 		enabled: bool) -> Button:
 	var button := Button.new()
 	button.name = "Facility_%s" % facility_id
-	button.text = I18n.t_key(text_key)
 	button.disabled = not enabled
-	button.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
+	button.custom_minimum_size = FACILITY_CARD_SIZE
 	button.set_meta("text_key", text_key)
 	button.set_meta("facility_id", facility_id)
 	button.set_meta("stub", not enabled)
+	# Extension-point default (e.g. [method add_facility_row]): an enabled card
+	# claims the open-now line, a disabled one the stub reason. `_sync_`
+	# facility_rows always overwrites this with the §4.8.1 state.
+	button.set_meta("status_key",
+		"port.facility.open_now" if enabled else FACILITY_STUB_KEY)
+	var card := VBoxContainer.new()
+	card.name = "Card"
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card.alignment = BoxContainer.ALIGNMENT_CENTER
+	card.add_theme_constant_override("separation", 2)
+	button.add_child(card)
+	var name_label := Label.new()
+	name_label.name = "Name"
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(name_label)
+	var status_label := Label.new()
+	status_label.name = "Status"
+	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.add_theme_font_size_override("font_size",
+		FACILITY_STATUS_FONT_SIZE)
+	card.add_child(status_label)
+	button.set_meta("name_label", name_label)
+	button.set_meta("status_label", status_label)
 	# A disabled stub has no target: `pressed` never fires on a disabled
 	# Button, and the phase check in [method open_facility] is the second
 	# line of defence.
@@ -336,9 +376,24 @@ func _make_facility_button(facility_id: String, text_key: String,
 	return button
 
 
-## Every facility row Button in the container, recursively (the wireframe pairs
-## open facilities inside `HBoxContainer`s), in display order. Public so tests
-## and future screens can walk the rows without knowing the layout.
+## The card's two line texts for `facility_id` ({"name", "status"}; empty
+## strings when that port has no card). Tests and hosts read the §4.8.1
+## status line through this — a card Button's own `text` stays empty.
+func facility_card_texts(facility_id: String) -> Dictionary:
+	var button := facility_row(facility_id)
+	if button == null:
+		return {"name": "", "status": ""}
+	var name_label := button.get_meta("name_label") as Label
+	var status_label := button.get_meta("status_label") as Label
+	return {
+		"name": name_label.text if name_label != null else "",
+		"status": status_label.text if status_label != null else "",
+	}
+
+
+## Every facility card Button in the container, recursively (the fixed grid
+## pairs the cards inside `HBoxContainer`s), in display order. Public so tests
+## and future screens can walk the cards without knowing the layout.
 func facility_buttons() -> Array:
 	var buttons: Array = []
 	for child in _facility_rows.get_children():
@@ -616,38 +671,36 @@ func _facility_available(facility_id: String) -> bool:
 	return SailingSimLib.facility_open(_port_id, facility_id)
 
 
-## Renders the facility rows for the current port from its `facilities` data:
-## a row per present key, in the fixed §4.1 order, enabled iff its phase ≤ 1;
-## Phase-3 rows are disabled stubs labelled `port.stub.phase3`.
+## Renders the facility cards for the current port from its `facilities`
+## data: one card per present key, in the fixed §4.1 order, laid out as the
+## **fixed §4.8.1 grid** — two 320×64 cards per line, left-aligned, whatever
+## their state. Open/closed lives in the card's status line + disabled flag
+## only: an open card shows the green `port.facility.open_now` line; a
+## hours-closed card (`§4.1b`) the `{open}–{close}` window; a bounty-closed
+## card (`70-*` §4.9.6) its reason; a future-phase card the stub label.
 ##
-## Layout follows the §4.7 wireframe: the open Phase-1 facilities sit two per
-## line ([Market][Shipyard] / [Tavern][Inn]), while a disabled stub gets a line
-## of its own ([Guild — opens in Phase 3]). The grouping is derived from the
-## row list, so it adapts to whatever the port data contains (a port missing
-## `inn`, or offering an extra phase-1 key, still lays out sensibly).
-##
-## Rebuilds only when the underlying data changed (docked port or phases), so
-## locale/state rebinds stay cheap and keep button focus.
+## Rebuilds only when the underlying data changed (docked port, phases, hours
+## or bounty state), so locale/state rebinds stay cheap and keep button focus.
 func _sync_facility_rows(port: Dictionary) -> void:
 	var facilities = port.get("facilities", {})
 	if not facilities is Dictionary:
 		facilities = {}
-	# Signature of the data the rows depend on, in display order.
+	# Signature of the data the cards depend on, in display order.
 	var parts: Array[String] = []
 	for facility_id in FACILITY_ORDER:
 		if (facilities as Dictionary).has(facility_id):
 			parts.append("%s:%d" % [facility_id, _facility_phase(facility_id)])
 	for key in (facilities as Dictionary).keys():
 		# Keys outside the fixed order are data errors; include them in the
-		# signature anyway so a data edit still refreshes the rows.
+		# signature anyway so a data edit still refreshes the cards.
 		if not str(key) in FACILITY_ORDER:
 			parts.append("%s:?" % str(key))
-	# A bounty closing/reopening the port changes what every row shows, so it
+	# A bounty closing/reopening the port changes what every card shows, so it
 	# belongs in the rebuild signature (`70-*` §4.9.6).
 	parts.append("closed:%s" % str(BountyLib.is_port_closed(_port_id)))
-	# §4.1b (added 2026-11-02): each row's open/closed state is in the
+	# §4.1b (added 2026-11-02): each card's open/closed state is in the
 	# signature too, so crossing an opening/closing hour (Space waits, timed
-	# actions) rebuilds the rows with the `port.facility.closed` state.
+	# actions) rebuilds the cards with the §4.8.1 status-line state.
 	for facility_id in FACILITY_ORDER:
 		if (facilities as Dictionary).has(facility_id):
 			parts.append("hours:%s:%s" % [
@@ -660,46 +713,46 @@ func _sync_facility_rows(port: Dictionary) -> void:
 	_rows_signature = signature
 	_clear_facility_rows()
 
+	# The fixed grid: every present facility takes the next two-per-line
+	# slot, open or closed alike (docs/80-* §4.8.1) — the layout never
+	# depends on the state.
 	var pair: HBoxContainer = null
 	for facility_id in FACILITY_ORDER:
 		if not (facilities as Dictionary).has(facility_id):
 			continue
 		var phase := _facility_phase(facility_id)
 		var bounty_closed := not BountyLib.can_open_facility(_port_id, facility_id)
-		# §4.1b: hours-closed rows are phase-enabled but outside the window.
+		# §4.1b: hours-closed cards are phase-enabled but outside the window.
 		var hours_open := SailingSimLib.facility_open(_port_id, facility_id)
 		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE \
 			and not bounty_closed and hours_open
 		var label_key := str(FACILITY_LABEL_KEYS.get(
 			facility_id, "port.%s" % facility_id))
-		# §4.9.6: a bounty closes the port's rows (the capital palace stays
-		# usable for the pay-off), with its own reason label. §4.1b: a facility
-		# outside its opening window greys out with the `{open}–{close}` label.
-		var stub_key := "port.closed_bounty" if bounty_closed \
-			else FACILITY_STUB_KEY
-		if not bounty_closed and not hours_open:
-			stub_key = "port.facility.closed"
+		# The status line's key, precedence bounty > hours > phase stub
+		# (docs/80-* §4.8.1): a bounty-closed card shows its §4.9.6 reason,
+		# a card outside its §4.1b window the `{open}–{close}` hours, a
+		# future-phase card the stub label, an open card the green
+		# `open_now` line.
+		var status_key := FACILITY_STUB_KEY
+		if bounty_closed:
+			status_key = "port.closed_bounty"
+		elif not hours_open:
+			status_key = "port.facility.closed"
+		elif enabled:
+			status_key = "port.facility.open_now"
 		var button := _make_facility_button(facility_id, label_key, enabled)
-		if enabled:
-			# Two open facilities per wireframe line.
-			if pair == null or pair.get_child_count() >= 2:
-				pair = HBoxContainer.new()
-				pair.name = "Pair_%d" % _facility_rows.get_child_count()
-				pair.add_theme_constant_override("separation", 8)
-				_facility_rows.add_child(pair)
-			pair.add_child(button)
-		else:
-			# A stub owns its line (full-width), as in the wireframe.
-			pair = null
-			_facility_rows.add_child(button)
-			# §4.1: disabled rows carry the reason label, e.g.
-			# "Guild — opens in Phase 3" or "Market — Open 08:00–18:00".
-			button.text = "%s — %s" % [
-				I18n.t_key(label_key), _stub_text(stub_key, facility_id),
-			]
-			button.tooltip_text = _stub_text(stub_key, facility_id)
-			button.set_meta("stub", true)
-			button.set_meta("stub_key", stub_key)
+		if pair == null or pair.get_child_count() >= 2:
+			pair = HBoxContainer.new()
+			pair.name = "Pair_%d" % _facility_rows.get_child_count()
+			pair.add_theme_constant_override("separation", 8)
+			_facility_rows.add_child(pair)
+		pair.add_child(button)
+		button.set_meta("status_key", status_key)
+		if not enabled:
+			# Disabled cards keep their reason as a tooltip too (the status
+			# line already shows it on-card).
+			button.tooltip_text = _status_text(status_key, facility_id)
+		_apply_card_labels(button)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
 
@@ -713,34 +766,50 @@ func _clear_facility_rows() -> void:
 	_row_ids.clear()
 
 
-## The disabled-row reason text: plain keys render through [I18n.t_key]; the
-## §4.1b hours key interpolates the facility's own `{open}–{close}` window.
-func _stub_text(stub_key: String, facility_id: String) -> String:
-	if stub_key == "port.facility.closed":
-		return I18n.fmt(stub_key,
+## A status-line text (docs/80-* §4.8.1): the two hours keys interpolate the
+## facility's `{open}–{close}` window — except a 24h facility (empty window)
+## shows the plain `open_always` label — and every other key renders through
+## [I18n.t_key].
+func _status_text(status_key: String, facility_id: String) -> String:
+	if status_key == "port.facility.open_now":
+		var window := SailingSimLib.facility_window_text(_port_id, facility_id)
+		if window.is_empty():
+			return I18n.t_key("port.facility.open_always")
+		return I18n.fmt(status_key, window)
+	if status_key == "port.facility.closed":
+		return I18n.fmt(status_key,
 			SailingSimLib.facility_window_text(_port_id, facility_id))
-	return I18n.t_key(stub_key)
+	return I18n.t_key(status_key)
 
 
-## Re-labels every rendered row from its stored key, keeping the stub note for
-## disabled rows (docs/80-* §6: locale change rebinds without a reload). Walks
-## the container rather than the row cache so a row added through
-## [method add_facility_row] by a caller also rebinds.
+## Applies the §4.8.1 card labels for `button`: the facility name (`TEXT`
+## when enabled, `PANEL_LINE` when disabled) over the status line (`GOOD`
+## for the open-now key, `PANEL_LINE` otherwise). Used by the card build and
+## every locale rebind; the labels and keys are read from the button's own
+## metas so any card (including extension-point rows) rebinds.
+func _apply_card_labels(button: Button) -> void:
+	var name_label := button.get_meta("name_label") as Label
+	var status_label := button.get_meta("status_label") as Label
+	if name_label == null or status_label == null:
+		return
+	var status_key := str(button.get_meta("status_key", FACILITY_STUB_KEY))
+	var facility_id := str(button.get_meta("facility_id"))
+	name_label.text = I18n.t_key(str(button.get_meta("text_key")))
+	name_label.add_theme_color_override("font_color",
+		PaletteLib.TEXT if not button.disabled else PaletteLib.PANEL_LINE)
+	status_label.text = _status_text(status_key, facility_id)
+	status_label.add_theme_color_override("font_color",
+		PaletteLib.GOOD if status_key == "port.facility.open_now"
+		else PaletteLib.PANEL_LINE)
+
+
+## Re-labels every rendered card from its stored keys, keeping the status
+## line for disabled cards (docs/80-* §6: locale change rebinds without a
+## reload). Walks the container rather than the row cache so a card added
+## through [method add_facility_row] by a caller also rebinds.
 func _relabel_facility_rows() -> void:
 	for child in facility_buttons():
-		var button := child as Button
-		var label_key := str(button.get_meta("text_key"))
-		if bool(button.get_meta("stub", false)):
-			# The reason key is recorded per row so a bounty-closed row relabels
-			# with `port.closed_bounty`, a future-phase stub with its own key,
-			# and a §4.1b hours-closed row with its facility's window.
-			var stub_key := str(button.get_meta("stub_key", FACILITY_STUB_KEY))
-			var facility_id := str(button.get_meta("facility_id"))
-			button.text = "%s — %s" % [
-				I18n.t_key(label_key), _stub_text(stub_key, facility_id)]
-			button.tooltip_text = _stub_text(stub_key, facility_id)
-		else:
-			button.text = I18n.t_key(label_key)
+		_apply_card_labels(child as Button)
 
 
 ## A row was clicked: disabled stubs never emit `pressed` (Button.disabled), so

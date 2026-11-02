@@ -127,9 +127,9 @@ func _mount_hub(host: Control):
 	return hub
 
 
-## Row ids, in display order, from the actual row buttons (not the hub's own
-## cache) so the assertion is about what is on screen. The wireframe pairs the
-## open facilities inside HBoxContainers, so the walk is recursive.
+## Row ids, in display order, from the actual card buttons (not the hub's own
+## cache) so the assertion is about what is on screen. The §4.8.1 fixed grid
+## pairs the cards inside HBoxContainers, so the walk is recursive.
 func _row_ids(hub) -> Array:
 	var ids: Array = []
 	for button in hub.facility_buttons():
@@ -137,8 +137,9 @@ func _row_ids(hub) -> Array:
 	return ids
 
 
-## The direct children of the row container: Buttons (stubs, one per line) and
-## HBoxContainers (wireframe pairs of open facilities).
+## The direct children of the row container: the fixed grid's
+## HBoxContainers, each holding up to two facility cards — whatever their
+## open/closed state (docs/80-* §4.8.1).
 func _row_lines(hub) -> Array:
 	var lines: Array = []
 	for child in hub.facility_container().get_children():
@@ -151,6 +152,16 @@ func _row_lines(hub) -> Array:
 					ids.append(str(grandchild.get_meta("facility_id")))
 			lines.append(ids)
 	return lines
+
+
+## The §4.8.1 open-card status text for `id` at `port_id`: the windowed
+## `open_now` line, or the plain `open_always` label for a 24h facility
+## (empty window).
+func _open_status(port_id: String, id: String) -> String:
+	var window: Dictionary = SailingSimLib.facility_window_text(port_id, id)
+	if window.is_empty():
+		return I18n.t_key("port.facility.open_always")
+	return I18n.fmt("port.facility.open_now", window)
 
 
 # --- 1. Row order and content per port class -------------------------------
@@ -182,18 +193,19 @@ func _test_row_order_lisbon() -> void:
 	var sail: Button = hub.get_node("Layout/VBox/Footer/SetSail")
 	_check(sail != null and not sail.disabled,
 		"Set Sail is present and enabled below the rows")
-	# Wireframe layout: [Market][Shipyard] / [Tavern][Inn] / [Guild][Palace] —
-	# from Phase 3 on every facility is live, so the guild/palace pair joins the
-	# two-per-line layout (docs/30-* §4.1, §4.7).
+	# Fixed-card grid layout (docs/80-* §4.8.1): [Market][Shipyard] /
+	# [Tavern][Inn] / [Guild][Palace] — every present facility takes the same
+	# two-per-line slot whatever its open/closed state.
 	var lines := _row_lines(hub)
 	_check(lines == [["market", "shipyard"], ["tavern", "inn"],
 			["guild", "palace"]],
-		"Lisbon lays the rows out as the Phase-3 wireframe (got %s)" % str(lines))
-	# Every row is a 40px button (docs/80-* §4.8).
+		"Lisbon lays the cards out as the fixed §4.8.1 grid (got %s)" % str(lines))
+	# Every card uses the fixed 320×64 spec (docs/80-* §4.8.1).
 	for id in ids:
 		var row: Button = hub.facility_row(id)
-		_check(row != null and row.custom_minimum_size.y == 40.0,
-			"row '%s' uses the 40px button height (§4.8)" % id)
+		_check(row != null and row.custom_minimum_size == Vector2(320, 64),
+			"card '%s' uses the 320×64 §4.8.1 spec (%s)"
+			% [id, "" if row == null else str(row.custom_minimum_size)])
 
 	hub.queue_free()
 	host.queue_free()
@@ -351,17 +363,23 @@ func _test_enable_disable() -> void:
 		var row: Button = hub.facility_row(id)
 		_check(row != null and not row.disabled,
 			"P1 facility '%s' is enabled" % id)
-		_check(row != null and row.text == I18n.t_key("port.%s" % id),
-			"'%s' shows its noun, no stub note (%s)"
-			% [id, "" if row == null else row.text])
+		var texts: Dictionary = {} if row == null \
+			else hub.facility_card_texts(id)
+		_check(texts.get("name", "") == I18n.t_key("port.%s" % id),
+			"'%s' shows its noun on the name line (%s)" % [id, str(texts)])
+		_check(texts.get("status", "") == _open_status("lisbon", id),
+			"'%s' shows the open-now status line (%s)" % [id, str(texts)])
 
 	for id in P3_FACILITIES:
 		var row: Button = hub.facility_row(id)
 		_check(row != null and not row.disabled,
 			"phase-3 facility '%s' is enabled" % id)
-		_check(row != null and row.text == I18n.t_key("port.%s" % id),
-			"'%s' shows its noun, no stub note (%s)"
-			% [id, "" if row == null else row.text])
+		var texts: Dictionary = {} if row == null \
+			else hub.facility_card_texts(id)
+		_check(texts.get("name", "") == I18n.t_key("port.%s" % id),
+			"'%s' shows its noun on the name line (%s)" % [id, str(texts)])
+		_check(texts.get("status", "") == _open_status("lisbon", id),
+			"'%s' shows the open-now status line (%s)" % [id, str(texts)])
 		_check(row != null and row.tooltip_text.is_empty(),
 			"'%s' carries no stub tooltip" % id)
 
@@ -529,29 +547,32 @@ func _test_locale_rebind() -> void:
 
 	var english: Dictionary = {}
 	for id in FIXED_ORDER:
-		var row: Button = hub.facility_row(id)
-		english[id] = "" if row == null else row.text
+		english[id] = hub.facility_card_texts(id)
 
 	I18n.set_locale("zh")
 	await get_tree().process_frame
 	for id in FIXED_ORDER:
-		var row: Button = hub.facility_row(id)
-		_check(row != null and row.text != english[id],
-			"zh rebinds the '%s' row (%s)" % [id, "" if row == null else row.text])
-		_check(row != null and row.text == I18n.t_key("port.%s" % id),
-			"zh '%s' row uses the zh key (%s)"
-			% [id, "" if row == null else row.text])
+		var texts: Dictionary = hub.facility_card_texts(id)
+		_check(texts.get("name", "") != str(english[id].get("name", "")),
+			"zh rebinds the '%s' name line (%s)" % [id, str(texts)])
+		_check(texts.get("name", "") == I18n.t_key("port.%s" % id),
+			"zh '%s' name line uses the zh key (%s)" % [id, str(texts)])
+		_check(texts.get("status", "") != str(english[id].get("status", "")),
+			"zh rebinds the '%s' status line (%s)" % [id, str(texts)])
 
-	# No row may ever render a raw key (docs/80-* §6), and every row is localised
-	# in zh.
+	# No card line may ever render a raw key (docs/80-* §6), and every line is
+	# localised in zh.
 	for button in hub.facility_buttons():
-		var text := (button as Button).text
-		_check(not text.begins_with("<") and not text.contains("<port."),
-			"row text is localised, not a raw key (%s)" % text)
-		_check(not (button as Button).text.is_empty(),
-			"row text is non-empty in zh (%s)" % text)
+		var id := str(button.get_meta("facility_id"))
+		var texts: Dictionary = hub.facility_card_texts(id)
+		for line in ["name", "status"]:
+			var text := str(texts.get(line, ""))
+			_check(not text.begins_with("<") and not text.contains("<port."),
+				"'%s' %s line is localised, not a raw key (%s)" % [id, line, text])
+			_check(not text.is_empty(),
+				"'%s' %s line is non-empty in zh (%s)" % [id, line, text])
 
-	# The header, greeting and Set Sail rebind with the rows.
+	# The header, greeting and Set Sail rebind with the cards.
 	var greeting: Label = hub.get_node("Layout/VBox/Header/Greeting")
 	var lisbon: Dictionary = DataLoader.get_port("lisbon")
 	_check(greeting.text == I18n.t(lisbon["flavor"]),
@@ -564,9 +585,11 @@ func _test_locale_rebind() -> void:
 	I18n.set_locale("en")
 	await get_tree().process_frame
 	for id in FIXED_ORDER:
-		var row: Button = hub.facility_row(id)
-		_check(row != null and row.text == english[id],
-			"en restores the '%s' row (%s)" % [id, "" if row == null else row.text])
+		var texts: Dictionary = hub.facility_card_texts(id)
+		_check(texts.get("name", "") == str(english[id].get("name", "")),
+			"en restores the '%s' name line (%s)" % [id, str(texts)])
+		_check(texts.get("status", "") == str(english[id].get("status", "")),
+			"en restores the '%s' status line (%s)" % [id, str(texts)])
 
 	hub.queue_free()
 	host.queue_free()

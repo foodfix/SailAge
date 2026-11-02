@@ -2694,7 +2694,15 @@
   },
   "port.facility.closed": {
     "zh": "营业时间 {open}–{close}",
-    "en": "Open {open}–{close}"
+    "en": "Closed · Opens {open}–{close}"
+  },
+  "port.facility.open_now": {
+    "zh": "营业中 · {open}–{close}",
+    "en": "Open · {open}–{close}"
+  },
+  "port.facility.open_always": {
+    "zh": "全天营业",
+    "en": "Open around the clock"
   },
   "port.wait.hour": {
     "zh": "等待 1 小时（空格）",

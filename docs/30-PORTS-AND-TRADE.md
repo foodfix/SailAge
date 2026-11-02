@@ -50,7 +50,8 @@ Every `Port.facilities` key lists an activation phase (`10-*` §4.4):
 
 The port hub lists facilities in fixed order: Market, Shipyard, Tavern, Inn,
 Guild, Palace, plus a "Set Sail" button. Phase-3 facilities render as
-disabled rows with the stub label until Phase 3 activates them; from Phase 3
+disabled cards with the stub status line (`80-*` §4.8.1) until Phase 3
+activates them; from Phase 3
 on they are enabled (or replaced by `port.closed_bounty` on a bountied
 nation's ports, `70-*` §4.9.6). Neutral ports (`nation_id: ""`, Phase 6,
 `10-*` §7.1) run the standard market off their `produces`/`demands` flow
@@ -81,8 +82,10 @@ The shipped defaults — uniform across all ports:
 both require the **current** time of day to be within the facility's window
 (`SailingSim.facility_open`); an action started before closing may finish
 after it (the "last order" reading — a 17:59 trade ends 18:59, a 18:01 trade
-is refused). A closed facility renders its hub row disabled with the
-`port.facility.closed` label carrying the `{open}–{close}` window; the port
+is refused). A closed facility renders its card disabled, its status line
+carrying the `port.facility.closed` `{open}–{close}` window (`80-*` §4.8.1 —
+the card grid is fixed, so open/closed changes colors and clickability,
+never the layout); the port
 Space wait (§4.3, +1h) is the way to wait for opening. The inn never closes,
 so rest and odd jobs work at any hour. **Supplies are the one exception to
 the windows (24h amendment, 2026-11-02, `20-*` §4.10):** provisions/water
@@ -470,14 +473,22 @@ interactions per screen.
 +--------------------------------------------------------------+
 | "<flavor line>"                                              |
 |                                                              |
-|  [ Market ]   [ Shipyard ]                                   |
-|  [ Tavern ]   [ Inn    ]                                     |
-|  [ Guild — opens in Phase 3 ]  (disabled)                    |
-|  [ Palace — opens in Phase 3 ] (disabled, capitals only row) |
+|  [ Market         ] [ Shipyard     ]                         |
+|  [ <status line>  ] [ <status line> ]                        |
+|  [ Tavern         ] [ Inn          ]                         |
+|  [ <status line>  ] [ <status line> ]                        |
+|  [ Guild          ] [ Palace       ]                         |
+|  [ <status line>  ] [ <status line> ]                        |
 |                                                              |
 |  [ Set Sail ]                                                |
 +--------------------------------------------------------------+
 ```
+
+Fixed 320×64 cards in two left-aligned columns (`80-*` §4.8.1): every
+facility the port offers renders the **same card slot whatever its state** —
+open/closed lives only in the card's status line and disabled flag
+(`营业中 · 08:00–18:00` green vs `营业时间 08:00–18:00` greyed), never in
+the layout.
 
 Interactions: click a facility → route to its screen; Esc from a facility
 returns here; Set Sail → `20-*` §4.11 exit.

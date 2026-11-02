@@ -462,10 +462,11 @@ func _test_set_sail_round_trip() -> void:
 	port.facility_requested.connect(func(fid: String) -> void: requested.append(fid))
 	var rows_before: int = port.facility_container().get_child_count()
 	var row: Button = port.add_facility_row("market", "port.market")
-	_check(row.text == I18n.t_key("port.market"),
-		"add_facility_row() binds port.market (%s)" % row.text)
-	_check(row.custom_minimum_size == Vector2(240, PaletteLib.BUTTON_H),
-		"facility rows use the 40px button height (§4.8)")
+	_check(port.facility_card_texts("market")["name"] == I18n.t_key("port.market"),
+		"add_facility_row() binds port.market (%s)"
+		% str(port.facility_card_texts("market")))
+	_check(row.custom_minimum_size == Vector2(320, 64),
+		"facility cards use the fixed 320×64 §4.8.1 spec")
 	_check(port.facility_container().get_child_count() == rows_before + 1,
 		"the row lands in the facility container")
 	row.pressed.emit()
@@ -474,8 +475,9 @@ func _test_set_sail_round_trip() -> void:
 	_check(port.is_inside_tree() and tree.current_scene == port,
 		"route_to_facility=false keeps the port screen in place")
 	I18n.set_locale("zh")
-	_check(row.text == I18n.t_key("port.market"),
-		"facility rows rebind on locale_changed (%s)" % row.text)
+	_check((row.get_meta("name_label") as Label).text == I18n.t_key("port.market"),
+		"facility cards rebind on locale_changed (%s)"
+		% str((row.get_meta("name_label") as Label).text))
 	I18n.set_locale("en")
 	row.queue_free()
 
