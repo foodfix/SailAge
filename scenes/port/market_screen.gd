@@ -6,6 +6,12 @@ extends Control
 ## badge + header, the 不收购 sell-disabled own produces, the grayed
 ## 专营货 rows, the 4-state tariff badge + per-side tax lines, and the
 ## three-state Invest button (docs/30 §4.9/§4.10, decision 26).
+## Phase 8: the §4.2 appraisal-gated arrows — the profit arrow (↓ below
+## `base_price` on the buy side / ↑ above it on the sell side, gate ≥ 30)
+## and the other-port memory arrow (local price vs the remembered foreign
+## price, gate ≥ 60) — rendered as bare ↑/↓ glyphs in their own cell; the
+## engine's [method TradeEngine.profit_arrow] / [method
+## TradeEngine.memory_arrow] own the gates, this screen only renders.
 ##
 ## Everything the screen shows comes from data:
 ##   * the goods table iterates [method TradeEngine.goods_rows] (L's merged,
@@ -69,6 +75,10 @@ const QTY_PRESETS: Array[int] = [1, 10, 100]
 const COL_NAME_W := 160
 const COL_STOCK_W := 56
 const COL_TREND_W := 96
+## Phase 8 (docs/30 §4.2): the appraisal-gated profit / other-port memory
+## arrows — one narrow cell between Trend and Marginal. Bare ↑/↓ glyphs
+## (locale-independent symbols; the §4.7.15 inventory pins no string keys).
+const COL_ARROW_W := 40
 const COL_MARGINAL_W := 132
 const COL_HAVE_W := 70
 const COL_QTY_W := 72
@@ -459,11 +469,13 @@ func _build_column_header() -> void:
 		_column_header.remove_child(child)
 		child.queue_free()
 	# [node-name suffix, ui_strings key, width, alignment] — the keys are the
-	# §4.7.9 captions (`market.` + key); node names stay dot-free.
+	# §4.7.9 captions (`market.` + key); node names stay dot-free. The
+	# Phase-8 arrows cell carries no caption (bare glyphs, no string keys).
 	for spec in [
 		["good", "good", COL_NAME_W, HORIZONTAL_ALIGNMENT_LEFT],
 		["stock", "stock.header", COL_STOCK_W, HORIZONTAL_ALIGNMENT_RIGHT],
 		["trend", "stock.trend", COL_TREND_W, HORIZONTAL_ALIGNMENT_LEFT],
+		["arrows", "", COL_ARROW_W, HORIZONTAL_ALIGNMENT_LEFT],
 		["marginal", "stock.marginal", COL_MARGINAL_W,
 				HORIZONTAL_ALIGNMENT_RIGHT],
 		["you_have", "you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
@@ -471,7 +483,8 @@ func _build_column_header() -> void:
 	]:
 		var label := Label.new()
 		label.name = "Col_%s" % str(spec[0])
-		label.set_meta("text_key", "market.%s" % str(spec[1]))
+		if not str(spec[1]).is_empty():
+			label.set_meta("text_key", "market.%s" % str(spec[1]))
 		label.custom_minimum_size = Vector2(float(spec[2]), float(PaletteLib.ROW_H))
 		label.horizontal_alignment = int(spec[3])
 		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
@@ -529,6 +542,25 @@ func _build_good_row(good_id: String) -> Dictionary:
 	trend_label.custom_minimum_size.x = float(COL_TREND_W)
 	trend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
+	# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the profit arrow
+	# (GOOD: ↓ buy-cheap / ↑ sell-dear vs base_price) and the other-port
+	# memory arrow (ACCENT: local price vs the remembered foreign price).
+	# Both stay empty below their gates.
+	var arrows_box := HBoxContainer.new()
+	arrows_box.name = "Arrows"
+	arrows_box.custom_minimum_size.x = float(COL_ARROW_W)
+	arrows_box.add_theme_constant_override("separation", 2)
+	var profit_arrow_label := Label.new()
+	profit_arrow_label.name = "ProfitArrow"
+	profit_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	profit_arrow_label.add_theme_color_override("font_color", PaletteLib.GOOD)
+	var memory_arrow_label := Label.new()
+	memory_arrow_label.name = "MemoryArrow"
+	memory_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	memory_arrow_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	arrows_box.add_child(profit_arrow_label)
+	arrows_box.add_child(memory_arrow_label)
+
 	var marginal_label := Label.new()
 	marginal_label.name = "Marginal"
 	marginal_label.custom_minimum_size.x = float(COL_MARGINAL_W)
@@ -573,6 +605,7 @@ func _build_good_row(good_id: String) -> Dictionary:
 	row.add_child(name_cell)
 	row.add_child(stock_label)
 	row.add_child(trend_label)
+	row.add_child(arrows_box)
 	row.add_child(marginal_label)
 	row.add_child(have_label)
 	row.add_child(qty_box)
@@ -588,6 +621,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 		"name": name_label,
 		"stock": stock_label,
 		"trend": trend_label,
+		"arrows": arrows_box,
+		"profit_arrow": profit_arrow_label,
+		"memory_arrow": memory_arrow_label,
 		"marginal": marginal_label,
 		"have": have_label,
 		"qty": qty_field,
@@ -825,8 +861,46 @@ func _refresh_rows() -> void:
 			I18n.fmt("ui.gold_amount", {"gold": format_thousands(sell)}),
 		]
 		_refresh_stock_cells(good_id, refs)
+		_refresh_arrow_cells(good_id, refs)
 		(refs["have"] as Label).text = str(FleetLib.held(good_id))
 		_apply_row_limits(good_id)
+
+
+## The Phase-8 arrow cells (docs/30 §4.2): the profit arrow renders iff the
+## effective appraisal passes its ≥ 30 gate and the row is profitable vs
+## `base_price`; the other-port memory arrow iff the ≥ 60 gate passes and the
+## memory holds a foreign entry for the good. Below the gates the cells stay
+## empty and only the §4.8 flow-trend glyph shows (kept in
+## `_refresh_stock_cells`, untouched).
+func _refresh_arrow_cells(good_id: String, refs: Dictionary) -> void:
+	var profit_dir := TradeEngineLib.profit_arrow(_port_id, good_id) \
+		if not _port_id.is_empty() else ""
+	var memory_dir := TradeEngineLib.memory_arrow(_port_id, good_id) \
+		if not _port_id.is_empty() else ""
+	var profit_label: Label = refs["profit_arrow"]
+	var memory_label: Label = refs["memory_arrow"]
+	profit_label.text = _arrow_glyph(profit_dir)
+	memory_label.text = _arrow_glyph(memory_dir)
+
+
+## `↑` above / `↓` below; `""` for no arrow.
+static func _arrow_glyph(direction: String) -> String:
+	if direction == "up":
+		return "↑"
+	if direction == "down":
+		return "↓"
+	return ""
+
+
+## The Phase-8 arrow directions currently rendered on a good's row
+## (`{"profit": "up"|"down"|"", "memory": ...}`) — the suite seam; the labels
+## themselves carry the bare ↑/↓ glyphs.
+func row_arrows(good_id: String) -> Dictionary:
+	var profit_dir := TradeEngineLib.profit_arrow(_port_id, good_id) \
+		if not _port_id.is_empty() else ""
+	var memory_dir := TradeEngineLib.memory_arrow(_port_id, good_id) \
+		if not _port_id.is_empty() else ""
+	return {"profit": profit_dir, "memory": memory_dir}
 
 
 ## Stock cell (0–200) and the one-glyph trend against the **effective**
