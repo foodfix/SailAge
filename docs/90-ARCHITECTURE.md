@@ -191,10 +191,12 @@ marked •):
   `20-*` §4.17), `heading` (default `"E"`; an 8-dir id, `20-*` §4.2), and
   `wind_dir` (default `"E"`; an 8-dir id — overwritten by every ledger
   weather roll before any movement consumes it, and persisted for the
-  current day, `20-*` §4.7). The explored bitset is a
+  current day, `20-*` §4.7). The explored set's container is a
   `PackedByteArray` of **9,331,200** bytes (~9.3 MB at the 4320×2160 grid;
-  session-only) owned by the world scene/HUD, **not**
-  saved and not part of `world`.
+  the runtime keeps the Phase-1 Dictionary behind `ChartView.is_explored`)
+  owned by the world scene/HUD. It **is** saved since the explored-state
+  amendment (2026-11-02) — as the top-level §8.1 key `explored_tiles`,
+  never inside `world`.
 - `morale: int` • — fleet morale 0–100 (`20-*` §4.8)
 - `current_port: String?` • — port id while docked; `null` at sea (save/load
   routing, `80-*` §4.7)
@@ -344,9 +346,9 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 7,
+  "save_version": 8,
   "saved_at": 1793119712,
-  "phase": 7,
+  "phase": 8,
   "locale": "en",
   "day": 12,
   "gold": 7830,
@@ -356,6 +358,7 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   "world": {"position": {"x": 2050, "y": 615}, "map_id": "world", "weather": "calm", "sail_trim": "normal", "heading": "E", "wind_dir": "E"},
   "current_port": "lisbon",
   "known_ports": ["lisbon"],
+  "explored_tiles": "",
   "port_investments": {"lisbon": 500},
   "quests": [],
   "discoveries_found": [],
@@ -494,6 +497,35 @@ transformation**. All Phase-7 state is initialized by `new_game` through
 One owner task (V, `tools/test_save_v7.*` renamed from `test_save_v6`), the
 Phase-5/6 single-breaking-bump pattern.
 
+Version 8 — explored-state amendment (2026-11-02):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `explored_tiles` | `string` — base64 of the run-length encoding below | `""` → the empty set | `20-*` §4.12 (the reveal rules; the set itself lives in `GameState.explored_tiles`) |
+
+The key persists the session explored set so a load restores the exact fog
+boundary (the Phase-1 "explored on load again" limitation is removed; `80-*`
+§4.6 amended the same day). **Encoding** (normative): the string is standard
+base64 (with padding) of a little-endian byte stream of **6-byte runs**
+`[u16 y][u16 x0][u16 len−1]` over the 4320×2160 grid; runs are sorted by
+`(y, x0)` strictly increasingly, never overlap or touch within a row, and
+satisfy `y < 2160`, `x0 ≥ 0`, `len ≥ 1`, `x0 + len ≤ 4320`. The empty set
+encodes as `""`. `snapshot()` derives runs from `GameState.explored_tiles`
+(keys are already wrap-normalised `Vector2i`s); `validate_payload()` refuses
+a value that is not a string, not valid base64, not a multiple of 6 bytes,
+or carries an out-of-domain / unsorted / overlapping run — same
+refuse-loudly rule as every other wrong-typed block. The runtime container
+stays the Phase-1 Dictionary (`90-*` §5.4); load assigns a **fresh**
+dictionary so the HUD minimap's reference-identity reset check keeps firing.
+
+**No migration; v7 refused (explored-state amendment).** `SAVE_VERSION = 8`,
+`PHASE = 8`; version 8 adds **no `MIGRATIONS` entry and performs no payload
+transformation**. A v7 payload is refused like any older version (`load()`
+false, "pre-release save" logged); see §8.2 for the normative rule. Owner:
+the out-of-band explored-state amendment (no `IMPLEMENT-Phase8.md` exists);
+`tools/test_save_v8.*` follows the `test_save_v7` single-breaking-bump
+pattern.
+
 ### 8.2 Versioning rule (no migration chain)
 
 **Development-stage scope (normative; amended 2026-10-31, Phases 5–6).**
@@ -502,15 +534,17 @@ compatibility across phases is therefore **explicitly out of scope until
 the first release**, and no task may spend effort on it. Concretely:
 
 - `save_version` increments on any breaking shape change. The current
-  values are `SAVE_VERSION = 7`, `PHASE = 7`.
+  values are `SAVE_VERSION = 8`, `PHASE = 8` (the explored-state amendment,
+  2026-11-02).
 - **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
   contract is the identity: a payload whose `save_version` equals
-  `SAVE_VERSION` loads (round-trip); **any older payload — v6 included —
+  `SAVE_VERSION` loads (round-trip); **any older payload — v7 included —
   is refused** (`load()` returns false, logs "pre-release save"). There is
-  no v6 → v7 step, and none may be reintroduced: Phase 4 removed the chain
+  no v7 → v8 step, and none may be reintroduced: Phase 4 removed the chain
   (`IMPLEMENT-Phase5.md` correction 4), Phase 5 kept it removed
-  (decision 5), Phase 6 kept it removed (decision 12), and Phase 7 keeps
-  it removed (decision 13).
+  (decision 5), Phase 6 kept it removed (decision 12), Phase 7 keeps
+  it removed (decision 13), and the explored-state amendment (2026-11-02)
+  keeps it removed.
 - All Phase-5/6/7 state is initialized by `new_game` (stocks derived;
   fleets seeded to half the cap there and only there; `control_prefs` and
   the three `world` ocean keys defaulted; the allegiance/permit/treasury

@@ -18,7 +18,12 @@ extends RefCounted
 ##
 ## **Explored state container.** `GameState.explored_tiles` is the Phase-1
 ## dictionary (`20-*` §4.12 / `90-*` §5.4 describe the intended
-## `PackedByteArray` of 291,600 bytes). Phase 4 keeps the dictionary: the phase
+## `PackedByteArray` of 291,600 bytes). The container migration stays a
+## documented deferral, but since the v8 explored-state amendment
+## (2026-11-02, `90-*` §8.1 version 8) the set **persists**: `SaveSystem`
+## encodes it into the save (`explored_tiles`, base64 row runs) and restores
+## it into a fresh Dictionary on load — the old "re-explored on load"
+## limitation is removed. Phase 4 keeps the Dictionary: the phase
 ## acceptance is identical *content* between the two views, and migrating the
 ## container would touch `autoload/game_state.gd`, `autoload/save_system.gd`,
 ## `scenes/world/world_map.gd#_reveal` and five suites owned by other tasks.

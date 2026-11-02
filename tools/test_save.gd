@@ -133,7 +133,15 @@ func _make_rich_run() -> void:
 	GameState.port_investments = {"lisbon": 500, "seville": 1200}
 	GameState.quests = []
 	GameState.discoveries_found = []
-	GameState.explored_tiles = {"1,2": true}
+	# v8 explored-state amendment (docs/90-* §8.1): a real Vector2i fixture —
+	# row 0 single tile, row 5 one contiguous run, row 6 two separated runs
+	# (one hugging the seam x=4319) — so the codec's merge, ordering and
+	# decode all carry round-trip weight.
+	GameState.explored_tiles = {
+		Vector2i(10, 5): true, Vector2i(11, 5): true, Vector2i(12, 5): true,
+		Vector2i(4300, 6): true, Vector2i(4319, 6): true,
+		Vector2i(0, 0): true,
+	}
 	# Phase-5 blocks (docs/90-* §8.1): a displaced stock, a wreck, a
 	# non-default preset and one active event instance.
 	var stocks := EconomyLib.build_initial_stocks(
@@ -173,6 +181,9 @@ func _clobber_state() -> void:
 	GameState.port_investments = {}
 	GameState.quests = []
 	GameState.discoveries_found = []
+	# A different explored set than the fixture's, so "restored" cannot be
+	# confused with "left alone" (v8 explored-state amendment).
+	GameState.explored_tiles = {Vector2i(3, 3): true}
 
 
 ## The values a save must reproduce exactly, read straight from GameState.
@@ -188,6 +199,7 @@ func _expected() -> Dictionary:
 		"position": GameState.world["position"].duplicate(),
 		"weather": GameState.world["weather"],
 		"known_ports": GameState.known_ports.duplicate(),
+		"explored_tiles": GameState.explored_tiles.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
 		"market_stocks": GameState.market_stocks.duplicate(true),
 		"wrecks": GameState.wrecks.duplicate(true),
@@ -229,8 +241,12 @@ func _test_full_round_trip() -> void:
 		"saved_at is numeric")
 	_check(not (raw.get("world", {}) as Dictionary).has("clock_fraction"),
 		"world.clock_fraction is not persisted (docs/20-* §4.3)")
-	_check(not raw.has("explored_tiles"),
-		"explored_tiles is not persisted (docs/20-* §4.12)")
+	# v8 explored-state amendment (docs/90-* §8.1 v8): persisted as the base64
+	# row-run encoding, present even when the set is empty.
+	_check(raw.has("explored_tiles") and raw["explored_tiles"] is String,
+		"explored_tiles is persisted as a string (docs/90-* §8.1 v8)")
+	_check(not (raw["explored_tiles"] as String).is_empty(),
+		"the sailed fixture encodes to a non-empty run string")
 	_check((raw.get("player", {}) as Dictionary).has("profit_by_nation")
 		and (raw.get("player", {}) as Dictionary).has("profit_rep_awarded"),
 		"both reputation accumulators are in the payload (docs/50-* §4.8)")
@@ -294,8 +310,12 @@ func _test_full_round_trip() -> void:
 	_check(GameState.market_events == expected["market_events"]
 		and int(GameState.market_events[0]["start_day"]) == 30,
 		"market_events restored byte-equal with int days")
-	_check(GameState.explored_tiles.is_empty(),
-		"explored_tiles stays empty after a load (not saved)")
+	_check(GameState.explored_tiles == expected["explored_tiles"],
+		"explored_tiles restored byte-equal (docs/90-* §8.1 v8)")
+	_check(GameState.explored_tiles.size() == 6
+		and GameState.explored_tiles.has(Vector2i(4319, 6))
+		and GameState.explored_tiles.has(Vector2i(0, 0)),
+		"the explored set comes back as Vector2i keys, seam tile included")
 
 	# A second save/load cycle must be idempotent (no accumulation/drift).
 	var before := _expected()

@@ -105,8 +105,10 @@ func _report() -> void:
 
 
 ## A full-state digest: the whole `SaveSystem.snapshot()` payload (minus the
-## wall-clock `saved_at`) plus the session-only fields a save does not carry
-## (the explored set, the fleet sim's save payload, the day).
+## wall-clock `saved_at`) plus the fields a save does not carry (the fleet
+## sim's save payload, the day). The explored set rides the payload since the
+## v8 amendment and is still listed explicitly for symmetry with the digest's
+## other direct reads.
 func _state_digest() -> String:
 	var snapshot: Dictionary = SaveSystem.snapshot()
 	snapshot.erase("saved_at")

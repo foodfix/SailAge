@@ -1095,3 +1095,29 @@ orchestrator ui_strings merge, and the two staged-sim rulings.
 | day tick @ cap (ms, ≤ 75) / pursuit A* (ms, ≤ 250) | — | — |
 | ui_strings keys zh/en parity | — | — |
 | save size @ extreme (≤ 2 MB) | — | — |
+
+---
+
+## Amendment (2026-11-02): explored-state persistence
+
+Post-completion, user-directed out-of-band amendment (no owner task; docs
+`90-*` §5.4/§8.1/§8.2, `20-*` §4.12 and `80-*` §4.6 amended the same day).
+The Phase-1 known limitation "explored tiles are not saved; re-explored on
+load" is **removed**: the session explored set persists as the §8.1
+`explored_tiles` key (base64 of 6-byte row runs, spec in `90-*` §8.1
+version 8). The version bump absorbs the payload-shape change —
+`SAVE_VERSION = 8`, `PHASE = 8`, v7 refused, no migration chain. The runtime
+container stays the Phase-1 Dictionary (`chart_view.gd`); `save_system.gd`
+owns the encode/decode seam. Tests: `tools/test_save.gd` flipped its two
+"deliberately not saved" assertions; `tools/test_save_v8.*` (renamed from
+`test_save_v7`, the single-breaking-bump pattern) covers the v8 round trip
+incl. the explored set, the encoding refusal probes, the absent-key default,
+the v7-refused path and the extreme-save size re-measurement.
+
+| Gate | Result | Date |
+|---|---|---|
+| `test_save` / `test_save_v8` | **both exit 0** (222 / 473 checks); v8 round-trips byte-equal (explored set restored as 3 runs → 4 tiles), v7 refused by name, encoding refusals hold, state untouched on every rejection | 2026-11-02 |
+| test suites (`run_tests.py`) | **39 suites, green=39 red=0 zombie/hang=0** (412 s) | 2026-11-02 |
+| save size @ extreme (≤ 2 MB) | **1 970 269 B ≈ 1.88 MB** (the empty-set encoding adds ~24 B; the probe sails nothing) | 2026-11-02 |
+| `validate_data.py` groups 1–10 | **exit 0** (no `data/` change) | 2026-11-02 |
+| `godot --headless --quit-after 3` | exit 0, zero `SCRIPT ERROR` | 2026-11-02 |

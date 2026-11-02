@@ -571,11 +571,15 @@ provisioning prompt rather than leaving directly.
 
 - HUD element: a **256×192 px** box showing a **wrap-aware 128×96-tile crop**
   around the fleet at 2 px/tile.
-- Renders explored tiles only, from the session explored bitset (a
-  `PackedByteArray` of **9,331,200** bytes — 4320 × 2160, one per world tile,
-  ~9.3 MB; not saved):
+- Renders explored tiles only, from the session explored set (the doc's
+  container is a `PackedByteArray` of **9,331,200** bytes — 4320 × 2160, one
+  per world tile, ~9.3 MB; the runtime keeps the Phase-1 Dictionary of
+  `Vector2i` keys behind `ChartView.is_explored`, the migration stays a
+  documented deferral):
   a tile is explored after being within the sighting radius (§4.11) of the
-  fleet. Re-explored on load — known limitation, unchanged.
+  fleet. **Persisted** as the §8.1 `explored_tiles` key (`90-*` §8.1
+  version 8 — explored-state amendment, 2026-11-02): a save restores the
+  exact set on load, so the old "re-explored on load" limitation is removed.
 - The crop is **centred on the fleet** (column 64 of the 128, row 48 of 96),
   so a fleet at `x = 4319` shows tiles `x ∈ [4255..4319]` then `x ∈ [0..62]`
   — 128 contiguous columns, with no void at the seam. `x = 4254` and

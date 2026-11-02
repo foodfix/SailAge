@@ -134,8 +134,10 @@ var pending_tournament_round: int = 0
 ## The settled bracket block S13 reports on open (`70-*` §4.9.7). Transient:
 ## written by `Tournament.settle()`, consumed once by S13; never saved.
 var last_tournament_outcome: Dictionary = {}
-## Minimap exploration set; deliberately not saved in Phase 1
-## (docs/20-* §4.12 known limitation).
+## Minimap/chart exploration set (`20-*` §4.12). Persisted since the v8
+## explored-state amendment (docs/90-* §8.1 version 8) — the Phase-1
+## "deliberately not saved" limitation is removed; `SaveSystem` owns the
+## payload encoding. `new_game` still clears it.
 var explored_tiles: Dictionary = {}
 
 

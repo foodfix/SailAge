@@ -1,43 +1,46 @@
 extends Node
-## Phase-7 Task V acceptance tests: the v7 save schema and the identity-only
-## load rule (docs/IMPLEMENT-Phase7.md task V, decision 13; docs/90-* §8.1,
-## §8.2 development-stage scope; docs/30-* §4.9/§4.10 the allegiance state).
+## Explored-state amendment (2026-11-02) acceptance tests: the v8 save schema
+## and the identity-only load rule (docs/90-* §8.1 version 8, §8.2
+## development-stage scope; docs/20-* §4.12 the explored set; docs/30-*
+## §4.9/§4.10 the allegiance state carried over from v7).
 ##
-##   godot --headless --path . res://tools/test_save_v7.tscn
+##   godot --headless --path . res://tools/test_save_v8.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## **What this suite is.** Phase 4 deleted the migration chain and Phases 5–7
-## keep it removed (decision 13: no migration; a v6 payload is refused like
-## any older pre-release save — the v7 bump absorbs the allegiance/permit/
-## treasury state, so a stale v6 file must never load into a run whose
-## allegiance tug-of-war would silently restart from the seed). This suite
-## therefore tests the **current** schema: a v7 payload round-trips byte-equal
-## — including the five new keys (`permits`, `port_allegiance` in the
-## correction-8 `{ledger, allegiance}` shape with the tie-incumbent allegiance
-## persisted, `month_invested`, `nation_treasuries`, `fame_commended`) —
-## the older blocks carry over unchanged, the documented guards still hold
-## (corrupt payload refused, future `save_version` refused, v6 and older
+## **What this suite is.** Phase 4 deleted the migration chain and Phases 5–8
+## keep it removed (decision 13: no migration; a v7 payload is refused like
+## any older pre-release save — the v8 bump absorbs the `explored_tiles`
+## key, so a stale v7 file — whose shape predates the key — must never load
+## into a run whose fog boundary the file never carried). This suite
+## therefore tests the **current** schema: a v8 payload round-trips byte-equal
+## — including the explored set (`explored_tiles`, the base64 row-run
+## encoding of docs/90-* §8.1 v8) and the five allegiance keys — the older
+## blocks carry over unchanged, the documented guards still hold
+## (corrupt payload refused, future `save_version` refused, v7 and older
 ## refused by name, retired runs summarised not resumed), an out-of-shape
-## value is refused exactly like any other wrong-typed block, and two
-## Phase-7-specific proofs run at the end: **mid-month AI replay purity**
-## (a save/load on day 17 replays month-tick 2's counter-investment
-## identically to a never-saved run reaching the same day) and the **2 MB
-## extreme-save budget** (measured size printed for the task report).
-## Sections at the end drive the S19 rows (§4.6.3) through the panel API and
-## prove the `new_game` carry — including the `Allegiance.seed_new_game()`
-## seeding contract (contestable sovereign `{owner: 6,000}`, neutrals empty).
+## value is refused exactly like any other wrong-typed block — including the
+## explored encoding itself (not base64, a non-multiple of the run record,
+## an out-of-grid or unsorted/touching run) — and the standing proofs run at
+## the end: **mid-month AI replay purity** (a save/load on day 17 replays
+## month-tick 2's counter-investment identically to a never-saved run
+## reaching the same day) and the **2 MB extreme-save budget** (measured size
+## printed for the task report). Sections at the end drive the S19 rows
+## (§4.6.3) through the panel API and prove the `new_game` carry — including
+## the `Allegiance.seed_new_game()` seeding contract (contestable sovereign
+## `{owner: 6,000}`, neutrals empty).
 ##
 ## Test isolation: any `user://saves/save_*.json` found at startup is moved
 ## into memory and written back at the end; every file this suite creates is
 ## removed again (start AND end), exactly like `tools/test_save.gd`.
 
-## Every Phase-7 §8.1 optional key and its documented default (the
-## Phase-2/3/5/6 blocks are unchanged; `market_stocks`' documented default is
-## the derived resting stock, asserted through the loader in the defaults
+## Every v8 §8.1 optional key and its documented default (the
+## Phase-2/3/5/6/7 blocks are unchanged; `market_stocks`' documented default
+## is the derived resting stock, asserted through the loader in the defaults
 ## test; the five Phase-7 keys' documented default is the **seeded**
-## new-game state — asserted through `Allegiance.dump_state()`).
-const V7_DEFAULTS := {
+## new-game state — asserted through `Allegiance.dump_state()`; the v8
+## `explored_tiles` default is the empty set — the "" string).
+const V8_DEFAULTS := {
 	"wrecks": [],
 	"npc_preset": "normal",
 	"control_prefs": {"input_mode": "step", "current_mode": "modifier"},
@@ -50,6 +53,7 @@ const V7_DEFAULTS := {
 	"battles_won": 0,
 	"retired": false,
 	"retired_at": 0,
+	"explored_tiles": "",
 }
 ## The §8.1 Phase-7 payload keys, exactly `Allegiance.dump_state()`'s five
 ## (docs/90-* §8.1 Phase-7 additions; docs/30-* §4.9).
@@ -61,6 +65,10 @@ const V7_ALLEGIANCE_KEYS: Array[String] = [
 ## these, and the panel/engines read them guard-style with the same values.
 const WORLD_DEFAULTS := {"sail_trim": "normal", "heading": "E", "wind_dir": "E"}
 const NATION_IDS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
+## The v8 explored encoding pins (docs/90-* §8.1 version 8) — mirrored from
+## SaveSystem so the suite asserts the *documented* numbers, not the code's.
+const EXPLORED_GRID := Vector2i(4320, 2160)
+const EXPLORED_RUN_BYTES := 6
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const AllegianceLib := preload("res://scripts/port/allegiance.gd")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
@@ -78,13 +86,14 @@ var _backup: Dictionary = {}
 
 func _ready() -> void:
 	_backup_saves()
-	_test_v7_round_trip()
+	_test_v8_round_trip()
 	_test_fixture_shape()
 	_test_no_migration_chain()
 	_test_older_versions_refused()
-	_test_v6_shape_refused()
+	_test_v7_shape_refused()
 	_test_future_version_refused()
 	_test_corrupt_phase_fields_rejected()
+	_test_explored_codec()
 	_test_optional_keys_default()
 	_test_new_fields_round_trip()
 	_test_debug_overlays_never_saved()
@@ -98,10 +107,10 @@ func _ready() -> void:
 
 # --- Fixtures ---------------------------------------------------------------
 
-## A complete **v7** save: every §8.1 key, `phase: 7`, the world block on the
+## A complete **v8** save: every §8.1 key, `phase: 8`, the world block on the
 ## 4320×2160 grid (the §8.1 Lisbon berth example), the carried Phase-5 hunter
-## keys, every Phase-6 key at a NON-default value, and every Phase-7 key at a
-## NON-default value so the round trip can prove exact restoration:
+## keys, every Phase-6 key at a NON-default value, every Phase-7 key at a
+## NON-default value (so the round trip can prove exact restoration:
 ## `permits` home + a two-nation foreign map, `port_allegiance` with the
 ## sovereign-seed shape (madeira), the **tie-incumbent** allegiance (malacca:
 ## england and holland tie at 6,000g and the persisted allegiance holland
@@ -109,13 +118,14 @@ func _ready() -> void:
 ## all, correction 8) and an empty neutral (quanzhou), a spent
 ## `month_invested` counter, `nation_treasuries` with a nation pinned at the
 ## 2,000g NPC-tax cap constant, one drained to 0 and one large, and two
-## `fame_commended` flags. The fleet is capacity-compliant so
-## `Fleet.normalize_all()` is a no-op on load.
-func _v7_payload() -> Dictionary:
+## `fame_commended` flags, and the v8 explored set at a NON-default value
+## (three canonical runs, one hugging the seam). The fleet is
+## capacity-compliant so `Fleet.normalize_all()` is a no-op on load.
+func _v8_payload() -> Dictionary:
 	return {
-		"save_version": 7,
+		"save_version": 8,
 		"saved_at": 1793119712,
-		"phase": 7,
+		"phase": 8,
 		"locale": "en",
 		"day": 64,
 		"gold": 12540,
@@ -161,6 +171,15 @@ func _v7_payload() -> Dictionary:
 		},
 		"current_port": "lisbon",
 		"known_ports": ["lisbon", "seville", "london", "madeira"],
+		# v8 explored-state amendment (docs/90-* §8.1 version 8): a NON-default
+		# explored set so the round trip proves exact restoration — three runs
+		# on three rows, one hugging the seam (x = 4319) and one at y = 0.
+		# The bytes are `SaveSystem._encode_explored`'s canonical output for
+		# {row 0: x 4319; row 615: x 2050..2051; row 1002: x 2213} — hand-
+		# writing them keeps the fixture an honest v8 document; the codec test
+		# proves the encoder produces exactly this string for that set.
+		"explored_tiles": _encode_runs([[0, 4319, 1], [615, 2050, 2],
+			[1002, 2213, 1]]),
 		"port_investments": {"lisbon": 1000},
 		"discoveries_found": [],
 		"npc_fleets": [],
@@ -205,28 +224,27 @@ func _v7_payload() -> Dictionary:
 	}
 
 
-## A **true v6-shaped** payload (what Phase 6 actually wrote): exactly the v7
-## fixture minus the five Phase-7 keys, with `save_version` / `phase` 6.
+## A **true v7-shaped** payload (what Phase 7 actually wrote): exactly the v8
+## fixture minus the `explored_tiles` key, with `save_version` / `phase` 7.
 ## Refused on load, never repaired in place.
-func _v6_payload() -> Dictionary:
-	var payload := _v7_payload()
-	payload["save_version"] = 6
-	payload["phase"] = 6
-	for key in V7_ALLEGIANCE_KEYS:
-		payload.erase(key)
+func _v7_payload() -> Dictionary:
+	var payload := _v8_payload()
+	payload["save_version"] = 7
+	payload["phase"] = 7
+	payload.erase("explored_tiles")
 	return payload
 
 
-# --- 1. The done-when: a v7 save loads and re-saves as v7 ------------------
+# --- 1. The done-when: a v8 save loads and re-saves as v8 ------------------
 
-func _test_v7_round_trip() -> void:
-	var fixture := _v7_payload()
+func _test_v8_round_trip() -> void:
+	var fixture := _v8_payload()
 	_ensure_dir()
-	_check(_write_json(1, fixture), "the v7 fixture is written to slot 1")
+	_check(_write_json(1, fixture), "the v8 fixture is written to slot 1")
 
-	# Quit-and-restart: wipe the state, then load the v7 file.
+	# Quit-and-restart: wipe the state, then load the v8 file.
 	_clobber_state()
-	_check(SaveSystem.load(1), "a v7 save loads")
+	_check(SaveSystem.load(1), "a v8 save loads")
 	_check(SaveSystem.last_read_error.is_empty(),
 		"the load reports no error (got '%s')" % SaveSystem.last_read_error)
 	_check(GameState.fame == 0, "fame restored (0)")
@@ -262,6 +280,17 @@ func _test_v7_round_trip() -> void:
 		"known_ports restored byte-equal")
 	_check(GameState.port_investments == fixture["port_investments"],
 		"port_investments restored byte-equal")
+	# v8 explored-state amendment (docs/90-* §8.1 version 8): the explored set
+	# restores EXACTLY as Vector2i keys — the fixture's three runs decode to
+	# four tiles (row 615 carries a two-tile run), seam tile included.
+	var explored_expected := {
+		Vector2i(4319, 0): true,
+		Vector2i(2050, 615): true, Vector2i(2051, 615): true,
+		Vector2i(2213, 1002): true,
+	}
+	_check(GameState.explored_tiles == explored_expected,
+		"explored_tiles restored byte-equal (4 tiles across 3 runs, got %s)"
+		% str(GameState.explored_tiles))
 	_check(GameState.proximity_cooldowns == {"pirate": 61},
 		"proximity_cooldowns restored byte-equal")
 	_check(GameState.player.get("equipment") == {"weapon": "eq_cutlass", "armor": ""},
@@ -342,16 +371,16 @@ func _test_v7_round_trip() -> void:
 	_check(not (dump["port_allegiance"] as Dictionary).has("lisbon"),
 		"the protected port lisbon is never serialized (no ledger exists)")
 
-	# --- Re-save: the run is written as version 7 -------------------------
+	# --- Re-save: the run is written as version 8 -------------------------
 	_check(SaveSystem.save(1), "the run re-saves to slot 1")
 	var resaved := _read_json(1)
 	_check(not resaved.is_empty(), "the re-saved file parses as JSON")
-	_check(int(resaved.get("save_version", -1)) == 7,
-		"the re-saved file is save_version 7 (got %s)"
+	_check(int(resaved.get("save_version", -1)) == 8,
+		"the re-saved file is save_version 8 (got %s)"
 		% str(resaved.get("save_version")))
-	_check(int(resaved.get("phase", -1)) == 7,
-		"the re-saved file is phase 7 (got %s)" % str(resaved.get("phase")))
-	for key in V7_DEFAULTS:
+	_check(int(resaved.get("phase", -1)) == 8,
+		"the re-saved file is phase 8 (got %s)" % str(resaved.get("phase")))
+	for key in V8_DEFAULTS:
 		_check(resaved.has(key),
 			"the re-saved file carries '%s' (docs/90-* §8.1)" % key)
 	_check(resaved.has("market_stocks"),
@@ -367,9 +396,12 @@ func _test_v7_round_trip() -> void:
 		"the re-saved file has no superseded 'quests' key")
 	_check(resaved_world.get("map_id") == "world",
 		"the re-saved world block carries the shipped map id")
-	_check(not resaved_world.has("clock_fraction") and not resaved.has("explored_tiles")
-		and not resaved.has("debug_overlays"),
-		"the re-save still omits clock_fraction / explored_tiles / debug_overlays")
+	_check(not resaved_world.has("clock_fraction") and not resaved.has("debug_overlays"),
+		"the re-save still omits clock_fraction / debug_overlays")
+	# The v8 amendment's determinism proof: the restored set re-encodes to the
+	# fixture's exact bytes (sorted canonical runs — no drift across cycles).
+	_check(resaved.get("explored_tiles") == fixture["explored_tiles"],
+		"the re-saved explored_tiles is byte-equal to the loaded one")
 	# Correction 8: the persisted allegiance shape is exactly
 	# {ledger, allegiance} — development is derived and never serialized.
 	var resaved_pa: Dictionary = resaved["port_allegiance"]
@@ -391,17 +423,17 @@ func _test_v7_round_trip() -> void:
 	_check(int((resaved["nation_treasuries"] as Dictionary).get("spain", -1)) == 2000,
 		"the re-saved treasuries keep the 2,000g-cap literal")
 
-	# …and the v7 file re-loads to the same state (second cycle).
+	# …and the v8 file re-loads to the same state (second cycle).
 	var first_cycle := _loaded_values()
 	_clobber_state()
-	_check(SaveSystem.load(1), "the re-saved v7 file loads")
+	_check(SaveSystem.load(1), "the re-saved v8 file loads")
 	_check(_loaded_values() == first_cycle, "a second save/load cycle changes nothing")
 
 
-# --- 2. The fixture really is the v7 §8.1 shape ----------------------------
+# --- 2. The fixture really is the v8 §8.1 shape ----------------------------
 
 func _test_fixture_shape() -> void:
-	var fixture := _v7_payload()
+	var fixture := _v8_payload()
 	_check(int(fixture["save_version"]) == SaveSystem.SAVE_VERSION,
 		"the fixture is save_version %d" % SaveSystem.SAVE_VERSION)
 	_check(int(fixture["phase"]) == SaveSystem.PHASE,
@@ -409,8 +441,8 @@ func _test_fixture_shape() -> void:
 	_check(SaveSystem.validate_payload(fixture).is_empty(),
 		"validate_payload() accepts the fixture (%s)"
 		% SaveSystem.validate_payload(fixture))
-	_check(SaveSystem.SAVE_VERSION == 7 and SaveSystem.PHASE == 7,
-		"this build ships save_version 7 / phase 7 (decision 13)")
+	_check(SaveSystem.SAVE_VERSION == 8 and SaveSystem.PHASE == 8,
+		"this build ships save_version 8 / phase 8 (the explored-state amendment)")
 	_check(SaveSystem.DEFAULT_MAP_ID == "world",
 		"the shipped map id is 'world' (docs/90-* §9.1)")
 
@@ -421,7 +453,8 @@ func _test_no_migration_chain() -> void:
 	_check(not ("MIGRATIONS" in SaveSystem),
 		"SaveSystem carries no MIGRATIONS table any more (dev-stage scope)")
 	for name in ["migrate_v1_to_v2", "migrate_v2_to_v3", "migrate_v3_to_v4",
-			"migrate_v4_to_v5", "migrate_v5_to_v6", "migrate_v6_to_v7"]:
+			"migrate_v4_to_v5", "migrate_v5_to_v6", "migrate_v6_to_v7",
+			"migrate_v7_to_v8"]:
 		_check(not SaveSystem.has_method(name),
 			"the historical migration step %s() is gone" % name)
 
@@ -431,8 +464,8 @@ func _test_no_migration_chain() -> void:
 func _test_older_versions_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	for version in [1, 2, 3, 4, 5, 6]:
-		var older := _v7_payload()
+	for version in [1, 2, 3, 4, 5, 6, 7]:
+		var older := _v8_payload()
 		older["save_version"] = version
 		older["phase"] = version
 		_write_json(1, older)
@@ -448,28 +481,27 @@ func _test_older_versions_refused() -> void:
 			"list_saves() reports the v%d slot invalid" % version)
 
 
-# --- 4b. A true v6-shaped payload is refused -------------------------------
+# --- 4b. A true v7-shaped payload is refused -------------------------------
 
-## The §8.2 normative case (Phase-7 decision 13): a payload exactly as
-## Phase 6 wrote it — no `permits`, no `port_allegiance`, no `month_invested`,
-## no `nation_treasuries`, no `fame_commended` — refused with the standard
+## The §8.2 normative case (the explored-state amendment): a payload exactly
+## as Phase 7 wrote it — no `explored_tiles` — refused with the standard
 ## pre-release message and `GameState` (and the allegiance statics) untouched.
-func _test_v6_shape_refused() -> void:
+func _test_v7_shape_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	_write_json(1, _v6_payload())
+	_write_json(1, _v7_payload())
 	_check(SaveSystem.load(1) == false,
-		"a true v6-shaped payload fails to load (pre-release)")
+		"a true v7-shaped payload fails to load (pre-release)")
 	_check(SaveSystem.last_read_error.contains("pre-release")
-		and SaveSystem.last_read_error.contains("6"),
+		and SaveSystem.last_read_error.contains("7"),
 		"the reason is the standard pre-release message (got '%s')"
 		% SaveSystem.last_read_error)
 	_check(_loaded_values() == before,
-		"state untouched after refusing the v6 payload (no allegiance reseed)")
+		"state untouched after refusing the v7 payload (no silent fog reset)")
 	_check(SaveSystem.read_save(1).is_empty(),
-		"read_save() refuses the v6 payload too")
+		"read_save() refuses the v7 payload too")
 	_check(AllegianceLib.dump_state() == before["allegiance"],
-		"the allegiance statics were not reseeded by the refused v6 file")
+		"the allegiance statics were not reseeded by the refused v7 file")
 
 
 # --- 5. A future version is refused ---------------------------------------
@@ -477,7 +509,7 @@ func _test_v6_shape_refused() -> void:
 func _test_future_version_refused() -> void:
 	_load_fixture_into_memory()
 	var before := _loaded_values()
-	var future := _v7_payload()
+	var future := _v8_payload()
 	future["save_version"] = SaveSystem.SAVE_VERSION + 1
 	future["phase"] = SaveSystem.PHASE + 1
 	_write_json(1, future)
@@ -533,6 +565,11 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		{"key": "nation_treasuries", "value": [], "why":
 			"nation_treasuries as an array"},
 		{"key": "fame_commended", "value": [], "why": "fame_commended as an array"},
+		# The v8 explored key: wrong top-level types are rejections like any
+		# block (docs/90-* §8.1 version 8).
+		{"key": "explored_tiles", "value": 5, "why": "explored_tiles as a number"},
+		{"key": "explored_tiles", "value": [], "why": "explored_tiles as an array"},
+		{"key": "explored_tiles", "value": {}, "why": "explored_tiles as an object"},
 	]:
 		var bad: Dictionary = SaveSystem.snapshot()
 		bad[probe["key"]] = probe["value"]
@@ -653,6 +690,121 @@ func _test_corrupt_phase_fields_rejected() -> void:
 		"read_save() rejects the same wrong-typed payload")
 
 
+# --- 6b. The explored_tiles encoding itself (docs/90-* §8.1 version 8) -----
+
+## The test-side twin of the §8.1 v8 encoding: hand-built
+## `[u16 y][u16 x0][u16 span−1]` little-endian runs → base64. Used both to
+## cross-prove the encoder and to craft exact malformed payloads.
+func _encode_runs(runs: Array) -> String:
+	var bytes := PackedByteArray()
+	for run in runs:
+		var y := int(run[0])
+		var x0 := int(run[1])
+		var span := int(run[2])
+		bytes.append(y & 0xFF)
+		bytes.append((y >> 8) & 0xFF)
+		bytes.append(x0 & 0xFF)
+		bytes.append((x0 >> 8) & 0xFF)
+		bytes.append((span - 1) & 0xFF)
+		bytes.append(((span - 1) >> 8) & 0xFF)
+	return Marshalls.raw_to_base64(bytes)
+
+
+func _test_explored_codec() -> void:
+	# The empty set encodes to the documented "" (and is valid).
+	_check(SaveSystem._encode_explored({}) == "",
+		"an empty explored set encodes to the empty string")
+	_check(SaveSystem._explored_error("").is_empty(),
+		"the empty string is a valid explored_tiles value")
+	_check(SaveSystem._explored_error(null).is_empty(),
+		"an absent explored_tiles value is valid (optional key)")
+
+	# Canonical form: same-row neighbours merge into ONE run, so two tiles
+	# encode to exactly one 6-byte record (8 base64 chars), and the encoding
+	# is deterministic.
+	var pair := SaveSystem._encode_explored({
+		Vector2i(10, 5): true, Vector2i(11, 5): true,
+	})
+	_check(pair == SaveSystem._encode_explored({
+		Vector2i(11, 5): true, Vector2i(10, 5): true,
+	}), "the encoding is key-order independent")
+	_check(pair == _encode_runs([[5, 10, 2]]),
+		"touching same-row tiles merge into one canonical run")
+	_check(pair.length() == 8,
+		"one merged run is exactly one 6-byte record (8 base64 chars)")
+
+	# The fixture cross-proof: the encoder produces exactly the string the v8
+	# fixture hand-writes for the same set (rows 0 / 615 / 1002).
+	var fixture_set := {
+		Vector2i(4319, 0): true,
+		Vector2i(2050, 615): true, Vector2i(2051, 615): true,
+		Vector2i(2213, 1002): true,
+	}
+	_check(SaveSystem._encode_explored(fixture_set) == _v8_payload()["explored_tiles"],
+		"the encoder reproduces the fixture's hand-written explored_tiles")
+
+	# Decode identity: the decoded set is exactly the encoded one (value
+	# equality across seam-adjacent rows; the fresh-dictionary property is
+	# load-path behavior asserted by the round trip's clobber cycle).
+	var decoded: Dictionary = SaveSystem._decode_explored(
+		SaveSystem._encode_explored(fixture_set))
+	_check(decoded == fixture_set,
+		"decode(encode(set)) == set across seam-adjacent rows")
+	var seam_decode: Dictionary = SaveSystem._decode_explored(
+		SaveSystem._encode_explored({
+			Vector2i(0, 2159): true, Vector2i(4319, 2159): true,
+		}))
+	_check(seam_decode.has(Vector2i(0, 2159))
+		and seam_decode.has(Vector2i(4319, 2159)),
+		"the grid edges (y = 2159, x = 4319) survive the codec")
+
+	# Refusals: every non-canonical or out-of-domain encoding is named.
+	_check(SaveSystem._explored_error(5).contains("not a string"),
+		"a number is refused with the key named")
+	_check(SaveSystem._explored_error("!!!").contains("base64"),
+		"a non-base64 string is refused")
+	_check(SaveSystem._explored_error("ABC").contains("base64"),
+		"a length-3 string is refused (base64 is a multiple of 4)")
+	_check(SaveSystem._explored_error("A===BC==").contains("base64"),
+		"padding not in the tail is refused")
+	_check(SaveSystem._explored_error(
+		Marshalls.raw_to_base64(PackedByteArray([0, 0, 0, 0, 0])))
+		.contains("multiple of 6"), "a non-multiple of the run record is refused")
+	_check(SaveSystem._explored_error(_encode_runs([[2160, 0, 1]]))
+		.contains("outside"), "a run on y = 2160 is refused (grid is 2160 tall)")
+	_check(SaveSystem._explored_error(_encode_runs([[0, 4319, 2]]))
+		.contains("outside"), "a run crossing x = 4320 is refused")
+	_check(SaveSystem._explored_error(
+		_encode_runs([[5, 100, 1], [4, 100, 1]])).contains("sorted"),
+		"row-descending runs are refused")
+	_check(SaveSystem._explored_error(
+		_encode_runs([[5, 10, 2], [5, 12, 2]])).contains("sorted"),
+		"touching same-row runs are refused (the canonical form merges them)")
+	_check(SaveSystem._explored_error(
+		_encode_runs([[5, 10, 3], [5, 12, 1]])).contains("sorted"),
+		"overlapping same-row runs are refused")
+	_check(SaveSystem._explored_error(_encode_runs([[5, 100, 1], [5, 102, 1]])
+		).is_empty(), "two disjoint runs on one row are valid")
+	_check(SaveSystem._explored_error(
+		_encode_runs([[5, 100, 1], [6, 0, 1]])).is_empty(),
+		"adjacent rows are valid (only same-row runs must not touch)")
+
+	# One full-load proof: a valid-everything-else payload with an
+	# out-of-grid run is refused with the key named, state untouched.
+	_load_fixture_into_memory()
+	var before := _loaded_values()
+	var bad: Dictionary = SaveSystem.snapshot()
+	bad["explored_tiles"] = _encode_runs([[999999, 0, 1]])
+	_write_json(1, bad)
+	_check(SaveSystem.load(1) == false,
+		"an out-of-grid explored run rejects the whole payload")
+	_check(SaveSystem.last_read_error.contains("explored_tiles"),
+		"the rejection reason names explored_tiles (got '%s')"
+		% SaveSystem.last_read_error)
+	_check(_loaded_values() == before,
+		"state untouched after the explored-encoding rejection")
+
+
 # --- 7. Every optional field defaults when absent --------------------------
 
 ## docs/90-* §8.1 "Default when absent": the optional blocks may be omitted by
@@ -663,13 +815,13 @@ func _test_corrupt_phase_fields_rejected() -> void:
 ## commendations, no spent allowance.
 func _test_optional_keys_default() -> void:
 	_load_fixture_into_memory()
-	var payload := _v7_payload()
+	var payload := _v8_payload()
 	for key in ["npc_fleets", "proximity_cooldowns", "market_stocks",
 			"wrecks", "npc_preset", "control_prefs",
 			"market_events", "named_pirate_respawns", "fame", "titles",
 			"bounties", "active_quests", "completed_royal_missions",
 			"discoveries_reported", "discovery_hints", "battles_won",
-			"retired", "retired_at", "discoveries_found"]:
+			"retired", "retired_at", "discoveries_found", "explored_tiles"]:
 		payload.erase(key)
 	for key in V7_ALLEGIANCE_KEYS:
 		payload.erase(key)
@@ -731,6 +883,11 @@ func _test_optional_keys_default() -> void:
 		"absent retired/retired_at default to false/0")
 	_check(GameState.discoveries_found == [],
 		"an absent discoveries_found defaults to []")
+	# The v8 explored key defaults to the EMPTY SET (docs/90-* §8.1 version 8:
+	# "" → nothing explored).
+	_check(GameState.explored_tiles.is_empty()
+		and GameState.explored_tiles is Dictionary,
+		"an absent explored_tiles defaults to the empty set")
 	# The Phase-7 quintet defaults to the SEEDED state (docs/90-* §8.1:
 	# "{}` — then Allegiance.seed_new_game() reseeds").
 	var dump: Dictionary = AllegianceLib.dump_state()
@@ -825,6 +982,12 @@ func _test_new_fields_round_trip() -> void:
 	GameState.world["wind_dir"] = "NE"
 	GameState.world["last_departed_port"] = "seville"
 	GameState.world["hunter_intel_cell"] = {"x": 1900, "y": 860}
+	# v8 explored-state amendment (docs/90-* §8.1 version 8): a non-default
+	# explored set rides the same round trip (edges and a two-tile run).
+	GameState.explored_tiles = {
+		Vector2i(2050, 615): true, Vector2i(2051, 615): true,
+		Vector2i(4319, 0): true, Vector2i(0, 2159): true,
+	}
 	# The §4.15 fleet shape (docs/10-* §4.15): the pirate's saved fields are
 	# exactly the pinned set plus the task-owned extensions.
 	GameState.npc_fleets = [{
@@ -856,9 +1019,13 @@ func _test_new_fields_round_trip() -> void:
 	AllegianceLib.credit_tax("malacca", "england", 700)
 	var expected := _loaded_values()
 
-	_check(SaveSystem.save(1), "a run with Phase-2/3/5/6/7 state saves")
+	_check(SaveSystem.save(1), "a run with Phase-2/3/5/6/7/8 state saves")
 	var on_disk := _read_json(1)
 	_check(int(on_disk.get("fame", -1)) == 480, "snapshot() writes fame")
+	_check(on_disk.get("explored_tiles") == SaveSystem._encode_explored({
+		Vector2i(2050, 615): true, Vector2i(2051, 615): true,
+		Vector2i(4319, 0): true, Vector2i(0, 2159): true,
+		}), "snapshot() writes explored_tiles in the canonical encoding")
 	_check((on_disk.get("titles") as Dictionary).get("portugal") == "baron",
 		"snapshot() writes titles")
 	_check(((on_disk.get("bounties") as Dictionary).get("spain") as Dictionary)
@@ -920,9 +1087,9 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() writes fame_commended")
 
 	_clobber_state()
-	_check(SaveSystem.load(1), "the v7 file with Phase-2/3/5/6/7 state loads")
+	_check(SaveSystem.load(1), "the v8 file with Phase-2/3/5/6/7/8 state loads")
 	_check(_loaded_values() == expected,
-		"every Phase-2/3/5/6/7 field restores byte-equal after a v7 round trip")
+		"every Phase-2/3/5/6/7/8 field restores byte-equal after a v8 round trip")
 	_check(typeof(GameState.market_stocks["lisbon"]["wine"]) == TYPE_INT,
 		"stock counts come back as ints, not json floats")
 	_check(typeof(GameState.wrecks[0]["position"]["x"]) == TYPE_INT,
@@ -955,6 +1122,8 @@ func _test_new_fields_round_trip() -> void:
 	GameState.control_prefs["input_mode"] = "mutated"
 	GameState.world["sail_trim"] = "mutated"
 	GameState.world["hunter_intel_cell"]["x"] = 999
+	GameState.explored_tiles[Vector2i(9, 9)] = true
+	var explored_before: String = snap["explored_tiles"]
 	AllegianceLib.set_permit("foreign", "italy")
 	AllegianceLib.add_investment("malacca", "holland", 12000)
 	AllegianceLib.credit_permit_sale("italy", 999999)
@@ -984,6 +1153,9 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() deep-copies the world block")
 	_check(((snap["world"] as Dictionary)["hunter_intel_cell"]
 		as Dictionary)["x"] == 1900, "snapshot() deep-copies the intel cell")
+	_check(snap["explored_tiles"] == explored_before
+		and not explored_before.is_empty(),
+		"snapshot() deep-copies the explored set")
 	_check(not ((snap["permits"] as Dictionary)["foreign"]
 		as Dictionary).has("italy"),
 		"snapshot() deep-copies permits")
@@ -1246,7 +1418,7 @@ func _test_extreme_save_size() -> void:
 	var payload_bytes: int = JSON.stringify(payload, "\t").to_utf8_buffer().size()
 	print("MEASURED extreme save payload: %d bytes (%.2f MB; budget %d)"
 		% [payload_bytes, payload_bytes / 1048576.0, EXTREME_SAVE_BUDGET])
-	print("PROFILE save_v7_extreme_bytes %d" % payload_bytes)
+	print("PROFILE save_v8_extreme_bytes %d" % payload_bytes)
 	_check(payload_bytes <= EXTREME_SAVE_BUDGET,
 		"the extreme save stays within the 2 MB budget (%d bytes)" % payload_bytes)
 	_check((payload["npc_fleets"] as Array).size() >= 100,
@@ -1420,6 +1592,9 @@ func _clobber_state() -> void:
 	GameState.control_prefs = {"input_mode": "clobber", "current_mode": "clobbered"}
 	GameState.known_ports = []
 	GameState.port_investments = {}
+	# A sentinel explored set the fixture never carries — a load that skipped
+	# the v8 restore would leave it in `_loaded_values()` and fail the compare.
+	GameState.explored_tiles = {Vector2i(7, 7): true}
 	GameState.quests = []
 	GameState.discoveries_found = []
 	GameState.npc_fleets = []
@@ -1463,6 +1638,7 @@ func _loaded_values() -> Dictionary:
 		"world": GameState.world.duplicate(true),
 		"control_prefs": GameState.control_prefs.duplicate(true),
 		"known_ports": GameState.known_ports.duplicate(),
+		"explored_tiles": GameState.explored_tiles.duplicate(),
 		"port_investments": GameState.port_investments.duplicate(true),
 		"npc_fleets": GameState.npc_fleets.duplicate(true),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
@@ -1487,14 +1663,14 @@ func _loaded_values() -> Dictionary:
 	}
 
 
-## Loads the v7 fixture once so the "before" state of a rejection test is a
+## Loads the v8 fixture once so the "before" state of a rejection test is a
 ## real loaded run rather than the clobbered sentinel.
 func _load_fixture_into_memory() -> void:
 	_ensure_dir()
-	_write_json(1, _v7_payload())
+	_write_json(1, _v8_payload())
 	_clobber_state()
 	if not SaveSystem.load(1):
-		_check(false, "setup: the v7 fixture loads before the test")
+		_check(false, "setup: the v8 fixture loads before the test")
 
 
 func _read_json(slot: int) -> Dictionary:

@@ -538,7 +538,8 @@ mutates state** — a pure view of the session.
 ```
 
 - **Layers, bottom to top:** canvas background, explored-tiles overlay from
-  the session explored bitset (`PackedByteArray`, `20-*` §4.12), known ports
+  the session explored set (`20-*` §4.12 — persisted in the save since the
+  explored-state amendment, 2026-11-02), known ports
   as nation-coloured dots with names shown at zoom, discovery hint icons, the
   fleet marker.
 - **Scale:** whole 4320×2160 grid downscaled to fit the viewport (scale
@@ -549,8 +550,11 @@ mutates state** — a pure view of the session.
   untouched.
 - **Budget:** open (build + first frame) **< 0.5 s**.
 - **Strings:** every label from `chart.*` (§4.7.5).
-- **Not saved:** explored state and the chart itself are session-only (Phase-1
-  known limitation, unchanged).
+- **Not saved:** the chart's local view state (`W`/`C`/`I`/`D`, the month
+  preview, legend-visibility filters) is session-only. The explored set is
+  **not** in that bucket: it persists as the §8.1 `explored_tiles` key
+  (`90-*`, `20-*` §4.12) since the explored-state amendment (2026-11-02) —
+  the Phase-1 "explored state is session-only" limitation is removed.
 - **Phase-6 seasonal layers (player).** Three toggles while the chart is
   open — `W` draws the **current month's prevailing wind arrows per
   region** (from the baked `wind_regions` lookup, `20-*` §4.14), `C` draws
@@ -1410,8 +1414,10 @@ rumor row kind: "investment"
   port (`20-*` §4.3).
 - **Click-through dimmed background** → modals consume all input (Godot
   modal flag), no exceptions.
-- **Minimap with zero explored tiles after load** → expected (Phase-1 known
-  limitation, `20-*` §4.12), not a bug.
+- **Minimap/chart with zero explored tiles after load** → only on a run that
+  never sailed before saving; a save taken after sailing restores its
+  explored set on load (explored-state amendment, 2026-11-02, `20-*`
+  §4.12) — a fresh-run-shaped fog map after loading a sailed save is a bug.
 - **A Phase-3 screen opened with no run** (editor) → renders `-` placeholders
   and every action is disabled, exactly as the Phase-1 facility screens do.
 - **Palace ceremony while a locale toggle fires** → the ceremony dialog

@@ -13,8 +13,9 @@ extends Node
 ## `GameState` fields plus `save_version` / `saved_at` / `phase`. `player` and
 ## `fleet` are treated **opaquely** — their interior shapes belong to docs/50-*
 ## §4.8 and docs/40-* §4.1. `world.clock_fraction` is deliberately not written
-## (docs/20-* §4.3: saving only happens in port, where it is 0) and
-## `explored_tiles` is deliberately not written (docs/20-* §4.12).
+## (docs/20-* §4.3: saving only happens in port, where it is 0).
+## `explored_tiles` **is** written since the v8 explored-state amendment
+## (docs/20-* §4.12; the Phase-1 "not saved" limitation is removed).
 ##
 ## Load safety: a corrupt payload, a missing key, a version newer than this
 ## build or a payload from an older (pre-release) version all return `false`,
@@ -30,16 +31,21 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2 "development-stage scope"): Phase 7 ships
-## [constant SAVE_VERSION] 7 and there is **no migration chain** (decision 13,
-## `IMPLEMENT-Phase7.md`). SailAge has not shipped, so a payload whose
-## `save_version` is anything but 7 — v6 included — is a pre-release save and
-## is refused by name; the only migration that exists is the identity. The
-## historical `1 → 2` / `2 → 3` steps lived here through Phase 3 and were
-## deleted in Phase 4 rather than carried as dead weight. The v7 bump (task V)
-## absorbs the allegiance/permit/treasury state, so a stale v6 payload — whose
-## shape predates the five Phase-7 keys — must never load into a run whose
-## allegiance tug-of-war would silently restart from the seed.
+## Versioning (docs/90-* §8.2 "development-stage scope"): version 8 — the
+## explored-state amendment (2026-11-02, docs/90-* §8.1 v8) — ships
+## [constant SAVE_VERSION] 8 and there is **no migration chain** (decision 13,
+## `IMPLEMENT-Phase7.md`; the amendment keeps it removed). SailAge has not
+## shipped, so a payload whose `save_version` is anything but 8 — v7
+## included — is a pre-release save and is refused by name; the only
+## migration that exists is the identity. The historical `1 → 2` / `2 → 3`
+## steps lived here through Phase 3 and were deleted in Phase 4 rather than
+## carried as dead weight. The v7 bump (task V) absorbed the
+## allegiance/permit/treasury state, so a stale v6 payload — whose shape
+## predates the five Phase-7 keys — must never load into a run whose
+## allegiance tug-of-war would silently restart from the seed. The v8 bump
+## absorbs the explored-set payload key for the same reason: a v7 payload
+## has no explored set at all, and loading one into the amendment's runtime
+## would silently promise a fog boundary the file never carried.
 ##
 ## Phase-6 persisted keys (docs/90-* §8.1 "Phase-6 additions"): `control_prefs`
 ## (top level) plus the `world` block's `sail_trim` / `heading` / `wind_dir`.
@@ -61,8 +67,17 @@ extends Node
 ## re-derives the transient trackers, which is what keeps a mid-month
 ## save/load replaying the month's counter-investment identically. All five
 ## keys are shape-checked on load: a malformed value is refused exactly like
-## any other wrong-typed block (docs/90-* §8.2; `tools/test_save_v7.gd`
-## asserts the round trips and the refusal wording).
+## any other wrong-typed block (docs/90-* §8.2; `tools/test_save_v8.gd` —
+## the renamed v7 suite — still asserts the round trips and the refusal
+## wording).
+##
+## Version 8 — explored-state amendment (2026-11-02, docs/90-* §8.1 v8):
+## `explored_tiles` joins the payload after `known_ports` as the base64
+## row-run encoding of `GameState.explored_tiles` (spec pinned in §8.1 v8;
+## encode/decode/validate live in this file, the persistence seam). The set
+## restores into a fresh Dictionary on load; `tools/test_save_v8.gd` follows
+## the `test_save_v7` pattern (round trip, refusal probes, absent-key
+## default, v7 refused by name, extreme-save size re-measured).
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -87,10 +102,11 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: Phase 7 ships version 7).
-const SAVE_VERSION := 7
+## Current payload version (docs/90-* §8.2: the v8 explored-state amendment
+## ships version 8).
+const SAVE_VERSION := 8
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 7
+const PHASE := 8
 
 ## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
 ## nation at [constant RANK_NONE].
@@ -126,9 +142,12 @@ const COMPASS_DIRS: Array[String] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 ## v7 appends the five Phase-7 allegiance keys after the Phase-3 tail
 ## (docs/90-* §8.1 Phase-7 additions) — the payload blocks of the runtime
 ## state that lives in `Allegiance`'s statics (see [member AllegianceLib]).
+## v8 appends `explored_tiles` after `known_ports` (the explored-state
+## amendment, docs/90-* §8.1 version 8).
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
-	"current_port", "known_ports", "port_investments", "quests",
+	"current_port", "known_ports", "explored_tiles", "port_investments",
+	"quests",
 	"discoveries_found", "npc_fleets", "proximity_cooldowns",
 	"market_stocks", "wrecks", "npc_preset", "control_prefs",
 	"market_events", "named_pirate_respawns",
@@ -183,6 +202,9 @@ const OPTIONAL_DEFAULTS := {
 	"battles_won": 0,
 	"retired": false,
 	"retired_at": 0,
+	# v8 explored-state amendment (docs/90-* §8.1): absent → the empty set
+	# (the string form of "nothing explored yet").
+	"explored_tiles": "",
 }
 
 ## Scene paths (docs/90-* §4, §7).
@@ -307,6 +329,11 @@ func snapshot() -> Dictionary:
 		"world": world_payload,
 		"current_port": GameState.current_port,
 		"known_ports": GameState.known_ports.duplicate(),
+		# v8 explored-state amendment (docs/90-* §8.1, docs/20-* §4.12): the
+		# session explored set as base64 row runs — a save this build writes
+		# always carries the key ("" for a never-sailed run) and always
+		# re-validates.
+		"explored_tiles": _encode_explored(GameState.explored_tiles),
 		"port_investments": GameState.port_investments.duplicate(true),
 		"discoveries_found": GameState.discoveries_found.duplicate(true),
 		"npc_fleets": GameState.npc_fleets.duplicate(true),
@@ -389,6 +416,142 @@ static func _prefs_payload(prefs: Dictionary) -> Dictionary:
 			DEFAULT_CONTROL_PREFS["current_mode"]), CURRENT_MODES,
 			DEFAULT_CONTROL_PREFS["current_mode"]),
 	}
+
+
+# --- v8 explored-state codec (docs/90-* §8.1 version 8) ----------------------
+
+## The explored-set grid the v8 encoding is pinned to: the single shipped
+## map (`90-*` §9.1, `20-*` §4.1).
+const EXPLORED_GRID := Vector2i(4320, 2160)
+## Bytes per run record: `[u16 y][u16 x0][u16 len−1]`, little-endian
+## (docs/90-* §8.1 version 8 encoding spec).
+const EXPLORED_RUN_BYTES := 6
+
+
+## The §8.1 `explored_tiles` payload value for the GameState explored set:
+## standard base64 of sorted, non-overlapping, non-touching row runs. Pure —
+## never mutates `tiles`; keys outside the pinned grid are dropped (defensive,
+## the same rule as the chart's terrain painter). Deterministic: the same set
+## always encodes to the same bytes (a re-save stays byte-equal).
+static func _encode_explored(tiles: Dictionary) -> String:
+	var rows: Dictionary = {}
+	for raw_cell in tiles:
+		if not (raw_cell is Vector2i):
+			continue
+		var cell: Vector2i = raw_cell
+		if cell.x < 0 or cell.y < 0 \
+				or cell.x >= EXPLORED_GRID.x or cell.y >= EXPLORED_GRID.y:
+			continue
+		if not rows.has(cell.y):
+			rows[cell.y] = []
+		(rows[cell.y] as Array).append(cell.x)
+	var ys: Array = rows.keys()
+	ys.sort()
+	var bytes := PackedByteArray()
+	for y_var in ys:
+		var y := int(y_var)
+		var xs: Array = (rows[y_var] as Array).duplicate()
+		xs.sort()
+		var index := 0
+		while index < xs.size():
+			var start := int(xs[index])
+			var end := start
+			# Merge touching/overlapping same-row tiles into one canonical
+			# run (the validator refuses runs that touch).
+			while index < xs.size() and int(xs[index]) <= end + 1:
+				end = maxi(end, int(xs[index]))
+				index += 1
+			var span := end - start + 1
+			bytes.append(y & 0xFF)
+			bytes.append((y >> 8) & 0xFF)
+			bytes.append(start & 0xFF)
+			bytes.append((start >> 8) & 0xFF)
+			bytes.append((span - 1) & 0xFF)
+			bytes.append(((span - 1) >> 8) & 0xFF)
+	# Marshalls.raw_to_base64 errors on an empty buffer — the documented empty
+	# set encoding is the empty string, return it directly.
+	if bytes.is_empty():
+		return ""
+	return Marshalls.raw_to_base64(bytes)
+
+
+## The GameState explored set for a *validated* §8.1 `explored_tiles` value:
+## one `Vector2i → true` entry per run tile, in a fresh dictionary (the HUD
+## minimap's reference-identity check repaints on exactly this replacement,
+## `hud.gd`). Absent/malformed input yields the empty set — validation is
+## [method _explored_error]'s job, this only runs after it passed.
+static func _decode_explored(text: String) -> Dictionary:
+	var out: Dictionary = {}
+	if text.is_empty():
+		return out
+	var bytes := Marshalls.base64_to_raw(text)
+	var run_count := bytes.size() / EXPLORED_RUN_BYTES
+	for run in run_count:
+		var offset := run * EXPLORED_RUN_BYTES
+		var y := int(bytes[offset]) | (int(bytes[offset + 1]) << 8)
+		var x0 := int(bytes[offset + 2]) | (int(bytes[offset + 3]) << 8)
+		var span := (int(bytes[offset + 4]) | (int(bytes[offset + 5]) << 8)) + 1
+		for dx in span:
+			out[Vector2i(x0 + dx, y)] = true
+	return out
+
+
+## "" when `value` is a loadable `explored_tiles` value, else a short reason
+## naming the key (the refuse-loudly rule every other block follows). The
+## canonical form is enforced, not just decodeability: valid base64, a
+## multiple of the 6-byte run record, every run inside the pinned grid, runs
+## sorted by `(y, x0)` with no overlap and no same-row touching.
+static func _explored_error(value) -> String:
+	if value == null:
+		return ""
+	if not (value is String):
+		return "'explored_tiles' is not a string"
+	var text := value as String
+	if text.is_empty():
+		return ""
+	if not _is_strict_base64(text):
+		return "'explored_tiles' is not valid base64"
+	var bytes := Marshalls.base64_to_raw(text)
+	if bytes.size() % EXPLORED_RUN_BYTES != 0:
+		return "'explored_tiles' is not a multiple of %d run bytes" \
+			% EXPLORED_RUN_BYTES
+	var prev_y := -1
+	var prev_end := -1
+	var run_count := bytes.size() / EXPLORED_RUN_BYTES
+	for run in run_count:
+		var offset := run * EXPLORED_RUN_BYTES
+		var y := int(bytes[offset]) | (int(bytes[offset + 1]) << 8)
+		var x0 := int(bytes[offset + 2]) | (int(bytes[offset + 3]) << 8)
+		var span := (int(bytes[offset + 4]) | (int(bytes[offset + 5]) << 8)) + 1
+		if y >= EXPLORED_GRID.y:
+			return "'explored_tiles' run %d: y %d outside the %d-tile grid" \
+				% [run, y, EXPLORED_GRID.y]
+		if x0 + span > EXPLORED_GRID.x:
+			return "'explored_tiles' run %d: x-range %d..%d outside the %d-tile grid" \
+				% [run, x0, x0 + span - 1, EXPLORED_GRID.x]
+		if y < prev_y or (y == prev_y and x0 <= prev_end + 1):
+			return "'explored_tiles' run %d: runs are not sorted/disjoint" % run
+		prev_y = y
+		prev_end = x0 + span - 1
+	return ""
+
+
+## Strict standard base64: the § alphabet with padding only in the last one
+## or two positions and a multiple-of-4 length — `Marshalls.base64_to_raw`
+## alone is too forgiving (it silently skips invalid characters), and the
+## refuse-loudly rule needs malformed strings rejected, not blanked.
+static func _is_strict_base64(text: String) -> bool:
+	if text.length() == 0 or text.length() % 4 != 0:
+		return false
+	for i in text.length():
+		var c := text[i]
+		if c == "=":
+			if i < text.length() - 2:
+				return false
+		elif not ((c >= "A" and c <= "Z") or (c >= "a" and c <= "z") \
+				or (c >= "0" and c <= "9") or c == "+" or c == "/"):
+			return false
+	return true
 
 
 func save(slot: int) -> bool:
@@ -565,6 +728,13 @@ func validate_payload(data: Dictionary) -> String:
 		return "'known_ports' is not an array"
 	if not (data["port_investments"] is Dictionary):
 		return "'port_investments' is not an object"
+	# v8 explored-state amendment (docs/90-* §8.1 version 8): optional
+	# (absent → the empty set) but type- AND encoding-checked whenever
+	# present, the same refuse-loudly rule as every other block — a payload
+	# this build writes always validates.
+	var explored_error := _explored_error(data.get("explored_tiles", null))
+	if not explored_error.is_empty():
+		return explored_error
 	if not (data["current_port"] == null or data["current_port"] is String):
 		return "'current_port' is neither a port id nor null"
 	if not _is_array_or_missing(data, "quests"):
@@ -940,9 +1110,14 @@ func _apply(data: Dictionary) -> void:
 	# The superseded `quests` placeholder is never saved (§8.1: `active_quests`
 	# is the one quest list) and is cleared on load even if a payload carries it.
 	GameState.quests = []
-	# docs/20-* §4.12: explored tiles are not part of the save (known Phase-1
-	# limitation); the minimap re-reveals from the loaded position.
-	GameState.explored_tiles = {}
+	# v8 explored-state amendment (docs/90-* §8.1, docs/20-* §4.12): the
+	# explored set restores from the payload (validated above; absent → the
+	# empty-set default). A FRESH dictionary every load — the HUD minimap's
+	# reference-identity check (`hud.gd` `_sync_minimap_image`) treats a
+	# replaced dict as "repaint from scratch", which is also what makes a
+	# *smaller* loaded set repaint, not just a larger one.
+	GameState.explored_tiles = _decode_explored(
+		str(data.get("explored_tiles", OPTIONAL_DEFAULTS["explored_tiles"])))
 	_reset_transient_sim_state()
 
 
