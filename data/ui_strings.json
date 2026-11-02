@@ -2723,5 +2723,657 @@
   "debug.lane.molucca_run": {
     "zh": "马鲁古香料航线",
     "en": "The Molucca spice run"
+  },
+  "char.level_up.alloc": {
+    "zh": "等级提升!可用 +2 点。",
+    "en": "Level up! +2 points to allocate."
+  },
+  "char.points_pending": {
+    "zh": "待分配点数",
+    "en": "Points to allocate"
+  },
+  "char.action.talk": {
+    "zh": "交谈",
+    "en": "Talk"
+  },
+  "char.action.gift": {
+    "zh": "赠礼",
+    "en": "Gift"
+  },
+  "char.action.train": {
+    "zh": "训练",
+    "en": "Train"
+  },
+  "char.action.appoint": {
+    "zh": "任命",
+    "en": "Appoint"
+  },
+  "char.talk.result": {
+    "zh": "{name} 相谈甚欢,忠诚 +1。",
+    "en": "{name} enjoys the talk; loyalty +1."
+  },
+  "char.gift.result": {
+    "zh": "{name} 收下礼物,忠诚 +5。",
+    "en": "{name} accepts the gift; loyalty +5."
+  },
+  "char.gift.greedy": {
+    "zh": "{name} 生性贪婪,忠诚 +8。",
+    "en": "Greedy {name}: loyalty +8."
+  },
+  "char.gift.loyal": {
+    "zh": "{name} 生性忠义,忠诚 +3。",
+    "en": "Loyal {name}: loyalty +3."
+  },
+  "char.action.cooldown": {
+    "zh": "该举动尚在冷却(还需 {days} 天)。",
+    "en": "Still on cooldown ({days} days to go)."
+  },
+  "char.raise.offer": {
+    "zh": "{name} 忠诚低落,开口要求加薪。",
+    "en": "{name}'s loyalty is low; a raise is demanded."
+  },
+  "char.raise.accept": {
+    "zh": "同意加薪,日薪 ×1.25,忠诚 +10。",
+    "en": "Raise granted — wage ×1.25, loyalty +10."
+  },
+  "char.raise.refuse": {
+    "zh": "加薪被拒,{name} 忠诚 −10。",
+    "en": "Raise refused — {name}'s loyalty −10."
+  },
+  "char.resign": {
+    "zh": "{name} 心灰意冷,辞船而去。",
+    "en": "{name} resigns and leaves the fleet."
+  },
+  "char.card.attributes": {
+    "zh": "属性",
+    "en": "Attributes"
+  },
+  "char.card.skills": {
+    "zh": "技能",
+    "en": "Skills"
+  },
+  "char.card.personality": {
+    "zh": "性情",
+    "en": "Personality"
+  },
+  "char.card.appearance": {
+    "zh": "容貌",
+    "en": "Appearance"
+  },
+  "char.card.relations": {
+    "zh": "关系",
+    "en": "Relations"
+  },
+  "char.card.career": {
+    "zh": "事迹",
+    "en": "Career"
+  },
+  "char.card.effective": {
+    "zh": "生效值",
+    "en": "Effective value"
+  },
+  "char.card.officer_part": {
+    "zh": "官员贡献 +{amount}",
+    "en": "Officer adds +{amount}"
+  },
+  "char.card.native_part": {
+    "zh": "忠诚 ≥ 80:本职 +5",
+    "en": "Loyalty ≥ 80: native +5"
+  },
+  "char.card.without_officer": {
+    "zh": "若无此官员:{amount}",
+    "en": "Without this officer: {amount}"
+  },
+  "char.personality_line": {
+    "zh": "性情:{tags}",
+    "en": "Personality: {tags}"
+  },
+  "char.appearance.sentence": {
+    "zh": "容貌:{parts}。",
+    "en": "Looks: {parts}."
+  },
+  "char.personality.greedy": {
+    "zh": "贪婪",
+    "en": "greedy"
+  },
+  "char.personality.patient": {
+    "zh": "沉稳",
+    "en": "patient"
+  },
+  "char.personality.boastful": {
+    "zh": "好夸口",
+    "en": "boastful"
+  },
+  "char.personality.ferocious": {
+    "zh": "凶悍",
+    "en": "ferocious"
+  },
+  "char.personality.vain": {
+    "zh": "虚荣",
+    "en": "vain"
+  },
+  "char.personality.stoic": {
+    "zh": "坚忍",
+    "en": "stoic"
+  },
+  "char.personality.bookish": {
+    "zh": "好学",
+    "en": "bookish"
+  },
+  "char.personality.sullen": {
+    "zh": "阴沉",
+    "en": "sullen"
+  },
+  "char.personality.pious": {
+    "zh": "虔诚",
+    "en": "pious"
+  },
+  "char.personality.generous": {
+    "zh": "慷慨",
+    "en": "generous"
+  },
+  "char.personality.cunning": {
+    "zh": "狡猾",
+    "en": "cunning"
+  },
+  "char.personality.loyal": {
+    "zh": "忠义",
+    "en": "loyal"
+  },
+  "char.appearance.face.lean": {
+    "zh": "精瘦",
+    "en": "lean"
+  },
+  "char.appearance.face.round": {
+    "zh": "圆脸",
+    "en": "round"
+  },
+  "char.appearance.face.scarred": {
+    "zh": "带疤",
+    "en": "scarred"
+  },
+  "char.appearance.face.weathered": {
+    "zh": "饱经风霜",
+    "en": "weathered"
+  },
+  "char.appearance.beard.clean": {
+    "zh": "净面",
+    "en": "clean-shaven"
+  },
+  "char.appearance.beard.stubble": {
+    "zh": "胡茬",
+    "en": "stubble"
+  },
+  "char.appearance.beard.full": {
+    "zh": "络腮胡",
+    "en": "full beard"
+  },
+  "char.appearance.beard.forked": {
+    "zh": "山羊胡",
+    "en": "forked"
+  },
+  "char.appearance.eyes.dark": {
+    "zh": "乌黑",
+    "en": "dark"
+  },
+  "char.appearance.eyes.grey": {
+    "zh": "灰色",
+    "en": "grey"
+  },
+  "char.appearance.eyes.hazel": {
+    "zh": "褐色",
+    "en": "hazel"
+  },
+  "char.appearance.eyes.pale_blue": {
+    "zh": "淡蓝",
+    "en": "pale blue"
+  },
+  "char.appearance.hair.black": {
+    "zh": "乌黑",
+    "en": "black"
+  },
+  "char.appearance.hair.brown": {
+    "zh": "棕色",
+    "en": "brown"
+  },
+  "char.appearance.hair.sun_bleached": {
+    "zh": "晒褪",
+    "en": "sun-bleached"
+  },
+  "char.appearance.hair.grey_streaked": {
+    "zh": "花白",
+    "en": "grey-streaked"
+  },
+  "skill.seamanship": {
+    "zh": "操船",
+    "en": "Seamanship"
+  },
+  "skill.navigation": {
+    "zh": "航海",
+    "en": "Navigation"
+  },
+  "skill.swordplay": {
+    "zh": "剑术",
+    "en": "Swordplay"
+  },
+  "skill.gunnery": {
+    "zh": "炮术",
+    "en": "Gunnery"
+  },
+  "skill.appraisal": {
+    "zh": "鉴定",
+    "en": "Appraisal"
+  },
+  "skill.negotiation": {
+    "zh": "交涉",
+    "en": "Negotiation"
+  },
+  "skill.cartography": {
+    "zh": "制图",
+    "en": "Cartography"
+  },
+  "skill.rumour": {
+    "zh": "打探",
+    "en": "Rumour"
+  },
+  "skill.medicine": {
+    "zh": "医术",
+    "en": "Medicine"
+  },
+  "skill.carpentry": {
+    "zh": "修造",
+    "en": "Carpentry"
+  },
+  "skill.cooking": {
+    "zh": "烹饪",
+    "en": "Cooking"
+  },
+  "skill.uses": {
+    "zh": "熟练 {count}/{need}",
+    "en": "Uses {count}/{need}"
+  },
+  "skill.train": {
+    "zh": "付费训练",
+    "en": "Paid training"
+  },
+  "skill.train.fee": {
+    "zh": "费用 {gold} 金,提升 1 点。",
+    "en": "{gold}g buys +1."
+  },
+  "skill.train.capped": {
+    "zh": "已达训练上限 60,只能靠使用成长。",
+    "en": "At the training cap of 60; only use raises it now."
+  },
+  "skill.train.done": {
+    "zh": "训练完成:{name} +1。",
+    "en": "Training complete: {name} +1."
+  },
+  "gate.locked": {
+    "zh": "未解锁",
+    "en": "Locked"
+  },
+  "gate.requires": {
+    "zh": "需 {stat} ≥ {n}",
+    "en": "Requires {stat} ≥ {n}"
+  },
+  "hail.title": {
+    "zh": "与 {name} 交谈",
+    "en": "Talking to {name}"
+  },
+  "hail.option.rumours": {
+    "zh": "问讯",
+    "en": "Ask rumours"
+  },
+  "hail.option.supplies": {
+    "zh": "买补给",
+    "en": "Buy supplies"
+  },
+  "hail.option.intimidate": {
+    "zh": "威吓",
+    "en": "Intimidate"
+  },
+  "hail.option.befriend": {
+    "zh": "交好",
+    "en": "Befriend"
+  },
+  "hail.supplies.terms": {
+    "zh": "港价 ×1.5",
+    "en": "Port price ×1.5"
+  },
+  "hail.supplies.stance_terms": {
+    "zh": "好感 ≥ +3:降为 ×1.25",
+    "en": "Stance ≥ +3: ×1.25"
+  },
+  "hail.supplies.negotiation": {
+    "zh": "交涉压价:再省 {percent}%",
+    "en": "Negotiation: a further {percent}% off"
+  },
+  "hail.rumours.intel_terms": {
+    "zh": "好感 ≥ +2:附赠一条情报",
+    "en": "Stance ≥ +2: one piece of intel free"
+  },
+  "hail.befriend.terms": {
+    "zh": "好感 +1,每日限一次",
+    "en": "Stance +1, once per day"
+  },
+  "hail.befriend.used": {
+    "zh": "今日已与此人交好。",
+    "en": "Already befriended this captain today."
+  },
+  "hail.rumours.result_intel": {
+    "zh": "{name} 多透露了一条消息。",
+    "en": "{name} shares an extra piece of intel."
+  },
+  "hail.supplies.result": {
+    "zh": "已购入补给 {qty} 单位。",
+    "en": "Bought {qty} units of supplies."
+  },
+  "hail.intimidate.win": {
+    "zh": "{name} 交出了半舱货物。",
+    "en": "{name} hands over half their cargo."
+  },
+  "hail.intimidate.lose": {
+    "zh": "{name} 恼羞成怒,战斗打响。",
+    "en": "{name} turns hostile; the battle opens."
+  },
+  "hail.befriend.result": {
+    "zh": "{name} 对你的好感 +1。",
+    "en": "{name}'s stance toward you +1."
+  },
+  "hail.coaster_note": {
+    "zh": "对沿岸货船只能威吓。",
+    "en": "Coasters can only be intimidated."
+  },
+  "interact.pick.title": {
+    "zh": "选择一支船队",
+    "en": "Choose a fleet"
+  },
+  "interact.pick.row": {
+    "zh": "{name} · 等级 {tier}",
+    "en": "{name} · Tier {tier}"
+  },
+  "interact.pick.role_icon": {
+    "zh": "职能",
+    "en": "Role"
+  },
+  "interact.verb.inspect": {
+    "zh": "详查",
+    "en": "Inspect"
+  },
+  "interact.verb.talk": {
+    "zh": "交谈",
+    "en": "Talk"
+  },
+  "interact.verb.attack": {
+    "zh": "攻击",
+    "en": "Attack"
+  },
+  "interact.talk.too_far": {
+    "zh": "距离过远,无法攀谈。",
+    "en": "Too far to hail."
+  },
+  "interact.intercept.set": {
+    "zh": "拦截:{name}",
+    "en": "Intercept: {name}"
+  },
+  "interact.intercept.cancelled": {
+    "zh": "已取消拦截。",
+    "en": "Intercept cancelled."
+  },
+  "interact.attack.coaster": {
+    "zh": "沿岸货船不可攻击。",
+    "en": "Coasters cannot be attacked."
+  },
+  "interact.unknown_name": {
+    "zh": "陌生船队",
+    "en": "Unidentified fleet"
+  },
+  "dossier.title": {
+    "zh": "档案:{name}",
+    "en": "Dossier: {name}"
+  },
+  "dossier.familiarity": {
+    "zh": "熟悉度",
+    "en": "Familiarity"
+  },
+  "dossier.tier.3": {
+    "zh": "略识",
+    "en": "Passing acquaintance"
+  },
+  "dossier.tier.6": {
+    "zh": "相熟",
+    "en": "Well acquainted"
+  },
+  "dossier.tier.10": {
+    "zh": "知根知底",
+    "en": "Thoroughly known"
+  },
+  "dossier.log.composition": {
+    "zh": "上次编成",
+    "en": "Last fleet composition"
+  },
+  "dossier.log.home_port": {
+    "zh": "母港与目击记录",
+    "en": "Home port & sighting history"
+  },
+  "dossier.log.lanes": {
+    "zh": "常跑航线(含月度改道)",
+    "en": "Full lanes incl. month variants"
+  },
+  "dossier.locked.tier": {
+    "zh": "熟悉度不足(需 {tier})",
+    "en": "Not enough familiarity (needs {tier})"
+  },
+  "dossier.header.tier": {
+    "zh": "现等级 {tier}",
+    "en": "Current tier {tier}"
+  },
+  "dossier.status.at_sea": {
+    "zh": "在航",
+    "en": "At sea"
+  },
+  "dossier.status.returning": {
+    "zh": "归队中",
+    "en": "Returning"
+  },
+  "dossier.open_from_bounty": {
+    "zh": "自悬赏令调阅",
+    "en": "Open from the bounty board"
+  },
+  "captain.table.title": {
+    "zh": "船长桌",
+    "en": "The captains' table"
+  },
+  "captain.table.empty": {
+    "zh": "船长桌旁暂无熟人。",
+    "en": "No captains at the table just now."
+  },
+  "captain.table.role": {
+    "zh": "职能",
+    "en": "Role"
+  },
+  "captain.table.tier": {
+    "zh": "等级",
+    "en": "Tier"
+  },
+  "captain.table.last_seen": {
+    "zh": "上次现身:第 {day} 天",
+    "en": "Last seen: day {day}"
+  },
+  "captain.table.at": {
+    "zh": "现在位于:{facility}",
+    "en": "Now at: {facility}"
+  },
+  "officer.post.pilot": {
+    "zh": "领航员",
+    "en": "Pilot"
+  },
+  "officer.post.boatswain": {
+    "zh": "水手长",
+    "en": "Boatswain"
+  },
+  "officer.post.gunner": {
+    "zh": "炮手",
+    "en": "Gunner"
+  },
+  "officer.post.surgeon": {
+    "zh": "船医",
+    "en": "Surgeon"
+  },
+  "officer.post.carpenter": {
+    "zh": "修造师",
+    "en": "Carpenter"
+  },
+  "officer.post.cook": {
+    "zh": "厨师",
+    "en": "Cook"
+  },
+  "officer.post.captain": {
+    "zh": "舰长",
+    "en": "Ship captain"
+  },
+  "officer.post.idle": {
+    "zh": "闲置",
+    "en": "Idle"
+  },
+  "officer.post.no_captain": {
+    "zh": "无舰长",
+    "en": "No captain"
+  },
+  "officer.post.prereq_met": {
+    "zh": "任职条件已满足",
+    "en": "Prereq met"
+  },
+  "officer.post.prereq_unmet": {
+    "zh": "任职条件不足",
+    "en": "Prereq unmet"
+  },
+  "advice.pilot.wind_band": {
+    "zh": "领航员:明日将进入风带。",
+    "en": "Pilot: we enter a wind band tomorrow."
+  },
+  "advice.surgeon.water_low": {
+    "zh": "船医:淡水将尽,坏血病将起。",
+    "en": "Surgeon: water is nearly out — scurvy will follow."
+  },
+  "advice.boatswain.storm_sail": {
+    "zh": "水手长:风暴将至,宜收帆减速。",
+    "en": "Boatswain: a storm is coming — reef the sails."
+  },
+  "advice.gunner.first_contact": {
+    "zh": "炮手:遭遇敌船,火炮已就位。",
+    "en": "Gunner: first contact — guns are ready."
+  },
+  "advice.carpenter.durability_low": {
+    "zh": "修造师:船体耐久过低,应尽快修理。",
+    "en": "Carpenter: hull durability is low — repair soon."
+  },
+  "advice.cook.morale_low": {
+    "zh": "厨师:士气低落,我去做顿热食。",
+    "en": "Cook: morale is flagging — I will fix a hot meal."
+  },
+  "creation.step.background": {
+    "zh": "出身",
+    "en": "Background"
+  },
+  "creation.step.points": {
+    "zh": "自由点数",
+    "en": "Free points"
+  },
+  "creation.points.left": {
+    "zh": "剩余 {count} 点未分配",
+    "en": "{count} points left to spend"
+  },
+  "creation.points.attributes": {
+    "zh": "属性尚余 {count} 点",
+    "en": "{count} attribute points left"
+  },
+  "creation.points.skills": {
+    "zh": "技能尚余 {count} 点",
+    "en": "{count} skill points left"
+  },
+  "creation.stepper.add": {
+    "zh": "+1",
+    "en": "+1"
+  },
+  "creation.stepper.sub": {
+    "zh": "−1",
+    "en": "−1"
+  },
+  "creation.cap_reached": {
+    "zh": "此项已达上限。",
+    "en": "This item is at its cap."
+  },
+  "creation.points.must_spend": {
+    "zh": "点数须全部用完方可确认。",
+    "en": "All points must be spent before confirming."
+  },
+  "creation.spread": {
+    "zh": "均匀分配",
+    "en": "Spread evenly"
+  },
+  "creation.confirm": {
+    "zh": "确认出航",
+    "en": "Confirm and set sail"
+  },
+  "creation.preview.sighting": {
+    "zh": "瞭望距离",
+    "en": "Sighting radius"
+  },
+  "creation.preview.speed": {
+    "zh": "航速加成",
+    "en": "Fleet speed bonus"
+  },
+  "creation.preview.duel": {
+    "zh": "单挑值",
+    "en": "Duel value"
+  },
+  "creation.preview.base_value": {
+    "zh": "{base} → {value}",
+    "en": "{base} → {value}"
+  },
+  "sail.autopilot.appoint": {
+    "zh": "委任航行",
+    "en": "Appoint voyage"
+  },
+  "sail.autopilot.cancel": {
+    "zh": "取消委任",
+    "en": "Cancel voyage"
+  },
+  "sail.autopilot.hud.bar": {
+    "zh": "目的地 {port} · 预计 {days} 天",
+    "en": "Bound for {port} · ETA {days} days"
+  },
+  "sail.autopilot.cancelled_contact": {
+    "zh": "遭遇敌对船队,委任航行取消。",
+    "en": "Hostile fleet sighted — the appointed voyage is cancelled."
+  },
+  "sail.autopilot.gated": {
+    "zh": "条件不符:{reason}",
+    "en": "Not met: {reason}"
+  },
+  "sail.autopilot.storm_note": {
+    "zh": "风暴不会打断委任航行。",
+    "en": "Storms do not break an appointed voyage."
+  },
+  "ending.rpg.nemesis_title": {
+    "zh": "宿敌榜",
+    "en": "The nemesis list"
+  },
+  "ending.rpg.nemesis_row": {
+    "zh": "{name} · 等级 {tier} · 好感 {stance}",
+    "en": "{name} · Tier {tier} · Stance {stance}"
+  },
+  "ending.rpg.grudge": {
+    "zh": "最深恩仇:{name}",
+    "en": "Deepest grudge: {name}"
+  },
+  "ending.rpg.veteran": {
+    "zh": "最忠诚老部下:{name}(随航 {days} 天)",
+    "en": "Most loyal veteran: {name} ({days} sea-days)"
+  },
+  "ending.rpg.bio": {
+    "zh": "出身回望",
+    "en": "Background recalled"
   }
 }
