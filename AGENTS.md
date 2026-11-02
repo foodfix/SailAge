@@ -66,3 +66,13 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 - Design questions discovered during a task are answered in the owning
   system doc first (`docs/00-OVERVIEW.md` §13), then the task proceeds.
 - Doc short-hands: `20-*` = `docs/20-WORLD-AND-SAILING.md`, etc.
+- **Test discipline — no overkill tests:** tests verify contracts directly.
+  Assert the constant, the closed form, or the pinned formula; never
+  re-derive a known result by Monte Carlo, seeded-trial sweeps, brute-force
+  soaks (full-map BFS / pixel walks over facts the build-time validator
+  already computes and stores in `data/maps/world_report.json`), or
+  repeated expensive scene boots where one boot + re-fixture would do.
+  One small deterministic integration observation (fixed seed) is enough
+  to prove a roll/rule actually fires. When trimming, cut the method, not
+  the guarantee: every unique-behavior pin survives; check-count drift in
+  `tools/demo_check_*.md` is accepted, semantic doc pins are amended first.
