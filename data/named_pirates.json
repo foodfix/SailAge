@@ -1,29 +1,164 @@
 {
-  "version": 1,
+  "version": 2,
   "named_pirates": [
     {
       "id": "pirate_redbeard_khair",
-      "name": {"zh": "「红胡子」海雷丁", "en": "Khair ad-Din Redbeard"},
+      "name": {
+        "zh": "「红胡子」海雷丁",
+        "en": "Khair ad-Din Redbeard"
+      },
+      "nation_id": "",
+      "role": "pirate",
       "tier": 3,
-      "drop": "eq_khair_scimitar"
+      "level": 15,
+      "attributes": {
+        "constitution": 14,
+        "intellect": 11,
+        "charisma": 16,
+        "courage": 20,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 0,
+        "navigation": 0,
+        "swordplay": 28,
+        "gunnery": 12,
+        "appraisal": 0,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 0
+      },
+      "personality": [
+        "ferocious",
+        "vain"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "drop": "eq_khair_scimitar",
+      "legend": true
     },
     {
       "id": "pirate_murad_red_sail",
-      "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
+      "name": {
+        "zh": "「红帆」穆拉德",
+        "en": "Murad the Red Sail"
+      },
+      "nation_id": "",
+      "role": "pirate",
       "tier": 2,
-      "drop": "eq_red_sail"
+      "level": 11,
+      "attributes": {
+        "constitution": 14,
+        "intellect": 12,
+        "charisma": 15,
+        "courage": 17,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 0,
+        "navigation": 0,
+        "swordplay": 19,
+        "gunnery": 8,
+        "appraisal": 0,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 0
+      },
+      "personality": [
+        "ferocious",
+        "vain"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "drop": "eq_red_sail",
+      "legend": true
     },
     {
       "id": "pirate_limahong_thousand_sails",
-      "name": {"zh": "「千帆」林凤", "en": "Limahong of the Thousand Sails"},
+      "name": {
+        "zh": "「千帆」林凤",
+        "en": "Limahong of the Thousand Sails"
+      },
+      "nation_id": "",
+      "role": "pirate",
       "tier": 2,
-      "drop": "eq_golden_dragon_figurehead"
+      "level": 11,
+      "attributes": {
+        "constitution": 12,
+        "intellect": 11,
+        "charisma": 14,
+        "courage": 16,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 0,
+        "navigation": 0,
+        "swordplay": 18,
+        "gunnery": 8,
+        "appraisal": 0,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 0
+      },
+      "personality": [
+        "ferocious",
+        "greedy"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "drop": "eq_golden_dragon_figurehead",
+      "legend": true
     },
     {
       "id": "pirate_edward_bloodhand",
-      "name": {"zh": "「血手」爱德华", "en": "Edward the Bloodhand"},
+      "name": {
+        "zh": "「血手」爱德华",
+        "en": "Edward the Bloodhand"
+      },
+      "nation_id": "",
+      "role": "pirate",
       "tier": 1,
-      "drop": "eq_bloodhand_cuirass"
+      "level": 7,
+      "attributes": {
+        "constitution": 13,
+        "intellect": 9,
+        "charisma": 12,
+        "courage": 15,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 0,
+        "navigation": 0,
+        "swordplay": 12,
+        "gunnery": 4,
+        "appraisal": 0,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 0
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "full",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "drop": "eq_bloodhand_cuirass",
+      "legend": true
     }
   ]
 }

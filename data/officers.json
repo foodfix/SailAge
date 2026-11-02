@@ -1,65 +1,4703 @@
 {
-  "version": 1,
+  "version": 2,
   "officers": [
     {
-      "id": "off_mateus_alvares",
-      "name": {"zh": "马特乌斯·阿尔瓦雷斯", "en": "Mateus Álvares"},
+      "id": "off_leg_duarte_silveira",
+      "name": {
+        "zh": "杜阿尔特·西尔维拉",
+        "en": "Duarte Silveira"
+      },
       "nation_id": "portugal",
-      "role": "navigator",
-      "stats": {"leadership": 10, "seamanship": 14, "combat": 6, "navigation": 16},
+      "legend": true,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 24,
+        "charisma": 17,
+        "courage": 19,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 58,
+        "swordplay": 6,
+        "gunnery": 4,
+        "appraisal": 22,
+        "negotiation": 12,
+        "cartography": 21,
+        "rumour": 9,
+        "medicine": 0,
+        "carpentry": 3,
+        "cooking": 6
+      },
+      "personality": [
+        "bookish",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 55,
+      "recruit_ports": [
+        "lisbon",
+        "madeira"
+      ],
+      "bio": {
+        "zh": "在印度航线领了二十年航的老领航员,闭着眼也能数清好望角的浪。",
+        "en": "A chief pilot with twenty years on the India run, who counts the Cape's swells with his eyes shut."
+      }
+    },
+    {
+      "id": "off_leg_blasco_miranda",
+      "name": {
+        "zh": "布拉斯科·德·米兰达",
+        "en": "Blasco de Miranda"
+      },
+      "nation_id": "spain",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 25,
+        "intellect": 12,
+        "charisma": 16,
+        "courage": 34,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 57,
+        "navigation": 20,
+        "swordplay": 14,
+        "gunnery": 10,
+        "appraisal": 21,
+        "negotiation": 9,
+        "cartography": 5,
+        "rumour": 7,
+        "medicine": 0,
+        "carpentry": 23,
+        "cooking": 11
+      },
+      "personality": [
+        "stoic",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 52,
+      "recruit_ports": [
+        "seville",
+        "cadiz"
+      ],
+      "bio": {
+        "zh": "瓜达尔基维尔河口出身的老水手长,风暴里的甲板因他而井然有序。",
+        "en": "A boatswain raised by the Guadalquivir mouth, whose deck stays in order through any storm."
+      }
+    },
+    {
+      "id": "off_leg_john_blackwood",
+      "name": {
+        "zh": "约翰·布莱克伍德",
+        "en": "John Blackwood"
+      },
+      "nation_id": "england",
+      "legend": true,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 14,
+        "charisma": 13,
+        "courage": 42,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 9,
+        "swordplay": 12,
+        "gunnery": 56,
+        "appraisal": 22,
+        "negotiation": 6,
+        "cartography": 4,
+        "rumour": 8,
+        "medicine": 0,
+        "carpentry": 21,
+        "cooking": 5
+      },
+      "personality": [
+        "ferocious",
+        "pious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 50,
+      "recruit_ports": [
+        "london",
+        "plymouth"
+      ],
+      "bio": {
+        "zh": "在海峡追猎私掠船半生的炮长,信条是火药必须永远干燥。",
+        "en": "A gun captain who hunted privateers in the Channel for half a life; the powder stays dry, always."
+      }
+    },
+    {
+      "id": "off_leg_hulusi_veli",
+      "name": {
+        "zh": "胡卢西·韦利",
+        "en": "Hulusi Veli"
+      },
+      "nation_id": "ottoman",
+      "legend": true,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 26,
+        "charisma": 15,
+        "courage": 17,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 8,
+        "navigation": 10,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 20,
+        "negotiation": 14,
+        "cartography": 7,
+        "rumour": 12,
+        "medicine": 55,
+        "carpentry": 2,
+        "cooking": 21
+      },
+      "personality": [
+        "bookish",
+        "pious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 48,
+      "recruit_ports": [
+        "istanbul",
+        "smyrna"
+      ],
+      "bio": {
+        "zh": "曾在帝国医馆坐堂的船医,坏血病在他船上从无踪迹。",
+        "en": "A ship surgeon once schooled in the imperial infirmary; scurvy never takes hold aboard his ship."
+      }
+    },
+    {
+      "id": "off_leg_arend_grootveld",
+      "name": {
+        "zh": "阿伦特·赫鲁特费尔德",
+        "en": "Arend Grootveld"
+      },
+      "nation_id": "holland",
+      "legend": true,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 20,
+        "charisma": 12,
+        "courage": 16,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 12,
+        "navigation": 8,
+        "swordplay": 2,
+        "gunnery": 4,
+        "appraisal": 21,
+        "negotiation": 10,
+        "cartography": 3,
+        "rumour": 4,
+        "medicine": 0,
+        "carpentry": 54,
+        "cooking": 22
+      },
+      "personality": [
+        "patient",
+        "generous"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 46,
+      "recruit_ports": [
+        "amsterdam",
+        "antwerp"
+      ],
+      "bio": {
+        "zh": "联合省船坞里最好的修造师,他钉的每一根肋骨都严丝合缝。",
+        "en": "The finest shipwright out of the United Provinces' yards; every frame he sets sits flush."
+      }
+    },
+    {
+      "id": "off_leg_bartolomeo_scappi",
+      "name": {
+        "zh": "巴尔托洛梅奥·斯卡皮",
+        "en": "Bartolomeo Scappi"
+      },
+      "nation_id": "italy",
+      "legend": true,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 19,
+        "charisma": 16,
+        "courage": 12,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 5,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 20,
+        "negotiation": 11,
+        "cartography": 2,
+        "rumour": 6,
+        "medicine": 3,
+        "carpentry": 21,
+        "cooking": 53
+      },
+      "personality": [
+        "generous",
+        "patient"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 44,
+      "recruit_ports": [
+        "venice",
+        "naples"
+      ],
+      "bio": {
+        "zh": "给威尼斯总督府做过宴的厨子,在咸风里也能端出像样的炖菜。",
+        "en": "A cook who once served the Doge's table, and still turns out a proper stew in the salt wind."
+      }
+    },
+    {
+      "id": "off_leg_cristobal_aldana",
+      "name": {
+        "zh": "克里斯托瓦尔·德阿尔达纳",
+        "en": "Cristóbal de Aldana"
+      },
+      "nation_id": "spain",
+      "legend": true,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 14,
+        "charisma": 24,
+        "courage": 45,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 18,
+        "swordplay": 60,
+        "gunnery": 24,
+        "appraisal": 22,
+        "negotiation": 10,
+        "cartography": 6,
+        "rumour": 9,
+        "medicine": 0,
+        "carpentry": 8,
+        "cooking": 5
+      },
+      "personality": [
+        "ferocious",
+        "cunning"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 60,
+      "recruit_ports": [
+        "seville",
+        "cadiz"
+      ],
+      "bio": {
+        "zh": "在波多韦洛城墙下赢得佩剑的护航船长,剑与话一样快。",
+        "en": "A convoy captain who won his blade beneath the walls of Portobelo; his sword is as quick as his tongue."
+      }
+    },
+    {
+      "id": "off_leg_vicente_gouveia",
+      "name": {
+        "zh": "维森特·古维亚",
+        "en": "Vicente Gouveia"
+      },
+      "nation_id": "portugal",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 15,
+        "charisma": 22,
+        "courage": 36,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 58,
+        "navigation": 24,
+        "swordplay": 12,
+        "gunnery": 20,
+        "appraisal": 21,
+        "negotiation": 13,
+        "cartography": 7,
+        "rumour": 6,
+        "medicine": 0,
+        "carpentry": 9,
+        "cooking": 4
+      },
+      "personality": [
+        "loyal",
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 58,
+      "recruit_ports": [
+        "lisbon",
+        "oporto"
+      ],
+      "bio": {
+        "zh": "从印度航线水手一路升上来的船长,对每一名船员都记着名字。",
+        "en": "A captain risen from India-run deckhand to command, who keeps every crewman's name in his head."
+      }
+    },
+    {
+      "id": "off_leg_willem_barentsz",
+      "name": {
+        "zh": "威廉·巴伦支",
+        "en": "Willem Barentsz"
+      },
+      "nation_id": "holland",
+      "legend": true,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 27,
+        "charisma": 13,
+        "courage": 28,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 59,
+        "swordplay": 2,
+        "gunnery": 0,
+        "appraisal": 22,
+        "negotiation": 8,
+        "cartography": 24,
+        "rumour": 7,
+        "medicine": 0,
+        "carpentry": 10,
+        "cooking": 3
+      },
+      "personality": [
+        "bookish",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 56,
+      "recruit_ports": [
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "三次北上寻找东北航道的领航员,冰海与星图都是他的家园。",
+        "en": "The pilot who thrice sought the Northeast Passage; ice seas and star charts are home to him."
+      }
+    },
+    {
+      "id": "off_leg_hasan_zorlu",
+      "name": {
+        "zh": "哈桑·佐尔卢",
+        "en": "Hasan Zorlu"
+      },
+      "nation_id": "ottoman",
+      "legend": true,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 15,
+        "charisma": 12,
+        "courage": 38,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 8,
+        "swordplay": 10,
+        "gunnery": 57,
+        "appraisal": 20,
+        "negotiation": 5,
+        "cartography": 3,
+        "rumour": 6,
+        "medicine": 0,
+        "carpentry": 18,
+        "cooking": 4
+      },
+      "personality": [
+        "pious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 52,
+      "recruit_ports": [
+        "istanbul",
+        "alexandria"
+      ],
+      "bio": {
+        "zh": "金角湾炮台出的火炮长,齐射前必亲手量一遍装药。",
+        "en": "A gun master from the Golden Horn batteries who measures every charge himself before the salvo."
+      }
+    },
+    {
+      "id": "off_leg_pedro_valles",
+      "name": {
+        "zh": "佩德罗·瓦列斯",
+        "en": "Pedro Vallés"
+      },
+      "nation_id": "spain",
+      "legend": true,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 25,
+        "charisma": 16,
+        "courage": 15,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 9,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 14,
+        "negotiation": 21,
+        "cartography": 8,
+        "rumour": 10,
+        "medicine": 54,
+        "carpentry": 2,
+        "cooking": 20
+      },
+      "personality": [
+        "pious",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 46,
+      "recruit_ports": [
+        "seville",
+        "cadiz"
+      ],
+      "bio": {
+        "zh": "塞维利亚外科行会出身的船医,缝合与配药从不假手他人。",
+        "en": "A ship surgeon out of the Seville surgeons' guild who trusts no other hands with suture or salve."
+      }
+    },
+    {
+      "id": "off_leg_matthew_keelson",
+      "name": {
+        "zh": "马修·基尔森",
+        "en": "Matthew Keelson"
+      },
+      "nation_id": "england",
+      "legend": true,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 23,
+        "intellect": 18,
+        "charisma": 11,
+        "courage": 19,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 14,
+        "navigation": 6,
+        "swordplay": 4,
+        "gunnery": 8,
+        "appraisal": 12,
+        "negotiation": 22,
+        "cartography": 3,
+        "rumour": 4,
+        "medicine": 0,
+        "carpentry": 55,
+        "cooking": 21
+      },
+      "personality": [
+        "patient",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 47,
+      "recruit_ports": [
+        "london",
+        "plymouth"
+      ],
+      "bio": {
+        "zh": "修龙骨如同修钟表的匠人,船板在他手里从不浪费一根钉。",
+        "en": "A craftsman who trues a keel like a clockmaker; not one nail is wasted under his hands."
+      }
+    },
+    {
+      "id": "off_leg_joost_verhoeven",
+      "name": {
+        "zh": "约斯特·费尔霍芬",
+        "en": "Joost Verhoeven"
+      },
+      "nation_id": "holland",
+      "legend": true,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 16,
+        "charisma": 18,
+        "courage": 11,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 10,
+        "navigation": 4,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 13,
+        "negotiation": 20,
+        "cartography": 2,
+        "rumour": 8,
+        "medicine": 2,
+        "carpentry": 21,
+        "cooking": 52
+      },
+      "personality": [
+        "generous",
+        "sullen"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 45,
+      "recruit_ports": [
+        "amsterdam",
+        "antwerp"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话的厨子,锅里却总给水手多添一勺。",
+        "en": "A cook of few words who always slips the crew an extra ladleful."
+      }
+    },
+    {
+      "id": "off_leg_giovanni_doria",
+      "name": {
+        "zh": "乔瓦尼·多利亚",
+        "en": "Giovanni Doria"
+      },
+      "nation_id": "italy",
+      "legend": true,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 26,
+        "charisma": 19,
+        "courage": 16,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 18,
+        "navigation": 56,
+        "swordplay": 4,
+        "gunnery": 3,
+        "appraisal": 15,
+        "negotiation": 21,
+        "cartography": 22,
+        "rumour": 11,
+        "medicine": 0,
+        "carpentry": 2,
+        "cooking": 4
+      },
+      "personality": [
+        "bookish",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 54,
+      "recruit_ports": [
+        "genoa",
+        "naples"
+      ],
+      "bio": {
+        "zh": "热那亚航海世家出来的领航员,地中海的每一股洋流他都画进过海图。",
+        "en": "A pilot from a Genoese seafaring house who has charted every current the Mediterranean owns."
+      }
+    },
+    {
+      "id": "off_leg_richard_mainwaring",
+      "name": {
+        "zh": "理查德·梅恩沃林",
+        "en": "Richard Mainwaring"
+      },
+      "nation_id": "england",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 16,
+        "charisma": 21,
+        "courage": 38,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 57,
+        "navigation": 23,
+        "swordplay": 14,
+        "gunnery": 21,
+        "appraisal": 12,
+        "negotiation": 22,
+        "cartography": 6,
+        "rumour": 8,
+        "medicine": 0,
+        "carpentry": 7,
+        "cooking": 3
+      },
+      "personality": [
+        "loyal",
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 57,
+      "recruit_ports": [
+        "london",
+        "plymouth"
+      ],
+      "bio": {
+        "zh": "女王船队里出了名的铁面船长,追猎时从不需要第三种旗语。",
+        "en": "The Queen's iron-faced captain, famous for never needing a third signal flag in a chase."
+      }
+    },
+    {
+      "id": "off_leg_davud_bozok",
+      "name": {
+        "zh": "达武德·博佐克",
+        "en": "Davud Bozok"
+      },
+      "nation_id": "ottoman",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 24,
+        "intellect": 12,
+        "charisma": 14,
+        "courage": 33,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 55,
+        "navigation": 20,
+        "swordplay": 16,
+        "gunnery": 12,
+        "appraisal": 9,
+        "negotiation": 21,
+        "cartography": 4,
+        "rumour": 6,
+        "medicine": 0,
+        "carpentry": 19,
+        "cooking": 8
+      },
+      "personality": [
+        "stoic",
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 49,
+      "recruit_ports": [
+        "istanbul",
+        "smyrna"
+      ],
+      "bio": {
+        "zh": "从桨帆船链凳上熬出来的水手长,吼声压得过浮桥的风。",
+        "en": "A boatswain who rose from a galley's bench, whose roar outlasts the wind off the bridge."
+      }
+    },
+    {
+      "id": "off_leg_fabio_orsini",
+      "name": {
+        "zh": "法比奥·奥尔西尼",
+        "en": "Fabio Orsini"
+      },
+      "nation_id": "italy",
+      "legend": true,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 16,
+        "charisma": 14,
+        "courage": 36,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 7,
+        "swordplay": 13,
+        "gunnery": 56,
+        "appraisal": 11,
+        "negotiation": 22,
+        "cartography": 5,
+        "rumour": 7,
+        "medicine": 0,
+        "carpentry": 17,
+        "cooking": 6
+      },
+      "personality": [
+        "ferocious",
+        "pious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 51,
+      "recruit_ports": [
+        "venice",
+        "naples"
+      ],
+      "bio": {
+        "zh": "威尼斯军械库里的射击教头,把每门炮都当有自己的脾气来伺候。",
+        "en": "A gunnery master out of the Venice arsenal who treats every cannon as if it had a temper of its own."
+      }
+    },
+    {
+      "id": "off_leg_tome_pires",
+      "name": {
+        "zh": "托梅·皮雷斯",
+        "en": "Tomé Pires"
+      },
+      "nation_id": "portugal",
+      "legend": true,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 27,
+        "charisma": 17,
+        "courage": 14,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 5,
+        "navigation": 11,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 13,
+        "negotiation": 21,
+        "cartography": 20,
+        "rumour": 13,
+        "medicine": 56,
+        "carpentry": 1,
+        "cooking": 12
+      },
+      "personality": [
+        "bookish",
+        "pious"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 53,
+      "recruit_ports": [
+        "lisbon",
+        "goa"
+      ],
+      "bio": {
+        "zh": "药剂师出身的东方通,他写的风土志比宫廷的档案还要详尽。",
+        "en": "An apothecary turned hand on the eastern run, whose survey of the lands outdetails the court's own archives."
+      }
+    },
+    {
+      "id": "off_leg_juan_alcala",
+      "name": {
+        "zh": "胡安·德·阿尔卡拉",
+        "en": "Juan de Alcalá"
+      },
+      "nation_id": "spain",
+      "legend": true,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 24,
+        "intellect": 15,
+        "charisma": 13,
+        "courage": 21,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 5,
+        "swordplay": 6,
+        "gunnery": 9,
+        "appraisal": 10,
+        "negotiation": 20,
+        "cartography": 2,
+        "rumour": 3,
+        "medicine": 0,
+        "carpentry": 54,
+        "cooking": 18
+      },
+      "personality": [
+        "patient",
+        "generous"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 46,
+      "recruit_ports": [
+        "seville",
+        "valencia"
+      ],
+      "bio": {
+        "zh": "跟着白银船队跑了半生的修造师,桅杆断了他也敢在海上接。",
+        "en": "A shipwright who half a life sailed with the silver fleets; he will fish a broken mast at sea if he must."
+      }
+    },
+    {
+      "id": "off_leg_halil_demirtas",
+      "name": {
+        "zh": "哈利勒·德米尔塔什",
+        "en": "Halil Demirtaş"
+      },
+      "nation_id": "ottoman",
+      "legend": true,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 15,
+        "charisma": 17,
+        "courage": 12,
+        "luck": 19
+      },
+      "skills": {
+        "seamanship": 12,
+        "navigation": 3,
+        "swordplay": 0,
+        "gunnery": 0,
+        "appraisal": 12,
+        "negotiation": 22,
+        "cartography": 1,
+        "rumour": 7,
+        "medicine": 2,
+        "carpentry": 20,
+        "cooking": 53
+      },
+      "personality": [
+        "patient",
+        "generous"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 44,
+      "recruit_ports": [
+        "istanbul",
+        "athens"
+      ],
+      "bio": {
+        "zh": "一坛腌菜就能让全船在锚地重振士气的厨师。",
+        "en": "A cook whose one jar of pickles can raise a whole anchored crew's spirits."
+      }
+    },
+    {
+      "id": "off_leg_dirck_sonneveld",
+      "name": {
+        "zh": "迪尔克·松讷费尔德",
+        "en": "Dirck Sonneveld"
+      },
+      "nation_id": "holland",
+      "legend": true,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 17,
+        "charisma": 21,
+        "courage": 47,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 21,
+        "swordplay": 59,
+        "gunnery": 24,
+        "appraisal": 14,
+        "negotiation": 12,
+        "cartography": 21,
+        "rumour": 8,
+        "medicine": 0,
+        "carpentry": 6,
+        "cooking": 4
+      },
+      "personality": [
+        "cunning",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 59,
+      "recruit_ports": [
+        "amsterdam",
+        "antwerp"
+      ],
+      "bio": {
+        "zh": "决斗从未输过的公司船长,教剑时嘴里永远衔着烟斗。",
+        "en": "The Company captain never beaten in a duel, who teaches swordplay with a pipe clenched in his teeth."
+      }
+    },
+    {
+      "id": "off_leg_agostino_brignole",
+      "name": {
+        "zh": "阿戈斯蒂诺·布里尼奥莱",
+        "en": "Agostino Brignole"
+      },
+      "nation_id": "italy",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 17,
+        "charisma": 23,
+        "courage": 40,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 58,
+        "navigation": 23,
+        "swordplay": 15,
+        "gunnery": 20,
+        "appraisal": 13,
+        "negotiation": 16,
+        "cartography": 22,
+        "rumour": 9,
+        "medicine": 0,
+        "carpentry": 8,
+        "cooking": 5
+      },
+      "personality": [
+        "loyal",
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 58,
+      "recruit_ports": [
+        "genoa",
+        "naples"
+      ],
+      "bio": {
+        "zh": "带着家族船队替共和国押运粮食的船长,从未误过一季。",
+        "en": "Captain of his house's grain convoys for the Republic, with never a season missed."
+      }
+    },
+    {
+      "id": "off_leg_stephen_ashcombe",
+      "name": {
+        "zh": "斯蒂芬·阿什科姆",
+        "en": "Stephen Ashcombe"
+      },
+      "nation_id": "england",
+      "legend": true,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 25,
+        "charisma": 14,
+        "courage": 21,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 58,
+        "swordplay": 3,
+        "gunnery": 2,
+        "appraisal": 12,
+        "negotiation": 10,
+        "cartography": 23,
+        "rumour": 14,
+        "medicine": 0,
+        "carpentry": 4,
+        "cooking": 5
+      },
+      "personality": [
+        "bookish",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "grey",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 55,
+      "recruit_ports": [
+        "london",
+        "boston"
+      ],
+      "bio": {
+        "zh": "北大西洋渔场里练出来的领航员,雾里认路靠的是水的味道。",
+        "en": "A pilot schooled in the North Atlantic fishing grounds who finds his way in fog by the taste of the water."
+      }
+    },
+    {
+      "id": "off_leg_goncalo_marinheiro",
+      "name": {
+        "zh": "贡萨洛·马里涅罗",
+        "en": "Gonçalo Marinheiro"
+      },
+      "nation_id": "portugal",
+      "legend": true,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 23,
+        "intellect": 13,
+        "charisma": 15,
+        "courage": 35,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 56,
+        "navigation": 20,
+        "swordplay": 12,
+        "gunnery": 11,
+        "appraisal": 8,
+        "negotiation": 10,
+        "cartography": 21,
+        "rumour": 5,
+        "medicine": 0,
+        "carpentry": 22,
+        "cooking": 7
+      },
+      "personality": [
+        "stoic",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 50,
+      "recruit_ports": [
+        "lisbon",
+        "madeira"
+      ],
+      "bio": {
+        "zh": "水手们说他的哨音比船长的话更管用,他自己从不否认。",
+        "en": "The crew swears his whistle carries further than the captain's word, and he never denies it."
+      }
+    },
+    {
+      "id": "off_reg_pilot_01",
+      "name": {
+        "zh": "卢克·温特",
+        "en": "Luke Winter"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 20,
+        "charisma": 21,
+        "courage": 14,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 42,
+        "swordplay": 2,
+        "gunnery": 5,
+        "appraisal": 3,
+        "negotiation": 2,
+        "cartography": 23,
+        "rumour": 5,
+        "medicine": 6,
+        "carpentry": 8,
+        "cooking": 8
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "hazel",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 32,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "自英格兰出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of England, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_02",
+      "name": {
+        "zh": "雅各布·库嫩",
+        "en": "Jacob Coenen"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 16,
+        "charisma": 21,
+        "courage": 11,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 38,
+        "swordplay": 1,
+        "gunnery": 0,
+        "appraisal": 6,
+        "negotiation": 9,
+        "cartography": 23,
+        "rumour": 3,
+        "medicine": 5,
+        "carpentry": 3,
+        "cooking": 2
+      },
+      "personality": [
+        "patient"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "forked",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 29,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "荷兰港口里出了名的夜航好手,雾里也不迷向。",
+        "en": "The night-sailing toast of Holland's harbor, never lost even in fog."
+      }
+    },
+    {
+      "id": "off_reg_pilot_03",
+      "name": {
+        "zh": "莫伊塞·莫切尼戈",
+        "en": "Moisè Mocenigo"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 14,
+        "charisma": 22,
+        "courage": 21,
+        "luck": 10
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 26,
+        "swordplay": 10,
+        "gunnery": 4,
+        "appraisal": 3,
+        "negotiation": 3,
+        "cartography": 20,
+        "rumour": 7,
+        "medicine": 5,
+        "carpentry": 6,
+        "cooking": 0
+      },
+      "personality": [
+        "bookish"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "pale_blue",
+        "hair": "black"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "自意大利出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of Italy, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_04",
+      "name": {
+        "zh": "沙班·耶尔德兹",
+        "en": "Şaban Yıldız"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 21,
+        "charisma": 17,
+        "courage": 17,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 33,
+        "swordplay": 5,
+        "gunnery": 6,
+        "appraisal": 8,
+        "negotiation": 3,
+        "cartography": 23,
+        "rumour": 0,
+        "medicine": 7,
+        "carpentry": 9,
+        "cooking": 6
+      },
+      "personality": [
+        "bookish",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "pale_blue",
+        "hair": "black"
+      },
+      "wage_daily": 33,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "自奥斯曼出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of Ottoman, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_05",
+      "name": {
+        "zh": "若昂·萨",
+        "en": "João Sá"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 19,
+        "charisma": 22,
+        "courage": 14,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 45,
+        "swordplay": 8,
+        "gunnery": 9,
+        "appraisal": 7,
+        "negotiation": 10,
+        "cartography": 24,
+        "rumour": 3,
+        "medicine": 10,
+        "carpentry": 5,
+        "cooking": 9
+      },
+      "personality": [
+        "bookish"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 32,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "自葡萄牙出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of Portugal, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_06",
+      "name": {
+        "zh": "马丁·维维罗",
+        "en": "Martín Vivero"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 16,
+        "charisma": 13,
+        "courage": 21,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 39,
+        "swordplay": 9,
+        "gunnery": 9,
+        "appraisal": 4,
+        "negotiation": 9,
+        "cartography": 22,
+        "rumour": 5,
+        "medicine": 1,
+        "carpentry": 6,
+        "cooking": 2
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "brown"
+      },
+      "wage_daily": 29,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "自西班牙出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of Spain, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_07",
+      "name": {
+        "zh": "约翰·芬威克",
+        "en": "John Fenwick"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 13,
+        "charisma": 18,
+        "courage": 22,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 3,
+        "navigation": 39,
+        "swordplay": 7,
+        "gunnery": 2,
+        "appraisal": 0,
+        "negotiation": 4,
+        "cartography": 22,
+        "rumour": 22,
+        "medicine": 2,
+        "carpentry": 5,
+        "cooking": 9
+      },
+      "personality": [
+        "bookish"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "自英格兰出海的领航员,星图与洋流志从不离手。",
+        "en": "A pilot out of England, never far from star charts and current tables."
+      }
+    },
+    {
+      "id": "off_reg_pilot_08",
+      "name": {
+        "zh": "巴伦特·范乌得勒支",
+        "en": "Barent van Utrecht"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 10,
+        "intellect": 18,
+        "charisma": 11,
+        "courage": 19,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 30,
+        "swordplay": 5,
+        "gunnery": 7,
+        "appraisal": 9,
+        "negotiation": 5,
+        "cartography": 23,
+        "rumour": 21,
+        "medicine": 6,
+        "carpentry": 5,
+        "cooking": 4
+      },
+      "personality": [
+        "patient",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 33,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "在荷兰的船上学了十年观星,如今终于有了自己的海图桌。",
+        "en": "Ten years learning the stars aboard Holland ships, and a chart table finally his own."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_01",
+      "name": {
+        "zh": "斯蒂芬·罗克伍德",
+        "en": "Stephen Rookwood"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 20,
+        "charisma": 19,
+        "courage": 37,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 37,
+        "navigation": 20,
+        "swordplay": 3,
+        "gunnery": 9,
+        "appraisal": 3,
+        "negotiation": 9,
+        "cartography": 4,
+        "rumour": 20,
+        "medicine": 4,
+        "carpentry": 6,
+        "cooking": 3
+      },
+      "personality": [
+        "ferocious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "在英格兰的甲板上熬了半辈子,风暴天反而睡得更香。",
+        "en": "Half a life on England decks; he sleeps soundest in a storm."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_02",
+      "name": {
+        "zh": "赫里特·彼得斯",
+        "en": "Gerrit Pietersz"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 13,
+        "charisma": 13,
+        "courage": 37,
+        "luck": 10
+      },
+      "skills": {
+        "seamanship": 26,
+        "navigation": 21,
+        "swordplay": 9,
+        "gunnery": 3,
+        "appraisal": 8,
+        "negotiation": 9,
+        "cartography": 2,
+        "rumour": 21,
+        "medicine": 6,
+        "carpentry": 7,
+        "cooking": 7
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "hazel",
+        "hair": "sun_bleached"
+      },
       "wage_daily": 30,
-      "recruit_ports": ["lisbon", "madeira"],
-      "bio": {"zh": "一位在老领航员手下学艺的青年,星象与海图无一不精。", "en": "A young pilot schooled by old navigators; at home with stars and charts alike."}
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "鞭子早就收起来了,可水手们还是不敢在他的甲板上偷懒。",
+        "en": "The rattan is long retired, yet none dawdle on his deck."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_03",
+      "name": {
+        "zh": "贾科莫·泽诺",
+        "en": "Giacomo Zeno"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 11,
+        "charisma": 15,
+        "courage": 38,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 37,
+        "navigation": 21,
+        "swordplay": 5,
+        "gunnery": 2,
+        "appraisal": 0,
+        "negotiation": 1,
+        "cartography": 9,
+        "rumour": 22,
+        "medicine": 0,
+        "carpentry": 7,
+        "cooking": 9
+      },
+      "personality": [
+        "ferocious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "hazel",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 22,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "鞭子早就收起来了,可水手们还是不敢在他的甲板上偷懒。",
+        "en": "The rattan is long retired, yet none dawdle on his deck."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_04",
+      "name": {
+        "zh": "贾费尔·阿斯兰",
+        "en": "Cafer Aslan"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 12,
+        "charisma": 19,
+        "courage": 40,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 41,
+        "navigation": 24,
+        "swordplay": 6,
+        "gunnery": 6,
+        "appraisal": 0,
+        "negotiation": 8,
+        "cartography": 9,
+        "rumour": 21,
+        "medicine": 1,
+        "carpentry": 6,
+        "cooking": 8
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "hazel",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 34,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "嗓门最大的水手长,缆索在他手里从不打错一个结。",
+        "en": "The loudest boatswain afloat; not one rope fouls under his knots."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_05",
+      "name": {
+        "zh": "费尔南多·巴罗斯",
+        "en": "Fernando Barros"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 10,
+        "intellect": 12,
+        "charisma": 14,
+        "courage": 33,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 31,
+        "navigation": 23,
+        "swordplay": 8,
+        "gunnery": 9,
+        "appraisal": 3,
+        "negotiation": 3,
+        "cartography": 1,
+        "rumour": 21,
+        "medicine": 7,
+        "carpentry": 3,
+        "cooking": 10
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 25,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "嗓门最大的水手长,缆索在他手里从不打错一个结。",
+        "en": "The loudest boatswain afloat; not one rope fouls under his knots."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_06",
+      "name": {
+        "zh": "埃尔南多·古斯曼",
+        "en": "Hernando Guzmán"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 17,
+        "charisma": 22,
+        "courage": 31,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 36,
+        "navigation": 20,
+        "swordplay": 3,
+        "gunnery": 3,
+        "appraisal": 4,
+        "negotiation": 8,
+        "cartography": 9,
+        "rumour": 23,
+        "medicine": 2,
+        "carpentry": 5,
+        "cooking": 4
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "black"
+      },
+      "wage_daily": 32,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "在西班牙的甲板上熬了半辈子,风暴天反而睡得更香。",
+        "en": "Half a life on Spain decks; he sleeps soundest in a storm."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_07",
+      "name": {
+        "zh": "查尔斯·霍金斯",
+        "en": "Charles Hawkins"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 13,
+        "charisma": 14,
+        "courage": 38,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 43,
+        "navigation": 22,
+        "swordplay": 8,
+        "gunnery": 9,
+        "appraisal": 5,
+        "negotiation": 4,
+        "cartography": 10,
+        "rumour": 20,
+        "medicine": 8,
+        "carpentry": 0,
+        "cooking": 8
+      },
+      "personality": [
+        "loyal",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 22,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "在英格兰的甲板上熬了半辈子,风暴天反而睡得更香。",
+        "en": "Half a life on England decks; he sleeps soundest in a storm."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_08",
+      "name": {
+        "zh": "安德里斯·德维特",
+        "en": "Andries de Witt"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 11,
+        "charisma": 19,
+        "courage": 30,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 44,
+        "navigation": 23,
+        "swordplay": 9,
+        "gunnery": 1,
+        "appraisal": 8,
+        "negotiation": 7,
+        "cartography": 3,
+        "rumour": 24,
+        "medicine": 5,
+        "carpentry": 1,
+        "cooking": 0
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "forked",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 25,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "嗓门最大的水手长,缆索在他手里从不打错一个结。",
+        "en": "The loudest boatswain afloat; not one rope fouls under his knots."
+      }
+    },
+    {
+      "id": "off_reg_boatswain_09",
+      "name": {
+        "zh": "洛伦佐·丹多洛",
+        "en": "Lorenzo Dandolo"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 15,
+        "charisma": 22,
+        "courage": 33,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 28,
+        "navigation": 23,
+        "swordplay": 20,
+        "gunnery": 8,
+        "appraisal": 6,
+        "negotiation": 1,
+        "cartography": 7,
+        "rumour": 3,
+        "medicine": 7,
+        "carpentry": 2,
+        "cooking": 9
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "brown"
+      },
+      "wage_daily": 24,
+      "recruit_ports": [
+        "palermo",
+        "ragusa"
+      ],
+      "bio": {
+        "zh": "在意大利的甲板上熬了半辈子,风暴天反而睡得更香。",
+        "en": "Half a life on Italy decks; he sleeps soundest in a storm."
+      }
+    },
+    {
+      "id": "off_reg_gunner_01",
+      "name": {
+        "zh": "罗伯特·奥德韦",
+        "en": "Robert Ordway"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 22,
+        "charisma": 11,
+        "courage": 19,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 9,
+        "swordplay": 22,
+        "gunnery": 29,
+        "appraisal": 2,
+        "negotiation": 9,
+        "cartography": 8,
+        "rumour": 7,
+        "medicine": 2,
+        "carpentry": 0,
+        "cooking": 3
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "英格兰炮术行会的老会员,最恨受潮的火药。",
+        "en": "A senior of England's gunners' guild; nothing riles him like damp powder."
+      }
+    },
+    {
+      "id": "off_reg_gunner_02",
+      "name": {
+        "zh": "威廉·德弗里斯",
+        "en": "Willem de Vries"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 10,
+        "charisma": 10,
+        "courage": 17,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 6,
+        "swordplay": 24,
+        "gunnery": 26,
+        "appraisal": 2,
+        "negotiation": 0,
+        "cartography": 8,
+        "rumour": 10,
+        "medicine": 6,
+        "carpentry": 10,
+        "cooking": 10
+      },
+      "personality": [
+        "pious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 25,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "打靶比打牌还在行的炮长,赌桌上却输多赢少。",
+        "en": "Better at targets than cards, and it shows at the betting table."
+      }
+    },
+    {
+      "id": "off_reg_gunner_03",
+      "name": {
+        "zh": "法比奥·萨尔瓦戈",
+        "en": "Fabio Salvago"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 20,
+        "charisma": 22,
+        "courage": 16,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 6,
+        "swordplay": 5,
+        "gunnery": 29,
+        "appraisal": 3,
+        "negotiation": 2,
+        "cartography": 2,
+        "rumour": 1,
+        "medicine": 3,
+        "carpentry": 24,
+        "cooking": 8
+      },
+      "personality": [
+        "pious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "hazel",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 24,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "意大利炮术行会的老会员,最恨受潮的火药。",
+        "en": "A senior of Italy's gunners' guild; nothing riles him like damp powder."
+      }
+    },
+    {
+      "id": "off_reg_gunner_04",
+      "name": {
+        "zh": "雅库普·阿克索伊",
+        "en": "Yakup Aksoy"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 11,
+        "intellect": 12,
+        "charisma": 15,
+        "courage": 14,
+        "luck": 21
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 6,
+        "swordplay": 5,
+        "gunnery": 35,
+        "appraisal": 3,
+        "negotiation": 5,
+        "cartography": 8,
+        "rumour": 6,
+        "medicine": 6,
+        "carpentry": 22,
+        "cooking": 3
+      },
+      "personality": [
+        "ferocious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 23,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "装药永远亲手量的炮手,齐射前不看任何人脸色。",
+        "en": "A gunner who measures every charge himself and asks no one's leave before the salvo."
+      }
+    },
+    {
+      "id": "off_reg_gunner_05",
+      "name": {
+        "zh": "曼努埃尔·科雷亚",
+        "en": "Manuel Correia"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 14,
+        "charisma": 15,
+        "courage": 15,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 2,
+        "swordplay": 4,
+        "gunnery": 36,
+        "appraisal": 8,
+        "negotiation": 5,
+        "cartography": 10,
+        "rumour": 10,
+        "medicine": 0,
+        "carpentry": 24,
+        "cooking": 3
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 26,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "葡萄牙炮术行会的老会员,最恨受潮的火药。",
+        "en": "A senior of Portugal's gunners' guild; nothing riles him like damp powder."
+      }
+    },
+    {
+      "id": "off_reg_gunner_06",
+      "name": {
+        "zh": "希梅诺·蒙卡达",
+        "en": "Jimeno Moncada"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 12,
+        "charisma": 21,
+        "courage": 15,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 5,
+        "swordplay": 8,
+        "gunnery": 31,
+        "appraisal": 8,
+        "negotiation": 10,
+        "cartography": 7,
+        "rumour": 10,
+        "medicine": 9,
+        "carpentry": 21,
+        "cooking": 9
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 22,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "西班牙炮术行会的老会员,最恨受潮的火药。",
+        "en": "A senior of Spain's gunners' guild; nothing riles him like damp powder."
+      }
+    },
+    {
+      "id": "off_reg_gunner_07",
+      "name": {
+        "zh": "纳撒尼尔·巴洛",
+        "en": "Nathaniel Barlow"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 19,
+        "charisma": 15,
+        "courage": 16,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 10,
+        "swordplay": 3,
+        "gunnery": 43,
+        "appraisal": 8,
+        "negotiation": 0,
+        "cartography": 6,
+        "rumour": 1,
+        "medicine": 3,
+        "carpentry": 21,
+        "cooking": 4
+      },
+      "personality": [
+        "ferocious",
+        "pious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 35,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "打靶比打牌还在行的炮长,赌桌上却输多赢少。",
+        "en": "Better at targets than cards, and it shows at the betting table."
+      }
+    },
+    {
+      "id": "off_reg_gunner_08",
+      "name": {
+        "zh": "弗雷德里克·巴克尔",
+        "en": "Frederick Bakker"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 19,
+        "charisma": 13,
+        "courage": 15,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 1,
+        "swordplay": 5,
+        "gunnery": 26,
+        "appraisal": 8,
+        "negotiation": 7,
+        "cartography": 9,
+        "rumour": 8,
+        "medicine": 3,
+        "carpentry": 20,
+        "cooking": 1
+      },
+      "personality": [
+        "pious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "full",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 27,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "打靶比打牌还在行的炮长,赌桌上却输多赢少。",
+        "en": "Better at targets than cards, and it shows at the betting table."
+      }
+    },
+    {
+      "id": "off_reg_gunner_09",
+      "name": {
+        "zh": "卢多维科·巴尔比",
+        "en": "Ludovico Balbi"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 10,
+        "charisma": 11,
+        "courage": 15,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 1,
+        "swordplay": 5,
+        "gunnery": 28,
+        "appraisal": 6,
+        "negotiation": 10,
+        "cartography": 0,
+        "rumour": 3,
+        "medicine": 0,
+        "carpentry": 20,
+        "cooking": 5
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "grey",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 34,
+      "recruit_ports": [
+        "palermo",
+        "ragusa"
+      ],
+      "bio": {
+        "zh": "意大利炮术行会的老会员,最恨受潮的火药。",
+        "en": "A senior of Italy's gunners' guild; nothing riles him like damp powder."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_01",
+      "name": {
+        "zh": "尼古拉斯·罗克伍德",
+        "en": "Nicholas Rookwood"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 15,
+        "charisma": 10,
+        "courage": 20,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 3,
+        "swordplay": 8,
+        "gunnery": 0,
+        "appraisal": 5,
+        "negotiation": 0,
+        "cartography": 21,
+        "rumour": 4,
+        "medicine": 40,
+        "carpentry": 3,
+        "cooking": 23
+      },
+      "personality": [
+        "pious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 31,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "药箱比钱包鼓的船医,治好过半条街的热病。",
+        "en": "A surgeon whose kit outweighs his purse, who has fevers of a whole street beaten."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_02",
+      "name": {
+        "zh": "托比亚斯·范贝克",
+        "en": "Tobias van Beeck"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 22,
+        "charisma": 10,
+        "courage": 12,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 7,
+        "navigation": 10,
+        "swordplay": 5,
+        "gunnery": 7,
+        "appraisal": 2,
+        "negotiation": 8,
+        "cartography": 20,
+        "rumour": 5,
+        "medicine": 44,
+        "carpentry": 9,
+        "cooking": 23
+      },
+      "personality": [
+        "bookish",
+        "pious"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 27,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "缝合利落、用药大胆的船医,水手们叫他最后一道保险。",
+        "en": "A deft, daring ship surgeon the crew calls the last line of safety."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_03",
+      "name": {
+        "zh": "斯特凡诺·普里乌利",
+        "en": "Stefano Priuli"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 19,
+        "charisma": 18,
+        "courage": 17,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 7,
+        "navigation": 5,
+        "swordplay": 4,
+        "gunnery": 4,
+        "appraisal": 10,
+        "negotiation": 8,
+        "cartography": 22,
+        "rumour": 3,
+        "medicine": 25,
+        "carpentry": 4,
+        "cooking": 20
+      },
+      "personality": [
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "black"
+      },
+      "wage_daily": 29,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "在意大利的医馆学徒出身,坏血病名单上从没有他的船。",
+        "en": "Trained in Italy's infirmary; no ship of his ever makes the scurvy lists."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_04",
+      "name": {
+        "zh": "拉提夫·阿克索伊",
+        "en": "Latif Aksoy"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 21,
+        "charisma": 13,
+        "courage": 19,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 5,
+        "navigation": 0,
+        "swordplay": 3,
+        "gunnery": 8,
+        "appraisal": 10,
+        "negotiation": 10,
+        "cartography": 24,
+        "rumour": 7,
+        "medicine": 38,
+        "carpentry": 1,
+        "cooking": 21
+      },
+      "personality": [
+        "patient",
+        "pious"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "grey",
+        "hair": "black"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "缝合利落、用药大胆的船医,水手们叫他最后一道保险。",
+        "en": "A deft, daring ship surgeon the crew calls the last line of safety."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_05",
+      "name": {
+        "zh": "阿方索·阿尔梅达",
+        "en": "Afonso Almeida"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 20,
+        "charisma": 20,
+        "courage": 12,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 8,
+        "navigation": 6,
+        "swordplay": 1,
+        "gunnery": 10,
+        "appraisal": 4,
+        "negotiation": 2,
+        "cartography": 22,
+        "rumour": 1,
+        "medicine": 41,
+        "carpentry": 4,
+        "cooking": 24
+      },
+      "personality": [
+        "bookish",
+        "patient"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "缝合利落、用药大胆的船医,水手们叫他最后一道保险。",
+        "en": "A deft, daring ship surgeon the crew calls the last line of safety."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_06",
+      "name": {
+        "zh": "拉米罗·奥尔多涅斯",
+        "en": "Ramiro Ordóñez"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 20,
+        "charisma": 16,
+        "courage": 17,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 9,
+        "navigation": 8,
+        "swordplay": 10,
+        "gunnery": 10,
+        "appraisal": 3,
+        "negotiation": 6,
+        "cartography": 23,
+        "rumour": 1,
+        "medicine": 26,
+        "carpentry": 7,
+        "cooking": 20
+      },
+      "personality": [
+        "patient",
+        "pious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "在西班牙的医馆学徒出身,坏血病名单上从没有他的船。",
+        "en": "Trained in Spain's infirmary; no ship of his ever makes the scurvy lists."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_07",
+      "name": {
+        "zh": "乔治·克利福德",
+        "en": "George Clifford"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 16,
+        "charisma": 17,
+        "courage": 15,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 2,
+        "swordplay": 4,
+        "gunnery": 5,
+        "appraisal": 3,
+        "negotiation": 9,
+        "cartography": 21,
+        "rumour": 2,
+        "medicine": 27,
+        "carpentry": 2,
+        "cooking": 24
+      },
+      "personality": [
+        "bookish",
+        "pious"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 25,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "药箱比钱包鼓的船医,治好过半条街的热病。",
+        "en": "A surgeon whose kit outweighs his purse, who has fevers of a whole street beaten."
+      }
+    },
+    {
+      "id": "off_reg_surgeon_08",
+      "name": {
+        "zh": "阿德里安·布劳威尔",
+        "en": "Adriaen Brouwer"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "medicine",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 17,
+        "charisma": 21,
+        "courage": 14,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 6,
+        "navigation": 8,
+        "swordplay": 4,
+        "gunnery": 10,
+        "appraisal": 1,
+        "negotiation": 1,
+        "cartography": 22,
+        "rumour": 6,
+        "medicine": 34,
+        "carpentry": 0,
+        "cooking": 22
+      },
+      "personality": [
+        "patient",
+        "pious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 32,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "在荷兰的医馆学徒出身,坏血病名单上从没有他的船。",
+        "en": "Trained in Holland's infirmary; no ship of his ever makes the scurvy lists."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_01",
+      "name": {
+        "zh": "彼得·芬威克",
+        "en": "Peter Fenwick"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 21,
+        "charisma": 15,
+        "courage": 12,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 7,
+        "swordplay": 4,
+        "gunnery": 5,
+        "appraisal": 4,
+        "negotiation": 5,
+        "cartography": 9,
+        "rumour": 7,
+        "medicine": 6,
+        "carpentry": 37,
+        "cooking": 20
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "stubble",
+        "eyes": "grey",
+        "hair": "black"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "海上一面补帆一面补船板的巧手,脾气好得出奇。",
+        "en": "Deft hands that patch sail and plank together at sea, and a temper sweet as honey."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_02",
+      "name": {
+        "zh": "弗雷德里克·范贝弗伦",
+        "en": "Frederick van Beveren"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 17,
+        "charisma": 19,
+        "courage": 11,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 8,
+        "swordplay": 3,
+        "gunnery": 3,
+        "appraisal": 10,
+        "negotiation": 3,
+        "cartography": 2,
+        "rumour": 0,
+        "medicine": 1,
+        "carpentry": 25,
+        "cooking": 20
+      },
+      "personality": [
+        "patient",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "修龙骨像修钟表的匠人,一根钉也不肯多用。",
+        "en": "A craftsman who trues a keel like a clockmaker and wastes not one nail."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_03",
+      "name": {
+        "zh": "彼得罗·布拉加丁",
+        "en": "Pietro Bragadin"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 14,
+        "charisma": 21,
+        "courage": 13,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 3,
+        "swordplay": 4,
+        "gunnery": 5,
+        "appraisal": 10,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 10,
+        "medicine": 7,
+        "carpentry": 31,
+        "cooking": 22
+      },
+      "personality": [
+        "patient",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 34,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "修龙骨像修钟表的匠人,一根钉也不肯多用。",
+        "en": "A craftsman who trues a keel like a clockmaker and wastes not one nail."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_04",
+      "name": {
+        "zh": "哈伦·基利奇",
+        "en": "Harun Kılıç"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 16,
+        "charisma": 10,
+        "courage": 22,
+        "luck": 21
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 1,
+        "swordplay": 8,
+        "gunnery": 4,
+        "appraisal": 1,
+        "negotiation": 9,
+        "cartography": 10,
+        "rumour": 1,
+        "medicine": 1,
+        "carpentry": 41,
+        "cooking": 24
+      },
+      "personality": [
+        "patient",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 23,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "海上一面补帆一面补船板的巧手,脾气好得出奇。",
+        "en": "Deft hands that patch sail and plank together at sea, and a temper sweet as honey."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_05",
+      "name": {
+        "zh": "埃斯特旺·费尔南德斯",
+        "en": "Estêvão Fernandes"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 19,
+        "charisma": 22,
+        "courage": 15,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 5,
+        "swordplay": 3,
+        "gunnery": 7,
+        "appraisal": 4,
+        "negotiation": 3,
+        "cartography": 5,
+        "rumour": 4,
+        "medicine": 9,
+        "carpentry": 42,
+        "cooking": 23
+      },
+      "personality": [
+        "generous",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "brown"
+      },
+      "wage_daily": 33,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "修龙骨像修钟表的匠人,一根钉也不肯多用。",
+        "en": "A craftsman who trues a keel like a clockmaker and wastes not one nail."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_06",
+      "name": {
+        "zh": "戈麦斯·萨拉查",
+        "en": "Gómez Salazar"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 13,
+        "charisma": 15,
+        "courage": 16,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 0,
+        "swordplay": 0,
+        "gunnery": 5,
+        "appraisal": 0,
+        "negotiation": 5,
+        "cartography": 8,
+        "rumour": 8,
+        "medicine": 2,
+        "carpentry": 42,
+        "cooking": 23
+      },
+      "personality": [
+        "patient"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "brown"
+      },
+      "wage_daily": 20,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "海上一面补帆一面补船板的巧手,脾气好得出奇。",
+        "en": "Deft hands that patch sail and plank together at sea, and a temper sweet as honey."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_07",
+      "name": {
+        "zh": "尼古拉斯·芬威克",
+        "en": "Nicholas Fenwick"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 20,
+        "charisma": 21,
+        "courage": 12,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 21,
+        "navigation": 7,
+        "swordplay": 8,
+        "gunnery": 3,
+        "appraisal": 5,
+        "negotiation": 6,
+        "cartography": 7,
+        "rumour": 7,
+        "medicine": 0,
+        "carpentry": 36,
+        "cooking": 20
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 26,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "海上一面补帆一面补船板的巧手,脾气好得出奇。",
+        "en": "Deft hands that patch sail and plank together at sea, and a temper sweet as honey."
+      }
+    },
+    {
+      "id": "off_reg_carpenter_08",
+      "name": {
+        "zh": "安德里斯·扬斯",
+        "en": "Andries Jansz"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "carpentry",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 18,
+        "charisma": 17,
+        "courage": 18,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 1,
+        "swordplay": 5,
+        "gunnery": 9,
+        "appraisal": 6,
+        "negotiation": 2,
+        "cartography": 5,
+        "rumour": 1,
+        "medicine": 7,
+        "carpentry": 29,
+        "cooking": 22
+      },
+      "personality": [
+        "patient"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 27,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "修龙骨像修钟表的匠人,一根钉也不肯多用。",
+        "en": "A craftsman who trues a keel like a clockmaker and wastes not one nail."
+      }
+    },
+    {
+      "id": "off_reg_cook_01",
+      "name": {
+        "zh": "安布罗斯·马洛",
+        "en": "Ambrose Marlow"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 10,
+        "intellect": 21,
+        "charisma": 15,
+        "courage": 11,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 6,
+        "swordplay": 4,
+        "gunnery": 2,
+        "appraisal": 2,
+        "negotiation": 10,
+        "cartography": 10,
+        "rumour": 5,
+        "medicine": 8,
+        "carpentry": 23,
+        "cooking": 33
+      },
+      "personality": [
+        "generous",
+        "sullen"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 22,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_02",
+      "name": {
+        "zh": "约斯特·巴克尔",
+        "en": "Joost Bakker"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 22,
+        "charisma": 16,
+        "courage": 18,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 3,
+        "swordplay": 6,
+        "gunnery": 8,
+        "appraisal": 3,
+        "negotiation": 0,
+        "cartography": 9,
+        "rumour": 10,
+        "medicine": 9,
+        "carpentry": 24,
+        "cooking": 29
+      },
+      "personality": [
+        "sullen"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 24,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_03",
+      "name": {
+        "zh": "莫伊塞·凯里尼",
+        "en": "Moisè Querini"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 19,
+        "intellect": 14,
+        "charisma": 18,
+        "courage": 12,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 24,
+        "navigation": 6,
+        "swordplay": 6,
+        "gunnery": 4,
+        "appraisal": 5,
+        "negotiation": 7,
+        "cartography": 0,
+        "rumour": 2,
+        "medicine": 2,
+        "carpentry": 22,
+        "cooking": 38
+      },
+      "personality": [
+        "generous",
+        "sullen"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "hazel",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 23,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_04",
+      "name": {
+        "zh": "阿里·恰克尔",
+        "en": "Ali Çakır"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 11,
+        "charisma": 18,
+        "courage": 14,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 4,
+        "swordplay": 3,
+        "gunnery": 10,
+        "appraisal": 4,
+        "negotiation": 2,
+        "cartography": 5,
+        "rumour": 7,
+        "medicine": 7,
+        "carpentry": 24,
+        "cooking": 35
+      },
+      "personality": [
+        "generous"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "grey",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_05",
+      "name": {
+        "zh": "阿方索·雷贝洛",
+        "en": "Afonso Rebelo"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 18,
+        "charisma": 16,
+        "courage": 22,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 22,
+        "navigation": 10,
+        "swordplay": 1,
+        "gunnery": 8,
+        "appraisal": 5,
+        "negotiation": 10,
+        "cartography": 3,
+        "rumour": 7,
+        "medicine": 1,
+        "carpentry": 21,
+        "cooking": 26
+      },
+      "personality": [
+        "generous",
+        "sullen"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 22,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_06",
+      "name": {
+        "zh": "安德烈斯·洛艾萨",
+        "en": "Andrés Loaysa"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 18,
+        "charisma": 11,
+        "courage": 15,
+        "luck": 15
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 9,
+        "swordplay": 1,
+        "gunnery": 9,
+        "appraisal": 1,
+        "negotiation": 7,
+        "cartography": 5,
+        "rumour": 5,
+        "medicine": 3,
+        "carpentry": 24,
+        "cooking": 41
+      },
+      "personality": [
+        "generous",
+        "sullen"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "在西班牙的酒馆里学艺的厨子,淡水上手,咸风也难不倒。",
+        "en": "Trained in Spain's taverns; fresh water or salt wind, nothing spoils his pot."
+      }
+    },
+    {
+      "id": "off_reg_cook_07",
+      "name": {
+        "zh": "塞缪尔·斯图克利",
+        "en": "Samuel Stukley"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 14,
+        "charisma": 16,
+        "courage": 10,
+        "luck": 19
+      },
+      "skills": {
+        "seamanship": 23,
+        "navigation": 1,
+        "swordplay": 1,
+        "gunnery": 10,
+        "appraisal": 5,
+        "negotiation": 0,
+        "cartography": 0,
+        "rumour": 4,
+        "medicine": 0,
+        "carpentry": 21,
+        "cooking": 33
+      },
+      "personality": [
+        "sullen"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "pale_blue",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 31,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "嘴上不肯多话,却总给病号多盛一碗。",
+        "en": "Few words, but the sick always get the bigger bowl."
+      }
+    },
+    {
+      "id": "off_reg_cook_08",
+      "name": {
+        "zh": "马滕·布劳威尔",
+        "en": "Maerten Brouwer"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "cooking",
+      "attributes": {
+        "constitution": 11,
+        "intellect": 16,
+        "charisma": 16,
+        "courage": 18,
+        "luck": 16
+      },
+      "skills": {
+        "seamanship": 20,
+        "navigation": 0,
+        "swordplay": 3,
+        "gunnery": 2,
+        "appraisal": 1,
+        "negotiation": 1,
+        "cartography": 5,
+        "rumour": 4,
+        "medicine": 10,
+        "carpentry": 22,
+        "cooking": 37
+      },
+      "personality": [
+        "generous"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "stubble",
+        "eyes": "dark",
+        "hair": "brown"
+      },
+      "wage_daily": 24,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "咸牛肉也能做出花样的厨师,锅里永远有下一勺。",
+        "en": "A cook who makes salt beef a delicacy; the pot always has one more ladle."
+      }
+    },
+    {
+      "id": "off_reg_captain_01",
+      "name": {
+        "zh": "卢克·哈罗",
+        "en": "Luke Harrow"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 18,
+        "intellect": 21,
+        "charisma": 12,
+        "courage": 39,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 37,
+        "navigation": 22,
+        "swordplay": 1,
+        "gunnery": 24,
+        "appraisal": 5,
+        "negotiation": 7,
+        "cartography": 10,
+        "rumour": 4,
+        "medicine": 4,
+        "carpentry": 0,
+        "cooking": 6
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "hazel",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "带过三条船的老船长,决斗场上从未输过。",
+        "en": "An old captain of three hulls, never once beaten in the dueling yard."
+      }
+    },
+    {
+      "id": "off_reg_captain_02",
+      "name": {
+        "zh": "西门·范贝克",
+        "en": "Symen van Beeck"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 15,
+        "charisma": 14,
+        "courage": 34,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 26,
+        "navigation": 22,
+        "swordplay": 2,
+        "gunnery": 20,
+        "appraisal": 3,
+        "negotiation": 5,
+        "cartography": 3,
+        "rumour": 4,
+        "medicine": 10,
+        "carpentry": 9,
+        "cooking": 2
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "black"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "带过三条船的老船长,决斗场上从未输过。",
+        "en": "An old captain of three hulls, never once beaten in the dueling yard."
+      }
+    },
+    {
+      "id": "off_reg_captain_03",
+      "name": {
+        "zh": "法比奥·丹多洛",
+        "en": "Fabio Dandolo"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 12,
+        "charisma": 19,
+        "courage": 40,
+        "luck": 18
+      },
+      "skills": {
+        "seamanship": 26,
+        "navigation": 22,
+        "swordplay": 10,
+        "gunnery": 21,
+        "appraisal": 5,
+        "negotiation": 10,
+        "cartography": 3,
+        "rumour": 7,
+        "medicine": 1,
+        "carpentry": 7,
+        "cooking": 0
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "black"
+      },
+      "wage_daily": 34,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "从桅顶瞭望一路升上来的船长,眼力比望远镜还利。",
+        "en": "A captain who climbed up from the masthead, with eyes sharper than any glass."
+      }
+    },
+    {
+      "id": "off_reg_captain_04",
+      "name": {
+        "zh": "优素福·图兰",
+        "en": "Yusuf Turan"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 19,
+        "charisma": 19,
+        "courage": 35,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 27,
+        "navigation": 22,
+        "swordplay": 7,
+        "gunnery": 23,
+        "appraisal": 6,
+        "negotiation": 9,
+        "cartography": 3,
+        "rumour": 3,
+        "medicine": 3,
+        "carpentry": 8,
+        "cooking": 6
+      },
+      "personality": [
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 32,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "商人出身的船长,更信算术胜过火药。",
+        "en": "A captain out of the countinghouse who trusts arithmetic over powder."
+      }
+    },
+    {
+      "id": "off_reg_captain_05",
+      "name": {
+        "zh": "阿伊雷斯·雷贝洛",
+        "en": "Aires Rebelo"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 21,
+        "charisma": 14,
+        "courage": 33,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 41,
+        "navigation": 23,
+        "swordplay": 10,
+        "gunnery": 24,
+        "appraisal": 2,
+        "negotiation": 6,
+        "cartography": 5,
+        "rumour": 7,
+        "medicine": 9,
+        "carpentry": 2,
+        "cooking": 4
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 23,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "葡萄牙海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from Portugal's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_06",
+      "name": {
+        "zh": "特里斯坦·法哈尔多",
+        "en": "Tristán Fajardo"
+      },
+      "nation_id": "spain",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 17,
+        "charisma": 22,
+        "courage": 30,
+        "luck": 14
+      },
+      "skills": {
+        "seamanship": 37,
+        "navigation": 24,
+        "swordplay": 4,
+        "gunnery": 21,
+        "appraisal": 6,
+        "negotiation": 7,
+        "cartography": 5,
+        "rumour": 7,
+        "medicine": 10,
+        "carpentry": 3,
+        "cooking": 8
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 30,
+      "recruit_ports": [
+        "santa_cruz",
+        "santo_domingo",
+        "seville"
+      ],
+      "bio": {
+        "zh": "商人出身的船长,更信算术胜过火药。",
+        "en": "A captain out of the countinghouse who trusts arithmetic over powder."
+      }
+    },
+    {
+      "id": "off_reg_captain_07",
+      "name": {
+        "zh": "休·斯图克利",
+        "en": "Hugh Stukley"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 22,
+        "intellect": 13,
+        "charisma": 14,
+        "courage": 31,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 40,
+        "navigation": 24,
+        "swordplay": 8,
+        "gunnery": 20,
+        "appraisal": 5,
+        "negotiation": 1,
+        "cartography": 0,
+        "rumour": 3,
+        "medicine": 9,
+        "carpentry": 6,
+        "cooking": 7
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "grey",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 21,
+      "recruit_ports": [
+        "surat",
+        "accra"
+      ],
+      "bio": {
+        "zh": "英格兰海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from England's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_08",
+      "name": {
+        "zh": "希利斯·赫里茨",
+        "en": "Gillis Gerritsz"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 10,
+        "charisma": 22,
+        "courage": 38,
+        "luck": 19
+      },
+      "skills": {
+        "seamanship": 26,
+        "navigation": 20,
+        "swordplay": 0,
+        "gunnery": 24,
+        "appraisal": 5,
+        "negotiation": 3,
+        "cartography": 4,
+        "rumour": 3,
+        "medicine": 9,
+        "carpentry": 7,
+        "cooking": 4
+      },
+      "personality": [
+        "ferocious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "brown"
+      },
+      "wage_daily": 20,
+      "recruit_ports": [
+        "zeelandia",
+        "amboina",
+        "amsterdam"
+      ],
+      "bio": {
+        "zh": "荷兰海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from Holland's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_09",
+      "name": {
+        "zh": "彼得罗·福斯卡里",
+        "en": "Pietro Foscari"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 21,
+        "intellect": 10,
+        "charisma": 17,
+        "courage": 36,
+        "luck": 21
+      },
+      "skills": {
+        "seamanship": 33,
+        "navigation": 23,
+        "swordplay": 5,
+        "gunnery": 21,
+        "appraisal": 9,
+        "negotiation": 9,
+        "cartography": 1,
+        "rumour": 1,
+        "medicine": 4,
+        "carpentry": 9,
+        "cooking": 10
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "forked",
+        "eyes": "dark",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 20,
+      "recruit_ports": [
+        "palermo",
+        "ragusa"
+      ],
+      "bio": {
+        "zh": "意大利海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from Italy's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_10",
+      "name": {
+        "zh": "哈桑·图兰",
+        "en": "Hasan Turan"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 17,
+        "intellect": 11,
+        "charisma": 22,
+        "courage": 39,
+        "luck": 22
+      },
+      "skills": {
+        "seamanship": 35,
+        "navigation": 20,
+        "swordplay": 9,
+        "gunnery": 23,
+        "appraisal": 8,
+        "negotiation": 2,
+        "cartography": 8,
+        "rumour": 6,
+        "medicine": 6,
+        "carpentry": 10,
+        "cooking": 10
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "black"
+      },
+      "wage_daily": 31,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "从桅顶瞭望一路升上来的船长,眼力比望远镜还利。",
+        "en": "A captain who climbed up from the masthead, with eyes sharper than any glass."
+      }
+    },
+    {
+      "id": "off_reg_captain_11",
+      "name": {
+        "zh": "佩德罗·科蒂尼奥",
+        "en": "Pedro Coutinho"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 17,
+        "charisma": 12,
+        "courage": 39,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 26,
+        "navigation": 23,
+        "swordplay": 10,
+        "gunnery": 22,
+        "appraisal": 4,
+        "negotiation": 10,
+        "cartography": 2,
+        "rumour": 9,
+        "medicine": 7,
+        "carpentry": 3,
+        "cooking": 8
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "grey",
+        "hair": "brown"
+      },
+      "wage_daily": 28,
+      "recruit_ports": [
+        "bahia",
+        "belem"
+      ],
+      "bio": {
+        "zh": "从桅顶瞭望一路升上来的船长,眼力比望远镜还利。",
+        "en": "A captain who climbed up from the masthead, with eyes sharper than any glass."
+      }
+    },
+    {
+      "id": "off_reg_captain_12",
+      "name": {
+        "zh": "马丁·马洛",
+        "en": "Martin Marlow"
+      },
+      "nation_id": "england",
+      "legend": false,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 20,
+        "charisma": 14,
+        "courage": 35,
+        "luck": 20
+      },
+      "skills": {
+        "seamanship": 3,
+        "navigation": 21,
+        "swordplay": 25,
+        "gunnery": 20,
+        "appraisal": 9,
+        "negotiation": 10,
+        "cartography": 6,
+        "rumour": 0,
+        "medicine": 3,
+        "carpentry": 7,
+        "cooking": 5
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "forked",
+        "eyes": "hazel",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 26,
+      "recruit_ports": [
+        "accra",
+        "bombay"
+      ],
+      "bio": {
+        "zh": "英格兰海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from England's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_13",
+      "name": {
+        "zh": "安德里斯·范罗伊芬",
+        "en": "Andries van Ruyven"
+      },
+      "nation_id": "holland",
+      "legend": false,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 11,
+        "intellect": 11,
+        "charisma": 13,
+        "courage": 32,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 1,
+        "navigation": 21,
+        "swordplay": 38,
+        "gunnery": 23,
+        "appraisal": 0,
+        "negotiation": 4,
+        "cartography": 9,
+        "rumour": 6,
+        "medicine": 8,
+        "carpentry": 9,
+        "cooking": 6
+      },
+      "personality": [
+        "loyal"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "forked",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
+      "wage_daily": 25,
+      "recruit_ports": [
+        "batavia",
+        "bergen",
+        "botany_bay"
+      ],
+      "bio": {
+        "zh": "从桅顶瞭望一路升上来的船长,眼力比望远镜还利。",
+        "en": "A captain who climbed up from the masthead, with eyes sharper than any glass."
+      }
+    },
+    {
+      "id": "off_reg_captain_14",
+      "name": {
+        "zh": "贾科莫·丹多洛",
+        "en": "Giacomo Dandolo"
+      },
+      "nation_id": "italy",
+      "legend": false,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 20,
+        "intellect": 18,
+        "charisma": 19,
+        "courage": 34,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 9,
+        "navigation": 22,
+        "swordplay": 25,
+        "gunnery": 21,
+        "appraisal": 8,
+        "negotiation": 3,
+        "cartography": 2,
+        "rumour": 8,
+        "medicine": 7,
+        "carpentry": 2,
+        "cooking": 6
+      },
+      "personality": [
+        "ferocious",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "dark",
+        "hair": "black"
+      },
+      "wage_daily": 33,
+      "recruit_ports": [
+        "naples",
+        "palermo"
+      ],
+      "bio": {
+        "zh": "意大利海军里退役的船长,令行禁止,赏罚分明。",
+        "en": "A captain retired from Italy's navy; orders kept, rewards exact."
+      }
+    },
+    {
+      "id": "off_reg_captain_15",
+      "name": {
+        "zh": "艾哈迈德·特金",
+        "en": "Ahmed Tekin"
+      },
+      "nation_id": "ottoman",
+      "legend": false,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 10,
+        "intellect": 20,
+        "charisma": 13,
+        "courage": 40,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 3,
+        "navigation": 21,
+        "swordplay": 32,
+        "gunnery": 23,
+        "appraisal": 7,
+        "negotiation": 1,
+        "cartography": 8,
+        "rumour": 8,
+        "medicine": 5,
+        "carpentry": 10,
+        "cooking": 8
+      },
+      "personality": [
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "grey_streaked"
+      },
+      "wage_daily": 20,
+      "recruit_ports": [
+        "istanbul",
+        "jiddah",
+        "mogadishu"
+      ],
+      "bio": {
+        "zh": "从桅顶瞭望一路升上来的船长,眼力比望远镜还利。",
+        "en": "A captain who climbed up from the masthead, with eyes sharper than any glass."
+      }
+    },
+    {
+      "id": "off_reg_captain_16",
+      "name": {
+        "zh": "曼努埃尔·佩雷拉",
+        "en": "Manuel Pereira"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "swordplay",
+      "attributes": {
+        "constitution": 11,
+        "intellect": 21,
+        "charisma": 21,
+        "courage": 32,
+        "luck": 17
+      },
+      "skills": {
+        "seamanship": 3,
+        "navigation": 22,
+        "swordplay": 32,
+        "gunnery": 21,
+        "appraisal": 10,
+        "negotiation": 10,
+        "cartography": 4,
+        "rumour": 7,
+        "medicine": 4,
+        "carpentry": 8,
+        "cooking": 3
+      },
+      "personality": [
+        "cunning",
+        "ferocious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "clean",
+        "eyes": "pale_blue",
+        "hair": "black"
+      },
+      "wage_daily": 29,
+      "recruit_ports": [
+        "luanda",
+        "macau"
+      ],
+      "bio": {
+        "zh": "商人出身的船长,更信算术胜过火药。",
+        "en": "A captain out of the countinghouse who trusts arithmetic over powder."
+      }
+    },
+    {
+      "id": "off_mateus_alvares",
+      "name": {
+        "zh": "马特乌斯·阿尔瓦雷斯",
+        "en": "Mateus Álvares"
+      },
+      "nation_id": "portugal",
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 11,
+        "intellect": 14,
+        "charisma": 12,
+        "courage": 13,
+        "luck": 10
+      },
+      "skills": {
+        "seamanship": 18,
+        "navigation": 30,
+        "swordplay": 8,
+        "gunnery": 6,
+        "appraisal": 10,
+        "negotiation": 12,
+        "cartography": 16,
+        "rumour": 10,
+        "medicine": 0,
+        "carpentry": 0,
+        "cooking": 8
+      },
+      "personality": [
+        "bookish",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
+      "wage_daily": 30,
+      "recruit_ports": [
+        "lisbon",
+        "madeira"
+      ],
+      "bio": {
+        "zh": "一位在老领航员手下学艺的青年,星象与海图无一不精。",
+        "en": "A young pilot schooled by old navigators; at home with stars and charts alike."
+      }
     },
     {
       "id": "off_diego_fernandez",
-      "name": {"zh": "迭戈·费尔南德斯", "en": "Diego Fernández"},
+      "name": {
+        "zh": "迭戈·费尔南德斯",
+        "en": "Diego Fernández"
+      },
       "nation_id": "spain",
-      "role": "boatswain",
-      "stats": {"leadership": 12, "seamanship": 15, "combat": 12, "navigation": 8},
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 16,
+        "intellect": 11,
+        "charisma": 13,
+        "courage": 33,
+        "luck": 10
+      },
+      "skills": {
+        "seamanship": 32,
+        "navigation": 18,
+        "swordplay": 12,
+        "gunnery": 10,
+        "appraisal": 4,
+        "negotiation": 6,
+        "cartography": 3,
+        "rumour": 5,
+        "medicine": 0,
+        "carpentry": 14,
+        "cooking": 8
+      },
+      "personality": [
+        "stoic",
+        "loyal"
+      ],
+      "appearance": {
+        "face": "weathered",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
       "wage_daily": 28,
-      "recruit_ports": ["seville", "ceuta"],
-      "bio": {"zh": "在塞维利亚船坞里长大的老水手长,一声令下缆索便各归其位。", "en": "A boatswain raised in the Seville yards, whose whistle sends every rope to its place."}
+      "recruit_ports": [
+        "seville",
+        "ceuta"
+      ],
+      "bio": {
+        "zh": "在塞维利亚船坞里长大的老水手长,一声令下缆索便各归其位。",
+        "en": "A boatswain raised in the Seville yards, whose whistle sends every rope to its place."
+      }
     },
     {
       "id": "off_thomas_reed",
-      "name": {"zh": "托马斯·里德", "en": "Thomas Reed"},
+      "name": {
+        "zh": "托马斯·里德",
+        "en": "Thomas Reed"
+      },
       "nation_id": "england",
-      "role": "gunner",
-      "stats": {"leadership": 9, "seamanship": 11, "combat": 16, "navigation": 7},
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 13,
+        "intellect": 12,
+        "charisma": 10,
+        "courage": 30,
+        "luck": 11
+      },
+      "skills": {
+        "seamanship": 16,
+        "navigation": 12,
+        "swordplay": 18,
+        "gunnery": 33,
+        "appraisal": 5,
+        "negotiation": 4,
+        "cartography": 4,
+        "rumour": 8,
+        "medicine": 0,
+        "carpentry": 15,
+        "cooking": 6
+      },
+      "personality": [
+        "ferocious",
+        "pious"
+      ],
+      "appearance": {
+        "face": "scarred",
+        "beard": "stubble",
+        "eyes": "grey",
+        "hair": "brown"
+      },
       "wage_daily": 32,
-      "recruit_ports": ["london"],
-      "bio": {"zh": "曾在英吉利海峡追捕私掠者的炮手,最看重火药干燥与否。", "en": "A gunner who once chased privateers in the Channel, and cares above all that the powder stays dry."}
+      "recruit_ports": [
+        "london"
+      ],
+      "bio": {
+        "zh": "曾在英吉利海峡追捕私掠者的炮手,最看重火药干燥与否。",
+        "en": "A gunner who once chased privateers in the Channel, and cares above all that the powder stays dry."
+      }
     },
     {
       "id": "off_jan_de_vries",
-      "name": {"zh": "扬·德弗里斯", "en": "Jan de Vries"},
+      "name": {
+        "zh": "扬·德弗里斯",
+        "en": "Jan de Vries"
+      },
       "nation_id": "holland",
-      "role": "boatswain",
-      "stats": {"leadership": 13, "seamanship": 17, "combat": 9, "navigation": 10},
+      "legend": false,
+      "main_skill": "seamanship",
+      "attributes": {
+        "constitution": 15,
+        "intellect": 12,
+        "charisma": 12,
+        "courage": 31,
+        "luck": 13
+      },
+      "skills": {
+        "seamanship": 34,
+        "navigation": 16,
+        "swordplay": 10,
+        "gunnery": 9,
+        "appraisal": 7,
+        "negotiation": 9,
+        "cartography": 6,
+        "rumour": 5,
+        "medicine": 0,
+        "carpentry": 17,
+        "cooking": 11
+      },
+      "personality": [
+        "stoic"
+      ],
+      "appearance": {
+        "face": "round",
+        "beard": "stubble",
+        "eyes": "pale_blue",
+        "hair": "sun_bleached"
+      },
       "wage_daily": 28,
-      "recruit_ports": ["amsterdam", "antwerp"],
-      "bio": {"zh": "弗里斯兰出身的水手长,能在暴风里把甲板收拾得井井有条。", "en": "A Frisian boatswain who can keep a deck in order even through a gale."}
+      "recruit_ports": [
+        "amsterdam",
+        "antwerp"
+      ],
+      "bio": {
+        "zh": "弗里斯兰出身的水手长,能在暴风里把甲板收拾得井井有条。",
+        "en": "A Frisian boatswain who can keep a deck in order even through a gale."
+      }
     },
     {
       "id": "off_kemal_agha",
-      "name": {"zh": "凯末尔阿迦", "en": "Kemal Agha"},
+      "name": {
+        "zh": "凯末尔阿迦",
+        "en": "Kemal Agha"
+      },
       "nation_id": "ottoman",
-      "role": "gunner",
-      "stats": {"leadership": 12, "seamanship": 9, "combat": 17, "navigation": 8},
+      "legend": false,
+      "main_skill": "gunnery",
+      "attributes": {
+        "constitution": 14,
+        "intellect": 11,
+        "charisma": 12,
+        "courage": 32,
+        "luck": 10
+      },
+      "skills": {
+        "seamanship": 14,
+        "navigation": 10,
+        "swordplay": 20,
+        "gunnery": 35,
+        "appraisal": 5,
+        "negotiation": 6,
+        "cartography": 3,
+        "rumour": 9,
+        "medicine": 0,
+        "carpentry": 12,
+        "cooking": 7
+      },
+      "personality": [
+        "pious",
+        "stoic"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "full",
+        "eyes": "dark",
+        "hair": "black"
+      },
       "wage_daily": 30,
-      "recruit_ports": ["istanbul", "smyrna"],
-      "bio": {"zh": "在金角湾炮台服役多年的老炮长,开火前总要亲手校一遍炮位。", "en": "A veteran gun captain from the Golden Horn batteries, who sights each gun himself before firing."}
+      "recruit_ports": [
+        "istanbul",
+        "smyrna"
+      ],
+      "bio": {
+        "zh": "在金角湾炮台服役多年的老炮长,开火前总要亲手校一遍炮位。",
+        "en": "A veteran gun captain from the Golden Horn batteries, who sights each gun himself before firing."
+      }
     },
     {
       "id": "off_marco_bellini",
-      "name": {"zh": "马尔科·贝里尼", "en": "Marco Bellini"},
+      "name": {
+        "zh": "马尔科·贝里尼",
+        "en": "Marco Bellini"
+      },
       "nation_id": "italy",
-      "role": "navigator",
-      "stats": {"leadership": 8, "seamanship": 12, "combat": 6, "navigation": 17},
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {
+        "constitution": 12,
+        "intellect": 15,
+        "charisma": 13,
+        "courage": 14,
+        "luck": 12
+      },
+      "skills": {
+        "seamanship": 17,
+        "navigation": 31,
+        "swordplay": 6,
+        "gunnery": 5,
+        "appraisal": 12,
+        "negotiation": 10,
+        "cartography": 19,
+        "rumour": 9,
+        "medicine": 0,
+        "carpentry": 0,
+        "cooking": 7
+      },
+      "personality": [
+        "bookish",
+        "patient"
+      ],
+      "appearance": {
+        "face": "lean",
+        "beard": "clean",
+        "eyes": "hazel",
+        "hair": "brown"
+      },
       "wage_daily": 30,
-      "recruit_ports": ["venice", "genoa"],
-      "bio": {"zh": "为威尼斯商船绘制海图的领航员,对亚得里亚海的每一处暗礁都了然于心。", "en": "A chart-maker for Venetian merchantmen, who knows every reef in the Adriatic by heart."}
+      "recruit_ports": [
+        "venice",
+        "genoa"
+      ],
+      "bio": {
+        "zh": "为威尼斯商船绘制海图的领航员,对亚得里亚海的每一处暗礁都了然于心。",
+        "en": "A chart-maker for Venetian merchantmen, who knows every reef in the Adriatic by heart."
+      }
     }
   ]
 }
