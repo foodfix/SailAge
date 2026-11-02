@@ -331,7 +331,7 @@ the only place supplies are bought; the market sells trade goods only
 | 淡水 Water       45  (15 days)   [- 10 +]  [Buy 10 — 10g] [抛弃] |
 | 货舱 Free        0 / 120                                      |
 +--------------------------------------------------------------+
-| 可航行天数 Days at sea: 15                                    |
+| 可航行天数 Days at sea: 15                    [一键补满 Auto-fill] |
 | 离港后第 7 天起可能断粮。                                      |
 +--------------------------------------------------------------+
 | [出航 Set Sail]   [留在港口 Stay in port]                     |
@@ -360,6 +360,29 @@ the only place supplies are bought; the market sells trade goods only
   full hold. **Confirm-first** (§4.7, same `confirm_dialog` as the cargo
   jettison): `port.sail.jettison.confirm` names the kind and the quantity
   before anything is dropped.
+- **一键补满 / Auto-fill (amended 2026-11-02):** a button on the days row.
+  One press plans the largest common target `T` with
+  `provisions = water = T`, then executes it: the shortfalls are **bought**
+  at the fixed §4.10 prices (provisions 2g / water 1g, no tax) through
+  `TradeEngine.buy_supplies`, and the surplus above `T` is **discarded**
+  (the amended discard path above — `Fleet.remove_supplies`, no refund)
+  only where the plan requires it. The plan is exact maths over the pooled
+  state `P, W, free, gold`:
+  - hold: `buy_p + buy_w ≤ free + discarded`, which collapses to the cap
+    `T ≤ ⌊(free + P + W) / 2⌋` in every buy/discard mix;
+  - purse: `2·buy_p + 1·buy_w ≤ gold` (cost is piecewise linear in `T`:
+    0 up to `min(P, W)`, the smaller kind's price up to `max(P, W)`, then
+    `3` per unit — so the gold cap is read off those breakpoints).
+  `T = min(hold cap, gold cap)` is therefore the maximum; `T ≥ min(P, W)`
+  always, so **at most one kind is ever discarded** — the larger one, and
+  only when the hold (or purse) caps `T` below its stack. Discards run
+  first (freeing hold), then the buys. **Confirm-first** (§4.7) whenever
+  the plan discards anything (`port.sail.fill.confirm_both` /
+  `port.sail.fill.confirm_discard` name the discard and buy parts); a
+  buy-only plan executes immediately, like the row Buy buttons. With
+  nothing to buy or discard the button is disabled with a stated reason
+  (`port.sail.fill.done`). The button never stages a stepper quantity and
+  never touches the cargo jettison list.
 - **Gate (locked, `20-*` §4.11.2):** `Set Sail` is disabled when there are no
   crew (`port.sail.no_crew`) or fewer than one day of supply
   (`port.sail.no_supply`), each stating its reason. `Stay in port` always

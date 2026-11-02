@@ -23,7 +23,11 @@ extends Node
 ##     opens from Set Sail *and* Esc, the locked days formula, buying through
 ##     `TradeEngine.buy_supplies`, jettison, the crew/supply gate and the
 ##     Stay-in-port / Esc-in-prompt back edges;
-##   9 the S18 officers panel opens from the `O` key and the footer row.
+##   9 the §4.6.1-amended 一键补满 auto-fill: the exact plan maths (largest
+##     common target, hold cap ⌊(free+P+W)/2⌋, piecewise purse cap), buy-only
+##     plans running at once, discard-bearing plans confirm-first, the
+##     disabled no-op reason and the zh rebind;
+##  10 the S18 officers panel opens from the `O` key and the footer row.
 
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -71,6 +75,7 @@ func _ready() -> void:
 	await _test_shell_intact()
 	await _test_standalone()
 	await _test_provisions_prompt()
+	await _test_provisions_fill()
 	await _test_provisions_gate()
 	await _test_officers_panel_entry()
 	await _test_chart_at_port()
@@ -912,6 +917,161 @@ func _test_provisions_prompt() -> void:
 	_check(zh_buy.text == I18n.fmt("port.sail.buy",
 			{"qty": prompt.pending_qty("provisions"), "gold": 0}),
 		"the Buy label rebinds to zh (%s)" % zh_buy.text)
+	I18n.set_locale("en")
+	prompt.close()
+	await get_tree().process_frame
+
+	hub.queue_free()
+	host.queue_free()
+	await get_tree().process_frame
+
+
+# --- 8b. The 一键补满 auto-fill (docs/80-* §4.6.1 amended) ------------------
+
+## The auto-fill: the pure plan maths (largest common target with
+## provisions = water, locked 2g / 1g prices, hold cap ⌊(free+P+W)/2⌋ and the
+## piecewise purse cap), then the live button — buy-only plans run at once,
+## discard-bearing plans confirm first (§4.7), and a balanced-and-unraisable
+## state disables the button with a stated reason.
+func _test_provisions_fill() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 720)
+	add_child(host)
+	_make_starter_run()
+	var hub = _mount_hub(host)
+	await get_tree().process_frame
+	var prompt = hub.provisions_dialog()
+	if prompt == null:
+		host.queue_free()
+		return
+	_check(prompt.fill_button() != null,
+		"the prompt carries the 一键补满 button")
+
+	# --- the pure plan maths ------------------------------------------------
+	# Hold cap ⌊(free+P+W)/2⌋ beats the purse: surplus of the larger kind is
+	# traded for the short kind.
+	var plan: Dictionary = prompt.fill_plan(100, 50, 0, 1000)
+	_check(int(plan["target"]) == 75 and int(plan["discard_provisions"]) == 25
+		and int(plan["buy_water"]) == 25 and int(plan["cost"]) == 25,
+		"fill_plan(100,50,free=0,gold=1000) trades surplus for the short kind"
+		+ " (target %d)" % int(plan["target"]))
+	# The purse beats the hold: 12g buys 12 water and stops — and the target
+	# sits below the provisions stack, so equalising trims 38 provisions.
+	plan = prompt.fill_plan(100, 50, 200, 12)
+	_check(int(plan["target"]) == 62 and int(plan["buy_water"]) == 12
+		and int(plan["discard_provisions"]) == 38 and int(plan["cost"]) == 12,
+		("fill_plan(100,50,free=200,gold=12) stops at the purse and trims"
+		+ " the surplus (target %d, plan %s)") % [int(plan["target"]), str(plan)])
+	# Both caps loose: raise both stacks together at 3g per common unit.
+	plan = prompt.fill_plan(100, 50, 200, 1000)
+	_check(int(plan["target"]) == 175 and int(plan["buy_provisions"]) == 75
+		and int(plan["buy_water"]) == 125 and int(plan["cost"]) == 275,
+		"fill_plan(100,50,free=200,gold=1000) raises both to the hold cap (%d)"
+		% int(plan["target"]))
+	# Equal stacks with no gold: already balanced, nothing to do.
+	plan = prompt.fill_plan(45, 45, 30, 0)
+	_check(int(plan["target"]) == 45 and prompt._plan_is_empty(plan),
+		"fill_plan(45,45,free=30,gold=0) is an empty plan")
+	# Zero gold, unequal stacks: discard-only equalisation refunds nothing.
+	plan = prompt.fill_plan(200, 50, 0, 0)
+	_check(int(plan["target"]) == 50 and int(plan["discard_provisions"]) == 150
+		and int(plan["cost"]) == 0,
+		"fill_plan(200,50,free=0,gold=0) discards down to the smaller stack")
+	# Reversed stacks: the gold cap is now priced at the provisions' 2g.
+	plan = prompt.fill_plan(50, 100, 0, 1000)
+	_check(int(plan["target"]) == 75 and int(plan["buy_provisions"]) == 25
+		and int(plan["discard_water"]) == 25 and int(plan["cost"]) == 50,
+		"fill_plan(50,100,free=0,gold=1000) prices the short kind at 2g (%d)"
+		% int(plan["target"]))
+
+	# --- live: a buy-only plan runs at once, no confirm ---------------------
+	var ship: Dictionary = GameState.fleet[0]
+	ship["provisions"] = 45
+	ship["water"] = 45
+	ship["cargo"] = {}
+	GameState.gold = 100
+	prompt.open()
+	await get_tree().process_frame
+	var fill: Button = prompt.fill_button()
+	_check(not fill.disabled,
+		"45/45 with hold headroom and gold enables the auto-fill")
+	var changes: Array = []
+	prompt.supplies_changed.connect(
+		func(kind: String, qty: int) -> void: changes.append([kind, qty]))
+	fill.pressed.emit()
+	await get_tree().process_frame
+	_check(FleetLib.supplies("provisions") == 60 and FleetLib.supplies("water") == 60,
+		"the buy-only fill raised both stacks to 60 (%d/%d)"
+		% [FleetLib.supplies("provisions"), FleetLib.supplies("water")])
+	_check(GameState.gold == 55, "15+15 units at 2g/1g cost 45g (gold %d)"
+		% GameState.gold)
+	_check(not prompt._confirm.is_open(),
+		"a buy-only plan confirms nothing")
+	_check(changes.has(["provisions", 15]) and changes.has(["water", 15]),
+		"supplies_changed reports both buys (%s)" % str(changes))
+
+	# --- live: balanced and unraisable disables the button with a reason ----
+	# 60/60 with free=0: the hold cap equals the stacks — empty plan.
+	GameState.gold = 0
+	prompt.rebuild()
+	await get_tree().process_frame
+	_check(fill.disabled, "60/60 with no hold and no gold disables the fill")
+	_check(fill.tooltip_text == I18n.t_key("port.sail.fill.done"),
+		"the disabled fill states its reason (port.sail.fill.done)")
+
+	# --- live: a discard-bearing plan is confirm-first (§4.7) ----------------
+	# P100/W20 fills the 120-hold exactly (free=0); gold 1000: the hold cap
+	# (60) beats the purse, so 40 provisions trade for 40 water.
+	ship["provisions"] = 100
+	ship["water"] = 20
+	GameState.gold = 1000
+	prompt.rebuild()
+	await get_tree().process_frame
+	_check(not fill.disabled, "P100/W20 with gold enables the fill again")
+	changes.clear()
+	fill.pressed.emit()
+	await get_tree().process_frame
+	_check(prompt._confirm.is_open(), "a discard-bearing fill confirms first")
+	_check(str(prompt._confirm._source.get("key", ""))
+			== "port.sail.fill.confirm_both"
+		and int(prompt._confirm._source.get("values", {}).get("target", -1)) == 60
+		and int(prompt._confirm._source.get("values", {}).get("gold", -1)) == 40,
+		"the confirm names target 60 at 40g (port.sail.fill.confirm_both)")
+	_check(FleetLib.supplies("provisions") == 100
+		and FleetLib.supplies("water") == 20 and GameState.gold == 1000,
+		"nothing moved before the confirm is accepted")
+	changes.clear()
+	prompt._confirm.accept()
+	await get_tree().process_frame
+	_check(FleetLib.supplies("provisions") == 60 and FleetLib.supplies("water") == 60,
+		"the accepted fill equalised at 60/60 (%d/%d)"
+		% [FleetLib.supplies("provisions"), FleetLib.supplies("water")])
+	_check(GameState.gold == 960, "40 water at 1g cost 40g (gold %d)"
+		% GameState.gold)
+	_check(changes.has(["provisions", -40]) and changes.has(["water", 40]),
+		"supplies_changed reports the discard and the buy (%s)" % str(changes))
+	_check(fill.disabled, "60/60 at the hold cap leaves the fill disabled")
+
+	# --- live: cancelling the confirm changes nothing ------------------------
+	ship["provisions"] = 100
+	ship["water"] = 20
+	GameState.gold = 1000
+	prompt.rebuild()
+	await get_tree().process_frame
+	fill.pressed.emit()
+	await get_tree().process_frame
+	_check(prompt._confirm.is_open(), "the fill confirm reopens for cancel")
+	prompt._confirm.cancel()
+	await get_tree().process_frame
+	_check(not prompt._confirm.is_open()
+		and FleetLib.supplies("provisions") == 100
+		and FleetLib.supplies("water") == 20 and GameState.gold == 1000,
+		"cancel leaves the stacks, hold and purse untouched")
+
+	# --- the label rebinds to zh --------------------------------------------
+	I18n.set_locale("zh")
+	await get_tree().process_frame
+	_check(fill.text == "一键补满", "the fill label rebinds to zh (%s)" % fill.text)
 	I18n.set_locale("en")
 	prompt.close()
 	await get_tree().process_frame

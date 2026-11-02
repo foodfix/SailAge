@@ -1588,6 +1588,26 @@
     "zh": "抛弃{kind} × {qty}?",
     "en": "Jettison {kind} × {qty}?"
   },
+  "port.sail.fill": {
+    "zh": "一键补满",
+    "en": "Auto-fill"
+  },
+  "port.sail.fill.done": {
+    "zh": "补给与淡水已相等,且货舱与金钱都无法再增加。",
+    "en": "Provisions and water are equal — hold and purse cannot raise them further."
+  },
+  "port.sail.fill.part": {
+    "zh": "{kind} × {qty}",
+    "en": "{kind} × {qty}"
+  },
+  "port.sail.fill.confirm_both": {
+    "zh": "将抛弃 {discard} 并购买 {buy},使补给与淡水各达 {target}(花费 {gold}g)。确定?",
+    "en": "Jettison {discard} and buy {buy} — bringing both to {target} ({gold}g). Confirm?"
+  },
+  "port.sail.fill.confirm_discard": {
+    "zh": "将抛弃 {discard},使补给与淡水各达 {target}。确定?",
+    "en": "Jettison {discard} — bringing both to {target}. Confirm?"
+  },
   "fleet.ship_header": {
     "zh": "舰队",
     "en": "Fleet"

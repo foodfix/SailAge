@@ -21,6 +21,14 @@ extends Control
 ##   * jettison is `Fleet.jettison_good()` / `Fleet.jettison_supplies()` after
 ##     the shared `confirm_dialog.tscn` (§4.7), exactly the S15 flow.
 ##
+## The **一键补满 / Auto-fill** button (§4.6.1 amended) plans the largest
+## common target with `provisions = water = T` — exact integer maths over the
+## locked §4.10 prices (`SailingSimLib.PROVISIONS_PRICE` / `.WATER_PRICE`) —
+## and executes it through the same two paths as the rows: `Fleet
+## .remove_supplies` for the discards (confirm-first, §4.7) and
+## `TradeEngine.buy_supplies` for the buys. It invents no price, no cap and
+## no second engine path.
+##
 ## Sailing does **not** reimplement the transition: the enabled button calls the
 ## host's `set_sail()` ([member sail_host]), so there is one S4 → S3 code path.
 ##
@@ -39,6 +47,13 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const SCENE_PATH := "res://scenes/port/provisions_dialog.tscn"
 const JETTISON_KEY := "port.sail.jettison"
 const JETTISON_CONFIRM_KEY := "port.sail.jettison.confirm"
+## 一键补满 / Auto-fill (§4.6.1 amended): button label, the disabled reason and
+## the confirm-first messages for a plan that discards.
+const FILL_KEY := "port.sail.fill"
+const FILL_DONE_KEY := "port.sail.fill.done"
+const FILL_PART_KEY := "port.sail.fill.part"
+const FILL_CONFIRM_BOTH_KEY := "port.sail.fill.confirm_both"
+const FILL_CONFIRM_DISCARD_KEY := "port.sail.fill.confirm_discard"
 const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -75,6 +90,8 @@ var sail_host: Node = null
 ## §4.5.1 `fleet.stat.supply` line; `qty` is the staged stepper quantity.
 var _rows: Dictionary = {}
 ## Pending jettison: `{ship_index, kind, good_id, qty, name, ship}` (-1 = none).
+## The auto-fill stages `{"kind": "fill", "plan": <fill_plan()>}` here instead,
+## so the one shared confirm (§4.7) serves both destructive paths.
 var _pending: Dictionary = {}
 
 @onready var _dim: ColorRect = $Dim
@@ -86,6 +103,7 @@ var _pending: Dictionary = {}
 @onready var _hold: Label = $Center/Panel/Margin/Body/Table/Hold
 @onready var _days: Label = $Center/Panel/Margin/Body/DaysRow/Days
 @onready var _short: Label = $Center/Panel/Margin/Body/DaysRow/Short
+@onready var _fill_button: Button = $Center/Panel/Margin/Body/DaysRow/Fill
 @onready var _hint: Label = $Center/Panel/Margin/Body/Hint
 @onready var _cargo_box: VBoxContainer = \
 	$Center/Panel/Margin/Body/Cargo/Scroll/Stacks
@@ -154,8 +172,11 @@ func _ready() -> void:
 	_gate_reason.add_theme_color_override("font_color", PaletteLib.BAD)
 	_sail_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	_stay_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
+	_fill_button.custom_minimum_size = Vector2(float(COL_BUY_W),
+		float(PaletteLib.BUTTON_H))
 	_sail_button.pressed.connect(_on_sail_pressed)
 	_stay_button.pressed.connect(close)
+	_fill_button.pressed.connect(_on_fill_pressed)
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
 	_build_rows()
@@ -274,6 +295,11 @@ func plus_button(kind: String) -> Button:
 	return _rows.get(kind, {}).get("plus", null)
 
 
+## The 一键补满 button (§4.6.1 amended; tests / hosts).
+func fill_button() -> Button:
+	return _fill_button
+
+
 ## Quantity currently staged in `kind`'s stepper (0 when unknown).
 func pending_qty(kind: String) -> int:
 	var refs: Dictionary = _rows.get(kind, {})
@@ -321,6 +347,144 @@ func buy(kind: String) -> bool:
 	supplies_changed.emit(kind, qty)
 	rebuild()
 	return true
+
+
+# --- Auto-fill (§4.6.1 amended) ---------------------------------------------
+
+## The largest common target `T` with `provisions = water = T` reachable from
+## the four pooled inputs, by buying the shortfalls at the locked §4.10 prices
+## (provisions 2g / water 1g, no tax) and discarding the surplus above `T`
+## where the plan requires it. Pure integer maths — unit-testable without a
+## run, and the only place the plan exists (execution goes through the same
+## engine paths as the rows).
+##
+## Caps, over the pooled state `P, W, free, gold`:
+##   * hold: `buy_p + buy_w ≤ free + discarded`, which collapses to
+##     `T ≤ ⌊(free + P + W) / 2⌋` in every buy/discard mix;
+##   * purse: `2·buy_p + 1·buy_w ≤ gold` — the cost is piecewise linear in
+##     `T` with breakpoints at `min(P, W)` (cost 0) and `max(P, W)` (cost
+##     `smaller_kind_price × (max − min)`), slope `2 + 1` beyond.
+## `T = min(hold cap, gold cap)`; `T ≥ min(P, W)` always, so at most one kind
+## is ever discarded (the larger one, and only when a cap sits below its
+## stack). Returns `{target, buy_provisions, buy_water, discard_provisions,
+## discard_water, cost}` — an all-zero plan means nothing to do.
+static func fill_plan(provisions: int, water: int, free: int, gold: int) -> Dictionary:
+	var smaller := mini(provisions, water)
+	var larger := maxi(provisions, water)
+	# The kind a below-`larger` target must buy is the currently smaller one.
+	var small_price := SailingSimLib.WATER_PRICE if provisions >= water \
+		else SailingSimLib.PROVISIONS_PRICE
+	var cost_at_larger := small_price * (larger - smaller)
+	var gold_cap := 0
+	if gold >= cost_at_larger:
+		@warning_ignore("integer_division")
+		gold_cap = larger + (gold - cost_at_larger) \
+			/ (SailingSimLib.PROVISIONS_PRICE + SailingSimLib.WATER_PRICE)
+	else:
+		@warning_ignore("integer_division")
+		gold_cap = smaller + gold / small_price
+	@warning_ignore("integer_division")
+	var space_cap := (free + provisions + water) / 2
+	var target := mini(gold_cap, space_cap)
+	var plan := {
+		"target": target,
+		"buy_provisions": maxi(0, target - provisions),
+		"buy_water": maxi(0, target - water),
+		"discard_provisions": maxi(0, provisions - target),
+		"discard_water": maxi(0, water - target),
+	}
+	plan["cost"] = SailingSimLib.PROVISIONS_PRICE * int(plan["buy_provisions"]) \
+		+ SailingSimLib.WATER_PRICE * int(plan["buy_water"])
+	return plan
+
+
+## True when a plan buys and discards nothing (the button is a no-op).
+static func _plan_is_empty(plan: Dictionary) -> bool:
+	return int(plan.get("buy_provisions", 0)) \
+		+ int(plan.get("buy_water", 0)) \
+		+ int(plan.get("discard_provisions", 0)) \
+		+ int(plan.get("discard_water", 0)) <= 0
+
+
+## [method fill_plan] over the live pooled fleet, hold and purse.
+func current_fill_plan() -> Dictionary:
+	return fill_plan(
+		FleetLib.supplies("provisions"), FleetLib.supplies("water"),
+		FleetLib.fleet_free(), GameState.gold
+	)
+
+
+## Executes a plan as one unit: discards first (freeing hold — the only way a
+## space-starved plan fits), then the buys through [TradeEngine.buy_supplies],
+## the only supplies price path. Emits `supplies_changed` per touched kind,
+## clears the staged steppers (the world they referenced is gone) and rebuilds.
+func apply_fill_plan(plan: Dictionary) -> bool:
+	if _plan_is_empty(plan):
+		return false
+	for kind in TradeEngineLib.SUPPLY_KINDS:
+		var removed := FleetLib.remove_supplies(
+			kind, int(plan["discard_%s" % kind])
+		)
+		if removed > 0:
+			FleetLib.notify_changed()
+			supplies_changed.emit(kind, -removed)
+	for kind in TradeEngineLib.SUPPLY_KINDS:
+		var qty := int(plan["buy_%s" % kind])
+		# Unreachable while the modal blocks interleaving state changes (the
+		# plan was exact); reported as failed rather than half-claimed.
+		if qty > 0 and not TradeEngineLib.buy_supplies(_port_id(), kind, qty):
+			return false
+		if qty > 0:
+			supplies_changed.emit(kind, qty)
+	_reset_staged()
+	rebuild()
+	return true
+
+
+## The localised `Provisions × 75, Water × 20` fragment of a confirm message
+## for one plan half (`"buy"` / `"discard"`); `""` when that half is empty.
+func _fill_parts(plan: Dictionary, prefix: String) -> String:
+	var parts: Array[String] = []
+	for kind in TradeEngineLib.SUPPLY_KINDS:
+		var qty := int(plan["%s_%s" % [prefix, kind]])
+		if qty > 0:
+			parts.append(I18n.fmt(FILL_PART_KEY, {
+				"kind": _kind_name(kind), "qty": qty,
+			}))
+	return ", ".join(parts)
+
+
+## 一键补满 pressed (§4.6.1 amended): a buy-only plan executes immediately —
+## the row Buy buttons confirm nothing either; a plan that discards is
+## destructive and confirms first (§4.7), naming the discard and buy parts.
+func _on_fill_pressed() -> void:
+	var plan := current_fill_plan()
+	if _plan_is_empty(plan):
+		return
+	var discards := _fill_parts(plan, "discard")
+	if discards.is_empty():
+		apply_fill_plan(plan)
+		return
+	var buys := _fill_parts(plan, "buy")
+	_pending = {"kind": "fill", "plan": plan}
+	_confirm.open_key(
+		FILL_CONFIRM_BOTH_KEY if not buys.is_empty()
+		else FILL_CONFIRM_DISCARD_KEY,
+		{
+			"discard": discards, "buy": buys,
+			"target": int(plan["target"]), "gold": int(plan["cost"]),
+		}
+	)
+
+
+## The fill button state: enabled exactly when a plan exists — the plan's caps
+## already guarantee it is affordable and fits the hold — and disabled with a
+## stated reason when the amounts are equal and no cap allows raising them.
+func _refresh_fill() -> void:
+	var blocked := _port_id().is_empty() \
+		or _plan_is_empty(current_fill_plan())
+	_fill_button.disabled = blocked
+	_fill_button.tooltip_text = I18n.t_key(FILL_DONE_KEY) if blocked else ""
 
 
 ## Discard supplies (§4.6.1 amended): the staged quantity of `kind` leaves
@@ -470,6 +634,7 @@ func _bind_static() -> void:
 		(_rows[kind]["label"] as Label).text = _kind_name(kind)
 	_sail_button.text = I18n.t_key("port.set_sail")
 	_stay_button.text = I18n.t_key("port.sail.stay")
+	_fill_button.text = I18n.t_key(FILL_KEY)
 	_hint.text = I18n.t_key("port.sail.jettison_hint")
 
 
@@ -490,6 +655,7 @@ func _refresh_all() -> void:
 	_refresh_days()
 	_refresh_cargo()
 	_refresh_gate()
+	_refresh_fill()
 	# §4.6.1: the prompt *says* the hold is full rather than silently dropping
 	# cargo — so the jettison hint appears exactly when it applies.
 	_hint.visible = FleetLib.fleet_free() <= 0
@@ -679,6 +845,12 @@ func _on_jettison_confirmed() -> void:
 	var pending := _pending
 	_pending = {}
 	if pending.is_empty():
+		return
+	# Auto-fill (§4.6.1 amended): the staged plan executes as one unit —
+	# discards first (freeing hold), then the buys through the one supplies
+	# price path.
+	if str(pending.get("kind", "")) == "fill":
+		apply_fill_plan(pending.get("plan", {}))
 		return
 	# Supply discard (§4.6.1 amended): the staged quantity leaves the pooled
 	# stock flagship-first, freeing hold immediately, refunding nothing.
