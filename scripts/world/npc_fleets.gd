@@ -1097,8 +1097,12 @@ func _accrue_lane(fleet: Dictionary, day: int, delta: float) -> void:
 	var id := str(fleet.get("id", ""))
 	# Docked fleets owe no movement (the day tick departs them; the fast
 	# path keeps the per-move accrual O(fleets) with no geometry work).
+	# Spawn-dwell amendment (docs/60-* §4.11.11): a lane fleet inside its
+	# spawn hold idles too — its journey is pre-planned (legs non-empty)
+	# but the dwell has not expired, and the hold wins over the legs.
 	if ((fleet.get("route", {}) as Dictionary).get("legs", [])
-			as Array).is_empty():
+			as Array).is_empty() \
+			or int(fleet.get("dwell_until_day", 0)) > day:
 		_accrual_dbg[id] = {"delta": delta, "skip": "docked"}
 		return
 	var committed_total := 0
@@ -1353,9 +1357,9 @@ func markers() -> Array:
 # --- Diagnostics (unified-movement amendment, `60-*` §4.12.x) ----------------
 
 ## The one-word stall state of a fleet, evaluated in priority order:
-## `docked` (dwell not expired **and no route legs** — a fleet with legs is
-## under way even inside its spawn-dwell window) → `cooldown` (pursuit
-## cooldown) → `camping` (a targetless raider within its anchor radius,
+## `docked` (dwell not expired — the spawn-dwell amendment: a spawn hold
+## idles on its berth even with its journey pre-planned) → `cooldown`
+## (pursuit cooldown) → `camping` (a targetless raider within its anchor radius,
 ## off-lane — the §4.11.11.1 camping pattern) → `chasing`/`pursuing`
 ## (raider with a target / hunter in chase) → `blocked` (under way but
 ## held `STALL_HOLD_TICKS`+ accrual budgets) → `sailing`. `holds` is the
@@ -1365,7 +1369,9 @@ func stall_state(fleet: Dictionary, holds: int) -> String:
 	var role := str(fleet.get("role", ""))
 	var legs_empty := ((fleet.get("route", {}) as Dictionary).get("legs", [])
 		as Array).is_empty()
-	if int(fleet.get("dwell_until_day", 0)) > day and legs_empty:
+	# Spawn-dwell amendment: the dwell hold wins over the legs — a spawn
+	# hold (pre-planned journey) reports docked/stranded like any hold.
+	if int(fleet.get("dwell_until_day", 0)) > day:
 		# Berth truth (unified-movement amendment, `60-*` §4.11.11):
 		# "docked" means standing ON a port's berth tile — a fleet holding
 		# in open water is `stranded` (the false-mooring report), and the
@@ -3372,7 +3378,14 @@ func _step_fleets(day: int) -> void:
 			_raider_tick(fleet, day, doomed, remove_ids, wrecks)
 			continue
 		var legs: Array = (fleet.get("route", {}) as Dictionary).get("legs", [])
-		if legs.is_empty():
+		var dwell_expired := int(fleet.get("dwell_until_day", 0)) <= day
+		# Docked: legs empty (arrived / failed depart) — or inside a spawn
+		# hold (spawn-dwell amendment, docs/60-* §4.11.11): a freshly
+		# spawned lane fleet idles on its origin berth with the journey
+		# pre-planned until the dwell expires; the expiry releases the
+		# journey to the accrual walk (the old legs-only gate left the
+		# hold unconsumed forever — the frozen-at-the-berth report).
+		if legs.is_empty() or not dwell_expired:
 			# Berth consistency (unified-movement amendment, `60-*` §4.11.11
 			# berth pin): a docked fleet stands ON a port's berth tile — the
 			# mooring resolves from the tile itself (`_port_at_cell`).
@@ -3382,17 +3395,19 @@ func _step_fleets(day: int) -> void:
 			# about to re-depart), and teleporting it mid-hold would move
 			# prey out from under an engagement. On expiry the heal lands
 			# it on a berth first, then the depart uses that berth as the
-			# origin (never a port it is nowhere near).
-			var mooring := _port_at_cell(position_of(fleet))
-			var dwell_expired := int(fleet.get("dwell_until_day", 0)) <= day
-			if mooring.is_empty() and dwell_expired:
-				var dest := str(fleet.get("dest_port_id", ""))
-				var berth := _port_cell(dest) if not dest.is_empty() \
-					else NO_CELL
-				if berth == NO_CELL:
-					berth = _nearest_own_berth(fleet)
-				if berth != NO_CELL:
-					_commit_cell(fleet, berth)
+			# origin (never a port it is nowhere near). Spawn holds stand
+			# on their origin berth, so the legs-empty gate below keeps
+			# them out of the heal.
+			if legs.is_empty():
+				var mooring := _port_at_cell(position_of(fleet))
+				if mooring.is_empty() and dwell_expired:
+					var dest := str(fleet.get("dest_port_id", ""))
+					var berth := _port_cell(dest) if not dest.is_empty() \
+						else NO_CELL
+					if berth == NO_CELL:
+						berth = _nearest_own_berth(fleet)
+					if berth != NO_CELL:
+						_commit_cell(fleet, berth)
 			if dwell_expired:
 				if role == TREASURE:
 					# Task L: the seasonal run is over — the fleet delivered

@@ -110,6 +110,8 @@ func _ready() -> void:
 	_test_unified_movement()
 	_section = "16c stall diagnostics"
 	_test_stall_diagnostics()
+	_section = "16d spawn dwell hold"
+	_test_spawn_dwell_hold()
 	_section = "17 variant flip"
 	_test_variant_flip()
 	_section = "18 ice refusal"
@@ -1747,6 +1749,57 @@ func _test_unified_movement() -> void:
 			"29 fast-player moves integrate the per-tile pipeline exactly "
 			+ "(%d chunked vs %d integrated; one-shot first-heading walk %d)"
 			% [walked_chunked, walked_expect, walked_oneshot])
+
+
+# --- 16d. Spawn dwell hold (docs/60-* §4.11.11, amended 2026-11-02) ----------
+
+## The spawn-dwell amendment: a freshly spawned lane fleet idles on its
+## origin berth with its journey pre-planned until the dwell expires —
+## legs non-empty is NOT "under way" inside the hold (the frozen-at-the-
+## berth report). On expiry the hold releases and the pre-planned
+## journey walks; `stall_state` releases with it.
+func _test_spawn_dwell_hold() -> void:
+	var sim := _make_run()
+	sim._refresh_net()
+	GameState.day = 100
+	# A real spawn: docked at the origin berth, legs pre-planned, dwell set.
+	var coaster: Dictionary = sim.spawn("coaster", "portugal", 100)
+	_check(not coaster.is_empty(), "the coaster spawn places a fleet")
+	var legs: Array = (coaster.get("route", {}) as Dictionary).get("legs", [])
+	_check(not legs.is_empty(), "the spawn pre-plans the journey legs")
+	_check(int(coaster.get("dwell_until_day", 0)) > 100,
+		"the spawn sets a future dwell (%d)"
+		% int(coaster.get("dwell_until_day", 0)))
+	_check(sim.stall_state(coaster, 0) == "docked",
+		"a spawn hold reports docked despite its legs")
+	# Arm the fresh sim's accrual clock (the sentinel pass grants nothing).
+	GameState.world["clock_fraction"] = 0.5
+	sim.advance_clock()
+	GameState.world["clock_fraction"] = 0.0
+	# The hold idles through its days — day tick AND clock accrual alike
+	# (in port the accrual runs only on the midnight tick, which is where
+	# the old legs-only gate froze these fleets forever).
+	var cell := _cell_of(coaster)
+	var fid := str(coaster["id"])
+	for day in range(101, 104):
+		GameState.day = day
+		sim.last_tick_day = -1
+		sim.tick(day)
+		_check(_cell_of(coaster) == cell,
+			"the spawn hold idles through day %d" % day)
+		var acc: Dictionary = sim._accrual_dbg.get(fid, {})
+		_check(str(acc.get("skip", "")) == "docked",
+			"the hold banks day %d's accrual as docked" % day)
+	# On expiry the hold releases: the pre-planned journey starts walking
+	# (the port call happens at the journey's first arrival).
+	GameState.day = 104
+	sim.last_tick_day = -1
+	sim.tick(104)
+	_check(sim.stall_state(coaster, 0) != "docked",
+		"the expired hold no longer reports docked")
+	var acc: Dictionary = sim._accrual_dbg.get(fid, {})
+	_check(int(acc.get("committed", 0)) > 0 or _cell_of(coaster) != cell,
+		"the expired hold walks its pre-planned journey")
 
 
 # --- 16c. Stall diagnostics (the unified-movement observability) -------------

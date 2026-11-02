@@ -98,11 +98,20 @@ func apply_preset(preset: String) -> void:
 ## ecology's day work, then fans the NPC-trade `market_changed` events (the
 ## pure module never emits; the old world-scene listener owned that fan-out).
 func _on_day_advanced(_new_day: int) -> void:
-	if _sim == null or not _has_game() or SailingSimLib.is_game_over():
+	if not _has_game() or SailingSimLib.is_game_over():
 		return
-	var moved: Array = _sim.moved_ports
-	_sim.tick(int(GameState.day))
-	for port_id in (_sim.moved_ports as Array):
+	# The daily tick runs in every scene, port included: ensure the sim
+	# HERE (not only on the world scene's per-move seam) so a session that
+	# never opened the map — a fresh run or a load landing in a port —
+	# still ticks the ecology at each midnight. `ensure()` starts a fresh
+	# sim "this day already ticked" (§4.11.11.1), so adoption itself never
+	# back-ticks or catch-up-accrues.
+	var sim = ensure()
+	if sim == null:
+		return
+	var moved: Array = sim.moved_ports
+	sim.tick(int(GameState.day))
+	for port_id in (sim.moved_ports as Array):
 		if not (moved as Array).has(port_id):
 			EventBus.market_changed.emit(str(port_id))
 

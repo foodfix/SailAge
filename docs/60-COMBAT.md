@@ -541,6 +541,20 @@ ecology members with a role, a nation, a lane route and a captain:
   destination's, else its own nation's nearest port) **before** the
   departure, so the depart's origin is always a port it actually stands
   on and a dropped journey can never leave a fleet idling at sea.
+- **Spawn dwell holds (amended 2026-11-02).** A freshly spawned
+  lane-role fleet (trader / coaster / courier) idles on its **origin
+  berth** for its spawn dwell (`dwell_until_day = spawn day + the role's
+  dock days`, the §4.11.14 coaster lever) **with its journey already
+  pre-planned** — legs non-empty is *not* "under way" while the dwell
+  runs. Both movement gates read docked = legs empty **or** dwell not
+  expired: the accrual's docked fast path (`_accrue_lane`) banks the
+  hold as `skip=docked`, and the day tick's docked branch idles it. On
+  expiry the hold releases and the fleet walks its **pre-planned
+  journey** (the port call happens at the journey's first arrival);
+  `stall_state` reports `docked`/`stranded` for a spawn hold by the
+  same rule. Without this the spawned fleet sails out of its hold the
+  moment any accrual pass runs at sea, yet sits frozen at `ti=0` on the
+  berth in port (day-tick-only accrual) — the "两个舰队一直不动" report.
 - **Seam junctions are boarding tiles (amended 2026-11-01).** A spoke's
   terminus is frequently the trunk's first tile (a junction, not a hop) —
   `legs[0]` ends **on** the tile where `legs[1]` starts. The leg-end
