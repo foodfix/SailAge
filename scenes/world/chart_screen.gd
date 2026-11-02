@@ -834,16 +834,14 @@ func _update_hover(at: Vector2) -> void:
 				parts.append(I18n.t_key("debug.info.circuit") + " "
 					+ " · ".join(lane_names))
 			line += "\n  " + " · ".join(parts)
-			line += "\n  " + _annotate_raw_line("[raw]",
+			line += "\n  " + _annotate_raw_line(
 				str(ship.get("dbg", "")), "state", false)
 			var raw2 := str(ship.get("dbg2", ""))
 			if not raw2.is_empty():
-				line += "\n  " + _annotate_raw_line("[raw2]", raw2,
-					"accrual", false)
+				line += "\n  " + _annotate_raw_line(raw2, "accrual", false)
 			var raw3 := str(ship.get("dbg3", ""))
 			if not raw3.is_empty():
-				line += "\n  " + _annotate_raw_line("[raw3]", raw3,
-					"journey", true)
+				line += "\n  " + _annotate_raw_line(raw3, "journey", true)
 			text += line + "\n"
 	else:
 		# No fleet on the tile: the nearest wreck / intel / port entry.
@@ -875,7 +873,7 @@ func _update_hover(at: Vector2) -> void:
 	_show_hover_window(text, at)
 
 
-# --- Annotated raw lines (§4.6, amended 2026-11-02) --------------------------
+# --- Localized raw lines (§4.6, amended 2026-11-02) --------------------------
 
 ## The raw hover payload keys that carry a localized gloss
 ## (`debug.raw.f.<key>`, ui_strings.json — §4.7.10).
@@ -883,18 +881,21 @@ const RAW_GLOSS_KEYS: Array[String] = ["cell", "dwell", "day", "legs", "ti",
 	"holds", "carry", "mark", "now", "pend", "last", "lastd", "moved",
 	"skip", "committed", "budget", "pipe", "cd", "leg0", "dest", "mooring"]
 
-## `[raw3]`'s `ev=` tail spans tokens with its own event grammar — split
-## off before the generic `key=value` pass.
+## The journey payload's `ev=` tail spans tokens with its own event
+## grammar — split off before the generic `key=value` pass. (The
+## `[raw*]` telemetry names live in the §4.6 prose and `markers()`,
+## never in the window.)
 const EV_TAG := "ev="
 
 
-## Renders one raw line as `<tag>·<section> <gloss> key=value ...`: every
-## `key=value` token is prefixed with its localized gloss (the raw payload
-## stays verbatim for doc/test cross-reference), `_raw_value_gloss` appends
-## the value-side annotations, non-key continuation tokens (`leg0`'s
-## `ti/walked_len` tail) extend the previous field, and — for `[raw3]` —
-## the trailing `ev=` event ring is translated event-wise.
-func _annotate_raw_line(tag: String, raw: String, section: String,
+## Renders one payload line fully localized (§4.6, amended 2026-11-02):
+## `<section title> <gloss> <value> ...` — every `key=value` token renders
+## as its localized gloss plus the value (ids replaced by their localized
+## names via `_raw_value_text`), `_raw_value_hint` appends the `pend`/
+## `mark` hints, non-key continuation tokens (`leg0`'s `ti/walked_len`
+## tail) extend the previous field, and — for the journey line — the
+## trailing `ev=` event ring is localized event-wise.
+func _annotate_raw_line(raw: String, section: String,
 		with_ev: bool) -> String:
 	var head := raw
 	var ev := ""
@@ -903,13 +904,15 @@ func _annotate_raw_line(tag: String, raw: String, section: String,
 		if cut >= 0:
 			head = raw.substr(0, cut)
 			ev = raw.substr(cut + 1 + EV_TAG.length())
-	var out: Array = ["%s·%s" % [tag, I18n.t_key("debug.raw.sec." + section)]]
+	var out: Array = [I18n.t_key("debug.raw.sec." + section)]
 	for token in head.split(" ", false):
 		var eq := token.find("=")
 		var key := token.substr(0, eq) if eq > 0 else ""
 		if key in RAW_GLOSS_KEYS:
-			var field := "%s %s" % [I18n.t_key("debug.raw.f." + key), token]
-			field += _raw_value_gloss(key, token.substr(eq + 1))
+			var value := token.substr(eq + 1)
+			var field := "%s %s" % [I18n.t_key("debug.raw.f." + key),
+				_raw_value_text(key, value)]
+			field += _raw_value_hint(key, value)
 			out.append(field)
 		elif not out.is_empty():
 			# Continuation of the previous field's value.
@@ -917,60 +920,94 @@ func _annotate_raw_line(tag: String, raw: String, section: String,
 		else:
 			out.append(token)
 	if not ev.is_empty():
-		out.append("%s %s%s" % [I18n.t_key("debug.raw.f.ev"), EV_TAG,
+		out.append("%s %s" % [I18n.t_key("debug.raw.f.ev"),
 			_annotate_ev_stream(ev)])
 	return " ".join(out)
 
 
-## The value-side annotation of one raw field: the localized port/lane
-## name in parentheses (`dest` / `mooring` are port ids; `leg0`'s id is a
-## lane id on lane legs, a port id on spokes) or the §4.6 value hints
-## (`pend < 0` ⇒ frozen, `mark < 0` ⇒ unset). "" when nothing applies.
-func _raw_value_gloss(key: String, value: String) -> String:
+## The displayed value of one raw field (§4.6, amended 2026-11-02): ids
+## render as their localized names when they resolve, else the raw id
+## (the legend's fallback rule) — `dest`/`mooring` ports, `leg0`'s lane/
+## spoke id (its `[a..b]R<>` tail keeps the numbers), `skip` reasons.
+## Everything else passes through verbatim.
+func _raw_value_text(key: String, value: String) -> String:
 	if key == "dest" or key == "mooring":
-		return _paren(_port_name(value))
+		return _display(_port_name(value), value)
 	if key == "leg0":
 		var br := value.find("[")
-		return _paren(_leg_name(value.substr(0, br) if br >= 0 else value))
-	if key == "pend" or key == "mark":
-		if value.is_valid_float() and float(value) < 0.0:
-			return "(%s)" % I18n.t_key("debug.raw.hint."
-				+ ("frozen" if key == "pend" else "no_mark"))
+		var id := value.substr(0, br) if br >= 0 else value
+		return _display(_leg_name(id), id) \
+			+ (value.substr(br) if br >= 0 else "")
+	if key == "skip":
+		var l10n := "debug.raw.skip." + value
+		if DataLoader.ui_strings.has(l10n):
+			return I18n.t_key(l10n)
+	return value
+
+
+## The value hint of one raw field (§4.6, amended 2026-11-02): `pend < 0`
+## ⇒ frozen (the mark is ahead of the clock — the §4.6 discriminator),
+## `mark < 0` ⇒ unset. "" when nothing applies.
+func _raw_value_hint(key: String, value: String) -> String:
+	if (key == "pend" or key == "mark") and value.is_valid_float() \
+			and float(value) < 0.0:
+		return " (%s)" % I18n.t_key("debug.raw.hint."
+			+ ("frozen" if key == "pend" else "no_mark"))
 	return ""
 
 
-## The ev ring stream (`spawn@1 dep a->b@5 ...`): appends the localized
-## names per event token — `a->b` pairs (`dep`/`depX` carry them as the
-## following token), the port after a bare `arr`, and `wedge|leg|seam:<id>`
-## (the `drop` verb is the preceding bare token). Unknown tokens pass
-## through untouched.
+## The ev ring stream (`spawn@1 dep a->b@3 ...`) fully localized: the
+## event verbs (`debug.raw.ev.*`), the `a->b` port pairs, the port after
+## a bare `arr`, the `wedge|leg|seam:<id>` causes and the `ti=<n>` detail —
+## the `@<day>` stamps ride their tokens untouched. Unknown tokens pass
+## through verbatim.
 func _annotate_ev_stream(ev: String) -> String:
 	var out: Array = []
 	var prev_arr := false
 	for tok in ev.split(" ", false):
 		var head := tok
+		var stamp := ""
 		var at := tok.rfind("@")
 		if at > 0:
-			head = tok.substr(0, at)  # strip the `@<day>` stamp
-		var gloss := ""
+			head = tok.substr(0, at)
+			stamp = tok.substr(at)
+		var text := ""
 		if head.contains("->"):
 			var arrow := head.find("->")
-			var a := _port_name(head.substr(0, arrow))
-			var b := _port_name(head.substr(arrow + 2))
-			if not (a.is_empty() and b.is_empty()):
-				gloss = "(%s→%s)" % [a, b]
+			text = "%s→%s" % [_display_port(head.substr(0, arrow)),
+				_display_port(head.substr(arrow + 2))]
 		elif prev_arr:
-			gloss = _paren(_port_name(head))
-		elif head.contains(":"):
-			gloss = _paren(_leg_name(head.substr(head.find(":") + 1)))
+			text = _display_port(head)
+		elif head == "dep":
+			text = I18n.t_key("debug.raw.ev.dep")
+		elif head == "depX":
+			text = I18n.t_key("debug.raw.ev.depx")
+		elif head == "arr":
+			text = I18n.t_key("debug.raw.ev.arr")
+		elif head == "drop":
+			text = I18n.t_key("debug.raw.ev.drop")
+		elif head == "spawn":
+			text = I18n.t_key("debug.raw.ev.spawn")
+		elif head.begins_with("wedge:"):
+			text = "%s:%s" % [I18n.t_key("debug.raw.ev.wedge"),
+				_display_leg(head.substr(6))]
+		elif head.begins_with("leg:"):
+			text = "%s:%s" % [I18n.t_key("debug.raw.ev.leg"),
+				_display_leg(head.substr(4))]
+		elif head.begins_with("seam:"):
+			text = "%s:%s" % [I18n.t_key("debug.raw.ev.seam"),
+				_display_leg(head.substr(5))]
+		elif head.begins_with("ti="):
+			text = "%s%s" % [I18n.t_key("debug.raw.ev.ti"), head.substr(3)]
+		else:
+			text = head
+		out.append(text + stamp)
 		prev_arr = head == "arr"
-		out.append(tok + gloss)
 	return " ".join(out)
 
 
 ## The localized port name for a raw port id ("" when the id resolves to
-## no known port — the annotation is then omitted, the legend's raw-id
-## fallback rule).
+## no known port).
 func _port_name(port_id: String) -> String:
 	if port_id.is_empty() or port_id == "-":
 		return ""
@@ -992,9 +1029,20 @@ func _leg_name(id: String) -> String:
 	return _port_name(id)
 
 
-## `(名)` wrapper — "" stays "".
-func _paren(name: String) -> String:
-	return "" if name.is_empty() else "(%s)" % name
+## A display value with raw-id fallback: the localized name when it
+## resolved, else the raw id itself.
+func _display(name: String, raw_id: String) -> String:
+	return name if not name.is_empty() else raw_id
+
+
+## A display port id (localized name, else the raw id).
+func _display_port(port_id: String) -> String:
+	return _display(_port_name(port_id), port_id)
+
+
+## A display leg id (localized name, else the raw id).
+func _display_leg(id: String) -> String:
+	return _display(_leg_name(id), id)
 
 
 ## The floating hover window (unified-movement amendment): a bordered

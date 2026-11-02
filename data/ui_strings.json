@@ -2256,6 +2256,54 @@
     "zh": "未设标记",
     "en": "no mark yet"
   },
+  "debug.raw.ev.spawn": {
+    "zh": "出生",
+    "en": "spawned"
+  },
+  "debug.raw.ev.dep": {
+    "zh": "起航",
+    "en": "departed"
+  },
+  "debug.raw.ev.depx": {
+    "zh": "起航失败",
+    "en": "departure failed"
+  },
+  "debug.raw.ev.drop": {
+    "zh": "丢弃",
+    "en": "dropped"
+  },
+  "debug.raw.ev.arr": {
+    "zh": "抵达",
+    "en": "arrived"
+  },
+  "debug.raw.ev.wedge": {
+    "zh": "楔形段",
+    "en": "wedge"
+  },
+  "debug.raw.ev.leg": {
+    "zh": "航段",
+    "en": "leg"
+  },
+  "debug.raw.ev.seam": {
+    "zh": "接缝",
+    "en": "seam"
+  },
+  "debug.raw.ev.ti": {
+    "zh": "段内序",
+    "en": "leg ti"
+  },
+  "debug.raw.skip.cooldown": {
+    "zh": "冷却",
+    "en": "cooldown"
+  },
+  "debug.raw.skip.stale_mark": {
+    "zh": "标记过期",
+    "en": "stale mark"
+  },
+  "debug.raw.skip.docked": {
+    "zh": "停靠",
+    "en": "docked"
+  },
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"
