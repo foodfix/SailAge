@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "backgrounds": [
+    {
+      "id": "background_deckhand",
+      "name": {"zh": "甲板水手", "en": "Deckhand"},
+      "attribute_bonus": {"constitution": 3},
+      "skill_bonus": {"seamanship": 5},
+      "bio": {"zh": "你在帆缆之间长大,双手比言语更可靠。", "en": "You grew up between mast and deck; your hands speak louder than words."}
+    },
+    {
+      "id": "background_navy_cadet",
+      "name": {"zh": "海军见习生", "en": "Naval Cadet"},
+      "attribute_bonus": {"courage": 3},
+      "skill_bonus": {"navigation": 5},
+      "bio": {"zh": "你在皇家舰队的桅楼上见过第一缕晨光,号令与星图是童年的母语。", "en": "You saw your first dawn from a royal masthead; the pipe of orders and the star chart were your childhood tongue."}
+    },
+    {
+      "id": "background_merchant_apprentice",
+      "name": {"zh": "商行学徒", "en": "Merchant Apprentice"},
+      "attribute_bonus": {"charisma": 3},
+      "skill_bonus": {"negotiation": 5},
+      "bio": {"zh": "在商行的账房里,你学会了看秤算息,也知道哪句话能压下三个铜板。", "en": "In a counting house you learned the scales and the interest tables — and which sentence knocks three coppers off a price."}
+    },
+    {
+      "id": "background_cartographer_apprentice",
+      "name": {"zh": "制图学徒", "en": "Cartographer's Apprentice"},
+      "attribute_bonus": {"intellect": 3},
+      "skill_bonus": {"cartography": 5},
+      "bio": {"zh": "在制图师的阁楼里,你把一条条海岸线描进了梦里。", "en": "In the chartmaker's garret you inked coastline after coastline into your dreams."}
+    },
+    {
+      "id": "background_tavern_errand",
+      "name": {"zh": "酒馆跑腿", "en": "Tavern Runner"},
+      "attribute_bonus": {"luck": 3},
+      "skill_bonus": {"rumour": 5},
+      "bio": {"zh": "码头酒馆里跑腿千次,你早知道每句醉话都可能是一条值钱的线报。", "en": "A thousand errands through the harbor taverns taught you that every drunkard's tale may be a rumour worth coin."}
+    },
+    {
+      "id": "background_fencing_student",
+      "name": {"zh": "剑馆弟子", "en": "Fencing Student"},
+      "attribute_bonus": {"courage": 3},
+      "skill_bonus": {"swordplay": 5},
+      "bio": {"zh": "剑馆里练废了十柄木剑,腕上的旧茧比任何文凭都硬。", "en": "You wore out ten training blades in the fencing hall; the callus on your wrist is diploma enough."}
+    }
+  ]
+}
