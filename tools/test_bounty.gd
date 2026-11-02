@@ -62,6 +62,22 @@ func _new_run(port_id: String = "lisbon", day: int = 40, map_id: String = "world
 		GameState.player["reputation"][id] = 0
 
 
+## Cheap between-section reset: clears exactly the §4.9.5 state a section
+## dirties (reputation, bounties, gold, fleets) without a full `new_game`
+## re-boot — the bounty rules read only these.
+func _reset_rep_and_bounties(port_id: String = "lisbon") -> void:
+	GameState.day = 40
+	GameState.world["clock_fraction"] = 0.5
+	GameState.gold = 10000
+	GameState.current_port = port_id
+	GameState.npc_fleets = []
+	GameState.proximity_cooldowns = {}
+	GameState.bounties = {}
+	for nation in DataLoader.nations_list:
+		var id := str((nation as Dictionary)["id"])
+		GameState.player["reputation"][id] = 0
+
+
 # --- 1. The rival table is data, and matches the pin ---------------------
 
 func _test_rival_table() -> void:
@@ -88,7 +104,7 @@ func _test_rival_table() -> void:
 # --- 2. Piracy applies −20 to the victim and +2 to its rivals -----------
 
 func _test_piracy_deltas() -> void:
-	_new_run()
+	_reset_rep_and_bounties()
 	var deltas: Dictionary = BountyLib.piracy_deltas("spain")
 	_check(int(deltas.get("spain", 0)) == -20,
 		"piracy against Spain is −20 with Spain (got %d)" % int(deltas.get("spain", 0)))
@@ -99,7 +115,7 @@ func _test_piracy_deltas() -> void:
 	_check(BountyLib.piracy_deltas("").is_empty(), "no nation → no deltas")
 
 	# Applying it moves the real reputation (through the clamped setter).
-	_new_run()
+	_reset_rep_and_bounties()
 	var before := CharacterLib.reputation("spain")
 	BountyLib.apply_piracy("spain")
 	_check(CharacterLib.reputation("spain") == before - 20,
@@ -111,7 +127,7 @@ func _test_piracy_deltas() -> void:
 		"a non-rival nation is untouched (got %d)"
 		% CharacterLib.reputation("england"))
 	# Clamping still applies at the floor.
-	_new_run()
+	_reset_rep_and_bounties()
 	GameState.player["reputation"]["spain"] = -95
 	BountyLib.apply_piracy("spain")
 	_check(CharacterLib.reputation("spain") == -100,
@@ -121,7 +137,7 @@ func _test_piracy_deltas() -> void:
 # --- 3. rep ≤ −50 issues a bounty with the fixed amount -----------------
 
 func _test_bounty_issue() -> void:
-	_new_run()
+	_reset_rep_and_bounties()
 	GameState.player["reputation"]["spain"] = -30
 	_check(BountyLib.evaluate_all().is_empty(), "no bounty above −50")
 	_check(not BountyLib.has_bounty("spain"), "Spain has no bounty at −30")
@@ -143,7 +159,7 @@ func _test_bounty_issue() -> void:
 		"dropping to −80 does not re-price the bounty (got %d)"
 		% BountyLib.amount("spain"))
 	# A nation below the threshold without a bounty issues one at any value.
-	_new_run()
+	_reset_rep_and_bounties()
 	GameState.player["reputation"]["italy"] = -70
 	BountyLib.evaluate_all()
 	_check(BountyLib.amount("italy") == 35000,
@@ -153,7 +169,7 @@ func _test_bounty_issue() -> void:
 # --- 4. Closed ports (docs/70-* §4.9.6) --------------------------------
 
 func _test_closed_ports() -> void:
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
 	_check(BountyLib.is_port_closed("seville"), "a Spanish port closes at −60")
@@ -178,7 +194,7 @@ func _test_closed_ports() -> void:
 # --- 5. Pay-off resets rep to exactly −10 ------------------------------
 
 func _test_pay_off() -> void:
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
 	GameState.gold = BountyLib.amount("spain") + 500
@@ -198,7 +214,7 @@ func _test_pay_off() -> void:
 	_check(not BountyLib.pay_off("spain"), "a cleared bounty cannot be paid twice")
 
 	# Too little gold refuses without changing anything.
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -70
 	BountyLib.evaluate_all()
 	GameState.gold = 100
@@ -213,7 +229,7 @@ func _test_pay_off() -> void:
 # --- 6. Surrender clears the bounty too -------------------------------
 
 func _test_surrender_path() -> void:
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -55
 	BountyLib.evaluate_all()
 	_check(BountyLib.has_bounty("spain"), "Spain holds a bounty before the surrender")
@@ -230,7 +246,7 @@ func _test_surrender_path() -> void:
 # --- 7. Hunters spawn while bountied ---------------------------------
 
 func _test_hunters_spawn() -> void:
-	_new_run("lisbon", 40)
+	_reset_rep_and_bounties()
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
 	# The Phase-5 spawn rule keys on `rep <= -50` (`60-*` §4.11.11.1 hunter
@@ -259,7 +275,7 @@ func _test_hunters_spawn() -> void:
 # --- 8. No unrecoverable lockout --------------------------------------
 
 func _test_no_lockout() -> void:
-	_new_run("lisbon", 40)
+	_reset_rep_and_bounties()
 	# The worst case: bountied by EVERY nation, broke, and docked at a closed
 	# capital. The pay-off row exists there, and harbor relief still works.
 	for nation in DataLoader.nations_list:
@@ -313,7 +329,7 @@ func _test_own_nation_bounty() -> void:
 # --- 10. Palace + hub wiring -----------------------------------------
 
 func _test_palace_and_hub() -> void:
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
 	GameState.gold = BountyLib.amount("spain") + 500
@@ -342,7 +358,7 @@ func _test_palace_and_hub() -> void:
 	await get_tree().process_frame
 
 	# The hub shows the closed labels and refuses the closed facilities.
-	_new_run("seville", 40)
+	_reset_rep_and_bounties("seville")
 	GameState.player["reputation"]["spain"] = -60
 	BountyLib.evaluate_all()
 	var hub: Control = PortScene.instantiate()

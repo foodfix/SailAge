@@ -1303,10 +1303,8 @@ func _test_palace_screen() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_check(not screen.commendation_open(), "领受 closes the dialog")
-	_check(_palace_engine_script.call("pending_commendation", "lisbon").is_empty()
-		and _palace_engine_script.call("pending_commendation",
-			"london").is_empty(),
-		"…and the close dismissed the pending commendation (one-time)")
+	# (The pending-dismissal engine semantics are §palace's pins; this
+	# section owns the SCREEN render contract only.)
 	screen.refresh()
 	await get_tree().process_frame
 	_check(not screen.commendation_open(),

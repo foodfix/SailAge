@@ -193,7 +193,7 @@ func _test_derived_effects() -> void:
 	_check(diego_effect.contains(I18n.t_key("char.seamanship")),
 		"the boatswain's effect names seamanship (%s)" % diego_effect)
 	_check(diego_effect.contains("+10%"),
-		"…and the +10% speed bonus its +10 buys (%s)" % diego_effect)
+		"…and the +10%% speed bonus its +10 buys (%s)" % diego_effect)
 	_check(is_equal_approx(CharacterLib.speed_bonus(), 0.10),
 		"seamanship 10 + the boatswain's 10 → +10%% speed (%.2f)"
 		% CharacterLib.speed_bonus())

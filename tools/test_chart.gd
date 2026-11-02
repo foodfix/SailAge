@@ -19,6 +19,10 @@ extends Node
 ## scroll, localized `debug.lane.*` §7.6 names, and the scene-order rule that
 ## no full-rect child masks the root draw).
 ##
+## Gate-audit trim 2026-11-02: ONE shared open across the view/mouse/legend
+## groups (every `open_chart()` rebuilds the whole 4320×2160 terrain image),
+## and the §4.3 Tab/Esc basics are the intake from test_discovery §5c.
+##
 ## The S19 row itself is task V's (parallel W5): the gate is read guard-style
 ## (`ChartView.debug_row_enabled`), so this suite drives the gate through the
 ## documented `ChartView.debug_row_override` test seam and additionally
@@ -71,6 +75,7 @@ func _ready() -> void:
 	_test_gate_defaults()
 	_test_row_off_keys_unreachable()
 	_test_player_overlay_state_machine()
+	_test_tab_esc_basics()
 	_test_snapshot_purity()
 	_test_debug_layers()
 	_test_scrub_purity()
@@ -288,6 +293,30 @@ func _somali_dir(month: int) -> String:
 		if str(arrow["system_id"]) == SOMALI_SYSTEM:
 			return str(arrow["dir"])
 	return ""
+
+
+# --- 3b. Tab/Esc basics (§4.3; intake from test_discovery §5c, gate-audit
+# trim 2026-11-02 — the chart-local S17 machine lives here; discovery keeps
+# the world-scene integration: the modal block + fleet/clock untouched) ------
+
+func _test_tab_esc_basics() -> void:
+	# §3 ends closed. Tab is the raw key (the focus-steal fix keeps the toggle
+	# in `_input`, above the GUI layer); Esc closes from `_unhandled_input`.
+	var tab := InputEventKey.new()
+	tab.physical_keycode = KEY_TAB
+	tab.pressed = true
+	chart._input(tab)
+	_check(chart.is_open(), "`Tab` opens the chart (§4.3)")
+	var esc := InputEventAction.new()
+	esc.action = "back"
+	esc.pressed = true
+	chart._unhandled_input(esc)
+	_check(not chart.is_open(), "`Esc` closes the chart (§4.3)")
+	chart._input(tab)
+	_check(chart.is_open(), "`Tab` re-opens the chart")
+	chart._input(tab)
+	_check(not chart.is_open(),
+		"`Tab` closes it again (§4.2: S3 ──Tab──► S17 ──Esc/Tab──► S3)")
 
 
 # --- 4. Snapshot purity: no debug interaction mutates state ------------------
@@ -713,6 +742,10 @@ func _test_legend_panel_and_lanes() -> void:
 		"the side legend never scrolls horizontally (labels elide)")
 	# The 17 §7.6 lanes each carry a zh/en `debug.lane.<id>` key …
 	ChartViewLib.debug_row_override = 1
+	# Gate-audit trim 2026-11-02: ONE shared open for the panel/lane,
+	# mouse-view and legend-row groups — every open_chart() rebuilds the whole
+	# 4320×2160 terrain image.
+	_reset_view_state()
 	chart.open_chart()
 	var lanes: Array = chart.network_layer().get("lanes", [])
 	_check(lanes.size() == 17, "the built network lists the 17 §7.6 lanes")
@@ -755,7 +788,8 @@ func _test_legend_panel_and_lanes() -> void:
 		"the trader role row shows its letter + en name")
 	_check(_legend_has(chart.debug_legend_texts(), "The Hanseatic northern run"),
 		"the hanseatic_north row shows its §7.6 en name")
-	chart.close_chart()
+	# No close here: the mouse-view section continues on this shared open
+	# state (gate-audit trim 2026-11-02).
 
 
 ## Exact-match probe over the legend's label/value texts.
@@ -768,10 +802,10 @@ func _legend_has(texts: Array, needle: String) -> bool:
 
 # --- 12. Mouse view: the zoom/pan state machine (§4.6, amended 2026-11-01) ----
 
+## Runs on the legend section's shared open state (gate-audit trim
+## 2026-11-02); its final reopen hands a fresh default state to the
+## legend-row section.
 func _test_mouse_view() -> void:
-	ChartViewLib.debug_row_override = 1
-	_reset_view_state()
-	chart.open_chart()
 	var builds: int = chart.build_count()
 	# Wheel zoom: ×1.25 per notch, clamped to [ZOOM_MIN, ZOOM_MAX], and never
 	# a rebuild (only a redraw of the existing caches).
@@ -823,15 +857,16 @@ func _test_mouse_view() -> void:
 	chart.open_chart()
 	_check(chart._zoom == chart.ZOOM_MIN and chart._pan == Vector2.ZERO,
 		"opening restores the fit view")
-	chart.close_chart()
+	# No close here: the legend-row section continues on this fresh default
+	# state (gate-audit trim 2026-11-02).
 
 
 # --- 13. Interactive legend rows (§4.6, amended 2026-11-01) -------------------
 
+## Runs on the mouse-view section's fresh reopen (gate-audit trim 2026-11-02:
+## one shared open across the view/mouse/legend groups; the pinned +8 rebuild
+## contract below is untouched).
 func _test_legend_rows() -> void:
-	ChartViewLib.debug_row_override = 1
-	_reset_view_state()
-	chart.open_chart()
 	var builds: int = chart.build_count()
 	# A lane row click hides that lane: a draw-time filter, never a rebuild.
 	chart._on_row_gui_input(_click(), "lane_" + HANSE_LANE)

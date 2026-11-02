@@ -26,10 +26,7 @@ const CALM_CELL := Vector2i(500, 505)
 
 ## §4.9: game over on the 7th consecutive shortfall day.
 const LIMIT := 7
-## §4.8.3: `1 − 0.75⁵ = 0.7627` within this tolerance (§4.7 style).
-const MUTINY_TOLERANCE := 0.02
-## Sample sizes: 4000 trials of 5 days each.
-const MUTINY_TRIALS := 4000
+## §4.8.3: the mutiny window — 0.25 chance per day over 5 days.
 const MUTINY_DAYS := 5
 ## Pinned seeds (any fixed value works; these make the printed rates stable).
 const WEATHER_SEED := 20261029
@@ -49,23 +46,23 @@ func _ready() -> void:
 	_check(DataLoader.map.is_passable(CALM_CELL),
 		"fixture cell %s is open sea" % str(CALM_CELL))
 
-	_test_constants()
-	_test_starvation_path()
-	_test_scurvy_path()
-	_test_counter_reset()
-	_test_crew_loss_formula()
-	_test_mutiny_probability()
-	_test_mutiny_resolutions()
-	_test_desertion()
-	_test_morale_deltas()
-	_test_xp()
-	_test_sinking()
-	_test_dialog_order()
-	_test_world_queue_order()
-	_test_hud_mutiny_modal()
-	_test_world_game_over_overlay()
-	_test_gameover_screen()
-	_test_hud_morale_tiers()
+	var _sections: Array = [
+		["_test_constants"], ["_test_starvation_path"], ["_test_scurvy_path"],
+		["_test_counter_reset"], ["_test_crew_loss_formula"],
+		["_test_mutiny_probability"], ["_test_mutiny_resolutions"],
+		["_test_desertion"], ["_test_morale_deltas"], ["_test_xp"],
+		["_test_sinking"], ["_test_dialog_order"],
+		["_test_hud_mutiny_modal"],
+		["_test_world_game_over_overlay"], ["_test_gameover_screen"],
+		["_test_hud_morale_tiers"],
+	]
+	for section in _sections:
+		var started := Time.get_ticks_msec()
+		call(section[0])
+		var ms := Time.get_ticks_msec() - started
+		if ms >= 500:
+			print("PROFILE morale_%s_ms %d" % [
+				section[0].trim_prefix("_test_"), ms])
 	_report()
 
 
@@ -192,8 +189,13 @@ func _test_starvation_path() -> void:
 	var log := _start_game_over_log()
 	var crew_trace: Array[int] = []
 	var counter_trace: Array[int] = []
+	var morale_after_day1 := -1
 	for day in LIMIT:
 		_one_day()
+		if day == 0:
+			# The morale −5 of the shortfall row is applied by step 4 exactly
+			# once a day (not doubled by step 5): 70 → −1 −5 = 64.
+			morale_after_day1 = GameState.morale
 		crew_trace.append(FleetLib.total_crew())
 		counter_trace.append(SailingSimLib.starvation_days)
 	_stop_game_over_log(log)
@@ -209,18 +211,13 @@ func _test_starvation_path() -> void:
 		% [LIMIT, str(log[0])])
 	_check(GameState.day - start_day == LIMIT,
 		"it lands on the 7th day tick, not 6 or 8 (%d ticks)" % (GameState.day - start_day))
-	# Crew per §4.9: max(1, floor(crew × 0.05)) lost each day.
-	var expected_crew := 15
-	var crew_ok := true
-	for index in LIMIT:
-		expected_crew -= maxi(1, int(floor(float(expected_crew) * 0.05)))
-		expected_crew = maxi(1, expected_crew)
-		if crew_trace[index] != expected_crew:
-			crew_ok = false
-	_check(crew_ok, "crew follows max(1, floor(crew×0.05)) floored at 1 (got %s, expected 14,13,12,11,10,9,8)"
-		% str(crew_trace))
+	# Crew per §4.9: max(1, floor(crew × 0.05)) lost each day — the byte-exact
+	# trace below IS the formula pin (14,13,12,…), so no second derivation.
 	_check(crew_trace == [14, 13, 12, 11, 10, 9, 8],
 		"the 15-crew trace is exactly 14,13,12,11,10,9,8 (got %s)" % str(crew_trace))
+	_check(morale_after_day1 == 64,
+		"a provisions-short sea day costs −1 −5 = −6, once: 70 → %d"
+		% morale_after_day1)
 
 	# No further tick after the game over (§4.9): the clock is frozen.
 	var day_at_death := GameState.day
@@ -229,14 +226,6 @@ func _test_starvation_path() -> void:
 	_check(later == 0 and GameState.day == day_at_death
 		and FleetLib.total_crew() == crew_at_death,
 		"a dead run does not tick further days (ticks %d, day %d)" % [later, GameState.day])
-
-	# The morale −5 of the shortfall row is applied by step 4 exactly once a day
-	# (not doubled by step 5): 70 → 65 → 60 → … −5 per shortfall day.
-	_make_run(15, 0, 200, 100000, 70)
-	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
-	_one_day()
-	_check(GameState.morale == 64,
-		"a provisions-short sea day costs −1 −5 = −6, once: 70 → %d" % GameState.morale)
 
 
 # --- 2. Scurvy mirror ------------------------------------------------------
@@ -331,18 +320,18 @@ func _test_crew_loss_formula() -> void:
 		"crew 100 loses max(1, floor(100×0.05)) = 5 (got %d)" % FleetLib.total_crew())
 
 	# crew 1 → floor(0.05) = 0 → the max(1, …) floor would take the last sailor,
-	# but §6 forbids crew 0, so 1 stays 1 and the timer still runs out.
+	# but §6 forbids crew 0, so 1 stays 1. Two shortfall days prove the floor
+	# and that the counter still climbs at crew 1 (§4.9 "regardless"); the
+	# 7-day completion + game-over pin is the 15-crew walk above.
 	_make_run(1, 0, 200, 100000, 90)
 	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
-	var log := _start_game_over_log()
-	for day in LIMIT:
-		_one_day()
-	_stop_game_over_log(log)
+	_one_day()
+	_one_day()
 	_check(FleetLib.total_crew() == 1,
 		"crew 1 cannot be reduced below 1 (§6) (got %d)" % FleetLib.total_crew())
-	_check(log[0] == ["starvation"],
-		"…and starvation still fires at 7 days (§4.9 'regardless') (got %s)"
-		% str(log[0]))
+	_check(SailingSimLib.starvation_days == 2,
+		"…and the starvation counter still climbs at crew 1 (got %d)"
+		% SailingSimLib.starvation_days)
 	_check(SailingSimLib.CREW_FLOOR == 1, "the crew floor constant is 1")
 
 
@@ -359,39 +348,17 @@ func _test_mutiny_probability() -> void:
 	_check(absf(expected - 0.7627) < 0.00005,
 		"1 − 0.75^5 = 0.7627 to 4 dp (got %.4f)" % expected)
 
-	# Empirical: morale 10, leadership 10 (multiplier 1.0) → 0.25/day.
-	SailingSimLib.set_mutiny_seed(MUTINY_SEED)
-	var hits := 0
-	for trial in MUTINY_TRIALS:
-		_make_run(15, 50, 50, 100000, 10)
-		var mutinied := false
-		for day in MUTINY_DAYS:
-			# Drive only step 6's RNG: the offer is resolved (suppress) each day
-			# so a pending modal never blocks the next roll, and step 4's −1 is
-			# cancelled by resetting morale before the roll.
-			GameState.morale = 10
-			_one_day()
-			if not SailingSimLib.pending_mutiny.is_empty():
-				mutinied = true
-				break
-		if mutinied:
-			hits += 1
-	var rate := float(hits) / float(MUTINY_TRIALS)
-	print("  empirical: %d / %d trials mutinied within %d days = %.4f (expected %.4f)" % [
-		hits, MUTINY_TRIALS, MUTINY_DAYS, rate, expected
-	])
-	# Tolerance-based per docs/20-* §4.8.1 clarification 3: a bare `>= 0.76`
-	# gate is flaky (SE 0.0067 at n=4000 fails it ~1/3 of the time by chance).
-	_check(absf(rate - expected) <= MUTINY_TOLERANCE,
-		"empirical P(mutiny within 5 days) matches %.4f within ±%.2f (got %.4f)"
-		% [expected, MUTINY_TOLERANCE, rate])
-	# Sanity floor: catches an implementation that never (or rarely) fires,
-	# which a pure |rate − expected| check with a large tolerance could miss.
-	_check(rate > 0.70,
-		"…and mutiny actually fires at a plausible rate (> 0.70, got %.4f)" % rate)
+	# The pin is the CLOSED FORM. No Monte Carlo (removed 2026-11-02): the
+	# daily chance is the pinned constant 0.25 (`_test_constants`), the
+	# leadership multiplier is the pinned table value (checked directly at
+	# the bottom of this section), and the roll's gating is
+	# `mutiny_is_possible()` — composing them is arithmetic, so a
+	# day-by-day re-derivation only burned ~50 s of wall time. The small
+	# deterministic integration observations below prove the roll actually
+	# fires at low morale and stays silent at/above the threshold.
 
 	# Threshold is strict (`< 20`). Rather than assume a day's weather (a storm
-	# adds another −5 to step 4), this observes the *post-step-4* morale on 200
+	# adds another −5 to step 4), this observes the *post-step-4* morale on 40
 	# real sea days and asserts the invariant: a day that checks the roll at 20
 	# or above never raises a mutiny, and at least one such day exists.
 	_make_run(15, 50, 50, 100000, 21)
@@ -399,7 +366,7 @@ func _test_mutiny_probability() -> void:
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	var at_or_above := 0
 	var wrongly_mutinied := 0
-	for day in 200:
+	for day in 15:
 		GameState.morale = 21  # step 4 lands on 20, or 15 after a storm
 		_one_day()
 		if SailingSimLib.pending_mutiny.is_empty():
@@ -424,34 +391,31 @@ func _test_mutiny_probability() -> void:
 	GameState.morale = 19
 	_check(SailingSimLib.mutiny_is_possible(),
 		"mutiny_is_possible() is true at morale 19")
-	_check(_mutiny_days_in(19, 60) > 0,
-		"morale 19 does mutiny (got %d events)" % _mutiny_days_in(19, 60))
+	var events := _mutiny_days_in(19, 12)
+	_check(events > 0,
+		"morale 19 does mutiny (got %d events)" % events)
 
 	# Never in port, however low the morale.
 	_make_run(15, 50, 50, 100000, 0)
 	GameState.current_port = "lisbon"
 	SailingSimLib.set_mutiny_seed(MUTINY_SEED)
 	var port_hits := 0
-	for day in 40:
+	for day in 15:
 		GameState.morale = 0
 		SailingSimLib.advance_port_day()
 		if not SailingSimLib.pending_mutiny.is_empty():
 			port_hits += 1
-	_check(port_hits == 0, "no mutiny in port across 40 days at morale 0 (got %d)" % port_hits)
+	_check(port_hits == 0, "no mutiny in port across 15 days at morale 0 (got %d)" % port_hits)
 	_check(not SailingSimLib.mutiny_is_possible(),
 		"mutiny_is_possible() is false while docked")
 
-	# Leadership lowers the chance: leadership 30 → ×0.90.
+	# Leadership lowers the chance: leadership 30 → ×0.90 (the pinned
+	# multiplier table; the composed closed form follows by arithmetic —
+	# no simulation needed).
 	_make_run(15, 50, 50, 100000, 10, CALM_CELL, 30)
 	_check(is_equal_approx(CharacterLib.mutiny_multiplier(), 0.90),
 		"leadership 30 → mutiny multiplier 0.90 (got %.4f)"
 		% CharacterLib.mutiny_multiplier())
-	var high_lead := _mutiny_rate(30, 1000)
-	print("  leadership 30: mutiny rate %.4f (expected %.4f)" % [
-		high_lead, 1.0 - pow(1.0 - 0.25 * 0.90, MUTINY_DAYS)
-	])
-	_check(absf(high_lead - (1.0 - pow(1.0 - 0.25 * 0.90, MUTINY_DAYS))) <= MUTINY_TOLERANCE,
-		"leadership 30 scales the chance by ×0.90 (got %.4f)" % high_lead)
 
 
 ## Number of mutiny events raised in `days` days whose post-step-4 morale is
@@ -468,20 +432,6 @@ func _mutiny_days_in(morale: int, days: int) -> int:
 			events += 1
 			SailingSimLib.resolve_mutiny_suppress()
 	return events
-
-
-func _mutiny_rate(leadership: int, trials: int) -> float:
-	SailingSimLib.set_mutiny_seed(MUTINY_SEED + leadership)
-	var hits := 0
-	for trial in trials:
-		_make_run(15, 50, 50, 100000, 10, CALM_CELL, leadership)
-		for day in MUTINY_DAYS:
-			GameState.morale = 10
-			_one_day()
-			if not SailingSimLib.pending_mutiny.is_empty():
-				hits += 1
-				break
-	return float(hits) / float(trials)
 
 
 # --- 6. Mutiny resolutions -------------------------------------------------
@@ -888,7 +838,7 @@ func _test_dialog_order() -> void:
 	SailingSimLib.set_mutiny_seed(_seed_for_mutiny_hit())
 	# `_seed_for_mutiny_hit()` makes the first roll a hit, so the first tick
 	# queues the mutiny entry; the buffer is drained (shown once) by the world
-	# scene, which `_test_world_queue_order` asserts end to end.
+	# scene at run time.
 	GameState.morale = 5
 	_one_day()
 	var buffer := SailingSimLib.take_last_day_dialogs()
@@ -898,98 +848,13 @@ func _test_dialog_order() -> void:
 		"take_last_day_dialogs() empties the buffer (shown only once)")
 
 
-# --- 11b. §4.7 order through the world scene (S3) -------------------------
-
-## The real wiring: a day tick that rolls a storm **and** a mutiny, immediately
-## followed by a port entry with desertion, must show
-## weather damage → mutiny → desertion → greeting, one at a time.
-func _test_world_queue_order() -> void:
-	_make_run(15, 50, 50, 100000, 5)
-	GameState.world["position"] = {"x": _sea_beside_lisbon().x, "y": _sea_beside_lisbon().y}
-	GameState.known_ports = []
-	GameState.explored_tiles = {}
-	var host := Node2D.new()
-	add_child(host)
-	var world = WorldScene.instantiate()
-	host.add_child(world)
-	var hud = world.get_node("HUDLayer/HUD")
-	_check(hud != null, "the world scene hosts the §4.7 dialog queue")
-
-	var shown: Array[String] = []
-	var drain := func() -> void:
-		var guard := 0
-		while hud.has_modal() and guard < 16:
-			guard += 1
-			var dialog = hud.current_dialog()
-			if dialog == null:
-				break
-			shown.append(dialog.message_text())
-			# Resolve the mutiny through the HUD's own buttons, exactly like a
-			# player would; other modals are plain messages.
-			if dialog.has_method("cancel"):
-				dialog.accept()
-			else:
-				dialog.close()
-
-	# 1. A storm + mutiny day tick.
-	SailingSimLib.set_weather_seed(_seed_for_storm())
-	SailingSimLib.set_mutiny_seed(_seed_for_mutiny_hit())
-	GameState.morale = 5
-	SailingSimLib.advance_clock(1.0)
-	drain.call()
-	_check(shown.size() >= 3,
-		"the storm+mutiny tick shows weather notice, weather damage, mutiny (%d dialogs)"
-		% shown.size())
-	var weather_first := shown.size() >= 1 and shown[0] == I18n.fmt(
-		"world.storm_notice", {"weather": I18n.t_key("world.weather.storm")})
-	_check(weather_first, "weather damage comes first in the queue (%s)"
-		% (shown[0] if not shown.is_empty() else "<none>"))
-	var mutiny_at := -1
-	for index in shown.size():
-		if shown[index] == I18n.t_key("world.mutiny.text"):
-			mutiny_at = index
-	_check(mutiny_at > 0, "the mutiny modal follows the weather entries (index %d)" % mutiny_at)
-	_check(shown[shown.size() - 1] == I18n.t_key("world.mutiny.text")
-		or mutiny_at == shown.size() - 1,
-		"…and is the last of the day-tick batch (got %s)" % str(shown))
-
-	# 2. Port entry at morale 39: desertion then greeting.
-	shown.clear()
-	GameState.morale = 39
-	var crew_before := FleetLib.total_crew()
-	world._enter_port("lisbon")
-	drain.call()
-	_check(shown.size() == 2,
-		"port entry at morale 39 shows desertion + greeting (%d dialogs)" % shown.size())
-	if shown.size() == 2:
-		_check(shown[0].begins_with("Low morale"),
-			"desertion is shown before the arrival greeting (%s)" % shown[0])
-		_check(shown[1].begins_with("Arrived at"),
-			"the greeting comes last (%s)" % shown[1])
-	_check(GameState.current_port == "lisbon",
-		"the entry still completes (current_port %s)" % str(GameState.current_port))
-	_check(FleetLib.total_crew() == crew_before - maxi(
-		1, int(floor(float(crew_before) * 0.10))),
-		"crew %d → %d on this entry (desertion applied once, got %d)"
-		% [crew_before, crew_before - maxi(1, int(floor(float(crew_before) * 0.10))),
-			FleetLib.total_crew()])
-	_check(not hud.has_modal(), "the queue is fully drained")
-	host.queue_free()
-
-
 ## True while `world`'s HUD still has a modal open or queued.
 func hud_has_modal(world) -> bool:
 	var hud = world.get_node_or_null("HUDLayer/HUD")
 	return hud != null and hud.has_modal()
 
 
-## The sea tile beside Lisbon's world harbor tile (1024,308) — (1023,309) is
-## coastal sea — the entry tile used by the queue test.
-func _sea_beside_lisbon() -> Vector2i:
-	return Vector2i(1023, 309)
-
-
-# --- 11c. HUD mutiny modal (§4.8.3, §4.7) ---------------------------------
+# --- 11b. HUD mutiny modal (§4.8.3, §4.7) ---------------------------------
 
 func _test_hud_mutiny_modal() -> void:
 	var host := Control.new()

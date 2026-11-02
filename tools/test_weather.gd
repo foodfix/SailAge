@@ -27,11 +27,12 @@ const VARIABLES_CELL := Vector2i(3, 616)    # lat 38.7 (Lisbon)
 const WESTERLIES_CELL := Vector2i(3, 480)   # lat 50.0
 const BOREAL_CELL := Vector2i(3, 300)       # lat 65.0
 
-## The five locked band tables (`20-*` §4.7), in **engine** ids. The frequency
-## harness runs one 10,000-roll sample per band at luck 10 and compares against
-## each table with the same redistribution `zone_probabilities()` applies (the
-## helper [method _luck_table] below), so the assertion is "the seeded rolls
-## match the luck-adjusted table", not "calm is exactly 0.30".
+## The five locked band tables (`20-*` §4.7), in **engine** ids. They are
+## asserted **exactly** twice: `zone_probabilities()` equals `BAND_TABLES`
+## verbatim at luck 0 (`_test_zone_table`), and at luck 10 it equals the §4.2
+## closed form recomputed independently of the engine (`_expected_band_rates`,
+## per band in `_test_storm_frequency`). The seeded draw keeps one ~500-roll
+## spot sample per band table to prove `roll_weather` reads that table.
 const BAND_TABLES := {
 	"doldrums": {"calm": 0.30, "fair": 0.45, "strong": 0.15, "storm": 0.10},
 	"trade_winds": {"calm": 0.15, "fair": 0.30, "strong": 0.20, "storm": 0.35},
@@ -40,10 +41,11 @@ const BAND_TABLES := {
 	"boreal": {"calm": 0.15, "fair": 0.35, "strong": 0.30, "storm": 0.20},
 }
 
-## Sample sizes / tolerances from the §4.7 "Reachability acceptance" note.
-const ROLLS := 10000
-const FREQUENCY_TOLERANCE := 0.02
-const TRIALS := 10000
+## The per-band spot sample: ~500 seeded rolls prove the draw reads the
+## luck-adjusted table; ±0.06 is ~3σ at 500 rolls (the table itself is pinned
+## exactly, so the spot check only catches "draws from the wrong table").
+const SPOT_ROLLS := 500
+const SPOT_TOLERANCE := 0.06
 const DAYS_PER_TRIAL := 6
 ## §4.7 acceptance threshold: "storm within 6 day ticks in-band ≥ 0.90".
 const MIN_6_DAY_PROBABILITY := 0.90
@@ -125,19 +127,6 @@ func _make_run(
 
 func _one_day() -> int:
 	return SailingSimLib.advance_clock(1.0)
-
-
-## Samples `count` weather rolls at the current fleet tile, returning the number
-## of storms. Calls the production [method SailingSim.roll_weather] on the tile
-## read from GameState (so a zone bug is still caught) but deliberately skips
-## the storm damage: 10,000 storm days would sink the fleet mid-measurement.
-func _sample_storms(count: int) -> int:
-	var storms := 0
-	var tile := GameState.world_tile()
-	for index in count:
-		if SailingSimLib.roll_weather(tile) == "storm":
-			storms += 1
-	return storms
 
 
 func _tile(x: int, y: int) -> Vector2i:
@@ -263,15 +252,17 @@ func _test_band_edges() -> void:
 		"x=0 and x=4319 at the equator are the same band (zonal, not a strip)")
 
 
-# --- §4.7 band frequencies: 10,000 seeded rolls per band -------------------
+# --- §4.7 band tables: exact closed form + one seeded spot sample per band --
 #
-# Convention (documented, and the same one the old strip harness used): every
-# sample runs at **luck 10**, the default new-game value, so the expected rate
-# is the band table with the §4.2 luck redistribution applied (storm ×
-# (1 − 10/400), freed mass returned to calm/fair/strong in proportion to their
-# base weights). `_expected_band_rates()` recomputes that from `BAND_TABLES`
-# with the documented formula rather than calling `zone_probabilities()`, so
-# the harness cannot pass by tautology.
+# The old 10,000-roll-per-band frequency harness re-derived (within ±0.02)
+# numbers the suite already asserts exactly: `_test_zone_table` pins
+# `zone_probabilities()` == `BAND_TABLES` at luck 0, and the luck term is
+# arithmetic (`20-*` §4.2). So the luck-10 table per band is now asserted in
+# closed form — storm' = storm × (1 − luck/400), the freed mass returned to
+# calm/fair/strong in proportion to their base weights — against
+# `_expected_band_rates()`, which recomputes it independently of the engine
+# (no tautology). One ~500-roll seeded spot sample per band then proves the
+# draw actually reads that table on the band's own tile.
 
 ## The §4.7 table for `band` with the luck term applied, computed independently
 ## of the engine: `storm' = storm × (1 − luck/400)`,
@@ -311,23 +302,31 @@ func _test_storm_frequency() -> void:
 	var offset := 0
 	for band in ["doldrums", "trade_winds", "variables", "westerlies", "boreal"]:
 		var cell: Vector2i = bands[band]
+		# Exact arithmetic: the luck-10 table IS the closed form — no sampling,
+		# no tolerance.
+		_make_run("fair", cell, 10)
+		var expected := _expected_band_rates(band, 10)
+		var got := SailingSimLib.zone_probabilities(band)
+		for outcome in SailingSimLib.WEATHER_OUTCOMES:
+			_check(is_equal_approx(float(got[outcome]), float(expected[outcome])),
+				"luck 10 %s %s == closed form %.6f (got %.6f)"
+					% [band, outcome, float(expected[outcome]), float(got[outcome])])
+		# The seeded spot sample (~500 rolls) on the band's own tile.
 		SailingSimLib.set_weather_seed(WEATHER_SEED + offset)
 		offset += 1
-		_make_run("fair", cell, 10)
-		var counts := _sample_outcomes(ROLLS)
-		var expected := _expected_band_rates(band, 10)
+		var counts := _sample_outcomes(SPOT_ROLLS)
 		var parts: Array[String] = []
 		for outcome in SailingSimLib.WEATHER_OUTCOMES:
-			var rate := float(counts[outcome]) / float(ROLLS)
+			var rate := float(counts[outcome]) / float(SPOT_ROLLS)
 			rates["%s.%s" % [band, outcome]] = rate
 			parts.append("%s %.4f" % [outcome, rate])
 		print("  %-12s y=%4d luck 10: %s" % [band, cell.y, "  ".join(parts)])
 		for outcome in SailingSimLib.WEATHER_OUTCOMES:
 			var rate: float = rates["%s.%s" % [band, outcome]]
 			var want := float(expected[outcome])
-			_check(absf(rate - want) <= FREQUENCY_TOLERANCE,
-				"%s %s %.4f±0.02 over %d rolls (got %.4f)"
-				% [band, outcome, want, ROLLS, rate])
+			_check(absf(rate - want) <= SPOT_TOLERANCE,
+				"%s %s %.4f±%.2f over %d rolls (got %.4f)"
+					% [band, outcome, want, SPOT_TOLERANCE, SPOT_ROLLS, rate])
 
 	# Sanity that the bands are materially different: the trade winds are the
 	# storm belt (0.35 base), the variables the calmest (0.10), so the seeded
@@ -344,7 +343,9 @@ func _test_storm_frequency() -> void:
 
 func _test_luck_scales_storm_chance() -> void:
 	# Trade winds (base 0.35) × (1 − luck/400): 0 → 0.3500, 10 → 0.34125,
-	# 100 → 0.2625.
+	# 100 → 0.2625 — asserted as exact arithmetic on the luck-adjusted table
+	# (the seeded draw reading that table is spot-checked per band in
+	# `_test_storm_frequency`).
 	var rows := [
 		[0, 0.3500],
 		[10, 0.34125],
@@ -353,15 +354,11 @@ func _test_luck_scales_storm_chance() -> void:
 	for row in rows:
 		var luck: int = row[0]
 		var expected: float = row[1]
-		SailingSimLib.set_weather_seed(WEATHER_SEED + luck)
 		_make_run("fair", TRADE_CELL, luck)
-		var storms := _sample_storms(ROLLS)
-		var rate := float(storms) / float(ROLLS)
-		print("  luck %3d: %d / %d storms = %.4f (expected %.4f)" % [
-			luck, storms, ROLLS, rate, expected
-		])
-		_check(absf(rate - expected) <= FREQUENCY_TOLERANCE,
-			"luck %d storm frequency %.5f±0.02 (got %.4f)" % [luck, expected, rate])
+		var storm := float(SailingSimLib.zone_probabilities("trade_winds")["storm"])
+		_check(is_equal_approx(storm, expected),
+			"luck %d trade-wind storm chance == %.5f (got %.6f)"
+				% [luck, expected, storm])
 		_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 1.0 - luck / 400.0),
 			"Character.storm_chance_multiplier() == 1 − luck/400 at luck %d" % luck)
 
@@ -577,11 +574,16 @@ func _test_no_morale_change() -> void:
 	var saw_flag_false_after_storm := false
 	var previous_was_storm := false
 	var mismatches := 0
-	for day in 40:
+	var days_mirrored := 0
+	# 20 seeded days is far more than both flag states need (storm p≈0.34, so
+	# a storm and a clear day after it land within the first handful); the loop
+	# breaks once both were observed.
+	for day in 20:
 		# Weather-only fixture: keep T9's fail states (T9 suffix of the ledger)
 		# out of the measurement by restoring stores and hull each day.
 		_refill()
 		_one_day()
+		days_mirrored += 1
 		var now_storm: bool = str(GameState.world["weather"]) == "storm"
 		if SailingSimLib.last_day_storm != now_storm:
 			mismatches += 1
@@ -591,19 +593,22 @@ func _test_no_morale_change() -> void:
 		elif previous_was_storm:
 			saw_flag_false_after_storm = true
 			previous_was_storm = false
+		if saw_flag_true and saw_flag_false_after_storm:
+			break
 	_check(mismatches == 0,
-		"last_day_storm mirrors world.weather on all 40 days (got %d mismatches)"
-		% mismatches)
+		"last_day_storm mirrors world.weather on all %d mirrored days (got %d mismatches)"
+			% [days_mirrored, mismatches])
 	_check(saw_flag_true, "last_day_storm is raised on storm days")
 	_check(saw_flag_false_after_storm,
 		"last_day_storm is cleared again on the next non-storm day")
 
 	# In port too: the roll still happens (zone-based), and step 4 applies the
-	# in-port +5 up to the port cap 80 (§4.8.1) — never a sea delta.
+	# in-port +5 up to the port cap 80 (§4.8.1) — never a sea delta. Three
+	# ticks cover the whole climb: 70 → 75 → 80 → 80 (the cap pins).
 	_make_run("fair", TRADE_CELL, 10)
 	GameState.current_port = "lisbon"
 	GameState.morale = 70
-	for day in 20:
+	for day in 3:
 		SailingSimLib.advance_port_day()
 	_check(GameState.morale == SailingSimLib.MORALE_PORT_CAP,
 		"port day-advances climb +5 to the cap 80 (70 → %d)" % GameState.morale)
@@ -616,7 +621,7 @@ func _test_weather_persists() -> void:
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	var seen := {}
 	var invalid: Array[String] = []
-	for day in 200:
+	for day in 60:
 		_refill()
 		_one_day()
 		var weather := str(GameState.world["weather"])
@@ -624,10 +629,11 @@ func _test_weather_persists() -> void:
 		if not (weather in SailingSimLib.WEATHER_OUTCOMES):
 			invalid.append(weather)
 	_check(invalid.is_empty(),
-		"world.weather holds a §4.7 outcome on all 200 days (bad: %s)" % str(invalid))
+		"world.weather holds a §4.7 outcome on all 60 days (bad: %s)" % str(invalid))
 	# One storm-free counter-check: the roll overwrote the pre-set "fair".
 	_check(seen.has("storm") and seen.has("calm"),
-		"200 trade-wind days produce several outcomes (saw %s)" % str(seen.keys()))
+		"60 trade-wind days (storm p≈0.34, seeded) produce several outcomes (saw %s)"
+			% str(seen.keys()))
 
 	# The band follows the tile: same seed, a variables-band tile (tropical
 	# row y=740) vs a westerlies tile (y=480).
@@ -688,40 +694,11 @@ func _test_reachability() -> void:
 	_check(six >= MIN_6_DAY_PROBABILITY and six_no_luck >= MIN_6_DAY_PROBABILITY,
 		"both closed forms clear the ≥0.90 / 6-day gate")
 
-	# 2. Empirical: 10,000 seeded 6-day windows at the Tenerife water tile
-	#    (lat 28.3 → y = round((90 − 28.3) × 12) = 740), luck 10. Only the roll
-	#    is sampled, so a window cannot be cut short by storm damage or
-	#    starvation; `by_day` counts the first-storm day of each window.
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
-	_make_run("fair", TRADE_CELL, 10)
-	var by_day: Array[int] = [0, 0, 0, 0, 0, 0]
-	var trade_tile := GameState.world_tile()
-	_check(SailingSimLib.weather_zone_for(trade_tile) == "trade_winds",
-		"the reachability trials sit in the trade-wind band (y=%d)" % trade_tile.y)
-	for trial in TRIALS:
-		var hit := false
-		for day in DAYS_PER_TRIAL:
-			var weather := SailingSimLib.roll_weather(trade_tile)
-			if weather == "storm":
-				if not hit:
-					by_day[day] += 1
-				hit = true
-	var within_6 := 0
-	for day in DAYS_PER_TRIAL:
-		within_6 += by_day[day]
-	var rate_6 := float(within_6) / float(TRIALS)
-	print("  empirical: %d windows of %d days at y=%d (trade winds), luck 10"
-		% [TRIALS, DAYS_PER_TRIAL, trade_tile.y])
-	print("    first storm on day 1..6: %s" % str(by_day))
-	print("    P(within 6) = %.4f (%d/%d)" % [rate_6, within_6, TRIALS])
-	_check(rate_6 >= MIN_6_DAY_PROBABILITY,
-		"empirical P(storm within 6 days in the trade belt) ≥ 0.90 (got %.4f)" % rate_6)
-	_check(absf(rate_6 - six) <= FREQUENCY_TOLERANCE,
-		"empirical 6-day rate tracks the closed form 0.9183 (±0.02, got %.4f)" % rate_6)
-
-	# 3. Through the production path (real ledger days, storm damage included):
+	# 2. Through the production path (real ledger days, storm damage included):
 	#    a caravel survives 6 storm days (6 × 5 = 30 < 90), so the day loop can
-	#    run to completion and the milestone still lands.
+	#    run to completion and the milestone still lands. (The old empirical
+	#    10,000-window re-derivation of the same number was replaced by the
+	#    per-band seeded spot samples in `_test_storm_frequency`, 2026-11-02.)
 	SailingSimLib.set_weather_seed(WEATHER_SEED)
 	_make_run("fair", TRADE_CELL, 10)
 	var production_hit := false

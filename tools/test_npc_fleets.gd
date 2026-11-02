@@ -2079,39 +2079,76 @@ func _test_variant_flip() -> void:
 	var vmonths: Array = variants[0]["months"]
 	_check(12 in vmonths and not (11 in vmonths),
 		"the winter variant covers month 12, not month 11")
-	# The active-geometry seam: summer walks the base (Baltic) run, winter
-	# walks the variant (Hamburg run).
-	var leg := {"kind": "lane", "id": "hanseatic_north", "reverse": false,
-		"a": 0, "b": base.size() - 1}
+	# Endpoint-anchored resolution (bug report 2026-11-02 amendment): the
+	# variant carries a leg only when BOTH walked end tiles exist on the
+	# variant path. The winter run shares only the Bergen approaches and
+	# the German-bight junction with the base path, so:
+	#   * the FULL-lane leg (Bergen↔Danzig ends) never rides the variant —
+	#     the old wholesale replacement snapped journeys attaching to the
+	#     lane's ends onto unrelated water (the Danzig berth from ~119
+	#     tiles out);
+	#   * a leg between the SHARED junctions rides the variant exactly —
+	#     the Bergenfahrer winter run.
+	var full_leg := {"kind": "lane", "id": "hanseatic_north",
+		"reverse": false, "a": 0, "b": base.size() - 1}
+	# The shared junction indices (Bergen approaches + German bight).
+	var shared: Array = []
+	for index in base.size():
+		if vpath.find(base[index]) >= 0:
+			shared.append(index)
+	_check(shared.size() >= 2, "the base/variant paths share junction tiles")
+	if shared.size() < 2:
+		return
+	var span_a := int(shared[0])
+	var span_b := int(shared[shared.size() - 1])
+	var span_leg := {"kind": "lane", "id": "hanseatic_north",
+		"reverse": false, "a": span_a, "b": span_b}
 	GameState.day = 210  # month 7
-	_check(sim._leg_path_active(leg).size() == base.size(),
+	_check(sim._leg_path_active(full_leg).size() == base.size(),
 		"month 7 walks the base path (%d tiles)"
-		% sim._leg_path_active(leg).size())
+		% sim._leg_path_active(full_leg).size())
+	_check(sim._leg_path_active(span_leg).size() == span_b - span_a + 1,
+		"month 7 walks the shared span on the base (%d tiles)"
+		% sim._leg_path_active(span_leg).size())
 	GameState.day = 340  # month 12
-	_check(sim._leg_path_active(leg).size() == vpath.size(),
-		"month 12 walks the variant path (%d tiles)"
-		% sim._leg_path_active(leg).size())
-	# The flip, end-to-end: a patrol on the Baltic leg in month 11 rides the
-	# Hamburg run in month 12, progress remapped BY FRACTION.
-	var start := 100
-	var fleet := _make_fleet(sim, "patrol", "england", base[start])
+	var full_geo := sim._leg_geometry(full_leg)
+	_check(full_geo.is_empty()
+		or not str(full_geo["key"]).contains("winter"),
+		"month 12: the full-lane leg keeps the base geometry "
+		+ "(endpoints not on the variant)")
+	_check(sim._leg_path_active(span_leg)[0] == base[span_a]
+		and sim._leg_path_active(span_leg)[
+			(sim._leg_path_active(span_leg) as Array).size() - 1]
+		== base[span_b],
+		"month 12: the shared span walks the variant between the SAME "
+		+ "endpoint tiles")
+	# The flip, end-to-end: a patrol on the shared span in month 11 rides
+	# the winter variant in month 12, progress remapped BY FRACTION, and —
+	# the amendment — its CELL re-seats onto the remapped geometry instead
+	# of jumping across the base↔variant gap on the next commit.
+	var walked := 40
+	var fleet := _make_fleet(sim, "patrol", "england", base[span_a])
 	fleet["id"] = "flip_01"
 	fleet["route"] = {"lanes": ["hanseatic_north"], "leg": 0, "tile_index": 0,
 		"legs": [{"kind": "lane", "id": "hanseatic_north", "reverse": false,
-			"a": 0, "b": base.size() - 1}]}
+			"a": span_a, "b": span_b}]}
 	GameState.day = 320  # month 11: the base (Baltic) run is active
-	for _step in start:  # walk the base path up to tile `start`
+	for _step in walked:  # walk the base path up to tile `span_a + walked`
 		sim._advance(fleet, 320)
-	_check(int(fleet["route"]["tile_index"]) == start
-		and _cell_of(fleet) == base[start],
-		"the fleet is on the Baltic leg at tile %d (month %d)"
-		% [start, SailingSimLib.month_for(GameState.day)])
+	_check(int(fleet["route"]["tile_index"]) == walked
+		and _cell_of(fleet) == base[span_a + walked],
+		"the fleet is on the shared span at tile %d (month %d)"
+		% [span_a + walked, SailingSimLib.month_for(GameState.day)])
 	# …month rolls over: the first step remaps progress by fraction —
-	# round(fraction × (new_len − 1)) over the full variant — and commits
-	# onto the winter path.
+	# round(fraction × (new_walked_len − 1)) over the variant span — seats
+	# the cell there, and commits the adjacent variant tile.
+	var span_len := span_b - span_a + 1
+	var va: int = vpath.find(base[span_a])
+	var vb: int = vpath.find(base[span_b])
+	var new_walked := absi(vb - va) + 1
 	@warning_ignore("integer_division")
-	var expected_new := roundi(float(start) / float(base.size() - 1)
-		* float(vpath.size() - 1))
+	var expected_new := roundi(float(walked) / float(span_len - 1)
+		* float(new_walked - 1))
 	GameState.day = 331  # month 12
 	sim._advance(fleet, 331)
 	var flipped_cell := _cell_of(fleet)
@@ -2121,11 +2158,11 @@ func _test_variant_flip() -> void:
 			on_variant = true
 			break
 	_check(on_variant,
-		"month 12: the fleet rides the Hamburg run (at %s)" % str(flipped_cell))
+		"month 12: the fleet rides the winter run (at %s)" % str(flipped_cell))
 	_check(int(fleet["route"]["tile_index"]) == expected_new + 1,
 		"progress remapped by fraction: index %d (round(%d/%d × %d) + 1)"
-		% [int(fleet["route"]["tile_index"]), start, base.size() - 1,
-		vpath.size() - 1])
+		% [int(fleet["route"]["tile_index"]), walked, span_len - 1,
+		new_walked - 1])
 	_check(sim._leg_active.has("flip_01")
 		and str((sim._leg_active["flip_01"] as Dictionary)["key"]).contains(
 			"hanseatic_north_winter"),
@@ -2134,12 +2171,12 @@ func _test_variant_flip() -> void:
 	var echo := _make_run()
 	echo._refresh_net()
 	GameState.day = 320
-	var twin := _make_fleet(echo, "patrol", "england", base[start])
+	var twin := _make_fleet(echo, "patrol", "england", base[span_a])
 	twin["id"] = "flip_01"
 	twin["route"] = {"lanes": ["hanseatic_north"], "leg": 0, "tile_index": 0,
 		"legs": [{"kind": "lane", "id": "hanseatic_north", "reverse": false,
-			"a": 0, "b": base.size() - 1}]}
-	for _step in start:
+			"a": span_a, "b": span_b}]}
+	for _step in walked:
 		echo._advance(twin, 320)
 	GameState.day = 331
 	echo._advance(twin, 331)
@@ -2147,7 +2184,7 @@ func _test_variant_flip() -> void:
 		"the flip replays identically (%s)" % str(_cell_of(twin)))
 	# The stored route keeps its base-relative shape (save shape unchanged).
 	var stored: Dictionary = fleet["route"]["legs"][0]
-	_check(int(stored["a"]) == 0 and int(stored["b"]) == base.size() - 1,
+	_check(int(stored["a"]) == span_a and int(stored["b"]) == span_b,
 		"the persisted leg keeps its base-relative a/b")
 
 
@@ -2422,8 +2459,8 @@ func _test_grey_coasters() -> void:
 		if str(DataLoader.get_port(dest_id).get("nation_id", "")) != "":
 			sovereign_dests += 1
 	_check(grey_spawns == 9 and sovereign_dests >= 1,
-		"the grey hops cross the ownership border (%d of %d headed for a"
-		+ " sovereign berth)" % [sovereign_dests, grey_spawns])
+		(("the grey hops cross the ownership border (%d of %d headed for a"
+		+ " sovereign berth)") % [sovereign_dests, grey_spawns]))
 	# (b) never-triggers-contact, invisible to raiders — the grey tier rides
 	# the coaster role rules unchanged.
 	var contacts: Array = sim.contacts(

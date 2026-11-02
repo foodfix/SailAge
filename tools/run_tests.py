@@ -44,7 +44,7 @@ DEFAULT_TIMEOUT_S = 300.0
 # proof pays that designed cost thousands of times across four legs, so its
 # wall budget sits above the default. The density/perf gates keep their own
 # pins (`60-*` §4.11.11.5); this only widens the runner's kill timer.
-SUITE_TIMEOUTS_S = {"test_world_e2e": 540.0}
+SUITE_TIMEOUTS_S = {"test_world_e2e": 300.0}
 DEFAULT_JOBS = 8
 POLL_S = 2.0            # log/CPU sample cadence
 STUCK_IDLE_S = 6.0      # zero log growth + < STUCK_CPU_S child CPU ⇒ stuck
@@ -57,6 +57,57 @@ LOAD_ERR_RE = re.compile(
     re.IGNORECASE,
 )
 PROFILE_RE = re.compile(r"^\s*PROFILE\s+(\S+)\s+(\d+)\s*$", re.M)
+
+# --- Timing baseline (per-suite wall/cpu regression watch, 2026-11-02) -------
+# Every run records each suite's wall/cpu into the report JSON; the committed
+# `tools/test_times.json` keeps the LAST ACCEPTED run as the baseline. Each
+# run compares against it and flags a suite whose wall grew beyond
+# TIMES_FACTOR × baseline (and TIMES_FLOOR_S seconds, so sub-10s suites are
+# never flagged by jitter alone) — that flag is the "something got much
+# slower" signal. Refresh the baseline with `--save-baseline` after an
+# accepted (all-green) run.
+BASELINE_NAME = "test_times.json"
+TIMES_FACTOR = 1.5
+TIMES_FLOOR_S = 10.0
+
+
+def load_baseline(repo: Path) -> dict:
+    path = repo / "tools" / BASELINE_NAME
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_baseline(repo: Path, results: list[dict], total_s: float) -> None:
+    baseline = {
+        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "total_s": round(total_s, 1),
+        "suites": {
+            r["suite"]: {"wall_ms": int(r["wall_ms"]),
+                "cpu_ms": int(r["cpu_ms"]), "class": r["class"]}
+            for r in results
+        },
+    }
+    path = repo / "tools" / BASELINE_NAME
+    path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
+
+
+def time_flag(baseline: dict, suite: str, wall_ms: int) -> str:
+    suites = (baseline.get("suites", {}) if baseline else {})
+    entry = suites.get(suite)
+    if not isinstance(entry, dict):
+        return ""
+    base_ms = int(entry.get("wall_ms", 0))
+    if base_ms <= 0:
+        return ""
+    over_floor = wall_ms - base_ms > TIMES_FLOOR_S * 1000
+    if wall_ms > base_ms * TIMES_FACTOR and over_floor:
+        return f" TIME×{wall_ms / base_ms:.1f}"
+    return ""
 
 
 def child_cpu_s() -> float:
@@ -184,13 +235,20 @@ def main() -> int:
     ap.add_argument("--repo", default=str(Path(__file__).resolve().parent.parent))
     ap.add_argument("-j", "--jobs", type=int, default=DEFAULT_JOBS)
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
-    ap.add_argument("--out", default="", help="optional JSON report path")
+    ap.add_argument("--out", default="",
+                    help="optional JSON report path (always also written "
+                    + "to <log-dir>/report.json)")
     ap.add_argument("--log-dir", default="/tmp/opencode/test_logs")
     ap.add_argument("--only", default="",
                     help="run suites whose name contains this substring")
+    ap.add_argument("--save-baseline", action="store_true",
+                    help="write this run's timings as the committed "
+                    + f"{BASELINE_NAME} baseline (do this after an "
+                    + "all-green run)")
     args = ap.parse_args()
 
     repo = Path(args.repo).resolve()
+    baseline = load_baseline(repo)
     suites = sorted(p.stem for p in (repo / "tools").glob("test_*.tscn"))
     if args.only:
         suites = [s for s in suites if args.only in s]
@@ -214,23 +272,64 @@ def main() -> int:
             SUITE_TIMEOUTS_S.get(n, args.timeout)): n for n in parallel}
         for fut in concurrent.futures.as_completed(futures):
             results.append(fut.result())
+    total_s = time.monotonic() - t0
     results.sort(key=lambda r: -r["wall_ms"])
 
     red = [r for r in results if r["class"] == "RED"]
     stuck = [r for r in results if r["class"] in ("ZOMBIE", "HANG")]
     print(f"\n{'suite':<28} {'class':<7} {'wall':>8} {'cpu':>8}  flags")
+    regressions: list[str] = []
     for r in results:
         flags = " slow" if r["slow"] else ""
+        delta = ""
+        suites_b = (baseline.get("suites", {}) if baseline else {})
+        entry = suites_b.get(r["suite"])
+        if isinstance(entry, dict) and int(entry.get("wall_ms", 0)) > 0:
+            delta = " Δ%+.1fs" % ((r["wall_ms"]
+                - int(entry["wall_ms"])) / 1000.0)
+        time_warn = time_flag(baseline, r["suite"], r["wall_ms"])
+        if time_warn:
+            regressions.append("%s:%s Δ%s → %dms (baseline %dms)" % (
+                r["suite"], time_warn.strip(), delta, r["wall_ms"],
+                int(entry["wall_ms"])))
+        flags += delta + time_warn
         flags += f" {r['detail']}" if r["detail"] else ""
         prof = " ".join(f"{k}={v}ms" for k, v in r["profiles"].items())
         if prof:
             flags += f" | {prof}"
-        print(f"{r['suite']:<28} {r['class']:<7} {r['wall_ms']:>7}ms {r['cpu_ms']:>7}ms {flags}")
-    print(f"\n{len(results)} suites in {time.monotonic() - t0:.1f}s · "
+        print(f"{r['suite']:<28} {r['class']:<7} {r['wall_ms']:>7}ms "
+            f"{r['cpu_ms']:>7}ms {flags}")
+    print(f"\n{len(results)} suites in {total_s:.1f}s · "
           f"green={sum(1 for r in results if r['class'] == 'GREEN')} "
           f"red={len(red)} zombie/hang={len(stuck)} · logs: {log_dir}")
+    if baseline:
+        base_total = float(baseline.get("total_s", 0.0))
+        if base_total > 0:
+            print(f"timing baseline: {BASELINE_NAME} total {base_total:.1f}s "
+                f"(this run {total_s:.1f}s, Δ{total_s - base_total:+.1f}s)")
+    if regressions:
+        print("TIME REGRESSIONS (wall > %.1f× baseline and > +%.0fs):"
+            % (TIMES_FACTOR, TIMES_FLOOR_S))
+        for line in regressions:
+            print("  " + line)
+        print("if the new time is expected, refresh the baseline: "
+            + "python3 tools/run_tests.py --save-baseline")
+    # The report lands in the log dir on EVERY run (the --out flag adds a
+    # second copy elsewhere); the committed baseline updates only via
+    # --save-baseline.
+    report = {
+        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "total_s": round(total_s, 1),
+        "suites": results,
+    }
+    report_path = log_dir / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n")
+    print(f"timings: {report_path}")
     if args.out:
-        Path(args.out).write_text(json.dumps(results, indent=2))
+        Path(args.out).write_text(json.dumps(report, indent=2))
+    if args.save_baseline:
+        save_baseline(repo, results, total_s)
+        print(f"baseline updated: {repo / 'tools' / BASELINE_NAME}")
     if stuck:
         return 2
     if red:

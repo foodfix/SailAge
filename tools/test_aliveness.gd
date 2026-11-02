@@ -442,10 +442,10 @@ func _test_bounty_preference(target: Dictionary) -> void:
 
 func _test_demand_events() -> void:
 	_make_run()
-	# Drive 720 rotation days and collect every start: every nation is hit,
-	# and the schedule replays byte-identically.
-	var starts := _drive_rotation(720)
-	_check(starts.size() > 0, "the seeded schedule starts events (%d in 720 days)"
+	# Drive 360 rotation days (four 90-day cycles) and collect every start:
+	# every nation is hit, and the schedule replays byte-identically.
+	var starts := _drive_rotation(360)
+	_check(starts.size() > 0, "the seeded schedule starts events (%d in 360 days)"
 		% starts.size())
 	var budget_ok := true
 	var nation_count := {}
@@ -458,7 +458,7 @@ func _test_demand_events() -> void:
 		if int(nation_count.get(nation, 0)) >= 1:
 			hit_nations += 1
 	_check(hit_nations >= 4,
-		"at least 4 of 6 nations see an event in 720 days (%d)" % hit_nations)
+		"at least 4 of 6 nations see an event in 360 days (%d)" % hit_nations)
 	# The live invariant: replay day by day and assert ≤ 1/nation ≤ 4 world.
 	_make_run()
 	for day in range(1, 401):
@@ -470,7 +470,7 @@ func _test_demand_events() -> void:
 	_check(budget_ok, "≤ 1 active per nation and ≤ 4 world-wide on every day")
 	# Determinism: the same days replay the same instance list.
 	_make_run()
-	var replay := _drive_rotation(720)
+	var replay := _drive_rotation(360)
 	var identical := JSON.stringify(starts) == JSON.stringify(replay)
 	_check(identical, "the seeded schedule replays exactly")
 

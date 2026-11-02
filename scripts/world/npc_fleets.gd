@@ -1787,6 +1787,27 @@ func _finish_lane_fleet(fleet: Dictionary, journey: Dictionary,
 	# the first step may be a fraction away, and the fleet must stand on
 	# `path[a + tile_index]` from the instant it is under way.
 	_sync_route_progress(fleet)
+	# Re-seat onto the ACTIVE walked path when the resolved cursor tile is
+	# not the boarding tile (an in-month variant walked list, or the
+	# first-sight fraction remap of the boarding index): the first accrual
+	# step must leave an ADJACENT tile, never a straight-line jump across
+	# the base↔variant gap (bug report 2026-11-02). Spawn-time only — a
+	# direct seat, no move report, no wake, no contact sampling.
+	var first_legs: Array = (fleet.get("route", {}) as Dictionary).get(
+		"legs", [])
+	if not first_legs.is_empty():
+		var first_geo := _leg_geometry(first_legs[0])
+		if not first_geo.is_empty():
+			var walked: Array = first_geo["path"]
+			var seat_index := int(
+				(fleet["route"] as Dictionary).get("tile_index", 0))
+			var cursor := (int(first_geo["end"]) - seat_index) \
+				if bool(first_geo["reverse"]) \
+				else (int(first_geo["start"]) + seat_index)
+			cursor = clampi(cursor, 0, walked.size() - 1)
+			var seat: Vector2i = walked[cursor]
+			if seat != position_of(fleet):
+				set_position(fleet, seat)
 	_record_wake(fleet, journey["cell"])
 	if int(journey.get("dwell_until_day", 0)) > 0:
 		fleet["dwell_until_day"] = int(journey["dwell_until_day"])
@@ -2044,40 +2065,16 @@ func _role_journey(role: String, nation_id: String, day: int) -> Dictionary:
 		var harbor := _port_cell(origin)
 		if harbor.x < 0:
 			return {}
-		var lane_path: Array = _lane_paths.get(lane_id, [])
-		if lane_path.is_empty():
-			return {}
 		# Board the lane at the tile nearest the home port and sail at once
 		# (the cycle's dwell happens at the lane ends, docs/60-* §4.1.1).
-		var best_index := 0
-		var best_distance := -1
-		for index in lane_path.size():
-			var distance := chebyshev(harbor, lane_path[index])
-			if best_distance < 0 or distance < best_distance:
-				best_distance = distance
-				best_index = index
-		if _is_occupied(lane_path[best_index], ""):
-			# Boarding tile busy: walk the lane outward to the first free
-			# tile (deterministic), else fail the draw.
-			var step := -1 if best_index > lane_path.size() / 2 else 1
-			var scan := best_index + step
-			var free := -1
-			while scan >= 0 and scan < lane_path.size():
-				if not _is_occupied(lane_path[scan], ""):
-					free = scan
-					break
-				scan += step
-			if free < 0:
-				return {}
-			best_index = free
-		var reverse := best_index > lane_path.size() / 2
+		var boarded := _lane_board_route(lane_id, harbor)
+		if boarded.is_empty():
+			return {}
 		return {
 			"origin": origin, "dest": "",
-			"cell": lane_path[best_index],
+			"cell": boarded["cell"],
 			"dwell_until_day": 0,
-			"route": {"lanes": [lane_id], "leg": 0, "tile_index": 0,
-				"legs": [{"kind": "lane", "id": lane_id, "reverse": reverse,
-					"a": 0, "b": lane_path.size() - 1}]},
+			"route": boarded["route"],
 		}
 	var route := route_between(origin, dest)
 	if route.is_empty():
@@ -3038,13 +3035,16 @@ static func _heading_to(from: Vector2i, to: Vector2i) -> String:
 ## ([method _active_lane_variant], file order on overlap — the shipped data
 ## has at most one per lane).
 ##
-## The variant's walked range maps the saved base range `a..b`
-## proportionally: `round(a / (base_n − 1) × (var_n − 1))` — a full-lane leg
-## (`a = 0, b = base_n − 1`, the patrol/treasure/pin probe shape) maps to the
-## FULL variant path, which is exactly the master-pin form
-## `new_index = round(fraction × (new_len − 1))`; sub-range journey legs map
-## to the same fraction of the variant, so a mid-journey fleet rides the
-## variant at its proportional position instead of touring the whole lane.
+## Variant resolution (bug report 2026-11-02 amendment of the task-H pin):
+## EVERY lane leg anchors on ENDPOINT IDENTITY — both walked end tiles must
+## exist on the variant path, and the leg walks the variant between them;
+## otherwise it keeps the base geometry (the §4.18 ice refusal governs).
+## The old fraction-proportional map — and the full-lane wholesale
+## replacement — landed walked ends on unrelated water when the variant is
+## a structurally different route (hanseatic_north_winter is the
+## Hamburg–Bergen North Sea run, not a winter detour of the Baltic run):
+## journey seams opened 30–123-tile teleports and arrivals snapped the
+## berth from afar.
 ## The persisted leg keeps its base-relative `a`/`b` (clean save shape).
 func _leg_geometry(leg: Dictionary) -> Dictionary:
 	var kind := str(leg.get("kind", ""))
@@ -3070,7 +3070,18 @@ func _leg_geometry(leg: Dictionary) -> Dictionary:
 	if pid == 0:
 		pid = ids.size() + 1
 		ids[leg_id] = pid
-	var cache_key := pid * 140737488355328 + a * 8388608 + b
+	# The memo key packs {pid, kind, a, b, reverse} into distinct bit fields —
+	# kind and reverse MUST take part: the pid maps are per-kind but the cache
+	# is shared (a lane and a spoke numbered alike collide), and legs with
+	# equal a/b routinely differ in direction (outbound vs return journeys).
+	# The old key packed {pid, a, b} only, so the loser of a collision sailed
+	# the winner's geometry — walked the wrong path/direction, boarded seams
+	# at the wrong end, and `_arrive` snapped the berth from afar (the
+	# arrival/seam teleport, bug report 2026-11-02).
+	var cache_key := pid * 1125899906842624 \
+		+ (562949953421312 if kind == "lane" else 0) \
+		+ a * 33554432 + b * 2 \
+		+ (1 if bool(leg.get("reverse", false)) else 0)
 	if _geo_cache.has(cache_key):
 		return _geo_cache[cache_key]
 	var out := {
@@ -3097,18 +3108,40 @@ func _leg_geometry(leg: Dictionary) -> Dictionary:
 		# a degenerate variant cannot carry progress; sail base
 		_geo_cache[cache_key] = out
 		return out
-	var va := roundi(float(a) / float(base.size() - 1) * float(vn - 1))
-	var vb := roundi(float(b) / float(base.size() - 1) * float(vn - 1))
-	va = clampi(va, 0, vn - 1)
-	vb = clampi(vb, 0, vn - 1)
-	if va > vb:
-		var swap := va
-		va = vb
-		vb = swap
+	# Resolution rule (bug report 2026-11-02 amendment of the task-H pin):
+	# EVERY lane leg anchors on ENDPOINT IDENTITY — each walked end (a
+	# junction or berth tile) must exist on the variant path, and the leg
+	# walks the variant between those indices. A variant that does not
+	# touch both of the leg's endpoints (hanseatic_north_winter replaces
+	# the Baltic run with the Hamburg–Bergen North Sea run; the two paths
+	# share only the Bergen approaches and the German-bight junction)
+	# cannot carry the leg — the old fraction-proportional map landed the
+	# walked ends on unrelated water, and every journey seam on that lane
+	# opened a 30–123-tile teleport, arrivals included (`_arrive` snapped
+	# the Danzig berth from ~119 tiles out). Such a leg keeps the base
+	# geometry, and the §4.18 ice refusal governs the walk as before (a
+	# standing fleet is never trapped; the hold/drop machinery re-departs
+	# it fresh). Legs whose ends ARE shared (hamburg ↔ bergen through the
+	# German bight) ride the variant exactly — the Bergenfahrer winter
+	# run. The retired wholesale full-lane replacement also snapped
+	# journeys that merely ATTACHED to the lane's ends.
+	var va := vpath.find(base[a])
+	var vb := vpath.find(base[b])
+	if va < 0 or vb < 0 or va == vb:
+		# Endpoint not on the variant (or degenerate): sail base.
+		_geo_cache[cache_key] = out
+		return out
+	# Normalize the walked direction: forward means ascending variant
+	# indices; a stored return leg (or a variant that reaches base[b]
+	# first) flips the resolved flag so the walk still runs between the
+	# SAME two endpoint tiles.
+	var stored_reverse := bool(leg.get("reverse", false))
+	var ascending := va < vb
 	out["path"] = vpath
-	out["start"] = va
-	out["end"] = vb
-	out["walked_len"] = vb - va + 1
+	out["start"] = mini(va, vb)
+	out["end"] = maxi(va, vb)
+	out["walked_len"] = maxi(va, vb) - mini(va, vb) + 1
+	out["reverse"] = stored_reverse == ascending
 	out["key"] = "%s:%s|%s" % [kind, leg_id, str(variant["id"])]
 	_geo_cache[cache_key] = out
 	return out
@@ -3166,6 +3199,21 @@ func _leg_progress(fleet: Dictionary, route: Dictionary, geo: Dictionary) -> int
 			index = clampi(roundi(fraction * float(walked_len - 1)),
 				0, walked_len - 1)
 			route["tile_index"] = index
+			# Re-seat onto the REMAPPED geometry: the new index is relative
+			# to the new walked list, but the CELL still stands on the old
+			# one — leaving it would make the very next commit a
+			# straight-line jump onto the new path (bug report 2026-11-02,
+			# the month-rollover/first-sight class). The fraction pin ("the
+			# fleet rides the variant at its proportional position") IS the
+			# seat — applied to the tile, not just the index. Direct seat:
+			# no move report, no wake, no contact sampling.
+			var seat_path: Array = geo["path"]
+			var seat_cursor := (int(geo["end"]) - index) \
+				if bool(geo["reverse"]) else (int(geo["start"]) + index)
+			seat_cursor = clampi(seat_cursor, 0, seat_path.size() - 1)
+			var seat: Vector2i = seat_path[seat_cursor]
+			if seat != position_of(fleet):
+				set_position(fleet, seat)
 		_leg_active[id] = {"key": str(geo["key"]), "walked_len": walked_len}
 	if index < 0 or index >= walked_len:
 		# Off the leg (a hand edit): restart the leg deterministically.
@@ -3408,7 +3456,16 @@ func _step_fleets(day: int) -> void:
 			# them out of the heal.
 			if legs.is_empty():
 				var mooring := _port_at_cell(position_of(fleet))
-				if mooring.is_empty() and dwell_expired:
+				# The patrol exception (§4.1.1 lane-end dwell amendment,
+				# 2026-11-02): a patrol standing on its lane's path after an
+				# arrival is at a legitimate lane-end hold — the cycle's
+				# dwell happens AT THE LANE ENDS, and the depart re-boards
+				# from the very tile it stands on. Snapping it to a berth
+				# here teleported it home (up to ~645 tiles) and back onto
+				# the lane at the next depart.
+				var lane_end_hold := str(fleet.get("role", "")) == PATROL \
+					and _is_path_tile(position_of(fleet))
+				if mooring.is_empty() and dwell_expired and not lane_end_hold:
 					var dest := str(fleet.get("dest_port_id", ""))
 					var berth := _port_cell(dest) if not dest.is_empty() \
 						else NO_CELL
@@ -3931,11 +3988,18 @@ func _depart(fleet: Dictionary, day: int) -> void:
 		_sync_route_progress(fleet)
 		_fleet_mark[str(fleet.get("id", ""))] = _clock_now()
 		var moved_from := position_of(fleet)
+		# The walk joins the render report WITH its walked path (the
+		# stepwise-glide amendment): the day tick runs outside any accrual
+		# pass, so open the collection here — the old `{from, to}`-only
+		# record made the render snap every departure that walked more
+		# than a tile (the 2026-11-02 jump report, the pathless class).
+		var walker := str(fleet.get("id", ""))
+		_accrual_paths[walker] = []
 		_accrue_lane(fleet, day, _pending_delta)
 		var moved_to := position_of(fleet)
 		if moved_to != moved_from:
-			moved_fleet_moves.append({"id": str(fleet.get("id", "")),
-				"from": moved_from, "to": moved_to})
+			moved_fleet_moves.append({"id": walker, "from": moved_from,
+				"path": _accrual_paths.get(walker, []), "to": moved_to})
 
 
 ## Sells every cargo good whose live factor is above 1.0 at `port_id` —
@@ -4125,13 +4189,15 @@ func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 	var lanes: Array = route.get("lanes", [])
 	if lanes.is_empty():
 		return
-	# The patrol's dockable anchor: its home port (§4.1.1 — patrols dock at
-	# a PORT berth, never in place). Setting `dest_port_id` lets `_arrive`
-	# commit the home berth at the span end and gives `_lane_step_heading`'s
-	# berth fallback a resolvable target (no 0-budget wedge).
-	var home := _patrol_home_port(str(fleet.get("nation_id", "")))
-	if not home.is_empty():
-		fleet["dest_port_id"] = home
+	# The patrol dwells AT THE LANE END (§4.1.1 "the cycle's dwell happens
+	# at the lane ends"): `dest_port_id` stays empty, so `_arrive` holds the
+	# dwell in place instead of committing the home berth — the old
+	# home-berth commit teleported the patrol home from the span end and
+	# then back onto the lane at the next depart (645 + 583-tile jumps,
+	# bug report 2026-11-02, the lisbon↔swahili_coast patrol cycle). The
+	# berth fallback in `_lane_step_heading` is not needed: a patrol parked
+	# at its span end has empty legs (the docked branch), and an ice-held
+	# span end wedges into the drop/re-depart machinery by design.
 	var lane_id := str(lanes[0])
 	var base: Array = _lane_paths.get(lane_id, [])
 	if base.is_empty():
@@ -4146,7 +4212,8 @@ func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 	# Board the lane at the NEAREST tile: a mid-lane un-wedged patrol is
 	# already standing on the lane (teleport-free re-boarding — the wedge
 	# drop hands `legs: []` patrols back here); a fleet genuinely off the
-	# lane waits rather than teleport (hand edit).
+	# lane WAITS rather than teleport (hand edit / an anomalous berth hold),
+	# idling one dwell cycle like a failed departure.
 	var nearest := 0
 	var best_d := -1
 	for index in path.size():
@@ -4154,9 +4221,12 @@ func _depart_patrol(fleet: Dictionary, _day: int) -> void:
 		if best_d < 0 or d < best_d:
 			best_d = d
 			nearest = index
+	if best_d > 1:
+		_note_event(str(fleet.get("id", "")), "depX off-lane %s" % lane_id)
+		fleet["dwell_until_day"] = int(GameState.day) + DWELL_DAYS
+		return
 	# The walk direction: from the nearer end toward the other.
 	var reverse := chebyshev(cell, path[0]) > chebyshev(cell, path[far_end])
-	var board := 0 if not reverse else far_end
 	var ti := nearest
 	if reverse:
 		ti = far_end - nearest
@@ -4376,17 +4446,18 @@ func _schedule_treasure(day: int) -> void:
 ## its built spoke attaches to) at the tile nearest the capital and arm the
 ## full-lane leg; hold = ×3 a normal port call of a seeded nation good. `{}`
 ## when the nation has no usable lane (the scheduler skips that season).
-func _treasure_journey(nation_id: String, day: int) -> Dictionary:
+## The mid-lane boarding route shared by the patrol cycle and the treasure
+## run (the §4.1.1 "board at the tile nearest the port" pattern): pick the
+## free BASE tile nearest `harbor`, then walk toward the nearer end. The
+## route's `tile_index` is the boarding position on the saved walked range —
+## the ti=0 the old inline builders shipped made the first accrual step
+## leave the lane's far END, a straight-line jump from the boarding tile
+## (bug report 2026-11-02, the spawn-day patrol jumps).
+func _lane_board_route(lane_id: String, harbor: Vector2i) -> Dictionary:
 	_refresh_net()
-	var capital := _capital_of(nation_id)
-	var lane_id := str(_spoke_lane.get(capital, ""))
 	var lane_path: Array = _lane_paths.get(lane_id, [])
-	if capital.is_empty() or lane_id.is_empty() or lane_path.is_empty():
+	if lane_path.is_empty() or harbor.x < 0:
 		return {}
-	var harbor := _port_cell(capital)
-	if harbor.x < 0:
-		return {}
-	# Board at the lane tile nearest the capital (the §4.1.1 patrol pattern).
 	var best_index := 0
 	var best_distance := -1
 	for index in lane_path.size():
@@ -4395,6 +4466,8 @@ func _treasure_journey(nation_id: String, day: int) -> Dictionary:
 			best_distance = distance
 			best_index = index
 	if _is_occupied(lane_path[best_index], ""):
+		# Boarding tile busy: walk the lane outward to the first free
+		# tile (deterministic), else fail the draw.
 		var step := -1 if best_index > lane_path.size() / 2 else 1
 		var scan := best_index + step
 		var free := -1
@@ -4407,11 +4480,31 @@ func _treasure_journey(nation_id: String, day: int) -> Dictionary:
 			return {}
 		best_index = free
 	var reverse := best_index > lane_path.size() / 2
+	var ti := (lane_path.size() - 1 - best_index) if reverse else best_index
 	return {
 		"cell": lane_path[best_index],
-		"route": {"lanes": [lane_id], "leg": 0, "tile_index": 0,
+		"route": {"lanes": [lane_id], "leg": 0, "tile_index": ti,
 			"legs": [{"kind": "lane", "id": lane_id, "reverse": reverse,
 				"a": 0, "b": lane_path.size() - 1}]},
+	}
+
+
+func _treasure_journey(nation_id: String, day: int) -> Dictionary:
+	_refresh_net()
+	var capital := _capital_of(nation_id)
+	var lane_id := str(_spoke_lane.get(capital, ""))
+	if capital.is_empty() or lane_id.is_empty():
+		return {}
+	var harbor := _port_cell(capital)
+	if harbor.x < 0:
+		return {}
+	# Board at the lane tile nearest the capital (the §4.1.1 patrol pattern).
+	var boarded := _lane_board_route(lane_id, harbor)
+	if boarded.is_empty():
+		return {}
+	return {
+		"cell": boarded["cell"],
+		"route": boarded["route"],
 		"cargo": _treasure_cargo(nation_id, day),
 	}
 

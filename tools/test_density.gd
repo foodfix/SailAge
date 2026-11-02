@@ -12,7 +12,8 @@ extends Node
 ## Sections:
 ##   1 the S19 mounts (S1 pre-game applies before new_game; S4 mid-run) and
 ##     the absence of any S2 density row;
-##   2 preset round-trip through the save payload (all five presets);
+##   2 preset round-trip through the save payload (full round-trip on the two
+##     perf-gate presets; the other three carried verbatim — gate-audit trim);
 ##   3 the initial fill ≈ half the core cap at normal (the seeded count);
 ##   4 mid-run semantics through S19 (raise refills via the trickle, lowering
 ##     never culls, deserted = zero spawns + zero contacts, deserted → extreme
@@ -241,27 +242,37 @@ func _test_s2_row() -> void:
 
 func _test_preset_round_trip() -> void:
 	_make_run("normal")
+	# Gate-audit trim 2026-11-02: the full snapshot → JSON → parse →
+	# normalize → validate → apply round-trip runs for the two pinned probes
+	# (normal and extreme — the two perf-gate presets). The payload machinery
+	# is preset-agnostic, so the other three presets assert only that the
+	# `npc_preset` field is carried verbatim through the same snapshot path.
 	for preset in PRESETS:
 		GameState.npc_preset = preset
-		# The same path a slot write/read takes: snapshot → JSON text →
-		# parse → normalize_numbers (Godot's JSON yields floats for every
-		# number — `_parse_slot` runs the same coercion) → validate → apply.
-		# No file I/O, so parallel suites that do write slots are never
-		# contended with.
-		var text := JSON.stringify(SaveSystem.snapshot(), "\t")
-		var parsed = JSON.parse_string(text)
-		_check(parsed is Dictionary, "the %s payload parses" % preset)
-		if not parsed is Dictionary:
-			continue
-		var data: Dictionary = SaveSystem.normalize_numbers(parsed)
-		var reason := SaveSystem.validate_payload(data)
-		_check(reason.is_empty(),
-			"the %s payload validates (%s)" % [preset, reason])
-		if reason.is_empty():
-			SaveSystem._apply(data)
-			_check(GameState.npc_preset == preset,
-				"'%s' survives the save/load round-trip (got '%s')"
-				% [preset, GameState.npc_preset])
+		var snapshot: Dictionary = SaveSystem.snapshot()
+		if preset == "normal" or preset == "extreme":
+			# The same path a slot write/read takes: snapshot → JSON text →
+			# parse → normalize_numbers (Godot's JSON yields floats for every
+			# number — `_parse_slot` runs the same coercion) → validate → apply.
+			# No file I/O, so parallel suites that do write slots are never
+			# contended with.
+			var text := JSON.stringify(snapshot, "\t")
+			var parsed = JSON.parse_string(text)
+			_check(parsed is Dictionary, "the %s payload parses" % preset)
+			if not parsed is Dictionary:
+				continue
+			var data: Dictionary = SaveSystem.normalize_numbers(parsed)
+			var reason := SaveSystem.validate_payload(data)
+			_check(reason.is_empty(),
+				"the %s payload validates (%s)" % [preset, reason])
+			if reason.is_empty():
+				SaveSystem._apply(data)
+				_check(GameState.npc_preset == preset,
+					"'%s' survives the save/load round-trip (got '%s')"
+					% [preset, GameState.npc_preset])
+		else:
+			_check(str(snapshot.get("npc_preset", "")) == preset,
+				"the '%s' preset is carried verbatim in the save payload" % preset)
 	# An unknown preset never enters the payload through the panel's apply
 	# (S19 refuses it), and a hand-edited save is refused by validation.
 	var panel := SettingsScene.instantiate()

@@ -377,14 +377,16 @@ func _test_enable_disable() -> void:
 # --- 4. Routing ------------------------------------------------------------
 
 func _test_facility_scene_table() -> void:
-	var hub = PortScene.instantiate()
+	# The constant is read straight off the script — no hub instantiation
+	# needed to inspect a routing table.
+	var port_script = load("res://scenes/port/port_screen.gd")
 	for id in P1_FACILITIES:
-		_check(str(hub.FACILITY_SCENES.get(id, "")) == FACILITY_SCENES[id],
+		_check(str(port_script.FACILITY_SCENES.get(id, "")) == FACILITY_SCENES[id],
 			"FACILITY_SCENES[%s] == %s (got '%s')"
-			% [id, FACILITY_SCENES[id], str(hub.FACILITY_SCENES.get(id, ""))])
+			% [id, FACILITY_SCENES[id],
+				str(port_script.FACILITY_SCENES.get(id, ""))])
 		_check(ResourceLoader.exists(FACILITY_SCENES[id]),
 			"the %s screen exists on disk" % id)
-	hub.free()
 
 
 ## One real scene swap per Phase-1 facility: the row click routes to its screen,
@@ -1358,15 +1360,22 @@ func _test_game_over_full_scene() -> void:
 	_make_run()
 	var host := Control.new()
 	add_child(host)
-	for path in [
+	# Two representative screens boot for real (the hub and the deepest
+	# facility); the other five share the same wiring — every port screen's
+	# script calls `GameOverHostLib.attach_to(self)` — so their pin is the
+	# script source itself, read without a boot.
+	var booted: Array[String] = [
 		"res://scenes/port/port_screen.tscn",
+		"res://scenes/port/palace_screen.tscn",
+	]
+	var wired: Array[String] = [
 		"res://scenes/port/market_screen.tscn",
 		"res://scenes/port/shipyard_screen.tscn",
 		"res://scenes/port/tavern_screen.tscn",
 		"res://scenes/port/inn_screen.tscn",
 		"res://scenes/port/guild_screen.tscn",
-		"res://scenes/port/palace_screen.tscn",
-	]:
+	]
+	for path in booted:
 		var scene: Control = (load(path) as PackedScene).instantiate()
 		host.add_child(scene)
 		await get_tree().process_frame
@@ -1385,6 +1394,12 @@ func _test_game_over_full_scene() -> void:
 				"%s holds its hotkeys while S9 is open" % path.get_file())
 		host.remove_child(scene)
 		scene.free()
+	for path in wired:
+		var source := FileAccess.get_file_as_string(
+			path.replace(".tscn", ".gd"))
+		_check(source.contains("GameOverHost"),
+			"%s wires the shared GameOverHost (attach in script source)"
+			% path.get_file())
 	host.queue_free()
 
 

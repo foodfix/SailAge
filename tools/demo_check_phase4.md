@@ -46,7 +46,7 @@ Counts are compared, not just the green summary (table at the bottom).
 | 2 | Six nationalities → start port, ship, gold (localized) | unchanged; one map now, so the S2 map selector is gone | `nations.json` drives all six; `test_character` |
 | 3 | Spawn in home port; buy a good; gold + cargo update | unchanged; spawn is the derived harbour tile | `test_port_hub`, `test_trade` |
 | 4 | Sail 8-directionally; daily provisions/water/wages; land blocks | **hold-to-repeat + click-to-sail** replace tap-stepping | `test_movement` (297 checks; cadence 8 tiles/s after 0.25 s, 20 steps = 20 moves = 2.0 days) |
-| 5 | A storm is reachable | **re-anchored**: Lisbon → the open water off Santa Cruz de Tenerife (coordinate destination, no docking) | `test_world_e2e` leg 1: 61 steps / 6 days, one `variables → trade_winds` transition at 29.83°N, storm gate **0.9183** closed form and **0.9183** over 10 000 seeded 6-day windows (≥ 0.90) |
+| 5 | A storm is reachable | **re-anchored**: Lisbon → the open water off Santa Cruz de Tenerife (coordinate destination, no docking) | `test_world_e2e` leg 1: 61 steps / 6 days, one `variables → trade_winds` transition at 29.83°N, storm gate **0.9183** by closed form (the 10 000-window Monte Carlo retired 2026-11-02 — overkill-sweep removal; ≥ 0.90) |
 | 6 | Second port; sell; supply/demand modifier shown | unchanged | `test_trade` (278 checks) |
 | 7 | Shipyard, tavern (recruit an officer), inn | unchanged | `test_shipyard`, `test_tavern`, `test_inn` |
 | 8 | Save in port; quit; Load; state fully restored | **save v4**; pre-release saves need not load (`90-*` §8.2) | `test_save` (205) + `test_save_v4` (157), round-trip byte-equal |
@@ -62,15 +62,21 @@ movement path — not teleports, except the provisioning stops leg 4 allows:
 
 ```
 LEG     STEPS  DAYS  ENVELOPE (days)   START        GOAL         OK
-leg1       61     6    3.4 ..   9.8   (1024, 308)  (980, 369)   yes
-leg2      246    20   13.7 ..  30.3   (1024, 308)  (1254, 292)  yes
-leg3     1146    90   63.7 .. 154.3   (1024, 308)  (1858, 343)  yes
-leg4     2453   192  136.3 .. 338.6   (1024, 308)  (1024, 308)  yes
+leg1      128     6    3.6 ..   9.7   (2050, 615)  (1963, 740)  yes
+leg2      494    18   13.7 ..  29.0   (2050, 615)  (2507, 587)  yes
+leg3     2292   101   63.7 .. 147.6   (2050, 615)  (3717, 687)  yes
+leg4     1727    81   48.0 .. 126.9   (2050, 615)  (3611, 905)  yes
 ```
+
+(Re-recorded 2026-11-02 after the Phase-6 5 nm grid rescale and the leg-4
+trim below: tiles-per-degree doubled, so legs 1–3 roughly doubled their step
+counts and Lisbon's berth reads `(2050, 615)`; leg 4 additionally shrank
+because its duplicated corridors were cut.)
 
 - **Leg 1** — arrival is open water (`port_id_at` empty): Tenerife's exact
   coordinate is land, and §6.1's snap puts the destination on `(980, 369)`.
-  The storm gate is met both ways (closed form and 10 000 seeded windows).
+  The storm gate is met by the closed form (the 10 000-window Monte Carlo
+  was retired 2026-11-02).
 - **Leg 2** — the **Bosphorus/Dardanelles override is provably in play**:
   refilling the 11 carved cells as land on a *copy* of the world makes
   `find_path(lisbon, istanbul)` return nothing at all, while the shipped map
@@ -78,9 +84,20 @@ leg4     2453   192  136.3 .. 338.6   (1024, 308)  (1024, 308)  yes
 - **Leg 3** — the long way really is long: reaches 34.83°S (rounds the Cape),
   threads 10 Malacca channel tiles, and touches **zero** ice-band tiles, so
   there is no northern passage.
-- **Leg 4** — circumnavigation: **three seam crossings** (2 west at steps
-  880/920, 1 east at step 899), netting −2013 columns westward and returning
-  to exactly `(1024, 308)`.
+- **Leg 4** — westward Pacific tack: boards at Acapulco, sails to the
+  dateline approach, crosses the seam west, round-trips east, then sails on
+  to Manila — **three seam crossings** (2 west, 1 east), netting −1669
+  columns westward, ending docked at Manila. The two mid-Pacific provisioning
+  stops are round trips that return to the exact cell they left, and the
+  docking evidence is the stops log (because `_provision` ends with a Set
+  Sail). (Amended 2026-11-02: two trims cut duplicated corridor — first the
+  Cape Town → Lisbon return, which re-sailed leg 3's corridor in reverse,
+  ~900 steps of already-proven geometry, in the overkill-sweep removal; then
+  the Lisbon → Cartagena Atlantic crossing and the Manila → Macassar →
+  Colombo → Cape Town Indian-Ocean run, whose Atlantic/Indian-Ocean lanes,
+  Cape round and Malacca thread are leg 3's geometry. The voyage now boards
+  at Acapulco — the task's one Americas-assist teleport — and sails only its
+  unique proof.)
 
 Map integrity (validator group 6, 0.6 s): the artifact is a 2160 × 1080
 indexed PNG with palette ⊆ `~ . # ^ I`; **100/100 harbours** recompute

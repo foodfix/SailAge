@@ -1374,22 +1374,19 @@ func _test_mid_month_replay_purity() -> void:
 ## docs/90-* completion gate: save ≤ 2 MB @ extreme. The honest extreme
 ## world, measured the way `test_density` measures it (on the exact
 ## slot-write bytes of a REAL payload): the extreme density preset seeds the
-## fleet ecology through `new_game`'s initial fill, a 90-day trickle window
-## grows it toward the 288 cap, the full derived stock table rides along
-## (145 ports × the listed goods), and the allegiance state is a
-## late-campaign world — every contestable port carrying a six-nation
-## ledger, a player sweep flipping the contestables, the monthly allowance
-## spent at 40 ports, every foreign permit held. Measured size printed for
-## the task report.
+## fleet ecology through `new_game`'s initial fill (SLIMMED 2026-11-02, the
+## overkill-sweep removal: the old 90-day tick loop cost ~18 s of serial
+## gate time to grow the same population the initial fill already seats —
+## the gate is a PAYLOAD BYTE BUDGET, not a simulation property; the
+## byte-count provenance lives in `tools/demo_check_phase7.md`), the full
+## derived stock table rides along (145 ports × the listed goods), and the
+## allegiance state is a late-campaign world — every contestable port
+## carrying a six-nation ledger, a player sweep flipping the contestables,
+## the monthly allowance spent at 40 ports, every foreign permit held.
+## Measured size printed for the task report.
 func _test_extreme_save_size() -> void:
 	GameState.npc_preset = "extreme"
 	GameState.new_game("portugal", false)
-	var sim := NpcFleetsLib.new({
-		"npc_config": DataLoader.npc_config, "preset": "extreme",
-	})
-	for offset in range(90):
-		GameState.day = 200 + offset
-		sim.tick(GameState.day)
 	# A late-campaign allegiance world on top of the populated ecology.
 	var flipped := 0
 	for port in DataLoader.ports_list:

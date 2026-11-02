@@ -118,17 +118,26 @@ func _scenario_crown_and_horizon() -> void:
 	# between trips (the healing dynamics themselves are test_trade's and
 	# test_economy's subject: 10-day staple / 30-day luxury heals). This
 	# fixture advances no days, so the daily ledger does not run here.
+	var leg_ports: Array = []
+	for port in DataLoader.ports_list:
+		if str((port as Dictionary).get("id", "")) in ["lisbon", dest]:
+			leg_ports.append(port)
 	var trips := 0
 	# Phase 7 (task L re-baseline): the §4.10 tariff now composes on both
 	# legs (5% out of Lisbon, 20% at the foreign dest), so the same grind
-	# needs ~1.4× the trips to reach the same purse. The cap widens to 2,000
-	# and the 55,000g target is unchanged — the acceptance intent ("this
-	# route can fund the expedition") survives the tax, as sim_trade gate 1
-	# asserts for every starter ship.
-	while GameState.gold < 55000 and trips < 2000:
+	# needs more trips to reach the same purse. The guard sits well below
+	# the old 2,000 (the walk needs ~434 trips) and the 55,000g target is
+	# unchanged — the acceptance
+	# intent ("this route can fund the expedition") survives the tax, as
+	# sim_trade gate 1 asserts for every starter ship.
+	while GameState.gold < 55000 and trips < 600:
 		trips += 1
-		GameState.market_stocks = EconomyLib.build_initial_stocks(
-			DataLoader.ports_list, DataLoader.goods_list)
+		# Reset only the two ports this trip touches — the trade engine
+		# reads just these legs, and `build_initial_stocks` is pure, so a
+		# per-port build equals the all-port row (docs/30 §4.2).
+		for port in leg_ports:
+			GameState.market_stocks[str((port as Dictionary)["id"])] = \
+				EconomyLib.build_initial_stocks([port], DataLoader.goods_list)
 		# 20 units/trip stays inside the profitable band on BOTH walks:
 		# the buy tail (Lisbon stock 160→140, factor 700→750) and the sell
 		# tail (rest-40 → 60, factor 1300→1150) keep buy < sell per

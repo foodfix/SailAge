@@ -1,0 +1,211 @@
+{
+  "recorded_at": "2026-11-02T19:54:43",
+  "suites": {
+    "test_aliveness": {
+      "class": "GREEN",
+      "cpu_ms": 5589,
+      "wall_ms": 6001
+    },
+    "test_allegiance": {
+      "class": "GREEN",
+      "cpu_ms": 1718,
+      "wall_ms": 2001
+    },
+    "test_arrival_jump": {
+      "class": "GREEN",
+      "cpu_ms": 6623,
+      "wall_ms": 8001
+    },
+    "test_battle": {
+      "class": "GREEN",
+      "cpu_ms": 1810,
+      "wall_ms": 2002
+    },
+    "test_battle_economy": {
+      "class": "GREEN",
+      "cpu_ms": 8592,
+      "wall_ms": 10004
+    },
+    "test_battle_screen": {
+      "class": "GREEN",
+      "cpu_ms": 1895,
+      "wall_ms": 4003
+    },
+    "test_bounty": {
+      "class": "GREEN",
+      "cpu_ms": 6259,
+      "wall_ms": 8003
+    },
+    "test_character": {
+      "class": "GREEN",
+      "cpu_ms": 4667,
+      "wall_ms": 6003
+    },
+    "test_chart": {
+      "class": "GREEN",
+      "cpu_ms": 10533,
+      "wall_ms": 12003
+    },
+    "test_demo_loop": {
+      "class": "GREEN",
+      "cpu_ms": 5227,
+      "wall_ms": 6002
+    },
+    "test_density": {
+      "class": "GREEN",
+      "cpu_ms": 58368,
+      "wall_ms": 60007
+    },
+    "test_discovery": {
+      "class": "GREEN",
+      "cpu_ms": 16560,
+      "wall_ms": 18002
+    },
+    "test_duel": {
+      "class": "GREEN",
+      "cpu_ms": 1883,
+      "wall_ms": 2002
+    },
+    "test_ecology": {
+      "class": "GREEN",
+      "cpu_ms": 9159,
+      "wall_ms": 10001
+    },
+    "test_economy": {
+      "class": "GREEN",
+      "cpu_ms": 4287,
+      "wall_ms": 6004
+    },
+    "test_equipment": {
+      "class": "GREEN",
+      "cpu_ms": 2070,
+      "wall_ms": 4000
+    },
+    "test_fleet": {
+      "class": "GREEN",
+      "cpu_ms": 5110,
+      "wall_ms": 6001
+    },
+    "test_inn": {
+      "class": "GREEN",
+      "cpu_ms": 2478,
+      "wall_ms": 4001
+    },
+    "test_market_screen": {
+      "class": "GREEN",
+      "cpu_ms": 2633,
+      "wall_ms": 4001
+    },
+    "test_morale": {
+      "class": "GREEN",
+      "cpu_ms": 9862,
+      "wall_ms": 10001
+    },
+    "test_movement": {
+      "class": "GREEN",
+      "cpu_ms": 45272,
+      "wall_ms": 46004
+    },
+    "test_npc_fleets": {
+      "class": "GREEN",
+      "cpu_ms": 24062,
+      "wall_ms": 26003
+    },
+    "test_ocean": {
+      "class": "GREEN",
+      "cpu_ms": 7543,
+      "wall_ms": 8001
+    },
+    "test_officers": {
+      "class": "GREEN",
+      "cpu_ms": 2153,
+      "wall_ms": 4001
+    },
+    "test_palace": {
+      "class": "GREEN",
+      "cpu_ms": 4835,
+      "wall_ms": 6000
+    },
+    "test_phase2_acceptance": {
+      "class": "GREEN",
+      "cpu_ms": 11646,
+      "wall_ms": 12001
+    },
+    "test_phase3_acceptance": {
+      "class": "GREEN",
+      "cpu_ms": 6545,
+      "wall_ms": 8001
+    },
+    "test_port_hours": {
+      "class": "GREEN",
+      "cpu_ms": 2099,
+      "wall_ms": 4000
+    },
+    "test_port_hub": {
+      "class": "GREEN",
+      "cpu_ms": 2992,
+      "wall_ms": 4000
+    },
+    "test_quests": {
+      "class": "GREEN",
+      "cpu_ms": 9047,
+      "wall_ms": 10002
+    },
+    "test_retirement": {
+      "class": "GREEN",
+      "cpu_ms": 4385,
+      "wall_ms": 6000
+    },
+    "test_sailing": {
+      "class": "GREEN",
+      "cpu_ms": 4164,
+      "wall_ms": 6002
+    },
+    "test_save": {
+      "class": "GREEN",
+      "cpu_ms": 3966,
+      "wall_ms": 4000
+    },
+    "test_save_v8": {
+      "class": "GREEN",
+      "cpu_ms": 3518,
+      "wall_ms": 4000
+    },
+    "test_shipyard": {
+      "class": "GREEN",
+      "cpu_ms": 4283,
+      "wall_ms": 6001
+    },
+    "test_tavern": {
+      "class": "GREEN",
+      "cpu_ms": 2486,
+      "wall_ms": 4002
+    },
+    "test_tournament": {
+      "class": "GREEN",
+      "cpu_ms": 4589,
+      "wall_ms": 6002
+    },
+    "test_trade": {
+      "class": "GREEN",
+      "cpu_ms": 1268,
+      "wall_ms": 2000
+    },
+    "test_weather": {
+      "class": "GREEN",
+      "cpu_ms": 8364,
+      "wall_ms": 10001
+    },
+    "test_world_e2e": {
+      "class": "GREEN",
+      "cpu_ms": 88045,
+      "wall_ms": 90010
+    },
+    "test_world_map": {
+      "class": "GREEN",
+      "cpu_ms": 35852,
+      "wall_ms": 36003
+    }
+  },
+  "total_s": 278.1
+}

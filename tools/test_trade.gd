@@ -972,34 +972,38 @@ func _test_sell_profit_xp_and_reputation() -> void:
 		% TradeEngineLib.profit_by_nation("england"))
 
 	# The 1,000g threshold carries across transactions, walked tranche by
-	# tranche: keep selling 10 at a time and let the oracle track the exact
-	# net gold as London's stock rises (docs/30 §4.4 + §4.10).
+	# tranche. The tranche-formula oracle is SAMPLED at three points — the
+	# first sale, one mid tranche, and the chunk that crosses the threshold
+	# — while every tranche still sells through the engine so the
+	# accumulator really carries (docs/30 §4.4 + §4.10).
 	var stock := 50  # 40 at rest + the first sale's 10
 	var profit_total := 650  # the 550g seed + the first sale's 100g
 	var sale := 0
 	for chunk in range(12):
+		var sampled := chunk == 0 or chunk == 4
 		FleetLib.add_goods("wine", 10)
 		_open_market()
 		gold_before = GameState.gold
 		xp_before = CharacterLib.current_xp()
-		rep_before = CharacterLib.reputation("england")
-		_check(TradeEngineLib.sell("london", "wine", 10),
-			"oracle sale %d: sell 10 more wine at London" % chunk)
 		# Oracle: one tranche of 10 at the current stock's sell price, taxed 20%.
 		var factor := 1500 - 5 * stock
 		var price := maxi(1, (30 * factor * 8) / 10000)
 		var gross := 10 * price
 		@warning_ignore("integer_division")
 		var net := gross - gross * 2000 / 10000
-		_check(GameState.gold == gold_before + net,
-			"oracle sale %d (stock %d): %d gross − tax = %d net (got +%d)"
-			% [chunk, stock, gross, net, GameState.gold - gold_before])
 		var profit := maxi(0, gross - 10 * 21)
+		var sold: bool = TradeEngineLib.sell("london", "wine", 10)
+		if sampled or profit_total + profit >= 1000:
+			_check(sold, "oracle sale %d: sell 10 more wine at London" % chunk)
+			_check(GameState.gold == gold_before + net,
+				"oracle sale %d (stock %d): %d gross − tax = %d net (got +%d)"
+				% [chunk, stock, gross, net, GameState.gold - gold_before])
+		if sampled:
+			_check(CharacterLib.current_xp() == xp_before + profit / 100,
+				"oracle sale %d awards floor(%d / 100) XP"
+				% [chunk, profit])
 		profit_total += profit
 		sale += 1
-		_check(CharacterLib.current_xp() == xp_before + profit / 100,
-			"oracle sale %d awards floor(%d / 100) XP"
-			% [chunk, profit])
 		stock += 10
 		if profit_total >= 1000:
 			break

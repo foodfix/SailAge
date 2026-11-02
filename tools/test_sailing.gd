@@ -564,23 +564,26 @@ func _test_heading_pipeline() -> void:
 
 
 func _test_port_day() -> void:
-	# 8. Dock at Lisbon: the day advance consumes and pays exactly like at sea.
+	# 8. Dock at Lisbon: the port-day amendment (20-* §4.5, 2026-11-02) — a
+	# docked ledger day consumes NOTHING (supplies are bought ashore; the
+	# no-shortfall shape resets the §4.9 counters) while wages still run.
 	_make_run(15, 10, 10, 1000)
 	GameState.current_port = "lisbon"
 	_check(SailingSimLib.in_port(), "in_port() is true while docked")
 	_check(SailingSimLib.advance_port_day() == 1,
 		"advance_port_day() ticks one day")
-	_check(FleetLib.supplies("provisions") == 7 and FleetLib.supplies("water") == 7,
-		"in-port day consumes 3 + 3 (got %d/%d)"
+	_check(FleetLib.supplies("provisions") == 10 and FleetLib.supplies("water") == 10,
+		"in-port day consumes nothing (got %d/%d)"
 		% [FleetLib.supplies("provisions"), FleetLib.supplies("water")])
 	_check(GameState.gold == 970,
 		"in-port day pays 30g wages (1000 → %d)" % GameState.gold)
 
-	# The doc's literal path also works: a port action calls advance_clock(1.0).
+	# The doc's literal path also works: a port action calls advance_clock(1.0)
+	# — same amendment: wages yes, consumption no.
 	GameState.gold = 1000
 	SailingSimLib.advance_clock(1.0)
-	_check(GameState.gold == 970 and FleetLib.supplies("provisions") == 4,
-		"advance_clock(1.0) in port consumes and pays too (gold %d, provisions %d)"
+	_check(GameState.gold == 970 and FleetLib.supplies("provisions") == 10,
+		"advance_clock(1.0) in port pays but does not consume (gold %d, provisions %d)"
 		% [GameState.gold, FleetLib.supplies("provisions")])
 
 	# At sea, in_port() is false — the T9 branch point.

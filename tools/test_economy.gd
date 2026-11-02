@@ -453,15 +453,13 @@ func _test_capacity_and_dev_multiplier() -> void:
 	_check(EconomyLib.capacity_of("london", "porcelain") == 160,
 		"at dev 2 the luxury capacity is 120 + 40 = 160 (got %d)"
 		% EconomyLib.capacity_of("london", "porcelain"))
-	var hit_zero_dev2 := -1
-	for tick in range(30):
-		_flow_ticks(1)
-		if EconomyLib.stock_of("london", "wine") == 0:
-			hit_zero_dev2 = tick + 1
-			break
-	_check(hit_zero_dev2 == 9,
-		"at dev 2 the staple consumer drains 60 → 0 in exactly 9 days "
-		+ "(7/day = 5 × 6/4; got %d)" % hit_zero_dev2)
+	# Single-boundary tick: from one day above zero the dev-2 rate (7/day)
+	# must land exactly on the floor in one tick.
+	EconomyLib.set_stock("london", "wine", 5)
+	_flow_ticks(1)
+	_check(EconomyLib.stock_of("london", "wine") == 0,
+		"at dev 2 the staple consumer drains 5 → 0 in exactly one tick "
+		+ "(7/day = 5 × 6/4; got %d)" % EconomyLib.stock_of("london", "wine"))
 	_restore_allegiance()
 	_check(_loaded_allegiance() == _real_allegiance,
 		"the real allegiance module is restored after the fixture swap")
@@ -480,38 +478,30 @@ func _test_flow_tick_gradient() -> void:
 		"under the fixture the flow tick reads dev 0 at london (got %d)"
 		% EconomyLib.dev_level("london"))
 	# Consumers drain at the tier rate and FLOOR at 0 — a starved port
-	# cannot sell what it lacks (docs/30 §4.2).
+	# cannot sell what it lacks (docs/30 §4.2). Single-boundary tick: from
+	# one day above zero the 5/day rate lands exactly on the floor.
 	var wine_stock := EconomyLib.stock_of("london", "wine")
 	_check(wine_stock == 60, "london wine starts at the consumer 60")
-	var hit_zero := -1
-	for tick in range(30):
-		_flow_ticks(1)
-		if EconomyLib.stock_of("london", "wine") == 0:
-			hit_zero = tick + 1
-			break
-	_check(hit_zero == 12,
-		"a staple consumer (5/day) drains 60 → 0 in exactly 12 days (got %d)"
-		% hit_zero)
-	for tick in range(5):
-		_flow_ticks(1)
+	EconomyLib.set_stock("london", "wine", 5)
+	_flow_ticks(1)
+	_check(EconomyLib.stock_of("london", "wine") == 0,
+		"a staple consumer (5/day) drains 5 → 0 in exactly one tick (got %d)"
+		% EconomyLib.stock_of("london", "wine"))
+	_flow_ticks(1)
 	_check(EconomyLib.stock_of("london", "wine") == 0,
 		"the drain floors at 0 — unmet demand sits, no negative stock")
 	_check(EconomyLib.factor_units("london", "wine") == 1500,
 		"a starved consumer prices at the factor floor (1500)")
 
 	# Producers fill toward capacity and CLAMP there — never past it.
-	EconomyLib.set_stock("quanzhou", "porcelain", 0)
-	var full_at := -1
-	for tick in range(90):
-		_flow_ticks(1)
-		if EconomyLib.stock_of("quanzhou", "porcelain") == 120:
-			full_at = tick + 1
-			break
-	_check(full_at == 60,
-		"quanzhou porcelain refills 0 → 120 at 2/day in exactly 60 days (got %d)"
-		% full_at)
-	for tick in range(5):
-		_flow_ticks(1)
+	# Single-boundary tick: one day short of capacity the 2/day fill lands
+	# exactly on 120.
+	EconomyLib.set_stock("quanzhou", "porcelain", 118)
+	_flow_ticks(1)
+	_check(EconomyLib.stock_of("quanzhou", "porcelain") == 120,
+		"quanzhou porcelain refills 118 → 120 at 2/day in one tick (got %d)"
+		% EconomyLib.stock_of("quanzhou", "porcelain"))
+	_flow_ticks(1)
 	_check(EconomyLib.stock_of("quanzhou", "porcelain") == 120,
 		"the refill clamps at capacity — the producer never overshoots")
 
@@ -601,8 +591,8 @@ func _test_recovery_pacing() -> void:
 			recovered = tick + 1
 			break
 	_check(recovered == 18,
-		"the dump recovers to within 10% of steady state in exactly 18 days (got %d)"
-		% recovered)
+		"the dump recovers to within 10 percent of steady state in exactly "
+		+ "18 days (got %d)" % recovered)
 	_check(recovered > 0 and recovered <= 30,
 		"recovery pacing stays within the 30-day gate")
 
@@ -619,18 +609,19 @@ func _test_determinism() -> void:
 	_check(runs[0] == runs[1],
 		"same seed → same ticks: 20 flow days replay byte-identical stocks")
 	# The seeded event schedule replays exactly, too (same formula family,
-	# no RNG): 720 rotation passes, twice.
+	# no RNG): 360 rotation passes, twice — one pass covers every event
+	# cadence window (120 / 180 / 360).
 	var starts := []
 	for pass_index in range(2):
 		_make_run("lisbon")
 		var replay: Array = []
-		for day in range(1, 721):
+		for day in range(1, 361):
 			for instance in EconomyLib.market_events_tick(day):
 				replay.append("%s@%s@%d" % [instance["template_id"],
 					instance["port_id"], instance["start_day"]])
 		starts.append(JSON.stringify(replay))
 	_check(starts[0] == starts[1],
-		"the seeded event schedule replays exactly over 720 days")
+		"the seeded event schedule replays exactly over 360 days")
 
 
 # --- 9. day_tick reporting + the GameState signal path ----------------------

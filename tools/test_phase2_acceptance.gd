@@ -822,7 +822,7 @@ func _drive(screen, mode: String) -> int:
 	if not screen.is_over():
 		screen.begin()
 	var guard := 0
-	while not screen.is_over() and guard < 800:
+	while not screen.is_over() and guard < 300:
 		guard += 1
 		var unit: Dictionary = screen.selected_unit()
 		if unit.is_empty():

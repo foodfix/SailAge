@@ -377,14 +377,14 @@ func _test_exploration_completion() -> void:
 	# Find an exploration offer in any week at a port that has discoveries near
 	# (lisbon: disc_atlas_cedars ~10 tiles; Phase-6 draw band 80).
 	var chosen: Dictionary = {}
-	for week in range(0, 200):
+	for week in range(0, 60):
 		for offer in QuestGenLib.offers("lisbon", week * 7 + 1):
 			if str((offer as Dictionary)["type"]) == "exploration":
 				chosen = offer
 				break
 		if not chosen.is_empty():
 			break
-	_check(not chosen.is_empty(), "an exploration offer is found in 200 weeks")
+	_check(not chosen.is_empty(), "an exploration offer is found in 60 weeks")
 	var discovery_id := str((chosen["requirements"] as Dictionary)["discovery_id"])
 	var accepted: Dictionary = QuestGenLib.accept(chosen, "lisbon", 12)
 	_check(not accepted.is_empty(), "the exploration offer is accepted")

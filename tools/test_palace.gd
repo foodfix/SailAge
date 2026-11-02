@@ -388,14 +388,11 @@ func _test_mission_gate() -> void:
 func _test_mission_kinds() -> void:
 	_new_run("lisbon", 1)
 	GameState.player["reputation"]["portugal"] = 40
-	# The offer rotates through all three kinds over months.
+	# The offer rotates through all three kinds over months: the pure
+	# rotation sampled at 3 consecutive month starts visits every kind.
 	var seen := {}
-	for day in range(1, 200, 30):
-		GameState.active_quests = []
-		var offer := PalaceEngineLib.offer("lisbon", day)
-		if offer.is_empty():
-			continue
-		seen[str((offer["requirements"] as Dictionary)["kind"])] = true
+	for day in range(1, 91, 30):
+		seen[PalaceEngineLib.offered_kind("lisbon", day)] = true
 	_check(seen.size() == 3, "all three royal kinds are offered over time (%s)"
 		% str(seen.keys()))
 
@@ -461,16 +458,18 @@ func _test_mission_kinds() -> void:
 		"royal_delivery has a gold reward")
 
 
-## Finds the first day whose offer is `kind` (searches whole cycles).
+## Finds the first day whose offer is `kind`: the pure rotation
+## `offered_kind` (a 90-day cycle) locates the month, and one `offer()` call
+## builds the instance — no day-by-day brute force.
 func _mission_of_kind(kind_fragment: String) -> Dictionary:
-	for day in range(1, 400):
+	for day in range(1, 91):
+		if not PalaceEngineLib.offered_kind("lisbon", day).contains(kind_fragment):
+			continue
 		GameState.active_quests = []
 		var offer := PalaceEngineLib.offer("lisbon", day)
 		if offer.is_empty():
 			continue
-		var kind := str((offer["requirements"] as Dictionary).get("kind", ""))
-		if kind.contains(kind_fragment):
-			return {"day": day, "offer": offer}
+		return {"day": day, "offer": offer}
 	return {}
 
 

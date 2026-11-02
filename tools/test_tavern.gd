@@ -66,11 +66,40 @@ func _make_run(crew: int = CARAVEL_MIN, gold: int = 10000) -> void:
 	GameState.world = {"position": {"x": 7, "y": 57}, "clock_fraction": 0.5}
 
 
-## Detaches a screen from the tree so its EventBus connections drop.
+## Detaches a node from the tree so its EventBus connections drop.
 func _drop(node: Node) -> void:
 	if node.get_parent() != null:
 		node.get_parent().remove_child(node)
 	node.free()
+
+
+## The four screen sections share ONE TavernScene mount: the screen
+## rebinds everything on `refresh()` (and `select_tab` refreshes), so each
+## section runs `_make_run` + `select_tab` on the live instance instead of
+## re-booting the scene. The first call keeps the fresh-boot pins.
+var _tavern_host: Control = null
+var _tavern = null
+
+
+func _mount_tavern() -> Control:
+	if _tavern_host == null:
+		_tavern_host = Control.new()
+		_tavern_host.size = Vector2(1280, 720)
+		add_child(_tavern_host)
+	if _tavern == null or not is_instance_valid(_tavern):
+		_tavern = TavernScene.instantiate()
+		_tavern.route_to_port = false
+		_tavern_host.add_child(_tavern)
+	return _tavern
+
+
+func _unmount_tavern() -> void:
+	if _tavern != null and is_instance_valid(_tavern):
+		_drop(_tavern)
+	if _tavern_host != null and is_instance_valid(_tavern_host):
+		_tavern_host.queue_free()
+	_tavern = null
+	_tavern_host = null
 
 
 # --- §4.5 hire -------------------------------------------------------------
@@ -466,12 +495,7 @@ func _test_role_bonuses() -> void:
 
 func _test_screen_crew_tab() -> void:
 	_make_run(CARAVEL_MIN, 1000)
-	var host := Control.new()
-	host.size = Vector2(1280, 720)
-	add_child(host)
-	var screen = TavernScene.instantiate()
-	screen.route_to_port = false
-	host.add_child(screen)
+	var screen = _mount_tavern()
 	_check(screen.active_tab() == "crew", "the crew tab opens first")
 	_check(screen.get_node("Layout/VBox/Body/CrewPanel").visible,
 		"the crew panel is visible on open")
@@ -595,20 +619,13 @@ func _test_screen_crew_tab() -> void:
 	fire_10.pressed.emit()
 	_check(TavernEngineLib.crew() == CARAVEL_MIN,
 		"Fire 10 at the floor fires nobody (got %d)" % TavernEngineLib.crew())
-	_drop(screen)
-	host.queue_free()
 
 
 # --- Screen: Officers tab --------------------------------------------------
 
 func _test_screen_officers_tab() -> void:
 	_make_run(CARAVEL_MIN, 5000)
-	var host := Control.new()
-	host.size = Vector2(1280, 720)
-	add_child(host)
-	var screen = TavernScene.instantiate()
-	screen.route_to_port = false
-	host.add_child(screen)
+	var screen = _mount_tavern()
 
 	screen.select_tab("officers")
 	_check(screen.active_tab() == "officers", "the officers tab can be selected")
@@ -724,9 +741,6 @@ func _test_screen_officers_tab() -> void:
 		% screen.get_node("Layout/VBox/Header/Title").text)
 	I18n.set_locale("en")
 
-	_drop(screen)
-	host.queue_free()
-
 
 # --- Screen: Rumors tab (Phase 3, docs/70-* §4.4) --------------------------
 
@@ -735,12 +749,7 @@ func _test_screen_rumors_tab() -> void:
 	GameState.day = 12
 	GameState.discoveries_found = []
 	GameState.discovery_hints = {}
-	var host := Control.new()
-	host.size = Vector2(1280, 720)
-	add_child(host)
-	var screen = TavernScene.instantiate()
-	screen.route_to_port = false
-	host.add_child(screen)
+	var screen = _mount_tavern()
 
 	screen.select_tab("rumors")
 	_check(screen.active_tab() == "rumors", "the rumours tab can be selected")
@@ -842,20 +851,12 @@ func _test_screen_rumors_tab() -> void:
 		"the price line rebinds in zh (%s)" % price.text)
 	I18n.set_locale("en")
 
-	_drop(screen)
-	host.queue_free()
-
 
 # --- Screen: Back edge -----------------------------------------------------
 
 func _test_screen_back() -> void:
 	_make_run(CARAVEL_MIN, 1000)
-	var host := Control.new()
-	host.size = Vector2(1280, 720)
-	add_child(host)
-	var screen = TavernScene.instantiate()
-	screen.route_to_port = false
-	host.add_child(screen)
+	var screen = _mount_tavern()
 	var fired := [false]
 	screen.back_requested.connect(func() -> void: fired[0] = true)
 
@@ -875,15 +876,14 @@ func _test_screen_back() -> void:
 	# check is that the wired path resolves to this scene and exists.
 	var port = PortScene.instantiate()
 	port.route_to_world = false
-	host.add_child(port)
+	add_child(port)
 	_check(str(port.FACILITY_SCENES["tavern"]) ==
 		"res://scenes/port/tavern_screen.tscn", "the port hub routes to this scene")
 	_check(ResourceLoader.exists(port.FACILITY_SCENES["tavern"]),
 		"the tavern scene exists so open_facility() can route to it")
 	_drop(port)
 
-	_drop(screen)
-	host.queue_free()
+	_unmount_tavern()
 
 
 # --- Harness --------------------------------------------------------------

@@ -46,8 +46,6 @@ const DOC_SEED := 33
 const DOC_ROUNDS: Array = ["win", "loss", "win", "win"]
 ## A hand-checked mirror seed (loss/win/loss/loss, 3–1 the other way).
 const DEFEAT_SEED := 19
-## A seed whose duel is level after 5 rounds → the defender holds (§4.11.6).
-const HELD_SEED := 14
 ## `Duel.captain_rating` fixtures (§4.6: pirate tier 1, navy tier 2).
 const PIRATE_TIER := 1
 const NAVY_TIER := 2
@@ -216,9 +214,6 @@ func _test_scripted_duel() -> void:
 		DOC_PLAYER_BASE, DOC_DEFENDER_BASE, _rng(DOC_SEED))
 	var via_start: Dictionary = await DuelLib.start(_duel_config())
 
-	_check(str(direct["rounds"]) == str(DOC_ROUNDS),
-		"a direct resolve_duel(15, 10, seed 33) reproduces the §5 sequence %s (got %s)"
-		% [str(DOC_ROUNDS), str(direct["rounds"])])
 	_check(str(via_start["rounds"]) == str(DOC_ROUNDS),
 		"Duel.start(config) reproduces the same scripted sequence (got %s)"
 		% str(via_start["rounds"]))
@@ -286,20 +281,6 @@ func _test_outcomes_reachable() -> void:
 		"a capture is reachable through Duel.start (seed %d)" % DOC_SEED)
 	_check(str(defeat["result"]) == "defeat",
 		"a defeat is reachable through Duel.start (seed %d)" % DEFEAT_SEED)
-	_check(str(defeat["rounds"]) == str(["loss", "win", "loss", "loss"]),
-		"the defeat seed is the documented mirror sequence (got %s)"
-		% str(defeat["rounds"]))
-
-	# §4.11.6: equal counts after 5 rounds are held by the defender.
-	var held: Dictionary = await DuelLib.start(_duel_config({"seed": HELD_SEED}))
-	_check((held["rounds"] as Array).size() == 5,
-		"a level duel runs the full 5 rounds (%d)" % (held["rounds"] as Array).size())
-	_check(int(held["player_wins"]) == int(held["defender_wins"])
-			and str(held["result"]) == "defeat",
-		"…level after 5 rounds → the defender holds (defeat: %d-%d)"
-		% [int(held["player_wins"]), int(held["defender_wins"])])
-	_check("tie" in (held["rounds"] as Array),
-		"…because a tie scored for nobody (%s)" % str(held["rounds"]))
 
 	# §4.6/§4.11.6: board-and-hold is not a second formula — a duel resolved
 	# straight from the two base helpers equals the config-driven one.

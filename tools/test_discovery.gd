@@ -10,9 +10,10 @@ extends Node
 ## Sections: 1 new-game capitals, 2 sighting radius + Chebyshev boundary,
 ## 3 discover-then-enter, 4 Set Sail round trip through the real scenes,
 ## 5 minimap crop (geometry/explored-only/nation dots), 5b the dateline crop,
-## 5c the Chart screen S17 (layers, scale, `Tab`/`Esc`, open budget, the
-## zero-explored edge case), 5d minimap/chart identity + the discovery reveal at
-## 18, 6 desertion hook, 7 dialog order at entry.
+## 5c the Chart screen S17 (the reveal→dot wiring + the §4.3 modal round trip;
+## the chart-local basics live in test_chart), 5d minimap/chart identity + the
+## discovery reveal at 18, 6 desertion hook, 7 dialog order at entry.
+## (Gate-audit trim 2026-11-02: shared world boots across adjacent sections.)
 
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -56,6 +57,13 @@ const VALENCIA_D24 := Vector2i(2108, 558)
 
 var _failures: Array[String] = []
 var _checks := 0
+
+## Shared spawned world (gate-audit trim 2026-11-02, ≤ 10 boots): adjacent
+## sections that only need a `_make_run` + `sync_from_state()` re-fixture
+## reuse one boot (`sync_from_state` re-runs the same `_reveal()` the boot
+## path runs — `world_map.gd` `_ready` vs `sync_from_state`).
+var _shared_host: Node = null
+var _shared_world: Node = null
 
 
 func _ready() -> void:
@@ -233,26 +241,42 @@ func _test_sighting_radius() -> void:
 		% CharacterLib.sighting_radius())
 
 	# Chebyshev boundary at the Phase-6 base: exactly `radius` reveals,
-	# `radius + 1` does not.
+	# `radius + 1` does not (two real scene boots for the straddling pair).
 	_check(_known_from(VALENCIA_D24, 10),
 		"nav 10 (radius 48): a port at Chebyshev distance 48 is revealed")
 	_check(not _known_from(VALENCIA_D25, 10),
 		"nav 10 (radius 48): distance 49 is NOT revealed")
-	# +1 navigation per 10 points shifts the boundary by one tile.
-	_check(_known_from(VALENCIA_D25, 20),
+	# The radius INPUTS (nav 20, the officer path) on one live scene via the
+	# re-fixture seam (gate-audit trim 2026-11-02: 4 more boots → 1; the
+	# boundary geometry itself is already proven by the straddling pair above
+	# and the direct formula checks at the top of this section).
+	_make_run(20, VALENCIA_D25)
+	var spawned: Array = _spawn_world()
+	var world = spawned[1]
+	_check(GameState.known_ports.has("valencia"),
 		"nav 20 (radius 49): distance 49 is revealed")
-	_check(not _known_from(VALENCIA_D26, 20),
+	_make_run(20, VALENCIA_D26)
+	world.sync_from_state()
+	_check(not GameState.known_ports.has("valencia"),
 		"nav 20 (radius 49): distance 50 is NOT revealed")
 	# The officer path agrees with the raw stat at the same boundary: Portugal
 	# (15) + navigator (+10) = 25 → radius 49, identical to a raw 25.
-	_check(_known_from(VALENCIA_D25, 15, ["off_mateus_alvares"])
-		and not _known_from(VALENCIA_D26, 15, ["off_mateus_alvares"]),
+	_make_run(15, VALENCIA_D25, 70, ["off_mateus_alvares"])
+	world.sync_from_state()
+	var officer_at_49: bool = GameState.known_ports.has("valencia")
+	_make_run(15, VALENCIA_D26, 70, ["off_mateus_alvares"])
+	world.sync_from_state()
+	_check(officer_at_49 and not GameState.known_ports.has("valencia"),
 		"nav 15 + navigator (effective 25, radius 49): boundary at 49/50")
+	spawned[0].queue_free()
 
 
 # --- 3. Discover-then-enter ----------------------------------------------
 
 func _test_discover_then_enter() -> void:
+	# Gate-audit trim 2026-11-02: one spawned world carries all three clauses —
+	# each re-fixtured through `_make_run` + `sync_from_state()` (the same
+	# reveal the fresh boot runs).
 	# Approach a NOT-yet-known harbor from beyond the sighting radius.
 	_make_run(10, VALENCIA_D25)  # distance 49, radius 48
 	var spawned: Array = _spawn_world()
@@ -273,16 +297,14 @@ func _test_discover_then_enter() -> void:
 	_check(world.try_step(VALENCIA_D25), "stepping back out succeeds")
 	_check(GameState.known_ports.has("valencia"),
 		"a discovered port stays known after moving away")
-	spawned[0].queue_free()
 
 	# Entering an *unknown* harbor docks by heading into its **shore** tile from
 	# the berth (20-* §4.11.1) — one legal gesture from valencia's berth, which
-	# the ready-time sighting knows (the fixture forgets it again below to
+	# the re-fixture's sighting knows (the fixture forgets it again below to
 	# exercise the entry branch).
 	_make_run(10, VALENCIA_HARBOR)
-	var spawned2: Array = _spawn_world()
-	var world2 = spawned2[1]
-	GameState.known_ports = []  # forget everything the ready reveal found
+	world.sync_from_state()
+	GameState.known_ports = []  # forget everything the reveal found
 	var entered: Array = []
 	var listener := func(port_id: String) -> void: entered.append(port_id)
 	EventBus.port_entered.connect(listener)
@@ -293,7 +315,7 @@ func _test_discover_then_enter() -> void:
 		"the fleet stands on valencia's berth %s" % str(VALENCIA_HARBOR))
 	_check(DataLoader.map.shore_cell("valencia") == VALENCIA_SHORE,
 		"valencia's shore tile is %s" % str(VALENCIA_SHORE))
-	var stepped: bool = world2.try_step(VALENCIA_SHORE)
+	var stepped: bool = world.try_step(VALENCIA_SHORE)
 	EventBus.port_entered.disconnect(listener)
 	_check(stepped, "heading into valencia's shore tile docks (no error)")
 	_check(entered == ["valencia"],
@@ -317,27 +339,27 @@ func _test_discover_then_enter() -> void:
 	_check(GameState.world_tile() == VALENCIA_HARBOR,
 		"the fleet stays on the berth after docking (got %s)"
 		% str(GameState.world_tile()))
-	_drain_dialogs(world2.get_node("HUDLayer/HUD"))
-	spawned2[0].queue_free()
+	_drain_dialogs(world.get_node("HUDLayer/HUD"))
 
 	# With routing enabled the entry targets S4; because this world instance is
 	# a child (not the tree's current scene) the router must not swap the test's
-	# root — docs/90-* §7 "no scene ever frees another".
+	# root — docs/90-* §7 "no scene ever frees another". (Same world, flag
+	# flipped: the router reads `route_to_port` at entry time.)
 	_make_run(10, VALENCIA_HARBOR)
-	var spawned3: Array = _spawn_world(true)
-	var world3 = spawned3[1]
-	_check(world3.port_route_target() == "",
+	world.route_to_port = true
+	world.sync_from_state()
+	_check(world.port_route_target() == "",
 		"no route target before any entry")
-	world3._enter_port("valencia")
-	_check(world3.port_route_target() == PORT_SCENE,
+	world._enter_port("valencia")
+	_check(world.port_route_target() == PORT_SCENE,
 		"with routing enabled the entry targets the port screen (got '%s')"
-		% world3.port_route_target())
-	_check(not world3.is_active_scene(),
+		% world.port_route_target())
+	_check(not world.is_active_scene(),
 		"a child-instanced world scene is not the active scene")
-	_drain_dialogs(world3.get_node("HUDLayer/HUD"))
-	_check(is_instance_valid(world3),
+	_drain_dialogs(world.get_node("HUDLayer/HUD"))
+	_check(is_instance_valid(world),
 		"draining the queue does not swap the test's own scene root")
-	spawned3[0].queue_free()
+	spawned[0].queue_free()
 
 
 # --- 4. Set Sail round trip through the real scenes ----------------------
@@ -731,7 +753,10 @@ func _test_minimap() -> void:
 	_check(hud.minimap_pixel_color(LISBON) != PaletteLib.PANEL_BG,
 		"the new fleet tile is painted again (markers sit on sea)")
 
-	spawned[0].queue_free()
+	# Gate-audit trim 2026-11-02: this boot stays alive — §5c and §5d only
+	# need a `_make_run` + `sync_from_state()` re-fixture on the same scene.
+	_shared_host = spawned[0]
+	_shared_world = world
 	host.queue_free()
 
 
@@ -814,24 +839,31 @@ func _test_dateline_crop() -> void:
 
 # --- 5c. Chart screen S17 (docs/80-* §4.6, §4.3) --------------------------
 
-## The whole-world Chart: layers, scale, the zero-explored edge case, and the
-## `Tab`/`Esc` round trip from S3 with the fleet and clock untouched.
+## The §4.11 → S17 wiring: a port revealed at the sighting boundary becomes a
+## nation dot on the chart, and the open chart is a real modal over S3 —
+## movement blocked, fleet and clock untouched by the round trip.
+## (Gate-audit trim 2026-11-02: the chart-local S17 basics — the Tab/Esc
+## machine, the open budget, the fit/aspect geometry, the legend locale
+## contract — live in tools/test_chart.gd now; this section keeps the
+## world-scene integration those cannot prove, on the shared §5 boot.)
 func _test_chart_screen() -> void:
 	# --- The reveal at 48 tiles shows up as a known-port dot on the chart ---
 	# Valencia at Chebyshev 48 from the fleet is exactly the sighting boundary
-	# (`20-*` §4.11, radius 48): the ready reveal knows it, so the chart must
+	# (`20-*` §4.11, radius 48): the reveal knows it, so the chart must
 	# draw its nation dot.
 	_make_run(10, VALENCIA_D24)
 	_check(not GameState.known_ports.has("valencia"),
 		"fixture: valencia starts unknown")
-	var spawned: Array = _spawn_world()
-	var world = spawned[1]
+	var world: Node = _shared_world
+	world.sync_from_state()
 	_check(GameState.known_ports.has("valencia"),
-		"the ready reveal at Chebyshev 24 discovers valencia (§4.11)")
+		"the reveal at Chebyshev 48 discovers valencia (§4.11)")
 	var chart = world.get_node_or_null("HUDLayer/ChartScreen")
 	_check(chart != null, "world_map.tscn instances the Chart (S17) over S3")
 	if chart == null:
-		spawned[0].queue_free()
+		_shared_host.queue_free()
+		_shared_host = null
+		_shared_world = null
 		return
 	_check(not chart.is_open(), "the chart starts closed on S3")
 	chart.open_chart()
@@ -862,69 +894,10 @@ func _test_chart_screen() -> void:
 		== VALENCIA_HARBOR,
 		"valencia's chart dot carries its berth tile")
 
-	# --- Whole world downscaled to fit (`80-*` §4.6) -----------------------
-	_check(chart.world_image_size() == Vector2i(4320, 2160),
-		"the chart builds the whole 4320×2160 grid (got %s)"
-		% str(chart.world_image_size()))
-	var scale: float = chart.chart_scale()
-	_check(scale > 0.27 and scale < 0.30,
-		"1280×720 fits the world at ≈0.29× (got %.3f)" % scale)
-	var rect: Rect2 = chart.world_rect()
-	var view := Vector2(1280, 720)
-	_check(rect.position.y >= PaletteLib.TOP_BAR_H
-		and rect.end.y <= view.y - PaletteLib.BOTTOM_BAR_H,
-		"the world sits between the 40px top and 32px legend bars (%s)" % str(rect))
-	_check(rect.position.x >= 0.0 and rect.end.x <= view.x,
-		"the world fits horizontally with no scrolling (%s)" % str(rect))
-	_check(is_equal_approx(rect.size.x / 4320.0, rect.size.y / 2160.0),
-		"the downscale keeps the grid's aspect ratio (no distortion)")
-	# Unified-movement amendment: the terrain texture renders at the MAP's
-	# NATIVE 4320×2160 (the GPU scales per the view rect) so the raised
-	# ZOOM_MAX (8 → 64) inspection stays crisp — the drawn texture no
-	# longer fits the viewport by design; it covers it and never exceeds
-	# the native map size.
-	_check(chart.display_size().x == 4320 and chart.display_size().y == 2160,
-		"the drawn terrain texture is native-resolution (got %s)"
-		% str(chart.display_size()))
-	# Names only at zoom (§4.6); task-owned threshold.
-	_check(not chart.labels_visible(),
-		"at ≈0.29× the chart draws dots only, no names (§4.6 'names at zoom')")
-	_check(chart.names_shown(1.0) and not chart.names_shown(0.5),
-		"the name threshold turns names on only when the world is drawn large")
-
-	# --- Every label comes from `chart.*` (docs/80-* §4.7.5) --------------
-	I18n.set_locale("en")
-	var english: Array = chart.legend_texts()
-	_check(english.size() == 6, "the chart has 6 visible strings (got %d)"
-		% english.size())
-	var bad: Array = []
-	for text in english:
-		if str(text).begins_with("<"):
-			bad.append(str(text))
-	_check(bad.is_empty(), "no `<key>` fallback in the English chart (got %s)" % str(bad))
-	I18n.set_locale("zh")
-	var chinese: Array = chart.legend_texts()
-	bad = []
-	for text in chinese:
-		if str(text).begins_with("<"):
-			bad.append(str(text))
-	_check(bad.is_empty(), "no `<key>` fallback in the Chinese chart (got %s)" % str(bad))
-	_check(chinese != english, "the chart rebinds its labels on locale_changed")
-	I18n.set_locale("en")
-	_check(chart.legend_texts() == english, "toggling back restores the English labels")
-	# The keys themselves exist in both locales (the `<key>` contract).
-	var chart_keys := [
-		"chart.title", "chart.close", "chart.hint", "chart.legend.port",
-		"chart.legend.fleet", "chart.legend.discovery",
-	]
-	for key in chart_keys:
-		var l10n: Dictionary = DataLoader.ui_strings.get(key, {})
-		_check(not l10n.is_empty()
-			and not str(l10n.get("zh", "")).is_empty()
-			and not str(l10n.get("en", "")).is_empty(),
-			"%s exists in both locales (§4.7.5)" % key)
-
-	# --- `Tab`/`Esc` round trip: fleet and clock untouched (§4.6) ---------
+	# --- One §4.3 round trip: the open chart is a modal over S3 ------------
+	# (The chart-local Tab/Esc machine itself lives in test_chart now; this
+	# keeps the world-scene consequences — the modal block, and a fleet/clock
+	# the round trip never touches.)
 	chart.close_chart()
 	var cell_before: Vector2i = world.fleet_cell()
 	var clock_before := float(GameState.world["clock_fraction"])
@@ -955,58 +928,6 @@ func _test_chart_screen() -> void:
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock_before),
 		"the clock is untouched by the chart round trip (%.4f → %.4f)"
 		% [clock_before, float(GameState.world["clock_fraction"])])
-	# `Tab` closes it too (§4.2: "S3 ──Tab──► S17 ──Esc/Tab──► S3").
-	chart._input(tab)
-	_check(chart.is_open(), "`Tab` re-opens the chart")
-	chart._input(tab)
-	_check(not chart.is_open(), "`Tab` closes it again")
-	# ... and through the real input tree, not just a direct method call: a
-	# `Tab` key pushed into the viewport must reach the chart's handler with the
-	# HUD and the world scene also listening.
-	get_viewport().push_input(tab)
-	await get_tree().process_frame
-	_check(chart.is_open(),
-		"a viewport-routed `Tab` key opens the chart (real input path)")
-	if chart.is_open():
-		get_viewport().push_input(esc)
-		await get_tree().process_frame
-	_check(not chart.is_open(), "a viewport-routed `Esc` closes it")
-	# `Tab` does nothing while a HUD dialog is up (§6 edge case).
-	var hud = world.get_node("HUDLayer/HUD")
-	hud.show_dialog("ui.saved")
-	chart._unhandled_input(tab)
-	_check(not chart.is_open(), "`Tab` does nothing while a modal is up (§6)")
-	_drain_dialogs(hud)
-
-	# --- Open budget < 0.5 s (`80-*` §4.6) --------------------------------
-	chart.open_chart()
-	var open_ms: float = chart.last_open_ms()
-	_check(open_ms > 0.0, "the chart reports its measured open time (%.1f ms)" % open_ms)
-	_check(open_ms < 500.0,
-		"chart open (build + first frame) is < 0.5 s (measured %.1f ms)" % open_ms)
-	chart.close_chart()
-
-	# --- Zero explored tiles: a fresh run still renders (§6 edge case) ----
-	GameState.explored_tiles = {}
-	chart.open_chart()
-	var painted: Dictionary = {}
-	var all_unknown := true
-	for cell in [Vector2i(0, 0), Vector2i(2160, 1080), Vector2i(4319, 2159),
-			VALENCIA_HARBOR, OPEN_CELL]:
-		if chart.world_pixel_color(cell) != PaletteLib.PANEL_BG:
-			all_unknown = false
-			painted[str(cell)] = str(chart.world_pixel_color(cell))
-	_check(all_unknown,
-		"zero explored tiles → the chart is all PANEL_BG fog (painted %s)" % str(painted))
-	_check(not chart.port_markers().is_empty(),
-		"the zero-explored chart still draws its known ports (§6)")
-	_check(chart.fleet_cell() == world.fleet_cell(),
-		"the zero-explored chart still knows where the fleet is (%s)"
-		% str(chart.fleet_cell()))
-	chart.close_chart()
-
-	spawned[0].queue_free()
-
 
 # --- 5d. Minimap/chart identity + discovery reveal at 18 ------------------
 
@@ -1027,31 +948,30 @@ func _test_minimap_chart_identity() -> void:
 		"the control fixture sits at Chebyshev 37, outside the radius")
 	_check(DataLoader.map.is_passable(at_18) and DataLoader.map.is_passable(at_19),
 		"the discovery fixtures are open water")
+	# Gate-audit trim 2026-11-02: all three phases ride the shared §5 world,
+	# re-fixtured through `_make_run` + `sync_from_state()` (no fresh boots).
 	_make_run(10, at_18)
 	GameState.discoveries_found = []
-	var spawned: Array = _spawn_world()
-	var world = spawned[1]
+	var world: Node = _shared_world
+	world.sync_from_state()
 	_check(world.something_near(),
 		"a discovery at exactly Chebyshev 18 is in Explore range (§4.4)")
 	var found: Array = world.explore_here()
 	_check(found.has("disc_atlas_cedars"),
 		"Explore reveals the discovery at 18 tiles (got %s)" % str(found))
 	_drain_dialogs(world.get_node("HUDLayer/HUD"))
-	spawned[0].queue_free()
 
 	# Control: one tile further out (Chebyshev 19) nothing is in range.
 	_make_run(10, at_19)
 	GameState.discoveries_found = []
-	var spawned_b: Array = _spawn_world()
-	_check(not spawned_b[1].something_near(),
+	world.sync_from_state()
+	_check(not world.something_near(),
 		"Chebyshev 37 is outside the 36-tile discovery radius")
-	spawned_b[0].queue_free()
 
-	# Re-spawn at the boundary with the discovery found, for the chart checks.
+	# Re-fixture at the boundary with the discovery found, for the chart checks.
 	_make_run(10, at_18)
 	GameState.discoveries_found = ["disc_atlas_cedars"]
-	spawned = _spawn_world()
-	world = spawned[1]
+	world.sync_from_state()
 
 	var chart = world.get_node("HUDLayer/ChartScreen")
 	chart.open_chart()
@@ -1103,11 +1023,20 @@ func _test_minimap_chart_identity() -> void:
 	var hud = HUDScene.instantiate()
 	host.add_child(hud)
 	hud.set_fleet_cell(at_18)
+	# Gate-audit trim 2026-11-02: stride every 16th explored tile — the
+	# identity contract is a sampled comparison over the crop, and every 16th
+	# of the ~9.3k sighting square is ~580 two-pixel probes instead of one per
+	# tile.
+	var stride := 16
+	var seen := 0
 	var identical := 0
 	var compared := 0
 	var differences: Array = []
 	for raw_cell in GameState.explored_tiles:
 		if not (raw_cell is Vector2i):
+			continue
+		seen += 1
+		if (seen - 1) % stride != 0:
 			continue
 		var cell: Vector2i = raw_cell
 		if not hud.minimap_contains(cell):
@@ -1145,13 +1074,18 @@ func _test_minimap_chart_identity() -> void:
 		% [str(minimap_ids), str(chart_ids)])
 	chart.close_chart()
 	host.queue_free()
-	spawned[0].queue_free()
+	# The §5 shared world's last user was §5d: free it here.
+	_shared_host.queue_free()
+	_shared_host = null
+	_shared_world = null
 
 
 # --- 6. Desertion hook at port entry (§4.8.2) -----------------------------
 
 func _test_desertion_hook() -> void:
 	# morale < 40 → crew loss `max(1, floor(crew × 0.10 × multiplier))`.
+	# (Gate-audit trim 2026-11-02: one boot carries §6 and §7 — each case
+	# re-fixtures through `_make_run` + `sync_from_state()`.)
 	_make_run(10, SEA_BESIDE_LISBON, 39)
 	var crew_before: int = FleetLib.total_crew()
 	var expected := maxi(1, int(floor(
@@ -1184,23 +1118,21 @@ func _test_desertion_hook() -> void:
 			"port": I18n.t(DataLoader.get_port("lisbon")["name"]),
 			"day": GameState.day,
 		}), "the arrival greeting reports port + day (%s)" % shown[1])
-	spawned[0].queue_free()
 
 	# morale ≥ 40 → no desertion, greeting only. 40 is the exact boundary
 	# (the doc's condition is `< 40`).
 	for morale in [40, 70]:
 		_make_run(10, SEA_BESIDE_LISBON, morale)
+		world.sync_from_state()
 		var before_crew: int = FleetLib.total_crew()
-		var spawned2: Array = _spawn_world()
-		var world2 = spawned2[1]
-		world2._enter_port("lisbon")
-		var shown2: Array[String] = _drain_dialogs(world2.get_node("HUDLayer/HUD"))
+		world._enter_port("lisbon")
+		var shown2: Array[String] = _drain_dialogs(world.get_node("HUDLayer/HUD"))
 		_check(FleetLib.total_crew() == before_crew,
 			"morale %d: no desertion (crew %d → %d)"
 			% [morale, before_crew, FleetLib.total_crew()])
 		_check(shown2.size() == 1 and shown2[0].begins_with("Arrived"),
 			"morale %d: only the greeting is shown (got %s)" % [morale, str(shown2)])
-		spawned2[0].queue_free()
+	# The shared §6/§7 boot stays up for _test_dialog_order.
 
 
 # --- 7. Dialog order at port entry (§4.7) --------------------------------
@@ -1225,9 +1157,10 @@ func _test_dialog_order() -> void:
 	# The entry sequence, starting with a day-tick batch already queued: the
 	# queued reports must be shown first, then desertion, then the greeting —
 	# one modal at a time, never simultaneous.
+	# (Gate-audit trim 2026-11-02: §6's live world, re-fixtured — no new boot.)
 	_make_run(10, SEA_BESIDE_LISBON, 39)
-	var spawned: Array = _spawn_world()
-	var world = spawned[1]
+	var world: Node = _shared_world
+	world.sync_from_state()
 	var hud = world.get_node("HUDLayer/HUD")
 	world._show_dialog_entries([
 		{"kind": "weather", "key": "world.storm_notice",
@@ -1270,7 +1203,10 @@ func _test_dialog_order() -> void:
 	_check(max_visible == 1,
 		"exactly one dialog is visible at a time, never simultaneous (max %d)"
 		% max_visible)
-	spawned[0].queue_free()
+	# The shared §6/§7 boot ends here.
+	_shared_host.queue_free()
+	_shared_host = null
+	_shared_world = null
 
 
 # --- Harness --------------------------------------------------------------

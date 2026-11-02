@@ -26,8 +26,6 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
-const PortScene := preload("res://scenes/port/port_screen.tscn")
 const InnScene := preload("res://scenes/port/inn_screen.tscn")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -49,13 +47,8 @@ var _checks := 0
 
 
 func _ready() -> void:
-	var map = MapLoaderLib.new()
-	var ok: bool = map.load_map(
-		"res://data/maps/world.png", DataLoader.map_legend
-	)
-	_check(ok, "map loads for the port fixtures (%s)" % map.last_error)
-	DataLoader.map = map if ok else null
-
+	# No map fixture needed: the whole suite is docked (`in_port()` reads
+	# `current_port != null`, and the drift push returns early when docked).
 	_test_constants()
 	_test_rest_days_and_gold()
 	_test_rest_morale_cap()
@@ -402,8 +395,9 @@ func _test_debug_strip_fleet() -> void:
 func _test_menu_wiring() -> void:
 	# FACILITY_SCENES is the routing table T11's rows call through; the inn
 	# entry must point at the scene this task created and the file must exist.
-	var port = PortScene.instantiate()
-	var scenes: Dictionary = port.FACILITY_SCENES
+	# The constant is read straight off the script — no hub instantiation.
+	var port_script = load("res://scenes/port/port_screen.gd")
+	var scenes: Dictionary = port_script.FACILITY_SCENES
 	_check(str(scenes.get("inn", "")) == INN_SCENE,
 		"port_screen.FACILITY_SCENES[inn] == %s (got '%s')"
 		% [INN_SCENE, str(scenes.get("inn", ""))])
@@ -422,7 +416,6 @@ func _test_menu_wiring() -> void:
 		"port hub is the active scene (got %s)"
 		% ("null" if hub == null else hub.scene_file_path))
 	if hub == null or hub.scene_file_path != PORT_SCENE:
-		port.free()
 		return
 	var routed: bool = hub.open_facility("inn")
 	_check(routed, "open_facility('inn') reports a started route")
@@ -440,7 +433,6 @@ func _test_menu_wiring() -> void:
 	if tree.current_scene != null:
 		tree.current_scene.queue_free()
 		tree.current_scene = null
-	port.free()
 	await tree.process_frame
 
 
@@ -518,15 +510,15 @@ func _test_scene_states() -> void:
 	_check(rest_hint.visible, "the gold reason line is visible at 29g")
 	_check(rest_hint.text == I18n.t_key("inn.no_gold"),
 		"the gold reason is inn.no_gold (%s)" % rest_hint.text)
-	inn.queue_free()
-	await get_tree().process_frame
 
 	# (d) Harbor relief: shipless + broke + no officers → button enabled, and
 	# one click gives +100g/+1 day; the state machine then flips to disabled
-	# *in the same action* because 100g is no longer `< 100`.
+	# *in the same action* because 100g is no longer `< 100`. The ONE mounted
+	# screen re-binds everything on refresh(), so the new run re-renders
+	# without a re-mount.
 	_make_run(0, 0, 10, 70)
 	GameState.debug_strip_fleet()
-	inn = _mount_inn(host)
+	inn.refresh()
 	await get_tree().process_frame
 	odd = inn.get_node("Layout/VBox/Actions/OddJobButton")
 	hint = inn.get_node("Layout/VBox/Actions/OddJobHint")
@@ -564,19 +556,15 @@ func _test_scene_states() -> void:
 	_check(states.has(true), "refreshing the screen re-evaluates to eligible (%s)"
 		% str(states))
 	_check(inn.odd_job_enabled(), "the button re-arms after the state changes")
-	inn.queue_free()
-	await get_tree().process_frame
 
-	# (e) Officer lockout surfaced in the UI.
+	# (e) Officer lockout surfaced in the UI (same mounted screen).
 	_make_run(0, 0, 10, 70, ["off_mateus_alvares"])
 	GameState.debug_strip_fleet()
-	inn = _mount_inn(host)
+	inn.refresh()
 	await get_tree().process_frame
 	_check(not inn.odd_job_enabled(), "an employed officer disables relief in the UI")
 	_check(inn.odd_job_reason() == InnEngineLib.REASON_OFFICERS,
 		"the UI reason is the officer lockout (got '%s')" % inn.odd_job_reason())
-	inn.queue_free()
-	await get_tree().process_frame
 
 	host.queue_free()
 	await get_tree().process_frame

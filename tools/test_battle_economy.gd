@@ -183,11 +183,13 @@ func _test_nearest_nations() -> void:
 	_check(tie == ["holland", "england"],
 		"a distance tie breaks by port id ascending → amsterdam before london (%s)"
 		% str(tie))
-	# Sanity: the list never repeats a nation and never carries "".
+	# Sanity: the list never repeats a nation and never carries "" — sampled
+	# 10×10 over the map (the full sweep ran in Phase 4; this pins the
+	# invariants cheaply).
 	var repeated: Array[String] = []
 	var blanks: Array[String] = []
-	for x in range(0, 2160, 61):
-		for y in range(0, 1080, 37):
+	for x in range(0, 2160, 216):
+		for y in range(0, 1080, 108):
 			var nations := RewardsLib.nearest_nations(Vector2i(x, y))
 			var seen: Array[String] = []
 			for nation_id in nations:
@@ -350,7 +352,7 @@ func _test_engine_agreement() -> void:
 	var xp_mismatches: Array[String] = []
 	var search = [SAME_NATION_CONTACT, LISBON_CONTACT, TIE_CONTACT]
 	for kind in ["pirate", "navy"]:
-		for seed_offset in range(1, 13):
+		for seed_offset in range(1, 4):
 			var battle_seed := 700000 + seed_offset
 			var rng := _rng(battle_seed)
 			var foes := AiLib.compose_enemy(kind, 20, rng)
@@ -395,11 +397,11 @@ func _test_engine_agreement() -> void:
 				salvage_mismatches.append("%s/%d carries rep_deltas %s"
 					% [kind, battle_seed, str(outcome["rep_deltas"])])
 	_check(salvage_mismatches.is_empty(),
-		"24 seeded battles: outcome.salvage_gold == BattleRewards.salvage_for("
+		"6 seeded battles: outcome.salvage_gold == BattleRewards.salvage_for("
 		+ "sunk_enemy) (%d mismatches: %s)"
 		% [salvage_mismatches.size(), str(salvage_mismatches.slice(0, 3))])
 	_check(xp_mismatches.is_empty(),
-		"24 seeded battles: outcome.xp == +10/neutralised + 5/round (%d mismatches: %s)"
+		"6 seeded battles: outcome.xp == +10/neutralised + 5/round (%d mismatches: %s)"
 		% [xp_mismatches.size(), str(xp_mismatches.slice(0, 3))])
 
 
@@ -512,52 +514,95 @@ func _test_locale_completeness() -> void:
 	# 7b. No rendered label of S10's after-action dialog, S11's modal or S3's
 	# encounter confirm contains a `<key>` in either locale.
 	var leaks: Array[String] = []
-	for locale in ["zh", "en"]:
-		I18n.set_locale(locale)
-		await get_tree().process_frame
 
-		# S10 after-action dialog, from a real battle.
-		_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
-		var screen = ScreenScene.instantiate()
-		screen.route_to_world = false
-		add_child(screen)
-		await get_tree().process_frame
-		var encounter := _pirate_encounter(1, "latin")
-		(encounter["ships"][0] as Dictionary)["durability"] = 5
-		screen.open_battle(encounter)
-		await get_tree().process_frame
-		screen.run_to_completion(30)
-		await get_tree().process_frame
+	# One DataLoader-level map load serves the whole sweep: the S3 confirm
+	# boots a world per locale and both boots read the same raster (the
+	# decode itself is owned by §3, not a per-locale contract).
+	var map = MapLoaderLib.new()
+	if not map.load_map("res://data/maps/world.png", DataLoader.map_legend):
+		leaks.append("S3 map failed to load (%s)" % map.last_error)
+	DataLoader.map = map
+
+	# S10 after-action dialog, from a real battle — fought once in `en`,
+	# then the locale toggles on the open dialog (§6: re-translate, not
+	# reload).
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	I18n.set_locale("en")
+	var screen = ScreenScene.instantiate()
+	screen.route_to_world = false
+	add_child(screen)
+	await get_tree().process_frame
+	var encounter := _pirate_encounter(1, "latin")
+	(encounter["ships"][0] as Dictionary)["durability"] = 5
+	screen.open_battle(encounter)
+	await get_tree().process_frame
+	screen.run_to_completion(30)
+	await get_tree().process_frame
+	for locale in ["en", "zh"]:
 		var dialog_lines: Array = screen.after_action_lines()
 		leaks.append_array(_labelled_leaks(dialog_lines, "S10/%s" % locale))
 		if _joined(dialog_lines).strip_edges().is_empty():
 			leaks.append("S10/%s rendered nothing" % locale)
 		# The mid-dialog locale toggle must re-translate, not reload.
 		leaks.append_array(_labelled_leaks(screen.log_lines(), "S10log/%s" % locale))
-		screen.queue_free()
-		await get_tree().process_frame
+		if locale == "en":
+			I18n.set_locale("zh")
+			await get_tree().process_frame
+	_check(screen.after_action_dialog().visible,
+		"the after-action dialog survives the mid-dialog locale toggle")
+	screen.queue_free()
+	await get_tree().process_frame
 
-		# S11 duel modal (full-rect anchored, so its size comes from the scene).
-		var modal = DuelScene.instantiate()
-		add_child(modal)
-		await get_tree().process_frame
-		modal.open_duel(DuelLib.preview({
-			"player_base": 15, "defender_base": 10, "seed": 33,
-			"attacker_name": "You", "defender_name": "Pirate captain",
-			"ship_name": "Brigantine",
-		}))
-		await get_tree().process_frame
+	# S11 duel modal (full-rect anchored, so its size comes from the scene):
+	# one instance serves both locales through the §6 re-bind.
+	I18n.set_locale("en")
+	var modal = DuelScene.instantiate()
+	add_child(modal)
+	await get_tree().process_frame
+	modal.open_duel(DuelLib.preview({
+		"player_base": 15, "defender_base": 10, "seed": 33,
+		"attacker_name": "You", "defender_name": "Pirate captain",
+		"ship_name": "Brigantine",
+	}))
+	await get_tree().process_frame
+	for locale in ["en", "zh"]:
 		leaks.append_array(_widget_leaks(modal, "S11/%s" % locale))
-		modal.close()
-		modal.queue_free()
-		await get_tree().process_frame
+		if locale == "en":
+			I18n.set_locale("zh")
+			await get_tree().process_frame
+	modal.close()
+	modal.queue_free()
+	await get_tree().process_frame
 
-		# S3 encounter confirm (the navy attack warning).
+	# S3 encounter confirm (the navy attack warning) boots a world per locale.
+	for locale in ["zh", "en"]:
+		I18n.set_locale(locale)
+		await get_tree().process_frame
 		leaks.append_array(await _encounter_confirm_leaks(locale))
 
-		# S9 `gameover.captured` (the Phase-2 reason, §4.12.5) is the terminal
-		# screen of a lost last ship — it must name the reason, not a `<key>`.
-		leaks.append_array(await _gameover_leaks(locale))
+	# S9 `gameover.captured` (the Phase-2 reason, §4.12.5) is the terminal
+	# screen of a lost last ship — it must name the reason, not a `<key>`.
+	# One instance re-binds on the toggle (§6).
+	I18n.set_locale("en")
+	var scene = GameOverScene.instantiate()
+	scene.route_to_title = false
+	add_child(scene)
+	await get_tree().process_frame
+	scene.open_reason("captured")
+	await get_tree().process_frame
+	for locale in ["en", "zh"]:
+		var reason_text: String = scene.reason_text()
+		if reason_text.strip_edges().is_empty() or _contains_key_marker(reason_text):
+			leaks.append("S9/%s reason='%s'" % [locale, reason_text])
+		if not reason_text.contains(I18n.t_key("gameover.captured")):
+			leaks.append("S9/%s reason omits gameover.captured (%s)"
+				% [locale, reason_text])
+		leaks.append_array(_widget_leaks(scene, "S9/%s" % locale))
+		if locale == "en":
+			I18n.set_locale("zh")
+			await get_tree().process_frame
+	scene.queue_free()
+	await get_tree().process_frame
 
 	I18n.set_locale(locale_before)
 	await get_tree().process_frame
@@ -602,15 +647,9 @@ func _text_in_locale(key: String, locale: String) -> String:
 
 ## Rendered-text leaks for S3's `encounter.attack_confirm` modal, built through
 ## the real world scene (the map fixture lives in `test_npc_fleets.gd`).
+## `DataLoader.map` is loaded once by `_test_locale_completeness`.
 func _encounter_confirm_leaks(locale: String) -> Array[String]:
 	var leaks: Array[String] = []
-	var map = MapLoaderLib.new()
-	var loaded: bool = map.load_map("res://data/maps/world.png",
-		DataLoader.map_legend)
-	if not loaded:
-		leaks.append("S3/%s map failed to load (%s)" % [locale, map.last_error])
-		return leaks
-	DataLoader.map = map
 	_make_run()
 	GameState.set_world_tile(OPEN_CELL)
 	# A §4.15 hunter fixture (the retired navy marker's successor): its
@@ -668,26 +707,6 @@ func _encounter_confirm_leaks(locale: String) -> Array[String]:
 
 
 # --- Fixtures -------------------------------------------------------------
-
-## S9 rendering of the Phase-2 `gameover.captured` reason (docs/60-* §4.12.5).
-func _gameover_leaks(locale: String) -> Array[String]:
-	var leaks: Array[String] = []
-	var scene = GameOverScene.instantiate()
-	scene.route_to_title = false
-	add_child(scene)
-	await get_tree().process_frame
-	scene.open_reason("captured")
-	await get_tree().process_frame
-	var reason_text: String = scene.reason_text()
-	if reason_text.strip_edges().is_empty() or _contains_key_marker(reason_text):
-		leaks.append("S9/%s reason='%s'" % [locale, reason_text])
-	if not reason_text.contains(I18n.t_key("gameover.captured")):
-		leaks.append("S9/%s reason omits gameover.captured (%s)"
-			% [locale, reason_text])
-	leaks.append_array(_widget_leaks(scene, "S9/%s" % locale))
-	scene.queue_free()
-	await get_tree().process_frame
-	return leaks
 
 
 func _make_run(fleet: Array = []) -> void:

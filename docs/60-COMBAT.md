@@ -592,7 +592,18 @@ shape; the Phase-6 sea adds four touches, all deterministic:
 - **Seasonal lane variants.** Lanes may carry
   `variants: [{id, months, waypoints}]` (`10-*`, amended Phase 6); runtime
   selects the **in-month variant from the built tile paths**
-  (`trade_routes_built.json`). Deterministic per day.
+  (`trade_routes_built.json`). Deterministic per day. Resolution
+  (amendment 2026-11-02, the arrival-jump fix): **every** lane leg anchors
+  on endpoint identity — both walked end tiles must exist on the variant
+  path, and the leg walks the variant between those indices; otherwise the
+  leg keeps the base geometry and the §4.18 ice refusal governs.
+  Proportional (fraction-of-path) mapping and the full-lane wholesale
+  replacement are retired: a structurally different variant (the
+  `hanseatic_north_winter` North Sea run vs the Baltic base run)
+  proportionally mapped onto unrelated water and teleported every journey
+  seam on the lane — arrivals snapped the Danzig berth from ~119 tiles
+  out. Shared-endpoint legs (hamburg ↔ bergen through the German bight)
+  still ride the variant exactly — the Bergenfahrer winter run.
 - **Ice-aware stepping & pursuit.** In-month seasonal ice
   (`20-*` §4.18) refuses *entry* for player, NPC, A\* and lane stepping
   alike; a fleet standing on a tile that freezes is **never trapped** — it
@@ -867,7 +878,7 @@ Perf gates (measured in tools suites — tasks J/M):
 | Marginal cost | demonstrably linear (extreme ≈ 4× normal, not 16×) |
 | Pursuit A* | ≤ 250 ms/day budget, overflow loses the chase — unchanged as the budget; H re-measures at the quadrupled chase area and windows the region only on measured failure (correction 13) |
 | Save payload @ extreme | ≤ 2 MB |
-| world_e2e wall budget | **runner kill timer 540 s for this suite only** (amended 2026-11-01): the unified-movement amendment accrues every fleet on every player move, so the movement proof pays the designed per-move cost × thousands of steps; its fixture scales the ecology budgets ×0.1 process-locally (`test_world_e2e.gd`) and suppresses raiders within Chebyshev 60 of the route — the proof's contract is movement, not population or combat (those stay with test_density / test_npc_fleets / the battle suites) |
+| world_e2e wall budget | **runner kill timer 300 s for this suite only** (amended 2026-11-01; re-pinned 540 → 300 by the 2026-11-02 overkill-sweep removal — leg 4 ends at Cape Town instead of re-sailing leg 3's corridor in reverse, and the storm-gate Monte Carlo was retired for the closed form): the unified-movement amendment accrues every fleet on every player move, so the movement proof pays the designed per-move cost × thousands of steps; its fixture scales the ecology budgets ×0.1 process-locally (`test_world_e2e.gd`) and suppresses raiders within Chebyshev 60 of the route — the proof's contract is movement, not population or combat (those stay with test_density / test_npc_fleets / the battle suites) |
 
 #### 4.11.12 Equipment wiring (pairs with `10-*` §4.6, `40-*` §4.1)
 

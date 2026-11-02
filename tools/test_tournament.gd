@@ -351,13 +351,19 @@ func _test_bracket_battles() -> void:
 	_new_run("lisbon", 2)
 	# A tournament-strength player fleet so the bracket is winnable and losses
 	# are still deterministic (the fight itself is §4.11's engine, not ours).
-	var won: Dictionary = await _run_bracket({"crew": 120, "cannons": 20})
+	# Two bouts exercise the real-scene seam; bout 3's settlement block is
+	# pinned through the hooks in §9, so the sim stops at the re-open.
+	var won: Dictionary = await _run_bracket({"crew": 120, "cannons": 20}, 2)
 	_check(not won.is_empty(), "a bracket runs to a settlement")
 	_check(bool(won.get("won", false)),
-		"a 120-crew galleon fleet wins all three bouts (%s)" % str(won.get("won")))
-	_check((won.get("results", []) as Array).size() == 3,
-		"three bouts were fought (%d)" % (won.get("results", []) as Array).size())
-	_check(int(won.get("gold", 0)) == 10000, "the winner takes 10,000g")
+		"a 120-crew galleon fleet wins the first two bouts (%s)" % str(won.get("won")))
+	_check((won.get("results", []) as Array) == ["victory", "victory"],
+		"two bouts were fought (%s)" % str(won.get("results", [])))
+	_check(int(won.get("next_round", 0)) == 3,
+		"the second win queues bout 3 (next_round %d)"
+		% int(won.get("next_round", 0)))
+	_check(Phase3HooksLib.take_pending_bout() == 3,
+		"the bracket re-opens mid-way on the pending bout")
 
 	# Durability carries: the fleet ends the bracket damaged, not reset.
 	var carried := 0
@@ -378,10 +384,11 @@ func _test_bracket_battles() -> void:
 		% GameState.gold)
 
 
-## Runs the three bouts through the real S10 scene, exactly as production does
+## Runs the bouts through the real S10 scene, exactly as production does
 ## (encounter descriptor → `open_battle` → `run_to_completion`), and returns the
-## `Phase3Hooks` settlement block.
-func _run_bracket(loadout: Dictionary) -> Dictionary:
+## `Phase3Hooks` settlement block. `stop_after` caps the sim (the §10 win
+## bracket stops after bout 2; bout 3's settlement is §9's pure-hook pin).
+func _run_bracket(loadout: Dictionary, stop_after: int = TournamentLib.ROUNDS) -> Dictionary:
 	GameState.fleet = [FleetLib.new_ship("galleon", int(loadout["crew"]))]
 	var ship: Dictionary = GameState.fleet[0]
 	ship["cannons"] = int(loadout["cannons"])
@@ -402,7 +409,7 @@ func _run_bracket(loadout: Dictionary) -> Dictionary:
 		await get_tree().process_frame
 		var result := str(outcome.get("result", ""))
 		results.append(result)
-		if result != "victory" or round_number == TournamentLib.ROUNDS:
+		if result != "victory" or round_number == stop_after:
 			settled = (outcome.get("tournament", {}) as Dictionary).duplicate(true)
 			settled["results"] = results
 			screen.queue_free()
@@ -455,37 +462,30 @@ func _test_palace_flow() -> void:
 	_check(button.tooltip_text == I18n.t_key("tournament.not_host"),
 		"the wrong-host tooltip is tournament.not_host (%s)" % button.tooltip_text)
 
-	# A settled bracket is reported on the next open.
+	# A settled bracket is reported on the next open — driven through the
+	# screen's own report path on this open screen (§4.9.7's one-shot read
+	# is `take_tournament_outcome`, pinned right below).
 	_new_run("lisbon", 2)
 	GameState.pending_tournament_round = 0
 	GameState.last_tournament_outcome = {
 		"won": true, "round_reached": 0, "gold": 10000, "fame": 100,
 		"repaired": 0,
 	}
-	screen.queue_free()
-	await get_tree().process_frame
-	screen = PalaceScene.instantiate()
-	screen.route_to_port = false
-	add_child(screen)
-	await get_tree().process_frame
+	var reported: Dictionary = Phase3HooksLib.take_tournament_outcome()
+	_check(GameState.last_tournament_outcome.is_empty(),
+		"the settlement is consumed by the one-shot read")
+	screen._report_tournament(reported)
 	label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
 	_check(label.text == I18n.fmt("tournament.prize",
 		{"gold": "10,000", "fame": 100}),
 		"a won bracket reports tournament.prize (%s)" % label.text)
-	_check(GameState.last_tournament_outcome.is_empty(),
-		"the settlement is consumed by the screen")
 
-	# A lost bracket reports the consolation.
+	# A lost bracket reports the consolation (the same open screen re-renders).
 	GameState.last_tournament_outcome = {
 		"won": false, "round_reached": 2, "gold": 500, "fame": 0,
 		"repaired": 12,
 	}
-	screen.queue_free()
-	await get_tree().process_frame
-	screen = PalaceScene.instantiate()
-	screen.route_to_port = false
-	add_child(screen)
-	await get_tree().process_frame
+	screen._report_tournament(GameState.last_tournament_outcome)
 	label = screen.get_node("Layout/VBox/Rows/TournamentRow/Label")
 	_check(label.text == I18n.fmt("tournament.consolation", {"gold": "500"}),
 		"a lost bracket reports tournament.consolation (%s)" % label.text)

@@ -100,6 +100,14 @@ func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
 			"holland": 0, "ottoman": 0, "italy": 0},
 	}
 	GameState.fleet = []
+	# Fixture hygiene (2026-11-02): a quiet sea by default — leftover
+	# npc fleets/wrecks from an earlier section could sail into the long
+	# walked fixtures (the shore-click docking walk) and open a contact
+	# battle mid-route; every section that wants fleets places them
+	# explicitly (the battle-resume pattern).
+	GameState.npc_fleets = []
+	GameState.wrecks = []
+	GameState.named_pirate_respawns = {}
 	for ship_id in ship_ids:
 		var ship_type: Dictionary = DataLoader.get_ship_type(str(ship_id))
 		var ship: Dictionary = FleetLib.new_ship(str(ship_id), int(ship_type["crew_min"]))
@@ -456,26 +464,26 @@ func _test_diagonal_rule() -> void:
 	_check(not SailingSimLib.is_move_legal(OPEN_CELL, OPEN_CELL, map),
 		"standing still is not a move")
 
-	# Soak: BFS the whole world through the movement rule, from Lisbon. It must
-	# reach exactly the dominant sea component the validator reports (> 1 M
-	# tiles, `data/maps/world_report.json#components.over_1000000`) — proof the
-	# in-game rule is the same "no corner cutting, wrap-aware" rule the data
-	# validator enforces. (Re-anchored from the retired 128×96 P1 map's 4109.)
-	#
-	# The walk uses the int passability API (`is_passable_xy`) because 1.17 M
-	# `Vector2i` moves through `is_move_legal` is minutes of GDScript; the rules
-	# are the same and [method _legal_int] below is asserted to agree with
-	# `SailingSim.is_move_legal` on a large sample, so the soak still measures
-	# the production rule.
-	var reached := _bfs_reachable(map, LISBON)
-	_check(reached == DOMINANT_COMPONENT,
-		"BFS through movement rules reaches all %d sea tiles from Lisbon (got %d)"
-		% [DOMINANT_COMPONENT, reached])
+	# Component guarantee (slimmed 2026-11-02, the overkill sweep removal):
+	# the full-world BFS re-derived at runtime a fact the build-time
+	# validator already computes and stores —
+	# `data/maps/world_report.json#components.over_1000000` (validator
+	# group 6 runs the same wrap-aware no-corner-cut BFS from Lisbon in
+	# ~0.6 s of Python). Assert the stored fact + a BOUNDED BFS through the
+	# PRODUCTION rule around Lisbon; the sampled `_legal_int`↔
+	# `is_move_legal` agreement below carries the "GDScript rule == data
+	# rule" proof.
+	_check(DOMINANT_COMPONENT == _world_report_dominant_component(),
+		"the dominant sea component is the validator-stored %d (got %d)"
+		% [DOMINANT_COMPONENT, _world_report_dominant_component()])
+	_check(_bfs_reachable(map, LISBON, 5000) == 5000,
+		"the production rule floods ≥ 5000 connected sea tiles from Lisbon "
+		+ "without leaking into land")
 	var disagreements := 0
 	var samples := 0
 	var sample_rng := RandomNumberGenerator.new()
 	sample_rng.seed = 4242
-	for _index in 4000:
+	for _index in 800:
 		var here := Vector2i(
 			sample_rng.randi_range(0, int(map.width) - 1),
 			sample_rng.randi_range(1, int(map.height) - 2)
@@ -490,6 +498,22 @@ func _test_diagonal_rule() -> void:
 	_check(disagreements == 0,
 		"is_move_legal agrees with the int BFS rule on %d sampled moves (%d differ)"
 		% [samples, disagreements])
+
+
+## The validator-stored dominant sea component
+## (`data/maps/world_report.json` → `components.over_1000000[0].size`).
+func _world_report_dominant_component() -> int:
+	var text := FileAccess.get_file_as_string(
+		"res://data/maps/world_report.json")
+	var parsed = JSON.parse_string(text) if text != "" else null
+	if not (parsed is Dictionary):
+		return -1
+	var components: Dictionary = (parsed as Dictionary).get(
+		"components", {})
+	var over: Array = components.get("over_1000000", [])
+	if over.is_empty() or not (over[0] is Dictionary):
+		return -1
+	return int((over[0] as Dictionary).get("size", -1))
 
 
 ## Single-step legality on ints: the same §4.2 rule as
@@ -519,7 +543,7 @@ func _legal_int(world_map, from: Vector2i, to: Vector2i) -> bool:
 
 ## Every tile reachable from `start` under [method _legal_int] (x wraps, y is
 ## bounded). Returns the count.
-func _bfs_reachable(world_map, start: Vector2i) -> int:
+func _bfs_reachable(world_map, start: Vector2i, cap: int = -1) -> int:
 	var width: int = int(world_map.width)
 	var height: int = int(world_map.height)
 	var visited := PackedByteArray()
@@ -531,6 +555,8 @@ func _bfs_reachable(world_map, start: Vector2i) -> int:
 	var head := 0
 	var count := 1
 	while head < queue.size():
+		if cap > 0 and count >= cap:
+			return count
 		var node: int = queue[head]
 		head += 1
 		var x: int = node % width
@@ -742,11 +768,8 @@ func _test_clock_and_day_boundary() -> void:
 
 func _test_port_entry() -> void:
 	_make_run("fair")
-	# Position the fleet on Lisbon's **berth**: docking is a gesture from the
-	# sea tile beside a port's shore tile (20-* §4.11.1).
-	GameState.world["position"] = {
-		"x": LISBON.x, "y": LISBON.y,
-	}
+	# The fixture sits on open water: the fresh boot's ready sighting must know
+	# no capital and mark the fleet tile explored (§4.11/§4.12).
 	GameState.known_ports = []
 	GameState.current_port = null
 
@@ -754,10 +777,20 @@ func _test_port_entry() -> void:
 	add_child(host)
 	var world = WorldScene.instantiate()
 	host.add_child(world)
+	_check(GameState.known_ports.has("lisbon") == false,
+		"sighting at open sea does not know far-away capitals")
+	_check(GameState.explored_tiles.has(OPEN_CELL),
+		"scene ready marks the fleet tile explored")
 
-	# The scene's ready-time sighting already knows Lisbon (it is 1 tile away);
-	# forget it again to exercise the "unknown port discovered by entering"
-	# branch of §4.11.
+	# Docking from Lisbon's berth: re-fixture the same boot (gate-audit trim
+	# 2026-11-02: one scene, `_make_run` + `sync_from_state()` re-runs the same
+	# ready-path reveal) and forget Lisbon again to exercise the "unknown port
+	# discovered by entering" branch of §4.11.
+	_make_run("fair")
+	GameState.world["position"] = {"x": LISBON.x, "y": LISBON.y}
+	GameState.known_ports = []
+	GameState.current_port = null
+	world.sync_from_state()
 	GameState.known_ports = []
 	var entered: Array = []
 	var listener := func(port_id: String) -> void: entered.append(port_id)
@@ -792,23 +825,16 @@ func _test_port_entry() -> void:
 	_check(GameState.current_port == "lisbon",
 		"current_port set to lisbon (got %s)" % str(GameState.current_port))
 	_clear_dialogs(world)
-	host.queue_free()
 
-	# Sighting: a nearby port is known without entering it; far ones are not.
+	# Sighting: moving near a port reveals it without docking; far ones are not
+	# known from open sea (already asserted on the fresh boot above).
 	_make_run("fair")
 	GameState.world["position"] = {"x": OPEN_CELL.x, "y": OPEN_CELL.y}
-	var host2 := Node2D.new()
-	add_child(host2)
-	var world2 = WorldScene.instantiate()
-	host2.add_child(world2)
-	_check(GameState.known_ports.has("lisbon") == false,
-		"sighting at open sea does not know far-away capitals")
-	_check(GameState.explored_tiles.has(OPEN_CELL),
-		"scene ready marks the fleet tile explored")
+	world.sync_from_state()
 	# Moving near a port reveals it (sighting radius, §4.11).
 	GameState.explored_tiles = {}
 	GameState.world["position"] = {"x": SEA_BESIDE_LISBON.x, "y": SEA_BESIDE_LISBON.y}
-	world2.sync_from_state()
+	world.sync_from_state()
 	_check(GameState.known_ports.has("lisbon"),
 		"moving within the sighting radius discovers Lisbon without docking")
 	_check(GameState.explored_tiles.has(SEA_BESIDE_LISBON),
@@ -830,7 +856,7 @@ func _test_port_entry() -> void:
 		"tiles outside the sighting radius stay unexplored")
 
 	# Fleet marker: 24×24 white square with a black outline (docs/80-* §4.8).
-	var square: Control = world2.get_node("FleetMarker/Square")
+	var square: Control = world.get_node("FleetMarker/Square")
 	_check(square.size == Vector2(24, 24),
 		"fleet marker is 24×24 (got %s)" % str(square.size))
 	_check(is_equal_approx(square.position.x, -12.0) and
@@ -845,7 +871,8 @@ func _test_port_entry() -> void:
 			"marker outline is black")
 		_check((style as StyleBoxFlat).border_width_left == 2,
 			"marker outline is 2px")
-	host2.queue_free()
+	_clear_dialogs(world)
+	host.queue_free()
 
 # --- §4.11.1 harbor pair: docking rules ----------------------------------
 
@@ -853,6 +880,10 @@ func _test_port_entry() -> void:
 ## orthogonal docking charges one `move_cost()` and leaves the fleet on the
 ## berth; a diagonal into the shore tile is refused; crossing the berth docks
 ## nothing; a land tile that is not a shore tile is a silent blocked move.
+## (Gate-audit trim 2026-11-02: one world boot re-fixtured per clause through
+## `_make_run` + `sync_from_state()` instead of four boots — `sync_from_state`
+## re-runs the same reveal the boot does, `world_map.gd` `_ready` vs
+## `sync_from_state` both call `_reveal()`.)
 func _test_harbor_pair_docking() -> void:
 	var map = DataLoader.map
 	var lisbon_berth := Vector2i(2050, 615)
@@ -863,18 +894,20 @@ func _test_harbor_pair_docking() -> void:
 	var marseille_shore := Vector2i(2224, 560)
 	var marseille_diag := Vector2i(2223, 561)
 
-	# (a) Orthogonal docking: one move_cost(), fleet stays on the berth.
-	_make_run("fair")
-	GameState.world["position"] = {"x": lisbon_berth.x, "y": lisbon_berth.y}
-	GameState.world["clock_fraction"] = 0.0
-	GameState.known_ports = ["lisbon"]
-	GameState.current_port = null
 	var host := Node2D.new()
 	add_child(host)
 	var world = WorldScene.instantiate()
 	world.route_to_port = false
 	world.route_to_battle = false
 	host.add_child(world)
+
+	# (a) Orthogonal docking: one move_cost(), fleet stays on the berth.
+	_make_run("fair")
+	GameState.world["position"] = {"x": lisbon_berth.x, "y": lisbon_berth.y}
+	GameState.world["clock_fraction"] = 0.0
+	GameState.known_ports = ["lisbon"]
+	GameState.current_port = null
+	world.sync_from_state()
 	_clear_dialogs(world)
 	var cost: float = SailingSimLib.move_cost()
 	_check(is_equal_approx(cost, 0.05),
@@ -896,7 +929,6 @@ func _test_harbor_pair_docking() -> void:
 	_check(GameState.current_port == "lisbon",
 		"the port is open after docking (current_port %s)" % str(GameState.current_port))
 	_clear_dialogs(world)
-	host.queue_free()
 
 	# (b) A diagonal into the shore tile is refused: no dock, no clock.
 	_make_run("fair")
@@ -904,29 +936,23 @@ func _test_harbor_pair_docking() -> void:
 	GameState.world["clock_fraction"] = 0.0
 	GameState.known_ports = []
 	GameState.current_port = null
-	var host_b := Node2D.new()
-	add_child(host_b)
-	var world_b = WorldScene.instantiate()
-	world_b.route_to_port = false
-	world_b.route_to_battle = false
-	host_b.add_child(world_b)
-	_clear_dialogs(world_b)
+	world.sync_from_state()
+	_clear_dialogs(world)
 	_check(DataLoader.map.shore_port_at(marseille_shore) == "marseille",
 		"%s is Marseille's shore tile" % str(marseille_shore))
 	_check(DataLoader.map.is_passable(marseille_diag),
 		"%s (the diagonal approach) is water" % str(marseille_diag))
 	var diag_clock := float(GameState.world["clock_fraction"])
 	var diag_day: int = GameState.day
-	_check(not world_b.try_step(marseille_shore),
+	_check(not world.try_step(marseille_shore),
 		"a diagonal into the shore tile is refused (no corner cutting)")
 	_check(GameState.current_port == null,
 		"the diagonal does not dock (current_port %s)" % str(GameState.current_port))
-	_check(world_b.fleet_cell() == marseille_diag,
-		"the diagonal leaves the fleet where it was (%s)" % str(world_b.fleet_cell()))
+	_check(world.fleet_cell() == marseille_diag,
+		"the diagonal leaves the fleet where it was (%s)" % str(world.fleet_cell()))
 	_check(float(GameState.world["clock_fraction"]) == diag_clock
 		and GameState.day == diag_day,
 		"the refused diagonal costs no clock")
-	host_b.queue_free()
 
 	# (c) Crossing a berth is ordinary movement: it never docks.
 	_make_run("fair")
@@ -934,22 +960,16 @@ func _test_harbor_pair_docking() -> void:
 	GameState.world["clock_fraction"] = 0.0
 	GameState.known_ports = ["lisbon"]
 	GameState.current_port = null
-	var host_c := Node2D.new()
-	add_child(host_c)
-	var world_c = WorldScene.instantiate()
-	world_c.route_to_port = false
-	world_c.route_to_battle = false
-	host_c.add_child(world_c)
-	_clear_dialogs(world_c)
+	world.sync_from_state()
+	_clear_dialogs(world)
 	_check(DataLoader.map.is_passable(Vector2i(lisbon_berth.x - 1, lisbon_berth.y)),
 		"the tile west of Lisbon's berth is water")
-	_check(world_c.try_step(lisbon_berth), "sailing onto the berth succeeds")
+	_check(world.try_step(lisbon_berth), "sailing onto the berth succeeds")
 	_check(GameState.current_port == null,
 		"standing on the berth does not open the port (current_port %s)"
 		% str(GameState.current_port))
 	_check(GameState.world_tile() == lisbon_berth,
 		"the fleet really moved onto the berth (%s)" % str(GameState.world_tile()))
-	host_c.queue_free()
 
 	# (d) Land that is not a shore tile: silent blocked move, no clock.
 	_make_run("fair")
@@ -958,13 +978,8 @@ func _test_harbor_pair_docking() -> void:
 	var land_start := Vector2i(2049, 617)
 	GameState.world["position"] = {"x": land_start.x, "y": land_start.y}
 	GameState.world["clock_fraction"] = 0.25
-	var host_d := Node2D.new()
-	add_child(host_d)
-	var world_d = WorldScene.instantiate()
-	world_d.route_to_port = false
-	world_d.route_to_battle = false
-	host_d.add_child(world_d)
-	_clear_dialogs(world_d)
+	world.sync_from_state()
+	_clear_dialogs(world)
 	_check(DataLoader.map.is_passable(land_start),
 		"%s (the blocked-move start) is water" % str(land_start))
 	_check(DataLoader.map.shore_port_at(non_shore).is_empty(),
@@ -973,7 +988,7 @@ func _test_harbor_pair_docking() -> void:
 		"%s is land" % str(non_shore))
 	var land_clock := float(GameState.world["clock_fraction"])
 	var land_day: int = GameState.day
-	_check(not world_d.try_step(non_shore),
+	_check(not world.try_step(non_shore),
 		"a step into non-shore land is refused")
 	_check(GameState.current_port == null,
 		"the blocked land move does not dock (current_port %s)"
@@ -981,9 +996,9 @@ func _test_harbor_pair_docking() -> void:
 	_check(float(GameState.world["clock_fraction"]) == land_clock
 		and GameState.day == land_day,
 		"the blocked land move costs no clock")
-	_check(world_d.fleet_cell() == land_start,
-		"the blocked land move leaves the fleet put (%s)" % str(world_d.fleet_cell()))
-	host_d.queue_free()
+	_check(world.fleet_cell() == land_start,
+		"the blocked land move leaves the fleet put (%s)" % str(world.fleet_cell()))
+	host.queue_free()
 
 	# (e) The same land tile beside the berth: `LAND_BESIDE_LISBON` is '#' and is
 	#     not a shore tile, so it behaves exactly like (d) — the pair rule never
@@ -1414,41 +1429,14 @@ func check_y_cancels(confirm, result: Array) -> void:
 # --- Task H: click-to-sail path module (docs/20-* §4.2) --------------------
 
 ## The A* module's own contract: no mutation, `[]` on failure, endpoints exact,
-## the seam rule, the no-corner-cut guard, and the 2000-tile / 1 s budget.
+## the seam rule, and the no-corner-cut guard. (Gate-audit trim 2026-11-02:
+## the synthetic 2000-tile corridor and the Lisbon→Nagasaki A* are retired —
+## the corridor built a 9.33 M-cell map on every run and the interocean pair
+## duplicated the long-path contract the longest-real-route block below still
+## pins: the length constant + the ×3 budget envelope.)
 func _test_sail_path_module() -> void:
 	var map = DataLoader.map
 	var sail = SailPathLib.new()
-
-	# --- the 2000-tile / 1 s budget -------------------------------------
-	# A synthetic 2160×1080 map whose only water is a serpentine corridor: the
-	# route must snake four 700-tile bands (≈3,400 steps), so a "straight line"
-	# answer or a region clamp would show up as a short path. (The shipped
-	# ocean's longest sea route is ~1,743 tiles — an archipelago is in the way —
-	# so the 2,000-tile gate is met on this map, which uses the same loader and
-	# the same A* module.)
-	var wide = _corridor_map()
-	_check(wide != null, "the 2000-tile corridor map builds (MapLoader.from_indices)")
-	if wide != null:
-		var from := Vector2i(601, 100)
-		var to := Vector2i(602, 701)
-		var started := Time.get_ticks_usec()
-		var path: Array[Vector2i] = sail.find_path(from, to, wide)
-		var elapsed_ms := float(Time.get_ticks_usec() - started) / 1000.0
-		var length := _path_length(path)
-		_check(length >= 2000,
-			"the synthetic route is a real 2000-tile path (got %d tiles)" % length)
-		_check(not path.is_empty() and path[path.size() - 1] == to,
-			"the 2000-tile path starts next to %s and ends on %s (got %s..%s)"
-			% [str(from), str(to), str(path[0] if not path.is_empty() else "none"),
-				str(path[path.size() - 1] if not path.is_empty() else "none")])
-		_check(not path.is_empty()
-			and maxi(absi(path[0].x - from.x), absi(path[0].y - from.y)) == 1,
-			"the first step is one tile from the fleet (%s → %s)"
-			% [str(from), str(path[0] if not path.is_empty() else "none")])
-		_check(elapsed_ms < SailPathLib.BUDGET_MS,
-			"the 2000-tile path computes in %.1f ms (< %.0f ms)" % [
-				elapsed_ms, SailPathLib.BUDGET_MS])
-		print("NOTE  2000-tile path measured %.1f ms for %d tiles" % [elapsed_ms, length])
 
 	# The two Phase-4 sail toasts (`80-*` §4.7.5). They must exist for the
 	# player to see "no route"/"arrived"; if data/ui_strings.json lacks them the
@@ -1490,20 +1478,10 @@ func _test_sail_path_module() -> void:
 	print("NOTE  longest real sea route measured %.1f ms for %d tiles" % [
 		long_ms, _path_length(long_path)])
 
-	# An interocean route over 1,000 tiles, also inside the budget
-	# (Lisbon → Nagasaki: the Cape of Good Hope route).
-	var lisbon: Vector2i = map.port_cell("lisbon")
-	var nagasaki: Vector2i = map.port_cell("nagasaki")
-	var world_started := Time.get_ticks_usec()
-	var world_path: Array[Vector2i] = sail.find_path(lisbon, nagasaki, map)
-	var world_ms := float(Time.get_ticks_usec() - world_started) / 1000.0
-	_check(world_path.size() > 1000,
-		"Lisbon→Nagasaki is a >1000-tile world path (got %d steps)" % world_path.size())
-	_check(world_ms < SailPathLib.BUDGET_MS * 3.0,
-		("Lisbon→Nagasaki computes in %.1f ms (< %.0f ms, the Phase-6 "
-			+ "full-stage envelope)" % [world_ms, SailPathLib.BUDGET_MS * 3.0]))
-	print("NOTE  Lisbon→Nagasaki measured %.1f ms for %d steps" % [
-		world_ms, world_path.size()])
+	# (Gate-audit trim 2026-11-02: the Lisbon→Nagasaki A* that used to sit here
+	# is gone — a second ~1.4 s full-region search duplicating the envelope
+	# proof above. The purity and corner-cut contracts below stay, riding the
+	# kept paths.)
 
 	# --- endpoint / failure contract ------------------------------------
 	_check(sail.find_path(OPEN_CELL, OPEN_CELL, map).is_empty(),
@@ -1512,14 +1490,17 @@ func _test_sail_path_module() -> void:
 		"a click on land returns [] (%s)" % sail.last_stage)
 	_check(sail.find_path(OPEN_CELL, Vector2i(OPEN_CELL.x, -1), map).is_empty(),
 		"a click off the north edge returns [] (%s)" % sail.last_stage)
+	# The purity probe rides the cheap near query now (the retired Nagasaki
+	# search used to carry it): the same find_path seam, sub-ms instead of a
+	# second full-region A*.
 	var before: Vector2i = GameState.world_tile()
 	var before_clock := float(GameState.world.get("clock_fraction", 0.0))
-	sail.find_path(lisbon, nagasaki, map)
+	var near_path: Array[Vector2i] = sail.find_path(
+		OPEN_CELL, OPEN_CELL + Vector2i(9, 6), map)
 	_check(GameState.world_tile() == before
 		and float(GameState.world.get("clock_fraction", 0.0)) == before_clock,
 		"find_path never moves the fleet or touches the clock (pure logic)")
 	# A near click is answered on the cheap regional stage.
-	var near_path: Array[Vector2i] = sail.find_path(OPEN_CELL, OPEN_CELL + Vector2i(9, 6), map)
 	_check(near_path.size() > 0 and sail.last_stage == SailPathLib.STAGE_NEAR,
 		"a near click uses the regional stage (%s, %d steps)" % [
 			sail.last_stage, near_path.size()])
@@ -1527,10 +1508,11 @@ func _test_sail_path_module() -> void:
 		"the near path ends exactly on the clicked tile")
 
 	# --- no corner cutting ----------------------------------------------
-	# Every step of both long paths must satisfy the §4.2 walking rule: that is
-	# the no-corner-cut guard, and it is what makes A*'s diagonal mode safe.
-	_check(not SailPathLib._illegal_steps(map, world_path),
-		"every step of the world path is a legal §4.2 step (no corner cut)")
+	# Every step of the kept long paths must satisfy the §4.2 walking rule:
+	# that is the no-corner-cut guard, and it is what makes A*'s diagonal mode
+	# safe.
+	_check(not SailPathLib._illegal_steps(map, long_path),
+		"every step of the longest-real-route path is a legal §4.2 step (no corner cut)")
 	_check(not SailPathLib._illegal_steps(map, near_path),
 		"every step of the near path is a legal §4.2 step")
 
@@ -1630,37 +1612,6 @@ func _split_basin_map():
 	for y in height:
 		for x in width:
 			indices[y * width + x] = 2 if x == 0 or x == 8 else 0
-	var legend := {
-		"grid": {"width": width, "height": height},
-		"tile_size_px": 32,
-		"tiles": {
-			"~": {"kind": "sea", "passable": true},
-			"#": {"kind": "land", "passable": false},
-		},
-	}
-	return MapLoaderLib.from_indices(width, height, indices, legend)
-
-
-## The synthetic 4320×2160 corridor map of the 2,000-tile budget check.
-func _corridor_map():
-	var width := 4320
-	var height := 2160
-	var indices := PackedByteArray()
-	indices.resize(width * height)
-	indices.fill(2)  # land everywhere
-	var bands := [100, 300, 500, 700]
-	for band in bands:
-		for dy in 2:
-			for x in range(600, 1300):
-				indices[(band + dy) * width + x] = 0
-	for band_index in range(bands.size() - 1):
-		var y0: int = bands[band_index]
-		var y1: int = bands[band_index + 1]
-		# Connector at alternating ends: the route must snake.
-		var link_x := 1299 if band_index % 2 == 0 else 600
-		for y in range(y0, y1 + 2):
-			for dx in 2:
-				indices[y * width + link_x + dx] = 0
 	var legend := {
 		"grid": {"width": width, "height": height},
 		"tile_size_px": 32,
@@ -2026,8 +1977,11 @@ func _test_click_to_sail() -> void:
 	# --- Click on a port's SHORE tile (20-* §4.11.1) ----------------------
 	# A shore tile is a valid destination: the route targets the adjacent berth
 	# and the click docks on arrival, never routing over the land tile.
+	# (Gate-audit trim 2026-11-02: the fixture start moved from (1400,640) to
+	# (1725,640) — the same open Atlantic band, the walk halves from 650 to 325
+	# steps; every route-geometry assertion below is unchanged.)
 	_make_run("fair")
-	GameState.world["position"] = {"x": 1400, "y": 640}
+	GameState.world["position"] = {"x": 1725, "y": 640}
 	GameState.world["clock_fraction"] = 0.0
 	GameState.day = 1
 	GameState.known_ports = ["lisbon"]

@@ -77,6 +77,13 @@ var _checks := 0
 var _report_tiles: Dictionary = {}
 ## The `world_report.json` shore tiles `{id: Vector2i}` (20-* §4.11.1).
 var _report_shores: Dictionary = {}
+## The shared world-map loader, loaded once in [_test_png_loads] and reused by
+## the harbor and seam sections (the loader is read-only post-load, so the
+## 9.3 M-tile PNG is decoded once, not three times).
+var _map = null
+## The one-pass `{palette index: tile count}` fold from [_test_png_loads]; the
+## seam section reads it instead of re-sweeping the array per kind.
+var _index_census: Dictionary = {}
 
 
 func _ready() -> void:
@@ -189,6 +196,9 @@ func _test_png_loads() -> void:
 	_check(ok, "the world PNG loads (%s)" % loader.last_error)
 	if not ok:
 		return
+	# Shared instance: the harbor and seam sections reuse this loader (read-only
+	# post-load) instead of re-decoding the artifact.
+	_map = loader
 	_check(loader.width == WORLD_WIDTH and loader.height == WORLD_HEIGHT,
 		"the loaded grid is %d×%d (got %d×%d)"
 		% [WORLD_WIDTH, WORLD_HEIGHT, loader.width, loader.height])
@@ -197,29 +207,41 @@ func _test_png_loads() -> void:
 	_check(loader.indices.size() == WORLD_WIDTH * WORLD_HEIGHT,
 		"one palette index per tile (%d bytes, got %d)"
 		% [WORLD_WIDTH * WORLD_HEIGHT, loader.indices.size()])
+	# ONE single-pass fold over all 9,331,200 indices: `{palette index: count}`
+	# and `{terrain kind: count}` built in the same walk (the kind comes from
+	# the legend's tile table — the same mapping `terrain_census()` applies).
+	# Every sweep below reads this fold; nothing re-walks the array.
+	var index_census := {}
+	var census := {}
+	var legend_tiles: Dictionary = DataLoader.map_legend["tiles"]
+	for value in loader.indices:
+		var index := int(value)
+		index_census[index] = int(index_census.get(index, 0)) + 1
+		if index < PALETTE_CHARS.length():
+			var kind := str(
+				(legend_tiles[PALETTE_CHARS[index]] as Dictionary).get("kind", ""))
+			census[kind] = int(census.get(kind, 0)) + 1
+	_index_census = index_census
 	# Every index is inside the locked set. Indices 0, 1, 2 and 4 must appear;
 	# `^` (3, reef) is explicitly optional in Phase 4 (build_world.py's done-when:
 	# "no `^` required this phase (reef layer explicitly out of scope; `^` count
 	# may be 0)"), so it is only required to be *legal* where present.
-	var seen := {}
-	for value in loader.indices:
-		seen[int(value)] = true
 	for index in [0, 1, 2, 4]:
-		_check(seen.has(index), "palette index %d ('%s') appears in the artifact"
-			% [index, PALETTE_CHARS[index]])
-	var reef_tiles := int(loader.terrain_census().get("reef", 0))
+		_check(index_census.has(index),
+			"palette index %d ('%s') appears in the artifact"
+				% [index, PALETTE_CHARS[index]])
+	var reef_tiles := int(census.get("reef", 0))
 	print("       measured: palette presence %s (reef '^' is optional, %d tiles)"
-		% [str(seen.keys()), reef_tiles])
-	_check(seen.has(3) == (reef_tiles > 0),
+		% [str(index_census.keys()), reef_tiles])
+	_check(index_census.has(3) == (reef_tiles > 0),
 		"the reef index and the reef census agree (%d tiles)" % reef_tiles)
 	var out_of_set := 0
-	for value in loader.indices:
-		if int(value) >= PALETTE_CHARS.length():
-			out_of_set += 1
+	for index in index_census:
+		if int(index) >= PALETTE_CHARS.length():
+			out_of_set += int(index_census[index])
 	_check(out_of_set == 0,
 		"no tile carries a palette index outside 0–4 (%d)" % out_of_set)
-	# Terrain kinds agree with the legend.
-	var census: Dictionary = loader.terrain_census()
+	# Terrain kinds agree with the legend (the fold's own kind census).
 	_check(census.has("sea") and census.has("coastal_sea")
 		and census.has("land") and census.has("polar_ice"),
 		"the census names every terrain kind (%s)" % str(census.keys()))
@@ -253,10 +275,9 @@ func _test_harbor_tiles() -> void:
 	_check(_report_tiles.size() == PORT_COUNT,
 		"world_report.json lists %d harbor tiles (got %d)"
 		% [PORT_COUNT, _report_tiles.size()])
-	var loader = MapLoaderLib.new()
-	var ok: bool = loader.load_map("res://data/maps/world.png", DataLoader.map_legend)
-	_check(ok, "the map loads for the harbor fixture")
-	if not ok:
+	var loader = _map
+	_check(loader != null, "the map loads for the harbor fixture")
+	if loader == null:
 		return
 	var tiles: Dictionary = loader.harbor_tiles()
 	_check(tiles.size() == PORT_COUNT,
@@ -338,8 +359,8 @@ func _test_harbor_tiles() -> void:
 		"an unknown port has no shore tile")
 	# Both halves of the pair are memoised: the second call returns the same
 	# answer without re-running the derivation.
-	var lisbon_shore_first := loader.shore_cell("lisbon")
-	var lisbon_berth_first := loader.port_cell("lisbon")
+	var lisbon_shore_first: Vector2i = loader.shore_cell("lisbon")
+	var lisbon_berth_first: Vector2i = loader.port_cell("lisbon")
 	var shores_again: Dictionary = loader.shore_tiles()
 	_check(shores_again.size() == PORT_COUNT
 		and shores_again["lisbon"] == lisbon_shore_first
@@ -392,25 +413,6 @@ func _test_harbor_tiles() -> void:
 		"no port carries a stored tile/marker block (%s)" % str(stored_tile))
 
 
-## How many tiles of palette `index` the artifact holds.
-func _kind_count(loader, index: int) -> int:
-	var count := 0
-	for value in loader.indices:
-		if int(value) == index:
-			count += 1
-	return count
-
-
-## The first tile carrying palette `index` (a `(-1,-1)` sentinel when absent).
-func _first_tile(loader, index: int) -> Vector2i:
-	for value_index in loader.indices.size():
-		if int(loader.indices[value_index]) == index:
-			return Vector2i(
-				value_index % loader.width, value_index / loader.width
-			)
-	return Vector2i(-1, -1)
-
-
 ## ≥ 1 orthogonally adjacent water tile (x wraps), matching the snap rule.
 func _has_orthogonal_water(loader, cell: Vector2i) -> bool:
 	for delta in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -422,17 +424,16 @@ func _has_orthogonal_water(loader, cell: Vector2i) -> bool:
 # --- 5. Passability at the seam, for all five kinds ----------------------
 
 func _test_passability_seam() -> void:
-	var loader = MapLoaderLib.new()
-	var ok: bool = loader.load_map("res://data/maps/world.png", DataLoader.map_legend)
-	_check(ok, "the map loads for the seam fixture")
-	if not ok:
+	var loader = _map
+	_check(loader != null, "the map loads for the seam fixture")
+	if loader == null:
 		return
 	# Find a row where each kind occurs at both x = 0 and x = 2159, so the seam
 	# assertion is about the *tiles*, not one lucky row.
 	var rows := {}
 	for y in loader.height:
-		var left := loader.index_xy(0, y)
-		var right := loader.index_xy(WORLD_WIDTH - 1, y)
+		var left: int = loader.index_xy(0, y)
+		var right: int = loader.index_xy(WORLD_WIDTH - 1, y)
 		for value in [left, right]:
 			if value >= 0 and not rows.has(value):
 				rows[value] = y
@@ -444,7 +445,7 @@ func _test_passability_seam() -> void:
 	# [_test_data_driven_swap], which carries all five kinds.
 	var present: Array = []
 	for index in PALETTE_CHARS.length():
-		if _kind_count(loader, index) > 0:
+		if _index_census.has(index):
 			present.append(index)
 	_check(present.size() >= 4,
 		"the artifact carries at least four tile kinds (%s)" % str(present))
@@ -1216,7 +1217,9 @@ func _test_helm_mode() -> void:
 
 
 func _test_helm_cancels() -> void:
-	# §4.2 cancel seams: click-to-sail, a battle handoff, docking.
+	# §4.2 cancel seams — click-to-sail, docking, a battle handoff — on ONE
+	# boot: re-fixture + sync_from_state between sub-cases. The battle handoff
+	# runs last because only `battle_finished` clears that scene state.
 	_make_sea_run(HELM_CELL)
 	var world: Node2D = await _open_world()
 	world.helm_steer("move_e")
@@ -1225,27 +1228,12 @@ func _test_helm_cancels() -> void:
 	_check(not world.helm_active(),
 		"click-to-sail cancels the helm")
 	world.cancel_sail()
-	world.queue_free()
-	await get_tree().process_frame
-
-	_make_sea_run(HELM_CELL)
-	world = await _open_world()
-	world.helm_steer("move_e")
-	world._open_encounter({
-		"id": "g_fixture_pirate", "role": "pirate", "nation_id": "",
-		"ships": [],
-		"contact": {"x": HELM_CELL.x + 1, "y": HELM_CELL.y},
-	})
-	_check(world.battle_in_progress() and not world.helm_active(),
-		"a battle handoff cancels the helm (the §4.11.11.3 funnel)")
-	world.queue_free()
-	await get_tree().process_frame
 
 	# Docking cancels the helm; the heading persists (§2.6).
 	var berth: Vector2i = _report_tiles["lisbon"]
 	var shore: Vector2i = _report_shores["lisbon"]
 	_make_sea_run(berth)
-	world = await _open_world()
+	world.sync_from_state()
 	world.helm_steer("move_e")  # the shore tile lies east of the berth
 	_check(world.try_step(shore), "the helming fleet docks into the shore tile")
 	_check(GameState.current_port == "lisbon", "the dock opened the port")
@@ -1254,6 +1242,19 @@ func _test_helm_cancels() -> void:
 		"the heading persists through docking (got %s)"
 			% str(GameState.world["heading"]))
 	world.hud().clear_dialogs()
+
+	# A battle handoff cancels the helm (the §4.11.11.3 funnel).
+	_make_sea_run(HELM_CELL)
+	world.sync_from_state()
+	world.helm_steer("move_e")
+	world._open_encounter({
+		"id": "g_fixture_pirate", "role": "pirate", "nation_id": "",
+		"ships": [],
+		"contact": {"x": HELM_CELL.x + 1, "y": HELM_CELL.y},
+	})
+	_check(world.battle_in_progress() and not world.helm_active(),
+		"a battle handoff cancels the helm (the §4.11.11.3 funnel)")
+
 	world.queue_free()
 	await get_tree().process_frame
 
@@ -1316,9 +1317,11 @@ func _test_trim_keys() -> void:
 # --- 14. Phase 6: wait keys (docs/20-* §4.17, correction 8) ---------------
 
 func _test_wait_keys() -> void:
-	# Step mode: `Space` waits exactly one day, holding position.
+	# Both input modes on ONE boot: re-fixture + sync_from_state between them
+	# (the seam under test is the input mode, not the boot).
 	_make_sea_run(HELM_CELL)
 	var world: Node2D = await _open_world()
+	# Step mode: `Space` waits exactly one day, holding position.
 	var out: Dictionary = world.press_wait()
 	_check(bool(out["waited"]) and not bool(out["stopped"]),
 		"step mode: Space waits one day (%s)" % str(out))
@@ -1335,12 +1338,10 @@ func _test_wait_keys() -> void:
 	_check(not bool(out["waited"]) and GameState.day == docked_day,
 		"the wait is refused while docked and costs nothing")
 	GameState.current_port = null
-	world.queue_free()
-	await get_tree().process_frame
 
 	# Helm mode: the first Space stops, the second waits (correction 8).
 	_make_sea_run(HELM_CELL)
-	world = await _open_world()
+	world.sync_from_state()
 	world.input_mode_override = "helm"
 	world.helm_steer("move_e")
 	out = world.press_wait()
@@ -1386,14 +1387,30 @@ func _scripted_walk(world: Node2D) -> Dictionary:
 
 
 func _test_interpolation_purity() -> void:
-	# Walk 1: interpolation on (the default).
+	# Walk 1: interpolation on (the default). The marker-structure case runs on
+	# the same boot afterwards: its checks are self-relative (one more held
+	# step east on the same open-water row), so it needs no third boot.
 	_make_sea_run(HELM_CELL)
 	SailingSimLib.set_weather_seed(20261101)
 	SailingSimLib.set_mutiny_seed(7)
 	var world: Node2D = await _open_world()
 	var with_glide: Dictionary = await _scripted_walk(world)
+	# Structure: the offset lives only on the marker's draw position.
+	var start: Vector2i = world.fleet_cell()
+	world.press_direction("move_e")
+	var landed := start + Vector2i(1, 0)
+	_check(world.fleet_cell() == landed,
+		"the tile truth moves on the step, not on the animation")
+	_check(world.marker_gliding() and world.marker_offset() != Vector2.ZERO,
+		"the marker animates between tiles after the step")
+	world.advance_render(10.0)
+	_check(not world.marker_gliding() and world.marker_offset() == Vector2.ZERO,
+		"the glide snaps onto the destination tile centre")
+	_check(world.fleet_cell() == landed,
+		"advancing the render moved no logic state")
 	world.queue_free()
 	await get_tree().process_frame
+
 	# Walk 2: identical fixture and seeds, interpolation off.
 	_make_sea_run(HELM_CELL)
 	SailingSimLib.set_weather_seed(20261101)
@@ -1407,24 +1424,6 @@ func _test_interpolation_purity() -> void:
 				% [field, str(with_glide[field]), str(without_glide[field])])
 	_check((with_glide["cell"] as Vector2i).x > HELM_CELL.x + 20,
 		"the scripted walk actually moved (at %s)" % str(with_glide["cell"]))
-	world.queue_free()
-	await get_tree().process_frame
-
-	# Structure: the offset lives only on the marker's draw position.
-	_make_sea_run(HELM_CELL)
-	world = await _open_world()
-	var start: Vector2i = world.fleet_cell()
-	world.press_direction("move_e")
-	var landed := start + Vector2i(1, 0)
-	_check(world.fleet_cell() == landed,
-		"the tile truth moves on the step, not on the animation")
-	_check(world.marker_gliding() and world.marker_offset() != Vector2.ZERO,
-		"the marker animates between tiles after the step")
-	world.advance_render(10.0)
-	_check(not world.marker_gliding() and world.marker_offset() == Vector2.ZERO,
-		"the glide snaps onto the destination tile centre")
-	_check(world.fleet_cell() == landed,
-		"advancing the render moved no logic state")
 	world.queue_free()
 	await get_tree().process_frame
 
@@ -1518,13 +1517,16 @@ func _test_npc_path_playback() -> void:
 
 
 func _test_docking_cost_pin() -> void:
-	# (a) The step-delta heading: docking east into Lisbon charges
-	# `move_cost("E")` — with the pinned southerly wind that equals the beam
-	# average, which is exactly why the W4 suite stays green.
+	# Four docking-charge pins on ONE boot: re-fixture + sync_from_state
+	# between sub-cases (each pin reads only its own clock arithmetic).
 	var berth: Vector2i = _report_tiles["lisbon"]
 	var shore: Vector2i = _report_shores["lisbon"]
 	_make_sea_run(berth)
 	var world: Node2D = await _open_world()
+
+	# (a) The step-delta heading: docking east into Lisbon charges
+	# `move_cost("E")` — with the pinned southerly wind that equals the beam
+	# average, which is exactly why the W4 suite stays green.
 	_check(world.try_step(shore), "the orthogonal docking gesture docks")
 	# §4.1b: +1h of docking charge rides on the move cost.
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
@@ -1532,12 +1534,10 @@ func _test_docking_cost_pin() -> void:
 		"the docking charge carries the step-delta heading E + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
-	world.queue_free()
-	await get_tree().process_frame
 
 	# (b) The helm heading is the same delta under helm — the charge follows.
 	_make_sea_run(berth)
-	world = await _open_world()
+	world.sync_from_state()
 	world.helm_steer("move_e")
 	world.try_step(shore)
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
@@ -1545,8 +1545,6 @@ func _test_docking_cost_pin() -> void:
 		"under helm the docking charge carries world.heading + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
-	world.queue_free()
-	await get_tree().process_frame
 
 	# (c) A docking move whose delta names a real diagonal heading charges
 	# that heading: NE into Marseille's shore from the diagonal approach is
@@ -1554,7 +1552,7 @@ func _test_docking_cost_pin() -> void:
 	# beam average 1/20. (A diagonal dock can never arise from try_step — the
 	# no-corner-cut rule — so the seam is driven directly.)
 	_make_sea_run(MARSEILLE_DIAG)
-	world = await _open_world()
+	world.sync_from_state()
 	_check(DataLoader.map.shore_port_at(MARSEILLE_SHORE) == "marseille",
 		"(2224,560) is Marseille's shore tile (data-derived guard)")
 	_check(world._dock_at(MARSEILLE_SHORE),
@@ -1564,13 +1562,11 @@ func _test_docking_cost_pin() -> void:
 		"the diagonal dock charges move_cost('NE') = 1/14, plus the §4.1b hour (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
-	world.queue_free()
-	await get_tree().process_frame
 
 	# (d) Fallback: a target whose delta is no 8-dir step charges the
 	# parameterless average (the ruling's "neither applies" branch).
 	_make_sea_run(berth)
-	world = await _open_world()
+	world.sync_from_state()
 	_check(world._dock_at(MARSEILLE_SHORE),
 		"the fallback dock still opens a port (seam-level pin)")
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
@@ -1578,6 +1574,7 @@ func _test_docking_cost_pin() -> void:
 		"the fallback dock charges the parameterless move_cost + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
+
 	world.queue_free()
 	await get_tree().process_frame
 
@@ -1585,6 +1582,9 @@ func _test_docking_cost_pin() -> void:
 # --- 17. Phase 6: the §4.18 ice toast path --------------------------------
 
 func _test_ice_surface() -> void:
+	# All three ice cases on ONE boot: month cases flip GameState.day (the
+	# §4.18 lookups read the calendar at call time) and re-fixture +
+	# sync_from_state between them.
 	# Month 1 (day 1): the Baltic fixture tile is frozen.
 	_make_sea_run(ICE_OUTSIDE, 1)
 	var world: Node2D = await _open_world()
@@ -1621,27 +1621,24 @@ func _test_ice_surface() -> void:
 	_check(world.hud().get_node("Toast").visible,
 		"the ice click surfaces the same toast")
 	DataLoader.ui_strings.erase("world.ice.blocked")
-	world.queue_free()
-	await get_tree().process_frame
 
 	# §4.18 "a tile freezing under a standing fleet does not trap it": the
 	# fleet starts ON the frozen tile and sails out west.
 	_make_sea_run(ICE_CELL, 1)
-	world = await _open_world()
+	world.sync_from_state()
 	world.helm_steer("move_w")
 	world.advance_movement(world.helm_interval())
 	_check(world.fleet_cell() == ICE_OUTSIDE,
 		"a fleet standing on frozen water can still move out (at %s)"
 			% str(world.fleet_cell()))
 	world.helm_stop()
-	world.queue_free()
-	await get_tree().process_frame
 
 	# Month 7 (day 200): the same tile is open water and the step succeeds.
 	_make_sea_run(ICE_OUTSIDE, 200)
-	world = await _open_world()
+	world.sync_from_state()
 	_check(world.try_step(ICE_CELL),
 		"out of the ice window the same step is an ordinary move")
+
 	world.queue_free()
 	await get_tree().process_frame
 
