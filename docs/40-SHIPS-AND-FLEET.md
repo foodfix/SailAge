@@ -7,7 +7,9 @@ shipyard, fleet composition and flagship rules, and cargo-hold maths (goods
 vs provisions vs water vs armament sharing capacity). Gates Phase 1; combat
 use of `armament_slots`/`cannons` is Phase 2. **Phase 7** grows the roster
 8 → 16 with a `role` field and per-port stock lists under development-gated
-tiers (§4.3.1).
+tiers (§4.3.1). **Phase 8** (2026-11-02) adds the carpentry repair discount
+and at-sea minor repair (§4.3/§4.5) and the captain-less penalties plus the
+idle-officer capture/buy gates (§4.4).
 
 ## 2. Artifacts
 
@@ -21,7 +23,9 @@ tiers (§4.3.1).
 ## 3. Dependencies
 
 `10-DATA-SCHEMA.md` (ShipType schema + locked stats), `20-*` (speed use,
-consumption pooling), `30-*` (shipyard screen wiring), `90-*`.
+consumption pooling), `30-*` (shipyard screen wiring), `50-*` (officers
+and posts, `OFFICER_MAX`, the carpentry skill), `60-*` (the capture flow,
+cannon rating), `70-*` (count-title repair factor), `90-*`.
 
 ## 4. Systems / Mechanics
 
@@ -105,8 +109,8 @@ purchasable there. Every rule in the table below is otherwise unchanged:
 
 | Action | Rule |
 |---|---|
-| Buy ship | cost `ShipType.base_price`; new instance at `durability = max`, `crew = 0`, `provisions/water = 0`, `cannons = 0`, empty cargo. Requires `gold ≥ price` and fleet size < `FLEET_MAX` (§4.4). |
-| Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). |
+| Buy ship | cost `ShipType.base_price`; new instance at `durability = max`, `crew = 0`, `provisions/water = 0`, `cannons = 0`, empty cargo. Requires `gold ≥ price`, fleet size < `FLEET_MAX` (§4.4), **and ≥ 1 idle officer** for the new ship's captain post (Phase 8, 2026-11-02; `OFFICER_MAX = 12`, `50-*` — no idle officer disables Buy with the gate reason; same check as the §4.4 capture gate). |
+| Repair ship | cost per durability point = `ceil(ShipType.base_price / 400)`; partial repair allowed (player picks points, capped by gold and damage). **Phase 8:** with a carpenter in post the whole fee is ×`(1 − floor(carpentry / 20) / 100)` — a −`floor(carpentry/20)`% discount (`50-*`; composed after the §4.9.2 count-title ×0.8, `70-*`, and floored once at the end of the whole transaction). |
 | Refit (armament) | cannon price 100g each, occupies 5 cargo units, ≤ `armament_slots`; sell-back 50g each. **Phase 2 enables the row**; see `60-*` §4.11.4 for the battle effect. |
 | Buy equipment | `data/equipment.json` item at its `price`; occupies its slot (`weapon`/`armor` player, `figurehead`/`sail` ship); replacing sells the old item back at `floor(price × 0.5)` in the same action (`60-*` §4.11.12). Phase 2; **Phase 7:** the buy list becomes the port's `facilities.equipment_stock` under the same §4.3.1 tier gate (`60-*` §4.11.13) — rare items never render in it. |
 | Sell ship | price `floor(base_price × 0.5 × durability / effective_max_durability)`; the ship's **pooled hold must be empty** (§4.2: goods + provisions + water — checking only the `cargo` object would let a sale silently destroy pooled supplies, which §6 forbids) and the ship must not be the flagship; crew aboard is lost (warning confirm dialog `shipyard.sell.confirm`). Equipment leaves with the ship. |
@@ -236,12 +240,35 @@ fields anywhere.
   relocate in fleet order up to capacity (overflow lost), the next ship
   becomes flagship, event dialog `world.flagship_lost`. With no escort →
   `20-*` §4.9 game over `"sunk"`.
+- **Captain-less ships (Phase 8, 2026-11-02).** An escort without an
+  appointed captain (post prereqs and appointment flow in `50-*`):
+  that ship's speed counts as `ShipType.speed × 0.8` in the §4.4
+  slowest-hull scan (a captain-less hull is the slowest whenever its
+  ×0.8 value dips below the others'); while **any** fleet ship is
+  captain-less the daily morale decay gains **−2 additional**
+  (`20-*` §4.8.1); and the ship's cannon rating stays **0** (the
+  combat rating itself is `60-*`'s).
+- **Capture needs an idle officer (Phase 8, 2026-11-02).** Capturing a
+  defeated enemy ship into the fleet requires **≥ 1 idle officer**
+  (`OFFICER_MAX = 12`, `50-*`) to take the prize's captain post; with
+  none idle the prize **auto-converts to loot gold and the hull
+  scuttles** (the flow and its dialog are `60-*`'s — this is the
+  fleet-state rule). The §4.3 Buy-ship gate is the same check.
 
 ### 4.5 Durability damage sources (Phase 1)
 
 Only storms (`20-*` §4.7) reduce durability at sea. Repair is the only way to
 restore it. Reef `^` tiles block movement without damage in Phase 1 (damage
 rule OUT OF SCOPE (phase 2)).
+
+**At-sea minor repair (Phase 8, 2026-11-02).** With a carpenter in post
+whose carpentry ≥ **60**, the player may repair at sea: **+10 durability**
+to one fleet ship (chosen at the prompt), costing
+`10 × ceil(ShipType.base_price / 400)` points at the §4.3 fee under the
+carpenter discount (the count-title ×0.8 does **not** apply at sea — it is
+port-scoped, `70-*` §4.9.2), floored once. Once per fleet-day; no clock
+cost. Below the gate the action is never offered (`skill_gates` reason,
+`50-*`).
 
 ## 5. Data Examples
 
@@ -327,6 +354,14 @@ Shipyard worked numbers (from `10-*` §7.3):
 - **Tier-gray buy attempt** (row above the port's `effective_dev`) → the
   Buy button is disabled with the 需发展度 note; no transaction path
   bypasses the §4.3.1 filter.
+- **Capture with no idle officer** → the prize auto-converts to loot gold
+  and the hull scuttles (§4.4); the after-action report names the
+  conversion (`60-*`).
+- **Buy ship with no idle officer** → Buy disabled with the gate reason
+  (§4.3); hiring an officer into the idle bench (`50-*`) is the unlock
+  path.
+- **At-sea repair with no carpenter ≥ 60** → the action is absent, not
+  grayed (§4.5); when offered it is available at most once per fleet-day.
 
 ## 7. Acceptance Criteria
 
@@ -357,3 +392,17 @@ Shipyard worked numbers (from `10-*` §7.3):
       price is still 10,000g.
 - [ ] Every stock list includes ≥ 2 hulls at each of the 104 shipyard
       ports and something buyable at every reachable dev level.
+
+**Phase-8 additions (fleet rules).**
+
+- [ ] The repair fee with an in-post carpenter is
+      `fee × (1 − floor(carpentry/20)/100)` after the count-title factor,
+      floored once on the whole transaction (§4.3).
+- [ ] At-sea minor repair: gate in-post carpentry ≥ 60, +10 durability to
+      a chosen ship, once per fleet-day, cost = the discounted 10-point
+      fee without the title factor (§4.5).
+- [ ] A captain-less escort counts as `ShipType.speed × 0.8` in the
+      slowest-hull scan, adds −2 extra daily morale decay while any ship
+      is captain-less, and its cannon rating stays 0 (§4.4).
+- [ ] Capture with zero idle officers loot-converts + scuttles; Buy ship
+      with zero idle officers is disabled with the gate reason (§4.3/§4.4).
