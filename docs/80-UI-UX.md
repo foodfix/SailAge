@@ -18,7 +18,14 @@ debug rows and the omniscient debug chart (§4.3, §4.5, §4.6, §4.6.3,
 §4.7.10). Phase 7 adds the trade-empire surfaces — market listing/特产/
 tariff/invest-gate rows, shipyard role labels + three row states, palace
 permit row + commendation dialog, tavern investment telegraphs
-(§4.7.11–§4.7.15) — and pins the W3/W4 symbol contracts (§4.9).
+(§4.7.11–§4.7.15) — and pins the W3/W4 symbol contracts (§4.9). Phase 8
+(the RPG overhaul) adds the right-click interaction layer — the fleet
+picker, the hail modal and the port context menu (§4.10) — the in-port
+verb matrices, the captain's table and the dossier panel (§4.11), the
+unified character card + allocation UX + the character-panel rework
+(§4.12), the two-step creation screen S20 (§4.13), the retirement-screen
+RPG segment (§4.14), and the Phase-8 `ui_strings` family inventory
+(§4.15).
 
 ## 2. Artifacts
 
@@ -29,6 +36,12 @@ permit row + commendation dialog, tavern investment telegraphs
 | `scenes/ui_shared/confirm_dialog.tscn` | modal yes/no dialog |
 | `scenes/ui_shared/hud.tscn` | shared HUD (world + port) |
 | `scenes/world/chart_screen.tscn` | full-screen Chart (S17, §4.6) |
+| `scenes/ui/character_card.tscn` | unified character card — renders any Person (player / officer / NPC captain; §4.12) |
+| `scenes/world/fleet_picker.tscn` | right-click fleet verb picker (§4.10.1) |
+| `scenes/world/hail_modal.tscn` | at-sea hail modal (§4.10.2) |
+| `scenes/world/autopilot_hud.tscn` | appointed-voyage HUD bar, instanced into the world HUD (§4.10.4) |
+| `scenes/title/creation_screen.tscn` | S20 creation — background + free points (§4.13) |
+| dossier panel | card-external info layer: full card + career log (§4.11.3) |
 | all `scenes/**` screens | per `90-*` §4 tree, content per docs 30/50 |
 | Save UX | title-screen Load / S19 Save (§4.6.3, §4.7) |
 
@@ -62,6 +75,12 @@ permit row + commendation dialog, tavern investment telegraphs
 | S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
 | S18 | Officers | `scenes/port/officers_panel.tscn` (officer roster + details, §4.6.2) | 5 |
 | S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over **S1 and S4**: the sea-traffic density dial + return-to-menu action, §4.6.3) | 5 |
+| S20 | Creation (出身 + 自由点数) | `scenes/title/creation_screen.tscn` (two-step flow, §4.13) | 8 |
+
+Phase 8 adds no further S-numbers: `fleet_picker`, `hail_modal`,
+`character_card`, the dossier panel and `autopilot_hud` are
+modals/instanced panels over their hosts (the provisioning-prompt
+convention below).
 
 Save/load has no dedicated scene: S1 hosts Load; S4 hosts Save (§4.7).
 The provisioning prompt (§4.6.1) is a **modal over S4**, not a screen of its
@@ -70,7 +89,8 @@ own, so it takes no S-number.
 ### 4.2 Navigation graph
 
 ```
-S1 ──New Game──► S2 ──confirm──► S4
+S1 ──New Game──► S2 ──confirm──► S20 ──confirm──► S4
+    (S20 = creation, background → free points; Phase 8, §4.13)
 S1 ──Load──────► (slot dialog) ─► S3 or S4 (state-dependent)
 S1 ──Load retired slot──► S16 (summary only)
 S3 ──dock: head into shore tile──► S4
@@ -123,7 +143,9 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S10 | `Tab` | cycle own ships; arrows move the targeting cursor |
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / back) |
-| S3 | right-click an NPC fleet marker | attack it — **any** fleet (a non-pirate owner = piracy, `70-*` §4.5; contact rules `60-*` §4.11.11.2) |
+| S3 | right-click a fleet inside sighting radius | opens **fleet_picker** (§4.10.1): inspect / talk / attack. Left-click sail-to is unchanged; `attack` keeps the existing funnel (a non-pirate owner = piracy + −20 fame, `70-*` §4.5 + `60-*` §4.11.10; contact rules `60-*` §4.11.11.2); a **coaster** offers no attack verb (intimidate-only, `60-*` §4.1.1); right-click on empty water or land is a no-op |
+| S3 | talk verb at Chebyshev ≤ 2 | opens the **hail modal** (§4.10.2) |
+| S3 | right-click a port harbor tile | the **port context menu** (§4.10.3): dock / 委任航行 appoint voyage |
 | S3 | `E` | Explore: find every discovery within Chebyshev 36, wrap-aware (`70-*` §4.4; Phase-6 sweep of the 18-tile radius); no-op with a toast `world.explore.none` when nothing is in range |
 | S17 (Chart owns input while open) | `W` | toggle the current-month wind-arrow layer per region (§4.6) |
 | S17 | `C` | toggle the current-arrow layer (§4.6) — chart-local; shadows the character-panel `C` only while S17 is open |
@@ -173,7 +195,10 @@ modes regardless of trim (`20-*` §4.17).
   `market.specialty.*`, `market.tax.*`, `market.exclusive.*`,
   `market.invest_gate.*`, `shipyard.role.*`, `shipyard.tier.*`,
   `palace.permit.*`, `palace.commend.*`, `tavern.invest.*`
-  (§4.7.15).
+  (§4.7.15), and the Phase-8 families `char.*` / `skill.*` / `gate.*` /
+  `hail.*` / `interact.*` / `dossier.*` / `captain.table.*` /
+  `officer.post.*` / `advice.*` / `creation.*` / `sail.autopilot.*`
+  plus the personality/appearance part keys (§4.15).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - **Port-hours keys (amended 2026-11-02, `30-*` §4.1b):** `port.facility.closed`
@@ -245,6 +270,9 @@ Layout (1280×720; tile viewport is the space below the top bar):
 - **Trim chip (Phase 6):** a 帆位/sail-trim chip (`furled`/`reefed`/
   `normal`/`full`, `world.sail_trim`, guard-read default `normal`) near the
   speed readout, **highlighted while the trim ≠ `normal`**.
+- **Appointed-voyage bar (Phase 8):** while an appointed voyage runs,
+  `scenes/world/autopilot_hud.tscn` is instanced into the world HUD below
+  the top bar — destination / ETA / cancel (§4.10.4).
 - Camera: a `Camera2D` centers on the fleet marker every frame. **`x` wraps**
   (no clamp at the dateline; the seam shows no void) and `y` is clamped to the
   2160-tile height (Phase-6 grid; minimap box/crop numbers unchanged per
@@ -442,8 +470,9 @@ completed purchase still charges its §4.1b hour.
 ### 4.6.2 Officers panel (S18, Phase 5 polish)
 
 A dedicated roster screen, opened from **S4's footer, beside the Fleet button**
-(and from the character panel, `C`) — the existing officer **summary** in S14's
-right column stays as-is; this panel is the detail view.
+(and from the character panel, `C`) — the Phase-5 officer **summary** in S14's
+right column is, since Phase 8 (2026-11-02), the 官员与岗位 tab (§4.12.3);
+this panel is the detail view.
 
 **Entry point (locked):** S18 is a **modal over S4**, like S15, so it belongs
 with the footer modal buttons (`Save · Set Sail · Fleet · Officers`), **not** in
@@ -467,17 +496,32 @@ as a seventh facility and was removed.
 +--------------------------------------------------------------+
 ```
 
-- **Rows:** one per employed officer (`player.officers` → `data/officers.json`),
-  sorted by `id`; name (L10n), `role` tag, the four stats, `wage_daily`, the
-  **derived effect** each contributes (navigation → sighting radius,
-  seamanship → speed bonus, leadership → mutiny/desertion, combat → battle /
-  duel), the recruit port, and `Dismiss` (confirm dialog; frees the slot and
-  stops the wage from the next day tick).
-- **Header:** `n / 3` (`OFFICER_MAX`) and the total daily wage bill — the number
+(Phase-5 wireframe kept for layout reference — Phase 8 replaces the
+per-officer stat line with the §4.12 card bars and adds the post column
+and the four action buttons.)
+
+- **Rows (Phase 8, amended 2026-11-02):** one per employed officer
+  (`player.officers` → the officer roster, `50-*`), rendered with the
+  §4.12 character-card component — the Person model's attribute/skill
+  bars, the **native role** tag, the **post column** (current post, or
+  idle; a prereq-failing post renders prereq-gray + its `gate.*` reason),
+  loyalty, `wage_daily`, the recruit port — plus the **four actions**
+  talk / gift / train / appoint (`50-*` formulas; §4.12.3) and
+  `Dismiss` (confirm dialog; frees the slot and stops the wage from the
+  next day tick). The Phase-5 four-stat line (统率/航海术/战斗/导航) and
+  its derived-effect text are retired with the old model.
+- **Header:** `n / OFFICER_MAX` (**12** since Phase 8, `50-*`; the
+  Phase-5 cap was 3) and the total daily wage bill — the number
   that shows up in `20-*` §4.5 ledger step 2.
+- **Port/sea availability (Phase 8):** `appoint` and `Dismiss` are port
+  actions (fleet composition changes dock-side, the §4.5.1 promotion
+  rule); `talk` / `gift` / `train` work anywhere, each with its own
+  cooldown shown on the row.
 - **Empty state:** `char.no_officers` plus the tavern hint (`§4.4` is where
   they are hired).
-- Read-only at sea (dismissal is a port action), same rule as S15.
+- **At sea (Phase 8):** `appoint` / `Dismiss` are disabled at sea with
+  their reason (port actions, the §4.5.1 promotion rule); the
+  talk / gift / train rows stay usable.
 - No textures; 32px rows (§4.8).
 
 #### 4.6.3 Settings: S1 title entry + S19 settings modal (Phase 5, amended)
@@ -801,9 +845,10 @@ chart adds:
 - **Load:** title-screen Load (always) + F9 quick-load slot 1 (with confirm).
   Loading routes to S4 if `current_port` set, else S3.
 - No autosave.
-- **Save version:** current format is **version 7** (`90-*` §8.2;
-  Phase 7). There is **no migration chain** — a payload older than v7
-  (v6 included) is refused like any corrupt or future-version file.
+- **Save version:** current format is **version 9** (`90-*` §8.2; Phase 8,
+  2026-11-02 — v8 was the explored-state amendment, v9 is the RPG
+  overhaul). There is **no migration chain** — a payload older than v9
+  (v8 included) is refused like any corrupt or future-version file.
 - Corrupt or future-version file → slot line shows `ui.save.invalid` and is
   not selectable (`90-*` §8.2).
 
@@ -836,6 +881,10 @@ Layout, 1280×720, placeholder shapes only (§4.8 palette):
 - **Duel modal (S11):** `duel_modal.tscn` is instanced over S10 by the
   boarding action; it shows both sides' rolls per round (three rows max) and
   closes with `duel.*` result text. It owns all input while open.
+- **Captain intro preview (Phase 8):** the battle opens with a one-card
+  preview of the opposing flagship captain's §4.12 character card
+  (identified = full reveal), dismissed with any input before the first
+  round.
 - **After-action:** a `dialog_box`-style modal lists loot gold, captured
   ships, XP and reputation deltas, then returns to S3 (`60-*` §4.11.10).
 
@@ -898,6 +947,7 @@ bottom:
 centered panel with `ending.title`, the six summary rows of `70-*` §4.7, and
 one button `ending.continue` → S1. In `retired` load mode the panel title is
 `ending.retired_title` and no Continue route back into play exists.
+Phase 8 adds the read-only RPG section above the summary rows (§4.14).
 
 **Tavern `Rumors` tab (S7, Phase 3).** Third tab beside `Crew | Officers`.
 Above the rows, the monthly tournament announcement (`tournament.status`, plus
@@ -1136,6 +1186,12 @@ decision 9).
   the investment-telegraph source, rumor row kind `"investment"`
   (§4.7.14).
 - **All sighting strings** are `captain.*` keys (§4.7.9), zh/en.
+- **Phase 8 (2026-11-02):** sighting rows become **interactive** — the
+  §4.11.1 verb matrices (market quotes / supply pre-order, tavern
+  befriend, inn limited talk, palace bounty business / inform), each row
+  opening the captain's §4.12 card; the tavern gains the **captain's
+  table** index (§4.11.2); palace bounty rows link to dossiers (§4.11.3).
+  The seeded rolls and the 20g poster reveal above are unchanged.
 
 #### 4.7.9 Phase-5 fleet `ui_strings.json` inventory (`captain.*` / `settings.*` / `market.stock.*`)
 
@@ -1515,6 +1571,292 @@ rumor row kind: "investment"
   through `I18n.t` (it is a `ui_strings` key, §4.7.15's
   `market.invest_gate.*` states).
 
+### 4.10 Phase-8 at-sea interaction layer (right-click, picker, hail, intercept)
+
+Phase 8 keeps **left-click sail-to byte-for-byte unchanged** (§4.3) and
+turns right-click into the interaction surface. Dispatch lives in
+`scripts/world/interactions.gd`; hail option building lives in
+`scripts/world/hail_options.gd`. The combat-side rules (piracy, contact,
+coaster pins) are `60-*` §4.11.15; all strings are §4.15 families.
+
+#### 4.10.1 Right-click & the fleet picker (`scenes/world/fleet_picker.tscn`)
+
+- **Hit rules (locked):**
+  - right-click **inside sighting radius** (`48 + floor(navigation / 12)`,
+    `20-*`) on a tile holding one or more fleets → the picker;
+  - right-click on a **port harbor tile** → the port context menu
+    (§4.10.3);
+  - right-click on empty water or land → **no-op** (no toast, no menu).
+- **Picker:** one row per fleet on the tile — flag color (`Nation.color`),
+  role icon (the §4.5.2 marker letter), the **identified name** (Phase 8:
+  every captain carries a canon name — the row shows it) and the **tier
+  badge**. A multi-fleet tile picks its target first (the rows are the
+  pick list); a single-fleet tile may render the verbs directly beside
+  its row.
+- **Verbs:** `inspect` — opens the captain's §4.12 card (identify = full
+  reveal); `talk` — the hail (§4.10.2), enabled within Chebyshev 2 and
+  grayed with the distance reason beyond it; `attack` — the existing
+  funnel (the intercept order below, then the `60-*` §4.11.11.2 contact
+  battle). **A `coaster`-role fleet renders no attack verb**
+  (intimidate-only, `60-*` §4.1.1/§4.11.15).
+- Strings: `interact.verb.*`, `interact.pick.*` (§4.15).
+
+#### 4.10.2 Hail modal (`scenes/world/hail_modal.tscn`)
+
+The talk verb at **Chebyshev ≤ 2** opens the hail modal over S3. Options
+are built from role × stance × skills and render as rows with their terms
+inline; a gated option is grayed with its `gate.*` reason. The modal owns
+all input while open (§4.7 modal rule).
+
+- **问讯 ask rumours** — a rumour line; **stance ≥ +2** appends one free
+  route/market intel (the same intel shape the captain's table points
+  at).
+- **买补给 buy supplies** — `trader`/`coaster` captains only: port price
+  ×1.5, **×1.25 at stance ≥ +3**, minus `floor(negotiation / 10)`%;
+  quantities via the §4.6.1 stepper convention, charged on confirm.
+- **威吓 intimidate** — success chance per `60-*` §4.11.15
+  (`clamp(strength share + 胆识/200 − stance penalty, 0.05, 0.95)`):
+  success takes half the target's cargo (floor per good) + pirate fame
+  +5; failure turns the target hostile and the battle opens.
+- **交好 befriend** — stance +1, **once per captain per day** (a used
+  befriend renders disabled with its reason).
+
+#### 4.10.3 Port context menu (right-click on a harbor tile)
+
+Rows: `靠港 dock` (the standard docking edge into S4) and `委任航行
+appoint voyage` (§4.10.4; grayed with its `gate.*` reason when the
+`sail.autopilot` gate fails — pilot not in post, navigation < 40, or the
+port not in `known_ports`). Every other right-click target is the §4.10.1
+no-op.
+
+#### 4.10.4 Appointed voyage — entries, HUD bar, interrupts
+
+- **Entries:** the Chart (S17) gains an **委任航行** action on a selected
+  **known** port (`20-*`, the appointed-voyage input-mode section); the
+  §4.10.3 port context menu is the at-sea shortcut. Gate = the
+  `skill_gates` `sail.autopilot` row (pilot in post **and** navigation
+  ≥ 40, `50-*`); grayed + reason otherwise; no fee.
+- **HUD bar:** while appointed, `scenes/world/autopilot_hud.tscn` is
+  instanced into the world HUD (§4.5) — `目的地 {port} · 预计 {days} 天 ·
+  [取消]` (`sail.autopilot.hud.*`). Cancel returns control immediately;
+  no clock cost beyond the sailing already done.
+- **Interrupts:** hostile contact **auto-cancels with a notice toast**
+  (`sail.autopilot.cancelled_contact`) before the `60-*` §4.11.11.2
+  battle opens; **any manual input cancels**; **storms do not cancel**
+  (auto-reef, `20-*`).
+
+### 4.11 Phase-8 in-port people surfaces (verb matrices, captain's table, dossier)
+
+The §4.7.8 sighting rolls are unchanged; what changes is that a sighting
+row is now **interactive**. Every verb row carries its terms inline and
+gray-renders with its `gate.*` reason when gated. A facility without a
+sighted captain simply shows its rows without people verbs.
+
+#### 4.11.1 Verb matrices per facility (locked)
+
+| Facility | Sighting-row verbs (Phase 8) |
+|---|---|
+| Market (S5) | **行情 quotes** — the sighted trader captain's current-lane price intel (the ask-rumours intel shape); **补给预订 supply pre-order** — stage supplies for the next Set Sail: the row jumps into the §4.6.1 provisioning prompt with the quantity pre-staged (the prompt stays the only purchase seam) |
+| Tavern (S7) | **交好 befriend** (stance +1, once per captain per day — the hail rule); **切磋 sparring bet** (below); the **captain's table** index (§4.11.2) |
+| Inn (S8) | **受限谈话 limited talk** — +1 extra familiarity, **once per port visit** |
+| Palace (S13) | **悬赏公务 bounty business** — the bounty-board rows link to dossiers (§4.11.3); **告发 inform on pirates** — 500g reveals a wanted captain's exact live position (the `captain.reveal.text` shape) |
+
+- **Sparring bet (tavern, locked numbers):** the tavern champion's
+  swordplay is **40**; the stake runs 100–1,000g in 100g steps and is the
+  pot; win chance `p = clamp(0.5 + (player_swordplay − 40) / 200, 0.10,
+  0.90)` (seeded); **a win pays `pot × 2`**; a loss forfeits the stake.
+  **Each bout counts as 3 swordplay usages** (growth counter, `50-*`).
+- Strings: `interact.market.*`, `tavern.spar.*`, `inn.talk.*`,
+  `palace.inform.*` (§4.15).
+
+#### 4.11.2 The captain's table (tavern index)
+
+A tavern section listing **this port's sightings** (the §4.7.8 roll
+output): one row per sighted captain — name, role, stance/familiarity
+hint — each row opening the captain's §4.12 card and carrying a
+**facility pointer** naming where that captain can be found right now
+(the market / tavern / inn / palace row its sighting rolled). A sighted
+captain's pointer names exactly one facility; "gone ashore" captains
+render the `captain.gone_ashore` line without a pointer. Strings:
+`captain.table.*` (§4.15).
+
+#### 4.11.3 Dossier panel
+
+A **card-external** information layer, opened from any captain entry
+(picker inspect, captain's-table row, bounty row, hail modal): the full
+§4.12 card **plus the career log**. The panel is read-only.
+
+- **Familiarity gates only the career log (locked):** tier **3** = the
+  captain's last-seen **fleet composition**; tier **6** = **home port +
+  sighting history**; tier **10** = the **full lane picture including
+  month variants** (`10-*` lane variants). Below a tier, its log section
+  renders locked with the reason (`dossier.locked.*`).
+- **Card numbers are never gated** — identify = full reveal (§4.12).
+- **Stance ≥ +2** adds the captain's current tier + status (在航 at sea /
+  归队中 returning) to the panel header.
+- **Bounty board links to dossiers:** every palace bounty row gains an
+  open-dossier action.
+- Strings: `dossier.*` (§4.15).
+
+### 4.12 The unified character card, allocation & the S14 rework
+
+#### 4.12.1 `scenes/ui/character_card.tscn` (locked layout)
+
+One scene renders **any** Person — player, officer, NPC captain — with an
+identical structure from every entry:
+
+- **Portrait:** a color block composed from the appearance tags
+  (`{face, beard, eyes, …}` — §4.8 palette, placeholder-first).
+- **Identity row:** name / flag color block / role / tier badge / level.
+- **Five attribute bars** (体魄 / 悟性 / 魅力 / 胆识 / 运气, 1–100) and
+  **skill bars** for the Person's skills — the signature skill
+  highlighted, a 0-value skill grayed as unlearned.
+- **Personality tags** and the **appearance sentence** assembled from the
+  part keys (`char.personality.*`, `char.appearance.*`, §4.15).
+- **Relation block:** officer = loyalty + native role / current post;
+  NPC captain = stance + familiarity.
+- **Career block:** player = XP / level; NPC captain = wins / defeats /
+  return day.
+- **Player-card extra — the effective-values split:** base value +
+  officer contribution + the native +5, with the "without this officer"
+  diff (`50-*`; the successor of S18's pre-Phase-8 derived-effect line).
+
+**IDENTIFY = FULL REVEAL (locked):** an identified NPC captain's card
+shows every number; familiarity gates only the dossier career log
+(§4.11.3). **The same captain's card is identical from every entry**
+(picker inspect, captain's-table row, bounty row, hail modal, battle
+intro preview) — acceptance-pinned.
+
+**Entries (locked set):** panel header (player); officer row / tavern
+recruit dialog (officers); picker inspect / captain's-table row / bounty
+row / hail modal / battle intro preview (NPC — §4.7.1).
+
+#### 4.12.2 Allocation UX (level-up points, locked flow)
+
+`award_xp` detects the level-up → toast `char.level_up` +
+`alloc_pending += 2` (**persisted**, save v9) → a badge on the character
+button (`char.points_pending`). The player allocates on **their own
+card's attribute tab** at leisure:
+
+- per-attribute `+` stepper (enabled iff `alloc_pending > 0`) → the rows
+  enter the **draft** → `确认` commits / `取消` rolls the draft back;
+- a single attribute clamps at 1–100; **no second confirm dialog**;
+- **skills never allocate** (usage growth + paid training only, `50-*`);
+- points are **deferrable forever** — the badge persists until spent.
+
+#### 4.12.3 Character panel (S14) three tabs + the appointment flow
+
+The person side of S14 reorganizes into **three tabs** (Phase 8):
+
+| Tab | Shows |
+|---|---|
+| **属性 Attributes** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, and the player's **effective-values split** |
+| **技能 Skills + gates** | the eight skill bars with their usage counters, and every locked feature rendered from `data/skill_gates.json` — the one `gate.*` reason renderer (grayed row + threshold + reason) shared by the whole UI |
+| **官员与岗位 Officers & posts** | the officer roster (the §4.6.2 rows with their four actions) and the post table |
+
+The Phase-3 委托 Quests tab is unchanged and keeps its place beside the
+three person tabs.
+
+**Officer actions (S18 rows; formulas `50-*`):** `talk` (loyalty +1,
+10-day cooldown), `gift` (200g → loyalty +5; +8 贪婪 / +3 忠厚, 10-day
+cooldown), `train` (the paid-training formula), `appoint` (the post
+table). The **post column** renders prereq-gray + reason through the
+same data-driven gates renderer (`officer_posts.json` prereqs ship their
+`gate.*` reasons in the `skill_gates.json` shape). `appoint` / `Dismiss`
+are port actions; `talk` / `gift` / `train` work anywhere (§4.6.2).
+
+**Fleet-panel captain rows (S15):** every non-flagship ship row gains a
+**"captain: ___"** line naming its appointed captain (or the
+`officer.post.no_captain` state — the captain-less penalties of `40-*` /
+`50-*` apply), with the appoint shortcut into the S18 post table.
+
+### 4.13 Creation screen (S20, Phase 8)
+
+`scenes/title/creation_screen.tscn` — the **two-step** flow between the
+nationality card (S2, unchanged, hands off) and S4:
+
+1. **出身 background** — a 6-choice card grid (`data/backgrounds.json`,
+   zh/en name + bio + bonus line): 甲板水手 体+3/操船+5 · 海军见习生
+   胆+3/航海+5 · 商行学徒 魅+3/交涉+5 · 制图学徒 悟+3/制图+5 · 酒馆跑腿
+   运+3/打探+5 · 剑馆弟子 胆+3/剑术+5.
+2. **自由点数 free points** — attributes +5 and skills +3 total,
+   per-item cap +3, **must spend all** (confirm stays disabled with the
+   remaining-points count otherwise); a **均匀分配 spread evenly**
+   shortcut button (attributes +1 each; the first three skills +1 each);
+   the §4.12.2 steppers, clamped 1–100 (attributes) / 0–100 (skills).
+
+- **Live derived preview:** sighting / fleet speed / duel value move with
+  the steppers — **the same source formulas** (`20-*` / `50-*` / `60-*`),
+  never a re-derivation; each line shows `base → value` as points are
+  spent.
+- Creation extremes stay inside the balance band: attribute ≤ 21, skill
+  ≤ 13 (`50-*`).
+- `GameState.new_game(nation_id, background_id, attr_alloc, skill_alloc)`;
+  `background_id` persists in save v9's player block.
+- Strings: `creation.*` (§4.15). Reuses the nationality card component
+  and the §4.12 card components.
+
+### 4.14 Retirement screen RPG segment (S16, Phase 8)
+
+The S16 summary gains a **read-only** RPG section above the six summary
+rows — every line derives from existing state (`captain_states`,
+`officer_states`, the player block), pure display:
+
+- **宿敌榜 nemesis list** — the top **3** defeated captains ranked by
+  their wins against the player (name + tier + stance);
+- **最深恩仇 deepest grudge** — the captain with the lowest stance;
+- **最忠诚老部下 most loyal veteran** — the highest-loyalty officer with
+  **≥ 90 sea-days served**;
+- **出身回望 background bio** — one line from the player's
+  `backgrounds.json` bio.
+
+Strings: `ending.rpg.*` (§4.15). Empty states (no defeats / no veteran
+yet) render the `ui.empty` convention.
+
+### 4.15 Phase-8 `ui_strings.json` families (orchestrator-merge contract)
+
+Same protocol as §4.7.10/§4.7.15: W2-C authors the keys from this
+inventory; zh/en complete and placeholders matched per key
+(validator-enforced). The table pins each family's coverage with example
+keys (zh/en shown for the examples); the full key lists are W2-C's task,
+and a code review that misses a key reports it (the master micro-ledger
+merges residuals).
+
+| Family | Covers | Example keys (zh / en) |
+|---|---|---|
+| `char.*` | level-up toast, allocation badge, officer-action labels, card chrome | `char.level_up` 等级提升!可用 +2 点。/ Level up! +2 points to allocate. · `char.points_pending` 待分配点数 / Points to allocate · `char.action.gift` 赠礼 / Gift |
+| `skill.*` | the 8 skill names + usage-counter labels | `skill.navigation` 航海 / Navigation · `skill.uses` 熟练 {count}/{need} / Uses {count}/{need} |
+| `gate.*` | the one locked-reason renderer's rows (features + posts) | `gate.sail.autopilot` 需领航员在岗且航海 ≥ 40 / Needs a pilot in post with Navigation ≥ 40 |
+| `hail.*` | hail modal options, terms, results | `hail.option.intimidate` 威吓 / Intimidate · `hail.intimidate.win` {name} 交出了半舱货物。/ {name} hands over half their cargo. |
+| `interact.*` | picker verbs + intercept order | `interact.verb.inspect` 详查 / Inspect · `interact.verb.attack` 攻击 / Attack · `interact.intercept.set` 拦截:{name} / Intercept: {name} |
+| `dossier.*` | dossier panel + career-log tiers | `dossier.title` 档案:{name} / Dossier: {name} · `dossier.locked.tier` 熟悉度不足(需 {tier}) / Not enough familiarity (needs {tier}) |
+| `captain.table.*` | tavern captain's-table index | `captain.table.title` 船长桌 / The captains' table · `captain.table.at` 现在位于:{facility} / Now at: {facility} |
+| `officer.post.*` | post names + the captain-less state | `officer.post.pilot` 领航员 / Pilot · `officer.post.captain` 舰长 / Ship captain · `officer.post.no_captain` 无舰长 / No captain |
+| `advice.*` | the 6 in-post advice events, `advice.{post}.{situation}` | `advice.pilot.wind_band` 领航员:明日将进入风带。/ Pilot: we enter a wind band tomorrow. |
+| `creation.*` | background cards, free points, spread evenly | `creation.points.left` 剩余 {count} 点未分配 / {count} points left to spend · `creation.spread` 均匀分配 / Spread evenly |
+| `sail.autopilot.*` | appoint / cancel actions, HUD bar, notices | `sail.autopilot.appoint` 委任航行 / Appoint voyage · `sail.autopilot.cancelled_contact` 遭遇敌对船队,委任航行取消。/ Hostile fleet sighted — the appointed voyage is cancelled. |
+
+Notes pinning the set exactly:
+
+- `advice.{post}.{situation}` is a closed 6-entry table (the
+  `officer_posts.json` `advice` field, `50-*`): `advice.pilot.wind_band`
+  · `advice.surgeon.water_low` · `advice.boatswain.storm_sail` ·
+  `advice.gunner.first_contact` · `advice.carpenter.durability_low` ·
+  `advice.cook.morale_low`.
+- Personality / appearance part keys join the inventory
+  (`char.personality.*`, `char.appearance.face|beard|eyes|…`) — the card
+  assembles the appearance sentence from the part keys.
+- Post prereq reasons are `gate.*` keys (the renderer is shared, the
+  `skill_gates.json` shape); `officer.post.*` owns only the post names
+  and the `officer.post.no_captain` state line.
+- The 6 background cards are `creation.background.<id>` (name) +
+  `creation.background.<id>.bio` (bio line); the S16 bio line reuses the
+  same `bio` value.
+- The retirement segment's strings **extend the existing `ending.*`
+  family** (`ending.rpg.nemesis_title`, `ending.rpg.grudge`,
+  `ending.rpg.veteran`, `ending.rpg.bio` + their row-composition keys) —
+  no new family.
+
 ## 5. Data Examples
 
 `ui_strings.json` excerpt (shape):
@@ -1573,6 +1915,22 @@ rumor row kind: "investment"
   dots and fleet marker over the unexplored background, not a blank crash.
 - **Chart open while a modal exists** → modals consume input; `Tab` does
   nothing while any modal is up.
+- **Right-click on empty water or land** → a hard no-op: no picker, no
+  menu, no toast (§4.10.1).
+- **Picker on a multi-fleet tile** → the target is chosen first; `Esc`
+  backs out of the picker with no order issued (§4.10.1).
+- **Intimidate failure** → the hail modal closes, the target turns
+  hostile and the `60-*` §4.11.11.2 battle opens through the normal
+  funnel (§4.10.2).
+- **`alloc_pending` across save/load** → the counter round-trips (save
+  v9) and the badge persists; only a committed allocation spends it
+  (§4.12.2) — a draft rolled back by `取消` restores the counter exactly.
+- **Appointed voyage vs storm** → the voyage continues (auto-reef);
+  only hostile contact or manual input cancels, each with its notice
+  (§4.10.4).
+- **Same captain, two entries** → the card renders identically from the
+  picker and the dossier; any divergence is a bug (acceptance-pinned,
+  §4.12.1).
 
 ## 7. Acceptance Criteria
 
@@ -1641,4 +1999,31 @@ rumor row kind: "investment"
 - [ ] Tavern telegraph rows of kind `"investment"` appear for the 30-day
       window, scoped to the invested port's band, and expire.
 - [ ] Phase 7: zero `<key>` fallbacks zh/en for the §4.7.15 families
+      (orchestrator merge complete).
+
+**Phase-8 additions (the RPG overhaul, 2026-11-02).**
+
+- [ ] Right-click: the picker renders exactly per §4.10.1 (coaster: no
+      attack verb; empty water/land a no-op; multi-fleet pick first);
+      left-click sail-to is unchanged; the hail modal opens only within
+      Chebyshev 2 with role × stance × skills options.
+- [ ] The port context menu docks or appoints; the appointed-voyage HUD
+      bar shows destination / ETA / cancel, auto-cancels with a notice on
+      hostile contact and never on storms.
+- [ ] The same captain's card is identical from every entry (picker,
+      captain's table, bounty row, hail modal, battle intro preview,
+      dossier).
+- [ ] Dossier familiarity gates only the career log at 3/6/10; card
+      numbers never gated; stance ≥ +2 adds tier + status to the header.
+- [ ] Allocation: level-up toast + persisted `alloc_pending` + badge;
+      steppers → draft → confirm / cancel rollback; deferrable forever;
+      skills never allocate.
+- [ ] Officers panel: talk / gift / train / appoint with cooldowns and
+      prereqs; the post column prereq-grays with its gate reason; S15
+      shows the per-ship "captain: ___" rows.
+- [ ] Creation S20: two steps, the live same-source derived preview,
+      spread-evenly, must-spend-all; extremes attribute ≤ 21 / skill ≤ 13.
+- [ ] Retirement RPG segment: nemesis top 3, deepest grudge, most loyal
+      veteran (≥ 90 sea-days), background bio — all read-only.
+- [ ] Phase 8: zero `<key>` fallbacks zh/en for the §4.15 families
       (orchestrator merge complete).
