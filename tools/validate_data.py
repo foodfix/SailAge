@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-10 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-12 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
@@ -9,8 +9,10 @@ independently from ``lat``/``lon`` and compares it with
 reachable from Lisbon by a wrap-aware 8-directional BFS that forbids corner
 cutting (docs/20-WORLD-AND-SAILING.md section 4.2). Group 7 is the Phase-5
 npc & economy data check (section 8.2): the density-dial config bounds, the
-captain pools, the named pirates, the demand-event templates with their
-rest-band shift bounds, and the consumption-tier split. Group 8 is the
+v2 named-pirate cards (full captain cards, field-for-field equal to their
+canon copies, with the rare ``drop`` pairing), the demand-event templates
+with their rest-band shift bounds, the consumption-tier split, and the
+§4.19 facility-hours sub-block. Group 8 is the
 trade-route check (section 8.3): the locked 21-lane id set, waypoint snap and
 segment passability (shared with ``tools/build_routes.py``), the §4.14
 walk-aware spoke rule for every port, the named junction-graph probes, and
@@ -21,7 +23,18 @@ per the §6.5 encodings, water coverage against ``world.png``, and the
 byte-exact ``tools/build_ocean.py`` rebuild. Group 10 is the Phase-6 ice &
 lane-variant check (section 8.5): ``ice_regions.json`` structure, lane
 variant month coverage, and per-month-window passability under the in-month
-ice mask.
+ice mask. Group 11 is the Phase-8 captain-canon check (section 8.6): the
+built ``data/captains.json`` envelope, every card's §4.11 shape and the
+generated cards' formulas re-asserted term-by-term, the extreme-preset quota
+coverage re-derived independently from ``npc_config`` × ``ports`` ×
+``nations``, the artifact ``quota_table`` vs the roster cells, the
+``tools/build_captains.py --check`` byte-identical rebuild, and name
+uniqueness across the canon and the officer roster. Group 12 is the Phase-8
+RPG-data check (section 8.7): the officers v2 roster quotas (bands, specialty
+coverage, captain-qualified, recruit ports, native-role personality pools),
+the §4.20 skill gates, the §4.21 officer posts with their locked prereqs and
+advice strings, the §4.22 backgrounds, and the §7.11 ui_strings Phase-8
+family presence.
 
 Usage (from the repo root):
 
@@ -40,12 +53,16 @@ Exit codes:
     4   referential integrity failure
     5   locked-list failure
     6   world map failure (data/maps/world.png / world_report.json)
-    7   npc & economy data failure (npc_config / npc_captains / named_pirates /
-        market_events)
+    7   npc & economy data failure (npc_config / named_pirates /
+        market_events / facility_hours)
     8   trade-route failure (trade_routes / trade_routes_built /
         route_overrides)
     9   ocean-raster failure (wind_regions.png / currents.png)
     10  ice & lane-variant failure (ice_regions / trade_routes variants)
+    11  captain-canon failure (captains.json / officers.json rebuild /
+        quota coverage / name uniqueness)
+    12  RPG-data failure (officers v2 quotas / skill_gates / officer_posts /
+        backgrounds / ui_strings Phase-8 families)
 
 On the first failure a single line is printed to stdout:
 
@@ -182,7 +199,6 @@ SHIP_CLASSES = ("sail", "oar", "hybrid")
 SHIP_ROLES = ("war", "trade", "coastal")
 # §6.1 locked ship-speed set (tiles/day) — every hull's final value lies in it.
 LOCKED_SHIP_SPEEDS = frozenset({16, 20, 24})
-OFFICER_ROLES = ("navigator", "boatswain", "gunner")
 EQUIPMENT_SLOTS = ("weapon", "armor", "figurehead", "sail")
 DISCOVERY_CATEGORIES = ("natural", "ruins", "relic", "creature")
 QUEST_TYPES = ("delivery", "bounty", "exploration", "royal")
@@ -190,8 +206,9 @@ QUEST_GIVERS = ("guild", "palace")
 
 # docs/50-CHARACTER-AND-PROGRESSION.md section 4.2 (player) and
 # docs/40-SHIPS-AND-FLEET.md (ship instance stats), for equipment modifiers.
+# (The v1 OFFICER_ROLES / OFFICER_STAT_NAMES retired with the v1 officer
+# schema — Phase 8's person card uses PERSON_ATTRIBUTES / OFFICER_SKILL_NAMES.)
 PLAYER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation", "luck")
-OFFICER_STAT_NAMES = ("leadership", "seamanship", "combat", "navigation")
 SHIP_STAT_NAMES = ("durability", "capacity", "speed", "crew_max", "armament_slots")
 EQUIPMENT_STAT_NAMES = frozenset(PLAYER_STAT_NAMES + SHIP_STAT_NAMES)
 # Phase 7 (10-* §4.6 / 60-* §4.11.12): the two sideways modifier keys join the
@@ -236,14 +253,35 @@ ENTITY_FILES = {
     "equipment.json": "equipment",
     "discoveries.json": "discoveries",
     "quests.json": "quests",
-    # Phase 5 (section 8, group 1): npc_captains.json's plural key is `pools`,
-    # named_pirates.json / market_events.json match their filenames,
-    # trade_routes.json's plural key is `lanes` (§4.14).
-    "npc_captains.json": "pools",
+    # Phase 5: named_pirates.json / market_events.json match their filenames,
+    # trade_routes.json's plural key is `lanes` (§4.14). Phase 8 retires
+    # npc_captains.json from this table — the name pools are gone (§7.7), the
+    # file's presence is simply unchecked until W4-B deletes it (group 11).
     "named_pirates.json": "named_pirates",
     "market_events.json": "market_events",
     "trade_routes.json": "lanes",
+    # Phase 8 (W2-B files, §4.20–4.22): plural == basename, no exception.
+    "skill_gates.json": "skill_gates",
+    "officer_posts.json": "officer_posts",
+    "backgrounds.json": "backgrounds",
 }
+
+# Phase 8 (§4.11): captains.json is a *tool output* (§8 group-1 exception —
+# key `captains` plus the builder's envelope block), never hand-edited; its
+# shape is owned by group 11. The allowed extras are the §4.11 envelope keys.
+TOOL_OUTPUT_FILES = {
+    "captains.json": {
+        "plural": "captains",
+        "allowed_extra": {"generated_by", "artifact", "build", "quota_table"},
+    },
+}
+
+# Phase 8: retired files still present until W4-B deletes them (master
+# decision 2026-11-03). Group 1 still parses them (any .json under data/
+# must be valid UTF-8 JSON) but skips the envelope contract — their
+# presence is simply unchecked (§8.6 item 1's absence assertion lands in
+# W4-B).
+RETIRED_FILES = {"npc_captains.json"}
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
 SPECIAL_FILES = {
@@ -266,9 +304,15 @@ SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
 SPECIAL_FILES.add("npc_config.json")
 SPECIAL_REQUIRE_VERSION.add("npc_config.json")
 # Port hours (added 2026-11-02): facility_hours.json is a config block
-# (§4.19), not an entity file — its shape is owned by group 11.
+# (§4.19), not an entity file — its shape is a group-7 sub-block.
 SPECIAL_FILES.add("facility_hours.json")
 SPECIAL_REQUIRE_VERSION.add("facility_hours.json")
+# Phase 8 (§4.11.1): captain_name_parts.json is the builder's authored
+# multi-block source (names/personality/appearance/officer_bios) — a plain
+# object file like npc_config.json, group-1 exception; group 11 owns its
+# vocabularies.
+SPECIAL_FILES.add("captain_name_parts.json")
+SPECIAL_REQUIRE_VERSION.add("captain_name_parts.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -282,15 +326,17 @@ L10N_FIELDS = {
     "equipment": ("name",),
     "discoveries": ("name", "region_hint"),
     "quests": ("name", "description", "objective"),
-    # Phase 5: a pool's `names` is an array of L10nStrings — the walker's
-    # locale-key heuristic covers each entry (no scalar L10n field here);
-    # pirates/events carry their display string in `name`.
-    "pools": (),
+    # Phase 5: pirates/events carry their display string in `name`.
     "named_pirates": ("name",),
     "market_events": ("name",),
     # §4.14: lanes carry no display strings (ids, numeric waypoints, id lists);
     # the walker's locale-key heuristic still guards any stray zh/en object.
     "lanes": (),
+    # Phase 8 (§4.20–4.22): the gate "why locked" line, the post description
+    # and the background card strings.
+    "skill_gates": ("reason",),
+    "officer_posts": ("desc",),
+    "backgrounds": ("name", "bio"),
 }
 
 # --- Locked content tables (docs/10-DATA-SCHEMA.md section 7) --------------
@@ -586,20 +632,178 @@ LOCKED_BANDS: tuple[str, ...] = (
     "swahili_red_sea",
 )
 
-# id: (zh, en, nation_id, role, recruit_ports, wage_daily)  -- section 7.5
-LOCKED_OFFICERS = {
-    "off_mateus_alvares": ("马特乌斯·阿尔瓦雷斯", "Mateus Álvares", "portugal",
-                          "navigator", ("lisbon", "madeira"), 30),
-    "off_diego_fernandez": ("迭戈·费尔南德斯", "Diego Fernández", "spain",
-                           "boatswain", ("seville", "ceuta"), 28),
-    "off_thomas_reed": ("托马斯·里德", "Thomas Reed", "england",
-                        "gunner", ("london",), 32),
-    "off_jan_de_vries": ("扬·德弗里斯", "Jan de Vries", "holland",
-                         "boatswain", ("amsterdam", "antwerp"), 28),
-    "off_kemal_agha": ("凯末尔阿迦", "Kemal Agha", "ottoman",
-                       "gunner", ("istanbul", "smyrna"), 30),
-    "off_marco_bellini": ("马尔科·贝里尼", "Marco Bellini", "italy",
-                          "navigator", ("venice", "genoa"), 30),
+# §7.5 (Phase 8): the 6 Phase-1 starters' LOCKED IDENTITY — id, zh/en name,
+# nation and recruit ports stay verbatim from the v1 roster (§7.5 table); the
+# v1 `role`/`stats` columns are retired (the v2 person-card conversion is the
+# builder's, §4.5). Their bios are likewise verbatim (the builder carries
+# them in STARTERS_V1; group 5 pins the whole identity block). Note
+# off_diego_fernandez recruits at `ceuta`, a portugal port — the §7.5
+# identity is exempt from the group-12 own-nation subset rule.
+STARTER_IDENTITY = {
+    "off_mateus_alvares": {
+        "zh": "马特乌斯·阿尔瓦雷斯", "en": "Mateus Álvares",
+        "nation_id": "portugal", "recruit_ports": ("lisbon", "madeira"),
+        "bio_zh": "一位在老领航员手下学艺的青年,星象与海图无一不精。",
+        "bio_en": "A young pilot schooled by old navigators; at home with stars and charts alike.",
+    },
+    "off_diego_fernandez": {
+        "zh": "迭戈·费尔南德斯", "en": "Diego Fernández",
+        "nation_id": "spain", "recruit_ports": ("seville", "ceuta"),
+        "bio_zh": "在塞维利亚船坞里长大的老水手长,一声令下缆索便各归其位。",
+        "bio_en": "A boatswain raised in the Seville yards, whose whistle sends every rope to its place.",
+    },
+    "off_thomas_reed": {
+        "zh": "托马斯·里德", "en": "Thomas Reed",
+        "nation_id": "england", "recruit_ports": ("london",),
+        "bio_zh": "曾在英吉利海峡追捕私掠者的炮手,最看重火药干燥与否。",
+        "bio_en": "A gunner who once chased privateers in the Channel, and cares above all that the powder stays dry.",
+    },
+    "off_jan_de_vries": {
+        "zh": "扬·德弗里斯", "en": "Jan de Vries",
+        "nation_id": "holland", "recruit_ports": ("amsterdam", "antwerp"),
+        "bio_zh": "弗里斯兰出身的水手长,能在暴风里把甲板收拾得井井有条。",
+        "bio_en": "A Frisian boatswain who can keep a deck in order even through a gale.",
+    },
+    "off_kemal_agha": {
+        "zh": "凯末尔阿迦", "en": "Kemal Agha",
+        "nation_id": "ottoman", "recruit_ports": ("istanbul", "smyrna"),
+        "bio_zh": "在金角湾炮台服役多年的老炮长,开火前总要亲手校一遍炮位。",
+        "bio_en": "A veteran gun captain from the Golden Horn batteries, who sights each gun himself before firing.",
+    },
+    "off_marco_bellini": {
+        "zh": "马尔科·贝里尼", "en": "Marco Bellini",
+        "nation_id": "italy", "recruit_ports": ("venice", "genoa"),
+        "bio_zh": "为威尼斯商船绘制海图的领航员,对亚得里亚海的每一处暗礁都了然于心。",
+        "bio_en": "A chart-maker for Venetian merchantmen, who knows every reef in the Adriatic by heart.",
+    },
+}
+STARTER_IDS = tuple(STARTER_IDENTITY)
+
+# --- Phase 8 person model (docs/10-DATA-SCHEMA.md §4.5/§4.11/§4.20-4.22) ----
+
+# §4.11/§4.5: the 5 attribute keys of the shared person card.
+PERSON_ATTRIBUTES = ("constitution", "intellect", "charisma", "courage", "luck")
+# §4.11/50-* §2.2: the 8 player skills (captain-card key set).
+PLAYER_SKILLS = ("seamanship", "navigation", "swordplay", "gunnery",
+                 "appraisal", "negotiation", "cartography", "rumour")
+# §4.5: the officer card adds the three ship-service skills (11 total).
+OFFICER_SKILL_NAMES = PLAYER_SKILLS + ("medicine", "carpentry", "cooking")
+# §8.7 gate vocabulary: the 5 attributes + the 11 skills.
+GATE_STAT_SKILLS = PERSON_ATTRIBUTES + OFFICER_SKILL_NAMES
+
+# §4.11: the 7 locked captain roles, their tier ranges and the role
+# templates (main/secondary attribute — signature/secondary skill). The
+# coaster names NO skills and its luck sits at the others step (the -low
+# pin); its "any" secondary-attribute cell is pinned to courage by the
+# builder (W2-A choice, recorded in tools/build_captains.py).
+CAPTAIN_ROLES = ("trader", "coaster", "patrol", "courier", "privateer",
+                 "pirate", "hunter")
+CAPTAIN_ROLE_TIERS = {"trader": (1, 2), "coaster": (1, 1), "patrol": (2, 2),
+                      "courier": (1, 2), "privateer": (2, 3), "pirate": (1, 3),
+                      "hunter": (2, 3)}
+CAPTAIN_ROLE_TEMPLATES = {
+    "trader": ("charisma", "luck", "negotiation", "appraisal"),
+    "coaster": ("constitution", "courage", None, None),
+    "patrol": ("courage", "charisma", "gunnery", "seamanship"),
+    "courier": ("constitution", "intellect", "navigation", "seamanship"),
+    "privateer": ("courage", "luck", "swordplay", "gunnery"),
+    "pirate": ("courage", "charisma", "swordplay", "gunnery"),
+    "hunter": ("courage", "intellect", "swordplay", "navigation"),
+}
+# §4.11: pirates/hunters get level +2 (1 + tier×4 otherwise).
+CAPTAIN_LEVEL_BONUS_ROLES = ("pirate", "hunter")
+# §7.8: the 4 locked named-pirate ids (the shipped Phase-5/7 pairings).
+LOCKED_NAMED_PIRATE_IDS = (
+    "pirate_redbeard_khair",
+    "pirate_murad_red_sail",
+    "pirate_limahong_thousand_sails",
+    "pirate_edward_bloodhand",
+)
+# §7.7/§8.6 item 3: the extreme-preset pirate row is the Phase-7 measured
+# normal composition (8 pirate_base from npc_config + 17 unpatrolled zones,
+# docs/60-* §4.1.1, tools/demo_check_phase7.md) × the extreme multiplier.
+UNPATROLLED_ZONES_PHASE7 = 17
+EXTREME_PRESET = "extreme"
+
+# §4.5/§7.5/§8.7: the officers v2 roster pins.
+OFFICER_TOTAL = 96           # 24 legends + 72 regulars
+OFFICER_LEGEND_COUNT = 24
+OFFICER_REGULAR_COUNT = 72
+LEGEND_MAIN_BAND = (45, 60)
+REGULAR_MAIN_BAND = (25, 45)
+LEGEND_WAGE_BAND = (40, 60)
+REGULAR_WAGE_BAND = (20, 35)
+SPECIALTY_MIN_CARRIERS = 10  # each skill at ≥ 20 on ≥ 10 officers
+SPECIALTY_THRESHOLD = 20
+CAPTAIN_QUALIFIED_MIN = 12   # seamanship ≥ 25 ∧ courage ≥ 30
+# §8.7 item 1: main_skill → the officer native-role personality pool(s) of
+# §4.11.1. The seamanship main is ambiguous between boatswain and captain —
+# the union is the pool; seamanship-main LEGENDS draw the boatswain pool
+# only (the builder's recorded pin, tools/build_captains.py).
+OFFICER_MAIN_ROLE_POOLS = {
+    "navigation": ("pilot",),
+    "seamanship": ("boatswain", "captain"),
+    "gunnery": ("gunner",),
+    "medicine": ("surgeon",),
+    "carpentry": ("carpenter",),
+    "cooking": ("cook",),
+    "swordplay": ("captain",),
+}
+
+# §4.20/§8.7 item 6: feature ids are `<system>.<feature>` — dots legal.
+FEATURE_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
+# The locked gate inventory (50-* §2.2 Gates column + sail.autopilot):
+# every row below must be present (the file may grow).
+LOCKED_GATE_FEATURES = (
+    "sail.autopilot",
+    "sail.night",
+    "repair.foul_weather",
+    "repair.at_sea",
+    "shot.chain",
+    "shot.armor_piercing",
+    "duel.ladder.rank2",
+    "duel.ladder.rank3",
+    "market.profit_arrows",
+    "market.other_port_memory",
+    "permit.home_discount",
+    "permit.foreign_discount",
+    "chart.reef_annotations",
+    "bounty.pinpoint",
+)
+# §4.21/§8.7 item 7: the 7 locked posts and their prereqs.
+LOCKED_POST_IDS = ("pilot", "boatswain", "gunner", "surgeon", "carpenter",
+                   "cook", "captain")
+FLAGSHIP_POST_PREREQ = {
+    "pilot": {"navigation": 20},
+    "boatswain": {"seamanship": 20},
+    "gunner": {"gunnery": 20},
+    "surgeon": {"medicine": 20},
+    "carpenter": {"carpentry": 20},
+    "cook": {"cooking": 20},
+}
+CAPTAIN_POST_PREREQ = {"seamanship": 25, "courage": 30}
+# §4.21: the 6 locked advice situations and their numeric trigger params
+# (the numbers sit in this table, never in code).
+ADVICE_SITUATIONS = ("wind_band", "storm_sail", "first_contact", "water_low",
+                     "durability_low", "morale_low")
+ADVICE_PARAMS = {
+    "water_low": {"days": 5},
+    "durability_low": {"pct": 50},
+    "morale_low": {"threshold": 40},
+}
+
+# §7.10: the locked 6-background set — id → (zh, en, attribute, skill).
+LOCKED_BACKGROUNDS = {
+    "background_deckhand": ("甲板水手", "Deckhand", "constitution", "seamanship"),
+    "background_navy_cadet": ("海军见习生", "Naval Cadet", "courage", "navigation"),
+    "background_merchant_apprentice": ("商行学徒", "Merchant Apprentice",
+                                        "charisma", "negotiation"),
+    "background_cartographer_apprentice": ("制图学徒",
+                                            "Cartographer's Apprentice",
+                                            "intellect", "cartography"),
+    "background_tavern_errand": ("酒馆跑腿", "Tavern Runner", "luck", "rumour"),
+    "background_fencing_student": ("剑馆弟子", "Fencing Student", "courage",
+                                    "swordplay"),
 }
 
 # id: (zh, en, slot, modifiers, price, tier, rare)  -- docs/60-COMBAT.md
@@ -665,8 +869,9 @@ LOCKED_COUNTS = {
     "goods": 40,
     "ship_types": 16,
     "ports": 105,  # amended 2026-11-02 (§7.1): the five new sovereign ports
-    "officers": 6,
+    "officers": 96,  # §7.5 (Phase 8): 24 legends + 72 regulars
     "equipment": 24,
+    "backgrounds": 6,  # §7.10 (Phase 8)
 }
 
 # §7.1 Phase-6 neutral tier: Phase 7 joins the tier to the identity locks —
@@ -719,13 +924,9 @@ NEUTRAL_PRESET = "normal"
 # §4.10: hard upper bound on live NPC fleets (group 7 enforces the locked cap).
 ABSOLUTE_CAP_MAX = 2048
 
-# npc_captains.json: §7.7's closed set — the 6 nation ids plus the nationless
-# `""` pool pirates draw from; every pool carries at least this many names.
-NATIONLESS_POOL_ID = ""
-CAPTAIN_POOL_MIN_NAMES = 8
-
 # named_pirates.json: §7.8 locks the count and the tier band (tier semantics:
-# 70-* §4.5 bounty bands 5000/10000/20000 for tiers 1/2/3).
+# 70-* §4.5 bounty bands 5000/10000/20000 for tiers 1/2/3); since Phase 8 the
+# rows are v2 full captain cards (§4.12) — the full-card checks are group 7's.
 NAMED_PIRATE_COUNT = 4
 NAMED_PIRATE_TIER_MIN = 1
 NAMED_PIRATE_TIER_MAX = 3
@@ -742,9 +943,16 @@ NAMED_PIRATE_TIER_MAX = 3
 # (Phase-7 flag-driven 12/16/12); the Phase-5 base-price-rank split is retired.
 
 # Files whose structure/counts/bounds group 7 owns outright (§8.2 preamble);
-# group 3's generic id loop skips them.
+# group 3's generic id loop skips them. Phase 8: npc_captains.json is retired
+# (§7.7) — group 7 no longer reads it.
 GROUP7_ENTITY_FILES = frozenset({
-    "npc_captains.json", "named_pirates.json", "market_events.json",
+    "named_pirates.json", "market_events.json",
+})
+
+# Phase 8 (§4.20/§4.21): rows keyed by feature_id/post_id, not `id` — the
+# group-3 generic id loop skips them; their schema functions own uniqueness.
+GROUP12_SCHEMA_FILES = frozenset({
+    "skill_gates.json", "officer_posts.json",
 })
 
 # §4.14: trade_routes.json's structure (locked 12-id set, waypoints,
@@ -811,6 +1019,10 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
             fail("parse", name, f"invalid JSON: {exc}", 1)
 
         obj = docs[name]
+        if name in RETIRED_FILES:
+            # Phase 8 (§7.7): retired with the name pools; unchecked until
+            # the W4-B deletion (see the group-7 TODO).
+            continue
         if not isinstance(obj, dict):
             fail("envelope", name, "top-level value must be an object", 1)
 
@@ -822,6 +1034,27 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
                 fail("envelope", name, "missing required key 'version'", 1)
             if "version" in obj and not is_int(obj["version"]):
                 fail("envelope", name, "envelope key 'version' must be an integer", 1)
+            continue
+
+        if name in TOOL_OUTPUT_FILES:
+            # Phase 8 (§4.11): captains.json is a builder output (§8 group-1
+            # exception — the plural `captains` array plus the builder's
+            # envelope block). Shape ownership is group 11's; here only the
+            # version/plural/extras contract applies.
+            plural = TOOL_OUTPUT_FILES[name]["plural"]
+            allowed_extra = TOOL_OUTPUT_FILES[name]["allowed_extra"]
+            if not is_int(obj.get("version",)):
+                fail("envelope", name, "envelope key 'version' must be an integer", 1)
+            extra = set(obj) - {"version", plural} - allowed_extra
+            if extra:
+                fail(
+                    "envelope",
+                    name,
+                    f"unexpected envelope keys: {', '.join(sorted(extra))}",
+                    1,
+                )
+            if not isinstance(obj.get(plural), list):
+                fail("envelope", name, f"missing required array key '{plural}'", 1)
             continue
 
         plural = ENTITY_FILES.get(name)
@@ -908,6 +1141,18 @@ def check_group2(docs: dict[str, object], verbose: bool) -> None:
         fields = L10N_FIELDS[plural]
         for index, entity in enumerate(docs[filename][plural]):
             _walk_l10n(entity, fields, f"{plural}[{index}]", filename)
+
+    # Phase 8 (§4.11/§4.11.1): the canon cards and the builder's authored
+    # name-part blocks join the recursion — any object that even looks like a
+    # display string must be a well-formed L10nString.
+    captains_doc = docs.get("captains.json")
+    if isinstance(captains_doc, dict):
+        for index, captain in enumerate(captains_doc.get("captains", [])):
+            _walk_l10n(captain, ("name",), f"captains[{index}]",
+                       "captains.json")
+    parts = docs.get("captain_name_parts.json")
+    if parts is not None:
+        _walk_l10n(parts, (), "captain_name_parts", "captain_name_parts.json")
 
     ui_strings = docs.get("ui_strings.json")
     if ui_strings is not None:
@@ -1028,6 +1273,8 @@ def _schema_nations(items: list) -> None:
                 "start_ship_type_id",
                 "start_gold",
                 "start_reputation",
+                "bonus_attribute",
+                "bonus_skill",
                 "description",
             ),
             path,
@@ -1046,6 +1293,12 @@ def _schema_nations(items: list) -> None:
             -100,
             100,
         )
+        # Phase 8 (§4.1): the new-game +5 pair — one attribute id and one of
+        # the 8 player skill ids (50-* §4.2).
+        _require_enum(entity["bonus_attribute"], PERSON_ATTRIBUTES,
+                      f"{path}.bonus_attribute", "nations.json")
+        _require_enum(entity["bonus_skill"], PLAYER_SKILLS,
+                      f"{path}.bonus_skill", "nations.json")
 
 
 def _schema_goods(items: list) -> None:
@@ -1293,41 +1546,278 @@ def _schema_ports(items: list, filename: str = "ports.json") -> None:
             )
 
 
+OFFICER_CARD_FIELDS = (
+    "id", "name", "nation_id", "legend", "main_skill", "attributes",
+    "skills", "personality", "appearance", "wage_daily", "recruit_ports",
+    "bio",
+)
+APPEARANCE_AXES = ("face", "beard", "eyes", "hair")
+
+
+def _check_person_attributes(entity: dict, path: str, filename: str) -> None:
+    """The 5-key attribute block with ints 1–100 (§4.5/§4.11)."""
+    attributes = entity["attributes"]
+    if not isinstance(attributes, dict) or set(attributes) != set(PERSON_ATTRIBUTES):
+        fail(
+            "schema",
+            filename,
+            f"{path}.attributes must have exactly keys "
+            f"{','.join(PERSON_ATTRIBUTES)}",
+            3,
+        )
+    for attr in PERSON_ATTRIBUTES:
+        _require_int(attributes[attr], f"{path}.attributes.{attr}", filename, 1, 100)
+
+
+def _check_appearance(entity: dict, path: str, filename: str) -> None:
+    """Exactly the 4 appearance axes, one value each (§4.11)."""
+    appearance = entity["appearance"]
+    if not isinstance(appearance, dict) or set(appearance) != set(APPEARANCE_AXES):
+        fail(
+            "schema",
+            filename,
+            f"{path}.appearance must have exactly keys "
+            f"{','.join(APPEARANCE_AXES)}",
+            3,
+        )
+    for axis in APPEARANCE_AXES:
+        if not isinstance(appearance[axis], str) or not appearance[axis]:
+            fail(
+                "schema",
+                filename,
+                f"{path}.appearance.{axis} must be a value id (got "
+                f"{appearance[axis]!r})",
+                3,
+            )
+
+
 def _schema_officers(items: list) -> None:
+    """Officer card v2 (docs/10-* section 4.5, Phase 8 — built artifact):
+    the shared person-card shape plus the three officer-only skills. The
+    bands, quotas, pools and recruit rules are group 12's (§8.7); the
+    vocabulary memberships live there too (they read the name parts)."""
     for index, entity in enumerate(items):
         path = f"officers[{index}]"
-        _require_keys(
-            entity,
-            (
-                "id",
-                "name",
-                "nation_id",
-                "role",
-                "stats",
-                "wage_daily",
-                "recruit_ports",
-                "bio",
-            ),
-            path,
-            "officers.json",
-        )
-        _require_id(entity["nation_id"], f"{path}.nation_id", "officers.json")
-        _require_enum(entity["role"], OFFICER_ROLES, f"{path}.role", "officers.json")
-        stats = entity["stats"]
-        if not isinstance(stats, dict) or set(stats) != set(OFFICER_STAT_NAMES):
+        if set(entity) != set(OFFICER_CARD_FIELDS):
+            missing = sorted(set(OFFICER_CARD_FIELDS) - set(entity))
+            extra = sorted(set(entity) - set(OFFICER_CARD_FIELDS))
+            details = []
+            if missing:
+                details.append(f"missing {', '.join(missing)}")
+            if extra:
+                details.append(f"unexpected {', '.join(extra)}")
             fail(
                 "schema",
                 "officers.json",
-                f"{path}.stats must have exactly keys "
-                f"leadership,seamanship,combat,navigation",
+                f"{path}: officer v2 field set must be exactly the §4.5 "
+                f"card: {'; '.join(details)}",
                 3,
             )
-        for stat in OFFICER_STAT_NAMES:
-            _require_int(stats[stat], f"{path}.stats.{stat}", "officers.json", 1, 20)
-        _require_int(entity["wage_daily"], f"{path}.wage_daily", "officers.json", 0)
+        _require_id(entity["nation_id"], f"{path}.nation_id", "officers.json")
+        if not isinstance(entity["legend"], bool):
+            fail("schema", "officers.json",
+                 f"{path}.legend must be a bool (got {entity['legend']!r})", 3)
+        if entity["main_skill"] not in OFFICER_SKILL_NAMES:
+            fail(
+                "schema",
+                "officers.json",
+                f"{path}.main_skill {entity['main_skill']!r} is not one of "
+                f"the 11 skills",
+                3,
+            )
+        _check_person_attributes(entity, path, "officers.json")
+        skills = entity["skills"]
+        if not isinstance(skills, dict) or set(skills) != set(OFFICER_SKILL_NAMES):
+            fail(
+                "schema",
+                "officers.json",
+                f"{path}.skills must have exactly the 11 keys "
+                f"(8 player + medicine/carpentry/cooking)",
+                3,
+            )
+        for skill in OFFICER_SKILL_NAMES:
+            _require_int(skills[skill], f"{path}.skills.{skill}",
+                         "officers.json", 0, 100)
+        # §4.5: main_skill is the strict maximum of skills.
+        main_value = skills[entity["main_skill"]]
+        for skill, value in skills.items():
+            if skill != entity["main_skill"] and value >= main_value:
+                fail(
+                    "schema",
+                    "officers.json",
+                    f"{path} ({entity['id']}): main_skill "
+                    f"{entity['main_skill']} ({main_value}) is not the "
+                    f"strict maximum ({skill} = {value})",
+                    3,
+                )
+        personality = entity["personality"]
+        if not isinstance(personality, list) or not (
+                1 <= len(personality) <= 2):
+            fail(
+                "schema",
+                "officers.json",
+                f"{path}.personality must be 1–2 tag ids",
+                3,
+            )
+        for tag_index, tag in enumerate(personality):
+            _require_id(tag, f"{path}.personality[{tag_index}]", "officers.json")
+        _check_appearance(entity, path, "officers.json")
+        _require_int(entity["wage_daily"], f"{path}.wage_daily",
+                     "officers.json", 0)
         _require_id_list(
-            entity["recruit_ports"], f"{path}.recruit_ports", "officers.json", allow_empty=False
+            entity["recruit_ports"], f"{path}.recruit_ports", "officers.json",
+            allow_empty=False
         )
+
+
+def _schema_skill_gates(items: list) -> None:
+    """SkillGate rows (docs/10-* section 4.20, Phase 8). Field shapes only —
+    the locked inventory and the sail.autopilot pin are group 12's (§8.7
+    item 6); the stat_or_skill vocabulary is group 4's (referential)."""
+    label = "skill_gates.json"
+    seen: set[str] = set()
+    for index, entity in enumerate(items):
+        path = f"skill_gates[{index}]"
+        if set(entity) != {"feature_id", "stat_or_skill", "threshold", "reason"}:
+            fail(
+                "schema",
+                label,
+                f"{path} must be an object with exactly keys "
+                "feature_id,stat_or_skill,threshold,reason (section 4.20)",
+                3,
+            )
+        feature_id = entity["feature_id"]
+        if not isinstance(feature_id, str) or not FEATURE_ID_RE.match(feature_id):
+            fail(
+                "schema",
+                label,
+                f"{path}.feature_id {feature_id!r} is not a "
+                "`<system>.<feature>` id",
+                3,
+            )
+        if feature_id in seen:
+            fail("schema", label, f"duplicate feature_id {feature_id!r}", 3)
+        seen.add(feature_id)
+        _require_int(entity["threshold"], f"{path}.threshold", label, 1, 99)
+
+
+def _schema_officer_posts(items: list) -> None:
+    """OfficerPost rows (docs/10-* section 4.21, Phase 8). Shapes only — the
+    locked prereq values, advice params and the ui_strings closure are
+    group 12's (§8.7 item 7)."""
+    label = "officer_posts.json"
+    seen: set[str] = set()
+    for index, entity in enumerate(items):
+        path = f"officer_posts[{index}]"
+        if not isinstance(entity, dict) or \
+                not {"post_id", "slot_type", "prereq", "desc"} <= set(entity):
+            fail(
+                "schema",
+                label,
+                f"{path} must be an object with keys "
+                "post_id,slot_type,prereq,desc[,advice] (section 4.21)",
+                3,
+            )
+        post_id = entity["post_id"]
+        if post_id not in LOCKED_POST_IDS:
+            fail(
+                "schema",
+                label,
+                f"{path}.post_id {post_id!r} must be one of "
+                f"{'|'.join(LOCKED_POST_IDS)}",
+                3,
+            )
+        if post_id in seen:
+            fail("schema", label, f"duplicate post_id {post_id!r}", 3)
+        seen.add(post_id)
+        _require_enum(entity["slot_type"], ("flagship", "captain"),
+                      f"{path}.slot_type", label)
+        prereq = entity["prereq"]
+        if not isinstance(prereq, dict) or not prereq:
+            fail("schema", label, f"{path}.prereq must be a non-empty object "
+                 "of stat/skill id → minimum", 3)
+        for stat, minimum in prereq.items():
+            if stat not in GATE_STAT_SKILLS:
+                fail(
+                    "schema",
+                    label,
+                    f"{path}.prereq key {stat!r} is not an attribute or "
+                    "skill id",
+                    3,
+                )
+            _require_int(minimum, f"{path}.prereq.{stat}", label, 1, 99)
+        if "advice" in entity:
+            advice = entity["advice"]
+            if not isinstance(advice, dict):
+                fail("schema", label, f"{path}.advice must be an object of "
+                     "situation id → trigger params", 3)
+            for situation, params in advice.items():
+                if situation not in ADVICE_SITUATIONS:
+                    fail(
+                        "schema",
+                        label,
+                        f"{path}.advice situation {situation!r} is outside "
+                        f"the 6 locked situations "
+                        f"({'|'.join(ADVICE_SITUATIONS)})",
+                        3,
+                    )
+                if not isinstance(params, dict):
+                    fail("schema", label,
+                         f"{path}.advice.{situation} must be an object", 3)
+
+
+def _check_background_rules(items: list) -> None:
+    """§4.22/§8.7 item 8: exactly one attribute key = 3 and exactly one
+    skill key = 5 per background. Shared by groups 3 and 12 (the §8.7
+    negative list owns the failures: a two-attribute background, a +4 skill
+    bonus, a 7th background)."""
+    label = "backgrounds.json"
+    for index, entity in enumerate(items):
+        path = f"backgrounds[{index}]"
+        for field, vocabulary, value in (
+                ("attribute_bonus", PERSON_ATTRIBUTES, 3),
+                ("skill_bonus", OFFICER_SKILL_NAMES, 5)):
+            bonus = entity.get(field)
+            if not isinstance(bonus, dict) or len(bonus) != 1:
+                fail(
+                    "schema",
+                    label,
+                    f"{path}.{field} must be an object with exactly one key "
+                    f"(got {bonus!r})",
+                    3,
+                )
+            key = next(iter(bonus))
+            if key not in vocabulary:
+                fail(
+                    "schema",
+                    label,
+                    f"{path}.{field} key {key!r} is not a known id",
+                    3,
+                )
+            if bonus[key] != value:
+                fail(
+                    "schema",
+                    label,
+                    f"{path}.{field}.{key} must be {value} (got {bonus[key]!r})",
+                    3,
+                )
+
+
+def _schema_backgrounds(items: list) -> None:
+    """Background rows (docs/10-* section 4.22, Phase 8). The exact 6-id
+    §7.10 set and the zh/en names are group 5's identity lock."""
+    label = "backgrounds.json"
+    for index, entity in enumerate(items):
+        path = f"backgrounds[{index}]"
+        if set(entity) != {"id", "name", "attribute_bonus", "skill_bonus", "bio"}:
+            fail(
+                "schema",
+                label,
+                f"{path} must be an object with exactly keys "
+                "id,name,attribute_bonus,skill_bonus,bio (section 4.22)",
+                3,
+            )
+    _check_background_rules(items)
 
 
 def _schema_equipment(items: list) -> None:
@@ -1553,11 +2043,13 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
     }
 
     for filename, plural in ENTITY_FILES.items():
-        if filename in GROUP7_ENTITY_FILES or filename in GROUP8_ENTITY_FILES:
+        if filename in GROUP7_ENTITY_FILES or filename in GROUP8_ENTITY_FILES \
+                or filename in GROUP12_SCHEMA_FILES:
             # Group 7 owns these files' structure, counts and bounds outright
-            # (docs/10-* section 8.2 preamble), including pool/pirate/event id
-            # uniqueness — a pool has no `id` field at all (its key is
-            # `nation_id`). Group 8 likewise owns trade_routes.json (§4.14).
+            # (docs/10-* section 8.2 preamble), including event id uniqueness.
+            # Group 8 likewise owns trade_routes.json (§4.14). The Phase-8
+            # gate/post rows are keyed by feature_id/post_id, not `id` —
+            # their schema functions own uniqueness (groups 3/12).
             continue
         _check_unique_ids(items[plural], plural, filename)
 
@@ -1569,6 +2061,10 @@ def check_group3(docs: dict[str, object], verbose: bool) -> None:
     _schema_equipment(items["equipment"])
     _schema_discoveries(items["discoveries"])
     _schema_quests(items["quests"])
+    # Phase 8 (§4.20–4.22): the W2-B file shapes.
+    _schema_skill_gates(items["skill_gates"])
+    _schema_officer_posts(items["officer_posts"])
+    _schema_backgrounds(items["backgrounds"])
 
     if "map_legend.json" in docs:
         _schema_map_legend(docs["map_legend.json"])
@@ -1740,6 +2236,21 @@ def check_group4(docs: dict[str, object], verbose: bool) -> None:
                     4,
                 )
 
+    # Phase 8 (§8 group 4): every gate's stat_or_skill is one of the 5
+    # attributes + 11 skills; the background bonus keys are known
+    # attribute/skill ids (the one-key/=3//=5 rules are group 3's).
+    for index, gate in enumerate(docs["skill_gates.json"]["skill_gates"]):
+        stat = gate.get("stat_or_skill")
+        if stat not in GATE_STAT_SKILLS:
+            fail(
+                "ref",
+                "skill_gates.json",
+                f"skill_gates[{index}] ({gate.get('feature_id')}) "
+                f"stat_or_skill {stat!r} is outside the 5 attributes + "
+                "11 skills",
+                4,
+            )
+
     for index, item in enumerate(equipment):
         slot = item.get("slot",)
         modifiers = item.get("modifiers",)
@@ -1885,6 +2396,69 @@ def _check_l10n_text(
         )
 
 
+def _lock_officers_v2(officers: list) -> None:
+    """§7.5 (Phase 8): the roster holds exactly 96 officers — 24 legends +
+    72 regulars (the count/quota detail is §8.7's); the 6 Phase-1 starter
+    ids are locked, and each starter keeps its v1 identity verbatim: zh/en
+    name, nation, recruit ports and bio (the §7.5 table; bios as shipped in
+    v1). The other 90 members are builder-generated and checked by groups
+    11–12 instead."""
+    if len(officers) != LOCKED_COUNTS["officers"]:
+        fail(
+            "locked-count",
+            "officers.json",
+            f"officers: count {len(officers)} != the locked "
+            f"{LOCKED_COUNTS['officers']} (24 legends + 72 regulars, §7.5)",
+            5,
+        )
+    legends = [o for o in officers if o.get("legend") is True]
+    if len(legends) != OFFICER_LEGEND_COUNT:
+        fail(
+            "locked-list",
+            "officers.json",
+            f"exactly {OFFICER_LEGEND_COUNT} legend officers are locked "
+            f"(§7.5), got {len(legends)}",
+            5,
+        )
+    by_id = {o.get("id"): o for o in officers}
+    missing = [sid for sid in STARTER_IDS if sid not in by_id]
+    if missing:
+        fail(
+            "locked-list",
+            "officers.json",
+            f"missing the §7.5 starter id(s) {', '.join(missing)}",
+            5,
+        )
+    for starter_id in STARTER_IDS:
+        officer = by_id[starter_id]
+        identity = STARTER_IDENTITY[starter_id]
+        path = f"officers[{starter_id}]"
+        _check_l10n_text(officer, "name", identity["zh"], identity["en"],
+                         path, "officers.json")
+        expected = {
+            "nation_id": identity["nation_id"],
+            "recruit_ports": list(identity["recruit_ports"]),
+        }
+        for field, value in expected.items():
+            if officer.get(field) != value:
+                fail(
+                    "locked-content",
+                    "officers.json",
+                    f"{path} {field} must be {value} (§7.5 identity lock)",
+                    5,
+                )
+        bio = officer.get("bio")
+        if not isinstance(bio, dict) or bio.get("zh") != identity["bio_zh"] \
+                or bio.get("en") != identity["bio_en"]:
+            fail(
+                "locked-content",
+                "officers.json",
+                f"{path} bio must stay verbatim from the v1 roster (§7.5 "
+                "identity lock)",
+                5,
+            )
+
+
 def check_group5(docs: dict[str, object], verbose: bool) -> None:
     """The §7.1 lock model: the sovereign-100 exact set + the neutral tier,
     then the other section 7 tables."""
@@ -1894,6 +2468,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
     nations = docs["nations.json"]["nations"]
     officers = docs["officers.json"]["officers"]
     equipment = docs["equipment.json"]["equipment"]
+    backgrounds = docs["backgrounds.json"]["backgrounds"]
 
     # -- §7.1 lock model (Phase 6): sovereign exact set + neutral tier --------
     sovereign = [port for port in ports_all
@@ -1905,24 +2480,14 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         [entry for entry in goods], LOCKED_GOODS, "goods", "goods.json")
     _locked_id_sets(ship_types, LOCKED_SHIP_TYPES, "ship_types", "ship_types.json")
     _locked_id_sets(nations, LOCKED_NATIONS, "nations", "nations.json")
-    _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
+    _lock_officers_v2(officers)
     _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
-
-    # -- §7.1 lock model (Phase 7): identity locks ----------------------------
-    # Sovereign 100 + neutral 45: id/zh/en/nation/lat/lon EXACT vs the §7.1
-    # tables; produces/demands are demoted to the structural §8.2 group-7
-    # economy-graph checks (correction 12 — the lock-model amendment).
-    sovereign = [port for port in ports_all
-                 if port.get("nation_id") != NEUTRAL_PORT_NATION_ID]
-    neutral = [port for port in ports_all
-               if port.get("nation_id") == NEUTRAL_PORT_NATION_ID]
-    _locked_id_sets(sovereign, LOCKED_PORTS, "sovereign ports", "ports.json")
-    _locked_id_sets(
-        [entry for entry in goods], LOCKED_GOODS, "goods", "goods.json")
-    _locked_id_sets(ship_types, LOCKED_SHIP_TYPES, "ship_types", "ship_types.json")
-    _locked_id_sets(nations, LOCKED_NATIONS, "nations", "nations.json")
-    _locked_id_sets(officers, LOCKED_OFFICERS, "officers", "officers.json")
-    _locked_id_sets(equipment, LOCKED_EQUIPMENT, "equipment", "equipment.json")
+    _locked_id_sets(backgrounds, LOCKED_BACKGROUNDS, "backgrounds",
+                    "backgrounds.json")
+    # -- §7.1 lock model (Phase 7): the neutral tier joins the identity locks
+    # (id/zh/en/lat/lon exact vs the §7.1 table; produces/demands are
+    # structural, §8.2 group 7). The duplicated pre-Phase-8 lock block above
+    # is collapsed; the neutral lock lives here since the Phase-7 amendment.
     _locked_id_sets(neutral, LOCKED_NEUTRAL_PORTS, "neutral ports", "ports.json")
 
     # The neutral tier (§7.1): identity-locked 45 rows (Phase 7 joins the
@@ -2133,24 +2698,29 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     5,
                 )
 
-    for index, officer in enumerate(officers):
-        zh, en, nation_id, role, recruit_ports, wage_daily = LOCKED_OFFICERS[officer["id"]]
-        path = f"officers[{index}]"
-        _check_l10n_text(officer, "name", zh, en, path, "officers.json")
-        expected = {
-            "nation_id": nation_id,
-            "role": role,
-            "recruit_ports": list(recruit_ports),
-            "wage_daily": wage_daily,
-        }
-        for field, value in expected.items():
-            if officer[field] != value:
-                fail(
-                    "locked-content",
-                    "officers.json",
-                    f"{path} ({officer['id']}) {field} must be {value}",
-                    5,
-                )
+    # §7.10: the 6 backgrounds are authored-to-final — zh/en names and the
+    # attribute/skill pairing lock exactly (the one-key/=3//=5 rules are
+    # group 3's §4.22 shape check).
+    for index, background in enumerate(backgrounds):
+        zh, en, attribute, skill = LOCKED_BACKGROUNDS[background["id"]]
+        path = f"backgrounds[{index}]"
+        _check_l10n_text(background, "name", zh, en, path, "backgrounds.json")
+        if background.get("attribute_bonus") != {attribute: 3}:
+            fail(
+                "locked-content",
+                "backgrounds.json",
+                f"{path} ({background['id']}) attribute_bonus must be "
+                f"{{{attribute}: 3}} (§7.10)",
+                5,
+            )
+        if background.get("skill_bonus") != {skill: 5}:
+            fail(
+                "locked-content",
+                "backgrounds.json",
+                f"{path} ({background['id']}) skill_bonus must be "
+                f"{{{skill}: 5}} (§7.10)",
+                5,
+            )
 
     # docs/60-COMBAT.md section 4.11.13: the locked 24-item content set
     # (Phase 7 — authored-to-final by task S). Mirrors the doc tables field by
@@ -2193,8 +2763,10 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
             f"= {len(sovereign) + len(neutral)} (exact 150-set), "
             f"{LOCKED_COUNTS['goods']} goods, "
             f"{LOCKED_COUNTS['ship_types']} ship types, "
-            f"6 nations, 6 officers, {LOCKED_COUNTS['equipment']} equipment "
-            "items — identity locks, produces/demands structural)"
+            f"6 nations, {LOCKED_COUNTS['officers']} officers "
+            f"(6 §7.5 starters + 24 legends), {LOCKED_COUNTS['equipment']} "
+            f"equipment items, {LOCKED_COUNTS['backgrounds']} backgrounds "
+            "— identity locks, produces/demands structural)"
         )
 
 
@@ -3781,6 +4353,113 @@ def run_group6_self_test() -> int:
     return 1
 
 
+
+# --- Group-7 sub-block: facility_hours.json (added 2026-11-02, §4.19) -------
+# The §8 exit table has no row of its own for facility hours; the config-
+# block shape check rides in group 7 (exit 7) with its own check-id, like
+# the other named messages above.
+
+FACILITY_HOURS_JSON_LABEL = "data/facility_hours.json"
+# The §4.1 facility ids (docs/30-* §4.1) — every one needs a default window.
+FACILITY_IDS = ("market", "shipyard", "tavern", "inn", "guild", "palace")
+
+
+def _facility_minutes(text: object, what: str) -> int:
+    """Parses one `HH:MM` window bound to minutes; `fail`s on any deviation."""
+    if not isinstance(text, str):
+        fail("hours", FACILITY_HOURS_JSON_LABEL, f"{what}: must be a string", 7)
+    parts = text.split(":")
+    if len(parts) != 2 or not all(part.isdigit() and len(part) == 2
+                                  for part in parts):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: {text!r} is not HH:MM", 7)
+    hours, minutes = int(parts[0]), int(parts[1])
+    if not (0 <= hours <= 24 and 0 <= minutes <= 59):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: {text!r} out of range", 7)
+    value = hours * 60 + minutes
+    if value == 0:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: 00:00 is never a window bound", 7)
+    return value
+
+
+def _facility_window(value: object, what: str) -> tuple[int, int]:
+    """One window: the string `\"24h\"` or the `[open, close]` pair."""
+    if value == "24h":
+        return (-1, -1)
+    if not isinstance(value, list) or len(value) != 2:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: must be \"24h\" or [open, close]", 7)
+    open_min = _facility_minutes(value[0], f"{what} open")
+    close_min = _facility_minutes(value[1], f"{what} close")
+    if close_min != 1440 and open_min >= close_min:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: open {value[0]!r} must precede close {value[1]!r}", 7)
+    return (open_min, close_min)
+
+
+def check_facility_hours(docs: dict[str, object], verbose: bool) -> None:
+    """Facility opening hours: docs/10-DATA-SCHEMA.md section 4.19."""
+    hours = docs.get("facility_hours.json")
+    if not isinstance(hours, dict):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "missing (the §4.19 opening-hours table is required)", 7)
+    version = hours.get("version")
+    if not is_int(version) or version != 1:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'version' must be 1 (got {version!r})", 7)
+    default = hours.get("default")
+    if not isinstance(default, dict) or not default:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "'default' must be a non-empty object", 7)
+    unknown = sorted(set(default) - set(FACILITY_IDS))
+    if unknown:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'default' has unknown facility ids {unknown}", 7)
+    missing = sorted(set(FACILITY_IDS) - set(default))
+    if missing:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'default' is missing facility ids {missing} (30-* §4.1)", 7)
+    windows: dict[str, tuple[int, int]] = {}
+    for facility_id in FACILITY_IDS:
+        if facility_id not in default:
+            continue
+        windows[facility_id] = _facility_window(
+            default[facility_id], f"default.{facility_id}")
+    if default.get("inn") != "24h":
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"default.inn must be \"24h\" (30-* §4.1b; got "
+             f"{default.get('inn')!r})", 7)
+
+    overrides = hours.get("overrides")
+    if not isinstance(overrides, dict):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "'overrides' must be an object", 7)
+    port_ids = {port["id"] for port in docs["ports.json"]["ports"]}
+    override_count = 0
+    for port_id, table in overrides.items():
+        if port_id not in port_ids:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides: unknown port id {port_id!r}", 7)
+        if not isinstance(table, dict) or not table:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides.{port_id}: must be a non-empty object", 7)
+        unknown_fac = sorted(set(table) - set(FACILITY_IDS))
+        if unknown_fac:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides.{port_id}: unknown facility ids {unknown_fac}", 7)
+        for facility_id, window in table.items():
+            _facility_window(window, f"overrides.{port_id}.{facility_id}")
+            override_count += 1
+
+    if verbose:
+        print(
+            f"PASS group 7 facility hours ({len(windows)} default windows, "
+            f"{override_count} override(s), inn 24h)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Check group 7 — NPC & economy data
 # ---------------------------------------------------------------------------
@@ -3922,75 +4601,24 @@ def _check_npc_config(config: object) -> None:
             )
 
 
-def _check_npc_captains(captains: object) -> None:
-    """npc_captains.json (section 8.2 item 2, sections 4.11 / 7.7)."""
-    label = "npc_captains.json"
-    pools = captains.get("pools") if isinstance(captains, dict) else None
-    if not isinstance(pools, list):
-        fail("captain-pools", label, "missing 'pools' array", 7)
-
-    expected_pools = set(LOCKED_NATIONS) | {NATIONLESS_POOL_ID}
-    seen: set[str] = set()
-    for index, pool in enumerate(pools):
-        path = f"pools[{index}]"
-        if not isinstance(pool, dict) or set(pool) != {"nation_id", "names"}:
-            fail(
-                "captain-pools",
-                label,
-                f"{path} must be an object with exactly keys "
-                "nation_id,names (section 4.11)",
-                7,
-            )
-        pool_id = pool["nation_id"]
-        if not isinstance(pool_id, str) or pool_id not in expected_pools:
-            fail(
-                "captain-pools",
-                label,
-                f"{path}.nation_id {pool_id!r} must be one of the 6 locked "
-                f"nation ids or the nationless '' pool (section 7.7)",
-                7,
-            )
-        if pool_id in seen:
-            fail("captain-pools", label,
-                 f"{path} repeats pool {pool_id!r}", 7)
-        seen.add(pool_id)
-
-        names = pool["names"]
-        if not isinstance(names, list) or len(names) < CAPTAIN_POOL_MIN_NAMES:
-            count = len(names) if isinstance(names, list) else "non-array"
-            fail(
-                "captain-pools",
-                label,
-                f"{path} (pool {pool_id!r}) must carry at least "
-                f"{CAPTAIN_POOL_MIN_NAMES} names (got {count})",
-                7,
-            )
-        for name_index, name in enumerate(names):
-            _check_complete_l10n(
-                name, f"{path}.names[{name_index}]", label
-            )
-
-    missing = sorted(expected_pools - seen)
-    if missing:
-        fail(
-            "captain-pools",
-            label,
-            f"missing pool(s) {', '.join(repr(m) for m in missing)} — the "
-            "section 7.7 pool set is closed (6 nations + '')",
-            7,
-        )
-    if len(pools) != len(expected_pools):
-        fail(
-            "captain-pools",
-            label,
-            f"pool count {len(pools)} != the locked {len(expected_pools)} "
-            "(section 7.7)",
-            7,
-        )
+# TODO(phase8-W4-B): delete data/npc_captains.json + add the absence
+# assertion (10-* §8.6 item 1 — a present file fails group 11). The
+# physical deletion moved here from W2-D by master decision (2026-11-03):
+# W3's gate needs `run_tests.py` green and the ecology suites still
+# exercise the pool-based name attribution through the last runtime
+# reader (npc_fleets.gd's pool draw). Until then the retired file's
+# presence is simply unchecked — group 7 no longer reads it (§8.2 item 2)
+# and group 1 no longer requires it.
 
 
-def _check_named_pirates(pirates_doc: object) -> None:
-    """named_pirates.json (section 8.2 item 3, sections 4.12 / 7.8)."""
+def _check_named_pirates(pirates_doc: object, captains_doc: object,
+                         equipment: list) -> None:
+    """named_pirates.json (section 8.2 item 3, sections 4.12 / 7.8) — the
+    Phase-8 v2 full-card form. Exactly the 4 locked ids, each a full captain
+    card field-for-field identical to its canon copy in captains.json, with
+    `drop` present and referencing a `rare: true` equipment item (the
+    Phase-7 pin, semantics unchanged — correction 7). The distinctness /
+    1:1 pairing with the 4 rare items is _check_pirate_drop_pairing below."""
     label = "named_pirates.json"
     pirates = pirates_doc.get("named_pirates") \
         if isinstance(pirates_doc, dict) else None
@@ -4004,45 +4632,89 @@ def _check_named_pirates(pirates_doc: object) -> None:
             f"(section 7.8), got {len(pirates)}",
             7,
         )
+    canon = captains_doc.get("captains") \
+        if isinstance(captains_doc, dict) else None
+    if not isinstance(canon, list):
+        fail(
+            "named-pirates",
+            label,
+            "captains.json is missing — the v2 rows are canon copies "
+            "(section 4.12)",
+            7,
+        )
+    canon_by_id = {card.get("id"): card for card in canon
+                   if isinstance(card, dict)}
+    rare_ids = {item["id"] for item in equipment
+                if item.get("rare") is True}
     seen: set[str] = set()
     drops: list[str] = []
     for index, pirate in enumerate(pirates):
         path = f"named_pirates[{index}]"
-        if not isinstance(pirate, dict) or set(pirate) != {"id", "name", "tier", "drop"}:
+        if not isinstance(pirate, dict):
+            fail("named-pirates", label,
+                 f"{path} must be a captain card object", 7)
+        pirate_id = pirate.get("id")
+        if pirate_id not in LOCKED_NAMED_PIRATE_IDS:
             fail(
                 "named-pirates",
                 label,
-                f"{path} must be an object with exactly keys "
-                "id,name,tier,drop (section 4.12 — Phase 7 adds the rare "
-                "equipment drop)",
+                f"{path} id {pirate_id!r} is outside the 4 locked ids "
+                f"({', '.join(LOCKED_NAMED_PIRATE_IDS)} — section 7.8)",
                 7,
             )
-        _require_id(pirate["id"], f"{path}.id", label)
-        if pirate["id"] in seen:
+        if pirate_id in seen:
             fail("named-pirates", label,
-                 f"{path} repeats id {pirate['id']!r}", 7)
-        seen.add(pirate["id"])
-        _check_complete_l10n(pirate["name"], f"{path}.name", label)
-        tier = pirate["tier"]
+                 f"{path} repeats id {pirate_id!r}", 7)
+        seen.add(pirate_id)
+        # Field-for-field canon equality (§4.12): the bounty-facing copy IS
+        # the canon card (the builder writes the same object into both
+        # files), `drop` included.
+        canon_card = canon_by_id.get(pirate_id)
+        if canon_card is None or pirate != canon_card:
+            fail(
+                "named-pirates",
+                label,
+                f"{path} ({pirate_id}) is not field-for-field identical to "
+                "its captains.json canon copy (section 4.12)",
+                7,
+            )
+        tier = pirate.get("tier")
         if not is_int(tier) or not (NAMED_PIRATE_TIER_MIN <= tier
                                     <= NAMED_PIRATE_TIER_MAX):
             fail(
                 "named-pirates",
                 label,
-                f"{path} ({pirate['id']}) tier must be an integer in "
+                f"{path} ({pirate_id}) tier must be an integer in "
                 f"{NAMED_PIRATE_TIER_MIN}-{NAMED_PIRATE_TIER_MAX} "
                 f"(70-* section 4.5 bounty bands), got {tier!r}",
                 7,
             )
-        if not isinstance(pirate["drop"], str) \
-                or not ID_RE.match(pirate["drop"]):
+        drop = pirate.get("drop")
+        if not isinstance(drop, str) or not ID_RE.match(drop):
             fail("named-pirates", label,
-                 f"{path} ({pirate['id']}) drop must be an equipment id "
-                 f"(got {pirate['drop']!r})", 7)
-        drops.append(pirate["drop"])
-    # §8.2 item 12: the 4 drops are distinct (the rare-equipment reference
-    # and the 1:1 pairing with the 4 rare items are checked below in the
-    # economy block, once equipment is in scope).
+                 f"{path} ({pirate_id}) drop must be an equipment id "
+                 f"(got {drop!r})", 7)
+        if drop not in rare_ids:
+            fail(
+                "named-pirates",
+                label,
+                f"{path} ({pirate_id}) drop {drop!r} does not reference a "
+                "rare: true equipment item (§4.12 — drops come from the "
+                "four rare items of §7.9)",
+                7,
+            )
+        drops.append(drop)
+    missing = [pid for pid in LOCKED_NAMED_PIRATE_IDS if pid not in seen]
+    if missing:
+        fail(
+            "named-pirates",
+            label,
+            f"missing the locked named-pirate id(s) {', '.join(missing)} "
+            "(section 7.8)",
+            7,
+        )
+    # §8.2 item 12: the 4 drops are distinct (the 1:1 pairing with the 4
+    # rare items is checked below in the economy block).
     if len(set(drops)) != len(drops):
         fail(
             "named-pirates",
@@ -4579,15 +5251,20 @@ def _check_band_set(ports: list) -> None:
 def check_group7(docs: dict[str, object], verbose: bool) -> None:
     """Npc & economy data: docs/10-DATA-SCHEMA.md section 8.2.
 
-    Owns structure, counts and bounds for the four Phase-5 files; L10nString
-    completeness inside them is group 2's recursion. Phase 7 adds the
-    economy-data checks of §8.2 items 5-13 (the market-event block above is
-    untouched — correction 9, task K owns it in W3).
+    Owns structure, counts and bounds for the Phase-5 files still in force;
+    L10nString completeness inside them is group 2's recursion. Phase 7 adds
+    the economy-data checks of §8.2 items 5-13; Phase 8 removes the
+    npc_captains reads (§8.2 item 2 — the retired name pools; the file's
+    presence is unchecked until W4-B deletes it) and turns the named pirates
+    into v2 full-card checks. The §4.19 facility-hours sub-block rides here
+    (the §8 exit table has no row of its own for it).
     """
     _check_npc_config(docs.get("npc_config.json"))
-    pools = docs["npc_captains.json"]["pools"]
-    _check_npc_captains(docs["npc_captains.json"])
-    _check_named_pirates(docs["named_pirates.json"])
+    _check_named_pirates(
+        docs["named_pirates.json"],
+        docs.get("captains.json", {}),
+        docs["equipment.json"]["equipment"],
+    )
     _check_market_events(
         docs["market_events.json"],
         docs["ports.json"]["ports"],
@@ -4612,10 +5289,13 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
     _check_pirate_drop_pairing(pirates, equipment)
     _check_band_set(ports)
 
+    # §4.19 sub-block: port-facility opening hours.
+    check_facility_hours(docs, verbose)
+
     if verbose:
         print(
-            f"PASS group 7 npc & economy data ({len(pools)} captain pools, "
-            f"{NAMED_PIRATE_COUNT} named pirates, "
+            f"PASS group 7 npc & economy data "
+            f"({NAMED_PIRATE_COUNT} named pirates (v2 canon cards), "
             f"{len(docs['market_events.json']['market_events'])} event "
             f"templates, absolute_cap {docs['npc_config.json']['absolute_cap']})"
         )
@@ -6381,109 +7061,981 @@ def run_group10_self_test() -> int:
         return 0
     return 1
 
-
 # ---------------------------------------------------------------------------
-# Group 11: facility_hours.json (added 2026-11-02, docs/10-* §4.19)
+# Check group 11 — Captain canon (Phase 8, docs/10-* §8.6)
 # ---------------------------------------------------------------------------
 
-FACILITY_HOURS_JSON_LABEL = "data/facility_hours.json"
-# The §4.1 facility ids (docs/30-* §4.1) — every one needs a default window.
-FACILITY_IDS = ("market", "shipyard", "tavern", "inn", "guild", "palace")
+CAPTAINS_JSON_LABEL = "data/captains.json"
+PARTS_JSON_LABEL = "data/captain_name_parts.json"
+# §4.11 envelope: the builder's fixed generated_by stamp.
+CAPTAIN_BUILDER_STAMP = "tools/build_captains.py"
 
 
-def _facility_minutes(text: object, what: str) -> int:
-    """Parses one `HH:MM` window bound to minutes; `fail`s on any deviation."""
-    if not isinstance(text, str):
-        fail("hours", FACILITY_HOURS_JSON_LABEL, f"{what}: must be a string", 11)
-    parts = text.split(":")
-    if len(parts) != 2 or not all(part.isdigit() and len(part) == 2
-                                  for part in parts):
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"{what}: {text!r} is not HH:MM", 11)
-    hours, minutes = int(parts[0]), int(parts[1])
-    if not (0 <= hours <= 24 and 0 <= minutes <= 59):
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"{what}: {text!r} out of range", 11)
-    value = hours * 60 + minutes
-    if value == 0:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"{what}: 00:00 is never a window bound", 11)
-    return value
+def _check_parts_shape(parts: object) -> None:
+    """§4.11.1: the builder's authored source — the name-part sets, the
+    personality vocabulary (all + per-role pools) and the appearance axes.
+    Only the facts the card checks below consume; the rebuild determinism
+    check covers the rest."""
+    label = PARTS_JSON_LABEL
+    if not isinstance(parts, dict):
+        fail("canon-parts", label, "the §4.11.1 source block is required", 11)
+    for block in ("surnames", "given_names"):
+        sets = parts.get(block)
+        expected_keys = set(LOCKED_NATIONS) | {""}
+        if not isinstance(sets, dict) or set(sets) != expected_keys:
+            fail(
+                "canon-parts",
+                label,
+                f"{block} keys must be the 6 nation ids + the nationless "
+                "'' set (§4.11.1)",
+                11,
+            )
+        for nation_id, parts_list in sets.items():
+            if not isinstance(parts_list, list) or not parts_list:
+                fail(
+                    "canon-parts",
+                    label,
+                    f"{block}[{nation_id!r}] must be a non-empty array of "
+                    "L10nString parts",
+                    11,
+                )
+    personalities = parts.get("personalities")
+    if not isinstance(personalities, dict) \
+            or not isinstance(personalities.get("all"), list) \
+            or not isinstance(personalities.get("roles"), dict):
+        fail(
+            "canon-parts",
+            label,
+            "personalities must be {all: [...], roles: {pool: [...]}} "
+            "(§4.11.1)",
+            11,
+        )
+    all_tags = set(personalities["all"])
+    if len(all_tags) < 8:
+        fail(
+            "canon-parts",
+            label,
+            f"the shared tag vocabulary must carry ≥ 8 tags "
+            f"(got {len(all_tags)})",
+            11,
+        )
+    for pool_id, pool in personalities["roles"].items():
+        if not isinstance(pool, list) or not (2 <= len(pool) <= 5) \
+                or not set(pool) <= all_tags:
+            fail(
+                "canon-parts",
+                label,
+                f"personality pool {pool_id!r} must be 2–5 tags from the "
+                "shared vocabulary (§4.11.1)",
+                11,
+            )
+    appearance = parts.get("appearance")
+    if not isinstance(appearance, dict) or set(appearance) != set(APPEARANCE_AXES):
+        fail(
+            "canon-parts",
+            label,
+            f"appearance must carry exactly the 4 axes "
+            f"{','.join(APPEARANCE_AXES)} (§4.11.1)",
+            11,
+        )
+    for axis, values in appearance.items():
+        if not isinstance(values, list) or len(values) < 4:
+            fail(
+                "canon-parts",
+                label,
+                f"appearance.{axis} must hold ≥ 4 values (§4.11.1)",
+                11,
+            )
 
 
-def _facility_window(value: object, what: str) -> tuple[int, int]:
-    """One window: the string `\"24h\"` or the `[open, close]` pair."""
-    if value == "24h":
-        return (-1, -1)
-    if not isinstance(value, list) or len(value) != 2:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"{what}: must be \"24h\" or [open, close]", 11)
-    open_min = _facility_minutes(value[0], f"{what} open")
-    close_min = _facility_minutes(value[1], f"{what} close")
-    if close_min != 1440 and open_min >= close_min:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"{what}: open {value[0]!r} must precede close {value[1]!r}", 11)
-    return (open_min, close_min)
+def _check_captain_card(card: dict, index: int, nation_ids: set,
+                        port_ids: set, parts: dict) -> None:
+    """§4.11 card shape (types/enums/ranges/vocabularies) for every card —
+    legend or generated."""
+    path = f"captains[{index}]"
+    label = CAPTAINS_JSON_LABEL
+    card_id = card.get("id")
+    if not isinstance(card_id, str) or not ID_RE.match(card_id):
+        fail("canon-card", label, f"{path}.id is not a valid id: {card_id!r}", 11)
+    _check_l10n(card.get("name"), f"{path}.name", label)
+    nation_id = card.get("nation_id")
+    if nation_id != "" and nation_id not in nation_ids:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) nation_id {nation_id!r} must be a nation "
+            "or '' (the nationless pirate/coaster rows)",
+            11,
+        )
+    role = card.get("role")
+    if role not in CAPTAIN_ROLES:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) role {role!r} is outside the 7 locked "
+            f"roles ({'|'.join(CAPTAIN_ROLES)})",
+            11,
+        )
+    # §4.11: nationless cells carry the nationless roles only, and pirates
+    # keep "".
+    if nation_id == "" and role not in ("pirate", "coaster"):
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}): nationless cards must be pirate or "
+            "coaster (§8.6 item 4)",
+            11,
+        )
+    if role == "pirate" and nation_id != "":
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}): pirates keep nation_id ''",
+            11,
+        )
+    tier = card.get("tier")
+    if not is_int(tier) or tier < 1 or tier > 3:
+        fail("canon-card", label,
+             f"{path} ({card_id}) tier must be 1–3 (got {tier!r})", 11)
+    lo, hi = CAPTAIN_ROLE_TIERS[role]
+    if not lo <= tier <= hi:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) tier {tier} is outside the {role} range "
+            f"{lo}–{hi} (§4.11 role table)",
+            11,
+        )
+    level = card.get("level")
+    expected_level = 1 + tier * 4 + (2 if role in CAPTAIN_LEVEL_BONUS_ROLES
+                                     else 0)
+    if level != expected_level:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) level {level!r} must be {expected_level} "
+            "(1 + tier×4, +2 pirate/hunter — §4.11)",
+            11,
+        )
+    _check_person_attributes(card, path, label)
+    skills = card.get("skills")
+    if not isinstance(skills, dict) or set(skills) != set(PLAYER_SKILLS):
+        fail(
+            "canon-card",
+            label,
+            f"{path}.skills must have exactly the 8 player skill keys",
+            11,
+        )
+    for skill in PLAYER_SKILLS:
+        _require_int(skills[skill], f"{path}.skills.{skill}", label, 0, 100)
+    personality = card.get("personality")
+    pool = parts["personalities"]["roles"].get(role, [])
+    if not isinstance(personality, list) or not (
+            1 <= len(personality) <= 2) \
+            or not set(personality) <= set(pool):
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) personality must be 1–2 tags from the "
+            f"{role} pool (§4.11.1)",
+            11,
+        )
+    appearance = card.get("appearance")
+    if not isinstance(appearance, dict) or set(appearance) != set(APPEARANCE_AXES):
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) appearance must carry exactly the 4 axes",
+            11,
+        )
+    for axis in APPEARANCE_AXES:
+        if appearance.get(axis) not in parts["appearance"][axis]:
+            fail(
+                "canon-card",
+                label,
+                f"{path} ({card_id}) appearance.{axis} "
+                f"{appearance.get(axis)!r} is outside the §4.11.1 vocabulary",
+                11,
+            )
+    if not isinstance(card.get("legend"), bool):
+        fail("canon-card", label,
+             f"{path} ({card_id}) legend must be a bool", 11)
+    # §4.11: `drop` appears on the 4 named pirates only.
+    if "drop" in card and card_id not in LOCKED_NAMED_PIRATE_IDS:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) carries drop — only the 4 named pirates "
+            "do (§8.6 item 7)",
+            11,
+        )
+    if "drop" not in card and card_id in LOCKED_NAMED_PIRATE_IDS:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) is a named pirate without its drop",
+            11,
+        )
+    home_port = card.get("home_port")
+    if home_port is not None and home_port not in port_ids:
+        fail(
+            "canon-card",
+            label,
+            f"{path} ({card_id}) home_port {home_port!r} is not a known "
+            "port",
+            11,
+        )
+
+
+def _check_generated_formulas(card: dict) -> None:
+    """§4.11 generation rules, term-by-term (§8.6 item 7), for a non-legend
+    card. The jitter is ±3, so every attribute is checked against its
+    template BAND (main +3×tier, secondary +2×tier, others +1×tier around
+    base 10) — never an exact value; the template's strict ordering is the
+    generation intent, not an assertable invariant under jitter."""
+    card_id = card["id"]
+    role = card["role"]
+    tier = card["tier"]
+    main_attr, sec_attr, sig_skill, sec_skill = CAPTAIN_ROLE_TEMPLATES[role]
+    bands = {
+        main_attr: (10 + 3 * tier - 3, 10 + 3 * tier + 3),
+        sec_attr: (10 + 2 * tier - 3, 10 + 2 * tier + 3),
+    }
+    for attr in PERSON_ATTRIBUTES:
+        lo, hi = bands.get(attr, (10 + tier - 3, 10 + tier + 3))
+        value = card["attributes"][attr]
+        if not lo <= value <= hi:
+            fail(
+                "canon-formula",
+                CAPTAINS_JSON_LABEL,
+                f"{card_id}: generated {attr} {value} is outside the "
+                f"{role} tier-{tier} band [{lo}, {hi}] (§8.6 item 7)",
+                11,
+            )
+    skills = card["skills"]
+    if role == "coaster":
+        # The coaster names NO skills — all 0 — and its luck sits at the
+        # others step (never the secondary step, §4.11 -low pin).
+        if any(skills.values()):
+            nonzero = {k: v for k, v in skills.items() if v}
+            fail(
+                "canon-formula",
+                CAPTAINS_JSON_LABEL,
+                f"{card_id}: a coaster card carries a nonzero skill "
+                f"({nonzero}) — the coaster names no skills (§4.11)",
+                11,
+            )
+        luck_lo, luck_hi = (10 + tier - 3, 10 + tier + 3)
+        if not luck_lo <= card["attributes"]["luck"] <= luck_hi:
+            fail(
+                "canon-formula",
+                CAPTAINS_JSON_LABEL,
+                f"{card_id}: coaster luck {card['attributes']['luck']} is "
+                f"outside the others step [{luck_lo}, {luck_hi}] (§4.11 "
+                "-low pin)",
+                11,
+            )
+        return
+    signature = skills[sig_skill]
+    if signature != max(skills.values()):
+        fail(
+            "canon-formula",
+            CAPTAINS_JSON_LABEL,
+            f"{card_id}: the signature skill {sig_skill} ({signature}) is "
+            "not the maximum of skills (§8.6 item 7)",
+            11,
+        )
+    if not 8 * tier <= signature <= 8 * tier + 6:
+        fail(
+            "canon-formula",
+            CAPTAINS_JSON_LABEL,
+            f"{card_id}: signature skill {sig_skill} = {signature} is "
+            f"outside [{8 * tier}, {8 * tier + 6}] (§8.6 item 7)",
+            11,
+        )
+    if skills[sec_skill] != 4 * tier:
+        fail(
+            "canon-formula",
+            CAPTAINS_JSON_LABEL,
+            f"{card_id}: secondary skill {sec_skill} = {skills[sec_skill]} "
+            f"must be 4×tier = {4 * tier} (§8.6 item 7)",
+            11,
+        )
+    nonzero = {skill: value for skill, value in skills.items()
+               if skill not in (sig_skill, sec_skill) and value != 0}
+    if nonzero:
+        fail(
+            "canon-formula",
+            CAPTAINS_JSON_LABEL,
+            f"{card_id}: skills outside the template pair must be 0 "
+            f"(got {nonzero}) (§8.6 item 7)",
+            11,
+        )
+
+
+def _derive_extreme_quotas(config: dict, ports: list,
+                           nations: list) -> dict:
+    """§8.6 item 3 — the extreme-preset per-role totals, derived
+    INDEPENDENTLY from npc_config × ports × nations (mirror of
+    npc_fleets.gd budget_for(): multiply-then-ceil with the preset inside
+    the ceil). Treasure is transient and covered BY trader tier-2 cards
+    (W1 pin), so it is returned separately, not as a card-role total."""
+    extreme = float(config["presets"][EXTREME_PRESET])
+    if extreme <= 0:
+        fail("canon-quotas", "npc_config.json",
+             f"presets.{EXTREME_PRESET} must be > 0", 11)
+    budgets = config["budgets"]
+    own = {nation["id"]: 0 for nation in nations}
+    neutral = 0
+    for port in ports:
+        if port["nation_id"] == "":
+            neutral += 1
+        elif port["nation_id"] in own:
+            own[port["nation_id"]] += 1
+
+    totals: dict[str, int] = {role: 0 for role in CAPTAIN_ROLES}
+    for nation_id in sorted(own):
+        n = own[nation_id]
+        # trader: ceili(own × traders_mult_per_port × preset)
+        totals["trader"] += math.ceil(
+            n * budgets["traders_mult_per_port"] * extreme)
+        # coaster: ceili(own × coasters_mult_per_port × preset)
+        totals["coaster"] += math.ceil(
+            n * budgets["coasters_mult_per_port"] * extreme)
+        # patrol: max(patrols_min, ceil(own / patrols_div_ports × preset))
+        raw = math.ceil(n / float(budgets["patrols_div_ports"]) * extreme)
+        totals["patrol"] += max(int(budgets["patrols_min"]), raw)
+        # courier: ceili(couriers_per_nation × preset)
+        totals["courier"] += math.ceil(
+            budgets["couriers_per_nation"] * extreme)
+    # nationless coasters: ceili(neutral × neutral_coasters_mult × preset)
+    totals["coaster"] += math.ceil(
+        neutral * config["neutral_coasters_mult"] * extreme)
+    # privateer: per UNDIRECTED rivalry pair (§4.1.1; the builder's
+    # attribution splits each pair's cards 4/4 between its two nations, so
+    # the pair total ≥ the per-nation runtime count either way).
+    pairs: set[frozenset] = set()
+    for nation in nations:
+        for rival in nation.get("rivals", ()):
+            pairs.add(frozenset((nation["id"], str(rival))))
+    per_pair = math.ceil(budgets["privateers_per_rivalry"] * extreme)
+    totals["privateer"] += per_pair * len(pairs)
+    # pirate: 25 normal pirates (8 pirate_base + 17 unpatrolled zones, the
+    # Phase-7 measured composition) × preset.
+    totals["pirate"] += math.ceil(
+        (budgets["pirate_base"] + UNPATROLLED_ZONES_PHASE7) * extreme)
+    # hunter: the transient row, worst case all 6 nations bountied × preset.
+    transient = len(own) * math.ceil(len(own) * extreme) // len(own)
+    totals["hunter"] += transient
+    treasure = transient
+    return {"totals": totals, "treasure": treasure, "extreme": extreme}
+
+
+def _check_quota_table(doc: dict, roster: list, derived: dict) -> None:
+    """§8.6 item 4: the artifact's quota_table equals the roster's actual
+    per-(role, tier, nation) cell counts (metadata keys like note /
+    covered_by skipped), every tier stays inside its role's range, and the
+    derived rows are covered."""
+    quota_table = doc.get("quota_table")
+    if not isinstance(quota_table, dict) or not quota_table:
+        fail("canon-quotas", CAPTAINS_JSON_LABEL,
+             "the artifact must carry a quota_table (§4.11)", 11)
+    actual: dict[tuple[str, int, str], int] = {}
+    for card in roster:
+        key = (card["role"], card["tier"], card["nation_id"])
+        actual[key] = actual.get(key, 0) + 1
+    for role, row in quota_table.items():
+        if role == "treasure":
+            # Recorded-only row: no treasure-ROLE cards exist (the fleets
+            # are trader tier-2 cards of their nation, covered_by pin
+            # checked below).
+            continue
+        for key, cell in row.items():
+            if not key.isdigit():
+                continue  # metadata: pirate `note`, treasure `covered_by`
+            tier = int(key)
+            if role in CAPTAIN_ROLE_TIERS:
+                lo, hi = CAPTAIN_ROLE_TIERS[role]
+                if not lo <= tier <= hi:
+                    fail(
+                        "canon-quotas",
+                        CAPTAINS_JSON_LABEL,
+                        f"quota_table[{role}] tier {tier} is outside the "
+                        f"{role} range {lo}–{hi} (§4.11)",
+                        11,
+                    )
+            if not isinstance(cell, dict):
+                fail("canon-quotas", CAPTAINS_JSON_LABEL,
+                     f"quota_table[{role}][{key}] must be a nation → count "
+                     "object", 11)
+            for nation_id, count in cell.items():
+                held = actual.get((role, tier, nation_id), 0)
+                if held != count:
+                    fail(
+                        "canon-quotas",
+                        CAPTAINS_JSON_LABEL,
+                        f"quota_table[{role}][{key}][{nation_id or '\"\"'}] = "
+                        f"{count}, roster holds {held} (§8.6 item 4)",
+                        11,
+                    )
+    # §8.6 items 3–4: per-role coverage ≥ the derived extreme totals, and
+    # the grand total ≥ the derived grand total.
+    for role, want in derived["totals"].items():
+        got = sum(count for (r, _t, _n), count in actual.items() if r == role)
+        if got < want:
+            fail(
+                "canon-quotas",
+                CAPTAINS_JSON_LABEL,
+                f"role {role}: {got} cards < the derived extreme-preset "
+                f"total {want} (§7.7 — coverage is computed, never "
+                "magic-numbered)",
+                11,
+            )
+    grand_want = sum(derived["totals"].values())
+    if len(roster) < grand_want:
+        fail(
+            "canon-quotas",
+            CAPTAINS_JSON_LABEL,
+            f"canon grand total {len(roster)} < the derived extreme-preset "
+            f"fleet total {grand_want} (§8.6 item 3)",
+            11,
+        )
+    # The treasure row is covered BY the trader tier-2 cards (W1 pin); the
+    # builder records it as its own quota_table row.
+    treasure_row = quota_table.get("treasure")
+    if not isinstance(treasure_row, dict) \
+            or treasure_row.get("covered_by") != "trader.tier2":
+        fail(
+            "canon-quotas",
+            CAPTAINS_JSON_LABEL,
+            "quota_table.treasure must record covered_by = trader.tier2 "
+            "(§4.11 — a treasure fleet is a national trader convoy, no "
+            "8th role)",
+            11,
+        )
+    trader_t2 = sum(count for (r, t, _n), count in actual.items()
+                    if r == "trader" and t == 2)
+    if trader_t2 < derived["treasure"]:
+        fail(
+            "canon-quotas",
+            CAPTAINS_JSON_LABEL,
+            f"trader tier-2 cards ({trader_t2}) cannot cover the treasure "
+            f"row ({derived['treasure']}) (§7.7 transient worst case)",
+            11,
+        )
+    # The pinned pirate composition is recorded, not magic-numbered: the
+    # quota_table's pirate row carries the 25 = 8 + 17 note (§7.7).
+    note = quota_table.get("pirate", {}).get("note")
+    if not isinstance(note, str) or not note.strip():
+        fail(
+            "canon-quotas",
+            CAPTAINS_JSON_LABEL,
+            "quota_table.pirate.note must record the pinned composition "
+            "(8 pirate_base + 17 unpatrolled zones × the extreme preset)",
+            11,
+        )
+
+
+def _check_canon_rebuild_determinism(verbose: bool) -> None:
+    """§8.6 item 2: `tools/build_captains.py --check` re-builds all three
+    products in memory and byte-compares them against the committed files.
+    With a data-root override the overridden checkout's own builder runs
+    over its own tree (the staged-sim protocol, like group 8)."""
+    import subprocess
+
+    builder_root = REPO_ROOT
+    if DATA_DIR != _default_data_dir():
+        staged_tools = DATA_DIR.parent / "tools" / "build_captains.py"
+        if staged_tools.is_file():
+            builder_root = DATA_DIR.parent
+    result = subprocess.run(
+        [sys.executable, str(builder_root / "tools" / "build_captains.py"),
+         "--check"],
+        capture_output=True,
+        text=True,
+        cwd=builder_root,
+    )
+    if verbose and result.stderr:
+        for line in result.stderr.strip().splitlines():
+            print(f"INFO group 11 {line}")
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout or "").strip().splitlines()
+        detail = tail[-1] if tail else f"exit {result.returncode}"
+        fail(
+            "canon-rebuild",
+            CAPTAINS_JSON_LABEL,
+            f"rebuild drift: {detail} (tools/build_captains.py --check "
+            f"exited {result.returncode}; §8.6 item 2 — fix "
+            "data/captain_name_parts.json, tools/captain_overrides.json or "
+            "tools/officer_overrides.json and regenerate, never hand-edit "
+            "the built files)",
+            11,
+        )
 
 
 def check_group11(docs: dict[str, object], verbose: bool) -> None:
-    """Facility opening hours: docs/10-DATA-SCHEMA.md section 4.19."""
-    hours = docs.get("facility_hours.json")
-    if not isinstance(hours, dict):
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             "missing (the §4.19 opening-hours table is required)", 11)
-    version = hours.get("version")
-    if not is_int(version) or version != 1:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"'version' must be 1 (got {version!r})", 11)
-    default = hours.get("default")
-    if not isinstance(default, dict) or not default:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             "'default' must be a non-empty object", 11)
-    unknown = sorted(set(default) - set(FACILITY_IDS))
-    if unknown:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"'default' has unknown facility ids {unknown}", 11)
-    missing = sorted(set(FACILITY_IDS) - set(default))
-    if missing:
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"'default' is missing facility ids {missing} (30-* §4.1)", 11)
-    windows: dict[str, tuple[int, int]] = {}
-    for facility_id in FACILITY_IDS:
-        if facility_id not in default:
-            continue
-        windows[facility_id] = _facility_window(
-            default[facility_id], f"default.{facility_id}")
-    if default.get("inn") != "24h":
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             f"default.inn must be \"24h\" (30-* §4.1b; got "
-             f"{default.get('inn')!r})", 11)
+    """Captain canon: docs/10-DATA-SCHEMA.md section 8.6.
 
-    overrides = hours.get("overrides")
-    if not isinstance(overrides, dict):
-        fail("hours", FACILITY_HOURS_JSON_LABEL,
-             "'overrides' must be an object", 11)
+    Envelope + card shapes + the generated-card formulas re-asserted
+    term-by-term, the extreme-preset quota coverage re-derived independently
+    from npc_config × ports × nations, the artifact quota_table vs the
+    roster cells, and name uniqueness across the canon and the officer
+    roster. The byte-identical builder rebuild runs last (§8.6 item 2).
+    """
+    doc = docs.get("captains.json")
+    if not isinstance(doc, dict):
+        fail("canon", CAPTAINS_JSON_LABEL,
+             "missing (build with tools/build_captains.py)", 11)
+    if doc.get("version") != 1:
+        fail("canon", CAPTAINS_JSON_LABEL,
+             f"'version' must be 1 (got {doc.get('version')!r})", 11)
+    if doc.get("generated_by") != CAPTAIN_BUILDER_STAMP:
+        fail(
+            "canon",
+            CAPTAINS_JSON_LABEL,
+            f"'generated_by' must be {CAPTAIN_BUILDER_STAMP!r} "
+            f"(got {doc.get('generated_by')!r})",
+            11,
+        )
+    if doc.get("artifact") != "data/captains.json":
+        fail("canon", CAPTAINS_JSON_LABEL,
+             f"'artifact' must be data/captains.json "
+             f"(got {doc.get('artifact')!r})", 11)
+    if not isinstance(doc.get("build"), dict) \
+            or not isinstance(doc.get("quota_table"), dict) \
+            or not isinstance(doc.get("captains"), list):
+        fail(
+            "canon",
+            CAPTAINS_JSON_LABEL,
+            "the §4.11 envelope needs build, quota_table and captains "
+            "(§8.6)",
+            11,
+        )
+    roster = doc["captains"]
+    seen_ids: set[str] = set()
+    for index, card in enumerate(roster):
+        if not isinstance(card, dict):
+            fail("canon-card", CAPTAINS_JSON_LABEL,
+                 f"captains[{index}] must be an object", 11)
+        card_id = card.get("id")
+        if card_id in seen_ids:
+            fail("canon-card", CAPTAINS_JSON_LABEL,
+                 f"captain id repeated: {card_id!r}", 11)
+        seen_ids.add(card_id)
+
+    nation_ids = {nation["id"] for nation in docs["nations.json"]["nations"]}
     port_ids = {port["id"] for port in docs["ports.json"]["ports"]}
-    override_count = 0
-    for port_id, table in overrides.items():
-        if port_id not in port_ids:
-            fail("hours", FACILITY_HOURS_JSON_LABEL,
-                 f"overrides: unknown port id {port_id!r}", 11)
-        if not isinstance(table, dict) or not table:
-            fail("hours", FACILITY_HOURS_JSON_LABEL,
-                 f"overrides.{port_id}: must be a non-empty object", 11)
-        unknown_fac = sorted(set(table) - set(FACILITY_IDS))
-        if unknown_fac:
-            fail("hours", FACILITY_HOURS_JSON_LABEL,
-                 f"overrides.{port_id}: unknown facility ids {unknown_fac}", 11)
-        for facility_id, window in table.items():
-            _facility_window(window, f"overrides.{port_id}.{facility_id}")
-            override_count += 1
+    parts = docs.get("captain_name_parts.json")
+    _check_parts_shape(parts)
+    legends = 0
+    for index, card in enumerate(roster):
+        _check_captain_card(card, index, nation_ids, port_ids, parts)
+        if card.get("legend") is True:
+            legends += 1
+        else:
+            _check_generated_formulas(card)
+    # §8.6 item 7: legend: true on exactly the 24 hand-authored cards.
+    if legends != OFFICER_LEGEND_COUNT:
+        fail(
+            "canon-card",
+            CAPTAINS_JSON_LABEL,
+            f"exactly {OFFICER_LEGEND_COUNT} legend cards are hand-authored "
+            f"(§7.7), got {legends}",
+            11,
+        )
 
+    # §8.6 items 3–4: computed coverage + the quota-table match.
+    derived = _derive_extreme_quotas(
+        docs.get("npc_config.json", {}),
+        docs["ports.json"]["ports"],
+        docs["nations.json"]["nations"],
+    )
+    _check_quota_table(doc, roster, derived)
+
+    # §8.6 item 5: name uniqueness across every person — canon ∪ officers
+    # (zh and en separately; a collision in either locale is a reuse).
+    officers = docs["officers.json"]["officers"]
+    zh_names: dict[str, str] = {}
+    en_names: dict[str, str] = {}
+    for person in roster + officers:
+        person_id = person.get("id", "?")
+        name = person.get("name", {})
+        for locale, registry in (("zh", zh_names), ("en", en_names)):
+            key = name.get(locale)
+            if not isinstance(key, str):
+                continue  # group 2 already reported the malformed string
+            if key in registry:
+                fail(
+                    "canon-names",
+                    CAPTAINS_JSON_LABEL,
+                    f"{locale} name {key!r} is reused by "
+                    f"{registry[key]!r} and {person_id!r} — names are "
+                    "never reused (§8.6 item 5)",
+                    11,
+                )
+            registry[key] = person_id
+
+    # §4.11.1 vocabulary closure in ui_strings: every personality tag and
+    # appearance axis-value has its char.* string row.
+    ui = docs.get("ui_strings.json")
+    if isinstance(ui, dict):
+        for tag in parts["personalities"]["all"]:
+            if f"char.personality.{tag}" not in ui:
+                fail(
+                    "canon-vocab",
+                    "ui_strings.json",
+                    f"missing char.personality.{tag} — every personality "
+                    "tag needs its string row (§4.11.1)",
+                    11,
+                )
+        for axis, values in parts["appearance"].items():
+            for value in values:
+                key = f"char.appearance.{axis}.{value}"
+                if key not in ui:
+                    fail(
+                        "canon-vocab",
+                        "ui_strings.json",
+                        f"missing {key} — every appearance value needs its "
+                        "string row (§4.11.1)",
+                        11,
+                    )
+
+    # §8.6 item 6 lives in group 7 (the v2 named-pirate full-card check,
+    # including the drop → rare pin — see _check_named_pirates). §8.6
+    # item 1's absence assertion lands with the W4-B file deletion (see the
+    # group-7 TODO).
+
+    # §8.6 item 2: rebuild determinism (byte-exact), LAST so the structural
+    # verdicts above name problems before the builder is re-run.
+    _check_canon_rebuild_determinism(verbose)
+    if verbose:
+        per_role = {role: sum(1 for c in roster if c["role"] == role)
+                    for role in CAPTAIN_ROLES}
+        print(
+            f"PASS group 11 captain canon ({len(roster)} cards — "
+            + " / ".join(f"{role} {per_role[role]}"
+                         for role in CAPTAIN_ROLES)
+            + f"; {legends} legends; extreme derived "
+            + " / ".join(f"{role} {want}"
+                         for role, want in derived["totals"].items())
+            + f"; treasure {derived['treasure']} covered by trader tier-2)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Check group 12 — RPG data (Phase 8, docs/10-* §8.7)
+# ---------------------------------------------------------------------------
+
+UI_STRINGS_LABEL = "data/ui_strings.json"
+# §7.11: the Phase-8 ui_strings family prefixes (≥ 1 key each, both locales
+# via group 2). skill.* / officer.post.* / advice.* own their named checks
+# below; the rest are presence-checked here.
+PHASE8_STRING_FAMILIES = (
+    "char.", "gate.", "hail.", "interact.", "dossier.", "captain.table.",
+    "creation.", "sail.autopilot.", "ending.rpg.",
+)
+
+
+def _check_officer_pools(officers: list, parts: dict) -> None:
+    """§8.7 item 1: personality ⊆ the officer's native-role pool(s)
+    (§4.11.1; pool id = native-role id). The seamanship main is ambiguous
+    between boatswain and captain — the union is the pool, and seamanship
+    main LEGENDS draw the boatswain pool only (the builder's recorded pin,
+    tools/build_captains.py)."""
+    pools = parts["personalities"]["roles"]
+    for officer in officers:
+        main = officer["main_skill"]
+        pool_ids = OFFICER_MAIN_ROLE_POOLS.get(main)
+        if not pool_ids:
+            fail(
+                "officer-pool",
+                "officers.json",
+                f"{officer['id']}: main_skill {main!r} maps to no native "
+                "role (§4.5)",
+                12,
+            )
+        pool = set().union(*(set(pools[p]) for p in pool_ids))
+        tags = set(officer["personality"])
+        if not tags <= pool:
+            fail(
+                "officer-pool",
+                "officers.json",
+                f"{officer['id']}: personality "
+                f"{sorted(tags - pool)} is outside the {main}-native "
+                f"pool(s) {pool_ids} (§8.7 item 1)",
+                12,
+            )
+        if officer["legend"] and main == "seamanship" \
+                and not tags <= set(pools["boatswain"]):
+            fail(
+                "officer-pool",
+                "officers.json",
+                f"{officer['id']}: seamanship-main legend must draw the "
+                "boatswain pool (the boatswain/captain ambiguity)",
+                12,
+            )
+
+
+def check_group12(docs: dict[str, object], verbose: bool) -> None:
+    """RPG data: docs/10-DATA-SCHEMA.md section 8.7 — the officers v2
+    quotas, the §4.20 skill gates, the §4.21 officer posts with their
+    locked prereqs and advice strings, the §4.22 backgrounds, and the
+    §7.11 ui_strings Phase-8 family presence."""
+    officers = docs["officers.json"]["officers"]
+    parts = docs["captain_name_parts.json"]
+
+    # -- items 1–2: the 96 = 24 + 72 roster with its bands --------------------
+    legends = [o for o in officers if o["legend"] is True]
+    regulars = [o for o in officers if o["legend"] is not True]
+    if len(officers) != OFFICER_TOTAL or len(officers) != \
+            OFFICER_LEGEND_COUNT + OFFICER_REGULAR_COUNT:
+        fail(
+            "officer-quotas",
+            "officers.json",
+            f"officers: {len(officers)} != the locked "
+            f"{OFFICER_TOTAL} = {OFFICER_LEGEND_COUNT} + "
+            f"{OFFICER_REGULAR_COUNT} (§8.7 item 1)",
+            12,
+        )
+    if len(legends) != OFFICER_LEGEND_COUNT:
+        fail(
+            "officer-quotas",
+            "officers.json",
+            f"{len(legends)} legend officers != the locked "
+            f"{OFFICER_LEGEND_COUNT} (§8.7 item 1)",
+            12,
+        )
+    for officer in legends:
+        value = officer["skills"][officer["main_skill"]]
+        if not LEGEND_MAIN_BAND[0] <= value <= LEGEND_MAIN_BAND[1]:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"{officer['id']}: legend main skill {value} is outside "
+                f"{LEGEND_MAIN_BAND} (§8.7 item 2)",
+                12,
+            )
+        if not LEGEND_WAGE_BAND[0] <= officer["wage_daily"] <= LEGEND_WAGE_BAND[1]:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"{officer['id']}: legend wage {officer['wage_daily']} g is "
+                f"outside {LEGEND_WAGE_BAND} (§8.7 item 2)",
+                12,
+            )
+    for officer in regulars:
+        value = officer["skills"][officer["main_skill"]]
+        if not REGULAR_MAIN_BAND[0] <= value <= REGULAR_MAIN_BAND[1]:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"{officer['id']}: regular main skill {value} is outside "
+                f"{REGULAR_MAIN_BAND} (§8.7 item 2)",
+                12,
+            )
+        if not REGULAR_WAGE_BAND[0] <= officer["wage_daily"] <= REGULAR_WAGE_BAND[1]:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"{officer['id']}: regular wage {officer['wage_daily']} g "
+                f"is outside {REGULAR_WAGE_BAND} (§8.7 item 2)",
+                12,
+            )
+
+    # -- item 3: specialty coverage -------------------------------------------
+    carriers = {skill: sum(1 for o in officers
+                           if o["skills"][skill] >= SPECIALTY_THRESHOLD)
+                for skill in OFFICER_SKILL_NAMES}
+    for skill, count in carriers.items():
+        if count < SPECIALTY_MIN_CARRIERS:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"specialty {skill}: {count} officers carry it at "
+                f"≥ {SPECIALTY_THRESHOLD} < {SPECIALTY_MIN_CARRIERS} "
+                "(§8.7 item 3 — the post-prereq band)",
+                12,
+            )
+
+    # -- item 4: captain-qualified --------------------------------------------
+    captain_qualified = sum(
+        1 for o in officers
+        if o["skills"]["seamanship"] >= 25 and o["attributes"]["courage"] >= 30)
+    if captain_qualified < CAPTAIN_QUALIFIED_MIN:
+        fail(
+            "officer-quotas",
+            "officers.json",
+            f"captain-qualified officers: {captain_qualified} < "
+            f"{CAPTAIN_QUALIFIED_MIN} (seamanship ≥ 25 ∧ courage ≥ 30, "
+            "§8.7 item 4)",
+            12,
+        )
+
+    # -- item 5: recruit ports (the §7.5 starters are identity-locked, so
+    # they are exempt from the own-nation subset — off_diego_fernandez
+    # recruits at ceuta, a portugal port) --------------------------------------
+    ports_by_nation: dict[str, set] = {}
+    for port in docs["ports.json"]["ports"]:
+        ports_by_nation.setdefault(port["nation_id"], set()).add(port["id"])
+    for officer in officers:
+        if officer["id"] in STARTER_IDS:
+            continue
+        own = ports_by_nation.get(officer["nation_id"], set())
+        outside = sorted(set(officer["recruit_ports"]) - own)
+        if outside:
+            fail(
+                "officer-quotas",
+                "officers.json",
+                f"{officer['id']}: recruit ports {outside} are outside "
+                f"{officer['nation_id']}'s ports (§8.7 item 5 — the "
+                "home-port band; §7.5 starters are identity-exempt)",
+                12,
+            )
+
+    # -- item 1 (pools): personality ⊆ the native-role pool -------------------
+    _check_officer_pools(officers, parts)
+
+    # -- item 6: skill_gates — the locked inventory + the autopilot pin -------
+    gates = docs["skill_gates.json"]["skill_gates"]
+    gate_features = {g["feature_id"] for g in gates}
+    missing_gates = [f for f in LOCKED_GATE_FEATURES if f not in gate_features]
+    if missing_gates:
+        fail(
+            "gates",
+            "skill_gates.json",
+            f"missing the locked gate row(s) {', '.join(missing_gates)} "
+            "(§8.7 item 6 — the 50-* §2.2 Gates column + sail.autopilot)",
+            12,
+        )
+    autopilot = next((g for g in gates
+                      if g["feature_id"] == "sail.autopilot"), None)
+    if not autopilot or autopilot["stat_or_skill"] != "navigation" \
+            or autopilot["threshold"] != 40:
+        fail(
+            "gates",
+            "skill_gates.json",
+            "sail.autopilot must pin stat_or_skill = navigation and "
+            "threshold = 40 (§8.7 item 6, the appointed-voyage gate)",
+            12,
+        )
+
+    # -- item 7: officer_posts — the locked prereqs + advice strings ----------
+    ui = docs.get("ui_strings.json")
+    if not isinstance(ui, dict):
+        ui = {}
+    posts = {p["post_id"]: p for p in docs["officer_posts.json"]["officer_posts"]}
+    if set(posts) != set(LOCKED_POST_IDS):
+        fail(
+            "posts",
+            "officer_posts.json",
+            f"post set {sorted(posts)} must be exactly the 7 locked posts "
+            f"({', '.join(LOCKED_POST_IDS)}) (§8.7 item 7)",
+            12,
+        )
+    for post_id, prereq in FLAGSHIP_POST_PREREQ.items():
+        if posts[post_id].get("slot_type") != "flagship" \
+                or posts[post_id].get("prereq") != prereq:
+            fail(
+                "posts",
+                "officer_posts.json",
+                f"post {post_id}: flagship prereq must be exactly {prereq} "
+                "(the matching skill ≥ 20, §4.21)",
+                12,
+            )
+    if posts["captain"].get("slot_type") != "captain" \
+            or posts["captain"].get("prereq") != CAPTAIN_POST_PREREQ:
+        fail(
+            "posts",
+            "officer_posts.json",
+            f"post captain: prereq must be exactly {CAPTAIN_POST_PREREQ} "
+            "(seamanship ≥ 25 ∧ courage ≥ 30, §4.21)",
+            12,
+        )
+    for post_id, post in posts.items():
+        for situation, params in post.get("advice", {}).items():
+            expected = ADVICE_PARAMS.get(situation, {})
+            if expected and params != expected:
+                fail(
+                    "posts",
+                    "officer_posts.json",
+                    f"post {post_id} advice {situation}: trigger params "
+                    f"{params} must be exactly {expected} (§4.21 — the "
+                    "numbers sit in this table, never in code)",
+                    12,
+                )
+            if f"advice.{post_id}.{situation}" not in ui:
+                fail(
+                    "posts",
+                    UI_STRINGS_LABEL,
+                    f"missing advice.{post_id}.{situation} — every advice "
+                    "situation needs its ui_strings row (§8.7 item 7)",
+                    12,
+                )
+
+    # -- item 8: backgrounds — the §8.7 rules (re-asserted) -------------------
+    _check_background_rules(docs["backgrounds.json"]["backgrounds"])
+
+    # -- item 9: ui_strings Phase-8 families ----------------------------------
+    ui_keys = set(ui) - {"version"}
+    for prefix in PHASE8_STRING_FAMILIES:
+        if not any(key.startswith(prefix) for key in ui_keys):
+            fail(
+                "strings",
+                UI_STRINGS_LABEL,
+                f"the Phase-8 ui_strings family {prefix}* is empty "
+                "(§7.11/§8.7 item 9)",
+                12,
+            )
+    for skill in OFFICER_SKILL_NAMES:
+        if f"skill.{skill}" not in ui:
+            fail(
+                "strings",
+                UI_STRINGS_LABEL,
+                f"missing skill.{skill} — the 8 player + 3 ship-service "
+                "skill names are locked strings (§7.11)",
+                12,
+            )
+    for post_id in LOCKED_POST_IDS:
+        if f"officer.post.{post_id}" not in ui:
+            fail(
+                "strings",
+                UI_STRINGS_LABEL,
+                f"missing officer.post.{post_id} — the 7 post names are "
+                "locked strings (§8.7 item 9)",
+                12,
+            )
+    if "officer.post.no_captain" not in ui:
+        fail(
+            "strings",
+            UI_STRINGS_LABEL,
+            "missing officer.post.no_captain (§8.7 item 9)",
+            12,
+        )
+    # advice.* is closed: exactly the §4.21 rows, no strays.
+    expected_advice = {
+        f"advice.{post_id}.{situation}"
+        for post_id, post in posts.items()
+        for situation in post.get("advice", {})
+    }
+    stray = sorted(k for k in ui_keys if k.startswith("advice.")
+                   and k not in expected_advice)
+    if stray:
+        fail(
+            "strings",
+            UI_STRINGS_LABEL,
+            f"advice.* carries key(s) outside the §4.21 trigger table: "
+            f"{', '.join(stray)}",
+            12,
+        )
     if verbose:
         print(
-            f"PASS group 11 facility hours ({len(windows)} default windows, "
-            f"{override_count} override(s), inn 24h)"
+            f"PASS group 12 RPG data ({len(officers)} officers = "
+            f"{len(legends)} + {len(regulars)}, captain-qualified "
+            f"{captain_qualified}, specialty carriers "
+            + " / ".join(f"{skill} {carriers[skill]}"
+                         for skill in OFFICER_SKILL_NAMES)
+            + f"; {len(gates)} gates, {len(posts)} posts, "
+            f"{len(ui_keys)} ui_strings keys)"
         )
 
 
@@ -6559,6 +8111,7 @@ def main(argv: list[str]) -> int:
         ("9", check_group9),
         ("10", check_group10),
         ("11", check_group11),
+        ("12", check_group12),
     )
 
     for group_id, check in groups:
