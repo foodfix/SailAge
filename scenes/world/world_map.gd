@@ -32,6 +32,9 @@ const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 ## (docs/40-* §4.2 distribution rule — the same helper the battle loot uses).
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
+## The §4.7-style message dialog (the picker's inspect summary + the W5-B
+## hail placeholder render through it; docs/90-* §7 modal children).
+const DialogScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 ## Phase 3: the explore action and the day/port hooks (`70-*` §4.4/§4.9.3).
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
@@ -41,6 +44,13 @@ const SailPathLib := preload("res://scripts/world/sail_path.gd")
 ## only warms its decode in `_ready` and pre-checks click destinations; every
 ## rule lookup stays behind `SailingSim` / the HUD.
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+## Phase 8 W5-A: the interaction layer's brain (targeting, verbs, intercept
+## arithmetic, the attack encounter dict — docs/60-* §4.11.15, 80-* §4.10).
+## The scene owns the side effects; the module computes.
+const InteractionsLib := preload("res://scripts/world/interactions.gd")
+## The right-click interaction menu (fleet picker + port context, 80-*
+## §4.10.1/§4.10.3) — instanced once into a modal layer on first use.
+const PickerScene := preload("res://scenes/world/fleet_picker.tscn")
 
 ## The single shipped map id (docs/90-* §9.1). Map switching is retired with
 ## the dual-map pipeline: `world.map_id` is always this value, so the scene
@@ -145,6 +155,24 @@ var _last_markers: Array = []
 ## right-click attack (the §4.11.11.2 loot row applies to those only — a
 ## hostile contact keeps the §4.11.10 aftermath untouched).
 var _battle_player_initiated: bool = false
+
+# --- Phase 8 W5-A: the right-click interaction layer (80-* §4.10) -----------
+
+## The active intercept order (`60-*` §4.11.15): `{target_id, target_cell}`
+## — `target_cell` is re-written to the target's current cell on every
+## contact-check tick while the order runs. `{}` when no order is active.
+## The order's *movement* is the ordinary click-to-sail route below; where
+## that route dies (manual input, docking, a blocked step), this dies with it
+## (see [_cancel_sail_order]).
+var _intercept_order: Dictionary = {}
+## The right-click menu (fleet picker / port context), instanced once into
+## [_interact_layer] on first use and reused.
+var _picker: Control = null
+## The modal layer the menu lives on (the AttackLayer pattern, layer 3).
+var _interact_layer: CanvasLayer = null
+## The summary/placeholder message dialog (the inspect verb's line + the
+## W5-B hail seam's placeholder) — single instance, reused.
+var _message_dialog: Control = null
 
 # --- Task H: hold-to-repeat + click-to-sail (docs/20-* §4.2) ---------------
 
@@ -377,13 +405,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
-			# Right-click on an adjacent hostile marker = attack (§4.1).
+			# Phase 8 (80-* §4.10.1): right-click is the interaction surface —
+			# a fleet tile inside sighting radius opens the fleet picker, a
+			# port harbor tile the port context, empty water/land is a no-op.
+			# Opening a menu is not movement input: a live sail order (and an
+			# intercept riding it) is only replaced when a *verb* fires. The
+			# old adjacent-attack funnel stays reachable as the seam
+			# [_try_attack] (the suites' contact surface).
 			if _modal_open():
 				return
-			var attacked := _try_attack(_cell_at(get_global_mouse_position()))
-			if attacked:
-				# A deliberate attack is manual input: it replaces a sail order.
-				_cancel_sail_order()
+			if _open_interaction_at(_cell_at(get_global_mouse_position())):
 				get_viewport().set_input_as_handled()
 			return
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
@@ -1072,9 +1103,11 @@ func _reject_sail() -> void:
 
 
 ## Shows a ui_strings toast when the HUD offers one and the key exists; false
-## otherwise (the caller keeps its console fallback).
-func _toast(key: String) -> bool:
-	return _hud != null and _hud.has_method("toast_key") and _hud.toast_key(key)
+## otherwise (the caller keeps its console fallback). `values` fills the
+## key's `{placeholders}` (the intercept line carries the target's name).
+func _toast(key: String, values: Dictionary = {}) -> bool:
+	return _hud != null and _hud.has_method("toast_key") \
+		and _hud.toast_key(key, values)
 
 
 # --- Task H: cadence (docs/20-* §4.2) --------------------------------------
@@ -1245,6 +1278,12 @@ func _cancel_sail_order() -> void:
 	_sail_elapsed = 0.0
 	_sail_suspended = false
 	_sail_dock_port = ""
+	# Phase 8: the intercept order's movement IS this route (§4.11.15 —
+	# "intercepting IS sailing to the target"), so wherever the route dies
+	# (manual input, docking, a blocked step), the order dies with it. The
+	# order's own re-target ([method _set_intercept] → `sail_to`) overwrites
+	# the route without cancelling, so the two never fight.
+	_intercept_order = {}
 
 
 func _reset_cadence() -> void:
@@ -1530,6 +1569,10 @@ func _tick_fleet_contacts() -> void:
 		return
 	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
 		return
+	# Phase 8: the intercept order re-evaluates + re-targets on the same
+	# cadence the contact check runs at (§4.11.15 — per player step), before
+	# the contact check so an arrival opens the battle on a fresh route.
+	_tick_intercept()
 	_check_fleet_contact()
 
 
@@ -1548,6 +1591,9 @@ func _tick_fleets_day() -> void:
 	# Unified-movement amendment: the day tick's accrual (catch-up) also
 	# reports fleet moves — glide those markers too.
 	_glide_fleet_moves()
+	# Phase 8: the intercept rides the day tick's contact pass too (the
+	# target may have moved or left the radius without a player step).
+	_tick_intercept()
 	_check_fleet_contact()
 
 
@@ -1572,21 +1618,13 @@ func _check_fleet_contact() -> void:
 ## plus the S10 `kind` mapping (§4.11.11.3: `hunter` battles keep
 ## `kind = "navy"`; every other role carries its role id) and the fleet's own
 ## seeded composition, so S10 fights exactly what the fleet has.
+##
+## Phase 8: the dict itself is the interaction layer's
+## (`Interactions.attack_encounter`, 60-* §4.11.15) — the same shape the
+## picker's attack verb opens, so contact and player attacks queue
+## byte-identical encounters.
 func _encounter_for(fleet: Dictionary) -> Dictionary:
-	var encounter := fleet.duplicate(true)
-	encounter["kind"] = NpcFleetsLib.composition_kind(
-		str(fleet.get("role", "")))
-	encounter["encounter_id"] = str(fleet.get("id", ""))
-	if (fleet.get("ships", []) as Array).is_empty():
-		# §4.11.11.2: the battle draws from the fleet's own seeded stream.
-		encounter["ships"] = NpcFleetsLib.compose_fleet_ships(
-			fleet, int(GameState.day))
-	# else: a fleet-carried `ships` override (a fixture/K seam) is honored
-	# verbatim, exactly like the retired marker block's stored composition.
-	encounter["contact"] = {
-		"x": GameState.world_tile().x, "y": GameState.world_tile().y,
-	}
-	return encounter
+	return InteractionsLib.attack_encounter(fleet)
 
 
 ## Queues `encounter` on `GameState.pending_encounter`, emits `battle_started`
@@ -1608,6 +1646,16 @@ func _open_encounter(encounter: Dictionary) -> void:
 			and not _battle_encounter.is_empty():
 		return
 	_battle_encounter = encounter.duplicate(true)
+	# Phase 8: the intercept order is *delivered* when its own target is the
+	# fleet this battle opened against (§4.11.15 — the contact pipeline is
+	# the arrival). Cleared silently: the interception succeeded, nothing
+	# was cancelled. Any other fleet's battle (a hostile walking into the
+	# player mid-chase) leaves the order alive; the route resumes after the
+	# battle and the next tick re-targets.
+	if not _intercept_order.is_empty() \
+			and str(_intercept_order.get("target_id", "")) \
+				== str(encounter.get("id", "")):
+		_intercept_order = {}
 	# §4.2: a battle handoff cancels the helm (the single funnel every opener
 	# — contact, chain, the player's own attack — goes through). The route is
 	# only *suspended*; the helm is not resumed after the battle.
@@ -1961,10 +2009,283 @@ func _tick_npc_glides(delta: float) -> void:
 			points[index + 1] as Vector2, clampf(t, 0.0, 1.0))
 
 
+# --- Phase 8 W5-A: the right-click interaction layer (80-* §4.10) -----------
+
+## Resolves a right-click at `cell` (§4.10.1 hit rules, in the doc's order):
+## a fleet tile inside sighting radius opens the fleet picker, a port harbor
+## tile the port context, anything else is a no-op (`false`, no toast, no
+## menu). Left-click sail-to is the unchanged branch above.
+func _open_interaction_at(cell: Vector2i) -> bool:
+	if not _has_game() or _modal_open():
+		return false
+	var target: Dictionary = InteractionsLib.target_at(cell)
+	if not target.is_empty() and InteractionsLib.in_range(target):
+		_open_fleet_picker(cell)
+		return true
+	var port_id := _port_target_at(cell)
+	if not port_id.is_empty():
+		_open_port_context(port_id)
+		return true
+	return false
+
+
+## The port a right-clicked harbor tile belongs to: its **shore** tile via
+## the loader's inverse table, its **berth** tile by the derived harbor pair
+## (a docked fleet on the berth resolves as a fleet first — the §4.10.1
+## fleet rule outranks the §4.10.3 port rule). `""` when the tile is no
+## port's harbor.
+func _port_target_at(cell: Vector2i) -> String:
+	if _loader == null or not _is_loaded():
+		return ""
+	if not _loader.shore_port_at(cell).is_empty():
+		return _loader.shore_port_at(cell)
+	var wrapped := Vector2i(posmod(cell.x, _loader.width), cell.y)
+	for port_id in _loader.harbor_tiles():
+		if _loader.port_cell(str(port_id)) == wrapped:
+			return str(port_id)
+	return ""
+
+
+## The fleet picker over `cell`'s fleets (§4.10.1): the pick list is every
+## fleet on the tile — a multi-fleet tile lists them all. Verb gating lives
+## in the picker (`Interactions.verbs_for` + the hail range).
+func _open_fleet_picker(cell: Vector2i) -> void:
+	var picker := _picker_ensure()
+	if picker.is_open():
+		return
+	picker.open_fleets(InteractionsLib.fleets_at(cell))
+
+
+## The port context menu over `port_id` (§4.10.3): dock (the walk-in flow)
+## and 委任航行 appoint voyage — the appoint row grays with the
+## `sail.autopilot` gate reason while the gate fails.
+func _open_port_context(port_id: String) -> void:
+	var picker := _picker_ensure()
+	if picker.is_open():
+		return
+	var gate: Dictionary = InteractionsLib.appoint_gate(port_id)
+	picker.open_port_context(port_id, bool(gate.get("ok", false)),
+		str(gate.get("reason", "")))
+
+
+## The modal layer both interaction modals live on (the AttackLayer
+## pattern, layer 3) — created lazily, once.
+func _interact_layer_ensure() -> CanvasLayer:
+	if _interact_layer == null:
+		_interact_layer = CanvasLayer.new()
+		_interact_layer.name = "InteractLayer"
+		_interact_layer.layer = 3
+		add_child(_interact_layer)
+	return _interact_layer
+
+
+## The menu instance, created once on a layer above the HUD (the AttackLayer
+## pattern) and reused for every right-click.
+func _picker_ensure() -> Control:
+	_interact_layer_ensure()
+	if _picker == null:
+		_picker = PickerScene.instantiate()
+		_picker.name = "FleetPicker"
+		_interact_layer.add_child(_picker)
+		_picker.verb_chosen.connect(_on_picker_verb)
+		_picker.port_action.connect(_on_port_action)
+	return _picker
+
+
+## The right-click menu instance (null until the first right-click created
+## it) — the test/inspection seam.
+func interaction_picker():
+	return _picker
+
+
+## A verb button was pressed on a fleet row (§4.10.1): inspect → the summary
+## line (the unified card is W6's); talk → the hail (the W5-B seam); attack
+## → the existing §4.11.11.2 funnel (in contact) or the intercept order
+## (beyond it).
+func _on_picker_verb(verb: String, fleet: Dictionary) -> void:
+	if fleet.is_empty():
+		return
+	match verb:
+		InteractionsLib.VERB_INSPECT:
+			_open_message(InteractionsLib.inspect_summary(fleet))
+		InteractionsLib.VERB_TALK:
+			_open_hail(fleet)
+		InteractionsLib.VERB_ATTACK:
+			_dispatch_attack(fleet)
+
+
+## A port-context row was pressed (§4.10.3): dock routes through the
+## existing walk-in flow (click-to-sail onto the shore tile — docking
+## happens on arrival, or immediately when already adjacent); 委任航行
+## appoints through the W5-D seam.
+func _on_port_action(action: String, port_id: String) -> void:
+	if port_id.is_empty():
+		return
+	if action == "dock":
+		var shore: Vector2i = _loader.shore_cell(port_id)
+		if shore.x >= 0:
+			sail_to(shore)
+	elif action == "appoint":
+		_appoint_voyage(port_id)
+
+
+## The attack verb's dispatch (§4.11.15): a deliberate attack is manual
+## input — it replaces any live sail order and intercept. In contact range
+## (Chebyshev ≤ 1) the battle opens now through the single funnel (a pirate
+## straight away, any other fleet behind the piracy confirm — the old
+## funnel UX); beyond it the attack becomes an intercept order onto the
+## target. **A coaster is never dispatched** (§4.1.1/§4.11.15: no attack
+## verb exists for one — the picker cannot even render the button; this
+## guard is the last line behind it).
+func _dispatch_attack(fleet: Dictionary) -> void:
+	if fleet.is_empty() or _modal_open():
+		return
+	if str(fleet.get("role", "")) == NpcFleetsLib.COASTER:
+		if not _toast("interact.attack.coaster"):
+			print("WorldMap: attack refused on a coaster (§4.1.1)")
+		return
+	_cancel_sail_order()
+	var target := NpcFleetsLib.position_of(fleet)
+	if NpcFleetsLib.chebyshev(GameState.world_tile(), target) \
+			<= NpcFleetsLib.CONTACT_DISTANCE:
+		if str(fleet.get("role", "")) != NpcFleetsLib.PIRATE:
+			_open_attack_confirm(fleet)
+			return
+		_attack(fleet)
+		return
+	_set_intercept(fleet)
+
+
+## Issues the intercept order against `fleet` (§4.11.15): store
+## `{target_id, target_cell at set time}` and sail to the target's current
+## cell through the EXISTING click-to-sail path. Each contact-check tick
+## re-evaluates [method _tick_intercept] — re-targeting the moving target,
+## auto-cancelling when it leaves the sighting radius — until the contact
+## pipeline fires the battle (intercepting IS sailing to the target).
+## A target with no sea route takes no order (the no-path toast explains).
+func _set_intercept(fleet: Dictionary) -> void:
+	if fleet.is_empty():
+		return
+	var order := InteractionsLib.intercept(fleet)
+	var cell: Vector2i = order["target_cell"]
+	if not sail_to(cell):
+		return  # no route: no order (the previous route is untouched)
+	_intercept_order = order
+	var fleet_name := InteractionsLib.display_name(fleet)
+	if not _toast("interact.intercept.set", {"name": fleet_name}):
+		print("WorldMap: intercept %s at %s" % [str(order["target_id"]), str(cell)])
+
+
+## The intercept order's tick (§4.11.15), run on every contact-check pass:
+## cancelled → the `interact.intercept.cancelled` notice and the whole
+## order (route included) drops; valid → the sail order re-targets the
+## moving target's CURRENT cell whenever it moved since the last tick.
+## Skipped while a battle owns the world or the route is battle-suspended —
+## the order re-evaluates on the first tick after the fight.
+func _tick_intercept() -> void:
+	if _intercept_order.is_empty():
+		return
+	var reason := InteractionsLib.intercept_cancel_reason(_intercept_order)
+	if not reason.is_empty():
+		_intercept_order = {}
+		_cancel_sail_order()
+		if not _toast("interact.intercept.cancelled"):
+			print("WorldMap: intercept cancelled (%s)" % reason)
+		return
+	if battle_in_progress() or _sail_suspended:
+		return
+	if _modal_open():
+		# A modal freezes the world (§4.7): the re-target waits for the next
+		# tick — a refused `sail_to` below must only ever mean "no route",
+		# never "a dialog was up".
+		return
+	var fleet: Dictionary = InteractionsLib.fleet_by_id(
+		str(_intercept_order.get("target_id", "")))
+	if fleet.is_empty():
+		return  # the cancel pass above already handled a vanished target
+	var cell := NpcFleetsLib.position_of(fleet)
+	var chased: Vector2i = _intercept_order.get("target_cell",
+		NpcFleetsLib.NO_CELL)
+	if cell == chased:
+		return  # the target has not moved: keep walking the current route
+	_intercept_order["target_cell"] = cell
+	if not sail_to(cell):
+		# The target reached a tile this fleet cannot route to (a different
+		# sea region): the order dies as unreachable-sight.
+		_intercept_order = {}
+		_cancel_sail_order()
+
+
+## The active intercept order (`{}` when none) — the test/inspection seam.
+func intercept_order() -> Dictionary:
+	return _intercept_order.duplicate(true)
+
+
+## The talk verb's seam (§4.10.2): the hail opens at Chebyshev ≤ 2 with the
+## options slot B builds. **W5-B dispatch seam** — the master fills this
+## with the 2-line hookup (gate the range, instance `hail_modal.tscn`, hand
+## it the fleet) once slot B merges; until then the placeholder below keeps
+## the seam compiling and shows the modal's own title (an existing key —
+## never invented copy).
+func _open_hail(fleet: Dictionary) -> void:
+	if fleet.is_empty():
+		return
+	if not InteractionsLib.hail_in_range(fleet):
+		if not _toast("interact.talk.too_far"):
+			print("WorldMap: too far to hail (interact.talk.too_far missing)")
+		return
+	# W5-B: replace the placeholder below with the hail_modal instance +
+	# open call (the master's 2-line dispatch hookup).
+	_open_message(I18n.fmt("hail.title",
+		{"name": InteractionsLib.display_name(fleet)}))
+
+
+## The 委任航行 appoint seam (§4.10.3/§4.10.4): the port context's enabled
+## row lands here after the `sail.autopilot` gate passed. **W5-D seam** —
+## slot D's autopilot owns the appointment (`player.autopilot
+## {dest_port_id}`, the HUD bar, the weighted route); until it merges the
+## certified row stays a no-op placeholder (no toast, no state change).
+func _appoint_voyage(port_id: String) -> void:
+	if port_id.is_empty():
+		return
+	# W5-D: replace this placeholder with the appointment call.
+	print("WorldMap: appoint-voyage to %s (autopilot module pending, W5-D)"
+		% port_id)
+
+
+## The summary/placeholder message dialog (docs/90-* §7 modal child): one
+## instance, reused; hidden **before** it frees-queues so `_modal_open()`
+## is false again in the same frame (the `_close_attack_confirm` rule).
+func _open_message(text: String) -> void:
+	if text.is_empty():
+		return
+	_interact_layer_ensure()
+	if _message_dialog == null:
+		_message_dialog = DialogScene.instantiate()
+		_message_dialog.name = "InteractMessage"
+		_interact_layer.add_child(_message_dialog)
+	_message_dialog.open_text(text)
+
+
+## Closes the message dialog (kept instanced for reuse; the hide leaves
+## `_modal_open()` false in the same frame).
+func _close_message() -> void:
+	if _message_dialog != null:
+		_message_dialog.close()
+
+
 ## Right-click on an adjacent fleet = attack it (docs/60-* §4.11.11.2). A
 ## pirate opens the battle straight away; any other fleet asks for
 ## `encounter.attack_confirm` first because attacking it is piracy (a
 ## non-pirate owner pays `Bounty.apply_piracy` at battle start).
+##
+## Phase 8: the *mouse* no longer lands here — right-click opens the fleet
+## picker (§4.10.1), whose attack verb dispatches through
+## [_dispatch_attack]. This seam stays byte-compatible for the suites that
+## pin the funnel itself (contact-adjacent attack → confirm → battle), and
+## is deliberately NOT the coaster pin's home: the not-attackable rule is
+## pinned on the offered surface ([method Interactions.verbs_for] + the
+## rendered picker rows), which is the only path production input can reach.
 func _try_attack(cell: Vector2i) -> bool:
 	if _modal_open() or not _has_game():
 		return false
