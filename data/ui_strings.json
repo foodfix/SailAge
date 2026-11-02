@@ -3383,5 +3383,133 @@
   "hail.intimidate.terms": {
     "zh": "以势压人:胜则取其半舱货物,败则立时开战。",
     "en": "Intimidate: win and they hand over half their cargo; lose and the guns open at once."
+  },
+  "char.attr.constitution": {
+    "zh": "体魄",
+    "en": "Constitution"
+  },
+  "char.attr.intellect": {
+    "zh": "悟性",
+    "en": "Intellect"
+  },
+  "char.attr.charisma": {
+    "zh": "魅力",
+    "en": "Charisma"
+  },
+  "char.attr.courage": {
+    "zh": "胆识",
+    "en": "Courage"
+  },
+  "char.attr.luck": {
+    "zh": "运气",
+    "en": "Luck"
+  },
+  "char.card.loyalty": {
+    "zh": "忠诚 {amount}",
+    "en": "Loyalty {amount}"
+  },
+  "char.card.wins": {
+    "zh": "胜 {amount}",
+    "en": "Wins {amount}"
+  },
+  "char.card.defeats": {
+    "zh": "负 {amount}",
+    "en": "Defeats {amount}"
+  },
+  "char.card.return_day": {
+    "zh": "归队日:第 {day} 天",
+    "en": "Returns on day {day}"
+  },
+  "officer.post.occupied": {
+    "zh": "在岗:{name}",
+    "en": "In post: {name}"
+  },
+  "officer.post.to_idle": {
+    "zh": "卸任(回闲置)",
+    "en": "Unassign (to idle)"
+  },
+  "battle.preview.duel": {
+    "zh": "接舷 {amount}",
+    "en": "Duel {amount}"
+  },
+  "battle.preview.cannon": {
+    "zh": "炮击 {amount}",
+    "en": "Cannon {amount}"
+  },
+  "attr.constitution": {
+    "zh": "体魄",
+    "en": "Constitution"
+  },
+  "attr.intellect": {
+    "zh": "悟性",
+    "en": "Intellect"
+  },
+  "attr.charisma": {
+    "zh": "魅力",
+    "en": "Charisma"
+  },
+  "attr.courage": {
+    "zh": "胆识",
+    "en": "Courage"
+  },
+  "attr.luck": {
+    "zh": "运气",
+    "en": "Luck"
+  },
+  "creation.next": {
+    "zh": "下一步",
+    "en": "Next"
+  },
+  "creation.bonus_line": {
+    "zh": "{attr}+{attr_n}/{skill}+{skill_n}",
+    "en": "{attr}+{attr_n}/{skill}+{skill_n}"
+  },
+  "tavern.spar.title": {
+    "zh": "切磋赌酒",
+    "en": "Sparring bet"
+  },
+  "tavern.spar.stake": {
+    "zh": "赌注:{gold} 金 · 胜率 {pct}%",
+    "en": "Stake: {gold}g · win chance {pct}%"
+  },
+  "tavern.spar.go": {
+    "zh": "押注切磋",
+    "en": "Place the bet"
+  },
+  "tavern.spar.win": {
+    "zh": "你赢了,赢得 {gold} 金!",
+    "en": "You win — {gold}g paid out!"
+  },
+  "tavern.spar.lose": {
+    "zh": "你输了,{gold} 金赌注归了馆主。",
+    "en": "You lose — the {gold}g stake stays with the house."
+  },
+  "inn.talk.result": {
+    "zh": "与{name}闲谈,熟悉度 +1。",
+    "en": "You chatted with {name}; familiarity +1."
+  },
+  "inn.talk.done": {
+    "zh": "本次进港已谈过话。",
+    "en": "You already talked this visit."
+  },
+  "palace.inform.header": {
+    "zh": "告发海盗",
+    "en": "Inform on pirates"
+  },
+  "palace.inform.action": {
+    "zh": "告发 — 500 金",
+    "en": "Inform — 500g"
+  },
+  "market.intel.header": {
+    "zh": "船长航线情报",
+    "en": "Captain lane intel"
+  },
+  "market.intel.free": {
+    "zh": "免费情报:下一程 {port}",
+    "en": "Free intel: next leg {port}"
+  },
+  "debug.info.circuit": {
+    "zh": "巡逻航线",
+    "en": "Circuit"
   }
 }
