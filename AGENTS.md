@@ -14,9 +14,11 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
    `95`-debug-hover (how to read the fleet debug floating window)
 5. Task backlogs: `docs/IMPLEMENT-Phase7.md` (complete — acceptance record
    `tools/demo_check_phase7.md`), then `docs/IMPLEMENT-Phase6.md` (complete)
-   and Phase1–Phase5 for history. The Phase-8 backlog does not exist yet;
-   `docs/IMPLEMENT-Phase7.md`'s "Out of scope" section is the candidate
-   list.
+   and Phase1–Phase5 for history, then `docs/IMPLEMENT-Phase8.md`
+   (backlog ratified 2026-11-02 — RPG overhaul: Person model, officer
+   posts, named-captain canon, interactions, appointed voyage, save
+   **v9**; source plan `.kilo/plans/1793586441004-phase8-rpg-overhaul.md`
+   with the corrections table).
 
 ## Hard rules (violations = rework)
 
