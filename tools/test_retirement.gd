@@ -22,6 +22,7 @@ func _ready() -> void:
 	_test_retire_flags()
 	_test_summary_block()
 	await _test_ending_screen_live()
+	await _test_rpg_segment()
 	await _test_retired_save_round_trip()
 	await _test_load_retired_shows_summary()
 	_report()
@@ -204,6 +205,19 @@ func _test_ending_screen_live() -> void:
 	_check(titles_text.contains(I18n.t_key("rank.duke")),
 		"the titles row names the dukedom (%s)" % titles_text)
 
+	# The Phase-8 RPG segment (docs/70-* §4.7) renders in its own container
+	# below the six summary rows; this fixture never met a captain, so the
+	# eligible rows show the ui.empty convention (docs/80-* §4.14).
+	var rpg: VBoxContainer = screen.get_node("Center/Panel/Margin/Body/RpgRows")
+	_check(rpg.has_node("Row_rpg_nemesis_title"), "the RPG nemesis header exists")
+	_check((rpg.get_node("Row_rpg_nemesis_empty") as Label).text
+		== I18n.t_key("ui.empty"),
+		"no met captains → the nemesis rows show ui.empty")
+	_check((rpg.get_node("Row_rpg_grudge") as Label).text == I18n.t_key("ui.empty"),
+		"no grudge yet → the grudge row shows ui.empty")
+	_check((rpg.get_node("Row_rpg_veteran") as Label).text == I18n.t_key("ui.empty"),
+		"no veteran yet → the veteran row shows ui.empty")
+
 	# Both locales, no raw keys.
 	var leaked: Array = []
 	for locale in ["en", "zh"]:
@@ -223,6 +237,153 @@ func _test_ending_screen_live() -> void:
 	var cont: Button = screen.get_node("Center/Panel/Margin/Body/Footer/Continue")
 	_check(cont.text == I18n.t_key("ending.continue"),
 		"the button says ending.continue (%s)" % cont.text)
+	screen.queue_free()
+	await get_tree().process_frame
+
+
+# --- 4b. The Phase-8 RPG segment (docs/70-* §4.7; docs/80-* §4.14) --------
+#
+# The rows read exactly the save-v9 `captain_states` / `officer_states`
+# blocks and the player background — pure display, no new counters. Selection
+# rules as implemented: nemesis = met captains with wins > 0, top 3 by wins
+# (id ascending tie-break); grudge = the lowest NEGATIVE stance (a met
+# captain at stance 0 holds no grudge — spawned fleet captains get met
+# entries); veteran = the highest-loyalty officer with ≥ 90 sea-days.
+
+## A full §4.15 captain_states entry for the fixture.
+func _cap_state(wins: int, stance: int, tier: int) -> Dictionary:
+	return {
+		"status": "returning", "return_day": 460, "tier_now": tier,
+		"stance": stance, "familiarity": 4, "dossier_seen": true,
+		"defeats": 1, "wins": wins,
+	}
+
+
+## A full §8 officer_states entry for the fixture.
+func _off_state(loyalty: int, sea_days: int) -> Dictionary:
+	return {
+		"loyalty": loyalty, "sea_days": sea_days, "post_id": "",
+		"ship_id": "", "talk_cd_day": 0, "gift_cd_day": 0,
+		"defeats": 0, "wage_mult": 1.0,
+	}
+
+
+func _name(record: Dictionary) -> String:
+	return I18n.t(record.get("name", {}))
+
+
+func _test_rpg_segment() -> void:
+	_new_run("lisbon", 400)
+	# Data-driven fixtures: real canon ids so every name resolves.
+	var captains: Array = DataLoader.captains_list
+	var officers: Array = DataLoader.officers_list
+	# The two 2-win captains tie, so their display order is the id ascending —
+	# order the fixture by the same rule.
+	var duo: Array = [str(captains[0]["id"]), str(captains[1]["id"])]
+	duo.sort()
+	var tie_first := str(duo[0])
+	var tie_second := str(duo[1])
+	var top_scorer := str(captains[2]["id"])   # 5 wins — the nemesis leader
+	var grudge_id := str(captains[3]["id"])    # 0 wins but stance −9
+	var veteran := str(officers[0]["id"])      # loyalty 88 over 120 days
+	var short_timer := str(officers[1]["id"])  # loyalty 95 over only 89 days
+	var bench := str(officers[2]["id"])        # loyalty 70 over 200 days
+	GameState.captain_states = {
+		tie_first: _cap_state(2, -5, 3),
+		tie_second: _cap_state(2, -5, 2),
+		top_scorer: _cap_state(5, 0, 1),
+		grudge_id: _cap_state(0, -9, 1),
+	}
+	GameState.player["officers"] = [veteran, short_timer, bench]
+	GameState.officer_states = {
+		veteran: _off_state(88, 120),
+		short_timer: _off_state(95, 89),
+		bench: _off_state(70, 200),
+	}
+	GameState.player["background_id"] = "background_deckhand"
+	SaveSystem.last_loaded_retired = false
+	SaveSystem.last_retired_summary = {}
+	var screen: Control = EndingScene.instantiate()
+	add_child(screen)
+	await get_tree().process_frame
+
+	# The six summary rows stay alone in their container (the RPG segment
+	# never reflows them).
+	var rows: VBoxContainer = screen.get_node("Center/Panel/Margin/Body/Rows")
+	_check(rows.get_child_count() == 6,
+		"the six summary rows stay alone in Rows (%d)" % rows.get_child_count())
+	var rpg: VBoxContainer = screen.get_node("Center/Panel/Margin/Body/RpgRows")
+	_check(rpg.get_child_count() == 7,
+		"the RPG block renders header + 3 nemesis rows + grudge + veteran + bio (%d)"
+		% rpg.get_child_count())
+
+	# The nemesis ranking: 5 wins first, then the 2-2 tie by captain id, and
+	# the 0-win grudge is not ranked.
+	_check((rpg.get_node("Row_rpg_nemesis_0") as Label).text
+		== I18n.fmt("ending.rpg.nemesis_row", {
+			"name": _name(captains[2]), "tier": 1, "stance": 0}),
+		"the nemesis leader is the 5-win captain (%s)"
+		% (rpg.get_node("Row_rpg_nemesis_0") as Label).text)
+	_check((rpg.get_node("Row_rpg_nemesis_1") as Label).text
+		== I18n.fmt("ending.rpg.nemesis_row", {
+			"name": _name(DataLoader.get_captain(tie_first)), "tier": 3, "stance": -5}),
+		"the 2-2 tie orders by captain id (first: %s)" % tie_first)
+	_check((rpg.get_node("Row_rpg_nemesis_2") as Label).text
+		== I18n.fmt("ending.rpg.nemesis_row", {
+			"name": _name(DataLoader.get_captain(tie_second)), "tier": 2, "stance": -5}),
+		"the 2-2 tie orders by captain id (second: %s)" % tie_second)
+	_check(not rpg.has_node("Row_rpg_nemesis_empty"),
+		"the empty row yields to the ranked rows")
+	# The deepest grudge is the lowest NEGATIVE stance (−9), even at zero
+	# wins; the 0-stance 5-win captain is not eligible.
+	_check((rpg.get_node("Row_rpg_grudge") as Label).text
+		== I18n.fmt("ending.rpg.grudge", {"name": _name(captains[3])}),
+		"the grudge row names the lowest negative stance")
+	# The veteran: 95 loyalty over 89 days is ineligible; 88 over 120 wins.
+	_check((rpg.get_node("Row_rpg_veteran") as Label).text
+		== I18n.fmt("ending.rpg.veteran", {
+			"name": _name(officers[0]), "days": 120}),
+		"the veteran is the highest-loyalty officer with ≥ 90 sea-days (%s)"
+		% (rpg.get_node("Row_rpg_veteran") as Label).text)
+	# The background recall: header + the bio line from data.
+	var bio_text: String = (rpg.get_node("Row_rpg_bio") as Label).text
+	_check(bio_text.begins_with(I18n.t_key("ending.rpg.bio"))
+		and bio_text.contains(I18n.t(
+			DataLoader.get_background("background_deckhand")["bio"])),
+		"the bio row is the background recall + the data bio (%s)" % bio_text)
+
+	# Both locales, no raw keys (lines() walks the RPG container too).
+	var leaked: Array = []
+	for locale in ["en", "zh"]:
+		I18n.set_locale(locale)
+		await get_tree().process_frame
+		for line in screen.lines():
+			if str(line).contains("<"):
+				leaked.append("%s: %s" % [locale, str(line)])
+	_check(leaked.is_empty(), "the RPG segment prints no raw <key> (%s)"
+		% str(leaked.slice(0, 3)))
+	I18n.set_locale("en")
+	screen.queue_free()
+	await get_tree().process_frame
+
+	# Empty state: a fresh run has met nobody — every eligible row is ui.empty.
+	_new_run()
+	SaveSystem.last_loaded_retired = false
+	SaveSystem.last_retired_summary = {}
+	screen = EndingScene.instantiate()
+	add_child(screen)
+	await get_tree().process_frame
+	rpg = screen.get_node("Center/Panel/Margin/Body/RpgRows")
+	_check(rpg.get_child_count() == 5,
+		"the empty block renders header + 4 empty rows (%d)" % rpg.get_child_count())
+	_check((rpg.get_node("Row_rpg_nemesis_empty") as Label).text
+		== I18n.t_key("ui.empty"), "the empty nemesis block shows ui.empty")
+	_check((rpg.get_node("Row_rpg_grudge") as Label).text == I18n.t_key("ui.empty"),
+		"the empty grudge row shows ui.empty")
+	_check((rpg.get_node("Row_rpg_veteran") as Label).text == I18n.t_key("ui.empty"),
+		"the empty veteran row shows ui.empty")
+	_check((rpg.get_node("Row_rpg_bio") as Label).text == I18n.t_key("ui.empty"),
+		"an unknown background shows ui.empty")
 	screen.queue_free()
 	await get_tree().process_frame
 

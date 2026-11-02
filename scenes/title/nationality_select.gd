@@ -14,6 +14,11 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const TITLE_SCENE := "res://scenes/title/title_screen.tscn"
+## The Phase-8 handoff target (docs/80-* §4.2: S1 → S2 → S20 → S4). The
+## script preload (not just the scene path) carries the nation through the
+## [member CreationLib.pending_nation_id] static.
+const CreationLib := preload("res://scenes/title/creation_screen.gd")
+const CREATION_SCENE := "res://scenes/title/creation_screen.tscn"
 const NATIONS_PER_ROW := 3
 const CARD_SIZE := Vector2(360, 208)
 
@@ -32,8 +37,14 @@ var _cards: Array[Button] = []
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
 ## convention): with `false`, [method confirm_selection] still runs the whole
-## new-game path but does not route.
+## new-game path but does not route. With the default `true`, confirm is the
+## Phase-8 §4.13 handoff — it stores the nation for the creation screen (S20)
+## and routes there; S20's own confirm runs `new_game`.
 var route_after_confirm: bool = true
+## Headless-test seam: when valid, the §4.13 handoff passes the would-be
+## scene path here instead of calling `GameState.change_scene`, so a suite
+## can observe the routing without swapping its own scene out.
+var route_sink: Callable = Callable()
 
 
 func _ready() -> void:
@@ -195,15 +206,27 @@ func _on_back() -> void:
 ## comes from `GameState`/`DataLoader.DEFAULT_MAP_ID` (`"world"`).
 
 
-## Confirm: start the run. `GameState.new_game()` owns the §4.1 state block and
-## the routing; `world.map_id` is the single shipped map (docs/90-* §9.1).
-## S2 is the nationality grid only (docs/80-* §4.6.3 amended 2026-10-31): the
-## sea-traffic dial lives in S19 (S1 pre-game / S4 mid-run), and `new_game`
-## preserves whatever preset S19 last wrote as run input.
+## Confirm: with the Phase-8 two-step flow (docs/80-* §4.2, §4.13), the S2
+## confirm hands off to the creation screen (S20) — the nation travels in
+## `CreationLib.pending_nation_id`, and S20's own confirm runs
+## `GameState.new_game()` with the §4.1 state block and routing. The S19
+## pre-game choices (`npc_preset`, `control_prefs`) are GameState run input
+## that `new_game` reads BEFORE its reset (docs/80-* §4.6.3 amended
+## 2026-10-31) — they live through this screen swap untouched, so the handoff
+## preserves them by construction. With `route_after_confirm == false` (the
+## headless-test switch) the legacy path runs: the whole new-game build, no
+## routing, no handoff.
 func confirm_selection() -> void:
 	if _selected_id.is_empty():
 		return
-	GameState.new_game(_selected_id, route_after_confirm)
+	if route_after_confirm:
+		CreationLib.pending_nation_id = _selected_id
+		if route_sink.is_valid():
+			route_sink.call(CREATION_SCENE)
+		else:
+			GameState.change_scene(CREATION_SCENE)
+	else:
+		GameState.new_game(_selected_id, false)
 
 
 func _on_locale_changed(_locale: String) -> void:
