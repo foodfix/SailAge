@@ -41,6 +41,18 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
+## §4.7.1 (W6-A): the battle-intro captain preview reads the §4.12 card data
+## (the NPC entry) for the one-line preview panel before round 1.
+const CardLib := preload("res://scenes/ui/character_card.gd")
+## The preview reads the canon captain card through the W4-A module.
+const CaptainsLib := preload("res://scripts/world/captains.gd")
+
+## ui_strings keys the preview needs that the shared table does not carry yet
+## (the W5-C `FALLBACK_STRINGS` pattern — W6-D owns the residual merge).
+const FALLBACK_STRINGS := {
+	"battle.preview.duel": {"zh": "接舷 {amount}", "en": "Duel {amount}"},
+	"battle.preview.cannon": {"zh": "炮击 {amount}", "en": "Cannon {amount}"},
+}
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
 ## Phase 3: a tournament bout returns to the host palace instead of S3, because
@@ -179,6 +191,74 @@ var _action_buttons: Dictionary = {}
 var _tiles: Array = []
 ## Unit key (`side:index`) → token widgets `{root, square, label, frame}`.
 var _token_widgets: Dictionary = {}
+## §4.7.1 (W6-A): the battle-intro captain preview panel (`null` once
+## dismissed). Dismissed with any input before the first round.
+var _preview: Control = null
+
+
+## The §4.7.1 captain intro preview (Phase 8, W6-A): one line/panel with the
+## opposing flagship captain's name / role / tier and the duel + cannon
+## ratings (the §4.11.5 card formulas), rendered from the §4.12 card data —
+## identified = full reveal, but the full card would block the battle, so the
+## intro stays a preview panel dismissed with any input before round 1.
+func _show_captain_preview(captain_id: String) -> void:
+	_dismiss_captain_preview()
+	var canon := CaptainsLib.captain(captain_id)
+	if canon.is_empty():
+		return
+	var data := CardLib.card_data(CardLib.KIND_NPC, captain_id)
+	var preview := PanelContainer.new()
+	preview.name = "CaptainPreview"
+	var style := StyleBoxFlat.new()
+	style.bg_color = PaletteLib.PANEL_BG
+	style.border_color = PaletteLib.ACCENT
+	style.set_border_width_all(2)
+	preview.add_theme_stylebox_override("panel", style)
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(side, PaletteLib.MARGIN)
+	preview.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	margin.add_child(box)
+	var title := Label.new()
+	title.name = "Title"
+	title.text = I18n.fmt("dossier.title", {"name": str(data.get("name", ""))})
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	box.add_child(title)
+	var detail := Label.new()
+	detail.name = "Detail"
+	var role := str(data.get("role_key", "char.none"))
+	var parts: Array[String] = [I18n.t_key(role)]
+	parts.append("%s %d" % [I18n.t_key("captain.table.tier"),
+		int(data.get("tier", 1))])
+	parts.append(I18n.fmt("char.level", {"level": int(data.get("level", 1))}))
+	detail.text = " · ".join(parts)
+	detail.add_theme_color_override("font_color", PaletteLib.TEXT)
+	box.add_child(detail)
+	var ratings := Label.new()
+	ratings.name = "Ratings"
+	ratings.text = "%s · %s" % [
+		_t("battle.preview.duel", {
+			"amount": BattleSimLib.card_duel_rating(canon)}),
+		_t("battle.preview.cannon", {
+			"amount": BattleSimLib.card_cannon_rating(canon)}),
+	]
+	ratings.add_theme_color_override("font_color", PaletteLib.WARN)
+	box.add_child(ratings)
+	preview.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	preview.position = Vector2(
+		(GRID_ORIGIN.x + GRID_PX.x / 2.0) - 160.0, GRID_ORIGIN.y + 8.0)
+	add_child(preview)
+	_preview = preview
+
+
+## Dismisses the preview (any input before the first round, §4.7.1).
+func _dismiss_captain_preview() -> void:
+	if _preview != null:
+		_preview.queue_free()
+		_preview = null
 
 
 func _ready() -> void:
@@ -283,6 +363,11 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 	})
 	sim.start()
 	_seed_cursor()
+	# §4.7.1 (W6-A): the captain intro preview — before the first round, when
+	# the encounter names a canon captain (every Phase-8 fleet carries one).
+	var captain_id := str(encounter.get("captain_id", ""))
+	if not captain_id.is_empty():
+		_show_captain_preview(captain_id)
 	_bind()
 	battle_opened.emit(encounter)
 
@@ -989,6 +1074,12 @@ func _apply_engine_decision(unit: Dictionary, decision: Dictionary) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if sim == null:
 		return
+	# §4.7.1 (W6-A): the captain intro preview is dismissed with any input
+	# before the first round (the input is otherwise swallowed).
+	if _preview != null and _preview.visible:
+		get_viewport().set_input_as_handled()
+		_dismiss_captain_preview()
+		return
 	# Modals consume everything first (§6).
 	if _after_action.visible:
 		if event.is_action_pressed("ui_accept") or event.is_action_pressed("back"):
@@ -1641,8 +1732,15 @@ func game_over_open() -> bool:
 ## the shared formatter (§4.4 `{name}` placeholders). This screen never carries
 ## its own copy of a player-facing string (AGENTS.md i18n hard rule); a missing
 ## key is a data bug and renders `I18n.t_key()`'s `<key>` marker, which the data
-## validator prevents in shipped data.
+## validator prevents in shipped data. W6-A extends the read with the screen's
+## `FALLBACK_STRINGS` table (the W5-C pattern) for the §4.7.1 preview keys
+## until the W6-D residual merge authors them in the shared file.
 func _t(key: String, values: Dictionary = {}) -> String:
+	if not DataLoader.ui_strings.has(key) and FALLBACK_STRINGS.has(key):
+		var text := I18n.t(FALLBACK_STRINGS.get(key, {}))
+		for name in values:
+			text = text.replace("{%s}" % name, str(values[name]))
+		return text
 	return I18n.fmt(key, values)
 
 
@@ -1773,6 +1871,11 @@ func _on_locale_changed(_locale: String) -> void:
 	_bind()
 	if _after_action.visible:
 		_show_after_action()
+	# §4.7.1 (W6-A): the intro preview re-renders in the new locale.
+	if _preview != null and _preview.visible:
+		var captain_id := str(encounter.get("captain_id", ""))
+		if not captain_id.is_empty():
+			_show_captain_preview(captain_id)
 
 
 func _panel_style() -> StyleBoxFlat:

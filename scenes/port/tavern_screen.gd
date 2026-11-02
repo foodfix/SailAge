@@ -52,6 +52,9 @@ const SkillsLib := preload("res://scripts/player/skills.gd")
 ## 2026-11-02) — the tavern is the facility, this screen hosts the action.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
+## §4.12.1 (W6-A): the recruit dialog renders the §4.12 officer card (the
+## officer entry).
+const CardLib := preload("res://scenes/ui/character_card.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -183,6 +186,11 @@ var last_inspect_text: String = ""
 
 ## Phase-8 W5-C (§4.11.1): the sparring row — code-built beside the table.
 var _spar_box: VBoxContainer = null
+
+## §4.12.1 (W6-A): the recruit dialog — the §4.12 officer card over the
+## recruitable list (`null` while closed; the card-identity pin reads its
+## card through [method recruit_dialog]).
+var _recruit_dialog: Control = null
 ## The stake the steppers currently offer (always on a 100g step).
 var _spar_stake: int = TavernEngineLib.SPAR_STAKE_MIN
 ## The seeded bout stream: re-seeded per (port, visit-day) so a bout sequence
@@ -247,6 +255,11 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# §4.12.1 (W6-A): the recruit dialog owns the input while it is up (§6) —
+	# its own `_unhandled_input` handles Esc first (reverse tree order); this
+	# guard keeps the Back edge from firing behind it.
+	if _recruit_dialog != null and _recruit_dialog.is_open():
+		return
 	# §4.3 "Esc = back / close modal": this screen is one edge from S4, so Esc
 	# is the same back edge as the Back button (docs/80-* §4.2).
 	if event.is_action_pressed("back"):
@@ -321,7 +334,7 @@ func recruit_officer(officer_id: String) -> bool:
 	if ok:
 		_show_toast("tavern.recruited", {"name": I18n.t(officer.get("name", {}))})
 		SailingSimLib.advance_port_hours(1)
-	refresh()
+	_after_recruit(ok)
 	return ok
 
 
@@ -565,8 +578,60 @@ func _build_recruitable_row(officer_id: String) -> Control:
 			})
 	button.pressed.connect(recruit_officer.bind(officer_id))
 	action.add_child(button)
+	# §4.12.1 (W6-A): the recruit dialog — the §4.12 officer card view (the
+	# officer entry); the signing itself stays on the row's Recruit button,
+	# the dialog re-offers the same shared recruit path.
+	var card_button := Button.new()
+	card_button.name = "Card"
+	card_button.text = I18n.t_key("interact.verb.inspect")
+	card_button.custom_minimum_size.y = PaletteLib.BUTTON_H
+	_style_button(card_button)
+	card_button.pressed.connect(open_recruit_dialog.bind(officer_id))
+	action.add_child(card_button)
 	row.add_child(action)
 	return row
+
+
+# --- §4.12.1 (W6-A): the recruit dialog -------------------------------------
+
+## Opens the recruit dialog for `officer_id`: the §4.12 officer card (the
+## officer entry) with the shared recruit path and the close edge. Returns
+## the dialog (the test seam).
+func open_recruit_dialog(officer_id: String) -> Control:
+	close_recruit_dialog()
+	_recruit_dialog = RecruitDialog.new()
+	_recruit_dialog.name = "RecruitDialog"
+	_recruit_dialog.tavern = self
+	add_child(_recruit_dialog)
+	_recruit_dialog.open(officer_id)
+	return _recruit_dialog
+
+
+## The open recruit dialog, or `null` when closed.
+func recruit_dialog() -> Control:
+	return _recruit_dialog
+
+
+func close_recruit_dialog() -> void:
+	if _recruit_dialog != null:
+		_recruit_dialog.queue_free()
+	_recruit_dialog = null
+
+
+## The §4.12 officer card of the open recruit dialog (`{}` when closed) — the
+## card-identity pin's tavern-side read.
+func recruit_card_data() -> Dictionary:
+	if _recruit_dialog == null or not _recruit_dialog.is_open():
+		return {}
+	return _recruit_dialog.card_data()
+
+
+## The post-recruit refresh closes the dialog (the officer is aboard — the
+## row is gone from the recruitable list).
+func _after_recruit(ok: bool) -> void:
+	if ok:
+		close_recruit_dialog()
+	refresh()
 
 
 func _build_roster_row(officer_id: String) -> Control:
@@ -1306,3 +1371,141 @@ func _exit_tree() -> void:
 		EventBus.gold_changed.disconnect(_on_gold_changed)
 	if EventBus.fleet_changed.is_connected(_on_fleet_changed):
 		EventBus.fleet_changed.disconnect(_on_fleet_changed)
+
+
+# --- §4.12.1 (W6-A): the recruit dialog (inner class) -----------------------
+
+## The recruit dialog: dim + panel + the §4.12 officer card + the shared
+## recruit path and the close edge. Code-built chrome (the §4.11 sections'
+## pattern); owns all input while open (§6), Esc closes.
+class RecruitDialog:
+	extends Control
+
+	const DIM_ALPHA := 0.4
+	const MODAL_GROUP := "modal_overlay"
+	# Inner classes see autoloads and global classes but NOT the outer
+	# script's consts — the preloads are re-declared here (the cold class
+	# cache stays harmless: the preloads win over `Palette`/`Character`).
+	const PaletteLib := preload("res://scripts/palette.gd")
+	const CharacterLib := preload("res://scripts/player/character.gd")
+	const CardLib := preload("res://scenes/ui/character_card.gd")
+
+	var tavern: Control = null
+	var _officer_id: String = ""
+	var _open := false
+	var _card: Control = null
+	var _dim: ColorRect
+	var _title: Label
+	var _recruit: Button
+	var _close: Button
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+		_dim = ColorRect.new()
+		_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_dim.color = Color(0, 0, 0, DIM_ALPHA)
+		add_child(_dim)
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(center)
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(520, 0)
+		var style := StyleBoxFlat.new()
+		style.bg_color = PaletteLib.PANEL_BG
+		style.border_color = PaletteLib.PANEL_LINE
+		style.set_border_width_all(2)
+		panel.add_theme_stylebox_override("panel", style)
+		center.add_child(panel)
+		var margin := MarginContainer.new()
+		for side in ["margin_left", "margin_top", "margin_right",
+				"margin_bottom"]:
+			margin.add_theme_constant_override(side, PaletteLib.MARGIN)
+		panel.add_child(margin)
+		var body := VBoxContainer.new()
+		body.name = "Body"
+		body.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		margin.add_child(body)
+		_title = Label.new()
+		_title.name = "Title"
+		_title.add_theme_font_size_override("font_size", 20)
+		_title.add_theme_color_override("font_color", PaletteLib.TEXT)
+		body.add_child(_title)
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(0, 380)
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		body.add_child(scroll)
+		# The card drops in here at open (kind-specific build).
+		_card = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
+		_card.name = "Card"
+		scroll.add_child(_card)
+		var footer := HBoxContainer.new()
+		footer.alignment = BoxContainer.ALIGNMENT_END
+		footer.add_theme_constant_override("separation", PaletteLib.MARGIN)
+		body.add_child(footer)
+		_recruit = Button.new()
+		_recruit.name = "Recruit"
+		_recruit.text = I18n.t_key("tavern.recruit")
+		_recruit.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
+		_recruit.pressed.connect(_on_recruit_pressed)
+		footer.add_child(_recruit)
+		_close = Button.new()
+		_close.name = "Close"
+		_close.text = I18n.t_key("ui.close")
+		_close.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
+		_close.pressed.connect(close)
+		footer.add_child(_close)
+
+	## Opens on `officer_id`, rendering the §4.12 officer card.
+	func open(officer_id: String) -> void:
+		_officer_id = officer_id
+		var officer: Dictionary = DataLoader.get_officer(officer_id)
+		_title.text = I18n.t(officer.get("name", {}))
+		_open = true
+		visible = true
+		add_to_group(MODAL_GROUP)
+		_refresh()
+		_recruit.disabled = not CharacterLib.can_recruit(officer_id)
+		if _recruit.disabled:
+			_recruit.tooltip_text = I18n.t_key("market.no_gold")
+		_close.grab_focus()
+
+	func close() -> void:
+		if not _open:
+			return
+		_open = false
+		visible = false
+		remove_from_group(MODAL_GROUP)
+
+	func is_open() -> bool:
+		return _open
+
+	## The rendered card's data dictionary (the card-identity pin's read).
+	func card_data() -> Dictionary:
+		return _card.rendered_data() if _card != null else {}
+
+	func _unhandled_input(event: InputEvent) -> void:
+		if not _open:
+			return
+		if event.is_action_pressed("back"):
+			get_viewport().set_input_as_handled()
+			close()
+			return
+		get_viewport().set_input_as_handled()
+
+	## The shared recruit path — the same `TavernScreen.recruit_officer` the
+	## row's button calls (one signing funnel; the toast/refresh behavior
+	## cannot drift between the two surfaces). A successful signing closes
+	## the dialog (`_after_recruit`).
+	func _on_recruit_pressed() -> void:
+		if tavern == null or not tavern.has_method("recruit_officer"):
+			return
+		var ok: bool = tavern.recruit_officer(_officer_id)
+		if ok:
+			close()
+
+	func _refresh() -> void:
+		if _card == null or _officer_id.is_empty():
+			return
+		_card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
+			CardLib.KIND_OFFICER, _officer_id))

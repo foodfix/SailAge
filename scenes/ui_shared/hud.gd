@@ -35,6 +35,10 @@ const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
+## §4.12.2 (W6-A): the character button's alloc_pending badge reads the
+## persisted counter; the button itself opens the S14 panel on the host.
+const CharacterLib := preload("res://scripts/player/character.gd")
+const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 
 ## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
 ## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
@@ -102,6 +106,15 @@ signal explore_requested
 @onready var _trim_chip: Label = $BottomRow/TrimChip
 @onready var _wind_label: Label = $WindLabel
 @onready var _current_label: Label = $CurrentLabel
+## §4.12.2 (W6-A): the character button + its alloc_pending badge.
+@onready var _character_button: Button = $TopRow/CharacterButton
+@onready var _char_badge: Control = $TopRow/CharacterButton/CharBadge
+@onready var _char_badge_count: Label = \
+	$TopRow/CharacterButton/CharBadge/BadgeCount
+
+## The badge's last shown count (the per-frame diff only touches the label on
+## change — see [_process]).
+var _alloc_pending_shown := -1
 
 ## Fleet dot position override for hosts that show the map before a run exists
 ## (the world scene falls back to Lisbon's berth tile). `(-1,-1)` means "read
@@ -181,6 +194,13 @@ func _ready() -> void:
 	_explore_button.text = I18n.t_key("discovery.explore")
 	_explore_button.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
 	_explore_button.pressed.connect(_on_explore_pressed)
+	# §4.12.2 (W6-A): the character button opens the S14 panel on the host
+	# (the same attach the host's own `C` key uses — attach_to is idempotent).
+	_character_button.text = "%s (C)" % I18n.t_key("char.title")
+	_character_button.custom_minimum_size.y = 32
+	_character_button.pressed.connect(_on_character_pressed)
+	_char_badge.visible = false
+	_apply_alloc_badge()
 	_apply_minimap_rect()
 
 	# The only update path for the bars (docs/80-* §7 acceptance).
@@ -194,6 +214,50 @@ func _ready() -> void:
 	EventBus.port_entered.connect(_on_port_entered)
 
 	refresh()
+
+	# §4.12.2 (W6-A): the badge's per-frame diff rides the SceneTree's
+	# `process_frame` (see [_on_process_frame] for why a signal-only badge
+	# cannot clear when the player spends the points inside S14).
+	var tree := get_tree()
+	if tree != null and not tree.process_frame.is_connected(_on_process_frame):
+		tree.process_frame.connect(_on_process_frame)
+
+
+## §4.12.2 (W6-A): the alloc_pending badge has no EventBus signal (the
+## level-up grant happens deep in `Character.award_xp`, and spending happens
+## inside the S14 panel), so the badge follows a per-frame diff through the
+## SceneTree's `process_frame` — the loop body is one int compare and only a
+## CHANGE touches the label, so no HUD bar ever becomes signal-driven here.
+## This is the single deliberate exception to the "no polling" update
+## contract (docs/80-* §4.5, amended by the §4.12.2 badge flow); the
+## `test_movement` textual pin stays satisfied without a `_process`.
+func _on_process_frame() -> void:
+	if _alloc_pending_shown != CharacterLib.alloc_pending():
+		_apply_alloc_badge()
+
+
+## The badge: a dot + count on the character button, visible iff pending > 0;
+## it clears when the pending counter hits 0 (spent).
+func _apply_alloc_badge() -> void:
+	if _char_badge == null or _char_badge_count == null:
+		return
+	var pending := CharacterLib.alloc_pending() \
+		if not GameState.player.is_empty() else 0
+	_alloc_pending_shown = pending
+	_char_badge.visible = pending > 0
+	_char_badge_count.text = str(pending)
+	_char_badge.tooltip_text = I18n.t_key("char.points_pending")
+
+
+## The character button: attaches the S14 panel to the HUD's host screen
+## (idempotent — the host's own `C` attach is reused) and toggles it.
+func _on_character_pressed() -> void:
+	var host := get_parent()
+	if host == null:
+		host = self
+	var panel := CharacterPanelLib.attach_to(host)
+	if panel != null and panel.has_method("toggle"):
+		panel.call("toggle")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -790,6 +854,9 @@ func _on_locale_changed(_locale: String) -> void:
 	# The Phase-3 Explore affordance re-binds with the rest of the HUD.
 	if _explore_button.visible:
 		set_explore_available(true)
+	# §4.12.2 (W6-A): the character button + badge tooltip re-bind too.
+	_character_button.text = "%s (C)" % I18n.t_key("char.title")
+	_apply_alloc_badge()
 	# The mutiny dialog re-binds its own labels on the same signal; re-apply the
 	# formatted Pay price (with `{gold}` filled) after it, next idle frame.
 	if _mutiny_dialog != null:
