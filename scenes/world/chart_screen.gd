@@ -768,6 +768,12 @@ func _update_hover(at: Vector2) -> void:
 		# the nation's L10n name, `debug.stall.*`, `debug.info.*` labels,
 		# the mooring/destination port's L10n name. `holds` shows only
 		# where it means something (blocked).
+		_ensure_hover_window()
+		var font := _hover_window_label.get_theme_font("font")
+		var font_size := _hover_window_label.get_theme_font_size(
+			"font_size")
+		var max_w := minf(HOVER_WINDOW_MAX_W,
+			get_viewport_rect().size.x * 0.5)
 		for ship in ships:
 			var role := str(ship.get("role", ""))
 			var stall := str(ship.get("stall", ""))
@@ -835,14 +841,18 @@ func _update_hover(at: Vector2) -> void:
 					+ " · ".join(lane_names))
 			line += "\n  " + " · ".join(parts)
 			line += "\n  " + _annotate_raw_line(
-				str(ship.get("dbg", "")), "state", false)
+				str(ship.get("dbg", "")), "state", false,
+				font, font_size, max_w)
 			var raw2 := str(ship.get("dbg2", ""))
 			if not raw2.is_empty():
-				line += "\n  " + _annotate_raw_line(raw2, "accrual", false)
+				line += "\n  " + _annotate_raw_line(raw2, "accrual",
+					false, font, font_size, max_w)
 			var raw3 := str(ship.get("dbg3", ""))
 			if not raw3.is_empty():
-				line += "\n  " + _annotate_raw_line(raw3, "journey", true)
-			text += line + "\n"
+				line += "\n  " + _annotate_raw_line(raw3, "journey",
+					true, font, font_size, max_w)
+			# A blank line keeps stacked fleet blocks apart (§4.6).
+			text += line + "\n\n"
 	else:
 		# No fleet on the tile: the nearest wreck / intel / port entry.
 		var best := ""
@@ -889,14 +899,16 @@ const EV_TAG := "ev="
 
 
 ## Renders one payload line fully localized (§4.6, amended 2026-11-02):
-## `<section title> <gloss> <value> ...` — every `key=value` token renders
-## as its localized gloss plus the value (ids replaced by their localized
-## names via `_raw_value_text`), `_raw_value_hint` appends the `pend`/
-## `mark` hints, non-key continuation tokens (`leg0`'s `ti/walked_len`
-## tail) extend the previous field, and — for the journey line — the
-## trailing `ev=` event ring is localized event-wise.
-func _annotate_raw_line(raw: String, section: String,
-		with_ev: bool) -> String:
+## `<section title> · <gloss> <value> · …` — every `key=value` token
+## becomes a `gloss value` field (ids replaced by their localized names
+## via `_raw_value_text`, `_raw_value_hint` appending the `pend`/`mark`
+## hints, non-key continuation tokens (`leg0`'s `ti/walked_len` tail)
+## extending the previous field, the journey payload's trailing `ev=`
+## ring becoming one field per event). The fields then greedy-fill
+## physical lines to `max_w`, measured with the window's own font — a
+## wrap lands BETWEEN fields, never mid-gloss or mid-value.
+func _annotate_raw_line(raw: String, section: String, with_ev: bool,
+		font: Font, font_size: int, max_w: float) -> String:
 	var head := raw
 	var ev := ""
 	if with_ev:
@@ -904,7 +916,7 @@ func _annotate_raw_line(raw: String, section: String,
 		if cut >= 0:
 			head = raw.substr(0, cut)
 			ev = raw.substr(cut + 1 + EV_TAG.length())
-	var out: Array = [I18n.t_key("debug.raw.sec." + section)]
+	var fields: Array = []
 	for token in head.split(" ", false):
 		var eq := token.find("=")
 		var key := token.substr(0, eq) if eq > 0 else ""
@@ -913,16 +925,34 @@ func _annotate_raw_line(raw: String, section: String,
 			var field := "%s %s" % [I18n.t_key("debug.raw.f." + key),
 				_raw_value_text(key, value)]
 			field += _raw_value_hint(key, value)
-			out.append(field)
-		elif not out.is_empty():
+			fields.append(field)
+		elif not fields.is_empty():
 			# Continuation of the previous field's value.
-			out[out.size() - 1] += " " + token
+			fields[fields.size() - 1] += " " + token
 		else:
-			out.append(token)
+			fields.append(token)
 	if not ev.is_empty():
-		out.append("%s %s" % [I18n.t_key("debug.raw.f.ev"),
-			_annotate_ev_stream(ev)])
-	return " ".join(out)
+		var first_ev := true
+		for ev_text in _annotate_ev_events(ev):
+			# The gloss labels the first event; the rest read as its
+			# continuations (each still wraps as its own field).
+			fields.append(((I18n.t_key("debug.raw.f.ev") + " ")
+				if first_ev else "") + str(ev_text))
+			first_ev = false
+	# Greedy fill: a physical line carries as many fields as fit the
+	# §4.6 fold cap; the wrap always falls between two fields.
+	var lines: Array = []
+	var cur := I18n.t_key("debug.raw.sec." + section)
+	for field in fields:
+		var candidate := cur + " · " + str(field)
+		if font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, font_size).x > max_w:
+			lines.append(cur)
+			cur = str(field)
+		else:
+			cur = candidate
+	lines.append(cur)
+	return "\n  ".join(lines)
 
 
 ## The displayed value of one raw field (§4.6, amended 2026-11-02): ids
@@ -956,15 +986,32 @@ func _raw_value_hint(key: String, value: String) -> String:
 	return ""
 
 
-## The ev ring stream (`spawn@1 dep a->b@3 ...`) fully localized: the
-## event verbs (`debug.raw.ev.*`), the `a->b` port pairs, the port after
-## a bare `arr`, the `wedge|leg|seam:<id>` causes and the `ti=<n>` detail —
-## the `@<day>` stamps ride their tokens untouched. Unknown tokens pass
-## through verbatim.
-func _annotate_ev_stream(ev: String) -> String:
+## The ev ring (`spawn@1 dep a->b@3 arr x@12 drop wedge:lane ti=2@15 …`)
+## localized, one STRING per event (each becomes its own wrap field).
+## Event boundaries: every event's last token carries the `@<day>` stamp
+## (`_note_event` stamps the whole text).
+func _annotate_ev_events(ev: String) -> Array:
+	var events: Array = []
+	var cur_tokens: Array = []
+	for tok in ev.split(" ", false):
+		cur_tokens.append(tok)
+		if tok.contains("@"):
+			events.append(_annotate_ev_event(cur_tokens))
+			cur_tokens = []
+	if not cur_tokens.is_empty():
+		events.append(_annotate_ev_event(cur_tokens))
+	return events
+
+
+## One raw ev event (its tokens) → one localized string; the `@<day>`
+## stamps ride their tokens untouched. Event verbs (`debug.raw.ev.*`),
+## the `a->b` port pairs, the port after a bare `arr`, the
+## `wedge|leg|seam:<id>` causes and the `ti=<n>` detail all localize;
+## unknown tokens pass through verbatim.
+func _annotate_ev_event(tokens: Array) -> String:
 	var out: Array = []
 	var prev_arr := false
-	for tok in ev.split(" ", false):
+	for tok: String in tokens:
 		var head := tok
 		var stamp := ""
 		var at := tok.rfind("@")
@@ -1047,9 +1094,12 @@ func _display_leg(id: String) -> String:
 
 ## The floating hover window (unified-movement amendment): a bordered
 ## panel at the cursor, mouse-transparent, clipped to the viewport.
-## §4.6 (amended 2026-11-02): the label folds at
-## `min(HOVER_WINDOW_MAX_W, viewport width × 0.5)` px.
+## §4.6 (amended 2026-11-02): fleet reports pre-wrap at field boundaries
+## to `min(HOVER_WINDOW_MAX_W, viewport width × 0.5)` px and read at a
+## dedicated 13 px font (smaller than the default 16 — stacked reports
+## must stay compact).
 const HOVER_WINDOW_MAX_W := 560.0
+const HOVER_WINDOW_FONT_SIZE := 13
 var _hover_window: PanelContainer = null
 var _hover_window_label: Label = null
 
@@ -1072,49 +1122,28 @@ func _ensure_hover_window() -> void:
 	_hover_window.add_theme_stylebox_override("panel", style)
 	_hover_window_label = Label.new()
 	_hover_window_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_window_label.add_theme_font_size_override("font_size",
+		HOVER_WINDOW_FONT_SIZE)
 	_hover_window.add_child(_hover_window_label)
 	add_child(_hover_window)
 	_hover_window.visible = false
 
 
 ## Shows/hides + positions the floating window (clamped to the viewport).
-## §4.6 (amended 2026-11-02): a report wider than the fold cap wraps
-## (word-smart) instead of spanning the screen; short entries keep their
-## natural width. The natural width is measured with the label's own font
-## (NOT `get_minimum_size()` across an autowrap toggle — the label's wrap
-## height depends on its stale current width, which once blew the panel up
-## to a screen-filling empty block), the wrap width is forced on the label
-## BEFORE its height is read, and the panel `reset_size()`s every show so
-## it re-fits — and shrinks — instead of only ever growing.
+## §4.6 (amended 2026-11-02): fleet reports pre-wrap at field boundaries
+## (`_annotate_raw_line`), so the label keeps autowrap OFF and the panel
+## simply re-fits — and shrinks — to its natural size on every show,
+## never relying on Label wrap minimums (whose stale-width shape once
+## blew the panel up to a screen-filling empty block).
 func _show_hover_window(text: String, at: Vector2) -> void:
 	_ensure_hover_window()
 	if text.is_empty():
 		_hover_window.visible = false
 		return
 	_hover_window_label.text = text
-	var view := get_viewport_rect().size
-	var max_w := minf(HOVER_WINDOW_MAX_W, view.x * 0.5)
-	var font := _hover_window_label.get_theme_font("font")
-	var font_size := _hover_window_label.get_theme_font_size("font_size")
-	var natural_w := 0.0
-	for line in text.split("\n"):
-		natural_w = maxf(natural_w, font.get_string_size(
-			line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
-	if natural_w > max_w:
-		_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_hover_window_label.custom_minimum_size = Vector2(max_w, 0.0)
-		# Give the wrap a real width NOW, then force a re-shape at it
-		# (clear + re-set the text — an identical `set_text` early-outs,
-		# and the stale-width shape is what once computed a 9 897 px
-		# height for a ~10-line report).
-		_hover_window_label.size = Vector2(max_w, 1.0)
-		_hover_window_label.text = ""
-		_hover_window_label.text = text
-	else:
-		_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		_hover_window_label.custom_minimum_size = Vector2.ZERO
 	_hover_window.reset_size()
 	_hover_window.visible = true
+	var view := get_viewport_rect().size
 	var size := _hover_window.size
 	var pos := at + Vector2(14.0, 14.0)
 	_hover_window.position = pos.clamp(Vector2.ZERO,

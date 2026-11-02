@@ -641,11 +641,15 @@ chart adds:
   `debug.raw.skip.*`. Value hints: `pend < 0` appends
   `debug.raw.hint.frozen` (mark ahead ⇒ frozen, the discriminator above)
   and `mark < 0` appends `debug.raw.hint.no_mark`. Non-key continuation
-  tokens (`leg0`'s `ti/walked_len` tail) extend the preceding field. The
-  floating window **folds**: its label autowraps at a max width of
-  `min(560, viewport width × 0.5)` px (measured and re-fit on every
-  show) — a long fleet report wraps instead of spanning the screen;
-  position clamping is unchanged.
+  tokens (`leg0`'s `ti/walked_len` tail) extend the preceding field.
+  Fields join with ` · ` (the summary line's separator) and each section
+  **pre-wraps at field boundaries** — a greedy fill to the fold cap
+  `min(560, viewport width × 0.5)` px measured with the window's own
+  font, so a wrap never cuts a gloss or a value in half. The window
+  reads at a dedicated **13 px** font (smaller than the default 16 —
+  stacked reports must stay compact); the label keeps autowrap off and
+  the panel re-fits — and shrinks — on every show. Stacked fleet blocks
+  separate with a blank line. Position clamping is unchanged.
 - **Berth truth (`stranded`, amended 2026-11-01):** a legs-empty fleet
   holding its dwell is `docked` **only** when it stands on a port's berth
   tile; holding in open water is `stranded` — the summary line shows its
