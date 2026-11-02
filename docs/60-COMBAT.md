@@ -638,15 +638,12 @@ per day tick:
   day-remainder immediately and marks itself accrued-through-now (docked
   time never accrues; the per-fleet marks are runtime-only — a reloaded
   fleet resumes accrual from the load instant). **Clock-rewind rebase
-  (amendment):** set sail resets `clock_fraction` to 0 (`20-*` §4.3 —
-  port time is day-granular), rewinding the absolute clock; a pass whose
-  fleet Δ ≤ 0 (a mark left inside the rewound window) **rebases** — the
-  mark snaps to the clock, the pass grants nothing, and the next pass
-  accrues its own per-move slice. The rewound window is forfeit, never
-  re-walked (those fleets already moved through it) and never owed:
-  freezing until the clock re-passed the mark — then lumping the owed
-  days at a roll — was the "fleet moves only once a day" day-jump bug.
-  The day tick owns state,
+  fleet resumes accrual from the load instant). **Clock-rewind rebase
+  (dormant since 2026-11-02):** the world clock is continuous — set sail no
+  longer resets `clock_fraction` (`20-*` §4.3 port-hours amendment) — so
+  fleet Δ ≤ 0 no longer occurs in play; the rebase path (a pass whose fleet
+  Δ ≤ 0 snaps the mark to the clock and grants nothing) is kept as a
+  headless/test-seam safety net.
   not stepping: dwell, departures (with the eager route-progress sync),
   the raider/hunter state machines, spawns, wrecks. NPC-vs-NPC
   engagement fires from the accrual walk the moment a raider's committed
@@ -1143,6 +1140,14 @@ stalled_fleets(min_hold: int = 3) -> Array
 - `tick(day)` — the daily ecology tick in the `20-*` §4.3 order (after
   `day_advanced`): lane stepping, dwell, auto-resolve, trickle, treasure
   scheduler; returns the fleets spawned this tick (test seam).
+  **Owner (amended 2026-11-02):** the `FleetSim` autoload runs it as the
+  post-`day_advanced` listener in every scene — port day-advances (rest,
+  hour-scale actions crossing midnight, the port Space wait) tick the
+  ecology exactly like sea days; the ecology no longer freezes while the
+  player is ashore. **Docked-player immunity:** contact checks stay with the
+  world scene, so a hostile fleet that accrues onto a docked player's port
+  tile opens nothing — it holds there, and the first contact check after
+  Set Sail resolves it (`80-*` §4.3 world-scene-only presentation).
 - `fleets()` — every live fleet dict (the §4.11.11 shape); the save payload.
 - `markers()` — render dicts for `world_map.gd` (`role`, `nation_id`,
   `cell`, `convoy_id` when convoy-grouped, wake path); viewport-culled
@@ -1163,15 +1168,11 @@ stalled_fleets(min_hold: int = 3) -> Array
   time (`Δ = day + clock_fraction − its per-fleet mark`; the world scene
   calls it per player move, `tick()` catches up — idempotent, no
   double-count) and reports fleet moves for the marker glides (`80-*`
-  §4.5.2). **Clock-rewind rebase:** set sail resets `clock_fraction` to 0
-  (`20-*` §4.3 — port time is day-granular), rewinding the absolute
-  clock; a pass whose fleet Δ ≤ 0 (a mark left inside the rewound
-  window) **rebases** — the mark snaps to the clock, the pass grants
-  nothing, and the next pass accrues its own per-move slice. The rewound
-  window is forfeit, never re-walked (those fleets already moved through
-  it) and never owed: freezing until the clock re-passed the mark — then
-  lumping the owed days at a roll — was the "fleet moves only once a
-  day" day-jump bug. `take_fleet_moves()` — drains that render report.
+  §4.5.2). **Clock-rewind rebase (dormant since 2026-11-02):** set sail
+  no longer resets `clock_fraction` — the world clock is continuous
+  (`20-*` §4.3 port-hours amendment) — so fleet Δ ≤ 0 no longer occurs in
+  play; the rebase path (a pass whose fleet Δ ≤ 0 snaps the mark to the
+  clock and grants nothing) is kept as a headless/test-seam safety net.
   `stall_reason(fleet)` / `stalled_fleets(min_hold = 3)` — the read-only
   stall diagnostics: per-fleet state
   (`docked → cooldown → camping → chasing/pursuing → blocked → sailing`,

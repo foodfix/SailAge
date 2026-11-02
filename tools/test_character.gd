@@ -377,8 +377,13 @@ func _test_new_game_all_nations() -> void:
 			"%s: world.position == %s (got %s)" % [
 				nation_id, str(expected), str(GameState.world_tile())
 			])
-		_check(float(GameState.world.get("clock_fraction", -1.0)) == 0.0,
-			"%s: clock_fraction reset to 0 in port" % nation_id)
+		# §4.1b (amended 2026-11-02): a new run spawns docked at day 1 00:00 —
+		# no docking action has run yet, so no hour has been charged. The
+		# facilities open at their windows (the hub's Space wait reaches them).
+		var fraction_spawn := float(GameState.world.get("clock_fraction", -1.0))
+		_check(fraction_spawn == 0.0,
+			"%s: a new run spawns at 00:00 (fraction %s)"
+			% [nation_id, str(fraction_spawn)])
 
 		# known_ports = the six capitals (§20 §4.11), order-insensitive.
 		var known: Array = GameState.known_ports.duplicate()

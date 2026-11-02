@@ -137,6 +137,8 @@ func _scenario_crown_and_horizon() -> void:
 		var affordable := mini(TradeEngineLib.buy_max("lisbon", good_id), 20)
 		if affordable <= 0:
 			break
+		# §4.1b: one hour per side — each trip is another market day.
+		GameState.world["clock_fraction"] = 0.5
 		TradeEngineLib.buy("lisbon", good_id, affordable)
 		TradeEngineLib.sell(dest, good_id, affordable)
 	_check(GameState.gold >= 55000,
@@ -198,6 +200,8 @@ func _scenario_crown_and_horizon() -> void:
 	# Report both at the guild.
 	GameState.current_port = "lisbon"
 	GameState.day = START_DAY
+	# §4.1b port hours: the counter is open (two reports = 2h, still inside).
+	GameState.world["clock_fraction"] = 0.5
 	var fame_before := GameState.fame
 	var gold_before_report := GameState.gold
 	var guild: Control = GuildScene.instantiate()
@@ -254,6 +258,8 @@ func _scenario_crown_and_horizon() -> void:
 	var guard := 0
 	while missions_done < 8 and guard < 40:
 		guard += 1
+		# §4.1b: one hour per audience — re-open the palace per iteration.
+		GameState.world["clock_fraction"] = 0.5
 		palace.refresh()
 		var quest := PalaceEngineLib.active_mission("portugal")
 		if quest.is_empty():
@@ -284,6 +290,8 @@ func _scenario_crown_and_horizon() -> void:
 	# Climb one rung per ceremony, exactly as the palace offers it.
 	var ranks_granted: Array = []
 	for _step in 5:
+		# §4.1b: one hour per ceremony — re-open the palace per rung.
+		GameState.world["clock_fraction"] = 0.5
 		palace.refresh()
 		var granted: String = palace.attend_ceremony()
 		if granted.is_empty():
@@ -600,6 +608,8 @@ func _start_run(port_id: String, day: int) -> void:
 	GameState.new_game("portugal" if port_id == "lisbon" else "spain",
 		false, "world")
 	GameState.day = day
+	# §4.1b port hours: 12:00 — the S1 journey trades and reports in-hours.
+	GameState.world["clock_fraction"] = 0.5
 	GameState.current_port = port_id
 	GameState.fame = 0
 	GameState.titles = {}

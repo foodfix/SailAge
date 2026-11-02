@@ -141,18 +141,21 @@ the modes differ only in what produces the steps.
 ### 4.3 Game clock & day tick
 
 - `GameState.day` is an integer; a fractional accumulator
-  `world.clock_fraction ∈ [0,1)` holds sub-day progress (not saved — saving
-  happens only in port, where the fraction is always reset to 0).
+  `world.clock_fraction ∈ [0,1)` holds sub-day progress (not saved — a load
+  restarts the day at 00:00). **Continuous clock (amended 2026-11-02, port
+  hours):** the fraction is one continuous world clock across sea *and* port —
+  docking and Set Sail no longer reset it (the retired resets made the port
+  hour costs meaningless); a port visit ends at the wall-clock time it was
+  left, and sea time continues from there.
 - **Time-of-day display (amended 2026-11-02).** Sub-day progress renders as
   wall-clock time `HH:MM = floor(clock_fraction × 1440)`; the fraction never
   reaches 1.0, so 23:59 is the last minute shown and the day rolls over at
   00:00. Surfaces — every *label* that shows the day: the sailing HUD top
   bar, the fleet-panel summary, the inn, the provisioning dialog and the
-  character panel (`world.day_time`, `char.day`). **Excluded:** the battle
-  screen (`sim.day` is a battle-local counter, no world clock), the
-  save-slot list (renders saved metadata; the fraction is not saved), and
-  narrative sentence keys (`world.arrive`, `port.day_greeting` — docking
-  resets the fraction to 0, so a time there would always read 00:00).
+  character panel (`world.day_time`, `char.day`), re-rendered on
+  `EventBus.clock_changed` too. **Excluded:** the battle
+  screen (`sim.day` is a battle-local counter, no world clock) and the
+  save-slot list (renders saved metadata; the fraction is not saved).
 - **Day-tick order (locked, Phase 5; Phase 6 inserts the drift push at
   sea).** When `clock_fraction ≥ 1.0`:
   subtract 1.0, `day += 1`, then run strictly in order:
@@ -168,19 +171,38 @@ the modes differ only in what produces the steps.
      stops before impassable tiles), not a clocked move;
   4. emit `EventBus.day_advanced`;
   5. the **NPC fleet tick** (`60-*` §4.11.11): lane stepping, dwell,
-     auto-resolve and the daily trickle — the world scene ticks it once per
-     day on `day_advanced` (the Phase-4 `last_tick_day` dedupe is kept).
+     auto-resolve and the daily trickle — the **`FleetSim` autoload** ticks it
+     once per day as the post-`day_advanced` listener, in every scene, port
+     included (amended 2026-11-02, port hours — port day-skips no longer
+     freeze the ecology; the Phase-4 `last_tick_day` dedupe is kept). The
+     world scene keeps only the presentation pass (marker glides) and the
+     contact check.
 - **Wait is a day-advance source (Phase 6).** The wait action (`Space` at sea,
   §4.2/§4.17) holds position, calls `advance_clock(1.0)` and runs this same
   day-tick sequence — the full ledger and the steps below it, exactly like any
   other day.
+- **Port wait (amended 2026-11-02).** `Space` on the port hub (S4) advances
+  the clock by exactly one hour: `SailingSim.advance_port_hours(1)`. A wait
+  that crosses midnight runs the full day-tick sequence above, in port, port
+  morale rules included. It is refused (no-op) while a game-over state stands.
 - **Drift push position (locked, Phase 6).** The push runs **after the
   economy step and immediately before `EventBus.day_advanced` fires** —
   deterministic and pure, so the NPC tick sees the drift-corrected cell and
   contact checks use it.
-- In port, the clock does not advance except by explicit actions that cost a
-  day (odd jobs, rest). Port actions advancing the day run the same ledger
-  and the same economy step (order step 2 above).
+- **Port hours (amended 2026-11-02).** In port the clock moves only through
+  explicit actions, in hours via `SailingSim.advance_port_hours(h)` (`h/24.0`
+  days through `advance_clock`): every §4.3 port action table entry
+  (`30-*` §4.1b), docking +1h and Set Sail +1h, the port Space wait, and the
+  inn's rest. A sub-day advance runs no ledger; crossing midnight runs the
+  full sequence. **Rest (amended 2026-11-02; `30-*` §4.7):** the inn's
+  3-day rest advances the clock by exactly `Δ = 10/3 − clock_fraction`
+  days — whatever the arrival time, the run wakes on **day + 3 at 08:00**
+  and exactly **three** ledger days charge (fp residue ~1e-16 is absorbed by
+  `CLOCK_EPSILON`; the landing fraction is 8/24 = 08:00).
+- **`clock_changed` (amended 2026-11-02).** Every `advance_clock` call that
+  consumed time emits `EventBus.clock_changed` once, after the final fraction
+  write — sub-day advances included, so hour-scale actions refresh every
+  `HH:MM` label. `day_advanced` stays per completed day.
 
 ### 4.4 Speed formula
 
@@ -538,18 +560,22 @@ The berth is ordinary water — **standing on it does not open the port screen**
     exactly as any diagonal into land is (§4.2, no corner cutting). Since the
     berth is orthogonally adjacent to the shore, standing on or beside the
     berth is the docking position.
-  - **Clock cost (locked):** docking charges one `move_cost(heading)`
-    (`1 / effective_speed(heading)` days, §4.4) before the port screen opens,
-    so the
-    "distance is the core resource" pillar is not leaked. `clock_fraction`
-    still resets to 0 at port entry.
+  - **Clock cost (locked; amended 2026-11-02):** docking charges one
+    `move_cost(heading)`
+    (`1 / effective_speed(heading)` days, §4.4) **plus exactly one hour**
+    (`advance_port_hours(1)`) before the port screen opens, so the
+    "distance is the core resource" pillar is not leaked. The clock fraction
+    carries across the dock continuously (§4.3).
   - Docking an **unknown** port discovers it (`known_ports`) and enters
     normally.
   - A land tile that is not a port's shore tile is an ordinary blocked move
     (§6: silent, no clock cost, `world.move_blocked` toast).
 - **Exit:** "Set sail" returns to `world_map.tscn` with the fleet on the
-  **berth tile** (sea) and `clock_fraction` reset to 0. The fleet never
-  occupies a land tile.
+  **berth tile** (sea). It charges exactly one hour first (amended
+  2026-11-02: `advance_port_hours(1)` after the §4.11.2 gate passes, before
+  the scene route); the clock fraction is **continuous** — the retired
+  reset-to-0 made sail-out always read 00:00 and would have swallowed the
+  hour (`§4.3`). The fleet never occupies a land tile.
 - **Click-to-sail:** a shore tile is a valid route *destination* — clicking it
   routes to the adjacent berth and then docks. It is never a routing waypoint;
   `AStarGrid2D` still treats it as solid.
@@ -843,7 +869,8 @@ are GDScript constants, not a data file — game content stays in `data/`.)
 - [ ] Morale tiers use exactly the §4.8 thresholds; mutiny/desertion trigger
       only via the specified checks.
 - [ ] Game over fires only from `"starvation"`, `"scurvy"`, `"sunk"`.
-- [ ] Port entry/exit round-trips position and resets `clock_fraction`.
+- [ ] Port entry/exit round-trips position; the clock fraction is continuous
+      across both edges, each charging +1h (amended 2026-11-02, port hours).
 - [ ] Minimap is a 256×192 px box showing a wrap-aware 128×96-tile crop at
       2 px/tile, and the sighting radius (48) matches `80-*` §4.5.
 - [ ] The single world map plays with wrap-aware movement and the chunked

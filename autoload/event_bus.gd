@@ -5,6 +5,10 @@ extends Node
 ## Cross-screen communication never uses direct node references.
 
 signal day_advanced(new_day: int)
+## Port-hours amendment (docs/90-* §5.1, docs/20-* §4.3): any `advance_clock`
+## that consumed time emits this once, sub-day advances included — every
+## `HH:MM` label re-renders on it. `day_advanced` stays per completed day.
+signal clock_changed()
 signal locale_changed(locale: String)
 signal gold_changed(new_gold: int)
 signal fleet_changed()

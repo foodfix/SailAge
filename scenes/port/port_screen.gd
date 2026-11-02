@@ -21,8 +21,9 @@ extends Control
 ##
 ## Exit contract (docs/20-* §4.11, docs/80-* §4.3/§4.6.1, §4.11.2):
 ##   * `GameState.current_port = null`
-##   * `GameState.world.clock_fraction = 0.0`
 ##   * `GameState.world.position` stays on the **berth** tile (`20-*` §4.11.1)
+##   * +1 §4.1b hour for the sail-out; `clock_fraction` carries to sea
+##     (continuous clock, amended 2026-11-02 — the retired reset is gone)
 ##   * route to `world_map.tscn`
 ## Since Phase 5 both the `Set Sail` button and `Esc` on S4 open the **provisioning
 ## prompt** (`provisions_dialog.tscn`) first — the same edge (`20-*` §4.11.2) —
@@ -191,6 +192,10 @@ func _ready() -> void:
 	# A save load can change `current_port` under us; re-bind the header when
 	# the day signal fires (the only event a load always produces).
 	EventBus.day_advanced.connect(_on_day_advanced)
+	# §4.1b (added 2026-11-02): hour-scale actions and Space waits only fire
+	# `clock_changed` — the rows (whose §4.1b open state is in the rebuild
+	# signature) and the banner clock re-bind on it too.
+	EventBus.clock_changed.connect(_on_clock_changed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -211,6 +216,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		get_viewport().set_input_as_handled()
 		toggle_officers_panel()
+		return
+	# §4.1b port wait (added 2026-11-02, `20-*` §4.3): `Space` on the hub
+	# passes one hour — the way to wait for a facility's opening window or to
+	# let the clock roll toward a cheaper hour. Refused behind a modal (the
+	# modal owns input first) and a no-op while the run is dead
+	# (`advance_clock` freezes the clock); hub only, never inside a facility.
+	if event.is_action_pressed("world_wait"):
+		if has_modal():
+			return
+		get_viewport().set_input_as_handled()
+		SailingSimLib.advance_port_hours(1)
 		return
 	# Locale toggle lives in the HUD top bar; keep the key working here too when
 	# the HUD is not the focus owner.
@@ -465,8 +481,10 @@ func open_save_dialog() -> Control:
 
 
 ## Set Sail (docs/20-* §4.11 exit; docs/80-* §4.2 S4 → S3):
-## clears `current_port`, resets `clock_fraction` to 0, keeps the fleet on the
-## **berth** tile, then routes to the world map.
+## charges one §4.1b hour, clears `current_port`, keeps the fleet on the
+## **berth** tile, then routes to the world map. The clock fraction is
+## **continuous** (amended 2026-11-02): the retired reset-to-0 made sail-out
+## always read 00:00 and would have swallowed the hour.
 ##
 ## **Gated** by `20-*` §4.11.2 (locked): a fleet with no crew (`total_crew < 1`)
 ## or less than one day of supply (the §4.10 formula) never reaches open water,
@@ -492,14 +510,15 @@ func set_sail() -> bool:
 		# the second line of defence for a programmatic caller.
 		return false
 
-	# §4.11 exit order: leave the berth tile in place, drop the docked flag,
-	# and reset the fractional clock (a port visit never carries sub-day time
-	# back to sea — §4.3 "saving happens only in port, where the fraction is
-	# always reset to 0"). The departed port is recorded for the Phase-5
-	# hunter intel (docs/60-* §4.11.11.1) before the docked flag drops.
+	# §4.11 exit order: leave the berth tile in place, drop the docked flag.
+	# §4.1b: the sail-out itself costs one hour (the harbor pilot), charged
+	# before the docked flag drops so a midnight crossing ticks in port. The
+	# departed port is recorded for the Phase-5 hunter intel (docs/60-*
+	# §4.11.11.1) first. `clock_fraction` carries to sea (§4.3 continuous
+	# clock).
 	GameState.world["last_departed_port"] = str(GameState.current_port)
+	SailingSimLib.advance_port_hours(1)
 	GameState.current_port = null
-	GameState.world["clock_fraction"] = 0.0
 	sailed.emit()
 	if route_to_world:
 		GameState.change_scene(WORLD_SCENE)
@@ -582,11 +601,15 @@ func _facility_phase(facility_id: String) -> int:
 ## phase is in `[1, FACILITY_ENABLED_MAX_PHASE]`. A bounty-closed port
 ## (`70-*` §4.9.6) refuses every facility except the bountied capital's palace
 ## (the pay-off path), which is what keeps the game recoverable.
+## §4.1b (added 2026-11-02): the facility must also be open **right now** —
+## the entry gate of the closed rule; the inn (24h) never refuses.
 func _facility_available(facility_id: String) -> bool:
 	var phase := _facility_phase(facility_id)
 	if phase < 1 or phase > FACILITY_ENABLED_MAX_PHASE:
 		return false
-	return BountyLib.can_open_facility(_port_id, facility_id)
+	if not BountyLib.can_open_facility(_port_id, facility_id):
+		return false
+	return SailingSimLib.facility_open(_port_id, facility_id)
 
 
 ## Renders the facility rows for the current port from its `facilities` data:
@@ -618,6 +641,15 @@ func _sync_facility_rows(port: Dictionary) -> void:
 	# A bounty closing/reopening the port changes what every row shows, so it
 	# belongs in the rebuild signature (`70-*` §4.9.6).
 	parts.append("closed:%s" % str(BountyLib.is_port_closed(_port_id)))
+	# §4.1b (added 2026-11-02): each row's open/closed state is in the
+	# signature too, so crossing an opening/closing hour (Space waits, timed
+	# actions) rebuilds the rows with the `port.facility.closed` state.
+	for facility_id in FACILITY_ORDER:
+		if (facilities as Dictionary).has(facility_id):
+			parts.append("hours:%s:%s" % [
+				facility_id,
+				str(SailingSimLib.facility_open(_port_id, facility_id)),
+			])
 	var signature := "|".join(parts)
 	if signature == _rows_signature and _facility_rows.get_child_count() > 0:
 		return
@@ -629,13 +661,20 @@ func _sync_facility_rows(port: Dictionary) -> void:
 		if not (facilities as Dictionary).has(facility_id):
 			continue
 		var phase := _facility_phase(facility_id)
+		var bounty_closed := not BountyLib.can_open_facility(_port_id, facility_id)
+		# §4.1b: hours-closed rows are phase-enabled but outside the window.
+		var hours_open := SailingSimLib.facility_open(_port_id, facility_id)
 		var enabled := phase >= 1 and phase <= FACILITY_ENABLED_MAX_PHASE \
-			and BountyLib.can_open_facility(_port_id, facility_id)
+			and not bounty_closed and hours_open
 		var label_key := str(FACILITY_LABEL_KEYS.get(
 			facility_id, "port.%s" % facility_id))
 		# §4.9.6: a bounty closes the port's rows (the capital palace stays
-		# usable for the pay-off), with its own reason label.
-		var closed := not BountyLib.can_open_facility(_port_id, facility_id)
+		# usable for the pay-off), with its own reason label. §4.1b: a facility
+		# outside its opening window greys out with the `{open}–{close}` label.
+		var stub_key := "port.closed_bounty" if bounty_closed \
+			else FACILITY_STUB_KEY
+		if not bounty_closed and not hours_open:
+			stub_key = "port.facility.closed"
 		var button := _make_facility_button(facility_id, label_key, enabled)
 		if enabled:
 			# Two open facilities per wireframe line.
@@ -649,18 +688,14 @@ func _sync_facility_rows(port: Dictionary) -> void:
 			# A stub owns its line (full-width), as in the wireframe.
 			pair = null
 			_facility_rows.add_child(button)
-			# §4.1: disabled rows carry the stub label, e.g.
-			# "Guild — opens in Phase 3". The noun and the note are both
-			# localised; only the separator is punctuation.
+			# §4.1: disabled rows carry the reason label, e.g.
+			# "Guild — opens in Phase 3" or "Market — Open 08:00–18:00".
 			button.text = "%s — %s" % [
-				I18n.t_key(label_key),
-				I18n.t_key("port.closed_bounty" if closed else FACILITY_STUB_KEY),
+				I18n.t_key(label_key), _stub_text(stub_key, facility_id),
 			]
-			button.tooltip_text = I18n.t_key(
-				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
+			button.tooltip_text = _stub_text(stub_key, facility_id)
 			button.set_meta("stub", true)
-			button.set_meta("stub_key",
-				"port.closed_bounty" if closed else FACILITY_STUB_KEY)
+			button.set_meta("stub_key", stub_key)
 		_row_buttons[facility_id] = button
 		_row_ids.append(facility_id)
 
@@ -674,6 +709,15 @@ func _clear_facility_rows() -> void:
 	_row_ids.clear()
 
 
+## The disabled-row reason text: plain keys render through [I18n.t_key]; the
+## §4.1b hours key interpolates the facility's own `{open}–{close}` window.
+func _stub_text(stub_key: String, facility_id: String) -> String:
+	if stub_key == "port.facility.closed":
+		return I18n.fmt(stub_key,
+			SailingSimLib.facility_window_text(_port_id, facility_id))
+	return I18n.t_key(stub_key)
+
+
 ## Re-labels every rendered row from its stored key, keeping the stub note for
 ## disabled rows (docs/80-* §6: locale change rebinds without a reload). Walks
 ## the container rather than the row cache so a row added through
@@ -684,10 +728,13 @@ func _relabel_facility_rows() -> void:
 		var label_key := str(button.get_meta("text_key"))
 		if bool(button.get_meta("stub", false)):
 			# The reason key is recorded per row so a bounty-closed row relabels
-			# with `port.closed_bounty` and a future-phase stub with its own key.
+			# with `port.closed_bounty`, a future-phase stub with its own key,
+			# and a §4.1b hours-closed row with its facility's window.
 			var stub_key := str(button.get_meta("stub_key", FACILITY_STUB_KEY))
-			button.text = "%s — %s" % [I18n.t_key(label_key), I18n.t_key(stub_key)]
-			button.tooltip_text = I18n.t_key(stub_key)
+			var facility_id := str(button.get_meta("facility_id"))
+			button.text = "%s — %s" % [
+				I18n.t_key(label_key), _stub_text(stub_key, facility_id)]
+			button.tooltip_text = _stub_text(stub_key, facility_id)
 		else:
 			button.text = I18n.t_key(label_key)
 
@@ -725,6 +772,10 @@ func _on_day_advanced(_new_day: int) -> void:
 	_bind()
 
 
+func _on_clock_changed() -> void:
+	_bind()
+
+
 func _exit_tree() -> void:
 	# EventBus autoloads outlive every screen; drop the connections so a freed
 	# port screen never re-binds onto a dead node on a later locale toggle.
@@ -734,3 +785,5 @@ func _exit_tree() -> void:
 		EventBus.fleet_changed.disconnect(_on_state_changed)
 	if EventBus.day_advanced.is_connected(_on_day_advanced):
 		EventBus.day_advanced.disconnect(_on_day_advanced)
+	if EventBus.clock_changed.is_connected(_on_clock_changed):
+		EventBus.clock_changed.disconnect(_on_clock_changed)

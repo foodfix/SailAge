@@ -54,6 +54,8 @@ func _ready() -> void:
 func _new_run(port_id: String = "lisbon", day: int = 1) -> void:
 	GameState.new_game("portugal", false, "world")
 	GameState.day = day
+	# §4.1b port hours: 12:00 — palace/market windows open.
+	GameState.world["clock_fraction"] = 0.5
 	GameState.gold = 50000
 	GameState.current_port = port_id
 	GameState.npc_fleets = []

@@ -2463,5 +2463,13 @@
   "tavern.invest.row": {
     "zh": "{nation} 在 {port} 投资 {amount} 金",
     "en": "{nation} invested {amount}g in {port}"
+  },
+  "port.facility.closed": {
+    "zh": "营业时间 {open}–{close}",
+    "en": "Open {open}–{close}"
+  },
+  "port.wait.hour": {
+    "zh": "等待 1 小时（空格）",
+    "en": "Wait 1 hour (Space)"
   }
 }

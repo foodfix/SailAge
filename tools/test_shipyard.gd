@@ -109,6 +109,9 @@ func _make_run(gold: int = 100000, ship_ids: Array = ["caravel"],
 	GameState.fleet = []
 	for ship_id in ship_ids:
 		GameState.fleet.append(FleetLib.new_ship(str(ship_id), 0))
+	# §4.1b port hours (added 2026-11-02): 12:00 — the yard is open for the
+	# buy/repair/sell/refit scenarios.
+	GameState.world = {"clock_fraction": 0.5}
 
 
 ## Replaces the fleet with one hull of `ship_id` at a damaged durability.
@@ -219,6 +222,9 @@ func _test_fleet_max() -> void:
 	_make_run(500000, ["caravel"])
 	var bought := 0
 	for i in 4:
+		# §4.1b: each buy costs 3h — four in a row would run past the 18:00
+		# close, so the scenario re-opens the yard between orders.
+		GameState.world["clock_fraction"] = 0.5
 		if ShipyardLib.buy("latin"):
 			bought += 1
 	_check(bought == 4, "4 buys take a 1-ship fleet to the cap (got %d)" % bought)

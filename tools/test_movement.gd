@@ -775,9 +775,9 @@ func _test_port_entry() -> void:
 	_check(world.try_step(LISBON_SHORE), "heading into Lisbon's shore tile docks")
 	EventBus.port_entered.disconnect(listener)
 	_check(entered == ["lisbon"], "port_entered('lisbon') emitted (got %s)" % str(entered))
-	# Docking charges exactly one move_cost() (the old harbor-tile day).
-	_check(is_equal_approx(float(GameState.world["clock_fraction"]), ahead + 0.05),
-		"docking costs one 1/speed day (%.4f)"
+	# Docking charges exactly one move_cost() (the old harbor-tile day) plus the §4.1b hour (added 2026-11-02).
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), ahead + 0.05 + 1.0 / 24.0),
+		"docking costs one 1/speed day + 1h (%.4f)"
 		% float(GameState.world["clock_fraction"]))
 	# The fleet stays on the berth: docking never moves it onto land.
 	_check(GameState.world_tile() == LISBON,
@@ -887,8 +887,8 @@ func _test_harbor_pair_docking() -> void:
 	EventBus.port_entered.disconnect(listener)
 	_check(entered == ["lisbon"],
 		"docking emits port_entered once (got %s)" % str(entered))
-	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock0 + cost),
-		"docking charges exactly one move_cost() (%.4f → %.4f)"
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock0 + cost + 1.0 / 24.0),
+		"docking charges exactly one move_cost() + 1h (%.4f → %.4f)"
 		% [clock0, float(GameState.world["clock_fraction"])])
 	_check(GameState.world_tile() == lisbon_berth and world.fleet_cell() == lisbon_berth,
 		"the fleet ends on the berth %s (world %s, scene %s)"
@@ -2092,8 +2092,8 @@ func _test_click_to_sail() -> void:
 		% str(GameState.current_port))
 	_check(not world.sail_active(), "the adjacent click starts no route")
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-			dock_clock + SailingSimLib.move_cost()),
-		"the adjacent shore click charges one move_cost() (%.4f → %.4f)"
+			dock_clock + SailingSimLib.move_cost() + 1.0 / 24.0),
+		"the adjacent shore click charges one move_cost() + 1h (%.4f → %.4f)"
 		% [dock_clock, float(GameState.world["clock_fraction"])])
 	_check(world.fleet_cell() == lisbon_berth,
 		"the adjacent click leaves the fleet on the berth")

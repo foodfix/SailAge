@@ -955,6 +955,40 @@ Initial locked set: Baltic (months 12–3), Hudson Bay (11–4), White Sea
 }
 ```
 
+### 4.19 FacilityHours — `data/facility_hours.json` *(added 2026-11-02)*
+
+Port-facility opening hours (`30-*` §4.1b): one **default** window per
+facility id plus optional **per-port overrides** — a port without an override
+sails on the defaults. Envelope `{"version": 1, "default": {...},
+"overrides": {...}}` (a plain object file, like §4.10 `npc_config` — not an
+entity list, so validator group 1 does not apply; its own group checks it).
+
+- A window is `"HH:MM"`–`"HH:MM"` as the two-element array `[open, close]`;
+  minutes are `HH×60+MM`, `close` may be `"24:00"` (= minute 1440). The
+  special value `"24h"` marks an always-open facility.
+- Keys of `default` and of every override are facility ids (`30-*` §4.1:
+  market, shipyard, tavern, inn, guild, palace); override keys are port ids
+  that must exist in `ports.json`. Every facility id in `30-*` §4.1 must have
+  a default window; `inn` ships as `"24h"`.
+- **Runtime:** `DataLoader.facility_hours` (loaded at startup, `90-*` §5.2);
+  `SailingSim.facility_open(port_id, facility_id)` answers the closed rule
+  against `time_of_day_minutes()`.
+
+```json
+{
+  "version": 1,
+  "default": {
+    "market": ["08:00", "18:00"],
+    "shipyard": ["08:00", "18:00"],
+    "tavern": ["10:00", "24:00"],
+    "inn": "24h",
+    "guild": ["08:00", "18:00"],
+    "palace": ["09:00", "17:00"]
+  },
+  "overrides": {}
+}
+```
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in

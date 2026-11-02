@@ -335,6 +335,9 @@ func apply_preset(preset: String) -> bool:
 		push_warning("SettingsPanel.apply_preset: unknown preset '%s'" % preset)
 		return false
 	GameState.npc_preset = preset
+	# §5.6 (added 2026-11-02): a live ecology sim (the FleetSim autoload)
+	# re-budgets immediately; a sim built later reads the field anyway.
+	FleetSim.apply_preset(preset)
 	preset_changed.emit(preset)
 	rebuild()
 	return true

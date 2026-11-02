@@ -132,6 +132,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
 | S4 | `O` | open/close the officers panel (S18, §4.6.2) |
+| S4 | `Space` | wait one hour (`advance_port_hours(1)`, `20-*` §4.3; amended 2026-11-02) — hub only, never behind a modal |
 | S19 | `Esc` | close settings, back to its host (S1 or S4; same edge as Close) |
 | provisioning | `Enter` | sail (disabled with a stated reason when gated, `20-*` §4.11.2) |
 | provisioning | `Esc` | back to S4 without sailing |
@@ -169,6 +170,10 @@ modes regardless of trim (`20-*` §4.17).
   (§4.7.15).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
+- **Port-hours keys (amended 2026-11-02, `30-*` §4.1b):** `port.facility.closed`
+  = `营业时间 {open}–{close}` / `Open {open}–{close}` (the disabled hub row's
+  label for a closed facility) and `port.wait.hour` = `等待 1 小时 (空格)` /
+  `Wait 1 hour (Space)` (the hub's wait affordance label).
 - Placeholders use `{name}` syntax, substituted by code:
   `"world.arrive": {"zh": "抵达 {port}。第 {day} 天。", "en": "Arrived at {port}. Day {day}."}`.
 - The validator checks both locales non-empty and that zh/en placeholder sets

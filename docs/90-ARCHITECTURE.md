@@ -119,6 +119,7 @@ Application-wide signals; no state. Canonical signals:
 | Signal | Args | Emitted when |
 |---|---|---|
 | `day_advanced(new_day: int)` | day number | clock ticks (at sea and in port) |
+| `clock_changed()` | | any `advance_clock` that consumed time, sub-day included — `HH:MM` labels re-render (added 2026-11-02) |
 | `locale_changed(locale: String)` | `"zh"`/`"en"` | language toggle |
 | `gold_changed(new_gold: int)` | | any gold delta |
 | `fleet_changed()` | | ship bought/sold/sunk/repaired/cargo moved |
@@ -149,8 +150,9 @@ Cross-screen communication never uses direct node references.
   `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`,
   plus the Phase-5 files `.npc_config`, `.npc_captains`, `.named_pirates`,
   `.market_events`, `.trade_routes`, the tool-built
-  `.trade_routes_built` (read-only, `10-*` §4.14), and the Phase-6 ocean
-  files `.wind_regions`, `.ocean_currents`, `.ice_regions` (`10-*` §4.16–4.18).
+  `.trade_routes_built` (read-only, `10-*` §4.14), the Phase-6 ocean
+  files `.wind_regions`, `.ocean_currents`, `.ice_regions` (`10-*` §4.16–4.18),
+  and `.facility_hours` (`10-*` §4.19, added 2026-11-02).
   There is exactly one port file (`data/ports.json`, the 100 sovereign ports
   plus the Phase-6 neutral tier, `10-*` §7.1) — **no merge step**.
 - Entry points: `get_port(id) -> Dictionary`, `get_good(id)`, …
@@ -305,6 +307,26 @@ marked •):
   **no migration chain** (§8.2): a v6 or older payload is refused
   ("pre-release save"), `load()` returns `false`, and state is untouched.
 
+### 5.6 FleetSim (`autoload/fleet_sim.gd`) *(added 2026-11-02)*
+
+- Owns the live `NpcFleets` ecology sim instance. The fleet store itself
+  stays `GameState.npc_fleets` (the §8.1 save block) — the instance is
+  runtime-only and lazily re-created (`ensure()`), after a load or a new run,
+  with `last_tick_day = GameState.day` and the accrual clock mark synced to
+  the load instant (no catch-up, `60-*` §4.11.11).
+- The `day_advanced` listener runs the **full daily ecology tick** here — in
+  every scene, port included (`20-*` §4.3 step 5) — and emits
+  `market_changed` for the ports the NPC trades moved (the pure module never
+  emits). Per-move accrual is exposed as `accrue()` for the world scene's
+  helm callers.
+- **Never opens battles**: contact checks and `pending_encounter` stay with
+  the world scene (`60-*` §4.11.11.2); a hostile fleet drifting onto a docked
+  player's tile just waits there.
+- Guards: without a run (`GameState.player` empty) or under a game-over the
+  listener is a no-op — the same conditions the world scene checked.
+- `replace_sim()` is the test seam (the `world_map.fleet_sim()` contract
+  delegates here). Registered **last**, after SaveSystem.
+
 ## 6. `project.godot` Requirements (locked values)
 
 | Setting | Value |
@@ -314,7 +336,7 @@ marked •):
 | `display/window/stretch/mode` | `canvas_items` |
 | `display/window/stretch/aspect` | `keep` |
 | Main scene | `scenes/title/title_screen.tscn` |
-| Autoloads | EventBus, DataLoader, I18n, GameState, SaveSystem (in that order) |
+| Autoloads | EventBus, DataLoader, I18n, GameState, SaveSystem, FleetSim (in that order; FleetSim added 2026-11-02) |
 | Input | keyboard+mouse only; no joypad actions in Phase 1 |
 
 UI scales up from 1280×720 via stretch; no per-screen responsive logic.

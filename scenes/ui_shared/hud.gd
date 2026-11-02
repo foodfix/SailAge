@@ -185,6 +185,9 @@ func _ready() -> void:
 
 	# The only update path for the bars (docs/80-* §7 acceptance).
 	EventBus.day_advanced.connect(_on_day_advanced)
+	# §4.1b (added 2026-11-02): hour-scale actions advance the sub-day clock
+	# without a day tick — the `HH:MM` label follows `clock_changed`.
+	EventBus.clock_changed.connect(_on_clock_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -767,6 +770,12 @@ func _on_day_advanced(_new_day: int) -> void:
 
 func _on_gold_changed(_new_gold: int) -> void:
 	_refresh_top()
+
+
+## §4.1b (added 2026-11-02): a sub-day clock advance — only the `HH:MM`
+## surface changes; bars and weather are day-granular.
+func _on_clock_changed() -> void:
+	_refresh_day_time()
 
 
 func _on_fleet_changed() -> void:

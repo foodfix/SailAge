@@ -105,7 +105,9 @@ var _pending_port_id: String = ""
 var _gameover: Control = null
 ## Phase 5 task J: the NPC fleet sim (docs/60-* §4.11.11). Created in `_ready`
 ## over the saved `GameState.npc_fleets` — never re-rolled on scene open.
-var _fleets = null
+## (Amended 2026-11-02: the instance itself moved up into the `FleetSim`
+## autoload — `90-*` §5.6 — so the ecology ticks in every scene, port
+## included. This scene only *reads* it, through [_fs].)
 ## Fleet id → the placeholder marker node drawn for it (`80-*` §4.5.2: a
 ## nation-coloured square with the role letter; pirate red).
 var _marker_nodes: Dictionary = {}
@@ -276,10 +278,11 @@ func _ready() -> void:
 		if _hud.has_signal("explore_requested"):
 			_hud.explore_requested.connect(explore_here)
 
-	# Phase 5 task J: the NPC fleet sim (docs/60-* §4.11.11). The scene only
-	# *adopts* the saved fleets here — the sim is told which day already
-	# ticked so re-opening the map cannot re-tick or re-move them (§4.11.11.1
-	# `last_tick_day` dedupe).
+	# Phase 5 task J, amended 2026-11-02 (docs/60-* §4.11.11, `90-*` §5.6):
+	# the NPC fleet sim instance lives in the `FleetSim` autoload — the daily
+	# tick runs there in every scene, port included. This scene adopts it (so
+	# re-opening the map cannot re-tick or re-move fleets, §4.11.11.1
+	# `last_tick_day` dedupe) and owns only the presentation + contact pass.
 	_init_fleets()
 	# `battle_finished` is declared by docs/90-* §5.1; the connect is guarded by
 	# `has_signal` so this scene also runs on a base whose EventBus predates the
@@ -453,8 +456,8 @@ func try_step(target: Vector2i) -> bool:
 ## and the unified-movement amendment made them mobile). Delegates to
 ## [method NpcFleets.remove] so the sim's cell/id indexes stay coherent.
 func npc_remove(id: String) -> void:
-	if _fleets != null:
-		_fleets.remove(id)
+	if _fs() != null:
+		_fs().remove(id)
 
 
 # --- Task H: hold-to-repeat & click-to-sail (docs/20-* §4.2) ---------------
@@ -831,7 +834,10 @@ func sync_from_state() -> void:
 	_update_camera()
 	_reveal()
 	_sync_hud()
-	# A save load replaces `npc_fleets` wholesale; redraw to it.
+	# A save load replaces `npc_fleets` wholesale; redraw to it. The FleetSim
+	# autoload re-adopts the new store on this access (no catch-up — a loaded
+	# fleet resumes accrual from the load instant, `60-*` §4.11.11).
+	FleetSim.ensure()
 	_sync_marker_nodes()
 
 
@@ -904,8 +910,8 @@ func _try_step(target: Vector2i) -> bool:
 	# ≈ one tile per player move (idempotent; the day tick's catch-up call
 	# nets zero when this ran). After the tile re-assert, so the accrual's
 	# contact sampling measures against the landed tile.
-	if _has_game() and _fleets != null:
-		_fleets.advance_clock()
+	if _has_game() and _fs() != null:
+		_fs().advance_clock()
 		_glide_fleet_moves()
 
 	_reject_logged = false
@@ -972,14 +978,17 @@ func _dock_at(target: Vector2i) -> bool:
 			SailingSimLib.advance_clock(SailingSimLib.move_cost())
 		else:
 			SailingSimLib.advance_clock(SailingSimLib.move_cost(heading))
+		# §4.1b (added 2026-11-02): docking itself charges one more hour —
+		# the harbor pilot, the mooring — before the port screen opens.
+		SailingSimLib.advance_port_hours(1)
 	if berth.x >= 0:
 		GameState.set_world_tile(berth)
 		_fleet_cell = berth
 	# Unified-movement amendment: NPC movement accrues with the clock —
 	# after the berth re-assert, so the accrual's contact sampling measures
 	# against the docked tile (idempotent with the day tick's catch-up).
-	if _has_game() and _fleets != null:
-		_fleets.advance_clock()
+	if _has_game() and _fs() != null:
+		_fs().advance_clock()
 		_glide_fleet_moves()
 	_place_marker()
 	_update_camera()
@@ -1347,27 +1356,30 @@ func is_active_scene() -> bool:
 ## the sim starts on `GameState.day`, i.e. "this day's tick already happened",
 ## so opening the map (or saving/loading) can never move a fleet (§4.11.11.1).
 func _init_fleets() -> void:
-	if _fleets == null:
-		_fleets = NpcFleetsLib.new({
-			"npc_config": DataLoader.npc_config,
-			"preset": GameState.npc_preset,
-		})
-		_fleets.last_tick_day = int(GameState.day)
+	FleetSim.ensure()
 	_sync_marker_nodes()
+
+
+## The live ecology sim, adopted on demand from the `FleetSim` autoload
+## (`90-*` §5.6): null while there is no run. Never cached — a save load or a
+## fixture swap re-adopts on the next access (the autoload owns the
+## lifecycle; this scene only renders and checks contacts).
+func _fs():
+	return FleetSim.ensure()
 
 
 ## The fleet sim (public so a test can seed/observe it without a scene).
 func fleet_sim():
-	return _fleets
+	return _fs()
 
 
 ## Cells of every live fleet, `[{"id","role","nation_id","cell"}]`, sorted by
 ## id. The test seam for "fleets moved/died as expected".
 func fleet_marker_cells() -> Array:
 	var out: Array = []
-	if _fleets == null:
+	if _fs() == null:
 		return out
-	var entries: Array = _fleets.markers()
+	var entries: Array = _fs().markers()
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("id", "")) < str(b.get("id", "")))
 	for marker in entries:
@@ -1401,9 +1413,9 @@ func pending_encounter() -> Dictionary:
 ## Consumes the accrual's render-move report and starts the NPC marker
 ## glides (render-only — the report feeds nothing but marker positions).
 func _glide_fleet_moves() -> void:
-	if _fleets == null:
+	if _fs() == null:
 		return
-	for move in _fleets.take_fleet_moves():
+	for move in _fs().take_fleet_moves():
 		_start_npc_glide(str(move.get("id", "")),
 			move.get("from", Vector2i.ZERO) as Vector2i,
 			move.get("to", Vector2i.ZERO) as Vector2i,
@@ -1411,27 +1423,24 @@ func _glide_fleet_moves() -> void:
 
 
 func _tick_fleet_contacts() -> void:
-	if _fleets == null:
+	if _fs() == null:
 		return
 	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
 		return
 	_check_fleet_contact()
 
 
-## The full day tick (docs/20-* §4.3 step 4, the post-`day_advanced`
-## listener): lane stepping, dwell, decisions, trickle — once per day — then
-## the contact check and the marker redraw. `market_changed` for ports the
-## NPC trades moved is emitted here (the pure module never emits).
+## The day tick's **presentation pass** (docs/20-* §4.3 step 5, amended
+## 2026-11-02): the ecology tick itself moved up into the `FleetSim` autoload
+## (`90-*` §5.6), whose listener runs first (autoloads connect before any
+## scene). This scene-side pass — still on `day_advanced` — redraws the
+## markers, glides the moves the tick just reported and runs the contact
+## check. `market_changed` for NPC-traded ports is emitted by the autoload.
 func _tick_fleets_day() -> void:
-	if _fleets == null:
+	if _fs() == null:
 		return
 	if not _has_game() or game_over_open() or SailingSimLib.is_game_over():
 		return
-	var moved: Array = _fleets.moved_ports
-	_fleets.tick(int(GameState.day))
-	for port_id in (_fleets.moved_ports as Array):
-		if not (moved as Array).has(port_id):
-			EventBus.market_changed.emit(str(port_id))
 	_sync_marker_nodes()
 	# Unified-movement amendment: the day tick's accrual (catch-up) also
 	# reports fleet moves — glide those markers too.
@@ -1444,11 +1453,11 @@ func _tick_fleets_day() -> void:
 ## Contact with any fleet of a hunting nation also records the at-sea intel
 ## cell (§4.11.11.1: one assignment on contact).
 func _check_fleet_contact() -> void:
-	if _fleets == null:
+	if _fs() == null:
 		return
 	var tile := GameState.world_tile()
-	_fleets.note_contacts(tile)
-	var contact: Dictionary = _fleets.nearest_contact(tile)
+	_fs().note_contacts(tile)
+	var contact: Dictionary = _fs().nearest_contact(tile)
 	if contact.is_empty():
 		return
 	var encounter: Dictionary = _encounter_for(contact)
@@ -1566,7 +1575,7 @@ func _sync_marker_nodes() -> void:
 		_marker_root.z_index = 9
 		add_child(_marker_root)
 	var live: Dictionary = {}
-	var entries: Array = _fleets.markers() if _fleets != null else []
+	var entries: Array = _fs().markers() if _fs() != null else []
 	_last_markers = entries
 	for marker in entries:
 		if not (marker is Dictionary):
@@ -1708,7 +1717,7 @@ func _sync_wreck_nodes() -> void:
 	if _marker_root == null:
 		return  # no fleet pass ran yet: nothing to hang the glyphs under
 	var live: Dictionary = {}
-	var entries: Array = _fleets.wrecks() if _fleets != null else []
+	var entries: Array = _fs().wrecks() if _fs() != null else []
 	for wreck in entries:
 		if not (wreck is Dictionary):
 			continue
@@ -1753,14 +1762,14 @@ func _place_wreck_glyph(glyph: Label, cell: Vector2i) -> void:
 ## (already `BattleRewards.salvage_for` money at wreck-spawn time). Overflow
 ## units are lost with the wreck (the hold guard, not a partial wreck).
 func _collect_wrecks_at(cell: Vector2i) -> void:
-	if _fleets == null or not _has_game():
+	if _fs() == null or not _has_game():
 		return
 	var collected := false
 	while true:
-		var wreck: Dictionary = _fleets.wreck_at(cell)
+		var wreck: Dictionary = _fs().wreck_at(cell)
 		if wreck.is_empty():
 			break
-		var result: Dictionary = _fleets.collect_wreck(
+		var result: Dictionary = _fs().collect_wreck(
 			str(wreck.get("id", "")), FleetLib.fleet_free())
 		if result.is_empty():
 			break
@@ -1874,9 +1883,9 @@ func _try_attack(cell: Vector2i) -> bool:
 
 ## The fleet occupying `cell` ({} when none).
 func _fleet_at_cell(cell: Vector2i) -> Dictionary:
-	if _fleets == null:
+	if _fs() == null:
 		return {}
-	return _fleets.fleet_at(cell)
+	return _fs().fleet_at(cell)
 
 
 ## The attack confirmation (S12-style modal, `encounter.attack_confirm`):
@@ -1963,15 +1972,15 @@ func _on_battle_finished(outcome: Dictionary) -> void:
 	# aftermath (salvage/XP/rep) was already applied by S10's §4.12.4 steps.
 	var initiated := _battle_player_initiated
 	_battle_player_initiated = false
-	if _fleets != null:
+	if _fs() != null:
 		if retreated:
 			# The descriptor is a copy: the cooldown must land on the stored
 			# fleet, so it goes through the id lookup.
-			_fleets.set_pursuit_cooldown(
+			_fs().set_pursuit_cooldown(
 				str(fleet.get("id", "")), day + NpcFleetsLib.PURSUIT_COOLDOWN_DAYS
 			)
 		else:
-			_fleets.remove(str(fleet.get("id", "")))
+			_fs().remove(str(fleet.get("id", "")))
 	if victory:
 		if initiated:
 			_apply_attack_loot(fleet, day)
@@ -2078,9 +2087,9 @@ func _restore_fleet_tile(marker: Dictionary) -> void:
 ## skipping `exclude_id` — the fleet whose battle just finished. Returns true
 ## when a battle was opened (the caller keeps a sail route suspended).
 func _open_chained_battle(exclude_id: String = "") -> bool:
-	if _fleets == null:
+	if _fs() == null:
 		return false
-	for fleet in _fleets.contacts(GameState.world_tile()):
+	for fleet in _fs().contacts(GameState.world_tile()):
 		if str(fleet.get("id", "")) == exclude_id:
 			continue
 		_open_encounter(_encounter_for(fleet))

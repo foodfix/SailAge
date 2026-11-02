@@ -70,14 +70,20 @@ static func can_hire(heads: int) -> bool:
 
 
 ## Pays the signing bonus and adds the crew to the flagship.
-## Returns false (state untouched) whenever [method can_hire] is false.
+## Returns false (state untouched) whenever [method can_hire] is false, or
+## when the tavern is closed at the current time (`30-*` §4.1b closed rule —
+## an action may only *start* inside the window). A completed hire charges
+## one hour (§4.1b).
 static func hire(heads: int) -> bool:
 	if not can_hire(heads):
+		return false
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "tavern"):
 		return false
 	var ship: Dictionary = FleetLib.flagship()
 	GameState.add_gold(-hire_cost(heads))
 	ship["crew"] = int(ship.get("crew", 0)) + heads
 	FleetLib.notify_changed()
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
@@ -105,18 +111,25 @@ static func can_fire(heads: int) -> bool:
 static func fire(heads: int) -> bool:
 	if not can_fire(heads):
 		return false
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "tavern"):
+		return false
 	_apply_fire(heads)
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
 ## Clamping variant used by the −1 / −10 buttons (docs/30-* §6 "−1/−10 clamp
 ## likewise", §4.5 "cannot go below crew_min"): fires as many as the floor
-## allows and returns the number actually let go (0 at the floor).
+## allows and returns the number actually let go (0 at the floor). Same §4.1b
+## window guard and one-hour cost as [method fire].
 static func fire_clamped(heads: int) -> int:
 	var actual := mini(maxi(heads, 0), min_fire())
 	if actual <= 0:
 		return 0
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "tavern"):
+		return 0
 	_apply_fire(actual)
+	SailingSimLib.advance_port_hours(1)
 	return actual
 
 

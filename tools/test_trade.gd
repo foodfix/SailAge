@@ -105,7 +105,9 @@ func _make_run(port_id: String, gold: int = 10000, ship_ids: Array = ["caravel"]
 	var port: Dictionary = DataLoader.get_port(port_id)
 	GameState.world = {
 		"position": port.get("position", {"x": 0, "y": 0}).duplicate(),
-		"clock_fraction": 0.0,
+		# §4.1b port hours (added 2026-11-02): 12:00 — every facility open,
+		# so the trading exercises the price plumbing, not the closed rule.
+		"clock_fraction": 0.5,
 		"weather": "fair",
 	}
 	CharacterLib.pending_levelup = false
@@ -114,8 +116,18 @@ func _make_run(port_id: String, gold: int = 10000, ship_ids: Array = ["caravel"]
 ## Docks at `to_port` without rebuilding the run (the Lisbon → London leg).
 func _dock(to_port: String, gold: int = -1) -> void:
 	GameState.current_port = to_port
+	# §4.1b: each leg models another day — back inside every window.
+	GameState.world["clock_fraction"] = 0.5
 	if gold >= 0:
 		GameState.gold = gold
+
+
+## §4.1b port hours: moves the wall clock back to 12:00, inside every
+## facility's window. The §4.1b hour charges are real, so a scenario that
+## chains more actions than one opening window allows calls this between
+## them (each call models "came back the next day").
+func _open_market() -> void:
+	GameState.world["clock_fraction"] = 0.5
 
 
 func _test_worked_examples() -> void:
@@ -221,6 +233,7 @@ func _test_investment_cap() -> void:
 	# lifetime cap still ends investment — 10 × 500g → exactly −10%.
 	_make_run("lisbon", 10000)
 	for click in range(1, 11):
+		_open_market()
 		var paid_before := GameState.gold
 		_check(TradeEngineLib.can_invest("lisbon"),
 			"click %d: can_invest is true" % click)
@@ -280,6 +293,7 @@ func _test_investment_cap() -> void:
 	# Investment is per port: London stays at full price.
 	_make_run("lisbon", 10000)
 	for click in range(10):
+		_open_market()
 		TradeEngineLib.invest("lisbon")
 	_check(TradeEngineLib.invested("london") == 0,
 		"investment is per port: London has 0g invested")
@@ -296,6 +310,7 @@ func _test_month_cap_and_gates() -> void:
 	# every chunk also feeds the ledger.
 	_make_run("madeira", 100000)
 	for click in range(4):
+		_open_market()
 		_check(TradeEngineLib.can_invest("madeira"),
 			"chunk %d investable (allowance %d/2,000)" % [click + 1,
 			AllegianceLib.month_invested_gold("madeira")])
@@ -324,6 +339,7 @@ func _test_month_cap_and_gates() -> void:
 	_check(AllegianceLib.month_invested_gold("madeira") == 0,
 		"the month tick resets the allowance")
 	for click in range(4):
+		_open_market()
 		_check(TradeEngineLib.invest("madeira"),
 			"month 2 chunk %d invests (lifetime %dg)" % [click + 1,
 			TradeEngineLib.invested("madeira")])
@@ -413,6 +429,7 @@ func _test_band_clamp() -> void:
 	# exact §4.2 value: 0.7 × 0.9 = 0.63 → floor(30 × 0.63) = 18.
 	_make_run("lisbon", 10000)
 	for click in range(10):
+		_open_market()
 		TradeEngineLib.invest("lisbon")
 	_check(is_equal_approx(TradeEngineLib.clamped_factor("lisbon", "wine"), 0.63),
 		"Lisbon wine at max investment: 0.7 × 0.9 = 0.63 (got %.4f)"
@@ -606,6 +623,7 @@ func _test_tranche_repricing() -> void:
 	# The band still re-clamps factor × discount (docs/30 §4.2): 1.5 × 0.9.
 	_make_run("lisbon", 10000)
 	for click in range(10):
+		_open_market()
 		TradeEngineLib.invest("lisbon")
 	EconomyLib.set_stock("lisbon", "wine", 0)
 	_check(is_equal_approx(TradeEngineLib.clamped_factor("lisbon", "wine"), 1.35),
@@ -869,6 +887,7 @@ func _test_supplies_ignore_factors() -> void:
 	_check("spices" in DataLoader.get_port("lisbon")["demands"],
 		"fixture port demands spices")
 	for click in range(10):
+		_open_market()
 		TradeEngineLib.invest("lisbon")
 	_check(TradeEngineLib.supplies_price("provisions") == 2,
 		"provisions are 2g at max investment (got %d)"
@@ -960,6 +979,7 @@ func _test_sell_profit_xp_and_reputation() -> void:
 	var sale := 0
 	for chunk in range(12):
 		FleetLib.add_goods("wine", 10)
+		_open_market()
 		gold_before = GameState.gold
 		xp_before = CharacterLib.current_xp()
 		rep_before = CharacterLib.reputation("england")

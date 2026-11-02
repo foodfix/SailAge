@@ -36,6 +36,10 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 ## Task L (docs/80-* §4.7.8): the bounty board lists docked hunter captains.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
+## §4.1b port hours (added 2026-11-02): the bay fill action's window guard and
+## two-hour charge go through the one clock seam.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## S16 (docs/70-* §4.7).
 const ENDING_SCENE := "res://scenes/ui_shared/ending_screen.tscn"
@@ -284,8 +288,12 @@ func accept_mission() -> Dictionary:
 
 
 ## Repairs the whole fleet at the count-grant discount, as much as gold allows.
-## Returns the points restored.
+## Returns the points restored. §4.1b (added 2026-11-02): one fill action —
+## the bay visit must start inside the palace window and charges two hours
+## once, not per hull.
 func repair_fleet() -> int:
+	if not SailingSimLib.facility_open(_port_id, "palace"):
+		return 0
 	var restored := 0
 	for index in GameState.fleet.size():
 		var shipyard_path := "res://scripts/port/shipyard_engine.gd"
@@ -303,6 +311,8 @@ func repair_fleet() -> int:
 		if want <= 0:
 			break
 		restored += PalaceEngineLib.repair(_port_id, index, want)
+	if restored > 0:
+		SailingSimLib.advance_port_hours(2)
 	_show_toast("palace.repair")
 	refresh()
 	return restored

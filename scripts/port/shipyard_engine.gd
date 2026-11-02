@@ -45,6 +45,9 @@ extends RefCounted
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
+## §4.1b port hours (added 2026-11-02): the yard actions' window guard and
+## hour charges go through the one clock seam.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 ## §4.4: locked fleet size (also the buy cap of §4.3).
 const FLEET_MAX := FleetLib.FLEET_MAX
@@ -277,6 +280,9 @@ static func buy_block_reason(ship_type_id: String) -> String:
 static func buy(ship_type_id: String) -> bool:
 	if not can_buy(ship_type_id):
 		return false
+	# §4.1b closed rule: a build order may only start inside the window.
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "shipyard"):
+		return false
 	var ship: Dictionary = FleetLib.new_ship(ship_type_id, 0)
 	if ship.is_empty():
 		# Unknown type — [method can_buy] already rejects it; belt and braces.
@@ -284,6 +290,8 @@ static func buy(ship_type_id: String) -> bool:
 	GameState.fleet.append(ship)
 	GameState.add_gold(-buy_price(ship_type_id))
 	FleetLib.notify_changed()
+	# §4.1b action cost: three hours to buy a hull.
+	SailingSimLib.advance_port_hours(3)
 	return true
 
 
@@ -362,9 +370,21 @@ static func can_repair(index: int, points: int, port_id: String = "") -> bool:
 ## §4.3 "Repair ship": partial repair is the only kind — exactly `points`
 ## durability is restored and exactly `cost` gold is paid. The cap is the
 ## **effective** max (§4.1), so a worn figurehead can be repaired onto.
+## §4.1b (added 2026-11-02): the yard's timed wrapper — the order must start
+## inside the shipyard window and charges two hours on success.
 static func repair(index: int, points: int, port_id: String = "") -> bool:
 	if not can_repair(index, points, port_id):
 		return false
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "shipyard"):
+		return false
+	return repair_apply(index, points, port_id)
+
+
+## The §4.3 repair mutation with **no clock and no window** — the primitive
+## [method repair] wraps. The palace bays call this (their own §4.1b cost is
+## charged once per fill action by the palace, not per hull), and tests drive
+## it directly for the pure rules.
+static func repair_apply(index: int, points: int, port_id: String = "") -> bool:
 	var ship: Dictionary = GameState.fleet[index]
 	var durability := int(ship.get("durability", 0))
 	ship["durability"] = mini(durability + points, ship_max_durability(index))
@@ -430,10 +450,15 @@ static func can_sell(index: int) -> bool:
 static func sell(index: int) -> bool:
 	if not can_sell(index):
 		return false
+	# §4.1b closed rule: the sale must start inside the window.
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "shipyard"):
+		return false
 	var price := sell_price(index)
 	GameState.fleet.remove_at(index)
 	GameState.add_gold(price)
 	FleetLib.notify_changed()
+	# §4.1b action cost: one hour to close the sale.
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
@@ -489,10 +514,15 @@ static func refit_block_reason(index: int, cannons: int) -> String:
 static func refit(index: int, cannons: int) -> bool:
 	if not can_refit(index, cannons):
 		return false
+	# §4.1b closed rule: the armament works keep yard hours.
+	if not SailingSimLib.facility_open(SailingSimLib.docked_port_id(), "shipyard"):
+		return false
 	var ship: Dictionary = GameState.fleet[index]
 	ship["cannons"] = int(ship.get("cannons", 0)) + cannons
 	GameState.add_gold(-refit_cost(cannons))
 	FleetLib.notify_changed()
+	# §4.1b action cost: two hours per refit order.
+	SailingSimLib.advance_port_hours(2)
 	return true
 
 

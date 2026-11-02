@@ -302,15 +302,17 @@ func _test_discover_then_enter() -> void:
 		"entering an unknown port discovers it (§4.11)")
 	_check(GameState.current_port == "valencia",
 		"current_port is valencia after entry (got %s)" % str(GameState.current_port))
-	# §4.11.1: exactly one move's worth of days before the screen, and the
-	# fleet stays on the berth (docking never steps onto the land tile).
-	# Phase-6 master ruling: the docking charge carries the docking move's own
-	# heading — here W (shore west of berth), running against the guard-default
-	# easterly wind (`world.wind_dir` default "E") = 1/26, not the beam average.
+	# §4.11.1: exactly one move's worth of days **plus the §4.1b docking hour**
+	# before the screen, and the fleet stays on the berth (docking never steps
+	# onto the land tile). Phase-6 master ruling: the docking charge carries
+	# the docking move's own heading — here W (shore west of berth), running
+	# against the guard-default easterly wind (`world.wind_dir` default "E")
+	# = 1/26, then +1h (added 2026-11-02).
+	var docked_cost := SailingSimLib.move_cost(SailingSimLib.heading_of_delta(
+		VALENCIA_SHORE - VALENCIA_HARBOR)) + 1.0 / 24.0
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-		clock_before + SailingSimLib.move_cost(SailingSimLib.heading_of_delta(
-			VALENCIA_SHORE - VALENCIA_HARBOR))),
-		"the docking cost is one move_cost(heading) (%.4f → %.4f)"
+		clock_before + docked_cost),
+		"the docking cost is one move_cost(heading) + 1h (%.4f → %.4f)"
 		% [clock_before, float(GameState.world["clock_fraction"])])
 	_check(GameState.world_tile() == VALENCIA_HARBOR,
 		"the fleet stays on the berth after docking (got %s)"
@@ -507,8 +509,10 @@ func _test_set_sail_round_trip() -> void:
 	port._unhandled_input(esc)
 	await tree.process_frame
 	_check(prompt.is_open(), "Esc re-opens the prompt")
-	_check(not prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").disabled,
+	_check(prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").disabled == false,
 		"Set Sail is enabled with a crew and a day of supplies")
+	# §4.1b: capture the docked clock just before the sail for the +1h assert.
+	var fraction_before_sail := float(GameState.world["clock_fraction"])
 	prompt.get_node("Center/Panel/Margin/Body/Footer/Sail").pressed.emit()
 	await tree.process_frame
 	await tree.process_frame
@@ -522,9 +526,12 @@ func _test_set_sail_round_trip() -> void:
 		% str(GameState.world_tile()))
 	_check(DataLoader.map.is_passable(GameState.world_tile()),
 		"the exit tile is water, never a land tile")
-	_check(float(GameState.world["clock_fraction"]) == 0.0,
-		"Set Sail resets clock_fraction to exactly 0.0 (got %.10f)"
-		% float(GameState.world["clock_fraction"]))
+	# §4.1b continuous clock (amended 2026-11-02): the sail-out charges +1h
+	# and the fraction carries — no reset.
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
+			fraction_before_sail + 1.0 / 24.0),
+		"Set Sail charges +1h and carries the fraction (%.10f → %.10f)"
+		% [fraction_before_sail, float(GameState.world["clock_fraction"])])
 	_check(GameState.current_port == null,
 		"Set Sail clears current_port (got %s)" % str(GameState.current_port))
 	if back != null and back.scene_file_path == WORLD_SCENE:

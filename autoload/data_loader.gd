@@ -60,6 +60,10 @@ var ice_regions: Dictionary = {}
 ## per-port spokes. Tool output of `tools/build_routes.py` — never hand-edited
 ## (AGENTS.md); runtime lane routing is Phase-5 task J (`60-*` §4.1).
 var trade_routes_built: Dictionary = {}
+## Facility opening hours (`data/facility_hours.json`, docs/10-* §4.19,
+## added 2026-11-02): `default` windows per facility id + per-port
+## `overrides`. Read through `SailingSim.facility_open`, never directly.
+var facility_hours: Dictionary = {}
 
 # Insertion-ordered lists copied from the JSON arrays. UI iteration uses these
 # (market rows sort by base_price later; the nationality screen needs the
@@ -160,6 +164,10 @@ func load_all() -> void:
 	trade_routes_built = _load_trade_routes_built()
 	route_lanes = _index_route_lanes(trade_routes_built)
 	route_spokes = _index_route_spokes(trade_routes_built)
+
+	# Facility opening hours (docs/10-* §4.19, added 2026-11-02) — another
+	# plain object file, like npc_config.
+	facility_hours = _load_facility_hours()
 
 	ui_strings = _load_ui_strings()
 	map_legend = _load_map_legend()
@@ -575,6 +583,29 @@ func _load_npc_config() -> Dictionary:
 			"absolute_cap"]:
 		if not data.has(key):
 			_record("npc_config.json: missing '%s' (docs/10-* §4.10)" % key)
+	return data
+
+
+## Reads `data/facility_hours.json` — the facility opening-hour table
+## (docs/10-* §4.19, `30-*` §4.1b). A plain object file: `default` windows
+## per facility id plus optional per-port `overrides`. Shape errors are
+## recorded but never fatal here — the validator owns the full check; the
+## runtime reads windows through `SailingSim.facility_open`, which falls back
+## to "always open" on a missing entry so a bad file cannot close every port.
+func _load_facility_hours() -> Dictionary:
+	var data = _read_json("facility_hours.json")
+	if data == null:
+		return {}
+	if not (data is Dictionary):
+		_record("facility_hours.json: top-level value must be an object")
+		return {}
+	for key in ["version", "default", "overrides"]:
+		if not data.has(key):
+			_record("facility_hours.json: missing '%s' (docs/10-* §4.19)" % key)
+	if not (data.get("default", {}) is Dictionary):
+		_record("facility_hours.json: 'default' must be an object")
+	if not (data.get("overrides", {}) is Dictionary):
+		_record("facility_hours.json: 'overrides' must be an object")
 	return data
 
 

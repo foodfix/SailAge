@@ -29,6 +29,9 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## Task L (docs/80-* §4.7.8): captains, wanted posters, the 20g reveal and
 ## the live-fleet/departure/event rumor rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+## §4.1b port hours: the officers tab's window guard + hour charge (added
+## 2026-11-02) — the tavern is the facility, this screen hosts the action.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -235,25 +238,34 @@ func fire_heads(heads: int) -> int:
 	return fired
 
 
-## Officers-tab actions. Rules live in Character (docs/50-* §4.4).
+## Officers-tab actions. Rules live in Character (docs/50-* §4.4); the §4.1b
+## window guard and one-hour cost live here — the tavern is the facility, the
+## roster bookkeeping is Character's. All-or-nothing: a closed-door request is
+## refused before Character is called.
 func recruit_officer(officer_id: String) -> bool:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
+	if not SailingSimLib.facility_open(port_id(), "tavern"):
+		return false
 	_busy = true
 	var ok: bool = CharacterLib.recruit(officer_id)
 	_busy = false
 	if ok:
 		_show_toast("tavern.recruited", {"name": I18n.t(officer.get("name", {}))})
+		SailingSimLib.advance_port_hours(1)
 	refresh()
 	return ok
 
 
 func dismiss_officer(officer_id: String) -> bool:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
+	if not SailingSimLib.facility_open(port_id(), "tavern"):
+		return false
 	_busy = true
 	var ok: bool = CharacterLib.dismiss(officer_id)
 	_busy = false
 	if ok:
 		_show_toast("tavern.dismissed", {"name": I18n.t(officer.get("name", {}))})
+		SailingSimLib.advance_port_hours(1)
 	refresh()
 	return ok
 

@@ -13,6 +13,9 @@ extends RefCounted
 ## completion deltas. The title ladder itself is `Fame`.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+## §4.1b port hours (added 2026-11-02): the palace audiences' window guard and
+## hour charges go through the one clock seam.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
@@ -211,8 +214,13 @@ static func accept(port_id: String, day: int) -> Dictionary:
 
 ## [method accept] for an already-built `candidate` (the same offer the screen
 ## displayed, so a screen click and a test accept the identical instance).
+## §4.1b (added 2026-11-02): the audience must start inside the palace's
+## window and charges one hour on success (all-or-nothing: a closed-door call
+## returns `{}` untouched).
 static func accept_offer(port_id: String, day: int, candidate: Dictionary) -> Dictionary:
 	if candidate.is_empty():
+		return {}
+	if not SailingSimLib.facility_open(port_id, "palace"):
 		return {}
 	var instance: Dictionary = candidate.duplicate(true)
 	instance["accepted_day"] = day
@@ -234,6 +242,8 @@ static func accept_offer(port_id: String, day: int, candidate: Dictionary) -> Di
 		_spawn_patrol(instance, day)
 	GameState.active_quests.append(instance)
 	EventBus.quests_changed.emit()
+	# §4.1b action cost: one hour for the mission audience.
+	SailingSimLib.advance_port_hours(1)
 	return instance
 
 
@@ -339,11 +349,18 @@ static func tick(day: int) -> Array:
 # --- Titles (docs/70-* §4.9.2) -------------------------------------------
 
 ## Runs the ceremony: grants the next rank when both requirements are met.
+## §4.1b (added 2026-11-02): the audience must start inside the palace window
+## and charges one hour.
 static func attend_ceremony(port_id: String) -> String:
 	var nation_id := nation_of(port_id)
 	if nation_id.is_empty():
 		return ""
-	return FameLib.grant(nation_id)
+	if not SailingSimLib.facility_open(port_id, "palace"):
+		return ""
+	var rank := FameLib.grant(nation_id)
+	if not rank.is_empty():
+		SailingSimLib.advance_port_hours(1)
+	return rank
 
 
 # --- Repair bays (docs/70-* §4.9.2 count grant) --------------------------
@@ -360,6 +377,9 @@ static func repair_cost(port_id: String, ship_index: int, points: int) -> int:
 
 ## Repairs one hull at the bays, charging [method repair_cost]. Returns the
 ## points repaired (0 when refused: no damage, no gold, or not a capital).
+## The bays walk the shipyard engine's **un-timed** primitive
+## (`repair_apply`): the §4.1b bay cost is charged once per fill action by
+## the screen, never per hull here.
 static func repair(port_id: String, ship_index: int, points: int) -> int:
 	if nation_of(port_id).is_empty() or points <= 0:
 		return 0
@@ -370,7 +390,7 @@ static func repair(port_id: String, ship_index: int, points: int) -> int:
 	var actual := mini(points, max_points)
 	if actual <= 0:
 		return 0
-	if not bool(shipyard.call("repair", ship_index, actual, port_id)):
+	if not bool(shipyard.call("repair_apply", ship_index, actual, port_id)):
 		return 0
 	return actual
 
@@ -386,11 +406,18 @@ static func _shipyard():
 # --- Bounty / tournament / retirement edges ------------------------------
 
 ## Palace bounty row: pays the nation's bounty (docs/70-* §4.9.5).
+## §4.1b (added 2026-11-02): the pay-off is an audience — it must start inside
+## the palace window and charges one hour.
 static func pay_bounty(port_id: String) -> bool:
 	var nation_id := nation_of(port_id)
 	if nation_id.is_empty():
 		return false
-	return BountyLib.pay_off(nation_id)
+	if not SailingSimLib.facility_open(port_id, "palace"):
+		return false
+	if not BountyLib.pay_off(nation_id):
+		return false
+	SailingSimLib.advance_port_hours(1)
+	return true
 
 
 ## `true` when the retire row exists (§4.7: duke with this nation).
@@ -412,13 +439,19 @@ static func retire(port_id: String) -> bool:
 	return true
 
 
-## Tournament entry at this palace (`70-*` §4.9.7).
+## Tournament entry at this palace (`70-*` §4.9.7). §4.1b (added 2026-11-02):
+## the entry is an audience — palace window guard, one hour on success.
 static func tournament_status(port_id: String, day: int) -> Dictionary:
 	return TournamentLib.status(port_id, day)
 
 
 static func enter_tournament(port_id: String, day: int) -> bool:
-	return TournamentLib.enter(port_id, day)
+	if not SailingSimLib.facility_open(port_id, "palace"):
+		return false
+	if not TournamentLib.enter(port_id, day):
+		return false
+	SailingSimLib.advance_port_hours(1)
+	return true
 
 
 # --- Tax permits (docs/30-* §4.10, Phase 7; UI contract 80-* §4.7.13) ------
@@ -473,6 +506,8 @@ static func buy_permit(port_id: String) -> bool:
 	var offer := permit_offer(port_id)
 	if offer.is_empty():
 		return false
+	if not SailingSimLib.facility_open(port_id, "palace"):
+		return false
 	if bool(offer["owned"]) and str(offer["void_key"]).is_empty():
 		return false
 	if bool(offer["title_locked"]) or bool(offer["rep_locked"]):
@@ -483,6 +518,8 @@ static func buy_permit(port_id: String) -> bool:
 	GameState.add_gold(-price)
 	AllegianceLib.set_permit(str(offer["kind"]), str(offer["nation_id"]))
 	AllegianceLib.credit_permit_sale(str(offer["nation_id"]), price)
+	# §4.1b action cost: one hour for the permit audience.
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 

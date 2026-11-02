@@ -253,10 +253,15 @@ static func can_invest(port_id: String) -> bool:
 static func invest(port_id: String) -> bool:
 	if not can_invest(port_id):
 		return false
+	# §4.1b closed rule: investing happens at the market counter.
+	if not SailingSimLib.facility_open(port_id, "market"):
+		return false
 	GameState.port_investments[port_id] = invested(port_id) + INVEST_CHUNK
 	GameState.add_gold(-INVEST_CHUNK)
 	if not AllegianceLib.is_protected(port_id):
 		AllegianceLib.player_invest_chunk(port_id)
+	# §4.1b action cost: one hour per investment chunk.
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
@@ -301,6 +306,11 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	if qty > buy_max(port_id, good_id):
 		return false
+	# §4.1b closed rule (added 2026-11-02): a market action may only *start*
+	# within the market's opening window (all-or-nothing: a closed-door call
+	# changes nothing).
+	if not SailingSimLib.facility_open(port_id, "market"):
+		return false
 	# The walk is planned before anything mutates, so a refused trade leaves
 	# not even the stock touched (all-or-nothing, docs/30 §4.4).
 	var cost := _walk_total(port_id, good_id,
@@ -325,6 +335,8 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 	AllegianceLib.credit_tax(port_id, _player_nation(), tax)
 	EventBus.market_changed.emit(port_id)
 	FleetLib.notify_changed()
+	# §4.1b action cost: one hour per completed purchase (after the effects).
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
@@ -360,6 +372,9 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	if qty <= 0 or qty > FleetLib.held(good_id):
 		return false
+	# §4.1b closed rule: the sale must start inside the market's window.
+	if not SailingSimLib.facility_open(port_id, "market"):
+		return false
 	var proceeds := _walk_total(port_id, good_id,
 		EconomyLib.plan_trade(port_id, good_id, -qty), true)
 	# docs/30 §4.10: the tariff comes off the proceeds after all price math
@@ -392,6 +407,8 @@ static func sell(port_id: String, good_id: String, qty: int) -> bool:
 	)
 	EventBus.market_changed.emit(port_id)
 	FleetLib.notify_changed()
+	# §4.1b action cost: one hour per completed sale.
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 
@@ -432,6 +449,12 @@ static func buy_supplies(port_id: String, kind: String, qty: int) -> bool:
 		return false
 	if qty <= 0 or qty > supplies_buy_max(kind):
 		return false
+	# §4.1b closed rule: supplies are bought at the market, so a docked call
+	# respects the market window (the pre-sail prompt passes the docked port;
+	# a port-less caller — none in production — skips the guard).
+	if not port_id.is_empty() \
+			and not SailingSimLib.facility_open(port_id, "market"):
+		return false
 	var cost := supplies_price(kind) * qty
 	if GameState.gold < cost:
 		return false
@@ -444,6 +467,8 @@ static func buy_supplies(port_id: String, kind: String, qty: int) -> bool:
 		return false
 	GameState.add_gold(-cost)
 	FleetLib.notify_changed()
+	# §4.1b action cost: one hour per completed supply purchase.
+	SailingSimLib.advance_port_hours(1)
 	return true
 
 

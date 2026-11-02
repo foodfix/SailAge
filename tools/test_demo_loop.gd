@@ -140,6 +140,8 @@ func _step2_nationality() -> void:
 func _step3_market() -> void:
 	GameState.new_game("portugal", false)
 	GameState.current_port = "lisbon"
+	# §4.1b port hours: 12:00 — the market is open for the demo trade.
+	GameState.world["clock_fraction"] = 0.5
 	# Stock-explicit §5 seed (task L integration bounce): the flow economy
 	# starts Lisbon's produced wine at its dev-3 capacity (factor 0.5); the
 	# §5 worked example is computed at the produced rest 160 (factor 0.7).
@@ -291,6 +293,8 @@ func _step6_second_port() -> void:
 	_check(GameState.known_ports.has("london"), "step 6: London is known at new game")
 	GameState.set_world_tile(DataLoader.map.port_cell("london"))
 	GameState.current_port = "london"
+	# §4.1b port hours: 12:00 — London's market is open for the demo sale.
+	GameState.world["clock_fraction"] = 0.5
 
 	var buy_lisbon: int = TradeLib.buy_price("lisbon", "wine")
 	var sell_london: int = TradeLib.sell_price("london", "wine")
@@ -322,6 +326,8 @@ func _step6_second_port() -> void:
 func _step7_facilities() -> void:
 	GameState.new_game("portugal", false)
 	GameState.current_port = "lisbon"
+	# §4.1b port hours: 12:00 — the yard is open for the repair.
+	GameState.world["clock_fraction"] = 0.5
 	GameState.gold = 20000
 
 	# Shipyard: repair available; refit present but Phase-2 disabled.

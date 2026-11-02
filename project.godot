@@ -17,6 +17,7 @@ DataLoader="*res://autoload/data_loader.gd"
 I18n="*res://autoload/i18n.gd"
 GameState="*res://autoload/game_state.gd"
 SaveSystem="*res://autoload/save_system.gd"
+FleetSim="*res://autoload/fleet_sim.gd"
 
 [display]
 

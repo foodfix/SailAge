@@ -999,6 +999,12 @@ static func advance_clock(days: float) -> int:
 		fraction = maxf(0.0, fraction - 1.0)
 		GameState.day += 1
 		ticks += 1
+		# Port-hours amendment (2026-11-02): the running remainder is written
+		# back BEFORE the ledger listeners read the clock, so a `day_advanced`
+		# handler (HUD `HH:MM`, the FleetSim autoload's tick) observes the
+		# post-advance fraction instead of the previous call's stale value.
+		# The ledger/economy/drift order below is untouched (§4.3).
+		GameState.world["clock_fraction"] = clampf(fraction, 0.0, 0.999999999)
 		_run_daily_ledger()
 		# §4.3 order: the economy step (demand-event rotation + stock drift +
 		# override expiry, docs/30-* §4.2/§4.5) runs after the ledger and
@@ -1033,6 +1039,9 @@ static func advance_clock(days: float) -> int:
 	# §4.3: the accumulator invariant is [0,1); the clamp above also absorbs
 	# the tiny negative produced by the epsilon.
 	GameState.world["clock_fraction"] = clampf(fraction, 0.0, 0.999999999)
+	# Port-hours amendment (§4.3): every time-consuming call — sub-day
+	# advances included — refreshes every `HH:MM` surface exactly once.
+	EventBus.clock_changed.emit()
 	return ticks
 
 
@@ -1043,6 +1052,71 @@ static func advance_clock(days: float) -> int:
 ## Returns the number of days advanced (always 1 unless a caller batches).
 static func advance_port_day() -> int:
 	return advance_clock(1.0)
+
+
+# --- Port hours (docs/20-* §4.3, docs/30-* §4.1b; amended 2026-11-02) --------
+
+## Hour-scale port time: `h` hours through the one clock seam. A sub-day
+## advance runs no ledger; crossing midnight runs the full day-tick sequence
+## (ledger, economy step, `day_advanced`, the FleetSim tick) exactly like a
+## sea day. Refused (0) while the run is dead — `advance_clock` freezes it.
+static func advance_port_hours(hours: int) -> int:
+	if hours <= 0:
+		return 0
+	return advance_clock(float(hours) / 24.0)
+
+
+## The docked port id, else `""` (`GameState.current_port` is the one owner).
+static func docked_port_id() -> String:
+	var value = GameState.current_port
+	return value if value is String else ""
+
+
+## True when `facility_id` at `port_id` is open at the **current** time of day
+## (`30-*` §4.1b closed rule: entering a facility and starting each timed
+## action both check the clock here; an action started before closing may end
+## after it). Reads `DataLoader.facility_hours` through the guarded-module
+## convention (`80-*` §4.9): a missing table, port or facility falls back to
+## **always open**, so a bad data file can never seal every port shut. The
+## window check is `[open, close)` on minutes; `"24h"` is always true.
+static func facility_open(port_id: String, facility_id: String) -> bool:
+	var table: Dictionary = DataLoader.facility_hours
+	if table.is_empty():
+		return true
+	var window = table.get("default", {}).get(facility_id)
+	var overrides: Dictionary = table.get("overrides", {})
+	if overrides.has(port_id) and (overrides[port_id] as Dictionary).has(facility_id):
+		window = (overrides[port_id] as Dictionary)[facility_id]
+	if window == null:
+		return true
+	if not (window is Array) or (window as Array).size() != 2:
+		# `"24h"` (the inn) and any malformed entry read as always open.
+		return true
+	var now := time_of_day_minutes()
+	return _window_minutes(str((window as Array)[0])) <= now \
+		and now < _window_minutes(str((window as Array)[1]))
+
+
+## `"HH:MM"` → minutes (the parse `time_of_day_minutes` renders with). Out-of
+## -range text reads as midnight so a malformed window can never lock a door.
+static func _window_minutes(text: String) -> int:
+	var parts := text.split(":")
+	if parts.size() != 2:
+		return 0
+	return int(parts[0]) * 60 + int(parts[1])
+
+
+## The facility's window as `{open, close}` display strings (`""` when always
+## open or unknown) — the `port.facility.closed` row label's `{open}/{close}`.
+static func facility_window_text(port_id: String, facility_id: String) -> Dictionary:
+	var table: Dictionary = DataLoader.facility_hours
+	var window = table.get("default", {}).get(facility_id)
+	var overrides: Dictionary = table.get("overrides", {})
+	if overrides.has(port_id) and (overrides[port_id] as Dictionary).has(facility_id):
+		window = (overrides[port_id] as Dictionary)[facility_id]
+	if window is Array and (window as Array).size() == 2:
+		return {"open": str((window as Array)[0]), "close": str((window as Array)[1])}
+	return {}
 
 
 ## True while docked (docs/20-* §4.3/§4.11). The ledger is shared between the

@@ -95,6 +95,7 @@ func _ready() -> void:
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.day_advanced.connect(_on_day_advanced)
+	EventBus.clock_changed.connect(_on_clock_changed)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
 
 
@@ -365,6 +366,12 @@ func _on_day_advanced(_new_day: int) -> void:
 	_bind()
 
 
+## §4.1b (added 2026-11-02): actions elsewhere in port move the `HH:MM`
+## label; the inn banner follows without a day tick.
+func _on_clock_changed() -> void:
+	_bind()
+
+
 func _on_fleet_changed() -> void:
 	_bind()
 
@@ -376,6 +383,7 @@ func _exit_tree() -> void:
 		[EventBus.locale_changed, _on_locale_changed],
 		[EventBus.gold_changed, _on_gold_changed],
 		[EventBus.day_advanced, _on_day_advanced],
+		[EventBus.clock_changed, _on_clock_changed],
 		[EventBus.fleet_changed, _on_fleet_changed],
 	]:
 		var sig: Signal = pair[0]

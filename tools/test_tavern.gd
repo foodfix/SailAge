@@ -63,7 +63,7 @@ func _make_run(crew: int = CARAVEL_MIN, gold: int = 10000) -> void:
 	GameState.morale = 70
 	GameState.fleet = [FleetLib.new_ship(CARAVEL, crew)]
 	GameState.current_port = "lisbon"
-	GameState.world = {"position": {"x": 7, "y": 57}, "clock_fraction": 0.0}
+	GameState.world = {"position": {"x": 7, "y": 57}, "clock_fraction": 0.5}
 
 
 ## Detaches a screen from the tree so its EventBus connections drop.

@@ -109,6 +109,8 @@ func _make_run(gold: int = 100000, ship_ids: Array = ["caravel"],
 		port = FLOW_PORT) -> void:
 	GameState.gold = gold
 	GameState.current_port = port
+	# §4.1b port hours: 12:00 — the yard/palace windows are open.
+	GameState.world = {"clock_fraction": 0.5}
 	GameState.player = {
 		"nation_id": "portugal",
 		"stats": {
@@ -602,6 +604,8 @@ func _test_refit_and_phase1_invariants() -> void:
 	# FLEET_MAX and the fleet panel's delegation are untouched.
 	_make_run(500000, ["caravel"])
 	for i in 4:
+		# §4.1b: 3h per hull — re-open the yard between orders.
+		GameState.world["clock_fraction"] = 0.5
 		ShipyardLib.buy("latin")
 	_check(GameState.fleet.size() == 5
 		and ShipyardLib.buy_block_reason("latin") == "shipyard.fleet_full",

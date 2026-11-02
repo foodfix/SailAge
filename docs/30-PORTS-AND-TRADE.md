@@ -62,6 +62,53 @@ neutral alike, §4.9); standing port-call rules (§4.4) are unchanged, and
 every neutral port additionally receives ~1 nationless coaster regardless
 of alignment (`60-*`).
 
+### 4.1b Port hours (added 2026-11-02)
+
+Facility opening hours are **data** (`data/facility_hours.json`,
+`10-*` §4.19): a default table per facility plus optional per-port overrides.
+The shipped defaults — uniform across all ports:
+
+| Facility | Hours |
+|---|---|
+| market | 08:00–18:00 |
+| shipyard | 08:00–18:00 |
+| tavern | 10:00–24:00 |
+| inn | 24h (always open) |
+| guild | 08:00–18:00 |
+| palace | 09:00–17:00 |
+
+**Closed rule.** Entering a facility and starting each of its timed actions
+both require the **current** time of day to be within the facility's window
+(`SailingSim.facility_open`); an action started before closing may finish
+after it (the "last order" reading — a 17:59 trade ends 18:59, a 18:01 trade
+is refused). A closed facility renders its hub row disabled with the
+`port.facility.closed` label carrying the `{open}–{close}` window; the port
+Space wait (§4.3, +1h) is the way to wait for opening. The inn never closes,
+so rest and odd jobs work at any hour.
+
+**Action hour costs (pinned).** Every timed port action charges hours through
+`SailingSim.advance_port_hours` after its effects apply (all-or-nothing: a
+refused action charges nothing):
+
+| Action | Hours |
+|---|---|
+| docking (`20-*` §4.11) | 1 |
+| Set Sail (`20-*` §4.11) | 1 |
+| port Space wait | 1 |
+| market: buy / sell / buy supplies / invest | 1 each |
+| shipyard: repair | 2 |
+| shipyard: refit | 2 |
+| shipyard: buy ship | 3 |
+| shipyard: sell ship | 1 |
+| tavern: crew hire / fire | 1 each |
+| tavern: officer sign / dismiss | 1 each |
+| palace: mission accept / report | 1 each |
+| palace: repair bays | 2 |
+| palace: invest / permit / bounty claim / title / tournament entry | 1 each |
+| guild: quest accept / discovery report | 1 each |
+| inn: odd job | 1 full day (unchanged) |
+| inn: rest | 3 days → 08:00 (§4.7) |
+
 ### 4.2 Stock economy & price formulas
 
 For `good` at `port`, prices are a function of the port-good's **stock**
@@ -384,17 +431,21 @@ with K's transition.
 - Hire: 1-click buttons "+1 / +10 / Fill"; cost = `crew_wage_daily × 10` per
   head as signing bonus (locked: 2 × 10 = 20g/head). Hard cap: flagship
   `crew_max` (Phase-1 fleet = flagship only for crew; multi-ship crew OUT OF
-  SCOPE (phase 2)).
+  SCOPE (phase 2)). Each hire/fire charge costs 1 hour (§4.1b).
 - Fire: "−1 / −10 / Down to min" buttons; cannot go below `crew_min`; fired
   crew leaves with no severance; morale unchanged.
 - Officer recruiting UI and rules live in `50-*` §officers; the tavern screen
-  hosts that panel under a second tab.
+  hosts that panel under a second tab. Signing or dismissing an officer costs
+  1 hour (§4.1b).
 
 ### 4.7 Inn: rest & harbor relief
 
-- **Rest:** button "Rest 3 days", cost `10g × 3 = 30g`; each rest day runs
-  the daily ledger (wages still paid) and applies the in-port morale delta
-  (+5/day, cap 80, `20-*` §4.8.1).
+- **Rest (amended 2026-11-02):** button "Rest 3 days", cost `10g × 3 = 30g`;
+  the clock advances by exactly `Δ = 10/3 − clock_fraction` days
+  (`20-*` §4.3), so the run wakes on **day + 3 at 08:00** whatever the
+  arrival hour, and exactly **three** ledger days charge (wages still paid)
+  with the in-port morale delta (+5/day, cap 80, `20-*` §4.8.1). The inn is
+  open 24h (§4.1b), so rest is offered at any time.
 - **Harbor relief (odd jobs):** visible only when the `10-*` §5 condition
   holds (`gold < 100` and fleet empty). Button "Work an odd job":
   `gold += 100`, one ledger day passes. Strings `inn.odd_job.offer`,

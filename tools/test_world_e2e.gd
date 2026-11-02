@@ -849,14 +849,19 @@ func _provision(port_id: String) -> int:
 		return 0
 	var day0: int = GameState.day
 	GameState.current_port = port_id
+	# §4.1b port hours: the harness runs the port business inside the
+	# windows — re-open the clock before every hour-costly action (arrival
+	# hours are arbitrary, and a closed market at 03:00 would starve the leg).
 	_dismiss_modals()
 	for index in GameState.fleet.size():
+		GameState.world["clock_fraction"] = 0.5
 		var points: int = ShipyardLib.max_repair_points(index)
 		if points > 0:
 			ShipyardLib.repair(index, points, port_id)
 	var crew_min: int = FleetLib.ship_stat(FleetLib.flagship(), "crew_min")
 	var heads: int = crew_min - FleetLib.total_crew()
 	if heads > 0:
+		GameState.world["clock_fraction"] = 0.5
 		TavernLib.hire(mini(heads, TavernLib.max_hire()))
 	# §4.8.1: an in-port day is morale +5 (cap 80); rest in 3-day blocks.
 	var rests := 0
@@ -867,10 +872,12 @@ func _provision(port_id: String) -> int:
 	# Supplies: an even split, because provisions and water are consumed 1:1.
 	var half: int = FleetLib.fleet_free() / 2
 	for kind in ["water", "provisions"]:
+		GameState.world["clock_fraction"] = 0.5
 		TradeLib.buy_supplies(port_id, kind, mini(
 			TradeLib.supplies_buy_max(kind), maxi(0, half)))
 	half = FleetLib.fleet_free() / 2
 	for kind in ["provisions", "water"]:
+		GameState.world["clock_fraction"] = 0.5
 		TradeLib.buy_supplies(port_id, kind, mini(
 			TradeLib.supplies_buy_max(kind), maxi(0, half)))
 	GameState.current_port = null

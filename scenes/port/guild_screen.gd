@@ -23,6 +23,9 @@ const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+## §4.1b port hours (added 2026-11-02): the guild counter's window guard and
+## hour charges go through the one clock seam.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## Type tag → `ui_strings` key (`80-*` §4.7.4).
@@ -138,6 +141,8 @@ func all_text() -> Array:
 
 ## Accepts the offer at `index` (§4.9.3). Returns the stored instance (`{}` on
 ## refusal). The refusal reason is toasted so the click is never silent.
+## §4.1b (added 2026-11-02): the counter must be open and the signing takes
+## one hour.
 func accept_offer(index: int) -> Dictionary:
 	if index < 0 or index >= _offers.size():
 		return {}
@@ -146,19 +151,25 @@ func accept_offer(index: int) -> Dictionary:
 	if not reason.is_empty():
 		_show_toast(reason)
 		return {}
+	if not SailingSimLib.facility_open(_port_id, "guild"):
+		return {}
 	var instance: Dictionary = QuestGenLib.accept(offer, _port_id, GameState.day)
 	if instance.is_empty():
 		_show_toast("quest.no_hold")
 		return {}
 	_show_toast("quest.accepted")
+	SailingSimLib.advance_port_hours(1)
 	quest_accepted.emit(instance)
 	refresh()
 	return instance
 
 
 ## Reports a discovery (§4.4), completing any exploration/royal quest that
-## names it. Returns the report block (`{}` on refusal).
+## names it. Returns the report block (`{}` on refusal). §4.1b (added
+## 2026-11-02): the counter must be open and the report takes one hour.
 func report_discovery(discovery_id: String) -> Dictionary:
+	if not SailingSimLib.facility_open(_port_id, "guild"):
+		return {}
 	var block: Dictionary = DiscoveryLib.report(discovery_id)
 	if block.is_empty():
 		return {}
@@ -172,6 +183,7 @@ func report_discovery(discovery_id: String) -> Dictionary:
 			continue
 		PalaceEngineLib.on_discovery_reported(quest)
 	_show_toast("guild.report.action")
+	SailingSimLib.advance_port_hours(1)
 	discovery_reported.emit(block)
 	refresh()
 	return block

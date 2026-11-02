@@ -108,7 +108,9 @@ func _make_run(port_id: String = "lisbon", tile: Vector2i = LISBON_TILE) -> void
 	flagship["water"] = 200
 	GameState.current_port = port_id
 	GameState.world = {
-		"position": {"x": tile.x, "y": tile.y}, "clock_fraction": 0.0,
+		"position": {"x": tile.x, "y": tile.y},
+		# §4.1b port hours (added 2026-11-02): 12:00 — every facility open.
+		"clock_fraction": 0.5,
 	}
 	GameState.known_ports = [port_id]
 	GameState.locale = "en"
@@ -245,7 +247,7 @@ func _test_guild_always_present() -> void:
 		checked += 1
 		GameState.current_port = port_id
 		GameState.world = {"position": {"x": LISBON_TILE.x, "y": LISBON_TILE.y},
-			"clock_fraction": 0.0}
+			"clock_fraction": 0.5}
 		var hub = _mount_hub(host)
 		await get_tree().process_frame
 		var guild: Button = hub.facility_row("guild")
@@ -600,8 +602,11 @@ func _test_shell_intact() -> void:
 	_check(hub.set_sail(), "set_sail() succeeds while docked")
 	_check(sailed.size() == 1, "set_sail() emits sailed")
 	_check(GameState.current_port == null, "set_sail() clears current_port")
-	_check(float(GameState.world["clock_fraction"]) == 0.0,
-		"set_sail() resets clock_fraction to 0.0")
+	# §4.1b / §4.3 continuous clock (amended 2026-11-02): the sail-out charges
+	# one hour from the fixture's 12:00 and the fraction carries to sea.
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), 13.0 / 24.0),
+		"set_sail() charges +1h and carries the fraction (got %.4f)"
+		% float(GameState.world["clock_fraction"]))
 
 	hub.queue_free()
 	host.queue_free()
@@ -900,8 +905,10 @@ func _test_provisions_prompt() -> void:
 		"the prompt's Set Sail calls PortScreen.set_sail() (one sailed signal)")
 	_check(GameState.current_port == null,
 		"…which clears current_port (the one S4 → S3 path)")
-	_check(float(GameState.world["clock_fraction"]) == 0.0,
-		"…and resets clock_fraction to 0.0")
+	# §4.1b / §4.3 continuous clock (amended 2026-11-02): +1h, fraction kept.
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), 13.0 / 24.0),
+		"…and charges +1h carrying the fraction (got %.4f)"
+		% float(GameState.world["clock_fraction"]))
 
 	# Locale rebind while open.
 	_make_starter_run()

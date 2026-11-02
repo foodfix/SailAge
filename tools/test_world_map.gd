@@ -1438,9 +1438,10 @@ func _test_docking_cost_pin() -> void:
 	_make_sea_run(berth)
 	var world: Node2D = await _open_world()
 	_check(world.try_step(shore), "the orthogonal docking gesture docks")
+	# §4.1b: +1h of docking charge rides on the move cost.
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-			SailingSimLib.move_cost("E")),
-		"the docking charge carries the step-delta heading E (%.4f)"
+			SailingSimLib.move_cost("E") + 1.0 / 24.0),
+		"the docking charge carries the step-delta heading E + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
 	world.queue_free()
@@ -1452,8 +1453,8 @@ func _test_docking_cost_pin() -> void:
 	world.helm_steer("move_e")
 	world.try_step(shore)
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-			SailingSimLib.move_cost("E")),
-		"under helm the docking charge carries world.heading (%.4f)"
+			SailingSimLib.move_cost("E") + 1.0 / 24.0),
+		"under helm the docking charge carries world.heading + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
 	world.queue_free()
@@ -1471,8 +1472,8 @@ func _test_docking_cost_pin() -> void:
 	_check(world._dock_at(MARSEILLE_SHORE),
 		"the direct diagonal dock docks into marseille")
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-			SailingSimLib.move_cost("NE")),
-		"the diagonal dock charges move_cost('NE') = 1/14, not the average (%.4f)"
+			SailingSimLib.move_cost("NE") + 1.0 / 24.0),
+		"the diagonal dock charges move_cost('NE') = 1/14, plus the §4.1b hour (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
 	world.queue_free()
@@ -1485,8 +1486,8 @@ func _test_docking_cost_pin() -> void:
 	_check(world._dock_at(MARSEILLE_SHORE),
 		"the fallback dock still opens a port (seam-level pin)")
 	_check(is_equal_approx(float(GameState.world["clock_fraction"]),
-			SailingSimLib.move_cost()),
-		"the fallback dock charges the parameterless move_cost (%.4f)"
+			SailingSimLib.move_cost() + 1.0 / 24.0),
+		"the fallback dock charges the parameterless move_cost + 1h (%.4f)"
 			% float(GameState.world["clock_fraction"]))
 	world.hud().clear_dialogs()
 	world.queue_free()

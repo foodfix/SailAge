@@ -48,6 +48,8 @@ func _new_run(port_id: String = "lisbon", day: int = 1) -> void:
 	GameState.day = day
 	GameState.gold = 50000
 	GameState.current_port = port_id
+	# §4.1b port hours: 12:00 — the palace is open for entries.
+	GameState.world = {"clock_fraction": 0.5}
 	GameState.fame = 0
 	GameState.bounties = {}
 	GameState.discovery_hints = {}

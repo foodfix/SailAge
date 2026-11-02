@@ -34,6 +34,11 @@ const REST_COST_PER_DAY := 10
 ## costs `30g + 3 × daily wages` in total. This is the split the T15 tests
 ## assert separately.
 const REST_COST := REST_DAYS * REST_COST_PER_DAY
+## The rest's landing point (docs/30-* §4.1b/§4.7, amended 2026-11-02): wake
+## on day + 3 at 08:00 — `advance_clock(10/3 − clock_fraction)` crosses
+## exactly three day boundaries from any arrival fraction.
+const REST_WAKE_DAYS := 3
+const REST_WAKE_HOUR := 8
 
 # --- Harbor relief (docs/10-* §5, docs/50-* §4.7) ---------------------------
 
@@ -60,24 +65,25 @@ static func can_rest() -> bool:
 	return GameState.gold >= REST_COST
 
 
-## "Rest 3 days" (docs/30-* §4.6):
+## "Rest 3 days" (docs/30-* §4.6, §4.1b; amended 2026-11-02):
 ##   1. charge the 30g lodging up front (one `gold_changed`);
-##   2. run exactly [constant REST_DAYS] ledger days, in port, via
-##      [method SailingSim.advance_port_day] — wages paid each day, in-port
-##      morale `+5`/day capped at 80, weather/fail-state steps included.
+##   2. advance the clock by exactly `Δ = 10/3 − clock_fraction` days in one
+##      `advance_clock` call — whatever the arrival hour, the run wakes on
+##      **day + 3 at 08:00** (landing fraction 8/24), and the day-boundary
+##      crossings charge exactly **three** ledger days: wages ×3, in-port
+##      morale `+5`/day capped at 80, weather/fail-state steps included. The
+##      fp residue of `f + (10/3 − f)` is ~1e-16, absorbed by `CLOCK_EPSILON`,
+##      so the third crossing is exact.
 ##
 ## Returns false (state untouched: no gold, no day, no morale) when
 ## [method can_rest] is false. If the ledger ends the run mid-rest (a §4.9
-## game over) the remaining days are skipped, exactly as the clock freeze in
-## `SailingSim.advance_clock` does.
+## game over) `advance_clock` freezes the clock on its own (§4.9).
 static func rest() -> bool:
 	if not can_rest():
 		return false
 	GameState.add_gold(-REST_COST)
-	for _rest_day in range(REST_DAYS):
-		if SailingSimLib.is_game_over():
-			break
-		SailingSimLib.advance_port_day()
+	var fraction := float(GameState.world.get("clock_fraction", 0.0))
+	SailingSimLib.advance_clock(REST_WAKE_DAYS + REST_WAKE_HOUR / 24.0 - fraction)
 	return true
 
 

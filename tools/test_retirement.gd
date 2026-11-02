@@ -34,6 +34,8 @@ func _new_run(port_id: String = "lisbon", day: int = 240) -> void:
 	GameState.day = day
 	GameState.gold = 42000
 	GameState.current_port = port_id
+	# §4.1b port hours: 12:00 — the palace is open for the ceremony.
+	GameState.world = {"clock_fraction": 0.5}
 	GameState.fame = 0
 	GameState.titles = {}
 	for nation in DataLoader.nations_list:

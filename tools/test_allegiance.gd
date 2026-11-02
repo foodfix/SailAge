@@ -73,7 +73,7 @@ func _make_run(nation_id: String = "portugal", gold: int = 100000,
 	GameState.fame = 0
 	GameState.world = {
 		"position": {"x": CALM_CELL.x, "y": CALM_CELL.y},
-		"clock_fraction": 0.0,
+		"clock_fraction": 0.5,
 		"weather": "fair",
 	}
 	AllegianceLib.seed_new_game()

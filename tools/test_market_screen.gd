@@ -210,7 +210,7 @@ func _make_run(port_id: String, gold: int = 10000,
 	var port: Dictionary = DataLoader.get_port(port_id)
 	GameState.world = {
 		"position": port.get("position", {"x": 0, "y": 0}).duplicate(),
-		"clock_fraction": 0.0,
+		"clock_fraction": 0.5,
 		"weather": "fair",
 	}
 
@@ -627,6 +627,8 @@ func _test_invest_states() -> void:
 	_drop(screen2)
 	_make_run("lisbon", 10000)
 	for click in range(10):
+		# §4.1b: one hour per chunk — re-open the window between clicks.
+		GameState.world["clock_fraction"] = 0.5
 		TradeEngineLib.invest("lisbon")
 	var screen3 := _instantiate_market()
 	var button3: Button = screen3.get_node("Layout/VBox/Footer/Invest")

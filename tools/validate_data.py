@@ -265,6 +265,10 @@ SPECIAL_REQUIRE_VERSION = {"map_legend.json"}
 # an entity file — its shape is owned by group 7.
 SPECIAL_FILES.add("npc_config.json")
 SPECIAL_REQUIRE_VERSION.add("npc_config.json")
+# Port hours (added 2026-11-02): facility_hours.json is a config block
+# (§4.19), not an entity file — its shape is owned by group 11.
+SPECIAL_FILES.add("facility_hours.json")
+SPECIAL_REQUIRE_VERSION.add("facility_hours.json")
 
 # L10nString field names per entity file (docs/10 section 4). The i18n check
 # walks each entity recursively and validates every value under one of these
@@ -6337,6 +6341,111 @@ def run_group10_self_test() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Group 11: facility_hours.json (added 2026-11-02, docs/10-* §4.19)
+# ---------------------------------------------------------------------------
+
+FACILITY_HOURS_JSON_LABEL = "data/facility_hours.json"
+# The §4.1 facility ids (docs/30-* §4.1) — every one needs a default window.
+FACILITY_IDS = ("market", "shipyard", "tavern", "inn", "guild", "palace")
+
+
+def _facility_minutes(text: object, what: str) -> int:
+    """Parses one `HH:MM` window bound to minutes; `fail`s on any deviation."""
+    if not isinstance(text, str):
+        fail("hours", FACILITY_HOURS_JSON_LABEL, f"{what}: must be a string", 11)
+    parts = text.split(":")
+    if len(parts) != 2 or not all(part.isdigit() and len(part) == 2
+                                  for part in parts):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: {text!r} is not HH:MM", 11)
+    hours, minutes = int(parts[0]), int(parts[1])
+    if not (0 <= hours <= 24 and 0 <= minutes <= 59):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: {text!r} out of range", 11)
+    value = hours * 60 + minutes
+    if value == 0:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: 00:00 is never a window bound", 11)
+    return value
+
+
+def _facility_window(value: object, what: str) -> tuple[int, int]:
+    """One window: the string `\"24h\"` or the `[open, close]` pair."""
+    if value == "24h":
+        return (-1, -1)
+    if not isinstance(value, list) or len(value) != 2:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: must be \"24h\" or [open, close]", 11)
+    open_min = _facility_minutes(value[0], f"{what} open")
+    close_min = _facility_minutes(value[1], f"{what} close")
+    if close_min != 1440 and open_min >= close_min:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"{what}: open {value[0]!r} must precede close {value[1]!r}", 11)
+    return (open_min, close_min)
+
+
+def check_group11(docs: dict[str, object], verbose: bool) -> None:
+    """Facility opening hours: docs/10-DATA-SCHEMA.md section 4.19."""
+    hours = docs.get("facility_hours.json")
+    if not isinstance(hours, dict):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "missing (the §4.19 opening-hours table is required)", 11)
+    version = hours.get("version")
+    if not is_int(version) or version != 1:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'version' must be 1 (got {version!r})", 11)
+    default = hours.get("default")
+    if not isinstance(default, dict) or not default:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "'default' must be a non-empty object", 11)
+    unknown = sorted(set(default) - set(FACILITY_IDS))
+    if unknown:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'default' has unknown facility ids {unknown}", 11)
+    missing = sorted(set(FACILITY_IDS) - set(default))
+    if missing:
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"'default' is missing facility ids {missing} (30-* §4.1)", 11)
+    windows: dict[str, tuple[int, int]] = {}
+    for facility_id in FACILITY_IDS:
+        if facility_id not in default:
+            continue
+        windows[facility_id] = _facility_window(
+            default[facility_id], f"default.{facility_id}")
+    if default.get("inn") != "24h":
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             f"default.inn must be \"24h\" (30-* §4.1b; got "
+             f"{default.get('inn')!r})", 11)
+
+    overrides = hours.get("overrides")
+    if not isinstance(overrides, dict):
+        fail("hours", FACILITY_HOURS_JSON_LABEL,
+             "'overrides' must be an object", 11)
+    port_ids = {port["id"] for port in docs["ports.json"]["ports"]}
+    override_count = 0
+    for port_id, table in overrides.items():
+        if port_id not in port_ids:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides: unknown port id {port_id!r}", 11)
+        if not isinstance(table, dict) or not table:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides.{port_id}: must be a non-empty object", 11)
+        unknown_fac = sorted(set(table) - set(FACILITY_IDS))
+        if unknown_fac:
+            fail("hours", FACILITY_HOURS_JSON_LABEL,
+                 f"overrides.{port_id}: unknown facility ids {unknown_fac}", 11)
+        for facility_id, window in table.items():
+            _facility_window(window, f"overrides.{port_id}.{facility_id}")
+            override_count += 1
+
+    if verbose:
+        print(
+            f"PASS group 11 facility hours ({len(windows)} default windows, "
+            f"{override_count} override(s), inn 24h)"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -6407,6 +6516,7 @@ def main(argv: list[str]) -> int:
         ("8", check_group8),
         ("9", check_group9),
         ("10", check_group10),
+        ("11", check_group11),
     )
 
     for group_id, check in groups:
