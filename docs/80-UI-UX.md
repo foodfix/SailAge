@@ -620,6 +620,27 @@ chart adds:
   armed, `depX a->b` no route found, `drop wedge|leg|seam:<id>` a
   mid-route drop with its cause, `arr <port>`). A fleet stuck in a
   drop/re-depart cycle shows a `dep→drop→dep→drop` chain here.
+- **Annotated raw lines (amended 2026-11-02):** the three raw lines render
+  **per-field annotated** — the literal `[raw]`/`[raw2]`/`[raw3]` tag gains
+  a localized section title (`debug.raw.sec.state/accrual/journey`) and
+  every `key=value` token is prefixed with its `debug.raw.f.<key>` gloss
+  (22 keys, one per raw field; e.g. `目的港 dest=tunis` /
+  `dest port dest=tunis`). The raw `key=value` payload stays verbatim
+  (greppable; matches this section and the `test_npc_fleets.gd` telemetry
+  assertions). Value-side annotations, always a parenthesized suffix:
+  `dest` / `mooring` append the port's L10n name; `leg0`'s `id` (a lane id
+  on lane legs, a port id on spokes) appends the `debug.lane.<id>` name or
+  the port name; `ev` appends them event-wise (`dep a->b` / `depX a->b`
+  both port ids, `arr <port>` its port, `wedge|leg|seam:<id>` the
+  lane/spoke name — the `dep`/`arr`/`drop` verbs are bare tokens between);
+  a missing lookup omits the suffix (the legend's raw-id fallback rule).
+  Value hints: `pend < 0` appends `debug.raw.hint.frozen` (mark ahead ⇒
+  frozen, the discriminator above) and `mark < 0` appends
+  `debug.raw.hint.no_mark`. Non-`key=value` continuation tokens (`leg0`'s
+  `ti/walked_len` tail) extend the preceding field. The floating window
+  **folds**: its label autowraps at a max width of
+  `min(560, viewport width × 0.5)` px — a long fleet report wraps instead
+  of spanning the screen; position clamping is unchanged.
 - **Berth truth (`stranded`, amended 2026-11-01):** a legs-empty fleet
   holding its dwell is `docked` **only** when it stands on a port's berth
   tile; holding in open water is `stranded` — the summary line shows its
@@ -1091,6 +1112,12 @@ Notes pinning the set exactly:
   fleet-marker legend rows; the chart prefixes the role's marker letter
   (`T c k P p · N X`) itself. `debug.info.*` was **retired** with the
   info strip (amended 2026-11-01).
+- `debug.raw.*` (annotated hover raw lines, amended 2026-11-02): the 3
+  section titles (`debug.raw.sec.state/accrual/journey`), 22 per-field
+  glosses (`debug.raw.f.<key>`, one per raw key — `cell dwell day legs ti
+  holds carry mark now pend last lastd moved skip committed budget pipe
+  cd leg0 dest mooring ev`) and 2 value hints (`debug.raw.hint.frozen` /
+  `debug.raw.hint.no_mark`).
 - **Pre-declared per `20-*` §4.15:** `world.calendar.month.1` …
   `world.calendar.month.12` (一月…十二月 / Month 1–12). They are owed by
   whichever surface first renders a bare month name (the likely consumer

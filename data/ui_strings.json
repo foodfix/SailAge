@@ -2148,6 +2148,114 @@
     "zh": "目的地",
     "en": "Destination"
   },
+  "debug.raw.sec.state": {
+    "zh": "状态",
+    "en": "State"
+  },
+  "debug.raw.sec.accrual": {
+    "zh": "结算",
+    "en": "Accrual"
+  },
+  "debug.raw.sec.journey": {
+    "zh": "旅程",
+    "en": "Journey"
+  },
+  "debug.raw.f.cell": {
+    "zh": "所在格",
+    "en": "tile"
+  },
+  "debug.raw.f.dwell": {
+    "zh": "停留截止日",
+    "en": "dwell-until"
+  },
+  "debug.raw.f.day": {
+    "zh": "世界天数",
+    "en": "world day"
+  },
+  "debug.raw.f.legs": {
+    "zh": "航段数",
+    "en": "leg count"
+  },
+  "debug.raw.f.ti": {
+    "zh": "段内格序",
+    "en": "leg tile idx"
+  },
+  "debug.raw.f.holds": {
+    "zh": "停滞计数",
+    "en": "hold ticks"
+  },
+  "debug.raw.f.carry": {
+    "zh": "步进余量",
+    "en": "step carry"
+  },
+  "debug.raw.f.mark": {
+    "zh": "时钟标记",
+    "en": "clock mark"
+  },
+  "debug.raw.f.now": {
+    "zh": "当前时钟",
+    "en": "clock now"
+  },
+  "debug.raw.f.pend": {
+    "zh": "待结算增量",
+    "en": "pending accrual"
+  },
+  "debug.raw.f.last": {
+    "zh": "上次结算",
+    "en": "last pass"
+  },
+  "debug.raw.f.lastd": {
+    "zh": "上次增量",
+    "en": "last accrual"
+  },
+  "debug.raw.f.moved": {
+    "zh": "是否移动",
+    "en": "moved"
+  },
+  "debug.raw.f.skip": {
+    "zh": "跳过原因",
+    "en": "skip reason"
+  },
+  "debug.raw.f.committed": {
+    "zh": "日已走格",
+    "en": "committed tiles"
+  },
+  "debug.raw.f.budget": {
+    "zh": "日预算",
+    "en": "day budget"
+  },
+  "debug.raw.f.pipe": {
+    "zh": "管道速率",
+    "en": "pipe rate"
+  },
+  "debug.raw.f.cd": {
+    "zh": "冷却截止日",
+    "en": "cooldown-until"
+  },
+  "debug.raw.f.leg0": {
+    "zh": "当前腿",
+    "en": "current leg"
+  },
+  "debug.raw.f.dest": {
+    "zh": "目的港",
+    "en": "dest port"
+  },
+  "debug.raw.f.mooring": {
+    "zh": "实际泊位港",
+    "en": "berth port"
+  },
+  "debug.raw.f.ev": {
+    "zh": "旅程事件",
+    "en": "journey events"
+  },
+  "debug.raw.hint.frozen": {
+    "zh": "冻结：标记超前于时钟",
+    "en": "frozen: mark ahead of clock"
+  },
+  "debug.raw.hint.no_mark": {
+    "zh": "未设标记",
+    "en": "no mark yet"
+  },
   "chart.debug.neutral": {
     "zh": "中立港",
     "en": "Neutral ports"

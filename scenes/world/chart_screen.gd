@@ -834,13 +834,16 @@ func _update_hover(at: Vector2) -> void:
 				parts.append(I18n.t_key("debug.info.circuit") + " "
 					+ " · ".join(lane_names))
 			line += "\n  " + " · ".join(parts)
-			line += "\n  [raw] " + str(ship.get("dbg", ""))
+			line += "\n  " + _annotate_raw_line("[raw]",
+				str(ship.get("dbg", "")), "state", false)
 			var raw2 := str(ship.get("dbg2", ""))
 			if not raw2.is_empty():
-				line += "\n  [raw2] " + raw2
+				line += "\n  " + _annotate_raw_line("[raw2]", raw2,
+					"accrual", false)
 			var raw3 := str(ship.get("dbg3", ""))
 			if not raw3.is_empty():
-				line += "\n  [raw3] " + raw3
+				line += "\n  " + _annotate_raw_line("[raw3]", raw3,
+					"journey", true)
 			text += line + "\n"
 	else:
 		# No fleet on the tile: the nearest wreck / intel / port entry.
@@ -872,8 +875,133 @@ func _update_hover(at: Vector2) -> void:
 	_show_hover_window(text, at)
 
 
+# --- Annotated raw lines (§4.6, amended 2026-11-02) --------------------------
+
+## The raw hover payload keys that carry a localized gloss
+## (`debug.raw.f.<key>`, ui_strings.json — §4.7.10).
+const RAW_GLOSS_KEYS: Array[String] = ["cell", "dwell", "day", "legs", "ti",
+	"holds", "carry", "mark", "now", "pend", "last", "lastd", "moved",
+	"skip", "committed", "budget", "pipe", "cd", "leg0", "dest", "mooring"]
+
+## `[raw3]`'s `ev=` tail spans tokens with its own event grammar — split
+## off before the generic `key=value` pass.
+const EV_TAG := "ev="
+
+
+## Renders one raw line as `<tag>·<section> <gloss> key=value ...`: every
+## `key=value` token is prefixed with its localized gloss (the raw payload
+## stays verbatim for doc/test cross-reference), `_raw_value_gloss` appends
+## the value-side annotations, non-key continuation tokens (`leg0`'s
+## `ti/walked_len` tail) extend the previous field, and — for `[raw3]` —
+## the trailing `ev=` event ring is translated event-wise.
+func _annotate_raw_line(tag: String, raw: String, section: String,
+		with_ev: bool) -> String:
+	var head := raw
+	var ev := ""
+	if with_ev:
+		var cut := raw.find(" " + EV_TAG)
+		if cut >= 0:
+			head = raw.substr(0, cut)
+			ev = raw.substr(cut + 1 + EV_TAG.length())
+	var out: Array = ["%s·%s" % [tag, I18n.t_key("debug.raw.sec." + section)]]
+	for token in head.split(" ", false):
+		var eq := token.find("=")
+		var key := token.substr(0, eq) if eq > 0 else ""
+		if key in RAW_GLOSS_KEYS:
+			var field := "%s %s" % [I18n.t_key("debug.raw.f." + key), token]
+			field += _raw_value_gloss(key, token.substr(eq + 1))
+			out.append(field)
+		elif not out.is_empty():
+			# Continuation of the previous field's value.
+			out[out.size() - 1] += " " + token
+		else:
+			out.append(token)
+	if not ev.is_empty():
+		out.append("%s %s%s" % [I18n.t_key("debug.raw.f.ev"), EV_TAG,
+			_annotate_ev_stream(ev)])
+	return " ".join(out)
+
+
+## The value-side annotation of one raw field: the localized port/lane
+## name in parentheses (`dest` / `mooring` are port ids; `leg0`'s id is a
+## lane id on lane legs, a port id on spokes) or the §4.6 value hints
+## (`pend < 0` ⇒ frozen, `mark < 0` ⇒ unset). "" when nothing applies.
+func _raw_value_gloss(key: String, value: String) -> String:
+	if key == "dest" or key == "mooring":
+		return _paren(_port_name(value))
+	if key == "leg0":
+		var br := value.find("[")
+		return _paren(_leg_name(value.substr(0, br) if br >= 0 else value))
+	if key == "pend" or key == "mark":
+		if value.is_valid_float() and float(value) < 0.0:
+			return "(%s)" % I18n.t_key("debug.raw.hint."
+				+ ("frozen" if key == "pend" else "no_mark"))
+	return ""
+
+
+## The ev ring stream (`spawn@1 dep a->b@5 ...`): appends the localized
+## names per event token — `a->b` pairs (`dep`/`depX` carry them as the
+## following token), the port after a bare `arr`, and `wedge|leg|seam:<id>`
+## (the `drop` verb is the preceding bare token). Unknown tokens pass
+## through untouched.
+func _annotate_ev_stream(ev: String) -> String:
+	var out: Array = []
+	var prev_arr := false
+	for tok in ev.split(" ", false):
+		var head := tok
+		var at := tok.rfind("@")
+		if at > 0:
+			head = tok.substr(0, at)  # strip the `@<day>` stamp
+		var gloss := ""
+		if head.contains("->"):
+			var arrow := head.find("->")
+			var a := _port_name(head.substr(0, arrow))
+			var b := _port_name(head.substr(arrow + 2))
+			if not (a.is_empty() and b.is_empty()):
+				gloss = "(%s→%s)" % [a, b]
+		elif prev_arr:
+			gloss = _paren(_port_name(head))
+		elif head.contains(":"):
+			gloss = _paren(_leg_name(head.substr(head.find(":") + 1)))
+		prev_arr = head == "arr"
+		out.append(tok + gloss)
+	return " ".join(out)
+
+
+## The localized port name for a raw port id ("" when the id resolves to
+## no known port — the annotation is then omitted, the legend's raw-id
+## fallback rule).
+func _port_name(port_id: String) -> String:
+	if port_id.is_empty() or port_id == "-":
+		return ""
+	var port: Dictionary = DataLoader.get_port(port_id)
+	if port.is_empty():
+		return ""
+	return I18n.t(port.get("name", {}))
+
+
+## The localized name for a raw leg id — a lane id on lane legs
+## (`debug.lane.<id>`, the §4.6 network legend), a port id on spokes; ""
+## when neither resolves.
+func _leg_name(id: String) -> String:
+	if id.is_empty() or id == "-":
+		return ""
+	var lane_key := "debug.lane." + id
+	if DataLoader.ui_strings.has(lane_key):
+		return I18n.t_key(lane_key)
+	return _port_name(id)
+
+
+## `(名)` wrapper — "" stays "".
+func _paren(name: String) -> String:
+	return "" if name.is_empty() else "(%s)" % name
+
+
 ## The floating hover window (unified-movement amendment): a bordered
 ## panel at the cursor, mouse-transparent, clipped to the viewport.
+## §4.6 (amended 2026-11-02): the label folds at
+## `min(HOVER_WINDOW_MAX_W, viewport width × 0.5)` px.
+const HOVER_WINDOW_MAX_W := 560.0
 var _hover_window: PanelContainer = null
 var _hover_window_label: Label = null
 
@@ -902,16 +1030,25 @@ func _ensure_hover_window() -> void:
 
 
 ## Shows/hides + positions the floating window (clamped to the viewport).
+## §4.6 (amended 2026-11-02): a report wider than the fold cap wraps
+## (word-smart) instead of spanning the screen; short entries keep their
+## natural width.
 func _show_hover_window(text: String, at: Vector2) -> void:
 	_ensure_hover_window()
 	if text.is_empty():
 		_hover_window.visible = false
 		return
 	_hover_window_label.text = text
-	_hover_window.visible = true
 	var view := get_viewport_rect().size
-	var pos := at + Vector2(14.0, 14.0)
+	var max_w := minf(HOVER_WINDOW_MAX_W, view.x * 0.5)
+	_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_hover_window_label.custom_minimum_size.x = 0.0
+	if _hover_window_label.get_minimum_size().x > max_w:
+		_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_hover_window_label.custom_minimum_size.x = max_w
+	_hover_window.visible = true
 	var size := _hover_window.get_minimum_size()
+	var pos := at + Vector2(14.0, 14.0)
 	_hover_window.position = pos.clamp(Vector2.ZERO,
 		(view - size).clamp(Vector2.ZERO, view))
 
