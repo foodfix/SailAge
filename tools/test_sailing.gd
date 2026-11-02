@@ -143,11 +143,12 @@ func _test_constants() -> void:
 		"§5 sighting_radius == 48 (got %d)" % SailingSimLib.SIGHTING_RADIUS)
 	_check(SailingSimLib.DISCOVERY_RADIUS == 36,
 		"§5 discovery_radius == 36 (got %d)" % SailingSimLib.DISCOVERY_RADIUS)
-	# The engine value lives in `DiscoverySight.RADIUS` (70-* §4.4); §5 is the
+	# The engine base lives in `DiscoverySight.RADIUS_BASE` (70-* §4.4 — the
+	# cartography-0 floor of `36 + floor(cartography/15)`); §5 is the
 	# single documented constants location, so the two must never drift.
-	_check(DiscoveryLib.RADIUS == SailingSimLib.DISCOVERY_RADIUS,
-		"DiscoverySight.RADIUS (%d) == §5 discovery_radius (%d)"
-		% [DiscoveryLib.RADIUS, SailingSimLib.DISCOVERY_RADIUS])
+	_check(DiscoveryLib.RADIUS_BASE == SailingSimLib.DISCOVERY_RADIUS,
+		"DiscoverySight.RADIUS_BASE (%d) == §5 discovery_radius base (%d)"
+		% [DiscoveryLib.RADIUS_BASE, SailingSimLib.DISCOVERY_RADIUS])
 	_check(SailingSimLib.MORALE_START == 70,
 		"§5 morale_start == 70 (got %d)" % SailingSimLib.MORALE_START)
 	_check(SailingSimLib.MORALE_PORT_CAP == 80,

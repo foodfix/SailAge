@@ -115,7 +115,10 @@ static func set_pending_raise(value: bool) -> void:
 ## The player's own attribute value for `key`, clamped to 1–100.
 static func attribute(key: String) -> int:
 	var values: Dictionary = _player().get("attributes", {})
-	return clampi(int(values.get(key, BASE_ATTRIBUTE)), ATTR_MIN, ATTR_MAX)
+	# No read-side clamp: 1–100 is a WRITE-side rule (allocate/starting_person
+	# clamp); formulas consume the stored value verbatim so the §4.2 pinned
+	# formulas stay exact at fixture boundaries.
+	return int(values.get(key, BASE_ATTRIBUTE))
 
 
 ## A copy of the player's five attributes (the §4.8 block; missing keys read

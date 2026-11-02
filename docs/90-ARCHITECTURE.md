@@ -608,7 +608,7 @@ Version 9 — Phase 8 (characters/careers/encounters):
 | Key | Type | Default when absent | Owner |
 |---|---|---|---|
 | `player` (reshape) | object | — | the v9 Person block: `{nation_id, background_id, attributes{5}, skills{8}, skill_counters{8}, alloc_pending, xp, level, autopilot, officers[], reputation{}, profit_by_nation{}, profit_rep_awarded{}, equipment{}}` (`50-*` §4.8). `autopilot: {dest_port_id}` is **absent** when no voyage is appointed (`20-*`); `level` stays the cached derivation of `xp`; the counters follow the usage-growth rule (reset on award, stop counting at 100) |
-| `officer_states` | object `officer_id → state` | `{}` | `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day, defeats}` per employed officer (`10-*` §4.15; behavior `50-*`); `post_id = ""` = idle, `ship_id` non-empty only on a captain post |
+| `officer_states` | object `officer_id → state` | `{}` | `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day, defeats}` per employed officer (`10-*` §4.15; behavior `50-*`); `post_id = ""` = idle, `ship_id` non-empty only on a captain post. Two optional keys (W3 gate, 2026-11-03): `wage_mult` (default `1.0`; the §4.5.4 raise-accept writes `1.25`) and `skill_deltas` (object `skill → +n`, default absent; the W6-C persistence of the in-post +1/90-sea-days officer growth — W3's runtime applies growth to the loaded record in memory, the deltas make it survive save/load) |
 | `captain_states` | object `captain_id → state` | `{}` | `{status, return_day, tier_now, stance, familiarity, dossier_seen, defeats, wins}` — full entries **only for met captains**; the canon cards stay save-independent (`10-*` §4.11/§4.15, `60-*`) |
 
 **Removed at v9 (no migration, old payloads refused wholesale):**

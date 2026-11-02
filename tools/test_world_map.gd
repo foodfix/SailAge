@@ -1037,8 +1037,8 @@ func _test_explore_action() -> void:
 	world.route_to_battle = false
 	add_child(world)
 	await get_tree().process_frame
-	var radius: int = DiscoveryLib.RADIUS
-	_check(radius == 36, "the discovery radius is 36 (§4.4; got %d)" % radius)
+	var radius: int = DiscoveryLib.radius()
+	_check(radius == 36, "the discovery radius is 36 at cartography 0 (§4.4; got %d)" % radius)
 	_check(world.something_near(), "something_near() is true within radius 18")
 	var found: Array = world.explore_here()
 	_check(found.has("disc_atlas_cedars"),
@@ -1135,6 +1135,12 @@ func _test_helm_mode() -> void:
 	# Steering sets `world.heading` and latches the auto-stepper; the press
 	# itself does not step (the interval cadence owns every step).
 	var start: Vector2i = world.fleet_cell()
+	# Phase-8 night-sail rule (`20-*` §4.2): a move starting 22:00–06:00
+	# costs 2× — the fixture's midnight start would double the pinned cost,
+	# so the helm sequence runs from 07:12 (clock_fraction 0.3; daytime, and
+	# the ≤ 13-interval walk stays inside day 1 so the day-tick wind re-roll
+	# never fires mid-sequence), navigation skill below the 40 exemption.
+	GameState.world["clock_fraction"] = 0.3
 	var clock0 := float(GameState.world["clock_fraction"])
 	_check(world.helm_steer("move_e"), "helm_steer accepts a direction action")
 	_check(world.helm_active(), "the helm auto-stepper latches on steer")

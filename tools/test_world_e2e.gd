@@ -86,6 +86,12 @@ const FIXTURE_GOLD := 100000000
 ##   storm 24 × 1.50 = 36.0 → 36 tiles/day          (the fastest possible)
 ## so `steps` tiles take between `steps / 36` and `steps / 19` sea days. That
 ## is the envelope every leg asserts, plus its deliberate in-port days.
+## Phase 8 (2026-11-03): the §4.7 storm-headway factor makes a storm day the
+## fleet's slow day. The fixture's bold captain (courage 100) holds retention
+## at 1 − 0.5×(1−(100−10)/400) = 0.6125 — the least-storm loss the formula
+## allows — so the storm-day bound floor(36 × 0.6125) = 22 stays above the
+## calm floor 19, which remains the envelope's slow speed (the Phase-7
+## envelope widths are unchanged).
 const MIN_SPEED := 19
 const MAX_SPEED := 36
 ## Every leg is re-seeded so a rerun is byte-identical (one base + leg index).
@@ -158,15 +164,40 @@ func _port(port_id: String) -> Vector2i:
 ## A run that can actually cross an ocean: five brigantines at full crew, an
 ## empty hold, default stats (luck 10 — the §4.7 gate's own luck) and the two
 ## spawn immunities parked. Everything else is ordinary `GameState` state.
+## Phase 8 (2026-11-03): the v9 player block with navigation 40 (the night
+## exemption, `20-*` §4.2 — the walk sails through the night) and one
+## captain-qualified officer in the `captain` post over the brigantine type
+## (the `40-*` §4.4 captain-less ×0.8 rule would otherwise slow the escorts).
 func _build_fixture() -> void:
+	var skills := {}
+	for key in ["seamanship", "navigation", "swordplay", "gunnery",
+			"appraisal", "negotiation", "cartography", "rumour"]:
+		skills[key] = 0
+	skills["navigation"] = 40
+	var counters := {}
+	for key in skills.keys():
+		counters[key] = 0
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10},
-		"xp": 0, "level": 1, "officers": [],
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 100, "luck": 10},
+		"skills": skills,
+		"skill_counters": counters,
+		"alloc_pending": 0,
+		"xp": 0, "level": 1,
+		"officers": ["off_leg_blasco_miranda"],
 		"reputation": {"portugal": 0, "spain": 0, "england": 0, "holland": 0,
 			"ottoman": 0, "italy": 0},
 	}
+	# The appointed escort captain (`40-*` §4.4): one in-post captain whose
+	# ship_id matches the brigantine type lifts the captain-less ×0.8 from
+	# every escort (ship instances carry no unique id — the type id is the
+	# matching key, sailing_sim `captain_ship_ids`).
+	GameState.officer_states = {"off_leg_blasco_miranda": {
+		"loyalty": 50, "sea_days": 0, "post_id": "captain",
+		"ship_id": SHIP_ID, "talk_cd_day": 0, "gift_cd_day": 0,
+		"defeats": 0, "wage_mult": 1.0}}
 	GameState.fleet = []
 	for _index in SHIP_COUNT:
 		var ship_type: Dictionary = DataLoader.get_ship_type(SHIP_ID)
@@ -247,13 +278,18 @@ func _test_fixture_arithmetic() -> void:
 		"five brigantines at fair weather sail 24 tiles/day (got %d)"
 		% SailingSimLib.effective_speed())
 	GameState.world["weather"] = "calm"
-	_check(SailingSimLib.effective_speed() == MIN_SPEED,
-		"calm weather floors the fleet to %d tiles/day (got %d)"
-		% [MIN_SPEED, SailingSimLib.effective_speed()])
+	# Calm: floor(24 × the calm wind factor) = 19 — the fleet's slow non-storm
+	# day (the envelope's pre-Phase-8 bound; storm days now dip below it).
+	_check(SailingSimLib.effective_speed() == 19,
+		"calm weather floors the fleet to 19 tiles/day (got %d)"
+		% SailingSimLib.effective_speed())
 	GameState.world["weather"] = "storm"
-	_check(SailingSimLib.effective_speed() == MAX_SPEED,
-		"a storm pushes the fleet to %d tiles/day (got %d)"
-		% [MAX_SPEED, SailingSimLib.effective_speed()])
+	# Phase 8 §4.7 headway: the storm-day retention at courage 100 is
+	# 1 − 0.5×(1 − (100−10)/400) = 0.6125, so the pushed pipeline lands at
+	# floor(36 × 0.6125) = 22 — storms cost speed now instead of adding it.
+	_check(SailingSimLib.effective_speed() == 22,
+		"a storm day runs at floor(36 × 0.6125) = 22 tiles/day (got %d)"
+		% SailingSimLib.effective_speed())
 	GameState.world["weather"] = "fair"
 	_check(is_equal_approx(CharacterLib.storm_chance_multiplier(), 0.975),
 		"luck 10 scales the storm chance by 1 − 10/400 = 0.975 (got %.4f)"

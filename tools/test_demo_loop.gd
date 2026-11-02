@@ -10,6 +10,7 @@ extends Node
 ##      (exit 0 = all steps pass; the check count must be 100% of TOTAL)
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingLib := preload("res://scripts/world/sailing_sim.gd")
@@ -368,8 +369,12 @@ func _step7_facilities() -> void:
 	_check(CharacterLib.recruit("off_mateus_alvares"), "step 7: recruiting succeeds")
 	_check(GameState.player.officers.has("off_mateus_alvares"),
 		"step 7: the officer joins player.officers (panel source)")
-	_check(CharacterLib.effective_stat("navigation") == 25,
-		"step 7: the navigator's +10 navigation applies (15 → 25)")
+	# Phase 8: officers contribute in POST, not by employment (§4.5.3) — the
+	# pilot's true navigation feeds `effective_skill` once appointed.
+	_check(SkillsLib.appoint("off_mateus_alvares", "pilot"),
+		"step 7: appointing Mateus as pilot succeeds")
+	_check(SkillsLib.effective_skill("navigation") == 35,
+		"step 7: the pilot's navigation applies in post (5 + 30 = 35)")
 
 	# Inn: rest restores morale. A fresh run clears the game-over latch and every
 	# transient ledger counter left by step 5 (the sim stays dead until a new run

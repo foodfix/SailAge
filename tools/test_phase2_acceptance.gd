@@ -645,6 +645,10 @@ func _scenario_last_ship_captured() -> void:
 ## `SaveSystem.load(1)` — the shipped path, with no migration involved
 ## (docs/90-* §8.2 development-stage scope: there is no migration chain).
 func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Dictionary:
+	# Phase 8: `combat` feeds the duel through the v9 skill block
+	# (`50-*` §4.8) — swordplay + floor(courage/20) replaces the retired
+	# four-stat `stats.combat` (the suite's combat fixtures were authored
+	# against the old base, so the value lands on swordplay unchanged).
 	return {
 		"save_version": SaveSystem.SAVE_VERSION,
 		"saved_at": 1793119712,
@@ -654,10 +658,16 @@ func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Diction
 		"gold": gold,
 		"player": {
 			"nation_id": "portugal",
-			"stats": {
-				"leadership": 10, "seamanship": 10, "combat": combat,
-				"navigation": 10, "luck": 10,
-			},
+			"background_id": "",
+			"attributes": {"constitution": 10, "intellect": 10,
+				"charisma": 10, "courage": 10, "luck": 10},
+			"skills": {"seamanship": 0, "navigation": 0, "swordplay": combat,
+				"gunnery": 0, "appraisal": 0, "negotiation": 0,
+				"cartography": 0, "rumour": 0},
+			"skill_counters": {"seamanship": 0, "navigation": 0,
+				"swordplay": 0, "gunnery": 0, "appraisal": 0,
+				"negotiation": 0, "cartography": 0, "rumour": 0},
+			"alloc_pending": 0,
 			"xp": 0,
 			"level": 1,
 			"officers": [],

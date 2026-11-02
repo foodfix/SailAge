@@ -14,12 +14,17 @@ extends RefCounted
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
 
-## §4.4 pin: this is **not** the port sighting radius (48, `20-*` §4.11 /
-## `SailingSim.SIGHTING_RADIUS`); the two constants must not be conflated.
-## Chebyshev over tiles on the world grid, wrap-aware on x (`20-*` §4.1).
-## Phase-6 grid sweep: 18 → 36 tiles (≈ 3°, nm preserved at 5 nm tiles).
-const RADIUS := 36
+## §4.4 pin: this is **not** the port sighting radius (48 + navigation, `20-*`
+## §4.11 / `SailingSim.SIGHTING_RADIUS`); the two formulas must not be
+## conflated. Chebyshev over tiles on the world grid, wrap-aware on x (`20-*`
+## §4.1). Phase-6 grid sweep: 18 → 36 tiles (≈ 3°, nm preserved at 5 nm tiles).
+## **Phase 8:** the radius is owned by the cartography skill (`50-*` §4.3):
+## `36 + floor(cartography / 15)` with the effective (officer-contributed)
+## skill, so the base term below is the cartography-0 floor.
+const RADIUS_BASE := 36
+const CARTOGRAPHY_DIVISOR := 15
 ## §4.1: the world grid width in tiles (4320 at 12 tiles/degree, Phase 6).
 ## Read from the loaded legend when there is one, so a test map does not have
 ## to be 4320 wide.
@@ -37,15 +42,23 @@ const SEED_PORT_MULT := 7919
 
 # --- Explore (docs/70-* §4.4) --------------------------------------------
 
-## Every discovery within Chebyshev `RADIUS` of `cell` that has not been found
+## The Phase-8 discovery radius: `36 + floor(effective cartography / 15)`
+## (`50-*` §4.3; `Skills.effective_skill` includes the in-post officer
+## contribution).
+static func radius() -> int:
+	return RADIUS_BASE + int(floor(SkillsLib.effective_skill("cartography") / float(CARTOGRAPHY_DIVISOR)))
+
+
+## Every discovery within Chebyshev radius of `cell` that has not been found
 ## yet, sorted by id (stable dialog order).
 static func in_range(cell: Vector2i) -> Array:
 	var out: Array = []
+	var radius := radius()
 	for entry in DataLoader.discoveries_list:
 		var discovery_id := str((entry as Dictionary).get("id", ""))
 		if GameState.discoveries_found.has(discovery_id):
 			continue
-		if _distance(entry, cell) <= RADIUS:
+		if _distance(entry, cell) <= radius:
 			out.append(discovery_id)
 	out.sort()
 	return out

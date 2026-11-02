@@ -487,11 +487,11 @@ func _test_trim_and_storm_damage() -> void:
 	_make_run(OPEN_CELL, "storm")
 	_check(SailingSimLib.storm_damage_for(90) == 5,
 		"no trim term: caravel 90 still takes ceil(90 × 0.05) = 5")
-	GameState.player["stats"]["luck"] = 50
+	GameState.player["attributes"]["luck"] = 50
 	_check(SailingSimLib.storm_damage_for(90) == 4,
 		"luck 50 still mitigates before rounding: ceil(3.375) = 4")
 	# And the fleet application carries the per-hull class rule.
-	GameState.player["stats"]["luck"] = 10
+	GameState.player["attributes"]["luck"] = 10
 	GameState.world["sail_trim"] = "furled"
 	GameState.fleet[0] = FleetLib.new_ship("galley", 40)
 	GameState.fleet[0]["durability"] = 70

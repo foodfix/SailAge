@@ -683,7 +683,7 @@ func _map_has_port(port_id: String) -> bool:
 ## Puts the fleet on the nearest passable tile to `cell` (a discovery sits on
 ## land; the Explore radius is 3, `70-*` §4.4).
 func _move_fleet_near(cell: Vector2i) -> void:
-	for radius in range(0, DiscoveryLib.RADIUS + 1):
+	for radius in range(0, DiscoveryLib.radius() + 1):
 		for dy in range(-radius, radius + 1):
 			for dx in range(-radius, radius + 1):
 				var candidate := cell + Vector2i(dx, dy)

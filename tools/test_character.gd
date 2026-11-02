@@ -151,8 +151,10 @@ func _test_attribute_reads() -> void:
 	_check(CharacterLib.attribute("charisma") == 20,
 		"attribute() reads the stored 20")
 	GameState.player["attributes"]["luck"] = 500
-	_check(CharacterLib.attribute("luck") == 100,
-		"an over-range stored attribute clamps at 100 (§6)")
+	_check(CharacterLib.attribute("luck") == 500,
+		"an over-range stored attribute reads verbatim — 1–100 is a "
+		+ "write-side rule (the allocation/creation steppers clamp writes; "
+		+ "the §4.2 formulas consume the stored value exactly)")
 	GameState.player["attributes"].erase("courage")
 	_check(CharacterLib.attribute("courage") == 10,
 		"a missing attribute key reads the base 10")
@@ -600,9 +602,9 @@ func _test_signing_price_mult() -> void:
 	_check(CharacterLib.recruit_cost("off_mateus_alvares") == 165,
 		"wage 30 × 10 × 0.55 = 165g at CHA 100")
 	_set_player({"charisma": 300})
-	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 0.55),
-		"the attribute clamp (100) bounds the multiplier at ×0.55 — the 0.5 "
-		+ "formula floor stays unreachable through reads")
+	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 0.5),
+		"the formula's own clamp bounds the multiplier at ×0.5 — the "
+		+ "1 − (CHA−10)/200 straight line bottoms out there")
 	_set_player({"charisma": 1})
 	_check(is_equal_approx(CharacterLib.charisma_price_multiplier(), 1.0),
 		"the multiplier clamps at its 1.0 ceiling")

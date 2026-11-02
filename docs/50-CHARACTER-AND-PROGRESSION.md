@@ -308,8 +308,9 @@ are never enumerated in code or docs.
 - Daily wage: `Σ officer.wage_daily` in the ledger (`20-*` §4.5 step 2,
   unchanged). Signing cost: `ceil(wage_daily × 10 × price_mult)` paid once,
   with `price_mult = clamp(1 − (CHA−10)/200, 0.5, 1.0)` (the §4.2 charisma
-  price multiplier; CHA 10 → ×1.0, CHA 60 → ×0.75, CHA 100 → ×0.5); wage
-  talks otherwise enter via the §4.5.4 raise event.
+  price multiplier; CHA 10 → ×1.0, CHA 60 → ×0.75, CHA 100 → ×0.55 — the
+  straight line 1 − 90/200; the formula's own clamp bottoms out at ×0.5);
+  wage talks otherwise enter via the §4.5.4 raise event.
 
 #### 4.5.3 Contribution (replaces ROLE_STAT_BONUS)
 
@@ -455,11 +456,12 @@ no `player.stats` carry-over** (`90-*` §8.2). Shape:
   `armor` hold equipment ids or `""`.
 - **Removed: `player.stats`** (the leadership/seamanship/combat/
   navigation block) — no migration; any v8 payload is refused.
-- `officer_states` and `captain_states` are **top-level save blocks**,
-  not inside `player` — shapes normative in `90-*` §8 (officer entries:
+- `officer_states` and `captain_states` are **top-level save blocks**, not
+  inside `player` — shapes normative in `90-*` §8 (officer entries:
   `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day,
-  defeats}`; `post_id = ""` = idle; `ship_id` non-empty only for captain
-  posts).
+  defeats}` plus the optional `wage_mult` (default `1.0`) and
+  `skill_deltas` keys, `90-*` §8); `post_id = ""` = idle; `ship_id`
+  non-empty only for captain posts).
 
 ## 5. Data Examples
 

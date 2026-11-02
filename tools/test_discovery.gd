@@ -19,6 +19,7 @@ const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+const SkillsLib := preload("res://scripts/player/skills.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
@@ -44,9 +45,9 @@ const LISBON := Vector2i(2050, 615)
 const LISBON_SHORE := Vector2i(2051, 615)
 const SEA_BESIDE_LISBON := Vector2i(2049, 615)
 ## Valencia's harbor tile on the world map (derived, not stored). It is not a
-## capital, so it starts unknown. The three cells below sit at exactly Chebyshev
-## 48 / 49 / 50 from it and each is a legal step from the next, so the pair
-## (D48, D49) straddles the Phase-6 base radius 48 (`20-*` §4.11).
+## capital, so it starts unknown. The three cells below sit at Chebyshev 48 /
+## 49 / 52 from the shore tile and each is a legal step from the next; the
+## (D48, D49) pair straddles the base radius 48 (`20-*` §4.11).
 const VALENCIA_HARBOR := Vector2i(2156, 606)
 ## Valencia's shore tile: the `#` tile orthogonally adjacent to its berth that
 ## the port is drawn on and docked into (`20-*` §4.11.1).
@@ -57,6 +58,20 @@ const VALENCIA_D24 := Vector2i(2108, 558)
 
 var _failures: Array[String] = []
 var _checks := 0
+
+## The §5a boot is queue_freed when its section ends; later §5 sections
+## re-spawn the shared world when that free has landed (a freed instance
+## reads as null/invalid here and the old direct use raised a SCRIPT ERROR).
+func _ensure_shared_world() -> Node:
+	if _shared_world != null and is_instance_valid(_shared_world) \
+			and is_instance_valid(_shared_host):
+		return _shared_world
+	if _shared_host != null and is_instance_valid(_shared_host):
+		_shared_host.queue_free()
+	var spawned: Array = _spawn_world()
+	_shared_host = spawned[0]
+	_shared_world = spawned[1]
+	return _shared_world
 
 ## Shared spawned world (gate-audit trim 2026-11-02, ≤ 10 boots): adjacent
 ## sections that only need a `_make_run` + `sync_from_state()` re-fixture
@@ -124,18 +139,36 @@ func _make_run(
 	morale: int = 70,
 	officers: Array = []
 ) -> void:
+	# Phase-8 v9 player block (`50-*` §4.8): `navigation` is the navigation
+	# SKILL (the old four-stat block is retired).
+	var skills := {}
+	for key in SkillsLib.KEYS:
+		skills[key] = 0
+	skills["navigation"] = navigation
+	var counters := {}
+	for key in SkillsLib.KEYS:
+		counters[key] = 0
 	GameState.player = {
 		"nation_id": "portugal",
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": navigation, "luck": 10,
-		},
+		"background_id": "",
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10},
+		"skills": skills,
+		"skill_counters": counters,
+		"alloc_pending": 0,
 		"xp": 0,
 		"level": 1,
 		"officers": officers,
 		"reputation": {"portugal": 0, "spain": 0, "england": 0,
 			"holland": 0, "ottoman": 0, "italy": 0},
 	}
+	# Seeded officer states so `Skills.appoint`/contributions see the roster.
+	var states := {}
+	for officer_id in officers:
+		states[str(officer_id)] = {"loyalty": 50, "sea_days": 0,
+			"post_id": "", "ship_id": "", "talk_cd_day": 0,
+			"gift_cd_day": 0, "defeats": 0, "wage_mult": 1.0}
+	GameState.officer_states = states
 	var ship_type: Dictionary = DataLoader.get_ship_type("caravel")
 	GameState.fleet = [FleetLib.new_ship("caravel", int(ship_type["crew_min"]))]
 	GameState.fleet[0]["provisions"] = 100
@@ -217,39 +250,42 @@ func _known_from(cell: Vector2i, navigation: int, officers: Array = []) -> bool:
 
 
 func _test_sighting_radius() -> void:
-	# Phase-6 (`20-*` §4.11, `50-*` §4.2): radius = 48 + floor((navigation − 10)/10).
-	_make_run(15)
+	# Phase 8 (`20-*` §4.11, `50-*` §4.3): radius = 48 + floor(navigation / 12)
+	# with navigation the EFFECTIVE skill (player + in-post pilot contribution).
+	_make_run(0)
 	_check(CharacterLib.sighting_radius() == 48,
-		"navigation 15 → sighting radius 48 (§4.2 formula; got %d)"
+		"navigation 0 → sighting radius 48 (§4.11 formula; got %d)"
 		% CharacterLib.sighting_radius())
-	_make_run(10)
-	_check(CharacterLib.sighting_radius() == 48,
-		"navigation 10 → sighting radius 48 (got %d)" % CharacterLib.sighting_radius())
-	_make_run(25)
+	_make_run(12)
 	_check(CharacterLib.sighting_radius() == 49,
-		"navigation 25 → sighting radius 49 (got %d)" % CharacterLib.sighting_radius())
-	_make_run(30)
+		"navigation 12 → sighting radius 49 (got %d)" % CharacterLib.sighting_radius())
+	_make_run(24)
 	_check(CharacterLib.sighting_radius() == 50,
-		"navigation 30 → sighting radius 50 (got %d)" % CharacterLib.sighting_radius())
-	# §5 worked example: Portugal (15) + navigator (+10) = 25 → 25.
-	_make_run(15, OPEN_CELL, 70, ["off_mateus_alvares"])
-	_check(CharacterLib.effective_stat("navigation") == 25,
-		"navigator officer gives effective navigation 25 (got %d)"
-		% CharacterLib.effective_stat("navigation"))
-	_check(CharacterLib.sighting_radius() == 49,
-		"Portugal + navigator → sighting radius 49 (§5 worked example, got %d)"
+		"navigation 24 → sighting radius 50 (got %d)" % CharacterLib.sighting_radius())
+	_make_run(48)
+	_check(CharacterLib.sighting_radius() == 52,
+		"navigation 48 → sighting radius 52 (got %d)" % CharacterLib.sighting_radius())
+	# §4.3 worked example (Phase 8): Mateus (pilot, main navigation 30) in post
+	# over a skill-0 player → effective 30 → radius 50.
+	_make_run(0, OPEN_CELL, 70, ["off_mateus_alvares"])
+	_check(SkillsLib.appoint("off_mateus_alvares", "pilot"),
+		"pilot appointment accepted (navigation 30 ≥ prereq 20)")
+	_check(SkillsLib.effective_skill("navigation") == 30,
+		"pilot in post gives effective navigation 30 (got %d)"
+		% SkillsLib.effective_skill("navigation"))
+	_check(CharacterLib.sighting_radius() == 50,
+		"skill 0 + pilot (30) → sighting radius 50 (§4.3 worked example, got %d)"
 		% CharacterLib.sighting_radius())
 
 	# Chebyshev boundary at the Phase-6 base: exactly `radius` reveals,
 	# `radius + 1` does not (two real scene boots for the straddling pair).
 	_check(_known_from(VALENCIA_D24, 10),
-		"nav 10 (radius 48): a port at Chebyshev distance 48 is revealed")
+		"nav 10 (radius 48): distance 48 is revealed")
 	_check(not _known_from(VALENCIA_D25, 10),
 		"nav 10 (radius 48): distance 49 is NOT revealed")
-	# The radius INPUTS (nav 20, the officer path) on one live scene via the
-	# re-fixture seam (gate-audit trim 2026-11-02: 4 more boots → 1; the
-	# boundary geometry itself is already proven by the straddling pair above
-	# and the direct formula checks at the top of this section).
+	# The radius-49 pair (nav 20) on one live scene via the re-fixture seam
+	# (gate-audit trim 2026-11-02: the boundary geometry is already proven by
+	# the straddling pair above and the direct formula checks at the top).
 	_make_run(20, VALENCIA_D25)
 	var spawned: Array = _spawn_world()
 	var world = spawned[1]
@@ -258,16 +294,18 @@ func _test_sighting_radius() -> void:
 	_make_run(20, VALENCIA_D26)
 	world.sync_from_state()
 	_check(not GameState.known_ports.has("valencia"),
-		"nav 20 (radius 49): distance 50 is NOT revealed")
-	# The officer path agrees with the raw stat at the same boundary: Portugal
-	# (15) + navigator (+10) = 25 → radius 49, identical to a raw 25.
-	_make_run(15, VALENCIA_D25, 70, ["off_mateus_alvares"])
+		"nav 20 (radius 49): distance 52 is NOT revealed")
+	# The officer path agrees at its own boundary (radius 50 = Mateus over a
+	# skill-0 player): distance 49 revealed, distance 52 not.
+	_make_run(0, VALENCIA_D25, 70, ["off_mateus_alvares"])
+	SkillsLib.appoint("off_mateus_alvares", "pilot")
 	world.sync_from_state()
 	var officer_at_49: bool = GameState.known_ports.has("valencia")
-	_make_run(15, VALENCIA_D26, 70, ["off_mateus_alvares"])
+	_make_run(0, VALENCIA_D26, 70, ["off_mateus_alvares"])
+	SkillsLib.appoint("off_mateus_alvares", "pilot")
 	world.sync_from_state()
 	_check(officer_at_49 and not GameState.known_ports.has("valencia"),
-		"nav 15 + navigator (effective 25, radius 49): boundary at 49/50")
+		"pilot in post (effective 30, radius 50): boundary at 49 revealed / 52 not")
 	spawned[0].queue_free()
 
 
@@ -856,7 +894,7 @@ func _test_chart_screen() -> void:
 	_make_run(10, VALENCIA_D24)
 	_check(not GameState.known_ports.has("valencia"),
 		"fixture: valencia starts unknown")
-	var world: Node = _shared_world
+	var world: Node = _ensure_shared_world()
 	world.sync_from_state()
 	_check(GameState.known_ports.has("valencia"),
 		"the reveal at Chebyshev 48 discovers valencia (§4.11)")
@@ -954,7 +992,7 @@ func _test_minimap_chart_identity() -> void:
 	# re-fixtured through `_make_run` + `sync_from_state()` (no fresh boots).
 	_make_run(10, at_18)
 	GameState.discoveries_found = []
-	var world: Node = _shared_world
+	var world: Node = _ensure_shared_world()
 	world.sync_from_state()
 	_check(world.something_near(),
 		"a discovery at exactly Chebyshev 18 is in Explore range (§4.4)")
@@ -1161,7 +1199,7 @@ func _test_dialog_order() -> void:
 	# one modal at a time, never simultaneous.
 	# (Gate-audit trim 2026-11-02: §6's live world, re-fixtured — no new boot.)
 	_make_run(10, SEA_BESIDE_LISBON, 39)
-	var world: Node = _shared_world
+	var world: Node = _ensure_shared_world()
 	world.sync_from_state()
 	var hud = world.get_node("HUDLayer/HUD")
 	world._show_dialog_entries([

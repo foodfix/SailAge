@@ -25,6 +25,33 @@ alive; validator TODO left in place); (b) slot A added the `officer_bios`
 block to `captain_name_parts.json` (doc row added); (c) the level-up toast
 lands on the new `char.level_up.alloc` key beside the Phase-1
 `char.level_up` (W6 wiring note).
+**W3 status (2026-11-03): ✅ complete** — slots A (Person model +
+skills.gd + posts/loyalty) → B (sailing rewires) → C (battle sim on the
+Person model, dual captain-card shape) → D (trade wiring) merged in order;
+gate on `main`: **`run_tests.py` 42/42 green, exit 0** (baselines: 42
+suites incl. the new `test_skills`, 156 checks); speed/sighting/duel/storm
+formulas pinned term-by-term in their suites; **vertical-slice headless
+check PASS** (fresh boot: background + alloc attribute feel, speed
+`seamanship/300` delta, duel base, `alloc_pending` round-trip, training
+price closed form; zero SCRIPT ERROR). Master sweep at the gate (recorded):
+attribute reads unclamped (1–100 is write-side — formulas stay exact at
+fixture boundaries; `test_character` re-pinned), discovery radius rewired
+to `36 + floor(cartography/15)` (`discovery.gd`, unowned file),
+`test_discovery`/`test_demo_loop` re-baselined to in-post officer
+contributions, `test_world_map` helm fixture moved to 07:12 (night-sail
+rule), `test_world_e2e` fixture: v9 player block + navigation 40 (night
+exemption) + one captain-qualified officer over the brigantine type
+(captain-less ×0.8 lifted) + courage 100 (storm-headway retention 0.6125 →
+storm-day bound 22; calm 19 stays the envelope floor), `test_phase2_
+acceptance` S2/S2b fixtures to the v9 skill block, `test_ocean` luck
+fixtures to the v9 attribute block. Doc amends: charisma multiplier
+illustrative fixed (×0.55 at CHA 100), `officer_states` optional
+`wage_mult`/`skill_deltas` keys specced (`90-*` §8 — `skill_deltas` is
+**W6-C's persistence** of the in-post +1/90-days growth). Cross-wave
+notes: W4-B carries `captain_id` into fleets + the battle config; W4-C
+applies the boarding `morale_bonus` (outcome field) and the
+valuation/XP multipliers; W6 wires `char.level_up.alloc` + the battle
+screen's chain/AP buttons + boarding presentation bases.
 **History:** source plan `.kilo/plans/1793586441004-phase8-rpg-overhaul.md`
 (product-owner locked decisions, 2026-11-02). The "Review corrections" table
 records every divergence from that plan, all verified against the repo on
@@ -521,6 +548,8 @@ No code, no data. Every number above lands in its owning doc before W2.
   the doc formulas term-by-term; **vertical-slice headless check** (fresh
   boot, seeded days: attribute feel, speed delta, duel win-rate sanity,
   allocation value) — pass before W4/W5/W6 launch.
+  **→ PASSED 2026-11-03** (see the W3 status line at the top; 42/42 suites,
+  vertical slice PASS, zero SCRIPT ERROR).
 
 ## W4 — Roster & ecology (4 slots · merge A → B → C → D)
 
