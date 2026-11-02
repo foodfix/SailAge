@@ -31,6 +31,7 @@ const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const Phase3HooksLib := preload("res://scripts/quests/phase3_hooks.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 ## Task L (docs/80-* §4.7.8): the bounty board lists docked hunter captains.
@@ -145,6 +146,9 @@ var _hunter_rows: Array = []
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the palace too.
+	GameOverHostLib.attach_to(self)
 	for label in [_title, _title_row, _title_next, _mission_label, _repair_label,
 			_bounty_label, _tournament_label, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)

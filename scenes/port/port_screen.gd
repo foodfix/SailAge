@@ -52,6 +52,7 @@ const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
 ## Phase-5: the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic
 ## density dial, opened from this hub's footer row.
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 ## Amended 2026-11-01 (docs/80-* §4.2/§4.3): the Chart (S17) is instanced in
 ## this scene too — `Tab` opens it over the hub, Esc/Tab closes back into S4.
 ## The overlay wires itself (input, modal group, session reads); no code here.
@@ -146,6 +147,9 @@ var _rows_signature: String = ""
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the hub too.
+	GameOverHostLib.attach_to(self)
 	for label in [_port_name, _nation_name, _greeting, _day_greeting, _facility_heading]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_greeting.add_theme_color_override("font_color", PaletteLib.ACCENT)

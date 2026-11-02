@@ -1047,8 +1047,9 @@ static func advance_clock(days: float) -> int:
 
 ## Port-side day advance (docs/20-* §4.3: "In port, the clock does not advance
 ## except by explicit actions that cost a day"; odd jobs, rest). It runs the
-## **same** ledger as a sea day — crews eat and wages are paid in port too
-## (§4.5 "runs once per day tick at sea and on port day-advances").
+## **same** ledger as a sea day — wages are paid in port too, while the
+## consumption step is sea-only (§4.5 "runs once per day tick at sea and on
+## port day-advances", as amended 2026-11-02).
 ## Returns the number of days advanced (always 1 unless a caller batches).
 static func advance_port_day() -> int:
 	return advance_clock(1.0)
@@ -1256,10 +1257,20 @@ static func _run_daily_ledger() -> void:
 ## provisions **and** the same of water; stock is drained flagship-first
 ## (`40-*` §4.2 pooling) and a shortage is recorded for step 5. The fail-state
 ## consequence (crew loss, counters) is T9's; this step only eats.
+## **Sea ledger days only** (port-day amendment, 2026-11-02, `20-*` §4.5):
+## a docked ledger day consumes nothing — supplies are bought ashore — and
+## records the all-false shortfall shape, which is what resets the §4.9
+## starvation/scurvy counters; docking ends an active counter and the
+## crew-loss step never runs ashore. Wages (step 2) still run on port days.
 static func _ledger_consumption() -> void:
 	var crew := FleetLib.total_crew()
-	var need := 0 if crew <= 0 else int(ceil(float(crew) / float(RATION_SIZE)))
 	last_day_shortfalls = {"provisions": false, "water": false}
+	# Port-day amendment: no drain ashore (see the docstring above) — and with
+	# no shortfall recorded, step 5 reads the reset shape the same way a
+	# fully-supplied sea day does.
+	if in_port():
+		return
+	var need := 0 if crew <= 0 else int(ceil(float(crew) / float(RATION_SIZE)))
 	if need <= 0:
 		return  # Crew 0: nothing to feed, no shortage (§4.9 crew floor).
 	var ate := false

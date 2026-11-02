@@ -26,6 +26,7 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## §4.1b port hours (added 2026-11-02): the guild counter's window guard and
 ## hour charges go through the one clock seam.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## Type tag → `ui_strings` key (`80-*` §4.7.4).
@@ -72,6 +73,9 @@ var _reports: Array = []
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the guild too.
+	GameOverHostLib.attach_to(self)
 	for label in [_title, _gold, _fame, _offers_heading, _offers_hint,
 			_announce, _reports_heading, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)

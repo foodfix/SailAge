@@ -26,6 +26,7 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Task L (docs/80-* §4.7.8): the "captains resting" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -72,6 +73,9 @@ var _captain_rows: Array = []
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): rest rolls ledger days
+	# while this screen is up — the game-over screen must rise over the inn too.
+	GameOverHostLib.attach_to(self)
 	for label in [_title, _morale_label, _gold_label, _day_label]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_rest_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)

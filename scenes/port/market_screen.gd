@@ -53,6 +53,7 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## Task L (docs/80-* §4.7.8): the "merchant captains in port" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 ## docs/80 §4.7: toasts are transient (2.5s).
@@ -230,6 +231,9 @@ func _player_nation() -> String:
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the market too.
+	GameOverHostLib.attach_to(self)
 	for label in [_title, _gold, _hold, _invest_status, _toast]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_title.add_theme_font_size_override("font_size", 32)

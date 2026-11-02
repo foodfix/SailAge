@@ -51,7 +51,7 @@ permit row + commendation dialog, tavern investment telegraphs
 | S6 | Shipyard | `shipyard_screen.tscn` | 1 |
 | S7 | Tavern | `tavern_screen.tscn` | 1 |
 | S8 | Inn | `inn_screen.tscn` | 1 |
-| S9 | Game over | `ui_shared/gameover_screen.tscn` (modal over S3) | 1 |
+| S9 | Game over | `ui_shared/gameover_screen.tscn` (modal over any run-hosting scene — world, port hub, every facility screen; full-scene amendment 2026-11-02) | 1 |
 | S10 | Battle | `scenes/combat/battle_screen.tscn` | 2 |
 | S11 | Duel | `scenes/combat/duel_modal.tscn` (modal over S10) | 2 |
 | S12 | Guild | `guild_screen.tscn` | 3 |
@@ -89,6 +89,11 @@ S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
 S13 ──tournament entry──► S10 (3 bouts) ──won bout──► S13 ──last bout──► S13
 S3 ──sea death / capture──► S9 ──any key──► S1
+S4–S13 ──run death while ashore (a ledger tick on any port scene, e.g. a
+        durability-0 flagship rolling a docked day)──► S9 ──any key──► S1
+        (full-scene amendment 2026-11-02: every port-side scene attaches
+        the shared `ui_shared/game_over_host.gd`; the world scene keeps its
+        own handler with the debug-chart layer placement)
 S1 ──Quit──► exit
 ```
 

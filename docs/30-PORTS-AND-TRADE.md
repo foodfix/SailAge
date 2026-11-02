@@ -443,9 +443,11 @@ with K's transition.
 - **Rest (amended 2026-11-02):** button "Rest 3 days", cost `10g × 3 = 30g`;
   the clock advances by exactly `Δ = 10/3 − clock_fraction` days
   (`20-*` §4.3), so the run wakes on **day + 3 at 08:00** whatever the
-  arrival hour, and exactly **three** ledger days charge (wages still paid)
-  with the in-port morale delta (+5/day, cap 80, `20-*` §4.8.1). The inn is
-  open 24h (§4.1b), so rest is offered at any time.
+  arrival hour, and exactly **three** ledger days charge (wages still paid;
+  supplies are not — a docked ledger day consumes nothing, `20-*` §4.5
+  port-day amendment) with the in-port morale delta (+5/day, cap 80,
+  `20-*` §4.8.1). The inn is open 24h (§4.1b), so rest is offered at any
+  time.
 - **Harbor relief (odd jobs):** visible only when the `10-*` §5 condition
   holds (`gold < 100` and fleet empty). Button "Work an odd job":
   `gold += 100`, one ledger day passes. Strings `inn.odd_job.offer`,

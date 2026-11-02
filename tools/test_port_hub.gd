@@ -79,6 +79,7 @@ func _ready() -> void:
 	await _test_provisions_gate()
 	await _test_officers_panel_entry()
 	await _test_chart_at_port()
+	await _test_game_over_full_scene()
 	_report()
 
 
@@ -1345,6 +1346,46 @@ func _check(condition: bool, description: String) -> void:
 	else:
 		_failures.append(description)
 		print("FAIL  ", description)
+
+
+# --- S9 full-scene (80-* §4.2 full-scene amendment, 2026-11-02) ------------
+
+## Every run-hosting port scene attaches the shared GameOverHost, so a ledger
+## death ashore — the frozen-port bug: a starvation/scurvy counter completing
+## on a docked midnight roll — raises S9 over whichever screen is up. The
+## world scene keeps its own handler and is not exercised here.
+func _test_game_over_full_scene() -> void:
+	_make_run()
+	var host := Control.new()
+	add_child(host)
+	for path in [
+		"res://scenes/port/port_screen.tscn",
+		"res://scenes/port/market_screen.tscn",
+		"res://scenes/port/shipyard_screen.tscn",
+		"res://scenes/port/tavern_screen.tscn",
+		"res://scenes/port/inn_screen.tscn",
+		"res://scenes/port/guild_screen.tscn",
+		"res://scenes/port/palace_screen.tscn",
+	]:
+		var scene: Control = (load(path) as PackedScene).instantiate()
+		host.add_child(scene)
+		await get_tree().process_frame
+		EventBus.game_over.emit("sunk")
+		var screen := scene.get_node_or_null(
+			"GameOverHost/GameOverLayer/GameOverScreen") as Control
+		_check(screen != null and screen.is_open(),
+			"%s raises S9 on game_over" % path.get_file())
+		if screen != null:
+			_check(screen.reason == "sunk"
+				and not screen.reason_text().is_empty(),
+				"%s's S9 binds the reason (%s)"
+				% [path.get_file(), screen.reason_text()])
+		if scene.has_method("has_modal"):
+			_check(scene.has_modal(),
+				"%s holds its hotkeys while S9 is open" % path.get_file())
+		host.remove_child(scene)
+		scene.free()
+	host.queue_free()
 
 
 func _report() -> void:

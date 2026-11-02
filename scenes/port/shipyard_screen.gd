@@ -38,6 +38,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -135,6 +136,9 @@ var _rebuilding := false
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the shipyard too.
+	GameOverHostLib.attach_to(self)
 	_title.add_theme_font_size_override("font_size", 32)
 	for label in [_title, _gold_label, _catalog_title, _fleet_title]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
@@ -170,12 +174,17 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # --- Public API ------------------------------------------------------------
 
-## True while the sell confirmation or any HUD dialog is on screen.
+## True while the sell confirmation, any HUD dialog, or any `modal_overlay`
+## modal (the S9 game-over screen included, 80-* §4.2 full-scene amendment)
+## is on screen.
 func has_modal() -> bool:
 	if _confirm != null and _confirm.is_open():
 		return true
 	if _hud != null and _hud.has_method("has_modal") and _hud.has_modal():
 		return true
+	for node in get_tree().get_nodes_in_group("modal_overlay"):
+		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
+			return true
 	return false
 
 

@@ -32,6 +32,7 @@ const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 ## §4.1b port hours: the officers tab's window guard + hour charge (added
 ## 2026-11-02) — the tavern is the facility, this screen hosts the action.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
@@ -136,6 +137,9 @@ var _busy: bool = false
 
 func _ready() -> void:
 	$Background.color = PaletteLib.PANEL_BG
+	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
+	# ledger tick ashore — the game-over screen must rise over the tavern too.
+	GameOverHostLib.attach_to(self)
 	for label in [
 		_title, _gold, _crew_count, _morale, _per_head, _reason, _min_note,
 		_roster_header, _officer_reason, _toast, _rumor_price,

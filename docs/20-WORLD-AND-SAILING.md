@@ -284,11 +284,17 @@ normative in `60-*` §4.11.11 (unified-movement amendment), not here.
 ### 4.5 Daily ledger (strict order, runs once per day tick at sea and on
 port day-advances)
 
-1. **Consumption:** daily need is `need = ceil(total_crew / RATION_SIZE)`
+1. **Consumption (sea ledger days only — port-day amendment, 2026-11-02):**
+   daily need is `need = ceil(total_crew / RATION_SIZE)`
    units of provisions **and** the same in water, with `RATION_SIZE = 5`
    (1 unit feeds/waters 5 crew for 1 day; pooled across all ships,
    `40-*` §pooling). If stock < need, the stock is consumed to 0 and the
-   shortfall triggers fail-state counters (§4.9).
+   shortfall triggers fail-state counters (§4.9). **A docked ledger day
+   consumes nothing** — supplies are bought ashore, so a port ledger day
+   always records "no shortfall", which is exactly the §4.9 shape that resets
+   the starvation/scurvy counters to 0: docking ends an active counter, and
+   the counters can only ever advance at sea. Wages (step 2) still run on
+   port days.
 2. **Wages:** `gold -= total_crew × CREW_WAGE_DAILY + Σ officer.wage_daily`.
    `CREW_WAGE_DAILY = 2` (locked). Gold may go negative ≤ 0 → clamp to 0 and
    apply morale −5 once that day (unpaid crew).
@@ -474,7 +480,9 @@ If neither is possible (e.g., crew already 1), mutiny fizzles with morale +5.
 | Scurvy | water < need (water clamp to 0) | counter+1; `crew -= max(1, floor(crew × 0.05))`; morale −5 | counter ≥ 7 → `game_over("scurvy")` |
 | Sinking | any ship durability ≤ 0 | — | flagship only ship → `game_over("sunk")`; else crew/cargo relocate per `40-*` §sinking |
 
-Starvation/scurvy counters reset to 0 on the first fully-supplied day. Crew
+Starvation/scurvy counters reset to 0 on the first fully-supplied day; a
+port ledger day always counts as fully-supplied (port-day amendment,
+2026-11-02, §4.5 step 1), so the counters advance at sea only. Crew
 loss from either cannot reduce crew below 1 (game over fires at 7 days
 regardless). On game over: show `gameover_screen` with the reason string,
 then return to title; no save is written or deleted.
@@ -482,8 +490,9 @@ then return to title; no save is written or deleted.
 ### 4.10 Provisions & water as cargo
 
 - Both occupy capacity at 1 cargo unit per unit (`10-*` §3.1) and are
-  consumed at `ceil(crew / 5)` units each per day (§4.5) — e.g., a 15-crew
-  caravel burns 3 + 3 units/day, so 60 + 60 units of cargo = 20 days at sea.
+  consumed at `ceil(crew / 5)` units each per **sea** day (§4.5; a docked
+  ledger day consumes nothing — port-day amendment, 2026-11-02) — e.g., a 15-crew
+  caravel burns 3 + 3 units/day at sea, so 60 + 60 units of cargo = 20 days at sea.
 - **Purchased at the Set-Sail provisioning dialog, not the market**
   (`80-*` §4.6.1): `provisions` 2g/unit, `water` 1g/unit (locked prices; not
   affected by supply/demand — they are supplies, not trade goods, and never

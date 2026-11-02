@@ -125,7 +125,7 @@ Application-wide signals; no state. Canonical signals:
 | `fleet_changed()` | | ship bought/sold/sunk/repaired/cargo moved |
 | `market_changed(port_id: String)` | | a trade moved a port-good's stock at that port (economy stock change; market UI refreshes) |
 | `port_entered(port_id: String)` | | a port's shore tile entered (docking, `20-*` §4.11.1) |
-| `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"`/`"captured"` | sea-death |
+| `game_over(reason: String)` | `"starvation"`/`"scurvy"`/`"sunk"`/`"captured"` | run death — a ledger tick ended the run (port day-rolls included, `20-*` §4.9); S9 rises over every run-hosting scene (`80-*` §4.2 full-scene amendment 2026-11-02) |
 | `save_completed(slot: int)` | | SaveSystem finished a write |
 | `battle_started(encounter: Dictionary)` | encounter descriptor (`60-*` §4.11.11) | S10 opens a battle |
 | `battle_finished(outcome: Dictionary)` | outcome block (`60-*` §4.11.9/§4.11.10) | a battle ends, any outcome |

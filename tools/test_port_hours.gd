@@ -50,6 +50,7 @@ func _ready() -> void:
 	_test_rest_lands_at_8am()
 	_test_set_sail_carries_the_clock()
 	_test_ecology_ticks_in_port()
+	_test_port_day_feeds_no_one()
 	_test_hub_closed_rows()
 	_report()
 
@@ -115,6 +116,42 @@ func _check(condition: bool, description: String) -> void:
 	else:
 		_failures.append(description)
 		print("FAIL  ", description)
+
+
+# --- 7. Port ledger days feed no one (20-* §4.5 port-day amendment) --------
+
+func _test_port_day_feeds_no_one() -> void:
+	# Docked at 23:59 with two days of rations and an ACTIVE starvation and
+	# scurvy counter: the midnight roll charges wages but never touches
+	# supplies, and the port day reads as the fully-supplied day — both
+	# counters reset, no crew loss, no game over. (The frozen-port regression:
+	# waiting ashore used to starve the crew invisibly and then freeze every
+	# clock surface at the death midnight.)
+	_make_run(1000, 10, 70, 23.0 / 24.0 + 59.0 / 1440.0)
+	var flagship: Dictionary = GameState.fleet[0]
+	flagship["provisions"] = 2
+	flagship["water"] = 2
+	SailingSimLib.starvation_days = 5
+	SailingSimLib.scurvy_days = 3
+	var gold_before := GameState.gold
+	var crew_before := int(flagship["crew"])
+	SailingSimLib.advance_port_hours(1)
+	_check(int(GameState.day) == 11, "the midnight crossing rolled day 11")
+	_check(int(flagship["provisions"]) == 2 and int(flagship["water"]) == 2,
+		"a port ledger day consumed no provisions and no water (got %d/%d)"
+		% [int(flagship["provisions"]), int(flagship["water"])])
+	_check(SailingSimLib.starvation_days == 0 and SailingSimLib.scurvy_days == 0,
+		"the port day reset both fail-state counters (starvation %d, scurvy %d)"
+		% [SailingSimLib.starvation_days, SailingSimLib.scurvy_days])
+	_check(int(flagship["crew"]) == crew_before,
+		"the port day ran no crew loss (crew %d)" % int(flagship["crew"]))
+	_check(GameState.gold < gold_before,
+		"wages still ran on the port day (gold %d → %d)"
+		% [gold_before, GameState.gold])
+	_check(SailingSimLib.game_over_reason.is_empty(),
+		"no game over fired on a docked roll (reason '%s')"
+		% SailingSimLib.game_over_reason)
+	SailingSimLib.reset_ledger_state()
 
 
 func _report() -> void:
