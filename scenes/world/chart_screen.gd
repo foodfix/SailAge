@@ -1032,7 +1032,12 @@ func _ensure_hover_window() -> void:
 ## Shows/hides + positions the floating window (clamped to the viewport).
 ## §4.6 (amended 2026-11-02): a report wider than the fold cap wraps
 ## (word-smart) instead of spanning the screen; short entries keep their
-## natural width.
+## natural width. The natural width is measured with the label's own font
+## (NOT `get_minimum_size()` across an autowrap toggle — the label's wrap
+## height depends on its stale current width, which once blew the panel up
+## to a screen-filling empty block), the wrap width is forced on the label
+## BEFORE its height is read, and the panel `reset_size()`s every show so
+## it re-fits — and shrinks — instead of only ever growing.
 func _show_hover_window(text: String, at: Vector2) -> void:
 	_ensure_hover_window()
 	if text.is_empty():
@@ -1041,13 +1046,28 @@ func _show_hover_window(text: String, at: Vector2) -> void:
 	_hover_window_label.text = text
 	var view := get_viewport_rect().size
 	var max_w := minf(HOVER_WINDOW_MAX_W, view.x * 0.5)
-	_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_hover_window_label.custom_minimum_size.x = 0.0
-	if _hover_window_label.get_minimum_size().x > max_w:
+	var font := _hover_window_label.get_theme_font("font")
+	var font_size := _hover_window_label.get_theme_font_size("font_size")
+	var natural_w := 0.0
+	for line in text.split("\n"):
+		natural_w = maxf(natural_w, font.get_string_size(
+			line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
+	if natural_w > max_w:
 		_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_hover_window_label.custom_minimum_size.x = max_w
+		_hover_window_label.custom_minimum_size = Vector2(max_w, 0.0)
+		# Give the wrap a real width NOW, then force a re-shape at it
+		# (clear + re-set the text — an identical `set_text` early-outs,
+		# and the stale-width shape is what once computed a 9 897 px
+		# height for a ~10-line report).
+		_hover_window_label.size = Vector2(max_w, 1.0)
+		_hover_window_label.text = ""
+		_hover_window_label.text = text
+	else:
+		_hover_window_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		_hover_window_label.custom_minimum_size = Vector2.ZERO
+	_hover_window.reset_size()
 	_hover_window.visible = true
-	var size := _hover_window.get_minimum_size()
+	var size := _hover_window.size
 	var pos := at + Vector2(14.0, 14.0)
 	_hover_window.position = pos.clamp(Vector2.ZERO,
 		(view - size).clamp(Vector2.ZERO, view))
