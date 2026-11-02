@@ -347,7 +347,9 @@ rendering is viewport-culled and never re-simulates.
 Clicking **Set Sail** (`出航`) — or pressing `ESC` on S4, which is the same
 edge (`§4.2`) — opens a provisioning prompt **before** the world map. This is
 the only place supplies are bought; the market sells trade goods only
-(`20-*` §4.10).
+(`20-*` §4.10). The prompt buys at **any hour** — supplies are a 24h
+exception to the §4.1b windows (2026-11-02 amendment, `30-*` §4.1b); each
+completed purchase still charges its §4.1b hour.
 
 ```
 +--------------------------------------------------------------+

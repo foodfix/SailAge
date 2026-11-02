@@ -51,6 +51,7 @@ func _ready() -> void:
 	_test_set_sail_carries_the_clock()
 	_test_ecology_ticks_in_port()
 	_test_port_day_feeds_no_one()
+	_test_supplies_buy_24h()
 	_test_hub_closed_rows()
 	_report()
 
@@ -151,6 +152,24 @@ func _test_port_day_feeds_no_one() -> void:
 	_check(SailingSimLib.game_over_reason.is_empty(),
 		"no game over fired on a docked roll (reason '%s')"
 		% SailingSimLib.game_over_reason)
+	SailingSimLib.reset_ledger_state()
+
+
+# --- 8. Supplies buy 24h (30-* §4.1b exemption, 2026-11-02) ----------------
+
+func _test_supplies_buy_24h() -> void:
+	# The pre-sail prompt buys provisions/water at any hour — the market's
+	# window gates only the market's own goods counter. The §4.1b action hour
+	# still runs on every completed purchase.
+	_make_run(1000, 10, 70)
+	_clock(7, 59)
+	_check(not TradeEngineLib.buy("lisbon", "wine", 1),
+		"07:59 a market GOOD buy is still refused (closed rule)")
+	_check(TradeEngineLib.buy_supplies("lisbon", "provisions", 1),
+		"07:59 (market closed) a supply buy goes through anyway")
+	_check(SailingSimLib.time_of_day_minutes() in [538, 539, 540],
+		"the supply purchase charged its §4.1b hour (got %s)"
+		% SailingSimLib.clock_text())
 	SailingSimLib.reset_ledger_state()
 
 

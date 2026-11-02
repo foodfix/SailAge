@@ -449,12 +449,10 @@ static func buy_supplies(port_id: String, kind: String, qty: int) -> bool:
 		return false
 	if qty <= 0 or qty > supplies_buy_max(kind):
 		return false
-	# §4.1b closed rule: supplies are bought at the market, so a docked call
-	# respects the market window (the pre-sail prompt passes the docked port;
-	# a port-less caller — none in production — skips the guard).
-	if not port_id.is_empty() \
-			and not SailingSimLib.facility_open(port_id, "market"):
-		return false
+	# 24h rule (30-* §4.1b closed-rule exemption, 2026-11-02, `20-*` §4.10):
+	# supplies are bought at the §4.6.1 pre-sail prompt, not at the market's
+	# counter — no facility window applies. The §4.1b action hour below still
+	# runs after a completed purchase.
 	var cost := supplies_price(kind) * qty
 	if GameState.gold < cost:
 		return false

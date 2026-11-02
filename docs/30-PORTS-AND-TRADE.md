@@ -84,7 +84,11 @@ after it (the "last order" reading — a 17:59 trade ends 18:59, a 18:01 trade
 is refused). A closed facility renders its hub row disabled with the
 `port.facility.closed` label carrying the `{open}–{close}` window; the port
 Space wait (§4.3, +1h) is the way to wait for opening. The inn never closes,
-so rest and odd jobs work at any hour.
+so rest and odd jobs work at any hour. **Supplies are the one exception to
+the windows (24h amendment, 2026-11-02, `20-*` §4.10):** provisions/water
+are bought at the §4.6.1 pre-sail prompt, not at the market's counter, so
+their purchase works at any hour — each completed purchase still charges
+its action hour below.
 
 **Action hour costs (pinned).** Every timed port action charges hours through
 `SailingSim.advance_port_hours` after its effects apply (all-or-nothing: a

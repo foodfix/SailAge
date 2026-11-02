@@ -498,6 +498,9 @@ then return to title; no save is written or deleted.
   affected by supply/demand — they are supplies, not trade goods, and never
   appear in `goods.json`). The market no longer sells them; the provisioning
   prompt is the single supply purchase point, and it also jettisons surplus.
+  **Purchases work at any hour** (24h amendment, 2026-11-02 — the prompt is
+  not the market, `30-*` §4.1b closed-rule exemption); each completed
+  purchase still charges its §4.1b action hour.
   Reasons: (1) supplies are survival, not commerce, so they must not compete
   with trade rows; (2) leaving port is the moment the player knows where they
   are going, so it is the moment the number matters.
