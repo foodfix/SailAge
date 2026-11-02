@@ -9,6 +9,22 @@ locked number now lives in its owning doc. Master micro-integrations at the
 gate: charisma price multiplier pinned (`50-*` §4.2/§4.5.2, bounty pinpoint
 base 100g in `70-*` §4.5), appraisal price memory pinned session-transient
 (`30-*` §4.2), `00-*` §5 completion-style consistency.
+**W2 status (2026-11-03): ✅ complete** — slots A/B/C merged, then the
+staged validator D last; gate on `main` green: validator groups 1–12 exit 0,
+`build_captains.py --check` byte-identical (2 runs), `build_routes.py
+--check` / `build_world.py --check-snaps` / `build_ocean.py --check` green.
+**Measured canon (the acceptance-record pin, correction 2): 1,275 captain
+cards** covering the extreme preset (trader 525 / coaster 450 of which 135
+nationless / patrol 72 / courier 48 / privateer 56 / pirate 100 / hunter 24;
+treasure 24 covered by trader tier-2), officers 96 = 24 + 72
+(captain-qualified 28 ≥ 12; specialty coverage min 10 carriers/skill),
+ui_strings 681 → 844 keys. Master deviations, recorded: (a)
+`data/npc_captains.json` deletion + the absence assertion move to **W4-B**
+with the last runtime reader (W3's `run_tests` gate needs the pool draw
+alive; validator TODO left in place); (b) slot A added the `officer_bios`
+block to `captain_name_parts.json` (doc row added); (c) the level-up toast
+lands on the new `char.level_up.alloc` key beside the Phase-1
+`char.level_up` (W6 wiring note).
 **History:** source plan `.kilo/plans/1793586441004-phase8-rpg-overhaul.md`
 (product-owner locked decisions, 2026-11-02). The "Review corrections" table
 records every divergence from that plan, all verified against the repo on
@@ -479,6 +495,8 @@ No code, no data. Every number above lands in its owning doc before W2.
   `data/npc_captains.json`.
 - **Gate (master)**: validator exit 0; `build_captains.py --check`; canon
   counts cover the extreme preset; officer quotas met.
+  **→ PASSED 2026-11-03** (see the W2 status line at the top of this file
+  for the measured counts and the recorded deviations).
 
 ## W3 — Core model (4 slots · merge A → B → C → D)
 
