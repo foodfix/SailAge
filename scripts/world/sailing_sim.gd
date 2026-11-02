@@ -23,6 +23,19 @@ extends RefCounted
 ## `_run_daily_ledger()` is the single seam for all six steps: they run in the
 ## §4.5 order, synchronously, once per day tick at sea **and** on port
 ## day-advances.
+##
+## Phase 8 (2026-11-02, docs/20-* §4.2/§4.4/§4.7–§4.9/§4.11, `40-*` §4.4–4.5):
+## the attribute/skill rewires live here — the seamanship speed bonus
+## (`skill/300` clamp `[0, +0.30]`), night-sail cost doubling with the
+## navigation ≥ 40 exemption, the storm trio (continuous luck damage,
+## CON-scaled morale hit, COU-scaled headway), charisma desertion/mutiny, the
+## CON/surgeon scurvy grace, the navigation sighting radius, the
+## captain-less escort hooks (speed ×0.8 scan, −2 morale), the officer sea-day
+## growth seam, and the §4.5 at-sea minor repair. Slot A's
+## `Character.attribute` / `Skills.effective_skill` API is consumed through
+## guarded loaders ([method attribute], [method effective_skill],
+## [method officers_in_post]) with v9-block fallbacks so the module runs
+## green before that merge lands.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
@@ -45,29 +58,59 @@ const PROVISIONS_PRICE := 2
 const WATER_PRICE := 1
 ## §4.11: base port sighting radius, Chebyshev, wrap-aware on x.
 ## Phase-6 grid sweep: 24 → 48 tiles (≈ 240 nm, nm preserved at 5 nm tiles).
-## (`50-*` §4.2 modifies it by navigation at the caller.)
+## The navigation term is added by [method sighting_radius] (§4.11, Phase 8).
 const SIGHTING_RADIUS := 48
+## §4.11 (Phase 8): `48 + floor(effective_navigation / 12)` — the navigation
+## divisor of the sighting formula. Effective navigation = player skill + the
+## in-post pilot's value (`50-*`).
+const SIGHTING_NAVIGATION_DIVISOR := 12
 ## §4.11 / `70-*` §4.4: the separate, shorter discovery sighting radius. Kept
 ## here because §5 is the single constants location for both radii — the
-## engine value lives in `DiscoverySight.RADIUS`, which must agree.
+## **engine formula** (`36 + floor(cartography / 15)`, Phase 8) lives in
+## `DiscoverySight`, whose `RADIUS` base must agree with this constant. This
+## file owns no copy of the cartography formula (single implementation rule).
 ## Phase-6 grid sweep: 18 → 36 tiles (≈ 3°).
 const DISCOVERY_RADIUS := 36
+## §4.11 (Phase 8): the cartography divisor of the discovery-radius formula —
+## pinned for §5 completeness; `DiscoverySight` owns the formula itself.
+const DISCOVERY_CARTOGRAPHY_DIVISOR := 15
 ## §4.1: `lat = 90 − y / 12` (12 tiles per degree, 1 tile = 5′ of latitude;
 ## Phase-6 grid, `10-*` §6.1).
 const TILES_PER_DEGREE := 12
 ## §4.8: new-game morale and the in-port ceiling.
 const MORALE_START := 70
 const MORALE_PORT_CAP := 80
-## §4.9: fail-state counter limit (starvation and scurvy).
+## §4.9: fail-state counter base (starvation, and the scurvy grace base).
+## Scurvy's game-over threshold is this **plus** `floor(max(CON, in-post
+## surgeon medicine) / [constant SCURVY_GRACE_DIVISOR])` (§4.9, Phase 8).
 const STARVATION_LIMIT_DAYS := 7
-## §4.8.3: mutiny trigger threshold and per-day chance at sea.
+## §4.9 scurvy grace (Phase 8): the `floor(x / 10)` divisor fed by the higher
+## of the player's constitution and the in-post surgeon's medicine.
+const SCURVY_GRACE_DIVISOR := 10
+## §4.8.3: mutiny trigger threshold and per-day chance at sea (before the
+## charisma multiplier).
 const MUTINY_THRESHOLD := 20
 const MUTINY_CHANCE_PER_DAY := 0.25
+## §4.8.2/§4.8.3 (Phase 8): the charisma factor's divisor — desertion loss and
+## the mutiny chance are × `max(0, 1 − (charisma − 10) / 200)`.
+const MUTINY_CHARISMA_DIVISOR := 200
 ## §4.8.2: desertion on port entry below this morale.
 const DESERTION_THRESHOLD := 40
 const DESERTION_FRACTION := 0.10
-## §4.7: storm damage as a fraction of max durability (`ceil(max × 0.05)`).
+## §4.7: storm damage as a fraction of max durability (`ceil(max × 0.05)`),
+## mitigated × `1 − luck / [constant STORM_DAMAGE_LUCK_DIVISOR]` (Phase 8 —
+## the retired `luck ≥ 50 → ×0.75` step is deleted; continuous, player-only).
 const STORM_DAMAGE_FRACTION := 0.05
+const STORM_DAMAGE_LUCK_DIVISOR := 250
+## §4.7 storm headway (Phase 8): on a storm day the day's movement budget
+## loses `0.5 × (1 − (COU − 10) / 400)` — the speed retention factor
+## `1 − 0.5 × (1 − (COU − 10) / 400)` (×0.500 at COU 10 → ×0.6125 at COU 100).
+## Player-ledger only; NPC fleets are pinned neutral (1.0).
+const STORM_HEADWAY_BASE_LOSS := 0.5
+const STORM_HEADWAY_DIVISOR := 400
+## §4.8.1 storm-day morale (Phase 8): the storm −5 itself is
+## × `1 − (CON − 10) / 300` (constitution tempers the morale hit).
+const STORM_MORALE_CON_DIVISOR := 300
 ## §4.7 storm damage is rounded with `ceil`; binary float noise makes exact
 ## integer products evaluate a hair above the integer (140 × 0.05 =
 ## 7.000000000000001), so the ceiling is taken on `raw − STORM_DAMAGE_EPSILON`.
@@ -84,6 +127,10 @@ const MORALE_SHORTFALL := -5
 const MORALE_STORM := -5
 const MORALE_UNPAID_WAGES := -5
 const MORALE_PORT_DAILY := 5
+## §4.8.1 (Phase 8, the `40-*` §4.4 captain-less rule): while **any** fleet
+## ship beyond the flagship has no in-post captain, the daily decay gains this
+## additional −2 (once per day, not per ship).
+const MORALE_CAPTAIN_LESS := -2
 ## Morale is a 0–100 fleet value (§4.8).
 const MORALE_MIN := 0
 const MORALE_MAX := 100
@@ -234,6 +281,313 @@ const WEATHER_OUTCOMES: Array[String] = ["calm", "fair", "strong", "storm"]
 const CLOCK_EPSILON := 1.0e-9
 
 
+# --- Phase-8 skill/attribute formulas (docs/20-* §4.2, §4.4, §4.11) ----------
+
+## §4.4 (Phase 8): `seamanship_bonus = seamanship / 300`, clamped `[0, +0.30]`
+## — never negative (the retired `(seamanship − 10) / 100` clamp
+## `[−0.10, +0.20]` is deleted).
+const SEAMANSHIP_SPEED_DIVISOR := 300
+const SEAMANSHIP_SPEED_CAP := 0.30
+## §4.2 night sailing (Phase 8): a move starting at wall-clock ≥ 22:00 or
+## < 06:00 costs `2 × move_cost` — half the distance per movement budget —
+## unless effective navigation ≥ 40.
+const NIGHT_WINDOW_START_HOUR := 22
+const NIGHT_WINDOW_END_HOUR := 6
+const NIGHT_MOVE_COST_MULTIPLIER := 2.0
+const NIGHT_SAIL_NAVIGATION_THRESHOLD := 40
+
+## `40-*` §4.4 (Phase 8): an escort without an in-post captain contributes
+## `ShipType.speed × 0.8` to the §4.4 slowest-hull scan.
+const CAPTAIN_LESS_SPEED_FACTOR := 0.8
+
+## `40-*` §4.5 at-sea minor repair (Phase 8): with a carpenter in post whose
+## carpentry ≥ 60, +10 durability to one fleet ship, once per fleet-day, at
+## the discounted 10-point fee, no clock cost.
+const AT_SEA_REPAIR_POINTS := 10
+const AT_SEA_REPAIR_CARPENTRY_GATE := 60
+## §2.2 / `40-*` §4.3: the carpentry divisor of the repair-fee discount
+## (`−floor(carpentry / 20)`%).
+const AT_SEA_REPAIR_CARPENTRY_DIVISOR := 20
+
+## Path of slot A's `skills.gd` (Phase 8 roster). Loaded **guarded** (by path,
+## never `preload`) so this module runs green before W3-A's file lands.
+const SKILLS_SCRIPT_PATH := "res://scripts/player/skills.gd"
+
+## Slot A's `skills.gd` once present, else `null`. Probed once per process
+## (the file cannot appear mid-run); [member skills_script_override] wins so a
+## test can drive the seam before the real module merges.
+static var _skills_script: Script = null
+static var _skills_probed: bool = false
+## Test seam (the [member drift_mode_override] pattern): a runtime GDScript
+## standing in for `skills.gd`. Never set it outside a test.
+static var skills_script_override: Script = null
+## Test seam for the save-v9 `officer_states` block (`90-*` §8): the autoload
+## gains the runtime var in slot A's wake, so a test can inject the block here
+## before that. A Dictionary here wins over `GameState.officer_states`.
+## Never set it outside a test.
+static var officer_states_override = null
+
+
+## The skills module (slot A's `Skills`) or `null` before it merges.
+static func _skills() -> Script:
+	if skills_script_override != null:
+		return skills_script_override
+	if _skills_script == null and not _skills_probed:
+		_skills_probed = true
+		if ResourceLoader.exists(SKILLS_SCRIPT_PATH):
+			_skills_script = load(SKILLS_SCRIPT_PATH)
+	return _skills_script
+
+
+## The save-v9 `officer_states` block (`{officer_id → {post_id, ship_id, …}}`),
+## guard-read: the override wins (tests), then the autoload's block when it
+## exists, else `{}` (pre-v9 fixtures with no appointed officers).
+static func _officer_states() -> Dictionary:
+	if officer_states_override is Dictionary:
+		return officer_states_override
+	var states = GameState.get("officer_states")
+	return states if states is Dictionary else {}
+
+
+static func _player_block(key: String) -> Dictionary:
+	var player: Dictionary = GameState.player
+	var block = player.get(key, {})
+	return block if block is Dictionary else {}
+
+
+static func _player_array(key: String) -> Array:
+	var player: Dictionary = GameState.player
+	var value = player.get(key, [])
+	return value if value is Array else {}
+
+
+## The player attribute (`constitution` / `intellect` / `charisma` / `courage`
+## / `luck`). Prefers slot A's `Character.attribute()`; before that lands it
+## reads the v9 `player.attributes` block directly, then the retired
+## `player.stats` block, and any unknown id reads the base value 10 (`50-*`
+## §4.2.1) so a pre-merge fixture can never crash the pipeline.
+static func attribute(attribute_id: String) -> int:
+	# Variant-indirected: a preloaded script const is checked as the class
+	# itself, and `Object.has_method`/`Object.call` are instance-level (the
+	# guard-call pattern, `80-*` §4.9).
+	var cls: Variant = CharacterLib
+	if cls.has_method("attribute"):
+		return int(cls.call("attribute", attribute_id))
+	var attributes := _player_block("attributes")
+	if attributes.has(attribute_id):
+		return int(attributes[attribute_id])
+	var stats := _player_block("stats")
+	return int(stats[attribute_id]) if stats.has(attribute_id) else 10
+
+
+## The effective skill value (player skill + the in-post officer contribution,
+## `50-*` §4.5.3). Prefers slot A's `Skills.effective_skill()`; before that
+## lands it reads the v9 `player.skills` block directly (the player's own
+## value — officer skills such as `medicine`/`carpentry` are absent there and
+## correctly read 0 without a surgeon/carpenter in post).
+static func effective_skill(skill_id: String) -> int:
+	var lib := _skills()
+	if lib != null and lib.has_method("effective_skill"):
+		return int(lib.call("effective_skill", skill_id))
+	return int(_player_block("skills").get(skill_id, 0))
+
+
+## Officer ids currently in `post_id` (`50-*` posts). Prefers slot A's
+## `Skills.officers_in_post()`; before that lands it scans the
+## [method _officer_states] block for employed officers whose `post_id`
+## matches (the same state the save block stores, `90-*` §8).
+static func officers_in_post(post_id: String) -> Array:
+	if officer_states_override is Dictionary:
+		var direct := []
+		var states: Dictionary = officer_states_override
+		for officer_id in _player_array("officers"):
+			var state: Dictionary = states.get(str(officer_id), {})
+			if str(state.get("post_id", "")) == post_id:
+				direct.append(str(officer_id))
+		return direct
+	var lib := _skills()
+	if lib != null and lib.has_method("officers_in_post"):
+		var ids = lib.call("officers_in_post", post_id)
+		if ids is Array:
+			return ids
+	var out := []
+	var fallback_states := _officer_states()
+	for officer_id in _player_array("officers"):
+		var state: Dictionary = fallback_states.get(str(officer_id), {})
+		if str(state.get("post_id", "")) == post_id:
+			out.append(str(officer_id))
+	return out
+
+
+## The ship ids whose captain post is filled: every in-post captain officer's
+## `officer_states.ship_id` (`90-*` §8: non-empty only on a captain post).
+## Ship identity is the instance's `ship_type_id` today — fleet ship
+## instances carry no other stable key (`40-*` §4.1).
+static func captain_ship_ids() -> Array:
+	var states := _officer_states()
+	var ids := []
+	for officer_id in officers_in_post("captain"):
+		var state: Dictionary = states.get(str(officer_id), {})
+		var ship_id := str(state.get("ship_id", ""))
+		if not ship_id.is_empty() and not ids.has(ship_id):
+			ids.append(ship_id)
+	return ids
+
+
+## Number of fleet ships **beyond the flagship** with no in-post captain
+## (`40-*` §4.4). Zero for the default one-ship fleet — the captain-less rule
+## changes nothing without escorts.
+static func captain_less_count() -> int:
+	var captained := captain_ship_ids()
+	var count := 0
+	for index in range(1, GameState.fleet.size()):
+		var ship = GameState.fleet[index]
+		if not (ship is Dictionary):
+			continue
+		if not (str(ship.get("ship_type_id", "")) in captained):
+			count += 1
+	return count
+
+
+## docs/20-* §4.4 (Phase 8): the seamanship speed bonus, `seamanship / 300`
+## clamped `[0, +0.30]` — effective seamanship = player + in-post boatswain.
+static func seamanship_bonus() -> float:
+	return seamanship_bonus_for(effective_skill("seamanship"))
+
+
+## [method seamanship_bonus] for an explicit value — the pure formula.
+static func seamanship_bonus_for(seamanship: int) -> float:
+	return clampf(
+		float(seamanship) / float(SEAMANSHIP_SPEED_DIVISOR), 0.0,
+		SEAMANSHIP_SPEED_CAP
+	)
+
+
+## Effective navigation: player skill + the in-post pilot's value (`50-*`).
+static func effective_navigation() -> int:
+	return effective_skill("navigation")
+
+
+## docs/20-* §4.11 (Phase 8): the port sighting radius,
+## `48 + floor(effective_navigation / 12)` — base 48 ≈ 4° ≈ 240 nm plus the
+## navigation term, Chebyshev, wrap-aware on x (the wrap arithmetic is the
+## caller's). Map exploration (§4.12) uses the same radius.
+static func sighting_radius() -> int:
+	return SIGHTING_RADIUS + int(floor(
+		float(effective_navigation()) / float(SIGHTING_NAVIGATION_DIVISOR)))
+
+
+## [method sighting_radius] for an explicit effective-navigation value (the
+## pure formula).
+static func sighting_radius_for(effective_navigation_value: int) -> int:
+	return SIGHTING_RADIUS + int(floor(
+		float(effective_navigation_value) / float(SIGHTING_NAVIGATION_DIVISOR)))
+
+
+## docs/20-* §4.2 (Phase 8): true while the wall-clock start-of-move time is
+## inside the night window — `HH:MM` ≥ 22:00 or < 06:00 (§4.3's
+## `floor(clock_fraction × 1440)`).
+static func is_night_watch() -> bool:
+	var minutes := time_of_day_minutes()
+	return minutes >= NIGHT_WINDOW_START_HOUR * 60 \
+		or minutes < NIGHT_WINDOW_END_HOUR * 60
+
+
+## True when a move starting now pays the night slow: night window **and**
+## effective navigation below 40 (the exemption, §4.2).
+static func night_slow_applies() -> bool:
+	return is_night_watch() \
+		and effective_navigation() < NIGHT_SAIL_NAVIGATION_THRESHOLD
+
+
+## The clock cost of one fleet move (§4.2): `move_cost(heading)` doubled while
+## [method night_slow_applies] — every step source alike (step keys, helm
+## auto-steps, click-to-sail legs all funnel through `try_move`). A docking
+## charge is **not** a move: it stays the plain `move_cost(heading)` (§4.11.1).
+static func step_move_cost(heading: String = "") -> float:
+	var cost := move_cost(heading)
+	if cost <= 0.0:
+		return 0.0
+	if night_slow_applies():
+		return cost * NIGHT_MOVE_COST_MULTIPLIER
+	return cost
+
+
+## docs/20-* §4.7 (Phase 8): the storm-headway speed factor — on a day that
+## rolled storm the fleet runs at `1 − 0.5 × (1 − (COU − 10) / 400)` of normal
+## speed; every other day 1.0. Player-ledger only (§4.4: NPC fleets are pinned
+## neutral 1.0 — they run their own pipeline in `60-*` §4.11.11 and never call
+## [method effective_speed]).
+static func storm_headway_factor() -> float:
+	if str(GameState.world.get("weather", DEFAULT_WEATHER)) != "storm":
+		return 1.0
+	var retention := 1.0 - float(attribute("courage") - 10) \
+		/ float(STORM_HEADWAY_DIVISOR)
+	return 1.0 - STORM_HEADWAY_BASE_LOSS * retention
+
+
+## docs/20-* §4.7 (Phase 8): the continuous luck storm-damage mitigation,
+## `1 − luck / 250` — player-only, applied before rounding
+## (`Character.storm_chance_multiplier()` keeps owning the unchanged chance
+## term × `(1 − luck / 400)`).
+static func storm_luck_multiplier() -> float:
+	return 1.0 - float(attribute("luck")) / float(STORM_DAMAGE_LUCK_DIVISOR)
+
+
+## docs/20-* §4.8.1 (Phase 8): the storm-day morale multiplier,
+## `1 − (CON − 10) / 300` — constitution tempers the storm morale hit.
+static func storm_morale_multiplier() -> float:
+	return 1.0 - float(attribute("constitution") - 10) \
+		/ float(STORM_MORALE_CON_DIVISOR)
+
+
+## The §4.8.1 storm-day morale delta: `−5 ×` the multiplier, rounded half away
+## from zero so the fleet morale stays integral (CON 10 → −5, CON 100 → −4).
+static func storm_morale_delta() -> int:
+	return int(round(float(MORALE_STORM) * storm_morale_multiplier()))
+
+
+## docs/20-* §4.8.2/§4.8.3 (Phase 8): the charisma factor that replaces the
+## retired leadership at every desertion/mutiny site —
+## `max(0, 1 − (charisma − 10) / 200)` (floored at 0 like the old formula: a
+## negative multiplier would turn a loss into a gain).
+static func charisma_loss_multiplier() -> float:
+	return maxf(0.0, 1.0 - float(attribute("charisma") - 10) \
+		/ float(MUTINY_CHARISMA_DIVISOR))
+
+
+## docs/20-* §4.9 (Phase 8): the scurvy game-over threshold,
+## `7 + floor(max(CON, in-post surgeon medicine) / 10)` — the player's
+## constitution and the in-post surgeon's medicine (`Skills.effective_skill`
+## gives the player's own 0 plus the surgeon value) feed the same term.
+static func scurvy_limit_days() -> int:
+	var grace := maxi(attribute("constitution"), effective_skill("medicine"))
+	return STARVATION_LIMIT_DAYS + int(floor(float(grace) / float(SCURVY_GRACE_DIVISOR)))
+
+
+## The shipyard engine, lazily loaded by path — `shipyard_engine.gd` preloads
+## this file, and a static preload cycle would break both (the
+## `fleet.gd`↔`shipyard_engine.gd` pattern).
+static func _shipyard_lib() -> Script:
+	if _shipyard_script == null:
+		_shipyard_script = load("res://scripts/port/shipyard_engine.gd")
+	return _shipyard_script
+
+
+static var _shipyard_script: Script = null
+
+
+## `40-*` §4.3 (Phase 8): the in-post carpenter's repair-fee discount,
+## `1 − floor(carpentry / 20) / 100` — a −`floor(carpentry / 20)`% discount on
+## the whole fee (composed after the §4.9.2 count-title ×0.8 and floored once
+## at the end of the whole transaction, `70-*` §4.9.2). Single implementation:
+## the shipyard fee and the at-sea minor-repair fee both compose it.
+static func carpenter_discount() -> float:
+	var steps := int(floor(
+		float(effective_skill("carpentry")) / float(AT_SEA_REPAIR_CARPENTRY_DIVISOR)))
+	return 1.0 - float(steps) / 100.0
+
+
 # --- Speed (docs/20-* §4.4, §4.6, §4.7, §4.14–§4.17) ------------------------
 
 ## docs/20-* §4.7: multiplier for the current weather and the flagship's class.
@@ -287,10 +641,11 @@ static func current_factor(heading: String, cell: Vector2i, month: int) -> float
 
 ## docs/20-* §4.4, exactly:
 ##   floor(slowest hull speed × wind × [direction × current × trim] × crew
-##         × (1 + seamanship bonus)), min 1.
+##         × (1 + seamanship bonus) × storm headway), min 1.
 ## `base_speed` is the slowest ShipType.speed in the fleet ("Fleet-speed
-## composition"); weather class, crew, crew_min and the seamanship bonus come
-## from the flagship.
+## composition"), with the Phase-8 captain-less rule (an escort without an
+## in-post captain contributes `speed × 0.8`, `40-*` §4.4); weather class,
+## crew, crew_min and the seamanship bonus come from the flagship.
 ##
 ## Phase-6 heading forms:
 ##   * `effective_speed(heading)` — the §4.4 pipeline: the direction factor
@@ -301,8 +656,13 @@ static func current_factor(heading: String, cell: Vector2i, month: int) -> float
 ## A furled sail/hybrid fleet has no speed at all (§4.17 "furled 0 — cannot
 ## move"): this returns 0, and only the oar class exemption keeps a furled
 ## galley rowing.
+##
+## Phase 8: the seamanship bonus is the `50-*` skill formula
+## ([method seamanship_bonus], clamp `[0, +0.30]`) and the storm-headway term
+## ([method storm_headway_factor], §4.7) joins on a storm day — player-ledger
+## only; NPC fleets run their own §4.11.11 pipeline and never call this.
 static func effective_speed(heading: String = "") -> int:
-	var base := FleetLib.slowest_speed()
+	var base := _fleet_base_speed()
 	if base <= 0:
 		# No fleet (or an unknown hull): §4.4's floor still applies.
 		return MIN_SPEED
@@ -327,9 +687,33 @@ static func effective_speed(heading: String = "") -> int:
 		* dir_f \
 		* current_f \
 		* crew_factor() \
-		* (1.0 + CharacterLib.speed_bonus()) \
+		* (1.0 + seamanship_bonus()) \
+		* storm_headway_factor() \
 		* trim_f
 	return maxi(int(floor(raw)), MIN_SPEED)
+
+
+## The §4.4 slowest-hull scan over the fleet, with the `40-*` §4.4 Phase-8
+## captain-less rule: a ship **beyond the flagship** with no in-post captain
+## whose `ship_id` matches contributes `speed × 0.8` (a captain-less hull is
+## the slowest whenever its ×0.8 value dips below the others'). The flagship
+## is exempt (the player steers it) and with no escorts the scan reduces
+## exactly to `Fleet.slowest_speed()`'s value.
+static func _fleet_base_speed() -> int:
+	var best := 0
+	var captained := captain_ship_ids()
+	for index in GameState.fleet.size():
+		var ship = GameState.fleet[index]
+		if not (ship is Dictionary):
+			continue
+		var speed := FleetLib.ship_stat(ship, "speed")
+		if speed <= 0:
+			continue
+		if index > 0 and not (str(ship.get("ship_type_id", "")) in captained):
+			speed = int(floor(float(speed) * CAPTAIN_LESS_SPEED_FACTOR))
+		if best == 0 or speed < best:
+			best = speed
+	return best
 
 
 ## docs/20-* §4.2/§4.4: a successful tile move advances the clock by
@@ -459,6 +843,7 @@ static func reset_ledger_state() -> void:
 	drift_accumulator = 0.0
 	drift_mode_override = null
 	last_wind_prevailing = ""
+	at_sea_repair_day = -1
 	_last_run_day = -1
 
 
@@ -720,9 +1105,11 @@ static func roll_wind_direction(tile: Vector2i, month: int, weather: String) -> 
 
 
 ## §4.7 storm damage for one hull: `ceil(durability_max × 0.05)`, with the
-## luck mitigation (`50-*` §4.2: ×0.75 when luck ≥ 50) applied **before**
-## rounding. The epsilon absorbs binary float noise (140 × 0.05 evaluates to
-## 7.000000000000001, which must still ceil to 7, per §4.7's worked table).
+## continuous luck mitigation (Phase 8: × `1 − luck / 250`,
+## [method storm_luck_multiplier]; the retired `luck ≥ 50 → ×0.75` step is
+## deleted) applied **before** rounding. The epsilon absorbs binary float
+## noise (140 × 0.05 evaluates to 7.000000000000001, which must still ceil to
+## 7, per §4.7's worked table).
 ##
 ## Phase 6 (§4.17): `extra_multiplier` carries the trim storm multiplier —
 ## furled ×0.5 / reefed ×0.75 / normal ×1.0 / full ×1.5 (oar forced 1.0 by the
@@ -733,7 +1120,7 @@ static func storm_damage_for(durability_max: int, extra_multiplier: float = 1.0)
 	if durability_max <= 0:
 		return 0
 	var raw := float(durability_max) * STORM_DAMAGE_FRACTION \
-		* CharacterLib.storm_damage_multiplier() * extra_multiplier
+		* storm_luck_multiplier() * extra_multiplier
 	return maxi(0, int(ceil(raw - STORM_DAMAGE_EPSILON)))
 
 
@@ -971,7 +1358,11 @@ static func try_move(to: Vector2i, map = null, from = null) -> bool:
 		# Furled (§4.17): sails in, no way on. No clock cost, no move.
 		return false
 	GameState.set_world_tile(to)
-	advance_clock(move_cost(heading))
+	# §4.2 night sailing (Phase 8): the move's START time keys the cost —
+	# `2 × move_cost` inside the night window unless effective navigation ≥ 40.
+	# One choke point for every step source (step keys, helm auto-steps and
+	# click-to-sail legs all pass through here).
+	advance_clock(step_move_cost(heading))
 	return true
 
 
@@ -1345,7 +1736,8 @@ static func _ledger_weather() -> void:
 ## | at sea, fully supplied          | −1    |
 ## | at sea, provisions short        | −5    |
 ## | at sea, water short             | −5    |
-## | at sea, storm day               | −5    |
+## | at sea, storm day               | −5 × (1 − (CON−10)/300), rounded (Phase 8) |
+## | any escort without its captain  | −2 additional (Phase 8, `40-*` §4.4) |
 ## | in port (any day advance)       | +5, up to the port cap 80 |
 ## | wages unpaid (gold clamped)     | −5    |
 ##
@@ -1357,7 +1749,11 @@ static func _ledger_weather() -> void:
 ## that is not paid is just as mutinous).
 ##
 ## Also here, deferred from T7 (`50-*` §4.3): **+2 XP per day tick at sea
-## only**, never on a port day advance.
+## only**, never on a port day advance. Phase 8 adds the sea-day growth seam
+## at the same point (after consumption/wages, with the XP award):
+## `Skills.note_sea_day()` (skill usage) and `Skills.officer_day_tick()`
+## (in-post officer sea-days, 90-day growth), via the guarded loader so the
+## ledger still ticks before slot A's module merges.
 static func _ledger_morale() -> bool:
 	var delta := MORALE_SEA_DAILY if not in_port() else MORALE_PORT_DAILY
 	var before := GameState.morale
@@ -1367,11 +1763,16 @@ static func _ledger_morale() -> bool:
 		if bool(last_day_shortfalls.get("water", false)):
 			delta += MORALE_SHORTFALL
 		if last_day_storm:
-			delta += MORALE_STORM
+			delta += storm_morale_delta()
+		# `40-*` §4.4 captain-less rule (Phase 8): −2 additional while any
+		# escort lacks its in-post captain (once per day, not per ship).
+		if captain_less_count() > 0:
+			delta += MORALE_CAPTAIN_LESS
 		# docs/50-* §4.3, deferred from T7: +2 XP per day tick **at sea only**.
 		# Guarded so a fleetless/playerless debug fixture (docs/50-* §4.7
 		# harbor relief) still ticks without an error.
 		if not GameState.player.is_empty():
+			_sea_day_growth()
 			CharacterLib.award_xp(2)
 	if last_day_unpaid_wages:
 		delta += MORALE_UNPAID_WAGES
@@ -1384,6 +1785,21 @@ static func _ledger_morale() -> bool:
 		after = mini(after, maxi(before, MORALE_PORT_CAP))
 	GameState.morale = clampi(after, MORALE_MIN, MORALE_MAX)
 	return true
+
+
+## The Phase-8 sea-day growth seam (`20-*` §4.8.1, `50-*` §2.2): the player's
+## skill usage counters (`Skills.note_sea_day()`) and the in-post officers'
+## sea-days (`Skills.officer_day_tick()` — 90-day growth, loyalty resignal)
+## run at the ledger's growth point, after consumption/wages and with the +2
+## XP award. A no-op until slot A's `skills.gd` exists (guard-call convention).
+static func _sea_day_growth() -> void:
+	var lib := _skills()
+	if lib == null:
+		return
+	if lib.has_method("note_sea_day"):
+		lib.call("note_sea_day")
+	if lib.has_method("officer_day_tick"):
+		lib.call("officer_day_tick")
 
 
 # --- Ledger step 5: fail states (docs/20-* §4.9) ---------------------------
@@ -1480,7 +1896,10 @@ static func _advance_starvation_and_scurvy() -> bool:
 		_apply_crew_loss(STARVATION_CREW_LOSS_FRACTION)
 	if starvation_days >= STARVATION_LIMIT_DAYS:
 		return _fire_game_over("starvation")
-	if scurvy_days >= STARVATION_LIMIT_DAYS:
+	# §4.9 scurvy grace (Phase 8): the game-over threshold is
+	# `7 + floor(max(CON, in-post surgeon medicine) / 10)`; starvation's 7 is
+	# untouched.
+	if scurvy_days >= scurvy_limit_days():
 		return _fire_game_over("scurvy")
 	return true
 
@@ -1505,10 +1924,11 @@ static func _apply_crew_loss(fraction: float) -> int:
 
 ## §4.5 step 6 — mutiny check. At sea only, below [constant MUTINY_THRESHOLD]:
 ## one draw of the **dedicated** [member mutiny_rng] against
-## `MUTINY_CHANCE_PER_DAY × Character.mutiny_multiplier()`. A hit stores the
-## offer in [member pending_mutiny] and queues the `world.mutiny.text` modal in
-## the §4.7 dialog order; the player's choice is resolved by the three pure
-## `resolve_mutiny_*` entry points ([method resolve_mutiny_pay],
+## `MUTINY_CHANCE_PER_DAY × [method charisma_loss_multiplier]` (Phase 8:
+## charisma replaces the retired leadership factor, formula unchanged). A hit
+## stores the offer in [member pending_mutiny] and queues the `world.mutiny.text`
+## modal in the §4.7 dialog order; the player's choice is resolved by the three
+## pure `resolve_mutiny_*` entry points ([method resolve_mutiny_pay],
 ## [method resolve_mutiny_suppress], [method resolve_mutiny_fizzle]).
 ##
 ## A second offer never stacks: while one is pending the check is skipped, so
@@ -1520,7 +1940,7 @@ static func _ledger_mutiny() -> void:
 		return
 	if not mutiny_is_possible():
 		return
-	var chance := MUTINY_CHANCE_PER_DAY * CharacterLib.mutiny_multiplier()
+	var chance := MUTINY_CHANCE_PER_DAY * charisma_loss_multiplier()
 	if mutiny_rng.randf() >= chance:
 		return
 	pending_mutiny = mutiny_offer()
@@ -1604,9 +2024,9 @@ static func resolve_mutiny_fizzle() -> void:
 # --- Desertion on port entry (docs/20-* §4.8.2) ----------------------------
 
 ## Every port entry with morale < [constant DESERTION_THRESHOLD] costs
-## `loss = max(1, floor(crew × 0.10 × Character.desertion_multiplier()))` crew,
-## floored at 1. Returns the crew lost (0 when morale is 40+ — the check is
-## `< 40`, so exactly 40 is safe).
+## `loss = max(1, floor(crew × 0.10 × [method charisma_loss_multiplier]))`
+## crew, floored at 1 (Phase 8: charisma scales the loss). Returns the crew
+## lost (0 when morale is 40+ — the check is `< 40`, so exactly 40 is safe).
 ##
 ## Pure state, no dialog: the world scene's port-entry sequence queues the
 ## `world.desertion` message in §4.7 order, so a headless test can drive the
@@ -1620,7 +2040,7 @@ static func apply_desertion() -> int:
 	var crew := int(ship.get("crew", 0))
 	if crew <= CREW_FLOOR:
 		return 0
-	var raw := float(crew) * DESERTION_FRACTION * CharacterLib.desertion_multiplier()
+	var raw := float(crew) * DESERTION_FRACTION * charisma_loss_multiplier()
 	var loss := maxi(1, int(floor(raw)))
 	var after := maxi(CREW_FLOOR, crew - loss)
 	ship["crew"] = after
@@ -1628,6 +2048,90 @@ static func apply_desertion() -> int:
 	if lost > 0:
 		FleetLib.notify_changed()
 	return lost
+
+
+# --- At-sea minor repair (docs/40-* §4.5, Phase 8) -------------------------
+
+## The fleet-day of the last successful at-sea repair (once per fleet-day).
+## Runtime-only, never persisted (saving happens in port, where the action is
+## unavailable); reset by [method reset_ledger_state] for fixtures.
+static var at_sea_repair_day: int = -1
+
+
+## `fleet[ship_index]` as a non-empty Dictionary, else `{}`.
+static func _ship_at(ship_index: int) -> Dictionary:
+	if ship_index < 0 or ship_index >= GameState.fleet.size():
+		return {}
+	var ship = GameState.fleet[ship_index]
+	return ship if ship is Dictionary else {}
+
+
+## The in-post carpentry value behind the §4.5 gate — effective carpentry =
+## player 0 + the in-post carpenter's value (player skills never carry
+## carpentry; the officer contribution is the whole term, `50-*` §4.5.3).
+static func effective_carpentry() -> int:
+	return effective_skill("carpentry")
+
+
+## True when the §4.5 carpenter gate is met (in-post carpentry ≥ 60).
+static func at_sea_repair_gate_met() -> bool:
+	return effective_carpentry() >= AT_SEA_REPAIR_CARPENTRY_GATE
+
+
+## The §4.5 fee of one at-sea minor repair on `fleet[ship_index]`:
+## `10 × ceil(ShipType.base_price / 400)` points at the §4.3 rate, under the
+## carpenter discount ([method carpenter_discount]), **floored once** — and
+## without the §4.9.2 count-title ×0.8, which is port-scoped (`70-*` §4.9.2).
+## 0 for an unknown hull.
+static func at_sea_repair_fee(ship_index: int = 0) -> int:
+	var ship := _ship_at(ship_index)
+	if ship.is_empty():
+		return 0
+	var raw := AT_SEA_REPAIR_POINTS * int(_shipyard_lib().repair_cost_per_point(
+		str(ship.get("ship_type_id", ""))))
+	return maxi(0, int(floor(float(raw) * carpenter_discount())))
+
+
+## True when [method at_sea_repair] would succeed right now: at sea, run
+## alive, gate met, a damaged target hull, the once-per-fleet-day guard open
+## and the purse covering the fee. The UI hook (W5/W6) composes this with the
+## fee and gate reads; the sim owns every rule.
+static func at_sea_repair_available(ship_index: int = 0) -> bool:
+	if in_port() or is_game_over():
+		return false
+	if not at_sea_repair_gate_met():
+		return false
+	var ship := _ship_at(ship_index)
+	if ship.is_empty():
+		return false
+	var maximum := int(_shipyard_lib().ship_max_durability(ship_index))
+	if maximum <= 0 or int(ship.get("durability", 0)) >= maximum:
+		return false  # nothing to repair
+	if at_sea_repair_day == GameState.day:
+		return false
+	return GameState.gold >= at_sea_repair_fee(ship_index)
+
+
+## §4.5 "At-sea minor repair" (Phase 8): restores [constant
+## AT_SEA_REPAIR_POINTS] durability to `fleet[ship_index]` for the
+## [method at_sea_repair_fee] gold — once per fleet-day, **no clock cost**,
+## at sea only. False (state untouched) when any guard fails; the guards and
+## their order are [method at_sea_repair_available]'s. Emits `gold_changed`
+## and `fleet_changed` on success so the HUD/fleet panel repaint without
+## polling. The UI hook itself lands in W5/W6 (`80-*`); this is the world-side
+## entry point.
+static func at_sea_repair(ship_index: int = 0) -> bool:
+	if not at_sea_repair_available(ship_index):
+		return false
+	var ship := _ship_at(ship_index)
+	var maximum := int(_shipyard_lib().ship_max_durability(ship_index))
+	var fee := at_sea_repair_fee(ship_index)
+	ship["durability"] = mini(int(ship.get("durability", 0)) + AT_SEA_REPAIR_POINTS, maximum)
+	at_sea_repair_day = GameState.day
+	GameState.gold = maxi(0, GameState.gold - fee)
+	EventBus.gold_changed.emit(GameState.gold)
+	FleetLib.notify_changed()
+	return true
 
 
 # --- Game over (docs/20-* §4.9) --------------------------------------------

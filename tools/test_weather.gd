@@ -89,13 +89,24 @@ func _make_run(
 	luck: int = 10,
 	ship_ids: Array = ["caravel"],
 	crew: int = 15,
-	gold: int = 100000
+	gold: int = 100000,
+	constitution: int = 10,
 ) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
+		# Phase-8 v9 shape (50-* §4.8) + the legacy stats block the pre-merge
+		# character.gd fallbacks read.
+		"attributes": {
+			"constitution": constitution, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": luck,
+		},
+		"skills": {
+			"seamanship": 10, "navigation": 60, "swordplay": 0, "gunnery": 0,
+			"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+		},
 		"stats": {
 			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": luck,
+			"navigation": 60, "luck": luck,
 		},
 		"xp": 0,
 		"level": 1,
@@ -132,6 +143,17 @@ func _one_day() -> int:
 func _tile(x: int, y: int) -> Vector2i:
 	GameState.world["position"] = {"x": x, "y": y}
 	return Vector2i(x, y)
+
+
+## Finds a weather seed whose first trade-wind roll is a storm (the
+## test_morale pattern, on this suite's fixture cell), for the deterministic
+## storm-day observations.
+func _seed_for_storm() -> int:
+	for candidate in 500:
+		SailingSimLib.set_weather_seed(candidate)
+		if SailingSimLib.roll_weather(TRADE_CELL) == "storm":
+			return candidate
+	return 0
 
 
 ## Restores stores and hull for the long weather loops: T9's ledger would
@@ -419,28 +441,52 @@ func _test_redistribution_preserves_table() -> void:
 # --- §4.7 / §5 storm damage formula ---------------------------------------
 
 func _test_damage_formula() -> void:
-	# Caravel 90 → ceil(4.5) = 5; luck ≥ 50 → ceil(3.375) = 4.
-	_make_run("fair", TRADE_CELL, 10)
+	# §4.7 Phase 8: damage × (1 − luck/250), continuous, applied before ceil.
+	# Caravel 90 → ceil(4.5) = 5 at luck 0; ceil(4.5 × 0.96) = 5 at luck 10;
+	# ceil(4.5 × 0.60) = ceil(2.7) = 3 at luck 100 (×1.00 / ×0.60).
+	_make_run("fair", TRADE_CELL, 0)
+	_check(is_equal_approx(SailingSimLib.storm_luck_multiplier(), 1.0),
+		"storm_luck_multiplier at luck 0 is ×1.00 (got %.4f)"
+		% SailingSimLib.storm_luck_multiplier())
 	_check(SailingSimLib.storm_damage_for(90) == 5,
-		"caravel (90) takes ceil(90×0.05) = 5 at luck 10 (got %d)"
+		"caravel (90) takes ceil(90×0.05) = 5 at luck 0 (got %d)"
 		% SailingSimLib.storm_damage_for(90))
+	_make_run("fair", TRADE_CELL, 10)
+	_check(is_equal_approx(SailingSimLib.storm_luck_multiplier(), 0.96),
+		"storm_luck_multiplier at luck 10 is ×0.96 (got %.4f)"
+		% SailingSimLib.storm_luck_multiplier())
+	_check(SailingSimLib.storm_damage_for(90) == 5,
+		"caravel (90) takes ceil(4.5×0.96) = 5 at luck 10 (got %d)"
+		% SailingSimLib.storm_damage_for(90))
+	_make_run("fair", TRADE_CELL, 100)
+	_check(is_equal_approx(SailingSimLib.storm_luck_multiplier(), 0.60),
+		"storm_luck_multiplier at luck 100 is ×0.60 (got %.4f)"
+		% SailingSimLib.storm_luck_multiplier())
+	_check(SailingSimLib.storm_damage_for(90) == 3,
+		"caravel (90) takes ceil(4.5×0.6) = 3 at luck 100 (got %d)"
+		% SailingSimLib.storm_damage_for(90))
+	# The retired `luck ≥ 50 → ×0.75` step is gone: the multiplier is
+	# continuous — luck 49 → ×0.804, luck 50 → ×0.80 (the ×0.8 value the old
+	# step produced at exactly 50 is now just the continuous curve).
 	_make_run("fair", TRADE_CELL, 49)
-	_check(SailingSimLib.storm_damage_for(90) == 5,
-		"luck 49 is below the threshold: still 5 (got %d)"
-		% SailingSimLib.storm_damage_for(90))
+	_check(is_equal_approx(SailingSimLib.storm_luck_multiplier(), 1.0 - 49.0 / 250.0),
+		"luck 49 sits on the continuous curve ×0.804 (got %.4f)"
+		% SailingSimLib.storm_luck_multiplier())
 	_make_run("fair", TRADE_CELL, 50)
-	_check(SailingSimLib.storm_damage_for(90) == 4,
-		"luck 50: ceil(90×0.05×0.75) = ceil(3.375) = 4 (got %d)"
-		% SailingSimLib.storm_damage_for(90))
-	_check(is_equal_approx(CharacterLib.storm_damage_multiplier(), 0.75),
-		"Character.storm_damage_multiplier() == 0.75 at luck 50")
+	_check(is_equal_approx(SailingSimLib.storm_luck_multiplier(), 0.80),
+		"luck 50 is ×0.80, the same continuous curve (got %.4f)"
+		% SailingSimLib.storm_luck_multiplier())
 
-	# Luck is applied BEFORE ceil, not after (5 × 0.75 = 3.75 → 4, not 4 × 0.75).
+	# Luck is applied BEFORE ceil, not after (4.5 × 0.6 = 2.7 → 3, not
+	# ceil(5) × 0.6 → 3 either way at luck 100; luck 49 separates them:
+	# 4.5 × 0.804 = 3.618 → 4, while floor(ceil(4.5) × 0.804) = 3).
+	_make_run("fair", TRADE_CELL, 49)
 	_check(SailingSimLib.storm_damage_for(90) == 4,
-		"mitigation is applied before rounding (4, not floor(5×0.75)=3)")
+		"mitigation is applied before rounding (4, not floor(5×0.804)=3)")
 
-	# Every hull in data/ship_types.json, both luck regimes, exact §4.7 values.
-	_make_run("fair", TRADE_CELL, 10)
+	# Every hull in data/ship_types.json at luck 0 (×1.00) and luck 100
+	# (×0.60), exact §4.7 values.
+	_make_run("fair", TRADE_CELL, 0)
 	var expected_plain := {
 		"latin": 2, "sloop": 3, "caravel": 5, "galley": 4,
 		"brigantine": 6, "nao": 7, "carrack": 9, "galleon": 12,
@@ -448,19 +494,19 @@ func _test_damage_formula() -> void:
 	for ship_id in expected_plain:
 		var max_dur := int(DataLoader.get_ship_type(str(ship_id))["durability"])
 		_check(SailingSimLib.storm_damage_for(max_dur) == int(expected_plain[ship_id]),
-			"%s (%d) takes %d damage at luck < 50 (got %d)" % [
+			"%s (%d) takes %d damage at luck 0 (got %d)" % [
 				ship_id, max_dur, int(expected_plain[ship_id]),
 				SailingSimLib.storm_damage_for(max_dur)
 			])
-	_make_run("fair", TRADE_CELL, 50)
+	_make_run("fair", TRADE_CELL, 100)
 	var expected_mitigated := {
-		"latin": 2, "sloop": 3, "caravel": 4, "galley": 3,
-		"brigantine": 5, "nao": 6, "carrack": 7, "galleon": 9,
+		"latin": 2, "sloop": 2, "caravel": 3, "galley": 3,
+		"brigantine": 4, "nao": 5, "carrack": 6, "galleon": 8,
 	}
 	for ship_id in expected_mitigated:
 		var max_dur := int(DataLoader.get_ship_type(str(ship_id))["durability"])
 		_check(SailingSimLib.storm_damage_for(max_dur) == int(expected_mitigated[ship_id]),
-			"%s (%d) takes %d damage at luck ≥ 50 (got %d)" % [
+			"%s (%d) takes %d damage at luck 100 (got %d)" % [
 				ship_id, max_dur, int(expected_mitigated[ship_id]),
 				SailingSimLib.storm_damage_for(max_dur)
 			])
@@ -485,12 +531,14 @@ func _test_storm_damage_applied_to_fleet() -> void:
 	_check(changes.size() == 1,
 		"fleet_changed emitted exactly once per storm day (got %d)" % changes.size())
 
-	# Luck ≥ 50 lets the same fleet ride it out with less damage: 4 and 6.
+	# The continuous luck curve lets the same fleet ride it out with less
+	# damage: at luck 50 (×0.80) caravel ceil(4.5×0.8) = 4 and nao
+	# ceil(7×0.8) = ceil(5.6) = 6.
 	_make_run("fair", TRADE_CELL, 50, ["caravel", "nao"])
 	SailingSimLib.apply_storm_damage()
 	_check(int(GameState.fleet[0]["durability"]) == 86
 		and int(GameState.fleet[1]["durability"]) == 134,
-		"luck 50 fleet: caravel 90 → 86, nao 140 → 134 (got %d/%d)" % [
+		"luck 50 fleet (×0.80 continuous): caravel 90 → 86, nao 140 → 134 (got %d/%d)" % [
 			int(GameState.fleet[0]["durability"]),
 			int(GameState.fleet[1]["durability"]),
 		])
@@ -566,6 +614,25 @@ func _test_no_morale_change() -> void:
 			% [day + 1, " −5 (storm)" if SailingSimLib.last_day_storm else "", expected, GameState.morale])
 	_check(storm_days > 0,
 		"the seeded 6-day trade-wind run contains at least one storm (got %d)" % storm_days)
+
+	# §4.8.1 storm-day morale (Phase 8): the storm −5 itself is
+	# × (1 − (CON−10)/300). At CON 10 the multiplier is 1.0 (−5, the pin
+	# above); at CON 100 it is 0.7 → −5 × 0.7 = −3.5, rounded half away from
+	# zero to the integral −4. One seeded storm day at CON 100 pins it.
+	_make_run("fair", TRADE_CELL, 10, ["caravel"], 15, 100000, 100)
+	_check(is_equal_approx(SailingSimLib.storm_morale_multiplier(), 0.7),
+		"storm_morale_multiplier at CON 100 is ×0.7 (got %.4f)"
+		% SailingSimLib.storm_morale_multiplier())
+	_check(SailingSimLib.storm_morale_delta() == -4,
+		"the CON-100 storm morale delta is round(−3.5) = −4 (got %d)"
+		% SailingSimLib.storm_morale_delta())
+	SailingSimLib.set_weather_seed(_seed_for_storm())
+	GameState.morale = 70
+	_one_day()
+	_check(SailingSimLib.last_day_storm, "the CON-100 fixture seeded a storm day")
+	_check(GameState.morale == 70 - 1 - 4 and SailingSimLib.last_morale_delta == -5,
+		"a CON-100 storm day costs −1 −4 = −5 (70 → %d, delta %d)" % [
+			GameState.morale, SailingSimLib.last_morale_delta])
 
 	# The flag itself: true on a storm, false on the next non-storm day.
 	_make_run("fair", TRADE_CELL, 10)

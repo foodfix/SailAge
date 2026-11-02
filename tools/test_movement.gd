@@ -57,6 +57,7 @@ var _checks := 0
 func _ready() -> void:
 	_test_map_loads()
 	_test_effective_speed()
+	_test_night_sail()
 	_test_heading_costs()
 	_test_ice_refusal()
 	_test_diagonal_rule()
@@ -83,15 +84,39 @@ func _ready() -> void:
 
 # --- Fixtures --------------------------------------------------------------
 
-## Minimal run: caravel (speed 10, crew_min 15) at full crew, base stats, fair
-## weather → effective speed exactly 10 (§4.4 worked case; Phase-4 speeds are
-## the ×2 rescale on 10 nm tiles, `10-*` §7.3).
-func _make_run(weather: String = "fair", ship_ids: Array = ["caravel"]) -> void:
+## Minimal run: caravel (speed 20, crew_min 15) at full crew, base stats, fair
+## weather → effective speed exactly 20 (§4.4 worked case; the Phase-8 bonus
+## at seamanship 10 is +10/300 = 0.0333, and floor(20 × 1.0333) = 20 — the
+## pre-Phase-8 value survives).
+##
+## The player block carries **both** shapes: the Phase-8 v9 block
+## (`attributes` + `skills`, `50-*` §4.8) and the legacy `stats` block the
+## pre-merge `character.gd` fallbacks read. Default navigation is 60 — above
+## the §4.2 night-sail threshold — so the suite's clock walks keep their
+## day-time arithmetic at their 00:00 fixture starts; the night rule itself is
+## pinned explicitly in `_test_night_sail` with low-navigation fixtures.
+func _make_run(
+	weather: String = "fair", ship_ids: Array = ["caravel"],
+	seamanship: int = 10, navigation: int = 60,
+	courage: int = 10, constitution: int = 10, charisma: int = 10,
+	luck: int = 10,
+) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
+		# Phase-8 v9 shape (50-* §4.8).
+		"attributes": {
+			"constitution": constitution, "intellect": 10, "charisma": charisma,
+			"courage": courage, "luck": luck,
+		},
+		"skills": {
+			"seamanship": seamanship, "navigation": navigation,
+			"swordplay": 0, "gunnery": 0, "appraisal": 0, "negotiation": 0,
+			"cartography": 0, "rumour": 0,
+		},
+		# Legacy stats block (the pre-v9 fallback reads; gone with save v9).
 		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
+			"leadership": charisma, "seamanship": seamanship, "combat": 10,
+			"navigation": navigation, "luck": luck,
 		},
 		"xp": 0,
 		"level": 1,
@@ -207,20 +232,37 @@ func _test_map_loads() -> void:
 func _test_effective_speed() -> void:
 	_make_run("fair", ["caravel"])
 	_check(SailingSimLib.effective_speed() == 20,
-		"fair, full crew, seamanship 10: 20 (got %d)"
+		"fair, full crew, seamanship 10: 20 — floor(20 × (1 + 10/300)) (got %d)"
 		% SailingSimLib.effective_speed())
 	_check(is_equal_approx(SailingSimLib.move_cost(), 0.05),
 		"move_cost = 1/20 = 0.05 days (got %.4f)" % SailingSimLib.move_cost())
 
 	_make_run("calm", ["caravel"])
 	_check(SailingSimLib.effective_speed() == 16,
-		"calm sail: floor(20 × 0.8) = 16 (got %d)"
+		"calm sail: floor(20 × 0.8 × 1.0333) = 16 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	_make_run("storm", ["caravel"])
-	_check(SailingSimLib.effective_speed() == 30,
-		"storm sail: floor(20 × 1.5) = 30 (got %d)"
+	# §4.4 storm headway (Phase 8): on a storm day the budget loses
+	# 0.5 × (1 − (COU−10)/400) — ×0.5 of speed at COU 10, ×0.6125 at COU 100.
+	_make_run("storm", ["caravel"], 10, 60, 10)
+	_check(SailingSimLib.storm_headway_factor() == 0.5,
+		"storm headway at COU 10 is ×0.500 (got %.4f)"
+		% SailingSimLib.storm_headway_factor())
+	_check(SailingSimLib.effective_speed() == 15,
+		"storm sail at COU 10: floor(20 × 1.5 × 0.5) = 15 (got %d)"
 		% SailingSimLib.effective_speed())
+	_make_run("storm", ["caravel"], 10, 60, 100)
+	_check(is_equal_approx(SailingSimLib.storm_headway_factor(), 0.6125),
+		"storm headway at COU 100 is ×0.6125 (got %.4f)"
+		% SailingSimLib.storm_headway_factor())
+	_check(SailingSimLib.effective_speed() == 18,
+		"storm sail at COU 100: floor(20 × 1.5 × 0.6125) = 18 (got %d)"
+		% SailingSimLib.effective_speed())
+	# A non-storm day is neutral: the factor is 1.0.
+	_make_run("fair", ["caravel"])
+	_check(SailingSimLib.storm_headway_factor() == 1.0,
+		"a fair day has no headway loss (got %.4f)"
+		% SailingSimLib.storm_headway_factor())
 
 	# Skeleton crew: 1 of crew_min 15 → factor 0.25 → floor(5) = 5, never 0.
 	_make_run("fair", ["caravel"])
@@ -228,33 +270,139 @@ func _test_effective_speed() -> void:
 	_check(is_equal_approx(SailingSimLib.crew_factor(), 0.25),
 		"crew 1/15 → factor 0.25 (got %.4f)" % SailingSimLib.crew_factor())
 	_check(SailingSimLib.effective_speed() == 5,
-		"skeleton crew floors to max(1, floor(20 × 0.25)) = 5 (got %d)"
+		"skeleton crew floors to max(1, floor(20 × 0.25 × 1.0333)) = 5 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Slowest-hull rule (§4.4 composition): caravel 20 + nao 16 → base 16.
+	# Slowest-hull rule (§4.4 composition): caravel 20 + nao 16 → base 16 —
+	# but Phase 8's captain-less rule (`40-*` §4.4) makes an escort with no
+	# in-post captain contribute 16 × 0.8 = 12.8 → 12 in the scan; appointing
+	# a captain for the nao restores the hull's own 16. (The morale half of
+	# this rule is pinned in test_morale.)
 	_make_run("fair", ["caravel", "nao"])
 	_check(FleetLib.slowest_speed() == 16,
 		"fleet slowest hull speed is the nao's 16 (got %d)"
 		% FleetLib.slowest_speed())
+	_check(SailingSimLib.effective_speed() == 12,
+		"captain-less escort contributes 16 × 0.8 → base 12 (got %d)"
+		% SailingSimLib.effective_speed())
+	GameState.player["officers"] = ["off_x_captain"]
+	SailingSimLib.officer_states_override = {
+		"off_x_captain": {"post_id": "captain", "ship_id": "nao",
+			"loyalty": 50, "sea_days": 0},
+	}
 	_check(SailingSimLib.effective_speed() == 16,
-		"fleet speed uses the slowest hull: 16 (got %d)"
+		"an appointed captain clears the ×0.8: base back to 16 (got %d)"
 		% SailingSimLib.effective_speed())
+	SailingSimLib.officer_states_override = null
 
-	# Seamanship bonus: 20 → +0.10 → floor(22.0) = 22.
-	_make_run("fair", ["caravel"])
-	GameState.player["stats"]["seamanship"] = 20
-	_check(SailingSimLib.effective_speed() == 22,
-		"seamanship 20 gives speed 22 (got %d)" % SailingSimLib.effective_speed())
-	# 25 → +0.15 → floor(23.0) = 23.
-	GameState.player["stats"]["seamanship"] = 25
-	_check(SailingSimLib.effective_speed() == 23,
-		"seamanship 25 → floor(20 × 1.15) = 23 (got %d)"
-		% SailingSimLib.effective_speed())
-	# 30 → clamped +0.20 → floor(24.0) = 24.
-	GameState.player["stats"]["seamanship"] = 30
-	_check(SailingSimLib.effective_speed() == 24,
-		"seamanship 30 → floor(20 × 1.2) = 24 (got %d)"
-		% SailingSimLib.effective_speed())
+	# Seamanship bonus (Phase 8 §4.4): `skill / 300` clamped [0, +0.30] —
+	# the retired `(seamanship − 10)/100` clamp [−0.10, +0.20] is deleted and
+	# the new bonus is never negative (seamanship 0 → +0.00, no penalty).
+	for row in [[0, 0.0, 20], [30, 0.10, 22], [100, 0.30, 26]]:
+		_make_run("fair", ["caravel"], row[0])
+		_check(is_equal_approx(SailingSimLib.seamanship_bonus(), float(row[1])),
+			"seamanship %d bonus == %.2f, clamped [0, +0.30] (got %.4f)" % [
+				int(row[0]), float(row[1]), SailingSimLib.seamanship_bonus()])
+		_check(SailingSimLib.effective_speed() == int(row[2]),
+			"seamanship %d → floor(20 × (1 + %.2f)) = %d (got %d)" % [
+				int(row[0]), float(row[1]), int(row[2]),
+				SailingSimLib.effective_speed()])
+
+
+# --- §4.2 night sailing (Phase 8) ------------------------------------------
+
+## A move **starting** in 22:00–06:00 costs `2 × move_cost` (half the distance
+## per movement budget) unless effective navigation ≥ 40 — one choke point in
+## `try_move` for every step source (step keys, helm auto-steps and
+## click-to-sail legs). A docking charge is not a move: it stays the plain
+## `move_cost(heading)` (§4.11.1).
+func _test_night_sail() -> void:
+	# The window bounds on the wall clock (§4.3 `HH:MM = fraction × 1440`):
+	# 21:59 is day, 22:00 is night, 05:59 is night, 06:00 is day again.
+	for row in [
+		[21.0 / 24.0, false, "21:59"], [22.0 / 24.0, true, "22:00"],
+		[359.0 / 1440.0, true, "05:59"], [360.0 / 1440.0, false, "06:00"],
+	]:
+		_make_run("fair", ["caravel"], 10, 10)  # navigation 10: no exemption
+		GameState.world["clock_fraction"] = float(row[0])
+		_check(SailingSimLib.is_night_watch() == bool(row[1]),
+			"clock %s is_night_watch == %s (got %s)" % [
+				str(row[2]), str(row[1]),
+				str(SailingSimLib.is_night_watch())])
+		_check(SailingSimLib.night_slow_applies() == bool(row[1]),
+			"clock %s night_slow_applies == %s at navigation 10" % [
+				str(row[2]), str(row[1])])
+
+	# A 23:00 beam step costs 2 × 0.05 = 0.1 days (vs the day-time 0.05).
+	# The doubled cost crosses midnight (23:00 + 2.4 h), so the advance is
+	# measured across the day boundary: (day after − day before) + Δfraction.
+	_make_run("fair", ["caravel"], 10, 10)
+	GameState.world["clock_fraction"] = 23.0 / 24.0
+	var start_day: int = GameState.day
+	var start_fraction := float(GameState.world["clock_fraction"])
+	_check(SailingSimLib.try_move(OPEN_CELL + Vector2i(1, 0), DataLoader.map),
+		"a night step succeeds")
+	var night_cost := float(GameState.day - start_day) \
+		+ float(GameState.world["clock_fraction"]) - start_fraction
+	_check(is_equal_approx(night_cost, 0.1),
+		"a 23:00 beam step costs 2 × 0.05 = 0.1 days across midnight (got %.4f)"
+		% night_cost)
+	_check(SailingSimLib.step_move_cost("E") == 2.0 * SailingSimLib.move_cost("E"),
+		"step_move_cost is exactly 2 × move_cost inside the night window")
+
+	# The day-time step beside it stays 0.05 (same fixture, clock 12:00; the
+	# night step's midnight tick re-rolled weather AND wind_dir, so pin both
+	# back — a storm would add the §4.4 headway term, a new wind the direction
+	# term, to the comparison).
+	GameState.world["weather"] = "fair"
+	GameState.world["wind_dir"] = "S"
+	GameState.world["clock_fraction"] = 0.5
+	var day_fraction := float(GameState.world["clock_fraction"])
+	_check(SailingSimLib.try_move(OPEN_CELL + Vector2i(2, 0), DataLoader.map),
+		"a day-time step succeeds")
+	var day_cost := float(GameState.world["clock_fraction"]) - day_fraction
+	_check(is_equal_approx(day_cost, 0.05),
+		"a 12:00 beam step costs the plain 0.05 days (got %.4f)" % day_cost)
+
+	# The exemption: navigation exactly 40 lifts the slow (the doc's `≥ 40`);
+	# navigation 39 does not.
+	for nav_row in [[39, true], [40, false], [60, false]]:
+		_make_run("fair", ["caravel"], 10, int(nav_row[0]))
+		GameState.world["clock_fraction"] = 23.0 / 24.0
+		_check(SailingSimLib.night_slow_applies() == bool(nav_row[1]),
+			"navigation %d at 23:00 night_slow_applies == %s (≥ 40 lifts it)" % [
+				int(nav_row[0]), str(nav_row[1])])
+
+	# Every step source shares the choke: a world-scene `try_step` (the
+	# step-key/helm/click leg path) pays the doubled cost at night too, on a
+	# low-navigation fixture. Again across midnight (23:00 + 2.4 h).
+	_make_run("fair", ["caravel"], 10, 10)
+	GameState.world["position"] = {"x": OPEN_CELL.x, "y": OPEN_CELL.y}
+	GameState.world["clock_fraction"] = 23.0 / 24.0
+	var host := Node2D.new()
+	add_child(host)
+	var world = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	host.add_child(world)
+	_clear_dialogs(world)
+	start_day = GameState.day
+	start_fraction = float(GameState.world["clock_fraction"])
+	_check(world.try_step(OPEN_CELL + Vector2i(1, 0)),
+		"the night try_step (the shared step path) moves the fleet")
+	var scene_cost := float(GameState.day - start_day) \
+		+ float(GameState.world["clock_fraction"]) - start_fraction
+	_check(is_equal_approx(scene_cost, 0.1),
+		"a 23:00 try_step costs the doubled 0.1 days (got %.4f)" % scene_cost)
+	host.queue_free()
+
+	# A docking charge is NOT a move (§4.11.1): the plain move_cost the port
+	# entry composes is unchanged inside the night window (navigation 10).
+	_make_run("fair", ["caravel"], 10, 10)
+	GameState.world["clock_fraction"] = 23.0 / 24.0
+	_check(is_equal_approx(SailingSimLib.move_cost(), 0.05),
+		"move_cost() — the docking-charge rate — stays 0.05 at 23:00 (got %.4f)"
+		% SailingSimLib.move_cost())
 
 
 # --- §4.4 heading-aware costs (Phase 6) ------------------------------------
@@ -1811,9 +1959,16 @@ func _normal_move_clock(path: Array, start_cell: Vector2i,
 		"fraction": float(GameState.world["clock_fraction"])}
 
 
-## Baseline for the hold test: 20 plain `SailingSim.advance_clock(move_cost())`
+## Baseline for the click-to-sail walk: the same path walked with plain
+## `advance_clock(step_move_cost())` calls — the production per-step cost
+## (Phase 8 night-aware) — so the twin pays exactly what the route pays.
+
+
+## Baseline for the hold test: 20 plain `SailingSim.advance_clock(step_move_cost())`
 ## calls from the same cell/day — the clock side of a normal move — returning
-## the resulting clock/provisions/water.
+## the resulting clock/provisions/water. (Phase 8: the per-step cost is
+## `step_move_cost`, night-aware; identical to `move_cost()` on this suite's
+## navigation-60 fixtures, and honest if a fixture ever drops below 40.)
 func _twenty_normal_moves(_map) -> Dictionary:
 	_make_run("fair")
 	SailingSimLib.set_weather_seed(424242)
@@ -1821,7 +1976,7 @@ func _twenty_normal_moves(_map) -> Dictionary:
 	var start_water := FleetLib.supplies("water")
 	for step in 20:
 		GameState.set_world_tile(Vector2i(700 + step, 320))
-		SailingSimLib.advance_clock(SailingSimLib.move_cost())
+		SailingSimLib.advance_clock(SailingSimLib.step_move_cost())
 	return {
 		"day": GameState.day,
 		"fraction": float(GameState.world["clock_fraction"]),
