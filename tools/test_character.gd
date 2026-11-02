@@ -9,6 +9,7 @@ extends Node
 ## UI rebuilds; this suite pins the model only.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+const CaptainsLibRef := preload("res://scripts/world/captains.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
@@ -497,11 +498,29 @@ func _test_new_game_all_nations() -> void:
 			"%s: own reputation == start_reputation %d" % [
 				nation_id, int(nation["start_reputation"])])
 
-		# The Phase-8 state blocks seed empty on every fresh run (§8.2).
+		# The Phase-8 state blocks on a fresh run (§8.2, W4 gate amendment):
+		# `officer_states` seeds empty; `captain_states` seeds with exactly the
+		# initial fill's deployed captains (every entry `active` and deployed —
+		# a deployed captain is a "met" captain, `10-*` §4.15).
 		_check(GameState.officer_states.is_empty(),
 			"%s: officer_states == {}" % nation_id)
-		_check(GameState.captain_states.is_empty(),
-			"%s: captain_states == {}" % nation_id)
+		var canon_seeded := true
+		for captain_id in GameState.captain_states.keys():
+			var entry: Dictionary = GameState.captain_states[captain_id]
+			if str(entry.get("status", "")) != "active" \
+					or not bool(entry.get("deployed", false)):
+				canon_seeded = false
+		if not GameState.captain_states.is_empty():
+			var any_canon := false
+			for captain_id in GameState.captain_states.keys():
+				if not CaptainsLibRef.captain(str(captain_id)).is_empty():
+					any_canon = true
+					break
+			if not any_canon:
+				canon_seeded = false
+		_check(canon_seeded,
+			"%s: captain_states == the initial fill's deployed canon (%d entries)"
+				% [nation_id, GameState.captain_states.size()])
 
 		# World position is the start port's berth tile in the save shape.
 		var pos = GameState.world.get("position", null)

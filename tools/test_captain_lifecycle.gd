@@ -432,10 +432,11 @@ func _test_lazy_defaults() -> void:
 		"an unmet captain defaults to dossier_seen false")
 	_check(int(state.get("defeats", -1)) == 0 and int(state.get("wins", -1)) == 0,
 		"an unmet captain defaults to defeats/wins 0")
-	# The lazy entry is the save block's shape (full entries only for met
-	# captains): the read materialised exactly this id.
-	_check(GameState.captain_states.has(id),
-		"the lazy read materialised the captain_states entry (save §4.15)")
+	# The defaults are a THROWAWAY copy — the read never materialises the
+	# entry (the W4-A contract; `ensure()` is the only creator). Full entries
+	# exist only for captains the run actually touched.
+	_check(not GameState.captain_states.has(id),
+		"the lazy read does not materialise the entry — ensure() is the only creator")
 
 
 # --- 3. The return queue (§4.11.15: day + 60, tier preserved) -----------------
@@ -849,18 +850,26 @@ func _test_ecology_integration() -> void:
 			return str(fleet.get("captain_id", "")))),
 		"the spawned fleets hold distinct captains")
 
-	# The single removal funnel releases the deployment and books the return
-	# queue (§4.11.11.4: the defeat books at remove()).
+	# The single removal funnel RELEASES the deployment (the captain is
+	# immediately spawnable again) — the RETURN QUEUE books only at the battle
+	# seam (`BattleRewards.apply` → `Captains.defeat`, W4-C), per the W4 gate
+	# reading of §4.11.11.4: a budget-shrink/lane-end despawn is not a defeat.
 	var doomed: Dictionary = spawned[0]
 	var doomed_id := str(doomed.get("captain_id", ""))
 	GameState.day = 40
 	sim.remove(str(doomed.get("id", "")))
 	_check(not _captains.call("is_deployed", doomed_id),
 		"the removal funnel releases the captain's deployment")
+	_check(str(_state(doomed_id).get("status", "")) == "active",
+		"a plain removal leaves the captain active (no defeat booked)")
+	_check(_captains.call("is_spawnable", doomed_id),
+		"the released captain is immediately spawnable again")
+	# The battle seam books the queue: defeat at day 40 → return_day 100.
+	_captains.call("defeat", doomed_id, 40, false)
 	_check(str(_state(doomed_id).get("status", "")) == "returning",
-		"the removal funnel books the captain as returning")
+		"the battle seam books the captain as returning")
 	_check(int(_state(doomed_id).get("return_day", -1)) == 100,
-		"the funnel books return_day = day + 60 (40 → 100, got %d)"
+		"the battle seam books return_day = day + 60 (40 → 100, got %d)"
 		% int(_state(doomed_id).get("return_day", -1)))
 	_check(not _captains.call("is_spawnable", doomed_id),
 		"the booked captain is not spawnable while returning")

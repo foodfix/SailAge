@@ -27,6 +27,7 @@ const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
+const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 ## Phase 5 task K: wreck collect fills the pooled hold flagship-first
 ## (docs/40-* §4.2 distribution rule — the same helper the battle loot uses).
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -1632,7 +1633,10 @@ func _charge_piracy(encounter: Dictionary) -> void:
 	var nation_id := str(encounter.get("nation_id", ""))
 	if nation_id.is_empty():
 		return
-	BountyLib.apply_piracy(nation_id)
+	# Phase 8 (§4.11.10 extension): the same single funnel also applies the
+	# −20 fame and the victim captain's personal stance hit.
+	BattleRewardsLib.apply_piracy_attack(nation_id,
+		str(encounter.get("captain_id", "")))
 
 
 ## True while a battle this scene opened is unresolved.

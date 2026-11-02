@@ -25,6 +25,34 @@ alive; validator TODO left in place); (b) slot A added the `officer_bios`
 block to `captain_name_parts.json` (doc row added); (c) the level-up toast
 lands on the new `char.level_up.alloc` key beside the Phase-1
 `char.level_up` (W6 wiring note).
+**W4 status (2026-11-03): ✅ complete** — slots A (captains.gd canon
+module) → B (npc fleets on the canon; successor machinery +
+`named_pirate_respawns` + `data/npc_captains.json` DELETED, the §8.6
+absence assertion live; validator groups 1–12 exit 0) → C (battle rewards:
+valuation/XP multipliers, capture idle-officer gate + loot-convert
+fallback, captain defeat/win/nemesis hooks, piracy fame −20 +
+victim-stance funnel) → D (lifecycle suites) merged in order; slot A's
+normative `captains.gd` won the stub conflicts. Gate on `main`:
+**`run_tests.py` 44/44 green** (new: `test_captains` 61, `test_captain_
+lifecycle` 67), validator exit 0. **Perf re-recorded:** day tick 67–70 ms
+avg @ ~318 fleets (gate ≤ 75 holds), extreme 290–304 ms (≤ 350), extreme
+save ~1.92 MB (≤ 2 MB). **Cap arithmetic correction:** the 2026-11-02
+five-port amendment re-derives the normal cap to **318 core + 16 slack =
+334** (the backlog's "323" predates the 150th port; the suites pin the
+closed form, not the stale constant). Master integrations at the gate:
+`Captains.reset_deployments()` seam added to A's module (B's contract),
+`captain_id` threaded through the encounter → outcome (battle_screen) and
+the piracy funnel now fires `BattleRewards.apply_piracy_attack` (fame −20 +
+victim stance −1), `save_system.gd` guarded its removed
+`named_pirate_respawns` reads (W6-C deletes the block with the v9 sweep),
+suite re-baselines (character: captain_states seeds deployed; battle_
+economy: nemesis pin on a real pirate canon id; captain_lifecycle: lazy
+read creates nothing + removal releases (the return queue books only at
+the battle seam); npc_fleets/phase2_acceptance: JSON float `speed`
+tolerance + key-set (order-free) round-trip compares; tournament/phase2:
+an idle officer seated where a captured prize joins). W6-C carries:
+`skill_deltas` persistence, the v9 officer_states/captain_states blocks,
+the `save_system.gd` guard removal, `test_save_v9` rename.
 **W3 status (2026-11-03): ✅ complete** — slots A (Person model +
 skills.gd + posts/loyalty) → B (sailing rewires) → C (battle sim on the
 Person model, dual captain-card shape) → D (trade wiring) merged in order;
@@ -566,6 +594,10 @@ No code, no data. Every number above lands in its owning doc before W2.
   (return-queue day+60, tier drift, **name-never-reused**, seeded duel
   replay, cap arithmetic at 323), day-tick perf probe ≤ 75 ms.
 - **Gate**: suites green; perf recorded vs Phase-7 baseline.
+  **→ PASSED 2026-11-03** (see the W4 status line at the top; 44/44 suites,
+  day tick 67–70 ms @ ~318 fleets vs the ≤ 75 ms pin; the normal cap
+  re-derives to 334 at 150 ports — the "323" rows above predate the
+  five-port amendment and read as their 145-port measurements).
 
 ## W5 — Interactions (4 slots · merge A → B → C → D)
 

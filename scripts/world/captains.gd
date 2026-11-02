@@ -177,6 +177,17 @@ static func release(id: String) -> void:
 		(entry as Dictionary).erase("deployed")
 
 
+## Per-run transient reset (W4-B's contract: `initial_fill` and the suites
+## call it on a fresh sim — the deployment set is runtime-only and a new run
+## re-deploys from scratch). Erases every `deployed` flag; touches nothing
+## else (statuses/stance/familiarity survive — only a new_game resets those).
+static func reset_deployments() -> void:
+	for officer_id in GameState.captain_states.keys():
+		var entry: Variant = GameState.captain_states[officer_id]
+		if entry is Dictionary:
+			(entry as Dictionary).erase("deployed")
+
+
 static func is_deployed(id: String) -> bool:
 	return bool(state(id).get("deployed", false))
 

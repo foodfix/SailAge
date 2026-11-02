@@ -41,6 +41,7 @@ extends Node
 ## became `npc_fleets`, `kind` became `role`, and the per-kind spawn
 ## immunity is retired (the trickle refills the ecology).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -277,6 +278,9 @@ func _scenario_boarding_capture() -> void:
 		% run_day)
 	_check(_start_from_save("S2", fleet, run_day, save_gold, 12),
 		"S2: the save loads")
+	# Phase 8 capture gate (`60-*` §4.11.7): the captured hull needs ≥ 1 idle
+	# officer — seat one (no state entry reads as idle, `post_id ""` default).
+	GameState.player["officers"] = ["fx_p2_idle"]
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -380,6 +384,9 @@ func _scenario_full_fleet_capture() -> void:
 		% run_day)
 	_check(_start_from_save("S2b", fleet, run_day, save_gold, 12),
 		"S2b: a 5-ship save loads")
+	# Phase 8 capture gate: seat an idle officer so the gate that fires here
+	# is `fleet_full` (the scenario's subject), not `no_idle_officer`.
+	GameState.player["officers"] = ["fx_p2_idle"]
 	_set_explored_world()
 	_ensure_map()
 	SailingSimLib.reset_ledger_state()
@@ -748,7 +755,7 @@ func _place_marker(kind: String, cell: Vector2i, day: int,
 		"cell": {"x": cell.x, "y": cell.y},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
 		"cargo": {},
-		"captain": {"pool_id": nation_id, "name_index": 0},
+		"captain_id": "",
 		"cooldown_until_day": 0,
 		"seed": int(day) * 1000003 + cell.x * 7919 + cell.y * 104729,
 		"dest_port_id": "",
@@ -762,6 +769,26 @@ func _place_marker(kind: String, cell: Vector2i, day: int,
 	if not ships.is_empty():
 		marker["ships"] = ships.duplicate(true)
 	GameState.npc_fleets.append(marker)
+	# Phase 8: seat a canon captain at fixture time (stable per marker id) —
+	# the load path's backfill re-deploys a persisted id without mutating it,
+	# so the save/load round-trip equality holds. `backfill_captains()` is an
+	# instance method, so the draw is inlined over the canon list: the first
+	# canon card of the fleet's (role, nation) cell not used by an earlier
+	# fixture marker.
+	var used: Array = []
+	for other in GameState.npc_fleets:
+		if other is Dictionary and other != marker:
+			used.append(str((other as Dictionary).get("captain_id", "")))
+	for card in CaptainsLib.canon_list():
+		var card_d: Dictionary = card
+		if str(card_d.get("id", "")) in used:
+			continue
+		if str(card_d.get("role", "")) != role:
+			continue
+		if str(card_d.get("nation_id", "")) != str(marker["nation_id"]):
+			continue
+		marker["captain_id"] = str(card_d.get("id", ""))
+		break
 	return marker
 
 
@@ -921,6 +948,17 @@ func _locales_clean(screen, label: String) -> bool:
 	return clean and not rendered_any.is_empty()
 
 
+func _keysets_match(a: Dictionary, b: Dictionary) -> bool:
+	var ka := a.keys()
+	var kb := b.keys()
+	if ka.size() != kb.size():
+		return false
+	for k in ka:
+		if not b.has(k):
+			return false
+	return true
+
+
 # ===========================================================================
 # Save round trip (save → load → save) per scenario
 # ===========================================================================
@@ -942,7 +980,32 @@ func _assert_round_trip(label: String) -> void:
 		"%s: the v2 file reloads cleanly (%s)" % [label, SaveSystem.last_read_error])
 	_check(GameState.fleet == fleet_before,
 		"%s: the fleet survives the reload (%d ships)" % [label, GameState.fleet.size()])
-	_check(_as_array(GameState.npc_fleets) == hostile_before,
+	# Phase 8: the jitted `speed` is a float and the JSON round trip
+	# perturbs its low-order bits, so that one key compares approximately
+	# (every other key, and the key sets themselves, are exact).
+	var npc_arrays_equal := hostile_before.size() == GameState.npc_fleets.size()
+	if npc_arrays_equal:
+		for i in range(hostile_before.size()):
+			var fa: Dictionary = hostile_before[i]
+			var fb: Dictionary = GameState.npc_fleets[i]
+			# The JSON round trip re-orders dictionary keys alphabetically;
+			# compare key SETS, not key order.
+			if not _keysets_match(fa, fb):
+				npc_arrays_equal = false
+				break
+			for k in fa.keys():
+				var va: Variant = fa[k]
+				var vb: Variant = fb[k]
+				if k == "speed" and va is float and vb is float:
+					if not is_equal_approx(va, vb):
+						npc_arrays_equal = false
+						break
+				elif vb != va:
+					npc_arrays_equal = false
+					break
+			if not npc_arrays_equal:
+				break
+	_check(npc_arrays_equal,
 		"%s: npc_fleets survive the reload (%d fleets)"
 		% [label, GameState.npc_fleets.size()])
 	_check(_as_dict(GameState.proximity_cooldowns) == cooldowns_before,

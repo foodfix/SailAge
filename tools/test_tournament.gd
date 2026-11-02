@@ -394,6 +394,10 @@ func _run_bracket(loadout: Dictionary, stop_after: int = TournamentLib.ROUNDS) -
 	ship["cannons"] = int(loadout["cannons"])
 	ship["provisions"] = 60
 	ship["water"] = 60
+	# Phase 8 capture gate (`60-*` §4.11.7): a captured bracket prize joins
+	# only with an idle officer to seat — the fixture keeps the base
+	# "captured hulls join damaged" semantics by parking one.
+	GameState.player["officers"] = ["fx_tour_idle"]
 	var settled: Dictionary = {}
 	var results: Array = []
 	for round_number in range(1, TournamentLib.ROUNDS + 1):

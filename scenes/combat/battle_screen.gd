@@ -1286,6 +1286,11 @@ func _finish_battle() -> void:
 	_bind()
 	# 1. Raw §4.12.2 block.
 	last_outcome = (sim.outcome() as Dictionary).duplicate(true)
+	# Phase 8 (W4 master micro-integration): the enemy fleet's canon captain
+	# rides the outcome so `BattleRewards.apply`'s lifecycle hooks fire —
+	# the encounter descriptor's `captain_id` (written by the world-side
+	# encounter builder over the fleet dict) is the source of truth.
+	last_outcome["captain_id"] = str(encounter.get("captain_id", ""))
 
 	# 2. Fleet effects (task C) — guarded.
 	# §4.12.3 pins the second argument as `BattleSim.units()` (the engine's unit

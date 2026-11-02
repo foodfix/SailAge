@@ -621,8 +621,11 @@ carry forward (incl. `explored_tiles`).
 **No migration; v8 refused (Phase-8 decision 16).** `SAVE_VERSION = 9`,
 `PHASE = 9`; version 9 adds **no `MIGRATIONS` entry and performs no payload
 transformation**. All Phase-8 state is initialized by
-`new_game(nation_id, background_id, attr_alloc, skill_alloc)` (the state
-blocks start empty, the reshaped player block at its §4.8 defaults); a v8
+`new_game(nation_id, background_id, attr_alloc, skill_alloc)` (`officer_states`
+starts empty; `captain_states` starts as the initial fill's **deployed
+captains** — W4 gate amendment, 2026-11-03: a fleet's captain is a "met"
+captain from day 1, `10-*` §4.15 — and the reshaped player block at its
+§4.8 defaults); a v8
 payload is refused like any older version (`load()` false, "pre-release
 save" logged); see §8.2 for the normative rule. One owner task (W6-C,
 `tools/test_save_v9.*` renamed from `test_save_v8`), the single-breaking-bump
@@ -651,8 +654,9 @@ the first release**, and no task may spend effort on it. Concretely:
   fleets seeded to half the cap there and only there; `control_prefs` and
   the three `world` ocean keys defaulted; the allegiance/permit/treasury
   blocks seeded through `Allegiance.seed_new_game()`; the Phase-8
-  `officer_states`/`captain_states` blocks and the reshaped player block
-  start empty/defaulted); nothing is back-filled at load.
+  `officer_states` block and the reshaped player block start empty/defaulted;
+  `captain_states` starts with the initial fill's deployed captains (W4 gate
+  amendment, 2026-11-03)); nothing is back-filled at load.
 - Anything that would only exist to serve an old save (position remapping,
   port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
   is cheaper to delete than to maintain, delete it.

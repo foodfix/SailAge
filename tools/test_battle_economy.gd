@@ -620,8 +620,10 @@ func _test_captain_lifecycle() -> void:
 	_check(not bool(surrendered["crushed"]),
 		"a surrendered hull keeps the defeat from being crushed")
 
-	# Nemesis extra: stance ≤ −3 → the defeat also moves stance −2.
-	var nemesis := "cap_grudge"
+	# Nemesis extra: stance ≤ −3 on a REAL pirate/privateer canon card → the
+	# defeat also moves stance −2 (`Captains.is_nemesis` reads the canon role,
+	# so the fixture uses one of the 4 named-pirate ids).
+	var nemesis := "pirate_edward_bloodhand"
 	CaptainsLib.adjust_stance(nemesis, -3)
 	var grudge: Dictionary = RewardsLib.apply(_outcome({
 		"captain_id": nemesis, "result": "victory",

@@ -132,7 +132,6 @@ func _make_run(
 	# explicitly (the battle-resume pattern).
 	GameState.npc_fleets = []
 	GameState.wrecks = []
-	GameState.named_pirate_respawns = {}
 	for ship_id in ship_ids:
 		var ship_type: Dictionary = DataLoader.get_ship_type(str(ship_id))
 		var ship: Dictionary = FleetLib.new_ship(str(ship_id), int(ship_type["crew_min"]))

@@ -93,7 +93,6 @@ func _ready() -> void:
 	GameState.wrecks = []
 	GameState.npc_preset = "normal"
 	GameState.market_events = []
-	GameState.named_pirate_respawns = {}
 	GameState.npc_port_log = []
 
 	sim = NpcFleetsLib.new({

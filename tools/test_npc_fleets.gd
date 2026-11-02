@@ -1362,9 +1362,34 @@ func _test_save_round_trip() -> void:
 	_check(after.size() == before.size(),
 		"save/load restores the fleet count (%d vs %d)"
 		% [after.size(), before.size()])
+	# Phase 8: the jitted `speed` is a float and the JSON round trip
+	# perturbs its low-order bits, so that one key compares approximately
+	# (every other key, and the key sets, stay byte-exact).
 	var same := before.size() == after.size()
 	for index in mini(before.size(), after.size()):
-		if JSON.stringify(before[index]) != JSON.stringify(after[index]):
+		var fb: Dictionary = before[index]
+		var fa: Dictionary = after[index]
+		var keyset := fb.keys().size() == fa.keys().size()
+		if keyset:
+			for k in fb.keys():
+				if not fa.has(k):
+					keyset = false
+					break
+		if not keyset or JSON.stringify(fb) != JSON.stringify(fa):
+			# fall back to a per-key walk tolerating the speed float only
+			var tolerates := keyset
+			if keyset:
+				for k in fb.keys():
+					if k == "speed":
+						# 19.0 vs 19: the JSON round trip may also flip the
+						# float to its integral spelling — values compare.
+						if is_equal_approx(float(fb[k]), float(fa[k])):
+							continue
+					if JSON.stringify(fb[k]) != JSON.stringify(fa[k]):
+						tolerates = false
+						break
+			if tolerates:
+				continue
 			same = false
 			print("  fleet %d diverged:\n    before: %s\n    after:  %s"
 				% [index, JSON.stringify(before[index]),
