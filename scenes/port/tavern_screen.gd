@@ -12,10 +12,23 @@ extends Control
 ##     `Recruit` button showing the `wage × 10` signing fee; below, the
 ##     current roster with `Dismiss`.
 ##
-## Every rule lives in `scripts/port/tavern_engine.gd` (crew maths/visibility)
-## and `character.gd` (officers, OFFICER_MAX, role bonuses) — this screen only
-## renders state and forwards clicks. That keeps the tavern data-driven and
-## the same rules testable headless.
+## Phase-8 W5-C (docs/80-* §4.11, in-port verb matrices), all on the rumours
+## tab beside the §4.7.8 sighting surfaces:
+##   * sighting rows gain the 交好 befriend verb (+1 stance, once per captain
+##     per port-visit day — the engine-side session guard);
+##   * the **captains' table** (§4.11.2) indexes this port's sightings with
+##     role/tier/last-seen/facility pointers and an inspect action (+1
+##     familiarity per view; the unified card is W6-A's, so the placeholder
+##     renders a summary line);
+##   * the **sparring bet** row — stake 100–1,000g in 100g steps via the
+##     −/+ steppers, the locked `p` against the 40-swordplay tavern champion,
+##     a win paying pot × 2, every bout counting 3 swordplay usages; the roll
+##     comes from the seeded per-(port, visit-day) stream.
+##
+## Every rule lives in `scripts/port/tavern_engine.gd` (crew maths/visibility,
+## befriend guard, sparring) and `character.gd` (officers, OFFICER_MAX, role
+## bonuses) — this screen only renders state and forwards clicks. That keeps
+## the tavern data-driven and the same rules testable headless.
 ##
 ## Palette is preloaded rather than referenced through its global class name so
 ## the scene also runs before the editor has written its class cache.
@@ -29,6 +42,12 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## Task L (docs/80-* §4.7.8): captains, wanted posters, the 20g reveal and
 ## the live-fleet/departure/event rumor rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+## Phase-8 W5-C: the captains' table and the inspect action read the canon
+## cards and run state through the W4-A module (read-only for this screen).
+const CaptainsLib := preload("res://scripts/world/captains.gd")
+## §4.11.1: the sparring terms line renders the effective swordplay win
+## chance (the growth engine owns the value).
+const SkillsLib := preload("res://scripts/player/skills.gd")
 ## §4.1b port hours: the officers tab's window guard + hour charge (added
 ## 2026-11-02) — the tavern is the facility, this screen hosts the action.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -51,10 +70,32 @@ const TOAST_SECONDS := 2.5
 ## (Task L's `captain.rumor.*` / `captain.poster.reward` fallbacks were
 ## merged into the shared table at the W6 gate and are gone from here — the
 ## screen now reads the canonical keys directly.)
+## Phase-8 W5-C adds the §4.11.1 sparring family (`tavern.spar.*`) — reported
+## for the W6-D residual merge; until then the row renders from here.
 const FALLBACK_STRINGS := {
 	"tavern.crew_full": {
 		"zh": "船员已满({max} 人)。",
 		"en": "Crew is at full strength ({max}).",
+	},
+	"tavern.spar.title": {
+		"zh": "切磋赌酒",
+		"en": "Sparring bet",
+	},
+	"tavern.spar.stake": {
+		"zh": "赌注:{gold} 金 · 胜率 {pct}%",
+		"en": "Stake: {gold}g · win chance {pct}%",
+	},
+	"tavern.spar.go": {
+		"zh": "押注切磋",
+		"en": "Place the bet",
+	},
+	"tavern.spar.win": {
+		"zh": "你赢了,赢得 {gold} 金!",
+		"en": "You win — {gold}g paid out!",
+	},
+	"tavern.spar.lose": {
+		"zh": "你输了,{gold} 金赌注归了馆主。",
+		"en": "You lose — the {gold}g stake stays with the house.",
 	},
 }
 
@@ -130,6 +171,28 @@ var _revealed: Dictionary = {}
 ## The reveal text of the most recent "buy a round" ("" before the first).
 var last_reveal_text: String = ""
 
+## Phase-8 W5-C (§4.11.2): the captains' table — code-built under the rumor
+## scroll (the RumorsPanel children the §4.7.8 test pins stay untouched).
+var _table_box: VBoxContainer = null
+## The table rows currently rendered (`{captain_id, fleet_id, name, role,
+## tier, nation_id, facility, last_seen_day}` — the headless seam).
+var _table_rows: Array = []
+## The summary line of the most recent inspect ("" before the first). The
+## unified §4.12 card is W6-A's; this is the placeholder summary.
+var last_inspect_text: String = ""
+
+## Phase-8 W5-C (§4.11.1): the sparring row — code-built beside the table.
+var _spar_box: VBoxContainer = null
+## The stake the steppers currently offer (always on a 100g step).
+var _spar_stake: int = TavernEngineLib.SPAR_STAKE_MIN
+## The seeded bout stream: re-seeded per (port, visit-day) so a bout sequence
+## replays deterministically (the §4.7.8 roll discipline, applied to bets).
+var _spar_seed_key: String = ""
+var _spar_rng := RandomNumberGenerator.new()
+## The most recent bout's result (`{}` before the first) — `{won, stake,
+## chance, uses, roll}`; the row re-renders its result line from it.
+var last_spar: Dictionary = {}
+
 ## True while a TavernEngine/Character transaction is running; the EventBus
 ## refresh handlers do nothing then (see [method hire_heads]).
 var _busy: bool = false
@@ -174,6 +237,8 @@ func _ready() -> void:
 	_down_to_min.pressed.connect(_on_down_to_min_pressed)
 
 	_port_id = _read_current_port()
+
+	_build_table_and_spar_sections()
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
@@ -575,6 +640,8 @@ func _bind_rumors() -> void:
 	for entry in _rumors:
 		_rumor_rows.add_child(_build_rumor_row(str(entry["id"])))
 	_bind_aliveness_rows()
+	_bind_table()
+	_bind_spar()
 	_rumor_empty.visible = _rumors.is_empty() and _rumor_texts.is_empty()
 
 
@@ -595,6 +662,8 @@ func _bind_aliveness_rows() -> void:
 		_rumor_texts.append(text)
 		_rumor_rows.add_child(_make_label(text, "RumorAliveness"))
 	# Captains sighted in the tavern (§4.7.8), then the gone-ashore notes.
+	# Phase 8 (§4.11.1): each sighting row is interactive — the befriend verb
+	# (+1 stance, once per captain per port-visit day).
 	var captains: Array = NpcIntelLib.sightings(_port_id,
 		NpcIntelLib.FACILITY_TAVERN)
 	if not captains.is_empty() or not NpcIntelLib.gone_ashore(_port_id).is_empty():
@@ -605,13 +674,15 @@ func _bind_aliveness_rows() -> void:
 		for entry in captains:
 			var row_text := "%s · %s" % [str(entry.get("name", "")),
 				I18n.t_key("captain.role.%s" % str(entry.get("role", "")))]
-			_captain_rows.append({
+			var row := {
 				"id": str(entry.get("id", "")),
+				"captain_id": str(entry.get("captain_id", "")),
 				"name": str(entry.get("name", "")),
 				"role": str(entry.get("role", "")),
 				"nation_id": str(entry.get("nation_id", "")),
-			})
-			_rumor_rows.add_child(_make_label(row_text, "CaptainRow"))
+			}
+			_captain_rows.append(row)
+			_rumor_rows.add_child(_build_captain_row(row, row_text))
 		for entry in NpcIntelLib.gone_ashore(_port_id):
 			var ashore := I18n.fmt("captain.gone_ashore",
 				{"name": str(entry.get("name", ""))})
@@ -770,6 +841,293 @@ func poster_rows() -> Array:
 
 func rumor_texts() -> Array:
 	return _rumor_texts.duplicate()
+
+
+# --- Phase-8 W5-C: row verbs, the captains' table, sparring (§4.11) ---------
+
+## One tavern sighting row as an interactive HBox: the §4.7.8 text plus the
+## 交好 befriend verb (stance +1, once per captain per port-visit day — the
+## hail rule). Disabled rows gray-render with their `hail.befriend.used` term.
+func _build_captain_row(row: Dictionary, row_text: String) -> Control:
+	var box := HBoxContainer.new()
+	box.name = "Captain_%s" % str(row["id"])
+	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+
+	var text := _make_label(row_text, "Text")
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(text)
+
+	var button := Button.new()
+	button.name = "Befriend"
+	button.text = I18n.t_key("hail.option.befriend")
+	button.tooltip_text = I18n.t_key("hail.befriend.terms")
+	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
+	_style_button(button)
+	var captain_id := str(row.get("captain_id", ""))
+	if not TavernEngineLib.can_befriend(captain_id, _port_id):
+		button.disabled = true
+		button.tooltip_text = I18n.t_key("hail.befriend.used")
+	else:
+		button.pressed.connect(func() -> void: befriend_captain(captain_id,
+			str(row.get("name", ""))))
+	box.add_child(button)
+	return box
+
+
+## The befriend verb (§4.11.1): stance +1 through the engine's visit guard,
+## then the `hail.befriend.result` toast. Returns the new stance.
+func befriend_captain(captain_id: String, captain_name: String) -> int:
+	var stance := TavernEngineLib.befriend(captain_id, _port_id)
+	_show_toast("hail.befriend.result", {"name": captain_name})
+	refresh()
+	return stance
+
+
+## Builds the captains'-table and sparring section shells once, under the
+## rumor scroll (code-built, the captains-section pattern — the scene file
+## and the §4.7.8-pinned `Scroll/Rows` children stay untouched).
+func _build_table_and_spar_sections() -> void:
+	var panel: VBoxContainer = $Layout/VBox/Body/RumorsPanel
+	var scroll: Control = $Layout/VBox/Body/RumorsPanel/Scroll
+	_table_box = VBoxContainer.new()
+	_table_box.name = "CaptainsTable"
+	_table_box.add_theme_constant_override("separation", 4)
+	_spar_box = VBoxContainer.new()
+	_spar_box.name = "SparRow"
+	_spar_box.add_theme_constant_override("separation", 4)
+	panel.add_child(_table_box)
+	panel.add_child(_spar_box)
+	panel.move_child(_table_box, scroll.get_index() + 1)
+	panel.move_child(_spar_box, _table_box.get_index() + 1)
+
+
+## The captains'-table rows currently rendered (the headless seam).
+func table_rows() -> Array:
+	return _table_rows.duplicate()
+
+
+## THIS port's captain sightings across every facility (the §4.11.2 index):
+## docked, present, captain-bearing; one row per sighting with the facility
+## pointer naming where that captain can be found right now. Composed from
+## npc_intel's seeded rolls without the `sightings()` familiarity side
+## effect — the table must not double-charge what the facility rows charge.
+func _port_sighting_rows() -> Array:
+	var out: Array = []
+	if _port_id.is_empty() or GameState.player.is_empty():
+		return out
+	for fleet in NpcIntelLib.docked_fleets(_port_id):
+		if not NpcIntelLib.is_present(fleet, _port_id):
+			continue
+		var captain_id := str(fleet.get("captain_id", ""))
+		if captain_id.is_empty():
+			continue
+		var canon := CaptainsLib.captain(captain_id)
+		out.append({
+			"captain_id": captain_id,
+			"fleet_id": str(fleet.get("id", "")),
+			"name": I18n.t(canon.get("name", {})),
+			"role": str(fleet.get("role", "")),
+			"tier": int(canon.get("tier", 1)),
+			"nation_id": str(fleet.get("nation_id", "")),
+			"facility": NpcIntelLib.facility_of(fleet, _port_id),
+			"last_seen_day": NpcIntelLib.arrival_day_of(fleet),
+		})
+	out.sort_custom(func(a, b) -> bool:
+		return str((a as Dictionary).get("fleet_id", "")) \
+			< str((b as Dictionary).get("fleet_id", "")))
+	return out
+
+
+## Binds the captains' table (§4.11.2): one row per sighted captain — name
+## (canon), role/tier, last-seen day and the "now at: {facility}" pointer —
+## each with an inspect action (+1 familiarity per view; the unified card is
+## W6-A's, so the placeholder renders a summary line).
+func _bind_table() -> void:
+	if _table_box == null:
+		return
+	_clear(_table_box)
+	_table_rows = []
+	last_inspect_text = ""
+	var header := _make_label(I18n.t_key("captain.table.title"), "TableHeader")
+	header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_table_box.add_child(header)
+	_table_rows = _port_sighting_rows()
+	if _table_rows.is_empty():
+		var empty := _make_label(I18n.t_key("captain.table.empty"), "Empty")
+		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		_table_box.add_child(empty)
+		return
+	for row in _table_rows:
+		_table_box.add_child(_build_table_row(row))
+
+
+## One captains'-table row: the index text plus the inspect verb.
+func _build_table_row(row: Dictionary) -> Control:
+	var box := HBoxContainer.new()
+	box.name = "TableRow_%s" % str(row["captain_id"])
+	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+
+	var facility_key := "port.%s" % str(row.get("facility", ""))
+	var facility_name := I18n.t_key(facility_key)
+	var text := "%s · %s · %s %d · %s · %s" % [
+		str(row.get("name", "")),
+		I18n.t_key("captain.role.%s" % str(row.get("role", ""))),
+		I18n.t_key("captain.table.tier"), int(row.get("tier", 1)),
+		I18n.fmt("captain.table.last_seen",
+			{"day": int(row.get("last_seen_day", 0))}),
+		I18n.fmt("captain.table.at", {"facility": facility_name}),
+	]
+	var label := _make_label(text, "Text")
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(label)
+
+	var button := Button.new()
+	button.name = "Inspect"
+	button.text = I18n.t_key("interact.verb.inspect")
+	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
+	_style_button(button)
+	button.pressed.connect(func() -> void: inspect_captain(
+		str(row.get("captain_id", ""))))
+	box.add_child(button)
+	return box
+
+
+## The inspect action (§4.11.2): +1 familiarity per view, then the placeholder
+## summary line (name · role · tier · familiarity — the §4.12 unified card is
+## W6-A's). Returns the composed summary.
+func inspect_captain(captain_id: String) -> String:
+	CaptainsLib.add_familiarity(captain_id, 1)
+	var canon := CaptainsLib.captain(captain_id)
+	var role := str(canon.get("role", ""))
+	var summary := "%s · %s · %s %d · %s %d" % [
+		I18n.t(canon.get("name", {})),
+		I18n.t_key("captain.role.%s" % role) if not role.is_empty() else "-",
+		I18n.t_key("captain.table.tier"), int(canon.get("tier", 1)),
+		I18n.t_key("dossier.familiarity"), CaptainsLib.familiarity(captain_id),
+	]
+	last_inspect_text = summary
+	# The summary rides under the rows as the placeholder detail line.
+	if _table_box != null:
+		var detail := _make_label(summary, "InspectSummary")
+		detail.add_theme_color_override("font_color", PaletteLib.ACCENT)
+		_table_box.add_child(detail)
+	return summary
+
+
+## The stake the steppers currently offer.
+func spar_stake_value() -> int:
+	return _spar_stake
+
+
+## Steppers: ±100g inside the locked 100–1,000 band (§4.11.1).
+func spar_stake_step(direction: int) -> int:
+	_spar_stake = TavernEngineLib.spar_step(_spar_stake, direction)
+	_bind_spar()
+	return _spar_stake
+
+
+## The bout roll: one draw from the seeded per-(port, visit-day) stream.
+func _spar_roll() -> float:
+	var key := "%s|%d" % [_port_id, int(GameState.day)]
+	if key != _spar_seed_key:
+		_spar_seed_key = key
+		_spar_rng.seed = hash("spar|%s" % key)
+	return _spar_rng.randf()
+
+
+## The sparring bet (§4.11.1): the row's current stake, one seeded roll.
+## Returns the bout result (`{}` when the engine refused — invalid band or
+## short purse, which also toasts the reuseable `captain.reveal.no_gold`).
+func place_spar_bet() -> Dictionary:
+	var roll := _spar_roll()
+	_busy = true
+	var result: Dictionary = TavernEngineLib.spar(_spar_stake, roll)
+	_busy = false
+	if result.is_empty():
+		_show_toast("captain.reveal.no_gold")
+		refresh()
+		return {}
+	last_spar = result.duplicate()
+	last_spar["roll"] = roll
+	refresh()
+	return last_spar
+
+
+## Appends the bout's result line (the win/lose `tavern.spar.*` texts with the
+## gold amount composed in). [method _bind_spar] re-appends it after every
+## rebuild, so the line survives the `gold_changed` refresh.
+func _append_spar_result(result: Dictionary) -> void:
+	if _spar_box == null:
+		return
+	var key := "tavern.spar.win" if bool(result.get("won", false)) \
+		else "tavern.spar.lose"
+	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
+		if bool(result.get("won", false)) else int(result.get("stake", 0))
+	var line := _make_label(_fmt(key, {"gold": gold}), "SparResult")
+	line.add_theme_color_override(
+		"font_color", PaletteLib.GOOD if bool(result.get("won", false))
+		else PaletteLib.WARN)
+	_spar_box.add_child(line)
+
+
+## Rebinds the sparring row from state: the title, the stake + win-chance
+## terms line (the §4.11.1 "carries its terms inline" rule), the steppers and
+## the bet button (disabled with `captain.reveal.no_gold` when short).
+func _bind_spar() -> void:
+	if _spar_box == null:
+		return
+	_clear(_spar_box)
+	var header := _make_label(_t_key("tavern.spar.title"), "SparHeader")
+	header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_spar_box.add_child(header)
+
+	var chance := TavernEngineLib.spar_win_chance(
+		SkillsLib.effective_skill("swordplay"))
+	var terms := _make_label(_fmt("tavern.spar.stake", {
+		"gold": _spar_stake,
+		"pct": int(round(chance * 100.0)),
+	}), "SparTerms")
+	terms.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spar_box.add_child(terms)
+
+	var row := HBoxContainer.new()
+	row.name = "SparControls"
+	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	var down := Button.new()
+	down.name = "StakeDown"
+	down.text = "−"
+	down.custom_minimum_size = Vector2(56, PaletteLib.BUTTON_H)
+	_style_button(down)
+	down.pressed.connect(spar_stake_step.bind(-1))
+	row.add_child(down)
+	var up := Button.new()
+	up.name = "StakeUp"
+	up.text = "+"
+	up.custom_minimum_size = Vector2(56, PaletteLib.BUTTON_H)
+	_style_button(up)
+	up.pressed.connect(spar_stake_step.bind(1))
+	row.add_child(up)
+	var bet := Button.new()
+	bet.name = "SparBet"
+	bet.text = _t_key("tavern.spar.go")
+	bet.tooltip_text = _fmt("tavern.spar.stake", {
+		"gold": _spar_stake,
+		"pct": int(round(chance * 100.0)),
+	})
+	bet.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
+	_style_button(bet)
+	if not TavernEngineLib.can_spar(_spar_stake):
+		bet.disabled = true
+		bet.tooltip_text = I18n.t_key("captain.reveal.no_gold")
+	else:
+		bet.pressed.connect(place_spar_bet)
+	row.add_child(bet)
+	_spar_box.add_child(row)
+
+	# The latest bout's result line survives every rebuild (the reveal-text
+	# discipline: the answer stays after the refresh).
+	if not last_spar.is_empty():
+		_append_spar_result(last_spar)
 
 
 func _build_rumor_row(discovery_id: String) -> Control:

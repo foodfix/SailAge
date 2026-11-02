@@ -59,6 +59,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## Task L (docs/80-* §4.7.8): the "merchant captains in port" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+## Phase-8 W5-C (docs/30-* §4.8): the captain-intel rows read the captains'
+## stance through the W4-A module (read-only for this screen).
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
@@ -100,6 +103,24 @@ const SPHERE_TARIFF_MILLE := 500
 ## module enforces the same cap; this feeds the `market.invest_gate.allowance`
 ## hint. Reset at the month tick (`month_tick`).
 const INVEST_MONTHLY_CAP := 2000
+
+## Phase-8 W5-C (docs/30-* §4.8): the captain-intel section's `ui_strings`
+## keys — reported for the W6-D residual merge; until then the section renders
+## from this local table (the tavern-screen FALLBACK_STRINGS pattern: same
+## zh+en shape as the JSON so the merge is a copy-paste).
+const INTEL_FALLBACK_STRINGS = {
+	"market.intel.header": {
+		"zh": "船长航线情报",
+		"en": "Captain lane intel",
+	},
+	"market.intel.free": {
+		"zh": "免费情报:下一程 {port}",
+		"en": "Free intel: next leg {port}",
+	},
+}
+## The free-intel qualifier (docs/30-* §4.8, docs/80-* §4.11.1: stance ≥ +2
+## marks the next-lane hint free — the hail flow grants it, `60-*`).
+const INTEL_FREE_STANCE := 2
 
 ## Emitted right before the S5 → S4 route (tests observe it instead of swapping
 ## their own scene root, the `port_screen.gd` convention).
@@ -148,6 +169,12 @@ var _captains_header: Label = null
 var _captains_box: VBoxContainer = null
 ## The captain rows currently rendered (`{id, name, role, nation_id}`).
 var _captain_rows: Array = []
+## Phase-8 W5-C (docs/30-* §4.8): the captain-intel section — one row per
+## captain-bearing fleet sighted at this port; stance ≥ +2 rows carry the
+## free next-lane hint (the hail flow grants it, `60-*`).
+var _intel_header: Label = null
+var _intel_box: VBoxContainer = null
+var _intel_rows: Array = []
 ## Phase 7 (task M): this port's `produces` / `demands` from `ports.json`
 ## (cached at open; the dock never changes while the screen is up).
 var _produces: Array = []
@@ -267,6 +294,8 @@ func _ready() -> void:
 	_refresh()
 	_build_captains_section()
 	_refresh_captains()
+	_build_intel_section()
+	_refresh_intel()
 
 	# S14 over S5, the same modal the port hub offers (docs/80 §4.3).
 	CharacterPanelLib.attach_to(self)
@@ -752,6 +781,7 @@ func _refresh() -> void:
 	_refresh_tax_lines()
 	_refresh_investment()
 	_refresh_captains()
+	_refresh_intel()
 
 
 func _refresh_header() -> void:
@@ -1162,6 +1192,95 @@ func _refresh_captains() -> void:
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
 		row.add_theme_color_override("font_color", PaletteLib.TEXT)
 		_captains_box.add_child(row)
+
+
+# --- Captain-intel rows (docs/30-* §4.8, Phase 8 W5-C) -----------------------
+
+## `I18n` text for an intel key this screen also carries in
+## [constant INTEL_FALLBACK_STRINGS] until W6-D merges it.
+static func _intel_text(key: String) -> String:
+	if DataLoader.ui_strings.has(key):
+		return I18n.t_key(key)
+	return I18n.t(INTEL_FALLBACK_STRINGS.get(key, {}))
+
+
+## The intel rows currently rendered (`{captain_id, name, role, nation_id,
+## stance, free, dest_port_id, dest_port_name}` — the headless seam; `free`
+## is the stance ≥ +2 hail-intel qualifier, docs/30-* §4.8).
+func intel_rows() -> Array:
+	return _intel_rows.duplicate()
+
+
+## Builds the intel section shell once (header + rows box) under the merchant
+## captains section.
+func _build_intel_section() -> void:
+	var layout: VBoxContainer = $Layout/VBox
+	_intel_header = Label.new()
+	_intel_header.name = "IntelHeader"
+	_intel_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	layout.add_child(_intel_header)
+	_intel_box = VBoxContainer.new()
+	_intel_box.name = "IntelRows"
+	_intel_box.add_theme_constant_override("separation", 2)
+	layout.add_child(_intel_box)
+
+
+## Re-reads the captain-bearing fleets sighted at this port (docked + present
+## across every facility — the same npc_intel seeded rolls the world map and
+## the facility rows read, queried without `sightings()`' familiarity side
+## effect so re-opening the market never double-charges). Stance ≥ +2 rows
+## carry the free next-lane hint; the rows are read-only intel (viewing them
+## changes no state).
+func _refresh_intel() -> void:
+	if _intel_box == null:
+		return
+	for child in _intel_box.get_children():
+		_intel_box.remove_child(child)
+		child.queue_free()
+	_intel_rows = []
+	if _port_id.is_empty() or GameState.player.is_empty():
+		_intel_header.visible = false
+		return
+	var seen: Dictionary = {}
+	for fleet in NpcIntelLib.docked_fleets(_port_id):
+		if not NpcIntelLib.is_present(fleet, _port_id):
+			continue
+		var captain_id := str(fleet.get("captain_id", ""))
+		if captain_id.is_empty() or seen.has(captain_id):
+			continue
+		seen[captain_id] = true
+		var canon := CaptainsLib.captain(captain_id)
+		var dest_port := str(fleet.get("dest_port_id", ""))
+		var dest_name := I18n.t(DataLoader.get_port(dest_port).get("name", {})) \
+			if not dest_port.is_empty() else "-"
+		var stance := CaptainsLib.stance(captain_id)
+		_intel_rows.append({
+			"captain_id": captain_id,
+			"name": I18n.t(canon.get("name", {})),
+			"role": str(fleet.get("role", "")),
+			"nation_id": str(fleet.get("nation_id", "")),
+			"stance": stance,
+			"free": stance >= INTEL_FREE_STANCE,
+			"dest_port_id": dest_port,
+			"dest_port_name": dest_name,
+		})
+	if _intel_rows.is_empty():
+		_intel_header.visible = false
+		return
+	_intel_header.visible = true
+	_intel_header.text = _intel_text("market.intel.header")
+	for row in _intel_rows:
+		var line := "%s · %s" % [str(row["name"]),
+			I18n.t_key("captain.role.%s" % str(row["role"]))]
+		if bool(row["free"]):
+			line += " · %s" % _intel_text("market.intel.free")\
+				.replace("{port}", str(row["dest_port_name"]))
+		var label := Label.new()
+		label.name = "Intel_%s" % str(row["captain_id"])
+		label.text = line
+		label.add_theme_color_override("font_color",
+			PaletteLib.ACCENT if bool(row["free"]) else PaletteLib.TEXT)
+		_intel_box.add_child(label)
 
 
 # --- Interaction -----------------------------------------------------------

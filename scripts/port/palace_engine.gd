@@ -24,6 +24,10 @@ const TournamentLib := preload("res://scripts/quests/tournament.gd")
 ## Port allegiance, tariffs and permits (Phase 7, task L) — the permit state,
 ## void rules and treasury credit live there; the sale flow lives here.
 const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+## Phase-8 W5-C (docs/70-* §4.5, docs/80-* §4.11.1): inform-on-pirates reuses
+## the task-L bounty-pinpoint pipeline (`reveal_position`) at the fixed price.
+const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 ## §4.3: a nation offers royal missions only at or above this reputation.
 const MISSION_REPUTATION := 30
@@ -404,6 +408,56 @@ static func _shipyard():
 
 
 # --- Bounty / tournament / retirement edges ------------------------------
+
+# --- Inform on pirates (docs/70-* §4.5, docs/80-* §4.11.1; Phase-8 W5-C) ----
+
+## 告发 inform on pirates: pay the FIXED **500g** to reveal one
+## pirate/privateer captain's current position — the bounty-pinpoint pipeline
+## (`NpcIntelLib.reveal_position`, the same payload the tavern's 20g poster
+## reveal formats as `captain.reveal.text`) at the fixed price: **no rumour or
+## charisma discount applies** (`70-*` §4.5).
+const INFORM_COST := 500
+
+
+## The fixed inform price (the one `500` in the codebase).
+static func inform_cost() -> int:
+	return INFORM_COST
+
+
+## True when the inform may start: the palace is open (§4.1b audience rule)
+## and the purse covers the fixed fee.
+static func can_inform(port_id: String) -> bool:
+	if not SailingSimLib.facility_open(port_id, "palace"):
+		return false
+	return GameState.gold >= INFORM_COST
+
+
+## The inform reveal (`70-*` §4.5): charges the fixed 500g and returns the
+## captain's exact live position `{id, name, cell, nearest_port,
+## nearest_port_name}` — `{}` (state untouched) when the palace is closed,
+## the purse is short, or `fleet_id` is not a live pirate/privateer fleet.
+static func inform_on_pirates(port_id: String, fleet_id: String) -> Dictionary:
+	if not can_inform(port_id):
+		return {}
+	var fleet: Dictionary = {}
+	for candidate in GameState.npc_fleets:
+		if not (candidate is Dictionary):
+			continue
+		if str((candidate as Dictionary).get("id", "")) != fleet_id:
+			continue
+		fleet = candidate
+		break
+	if fleet.is_empty():
+		return {}
+	var role := str(fleet.get("role", ""))
+	if role != NpcFleetsLib.PIRATE and role != NpcFleetsLib.PRIVATEER:
+		return {}
+	var position: Dictionary = NpcIntelLib.reveal_position(fleet_id)
+	if position.is_empty():
+		return {}
+	GameState.add_gold(-INFORM_COST)
+	return position
+
 
 ## Palace bounty row: pays the nation's bounty (docs/70-* §4.9.5).
 ## §4.1b (added 2026-11-02): the pay-off is an audience — it must start inside
