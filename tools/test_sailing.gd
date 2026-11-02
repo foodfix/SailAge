@@ -39,6 +39,9 @@ func _ready() -> void:
 	DataLoader.map = map if ok else null
 
 	_test_constants()
+	_test_phase8_constants()
+	_test_sighting_radius()
+	_test_officer_day_seam()
 	_test_consumption()
 	_test_wages()
 	_test_gold_clamp()
@@ -56,17 +59,34 @@ func _ready() -> void:
 
 ## Caravel (speed 20, crew_min 15, crew_max 45) at full crew, base stats, fair
 ## weather → effective speed exactly 20 (§4.4 worked case; Phase-6 ×2 speeds on
-## 5 nm tiles, `10-*` §7.3). The hold defaults to
-## empty; each test loads what it needs.
+## 5 nm tiles, `10-*` §7.3; the Phase-8 seamanship-10 bonus is +0.0333 and
+## floor(20 × 1.0333) = 20). The hold defaults to
+## empty; each test loads what it needs. Default navigation is 60 (above the
+## night-sail threshold) so the suite's clock walks keep their day arithmetic;
+## the night rule is pinned in test_movement.
 func _make_run(
 	crew: int = 15, provisions: int = 0, water: int = 0,
-	gold: int = 1000, weather: String = "fair"
+	gold: int = 1000, weather: String = "fair",
+	seamanship: int = 10, navigation: int = 60,
+	courage: int = 10, constitution: int = 10, charisma: int = 10,
+	luck: int = 10,
 ) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
+		# Phase-8 v9 shape (50-* §4.8) + the legacy stats block the pre-merge
+		# character.gd fallbacks read.
+		"attributes": {
+			"constitution": constitution, "intellect": 10, "charisma": charisma,
+			"courage": courage, "luck": luck,
+		},
+		"skills": {
+			"seamanship": seamanship, "navigation": navigation,
+			"swordplay": 0, "gunnery": 0, "appraisal": 0, "negotiation": 0,
+			"cartography": 0, "rumour": 0,
+		},
 		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
+			"leadership": charisma, "seamanship": seamanship, "combat": 10,
+			"navigation": navigation, "luck": luck,
 		},
 		"xp": 0,
 		"level": 1,
@@ -167,6 +187,99 @@ func _test_constants() -> void:
 	_check(DiscoveryLib.chebyshev_to_cell(Vector2i(2160, 10), Vector2i(0, 10)) == 2160,
 		"the far side of the seam stays far (got %d)"
 		% DiscoveryLib.chebyshev_to_cell(Vector2i(2160, 10), Vector2i(0, 10)))
+
+
+# --- §5 Phase-8 constants (20-* §5 "sailing_constants") --------------------
+
+func _test_phase8_constants() -> void:
+	_check(SailingSimLib.SEAMANSHIP_SPEED_DIVISOR == 300
+		and is_equal_approx(SailingSimLib.SEAMANSHIP_SPEED_CAP, 0.30),
+		"§5 seamanship_speed_divisor/cap == 300 / +0.30 (got %d / %.2f)" % [
+			SailingSimLib.SEAMANSHIP_SPEED_DIVISOR, SailingSimLib.SEAMANSHIP_SPEED_CAP])
+	_check(SailingSimLib.SIGHTING_NAVIGATION_DIVISOR == 12,
+		"§5 sighting_navigation_divisor == 12 (got %d)"
+		% SailingSimLib.SIGHTING_NAVIGATION_DIVISOR)
+	_check(SailingSimLib.DISCOVERY_CARTOGRAPHY_DIVISOR == 15,
+		"§5 discovery_cartography_divisor == 15 (the formula itself lives in "
+		+ "DiscoverySight, got %d)" % SailingSimLib.DISCOVERY_CARTOGRAPHY_DIVISOR)
+	_check(SailingSimLib.NIGHT_WINDOW_START_HOUR == 22
+		and SailingSimLib.NIGHT_WINDOW_END_HOUR == 6,
+		"§5 night window == 22:00–06:00 (got %d–%d)" % [
+			SailingSimLib.NIGHT_WINDOW_START_HOUR, SailingSimLib.NIGHT_WINDOW_END_HOUR])
+	_check(is_equal_approx(SailingSimLib.NIGHT_MOVE_COST_MULTIPLIER, 2.0)
+		and SailingSimLib.NIGHT_SAIL_NAVIGATION_THRESHOLD == 40,
+		"§5 night multiplier / navigation threshold == 2.0 / 40")
+	_check(SailingSimLib.STORM_DAMAGE_LUCK_DIVISOR == 250,
+		"§5 storm_damage_luck_divisor == 250 (got %d)"
+		% SailingSimLib.STORM_DAMAGE_LUCK_DIVISOR)
+	_check(is_equal_approx(SailingSimLib.STORM_HEADWAY_BASE_LOSS, 0.5)
+		and SailingSimLib.STORM_HEADWAY_DIVISOR == 400,
+		"§5 storm headway == base loss 0.5 over COU divisor 400")
+	_check(SailingSimLib.STORM_MORALE_CON_DIVISOR == 300,
+		"§5 storm morale CON divisor == 300 (got %d)"
+		% SailingSimLib.STORM_MORALE_CON_DIVISOR)
+	_check(SailingSimLib.MUTINY_CHARISMA_DIVISOR == 200,
+		"§5 mutiny_charisma_divisor == 200 (got %d)"
+		% SailingSimLib.MUTINY_CHARISMA_DIVISOR)
+	_check(SailingSimLib.SCURVY_GRACE_DIVISOR == 10,
+		"§5 scurvy_grace_divisor == 10 (got %d)" % SailingSimLib.SCURVY_GRACE_DIVISOR)
+	_check(SailingSimLib.CAPTAIN_LESS_SPEED_FACTOR == 0.8
+		and SailingSimLib.MORALE_CAPTAIN_LESS == -2,
+		"§5/40-* captain-less hooks == speed ×0.8, morale −2")
+	_check(SailingSimLib.AT_SEA_REPAIR_POINTS == 10
+		and SailingSimLib.AT_SEA_REPAIR_CARPENTRY_GATE == 60
+		and SailingSimLib.AT_SEA_REPAIR_CARPENTRY_DIVISOR == 20,
+		"40-* §4.5 at-sea minor repair == +10 dur / carpentry gate 60 / −skill/20%%")
+
+
+# --- §4.11 sighting radius (Phase 8) ---------------------------------------
+
+## `48 + floor(effective_navigation / 12)` at navigation 0/40/100 → 48/51/56.
+## (The base-48 agreement with `DiscoverySight.RADIUS`'s separate constant is
+## pinned in `_test_constants`; the discovery radius formula itself is
+## `DiscoverySight`'s — `70-*` §4.4 — not this file's.)
+func _test_sighting_radius() -> void:
+	for row in [[0, 48], [40, 51], [100, 56]]:
+		_make_run(15, 0, 0, 1000, "fair", 10, int(row[0]))
+		_check(SailingSimLib.sighting_radius() == int(row[1]),
+			"navigation %d sighting radius == %d (got %d)" % [
+				int(row[0]), int(row[1]), SailingSimLib.sighting_radius()])
+		_check(SailingSimLib.sighting_radius_for(int(row[0])) == int(row[1]),
+			"sighting_radius_for(%d) == %d (the pure formula)" % [
+				int(row[0]), int(row[1])])
+
+
+# --- §4.8.1 officer sea-day growth seam (Phase 8) --------------------------
+
+## The ledger calls `Skills.note_sea_day()` + `Skills.officer_day_tick()` at
+## the sea-day growth point (after consumption/wages, with the +2 XP award),
+## and nothing on a port day. The double is a runtime GDScript standing in for
+## slot A's `skills.gd` (which owns the real growth rules and their own tests);
+## this pins the sailing-side seam only. Never set `skills_script_override`
+## outside a test.
+func _test_officer_day_seam() -> void:
+	var calls_log := "extends RefCounted\nstatic var calls := []\n" \
+		+ "static func note_sea_day() -> void:\n\tcalls.append(\"sea\")\n" \
+		+ "static func officer_day_tick() -> void:\n\tcalls.append(\"tick\")\n"
+	var double := GDScript.new()
+	double.source_code = calls_log
+	_check(double.reload() == OK, "the skills double compiles")
+	_make_run(15, 10, 10)
+	double.calls = []
+	SailingSimLib.skills_script_override = double
+	_one_day()
+	var sea_calls: Array = double.calls
+	_check(sea_calls == ["sea", "tick"],
+		"a sea day fires note_sea_day then officer_day_tick (got %s)" % str(sea_calls))
+	# A port day-advance runs no growth (the seam sits in the at-sea branch).
+	double.calls = []
+	GameState.current_port = "lisbon"
+	_one_day()
+	var port_calls: Array = double.calls
+	_check(port_calls.is_empty(),
+		"a port day fires no sea-day growth (got %s)" % str(port_calls))
+	SailingSimLib.skills_script_override = null
+	GameState.current_port = null
 
 
 # --- §4.5 step 1 consumption ----------------------------------------------
@@ -438,10 +551,16 @@ func _test_speed_table() -> void:
 	_check(SailingSimLib.effective_speed() == 16,
 		"calm sail: floor(20 × 0.8) = 16 (got %d)" % SailingSimLib.effective_speed())
 
-	# storm / sail → floor(20 × 1.5) = 30.
+	# storm / sail (Phase 8 headway): COU 10 → floor(20 × 1.5 × 0.5) = 15.
 	_make_run(15, 0, 0, 1000, "storm")
-	_check(SailingSimLib.effective_speed() == 30,
-		"storm sail: floor(20 × 1.5) = 30 (got %d)" % SailingSimLib.effective_speed())
+	_check(SailingSimLib.effective_speed() == 15,
+		"storm sail at COU 10: floor(20 × 1.5 × 0.5) = 15 (got %d)"
+		% SailingSimLib.effective_speed())
+	# …at COU 100 the retention is ×0.6125: floor(20 × 1.5 × 0.6125) = 18.
+	_make_run(15, 0, 0, 1000, "storm", 10, 60, 100)
+	_check(SailingSimLib.effective_speed() == 18,
+		"storm sail at COU 100: floor(20 × 1.5 × 0.6125) = 18 (got %d)"
+		% SailingSimLib.effective_speed())
 
 	# Skeleton crew 1/15 → factor floor 0.25 → floor(20 × 0.25) = 5, never 0.
 	_make_run(1)
@@ -456,25 +575,33 @@ func _test_speed_table() -> void:
 		"skeleton crew in calm is floor(20 × 0.8 × 0.25) = 4 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Slowest hull: caravel 20 + nao 16 → base 16.
+	# Slowest hull: caravel 20 + nao 16 → the escort is captain-less (the
+	# default roster has no appointments), so its §4.4 scan value is
+	# 16 × 0.8 = 12.8 → 12 (the `40-*` §4.4 hook; the appointed-captain
+	# restore is pinned in test_movement).
 	_make_run(15)
 	GameState.fleet.append(FleetLib.new_ship("nao", 25))
 	_check(FleetLib.slowest_speed() == 16,
 		"fleet slowest hull is the nao's 16 (got %d)" % FleetLib.slowest_speed())
-	_check(SailingSimLib.effective_speed() == 16,
-		"fleet speed uses the slowest hull → 16 (got %d)"
+	_check(SailingSimLib.effective_speed() == 12,
+		"the captain-less escort drags the scan to 12 (got %d)"
 		% SailingSimLib.effective_speed())
 
-	# Oar ignores wind: galley (base 24, crew_min 40) in storm → floor(24 × 1.0) = 24.
+	# Oar ignores wind (wind_factor 1.0 in every weather — the class table),
+	# but the Phase-8 storm headway still applies: storm at COU 10 gives
+	# floor(24 × 1.0(wind) × 1.5 × 0.5) = 18; calm has no headway → 24.
 	_make_run(40, 0, 0, 1000, "storm")
 	GameState.fleet[0] = FleetLib.new_ship("galley", 40)
-	_check(SailingSimLib.effective_speed() == 24,
-		"oar in storm is wind-independent: floor(24 × 1.0) = 24 (got %d)"
+	_check(SailingSimLib.wind_factor("storm", "oar") == 1.0
+		and SailingSimLib.wind_factor("calm", "oar") == 1.0,
+		"oar wind_factor is 1.0 in storm and calm alike (the class table)")
+	_check(SailingSimLib.effective_speed() == 12,
+		"oar in storm at COU 10: floor(24 × 1.0 × 0.5 × 1.0333) = 12 (got %d)"
 		% SailingSimLib.effective_speed())
-	# …and matches the calm case exactly.
+	# …and the calm case has no headway term.
 	GameState.world["weather"] = "calm"
 	_check(SailingSimLib.effective_speed() == 24,
-		"oar in calm is the same 24 (got %d)" % SailingSimLib.effective_speed())
+		"oar in calm is the full 24 (got %d)" % SailingSimLib.effective_speed())
 
 	# Hybrid in strong wind: galleon (base 20, crew_min 40) → floor(20 × 1.1) = 22.
 	_make_run(40, 0, 0, 1000, "strong")
@@ -536,10 +663,11 @@ func _test_heading_pipeline() -> void:
 		"a beam try_move costs the W3 0.05 days (got %.4f)" % beam_cost)
 
 	# The full §4.4 pipeline multiplies trim too: full sail, running, fair →
-	# floor(20 × 1.0 × 1.3 × 1.15) = floor(29.9) = 29.
+	# floor(20 × 1.0 × 1.3 × 1.15 × 1.0333) = floor(30.887) = 30 (the +10/300
+	# seamanship bonus rides the pipeline since Phase 8).
 	GameState.world["sail_trim"] = "full"
-	_check(SailingSimLib.effective_speed("W") == 29,
-		"full-sail running speed floor(20 × 1.3 × 1.15) = 29 (got %d)"
+	_check(SailingSimLib.effective_speed("W") == 30,
+		"full-sail running speed floor(20 × 1.3 × 1.15 × 1.0333) = 30 (got %d)"
 		% SailingSimLib.effective_speed("W"))
 	# …and reefed into the wind: floor(20 × 0.5 × 0.75) = floor(7.5) = 7.
 	GameState.world["sail_trim"] = "reefed"

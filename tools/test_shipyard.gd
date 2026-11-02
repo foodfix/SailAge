@@ -17,6 +17,7 @@ extends Node
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
+const SailingSim := preload("res://scripts/world/sailing_sim.gd")
 const ShipyardScene := preload("res://scenes/port/shipyard_screen.tscn")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
 const PortScreenLib := preload("res://scenes/port/port_screen.gd")
@@ -77,11 +78,13 @@ var _checks := 0
 
 func _ready() -> void:
 	_test_repair_pricing()
+	_test_carpenter_discount()
 	_test_sell_pricing()
 	_test_fleet_max()
 	_test_buy_defaults()
 	_test_no_sell_rules()
 	_test_partial_repair()
+	_test_at_sea_minor_repair()
 	_test_promote()
 	_test_refit_maths()
 	_test_per_port_stock()
@@ -94,15 +97,25 @@ func _ready() -> void:
 # --- Fixtures --------------------------------------------------------------
 
 ## A docked run with exactly `ship_ids` in the fleet, all at full durability.
+## The player block carries the Phase-8 v9 keys alongside the legacy stats the
+## pre-merge character.gd reads; `at_sea` drops the run into open water.
 func _make_run(gold: int = 100000, ship_ids: Array = ["caravel"],
 		port = "lisbon") -> void:
 	GameState.gold = gold
 	GameState.current_port = port
 	GameState.player = {
 		"nation_id": "portugal",
+		"attributes": {
+			"constitution": 10, "intellect": 10, "charisma": 10,
+			"courage": 10, "luck": 10,
+		},
+		"skills": {
+			"seamanship": 10, "navigation": 60, "swordplay": 0, "gunnery": 0,
+			"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+		},
 		"stats": {
 			"leadership": 10, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
+			"navigation": 60, "luck": 10,
 		},
 		"xp": 0, "level": 1, "officers": [], "reputation": {"portugal": 0},
 	}
@@ -112,6 +125,21 @@ func _make_run(gold: int = 100000, ship_ids: Array = ["caravel"],
 	# §4.1b port hours (added 2026-11-02): 12:00 — the yard is open for the
 	# buy/repair/sell/refit scenarios.
 	GameState.world = {"clock_fraction": 0.5}
+
+
+## Installs a runtime GDScript standing in for slot A's skills module, with
+## `values` answered by `effective_skill` (the sailing-side guarded loader
+## consumes it — `SailingSim.skills_script_override`, never set outside a
+## test). Returns the double so a test can read back what it set.
+func _skills_double(values: Dictionary) -> GDScript:
+	var double := GDScript.new()
+	double.source_code = "extends RefCounted\nstatic var values := {}\n" \
+		+ "static func effective_skill(key: String) -> int:\n" \
+		+ "\treturn int(values.get(key, 0))\n"
+	double.reload()
+	double.values = values
+	SailingSim.skills_script_override = double
+	return double
 
 
 ## Replaces the fleet with one hull of `ship_id` at a damaged durability.
@@ -403,6 +431,132 @@ func _test_partial_repair() -> void:
 		if ShipyardLib.repair_cost(0, 1) != ShipyardLib.repair_cost_per_point(ship_type_id):
 			all_match = false
 	_check(all_match, "1 point costs exactly the per-point price for every type")
+
+
+# --- 6b. §4.3 carpenter discount (Phase 8) ---------------------------------
+
+## With a carpenter in post the whole fee is ×`(1 − floor(carpentry/20)/100)`
+## (a −`floor(carpentry/20)`% discount), composed after the §4.9.2 count-title
+## ×0.8 and **floored once at the end of the whole transaction**. The
+## carpentry value is the in-post carpenter's contribution
+## (`Skills.effective_skill("carpentry")` — the double stands in for slot A's
+## module).
+func _test_carpenter_discount() -> void:
+	# ×1.00 / ×0.99 / ×0.95 at carpentry 0 / 20 / 100 (the −skill/20% table).
+	for row in [[0, 1.0], [20, 0.99], [100, 0.95]]:
+		_damaged_ship("caravel", 50)
+		_skills_double({"carpentry": int(row[0])})
+		_check(is_equal_approx(SailingSim.carpenter_discount(), float(row[1])),
+			"carpentry %d → fee multiplier ×%.2f (got %.4f)" % [
+				int(row[0]), float(row[1]), SailingSim.carpenter_discount()])
+		# 7 caravel points = raw 140 → floor(140 × multiplier), floored once.
+		var expected := int(floor(140.0 * float(row[1])))
+		_check(ShipyardLib.repair_cost(0, 7) == expected,
+			"carpentry %d: 7 caravel points cost floor(140 × %.2f) = %dg (got %d)" % [
+				int(row[0]), float(row[1]), expected, ShipyardLib.repair_cost(0, 7)])
+	SailingSim.skills_script_override = null
+
+	# Fractional cases floor exactly once at the end (not per factor): nao
+	# 1 point = 55 raw; carpentry 41 → −floor(41/20)% = −2% →
+	# floor(55 × 0.98) = 53.
+	_damaged_ship("nao", 100)
+	_skills_double({"carpentry": 41})
+	_check(ShipyardLib.repair_cost(0, 1) == 53,
+		"nao 1 point at carpentry 41: floor(55 × 0.98) = 53, floored once (got %d)"
+		% ShipyardLib.repair_cost(0, 1))
+	SailingSim.skills_script_override = null
+
+	# Without the double (no skills module pre-merge), the discount is ×1.00:
+	# the fee is the plain transaction.
+	_damaged_ship("caravel", 50)
+	SailingSim.skills_script_override = null
+	_check(is_equal_approx(SailingSim.carpenter_discount(), 1.0),
+		"no carpenter in post → ×1.00 (got %.4f)" % SailingSim.carpenter_discount())
+	_check(ShipyardLib.repair_cost(0, 7) == 140,
+		"the no-carpenter fee is the raw 140g (got %d)" % ShipyardLib.repair_cost(0, 7))
+
+
+# --- 6c. §4.5 at-sea minor repair (Phase 8) --------------------------------
+
+## Carpentry ≥ 60 → +10 durability to one fleet ship for
+## `floor(10 × per-point rate × carpenter discount)` gold, once per fleet-day,
+## no clock cost, at sea only.
+func _test_at_sea_minor_repair() -> void:
+	# The gate is the effective in-post carpentry; 59 refuses, 60 opens.
+	# Durability 70 so two +10 repairs fit below the 90 max.
+	_make_run(100000, ["caravel"])
+	GameState.current_port = null
+	GameState.fleet[0]["durability"] = 70
+	_skills_double({"carpentry": 59})
+	_check(not SailingSim.at_sea_repair_gate_met(),
+		"carpentry 59 is below the at-sea gate")
+	_check(not SailingSim.at_sea_repair(),
+		"below the gate the repair is refused (state untouched)")
+	_check(int(GameState.fleet[0]["durability"]) == 70 and GameState.gold == 100000,
+		"the refused repair changes nothing")
+	_skills_double({"carpentry": 60})
+	_check(SailingSim.at_sea_repair_gate_met(), "carpentry 60 opens the gate")
+
+	# The fee: 10 × ceil(8000/400) = 200 raw, ×0.97 at carpentry 60 → 194.
+	_check(SailingSim.at_sea_repair_fee(0) == 194,
+		"caravel fee at carpentry 60: floor(200 × 0.97) = 194 (got %d)"
+		% SailingSim.at_sea_repair_fee(0))
+	_check(SailingSim.at_sea_repair_available(0),
+		"a damaged hull at sea with a gated carpenter is repairable")
+	var clock_before := float(GameState.world["clock_fraction"])
+	_check(SailingSim.at_sea_repair(), "the at-sea repair succeeds")
+	_check(int(GameState.fleet[0]["durability"]) == 80,
+		"it restores exactly +10 durability (70 → %d)"
+		% int(GameState.fleet[0]["durability"]))
+	_check(GameState.gold == 100000 - 194,
+		"it charges the discounted fee (gold → %d)" % GameState.gold)
+	_check(is_equal_approx(float(GameState.world["clock_fraction"]), clock_before),
+		"it costs no clock")
+
+	# Once per fleet-day: a second call the same day refuses; the next day the
+	# guard reopens.
+	_check(not SailingSim.at_sea_repair(),
+		"a second repair the same fleet-day is refused")
+	_check(int(GameState.fleet[0]["durability"]) == 80 and GameState.gold == 100000 - 194,
+		"the refused second repair changes nothing")
+	GameState.day += 1
+	_check(SailingSim.at_sea_repair(),
+		"the next fleet-day the repair works again")
+	_check(int(GameState.fleet[0]["durability"]) == 90,
+		"the second repair clamps at the hull's max (90 → %d)"
+		% int(GameState.fleet[0]["durability"]))
+
+	# Insufficient gold refuses (fee 194, purse 100).
+	_make_run(100, ["caravel"])
+	GameState.current_port = null
+	GameState.fleet[0]["durability"] = 80
+	GameState.day = 1
+	SailingSim.at_sea_repair_day = -1
+	_skills_double({"carpentry": 60})
+	_check(not SailingSim.at_sea_repair_available(0)
+		and not SailingSim.at_sea_repair(),
+		"gold under the fee refuses the repair")
+	_check(int(GameState.fleet[0]["durability"]) == 80 and GameState.gold == 100,
+		"the refused repair changes nothing")
+
+	# An undamaged hull has nothing to repair.
+	_make_run(100000, ["caravel"])
+	GameState.current_port = null
+	SailingSim.at_sea_repair_day = -1
+	_skills_double({"carpentry": 60})
+	_check(not SailingSim.at_sea_repair_available(0),
+		"a full-durability hull is not repairable")
+
+	# In port the action is never available (it is an at-sea rule).
+	_make_run(100000, ["caravel"])
+	GameState.fleet[0]["durability"] = 80
+	GameState.day = 1
+	SailingSim.at_sea_repair_day = -1
+	_skills_double({"carpentry": 60})
+	_check(not SailingSim.at_sea_repair_available(0)
+		and not SailingSim.at_sea_repair(),
+		"docked, the at-sea repair is refused")
+	SailingSim.skills_script_override = null
 
 
 # --- 7. Promote (§4.4) ---------------------------------------------------

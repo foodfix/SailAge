@@ -48,10 +48,10 @@ func _ready() -> void:
 
 	var _sections: Array = [
 		["_test_constants"], ["_test_starvation_path"], ["_test_scurvy_path"],
-		["_test_counter_reset"], ["_test_crew_loss_formula"],
+		["_test_scurvy_grace"], ["_test_counter_reset"], ["_test_crew_loss_formula"],
 		["_test_mutiny_probability"], ["_test_mutiny_resolutions"],
-		["_test_desertion"], ["_test_morale_deltas"], ["_test_xp"],
-		["_test_sinking"], ["_test_dialog_order"],
+		["_test_desertion"], ["_test_morale_deltas"], ["_test_captain_less"],
+		["_test_xp"], ["_test_sinking"], ["_test_dialog_order"],
 		["_test_hud_mutiny_modal"],
 		["_test_world_game_over_overlay"], ["_test_gameover_screen"],
 		["_test_hud_morale_tiers"],
@@ -70,6 +70,8 @@ func _ready() -> void:
 
 ## Caravel (speed 5, durability 90, capacity 120, crew_max 45) at `crew` crew on
 ## open water, morale 70 unless overridden, ample gold so wages never clamp.
+## Phase 8: `charisma` (the retired leadership's replacement, formula
+## unchanged) and `constitution` ride the v9 attributes block.
 func _make_run(
 	crew: int = 15,
 	provisions: int = 50,
@@ -77,14 +79,25 @@ func _make_run(
 	gold: int = 100000,
 	morale: int = 70,
 	cell: Vector2i = CALM_CELL,
-	leadership: int = 10,
-	ship_ids: Array = ["caravel"]
+	charisma: int = 10,
+	ship_ids: Array = ["caravel"],
+	constitution: int = 10,
 ) -> void:
 	GameState.player = {
 		"nation_id": "portugal",
+		# Phase-8 v9 shape (50-* §4.8) + the legacy stats block the pre-merge
+		# character.gd fallbacks read.
+		"attributes": {
+			"constitution": constitution, "intellect": 10, "charisma": charisma,
+			"courage": 10, "luck": 10,
+		},
+		"skills": {
+			"seamanship": 10, "navigation": 60, "swordplay": 0, "gunnery": 0,
+			"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+		},
 		"stats": {
-			"leadership": leadership, "seamanship": 10, "combat": 10,
-			"navigation": 10, "luck": 10,
+			"leadership": charisma, "seamanship": 10, "combat": 10,
+			"navigation": 60, "luck": 10,
 		},
 		"xp": 0,
 		"level": 1,
@@ -150,6 +163,8 @@ func _test_constants() -> void:
 	_check(SailingSimLib.MORALE_SEA_DAILY == -1 and SailingSimLib.MORALE_SHORTFALL == -5
 		and SailingSimLib.MORALE_STORM == -5 and SailingSimLib.MORALE_UNPAID_WAGES == -5,
 		"§4.8.1 deltas are −1 / −5 / −5 / −5")
+	_check(SailingSimLib.MORALE_CAPTAIN_LESS == -2,
+		"§4.8.1 captain-less additional decay is −2")
 	_check(SailingSimLib.MORALE_PORT_DAILY == 5, "§4.8.1 in-port delta is +5")
 	_check(SailingSimLib.MUTINY_PAY_PER_CREW == 20 and
 		is_equal_approx(SailingSimLib.MUTINY_SUPPRESS_FRACTION, 0.30),
@@ -231,24 +246,28 @@ func _test_starvation_path() -> void:
 # --- 2. Scurvy mirror ------------------------------------------------------
 
 func _test_scurvy_path() -> void:
+	# Phase 8 scurvy grace: at base CON 10 (no surgeon) the game-over threshold
+	# is 7 + floor(10/10) = 8, so the run dies on the **8th** water-short day —
+	# one later than starvation's 7.
 	_make_run(15, 200, 0, 100000, 70)
 	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
 	var start_day: int = GameState.day
 	var log := _start_game_over_log()
 	var counter_trace: Array[int] = []
-	for day in LIMIT:
+	for day in SailingSimLib.scurvy_limit_days():
 		_one_day()
 		counter_trace.append(SailingSimLib.scurvy_days)
 	_stop_game_over_log(log)
 
 	print("  scurvy: counter %s, game over %s" % [str(counter_trace), str(log[0])])
-	_check(counter_trace == [1, 2, 3, 4, 5, 6, 7],
+	_check(counter_trace == [1, 2, 3, 4, 5, 6, 7, 8],
 		"the scurvy counter increments once per water-short day (got %s)"
 		% str(counter_trace))
 	_check(log[0] == ["scurvy"],
 		"game_over('scurvy') fires exactly once (got %s)" % str(log[0]))
-	_check(GameState.day - start_day == LIMIT,
-		"scurvy ends the run on the 7th tick (%d ticks)" % (GameState.day - start_day))
+	_check(GameState.day - start_day == 8,
+		"scurvy ends the run on the grace-extended 8th tick (%d ticks)"
+		% (GameState.day - start_day))
 	_check(SailingSimLib.starvation_days == 0,
 		"a water-only shortage never advances the starvation counter (got %d)"
 		% SailingSimLib.starvation_days)
@@ -265,8 +284,53 @@ func _test_scurvy_path() -> void:
 		"both short → the documented check order reports 'starvation' (got %s)"
 		% str(both_log[0]))
 	_check(SailingSimLib.scurvy_days == LIMIT,
-		"…while the scurvy counter also reached 7 (got %d)"
+		"…while the scurvy counter also reached %d (got %d)"
+		% [LIMIT, SailingSimLib.scurvy_days])
+
+
+# --- 2b. §4.9 scurvy grace (Phase 8) ---------------------------------------
+
+## The threshold is `7 + floor(max(CON, in-post surgeon medicine) / 10)`:
+## CON 10 without a surgeon → 8; CON 100 → 17; a surgeon with medicine 30 at
+## CON 10 → 10 — and the 10-shortfall-day run dies exactly there.
+func _test_scurvy_grace() -> void:
+	_make_run(15, 200, 0, 100000, 70)
+	_check(SailingSimLib.scurvy_limit_days() == 8,
+		"CON 10, no surgeon: the scurvy threshold is 7 + floor(10/10) = 8 (got %d)"
+		% SailingSimLib.scurvy_limit_days())
+	_make_run(15, 200, 0, 100000, 70, CALM_CELL, 10, ["caravel"], 100)
+	_check(SailingSimLib.scurvy_limit_days() == 17,
+		"CON 100: 7 + floor(100/10) = 17 (got %d)" % SailingSimLib.scurvy_limit_days())
+
+	# A surgeon in post feeds the same term through Skills.effective_skill
+	# ("medicine") — player 0 + the surgeon's value. The double is a runtime
+	# GDScript standing in for slot A's skills module (the real module's own
+	# tests live with slot A); never set `skills_script_override` outside a test.
+	var double := GDScript.new()
+	double.source_code = "extends RefCounted\nstatic var values := {}\n" \
+		+ "static func effective_skill(key: String) -> int:\n" \
+		+ "\treturn int(values.get(key, 0))\n"
+	_check(double.reload() == OK, "the medicine double compiles")
+	double.values = {"medicine": 30}
+	_make_run(15, 200, 0, 100000, 70)
+	SailingSimLib.skills_script_override = double
+	_check(SailingSimLib.scurvy_limit_days() == 10,
+		"surgeon medicine 30 at CON 10: 7 + floor(30/10) = 10 (got %d)"
+		% SailingSimLib.scurvy_limit_days())
+
+	# Integration: 9 water-short days stay alive; the 10th ends the run.
+	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
+	var log := _start_game_over_log()
+	for day in 9:
+		_one_day()
+	_check(not SailingSimLib.is_game_over() and SailingSimLib.scurvy_days == 9,
+		"9 short days stay under the grace-extended threshold (counter %d)"
 		% SailingSimLib.scurvy_days)
+	_one_day()
+	_stop_game_over_log(log)
+	_check(log[0] == ["scurvy"],
+		"the 10th short day ends the run (got %s)" % str(log[0]))
+	SailingSimLib.skills_script_override = null
 
 
 # --- 3. Counter reset ------------------------------------------------------
@@ -409,13 +473,20 @@ func _test_mutiny_probability() -> void:
 	_check(not SailingSimLib.mutiny_is_possible(),
 		"mutiny_is_possible() is false while docked")
 
-	# Leadership lowers the chance: leadership 30 → ×0.90 (the pinned
-	# multiplier table; the composed closed form follows by arithmetic —
-	# no simulation needed).
-	_make_run(15, 50, 50, 100000, 10, CALM_CELL, 30)
-	_check(is_equal_approx(CharacterLib.mutiny_multiplier(), 0.90),
-		"leadership 30 → mutiny multiplier 0.90 (got %.4f)"
-		% CharacterLib.mutiny_multiplier())
+	# Charisma lowers the chance (Phase 8: charisma replaced leadership at
+	# every site, formula unchanged): ×(1 − (CHA−10)/200) — CHA 30 → 0.90,
+	# CHA 100 → 0.55, CHA 20 → 0.95, CHA 10 → 1.00 (the pinned multiplier
+	# table; the composed daily chance follows by arithmetic — no simulation).
+	for row in [[10, 1.0], [20, 0.95], [30, 0.90], [100, 0.55]]:
+		_make_run(15, 50, 50, 100000, 10, CALM_CELL, int(row[0]))
+		_check(is_equal_approx(SailingSimLib.charisma_loss_multiplier(), float(row[1])),
+			"charisma %d → mutiny/desertion multiplier %.2f (got %.4f)" % [
+				int(row[0]), float(row[1]), SailingSimLib.charisma_loss_multiplier()])
+	# And the composed per-day chance: 0.25 × 0.55 = 0.1375 at charisma 100.
+	_make_run(15, 50, 50, 100000, 10, CALM_CELL, 100)
+	_check(is_equal_approx(
+			SailingSimLib.MUTINY_CHANCE_PER_DAY * SailingSimLib.charisma_loss_multiplier(), 0.1375),
+		"the charisma-100 mutiny chance is 0.25 × 0.55 = 0.1375 per day")
 
 
 ## Number of mutiny events raised in `days` days whose post-step-4 morale is
@@ -551,22 +622,27 @@ func _test_desertion() -> void:
 	_check(SailingSimLib.apply_desertion() == 0,
 		"crew 1 is protected by the §6 floor (lost 0)")
 
-	# Leadership halves: leadership 20 → ×0.95 → floor(15 × 0.10 × 0.95) = 1
-	# both times, so use crew 100 to see the multiplier: 100 × 0.10 × 0.95 = 9.5
-	# → 9 (vs 10 at leadership 10).
+	# Charisma halves-and-more (Phase 8): CHA 20 → ×0.95 → floor(100 × 0.10 ×
+	# 0.95) = 9 (vs 10 at CHA 10); CHA 100 → ×0.55 → floor(5.5) = 5.
 	_make_run(100, 50, 50, 1000, 39, CALM_CELL, 20)
-	_check(is_equal_approx(CharacterLib.desertion_multiplier(), 0.95),
-		"leadership 20 → desertion multiplier 0.95 (got %.4f)"
-		% CharacterLib.desertion_multiplier())
+	_check(is_equal_approx(SailingSimLib.charisma_loss_multiplier(), 0.95),
+		"charisma 20 → desertion multiplier 0.95 (got %.4f)"
+		% SailingSimLib.charisma_loss_multiplier())
 	var lost := SailingSimLib.apply_desertion()
 	_check(lost == 9,
-		"leadership 20: floor(100×0.10×0.95) = 9 (got %d)" % lost)
+		"charisma 20: floor(100×0.10×0.95) = 9 (got %d)" % lost)
 	_check(FleetLib.total_crew() == 91, "crew 100 → 91 (got %d)" % FleetLib.total_crew())
 
-	# Leadership 10 baseline for the same crew: 10.
+	# CHA 10 baseline for the same crew: 10 — the multiplier is really applied.
 	_make_run(100, 50, 50, 1000, 39, CALM_CELL, 10)
 	_check(SailingSimLib.apply_desertion() == 10,
-		"leadership 10: floor(100×0.10×1.00) = 10 → the multiplier is really applied")
+		"charisma 10: floor(100×0.10×1.00) = 10 → the multiplier is really applied")
+
+	# CHA 100: floor(100 × 0.10 × 0.55) = 5 (the charisma factor at full).
+	_make_run(100, 50, 50, 1000, 39, CALM_CELL, 100)
+	lost = SailingSimLib.apply_desertion()
+	_check(lost == 5,
+		"charisma 100: floor(100×0.10×0.55) = 5 (got %d)" % lost)
 
 	# The world scene reports it as `world.desertion` with the count (§4.8.2).
 	var logged := _dialog_keys(SailingSimLib.sort_dialogs([
@@ -674,6 +750,62 @@ func _test_morale_deltas() -> void:
 	_check(GameState.morale == 99,
 		"in port at 99 the gain is capped: stays 99 (got %d)" % GameState.morale)
 	_check(SailingSimLib.MORALE_MAX == 100, "the general clamp ceiling is 100")
+
+
+# --- 8b. §4.8.1 / `40-*` §4.4 captain-less escort (Phase 8) -----------------
+
+## While **any** escort has no in-post captain the daily decay gains −2; a
+## captain appointed for that exact hull clears it (the speed ×0.8 half of the
+## rule is pinned in test_movement).
+func _test_captain_less() -> void:
+	# Two-ship fixture, no captain appointments: the escort is captain-less.
+	_make_run(15, 50, 50, 100000, 70, CALM_CELL, 10, ["caravel", "nao"])
+	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
+	_check(SailingSimLib.captain_less_count() == 1,
+		"the unappointed escort counts captain-less (got %d)"
+		% SailingSimLib.captain_less_count())
+	_one_day()
+	_check(GameState.morale == 67 and SailingSimLib.last_morale_delta == -3,
+		"a captain-less sea day decays −1 −2 = −3 (70 → %d, delta %d)" % [
+			GameState.morale, SailingSimLib.last_morale_delta])
+
+	# Appointing a captain **for that ship** clears the penalty (one fully
+	# supplied sea day is back to the plain −1).
+	GameState.player["officers"] = ["off_leg_vicente_gouveia"]
+	SailingSimLib.officer_states_override = {
+		"off_leg_vicente_gouveia": {"post_id": "captain", "ship_id": "nao",
+			"loyalty": 50, "sea_days": 0},
+	}
+	_check(SailingSimLib.captain_less_count() == 0,
+		"the appointed captain clears the count (got %d)"
+		% SailingSimLib.captain_less_count())
+	GameState.morale = 70
+	_one_day()
+	_check(GameState.morale == 69 and SailingSimLib.last_morale_delta == -1,
+		"the appointed sea day decays the plain −1 (70 → %d, delta %d)" % [
+			GameState.morale, SailingSimLib.last_morale_delta])
+
+	# A captain tied to the WRONG hull does not clear it (ship_id must match).
+	SailingSimLib.officer_states_override = {
+		"off_leg_vicente_gouveia": {"post_id": "captain", "ship_id": "latin",
+			"loyalty": 50, "sea_days": 0},
+	}
+	_check(SailingSimLib.captain_less_count() == 1,
+		"a captain for another hull leaves the escort captain-less (got %d)"
+		% SailingSimLib.captain_less_count())
+	SailingSimLib.officer_states_override = null
+	GameState.player["officers"] = []
+
+	# The default one-ship fleet: no escorts, the rule never fires.
+	_make_run(15, 50, 50, 100000, 70)
+	_check(SailingSimLib.captain_less_count() == 0,
+		"no escorts → no captain-less count (got %d)"
+		% SailingSimLib.captain_less_count())
+	SailingSimLib.set_weather_seed(_seed_for_first_non_storm())
+	_one_day()
+	_check(GameState.morale == 69 and SailingSimLib.last_morale_delta == -1,
+		"the single-ship sea day stays −1 (70 → %d, delta %d)" % [
+			GameState.morale, SailingSimLib.last_morale_delta])
 
 
 # --- 9. XP ----------------------------------------------------------------

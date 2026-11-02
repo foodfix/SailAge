@@ -15,7 +15,10 @@ extends RefCounted
 ##   * A bought ship starts at full durability, zero crew, no supplies, no
 ##     cannons, empty hold (§4.3).
 ##   * Repair costs `ceil(base_price / 400)` per durability point; partial
-##     repair is allowed and capped by both damage and gold.
+##     repair is allowed and capped by both damage and gold. Phase 8: with a
+##     carpenter in post the whole fee is ×`(1 − floor(carpentry/20)/100)`
+##     (composed after the §4.9.2 count-title ×0.8, floored once at the end —
+##     `SailingSim.carpenter_discount()`), `40-*` §4.3.
 ##   * Sell price is `floor(base_price × 0.5 × durability / max_durability)`;
 ##     the flagship can never be sold and the last ship can never be sold.
 ##   * Refit is 100g/cannon, 50g sell-back, 5 cargo units each and capped by
@@ -318,14 +321,21 @@ static func max_repair_points(index: int) -> int:
 
 ## Cost of `points` on `fleet[index]` (0 for a non-positive/invalid request).
 ## Phase 3: at a port of a nation whose title is count or higher the total is
-## multiplied by `0.8` and floored once (`70-*` §4.9.2). `port_id` defaults to
-## the docked port; the palace bays pass their own port explicitly.
+## multiplied by `0.8` (`70-*` §4.9.2). **Phase 8** (`40-*` §4.3): the whole
+## transaction is additionally multiplied by the in-post carpenter's discount
+## (`1 − floor(carpentry / 20) / 100`, a −`floor(carpentry / 20)`% fee cut,
+## composed after the count-title factor) and **floored once at the end of the
+## whole transaction**. `port_id` defaults to the docked port; the palace bays
+## pass their own port explicitly. The single discount implementation lives in
+## `SailingSim.carpenter_discount()` (the at-sea minor-repair fee composes the
+## same term without the title factor).
 static func repair_cost(index: int, points: int, port_id: String = "") -> int:
 	var raw := raw_repair_cost(index, points)
 	if raw <= 0:
 		return 0
-	var discounted := float(raw) * FameLib.repair_discount(_port_nation(port_id))
-	return maxi(0, int(ceil(discounted)))
+	var discounted := float(raw) * FameLib.repair_discount(_port_nation(port_id)) \
+		* SailingSimLib.carpenter_discount()
+	return maxi(0, int(floor(discounted)))
 
 
 ## The undiscounted §4.3 price of `points` (`points × ceil(base_price / 400)`).
