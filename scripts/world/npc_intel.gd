@@ -18,6 +18,7 @@ extends RefCounted
 ## A hunter is **palace-only**: it never rolls an alternate facility.
 
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 
@@ -124,7 +125,10 @@ static func docked_fleets(port_id: String) -> Array:
 
 ## The captains sighted at `port_id`'s `facility` (docs/80-* §4.7.8): docked,
 ## present, and their seeded facility is this one. Rows are
-## `{fleet, id, name, role, nation_id}` sorted by fleet id.
+## `{fleet, id, captain_id, name, tier, role, nation_id}` sorted by fleet id —
+## name and tier resolve from the captain's canon card via `captain_id`
+## (Phase 8). Each NEW sighting row accrues one familiarity on the captain
+## (`Captains.add_familiarity`; W5-C renders the tiers).
 static func sightings(port_id: String, facility: String) -> Array:
 	var out: Array = []
 	for fleet in docked_fleets(port_id):
@@ -132,10 +136,15 @@ static func sightings(port_id: String, facility: String) -> Array:
 			continue
 		if facility_of(fleet, port_id) != facility:
 			continue
+		var captain_id := str(fleet.get("captain_id", ""))
+		if not captain_id.is_empty():
+			CaptainsLib.add_familiarity(captain_id)
 		out.append({
 			"fleet": fleet,
 			"id": str(fleet.get("id", "")),
+			"captain_id": captain_id,
 			"name": NpcFleetsLib.captain_name(fleet),
+			"tier": NpcFleetsLib.captain_tier_of(fleet),
 			"role": str(fleet.get("role", "")),
 			"nation_id": str(fleet.get("nation_id", "")),
 		})
@@ -158,10 +167,11 @@ static func gone_ashore(port_id: String) -> Array:
 
 ## Wanted posters at `port_id`: every at-sea `pirate`/`privateer` captain
 ## within Chebyshev [constant POSTER_RADIUS] of the port (wrap-aware, bucket
-## index). Rows: `{id, name, tier, nearest_port, nearest_port_name,
-## reward_gold, cell}` sorted by fleet id. A named captain's tier comes from
-## `named_pirates.json` (`70-*` §4.5 tiers 1–3); an unnamed one has no
-## poster-worthy identity, so only named captains post.
+## index). Rows: `{id, captain_id, name, tier, nearest_port,
+## nearest_port_name, reward_gold, cell}` sorted by fleet id. Phase 8
+## (§4.11.11.4): the famous-or-successor eligibility test is retired — with
+## the canon **every** pirate/privateer captain carries a full named card and
+## posts; the tier (and reward band) comes from the canon card.
 static func wanted_posters(port_id: String) -> Array:
 	var cell := DataLoader.port_cell(port_id)
 	if cell.x < 0:
@@ -174,12 +184,11 @@ static func wanted_posters(port_id: String) -> Array:
 			continue
 		if int(fleet.get("dwell_until_day", 0)) > GameState.day:
 			continue  # at-sea posters only (a docked captain needs no reveal)
-		if not NpcFleetsLib.is_named_captain(fleet):
-			continue  # only a named captain posts (§4.11.11.4)
 		var near := nearest_port(NpcFleetsLib.position_of(fleet))
-		var tier := NpcFleetsLib.named_tier_of(fleet)
+		var tier := NpcFleetsLib.captain_tier_of(fleet)
 		out.append({
 			"id": str(fleet.get("id", "")),
+			"captain_id": str(fleet.get("captain_id", "")),
 			"name": NpcFleetsLib.captain_name(fleet),
 			"tier": tier,
 			"nearest_port": near,

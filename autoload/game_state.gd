@@ -81,13 +81,14 @@ var control_prefs: Dictionary = {"input_mode": "step", "current_mode": "modifier
 ## The rest-override table they drive lives transiently in `economy.gd` and
 ## is re-applied on load.
 var market_events: Array = []
-## `{named_pirate_id: available_day}` — defeated famous pirates' +30-day
-## respawn cooldowns (docs/60-* §4.11.11.4 task L pin); a live famous pirate
-## is derived from the fleets themselves. Saved as of save_version 5.
-var named_pirate_respawns: Dictionary = {}
 ## Transient arrival/departure log the ecology appends for tavern rumor rows
 ## (docs/60-* §4.11.11.4 task L pin): `{port_id, kind, role, nation_id,
 ## fleet_id, day}`, newest last, capped at 128. Never saved.
+## (The Phase-5 `named_pirate_respawns` successor field was removed with the
+## machinery at Phase 8 — docs/90-* §5.4 marks it "removed at v9"; the
+## `captain_states` return queue replaces it. W4-B retires the field; the
+## save payload's optional `named_pirate_respawns` key rides on W6-C's v9
+## sweep.)
 var npc_port_log: Array = []
 
 # --- Phase 7 saved state (docs/90-* §8.1, save_version 7) -------------------
@@ -308,8 +309,10 @@ func new_game(nation_id: String, route: bool = true,
 	retired_at = 0
 	# docs/90-* §8.1 Phase-5 fields: stocks at derived rest (docs/30-* §4.2,
 	# no RNG), the ecology blocks empty until tasks J/K fill them, the density
-	# dial at its run input (S19-only, 80-* §4.6.3). The fresh-run resets also clear the
-	# named-pirate respawn cooldowns and the transient event table + port log.
+	# dial at its run input (S19-only, 80-* §4.6.3). The fresh-run resets also
+	# clear the transient event table + port log. (The retired Phase-5
+	# `named_pirate_respawns` successor machinery is gone at Phase 8 — the
+	# `captain_states` return queue replaces it, docs/90-* §5.4.)
 	market_stocks = EconomyLib.build_initial_stocks(
 		DataLoader.ports_list, DataLoader.goods_list
 	)
@@ -322,7 +325,6 @@ func new_game(nation_id: String, route: bool = true,
 		"current_mode": chosen_current_mode,
 	}
 	market_events = []
-	named_pirate_respawns = {}
 	npc_port_log = []
 	EconomyLib.reset_overrides()
 	# docs/90-* §8.1 Phase-7 fields: the allegiance/permit/treasury state is

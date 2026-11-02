@@ -436,7 +436,8 @@ func _seed_named_fleets(sim: NpcFleetsLib, ids: Array) -> Array:
 			"id": str(id), "role": role, "nation_id": "portugal",
 			"cell": {"x": OPEN_CELL.x, "y": OPEN_CELL.y},
 			"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
-			"cargo": {}, "captain": {"pool_id": "portugal", "name_index": 0},
+			"cargo": {},
+			"captain_id": "",  # Phase-8 §4.15: canon id (backfilled lazily)
 			"cooldown_until_day": 0, "seed": 777, "dest_port_id": "",
 			"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
 			"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",
@@ -454,7 +455,7 @@ func _seed_pirate_beside(sim: NpcFleetsLib, player_cell: Vector2i) -> Dictionary
 		"id": "pir_beside_1", "role": "pirate", "nation_id": "",
 		"cell": {"x": player_cell.x + 1, "y": player_cell.y},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
-		"cargo": {}, "captain": {"pool_id": "", "name_index": 0},
+		"cargo": {}, "captain_id": "",  # Phase-8 §4.15: canon id (backfilled lazily)
 		"cooldown_until_day": 0, "seed": 999, "dest_port_id": "",
 		"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
 		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",

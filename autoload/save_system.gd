@@ -357,7 +357,11 @@ func snapshot() -> Dictionary:
 		"nation_treasuries": allegiance_state["nation_treasuries"],
 		"fame_commended": allegiance_state["fame_commended"],
 		"market_events": GameState.market_events.duplicate(true),
-		"named_pirate_respawns": GameState.named_pirate_respawns.duplicate(true),
+		# W4-B (Phase 8): the retired successor-machinery field is gone from
+		# GameState (`90-*` §5.4 "removed at v9") — the guard keeps the v8
+		# payload shape without it; W6-C's v9 sweep deletes the whole block.
+		"named_pirate_respawns": (GameState.named_pirate_respawns
+			if "named_pirate_respawns" in GameState else {}).duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),
@@ -1064,10 +1068,14 @@ func _apply(data: Dictionary) -> void:
 	GameState.market_events = \
 		(data.get("market_events", OPTIONAL_DEFAULTS["market_events"]) as Array) \
 			.duplicate(true)
-	GameState.named_pirate_respawns = \
-		(data.get("named_pirate_respawns",
-			OPTIONAL_DEFAULTS["named_pirate_respawns"]) as Dictionary) \
-			.duplicate(true)
+	# W4-B (Phase 8): the retired successor-machinery field is gone from
+	# GameState — a payload carrying the (now vestigial) v5-era key restores
+	# nothing; W6-C's v9 sweep deletes the whole block.
+	if "named_pirate_respawns" in GameState:
+		GameState.named_pirate_respawns = \
+			(data.get("named_pirate_respawns",
+				OPTIONAL_DEFAULTS["named_pirate_respawns"]) as Dictionary) \
+				.duplicate(true)
 	# Task L (docs/30-* §4.5, docs/60-* §4.11.11.4): the rest-override table
 	# and the port-traffic log are transient — the former is rebuilt here from
 	# the saved instances (before any port screen can price against it), the
