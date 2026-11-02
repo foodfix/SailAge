@@ -21,6 +21,18 @@ ecology docks lane traders at alignment-open ports, serves every neutral
 port with nationless coasters, and credits port-call tariff into host
 treasuries. The battle rules (§4.2–§4.11.10) are unchanged.
 
+**Phase 8 (the RPG overhaul, 2026-11-02).** Every battle-side stat moves
+onto the Person model (`50-*`): the duel rolls swordplay + courage +
+charisma instead of the retired `combat` stat (§4.6/§4.11.6), AI ships
+rate their captains' canon cards instead of `5 + tier` (§4.11.5), gunnery
+gains the flagship damage/hit term and the chain / armor-piercing shot
+unlocks (§4.4), AI surrender becomes a courage-flavored roll (§4.7),
+loot and XP gain the valuation and level multipliers plus the boarding
+morale bonus (§4.8/§4.11.10), the right-click funnel widens into the
+picker / hail / intercept interaction layer (§4.11.15; screens per
+`80-*` §4.10), and the Phase-5 named-pirate respawn machinery is
+retired for the captain return queue (§4.11.11.4 amended, §4.11.15).
+
 ## 2. Artifacts
 
 | Path | Contents |
@@ -30,19 +42,23 @@ treasuries. The battle rules (§4.2–§4.11.10) are unchanged.
 | `scripts/combat/battle_sim.gd` | turn engine (RefCounted, deterministic-seedable) |
 | `scripts/combat/ai_fleet.gd` | enemy decision rules (§4.9) |
 | `scripts/world/npc_fleets.gd` | world-map NPC fleet ecology — 8 roles, lane routing, auto-resolve, wreckage (§4.1, §4.11.11) |
-| `data/npc_config.json` `npc_captains.json` `named_pirates.json` `trade_routes_built.json` | Phase-5 fleet content (schemas `10-*`; authored by tasks A/D/E/F); Phase 7 adds the `neutral_coasters_mult` line (§4.11.14) and `named_pirates.drop` (§4.11.13) |
+| `scripts/world/interactions.gd` `scripts/world/hail_options.gd` | Phase-8 interaction layer — verb dispatch + hail option builder (§4.11.15); scenes `fleet_picker.tscn` / `hail_modal.tscn` per `80-*` §4.10 |
+| `data/npc_config.json` `captains.json` `named_pirates.json` `trade_routes_built.json` | fleet content (schemas `10-*`); Phase 7 added the `neutral_coasters_mult` line (§4.11.14) and `named_pirates.drop` (§4.11.13); Phase 8 retires `npc_captains.json` — the closed canon `captains.json` carries every captain card (§4.11.11.4) |
 | `data/equipment.json` | Phase-2/7 equipment content set (§4.11.13 — 24 tiered items from Phase 7) |
 | GameState additions | `npc_fleets` (fleet dicts, §4.11.11), `wrecks`, battle outcomes; Phase 5 saves as `SAVE_VERSION = 5` (no migration, v4 refused — `90-*` §8.2) |
 
 ## 3. Dependencies
 
-`10-*` (ShipType/Equipment schemas; Phase-5 `npc_config.json`/
-`npc_captains.json`/`named_pirates.json`/`trade_routes_built.json`),
+`10-*` (ShipType/Equipment schemas; `npc_config.json`/`captains.json`/
+`named_pirates.json`/`trade_routes_built.json` — the captain canon is the
+Phase-8 closed roster that replaced `npc_captains.json`),
 `20-*` (map constants, weather reuse, day-tick order §4.3), `30-*` §4.4
 (the trader market rules NPC traders decide by), `40-*` (ship instances,
-durability, cargo, FLEET_MAX), `50-*` (combat stat, equipment modifiers,
-reputation), `70-*` §4.5 (bounty tiers, piracy rep), `80-*` (S10/S11
-conventions, fleet markers), `90-*` (save v5 blocks, autoload order).
+durability, cargo, FLEET_MAX), `50-*` (the Person model — attributes and
+skills, equipment modifiers, reputation; the Phase-8 successor of the
+retired four-stat character), `70-*` §4.5 (bounty tiers, piracy rep and
+the Phase-8 fame extension), `80-*` (S10/S11 conventions, fleet markers,
+the §4.10 interaction layer), `90-*` (save blocks, autoload order).
 
 ## 4. Systems / Mechanics
 
@@ -68,13 +84,16 @@ grid, duel, damage, aftermath (§4.2–§4.11.10) — is unchanged.
   the density preset (`ceil` per role), from `npc_config.json` (`10-*`).
 - **Player surface.** Contact and the right-click attack funnel are pinned
   once, in the §4.11.11.2 table; the trader decision rule is `30-*` §4.4.
+  (Phase 8, 2026-11-02: right-click opens the `fleet_picker` verb layer —
+  inspect / talk / attack, §4.11.15 — whose attack verb ends in the same
+  §4.11.11.2 funnel.)
 
 #### 4.1.1 The 8 fleet roles & budgets (locked)
 
 | Role | Budget (normal) | Computed @ 6 nations / 100 ports | Behavior (pin) |
 |---|---|---|---|
 | `trader` | `ceil(own_ports × 1.25)`/nation | 25+27+17+28+23+14 = **134** | own-nation routes via lane graph; 2-day dwell; joint profit-per-day decision; sells only where `factor > 1.0` |
-| `coaster` | `ceil(own_ports × 0.75)`/nation | 15+15+14+14+11+8 = **77** | visual-life small craft; adjacent-port spokes; hold ≤ 10, trades ≤ 5/call; **never triggers contact**, raiders ignore; attacking one is ordinary piracy; loot `25 + floor(day/10)`g |
+| `coaster` | `ceil(own_ports × 0.75)`/nation | 15+15+14+14+11+8 = **77** | visual-life small craft; adjacent-port spokes; hold ≤ 10, trades ≤ 5/call; **never triggers contact**, raiders ignore; **not attackable — intimidate-only** (Phase 8, 2026-11-02: the picker exposes no attack verb for a coaster, retiring the old "attacking one is ordinary piracy; loot `25 + floor(day/10)`g" line — a successful intimidate takes half its cargo, floor per good, + pirate fame +5, §4.11.15) |
 | `patrol` | `ceil(own_ports / 6)`, min 1 | **19** | cycles its nation's lanes, docking en route; same-nation traders within Chebyshev 20 count escorted; halves pirate/privateer spawn rolls in its 30-tile zone |
 | `courier` | 2/nation | **12** | capital ↔ own-ports dispatch runs (sightings/rumors only — no quest mechanics this phase) |
 | `privateer` | 2/undirected rivalry pair | **12** | stations on its sponsor's rivals' major lanes (chokepoint-biased); hunts only those rivals' fleets; defeating one: +2 rep with **each** of the two sponsor rivals |
@@ -139,8 +158,21 @@ immunity are retired with the marker system (§4.11.11.1).
 - Damage: `floor(cannons × 2 × range_factor)`, `range_factor` = 1.0 / 0.75 /
   0.5 at range 1 / 2 / 3.
 - **Reload:** after firing, that ship cannot fire on its next turn.
-- Gunner officer bonus: +10 combat effective adds +1 damage per volley per 10
-  combat (i.e., `+ floor(effective_combat / 10)` damage, attacker).
+- **Gunnery (player flagship; Phase 8, 2026-11-02 — replaces the Phase-2
+  gunner-officer `effective_combat` bonus, retired with the four-stat
+  model):** the flagship's cannon damage and its hit term gain
+  `+ floor(effective_gunnery / 25)`, where `effective_gunnery` is the
+  player's gunnery plus the in-post gunner officer's true value (`50-*`
+  officer-contribution rule). The grid battle resolves a volley
+  deterministically (in range = it connects; there is no hit roll), so
+  the damage term is the only consumer of the "hit/damage
+  `+floor(skill/25)`" magnitude today — the hit side rides the same
+  locked value and is never a second formula.
+- **Chain shot (Phase 8):** unlock at gunnery ≥ 25 (`skill_gates`): the
+  volley's damage × 0.75 and the target ship loses 1 MP for 2 rounds.
+- **Armor-piercing shot (Phase 8):** unlock at gunnery ≥ 50
+  (`skill_gates`): the volley's damage × 1.25, ignoring the target's
+  `armor` equipment modifiers (§4.11.12).
 
 ### 4.5 Ram
 
@@ -152,15 +184,23 @@ immunity are retired with the marker system (§4.11.11.1).
 ### 4.6 Boarding & captain duel
 
 - Action against an orthogonally adjacent enemy ship → duel modal (S11).
-- **Duel:** best-of-5 rounds. Each round both sides roll
-  `effective_combat + equipment deltas + rand(0, 20)`; higher wins the round;
-  tie = no score. First to 3 round-wins takes the duel. The defender uses the
-  ship's effective combat: `floor(crew / 5)` capped 20, plus the enemy
-  "captain rating" = 5 + fleet tier (pirate tier 1, navy tier 2) rolled once
-  at battle start (no separate NPC stats — locked simplification).
+- **Duel (Phase 8 formula, 2026-11-02):** best-of-5 rounds. Each round both
+  sides roll `base + rand(0, 20)`; higher wins the round; tie = no score.
+  First to 3 round-wins takes the duel. The player's `base` =
+  `swordplay + floor(courage / 20)` + equipment deltas (§4.11.12) — the
+  Phase-2 `effective_combat` is retired. A captain-card ship rolls
+  `min(floor(crew / 5), 20)` + its captain's **duel rating** =
+  `captain swordplay + floor(captain courage / 20)` (computed once at
+  fleet composition, §4.11.5 — this replaces the `5 + fleet tier`
+  stand-in). **The defender adds `+ floor(charisma / 20)`** — the
+  defending side's own charisma (the player's when the player defends,
+  the captain card's otherwise). Full pin §4.11.6.
 - **Player wins duel:** the ship is **captured**: if `fleet.size <
-  FLEET_MAX` it joins at 25% current durability minimum 1, cleared crew,
-  cargo intact; else it is looted (cargo taken to capacity) and scuttled.
+  FLEET_MAX` **and ≥ 1 idle officer** is available (the Phase-8 capture
+  gate, §4.11.15), it joins at 25% current durability minimum 1, cleared
+  crew, cargo intact; otherwise — full fleet **or no idle officer** — it
+  is looted (cargo taken to capacity) and scuttled (the loot-convert
+  fallback; the after-action dialog names the gate that failed).
 - **Player loses duel:** the player's ship is captured — if it was the
   flagship: the next ship becomes flagship (rules of `40-*` §4.4); if no
   ships remain → game over `gameover.captured` (new reason added in Phase 2;
@@ -171,9 +211,14 @@ immunity are retired with the marker system (§4.11.11.1).
 
 - Durability 0 at battle → ship sinks immediately; cargo lost (no salvage in
   battle, consistent with `40-*` §4.4).
-- **AI surrender:** at its turn, an AI ship below 25% max durability with a
-  player ship within 3 tiles surrenders (becomes a capture as if duel-won,
-  no duel). Player ships never auto-surrender; the player may offer
+- **AI surrender (Phase 8 roll):** at its turn, an AI ship below 25% max
+  durability with a player ship within 3 tiles rolls surrender — chance =
+  `clamp(25 − floor(courage / 10), 10, 40)%` (the ship captain's courage;
+  drawn from the §4.11.1 battle stream; a failed roll re-rolls on the
+  ship's next turn). A surrender resolves as a capture as if duel-won, no
+  duel — the Phase-8 idle-officer capture gate included (§4.11.15). (The
+  Phase-2 automatic surrender — the "fixed < 25%" reading — is retired.)
+  Player ships never auto-surrender; the player may offer
   surrender from the battle menu: battle ends, enemy takes flagship cargo
   only, ships retained (pirates), or flagship itself (navy with bounty —
   which clears the bounty, `70-*`).
@@ -182,14 +227,20 @@ immunity are retired with the marker system (§4.11.11.1).
 
 - Victory (all enemy ships sunk/captured/surrendered/retreated): loot = all
   cargo of captured ships (already handled) + gold =
-  `Σ sunk_ship base_price × 0.05` (salvage sale abstraction).
+  `Σ sunk_ship base_price × 0.05` (salvage sale abstraction). **Phase 8:**
+  every haul gold valuation is credited ×(1 + (appraisal + negotiation) /
+  400), clamped to [×1.0, ×1.5] (§4.11.10).
 - Battle XP: +10 combat-relevant XP per sunk/captured ship to sailing XP pool
   (`50-*` §4.3 gains `+2 per battle round survived`? — locked: +10 XP per
-  enemy ship neutralized, +5 per round survived).
+  enemy ship neutralized, +5 per round survived). **Phase 8:** the total
+  is ×(1 + level / 20), floored once (§4.11.10).
+- **Boarding-victory morale (Phase 8):** a won boarding duel (§4.6) raises
+  fleet morale +5.
 - Reputation: defeating pirates +2 with the two nearest ports' nations;
-  attacking/sinking navy ships applies `70-*` piracy deltas.
+  attacking/sinking navy ships applies `70-*` piracy deltas — **Phase 8
+  adds −20 fame** when the attacked fleet was not hostile (§4.11.10).
 - Return: world map at contact tile; the hostile marker despawns; spawn
-  immunity 3 days.
+  immunity 3 days (Phase-2 rule; retired in Phase 5, §4.11.11.1).
 
 ### 4.9 Enemy AI (deterministic priority list, top-down first match)
 
@@ -291,11 +342,19 @@ battle opens with a movement phase.
 
 #### 4.11.5 Damage numbers (pin)
 
-- **Cannon:** `base = floor(cannons × 2 × range_factor) +
-  floor(combat_rating / 10)`; in storm weather `damage = floor(base × 0.75)`
-  (§4.2 "all cannon damage ×0.75"), otherwise `damage = base`.
-  `combat_rating` = the player's effective `combat` stat for a player
-  flagship, `0` for player escorts, `5 + fleet tier` for AI ships.
+- **Cannon:** `base = floor(cannons × 2 × range_factor) + bonus`; in storm
+  weather `damage = floor(base × 0.75)` (§4.2 "all cannon damage ×0.75"),
+  otherwise `damage = base`.
+  **`bonus` (Phase 8, 2026-11-02):** `floor(effective_gunnery / 25)` for
+  the player flagship (the §4.4 gunnery term) and `floor(combat_rating /
+  10)` for every captain-card ship (AI ships and appointed player
+  escorts). `combat_rating` is computed **once at fleet composition**
+  from the ship captain's card (`data/captains.json`): **duel rating** =
+  `captain swordplay + floor(captain courage / 20)`; **cannon rating** =
+  the duel rating `+ floor(captain gunnery / 25)`. A captain-less player
+  escort's cannon rating stays 0. (This replaces the Phase-2 reading —
+  the player's effective `combat` stat, `0` for escorts, `5 + fleet
+  tier` for AI ships.)
 - **Ram:** `target = floor(0.25 × attacker_max_durability)`,
   `attacker = floor(0.10 × attacker_max_durability)`; if the attacker's
   `ShipType.class` is `oar` or `hybrid` then
@@ -308,10 +367,17 @@ battle opens with a movement phase.
 #### 4.11.6 Duel resolution (pin)
 
 - Both sides roll `base + rng.randi_range(0, 20)` each round.
-  Player `base` = effective `combat` + the sum of `combat` modifiers on worn
-  weapon/armor equipment (§4.11.12).
-  Defender `base` = `min(floor(crew / 5), 20) + (5 + fleet tier)`; the captain
-  rating is rolled once at battle start (§4.6) and stored on the ship.
+  Player `base` = `swordplay + floor(courage / 20)` + the sum of `combat`
+  modifiers on worn weapon/armor equipment (§4.11.12) — the Phase-2
+  effective-`combat` term is retired (Phase 8, 2026-11-02).
+  Captain-card ships (every AI ship; a player escort with an appointed
+  captain) `base` = `min(floor(crew / 5), 20)` + the **duel rating**
+  (captain `swordplay + floor(captain courage / 20)`), computed once at
+  fleet composition (§4.11.5) and stored on the ship — the `5 + fleet
+  tier` stand-in is retired.
+- **Defender bonus (Phase 8):** whichever side defends adds
+  `+ floor(charisma / 20)` — the player's own charisma when the player
+  defends, the captain card's charisma otherwise.
 - Higher roll wins the round; equal rolls score for neither side.
 - First side to **3** round wins takes the duel.
 - **Undecided after 5 rounds** (only possible with ties): more round wins
@@ -321,18 +387,22 @@ battle opens with a movement phase.
 #### 4.11.7 Capture, loss and surrender (pin)
 
 - **Player wins (§4.6):** the enemy ship joins the fleet when
-  `fleet.size < FLEET_MAX`, at `max(1, floor(current durability × 0.25))`,
-  `crew = 0`, **cargo intact**, cannons and equipment intact. If the hold is
-  then over capacity, `Fleet.normalize_all()` truncates it and the
-  after-action dialog reports the overflow (§6). With a full fleet the ship is
-  looted (its cargo moved to fleet capacity flagship-first, the rest reported
-  lost) and scuttled.
+  `fleet.size < FLEET_MAX` **and ≥ 1 idle officer** is available (the
+  Phase-8 capture gate, §4.11.15), at `max(1, floor(current durability ×
+  0.25))`, `crew = 0`, **cargo intact**, cannons and equipment intact. If
+  the hold is then over capacity, `Fleet.normalize_all()` truncates it
+  and the after-action dialog reports the overflow (§6). With a full
+  fleet **or no idle officer** the ship is looted (its cargo moved to
+  fleet capacity flagship-first, the rest reported lost) and scuttled —
+  the loot-convert fallback; the dialog names which gate failed.
 - **Player loses (§4.6):** the ship the player boarded *from* is taken — hull,
   hold, cannons and equipment all leave with it (a capture is not a sinking:
   nothing relocates). If it was the flagship, the next ship becomes flagship
   (`fleet[0]`, order preserved). No ships left → `gameover.captured`.
-- **AI surrender (§4.7):** resolved exactly as a duel win (capture/loot), with
-  no duel and no XP for the duel rounds.
+- **AI surrender (§4.7):** resolved exactly as a duel win (capture/loot —
+  the Phase-8 capture gate applies, §4.11.15), with no duel and no XP for
+  the duel rounds; the surrender itself is the §4.7 courage-flavored
+  roll.
 - **Player offers surrender:** immediate battle end.
   *Pirates:* the flagship's whole hold (goods + provisions + water) is taken;
   every ship is retained.
@@ -385,10 +455,13 @@ because the bracket never repairs between battles.
 #### 4.11.10 Rewards & aftermath (pin)
 
 - **Salvage gold:** `Σ floor(ShipType.base_price × 0.05)` over ships **sunk**
-  by the player during this battle. Captured/surrendered ships pay no salvage.
+  by the player during this battle. Captured/surrendered ships pay no
+  salvage. **Phase 8:** the credited gold gains the haul-valuation
+  multiplier (below).
 - **Battle XP** (awarded to `player.xp` via `Character.award_xp`):
   `+10` per enemy ship neutralised (sunk/captured/surrendered) and `+5` per
-  round the battle lasted.
+  round the battle lasted. **Phase 8:** the total is ×(1 + level / 20),
+  floored once — integer XP.
 - **Reputation:**
   - Pirates defeated (any outcome except retreat) → `+2` with each of the
     **two nearest ports' nations** measured by Chebyshev distance from the
@@ -411,6 +484,20 @@ because the bracket never repairs between battles.
     funnel also applies `+2` to each of the victim nation's two
     `data/nations.json#rivals`, from the data table — never computed from
     port distances. Pirates have no nation and gain no rivals.
+  - **Piracy fame extension (Phase 8, 2026-11-02; `70-*` §4.5).** Attacking
+    a **non-hostile** fleet keeps its reputation deltas (−20 with the
+    owner, +2 its rivals — unchanged) and additionally costs **−20
+    fame**, charged once at battle start by the same single funnel as the
+    −20 (never at battle end, never per ship). Coasters are unreachable
+    through battle: the picker offers no attack verb for them
+    (intimidate-only, §4.11.15).
+  - **Haul-valuation multiplier (Phase 8).** Every battle-haul gold
+    valuation — the salvage gold above, the §4.11.11.2 loot-gold lines and
+    the treasure-fleet loot gold — is credited
+    ×(1 + (appraisal + negotiation) / 400), clamped to [×1.0, ×1.5] on the
+    player's two skills. Captured cargo still moves into the hold as
+    goods (§4.11.7); the multiplier prices gold, it never re-weights
+    goods.
   - **Tournaments (Phase 3).** `enemy_kind = "tournament"` is not a nation
     and contributes **no** reputation delta of any kind (no −20, no +2, no
     bounty).
@@ -440,7 +527,7 @@ ecology members with a role, a nation, a lane route and a captain:
     "cell": {"x": 30, "y": 40},
     "route": {"lanes": ["carreira_da_india"], "leg": 0, "tile_index": 112},
     "cargo": {"wine": 30},
-    "captain": {"pool_id": "portugal", "name_index": 3},
+    "captain": {"id": "cap_portugal_0003"},
     "specialty": "wine",
     "cooldown_until_day": 0
   }
@@ -453,8 +540,10 @@ ecology members with a role, a nation, a lane route and a captain:
 - `route` persists `{lanes: [ids], leg, tile_index}` — the lane id list and
   the position on the current leg's rasterized tile path, smaller than
   storing the path itself (§4.11.11.1).
-- `captain` is `{pool_id, name_index}` into `data/npc_captains.json`
-  (§4.11.11.4); `specialty` is the trader's persisted specialty good
+- `captain` is `{id}` — the captain's canon id into `data/captains.json`
+  (§4.11.11.4; Phase 8, 2026-11-02 retires the `{pool_id, name_index}`
+  pool indirection together with `npc_captains.json`; the id scheme is
+  `10-*`'s); `specialty` is the trader's persisted specialty good
   (`30-*` §4.4); `cooldown_until_day` is the pursuit cooldown with the
   inclusive reading carried over from the Phase-2 marker rules
   (§4.11.11.1).
@@ -727,8 +816,9 @@ the site; no battle screen. Salvage reuses the existing
 | Trader wreck | its actual cargo (collect up to free capacity) |
 | Warship wreck | `BattleRewards.salvage_for(hull ids)` gold (single implementation) |
 | Player collect | entering the wreck tile collects (no battle) |
-| Player contact (Chebyshev 1, wrap-aware) | opens battle only for `pirate` / `privateer` / `hunter`-with-bounty — exactly as today |
-| Player attacks any fleet (right-click) | non-pirate owner pays `Bounty.apply_piracy` (−20 owner, +2 its rivals) **once per battle at start** (existing single funnel); loot = actual cargo + `min(1000, 100 + 10 × day)`g — **except a coaster**, whose §4.1.1 row is the more specific pin: loot = actual cargo + `25 + floor(day / 10)`g |
+| Player contact (Chebyshev 1, wrap-aware) | opens battle only for `pirate` / `privateer` / `hunter`-with-bounty — exactly as today; **Phase 8:** the contact auto-cancels an appointed voyage with a notice first (`60-*` §4.11.15; HUD notice per `80-*` §4.10) |
+| Player attacks a fleet (the picker's attack verb, `80-*` §4.10) | non-pirate owner pays `Bounty.apply_piracy` (−20 owner, +2 its rivals) **and −20 fame** (Phase 8 piracy-fame extension, §4.11.10) **once per battle at start** (existing single funnel); loot = actual cargo + `min(1000, 100 + 10 × day)`g, credited through the §4.11.10 haul-valuation multiplier. **No attack verb exists for a coaster** — the §4.1.1 coaster row is the more specific pin: intimidate-only (§4.11.15) |
+| Coaster (right-click) | no attack verb; the hail's intimidate is the only way to take from one — success takes half its cargo (floor per good) + pirate fame +5, failure turns it hostile and opens this battle (§4.11.15) |
 | Composition | `AiFleet.compose_enemy` unchanged; per-fleet seeded stream; kind→budget map `{"trader": 6, "coaster": 2, "courier": 0, "patrol": 30, "privateer": 20, "pirate": 20}` + `floor(day/30)` |
 | Chained battles | existing §4.11.11.3 pattern preserved for hostile contacts; S10 descriptor shape unchanged |
 
@@ -745,7 +835,10 @@ the site; no battle screen. Salvage reuses the existing
   a `hunter` composes exactly as the §4.11.3 `navy` (S10 `kind` stays
   `"navy"`, §4.11.11.3); a `treasure` fleet rolls `3 + rng.randi_range(0, 2)`
   merchant hulls (the 3–5 pin, §4.11.11.4) plus one patrol-escort hull,
-  whole-fleet cannon budget `30 + floor(day/30)`.
+  whole-fleet cannon budget `30 + floor(day/30)`. **Phase 8:** the
+  composition also prices each ship's captain-card ratings (duel rating /
+  cannon rating, §4.11.5) once — stored on the ship, never re-rolled
+  mid-battle.
 - **Wreck lifecycle.** The loser despawns into a `wreck` at its cell (shape
   in §4.11.11); it despawns after **5 days**; contents per the table —
   trader = actual cargo (collected up to free capacity), warship = hull ids
@@ -782,9 +875,12 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
 - **Convoys (locked):** same-lane traders within Chebyshev 3 render as one
   group with a shared escort square; auto-resolve treats a convoy as
   escorted (the §4.11.11.2 table).
-- **Named pirates (locked):** `data/named_pirates.json`: 4 captains, zh/en,
-  tiers 1–3 (`70-*` §4.5); defeated → respawn as a new name **+30 days**;
-  `quest_gen` bounty targets prefer named captains.
+- **Named pirates (locked; Phase-8 amended 2026-11-02):** `data/named_pirates.json`:
+  4 captains, zh/en, tiers 1–3 (`70-*` §4.5); Phase 8 upgrades each entry to a
+  **full canon captain card** with its `drop` preserved (§4.11.13); defeated →
+  the **return queue** like every captain (§4.11.15: `return_day = day + 60`,
+  same name — names are never reused); `quest_gen` bounty targets prefer named
+  captains. (The Phase-5 "respawn as a new name +30 days" rule is retired.)
 - **Treasure fleets (locked):** 1/nation/season on day `45 + 15 ×
   nation_index` (mod 90 — under the Phase-6 360-day calendar these mod-90
   "seasons" are 90-day quarters anchored at Month 1 (`20-*` §4.15);
@@ -792,11 +888,14 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
   (portugal 0 … italy 5) ⇒ days 45/60/75/90/105/120; 3–5 ships + patrol
   escort on the nation's historical lane; loot = cargo (×3 normal volume) +
   `min(3000, 500 + 25 × day)`g.
-- **Captain identity (locked):** every fleet draws
-  `captain: {"pool_id", "name_index"}` at spawn from
-  `data/npc_captains.json` (6 nation pools + `""` nationless pool, ≥ 8
-  zh/en names each) via its seeded stream; names never flicker on reload;
-  famous pirates override; a captain dies with its fleet.
+- **Captain identity (locked; Phase-8 amended 2026-11-02):** every fleet
+  draws its captain from the closed canon `data/captains.json` at spawn
+  via its seeded stream and persists the captain's canon id (`{id}`,
+  §4.11.11) — the `npc_captains.json` name pools are retired; names never
+  flicker on reload; famous pirates are canon cards with their `drop`
+  preserved (§4.11.13); **captains never die with their fleet** — a
+  defeated captain enters the return queue (§4.11.15), which supersedes
+  the Phase-5 "a captain dies with its fleet" reading.
 - **Sighting surfaces** (market/tavern/inn/palace rows, wanted posters, the
   20g reveal) and the seeded facility/presence rolls are pinned in `80-*`
   §4.7.8; the pure query module `scripts/world/npc_intel.gd` (task L)
@@ -806,21 +905,25 @@ fleets (the §4.11.11.2 map keys), while `hunter` battles keep
   40, departures/arrivals at the port within 3 days, and demand-event
   telegraphs.
 - **Task-L implementation pins (details the tables above left open):**
-  - *Named pirates.* A famous identity rides its fleet's captain as
-    `captain.named_id` (famous override; `named_pirates.json` file order —
-    the first spawn while an identity is free takes it). A defeat at the
-    single removal funnel (`remove()`) books
-    `GameState.named_pirate_respawns[named_id] = day + 30` (saved,
-    `90-*` §8.1), retiring the famous name; at fire time a successor
-    pirate spawns under the **next nationless-pool entry** (the rotation
-    cursor steps deterministically, never re-issuing an afloat name) with
-    `captain.named_tier` inherited from the slot — the famous id keys its
-    own `named_pirates.json` tier, a defeated successor re-books the
-    interchangeable `successor_<tier>` slot. A famous entry inside its
-    cooldown is never re-drawn by the trickle.
-  - *Poster eligibility.* Posters are for **named** captains only
-    (famous or successor — the tier carriers); an unnamed pirate sails
-    under no banner worth paper. The reward hint uses the `70-*` §4.9.3
+  - *Captains — the return queue (Phase 8, 2026-11-02; supersedes the
+    named-pirate respawn/successor machinery).* A defeat at the single
+    removal funnel (`remove()`) books the captain into `captain_states`:
+    `status = "returning"`, `return_day = day + 60` (saved, `90-*` §8);
+    at `return_day` the captain returns **under its own name** (the canon
+    roster is closed — **names are never reused**, regression-pinned) with
+    its **tier drift** applied: −1 on a crushing defeat, +1 on each
+    victory against the player, clamp 1–3. A pirate/privateer with
+    `stance ≤ −3` returns as a **nemesis hunter** (lightweight: it hunts
+    the player under the §4.11.11.1 hunter-intel rules). The Phase-5
+    machinery — `GameState.named_pirate_respawns`, the `successor_<tier>`
+    alias slots and the nationless-pool name rotation — is **retired**
+    (the validator asserts `npc_captains.json`'s absence, `10-*` §8). A
+    famous pirate mid-queue simply returns on its `return_day` under its
+    own card; its `drop` stands again.
+  - *Poster eligibility.* Posters are for **bountied** captains (a bounty
+    standing per `70-*` §4.5/§4.9.3) — with the Phase-8 canon every
+    captain carries a full named card, so the Phase-5 famous-or-successor
+    eligibility test is retired. The reward hint uses the `70-*` §4.9.3
     bands `{1: 5000, 2: 10000, 3: 20000}`.
   - *Treasure fleets.* `_schedule_treasure` runs inside the daily tick:
     on `day − (45 + 15 × nation_index) ≥ 0 ∧ ≡ 0 (mod 90)` while the
@@ -949,12 +1052,18 @@ historical table lives in the Phase-2 docs). Rules pinned here:
     renders them (`80-*` §4.7.12);
   - `data/named_pirates.json` gains **`drop: <equipment_id>`** per entry,
     each referencing one `rare: true` item (validator cross-check);
+    **Phase 8:** the four entries upgrade to full canon captain cards
+    (`data/captains.json`) with `drop` carried through unchanged
+    (validator group relocation, `10-*` §8).
   - **flow (keyed by the sunk/captured captain id):** when a battle ends
     with a named pirate's captain sunk or captured (§4.11.10), the
-    aftermath matches `captain.named_id` against the four
-    `named_pirates.json` ids — a match credits that entry's `drop` item;
-    a captain with no famous-id match (unnamed pirates, successor
-    captains) drops nothing. The item equips through the standing replace
+    aftermath matches the captain's **canon id** against the four famous
+    pirate ids (`data/named_pirates.json`, preserved in
+    `data/captains.json`) — a match credits that entry's `drop` item; a
+    captain with no famous-id match drops nothing (the `drop` table stays
+    exactly the four named pirates'; Phase 8, 2026-11-02 wording — the
+    Phase-5 "successor captains" alias is retired with the respawn
+    machinery, §4.11.11.4). The item equips through the standing replace
     rule (§4.11.12): `weapon`/`armor` fit the player's slots,
     `figurehead`/`sail` fit the **flagship**; an occupied slot sells the
     displaced item back at `floor(price × 0.5)` in the same grant, and
@@ -1002,6 +1111,62 @@ NPC-sourced tax is capped **2,000g per nation per month** (treasuries,
 `30-*` §4.9); rates are the unified tariff of `30-*` §4.10 (5% aligned /
 20% foreign, permits applied). Flow-economy fit: coasters damp local
 extremes, never erase them (the `IMPLEMENT-Phase7.md` §2.9 gate 6).
+
+#### 4.11.15 Interactions, intercept & the captain lifecycle (Phase 8, 2026-11-02)
+
+The right-click attack funnel widens into the interaction layer —
+`scripts/world/interactions.gd` dispatches, `scripts/world/hail_options.gd`
+builds talk options, `scenes/world/fleet_picker.tscn` /
+`scenes/world/hail_modal.tscn` present them (`80-*` §4.10 owns every
+screen pin; the combat-side rules live here):
+
+- **Verb surfaces.** Right-click inside sighting radius on a fleet opens
+  the `fleet_picker` (flag color / role icon / identified name / tier; a
+  multi-fleet tile picks its target first) with the verbs inspect / talk /
+  attack. Left-click sail-to is unchanged; right-click on empty water or
+  land is a no-op. **A `coaster`-role fleet offers no attack verb**
+  (intimidate-only — the §4.1.1 coaster row is the more specific pin).
+  Right-click on a port harbor tile opens the port context (dock /
+  委任航行 appoint voyage — `80-*` §4.10.3).
+- **Hail (talk).** Chebyshev ≤ 2 opens the `hail_modal`; options are built
+  from role × stance × skills:
+  - *Ask rumours* — **stance ≥ +2** grants one free route/market intel on
+    top of the rumour.
+  - *Buy supplies* — `trader`/`coaster` captains only: port price ×1.5,
+    ×1.25 at `stance ≥ +3`, minus `floor(negotiation / 10)`%.
+  - *Intimidate* — `p = clamp(our_strength / total_strength +
+    floor(courage / 200) − max(0, −stance) × 0.05, 0.05, 0.95)`;
+    `strength` = Σ combat ratings (§4.11.5) of the respective side.
+    Success: half the target's cargo is handed over (floor per good) +
+    **pirate fame +5**. Failure: the target turns hostile and the
+    §4.11.11.2 contact battle opens.
+  - *Befriend* — `stance +1`, once per captain per day.
+- **Intercept order (attack from range).** The attack verb on a fleet
+  beyond contact range issues a click-to-sail movement order onto the
+  target; the §4.11.11.2 contact pipeline opens the battle on arrival.
+  The order **auto-cancels when the target leaves sighting radius**
+  (`48 + floor(navigation / 12)`, `20-*`). An appointed voyage (same
+  pipeline, port target) auto-cancels on hostile contact with a notice;
+  storms do not cancel it (`80-*` §4.10.4).
+- **Piracy.** Attacking a non-hostile fleet stays `70-*` §4.5 piracy —
+  reputation −20 with the owner (+2 its rivals, unchanged) **plus −20
+  fame** (§4.11.10).
+- **Capture gate & loot-convert fallback.** Capturing a defeated ship
+  (duel win or AI surrender) requires `fleet.size < FLEET_MAX` **and ≥ 1
+  idle officer**; otherwise the prize converts to loot (the §4.11.7
+  full-fleet resolution: cargo to fleet capacity, hull scuttled) and the
+  after-action dialog names the gate that failed. **Phase 8 has no
+  capture-of-NPC-captains**: only ships join the fleet — the gate is
+  about ships, and NPC-captain recruitment stays the Phase-9 parking
+  lot.
+- **Captain lifecycle (return queue — supersedes the Phase-5 respawn
+  machinery, §4.11.11.4).** Defeated NPC captains **never die**:
+  `active → defeated → returning(return_day = day + 60) → active`
+  (`scripts/world/captains.gd`). Tier drift: −1 on a crushing defeat, +1
+  on each victory against the player, clamp 1–3. Names are never reused
+  (closed canon). A pirate/privateer with `stance ≤ −3` returns as a
+  **nemesis hunter** (lightweight: it hunts the player under the
+  §4.11.11.1 hunter-intel rules).
 
 ### 4.12 Module interfaces (pins for `IMPLEMENT-Phase2.md`)
 
@@ -1182,8 +1347,8 @@ stalled_fleets(min_hold: int = 3) -> Array
 - `nearest_contact(cell)` — the §4.11.11.2 contact rule: `pirate` /
   `privateer` / `hunter`-with-bounty within Chebyshev 1, wrap-aware;
   `{}` when none.
-- `fleet_at(cell)` — any fleet whose cell matches (the right-click attack
-  target); `{}` when none.
+- `fleet_at(cell)` — any fleet whose cell matches (the right-click
+  fleet_picker target, `80-*` §4.10.1); `{}` when none.
 - `remove(id)` / `set_pursuit_cooldown(id, until_day)` — battle aftermath
   (§4.12.4 step 4).
 - `spawn(role, nation_id, day)` — single seeded spawn (test seam; also the
@@ -1300,21 +1465,27 @@ Task G owns this list; D/C/F use these keys and **must not invent others**
 | `encounter.attack_confirm` | 攻击{nation}船队即是海盗行为(声望 −20)。确定吗? | Attacking a {nation} fleet is an act of piracy (−20 reputation). Continue? |
 | `gameover.captured` | 你被俘了,船队落入敌手。 | Captured — your fleet is lost to the enemy. |
 
+Phase 8 adds the `hail.*` / `interact.*` / `gate.*` families for the
+picker verbs, the hail modal and the locked-reason renderer — inventoried
+in `80-*` §4.15; battle-side consumers use those keys and never invent
+new `battle.*` / `duel.*` ones.
+
 ## 5. Data Examples
 
-Cannon volley (brigantine, 10 cannons, range 2, gunner effective combat 14):
+Cannon volley (brigantine, 10 cannons, range 2, effective gunnery 30):
 
 ```json
-{"cannons": 10, "range": 2, "range_factor": 0.75, "combat_bonus": 1,
- "damage": 16, "note": "floor(10×2×0.75) + floor(14/10) = 15 + 1"}
+{"cannons": 10, "range": 2, "range_factor": 0.75, "gunnery_bonus": 1,
+ "damage": 16, "note": "floor(10×2×0.75) + floor(30/25) = 15 + 1"}
 ```
 
-Duel round sequence (player combat 12 + cutlass 3):
+Duel round sequence (player swordplay 22 + courage 30 → `floor(30/20)` = 1,
+cutlass +3; the defender defends with charisma 40 → +2):
 
 ```json
-{"player_score_base": 15, "defender_base": "floor(crew/5) + captain_rating",
+{"player_score_base": 26, "defender_base": "floor(crew/5) + captain duel rating + floor(charisma/20)",
  "rounds": ["win", "loss", "win", "win"],
- "result": "capture", "note": "best-of-5 decided 3-1"}
+ "result": "capture", "note": "22 + 1 + 3 = 26; best-of-5 decided 3-1"}
 ```
 
 ## 6. Edge Cases & Fail States
@@ -1369,12 +1540,17 @@ Duel round sequence (player combat 12 + cutlass 3):
       5-day wreck; trader wreck = actual cargo; warship wreck =
       `BattleRewards.salvage_for` gold; player collect on the wreck tile.
 - [ ] Contact opens battle only for `pirate`/`privateer`/
-      `hunter`-with-bounty; a right-click attack on any fleet charges
-      `Bounty.apply_piracy` once at battle start and loots actual cargo +
-      `min(1000, 100 + 10 × day)`g.
+      `hunter`-with-bounty; a right-click attack on any attackable fleet
+      charges `Bounty.apply_piracy` (−20 rep + −20 fame) once at battle
+      start and loots actual cargo + `min(1000, 100 + 10 × day)`g
+      (a coaster offers no attack verb — Phase 8, intimidate-only,
+      §4.11.15).
 - [ ] Treasure fleets sail their historical lanes on days
-      45/60/75/90/105/120; a defeated named pirate respawns +30 days under
-      a new name; captain names survive save/load byte-identically.
+      45/60/75/90/105/120; a defeated named pirate re-enters play through
+      the return queue (§4.11.15: `return_day = day + 60`, same name, tier
+      drift ±1 clamp 1–3 — the Phase-5 "+30 days under a new name"
+      respawn is retired); captain names survive save/load
+      byte-identically.
 - [ ] Perf gates (§4.11.11.5, as re-pinned by the unified-movement
       amendment): day tick ≤ 75 ms @ cap 288 and ≤ 350 ms @ extreme
       (≈ 1100 fleets), linear marginal cost, save ≤ 2 MB @ extreme, zero
@@ -1389,7 +1565,8 @@ Duel round sequence (player combat 12 + cutlass 3):
       (ship-side product floored once; scurvy threshold `7 + Σ delay`).
 - [ ] Rare items: never in any stock list, never purchasable; defeating a
       named pirate credits its `drop` item exactly once (famous-id keyed;
-      successors and unnamed pirates drop nothing); the replace rule
+      a captain with no famous-id match drops nothing — Phase-8 wording,
+      the `successor` alias is retired, §4.11.13); the replace rule
       sells the displaced item back at half price in the same grant.
 - [ ] A nation-N trader docks at an effective-alignment-N port and never
       at a rival-aligned or unallied one; an unallied neutral port sees
@@ -1399,3 +1576,33 @@ Duel round sequence (player combat 12 + cutlass 3):
       (`Allegiance.credit_tax`, walked totals reused); nationless
       coasters credit nothing; the NPC-sourced tax cap is 2,000g per
       nation per month.
+
+**Phase-8 additions (the RPG overhaul, 2026-11-02).**
+
+- [ ] Duel rolls `swordplay + floor(courage / 20) + equipment +
+      rand(0, 20)` with the defender adding `+ floor(charisma / 20)`
+      (§4.11.6); the seeded round sequence is re-baselined and
+      reproducible under a fixed seed.
+- [ ] `combat_rating` is computed once at fleet composition from the
+      captain's card (§4.11.5): duel rating, cannon rating
+      `+floor(gunnery / 25)`; appointed player escorts price the same
+      way; a captain-less escort cannon rating stays 0.
+- [ ] Gunnery: the flagship volley gains `+floor(effective_gunnery / 25)`;
+      chain shot unlocks at gunnery ≥ 25 (damage ×0.75, target MP −1 for
+      2 rounds); armor-piercing unlocks at ≥ 50 (damage ×1.25, ignores
+      equipment armor) (§4.4).
+- [ ] AI surrender rolls `clamp(25 − floor(courage / 10), 10, 40)%`
+      (§4.7); capture requires `fleet.size < FLEET_MAX` **and** ≥ 1 idle
+      officer, else the loot-convert fallback fires (§4.11.7/§4.11.15).
+- [ ] Haul valuation ×(1 + (appraisal + negotiation) / 400) clamp
+      [×1.0, ×1.5]; battle XP ×(1 + level / 20); boarding-victory morale
+      +5 (§4.8/§4.11.10).
+- [ ] Coasters expose no attack verb (intimidate-only); a successful
+      intimidate takes half the cargo + pirate fame +5, a failed one
+      opens the §4.11.11.2 battle (§4.11.15).
+- [ ] The return queue: `return_day = day + 60`, tier drift ±1 clamp 1–3,
+      names never reused, `stance ≤ −3` → nemesis hunter;
+      `npc_captains.json` / `named_pirate_respawns` / `successor_<tier>`
+      are gone (validator-asserted, §4.11.11.4).
+- [ ] Attacking a non-hostile fleet charges −20 reputation (+2 rivals)
+      **and** −20 fame exactly once at battle start (§4.11.10).
