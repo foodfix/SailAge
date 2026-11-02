@@ -254,9 +254,9 @@ ENTITY_FILES = {
     "discoveries.json": "discoveries",
     "quests.json": "quests",
     # Phase 5: named_pirates.json / market_events.json match their filenames,
-    # trade_routes.json's plural key is `lanes` (§4.14). Phase 8 retires
-    # npc_captains.json from this table — the name pools are gone (§7.7), the
-    # file's presence is simply unchecked until W4-B deletes it (group 11).
+    # trade_routes.json's plural key is `lanes` (§4.14). Phase 8 retired
+    # npc_captains.json from this table — the name pools are gone (§7.7; W4-B
+    # deleted the file and group 11 asserts its absence, §8.6 item 1).
     "named_pirates.json": "named_pirates",
     "market_events.json": "market_events",
     "trade_routes.json": "lanes",
@@ -275,13 +275,6 @@ TOOL_OUTPUT_FILES = {
         "allowed_extra": {"generated_by", "artifact", "build", "quota_table"},
     },
 }
-
-# Phase 8: retired files still present until W4-B deletes them (master
-# decision 2026-11-03). Group 1 still parses them (any .json under data/
-# must be valid UTF-8 JSON) but skips the envelope contract — their
-# presence is simply unchecked (§8.6 item 1's absence assertion lands in
-# W4-B).
-RETIRED_FILES = {"npc_captains.json"}
 
 # Files with a bespoke envelope / no plural entity key (section 3.2, 4.9).
 SPECIAL_FILES = {
@@ -944,7 +937,7 @@ NAMED_PIRATE_TIER_MAX = 3
 
 # Files whose structure/counts/bounds group 7 owns outright (§8.2 preamble);
 # group 3's generic id loop skips them. Phase 8: npc_captains.json is retired
-# (§7.7) — group 7 no longer reads it.
+# (§7.7; W4-B deleted the file) — group 7 no longer reads it.
 GROUP7_ENTITY_FILES = frozenset({
     "named_pirates.json", "market_events.json",
 })
@@ -1019,10 +1012,6 @@ def check_group1(docs: dict[str, object], verbose: bool) -> None:
             fail("parse", name, f"invalid JSON: {exc}", 1)
 
         obj = docs[name]
-        if name in RETIRED_FILES:
-            # Phase 8 (§7.7): retired with the name pools; unchecked until
-            # the W4-B deletion (see the group-7 TODO).
-            continue
         if not isinstance(obj, dict):
             fail("envelope", name, "top-level value must be an object", 1)
 
@@ -4601,14 +4590,9 @@ def _check_npc_config(config: object) -> None:
             )
 
 
-# TODO(phase8-W4-B): delete data/npc_captains.json + add the absence
-# assertion (10-* §8.6 item 1 — a present file fails group 11). The
-# physical deletion moved here from W2-D by master decision (2026-11-03):
-# W3's gate needs `run_tests.py` green and the ecology suites still
-# exercise the pool-based name attribution through the last runtime
-# reader (npc_fleets.gd's pool draw). Until then the retired file's
-# presence is simply unchecked — group 7 no longer reads it (§8.2 item 2)
-# and group 1 no longer requires it.
+# §8.6 item 1 (W4-B, 2026-11-03): `data/npc_captains.json` is DELETED — the
+# Phase-5 name pools are gone (§7.7); group 11 asserts the file's absence
+# below (see check_group11).
 
 
 def _check_named_pirates(pirates_doc: object, captains_doc: object,
@@ -5254,10 +5238,10 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
     Owns structure, counts and bounds for the Phase-5 files still in force;
     L10nString completeness inside them is group 2's recursion. Phase 7 adds
     the economy-data checks of §8.2 items 5-13; Phase 8 removes the
-    npc_captains reads (§8.2 item 2 — the retired name pools; the file's
-    presence is unchecked until W4-B deletes it) and turns the named pirates
-    into v2 full-card checks. The §4.19 facility-hours sub-block rides here
-    (the §8 exit table has no row of its own for it).
+    npc_captains reads (§8.2 item 2 — the retired name pools; W4-B deleted
+    the file) and turns the named pirates into v2 full-card checks. The
+    §4.19 facility-hours sub-block rides here (the §8 exit table has no row
+    of its own for it).
     """
     _check_npc_config(docs.get("npc_config.json"))
     _check_named_pirates(
@@ -7576,12 +7560,25 @@ def _check_canon_rebuild_determinism(verbose: bool) -> None:
 def check_group11(docs: dict[str, object], verbose: bool) -> None:
     """Captain canon: docs/10-DATA-SCHEMA.md section 8.6.
 
-    Envelope + card shapes + the generated-card formulas re-asserted
-    term-by-term, the extreme-preset quota coverage re-derived independently
-    from npc_config × ports × nations, the artifact quota_table vs the
-    roster cells, and name uniqueness across the canon and the officer
-    roster. The byte-identical builder rebuild runs last (§8.6 item 2).
+    §8.6 item 1 (the retired name-pool file's absence), the envelope + card
+    shapes + the generated-card formulas re-asserted term-by-term, the
+    extreme-preset quota coverage re-derived independently from npc_config ×
+    ports × nations, the artifact quota_table vs the roster cells, and name
+    uniqueness across the canon and the officer roster. The byte-identical
+    builder rebuild runs last (§8.6 item 2).
     """
+    # §8.6 item 1: the Phase-5 name-pool file must NOT exist — its presence
+    # is the failure (the successor machinery is retired, `60-*`; the canon +
+    # `captain_states` replace it). W4-B deleted the file (2026-11-03).
+    retired = DATA_DIR / "npc_captains.json"
+    if retired.exists():
+        fail(
+            "canon-retired",
+            "npc_captains.json",
+            "data/npc_captains.json still exists — the Phase-5 name pools "
+            "are retired (§7.7); delete the file (§8.6 item 1)",
+            11,
+        )
     doc = docs.get("captains.json")
     if not isinstance(doc, dict):
         fail("canon", CAPTAINS_JSON_LABEL,
@@ -7701,9 +7698,8 @@ def check_group11(docs: dict[str, object], verbose: bool) -> None:
                     )
 
     # §8.6 item 6 lives in group 7 (the v2 named-pirate full-card check,
-    # including the drop → rare pin — see _check_named_pirates). §8.6
-    # item 1's absence assertion lands with the W4-B file deletion (see the
-    # group-7 TODO).
+    # including the drop → rare pin — see _check_named_pirates). §8.6 item 1
+    # ran at the top of this group (the retired file's absence).
 
     # §8.6 item 2: rebuild determinism (byte-exact), LAST so the structural
     # verdicts above name problems before the builder is re-run.

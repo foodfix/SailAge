@@ -20,11 +20,13 @@ const DEFAULT_MAP_ID := "world"
 
 ## Loaded from `res://data/`: ports, goods, ship_types, nations, officers,
 ## equipment, discoveries, quests (all envelope files), plus the Phase-5
-## npc/economy tables npc_config.json, npc_captains.json, named_pirates.json
-## and market_events.json, the Phase-6 ocean tables wind_regions.json,
+## npc/economy tables npc_config.json, named_pirates.json and
+## market_events.json, the Phase-6 ocean tables wind_regions.json,
 ## ocean_currents.json and ice_regions.json, the route-builder artifact
 ## trade_routes_built.json, and the two non-entity tables ui_strings.json and
-## map_legend.json.
+## map_legend.json. Phase 8 retires `npc_captains.json` (the name pools —
+## the canon `captains.json` + `captain_states` replace it, docs/10-* §7.7;
+## the validator asserts the file's absence, §8.6 item 1).
 
 ## True when every data file loaded and passed the light shape checks.
 var load_ok: bool = false
@@ -40,9 +42,6 @@ var officers: Dictionary = {}
 var equipment: Dictionary = {}
 var discoveries: Dictionary = {}
 var quests: Dictionary = {}
-## Captain name pools keyed by `nation_id` — the 6 nation ids plus the
-## nationless `""` pool pirates draw from (docs/10-* §4.11).
-var npc_captains: Dictionary = {}
 ## The 4 named pirates (docs/10-* §4.12).
 var named_pirates: Dictionary = {}
 ## Demand-event templates (docs/10-* §4.13).
@@ -84,7 +83,6 @@ var officers_list: Array = []
 var equipment_list: Array = []
 var discoveries_list: Array = []
 var quests_list: Array = []
-var npc_captains_list: Array = []
 var named_pirates_list: Array = []
 var market_events_list: Array = []
 ## Phase-8 lists, file order (docs/10-* §4.11, §4.20–§4.22).
@@ -155,10 +153,9 @@ func load_all() -> void:
 	quests_list = _load_list("quests", "quests.json")
 	quests = _index_by_id(quests_list, "quests.json")
 
-	# Phase 5 living economy (docs/10-* §4.10–4.13).
+	# Phase 5 living economy (docs/10-* §4.10–4.13). Phase 8 retires
+	# npc_captains.json (the name pools — docs/10-* §7.7).
 	npc_config = _load_npc_config()
-	npc_captains_list = _load_list("pools", "npc_captains.json")
-	npc_captains = _index_pools_by_nation(npc_captains_list, "npc_captains.json")
 	named_pirates_list = _load_list("named_pirates", "named_pirates.json")
 	named_pirates = _index_by_id(named_pirates_list, "named_pirates.json")
 	market_events_list = _load_list("market_events", "market_events.json")
@@ -227,11 +224,7 @@ func get_discovery(id: String) -> Dictionary:
 func get_quest(id: String) -> Dictionary:
 	return _lookup(quests, id)
 
-## Captain name pool for `pool_id` (a nation id, or `""` for the pirate pool),
-## or {} when absent (docs/10-* §4.11).
-func get_captain_pool(pool_id: String) -> Dictionary:
-	return _lookup(npc_captains, pool_id)
-
+## A named pirate by id (docs/10-* §4.12; each entry is a full canon card).
 func get_named_pirate(id: String) -> Dictionary:
 	return _lookup(named_pirates, id)
 
@@ -659,26 +652,6 @@ func _load_facility_hours() -> Dictionary:
 	if not (data.get("overrides", {}) is Dictionary):
 		_record("facility_hours.json: 'overrides' must be an object")
 	return data
-
-
-## Indexes captain pools by their `nation_id` — the pool id (docs/10-* §4.11);
-## the nationless `""` pool is a legal key (pirates draw from it).
-func _index_pools_by_nation(list: Array, file_name: String) -> Dictionary:
-	var table: Dictionary = {}
-	for index in list.size():
-		var entry = list[index]
-		if not (entry is Dictionary):
-			_record("%s[%d]: entry must be an object" % [file_name, index])
-			continue
-		var pool_id = entry.get("nation_id", null)
-		if not (pool_id is String):
-			_record("%s[%d]: entry has no string 'nation_id'" % [file_name, index])
-			continue
-		if table.has(pool_id):
-			_record("%s[%d]: duplicate pool '%s'" % [file_name, index, pool_id])
-			continue
-		table[pool_id] = entry
-	return table
 
 
 ## Reads `data/map_legend.json` — the single legend (docs/90-* §9.1). No

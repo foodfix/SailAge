@@ -152,7 +152,9 @@ func _make_fleet(sim: NpcFleetsLib, role: String, nation_id: String,
 		"cell": {"x": cell.x, "y": cell.y},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
 		"cargo": {},
-		"captain": {"pool_id": nation_id, "name_index": 0},
+		
+		# Phase-8 §4.15: the captain is a canon-card id (lazily backfilled).
+		"captain_id": "",
 		"cooldown_until_day": 0, "seed": seed_value, "dest_port_id": "",
 		"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
 		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",

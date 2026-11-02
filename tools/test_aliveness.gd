@@ -18,6 +18,7 @@ extends Node
 ## palace sighting surfaces.
 
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
@@ -147,8 +148,9 @@ func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 	GameState.wrecks = []
 	GameState.npc_preset = "normal"
 	GameState.market_events = []
-	GameState.named_pirate_respawns = {}
+	GameState.captain_states = {}
 	GameState.npc_port_log = []
+	CaptainsLib.reset_deployments()
 	EconomyLib.reset_overrides()
 	return NpcFleetsLib.new({
 		"npc_config": DataLoader.npc_config, "preset": "normal",
@@ -175,7 +177,8 @@ func _make_fleet(sim: NpcFleetsLib, role: String, nation_id: String,
 		"cell": {"x": cell.x, "y": cell.y},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
 		"cargo": {},
-		"captain": {"pool_id": nation_id, "name_index": 0},
+		# Phase-8 §4.15: the captain is a canon-card id (backfilled lazily).
+		"captain_id": "",
 		"cooldown_until_day": 0, "seed": seed_value, "dest_port_id": "",
 		"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
 		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",
@@ -204,12 +207,12 @@ func _count_role(role: String, nation_id: String = "") -> int:
 	return count
 
 
-func _named_fleet(named_id: String) -> Dictionary:
+func _named_fleet(captain_id: String) -> Dictionary:
+	# Phase 8: presence derives from fleets — `captain_id` matches the id.
 	for fleet in GameState.npc_fleets:
 		if not (fleet is Dictionary):
 			continue
-		if str((((fleet as Dictionary).get("captain", {}) as Dictionary)
-				.get("named_id", ""))) == named_id:
+		if str((fleet as Dictionary).get("captain_id", "")) == captain_id:
 			return fleet
 	return {}
 
@@ -302,81 +305,90 @@ func _find_role_fleet(role: String, nation_id: String) -> Dictionary:
 	return {}
 
 
-# --- 2. Named pirates (§4.11.11.4) --------------------------------------------
+# --- 2. Famous pirates on the canon (§4.11.11.4 W1 rewrite, §4.11.15) --------
 
 func _test_named_pirates() -> void:
 	var sim := _make_run()
-	# The first pirate spawns draw the 4 famous identities, file order.
-	var named_order: Array = []
-	for entry in DataLoader.named_pirates_list:
-		named_order.append(str((entry as Dictionary).get("id", "")))
-	var pirates: Array = []
-	for _index in 4:
-		var pirate := sim.spawn("pirate", "", 10)
-		_check(not pirate.is_empty(), "a pirate spawn succeeds")
-		if not pirate.is_empty():
-			pirates.append(pirate)
-			var named_id := str((pirate.get("captain", {}) as Dictionary)
-				.get("named_id", ""))
-			_check(named_order.has(named_id),
-				"the pirate carries a named identity (%s)" % named_id)
-	_check(_named_fleet(named_order[0]) != {} and _named_fleet(named_order[3]) != {},
-		"all 4 famous pirates are afloat after 4 spawns")
-	var fifth := sim.spawn("pirate", "", 10)
-	if not fifth.is_empty():
-		_check(str((fifth.get("captain", {}) as Dictionary)
-				.get("named_id", "")) == "",
-			"a 5th pirate carries no famous identity (only 4 exist)")
-	# Defeat the first: the famous name retires, the slot respawns +30 days
-	# under a NEW name (the next nationless-pool entry), tier inherited.
-	var defeated_id: String = named_order[0]
-	var defeated := _named_fleet(defeated_id)
-	var defeated_fleet_id := str(defeated.get("id", ""))
-	var defeated_name := NpcFleetsLib.captain_name(defeated)
-	GameState.day = 12
-	sim.remove(defeated_fleet_id)
-	_check(_named_fleet(defeated_id) == {},
-		"the defeated named pirate is gone")
-	_check(NpcFleetsLib.next_named_pirate_id() != defeated_id,
-		"the defeated famous identity is not re-drawn while its respawn pends")
-	# Before the +30 days nothing respawns.
-	GameState.day = 41
+	# The 4 famous pirates are canon cards (§4.12: field-for-field identical
+	# copies); their presence derives from fleets: captain_id ∈ the 4 ids.
+	var named_order := NpcFleetsLib.famous_pirate_ids()
+	_check(named_order.size() == 4,
+		"the famous-pirate canon holds exactly 4 ids (%d)" % named_order.size())
+	# A famous pirate is afloat exactly when one of its carriers spawned.
+	var carried := sim.spawn("pirate", "", 10)
+	_check(not carried.is_empty(), "a pirate spawn succeeds")
+	_check(_count_named() <= 1,
+		"a spawn carries at most the drawn famous identity (%d afloat)"
+		% _count_named())
+	# Force a famous carrier (the canon draw is quota-driven, not fame-first):
+	# deploy the first famous card onto a fresh fleet and pin the seams.
+	var famous_id: String = named_order[0]
+	_check(not CaptainsLib.captain(famous_id).is_empty(),
+		"the famous id IS a canon card id (§4.12)")
+	var fleet := sim.spawn("pirate", "", 10)
+	if not fleet.is_empty():
+		sim.remove(str(fleet.get("id", "")))  # release its drawn card
+	var card := CaptainsLib.captain(famous_id)
+	_check(str(card.get("role", "")) == "pirate",
+		"the famous pirate's canon role is pirate")
+	# The famous-pirate presence check: a fleet with captain_id = the id.
+	var carrier := {
+		"id": "fx_famous_carrier", "role": "pirate", "nation_id": "",
+		"cell": {"x": OPEN_CELL.x, "y": OPEN_CELL.y},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {}, "captain_id": famous_id,
+		"cooldown_until_day": 0, "seed": 4242, "dest_port_id": "",
+		"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
+		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",
+	}
+	GameState.npc_fleets.append(carrier)
+	sim.reset_index()
+	_check(NpcFleetsLib.is_named_captain(carrier),
+		"the presence check derives from captain_id ∈ the 4 pirate ids")
+	_check(str(NpcFleetsLib.named_captain_of(carrier).get("id", ""))
+		== famous_id, "the famous card resolves via captain_id")
+	_check(NpcFleetsLib.captain_name(carrier)
+		== I18n.t((CaptainsLib.captain(famous_id) as Dictionary)
+			.get("name", {})),
+		"the famous pirate's name comes from its canon card")
+	# The bounty preference (§4.11.11.4): with a famous pirate afloat, a
+	# bounty quest targets it and re-prices to its canon tier.
+	_test_bounty_preference(carrier)
+	# Names are never reused: the closed canon + the officer roster share no
+	# name (validator group 11 re-asserts; here the id-keyed lookup pin).
+	_check(NpcFleetsLib.preferred_bounty_target().is_empty()
+		or str(NpcFleetsLib.preferred_bounty_target().get("captain_id", ""))
+			in named_order,
+		"the bounty preference targets a famous-pirate carrier")
+	# The return queue: a defeat books day+60 (the battle-outcome side calls
+	# Captains.defeat; names never change — no successor machinery).
+	var tier_before := int(CaptainsLib.state(famous_id).get("tier_now",
+		int((CaptainsLib.captain(famous_id) as Dictionary).get("tier", 1))))
+	CaptainsLib.defeat(famous_id, 12, true)
+	var state: Dictionary = CaptainsLib.state(famous_id)
+	_check(str(state.get("status", "")) == "returning"
+		and int(state.get("return_day", 0)) == 72,
+		"the famous defeat books the return queue at day+60 (%d)"
+		% int(state.get("return_day", 0)))
+	_check(int(state.get("tier_now", 0))
+		== clampi(tier_before - 1, 1, 3),
+		"a crushing defeat drifts the tier −1 (clamp 1–3)")
+	# At day 72 the captain returns active UNDER ITS OWN NAME (the canon is
+	# closed — names are never reused; the old +30 successor rule is retired).
+	GameState.day = 72
 	sim.last_tick_day = -1
-	sim.tick(41)
-	_check(_count_named() == 3,
-		"day +29: no respawn yet (3 named afloat, got %d)" % _count_named())
-	# At +30 the successor sails under a new pool name, same tier.
-	GameState.day = 42
-	sim.last_tick_day = -1
-	sim.tick(42)
-	_check(_count_named() == 4,
-		"day +30: the slot respawns (4 named afloat, got %d)" % _count_named())
-	var successor := _successor_fleet()
-	if successor.is_empty():
-		_check(false, "the respawned successor is afloat")
-	else:
-		_check(str(successor.get("id", "")) != defeated_fleet_id,
-			"the successor is a NEW fleet")
-		_check(NpcFleetsLib.captain_name(successor) != defeated_name,
-			"the successor sails under a NEW name (%s)"
-			% NpcFleetsLib.captain_name(successor))
-		_check(NpcFleetsLib.named_tier_of(successor)
-				== NpcFleetsLib.named_tier_of(
-					{"captain": {"named_id": defeated_id}}),
-			"the successor inherits the slot's tier")
-		_check(NpcFleetsLib.is_named_captain(successor),
-			"the successor is poster-worthy (a named captain)")
-	# The bounty preference: with a named pirate alive, a bounty quest
-	# targets it (tier re-priced from its own tier).
-	_test_bounty_preference(NpcFleetsLib.preferred_bounty_target())
-	_check(not NpcFleetsLib.preferred_bounty_target().is_empty(),
-		"a named pirate is preferred while any is alive")
-	# With NO named pirate alive, today's behavior: a fresh spawn.
-	for fleet in GameState.npc_fleets.duplicate():
-		if fleet is Dictionary \
-				and NpcFleetsLib.is_named_captain(fleet):
-			sim.remove(str((fleet as Dictionary).get("id", "")))
-	_check(_count_named() == 0, "no named pirate remains for the fallback case")
+	sim.tick(72)
+	_check(str(CaptainsLib.state(famous_id).get("status", "")) == "active",
+		"day 72: the famous pirate returned active")
+	_check(str((CaptainsLib.captain(famous_id) as Dictionary).get("name", {})
+		.get("en", "")) != "",
+		"the returned captain keeps its own canon name")
+	_check(not NpcFleetsLib._is_famous_pirate_id("cap_nobody")
+		and NpcFleetsLib._is_famous_pirate_id(famous_id),
+		"the famous-id test keys on the 4 canon ids only")
+	# Cleanup: release the fixture carrier.
+	sim.remove("fx_famous_carrier")
+	GameState.captain_states.erase(famous_id)
 
 
 func _count_named() -> int:
@@ -385,17 +397,6 @@ func _count_named() -> int:
 		if fleet is Dictionary and NpcFleetsLib.is_named_captain(fleet):
 			count += 1
 	return count
-
-
-## The respawned successor: a named pirate carrying no famous identity.
-func _successor_fleet() -> Dictionary:
-	for fleet in GameState.npc_fleets:
-		if not (fleet is Dictionary):
-			continue
-		if NpcFleetsLib.is_named_captain(fleet) \
-				and NpcFleetsLib.named_captain_of(fleet).is_empty():
-			return fleet
-	return {}
 
 
 ## The bounty preference (§4.11.11.4 + task 5): a live named pirate is the
@@ -743,8 +744,9 @@ func _test_posters_reveal() -> void:
 	var berth := DataLoader.port_cell(port_id)
 	GameState.day = 50
 	GameState.current_port = port_id
-	# A NAMED pirate within 40 tiles posts; one at 45 does not; a docked one
-	# never posts (at-sea posters only).
+	# A pirate within 40 tiles posts (with the canon EVERY pirate/privateer
+	# captain carries a named card — §4.11.11.4); one at 45 does not; a
+	# docked one never posts (at-sea posters only).
 	var near := _make_named_pirate(sim, berth + Vector2i(30, 0), "pirate_redbeard_khair")
 	var far := _make_named_pirate(sim, berth + Vector2i(45, 0), "pirate_murad_red_sail")
 	var docked := _make_named_pirate(sim, berth + Vector2i(5, 0), "pirate_limahong_thousand_sails")
@@ -754,7 +756,7 @@ func _test_posters_reveal() -> void:
 	for poster in posters:
 		poster_ids[str((poster as Dictionary).get("id", ""))] = poster
 	_check(poster_ids.has(str(near.get("id", ""))),
-		"a named pirate within Chebyshev 40 has a poster")
+		"a pirate captain within Chebyshev 40 has a poster (canon card)")
 	_check(not poster_ids.has(str(far.get("id", ""))),
 		"a pirate beyond Chebyshev 40 posts nothing")
 	_check(not poster_ids.has(str(docked.get("id", ""))),
@@ -799,30 +801,36 @@ func _test_posters_reveal() -> void:
 
 func _make_named_pirate(sim: NpcFleetsLib, cell: Vector2i,
 		named_id: String) -> Dictionary:
+	# Phase 8: the famous pirate IS a canon card — the fixture carries its
+	# canon id (the §4.12 field-for-field-identical copy).
 	var fleet := _make_fleet(sim, "pirate", "", cell)
-	(fleet["captain"] as Dictionary)["named_id"] = named_id
+	fleet["captain_id"] = named_id
 	sim.reset_index()
 	return fleet
 
 
-# --- 6. Captain names survive save/load (§4.11.11.4) --------------------------
+# --- 6. Captain identities survive save/load (§4.11.11.4/§4.11.15) -----------
 
 func _test_save_load_captains() -> void:
 	var sim := _make_run()
 	GameState.day = 1
 	sim.tick(1)
+	sim.backfill_captains()
 	var before: Array = []
 	for fleet in GameState.npc_fleets:
 		if fleet is Dictionary:
 			before.append({
 				"id": str((fleet as Dictionary).get("id", "")),
-				"captain": (fleet as Dictionary).get("captain", {}).duplicate(true),
+				"captain_id": str((fleet as Dictionary).get("captain_id", "")),
 				"name": NpcFleetsLib.captain_name(fleet),
 			})
 	_check(before.size() > 0, "the ecology holds fleets to name (%d)" % before.size())
 	_check(SaveSystem.save(SAVE_SLOT), "the run saves")
 	GameState.npc_fleets = []
+	GameState.captain_states = {}
+	CaptainsLib.reset_deployments()
 	_check(SaveSystem.load(SAVE_SLOT), "the run loads")
+	sim.backfill_captains()
 	var same := GameState.npc_fleets.size() == before.size()
 	for entry in before:
 		var fleet := {}
@@ -832,50 +840,41 @@ func _test_save_load_captains() -> void:
 						== str((entry as Dictionary).get("id", "")):
 					fleet = candidate
 					break
-		var captain_same := JSON.stringify(
-			(fleet as Dictionary).get("captain", {})) == JSON.stringify(
-			(entry as Dictionary).get("captain", {}))
+		var captain_same := str((fleet as Dictionary).get("captain_id", "")) \
+			== str((entry as Dictionary).get("captain_id", ""))
 		var name_same := NpcFleetsLib.captain_name(fleet) \
 			== str((entry as Dictionary).get("name", ""))
 		if fleet.is_empty() or not captain_same or not name_same:
 			same = false
 			break
-	_check(same, "captain identities (incl. named overrides) survive save/load")
-	# Task L follow-up (docs/60-* §4.11.11.4, docs/90-* §8.1): a pending
-	# +30-day respawn window is now saved — a defeat right before saving must
-	# fire on schedule after the load, not be re-anchored or lost.
-	var named: Dictionary = NpcFleetsLib.preferred_bounty_target()
-	if not named.is_empty():
-		var named_id := str((named.get("captain", {}) as Dictionary)
-			.get("named_id", ""))
-		GameState.day = 20
-		sim.remove(str(named.get("id", "")))
-		_check(int(GameState.named_pirate_respawns.get(named_id, -1)) == 50,
-			"the defeat books available_day = day + 30 (got %s)"
-			% str(GameState.named_pirate_respawns.get(named_id, -1)))
-		_check(SaveSystem.save(SAVE_SLOT), "the run with a pending respawn saves")
-		GameState.named_pirate_respawns = {}
-		_check(SaveSystem.load(SAVE_SLOT), "the pending-respawn save loads")
-		_check(int(GameState.named_pirate_respawns.get(named_id, -1)) == 50,
-			"the respawn window survives the save/load round trip")
-		# Day +29: still pending; day +30: the successor sails.
-		var reloaded := NpcFleetsLib.new({"npc_config": DataLoader.npc_config,
-			"preset": "normal"})
-		GameState.day = 49
+	_check(same, "captain identities (canon ids + names) survive save/load")
+	# Phase 8 (§4.11.15): the return queue — a defeat books day+60 and the
+	# captain reactivates under its own name. (`captain_states` persistence
+	# itself is save-v9 material — W6-C's `test_save_v9` pins the round trip;
+	# the v8 payload does not carry the block.)
+	var target: Dictionary = GameState.npc_fleets[0]
+	var captain_id := str(target.get("captain_id", ""))
+	_check(not captain_id.is_empty(), "the round-trip fleet carries a captain")
+	CaptainsLib.defeat(captain_id, 20, false)
+	sim.remove(str(target.get("id", "")))
+	_check(str(CaptainsLib.state(captain_id).get("status", "")) == "returning"
+			and int(CaptainsLib.state(captain_id).get("return_day", 0)) == 80,
+		"the defeat books the return queue at day+60")
+	# Day 79: still queued; day 80: the captain returns active under its own
+	# name (the successor machinery is retired — the name never changes).
+	var reloaded := NpcFleetsLib.new({"npc_config": DataLoader.npc_config,
+		"preset": "normal"})
+	for day in [79, 80]:
+		GameState.day = day
 		reloaded.last_tick_day = -1
-		reloaded.tick(49)
-		_check(GameState.named_pirate_respawns.has(named_id),
-			"day +29 keeps the window pending")
-		GameState.day = 50
-		reloaded.last_tick_day = -1
-		reloaded.tick(50)
-		var successor := false
-		for fleet in GameState.npc_fleets:
-			if fleet is Dictionary \
-					and int((fleet.get("captain", {}) as Dictionary)
-						.get("named_tier", 0)) > 0:
-				successor = true
-		_check(successor, "the successor sails at day +30 after the load")
+		reloaded.tick(day)
+		if day == 79:
+			_check(str(CaptainsLib.state(captain_id).get("status", ""))
+				== "returning", "day +59 keeps the captain queued")
+	_check(str(CaptainsLib.state(captain_id).get("status", "")) == "active",
+		"day +60 returns the captain active")
+	_check(not CaptainsLib.captain(captain_id).is_empty(),
+		"the returned captain keeps its own canon card")
 	_check(SaveSystem.delete_save(SAVE_SLOT) or not SaveSystem.has_save(SAVE_SLOT),
 		"the probe slot is cleaned up")
 

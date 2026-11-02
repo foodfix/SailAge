@@ -872,9 +872,6 @@ func _test_optional_keys_default() -> void:
 		% GameState.npc_preset)
 	_check(GameState.market_events == [] and GameState.market_events is Array,
 		"an absent market_events defaults to []")
-	_check(GameState.named_pirate_respawns == {}
-			and GameState.named_pirate_respawns is Dictionary,
-		"an absent named_pirate_respawns defaults to {}")
 	_check(GameState.fame == 0, "an absent fame defaults to 0")
 	_check(GameState.titles == {}, "an absent titles defaults to {}")
 	_check(GameState.bounties == {}, "an absent bounties defaults to {}")
@@ -974,12 +971,9 @@ func _test_new_fields_round_trip() -> void:
 		"template_id": "ev_war_provisioning", "port_id": "seville",
 		"start_day": 64, "end_day": 124,
 	}]
-	# Task L (docs/60-* §4.11.11.4, docs/90-* §8.1): the respawn map is a
-	# bare `{named_pirate_id: available_day}` object, saved as of v5.
-	GameState.named_pirate_respawns = {
-		"pirate_redbeard_khair": 94,
-		"successor_2": 70,
-	}
+	# Phase 8 (docs/90-* §5.4 "removed at v9"): the retired successor
+	# machinery's respawn map is GONE from GameState — the `captain_states`
+	# return queue replaces it (W4-B; W6-C's v9 sweep drops the payload key).
 	# Phase-6 (docs/90-* §8.1): control preferences and the world ocean keys
 	# at non-default values, plus the carried hunter keys.
 	GameState.control_prefs = {"input_mode": "helm", "current_mode": "drift"}
@@ -1003,7 +997,7 @@ func _test_new_fields_round_trip() -> void:
 		"cell": {"x": 30, "y": 40},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
 		"cargo": {},
-		"captain": {"pool_id": "", "name_index": 0},
+		"captain_id": "cap_pirate_0042",  # Phase-8 §4.15 canon id
 		"cooldown_until_day": 0,
 		"seed": 7 * 1000003 + 30 * 7919 + 40 * 104729,
 		"dest_port_id": "",
@@ -1056,9 +1050,9 @@ func _test_new_fields_round_trip() -> void:
 		"snapshot() writes npc_preset")
 	_check((on_disk.get("market_events") as Array).size() == 1,
 		"snapshot() writes market_events")
-	_check((on_disk.get("named_pirate_respawns") as Dictionary)
-		.get("pirate_redbeard_khair") == 94,
-		"snapshot() writes named_pirate_respawns")
+	_check(str(((on_disk.get("npc_fleets") as Array)[0]
+		as Dictionary).get("captain_id", "")) == "cap_pirate_0042",
+		"snapshot() writes the fleet's §4.15 captain_id")
 	_check(on_disk.get("control_prefs") == {"input_mode": "helm",
 		"current_mode": "drift"}, "snapshot() writes control_prefs")
 	var on_disk_world: Dictionary = on_disk["world"]
@@ -1124,7 +1118,6 @@ func _test_new_fields_round_trip() -> void:
 	GameState.wrecks[0]["id"] = "mutated"
 	GameState.npc_preset = "mutated"
 	GameState.market_events[0]["template_id"] = "mutated"
-	GameState.named_pirate_respawns["pirate_redbeard_khair"] = 999
 	GameState.control_prefs["input_mode"] = "mutated"
 	GameState.world["sail_trim"] = "mutated"
 	GameState.world["hunter_intel_cell"]["x"] = 999
@@ -1150,9 +1143,9 @@ func _test_new_fields_round_trip() -> void:
 	_check(snap["npc_preset"] == "extreme", "snapshot() copies npc_preset")
 	_check((snap["market_events"] as Array)[0]["template_id"]
 		== "ev_war_provisioning", "snapshot() deep-copies market_events")
-	_check(int((snap["named_pirate_respawns"] as Dictionary)
-		.get("pirate_redbeard_khair", -1)) == 94,
-		"snapshot() deep-copies named_pirate_respawns")
+	_check(str(((snap["npc_fleets"] as Array)[0] as Dictionary)
+		.get("captain_id", "")) == "cap_pirate_0042",
+		"snapshot() deep-copies the fleet captain_id")
 	_check((snap["control_prefs"] as Dictionary)["input_mode"] == "helm",
 		"snapshot() deep-copies control_prefs")
 	_check((snap["world"] as Dictionary)["sail_trim"] == "furled",
@@ -1618,7 +1611,6 @@ func _clobber_state() -> void:
 	GameState.wrecks = ["clobber"]
 	GameState.npc_preset = "clobbered"
 	GameState.market_events = ["clobber"]
-	GameState.named_pirate_respawns = {"clobber": -1}
 	GameState.fame = -1
 	GameState.titles = {}
 	GameState.bounties = {}
@@ -1661,8 +1653,6 @@ func _loaded_values() -> Dictionary:
 		"wrecks": GameState.wrecks.duplicate(true),
 		"npc_preset": GameState.npc_preset,
 		"market_events": GameState.market_events.duplicate(true),
-		"named_pirate_respawns":
-			GameState.named_pirate_respawns.duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),

@@ -35,6 +35,9 @@ const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-8 captain canon state machine (W4-A's contract; the local stub
+## implements it until the master merge takes slot A's module).
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 
 ## The allegiance guard path (task N's load-by-path seam — the fixture wins
@@ -96,6 +99,10 @@ func _ready() -> void:
 	_test_coaster_rules()
 	_section = "9 captains"
 	_test_captains()
+	_section = "9b canon lifecycle"
+	_test_canon_captain_lifecycle()
+	_section = "9c nemesis return"
+	_test_nemesis_return_path()
 	_section = "10 contact rules"
 	_test_contact_rules()
 	_section = "11 movement legality"
@@ -256,8 +263,10 @@ func _make_run(player_nation: String = "portugal") -> NpcFleetsLib:
 	GameState.wrecks = []
 	GameState.npc_preset = "normal"
 	GameState.market_events = []
-	GameState.named_pirate_respawns = {}
+	GameState.captain_states = {}
 	GameState.npc_port_log = []
+	CaptainsLib.reset_deployments()
+	NpcFleetsLib._canon_warned = false
 	_restore_allegiance()
 	_seed_allegiance()
 	EconomyLib.reset_overrides()
@@ -275,7 +284,9 @@ func _make_fleet(sim: NpcFleetsLib, role: String, nation_id: String,
 		"cell": {"x": cell.x, "y": cell.y},
 		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
 		"cargo": {},
-		"captain": {"pool_id": nation_id, "name_index": 0},
+		# Phase-8 §4.15: the captain is a canon-card id; fixtures leave it
+		# empty and the ecology's lazy backfill assigns one deterministically.
+		"captain_id": "",
 		"cooldown_until_day": 0, "seed": 12345, "dest_port_id": "",
 		"dwell_until_day": 0, "anchor_cell": null, "target_fleet_id": "",
 		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",
@@ -937,40 +948,232 @@ func _test_coaster_rules() -> void:
 		+ " (cargo %s)" % str(coaster2["cargo"]))
 
 
-# --- 9. Captains (docs/60-* §4.11.11.4) --------------------------------------
+# --- 9. Canon captains (docs/60-* §4.11.11.4 W1 rewrite, §4.11.15) -----------
 
 func _test_captains() -> void:
 	var sim := _make_run()
 	GameState.new_game("portugal", false)
+	sim.backfill_captains()
 	var named := 0
-	var pool_ids := {}
+	var roles_seen := {}
 	for fleet in GameState.npc_fleets:
-		var captain: Dictionary = fleet.get("captain", {})
-		_check_quiet(captain.has("pool_id") and captain.has("name_index"),
-			"every fleet carries a captain pair")
-		var pool_id := str(captain["pool_id"])
-		pool_ids[pool_id] = true
-		var name: String = NpcFleetsLib.captain_name(fleet)
-		if not name.is_empty():
+		var captain_id := str(fleet.get("captain_id", ""))
+		_check_quiet(not captain_id.is_empty(),
+			"every fleet carries a captain_id (%s)" % str(fleet.get("id", "")))
+		_check_quiet(not fleet.has("captain"),
+			"the retired pool shape does not appear (§4.15)")
+		var card: Dictionary = CaptainsLib.captain(captain_id)
+		_check_quiet(not card.is_empty(),
+			"the captain_id resolves to a canon card (%s)" % captain_id)
+		# The card role matches the fleet's (treasure → trader, §4.11).
+		var role := str(fleet.get("role", ""))
+		var want_role := "trader" if role == "treasure" else role
+		_check_quiet(str(card.get("role", "")) == want_role,
+			"the card role matches the fleet role (%s/%s)"
+			% [role, str(card.get("role", ""))])
+		if role == "treasure":
+			_check_quiet(int(card.get("tier", 0)) == 2,
+				"the treasure fleet carries a tier-2 trader card")
+		if not str(card.get("name", {}).get("en", "")).is_empty():
 			named += 1
+		roles_seen[role] = true
 	_check(named == GameState.npc_fleets.size(),
-		"every fleet's captain resolves to a name (%d of %d)"
+		"every fleet's captain resolves to a canon name (%d of %d)"
 		% [named, GameState.npc_fleets.size()])
-	_check(pool_ids.has(""), "pirates draw from the nationless pool")
-	# A fleet's captain is stable across identical re-draws and dies with it.
+	_check(roles_seen.has("pirate"), "pirates drew pirate-role canon cards")
+	# A fleet's captain is stable across identical re-draws (the seeded
+	# stream) and its release ends the deployment exclusivity.
 	var fleet: Dictionary = GameState.npc_fleets[0]
-	var before: String = NpcFleetsLib.captain_name(fleet)
+	var before: String = str(fleet["captain_id"])
 	sim._draw_captain(fleet)
-	_check(NpcFleetsLib.captain_name(fleet) == before,
+	_check(str(fleet["captain_id"]) == before,
 		"the captain draw is seeded from the fleet, not the clock")
 	var id := str(fleet["id"])
+	var captain_id := str(fleet["captain_id"])
+	_check(CaptainsLib.is_deployed(captain_id),
+		"the drawn captain is deployed (spawn exclusivity)")
 	sim.remove(id)
-	var still_listed := false
+	_check(not CaptainsLib.is_deployed(captain_id),
+		"a removed fleet releases its captain (Captains.release)")
+
+
+func _test_canon_captain_lifecycle() -> void:
+	# Determinism: the same fleet seed → the same captain_id across sims.
+	var sim := _make_run()
+	GameState.new_game("portugal", false)
+	var ids_a: Array[String] = []
+	var ids_b: Array[String] = []
+	sim.reset_rng(4242)
+	for index in 12:
+		var fleet := sim.spawn("pirate", "", 5)
+		if not fleet.is_empty():
+			ids_a.append(str(fleet["captain_id"]))
+			sim.remove(str(fleet["id"]))
+	var other := NpcFleetsLib.new({
+		"npc_config": DataLoader.npc_config, "preset": "normal",
+	})
+	other.reset_rng(4242)
+	other._id_seq = 0
+	for index in 12:
+		var fleet := other.spawn("pirate", "", 5)
+		if not fleet.is_empty():
+			ids_b.append(str(fleet["captain_id"]))
+			other.remove(str(fleet["id"]))
+	_check(ids_a == ids_b and ids_a.size() >= 12,
+		"the same seed reproduces the same captain draws (%d)" % ids_a.size())
+	# Deployment exclusivity under a tick storm: no captain_id is afloat
+	# twice AT ANY tick (a captain released by a removed fleet legitimately
+	# re-deploys later — exclusivity is a per-day live-fleet property).
+	GameState.captain_states = {}
+	CaptainsLib.reset_deployments()
+	var storm := _make_run()
+	GameState.new_game("portugal", false)
+	storm.reset_rng(909)
+	var duplicate := ""
+	var dup_day := -1
+	for day in range(2, 10):
+		GameState.day = day
+		storm.tick(day)
+		var live := {}
+		for fleet in GameState.npc_fleets:
+			var cid := str(fleet.get("captain_id", ""))
+			if cid.is_empty():
+				continue  # a fleet may sail without one only pathologically
+			if live.has(cid) and duplicate == "":
+				duplicate = cid
+				dup_day = day
+			live[cid] = true
+	_check(duplicate == "",
+		"deployment exclusivity holds across a tick storm (dup: %s @ day %d)"
+		% [duplicate, dup_day])
+	# Speed jitter: bounds + stability across a save/load round trip.
+	var jittered: Dictionary = GameState.npc_fleets[0]
+	var base_hull := 0
+	for ship in (jittered.get("ships", []) as Array):
+		var speed := int(DataLoader.get_ship_type(str(
+			(ship as Dictionary).get("ship_type_id", ""))).get("speed", 0))
+		if speed > 0 and (base_hull == 0 or speed < base_hull):
+			base_hull = speed
+	var base := float(maxi(base_hull, 1))
+	var cached_speed := float(jittered.get("speed", 0.0))
+	var factor := cached_speed / base
+	_check(factor > 0.9 and factor < 1.1,
+		"the cached speed carries the ±10%% captain jitter (×%.3f)" % factor)
+	_check(absf(factor - (1.0 + CaptainsLib.speed_jitter(
+			str(jittered.get("captain_id", ""))))) < 0.0001,
+		"the jitter factor equals Captains.speed_jitter(captain_id)")
+	_check(SaveSystem.save(SAVE_SLOT), "the jittered ecology saves")
+	_check(SaveSystem.load(SAVE_SLOT), "the jittered ecology loads")
+	var reloaded: Dictionary = {}
 	for entry in GameState.npc_fleets:
-		if str(entry.get("id", "")) == id:
-			still_listed = true
-	_check(not still_listed,
-		"a removed fleet is gone (its captain dies with it)")
+		if str(entry.get("id", "")) == str(jittered.get("id", "")):
+			reloaded = entry
+			break
+	_check(not reloaded.is_empty(),
+		"the jittered fleet survives the round trip")
+	_check(absf(float(reloaded.get("speed", 0.0)) - cached_speed) < 0.0001,
+		"the jittered speed is stable across save/load (%.3f)"
+		% float(reloaded.get("speed", 0.0)))
+	_check(SaveSystem.delete_save(SAVE_SLOT) or not SaveSystem.has_save(SAVE_SLOT),
+		"the jitter probe slot is cleaned up")
+	# Lazy backfill: a v8-era payload (old pool shape, no captain_id) simulates.
+	var legacy := _make_run()
+	GameState.new_game("portugal", false)
+	GameState.npc_fleets = []
+	var old_fleet := {
+		"id": "nf_legacy_0001_trader",
+		"role": "trader", "nation_id": "portugal",
+		"cell": {"x": 1024, "y": 308},
+		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
+		"cargo": {},
+		"captain": {"pool_id": "portugal", "name_index": 0},
+		"cooldown_until_day": 0, "seed": 777, "dest_port_id": "",
+		"dwell_until_day": 3, "anchor_cell": null, "target_fleet_id": "",
+		"hunter_state": "", "loiter_until_day": 0, "home_port_id": "",
+	}
+	GameState.npc_fleets.append(old_fleet)
+	legacy.backfill_captains()
+	var legacy_id := str(old_fleet.get("captain_id", ""))
+	_check(not legacy_id.is_empty(),
+		"a v8-era fleet lazily derives a captain_id (%s)" % legacy_id)
+	_check(not old_fleet.has("captain"),
+		"the lazy backfill retires the legacy pool dict")
+	_check(not CaptainsLib.captain(legacy_id).is_empty(),
+		"the derived id resolves to a canon card")
+	_check(CaptainsLib.is_deployed(legacy_id),
+		"the lazily derived captain is deployed")
+	var again := str(old_fleet.get("captain_id", ""))
+	legacy.backfill_captains()
+	_check(str(old_fleet.get("captain_id", "")) == again,
+		"the lazy backfill is idempotent (deterministic per fleet id)")
+	_check(not NpcFleetsLib.captain_name(old_fleet).is_empty(),
+		"the legacy fleet's captain name resolves from the canon")
+
+
+func _test_nemesis_return_path() -> void:
+	var sim := _make_run()
+	GameState.new_game("portugal", false)
+	var pirate := sim.spawn("pirate", "", 5)
+	_check(not pirate.is_empty(), "the nemesis fixture spawns a pirate")
+	if pirate.is_empty():
+		return
+	var captain_id := str(pirate.get("captain_id", ""))
+	_check(not captain_id.is_empty(), "the pirate carries a canon captain")
+	# The battle-outcome side (W4-C) books the defeat; stance ≤ −3 makes the
+	# captain a nemesis (`60-*` §4.11.15).
+	CaptainsLib.defeat(captain_id, 5, false)
+	CaptainsLib.state(captain_id)["stance"] = -3
+	sim.remove(str(pirate.get("id", "")))
+	_check(str(CaptainsLib.state(captain_id).get("status", ""))
+		== "returning", "the defeated nemesis is on the return queue")
+	_check(int(CaptainsLib.state(captain_id).get("return_day", 0)) == 65,
+		"return_day = day + 60 (got %d)"
+		% int(CaptainsLib.state(captain_id).get("return_day", 0)))
+	# Before day 65 nothing returns; on day 65 the nemesis returns AS a
+	# lightweight nationless hunter carrying its own card.
+	for day in range(6, 66):
+		GameState.day = day
+		sim.tick(day)
+	var hunter := {}
+	for fleet in GameState.npc_fleets:
+		if str(fleet.get("captain_id", "")) == captain_id:
+			hunter = fleet
+			break
+	_check(not hunter.is_empty(),
+		"the nemesis returned on its return_day carrying its own card")
+	if hunter.is_empty():
+		return
+	_check(str(hunter.get("role", "")) == "hunter",
+		"the nemesis returns as a hunter-role fleet (%s)"
+		% str(hunter.get("role", "")))
+	_check(str(hunter.get("nation_id", "")) == "",
+		"the nemesis hunter is nationless (lightweight)")
+	_check(NpcFleetsLib.is_hostile_fleet(hunter),
+		"the nemesis hunter is hostile regardless of reputation")
+	_check(str(hunter.get("hunter_state", "")) == "intel",
+		"the nemesis hunter runs the §4.11.11.1 intel state machine")
+	_check(NpcFleetsLib.is_named_captain(hunter) ==
+		NpcFleetsLib._is_famous_pirate_id(captain_id),
+		"the nemesis's famous-pirate flag derives from captain_id")
+	# A non-nemesis defeat returns the captain to the normal spawn pool.
+	var other := sim.spawn("pirate", "", GameState.day)
+	_check(not other.is_empty(), "a fresh pirate spawns for the release check")
+	var other_id := str(other.get("captain_id", ""))
+	CaptainsLib.defeat(other_id, int(GameState.day), false)
+	sim.remove(str(other.get("id", "")))
+	var states: Dictionary = GameState.captain_states
+	var returned := false
+	for day in range(int(GameState.day) + 1, int(GameState.day) + 62):
+		GameState.day = day
+		sim.tick(day)
+		if str(CaptainsLib.state(other_id).get("status", "")) == "active":
+			returned = true
+			break
+	_check(returned,
+		"a plain defeat returns its captain to the pool after day+60")
+	_check(not CaptainsLib.is_deployed(other_id),
+		"the returned captain is spawnable again (released + active)")
+	GameState.captain_states = {}
 
 
 func _check_quiet(condition: bool, label: String) -> void:
@@ -2422,7 +2625,7 @@ func _test_neutral_docking() -> void:
 func _test_grey_coasters() -> void:
 	var sim := _make_run()
 	# (a) budget + livery: ceil(45 × 0.75) = 34 grey coasters, the neutral
-	# grey marker, the nationless captain pool.
+	# grey marker, the nationless coaster canon cards (§4.11).
 	_check(sim.budget_for("coaster", "") == 34,
 		"the grey tier's budget line is 34 (got %d)"
 		% sim.budget_for("coaster", ""))
@@ -2436,9 +2639,16 @@ func _test_grey_coasters() -> void:
 	if grey.is_empty():
 		return
 	_check(str(grey["nation_id"]) == "",
-		"the grey coaster is nationless (its captain draws the \"\" pool)")
+		"the grey coaster is nationless (the §4.11.14 livery line)")
+	# Phase 8: the nationless coaster carries a nationless COASTER canon
+	# card (the ""-nation cells of the coasters quota, §4.11).
+	var grey_card: Dictionary = CaptainsLib.captain(
+		str(grey.get("captain_id", "")))
+	_check(str(grey_card.get("role", "")) == "coaster"
+		and str(grey_card.get("nation_id", "")) == "",
+		"the grey coaster's captain is a nationless coaster canon card")
 	_check(not str(NpcFleetsLib.captain_name(grey)).is_empty(),
-		"the grey coaster's captain resolves from the nationless pool")
+		"the grey coaster's captain name resolves from the canon")
 	var origin := str(grey.get("dest_port_id", ""))
 	# The journey: origin = a neutral port; dest = the NEAREST port of ANY
 	# ownership (argmin over all ports, computed here independently).
