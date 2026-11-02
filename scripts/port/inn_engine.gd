@@ -18,6 +18,9 @@ extends RefCounted
 
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
+## Phase-8 W5-C (docs/80-UI-UX.md §4.11.1): the limited-talk +1 familiarity
+## goes through the W4-A captains module.
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 
 # --- Rest (docs/30-* §4.6) --------------------------------------------------
 
@@ -56,6 +59,46 @@ const RELIEF_GOLD_THRESHOLD := 1200
 const REASON_HAS_SHIP := "inn.odd_job.has_ship"
 const REASON_NOT_BROKE := "inn.odd_job.not_broke"
 const REASON_OFFICERS := "inn.odd_job.officers"
+
+# --- Limited talk (docs/80-UI-UX.md §4.11.1, Phase-8 W5-C) -------------------
+
+## 受限谈话 limited talk: +1 EXTRA familiarity, **once per port visit**.
+const TALK_FAMILIARITY := 1
+
+## Session-static visit guard (runtime-only, never saved — the same
+## discipline as the tavern's befriend guard): one talk per (port,
+## visit-day). The inn is open around the clock, so the visit-day is the
+## visit's bounds.
+static var _talked: Dictionary = {}
+
+
+## Clears the session-static talk guards (the suites' re-fixture seam).
+static func reset_visit_guards() -> void:
+	_talked.clear()
+
+
+## The guard key of one (port, visit-day) pair.
+static func _visit_key(port_id: String) -> String:
+	return "%s|%d" % [port_id, int(GameState.day)]
+
+
+## True when the visit's one limited talk is still available at `port_id`.
+static func can_talk(port_id: String) -> bool:
+	if port_id.is_empty():
+		return false
+	return not _talked.has(_visit_key(port_id))
+
+
+## The limited talk (§4.11.1): `Captains.add_familiarity(captain_id, +1)`
+## extra for ONE sighted captain per port visit (the caller passes a captain
+## picked from this port's sighting rows). Consumes the visit guard only on
+## success; returns true when the familiarity was applied.
+static func talk(captain_id: String, port_id: String) -> bool:
+	if not can_talk(port_id) or captain_id.is_empty():
+		return false
+	_talked[_visit_key(port_id)] = true
+	CaptainsLib.add_familiarity(captain_id, TALK_FAMILIARITY)
+	return true
 
 
 # --- Rest ------------------------------------------------------------------

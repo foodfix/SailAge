@@ -30,6 +30,20 @@ const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 
+## Phase-8 W5-C (docs/80-* §4.11.1): the limited-talk `ui_strings` keys —
+## reported for the W6-D residual merge; until then the rows render from this
+## local table (the tavern-screen FALLBACK_STRINGS pattern).
+const TALK_FALLBACK_STRINGS := {
+	"inn.talk.result": {
+		"zh": "与{name}闲谈,熟悉度 +1。",
+		"en": "You chatted with {name}; familiarity +1.",
+	},
+	"inn.talk.done": {
+		"zh": "本次进港已谈过话。",
+		"en": "You already talked this visit.",
+	},
+}
+
 ## Emitted when the odd-job button's state machine re-evaluates (`eligible` is
 ## the new value). Tests observe it instead of reaching into the widgets.
 signal odd_job_state_changed(eligible: bool)
@@ -279,6 +293,7 @@ func _bind_captains() -> void:
 	for entry in NpcIntelLib.sightings(port_id, NpcIntelLib.FACILITY_INN):
 		_captain_rows.append({
 			"id": str(entry.get("id", "")),
+			"captain_id": str(entry.get("captain_id", "")),
 			"name": str(entry.get("name", "")),
 			"role": str(entry.get("role", "")),
 			"nation_id": str(entry.get("nation_id", "")),
@@ -291,12 +306,60 @@ func _bind_captains() -> void:
 		_captains_box.add_child(empty)
 		return
 	for entry in _captain_rows:
-		var row := Label.new()
+		var row := HBoxContainer.new()
 		row.name = "Captain_%s" % str(entry["id"])
-		row.text = "%s · %s" % [str(entry["name"]),
+		row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+		var text := Label.new()
+		text.name = "Text"
+		text.text = "%s · %s" % [str(entry["name"]),
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		text.add_theme_color_override("font_color", PaletteLib.TEXT)
+		row.add_child(text)
+		# Phase-8 W5-C (docs/80-* §4.11.1): the 受限谈话 limited-talk verb —
+		# +1 extra familiarity for one sighted captain, once per port visit.
+		var talk := Button.new()
+		talk.name = "Talk"
+		talk.text = I18n.t_key("interact.verb.talk")
+		talk.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
+		var captain_id := str(entry.get("captain_id", ""))
+		if not InnEngineLib.can_talk(port_id):
+			talk.disabled = true
+			talk.tooltip_text = _talk_text("inn.talk.done")
+		elif captain_id.is_empty():
+			talk.disabled = true
+		else:
+			talk.pressed.connect(_on_talk_pressed.bind(captain_id,
+				str(entry["name"])))
+		row.add_child(talk)
 		_captains_box.add_child(row)
+
+
+## The limited-talk click (§4.11.1): one +1 familiarity per port visit, the
+## `inn.talk.result` message records the captain.
+func _on_talk_pressed(captain_id: String, captain_name: String) -> void:
+	var port_id := str(GameState.current_port)
+	if InnEngineLib.talk(captain_id, port_id):
+		last_message_key = "inn.talk.result"
+		message_shown.emit("inn.talk.result")
+		if _hud != null and _hud.has_method("toast_text"):
+			_hud.toast_text(_talk_fmt("inn.talk.result", {"name": captain_name}))
+	_bind()
+
+
+## `I18n` text for a talk key this screen also carries in
+## [constant TALK_FALLBACK_STRINGS] until W6-D merges it.
+func _talk_text(key: String) -> String:
+	if DataLoader.ui_strings.has(key):
+		return I18n.t_key(key)
+	return I18n.t(TALK_FALLBACK_STRINGS.get(key, {}))
+
+
+## [method _talk_text] plus `{name}` substitution (docs/80-* §4.4).
+func _talk_fmt(key: String, values: Dictionary) -> String:
+	var text := _talk_text(key)
+	for name in values:
+		text = text.replace("{%s}" % name, str(values[name]))
+	return text
 
 
 ## The engine's reason, or `inn.odd_job.ineligible` itself when the only

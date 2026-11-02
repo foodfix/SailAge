@@ -36,6 +36,9 @@ const HudLib := preload("res://scenes/ui_shared/hud.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 ## Task L (docs/80-* §4.7.8): the bounty board lists docked hunter captains.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
+## Phase-8 W5-C (docs/80-* §4.11.3): the dossier flag goes through the W4-A
+## module (the panel itself is W6-A's — this screen owns only the entry).
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 
 ## §4.1b port hours (added 2026-11-02): the bay fill action's window guard and
 ## two-hour charge go through the one clock seam.
@@ -77,6 +80,20 @@ const PERMIT_BOUGHT_KEY := "palace.permit.bought"
 const COMMEND_TITLE_KEY := "palace.commend.title"
 const COMMEND_BODY_KEY := "palace.commend.body"
 const COMMEND_CLOSE_KEY := "palace.commend.close"
+
+## Phase-8 W5-C (docs/80-* §4.11.1): the 告发 inform section's `ui_strings`
+## keys — reported for the W6-D residual merge; until then the rows render
+## from this local table (the tavern-screen FALLBACK_STRINGS pattern).
+const INFORM_FALLBACK_STRINGS := {
+	"palace.inform.header": {
+		"zh": "告发海盗",
+		"en": "Inform on pirates",
+	},
+	"palace.inform.action": {
+		"zh": "告发 — 500 金",
+		"en": "Inform — 500g",
+	},
+}
 
 var route_to_port: bool = true
 ## Test seam (the `route_to_port` convention): when set, the permit /
@@ -142,6 +159,19 @@ var bout_pending: bool = false
 var _board_header: Label = null
 var _board_box: VBoxContainer = null
 var _hunter_rows: Array = []
+## Phase-8 W5-C (docs/80-* §4.11.1): the inform-on-pirates section, built
+## under the bounty board — wanted pirate/privateer rows with the fixed 500g
+## reveal + the dossier entry.
+var _inform_header: Label = null
+var _inform_box: VBoxContainer = null
+var _inform_rows: Array = []
+## Fleet ids already informed on this visit → their reveal text (re-rendered
+## after every rebuild, the tavern's `_revealed` discipline).
+var _informed: Dictionary = {}
+## The ids whose dossier entry was taken (the W6-A seam's test read).
+var _dossiers_opened: Array = []
+## The reveal text of the most recent inform ("" before the first).
+var last_inform_text: String = ""
 
 
 func _ready() -> void:
@@ -187,6 +217,7 @@ func _ready() -> void:
 	_port_id = _read_current_port()
 	_nation_id = PalaceEngineLib.nation_of(_port_id)
 	_build_bounty_board()
+	_build_inform_section()
 	refresh()
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)
@@ -435,6 +466,7 @@ func refresh() -> void:
 	_bind_tournament()
 	_bind_retire()
 	_bind_bounty_board()
+	_bind_inform_rows()
 	_apply_closed_state()
 	_check_commendation()
 
@@ -580,6 +612,7 @@ func _build_bounty_board() -> void:
 
 ## The docked hunter captains sighted at this port (§4.7.8: the bounty board
 ## is a hunter's ONLY surface — the facility roll never sends one elsewhere).
+## Phase 8 (§4.11.3): every bounty row gains the open-dossier action.
 func _bind_bounty_board() -> void:
 	if _board_box == null:
 		return
@@ -595,6 +628,7 @@ func _bind_bounty_board() -> void:
 	for entry in NpcIntelLib.sightings(_port_id, NpcIntelLib.FACILITY_PALACE):
 		_hunter_rows.append({
 			"id": str(entry.get("id", "")),
+			"captain_id": str(entry.get("captain_id", "")),
 			"name": str(entry.get("name", "")),
 			"role": str(entry.get("role", "")),
 			"nation_id": str(entry.get("nation_id", "")),
@@ -607,12 +641,191 @@ func _bind_bounty_board() -> void:
 		_board_box.add_child(empty)
 		return
 	for entry in _hunter_rows:
-		var row := Label.new()
+		var row := HBoxContainer.new()
 		row.name = "Hunter_%s" % str(entry["id"])
-		row.text = "%s · %s" % [str(entry["name"]),
+		row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+		var text := Label.new()
+		text.name = "Text"
+		text.text = "%s · %s" % [str(entry["name"]),
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		text.add_theme_color_override("font_color", PaletteLib.TEXT)
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(text)
+		var dossier := Button.new()
+		dossier.name = "Dossier"
+		dossier.text = I18n.t_key("dossier.open_from_bounty")
+		dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
+		_style_row_button(dossier)
+		dossier.pressed.connect(_open_dossier.bind(
+			str(entry.get("captain_id", ""))))
+		row.add_child(dossier)
 		_board_box.add_child(row)
+
+
+# --- Inform on pirates + the dossier entry (§4.11.1/§4.11.3, Phase-8 W5-C) --
+
+## `I18n` text for an inform key this screen also carries in
+## [constant INFORM_FALLBACK_STRINGS] until W6-D merges it.
+func _inform_text(key: String) -> String:
+	if DataLoader.ui_strings.has(key):
+		return I18n.t_key(key)
+	return I18n.t(INFORM_FALLBACK_STRINGS.get(key, {}))
+
+
+## One flat row button's chrome (the code-built sections have no scene
+## stylebox; the shared tavern-button look keeps the board readable).
+func _style_row_button(button: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = PaletteLib.PANEL_BG
+	normal.border_color = PaletteLib.PANEL_LINE
+	normal.set_border_width_all(2)
+	normal.set_content_margin_all(PaletteLib.BASE_UNIT)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.border_color = PaletteLib.ACCENT
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("focus", hover)
+
+
+## The inform rows currently rendered (`{id, captain_id, name, tier,
+## reward_gold}` — the headless seam; the same at-sea wanted set the tavern
+## posters draw, §4.7.8).
+func inform_rows() -> Array:
+	return _inform_rows.duplicate()
+
+
+## The ids whose dossier entry this screen opened (the W6-A seam's read).
+func dossiers_opened() -> Array:
+	return _dossiers_opened.duplicate()
+
+
+## Builds the inform section shell once (header + rows box), under the bounty
+## board and above the footer.
+func _build_inform_section() -> void:
+	var layout: Node = _board_box.get_parent()
+	_inform_header = Label.new()
+	_inform_header.name = "InformHeader"
+	_inform_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	layout.add_child(_inform_header)
+	_inform_box = VBoxContainer.new()
+	_inform_box.name = "InformRows"
+	_inform_box.add_theme_constant_override("separation", 2)
+	layout.add_child(_inform_box)
+	layout.move_child(_inform_header, _board_box.get_index() + 1)
+	layout.move_child(_inform_box, _inform_header.get_index() + 1)
+
+
+## Binds the inform rows: every at-sea pirate/privateer within the poster
+## radius (`70-*` §4.5: one wanted captain per inform), each with the fixed
+## 500g reveal action and the dossier entry (§4.11.3: bounty rows link
+## dossiers). Already-paid reveals re-render their text line (the §4.7.8
+## reveal-text discipline: the answer stays after the rebuild).
+func _bind_inform_rows() -> void:
+	if _inform_box == null:
+		return
+	for child in _inform_box.get_children():
+		_inform_box.remove_child(child)
+		child.queue_free()
+	_inform_rows = []
+	if _port_id.is_empty() or GameState.player.is_empty():
+		_inform_header.visible = false
+		return
+	var wanted: Array = NpcIntelLib.wanted_posters(_port_id)
+	if wanted.is_empty() and _informed.is_empty():
+		_inform_header.visible = false
+		last_inform_text = ""
+		return
+	_inform_header.visible = true
+	_inform_header.text = _inform_text("palace.inform.header")
+	for poster in wanted:
+		_inform_rows.append({
+			"id": str(poster.get("id", "")),
+			"captain_id": str(poster.get("captain_id", "")),
+			"name": str(poster.get("name", "")),
+			"tier": int(poster.get("tier", 1)),
+			"reward_gold": int(poster.get("reward_gold", 0)),
+		})
+	for row in _inform_rows:
+		_inform_box.add_child(_build_inform_row(row))
+	for fleet_id in _informed:
+		var line := Label.new()
+		line.name = "InformText_%s" % str(fleet_id)
+		line.text = str(_informed[fleet_id])
+		line.add_theme_color_override("font_color", PaletteLib.ACCENT)
+		_inform_box.add_child(line)
+
+
+## One inform row: the wanted caption (the §4.7.8 poster title), the fixed
+## 500g inform action, and the dossier entry.
+func _build_inform_row(row: Dictionary) -> Control:
+	var box := HBoxContainer.new()
+	box.name = "Inform_%s" % str(row["id"])
+	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+
+	var text := Label.new()
+	text.name = "Text"
+	text.text = I18n.fmt("captain.poster.title", {
+		"name": str(row.get("name", "")),
+		"tier": int(row.get("tier", 1)),
+	})
+	text.add_theme_color_override("font_color", PaletteLib.BAD)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(text)
+
+	var inform := Button.new()
+	inform.name = "Inform"
+	inform.text = _inform_text("palace.inform.action")
+	inform.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
+	_style_row_button(inform)
+	if not PalaceEngineLib.can_inform(_port_id):
+		inform.disabled = true
+		inform.tooltip_text = I18n.t_key("captain.reveal.no_gold")
+	else:
+		inform.pressed.connect(inform_on.bind(str(row.get("id", ""))))
+	box.add_child(inform)
+
+	var dossier := Button.new()
+	dossier.name = "Dossier"
+	dossier.text = I18n.t_key("dossier.open_from_bounty")
+	dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
+	_style_row_button(dossier)
+	dossier.pressed.connect(_open_dossier.bind(str(row.get("captain_id", ""))))
+	box.add_child(dossier)
+	return box
+
+
+## The inform click (§4.11.1): the fixed 500g reveal — the engine charges and
+## returns the bounty-pinpoint payload; this screen formats the existing
+## `captain.reveal.text` line (the §4.7.8 poster shape) and keeps it across
+## rebuilds. Returns the text ("" on refusal).
+func inform_on(fleet_id: String) -> String:
+	var position: Dictionary = PalaceEngineLib.inform_on_pirates(
+		_port_id, fleet_id)
+	if position.is_empty():
+		_show_toast("captain.reveal.no_gold")
+		return ""
+	var cell: Vector2i = position.get("cell", Vector2i.ZERO)
+	last_inform_text = I18n.fmt("captain.reveal.text", {
+		"name": str(position.get("name", "")),
+		"x": cell.x, "y": cell.y,
+		"port": str(position.get("nearest_port_name", "")),
+	})
+	_informed[fleet_id] = last_inform_text
+	refresh()
+	return last_inform_text
+
+
+## The dossier entry seam (§4.11.3, W6-A's handoff): marks the captain's
+## dossier seen through the shared module; the panel itself is W6-A's, so the
+## placeholder plays the existing `dossier.open_from_bounty` toast line.
+## Returns true when the entry was taken (a known captain id).
+func _open_dossier(captain_id: String) -> bool:
+	if captain_id.is_empty() or CaptainsLib.captain(captain_id).is_empty():
+		return false
+	CaptainsLib.mark_dossier_seen(captain_id)
+	_dossiers_opened.append(captain_id)
+	_show_toast("dossier.open_from_bounty")
+	return true
 
 
 # --- Permits (docs/30-* §4.10, 80-* §4.7.13 — Phase 7) ------------------------
