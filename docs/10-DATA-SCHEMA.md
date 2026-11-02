@@ -171,6 +171,8 @@ Types use §3.1 names plus JSON primitives. `[]T` = array of T.
       "start_ship_type_id": "caravel",
       "start_gold": 5000,
       "start_reputation": 20,
+      "bonus_attribute": "intellect",
+      "bonus_skill": "navigation",
       "description": {
         "zh": "先驱航海之国。从里斯本出发,以卡拉维尔帆船开拓贸易航线。",
         "en": "The pioneering seafaring nation. Sail from Lisbon in a caravel and blaze new trade routes."
@@ -738,6 +740,7 @@ personality pools and the appearance vocabulary:
 | `given_names` | object `nation_id → []L10nString` | same key set; ≈ 30 parts per set |
 | `personalities` | object `{all: []id, roles: {role: []id}}` | one shared tag vocabulary (`all`; snake_case ids; ≥ 8 tags) and per-role pools (`roles.<pool_id>` ⊆ `all`, 2–5 tags each) — one pool per §4.11 captain role, plus one per officer native role (pool id = the native-role id; the native-role list is `50-*` §4.5's pin); every tag has a `char.personality.<tag>` `ui_strings.json` row |
 | `appearance` | object of exactly 4 axes | `face`, `beard`, `eyes`, `hair`; ≥ 4 values per axis; every value has a `char.appearance.<axis>.<value>` `ui_strings.json` row |
+| `officer_bios` | object `role → []L10nString-template` | per-officer-native-role zh/en bio templates for the generated officer regulars; `{n}` substitutes the nation display name (from `data/nations.json`); the 6 starter bios and the 24 legend bios stay hand-authored in `tools/officer_overrides.json` and are never templated |
 
 Assembly: a generated person's display name is drawn without replacement
 from its nation's `given_names` × `surnames` (assembled in the locale's
@@ -1246,7 +1249,7 @@ the post → pipeline table `IMPLEMENT-Phase8.md` §2.7):
       "slot_type": "flagship",
       "prereq": {"medicine": 20},
       "desc": {"zh": "船医随船,坏血病更晚到来。", "en": "A surgeon aboard delays the scurvy."},
-      "advice": {"low_water": {"days": 5}}
+      "advice": {"water_low": {"days": 5}}
     },
     {
       "post_id": "captain",

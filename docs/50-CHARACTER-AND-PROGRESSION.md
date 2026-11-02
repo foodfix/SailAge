@@ -67,10 +67,10 @@ creation, appointment, hail screens), `90-*` (save v9).
    | id | name | bonus |
    |---|---|---|
    | `background_deckhand` | 甲板水手 Deckhand | constitution +3 / seamanship +5 |
-   | `background_navy_cadet` | 海军见习生 Navy Cadet | courage +3 / navigation +5 |
+   | `background_navy_cadet` | 海军见习生 Naval Cadet | courage +3 / navigation +5 |
    | `background_merchant_apprentice` | 商行学徒 Merchant Apprentice | charisma +3 / negotiation +5 |
    | `background_cartographer_apprentice` | 制图学徒 Cartographer's Apprentice | intellect +3 / cartography +5 |
-   | `background_tavern_errand` | 酒馆跑腿 Tavern Errand-boy | luck +3 / rumour +5 |
+   | `background_tavern_errand` | 酒馆跑腿 Tavern Runner | luck +3 / rumour +5 |
    | `background_fencing_student` | 剑馆弟子 Fencing Student | courage +3 / swordplay +5 |
 
 3. **Step ② free points 自由点数** — attributes **+5 total**, skills
