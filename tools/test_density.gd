@@ -19,8 +19,9 @@ extends Node
 ##     never culls, deserted = zero spawns + zero contacts, deserted → extreme
 ##     repopulates over days);
 ##   5 the S19 modal over S4 (footer entry, modal rule, Esc, zh/en);
-##   6 the perf gates (docs/60-* §4.11.11.5): day tick ≤ 50 ms @ normal cap
-##     289, ≤ 150 ms @ extreme, linear marginal cost, save ≤ 2 MB @ extreme.
+##   6 the perf gates (docs/60-* §4.11.11.5): day tick ≤ 75 ms @ the filled
+##     normal cap, ≤ 350 ms @ extreme, linear marginal cost, save ≤ 2 MB
+##     @ extreme.
 ##
 ## Isolation: this suite never writes `user://` (the save round-trip and the
 ## payload-size gate serialize through `SaveSystem.snapshot()` to a string),
@@ -289,6 +290,21 @@ func _test_initial_fill() -> void:
 	_check(sim.core_cap() == 318,
 		"the normal core cap is 318 (280 nation roles + 38 grey, got %d)"
 		% sim.core_cap())
+	# W4-D extension: the cap arithmetic re-derived as a closed form from
+	# the data (npc_config budgets × the §4.1.1 role formulas) and the
+	# §4.1.1 global identity. The Phase-7 record's 307 + 16 = 323 predates
+	# the 2026-11-02 five-port amendment (145 → 150 ports), which re-derives
+	# the normal cap the same way — see the printed closed form below.
+	var derived := _derive_normal_core()
+	_check(sim.core_cap() == derived,
+		"the core cap equals the data closed form (derived %d, got %d)"
+		% [derived, sim.core_cap()])
+	_check(sim.global_cap() == derived + 16,
+		("global = core + 16 slack (6 treasure + ≤ 6 hunters + 4 spare: "
+		+ "%d + 16 = %d, got %d)")
+		% [derived, derived + 16, sim.global_cap()])
+	print("  cap closed form: core %d + 16 slack = %d global (trickle %d/day)"
+		% [derived, derived + 16, sim.trickle_per_day()])
 	var half: int = sim.core_cap() / 2
 	var filled: int = GameState.npc_fleets.size()
 	# The fill targets exactly half the cap; a failed spawn draw (no legal
@@ -593,8 +609,55 @@ func _test_s19_modal() -> void:
 
 # --- 6. The perf gates (docs/60-* §4.11.11.5) --------------------------------
 
+## The normal-preset core cap derived from the data — npc_config budgets ×
+## the §4.1.1 role formulas (ceil per role), the §4.11.14 nationless-coaster
+## line, and the pirate row at its §4.1.1 core share (8 base + 17 unpatrolled
+## zones ≈ 25, the Phase-7 measured composition; the validator's
+## `UNPATROLLED_ZONES_PHASE7`). The same closed form `test_captain_lifecycle`
+## derives; pinned here so the arithmetic never drifts from the data.
+func _derive_normal_core() -> int:
+	var config: Dictionary = DataLoader.npc_config
+	var budgets: Dictionary = config.get("budgets", {})
+	var own: Dictionary = {}
+	var neutral := 0
+	for port in DataLoader.ports_list:
+		var nation_id := str((port as Dictionary).get("nation_id", ""))
+		if nation_id.is_empty():
+			neutral += 1
+		else:
+			own[nation_id] = int(own.get(nation_id, 0)) + 1
+	var pairs := {}
+	for nation in DataLoader.nations_list:
+		for rival in (nation as Dictionary).get("rivals", []):
+			var key := [str((nation as Dictionary).get("id", "")), str(rival)]
+			key.sort()
+			pairs[key] = true
+	var total := 0
+	for nation_id in own:
+		var n := int(own[nation_id])
+		total += ceili(n * float(budgets.get("traders_mult_per_port", 1.25)))
+		total += ceili(n * float(budgets.get("coasters_mult_per_port", 0.75)))
+		var raw := ceili(n / float(budgets.get("patrols_div_ports", 6)))
+		total += maxi(int(budgets.get("patrols_min", 1)), raw)
+		total += ceili(float(budgets.get("couriers_per_nation", 2)))
+		var in_pair := false
+		for nation in DataLoader.nations_list:
+			if str((nation as Dictionary).get("id", "")) != nation_id:
+				continue
+			for rival in (nation as Dictionary).get("rivals", []):
+				var key := [nation_id, str(rival)]
+				key.sort()
+				if pairs.has(key):
+					in_pair = true
+		if in_pair:
+			total += ceili(float(budgets.get("privateers_per_rivalry", 2)))
+	total += ceili(neutral * float(config.get("neutral_coasters_mult", 0.75)))
+	total += 8 + 17  # the §4.1.1 pirate row ≈ 25 at normal (base + zones)
+	return total
+
+
 func _test_perf_gates() -> void:
-	# Normal: settled at cap 289, ≥ 30 timed ticks.
+	# Normal: settled at the filled core cap, ≥ 30 timed ticks.
 	var sim := _make_run("normal")
 	var settled_day := _drive_to_cap(sim, 2, 220, sim.core_cap())
 	var n_normal: int = GameState.npc_fleets.size()
@@ -605,7 +668,7 @@ func _test_perf_gates() -> void:
 	_check(n_normal >= 250,
 		"the normal probe runs at the filled cap (%d fleets)" % n_normal)
 	_check(normal_avg <= GATE_NORMAL_MS,
-		"the day tick averages ≤ %.0f ms at cap 289 (%.1f ms over %d ticks)"
+		"the day tick averages ≤ %.0f ms at the filled normal cap (%.1f ms over %d ticks)"
 		% [GATE_NORMAL_MS, normal_avg, PERF_TICKS])
 
 	# Extreme: ×4 budgets (~4× fleets), ≤ 150 ms, linear marginal cost.
