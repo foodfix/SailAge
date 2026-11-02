@@ -423,7 +423,7 @@ func effect_text(officer_id: String) -> String:
 ## task may add only the §4.7.6 keys:
 ##   * sighting radius → `chart.hint` ("Explored waters"): the radius is the
 ##     number of tiles of water/ports your navigator reveals;
-##   * speed          → `world.speed` with the placeholder emptied ("Speed");
+##   * speed          → `ui.speed.noun` ("Speed");
 ##   * battle/duel    → `battle.title` ("Battle"), the surface combat feeds
 ##     (`50-*` §4.2: "no Phase-1 effect (consumed by `60-*`)").
 static func _derived_for(role: String, stat_key: String) -> String:
@@ -453,7 +453,7 @@ static func _derived_for(role: String, stat_key: String) -> String:
 				CharacterLib.effective_stat("seamanship") - amount
 			)
 			return "%s %+d%%" % [
-				_noun("world.speed"),
+				_noun("ui.speed.noun"),
 				int(round((with_speed - without_speed) * 100.0)),
 			]
 		"combat":

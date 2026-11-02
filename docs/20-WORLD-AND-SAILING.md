@@ -143,6 +143,16 @@ the modes differ only in what produces the steps.
 - `GameState.day` is an integer; a fractional accumulator
   `world.clock_fraction ∈ [0,1)` holds sub-day progress (not saved — saving
   happens only in port, where the fraction is always reset to 0).
+- **Time-of-day display (amended 2026-11-02).** Sub-day progress renders as
+  wall-clock time `HH:MM = floor(clock_fraction × 1440)`; the fraction never
+  reaches 1.0, so 23:59 is the last minute shown and the day rolls over at
+  00:00. Surfaces — every *label* that shows the day: the sailing HUD top
+  bar, the fleet-panel summary, the inn, the provisioning dialog and the
+  character panel (`world.day_time`, `char.day`). **Excluded:** the battle
+  screen (`sim.day` is a battle-local counter, no world clock), the
+  save-slot list (renders saved metadata; the fraction is not saved), and
+  narrative sentence keys (`world.arrive`, `port.day_greeting` — docking
+  resets the fraction to 0, so a time there would always read 00:00).
 - **Day-tick order (locked, Phase 5; Phase 6 inserts the drift push at
   sea).** When `clock_fraction ≥ 1.0`:
   subtract 1.0, `day += 1`, then run strictly in order:

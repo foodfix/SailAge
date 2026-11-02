@@ -858,11 +858,13 @@ func _test_stat_block() -> void:
 	var line3: HBoxContainer = stats.get_node("SpeedLine")
 	var speed_text := (line3.get_node("Speed") as Label).text
 	_check(speed_text == I18n.fmt("fleet.stat.speed", {
-			"speed": SailingSimLib.effective_speed(),
-			"max": FleetLib.ship_stat(flagship, "speed"),
+			"speed": SailingSimLib.knots_text_for(
+				SailingSimLib.effective_speed()),
+			"max": SailingSimLib.knots_text_for(
+				FleetLib.ship_stat(flagship, "speed")),
 			"wind": I18n.t_key("world.weather.fair"),
 		}),
-		"the flagship line shows the current effective speed + the wind (%s)"
+		"the flagship line shows the current effective speed in knots + the wind (%s)"
 		% speed_text)
 	_check(speed_text.contains(I18n.t_key("world.weather.fair")),
 		"the wind factor is the localised weather name (%s)" % speed_text)
@@ -870,11 +872,13 @@ func _test_stat_block() -> void:
 	var escort_line: HBoxContainer = rows.get_child(1).get_node("Stats/SpeedLine")
 	_check((escort_line.get_node("Speed") as Label).text == I18n.fmt(
 			"fleet.stat.speed", {
-				"speed": FleetLib.ship_stat(GameState.fleet[1], "speed"),
-				"max": FleetLib.ship_stat(GameState.fleet[1], "speed"),
+				"speed": SailingSimLib.knots_text_for(
+					FleetLib.ship_stat(GameState.fleet[1], "speed")),
+				"max": SailingSimLib.knots_text_for(
+					FleetLib.ship_stat(GameState.fleet[1], "speed")),
 				"wind": I18n.t_key("world.weather.fair"),
 			}),
-		"a non-flagship shows its hull's base speed (%s)"
+		"a non-flagship shows its hull's base speed in knots (%s)"
 		% (escort_line.get_node("Speed") as Label).text)
 
 	# Line 4: supplies with days, per ship (§4.10 on its own stack).

@@ -85,7 +85,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `money` | Integer ≥ 0, unit: gold pieces (g) |
 | `day` | Integer ≥ 0, the game-clock tick unit (1 day per tick) |
 | `tile` | Unit of distance/size on the world grid |
-| `cargo unit` | Abstract hold space; 1 unit of any good, provision, or water = 1 cargo unit |
+| `cargo unit` | Abstract hold space; 1 unit of any good, provision, or water = 1 cargo unit. **Display convention (amended 2026-11-02):** 1 cargo unit renders as **1 ton (t)** in every player-facing label (HUD, panels, dialogs) — display-only; storage, prices and consumption keep counting abstract units |
 | `tilePos` | `{"x": int, "y": int}` with `0 ≤ x < 4320`, `0 ≤ y < 2160` (see §6). `x` wraps: every consumer (movement, BFS, camera, click) takes `x mod 4320`; `y` is bounded and never wraps. |
 | `lat` / `lon` | WGS84 decimal degrees: `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`. The geographic truth for ports and discoveries; the grid cell is derived by §6.1's projection + harbor-snap rule. |
 

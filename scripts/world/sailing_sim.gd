@@ -346,6 +346,37 @@ static func move_cost(heading: String = "") -> float:
 	return 1.0 / float(speed)
 
 
+## --- Speed display (docs/40-* §4.4 speed units, amended 2026-11-02) --------
+
+## Nautical miles per world tile: the 12-tiles/degree grid (`20-*` §4.1) makes
+## one tile 1/12 degree of latitude = 5 nm. Locked display constant, never a
+## simulation factor.
+const NM_PER_TILE := 5.0
+## Hours per game day — the day is a calendar day (`20-*` §4.3).
+const HOURS_PER_DAY := 24.0
+
+
+## The HUD speed in **knots** (`40-*`): `tiles/day × 5 nm ÷ 24 h`, snapped to
+## one decimal (base 16/20/24 tiles/day = 3.3/4.2/5.0 kn). Display-only — the
+## simulation keeps counting tiles/day; every label shows knots through
+## [method speed_knots_text], never raw tiles/day.
+static func speed_knots() -> float:
+	return snappedf(float(effective_speed()) * NM_PER_TILE / HOURS_PER_DAY, 0.1)
+
+
+## Pre-formatted one-decimal knots text (the single rendering path for
+## [method speed_knots], so HUD and panels cannot disagree about precision).
+static func speed_knots_text() -> String:
+	return knots_text_for(effective_speed())
+
+
+## Knots text for an arbitrary tiles/day figure (a per-hull row, a cap, …) —
+## the same `40-*` conversion as [method speed_knots], one decimal.
+static func knots_text_for(tiles_per_day: int) -> String:
+	var knots := snappedf(float(tiles_per_day) * NM_PER_TILE / HOURS_PER_DAY, 0.1)
+	return "%.1f" % knots
+
+
 # --- Weather (docs/20-* §4.7, docs/50-* §4.2) -------------------------------
 
 ## Seeded RNG for the weather roll, injectable for deterministic tests via
@@ -593,6 +624,23 @@ static func month_for(day: int) -> int:
 	return int(floor(float(posmod(day - 1, MONTH_DAYS * YEAR_MONTHS)) / float(MONTH_DAYS))) + 1
 
 
+## Time-of-day in minutes `[0, 1439]`, the display rule locked in `20-*` §4.3
+## (amended 2026-11-02): `floor(clock_fraction × 1440)`. The fraction is
+## clamped below 1.0 everywhere (`advance_clock`), so 23:59 is the last minute
+## a day can show and 00:00 is the rollover. A world without the field (no
+## run, fresh port) reads as midnight.
+static func time_of_day_minutes() -> int:
+	var fraction := float(GameState.world.get("clock_fraction", 0.0))
+	return clampi(int(floor(fraction * 1440.0)), 0, 1439)
+
+
+## The `HH:MM` wall-clock text for the current sub-day clock (`20-*` §4.3).
+## Pre-formatted here so every caller renders the identical string.
+static func clock_text() -> String:
+	var minutes := time_of_day_minutes()
+	return "%02d:%02d" % [minutes / 60, minutes % 60]
+
+
 # --- Compass domain (docs/20-* §4.4; every heading stays in the 8-dir domain) --
 
 ## The 8-dir id of a one-tile move delta, or "" when the delta is not an
@@ -807,6 +855,19 @@ static func fleet_supply_days() -> int:
 		FleetLib.supplies("provisions"), FleetLib.supplies("water"),
 		FleetLib.total_crew()
 	)
+
+
+## Days of supply for **one kind** ("provisions" | "water") against the pooled
+## crew — the per-kind half of the §4.10 readout the HUD bottom bar and the
+## provisioning rows render (`80-*` §4.5 amended). Same convention as
+## [method supply_days]: 0 when there is no crew (nothing is consumed, and the
+## sailing gate already refuses to leave). The single implementation — callers
+## render it, never recompute it.
+static func kind_supply_days(kind: String) -> int:
+	var need := daily_need(FleetLib.total_crew())
+	if need <= 0:
+		return 0
+	return int(floor(float(maxi(FleetLib.supplies(kind), 0)) / float(need)))
 
 
 ## `ui_strings.json` key explaining why the fleet may not leave port, or `""`

@@ -286,10 +286,14 @@ func _bind_header() -> void:
 
 
 ## The day / gold / morale figures the HUD top bar shows (`80-*` §4.5), built
-## from the same three `ui_strings` keys so the panel can never disagree.
+## from the same three `ui_strings` keys so the panel can never disagree. The
+## day carries the wall-clock time (`20-*` §4.3 amended; `world.day_time`).
 func _hud_line() -> String:
 	return " · ".join([
-		I18n.fmt("world.day", {"day": GameState.day}),
+		I18n.fmt("world.day_time", {
+			"day": GameState.day,
+			"time": SailingSimLib.clock_text() if GameState.day > 0 else "-",
+		}),
 		I18n.fmt("ui.gold_amount", {"gold": GameState.gold}),
 		I18n.fmt("world.morale", {"amount": GameState.morale}),
 	])
@@ -339,7 +343,7 @@ func _bind_totals() -> void:
 	title_row.add_theme_constant_override("separation", 12)
 	title_row.add_child(title)
 	var speed := _label(I18n.fmt("world.speed", {
-		"speed": SailingSimLib.effective_speed(),
+		"speed": SailingSimLib.speed_knots_text(),
 	}), PaletteLib.PANEL_LINE)
 	speed.name = "Speed"
 	speed.custom_minimum_size.x = 180
@@ -491,8 +495,10 @@ func _add_row(index: int, ship) -> void:
 	speed_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
 	var speed := _label(
 		I18n.fmt("fleet.stat.speed", {
-			"speed": _row_speed(index),
-			"max": FleetLib.ship_stat(data, "speed"),
+			"speed": SailingSimLib.knots_text_for(_row_speed(index)),
+			"max": SailingSimLib.knots_text_for(
+				FleetLib.ship_stat(data, "speed")
+			),
 			"wind": _wind_name(),
 		}),
 		PaletteLib.TEXT

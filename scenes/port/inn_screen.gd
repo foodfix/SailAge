@@ -22,6 +22,8 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
+## The clock text in the day label (`20-*` §4.3 amended).
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Task L (docs/80-* §4.7.8): the "captains resting" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 
@@ -173,7 +175,9 @@ func _bind() -> void:
 	_gold_label.text = I18n.fmt(
 		"ui.gold_amount", {"gold": HudLib.format_thousands(GameState.gold)}
 	)
-	_day_label.text = I18n.fmt("world.day", {"day": GameState.day})
+	_day_label.text = I18n.fmt("world.day_time", {
+		"day": GameState.day, "time": SailingSimLib.clock_text(),
+	})
 
 	_bind_rest()
 	_bind_odd_job()

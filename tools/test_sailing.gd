@@ -46,6 +46,7 @@ func _ready() -> void:
 	_test_clock_boundaries()
 	_test_speed_table()
 	_test_heading_pipeline()
+	_test_display_formats()
 	_test_port_day()
 	_test_no_weather_or_morale_mutation()
 	_report()
@@ -373,6 +374,52 @@ func _test_clock_boundaries() -> void:
 	_check(GameState.gold == 850,
 		"3 ticks paid 3 × 30g (940 → %d)" % GameState.gold)
 	EventBus.day_advanced.disconnect(counter)
+
+
+# --- Display formats (20-* §4.3 amended, 40-* §4.4 amended, 10-* §3.1) -----
+
+## The wall-clock text, the knot conversion and the per-kind days-of-supply —
+## the display layer over the unchanged simulation numbers.
+func _test_display_formats() -> void:
+	_make_run(15, 60, 45, 1000)
+
+	# Wall clock: `floor(fraction × 1440)`; the sub-1.0 clamp tops out at 23:59.
+	GameState.world["clock_fraction"] = 0.0
+	_check(SailingSimLib.time_of_day_minutes() == 0
+		and SailingSimLib.clock_text() == "00:00",
+		"clock_text: fraction 0 renders 00:00")
+	GameState.world["clock_fraction"] = 0.5
+	_check(SailingSimLib.time_of_day_minutes() == 720
+		and SailingSimLib.clock_text() == "12:00",
+		"clock_text: half a day renders 12:00")
+	GameState.world["clock_fraction"] = 0.999999999
+	_check(SailingSimLib.time_of_day_minutes() == 1439
+		and SailingSimLib.clock_text() == "23:59",
+		"clock_text: the sub-1.0 clamp renders 23:59, never 24:00")
+	GameState.world["clock_fraction"] = 0.0
+
+	# Knots: tiles/day × 5 nm ÷ 24 h, one decimal — base 16/20/24.
+	_check(SailingSimLib.knots_text_for(16) == "3.3"
+		and SailingSimLib.knots_text_for(20) == "4.2"
+		and SailingSimLib.knots_text_for(24) == "5.0",
+		"knots_text_for: base 16/20/24 tiles/day = 3.3/4.2/5.0 kn")
+	# The fair-weather full-crew caravel run above is the §4.4 worked case
+	# (effective speed 20), so the HUD figure is 4.2 kn.
+	_check(SailingSimLib.speed_knots_text() == "4.2",
+		"speed_knots_text: the worked-case fleet shows 4.2 kn")
+
+	# Per-kind days-of-supply: need = ceil(15/5) = 3 → 60 food = 20 days,
+	# 45 water = 15 days (the §4.10 numbers, via the single implementation).
+	_check(SailingSimLib.kind_supply_days("provisions") == 20,
+		"kind_supply_days: 60 provisions at need 3 = 20 days")
+	_check(SailingSimLib.kind_supply_days("water") == 15,
+		"kind_supply_days: 45 water at need 3 = 15 days")
+	# No crew → 0 (nothing consumed; the sailing gate refuses anyway), the
+	# same convention as the pooled `supply_days`.
+	GameState.fleet[0]["crew"] = 0
+	_check(SailingSimLib.kind_supply_days("provisions") == 0,
+		"kind_supply_days: no crew reads 0 days")
+	GameState.fleet[0]["crew"] = 15
 
 
 # --- §4.4 speed table (re-asserted: it is a T7 done-when) -----------------

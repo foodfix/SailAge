@@ -627,7 +627,9 @@ func _bind_static() -> void:
 	var port_name := I18n.t(port.get("name", {})) if not port.is_empty() else "-"
 	_header.text = "%s · %s · %s" % [
 		port_name,
-		I18n.fmt("world.day", {"day": GameState.day}),
+		I18n.fmt("world.day_time", {
+			"day": GameState.day, "time": SailingSimLib.clock_text(),
+		}),
 		I18n.fmt("ui.gold_amount", {"gold": format_thousands(GameState.gold)}),
 	]
 	for kind in _rows:
@@ -671,8 +673,7 @@ func _refresh_all() -> void:
 func _refresh_row(kind: String) -> void:
 	var refs: Dictionary = _rows[kind]
 	var amount := FleetLib.supplies(kind)
-	var need := SailingSimLib.daily_need(FleetLib.total_crew())
-	var days := 0 if need <= 0 else int(floor(float(amount) / float(need)))
+	var days := SailingSimLib.kind_supply_days(kind)
 	(refs["label"] as Label).text = I18n.fmt("fleet.stat.supply", {
 		"kind": _kind_name(kind), "amount": amount, "days": days,
 	})

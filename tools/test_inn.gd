@@ -475,8 +475,9 @@ func _test_scene_states() -> void:
 	_check(gold.text == I18n.fmt("ui.gold_amount", {"gold": "1,000"}),
 		"status box shows 1,000g (%s)" % gold.text)
 	var day: Label = inn.get_node("Layout/VBox/Status/Margin/StatusVBox/Day")
-	_check(day.text == I18n.fmt("world.day", {"day": 10}),
-		"status box shows day 10 (%s)" % day.text)
+	_check(day.text == I18n.fmt("world.day_time", {
+			"day": 10, "time": SailingSimLib.clock_text()}),
+		"status box shows day 10 with the clock (%s)" % day.text)
 
 	var rest: Button = inn.get_node("Layout/VBox/Actions/RestButton")
 	_check(rest.text == I18n.fmt("inn.rest_cost", {"day": 3, "price": 30}),
@@ -505,7 +506,8 @@ func _test_scene_states() -> void:
 		"the rest button raised morale 70 → 80 (got %d)" % GameState.morale)
 	_check(inn.last_message_key == "inn.rest_done",
 		"the rest button reports inn.rest_done (got '%s')" % inn.last_message_key)
-	_check(day.text == I18n.fmt("world.day", {"day": 13}),
+	_check(day.text == I18n.fmt("world.day_time", {
+			"day": 13, "time": SailingSimLib.clock_text()}),
 		"the status box day follows the ledger (%s)" % day.text)
 
 	# (c) Empty purse: rest disabled with inn.no_gold.

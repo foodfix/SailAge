@@ -24,6 +24,8 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
+## The clock text in the header day label (`20-*` §4.3 amended).
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## S18 officers detail panel (docs/80-* §4.6.2): the footer button opens it, so
 ## the roster has the two entry points the doc names (S4's facility list and the
 ## character panel). Preloaded by path so a cold class cache is harmless.
@@ -244,7 +246,10 @@ func _refresh() -> void:
 	_title.text = I18n.t_key("char.title")
 	_nation.text = "%s · %s" % [
 		I18n.t(nation.get("name", {})),
-		I18n.fmt("char.day", {"day": GameState.day}),
+		I18n.fmt("char.day", {
+			"day": GameState.day,
+			"time": SailingSimLib.clock_text() if GameState.day > 0 else "-",
+		}),
 	]
 
 	var level := CharacterLib.current_level()

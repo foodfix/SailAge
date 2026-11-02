@@ -17,6 +17,8 @@ const WorldScene := preload("res://scenes/world/world_map.tscn")
 const DialogScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 const SailPathLib := preload("res://scripts/world/sail_path.gd")
+## The HUD script (statics: `supply_line` / `supply_days_color`, §4.5 amended).
+const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## Phase-5 task J: the fleet ecology replaced the 3-marker system; the
 ## battle-resume fixtures build §4.15 fleet dicts and drive the world
 ## scene's `NpcFleets` sim (docs/60-* §4.11.11, §4.12.3).
@@ -1030,6 +1032,10 @@ func _test_no_game_and_modal_block() -> void:
 		_check((hud.get_node("BottomRow/Crew") as Label).text
 			== I18n.fmt("world.crew", {"crew": "-", "max": "-"}),
 			"no game: crew bar renders '-'")
+		_check((hud.get_node("BottomRow/Provisions") as Label).text
+			== HudLib.supply_line("provisions", "-", "-"),
+			"no game: provisions bar renders '-' with a '-' day count (%s)"
+			% (hud.get_node("BottomRow/Provisions") as Label).text)
 
 	# A move with no run still steps (inspection) but cannot touch a clock.
 	_clear_dialogs(world)
@@ -1136,8 +1142,9 @@ func _test_hud_signal_only() -> void:
 	var day_label: Label = hud.get_node("TopRow/Day")
 	_check(gold_label.text == I18n.fmt("ui.gold_amount", {"gold": "5,000"}),
 		"gold bar renders the live value (%s)" % gold_label.text)
-	_check(day_label.text == I18n.fmt("world.day", {"day": 3}),
-		"day bar renders the live value (%s)" % day_label.text)
+	_check(day_label.text == I18n.fmt("world.day_time", {
+			"day": 3, "time": SailingSimLib.clock_text()}),
+		"day bar renders day + wall-clock time (%s)" % day_label.text)
 
 	# Gold: change + emit → updates.
 	GameState.gold = 7830
@@ -1152,11 +1159,22 @@ func _test_hud_signal_only() -> void:
 	# Day: same pair of checks.
 	GameState.day = 4
 	EventBus.day_advanced.emit(GameState.day)
-	_check(day_label.text == I18n.fmt("world.day", {"day": 4}),
+	_check(day_label.text == I18n.fmt("world.day_time", {
+			"day": 4, "time": SailingSimLib.clock_text()}),
 		"HUD follows day_advanced (%s)" % day_label.text)
 	GameState.day = 12
-	_check(day_label.text == I18n.fmt("world.day", {"day": 4}),
+	_check(day_label.text == I18n.fmt("world.day_time", {
+			"day": 4, "time": SailingSimLib.clock_text()}),
 		"HUD does not poll GameState.day (%s)" % day_label.text)
+
+	# Day + wall-clock: a movement step (set_fleet_cell) re-renders the
+	# sub-day clock even without a day_advanced (`20-*` §4.3 amended).
+	GameState.world["clock_fraction"] = 0.5
+	hud.set_fleet_cell(SEA_BESIDE_LISBON)
+	_check(day_label.text == I18n.fmt("world.day_time", {
+			"day": 12, "time": "12:00"}),
+		"set_fleet_cell re-renders the sub-day clock (%s)" % day_label.text)
+	GameState.world["clock_fraction"] = 0.0
 
 	# Morale tier color + label (docs/20-* §4.8 thresholds).
 	GameState.morale = 35
@@ -1176,6 +1194,35 @@ func _test_hud_signal_only() -> void:
 	EventBus.fleet_changed.emit()
 	_check(morale_label.get_theme_color("font_color") == PaletteLib.GOOD,
 		"morale 70 is tier-colored GOOD")
+
+	# Bottom bar formats (`80-*` §4.5 amended): supplies carry amount + days,
+	# cargo reads in tons, speed reads in knots — all live fleet values.
+	var provisions_bar: Label = hud.get_node("BottomRow/Provisions")
+	_check(provisions_bar.text == HudLib.supply_line(
+			"provisions", FleetLib.supplies("provisions"),
+			SailingSimLib.kind_supply_days("provisions")),
+		"provisions bar carries amount + days (%s)" % provisions_bar.text)
+	_check((hud.get_node("BottomRow/Speed") as Label).text
+		== I18n.fmt("world.speed", {"speed": SailingSimLib.speed_knots_text()}),
+		"speed bar renders knots (%s)"
+		% (hud.get_node("BottomRow/Speed") as Label).text)
+	_check((hud.get_node("BottomRow/Cargo") as Label).text
+		== I18n.fmt("world.cargo", {
+			"amount": 0, "capacity": FleetLib.fleet_capacity()}),
+		"cargo bar renders amount/capacity in tons (%s)"
+		% (hud.get_node("BottomRow/Cargo") as Label).text)
+	# §4.6.1 days tiers on the bar: 0 days is BAD red, ≥ 10 is GOOD green.
+	var ship: Dictionary = GameState.fleet[0]
+	ship["provisions"] = 0
+	ship["water"] = 0
+	EventBus.fleet_changed.emit()
+	_check((provisions_bar.get_theme_color("font_color") == PaletteLib.BAD),
+		"0 days of provisions is tier-colored BAD")
+	ship["provisions"] = 45
+	ship["water"] = 45
+	EventBus.fleet_changed.emit()
+	_check((provisions_bar.get_theme_color("font_color") == PaletteLib.GOOD),
+		"15 days of provisions is tier-colored GOOD")
 
 	# Area label: nearest known port within 16 tiles, else world.open_sea.
 	GameState.known_ports = ["lisbon"]
@@ -1202,7 +1249,8 @@ func _test_hud_signal_only() -> void:
 	GameState.day = 4
 	EventBus.day_advanced.emit(GameState.day)
 	I18n.set_locale("zh")
-	_check(day_label.text == I18n.fmt("world.day", {"day": 4}),
+	_check(day_label.text == I18n.fmt("world.day_time", {
+			"day": 4, "time": SailingSimLib.clock_text()}),
 		"HUD rebinds on locale_changed (%s)" % day_label.text)
 	I18n.set_locale("en")
 

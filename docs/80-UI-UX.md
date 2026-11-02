@@ -184,25 +184,41 @@ Layout (1280×720; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
-| Day 12 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]  top bar 40px
+| Day 12 08:30 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]  top bar 40px
 +------------------------------------------------------------------+
 | [minimap 256×192]                                   (viewport)   |
 |  explored tiles only                                             |
 |                                                                  |
 |                               [fleet ship sprite placeholder]    |
 +------------------------------------------------------------------+
-| Provisions 45 · Water 45 · Crew 15/45 · Cargo 120/120 · Speed 20 | bottom bar 32px
+| Provisions 45 (15d) · Water 45 (15d) · Crew 15/45 · Cargo 120/120 t · Speed 4.2 kn | bottom bar 32px
 +------------------------------------------------------------------+
 ```
 
-- Top bar: day, **`Year {y} · Month {m}` (zh `{y}年{m}月`; Phase 6, calendar
-  per `20-*` §4.15, key `world.calendar.year_month`)**, gold, morale (value +
+- Top bar: day **with time-of-day** `第 {day} 天 {time}` / `Day {day} {time}`
+  (`world.day_time`; `{time}` = `HH:MM` per `20-*` §4.3, amended 2026-11-02 —
+  day-only surfaces keep `world.day`), **`Year {y} · Month {m}` (zh
+  `{y}年{m}月`; Phase 6, calendar per `20-*` §4.15, key
+  `world.calendar.year_month`)**, gold, morale (value +
   tier label, tier-colored per `20-*`
   §4.8 — yellow < 40, red < 20), current area label (nearest known port
   within 16 tiles, else `world.open_sea`). **No language control** (amended
   2026-10-31: the locale lives only in S19, §4.6.3).
-- Bottom bar: provisions / water / crew / cargo / current effective speed —
-  all live-updating via `EventBus` signals.
+- Bottom bar (formats amended 2026-11-02; conventions per `10-*` §3.1,
+  `20-*` §4.3, `40-*` §4.4 speed units):
+  - **`补给 {amount}（{days}天）` / `Provisions {amount} ({days} days)`** and
+    the matching water line — the §4.5.1 `fleet.stat.supply` line, `days`
+    being **each kind's own** days-of-supply from the locked `20-*` §4.10
+    formula on the pooled stack. The label is tier-coloured by `days` with
+    the **same §4.6.1 thresholds** as the provisioning prompt: GOOD ≥ 10
+    (green), WARN 3–9 (yellow), BAD ≤ 2 (red).
+  - **`货舱 {amount}/{capacity} 吨`** — 1 cargo unit renders as 1 t
+    (`10-*` §3.1 display convention; abstract units underneath).
+  - **`航速 {speed} 节`** — knots per `40-*` (`× 5 nm ÷ 24 h`, one decimal),
+    never tiles/day.
+  All live-updating via `EventBus` signals; a movement step also refreshes
+  the day/time label (a sub-day tick has no EventBus signal — the host calls
+  `set_fleet_cell`, which owns position-derived refreshes).
 - Weather icon (placeholder glyph: sun/wind/storm text label) sits under the
   minimap; in storm it flashes (0.5s cycle).
 - **Wind indicator (Phase 6):** beside the weather glyph, an **arrow that
@@ -237,14 +253,14 @@ the supplies jettison of `20-*` §4.10 refer to.
 
 ```
 +----------------------------------------------------------------------+
-| 舰队 / Fleet                    Day 12 · 7,830g · Morale 72 (Good)   | header
+| 舰队 / Fleet                    Day 12 08:30 · 7,830g · Morale 72 (Good)   | header
 | 2/5 ships · Free 100 · Fleet is full (5 ships)                        |
 | <at-sea banner, hidden in port>                                       |
 +----------------------------------------------------------------------+
 | Ship 1 · Caravel [Flagship]                                           |
-| 耐久 Durability  [====------] 45/90     载重 Cargo 0/120 free         |
+| 耐久 Durability  [====------] 45/90     载重 Cargo 0/120 t free       |
 | 船员 Crew        15/45        火炮 Guns   6/6                         |
-| 航速 Speed       10/12 tiles/day (wind: fair ×1.0)                    |
+| 航速 Speed       4.2/5.0 kn (wind: fair ×1.0)                         |
 | 补给 Provisions  45 (15 days)  淡水 Water 45 (15 days)                |
 | 货物 Wine × 30 [Jettison]                                             |
 | Ship 2 · Nao                              [Make flagship]             |
@@ -262,8 +278,10 @@ the supplies jettison of `20-*` §4.10 refer to.
   1. durability bar (tier-coloured, same thresholds as S6) `durability /
      effective_max`, and cargo `used/capacity` with `free` beside it;
   2. crew `crew/crew_max` and guns `cannons/armament_slots`;
-  3. speed `effective/base` in tiles/day with the wind factor that produced
-     it (§4.4), so a becalmed or storm-lashed fleet explains itself;
+  3. speed `effective/base` in **knots** (`40-*` §4.4 speed units, amended
+     2026-11-02: tiles/day × 5 nm ÷ 24 h, one decimal) with the wind factor
+     that produced it (§4.4), so a becalmed or storm-lashed fleet explains
+     itself;
   4. supplies: `provisions` and `water` **each with their days-of-supply**
      derived by `20-*` §4.10's formula, so the panel answers "can I leave?"
      without opening the provisioning prompt.
@@ -948,6 +966,13 @@ inventing one.
 | `world.sail.no_path` | 无可行航线 | No route by sea |
 | `world.sail.arrived` | 已抵达目的地 | Destination reached |
 
+Display-format keys (amended 2026-11-02, `80-*` §4.5; `world.day` /
+`world.provisions` / `world.water` remain as the day-only label and the
+supply-kind nouns): `world.day_time` 第 {day} 天 {time} / Day {day} {time},
+`world.speed` 航速 {speed} 节 / Speed {speed} kn, `ui.speed.noun` 航速 / Speed,
+`world.cargo` 货舱 {amount}/{capacity} 吨 / Cargo {amount}/{capacity} t
+(`char.day` carries {time} too, §4.7.3 inventory).
+
 ### 4.7.6 Phase-5 polish `ui_strings` inventory (S15/S18 + provisioning)
 
 Required keys for the §4.5.1 stat block, §4.6.1 prompt and §4.6.2 panel.
@@ -968,10 +993,10 @@ Placeholders must match between zh and en.
 | `port.sail.jettison.confirm` | 抛弃{kind} × {qty}? | Jettison {kind} × {qty}? |
 | `fleet.ship_header` | 舰队 | Fleet |
 | `fleet.stat.durability` | 耐久 {current}/{max} | Durability {current}/{max} |
-| `fleet.stat.cargo` | 载重 {used}/{capacity}(剩余 {free}) | Cargo {used}/{capacity} ({free} free) |
+| `fleet.stat.cargo` | 载重 {used}/{capacity} 吨(剩余 {free} 吨) | Cargo {used}/{capacity} t ({free} t free) |
 | `fleet.stat.crew` | 船员 {crew}/{max} | Crew {crew}/{max} |
 | `fleet.stat.guns` | 火炮 {cannons}/{slots} | Guns {cannons}/{slots} |
-| `fleet.stat.speed` | 航速 {speed}/{max} 格/日(风:{wind}) | Speed {speed}/{max} tiles/day (wind: {wind}) |
+| `fleet.stat.speed` | 航速 {speed}/{max} 节(风:{wind}) | Speed {speed}/{max} kn (wind: {wind}) |
 | `fleet.stat.supply` | {kind} {amount}({days} 天) | {kind} {amount} ({days} days) |
 | `fleet.totals` | 船队合计 | Fleet totals |
 | `fleet.total_days` | 全队可航行 {days} 天 | Whole fleet: {days} days |

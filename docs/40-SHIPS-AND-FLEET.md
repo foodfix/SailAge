@@ -221,6 +221,11 @@ fields anywhere.
   factor and sail trim (`20-*` §4.4) — act on the composed fleet speed
   through the same pipeline; the composition rule itself (flagship
   supplies crew/sim fields, slowest hull as `base_speed`) is untouched.
+  **Display (amended 2026-11-02):** speed renders as **knots** —
+  `kn = tiles/day × 5 nm ÷ 24 h`, one decimal (base 16/20/24 tiles/day =
+  3.3/4.2/5.0 kn). The HUD bottom bar, the fleet-panel title and the
+  fleet-panel per-ship/totals speed rows show knots, never raw tiles/day;
+  the officers panel keeps a bare 航速/Speed noun (`ui.speed.noun`).
 - Phase-1 crew simplification (from `20-*` §4.6): all crew lives on the
   flagship; non-flagship hulls require no crew. Consumption pool = flagship
   crew only.

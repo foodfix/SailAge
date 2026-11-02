@@ -221,10 +221,12 @@ func refresh() -> void:
 ## Sets the fleet dot source and refreshes the position-derived parts only:
 ## the area label, the minimap and — Phase 6 — the current arrow (it reads the
 ## tile the fleet stands on). The bars are deliberately **not** touched
-## here — they change only on EventBus signals (docs/80-* §7), so a host that
-## moves the fleet cannot smuggle in a poll.
+## here — they change only on EventBus signals (docs/80-* §7) — except the
+## day/time label: a movement step advances the sub-day clock (`20-*` §4.3)
+## with no matching signal, so the clock follows the step like the area does.
 func set_fleet_cell(cell: Vector2i) -> void:
 	fleet_cell = cell
+	_refresh_day_time()
 	_area_label.text = _area_text()
 	_refresh_current()
 	# Exploration moves with the fleet, so the chart cache is refreshed here
@@ -374,6 +376,30 @@ static func format_thousands(value: int) -> String:
 	return ("-" if value < 0 else "") + out
 
 
+## One bottom-bar supply label: the §4.5.1 `fleet.stat.supply` line
+## (`{kind} {amount} ({days} days)`), the same line the fleet panel and the
+## provisioning prompt render. `amount`/`days` pass through pre-formatted ("-
+## placeholders included). The kind noun is the `world.provisions` /
+## `world.water` keys with the placeholder emptied — the fleet-panel pattern.
+static func supply_line(kind: String, amount, days) -> String:
+	var noun := I18n.fmt("world.%s" % kind, {"amount": ""}).strip_edges()
+	return I18n.fmt("fleet.stat.supply", {
+		"kind": noun, "amount": amount, "days": days,
+	})
+
+
+## The days-of-supply colour tier (`80-*` §4.6.1, amended §4.5): GOOD ≥ 10,
+## WARN 3–9, BAD ≤ 2 — the same thresholds the provisioning prompt and the
+## fleet panel paint their readouts with. Days 0 (no crew or empty stack)
+## falls to BAD, matching both.
+static func supply_days_color(days: int) -> Color:
+	if days >= 10:
+		return PaletteLib.GOOD
+	if days >= 3:
+		return PaletteLib.WARN
+	return PaletteLib.BAD
+
+
 ## docs/20-* §4.8 tier id for a morale value.
 static func morale_tier(value: int) -> String:
 	if value >= 80:
@@ -403,13 +429,23 @@ static func morale_color(value: int) -> Color:
 
 # --- Bars ------------------------------------------------------------------
 
-func _refresh_top() -> void:
-	var has_game: bool = not GameState.player.is_empty()
+## The top-bar day + wall-clock label (`world.day_time`; `20-*` §4.3 amended):
+## `{time}` = `floor(clock_fraction × 1440)` as `HH:MM`. Split from
+## [_refresh_top] because a movement step advances the sub-day clock without
+## any EventBus signal — [method set_fleet_cell] calls this directly, the one
+## bar text a position change owns.
+func _refresh_day_time() -> void:
 	if GameState.day > 0:
-		_day_label.text = I18n.fmt("world.day", {"day": GameState.day})
+		_day_label.text = I18n.fmt("world.day_time", {
+			"day": GameState.day, "time": SailingSimLib.clock_text(),
+		})
 	else:
-		_day_label.text = I18n.fmt("world.day", {"day": "-"})
+		_day_label.text = I18n.fmt("world.day_time", {"day": "-", "time": "-"})
 
+
+func _refresh_top() -> void:
+	_refresh_day_time()
+	var has_game: bool = not GameState.player.is_empty()
 	_gold_label.text = I18n.fmt(
 		"ui.gold_amount", {"gold": format_thousands(GameState.gold)}
 	)
@@ -432,8 +468,10 @@ func _refresh_top() -> void:
 func _refresh_bottom() -> void:
 	var has_game: bool = not GameState.fleet.is_empty()
 	if not has_game:
-		_provisions_label.text = I18n.fmt("world.provisions", {"amount": "-"})
-		_water_label.text = I18n.fmt("world.water", {"amount": "-"})
+		_provisions_label.text = supply_line("provisions", "-", "-")
+		_water_label.text = supply_line("water", "-", "-")
+		_provisions_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_water_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 		_crew_label.text = I18n.fmt("world.crew", {"crew": "-", "max": "-"})
 		_cargo_label.text = I18n.fmt(
 			"world.cargo", {"amount": "-", "capacity": "-"}
@@ -441,11 +479,20 @@ func _refresh_bottom() -> void:
 		_speed_label.text = I18n.fmt("world.speed", {"speed": "-"})
 		return
 
-	_provisions_label.text = I18n.fmt(
-		"world.provisions", {"amount": FleetLib.supplies("provisions")}
+	var provisions_days := SailingSimLib.kind_supply_days("provisions")
+	var water_days := SailingSimLib.kind_supply_days("water")
+	_provisions_label.text = supply_line(
+		"provisions", FleetLib.supplies("provisions"), provisions_days
 	)
-	_water_label.text = I18n.fmt(
-		"world.water", {"amount": FleetLib.supplies("water")}
+	_water_label.text = supply_line(
+		"water", FleetLib.supplies("water"), water_days
+	)
+	# §4.5 amended: the same §4.6.1 days tiers the provisioning prompt uses.
+	_provisions_label.add_theme_color_override(
+		"font_color", supply_days_color(provisions_days)
+	)
+	_water_label.add_theme_color_override(
+		"font_color", supply_days_color(water_days)
 	)
 	var crew_max := 0
 	var used := 0
@@ -459,7 +506,7 @@ func _refresh_bottom() -> void:
 		"world.cargo", {"amount": used, "capacity": FleetLib.fleet_capacity()}
 	)
 	_speed_label.text = I18n.fmt(
-		"world.speed", {"speed": SailingSimLib.effective_speed()}
+		"world.speed", {"speed": SailingSimLib.speed_knots_text()}
 	)
 
 

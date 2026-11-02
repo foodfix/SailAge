@@ -184,6 +184,10 @@
     "zh": "第 {day} 天",
     "en": "Day {day}"
   },
+  "world.day_time": {
+    "zh": "第 {day} 天 {time}",
+    "en": "Day {day} {time}"
+  },
   "world.gold": {
     "zh": "{gold} 金",
     "en": "{gold}g"
@@ -241,12 +245,16 @@
     "en": "Crew {crew}/{max}"
   },
   "world.cargo": {
-    "zh": "货舱 {amount}/{capacity}",
-    "en": "Cargo {amount}/{capacity}"
+    "zh": "货舱 {amount}/{capacity} 吨",
+    "en": "Cargo {amount}/{capacity} t"
   },
   "world.speed": {
-    "zh": "航速 {speed}",
-    "en": "Speed {speed}"
+    "zh": "航速 {speed} 节",
+    "en": "Speed {speed} kn"
+  },
+  "ui.speed.noun": {
+    "zh": "航速",
+    "en": "Speed"
   },
   "world.open_sea": {
     "zh": "外海",
@@ -757,8 +765,8 @@
     "en": "Officer wages {gold}g/day"
   },
   "char.day": {
-    "zh": "第 {day} 天",
-    "en": "Day {day}"
+    "zh": "第 {day} 天 {time}",
+    "en": "Day {day} {time}"
   },
   "char.level_up": {
     "zh": "晋升!你已达到 {level} 级。",
@@ -1617,8 +1625,8 @@
     "en": "Durability {current}/{max}"
   },
   "fleet.stat.cargo": {
-    "zh": "载重 {used}/{capacity}(剩余 {free})",
-    "en": "Cargo {used}/{capacity} ({free} free)"
+    "zh": "载重 {used}/{capacity} 吨(剩余 {free} 吨)",
+    "en": "Cargo {used}/{capacity} t ({free} t free)"
   },
   "fleet.stat.crew": {
     "zh": "船员 {crew}/{max}",
@@ -1629,8 +1637,8 @@
     "en": "Guns {cannons}/{slots}"
   },
   "fleet.stat.speed": {
-    "zh": "航速 {speed}/{max} 格/日(风:{wind})",
-    "en": "Speed {speed}/{max} tiles/day (wind: {wind})"
+    "zh": "航速 {speed}/{max} 节(风:{wind})",
+    "en": "Speed {speed}/{max} kn (wind: {wind})"
   },
   "fleet.stat.supply": {
     "zh": "{kind} {amount}({days} 天)",
