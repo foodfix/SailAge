@@ -3375,5 +3375,13 @@
   "ending.rpg.bio": {
     "zh": "出身回望",
     "en": "Background recalled"
+  },
+  "hail.rumours.result": {
+    "zh": "再会,船员。愿你一路顺风。",
+    "en": "Fair winds, sailor. May your crossing be a quiet one."
+  },
+  "hail.intimidate.terms": {
+    "zh": "以势压人:胜则取其半舱货物,败则立时开战。",
+    "en": "Intimidate: win and they hand over half their cargo; lose and the guns open at once."
   }
 }

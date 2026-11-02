@@ -489,12 +489,24 @@ func _test_world_dispatch() -> void:
 		"fx_disp_near", "cap_trader_0001")
 	world.sync_from_state()
 	world._on_picker_verb("talk", near)
-	_check(world._message_dialog.is_open()
-		and world._message_dialog.message_text()
-			== I18n.fmt("hail.title",
-				{"name": InteractionsLib.display_name(near)}),
-		"talk within range reaches the W5-B seam (placeholder = hail.title)")
-	world._close_message()
+	# W5 master hookup: the real hail modal opens (the W5-B module), not the
+	# placeholder message dialog.
+	var modal: Node = null
+	for child in world.get_children():
+		if child.is_in_group("modal_overlay"):
+			modal = child
+			break
+	if modal == null:
+		for child in world.get_tree().current_scene.get_children():
+			if child.is_in_group("modal_overlay"):
+				modal = child
+				break
+	_check(modal != null,
+		"talk within range opens the hail modal (the W5-B module, master hookup)")
+	if modal != null:
+		modal.call("close")
+		modal.queue_free()
+		await get_tree().process_frame
 
 	# The attack verb: adjacent coaster → refused at the surface (§4.1.1).
 	var coaster := _make_fleet("coaster", "portugal", OPEN_CELL + Vector2i(1, 0),
@@ -651,13 +663,14 @@ func _test_world_port_context() -> void:
 		and picker.status_text().is_empty(),
 		"the gate passing enables the appoint row (placeholder for W5-D)")
 	picker.close()
-	var fleet_before: Array = GameState.fleet.duplicate(true)
-	var day_before := int(GameState.day)
+	# W5 master hookup: the appoint row performs the appointment (the W5-D
+	# module) — the autopilot key lands and the sail order heads for the berth.
 	world._on_port_action("appoint", "lisbon")
-	_check(not GameState.player.has("autopilot")
-		and int(GameState.day) == day_before
-		and GameState.fleet.size() == fleet_before.size(),
-		"the appoint seam is a W5-D placeholder (no state change)")
+	_check(GameState.player.has("autopilot")
+		and str(GameState.player["autopilot"].get("dest_port_id", "")) == "lisbon",
+		"the appoint row appoints the voyage (the autopilot key lands)")
+	world.cancel_sail()
+	GameState.player.erase("autopilot")
 	# The dock row IS the walk-in flow: standing on the berth, it docks.
 	GameState.set_world_tile(berth)
 	world.sync_from_state()

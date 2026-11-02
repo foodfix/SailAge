@@ -48,6 +48,9 @@ const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 ## arithmetic, the attack encounter dict — docs/60-* §4.11.15, 80-* §4.10).
 ## The scene owns the side effects; the module computes.
 const InteractionsLib := preload("res://scripts/world/interactions.gd")
+const HailModalLib := preload("res://scenes/world/hail_modal.gd")
+const AutopilotLib := preload("res://scripts/world/autopilot.gd")
+const AutopilotHudScene := preload("res://scenes/world/autopilot_hud.tscn")
 ## The right-click interaction menu (fleet picker + port context, 80-*
 ## §4.10.1/§4.10.3) — instanced once into a modal layer on first use.
 const PickerScene := preload("res://scenes/world/fleet_picker.tscn")
@@ -294,6 +297,15 @@ func _ready() -> void:
 	_camera.make_current()
 	_update_camera()
 	_loader.refresh_port_overlay(DataLoader.ports, DataLoader.nations)
+
+	# Phase 8 (master micro-ledger): the appointed-voyage HUD bar — a lazy
+	# instance under the HUD layer; it reads the appointment and renders
+	# destination/ETA with its own cancel button (§4.10.4).
+	if _hud != null and _hud.get_parent() != null:
+		var autopilot_hud: Control = AutopilotHudScene.instantiate()
+		_hud.get_parent().add_child(autopilot_hud)
+		if autopilot_hud.has_method("setup"):
+			autopilot_hud.call("setup")
 
 	# Sighting/exploration at scene ready (docs/20-* §4.11/§4.12).
 	_reveal()
@@ -1278,6 +1290,11 @@ func _cancel_sail_order() -> void:
 	_sail_elapsed = 0.0
 	_sail_suspended = false
 	_sail_dock_port = ""
+	# Phase 8 §4.19: any manual movement input cancels the appointed voyage
+	# (the arrival path cleared it as "arrived" before docking ever lands
+	# here). The route dying IS the manual input for helm/step/click alike.
+	if AutopilotLib.appointed():
+		AutopilotLib.cancel("manual")
 	# Phase 8: the intercept order's movement IS this route (§4.11.15 —
 	# "intercepting IS sailing to the target"), so wherever the route dies
 	# (manual input, docking, a blocked step), the order dies with it. The
@@ -1311,6 +1328,11 @@ func sail_pathing():
 ## The port screen's greeting banner shows `Port.flavor`; the greeting dialog
 ## carries `{port}` and `{day}` (§4.11 / `ui_strings world.arrive`).
 func _enter_port(port_id: String) -> void:
+	# Phase 8 appointed voyage: docking at the destination completes it
+	# (§4.19 — the arrival clears the appointment before the port flow).
+	if AutopilotLib.appointed() \
+			and str(GameState.player.get("autopilot", {}).get("dest_port_id", "")) == port_id:
+		AutopilotLib.cancel("arrived")
 	# 2. Discover-then-dock. Entering an unknown harbor discovers it (§4.11).
 	if not GameState.known_ports.has(port_id):
 		GameState.known_ports.append(port_id)
@@ -1641,6 +1663,13 @@ func _encounter_for(fleet: Dictionary) -> Dictionary:
 ## no reputation (§4.1).
 func _open_encounter(encounter: Dictionary) -> void:
 	if encounter.is_empty():
+		return
+	# Phase 8 §4.19: a hostile contact cancels the appointed voyage (with
+	# the notice) — storms never do (the auto-reef rides the trim rule).
+	if AutopilotLib.cancel("contact"):
+		_toast("sail.autopilot.cancelled_contact")
+	if _battle_encounter_id() == str(encounter.get("id", "")) \
+			and not _battle_encounter.is_empty():
 		return
 	if _battle_encounter_id() == str(encounter.get("id", "")) \
 			and not _battle_encounter.is_empty():
@@ -2234,10 +2263,12 @@ func _open_hail(fleet: Dictionary) -> void:
 		if not _toast("interact.talk.too_far"):
 			print("WorldMap: too far to hail (interact.talk.too_far missing)")
 		return
-	# W5-B: replace the placeholder below with the hail_modal instance +
-	# open call (the master's 2-line dispatch hookup).
-	_open_message(I18n.fmt("hail.title",
-		{"name": InteractionsLib.display_name(fleet)}))
+	# W5-B hookup (the master's 2-line dispatch): the modal renders the
+	# option rows and applies outcomes through HailOptions.resolve; a failed
+	# intimidation opens the normal encounter after the modal closes.
+	var modal := HailModalLib.open_for(fleet)
+	if modal != null:
+		modal.hostile_encounter_requested.connect(_open_encounter)
 
 
 ## The 委任航行 appoint seam (§4.10.3/§4.10.4): the port context's enabled
@@ -2248,9 +2279,21 @@ func _open_hail(fleet: Dictionary) -> void:
 func _appoint_voyage(port_id: String) -> void:
 	if port_id.is_empty():
 		return
-	# W5-D: replace this placeholder with the appointment call.
-	print("WorldMap: appoint-voyage to %s (autopilot module pending, W5-D)"
-		% port_id)
+	# W5-D hookup: the gate re-check + appointment; the HUD bar (instanced
+	# in _ready) renders destination/ETA and owns the cancel action. The
+	# walk itself rides the existing sail-order machinery toward the port's
+	# berth — any manual input cancels (the §4.19 rule), docking completes.
+	var gate: Dictionary = AutopilotLib.gate(port_id)
+	if not bool(gate.get("ok", false)):
+		_open_message(str(gate.get("reason", "")))
+		return
+	var result: Dictionary = AutopilotLib.appoint(port_id)
+	if not bool(result.get("ok", true)):
+		_open_message(str(result.get("reason", "")))
+		return
+	var berth: Vector2i = DataLoader.port_cell(port_id)
+	if berth.x >= 0:
+		sail_to(berth)
 
 
 ## The summary/placeholder message dialog (docs/90-* §7 modal child): one

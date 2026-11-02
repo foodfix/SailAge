@@ -1664,7 +1664,9 @@ sighted captain simply shows its rows without people verbs.
 - **Sparring bet (tavern, locked numbers):** the tavern champion's
   swordplay is **40**; the stake runs 100–1,000g in 100g steps and is the
   pot; win chance `p = clamp(0.5 + (player_swordplay − 40) / 200, 0.10,
-  0.90)` (seeded); **a win pays `pot × 2`**; a loss forfeits the stake.
+  0.90)` (seeded; in-band values 0.30 / 0.50 / 0.80 at swordplay 0 / 40 /
+  100 — the clamps engage only outside the 0–100 skill band); **a win pays
+  `pot × 2`**; a loss forfeits the stake.
   **Each bout counts as 3 swordplay usages** (growth counter, `50-*`).
 - Strings: `interact.market.*`, `tavern.spar.*`, `inn.talk.*`,
   `palace.inform.*` (§4.15).

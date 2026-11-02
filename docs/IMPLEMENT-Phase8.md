@@ -25,6 +25,30 @@ alive; validator TODO left in place); (b) slot A added the `officer_bios`
 block to `captain_name_parts.json` (doc row added); (c) the level-up toast
 lands on the new `char.level_up.alloc` key beside the Phase-1
 `char.level_up` (W6 wiring note).
+**W5 status (2026-11-03): ✅ complete** — slots A (right-click interaction
+layer: fleet picker, intercept order, coaster-not-attackable) → B (hail
+options + modal) → C (port verb matrices: tavern befriend/sparring,
+captains' table, market intel rows, inn talk, palace inform) → D
+(appointed voyage: gate/plain/weighted routes + HUD; the Shared-A*
+"extraction" verified already-shared — fleet_path.gd since Phase 5 — and
+the weighted cost landed additively, NPC determinism byte-identical
+between the steps) merged in order. Gate on `main`: **`run_tests.py`
+48/48 green** (new: `test_interactions` 89, `test_hail` 113,
+`test_captains_table` 125, `test_autopilot` 96). Master micro-ledger
+(applied at the merges): `_open_hail` → `HailModalLib.open_for` +
+`hostile_encounter_requested → _open_encounter`; `_appoint_voyage` →
+`Autopilot.gate/appoint` + the sail order toward the berth; the appointed
+voyage wired into the world scene (arrival completes → `cancel("arrived")`,
+any sail-order death → `cancel("manual")`, hostile contact in
+`_open_encounter` → `cancel("contact")` + the notice, the autopilot HUD
+instanced under the HUD layer); 2 hail ui_strings residuals authored
+(`hail.rumours.result`, `hail.intimidate.terms`; C's remaining fallbacks
+are W6-D's parity sweep). Sparring-p illustrative fixed in `80-*` §4.11
+(in-band 0.30/0.50/0.80 at swordplay 0/40/100). D's finding: the storm
+auto-reef did not pre-exist — it is implemented in `Autopilot.tick()`
+(save prev trim → reefed on storm days → restore), scoped to an active
+appointment per §4.19.
+
 **W4 status (2026-11-03): ✅ complete** — slots A (captains.gd canon
 module) → B (npc fleets on the canon; successor machinery +
 `named_pirate_respawns` + `data/npc_captains.json` DELETED, the §8.6
@@ -623,6 +647,10 @@ No code, no data. Every number above lands in its owning doc before W2.
   voyage auto-cancels on contact but not on storm; ≥70-pilot weighted
   route measurably differs from the 40–69 straight route (same OD ≥ 15%
   faster or different wind-region crossings).
+  **→ PASSED 2026-11-03** (see the W5 status line at the top; the weighted
+  Lisbon→Malacca comparison satisfies the crossings arm — the wind field
+  is region-flat so the ≥15% arm is bounded — documented in
+  `test_autopilot`).
 
 ## W6 — UI & save (4 slots, W6-D staged · merge A → B → C → D)
 
