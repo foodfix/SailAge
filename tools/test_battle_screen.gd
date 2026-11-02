@@ -398,15 +398,17 @@ func _test_full_battle() -> void:
 # --- 5. The six §4.9 AI rules, through the screen ------------------------
 
 func _test_ai_rules() -> void:
-	# 1. Below 25% max durability with a player ship within 3 → surrender.
+	# 1. Below 25% max durability with a player ship within 3 → the §4.7
+	#    surrender roll (legacy pirate courage 13 → 24%); day 8 seeds a draw
+	#    of 11.4, inside the band, so the ship capitulates.
 	var r1 = await _ai_fixture(
 		[_ship("sloop")],
 		[_ship("sloop", {"durability": 14})],
-		Vector2i(8, 4), Vector2i(5, 4), "sloop")
+		Vector2i(8, 4), Vector2i(5, 4), "sloop", null, 8)
 	var decision := _enemy_turn(r1)
 	_check(str(decision.get("action", "")) == "surrender",
-		"§4.9 rule 1: 14/60 durability with a player 3 tiles away surrenders (got %s)"
-		% str(decision.get("action")))
+		"§4.9 rule 1: 14/60 durability, a player 3 tiles away, the §4.7 roll "
+			+ "passes → surrender (got %s)" % str(decision.get("action")))
 	var enemy := _unit(r1, "enemy", 0)
 	_check(not bool(enemy.get("alive", true)),
 		"the surrendering hull leaves the battle (§4.7)")
@@ -425,6 +427,18 @@ func _test_ai_rules() -> void:
 	_check(str(_enemy_turn(r1b).get("action", "")) != "surrender",
 		"§4.9 rule 1 boundary: 15/60 = 25% does not surrender")
 	await _free_screen(r1b)
+
+	# 1c. A failed §4.7 roll falls through to the approach and re-rolls on a
+	# later turn: day 9's draw stands above the 24% legacy band.
+	var r1c = await _ai_fixture(
+		[_ship("sloop")],
+		[_ship("sloop", {"durability": 14})],
+		Vector2i(8, 4), Vector2i(5, 4), "sloop")
+	var failed := _enemy_turn(r1c)
+	_check(str(failed.get("action", "")) == "move",
+		"§4.9 rule 1: day 9's §4.7 draw fails the 24% legacy roll → the rule-5 "
+			+ "approach runs instead (got %s)" % str(failed.get("action")))
+	await _free_screen(r1c)
 
 	# 2. Cannons loaded, a target in range → fire at the lowest durability.
 	var r2 = await _ai_fixture(
@@ -818,16 +832,18 @@ func _free_screen(screen) -> void:
 ## Builds a battle for one AI fixture: `player_ships` and the single enemy hull,
 ## then puts the two ships on the fixture tiles (the §4.11.2 deployment opens
 ## every battle 13 tiles apart, so close-quarters fixtures are placed by hand —
-## the same convention `tools/test_battle.gd` uses).
+## the same convention `tools/test_battle.gd` uses). `encounter_day` feeds the
+## §4.11.1 seed; the surrender fixture (rule 1) uses a day whose §4.7 roll
+## passes for the legacy pirate courage (13 → 24%) — day 8 draws 11.4.
 func _ai_fixture(player_ships: Array, enemy_ships: Array,
 		enemy_cell: Vector2i, player_cell: Vector2i, hull_id: String,
-		player_extra_cell = null):
+		player_extra_cell = null, encounter_day: int = 9):
 	_make_run(player_ships)
 	var screen = await _new_screen()
 	screen.route_to_world = false
 	screen.open_battle({
 		"id": "hf_ai_30_40_pirate", "kind": "pirate", "nation_id": "",
-		"position": {"x": 30, "y": 40}, "day": 9,
+		"position": {"x": 30, "y": 40}, "day": encounter_day,
 		"ships": enemy_ships,
 	})
 	await get_tree().process_frame
