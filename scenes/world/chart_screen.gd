@@ -77,6 +77,9 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## Task L: the lane-heat layer reads live fleet cells (flag-gated, OFF);
 ## the debug ecology renders `NpcFleets.markers()` (the only fleet source).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+## W5-D: the appointed-voyage gate/route engine behind the §4.10.4
+## 委任航行 entry (docs/80-* §4.10.4).
+const AutopilotLib := preload("res://scripts/world/autopilot.gd")
 
 const SCENE_PATH := "res://scenes/world/chart_screen.tscn"
 ## Group every open modal joins (docs/90-* §11): the world scene's
@@ -147,6 +150,12 @@ const KEY_HINT := "chart.hint"
 const KEY_LEGEND_PORT := "chart.legend.port"
 const KEY_LEGEND_FLEET := "chart.legend.fleet"
 const KEY_LEGEND_DISCOVERY := "chart.legend.discovery"
+## W5-D (docs/80-* §4.15 `sail.autopilot.*` family): the §4.10.4 chart
+## entry — select a known port → 委任航行.
+const KEY_APPOINT := "sail.autopilot.appoint"
+const KEY_APPOINT_CANCEL := "sail.autopilot.cancel"
+const KEY_APPOINT_HUD_BAR := "sail.autopilot.hud.bar"
+const KEY_APPOINT_GATED := "sail.autopilot.gated"
 ## Phase-6 keys (docs/80-* §4.7.10, orchestrator-merged — until then every
 ## label renders its literal key; the tests never assert label text).
 const KEY_WIND := "chart.wind.title"
@@ -361,6 +370,7 @@ func close_chart() -> void:
 	_hover_text = ""
 	_dragging = false
 	_close_port_panel()
+	_close_appoint_panel()
 	_port_payloads.clear()
 	remove_from_group(MODAL_GROUP)
 	queue_redraw()
@@ -621,9 +631,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
 	# Open: the panel owns all input (§4.6); `Esc` closes — the pinned port
-	# report first (§4.6 Phase-8), the chart itself on a second press.
+	# report first (§4.6 Phase-8), the appoint panel likewise (§4.10.4), the
+	# chart itself on a later press.
 	if event.is_action_pressed("back"):
 		get_viewport().set_input_as_handled()
+		if _appoint_panel != null and _appoint_panel.visible:
+			_close_appoint_panel()
+			return
 		if _port_panel != null and _port_panel.visible:
 			_close_port_panel()
 			return
@@ -718,8 +732,11 @@ func _gui_input(event: InputEvent) -> void:
 			# §4.6 Phase-8: a left press that lands on a port is a CLICK —
 			# it toggles the pinned report and never starts a pan. A press
 			# elsewhere closes the pinned panel, then pans as before.
-			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT \
-					and _debug_active:
+			# §4.10.4 (W5-D): in PLAYER mode the same click on a KNOWN port
+			# opens the appointed-voyage panel instead (the chart's 委任航行
+			# entry; `_port_dots` is the known-port set in player mode, so a
+			# hit is always a known port). The debug branch is unchanged.
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 				var width := _world_image.get_width() \
 					if _world_image != null else 4320
 				var u := (mb.position - _view_rect().position) \
@@ -728,12 +745,18 @@ func _gui_input(event: InputEvent) -> void:
 					int(floor(u.y)))
 				var port_id := _port_hit(mb.position, cell)
 				if not port_id.is_empty():
-					_open_port_panel(port_id)
+					if _debug_active:
+						_open_port_panel(port_id)
+					else:
+						_open_appoint_panel(port_id)
 					_dragging = false
 					return
 			if mb.pressed and _port_panel != null \
 					and _port_panel.visible:
 				_close_port_panel()
+			if mb.pressed and _appoint_panel != null \
+					and _appoint_panel.visible:
+				_close_appoint_panel()
 			_dragging = mb.pressed and _zoom > ZOOM_MIN
 
 
@@ -1220,6 +1243,20 @@ var _port_panel: PanelContainer = null
 var _port_panel_label: Label = null
 var _port_panel_port := ""
 
+## --- Appointed-voyage panel (§4.10.4, W5-D; player mode) --------------------
+
+## The player-mode 委任航行 panel: a KNOWN-port click opens it, the appoint
+## button carries the `sail.autopilot` gate (disabled + the skill_gates
+## reason), a success flips the panel to the HUD-line info + cancel. Built
+## lazily in code (the hover/port-panel pattern); debug mode never opens it,
+## so the pinned debug report behavior is byte-identical.
+var _appoint_panel: PanelContainer = null
+var _appoint_name: Label = null
+var _appoint_status: Label = null
+var _appoint_button: Button = null
+var _appoint_cancel_button: Button = null
+var _appoint_port := ""
+
 
 ## The hover summary block (docs/95-* §7.1): the ≤ 6 localized lines. ""
 ## for an unknown port.
@@ -1597,6 +1634,146 @@ func _close_port_panel() -> void:
 		_port_panel.visible = false
 
 
+## --- Appointed-voyage panel (§4.10.4; docs/50-* gates renderer) -------------
+
+## Builds the player-mode 委任航行 panel once (the hover/port-panel pattern:
+## code-built, autowrap discipline, explicit geometry).
+func _ensure_appoint_panel() -> void:
+	if _appoint_panel != null:
+		return
+	_appoint_panel = PanelContainer.new()
+	_appoint_panel.name = "AppointPanel"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(PaletteLib.PANEL_BG, 0.94)
+	style.border_color = PaletteLib.PANEL_LINE
+	style.set_border_width_all(1.0)
+	style.set_content_margin_all(8.0)
+	_appoint_panel.add_theme_stylebox_override("panel", style)
+	var box := VBoxContainer.new()
+	box.name = "Rows"
+	box.add_theme_constant_override("separation", 6)
+	_appoint_name = Label.new()
+	_appoint_name.add_theme_font_size_override("font_size", 16)
+	_appoint_name.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_appoint_name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_appoint_status = Label.new()
+	_appoint_status.add_theme_font_size_override("font_size", 13)
+	_appoint_status.add_theme_color_override("font_color", PaletteLib.WARN)
+	_appoint_status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_appoint_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_appoint_button = Button.new()
+	_appoint_button.text = I18n.t_key(KEY_APPOINT)
+	_appoint_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H * 0.7)
+	_appoint_button.pressed.connect(_on_appoint_pressed)
+	_appoint_cancel_button = Button.new()
+	_appoint_cancel_button.text = I18n.t_key(KEY_APPOINT_CANCEL)
+	_appoint_cancel_button.custom_minimum_size = Vector2(140,
+		PaletteLib.BUTTON_H * 0.7)
+	_appoint_cancel_button.pressed.connect(_on_appoint_cancel_pressed)
+	row.add_child(_appoint_button)
+	row.add_child(_appoint_cancel_button)
+	box.add_child(_appoint_name)
+	box.add_child(_appoint_status)
+	box.add_child(row)
+	_appoint_panel.add_child(box)
+	add_child(_appoint_panel)
+	_appoint_panel.visible = false
+
+
+## Opens (or toggles closed) the 委任航行 panel at the port's screen position.
+## Always reads the LIVE gate + appointment state.
+func _open_appoint_panel(port_id: String, toggle := true) -> void:
+	_ensure_appoint_panel()
+	if toggle and _appoint_panel.visible and _appoint_port == port_id:
+		_close_appoint_panel()
+		return
+	_appoint_port = port_id
+	_refresh_appoint_panel()
+	if _appoint_panel.visible:
+		return
+	var dot := Vector2.ZERO
+	for entry in _port_dots:
+		if str(entry.get("port_id", "")) == port_id:
+			dot = _to_screen(entry["cell"])
+			break
+	_appoint_panel.reset_size()
+	var view := get_viewport_rect().size
+	var pos := dot + Vector2(14.0, 14.0)
+	_appoint_panel.position = pos.clamp(Vector2.ZERO,
+		(view - _appoint_panel.size).clamp(Vector2.ZERO, view))
+	_appoint_panel.visible = true
+
+
+## Re-reads the gate + appointment into the panel: name line, status line
+## (the gate reason when the appoint button is disabled, the HUD bar line
+## when this port is already appointed to), and the button states.
+func _refresh_appoint_panel() -> void:
+	if _appoint_panel == null or _appoint_port.is_empty():
+		return
+	var port: Dictionary = DataLoader.get_port(_appoint_port)
+	var name_text := _appoint_port
+	if not port.is_empty():
+		name_text = I18n.t(port.get("name", {})) + " " + _appoint_port
+	_appoint_name.text = name_text
+	var verdict: Dictionary = AutopilotLib.gate(_appoint_port)
+	var appointed_here: bool = AutopilotLib.appointed() \
+		and AutopilotLib.dest_port_id() == _appoint_port
+	_appoint_button.visible = not appointed_here
+	_appoint_cancel_button.visible = appointed_here
+	if appointed_here:
+		# §4.10.4: a success (or a re-open over the standing appointment)
+		# shows the HUD-line info (destination / ETA).
+		var steps := AutopilotLib.route()
+		var days := ceili(AutopilotLib.eta_days(steps)) \
+				if not steps.is_empty() else 0
+		_appoint_status.add_theme_color_override("font_color",
+			PaletteLib.TEXT)
+		_appoint_status.text = I18n.fmt(KEY_APPOINT_HUD_BAR,
+			{"port": I18n.t(port.get("name", {})) if not port.is_empty()
+				else _appoint_port, "days": days})
+		return
+	var reason: String = AutopilotLib.reason_text(verdict)
+	if not bool(verdict.get("ok", false)):
+		_appoint_button.disabled = true
+		if not reason.is_empty():
+			_appoint_status.add_theme_color_override("font_color",
+				PaletteLib.WARN)
+			_appoint_status.text = I18n.fmt(KEY_APPOINT_GATED,
+				{"reason": reason})
+		else:
+			_appoint_status.text = ""
+		return
+	_appoint_button.disabled = false
+	_appoint_status.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_appoint_status.text = ""
+
+
+## The 委任航行 action: gate → appoint → the panel flips to the HUD-line
+## info (§4.10.4). A refused appoint (no sea route — a data-broken edge)
+## leaves the panel disabled with the gate reason empty.
+func _on_appoint_pressed() -> void:
+	var result: Dictionary = AutopilotLib.appoint(_appoint_port)
+	if bool(result.get("ok", false)):
+		_refresh_appoint_panel()
+	else:
+		_appoint_button.disabled = true
+
+
+func _on_appoint_cancel_pressed() -> void:
+	# The panel's cancel is a manual cancel (§4.19 "any manual input
+	# cancels"; §4.10.4 "Cancel returns control immediately").
+	AutopilotLib.cancel(AutopilotLib.REASON_MANUAL)
+	_refresh_appoint_panel()
+
+
+func _close_appoint_panel() -> void:
+	_appoint_port = ""
+	if _appoint_panel != null:
+		_appoint_panel.visible = false
+
+
 # --- Rebuild triggers (`80-*` §4.6: open, layer/month toggle, day_advanced) -
 
 func _rebuild_if_open() -> void:
@@ -1613,6 +1790,8 @@ func _on_day_advanced(_new_day: int) -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	_bind_labels()
+	if _appoint_panel != null and _appoint_panel.visible:
+		_refresh_appoint_panel()
 
 
 # --- Layout ------------------------------------------------------------------
