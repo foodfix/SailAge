@@ -591,6 +591,13 @@ func _test_port_debug() -> void:
 	chart._open_port_panel("lisbon")
 	_check(chart._port_panel != null and chart._port_panel.visible,
 		"clicking lisbon opens the pinned report")
+	_check(chart._port_panel.size.x <= 441.0,
+		"the report panel keeps its pinned width (%.0f px)"
+			% chart._port_panel.size.x)
+	_check(chart._port_panel.size.y
+		<= chart.get_viewport_rect().size.y * 0.62 + 1.0,
+		"the report panel caps at 62%% of the viewport (%.0f px)"
+			% chart._port_panel.size.y)
 	var report: String = chart._port_panel_label.text
 	_check(report.contains("lisbon"), "the report names the port")
 	for section_id in ["debug.port.sec.market", "debug.port.sec.ledger",

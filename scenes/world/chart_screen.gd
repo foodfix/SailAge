@@ -1201,12 +1201,16 @@ func _show_hover_window(text: String, at: Vector2) -> void:
 
 # --- Port debug hover + panel (`80-*` §4.6 Phase-8, docs/95-* §7) -----------
 
-## The pinned port report panel's fixed width (the fold target; the label
-## autowraps — arbitrary table lines must never clip) and its height cap
-## (a fraction of the viewport — the world stays visible behind it).
+## The pinned port report panel's fixed width (the fold target; the text
+## pre-wraps to it with the panel's own font — the hover window's
+## no-autowrap discipline, `80-*` §4.6: Label wrap minimums once blew a
+## panel up to a screen-filling empty block) and its height cap (a fraction
+## of the viewport — the world stays visible behind it).
 const PORT_PANEL_W := 440.0
 const PORT_PANEL_H_RATIO := 0.62
 const PORT_PANEL_FONT_SIZE := 13
+## The fold width minus the stylebox margins and the scrollbar slack.
+const PORT_PANEL_FOLD_W := PORT_PANEL_W - 36.0
 
 ## The payload cache (port_id → payload), rebuilt per `_rebuild` — stocks
 ## and ledgers move on a day tick, so a stale snapshot must not survive one.
@@ -1342,8 +1346,8 @@ func _port_good_name(good_id: String) -> String:
 
 
 ## The full report text (the panel's body, docs/95-* §7.2): the eight
-## `debug.port.sec.*` sections, one line per field — pre-folded, the label
-## autowraps only as a safety net.
+## `debug.port.sec.*` sections, one line per field — pre-folded by
+## `_fold_text` to the panel width (the no-autowrap discipline).
 func _port_panel_text(port_id: String) -> String:
 	var p := _port_payload(port_id)
 	if p.is_empty():
@@ -1517,14 +1521,36 @@ func _ensure_port_panel() -> void:
 	_port_panel_label.add_theme_font_size_override("font_size",
 		PORT_PANEL_FONT_SIZE)
 	_port_panel_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_port_panel_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_port_panel_label.custom_minimum_size = Vector2(
-		PORT_PANEL_W - 12.0, 0.0)
+	# The hover-window discipline: autowrap stays OFF — the fold is done in
+	# `_fold_text` with the panel's own font, so no Label wrap minimum can
+	# ever drive the panel's geometry.
+	_port_panel_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_port_panel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_port_panel_label)
 	_port_panel.add_child(scroll)
 	add_child(_port_panel)
 	_port_panel.visible = false
+
+
+## Greedy word-fold to `max_w`, measured with `font` (the §4.6 wrap
+## discipline — a wrap always falls between two words, never mid-word).
+## Continuation lines indent two spaces (the raw-section convention).
+func _fold_text(text: String, font: Font, font_size: int,
+		max_w: float) -> String:
+	var out: Array = []
+	for line in text.split("\n"):
+		var cur := ""
+		for word in str(line).split(" ", false):
+			var candidate := word if cur.is_empty() else cur + " " + word
+			var width := font.get_string_size(candidate,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			if cur.is_empty() or width <= max_w:
+				cur = candidate
+			else:
+				out.append(cur)
+				cur = "  " + word
+		out.append(cur)
+	return "\n".join(out)
 
 
 ## Opens (or toggles closed) the pinned report at the port's screen position.
@@ -1541,19 +1567,25 @@ func _open_port_panel(port_id: String, toggle := true) -> void:
 		_close_port_panel()
 		return
 	_port_panel_port = port_id
-	_port_panel_label.text = text
-	_port_panel.reset_size()
+	# The geometry is set EXPLICITLY — never from a Label wrap minimum:
+	# fold to the panel width with the panel's own font, then size the
+	# panel to the folded height, capped (the world stays visible).
+	var font := _port_panel_label.get_theme_font("font")
+	var font_size := _port_panel_label.get_theme_font_size("font_size")
+	var folded := _fold_text(text, font, font_size, PORT_PANEL_FOLD_W)
+	_port_panel_label.text = folded
+	var view := get_viewport_rect().size
+	var line_h := font.get_height(font_size)
+	var natural := float(folded.split("\n").size()) * line_h + 14.0
+	_port_panel.size = Vector2(PORT_PANEL_W,
+		minf(natural, view.y * PORT_PANEL_H_RATIO))
 	_port_panel.visible = true
-	# Cap the height (the world stays visible behind the panel) and clamp
-	# the position next to the port dot.
+	# Clamp the position next to the port dot.
 	var dot := Vector2.ZERO
 	for entry in _port_dots:
 		if str(entry.get("port_id", "")) == port_id:
 			dot = _to_screen(entry["cell"])
 			break
-	var view := get_viewport_rect().size
-	if _port_panel.size.y > view.y * PORT_PANEL_H_RATIO:
-		_port_panel.size.y = view.y * PORT_PANEL_H_RATIO
 	var pos := dot + Vector2(14.0, 14.0)
 	_port_panel.position = pos.clamp(Vector2.ZERO,
 		(view - _port_panel.size).clamp(Vector2.ZERO, view))

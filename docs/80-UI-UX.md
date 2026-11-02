@@ -726,9 +726,10 @@ chart adds:
   pinned, scrollable full report panel at the port** (hit-tested on press:
   a press on a port is a click, never a pan; clicking elsewhere closes the
   panel and pans as before; `Esc` closes the panel first). The panel reads
-  at the hover window's 13 px font, folds at a fixed **440 px** width
-  (autowrap safety net) and caps at **62 % of the viewport height** — the
-  world stays visible behind it. The panel has
+  at the hover window's 13 px font, pre-wraps with the panel's own font to
+  a fixed **440 px** width and caps at **62 % of the viewport height**
+  (the no-autowrap discipline — Label wrap minimums never drive the
+  geometry; the world stays visible behind it). The panel has
   eight sections (`debug.port.sec.*`): 概览 overview (the hover summary),
   市场 market (every listed port-good as one line — 产/需 side, stock /
   capacity, price factor, marginal buy/sell prices, `debug.port.no_buy`
