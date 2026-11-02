@@ -28,6 +28,17 @@ extends RefCounted
 ## one exact integer total (each tranche priced at the stock *before* it
 ## applies, the last tranche possibly smaller). A stock-moving trade emits
 ## `EventBus.market_changed(port_id)` (docs/30 §4.4).
+##
+## **Player skill factors (Phase 8, docs/30 §4.2, §4.10).** The player's
+## appraisal/negotiation (slot A's `Skills` module, guard-read through
+## [method skill_value]) add four consumers here, all player-only:
+## the §4.10 negotiation tariff discount (the player's tariff rate loses
+## `min(5, floor(negotiation / 10))` percentage points — NPC trades keep the
+## full `Allegiance.tariff_mille` rate), the session-transient price memory
+## (one entry per completed buy, capacity `floor(appraisal / 10)`, never
+## saved), and the two appraisal-gated market arrows
+## ([method profit_arrow] ≥ 30, [method memory_arrow] ≥ 60). The §4.3 XP and
+## the 0.7 basis are untouched (docs/50 §4.3).
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -83,6 +94,44 @@ const PROFIT_BASIS_FACTOR := 0.7
 ## The two supply kinds (docs/20 §4.10); they are not trade goods and never
 ## appear in `goods.json`.
 const SUPPLY_KINDS := ["provisions", "water"]
+
+# --- Phase 8 player skills (docs/30 §4.2, §4.10; docs/50 §4.3.1) ------------
+
+## Headless-suite seam for slot A's `Skills` module (the `market_screen.gd`
+## `allegiance_override` convention): an object answering
+## `effective_skill(key)` / `skill(key)`. The runtime never sets it — the
+## guard chain in [method skill_value] prefers the live module.
+static var skills_override: Variant = null
+
+## Slot A's Skills script (`W3-A` owns `scripts/player/skills.gd`). Absent in
+## pre-merge worktrees, where every skill answers 0 — all skills start at 0
+## (docs/50 §4.3), so the gates below read locked in the standalone suites.
+const SKILLS_PATH := "res://scripts/player/skills.gd"
+
+## §4.3.5 gate fallbacks when slot A's `DataLoader.skill_gates` load is
+## absent (`market.profit_arrows` / `market.other_port_memory` in
+## `data/skill_gates.json`; the doc numbers, docs/50 §4.3.1).
+const APPRAISAL_ARROW_GATE := 30
+const APPRAISAL_MEMORY_GATE := 60
+
+# --- §4.10 negotiation tariff discount (Phase 8, player-only) ---------------
+
+## The locked −5-point cap: `min(5, floor(effective_negotiation / 10))`
+## percentage points (docs/30 §4.10).
+const TARIFF_DISCOUNT_MAX_POINTS := 5
+## One percentage point in the `TARIFF_SCALE` basis (100 of 10,000).
+const TARIFF_POINT_MILLE := 100
+
+# --- §4.2 price memory (Phase 8 — session-transient, never saved) -----------
+
+## The player's price memory, `{key: {price, day}}` keyed `port|good` — one
+## entry per (port, good) holding the last-seen marginal buy price and day.
+## **Session-transient statics, never saved**: slot A owns `game_state.gd`
+## and the ratified save v9 spec lists no price-memory key, so a load starts
+## empty exactly like `npc_port_log` (docs/30 §4.2).
+static var _price_memory: Dictionary = {}
+## The same keys, least-recently-recorded first (the eviction order).
+static var _price_memory_order: Array = []
 
 
 # --- Prices (docs/30 §4.2) -------------------------------------------------
@@ -330,6 +379,11 @@ static func buy(port_id: String, good_id: String, qty: int) -> bool:
 		return false
 	# Books the stock walk (identical to the planned one: nothing moved in
 	# between) and then fires the §4.4 market_changed contract.
+	# Phase 8 §4.2 price memory: the completed buy records the port-good's
+	# marginal buy price — the first tranche's realized price, which the
+	# pre-trade stock still prices, so the record precedes the stock walk.
+	_memory_record(port_id, good_id, buy_price(port_id, good_id),
+		int(GameState.day))
 	EconomyLib.apply_trade(port_id, good_id, qty)
 	GameState.add_gold(-(cost + tax))
 	AllegianceLib.credit_tax(port_id, _player_nation(), tax)
@@ -551,10 +605,24 @@ static func port_buys_good(port_id: String, good_id: String) -> bool:
 
 # --- Tariff (docs/30 §4.10 — composes after all price math) -----------------
 
-## The player's tariff at `port_id` in the C-contract basis points
-## (0 / 500 / 2000 after permits; `Allegiance.tariff_mille` is the rule).
+## The player's tariff at `port_id` in the C-contract basis points: the
+## `Allegiance.tariff_mille` rule (0 / 500 / 2000 after permits) **minus** the
+## Phase-8 negotiation discount, `min(5, floor(effective_negotiation / 10))`
+## percentage points, floored at 0 (docs/30 §4.10 — an aligned 5% reaches 0%
+## at negotiation ≥ 50, a foreign 20% becomes 15%). **Player-only**: NPC
+## trades call the allegiance rule directly and always pay the full rate.
 static func tax_mille(port_id: String) -> int:
-	return AllegianceLib.tariff_mille(port_id, _player_nation())
+	var base := AllegianceLib.tariff_mille(port_id, _player_nation())
+	if base <= 0:
+		return base
+	return maxi(0, base - tariff_discount_points() * TARIFF_POINT_MILLE)
+
+
+## The negotiation discount in percentage points, `min(5, floor(negotiation
+## / 10))` — the −5 cap makes negotiation ≥ 50 the maximum (docs/30 §4.10).
+static func tariff_discount_points() -> int:
+	@warning_ignore("integer_division")
+	return mini(TARIFF_DISCOUNT_MAX_POINTS, skill_value("negotiation") / 10)
 
 
 ## The tax coin on a walked transaction total (`total × mille / 10,000`,
@@ -569,6 +637,168 @@ static func tax_amount(port_id: String, total: int) -> int:
 ## The player's nation id (`""` before a run exists).
 static func _player_nation() -> String:
 	return str(GameState.player.get("nation_id", ""))
+
+
+# --- Player skills (Phase 8; docs/50 §4.3, docs/30 §4.2) --------------------
+
+## The player's **effective** skill value (`Skills.effective_skill(key)` —
+## the officer-contribution-aware read slot A owns; `skill(key)` the base-only
+## fallback). Guard chain: the suite seam, then slot A's `Skills` autoload
+## node, then its script statics, then 0 (every skill starts at 0,
+## docs/50 §4.3 — pre-merge worktrees answer 0 and the gates stay shut).
+static func skill_value(key: String) -> int:
+	for method in ["effective_skill", "skill"]:
+		if skills_override is Object \
+				and (skills_override as Object).has_method(method):
+			return maxi(0, int(skills_override.call(method, key)))
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var node := (tree as SceneTree).root.get_node_or_null("Skills")
+		if node != null:
+			for method in ["effective_skill", "skill"]:
+				if node.has_method(method):
+					return maxi(0, int(node.call(method, key)))
+	if ResourceLoader.exists(SKILLS_PATH):
+		var script: Variant = ResourceLoader.load(SKILLS_PATH)
+		if script is Script:
+			for method in ["effective_skill", "skill"]:
+				if (script as Script).has_method(method):
+					return maxi(0, int((script as Script).call(method, key)))
+	return 0
+
+
+## The §4.3.5 gate threshold for `feature_id`: slot A's `DataLoader.skill_gates`
+## first (keyed `feature_id` → `{stat_or_skill, threshold, reason}` — the load
+## lands with W3-A), else the locked doc number. The guard read keeps the
+## suites standalone (docs/50 §4.3.5).
+static func _gate_threshold(feature_id: String, doc_default: int) -> int:
+	var gates = DataLoader.get("skill_gates")
+	if gates is Dictionary:
+		var row = (gates as Dictionary).get(feature_id, {})
+		if row is Dictionary and (row as Dictionary).has("threshold"):
+			return maxi(0, int((row as Dictionary)["threshold"]))
+	return doc_default
+
+
+## §4.2 profit arrows: unlocked at effective appraisal ≥ the
+## `market.profit_arrows` gate (30).
+static func profit_arrows_unlocked() -> bool:
+	return skill_value("appraisal") \
+		>= _gate_threshold("market.profit_arrows", APPRAISAL_ARROW_GATE)
+
+
+## §4.2 other-port memory arrows: unlocked at effective appraisal ≥ the
+## `market.other_port_memory` gate (60).
+static func memory_arrows_unlocked() -> bool:
+	return skill_value("appraisal") \
+		>= _gate_threshold("market.other_port_memory", APPRAISAL_MEMORY_GATE)
+
+
+# --- Price memory (docs/30 §4.2 — session-transient, never saved) -----------
+
+## Test/session seam: empties the memory (a new "session" starts empty).
+static func reset_price_memory() -> void:
+	_price_memory = {}
+	_price_memory_order = []
+
+
+## `floor(effective_appraisal / 10)` entries — appraisal 30 → 3, 100 → 10
+## (docs/30 §4.2); below 10 appraisal nothing records at all.
+static func memory_capacity() -> int:
+	@warning_ignore("integer_division")
+	return skill_value("appraisal") / 10
+
+
+static func _memory_key(port_id: String, good_id: String) -> String:
+	return "%s|%s" % [port_id, good_id]
+
+
+## The memory entry for a port-good — `{price, day}`, or `{}` when unrecorded.
+static func price_memory_entry(port_id: String, good_id: String) -> Dictionary:
+	var entry: Variant = _price_memory.get(_memory_key(port_id, good_id), {})
+	return (entry as Dictionary).duplicate() if entry is Dictionary else {}
+
+
+## Read-only copy of the whole memory, least-recently-recorded first — the
+## debug/inspection seam.
+static func price_memory() -> Dictionary:
+	var out: Dictionary = {}
+	for key in _price_memory_order:
+		out[str(key)] = (_price_memory[key] as Dictionary).duplicate()
+	return out
+
+
+## Records a completed buy's marginal price (docs/30 §4.2): one entry per
+## (port, good); a re-buy overwrites and moves the key to newest ("last
+## seen"); past [method memory_capacity] the oldest entry is evicted first.
+## Capacity 0 records nothing. Writes only these statics — never GameState.
+static func _memory_record(port_id: String, good_id: String, price: int,
+		day: int) -> void:
+	var capacity := memory_capacity()
+	if capacity <= 0:
+		return
+	var key := _memory_key(port_id, good_id)
+	if _price_memory.has(key):
+		_price_memory_order.erase(key)
+	_price_memory[key] = {"price": maxi(0, price), "day": maxi(0, day)}
+	_price_memory_order.append(key)
+	while _price_memory_order.size() > capacity:
+		var evicted := str(_price_memory_order.pop_front())
+		_price_memory.erase(evicted)
+
+
+## The most-recent memory entry for `good_id` recorded at a port **other**
+## than `port_id` (`{}` when none) — the §4.2 other-port memory arrow's
+## comparator ("the memory's last-seen price for that good at other ports").
+static func memory_other_port_entry(port_id: String,
+		good_id: String) -> Dictionary:
+	for index in range(_price_memory_order.size() - 1, -1, -1):
+		var key := str(_price_memory_order[index])
+		var parts := key.split("|", true, 1)
+		if parts.size() != 2 or str(parts[0]) == port_id:
+			continue
+		if str(parts[1]) != good_id:
+			continue
+		return (_price_memory[key] as Dictionary).duplicate()
+	return {}
+
+
+# --- Market arrows (docs/30 §4.2 — appraisal-gated) -------------------------
+
+## The profit arrow of a market row: `"down"` when the marginal buy price
+## sits below `base_price` (cheap producer row — profitable to buy),
+## `"up"` when the marginal sell price sits above it (dear consumer row —
+## profitable to sell), `""` otherwise. Below the appraisal ≥ 30 gate the
+## arrow never renders (`""`, docs/30 §4.2).
+static func profit_arrow(port_id: String, good_id: String) -> String:
+	if not profit_arrows_unlocked():
+		return ""
+	var base := _base_price(good_id)
+	if buy_price(port_id, good_id) < base:
+		return "down"
+	if sell_price(port_id, good_id) > base:
+		return "up"
+	return ""
+
+
+## The other-port memory arrow of a market row: `"up"` when the local marginal
+## buy price is above the most-recent remembered price for that good at other
+## ports, `"down"` when below, `""` when the memory holds no foreign entry.
+## Below the appraisal ≥ 60 gate only the §4.8 flow-trend arrows render
+## (`""`, docs/30 §4.2).
+static func memory_arrow(port_id: String, good_id: String) -> String:
+	if not memory_arrows_unlocked():
+		return ""
+	var entry := memory_other_port_entry(port_id, good_id)
+	if entry.is_empty():
+		return ""
+	var local := buy_price(port_id, good_id)
+	var remembered := maxi(0, int(entry.get("price", 0)))
+	if local > remembered:
+		return "up"
+	if local < remembered:
+		return "down"
+	return ""
 
 
 # --- Helpers ---------------------------------------------------------------

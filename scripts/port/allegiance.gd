@@ -106,6 +106,16 @@ const PERMIT_HOME_PRICE := 5000
 ## 涉外免税证: 20,000g, that nation's palaces, title ≥ Knight, rep ≥ +20.
 const PERMIT_FOREIGN_PRICE := 20000
 const PERMIT_FOREIGN_MIN_REP := 20
+## Phase 8 negotiation gates (docs/30 §4.10, 2026-11-02): the home charter
+## sells at ×95% (4,750g) when negotiation ≥ 40, the foreign permit at ×90%
+## (18,000g) when ≥ 70; full price below the gate. Thresholds live in
+## `data/skill_gates.json` (`permit.home_discount` / `permit.foreign_discount`)
+## — read through `permit_price` when slot A's loader lands, else the doc
+## numbers.
+const PERMIT_HOME_GATE := 40
+const PERMIT_FOREIGN_GATE := 70
+const PERMIT_HOME_DISCOUNT_NUM := 95
+const PERMIT_FOREIGN_DISCOUNT_NUM := 90
 ## Both kinds are void while that nation's bounty is held or rep < −20.
 const PERMIT_VOID_REP := -20
 
@@ -416,6 +426,79 @@ static func permit_void_reason(nation_id: String) -> String:
 
 static func permit_void(nation_id: String) -> bool:
 	return not permit_void_reason(nation_id).is_empty()
+
+
+# --- Permit price gates (docs/30 §4.10, Phase 8) -----------------------------
+
+## Headless-suite seam for slot A's `Skills` module (the `market_screen.gd`
+## `allegiance_override` convention): an object answering
+## `effective_skill(key)` / `skill(key)`. The runtime never sets it;
+## pre-merge worktrees answer 0 (skills start at 0, docs/50 §4.3).
+static var skills_override: Variant = null
+
+## Slot A's Skills script — restated instead of preloaded (a preload of
+## `trade_engine.gd`'s guard would be circular; the same convention as
+## `INVEST_CHUNK` above).
+const SKILLS_PATH := "res://scripts/player/skills.gd"
+
+
+## The player's **effective** negotiation — the same guard chain as
+## `trade_engine.skill_value` (the suite seam, slot A's `Skills` autoload
+## node, its script statics, else 0).
+static func negotiation_skill() -> int:
+	for method in ["effective_skill", "skill"]:
+		if skills_override is Object \
+				and (skills_override as Object).has_method(method):
+			return maxi(0, int(skills_override.call(method, "negotiation")))
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var node := (tree as SceneTree).root.get_node_or_null("Skills")
+		if node != null:
+			for method in ["effective_skill", "skill"]:
+				if node.has_method(method):
+					return maxi(0, int(node.call(method, "negotiation")))
+	if ResourceLoader.exists(SKILLS_PATH):
+		var script: Variant = ResourceLoader.load(SKILLS_PATH)
+		if script is Script:
+			for method in ["effective_skill", "skill"]:
+				if (script as Script).has_method(method):
+					return maxi(0,
+						int((script as Script).call(method, "negotiation")))
+	return 0
+
+
+## The §4.3.5 gate threshold (`feature_id` → threshold): slot A's
+## `DataLoader.skill_gates` first (keyed by `feature_id`), else the doc
+## default. Guarded so the suites run standalone.
+static func _gate_threshold(feature_id: String, doc_default: int) -> int:
+	var gates = DataLoader.get("skill_gates")
+	if gates is Dictionary:
+		var row = (gates as Dictionary).get(feature_id, {})
+		if row is Dictionary and (row as Dictionary).has("threshold"):
+			return maxi(0, int((row as Dictionary)["threshold"]))
+	return doc_default
+
+
+## The §4.10 permit price for `kind` (`"home"` / `"foreign"`, `""` → 0) after
+## the Phase-8 negotiation gate: the home charter 5,000g → **4,750g** at
+## negotiation ≥ 40, the foreign permit 20,000g → **18,000g** at ≥ 70, full
+## price below the gate (docs/30 §4.10 — the discounted values are the exact
+## products 5000 × 95 / 100 and 20000 × 90 / 100). `palace_engine.permit_offer`
+## answers this, so the row display and the `buy_permit` charge agree.
+static func permit_price(kind: String) -> int:
+	if kind == "home":
+		if negotiation_skill() >= _gate_threshold("permit.home_discount",
+				PERMIT_HOME_GATE):
+			@warning_ignore("integer_division")
+			return PERMIT_HOME_PRICE * PERMIT_HOME_DISCOUNT_NUM / 100
+		return PERMIT_HOME_PRICE
+	if kind == "foreign":
+		if negotiation_skill() >= _gate_threshold("permit.foreign_discount",
+				PERMIT_FOREIGN_GATE):
+			@warning_ignore("integer_division")
+			return PERMIT_FOREIGN_PRICE * PERMIT_FOREIGN_DISCOUNT_NUM / 100
+		return PERMIT_FOREIGN_PRICE
+	return 0
 
 
 ## Writes the permit flags (palace purchase seam — `palace_engine` calls this

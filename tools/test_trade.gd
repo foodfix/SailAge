@@ -43,6 +43,9 @@ func _ready() -> void:
 	_test_sell_profit_xp_and_reputation()
 	_test_profit_survives_save_roundtrip()
 	_test_capacity_flagship_first()
+	_test_tariff_discount()
+	_test_permit_prices()
+	_test_price_memory()
 	_report()
 
 
@@ -128,6 +131,37 @@ func _dock(to_port: String, gold: int = -1) -> void:
 ## them (each call models "came back the next day").
 func _open_market() -> void:
 	GameState.world["clock_fraction"] = 0.5
+
+
+# --- Phase 8 skill seam ------------------------------------------------------
+
+## Stand-in for slot A's `Skills` module (`W3-A` pins `effective_skill(key)`
+## as the API, `skill(key)` the base-only fallback).
+class FakeSkills extends RefCounted:
+	var values: Dictionary = {}
+
+	func effective_skill(key: String) -> int:
+		return int(values.get(key, 0))
+
+	func skill(key: String) -> int:
+		return effective_skill(key)
+
+
+## Pins the player's appraisal/negotiation through both engine seams
+## (`trade_engine` reads the tariff discount + memory capacity, `allegiance`
+## the permit gates).
+func _set_skills(appraisal: int, negotiation: int) -> void:
+	var fake := FakeSkills.new()
+	fake.values = {"appraisal": appraisal, "negotiation": negotiation}
+	TradeEngineLib.skills_override = fake
+	AllegianceLib.skills_override = fake
+
+
+## Clears the seam and the session-transient price memory (test hygiene).
+func _clear_skills() -> void:
+	TradeEngineLib.skills_override = null
+	AllegianceLib.skills_override = null
+	TradeEngineLib.reset_price_memory()
 
 
 func _test_worked_examples() -> void:
@@ -1179,6 +1213,234 @@ func _test_capacity_flagship_first() -> void:
 	_check(not TradeEngineLib.buy("lisbon", "wine", 11), "11 is refused")
 	_check(TradeEngineLib.buy("lisbon", "wine", 10), "exactly 10 succeeds")
 	_check(FleetLib.fleet_free() == 0, "the fleet is full")
+
+
+# --- Phase 8 (W3-D): the player skill factors (docs/30 §4.2, §4.10) ---------
+
+## §4.10 negotiation tariff discount: `min(5, floor(effective_negotiation/10))`
+## percentage points off the §4.10 rate, both directions, floored at 0;
+## **player-only** — the NPC-parity allegiance rule never moves. The pinned
+## levels: negotiation 0 → full 5%/20%, 20 → 3%/18%, 40 → 1%/16% (floor(40/10)
+## = 4 points), 50 and 100 → the −5 cap → 0%/15%.
+func _test_tariff_discount() -> void:
+	var cases := [
+		[0, 0, 500, 2000], [20, 2, 300, 1800], [40, 4, 100, 1600],
+		[50, 5, 0, 1500], [100, 5, 0, 1500],
+	]
+	for case in cases:
+		var negotiation := int(case[0])
+		_make_run("lisbon")
+		_set_skills(0, negotiation)
+		_check(TradeEngineLib.tariff_discount_points() == int(case[1]),
+			"negotiation %d → %d discount points (got %d)"
+			% [negotiation, case[1], TradeEngineLib.tariff_discount_points()])
+		_check(TradeEngineLib.tax_mille("lisbon") == int(case[2]),
+			"negotiation %d: aligned lisbon %d‰ = 5%% − %d pts (got %d‰)"
+			% [negotiation, case[2], case[1], TradeEngineLib.tax_mille("lisbon")])
+		_check(TradeEngineLib.tax_mille("london") == int(case[3]),
+			"negotiation %d: foreign london %d‰ = 20%% − %d pts (got %d‰)"
+			% [negotiation, case[3], case[1], TradeEngineLib.tax_mille("london")])
+		# NPC parity: the allegiance rule answers the full §4.10 rate whatever
+		# the player's negotiation (docs/30 §4.10 "NPC trades pay full rate").
+		_check(AllegianceLib.tariff_mille("lisbon", "portugal") == 500,
+			"negotiation %d: the NPC aligned rate stays 5%%" % negotiation)
+		_check(AllegianceLib.tariff_mille("london", "england") == 500,
+			"negotiation %d: the NPC england trader stays 5%%" % negotiation)
+		_check(AllegianceLib.tariff_mille("london", "portugal") == 2000,
+			"negotiation %d: the NPC foreign rate stays 20%%" % negotiation)
+	_clear_skills()
+
+	# The discount lands on real transactions, both directions (negotiation
+	# 20 → 2 points: aligned 3%, foreign 18%).
+	_make_run("lisbon", 1000)
+	_set_skills(0, 20)
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine at lisbon")
+	# 210 gross + 210 × 300/10000 = 6 tax → 216 out of pocket.
+	_check(GameState.gold == 1000 - 216,
+		"the discounted buy charges 210 + 6 tax = 216 (got %d)" % GameState.gold)
+	_dock("london")
+	FleetLib.add_goods("wine", 10)
+	var gold_before := GameState.gold
+	_check(TradeEngineLib.sell("london", "wine", 10), "sell 10 wine at london")
+	# 310 gross − 310 × 1800/10000 = 55 tax → 255 net.
+	_check(GameState.gold == gold_before + 255,
+		"the discounted sale nets 310 − 55 tax = 255 (got +%d)"
+		% (GameState.gold - gold_before))
+	_clear_skills()
+
+	# The floor is 0: the aligned 5% at the −5 cap taxes nothing, and the
+	# zero rate buys at exactly the gross walked total.
+	_make_run("lisbon", 1000)
+	_set_skills(0, 100)
+	_check(TradeEngineLib.tax_mille("lisbon") == 0,
+		"negotiation 100: the aligned 5%% floors at 0%% (got %d‰)"
+		% TradeEngineLib.tax_mille("lisbon"))
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "the zero-rate buy succeeds")
+	_check(GameState.gold == 790,
+		"the zero-rate buy charges exactly the gross 210 (got %d)" % GameState.gold)
+	_clear_skills()
+
+
+## §4.10 permit price gates: home 5,000g → 4,750g at negotiation ≥ 40
+## (`permit.home_discount`), foreign 20,000g → 18,000g at ≥ 70
+## (`permit.foreign_discount`); full price below the gate, the paid price
+## credits the selling nation. `PalaceEngine.permit_offer`/`buy_permit`
+## answer the same gated price.
+func _test_permit_prices() -> void:
+	# Below the home gate (39): full price everywhere.
+	_make_run("lisbon", 100000)
+	_set_skills(0, 39)
+	_check(AllegianceLib.permit_price("home") == 5000,
+		"negotiation 39: the home charter is full price (got %d)"
+		% AllegianceLib.permit_price("home"))
+	_check(PalaceEngineLib.permit_offer("lisbon")["price"] == 5000,
+		"the palace offer answers the full 5,000g")
+	var gold_before := GameState.gold
+	var portugal_before := AllegianceLib.treasury("portugal")
+	_check(PalaceEngineLib.buy_permit("lisbon"), "the full-price charter buys")
+	_check(GameState.gold == gold_before - 5000, "5,000g charged")
+	_check(AllegianceLib.treasury("portugal") == portugal_before + 5000,
+		"the full 5,000g credits portugal's treasury")
+
+	# At the gate (40): 4,750g.
+	_make_run("lisbon", 100000)
+	_set_skills(0, 40)
+	_check(AllegianceLib.permit_price("home") == 4750,
+		"negotiation 40: the home charter sells at 4,750g (got %d)"
+		% AllegianceLib.permit_price("home"))
+	_check(PalaceEngineLib.permit_offer("lisbon")["price"] == 4750,
+		"the palace offer answers the gated 4,750g")
+	gold_before = GameState.gold
+	portugal_before = AllegianceLib.treasury("portugal")
+	_check(PalaceEngineLib.buy_permit("lisbon"), "the gated charter buys")
+	_check(GameState.gold == gold_before - 4750,
+		"exactly 4,750g charged (paid %d)" % (gold_before - GameState.gold))
+	_check(AllegianceLib.treasury("portugal") == portugal_before + 4750,
+		"the paid 4,750g credits portugal's treasury (got %d)"
+		% (AllegianceLib.treasury("portugal") - portugal_before))
+	_clear_skills()
+
+	# The foreign gates (69/70), with the title ≥ knight + rep ≥ +20 fixture.
+	_make_run("london", 100000)
+	CharacterLib.add_reputation("england", 20)
+	GameState.titles = {"england": "knight"}
+	_set_skills(0, 69)
+	_check(AllegianceLib.permit_price("foreign") == 20000,
+		"negotiation 69: the foreign permit is full price (got %d)"
+		% AllegianceLib.permit_price("foreign"))
+	_set_skills(0, 70)
+	_check(AllegianceLib.permit_price("foreign") == 18000,
+		"negotiation 70: the foreign permit sells at 18,000g (got %d)"
+		% AllegianceLib.permit_price("foreign"))
+	var england_before := AllegianceLib.treasury("england")
+	gold_before = GameState.gold
+	_check(PalaceEngineLib.buy_permit("london"), "the gated foreign permit buys")
+	_check(GameState.gold == gold_before - 18000,
+		"exactly 18,000g charged (paid %d)" % (gold_before - GameState.gold))
+	_check(AllegianceLib.treasury("england") == england_before + 18000,
+		"the paid 18,000g credits england's treasury (got %d)"
+		% (AllegianceLib.treasury("england") - england_before))
+	_clear_skills()
+
+
+## §4.2 price memory: one entry per (port, good) per completed buy holding the
+## marginal (first-tranche) price + day; capacity `floor(appraisal/10)` with
+## least-recently-recorded-first eviction; a re-buy overwrites (and moves the
+## entry to newest — "last seen"); session-transient, never saved.
+func _test_price_memory() -> void:
+	TradeEngineLib.reset_price_memory()
+
+	# Capacity 0 (appraisal < 10): completed buys record nothing.
+	_make_run("lisbon", 10000)
+	_set_skills(0, 0)
+	_check(TradeEngineLib.memory_capacity() == 0, "appraisal 0 → capacity 0")
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine (no capacity)")
+	_check(TradeEngineLib.price_memory().is_empty(),
+		"capacity 0 records nothing")
+	_clear_skills()
+
+	# Capacity 3 (appraisal 30): the marginal buy price records per pair.
+	_make_run("lisbon", 100000)
+	TradeEngineLib.reset_price_memory()
+	_set_skills(30, 0)
+	_check(TradeEngineLib.memory_capacity() == 3, "appraisal 30 → capacity 3")
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "buy 10 wine at lisbon")
+	_check(TradeEngineLib.price_memory_entry("lisbon", "wine")
+		== {"price": 21, "day": 1},
+		"the entry is the marginal buy 21 at day 1 (got %s)"
+		% str(TradeEngineLib.price_memory_entry("lisbon", "wine")))
+	# Fill to capacity, then re-buy the oldest pair at its moved stock: the
+	# overwrite updates the marginal (22 at stock 150), stays one entry, and
+	# moves the pair to newest — "last seen".
+	_check(TradeEngineLib.buy("lisbon", "salt", 10), "buy salt (2nd entry)")
+	_dock("london")
+	_check(TradeEngineLib.buy("london", "wine", 10), "buy wine at london (3rd)")
+	_check(TradeEngineLib.price_memory().size() == 3,
+		"three entries at capacity 3")
+	_dock("lisbon")
+	_open_market()
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "re-buy wine (overwrite)")
+	_check(TradeEngineLib.price_memory_entry("lisbon", "wine")["price"] == 22,
+		"the re-buy overwrites with the new marginal 22 (got %d)"
+		% int(TradeEngineLib.price_memory_entry("lisbon", "wine")["price"]))
+	_check(TradeEngineLib.price_memory().size() == 3,
+		"a re-buy keeps exactly one entry per (port, good)")
+	# The 4th pair evicts the LEAST-RECENTLY-RECORDED entry — lisbon|salt,
+	# because the wine re-buy moved lisbon|wine to newest.
+	_check(TradeEngineLib.buy("lisbon", "wheat", 10), "buy wheat (4th entry)")
+	var memory := TradeEngineLib.price_memory()
+	_check(memory.size() == 3, "the eviction kept exactly 3 entries")
+	_check(not memory.has("lisbon|salt"),
+		"the least-recently-recorded entry (lisbon salt) evicted first")
+	_check(memory.has("lisbon|wine") and memory.has("london|wine")
+		and memory.has("lisbon|wheat"),
+		"the overwritten lisbon wine survives the eviction (last-seen order)")
+	_clear_skills()
+
+	# Capacity 10 (appraisal 100): eleven distinct pairs fill and evict the
+	# first pair, not the eleventh.
+	_make_run("lisbon", 1000000)
+	TradeEngineLib.reset_price_memory()
+	_set_skills(100, 0)
+	_check(TradeEngineLib.memory_capacity() == 10, "appraisal 100 → capacity 10")
+	var bought := 0
+	var first_pair := ""
+	for port_id in ["lisbon", "london"]:
+		for row in TradeEngineLib.goods_rows(port_id):
+			var good_id := str(row.get("id", ""))
+			_dock(port_id)
+			_open_market()
+			_check(TradeEngineLib.buy(port_id, good_id, 1),
+				"fill buy %d: %s at %s" % [bought + 1, good_id, port_id])
+			if first_pair.is_empty():
+				first_pair = "%s|%s" % [port_id, good_id]
+			bought += 1
+			if bought >= 11:
+				break
+		if bought >= 11:
+			break
+	_check(bought == 11, "eleven distinct pairs bought (got %d)" % bought)
+	var memory11 := TradeEngineLib.price_memory()
+	_check(memory11.size() == 10,
+		"capacity 10 keeps exactly 10 entries (got %d)" % memory11.size())
+	_check(not memory11.has(first_pair),
+		"the 11th buy evicted the oldest entry (%s)" % first_pair)
+	_clear_skills()
+
+	# Session-transient: the reset helper models a new session, and nothing
+	# ever lands in the save-relevant player block.
+	TradeEngineLib.reset_price_memory()
+	_check(TradeEngineLib.price_memory().is_empty(),
+		"the reset helper empties the memory (a new session)")
+	_make_run("lisbon", 10000)
+	_set_skills(30, 0)
+	_check(TradeEngineLib.buy("lisbon", "wine", 1), "one more completed buy")
+	_check(TradeEngineLib.price_memory().size() == 1,
+		"the fresh session records again")
+	_check(not GameState.player.has("price_memory")
+		and not GameState.player.has("price_memory_order"),
+		"the memory never writes the GameState player block")
+	_clear_skills()
 
 
 # --- Harness --------------------------------------------------------------

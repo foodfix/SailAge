@@ -470,8 +470,10 @@ static func permit_offer(port_id: String) -> Dictionary:
 		return {}
 	var player := _player_nation()
 	var kind := "home" if nation_id == player else "foreign"
-	var price := AllegianceLib.PERMIT_HOME_PRICE if kind == "home" \
-		else AllegianceLib.PERMIT_FOREIGN_PRICE
+	# Phase 8 §4.10: the negotiation-gated price (home 5,000g → 4,750g at
+	# negotiation ≥ 40, foreign 20,000g → 18,000g at ≥ 70; `allegiance.gd`
+	# owns the gate, docs/30 §4.10).
+	var price := AllegianceLib.permit_price(kind)
 	var owned := _permit_owned(kind, nation_id)
 	return {
 		"kind": kind,

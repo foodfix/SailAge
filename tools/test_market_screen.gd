@@ -117,6 +117,8 @@ func _ready() -> void:
 	_test_telegraph_rows()
 	_test_tavern_renders_investment()
 	_test_locale_swap()
+	_test_arrow_gates()
+	_test_memory_arrows()
 	_report()
 
 
@@ -129,7 +131,7 @@ func _scripts_loaded() -> bool:
 		"row_goods_ids", "row", "row_qty", "type_qty", "press_qty_preset",
 		"press_buy", "press_sell", "press_invest", "refresh",
 		"tax_badge_key", "tax_badge_state", "tax_line_texts",
-		"specialty_header_text",
+		"specialty_header_text", "row_arrows",
 	], ["route_to_port"]) and ok
 	var tavern: Variant = ResourceLoader.load(TAVERN_SCREEN_PATH)
 	ok = _script_ok(tavern, TAVERN_SCREEN_PATH, [
@@ -856,3 +858,160 @@ func _test_locale_swap() -> void:
 		"en: the 不收购 reason re-renders")
 	I18n.set_locale(was)
 	_drop(screen)
+
+
+# --- Phase 8 §4.2 arrows (appraisal-gated) ----------------------------------
+
+## Stand-in for slot A's `Skills` module (`W3-A` pins `effective_skill(key)`).
+class FakeSkills extends RefCounted:
+	var values: Dictionary = {}
+
+	func effective_skill(key: String) -> int:
+		return int(values.get(key, 0))
+
+	func skill(key: String) -> int:
+		return effective_skill(key)
+
+
+## Pins the player's appraisal through the trade engine's seam (the arrows'
+## gates and the memory capacity both read it).
+func _set_appraisal(value: int) -> void:
+	var fake := FakeSkills.new()
+	fake.values = {"appraisal": value, "negotiation": 0}
+	TradeEngineLib.skills_override = fake
+
+
+func _clear_seams() -> void:
+	TradeEngineLib.skills_override = null
+	TradeEngineLib.reset_price_memory()
+
+
+## The profit arrow renders iff effective appraisal ≥ 30 AND the row is
+## profitable vs `base_price` (buy < base → "down", sell > base → "up");
+## below the gate no arrow renders and the §4.8 flow-trend glyph is untouched.
+func _test_arrow_gates() -> void:
+	# Below the ≥ 30 gate: no arrows, the flow-trend logic intact.
+	_make_run("lisbon")
+	TradeEngineLib.reset_price_memory()
+	_set_appraisal(10)
+	var screen := _instantiate_market()
+	var arrows: Dictionary = screen.row_arrows("wine")
+	_check(str(arrows["profit"]) == "" and str(arrows["memory"]) == "",
+		"appraisal 10: no arrows render (got %s)" % str(arrows))
+	_check((screen.row("wine")["profit_arrow"] as Label).text == ""
+		and (screen.row("wine")["memory_arrow"] as Label).text == "",
+		"the arrow glyphs stay empty below the gates")
+	# The flow-trend logic (§4.8) is intact: drain lisbon wine under its
+	# rest 160 and the ▲ glyph renders as before.
+	EconomyLib.set_stock("lisbon", "wine", 100)
+	screen.refresh()
+	_check((screen.row("wine")["trend"] as Label).text
+		== I18n.t_key("market.stock.trend_up"),
+		"below the gates only the flow-trend glyph renders (%s)"
+			% str((screen.row("wine")["trend"] as Label).text))
+	_drop(screen)
+
+	# One below the gate, one at it: the gate is the locked ≥ 30.
+	_set_appraisal(29)
+	var screen2 := _instantiate_market()
+	_check(str(screen2.row_arrows("wine")["profit"]) == "",
+		"appraisal 29 stays below the profit-arrow gate")
+	_drop(screen2)
+	# Back to the §5 rest (the flow-trend block drained it to 100).
+	EconomyLib.set_stock("lisbon", "wine", 160)
+	_set_appraisal(30)
+	var screen3 := _instantiate_market()
+	arrows = screen3.row_arrows("wine")
+	_check(str(arrows["profit"]) == "down",
+		"appraisal 30: lisbon wine buys 21 < base 30 → down (got %s)"
+			% str(arrows))
+	_check((screen3.row("wine")["profit_arrow"] as Label).text == "↓",
+		"the buy-cheap arrow renders the ↓ glyph")
+	_check(str(arrows["memory"]) == "",
+		"appraisal 30 < 60: the memory arrow never renders")
+	# A row profitable neither way shows nothing: lisbon wheat buys 10 > base
+	# 8 and sells 8 (not > base) — no arrow.
+	_check(str(screen3.row_arrows("wheat")["profit"]) == "",
+		"a row profitable neither way shows no arrow")
+	_drop(screen3)
+
+	# The dear-consumer direction: london wine at the §5 rest 40 sells
+	# 31 > base 30 → "up" (its 39 buy is above base, so no buy arrow).
+	_make_run("london")
+	EconomyLib.set_stock("london", "wine", 40)
+	_set_appraisal(30)
+	var screen4 := _instantiate_market()
+	arrows = screen4.row_arrows("wine")
+	_check(str(arrows["profit"]) == "up",
+		"london wine sells 31 > base 30 → up (got %s)" % str(arrows))
+	_check((screen4.row("wine")["profit_arrow"] as Label).text == "↑",
+		"the sell-dear arrow renders the ↑ glyph")
+	_drop(screen4)
+	_clear_seams()
+
+
+## The other-port memory arrow renders iff effective appraisal ≥ 60 and the
+## memory holds a foreign entry; the comparator is the MOST-RECENT foreign
+## entry for the good.
+func _test_memory_arrows() -> void:
+	# Below the ≥ 60 gate a seeded foreign entry changes nothing.
+	_make_run("lisbon", 10000)
+	TradeEngineLib.reset_price_memory()
+	_set_appraisal(50)
+	_check(TradeEngineLib.buy("lisbon", "wine", 10),
+		"seed: buy wine at lisbon (memory 21)")
+	_make_run("london", 10000)
+	EconomyLib.set_stock("london", "wine", 40)  # the §5 rest: buy 39 / sell 31
+	_set_appraisal(50)
+	var screen := _instantiate_market()
+	_check(str(screen.row_arrows("wine")["memory"]) == "",
+		"appraisal 50 with a foreign entry: no memory arrow yet")
+	_drop(screen)
+
+	# At the gate: london wine buys 39 > remembered lisbon 21 → "up", next
+	# to the still-rendering profit arrow.
+	_set_appraisal(60)
+	var screen2 := _instantiate_market()
+	var arrows: Dictionary = screen2.row_arrows("wine")
+	_check(str(arrows["memory"]) == "up",
+		"appraisal 60: london 39 > remembered lisbon 21 → up (got %s)"
+			% str(arrows))
+	_check(str(arrows["profit"]) == "up",
+		"the profit arrow renders alongside the memory arrow")
+	_check((screen2.row("wine")["memory_arrow"] as Label).text == "↑",
+		"the memory arrow renders the ↑ glyph")
+	_drop(screen2)
+
+	# The reverse leg: remembered london 39, local lisbon 21 → "down".
+	_make_run("london", 100000)
+	_set_appraisal(60)
+	_check(TradeEngineLib.buy("london", "wine", 10),
+		"seed: buy wine at london (memory 39)")
+	_make_run("lisbon", 100000)
+	_set_appraisal(60)
+	var screen3 := _instantiate_market()
+	_check(str(screen3.row_arrows("wine")["memory"]) == "down",
+		"lisbon 21 < remembered london 39 → down (got %s)"
+			% str(screen3.row_arrows("wine")))
+	_drop(screen3)
+
+	# The comparator is the MOST-RECENT foreign entry: lisbon 21 then
+	# valencia 39 (last-seen) — london's own 39 equals it → no arrow.
+	_make_run("lisbon", 100000)
+	EconomyLib.set_stock("valencia", "wine", 40)
+	TradeEngineLib.reset_price_memory()
+	_set_appraisal(60)
+	_check(TradeEngineLib.buy("lisbon", "wine", 10), "seed lisbon wine @21")
+	_check(TradeEngineLib.buy("valencia", "wine", 10), "seed valencia wine @39")
+	_check(int(TradeEngineLib.memory_other_port_entry("london", "wine")
+		.get("price", 0)) == 39,
+		"the valencia entry is the most-recent foreign memory for wine")
+	_make_run("london", 100000)
+	EconomyLib.set_stock("london", "wine", 40)
+	_set_appraisal(60)
+	var screen4 := _instantiate_market()
+	_check(str(screen4.row_arrows("wine")["memory"]) == "",
+		"london 39 equals the last-seen foreign price → no arrow (got %s)"
+			% str(screen4.row_arrows("wine")))
+	_drop(screen4)
+	_clear_seams()
