@@ -10,12 +10,14 @@ depends on. It defines:
 - The spec for `tools/validate_data.py`, the validator all data must pass.
 - The locked content lists: 105 sovereign ports (the 100 plus the five of
   the 2026-11-02 route-network amendment) plus the Phase-6 neutral
-  tier (§7.1), 40 goods (§7.2), 16 ship types (§7.3), 6 nations, 6 starter
-  officers (§7.4–7.5), plus the Phase-5/6/7 lists — 21 trade lanes (§7.6),
-  7 captain name pools (§7.7), 4 named pirates (§7.8), 24 equipment items
-  (§7.9) — exhaustive, with no open slots.
-- The Phase-5 npc/economy schemas (`npc_config`, `npc_captains`,
-  `named_pirates`, `market_events` — §4.10–4.13), the trade-route pair
+  tier (§7.1), 40 goods (§7.2), 16 ship types (§7.3), 6 nations, the
+  96-officer roster retaining the 6 Phase-1 starter ids (§7.5), plus the
+  Phase-5/6/7 lists — 21 trade lanes (§7.6), the named-captain canon rule
+  (§7.7), 4 named pirates as v2 full cards (§7.8), 24 equipment items
+  (§7.9), and the Phase-8 6-background set (§7.10) — exhaustive, with no
+  open slots.
+- The Phase-5 npc/economy schemas (`npc_config`, `named_pirates`,
+  `market_events` — §4.10, §4.12–4.13), the trade-route pair
   (`trade_routes.json` hand-authored, `trade_routes_built.json` tool-owned —
   §4.14), and the living-economy save-block shapes (§4.15).
 - The Phase-6 additions: the three ocean seasonal datasets —
@@ -35,6 +37,14 @@ depends on. It defines:
   (`data/maps/world.png`) with its harbor-snap rule — ports are `lat`/`lon`
   data in `data/ports.json`, never hand-placed cells.
 - The harbor-relief (anti-softlock) fallback spec.
+- The Phase-8 additions (characters/careers/encounters): the
+  named-captain canon `data/captains.json` (built; §4.11) replacing the
+  retired `npc_captains.json` name pools, `officers.json` v2 — 96 entries,
+  built by the same tool (§4.5) — the person-schema files `skill_gates.json`
+  (§4.20), `officer_posts.json` (§4.21), `backgrounds.json` (§4.22),
+  `named_pirates.json` v2 full cards (§4.12), the save-block additions
+  `officer_states`/`captain_states` and the fleet's `captain_id` (§4.15),
+  and the group-11/12 validator specs (§8.6–8.7).
 
 Gates all phases. Later-phase entity schemas (`Equipment`, `Discovery`, `Quest`)
 are fully specified here; each data file ships when its owning phase lands.
@@ -47,13 +57,17 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/goods.json` | Good list — 40 entries with `staple`/`specialty`/`exclusive`/`flow` since Phase 7 (§4.2, §7.2) | this doc |
 | `data/ship_types.json` | ShipType list — 16 entries with `role`/`tier` since Phase 7 (§4.3, §7.3) | this doc |
 | `data/ports.json` | Port list — the 100 locked sovereign ports plus the Phase-6 neutral tier (§7.1) in one envelope; `lat`/`lon` are the geographic truth; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the per-port `shipyard`/`equipment_stock` stock lists (§4.4) | this doc |
-| `data/officers.json` | Officer roster | this doc |
+| `data/officers.json` | Officer roster — **v2**: 96 entries (24 legend + 72 regular) in the person-card shape (§4.5); built artifact of `tools/build_captains.py`, never hand-edited | this doc |
 | `data/discoveries.json` | Discovery list; `lat`/`lon` are the geographic truth | this doc / `70-*` |
 | `data/quests.json` | Quest templates | this doc / `70-*` |
 | `data/equipment.json` | Equipment list — 24 entries with `tier`/`rare` since Phase 7 (§4.6, §7.9) | this doc / `60-*` |
 | `data/npc_config.json` | Density-dial config: presets, budgets, flow, `absolute_cap` (§4.10) | this doc / `80-*` |
-| `data/npc_captains.json` | Captain name pools — 7 incl. the nationless `""` pool (§4.11, §7.7) | this doc / `60-*` |
-| `data/named_pirates.json` | The 4 named pirates, tiers 1–3, each with a rare-equipment `drop` (§4.12, §7.8) | this doc / `60-*` / `70-*` |
+| `data/captains.json` | Named-captain canon — the closed roster covering the extreme density preset (§4.11); tool-built, never hand-edited | this doc / `60-*` |
+| `data/captain_name_parts.json` | The canon builder's authored source: per-nation name parts + personality pools + appearance vocabulary (§4.11.1) | this doc |
+| `data/named_pirates.json` | The 4 named pirates as **v2 full captain cards**, each with its rare-equipment `drop` (§4.12, §7.8) | this doc / `60-*` / `70-*` |
+| `data/skill_gates.json` | Data-driven skill/stat gates — one row per locked gate (§4.20) | this doc / `50-*` |
+| `data/officer_posts.json` | Officer posts: prereqs, descriptions, advice triggers (§4.21) | this doc / `50-*` |
+| `data/backgrounds.json` | New-game backgrounds — exactly 6 (§4.22, §7.10) | this doc / `50-*` |
 | `data/market_events.json` | Demand-event templates (§4.13) | this doc / `30-*` |
 | `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 21 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
 | `data/wind_regions.json` | Prevailing-wind regions: month-keyed wind-from directions per ocean region (§4.16) — hand-authored | this doc / `20-*` |
@@ -72,9 +86,12 @@ are fully specified here; each data file ships when its owning phase lands.
 | `tools/build_routes.py` | Lane builder: `trade_routes.json` → snapped/rasterized lanes (incl. per-variant month-window passability, §4.14), junction graph, spokes → `trade_routes_built.json` (§4.14); `--ascii` debug export only | this doc / `IMPLEMENT-Phase5.md` task F |
 | `tools/route_overrides.json` | Hand fixes consumed by the lane builder (§4.14) | this doc |
 | `tools/build_ocean.py` | Ocean-layer rasterizer: `wind_regions.json` + `ocean_currents.json` → `data/maps/wind_regions.png` + `data/maps/currents.png` (§6.5); `--ascii`/`--report` debug exports only | this doc / `IMPLEMENT-Phase6.md` task E |
+| `tools/build_captains.py` | Canon builder: `data/captain_name_parts.json` + the quota derivation (§4.10 budgets × the `60-*` §4.1.1 formulas) + the override layers → `data/captains.json` **and** `data/officers.json` v2 (§4.11, §4.5); `--check` verifies byte-identical rebuilds | this doc / `IMPLEMENT-Phase8.md` W2-A |
+| `tools/captain_overrides.json` | Legend layer consumed by the canon builder: the 4 named pirates (with their `drop`s) + 20 legend captains (§4.11, §7.7) | this doc |
+| `tools/officer_overrides.json` | The 24 hand-authored legend officers consumed by the canon builder (§4.5, §7.5) | this doc |
 | `tools/assets/` | Vendored public-domain shapefiles (Natural Earth 10 m land + minor islands + lakes) and `LICENSE-NOTES.md` with per-file SHA-256 | this doc |
 | `data/ui_strings.json` | UI-frame L10n strings | `80-UI-UX.md` |
-| `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route validator (groups 1–10, §8) | this doc |
+| `tools/validate_data.py` | Schema/i18n/integrity/map/npc-economy/trade-route/captain-canon/RPG-data validator (groups 1–12, §8) | this doc |
 
 ## 3. Shared Conventions
 
@@ -345,29 +362,58 @@ values predate the Phase-7 40-good rewrite and are illustrative only — they
 do not yet satisfy the §8.2 staple-ubiquity rule, which task P's rewrite
 enforces on every port.)
 
-### 4.5 Officer — `data/officers.json`
+### 4.5 Officer — `data/officers.json` *(Phase 8 v2; built)*
+
+`data/officers.json` holds exactly **96 officers — 24 legends + 72 regulars**
+(locked split, §7.5). Since Phase 8 it is a **built artifact** of
+`tools/build_captains.py` — the same builder, name-parts, seed and override
+family that produces the captain canon (§4.11; `tools/officer_overrides.json`
+authors the 24 legends): never hand-edited, two consecutive builds
+byte-identical (§8.6). The card is the shared person-card shape (the same
+attribute/skill space as the player and NPC captains, `50-*` §2.1–2.2) plus
+the three officer-only skills.
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | |
-| `name` | L10nString | character name |
+| `id` | id | unique; the 6 Phase-1 starter ids (§7.5) are retained |
+| `name` | L10nString | unique across every person in `captains.json` ∪ `officers.json` (§8.6) |
 | `nation_id` | id | references Nation |
-| `role` | enum | `navigator` \| `boatswain` \| `gunner` (effects in `50-CHARACTER-AND-PROGRESSION.md`) |
-| `stats` | object | keys `leadership`, `seamanship`, `combat`, `navigation`: ints 1–20 |
-| `wage_daily` | money | gold per day while employed |
-| `recruit_ports` | []id | ⊆ Port ids; taverns where this officer can be hired |
+| `legend` | bool | `true` on exactly the 24 hand-authored legends |
+| `main_skill` | id | the native role's **signature skill** — the strict maximum of `skills` (validator-asserted) |
+| `attributes` | object | the 5 attribute keys of §4.11 (`constitution`…`luck`); ints 1–100 |
+| `skills` | object | all **11** skill keys — the 8 player skills plus `medicine`/`carpentry`/`cooking`; ints 0–100 |
+| `personality` | []id | 1–2 tags from the native role's personality pool (§4.11.1) |
+| `appearance` | object | the 4 appearance axes, one value each (§4.11.1) |
+| `wage_daily` | money | gold per day while employed; legends 40–60, regulars 20–35 (§8.7) |
+| `recruit_ports` | []id | ≥ 1 port id; legends hand-authored; regulars ⊆ the officer's own nation's ports (the per-nation home-port band, `IMPLEMENT-Phase8.md` correction 9) |
 | `bio` | L10nString | 1 sentence shown in the recruit dialog |
+
+Bands (validator group 12, §8.7): main-skill legends **45–60** / regulars
+**25–45**. The **native role** is the person's fixed vocation: it pins
+`main_skill`, the personality pool, the recruit text and the initial skill
+distribution — it never restricts appointment. A **post** (§4.21) is
+appointable: any officer meeting a post's prereq may take it; in-post
+contribution, loyalty and the `+1`/90-sea-days growth are `50-*` behavior.
+**Quotas (§8.7):** specialty coverage — each of the 11 skills is carried at
+≥ 20 (the post-prereq band) by ≥ 10 officers; captain-qualified —
+`skills.seamanship ≥ 25 ∧ attributes.courage ≥ 30` on ≥ 12 officers.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "officers": [
     {
       "id": "off_mateus_alvares",
       "name": {"zh": "马特乌斯·阿尔瓦雷斯", "en": "Mateus Álvares"},
       "nation_id": "portugal",
-      "role": "navigator",
-      "stats": {"leadership": 10, "seamanship": 14, "combat": 6, "navigation": 16},
+      "legend": false,
+      "main_skill": "navigation",
+      "attributes": {"constitution": 11, "intellect": 14, "charisma": 12, "courage": 13, "luck": 10},
+      "skills": {"seamanship": 18, "navigation": 30, "swordplay": 8, "gunnery": 6,
+                  "appraisal": 10, "negotiation": 12, "cartography": 16, "rumour": 10,
+                  "medicine": 0, "carpentry": 0, "cooking": 8},
+      "personality": ["bookish", "patient"],
+      "appearance": {"face": "lean", "beard": "clean", "eyes": "hazel", "hair": "brown"},
       "wage_daily": 30,
       "recruit_ports": ["lisbon", "madeira"],
       "bio": {"zh": "一位在老领航员手下学艺的青年,星象与海图无一不精。", "en": "A young pilot schooled by old navigators; at home with stars and charts alike."}
@@ -375,6 +421,9 @@ enforces on every port.)
   ]
 }
 ```
+
+(The personality/appearance values above are illustrative — the locked
+vocabularies are authored with the name parts, §4.11.1.)
 
 ### 4.6 Equipment — `data/equipment.json` *(Phase 2; Phase 7 extension)*
 
@@ -386,7 +435,7 @@ enforces on every port.)
 | `modifiers` | object | stat-name → int delta; stat names from `50-*` (player) or `40-*` (ship); Phase 7 adds the sideways keys `storm_damage_pct` (−%, multiplies `storm_damage_for`) and `scurvy_delay_days` (semantics `60-*` §4.11.12) |
 | `price` | money | 300–6,000 g band (§7.9 guideline: tier 1 ≤ 1,500, tier 2 ≤ 3,500, tier 3 above) |
 | `tier` | int | `1 \| 2 \| 3` *(Phase 7)* — **2 tier-1 + 2 tier-2 + 2 tier-3 items per slot** (§7.9); same `tier ≤ effective_dev(port)` gate as ships (§4.3) |
-| `rare` | bool | *(Phase 7)* optional; `true` on exactly **4** items — one per slot, obtainable **only** as a named-pirate `drop` (§4.12); never in any `facilities.equipment_stock` list, never tier-gated (never purchasable at all) — both validator-asserted (§8.2) |
+| `rare` | bool | *(Phase 7)* optional; `true` on exactly **4** items — one per slot, obtainable **only** as a named-pirate `drop` (§4.12); never in any `facilities.equipment_stock` list, never tier-gated (never purchasable at all) — validator-asserted (§8.2 for the stock rule; the `drop` pairing check lives in group 11 since Phase 8, §8.6) |
 | `phase` | int | locked at `2` for all equipment |
 
 Locked content set (24 items, Phase 7): §7.9. Modifier semantics
@@ -560,71 +609,211 @@ multiplier scales every role budget (`ceil` per role); `deserted` means zero
 NPC spawns and contacts; raising the preset refills via the daily trickle,
 lowering **never culls** living fleets.
 
-### 4.11 NpcCaptainPools — `data/npc_captains.json` *(Phase 5)*
+### 4.11 Captain — `data/captains.json` *(Phase 8; built)*
 
-Envelope `{"version": 1, "pools": [...]}` — the plural key is `pools`
-(named in the group-1 exception, §8).
+The **closed named-captain canon**. It replaces the retired Phase-5 name
+pools (`data/npc_captains.json` — the file is deleted, and validator group 11
+asserts its absence, §8.6): every NPC fleet's captain is a named card from
+this roster, and a captain never dies — defeat moves it onto the return
+queue (`captain_states`, §4.15; the state machine and lifecycle behavior are
+`60-*` material, read by `scripts/world/captains.gd`).
+
+**Built artifact** of `tools/build_captains.py` — the same standing as
+`trade_routes_built.json` (§4.14): written only by the builder, never
+hand-edited, two consecutive builds byte-identical (§8.6). One tool, one
+parts/seed/override family produces **both** `captains.json` and
+`officers.json` v2 (§4.5).
+
+**Envelope** (a tool output, validator group-1 exception — key `captains`,
+§8): `{"version": 1, "generated_by": "tools/build_captains.py",
+"artifact": "data/captains.json", "build": {…}, "quota_table": {…},
+"captains": […]}` — `build` records the seed and source paths, `quota_table`
+the derived role × tier × nation coverage table (item below).
+
+Card fields:
 
 | Field | Type | Rule |
 |---|---|---|
-| `nation_id` | id \| `""` | one of the 6 locked nation ids (§7.4) **or** the empty string — the nationless pool |
-| `names` | []L10nString | ≥ 8 entries (§7.7); every entry has non-empty zh and en |
+| `id` | id | unique within the canon |
+| `name` | L10nString | unique across every person — canon ∪ officers (§8.6); names are never reused |
+| `nation_id` | id \| `""` | owner nation; pirates keep `""` |
+| `role` | enum | `trader` \| `coaster` \| `patrol` \| `courier` \| `privateer` \| `pirate` \| `hunter` — the 7 locked roles. The §4.1.1 `treasure` rows commission **`trader`-role cards of the fleet's nation at tier 2** (a treasure fleet is a national convoy; no 8th role exists — W1 pin 2026-11-02) |
+| `tier` | int | `1 … 3`, within the role's range (table below) |
+| `level` | int | `1 + tier×4`, `+2` for pirate/hunter (tier 1 → 5; tier 2 → 9, 11 pirate/hunter; tier 3 → 13, 15 pirate/hunter) |
+| `attributes` | object | the 5 keys `constitution`/`intellect`/`charisma`/`courage`/`luck` (`50-*` §2.1); ints 1–100 |
+| `skills` | object | the 8 player skill keys (`50-*` §2.2); ints 0–100 |
+| `personality` | []id | 1–2 tags from the role's personality pool (§4.11.1) |
+| `appearance` | object | exactly the 4 axes `face`/`beard`/`eyes`/`hair`, one value each (§4.11.1); string-part assembly renders the card's appearance sentence (`80-*`) |
+| `drop` | id | **the 4 named pirates only**; references a `rare: true` equipment item of §7.9 (§8.6 — the relocated group-7 pin) |
+| `legend` | bool | `true` on exactly the 24 hand-authored cards (§7.7: the 4 named pirates + 20 legend captains, authored in `tools/captain_overrides.json`) |
+| `home_port` | id | optional; ∈ ports (the dossier's familiarity-6 row reveals it; a card without one has no home-port row) |
 
-Locked pool set: exactly 7 (§7.7). Every fleet draws
-`captain: {"pool_id": id, "name_index": int}` at spawn from its nation's
-pool — pirates draw from `""` — via its seeded stream (`60-*` §4.1); the
-drawn name is stable for the fleet's life and survives save/load.
+**Generation rules (generated — non-legend — cards; §8.6 re-asserts them
+term-by-term):**
+
+- **Level:** `1 + tier×4` (`+2` pirate/hunter).
+- **Attributes:** base 10; the template's main attribute `+3×tier`, its
+  secondary `+2×tier`, the other three `+1×tier`; every final value jitters
+  by a seeded `±3`.
+- **Skills:** the template's signature skill `8×tier + seeded(0…6)`; its
+  secondary skill `4×tier`; every other skill `0`.
+- **Personality:** 1–2 tags drawn from the role pool. **Appearance:** one
+  value per axis.
+
+**Role templates** (main/secondary attribute — signature/secondary skill):
+
+| Role | Attributes | Skills | Tier range |
+|---|---|---|---|
+| `trader` | 魅 charisma / 运 luck | 交涉 negotiation · 鉴定 appraisal | 1–2 |
+| `coaster` | 体 constitution / 运 luck **low** | none — every skill `0` | 1 only |
+| `patrol` | 胆 courage / 魅 charisma | 炮术 gunnery · 操船 seamanship | 2 only |
+| `courier` | 体 constitution / 悟 intellect | 航海 navigation · 操船 seamanship | 1–2 |
+| `privateer` | 胆 courage / 运 luck | 剑术 swordplay · 炮术 gunnery | 2–3 |
+| `pirate` | 胆 courage / 魅 charisma | 剑术 swordplay · 炮术 gunnery | 1–3 |
+| `hunter` | 胆 courage / 悟 intellect | 剑术 swordplay · 航海 navigation | 2–3 |
+
+(The coaster's `-low` tag is the W1 concretization of the backlog template
+line: the coaster's **luck sits at the others step (`+1×tier`), never the
+secondary step**, and the coaster names **no skills** — all `0`. Coasters
+never trigger contact and are not attackable; their hulls set their speed.)
+
+**Quota rule (locked in §7.7, machine-checked by §8.6 items 3–4):** the canon
+covers the **extreme density preset** — the card count is computed from
+`data/npc_config.json` (§4.10) budgets × preset multipliers under the role
+budget formulas of `60-*` §4.1.1 (as amended by `60-*` §4.11.14 for
+nationless coasters), including the transient hunter/treasure rows; the
+builder emits the derived `quota_table` and fills every cell.
+
+**Sources:** `data/captain_name_parts.json` (§4.11.1) + the quota derivation
++ `tools/captain_overrides.json` (the legend layer wins over generation for
+its ids; the 4 pirates carry their Phase-7 `drop` fields verbatim —
+correction 7).
 
 ```json
 {
   "version": 1,
-  "pools": [
+  "generated_by": "tools/build_captains.py",
+  "artifact": "data/captains.json",
+  "build": {"seed": "sailage-canon-v1", "parts": "data/captain_name_parts.json",
+            "overrides": ["tools/captain_overrides.json", "tools/officer_overrides.json"],
+            "coverage_preset": "extreme"},
+  "quota_table": {
+    "pirate": {"1": {"": 32}, "2": {"": 20}, "3": {"": 16}},
+    "hunter": {"2": {"england": 2, "spain": 2}, "3": {"england": 2, "spain": 2}}
+  },
+  "captains": [
     {
-      "nation_id": "portugal",
-      "names": [
-        {"zh": "若昂·阿尔梅达", "en": "João Almeida"},
-        {"zh": "佩德罗·努诺", "en": "Pedro Nuno"},
-        {"zh": "迪奥戈·苏亚雷斯", "en": "Diogo Soares"},
-        {"zh": "费尔南·科埃略", "en": "Fernão Coelho"},
-        {"zh": "阿方索·皮雷斯", "en": "Afonso Pires"},
-        {"zh": "瓦斯科·马丁斯", "en": "Vasco Martins"},
-        {"zh": "努诺·阿尔瓦雷斯", "en": "Nuno Álvares"},
-        {"zh": "吉尔·埃阿尼斯", "en": "Gil Eanes"}
-      ]
+      "id": "cap_pirate_0042",
+      "name": {"zh": "雅各布·埃雷拉", "en": "Jacobo Herrera"},
+      "nation_id": "",
+      "role": "pirate",
+      "tier": 2,
+      "level": 11,
+      "attributes": {"constitution": 13, "intellect": 10, "charisma": 15, "courage": 16, "luck": 12},
+      "skills": {"seamanship": 0, "navigation": 0, "swordplay": 18, "gunnery": 8,
+                  "appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0},
+      "personality": ["ferocious", "vain"],
+      "appearance": {"face": "scarred", "beard": "forked", "eyes": "dark", "hair": "black"},
+      "legend": false
     }
   ]
 }
 ```
 
-### 4.12 NamedPirate — `data/named_pirates.json` *(Phase 5; Phase 7 `drop`)*
+(The `quota_table` and card values above are illustrative — the table is
+builder-computed from §4.10 × the §4.1.1 formulas at the extreme preset;
+`nation_id: ""` cells are the nationless pirate/coaster rows.)
 
-| Field | Type | Rule |
+#### 4.11.1 `data/captain_name_parts.json` — the builder's authored source *(Phase 8)*
+
+Plain object file (validator group-1 exception, like `npc_config.json`).
+It carries every authored string-part family the builder draws from — names,
+personality pools and the appearance vocabulary:
+
+| Block | Shape | Rule |
 |---|---|---|
-| `id` | id | unique |
-| `name` | L10nString | the captain's name |
-| `tier` | int | `1 … 3` (§7.8; bounty-tier semantics in `70-*` §4.5) |
-| `drop` | id | *(Phase 7)* the equipment id this captain's sunk/captured hull yields (`60-*` §4.11 loot flow keys off the captain id); must reference a `rare: true` equipment item of §7.9 — validator-asserted (§8.2). The 4 drops pair 1:1 with the 4 captains (S authors the pairing) |
+| `surnames` | object `nation_id → []L10nString` | the 6 nation keys **plus** `""` (the nationless set pirates draw from); ≈ 30 parts per set, era-plausible per nation, zh and en |
+| `given_names` | object `nation_id → []L10nString` | same key set; ≈ 30 parts per set |
+| `personalities` | object `{all: []id, roles: {role: []id}}` | one shared tag vocabulary (`all`; snake_case ids; ≥ 8 tags) and per-role pools (`roles.<pool_id>` ⊆ `all`, 2–5 tags each) — one pool per §4.11 captain role, plus one per officer native role (pool id = the native-role id; the native-role list is `50-*` §4.5's pin); every tag has a `personality.<tag>` `ui_strings.json` row |
+| `appearance` | object of exactly 4 axes | `face`, `beard`, `eyes`, `hair`; ≥ 4 values per axis; every value has an `appearance.<axis>.<value>` `ui_strings.json` row |
 
-Exactly 4 entries (§7.8); names are era-plausible authored content (task D).
-A defeated named pirate respawns under a new name on the `60-*` §4.1
-schedule; `quest_gen` bounty targets prefer named captains (`70-*` §4.9.5).
+Assembly: a generated person's display name is drawn without replacement
+from its nation's `given_names` × `surnames` (assembled in the locale's
+order — zh 若昂·阿尔梅达, en João Almeida), so **no two people ever share a
+name** — the builder refuses a colliding draw and the validator re-asserts
+uniqueness across the canon and the officer roster (§8.6). Cards draw
+`personality` (1–2 tags, their own role's pool) and one value per appearance
+axis. The exact part lists and vocabularies are authored by the W2 roster
+task and recorded in this subsection after authoring.
 
 ```json
 {
   "version": 1,
+  "surnames": {"portugal": [{"zh": "阿尔梅达", "en": "Almeida"}, {"zh": "苏亚雷斯", "en": "Soares"}], "": [{"zh": "埃雷拉", "en": "Herrera"}]},
+  "given_names": {"portugal": [{"zh": "若昂", "en": "João"}, {"zh": "迪奥戈", "en": "Diogo"}], "": [{"zh": "雅各布", "en": "Jacobo"}]},
+  "personalities": {
+    "all": ["ferocious", "greedy", "vain", "stoic", "bookish", "patient", "boastful", "sullen"],
+    "roles": {"trader": ["greedy", "patient", "boastful"], "pirate": ["ferocious", "vain", "sullen"]}
+  },
+  "appearance": {
+    "face": ["lean", "round", "scarred", "weathered"],
+    "beard": ["clean", "stubble", "full", "forked"],
+    "eyes": ["dark", "grey", "hazel", "pale blue"],
+    "hair": ["black", "brown", "sun-bleached", "grey-streaked"]
+  }
+}
+```
+
+(The example above is an illustrative excerpt — real part sets hold ≈ 30
+entries per nation set and the full role pool map.)
+
+### 4.12 NamedPirate — `data/named_pirates.json` *(Phase 5; v2 full cards, Phase 8)*
+
+Exactly 4 entries (§7.8) — since Phase 8 each is a **full captain card**:
+every §4.11 field plus `drop`. The four cards are authored once, in the
+legend layer `tools/captain_overrides.json`, and therefore also exist inside
+the `data/captains.json` canon; the `named_pirates.json` rows are the
+bounty-facing copies (tier semantics `70-*` §4.5). Group 11 asserts the two
+copies agree field-for-field (§8.6) — `version` bumps to `2`.
+
+| Field | Type | Rule |
+|---|---|---|
+| *(all §4.11 card fields)* | | `id`, `name` (unique canon-wide), `nation_id` — all four keep `""` — , `role: "pirate"`, `tier` 1–3, `level` (`+2` pirate), `attributes`, `skills`, `personality`, `appearance`, `legend: true` |
+| `drop` | id | the equipment id this captain's sunk/captured hull yields (`60-*` §4.11 loot flow keys off the captain id); must reference a `rare: true` equipment item of §7.9. The Phase-7 group-7 pin is **relocated to group 11** (§8.6), unchanged in semantics (`IMPLEMENT-Phase8.md` correction 7) |
+
+Behavior change (Phase 8): a defeated named pirate no longer respawns under
+a new name — it enters the §4.11 return queue
+(`defeated → returning(day+60) → active`); the Phase-5 successor machinery
+(`named_pirate_respawns`, alias slots) is retired. `quest_gen` bounty
+targets still prefer named captains (`70-*` §4.9.5).
+
+```json
+{
+  "version": 2,
   "named_pirates": [
     {
       "id": "pirate_murad_red_sail",
       "name": {"zh": "「红帆」穆拉德", "en": "Murad the Red Sail"},
+      "nation_id": "",
+      "role": "pirate",
       "tier": 2,
-      "drop": "eq_golden_cutlass"
+      "level": 11,
+      "attributes": {"constitution": 14, "intellect": 12, "charisma": 15, "courage": 17, "luck": 11},
+      "skills": {"seamanship": 0, "navigation": 0, "swordplay": 19, "gunnery": 8,
+                  "appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0},
+      "personality": ["ferocious", "vain"],
+      "appearance": {"face": "scarred", "beard": "forked", "eyes": "dark", "hair": "black"},
+      "legend": true,
+      "drop": "eq_red_sail"
     }
   ]
 }
 ```
 
-(`drop` id illustrative — task S authors the four rare items of §7.9 and
-their pairing to the four captains.)
+(The attribute/skill values above are illustrative legend-layer content;
+the `drop` ids are the shipped Phase-7 pairings. Hand-authored legend names
+use the 「alias」 style and never collide with part-assembled names — §8.6
+asserts the whole space.)
 
 ### 4.13 MarketEvent — `data/market_events.json` *(Phase 5)*
 
@@ -772,16 +961,17 @@ graph, the per-port spokes, and build params. Its envelope is
 file (group 1 exempts it exactly like `maps/world_report.json`). Runtime
 routing over the graph is `20-*`/`60-*` material.
 
-### 4.15 Save-block shapes (Phase 5)
+### 4.15 Save-block shapes (Phase 5; Phase-8 additions)
 
 The living-economy save blocks — keys of the save payload since v5, carried
 into v6 unchanged (`90-*` §8.1; the Phase-6 keys `control_prefs`,
 `world.sail_trim`, `world.heading`, `world.wind_dir` are pinned in
 `90-*` §8.1 only). Not data files: runtime state whose shapes this doc pins.
-Shapes only; behavior lives in `30-*`/`60-*`. (`named_pirate_respawns` is
-the sixth Phase-5 key: a plain `{named_pirate_id: available_day}` map, pinned
-whole in `90-*` §8.1 with its `60-*` §4.11.11.4 semantics — no nested shape
-to add here.)
+Shapes only; behavior lives in `30-*`/`60-*`. The former sixth Phase-5 key
+`named_pirate_respawns` is **retired at save v9** with the successor
+machinery — the `captain_states` return queue replaces it (row below). Phase
+8 adds `officer_states`/`captain_states` and reshapes the fleet's captain
+field.
 
 | GameState field | Type | Shape |
 |---|---|---|
@@ -790,18 +980,20 @@ to add here.)
 | `wrecks` | []object | `{"cell": tilePos, "cargo": {good_id: units}, "salvage_gold": money, "spawn_day": day}` — contents per the `60-*` auto-resolve table (cargo or salvage gold); expiry on the `60-*` schedule |
 | `npc_preset` | id | one of the §4.10 preset keys; default `"normal"` |
 | `market_events` | []object | active instances: `{"template_id": id, "port_id": id, "start_day": day}`; expiry derives from the template's `duration_days` (`30-*` §4.5) |
+| `officer_states` *(Phase 8)* | object | `{officer_id: {loyalty: int 0–100, sea_days: int ≥ 0, post_id: id \| "", ship_id: id \| "", talk_cd_day: day, gift_cd_day: day, defeats: int ≥ 0}}` — one entry per employed officer; `post_id = ""` = idle; `ship_id` non-empty only on a captain post (`50-*`) |
+| `captain_states` *(Phase 8)* | object | `{captain_id: {status: "active" \| "defeated" \| "returning", return_day: day, tier_now: int 1–3, stance: int (the ± scale, `60-*`), familiarity: int, dossier_seen: bool, defeats: int ≥ 0, wins: int ≥ 0}}` — full entries **only for met captains**; the canon card (§4.11) is save-independent (`60-*`) |
 
 Fleet dict — the locked save shape (`60-*` §4.1):
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | string | stable fleet id; the seeded streams (captain, specialty, decisions) key off it |
+| `id` | string | stable fleet id; the seeded streams (captain draw, specialty, decisions) key off it |
 | `role` | id | one of the 8 fleet roles (`60-*` §4.1) |
 | `nation_id` | id \| `""` | owner nation; pirates keep `""` |
 | `cell` | tilePos | current grid position (§3.1; `x` wraps) |
 | `route` | object | `{"lanes": []id, "leg": int, "tile_index": int}` — position on the built lane network (§4.14) |
 | `cargo` | object | `{good_id: units}` — the actual hold contents |
-| `captain` | object | `{"pool_id": id \| "", "name_index": int}` into `npc_captains.json` (§4.11) |
+| `captain_id` | string | *(Phase 8)* the captain's `data/captains.json` id (§4.11); stance/familiarity/return state lives in `captain_states` (row above). The retired Phase-5 shape `captain: {"pool_id", "name_index"}` (the `npc_captains.json` name pools) must not appear |
 | `specialty` | id | optional; the good id drawn at spawn (traders) |
 | `cooldown_until_day` | day | pursuit/spawn cooldown |
 | `ships` | []object | the §4.11.3 composed ship list, stored at spawn (unified-movement amendment, `60-*` §4.11.11): each entry `{"ship_type_id": id, "durability": int, "crew": int, "provisions": int, "water": int, "cannons": int, "equipment": {"figurehead": id \| "", "sail": id \| ""}, "cargo": {good_id: units}}`; hull draws key off `seed` only (never the day), so a fleet missing the field (older save) backfills it lazily, bit-identical to the spawn draw; drives the fleet's §4.4 base speed (slowest hull), cached in the derived `speed` (int) + `speed_class` (id) pair written beside the list at spawn and backfilled under the same lazy rule — **spawn-time caching keeps read-only passes (markers, diagnostics) mutation-free** (the `80-*` §4.6 snapshot-purity probe) |
@@ -814,7 +1006,7 @@ Fleet dict — the locked save shape (`60-*` §4.1):
   "cell": {"x": 1025, "y": 307},
   "route": {"lanes": ["west_indies_flota"], "leg": 1, "tile_index": 42},
   "cargo": {"wine": 28},
-  "captain": {"pool_id": "spain", "name_index": 3},
+  "captain_id": "cap_trader_0207",
   "specialty": "wine",
   "cooldown_until_day": 0,
   "ships": [
@@ -991,6 +1183,117 @@ entity list, so validator group 1 does not apply; its own group checks it).
 }
 ```
 
+### 4.20 SkillGate — `data/skill_gates.json` *(Phase 8)*
+
+Envelope `{"version": 1, "skill_gates": [...]}` — plural == basename, so
+validator group 1 needs no exception. One row per **locked skill/stat gate**
+— the Gates column of the `50-*` §2.2 skills table plus every other
+gate-pinned feature — so the UI renders each locked feature's reason from
+data with one renderer (`80-*`):
+
+| Field | Type | Rule |
+|---|---|---|
+| `feature_id` | id | unique; names the gated feature as `<system>.<feature>` (e.g. `sail.autopilot`) |
+| `stat_or_skill` | id | one of the 5 attributes or the 11 skills (§4.5) |
+| `threshold` | int | 1–99; the feature unlocks at `stat ≥ threshold` |
+| `reason` | L10nString | the locked, player-visible "why locked" line |
+
+Compound numeric gates (e.g. the two duel-ladder ranks, the two shot types)
+are two rows with distinct `feature_id`s. Non-stat halves of a gate (an
+officer in post, a facility) are post/facility state, not stats — the
+`reason` names them; the behavior lives in the owning system doc.
+
+The **appointed-voyage gate** ships as:
+
+```json
+{
+  "version": 1,
+  "skill_gates": [
+    {
+      "feature_id": "sail.autopilot",
+      "stat_or_skill": "navigation",
+      "threshold": 40,
+      "reason": {"zh": "委任航行需要舵手在位,且航海 ≥ 40。", "en": "An appointed voyage needs a pilot in post with navigation ≥ 40."}
+    }
+  ]
+}
+```
+
+(behavior `20-*`; the entry points and HUD `80-*`.)
+
+### 4.21 OfficerPost — `data/officer_posts.json` *(Phase 8)*
+
+Envelope `{"version": 1, "officer_posts": [...]}`. Exactly **7** rows — the
+6 flagship functional posts + the per-escort captain seat (`50-*` §4.5;
+the post → pipeline table `IMPLEMENT-Phase8.md` §2.7):
+
+| Field | Type | Rule |
+|---|---|---|
+| `post_id` | id | `pilot` \| `boatswain` \| `gunner` \| `surgeon` \| `carpenter` \| `cook` \| `captain` |
+| `slot_type` | enum | `flagship` — one holder on the flagship; `captain` — one per escort ship (the holder's `ship_id` names the ship) |
+| `prereq` | object | stat/skill id → minimum value. **Flagship:** the matching skill ≥ 20 — pilot `navigation`, boatswain `seamanship`, gunner `gunnery`, surgeon `medicine`, carpenter `carpentry`, cook `cooking`. **Captain:** `seamanship ≥ 25` ∧ `courage ≥ 30` |
+| `desc` | L10nString | the appointment-UI description; the derived-effects line is generated from the same table (`50-*`) |
+| `advice` | object | optional; situation id → trigger params — the in-post **advice-event** trigger table (`50-*`: each sea-day tick, 3% per in-post officer, seeded, when the post's threshold is met). The text is pure `ui_strings.json` — `advice.<post_id>.<situation_id>`; the numeric trigger params (5 days, 50%, 40) sit in this table, never in code |
+
+```json
+{
+  "version": 1,
+  "officer_posts": [
+    {
+      "post_id": "surgeon",
+      "slot_type": "flagship",
+      "prereq": {"medicine": 20},
+      "desc": {"zh": "船医随船,坏血病更晚到来。", "en": "A surgeon aboard delays the scurvy."},
+      "advice": {"low_water": {"days": 5}}
+    },
+    {
+      "post_id": "captain",
+      "slot_type": "captain",
+      "prereq": {"seamanship": 25, "courage": 30},
+      "desc": {"zh": "一艘分舰船的船长席位。", "en": "The captain's seat of one escort ship."}
+    }
+  ]
+}
+```
+
+The six locked situations — pilot = tomorrow's wind band; surgeon = water
+≤ 5 days; boatswain = wrong sail plan in a storm; gunner = first contact
+round; carpenter = fleet durability < 50%; cook = morale < 40 — are the
+`advice` keys' content.
+
+### 4.22 Background — `data/backgrounds.json` *(Phase 8)*
+
+Envelope `{"version": 1, "backgrounds": [...]}`. Exactly **6** rows — the
+locked set of §7.10:
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | id | one of the 6 locked ids (§7.10) |
+| `name` | L10nString | |
+| `attribute_bonus` | object | **exactly one** attribute key → `3` |
+| `skill_bonus` | object | **exactly one** skill key → `5` |
+| `bio` | L10nString | 1–2 sentences on the creation card |
+
+(The creation flow — background card, then the free-point pool: attributes
++5 and skills +3 in total, per-item cap +3, all points spent — is
+`50-*` §4.1; the derived extremes attribute ≤ 21 / skill ≤ 13 fall out of
+that section's numbers, not this file's.)
+
+```json
+{
+  "version": 1,
+  "backgrounds": [
+    {
+      "id": "background_deckhand",
+      "name": {"zh": "甲板水手", "en": "Deckhand"},
+      "attribute_bonus": {"constitution": 3},
+      "skill_bonus": {"seamanship": 5},
+      "bio": {"zh": "你在帆缆之间长大,双手比言语更可靠。", "en": "You grew up between mast and deck; your hands speak louder than words."}
+    }
+  ]
+}
+```
+
 ## 5. Harbor-Relief Fallback (anti-softlock)
 
 Locked rule, implemented at the inn (facility `inn`), behavior detailed in
@@ -1044,7 +1347,7 @@ consumer may derive one differently.
 | Palette policy | append-only: indices 0–4 = `~ . # ^ I` are locked; indices ≥ 5 are reserved for future cosmetic/seasonal layers and never carry simulation semantics. The §6.5 ocean rasters are **separate files with their own palettes** — they do not use or extend this one | §6.3, §6.5 |
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `tools/build_world.py` |
 | Map index | `data/maps/maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 |
-| Save | version 7; no migration chain — v6 and older payloads refused | `90-*` §8.1–8.2 |
+| Save | version 9; no migration chain — v8 and older payloads refused | `90-*` §8.1–8.2 |
 | Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 105 sovereign ports plus the Phase-6 neutral tier; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the list-form `shipyard`/`equipment_stock` (§4.4) | §4.4, §7.1 |
 
 **Projection.** The grid is the whole globe at 12 tiles/degree: it spans
@@ -1657,18 +1960,28 @@ task S may tune within ±20% at authoring, then the values are locked
 Capital ports (palace locations, Phase 3): lisbon, seville, london, amsterdam,
 istanbul, venice.
 
-### 7.5 Starter Officer Roster (6, Phase 1)
+### 7.5 Officer roster (96, Phase 8; the 6 Phase-1 starters retained)
 
-One recruit per nation, available at the listed taverns from game start:
+`data/officers.json` v2 (§4.5, built) holds exactly **96 officers — 24
+legends + 72 regulars**; the legends are hand-authored in
+`tools/officer_overrides.json`. The Phase-1 starters below keep their ids,
+names, nations and recruit ports as **locked identity**; their v1
+`role`/`stats` columns are retired (the v2 person-card conversion of these
+six rows is W2 roster-task work — their v1 wages 28–32 g sit inside the
+regular 20–35 g band, §4.5):
 
-| id | zh | en | nation | role | recruit ports | wage |
-|---|---|---|---|---|---|---|
-| off_mateus_alvares | 马特乌斯·阿尔瓦雷斯 | Mateus Álvares | portugal | navigator | lisbon, madeira | 30 |
-| off_diego_fernandez | 迭戈·费尔南德斯 | Diego Fernández | spain | boatswain | seville, ceuta | 28 |
-| off_thomas_reed | 托马斯·里德 | Thomas Reed | england | gunner | london | 32 |
-| off_jan_de_vries | 扬·德弗里斯 | Jan de Vries | holland | boatswain | amsterdam, antwerp | 28 |
-| off_kemal_agha | 凯末尔阿迦 | Kemal Agha | ottoman | gunner | istanbul, smyrna | 30 |
-| off_marco_bellini | 马尔科·贝里尼 | Marco Bellini | italy | navigator | venice, genoa | 30 |
+| id | zh | en | nation | recruit ports |
+|---|---|---|---|---|
+| off_mateus_alvares | 马特乌斯·阿尔瓦雷斯 | Mateus Álvares | portugal | lisbon, madeira |
+| off_diego_fernandez | 迭戈·费尔南德斯 | Diego Fernández | spain | seville, ceuta |
+| off_thomas_reed | 托马斯·里德 | Thomas Reed | england | london |
+| off_jan_de_vries | 扬·德弗里斯 | Jan de Vries | holland | amsterdam, antwerp |
+| off_kemal_agha | 凯末尔阿迦 | Kemal Agha | ottoman | istanbul, smyrna |
+| off_marco_bellini | 马尔科·贝里尼 | Marco Bellini | italy | venice, genoa |
+
+The other 90 roster members, the legend layer, and the quota bands
+(specialty coverage / captain-qualified / wages) are §4.5 + §8.7 material —
+the exact per-skill membership is authored data, recorded nowhere here.
 
 ### 7.6 Trade lanes (21, Phase 5 + Phase 6 + the 2026-11-02 amendment)
 
@@ -1768,30 +2081,40 @@ Western Australia — and re-joins the network into one junction component):
   Hirado → around Kyushu's south → Urado → Anotsu (the Japan south coast).
 - `venice_alexandria` — unchanged (the Beirut junction station stays).
 
-### 7.7 Captain name pools (7, Phase 5)
+### 7.7 Named-captain canon (closed roster, Phase 8)
 
-`data/npc_captains.json` (§4.11) holds exactly 7 pools — one per nation plus
-the nationless `""` pool. Every pool carries **≥ 8 zh/en names**, authored
-era-plausible per nation (task-owned content, task D):
+`data/npc_captains.json` — the Phase-5 §7.7 of 7 captain name pools — is
+**deleted**; every fleet captain is now a named card of the closed canon
+`data/captains.json` (§4.11). The locked rule:
 
-| pool (`nation_id`) | roster |
-|---|---|
-| `portugal` | Portuguese captains |
-| `spain` | Spanish captains |
-| `england` | English captains |
-| `holland` | Dutch captains |
-| `ottoman` | Ottoman captains |
-| `italy` | Italian captains |
-| `""` | Nationless captains — the pool pirates draw from |
+- **Coverage is computed, never magic-numbered.** The canon card count is
+  ≥ the **extreme-preset** fleet total derived from `data/npc_config.json`
+  (§4.10) budgets × preset multipliers under the role budget formulas of
+  `60-*` §4.1.1 (as amended by `60-*` §4.11.14 for nationless coasters),
+  **including the transient rows**: hunters ≤ 1 × bountied nation (worst
+  case all 6) and treasure 1 × nation per season (worst case 6), each ×4 at
+  the extreme preset. At the current content the normal-preset total is
+  **323** fleets (core 307 + 16 slack, `tools/demo_check_phase7.md`); the
+  extreme canon lands ≈ **1,300** cards — the validator computes the exact
+  number at validation time (§8.6 items 3–4) and the acceptance record pins
+  the measured canon count.
+- **24 legend cards** are hand-authored (`tools/captain_overrides.json`):
+  the 4 named pirates of §7.8 (with their `drop` fields) + 20 legend
+  captains. Every other card is generated from
+  `data/captain_name_parts.json` (§4.11.1).
+- **Names are never reused** — one name per person across the canon, the
+  officer roster (§7.5) and the part-assembled name space; builder-refused
+  and validator-asserted (§8.6).
 
-### 7.8 Named pirates (4, Phase 5)
+### 7.8 Named pirates (4, Phase 5; v2 full cards, Phase 8)
 
 `data/named_pirates.json` (§4.12) holds exactly 4 named pirates; every
-`tier` ∈ `1 … 3` (`70-*` §4.5 bounty tiers). Names and tiers are task-owned
-authored content (task D); the count and the tier band are the locked part.
-Phase 7 adds the `drop` field (§4.12): each captain yields one of the four
-`rare: true` equipment items of §7.9 when sunk or captured — the pairing is
-task-owned by S; validator §8.2 asserts every `drop` references a rare item.
+`tier` ∈ `1 … 3` (`70-*` §4.5 bounty tiers). Since Phase 8 each row is a
+**full captain card** (§4.12) authored in `tools/captain_overrides.json`
+with its `drop` preserved; the Phase-5 respawn-under-a-new-name rule is
+retired (the §4.11 return queue replaces it). The locked part: the count
+(4), the tier band, and the `drop` → `rare: true` pairing 1:1 with the four
+captains (validator §8.6).
 
 ### 7.9 Equipment (24, Phase 7)
 
@@ -1805,7 +2128,8 @@ task-owned by S; validator §8.2 asserts every `drop` references a rare item.
 - **Rare drops:** exactly **4** items carry `rare: true` — one per slot;
   never in any `facilities.equipment_stock` list, never tier-gated
   (never purchasable at all); each is some named pirate's `drop` (§4.12,
-  §7.8). Validator-asserted (§8.2).
+  §7.8). Validator-asserted: the stock rule in §8.2, the `drop` pairing in
+  group 11 (§8.6, relocated Phase 8).
 - **Modifier keys:** the existing `combat`/`luck`/`durability`/`speed` plus
   the Phase-7 sideways keys `storm_damage_pct` and `scurvy_delay_days`
   (§4.6; semantics `60-*` §4.11.12).
@@ -1818,6 +2142,36 @@ task-owned by S; validator §8.2 asserts every `drop` references a rare item.
   shipyard port (§4.4); regional flavor as ships; same tier filter and the
   neutral allegiance gate (`30-*` §4.9).
 
+### 7.10 Backgrounds (6, Phase 8)
+
+`data/backgrounds.json` (§4.22) holds exactly **6** new-game backgrounds —
+the locked set (attribute +3 / skill +5 each; bio zh/en per §4.22; the
+creation flow and free-point pool `50-*` §4.1):
+
+| id | zh | en | attribute | skill |
+|---|---|---|---|---|
+| background_deckhand | 甲板水手 | Deckhand | 体魄 constitution +3 | 操船 seamanship +5 |
+| background_navy_cadet | 海军见习生 | Naval Cadet | 胆识 courage +3 | 航海 navigation +5 |
+| background_merchant_apprentice | 商行学徒 | Merchant Apprentice | 魅力 charisma +3 | 交涉 negotiation +5 |
+| background_cartographer_apprentice | 制图学徒 | Cartographer's Apprentice | 悟性 intellect +3 | 制图 cartography +5 |
+| background_tavern_errand | 酒馆跑腿 | Tavern Runner | 运气 luck +3 | 打探 rumour +5 |
+| background_fencing_student | 剑馆弟子 | Fencing Student | 胆识 courage +3 | 剑术 swordplay +5 |
+
+### 7.11 ui_strings Phase-8 families (inventory, Phase 8)
+
+`data/ui_strings.json` grows these families (both locales; group 12 asserts
+presence, §8.7): `char.*` (character panel/card), `skill.*` (skill names and
+growth copy), `gate.*` (locked-gate frames pairing the §4.20 rows),
+`hail.*` (hail modal verbs/intel), `interact.*` (fleet picker / verb
+matrices), `dossier.*` (career-log layers), `captain.table.*` (the tavern
+index), `officer.post.*` (appointment UI), `creation.*` (the two-step
+new-game screens), `sail.autopilot.*` (appointed-voyage HUD/entry), and
+`advice.*` (the §4.21 per-post situation lines) — plus the
+personality/appearance part keys `personality.<tag>` and
+`appearance.<axis>.<value>` of §4.11.1. The Phase-7 baseline is ≈ **680**
+keys (`IMPLEMENT-Phase8.md` correction 5; the exact count is recorded at
+validation time in the acceptance record — never a pinned constant).
+
 ## 8. `tools/validate_data.py` Spec
 
 Python ≥ 3.10, stdlib only (`json`, `re`, `sys`, `pathlib`, `zlib` for the PNG
@@ -1828,17 +2182,19 @@ the code below. All checks run in order.
 
 | Exit | Check group | Checks |
 |---|---|---|
-| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `ui_strings.json`, and the Phase-5 envelopes — `npc_config.json` (config block), `npc_captains.json` (key `pools`), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output)). The Phase-6 ocean files (`wind_regions.json`, `ocean_currents.json`, `ice_regions.json`) use plural == basename and need **no** exception |
-| 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
-| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key |
-| 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ⊆ goods`; `port.band ∈ the §7.1 band id set`; `facilities.shipyard[] ⊆ ship_types`; `facilities.equipment_stock[] ⊆ equipment` and never contains a `rare: true` item; `port.sphere ⊆ nations`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names (incl. the Phase-7 `storm_damage_pct`/`scurvy_delay_days`); `named_pirates.drop ∈ equipment ∧ drop.target.rare == true` |
+| 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `facility_hours.json`, `ui_strings.json`, and the envelope exceptions — `npc_config.json` (config block), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output), `captains.json` (tool output, key `captains`), `captain_name_parts.json` (authored multi-block source)). The Phase-6 ocean files (`wind_regions.json`, `ocean_currents.json`, `ice_regions.json`) use plural == basename and need **no** exception — as do the Phase-8 `skill_gates.json` / `officer_posts.json` / `backgrounds.json`. A present `data/npc_captains.json` (retired) fails group 11 (§8.6) |
+| 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical. The Phase-8 string families (§7.11) must each carry ≥ 1 key in both locales (group 12 owns the per-family check); the total key count is recorded at validation time, never pinned as a constant |
+| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key. **Phase 8:** captain-card and officer-card field shapes (§4.11, §4.5 — role enum, tier/level/attribute/skill ranges, personality/appearance vocabulary refs); `skill_gates`/`officer_posts`/`backgrounds` field shapes (§4.20–4.22) — the normative field-level specs are groups 11–12 (§8.6–8.7) |
+| 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ⊆ goods`; `port.band ∈ the §7.1 band id set`; `facilities.shipyard[] ⊆ ship_types`; `facilities.equipment_stock[] ⊆ equipment` and never contains a `rare: true` item; `port.sphere ⊆ nations`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; captain/officer `home_port` (when present) `∈ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names (incl. the Phase-7 `storm_damage_pct`/`scurvy_delay_days`); gate `stat_or_skill` ∈ the 5 attributes + 11 skills; background bonus keys ∈ attributes/skills. (The named-pirate `drop` → rare-equipment pin lives in group 11 since Phase 8 — §8.6, relocated) |
 | 5 | Locked lists | the §7.1 **lock model** — *Phase-7 amendment:* for ports, **identity locks only** (id/zh/en/nation/lat/lon exact vs the §7.1 tables; the port id set is exactly the 105 sovereign (the 100 plus the five of the
-2026-11-02 route-network amendment) **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 6 officers, §7.9 **24 equipment** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop); the §7.1 band id set matches the P-recorded list |
+2026-11-02 route-network amendment) **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 **96 officers** (24 legend + 72 regular; the 6 Phase-1 starter ids locked), §7.9 **24 equipment**, §7.10 **6 backgrounds** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop; the 90 non-starter officers and the canon are builder-generated and checked by groups 11–12 instead); the §7.1 band id set matches the P-recorded list |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
-| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n, §7.9-referencing `drop`s); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2 |
+| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `named_pirates.json` (exactly 4, tiers 1–3, i18n — since Phase 8 they are v2 full captain cards and the field-level checks incl. the `drop` pin live in group 11, §8.6); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2. (The Phase-5 `npc_captains.json` checks are removed — the file is retired, its absence asserted by group 11, §8.6) |
 | 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **21**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
 | 9 | Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` decode as 4320×2160 indexed PNGs; palette bounds per the §6.5 encodings; water-coverage vs `world.png`; `tools/build_ocean.py` rebuild determinism — normative spec §8.4 |
 | 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
+| 11 | Captain canon | `npc_captains.json` **absent**; `captains.json` + `officers.json` rebuild determinism (`tools/build_captains.py --check`); canon coverage ≥ the computed extreme-preset total; the artifact `quota_table` matches the roster; name uniqueness across all captains + officers; `named_pirates.json` v2 ≡ its canon copies with the `drop` → rare pin; generated-card formula conformance — normative spec §8.6 |
+| 12 | RPG data | officers v2 shape (96 = 24 + 72, 11 skill keys, wage & main-skill bands, specialty coverage ≥ 10 per skill at ≥ 20, captain-qualified ≥ 12, recruit-port rules); `skill_gates.json` rows incl. `sail.autopilot`; `officer_posts.json` exactly 7 with the locked prereqs; `backgrounds.json` exactly 6 with the key/range rules; ui_strings Phase-8 family presence — normative spec §8.7 |
 
 ### 8.1 Group 6 — world map, normative spec
 
@@ -1902,20 +2258,24 @@ harness; each seeded mutation makes group 6 exit 6 with a named message:
 
 ### 8.2 Group 7 — npc & economy data, normative spec
 
-Group 7 exits 7. It checks the four Phase-5 data files (L10nString
-completeness inside them is group 2's recursion; group 7 owns structure,
-counts, and bounds):
+Group 7 exits 7. It checks the Phase-5 data files still in force —
+`npc_config`, `named_pirates`, `market_events` (L10nString completeness
+inside them is group 2's recursion; group 7 owns structure, counts, and
+bounds):
 
 1. **`npc_config.json`** (§4.10): every `presets` multiplier ≥ 0;
    `default_preset` ∈ `presets`, and it must be the neutral preset of
    §4.10; every `budgets` and `flow` value > 0;
    `absolute_cap` ≤ the §4.10 locked cap; the `presets`/`budgets`/`flow`
    key sets are exactly the §4.10 keys.
-2. **`npc_captains.json`** (§4.11, §7.7): exactly 7 pools — the 6 locked
-   nation ids plus `""`, no duplicates, no extras; every pool ≥ 8 names;
-   every name a complete L10nString.
+2. **`npc_captains.json` — removed (Phase 8).** The Phase-5 name-pool file is
+   deleted; group 7 no longer reads it, and its absence is asserted by
+   group 11 (§8.6 item 1).
 3. **`named_pirates.json`** (§4.12, §7.8): exactly 4 entries; every `tier`
-   an int in the locked band 1–3; ids unique; names complete i18n.
+    an int in the locked band 1–3; ids unique; names complete i18n. Since
+    Phase 8 the four rows are v2 full captain cards — the field-level checks
+    and the `drop` → `rare: true` pin live in group 11 (§8.6 item 6),
+    relocated herefrom unchanged in semantics (correction 7).
 4. **`market_events.json`** (§4.13): every `scope == "port"` (the only
    valid value this phase); every `cadence_days` > 0 and `duration_days` >
    0; `rate_override` a non-empty good-id list, no duplicates, every id ∈
@@ -1956,25 +2316,27 @@ counts, and bounds):
     `facilities.shipyard` includes a tier-3 hull; every shipyard port's
     `equipment_stock` ≥ 2 ids; no `rare: true` item in any
     `equipment_stock` list.
-12. **Named-pirate drops:** every `drop` ∈ equipment with
-    `rare: true` (§4.12); the 4 drops are distinct and pair 1:1 with the 4
-    captains.
+12. **Named-pirate drops** — **relocated to group 11** (§8.6 item 6; the
+    Phase-8 correction-7 move): every `drop` ∈ equipment with `rare: true`
+    (§4.12), the 4 drops distinct and pairing 1:1 with the 4 captains,
+    checked there against the canon copies.
 13. **Band id set:** every port `band` ∈ the §7.1 recorded set; the set
     contains the six neutral-region bands (§7.1 skeleton ids) and covers
     all 150 ports with no unused id.
 
 **Negative tests (must provably fail, exit 7, named message):** a negative
 preset; a default whose multiplier is not 1.0; a budget ≤ 0; an
-`absolute_cap` above the cap; a missing or extra captain pool; a pool with
-7 names; a tier-4 pirate; a shift that pushes any applicable rest outside
-the band. Phase-7 additions: a 13th good flagged `staple`; a specialty with
-7 producers; a good with 1 producer or 3 consumers; a port demanding only
-half of its non-produced staples; `produces ∩ demands ≠ ∅`; a port > 120
-tiles from any staple producer; a neutral band with no exclusive producer;
-a 5th protected port of one nation; a capital missing from `protected`;
-a neutral-tier port row with authored `dev > 0`; a tier with 1 ship; a rare
-item inside an `equipment_stock` list; a `drop` referencing a non-rare or
-unknown equipment id; a port `band` outside the recorded set.
+`absolute_cap` above the cap; a 5th named pirate; a tier-4 pirate; a shift
+that pushes any applicable rest outside the band. Phase-7 additions:
+a 13th good flagged `staple`; a specialty with 7 producers; a good with 1
+producer or 3 consumers; a port demanding only half of its non-produced
+staples; `produces ∩ demands ≠ ∅`; a port > 120 tiles from any staple
+producer; a neutral band with no exclusive producer; a 5th protected port of
+one nation; a capital missing from `protected`; a neutral-tier port row with
+authored `dev > 0`; a tier with 1 ship; a rare item inside an
+`equipment_stock` list; a port `band` outside the recorded set. (The
+captain-pool and `drop`-reference negatives moved to group 11 with their
+checks — §8.6.)
 
 ### 8.3 Group 8 — trade routes, normative spec
 
@@ -2078,6 +2440,119 @@ empty or out-of-range `months`; two variants of one lane with overlapping
 months; a variant walk stepping onto in-month ice; an ice-crossing lane with
 no variants.
 
+### 8.6 Group 11 — captain canon, normative spec *(Phase 8)*
+
+Group 11 exits 11. It checks the built canon, the officer roster it shares a
+builder with, and the retired name pools:
+
+1. **`npc_captains.json` absent.** The Phase-5 name-pool file must not exist
+   — its presence is the failure (the successor machinery is retired,
+   `60-*`; the canon + `captain_states` replace it).
+2. **Rebuild determinism.** Re-run `tools/build_captains.py` and compare
+   both products **byte-exactly** against the committed `data/captains.json`
+   **and** `data/officers.json`; any drift fails naming the differing part.
+   The fix lives in `data/captain_name_parts.json`,
+   `tools/captain_overrides.json` or `tools/officer_overrides.json` — never
+   a built file. (`build_captains.py --check` is the builder's own
+   byte-compare mode.)
+3. **Canon coverage (computed, no magic constant).** From
+   `data/npc_config.json` (§4.10) and the `60-*` §4.1.1 role budget formulas
+   (as amended by `60-*` §4.11.14 for nationless coasters), compute the
+   **extreme-preset** per-role fleet totals (`ceil` per role at multiplier
+   4.0) plus the worst-case transient rows — hunters `1 × 6` bountied
+   nations and treasure `1 × 6` nations, each ×4. Assert per role:
+   `captains.json` cards of that role ≥ the role's extreme total; and the
+   grand total ≥ the extreme fleet-cap total. (At the current content the
+   normal total is 323 fleets and extreme ≈ 1,300 cards — the validator
+   computes both numbers; the acceptance record pins the measured canon
+   count.)
+4. **Quota-table match.** The artifact's `quota_table` (role → tier →
+   nation → count, §4.11) equals the roster's actual per-cell card counts,
+   and its per-role sums satisfy item 3. Every `tier` value in the table
+   and roster stays inside its role's §4.11 tier range; `nation_id: ""`
+   cells carry the nationless roles (pirate, and the coasters).
+5. **Name uniqueness.** Assembled `name.zh` and `name.en` are unique across
+   **all** people: `captains.json` ∪ `officers.json` (which includes the
+   4 named pirates — their `named_pirates.json` copies carry the same
+   names). No part-assembled name may collide with a hand-authored legend
+   name; the builder refuses the draw, this group re-asserts.
+6. **Named-pirate consistency (the relocated drop pin).**
+   `named_pirates.json` (§4.12) holds exactly 4 rows; each is
+   field-for-field identical to its canon copy in `captains.json`; every
+   `drop` ∈ equipment with `rare: true` (§7.9), the 4 drops distinct and
+   pairing 1:1 — the Phase-7 group-7 pin, relocated unchanged
+   (correction 7).
+7. **Card conformance.** Every legend card satisfies the §4.11 field
+   types/ranges/vocabularies (role enum, tier range, attributes 1–100,
+   skills 0–100, personality ⊆ its role pool, the 4 appearance axes,
+   `legend: true`). Every **generated** (non-legend) card additionally
+   satisfies the §4.11 formulas term-by-term: `level = 1 + tier×4`
+   (`+2` pirate/hunter); main attribute ∈ `[10+3t−3, 10+3t+3]`, secondary
+   ∈ `[10+2t−3, 10+2t+3]`, others ∈ `[10+t−3, 10+t+3]`; signature skill
+   ∈ `[8t, 8t+6]`, secondary skill `= 4t`, all other skills `0` (coaster:
+   every skill `0`). `drop` appears on the 4 pirates only; `legend: true`
+   on exactly the 24 hand-authored cards.
+
+**Negative tests (must provably fail, exit 11, named message):** a present
+`data/npc_captains.json`; a rebuilt `captains.json` (or `officers.json`)
+differing by one byte; a canon short by one card in any role at the extreme
+total; a `quota_table` cell disagreeing with the roster; a duplicated name
+(zh or en) between any captain and officer; a pirate `drop` referencing a
+non-rare or unknown equipment id; a tier-4 pirate; a generated pirate whose
+signature skill is outside `[8t, 8t+6]`; a coaster card with a nonzero
+skill.
+
+### 8.7 Group 12 — RPG data (officers v2, gates, posts, backgrounds, strings), normative spec *(Phase 8)*
+
+Group 12 exits 12. It checks:
+
+1. **Officers v2 shape (§4.5, §7.5).** Exactly 96 entries — 24 with
+   `legend: true` + 72 regulars; every card carries all 5 attribute keys
+   (ints 1–100) and all 11 skill keys (ints 0–100); `main_skill` is the
+   strict maximum of `skills`; `personality` ⊆ the officer's native-role
+   pool (§4.11.1); `appearance` carries exactly the 4 axes.
+2. **Bands.** `main_skill` value: legends 45–60, regulars 25–45;
+   `wage_daily`: legends 40–60 g, regulars 20–35 g.
+3. **Specialty coverage.** For each of the 11 skills (the 8 player skills +
+   `medicine`/`carpentry`/`cooking`), ≥ **10** officers carry it at ≥ **20**
+   (the post-prereq band, §4.21).
+4. **Captain-qualified.** ≥ **12** officers with `skills.seamanship ≥ 25 ∧
+   attributes.courage ≥ 30`.
+5. **Recruit ports.** `recruit_ports` ≥ 1 id ∈ ports; legends hand-authored
+   (no placement rule); every regular's ports ⊆ its own nation's ports
+   (correction 9's home-port band).
+6. **`skill_gates.json` (§4.20).** One row per locked gate in the `50-*`
+   §2.2 Gates column plus `sail.autopilot`; `feature_id`s unique;
+   `stat_or_skill` ∈ the 5 attributes + 11 skills; `threshold` int 1–99;
+   `reason` complete i18n. The `sail.autopilot` row pins
+   `stat_or_skill: "navigation"`, `threshold: 40`.
+7. **`officer_posts.json` (§4.21).** Exactly the 7 posts: 6 `flagship`
+   (pilot `navigation ≥ 20`, boatswain `seamanship ≥ 20`, gunner
+   `gunnery ≥ 20`, surgeon `medicine ≥ 20`, carpenter `carpentry ≥ 20`,
+   cook `cooking ≥ 20`) + 1 `captain` (`seamanship ≥ 25 ∧ courage ≥ 30`);
+   `desc` complete i18n; every `advice` situation id has a
+   `advice.<post_id>.<situation_id>` `ui_strings.json` row in both locales.
+8. **`backgrounds.json` (§4.22, §7.10).** Exactly 6, the §7.10 id set;
+   `attribute_bonus` exactly one attribute key `= 3`; `skill_bonus` exactly
+   one skill key `= 5`; `bio` complete i18n.
+9. **ui_strings Phase-8 families (§7.11).** Each family — `char.`,
+   `skill.`, `gate.`, `hail.`, `interact.`, `dossier.`, `captain.table.`,
+   `officer.post.`, `creation.`, `sail.autopilot.`, `advice.` — plus
+   `personality.<tag>` / `appearance.<axis>.<value>` carries ≥ 1 key in
+   both locales; every personality tag and appearance value referenced by
+   any canon/officer card has its string. Parity and placeholder-token
+   checks remain group 2's; the total key count is recorded at validation
+   time (baseline ≈ 680 after Phase 7, correction 5), never pinned as a
+   constant.
+
+**Negative tests (must provably fail, exit 12, named message):** a 97th
+officer or a 25th legend; a legend main skill 61; a regular main skill 46;
+a legend wage 61 g or a regular wage 36 g; a skill carried at ≥ 20 by only
+9 officers; a captain-qualified count of 11; a background with two
+attribute keys, a `+4` skill bonus, or a 7th background; a gate row whose
+`stat_or_skill` is unknown or whose `threshold` is 0; a flagship post whose
+prereq is below 20; an advice situation with no ui_strings entry.
+
 ## 9. Edge Cases & Fail States
 
 - **Locale string empty or whitespace-only** → validator exit 2.
@@ -2149,8 +2624,13 @@ no variants.
 - **`npc_config.json` out of bounds** (negative preset, default not the
   neutral preset, a budget ≤ 0, `absolute_cap` above the §4.10 cap) →
   validator exit 7.
-- **A captain pool missing, extra, or under 8 names** → validator exit 7;
-  the §7.7 pool set is closed.
+- **A captain pool missing, extra, or under 8 names** → retired rule: the
+  name pools no longer exist. A present `data/npc_captains.json` fails
+  validator **exit 11** (§8.6 item 1) — every captain is canon (§4.11).
+- **Two people share a name** (a part-assembled draw colliding with any
+  captain/officer name, zh or en) → builder refuses the draw; if a built
+  file drifts into a collision, validator exit 11 (§8.6 item 5) — names
+  are never reused.
 
 ## 10. Acceptance Criteria
 
@@ -2158,17 +2638,29 @@ no variants.
       match these names exactly.
 - [ ] Every JSON example in this doc parses (spot-checked with a parser).
 - [ ] §7 tables contain exactly 105 sovereign + 45 neutral ports / 40 goods
-      / 16 ship types / 6 nations / 6 officers / 24 equipment rows and only
-      ids using the §3.1 `id` regex; every §7.1 `lat`/`lon` is a plausible
-      real-world position (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈ 32.7°N 129.9°E)
-      and no port sits in the polar ice band (`|lat| ≥ 70` north,
-      `≤ −60` south).
+      / 16 ship types / 6 nations / a 96-officer roster (24 + 72, the 6
+      Phase-1 starter ids locked) / 6 backgrounds / 24 equipment rows and
+      only ids using the §3.1 `id` regex; every §7.1 `lat`/`lon` is a
+      plausible real-world position (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈
+      32.7°N 129.9°E) and no port sits in the polar ice band (`|lat| ≥ 70`
+      north, `≤ −60` south).
 - [ ] Every non-ASCII display string in tables carries both zh and en.
 - [ ] Every locked constant of the Phase-6 rescale (`IMPLEMENT-Phase6.md`
       §2.0–§2.4, §2.10–§2.11) with owning doc `10-*` appears exactly once in
       §6.1/§4.14–4.18 with the same value (grid, tiles per degree, sighting
       radii, ship-speed set, artifact paths, drift rates); the §6.1 save
-      row pins the current version (7, no migration chain — `90-*` §8.2).
+      row pins the current version (9, no migration chain — `90-*` §8.2).
+- [ ] Every locked constant with owning doc `10-*` from
+      `IMPLEMENT-Phase8.md` §2.1–§2.9 appears in this doc exactly once: the
+      captain card fields, generation formulas, role templates and tier
+      ranges (§4.11), the name-parts source family (§4.11.1), the officers
+      v2 shape with the 96 = 24 + 72 split and quota bands (§4.5, §7.5),
+      the v2 named-pirate cards with `drop` preserved (§4.12, §7.8), the
+      canon coverage rule (§7.7), the gate/post/background shapes with the
+      locked `sail.autopilot`, post prereqs and the 6-background set
+      (§4.20–4.22, §7.10), the `officer_states`/`captain_states` shapes and
+      the fleet `captain_id` (§4.15), and the group-11/12 validator specs
+      (§8.6–8.7).
 - [ ] Every locked constant of `IMPLEMENT-Phase7.md` §2.1–§2.9 with owning
       doc `10-*` appears in this doc exactly once: the goods fields and
       40-id skeleton with the flag-driven 12/16/12 split (§4.2, §7.2), the
@@ -2178,26 +2670,30 @@ no variants.
       shipyard/equipment stock lists plus the band container (§4.4, §7.1),
       and the group-3/4/5/7 validator amendments (§8, §8.2).
 - [ ] Every locked constant with owning doc `10-*` from
-      `IMPLEMENT-Phase5.md` (the §4.10–4.15 schemas, the §7.6–7.8 lists,
-      the §8.2/§8.3 validator specs) appears in this doc exactly once.
-- [ ] `validate_data.py` check groups (exit 1–10) are implementable from §8
-      alone, without further design questions — including the §8.1 group 6
-      world-map spec, §8.2 group 7, §8.3 group 8, §8.4 group 9, and §8.5
-      group 10.
+      `IMPLEMENT-Phase5.md` (the §4.10/§4.12–4.15 schemas, the §7.6–7.8
+      lists, the §8.2/§8.3 validator specs) appears in this doc exactly
+      once — with the Phase-8 amendments applied (the name pools retired,
+      the drop pin relocated to §8.6).
+- [ ] `validate_data.py` check groups (exit 1–12) are implementable from
+      §8 alone, without further design questions — including the §8.1
+      group 6 world-map spec, §8.2 group 7, §8.3 group 8, §8.4 group 9,
+      §8.5 group 10, §8.6 group 11, and §8.7 group 12.
 - [ ] §4.16–4.18 (WindRegion/OceanCurrent/IceRegion) and §6.5 (ocean
       rasters) are implementable from this doc alone — envelope plural ==
       basename, field tables, index encodings, overlap and reversal rules —
       with no open design questions.
-- [ ] §7.6 lists exactly the **17** locked lane ids (12 Phase-5 + the 5
-      named Phase-6 ids); §7.7 exactly 7 pools; §7.8 exactly 4 named pirates;
-      §7.9 exactly 24 equipment items in the 2/2/2-per-slot tier structure.
+- [ ] §7.6 lists exactly the **21** locked lane ids (12 Phase-5 + the 5
+      named Phase-6 ids + the 4 of the 2026-11-02 amendment); §7.7 pins the
+      closed-canon rule (count computed at validation, §8.6); §7.8 exactly
+      4 named pirates as v2 cards; §7.10 exactly 6 backgrounds; §7.9
+      exactly 24 equipment items in the 2/2/2-per-slot tier structure.
 - [ ] §7.3's **final** speed values use exactly the locked set
       `{16, 20, 24}` (tiles/day at 5 nm; §6.1) — the table's two 18s are
       first-pass values that task S snaps into the set within its ±20%
       budget before the exact-set lock.
 - [ ] The save-block shapes of §4.15 match the `90-*` §8.1 key list
-      field-for-field (carried into v7 unchanged; Phase-6 keys and the
-      Phase-7 allegiance/permit/treasury keys live in `90-*` §8.1).
+      field-for-field (carried into v9; `officer_states`/`captain_states`
+      added and `named_pirate_respawns` removed at v9, `90-*` §8.1).
 - [ ] The validator summary reports a port count of **105 sovereign +
       45 neutral** (the group-5 exact 150-set).
 - [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)

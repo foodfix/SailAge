@@ -8,7 +8,10 @@ save-file format and versioning, and how the world PNG becomes chunked runtime
 TileMaps. Gates all phases; Phase-1 tasks must not introduce structures that
 contradict this doc. Phase 7 (trade empires) adds the `allegiance.gd` engine
 module, five allegiance/permit/treasury GameState fields, the month-tick
-ordering pin (§5.4), and save v7 (§8).
+ordering pin (§5.4), and save v7 (§8). Phase 8 (characters/careers/encounters)
+adds the person-model scripts (`player/skills.gd`, `world/captains.gd`,
+`world/interactions.gd`, `world/hail_options.gd`, `world/autopilot.gd`), the
+officer/captain state blocks on GameState (§5.4), and save v9 (§8).
 
 ## 2. Artifacts
 
@@ -42,10 +45,14 @@ SailAge/
 ├── scenes/
 │   ├── title/
 │   │   ├── title_screen.tscn
-│   │   └── nationality_select.tscn
+│   │   ├── nationality_select.tscn
+│   │   └── creation_screen.tscn  # Phase 8: background + free points, step ②③ (80-*)
 │   ├── world/
 │   │   ├── world_map.tscn       # chunked-TileMap ocean sailing scene
-│   │   └── chart_screen.tscn    # S17 whole-world Chart (Phase 4)
+│   │   ├── chart_screen.tscn    # S17 whole-world Chart (Phase 4)
+│   │   ├── fleet_picker.tscn    # Phase 8: right-click multi-fleet picker (60-*/80-*)
+│   │   ├── hail_modal.tscn      # Phase 8: at-sea hail verbs (80-*)
+│   │   └── autopilot_hud.tscn   # Phase 8: appointed-voyage HUD bar (80-*)
 │   ├── port/
 │   │   ├── port_screen.tscn     # port hub (facility menu)
 │   │   ├── provisions_dialog.tscn  # Set-Sail provisioning prompt (§4.6.1)
@@ -57,6 +64,9 @@ SailAge/
 │   │   ├── guild_screen.tscn    # Phase 3 (S12)
 │   │   └── palace_screen.tscn   # Phase 3 (S13)
 │   ├── combat/                 # Phase 2
+│   ├── ui/                     # Phase 8: shared person UI
+│   │   ├── character_card.tscn    # unified person renderer — player/officer/NPC captain (80-*)
+│   │   └── dossier_panel.tscn     # captain dossier: card + familiarity-gated career log (80-*)
 │   └── ui_shared/
 │       ├── dialog_box.tscn
 │       ├── confirm_dialog.tscn
@@ -72,6 +82,10 @@ SailAge/
 │   ├── world/discovery.gd      # Phase 3: explore/report/hints (70-* §4.4)
 │   ├── world/npc_fleets.gd     # Phase 5: the living-sea fleet sim (60-* §4.1)
 │   ├── world/npc_intel.gd      # Phase 5: sightings/posters/rumors queries (60-* §4.1)
+│   ├── world/captains.gd       # Phase 8: canon read + captain state machine (10-* §4.11, 60-*)
+│   ├── world/interactions.gd   # Phase 8: targeting/fleet attribution/verb dispatch (60-*)
+│   ├── world/hail_options.gd   # Phase 8: role × stance × skill hail-option builder (80-*)
+│   ├── world/autopilot.gd      # Phase 8: appointed voyage — route + interrupts (20-*)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
 │   ├── port/economy.gd         # Phase 5/7: flow-economy stock tick + events, pure (30-* §4.2/§4.5)
 │   ├── port/allegiance.gd      # Phase 7: port classes, ledgers, dev, treasuries, tariffs/permits inputs (30-* §4.9/§4.10)
@@ -81,12 +95,19 @@ SailAge/
 │   ├── quests/bounty.gd        # Phase 3: piracy/bounty (70-* §4.9.5)
 │   ├── quests/tournament.gd    # Phase 3: bracket + prizes (70-* §4.9.7)
 │   ├── player/character.gd     # stats, XP, officers
+│   ├── player/skills.gd        # Phase 8: skill values, usage counters, gates, training (50-*)
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
 │   └── fleet/fleet.gd          # fleet composition, cargo maths
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
 │   ├── wind_regions.json        # Phase 6: prevailing-wind regions (10-* §4.16)
 │   ├── ocean_currents.json      # Phase 6: ocean-current systems (10-* §4.17)
 │   ├── ice_regions.json         # Phase 6: seasonal sea ice (10-* §4.18)
+│   ├── captains.json            # Phase 8: named-captain canon — built, tool-owned (10-* §4.11)
+│   ├── captain_name_parts.json  # Phase 8: builder's authored source — names/personality/appearance (10-* §4.11.1)
+│   ├── officers.json            # Phase 8 v2: 96-officer roster — built, tool-owned (10-* §4.5)
+│   ├── skill_gates.json         # Phase 8: data-driven skill/stat gates (10-* §4.20)
+│   ├── officer_posts.json       # Phase 8: officer posts — prereqs + advice triggers (10-* §4.21)
+│   ├── backgrounds.json         # Phase 8: 6 new-game backgrounds (10-* §4.22)
 │   ├── maps/world.png           # generated, tool-owned (§9)
 │   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
 │   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)
@@ -97,7 +118,10 @@ SailAge/
     ├── map_overrides.json       # carved-strait list (Phase 4)
     ├── build_ocean.py           # ocean rasters: wind_regions.png + currents.png (Phase 6)
     ├── build_routes.py          # trade lanes → trade_routes_built.json (Phase 5)
-    └── route_overrides.json     # lane hand-fixes (Phase 5)
+    ├── route_overrides.json     # lane hand-fixes (Phase 5)
+    ├── build_captains.py        # Phase 8: parts + quotas + overrides → captains.json + officers.json v2 (--check = byte-identical rebuilds; 10-* §4.11)
+    ├── captain_overrides.json   # Phase 8: legend layer — 4 named pirates (with drops) + 20 legend captains
+    └── officer_overrides.json   # Phase 8: the 24 hand-authored legend officers
 ```
 
 Rules:
@@ -142,17 +166,29 @@ Application-wide signals; no state. Canonical signals:
 
 Any module may `emit`; only view/UI code and `GameState` may `connect`.
 Cross-screen communication never uses direct node references.
+**Phase-8 note (2026-11-02):** the table is unchanged — Phase 8 adds **no new
+signal**. The new UI (level-up toast + allocation badge, advice banners,
+`fleet_picker`/`hail_modal` results, dossier panels) reads GameState and the
+`Character`/`Skills` statics directly and rides the existing signals
+(`day_advanced`, `gold_changed`, dialogs-as-modal-children), consistent with
+the HUD pattern of §7.
 
 ### 5.2 DataLoader (`autoload/data_loader.gd`)
 
 - Loads every `data/*.json` at startup into typed dictionaries keyed by id:
   `DataLoader.ports`, `.goods`, `.ship_types`, `.nations`, `.officers`,
   `.equipment`, `.discoveries`, `.quests`, `.ui_strings`, `.map_legend`,
-  plus the Phase-5 files `.npc_config`, `.npc_captains`, `.named_pirates`,
+  plus the Phase-5 files `.npc_config`, `.named_pirates`,
   `.market_events`, `.trade_routes`, the tool-built
   `.trade_routes_built` (read-only, `10-*` §4.14), the Phase-6 ocean
   files `.wind_regions`, `.ocean_currents`, `.ice_regions` (`10-*` §4.16–4.18),
-  and `.facility_hours` (`10-*` §4.19, added 2026-11-02).
+  `.facility_hours` (`10-*` §4.19, added 2026-11-02), and the Phase-8
+  canon/data files — the tool-built `.captains` and `.officers` v2 (one
+  builder, byte-identical rebuilds, read-only; `10-*` §4.11/§4.5) plus the
+  authored `.captain_name_parts`, `.skill_gates`, `.officer_posts`,
+  `.backgrounds` (`10-*` §4.11.1, §4.20–4.22). The Phase-5 `.npc_captains`
+  loader key is **removed** (the file is deleted — the named-captain canon
+  replaces the name pools).
   There is exactly one port file (`data/ports.json`, the 100 sovereign ports
   plus the Phase-6 neutral tier, `10-*` §7.1) — **no merge step**.
 - Entry points: `get_port(id) -> Dictionary`, `get_good(id)`, …
@@ -180,8 +216,14 @@ marked •):
 
 - `locale: String` • (`"zh"` default `"en"`? locked: `"en"` — user toggles)
 - `day: int` •, `gold: int` •
-- `player: Dictionary` • — nationality, stats, XP/level, officers, reputation
-  map (shape in `50-CHARACTER-AND-PROGRESSION.md` §save-block)
+- `player: Dictionary` • — nationality, background, the five attributes +
+  eight skills (with `skill_counters` and the persisted `alloc_pending`
+  counter), XP/level, the `autopilot` appointment (`{dest_port_id}`, absent
+  when none), officers, reputation map (the v9 Person shape in
+  `50-CHARACTER-AND-PROGRESSION.md` §4.8). `Character.pending_levelup` (the
+  class static in `scripts/player/character.gd`) stays **session-transient**
+  (the level-up toast + badge); `player.alloc_pending` is the persisted
+  counter — no levelup key exists in any save
 - `fleet: Array` • — ship instances (shape in `40-SHIPS-AND-FLEET.md` §ship
   instance schema)
 - `world: Dictionary` • — fleet tile position, `map_id` (always `"world"`,
@@ -205,7 +247,10 @@ marked •):
 - `port_investments: Dictionary` • — `{port_id: gold_total}` (`30-*` §4.3)
 - `known_ports: Array[String]` • — discovered ports (§20 port discovery)
 - `npc_fleets: Array` • — every living NPC fleet, 8 roles (`60-*` §4.1);
-  save shape in `10-*` §4.15. Owned by `scripts/world/npc_fleets.gd` — the
+  save shape in `10-*` §4.15. Since Phase 8 each fleet carries `captain_id`
+  — a key into `data/captains.json` canon plus the fleet's
+  `captain_states` entry (`10-*` §4.11/§4.15). Owned by
+  `scripts/world/npc_fleets.gd` — the
   Phase-5 module that replaces the retired Phase-2
   `scripts/world/encounters.gd` 3-marker system (the rename
   `hostile_fleets` → `npc_fleets` with `kind` → `role` mapping,
@@ -245,16 +290,21 @@ marked •):
 - `fame_commended: Dictionary` • — Phase 7: `{port_id: true}` — one palace
   commendation per port converted to the player's nation (`70-*` §4.1
   extension)
-- `named_pirate_respawns: Dictionary` • — `{named_pirate_id: available_day}`
-  respawn cooldowns (`60-*` §4.11.11.4 task L pin); default `{}`. A famous
-  defeat keys its own `named_pirates.json` id (the slot's tier source); a
-  defeated *successor* books the single interchangeable alias slot as
-  `successor_<tier>`; a live famous pirate is derived from the fleets
-  themselves
+- `officer_states: Dictionary` • — Phase 8: `{officer_id: {loyalty, sea_days,
+  post_id, ship_id, talk_cd_day, gift_cd_day, defeats}}` per employed officer
+  (`10-*` §4.15; behavior `50-*`). `post_id = ""` = idle; `ship_id` is
+  non-empty only on a captain post. Owned by `scripts/player/character.gd` +
+  `scripts/world/interactions.gd` (the officer 4 actions)
+- `captain_states: Dictionary` • — Phase 8: `{captain_id: {status, return_day,
+  tier_now, stance, familiarity, dossier_seen, defeats, wins}}`; **full
+  entries exist only for met captains** — the canon cards themselves
+  (`data/captains.json`) are save-independent (`10-*` §4.11/§4.15; the
+  `active → defeated → returning(day+60) → active` state machine lives in
+  `scripts/world/captains.gd`, behavior `60-*`)
 - `npc_port_log` — **transient, never saved**: the last ≤ 128
   arrival/departure records the ecology appends for tavern rumor rows
   (`60-*` §4.11.11.4 task L pin); a fresh run and every load start with an
-  empty log
+  empty log. **Unchanged by Phase 8**
 - `proximity_cooldowns: Dictionary` • — `{kind: day}` spawn immunity
   (`60-*` §4.8); present-but-empty before Phase 2
 - `pending_encounter` — **transient, never saved**: the encounter S3 hands to
@@ -269,7 +319,8 @@ marked •):
 - Phase-3 fields (§8.1): `fame` • (int), `titles` •, `bounties` •,
   `active_quests` •, `completed_royal_missions` •, `discoveries_reported` •,
   `discovery_hints` •, `battles_won` •, `retired` •, `retired_at` •
-- API: `new_game(nation_id, route)`, `add_gold(delta)`,
+- API: `new_game(nation_id, background_id, attr_alloc, skill_alloc)` (the
+  Phase-8 two-step creation signature, `50-*` §4.1), `add_gold(delta)`,
   `advance_day()`, and thin helpers; heavy rules live in `scripts/` engines
   which mutate GameState. `world.map_id` is set to `DEFAULT_MAP_ID = "world"`
   at new game — there is no map choice.
@@ -291,10 +342,11 @@ marked •):
   counter-investment, and refreshes the tavern telegraph windows
   (`30-*` §4.9). No other module performs month-boundary allegiance work;
   there is no second month tick anywhere in the frame.
-- **Cap sizing (Phase 5):** normal ≈ 288 is ecology/balance, not
-  performance; coasters absorb the visual traffic (≤ 5-unit trades) so
-  effective long-haul trading stays ~127 fleets; far-field LOD is the
-  Phase-6 lever beyond `absolute_cap`.
+- **Cap sizing (Phase 5; raised Phase 7):** normal ≈ **323** (core 307 + 16
+  slack, `tools/demo_check_phase7.md`) is ecology/balance, not performance;
+  coasters absorb the visual traffic (≤ 5-unit trades) so effective
+  long-haul trading stays ~127 fleets; far-field LOD is the Phase-6 lever
+  beyond `absolute_cap`.
 
 ### 5.5 SaveSystem (`autoload/save_system.gd`)
 
@@ -302,9 +354,9 @@ marked •):
 - `save(slot)`, `load(slot) -> bool`, `list_saves() -> Array[Dictionary]`
   (slot, day, nation, port, gold, timestamp for the slot UI).
 - Serializes exactly the •-marked GameState fields plus
-  `{"save_version": 7, "saved_at": <unix>, "phase": 7}`.
-- `load` validates `save_version` — it must equal `SAVE_VERSION = 7`;
-  **no migration chain** (§8.2): a v6 or older payload is refused
+  `{"save_version": 9, "saved_at": <unix>, "phase": 9}`.
+- `load` validates `save_version` — it must equal `SAVE_VERSION = 9`;
+  **no migration chain** (§8.2): a v8 or older payload is refused
   ("pre-release save"), `load()` returns `false`, and state is untouched.
 
 ### 5.6 FleetSim (`autoload/fleet_sim.gd`) *(added 2026-11-02)*
@@ -368,9 +420,9 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 
 ```json
 {
-  "save_version": 8,
+  "save_version": 9,
   "saved_at": 1793119712,
-  "phase": 8,
+  "phase": 9,
   "locale": "en",
   "day": 12,
   "gold": 7830,
@@ -385,6 +437,8 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   "quests": [],
   "discoveries_found": [],
   "npc_fleets": [],
+  "officer_states": {},
+  "captain_states": {},
   "proximity_cooldowns": {},
   "market_stocks": {},
   "wrecks": [],
@@ -399,8 +453,9 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
 }
 ```
 
-(`player`/`fleet` interior shapes are owned by docs 50/40; SaveSystem treats
-them opaquely. `world.position` is the Lisbon berth on the 4320×2160 grid —
+(`player`'s interior shape is the v9 Person block, owned by `50-*` §4.8;
+`fleet` interior shapes are owned by doc 40; SaveSystem treats both
+opaquely. `world.position` is the Lisbon berth on the 4320×2160 grid —
 lon −9.14 → `(−9.14 + 180) × 12 ≈ 2050`, lat 38.72 → `(90 − 38.72) × 12 ≈ 615`.)
 
 Phase-2 additions (version 2):
@@ -464,7 +519,7 @@ Phase-5 additions (version 5):
 | `wrecks` | `[]object` | `[]` | `60-*` auto-resolve; shape in `10-*` §4.15 |
 | `npc_preset` | string preset id | `"normal"` | `10-*` §4.10 |
 | `market_events` | `[]object` | `[]` | `30-*` §4.5; shape in `10-*` §4.15 |
-| `named_pirate_respawns` | `object named_id → day` | `{}` | `60-*` §4.11.11.4 (task L pin): a defeated famous pirate's respawn-availability day (`day + 30`; a defeated successor books the `successor_<tier>` alias slot); a live famous pirate is derived from the fleets themselves |
+| `named_pirate_respawns` | `object named_id → day` | `{}` | `60-*` §4.11.11.4 (task L pin): a defeated famous pirate's respawn-availability day (`day + 30`; a defeated successor books the `successor_<tier>` alias slot); a live famous pirate is derived from the fleets themselves — **removed at v9** (Phase 8 retires the successor machinery; see the Version 9 block below) |
 
 **No migration; v4 refused (Phase-5 decision 5).** `SAVE_VERSION = 5`,
 `PHASE = 5`; version 5 adds **no `MIGRATIONS` entry and performs no payload
@@ -548,6 +603,31 @@ the out-of-band explored-state amendment (no `IMPLEMENT-Phase8.md` exists);
 `tools/test_save_v8.*` follows the `test_save_v7` single-breaking-bump
 pattern.
 
+Version 9 — Phase 8 (characters/careers/encounters):
+
+| Key | Type | Default when absent | Owner |
+|---|---|---|---|
+| `player` (reshape) | object | — | the v9 Person block: `{nation_id, background_id, attributes{5}, skills{8}, skill_counters{8}, alloc_pending, xp, level, autopilot, officers[], reputation{}, profit_by_nation{}, profit_rep_awarded{}, equipment{}}` (`50-*` §4.8). `autopilot: {dest_port_id}` is **absent** when no voyage is appointed (`20-*`); `level` stays the cached derivation of `xp`; the counters follow the usage-growth rule (reset on award, stop counting at 100) |
+| `officer_states` | object `officer_id → state` | `{}` | `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day, defeats}` per employed officer (`10-*` §4.15; behavior `50-*`); `post_id = ""` = idle, `ship_id` non-empty only on a captain post |
+| `captain_states` | object `captain_id → state` | `{}` | `{status, return_day, tier_now, stance, familiarity, dossier_seen, defeats, wins}` — full entries **only for met captains**; the canon cards stay save-independent (`10-*` §4.11/§4.15, `60-*`) |
+
+**Removed at v9 (no migration, old payloads refused wholesale):**
+`player.stats` — the old leadership/seamanship/combat/navigation block — and
+`named_pirate_respawns` (the Phase-5 successor machinery is retired; the
+named-captain return queue of `captain_states` replaces it, so the Phase-5
+table's `named_pirate_respawns` row above is historical). All other v8 keys
+carry forward (incl. `explored_tiles`).
+
+**No migration; v8 refused (Phase-8 decision 16).** `SAVE_VERSION = 9`,
+`PHASE = 9`; version 9 adds **no `MIGRATIONS` entry and performs no payload
+transformation**. All Phase-8 state is initialized by
+`new_game(nation_id, background_id, attr_alloc, skill_alloc)` (the state
+blocks start empty, the reshaped player block at its §4.8 defaults); a v8
+payload is refused like any older version (`load()` false, "pre-release
+save" logged); see §8.2 for the normative rule. One owner task (W6-C,
+`tools/test_save_v9.*` renamed from `test_save_v8`), the single-breaking-bump
+pattern.
+
 ### 8.2 Versioning rule (no migration chain)
 
 **Development-stage scope (normative; amended 2026-10-31, Phases 5–6).**
@@ -556,22 +636,23 @@ compatibility across phases is therefore **explicitly out of scope until
 the first release**, and no task may spend effort on it. Concretely:
 
 - `save_version` increments on any breaking shape change. The current
-  values are `SAVE_VERSION = 8`, `PHASE = 8` (the explored-state amendment,
-  2026-11-02).
+  values are `SAVE_VERSION = 9`, `PHASE = 9` (Phase 8,
+  characters/careers/encounters).
 - **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
   contract is the identity: a payload whose `save_version` equals
-  `SAVE_VERSION` loads (round-trip); **any older payload — v7 included —
+  `SAVE_VERSION` loads (round-trip); **any older payload — v8 included —
   is refused** (`load()` returns false, logs "pre-release save"). There is
-  no v7 → v8 step, and none may be reintroduced: Phase 4 removed the chain
+  no v8 → v9 step, and none may be reintroduced: Phase 4 removed the chain
   (`IMPLEMENT-Phase5.md` correction 4), Phase 5 kept it removed
-  (decision 5), Phase 6 kept it removed (decision 12), Phase 7 keeps
-  it removed (decision 13), and the explored-state amendment (2026-11-02)
-  keeps it removed.
-- All Phase-5/6/7 state is initialized by `new_game` (stocks derived;
+  (decision 5), Phase 6 kept it removed (decision 12), Phase 7 kept
+  it removed (decision 13), the explored-state amendment (2026-11-02)
+  kept it removed, and Phase 8 keeps it removed (decision 16).
+- All Phase-5/6/7/8 state is initialized by `new_game` (stocks derived;
   fleets seeded to half the cap there and only there; `control_prefs` and
   the three `world` ocean keys defaulted; the allegiance/permit/treasury
-  blocks seeded through `Allegiance.seed_new_game()`); nothing is
-  back-filled at load.
+  blocks seeded through `Allegiance.seed_new_game()`; the Phase-8
+  `officer_states`/`captain_states` blocks and the reshaped player block
+  start empty/defaulted); nothing is back-filled at load.
 - Anything that would only exist to serve an old save (position remapping,
   port-id remapping, `phase` rewrites, legacy-key repair) is dead weight: if it
   is cheaper to delete than to maintain, delete it.
@@ -705,10 +786,10 @@ is a build failure, never a quiet divergence.
 - [ ] `project.godot` matches §6 exactly.
 - [ ] Save file contains at least the §8.1 keys with `save_version` present;
       load tolerates missing optional keys only where a default is documented.
-- [ ] A v7 payload round-trips exactly (fleet positions, route legs,
-      captains, stocks, control prefs, trim/heading/wind direction, permits,
-      port allegiance ledgers, month investment counters, treasuries,
-      commendation flags); a v6
+- [ ] A v9 payload round-trips exactly (fleet positions, route legs,
+      captain states, officer states, stocks, control prefs, trim/heading/
+      wind direction, permits, port allegiance ledgers, month investment
+      counters, treasuries, commendation flags, explored tiles); a v8
       payload is refused with the standard message
       (`load()` false, "pre-release save" logged — §8.2).
 - [ ] Swapping `data/maps/world.png` for another palette-conformant
@@ -729,9 +810,9 @@ on pass, and prints a completion marker — `ALL PASS (N checks)` or
 built-in profiling, so a wave gate needs exactly one run:
 
 - **Scheduling.** Save-touching suites share `user://saves/` and run
-  one-at-a-time (the serial-save set: `test_save`, `test_save_v7` (renamed
-  from `test_save_v6` in Phase 7 W4; itself renamed from `test_save_v5` in
-  Phase 6 W5),
+  one-at-a-time (the serial-save set: `test_save`, `test_save_v9` (renamed
+  from `test_save_v8` in Phase 8 W6; itself renamed from `test_save_v7` in
+  Phase 7 W4 — the rename follows every breaking bump),
   `test_world_e2e`); every other suite runs in parallel workers
   (`-j`, default **8**).
 - **Bounded time.** Per-suite wall cap **300 s** (kill the process group).
