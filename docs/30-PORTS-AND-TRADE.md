@@ -10,6 +10,9 @@ neutral-tier frontier markets (§4.1); Phase 7 (`IMPLEMENT-Phase7.md`)
 replaces the Phase-5 drift-to-rest stock economy with the **flow economy**
 (§4.2), re-pins demand events as consumption-rate surges (§4.5), and adds
 allegiance & development (§4.9) plus the unified tariff & permits (§4.10).
+Phase 8 (2026-11-02) adds the appraisal/negotiation player-skill factors —
+price memory, profit/memory arrows, tariff discount, permit discounts
+(§4.2/§4.10) — and the market's captain-intel rows (§4.8).
 
 ## 2. Artifacts
 
@@ -24,13 +27,15 @@ allegiance & development (§4.9) plus the unified tariff & permits (§4.10).
 | `scripts/port/economy.gd` | stock, flow tick, tranche repricing, demand-event consumption surges (Phase 5, RefCounted; flow rework Phase 7) |
 | `scripts/port/allegiance.gd` | port classes, ledgers, dev derivation, monthly counter-investment, treasuries, tariff/permit resolution (Phase 7) |
 | `scripts/port/shipyard_engine.gd` | ship transactions |
-| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved), `permits`, `port_allegiance` ({ledger, allegiance} per contestable port), `month_invested`, `nation_treasuries` (Phase 7, saved; shapes in `90-*` §8.2) |
+| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved), `permits`, `port_allegiance` ({ledger, allegiance} per contestable port), `month_invested`, `nation_treasuries` (Phase 7, saved; shapes in `90-*` §8.2), the player's price-memory block (Phase 8 appraisal, §4.2; block shape in `90-*` §8) |
 
 ## 3. Dependencies
 
 `00-*`, `10-DATA-SCHEMA.md` (Port/Good schemas, locked lists), `20-*`
 (provisions/water prices, port entry), `40-*` (capacity enforcement),
-`50-*` (harbor relief conditions, reputation effects), `80-*` (widget
+`50-*` (harbor relief conditions, reputation effects, Phase-8 skill
+effects), `60-*` (the hail flow and `npc_intel` captain sightings behind
+the market's captain-intel rows, Phase 8), `80-*` (widget
 conventions), `90-*` (scene routing, save blocks).
 
 ## 4. Systems / Mechanics
@@ -227,6 +232,31 @@ tariff composes **after** this plumbing, on the transaction totals (§4.10).
   (`port.closed_bounty`) and no facility screen opens — except the bountied
   nation's capital palace, which offers only `Pay bounty`. Pricing itself is
   unaffected (the market is simply unreachable).
+- **Player skill factors (Phase 8, 2026-11-02).** The plumbing above is
+  untouched by skills; the appraisal skill (`50-*`, 0–100) adds three
+  consumers of its outputs:
+  - **Price memory.** Each completed **buy** records the port-good's
+    marginal buy price into the player's price memory — one entry per
+    `(port, good)` holding the last-seen price and day; a re-buy at the
+    same port-good overwrites. Capacity is `floor(appraisal / 10)` entries,
+    oldest evicted first (appraisal 30 → 3 entries, 100 → 10). Persisted
+    in the save's player block (`90-*` §8).
+  - **Profit arrows (gate appraisal ≥ 30).** A market row shows the profit
+    arrow when it is profitable against `base_price`: the marginal **buy
+    price < base_price** (cheap producer row) or the marginal **sell price
+    > base_price** (dear consumer row). Below the gate the arrow never
+    renders.
+  - **Other-port memory arrows (gate appraisal ≥ 60).** A row additionally
+    compares its current price against the memory's last-seen price for
+    that good **at other ports** (arrow up when the local price is above
+    the remembered foreign price, down when below). Below the gate only
+    the §4.8 flow-trend arrows render.
+  - **At-sea supply price source (Phase 8, reference).** Supply bought from
+    hailed traders at sea is priced against **the port price**: the §4.2
+    plumbing computes the base, and the hail flow's multipliers (×1.5,
+    ×1.25 at stance ≥ +3, −`floor(negotiation/10)`%) compose after it. The
+    flow itself — and which port's price is the base — is `60-*`'s hail
+    spec; this doc owns the price source only.
 
 ### 4.3 Investment
 
@@ -443,7 +473,9 @@ with K's transition.
   crew leaves with no severance; morale unchanged.
 - Officer recruiting UI and rules live in `50-*` §officers; the tavern screen
   hosts that panel under a second tab. Signing or dismissing an officer costs
-  1 hour (§4.1b).
+  1 hour (§4.1b). (Phase 8, 2026-11-02, reference only: the officer signing
+  fee takes the charisma discount pinned in `50-*`; the tavern
+  befriend/sparring surface is `60-*`/`80-*`'s.)
 
 ### 4.7 Inn: rest & harbor relief
 
@@ -532,6 +564,16 @@ allowance-exhausted (month hint) / diplomacy-blocked
 (`market.invest_gate.*`). Successful trade flashes the gold readout (per
 `80-*` feedback rules) and emits `gold_changed` + `fleet_changed` +
 `market_changed`.
+
+**Captain-intel rows (Phase 8, 2026-11-02).** Below the goods rows the
+market screen lists **which known captains currently sail a lane into this
+port**: one row per sighting of a captain-bearing fleet at this port,
+sourced from `npc_intel` (the same sighting store the world map reads,
+`60-*`), each row pointing at the captain's unified card/dossier
+(`80-*`). Captains with **stance ≥ +2** mark their next-lane hint **free**
+(granted on hail — the hail flow is `60-*`'s; this row is the market-side
+source naming which captains qualify). The rows are read-only intel;
+viewing them changes no state.
 
 #### Tavern (`tavern_screen`)
 
@@ -703,15 +745,25 @@ band, margin, tranches, discount, title bonus, all untouched (§4.2/§4.4)
 — on the transaction totals, and shows as a **separate displayed line**
 (`market.tax.*`).
 
+**Negotiation discount (Phase 8, 2026-11-02).** The **player's** tariff is
+reduced by `floor(negotiation / 10)` percentage points, **capped at −5
+points**, on both directions (buy cost and sell proceeds); the floor is
+0%. NPC trades always pay the full rate. At negotiation ≥ 50 the discount
+is the full −5: an aligned 5% becomes **0%**, a foreign 20% becomes
+**15%**. The discount composes after the §4.10 rate is determined and
+shows on the same `market.tax.*` line.
+
 **Permits (two kinds):**
 
-- **本国免税证 (home charter):** **5,000g**, own palaces only, **no
-  title/rep gate** (the early gold sink); covers every port whose
-  effective alignment == the player's nation (protected own + aligned
-  contestable), 5% → **0%**.
+- **本国免税证 (home charter):** **5,000g** (Phase 8, 2026-11-02:
+  negotiation ≥ **40** → ×95% = **4,750g**; full price below the gate),
+  own palaces only, **no title/rep gate** (the early gold sink); covers
+  every port whose effective alignment == the player's nation (protected
+  own + aligned contestable), 5% → **0%**.
 - **涉外免税证 (foreign permit):** per nation, that nation's palaces,
-  **20,000g**, title ≥ **Knight**, rep ≥ **+20**; covers that nation's
-  protected + aligned contestable ports.
+  **20,000g** (Phase 8, 2026-11-02: negotiation ≥ **70** → ×90% =
+  **18,000g**; full price below the gate), title ≥ **Knight**, rep ≥
+  **+20**; covers that nation's protected + aligned contestable ports.
 - Both are **void** while that nation's bounty is held or rep < **−20**;
   re-buy at full price. State:
   `GameState.permits {home: bool, foreign: {nation_id: bool}}` (save v7,
@@ -856,3 +908,19 @@ A displaced-stock trade (sell 100 wine into London from rest, per §4.4):
       `80-*` §string inventory.
 - [ ] A bountied nation's port hub disables every facility row except the
       capital's `Pay bounty` row (`70-*` §4.9.6).
+
+**Phase-8 additions (player skills & intel).**
+
+- [ ] Profit arrows render on a market row iff appraisal ≥ 30 and the row
+      is profitable vs `base_price`; other-port memory arrows iff
+      appraisal ≥ 60; price-memory capacity is `floor(appraisal/10)`
+      entries with oldest-first eviction (§4.2).
+- [ ] The negotiation tariff discount is −`floor(negotiation/10)` points
+      capped at −5, player-only, both directions, never below 0%
+      (§4.10).
+- [ ] Permit prices are exactly 4,750g (home, negotiation ≥ 40) and
+      18,000g (foreign, ≥ 70), and 5,000g / 20,000g below the gates
+      (§4.10).
+- [ ] Market captain-intel rows list `npc_intel` sightings of
+      captain-bearing fleets at this port, with stance ≥ +2 rows marking
+      the free next-lane hint (§4.8).

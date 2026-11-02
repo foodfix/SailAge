@@ -7,7 +7,10 @@ discovery/report system, piracy and bounties, tournaments, the world-map content
 scope (now the single Terra Vera map, §4.8), and the retirement/victory
 condition. Gates **Phase 3** (Phase 4 re-anchors the map, §4.8/§4.9.8). Schemas
 for `Quest`, `Discovery`, and guild/palace facilities already exist in
-`10-DATA-SCHEMA.md`.
+`10-DATA-SCHEMA.md`. Phase 8 (2026-11-02) moves the discovery radius to
+cartography (§4.4), adds the rumour accuracy tiers, the bounty-pinpoint
+half price and inform-on-pirates (§4.5), the tournament duel ladder
+(§4.6), and the retirement-screen RPG segment (§4.7).
 
 ## 2. Artifacts
 
@@ -24,6 +27,7 @@ for `Quest`, `Discovery`, and guild/palace facilities already exist in
 | `scripts/player/fame.gd` | fame + title ladder |
 | `data/quests.json` | hand-authored quest templates (procedural fill) |
 | `data/discoveries.json` | discovery entries (~30, content task); positions are `lat`/`lon` |
+| `data/backgrounds.json` | creation background cards; the `bio` of the player's `background_id` feeds the ending screen's background line (§4.7; schema `10-*`, `50-*`) |
 | `data/ports.json` | all 100 ports (`lat`/`lon` truth, `10-*` §7.1) |
 | `data/maps/world.png` | the single Terra Vera world map (`10-*` §6.3) |
 | GameState additions | `fame`, `titles` (per nation), `bounties`, `active_quests`, `completed_royal_missions`, `discoveries_reported`, `discovery_hints`, `battles_won`, `retired`/`retired_at` (v3 fields; save version 4 from Phase 4, `90-*` §8.2) |
@@ -116,11 +120,16 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
 
 **Pins (task-owned values fixed before code, §4.9 discipline).**
 
-- **Sighting radius** is `36` exactly (`DiscoverySight.RADIUS`), **not** the
-  port sighting radius of `20-*` §4.11 (48) — a discovery is a much smaller
-  landmark than a harbour, and the world-map `E` action is only offered inside
-  this radius. Chebyshev distance over tiles, **wrap-aware on x**. (The
-  Phase-6 grid sweep doubled both radii from the Phase-4/5 values 18/24.)
+- **Sighting radius** is `36 + floor(cartography / 15)` (Phase 8,
+  2026-11-02 — the flat `36` is retired and ownership moves to the
+  player's cartography skill, `50-*`; `20-*` §4.11 carries the same
+  formula), **not** the port sighting radius of `20-*` §4.11
+  (`48 + floor(navigation/12)`) — a discovery is a much smaller
+  landmark than a harbour, and the world-map `E` action is only offered
+  inside this radius. Chebyshev distance over tiles, **wrap-aware on x**.
+  (History: the Phase-6 grid sweep doubled the flat radii from the
+  Phase-4/5 values 18/24 to 36/48; Phase 8 replaced the flat discovery
+  radius with the cartography formula.)
 - **Explore** is a world-map action bound to the `E` key (and a
   `discovery.explore` HUD button that appears only when in range, `80-*` §4.3).
   It finds **every** in-range, unfound discovery in one action and reports
@@ -168,6 +177,25 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
   (`{1: 5000, 2: 10000, 3: 20000}` gold by tier). A defeated named pirate
   respawns, after **+30 days**, under a **new name**; `quest_gen` bounty
   targets prefer named captains (`60-*` §4.11.11.4).
+- **Rumour accuracy tiers (Phase 8, 2026-11-02).** Location-bearing
+  rumours — the palace bounty board's position reveals and hailed
+  captains' route intel (`60-*` ask-rumours) — are tiered by the player's
+  **intellect**: intellect **< 40** → region-only hint; **40–69** → the
+  port named; **≥ 70** → port **+ month window**. (Authored static
+  strings — discovery `region_hint`, demand telegraphs — are data and
+  unchanged.)
+- **Bounty pinpoint at half price (Phase 8, 2026-11-02).** With **rumour
+  ≥ 40**, a bounty-board pinpoint reveal (one bounty/nemesis captain's
+  current position) costs **half price** — the bounty-business base price
+  and the charisma discount there are `60-*`/`50-*`'s (reference only
+  here); the rumour gate halves whatever that price is.
+- **Inform-on-pirates (Phase 8, 2026-11-02).** A palace action: pay a
+  fixed **500g** to reveal one pirate/privateer captain's current
+  position — the bounty-pinpoint pipeline at the **fixed price** (no
+  rumour or charisma discounts apply).
+- **Bounty rows link to dossiers (Phase 8).** Each bounty-board row opens
+  the captain's dossier (`80-*` owns the dossier UI; this doc owns the
+  link).
 - **Clearing:** pay the bounty at that nation's palace (cost =
   `500g × |rep|`), or surrender the flagship to a hunter (`60-*` §4.7) — both
   reset rep to −10.
@@ -187,6 +215,14 @@ schedule) live in `60-*` §4.1/§4.11.11.
   (brigantine → carrack → galleon class), durability carries between rounds,
   no repairs between rounds. Win all 3: prize 10,000g + 100 fame; loss at any
   round: consolation 500g, ships repaired to 50% free.
+- **Duel ladder (Phase 8, 2026-11-02).** The bracket carries ranks above
+  the fleet bracket, flown as duels (`60-*` resolution): a **rank-2** bout
+  requires player **swordplay ≥ 30** and pays the win prize **×2**
+  (**20,000g**); a **rank-3** bout requires **swordplay ≥ 60** and pays
+  **×3** (**30,000g**). The gates are `skill_gates` rows — grayed with
+  reason below the threshold (`50-*` §gates). Fame (100), the 500g
+  consolation, the 1,000g entry fee and the host/window rules are
+  unchanged across ranks.
 
 **Pins:** the cycle/host/window formulae, per-round fleet composition, the
 `enemy_kind = "tournament"` reputation exemption and the 50% repair floor are
@@ -208,13 +244,27 @@ fixed in §4.9.7.
   is `duke`; choosing it opens a confirm (`palace.retire.confirm`), and
   declining changes nothing.
 - The ending screen is S16 `scenes/ui_shared/ending_screen.tscn` (`80-*`
-  §4.1), showing exactly these six summary lines, each from a
+  §4.1), showing exactly these six summary lines — then the Phase-8 RPG
+  segment (below) — each from a
   `ending.*` `ui_strings` key with the number composed by the UI:
   `days sailed` = `GameState.day`, `gold` = `GameState.gold`, `fame`,
   `titles` = every nation whose rank ≠ none (`{nation} {rank}` rows),
   `discoveries` = `discoveries_reported.size()`, `battles won` =
   `GameState.battles_won` (new saved counter, incremented on every
   `battle_finished` outcome whose `result == "victory"`).
+- **RPG segment (Phase 8, 2026-11-02).** Below the six summary lines the
+  ending screen renders four **read-only** rows drawn entirely from
+  existing state — no new simulation, no new counters (layout `80-*`):
+  * **Nemesis list** — the top **3** captains by `captain_states.wins`
+    (defeats of the player), each shown with its win count
+    (save v9 `captain_states`, `90-*` §8);
+  * **Deepest grudge** — the captain with the lowest `stance`;
+  * **Most loyal veteran** — the officer with the highest loyalty among
+    those with `sea_days ≥ 90` served (save v9 `officer_states`);
+  * **Background line** — one bio line from the player's `background_id`
+    (`data/backgrounds.json` bio, `50-*`).
+  Strings `ending.rpg.*`; a row with no eligible entry is omitted (e.g.
+  no captain ever met).
 - **Retired saves.** The payload gains `"retired": true` and
   `"retired_at": <unix>`; `SaveSystem.load()` on such a slot restores nothing
   and instead returns a `retired` flag so the title screen routes straight to
@@ -579,7 +629,17 @@ Title ladder progress block:
       (sell-price grant verified against `30-*` formula as a separate
       `title_bonus` multiplier).
 - [ ] Discovery flow (hint → sight → explore → report) works with both
-      strings localized; sighting radius 36, wrap-aware.
+      strings localized; the discovery radius is
+      `36 + floor(cartography/15)`, wrap-aware (§4.4).
+- [ ] Rumour accuracy tiers — intellect < 40 region-only, 40–69 port
+      named, ≥ 70 port + month window; bounty pinpoint at half price with
+      rumour ≥ 40; inform-on-pirates fixed at 500g (§4.5).
+- [ ] Tournament duel ladder: rank-2 gate swordplay ≥ 30 with the 20,000g
+      purse, rank-3 gate ≥ 60 with 30,000g; base bracket pins unchanged
+      (§4.6).
+- [ ] The retirement RPG segment renders the nemesis top-3, deepest
+      grudge, loyal veteran (loyalty first among `sea_days ≥ 90`) and
+      background rows, read-only from existing state (§4.7).
 - [ ] Bounty: rep ≤ −50 triggers closure + hunters; both clear paths reset
       to −10.
 - [ ] Phase 5: named-pirate tiers match the §4.9.3 reward bands; defeating

@@ -13,7 +13,11 @@ amends §4.1 (grid rescale), §4.2 (input modes + interpolated rendering), §4.4
 (the direction-aware speed pipeline) and §4.7 (the wind-direction roll),
 re-pins the sighting/discovery radii at the 5 nm grid (48/36), and replaces
 §4.13 with the real §§4.14–4.18 (prevailing winds, calendar, ocean currents,
-sail trim & wait, seasonal sea ice).
+sail trim & wait, seasonal sea ice). Phase 8 (2026-11-02) amends §4.2 (the
+night-sail rule), §4.4 (speed bonus on the seamanship skill; the storm-headway
+term), §4.7/§4.8/§4.9 (attribute factors: continuous luck, charisma mutiny,
+scurvy grace), §4.11 (sighting/discovery radius formulas), adds §4.19
+(appointed voyage) and re-pins §7 (acceptance).
 
 ## 2. Artifacts
 
@@ -23,6 +27,7 @@ sail trim & wait, seasonal sea ice).
 | `scenes/world/chart_screen.tscn` | full-screen whole-world Chart (S17, `80-*` §4.6) |
 | `scripts/world/sailing_sim.gd` | movement, clock, daily ledger, weather, morale |
 | `scripts/world/sail_path.gd` | click-to-sail `AStarGrid2D` pathing (§4.2, task H) |
+| `scripts/world/autopilot.gd` | appointed voyage: gate, route state machine, shared A* (§4.19, Phase 8) |
 | `scripts/world/map_loader.gd` | PNG world → chunked TileMaps (spec in `90-ARCHITECTURE.md` §9) |
 | `scripts/world/ocean_layers.gd` | Phase-6 ocean-layer lookups: wind-region id, current vector (with reversal flip), month-keyed ice cache (schemas `10-*` §6.5) |
 | `data/maps/world.png` | the single Terra Vera world map (artefact spec `10-*` §6.3, built by `tools/build_world.py`) |
@@ -31,7 +36,7 @@ sail trim & wait, seasonal sea ice).
 | `data/ice_regions.json` | seasonal sea-ice polygons (Baltic, Hudson Bay, White Sea) |
 | `data/maps/wind_regions.png` | baked wind-region raster (tool-owned, `tools/build_ocean.py`, never hand-edited) |
 | `data/maps/currents.png` | baked current raster (tool-owned; each system's stored non-flipped vector — non-summer regime for reversal systems — reversal applied at lookup) |
-| GameState keys | `day`, `world.position`, `world.map_id` (always `"world"`), `world.weather`, `world.sail_trim`, `world.heading`, `world.wind_dir`, `known_ports`, `control_prefs`, morale/crew state inside `fleet` (schema in `40-*`) |
+| GameState keys | `day`, `world.position`, `world.map_id` (always `"world"`), `world.weather`, `world.sail_trim`, `world.heading`, `world.wind_dir`, `known_ports`, `player.autopilot` (appointed-voyage destination `{dest_port_id}`, absent = not appointed — §4.19), `control_prefs`, morale/crew state inside `fleet` (schema in `40-*`) |
 
 ## 3. Dependencies
 
@@ -133,6 +138,17 @@ the modes differ only in what produces the steps.
 - Each successful tile move advances the fractional clock by
   `move_cost(heading)` = `1 / effective_speed(heading)` days (§4.4). Blocked
   moves cost nothing.
+- **Night sailing (Phase 8, 2026-11-02).** A move whose **start time** is in
+  the night window — wall-clock ≥ 22:00 or < 06:00 (§4.3 `HH:MM`) — accrues
+  only half distance per movement budget: its clock advance is
+  `2 × move_cost(heading)`. The rule binds every step source alike — step
+  keys, helm auto-steps and click-to-sail legs — because a step is a step
+  wherever it comes from; the helm's real-time interval is unchanged, so a
+  night helm simply covers half the tiles per accrued day. The slow is
+  lifted when the fleet's **effective navigation** (player skill + the
+  in-post pilot's value, `50-*`) is ≥ **40**; the `skill_gates` row
+  `sail.night` carries the HUD note shown while the slow applies
+  (`80-*`).
 - Heading into a port's **shore** tile from an orthogonally adjacent tile
   triggers port entry (§4.11.1) instead of moving the fleet; the docking
   charges one `move_cost(heading)` before the port screen opens. Sailing
@@ -213,14 +229,26 @@ effective_speed(heading) = floor(
   × direction_factor(heading, wind_dir) # table below; identity 1.0 when weather = calm
   × current_factor(heading, position)   # §4.16; identity 1.0 in drift mode
   × crew_factor(crew, crew_min)         # §4.6
-  × (1 + seamanship_bonus)              # 50-* §stat effects
+  × (1 + seamanship_bonus)              # 50-* §skill effects
+  × storm_headway_factor                # §4.7 storm effects; 1.0 otherwise (Phase 8)
   × trim_factor(sail_trim)              # §4.17
 )
 minimum 1 tile/day
 ```
 
-`floor` applies after all multipliers. `seamanship_bonus =
-(seamanship − 10) / 100`, clamped to `[-0.1, +0.2]` (per `50-*`).
+`floor` applies after all multipliers. **`seamanship_bonus =
+seamanship / 300`, clamped to `[0, +0.30]`** (Phase 8, 2026-11-02 —
+seamanship is a 0–100 skill starting at 0, `50-*`; the retired
+`(seamanship − 10) / 100` clamp `[-0.1, +0.2]` is deleted, and the new bonus
+is never negative).
+
+**Storm headway (Phase 8, 2026-11-02).** On a day that rolled storm the
+fleet loses headway — no captain holds full way in a gale:
+`storm_headway_factor = 1 − 0.5 × (1 − (COU−10)/400)` — the storm's
+half-budget speed loss is scaled down by courage (the fleet runs at ×0.500
+of normal speed at COU 10, up to ×0.6125 at COU 100). Every other day the
+factor is 1.0. It is a player-ledger attribute effect and is pinned neutral
+(1.0) for NPC fleets (see the NPC parity paragraph below).
 
 `heading` is one of the 8 compass directions; `wind_dir` is the day's
 wind-FROM direction (`world.wind_dir`, §4.7). The angle between the move
@@ -274,7 +302,7 @@ the region's **prevailing** wind token — the seeded daily jitter is a
 player-ledger roll and is not re-rolled for NPCs), and the `current_factor`.
 The three player-ledger terms are pinned neutral for NPCs (they own no such
 state): `crew_factor = 1.0`, seamanship bonus `0`, sail trim `normal`
-(1.0). Movement accrues with elapsed world time — each fleet banks
+(1.0), storm headway `1.0` (Phase 8, 2026-11-02). Movement accrues with elapsed world time — each fleet banks
 `Δ × pipeline` tiles per elapsed Δ and steps one tile per accrued tile,
 released in step with the player's own clock (whole-day catch-up walks
 exactly the daily budget); raiders and hunters pay the same pipeline per
@@ -387,9 +415,19 @@ same seed replays the same direction sequence).
 
 **Storm effects** (checked at the day tick that rolled storm, before movement):
 
-- Each ship takes `ceil(durability_max × 0.05)` damage, reduced by luck
-  mitigation (`50-*`: luck ≥ 50 → damage × 0.75, applied before rounding).
-- Morale −5 (stacks with §4.8 daily delta).
+- **Chance (unchanged):** the rolled storm probability is
+  ×`(1 − luck/400)` (`50-*` §4.2; the mass freed by the reduction is handed
+  back to the three non-storm outcomes proportionally to their base
+  weights).
+- **Damage:** each ship takes `ceil(durability_max × 0.05)` damage, reduced
+  by the continuous luck mitigation **damage × `(1 − luck/250)`**, applied
+  before rounding (Phase 8, 2026-11-02 — the retired `luck ≥ 50 → damage
+  × 0.75` step is deleted; player-only, luck being a player attribute,
+  `50-*`).
+- **Headway:** the day's moves run at the §4.4 `storm_headway_factor` —
+  half budget at COU 10, courage-scaled (Phase 8, 2026-11-02).
+- Morale −5 (stacks with §4.8 daily delta) — on a storm day the −5 itself
+  is ×`(1 − (CON−10)/300)` (§4.8.1, Phase 8, 2026-11-02).
 
 **Demo-loop re-anchor (replaces the old Atlantic strip).** The old low-x
 Atlantic-strip thresholds are deleted; storms are now a property of the latitude
@@ -427,7 +465,8 @@ Fleet morale is a single value 0–100 (per-ship morale OUT OF SCOPE
 | At sea, fully supplied | −1 |
 | At sea, provisions short | −5 additional |
 | At sea, water short | −5 additional |
-| At sea, storm day | −5 additional |
+| At sea, storm day | −5 × (1 − (CON−10)/300) additional (Phase 8, 2026-11-02 — constitution tempers the storm-day morale hit; §4.7) |
+| Any fleet ship without its captain | −2 additional (Phase 8, 2026-11-02 — the captain-less rule is `40-*` §4.4's) |
 | In port (any cause of day advance) | +5, up to the port cap 80 |
 | Wages unpaid (gold clamped) | −5 additional |
 
@@ -449,22 +488,28 @@ Clamp result to [0, 100]. Morale tiers (HUD colors in `80-*`):
    losses; the outer `[0, 100]` clamp still applies.
 2. **"Wages unpaid" is not at-sea-only.** The −5 row applies on any day the
    gold clamp fired, in port included (so an unpaid port day nets `+5 −5 = 0`).
-3. **Acceptance sampling.** The mutiny rate is `0.25 × (1 − (leadership−10)/200)`
+3. **Acceptance sampling.** The mutiny rate is `0.25 × (1 − (charisma−10)/200)`
    per at-sea day, so the 5-day compounded probability is `1 − 0.75⁵ = 0.7627`
-   at leadership 10. Verify against that value within **±0.02** using ≥ 4000
+   at charisma 10. Verify against that value within **±0.02** using ≥ 4000
    seeded trials; an exact `≥ 0.76` threshold has a 0.0067 standard error at
-   n = 4000 and is flaky.
+   n = 4000 and is flaky. (Phase 8, 2026-11-02: charisma takes over every
+   retired leadership site — mutiny and desertion alike, formula unchanged,
+   `50-*` §2.1.)
 
 #### 4.8.2 Desertion
 
-On every port entry, if morale < 40: `crew -= max(1, floor(crew × 0.10))`
-from the flagship pool; a dialog reports the loss (`ui_strings`
-`world.desertion`). Desertion cannot reduce crew below 1.
+On every port entry, if morale < 40: `crew -= max(1, floor(crew × 0.10 ×
+(1 − (charisma − 10)/200)))` (Phase 8, 2026-11-02 — charisma scales the
+desertion loss, the mutiny/desertion charisma factor of `50-*` §2.1; the
+loss never falls below 1 crew) from the flagship pool; a dialog reports the
+loss (`ui_strings` `world.desertion`). Desertion cannot reduce crew below 1.
 
 #### 4.8.3 Mutiny
 
-At ledger step 6, if at sea and morale < 20: 25% chance per day of the
-mutiny event modal (`ui_strings world.mutiny.*`):
+At ledger step 6, if at sea and morale < 20: `25% × (1 − (charisma −
+10)/200)` chance per day (Phase 8, 2026-11-02 — charisma replaces the
+retired leadership factor, formula otherwise unchanged; §4.8.1 sampling)
+of the mutiny event modal (`ui_strings world.mutiny.*`):
 
 - **Pay off** (disabled unless `gold ≥ crew × 20`): `gold -= crew × 20`,
   morale = 50.
@@ -477,14 +522,24 @@ If neither is possible (e.g., crew already 1), mutiny fizzles with morale +5.
 | Counter | Trigger at ledger step 1/5 | Daily effect while active | Game over when |
 |---|---|---|---|
 | Starvation | provisions < need (provisions clamp to 0) | counter+1; `crew -= max(1, floor(crew × 0.05))`; morale −5 (in 4.8.1 table) | counter ≥ 7 → `EventBus.game_over("starvation")` |
-| Scurvy | water < need (water clamp to 0) | counter+1; `crew -= max(1, floor(crew × 0.05))`; morale −5 | counter ≥ 7 → `game_over("scurvy")` |
+| Scurvy | water < need (water clamp to 0) | counter+1; `crew -= max(1, floor(crew × 0.05))`; morale −5 | counter ≥ `7 + floor(max(CON, in-post surgeon medicine)/10)` → `game_over("scurvy")` (Phase 8, 2026-11-02) |
 | Sinking | any ship durability ≤ 0 | — | flagship only ship → `game_over("sunk")`; else crew/cargo relocate per `40-*` §sinking |
+
+**Scurvy grace (Phase 8, 2026-11-02).** The scurvy game-over threshold is
+`7 + floor(max(CON, in-post surgeon medicine)/10)` — the player's
+constitution and the in-post surgeon's medicine feed the same `floor(x/10)`
+term, whichever is higher (`50-*` §2.1/§2.2; the surgeon post is `50-*`
+§posts). The additive base stays **7** (correction 3 of
+`IMPLEMENT-Phase8.md` — §4.9 previously had no grace at all); at base
+constitution 10 with no surgeon the threshold is 8. Starvation's 7 and the
+sinking rule are untouched.
 
 Starvation/scurvy counters reset to 0 on the first fully-supplied day; a
 port ledger day always counts as fully-supplied (port-day amendment,
 2026-11-02, §4.5 step 1), so the counters advance at sea only. Crew
-loss from either cannot reduce crew below 1 (game over fires at 7 days
-regardless). On game over: show `gameover_screen` with the reason string,
+loss from either cannot reduce crew below 1 (game over fires at the counter
+threshold regardless — 7 for starvation, the grace-extended threshold for
+scurvy). On game over: show `gameover_screen` with the reason string,
 then return to title; no save is written or deleted.
 
 ### 4.10 Provisions & water as cargo
@@ -520,21 +575,28 @@ then return to title; no save is written or deleted.
 
 - **Known ports:** `GameState.known_ports`. At new game: all 6 capital/start
   ports are known (`lisbon, seville, london, amsterdam, istanbul, venice`).
-- **Sighting:** when the fleet is within the sighting radius (**48** tiles,
-  ≈4° ≈ 240 nm; modified by navigation per `50-*` §4.2; Chebyshev distance,
+- **Sighting:** when the fleet is within the sighting radius
+  `48 + floor(effective_navigation / 12)` (Phase 8, 2026-11-02 — base
+  **48** ≈ 4° ≈ 240 nm plus the navigation term; effective navigation =
+  player skill + the in-post pilot's value, `50-*`; this closes the Phase-6
+  unswept `(navigation − 10)/10` modifier; Chebyshev distance,
   **wrap-aware on x**) of a port's harbor pair (measured to its berth tile),
   that port is added to `known_ports` permanently (marker appears on map +
   minimap). Map exploration (§4.12) uses the same radius.
 - **Discovery sighting (Phase 3, world map):** a separate, shorter radius —
-  **36** tiles (Chebyshev, wrap-aware) — is when the `E` Explore action can
-  find a `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
-  constant (`sighting_radius` 48 vs `discovery_radius` 36, §5).
+  `36 + floor(cartography / 15)` tiles (Phase 8, 2026-11-02 — the flat 36
+  is retired; ownership moves to the cartography skill, `70-*` §4.4;
+  Chebyshev, wrap-aware) — is when the `E` Explore action can find a
+  `Discovery` (`70-*` §4.4). Ports and discoveries never share a radius
+  constant (`sighting_radius` 48 vs the cartography-driven discovery
+  radius, §5).
 - **NPC fleet sighting (Phase 5):** national NPC fleets are world-map
   overlays rendered like ports (`60-*` §4.11.11) — nation-coloured squares,
   the wreck icon and wake trails (`80-*` §4.5.2). The two radii above are
-  **unchanged by the fleet layer at their Phase-6 values**: port sighting
-  stays **48**, discovery stays **36**, and fleets need no sighting roll of
-  their own (they are simply rendered when on screen). Lane behavior — which
+  **unchanged by the fleet layer at their Phase-6 base values**: port
+  sighting stays **48** (+ the §4.11 navigation term), discovery stays
+  **36** (+ the cartography term, `70-*` §4.4), and fleets need no sighting
+  roll of their own (they are simply rendered when on screen). Lane behavior — which
   routes each role sails, chokepoint camping with the 5/8 hysteresis, and the
   pursuit exception — is specified in `60-*` §4.11.11, not here.
 
@@ -776,6 +838,52 @@ provisioning prompt rather than leaving directly.
   lane variants are normative in `60-*` §4.11.11 (Phase-6 amendment), not
   here.
 
+### 4.19 Appointed voyage (委任航行) (Phase 8, 2026-11-02)
+
+An input mode, not a physics override: while appointed, the fleet walks a
+precomputed route through the **normal per-step rules** — clock, the §4.5
+ledger, §4.11 port entry, encounters — exactly like a click-to-sail leg
+(§4.2).
+
+- **Entry:** the Chart screen (S17, `80-*` §4.6) — select a known port →
+  委任航行; or **right-click a port harbor tile** (the same right-click
+  pipeline as fleets, target type port — `60-*` §4.1, `80-*`). While
+  appointed the HUD shows destination / ETA / cancel (visuals in `80-*`).
+- **Gate (`skill_gates` `sail.autopilot`):** a pilot officer **in post**
+  and **that pilot's navigation ≥ 40**, and the destination ∈
+  `known_ports`. Otherwise the action renders grayed with the gate reason
+  (`50-*` §gates); there is **no gold fee** — officer wages are the cost.
+- **Route quality (skill investment buys route quality):**
+  - pilot navigation **40–69** → the **plain shortest-water A\*** — the
+    §4.2 wind-blind path, distance-optimal, knows nothing about wind or
+    currents;
+  - pilot navigation **≥ 70** → the **wind/current-weighted A\***: move
+    cost = base × month-prevailing-wind heading factor (§4.14) × current
+    vector factor (§4.16) — the route avoids head-wind bands and in-month
+    seasonal ice (§4.18) and rides the trades; hugging the trade lanes is
+    **emergent**, never authored. Data sources already exist:
+    `wind_regions.png` (month keys), `currents.png`, the ice windows.
+  - The §4.2 wind-blind locked decision stands for click-to-sail; the
+    weighted cost is an **autopilot-only** cost function on top of the
+    **shared A\* core** — which is extracted from `npc_fleets.gd` pursuit
+    as a pure move first (no behavior change; NPC pursuit determinism
+    re-verified by the ecology suites between the two changes), then the
+    weighted cost lands on it (`IMPLEMENT-Phase8.md` W5-D; NPC pursuit is
+    `60-*` §4.11.11's).
+- **Interrupts:** hostile contact → **auto-cancel + notice** (battles are
+  always player-flown, `60-*` §4.1); **any manual move input** — a step
+  key, a helm key, a click-to-sail, docking — cancels. **Storms do not
+  cancel**: on a storm day the appointment stands and the fleet
+  **auto-reefs** to `reefed` for that day (the §4.17 trim rule, storm
+  damage ×0.75), restoring the player's previous trim afterward; the §4.7
+  storm effects (damage, morale, headway) apply normally.
+- **Costs unchanged:** provisions, water and wages are charged every sea
+  day (§4.5) — "the sea has a cost" pillar is not exempted.
+- **State & arrival:** the appointment persists as save v9's
+  `player.autopilot` `{dest_port_id}` (absent = not appointed; `90-*` §8).
+  The route ends at the destination's berth tile (§4.11.1): the fleet
+  docks through the normal port-entry sequence and the appointment clears.
+
 ## 5. Data Examples
 
 Storm-roll and morale tables are code constants; all tunables live at the top
@@ -791,7 +899,7 @@ code constants too:
     "provisions_price": 2,
     "water_price": 1,
     "sighting_radius": 48,
-    "discovery_radius": 36,
+    "discovery_radius_base": 36,
     "harbor_snap_radius": 2,
     "tiles_per_degree": 12,
     "map_width": 4320,
@@ -802,6 +910,21 @@ code constants too:
     "morale_start": 70,
     "morale_port_cap": 80,
     "starvation_limit_days": 7,
+    "scurvy_base_limit_days": 7,
+    "scurvy_grace_divisor": 10,
+    "mutiny_charisma_divisor": 200,
+    "night_window_start_hour": 22,
+    "night_window_end_hour": 6,
+    "night_move_cost_multiplier": 2.0,
+    "night_sail_navigation_threshold": 40,
+    "seamanship_speed_divisor": 300,
+    "seamanship_speed_cap": 0.30,
+    "sighting_navigation_divisor": 12,
+    "discovery_cartography_divisor": 15,
+    "storm_chance_luck_divisor": 400,
+    "storm_damage_luck_divisor": 250,
+    "storm_headway_base_loss": 0.5,
+    "storm_headway_divisor": 400,
     "mutiny_threshold": 20,
     "mutiny_chance_per_day": 0.25,
     "desertion_threshold": 40,
@@ -912,3 +1035,26 @@ are GDScript constants, not a data file — game content stays in `data/`.)
 - [ ] Calendar formulas are unit-tested: `year(day)` / `month(day)` per §4.15
       (30-day months, 360-day year), and the wait action advances exactly one
       day via the full ledger (§4.17).
+
+**Phase-8 additions (attributes, skills, appointed voyage).**
+
+- [ ] Speed bonus is `seamanship/300` clamped `[0, +0.30]` (§4.4) and the
+      sighting radius is `48 + floor(effective_navigation/12)` (§4.11) —
+      term-for-term against `sailing_sim.gd`.
+- [ ] Storm: chance ×`(1 − luck/400)` (unchanged); damage ×`(1 − luck/250)`
+      with **no** `luck ≥ 50` step; headway `1 − 0.5 × (1 − (COU−10)/400)`
+      on storm days; storm-day morale −5 ×`(1 − (CON−10)/300)` (§4.7/§4.8).
+- [ ] Mutiny rate `0.25 × (1 − (charisma−10)/200)` and the charisma-scaled
+      desertion loss re-run the §4.8.1 sampling at the same 0.7627 anchor
+      (charisma 10).
+- [ ] Scurvy game-over threshold is `7 + floor(max(CON, in-post surgeon
+      medicine)/10)`; starvation stays 7 and sinking is untouched (§4.9).
+- [ ] Night moves (start ≥ 22:00 or < 06:00) cost `2 × move_cost` unless
+      effective navigation ≥ 40, in both input modes and on click-to-sail
+      legs (§4.2).
+- [ ] Appointed voyage (§4.19): the `sail.autopilot` gate grays without a
+      pilot in post with navigation ≥ 40 or an unknown destination; hostile
+      contact auto-cancels while a storm day does not (auto-reef); any
+      manual input cancels; and the ≥ 70-pilot weighted route measurably
+      differs from the 40–69 plain route — same OD ≥ 15% faster or
+      different wind-region crossings.
