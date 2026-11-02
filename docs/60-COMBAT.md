@@ -73,7 +73,7 @@ grid, duel, damage, aftermath (§4.2–§4.11.10) — is unchanged.
 
 | Role | Budget (normal) | Computed @ 6 nations / 100 ports | Behavior (pin) |
 |---|---|---|---|
-| `trader` | `ceil(own_ports × 1.25)`/nation | 25+25+23+23+18+13 = **127** | own-nation routes via lane graph; 2-day dwell; joint profit-per-day decision; sells only where `factor > 1.0` |
+| `trader` | `ceil(own_ports × 1.25)`/nation | 25+27+17+28+23+14 = **134** | own-nation routes via lane graph; 2-day dwell; joint profit-per-day decision; sells only where `factor > 1.0` |
 | `coaster` | `ceil(own_ports × 0.75)`/nation | 15+15+14+14+11+8 = **77** | visual-life small craft; adjacent-port spokes; hold ≤ 10, trades ≤ 5/call; **never triggers contact**, raiders ignore; attacking one is ordinary piracy; loot `25 + floor(day/10)`g |
 | `patrol` | `ceil(own_ports / 6)`, min 1 | **19** | cycles its nation's lanes, docking en route; same-nation traders within Chebyshev 20 count escorted; halves pirate/privateer spawn rolls in its 30-tile zone |
 | `courier` | 2/nation | **12** | capital ↔ own-ports dispatch runs (sightings/rumors only — no quest mechanics this phase) |
@@ -963,7 +963,7 @@ historical table lives in the Phase-2 docs). Rules pinned here:
 #### 4.11.14 NPC trade at ports (Phase-7 amendment — pairs with `30-*` §4.9/§4.10)
 
 **Trader docking at aligned ports (decision 12, generalized by 25).**
-Traders of nation N on any of the 17 lanes may dock at any port whose
+Traders of nation N on any of the 21 lanes may dock at any port whose
 **effective alignment == N** — protected own ports plus contestable ports
 aligned to N (sovereign non-core and neutral alike). Standing port-call
 rules are unchanged (≤ 30 units of one good per call, hold 40, 2-day
@@ -1356,7 +1356,7 @@ Duel round sequence (player combat 12 + cutlass 3):
 
 **Phase-5 additions (fleet ecology).**
 
-- [ ] §4.1.1 budgets reproduce 127 traders / 77 coasters / 19 patrols /
+- [ ] §4.1.1 budgets reproduce 134 traders / 77 coasters / 20 patrols /
       12 couriers / 12 privateers / ≈ 25 pirates at `normal`; core 272,
       global cap 288, `absolute_cap` 2048; `new_game` fills half the cap.
 - [ ] Lane-locked roles (`trader`/`coaster`/`courier`/`treasure`) never

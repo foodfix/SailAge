@@ -298,13 +298,13 @@ func _cell_of(fleet: Dictionary) -> Vector2i:
 func _test_budgets() -> void:
 	var sim := _make_run()
 	_check(sim.multiplier() == 1.0, "the normal preset multiplies by 1.0")
-	# Per-role budget totals at normal, computed @ 6 nations / 100 sovereign
-	# ports + the 45-port neutral tier (which no per-nation budget counts,
-	# §2.11) — the §4.1.1 column: 128 / 77 / 19 / 12 / 12, pirates 8 + zones
-	# (≈ 25 capped by the core share), hunters bounty-only. 128 = 127 + 1:
-	# the botany_bay→Shark Bay re-place moved one port england → holland
-	# (ceil(13 × 1.25) + ceil(21 × 1.25) = 17 + 27 vs 18 + 25).
-	var want := {"trader": 128, "coaster": 77, "patrol": 19, "courier": 12,
+	# Per-role budget totals at normal, computed @ 6 nations / 105 sovereign
+	# ports (the five 2026-11-02 §7.1 ports: santa_cruz spain, reykjavik
+	# holland, praia + benguela portugal, caffa italy) + the 45-port neutral
+	# tier (which no per-nation budget counts, §2.11) — the §4.1.1 column:
+	# 134 / 81 / 20 / 12 / 12, pirates 8 + zones (≈ 25 capped by the core
+	# share), hunters bounty-only.
+	var want := {"trader": 134, "coaster": 81, "patrol": 20, "courier": 12,
 		"privateer": 12}
 	for role in want:
 		var total := 0
@@ -329,11 +329,11 @@ func _test_budgets() -> void:
 	GameState.player["reputation"]["spain"] = -50
 	_check(sim.budget_for("hunter", "spain") == 1,
 		"rep ≤ −50 opens exactly one hunter budget for the nation")
-	# Cap arithmetic (the task N record): 128 + 77 + 19 + 12 + 12 + 34 + 25
-	# = 307 core; + 16 slack = 323 global; trickle max(4, ceil(323/50)) = 7.
-	_check(sim.core_cap() == 307, "the core cap is 307 at normal (got %d)"
+	# Cap arithmetic (amended 2026-11-02): 134 + 81 + 20 + 12 + 12 + 34 + 25
+	# = 318 core; + 16 slack = 334 global; trickle max(4, ceil(334/50)) = 7.
+	_check(sim.core_cap() == 318, "the core cap is 318 at normal (got %d)"
 		% sim.core_cap())
-	_check(sim.global_cap() == 323, "the global cap is 323 at normal (got %d)"
+	_check(sim.global_cap() == 334, "the global cap is 334 at normal (got %d)"
 		% sim.global_cap())
 	_check(sim.trickle_per_day() == 7,
 		"the trickle is max(4, ceil(323/50)) = 7/day (got %d)"
@@ -349,8 +349,8 @@ func _test_budgets() -> void:
 	var extreme: NpcFleetsLib = NpcFleetsLib.new({
 		"npc_config": DataLoader.npc_config, "preset": "extreme",
 	})
-	# ceil-per-role at the multiplied demand: portugal 18 ports × 1.25 × 4.
-	var want_extreme := ceili(18 * 1.25 * 4.0)
+	# ceil-per-role at the multiplied demand: portugal 20 ports × 1.25 × 4.
+	var want_extreme := ceili(20 * 1.25 * 4.0)
 	_check(extreme.budget_for("trader", "portugal") == want_extreme,
 		"the extreme preset multiplies per role with a ceil (got %d, want %d)"
 		% [extreme.budget_for("trader", "portugal"), want_extreme])
@@ -519,12 +519,14 @@ func _test_lane_routing() -> void:
 	_check(all_water, "the routed tile path never touches land/reef/ice")
 	# The once-Pacific-only manila_galleon component joined the giant network
 	# with the Phase-6 lanes (pacific_america + the E-spokes; the W3 probe
-	# acapulco ↔ manila pins it), so lisbon → acapulco routes now. A pair in
-	# the still-separate hanseatic_north/iceland_cod cluster (london) has no
-	# route and is skipped, not crash-caught.
+	# acapulco ↔ manila pins it). The 2026-11-02 amendment completed the
+	# junction: london's spokes (grand_banks/iceland/atlantic_north share the
+	# berth tile; the london spoke bridges hanseatic_north) make the whole
+	# network ONE component — lisbon → london now routes, and the routed tile
+	# path (re-checked below) never touches land.
 	var pacific: Dictionary = sim.route_between("lisbon", "london")
-	_check(pacific.is_empty(),
-		"an unreachable pair (Atlantic→hanseatic cluster) yields no route")
+	_check(not pacific.is_empty(),
+		"lisbon → london routes over the single connected network")
 
 
 # --- 4. The wrap-aware cell-bucket index (§4.11.11.5 — review gate) ----------
@@ -1195,8 +1197,20 @@ func _test_hunter_intel() -> void:
 	GameState.player["reputation"]["spain"] = -60
 	GameState.world["last_departed_port"] = "seville"
 	# A hunter spawns docked at a seeded own port, state intel, targeting the
-	# departed port.
-	var hunter := sim.spawn("hunter", "spain", 1)
+	# departed port. Re-roll the spawn seed when the draw lands on seville
+	# itself (home == intel port leaves no route to sail); the fleet list is
+	# reset between tries so the scenario keeps exactly one hunter.
+	var hunter: Dictionary = {}
+	var hunter_seed := 1
+	for _try in range(8):
+		GameState.npc_fleets = []
+		hunter = sim.spawn("hunter", "spain", hunter_seed)
+		if hunter.is_empty():
+			break
+		if str(hunter.get("home_port_id", "")) != "seville":
+			break
+		hunter_seed += 1
+	GameState.npc_fleets = [hunter] if not hunter.is_empty() else []
 	_check(not hunter.is_empty(), "a bountied nation spawns its hunter")
 	if hunter.is_empty():
 		return

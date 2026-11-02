@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """build_routes.py — deterministic trade-route builder (Phase 5, task F).
 
-Turns the hand-authored historical lanes (``data/trade_routes.json``, 17
+Turns the hand-authored historical lanes (``data/trade_routes.json``, 21
 locked ids per ``docs/10-DATA-SCHEMA.md`` §7.6) plus the 145 ports (the
 sovereign 100 + the Phase-6 neutral tier) and the hand fixes in
 ``tools/route_overrides.json`` into the tool-owned artifact

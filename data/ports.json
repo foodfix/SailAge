@@ -5875,6 +5875,281 @@
       }
     },
     {
+      "id": "santa_cruz",
+      "name": {
+        "zh": "圣克鲁斯",
+        "en": "Santa Cruz de Tenerife"
+      },
+      "nation_id": "spain",
+      "lat": 28.47,
+      "lon": -16.25,
+      "band": "africa_atlantic",
+      "dev": 1,
+      "produces": [
+        "wine",
+        "sugar"
+      ],
+      "demands": [
+        "wheat",
+        "olive_oil",
+        "wool",
+        "salt",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "spain",
+        "portugal",
+        "holland"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
+      },
+      "flavor": {
+        "zh": "信风里的加那利泊地,西印度船队回航前最后的淡水与酒。",
+        "en": "A Canary roadstead on the trades, the flota's last wine and water before the Atlantic run."
+      }
+    },
+    {
+      "id": "reykjavik",
+      "name": {
+        "zh": "雷克雅未克",
+        "en": "Reykjavik"
+      },
+      "nation_id": "holland",
+      "lat": 64.15,
+      "lon": -21.94,
+      "band": "europe_atlantic",
+      "dev": 1,
+      "produces": [
+        "dried_fish",
+        "wool"
+      ],
+      "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "sugar",
+        "salt",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "holland",
+        "england"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "carrack"
+        ],
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
+      },
+      "flavor": {
+        "zh": "温泉蒸汽缭绕的北境渔港,鳕鱼干挂满木架。",
+        "en": "A steaming northland fishing port, cod hanging in wooden racks."
+      }
+    },
+    {
+      "id": "praia",
+      "name": {
+        "zh": "普拉亚",
+        "en": "Praia"
+      },
+      "nation_id": "portugal",
+      "lat": 14.92,
+      "lon": -23.51,
+      "band": "africa_atlantic",
+      "dev": 1,
+      "produces": [
+        "salt",
+        "cotton_cloth"
+      ],
+      "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen"
+      ],
+      "sphere": [
+        "portugal",
+        "holland",
+        "england"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel",
+          "nao"
+        ],
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
+      },
+      "flavor": {
+        "zh": "佛得角的盐场小港,巴西航线船队的集结锚地。",
+        "en": "A salt-pan port of the Cape Verdes, muster anchorage of the Brazil run."
+      }
+    },
+    {
+      "id": "benguela",
+      "name": {
+        "zh": "本格拉",
+        "en": "Benguela"
+      },
+      "nation_id": "portugal",
+      "lat": -12.58,
+      "lon": 13.41,
+      "band": "africa_atlantic",
+      "dev": 1,
+      "produces": [
+        "amber",
+        "leather",
+        "salt"
+      ],
+      "demands": [
+        "wheat",
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "cotton_cloth",
+        "glassware"
+      ],
+      "sphere": [
+        "portugal",
+        "holland"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3,
+        "shipyard": [
+          "sloop",
+          "pinnace",
+          "caravel"
+        ],
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
+      },
+      "flavor": {
+        "zh": "安哥拉南海岸的堡垒泊地,盐场与兽皮商栈并立。",
+        "en": "A fortified roadstead on Angola's southern coast, salt pans beside a hide trading post."
+      }
+    },
+    {
+      "id": "caffa",
+      "name": {
+        "zh": "卡法",
+        "en": "Caffa"
+      },
+      "nation_id": "italy",
+      "lat": 45.03,
+      "lon": 35.38,
+      "band": "europe_med",
+      "dev": 1,
+      "produces": [
+        "wheat",
+        "salt",
+        "leather"
+      ],
+      "demands": [
+        "olive_oil",
+        "wine",
+        "wool",
+        "sugar",
+        "dried_fish",
+        "timber",
+        "iron",
+        "cheese",
+        "rice",
+        "pitch",
+        "glassware",
+        "linen",
+        "silk"
+      ],
+      "sphere": [
+        "italy",
+        "ottoman"
+      ],
+      "facilities": {
+        "market": 1,
+        "tavern": 1,
+        "inn": 1,
+        "guild": 3,
+        "shipyard": [
+          "carrack",
+          "galley",
+          "sloop",
+          "pinnace"
+        ],
+        "equipment_stock": [
+          "eq_cutlass",
+          "eq_cotton_sails"
+        ]
+      },
+      "flavor": {
+        "zh": "克里米亚的热那亚石塔与粮仓,黑海谷物之门。",
+        "en": "Genoese towers and granaries on the Crimea, gateway of Black Sea grain."
+      }
+    },
+    {
       "id": "quanzhou",
       "name": {
         "zh": "泉州",

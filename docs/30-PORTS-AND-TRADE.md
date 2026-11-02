@@ -56,7 +56,7 @@ nation's ports, `70-*` §4.9.6). Neutral ports (`nation_id: ""`, Phase 6,
 `10-*` §7.1) run the standard market off their `produces`/`demands` flow
 stock (§4.2). **Docking (Phase 7 amendment, `60-*` §4.11):** the Phase-6
 "no NPC fleet serves a neutral port" pin is retired — traders of nation N
-on **any of the 17 lanes** may dock at any port whose **effective alignment
+on **any of the 21 lanes** may dock at any port whose **effective alignment
 == N** (protected own + contestable aligned to N, sovereign non-core and
 neutral alike, §4.9); standing port-call rules (§4.4) are unchanged, and
 every neutral port additionally receives ~1 nationless coaster regardless

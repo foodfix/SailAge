@@ -3,39 +3,12 @@
   "overrides": [
     {
       "kind": "spoke",
-      "port": "amboina",
-      "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 17
-      },
-      "note": "Moluccas spice trade feeds the galleon via the Philippine-sea leg"
-    },
-    {
-      "kind": "spoke",
-      "port": "anotsu",
-      "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 37
-      },
-      "note": "Ise bay trade meets the galleon's southern Japan approach"
-    },
-    {
-      "kind": "spoke",
       "port": "bandar_abbas",
       "connect": {
         "lane": "basra_muscat_india",
         "waypoint_index": 6
       },
       "note": "Phase-6 5 nm raster: the Hormuz north-shore harbor has no straight-walk exit past Qeshm; rule-3 spoke pathfound onto the strait's channel station"
-    },
-    {
-      "kind": "spoke",
-      "port": "banten",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 8
-      },
-      "note": "Pepper port north through the western Java sea to the South China Sea lane"
     },
     {
       "kind": "spoke",
@@ -48,30 +21,12 @@
     },
     {
       "kind": "spoke",
-      "port": "batavia",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 39
-      },
-      "note": "VOC hub joins the strait trade through the Java Sea"
-    },
-    {
-      "kind": "spoke",
       "port": "beihai",
       "connect": {
         "lane": "canton_country_trade",
         "waypoint_index": 20
       },
       "note": "Gulf of Tonkin trade threads the Leizhou channel to the lane east of Hainan"
-    },
-    {
-      "kind": "spoke",
-      "port": "belem",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 15
-      },
-      "note": "Amazon mouth on the Carreira's Brazil-bulge track"
     },
     {
       "kind": "spoke",
@@ -84,39 +39,12 @@
     },
     {
       "kind": "spoke",
-      "port": "boston",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 67
-      },
-      "note": "New England joins the flota's Atlantic return track"
-    },
-    {
-      "kind": "spoke",
-      "port": "botany_bay",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 24
-      },
-      "note": "Shark Bay re-place (1616 Hartog landfall): southern-route landfall on the Carreira's Roaring-Forties leg, run east-to-west along lat -38/-40 past Cape Leeuwin"
-    },
-    {
-      "kind": "spoke",
       "port": "brunei",
       "connect": {
         "lane": "manila_galleon",
         "waypoint_index": 30
       },
       "note": "Brunei on the galleon's Borneo-Philippines trade"
-    },
-    {
-      "kind": "spoke",
-      "port": "buenos_aires",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 19
-      },
-      "note": "Rio de la Plata silver and hides join the Brazil-bulge track"
     },
     {
       "kind": "spoke",
@@ -129,33 +57,6 @@
     },
     {
       "kind": "spoke",
-      "port": "cape_town",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 26
-      },
-      "note": "Table Bay victualling stop; straight walk clips the Cape peninsula"
-    },
-    {
-      "kind": "spoke",
-      "port": "cartagena",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 27
-      },
-      "note": "The flota's Caribbean muster port"
-    },
-    {
-      "kind": "spoke",
-      "port": "charleston",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 65
-      },
-      "note": "Carolina joins the flota's Gulf Stream return track"
-    },
-    {
-      "kind": "spoke",
       "port": "corfu",
       "connect": {
         "lane": "venice_alexandria",
@@ -165,46 +66,19 @@
     },
     {
       "kind": "spoke",
-      "port": "curacao",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 27
-      },
-      "note": "Dutch Antilles entrepot on the flota circuit"
-    },
-    {
-      "kind": "spoke",
-      "port": "dianga",
-      "connect": {
-        "lane": "coromandel_bengal",
-        "waypoint_index": 39
-      },
-      "note": "Arakan coast trade to the run's Hughli terminus"
-    },
-    {
-      "kind": "spoke",
       "port": "funai",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 62
+        "waypoint_index": 61
       },
       "note": "Bungo-Funai joins the lane at Hirado, coasting the Bungo channel and west Kyushu"
-    },
-    {
-      "kind": "spoke",
-      "port": "gresik",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 8
-      },
-      "note": "Java's northeastern port north through the Madura sea to the lane"
     },
     {
       "kind": "spoke",
       "port": "hakata",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 62
+        "waypoint_index": 61
       },
       "note": "Hakata joins the lane at Hirado, the historic Japan terminus of the China run"
     },
@@ -219,19 +93,10 @@
     },
     {
       "kind": "spoke",
-      "port": "jamestown",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 66
-      },
-      "note": "Virginia tobacco on the flota's Atlantic track"
-    },
-    {
-      "kind": "spoke",
       "port": "lamu",
       "connect": {
         "lane": "swahili_coast",
-        "waypoint_index": 14
+        "waypoint_index": 30
       },
       "note": "Lamu archipelago joins the run north of Mombasa; straight walk clips the coast"
     },
@@ -240,34 +105,16 @@
       "port": "liujiagang",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 54
+        "waypoint_index": 48
       },
       "note": "Yangtze-mouth cotton port joins the lane's offshore Zhejiang leg"
     },
     {
       "kind": "spoke",
-      "port": "macassar",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 39
-      },
-      "note": "Spice Islands trade through the Java Sea to Malacca"
-    },
-    {
-      "kind": "spoke",
-      "port": "new_york",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 67
-      },
-      "note": "Hudson trade joins the flota's Atlantic track"
-    },
-    {
-      "kind": "spoke",
       "port": "osaka",
       "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 37
+        "lane": "canton_country_trade",
+        "waypoint_index": 93
       },
       "note": "Osaka on the galleon's southern Japan approach"
     },
@@ -282,66 +129,21 @@
     },
     {
       "kind": "spoke",
-      "port": "patani",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 36
-      },
-      "note": "Patani on the strait approach; straight walk clips the Malay coast"
-    },
-    {
-      "kind": "spoke",
-      "port": "portobelo",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 27
-      },
-      "note": "Phase-6 5 nm raster: the direct capital walk no longer threads the Caribbean; rule-3 spoke pathfound onto the flota's Hispaniola station"
-    },
-    {
-      "kind": "spoke",
       "port": "quebec",
       "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 67
+        "lane": "atlantic_north",
+        "waypoint_index": 31
       },
       "note": "St Lawrence fur trade down to the flota's Atlantic track"
-    },
-    {
-      "kind": "spoke",
-      "port": "rio_de_janeiro",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 19
-      },
-      "note": "Brazil sugar port on the Carreira's outbound track"
     },
     {
       "kind": "spoke",
       "port": "sakai",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 62
+        "waypoint_index": 81
       },
       "note": "Sakai joins the lane at Hirado, rounding Kii and Shikoku on the Pacific side"
-    },
-    {
-      "kind": "spoke",
-      "port": "santo_domingo",
-      "connect": {
-        "lane": "west_indies_flota",
-        "waypoint_index": 23
-      },
-      "note": "Phase-6 5 nm raster: the Ozama river mouth pocket has no straight-walk exit; rule-3 spoke pathfound onto the flota station off the coast"
-    },
-    {
-      "kind": "spoke",
-      "port": "siam",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 35
-      },
-      "note": "Ayutthaya trade down the Gulf of Thailand to the strait"
     },
     {
       "kind": "spoke",
@@ -351,15 +153,6 @@
         "waypoint_index": 20
       },
       "note": "Smyrna on the grain run's Aegean leg; gulf dodge"
-    },
-    {
-      "kind": "spoke",
-      "port": "sofala",
-      "connect": {
-        "lane": "carreira_da_india",
-        "waypoint_index": 32
-      },
-      "note": "Gold-route mouth south down the Mozambique channel to the Carreira's channel leg"
     },
     {
       "kind": "spoke",
@@ -393,36 +186,9 @@
       "port": "suriname",
       "connect": {
         "lane": "west_indies_flota",
-        "waypoint_index": 10
+        "waypoint_index": 16
       },
       "note": "Dutch Guiana plantations on the flota track"
-    },
-    {
-      "kind": "spoke",
-      "port": "syriam",
-      "connect": {
-        "lane": "coromandel_bengal",
-        "waypoint_index": 39
-      },
-      "note": "Pegu teak trade across the bay to the run's Hughli terminus"
-    },
-    {
-      "kind": "spoke",
-      "port": "ternate",
-      "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 17
-      },
-      "note": "Clove monopoly port feeding the galleon via the Philippines"
-    },
-    {
-      "kind": "spoke",
-      "port": "timor",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 39
-      },
-      "note": "Sandalwood trade through the Java Sea to Malacca"
     },
     {
       "kind": "spoke",
@@ -435,46 +201,19 @@
     },
     {
       "kind": "spoke",
-      "port": "urado",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 62
-      },
-      "note": "Tosa's Urado joins the lane at Hirado, coasting Shikoku south and west"
-    },
-    {
-      "kind": "spoke",
       "port": "wenzhou",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 44
+        "waypoint_index": 43
       },
       "note": "Phase-6 5 nm raster: Wenzhou roads step out past the Ou river mouth shoals to the lane's Zhejiang leg"
-    },
-    {
-      "kind": "spoke",
-      "port": "yamagawa",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 62
-      },
-      "note": "Satsuma's outer harbor joins the lane at its Hirado terminus, coasting west Kyushu"
-    },
-    {
-      "kind": "spoke",
-      "port": "yeompo",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 62
-      },
-      "note": "Yeompo joins the lane at Hirado along the Korea strait coasting route"
     },
     {
       "kind": "spoke",
       "port": "yuegang",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 35
+        "waypoint_index": 34
       },
       "note": "Jiulong-estuary berth steps out past the Xiamen headland to the lane's Fujian leg"
     },
@@ -492,7 +231,7 @@
       "port": "zhelin",
       "connect": {
         "lane": "canton_country_trade",
-        "waypoint_index": 33
+        "waypoint_index": 32
       },
       "note": "Zhelin bay joins the lane's Guangdong headland leg; straight walk clips the point"
     }

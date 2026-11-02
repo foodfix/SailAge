@@ -504,7 +504,7 @@ static func active_lane_path(lane: Dictionary, month: int) -> Dictionary:
 	return {"path": path, "variant": chosen_id}
 
 
-## The whole network layer for `month`: the 17 built lanes (active path solid
+## The whole network layer for `month`: the built lanes (active path solid
 ## + inactive variants for the side legend), the port spokes, and the
 ## chokepoint diamonds. **Chokepoint derivation:** the builder reports the
 ## network's junction tiles (`trade_routes_built.json` `junctions` — tiles

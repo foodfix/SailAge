@@ -1756,6 +1756,76 @@
       "distance": 0
     },
     {
+      "id": "santa_cruz",
+      "lat": 28.47,
+      "lon": -16.25,
+      "harbor_tile": {
+        "x": 1965,
+        "y": 738
+      },
+      "shore_tile": {
+        "x": 1965,
+        "y": 737
+      },
+      "distance": 0
+    },
+    {
+      "id": "reykjavik",
+      "lat": 64.15,
+      "lon": -21.94,
+      "harbor_tile": {
+        "x": 1896,
+        "y": 310
+      },
+      "shore_tile": {
+        "x": 1897,
+        "y": 310
+      },
+      "distance": 0
+    },
+    {
+      "id": "praia",
+      "lat": 14.92,
+      "lon": -23.51,
+      "harbor_tile": {
+        "x": 1878,
+        "y": 899
+      },
+      "shore_tile": {
+        "x": 1877,
+        "y": 899
+      },
+      "distance": 1
+    },
+    {
+      "id": "benguela",
+      "lat": -12.58,
+      "lon": 13.41,
+      "harbor_tile": {
+        "x": 2320,
+        "y": 1230
+      },
+      "shore_tile": {
+        "x": 2321,
+        "y": 1230
+      },
+      "distance": 0
+    },
+    {
+      "id": "caffa",
+      "lat": 45.03,
+      "lon": 35.38,
+      "harbor_tile": {
+        "x": 2585,
+        "y": 539
+      },
+      "shore_tile": {
+        "x": 2584,
+        "y": 539
+      },
+      "distance": 1
+    },
+    {
       "id": "quanzhou",
       "lat": 24.85,
       "lon": 118.72,
@@ -2386,5 +2456,5 @@
       "distance": 0
     }
   ],
-  "port_count": 145
+  "port_count": 150
 }

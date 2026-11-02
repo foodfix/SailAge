@@ -34,7 +34,7 @@ const NATIONS := ["portugal", "spain", "england", "holland", "ottoman", "italy"]
 const CAPITAL_LANES := {
 	"portugal": "carreira_da_india",
 	"spain": "west_indies_flota",
-	"england": "hanseatic_north",
+	"england": "iceland_cod",
 	"holland": "hanseatic_north",
 	"ottoman": "genoa_grain",
 	"italy": "venice_alexandria",

@@ -9,7 +9,7 @@ extends Node
 ## overlay state machines (keys + toggles, chart-local view state), the S19
 ## debug-row gate (off ⇒ `D`/`,`/`.` unreachable), the §2.12 debug layer list
 ## (omniscient map + every port/neutral/capitals, live ecology markers,
-## wrecks, hunter-intel shapes, the 17-lane network with variants/spokes/
+## wrecks, hunter-intel shapes, the 21-lane network with variants/spokes/
 ## chokepoints + legend, the `,`/`.` month scrubber), the
 ## redraw-trigger discipline (build counters move only on triggers, never per
 ## frame), the purity guarantees (a `SaveSystem.snapshot()` digest taken
@@ -416,7 +416,7 @@ func _test_debug_layers() -> void:
 	# The network layer: 17 lanes, per-lane colors, spokes, chokepoints.
 	var network: Dictionary = chart.network_layer()
 	var lanes: Array = network.get("lanes", [])
-	_check(lanes.size() == 17, "the network layer carries all 17 built lanes (%d)"
+	_check(lanes.size() == 21, "the network layer carries all 21 built lanes (%d)"
 		% lanes.size())
 	var colors := {}
 	var ids_seen := {}
@@ -740,7 +740,7 @@ func _test_legend_panel_and_lanes() -> void:
 		"the side legend scrolls vertically instead of overflowing the panel")
 	_check(scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED,
 		"the side legend never scrolls horizontally (labels elide)")
-	# The 17 §7.6 lanes each carry a zh/en `debug.lane.<id>` key …
+	# The 21 §7.6 lanes each carry a zh/en `debug.lane.<id>` key …
 	ChartViewLib.debug_row_override = 1
 	# Gate-audit trim 2026-11-02: ONE shared open for the panel/lane,
 	# mouse-view and legend-row groups — every open_chart() rebuilds the whole
@@ -748,7 +748,7 @@ func _test_legend_panel_and_lanes() -> void:
 	_reset_view_state()
 	chart.open_chart()
 	var lanes: Array = chart.network_layer().get("lanes", [])
-	_check(lanes.size() == 17, "the built network lists the 17 §7.6 lanes")
+	_check(lanes.size() == 21, "the built network lists the 21 §7.6 lanes")
 	var missing: Array[String] = []
 	for lane in lanes:
 		var l10n = DataLoader.ui_strings.get("debug.lane." + str(lane["id"]), {})

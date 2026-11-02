@@ -538,11 +538,11 @@ func _test_per_port_stock() -> void:
 				if DataLoader.get_equipment(str(id)).is_empty() \
 						or ShipyardLib.is_rare_equipment(str(id)):
 					equipment_valid = false
-	_check(stock_ports == 104,
-		"104 shipyard ports carry id lists (got %d)" % stock_ports)
+	_check(stock_ports == 109,
+		"109 shipyard ports carry id lists (got %d)" % stock_ports)
 	_check(lists_valid, "every shipyard list holds 2–8 valid ship type ids")
-	_check(equipment_ports == 104,
-		"104 ports carry equipment_stock lists (got %d)" % equipment_ports)
+	_check(equipment_ports == 109,
+		"109 ports carry equipment_stock lists (got %d)" % equipment_ports)
 	_check(equipment_valid,
 		"every equipment_stock holds ≥2 known, non-rare items (60-* §4.11.13)")
 	# The rare four are drop-only: never in any stock list, and every named

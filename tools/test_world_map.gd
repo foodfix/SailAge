@@ -28,7 +28,7 @@ const TILE_SIZE_PX := 32
 ## docs/10-* §6.3: palette index 0–4 = `~ . # ^ I` (append-only).
 const PALETTE_CHARS := "~.#^I"
 ## The 100 sovereign ports + the Phase-6 neutral tier (45) — the §7.1 roster.
-const PORT_COUNT := 145
+const PORT_COUNT := 150
 ## The 13 ports whose §6.1 berth moved when the harbor-pair constraint bit at
 ## the Phase-6 grid (`20-*` §4.11.1) — the map's pinned regression table.
 const HARBOR_PAIR_MOVED := {
@@ -844,11 +844,11 @@ func _test_chunked_rendering() -> void:
 	await get_tree().process_frame
 
 
-# --- 10. Port overlays: 145, nation colours, seam duplicates -------------
+# --- 10. Port overlays: 150, nation colours, seam duplicates -------------
 
 func _test_port_overlays() -> void:
 	GameState.new_game("portugal", false)
-	# Every port known, so the overlay must draw all 145 (§9 step 5).
+	# Every port known, so the overlay must draw all 150 (§9 step 5).
 	GameState.known_ports.assign(DataLoader.ports.keys())
 	var world: Node2D = WorldScene.instantiate()
 	world.route_to_port = false

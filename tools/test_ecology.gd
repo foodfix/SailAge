@@ -449,6 +449,13 @@ func _test_chokepoint_hysteresis() -> void:
 	_check(not pirate.is_empty(), "a pirate spawns for the anchor check")
 	if pirate.is_empty():
 		return
+	# The scenario needs a coastal pocket, and the seeded camp's junction set
+	# moves with the lane network (amended 2026-11-02), so the test seats the
+	# pirate at a fixed pocket that satisfies the anchor rule — water, off the
+	# lane raster, within Chebyshev 2 of a junction, with the water east
+	# pinning after one tile (the prey stands behind the coast at +10).
+	pirate["cell"] = {"x": 2172, "y": 463}
+	pirate["anchor_cell"] = {"x": 2172, "y": 463}
 	var anchor := _cell_of(pirate)
 	var anchor_dict: Dictionary = pirate.get("anchor_cell", {})
 	var nearest := _nearest_junction_distance(sim, anchor)
@@ -478,7 +485,7 @@ func _test_chokepoint_hysteresis() -> void:
 			wrecks)
 	var walked_out := NpcFleetsLib.chebyshev(_cell_of(pirate), anchor)
 	_check(walked_out == 1 and wrecks.is_empty(),
-		"the raider closes to the coastal pin 1 tile out and holds (out %d tiles, no resolve yet)"
+		"the raider closes to the coastal pin 1 tile out and holds (out %d tiles, no wreck yet)"
 		% walked_out)
 	# …and is lost beyond 16: the raider drops the chase and walks home.
 	trader["cell"] = {"x": (anchor + Vector2i(30, 0)).x, "y": anchor.y}

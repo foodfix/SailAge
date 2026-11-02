@@ -174,6 +174,35 @@ waypoints, nations, goods, and chokepoint tags.
 
 ## Phase 6, task D — ocean seasonal data (`wind_regions`, `ocean_currents`, `ice_regions`)
 
+### `atlantic_north` — Dover → Plymouth → the 44–48°N westerlies → Newfoundland → Gulf of St. Lawrence → the Atlantic seaboard (2026-11-02)
+
+- Daniel Vickers, *Farmers & Fishermen* (1994); the Newfoundland cod trade.
+- H.O. Pilot Chart of the North Atlantic; Maury (1855) — the westerly
+  outbound/outbound-return tracks.
+- David B. Quinn, *England and the Discovery of America* (1974) — the
+  St. Lawrence fur trade and the seaboard plantations.
+
+### `brasil_run` — Lisbon → Madeira → Cape Verde → Brazil bulge → the Plate (2026-11-02)
+
+- Haring, *Trade and Navigation between Spain and the Indies* (1918) — the
+  Brazil carrack run and the Plate trade.
+- Frédéric Mauro, *Le Portugal et l'Atlantique au XVIIe siècle* (1960).
+- OWTRAD — the Lisbon–Recife–Santos coastal sequence.
+
+### `brouwer_route` — Table Bay → the Roaring Forties → the west-Australian coast → Sunda strait (2026-11-02)
+
+- F. J. A. Broecke / Hendrick Brouwer's 1611 route; the 1616 Dirk Hartog
+  landfall (E. S. van Vollenhoven, *De uitvarende volkplanting* literature).
+- Giles Milton, *Nathaniel's Nutmeg* (1999) — VOC outbound practice.
+- C. A. Bindels' summaries of the VOC_OUT routes (journal of the
+  *Batavia*-era outbounds); OWTRAD.
+
+### `molucca_run` — Batavia → the Java sea → Makassar → Timor → Ambon → Ternate (2026-11-02)
+
+- R. Villiers, *The VOC on the Coromandel* literature; G. J. Knaap, *Kruidnagelen en Christenen* (2004) — the Moluccan circuit.
+- Tomczak & Godfrey (2003) — the Indonesian throughflow seas.
+- *The China Sea Pilot* (Admiralty).
+
 ### Scope & method (Phase-6 decision 3: hand-authored, cited, nothing vendored)
 
 The three files authored by Phase-6 task D are original data compiled from
@@ -252,16 +281,23 @@ rectilinear boxes/notched boxes as authored.
   fringe (Portugal/Morocco NW coast) shares the summer-northerly (nortada)
   and winter-W regime; the Black and Caspian seas are folded in (coarse).
 - `westerlies_n_pacific_west` — NW Pacific; L-box (40–70°N, 122°E–180°) +
-  (32–40°N, 132°E–180°). Months: Nov–Apr NW (winter monsoon outflow), May–Aug
-  S, Sep–Oct W. Sources: H.O. Pilot Chart of the North Pacific; Ramage
-  (1971). Covers Sea of Japan/Okhotsk/Kamchatka/Bering west side.
+  (32–40°N, 132°E–180°). Months (amended 2026-11-02): Nov–Mar NW (winter
+  monsoon outflow, kept), Apr–Oct W — the original May–Aug `S` (high west
+  flank) applies only to the ~30–35°N limb near Japan, while the Manila
+  galleon's homebound track crosses this box at 36–40°N where the
+  subtropical-high northern flank gives west-to-northwest flow. Sources: H.O.
+  Pilot Chart of the North Pacific; Ramage (1971); Maury (1855). Covers Sea
+  of Japan/Okhotsk/Kamchatka/Bering west side.
 - `westerlies_n_pacific_east` — NE Pacific; L-box (32–70°N, 180°–130°W) +
-  (38–70°N, 130°W–115°W) + (45–70°N, 115°W–76°W). Months: Nov–Mar SE
-  (Aleutian-low cyclonic regime), Apr S, May–Sep NW, Oct S. Sources: H.O.
-  Pilot Chart of the North Pacific; NCEP/NCAR reanalysis. The east limb
-  (45–70°N) extends the region over Hudson Bay and the Canadian subarctic
-  margin so the bay is tiled; Hudson Bay's local winter flow (NW-ly) is a
-  recorded coarsening.
+  (38–70°N, 130°W–115°W) + (45–70°N, 115°W–76°W). Months (amended
+  2026-11-02): Oct–Apr W (the winter westerlies; the original Nov–Mar `SE`
+  recorded the Aleutian-low cyclonic regime of the 45–55°N storm track,
+  north of the 32–40°N subtropical limb where the galleon's homebound run
+  actually sails), May–Sep NW (Pacific-High east flank, kept). Sources: H.O.
+  Pilot Chart of the North Pacific; NCEP/NCAR reanalysis; Maury (1855). The
+  east limb (45–70°N) extends the region over Hudson Bay and the Canadian
+  subarctic margin so the bay is tiled; Hudson Bay's local winter flow
+  (NW-ly) is a recorded coarsening.
 - `winds_gulf_of_mexico` — box (18–32°N, 98°W–83°W). Months: Oct–Mar N
   (winter "northers"), Apr–Sep SE. Sources: *The West India Pilot*; H.O.
   pilot charts. Includes the Bay of Campeche south to 18°N.

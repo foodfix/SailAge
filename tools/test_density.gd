@@ -286,8 +286,8 @@ func _test_preset_round_trip() -> void:
 
 func _test_initial_fill() -> void:
 	var sim := _make_run("normal")
-	_check(sim.core_cap() == 307,
-		"the normal core cap is 307 (273 nation roles + 34 grey, got %d)"
+	_check(sim.core_cap() == 318,
+		"the normal core cap is 318 (280 nation roles + 38 grey, got %d)"
 		% sim.core_cap())
 	var half: int = sim.core_cap() / 2
 	var filled: int = GameState.npc_fleets.size()

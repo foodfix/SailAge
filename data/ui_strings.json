@@ -2471,5 +2471,21 @@
   "port.wait.hour": {
     "zh": "等待 1 小时（空格）",
     "en": "Wait 1 hour (Space)"
+  },
+  "debug.lane.atlantic_north": {
+    "zh": "北大西洋航线",
+    "en": "The North Atlantic run"
+  },
+  "debug.lane.brasil_run": {
+    "zh": "巴西航线",
+    "en": "The Brazil run"
+  },
+  "debug.lane.brouwer_route": {
+    "zh": "布劳沃航线",
+    "en": "The Brouwer route"
+  },
+  "debug.lane.molucca_run": {
+    "zh": "马鲁古香料航线",
+    "en": "The Molucca spice run"
   }
 }

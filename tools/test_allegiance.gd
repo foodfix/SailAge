@@ -154,7 +154,7 @@ func _test_seed_state() -> void:
 			_check(AllegianceLib.dump_state()["port_allegiance"].has(
 				str((port as Dictionary).get("id", ""))),
 				"contestable port %s is seeded" % str((port as Dictionary).get("id", "")))
-	_check(contestable == 128, "128 contestable ports (got %d)" % contestable)
+	_check(contestable == 133, "133 contestable ports (got %d)" % contestable)
 
 
 # --- §4.9 ledger & allegiance resolution -----------------------------------

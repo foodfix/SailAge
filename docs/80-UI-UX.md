@@ -627,7 +627,7 @@ chart adds:
   markers with their exact shapes — `world.last_departed_port` drawn as a
   **ring** around its port, `world.hunter_intel_cell` drawn as a
   **cross**. Tooltips read-only.
-- **Network layer:** all 17 lanes from the built tile paths
+- **Network layer:** all 21 lanes from the built tile paths
   (`trade_routes_built.json`), per-lane colors, the **active variant
   solid**, spokes thin grey, chokepoint diamonds, lane ids in a side
   legend. Legend rows show the lane's **localized name** — the

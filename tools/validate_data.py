@@ -11,7 +11,7 @@ cutting (docs/20-WORLD-AND-SAILING.md section 4.2). Group 7 is the Phase-5
 npc & economy data check (section 8.2): the density-dial config bounds, the
 captain pools, the named pirates, the demand-event templates with their
 rest-band shift bounds, and the consumption-tier split. Group 8 is the
-trade-route check (section 8.3): the locked 17-lane id set, waypoint snap and
+trade-route check (section 8.3): the locked 21-lane id set, waypoint snap and
 segment passability (shared with ``tools/build_routes.py``), the §4.14
 walk-aware spoke rule for every port, the named junction-graph probes, and
 the byte-exact rebuild equality of the tool-owned
@@ -488,6 +488,15 @@ LOCKED_PORTS = {
     "stockholm": ("斯德哥尔摩", "Stockholm", "holland", 59.32, 18.1),
     "trieste": ("的里雅斯特", "Trieste", "italy", 45.65, 13.77),
     "corfu": ("科孚", "Corfu", "italy", 39.62, 19.92),
+    # 2026-11-02 route-network amendment (§7.1): five ports recorded there —
+    # the flota's Canary victualling stop, the Iceland cod terminus, the
+    # Brazil-run muster point, the Angola-leg station and the Genoese
+    # Black-sea grain hub.
+    "santa_cruz": ("圣克鲁斯", "Santa Cruz de Tenerife", "spain", 28.47, -16.25),
+    "reykjavik": ("雷克雅未克", "Reykjavik", "holland", 64.15, -21.94),
+    "praia": ("普拉亚", "Praia", "portugal", 14.92, -23.51),
+    "benguela": ("本格拉", "Benguela", "portugal", -12.58, 13.41),
+    "caffa": ("卡法", "Caffa", "italy", 45.03, 35.38),
 }
 
 # id: (zh, en, lat, lon)  -- section 7.1 Phase-6 neutral tier (45 rows)
@@ -557,7 +566,7 @@ LOCKED_PROTECTED_PORTS = frozenset({
 
 # §7.1 "Port region bands (Phase 7)": the locked band-id container — the
 # 15 ids below are task P's recorded set (staged 2026-11-02; partitions all
-# 145 ports, contains the six §7.1 skeleton ids). Group 5/§8.2 item 13 check
+# 150 ports, contains the six §7.1 skeleton ids). Group 5/§8.2 item 13 check
 # membership + no-unused-id against this tuple.
 LOCKED_BANDS: tuple[str, ...] = (
     "africa_atlantic",
@@ -655,14 +664,14 @@ LOCKED_COUNTS = {
     "nations": 6,
     "goods": 40,
     "ship_types": 16,
-    "ports": 100,
+    "ports": 105,  # amended 2026-11-02 (§7.1): the five new sovereign ports
     "officers": 6,
     "equipment": 24,
 }
 
 # §7.1 Phase-6 neutral tier: Phase 7 joins the tier to the identity locks —
 # the 40–60 count band is retired; the set is exactly LOCKED_NEUTRAL_PORTS
-# (45 rows) and the total port count exactly 145 (§8 group 5).
+# (45 rows) and the total port count exactly 150 (§8 group 5).
 
 # §8.2 item 5 (`30-*` §4.2): the Phase-7 flag-driven consumption-tier split —
 # exactly 12 `staple: true` / 16 unflagged (middle) / 12 `specialty: true`
@@ -1996,7 +2005,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         items = docs[f"{plural}.json"][plural]
         expected_total = expected_count
         if plural == "ports":
-            # §7.1 (Phase 7 lock model): exactly 100 sovereign (exact set
+            # §7.1 (lock model, amended 2026-11-02): exactly 105 sovereign (exact set
             # above) + exactly the 45 recorded neutral rows.
             expected_total = expected_count + NEUTRAL_PORT_COUNT
             if len(items) != expected_total:
@@ -2005,7 +2014,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
                     f"{plural}.json",
                     f"ports: count {len(items)} != {expected_total} "
                     f"({expected_count} sovereign + {NEUTRAL_PORT_COUNT} "
-                    "neutral, §8 group 5 exact 145-set)",
+                    "neutral, §8 group 5 exact 150-set)",
                     5,
                 )
             continue
@@ -2181,7 +2190,7 @@ def check_group5(docs: dict[str, object], verbose: bool) -> None:
         print(
             "PASS group 5 locked lists "
             f"({len(sovereign)} sovereign ports + {len(neutral)} neutral "
-            f"= {len(sovereign) + len(neutral)} (exact 145-set), "
+            f"= {len(sovereign) + len(neutral)} (exact 150-set), "
             f"{LOCKED_COUNTS['goods']} goods, "
             f"{LOCKED_COUNTS['ship_types']} ship types, "
             f"6 nations, 6 officers, {LOCKED_COUNTS['equipment']} equipment "
@@ -4543,7 +4552,7 @@ def _check_pirate_drop_pairing(pirates: list, equipment: list) -> None:
 
 def _check_band_set(ports: list) -> None:
     """§8.2 item 13: every port band ∈ the §7.1 recorded set; the six
-    neutral-region skeleton ids are present; the set covers all 145 ports
+    neutral-region skeleton ids are present; the set covers all 150 ports
     with no unused id."""
     used = sorted({p["band"] for p in ports})
     outside = sorted(set(used) - set(LOCKED_BANDS))
@@ -4562,7 +4571,7 @@ def _check_band_set(ports: list) -> None:
             "band-set",
             "ports.json",
             f"band id(s) {', '.join(missing_skeleton)} are unused — the §7.1 "
-            "set covers all 145 ports with no unused id (§8.2 item 13)",
+            "set covers all 150 ports with no unused id (§8.2 item 13)",
             7,
         )
 
@@ -4617,7 +4626,7 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
         furthest = ", ".join(
             f"{port_id} ({distance} tiles → {producer}/{good})"
             for distance, port_id, producer, good in staple_ranking[:5])
-        print(f"INFO group 7 economy graph — 145 ports / {len(goods)} goods; "
+        print(f"INFO group 7 economy graph — 150 ports / {len(goods)} goods; "
               f"furthest staple runs: {furthest}")
 
 
@@ -4625,7 +4634,7 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
 # Check group 8 — Trade routes (docs/10-DATA-SCHEMA.md section 8.3)
 # ---------------------------------------------------------------------------
 
-# Section 7.6: the locked 17-lane id set — exhaustive, closed (the 12
+# Section 7.6: the locked 21-lane id set — exhaustive, closed (the 12
 # Phase-5 lanes plus the 5 Phase-6 regional lanes of task P).
 LOCKED_LANE_IDS = (
     "carreira_da_india",
@@ -4645,6 +4654,13 @@ LOCKED_LANE_IDS = (
     "swahili_coast",
     "pacific_america",
     "west_africa",
+    # 2026-11-02 route-network amendment (§7.6): four regional runs recorded
+    # there — the North-Atlantic run, the Brazil run, the Brouwer route and
+    # the Molucca spice run.
+    "atlantic_north",
+    "brasil_run",
+    "brouwer_route",
+    "molucca_run",
 )
 
 BUILT_ROUTES_LABEL = "data/trade_routes_built.json"
@@ -5251,6 +5267,32 @@ def _check_trade_probes(grid, ports: list, built: dict) -> None:
     for port_id in ("safi", "elmina", "luanda"):
         spoke_onto(port_id, "west_africa",
                    description=f"{port_id} spoke onto west_africa")
+
+    # 2026-11-02 route-network amendment: the whole network is ONE component
+    # — every lane's start node reaches every other lane's start node over
+    # the junction graph (the hanseatic/iceland isolation class is a hard
+    # failure, §8.3 item 7).
+    lane_starts = []
+    for lane in built.get("lanes", []):
+        lid = lane.get("id")
+        if not lid:
+            continue
+        start = lane.get("tile_path", [[0, 0]])[0]
+        lane_starts.append((lid, (start[0], start[1])))
+    adj_probe = route_builder.reachable_from(
+        adj, node_of(lane_starts[0][1], "probe source lane:carreira_da_india"))
+    for lid, start in lane_starts[1:]:
+        node = node_of(start, f"probe source lane:{lid}")
+        if node not in adj_probe:
+            fail(
+                "trade-probes",
+                BUILT_ROUTES_LABEL,
+                f"lane '{lid}' is not reachable from lane "
+                f"'{lane_starts[0][0]}' over the built junction graph — the "
+                "network must be a single connected component (section 8.3 "
+                "item 7)",
+                8,
+            )
 
 
 def _built_lane_start(built: dict, lane_id: str) -> tuple[int, int]:
@@ -6219,7 +6261,7 @@ def check_group10(docs: dict[str, object], verbose: bool) -> None:
             f"PASS group 10 ice & lane variants ({len(parsed_regions)} ice "
             f"regions freezing {frozen_months} months, {total_variants} "
             f"lane variant(s) over {len(lanes)} lanes, month-window "
-            "passability 17 lanes x 12 months ok)"
+            "passability 21 lanes x 12 months ok)"
         )
 
 

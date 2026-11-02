@@ -8,9 +8,10 @@ depends on. It defines:
 - The exact JSON file layout under `data/` and the schema of every entity type.
 - The i18n rule for all display strings.
 - The spec for `tools/validate_data.py`, the validator all data must pass.
-- The locked content lists: 100 sovereign ports plus the Phase-6 neutral
+- The locked content lists: 105 sovereign ports (the 100 plus the five of
+  the 2026-11-02 route-network amendment) plus the Phase-6 neutral
   tier (§7.1), 40 goods (§7.2), 16 ship types (§7.3), 6 nations, 6 starter
-  officers (§7.4–7.5), plus the Phase-5/6/7 lists — 17 trade lanes (§7.6),
+  officers (§7.4–7.5), plus the Phase-5/6/7 lists — 21 trade lanes (§7.6),
   7 captain name pools (§7.7), 4 named pirates (§7.8), 24 equipment items
   (§7.9) — exhaustive, with no open slots.
 - The Phase-5 npc/economy schemas (`npc_config`, `npc_captains`,
@@ -20,7 +21,8 @@ depends on. It defines:
 - The Phase-6 additions: the three ocean seasonal datasets —
   `wind_regions.json` (§4.16), `ocean_currents.json` (§4.17),
   `ice_regions.json` (§4.18) — the lane `variants` schema (§4.14), the
-  neutral-port tier (§7.1), the 17-lane set (§7.6), and the two tool-owned
+  neutral-port tier (§7.1), the 21-lane set (§7.6; the 17 plus the four of
+  the 2026-11-02 route-network amendment), and the two tool-owned
   ocean rasters (§6.5).
 - The Phase-7 additions (trade empires): goods flags
   `staple`/`specialty`/`exclusive`/`flow` and the 40-good list (§4.2, §7.2),
@@ -53,7 +55,7 @@ are fully specified here; each data file ships when its owning phase lands.
 | `data/npc_captains.json` | Captain name pools — 7 incl. the nationless `""` pool (§4.11, §7.7) | this doc / `60-*` |
 | `data/named_pirates.json` | The 4 named pirates, tiers 1–3, each with a rare-equipment `drop` (§4.12, §7.8) | this doc / `60-*` / `70-*` |
 | `data/market_events.json` | Demand-event templates (§4.13) | this doc / `30-*` |
-| `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 17 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
+| `data/trade_routes.json` | Hand-authored major trade lanes — exactly the 21 locked ids of §7.6 (§4.14) | this doc / `20-*` / `60-*` |
 | `data/wind_regions.json` | Prevailing-wind regions: month-keyed wind-from directions per ocean region (§4.16) — hand-authored | this doc / `20-*` |
 | `data/ocean_currents.json` | Ocean-current systems: strength, path, width, optional reversal (§4.17) — hand-authored | this doc / `20-*` |
 | `data/ice_regions.json` | Seasonal sea-ice polygons with month windows (§4.18) — hand-authored | this doc / `20-*` |
@@ -269,7 +271,7 @@ is no second port file and no per-map port variant.
 | `nation_id` | id \| `""` | references Nation; `""` marks a Phase-6 neutral-tier port (§7.1) |
 | `lat` | number | WGS84 latitude in degrees, `-90 ≤ lat ≤ 90`; the port's real-world position and the **geographic truth** |
 | `lon` | number | WGS84 longitude in degrees, `-180 ≤ lon ≤ 180`; geographic truth |
-| `band` | id | *(Phase 7)* the port's region band — one of the §7.1 band id set; required on **all 145 ports**. Consumers: the staple-coverage and exclusive-coverage checks (§8.2) and tavern telegraph scoping (`30-*` §4.9) |
+| `band` | id | *(Phase 7)* the port's region band — one of the §7.1 band id set; required on **all 150 ports**. Consumers: the staple-coverage and exclusive-coverage checks (§8.2) and tavern telegraph scoping (`30-*` §4.9) |
 | `produces` | []id | ⊆ Good ids; port sells these cheaper (supply factor in `30-*`); `produces ∩ demands = ∅` (hard rule, Phase 7 — validator §8.2) |
 | `demands` | []id | ⊆ Good ids; port buys these dearer; must include every staple the port does not produce — `demands ⊇ (staples ∖ produces)` (`IMPLEMENT-Phase7.md` correction 3, validator §8.2) |
 | `protected` | bool | *(Phase 7)* optional; `true` marks a **protected port**: permanent alignment to its owner, never a ledger, discount-only investment, `dev` floor never grows. ≤ 4 per nation, and the set must include every nation capital (§7.1 lists the locked set). Sovereign ports only — never on a `nation_id: ""` row |
@@ -659,13 +661,13 @@ response are pinned in `30-*` §4.5; active instances persist in
 
 ### 4.14 TradeRoute — `data/trade_routes.json` + `data/trade_routes_built.json` *(Phase 5)*
 
-`data/trade_routes.json` holds **only the major lanes** — exactly the 17
+`data/trade_routes.json` holds **only the major lanes** — exactly the 21
 locked ids of §7.6, hand-authored as historical facts. Envelope
 `{"version": 1, "lanes": [...]}` (group-1 exception: key `lanes`).
 
 | Field | Type | Rule |
 |---|---|---|
-| `id` | id | one of the 17 locked lane ids (§7.6) |
+| `id` | id | one of the 21 locked lane ids (§7.6) |
 | `class` | enum | `"major"`; minor spokes are builder-generated and never stored in this file |
 | `nations` | []id | ⊆ Nation ids; the fleets that work the lane |
 | `waypoints` | [][lat, lon] | ≥ 2 pairs in the `ports.json` coordinate space (§3.1); wrap-aware across the dateline — a crossing segment keeps `x` monotonic under wrap (the Manila lane) |
@@ -1043,7 +1045,7 @@ consumer may derive one differently.
 | Lakes | `ne_10m_lakes` polygons rasterized as `#` (land for all purposes; the Caspian is land) | `tools/build_world.py` |
 | Map index | `data/maps/maps.json` exactly one entry, `id: "world"` | `90-*` §9.1 |
 | Save | version 7; no migration chain — v6 and older payloads refused | `90-*` §8.1–8.2 |
-| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 100 sovereign ports plus the Phase-6 neutral tier; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the list-form `shipyard`/`equipment_stock` (§4.4) | §4.4, §7.1 |
+| Port schema | `lat`, `lon` (WGS84 degrees, truth); the `marker`, `position`, and `phase` keys and the retired world-map marker block are removed; `ports.json` holds the 105 sovereign ports plus the Phase-6 neutral tier; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the list-form `shipyard`/`equipment_stock` (§4.4) | §4.4, §7.1 |
 
 **Projection.** The grid is the whole globe at 12 tiles/degree: it spans
 180°W–180°E and 90°N–90°S, and circumnavigation is a first-class feature
@@ -1227,7 +1229,7 @@ currents to O(1) runtime reads (`scripts/world/ocean_layers.gd`, `90-*` §4):
 
 Exhaustive — no additions or removals without amending this doc.
 
-### 7.1 Ports (100 sovereign + Phase-6 neutral tier)
+### 7.1 Ports (105 sovereign + Phase-6 neutral tier)
 
 The **sovereign set** — exactly the 100 ids below — lives in the single
 `data/ports.json` envelope and is **locked and untouched** (exact-set, validator
@@ -1360,6 +1362,11 @@ the sovereign block:
 | stockholm | 斯德哥尔摩 | Stockholm | holland | 59.32 | 18.10 | copper, iron | wine, salt |
 | trieste | 的里雅斯特 | Trieste | italy | 45.65 | 13.77 | glassware, timber | spices, sugar |
 | corfu | 科孚 | Corfu | italy | 39.62 | 19.92 | olive_oil, salt | wine, timber |
+| santa_cruz | 圣克鲁斯 | Santa Cruz de Tenerife | spain | 28.47 | -16.25 | wine, sugar | wheat, olive_oil, wool, salt, dried_fish, timber, iron, cheese, rice, pitch, glassware, linen |
+| reykjavik | 雷克雅未克 | Reykjavik | holland | 64.15 | -21.94 | dried_fish, wool | wheat, olive_oil, wine, sugar, salt, timber, iron, cheese, rice, pitch, glassware, linen |
+| praia | 普拉亚 | Praia | portugal | 14.92 | -23.51 | salt, cotton_cloth | wheat, olive_oil, wine, wool, sugar, dried_fish, timber, iron, cheese, rice, pitch, glassware, linen |
+| benguela | 本格拉 | Benguela | portugal | -12.58 | 13.41 | amber, leather, salt | wheat, olive_oil, wine, wool, sugar, dried_fish, timber, iron, cheese, rice, pitch, cotton_cloth, glassware |
+| caffa | 卡法 | Caffa | italy | 45.03 | 35.38 | wheat, salt, leather | olive_oil, wine, wool, sugar, dried_fish, timber, iron, cheese, rice, pitch, glassware, linen, silk |
 
 Historical fidelity is deliberately loose (e.g., French-coast ports assigned
 to Spain, Mediterranean islands split between Italy and the Ottomans, and the
@@ -1445,7 +1452,7 @@ The **band id set** is a locked container defined here; task P authors its
 members (the §4.4 `band` field references it). Rules:
 
 - Ids follow the §3.1 `id` regex (snake_case); every band id is unique.
-- The set **partitions all 145 ports**: every port's `band` ∈ the set, and
+- The set **partitions all 150 ports**: every port's `band` ∈ the set, and
   the validator asserts membership (§8.2) plus that no band id goes unused.
 - The set is a **superset of the six Phase-6 neutral-region bands** above —
   skeleton ids `china_coast`, `japan`, `korea`, `southeast_asia`,
@@ -1461,16 +1468,16 @@ members (the §4.4 `band` field references it). Rules:
   authors it (same protocol as the §7.1 neutral-tier table).
 
 **Band members (final, task P, 2026-11-02).** Exactly the 15 band ids
-below partition all 145 ports (member ids in file order); the first six
+below partition all 150 ports (member ids in file order); the first six
 are the locked Phase-6 neutral-region regions. No further band id may be
 added without amending this table.
 
 | band id | ports | members |
 |---|---|---|
-| europe_atlantic | 13 | lisbon oporto seville cadiz bordeaux london plymouth amsterdam antwerp hamburg bergen danzig stockholm |
-| europe_med | 17 | marseille valencia barcelona genoa naples palermo syracuse cagliari valetta venice trieste ragusa corfu athens istanbul smyrna candia |
+| europe_atlantic | 14 | lisbon oporto seville cadiz bordeaux london plymouth amsterdam antwerp hamburg bergen danzig stockholm reykjavik |
+| europe_med | 18 | marseille valencia barcelona genoa naples palermo syracuse cagliari valetta venice trieste ragusa corfu athens istanbul smyrna candia caffa |
 | africa_levant | 8 | ceuta safi algiers tunis tripoli alexandria beirut cyprus |
-| africa_atlantic | 5 | saint_louis elmina accra luanda madeira |
+| africa_atlantic | 8 | saint_louis elmina accra luanda madeira santa_cruz praia benguela |
 | swahili_red_sea | 10 | mozambique mombasa suakin mogadishu zanzibar kilwa sofala lamu massawa zeila |
 | india_persia_arabia | 22 | aden jiddah muscat basra bandar_abbas goa calicut cochin bombay surat colombo pondicherry nagapattinam masulipatnam hughli syriam dianga khambhat diu mocha qalhat hormuz |
 | southeast_asia | 17 | malacca batavia macassar amboina manila patani brunei ternate timor siam hoi_an banten jambi palembang gresik sulu kedah |
@@ -1663,7 +1670,7 @@ One recruit per nation, available at the listed taverns from game start:
 | off_kemal_agha | 凯末尔阿迦 | Kemal Agha | ottoman | gunner | istanbul, smyrna | 30 |
 | off_marco_bellini | 马尔科·贝里尼 | Marco Bellini | italy | navigator | venice, genoa | 30 |
 
-### 7.6 Trade lanes (17, Phase 5 + Phase 6)
+### 7.6 Trade lanes (21, Phase 5 + Phase 6 + the 2026-11-02 amendment)
 
 The locked `data/trade_routes.json` lane id set (§4.14) — exhaustive. The 12
 Phase-5 lanes' `nations`/`goods`/`waypoints`/`chokepoints` values are authored
@@ -1713,6 +1720,10 @@ points authored on the world raster — walkable ≤ 2-tile snap per §4.14):
 | swahili_coast | Mozambique Island → Mozambique channel coast → Mombasa → Somali coast → Mogadishu (19 waypoints) | portugal | dried_fish, salt, cotton_cloth | cape_guardafui |
 | pacific_america | Acapulco → offshore Central America → Gulf of Panama → Panama → Ecuador coast → Guayaquil → offshore Peru → Callao/Lima → offshore Chile → Valparaíso (38 waypoints) | spain | sugar, dried_fish, wool, salt | gulf_of_panama |
 | west_africa | Madeira → Moroccan coast → Safi → Saharan coast → Saint-Louis → Guinea coast → Elmina → Accra → Gulf of Guinea → Angola coast → Luanda (41 waypoints) | portugal | dried_fish, salt, cotton_cloth, amber | gulf_of_guinea |
+| atlantic_north | The Dover strait → Plymouth → the 44–48°N westerlies → Newfoundland → Gulf of St. Lawrence (Gaspé roads) → back out → Boston → New York → Charleston (53 waypoints) | england, holland | dried_fish, timber, furs, wool, salt, tobacco | dover_strait, gulf_of_st_lawrence |
+| brasil_run | Lisbon → Madeira → Praia → Belém → Recife → Bahia → Rio de Janeiro → Buenos Aires (44 waypoints) | portugal, spain | sugar, timber, salt, wine | volta_do_mar, rio_de_la_plata |
+| brouwer_route | Table Bay → the Roaring Forties (−38/−42°) → Cape Leeuwin → Shark Bay → the Western-Australian coast north → Sunda strait → Batavia (46 waypoints) | holland | spices, silk, cotton_cloth, sugar | cape_of_good_hope, sunda_strait |
+| molucca_run | Batavia → east along the Java sea → Gresik → Makassar → Timor → Ambon → Ternate (36 waypoints) | holland, portugal | spices, cotton_cloth, silk, sugar | makassar_strait |
 
 **`hanseatic_north` winter variant (task P, 2026-10-31).** The lane's base
 waypoints enter the Baltic through the Danish straits (Bergen → Dover →
@@ -1724,6 +1735,38 @@ Hamburg), staying clear of the Baltic freeze polygon entirely. Month
 coverage: base `waypoints` serve months 4–11 (ice-free by §4.18's own
 months), the variant serves 12–3 — base + variants cover all 12 months, no
 overlap.
+
+**Route-network amendment (2026-11-02).** The locked lane set grows 17 → 21
+with the four regional runs above, five ports join §7.1, and the following
+existing-lane waypoints are amended (all port-touch waypoints pin the exact
+`ports.json` coordinates; every segment and month window verified by
+`tools/build_routes.py`; the amendment closes the audited coastal gaps —
+eastern North America, eastern South America, southern Africa, the Gulf of
+Thailand, the Burmese coast, the Japanese south coast, the Moluccas and
+Western Australia — and re-joins the network into one junction component):
+
+- `grand_banks_cod` — start pinned to London (the Thames-estuary
+  out-and-back waypoints removed), end pinned to Newfoundland.
+- `iceland_cod` — start moved to London (sharing the Dover–Celtic-sea
+  corridor with `grand_banks_cod`), Plymouth kept as a victualling touch,
+  end pinned to Reykjavik (no more open-water terminus).
+- `west_indies_flota` — the Canary spike replaced by a Santa Cruz touch;
+  the Antilles arc replaced by the historical southern galeones silver loop
+  Trinidad → Curaçao → Cartagena → Portobelo → western Caribbean (a Puerto
+  Rico north-coast touch remains for San Juan).
+- `genoa_grain` — an Istanbul touch on the Bosporus and the terminus moved
+  from the open Black-sea shelf to Caffa.
+- `west_africa` — extended Luanda → Benguela → the Namibian coast →
+  Cape Town (joining the west-African and cape networks).
+- `swahili_coast` — southern terminus Sofala prepended before Mozambique.
+- `carreira_da_india` — the cape passage now calls at Table Bay (Cape Town).
+- `aden_gujarat_malacca` — extended Malacca → the Singapore strait → the
+  Gulf of Thailand → Siam (serving Patani en route).
+- `coromandel_bengal` — extended Hughli → the delta offshore → Dianga →
+  Syriam.
+- `canton_country_trade` — the Macau weave simplified, and the lane extended
+  Hirado → around Kyushu's south → Urado → Anotsu (the Japan south coast).
+- `venice_alexandria` — unchanged (the Beirut junction station stays).
 
 ### 7.7 Captain name pools (7, Phase 5)
 
@@ -1789,10 +1832,11 @@ the code below. All checks run in order.
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical |
 | 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key |
 | 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ⊆ goods`; `port.band ∈ the §7.1 band id set`; `facilities.shipyard[] ⊆ ship_types`; `facilities.equipment_stock[] ⊆ equipment` and never contains a `rare: true` item; `port.sphere ⊆ nations`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names (incl. the Phase-7 `storm_damage_pct`/`scurvy_delay_days`); `named_pirates.drop ∈ equipment ∧ drop.target.rare == true` |
-| 5 | Locked lists | the §7.1 **lock model** — *Phase-7 amendment:* for ports, **identity locks only** (id/zh/en/nation/lat/lon exact vs the §7.1 tables; the port id set is exactly the 100 sovereign **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 6 officers, §7.9 **24 equipment** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop); the §7.1 band id set matches the P-recorded list |
+| 5 | Locked lists | the §7.1 **lock model** — *Phase-7 amendment:* for ports, **identity locks only** (id/zh/en/nation/lat/lon exact vs the §7.1 tables; the port id set is exactly the 105 sovereign (the 100 plus the five of the
+2026-11-02 route-network amendment) **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 6 officers, §7.9 **24 equipment** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop); the §7.1 band id set matches the P-recorded list |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
 | 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `npc_captains.json` (exactly §7.7's 7 pools, ≥ 8 names each, complete i18n); `named_pirates.json` (exactly 4, tiers 1–3, i18n, §7.9-referencing `drop`s); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2 |
-| 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **17**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
+| 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **21**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
 | 9 | Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` decode as 4320×2160 indexed PNGs; palette bounds per the §6.5 encodings; water-coverage vs `world.png`; `tools/build_ocean.py` rebuild determinism — normative spec §8.4 |
 | 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
 
@@ -1917,7 +1961,7 @@ counts, and bounds):
     captains.
 13. **Band id set:** every port `band` ∈ the §7.1 recorded set; the set
     contains the six neutral-region bands (§7.1 skeleton ids) and covers
-    all 145 ports with no unused id.
+    all 150 ports with no unused id.
 
 **Negative tests (must provably fail, exit 7, named message):** a negative
 preset; a default whose multiplier is not 1.0; a budget ≤ 0; an
@@ -2069,7 +2113,7 @@ no variants.
   item 4)** → validator exit 9 naming the tile and the region/system. The
   fix is the JSON sources and a `tools/build_ocean.py` regeneration.
 - **A neutral port failing tier structure — a count ≠ 45 (the §8 group 5
-  exact 145-set), an id colliding with the sovereign 100, a missing locale,
+  exact 150-set), an id colliding with a sovereign id, a missing locale,
   a good outside the §7.2 40, or a non-empty `nation_id` (§7.1, §8
   group 5)** → validator exit 5.
 - **`market_goods` present** → validator exit 3: the key is retired
@@ -2113,7 +2157,7 @@ no variants.
 - [ ] All artifact paths from §2 exist in the doc set's file inventory and
       match these names exactly.
 - [ ] Every JSON example in this doc parses (spot-checked with a parser).
-- [ ] §7 tables contain exactly 100 sovereign + 45 neutral ports / 40 goods
+- [ ] §7 tables contain exactly 105 sovereign + 45 neutral ports / 40 goods
       / 16 ship types / 6 nations / 6 officers / 24 equipment rows and only
       ids using the §3.1 `id` regex; every §7.1 `lat`/`lon` is a plausible
       real-world position (Lisbon ≈ 38.7°N 9.1°W, Nagasaki ≈ 32.7°N 129.9°E)
@@ -2154,7 +2198,7 @@ no variants.
 - [ ] The save-block shapes of §4.15 match the `90-*` §8.1 key list
       field-for-field (carried into v7 unchanged; Phase-6 keys and the
       Phase-7 allegiance/permit/treasury keys live in `90-*` §8.1).
-- [ ] The validator summary reports a port count of **100 sovereign +
-      45 neutral** (the group-5 exact 145-set).
+- [ ] The validator summary reports a port count of **105 sovereign +
+      45 neutral** (the group-5 exact 150-set).
 - [ ] Harbor-relief numbers (threshold 1,200, payout 100, cheapest hull 1,200)
       are consistent with §7.3 and `50-*`.
