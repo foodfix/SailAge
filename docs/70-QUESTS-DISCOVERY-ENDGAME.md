@@ -186,9 +186,11 @@ mission kinds, rewards and the one-per-nation rule in §4.9.4.
   unchanged.)
 - **Bounty pinpoint at half price (Phase 8, 2026-11-02).** With **rumour
   ≥ 40**, a bounty-board pinpoint reveal (one bounty/nemesis captain's
-  current position) costs **half price** — the bounty-business base price
-  and the charisma discount there are `60-*`/`50-*`'s (reference only
-  here); the rumour gate halves whatever that price is.
+  current position) costs **half price**. Base price **100g**, then the
+  charisma price multiplier `clamp(1 − (CHA−10)/200, 0.5, 1.0)` applies
+  (`50-*` §4.2 owns the multiplier), then the rumour ≥ 40 gate halves the
+  result — so the paid range is **25g–100g**. The inform-on-pirates fixed
+  price below ignores both modifiers.
 - **Inform-on-pirates (Phase 8, 2026-11-02).** A palace action: pay a
   fixed **500g** to reveal one pirate/privateer captain's current
   position — the bounty-pinpoint pipeline at the **fixed price** (no

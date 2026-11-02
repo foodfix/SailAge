@@ -2,6 +2,13 @@
 
 **Status (2026-11-02):** **backlog ratified** — W1 (docs) may launch; W2+
 requires W1's merge gate (docs lock every number before code).
+**W1 status (2026-11-03): ✅ complete** — slots A/B/C/D merged in order on
+`main` (commits `0e066f1`, `5031cfd`, `1d65bd2`, `3fa9048` + master
+integration fixes), `validate_data.py` exit 0 after **each** merge; every
+locked number now lives in its owning doc. Master micro-integrations at the
+gate: charisma price multiplier pinned (`50-*` §4.2/§4.5.2, bounty pinpoint
+base 100g in `70-*` §4.5), appraisal price memory pinned session-transient
+(`30-*` §4.2), `00-*` §5 completion-style consistency.
 **History:** source plan `.kilo/plans/1793586441004-phase8-rpg-overhaul.md`
 (product-owner locked decisions, 2026-11-02). The "Review corrections" table
 records every divergence from that plan, all verified against the repo on
@@ -440,6 +447,16 @@ No code, no data. Every number above lands in its owning doc before W2.
   character panel three tabs; hail modal + key list).
 - **Gate (master)**: every changed number traceable to a doc; cross-doc
   references consistent; `validate_data.py` still exit 0; status stamp.
+  **→ PASSED 2026-11-03** (see the W1 status line at the top of this file).
+  Slot-flagged concretizations ratified at the gate: coaster cards carry no
+  named skills (all 0, attributes per the `-low` template); treasure fleets
+  commission `trader`-role canon cards of their nation at tier 2; officer
+  "specialty coverage ≥ 10" reads as **each of the 11 skills carried at
+  ≥ 20 by ≥ 10 officers**; captains.json is entity version 1 (new file),
+  officers.json bumps to entity version 2; storm headway base loss 0.5 of
+  the day's budget, courage-scaled ×`(1−(COU−10)/400)` (`20-*` §4.7);
+  bounty-business pinpoint base 100g with the charisma multiplier then the
+  rumour ≥ 40 half (`70-*` §4.5).
 
 ## W2 — Data & tools (4 slots, staged · merge A → B → C → D, gate once)
 

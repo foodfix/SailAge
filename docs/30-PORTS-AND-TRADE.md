@@ -27,7 +27,7 @@ price memory, profit/memory arrows, tariff discount, permit discounts
 | `scripts/port/economy.gd` | stock, flow tick, tranche repricing, demand-event consumption surges (Phase 5, RefCounted; flow rework Phase 7) |
 | `scripts/port/allegiance.gd` | port classes, ledgers, dev derivation, monthly counter-investment, treasuries, tariff/permit resolution (Phase 7) |
 | `scripts/port/shipyard_engine.gd` | ship transactions |
-| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved), `permits`, `port_allegiance` ({ledger, allegiance} per contestable port), `month_invested`, `nation_treasuries` (Phase 7, saved; shapes in `90-*` §8.2), the player's price-memory block (Phase 8 appraisal, §4.2; block shape in `90-*` §8) |
+| GameState keys | `port_investments` (per-port invested gold, saved), `current_port`, `market_stocks` / `market_events` (Phase 5, saved), `permits`, `port_allegiance` ({ledger, allegiance} per contestable port), `month_invested`, `nation_treasuries` (Phase 7, saved; shapes in `90-*` §8.2), the player's price-memory block (Phase 8 appraisal, §4.2 — **session-transient, never saved**) |
 
 ## 3. Dependencies
 
@@ -239,8 +239,10 @@ tariff composes **after** this plumbing, on the transaction totals (§4.10).
     marginal buy price into the player's price memory — one entry per
     `(port, good)` holding the last-seen price and day; a re-buy at the
     same port-good overwrites. Capacity is `floor(appraisal / 10)` entries,
-    oldest evicted first (appraisal 30 → 3 entries, 100 → 10). Persisted
-    in the save's player block (`90-*` §8).
+    oldest evicted first (appraisal 30 → 3 entries, 100 → 10). The memory
+    is **session-transient, never saved** — the ratified save v9 spec
+    (`90-*` §8, `IMPLEMENT-Phase8.md`) lists no price-memory key — so a
+    load starts with an empty memory, exactly like `npc_port_log`.
   - **Profit arrows (gate appraisal ≥ 30).** A market row shows the profit
     arrow when it is profitable against `base_price`: the marginal **buy
     price < base_price** (cheap producer row) or the marginal **sell price

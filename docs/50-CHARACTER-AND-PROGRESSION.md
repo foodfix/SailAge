@@ -123,7 +123,7 @@ that host the pipelines own the surrounding mechanics.
 |---|---|
 | 体魄 constitution CON | scurvy game-over threshold **`7 + floor(CON/10)`** (was fixed 7; `20-*` §4.9). Ramming self-damage × `(1−(CON−10)/200)` (`60-*`). Storm-day morale decay × `(1−(CON−10)/300)` — multiplies the `20-*` §4.8.1 storm row. When the surgeon post is filled, the surgeon's **medicine** skill replaces CON as the scurvy-grace source: same formula, base 7 (§4.3.2) |
 | 悟性 intellect INT | training fee × `(1−(INT−10)/200)` (§4.3.4); rumour accuracy / hint-quality tiers (INT-modified; `30-*`/`60-*` hail); chart reveal precision bonus (`20-*` §4.12) |
-| 魅力 charisma CHA | desertion/mutiny × `(1−(CHA−10)/200)` — **takes over every leadership site; formula unchanged** (`20-*` §4.8.2/§4.8.3); loyalty gain multiplier `1 + floor((CHA−10)/45)` (§4.5.4); signing fee / wage talks (flat `wage_daily × 10` signing rule carried forward; charisma enters via the §4.5.4 raise event); rumour & bounty-board discount (rate owned by the `30-*`/`70-*` price amendments — the backlog names the consumer, the price docs pin the modifier) |
+| 魅力 charisma CHA | desertion/mutiny × `(1−(CHA−10)/200)` — **takes over every leadership site; formula unchanged** (`20-*` §4.8.2/§4.8.3); loyalty gain multiplier `1 + floor((CHA−10)/45)` (§4.5.4); **charisma price multiplier** `price_mult = clamp(1 − (CHA−10)/200, 0.5, 1.0)` applied to the officer signing fee (§4.5.2), rumour purchase prices and the bounty-board pinpoint reveal (`70-*` §4.5 — the base prices live there, this doc owns the multiplier); wage talks otherwise enter via the §4.5.4 raise event |
 | 胆识 courage COU | duel attack `+floor(COU/20)` (`60-*`); storm speed retention × `(1−(COU−10)/400)` (`20-*` §4.4/§4.7); boarding-victory morale bonus **+5** (`60-*`) |
 | 运气 luck LUCK | storm chance × `(1−luck/400)` (unchanged, `20-*` §4.7); storm damage × `(1−luck/250)` — **player-only, continuous** (the Phase-1 `luck ≥ 50 → ×0.75` step is **deleted**; `20-*` §4.7); named-drop rolls (`60-*` battle rewards) |
 
@@ -306,8 +306,10 @@ are never enumerated in code or docs.
 - **Sunk/sold ship → its captain returns idle, loyalty −10** (flat; see
   §6 note on the backlog's unpinned "personality-scaled" qualifier).
 - Daily wage: `Σ officer.wage_daily` in the ledger (`20-*` §4.5 step 2,
-  unchanged). Signing cost: `wage_daily × 10`, paid once (carried
-  forward); charisma enters wage talks via the §4.5.4 raise event.
+  unchanged). Signing cost: `ceil(wage_daily × 10 × price_mult)` paid once,
+  with `price_mult = clamp(1 − (CHA−10)/200, 0.5, 1.0)` (the §4.2 charisma
+  price multiplier; CHA 10 → ×1.0, CHA 60 → ×0.75, CHA 100 → ×0.5); wage
+  talks otherwise enter via the §4.5.4 raise event.
 
 #### 4.5.3 Contribution (replaces ROLE_STAT_BONUS)
 
