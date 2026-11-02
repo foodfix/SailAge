@@ -86,9 +86,9 @@ var market_events: Array = []
 ## fleet_id, day}`, newest last, capped at 128. Never saved.
 ## (The Phase-5 `named_pirate_respawns` successor field was removed with the
 ## machinery at Phase 8 — docs/90-* §5.4 marks it "removed at v9"; the
-## `captain_states` return queue replaces it. W4-B retires the field; the
-## save payload's optional `named_pirate_respawns` key rides on W6-C's v9
-## sweep.)
+## `captain_states` return queue replaces it. The v9 payload no longer
+## carries the key either — W6-C's sweep dropped it from
+## SaveSystem.snapshot/validate/_apply.)
 var npc_port_log: Array = []
 
 # --- Phase 7 saved state (docs/90-* §8.1, save_version 7) -------------------
@@ -144,10 +144,11 @@ var explored_tiles: Dictionary = {}
 
 # --- Phase-8 run state (docs/90-* §5.4, §8.1 save v9) ------------------------
 #
-# Both blocks are save-relevant from v9 on; their payload wiring
-# (`SaveSystem.snapshot`/`_apply` key list) is W6-C's task — a payload this
-# build writes simply does not carry them yet, and nothing here reads them
-# back from a payload, so save/load stays green.
+# Both blocks are persisted as top-level v9 payload keys since W6-C
+# (`SaveSystem.snapshot` writes exactly the §4.15 entry shapes — `deployed`
+# never persists, `wage_mult` only when ≠ 1.0, `skill_deltas` only when
+# non-empty — and every load restores them plus re-applies the officer
+# skill_deltas onto the loaded officers.json records).
 
 ## Phase 8: `{officer_id: {loyalty, sea_days, post_id, ship_id, talk_cd_day,
 ## gift_cd_day, defeats, wage_mult}}` per employed officer

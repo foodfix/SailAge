@@ -31,21 +31,35 @@ extends Node
 ## file the engine's global `load()` is therefore never called — scripts and
 ## scenes are fetched with `ResourceLoader.load()`.
 ##
-## Versioning (docs/90-* §8.2 "development-stage scope"): version 8 — the
-## explored-state amendment (2026-11-02, docs/90-* §8.1 v8) — ships
-## [constant SAVE_VERSION] 8 and there is **no migration chain** (decision 13,
-## `IMPLEMENT-Phase7.md`; the amendment keeps it removed). SailAge has not
-## shipped, so a payload whose `save_version` is anything but 8 — v7
-## included — is a pre-release save and is refused by name; the only
-## migration that exists is the identity. The historical `1 → 2` / `2 → 3`
-## steps lived here through Phase 3 and were deleted in Phase 4 rather than
-## carried as dead weight. The v7 bump (task V) absorbed the
-## allegiance/permit/treasury state, so a stale v6 payload — whose shape
-## predates the five Phase-7 keys — must never load into a run whose
-## allegiance tug-of-war would silently restart from the seed. The v8 bump
-## absorbs the explored-set payload key for the same reason: a v7 payload
-## has no explored set at all, and loading one into the amendment's runtime
-## would silently promise a fog boundary the file never carried.
+## Versioning (docs/90-* §8.2 "development-stage scope"): version 9 — Phase 8
+## (characters/careers/encounters, decision 16) — ships [constant SAVE_VERSION]
+## 9 and there is **no migration chain**. SailAge has not shipped, so a payload
+## whose `save_version` is anything but 9 — v8 included — is a pre-release save
+## and is refused by name; the only migration that exists is the identity. The
+## historical `1 → 2` / `2 → 3` steps lived here through Phase 3 and were
+## deleted in Phase 4 rather than carried as dead weight. The v9 bump absorbs
+## the reshaped player block (`player.stats` removed — a payload still carrying
+## it is malformed, not repairable) and the retired `named_pirate_respawns`
+## key (the Phase-5 successor machinery is gone; the `captain_states` return
+## queue replaces it), so a stale v8 file must never load into a run whose
+## people state the file never carried.
+##
+## Phase-8 persisted keys (docs/90-* §8.1 version 9, `50-*` §4.8, `10-*`
+## §4.15): the reshaped `player` Person block (treated opaquely — its
+## interior is validated only for the wrong-typed/malformed cases), plus the
+## two top-level blocks `officer_states` (one entry per employed officer:
+## `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day, defeats}`
+## plus optional `wage_mult` — written only when ≠ 1.0 — and optional
+## `skill_deltas` — written only when non-empty) and `captain_states` (one
+## entry per met captain: `{status, return_day, tier_now, stance,
+## familiarity, dossier_seen, defeats, wins}`). The runtime-only `deployed`
+## key (`captains.gd` deployment bookkeeping) is **stripped from every
+## persisted entry**, and `officer_states.skill_deltas` is derived at
+## snapshot time from the loaded officer record's growth over the boot-time
+## canon (`_officer_skill_base`) — W3's in-post +1/90-sea-days growth mutates
+## the record in memory, the deltas make it survive save/load: restore resets
+## each record to the canon and re-applies the payload's deltas, so repeated
+## loads converge instead of compounding.
 ##
 ## Phase-6 persisted keys (docs/90-* §8.1 "Phase-6 additions"): `control_prefs`
 ## (top level) plus the `world` block's `sail_trim` / `heading` / `wind_dir`.
@@ -67,17 +81,9 @@ extends Node
 ## re-derives the transient trackers, which is what keeps a mid-month
 ## save/load replaying the month's counter-investment identically. All five
 ## keys are shape-checked on load: a malformed value is refused exactly like
-## any other wrong-typed block (docs/90-* §8.2; `tools/test_save_v8.gd` —
-## the renamed v7 suite — still asserts the round trips and the refusal
+## any other wrong-typed block (docs/90-* §8.2; `tools/test_save_v9.gd` —
+## the renamed v8 suite — still asserts the round trips and the refusal
 ## wording).
-##
-## Version 8 — explored-state amendment (2026-11-02, docs/90-* §8.1 v8):
-## `explored_tiles` joins the payload after `known_ports` as the base64
-## row-run encoding of `GameState.explored_tiles` (spec pinned in §8.1 v8;
-## encode/decode/validate live in this file, the persistence seam). The set
-## restores into a fresh Dictionary on load; `tools/test_save_v8.gd` follows
-## the `test_save_v7` pattern (round trip, refusal probes, absent-key
-## default, v7 refused by name, extreme-save size re-measured).
 
 # Preloaded rather than referenced through their global class names so this
 # autoload parses before the editor has written Godot's class cache.
@@ -90,6 +96,12 @@ const EconomyLib := preload("res://scripts/port/economy.gd")
 ## of its `restore_state()` (the persistence seam documented there — the
 ## statics are the single source of truth, GameState never mirrors them).
 const AllegianceLib := preload("res://scripts/port/allegiance.gd")
+## Phase-8 (save v9): the skill layer owns the 8+3 skill-key space and the
+## loyalty bounds the `officer_states` validation pins; the captains module
+## owns the status/tier/stance/familiarity domains the `captain_states`
+## validation pins (`50-*` §4.8, `10-*` §4.15).
+const SkillsLib := preload("res://scripts/player/skills.gd")
+const CaptainsLib := preload("res://scripts/world/captains.gd")
 const SlotDialogLib := preload("res://scenes/ui_shared/save_slot_dialog.gd")
 
 ## Smallest/largest usable slot number (docs/90-* §5.5: three slots).
@@ -102,11 +114,11 @@ const SAVE_EXT := ".json"
 ## Written next to the real file, then renamed over it (atomic-ish).
 const TEMP_EXT := ".tmp"
 
-## Current payload version (docs/90-* §8.2: the v8 explored-state amendment
-## ships version 8).
-const SAVE_VERSION := 8
+## Current payload version (docs/90-* §8.2: Phase 8 ships version 9 — the
+## v9 officer/captain states + reshaped player block; v8 refused wholesale).
+const SAVE_VERSION := 9
 ## `phase` marker in the payload (docs/90-* §8.1).
-const PHASE := 8
+const PHASE := 9
 
 ## Phase rank ids (docs/70-* §4.9.2), lowest first. A fresh game starts every
 ## nation at [constant RANK_NONE].
@@ -143,14 +155,18 @@ const COMPASS_DIRS: Array[String] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 ## (docs/90-* §8.1 Phase-7 additions) — the payload blocks of the runtime
 ## state that lives in `Allegiance`'s statics (see [member AllegianceLib]).
 ## v8 appends `explored_tiles` after `known_ports` (the explored-state
-## amendment, docs/90-* §8.1 version 8).
+## amendment, docs/90-* §8.1 version 8). v9 inserts `officer_states` /
+## `captain_states` after `npc_fleets` (docs/90-* §8.1 version 9) and
+## **removes** the retired Phase-5 `named_pirate_respawns` (the successor
+## machinery is gone; the `captain_states` return queue replaces it).
 const STATE_KEYS: Array[String] = [
 	"locale", "day", "gold", "player", "fleet", "morale", "world",
 	"current_port", "known_ports", "explored_tiles", "port_investments",
 	"quests",
-	"discoveries_found", "npc_fleets", "proximity_cooldowns",
+	"discoveries_found", "npc_fleets", "officer_states", "captain_states",
+	"proximity_cooldowns",
 	"market_stocks", "wrecks", "npc_preset", "control_prefs",
-	"market_events", "named_pirate_respawns",
+	"market_events",
 	"fame", "titles", "bounties", "active_quests",
 	"completed_royal_missions", "discoveries_reported", "discovery_hints",
 	"battles_won", "retired", "retired_at",
@@ -191,7 +207,6 @@ const OPTIONAL_DEFAULTS := {
 	"npc_preset": "normal",
 	"control_prefs": DEFAULT_CONTROL_PREFS,
 	"market_events": [],
-	"named_pirate_respawns": {},
 	"fame": 0,
 	"titles": {},
 	"bounties": {},
@@ -205,6 +220,10 @@ const OPTIONAL_DEFAULTS := {
 	# v8 explored-state amendment (docs/90-* §8.1): absent → the empty set
 	# (the string form of "nothing explored yet").
 	"explored_tiles": "",
+	# v9 Phase-8 blocks (docs/90-* §8.1 version 9): absent → no state — no
+	# employed officers, no met captains.
+	"officer_states": {},
+	"captain_states": {},
 }
 
 ## Scene paths (docs/90-* §4, §7).
@@ -242,6 +261,27 @@ var last_retired_summary: Dictionary = {}
 ## `PortScreen.route_to_world`: with `false` a successful load still restores
 ## state and emits [signal load_completed] but does not replace the scene.
 var route_after_load: bool = true
+
+## The boot-time canon of every officer's `skills` block (`{officer_id:
+## {skill: value}}`), captured in [method _ready] before any gameplay can
+## grow a record. Phase-8 growth rule (`skills.gd` §4.3.2): the in-post
+## +1/90-sea-days award mutates the *loaded* `officers.json` record in
+## memory — the canon card is save-independent — so this snapshot of the
+## pristine values is the only baseline against which [method snapshot] can
+## derive an officer's `skill_deltas` (live − canon) and [method _apply] can
+## reset a record before re-applying a payload's deltas (which keeps repeated
+## loads in one session convergent instead of compounding).
+var _officer_skill_base: Dictionary = {}
+
+
+func _ready() -> void:
+	for officer_id in DataLoader.officers:
+		var officer: Dictionary = DataLoader.officers[officer_id]
+		if officer is Dictionary:
+			_officer_skill_base[str(officer_id)] = \
+				((officer as Dictionary).get("skills", {}) as Dictionary) \
+					.duplicate(true)
+
 
 ## Emitted after [method load] restored state (UI/tests observe the flow).
 ## Not an EventBus signal: docs/90-* §5.1 lists the cross-screen events it
@@ -337,6 +377,15 @@ func snapshot() -> Dictionary:
 		"port_investments": GameState.port_investments.duplicate(true),
 		"discoveries_found": GameState.discoveries_found.duplicate(true),
 		"npc_fleets": GameState.npc_fleets.duplicate(true),
+		# Phase-8 blocks (docs/90-* §8.1 version 9, `10-*` §4.15): the
+		# employed officers' relation state and the met captains' lifecycle
+		# state. Both writers build exactly the §4.15 save shape — the
+		# runtime-only `deployed` key can never leak, `wage_mult` is written
+		# only when ≠ 1.0 and `skill_deltas` only when the loaded officer
+		# record has grown over the boot-time canon (see
+		# [member _officer_skill_base]).
+		"officer_states": _officer_states_payload(GameState.officer_states),
+		"captain_states": _captain_states_payload(GameState.captain_states),
 		"proximity_cooldowns": GameState.proximity_cooldowns.duplicate(true),
 		"market_stocks": GameState.market_stocks.duplicate(true),
 		"wrecks": GameState.wrecks.duplicate(true),
@@ -357,11 +406,6 @@ func snapshot() -> Dictionary:
 		"nation_treasuries": allegiance_state["nation_treasuries"],
 		"fame_commended": allegiance_state["fame_commended"],
 		"market_events": GameState.market_events.duplicate(true),
-		# W4-B (Phase 8): the retired successor-machinery field is gone from
-		# GameState (`90-*` §5.4 "removed at v9") — the guard keeps the v8
-		# payload shape without it; W6-C's v9 sweep deletes the whole block.
-		"named_pirate_respawns": (GameState.named_pirate_respawns
-			if "named_pirate_respawns" in GameState else {}).duplicate(true),
 		"fame": GameState.fame,
 		"titles": GameState.titles.duplicate(true),
 		"bounties": GameState.bounties.duplicate(true),
@@ -374,6 +418,85 @@ func snapshot() -> Dictionary:
 		"retired": GameState.retired,
 		"retired_at": GameState.retired_at,
 	}
+
+
+## The `officer_states` payload (docs/90-* §8.1 version 9, `10-*` §4.15):
+## one entry per key of the runtime block — the runtime dict holds exactly
+## the employed officers (`Character.recruit`/`dismiss`,
+## `Skills.officer_day_tick`). Each entry is rebuilt as the §4.15 save shape
+## `{loyalty, sea_days, post_id, ship_id, talk_cd_day, gift_cd_day, defeats}`
+## plus the two optional keys: `wage_mult` only when ≠ 1.0 (the §4.5.4
+## raise-accept writes 1.25) and `skill_deltas` only when non-empty — derived
+## from the loaded officer record's growth over the boot-time canon, which is
+## what makes W3's in-post growth survive save/load. Any runtime-only extra
+## key (a stray `deployed` et al.) is dropped by the rebuild.
+func _officer_states_payload(states: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for officer_id in states:
+		var state: Variant = states[officer_id]
+		if not (state is Dictionary):
+			continue
+		var entry: Dictionary = state
+		var payload := {
+			"loyalty": int(entry.get("loyalty", SkillsLib.LOYALTY_START)),
+			"sea_days": int(entry.get("sea_days", 0)),
+			"post_id": str(entry.get("post_id", "")),
+			"ship_id": str(entry.get("ship_id", "")),
+			"talk_cd_day": int(entry.get("talk_cd_day", 0)),
+			"gift_cd_day": int(entry.get("gift_cd_day", 0)),
+			"defeats": int(entry.get("defeats", 0)),
+		}
+		var wage_mult: float = float(entry.get("wage_mult", 1.0))
+		if wage_mult != 1.0:
+			payload["wage_mult"] = wage_mult
+		var deltas := _officer_skill_deltas(str(officer_id))
+		if not deltas.is_empty():
+			payload["skill_deltas"] = deltas
+		out[str(officer_id)] = payload
+	return out
+
+
+## The `skill_deltas` payload value for one officer (`90-*` §8.1 version 9):
+## `{skill: +n}` over every skill whose loaded record value now exceeds the
+## boot-time canon — the accumulated in-post growth (`50-*` §4.3.2). Pure:
+## reads only, never writes either side.
+func _officer_skill_deltas(officer_id: String) -> Dictionary:
+	var live: Variant = DataLoader.officers.get(officer_id, null)
+	if not (live is Dictionary):
+		return {}
+	var base: Dictionary = _officer_skill_base.get(officer_id, {})
+	var out: Dictionary = {}
+	var skills: Dictionary = (live as Dictionary).get("skills", {})
+	for skill_id in skills:
+		var delta := int(skills[skill_id]) - int(base.get(skill_id, 0))
+		if delta > 0:
+			out[str(skill_id)] = delta
+	return out
+
+
+## The `captain_states` payload (docs/90-* §8.1 version 9, `10-*` §4.15): one
+## entry per met captain — exactly the keys present in the runtime dict; an
+## unmet captain has no entry and never gains one here. Each entry is rebuilt
+## as the §4.15 save shape, which strips the runtime-only `deployed` key
+## (`captains.gd` deployment bookkeeping must never persist).
+func _captain_states_payload(states: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for captain_id in states:
+		var state: Variant = states[captain_id]
+		if not (state is Dictionary):
+			continue
+		var entry: Dictionary = state
+		out[str(captain_id)] = {
+			"status": str(entry.get("status", CaptainsLib.STATUS_ACTIVE)),
+			"return_day": int(entry.get("return_day", 0)),
+			"tier_now": int(entry.get("tier_now", CaptainsLib.TIER_MIN)),
+			"stance": int(entry.get("stance", 0)),
+			"familiarity": int(entry.get("familiarity", 0)),
+			"dossier_seen": bool(entry.get("dossier_seen", false)),
+			"defeats": int(entry.get("defeats", 0)),
+			"wins": int(entry.get("wins", 0)),
+		}
+	return out
 
 
 ## Writes slot `slot` and emits `EventBus.save_completed` (docs/90-* §5.1).
@@ -741,6 +864,61 @@ func validate_payload(data: Dictionary) -> String:
 		return explored_error
 	if not (data["current_port"] == null or data["current_port"] is String):
 		return "'current_port' is neither a port id nor null"
+	# v9 player block (docs/50-* §4.8): the interior is otherwise treated
+	# opaquely, but the removed v8-era blocks are malformed, not repairable —
+	# `player.stats` (leadership/seamanship/combat/navigation) is deleted at
+	# v9 with no migration, so a payload still carrying it is refused loudly
+	# instead of silently resurrecting retired stats. The v9 Person sub-blocks
+	# are type- AND shape-checked whenever present, the same refuse-loudly
+	# rule as every other block.
+	var player: Dictionary = data["player"]
+	if player.has("stats"):
+		return "'player.stats' is removed at save v9 (docs/50-* §4.8)"
+	if not _is_dict_or_missing(player, "attributes"):
+		return "'player.attributes' is not an object"
+	var attributes = player.get("attributes", null)
+	if attributes is Dictionary:
+		if (attributes as Dictionary).size() != CharacterLib.ATTRIBUTES.size():
+			return "'player.attributes' is not the 5-attribute block"
+		for attr_key in (attributes as Dictionary):
+			if not (attr_key in CharacterLib.ATTRIBUTES):
+				return "'player.attributes' carries unknown attribute '%s'" \
+					% str(attr_key)
+			if not _is_int((attributes as Dictionary)[attr_key]) \
+					or int((attributes as Dictionary)[attr_key]) \
+						< CharacterLib.ATTR_MIN \
+					or int((attributes as Dictionary)[attr_key]) \
+						> CharacterLib.ATTR_MAX:
+				return "'player.attributes.%s' is not an integer in %d..%d" \
+					% [str(attr_key), CharacterLib.ATTR_MIN,
+						CharacterLib.ATTR_MAX]
+	if not _is_dict_or_missing(player, "skills"):
+		return "'player.skills' is not an object"
+	var player_skills = player.get("skills", null)
+	if player_skills is Dictionary:
+		if not _is_skill_block(player_skills, SkillsLib.SKILL_MIN,
+				SkillsLib.SKILL_MAX):
+			return "'player.skills' is not the 8-skill block (0..%d)" \
+				% SkillsLib.SKILL_MAX
+	if not _is_dict_or_missing(player, "skill_counters"):
+		return "'player.skill_counters' is not an object"
+	var player_counters = player.get("skill_counters", null)
+	if player_counters is Dictionary:
+		if not _is_skill_block(player_counters, 0, -1):
+			return "'player.skill_counters' is not the 8-counter block (≥ 0)"
+	if not _is_int_or_missing(player, "alloc_pending") \
+			or (player.has("alloc_pending") and int(player["alloc_pending"]) < 0):
+		return "'player.alloc_pending' is not a non-negative integer"
+	if not _is_dict_or_missing(player, "autopilot"):
+		return "'player.autopilot' is not an object"
+	var autopilot = player.get("autopilot", null)
+	if autopilot is Dictionary \
+			and ((autopilot as Dictionary).size() != 1
+				or not (autopilot as Dictionary).has("dest_port_id")):
+		return "'player.autopilot' is not the {dest_port_id} shape"
+	if autopilot is Dictionary and not (
+			(autopilot as Dictionary).get("dest_port_id", null) is String):
+		return "'player.autopilot.dest_port_id' is not a port id"
 	if not _is_array_or_missing(data, "quests"):
 		return "'quests' is not an array"
 	if not _is_array_or_missing(data, "discoveries_found"):
@@ -764,10 +942,30 @@ func validate_payload(data: Dictionary) -> String:
 		return "'npc_preset' is not a string"
 	if not _is_array_or_missing(data, "market_events"):
 		return "'market_events' is not an array"
-	# Phase-5 (task L, docs/60-* §4.11.11.4): optional (absent → {})
-	# but type-checked whenever present, the same rule as its siblings.
-	if not _is_dict_or_missing(data, "named_pirate_respawns"):
-		return "'named_pirate_respawns' is not an object"
+	# Phase-8 blocks (§8.1 version 9): optional (absent → {}) but
+	# entry-shape-checked whenever present, the same rule as every older
+	# block. Entries must be exactly the §4.15 save shapes — the runtime-only
+	# `deployed` key, in an officer or a captain entry, is a rejection, not a
+	# silent strip (persisting it would book a deployment the fleets no
+	# longer carry).
+	if not _is_dict_or_missing(data, "officer_states"):
+		return "'officer_states' is not an object"
+	var officer_states = data.get("officer_states", null)
+	if officer_states is Dictionary:
+		for officer_id in (officer_states as Dictionary):
+			var officer_error := _officer_state_error(str(officer_id),
+				(officer_states as Dictionary)[officer_id])
+			if not officer_error.is_empty():
+				return officer_error
+	if not _is_dict_or_missing(data, "captain_states"):
+		return "'captain_states' is not an object"
+	var captain_states = data.get("captain_states", null)
+	if captain_states is Dictionary:
+		for captain_id in (captain_states as Dictionary):
+			var captain_error := _captain_state_error(str(captain_id),
+				(captain_states as Dictionary)[captain_id])
+			if not captain_error.is_empty():
+				return captain_error
 	# Phase-6 keys (§8.1): optional (absent → the pinned defaults) but
 	# type- AND enum-checked whenever present. An out-of-domain value is a
 	# rejection, mirroring `world.map_id`: these ids select rule paths
@@ -925,6 +1123,140 @@ func _is_int(value) -> bool:
 	return value is int and not (value is bool)
 
 
+## True for a JSON number that is not a bool (`wage_mult` floats et al.).
+func _is_number(value) -> bool:
+	return (value is float or value is int) and not (value is bool)
+
+
+## True when `block` is exactly the 8-skill-key space (`SkillsLib.KEYS`) with
+## an integer value in `[min_value, max_value]` per key; `max_value < 0`
+## means "no upper bound" (the ≥ 0 counters). The exact key set is the rule,
+## not a courtesy: a 7- or 9-key block cannot address the skill layer
+## (docs/50-* §4.8).
+func _is_skill_block(block: Dictionary, min_value: int, max_value: int) -> bool:
+	if block.size() != SkillsLib.KEYS.size():
+		return false
+	for skill_id in block:
+		if not (skill_id in SkillsLib.KEYS):
+			return false
+		var value = block[skill_id]
+		if not _is_int(value) or int(value) < min_value:
+			return false
+		if max_value >= 0 and int(value) > max_value:
+			return false
+	return true
+
+
+## "" when `entry` is a loadable `officer_states[id]` value, else a short
+## reason naming the officer and the key (docs/10-* §4.15, `50-*` §4.8).
+## Exactly the seven base keys plus the two optional ones — `wage_mult` (a
+## positive multiplier) and `skill_deltas` (a positive integer per known
+## skill id); any other key (a leaked `deployed` et al.) is a rejection.
+func _officer_state_error(officer_id: String, entry) -> String:
+	if not (entry is Dictionary):
+		return "'officer_states.%s' is not an object" % officer_id
+	var dict: Dictionary = entry
+	var base_keys: Array[String] = [
+		"loyalty", "sea_days", "post_id", "ship_id", "talk_cd_day",
+		"gift_cd_day", "defeats",
+	]
+	for key in base_keys:
+		if not dict.has(key):
+			return "'officer_states.%s' is not the v9 entry shape — missing '%s'" \
+				% [officer_id, key]
+	var allowed: Array[String] = base_keys.duplicate()
+	allowed.append("wage_mult")
+	allowed.append("skill_deltas")
+	for key in dict:
+		if not (key in allowed):
+			return "'officer_states.%s' carries the non-save key '%s'" \
+				% [officer_id, str(key)]
+	if not _is_int(dict["loyalty"]) or int(dict["loyalty"]) < SkillsLib.LOYALTY_MIN \
+			or int(dict["loyalty"]) > SkillsLib.LOYALTY_MAX:
+		return "'officer_states.%s.loyalty' is not an integer in %d..%d" \
+			% [officer_id, SkillsLib.LOYALTY_MIN, SkillsLib.LOYALTY_MAX]
+	for int_key in ["sea_days", "talk_cd_day", "gift_cd_day", "defeats"]:
+		if not _is_int(dict[int_key]) or int(dict[int_key]) < 0:
+			return "'officer_states.%s.%s' is not a non-negative integer" \
+				% [officer_id, int_key]
+	for id_key in ["post_id", "ship_id"]:
+		if not (dict[id_key] is String):
+			return "'officer_states.%s.%s' is not a string" \
+				% [officer_id, id_key]
+	if dict.has("wage_mult") \
+			and (not _is_number(dict["wage_mult"]) or float(dict["wage_mult"]) <= 0.0):
+		return "'officer_states.%s.wage_mult' is not a positive wage multiplier" \
+			% officer_id
+	if dict.has("skill_deltas"):
+		var deltas = dict["skill_deltas"]
+		if not (deltas is Dictionary):
+			return "'officer_states.%s.skill_deltas' is not an object" % officer_id
+		var skill_space: Array[String] = []
+		skill_space.append_array(SkillsLib.KEYS)
+		skill_space.append_array(SkillsLib.OFFICER_KEYS)
+		for skill_id in (deltas as Dictionary):
+			if not (skill_id in skill_space):
+				return "'officer_states.%s.skill_deltas' names the unknown skill '%s'" \
+					% [officer_id, str(skill_id)]
+			if not _is_int((deltas as Dictionary)[skill_id]) \
+					or int((deltas as Dictionary)[skill_id]) <= 0:
+				return "'officer_states.%s.skill_deltas.%s' is not a positive integer" \
+					% [officer_id, str(skill_id)]
+	return ""
+
+
+## "" when `entry` is a loadable `captain_states[id]` value, else a short
+## reason naming the captain and the key (docs/10-* §4.15, `60-*` §4.11.15).
+## Exactly the eight save keys — the runtime-only `deployed` key is a
+## rejection — and the persisted status is the machine's resting pair
+## `active|returning` (`defeated` is an instantaneous reading, never stored).
+func _captain_state_error(captain_id: String, entry) -> String:
+	if not (entry is Dictionary):
+		return "'captain_states.%s' is not an object" % captain_id
+	var dict: Dictionary = entry
+	var keys: Array[String] = [
+		"status", "return_day", "tier_now", "stance", "familiarity",
+		"dossier_seen", "defeats", "wins",
+	]
+	if dict.size() != keys.size():
+		return "'captain_states.%s' is not the v9 entry shape {status, return_day, tier_now, stance, familiarity, dossier_seen, defeats, wins}" \
+			% captain_id
+	for key in keys:
+		if not dict.has(key):
+			return "'captain_states.%s' is missing the save key '%s'" \
+				% [captain_id, key]
+	if not (dict["status"] is String) \
+			or not ((dict["status"] as String) in [
+				CaptainsLib.STATUS_ACTIVE, CaptainsLib.STATUS_RETURNING]):
+		return "'captain_states.%s.status' is not a captain status id" % captain_id
+	if not _is_int(dict["return_day"]) or int(dict["return_day"]) < 0:
+		return "'captain_states.%s.return_day' is not a non-negative integer" \
+			% captain_id
+	if not _is_int(dict["tier_now"]) \
+			or int(dict["tier_now"]) < CaptainsLib.TIER_MIN \
+			or int(dict["tier_now"]) > CaptainsLib.TIER_MAX:
+		return "'captain_states.%s.tier_now' is not a tier %d..%d" \
+			% [captain_id, CaptainsLib.TIER_MIN, CaptainsLib.TIER_MAX]
+	if not _is_int(dict["stance"]) \
+			or int(dict["stance"]) < CaptainsLib.STANCE_MIN \
+			or int(dict["stance"]) > CaptainsLib.STANCE_MAX:
+		return "'captain_states.%s.stance' is not a stance in %d..%d" \
+			% [captain_id, CaptainsLib.STANCE_MIN, CaptainsLib.STANCE_MAX]
+	if not _is_int(dict["familiarity"]) \
+			or int(dict["familiarity"]) < CaptainsLib.FAMILIARITY_MIN \
+			or int(dict["familiarity"]) > CaptainsLib.FAMILIARITY_MAX:
+		return "'captain_states.%s.familiarity' is not an integer in %d..%d" \
+			% [captain_id, CaptainsLib.FAMILIARITY_MIN,
+				CaptainsLib.FAMILIARITY_MAX]
+	if not (dict["dossier_seen"] is bool):
+		return "'captain_states.%s.dossier_seen' is not a boolean" % captain_id
+	for counter_key in ["defeats", "wins"]:
+		if not _is_int(dict[counter_key]) or int(dict[counter_key]) < 0:
+			return "'captain_states.%s.%s' is not a non-negative integer" \
+				% [captain_id, counter_key]
+	return ""
+
+
 ## A `{nation_id: rank}` map with an unknown rank repaired to `"none"` (a
 ## hand-edited file must not wedge the ladder, `70-*` §4.9.2).
 static func _rank_map(raw) -> Dictionary:
@@ -1068,14 +1400,17 @@ func _apply(data: Dictionary) -> void:
 	GameState.market_events = \
 		(data.get("market_events", OPTIONAL_DEFAULTS["market_events"]) as Array) \
 			.duplicate(true)
-	# W4-B (Phase 8): the retired successor-machinery field is gone from
-	# GameState — a payload carrying the (now vestigial) v5-era key restores
-	# nothing; W6-C's v9 sweep deletes the whole block.
-	if "named_pirate_respawns" in GameState:
-		GameState.named_pirate_respawns = \
-			(data.get("named_pirate_respawns",
-				OPTIONAL_DEFAULTS["named_pirate_respawns"]) as Dictionary) \
-				.duplicate(true)
+	# Phase-8 saved state (docs/90-* §8.1 version 9): the relation blocks
+	# restore verbatim (shape-checked above; absent → {}). `officer_states`
+	# then drives the growth restoration — see
+	# [method _apply_officer_skill_deltas].
+	GameState.officer_states = \
+		(data.get("officer_states", OPTIONAL_DEFAULTS["officer_states"]) \
+			as Dictionary).duplicate(true)
+	GameState.captain_states = \
+		(data.get("captain_states", OPTIONAL_DEFAULTS["captain_states"]) \
+			as Dictionary).duplicate(true)
+	_apply_officer_skill_deltas(GameState.officer_states)
 	# Task L (docs/30-* §4.5, docs/60-* §4.11.11.4): the rest-override table
 	# and the port-traffic log are transient — the former is rebuilt here from
 	# the saved instances (before any port screen can price against it), the
@@ -1127,6 +1462,42 @@ func _apply(data: Dictionary) -> void:
 	GameState.explored_tiles = _decode_explored(
 		str(data.get("explored_tiles", OPTIONAL_DEFAULTS["explored_tiles"])))
 	_reset_transient_sim_state()
+
+
+## W3's officer growth, made to survive save/load (docs/90-* §8.1 version 9,
+## `50-*` §4.3.2): the in-post +1/90-sea-days award mutates the loaded
+## `officers.json` record in memory, so a raw restore would silently reset
+## every officer's skills to the canon — or worse, keep a *later* session's
+## un-persisted growth. For every officer whose payload entry exists, the
+## record is reset to the boot-time canon ([member _officer_skill_base] —
+## the same baseline [method _officer_skill_deltas] derived the deltas
+## against) and the entry's `skill_deltas` are then applied with the growth
+## rule's clamp — exactly what W3's repeated +1 awards produce, so officer
+## contributions read the grown values after a load. Resetting first (not
+## adding onto whatever the session had grown) keeps repeated loads in one
+## session convergent instead of compounding, and drops in-session growth
+## the payload never carried. One debug line per officer whose deltas were
+## applied.
+func _apply_officer_skill_deltas(officer_states: Dictionary) -> void:
+	for officer_id in officer_states:
+		var state: Variant = officer_states[officer_id]
+		if not (state is Dictionary):
+			continue
+		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
+		if officer.is_empty():
+			continue
+		var base: Dictionary = _officer_skill_base.get(str(officer_id), {})
+		var skills: Dictionary = base.duplicate(true)
+		var deltas: Variant = (state as Dictionary).get("skill_deltas", null)
+		if deltas is Dictionary and not (deltas as Dictionary).is_empty():
+			for skill_id in (deltas as Dictionary):
+				skills[str(skill_id)] = clampi(
+					int(skills.get(str(skill_id), 0))
+						+ int((deltas as Dictionary)[skill_id]),
+					SkillsLib.SKILL_MIN, SkillsLib.SKILL_MAX)
+			print("SaveSystem: officer %s growth restored (skill_deltas %s applied to the loaded record)"
+				% [str(officer_id), str(deltas)])
+		officer["skills"] = skills
 
 
 ## A load is "a new run, or a save load" for the sailing sim
