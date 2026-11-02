@@ -26,8 +26,6 @@ extends RefCounted
 # parses from a fresh checkout before the editor has written its class cache
 # (the `ai_fleet.gd`/`fleet.gd` convention).
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
-const CharacterLib := preload("res://scripts/player/character.gd")
-const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 
 ## The S11 scene (docs/60-* §2). Loaded lazily by [method open_modal] and
 ## never preloaded: the modal preloads this file for its own `preview()`
@@ -53,23 +51,34 @@ static var force_presentation: bool = false
 
 # --- Bases (docs/60-* §4.11.6) --------------------------------------------
 
-## The player's duel base: effective `combat` (§4.11.5: base stat + assigned
-## officer roles) plus the `combat` modifiers of both worn player items
-## (§4.11.12), delegated to [method ShipyardEngine.player_combat_bonus] so the
-## equipment sum exists once.
+## The player's duel base (§4.11.6, Phase 8): swordplay + floor(courage / 20)
+## + the `combat` modifiers of both worn player items (§4.11.12) — delegated
+## to [method BattleSimLib.player_duel_base], the single implementation (the
+## retired Phase-2 effective-`combat` term is gone).
 static func player_base() -> int:
-	return CharacterLib.effective_stat("combat") + ShipyardLib.player_combat_bonus()
+	return BattleSimLib.player_duel_base()
 
 
 ## The AI captain's base: `min(floor(crew / 5), 20) + captain_rating`
-## (§4.11.6). Delegated to `BattleSim.defender_duel_base` — the same formula
-## the battle's boarding action uses.
+## (§4.11.6; the crew/captain terms only). Delegated to
+## `BattleSim.defender_duel_base` — the same formula the battle's boarding
+## action uses, which adds the §4.11.6 defender charisma bonus on top for
+## whichever side defends.
 static func defender_base(crew: int, captain_rating: int) -> int:
 	return BattleSimLib.defender_duel_base(crew, captain_rating)
 
 
-## §4.6/§4.11.6: `5 + fleet tier` (pirate 1, navy 2). The rating is a fixed
-## formula, not a roll, and is stored on the unit at battle start.
+## §4.11.6 Phase-8 defender bonus: `floor(charisma / 20)` for whichever side
+## defends (the player's own charisma when the player defends, the captain
+## card's otherwise). Delegated to the sim's single implementation.
+static func defender_charisma_bonus(charisma: int) -> int:
+	return BattleSimLib.defender_charisma_bonus(charisma)
+
+
+## §4.6/§4.11.6 legacy `5 + fleet tier` (pirate 1, navy 2) — the stand-in that
+## prices fleets without a captain canon card until W4-B flips the fleet
+## source (`60-*` §4.11.5). The tier table itself lives in `battle_sim.gd`
+## (`FLEET_TIER`) and is not copied here.
 static func captain_rating(fleet_tier: int) -> int:
 	return CAPTAIN_RATING_BASE + fleet_tier
 

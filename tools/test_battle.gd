@@ -12,16 +12,22 @@ extends Node
 ##   2 initiative order (§4.11.4) incl. a unit killed before its slot;
 ##   3 MP rules: orthogonal 1 / diagonal 2, refresh, occupancy (§4.3);
 ##   4 reload: fire r1 → blocked r2 → fires r3 (§4.11.4);
-##   5 the §5 worked cannon example + range/storm factors (§4.11.5);
+##   5 the §5 worked cannon example + range/storm factors + the §4.11.5
+##     captain-card ratings (flagship gunnery term, card/escort branches);
 ##   6 ram numbers, oar ×1.25, the galley designer check (§4.5, §4.11.5);
-##   7 the duel: §5 scripted sequence, ties, 5-round pin (§4.6, §4.11.6);
-##   8 boarding through resolve_duel: capture + loss paths (§4.11.7);
+##   7 the duel: §5 scripted sequence, ties, 5-round pin, the Phase-8 bases
+##     (swordplay + courage, defender charisma) (§4.6, §4.11.6);
+##   8 boarding through resolve_duel: capture + loss paths + the §4.8 boarding
+##     morale bonus (§4.11.7);
 ##   9 compose_enemy determinism + all §4.11.3 bounds;
-##  10 AI §4.9 rules 1–6 with one seeded fixture each;
+##  10 AI §4.9 rules 1–6 with one seeded fixture each + the §4.7 surrender
+##     roll formula and its deterministic observation;
 ##  11 a full headless battle via run_to_completion;
 ##  12 one-action-per-turn, occupancy walls, salvage/XP pins, §4.11.12 gear;
 ##  13 the §4.11.1 stream continuity (composition → duel), a fully scripted
-##     battle replayed from a fixed seed, and an 8-battle robustness sweep.
+##     battle replayed from a fixed seed, and an 8-battle robustness sweep;
+##  14 §4.4 Phase-8 shot types: chain / armor-piercing gates, multipliers and
+##     the 2-round MP debuff (§4.4).
 
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
@@ -29,9 +35,13 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 
 ## FLEET_MAX (docs/40-* §4.4) — the deployment table has 5 rows per side.
 const TABLE_ROWS := 5
-## Damage constants asserted below (§5 + §4.11.5).
+## Damage constants asserted below (§5 + §4.11.5: 10 cannons at range 2 with
+## effective gunnery 30 → 15 + 1 = 16).
 const DOC_CANNON_DAMAGE := 16
-const DOC_COMBAT_RATING := 14
+const DOC_GUNNERY := 30
+## §4.11.5 legacy fleet stand-in: a pirate fleet without a canon card prices
+## `5 + tier 1` on both ratings until W4-B flips the fleet source.
+const DOC_LEGACY_RATING := 6
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -56,17 +66,37 @@ func _ready() -> void:
 	_test_full_battle()
 	_test_turn_and_equipment_pins()
 	_test_seed_audit()
+	_test_shot_types()
 	_report()
 
 
 # --- Fixtures --------------------------------------------------------------
 
-func _stats(combat: int = 10) -> void:
+## A Phase-8 Person-model player block (the `50-*` §4.8 shape). The duel reads
+## `skills.swordplay` / `attributes.courage` / `attributes.charisma`; the
+## flagship volley reads effective `skills.gunnery`. Courage and charisma
+## default to 10 so `floor(x / 20)` terms stay 0 unless a test raises them.
+func _person(swordplay: int = 10, gunnery: int = 0, overrides: Dictionary = {}) -> void:
+	var attributes := {
+		"constitution": 10, "intellect": 10, "charisma": 10,
+		"courage": 10, "luck": 10,
+	}
+	var skills := {
+		"seamanship": 0, "navigation": 0, "swordplay": swordplay, "gunnery": gunnery,
+		"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+	}
+	var attribute_overrides: Dictionary = overrides.get("attributes", {}) \
+		if overrides.get("attributes", {}) is Dictionary else {}
+	var skill_overrides: Dictionary = overrides.get("skills", {}) \
+		if overrides.get("skills", {}) is Dictionary else {}
+	for key in attribute_overrides:
+		attributes[key] = attribute_overrides[key]
+	for key in skill_overrides:
+		skills[key] = skill_overrides[key]
 	GameState.player = {
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": combat,
-			"navigation": 10, "luck": 10,
-		},
+		"nation_id": "portugal",
+		"attributes": attributes,
+		"skills": skills,
 		"officers": [],
 		"equipment": {"weapon": "", "armor": ""},
 	}
@@ -147,7 +177,7 @@ func _order_of(sim: BattleLib, count: int) -> Array:
 # --- 1. Grid + deployment (§4.2, §4.11.2) ---------------------------------
 
 func _test_grid_and_deployment() -> void:
-	_stats()
+	_person()
 	_check(BattleLib.GRID_WIDTH == 16 and BattleLib.GRID_HEIGHT == 10,
 		"the grid is 16×10 (§4.2): %d×%d" % [BattleLib.GRID_WIDTH, BattleLib.GRID_HEIGHT])
 	_check(BattleLib.PLAYER_DEPLOYMENT.size() == TABLE_ROWS
@@ -211,7 +241,7 @@ func _test_grid_and_deployment() -> void:
 # --- 2. Initiative order (§4.11.4) ---------------------------------------
 
 func _test_initiative_order() -> void:
-	_stats()
+	_person()
 	# Speeds: brigantine 6, galley 6, sloop 5, caravel 5, latin 4.
 	var sim := _sim({
 		"player_ships": [
@@ -266,7 +296,7 @@ func _test_initiative_order() -> void:
 # --- 3. MP rules (§4.3, §4.11.4) ------------------------------------------
 
 func _test_mp_rules() -> void:
-	_stats()
+	_person()
 	var sim := _sim({
 		"player_ships": [_ship("brigantine"), _ship("sloop")],
 		"enemy_ships": [_ship("latin")],
@@ -335,7 +365,7 @@ func _test_mp_rules() -> void:
 # --- 4. Reload (§4.4, §4.11.4) -------------------------------------------
 
 func _test_reload() -> void:
-	_stats(10)
+	_person(10)
 	var sim := _sim({
 		"player_ships": [_ship("brigantine", {"cannons": 10})],
 		"enemy_ships": [_ship("sloop", {"cannons": 0})],
@@ -369,10 +399,11 @@ func _test_reload() -> void:
 	_check(sim.can_cannon(brig, enemy), "round 3: loaded again, the volley is legal")
 
 
-# --- 5. Cannon damage (§5, §4.11.5) --------------------------------------
+# --- 5. Cannon damage & the §4.11.5 ratings (§5, §4.4, §4.11.5) ------------
 
 func _test_cannon_damage() -> void:
-	_stats(DOC_COMBAT_RATING)
+	# §5 worked example: 10 cannons, range 2, effective gunnery 30 → 15 + 1.
+	_person(0, DOC_GUNNERY)
 	var sim := _sim({
 		"player_ships": [_ship("brigantine", {"cannons": 10})],
 		"enemy_ships": [_ship("sloop", {"durability": 60})],
@@ -380,15 +411,19 @@ func _test_cannon_damage() -> void:
 	sim.start()
 	var brig := _unit(sim, "player", 0)
 	var enemy := _unit(sim, "enemy", 0)
-	_check(sim.combat_rating(brig) == DOC_COMBAT_RATING,
-		"the player flagship's combat rating is the effective combat stat (%d)"
-		% sim.combat_rating(brig))
-	_check(sim.combat_rating(enemy) == 6,
-		"a pirate ship's combat rating is 5 + tier 1 = 6 (%d)" % sim.combat_rating(enemy))
+	_check(sim.combat_rating(brig) == 0,
+		"the flagship is not a captain-card ship: rating 0 — its §4.11.5 bonus "
+			+ "is the §4.4 gunnery term (%d)" % sim.combat_rating(brig))
+	_check(sim.cannon_bonus(brig) == 1,
+		"the flagship's §4.4 bonus is floor(effective gunnery 30 / 25) = 1 (%d)"
+			% sim.cannon_bonus(brig))
+	_check(sim.combat_rating(enemy) == DOC_LEGACY_RATING,
+		"a card-less pirate ship keeps the legacy 5 + tier 1 = 6 rating (%d)"
+			% sim.combat_rating(enemy))
 
 	_place(sim, "enemy", 0, Vector2i(3, 4))
 	_check(sim.cannon_damage(brig, enemy) == DOC_CANNON_DAMAGE,
-		"§5 worked example: 10 cannons, range 2, combat 14 → 16 (got %d)"
+		"§5 worked example: 10 cannons, range 2, gunnery 30 → 16 (got %d)"
 		% sim.cannon_damage(brig, enemy))
 	var landing := sim.cannon(brig, enemy)
 	_check(int(landing["damage"]) == DOC_CANNON_DAMAGE,
@@ -397,7 +432,7 @@ func _test_cannon_damage() -> void:
 		"the target's durability drops 60 → 44 (%d)"
 		% int(enemy["ship"]["durability"]))
 
-	# Range factors: 1.0 / 0.75 / 0.5 with the +1 combat bonus.
+	# Range factors: 1.0 / 0.75 / 0.5 with the +1 gunnery bonus.
 	_place(sim, "enemy", 0, Vector2i(2, 4))
 	_check(sim.cannon_damage(brig, enemy) == 21,
 		"range 1 factor 1.0: floor(10×2×1.0) + 1 = 21 (got %d)"
@@ -407,20 +442,19 @@ func _test_cannon_damage() -> void:
 		"range 3 factor 0.5: floor(10×2×0.5) + 1 = 11 (got %d)"
 		% sim.cannon_damage(brig, enemy))
 
-	# Without the gunner bonus the raw factors are 20 and 10 (§5).
-	_stats(0)
-	_check(sim.combat_rating(brig) == 0, "combat 0 → rating 0")
-	_place(sim, "enemy", 0, Vector2i(2, 4))
-	_check(sim.cannon_damage(brig, enemy) == 20,
-		"range 1 without bonus: floor(10×2×1.0) = 20 (got %d)"
-		% sim.cannon_damage(brig, enemy))
-	_place(sim, "enemy", 0, Vector2i(4, 4))
-	_check(sim.cannon_damage(brig, enemy) == 10,
-		"range 3 without bonus: floor(10×2×0.5) = 10 (got %d)"
-		% sim.cannon_damage(brig, enemy))
+	# The §4.4 term at the §2.2 gunnery boundaries 0 / 24 / 25 / 100 →
+	# +0 / +0 / +1 / +4 at range 2 (the term reads the live player block).
+	_place(sim, "enemy", 0, Vector2i(3, 4))
+	for boundary in [[0, 15], [24, 15], [25, 16], [100, 19]]:
+		var gunnery := int(boundary[0])
+		var expected := int(boundary[1])
+		_person(0, gunnery)
+		_check(sim.cannon_damage(brig, enemy) == expected,
+			"effective gunnery %d → +floor(gunnery / 25) = +%d, range-2 volley %d (got %d)"
+			% [gunnery, expected - 15, expected, sim.cannon_damage(brig, enemy)])
 
 	# Storm: all cannon damage ×0.75, floored after the bonus (§4.2/§4.11.5).
-	_stats(DOC_COMBAT_RATING)
+	_person(0, DOC_GUNNERY)
 	var storm := _sim({
 		"player_ships": [_ship("brigantine", {"cannons": 10})],
 		"enemy_ships": [_ship("sloop")],
@@ -439,7 +473,7 @@ func _test_cannon_damage() -> void:
 	_check(not storm.can_cannon(storm_brig, storm_enemy),
 		"range 4 is out of range (Chebyshev 1..3 only)")
 
-	# Escorts get no combat bonus (§4.11.5).
+	# Captain-less escorts (§4.11.5 / 50-* §4.5.2): duel 0, cannon rating 0.
 	var two := _sim({
 		"player_ships": [_ship("brigantine"), _ship("brigantine", {"cannons": 10})],
 		"enemy_ships": [_ship("sloop")],
@@ -447,17 +481,149 @@ func _test_cannon_damage() -> void:
 	two.start()
 	var escort := _unit(two, "player", 1)
 	_check(two.combat_rating(escort) == 0,
-		"player escorts have combat rating 0 (%d)" % two.combat_rating(escort))
+		"a captain-less escort has combat rating 0 (%d)" % two.combat_rating(escort))
+	_check(int(escort["captain_rating"]) == 0 and int(escort["cannon_rating"]) == 0,
+		"…and the captain-less rule prices duel 0 / cannon 0 (%d/%d)"
+			% [int(escort["captain_rating"]), int(escort["cannon_rating"])])
 	_place(two, "enemy", 0, Vector2i(3, 4))
 	_check(two.cannon_damage(escort, _unit(two, "enemy", 0)) == 15,
 		"escort range-2 volley: floor(10×2×0.75) + 0 = 15 (got %d)"
 		% two.cannon_damage(escort, _unit(two, "enemy", 0)))
 
+	_test_captain_card_ratings()
+
+
+## An injected officers.json v2 captain double (restored after the checks) so
+## the §4.11.5 escort branch reads one deterministic card: swordplay 30,
+## courage 45 → duel 32; gunnery 50 → cannon 34; charisma 85 (defender +4).
+const OFFICER_DOUBLE_ID := "off_test_captain"
+const OFFICER_DOUBLE := {
+	"id": OFFICER_DOUBLE_ID,
+	"name": {"zh": "试作船长", "en": "Test Captain"},
+	"nation_id": "portugal",
+	"attributes": {"constitution": 10, "intellect": 10, "charisma": 85,
+		"courage": 45, "luck": 10},
+	"skills": {"seamanship": 30, "navigation": 10, "swordplay": 30, "gunnery": 50,
+		"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+		"medicine": 0, "carpentry": 0, "cooking": 0},
+	"wage_daily": 30,
+}
+
+## An injected captains.json canon double with the same numbers, used through
+## the sim's `captain_id` config seam (the §4.11.5 AI branch). The whole canon
+## sits below the 25-gunnery card term today (max 22), so the double is what
+## makes the `+ floor(gunnery / 25)` split visible.
+const CAPTAIN_DOUBLE_ID := "cap_test_pirate"
+
+
+func _inject_captain_double() -> Dictionary:
+	return {
+		"id": CAPTAIN_DOUBLE_ID,
+		"name": {"zh": "试作海盗", "en": "Test Pirate"},
+		"role": "pirate",
+		"tier": 2,
+		"attributes": {"constitution": 10, "intellect": 10, "charisma": 85,
+			"courage": 45, "luck": 10},
+		"skills": {"swordplay": 30, "gunnery": 50},
+	}
+
+
+## The §4.11.5 card ratings, both branches: AI ships price from the fleet's
+## canon card (config `captain_id`), player escorts from their appointed
+## captain officer's officers.json v2 card — the same formula (§4.11.5).
+func _test_captain_card_ratings() -> void:
+	_person(0, 0)
+	# The real canon: Redbeard's named-pirate card (swordplay 28, courage 20,
+	# gunnery 12) → duel 28 + 1 = 29; cannon 29 + floor(12/25) = 29.
+	var redbeard := BattleLib.captain_canon_card("pirate_redbeard_khair")
+	_check(not redbeard.is_empty(),
+		"the canon lookup resolves pirate_redbeard_khair from the captain canon")
+	if not redbeard.is_empty():
+		_check(BattleLib.card_duel_rating(redbeard) == 29
+				and BattleLib.card_cannon_rating(redbeard) == 29,
+			"Redbeard's card prices duel 29 and cannon 29 (%d/%d)"
+				% [BattleLib.card_duel_rating(redbeard), BattleLib.card_cannon_rating(redbeard)])
+		var card_sim := _sim({
+			"player_ships": [_ship("brigantine", {"cannons": 10})],
+			"enemy_ships": [_ship("sloop")],
+			"captain_id": "pirate_redbeard_khair",
+		})
+		card_sim.start()
+		var card_enemy := _unit(card_sim, "enemy", 0)
+		_check(int(card_enemy["captain_rating"]) == 29 and int(card_enemy["cannon_rating"]) == 29,
+			"a canon-card fleet stores duel 29 / cannon 29 on the ship, once at "
+				+ "battle start (%d/%d)"
+				% [int(card_enemy["captain_rating"]), int(card_enemy["cannon_rating"])])
+		_place(card_sim, "enemy", 0, Vector2i(3, 4))
+		var flagship := _unit(card_sim, "player", 0)
+		_check(card_sim.cannon_bonus(flagship) == 0
+				and card_sim.cannon_bonus(card_enemy) == 2,
+			"the flagship keeps the gunnery term (+0) while the card ship takes "
+				+ "floor(cannon rating 29 / 10) = +2 (%d/%d)"
+				% [card_sim.cannon_bonus(flagship), card_sim.cannon_bonus(card_enemy)])
+
+	# The card formulas term-by-term on the injected double.
+	var card := _inject_captain_double()
+	_check(BattleLib.card_duel_rating(card) == 32,
+		"card duel rating: swordplay 30 + floor(courage 45 / 20) = 32 (%d)"
+			% BattleLib.card_duel_rating(card))
+	_check(BattleLib.card_cannon_rating(card) == 34,
+		"card cannon rating: duel 32 + floor(gunnery 50 / 25) = 34 (%d)"
+			% BattleLib.card_cannon_rating(card))
+	var previous_cache: Dictionary = BattleLib._captains_test_doubles.duplicate(true)
+	BattleLib._captains_test_doubles = {CAPTAIN_DOUBLE_ID: card}
+	var double_sim := _sim({
+		"player_ships": [_ship("brigantine")],
+		"enemy_ships": [_ship("sloop")],
+		"captain_id": CAPTAIN_DOUBLE_ID,
+	})
+	double_sim.start()
+	var double_enemy := _unit(double_sim, "enemy", 0)
+	_check(int(double_enemy["captain_rating"]) == 32 and int(double_enemy["cannon_rating"]) == 34,
+		"the AI branch prices the double's duel 32 / cannon 34 (%d/%d)"
+			% [int(double_enemy["captain_rating"]), int(double_enemy["cannon_rating"])])
+	_check(double_sim.cannon_bonus(double_enemy) == 3,
+		"the card ship's §4.11.5 bonus is floor(cannon rating 34 / 10) = 3 (%d)"
+			% double_sim.cannon_bonus(double_enemy))
+	_check(double_sim.captain_courage(double_enemy) == 45
+			and double_sim.captain_charisma(double_enemy) == 85,
+		"the card's courage 45 and charisma 85 back the §4.7 roll and the §4.11.6 "
+			+ "defender bonus (%d/%d)"
+			% [double_sim.captain_courage(double_enemy), double_sim.captain_charisma(double_enemy)])
+	BattleLib._captains_test_doubles = previous_cache
+
+	# The escort branch: the appointed captain officer prices the ship with the
+	# SAME formula, via the ship's `captain_officer_id` (§4.11.5 escort branch).
+	var officer_existed := DataLoader.officers.has(OFFICER_DOUBLE_ID)
+	var previous_officer = DataLoader.officers.get(OFFICER_DOUBLE_ID, null)
+	DataLoader.officers[OFFICER_DOUBLE_ID] = OFFICER_DOUBLE.duplicate(true)
+	var escort_sim := _sim({
+		"player_ships": [_ship("brigantine"),
+			_ship("brigantine", {"cannons": 10, "captain_officer_id": OFFICER_DOUBLE_ID})],
+		"enemy_ships": [_ship("sloop")],
+	})
+	escort_sim.start()
+	var manned := _unit(escort_sim, "player", 1)
+	_check(int(manned["captain_rating"]) == 32 and int(manned["cannon_rating"]) == 34,
+		"the escort's appointed captain officer prices duel 32 / cannon 34 (%d/%d)"
+			% [int(manned["captain_rating"]), int(manned["cannon_rating"])])
+	_check(escort_sim.combat_rating(manned) == 34,
+		"the manned escort's combat rating is its card cannon rating (%d)"
+			% escort_sim.combat_rating(manned))
+	_check(escort_sim.combat_rating(_unit(escort_sim, "player", 0)) == 0,
+		"the flagship stays out of the card branch (rating 0)")
+	if officer_existed:
+		DataLoader.officers[OFFICER_DOUBLE_ID] = previous_officer
+	else:
+		DataLoader.officers.erase(OFFICER_DOUBLE_ID)
+	_check(DataLoader.get_officer(OFFICER_DOUBLE_ID).is_empty(),
+		"the injected officer double is removed again")
+
 
 # --- 6. Ram (§4.5, §4.11.5) ----------------------------------------------
 
 func _test_ram() -> void:
-	_stats()
+	_person()
 	var sim := _sim({
 		"player_ships": [_ship("brigantine")],
 		"enemy_ships": [_ship("sloop")],
@@ -550,14 +716,25 @@ func _rng(seed_value: int) -> RandomNumberGenerator:
 
 
 func _test_duel() -> void:
-	# §5: player combat 12 + cutlass 3 = base 15. `data/equipment.json` is
+	# §5: player swordplay 12 + cutlass 3 = base 15. `data/equipment.json` is
 	# empty in this wave (task E owns it), so the +3 item is injected as a
 	# test double and removed again — the wiring under test is the lookup.
-	_stats(12)
+	_person(12)
 	GameState.player["equipment"] = {"weapon": "", "armor": ""}
 	_check(BattleLib.player_duel_base() == 12,
-		"without worn equipment the player duel base is the effective combat (12 = %d)"
-		% BattleLib.player_duel_base())
+		"the bare duel base is swordplay 12 + floor(courage 10 / 20) = 12 (%d)"
+			% BattleLib.player_duel_base())
+
+	# §4.11.6 Phase-8 player base at the courage boundaries: swordplay 0/30/60
+	# × courage 10/50/100 → +floor(courage/20) = 0/2/5.
+	for swordplay in [0, 30, 60]:
+		for courage in [10, 50, 100]:
+			_person(int(swordplay), 0, {"attributes": {"courage": int(courage)}})
+			var expected_base := int(swordplay) + int(floor(float(int(courage)) / 20.0))
+			_check(BattleLib.player_duel_base() == expected_base,
+				"duel base: swordplay %d + floor(courage %d / 20) = %d (got %d)"
+					% [int(swordplay), int(courage), expected_base, BattleLib.player_duel_base()])
+	_person(12)
 
 	var injected := {
 		"id": "eq_test_cutlass",
@@ -572,7 +749,7 @@ func _test_duel() -> void:
 	DataLoader.equipment["eq_test_cutlass"] = injected
 	GameState.player["equipment"] = {"weapon": "eq_test_cutlass", "armor": ""}
 	_check(BattleLib.player_duel_base() == 15,
-		"§5 player base: combat 12 + cutlass combat 3 = 15 (got %d)"
+		"§5 player base: swordplay 12 + cutlass combat 3 = 15 (got %d)"
 		% BattleLib.player_duel_base())
 	GameState.player["equipment"] = {"weapon": "eq_test_cutlass", "armor": "eq_test_cutlass"}
 	_check(BattleLib.player_duel_base() == 18,
@@ -599,7 +776,7 @@ func _test_duel() -> void:
 	_check(BattleLib.defender_duel_base(0, 7) == 7,
 		"crew 0 leaves the captain rating alone (navy: 5 + tier 2 = 7)")
 
-	# §5 scripted sequence: player base 15 (combat 12 + cutlass 3) vs a sloop
+	# §5 scripted sequence: player base 15 (swordplay 12 + cutlass 3) vs a sloop
 	# defender base 10 (crew 20 → 4, + pirate rating 6); seed 33 reproduces
 	# win/loss/win/win, capture 3–1 ("best-of-5 decided 3-1").
 	var capture := BattleLib.resolve_duel(15, 10, _rng(33))
@@ -652,6 +829,39 @@ func _test_duel() -> void:
 	_check(str(stuck["result"]) == "defeat",
 		"level after 5 rounds → the defender holds (defeat: %s)" % str(stuck["result"]))
 
+	# §4.11.6 defender bonus: `floor(charisma / 20)` — +0 at charisma 10,
+	# +2 at 45, +4 at 85.
+	_check(BattleLib.defender_charisma_bonus(10) == 0
+			and BattleLib.defender_charisma_bonus(45) == 2
+			and BattleLib.defender_charisma_bonus(85) == 4,
+		"the defender bonus is floor(charisma / 20): 10 → 0, 45 → 2, 85 → 4 (%d/%d/%d)"
+			% [BattleLib.defender_charisma_bonus(10),
+			BattleLib.defender_charisma_bonus(45), BattleLib.defender_charisma_bonus(85)])
+
+	# End-to-end: when the PLAYER defends an AI boarding, the player's own
+	# charisma joins the player base (charisma 85 → +4). Seed 2 resolves
+	# identically to a direct resolve_duel on the bonus-adjusted bases.
+	_person(12, 0, {"attributes": {"charisma": 85}})
+	var defend_sim := _sim({
+		"player_ships": [_ship("brigantine", {"crew": 60})],
+		"enemy_ships": [_ship("sloop", {"crew": 10, "cannons": 6})],
+		"seed": 2,
+	})
+	defend_sim.start()
+	_place(defend_sim, "enemy", 0, Vector2i(2, 4))
+	var defender := _unit(defend_sim, "enemy", 0)
+	defender["reload_until_round"] = 99
+	_begin_turn(defend_sim, "enemy", 0)
+	var ai_board := defend_sim.board(defender, _unit(defend_sim, "player", 0))
+	var expected_defend := BattleLib.resolve_duel(
+		BattleLib.player_duel_base() + BattleLib.defender_charisma_bonus(85),
+		BattleLib.defender_duel_base(10, DOC_LEGACY_RATING), _rng(2))
+	_check(ai_board["duel"] == expected_defend,
+		"a defending player adds floor(charisma 85 / 20) = +4: identical round "
+			+ "sequence to the direct call (%s vs %s)"
+			% [str(ai_board["duel"]["rounds"]), str(expected_defend["rounds"])])
+	_person(12)
+
 
 func _result_of(seed_value: int) -> String:
 	return str(BattleLib.resolve_duel(15, 10, _rng(seed_value))["result"])
@@ -660,7 +870,7 @@ func _result_of(seed_value: int) -> String:
 # --- 8. Boarding paths (§4.11.6, §4.11.7) --------------------------------
 
 func _test_board_paths() -> void:
-	_stats(12)
+	_person(12)
 	GameState.player["equipment"] = {"weapon": "", "armor": ""}
 	# Player base 12 vs a pirate sloop (crew 10 → floor(10/5)=2, +6 → 8).
 	# Seed 2 gives win/loss/win/win → capture 3–1.
@@ -693,6 +903,9 @@ func _test_board_paths() -> void:
 		"the captured enemy ship leaves the battle")
 	_check(sim.is_over() and str(sim.outcome()["result"]) == "victory",
 		"the last enemy captured → victory (%s)" % str(sim.outcome()["result"]))
+	_check(int(sim.outcome()["morale_bonus"]) == BattleLib.BOARDING_MORALE_BONUS,
+		"§4.8: a won boarding duel books the fleet morale +5 into the outcome "
+			+ "(morale_bonus %d)" % int(sim.outcome()["morale_bonus"]))
 	var captured: Array = sim.outcome()["captured_enemy"]
 	_check(captured.size() == 1 and str(captured[0]["ship_type_id"]) == "sloop",
 		"captured_enemy reports the intact ship instance (%s)" % str(captured))
@@ -705,7 +918,7 @@ func _test_board_paths() -> void:
 		"the outcome block carries the §4.12.2 payload fields")
 
 	# The mirror path: a weak player captain loses the boarding and the ship.
-	_stats(0)
+	_person(0)
 	var loss_sim := _sim({
 		"player_ships": [_ship("latin", {"crew": 8}), _ship("sloop")],
 		"enemy_ships": [_ship("galleon", {"crew": 150})],
@@ -730,6 +943,13 @@ func _test_board_paths() -> void:
 		% loss_sim.flagship_index())
 	_check(loss_sim.flagship_unit() == _unit(loss_sim, "player", 1),
 		"flagship_unit() now points at the surviving escort")
+	# A lost boarding books no morale (§4.8 pins the +5 on a WON duel).
+	var loss_outcome: Dictionary = loss_sim.outcome() if loss_sim.is_over() else {}
+	if loss_outcome.is_empty():
+		var retreat_outcome := loss_sim.retreat()
+		_check(int(retreat_outcome["morale_bonus"]) == 0,
+			"no won boarding → morale_bonus 0 (%d)"
+				% int(retreat_outcome["morale_bonus"]))
 
 	# Losing the last ship to a boarding → defeat_captured (§4.11.9).
 	var solo_sim := _sim({
@@ -850,20 +1070,36 @@ func _test_compose_enemy() -> void:
 # --- 10. AI rules (§4.9, §4.11.8) ---------------------------------------
 
 func _test_ai_rules() -> void:
-	_stats(10)
-	# Rule 1: below 25% max durability with a player ship within 3 → surrender.
+	_person(10)
+	# Rule 1: below 25% max durability with a player ship within 3 → the §4.7
+	# courage roll (legacy pirate courage 13 → 24%). Seed 13 draws 6.2 → the
+	# roll passes and the ship capitulates; seed 2 draws 70.3 → the roll fails
+	# and the rules below run instead (the failed roll re-rolls next turn).
 	var r1 := _sim({
 		"player_ships": [_ship("sloop")],
 		"enemy_ships": [_ship("sloop", {"durability": 14})],
+		"seed": 13,
 	})
 	r1.start()
 	_place(r1, "enemy", 0, Vector2i(8, 4))
 	_place(r1, "player", 0, Vector2i(5, 4))
 	var decision := AiLib.decide(r1, _unit(r1, "enemy", 0))
 	_check(str(decision["action"]) == "surrender",
-		"AI rule 1: 14/60 durability with a player 3 tiles away surrenders (got %s)"
-		% str(decision["action"]))
-	# Just above the threshold the same ship does not surrender.
+		"AI rule 1: 14/60 durability, a player 3 tiles away, the §4.7 roll passes "
+			+ "at seed 13 → surrender (got %s)" % str(decision["action"]))
+	var r1_miss := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14})],
+		"seed": 2,
+	})
+	r1_miss.start()
+	_place(r1_miss, "enemy", 0, Vector2i(8, 4))
+	_place(r1_miss, "player", 0, Vector2i(5, 4))
+	var failed := AiLib.decide(r1_miss, _begin_turn(r1_miss, "enemy", 0))
+	_check(str(failed["action"]) == "move",
+		"AI rule 1: the same fixture at seed 2 fails the roll and falls through "
+			+ "to rule 5's approach (got %s)" % str(failed["action"]))
+	# Just above the threshold the same ship never even rolls.
 	var r1b := _sim({
 		"player_ships": [_ship("sloop")],
 		"enemy_ships": [_ship("sloop", {"durability": 15})],
@@ -873,6 +1109,91 @@ func _test_ai_rules() -> void:
 	_place(r1b, "player", 0, Vector2i(5, 4))
 	_check(str(AiLib.decide(r1b, _unit(r1b, "enemy", 0))["action"]) != "surrender",
 		"AI rule 1 boundary: 15/60 = 25% is not below the threshold")
+
+	# §4.7 roll formula: clamp(25 − floor(courage / 10), 10, 40) — the pinned
+	# courages 10 / 50 / 100 give 24% / 20% / 15%; the clamp bounds are the
+	# §4.7 constants (a failed roll re-rolls next turn, never a sampled rate).
+	_check(BattleLib.SURRENDER_CHANCE_BASE == 25
+			and BattleLib.SURRENDER_CHANCE_MIN == 10
+			and BattleLib.SURRENDER_CHANCE_MAX == 40,
+		"the §4.7 roll is clamp(25 − floor(COU/10), 10, 40) percent")
+	for courage in [[10, 24], [50, 20], [100, 15]]:
+		_check(BattleLib.surrender_chance_for_courage(int(courage[0])) == int(courage[1]),
+			"captain courage %d → surrender chance %d%% (got %d%%)"
+				% [int(courage[0]), int(courage[1]),
+				BattleLib.surrender_chance_for_courage(int(courage[0]))])
+	# The courage behind the roll: the legacy tier-sourced band 10 + 3 × tier
+	# (pirate 13, navy 16) when the fleet carries no canon card.
+	var legacy_sim := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14})],
+	})
+	legacy_sim.start()
+	var legacy_enemy := _unit(legacy_sim, "enemy", 0)
+	_check(legacy_sim.captain_courage(legacy_enemy) == 13,
+		"a card-less pirate fleet rolls with the tier-sourced courage 10 + 3×1 = 13 (%d)"
+			% legacy_sim.captain_courage(legacy_enemy))
+	_check(legacy_sim.surrender_chance(legacy_enemy) == 24,
+		"…so its surrender chance is 24%% (got %d%%)"
+			% legacy_sim.surrender_chance(legacy_enemy))
+	var navy_sim2 := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14})],
+		"enemy_kind": "navy",
+		"enemy_nation": "spain",
+	})
+	navy_sim2.start()
+	_check(navy_sim2.captain_courage(_unit(navy_sim2, "enemy", 0)) == 16,
+		"a navy fleet's legacy courage is 10 + 3×2 = 16 (%d)"
+			% navy_sim2.captain_courage(_unit(navy_sim2, "enemy", 0)))
+	# A canon card supplies the real courage (the double's 45 → 21%); a
+	# ship-stored `captain_courage` wins over both (the deterministic test seam
+	# for W4-B's fleet-persisted captains).
+	var card := _inject_captain_double()
+	var previous_doubles: Dictionary = BattleLib._captains_test_doubles.duplicate(true)
+	BattleLib._captains_test_doubles = {CAPTAIN_DOUBLE_ID: card}
+	var card_sim2 := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14})],
+		"captain_id": CAPTAIN_DOUBLE_ID,
+	})
+	card_sim2.start()
+	var card_enemy2 := _unit(card_sim2, "enemy", 0)
+	_check(card_sim2.captain_courage(card_enemy2) == 45
+			and card_sim2.surrender_chance(card_enemy2) == 21,
+		"a canon-card fleet rolls with the card's courage 45 → 21%% (%d/%d%%)"
+			% [card_sim2.captain_courage(card_enemy2), card_sim2.surrender_chance(card_enemy2)])
+	BattleLib._captains_test_doubles = previous_doubles
+	var stored_sim := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14, "captain_courage": 100})],
+	})
+	stored_sim.start()
+	_check(stored_sim.captain_courage(_unit(stored_sim, "enemy", 0)) == 100
+			and stored_sim.surrender_chance(_unit(stored_sim, "enemy", 0)) == 15,
+		"a ship-stored captain_courage 100 wins: floor(100/10) caps the roll at 15% (%d%%)"
+			% stored_sim.surrender_chance(_unit(stored_sim, "enemy", 0)))
+	# One deterministic observation that the roll actually gates the rule:
+	# courage 100 (15%) at seed 2 draws 70.3 → no surrender; the same fixture
+	# re-seeded so the draw lands under 15 → surrender.
+	var high_seed := 0
+	for probe in range(1, 200):
+		var probe_rng := _rng(probe)
+		if probe_rng.randf() * 100.0 < 15.0:
+			high_seed = probe
+			break
+	var high_sim := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("sloop", {"durability": 14, "captain_courage": 100})],
+		"seed": high_seed,
+	})
+	high_sim.start()
+	_place(high_sim, "enemy", 0, Vector2i(8, 4))
+	_place(high_sim, "player", 0, Vector2i(5, 4))
+	_check(str(AiLib.decide(high_sim, _unit(high_sim, "enemy", 0))["action"]) == "surrender",
+		"the §4.7 roll fires: seed %d draws under the 15%% band → surrender" % high_seed)
+	_check(str(AiLib.decide(stored_sim, _begin_turn(stored_sim, "enemy", 0))["action"]) != "surrender",
+		"…and seed 2's 70.3 draw stands above the 15%% band → no surrender")
 
 	# Rule 2: cannons loaded + in range → fire at the lowest durability.
 	var r2 := _sim({
@@ -987,10 +1308,12 @@ func _test_ai_rules() -> void:
 	_check(str(close_in["action"]) == "move",
 		"equal cannons and a valid approach still moves (rule 5)")
 
-	# A surrendered AI ship resolves as a capture (§4.7).
+	# A surrendered AI ship resolves as a capture (§4.7). Seed 13 passes the
+	# roll on the enemy's first decision, so the run never reaches a boarding.
 	var surrender_sim := _sim({
 		"player_ships": [_ship("sloop")],
 		"enemy_ships": [_ship("latin", {"durability": 2})],
+		"seed": 13,
 	})
 	surrender_sim.start()
 	_place(surrender_sim, "enemy", 0, Vector2i(4, 4))
@@ -1010,7 +1333,7 @@ func _test_ai_rules() -> void:
 # --- 11. Full headless battle --------------------------------------------
 
 func _test_full_battle() -> void:
-	_stats(14)
+	_person(14)
 	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 40})]
 	var player_fleet := fleet.duplicate(true)
 	var enemy: Array = AiLib.compose_enemy("pirate", 12, _rng(11))
@@ -1138,7 +1461,7 @@ func _player_policy(sim: BattleLib, unit: Dictionary) -> Dictionary:
 # --- 12. Turn pins, salvage, equipment (§4.11.4, §4.11.10, §4.11.12) ----
 
 func _test_turn_and_equipment_pins() -> void:
-	_stats(10)
+	_person(10)
 	# One action per turn: after a volley neither a second volley nor a ram.
 	var sim := _sim({
 		"player_ships": [_ship("brigantine", {"cannons": 10})],
@@ -1219,6 +1542,9 @@ func _test_turn_and_equipment_pins() -> void:
 	_check(not sunk_outcome["rep_deltas"].is_empty(),
 		"defeating pirates credits the nearest ports' nations (%s)"
 		% str(sunk_outcome["rep_deltas"]))
+	_check(int(sunk_outcome["morale_bonus"]) == 0,
+		"a gunfire victory books no morale — §4.8 pins the +5 on a won boarding "
+			+ "(%d)" % int(sunk_outcome["morale_bonus"]))
 
 	# outcome() is {} before is_over() (§4.12.1).
 	var pending := _sim({"player_ships": [_ship("sloop")], "enemy_ships": [_ship("sloop")]})
@@ -1303,7 +1629,7 @@ func _doc_xp(neutralized: int, rounds: int) -> int:
 # --- 13. §4.11.1 seed audit ----------------------------------------------
 
 func _test_seed_audit() -> void:
-	_stats(14)
+	_person(14)
 	# The whole battle must be reproducible from the §4.11.1 formula alone:
 	# deployment → composition → duel rolls, all from one stream.
 	var seed_value := BattleLib.battle_seed_formula(12, Vector2i(30, 40), 3000, 1)
@@ -1408,6 +1734,143 @@ func _scripted_battle(seed_value: int) -> Dictionary:
 			return AiLib.decide(active_sim, current)
 		return _player_policy(active_sim, current)
 	return sim.run_to_completion(policy, 30)
+
+
+# --- 14. §4.4 Phase-8 shot types (chain / armor-piercing) ------------------
+
+func _test_shot_types() -> void:
+	# Gates read the live skill_gates rows (shot.chain 25, shot.armor_piercing
+	# 50) through the same helper the engine uses.
+	_check(BattleLib.chain_shot_gate() == 25,
+		"the shot.chain gate reads skill_gates (25, got %d)" % BattleLib.chain_shot_gate())
+	_check(BattleLib.armor_piercing_gate() == 50,
+		"the shot.armor_piercing gate reads skill_gates (50, got %d)"
+			% BattleLib.armor_piercing_gate())
+
+	# Below the chain gate the special shots refuse and spend no turn.
+	_person(0, 0)
+	var locked_sim := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 10})],
+		"enemy_ships": [_ship("sloop", {"durability": 60})],
+		"seed": 5,
+	})
+	locked_sim.start()
+	var gunner := _unit(locked_sim, "player", 0)
+	var target := _unit(locked_sim, "enemy", 0)
+	_place(locked_sim, "enemy", 0, Vector2i(3, 4))
+	var chain_locked: Dictionary = locked_sim.do_cannon(gunner, target, BattleLib.CHAIN_SHOT)
+	_check(not bool(chain_locked["ok"]) and bool(chain_locked.get("locked", false))
+			and int(chain_locked.get("gate", 0)) == 25,
+		"gunnery 0 refuses chain shot with the gate reason (ok %s, gate %d)"
+			% [str(chain_locked["ok"]), int(chain_locked.get("gate", -1))])
+	_check(int(target["ship"]["durability"]) == 60 and int(gunner["reload_until_round"]) == 1,
+		"a locked shot deals no damage and sets no reload (60 durability, reload %d)"
+			% int(gunner["reload_until_round"]))
+	var round_after: Dictionary = locked_sim.cannon(gunner, target)
+	_check(bool(round_after["ok"]),
+		"the locked refusal spent no turn: the round volley still fires")
+	_person(0, 0)
+
+	# Chain shot at gunnery 25 (the exact gate): volley 16 → floor(16 × 0.75)
+	# = 12, and the target loses 1 MP at each of its next 2 turn refreshes.
+	_person(0, 25)
+	var chain_sim := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 10})],
+		"enemy_ships": [_ship("sloop", {"durability": 60})],
+		"seed": 5,
+	})
+	chain_sim.start()
+	var chain_gunner := _unit(chain_sim, "player", 0)
+	var chain_target := _unit(chain_sim, "enemy", 0)
+	_place(chain_sim, "enemy", 0, Vector2i(3, 4))
+	var chain: Dictionary = chain_sim.do_cannon(chain_gunner, chain_target, BattleLib.CHAIN_SHOT)
+	_check(bool(chain["ok"]) and int(chain["damage"]) == 12
+			and str(chain.get("shot", "")) == BattleLib.CHAIN_SHOT,
+		"chain shot at the exact gate: floor(16 × 0.75) = 12 (%d, shot %s)"
+			% [int(chain["damage"]), str(chain.get("shot", ""))])
+	_check(int(chain_target["ship"]["durability"]) == 48,
+		"the chain volley applies its 12 damage (60 → %d)"
+			% int(chain_target["ship"]["durability"]))
+	_check(int(chain_target["mp_debuff_turns"]) == 2,
+		"the chain hit marks 2 debuffed turn refreshes (%d)"
+			% int(chain_target["mp_debuff_turns"]))
+	# Walk three rounds: −1 MP twice, then the full budget again (sloop MP 5).
+	var mp_track: Array = []
+	for _round in 3:
+		chain_sim.hold(chain_sim.current_unit())
+		chain_sim.end_turn()
+		var debuffed := _begin_turn(chain_sim, "enemy", 0)
+		mp_track.append(int(debuffed["mp"]))
+		chain_sim.end_turn()
+	_check(mp_track == [4, 4, 5],
+		"the chain MP debuff lasts exactly 2 rounds: 4 / 4 / 5 (%s)" % str(mp_track))
+	_person(0, 25)
+
+	# Armor-piercing at gunnery 50: volley 15 + 2 = 17 → floor(17 × 1.25) = 21.
+	# §4.4 "ignores the target's armor equipment modifiers": the volley path
+	# carries no armor term (ships wear figurehead/sail only, §4.11.12), so the
+	# multiplier is the only change — pinned as the exact ×1.25.
+	_person(0, 50)
+	var ap_sim := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 10})],
+		"enemy_ships": [_ship("sloop", {"durability": 60,
+			"equipment": {"figurehead": "eq_mermaid_figurehead", "sail": ""}})],
+		"seed": 5,
+	})
+	ap_sim.start()
+	var ap_gunner := _unit(ap_sim, "player", 0)
+	var ap_target := _unit(ap_sim, "enemy", 0)
+	_place(ap_sim, "enemy", 0, Vector2i(3, 4))
+	_check(ap_sim.cannon_damage(ap_gunner, ap_target) == 17,
+		"gunnery 50 raises the range-2 volley to 15 + 2 = 17 (got %d)"
+			% ap_sim.cannon_damage(ap_gunner, ap_target))
+	var ap: Dictionary = ap_sim.do_cannon(ap_gunner, ap_target, BattleLib.ARMOR_PIERCING_SHOT)
+	_check(bool(ap["ok"]) and int(ap["damage"]) == 21
+			and str(ap.get("shot", "")) == BattleLib.ARMOR_PIERCING_SHOT,
+		"armor-piercing at the exact gate: floor(17 × 1.25) = 21 (%d, shot %s)"
+			% [int(ap["damage"]), str(ap.get("shot", ""))])
+	_check(int(ap_target["mp_debuff_turns"]) == 0,
+		"armor-piercing applies no MP debuff (%d)" % int(ap_target["mp_debuff_turns"]))
+
+	# The gate bands in between: gunnery 49 keeps chain and still refuses AP.
+	_person(0, 49)
+	var band_sim := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 10})],
+		"enemy_ships": [_ship("sloop", {"durability": 60})],
+		"seed": 5,
+	})
+	band_sim.start()
+	var band_gunner := _unit(band_sim, "player", 0)
+	var band_target := _unit(band_sim, "enemy", 0)
+	_place(band_sim, "enemy", 0, Vector2i(3, 4))
+	# The gate refusal first (it spends no turn), then the unlocked chain shot.
+	var ap_locked: Dictionary = band_sim.do_cannon(band_gunner, band_target,
+		BattleLib.ARMOR_PIERCING_SHOT)
+	_check(not bool(ap_locked["ok"]) and int(ap_locked.get("gate", 0)) == 50,
+		"gunnery 49 refuses armor-piercing at the 50 gate (gate %d)"
+			% int(ap_locked.get("gate", -1)))
+	_check(bool(band_sim.do_cannon(band_gunner, band_target, BattleLib.CHAIN_SHOT)["ok"]),
+		"gunnery 49 still unlocks chain shot (≥ 25)")
+	_person(0, 50)
+
+	# The special shots are flagship actions: an escort cannot fire them even
+	# with the gunnery to unlock (§4.4 pins gunnery to the flagship).
+	var escort_sim := _sim({
+		"player_ships": [_ship("brigantine"), _ship("brigantine", {"cannons": 10})],
+		"enemy_ships": [_ship("sloop", {"durability": 60})],
+		"seed": 5,
+	})
+	escort_sim.start()
+	var escort := _unit(escort_sim, "player", 1)
+	_place(escort_sim, "enemy", 0, Vector2i(3, 4))
+	_begin_turn(escort_sim, "player", 1)
+	var escort_chain: Dictionary = escort_sim.do_cannon(escort, _unit(escort_sim, "enemy", 0),
+		BattleLib.CHAIN_SHOT)
+	_check(not bool(escort_chain["ok"]),
+		"an escort's chain shot is refused (§4.4 gunnery is the flagship's)")
+	_check(bool(escort_sim.cannon(escort, _unit(escort_sim, "enemy", 0))["ok"]),
+		"…while its round volley fires normally")
+	_person(0, 0)
 
 
 # --- Harness --------------------------------------------------------------

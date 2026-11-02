@@ -10,8 +10,9 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise.
 ##
 ## Sections:
-##   1 the duel bases: `player_base()` equipment deltas, `defender_base()`
-##     boundaries, `captain_rating()` (§4.11.6, §4.11.12);
+##   1 the duel bases: `player_base()` swordplay/courage/equipment terms,
+##     `defender_base()` boundaries, the §4.11.6 defender charisma bonus,
+##     `captain_rating()` (§4.11.6, §4.11.12);
 ##   2 `Duel.start` reproduces the §5 scripted sequence byte-for-byte against
 ##     a direct `BattleSim.resolve_duel` call, and is deterministic;
 ##   3 both outcomes (`capture`, `defeat`) are reachable through `Duel.start`;
@@ -32,7 +33,6 @@ const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const DuelLib := preload("res://scripts/combat/duel.gd")
 const ResultLib := preload("res://scripts/combat/battle_result.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const ModalLib := preload("res://scenes/combat/duel_modal.gd")
 const ModalScene := preload("res://scenes/combat/duel_modal.tscn")
@@ -98,13 +98,30 @@ func _ship(ship_type_id: String, overrides: Dictionary = {}) -> Dictionary:
 	return ship
 
 
-## A player block with one `combat` stat and the two worn slots (§4.8 shape).
-func _stats(combat: int) -> void:
+## A Phase-8 Person-model player block (`50-*` §4.8 shape). The duel reads
+## `skills.swordplay` / `attributes.courage` / `attributes.charisma`; courage
+## and charisma default to 10 so `floor(x / 20)` terms stay 0 unless raised.
+func _person(swordplay: int, overrides: Dictionary = {}) -> void:
+	var attributes := {
+		"constitution": 10, "intellect": 10, "charisma": 10,
+		"courage": 10, "luck": 10,
+	}
+	var skills := {
+		"seamanship": 0, "navigation": 0, "swordplay": swordplay, "gunnery": 0,
+		"appraisal": 0, "negotiation": 0, "cartography": 0, "rumour": 0,
+	}
+	var attribute_overrides: Dictionary = overrides.get("attributes", {}) \
+		if overrides.get("attributes", {}) is Dictionary else {}
+	var skill_overrides: Dictionary = overrides.get("skills", {}) \
+		if overrides.get("skills", {}) is Dictionary else {}
+	for key in attribute_overrides:
+		attributes[key] = attribute_overrides[key]
+	for key in skill_overrides:
+		skills[key] = skill_overrides[key]
 	GameState.player = {
-		"stats": {
-			"leadership": 10, "seamanship": 10, "combat": combat,
-			"navigation": 10, "luck": 10,
-		},
+		"nation_id": "portugal",
+		"attributes": attributes,
+		"skills": skills,
 		"officers": [],
 		"equipment": {"weapon": "", "armor": ""},
 	}
@@ -133,12 +150,28 @@ func _duel_config(overrides: Dictionary = {}) -> Dictionary:
 
 # --- 1. Duel bases (§4.11.6, §4.11.12) -----------------------------------
 
+## True when slot A's `skills.gd` is merged (the officer-contribution case is
+## only observable through its `effective_skill`).
+func _skills_module_present() -> bool:
+	return FileAccess.file_exists("res://scripts/player/skills.gd")
+
+
 func _test_bases() -> void:
-	_stats(12)
-	# Bare: the effective combat stat alone.
+	# §4.11.6 Phase-8 player base: swordplay + floor(courage / 20) + equipment.
+	_person(12)
+	# Bare: swordplay 12; the default courage 10 adds floor(10/20) = 0.
 	_check(DuelLib.player_base() == 12,
-		"player_base() without equipment is the effective combat (12 = %d)"
+		"player_base() without equipment is swordplay 12 + floor(10/20) = 12 (%d)"
 		% DuelLib.player_base())
+	# The §2.2 swordplay × courage bracket: 0/30/60 × 10/50/100 → 0/2/5 added.
+	for swordplay in [0, 30, 60]:
+		for courage in [10, 50, 100]:
+			_person(int(swordplay), {"attributes": {"courage": int(courage)}})
+			var expected_base := int(swordplay) + int(floor(float(int(courage)) / 20.0))
+			_check(DuelLib.player_base() == expected_base,
+				"attacker value: swordplay %d + floor(courage %d / 20) = %d (%d)"
+					% [int(swordplay), int(courage), expected_base, DuelLib.player_base()])
+	_person(12)
 	# §4.11.12: the worn weapon's `combat` modifier adds exactly its value.
 	GameState.player["equipment"] = {"weapon": "eq_cutlass", "armor": ""}
 	_check(DuelLib.player_base() == 15,
@@ -153,9 +186,9 @@ func _test_bases() -> void:
 	GameState.player["equipment"] = {"weapon": "eq_rapier", "armor": ""}
 	_check(DuelLib.player_base() == 17,
 		"…eq_rapier (+5) instead gives 17 (%d)" % DuelLib.player_base())
-	_check(DuelLib.player_base() == 12 + ShipyardLib.player_combat_bonus(),
-		"player_base() is the stat plus ShipyardEngine.player_combat_bonus() "
-		+ "(the single equipment sum, +%d)" % ShipyardLib.player_combat_bonus())
+	_check(DuelLib.player_base() == BattleLib.player_duel_base(),
+		"player_base() is BattleSim.player_duel_base() — the single §4.11.6 "
+		+ "implementation (both %d)" % DuelLib.player_base())
 	# An empty slot block (old save) reads as no bonus, never a crash.
 	GameState.player["equipment"] = {}
 	_check(DuelLib.player_base() == 12,
@@ -164,12 +197,13 @@ func _test_bases() -> void:
 	_check(DuelLib.player_base() == 12,
 		"…and bare equipment gives the bare base (%d)" % DuelLib.player_base())
 
-	# The done-when phrasing, measured as a **delta** from a 0-combat captain:
+	# The done-when phrasing, measured as a **delta** from a 0-swordplay captain:
 	# bare 0, +3 with eq_cutlass, +5 with cutlass + breastplate.
-	_stats(0)
+	_person(0)
 	GameState.player["equipment"] = {"weapon": "", "armor": ""}
 	_check(DuelLib.player_base() == 0,
-		"player_base() with combat 0 and no equipment is 0 (%d)" % DuelLib.player_base())
+		"player_base() with swordplay 0, courage 10 and no equipment is 0 (%d)"
+			% DuelLib.player_base())
 	GameState.player["equipment"] = {"weapon": "eq_cutlass", "armor": ""}
 	_check(DuelLib.player_base() == 3,
 		"…rises by exactly the worn weapon's modifier: 3 with eq_cutlass (%d)"
@@ -177,6 +211,31 @@ func _test_bases() -> void:
 	GameState.player["equipment"] = {"weapon": "eq_cutlass", "armor": "eq_breastplate"}
 	_check(DuelLib.player_base() == 5,
 		"…and 5 with eq_cutlass + eq_breastplate (%d)" % DuelLib.player_base())
+
+	# §4.11.6 defender bonus: `floor(charisma / 20)` — +0 at 10, +4 at 85 —
+	# and the attacker's base carries no charisma term.
+	_check(BattleLib.defender_charisma_bonus(10) == 0,
+		"defender charisma 10 adds +0 (%d)" % BattleLib.defender_charisma_bonus(10))
+	_check(BattleLib.defender_charisma_bonus(85) == 4,
+		"defender charisma 85 adds +4 (%d)" % BattleLib.defender_charisma_bonus(85))
+	_person(12, {"attributes": {"charisma": 85}})
+	_check(DuelLib.player_base() == 12,
+		"the ATTACKER's base carries no charisma term (12 = %d)"
+			% DuelLib.player_base())
+	_person(12)
+
+	# The rand(0, 20) bracket: every round roll sits in [base, base + 20]
+	# (observed through preview()'s replay of the §5 seed's actual rolls).
+	var payload: Dictionary = DuelLib.preview(_duel_config())
+	var bracket_ok := true
+	for roll in (payload["rolls"] as Array):
+		if int(roll["player"]) < DOC_PLAYER_BASE or int(roll["player"]) > DOC_PLAYER_BASE + 20 \
+				or int(roll["defender"]) < DOC_DEFENDER_BASE \
+				or int(roll["defender"]) > DOC_DEFENDER_BASE + 20:
+			bracket_ok = false
+	_check(bracket_ok,
+		"each round rolls base + rand(0, 20) on both sides (%s)"
+			% str(payload["rolls"]))
 
 	# §4.11.6 defender base: min(floor(crew / 5), 20) + captain rating.
 	_check(DuelLib.defender_base(0, 6) == 6,
@@ -196,7 +255,8 @@ func _test_bases() -> void:
 	_check(DuelLib.defender_base(500, 7) == 27,
 		"the 20 cap plus rating 7 is 27 (%d)" % DuelLib.defender_base(500, 7))
 
-	# §4.6 captain rating = 5 + fleet tier (pirate 1, navy 2).
+	# §4.6 legacy captain rating = 5 + fleet tier (pirate 1, navy 2) — the
+	# stand-in for fleets without a captain canon card (§4.11.5).
 	_check(DuelLib.captain_rating(PIRATE_TIER) == 6,
 		"captain_rating(pirate tier 1) == 6 (got %d)"
 		% DuelLib.captain_rating(PIRATE_TIER))
@@ -205,6 +265,45 @@ func _test_bases() -> void:
 		% DuelLib.captain_rating(NAVY_TIER))
 	_check(DuelLib.captain_rating(PIRATE_TIER) == BattleLib.CAPTAIN_RATING_BASE + PIRATE_TIER,
 		"…and 5 is BattleSim's own constant, not a second copy")
+
+	# The officer-contribution case (only feasible through slot A's module):
+	# a gunner in post feeds `effective_skill("gunnery")`, so the flagship's
+	# §4.4 cannon bonus grows with the in-post officer's true value. Swordplay
+	# itself has no flagship post — the duel attack value is the player's own
+	# skill (`50-*` §4.5.2 post table), so the duel base cannot change here.
+	_person(12, {"skills": {"gunnery": 25}})
+	var bonus_without_officer := BattleLib.cannon_bonus_flagship()
+	_check(bonus_without_officer == 1,
+		"the flagship's gunnery bonus at gunnery 25 is +1 (%d)"
+			% bonus_without_officer)
+	if _skills_module_present():
+		var officer_id := "off_leg_hasan_zorlu"  # gunnery 57, gunner-native
+		var officer: Dictionary = DataLoader.get_officer(officer_id)
+		if not officer.is_empty():
+			GameState.player["officers"] = [officer_id]
+			GameState.set("officer_states", {
+				officer_id: {"loyalty": 50, "sea_days": 0, "post_id": "gunner",
+					"ship_id": "", "talk_cd_day": 0, "gift_cd_day": 0, "defeats": 0},
+			})
+			var effective := BattleLib.player_effective_skill("gunnery")
+			_check(effective == 25 + int(officer.get("skills", {}).get("gunnery", 0)),
+				"with the gunner in post, effective gunnery is player 25 + the "
+					+ "officer's true %d (%d)"
+					% [int(officer.get("skills", {}).get("gunnery", 0)), effective])
+			_check(BattleLib.cannon_bonus_flagship() == int(floor(float(effective) / 25.0)),
+				"…and the flagship volley term follows the effective value (+%d)"
+					% BattleLib.cannon_bonus_flagship())
+			GameState.player["officers"] = []
+			GameState.set("officer_states", {})
+			_check(BattleLib.player_effective_skill("gunnery") == 25,
+				"removing the post restores the bare 25 (%d)"
+					% BattleLib.player_effective_skill("gunnery"))
+		else:
+			_check(true, "officer-contribution case skipped: %s not in the roster"
+				% officer_id)
+	else:
+		_check(true, "officer-contribution case is skippable until slot A's "
+			+ "skills.gd merges — the delegated call site is wired above")
 
 
 # --- 2. The §5 scripted duel through Duel.start ---------------------------
@@ -284,7 +383,7 @@ func _test_outcomes_reachable() -> void:
 
 	# §4.6/§4.11.6: board-and-hold is not a second formula — a duel resolved
 	# straight from the two base helpers equals the config-driven one.
-	_stats(12)
+	_person(12)
 	DuelLib.preview(_duel_config())  # warm path, no state kept
 	_check(DuelLib.player_base() == 12 and DuelLib.defender_base(20, 6) == 10,
 		"the base helpers feed exactly the §5 fixture numbers (12 vs 10)")
@@ -652,9 +751,9 @@ func _test_loss_paths() -> void:
 ## through the one duel formula) → `outcome()` → `BattleResult.apply()` → the
 ## fleet. This is the integration a single module test cannot show.
 func _test_boarding_end_to_end() -> void:
-	_stats(12)
+	_person(12)
 	GameState.player["equipment"] = {"weapon": "", "armor": ""}
-	# A pirate sloop (crew 10 → 2, + rating 6 = 8) boarded by a 12-combat
+	# A pirate sloop (crew 10 → 2, + rating 6 = 8) boarded by a swordplay-12
 	# captain: seed 2 gives win/loss/win/win → capture 3–1.
 	var sim := _sim({
 		"player_ships": [_ship("brigantine", {"crew": 60})],

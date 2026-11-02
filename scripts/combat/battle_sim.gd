@@ -5,8 +5,9 @@ extends RefCounted
 ## Pure logic, no node references (docs/90-ARCHITECTURE.md §4). The engine
 ## **never mutates `GameState`**: it deep-copies the ship instances handed to
 ## [method _init] and owns every battle-local field itself (units, RNG, log,
-## outcome tallies). Reading the player's effective combat stat / worn
-## equipment (§4.11.5, §4.11.6) is the only GameState access.
+## outcome tallies). Reading the player's Person-model values (swordplay /
+## courage / charisma / effective gunnery, §4.4/§4.11.5/§4.11.6) and the worn
+## equipment is the only GameState access.
 ##
 ## Interface: every method/signature pinned in docs/60-* §4.12.1, plus the
 ## seams a caller needs that the pin leaves implicit:
@@ -68,8 +69,33 @@ const STORM_CANNON_MULTIPLIER := 0.75
 const STORM_WEATHER := "storm"
 ## §4.11.4: firing in round N blocks round N+1 (sets `round + 2`).
 const RELOAD_ROUNDS := 2
-## §4.4: `+ floor(effective combat / 10)` damage.
+## §4.11.5 Phase-8 `bonus`: `floor(combat_rating / 10)` for captain-card ships
+## (the rating is the card cannon rating, §4.11.5 — see [method combat_rating]).
 const COMBAT_BONUS_DIVISOR := 10
+
+# --- Shot types & gunnery (Phase 8, docs/60-* §4.4, §4.11.5) ----------------
+
+## Round shot is the Phase-2 volley (no gate, no multiplier); the two Phase-8
+## types unlock at gunnery thresholds read from `data/skill_gates.json`.
+const ROUND_SHOT := "round"
+const CHAIN_SHOT := "chain"
+const ARMOR_PIERCING_SHOT := "armor_piercing"
+## §4.4 chain shot: the volley's damage ×0.75 and the target loses 1 MP for
+## 2 rounds (the debuff resolves at the target's per-turn MP refresh).
+const CHAIN_DAMAGE_MULTIPLIER := 0.75
+const CHAIN_MP_DEBUFF := 1
+const CHAIN_MP_DEBUFF_TURNS := 2
+## §4.4 armor-piercing: the volley's damage ×1.25, ignoring the target's
+## `armor` equipment modifiers (none exists in the volley path today — the
+## clause is honoured by construction; see [method do_cannon]).
+const ARMOR_PIERCING_DAMAGE_MULTIPLIER := 1.25
+## §4.4 flagship damage term: `+ floor(effective_gunnery / 25)`.
+const GUNNERY_BONUS_DIVISOR := 25
+## §4.4 / IMPLEMENT-Phase8 §2.2 gate thresholds. The data row
+## (`data/skill_gates.json` `shot.chain` / `shot.armor_piercing`) wins; these
+## stand in only while the gates file is unreadable (defensive default).
+const DEFAULT_CHAIN_GATE := 25
+const DEFAULT_ARMOR_PIERCING_GATE := 50
 
 # --- Ram (docs/60-* §4.5, §4.11.5) ----------------------------------------
 
@@ -86,10 +112,41 @@ const DUEL_MAX_ROUNDS := 5
 const DUEL_ROUND_MAX_ROLL := 20
 const DUEL_CREW_DIVISOR := 5
 const DUEL_CREW_CAP := 20
+## §4.11.5/§4.11.6 legacy stand-in (`5 + fleet tier`) for fleets without a
+## captain canon card — the Phase-2/5 formula, kept byte-identical until the
+## fleet source carries `captain_id` (W4-B, IMPLEMENT-Phase8 §2.3).
 const CAPTAIN_RATING_BASE := 5
 ## §4.6 "fleet tier": pirate tier 1, navy tier 2, and Phase-3 tournament bouts
 ## tier 2 as well (`60-*` §4.11.7.1 — the only code change that seam needs).
 const FLEET_TIER := {"pirate": 1, "navy": 2, "tournament": 2}
+## §4.11.6 Phase-8 duel terms: attacker `+ floor(courage / 20)`, the defender
+## adds `+ floor(charisma / 20)`; card cannon term `+ floor(gunnery / 25)`.
+const DUEL_COURAGE_DIVISOR := 20
+const DEFENDER_CHARISMA_DIVISOR := 20
+const CARD_CANNON_DIVISOR := 25
+
+# --- AI surrender roll (Phase 8, docs/60-* §4.7) ----------------------------
+
+## `clamp(25 − floor(courage / 10), 10, 40)` percent, drawn from the battle's
+## §4.11.1 stream ([method roll_surrender]); a failed roll re-rolls on the
+## ship's next turn (§4.9 rule 1 falls through).
+const SURRENDER_CHANCE_BASE := 25
+const SURRENDER_CHANCE_MIN := 10
+const SURRENDER_CHANCE_MAX := 40
+const SURRENDER_COURAGE_DIVISOR := 10
+## Fleets without a canon card (the legacy pool shape) have no captain courage:
+## the roll uses the card template's main-attribute band centre at that tier,
+## `10 + 3 × tier` (tier 1 → 13 → 24%, tier 2 → 16 → 24%) — deterministic, and
+## noted in the W3-C report; W4-B's canon fleets replace it with the real card.
+const LEGACY_COURAGE_BASE := 10
+const LEGACY_COURAGE_PER_TIER := 3
+
+# --- Boarding morale (Phase 8, docs/60-* §4.8) ------------------------------
+
+## A won boarding duel (§4.6) raises fleet morale +5. The engine never touches
+## `GameState`, so the +5 rides the outcome block as `morale_bonus` for the
+## §4.12.4 consumers to apply (see the W3-C report).
+const BOARDING_MORALE_BONUS := 5
 
 # --- Outcome (docs/60-* §4.11.9, §4.11.10) --------------------------------
 
@@ -140,6 +197,10 @@ var _started := false
 var _over := false
 var _result := RESULT_UNFINISHED
 var _flagship_index := 0
+## The fleet's captain canon card (§4.11.5), resolved once from the config's
+## `captain_id` / `captain` field. Empty for legacy fleets (no card — the
+## `5 + tier` fallback prices their ships) and when no field was handed over.
+var _fleet_captain_card: Dictionary = {}
 
 # Outcome tallies (§4.12.2).
 var _sunk_enemy: Array = []
@@ -149,6 +210,9 @@ var _surrendered_enemy := 0
 var _sunk_player: Array = []
 var _lost_player: Array = []
 var _player_last_cause := ""
+## §4.8 boarding-victory morale: 5 after a won boarding duel, else 0. Consumed
+## from the outcome block (`morale_bonus`) by the §4.12.4 flow.
+var _boarding_morale_bonus := 0
 var _log: Array = []
 
 
@@ -174,6 +238,7 @@ func _init(config: Dictionary) -> void:
 	contact = to_cell(config.get("contact", Vector2i.ZERO))
 	weather = str(config.get("weather", "calm"))
 	encounter_id = str(config.get("encounter_id", ""))
+	_fleet_captain_card = _resolve_fleet_captain_card(config)
 	var shared = config.get("rng", null)
 	if shared is RandomNumberGenerator:
 		rng = shared
@@ -198,6 +263,229 @@ func seed_value() -> int:
 	return _seed
 
 
+# --- Person-model accessors (Phase 8; the W3-A merge notes) -----------------
+#
+# The player's numbers live on the Person model (`50-*` §4.2/§4.3): slot A's
+# `Character.attribute(key)` / `Skills.effective_skill(key)`. Those functions
+# are consumed **defensively** so this file also parses and runs in a worktree
+# that predates slot A's rework: when `scripts/player/skills.gd` exists (it is
+# loaded lazily, never preloaded) and defines the API, the module call wins;
+# otherwise the raw player-block keys (`attributes` / `skills`) are read with
+# 0 defaults. At the master merge the module path takes over, including the
+# in-post officer contribution inside `effective_skill` — which is why the
+# flagship gunnery term below MUST go through it (an in-post gunner feeds the
+# cannon damage, `50-*` §4.5.3).
+
+const SKILLS_LIB_PATH := "res://scripts/player/skills.gd"
+
+## Lazily resolved `skills.gd` script (null until slot A's file exists).
+static var _skills_lib = null
+static var _skills_lib_probed := false
+## Standalone fallback caches (fresh-checkout runs before slot A's loader edit):
+## `data/captains.json` indexed by id, and the `skill_gates` rows.
+static var _captains_file_cache = null
+static var _skill_gates_file_cache = null
+
+
+static func _skills_script():
+	if not _skills_lib_probed:
+		_skills_lib_probed = true
+		if FileAccess.file_exists(SKILLS_LIB_PATH):
+			_skills_lib = load(SKILLS_LIB_PATH)
+	return _skills_lib
+
+
+## True when the script resource `lib` declares `method_name` (statics included).
+static func _script_defines(lib, method_name: String) -> bool:
+	if lib == null:
+		return false
+	for info in lib.get_script_method_list():
+		if info is Dictionary and str(info.get("name", "")) == method_name:
+			return true
+	return false
+
+
+## Slot A's `Character.attribute(key)`; the raw `player.attributes[key]` with a
+## 0 default stands in while the rework is unmerged. 0 without a loaded run.
+static func player_attribute(key: String) -> int:
+	var char_lib: Variant = CharacterLib
+	if _script_defines(char_lib, "attribute"):
+		return int(char_lib.attribute(key))
+	var player: Dictionary = GameState.player
+	if not (player is Dictionary):
+		return 0
+	var attributes = player.get("attributes", null)
+	if attributes is Dictionary:
+		return int(attributes.get(key, 0))
+	return 0
+
+
+## Slot A's `Skills.effective_skill(key)` — the player's skill plus the ONE
+## in-post officer's contribution (`50-*` §4.5.3). The raw `player.skills[key]`
+## stands in while the module is unmerged (no officer term on that path).
+static func player_effective_skill(key: String) -> int:
+	var lib = _skills_script()
+	if _script_defines(lib, "effective_skill"):
+		return int(lib.effective_skill(key))
+	var player: Dictionary = GameState.player
+	if not (player is Dictionary):
+		return 0
+	var skills = player.get("skills", null)
+	if skills is Dictionary:
+		return int(skills.get(key, 0))
+	return 0
+
+
+# --- Captain canon (docs/60-* §4.11.5; IMPLEMENT-Phase8 §2.4) ---------------
+
+## Test seam (consulted first): suites inject canon-card doubles here and
+## restore afterwards — the seam works identically before and after slot A's
+## `DataLoader.captains` edit merges.
+static var _captains_test_doubles: Dictionary = {}
+
+
+## The canon card for `captain_id`, or {} when absent. Reads
+## `DataLoader.captains` once slot A's loader edit merges (dictionary keyed by
+## id); before that, `data/captains.json` is read once through `FileAccess`
+## into a static cache so the suites run standalone.
+static func captain_canon_card(captain_id: String) -> Dictionary:
+	if captain_id.is_empty():
+		return {}
+	if _captains_test_doubles.has(captain_id):
+		return (_captains_test_doubles[captain_id] as Dictionary).duplicate(true)
+	var indexed = DataLoader.get("captains")
+	if not (indexed is Dictionary) or (indexed as Dictionary).is_empty():
+		indexed = _captains_file_index()
+	if not (indexed is Dictionary):
+		return {}
+	var card = (indexed as Dictionary).get(captain_id, null)
+	return card.duplicate(true) if card is Dictionary else {}
+
+
+static func _captains_file_index() -> Dictionary:
+	if _captains_file_cache is Dictionary:
+		return _captains_file_cache
+	var out: Dictionary = {}
+	var file := FileAccess.open("res://data/captains.json", FileAccess.READ)
+	if file != null:
+		var parsed = JSON.parse_string(file.get_as_text())
+		var cards = parsed.get("captains", []) if parsed is Dictionary else []
+		if cards is Array:
+			for card in cards:
+				if card is Dictionary and not str(card.get("id", "")).is_empty():
+					out[str(card["id"])] = card
+	_captains_file_cache = out
+	return out
+
+
+## §4.11.5 card duel rating: `swordplay + floor(courage / 20)`. Same formula
+## for an officers.json v2 record (the escort-captain branch — the v2 officer
+## card carries the same `skills` / `attributes` blocks).
+static func card_duel_rating(card: Dictionary) -> int:
+	var skills: Dictionary = card.get("skills", {}) if card.get("skills", {}) is Dictionary else {}
+	var attributes: Dictionary = card.get("attributes", {}) if card.get("attributes", {}) is Dictionary else {}
+	return int(skills.get("swordplay", 0)) \
+		+ int(floor(float(int(attributes.get("courage", 0))) / DUEL_COURAGE_DIVISOR))
+
+
+## §4.11.5 card cannon rating: the duel rating `+ floor(gunnery / 25)`.
+static func card_cannon_rating(card: Dictionary) -> int:
+	var skills: Dictionary = card.get("skills", {}) if card.get("skills", {}) is Dictionary else {}
+	return card_duel_rating(card) \
+		+ int(floor(float(int(skills.get("gunnery", 0))) / CARD_CANNON_DIVISOR))
+
+
+## The card's charisma for the §4.11.6 defender bonus (0 without a card).
+static func card_charisma(card: Dictionary) -> int:
+	var attributes: Dictionary = card.get("attributes", {}) if card.get("attributes", {}) is Dictionary else {}
+	return int(attributes.get("charisma", 0))
+
+
+## The card's courage for the §4.7 surrender roll (0 without a card).
+static func card_courage(card: Dictionary) -> int:
+	var attributes: Dictionary = card.get("attributes", {}) if card.get("attributes", {}) is Dictionary else {}
+	return int(attributes.get("courage", 0))
+
+
+## Resolves the config's fleet-captain field into a canon card. Supports both
+## save shapes: the Phase-8 `captain_id` string / `captain: {id}` (canon
+## lookup), and the legacy `captain: {pool_id, name_index}` pool shape — which
+## yields {} (no card), so the §4.11.5 `5 + tier` fallback prices the fleet
+## until W4-B flips the fleet source to canon ids.
+static func _resolve_fleet_captain_card(config: Dictionary) -> Dictionary:
+	var captain_id := str(config.get("captain_id", ""))
+	if captain_id.is_empty():
+		var captain = config.get("captain", null)
+		if captain is String:
+			captain_id = captain
+		elif captain is Dictionary:
+			captain_id = str(captain.get("id", ""))
+	return captain_canon_card(captain_id)
+
+
+## The skill_gates threshold for `feature_id`, or `fallback` when the gates
+## data is unreadable (the doc-pinned value stands in; never invented).
+static func skill_gate_threshold(feature_id: String, fallback: int) -> int:
+	var rows = DataLoader.get("skill_gates")
+	if rows == null or (rows is Dictionary and (rows as Dictionary).is_empty()):
+		rows = _skill_gates_file_index()
+	return _gate_threshold(rows, feature_id, fallback)
+
+
+static func _gate_threshold(rows, feature_id: String, fallback: int) -> int:
+	if rows is Array:
+		for row in rows:
+			if row is Dictionary and str(row.get("feature_id", "")) == feature_id:
+				return int(row.get("threshold", fallback))
+		return fallback
+	if rows is Dictionary:
+		var table: Dictionary = rows
+		# Envelope shape (the raw file) vs a keyed-by-feature-id shape.
+		if not table.has(feature_id) and table.has("skill_gates"):
+			var inner = table.get("skill_gates")
+			return _gate_threshold(inner, feature_id, fallback) if inner is Array else fallback
+		var row = table.get(feature_id, null)
+		if row is Dictionary:
+			return int(row.get("threshold", fallback))
+		if row is int or row is float:
+			return int(row)
+	return fallback
+
+
+static func _skill_gates_file_index():
+	if _skill_gates_file_cache != null:
+		return _skill_gates_file_cache
+	var parsed = null
+	var file := FileAccess.open("res://data/skill_gates.json", FileAccess.READ)
+	if file != null:
+		parsed = JSON.parse_string(file.get_as_text())
+	# The envelope's row array (keep the raw shape; _gate_threshold walks it).
+	_skill_gates_file_cache = parsed.get("skill_gates", []) if parsed is Dictionary else []
+	return _skill_gates_file_cache
+
+
+## §4.4 chain-shot gate: gunnery ≥ the `shot.chain` threshold (25 in data).
+static func chain_shot_gate() -> int:
+	return skill_gate_threshold("shot.chain", DEFAULT_CHAIN_GATE)
+
+
+## §4.4 armor-piercing gate: gunnery ≥ the `shot.armor_piercing` threshold (50).
+static func armor_piercing_gate() -> int:
+	return skill_gate_threshold("shot.armor_piercing", DEFAULT_ARMOR_PIERCING_GATE)
+
+
+## §4.4: true when the player's effective gunnery clears the shot's gate
+## (round shot is always unlocked).
+static func shot_unlocked(shot_type: String) -> bool:
+	match shot_type:
+		CHAIN_SHOT:
+			return player_effective_skill("gunnery") >= chain_shot_gate()
+		ARMOR_PIERCING_SHOT:
+			return player_effective_skill("gunnery") >= armor_piercing_gate()
+		_:
+			return true
+
+
 # --- Lifecycle (§4.12.1) ---------------------------------------------------
 
 func start() -> void:
@@ -211,7 +499,7 @@ func start() -> void:
 	for index in _enemy_ships.size():
 		_units.append(_make_unit(SIDE_ENEMY, index, _enemy_ships[index],
 			_deploy_cell(SIDE_ENEMY, index)))
-	_roll_captain_ratings()
+	_price_captain_ratings()
 	_round = 1
 	_current = -1
 	_action_taken = false
@@ -293,6 +581,7 @@ func outcome() -> Dictionary:
 		"salvage_gold": _salvage_gold(),
 		"xp": xp,
 		"rep_deltas": _rep_deltas(),
+		"morale_bonus": _boarding_morale_bonus,
 		"cargo_overflow_lost": 0,
 	}
 
@@ -393,14 +682,19 @@ func effective_max_durability(ship: Dictionary) -> int:
 	return int(ship_type.get("durability", 0)) + equipment_modifier(ship, "figurehead", "durability")
 
 
-## §4.11.5 combat rating: the player's effective combat on the flagship, 0 on
-## player escorts, `5 + fleet tier` on AI ships.
+## §4.11.5 combat rating (Phase 8): the ship's captain-card **cannon rating** —
+## `duel rating + floor(gunnery / 25)` from its captain's card, priced **once**
+## at battle start ([method _price_captain_ratings]) and stored on the unit.
+## AI ships price from the fleet's canon card; player escorts from their
+## appointed captain officer's officers.json v2 card; a captain-less escort
+## stays 0. The player flagship is not a captain-card ship — its §4.11.5 bonus
+## is the §4.4 gunnery term ([method cannon_bonus]), so its rating is 0.
 func combat_rating(unit: Dictionary) -> int:
 	if not (unit is Dictionary):
 		return 0
-	if unit.side == SIDE_PLAYER:
-		return player_effective_combat() if int(unit.index) == _flagship_index else 0
-	return CAPTAIN_RATING_BASE + int(FLEET_TIER.get(enemy_kind, 1))
+	if unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index:
+		return 0
+	return int(unit.get("cannon_rating", 0))
 
 
 # --- Cannon (docs/60-* §4.4, §4.11.5) --------------------------------------
@@ -421,28 +715,84 @@ func can_cannon(unit, target) -> bool:
 	return distance >= CANNON_RANGE_MIN and distance <= CANNON_RANGE_MAX
 
 
-## `base = floor(cannons × 2 × range_factor) + floor(combat_rating / 10)`;
+## §4.4 flagship gunnery term alone: `floor(effective_gunnery / 25)` — the
+## static form (UI previews, tests) of the flagship branch of
+## [method cannon_bonus]. Goes through `player_effective_skill`, so an in-post
+## gunner officer feeds the damage (`50-*` §4.5.3).
+static func cannon_bonus_flagship() -> int:
+	return int(floor(float(player_effective_skill("gunnery")) / GUNNERY_BONUS_DIVISOR))
+
+
+## §4.11.5 `bonus`: `floor(effective_gunnery / 25)` for the player flagship
+## (§4.4 — through `player_effective_skill`, so an in-post gunner feeds the
+## damage) and `floor(combat_rating / 10)` for every captain-card ship.
+func cannon_bonus(unit: Dictionary) -> int:
+	if unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index:
+		return cannon_bonus_flagship()
+	return int(floor(float(combat_rating(unit)) / COMBAT_BONUS_DIVISOR))
+
+
+## `base = floor(cannons × 2 × range_factor) + [method cannon_bonus]`;
 ## storm weather applies `floor(base × 0.75)` (§4.11.5).
 func cannon_damage(unit: Dictionary, target: Dictionary) -> int:
 	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
 	var factor := float(CANNON_RANGE_FACTOR.get(distance, 0.0))
 	var cannons := int(unit.get("ship", {}).get("cannons", 0))
 	var base := int(floor(float(cannons) * CANNON_BASE_MULTIPLIER * factor))
-	base += int(floor(float(combat_rating(unit)) / COMBAT_BONUS_DIVISOR))
+	base += cannon_bonus(unit)
 	if weather == STORM_WEATHER:
 		return int(floor(float(base) * STORM_CANNON_MULTIPLIER))
 	return base
 
 
-## Fires one volley. Returns `{ok, damage, sunk, log}` (§4.12.1). Sets
-## `reload_until_round = round + 2` so the next turn cannot fire (§4.11.4).
+## Fires one volley of round shot. Returns `{ok, damage, sunk, log}` (§4.12.1).
+## Sets `reload_until_round = round + 2` so the next turn cannot fire (§4.11.4).
 func cannon(unit: Dictionary, target: Dictionary) -> Dictionary:
+	return _fire_volley(unit, target, ROUND_SHOT, 1.0)
+
+
+## §4.4 Phase-8 shot types, exposed as the sim-level action (the S10 buttons
+## are W6): `ROUND_SHOT` (the default, = [method cannon]), `CHAIN_SHOT` —
+## unlock at gunnery ≥ the `shot.chain` gate, damage ×0.75 and the target
+## loses 1 MP at each of its next 2 turn refreshes — and
+## `ARMOR_PIERCING_SHOT` — unlock at the `shot.armor_piercing` gate, damage
+## ×1.25 ignoring the target's `armor` equipment modifiers. The volley path
+## carries no armor term today (§4.11.12 gives ships only figurehead/sail
+## slots), so "ignoring armor" is honoured by construction; the multiplier is
+## applied to the §4.11.5 damage (bonus and storm terms included), floored once.
+## A gated-but-locked shot returns `ok: false` with `locked`/`gate` fields and
+## spends no turn; the special types are player-flagship actions (§4.4 pins
+## gunnery to the flagship — the AI fires round shot only).
+func do_cannon(unit: Dictionary, target: Dictionary, shot_type: String = ROUND_SHOT) -> Dictionary:
+	match shot_type:
+		CHAIN_SHOT:
+			return _fire_volley(unit, target, CHAIN_SHOT, CHAIN_DAMAGE_MULTIPLIER)
+		ARMOR_PIERCING_SHOT:
+			return _fire_volley(unit, target, ARMOR_PIERCING_SHOT,
+				ARMOR_PIERCING_DAMAGE_MULTIPLIER)
+		_:
+			return _fire_volley(unit, target, ROUND_SHOT, 1.0)
+
+
+func _fire_volley(unit: Dictionary, target: Dictionary, shot_type: String,
+		multiplier: float) -> Dictionary:
 	var result := {"ok": false, "damage": 0, "sunk": false, "log": {}}
 	if _over or _action_taken or not is_acting(unit) or not can_cannon(unit, target):
 		return result
+	if shot_type != ROUND_SHOT:
+		if not (unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index):
+			return result
+		if not shot_unlocked(shot_type):
+			result["locked"] = true
+			result["gate"] = chain_shot_gate() if shot_type == CHAIN_SHOT \
+				else armor_piercing_gate()
+			result["shot"] = shot_type
+			return result
 	_action_taken = true
 	result["ok"] = true
 	var damage := cannon_damage(unit, target)
+	if multiplier != 1.0:
+		damage = int(floor(float(damage) * multiplier))
 	result["damage"] = damage
 	unit["reload_until_round"] = _round + RELOAD_ROUNDS
 	var ship: Dictionary = target["ship"]
@@ -450,9 +800,14 @@ func cannon(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var sunk := int(ship["durability"]) <= 0
 	if sunk:
 		_sink(target, str(unit.get("side", "")), "cannon")
+	if shot_type == CHAIN_SHOT and not sunk:
+		target["mp_debuff_turns"] = int(target.get("mp_debuff_turns", 0)) + CHAIN_MP_DEBUFF_TURNS
 	result["sunk"] = sunk
+	if shot_type != ROUND_SHOT:
+		result["shot"] = shot_type
 	result["log"] = _make_log("cannon", unit, target, {
 		"damage": damage, "sunk": sunk, "range": _chebyshev(unit_cell(unit), unit_cell(target)),
+		"shot": shot_type,
 	})
 	_check_over()
 	return result
@@ -521,7 +876,8 @@ func can_board(unit, target) -> bool:
 ## Resolves a boarding attempt through [method resolve_duel] — the single duel
 ## implementation (§4.12.1.2). The loser is captured: a player win removes the
 ## enemy ship (`captured_enemy`), a player loss removes the player's ship
-## (`lost_player`, §4.11.7).
+## (`lost_player`, §4.11.7). A player win also books the §4.8 boarding-victory
+## morale +5 into the outcome block (`morale_bonus`).
 func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var result := {"ok": false, "duel": {}, "captured": {}, "lost": {}, "log": {}}
 	if _over or _action_taken or not is_acting(unit) or not can_board(unit, target):
@@ -529,14 +885,28 @@ func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	_action_taken = true
 	var enemy_unit: Dictionary = target if target.side == SIDE_ENEMY else unit
 	var player_unit: Dictionary = target if target.side == SIDE_PLAYER else unit
+	# §4.11.6 bases: the player rolls swordplay + courage + equipment; the
+	# captain-card side rolls min(floor(crew/5), 20) + its duel rating. The
+	# defending side — the boarded ship — adds `+ floor(charisma / 20)`: the
+	# player's own charisma when the player defends, the captain card's
+	# otherwise.
+	var player_defends: bool = str(target.get("side", "")) == SIDE_PLAYER
+	var player_base := player_duel_base()
 	var defender_base := defender_duel_base(
 		int(enemy_unit["ship"].get("crew", 0)),
 		int(enemy_unit.get("captain_rating", CAPTAIN_RATING_BASE)))
-	var duel := resolve_duel(player_duel_base(), defender_base, rng)
+	if player_defends:
+		player_base += defender_charisma_bonus(player_attribute("charisma"))
+	else:
+		defender_base += defender_charisma_bonus(captain_charisma(enemy_unit))
+	var duel := resolve_duel(player_base, defender_base, rng)
 	result["duel"] = duel
 	if str(duel.get("result", "")) == "capture":
 		_capture(enemy_unit)
 		result["captured"] = enemy_unit["ship"].duplicate(true)
+		# §4.8: a won boarding duel raises fleet morale +5. The engine never
+		# touches `GameState` — the §4.12.4 consumer applies `morale_bonus`.
+		_boarding_morale_bonus = BOARDING_MORALE_BONUS
 	else:
 		_capture(player_unit)
 		result["lost"] = player_unit["ship"].duplicate(true)
@@ -584,14 +954,26 @@ static func resolve_duel(player_base: int, defender_base: int, rng: RandomNumber
 	}
 
 
-## §4.11.6 defender base: `min(floor(crew / 5), 20) + captain rating`.
+## §4.11.6 defender base: `min(floor(crew / 5), 20) + captain rating` (the
+## crew/captain terms only — the §4.11.6 defender charisma bonus is applied by
+## the boarding path to whichever side defends).
 static func defender_duel_base(crew: int, captain_rating: int) -> int:
 	return mini(int(floor(float(maxi(crew, 0)) / DUEL_CREW_DIVISOR)), DUEL_CREW_CAP) + captain_rating
 
 
-## §4.11.6 player base: effective combat + worn weapon/armor `combat` deltas.
+## §4.11.6 Phase-8 defender bonus: the defending side adds
+## `+ floor(charisma / 20)` — the player's own charisma when the player
+## defends, the captain card's otherwise (0 for a card-less legacy fleet).
+static func defender_charisma_bonus(charisma: int) -> int:
+	return int(floor(float(maxi(charisma, 0)) / DEFENDER_CHARISMA_DIVISOR))
+
+
+## §4.11.6 player base: swordplay + floor(courage / 20) + the sum of `combat`
+## modifiers on worn weapon/armor equipment (§4.11.12). The Phase-2
+## effective-`combat` term is retired (Phase 8, 2026-11-02).
 static func player_duel_base() -> int:
-	var base := player_effective_combat()
+	var base := player_effective_skill("swordplay") \
+		+ int(floor(float(player_attribute("courage")) / DUEL_COURAGE_DIVISOR))
 	var player: Dictionary = GameState.player
 	var equipment = player.get("equipment", {}) if player is Dictionary else {}
 	if equipment is Dictionary:
@@ -600,12 +982,51 @@ static func player_duel_base() -> int:
 	return base
 
 
-## The player's effective `combat` stat (§4.11.5), 0 when no run is loaded.
-static func player_effective_combat() -> int:
-	var player: Dictionary = GameState.player
-	if not (player is Dictionary) or player.is_empty():
+## The charisma the captain behind `unit` brings to the defender bonus
+## (§4.11.6): the fleet's canon card for AI ships, 0 without a card. Player
+## units defend with their own charisma (read at the boarding site).
+func captain_charisma(unit: Dictionary) -> int:
+	if not (unit is Dictionary) or unit.side != SIDE_ENEMY:
 		return 0
-	return CharacterLib.effective_stat("combat")
+	var ship: Dictionary = unit.get("ship", {})
+	if ship is Dictionary and ship.has("captain_charisma"):
+		return int(ship["captain_charisma"])
+	return card_charisma(_fleet_captain_card)
+
+
+## §4.7: the captain courage behind `unit` — the fleet's canon card, or, for a
+## legacy fleet without a card, the tier-sourced `10 + 3 × tier` (the card
+## template's main-attribute band centre at that tier; deterministic). Player
+## ships never surrender, so their courage is never asked for.
+func captain_courage(unit: Dictionary) -> int:
+	if not (unit is Dictionary) or unit.side != SIDE_ENEMY:
+		return 0
+	var ship: Dictionary = unit.get("ship", {})
+	if ship is Dictionary and ship.has("captain_courage"):
+		return int(ship["captain_courage"])
+	if not _fleet_captain_card.is_empty():
+		return card_courage(_fleet_captain_card)
+	return LEGACY_COURAGE_BASE + LEGACY_COURAGE_PER_TIER * int(FLEET_TIER.get(enemy_kind, 1))
+
+
+## §4.7 Phase-8 surrender chance in percent for a captain courage:
+## `clamp(25 − floor(courage / 10), 10, 40)`.
+static func surrender_chance_for_courage(courage: int) -> int:
+	return clampi(
+		SURRENDER_CHANCE_BASE - int(floor(float(maxi(courage, 0)) / SURRENDER_COURAGE_DIVISOR)),
+		SURRENDER_CHANCE_MIN, SURRENDER_CHANCE_MAX)
+
+
+## [method surrender_chance_for_courage] for the captain behind `unit`.
+func surrender_chance(unit: Dictionary) -> int:
+	return surrender_chance_for_courage(captain_courage(unit))
+
+
+## Draws the §4.7 surrender roll from the battle's single §4.11.1 stream
+## (deterministic per seed). `AiFleet.decide` rule 1 calls this; a failed roll
+## re-rolls on the ship's next turn (§4.9 rule 1 falls through).
+func roll_surrender(unit: Dictionary) -> bool:
+	return rng.randf() * 100.0 < float(surrender_chance(unit))
 
 
 # --- Hold / menu seams -----------------------------------------------------
@@ -823,6 +1244,8 @@ func _make_unit(side: String, index: int, ship: Dictionary, cell: Vector2i) -> D
 		"reload_until_round": 1,
 		"alive": true,
 		"captain_rating": 0,
+		"cannon_rating": 0,
+		"mp_debuff_turns": 0,
 	}
 
 
@@ -852,12 +1275,85 @@ func _deploy_cell(side: String, index: int) -> Vector2i:
 	return NO_CELL
 
 
-## §4.6: the AI captain rating (`5 + fleet tier`) is a fixed formula, so it is
-## computed once at battle start and stored on the unit (no RNG draw).
-func _roll_captain_ratings() -> void:
+## §4.11.5 / §4.11.11.2: each ship's captain-card ratings are priced **once**
+## at battle start and stored on the unit (`captain_rating` = the duel rating,
+## `cannon_rating` = the §4.11.5 combat rating) — never re-rolled mid-battle.
+##
+## Priority per side:
+##   * values already stored on the ship instance (`duel_rating` /
+##     `cannon_rating`, what the fleet source will persist per §4.11.11.2)
+##     win;
+##   * AI ships otherwise price from the fleet's canon card (config
+##     `captain_id` / `captain: {id}`);
+##   * player escorts price from their appointed captain officer's officers.json
+##     v2 card (§4.11.5 escort branch), a captain-less escort staying 0/0;
+##   * a fleet with **no card** (the legacy `captain: {pool_id, name_index}`
+##     shape) keeps the retired `5 + tier` stand-in on both ratings —
+##     byte-identical to Phase 2/7 until W4-B flips the fleet source.
+func _price_captain_ratings() -> void:
+	var legacy_rating := CAPTAIN_RATING_BASE + int(FLEET_TIER.get(enemy_kind, 1))
 	for unit in _units:
 		if unit.side == SIDE_ENEMY:
-			unit["captain_rating"] = CAPTAIN_RATING_BASE + int(FLEET_TIER.get(enemy_kind, 1))
+			var ship: Dictionary = unit["ship"]
+			if ship.has("duel_rating") and ship.has("cannon_rating"):
+				unit["captain_rating"] = int(ship["duel_rating"])
+				unit["cannon_rating"] = int(ship["cannon_rating"])
+			elif not _fleet_captain_card.is_empty():
+				unit["captain_rating"] = card_duel_rating(_fleet_captain_card)
+				unit["cannon_rating"] = card_cannon_rating(_fleet_captain_card)
+			else:
+				unit["captain_rating"] = legacy_rating
+				unit["cannon_rating"] = legacy_rating
+		elif int(unit.index) != _flagship_index:
+			# Player escort (§4.11.5): the appointed captain officer's card,
+			# else the captain-less rule (duel 0, cannon rating 0).
+			var escort_ship: Dictionary = unit["ship"]
+			if escort_ship.has("duel_rating") and escort_ship.has("cannon_rating"):
+				unit["captain_rating"] = int(escort_ship["duel_rating"])
+				unit["cannon_rating"] = int(escort_ship["cannon_rating"])
+				continue
+			var officer: Dictionary = _escort_captain_officer(unit)
+			if officer.is_empty():
+				unit["captain_rating"] = 0
+				unit["cannon_rating"] = 0
+			else:
+				unit["captain_rating"] = card_duel_rating(officer)
+				unit["cannon_rating"] = card_cannon_rating(officer)
+
+
+## The appointed captain officer of a player escort ship (§4.11.5 escort
+## branch), as an officers.json v2 record, or {} when the ship is captain-less
+## (the §4.5.2 captain-less rule). Battle ships carry no ids, so the officer is
+## resolved from the ship's own `captain_officer_id` when the fleet block
+## stores one, then from `officer_states` (post "captain" + `ship_id`) — read
+## defensively: the v9 `officer_states` block arrives with W4/W6, and its
+## absence simply leaves the escort captain-less.
+static func _escort_captain_officer(unit: Dictionary) -> Dictionary:
+	var ship: Dictionary = unit.get("ship", {})
+	if not (ship is Dictionary):
+		return {}
+	var officer_id := str(ship.get("captain_officer_id", ""))
+	if officer_id.is_empty():
+		officer_id = _officer_state_captain_for(str(ship.get("id", "")))
+	if officer_id.is_empty():
+		return {}
+	return DataLoader.get_officer(officer_id)
+
+
+## The officer id posted as this ship's captain in the (defensive)
+## `GameState.officer_states` scan; "" when the block or the match is absent.
+static func _officer_state_captain_for(ship_id: String) -> String:
+	if ship_id.is_empty():
+		return ""
+	var states = GameState.get("officer_states")
+	if not (states is Dictionary):
+		return ""
+	for officer_id in states:
+		var state = states[officer_id]
+		if state is Dictionary and str(state.get("post_id", "")) == "captain" \
+				and str(state.get("ship_id", "")) == ship_id:
+			return str(officer_id)
+	return ""
 
 
 func _build_order() -> void:
@@ -897,6 +1393,12 @@ func _advance() -> void:
 		var unit = _order[_current] if _current < _order.size() else null
 		if unit is Dictionary and bool(unit.get("alive", false)):
 			unit["mp"] = effective_speed(unit)
+			# §4.4 chain shot: the target loses 1 MP at each of the debuff's
+			# remaining turn refreshes (2 when the shot landed).
+			var debuff_turns := int(unit.get("mp_debuff_turns", 0))
+			if debuff_turns > 0:
+				unit["mp_debuff_turns"] = debuff_turns - 1
+				unit["mp"] = maxi(0, int(unit["mp"]) - CHAIN_MP_DEBUFF)
 			_action_taken = false
 			return
 

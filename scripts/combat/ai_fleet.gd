@@ -146,13 +146,17 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 	if player_ships.is_empty():
 		return hold
 
-	# 1. Below 25% max durability with a player ship within 3 → surrender.
+	# 1. Below 25% max durability with a player ship within 3 → the §4.7
+	#    courage-flavoured surrender roll (`clamp(25 − floor(COU/10), 10, 40)%`,
+	#    drawn from the battle's §4.11.1 stream). A failed roll re-rolls on the
+	#    ship's next turn — the rules below run instead.
 	var own_ship: Dictionary = unit.get("ship", {})
 	var max_durability := sim.effective_max_durability(own_ship)
 	if max_durability > 0 \
 			and int(own_ship.get("durability", 0)) * 100 < SURRENDER_DURABILITY_PERCENT * max_durability \
 			and _nearest(player_ships, sim.unit_cell(unit))["distance"] <= SURRENDER_PLAYER_RANGE:
-		return {"action": "surrender", "target": {}, "cell": BattleSimLib.NO_CELL}
+		if sim.roll_surrender(unit):
+			return {"action": "surrender", "target": {}, "cell": BattleSimLib.NO_CELL}
 
 	# 2. Cannons ≥ 1, loaded, a player ship in range → fire at the lowest
 	#    current durability among the ships in range (ties to the lower fleet
