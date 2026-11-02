@@ -1177,12 +1177,16 @@ stalled_fleets(min_hold: int = 3) -> Array
   (§4.12.4 step 4).
 - `spawn(role, nation_id, day)` — single seeded spawn (test seam; also the
   quest seam, `70-*` §4.9.3 Phase-5 note).
-- **Clock accrual + diagnostics (unified-movement amendment, 2026-11-01).**
+- **Clock accrual + diagnostics (unified-movement amendment, 2026-11-01;
+  report shape amended 2026-11-02).**
   `advance_clock()` — accrues every fleet's movement for the elapsed world
   time (`Δ = day + clock_fraction − its per-fleet mark`; the world scene
   calls it per player move, `tick()` catches up — idempotent, no
-  double-count) and reports fleet moves for the marker glides (`80-*`
-  §4.5.2). **Clock-rewind rebase (dormant since 2026-11-02):** set sail
+  double-count) and reports fleet moves for the marker **path playback**
+  (`80-*` §4.5.2): each entry is `{id, from, path, to}` — the pre-/post-
+  accrual cells plus every cell the accrual committed, in walked order, so
+  the marker replays the real route tile by tile; render-only, never
+  saved. **Clock-rewind rebase (dormant since 2026-11-02):** set sail
   no longer resets `clock_fraction` — the world clock is continuous
   (`20-*` §4.3 port-hours amendment) — so fleet Δ ≤ 0 no longer occurs in
   play; the rebase path (a pass whose fleet Δ ≤ 0 snaps the mark to the

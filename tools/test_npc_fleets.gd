@@ -112,6 +112,8 @@ func _ready() -> void:
 	_test_stall_diagnostics()
 	_section = "16d spawn dwell hold"
 	_test_spawn_dwell_hold()
+	_section = "16e move-report path"
+	_test_move_report_path()
 	_section = "17 variant flip"
 	_test_variant_flip()
 	_section = "18 ice refusal"
@@ -2014,6 +2016,56 @@ func _test_stall_diagnostics() -> void:
 
 
 # --- 17. Seasonal lane variants (§2.8; the hanseatic_north flip) --------------
+
+# --- 16e move-report path (80-* §4.5.2 stepwise-glide amendment) -----------
+
+## A multi-day accrual walks several tiles in ONE pass; the render report
+## must carry every walked cell (adjacent steps, wrap-aware, ending on
+## `to`) so the world scene can replay the route tile by tile.
+func _test_move_report_path() -> void:
+	var sim := _make_run()
+	var walker := _make_fleet(sim, "trader", "portugal", OPEN_CELL)
+	walker["id"] = "walk_01"
+	walker["route"] = {"lanes": ["hanseatic_north"], "leg": 0,
+		"tile_index": 0, "legs": [{"kind": "lane", "id": "hanseatic_north",
+		"reverse": false, "a": 0, "b": 99}]}
+	# Pin the fleet to the leg's first tile — in play the position always
+	# agrees with the route progress, so the walked path starts adjacent.
+	var geo: Dictionary = sim._leg_geometry(
+		(walker["route"]["legs"] as Array)[0])
+	NpcFleetsLib.set_position(walker,
+		(geo["path"] as Array)[int(geo["start"])] as Vector2i)
+	sim._fleet_mark["walk_01"] = sim._clock_now()
+	sim.advance_clock()  # arm (the load sentinel grants nothing)
+	GameState.day = int(GameState.day) + 3
+	sim.advance_clock()
+	var entry: Dictionary = {}
+	for move in sim.take_fleet_moves():
+		if str((move as Dictionary).get("id", "")) == "walk_01":
+			entry = move
+	_check(not entry.is_empty(), "the multi-day pass reports the walk")
+	if entry.is_empty():
+		sim.remove("walk_01")
+		return
+	var from_cell: Vector2i = entry.get("from", Vector2i.ZERO) as Vector2i
+	var to_cell: Vector2i = entry.get("to", Vector2i.ZERO) as Vector2i
+	var path: Array = entry.get("path", [])
+	_check(not path.is_empty(),
+		"the report carries the walked cells (%d tiles)" % path.size())
+	_check(to_cell == (path[path.size() - 1] as Vector2i),
+		"the path ends on the reported `to`")
+	var contiguous := true
+	var prev := from_cell
+	for cell in path:
+		var step: Vector2i = cell as Vector2i
+		var dx := posmod(step.x - prev.x + 2160, 4320) - 2160
+		if maxi(absi(dx), absi(step.y - prev.y)) != 1:
+			contiguous = false
+		prev = step
+	_check(contiguous and to_cell != from_cell,
+		"the path steps adjacent from `from` (wrap-aware) and the fleet moved")
+	sim.remove("walk_01")
+
 
 func _test_variant_flip() -> void:
 	var sim := _make_run()

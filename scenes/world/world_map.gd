@@ -112,10 +112,12 @@ var _gameover: Control = null
 ## nation-coloured square with the role letter; pirate red).
 var _marker_nodes: Dictionary = {}
 
-## Render-only NPC marker glides (unified-movement amendment, §2.6
-## extended): `fleet_id → {from_px, to_px, elapsed, duration}` — advanced
-## per frame by [_tick_npc_glides], read by [_place_marker_square]. Never
-## reaches logic; a fleet's tile position is the only simulated truth.
+## Render-only NPC marker path playback (stepwise-glide amendment, §2.6
+## extended): `fleet_id → {points_px, played, seg_duration}` — a polyline of
+## tile-centre waypoints (x unwrapped across the dateline) advanced per frame
+## by [_tick_npc_glides], read by [_place_marker_square]. `played` counts
+## completed segments (carrying the within-segment fraction). Never reaches
+## logic; a fleet's tile position is the only simulated truth.
 var _npc_glides: Dictionary = {}
 ## This scene's copy of the §4.11.11.3 handoff — `GameState.pending_encounter`
 ## is the contract field, but it is declared by task A/§5.4 on the merged base,
@@ -179,6 +181,21 @@ const HOLD_TILES_PER_SECOND := 8.0
 ## Seconds between two click-to-sail steps. Deliberately the same as a held
 ## step, so a click route is "N steps = N moves" at the same pace.
 const SAIL_STEP_SECONDS := 1.0 / HOLD_TILES_PER_SECOND
+
+# --- NPC marker path playback (80-* §4.5.2 amendment, 2026-11-02) -----------
+
+## A batch animates only fleets whose walked path touches the camera's
+## visible rect expanded by this many tiles (wrap-aware); a path that never
+## enters the frame snaps instead of animating.
+const NPC_GLIDE_MARGIN_TILES := 2
+## Per-fleet pending tiles above which the whole batch speeds up so playback
+## never lags the tile truth noticeably.
+const NPC_GLIDE_BACKLOG_TILES := 8
+## The compressed batch still drains its largest pending queue within this
+## many real seconds.
+const NPC_GLIDE_MAX_LAG_SECONDS := 1.5
+## A fleet pending more tiles than this skips animation entirely and snaps.
+const NPC_GLIDE_SNAP_TILES := 24
 ## The A* module instance of the last query (`sail_pathing()`), created lazily.
 var _sail = null
 
@@ -1411,15 +1428,100 @@ func pending_encounter() -> Dictionary:
 ## move"); the sim itself collapses repeats within one day, so this is a
 ## contact-only check except on the day's first call.
 ## Consumes the accrual's render-move report and starts the NPC marker
-## glides (render-only — the report feeds nothing but marker positions).
+## **path playback** (stepwise-glide amendment, 80-* §4.5.2 — render-only,
+## the report feeds nothing but marker positions). One batch per drain:
+## every fleet in the batch starts on the same frame and marches in lockstep
+## (one shared per-tile duration); a fleet whose walked path never touches
+## the expanded viewport snaps instead of animating, and an extreme backlog
+## snaps too.
 func _glide_fleet_moves() -> void:
 	if _fs() == null:
 		return
-	for move in _fs().take_fleet_moves():
-		_start_npc_glide(str(move.get("id", "")),
-			move.get("from", Vector2i.ZERO) as Vector2i,
-			move.get("to", Vector2i.ZERO) as Vector2i,
-			_step_render_seconds())
+	var moves: Array = _fs().take_fleet_moves()
+	if moves.is_empty() or not _glide_enabled:
+		return
+	# Pass 1 — build each fleet's waypoint chain: the pre-accrual cell, then
+	# every walked cell the report carries (the last one is the report's
+	# `to`). A fleet already playing chains the new tiles onto its tail (the
+	# previous `to` is this report's `from`).
+	var animated: Array = []
+	var max_pending := 0
+	for move in moves:
+		var id := str(move.get("id", ""))
+		var square: ColorRect = _marker_nodes.get(id, null)
+		if square == null:
+			continue
+		var waypoints: Array[Vector2i] = [
+			move.get("from", Vector2i.ZERO) as Vector2i]
+		for cell in (move.get("path", []) as Array):
+			waypoints.append(cell as Vector2i)
+		if waypoints.size() < 2:
+			continue
+		if not _any_tile_in_view(waypoints):
+			_npc_glides.erase(id)
+			continue
+		var glide: Dictionary = _npc_glides.get(id, {})
+		var points: PackedVector2Array = glide.get("points_px",
+			PackedVector2Array())
+		var played := float(glide.get("played", 0.0))
+		if points.is_empty():
+			points = PackedVector2Array()
+			points.append(_npc_waypoint_px(waypoints[0], Vector2.INF))
+		for i in range(1, waypoints.size()):
+			points.append(_npc_waypoint_px(waypoints[i],
+				points[points.size() - 1]))
+		var pending := points.size() - 1 - int(played)
+		if pending > NPC_GLIDE_SNAP_TILES:
+			# An extreme backlog would lag the marker minutes behind the
+			# tile truth — drop the animation, the next sync snaps it.
+			_npc_glides.erase(id)
+			continue
+		max_pending = maxi(max_pending, pending)
+		animated.append({"id": id, "points": points, "played": played})
+	if animated.is_empty():
+		return
+	# Pass 2 — batch lockstep pacing: one shared per-tile duration. With no
+	# real backlog it is the player's own step cadence; a pending queue past
+	# NPC_GLIDE_BACKLOG_TILES speeds the whole batch up so the largest one
+	# still drains within NPC_GLIDE_MAX_LAG_SECONDS.
+	var seg := _step_render_seconds()
+	if max_pending > NPC_GLIDE_BACKLOG_TILES:
+		seg = minf(seg, NPC_GLIDE_MAX_LAG_SECONDS / float(max_pending))
+	for entry in animated:
+		_npc_glides[str(entry["id"])] = {
+			"points_px": entry["points"],
+			"played": entry["played"],
+			"seg_duration": seg,
+		}
+
+
+## True when any of `cells` (each placed at its camera-nearest x across the
+## dateline) touches the camera's visible rect expanded by
+## [constant NPC_GLIDE_MARGIN_TILES] — the batch's animation gate.
+func _any_tile_in_view(cells: Array[Vector2i]) -> bool:
+	var view := visible_world_rect().grow(
+		float(NPC_GLIDE_MARGIN_TILES * _cell_pixels))
+	var map_px := _map_pixels.x
+	if map_px <= 0.0:
+		return true
+	for cell in cells:
+		var px := _marker_square_px(cell)
+		px.x += map_px * roundf((_camera.position.x - px.x) / map_px)
+		if view.has_point(px):
+			return true
+	return false
+
+
+## The tile-centre pixel for one playback waypoint, choosing the x
+## representation closest to `prev_px` across the dateline: a seam step is
+## one tile wide on screen, never a sweep across the whole map (80-*
+## §4.5.2 stepwise-glide amendment). `Vector2.INF` starts a fresh chain.
+func _npc_waypoint_px(cell: Vector2i, prev_px: Vector2) -> Vector2:
+	var px := _marker_square_px(cell)
+	var map_px := _map_pixels.x
+	if prev_px != Vector2.INF and map_px > 0.0:
+		px.x += map_px * roundf((prev_px.x - px.x) / map_px)
+	return px
 
 
 func _tick_fleet_contacts() -> void:
@@ -1798,68 +1900,61 @@ func _collect_wrecks_at(cell: Vector2i) -> void:
 
 ## Centers a marker square on its tile.
 ## Places one NPC marker square at `cell`'s tile centre — or, while a
-## render-only glide is active for `id` (the §2.6 mechanism extended to
-## NPC markers by the unified-movement amendment; logic never runs here),
-## at the glide's interpolated position.
+## render-only path playback is active for `id` (the §2.6 mechanism extended
+## to NPC markers; logic never runs here), at the polyline's interpolated
+## position: the segment `played` is walking, lerped within the segment.
 func _place_marker_square(square: ColorRect, cell: Vector2i,
 		id: String = "") -> void:
 	square.position = _marker_square_px(cell)
 	if id.is_empty() or not _npc_glides.has(id):
 		return
 	var glide: Dictionary = _npc_glides[id]
-	var t := 1.0
-	if float(glide["duration"]) > 0.0:
-		t = clampf(float(glide["elapsed"]) / float(glide["duration"]), 0.0, 1.0)
-	square.position = (glide["from_px"] as Vector2).lerp(
-		glide["to_px"] as Vector2, t)
+	var points: PackedVector2Array = glide["points_px"]
+	var last := points.size() - 1
+	if last < 1:
+		return
+	var index := clampi(int(float(glide["played"])), 0, last - 1)
+	var t := clampf(float(glide["played"]) - float(index), 0.0, 1.0)
+	square.position = (points[index] as Vector2).lerp(
+		points[index + 1] as Vector2, t)
 
 
 ## The tile-centre origin for one marker square (the snap formula's
-## position term, shared by the glide state).
+## position term, shared by the playback waypoints).
 func _marker_square_px(cell: Vector2i) -> Vector2:
 	return Vector2(cell) * float(_cell_pixels) \
 		+ (Vector2(_cell_pixels, _cell_pixels) - Vector2(_cell_pixels,
 		_cell_pixels) * 0.7) * 0.5
 
 
-## Starts (or restarts) one NPC marker glide (render-only, §2.6 extended):
-## the marker eases from `from_cell` to `to_cell` over `duration` seconds —
-## the accrual releases ≈ one tile per player move, so the marker glides in
-## step with the player's own marker instead of teleporting.
-func _start_npc_glide(id: String, from_cell: Vector2i, to_cell: Vector2i,
-		duration: float) -> void:
-	if not _glide_enabled or duration <= 0.0 or from_cell == to_cell:
-		_npc_glides.erase(id)
-		return
-	var centre := (Vector2(_cell_pixels, _cell_pixels)
-		- Vector2(_cell_pixels, _cell_pixels) * 0.7) * 0.5
-	_npc_glides[id] = {
-		"from_px": Vector2(from_cell) * float(_cell_pixels) + centre,
-		"to_px": Vector2(to_cell) * float(_cell_pixels) + centre,
-		"elapsed": 0.0,
-		"duration": duration,
-	}
-
-
-## Advances every NPC marker glide; an expired glide snaps its square to
-## the destination and drops the state.
+## Advances every NPC marker path playback; a finished polyline snaps its
+## square to the destination waypoint and drops the state. `played` counts
+## completed segments (the within-segment fraction rides the decimals), so
+## a mid-flight `seg_duration` change (a lockstep re-pace) keeps every
+## already-walked segment exactly where it was.
 func _tick_npc_glides(delta: float) -> void:
 	if _npc_glides.is_empty():
 		return
 	for id in _npc_glides.keys():
 		var glide: Dictionary = _npc_glides[id]
-		glide["elapsed"] = float(glide["elapsed"]) + delta
+		var seg := float(glide["seg_duration"])
+		if seg <= 0.0:
+			_npc_glides.erase(id)
+			continue
+		glide["played"] = float(glide["played"]) + delta / seg
 		var square: ColorRect = _marker_nodes.get(id, null)
 		if square == null:
 			continue
-		var t := 1.0
-		if float(glide["duration"]) > 0.0:
-			t = clampf(float(glide["elapsed"]) / float(glide["duration"]),
-				0.0, 1.0)
-		square.position = (glide["from_px"] as Vector2).lerp(
-			glide["to_px"] as Vector2, t)
-		if t >= 1.0:
+		var points: PackedVector2Array = glide["points_px"]
+		var last := points.size() - 1
+		if float(glide["played"]) >= float(last):
+			square.position = points[last]
 			_npc_glides.erase(id)
+			continue
+		var index := clampi(int(float(glide["played"])), 0, maxi(last - 1, 0))
+		var t := float(glide["played"]) - float(index)
+		square.position = (points[index] as Vector2).lerp(
+			points[index + 1] as Vector2, clampf(t, 0.0, 1.0))
 
 
 ## Right-click on an adjacent fleet = attack it (docs/60-* §4.11.11.2). A
@@ -2389,11 +2484,13 @@ func marker_offset() -> Vector2:
 
 
 ## Test seam for the interpolation-purity proof: `false` snaps every step.
+## Drops the NPC playback state too — the next sync re-places every square.
 func set_marker_glide_enabled(enabled: bool) -> void:
 	_glide_enabled = enabled
 	if not enabled:
 		_glide_duration = 0.0
 		_fleet_marker.position = _marker_px(_fleet_cell)
+		_npc_glides.clear()
 
 
 ## Deterministic replacement for `_process`'s glide tick in headless tests.

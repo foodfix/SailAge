@@ -462,11 +462,18 @@ func _note_event(id: String, text: String) -> void:
 	while ring.size() > FLEET_EVENT_MAX:
 		ring.pop_front()
 
-## Render reporting (80-* §4.5.2 amendment): `{id, from, to}` per fleet
-## that moved in the last accrual — the world scene's marker glides. Never
+## Render reporting (80-* §4.5.2 stepwise-glide amendment): `{id, from, path,
+## to}` per fleet that moved in the last accrual — `path` lists every cell
+## the accrual committed, in walked order, so the world scene can replay the
+## walk tile by tile instead of sweeping a straight from→to line. Never
 ## saved; drained by [method take_fleet_moves] (re-accumulates until
 ## consumed, so both the per-move callers and the day tick report).
 var moved_fleet_moves: Array = []
+
+## The walked cells of the accrual pass currently open, `fleet_id →
+## Array[Vector2i]` — appended by [_commit_cell], collected into the report
+## when [method advance_clock] closes the pass. Runtime-only, never saved.
+var _accrual_paths: Dictionary = {}
 
 
 ## Drains (and returns) the render-move report since the last take.
@@ -1033,9 +1040,10 @@ func advance_clock() -> void:
 			continue
 		_fleet_mark[id] = now
 		_accrual_dbg[id] = {"delta": fleet_delta}
-		# Render reporting (80-* §4.5.2 amendment): from → to for the
-		# marker glide; multi-tile walks report the first and last cell.
+		# Render reporting (80-* §4.5.2 stepwise-glide amendment): open the
+		# pass's walked-path collection; [_commit_cell] appends every step.
 		var moved_from := position_of(fleet)
+		_accrual_paths[id] = []
 		match str(fleet.get("role", "")):
 			PIRATE, PRIVATEER:
 				_accrue_raider(fleet, day, fleet_delta, doomed, remove_ids,
@@ -1049,7 +1057,7 @@ func advance_clock() -> void:
 			(_accrual_dbg[id] as Dictionary)["moved"] = moved_to != moved_from
 		if moved_to != moved_from:
 			moved_fleet_moves.append({"id": id, "from": moved_from,
-				"to": moved_to})
+				"path": _accrual_paths.get(id, []), "to": moved_to})
 	for id in remove_ids:
 		remove(id)
 	for wreck in wrecks:
@@ -3800,6 +3808,13 @@ func _record_wake(fleet: Dictionary, cell: Vector2i) -> void:
 func _commit_cell(fleet: Dictionary, cell: Vector2i) -> void:
 	var before := position_of(fleet)
 	set_position(fleet, cell)
+	# Stepwise-glide amendment (80-* §4.5.2): the stepped cell joins the open
+	# accrual's render path — real steps only (a seam hand-over that re-commits
+	# the standing tile is a no-op), and only while an accrual pass is open
+	# (spawn/dock commits never grow the collection).
+	var id := str(fleet.get("id", ""))
+	if cell != before and _accrual_paths.has(id):
+		(_accrual_paths[id] as Array).append(cell)
 	# Unified-movement amendment (`60-*` §4.11.11): contact is sampled per
 	# tile entered — every committed tile within Chebyshev 1 of the player
 	# queues the pass-through engagement (consumed by [method

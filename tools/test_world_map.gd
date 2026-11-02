@@ -19,6 +19,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase 6: the sailing core whose APIs the world scene consumes.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 
 ## docs/10-* §6.1: the locked grid and artifact.
 const WORLD_WIDTH := 4320
@@ -98,6 +99,7 @@ func _ready() -> void:
 	await _test_trim_keys()
 	await _test_wait_keys()
 	await _test_interpolation_purity()
+	await _test_npc_path_playback()
 	await _test_docking_cost_pin()
 	await _test_ice_surface()
 	await _test_hud_indicators()
@@ -1428,6 +1430,92 @@ func _test_interpolation_purity() -> void:
 
 
 # --- 16. Phase 6: the heading-aware docking charge (master ruling) --------
+
+# --- NPC marker path playback (80-* §4.5.2 stepwise-glide amendment) -------
+
+## A multi-tile accrual report replays the walked path tile by tile: batch
+## lockstep (one shared per-tile duration, same-frame start), intermediate
+## tile centres passed through, snap on completion — and a path that never
+## touches the expanded viewport animates nothing.
+func _test_npc_path_playback() -> void:
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	var sim = world.fleet_sim()
+	_check(sim != null, "the sea fixture adopts a fleet sim")
+	if sim == null:
+		world.queue_free()
+		await get_tree().process_frame
+		return
+	var centre_offset := Vector2(4.8, 4.8)  # the `_marker_square_px` centre term
+	var near_a: Dictionary = sim.spawn("trader", "portugal", 1)
+	var near_b: Dictionary = sim.spawn("trader", "spain", 1)
+	var far: Dictionary = sim.spawn("trader", "portugal", 1)
+	_check(not near_a.is_empty() and not near_b.is_empty()
+		and not far.is_empty(), "the three fixture fleets spawn")
+	if near_a.is_empty() or near_b.is_empty() or far.is_empty():
+		world.queue_free()
+		await get_tree().process_frame
+		return
+	NpcFleetsLib.set_position(near_a, HELM_CELL + Vector2i(6, 0))
+	NpcFleetsLib.set_position(near_b, HELM_CELL + Vector2i(-6, 2))
+	NpcFleetsLib.set_position(far, HELM_CELL + Vector2i(2500, 0))
+	world._sync_marker_nodes()
+	var id_a := str(near_a["id"])
+	var id_b := str(near_b["id"])
+	_check(world._marker_nodes.has(id_a) and world._marker_nodes.has(id_b),
+		"the in-view fleets hold marker squares")
+	var seg_a: Array[Vector2i] = [
+		HELM_CELL + Vector2i(7, 0), HELM_CELL + Vector2i(8, 0),
+		HELM_CELL + Vector2i(9, 0)]
+	var seg_b: Array[Vector2i] = [
+		HELM_CELL + Vector2i(-7, 2), HELM_CELL + Vector2i(-8, 2)]
+	var seg_f: Array[Vector2i] = [
+		HELM_CELL + Vector2i(2501, 0), HELM_CELL + Vector2i(2502, 0)]
+	sim.moved_fleet_moves = [
+		{"id": id_a, "from": HELM_CELL + Vector2i(6, 0),
+			"path": seg_a, "to": seg_a[2]},
+		{"id": id_b, "from": HELM_CELL + Vector2i(-6, 2),
+			"path": seg_b, "to": seg_b[1]},
+		{"id": str(far["id"]), "from": HELM_CELL + Vector2i(2500, 0),
+			"path": seg_f, "to": seg_f[1]},
+	]
+	world._glide_fleet_moves()
+	_check(world._npc_glides.has(id_a) and world._npc_glides.has(id_b),
+		"the in-view fleets animate on the same drain")
+	_check(not world._npc_glides.has(str(far["id"])),
+		"the off-screen fleet snaps without playback state")
+	var ga: Dictionary = world._npc_glides[id_a]
+	var gb: Dictionary = world._npc_glides[id_b]
+	_check((ga["points_px"] as PackedVector2Array).size() == 4,
+		"A's polyline carries from + the 3 walked tiles")
+	_check(is_equal_approx(float(ga["seg_duration"]),
+			float(gb["seg_duration"])) and float(ga["seg_duration"]) > 0.0,
+		"the batch marches in lockstep (one shared per-tile duration)")
+	var step := float(ga["seg_duration"])
+	var square_a: ColorRect = world._marker_nodes.get(id_a)
+	var square_b: ColorRect = world._marker_nodes.get(id_b)
+	world.advance_render(step * 0.5)
+	var half := (Vector2(HELM_CELL + Vector2i(6, 0)) * 32.0 + centre_offset) \
+		.lerp(Vector2(seg_a[0]) * 32.0 + centre_offset, 0.5)
+	_check((square_a as ColorRect).position.distance_to(half) < 2.0,
+		"the marker walks the first segment (halfway interpolates)")
+	world.advance_render(step * 0.5)
+	_check((square_a as ColorRect).position.distance_to(
+			Vector2(seg_a[0]) * 32.0 + centre_offset) < 2.0
+		and (square_b as ColorRect).position.distance_to(
+			Vector2(seg_b[0]) * 32.0 + centre_offset) < 2.0,
+		"one step lands each marker on its first walked tile")
+	world.advance_render(step * 3.0)
+	_check(not world._npc_glides.has(id_a) and not world._npc_glides.has(id_b),
+		"the finished playbacks snap and drop their state")
+	_check((square_a as ColorRect).position.distance_to(
+			Vector2(seg_a[2]) * 32.0 + centre_offset) < 2.0
+		and (square_b as ColorRect).position.distance_to(
+			Vector2(seg_b[1]) * 32.0 + centre_offset) < 2.0,
+		"the markers rest on their destinations' tile centres")
+	world.queue_free()
+	await get_tree().process_frame
+
 
 func _test_docking_cost_pin() -> void:
 	# (a) The step-delta heading: docking east into Lisbon charges

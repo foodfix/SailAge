@@ -327,17 +327,31 @@ rendering is viewport-culled and never re-simulates.
 - **Wakes (locked):** each moving marker drags a **5-tile dashed trail** of
   1 px `PANEL_LINE` lines behind it that fades tile-by-tile; wrecks and
   docked markers draw none.
-- **Marker glide (unified-movement amendment, 2026-11-01):** NPC markers
-  glide across their accrual steps exactly like the player marker's §2.6
-  interpolation — when a fleet's clock accrual steps it from cell to cell,
-  the marker eases between the two tile centres over the current step
-  cadence (`_step_render_seconds`), render-only: logic, contact and saves
-  keep reading tile positions, and the seam honours the same
-  glide-disabled test switch. Before this amendment NPC markers snapped
-  to their released cells; with hull-scale accrual the snap read as
-  teleporting every player move. Docked fleets render at their simulated
-  cell — the port's **sea berth tile**, the only legal docking tile
-  (established pin; ships never dock on the shore tile).
+- **Marker path playback (stepwise-glide amendment, 2026-11-02):** NPC
+  markers replay an accrual **tile by tile along the walked path** — the
+  logic already commits tile-by-tile (`60-*` §4.11.11) and now reports every
+  walked cell, so the marker walks the fleet's real route instead of
+  sweeping a straight from→to line (which read as a jump, and could cross
+  land). All fleets in one accrual batch start their playback on the same
+  frame and march in **lockstep** — one shared per-tile duration, the
+  player's own step cadence (`_step_render_seconds`) when unbacklogged.
+  **Viewport-gated:** a batch animates only fleets whose from/path cells
+  touch the camera's visible rect expanded by
+  `NPC_GLIDE_MARGIN_TILES = 2` tiles (wrap-aware); a path that never enters
+  the frame snaps. **Backlog:** a fleet already playing chains new tiles
+  onto its polyline; once a fleet's pending tiles exceed
+  `NPC_GLIDE_BACKLOG_TILES = 8`, the whole batch speeds up so its largest
+  pending queue still drains within `NPC_GLIDE_MAX_LAG_SECONDS = 1.5` s, and
+  a fleet pending more than `NPC_GLIDE_SNAP_TILES = 24` tiles skips
+  animation and snaps. Waypoint pixels unwrap the dateline (each step takes
+  the camera-nearest x representation) — a seam crossing walks one tile,
+  never sweeps the map. Render-only: logic, contact and saves keep reading
+  tile positions, and the seam honours the same glide-disabled test switch
+  (which also drops any playing playback). This supersedes the
+  unified-movement amendment's from→to glide (2026-11-01), which itself
+  replaced a snap that read as teleporting. Docked fleets render at their
+  simulated cell — the port's **sea berth tile**, the only legal docking
+  tile (established pin; ships never dock on the shore tile).
 - **Debug chart (Phase 6):** the omniscient debug chart mode (§4.6) renders
   the **same** `NpcFleets.markers()` data un-culled — every fleet on the
   whole map, same role colors.
