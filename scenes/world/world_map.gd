@@ -2605,6 +2605,13 @@ func port_route_target() -> String:
 func _on_day_advanced(_new_day: int) -> void:
 	if not _has_game():
 		return
+	# Phase 8 §2.5: drain the officer advice queue (the sea-day rolls fired
+	# inside the ledger's growth step) into the notice flow.
+	var advice_lib := load("res://scripts/world/advice.gd")
+	if advice_lib != null:
+		for entry in advice_lib.call("drain"):
+			if entry is Dictionary and not _toast(str((entry as Dictionary).get("key", ""))):
+				print("Advice: %s" % str((entry as Dictionary).get("key", "")))
 	# Phase 5 task J (docs/20-* §4.3 step 4): the NPC fleet tick runs once per
 	# day as this post-`day_advanced` listener (after the ledger and the
 	# economy step, which precede the emit); the sim's `last_tick_day` dedupe

@@ -1791,13 +1791,27 @@ static func _ledger_morale() -> bool:
 ## skill usage counters (`Skills.note_sea_day()`) and the in-post officers'
 ## sea-days (`Skills.officer_day_tick()` — 90-day growth, loyalty resignal)
 ## run at the ledger's growth point, after consumption/wages and with the +2
-## XP award. A no-op until slot A's `skills.gd` exists (guard-call convention).
+## XP award, together with the §2.5 officer advice rolls (`Advice.day_tick` —
+## 3% per in-post officer, the situation condition gating the fire). A no-op
+## for the growth halves until slot A's `skills.gd` exists (guard-call
+## convention).
+## The advice module's guarded load (the circular-preload-safe pattern).
+static func _guarded_advice() -> Object:
+	var script: Script = load("res://scripts/world/advice.gd")
+	return script if script != null and script is Script else null
+
+
 static func _sea_day_growth() -> void:
 	var lib := _skills()
 	if lib == null:
 		return
 	if lib.has_method("note_sea_day"):
 		lib.call("note_sea_day")
+	# Phase 8 §2.5: the officer advice events roll here too (3% per in-post
+	# officer per sea-day, the post's situation condition gating the fire).
+	var advice_lib := _guarded_advice()
+	if advice_lib != null:
+		advice_lib.call("day_tick", int(GameState.day))
 	if lib.has_method("officer_day_tick"):
 		lib.call("officer_day_tick")
 
