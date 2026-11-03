@@ -209,9 +209,13 @@ immunity are retired with the marker system (§4.11.11.1).
   and is **not** clamped back into `[0, battle_max_speed]`. `debuff` = 1
   while `speed_debuff_turns > 0` (chain shot, §4.4b), and the debuff term
   may never reduce `cap_eff` below 1 (the chain-shot cap floor — a cap of 0
-  remains reachable without the debuff, e.g. a `battle_max_speed` 2 sail
-  hull into a calm wind against the wind:
-  `floor(2 × 0.8 × 0.5)` = 0).
+  is unreachable in play: calm weather keeps `direction_factor` at the
+  identity 1.0 (the normative calm rule above), so the worst natural case,
+  a `battle_max_speed` 2 sail hull in calm against the wind, floors to
+  `floor(2 × 0.8 × 1.0)` = 1). *(W3 gate amendment: the earlier parenthetical
+  example — "into the wind, `floor(2 × 0.8 × 0.5)` = 0" — contradicted the
+  calm identity and the shipped hull table; the identity reading wins,
+  `test_battle` pins it.)*
 - **Current modifier (new battle-domain pin, correction 1 — the `20-*` §4.16
   world rule is multiplicative and is deliberately NOT quoted here):** with
   `current_mod` keyed off the relative heading8 bucket between the ship's

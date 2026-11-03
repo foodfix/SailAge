@@ -1116,7 +1116,11 @@ func _side_can_fire(unit: Dictionary, target: Dictionary, side: String,
 	if side_cannons(unit, side) < 1:
 		return false
 	var bearing := heading8_of(unit_cell(target) - unit_cell(unit))
-	var steps := bucket_distance(bearing, int(unit.get("heading8", HEADING_EAST)))
+	# §4.4 arcs are SIGNED counterclockwise steps off the attacker's heading8
+	# (port {1,2,3} = 45°/90°/135°, starboard {5,6,7} = 225°/270°/315°) — the
+	# unsigned `bucket_distance` (0..4) can never reach the starboard set and
+	# answers non-axial bearings with the wrong side (W3-D bounce-back fix).
+	var steps := (bearing - int(unit.get("heading8", HEADING_EAST)) + 8) % 8
 	var arc := ARC_PORT_STEPS if side == BROADSIDE_PORT else ARC_STARBOARD_STEPS
 	return steps in arc
 

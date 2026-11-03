@@ -450,7 +450,11 @@ static func _ram_decision(sim: BattleSimLib, unit: Dictionary, legal: Array,
 		if own_rating <= theirs:
 			continue
 		if sim.can_ram(unit, target):
-			return {"action": "ram", "target": target, "vel": Vector2i.ZERO}
+			# Master W3-gate ruling (ledger): the adjacent-action ram OMITS
+			# `vel` — no movement phase, the retained closing velocity prices
+			# the §4.5 impact (a `vel: ZERO` authoring brakes first and
+			# reads the ×0.75 standstill multiplier).
+			return {"action": "ram", "target": target}
 		var target_cell: Vector2i = sim.unit_cell(target)
 		for vel in legal:
 			if _sweep_enters(sim, unit, origin, vel, target_cell):
