@@ -15,10 +15,13 @@ extends Control
 ##
 ## **Forward-compat contract** (`80-*` §4.7.16): the export schema declares
 ## ALL planned fields from day one — `weather / wind_dir / current /
-## deployment / morale / ai_level / archetype / formation` — but 开战 passes
-## ONLY the fields the current engine consumes; the rest stay editor + export
-## values until their waves land (9A wind/current, 9B morale, 9C/9D
-## ai_level/archetype/formation, W3 deployment variant).
+## deployment / morale / ai_level / archetype / formation`. W4 landed the
+## morale keys (`player_morale` / `enemy_morale` ride the fixture as §4.12.1
+## config keys) and the enemy `formation` override (only when the editor
+## leaves its default = the `ai_profiles` row value); the rest — wind_dir /
+## current / deployment / `ai_level` / `archetype` — stay editor + export
+## values until their waves land (9A wind/current, W3 deployment, 9C/9D
+## ai_level/archetype).
 ##
 ## **Strings** (`10-*` §7.12): every label comes from the `sandbox.*` /
 ## `battle.*` / `char.attr.*` / `world.weather.*` / `shipyard.slot.*`
@@ -546,9 +549,10 @@ func _build_player_stats_block() -> void:
 
 
 ## The enemy panel's static editors (kind / compose / captain / ai_level /
-## archetype / formation / morale) — `ai_level` / `archetype` / `formation`
-## ride the forward-compatible export schema and take effect as their waves
-## land (9C/9D).
+## archetype / formation / morale) — `formation` + the initial morale take
+## effect as of W4 (the §4.9b profile override + the §4.12.1 morale keys);
+## `ai_level` / `archetype` still ride the forward-compatible export schema
+## until 9C/9D.
 func _build_enemy_options() -> void:
 	var block := VBoxContainer.new()
 	block.name = "EnemyOptions"
@@ -1198,9 +1202,10 @@ func _random_equipment(rng: RandomNumberGenerator, slot: String) -> String:
 ## The §4.7.16 fixture encounter. Ship instances in the §4.11.11 shape;
 ## `gold` 0; the resolved seed — `fixed` → the editor number, `random` → a
 ## fresh `randi()`, `auto` → the key is OMITTED and the §4.11.1 formula
-## applies (contact = the origin tile). ONLY the fields the current engine
-## consumes ride the encounter; wind/current/morale/ai_level/archetype/
-## formation/deployment stay editor + export values until their waves land.
+## applies (contact = the origin tile). W4: `player_morale` / `enemy_morale`
+## ride as §4.12.1 config keys, and the enemy `formation` rides only as a
+## true override of the profile row; wind/current/deployment/ai_level/
+## archetype stay editor + export values until their waves land.
 func build_encounter() -> Dictionary:
 	apply_clamps()
 	var player_ships: Array = []
@@ -1249,6 +1254,20 @@ func build_encounter() -> Dictionary:
 			"armor": str(_option_value(_armor_option)),
 		},
 	}
+	# W4 (§4.12.1 / §4.8a): the initial-morale fields are live — both sides'
+	# editors ride the fixture as the §4.12.1 config keys. A sim without the
+	# keys (pre-A) ignores unknown config, so this is harmless until A lands.
+	encounter["player_morale"] = int(_player_morale_spin.value)
+	encounter["enemy_morale"] = int(_enemy_morale_spin.value)
+	# The enemy formation override (§4.7.16 / §4.9b): the editor value rides
+	# ONLY as a true override of the kind's `ai_profiles` row. At the editor's
+	# default — which IS the profile row's own value (the kind switch syncs
+	# from it) — the key stays out of the fixture and the profile row's
+	# default applies downstream (the W2-C fixture-shape pin keeps the
+	# dormant-key audit's `formation` out of the at-default encounter).
+	var formation := str(_option_value(_formation_option))
+	if formation != str(_profile_default(kind).get("formation", "")):
+		encounter["formation"] = formation
 	return encounter
 
 

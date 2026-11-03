@@ -22,6 +22,16 @@ extends Control
 ##   * runs the §4.12.4 five-step battle-end sequence through the §4.12.3
 ##     guarded loaders, so no sibling task can block this one.
 ##
+## **W4 (Phase 9).** Two §4.7.1 additions live here: the two side-morale bars
+## in the top area (§4.8a values, `sim.side_morale` guarded — the pre-A seam
+## renders 100/100) and the formation display (the minimap anchor line for a
+## line formation + the `battle.formation.*` label), plus the §4.9b fleet
+## dispatch — one `fleet_commander.gd` instance per battle, its orders
+## re-emitted at each round start and fed to `AiFleet.decide(sim, unit,
+## order)` as the third argument. Every sibling seam is guarded
+## (`has_method` / `ResourceLoader.exists`, the §4.12.3 convention), so the
+## pre-A / pre-B merge order leaves this screen running exactly as before.
+##
 ## **Two drivers, one engine.** The player acts through the velocity picks,
 ## buttons and keys; the AI acts through [AiFleet.decide] applied by the
 ## engine's own decision seam. Both mutate the same [BattleSim], so a battle
@@ -87,6 +97,10 @@ const DUEL_PATH := "res://scripts/combat/duel.gd"
 const NPC_FLEETS_PATH := "res://scripts/world/npc_fleets.gd"
 ## Phase 3: quest/bounty/tournament aftermath (`70-*` §4.5, §4.9.7).
 const PHASE3_HOOKS_PATH := "res://scripts/quests/phase3_hooks.gd"
+## Phase-9 W4 (§4.9b/§4.12.3): the fleet-command module — lazily loaded and
+## guarded exactly like `battle_result.gd`, so the pre-B merge order cannot
+## block this screen (the AI then runs as before).
+const FLEET_COMMANDER_PATH := "res://scripts/combat/fleet_commander.gd"
 ## S9 (a shared Phase-1 scene) is instanced over S10 when a `gameover.*` fires.
 const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
 
@@ -118,6 +132,18 @@ const CLICK_THRESHOLD_PX := 4.0
 
 ## §4.8: ship tokens are 24×24 squares with a letter.
 const TOKEN_PX := 24
+## W4 (§4.8a): the §4.7 gate value — a side at or below it fills the morale
+## bar in the WARN tier. On the player side this is display ONLY ("low player
+## morale is a HUD warning only", §4.8a — player ships never auto-strike);
+## on the enemy side the same threshold merely telegraphs the §4.7/§4.8a
+## strike gates. No behavior rides the color.
+const MORALE_WARN_AT := 20
+## W4 (§4.7.1): the formation anchor ray on the minimap, in cells (§4.9b's
+## formation-slot scale; 6 cells = 24 px at the 4 px/cell minimap scale).
+const FORMATION_ANCHOR_CELLS := 6
+## The §4.8 line formations the anchor lines are pinned to (`line_ahead` /
+## `column`); `screen`/`swarm` draw nothing and label nothing (W4 gate).
+const LINE_FORMATIONS: Array[String] = ["line_ahead", "column"]
 ## §4.7.1: the log panel shows the last 3 lines.
 const LOG_LINES := 3
 ## Default round cap of [method run_to_completion]. §4.11.11.3 quotes 30
@@ -227,6 +253,45 @@ var _panning := false
 ## target_cells()).
 var _endpoint_cells: Array = []
 var _target_cells_cache: Array = []
+
+# --- W4 (§4.7.1 additions / §4.9b dispatch) state ---------------------------
+
+## The §4.9a profile row of this battle's enemy kind (`AiFleet.profile_for`,
+## guarded), with the S21 `formation` override folded in when the fixture
+## carries one. Built at open time; drives the §4.9b dispatch and the
+## formation display.
+var _enemy_profile: Dictionary = {}
+## The lazily loaded `fleet_commander.gd` INSTANCE for this battle (the enemy
+## side is one fleet). Null whenever the module is absent or malformed —
+## pre-B the whole layer stays dormant and the AI runs exactly as today.
+var _fleet_commander = null
+## The commander's persistent state dict — passed by reference every round so
+## B's hysteresis / anchor-succession memory lives across rounds (§4.9b).
+var _fc_state: Dictionary = {}
+## The round the current `_fc_orders` were issued for (the round-change
+## detector; −1 = none issued yet).
+var _fc_round := -1
+## The current round's per-ship order five-tuples (§4.9b).
+var _fc_orders: Array = []
+## Cached probe of the loaded ai_fleet's decide arity (−1 unknown, 0 = the
+## 2-arg form, 1 = the §4.12.1.1 W4-B `decide(sim, unit, order := {})`).
+var _ai_fleet_order_args := -1
+## The ai_fleet script as a DYNAMICALLY dispatched handle. The W4-B decide
+## gains a third `order` parameter, which the analyzer refuses against the
+## pre-B script at compile time — the sibling-module guard must probe the
+## call shape at runtime, so every guarded ai_fleet interaction (decide
+## arity, `profile_for`) goes through this Variant, not the typed preload.
+var _ai_fleet_script: Variant = load("res://scripts/combat/ai_fleet.gd")
+
+## W4 HUD handles (built in `_ready`): the §4.7.1 top-area morale bars and
+## the formation label under the minimap.
+var _morale_player_label: Label = null
+var _morale_enemy_label: Label = null
+var _morale_player_track: ColorRect = null
+var _morale_enemy_track: ColorRect = null
+var _morale_player_fill: ColorRect = null
+var _morale_enemy_fill: ColorRect = null
+var _formation_label: Label = null
 
 @onready var _background: ColorRect = $Background
 @onready var _top_bar: ColorRect = $TopBar
@@ -350,6 +415,7 @@ func _dismiss_captain_preview() -> void:
 
 func _ready() -> void:
 	_style()
+	_build_morale_hud()
 	# §4.7.1: the battle opens fitted to the whole 1536×960 world.
 	_cam_zoom = fit_zoom()
 	_cam_pos = clamp_cam(WORLD_PX * 0.5, _cam_zoom)
@@ -607,9 +673,19 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 		if stats_override is Dictionary \
 				and not (stats_override as Dictionary).is_empty():
 			sim_config["player_stats"] = stats_override
+	# W4 (§4.8a/§4.12.1): the S21 fixture's initial side-morale keys ride the
+	# config when present (the same pass-through shape as `wind_dir`). A sim
+	# without the keys (pre-A) ignores unknown config, so this is harmless
+	# both ways and never changes an outcome byte before A lands.
+	for morale_key in ["player_morale", "enemy_morale"]:
+		if encounter.has(morale_key):
+			sim_config[morale_key] = int(encounter[morale_key])
 	sim = BattleSimLib.new(sim_config)
 	sim.start()
 	_seed_cursor()
+	# W4 (§4.9b): the battle's §4.9a profile row + the guarded one-per-battle
+	# fleet commander (null pre-B — the layer stays dormant).
+	_setup_fleet_commander()
 	# §4.7.1 (W6-A): the captain intro preview — before the first round, when
 	# the encounter names a canon captain (every Phase-8 fleet carries one).
 	var captain_id := str(encounter.get("captain_id", ""))
@@ -788,6 +864,45 @@ func ai_instant_mode() -> bool:
 	return _ai_instant
 
 
+# --- W4 accessors (tests / hosts) -------------------------------------------
+
+## The §4.7.1 W4 morale label of `side` (`player`/`enemy`), null before
+## `_ready` built the HUD.
+func morale_label(side: String) -> Label:
+	return _morale_player_label if side == BattleSimLib.SIDE_PLAYER \
+		else _morale_enemy_label
+
+
+## The §4.7.1 W4 morale bar fill of `side` (its width is value/100 of the
+## track; the color is the §4.8 tier).
+func morale_fill(side: String) -> ColorRect:
+	return _morale_player_fill if side == BattleSimLib.SIDE_PLAYER \
+		else _morale_enemy_fill
+
+
+## The §4.7.1 W4 morale bar track of `side` (the full-width backdrop).
+func morale_track(side: String) -> ColorRect:
+	return _morale_player_track if side == BattleSimLib.SIDE_PLAYER \
+		else _morale_enemy_track
+
+
+## The morale value the bars currently show (the guarded §4.12.1 seam read).
+func side_morale_shown(side: String) -> int:
+	return _side_morale(side)
+
+
+## The §4.7.1 W4 formation label (hidden unless the §4.9b layer is active on
+## a line formation).
+func formation_label() -> Label:
+	return _formation_label
+
+
+## True while this battle's §4.9b fleet layer is live (a loaded
+## `fleet_commander.gd` instance exists).
+func fleet_commander_active() -> bool:
+	return _fleet_commander != null
+
+
 ## The last 3 rendered log lines, oldest first (localised).
 func log_lines() -> Array[String]:
 	var out: Array[String] = []
@@ -894,11 +1009,18 @@ func camera_state() -> Dictionary:
 ## rule fired. A decision outside the §4.12.1.1 dict shape (a sibling task's
 ## in-flight module) degrades to a hold through the engine's own decision
 ## seam — never a second copy of the turn rules.
+##
+## This is ALSO the §4.9b dispatch point: both AI paths (the animate/instant
+## pumps of `_pump_enemy_turns` / `_process`, and `run_to_completion`'s AI
+## branch) funnel through this method, so the round-start fleet dispatch of
+## [method _ensure_fleet_orders] fires exactly once per round, at the first
+## AI turn of that round.
 func run_ai_turn() -> Dictionary:
 	var unit: Dictionary = sim.current_unit() if sim != null else {}
 	if unit.is_empty() or str(unit.get("side", "")) != BattleSimLib.SIDE_ENEMY:
 		return {}
-	var decision = AiFleetLib.decide(sim, unit)
+	_ensure_fleet_orders()
+	var decision = _ai_decide(unit)
 	if not (decision is Dictionary):
 		decision = {}
 	_apply_engine_decision(unit, decision)
@@ -907,7 +1029,173 @@ func run_ai_turn() -> Dictionary:
 	else:
 		_end_turn_checked()
 	_bind()
+	# The W4 minimap anchor line + formation label track the fleet layer, so
+	# the AI stretch repaints too (queue_redraw coalesces within a frame).
+	_queue_redraw()
 	return decision
+
+
+# --- §4.9b fleet dispatch (W4; the guarded FleetCommander caller) -----------
+
+## One-time setup at [method open_battle]: builds the battle's §4.9a profile
+## row (with the S21 `formation` override folded in) and lazily loads
+## `fleet_commander.gd` — the `battle_result.gd` guard pattern (§4.12.3), so
+## a pre-B tree simply leaves [_member _fleet_commander] null and the AI runs
+## exactly as before (one warning per battle, the guard convention).
+func _setup_fleet_commander() -> void:
+	_fc_state = {}
+	_fc_round = -1
+	_fc_orders = []
+	_fleet_commander = null
+	_enemy_profile = {}
+	if _ai_fleet_script != null and _ai_fleet_script.has_method("profile_for"):
+		var profile = _ai_fleet_script.profile_for(
+			str(encounter.get("kind", "pirate")))
+		if profile is Dictionary:
+			_enemy_profile = (profile as Dictionary).duplicate()
+	# §4.7.16: the sandbox fixture's enemy formation override replaces the
+	# profile row's formation for this battle (the fixture carries the key
+	# only when the editor left its default).
+	var formation_override = encounter.get("formation", null)
+	if formation_override is String \
+			and not (formation_override as String).is_empty():
+		_enemy_profile["formation"] = formation_override
+	var module = ResourceLoader.load(FLEET_COMMANDER_PATH) \
+		if ResourceLoader.exists(FLEET_COMMANDER_PATH) else null
+	if module == null or not module.has_method("generate_orders") \
+			or not module.can_instantiate():
+		_warn_once(FLEET_COMMANDER_PATH, "BattleScreen: %s missing; the §4.9b "
+			% FLEET_COMMANDER_PATH + "fleet layer stays dormant (W4-B)")
+		return
+	_fleet_commander = module.new()
+
+
+## The §4.9b round-start dispatch, called at the top of [method run_ai_turn]:
+## on a round change, re-emits the fleet's per-ship orders. The state dict is
+## passed BY REFERENCE and kept across rounds (`_fc_state` is the same object
+## B mutates — the hysteresis/succession memory, §4.9b); the returned array is
+## this round's per-ship orders, stored for [_method _fleet_order_for].
+## Guarded end to end: no commander (pre-B), no living enemy, or a malformed
+## return all leave the AI on the plain §4.9a path.
+func _ensure_fleet_orders() -> void:
+	if _fleet_commander == null or sim == null or sim.is_over():
+		return
+	var round_no := int(sim.round_number())
+	if round_no == _fc_round:
+		return
+	var anchor: Dictionary = _enemy_anchor_unit()
+	if anchor.is_empty():
+		return
+	_fc_round = round_no
+	# Anchor seeding (§4.9b): the enemy flagship's first-round pos + heading8;
+	# the formation comes from the profile row. A refined B module without
+	# `initial_state` still works from an empty state (guard convention).
+	if _fc_state.is_empty():
+		if _fleet_commander.has_method("initial_state"):
+			var seeded = _fleet_commander.call("initial_state",
+				str(_enemy_profile.get("formation", "swarm")),
+				sim.unit_cell(anchor),
+				int(anchor.get("heading8", BattleSimLib.HEADING_WEST)))
+			_fc_state = seeded if seeded is Dictionary else {}
+		else:
+			_fc_state = {}
+	# The §4.9b view: the engine's units, the round, and the battle kind.
+	var view := {
+		"units": sim.units(),
+		"round": round_no,
+		"enemy_kind": str(encounter.get("kind", "pirate")),
+	}
+	var orders = _fleet_commander.call("generate_orders",
+		view, _enemy_profile, _fc_state)
+	_fc_orders = orders if orders is Array else []
+
+
+## The enemy fleet's anchor unit: the flagship while it lives (fleet index 0),
+## else the lowest living fleet index (§4.9b succession) — `living_units`
+## returns fleet-index order, so that is the first survivor.
+func _enemy_anchor_unit() -> Dictionary:
+	for unit in sim.living_units(BattleSimLib.SIDE_ENEMY):
+		return unit
+	return {}
+
+
+## The order B emitted for `unit` this round. §4.12.3 fixes the return as an
+## Array of per-ship five-tuples; the identity key inside an order is B's
+## refinement, so the lookup is defensive: an explicit index key first
+## (`index` / `unit_index` / `fleet_index`), then the positional reading
+## (fleet-index order) for an order dict that carries no identity key at
+## all. `{}` when nothing matches (the ship then decides §4.9a-plain).
+func _fleet_order_for(unit: Dictionary) -> Dictionary:
+	if _fc_orders.is_empty():
+		return {}
+	var unit_index := int(unit.get("index", -1))
+	for order in _fc_orders:
+		if not (order is Dictionary):
+			continue
+		for key in ["index", "unit_index", "fleet_index"]:
+			var value = (order as Dictionary).get(key, null)
+			if value != null and int(value) == unit_index:
+				return order
+	if unit_index >= 0 and unit_index < _fc_orders.size():
+		var positional = _fc_orders[unit_index]
+		if positional is Dictionary \
+				and not (positional as Dictionary).has("index") \
+				and not (positional as Dictionary).has("unit_index") \
+				and not (positional as Dictionary).has("fleet_index"):
+			return positional
+	return {}
+
+
+## Whether the loaded `ai_fleet.gd` carries the §4.12.1.1 W4-B decide shape
+## `decide(sim, unit, order := {})` — probed once against the script's method
+## list (the sibling-module guard convention). Pre-B the 2-arg decide is
+## called; post-B the ship's order rides as the third argument.
+func _ai_fleet_takes_order() -> bool:
+	if _ai_fleet_script == null or not _ai_fleet_script.has_method("decide"):
+		return false
+	if _ai_fleet_order_args < 0:
+		_ai_fleet_order_args = 0
+		for method in _ai_fleet_script.get_script_method_list():
+			if str(method.get("name", "")) == "decide":
+				if (method.get("args", []) as Array).size() >= 3:
+					_ai_fleet_order_args = 1
+				break
+	return _ai_fleet_order_args == 1
+
+
+## One §4.9 decision for `unit`: with the ship's §4.9b order as the THIRD
+## argument when both layers are landed, else the plain §4.9a decision (the
+## pre-B behavior, byte-identical to today). The call goes through the
+## dynamically dispatched script handle — the analyzer must not reject the
+## post-B arity against the pre-B script.
+func _ai_decide(unit: Dictionary) -> Dictionary:
+	var order := _fleet_order_for(unit)
+	if not order.is_empty() and _ai_fleet_takes_order():
+		return _ai_fleet_script.decide(sim, unit, order)
+	return AiFleetLib.decide(sim, unit)
+
+
+## The §4.7.1/§4.9b anchor-line datum for the minimap and the formation
+## label: the anchor cell + heading8 of the enemy fleet's flagship (the
+## §4.9b anchor = flagship pos + heading8; the lowest living fleet index
+## after succession — the first survivor in fleet-index order). Empty unless
+## the fleet layer is ACTIVE (a commander loaded AND this round's orders
+## issued) AND the profile's formation is one of §4.8's line formations
+## (`line_ahead`/`column`); `screen`/`swarm` draw nothing.
+func formation_anchor_line() -> Dictionary:
+	if _fleet_commander == null or _fc_orders.is_empty() \
+			or sim == null or sim.is_over():
+		return {}
+	var formation := str(_enemy_profile.get("formation", ""))
+	if not (formation in LINE_FORMATIONS):
+		return {}
+	for unit in sim.living_units(BattleSimLib.SIDE_ENEMY):
+		return {
+			"formation": formation,
+			"cell": sim.unit_cell(unit),
+			"heading8": int(unit.get("heading8", BattleSimLib.HEADING_EAST)),
+		}
+	return {}
 
 
 ## Advances the engine's cursor and finishes the battle when the advance
@@ -1134,6 +1422,136 @@ func _wire_action_buttons() -> void:
 			_shot_buttons[str(button.get_meta("shot_id"))] = button
 
 
+# --- W4 HUD (docs/80-* §4.7.1 top-area morale bars + formation label) -------
+
+## Builds the §4.7.1 W4 additions in code (palette shapes only, §4.8): the
+## two labeled side-morale bars appended to the top row (player left of the
+## pair, enemy right) and the formation label under the minimap. The label
+## text is set by [method _bind_morale] / [method _bind_formation]; every
+## control ignores the mouse so the top bar and the world view keep input.
+func _build_morale_hud() -> void:
+	var box := HBoxContainer.new()
+	box.name = "MoraleBox"
+	box.add_theme_constant_override("separation", 16)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side_def in [
+		{
+			"side": BattleSimLib.SIDE_PLAYER,
+			"column": "MoralePlayer", "label": "MoralePlayerLabel",
+			"track": "MoralePlayerTrack", "fill": "MoralePlayerFill",
+		},
+		{
+			"side": BattleSimLib.SIDE_ENEMY,
+			"column": "MoraleEnemy", "label": "MoraleEnemyLabel",
+			"track": "MoraleEnemyTrack", "fill": "MoraleEnemyFill",
+		},
+	]:
+		var column := VBoxContainer.new()
+		column.name = str(side_def["column"])
+		column.add_theme_constant_override("separation", 2)
+		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var label := Label.new()
+		label.name = str(side_def["label"])
+		label.text = _t("battle.morale")
+		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		column.add_child(label)
+		var track := ColorRect.new()
+		track.name = str(side_def["track"])
+		track.custom_minimum_size = Vector2(96, 8)
+		track.color = PaletteLib.PANEL_LINE
+		track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var fill := ColorRect.new()
+		fill.name = str(side_def["fill"])
+		fill.color = PaletteLib.GOOD
+		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		track.add_child(fill)
+		column.add_child(track)
+		box.add_child(column)
+		if side_def["side"] == BattleSimLib.SIDE_PLAYER:
+			_morale_player_label = label
+			_morale_player_track = track
+			_morale_player_fill = fill
+		else:
+			_morale_enemy_label = label
+			_morale_enemy_track = track
+			_morale_enemy_fill = fill
+	_top_bar.add_child(box)
+	box.position = Vector2(VIEW_SIZE.x - 224.0, 4.0)
+
+	# The formation label sits directly under the 192×120 minimap
+	# (§4.7.1 "near the minimap"); hidden until a line formation's fleet
+	# layer is active (§4.8 pins the anchor lines to line_ahead/column).
+	_formation_label = Label.new()
+	_formation_label.name = "FormationLabel"
+	_formation_label.add_theme_font_size_override("font_size", 12)
+	_formation_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	_formation_label.position = Vector2(1080, 172)
+	_formation_label.size = Vector2(192, 18)
+	_formation_label.visible = false
+	add_child(_formation_label)
+
+
+## One side's §4.8a morale. GUARDED SEAM (W4-A): when the engine lacks
+## `side_morale` (the pre-A merge), the bars render 100/100 — a full bar is
+## the missing-seam reading, never a guessed value; the call shape is the
+## `60-*` §4.12.1 pin (`sim.side_morale("player"/"enemy")`).
+func _side_morale(side: String) -> int:
+	if sim != null and sim.has_method("side_morale"):
+		var value = sim.call("side_morale", side)
+		if value is int or value is float:
+			return clampi(int(value), 0, 100)
+	return 100
+
+
+## Sets one bar's fill: `value/100` of the track width, GOOD tier above the
+## §4.8a gate and WARN at or below it (see MORALE_WARN_AT — display only).
+func _set_morale_fill(fill: ColorRect, track: ColorRect, value: int) -> void:
+	if fill == null or track == null:
+		return
+	var width := track.size.x
+	if width <= 0.0:
+		width = track.custom_minimum_size.x
+	var height := track.size.y
+	if height <= 0.0:
+		height = track.custom_minimum_size.y
+	fill.position = Vector2.ZERO
+	fill.size = Vector2(width * float(clampi(value, 0, 100)) / 100.0, height)
+	fill.color = PaletteLib.WARN if value <= MORALE_WARN_AT else PaletteLib.GOOD
+
+
+## §4.7.1 W4: the morale bars refresh on the existing `_bind` cadence — the
+## labels read `battle.morale` + the value, the fills value/100.
+func _bind_morale() -> void:
+	if _morale_player_label == null or _morale_enemy_label == null:
+		return
+	var player_value := _side_morale(BattleSimLib.SIDE_PLAYER)
+	var enemy_value := _side_morale(BattleSimLib.SIDE_ENEMY)
+	_morale_player_label.text = "%s %d" % [_t("battle.morale"), player_value]
+	_morale_enemy_label.text = "%s %d" % [_t("battle.morale"), enemy_value]
+	_set_morale_fill(_morale_player_fill, _morale_player_track, player_value)
+	_set_morale_fill(_morale_enemy_fill, _morale_enemy_track, enemy_value)
+
+
+## §4.7.1 W4: the formation label — `battle.formation` + the
+## `battle.formation.<value>` label, shown only while the §4.9b fleet layer
+## is active on a line formation (§4.8's `line_ahead`/`column` pin); hidden
+## otherwise (no display, no key invented, for `screen`/`swarm`).
+func _bind_formation() -> void:
+	if _formation_label == null:
+		return
+	var anchor := formation_anchor_line()
+	if anchor.is_empty():
+		_formation_label.visible = false
+		return
+	_formation_label.visible = true
+	_formation_label.text = "%s %s" % [
+		_t("battle.formation"),
+		I18n.t_key("battle.formation.%s" % str(anchor.get("formation", ""))),
+	]
+
+
 ## One custom-draw pass for the whole world view (§4.7.1 "placeholder shapes",
 ## §4.8): the sea, the 48×30 grid lines and the 24×24 lettered tokens, all
 ## through the camera functions. Drawing (not child Controls) keeps the free
@@ -1246,9 +1664,21 @@ func _on_minimap_draw() -> void:
 		_draw_minimap_arrow(center,
 			Vector2(BattleSimLib.HEADING_RAYS[current_index]), 14.0, 1.5,
 			PaletteLib.COAST_SEA)
-	# W4 stub: the §4.7.1 formation anchor lines (`line_ahead`/`column`) draw
-	# here in PANEL_LINE once the §4.9b fleet-command layer lands — the layer
-	# and its `battle.formation.*` label already exist in the string table.
+	# W4 (§4.7.1/§4.8): the formation anchor line — the anchor cell centre
+	# plus a 6-cell heading ray, PANEL_LINE per the §4.8 pin, drawn only
+	# while the §4.9b fleet layer is active on a line formation.
+	var anchor := formation_anchor_line()
+	if not anchor.is_empty():
+		var anchor_cell: Vector2i = anchor.get("cell", Vector2i.ZERO)
+		var anchor_center := minimap_map(
+			Vector2(anchor_cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5)
+		var heading: int = int(anchor.get("heading8", BattleSimLib.HEADING_EAST))
+		if heading >= 0 and heading < BattleSimLib.HEADING_RAYS.size():
+			var ray := Vector2(BattleSimLib.HEADING_RAYS[heading]).normalized()
+			draw_line(anchor_center,
+				anchor_center + ray
+					* (float(FORMATION_ANCHOR_CELLS) * TILE_PX * MINIMAP_SCALE),
+				PaletteLib.PANEL_LINE, 1.5)
 
 
 func _draw_minimap_arrow(from: Vector2, direction: Vector2, length: float,
@@ -1302,6 +1732,8 @@ func _bind() -> void:
 	_bind_log_records()
 	_bind_log()
 	_bind_highlights()
+	_bind_morale()
+	_bind_formation()
 	_bind_menu()
 
 
