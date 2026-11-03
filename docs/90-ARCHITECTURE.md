@@ -62,7 +62,9 @@ SailAge/
 │   │   ├── inn_screen.tscn
 │   │   ├── guild_screen.tscn    # Phase 3 (S12)
 │   │   └── palace_screen.tscn   # Phase 3 (S13)
-│   ├── combat/                 # Phase 2
+│   ├── combat/                 # Phase 2; Phase 9 adds the S21 sandbox
+│   │   ├── battle_screen.tscn    # S10 battle screen (80-* §4.7.1)
+│   │   └── battle_sandbox.tscn   # Phase 9 W2: S21 naval-battle sandbox, zero-write (80-* §4.7.16)
 │   ├── ui/                     # Phase 8: shared person UI
 │   │   ├── character_card.tscn    # unified person renderer — player/officer/NPC captain (80-*)
 │   │   └── dossier_panel.tscn     # captain dossier: card + familiarity-gated career log (80-*)
@@ -85,6 +87,10 @@ SailAge/
 │   ├── world/interactions.gd   # Phase 8: targeting/fleet attribution/verb dispatch (60-*)
 │   ├── world/hail_options.gd   # Phase 8: role × stance × skill hail-option builder (80-*)
 │   ├── world/autopilot.gd      # Phase 8: appointed voyage — route + interrupts (20-*)
+│   ├── combat/battle_sim.gd      # Phase 2: battle turn engine, pure (60-* §4.12.1)
+│   ├── combat/ai_fleet.gd        # Phase 2: enemy composition + AI decisions (60-* §4.12.1.1)
+│   ├── combat/fleet_commander.gd # Phase 9 W4: per-round fleet order five-tuples, pure (60-* §4.9b)
+│   ├── combat/ai_search.gd       # Phase 9 W5: T3 one-ply lookahead + shared evaluation + θ const tables (60-* §4.9c)
 │   ├── port/trade_engine.gd    # price formulas from 30-PORTS-AND-TRADE.md
 │   ├── port/economy.gd         # Phase 5/7: flow-economy stock tick + events, pure (30-* §4.2/§4.5)
 │   ├── port/allegiance.gd      # Phase 7: port classes, ledgers, dev, treasuries, tariffs/permits inputs (30-* §4.9/§4.10)
@@ -120,7 +126,11 @@ SailAge/
     ├── route_overrides.json     # lane hand-fixes (Phase 5)
     ├── build_captains.py        # Phase 8: parts + quotas + overrides → captains.json + officers.json v2 (--check = byte-identical rebuilds; 10-* §4.11)
     ├── captain_overrides.json   # Phase 8: legend layer — 4 named pirates (with drops) + 20 legend captains
-    └── officer_overrides.json   # Phase 8: the 24 hand-authored legend officers
+    ├── officer_overrides.json   # Phase 8: the 24 hand-authored legend officers
+    ├── battle_ai_harness.gd     # Phase 9 W3: 64-seed mirror self-play harness (+ .tscn)
+    ├── battle_ai_harness_report.md  # generated, tool-owned — never hand-edited
+    ├── battle_tune.py           # Phase 9 W5: offline CEM θ learning, stdlib-only
+    └── battle_tune_report.md    # generated, tool-owned — never hand-edited
 ```
 
 Rules:
@@ -407,6 +417,12 @@ UI scales up from 1280×720 via stretch; no per-screen responsive logic.
   over whichever screen opened it, with state untouched. `world.map_id`
   is a single value (`"world"`), so **no map-switch routing exists**
   anywhere in the flow.
+- **Title ⇄ Sandbox ⇄ Battle (Phase 9):** `S1 ──海战──► S21 ──开战──►
+  S10 ──battle ends──► S21` — the naval-battle sandbox
+  (`scenes/combat/battle_sandbox.tscn`, `80-*` §4.7.16) opens S10 through
+  a **zero-write** fixture encounter (`60-*` §4.12.4); the ending shows a
+  read-only after-action dialog and returns to S21 with the configuration
+  kept (a normal battle still ends at S3); `Esc` returns S21 → S1.
 - **Dialogs:** `dialog_box.tscn` / `confirm_dialog.tscn` are instanced as
   modal children of the current screen; results delivered via signals, not
   callbacks into other scenes.
@@ -639,7 +655,10 @@ the first release**, and no task may spend effort on it. Concretely:
 
 - `save_version` increments on any breaking shape change. The current
   values are `SAVE_VERSION = 9`, `PHASE = 9` (Phase 8,
-  characters/careers/encounters).
+  characters/careers/encounters). **Phase 9 keeps `SAVE_VERSION = 9`** —
+  battle state stays transient (never saved; the §5.4
+  `pending_encounter` handoff is unchanged) and the S21 naval-battle
+  sandbox writes nothing (`80-*` §4.7.16).
 - **No migration chain.** `SaveSystem.MIGRATIONS` is empty. The whole load
   contract is the identity: a payload whose `save_version` equals
   `SAVE_VERSION` loads (round-trip); **any older payload — v8 included —
