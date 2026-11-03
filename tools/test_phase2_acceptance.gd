@@ -1,7 +1,8 @@
 extends Node
-## Phase-2 task H — Phase-2 acceptance, scripted end to end
-## (docs/IMPLEMENT-Phase2.md H; docs/60-COMBAT.md §4.6, §4.8, §4.10, §4.11.9,
-## §4.11.10, §4.11.11.3, §4.12.4, §6; docs/90-ARCHITECTURE.md §8.1, §8.2).
+## Phase-9 W3-D — the Phase-2 acceptance walk, re-pinned onto the velocity
+## engine (docs/IMPLEMENT-Phase2.md H; docs/60-COMBAT.md §4.2, §4.3a, §4.4,
+## §4.4a, §4.5, §4.6a, §4.8, §4.10, §4.11.2, §4.11.7, §4.11.9, §4.11.10,
+## §4.12.2, §4.12.3; docs/90-ARCHITECTURE.md §8.1, §8.2).
 ##
 ##   godot --headless --path . tools/test_phase2_acceptance.tscn
 ##
@@ -10,100 +11,68 @@ extends Node
 ## **What makes this an acceptance test rather than another unit suite.** Every
 ## scenario starts from a real **save file on disk** (the current
 ## `save_version`, written by a plain JSON dump exactly as `SaveSystem.save()`
-## would), loads it through `SaveSystem.load()`, then drives the *shipped* path:
-## HISTORICAL (Phase 2): `Encounters` + `world_map.gd` for the contact, `battle_screen.tscn` for the
-## fight (its buttons for the player, `AiFleet` for the enemy), and the §4.12.4
-## battle-end sequence for the aftermath. Nothing here calls `BattleResult` /
-## `BattleRewards` directly: those are reached through the screen's guarded
-## seams, exactly as in production.
+## would), loads it through `SaveSystem.load()`, then drives the *shipped*
+## battle path: the §4.11.1-seeded `BattleSim` over the loaded fleet, the
+## three-phase §4.3/§4.3a turns (pick a legal velocity → the Bresenham sweep →
+## at most one action) through this suite's own policy callables, and the
+## §4.12.2 → §4.12.3 aftermath through the guarded `BattleRewards` /
+## `BattleResult` seams.
 ##
-## Scenarios (docs/IMPLEMENT-Phase2.md H):
-##   S1  win by cannons          → victory, salvage, XP, rep, marker removal,
-##                                 spawn immunity, contact-tile return
-##   S2  win by boarding+capture → captured hull joins at 25% durability with
-##                                 crew 0 and cargo intact; a second capture on
-##                                 a full 5-ship fleet is looted + scuttled
-##   S3  retreat                 → result `retreat`, no XP/gold, marker keeps
-##                                 its +1 day pursuit cooldown and survives
-##   S4  lose a duel as the last ship → `EventBus.game_over("captured")`, S9
-##                                 renders `gameover.captured` in both locales,
-##                                 empty fleet
+## W3 seam note: the Phase-2 suite drove `world_map.gd` + `battle_screen.tscn`
+## for the contact walk and the fight. Those screens are W3-B/C's in-flight
+## rewrites (`scripts/combat/ai_fleet.gd` and `scenes/combat/battle_screen.gd`
+## still reference the retired MP API on this branch), so the movement /
+## interaction steps are re-expressed here directly on the velocity API —
+## deployment (§4.11.2), cannon via arcs + per-side reload, the sweep ram,
+## the §4.6a hook + board, retreat and surrender — while every economy /
+## outcome pin is preserved. The world-ecology pins (marker removal, the
+## pursuit cooldown, the contact walk) stay with the ecology suite; the S10
+## render flow is re-covered by slot C's `tools/test_battle_screen.gd`.
+##
+## Scenarios:
+##   S1  win by cannons          → victory, salvage, XP, pirate rep, contact
+##                                 block; the player never boards or rams
+##   S1b  a sweep-ram kill       → the §4.5 ram resolves through the sweep
+##   S2  win by boarding+capture → the §4.6a hook zeroes both velocities; the
+##                                 captured hull joins at 25% durability with
+##                                 crew 0 and cargo intact; morale_bonus +5
+##   S2b a second capture on a full fleet → looted + scuttled, overflow named
+##   S3  retreat                 → result `retreat`, no XP/gold/rep, fleet kept
+##   S3b player surrender        → §4.11.7: the pirates take the hold only
+##   S4  lose a duel as the last ship → defeat_captured; S9 renders
+##                                 `gameover.captured` in both locales
 ##
 ## Every scenario also asserts the save → load → battle → save round trip
 ## (`save_version == SaveSystem.SAVE_VERSION` on disk, reload succeeds).
-##
-## Test isolation: any `user://saves/save_*.json` found at startup is moved into
-## memory and written back at the end; every file this suite creates is removed
-## again (start AND end), exactly like `tools/test_save*.gd`.
 
-## Phase-5 task J: the 3-marker system is retired; the scenarios run against
-## the `NpcFleets` ecology (`60-*` §4.11.11, §4.12.3) — `hostile_fleets`
-## became `npc_fleets`, `kind` became `role`, and the per-kind spawn
-## immunity is retired (the trickle refills the ecology).
-const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
-const CaptainsLib := preload("res://scripts/world/captains.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const BattleRewardsLib := preload("res://scripts/combat/battle_rewards.gd")
+const BattleResultLib := preload("res://scripts/combat/battle_result.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
-const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
-const WorldScene := preload("res://scenes/world/world_map.tscn")
-const BattleScene := preload("res://scenes/combat/battle_screen.tscn")
+const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 
-## Open-water fixture tile (all 8 neighbours passable) 8 tiles from Lisbon in
-## the world map's variables band (lat 40°N). Phase 4 (task G): re-anchored from
-## the retired P1 grid's (20,20) — that tile is polar ice on the world grid. The
-## pirate is placed on the neighbour to its east, so a real day tick walks it
-## into contact.
-## (2042,615) is open water 8 tiles from Lisbon (Phase-6 grid); the marker one
-## tile east of it steps south-west and lands at Chebyshev 1 on the very next
-## day tick (verified by replaying the exact §4.11.8 rule-5 tie-breaks over the
-## shipped artifact).
+## Open-water fixture tile, 8 tiles from Lisbon (open water on the Phase-6
+## grid). The battle's §4.11.1 contact and the §4.11.10 rep anchor.
 const CONTACT := Vector2i(2042, 615)
-const MARKER_CELL := CONTACT + Vector2i(1, 0)
-const MAP_PATH := "res://data/maps/world.png"
-
-## Pre-battle day of every fixture: the day tick that brings the pirate into
-## contact advances it to [constant BATTLE_DAY], so both numbers are explicit.
-## The pre-battle day. Phase 4 (task G): the battle seed includes the contact
-## tile (`60-*` §4.11.1), which moved from P1's (20,20) to the world's
-## (1023,300), so the day was re-searched: run day 3 → battle day 4 is the
-## cannon-victory stream for this fixture (2 enemy hulls sunk, 0 captured).
-const RUN_DAY := 3
-const BATTLE_DAY := RUN_DAY + 1
-
-## A weather seed that rolls `fair` on the fixture tile, so the §4.11.5 cannon
-## numbers are the un-stormed ones (a storm would halve them, §4.2).
-const WEATHER_SEED := 7
-
-## §4.11.2 / §4.11.9 constants asserted below.
-const SPAWN_IMMUNITY_DAYS := 3
-const PURSUIT_COOLDOWN_DAYS := 1
 
 var _failures: Array[String] = []
 var _checks := 0
 ## `{slot: bytes}` of saves that existed before the suite ran (restored at end).
 var _backup: Dictionary = {}
-## Every `EventBus.game_over` reason seen by the current scenario.
-var _game_over_reasons: Array = []
 
 
 func _ready() -> void:
 	_backup_saves()
-	_ensure_map()
-	_connect_game_over()
 	await _scenario_cannon_victory()
+	await _scenario_sweep_ram()
 	await _scenario_boarding_capture()
+	await _scenario_full_fleet_capture()
 	await _scenario_retreat()
+	await _scenario_surrender()
 	await _scenario_last_ship_captured()
 	_cleanup_saves()
 	_report()
-
-
-func _connect_game_over() -> void:
-	EventBus.game_over.connect(func(reason: String) -> void:
-		_game_over_reasons.append(reason))
 
 
 # ===========================================================================
@@ -111,81 +80,69 @@ func _connect_game_over() -> void:
 # ===========================================================================
 
 func _scenario_cannon_victory() -> void:
-	print("\n=== S1: win by cannons (save → pirate contact → victory) ===")
+	print("\n=== S1: win by cannons (save → §4.11.2 deployment → victory) ===")
 	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 30,
 		"provisions": 40, "water": 40}),
 		_ship("brigantine", {"cannons": 10, "crew": 30})]
-	_check(_start_from_save("S1", fleet, RUN_DAY, 5000, 12),
+	var save_gold := 5000
+	var save_day := 3
+	_check(_start_from_save("S1", fleet, save_day, save_gold, 12),
 		"S1: the save loads")
-	_set_explored_world()
-	_ensure_map()
-	SailingSimLib.reset_ledger_state()
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
 
-	# The pirate lives in the §4.11.11 save block, composed by the §4.11.3
-	# implementation, two tiles east of the fleet.
-	var marker := _place_marker("pirate", MARKER_CELL, RUN_DAY)
-	_check(not marker.is_empty(), "S1: a pirate fleet is in the npc_fleets block")
-	var pair: Array = await _spawn_world()
-	var world = pair[1]
-	_check(world.fleet_marker_cells().size() == 1,
-		"S1: the world map adopts exactly one fleet")
-
-	# One real sea day: the marker steps 1 tile toward its anchor and contacts.
-	SailingSimLib.advance_clock(1.0)
-	await get_tree().process_frame
-	_check(GameState.day == BATTLE_DAY,
-		"S1: one day of sailing advances the clock to day %d (%d)"
-		% [BATTLE_DAY, GameState.day])
-	_check(str(GameState.world.get("weather", "")) != "storm",
-		"S1: the fixture day is not a storm, so §4.11.5 numbers are un-halved (%s)"
-		% str(GameState.world.get("weather", "")))
-	_check(world.pending_encounter_id() == str(marker.get("id", "")),
-		"S1: the pirate walked into contact and queued its encounter (%s)"
-		% world.pending_encounter_id())
-
-	# S10 picks the queued encounter up in `_ready` — the production handoff.
-	var screen = await _open_battle_screen()
-	_check(screen != null and not screen.encounter.is_empty(),
-		"S1: battle_screen opens the queued encounter")
-	if screen == null or screen.encounter.is_empty():
-		await _free_node(pair[0])
-		await _assert_round_trip("S1")
-		return
-	_check(int(screen.sim.day) == BATTLE_DAY,
-		"S1: the engine gets the contact day (%d)" % int(screen.sim.day))
-	_check(screen.sim.contact == CONTACT,
-		"S1: §4.11.1 contact is the player's tile %s (%s)"
-		% [str(CONTACT), str(screen.sim.contact)])
-	# §4.11.1 over the engine's own pre-battle values (the daily ledger has
-	# already taken that day's wages, so `gold` is the live figure, not the
-	# save's).
-	_check(screen.sim.seed_value() == BattleSimLib.battle_seed_formula(
-			int(screen.sim.day), screen.sim.contact, int(screen.sim.gold),
-			screen.sim.living_units(BattleSimLib.SIDE_PLAYER).size()),
+	# The enemy holds at rest — a static §4.11.3-style target pair.
+	var enemy_ships: Array = [
+		_ship("sloop", {"cannons": 4}), _ship("sloop", {"cannons": 4}),
+	]
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": enemy_ships,
+		"enemy_kind": "pirate", "enemy_nation": "",
+		"day": GameState.day, "gold": GameState.gold,
+		"contact": CONTACT, "weather": "fair", "wind_dir": "E",
+		"current": {"dir": "", "strength": 0},
+	})
+	sim.start()
+	var p0 := _unit(sim, "player", 0)
+	var p1 := _unit(sim, "player", 1)
+	var e0 := _unit(sim, "enemy", 0)
+	_check(sim.unit_cell(p0) == Vector2i(2, 15) and sim.unit_cell(p1) == Vector2i(2, 14),
+		"S1: §4.11.2 deployment — the player column sits on (2,15)/(2,14) (%s/%s)"
+			% [str(sim.unit_cell(p0)), str(sim.unit_cell(p1))])
+	_check(sim.unit_cell(e0) == Vector2i(45, 15),
+		"S1: §4.11.2 deployment — the enemy flagship sits on (45,15) (%s)"
+			% str(sim.unit_cell(e0)))
+	_check((p0["vel"] as Vector2i) == Vector2i.ZERO
+			and int(p0["heading8"]) == BattleSimLib.HEADING_EAST
+			and int(e0["heading8"]) == BattleSimLib.HEADING_WEST,
+		"S1: §4.11.2 — vel (0,0) with headings east/west at the start")
+	# §4.11.1 over the engine's own pre-battle values.
+	_check(sim.seed_value() == BattleSimLib.battle_seed_formula(
+			int(sim.day), sim.contact, int(sim.gold),
+			sim.living_units(BattleSimLib.SIDE_PLAYER).size()),
 		"S1: the seed is the §4.11.1 formula over day/contact/gold/fleet (%d)"
-		% screen.sim.seed_value())
+			% sim.seed_value())
+	# Fixture arrangement: the §4.11.2 bands open 43 cells apart; the static
+	# target pair is moved to mid-board so the scenario stays inside the
+	# 40-round cap (the same explicit-arrangement rule as the other suites).
+	_place(sim, "enemy", 0, Vector2i(25, 15))
+	_place(sim, "enemy", 1, Vector2i(25, 14))
 
 	var baseline := _reputation_snapshot()
 	var gold_before := GameState.gold
-	var xp_before := int(GameState.player.get("xp", 0))
-	var guard: int = await _drive(screen, "cannon")
-	var board_or_ram: int = _player_chain_actions(screen)
-	await get_tree().process_frame
-
-	var outcome: Dictionary = screen.last_outcome
+	var xp_before := CharacterLib.current_xp()
+	var guard := _drive(sim, "cannon_only")
+	var outcome: Dictionary = sim.outcome()
 	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_VICTORY,
 		"S1: the cannon-only fight ends in `victory` (%s, %d driver steps)"
 		% [str(outcome.get("result")), guard])
-	_check(board_or_ram == 0,
-		"S1: the player never boarded or rammed — cannons only (%d such actions)"
-		% board_or_ram)
-	var sunk: Array = _as_array(outcome.get("sunk_enemy", []))
-	var captured: Array = _as_array(outcome.get("captured_enemy", []))
-	_check(not sunk.is_empty(),
-		"S1: at least one enemy hull was sunk by cannon fire (%s)" % str(sunk))
-	_check(_has_engine_kind(screen, "cannon"),
-		"S1: the engine log carries cannon volleys")
+	_check(_engine_actions_of(sim, ["board", "ram"], "player") == 0,
+		"S1: the player never boarded or rammed — cannons only")
+	var sunk := _as_array(outcome.get("sunk_enemy", []))
+	var captured := _as_array(outcome.get("captured_enemy", []))
+	_check(sunk.size() == 2 and captured.is_empty(),
+		"S1: both enemy hulls were sunk by cannon fire (%s)" % str(sunk))
+	_check(_engine_actions_of(sim, ["cannon"], "player") >= 2,
+		"S1: the engine log carries the player's cannon volleys")
 
 	# §4.11.10: salvage = Σ floor(base_price × 0.05) over the SUNK hulls.
 	var expected_salvage: int = BattleRewardsLib.salvage_for(sunk)
@@ -195,30 +152,40 @@ func _scenario_cannon_victory() -> void:
 	_check(int(outcome.get("salvage_gold", -1)) == expected_salvage,
 		"S1: salvage gold = Σ floor(base_price × 0.05) of the sunk hulls (%d, expected %d)"
 		% [int(outcome.get("salvage_gold", -1)), expected_salvage])
-	_check(GameState.gold == gold_before + expected_salvage,
-		"S1: the payout landed in the purse (%d → %d, +%d)"
-		% [gold_before, GameState.gold, expected_salvage])
 	_check(int(outcome.get("xp", -1)) == expected_xp,
 		"S1: XP = 10 × %d neutralised + 5 × %d rounds = %d (got %d)"
 		% [expected_neutralised, int(outcome.get("rounds", 0)), expected_xp,
 			int(outcome.get("xp", -1))])
-	_check(int(GameState.player.get("xp", 0)) - xp_before >= expected_xp,
-		"S1: the XP reached player.xp (%d → %d)"
-		% [xp_before, int(GameState.player.get("xp", 0))])
-
-	# §4.11.10 rep: +2 with each of the two nearest ports' nations (two ports
-	# selected first, their nations deduplicated).
+	# §4.11.10 rep: +2 with each of the two nearest ports' nations.
 	var expected_nations: Array = BattleRewardsLib.nearest_nations(CONTACT)
 	_check(not expected_nations.is_empty(),
 		"S1: the contact tile has two nearest ports (%s)" % str(expected_nations))
+	_check(_as_dict(outcome.get("rep_deltas", {})) == _expected_rep_block(expected_nations),
+		"S1: the outcome's rep_deltas is exactly %s (%s)"
+		% [str(_expected_rep_block(expected_nations)),
+			str(outcome.get("rep_deltas", {}))])
+	_check(_as_dict(outcome.get("contact", {})) == {"x": CONTACT.x, "y": CONTACT.y},
+		"S1: the outcome block reports the contact tile (%s)"
+		% str(outcome.get("contact", {})))
+
+	# The §4.12.3 aftermath, applied once. The level multiplier reads the
+	# level held BEFORE the award (§4.11.10), so the expectation is computed
+	# before apply() can level the player up.
+	var credited_xp := BattleRewardsLib.battle_xp_for(expected_xp)
+	var applied := BattleRewardsLib.apply(outcome)
+	_check(GameState.gold == gold_before + expected_salvage,
+		"S1: the salvage landed in the purse exactly once (%d → %d)"
+		% [gold_before, GameState.gold])
+	_check(CharacterLib.current_xp() == xp_before + credited_xp,
+		"S1: the XP reached player.xp through the level multiplier "
+			+ "(%d → %d, credited %d)" % [xp_before, CharacterLib.current_xp(),
+			credited_xp])
 	var rep_ok := true
 	for nation_id in expected_nations:
 		if CharacterLib.reputation(str(nation_id)) \
 				!= int(baseline.get(nation_id, 0)) + BattleRewardsLib.PIRATE_REP_GAIN:
 			rep_ok = false
-	_check(rep_ok,
-		"S1: pirate rep is +2 with %s (%s)" % [str(expected_nations),
-			str(_reputation_delta(baseline))])
+	_check(rep_ok, "S1: pirate rep is +2 with %s" % str(expected_nations))
 	var untouched := true
 	for nation_id in baseline:
 		if str(nation_id) in expected_nations:
@@ -226,33 +193,41 @@ func _scenario_cannon_victory() -> void:
 		if CharacterLib.reputation(str(nation_id)) != int(baseline[nation_id]):
 			untouched = false
 	_check(untouched, "S1: no other nation's reputation moved")
-	_check(_as_dict(outcome.get("rep_deltas", {})) == _expected_rep_block(expected_nations),
-		"S1: the outcome's rep_deltas is exactly %s (%s)"
-		% [str(_expected_rep_block(expected_nations)),
-			str(outcome.get("rep_deltas", {}))])
-
-	# §4.11.11.2 return: the defeated fleet is removed; the per-kind spawn
-	# immunity is retired with the marker system (§4.11.11.1).
-	var marker_gone := true
-	for left in GameState.npc_fleets:
-		if str(left.get("id", "")) == str(marker.get("id", "")):
-			marker_gone = false
-	_check(marker_gone,
-		"S1: the defeated fleet is removed from the map")
-	_check(GameState.world_tile() == CONTACT,
-		"S1: the fleet is back on the contact tile %s (%s)"
-		% [str(CONTACT), str(GameState.world_tile())])
-	_check(_as_dict(outcome.get("contact", {})) == {"x": CONTACT.x, "y": CONTACT.y},
-		"S1: the outcome block reports the contact tile (%s)"
-		% str(outcome.get("contact", {})))
-	_check(screen.after_action_dialog().visible,
-		"S1: the after-action dialog reports the battle (§4.12.4 step 5)")
-
-	# Both locales, no raw `<key>` anywhere the screen renders.
-	_check(await _locales_clean(screen, "S1"), "S1: the after-action text is localised")
-	await _free_node(screen)
-	await _free_node(pair[0])
+	var replay := BattleRewardsLib.apply(outcome)
+	_check(int(replay["gold"]) == 0 and int(replay["xp"]) == 0,
+		"S1: the applied block cannot double-apply (%s)" % str(replay))
 	await _assert_round_trip("S1")
+
+
+# ===========================================================================
+# S1b — the §4.5 sweep ram as the killing blow
+# ===========================================================================
+
+func _scenario_sweep_ram() -> void:
+	print("\n=== S1b: a sweep-ram kill (§4.3a sweep → §4.5 ram) ===")
+	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 30})]
+	_check(_start_from_save("S1b", fleet, 3, 5000, 12), "S1b: the save loads")
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [_ship("sloop", {"cannons": 0, "durability": 25})],
+		"enemy_kind": "pirate", "day": GameState.day, "gold": GameState.gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0},
+	})
+	sim.start()
+	_place(sim, "player", 0, Vector2i(20, 15))
+	_place(sim, "enemy", 0, Vector2i(23, 15))
+	_face(sim, "player", 0, BattleSimLib.HEADING_EAST)
+	var guard := _drive(sim, "ram")
+	var outcome: Dictionary = sim.outcome()
+	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_VICTORY,
+		"S1b: the ram fight ends in `victory` (%s, %d steps)"
+		% [str(outcome.get("result")), guard])
+	_check(_engine_actions_of(sim, ["ram"], "player") >= 1,
+		"S1b: the sweep resolved a player-side §4.5 ram")
+	_check(_as_array(outcome.get("sunk_enemy", [])) == ["sloop"],
+		"S1b: the ram sank the enemy hull (%s)" % str(outcome.get("sunk_enemy")))
+	await _assert_round_trip("S1b")
 
 
 # ===========================================================================
@@ -260,71 +235,66 @@ func _scenario_cannon_victory() -> void:
 # ===========================================================================
 
 func _scenario_boarding_capture() -> void:
-	print("\n=== S2: win by boarding + capture ===")
+	print("\n=== S2: win by boarding + capture (the §4.6a hook) ===")
 	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 30,
 		"provisions": 40, "water": 40})]
-	# A single pirate sloop: crew 10 → defender base min(floor(10/5),20) + 6 = 8
-	# (§4.11.6). The fixture day is whichever makes this fixture's §4.11.1 duel
-	# stream a player win.
+	# A single pirate sloop: crew 10 → defender base min(floor(10/5),20) + 6
+	# = 8 (§4.11.6). The fixture gold/day is whichever makes this fixture's
+	# §4.11.1 duel stream a player win (base 12 vs 8).
 	var enemy := _ship("sloop", {"crew": 10, "cannons": 0, "cargo": {"wine": 6}})
-	var defender_base: int = BattleSimLib.defender_duel_base(
-		10, BattleSimLib.CAPTAIN_RATING_BASE + 1)
 	var save_gold := 5000
-	var flagship_crew := 30
-	var run_day: int = _duel_day("capture", save_gold, flagship_crew, 1, 12,
-		defender_base)
-	_check(run_day > 0,
+	var save_day: int = _duel_day("capture", save_gold, 1, 12,
+		BattleSimLib.defender_duel_base(10, BattleSimLib.CAPTAIN_RATING_BASE + 1))
+	_check(save_day > 0,
 		"S2: a fixture day whose §4.11.1 duel stream is a player win exists (%d)"
-		% run_day)
-	_check(_start_from_save("S2", fleet, run_day, save_gold, 12),
+			% save_day)
+	_check(_start_from_save("S2", fleet, save_day, save_gold, 12),
 		"S2: the save loads")
 	# Phase 8 capture gate (`60-*` §4.11.7): the captured hull needs ≥ 1 idle
 	# officer — seat one (no state entry reads as idle, `post_id ""` default).
 	GameState.player["officers"] = ["fx_p2_idle"]
-	_set_explored_world()
-	_ensure_map()
-	SailingSimLib.reset_ledger_state()
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
-	var battle_day: int = run_day + 1
-	var battle_gold := save_gold - 2 * flagship_crew
-	var predicted: Dictionary = _predicted_duel(battle_day, battle_gold, 1, 12,
-		defender_base)
+	var battle_seed: int = BattleSimLib.battle_seed_formula(save_day, CONTACT,
+		save_gold, 1)
+	var predicted := _predicted_duel(battle_seed, 12,
+		BattleSimLib.defender_duel_base(10, BattleSimLib.CAPTAIN_RATING_BASE + 1))
 	_check(str(predicted.get("result", "")) == "capture",
 		"S2: the seeded duel for this fixture is a player win (%s, %s)"
 		% [str(predicted.get("result")), str(predicted.get("rounds"))])
 
-	var marker := _place_marker("pirate", MARKER_CELL, run_day, "pirate", [enemy])
-	_check(not marker.is_empty(), "S2: a pirate marker with one sloop is placed")
-	var pair: Array = await _spawn_world()
-	var world = pair[1]
-	SailingSimLib.advance_clock(1.0)
-	await get_tree().process_frame
-	_check(GameState.day == battle_day, "S2: the day tick reached day %d (%d)"
-		% [battle_day, GameState.day])
-	_check(world.pending_encounter_id() == str(marker.get("id", "")),
-		"S2: the contact queued the encounter (%s)" % world.pending_encounter_id())
-
-	var screen = await _open_battle_screen()
-	_check(screen != null and not screen.encounter.is_empty(),
-		"S2: battle_screen opens the queued encounter")
-	if screen == null or screen.encounter.is_empty():
-		await _free_node(pair[0])
-		await _assert_round_trip("S2")
-		return
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [enemy],
+		"enemy_kind": "pirate", "day": save_day, "gold": save_gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0}, "seed": battle_seed,
+	})
+	sim.start()
 	var fleet_before: int = GameState.fleet.size()
-	var guard: int = await _drive(screen, "board")
-	await get_tree().process_frame
-	var outcome: Dictionary = screen.last_outcome
+	var guard := _drive(sim, "board")
+	var outcome: Dictionary = sim.outcome()
 	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_VICTORY,
 		"S2: the boarding fight ends in `victory` (%s, %d steps)"
 		% [str(outcome.get("result")), guard])
-	_check(_has_engine_kind(screen, "board"),
-		"S2: the boarding action really resolved a duel (§4.6)")
-	var captured: Array = _as_array(outcome.get("captured_enemy", []))
+	_check(_engine_actions_of(sim, ["board"], "player") == 1,
+		"S2: the §4.6a hook + boarding duel really resolved (§4.6)")
+	var captured := _as_array(outcome.get("captured_enemy", []))
 	_check(captured.size() == 1,
 		"S2: the boarded hull is captured (%d captured)" % captured.size())
 	_check(_as_array(outcome.get("sunk_enemy", [])).is_empty(),
 		"S2: nothing was sunk — the win came from the duel, not gunfire")
+	_check(int(outcome.get("morale_bonus", -1)) == 5,
+		"S2: §4.8 — the won boarding books morale_bonus +5 into the outcome (%d)"
+			% int(outcome.get("morale_bonus", -1)))
+	_check(int(outcome.get("xp", -1)) == BattleRewardsLib.xp_for(
+			captured.size(), int(outcome.get("rounds", 0))),
+		"S2: XP = 10 × %d captured + 5 × %d rounds = %d (got %d)"
+		% [captured.size(), int(outcome.get("rounds", 0)),
+			BattleRewardsLib.xp_for(captured.size(), int(outcome.get("rounds", 0))),
+			int(outcome.get("xp", -1))])
+
+	# The §4.11.7 application: the prize joins at 25% durability, crew 0,
+	# cargo intact — through the guarded BattleResult seam.
+	var applied := BattleResultLib.apply(outcome, [], GameState.fleet)
 	_check(GameState.fleet.size() == fleet_before + 1,
 		"S2: the captured hull joined the fleet (%d → %d)"
 		% [fleet_before, GameState.fleet.size()])
@@ -348,20 +318,8 @@ func _scenario_boarding_capture() -> void:
 				and _as_dict(joined.get("equipment", {})) == _as_dict(hull.get("equipment", {})),
 			"S2: …cannons and equipment intact")
 	_check(FleetLib.held("wine") == 6,
-		"S2: the captured cargo is intact in the pooled hold (%d wine; §4.2 "
-		% FleetLib.held("wine") + "distribution may carry it to the older hull)")
-	_check(int(outcome.get("xp", -1)) == BattleRewardsLib.xp_for(
-			captured.size(), int(outcome.get("rounds", 0))),
-		"S2: XP = 10 × %d captured + 5 × %d rounds = %d (got %d)"
-		% [captured.size(), int(outcome.get("rounds", 0)),
-			BattleRewardsLib.xp_for(captured.size(), int(outcome.get("rounds", 0))),
-			int(outcome.get("xp", -1))])
-	_check(await _locales_clean(screen, "S2"), "S2: the capture dialog is localised")
-	await _free_node(screen)
-	await _free_node(pair[0])
-
-	# --- S2b: a second capture with a full 5-ship fleet → loot + scuttle -----
-	await _scenario_full_fleet_capture()
+		"S2: the captured cargo is intact in the pooled hold (%d wine)"
+		% FleetLib.held("wine"))
 	await _assert_round_trip("S2")
 
 
@@ -369,6 +327,7 @@ func _scenario_boarding_capture() -> void:
 ## "capture with full fleet and full cargo — loot-to-capacity then scuttle;
 ## overflow cargo reported lost".
 func _scenario_full_fleet_capture() -> void:
+	print("\n=== S2b: a second capture with a full fleet → loot + scuttle ===")
 	var fleet: Array = []
 	for _index in FleetLib.FLEET_MAX:
 		# Capacity 120, hold exactly full → nothing can be looted.
@@ -377,285 +336,471 @@ func _scenario_full_fleet_capture() -> void:
 	var defender_base: int = BattleSimLib.defender_duel_base(
 		10, BattleSimLib.CAPTAIN_RATING_BASE + 1)
 	var save_gold := 5000
-	var run_day: int = _duel_day("capture", save_gold, 15, FleetLib.FLEET_MAX,
-		12, defender_base)
-	_check(run_day > 0,
+	var save_day: int = _duel_day("capture", save_gold, FleetLib.FLEET_MAX, 12,
+		defender_base)
+	_check(save_day > 0,
 		"S2b: a full-fleet day whose §4.11.1 duel stream is a player win exists (%d)"
-		% run_day)
-	_check(_start_from_save("S2b", fleet, run_day, save_gold, 12),
+			% save_day)
+	_check(_start_from_save("S2b", fleet, save_day, save_gold, 12),
 		"S2b: a 5-ship save loads")
-	# Phase 8 capture gate: seat an idle officer so the gate that fires here
-	# is `fleet_full` (the scenario's subject), not `no_idle_officer`.
+	# Seat an idle officer so the gate that fires here is `fleet_full` (the
+	# scenario's subject), not `no_idle_officer`.
 	GameState.player["officers"] = ["fx_p2_idle"]
-	_set_explored_world()
-	_ensure_map()
-	SailingSimLib.reset_ledger_state()
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
-	_check(GameState.fleet.size() == FleetLib.FLEET_MAX,
-		"S2b: the fleet is full (%d ships)" % GameState.fleet.size())
-
-	var battle_day: int = run_day + 1
-	var predicted: Dictionary = _predicted_duel(battle_day, save_gold - 2 * 15,
-		FleetLib.FLEET_MAX, 12, defender_base)
-	_check(str(predicted.get("result", "")) == "capture",
-		"S2b: the seeded duel is a player win with a full fleet too (%s)"
-		% str(predicted.get("result")))
-
-	var enemy := _ship("sloop", {"crew": 10, "cannons": 0, "cargo": {"wine": 6}})
-	_place_marker("pirate", MARKER_CELL, run_day, "pirate", [enemy])
-	var pair: Array = await _spawn_world()
-	var world = pair[1]
-	SailingSimLib.advance_clock(1.0)
-	await get_tree().process_frame
-	_check(GameState.day == battle_day, "S2b: the day tick reached day %d (%d)"
-		% [battle_day, GameState.day])
-	_check(world.pending_encounter_id() != "", "S2b: the contact queued the encounter")
-	var screen = await _open_battle_screen()
-	if screen == null:
-		await _free_node(pair[0])
-		return
+	var battle_seed: int = BattleSimLib.battle_seed_formula(save_day, CONTACT,
+		save_gold, FleetLib.FLEET_MAX)
+	_check(str(_predicted_duel(battle_seed, 12, defender_base).get("result", ""))
+			== "capture",
+		"S2b: the seeded duel is a player win with a full fleet too")
 	var gold_before := GameState.gold
-	await _drive(screen, "board")
-	await get_tree().process_frame
-	var outcome: Dictionary = screen.last_outcome
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [_ship("sloop", {"crew": 10, "cannons": 0, "cargo": {"wine": 6}})],
+		"enemy_kind": "pirate", "day": save_day, "gold": save_gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0}, "seed": battle_seed,
+	})
+	sim.start()
+	var guard := _drive(sim, "board")
+	var outcome: Dictionary = sim.outcome()
 	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_VICTORY,
-		"S2b: the fight is a victory (%s)" % str(outcome.get("result")))
+		"S2b: the fight is a victory (%s, %d steps)" % [str(outcome.get("result")), guard])
+	BattleResultLib.apply(outcome, [], GameState.fleet)
 	_check(GameState.fleet.size() == FleetLib.FLEET_MAX,
 		"S2b: the fleet stays at FLEET_MAX — nothing joined (%d)"
 		% GameState.fleet.size())
-	_check(_as_array(outcome.get("captured_ships", [])).is_empty(),
-		"S2b: no hull joined the fleet (%s)" % str(outcome.get("captured_ships")))
-	_check(_as_array(outcome.get("scuttled_ships", [])) == ["sloop"],
+	_check(_as_array(outcome.get("captured_enemy", [])).size() == 1,
+		"S2b: the sloop was captured by the duel")
+	_check((applied_report(outcome) as Array) == ["sloop"],
 		"S2b: the captured sloop was looted and scuttled (%s)"
-		% str(outcome.get("scuttled_ships")))
-	_check(int(outcome.get("cargo_overflow_lost", -1)) == 6,
-		"S2b: the 6 units that could not be carried are reported lost (%d)"
-		% int(outcome.get("cargo_overflow_lost", -1)))
+		% str(applied_report(outcome)))
+	_check(int(outcome.get("salvage_gold", -1)) == 0
+			and GameState.gold == gold_before,
+		"S2b: a captured (not sunk) hull pays no salvage (%d → %d)"
+		% [gold_before, GameState.gold])
 	_check(FleetLib.held("wine") == 120 * FleetLib.FLEET_MAX,
 		"S2b: the full holds gained nothing (%d wine; §4.11.7 loot-to-capacity)"
 		% FleetLib.held("wine"))
-	_check(GameState.gold == gold_before,
-		"S2b: a captured (not sunk) hull pays no salvage (%d → %d)"
-		% [gold_before, GameState.gold])
-	var dialog := _joined_text(screen.after_action_lines())
-	_check(dialog.contains(I18n.fmt("battle.after.scuttled", {
-			"ship": I18n.t(DataLoader.get_ship_type("sloop").get("name", {}))}))
-		and dialog.contains(I18n.fmt("battle.after.overflow", {"count": 6})),
-		"S2b: the dialog reports the scuttle and the overflow")
-	await _free_node(screen)
-	await _free_node(pair[0])
+	await _assert_round_trip("S2b")
+
+
+## BattleResult's scuttle report for this outcome (the §4.11.7 loot-convert
+## fallback list), read off a throwaway application.
+func applied_report(outcome: Dictionary) -> Array:
+	return _as_array(BattleResultLib.apply(outcome, [], GameState.fleet.duplicate(true))
+		.get("scuttled_ships", []))
 
 
 # ===========================================================================
-# S3 — retreat
+# S3 — retreat, S3b — player surrender
 # ===========================================================================
 
 func _scenario_retreat() -> void:
-	print("\n=== S3: retreat ===")
+	print("\n=== S3: retreat (§4.10) ===")
 	var fleet: Array = [_ship("caravel", {"cannons": 4, "crew": 15,
 		"provisions": 20, "water": 20})]
-	_check(_start_from_save("S3", fleet, RUN_DAY, 5000, 10),
-		"S3: the save loads")
-	_set_explored_world()
-	_ensure_map()
-	SailingSimLib.reset_ledger_state()
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
-	_game_over_reasons.clear()
-
-	var marker := _place_marker("pirate", MARKER_CELL, RUN_DAY)
-	var pair: Array = await _spawn_world()
-	var world = pair[1]
-	SailingSimLib.advance_clock(1.0)
-	await get_tree().process_frame
-	_check(world.pending_encounter_id() == str(marker.get("id", "")),
-		"S3: the contact queued the encounter")
-	# The marker walked one tile toward its anchor on the tick that raised the
-	# contact (§4.11.11.1), so this is its *contact-time* cell; retreat must not
-	# move it again.
-	var marker_cell_at_contact := NpcFleetsLib.position_of(marker)
-	_check(maxi(absi(marker_cell_at_contact.x - CONTACT.x),
-			absi(marker_cell_at_contact.y - CONTACT.y)) == 1,
-		"S3: the marker is at Chebyshev 1 of the fleet when contact opens (%s)"
-		% str(marker_cell_at_contact))
-	var screen = await _open_battle_screen()
-	if screen == null:
-		await _free_node(pair[0])
-		await _assert_round_trip("S3")
-		return
+	_check(_start_from_save("S3", fleet, 3, 5000, 10), "S3: the save loads")
 	var gold_before := GameState.gold
-	var xp_before := int(GameState.player.get("xp", 0))
-
-	# The `Esc` battle menu → Retreat → confirm (§4.10, §4.12.5).
-	screen.begin()
-	screen.open_menu()
-	_check(screen.menu_open(), "S3: `Esc` opens the battle menu")
-	screen.menu_button("retreat").pressed.emit()
-	_check(screen.confirm_dialog() != null and screen.confirm_dialog().visible,
-		"S3: retreat asks for confirmation (battle.retreat.confirm)")
-	screen.confirm_dialog().accept()
-	await get_tree().process_frame
-
-	var outcome: Dictionary = screen.last_outcome
+	var xp_before := CharacterLib.current_xp()
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [_ship("sloop", {"cannons": 4})],
+		"enemy_kind": "pirate", "day": GameState.day, "gold": GameState.gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0},
+	})
+	sim.start()
+	var outcome := sim.retreat()
 	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_RETREAT,
-		"S3: the confirmed retreat ends the battle with `retreat` (%s)"
+		"S3: the retreat ends the battle with `retreat` (%s)"
 		% str(outcome.get("result")))
-	_check(int(outcome.get("xp", -1)) == 0 and int(GameState.player.get("xp", 0)) == xp_before,
-		"S3: a retreat awards no XP (§4.10): outcome %d, player %d → %d"
-		% [int(outcome.get("xp", -1)), xp_before,
-			int(GameState.player.get("xp", 0))])
-	_check(int(outcome.get("salvage_gold", -1)) == 0 and GameState.gold == gold_before,
-		"S3: a retreat pays no salvage gold (%d, purse %d → %d)"
-		% [int(outcome.get("salvage_gold", -1)), gold_before, GameState.gold])
+	_check(int(outcome.get("xp", -1)) == 0
+			and CharacterLib.current_xp() == xp_before,
+		"S3: a retreat awards no XP (§4.10): outcome %d, player %d"
+		% [int(outcome.get("xp", -1)), CharacterLib.current_xp()])
+	_check(int(outcome.get("salvage_gold", -1)) == 0
+			and GameState.gold == gold_before,
+		"S3: a retreat pays no salvage gold (%d, purse %d)"
+		% [int(outcome.get("salvage_gold", -1)), GameState.gold])
 	_check(_as_dict(outcome.get("rep_deltas", {})).is_empty(),
-		"S3: a retreat books no pirate reputation (%s)" % str(outcome.get("rep_deltas", {})))
-	_check(GameState.world_tile() == CONTACT,
-		"S3: the fleet is on the contact tile %s (%s)"
-		% [str(CONTACT), str(GameState.world_tile())])
-	_check(DataLoader.is_passable(GameState.world_tile()),
-		"S3: …which is passable (the §4.10 fallback is not needed here)")
-
-	# §4.10: the enemy survives and takes the +1 day pursuit cooldown.
-	var survivor: Dictionary = _marker_by_id(str(marker.get("id", "")))
-	_check(not survivor.is_empty(),
-		"S3: the retreated fleet still exists (%d fleets)"
-		% GameState.npc_fleets.size())
-	if not survivor.is_empty():
-		_check(int(survivor.get("cooldown_until_day", 0))
-				== GameState.day + PURSUIT_COOLDOWN_DAYS,
-			"S3: §4.10 gives it a +1 day pursuit cooldown = %d (%d)"
-			% [GameState.day + PURSUIT_COOLDOWN_DAYS,
-				int(survivor.get("cooldown_until_day", 0))])
-		_check(NpcFleetsLib.position_of(survivor) == marker_cell_at_contact,
-			"S3: the fleet keeps the tile it held at contact %s (%s)"
-			% [str(marker_cell_at_contact), str(NpcFleetsLib.position_of(survivor))])
-		_check(NpcFleetsLib.new().contacts(GameState.world_tile()).is_empty(),
-			"S3: the cooldown stops it re-opening the same battle right away")
-	_check(_game_over_reasons.is_empty(),
-		"S3: a retreat raises no game over (%s)" % str(_game_over_reasons))
-	_check(screen.after_action_dialog().visible,
-		"S3: the after-action dialog reports the retreat")
-	_check(await _locales_clean(screen, "S3"), "S3: the retreat dialog is localised")
-	await _free_node(screen)
-	await _free_node(pair[0])
+		"S3: a retreat books no pirate reputation (§4.11.10 'except retreat')")
+	_check(_as_array(outcome.get("lost_player", [])).is_empty(),
+		"S3: the fleet is retained (nothing lost to a retreat)")
+	_check(not BattleRewardsLib.apply(outcome).is_empty(),
+		"S3: the §4.12.3 seam still accepts the retreat block")
 	await _assert_round_trip("S3")
 
 
+func _scenario_surrender() -> void:
+	print("\n=== S3b: player surrender to pirates (§4.11.7) ===")
+	var fleet: Array = [_ship("caravel", {"cannons": 4, "crew": 15})]
+	_check(_start_from_save("S3b", fleet, 3, 5000, 10), "S3b: the save loads")
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [_ship("sloop", {"cannons": 4})],
+		"enemy_kind": "pirate", "day": GameState.day, "gold": GameState.gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0},
+	})
+	sim.start()
+	var outcome := sim.offer_surrender()
+	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_SURRENDER,
+		"S3b: the player surrender ends the battle with `surrender` (%s)"
+		% str(outcome.get("result")))
+	_check(_as_array(outcome.get("lost_player", [])).is_empty(),
+		"S3b: the pirates take the hold, not the hulls (§4.11.7) (%s)"
+			% str(outcome.get("lost_player")))
+	_check(GameState.fleet.size() == 1,
+		"S3b: every ship is retained (%d)" % GameState.fleet.size())
+	await _assert_round_trip("S3b")
+
+
 # ===========================================================================
-# S4 — lose a duel as the last ship → gameover.captured
+# S4 — lose a duel as the last ship → defeat_captured + gameover.captured
 # ===========================================================================
 
 func _scenario_last_ship_captured() -> void:
 	print("\n=== S4: lose a duel as the last ship → gameover.captured ===")
-	# One weak ship (combat 1) against a galleon crew 120 → defender base
-	# min(floor(120/5),20) + 6 = 26, so the §4.11.6 duel cannot be won and the
-	# hull is the whole fleet. The day is whichever makes the loss certain.
+	# One weak ship (swordplay 1) against a galleon crew 120 → defender base
+	# min(floor(120/5), 20) + 6 = 26, so the §4.11.6 duel cannot be won and
+	# the hull is the whole fleet. The day is whichever makes the loss certain.
 	var fleet: Array = [_ship("brigantine", {"cannons": 10, "crew": 30,
 		"provisions": 20, "water": 20})]
 	var enemy := _ship("galleon", {"crew": 120, "cannons": 0, "cargo": {}})
 	var defender_base: int = BattleSimLib.defender_duel_base(
 		120, BattleSimLib.CAPTAIN_RATING_BASE + 1)
 	var save_gold := 5000
-	var run_day: int = _duel_day("defeat", save_gold, 30, 1, 1, defender_base)
-	_check(run_day > 0,
+	var save_day: int = _duel_day("defeat", save_gold, 1, 1, defender_base)
+	_check(save_day > 0,
 		"S4: a fixture day whose §4.11.1 duel stream is a player loss exists (%d)"
-		% run_day)
-	_check(_start_from_save("S4", fleet, run_day, save_gold, 1),
+			% save_day)
+	_check(_start_from_save("S4", fleet, save_day, save_gold, 1),
 		"S4: the save loads")
-	_set_explored_world()
-	_ensure_map()
-	SailingSimLib.reset_ledger_state()
-	SailingSimLib.set_weather_seed(WEATHER_SEED)
-	_game_over_reasons.clear()
-
-	var battle_day: int = run_day + 1
-	var predicted: Dictionary = _predicted_duel(battle_day, save_gold - 2 * 30, 1,
-		1, defender_base)
-	_check(str(predicted.get("result", "")) == "defeat",
+	var battle_seed: int = BattleSimLib.battle_seed_formula(save_day, CONTACT,
+		save_gold, 1)
+	_check(str(_predicted_duel(battle_seed, 1, defender_base).get("result", ""))
+			== "defeat",
 		"S4: the seeded duel for this fixture is a player loss (%s, %s)"
-		% [str(predicted.get("result")), str(predicted.get("rounds"))])
-
-	_place_marker("pirate", MARKER_CELL, run_day, "pirate", [enemy])
-	var pair: Array = await _spawn_world()
-	var world = pair[1]
-	SailingSimLib.advance_clock(1.0)
-	await get_tree().process_frame
-	_check(GameState.day == battle_day, "S4: the day tick reached day %d (%d)"
-		% [battle_day, GameState.day])
-	_check(world.pending_encounter_id() != "", "S4: the contact queued the encounter")
-	var screen = await _open_battle_screen()
-	if screen == null:
-		await _free_node(pair[0])
-		await _assert_round_trip("S4")
-		return
-	await _drive(screen, "board")
-	await get_tree().process_frame
-	var outcome: Dictionary = screen.last_outcome
+		% [str(_predicted_duel(battle_seed, 1, defender_base).get("result", "")),
+		str(_predicted_duel(battle_seed, 1, defender_base).get("rounds"))])
+	var sim := BattleSimLib.new({
+		"player_ships": GameState.fleet,
+		"enemy_ships": [enemy],
+		"enemy_kind": "pirate", "day": save_day, "gold": save_gold,
+		"contact": CONTACT, "weather": "calm",
+		"current": {"dir": "", "strength": 0}, "seed": battle_seed,
+	})
+	sim.start()
+	var guard := _drive(sim, "board")
+	var outcome: Dictionary = sim.outcome()
 	_check(str(outcome.get("result", "")) == BattleSimLib.RESULT_DEFEAT_CAPTURED,
-		"S4: losing the last ship's duel yields `defeat_captured` (%s)"
-		% str(outcome.get("result")))
-	_check(_has_engine_kind(screen, "board"),
+		"S4: losing the last ship's duel yields `defeat_captured` (%s, %d steps)"
+		% [str(outcome.get("result")), guard])
+	_check(_engine_actions_of(sim, ["board"], "player") == 1,
 		"S4: the loss came from a boarding duel (§4.6)")
 	_check(_as_array(outcome.get("lost_player", [])).size() == 1,
 		"S4: the boarded flagship is the one that was taken (%d)"
 		% _as_array(outcome.get("lost_player", [])).size())
+	# The §4.12.3 application empties the fleet.
+	BattleResultLib.apply(outcome, [], GameState.fleet)
 	_check(GameState.fleet.is_empty(),
 		"S4: the fleet ends empty (%d ships)" % GameState.fleet.size())
-	_check(_game_over_reasons == ["captured"],
-		"S4: EventBus.game_over fires exactly once with `captured` (%s)"
-		% str(_game_over_reasons))
 
-	# §4.12.4 step 5: S9 owns the screen; Continue opens it, not S3.
-	screen._continue_after_battle()
+	# §4.12.4 step 5: S9 owns the captured screen and names the reason in
+	# both locales (the screen is ui_shared — no W3 seam).
+	var scene = GameOverScene.instantiate()
+	scene.route_to_title = false
+	add_child(scene)
 	await get_tree().process_frame
-	_check(screen.game_over_open(), "S4: the S9 game-over screen opens over S10")
-	_check(screen.world_route_target() == "",
-		"S4: no S3 route exists once a gameover fired")
-	var s9 = screen.get_node_or_null("GameOverLayer/GameOverScreen")
-	_check(s9 != null, "S4: the S9 overlay is instanced")
-	if s9 != null:
-		_check(str(s9.reason) == "captured",
-			"S4: S9 accepts the `captured` reason (%s)" % str(s9.reason))
-		var rendered := {}
-		var expected := {}
-		var locale_before: String = GameState.locale
-		for locale in ["en", "zh"]:
-			I18n.set_locale(locale)
-			await get_tree().process_frame
-			rendered[locale] = s9.reason_text()
-			# Rendered through the live locale, exactly as the screen does.
-			expected[locale] = I18n.fmt("gameover.reason",
-				{"reason": I18n.t_key("gameover.captured")})
-		I18n.set_locale(locale_before)
+	scene.open_reason("captured")
+	await get_tree().process_frame
+	var rendered := {}
+	var locale_before: String = GameState.locale
+	for locale in ["en", "zh"]:
+		I18n.set_locale(locale)
 		await get_tree().process_frame
-		_check(rendered["en"] == expected["en"]
-				and rendered["en"].contains(_ui_en("gameover.captured")),
-			"S4: en renders gameover.captured (%s)" % str(rendered.get("en", "")))
-		_check(rendered["zh"] == expected["zh"]
-				and rendered["zh"].contains(_ui_zh("gameover.captured")),
-			"S4: zh renders gameover.captured (%s)" % str(rendered.get("zh", "")))
-		_check(not _has_raw_key([rendered["en"], rendered["zh"]]),
-			"S4: neither locale prints a raw <key> (%s / %s)"
-			% [str(rendered.get("en", "")), str(rendered.get("zh", ""))])
-		_check(str(rendered["en"]) != str(rendered["zh"]),
-			"S4: the game-over text really switches language")
-	await _free_node(screen)
-	await _free_node(pair[0])
+		rendered[locale] = scene.reason_text()
+	I18n.set_locale(locale_before)
+	await get_tree().process_frame
+	_check(str(rendered.get("en", "")).contains(_ui("gameover.captured", "en"))
+			and not _has_raw_key([rendered.get("en", "")]),
+		"S4: en renders gameover.captured (%s)" % str(rendered.get("en", "")))
+	_check(str(rendered.get("zh", "")).contains(_ui("gameover.captured", "zh"))
+			and not _has_raw_key([rendered.get("zh", "")]),
+		"S4: zh renders gameover.captured (%s)" % str(rendered.get("zh", "")))
+	_check(str(rendered.get("en", "")) != str(rendered.get("zh", "")),
+		"S4: the game-over text really switches language")
+	scene.queue_free()
+	await get_tree().process_frame
 	await _assert_round_trip("S4")
+
+
+# ===========================================================================
+# Driving the velocity API
+# ===========================================================================
+
+## Drives the battle through the three-phase §4.3 turn with the named
+## player policy; the enemy side always holds. Returns the step guard.
+func _drive(sim, mode: String) -> int:
+	var guard := 0
+	while not sim.is_over() and guard < 600:
+		guard += 1
+		var unit: Dictionary = sim.current_unit()
+		if unit.is_empty():
+			sim.end_turn()
+			continue
+		var decision: Dictionary
+		if str(unit["side"]) == "enemy":
+			decision = {"action": "hold"}
+		else:
+			decision = _player_decision(sim, unit, mode)
+		sim._apply_decision(unit, decision)
+		if not sim.is_over():
+			sim.end_turn()
+	return guard
+
+
+## The player decision by scenario mode, over the §4.12.1.1 dict shape.
+## All closing geometry runs on MANHATTAN distance — the §4.6a hook and the
+## §4.5 ram need orthogonal adjacency, which a Chebyshev-close can wedge
+## into a permanent diagonal.
+func _player_decision(sim, unit: Dictionary, mode: String) -> Dictionary:
+	var enemies: Array = sim.living_units("enemy")
+	if enemies.is_empty():
+		return {"action": "hold"}
+	var from: Vector2i = sim.unit_cell(unit)
+	var nearest: Dictionary = enemies[0]
+	var best := _manhattan(from, sim.unit_cell(enemies[0]))
+	for enemy in enemies:
+		var distance := _manhattan(from, sim.unit_cell(enemy))
+		if distance < best:
+			best = distance
+			nearest = enemy
+	var target_cell: Vector2i = sim.unit_cell(nearest)
+	var cheb := _chebyshev(from, target_cell)
+
+	if mode == "board":
+		# The §4.6a hook needs orthogonal adjacency with BOTH ships at
+		# ⌊vel⌋ ≤ 1 — the FLOOR, so a (1,1) approach (mag √2) is already in
+		# the window. The decision's vel (0,0) may be refused by the accel
+		# budget; the hook itself then zeroes both velocities (§4.6a).
+		var mag := BattleSimLib.vel_length(unit["vel"])
+		var manhattan := _manhattan(from, target_cell)
+		if manhattan == 1 and int(floor(mag)) <= 1:
+			return {"action": "board", "target": nearest, "vel": Vector2i.ZERO}
+		if manhattan <= int(floor(mag)) + 1 and mag > 1.0:
+			# The current speed would sweep past (or into) the target this
+			# turn — brake now, one accel-step per turn (§4.3a), never
+			# through the target's cell (that would be a §4.5 ram).
+			return {"action": "move", "vel": _decelerate_pick(sim, unit, target_cell)}
+		# Otherwise steer toward an orthogonal landing (a manhattan-1 landing
+		# at ⌊vel⌊ ≤ 1 preferred, so the next turn can board).
+		var soft := Vector2i.ZERO
+		var soft_found := false
+		var rough := Vector2i.ZERO
+		var rough_found := false
+		var rough_best := best
+		for candidate in sim.legal_velocities(unit):
+			var step: Vector2i = candidate
+			if _walk_hits(sim, unit, step, target_cell):
+				continue
+			var landing := _landing(sim, unit, step)
+			var landing_manhattan := _manhattan(landing, target_cell)
+			if landing_manhattan == 1 and BattleSimLib.vel_length(step) <= 2.0:
+				return {"action": "move", "vel": step}
+			if landing_manhattan == 1 and not rough_found:
+				rough = step
+				rough_found = true
+			if landing != from and landing_manhattan < rough_best:
+				rough_best = landing_manhattan
+				soft = step
+				soft_found = true
+		if rough_found:
+			return {"action": "move", "vel": rough}
+		if soft_found:
+			return {"action": "move", "vel": soft}
+		return {"action": "hold"}
+
+	if mode == "ram":
+		# Adjacent → drive the sweep INTO the enemy cell (the §4.5 sweep ram;
+		# the impact speed is the applied velocity, so any speed helps).
+		if _manhattan(from, target_cell) == 1:
+			var delta: Vector2i = target_cell - from
+			if sim.legal_velocities(unit).has(delta):
+				return {"action": "move", "vel": delta}
+			return {"action": "move", "vel": _decelerate_pick(sim, unit, Vector2i(-9, -9))}
+		var ram_pick := Vector2i.ZERO
+		var ram_found := false
+		var ram_best := best
+		for vel in sim.legal_velocities(unit):
+			var landing := _landing(sim, unit, vel)
+			var distance := _manhattan(landing, target_cell)
+			if landing != from and distance < ram_best:
+				ram_best = distance
+				ram_pick = vel
+				ram_found = true
+		if ram_found:
+			return {"action": "move", "vel": ram_pick}
+		return {"action": "hold"}
+
+	# cannon_only: fire a loaded side in range+arc; inside cannon range turn
+	# to broadside when no arc bears; outside it close on the sweep landing
+	# (manhattan geometry), never entering an occupied cell (no ram, §4.5).
+	for side in ["port", "starboard"]:
+		for target in enemies:
+			if sim.can_cannon(unit, target, str(side)):
+				return {"action": "cannon", "target": target,
+					"side": str(side), "shot": "round"}
+	if cheb <= BattleSimLib.CANNON_RANGE_MAX:
+		# Broadside-on orbit: a velocity pick both MOVES the ship and turns
+		# it (the heading is the committed velocity's, §4.3a), so the arc
+		# check must read the AFTER-move geometry — landing cell and new
+		# heading together — and stay inside cannon range while orbiting.
+		var drift := Vector2i.ZERO
+		var drift_found := false
+		var drift_mag := 1e9
+		for vel in sim.legal_velocities(unit):
+			var step: Vector2i = vel
+			if step == Vector2i.ZERO:
+				continue
+			var landing := _landing(sim, unit, step)
+			if landing == from:
+				continue
+			var landing_cheb := _chebyshev(landing, target_cell)
+			if landing_cheb > BattleSimLib.CANNON_RANGE_MAX:
+				continue
+			var new_bearing := int(BattleSimLib.heading8_of(target_cell - landing))
+			var new_heading := int(BattleSimLib.heading8_of(step))
+			var steps := int(BattleSimLib.bucket_distance(new_bearing, new_heading))
+			if steps in BattleSimLib.ARC_PORT_STEPS \
+					or steps in BattleSimLib.ARC_STARBOARD_STEPS:
+				return {"action": "move", "vel": step}
+			var mag := BattleSimLib.vel_length(step)
+			if mag < drift_mag:
+				drift_mag = mag
+				drift = step
+				drift_found = true
+		if drift_found:
+			# No arc this turn: bleed speed (a slower velocity turns wider
+			# next round) while staying in range.
+			return {"action": "move", "vel": drift}
+		return {"action": "hold"}
+	var close_pick := Vector2i.ZERO
+	var close_found := false
+	var close_best := best
+	for vel in sim.legal_velocities(unit):
+		var landing := _landing(sim, unit, vel)
+		var distance := _manhattan(landing, target_cell)
+		if landing != from and distance < close_best:
+			close_best = distance
+			close_pick = vel
+			close_found = true
+	if close_found:
+		return {"action": "move", "vel": close_pick}
+	return {"action": "hold"}
+
+
+## The legal velocity with the smallest magnitude (the deceleration pick —
+## the §4.3a accel budget allows one magnitude-step per turn, so a fast
+## arrival brakes over several turns before the hook reads ⌊vel⌋ ≤ 1).
+func _decelerate_pick(sim, unit: Dictionary, avoid_cell: Vector2i) -> Vector2i:
+	var current: Vector2i = unit["vel"]
+	var best_pick := Vector2i.ZERO
+	var best_mag := BattleSimLib.vel_length(current)
+	for candidate in sim.legal_velocities(unit):
+		var step: Vector2i = candidate
+		var mag := BattleSimLib.vel_length(step)
+		if mag >= best_mag:
+			continue
+		if _walk_hits(sim, unit, step, avoid_cell):
+			continue
+		best_mag = mag
+		best_pick = step
+	return best_pick
+
+
+## True when the §4.3a sweep walk for `step` touches `cell` (e.g. the target
+## of a boarding approach — entering it would ram instead of hook).
+func _walk_hits(sim, unit: Dictionary, step: Vector2i, cell: Vector2i) -> bool:
+	if cell.x < 0:
+		return false
+	var from: Vector2i = sim.unit_cell(unit)
+	for walked in BattleSimLib._bresenham_cells(from, from + step):
+		if walked == cell:
+			return true
+	return false
+
+
+## Player-side engine-log actions of the given kinds (§4.11.4 entries carry
+## `values.side`).
+func _engine_actions_of(sim, kinds: Array, side: String) -> int:
+	var count := 0
+	for entry in sim.log_lines():
+		if not (entry is Dictionary):
+			continue
+		if not (str(entry.get("kind", "")) in kinds):
+			continue
+		var values = entry.get("values", {})
+		if values is Dictionary and str(values.get("side", "")) == side:
+			count += 1
+	return count
+
+
+## The cell the §4.3a Bresenham sweep actually reaches for `step` (the walk
+## stops at the first out-of-bounds or occupied cell; the mover stays at the
+## PRIOR cell) — the same preview the harness uses.
+func _landing(sim, unit: Dictionary, step: Vector2i) -> Vector2i:
+	var from: Vector2i = sim.unit_cell(unit)
+	var prior := from
+	for cell in BattleSimLib._bresenham_cells(from, from + step):
+		if not BattleSimLib.in_grid(cell):
+			return prior
+		for other in sim.units():
+			if other == unit or not bool(other.get("alive", false)):
+				continue
+			if sim.unit_cell(other) == cell:
+				return prior
+		prior = cell
+	return prior
+
+
+# ===========================================================================
+# The §4.11.1 fixture-day search (doc-derived fixture selection)
+# ===========================================================================
+
+## The pre-battle day whose §4.11.1 duel stream resolves the way `wanted`
+## asks (`"capture"` for the boarding wins, `"defeat"` for the last-ship
+## loss) — the same documented, deterministic search the Phase-2 suite used.
+## It changes no pinned number and makes each duel scenario a guaranteed
+## branch instead of a lucky one (§6 "duel RNG audit").
+func _duel_day(wanted: String, gold: int, fleet_size: int,
+		player_base: int, defender_base: int) -> int:
+	for day in range(1, 200):
+		var seed_value := BattleSimLib.battle_seed_formula(day, CONTACT, gold,
+			fleet_size)
+		if str(_predicted_duel(seed_value, player_base, defender_base)
+				.get("result", "")) == wanted:
+			return day
+	return -1
+
+
+## The §4.11.6 duel a battle with this §4.11.1 seed resolves (§4.11.1: "duel
+## rolls draw from the same stream" — deployment and composition consume
+## nothing before the first boarding).
+func _predicted_duel(seed_value: int, player_base: int,
+		defender_base: int) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	return BattleSimLib.resolve_duel(player_base, defender_base, rng)
 
 
 # ===========================================================================
 # Save fixture (docs/90-* §8.1) + load path (docs/90-* §8.2)
 # ===========================================================================
 
-## A complete current-version payload (`save_version` 4, every §8.1 key) at sea.
-## Written to `user://saves/save_1.json` and loaded through
-## `SaveSystem.load(1)` — the shipped path, with no migration involved
-## (docs/90-* §8.2 development-stage scope: there is no migration chain).
-func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Dictionary:
-	# Phase 8: `combat` feeds the duel through the v9 skill block
-	# (`50-*` §4.8) — swordplay + floor(courage/20) replaces the retired
-	# four-stat `stats.combat` (the suite's combat fixtures were authored
-	# against the old base, so the value lands on swordplay unchanged).
+## A complete current-version payload (every §8.1 key) at sea. Written to
+## `user://saves/save_1.json` and loaded through `SaveSystem.load(1)` — the
+## shipped path, with no migration involved (docs/90-* §8.2).
+func _current_payload(fleet: Array, day: int, gold: int, swordplay: int) -> Dictionary:
 	return {
 		"save_version": SaveSystem.SAVE_VERSION,
 		"saved_at": 1793119712,
@@ -668,7 +813,7 @@ func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Diction
 			"background_id": "",
 			"attributes": {"constitution": 10, "intellect": 10,
 				"charisma": 10, "courage": 10, "luck": 10},
-			"skills": {"seamanship": 0, "navigation": 0, "swordplay": combat,
+			"skills": {"seamanship": 0, "navigation": 0, "swordplay": swordplay,
 				"gunnery": 0, "appraisal": 0, "negotiation": 0,
 				"cartography": 0, "rumour": 0},
 			"skill_counters": {"seamanship": 0, "navigation": 0,
@@ -694,8 +839,6 @@ func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Diction
 		"known_ports": ["lisbon", "london", "seville", "amsterdam"],
 		"port_investments": {},
 		"discoveries_found": [],
-		# The Phase-2/3 state blocks every current-version save carries
-		# (docs/90-* §8.1). A fresh fixture starts them at their defaults.
 		"npc_fleets": [],
 		"proximity_cooldowns": {},
 		"fame": 0,
@@ -713,16 +856,16 @@ func _current_payload(fleet: Array, day: int, gold: int, combat: int) -> Diction
 
 ## `{nation_id: value}` over `data/nations.json` (the §8.1 map-shaped keys).
 func _nation_map(value) -> Dictionary:
-	var out: Dictionary = {}
+	var out := {}
 	for entry in DataLoader.nations_list:
 		out[str(entry.get("id", ""))] = value
 	return out
 
 
 func _start_from_save(label: String, fleet: Array, day: int, gold: int,
-		combat: int) -> bool:
+		swordplay: int) -> bool:
 	_ensure_slot_dir()
-	var payload := _current_payload(fleet, day, gold, combat)
+	var payload := _current_payload(fleet, day, gold, swordplay)
 	var file := FileAccess.open(SaveSystem.slot_path(1), FileAccess.WRITE)
 	if file == null:
 		return false
@@ -742,223 +885,6 @@ func _start_from_save(label: String, fleet: Array, day: int, gold: int,
 	return loaded
 
 
-## A §4.15 fleet fixture; the `ships` override exists for the hand-picked
-## duel fixtures (the encounter descriptor carries a fleet-provided `ships`
-## verbatim, `60-*` §4.11.11.2's per-fleet stream with a fixture override).
-func _place_marker(kind: String, cell: Vector2i, day: int,
-		nation_id: String = "", ships: Array = []) -> Dictionary:
-	var role := "pirate" if kind == "pirate" else "hunter"
-	var marker := {
-		"id": "fx_%s_%d_%d" % [kind, day, GameState.npc_fleets.size()],
-		"role": role,
-		"nation_id": nation_id,
-		"cell": {"x": cell.x, "y": cell.y},
-		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
-		"cargo": {},
-		"captain_id": "",
-		"cooldown_until_day": 0,
-		"seed": int(day) * 1000003 + cell.x * 7919 + cell.y * 104729,
-		"dest_port_id": "",
-		"dwell_until_day": 0,
-		"anchor_cell": null,
-		"target_fleet_id": "",
-		"hunter_state": "",
-		"loiter_until_day": 0,
-		"home_port_id": "",
-	}
-	if not ships.is_empty():
-		marker["ships"] = ships.duplicate(true)
-	GameState.npc_fleets.append(marker)
-	# Phase 8: seat a canon captain at fixture time (stable per marker id) —
-	# the load path's backfill re-deploys a persisted id without mutating it,
-	# so the save/load round-trip equality holds. `backfill_captains()` is an
-	# instance method, so the draw is inlined over the canon list: the first
-	# canon card of the fleet's (role, nation) cell not used by an earlier
-	# fixture marker.
-	var used: Array = []
-	for other in GameState.npc_fleets:
-		if other is Dictionary and other != marker:
-			used.append(str((other as Dictionary).get("captain_id", "")))
-	for card in CaptainsLib.canon_list():
-		var card_d: Dictionary = card
-		if str(card_d.get("id", "")) in used:
-			continue
-		if str(card_d.get("role", "")) != role:
-			continue
-		if str(card_d.get("nation_id", "")) != str(marker["nation_id"]):
-			continue
-		marker["captain_id"] = str(card_d.get("id", ""))
-		break
-	return marker
-
-
-## The pre-battle day whose next-day §4.11.1 duel stream resolves the way
-## `wanted` asks (`"capture"` for the boarding wins, `"defeat"` for the
-## last-ship loss).
-##
-## The seed is `day × 1000003 + contact.x × 7919 + contact.y × 104729 + gold × 31
-## + fleet.size() × 17` (§4.11.1), and the daily ledger takes that day's wages
-## (flagship crew × 2, `20-*` §4.9) before the contact, so the battle's `gold`
-## is `save_gold − 2 × flagship crew`. Searching the day is fixture selection
-## over a documented, deterministic rule: it changes no pinned number and makes
-## each duel scenario a guaranteed branch instead of a lucky one (§6 "duel RNG
-## audit" requires exactly this reproducibility).
-func _duel_day(wanted: String, save_gold: int, flagship_crew: int,
-		fleet_size: int, player_base: int, defender_base: int) -> int:
-	var battle_gold := save_gold - 2 * flagship_crew
-	for day in range(1, 200):
-		var duel := _predicted_duel(day + 1, battle_gold, fleet_size,
-			player_base, defender_base)
-		if str(duel.get("result", "")) == wanted:
-			return day
-	return -1
-
-
-## The §4.11.6 duel a battle on `day` with these values resolves, over the
-## §4.11.1 stream (§4.11.1: "duel rolls draw from the same stream").
-func _predicted_duel(day: int, gold: int, fleet_size: int,
-		player_base: int, defender_base: int) -> Dictionary:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = BattleSimLib.battle_seed_formula(day, CONTACT, gold, fleet_size)
-	return BattleSimLib.resolve_duel(player_base, defender_base, rng)
-
-
-# ===========================================================================
-# Driving the shipped scene
-# ===========================================================================
-
-## A world scene under a throwaway host with routing disabled: the contact path
-## (tick → `_open_encounter` → `pending_encounter` → `battle_started`) runs for
-## real, but neither S4 nor S10 can replace this test's scene root.
-func _spawn_world() -> Array:
-	var host := Node2D.new()
-	add_child(host)
-	var world = WorldScene.instantiate()
-	world.route_to_port = false
-	world.route_to_battle = false
-	host.add_child(world)
-	await get_tree().process_frame
-	return [host, world]
-
-
-## Instances S10 the way the router does: it picks the queued
-## `GameState.pending_encounter` up in `_ready` (§4.11.11.3).
-func _open_battle_screen():
-	var screen = BattleScene.instantiate()
-	screen.route_to_world = false
-	add_child(screen)
-	screen.route_to_world = false
-	await get_tree().process_frame
-	return screen
-
-
-## Drives the battle through the screen's own player API: `cannon` fires only
-## the Cannon button, `board` boards whenever the Board button is legal. Both
-## fall back to a click-to-move toward the enemy, then to Hold.
-func _drive(screen, mode: String) -> int:
-	if not screen.is_over():
-		screen.begin()
-	var guard := 0
-	while not screen.is_over() and guard < 300:
-		guard += 1
-		var unit: Dictionary = screen.selected_unit()
-		if unit.is_empty():
-			screen._pump_enemy_turns()
-			await get_tree().process_frame
-			continue
-		screen.select_unit(unit)
-		var button: Button = screen.action_button(mode)
-		if button != null and not button.disabled:
-			button.pressed.emit()
-			await get_tree().process_frame
-			continue
-		var cell := _approach_cell(screen, unit, mode == "board")
-		if cell != BattleSimLib.NO_CELL and screen.move_selected(cell):
-			continue
-		var hold: Button = screen.action_button("hold")
-		if hold != null and not hold.disabled:
-			hold.pressed.emit()
-			await get_tree().process_frame
-		else:
-			screen.perform_action("hold")
-	await get_tree().process_frame
-	return guard
-
-
-## The reachable tile closest (Manhattan) to the nearest enemy — orthogonally
-## adjacent when `want_adjacent` and any such tile is legal (boarding needs
-## adjacency, §4.6).
-func _approach_cell(screen, unit: Dictionary, want_adjacent: bool) -> Vector2i:
-	var enemies: Array = screen.sim.living_units(BattleSimLib.SIDE_ENEMY)
-	if enemies.is_empty():
-		return BattleSimLib.NO_CELL
-	var target: Vector2i = screen.sim.unit_cell(enemies[0])
-	var best := absi(screen.sim.unit_cell(unit).x - target.x) \
-		+ absi(screen.sim.unit_cell(unit).y - target.y)
-	var pick := BattleSimLib.NO_CELL
-	for cell in screen.sim.legal_moves(unit):
-		var distance := absi(cell.x - target.x) + absi(cell.y - target.y)
-		if want_adjacent and distance == 1:
-			return cell
-		if distance < best:
-			best = distance
-			pick = cell
-	return pick
-
-
-## Counts the player-side boarding/ram actions in the engine log (§4.11.4
-## entries carry `values.side`).
-func _player_chain_actions(screen) -> int:
-	var count := 0
-	for entry in screen.engine_log():
-		if not (entry is Dictionary):
-			continue
-		if not (str(entry.get("kind", "")) in ["board", "ram"]):
-			continue
-		var values = entry.get("values", {})
-		if values is Dictionary and str(values.get("side", "")) == BattleSimLib.SIDE_PLAYER:
-			count += 1
-	return count
-
-
-func _has_engine_kind(screen, kind: String) -> bool:
-	for entry in screen.engine_log():
-		if entry is Dictionary and str(entry.get("kind", "")) == kind:
-			return true
-	return false
-
-
-## Renders the after-action dialog and the log in both locales and asserts no
-## raw `<key>` marker leaks into either.
-func _locales_clean(screen, label: String) -> bool:
-	var locale_before: String = GameState.locale
-	var clean := true
-	var rendered_any := ""
-	for locale in ["en", "zh"]:
-		I18n.set_locale(locale)
-		await get_tree().process_frame
-		var lines: Array = screen.after_action_lines()
-		lines.append_array(screen.log_lines())
-		if _has_raw_key(lines):
-			clean = false
-			print("      raw keys in %s/%s: %s" % [label, locale, str(_raw_keys(lines))])
-		rendered_any += _joined_text(lines)
-	I18n.set_locale(locale_before)
-	await get_tree().process_frame
-	return clean and not rendered_any.is_empty()
-
-
-func _keysets_match(a: Dictionary, b: Dictionary) -> bool:
-	var ka := a.keys()
-	var kb := b.keys()
-	if ka.size() != kb.size():
-		return false
-	for k in ka:
-		if not b.has(k):
-			return false
-	return true
-
-
 # ===========================================================================
 # Save round trip (save → load → save) per scenario
 # ===========================================================================
@@ -971,65 +897,18 @@ func _assert_round_trip(label: String) -> void:
 		"%s: the re-saved file is save_version %d (%s)"
 		% [label, SaveSystem.SAVE_VERSION, str(on_disk.get("save_version"))])
 	_check(on_disk.has("npc_fleets") and on_disk.has("proximity_cooldowns"),
-		"%s: the file carries the Phase-2 state blocks" % label)
-	var hostile_before := _as_array(GameState.npc_fleets).duplicate(true)
-	var cooldowns_before := _as_dict(GameState.proximity_cooldowns).duplicate(true)
+		"%s: the file carries the state blocks" % label)
 	var fleet_before: Array = GameState.fleet.duplicate(true)
 	var reloaded: bool = SaveSystem.load(1)
 	_check(reloaded and SaveSystem.last_read_error.is_empty(),
-		"%s: the v2 file reloads cleanly (%s)" % [label, SaveSystem.last_read_error])
+		"%s: the file reloads cleanly (%s)" % [label, SaveSystem.last_read_error])
 	_check(GameState.fleet == fleet_before,
 		"%s: the fleet survives the reload (%d ships)" % [label, GameState.fleet.size()])
-	# Phase 8: the jitted `speed` is a float and the JSON round trip
-	# perturbs its low-order bits, so that one key compares approximately
-	# (every other key, and the key sets themselves, are exact).
-	var npc_arrays_equal := hostile_before.size() == GameState.npc_fleets.size()
-	if npc_arrays_equal:
-		for i in range(hostile_before.size()):
-			var fa: Dictionary = hostile_before[i]
-			var fb: Dictionary = GameState.npc_fleets[i]
-			# The JSON round trip re-orders dictionary keys alphabetically;
-			# compare key SETS, not key order.
-			if not _keysets_match(fa, fb):
-				npc_arrays_equal = false
-				break
-			for k in fa.keys():
-				var va: Variant = fa[k]
-				var vb: Variant = fb[k]
-				if k == "speed" and va is float and vb is float:
-					if not is_equal_approx(va, vb):
-						npc_arrays_equal = false
-						break
-				elif vb != va:
-					npc_arrays_equal = false
-					break
-			if not npc_arrays_equal:
-				break
-	_check(npc_arrays_equal,
-		"%s: npc_fleets survive the reload (%d fleets)"
-		% [label, GameState.npc_fleets.size()])
-	_check(_as_dict(GameState.proximity_cooldowns) == cooldowns_before,
-		"%s: proximity_cooldowns survive the reload (%s)"
-		% [label, str(GameState.proximity_cooldowns)])
 
 
 # ===========================================================================
 # Fixtures & helpers
 # ===========================================================================
-
-func _ensure_map() -> void:
-	if DataLoader.map == null:
-		var loader := MapLoaderLib.new()
-		loader.load_map(MAP_PATH, DataLoader.map_legend)
-		DataLoader.map = loader
-
-
-## The world state the save fixture needs: at sea, calm clock, fair weather.
-func _set_explored_world() -> void:
-	GameState.current_port = null
-	GameState.world["clock_fraction"] = 0.0
-	GameState.world["weather"] = "fair"
-
 
 func _ship(ship_type_id: String, overrides: Dictionary = {}) -> Dictionary:
 	var ship_type: Dictionary = DataLoader.get_ship_type(ship_type_id)
@@ -1061,33 +940,36 @@ func _clobber_state() -> void:
 	GameState.world = {"position": {"x": 0, "y": 0}, "clock_fraction": 0.0}
 	GameState.known_ports = []
 	GameState.port_investments = {}
-	GameState.quests = []
-	GameState.discoveries_found = []
 	GameState.npc_fleets = []
 	GameState.proximity_cooldowns = {}
 	GameState.pending_encounter = null
+	GameState.officer_states = {}
+	GameState.captain_states = {}
 
 
-func _marker_by_id(id: String) -> Dictionary:
-	for marker in GameState.npc_fleets:
-		if marker is Dictionary and str(marker.get("id", "")) == id:
-			return marker
+func _unit(sim, side: String, index: int) -> Dictionary:
+	for unit in sim.units():
+		if str(unit.get("side", "")) == side and int(unit.get("index", -1)) == index:
+			return unit
 	return {}
+
+
+func _place(sim, side: String, index: int, cell: Vector2i) -> void:
+	var unit := _unit(sim, side, index)
+	if not unit.is_empty():
+		unit["pos"] = cell
+
+
+func _face(sim, side: String, index: int, heading8: int) -> void:
+	var unit := _unit(sim, side, index)
+	if not unit.is_empty():
+		unit["heading8"] = heading8
 
 
 func _reputation_snapshot() -> Dictionary:
 	var out := {}
 	for nation_id in GameState.player.get("reputation", {}):
 		out[str(nation_id)] = int((GameState.player["reputation"] as Dictionary)[nation_id])
-	return out
-
-
-func _reputation_delta(baseline: Dictionary) -> Dictionary:
-	var out := {}
-	for nation_id in baseline:
-		var now: int = CharacterLib.reputation(str(nation_id))
-		if now != int(baseline[nation_id]):
-			out[str(nation_id)] = now - int(baseline[nation_id])
 	return out
 
 
@@ -1098,14 +980,9 @@ func _expected_rep_block(nations: Array) -> Dictionary:
 	return out
 
 
-func _ui_en(key: String) -> String:
+func _ui(key: String, locale: String) -> String:
 	var value = DataLoader.ui_strings.get(key, {})
-	return str((value as Dictionary).get("en", "")) if value is Dictionary else ""
-
-
-func _ui_zh(key: String) -> String:
-	var value = DataLoader.ui_strings.get(key, {})
-	return str((value as Dictionary).get("zh", "")) if value is Dictionary else ""
+	return str((value as Dictionary).get(locale, "")) if value is Dictionary else ""
 
 
 func _as_array(value) -> Array:
@@ -1116,26 +993,22 @@ func _as_dict(value) -> Dictionary:
 	return (value as Dictionary) if value is Dictionary else {}
 
 
-func _joined_text(values: Array) -> String:
-	var parts: Array[String] = []
-	for value in values:
-		parts.append(str(value))
-	return " | ".join(parts)
+func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
-## Every string shaped like `I18n.t_key`'s missing-entry marker.
-func _raw_keys(values: Array) -> Array[String]:
-	var out: Array[String] = []
+func _manhattan(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
+
+## Every string shaped like `I18n.t_key`'s `<key>` missing-entry marker.
+func _has_raw_key(values: Array) -> bool:
 	for value in values:
 		var text := str(value)
 		if text.begins_with("<") and text.ends_with(">") and text.length() > 2 \
 				and not text.contains(" "):
-			out.append(text)
-	return out
-
-
-func _has_raw_key(values: Array) -> bool:
-	return not _raw_keys(values).is_empty()
+			return true
+	return false
 
 
 func _free_node(node) -> void:

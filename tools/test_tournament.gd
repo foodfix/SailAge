@@ -1,11 +1,21 @@
 extends Node
-## Phase-3 task F acceptance tests: the monthly tournament
-## (docs/IMPLEMENT-Phase3.md F; docs/70-* §4.6, §4.9.7; docs/60-* §4.11.7.1;
-## docs/80-* §4.7.3).
+## Phase-3 task F acceptance tests: the monthly tournament (Phase-9 W3-D
+## re-pin) (docs/IMPLEMENT-Phase3.md F; docs/70-* §4.6, §4.9.7; docs/60-*
+## §4.11.7.1, §4.11.2 tournament variant, §4.12.1; docs/80-* §4.7.3).
 ##
 ##   godot --headless --path . tools/test_tournament.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
+##
+## W3 seam note: the Phase-3 suite drove the bouts through
+## `battle_screen.tscn`. The screen is slot C's in-flight rewrite (this
+## branch still carries the retired MP API there and in `ai_fleet.gd`), so
+## §10 now builds the bouts DIRECTLY on `BattleSim` with the §4.11.2
+## tournament deployment (`deployment: "tournament"`, config key of §4.12.1)
+## and drives BOTH sides with this suite's own inline policy callable — the
+## harness pattern — never slot B's T2 AI. The bracket semantics (3 bouts,
+## the hull ladder, durability carry-over, any non-victory = bracket loss,
+## no reputation) are unchanged.
 
 const TournamentLib := preload("res://scripts/quests/tournament.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
@@ -345,20 +355,23 @@ func _test_phase3_hooks() -> void:
 	}).is_empty(), "an ordinary battle settles no bracket")
 
 
-# --- 10. Three real battles through BattleScreen -----------------------
+# --- 10. Three real bouts on the velocity engine (§4.11.2 variant) ------
 
 func _test_bracket_battles() -> void:
 	_new_run("lisbon", 2)
-	# A tournament-strength player fleet so the bracket is winnable and losses
-	# are still deterministic (the fight itself is §4.11's engine, not ours).
-	# Two bouts exercise the real-scene seam; bout 3's settlement block is
-	# pinned through the hooks in §9, so the sim stops at the re-open.
-	var won: Dictionary = await _run_bracket({"crew": 120, "cannons": 20}, 2)
+	# A tournament-strength player fleet so the bracket is winnable and the
+	# fights stay deterministic (the fight itself is §4.11's engine, driven
+	# by this suite's inline policy on BOTH sides — no slot-B AI seam).
+	# Two bouts exercise the velocity-engine seam; bout 3's settlement block
+	# is pinned through the hooks in §9, so the sim stops at the re-open.
+	var won: Dictionary = _run_bracket({"crew": 120, "cannons": 24}, 2)
 	_check(not won.is_empty(), "a bracket runs to a settlement")
 	_check(bool(won.get("won", false)),
-		"a 120-crew galleon fleet wins the first two bouts (%s)" % str(won.get("won")))
+		"a 120-crew 24-cannon galleon wins the first two bouts (%s)"
+			% str(won.get("won")))
 	_check((won.get("results", []) as Array) == ["victory", "victory"],
-		"two bouts were fought (%s)" % str(won.get("results", [])))
+		"two bouts were fought on the velocity engine (%s)"
+			% str(won.get("results", [])))
 	_check(int(won.get("next_round", 0)) == 3,
 		"the second win queues bout 3 (next_round %d)"
 		% int(won.get("next_round", 0)))
@@ -377,17 +390,34 @@ func _test_bracket_battles() -> void:
 	# A hopeless fleet loses bout 1 and takes the consolation.
 	_new_run("lisbon", 2)
 	GameState.gold = 1000
-	var lost: Dictionary = await _run_bracket({"crew": 15, "cannons": 0})
-	_check(not bool(lost.get("won", false)), "a sloop fleet loses the bracket")
+	var lost: Dictionary = _run_bracket({"crew": 15, "cannons": 0})
+	_check(not bool(lost.get("won", false)), "a cannon-less sloop fleet loses the bracket")
 	_check(int(lost.get("gold", 0)) == 500, "the loser takes 500g")
 	_check(GameState.gold == 1500, "the consolation is paid (got %d)"
 		% GameState.gold)
 
+	# §4.11.10: any non-victory is a bracket loss — a `stall` included.
+	_new_run("lisbon", 2)
+	GameState.gold = 1000
+	var stalled: Dictionary = Phase3HooksLib.on_tournament_bout({
+		"encounter_id": "tournament_0_1", "result": "stall", "kind": "tournament",
+	})
+	_check(not bool(stalled.get("won", false)),
+		"a stalled bout is a bracket loss like any non-victory (§4.11.10)")
+	_check(int(stalled.get("gold", 0)) == 500,
+		"the stalled bracket still takes the consolation (%d)"
+			% int(stalled.get("gold", 0)))
+	_check(Phase3HooksLib.take_pending_bout() == 0,
+		"no next bout after a stall")
 
-## Runs the bouts through the real S10 scene, exactly as production does
-## (encounter descriptor → `open_battle` → `run_to_completion`), and returns the
-## `Phase3Hooks` settlement block. `stop_after` caps the sim (the §10 win
-## bracket stops after bout 2; bout 3's settlement is §9's pure-hook pin).
+
+## Runs the bouts DIRECTLY on BattleSim with the §4.11.2 tournament
+## deployment (`deployment: "tournament"` — the §4.12.1 config key), both
+## sides driven by this suite's inline fire/close policy. `stop_after` caps
+## the bracket (the §10 win bracket stops after bout 2; bout 3's settlement
+## is §9's pure-hook pin). The §4.12.4 durability write-back the screen owns
+## in production (W3-C seam) is applied inline here, so the carry-over pin
+## stays testable on the sim alone.
 func _run_bracket(loadout: Dictionary, stop_after: int = TournamentLib.ROUNDS) -> Dictionary:
 	GameState.fleet = [FleetLib.new_ship("galleon", int(loadout["crew"]))]
 	var ship: Dictionary = GameState.fleet[0]
@@ -401,28 +431,135 @@ func _run_bracket(loadout: Dictionary, stop_after: int = TournamentLib.ROUNDS) -
 	var settled: Dictionary = {}
 	var results: Array = []
 	for round_number in range(1, TournamentLib.ROUNDS + 1):
-		var encounter := TournamentLib.encounter(round_number, GameState.day)
-		GameState.pending_encounter = encounter
-		var screen = BattleScene.instantiate()
-		screen.route_to_world = false
-		add_child(screen)
-		await get_tree().process_frame
-		screen.open_battle(encounter)
-		screen.begin()
-		var outcome: Dictionary = screen.run_to_completion(60)
-		await get_tree().process_frame
+		var sim := BattleSimLib.new({
+			"player_ships": GameState.fleet,
+			"enemy_ships": TournamentLib.round_fleet(round_number),
+			"enemy_kind": "tournament", "enemy_nation": "",
+			"day": GameState.day, "gold": GameState.gold,
+			"contact": Vector2i(10, 15), "weather": "fair", "wind_dir": "E",
+			"current": {"dir": "", "strength": 0},
+			"deployment": BattleSimLib.TOURNAMENT_DEPLOYMENT,
+			"seed": BattleSimLib.battle_seed_formula(
+				GameState.day + round_number, Vector2i(37, 15), GameState.gold, 1),
+		})
+		sim.start()
+		if round_number == 1:
+			# §4.11.2 tournament variant, read off the velocity API.
+			var p: Dictionary = sim.units()[0]
+			var e: Dictionary = sim.units()[1]
+			_check(sim.unit_cell(p) == BattleSimLib.TOURNAMENT_PLAYER_CELL
+					and sim.unit_cell(e) == BattleSimLib.TOURNAMENT_ENEMY_CELL,
+				"§4.11.2: bout 1 deploys at (10,15)/(37,15) (%s/%s)"
+					% [str(sim.unit_cell(p)), str(sim.unit_cell(e))])
+			_check((p["vel"] as Vector2i) == BattleSimLib.TOURNAMENT_PLAYER_VEL
+					and (e["vel"] as Vector2i) == BattleSimLib.TOURNAMENT_ENEMY_VEL,
+				"§4.11.2: the bout opens under way — vel (1,0)/(−1,0) (%s/%s)"
+					% [str(p["vel"]), str(e["vel"])])
+			_check(int(p["heading8"]) == BattleSimLib.heading8_of(Vector2i(1, 0))
+					and int(e["heading8"]) == BattleSimLib.heading8_of(Vector2i(-1, 0)),
+				"§4.11.2: the pinned velocities set the bout headings")
+		var policy := func(active_sim, unit) -> Dictionary:
+			return _bout_policy(active_sim, unit)
+		var outcome: Dictionary = sim.run_to_completion(policy, BattleSimLib.MAX_ROUNDS)
 		var result := str(outcome.get("result", ""))
 		results.append(result)
+		# §4.11.7.1: a tournament battle contributes no reputation of any kind.
+		_check((outcome.get("rep_deltas", {}) as Dictionary).is_empty(),
+			"§4.11.7.1: bout %d carries no rep_deltas (%s)"
+				% [round_number, str(outcome.get("rep_deltas", {}))])
+		# §4.12.4 durability write-back (the screen's production job — W3-C
+		# seam): the surviving player hulls carry their battle durability.
+		for unit in sim.living_units("player"):
+			var fleet_ship: Dictionary = GameState.fleet[int(unit["index"])] \
+				if int(unit["index"]) < GameState.fleet.size() else {}
+			if not fleet_ship.is_empty():
+				fleet_ship["durability"] = int(unit["ship"]["durability"])
 		if result != "victory" or round_number == stop_after:
-			settled = (outcome.get("tournament", {}) as Dictionary).duplicate(true)
+			settled = Phase3HooksLib.on_tournament_bout({
+				"encounter_id": "tournament_0_%d" % round_number,
+				"result": result, "kind": "tournament",
+			})
 			settled["results"] = results
-			screen.queue_free()
-			await get_tree().process_frame
 			return settled
-		screen.queue_free()
-		await get_tree().process_frame
 		# Carry the fleet into the next bout (no repair, no resupply).
 	return settled
+
+
+## The inline bout policy (BOTH sides): fire a loaded side in range+arc
+## (round shot); inside cannon range steer the after-move broadside orbit;
+## outside it close on the §4.3a sweep landing. Zero dice, no AI module.
+func _bout_policy(sim, unit: Dictionary) -> Dictionary:
+	var own_side := str(unit.get("side", "player"))
+	var other := "enemy" if own_side == "player" else "player"
+	var enemies: Array = sim.living_units(other)
+	if enemies.is_empty():
+		return {"action": "hold"}
+	for side in ["port", "starboard"]:
+		for target in enemies:
+			if sim.can_cannon(unit, target, str(side)):
+				return {"action": "cannon", "target": target,
+					"side": str(side), "shot": "round"}
+	var from: Vector2i = sim.unit_cell(unit)
+	var nearest: Dictionary = enemies[0]
+	var best := _chebyshev(from, sim.unit_cell(enemies[0]))
+	for enemy in enemies:
+		var distance := _chebyshev(from, sim.unit_cell(enemy))
+		if distance < best:
+			best = distance
+			nearest = enemy
+	var target_cell: Vector2i = sim.unit_cell(nearest)
+	if best <= BattleSimLib.CANNON_RANGE_MAX:
+		for vel in sim.legal_velocities(unit):
+			var step: Vector2i = vel
+			if step == Vector2i.ZERO:
+				continue
+			var landing := _landing(sim, unit, step)
+			if landing == from:
+				continue
+			if _chebyshev(landing, target_cell) > BattleSimLib.CANNON_RANGE_MAX:
+				continue
+			var new_bearing := int(BattleSimLib.heading8_of(target_cell - landing))
+			var new_heading := int(BattleSimLib.heading8_of(step))
+			var steps := int(BattleSimLib.bucket_distance(new_bearing, new_heading))
+			if steps in BattleSimLib.ARC_PORT_STEPS \
+					or steps in BattleSimLib.ARC_STARBOARD_STEPS:
+				return {"action": "move", "vel": step}
+		return {"action": "hold"}
+	var close_pick := Vector2i.ZERO
+	var close_found := false
+	var close_best := best
+	for vel in sim.legal_velocities(unit):
+		var landing := _landing(sim, unit, vel)
+		var distance := _chebyshev(landing, target_cell)
+		if landing != from and distance < close_best:
+			close_best = distance
+			close_pick = vel
+			close_found = true
+	if close_found:
+		return {"action": "move", "vel": close_pick}
+	return {"action": "hold"}
+
+
+## The cell the §4.3a Bresenham sweep actually reaches for `step` (the walk
+## stops at the first out-of-bounds or occupied cell; the mover stays at the
+## PRIOR cell) — the same preview the harness uses.
+func _landing(sim, unit: Dictionary, step: Vector2i) -> Vector2i:
+	var from: Vector2i = sim.unit_cell(unit)
+	var prior := from
+	for cell in BattleSimLib._bresenham_cells(from, from + step):
+		if not BattleSimLib.in_grid(cell):
+			return prior
+		for other in sim.units():
+			if other == unit or not bool(other.get("alive", false)):
+				continue
+			if sim.unit_cell(other) == cell:
+				return prior
+		prior = cell
+	return prior
+
+
+func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 
 # --- 11. The palace screen's tournament row and flow -------------------

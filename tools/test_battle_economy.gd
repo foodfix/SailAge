@@ -1,8 +1,7 @@
 extends Node
-## Phase-2 task G (economy & strings integration) acceptance tests
-## (docs/IMPLEMENT-Phase2.md G; docs/60-COMBAT.md §4.8, §4.11.10, §4.12.2,
-## §4.12.3, §4.12.4, §4.12.5; docs/80-UI-UX.md §4.4, §4.7.1, §4.7.2;
-## docs/00-OVERVIEW.md §9, §12).
+## Phase-9 W3-D — the battle-economy suite, re-pinned onto the velocity
+## engine (docs/IMPLEMENT-Phase9.md W3-D; docs/60-COMBAT.md §4.8, §4.11.10,
+## §4.12.2, §4.12.3, §4.12.5; docs/80-UI-UX.md §4.4; docs/00-OVERVIEW.md §9, §12).
 ##
 ##   godot --headless --path . tools/test_battle_economy.tscn
 ##
@@ -10,80 +9,68 @@ extends Node
 ##
 ## Sections:
 ##   1 salvage gold: `Σ floor(base_price × 0.05)` over sunk hulls (§4.11.10);
-##   2 battle XP: `+10`/neutralised + `+5`/round, 0 on retreat (§4.10);
+##   2 battle XP: `+10`/neutralised + `+5`/round, 0 on retreat, bounded by
+##     the Phase-9 round cap 40 (§4.11.10, correction 12);
 ##   3 the two nearest ports' nations (Chebyshev, ties by id, nation once);
 ##   4 `BattleRewards.apply()`: gold/XP/reputation exactly, ±100 clamp,
 ##     idempotent, and never a navy `−20` (§4.11.10, §4.12.3);
-##   4b haul valuation (Phase 8, W4-C): every haul gold credited
-##     ×`clamp(1 + (appraisal + negotiation)/400, 1.0, 1.5)` (§4.8/§4.11.10);
-##   4c battle XP multiplier (Phase 8): credited ×(1 + level/20), floored
-##     once, at levels 1/10/20 (§4.8, `50-*` §4.4);
-##   4d boarding morale (Phase 8): the outcome's `morale_bonus` moves
-##     `GameState.morale` once, clamped (§4.8);
+##   4b haul valuation (Phase 8): ×`clamp(1 + (appraisal + negotiation)/400,
+##     1.0, 1.5)` (§4.8/§4.11.10);
+##   4c battle XP multiplier (Phase 8): ×(1 + level/20), floored once;
+##   4d boarding morale: the outcome's `morale_bonus` moves GameState.morale
+##     once, clamped (§4.8);
 ##   4e the capture officer gate (Phase 8): ≥ 1 idle officer joins the prize,
 ##     otherwise loot-convert + scuttle with the failed gate named
 ##     (§4.11.7/§4.11.15);
-##   4f the captain lifecycle hooks (Phase 8): defeat (return day +60,
-##     crushed on a wiped fleet), the nemesis stance −2 extra, the win on a
-##     lost flagship duel (§4.11.15);
-##   4g the piracy-fame extension hook (Phase 8): rep −20/+2 rivals unchanged,
-##     plus −20 fame and the victim stance −1 (§4.11.10/§4.11.15);
-##   4h the 4 named-pirate `drop`s still grant through the captain-id keying
-##     on the v2 `named_pirates.json` (§4.11.13, Phase 8 correction 7);
-##   5 engine agreement: `BattleSim.outcome()`'s `salvage_gold`/`xp` are the
-##     `BattleRewards` formulas over a seeded sweep of pirate and navy battles;
-##   6 the whole reward pipeline through `battle_screen.gd`: one battle via
-##     `open_battle` + `run_to_completion` applies the outcome exactly once;
-##   7 locale completeness (the done-when gate): every `battle.*`/`duel.*`/
-##     `encounter.*`/`gameover.captured` key resolves in BOTH locales, and no
-##     rendered label of S10's after-action dialog, S11's duel modal, S3's
-##     encounter confirm or S9's captured screen contains a `<key>` in either
-##     locale.
+##   4f the captain lifecycle hooks (Phase 8) (§4.11.15);
+##   4g the piracy-fame extension hook (Phase 8) (§4.11.10/§4.11.15);
+##   4h the 4 named-pirate `drop`s on the v2 `named_pirates.json` (§4.11.13);
+##   5 outcome morale carried: a won boarding duel books `morale_bonus` 5
+##     into the §4.12.2 block (§4.8);
+##   6 engine agreement: `BattleSim.outcome()`'s `salvage_gold`/`xp` are the
+##     `BattleRewards` formulas over seeded pirate and navy battles driven
+##     with an inline policy;
+##   7 the whole reward pipeline applied exactly once over a
+##     `run_to_completion` outcome (§4.12.2 → §4.12.3);
+##   8 locale completeness (data side): every `battle.*`/`duel.*`/
+##     `encounter.*`/`gameover.captured` key resolves in BOTH locales with
+##     the same placeholders.
+##
+## W3 seam note: the Phase-2 suite's S10-render pipeline (§4.12.4 through
+## `battle_screen.gd`) and the S10/S11/S3/S9 rendered-text sweeps are
+## re-covered by slot C's `tools/test_battle_screen.gd` once W3-C merges —
+## this suite drives `BattleSim.run_to_completion` with its own policy
+## stubs and applies the rewards through the guarded `BattleRewards`
+## seams directly, so it runs on the W3-A engine alone.
 
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
 const RewardsLib := preload("res://scripts/combat/battle_rewards.gd")
 const ResultLib := preload("res://scripts/combat/battle_result.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const SkillsLib := preload("res://scripts/player/skills.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-## W4-C: the lifecycle hooks call slot A's contract through the guarded load;
-## the stub this worktree carries implements the same names (the master keeps
-## slot A's normative `captains.gd` at the merge).
+## The lifecycle hooks call slot A's contract through the guarded load.
 const CaptainsLib := preload("res://scripts/world/captains.gd")
 ## Phase-5 task J: the S3-leg fixtures build §4.15 fleet dicts over the
 ## `NpcFleets` ecology (docs/60-* §4.11.11, §4.12.3).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
-const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
-const ScreenScene := preload("res://scenes/combat/battle_screen.tscn")
-const DuelScene := preload("res://scenes/combat/duel_modal.tscn")
-const DuelLib := preload("res://scripts/combat/duel.gd")
-const WorldScene := preload("res://scenes/world/world_map.tscn")
-const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 
 ## §4.11.10 worked numbers: sloop 3000 → 150, brigantine 15000 → 750.
 const SALVAGE_SLOOP := 150
 const SALVAGE_BRIGANTINE := 750
-## An open-water cell whose 8 neighbours are all passable. Phase 4 (task G):
-## re-anchored from the retired P1 grid's (20,20) — that tile is polar ice on
-## the 2160×1080 world.
-const OPEN_CELL := Vector2i(700, 320)
 ## A contact tile whose two nearest ports are Lisbon (Portugal, d=6) and Seville
-## (Spain, d=10) — two distinct nations, no tie. Re-anchored from P1's (7,57)
-## to the world's Lisbon harbor.
+## (Spain, d=10) — two distinct nations, no tie.
 const LISBON_CONTACT := Vector2i(2054, 620)
 ## A contact tile whose two nearest ports are both Portuguese (Lisbon d=5 and
-## Oporto d=34) — the "nation credited once" case. Re-anchored to the Phase-6
-## grid (the finer raster moved Oporto's berth north of Lisbon's latitude).
+## Oporto d=34) — the "nation credited once" case.
 const SAME_NATION_CONTACT := Vector2i(2047, 620)
 ## A contact tile where the two nearest ports tie on distance (Amsterdam 24 /
 ## London 24), so the port-id tie-break decides: amsterdam < london → Holland
-## before England. Re-anchored to the Phase-6 grid (`20-*` §4.11.1).
+## before England.
 const TIE_CONTACT := Vector2i(2190, 438)
 
 ## The 47-key §4.12.5 inventory, transcribed from the doc table (the contract:
-## D/C/F "must not invent others"). Task G verified the *texts* against the
-## table as well; the suite pins the key set so a merge cannot drop one.
+## D/C/F "must not invent others").
 const DOC_KEYS_47: Array[String] = [
 	"battle.title", "battle.round",
 	"battle.action.cannon", "battle.action.ram", "battle.action.board",
@@ -123,9 +110,10 @@ func _ready() -> void:
 	_test_captain_lifecycle()
 	_test_piracy_attack()
 	_test_named_drops_canon()
+	_test_outcome_morale_carried()
 	_test_engine_agreement()
-	await _test_scene_pipeline()
-	await _test_locale_completeness()
+	_test_reward_pipeline()
+	_test_locale_completeness()
 	_report()
 
 
@@ -176,6 +164,10 @@ func _test_xp_formula() -> void:
 	_check(RewardsLib.xp_for(3, 6) == 60,
 		"three hulls over six rounds → 30 + 30 = 60 (%d)"
 		% RewardsLib.xp_for(3, 6))
+	# The per-round term is bounded by the Phase-9 cap 40 (correction 12).
+	_check(BattleLib.MAX_ROUNDS == 40,
+		"§4.11.10 correction 12: the round cap re-pinned to 40 (%d)"
+			% BattleLib.MAX_ROUNDS)
 	# A retreat forfeits the round XP as well as the kill XP (§4.10 "costs no XP").
 	var retreat := _sim({
 		"player_ships": [_ship("brigantine", {"cannons": 10})],
@@ -203,12 +195,12 @@ func _test_nearest_nations() -> void:
 	_check(near_lisbon == ["portugal", "spain"],
 		"near Lisbon the two nearest nations are Portugal then Spain (%s)"
 		% str(near_lisbon))
-	# At (1025,308) the two nearest ports are Lisbon and Oporto (both d=15),
-	# both Portuguese → the nation is credited once, so the list holds one entry.
+	# The two nearest ports are Lisbon and Oporto, both Portuguese → the
+	# nation is credited once, so the list holds one entry.
 	var same_nation := RewardsLib.nearest_nations(SAME_NATION_CONTACT)
 	_check(same_nation == ["portugal"],
 		"a same-nation port pair is credited once (%s)" % str(same_nation))
-	# Ties break on port id ascending: amsterdam (26) before london (26).
+	# Ties break on port id ascending: amsterdam before london.
 	var tie := RewardsLib.nearest_nations(TIE_CONTACT)
 	_check(tie == ["holland", "england"],
 		"a distance tie breaks by port id ascending → amsterdam before london (%s)"
@@ -245,7 +237,7 @@ func _test_nearest_nations() -> void:
 	pirate.start()
 	var gunner := _unit(pirate, "player", 0)
 	var wreck := _unit(pirate, "enemy", 0)
-	_place(pirate, "enemy", 0, Vector2i(3, 4))
+	_place(pirate, "enemy", 0, Vector2i(3, 14))
 	_check(bool(pirate.cannon(gunner, wreck)["sunk"]), "the sloop sinks to one volley")
 	var outcome := pirate.outcome()
 	var expected := {}
@@ -265,7 +257,7 @@ func _test_apply() -> void:
 	var xp_before := CharacterLib.current_xp()
 	var rep_before := CharacterLib.reputation("portugal")
 	# Phase 8: the credited XP is the outcome total ×(1 + level/20) — at the
-	# fixture's level 1 that is floor(65 × 1.05) = 68 (§4.11.10, 4c below).
+	# fixture's level 1 that is floor(65 × 1.05) = 68 (§4.11.10).
 	var expected_xp := RewardsLib.battle_xp_for(65)
 	_check(expected_xp == 68,
 		"the level multiplier is exact at level 1: floor(65 × 1.05) = 68 (%d)"
@@ -350,7 +342,7 @@ func _test_apply() -> void:
 	})
 	navy.start()
 	var navy_gunner := _unit(navy, "player", 0)
-	_place(navy, "enemy", 0, Vector2i(3, 4))
+	_place(navy, "enemy", 0, Vector2i(3, 14))
 	_check(bool(navy.cannon(navy_gunner, _unit(navy, "enemy", 0))["sunk"]),
 		"the navy sloop sinks to one volley")
 	var navy_outcome := navy.outcome()
@@ -461,7 +453,7 @@ func _test_battle_xp_multiplier() -> void:
 func _test_boarding_morale() -> void:
 	_make_run()
 	GameState.morale = 70
-	# The W3-C engine field exists; without a won boarding it is 0 and morale
+	# The engine field exists; without a won boarding it is 0 and morale
 	# never moves.
 	var outcome := _outcome({"xp": 0, "morale_bonus": 5})
 	var applied := RewardsLib.apply(outcome)
@@ -680,7 +672,7 @@ func _test_captain_lifecycle() -> void:
 	_check(str(anonymous["captain_id"]) == "" and not bool(anonymous["defeat"]),
 		"an outcome without a captain_id fires nothing (%s)" % str(anonymous))
 
-	# The hull-instance fallback: a W4-B ship instance carries captain_id
+	# The hull-instance fallback: a ship instance carries captain_id
 	# through the deep-copied captured_enemy list.
 	var hull_captain := "cap_on_hull"
 	var with_hull := _outcome({
@@ -775,7 +767,40 @@ func _test_named_drops_canon() -> void:
 			"%s is equipped into its %s slot (%s)" % [drop_id, slot, carried])
 
 
-# --- 5. Engine agreement (§4.12.2 vs the formulas) ------------------------
+# --- 5. Outcome morale carried (§4.8 → §4.12.2) ----------------------------
+
+func _test_outcome_morale_carried() -> void:
+	# A won boarding duel books the §4.8 morale bonus INTO the outcome block
+	# — the engine never touches GameState (the §4.12.4 consumer applies it).
+	_make_run()
+	# §4.11.6 bases: swordplay 12 (+0 courage) vs min(floor(10/5), 20) + 6 = 8
+	# — seed 2 decides 3–1 for the player (the §4.11.6 scripted capture).
+	GameState.player["skills"]["swordplay"] = 12
+	GameState.morale = 70
+	var sim := _sim({
+		"player_ships": [_ship("brigantine", {"crew": 60})],
+		"enemy_ships": [_ship("sloop", {"crew": 10, "cannons": 0})],
+		"seed": 2,
+	})
+	sim.start()
+	var boarder := _unit(sim, "player", 0)
+	var target := _unit(sim, "enemy", 0)
+	_place(sim, "enemy", 0, Vector2i(3, 15))   # ORTHOGONAL adjacency (§4.6a)
+	var boarding: Dictionary = sim.board(boarder, target)
+	_check(bool(boarding["ok"]) and str(boarding["duel"]["result"]) == "capture",
+		"the seeded boarding capture resolves (seed 2)")
+	var outcome := sim.outcome()
+	_check(int(outcome["morale_bonus"]) == BattleLib.BOARDING_MORALE_BONUS,
+		"§4.8: the won boarding books morale_bonus %d into the outcome (%d)"
+			% [BattleLib.BOARDING_MORALE_BONUS, int(outcome["morale_bonus"])])
+	# …and the §4.12.3 apply moves fleet morale by exactly that bonus once.
+	var applied := RewardsLib.apply(outcome)
+	_check(GameState.morale == 75 and int(applied["morale"]) == 5,
+		"the carried bonus moves fleet morale 70 → %d once (applied %d)"
+			% [GameState.morale, int(applied["morale"])])
+
+
+# --- 6. Engine agreement (§4.12.2 vs the formulas) -------------------------
 
 func _test_engine_agreement() -> void:
 	var salvage_mismatches: Array[String] = []
@@ -785,7 +810,7 @@ func _test_engine_agreement() -> void:
 		for seed_offset in range(1, 4):
 			var battle_seed := 700000 + seed_offset
 			var rng := _rng(battle_seed)
-			var foes := AiLib.compose_enemy(kind, 20, rng)
+			var foes: Array = AiLib.compose_enemy(kind, 20, rng)
 			var sim := BattleLib.new({
 				"player_ships": [
 					_ship("brigantine", {"cannons": 10, "crew": 40}),
@@ -796,16 +821,11 @@ func _test_engine_agreement() -> void:
 				"enemy_nation": "spain" if kind == "navy" else "",
 				"day": 20, "gold": 500, "contact": search[seed_offset % 3],
 				"weather": "calm", "rng": rng,
+				"current": {"dir": "", "strength": 0},
 			})
-			sim.start()
-			var policy := func(active_sim) -> Dictionary:
-				var current: Dictionary = active_sim.current_unit()
-				if current.is_empty():
-					return {"action": "hold", "target": {}, "cell": BattleLib.NO_CELL}
-				if str(current["side"]) == "enemy":
-					return AiLib.decide(active_sim, current)
-				return _player_policy(active_sim, current)
-			var outcome := sim.run_to_completion(policy, 30)
+			var policy := func(active_sim, unit) -> Dictionary:
+				return _fire_and_close_policy(active_sim, unit)
+			var outcome := sim.run_to_completion(policy, BattleLib.MAX_ROUNDS)
 			if not sim.is_over():
 				xp_mismatches.append("seed %d never finished" % battle_seed)
 				continue
@@ -826,41 +846,50 @@ func _test_engine_agreement() -> void:
 			if kind == "navy" and not (outcome["rep_deltas"] as Dictionary).is_empty():
 				salvage_mismatches.append("%s/%d carries rep_deltas %s"
 					% [kind, battle_seed, str(outcome["rep_deltas"])])
+			if int(outcome["rounds"]) > BattleLib.MAX_ROUNDS:
+				xp_mismatches.append("seed %d ran past the 40-round cap" % battle_seed)
 	_check(salvage_mismatches.is_empty(),
 		"6 seeded battles: outcome.salvage_gold == BattleRewards.salvage_for("
 		+ "sunk_enemy) (%d mismatches: %s)"
 		% [salvage_mismatches.size(), str(salvage_mismatches.slice(0, 3))])
 	_check(xp_mismatches.is_empty(),
-		"6 seeded battles: outcome.xp == +10/neutralised + 5/round (%d mismatches: %s)"
+		"6 seeded battles: outcome.xp == +10/neutralised + 5/round, within the "
+		+ "40-round cap (%d mismatches: %s)"
 		% [xp_mismatches.size(), str(xp_mismatches.slice(0, 3))])
 
 
-# --- 6. Full pipeline through battle_screen.gd (§4.12.4) ------------------
+# --- 7. The reward pipeline applied exactly once (§4.12.2 → §4.12.3) -------
 
-func _test_scene_pipeline() -> void:
+func _test_reward_pipeline() -> void:
 	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
-	var screen = ScreenScene.instantiate()
-	screen.route_to_world = false
-	add_child(screen)
-	await get_tree().process_frame
-	var encounter := _pirate_encounter(1, "latin")
-	(encounter["ships"][0] as Dictionary)["durability"] = 5
-	screen.open_battle(encounter)
-	await get_tree().process_frame
+	# The battle the §4.12.4 flow would have run: a §4.11.1 seeded pirate
+	# encounter driven to completion with the suite's own policy stub.
+	var rng := _rng(4242)
+	var foes: Array = AiLib.compose_enemy("pirate", 12, rng)
+	var sim := BattleLib.new({
+		"player_ships": [_ship("brigantine", {"cannons": 10, "crew": 20})],
+		"enemy_ships": foes,
+		"enemy_kind": "pirate", "day": 12, "gold": 3000,
+		"contact": LISBON_CONTACT, "weather": "calm",
+		"seed": 4242, "rng": rng,
+		"current": {"dir": "", "strength": 0},
+	})
+	var policy := func(active_sim, unit) -> Dictionary:
+		return _fire_and_close_policy(active_sim, unit)
+	var outcome := sim.run_to_completion(policy, BattleLib.MAX_ROUNDS)
+	_check(sim.is_over() and str(outcome["result"]) in BattleLib.RESULT_VALUES,
+		"the pipeline battle finishes with a §4.11.9 result (%s, r%d)"
+			% [str(outcome["result"]), int(outcome["rounds"])])
 
 	var gold_before := GameState.gold
 	var xp_before := CharacterLib.current_xp()
 	var rep_before := _reputation_snapshot()
-	screen.run_to_completion(30)
-	await get_tree().process_frame
-	var outcome: Dictionary = screen.last_outcome
-	_check(screen.battle_finished() and str(outcome.get("result", "")) == "victory",
-		"the scene battle finished in a victory (%s)" % str(outcome.get("result", "")))
+	# W3-C seam: production reaches this apply through battle_screen.gd's
+	# guarded §4.12.4 seams; the suite applies it directly so it runs on the
+	# W3-A engine alone (the S10 render flow is C's suite).
+	var applied := RewardsLib.apply(outcome)
 	_check(bool(outcome.get("rewards_applied", false)),
-		"the scene applied the reward block (rewards_applied)")
-
-	# Exactly the outcome block's numbers, once — the XP through the Phase-8
-	# level multiplier (the fixture holds level 1 → ×1.05).
+		"the applied block is marked rewards_applied")
 	var expected_xp := RewardsLib.battle_xp_for(int(outcome.get("xp", 0)))
 	_check(GameState.gold == gold_before + int(outcome.get("salvage_gold", 0)),
 		"gold rose by exactly the outcome salvage (%d + %d = %d)"
@@ -869,50 +898,34 @@ func _test_scene_pipeline() -> void:
 		"XP rose by exactly the outcome xp ×(1 + level/20) (%d + %d = %d)"
 		% [xp_before, expected_xp, CharacterLib.current_xp()])
 	var rep_ok := true
-	var rep_report: Array[String] = []
 	for nation_id in (outcome.get("rep_deltas", {}) as Dictionary):
 		var delta := int((outcome["rep_deltas"] as Dictionary)[nation_id])
 		var expected := clampi(int(rep_before.get(nation_id, 0)) + delta, -100, 100)
-		var actual := CharacterLib.reputation(str(nation_id))
-		rep_report.append("%s %d→%d" % [str(nation_id), int(rep_before.get(nation_id, 0)),
-			actual])
-		if actual != expected:
+		if CharacterLib.reputation(str(nation_id)) != expected:
 			rep_ok = false
-	_check(rep_ok, "reputation moved by exactly the outcome deltas (%s)"
-		% str(rep_report))
-	_check(not (outcome.get("rep_deltas", {}) as Dictionary).is_empty(),
-		"the pirate victory credited the two nearest nations (%s)"
-		% str(outcome.get("rep_deltas")))
-	var rewards = outcome.get("rewards", {})
-	_check(rewards is Dictionary and int((rewards as Dictionary).get("gold", -1))
-			== int(outcome.get("salvage_gold", 0))
-			and int((rewards as Dictionary).get("xp", -1)) == expected_xp,
-		"the screen records what BattleRewards applied (%s)" % str(rewards))
+	_check(rep_ok, "reputation moved by exactly the outcome deltas")
+	_check(int(applied["gold"]) == int(outcome.get("salvage_gold", 0))
+			and int(applied["xp"]) == expected_xp
+			and int(applied["morale"]) == int(outcome.get("morale_bonus", 0)),
+		"the applied report records what BattleRewards credited (gold %d, xp %d, "
+			+ "morale %d)" % [int(applied["gold"]), int(applied["xp"]),
+			int(applied["morale"])])
 
 	# A second call on the same block (a retried sequence) pays nothing more.
 	var gold_after := GameState.gold
 	var xp_after := CharacterLib.current_xp()
-	var rep_after := _reputation_snapshot()
 	var replay := RewardsLib.apply(outcome)
 	_check(int(replay["gold"]) == 0 and int(replay["xp"]) == 0,
 		"replaying apply() on the applied block pays nothing (%s)" % str(replay))
-	screen._finish_battle()
-	await get_tree().process_frame
-	_check(GameState.gold == gold_after and CharacterLib.current_xp() == xp_after
-			and _reputation_snapshot() == rep_after,
-		"the screen's own finish guard cannot double-apply either (%d/%d)"
+	_check(GameState.gold == gold_after and CharacterLib.current_xp() == xp_after,
+		"the replay guard cannot double-apply (%d/%d)"
 		% [GameState.gold, CharacterLib.current_xp()])
-	_check(screen.after_action_dialog().visible,
-		"the after-action dialog is up after the battle")
-	_check(not screen.game_over_open(), "a victory against pirates is no game over")
-	screen.queue_free()
-	await get_tree().process_frame
 
 
-# --- 7. Locale completeness (the done-when gate) --------------------------
+# --- 8. Locale completeness (data side, §4.12.5) ---------------------------
 
 func _test_locale_completeness() -> void:
-	# 7a. Every `battle.*` / `duel.*` / `encounter.*` / `gameover.captured` key
+	# Every `battle.*` / `duel.*` / `encounter.*` / `gameover.captured` key
 	# resolves in both locales, with a real value rather than a marker.
 	var locale_before: String = GameState.locale
 	var broken: Array[String] = []
@@ -942,108 +955,7 @@ func _test_locale_completeness() -> void:
 	_check(extra.is_empty(),
 		"every one of the 47 documented keys is in ui_strings.json (missing: %s)"
 		% str(extra))
-
-	# 7b. No rendered label of S10's after-action dialog, S11's modal or S3's
-	# encounter confirm contains a `<key>` in either locale.
-	var leaks: Array[String] = []
-
-	# One DataLoader-level map load serves the whole sweep: the S3 confirm
-	# boots a world per locale and both boots read the same raster (the
-	# decode itself is owned by §3, not a per-locale contract).
-	var map = MapLoaderLib.new()
-	if not map.load_map("res://data/maps/world.png", DataLoader.map_legend):
-		leaks.append("S3 map failed to load (%s)" % map.last_error)
-	DataLoader.map = map
-
-	# S10 after-action dialog, from a real battle — fought once in `en`,
-	# then the locale toggles on the open dialog (§6: re-translate, not
-	# reload).
-	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
-	I18n.set_locale("en")
-	var screen = ScreenScene.instantiate()
-	screen.route_to_world = false
-	add_child(screen)
-	await get_tree().process_frame
-	var encounter := _pirate_encounter(1, "latin")
-	(encounter["ships"][0] as Dictionary)["durability"] = 5
-	screen.open_battle(encounter)
-	await get_tree().process_frame
-	screen.run_to_completion(30)
-	await get_tree().process_frame
-	for locale in ["en", "zh"]:
-		var dialog_lines: Array = screen.after_action_lines()
-		leaks.append_array(_labelled_leaks(dialog_lines, "S10/%s" % locale))
-		if _joined(dialog_lines).strip_edges().is_empty():
-			leaks.append("S10/%s rendered nothing" % locale)
-		# The mid-dialog locale toggle must re-translate, not reload.
-		leaks.append_array(_labelled_leaks(screen.log_lines(), "S10log/%s" % locale))
-		if locale == "en":
-			I18n.set_locale("zh")
-			await get_tree().process_frame
-	_check(screen.after_action_dialog().visible,
-		"the after-action dialog survives the mid-dialog locale toggle")
-	screen.queue_free()
-	await get_tree().process_frame
-
-	# S11 duel modal (full-rect anchored, so its size comes from the scene):
-	# one instance serves both locales through the §6 re-bind.
-	I18n.set_locale("en")
-	var modal = DuelScene.instantiate()
-	add_child(modal)
-	await get_tree().process_frame
-	modal.open_duel(DuelLib.preview({
-		"player_base": 15, "defender_base": 10, "seed": 33,
-		"attacker_name": "You", "defender_name": "Pirate captain",
-		"ship_name": "Brigantine",
-	}))
-	await get_tree().process_frame
-	for locale in ["en", "zh"]:
-		leaks.append_array(_widget_leaks(modal, "S11/%s" % locale))
-		if locale == "en":
-			I18n.set_locale("zh")
-			await get_tree().process_frame
-	modal.close()
-	modal.queue_free()
-	await get_tree().process_frame
-
-	# S3 encounter confirm (the navy attack warning) boots a world per locale.
-	for locale in ["zh", "en"]:
-		I18n.set_locale(locale)
-		await get_tree().process_frame
-		leaks.append_array(await _encounter_confirm_leaks(locale))
-
-	# S9 `gameover.captured` (the Phase-2 reason, §4.12.5) is the terminal
-	# screen of a lost last ship — it must name the reason, not a `<key>`.
-	# One instance re-binds on the toggle (§6).
-	I18n.set_locale("en")
-	var scene = GameOverScene.instantiate()
-	scene.route_to_title = false
-	add_child(scene)
-	await get_tree().process_frame
-	scene.open_reason("captured")
-	await get_tree().process_frame
-	for locale in ["en", "zh"]:
-		var reason_text: String = scene.reason_text()
-		if reason_text.strip_edges().is_empty() or _contains_key_marker(reason_text):
-			leaks.append("S9/%s reason='%s'" % [locale, reason_text])
-		if not reason_text.contains(I18n.t_key("gameover.captured")):
-			leaks.append("S9/%s reason omits gameover.captured (%s)"
-				% [locale, reason_text])
-		leaks.append_array(_widget_leaks(scene, "S9/%s" % locale))
-		if locale == "en":
-			I18n.set_locale("zh")
-			await get_tree().process_frame
-	scene.queue_free()
-	await get_tree().process_frame
-
-	I18n.set_locale(locale_before)
-	await get_tree().process_frame
-	_check(leaks.is_empty(),
-		"no <key> in S10's dialog, S11's modal, S3's encounter confirm or S9's "
-		+ "captured screen in either locale (%d leaks: %s)"
-		% [leaks.size(), str(leaks.slice(0, 5))])
-
-	# The same battle text really differs between locales (a copy, not a
+	# The battle text really differs between locales (a copy, not a
 	# fallback), and its placeholder survives in both (the §4.4 contract).
 	var english := _text_in_locale("battle.after.loot", "en")
 	var chinese := _text_in_locale("battle.after.loot", "zh")
@@ -1054,6 +966,10 @@ func _test_locale_completeness() -> void:
 	_check(I18n.fmt("battle.after.loot", {"gold": 150}).contains("150"),
 		"the {gold} placeholder substitutes at render time (%s)"
 		% I18n.fmt("battle.after.loot", {"gold": 150}))
+	# W3-C seam: the S10/S11/S3/S9 rendered-text sweeps of the Phase-2 suite
+	# boot `battle_screen.tscn`/world scenes — they are re-covered by slot
+	# C's `tools/test_battle_screen.gd` after W3-C merges.
+	I18n.set_locale(locale_before)
 
 
 ## The §4.12.5 inventory key set, plus the `gameover.captured` reason it names.
@@ -1077,69 +993,7 @@ func _text_in_locale(key: String, locale: String) -> String:
 	return text
 
 
-## Rendered-text leaks for S3's `encounter.attack_confirm` modal, built through
-## the real world scene (the map fixture lives in `test_npc_fleets.gd`).
-## `DataLoader.map` is loaded once by `_test_locale_completeness`.
-func _encounter_confirm_leaks(locale: String) -> Array[String]:
-	var leaks: Array[String] = []
-	_make_run()
-	GameState.set_world_tile(OPEN_CELL)
-	# A §4.15 hunter fixture (the retired navy marker's successor): its
-	# battle keeps kind = "navy" (docs/60-* §4.11.11.3) and the seeded
-	# composition comes from the fleet's own stream at contact time.
-	GameState.npc_fleets = [{
-		"id": "fx_hunter_spain",
-		"role": "hunter",
-		"nation_id": "spain",
-		"cell": {"x": OPEN_CELL.x + 1, "y": OPEN_CELL.y},
-		"route": {"lanes": [], "leg": 0, "tile_index": 0, "legs": []},
-		"cargo": {},
-		"captain": {"pool_id": "spain", "name_index": 0},
-		"cooldown_until_day": 0,
-		"seed": 1 * 1000003 + (OPEN_CELL.x + 1) * 7919 + OPEN_CELL.y * 104729,
-		"dest_port_id": "",
-		"dwell_until_day": 0,
-		"anchor_cell": null,
-		"target_fleet_id": "",
-		"hunter_state": "",
-		"loiter_until_day": 0,
-		"home_port_id": "",
-	}]
-	var host := Node2D.new()
-	add_child(host)
-	var world = WorldScene.instantiate()
-	world.route_to_port = false
-	world.route_to_battle = false
-	host.add_child(world)
-	await get_tree().process_frame
-	world.sync_from_state()
-	if not world._try_attack(OPEN_CELL + Vector2i(1, 0)):
-		leaks.append("S3/%s the navy attack did not open" % locale)
-		host.queue_free()
-		return leaks
-	var dialog = world._attack_confirm
-	if dialog == null:
-		leaks.append("S3/%s the encounter confirm did not open" % locale)
-		host.queue_free()
-		return leaks
-	var nation := I18n.t(DataLoader.get_nation("spain").get("name", {}))
-	var message: String = dialog.message_text()
-	if message.strip_edges().is_empty() or _has_raw_key([message]):
-		leaks.append("S3/%s message='%s'" % [locale, message])
-	if not message.contains(nation):
-		leaks.append("S3/%s message omits the nation name (%s)"
-			% [locale, message])
-	leaks.append_array(_widget_leaks(dialog, "S3/%s" % locale))
-	world._close_attack_confirm()
-	await get_tree().process_frame
-	host.queue_free()
-	GameState.npc_fleets = []
-	await get_tree().process_frame
-	return leaks
-
-
 # --- Fixtures -------------------------------------------------------------
-
 
 func _make_run(fleet: Array = []) -> void:
 	GameState.locale = "en"
@@ -1217,10 +1071,14 @@ func _ship(ship_type_id: String, overrides: Dictionary = {}) -> Dictionary:
 
 
 func _sim(config: Dictionary) -> BattleLib:
+	# `current` defaults to strength 0 so the fixtures are hermetic (the
+	# §4.12.1 default — the decoded contact-tile current — would leak a ±1
+	# cap mod from the real raster into these pins).
 	var full := {
 		"player_ships": [], "enemy_ships": [], "enemy_kind": "pirate",
 		"enemy_nation": "", "day": 12, "gold": 3000,
 		"contact": Vector2i(30, 40), "weather": "calm",
+		"current": {"dir": "", "strength": 0},
 	}
 	for key in config:
 		full[key] = config[key]
@@ -1239,26 +1097,79 @@ func _unit(sim, side: String, index: int) -> Dictionary:
 func _place(sim, side: String, index: int, cell: Vector2i) -> void:
 	var unit := _unit(sim, side, index)
 	if not unit.is_empty():
-		unit["cell"] = cell
+		unit["pos"] = cell
 
 
-## A §4.11.11 encounter descriptor for the scene fixture.
-func _pirate_encounter(enemy_count: int, hull_id: String) -> Dictionary:
-	var ships: Array = []
-	for _index in enemy_count:
-		ships.append(_ship(hull_id))
-	return {
-		"id": "hf_econ_9_30_40_pirate",
-		"kind": "pirate",
-		"nation_id": "",
-		"position": {"x": 30, "y": 40},
-		"day": 9,
-		"ships": ships,
-	}
+func _rng(seed_value: int) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	return rng
 
 
-## A §4.12.2 outcome block skeleton with `fields` merged over it (the W3-C
-## `morale_bonus` field included — the engine reports it on every block).
+func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+## The cell the §4.3a Bresenham sweep actually reaches for `step` (the walk
+## stops at the first out-of-bounds or occupied cell; the mover stays at the
+## PRIOR cell) — the same preview the harness uses.
+func _landing(sim, unit: Dictionary, step: Vector2i) -> Vector2i:
+	var from: Vector2i = sim.unit_cell(unit)
+	var prior := from
+	for cell in BattleLib._bresenham_cells(from, from + step):
+		if not BattleLib.in_grid(cell):
+			return prior
+		for other in sim.units():
+			if other == unit or not bool(other.get("alive", false)):
+				continue
+			if sim.unit_cell(other) == cell:
+				return prior
+		prior = cell
+	return prior
+
+
+## The inline deterministic battle policy driving BOTH sides of the seeded
+## agreement/pipeline battles: ① fire a loaded side in range+arc (round shot)
+## ② turn-to-broadside ③ close on the sweep landing ④ hold. Zero dice.
+func _fire_and_close_policy(sim, unit: Dictionary) -> Dictionary:
+	var own_side := str(unit.get("side", "player"))
+	var other := "enemy" if own_side == "player" else "player"
+	var enemies: Array = sim.living_units(other)
+	if enemies.is_empty():
+		return {"action": "hold"}
+	for side in ["port", "starboard"]:
+		for target in enemies:
+			if sim.can_cannon(unit, target, str(side)):
+				return {"action": "cannon", "target": target,
+					"side": str(side), "shot": "round"}
+	var from: Vector2i = sim.unit_cell(unit)
+	var nearest: Dictionary = enemies[0]
+	for enemy in enemies:
+		if _chebyshev(from, sim.unit_cell(enemy)) \
+				< _chebyshev(from, sim.unit_cell(nearest)):
+			nearest = enemy
+	var bearing := int(BattleLib.heading8_of(sim.unit_cell(nearest) - from))
+	var legal: Array = sim.legal_velocities(unit)
+	for vel in legal:
+		var step: Vector2i = vel
+		if step == Vector2i.ZERO:
+			continue
+		var steps := int(BattleLib.bucket_distance(bearing,
+			int(BattleLib.heading8_of(step))))
+		if steps in BattleLib.ARC_PORT_STEPS or steps in BattleLib.ARC_STARBOARD_STEPS:
+			return {"action": "move", "vel": step}
+	var distance := _chebyshev(from, sim.unit_cell(nearest))
+	for vel in legal:
+		var step: Vector2i = vel
+		if step == Vector2i.ZERO:
+			continue
+		var landing := _landing(sim, unit, step)
+		if landing != from and _chebyshev(landing, sim.unit_cell(nearest)) < distance:
+			return {"action": "move", "vel": step}
+	return {"action": "hold"}
+
+
+## A §4.12.2 outcome block skeleton with `fields` merged over it.
 func _outcome(fields: Dictionary) -> Dictionary:
 	var outcome := {
 		"result": "victory", "rounds": 6, "kind": "pirate", "nation_id": "",
@@ -1273,49 +1184,7 @@ func _outcome(fields: Dictionary) -> Dictionary:
 	return outcome
 
 
-func _rng(seed_value: int) -> RandomNumberGenerator:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
-	return rng
-
-
-## A simple player policy: fire when possible, else board, else close in.
-func _player_policy(sim, unit: Dictionary) -> Dictionary:
-	var enemies: Array = sim.living_units("enemy")
-	if enemies.is_empty():
-		return {"action": "hold", "target": {}, "cell": BattleLib.NO_CELL}
-	var boardable := {}
-	for enemy in enemies:
-		if sim.can_cannon(unit, enemy):
-			return {"action": "cannon", "target": enemy, "cell": BattleLib.NO_CELL}
-		if sim.can_board(unit, enemy):
-			boardable = enemy
-	if not boardable.is_empty():
-		return {"action": "board", "target": boardable, "cell": BattleLib.NO_CELL}
-	var origin: Vector2i = sim.unit_cell(unit)
-	var nearest: Dictionary = enemies[0]
-	var best := maxi(absi(origin.x - sim.unit_cell(nearest).x),
-		absi(origin.y - sim.unit_cell(nearest).y))
-	for enemy in enemies:
-		var cell: Vector2i = sim.unit_cell(enemy)
-		var distance := maxi(absi(origin.x - cell.x), absi(origin.y - cell.y))
-		if distance < best:
-			best = distance
-			nearest = enemy
-	var target_cell: Vector2i = sim.unit_cell(nearest)
-	var destination := BattleLib.NO_CELL
-	var best_distance := best
-	for cell in sim.legal_moves(unit):
-		var distance := maxi(absi(cell.x - target_cell.x), absi(cell.y - target_cell.y))
-		if distance < best_distance:
-			best_distance = distance
-			destination = cell
-	if destination != BattleLib.NO_CELL:
-		return {"action": "move", "target": {}, "cell": destination}
-	return {"action": "hold", "target": {}, "cell": BattleLib.NO_CELL}
-
-
-# --- Helpers --------------------------------------------------------------
+# --- Helpers ---------------------------------------------------------------
 
 func _reputation_snapshot() -> Dictionary:
 	var out := {}
@@ -1350,40 +1219,6 @@ func _contains_key_marker(text: String) -> bool:
 					return true
 		start = text.find("<", start + 1)
 	return false
-
-
-func _labelled_leaks(values: Array, tag: String) -> Array[String]:
-	var out: Array[String] = []
-	for value in values:
-		var text := str(value)
-		if text.strip_edges().is_empty() or _contains_key_marker(text):
-			out.append("%s:'%s'" % [tag, text])
-	return out
-
-
-## Every visible Label/Button under `root` — never empty, never a `<key>`.
-func _widget_leaks(root: Node, tag: String) -> Array[String]:
-	var out: Array[String] = []
-	for label in root.find_children("*", "Label", true, false):
-		if not (label as CanvasItem).is_visible_in_tree():
-			continue
-		var text := (label as Label).text
-		if text.strip_edges().is_empty() or _contains_key_marker(text):
-			out.append("%s:%s='%s'" % [tag, label.name, text])
-	for button in root.find_children("*", "Button", true, false):
-		if not (button as CanvasItem).is_visible_in_tree():
-			continue
-		var text := (button as Button).text
-		if text.strip_edges().is_empty() or _contains_key_marker(text):
-			out.append("%s:%s='%s'" % [tag, button.name, text])
-	return out
-
-
-func _joined(values: Array) -> String:
-	var parts: Array[String] = []
-	for value in values:
-		parts.append(str(value))
-	return " | ".join(parts)
 
 
 func _check(condition: bool, description: String) -> void:
