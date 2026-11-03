@@ -239,6 +239,15 @@ func _init(config: Dictionary) -> void:
 	weather = str(config.get("weather", "calm"))
 	encounter_id = str(config.get("encounter_id", ""))
 	_fleet_captain_card = _resolve_fleet_captain_card(config)
+	# Phase-9 S21 seam (60-* §4.12.1): the optional `player_stats` override is
+	# read HERE, once per constructed sim — present → the static holder carries
+	# it; absent → the holder is cleared so `player_attribute` /
+	# `player_effective_skill` / `player_duel_base` read GameState exactly as
+	# before (the normal battle path never passes the key and stays
+	# byte-identical). **W3's rewrite must preserve this seam.**
+	var stats_override = config.get("player_stats", null)
+	_player_stats_override = (stats_override as Dictionary).duplicate(true) \
+		if stats_override is Dictionary else {}
 	var shared = config.get("rng", null)
 	if shared is RandomNumberGenerator:
 		rng = shared
@@ -305,9 +314,31 @@ static func _script_defines(lib, method_name: String) -> bool:
 	return false
 
 
+# --- Phase-9 S21 seam (docs/60-COMBAT.md §4.12.1, §4.12.4) ------------------
+#
+# Optional `config.player_stats` override — `{attributes?: {…five…},
+# skills?: {…}, equipment?: {weapon?, armor?}}` — the S21 naval-battle
+# sandbox's injection point (decision 15, IMPLEMENT-Phase9 W2-C). [method
+# _init] copies the key into the static holder below, or CLEARS the holder
+# when the key is absent, so the three player reads re-scope per constructed
+# sim and a normal battle (which never passes the key) stays byte-identical.
+# Every accessor falls back to the GameState path PER KEY for anything the
+# override does not carry.
+#
+# **W3's rewrite of this file MUST preserve this seam** (the §4.12.1 config
+# table's `player_stats` row; the comment travels with the code).
+
+static var _player_stats_override: Dictionary = {}
+
+
 ## Slot A's `Character.attribute(key)`; the raw `player.attributes[key]` with a
 ## 0 default stands in while the rework is unmerged. 0 without a loaded run.
 static func player_attribute(key: String) -> int:
+	# Phase-9 S21 seam (§4.12.1): per-key override first, GameState fallback.
+	# W3's rewrite must preserve this branch.
+	var override = _player_stats_override.get("attributes", null)
+	if override is Dictionary and (override as Dictionary).has(key):
+		return int((override as Dictionary)[key])
 	var char_lib: Variant = CharacterLib
 	if _script_defines(char_lib, "attribute"):
 		return int(char_lib.attribute(key))
@@ -324,6 +355,11 @@ static func player_attribute(key: String) -> int:
 ## in-post officer's contribution (`50-*` §4.5.3). The raw `player.skills[key]`
 ## stands in while the module is unmerged (no officer term on that path).
 static func player_effective_skill(key: String) -> int:
+	# Phase-9 S21 seam (§4.12.1): per-key override first, GameState fallback.
+	# W3's rewrite must preserve this branch.
+	var override = _player_stats_override.get("skills", null)
+	if override is Dictionary and (override as Dictionary).has(key):
+		return int((override as Dictionary)[key])
 	var lib = _skills_script()
 	if _script_defines(lib, "effective_skill"):
 		return int(lib.effective_skill(key))
@@ -974,8 +1010,12 @@ static func defender_charisma_bonus(charisma: int) -> int:
 static func player_duel_base() -> int:
 	var base := player_effective_skill("swordplay") \
 		+ int(floor(float(player_attribute("courage")) / DUEL_COURAGE_DIVISOR))
-	var player: Dictionary = GameState.player
-	var equipment = player.get("equipment", {}) if player is Dictionary else {}
+	# Phase-9 S21 seam (§4.12.1): the override's `equipment` wins when present,
+	# else the worn GameState equipment. W3's rewrite must preserve this.
+	var equipment = _player_stats_override.get("equipment", null)
+	if not (equipment is Dictionary):
+		var player: Dictionary = GameState.player
+		equipment = player.get("equipment", {}) if player is Dictionary else {}
 	if equipment is Dictionary:
 		for slot in ["weapon", "armor"]:
 			base += equipment_item_modifier(str(equipment.get(slot, "")), "combat")

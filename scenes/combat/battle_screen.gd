@@ -55,6 +55,9 @@ const FALLBACK_STRINGS := {
 }
 
 const WORLD_SCENE := "res://scenes/world/world_map.tscn"
+## Phase-9 S21 (§4.12.4 sandbox zero-write branch): a sandbox battle's
+## after-action `Continue` returns to the S21 editor instead of S3.
+const SANDBOX_SCENE := "res://scenes/combat/battle_sandbox.tscn"
 ## Phase 3: a tournament bout returns to the host palace instead of S3, because
 ## the bracket continues there (`70-*` §4.9.7).
 const PALACE_SCENE := "res://scenes/port/palace_screen.tscn"
@@ -338,29 +341,66 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 		encounter.get("position", Vector2i.ZERO)))
 	var kind := str(encounter.get("kind", "pirate"))
 	var day := int(encounter.get("day", GameState.day))
-	var enemy_ships = encounter.get("ships", [])
+	# Phase-9 S21 (§4.12.4): the sandbox fixture carries BOTH fleets as
+	# §4.11.11 instances (`player_ships` / `enemy_ships`) plus its own
+	# `gold` / `weather`, so the live run is never read for them. A normal
+	# battle keeps the exact Phase-2/5 sources (GameState.fleet + the seeded
+	# `AiFleet.compose_enemy`).
+	var sandbox := is_sandbox_battle()
+	var player_ships := _player_fleet()
+	var gold := int(GameState.gold)
+	var weather := _weather_name()
+	if sandbox:
+		var fixture_player = encounter.get("player_ships", [])
+		player_ships = (fixture_player as Array).duplicate(true) \
+			if fixture_player is Array else []
+		gold = int(encounter.get("gold", 0))
+		var fixture_weather := str(encounter.get("weather", ""))
+		weather = fixture_weather if not fixture_weather.is_empty() \
+			else weather
+	var enemy_ships = encounter.get("enemy_ships", encounter.get("ships", [])) \
+		if sandbox else encounter.get("ships", [])
 	enemy_ships = (enemy_ships as Array).duplicate(true) \
 		if enemy_ships is Array else []
 	# §4.11.1: one stream per battle — composition first, then the sim, so a
-	# duel continues the same sequence.
+	# duel continues the same sequence. Sandbox: the fixture's optional `seed`
+	# (§4.7.16 `seed_mode`) drives the stream — `fixed`/`random` carry a number
+	# in the encounter, `auto` omits it and the §4.11.1 formula applies (gold
+	# 0, no contact tile ⇒ the origin; the S21 fixture pins that contract).
 	var rng := RandomNumberGenerator.new()
-	rng.seed = BattleSimLib.battle_seed_formula(
-		day, contact, int(GameState.gold), _player_fleet().size())
+	if sandbox:
+		if encounter.has("seed"):
+			rng.seed = int(encounter["seed"])
+		else:
+			rng.seed = BattleSimLib.battle_seed_formula(
+				day, contact, gold, player_ships.size())
+	else:
+		rng.seed = BattleSimLib.battle_seed_formula(
+			day, contact, int(GameState.gold), _player_fleet().size())
 	if (enemy_ships as Array).is_empty():
 		enemy_ships = AiFleetLib.compose_enemy(kind, day, rng)
 
-	sim = BattleSimLib.new({
-		"player_ships": _player_fleet(),
+	var sim_config := {
+		"player_ships": player_ships,
 		"enemy_ships": enemy_ships,
 		"enemy_kind": kind,
 		"enemy_nation": str(encounter.get("nation_id", "")),
 		"day": day,
-		"gold": int(GameState.gold),
+		"gold": gold,
 		"contact": contact,
-		"weather": _weather_name(),
+		"weather": weather,
 		"encounter_id": str(encounter.get("id", "")),
 		"rng": rng,
-	})
+	}
+	if sandbox:
+		# §4.12.1 `player_stats` (Phase 9): the S21 editor's attribute /
+		# equipment override rides the fixture encounter; absent → the sim
+		# stays byte-identical to the normal path.
+		var stats_override = encounter.get("player_stats", null)
+		if stats_override is Dictionary \
+				and not (stats_override as Dictionary).is_empty():
+			sim_config["player_stats"] = stats_override
+	sim = BattleSimLib.new(sim_config)
 	sim.start()
 	_seed_cursor()
 	# §4.7.1 (W6-A): the captain intro preview — before the first round, when
@@ -883,7 +923,11 @@ func _bind() -> void:
 	_title.text = _t("battle.title")
 	_day.text = I18n.fmt("world.day", {"day": int(sim.day)})
 	_round.text = _t("battle.round", {"round": int(sim.round_number())})
-	_weather.text = I18n.t_key("world.weather.%s" % _weather_name())
+	# §4.12.1: the battle's weather is locked at open time. A sandbox battle
+	# locks it on the fixture (there is no world state to read), so the label
+	# reads the engine's copy there; the normal path keeps the world lookup.
+	var weather_name := str(sim.weather) if is_sandbox_battle() else _weather_name()
+	_weather.text = I18n.t_key("world.weather.%s" % weather_name)
 	_sync_tokens()
 	_bind_stats()
 	_bind_log_records()
@@ -1383,6 +1427,21 @@ func _finish_battle() -> void:
 	# encounter builder over the fleet dict) is the source of truth.
 	last_outcome["captain_id"] = str(encounter.get("captain_id", ""))
 
+	# **Sandbox zero-write branch (Phase 9, docs/60-* §4.12.4, decision 15).**
+	# Steps 2/3/4 and step 5's world writes are skipped ENTIRELY: no
+	# `BattleResult.apply`, no `BattleRewards.apply`, no `NpcFleets` mutation,
+	# no phase-3 hooks, no `GameState.set_world_tile`, and no
+	# `battle_finished` broadcast (the S3 world scene consumes that signal to
+	# remove fleets and resume routing — emitting it would violate the
+	# zero-write contract whenever S3 happens to be listening). The dialog is
+	# READ-ONLY (it renders only the outcome block's own numbers), and the
+	# `Continue` edge routes back to S21 (`return_scene`). A sandbox battle is
+	# observed through `battle_closed` / [member last_outcome].
+	if is_sandbox_battle():
+		battle_closed.emit(last_outcome)
+		_show_after_action()
+		return
+
 	# 2. Fleet effects (task C) — guarded.
 	# §4.12.3 pins the second argument as `BattleSim.units()` (the engine's unit
 	# dicts, used to tag each capture with the enemy fleet index it came from);
@@ -1629,11 +1688,25 @@ func _continue_after_battle() -> void:
 		return
 	_after_action.visible = false
 	_after_action.remove_from_group("modal_overlay")
+	if is_sandbox_battle():
+		# §4.12.4 sandbox branch: `Continue` is the S10 → S21 edge (the
+		# editor restores its configuration from
+		# `battle_sandbox.gd.last_config`). The S9 game-over screen can never
+		# be involved — step 2 (the `gameover.*` emitter) was skipped.
+		_route_to_world()
+		return
 	if game_over_raised:
 		# §4.12.4 step 5: *not* S3 — S9 is the terminal screen for this run.
 		_show_game_over()
 		return
 	_route_to_world()
+
+
+## True when this battle was opened from a S21 sandbox fixture
+## (`encounter.sandbox == true`, docs/60-* §4.12.4). Guarding every skip on
+## this flag keeps a normal battle's sequence byte-identical to Phase 8.
+func is_sandbox_battle() -> bool:
+	return bool(encounter.get("sandbox", false))
 
 
 func _route_to_world() -> void:
@@ -1648,11 +1721,14 @@ func _route_to_world() -> void:
 	GameState.change_scene(target)
 
 
-## The scene the after-action dialog's `Continue` opens. A tournament bout goes
-## back to the host palace, which starts the next bout (`70-*` §4.9.7: "3
-## successive battles", no repairs between rounds); every other battle returns
-## to S3 (§4.12.4 step 5).
+## The scene the after-action dialog's `Continue` opens. A sandbox battle
+## returns to the S21 editor (§4.12.4 zero-write branch); a tournament bout
+## goes back to the host palace, which starts the next bout (`70-*` §4.9.7:
+## "3 successive battles", no repairs between rounds); every other battle
+## returns to S3 (§4.12.4 step 5).
 func return_scene() -> String:
+	if is_sandbox_battle():
+		return SANDBOX_SCENE
 	if is_tournament_battle():
 		return PALACE_SCENE
 	return WORLD_SCENE

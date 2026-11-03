@@ -58,6 +58,11 @@ custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
 text = "New game"
 
+[node name="Sandbox" type="Button" parent="Center/Stack/Buttons"]
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+text = "Naval battle"
+
 [node name="Load" type="Button" parent="Center/Stack/Buttons"]
 custom_minimum_size = Vector2(280, 40)
 layout_mode = 2
