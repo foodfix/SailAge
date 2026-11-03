@@ -1546,7 +1546,7 @@ triggers contact (§4.1.1; lootable coasters stay Phase-8).
 
 **NPC tax crediting (decisions 19/20).** Traders and sovereign coasters
 pay the unified tariff into the host treasury on their port-call trades —
-through `Allegiance.credit_tax` (the C contract, `80-*` §4.9) reusing the
+through `Allegiance.credit_tax` (the C contract, `80-*` §4.16) reusing the
 walked totals already computed for the call; no profit-and-loss
 accounting anywhere. Nationless coasters credit nothing (no host to pay).
 NPC-sourced tax is capped **2,000g per nation per month** (treasuries,

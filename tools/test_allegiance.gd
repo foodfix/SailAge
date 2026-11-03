@@ -1,7 +1,7 @@
 extends Node
 ## Phase-7 task L acceptance tests: port allegiance, development, treasuries,
 ## tariffs, permits and the monthly NPC counter-investment
-## (docs/30-* §4.9/§4.10, §4.3; docs/70-* §4.1; docs/80-* §4.9 contracts;
+## (docs/30-* §4.9/§4.10, §4.3; docs/70-* §4.1; docs/80-* §4.16 contracts;
 ## docs/90-* §5.4 month-tick ordering; IMPLEMENT-Phase7.md §2.4–§2.6).
 ##
 ##   godot --headless --path . res://tools/test_allegiance.tscn

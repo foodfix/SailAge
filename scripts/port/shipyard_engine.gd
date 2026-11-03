@@ -41,7 +41,7 @@ extends RefCounted
 ## stock list ever carried one.
 ##
 ## `effective_dev` / `effective_alignment` **guard-read** the allegiance
-## module (task L, `scripts/port/allegiance.gd`, the C contract of 80-* §4.9)
+## module (task L, `scripts/port/allegiance.gd`, the C contract of 80-* §4.16)
 ## with the safe fallbacks: the port's authored data floor (`ports.json` `dev`)
 ## and the port's data `nation_id`. The guard (order-independent merges) is the
 ## Phase-6 pattern: `ResourceLoader.exists` + `has_method` before any call.
@@ -75,7 +75,7 @@ const ROW_ALLEGIANCE_GRAY := "allegiance_gray"
 ## until then the screens fall back, never printing a raw "<key>").
 const TIER_NEED_DEV_KEY := "shipyard.tier.need_dev"
 const ALLEGIANCE_LOCKED_KEY := "shipyard.tier.allegiance_locked"
-## The allegiance module guard-read path (the C contract, `80-*` §4.9).
+## The allegiance module guard-read path (the C contract, `80-*` §4.16).
 const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
 
@@ -88,7 +88,7 @@ static func _allegiance():
 
 
 ## Guarded one-argument allegiance call: `fallback` when the module or the
-## method is absent (the 80-* §4.9 guard convention).
+## method is absent (the 80-* §4.16 guard convention).
 static func _allegiance_call(method: String, port_id: String,
 		fallback: Variant) -> Variant:
 	var module = _allegiance()

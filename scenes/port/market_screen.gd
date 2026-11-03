@@ -120,11 +120,11 @@ const COL_SPECS: Array = [
 	["buy", "buy", COL_BUTTON_W, HORIZONTAL_ALIGNMENT_CENTER],
 	["sell", "sell", COL_BUTTON_W, HORIZONTAL_ALIGNMENT_CENTER],
 ]
-## Task L's allegiance module (docs/80-* §4.9 contract) — loaded through the
+## Task L's allegiance module (docs/80-* §4.16 contract) — loaded through the
 ## guard helpers, never hard-referenced (it may not exist yet).
 const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 ## The guard-default tariff when no allegiance module answers
-## (docs/80-* §4.9: 未同盟 20%).
+## (docs/80-* §4.16: 未同盟 20%).
 const DEFAULT_TARIFF_MILLE := 2000
 ## The 20% and 5% tariff rates in per-mille (docs/30-* §4.10 unified tariff).
 const FOREIGN_TARIFF_MILLE := 2000
@@ -233,7 +233,7 @@ var _captains_key: String = ""
 var _intel_key: String = ""
 
 
-# --- Guarded Allegiance reads (docs/80-* §4.9) ------------------------------
+# --- Guarded Allegiance reads (docs/80-* §4.16) ------------------------------
 
 ## Headless-suite seam: a stand-in for L's allegiance module. The runtime
 ## never sets it; when null the real module (autoload node, then script) is

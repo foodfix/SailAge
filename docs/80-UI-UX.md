@@ -18,7 +18,7 @@ debug rows and the omniscient debug chart (§4.3, §4.5, §4.6, §4.6.3,
 §4.7.10). Phase 7 adds the trade-empire surfaces — market listing/特产/
 tariff/invest-gate rows, shipyard role labels + three row states, palace
 permit row + commendation dialog, tavern investment telegraphs
-(§4.7.11–§4.7.15) — and pins the W3/W4 symbol contracts (§4.9). Phase 8
+(§4.7.11–§4.7.15) — and pins the W3/W4 symbol contracts (§4.16). Phase 8
 (the RPG overhaul) adds the right-click interaction layer — the fleet
 picker, the hail modal and the port context menu (§4.10) — the in-port
 verb matrices, the captain's table and the dossier panel (§4.11), the
@@ -1736,7 +1736,7 @@ visibly jumped at every opening/closing hour.)
   (`30-*` §4.3) re-enables it on the next crossing hour. Routing, gating and
   the rebuild signature never move — only the rendering is fixed.
 
-### 4.9 W3/W4 symbol contracts (Phase 7 — the launch condition)
+### 4.16 W3/W4 symbol contracts (Phase 7 — the launch condition; §4.9 before Phase 10)
 
 These are the cross-worktree contracts for the Phase-7 W3/W4 code tasks
 (K/L/M/F/N/V): **names exact**, quoted verbatim from the ratified backlog

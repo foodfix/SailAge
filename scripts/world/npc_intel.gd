@@ -43,7 +43,7 @@ const POSTER_RADIUS := 40
 const REVEAL_COST := 20
 ## Tavern rumor rows (§4.7.8): live fleets within Chebyshev 40.
 const RUMOR_RADIUS := 40
-## Task L's allegiance module (docs/80-* §4.9 contract) — guarded, never
+## Task L's allegiance module (docs/80-* §4.16 contract) — guarded, never
 ## hard-referenced (Phase 7 investment telegraphs, §4.7.14).
 const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 

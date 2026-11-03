@@ -17,7 +17,7 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 ## The Phase-7 allegiance module's path (`90-*` §4 project layout): the fresh
 ## run's allegiance/permit/treasury seeding is a guarded dynamic call, the
-## docs/80-* §4.9 guard-call convention — a no-op keeps a fixture without the
+## docs/80-* §4.16 guard-call convention — a no-op keeps a fixture without the
 ## module alive (the module itself always ships on main).
 const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
 
@@ -103,7 +103,7 @@ var npc_port_log: Array = []
 # (missing keys keep the seeded defaults). `new_game` seeds a fresh run
 # through `Allegiance.seed_new_game()`: contestable sovereigns
 # `{owner: 6,000}`, neutrals empty, treasuries 5,000g, permits/fame/counters
-# reset (docs/30-* §4.9, `80-*` §4.9 contract).
+# reset (docs/30-* §4.9, `80-*` §4.16 contract).
 
 # --- Phase 3 saved state (docs/90-* §8.1, save_version 3) -------------------
 
@@ -329,7 +329,7 @@ func new_game(nation_id: String, route: bool = true,
 	npc_port_log = []
 	EconomyLib.reset_overrides()
 	# docs/90-* §8.1 Phase-7 fields: the allegiance/permit/treasury state is
-	# seeded right after the reset (the persistence seam — `80-*` §4.9
+	# seeded right after the reset (the persistence seam — `80-*` §4.16
 	# contract): contestable sovereigns `{owner: 6,000}` (allied, below
 	# dev-1's 10,000g), neutrals empty, every treasury 5,000g, permits/fame
 	# flags/counters/telegraphs cleared. Runs before the fleet fill so the
@@ -370,10 +370,10 @@ func _route_after_new_game(_start_port_id: String) -> void:
 		push_warning("GameState.new_game: neither port nor world scene exists yet")
 
 
-## The Phase-7 allegiance seeding (`90-*` §8.2, `80-*` §4.9 contract):
+## The Phase-7 allegiance seeding (`90-*` §8.2, `80-*` §4.16 contract):
 ## `Allegiance.seed_new_game()` — contestable sovereigns `{owner: 6,000}`,
 ## neutrals empty, treasuries 5,000g, permits/fame/counters reset. Guarded
-## dynamic call per the docs/80-* §4.9 guard-call convention: a missing
+## dynamic call per the docs/80-* §4.16 guard-call convention: a missing
 ## module (never a shipped state) is a logged no-op, not a wedge.
 func _seed_allegiance() -> void:
 	if not ResourceLoader.exists(ALLEGIANCE_PATH, "Script"):

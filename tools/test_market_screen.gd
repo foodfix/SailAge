@@ -80,7 +80,7 @@ const TAVERN_SCREEN_PATH := "res://scenes/port/tavern_screen.gd"
 const NPC_INTEL_PATH := "res://scripts/world/npc_intel.gd"
 
 
-## A stand-in for task L's allegiance module (docs/80-* §4.9 contract) —
+## A stand-in for task L's allegiance module (docs/80-* §4.16 contract) —
 ## fed to the screens' `allegiance_override` test seams.
 class FakeAllegiance extends RefCounted:
 	var dev_value := 0

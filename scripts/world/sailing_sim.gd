@@ -369,7 +369,7 @@ static func _player_array(key: String) -> Array:
 static func attribute(attribute_id: String) -> int:
 	# Variant-indirected: a preloaded script const is checked as the class
 	# itself, and `Object.has_method`/`Object.call` are instance-level (the
-	# guard-call pattern, `80-*` §4.9).
+	# guard-call pattern, `80-*` §4.16).
 	var cls: Variant = CharacterLib
 	if cls.has_method("attribute"):
 		return int(cls.call("attribute", attribute_id))
@@ -1412,7 +1412,7 @@ static func advance_clock(days: float) -> int:
 		# increment) runs the allegiance month tick — resets `month_invested`,
 		# credits baseline treasury income, resolves the seeded NPC
 		# counter-investment, refreshes the telegraph windows. Guarded dynamic
-		# load per the docs/80-* §4.9 guard-call convention.
+		# load per the docs/80-* §4.16 guard-call convention.
 		if GameState.day % 30 == 1:
 			var allegiance := load("res://scripts/port/allegiance.gd")
 			if allegiance != null and allegiance.has_method("month_tick"):
@@ -1468,7 +1468,7 @@ static func docked_port_id() -> String:
 ## (`30-*` §4.1b closed rule: entering a facility and starting each timed
 ## action both check the clock here; an action started before closing may end
 ## after it). Reads `DataLoader.facility_hours` through the guarded-module
-## convention (`80-*` §4.9): a missing table, port or facility falls back to
+## convention (`80-*` §4.16): a missing table, port or facility falls back to
 ## **always open**, so a bad data file can never seal every port shut. The
 ## window check is `[open, close)` on minutes; `"24h"` is always true.
 static func facility_open(port_id: String, facility_id: String) -> bool:

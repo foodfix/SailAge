@@ -3,7 +3,7 @@ extends RefCounted
 ## Port allegiance, development, treasuries, tariffs and permits (Phase 7) —
 ## docs/30-PORTS-AND-TRADE.md §4.9 (allegiance & development) and §4.10 (tax &
 ## permits), docs/30 §4.3 (the investment ledger effect), docs/70-* §4.1 (the
-## allegiance fame paragraph), docs/80-* §4.9 (the symbol contracts — THIS
+## allegiance fame paragraph), docs/80-* §4.16 (the symbol contracts — THIS
 ## module implements exactly those signatures), docs/90-* §5.4 (month-tick
 ## ordering: one seam in `sailing_sim.advance_clock`, one owner: this module).
 ##
@@ -171,7 +171,7 @@ static var _seeding: bool = false
 static var _restoring: bool = false
 
 
-# --- Classes & alignment (docs/80-* §4.9 contract) ---------------------------
+# --- Classes & alignment (docs/80-* §4.16 contract) ---------------------------
 
 ## True when `port_id` is a protected core port (`ports.json protected: true`).
 ## An unknown port is not protected.
@@ -381,7 +381,7 @@ static func player_invest_chunk(port_id: String) -> void:
 	_month_invested[port_id] = month_invested_gold(port_id) + 500
 
 
-# --- Tariff (docs/30 §4.10; docs/80-* §4.9 contract) -------------------------
+# --- Tariff (docs/30 §4.10; docs/80-* §4.16 contract) -------------------------
 
 ## 0 / 500 / 2000 per the C contract (basis points over 10,000): 5% when the
 ## effective alignment == the trader's nation, 20% otherwise, 0% under a valid
@@ -523,7 +523,7 @@ static func has_permit_foreign(nation_id: String) -> bool:
 	return bool((_permits.get("foreign", {}) as Dictionary).get(nation_id, false))
 
 
-# --- Tax crediting (docs/30 §4.9/§4.10; docs/80-* §4.9 contract) -------------
+# --- Tax crediting (docs/30 §4.9/§4.10; docs/80-* §4.16 contract) -------------
 
 ## Every tax coin flows to the port's effective-alignment nation (decision 19).
 ## `payer_nation` distinguishes the cap: an NPC payer's credit into a host is
@@ -561,7 +561,7 @@ static func treasury(nation_id: String) -> int:
 	return maxi(0, int(_treasuries.get(nation_id, 0)))
 
 
-# --- Telegraphs (decision 24; docs/80-* §4.9 contract) ----------------------
+# --- Telegraphs (decision 24; docs/80-* §4.16 contract) ----------------------
 
 ## The investment telegraph rows still inside their 30-day window, oldest
 ## first: `{nation_id, port_id, band, amount, day}`. The tavern's rumor
@@ -632,7 +632,7 @@ static func mark_commendation_shown() -> void:
 	_commendations_shown[port_id] = true
 
 
-# --- Seeding & the month tick (docs/90-* §5.4; docs/80-* §4.9 contract) -----
+# --- Seeding & the month tick (docs/90-* §5.4; docs/80-* §4.16 contract) -----
 
 ## The player's nation id (`""` before a run exists).
 static func _player_nation() -> String:

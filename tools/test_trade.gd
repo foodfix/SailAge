@@ -3,7 +3,7 @@ extends Node
 ## the listing rule, the §4.10 unified tariff on both sides, the §4.9
 ## investment ledger/monthly cap/diplomatic gate, permits and treasury credit
 ## (docs/30-* §4.2–§4.4, §4.9, §4.10, §5; docs/40-* §4.2; docs/50-* §4.3,
-## §4.6; docs/20-* §4.10; docs/80-* §4.9 contracts).
+## §4.6; docs/20-* §4.10; docs/80-* §4.16 contracts).
 ##
 ##   godot --headless res://tools/test_trade.tscn
 ##

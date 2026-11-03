@@ -730,7 +730,7 @@ func _test_per_port_stock() -> void:
 	_check(ShipyardLib.shipyard_stock().size() == 16,
 		"standalone (no docked port) falls back to the full catalog")
 
-	# --- effective dev / alignment guard defaults (80-* §4.9) ---------------
+	# --- effective dev / alignment guard defaults (80-* §4.16) ---------------
 	_make_run(50000, ["caravel"], "lisbon")
 	_check(ShipyardLib.effective_dev("lisbon") == 3,
 		"guard default: lisbon's authored floor is dev 3 (got %d)"
@@ -1610,7 +1610,7 @@ func _test_palace_screen() -> void:
 	GameState.locale = locale_before
 
 
-# --- 12. The Allegiance guard path (80-* §4.9) -----------------------------
+# --- 12. The Allegiance guard path (80-* §4.16) -----------------------------
 # Installed LAST: `take_over_path` publishes a fixture allegiance module at
 # the C-contract path, proving every guard call switches from the authored
 # defaults to the engine answers when task L's file lands.

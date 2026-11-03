@@ -88,7 +88,7 @@ const FleetPathLib := preload("res://scripts/world/fleet_path.gd")
 ## `sailing_sim.gd` never loads this module.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
-## Phase-7 allegiance guard (docs/60-* §4.11.14, docs/80-* §4.9 contracts).
+## Phase-7 allegiance guard (docs/60-* §4.11.14, docs/80-* §4.16 contracts).
 ## Loaded **by path, never preloaded** — the economy.gd dev-guard pattern —
 ## so the suites' `take_over_path` fixtures win over the real module until
 ## restored. Guarded defaults while absent: alignment = the data
@@ -591,7 +591,7 @@ func _port_counts() -> Dictionary:
 	return counts
 
 
-# --- Phase-7 allegiance guard (docs/60-* §4.11.14; docs/80-* §4.9) ----------
+# --- Phase-7 allegiance guard (docs/60-* §4.11.14; docs/80-* §4.16) ----------
 
 ## The allegiance module or `null`: exists-check, then a per-call `load` by
 ## path (Godot's resource cache answers with the path's CURRENT owner, so a
