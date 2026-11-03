@@ -52,6 +52,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | ✅ complete — `docs/IMPLEMENT-Phase6.md` (completion record) |
 | 7 | Trade Empires | Flow economy over 40 goods (`staple`/`specialty`/`exclusive` flags, per-port listing rule), 16 ships with `role`/`tier` + per-port shipyard stock, 24 equipment items with rare named-pirate drops, development-gated hardware, allegiance tug-of-war (protected vs contestable ports, per-nation ledgers, monthly seeded NPC counter-investment, nation treasuries), unified 5%/20% tariff + two tax permits, fame/commendation tie-ins, nationless coasters at every neutral port, `tools/sim_trade.py` gates 1–10, save v7 | ✅ complete — `docs/IMPLEMENT-Phase7.md` (acceptance record `tools/demo_check_phase7.md`) |
 | 8 | Characters, Careers & Encounters | Unified Person model (5 attributes + skills) shared by player/officers/NPC captains, officer posts & 96-officer roster, named-captain canon with defeat→return-queue lifecycle, people interactions (inspect/talk/attack/gifts/appointments/hail/dossier), appointed voyage (navigator-gated auto-sailing), two-step new-game creation, save v9 | ✅ complete — `docs/IMPLEMENT-Phase8.md` (acceptance record `tools/demo_check_phase8.md`) |
+| 9 | Naval-Combat Realism & AI | Velocity-physics battle layer (integer velocity vectors with inertia, heading8 8-bucket arcs, port/starboard broadsides with independent reload, wind/current/weather speed caps, four shot types, sweep ramming, hook-and-board with crew casualties), side-level morale & surrender, fleet-command layer (per-round order five-tuples, form→close→engage→wear→break state machine, hysteresis, anchor succession), AI ramp (T1 profiles → T2 deterministic greedy → T3 one-ply lookahead shipped ceiling, `ai_level ∈ {0,1}`), S10 presentation rebuild (48×30 battle world, camera, minimap, overlays), S21 naval-battle sandbox off S1 (zero-write) | See `docs/IMPLEMENT-Phase9.md` |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -293,6 +294,18 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 职位 | Officer post | A flagship functional post (pilot/boatswain/gunner/surgeon/carpenter/cook) or the captain seat of one escort ship; prereqs and the advice triggers live in `data/officer_posts.json` (`50-*`, `10-*` §4.21) |
 | 人物卡 | Character card | The unified person renderer `scenes/ui/character_card.tscn` — one scene renders player, officer or NPC captain; identification reveals the whole card (`80-*`) |
 | 宿敌 | Nemesis hunter | A pirate/privateer driven to stance ≤ −3 that returns hunting the player specifically (`60-*`) |
+| 航向8向 | heading8 | The 8-bucket ship heading derived from the velocity vector at 22.5° boundaries; `vel = 0` keeps the last heading (`60-*` §4.3a) |
+| 舷炮 | Broadside | Half the cannons fixed to one side (port = `floor(n/2)`, starboard the rest); arcs relative to heading8, each side reloads independently (`60-*` §4.4/§4.4a) |
+| 纵射 | Rake | A volley whose target bearing bucket is 0°/180° against the target's heading8; damage ×1.25, doubled crew casualties (`60-*` §4.4) |
+| 勾舷 | Hook | Grapple-and-board: orthogonal adjacency + both ships `‖vel‖ ≤ 1` + weather ≠ storm; both velocities zero on a hook (`60-*` §4.6a) |
+| 弹种 | Shot type | round / chain / armor_piercing / grape; chain gates at gunnery 25, armor-piercing at 50, grape has no gate and range 1 only (`60-*` §4.4) |
+| AI 档案 | Profile | The per-kind enemy behavior row in `npc_config.json` (`60-*` §4.9a; distinct from the person 档案/Dossier of `80-*`) |
+| 原型 | Archetype | The θ group key — aggressive / balanced / cautious; selects the T3 weight table (`60-*` §4.9c) |
+| 指令五元组 | Order tuple | The per-round AI fleet order `{station, desired_heading8, desired_speed_band, assigned_target, discipline}` (`60-*` §4.9b) |
+| 迟滞 | Hysteresis | The fleet state machine's minimum dwell — ≥ 2 rounds per state, `wear` locked until complete (`60-*` §4.9b) |
+| 前瞻 | Lookahead | The T3 one-ply search over legal velocities × actions on a `snapshot()/restore()` cycle (`60-*` §4.9c) |
+| 沙盒 | Sandbox | S21, the zero-write naval-battle editor launched from S1 (`80-*` §4.7.16) |
+| 僵持 | Stall | The `stall` outcome: 8 consecutive rounds with zero damage, zero boarding and no closure (`60-*` §4.11.9) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 

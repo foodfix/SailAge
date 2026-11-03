@@ -252,6 +252,9 @@ must not appear in any port row (§4.4). Engine/screen semantics: `30-*`
 | `crew_min` | int > 0 | below this, speed penalty applies (formula in `20-*`) |
 | `crew_max` | int ≥ crew_min | hard crew cap |
 | `armament_slots` | int ≥ 0 | max cannon count (Phase 2) |
+| `battle_max_speed` | int 2–4 | *(Phase 9)* battle velocity-cap tier derived from `speed`: `16→2`, `20→3`, `24→4` — the validator enforces the exact per-speed mapping (§8, group 3); consumed by the battle `cap_eff` clamp (`60-*` §4.3a) |
+| `battle_accel` | int | *(Phase 9)* `1 \| 2` — velocity-magnitude change allowed per turn: oar-class hulls `2` (galley, galiot, galleass), every `sail`/`hybrid` hull `1` (`60-*` §4.3a) |
+| `battle_turn_rate` | int | *(Phase 9)* `45 \| 90` — degrees the heading may change per turn: 90 = latin, sloop, galiot, pinnace, dhow, xebec, galley; 45 = the other nine (caravel, brigantine, nao, carrack, galleon, galleass, fluyt, junk, caravela_redonda) — the 16 locked hulls partition exactly once (validator §8, group 3) |
 
 Per-port availability: `facilities.shipyard` holds the hull **id list** this
 port stocks (§4.4); a hull is offered iff it is on that list and passes the
@@ -273,7 +276,10 @@ port stocks (§4.4); a hull is offered iff it is on that list and passes the
       "speed": 20,
       "crew_min": 15,
       "crew_max": 45,
-      "armament_slots": 6
+      "armament_slots": 6,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     }
   ]
 }
@@ -588,9 +594,11 @@ strings (validator group 1 exempts it from the plural-key rule, exactly like
 | `budgets` | object | per-role budget constants, every value > 0 (group 7); the per-role budget formulas that consume them are pinned in `60-*` §4.1 |
 | `flow` | object | spawn-flow constants, every value > 0 (group 7) |
 | `absolute_cap` | int | hard upper bound on live NPC fleets (wrecks are saved in `GameState.wrecks` and never counted); group 7 enforces the locked cap |
+| `ai_profiles` | object | *(Phase 9)* per-kind enemy battle behavior — keyed by battle kind, **exactly 9 rows**, each row carrying **exactly 9 keys** (value table below; validator §8.2 item 14) |
 
-The file content is **locked verbatim** — task D copies this block; the
-`presets`/`budgets`/`flow` key sets are exactly these:
+The Phase-5 block is **locked verbatim** — task D copies it verbatim; the
+`presets`/`budgets`/`flow` key sets are exactly these (the Phase-9
+`ai_profiles` key below joins the same envelope):
 
 ```json
 {
@@ -612,6 +620,69 @@ Preset semantics (`80-*`: the S2 row and the S19 settings modal): the
 multiplier scales every role budget (`ceil` per role); `deserted` means zero
 NPC spawns and contacts; raising the preset refills via the daily trickle,
 lowering **never culls** living fleets.
+
+**Phase-9 `ai_profiles` block *(Phase 9)*.** The envelope grows one more
+top-level key, `ai_profiles` — an object keyed by battle kind with **exactly
+9 rows**: `pirate`, `privateer`, `patrol`, `navy`, `tournament`, `treasure`,
+`trader`, `coaster`, `courier`. Each row carries **exactly 9 keys**:
+
+| Key | Type | Rule |
+|---|---|---|
+| `kind` | string | mirrors the row's map key — the validator checks `kind` == key (§8.2 item 14) |
+| `archetype` | enum | `aggressive` \| `balanced` \| `cautious` — the T3 θ group selector (`60-*` §4.9c) |
+| `aggression` | int | 0–100 |
+| `preferred_range` | int | 1–3 |
+| `flee_below_hp_pct` | int | 0–100 |
+| `focus` | enum | `weakest` \| `nearest` \| `flagship` |
+| `courage_mod` | int | −10…10 |
+| `formation` | enum | `line_ahead` \| `column` \| `screen` \| `swarm` (runtime consumer: the fleet layer, `60-*` §4.9b) |
+| `ai_level` | int | `0` \| `1` — T2 deterministic greedy vs T3 one-ply lookahead (`60-*` §4.9c) |
+
+Normative value table (all 9 rows, locked):
+
+| kind | archetype | aggression | preferred_range | flee_below_hp_pct | focus | courage_mod | formation | ai_level |
+|---|---|---|---|---|---|---|---|---|
+| pirate | aggressive | 90 | 2 | 0 | weakest | +5 | swarm | 1 |
+| privateer | aggressive | 80 | 2 | 10 | weakest | +5 | swarm | 1 |
+| patrol | balanced | 70 | 3 | 15 | nearest | 0 | line_ahead | 1 |
+| navy | balanced | 60 | 3 | 15 | flagship | 0 | line_ahead | 1 |
+| tournament | balanced | 60 | 3 | 0 | weakest | 0 | line_ahead | 1 |
+| treasure | cautious | 10 | 3 | 40 | nearest | −5 | screen | 0 |
+| trader | cautious | 5 | 3 | 50 | nearest | −5 | column | 0 |
+| coaster | cautious | 5 | 3 | 50 | nearest | −5 | column | 0 |
+| courier | cautious | 5 | 3 | 60 | nearest | −5 | column | 0 |
+
+**Lookup rule (correction 8):** a battle kind missing from the table falls
+back — `hunter` → the `navy` row (mirroring `NpcFleets.composition_kind`);
+**no `hunter` row may exist**. The `coaster` row is forward-compat +
+sandbox-only (coasters are intimidate-only, never battle, `60-*` §4.1.1) —
+the validator still checks its shape (§8.2 item 14). **All nine keys land
+with the Phase-9 W2 data wave** (correction 11) even though the runtime
+consumers arrive per stage (`formation` → the fleet layer, `ai_level` → T3);
+the validator checks the shape from day one. Behavior consumption is
+`60-*` §4.9a.
+
+```json
+{
+  "version": 1,
+  "ai_profiles": {
+    "pirate": {
+      "kind": "pirate",
+      "archetype": "aggressive",
+      "aggression": 90,
+      "preferred_range": 2,
+      "flee_below_hp_pct": 0,
+      "focus": "weakest",
+      "courage_mod": 5,
+      "formation": "swarm",
+      "ai_level": 1
+    }
+  }
+}
+```
+
+(Excerpt — the shipped `data/npc_config.json` carries all nine kind rows
+beside the locked `presets`/`budgets`/`flow` block above.)
 
 ### 4.11 Captain — `data/captains.json` *(Phase 8; built)*
 
@@ -2179,6 +2250,49 @@ personality/appearance part keys `personality.<tag>` and
 keys (`IMPLEMENT-Phase8.md` correction 5; the exact count is recorded at
 validation time in the acceptance record — never a pinned constant).
 
+### 7.12 ui_strings Phase-9 families (inventory, Phase 9)
+
+`data/ui_strings.json` grows these two families in the Phase-9 W2 strings
+wave (both locales; the zh/en values themselves are authored there — this
+inventory is the normative key set for the wave, and **no other Phase-9 key
+may be invented by later waves without amending this inventory first**).
+Locale parity and the per-key `{placeholder}`-token-set identity remain
+group 2's standing recursion; no new validator group is introduced (the
+Phase-9 validator amendments are group 3's §4.3 ship_types fields and
+group 7's `ai_profiles` — §8, §8.2 item 14).
+
+- **`battle.*` (21 keys):** `battle.fit`, `battle.speed`, `battle.heading`,
+  `battle.wind`, `battle.current`, `battle.weather`, `battle.reload.port`,
+  `battle.reload.starboard`, `battle.morale`, `battle.formation`,
+  `battle.shot.round`, `battle.shot.chain`, `battle.shot.armor_piercing`,
+  `battle.shot.grape`, `battle.shot.locked` (`{value}`), `battle.ring.hook`,
+  `battle.ai_speed.animate`, `battle.ai_speed.instant`,
+  `battle.result.stall`, `battle.log.rake` (`{attacker}`, `{target}`,
+  `{damage}`), `battle.log.strike` (`{ship}`).
+- **`sandbox.*` (40 keys):** `sandbox.title`, `sandbox.start`,
+  `sandbox.random_all`, `sandbox.import`, `sandbox.export`,
+  `sandbox.back`, `sandbox.player`, `sandbox.enemy`,
+  `sandbox.ship` (`{index}`), `sandbox.ship.add`, `sandbox.ship.remove`,
+  `sandbox.ship.type`, `sandbox.ship.cannons`, `sandbox.ship.crew`,
+  `sandbox.ship.durability`, `sandbox.ship.figurehead`, `sandbox.ship.sail`,
+  `sandbox.ship.captain`, `sandbox.enemy.kind`, `sandbox.enemy.compose`,
+  `sandbox.day`, `sandbox.seed`, `sandbox.seed.fixed`,
+  `sandbox.seed.random`, `sandbox.seed.auto`, `sandbox.weather`,
+  `sandbox.wind_dir`, `sandbox.current`, `sandbox.deployment`,
+  `sandbox.deployment.standard`, `sandbox.deployment.tournament`,
+  `sandbox.morale.player`, `sandbox.morale.enemy`, `sandbox.formation`,
+  `sandbox.ai_level`, `sandbox.archetype`, `sandbox.import.invalid`,
+  `sandbox.import.ok`, `sandbox.export.ok`, `sandbox.zero_write`.
+
+Every key not annotated above is a plain label (no placeholder). Notes:
+
+- attribute labels reuse the existing `char.attr.*` keys — no new attribute
+  strings;
+- equipment item names come from `data/equipment.json` — never duplicated
+  into `ui_strings.json`;
+- the sandbox after-action dialog reuses the existing `battle.after.*` keys;
+- grape volleys log hull damage through the existing `battle.log.cannon`.
+
 ## 8. `tools/validate_data.py` Spec
 
 Python ≥ 3.10, stdlib only (`json`, `re`, `sys`, `pathlib`, `zlib` for the PNG
@@ -2191,12 +2305,12 @@ the code below. All checks run in order.
 |---|---|---|
 | 1 | Parse & envelope | every `data/*.json` parses; envelope has int `version` and exactly one plural entity key matching the filename (except `map_legend.json`, `maps/maps.json`, `maps/world_report.json`, `facility_hours.json`, `ui_strings.json`, and the envelope exceptions — `npc_config.json` (config block), `trade_routes.json` (key `lanes`), `trade_routes_built.json` (tool output), `captains.json` (tool output, key `captains`), `captain_name_parts.json` (authored multi-block source)). The Phase-6 ocean files (`wind_regions.json`, `ocean_currents.json`, `ice_regions.json`) use plural == basename and need **no** exception — as do the Phase-8 `skill_gates.json` / `officer_posts.json` / `backgrounds.json`. A present `data/npc_captains.json` (retired) fails group 11 (§8.6) |
 | 2 | i18n | every L10nString has exactly keys `zh`,`en`, both non-empty strings; applies recursively to all entity files. `ui_strings.json`: every top-level key except `version` maps to an L10nString, and per key the `{placeholder}` token sets in `zh` and `en` must be identical. The Phase-8 string families (§7.11) must each carry ≥ 1 key in both locales (group 12 owns the per-family check); the total key count is recorded at validation time, never pinned as a constant |
-| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key. **Phase 8:** captain-card and officer-card field shapes (§4.11, §4.5 — role enum, tier/level/attribute/skill ranges, personality/appearance vocabulary refs); `skill_gates`/`officer_posts`/`backgrounds` field shapes (§4.20–4.22) — the normative field-level specs are groups 11–12 (§8.6–8.7) |
+| 3 | Schema | every entity has its §4 required fields with correct types and enum/range constraints (incl. `id` regex, `tilePos` bounds `4320 × 2160`, `lat ∈ [-90, 90]`, `lon ∈ [-180, 180]`, and rejection of the retired port keys). **Phase 7:** goods `staple`/`specialty`/`exclusive` bools + `flow {prod, cons, capacity}` (all-three-or-none, values > 0, `capacity ≤ 200`); ship `role ∈ {war, trade, coastal}` and `tier ∈ {1, 2, 3}`; equipment `tier ∈ {1, 2, 3}` and `rare` bool; named-pirate `drop` id type; port `band` id type, `protected` bool, `dev ∈ 0…3`, `sphere []id`, `facilities.shipyard` a 2–8-element id array (the retired int form rejected), `facilities.equipment_stock` ≥ 2 ids; rejection of the retired `market_goods` key. **Phase 8:** captain-card and officer-card field shapes (§4.11, §4.5 — role enum, tier/level/attribute/skill ranges, personality/appearance vocabulary refs); `skill_gates`/`officer_posts`/`backgrounds` field shapes (§4.20–4.22) — the normative field-level specs are groups 11–12 (§8.6–8.7). **Phase 9:** ship_types `battle_max_speed`/`battle_accel`/`battle_turn_rate` (§4.3) — type/range checks (`battle_max_speed` 2–4, `battle_accel ∈ {1, 2}`, `battle_turn_rate ∈ {45, 90}`), the exact per-speed mapping `16→2 / 20→3 / 24→4`, the `battle_accel` oar rule (oar hulls 2, sail/hybrid 1), and the `battle_turn_rate` two-tier hull partition (90 = latin sloop galiot pinnace dhow xebec galley; 45 = the other nine — the 16 locked hulls partition exactly once) |
 | 4 | Referential integrity | `port.nation_id ∈ nations` (or `""` — the Phase-6 neutral tier, §7.1); `port.produces ∪ port.demands ⊆ goods`; `port.band ∈ the §7.1 band id set`; `facilities.shipyard[] ⊆ ship_types`; `facilities.equipment_stock[] ⊆ equipment` and never contains a `rare: true` item; `port.sphere ⊆ nations`; `nation.start_port_id ∈ ports`; `nation.capital_port_id ∈ ports`; `nation.start_ship_type_id ∈ ship_types`; `nation.rivals ⊆ nations` (exactly 2, never itself); `officer.nation_id ∈ nations`; `officer.recruit_ports ⊆ ports`; captain/officer `home_port` (when present) `∈ ports`; `quest.requirements.good_id ∈ goods`, `dest_port_id ∈ ports`, `exploration.discovery_id ∈ discoveries`, `rewards.reputation` keys ∈ nations; equipment `modifiers` keys are known stat names (incl. the Phase-7 `storm_damage_pct`/`scurvy_delay_days`); gate `stat_or_skill` ∈ the 5 attributes + 11 skills; background bonus keys ∈ attributes/skills. (The named-pirate `drop` → rare-equipment pin is re-checked in group 7 since Phase 8 — §8.6 cross-reference, relocated) |
 | 5 | Locked lists | the §7.1 **lock model** — *Phase-7 amendment:* for ports, **identity locks only** (id/zh/en/nation/lat/lon exact vs the §7.1 tables; the port id set is exactly the 105 sovereign (the 100 plus the five of the
 2026-11-02 route-network amendment) **plus the 45 recorded Phase-6 neutrals**; produces/demands are demoted to the structural §8.2 checks so the economy graph can be authored); §7.2 **40 goods**, §7.3 **16 ship types**, §7.4 6 nations, §7.5 **96 officers** (24 legend + 72 regular; the 6 Phase-1 starter ids locked), §7.9 **24 equipment**, §7.10 **6 backgrounds** — id sets must match exactly (ships/equipment/goods are authored-to-final, no sim loop; the 90 non-starter officers and the canon are builder-generated and checked by groups 11–12 instead); the §7.1 band id set matches the P-recorded list |
 | 6 | World map | The generated-artifact integrity group below (artifact, harbor-tile agreement, reachability, probes, component listing) plus the seeded negative tests |
-| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `named_pirates.json` (exactly 4, tiers 1–3, i18n — since Phase 8 they are v2 full captain cards and the field-level checks incl. the `drop` pin live in group 11, §8.6); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2. (The Phase-5 `npc_captains.json` checks are removed — the file is retired, its absence asserted by group 11, §8.6) |
+| 7 | NPC & economy data | `npc_config.json` bounds (presets ≥ 0, `default_preset` ∈ `presets` at the neutral multiplier, budgets/flow > 0, `absolute_cap` ≤ the §4.10 cap, plus the Phase-7 `neutral_coasters_mult` > 0 line); `named_pirates.json` (exactly 4, tiers 1–3, i18n — since Phase 8 they are v2 full captain cards and the field-level checks incl. the `drop` pin live in group 11, §8.6); `market_events.json` (`scope` valid, cadence/duration > 0, shifts keep rest inside the band — **this event block is untouched by Phase 7's W2 wave**; the rate-surge transition is task K's in W3, `IMPLEMENT-Phase7.md` correction 9); the Phase-7 economy-data checks — normative spec §8.2. (The Phase-5 `npc_captains.json` checks are removed — the file is retired, its absence asserted by group 11, §8.6.) **Phase 9:** `npc_config.json` `ai_profiles` — the 9-kind exact set, the 9-key row shape, enum membership, integer ranges, `kind` == map key, hunter-fallback (no `hunter` row may exist) — normative spec §8.2 item 14 |
 | 8 | Trade routes | `trade_routes.json` id set is exactly §7.6's **21**; waypoints satisfy the §6.1 snap rule; every segment passable and wrap-continuous; every port satisfies the §4.14 spoke rule; junction-graph connectivity probes; `trade_routes_built.json` rebuild equality — normative spec §8.3 |
 | 9 | Ocean rasters | `data/maps/wind_regions.png` + `data/maps/currents.png` decode as 4320×2160 indexed PNGs; palette bounds per the §6.5 encodings; water-coverage vs `world.png`; `tools/build_ocean.py` rebuild determinism — normative spec §8.4 |
 | 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
@@ -2330,6 +2444,23 @@ bounds):
 13. **Band id set:** every port `band` ∈ the §7.1 recorded set; the set
     contains the six neutral-region bands (§7.1 skeleton ids) and covers
     all 150 ports with no unused id.
+14. **`ai_profiles` (Phase 9, §4.10):** the `npc_config.json` map holds
+    exactly the 9 kind rows — `pirate`, `privateer`, `patrol`, `navy`,
+    `tournament`, `treasure`, `trader`, `coaster`, `courier` (exact set;
+    **no `hunter` row may exist** — a battle kind missing from the table
+    falls back to the `navy` row, hunter battles entering as
+    `kind = "navy"`, correction 8); every row carries exactly the 9 keys
+    `kind`/`archetype`/`aggression`/`preferred_range`/`flee_below_hp_pct`/
+    `focus`/`courage_mod`/`formation`/`ai_level`; enum membership —
+    `archetype ∈ {aggressive, balanced, cautious}`, `focus ∈ {weakest,
+    nearest, flagship}`, `formation ∈ {line_ahead, column, screen, swarm}`,
+    `ai_level ∈ {0, 1}`; integer ranges — `aggression` 0–100,
+    `preferred_range` 1–3, `flee_below_hp_pct` 0–100, `courage_mod` −10…10;
+    and each row's `kind` value equals its map key. The `coaster` row is
+    forward-compat + sandbox-only (coasters are intimidate-only, never
+    battle, `60-*` §4.1.1) but is shape-checked like every other row. All
+    nine keys land with the W2 data wave (correction 11) — no per-stage key
+    growth; the values are the §4.10 table verbatim.
 
 **Negative tests (must provably fail, exit 7, named message):** a negative
 preset; a default whose multiplier is not 1.0; a budget ≤ 0; an
@@ -2341,7 +2472,11 @@ staples; `produces ∩ demands ≠ ∅`; a port > 120 tiles from any staple
 producer; a neutral band with no exclusive producer; a 5th protected port of
 one nation; a capital missing from `protected`; a neutral-tier port row with
 authored `dev > 0`; a tier with 1 ship; a rare item inside an
-`equipment_stock` list; a port `band` outside the recorded set. (The
+`equipment_stock` list; a port `band` outside the recorded set. Phase-9
+additions: a 10th `ai_profiles` kind (a `hunter` row included); a profile
+row with a missing key or a 10th key; an `archetype`/`focus`/`formation`
+value outside its enum; an `aggression` of 101 or a `courage_mod` of 11; a
+row whose `kind` disagrees with its map key. (The
 captain-pool and `drop`-reference negatives moved to group 11 with their
 checks — §8.6.)
 
