@@ -1,33 +1,49 @@
 extends Control
-## Battle screen (S10) — docs/60-COMBAT.md §4.2–§4.10, §4.11.2, §4.11.4,
-## §4.11.9, §4.11.10, §4.12.1–§4.12.5; docs/80-UI-UX.md §4.1–§4.3, §4.7.1,
-## §4.8; docs/90-ARCHITECTURE.md §5.1, §7.
+## Battle screen (S10) — the Phase-9 §4.7.1 rewrite
+## (docs/80-UI-UX.md §4.3, §4.7.1, §4.8; docs/60-COMBAT.md §4.2–§4.7, §4.3a,
+## §4.4a/§4.4b, §4.6a, §4.11.2, §4.11.4, §4.11.9, §4.11.10, §4.12.1–§4.12.5;
+## docs/90-ARCHITECTURE.md §5.1, §7).
 ##
 ## What this scene *is*: a thin input + render shell around [BattleSim]. Every
-## rule (deployment, MP, damage, reload, the duel formula, the outcome block and
-## every reward number) lives in the engine; this file only
-##   * draws the §4.7.1 wireframe (16×10 tiles at 48px, 24×24 lettered tokens,
-##     the bottom stat/action panel, the 3-line log, the after-action dialog);
-##   * turns mouse clicks / `Tab` / arrows / `Enter` / `Esc` into engine calls;
+## rule (deployment, the velocity model, damage, per-side reload, the duel
+## formula, the outcome block and every reward number) lives in the engine;
+## this file only
+##   * draws the §4.7.1 wireframe — a 48×30 tile world at 32 px (1536×960)
+##     under a free camera in a 1280×584 viewport, a 192×120 minimap
+##     top-right, and the 96 px bottom bar (`‖vel‖` · heading8 · per-side
+##     reload pips · wind · weather · the four-shot selector · `[fit]`);
+##   * owns ALL camera math as pure static functions (§4.7.1): world↔screen,
+##     clamp, cursor-anchored zoom, minimap mapping, edge scroll and the
+##     4 px click/drag threshold;
+##   * turns clicks / `Tab` / arrows / `Enter` / `1`–`4` / `Home` / `Esc`
+##     into engine calls (§4.3 S10 rows): a click on a legal velocity vector
+##     moves, a click on an enemy token is the default action, arrows cycle
+##     the `legal_velocities` enumeration and `Enter` confirms;
 ##   * runs the §4.12.4 five-step battle-end sequence through the §4.12.3
 ##     guarded loaders, so no sibling task can block this one.
 ##
-## **Two drivers, one engine.** The player acts through the buttons, clicks and
-## keys; the AI acts through [AiFleet.decide] applied by [method run_ai_turn].
-## Both mutate the same [BattleSim] *and* use the engine's own decision applier,
-## so a battle played by hand and one driven by [method run_to_completion] obey
-## exactly the same rules — which is what makes the headless suite meaningful
-## proof for the interactive screen.
+## **Two drivers, one engine.** The player acts through the velocity picks,
+## buttons and keys; the AI acts through [AiFleet.decide] applied by the
+## engine's own decision seam. Both mutate the same [BattleSim], so a battle
+## played by hand and one driven by [method run_to_completion] obey exactly
+## the same rules — which is what makes the headless suite meaningful proof
+## for the interactive screen.
 ##
-## **Turn flow (§4.3).** Moving does not end a turn; the one action per turn
-## does. Once an action is spent (or the player holds), this screen advances the
-## engine and plays every intervening AI turn, so the player always comes back
-## to a ship they can command. Clicking a highlighted tile moves, clicking an
-## enemy token in range is the default action, `Hold` passes.
+## **Turn flow (§4.3, three phases).** Picking a velocity integrates it as a
+## Bresenham sweep; movement happens exactly once per turn. The one action
+## (cannon naming the side / ram / board / hold) ends the turn; this screen
+## then advances the engine and plays every intervening AI turn, so the player
+## always comes back to a ship they can command.
+##
+## **AI-turn speed switch (§4.7.1).** The `Esc` menu carries
+## `battle.ai_speed.animate` / `battle.ai_speed.instant`: animate plays one
+## stepped AI turn per frame, instant resolves the whole AI stretch in one
+## call. The choice lives in scene state only — never a settings write.
 ##
 ## **Presentation is task-owned** (§4.7.1): every action appends one localised
-## log line, no animation exists, and an engine log kind outside the §4.12.5
-## inventory is simply not rendered rather than inventing `ui_strings` keys.
+## log line (last 3 visible), tokens stay placeholder shapes (§4.8), and an
+## engine log kind outside the `battle.*` inventory is simply not rendered
+## rather than inventing `ui_strings` keys.
 ##
 ## **Test / headless contract.** [method open_battle] sets up and does *not*
 ## run; [method run_to_completion] drives the whole battle and returns
@@ -41,6 +57,7 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## §4.7.1 (W6-A): the battle-intro captain preview reads the §4.12 card data
 ## (the NPC entry) for the one-line preview panel before round 1.
 const CardLib := preload("res://scenes/ui/character_card.gd")
@@ -73,33 +90,60 @@ const PHASE3_HOOKS_PATH := "res://scripts/quests/phase3_hooks.gd"
 ## S9 (a shared Phase-1 scene) is instanced over S10 when a `gameover.*` fires.
 const GAMEOVER_SCENE := "res://scenes/ui_shared/gameover_screen.tscn"
 
-## §4.2 / §4.7.1 geometry: 48px tiles; 16×10 = 768×480, centred at (256, 56)
-## between the 40px top bar and the bottom panel.
-const TILE_PX := 48
+# --- §4.7.1 world & camera geometry (all numbers pinned there) --------------
+
+## The battle world: 48×30 tiles at 32 px (§4.2).
+const TILE_PX := 32.0
 const GRID_W := BattleSimLib.GRID_WIDTH
 const GRID_H := BattleSimLib.GRID_HEIGHT
-const GRID_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)
-const GRID_ORIGIN := Vector2(256, 56)
+const WORLD_PX := Vector2(GRID_W * TILE_PX, GRID_H * TILE_PX)  # 1536×960
+## The camera viewport (the bottom bar takes the rest of 1280×720, §4.7.1).
+const VIEW_SIZE := Vector2(1280, 584)
+const TOP_BAR_H := 40.0
+const BOTTOM_BAR_H := 96.0
+## The minimap: 192×120 at 4 px/cell, top-right (§4.7.1).
+const MINIMAP_SIZE := Vector2(192, 120)
+const MINIMAP_MARGIN := 8.0
+const MINIMAP_SCALE := 0.125  # 4 px/cell ÷ 32 px/cell
+## Camera zoom bounds and the per-notch wheel step (§4.3/§4.7.1: 0.6×–1.5×,
+## anchored at the cursor; the step follows the S17 chart's ×1.25 precedent).
+const ZOOM_MIN := 0.6
+const ZOOM_MAX := 1.5
+const ZOOM_STEP := 1.25
+## Edge scroll: a 16 px screen band pans at 600 px/s (§4.3).
+const EDGE_BAND_PX := 16.0
+const EDGE_SPEED := 600.0
+## "press-move ≤ 4 px is a click, more is a drag" (§4.3).
+const CLICK_THRESHOLD_PX := 4.0
+
 ## §4.8: ship tokens are 24×24 squares with a letter.
 const TOKEN_PX := 24
 ## §4.7.1: the log panel shows the last 3 lines.
 const LOG_LINES := 3
-## Default round cap of [method run_to_completion] (§4.11.11.3).
-const DEFAULT_MAX_ROUNDS := 30
+## Default round cap of [method run_to_completion]. §4.11.11.3 quotes 30
+## (Phase 2); DEVIATION (W3-C, 2026-11-03): re-pinned to 60 because the
+## merged velocity model makes cap_eff 1 for a ship sailing into the wind
+## (§4.3a) — a 43-tile into-the-wind crossing takes 42 rounds, which the
+## Phase-2 bound cut off before contact (the pre-Phase-9 MP model closed the
+## same distance in a handful of MP moves). This is a headless-driver hang
+## guard, not a game rule: rounds/XP still come from the engine, and the
+## engine's own §4.11.9 stall still ends dead battles at round ~9.
+const DEFAULT_MAX_ROUNDS := 60
 ## Token letters (§4.8 "colored 24×24 squares with a letter"): the player's
 ## flagship, other player hulls, and every enemy hull.
 const TOKEN_FLAGSHIP := "F"
 const TOKEN_PLAYER := "P"
 const TOKEN_ENEMY := "E"
-## Bar colour thresholds, the §4.8 GOOD/WARN/BAD placeholders (same as S6).
-const BAR_GOOD_ABOVE := 0.6
-const BAR_WARN_ABOVE := 0.25
 ## Safety net for the "play the AI until a player ship acts" loop.
 const MAX_CHAINED_TURNS := 200
 
-## Action ids in the §4.7.1 wireframe order; `battle.action.<id>` labels them.
-const ACTION_IDS: Array[String] = [
-	"cannon", "ram", "board", "hold", "retreat", "surrender",
+## Action ids in the bottom bar (`battle.action.<id>` labels them); retreat /
+## surrender live in the `Esc` menu (§4.3, §4.7.1).
+const ACTION_IDS: Array[String] = ["cannon", "ram", "board", "hold"]
+## The §4.7.1 shot selector: the four §4.4b shot types in `1`–`4` order.
+const SHOT_IDS: Array[String] = [
+	BattleSimLib.ROUND_SHOT, BattleSimLib.CHAIN_SHOT,
+	BattleSimLib.ARMOR_PIERCING_SHOT, BattleSimLib.GRAPE_SHOT,
 ]
 
 ## Emitted when a battle sets up (tests observe the engine without a swap).
@@ -130,7 +174,7 @@ var _finished := false
 var _warning_counts: Dictionary = {}
 ## Actions disabled this repaint: id → `ui_strings` reason key.
 var _disabled_reasons: Dictionary = {}
-## Cell the keyboard cursor sits on (`Enter` confirms it).
+## Cell the keyboard cursor sits on (`Enter` confirms a velocity pick).
 var _cursor := BattleSimLib.NO_CELL
 var _cursor_visible := false
 ## Unit the player picked as the action target ({} = auto).
@@ -149,6 +193,41 @@ var _gameover_reason := ""
 ## The S9 overlay instance (null until one fires).
 var _gameover: Control = null
 
+# --- Camera & turn-presentation state (§4.7.1) ------------------------------
+
+## The camera's world-pixel position and zoom (always clamped by
+## [method clamp_cam] / the ZOOM bounds).
+var _cam_pos := Vector2.ZERO
+var _cam_zoom := 1.0
+## Auto-center on the acting unit until the first manual pan; a manual pan
+## pauses follow until the acting unit's NEXT turn (§4.7.1).
+var _follow := true
+## The acting unit key the camera/turn presentation last saw.
+var _actor_key := ""
+## True once this unit's one §4.3 movement is spent (presentation gate for
+## the velocity vectors).
+var _movement_spent := false
+## The `legal_velocities()` enumeration for the acting unit and the keyboard
+## index into it (arrows cycle, `Enter` confirms — §4.3).
+var _legal_velocities: Array[Vector2i] = []
+var _velocity_index := -1
+## The §4.7.1 shot selector's picked shot; rides the cannon decision
+## (`shot` key, §4.12.1.1).
+var _selected_shot := BattleSimLib.ROUND_SHOT
+## §4.7.1 AI-turn speed switch: false = 跟随动画 animate (one stepped AI turn
+## per frame), true = 即时结算 instant (the whole AI stretch in one call).
+## Scene state only — never persisted.
+var _ai_instant := false
+## Mouse press/drag bookkeeping (the §4.3 4 px click/drag threshold).
+var _press_active := false
+var _press_pos := Vector2.ZERO
+var _press_button := MOUSE_BUTTON_LEFT
+var _panning := false
+## Overlay presentation caches (tests read them through highlighted_cells() /
+## target_cells()).
+var _endpoint_cells: Array = []
+var _target_cells_cache: Array = []
+
 @onready var _background: ColorRect = $Background
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _bottom_panel: ColorRect = $BottomPanel
@@ -156,26 +235,32 @@ var _gameover: Control = null
 @onready var _day: Label = $TopRow/Day
 @onready var _round: Label = $TopRow/Round
 @onready var _weather: Label = $TopRow/Weather
-@onready var _grid_area: Control = $GridArea
-@onready var _sea: ColorRect = $GridArea/Sea
-@onready var _cells: Control = $GridArea/Cells
-@onready var _tokens: Control = $GridArea/Tokens
-@onready var _overlay: Control = $GridArea/Overlay
-@onready var _flagship_label: Label = $BottomPanel/Margin/VBox/StatsRow/Flagship
-@onready var _durability_bar: Control = $BottomPanel/Margin/VBox/StatsRow/DurabilityBar
-@onready var _durability_fill: ColorRect = \
-	$BottomPanel/Margin/VBox/StatsRow/DurabilityBar/Fill
-@onready var _durability: Label = $BottomPanel/Margin/VBox/StatsRow/Durability
-@onready var _crew: Label = $BottomPanel/Margin/VBox/StatsRow/Crew
-@onready var _cannons: Label = $BottomPanel/Margin/VBox/StatsRow/Cannons
-@onready var _reload: Label = $BottomPanel/Margin/VBox/StatsRow/Reload
-@onready var _target_label: Label = $BottomPanel/Margin/VBox/StatsRow/Target
-@onready var _actions: HBoxContainer = $BottomPanel/Margin/VBox/Actions
+@onready var _grid_view: Control = $GridView
+@onready var _overlay: Control = $Overlay
+@onready var _minimap: Control = $Minimap
+@onready var _speed: Label = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Speed
+@onready var _heading: Label = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Heading
+@onready var _reload_port: Label = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadPort
+@onready var _reload_starboard: Label = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadStarboard
+@onready var _wind: Label = $BottomPanel/Margin/Columns/LeftCol/StatsRow/Wind
+@onready var _weather_label: Label = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/WeatherLabel
+@onready var _fit_button: Button = \
+	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Fit
 @onready var _log_labels: Array = [
-	$BottomPanel/Margin/VBox/Log/Line0,
-	$BottomPanel/Margin/VBox/Log/Line1,
-	$BottomPanel/Margin/VBox/Log/Line2,
+	$BottomPanel/Margin/Columns/LeftCol/Log/Line0,
+	$BottomPanel/Margin/Columns/LeftCol/Log/Line1,
+	$BottomPanel/Margin/Columns/LeftCol/Log/Line2,
 ]
+@onready var _actions: HBoxContainer = \
+	$BottomPanel/Margin/Columns/RightCol/ActionRow
+@onready var _target_label: Label = $BottomPanel/Margin/Columns/RightCol/ActionRow/Target
+@onready var _shot_row: HBoxContainer = \
+	$BottomPanel/Margin/Columns/RightCol/ShotRow
 @onready var _after_action: Control = $AfterAction
 @onready var _after_title: Label = $AfterAction/Center/Panel/Margin/Body/Title
 @onready var _after_lines: VBoxContainer = $AfterAction/Center/Panel/Margin/Body/Lines
@@ -185,18 +270,15 @@ var _gameover: Control = null
 @onready var _menu_title: Label = $BattleMenu/Center/Panel/Margin/Body/Title
 @onready var _menu_retreat: Button = $BattleMenu/Center/Panel/Margin/Body/Retreat
 @onready var _menu_surrender: Button = $BattleMenu/Center/Panel/Margin/Body/Surrender
+@onready var _menu_ai_animate: Button = $BattleMenu/Center/Panel/Margin/Body/AiAnimate
+@onready var _menu_ai_instant: Button = $BattleMenu/Center/Panel/Margin/Body/AiInstant
 @onready var _menu_back: Button = $BattleMenu/Center/Panel/Margin/Body/Back
 @onready var _confirm: Control = $ConfirmDialog
 
 ## `action_id` → Button, filled in `_ready`.
 var _action_buttons: Dictionary = {}
-## The 160 cell tiles, row-major.
-var _tiles: Array = []
-## Unit key (`side:index`) → token widgets `{root, square, label, frame}`.
-var _token_widgets: Dictionary = {}
-## §4.7.1 (W6-A): the battle-intro captain preview panel (`null` once
-## dismissed). Dismissed with any input before the first round.
-var _preview: Control = null
+## `shot_id` → Button.
+var _shot_buttons: Dictionary = {}
 
 
 ## The §4.7.1 captain intro preview (Phase 8, W6-A): one line/panel with the
@@ -251,13 +333,15 @@ func _show_captain_preview(captain_id: String) -> void:
 	ratings.add_theme_color_override("font_color", PaletteLib.WARN)
 	box.add_child(ratings)
 	preview.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	preview.position = Vector2(
-		(GRID_ORIGIN.x + GRID_PX.x / 2.0) - 160.0, GRID_ORIGIN.y + 8.0)
+	preview.position = Vector2((VIEW_SIZE.x - 320.0) * 0.5, TOP_BAR_H + 8.0)
 	add_child(preview)
 	_preview = preview
 
 
 ## Dismisses the preview (any input before the first round, §4.7.1).
+var _preview: Control = null
+
+
 func _dismiss_captain_preview() -> void:
 	if _preview != null:
 		_preview.queue_free()
@@ -266,13 +350,28 @@ func _dismiss_captain_preview() -> void:
 
 func _ready() -> void:
 	_style()
-	_build_grid()
-	_build_action_buttons()
+	# §4.7.1: the battle opens fitted to the whole 1536×960 world.
+	_cam_zoom = fit_zoom()
+	_cam_pos = clamp_cam(WORLD_PX * 0.5, _cam_zoom)
+	_grid_view.draw.connect(_on_world_draw)
+	_minimap.draw.connect(_on_minimap_draw)
+	_minimap.gui_input.connect(_on_minimap_gui_input)
+	_wire_action_buttons()
+	_fit_button.pressed.connect(fit_view)
+	for shot_id in SHOT_IDS:
+		var button: Button = _shot_buttons.get(shot_id, null)
+		if button == null:
+			continue
+		button.pressed.connect(func() -> void:
+			select_shot(str(button.get_meta("shot_id"))))
 	_after_action.visible = false
 	_menu.visible = false
+	_bind_menu()
 	_after_continue.pressed.connect(_continue_after_battle)
 	_menu_retreat.pressed.connect(func() -> void: _request_end("retreat"))
 	_menu_surrender.pressed.connect(func() -> void: _request_end("surrender"))
+	_menu_ai_animate.pressed.connect(func() -> void: set_ai_speed(false))
+	_menu_ai_instant.pressed.connect(func() -> void: set_ai_speed(true))
 	_menu_back.pressed.connect(close_menu)
 	if _confirm.has_signal("confirmed"):
 		_confirm.confirmed.connect(_on_end_confirmed)
@@ -286,6 +385,7 @@ func _ready() -> void:
 		begin()
 	else:
 		_bind()
+		_queue_redraw()
 
 
 func _exit_tree() -> void:
@@ -293,6 +393,91 @@ func _exit_tree() -> void:
 		EventBus.locale_changed.disconnect(_on_locale_changed)
 	if EventBus.game_over.is_connected(_on_game_over):
 		EventBus.game_over.disconnect(_on_game_over)
+
+
+# --- Camera math (docs/80-* §4.7.1: "all camera math lives as pure
+# --- functions in battle_screen.gd ... with fixed-value assertions"). -------
+
+## World px → viewport px: the camera-centred projection. `zoom` 1.0 puts
+## `cam_pos` at the viewport centre.
+static func world_to_screen(world_pos: Vector2, cam_pos: Vector2,
+		zoom: float) -> Vector2:
+	return (world_pos - cam_pos) * zoom + VIEW_SIZE * 0.5
+
+
+## The exact inverse of [method world_to_screen].
+static func screen_to_world(screen_pos: Vector2, cam_pos: Vector2,
+		zoom: float) -> Vector2:
+	return (screen_pos - VIEW_SIZE * 0.5) / zoom + cam_pos
+
+
+## Clamps the camera so the viewport-sized window stays inside the
+## 1536×960 world; an axis whose whole world fits at `zoom` centres.
+static func clamp_cam(cam_pos: Vector2, zoom: float) -> Vector2:
+	var zoomed := maxf(zoom, 0.001)
+	var half := VIEW_SIZE * 0.5 / zoomed
+	var out := cam_pos
+	if VIEW_SIZE.x / zoomed >= WORLD_PX.x:
+		out.x = WORLD_PX.x * 0.5
+	else:
+		out.x = clampf(out.x, half.x, WORLD_PX.x - half.x)
+	if VIEW_SIZE.y / zoomed >= WORLD_PX.y:
+		out.y = WORLD_PX.y * 0.5
+	else:
+		out.y = clampf(out.y, half.y, WORLD_PX.y - half.y)
+	return out
+
+
+## Cursor-anchored wheel zoom (§4.3: 0.6×–1.5×, the world point under the
+## cursor stays put). `wheel_delta` > 0 zooms in, < 0 out, ×[constant ZOOM_STEP]
+## per notch. Returns `{zoom, cam}` with `cam` already clamped.
+static func zoom_at(old_zoom: float, wheel_delta: float, anchor_screen: Vector2,
+		cam_pos: Vector2) -> Dictionary:
+	var new_zoom := old_zoom
+	if wheel_delta > 0.0:
+		new_zoom = old_zoom * ZOOM_STEP
+	elif wheel_delta < 0.0:
+		new_zoom = old_zoom / ZOOM_STEP
+	new_zoom = clampf(new_zoom, ZOOM_MIN, ZOOM_MAX)
+	var anchor_world := screen_to_world(anchor_screen, cam_pos, old_zoom)
+	var new_cam := anchor_world - (anchor_screen - VIEW_SIZE * 0.5) / new_zoom
+	return {"zoom": new_zoom, "cam": clamp_cam(new_cam, new_zoom)}
+
+
+## The zoom that fits the whole 1536×960 world into the 1280×584 viewport
+## (`Home` / `[fit]`, §4.3), clamped into the 0.6×–1.5× window.
+static func fit_zoom() -> float:
+	return clampf(
+		minf(VIEW_SIZE.x / WORLD_PX.x, VIEW_SIZE.y / WORLD_PX.y),
+		ZOOM_MIN, ZOOM_MAX)
+
+
+## World px → minimap px (§4.7.1: the 192×120 minimap at 4 px/cell).
+static func minimap_map(world_pos: Vector2) -> Vector2:
+	return world_pos * MINIMAP_SCALE
+
+
+## Edge scroll delta (§4.3: the cursor within 16 px of a screen edge pans at
+## 600 px/s). Returns the UNCLAMPED camera delta for `delta_time` seconds —
+## the caller clamps through [method clamp_cam].
+static func edge_scroll(_cam_pos: Vector2, mouse_pos: Vector2,
+		delta_time: float) -> Vector2:
+	var out := Vector2.ZERO
+	if mouse_pos.x < EDGE_BAND_PX:
+		out.x = -EDGE_SPEED * delta_time
+	elif mouse_pos.x > VIEW_SIZE.x - EDGE_BAND_PX:
+		out.x = EDGE_SPEED * delta_time
+	if mouse_pos.y < EDGE_BAND_PX:
+		out.y = -EDGE_SPEED * delta_time
+	elif mouse_pos.y > VIEW_SIZE.y - EDGE_BAND_PX:
+		out.y = EDGE_SPEED * delta_time
+	return out
+
+
+## The §4.3 threshold: a press that moves ≤ 4 px is a click (select/act),
+## more is a drag (pan).
+static func is_click(from: Vector2, to: Vector2) -> bool:
+	return (to - from).length() <= CLICK_THRESHOLD_PX
 
 
 # --- Public API (docs/60-* §4.11.11.3, §4.12.4; task D tests) --------------
@@ -327,6 +512,18 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 	_last_actor = ""
 	_gameover_reason = ""
 	_warning_counts = {}
+	# §4.7.1 presentation reset: fitted camera, follow on, no stale velocity
+	# pick, round shot selected.
+	_cam_zoom = fit_zoom()
+	_cam_pos = clamp_cam(WORLD_PX * 0.5, _cam_zoom)
+	_follow = true
+	_actor_key = ""
+	_movement_spent = false
+	_velocity_index = -1
+	_legal_velocities = []
+	_selected_shot = BattleSimLib.ROUND_SHOT
+	_cursor = BattleSimLib.NO_CELL
+	_cursor_visible = false
 
 	# §4.11.2: deployment is the engine's, from the player's live fleet and the
 	# encounter's seeded enemy composition.
@@ -392,6 +589,16 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 		"encounter_id": str(encounter.get("id", "")),
 		"rng": rng,
 	}
+	# §4.2/§4.12.1 battle-condition pass-through: when the encounter carries
+	# the locked `wind_dir` / `current` (written by the interactions funnel),
+	# they ride the config verbatim; when absent the engine defaults them
+	# (the world's locked wind / the decoded contact-tile current) — the
+	# sandbox fixture deliberately omits both (the §4.7.16 forward-compat keys).
+	if encounter.has("wind_dir"):
+		sim_config["wind_dir"] = str(encounter["wind_dir"])
+	var encounter_current = encounter.get("current", null)
+	if encounter_current is Dictionary:
+		sim_config["current"] = (encounter_current as Dictionary).duplicate(true)
 	if sandbox:
 		# §4.12.1 `player_stats` (Phase 9): the S21 editor's attribute /
 		# equipment override rides the fixture encounter; absent → the sim
@@ -409,6 +616,7 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 	if not captain_id.is_empty():
 		_show_captain_preview(captain_id)
 	_bind()
+	_queue_redraw()
 	battle_opened.emit(encounter)
 
 
@@ -419,6 +627,7 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 func begin() -> void:
 	_pump_enemy_turns()
 	_bind()
+	_queue_redraw()
 
 
 ## Drives the battle to the end with no human input: the player side uses
@@ -456,8 +665,10 @@ func run_to_completion(max_rounds: int = DEFAULT_MAX_ROUNDS) -> Dictionary:
 		if not sim.is_over() and _turn_marker() == before:
 			# Nothing advanced the cursor (cannot happen for a legal turn, but a
 			# stuck loop would hang a suite): force the turn over.
-			sim.end_turn()
+			_end_turn_checked()
 		_bind()
+		if sim.is_over() and last_outcome.is_empty():
+			_finish_battle()
 	if sim.is_over():
 		_finish_battle()
 	return last_outcome
@@ -493,20 +704,24 @@ func select_unit(unit: Dictionary) -> bool:
 	return true
 
 
-## The action button for `name` (`cannon|ram|board|hold|retreat|surrender`),
-## null for an unknown id.
+## The action button for `name` (`cannon|ram|board|hold`), null otherwise.
 func action_button(name: String) -> Button:
 	var button = _action_buttons.get(name, null)
 	return button as Button
 
 
-## The battle-menu button for `name` (`retreat|surrender|back`).
+## The battle-menu button for `name`
+## (`retreat|surrender|ai_animate|ai_instant|back`).
 func menu_button(name: String) -> Button:
 	match name:
 		"retreat":
 			return _menu_retreat
 		"surrender":
 			return _menu_surrender
+		"ai_animate":
+			return _menu_ai_animate
+		"ai_instant":
+			return _menu_ai_instant
 		"back":
 			return _menu_back
 	return null
@@ -517,19 +732,60 @@ func confirm_dialog() -> Control:
 	return _confirm
 
 
-## The cells currently outlined as reachable for the selected ship —
-## `BattleSim.legal_moves()` verbatim (§4.3, §4.11.4).
+## The cells the acting unit's velocity vectors land on (`pos + vel` for every
+## `legal_velocities()` entry) — the §4.3 "click a legal vector" target set,
+## empty once the turn's movement is spent.
 func highlighted_cells() -> Array:
-	if _overlay == null:
-		return []
-	return _overlay.call("reachable_cells")
+	return (_endpoint_cells as Array).duplicate()
 
 
 ## The enemy cells highlighted as targets (cannon/board/ram range).
 func target_cells() -> Array:
-	if _overlay == null:
-		return []
-	return _overlay.call("target_cells")
+	return (_target_cells_cache as Array).duplicate()
+
+
+## The velocity the arrow keys currently point at (NO_CELL = none), from the
+## `legal_velocities()` enumeration (§4.3 "arrows cycle the enumeration").
+func cycled_velocity() -> Vector2i:
+	if _velocity_index < 0 or _velocity_index >= _legal_velocities.size():
+		return BattleSimLib.NO_CELL
+	return _legal_velocities[_velocity_index]
+
+
+## Applies `vel` to the acting player ship through the engine's
+## `apply_velocity` (§4.12.1). False (state untouched) when illegal or the
+## turn's movement is already spent.
+func apply_selected_velocity(vel: Vector2i) -> bool:
+	var unit := selected_unit()
+	if unit.is_empty():
+		return false
+	return _apply_unit_velocity(unit, vel)
+
+
+## Picks the §4.4b shot type the next cannon volley fires (`1`–`4` keys and
+## the selector buttons, §4.7.1). Unknown ids are refused.
+func select_shot(shot: String) -> bool:
+	if not (shot in SHOT_IDS):
+		return false
+	_selected_shot = shot
+	_bind_actions()
+	return true
+
+
+## The shot type the selector currently rides on the cannon decision.
+func selected_shot() -> String:
+	return _selected_shot
+
+
+## §4.7.1 AI-turn speed switch: true = 即时结算 instant, false = 跟随动画
+## animate. Scene state only — nothing is persisted.
+func set_ai_speed(instant: bool) -> void:
+	_ai_instant = instant
+	_bind_menu()
+
+
+func ai_instant_mode() -> bool:
+	return _ai_instant
 
 
 ## The last 3 rendered log lines, oldest first (localised).
@@ -562,7 +818,8 @@ func has_modal() -> bool:
 		or (_confirm != null and _confirm.visible)
 
 
-## Opens the `Esc` battle menu (Retreat / Surrender / back, §4.3).
+## Opens the `Esc` battle menu (Retreat / Surrender / the AI-turn speed
+## switch / back, §4.3).
 func open_menu() -> void:
 	if _finished or (sim != null and sim.is_over()):
 		return
@@ -615,42 +872,73 @@ func warnings() -> Dictionary:
 	return _warning_counts.duplicate()
 
 
+## Fits the whole world into the viewport (`Home` / the `[fit]` button,
+## §4.3): fit zoom, world centred. A manual camera command, so follow pauses
+## until the acting unit's next turn.
+func fit_view() -> void:
+	_cam_zoom = fit_zoom()
+	_cam_pos = clamp_cam(WORLD_PX * 0.5, _cam_zoom)
+	_follow = false
+	_queue_redraw()
+
+
+## The camera state (tests / minimap frame math).
+func camera_state() -> Dictionary:
+	return {"cam": _cam_pos, "zoom": _cam_zoom, "follow": _follow}
+
+
 # --- Engine actions (what the buttons, clicks and keys call) ---------------
 
 ## Runs one §4.9 AI turn for the acting enemy unit, then advances the engine.
-## Returns the decision that was applied (`{action, target, cell}`) so tests can
-## assert which §4.9 priority rule fired.
+## Returns the decision that was applied so tests can assert which priority
+## rule fired. A decision outside the §4.12.1.1 dict shape (a sibling task's
+## in-flight module) degrades to a hold through the engine's own decision
+## seam — never a second copy of the turn rules.
 func run_ai_turn() -> Dictionary:
 	var unit: Dictionary = sim.current_unit() if sim != null else {}
 	if unit.is_empty() or str(unit.get("side", "")) != BattleSimLib.SIDE_ENEMY:
 		return {}
-	var decision: Dictionary = AiFleetLib.decide(sim, unit)
+	var decision = AiFleetLib.decide(sim, unit)
+	if not (decision is Dictionary):
+		decision = {}
 	_apply_engine_decision(unit, decision)
 	if sim.is_over():
 		_finish_battle()
 	else:
-		sim.end_turn()
+		_end_turn_checked()
 	_bind()
 	return decision
 
 
-## Moves the selected ship to `cell` — the click-to-move path (§4.3). Illegal,
-## occupied or over-budget cells change nothing and return false. A move never
-## ends the turn (§4.3 "up to MOVE followed by at most 1 action").
-func move_selected(cell: Vector2i) -> bool:
-	var unit := selected_unit()
-	if unit.is_empty() or not sim.is_acting(unit):
+## Advances the engine's cursor and finishes the battle when the advance
+## itself ends it (the §4.11.9 stall fires inside `end_turn`'s round wrap —
+## the outcome must still run the §4.12.4 sequence).
+func _end_turn_checked() -> void:
+	sim.end_turn()
+	if sim.is_over():
+		_finish_battle()
+
+
+## Applies `vel` to the acting ship through the engine's `apply_velocity`
+## (§4.12.1): validate → clamp → Bresenham sweep. Movement happens exactly
+## once per turn (§4.3) — the presentation gate rides the engine's answer.
+func _apply_unit_velocity(unit: Dictionary, vel: Vector2i) -> bool:
+	if not sim.apply_velocity(unit, vel):
 		return false
-	if not sim.move_to(unit, cell):
-		return false
-	_cursor = cell
+	_movement_spent = true
+	_velocity_index = -1
+	_cursor = sim.unit_cell(unit)
 	_cursor_visible = true
 	_bind()
+	_queue_redraw()
 	return true
 
 
 ## Performs `action` against `target` (default: the resolved target) and
 ## settles the turn. Returns the engine result (`{ok: false}` when illegal).
+## The cannon carries the §4.11.8 side auto-pick (`side == ""`) and the shot
+## selector's picked type (§4.7.1); ram / board / hold map 1:1 onto the
+## engine's §4.5/§4.6/§4.3 actions.
 func perform_action(action: String, target: Dictionary = {}) -> Dictionary:
 	var unit := selected_unit()
 	if unit.is_empty() or not sim.is_acting(unit):
@@ -666,7 +954,7 @@ func perform_action(action: String, target: Dictionary = {}) -> Dictionary:
 	var result: Dictionary = {}
 	match action:
 		"cannon":
-			result = sim.cannon(unit, target)
+			result = sim.cannon(unit, target, "", _selected_shot)
 		"ram":
 			result = sim.ram(unit, target)
 		"board":
@@ -694,13 +982,15 @@ func surrender_battle() -> void:
 	_finish_battle()
 
 
-## Simulates a left click on `cell` (the acceptance suite and the mouse handler
-## share this one path, so "click a legal cell" and "click an enemy" exercise
-## the real handlers, not test-only shortcuts).
+## Simulates a left click on `cell` (the acceptance suite and the mouse
+## handler share this one path — the click is routed through the camera
+## functions, so "click a legal vector" exercises the real handlers, not
+## test-only shortcuts).
 func click_cell(cell: Vector2i) -> void:
 	if not BattleSimLib.in_grid(cell):
 		return
-	_on_grid_cell(cell)
+	var world := Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5
+	_handle_click_at(world_to_screen(world, _cam_pos, _cam_zoom))
 
 
 ## After an action: end the battle, else advance the turn and let the AI play
@@ -710,13 +1000,18 @@ func _settle_turn(spent: bool) -> void:
 		_finish_battle()
 		return
 	if spent:
-		sim.end_turn()
+		_end_turn_checked()
+		if sim.is_over():
+			return
 	_pump_enemy_turns()
 	_bind()
+	_queue_redraw()
 
 
 ## Plays AI turns until a player ship may act or the battle ends (§4.3 turn
 ## order — a faster enemy legitimately acts before the player's ships).
+## Animate mode (§4.7.1) applies ONE stepped AI turn per call — the `_process`
+## loop keeps the presentation moving; instant mode resolves the whole stretch.
 func _pump_enemy_turns() -> void:
 	if sim == null:
 		return
@@ -730,6 +1025,30 @@ func _pump_enemy_turns() -> void:
 		if unit.is_empty() or str(unit.get("side", "")) != BattleSimLib.SIDE_ENEMY:
 			return
 		run_ai_turn()
+		if not _ai_instant:
+			return
+
+
+## §4.7.1 animate mode: one stepped AI turn per frame (the instant switch
+## short-circuits this loop entirely).
+func _process(delta: float) -> void:
+	if sim == null or sim.is_over() or has_modal():
+		return
+	if not _ai_instant:
+		var unit: Dictionary = sim.current_unit()
+		if not unit.is_empty() and str(unit.get("side", "")) == BattleSimLib.SIDE_ENEMY:
+			run_ai_turn()
+			if sim.is_over():
+				return
+	# Edge scroll (§4.3) runs only for the production scene, so a headless
+	# suite's mouse at (0,0) never drifts the camera mid-assertion.
+	if is_active_scene():
+		var mouse := get_viewport().get_mouse_position() - _grid_view.global_position
+		if Rect2(Vector2.ZERO, VIEW_SIZE).has_point(mouse):
+			var scroll := edge_scroll(_cam_pos, mouse, delta)
+			if scroll != Vector2.ZERO:
+				_cam_pos = clamp_cam(_cam_pos + scroll, _cam_zoom)
+				_queue_redraw()
 
 
 # --- Boarding through the guarded `Duel` seam (§4.12.3) --------------------
@@ -748,7 +1067,7 @@ func _board(unit: Dictionary, target: Dictionary) -> Dictionary:
 		if str(target.get("side", "")) == BattleSimLib.SIDE_ENEMY else unit
 	var player_base := BattleSimLib.player_duel_base()
 	var defender_base := BattleSimLib.defender_duel_base(
-		int(defender.get("ship", {}).get("crew", 0)),
+		int(defender.get("crew", 0)),
 		int(defender.get("captain_rating", 0)))
 	var state_before := int(sim.rng.state)
 	var result: Dictionary = sim.board(unit, target)
@@ -773,18 +1092,17 @@ func _board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	return result
 
 
-# --- Grid rendering (docs/80-* §4.7.1, §4.8) -------------------------------
+# --- World rendering (docs/80-* §4.7.1, §4.8) -------------------------------
 
 func _style() -> void:
 	_background.color = PaletteLib.PANEL_BG
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_panel.color = PaletteLib.PANEL_BG
-	_sea.color = PaletteLib.SEA
-	for label in [_title, _day, _round, _flagship_label, _durability, _crew,
-			_cannons, _target_label]:
+	for label in [_title, _day, _round, _speed, _heading, _reload_port,
+			_reload_starboard, _wind, _weather_label, _target_label]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_weather.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_reload.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_speed.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_title.add_theme_font_size_override("font_size", 20)
 	_after_title.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_after_title.add_theme_font_size_override("font_size", 24)
@@ -792,126 +1110,175 @@ func _style() -> void:
 	_menu_title.add_theme_font_size_override("font_size", 24)
 	for label in _log_labels:
 		(label as Label).add_theme_color_override("font_color", PaletteLib.TEXT)
+		(label as Label).add_theme_font_size_override("font_size", 11)
 	_after_continue.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
 	($AfterAction/Center/Panel as PanelContainer).add_theme_stylebox_override(
 		"panel", _panel_style())
 	($BattleMenu/Center/Panel as PanelContainer).add_theme_stylebox_override(
 		"panel", _panel_style())
-	# §4.2/§4.7.1: the grid is 768×480, centred between the bars.
-	_grid_area.position = GRID_ORIGIN
-	_grid_area.size = GRID_PX
 
 
-## Builds the 160 palette tiles once (§4.7.1 "grid rendering, palette
-## placeholders"; §4.8 "no textures").
-func _build_grid() -> void:
-	_tiles.clear()
-	for y in GRID_H:
-		for x in GRID_W:
-			var tile := ColorRect.new()
-			tile.name = "Cell_%d_%d" % [x, y]
-			tile.color = PaletteLib.SEA
-			tile.position = Vector2(x * TILE_PX, y * TILE_PX)
-			tile.size = Vector2(TILE_PX, TILE_PX)
-			tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			_cells.add_child(tile)
-			_tiles.append(tile)
+func _wire_action_buttons() -> void:
+	_action_buttons.clear()
+	for node in _actions.get_children():
+		if node is Button and node.has_meta("action_id"):
+			var button := node as Button
+			var action_id := str(button.get_meta("action_id"))
+			button.pressed.connect(func() -> void:
+				_on_action_pressed(str(button.get_meta("action_id"))))
+			_action_buttons[action_id] = button
+	_shot_buttons.clear()
+	for node in _shot_row.get_children():
+		if node is Button and node.has_meta("shot_id"):
+			var button := node as Button
+			_shot_buttons[str(button.get_meta("shot_id"))] = button
 
 
-func _build_action_buttons() -> void:
-	for action_id in ACTION_IDS:
-		var button := Button.new()
-		button.name = "Action_%s" % action_id
-		button.custom_minimum_size = Vector2(120, float(PaletteLib.BUTTON_H))
-		button.focus_mode = Control.FOCUS_ALL
-		button.set_meta("action_id", action_id)
-		# A lambda cannot capture a loop variable by reference, so the id comes
-		# from the button's own metadata.
-		button.pressed.connect(func() -> void:
-			_on_action_pressed(str(button.get_meta("action_id"))))
-		_actions.add_child(button)
-		_action_buttons[action_id] = button
-
-
-## One 24×24 lettered token per ship (§4.8). Widgets are created once per unit
-## key and repositioned on every repaint; a dead hull's token is hidden rather
-## than deleted, so a token keeps its identity across a sinking.
-func _sync_tokens() -> void:
+## One custom-draw pass for the whole world view (§4.7.1 "placeholder shapes",
+## §4.8): the sea, the 48×30 grid lines and the 24×24 lettered tokens, all
+## through the camera functions. Drawing (not child Controls) keeps the free
+## camera cheap — no per-tile nodes to move.
+func _on_world_draw() -> void:
+	var sea_tl := world_to_screen(Vector2.ZERO, _cam_pos, _cam_zoom)
+	var sea_size := WORLD_PX * _cam_zoom
+	# Open sea (§4.8 SEA); the panel background shows outside the world.
+	draw_rect(Rect2(sea_tl, sea_size), PaletteLib.SEA)
+	var line := PaletteLib.PANEL_LINE
+	for x in range(1, GRID_W):
+		var px := world_to_screen(Vector2(x * TILE_PX, 0), _cam_pos, _cam_zoom)
+		draw_rect(Rect2(px, Vector2(1.0, sea_size.y)), line, true)
+	for y in range(1, GRID_H):
+		var px := world_to_screen(Vector2(0, y * TILE_PX), _cam_pos, _cam_zoom)
+		draw_rect(Rect2(px, Vector2(sea_size.x, 1.0)), line, true)
 	if sim == null:
 		return
-	var seen: Dictionary = {}
+	var font := ThemeDB.fallback_font
+	var acting: Dictionary = sim.current_unit()
 	for unit in sim.units():
-		var key := _unit_key(unit)
-		seen[key] = true
-		if not _token_widgets.has(key):
-			_token_widgets[key] = _make_token(key)
-		_place_token(_token_widgets[key], unit)
-	for key in _token_widgets.keys():
-		if not seen.has(key):
-			(_token_widgets[key]["root"] as Control).queue_free()
-			_token_widgets.erase(key)
-
-
-func _make_token(key: String) -> Dictionary:
-	var root := Control.new()
-	root.name = "Token_%s" % key.replace(":", "_")
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.size = Vector2(TOKEN_PX, TOKEN_PX)
-	var square := ColorRect.new()
-	square.name = "Square"
-	square.color = PaletteLib.TEXT
-	square.size = Vector2(TOKEN_PX, TOKEN_PX)
-	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(square)
-	var frame := Panel.new()
-	frame.name = "Frame"
-	frame.size = Vector2(TOKEN_PX, TOKEN_PX)
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.add_theme_stylebox_override("panel", _frame_style(Color.BLACK))
-	root.add_child(frame)
-	var label := Label.new()
-	label.name = "Letter"
-	label.text = TOKEN_PLAYER
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.size = Vector2(TOKEN_PX, TOKEN_PX)
-	label.add_theme_font_size_override("font_size", 12)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(label)
-	_tokens.add_child(root)
-	return {"root": root, "square": square, "label": label, "frame": frame}
+		if not bool(unit.get("alive", false)):
+			continue
+		var cell: Vector2i = sim.unit_cell(unit)
+		var center := world_to_screen(
+			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5,
+			_cam_pos, _cam_zoom)
+		var half := TOKEN_PX * _cam_zoom * 0.5
+		var rect := Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0)
+		var letter := TOKEN_PLAYER
+		var outline := Color.BLACK
+		if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER:
+			var flagship_unit: Dictionary = sim.flagship_unit()
+			var flagship: bool = not flagship_unit.is_empty() \
+				and _unit_key(flagship_unit) == _unit_key(unit)
+			letter = TOKEN_FLAGSHIP if flagship else TOKEN_PLAYER
+			outline = PaletteLib.ACCENT if flagship else Color.BLACK
+			draw_rect(rect, PaletteLib.TEXT)
+		else:
+			letter = TOKEN_ENEMY
+			outline = PaletteLib.TEXT
+			draw_rect(rect, _enemy_dot_color())
+		draw_rect(rect, outline, false, 1.0)
+		var font_size := maxi(8, int(round(12.0 * _cam_zoom)))
+		if font != null:
+			var text_size := font.get_string_size(letter,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+			draw_string(font, center
+				+ Vector2(-text_size.x * 0.5, text_size.y * 0.25),
+				letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+	# The acting unit wears a 2px accent frame (§4.8 focus outline).
+	if not acting.is_empty() and bool(acting.get("alive", false)):
+		var cell: Vector2i = sim.unit_cell(acting)
+		var center := world_to_screen(
+			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5,
+			_cam_pos, _cam_zoom)
+		var half := TOKEN_PX * _cam_zoom * 0.5 + 2.0
+		draw_rect(Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0),
+			PaletteLib.ACCENT, false, 2.0)
 
 
 ## §4.8 token colours: player `TEXT` with a black outline, pirate `BAD`, navy
-## the owning nation's `Nation.color`.
-func _place_token(widgets: Dictionary, unit: Dictionary) -> void:
-	var root: Control = widgets["root"]
-	if not bool(unit.get("alive", false)):
-		root.visible = false
+## the owning nation's `Nation.color` (the same pin the minimap dots use).
+func _enemy_dot_color() -> Color:
+	if _enemy_is_pirate():
+		return PaletteLib.BAD
+	return _enemy_nation_color()
+
+
+## The 192×120 minimap (§4.7.1, §4.8 pins): ship dots, the viewport frame,
+## the wind arrow (ACCENT, the battle's locked `wind_dir`), the current arrow
+## (COAST_SEA, only while the locked current has strength), and — W4 — the
+## formation anchor lines stub.
+func _on_minimap_draw() -> void:
+	draw_rect(Rect2(Vector2.ZERO, MINIMAP_SIZE), PaletteLib.PANEL_BG)
+	if sim == null:
 		return
-	root.visible = true
-	var cell: Vector2i = sim.unit_cell(unit)
-	root.position = Vector2(cell * TILE_PX) + Vector2(
-		(TILE_PX - TOKEN_PX) * 0.5, (TILE_PX - TOKEN_PX) * 0.5)
-	var square: ColorRect = widgets["square"]
-	var label: Label = widgets["label"]
-	var frame: Panel = widgets["frame"]
-	if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER:
-		square.color = PaletteLib.TEXT
-		# The black outline is the §4.8 player marker; the flagship's is ACCENT
-		# so the ship the bottom panel describes is identifiable on the grid.
-		var flagship_unit: Dictionary = sim.flagship_unit()
-		var flagship: bool = not flagship_unit.is_empty() \
-			and _unit_key(flagship_unit) == _unit_key(unit)
-		frame.add_theme_stylebox_override("panel",
-			_frame_style(PaletteLib.ACCENT if flagship else Color.BLACK))
-		label.add_theme_color_override("font_color", Color.BLACK)
-		label.text = TOKEN_FLAGSHIP if flagship else TOKEN_PLAYER
-	else:
-		square.color = PaletteLib.BAD if _enemy_is_pirate() else _enemy_nation_color()
-		frame.add_theme_stylebox_override("panel", _frame_style(PaletteLib.TEXT))
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-		label.text = TOKEN_ENEMY
+	# Ship dots: player = TEXT, enemy = BAD / the navy owner's Nation.color.
+	for unit in sim.units():
+		if not bool(unit.get("alive", false)):
+			continue
+		var cell: Vector2i = sim.unit_cell(unit)
+		var center := minimap_map(
+			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5)
+		var color := PaletteLib.TEXT \
+			if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER \
+			else _enemy_dot_color()
+		draw_rect(Rect2(center - Vector2(2, 2), Vector2(4, 4)), color, true)
+	# The viewport frame (§4.8 pin: ACCENT).
+	var world_rect := Rect2(
+		_cam_pos - VIEW_SIZE * 0.5 / _cam_zoom, VIEW_SIZE / _cam_zoom)
+	var frame_pos := minimap_map(world_rect.position)
+	var frame_end := minimap_map(world_rect.end)
+	draw_rect(Rect2(frame_pos, frame_end - frame_pos), PaletteLib.ACCENT,
+		false, 1.0)
+	# The wind arrow (§4.8 pin: ACCENT) — rotated per the wind-FROM token.
+	var center := MINIMAP_SIZE * 0.5
+	var wind_index := SailingSimLib.heading_index(str(sim.wind_dir))
+	if wind_index >= 0:
+		_draw_minimap_arrow(center,
+			Vector2(BattleSimLib.HEADING_RAYS[wind_index]), 22.0, 2.0,
+			PaletteLib.ACCENT)
+	# The current arrow (§4.8 pin: COAST_SEA) — only while strength > 0; it
+	# points along the flow-TO token.
+	var current: Dictionary = sim.current
+	var strength := int(current.get("strength", 0)) if current is Dictionary else 0
+	var current_index := SailingSimLib.heading_index(
+		str(current.get("dir", ""))) if current is Dictionary else -1
+	if strength > 0 and current_index >= 0:
+		_draw_minimap_arrow(center,
+			Vector2(BattleSimLib.HEADING_RAYS[current_index]), 14.0, 1.5,
+			PaletteLib.COAST_SEA)
+	# W4 stub: the §4.7.1 formation anchor lines (`line_ahead`/`column`) draw
+	# here in PANEL_LINE once the §4.9b fleet-command layer lands — the layer
+	# and its `battle.formation.*` label already exist in the string table.
+
+
+func _draw_minimap_arrow(from: Vector2, direction: Vector2, length: float,
+		width: float, color: Color) -> void:
+	var dir := direction.normalized()
+	var tip := from + dir * length
+	draw_line(from, tip, color, width)
+	for side in [-1.0, 1.0]:
+		var head := dir.rotated(side * PI * 0.8333) * mini(length * 0.3, 6.0)
+		draw_line(tip, tip + head, color, width)
+
+
+func _on_minimap_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mouse := event as InputEventMouseButton
+	if not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT:
+		return
+	# §4.3: "the minimap owns input before the world view" — a click jumps the
+	# camera. A manual camera command, so follow pauses until the next turn.
+	var world := (mouse.position / MINIMAP_SCALE).clamp(Vector2.ZERO, WORLD_PX)
+	_cam_pos = clamp_cam(world, _cam_zoom)
+	_follow = false
+	get_viewport().set_input_as_handled()
+	_queue_redraw()
+
+
+func _queue_redraw() -> void:
+	_grid_view.queue_redraw()
+	_minimap.queue_redraw()
 
 
 # --- Repaint ---------------------------------------------------------------
@@ -928,12 +1295,31 @@ func _bind() -> void:
 	# reads the engine's copy there; the normal path keeps the world lookup.
 	var weather_name := str(sim.weather) if is_sandbox_battle() else _weather_name()
 	_weather.text = I18n.t_key("world.weather.%s" % weather_name)
-	_sync_tokens()
+	_sync_camera()
 	_bind_stats()
-	_bind_log_records()
 	_bind_actions()
+	_bind_shots()
+	_bind_log_records()
 	_bind_log()
 	_bind_highlights()
+	_bind_menu()
+
+
+## §4.7.1 camera follow: auto-center on the acting unit until the first manual
+## pan; a manual pan pauses follow until the acting unit's NEXT turn.
+func _sync_camera() -> void:
+	var actor: Dictionary = sim.current_unit()
+	var actor_key := "" if actor.is_empty() else _unit_key(actor)
+	if actor_key != _actor_key:
+		_actor_key = actor_key
+		_movement_spent = false
+		_velocity_index = -1
+		_follow = true
+	if _follow and not actor.is_empty():
+		var center := Vector2(sim.unit_cell(actor)) * TILE_PX \
+			+ Vector2(TILE_PX, TILE_PX) * 0.5
+		_cam_pos = clamp_cam(center, _cam_zoom)
+	_overlay.set_camera(_cam_pos, _cam_zoom)
 
 
 func _bind_stats() -> void:
@@ -941,37 +1327,41 @@ func _bind_stats() -> void:
 	if unit.is_empty() and not sim.is_over():
 		unit = sim.flagship_unit()
 	if unit.is_empty():
-		_flagship_label.text = "-"
-		_durability.text = ""
-		_crew.text = ""
-		_cannons.text = ""
-		_reload.text = ""
-		_durability_fill.size = Vector2.ZERO
+		for label in [_speed, _heading, _reload_port, _reload_starboard,
+				_wind, _weather_label]:
+			label.text = "-"
 		_target_label.text = _t("battle.target.none")
 		return
-	var ship: Dictionary = unit.get("ship", {})
-	_flagship_label.text = "%s · %s" % [
-		I18n.t_key("fleet.flagship"), _ship_name(ship),
-	]
-	var max_durability := int(sim.effective_max_durability(ship))
-	var durability := int(ship.get("durability", 0))
-	_durability.text = I18n.fmt("shipyard.durability", {"durability": durability})
-	_crew.text = I18n.fmt("world.crew", {
-		"crew": int(ship.get("crew", 0)),
-		"max": _ship_crew_max(ship),
-	})
-	_cannons.text = "%s %d" % [I18n.t_key("shipyard.cannons"),
-		int(ship.get("cannons", 0))]
-	var ratio := 0.0 if max_durability <= 0 \
-		else clampf(float(durability) / float(max_durability), 0.0, 1.0)
-	var bar_width := _durability_bar.custom_minimum_size.x
-	_durability_fill.size = Vector2(bar_width * ratio,
-		_durability_bar.custom_minimum_size.y)
-	_durability_fill.color = _bar_color(ratio)
-	# §4.4 reload: loaded iff `round >= reload_until_round` (§4.11.4).
-	var loaded := int(sim.round_number()) >= int(unit.get("reload_until_round", 1))
-	_reload.text = "" if loaded else _t("battle.reload")
+	var vel: Vector2i = unit.get("vel", Vector2i.ZERO)
+	# §4.7.1 bottom bar: ‖vel‖ (1 decimal) and the heading8 compass token.
+	_speed.text = "%s %.1f" % [_t("battle.speed"),
+		BattleSimLib.vel_length(vel)]
+	_heading.text = "%s %s" % [_t("battle.heading"),
+		BattleSimLib.HEADING_TOKENS[posmod(int(unit.get("heading8", 0)),
+			BattleSimLib.HEADING_TOKENS.size())]]
+	_reload_port.text = "%s %s" % [_t("battle.reload.port"),
+		_reload_pips(unit, BattleSimLib.BROADSIDE_PORT)]
+	_reload_starboard.text = "%s %s" % [_t("battle.reload.starboard"),
+		_reload_pips(unit, BattleSimLib.BROADSIDE_STARBOARD)]
+	_wind.text = "%s %s" % [_t("battle.wind"), str(sim.wind_dir)]
+	var weather_name := str(sim.weather) if is_sandbox_battle() else _weather_name()
+	_weather_label.text = "%s %s" % [_t("battle.weather"),
+		I18n.t_key("world.weather.%s" % weather_name)]
 	_target_label.text = _target_text(unit)
+
+
+## §4.7.1 per-side reload pips: a loaded side shows one `#` pip per cannon; a
+## reloading side shows `.` pips plus the rounds still to wait (§4.4a —
+## "that side may fire again only when `round ≥ reload_side`").
+func _reload_pips(unit: Dictionary, side: String) -> String:
+	var key := "reload_port" if side == BattleSimLib.BROADSIDE_PORT \
+		else "reload_starboard"
+	var total: int = sim.side_cannons(unit, side)
+	var ready_at := int(unit.get(key, 1))
+	var round_no := int(sim.round_number())
+	if round_no >= ready_at:
+		return "#".repeat(total)
+	return "%s %d" % [".".repeat(total), ready_at - round_no]
 
 
 func _bind_actions() -> void:
@@ -979,7 +1369,9 @@ func _bind_actions() -> void:
 	var unit := selected_unit()
 	var target: Dictionary = _resolve_target(unit, "") if not unit.is_empty() else {}
 	for action_id in ACTION_IDS:
-		var button: Button = _action_buttons[action_id]
+		var button: Button = _action_buttons.get(action_id, null)
+		if button == null:
+			continue
 		button.text = _t("battle.action.%s" % action_id)
 		var reason := _block_reason(action_id, unit, target)
 		button.disabled = not reason.is_empty()
@@ -989,9 +1381,44 @@ func _bind_actions() -> void:
 	_bind_menu()
 
 
+## §4.7.1 shot selector: the four §4.4b shot types; gate-locked states grayed
+## with `battle.shot.locked` {value} (chain 25 / armor-piercing 50, the
+## `skill_gates` data via the engine's gate accessors); grape disabled unless
+## the intended target is at Chebyshev range 1. The selected entry carries a
+## `>` marker and rides the cannon decision.
+func _bind_shots() -> void:
+	var unit := selected_unit()
+	var target: Dictionary = _resolve_target(unit, "cannon") \
+		if not unit.is_empty() else {}
+	var distance := -1
+	if not unit.is_empty() and not target.is_empty():
+		distance = _distance(sim.unit_cell(unit), sim.unit_cell(target))
+	for index in SHOT_IDS.size():
+		var shot: String = SHOT_IDS[index]
+		var button: Button = _shot_buttons.get(shot, null)
+		if button == null:
+			continue
+		var label := "%d %s" % [index + 1, _t("battle.shot.%s" % shot)]
+		button.text = ("> " + label) if shot == _selected_shot else label
+		button.set_meta("index", index)
+		var tooltip := ""
+		if shot == BattleSimLib.CHAIN_SHOT \
+				and not BattleSimLib.shot_unlocked(shot):
+			tooltip = _t("battle.shot.locked",
+				{"value": BattleSimLib.chain_shot_gate()})
+		elif shot == BattleSimLib.ARMOR_PIERCING_SHOT \
+				and not BattleSimLib.shot_unlocked(shot):
+			tooltip = _t("battle.shot.locked",
+				{"value": BattleSimLib.armor_piercing_gate()})
+		elif shot == BattleSimLib.GRAPE_SHOT and distance != BattleSimLib.CANNON_RANGE_MIN:
+			tooltip = _reason_text("battle.reason.out_of_range")
+		button.disabled = not tooltip.is_empty()
+		button.tooltip_text = tooltip
+
+
 ## The presentation log: one record per engine entry this screen knows how to
-## render, plus one `battle.log.turn` line per turn. Kinds outside the §4.12.5
-## inventory are skipped rather than inventing keys.
+## render, plus one `battle.log.turn` line per turn. Kinds outside the
+## `battle.*` inventory are skipped rather than inventing keys.
 func _bind_log_records() -> void:
 	var entries: Array = sim.log_lines()
 	while _presented < entries.size():
@@ -1011,7 +1438,7 @@ func _bind_log_records() -> void:
 
 
 ## Translates one engine entry into zero or more presentation records
-## (`{key, values}`) using only §4.12.5 keys.
+## (`{key, values}`) using only landed `battle.*` keys.
 func _present(out: Array, entry) -> void:
 	if not (entry is Dictionary):
 		return
@@ -1034,16 +1461,21 @@ func _present(out: Array, entry) -> void:
 					payload.get("self_damage", 0))),
 			}})
 		"board":
-			# §4.12.5 has one boarding line (`battle.duel.start`); the per-round
-			# detail belongs to the S11 modal (task C).
+			# The per-round detail belongs to the S11 modal; the log keeps
+			# the one boarding line.
 			out.append({"key": "battle.duel.start", "values": {}})
+		"hold":
+			out.append({"key": "battle.log.hold", "values": {"ship": attacker}})
 		"retreat":
 			out.append({"key": "battle.result.retreat", "values": {}})
 		"surrender":
 			out.append({"key": "battle.result.surrender", "values": {}})
+		"surrender_enemy":
+			out.append({"key": "battle.log.surrender_enemy",
+				"values": {"ship": attacker}})
+		"strike":
+			out.append({"key": "battle.log.strike", "values": {"ship": attacker}})
 		_:
-			# `hold` and `surrender_enemy` have no §4.12.5 line; the after-action
-			# dialog reports captures/surrenders. Nothing is invented here.
 			pass
 	# A sunk hull gets its own documented line after the damaging one (§4.7).
 	if bool(payload.get("sunk", false)) and not target.is_empty():
@@ -1062,17 +1494,54 @@ func _bind_log() -> void:
 		label.text = _t(str(record.get("key", "")), record.get("values", {}))
 
 
+## Pushes the §4.7.1 overlay state for the acting player unit: the reachable
+## velocity vectors, the broadside arc fans, the target side indicators and
+## the hook-highlight rings.
 func _bind_highlights() -> void:
-	var reachable: Array = []
-	var targets: Array = []
 	var unit := selected_unit()
+	var targets: Array = []
+	var side_marks: Array = []
+	var hook_cells: Array = []
+	var endpoints: Array = []
+	var vectors: Array = []
+	var origin := Vector2.ZERO
+	var heading := 0
+	var selected := BattleSimLib.NO_CELL
 	if not unit.is_empty():
-		reachable = sim.legal_moves(unit)
+		var unit_cell: Vector2i = sim.unit_cell(unit)
+		origin = Vector2(unit_cell) * TILE_PX
+		heading = int(unit.get("heading8", 0))
 		for enemy in sim.living_units(BattleSimLib.SIDE_ENEMY):
-			if sim.can_cannon(unit, enemy) or sim.can_board(unit, enemy) \
-					or sim.can_ram(unit, enemy):
-				targets.append(sim.unit_cell(enemy))
-	_overlay.call("set_state", reachable, targets, _cursor, _cursor_visible)
+			var enemy_cell: Vector2i = sim.unit_cell(enemy)
+			if sim.can_cannon(unit, enemy) or sim.can_ram(unit, enemy) \
+					or sim.can_board(unit, enemy):
+				targets.append(enemy_cell)
+			# §4.7.1 target side indicators: a marker on the arc side that
+			# can fire at this enemy (§4.4 named-side arcs).
+			var side := ""
+			if sim.can_cannon(unit, enemy, BattleSimLib.BROADSIDE_PORT):
+				side = BattleSimLib.BROADSIDE_PORT
+			elif sim.can_cannon(unit, enemy, BattleSimLib.BROADSIDE_STARBOARD):
+				side = BattleSimLib.BROADSIDE_STARBOARD
+			if not side.is_empty():
+				side_marks.append({"cell": enemy_cell, "side": side})
+			# §4.6a hook condition → the GOOD ring (`battle.ring.hook`).
+			if sim.can_board(unit, enemy):
+				hook_cells.append(enemy_cell)
+		if not _movement_spent:
+			_legal_velocities = sim.legal_velocities(unit)
+			for vel in _legal_velocities:
+				vectors.append(vel)
+				endpoints.append(unit_cell + vel)
+			if _velocity_index >= 0 and _velocity_index < _legal_velocities.size():
+				selected = _legal_velocities[_velocity_index]
+	else:
+		_legal_velocities = []
+	_velocity_index = mini(_velocity_index, _legal_velocities.size() - 1)
+	_endpoint_cells = endpoints
+	_target_cells_cache = targets
+	_overlay.set_state(origin, heading, vectors, selected, side_marks,
+		hook_cells, _cursor, _cursor_visible)
 
 
 func _bind_menu() -> void:
@@ -1081,6 +1550,12 @@ func _bind_menu() -> void:
 	_menu_title.text = _t("battle.title")
 	_menu_retreat.text = _t("battle.action.retreat")
 	_menu_surrender.text = _t("battle.action.surrender")
+	_menu_ai_animate.text = _t("battle.ai_speed.animate")
+	_menu_ai_instant.text = _t("battle.ai_speed.instant")
+	# The ACTIVE mode's button is disabled — the other one switches (§4.7.1
+	# "跟随动画 animate / 即时结算 instant").
+	_menu_ai_animate.disabled = not _ai_instant
+	_menu_ai_instant.disabled = _ai_instant
 	_menu_back.text = I18n.t_key("ui.back")
 
 
@@ -1107,13 +1582,18 @@ func _apply_engine_decision(unit: Dictionary, decision: Dictionary) -> void:
 		"board":
 			_board(unit, target)
 		"move":
-			sim.move_to(unit,
-				BattleSimLib.to_cell(decision.get("cell", BattleSimLib.NO_CELL)))
+			# The decision's `vel` WAS the move (the engine's seam applies it);
+			# a cell-authored legacy decision degenerates to a hold.
+			var vel = decision.get("vel", null)
+			if vel is Vector2i:
+				sim.apply_velocity(unit, vel)
+			else:
+				sim.hold(unit)
 		_:
 			sim.hold(unit)
 
 
-# --- Input (docs/80-* §4.3 S10 rows) --------------------------------------
+# --- Input (docs/80-* §4.3 S10 rows, §4.7.1) --------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
 	if sim == null:
@@ -1146,13 +1626,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton:
-		var mouse := event as InputEventMouseButton
-		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
-			get_viewport().set_input_as_handled()
-			var local := mouse.position - _grid_area.global_position
-			_on_grid_cell(Vector2i(
-				int(floor(local.x / float(TILE_PX))),
-				int(floor(local.y / float(TILE_PX)))))
+		_on_mouse_button(event as InputEventMouseButton)
+		return
+	if event is InputEventMouseMotion:
+		_on_mouse_motion(event as InputEventMouseMotion)
 		return
 
 	if event.is_action_pressed("back"):
@@ -1168,24 +1645,90 @@ func _unhandled_input(event: InputEvent) -> void:
 				_cycle_own_ships(-1 if key.shift_pressed else 1)
 			KEY_ENTER, KEY_KP_ENTER:
 				get_viewport().set_input_as_handled()
-				_confirm_cursor()
-			KEY_UP:
+				_confirm_velocity()
+			KEY_UP, KEY_LEFT:
 				get_viewport().set_input_as_handled()
-				_move_cursor(Vector2i(0, -1))
-			KEY_DOWN:
+				_cycle_velocity(-1)
+			KEY_DOWN, KEY_RIGHT:
 				get_viewport().set_input_as_handled()
-				_move_cursor(Vector2i(0, 1))
-			KEY_LEFT:
+				_cycle_velocity(1)
+			KEY_HOME:
 				get_viewport().set_input_as_handled()
-				_move_cursor(Vector2i(-1, 0))
-			KEY_RIGHT:
+				fit_view()
+			KEY_1:
 				get_viewport().set_input_as_handled()
-				_move_cursor(Vector2i(1, 0))
+				select_shot(BattleSimLib.ROUND_SHOT)
+			KEY_2:
+				get_viewport().set_input_as_handled()
+				select_shot(BattleSimLib.CHAIN_SHOT)
+			KEY_3:
+				get_viewport().set_input_as_handled()
+				select_shot(BattleSimLib.ARMOR_PIERCING_SHOT)
+			KEY_4:
+				get_viewport().set_input_as_handled()
+				select_shot(BattleSimLib.GRAPE_SHOT)
 
 
-## One click (or `Enter`) on `cell`: a highlighted tile moves; an enemy token in
-## range is the default action (§4.3, §4.7.1); anything else parks the cursor.
-func _on_grid_cell(cell: Vector2i) -> void:
+func _on_mouse_button(mouse: InputEventMouseButton) -> void:
+	var view_pos := mouse.position - _grid_view.global_position
+	match mouse.button_index:
+		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+			if mouse.pressed:
+				get_viewport().set_input_as_handled()
+				_apply_wheel(
+					1.0 if mouse.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0,
+					view_pos)
+			return
+		_:
+			pass
+	if mouse.pressed:
+		_press_active = true
+		_press_pos = view_pos
+		_press_button = mouse.button_index
+		_panning = false
+		return
+	# Release: a LEFT press that moved ≤ 4 px is a click (§4.3); any press
+	# that moved more was a drag (already panned).
+	if _press_active and _press_button == mouse.button_index:
+		if mouse.button_index == MOUSE_BUTTON_LEFT \
+				and not _panning and is_click(_press_pos, view_pos):
+			get_viewport().set_input_as_handled()
+			_handle_click_at(view_pos)
+		_press_active = false
+		_panning = false
+
+
+## Wheel zoom (§4.3): 0.6×–1.5×, anchored at the cursor. A manual camera
+## command — follow pauses until the acting unit's next turn.
+func _apply_wheel(wheel_delta: float, anchor_view: Vector2) -> void:
+	var result := zoom_at(_cam_zoom, wheel_delta, anchor_view, _cam_pos)
+	_cam_zoom = float(result["zoom"])
+	_cam_pos = result["cam"]
+	_follow = false
+	_queue_redraw()
+
+
+func _on_mouse_motion(motion: InputEventMouseMotion) -> void:
+	if not _press_active:
+		return
+	var view_pos := motion.position - _grid_view.global_position
+	if not _panning and not is_click(_press_pos, view_pos):
+		_panning = true
+		_follow = false
+	if _panning:
+		get_viewport().set_input_as_handled()
+		_cam_pos = clamp_cam(
+			_cam_pos - motion.relative / _cam_zoom, _cam_zoom)
+		_queue_redraw()
+
+
+## One click in view coordinates (§4.3, §4.7.1): a legal velocity vector moves
+## (movement unspent), an enemy token takes the default action, anything else
+## parks the cursor.
+func _handle_click_at(view_pos: Vector2) -> void:
+	var world := screen_to_world(view_pos, _cam_pos, _cam_zoom)
+	var cell := Vector2i(int(floor(world.x / TILE_PX)),
+		int(floor(world.y / TILE_PX)))
 	if not BattleSimLib.in_grid(cell):
 		return
 	_cursor = cell
@@ -1193,19 +1736,51 @@ func _on_grid_cell(cell: Vector2i) -> void:
 	var unit := selected_unit()
 	if unit.is_empty():
 		_bind()
+		_queue_redraw()
 		return
+	# 1. A pick on a reachable velocity vector moves (§4.3 "click a legal
+	#    vector"); apply_velocity refuses once the turn's movement is spent,
+	#    so the pick falls through to the enemy-token path then.
+	var vel: Vector2i = _overlay.pick_velocity(world)
+	if vel != BattleSimLib.NO_CELL:
+		if _apply_unit_velocity(unit, vel):
+			return
+	# 2. An enemy token: the default action (§4.7.1).
 	for enemy in sim.living_units(BattleSimLib.SIDE_ENEMY):
 		if sim.unit_cell(enemy) == cell:
 			_target = enemy
 			_default_action(unit, enemy)
 			return
-	if sim.legal_moves(unit).has(cell):
-		move_selected(cell)
-		return
 	_bind()
+	_queue_redraw()
 
 
-## §4.7.1 "default action against it (cannon if loaded, else ram/board)".
+## Arrows cycle the `legal_velocities()` enumeration (§4.3); the highlighted
+## entry thickens on the overlay and `Enter` applies it.
+func _cycle_velocity(direction: int) -> void:
+	if _movement_spent or _legal_velocities.is_empty():
+		return
+	_velocity_index = posmod(
+		_velocity_index + direction, _legal_velocities.size())
+	_bind_highlights()
+	_queue_redraw()
+
+
+## `Enter` confirms the cycled velocity (§4.3). Without a cycled entry (or
+## with the movement spent) it does nothing — the action phase has its own
+## buttons and enemy-token clicks.
+func _confirm_velocity() -> void:
+	var unit := selected_unit()
+	if unit.is_empty() or _movement_spent:
+		return
+	var vel := cycled_velocity()
+	if vel == BattleSimLib.NO_CELL:
+		return
+	_apply_unit_velocity(unit, vel)
+
+
+## §4.7.1 "default action against it (cannon with the §4.11.8 side pick, else
+## ram, else board)".
 func _default_action(unit: Dictionary, enemy: Dictionary) -> void:
 	if sim.can_cannon(unit, enemy):
 		perform_action("cannon", enemy)
@@ -1215,6 +1790,7 @@ func _default_action(unit: Dictionary, enemy: Dictionary) -> void:
 		perform_action("board", enemy)
 	else:
 		_bind()
+		_queue_redraw()
 
 
 ## `Tab`: cycles the player's ships (§4.3). The cursor jumps to the next living
@@ -1238,39 +1814,7 @@ func _cycle_own_ships(direction: int) -> void:
 		_selection = next
 	_target = {}
 	_bind()
-
-
-## Arrows move the targeting cursor (§4.3); `Enter` confirms it.
-func _move_cursor(delta: Vector2i) -> void:
-	if _cursor == BattleSimLib.NO_CELL:
-		var unit := selected_unit()
-		_cursor = sim.unit_cell(unit) if not unit.is_empty() else Vector2i.ZERO
-		_cursor_visible = true
-		_bind()
-		return
-	var next := _cursor + delta
-	if not BattleSimLib.in_grid(next):
-		return
-	_cursor = next
-	_cursor_visible = true
-	_bind()
-
-
-## `Enter`: one move onto the highlighted tile, else the enemy under the
-## cursor's default action, else hold (so `Enter` always does something).
-func _confirm_cursor() -> void:
-	var unit := selected_unit()
-	if unit.is_empty():
-		return
-	if sim.legal_moves(unit).has(_cursor):
-		move_selected(_cursor)
-		return
-	for enemy in sim.living_units(BattleSimLib.SIDE_ENEMY):
-		if sim.unit_cell(enemy) == _cursor:
-			_target = enemy
-			_default_action(unit, enemy)
-			return
-	perform_action("hold")
+	_queue_redraw()
 
 
 # --- Buttons ---------------------------------------------------------------
@@ -1284,10 +1828,6 @@ func _on_action_pressed(action_id: String) -> void:
 	match action_id:
 		"hold":
 			perform_action("hold")
-		"retreat":
-			_request_end("retreat")
-		"surrender":
-			_request_end("surrender")
 		_:
 			var unit := selected_unit()
 			if unit.is_empty():
@@ -1359,9 +1899,7 @@ func _is_legal(action: String, unit: Dictionary, target: Dictionary) -> bool:
 
 ## "" when `action_id` is legal, else the `ui_strings` key of the tooltip that
 ## explains the refusal (§4.7.1 "disabled with a tooltip reason"). Only keys
-## from the §4.12.5 inventory and the shared `ui.*` set are used: Phase 2 pins no
-## "no cannons" reason key, so a gunless hull explains with `ui.not_available`
-## rather than an invented string.
+## from the landed `battle.*` inventory are used.
 func _block_reason(action_id: String, unit: Dictionary, target: Dictionary) -> String:
 	if sim == null or sim.is_over() or _finished:
 		return "battle.target.none"
@@ -1373,13 +1911,21 @@ func _block_reason(action_id: String, unit: Dictionary, target: Dictionary) -> S
 		"hold":
 			return ""
 		"cannon":
-			if int(unit.get("ship", {}).get("cannons", 0)) < 1:
+			if sim.side_cannons(unit, BattleSimLib.BROADSIDE_PORT) < 1 \
+					and sim.side_cannons(unit, BattleSimLib.BROADSIDE_STARBOARD) < 1:
 				return "battle.reason.no_cannons"
-			if int(sim.round_number()) < int(unit.get("reload_until_round", 1)):
-				return "battle.reload"
-			if target.is_empty():
+			var resolved := target
+			if resolved.is_empty():
+				resolved = _resolve_target(unit, "cannon")
+			if resolved.is_empty():
 				return "battle.target.none"
-			if not sim.can_cannon(unit, target):
+			var reloaded := int(sim.round_number()) \
+					>= int(unit.get("reload_port", 1)) \
+				or int(sim.round_number()) \
+					>= int(unit.get("reload_starboard", 1))
+			if not reloaded:
+				return "battle.reload"
+			if not sim.can_cannon(unit, resolved):
 				return "battle.reason.out_of_range"
 			return ""
 		"ram":
@@ -1595,8 +2141,8 @@ func _show_after_action() -> void:
 	_after_continue.grab_focus()
 
 
-## The §4.12.5 `battle.after.*` lines in wireframe order: loot gold, XP,
-## captures, scuttles, overflow, losses, preceded by the `battle.result.*` line
+## The `battle.after.*` lines in wireframe order: loot gold, XP, captures,
+## scuttles, overflow, losses, preceded by the `battle.result.*` line
 ## and followed by the reputation deltas §4.7.1 asks for.
 func _after_action_texts() -> Array[String]:
 	var out: Array[String] = []
@@ -1621,8 +2167,8 @@ func _after_action_texts() -> Array[String]:
 
 
 ## `battle.result.victory` / `.defeat` / `.retreat` / `.surrender` for the four
-## §4.11.9 groups (`defeat_sunk` and `defeat_captured` share the one defeat key
-## of the §4.12.5 inventory).
+## §4.11.9 groups (`defeat_sunk` and `defeat_captured` share the one defeat key;
+## a `stall` is its own `battle.result.stall` entry in the landed table).
 func _result_text(result: String) -> String:
 	match result:
 		BattleSimLib.RESULT_VICTORY:
@@ -1631,12 +2177,14 @@ func _result_text(result: String) -> String:
 			return _t("battle.result.retreat")
 		BattleSimLib.RESULT_SURRENDER:
 			return _t("battle.result.surrender")
+		BattleSimLib.RESULT_STALL:
+			return _t("battle.result.stall")
 		_:
 			return _t("battle.result.defeat")
 
 
 ## §4.7.1 "loot gold, captured ships, XP and reputation deltas", through the
-## `battle.after.rep` key of the §4.12.5 inventory.
+## `battle.after.rep` key.
 func _reputation_texts() -> Array[String]:
 	var out: Array[String] = []
 	var deltas = last_outcome.get("rep_deltas", {})
@@ -1658,8 +2206,8 @@ func _reputation_texts() -> Array[String]:
 
 
 ## Ship names from an outcome list. `ids_key` (task C's `captured_ships` /
-## `scuttled_ships` / `lost_ships`, hull ids) wins over the §4.12.2 instance
-## list when present, so a post-merge screen reports what the seams applied.
+## `scuttled_ships` / `lost_ships`, hull ids) wins over the instance list
+## when present, so a post-merge screen reports what the seams applied.
 func _outcome_ship_names(ids_key: String, instances_key: String) -> Array[String]:
 	var out: Array[String] = []
 	var ids = last_outcome.get(ids_key, [])
@@ -1804,13 +2352,12 @@ func game_over_open() -> bool:
 # --- Localisation helpers --------------------------------------------------
 
 ## `battle.*`/`encounter.*` text. Every one of these keys is a
-## `data/ui_strings.json` entry (`docs/60-COMBAT.md` §4.12.5), resolved through
-## the shared formatter (§4.4 `{name}` placeholders). This screen never carries
-## its own copy of a player-facing string (AGENTS.md i18n hard rule); a missing
-## key is a data bug and renders `I18n.t_key()`'s `<key>` marker, which the data
-## validator prevents in shipped data. W6-A extends the read with the screen's
-## `FALLBACK_STRINGS` table (the W5-C pattern) for the §4.7.1 preview keys
-## until the W6-D residual merge authors them in the shared file.
+## `data/ui_strings.json` entry, resolved through the shared formatter (§4.4
+## `{name}` placeholders). This screen never carries its own copy of a
+## player-facing string (AGENTS.md i18n hard rule); a missing key is a data
+## bug and renders `I18n.t_key()`'s `<key>` marker, which the data validator
+## prevents in shipped data. The preview keys ride the screen's
+## `FALLBACK_STRINGS` table (the W5-C pattern) until the residual merge.
 func _t(key: String, values: Dictionary = {}) -> String:
 	if not DataLoader.ui_strings.has(key) and FALLBACK_STRINGS.has(key):
 		var text := I18n.t(FALLBACK_STRINGS.get(key, {}))
@@ -1855,28 +2402,6 @@ func _ship_type_name(ship_type_id: String) -> String:
 	if ship_type.is_empty():
 		return ship_type_id if not ship_type_id.is_empty() else "-"
 	return I18n.t(ship_type.get("name", {}))
-
-
-func _ship_crew_max(ship: Dictionary) -> int:
-	var ship_type: Dictionary = DataLoader.get_ship_type(
-		str(ship.get("ship_type_id", "")))
-	return int(ship_type.get("crew_max", 0))
-
-
-func _bar_color(ratio: float) -> Color:
-	if ratio > BAR_GOOD_ABOVE:
-		return PaletteLib.GOOD
-	if ratio > BAR_WARN_ABOVE:
-		return PaletteLib.WARN
-	return PaletteLib.BAD
-
-
-func _frame_style(color: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.draw_center = false
-	style.border_color = color
-	style.set_border_width_all(2)
-	return style
 
 
 func _unit_key(unit: Dictionary) -> String:
@@ -1945,6 +2470,7 @@ func _warn_once(tag: String, message: String) -> void:
 
 func _on_locale_changed(_locale: String) -> void:
 	_bind()
+	_queue_redraw()
 	if _after_action.visible:
 		_show_after_action()
 	# §4.7.1 (W6-A): the intro preview re-renders in the new locale.
@@ -1965,13 +2491,17 @@ func _panel_style() -> StyleBoxFlat:
 # --- Player auto policy (the headless driver of run_to_completion) ---------
 
 ## One player turn using the **same** legality order the buttons use: fire,
-## else board, else ram, else close in and act, else hold.
+## else board, else ram, else close in with a legal velocity and act, else
+## hold. Movement rides `apply_velocity` (§4.12.1); the approach velocity is
+## the `legal_velocities()` endpoint minimising (Chebyshev, Manhattan) to the
+## nearest enemy, ties broken by the §4.11.8 enumeration order — a converging
+## close-in that never drifts past the target.
 func _player_auto_action(unit: Dictionary) -> void:
 	_target = {}
 	if _act_best(unit):
 		return
-	var cell := _approach_cell(unit)
-	if cell != BattleSimLib.NO_CELL and move_selected(cell):
+	var vel := _approach_velocity(unit)
+	if vel != BattleSimLib.NO_CELL and sim.apply_velocity(unit, vel):
 		unit = selected_unit()
 		if unit.is_empty() or _act_best(unit):
 			return
@@ -1996,27 +2526,44 @@ func _act_best(unit: Dictionary) -> bool:
 	return false
 
 
-## The reachable tile that closes the Chebyshev distance to the nearest enemy
-## (the same greedy rule the AI's rule 5 uses, §4.11.8).
-func _approach_cell(unit: Dictionary) -> Vector2i:
+## The `legal_velocities()` endpoint minimising (Chebyshev, Manhattan) to the
+## nearest enemy — the (Chebyshev, Manhattan) minimum, ties broken by the
+## enumeration order (§4.11.8's tie-break). Chebyshev-only first-match would
+## zigzag laterally (any diagonal that shaves the Chebyshev wins even while
+## wasting Manhattan), which cannot close a 43-tile gulf inside the round cap;
+## the Manhattan term keeps the close-in straight. NO_CELL when nothing
+## improves (the ship holds instead).
+func _approach_velocity(unit: Dictionary) -> Vector2i:
 	var enemies: Array = sim.living_units(BattleSimLib.SIDE_ENEMY)
 	if enemies.is_empty():
 		return BattleSimLib.NO_CELL
-	var nearest: Dictionary = enemies[0]
-	var best := _distance(sim.unit_cell(unit), sim.unit_cell(nearest))
+	var nearest_cell: Vector2i = sim.unit_cell(enemies[0])
+	var best_chebyshev := _distance(sim.unit_cell(unit), nearest_cell)
 	for enemy in enemies:
 		var distance := _distance(sim.unit_cell(unit), sim.unit_cell(enemy))
-		if distance < best:
-			best = distance
-			nearest = enemy
-	var best_cell := BattleSimLib.NO_CELL
-	var best_distance := best
-	for cell in sim.legal_moves(unit):
-		var distance := _distance(cell, sim.unit_cell(nearest))
-		if distance < best_distance:
-			best_distance = distance
-			best_cell = cell
-	return best_cell
+		if distance < best_chebyshev:
+			best_chebyshev = distance
+			nearest_cell = sim.unit_cell(enemy)
+	var best_vel := BattleSimLib.NO_CELL
+	var best_score := Vector2i(best_chebyshev, _manhattan(
+		sim.unit_cell(unit), nearest_cell))
+	for vel in sim.legal_velocities(unit):
+		if vel == Vector2i.ZERO:
+			continue
+		var endpoint: Vector2i = sim.unit_cell(unit) + vel
+		if not BattleSimLib.in_grid(endpoint):
+			continue
+		var score := Vector2i(_distance(endpoint, nearest_cell),
+			_manhattan(endpoint, nearest_cell))
+		if score.x < best_score.x or (score.x == best_score.x
+				and score.y < best_score.y):
+			best_score = score
+			best_vel = vel
+	return best_vel
+
+
+func _manhattan(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
 func _distance(a: Vector2i, b: Vector2i) -> int:
