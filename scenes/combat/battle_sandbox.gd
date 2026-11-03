@@ -17,11 +17,13 @@ extends Control
 ## ALL planned fields from day one — `weather / wind_dir / current /
 ## deployment / morale / ai_level / archetype / formation`. W4 landed the
 ## morale keys (`player_morale` / `enemy_morale` ride the fixture as §4.12.1
-## config keys) and the enemy `formation` override (only when the editor
-## leaves its default = the `ai_profiles` row value); the rest — wind_dir /
-## current / deployment / `ai_level` / `archetype` — stay editor + export
-## values until their waves land (9A wind/current, W3 deployment, 9C/9D
-## ai_level/archetype).
+## config keys); W4 + W5-C landed the enemy profile overrides — `formation`,
+## `ai_level` and `archetype` ride the fixture ONLY when the editor leaves
+## the `ai_profiles` row's own value (the true-override emission in
+## [method build_encounter]; the screen folds them into the battle's profile
+## row). Still dormant: wind_dir / current / deployment stay editor + export
+## values (the §4.12.1 wind/current keys and the sim `deployment` variant
+## are engine-side; the S21 conditions row keeps them forward-compat).
 ##
 ## **Strings** (`10-*` §7.12): every label comes from the `sandbox.*` /
 ## `battle.*` / `char.attr.*` / `world.weather.*` / `shipyard.slot.*`
@@ -648,7 +650,8 @@ func _build_player_stats_block() -> void:
 ## toggle) blanked the whole enemy panel — the "enemy sometimes empty"
 ## defect. `formation` + the initial morale take effect as of W4 (the
 ## §4.9b profile override + the §4.12.1 morale keys); `ai_level` /
-## `archetype` still ride the forward-compatible export schema until 9C/9D.
+## `archetype` take effect as of W5-C (the same true-override emission into
+## the fixture, folded into the battle's profile row by the screen).
 func _build_enemy_options() -> void:
 	var block := VBoxContainer.new()
 	block.name = "EnemyOptions"
@@ -740,8 +743,9 @@ func _sync_enemy_captain(from_row: bool) -> void:
 
 ## On a kind change the three profile selectors follow the kind's
 ## `ai_profiles` row (`10-*` §4.10; the doc-pinned fallback while the data
-## wave is unmerged). Editor convenience only — the values stay
-## export/dormant until 9C/9D.
+## wave is unmerged). The sync also RESTORES the at-default editor state:
+## a selector back on the row's own value stops riding the fixture (the
+## true-override emission reads this exact row).
 func _apply_kind_profile(kind: String) -> void:
 	var profile := _profile_default(kind)
 	_select_option(_archetype_option, str(profile.get("archetype", "balanced")))
@@ -1360,9 +1364,12 @@ func _random_equipment(rng: RandomNumberGenerator, slot: String) -> String:
 ## `gold` 0; the resolved seed — `fixed` → the editor number, `random` → a
 ## fresh `randi()`, `auto` → the key is OMITTED and the §4.11.1 formula
 ## applies (contact = the origin tile). W4: `player_morale` / `enemy_morale`
-## ride as §4.12.1 config keys, and the enemy `formation` rides only as a
-## true override of the profile row; wind/current/deployment/ai_level/
-## archetype stay editor + export values until their waves land.
+## ride as §4.12.1 config keys. W4 + W5-C: the enemy `formation` /
+## `ai_level` / `archetype` ride only as TRUE overrides of the kind's
+## `ai_profiles` row — at-default keys stay out of the fixture (the W2-C
+## fixture-shape pin keeps the byte-harmless audit meaningful), and the
+## screen's `_setup_fleet_commander` folds them into the battle's profile
+## row. wind/current/deployment stay editor + export values (dormant).
 func build_encounter() -> Dictionary:
 	apply_clamps()
 	var player_ships: Array = []
@@ -1416,15 +1423,23 @@ func build_encounter() -> Dictionary:
 	# keys (pre-A) ignores unknown config, so this is harmless until A lands.
 	encounter["player_morale"] = int(_player_morale_spin.value)
 	encounter["enemy_morale"] = int(_enemy_morale_spin.value)
-	# The enemy formation override (§4.7.16 / §4.9b): the editor value rides
-	# ONLY as a true override of the kind's `ai_profiles` row. At the editor's
-	# default — which IS the profile row's own value (the kind switch syncs
-	# from it) — the key stays out of the fixture and the profile row's
-	# default applies downstream (the W2-C fixture-shape pin keeps the
-	# dormant-key audit's `formation` out of the at-default encounter).
+	# The enemy profile overrides (§4.7.16 / §4.9b / §4.9c): the editor's
+	# formation / ai_level / archetype ride ONLY as true overrides of the
+	# kind's `ai_profiles` row. At the editor's default — which IS the
+	# profile row's own value (the kind switch syncs from it) — the key
+	# stays out of the fixture and the row's default applies downstream
+	# (the W2-C fixture-shape pin keeps the byte-harmless audit's keys out
+	# of the at-default encounter).
+	var profile_row := _profile_default(kind)
 	var formation := str(_option_value(_formation_option))
-	if formation != str(_profile_default(kind).get("formation", "")):
+	if formation != str(profile_row.get("formation", "")):
 		encounter["formation"] = formation
+	var ai_level := int(_option_value(_ai_level_option))
+	if ai_level != int(profile_row.get("ai_level", 0)):
+		encounter["ai_level"] = ai_level
+	var archetype := str(_option_value(_archetype_option))
+	if archetype != str(profile_row.get("archetype", "")):
+		encounter["archetype"] = archetype
 	return encounter
 
 
