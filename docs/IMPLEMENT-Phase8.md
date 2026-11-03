@@ -25,6 +25,33 @@ alive; validator TODO left in place); (b) slot A added the `officer_bios`
 block to `captain_name_parts.json` (doc row added); (c) the level-up toast
 lands on the new `char.level_up.alloc` key beside the Phase-1
 `char.level_up` (W6 wiring note).
+**W7 status (2026-11-03): ✅ complete — PHASE 8 DONE.** Master ran
+`sim_trade.py` gates 1–10 at the shipped **+0.30 speed clamp: overall
+PASS** (worst fully-foreign ratio 0.419, specialty 1.800×, greedy bot
+68 970 g ≤ 80 000; no +0.25 fallback needed); the duel RNG re-baseline and
+the storm-gate re-verify ride the green `test_duel`/`test_weather`/
+`test_world_e2e` pins (the §4.8.1 sampling is charisma-anchored since
+W1-C). Slot B landed `tools/demo_probe_phase8.tscn` (**9 scenarios, 99
+checks, ALL PASS**, ~18 s headless, byte-stable across two runs:
+appointment/prereqs, captain commissioning with the charisma signing
+price, capture-no-idle ⇒ loot convert, two-step creation, the master's
+advice event, retirement RPG rows, appointed voyage gate/weights/
+auto-cancel, nemesis lifecycle, zh/en parity) and wrote the acceptance
+record **`tools/demo_check_phase8.md`** at main `7bdcd26` + its commit.
+Final gate on `main` (post-merge `acd1c20`), all green: validator groups
+1–12 exit 0; the four rebuilds byte-identical (`build_captains`,
+`build_routes`, `build_world --check-snaps`, `build_ocean`);
+**`run_tests.py` 50/50 suites, Σ 10 071 checks, exit 0, 292 s**;
+`demo_probe_phase8` ALL PASS; headless boot zero `SCRIPT ERROR`; day tick
+68 ms ≤ 75 @ 318 fleets (cap arithmetic 318 + 16 = **334** at 150 ports —
+the "323" rows above read as their 145-port measurements); extreme save
+2 111 818 B ≤ 2.25 MB (v9 run payload 1 166 226 B); ui_strings **878**
+keys, zh/en + placeholders green; sim_trade 1–10 PASS. Master fixes during
+W7: the §2.5 officer advice-event runtime landed (`scripts/world/advice.gd`
++ ledger roll + world notice drain, `9c693fb`), the `attr.*` family unified
+onto `char.attr.*` and the HUD-badge `process_frame` note in `80-*`
+(`7bdcd26`), the probe's parse-error hang diagnosed and killed.
+
 **W6 status (2026-11-03): ✅ complete** — slots A (unified character card
 `scenes/ui/character_card.tscn`, three-tab S14, S18 officer actions +
 post column, dossier panel, allocation steppers + HUD badge, card entries:
@@ -716,6 +743,9 @@ No code, no data. Every number above lands in its owning doc before W2.
   parity count).
 - **Master**: final merges, status stamps, `AGENTS.md` task-backlog line
   update (Phase 8 complete → acceptance record).
+  **→ PASSED 2026-11-03 — PHASE 8 COMPLETE** (see the W7 status line at the
+  top; every whole-phase verification item in the "Verification plan" holds
+  on `main`).
 
 ---
 

@@ -51,7 +51,7 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 5 | Living Economy & National NPC Fleets | Stock-based supply/demand pricing with demand events, 8 roles of nation-owned NPC fleets on 12 hand-authored historical trade lanes (traders, coasters, patrols, couriers, privateers, pirates, hunters, treasure fleets), named pirates, convoys & wreckage, captain sightings & wanted posters, density presets, save v5 | ✅ complete — `docs/IMPLEMENT-Phase5.md` (acceptance record `tools/demo_check_phase5.md`) |
 | 6 | Sea Navigation Depth | 4320×2160 grid (12 tiles/°, 1 tile = 5 nm), month/season calendar (30-day months), prevailing winds + monsoons, ocean currents (modifier/drift modes), sail trim + wait-at-sea, Step/Helm input modes + interpolated rendering, seasonal sea ice, NPC factor parity + seasonal lane variants, 40–60 neutral ports + 5 regional lanes (17 lanes), S19 toggles, omniscient debug chart | ✅ complete — `docs/IMPLEMENT-Phase6.md` (completion record) |
 | 7 | Trade Empires | Flow economy over 40 goods (`staple`/`specialty`/`exclusive` flags, per-port listing rule), 16 ships with `role`/`tier` + per-port shipyard stock, 24 equipment items with rare named-pirate drops, development-gated hardware, allegiance tug-of-war (protected vs contestable ports, per-nation ledgers, monthly seeded NPC counter-investment, nation treasuries), unified 5%/20% tariff + two tax permits, fame/commendation tie-ins, nationless coasters at every neutral port, `tools/sim_trade.py` gates 1–10, save v7 | ✅ complete — `docs/IMPLEMENT-Phase7.md` (acceptance record `tools/demo_check_phase7.md`) |
-| 8 | Characters, Careers & Encounters | Unified Person model (5 attributes + skills) shared by player/officers/NPC captains, officer posts & 96-officer roster, named-captain canon with defeat→return-queue lifecycle, people interactions (inspect/talk/attack/gifts/appointments/hail/dossier), appointed voyage (navigator-gated auto-sailing), two-step new-game creation, save v9 | See `docs/IMPLEMENT-Phase8.md` |
+| 8 | Characters, Careers & Encounters | Unified Person model (5 attributes + skills) shared by player/officers/NPC captains, officer posts & 96-officer roster, named-captain canon with defeat→return-queue lifecycle, people interactions (inspect/talk/attack/gifts/appointments/hail/dossier), appointed voyage (navigator-gated auto-sailing), two-step new-game creation, save v9 | ✅ complete — `docs/IMPLEMENT-Phase8.md` (acceptance record `tools/demo_check_phase8.md`) |
 
 Out of scope entirely: multiplayer, accounts, online services,
 platform-specific builds beyond desktop, real art production, audio design
@@ -136,7 +136,7 @@ Read in this order. Each doc follows the Doc Template (§10).
 | — | `docs/IMPLEMENT-Phase5.md` | Phase-5 task backlog + wave plan | 5 |
 | — | `docs/IMPLEMENT-Phase6.md` | Phase-6 task backlog + completion record | 6 |
 | — | `docs/IMPLEMENT-Phase7.md` | Phase-7 task backlog + wave plan | 7 |
-| — | `docs/IMPLEMENT-Phase8.md` | Phase-8 task backlog + wave plan (current) | 8 |
+| — | `docs/IMPLEMENT-Phase8.md` | Phase-8 task backlog + wave plan + completion record | 8 |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.

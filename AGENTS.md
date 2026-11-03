@@ -12,13 +12,16 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3),
    `95`-debug-hover (how to read the fleet debug floating window)
-5. Task backlogs: `docs/IMPLEMENT-Phase7.md` (complete — acceptance record
-   `tools/demo_check_phase7.md`), then `docs/IMPLEMENT-Phase6.md` (complete)
-   and Phase1–Phase5 for history, then `docs/IMPLEMENT-Phase8.md`
-   (backlog ratified 2026-11-02 — RPG overhaul: Person model, officer
-   posts, named-captain canon, interactions, appointed voyage, save
-   **v9**; source plan `.kilo/plans/1793586441004-phase8-rpg-overhaul.md`
-   with the corrections table).
+5. Task backlogs: `docs/IMPLEMENT-Phase8.md` (complete — acceptance record
+   `tools/demo_check_phase8.md`: validator groups 1–12, rebuilds
+   byte-identical, 50 suites / 10 071 checks, probe 9 scenarios ALL PASS,
+   day tick 68 ms ≤ 75 @ 318 fleets, sim_trade gates 1–10 PASS at the
+   +0.30 clamp, save v9), then `docs/IMPLEMENT-Phase7.md` (complete —
+   `tools/demo_check_phase7.md`), `docs/IMPLEMENT-Phase6.md` (complete)
+   and Phase1–Phase5 for history. Phase-9 candidates live in
+   `docs/IMPLEMENT-Phase8.md`'s parking lot (NPC-captain recruitment,
+   titles/traits, officer quests, chronicle screen, Phase-7 economic
+   leftovers).
 
 ## Hard rules (violations = rework)
 
