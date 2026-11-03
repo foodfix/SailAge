@@ -1327,7 +1327,17 @@ func _pump_enemy_turns() -> void:
 			push_warning("BattleScreen: AI turn chain guard tripped")
 			return
 		var unit: Dictionary = sim.current_unit()
-		if unit.is_empty() or str(unit.get("side", "")) != BattleSimLib.SIDE_ENEMY:
+		if unit.is_empty():
+			# The empty-cursor transient (pacing-repins bounce): the last-slot
+			# ship can die mid-round, leaving the cursor empty with the battle
+			# still open — the documented `BattleSim.run_to_completion` path
+			# covers this via its `end_turn()` re-check; the pump must too,
+			# or an animate-mode battle stalls with nobody to act.
+			if not sim.is_over():
+				_end_turn_checked()
+				continue
+			return
+		if str(unit.get("side", "")) != BattleSimLib.SIDE_ENEMY:
 			return
 		run_ai_turn()
 		if not _ai_instant:
