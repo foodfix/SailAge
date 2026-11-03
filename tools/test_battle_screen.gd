@@ -34,6 +34,14 @@ extends Node
 ##     fleet_commander.gd, exactly one warning), the fixture morale/
 ##     formation keys are byte-harmless pre-A, and the `battle.log.strike` /
 ##     `battle.log.surrender_enemy` surfacing through the generic pipeline.
+##  12 the S10 UI presentation pins (Phase-9 battle-UI fix): the minimap is
+##     visible, 192×120 top-right inside the 1280×584 viewport area and owns
+##     input before the world view through the connected `draw` handlers;
+##     every bottom-bar child stays inside the 1280×96 bar (no overflow or
+##     clipped labels); the reload pips print `●`/`○`+`(N)` and never a
+##     `#####` run; the shot buttons carry no `>` prefix; and a draw-call
+##     source audit proves every `draw_*` in the two handlers targets the
+##     item whose `draw` signal fired (zero "Drawing is only allowed" calls).
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
@@ -72,6 +80,7 @@ func _ready() -> void:
 	await _test_after_action()
 	await _test_guards()
 	await _test_w4_morale_and_dispatch()
+	await _test_ui_presentation_pins()
 	_report()
 
 
@@ -1093,6 +1102,173 @@ func _test_w4_morale_and_dispatch() -> void:
 			+ "→ battle.log.surrender_enemy (keys consumed, none invented)")
 	await _free_screen(plain)
 	await _free_screen(keyed)
+
+
+# --- 12. S10 UI presentation pins (Phase-9 battle-UI fix) ------------------
+
+func _test_ui_presentation_pins() -> void:
+	_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
+	var screen = await _new_screen()
+	if screen == null:
+		return
+	var minimap: Control = screen.get_node("Minimap")
+	var view: Control = screen.get_node("GridView")
+	# (a) The minimap renders: visible, 192×120, top-right INSIDE the
+	# 1280×584 viewport area (below the 40 px top bar, §4.7.1), and it owns
+	# input before the world view through its connected handlers.
+	_check(minimap.visible and minimap.is_visible_in_tree(),
+		"the minimap node is visible (visible + in tree)")
+	_check(minimap.position.is_equal_approx(Vector2(1080, 48))
+			and minimap.size.is_equal_approx(Vector2(192, 120)),
+		"the minimap is 192×120 at the viewport's top-right (1080,48)")
+	_check(Rect2(Vector2.ZERO, Vector2(1280, 40 + 584))
+			.encloses(minimap.get_global_rect()),
+		"the minimap sits inside the 1280×584 camera-viewport area")
+	_check(minimap.mouse_filter == Control.MOUSE_FILTER_STOP
+			and view.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"the minimap owns input before the world view (§4.7.1)")
+	_check(minimap.draw.is_connected(screen._on_minimap_draw)
+			and view.draw.is_connected(screen._on_world_draw),
+		"both draw handlers ride their item's `draw` signal (not direct calls)")
+
+	# Open a battle so the bar carries real text, then give the containers a
+	# frame to sort.
+	screen.open_battle(_pirate_encounter(2))
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# (b) No bottom-bar child leaves the 1280×96 bar (iterate the rects).
+	var bar: ColorRect = screen.get_node("BottomPanel")
+	var bar_rect := bar.get_global_rect()
+	var outside: Array[String] = []
+	var stack: Array = [bar]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		for child in node.get_children():
+			stack.append(child)
+			if child is Control and not (child as Control).is_visible_in_tree():
+				continue
+			if child is Control:
+				var r := (child as Control).get_global_rect()
+				if r.position.x < bar_rect.position.x - 0.5 \
+						or r.position.y < bar_rect.position.y - 0.5 \
+						or r.end.x > bar_rect.end.x + 0.5 \
+						or r.end.y > bar_rect.end.y + 0.5:
+					outside.append("%s %s" % [str(child.get_path()), str(r)])
+	_check(outside.is_empty(),
+		"every bottom-bar child stays inside the 1280×96 bar (%s)" % str(outside))
+	_check(bar_rect.is_equal_approx(Rect2(0, 624, 1280, 96)),
+		"the bottom bar itself is 1280×96 under the viewport (§4.7.1)")
+
+	# (c) Reload pips are readable glyphs: loaded `●` per cannon, reloading
+	# `○` pips + `(N)` — never a `#####` run. Closed-form pins on the
+	# flagship, then a sweep over every unit and both sides.
+	var flagship: Dictionary = screen.sim.flagship_unit()
+	var round_no: int = int(screen.sim.round_number())
+	var port_total: int = screen.sim.side_cannons(flagship, BattleLib.BROADSIDE_PORT)
+	var star_total: int = screen.sim.side_cannons(
+		flagship, BattleLib.BROADSIDE_STARBOARD)
+	flagship["reload_port"] = round_no
+	flagship["reload_starboard"] = round_no + 3
+	_check(screen._reload_pips(flagship, BattleLib.BROADSIDE_PORT)
+			== "●".repeat(port_total)
+			and port_total >= 1,
+		"a loaded side prints one ● pip per cannon (%d cannons → %s)"
+			% [port_total, screen._reload_pips(flagship, BattleLib.BROADSIDE_PORT)])
+	_check(screen._reload_pips(flagship, BattleLib.BROADSIDE_STARBOARD)
+			== "○".repeat(star_total) + " (3)",
+		"a reloading side prints ○ pips + the rounds remaining (%s)"
+			% screen._reload_pips(flagship, BattleLib.BROADSIDE_STARBOARD))
+	var pips_dirty := ""
+	for unit in screen.sim.units():
+		for side in [BattleLib.BROADSIDE_PORT, BattleLib.BROADSIDE_STARBOARD]:
+			var pips: String = screen._reload_pips(unit, side)
+			if pips.contains("#"):
+				pips_dirty = pips
+	_check(pips_dirty == "", "no side's pips contain a # (##### form is gone)")
+	screen._bind_stats()
+	var port_label: Label = screen.get_node(
+		"BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadPort")
+	var star_label: Label = screen.get_node(
+		"BottomPanel/Margin/Columns/LeftCol/StatsRow/ReloadStarboard")
+	_check(port_label.text.begins_with(screen._t("battle.reload.port") + " ")
+			and port_label.text.contains("●")
+			and not port_label.text.contains("#"),
+		"the port pip line keeps the battle.reload.port label (%s)"
+			% port_label.text)
+	_check(star_label.text.begins_with(screen._t("battle.reload.starboard") + " ")
+			and star_label.text.contains("○") and star_label.text.contains("(3)"),
+		"the starboard pip line keeps the battle.reload.starboard label (%s)"
+			% star_label.text)
+
+	# (e) The shot selector carries no `>` prefix (the stray marker is gone).
+	var marked := false
+	for label in _shot_labels_after(screen):
+		if str(label).begins_with(">"):
+			marked = true
+	_check(not marked,
+		"no shot button prints a `>` prefix (%s)" % str(_shot_labels_after(screen)))
+	await _free_screen(screen)
+
+	# (d) Draw-call audit: every `draw_*` inside the two `draw`-signal
+	# handlers targets the item whose signal fired; the arrow-geometry
+	# helper and `_queue_redraw` contain no canvas-item draw calls at all.
+	# This is the deterministic stand-in for grepping a captured run for
+	# "Drawing is only allowed" — an unqualified call in these bodies is
+	# exactly what the engine rejects per invocation.
+	var src := FileAccess.get_file_as_string("res://scenes/combat/battle_screen.gd")
+	_check(not src.is_empty(), "the battle_screen.gd source is readable for the audit")
+	var lines := src.split("\n")
+	var unqualified: Array[String] = []
+	var cross_item: Array[String] = []
+	for handler in ["_on_world_draw", "_on_minimap_draw"]:
+		var own_item := "_grid_view.draw_" if handler == "_on_world_draw" \
+			else "_minimap.draw_"
+		var other_item := "_minimap.draw_" if handler == "_on_world_draw" \
+			else "_grid_view.draw_"
+		for line in _function_body(lines, handler):
+			var code := line.strip_edges()
+			if code.begins_with("#"):
+				continue
+			if code.contains("draw_") and not code.contains(own_item):
+				unqualified.append("%s: %s" % [handler, code])
+			if other_item != "" and code.contains(other_item):
+				cross_item.append("%s: %s" % [handler, code])
+	_check(unqualified.is_empty(),
+		"both handlers draw only through the firing item (%s)" % str(unqualified))
+	_check(cross_item.is_empty(),
+		"no handler draws on the other item's canvas (%s)" % str(cross_item))
+	_check(_function_body(lines, "_minimap_arrow_segments").is_empty()
+			or not _body_has_draw_call(lines, "_minimap_arrow_segments"),
+		"the minimap arrow helper is pure geometry (no draw calls)")
+	_check(not _body_has_draw_call(lines, "_queue_redraw"),
+		"_queue_redraw only queues (no direct draw calls)")
+
+
+## The body lines of one top-level `func` (source-audit helper).
+func _function_body(lines: PackedStringArray, func_name: String) -> Array[String]:
+	var out: Array[String] = []
+	var inside := false
+	for line in lines:
+		if line.begins_with("func %s(" % func_name):
+			inside = true
+			continue
+		if inside and line.begins_with("func "):
+			break
+		if inside:
+			out.append(line)
+	return out
+
+
+## True when the body contains a canvas-item `draw_*` call outside comments.
+func _body_has_draw_call(lines: PackedStringArray, func_name: String) -> bool:
+	for line in _function_body(lines, func_name):
+		var code := line.strip_edges()
+		if code.begins_with("#"):
+			continue
+		if code.contains("draw_") and not code.contains("queue_redraw"):
+			return true
+	return false
 
 
 # --- Fixtures --------------------------------------------------------------

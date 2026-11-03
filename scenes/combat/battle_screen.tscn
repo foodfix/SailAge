@@ -122,7 +122,7 @@ theme_override_constants/margin_bottom = 4
 [node name="Columns" type="HBoxContainer" parent="BottomPanel/Margin"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="LeftCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
 layout_mode = 2
@@ -134,46 +134,46 @@ theme_override_constants/separation = 4
 custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="Speed" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(96, 0)
+custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="Heading" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(96, 0)
+custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="ReloadPort" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="ReloadStarboard" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(130, 0)
+custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="Wind" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(90, 0)
+custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="WeatherLabel" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(110, 0)
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
 text = "-"
 vertical_alignment = 1
 
 [node name="Fit" type="Button" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
-custom_minimum_size = Vector2(72, 22)
+custom_minimum_size = Vector2(56, 22)
 layout_mode = 2
 text = "Fit"
 
@@ -210,25 +210,25 @@ mouse_filter = 2
 theme_override_constants/separation = 8
 
 [node name="Cannon" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(104, 40)
+custom_minimum_size = Vector2(84, 40)
 layout_mode = 2
 text = "Cannon"
 metadata/action_id = "cannon"
 
 [node name="Ram" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(88, 40)
+custom_minimum_size = Vector2(72, 40)
 layout_mode = 2
 text = "Ram"
 metadata/action_id = "ram"
 
 [node name="Board" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(88, 40)
+custom_minimum_size = Vector2(72, 40)
 layout_mode = 2
 text = "Board"
 metadata/action_id = "board"
 
 [node name="Hold" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
-custom_minimum_size = Vector2(88, 40)
+custom_minimum_size = Vector2(72, 40)
 layout_mode = 2
 text = "Hold"
 metadata/action_id = "hold"
