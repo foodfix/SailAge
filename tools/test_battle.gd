@@ -1642,7 +1642,7 @@ func _test_initiative() -> void:
 	var galley := skip_sim.current_unit()
 	_check(str(galley["side"]) == "enemy" and int(galley["index"]) == 0,
 		"§4.11.4: slot 2 is the enemy galley (24 tie, enemy after player)")
-	var volley := skip_sim.cannon(galley, latin, "port")
+	var volley := skip_sim.cannon(galley, latin, "starboard")
 	_check(bool(volley["ok"]) and bool(volley["sunk"]),
 		"§4.11.4: the galley sinks the 1-durability latin before its slot")
 	skip_sim.end_turn()
@@ -1666,15 +1666,19 @@ func _test_initiative() -> void:
 	_place(resort_sim, "player", 1, Vector2i(6, 14))
 	var doomed_sloop := _unit(resort_sim, "player", 1)
 	_begin_turn(resort_sim, "enemy", 0)
-	resort_sim.cannon(_unit(resort_sim, "enemy", 0), doomed_sloop, "port")
+	# The sloop sits NW of the west-facing galley — the STARBOARD side (the
+	# signed ccw step is 7; the W3 bounce-back arc fix made side resolution
+	# doc-exact, and the fixture's earlier "port" only passed against the
+	# unsigned-distance bug).
+	resort_sim.cannon(_unit(resort_sim, "enemy", 0), doomed_sloop, "starboard")
 	_check(not bool(doomed_sloop["alive"]), "§4.3: the sloop is sunk mid-battle")
 	resort_sim.end_turn()
 	resort_sim.end_turn()   # e1's slot, then the wrap into round 3
 	_check(resort_sim.round_number() == 3, "§4.3: the fixture reaches round 3")
 	var round3 := _order_of(resort_sim, 3)
 	_check(round3 == ["player:0", "enemy:0", "enemy:1"],
-		"§4.3: the once-built order never re-sorts — round 3 is %s (the dead "
-			+ "slot skipped, no speed re-sort)" % str(round3))
+		("§4.3: the once-built order never re-sorts — round 3 is %s (the dead "
+			+ "slot skipped, no speed re-sort)") % str(round3))
 	if round3 != ["player:0", "enemy:0", "enemy:1"]:
 		print("      round 3 order: %s" % str(round3))
 	if existed:
