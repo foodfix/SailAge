@@ -91,6 +91,53 @@ turn-to-broadside fallback (master integration fix) and the health band
 re-pinned for the 48×30 grid (see the W3 gate line). Process note: slot D
 committed its re-pin directly to `main` instead of its branch (content
 exclusively its file set; recorded, no divergence).
+**W4 status (2026-11-04): ✅ complete** — slots A (`c4123df`) → B
+(`3fa848d`) → C (`659d8b1`) → D (`2d78993`) merged in order; two master
+UI-fix slots interleave (`battle-ui-fix` `e0dadb5`, `sandbox-ui-fix`
+`857bce5` — see below). Final gate on `main`: **`run_tests.py` 53/53
+suites green, ZOMBIE/HANG = 0** (test_battle 297 with the restored
+§4.8a pins, test_fleet_command NEW 54, battle_economy 154, phase2 125,
+phase3 102, tournament 157, battle_screen 201, sandbox 111, captain
+lifecycle 83). **W4-A:** side morale in `battle_sim` (`side_morale`,
+`morale_delta_for`, the §4.8a event table, the ≤ 10 AI-only instant
+strike as an engine-owned pre-decision check, `morale_delta` in the
+outcome, the append-only snapshot +2, `player_morale`/`enemy_morale`
+config keys; `morale_bonus` retired). **W4-B:** `fleet_commander.gd`
+(five-tuples + phase rider, form→close→engage→wear→break with
+hysteresis/locks, anchor succession, round-robin + focus-fire
+assignment; the empty order is the free T2 byte-for-byte — proven) +
+`ai_fleet` order consumption (discipline pre-filter, station/heading
+steering, assigned-target fire restriction). **W4-C:** the morale bars
++ minimap anchor ray/formation label (layer × line-formation gated) +
+the fleet dispatch (`generate_orders` once per round, orders →
+`decide(sim, unit, order)`) + the sandbox morale/formation keys live.
+**W4-D:** the §4.8a event/gate pins (flagship ruling as ruled: player
+dynamic, enemy static index 0), the fleet-command transfer-table suite,
+and the harness navy-vs-pirate section — **recorded honestly: navy
+winrate 0/16, formation-hold 22.7 % = WATCH** vs the ≥ 60 % expectation
+(engage stations freeze at the anchor + the mirror driver's edge jam —
+the "line never forms" risk, made measurable; W5's T3 + tune revisit);
+the full mirror re-run shifted to 36/64 (W4-A morale rolls resolve
+previously frozen battles). **Master bounce-backs (ledgered):** the
+dispatch threads `view["side_morale"]` (B's commander reads it); C's
+guard-era pins superseded by merged-state pins; **`_ai_surrender`
+routes through `_capture`** (the §4.8a captured −20 never booked on AI
+surrenders/strikes — found by D, one-line fix + the dropped checks
+restored); the **T2 surrender gate is morale-aware** (`side_morale` ≤
+20 replaces the retired proximity clause, the morale modifier rides the
+roll) and **inclusive ≤ 25 %** (a hull at exactly 25 % never rolled —
+the W1 pin says ≤); S2's boarding pin re-pinned to `morale_delta == +10`
+(the §4.8 flat +5 retired). Tournament suite +10 s wall (2.7×) — bouts
+now fight to resolution instead of stalling short; acceptable, watch at
+W6. **UI-fix interludes (master-dispatched, user-reported):** S10 — the
+child-item draw handlers drew via unqualified `draw_*` (bound to the
+root), so the world view AND minimap painted nothing (5,895 headless
+errors → 0; minimap visible; bottom bar fits 1280×96; pips read
+`●●○ (N)`); S21 — the enemy panel's editors block lived inside the rows
+scroll, so the ~50 % of 随机全部 rolls that toggled compose ON hid the
+whole enemy side (compose toggle now never rolls + the block moved out;
+panel/row re-layout with zero clipped labels, rect-asserted both
+locales); `80-*` §4.7.16 amended with the editor-presentation pins.
 
 ## Goal
 
