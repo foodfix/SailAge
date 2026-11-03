@@ -699,3 +699,46 @@ deeper-than-1-ply search, online learning at runtime, multiplayer, sandbox
 preset persistence (deferred per S4), the merchant archetype (pending S5),
 hired escorts, and every Phase-8 parking-lot item except those explicitly
 listed in W6.
+
+---
+
+## W6 — Acceptance record (2026-11-04)
+
+**PHASE 9 DONE.** Final gate on `main` (the θ-finalized, correction-14/15
+pacing engine):
+
+| Gate | Result |
+|---|---|
+| `python3 tools/validate_data.py` | **exit 0** — groups 1–12 (group 3 pins the three ship_types battle fields at the correction-15 mapping 16→3/20→4/24→5; group 7 pins `ai_profiles` nine kinds × nine keys with the §4.10 locked-value table) |
+| `python3 tools/run_tests.py` | **54/54 suites green, ZOMBIE/HANG = 0** (incl. `test_ai_search` NEW 40, `test_fleet_command` NEW 54, `test_battle` 302, `test_battle_sandbox` 130, `test_battle_screen` 201, `test_phase2_acceptance` 125, `test_phase3_acceptance` 105, `test_tournament` 157) |
+| Harness (`tools/battle_ai_harness_report.md`) | mirror 64-seed set: **avg rounds 24.53, cap-hit 4.7 %, stall 3.1 %, legal-action 100 %** — the original 12–25 health band PASSES on the correction-14/15 pacing; navy-vs-pirate section: formation-hold **70.0 %**, navy 3 wins + 6 surrenders of 16; determinism audit byte-identical |
+| Tune (`tools/battle_tune_report.md`, `RUN: full` on the final pacing) | 94,752 battles ran == expected · **0 illegal / 5.08 M decisions (100 %)** · learning gain **+22.3 / +12.9 / +12.5 pp** ✓×3 · perturbation ≤ 1.6 pp ✓×3 · distinctness distance gap 1.06 ✓ + flee gap 42.2 pp ✓ · droop −0.8 / +3.1 / +11.7 pp recorded (aggressive passes; balanced marginal; cautious's train-window over-selection recorded, held-out gain stands) · decisions 1.6–2.0 ms avg / ≤ 11.1 ms max ✓ |
+| θ-finalization (correction 11's named task) | executed: `60-*` §4.9c amended first (the final θ table + gate verdicts), `THETA_AGGRESSIVE {8,4,6,−6,−2,−3,−3,−8,7}` / `THETA_BALANCED {6,5,7,−2,−3,−3,−5,−9,6}` / `THETA_CAUTIOUS {10,7,2,−9,−2,−3,−6,−10,3}` synced, suites re-run green |
+| Adoption decision | **T3 ships (`ai_level = 1`) for the aggressive/balanced kinds** — measured +18.0 / +12.5 pp vs free T2 on the 64 validation seeds (side-swapped), 100 % legal, ≤ 30 ms; cautious measured −0.8 pp ≈ parity ⇒ **stays `ai_level = 0`** (the §4.10 table confirmed as shipped) |
+| Rebuild determinism | `build_captains --check`, `build_routes --check`, `build_world --check-snaps`, `build_ocean --check` — all **byte-identical, exit 0** |
+| Day-tick budget (combat sits outside the day tick) | **72 ms ≤ 75 @ normal** (extreme 293 ms ≤ 350; extreme save 2,241,244 B ≤ 2.25 MB) — the Phase-8 gate unchanged |
+| Headless boot | zero `SCRIPT ERROR` |
+| `SAVE_VERSION` | **9 unchanged** — battle state transient; the sandbox writes nothing (zero-write audit green) |
+
+**Delivered:** the velocity-physics battle engine (48×30, integer velocity
+vectors + inertia, heading8 8-bucket arcs, port/starboard broadsides with
+independent reload, `cap_eff` wind/current/weather tiers, four shot types,
+sweep ramming, hook-and-board, side morale + the §4.7/§4.8a surrender
+gates, stall, round cap 40, `snapshot()/restore()`); the fleet-command
+layer (five-tuple orders, form→close→engage→wear→break, hysteresis, anchor
+succession); the AI ramp (T1 profiles → T2 greedy → **T3 one-ply shipped
+ceiling**, CEM-finalized θ ×3 archetype); the S10 rebuild (48×30 world,
+camera/minimap/overlays, shot selector, AI-speed switch); the S21 zero-write
+sandbox (full editor, forward-compat import/export); the tooling
+(`battle_ai_harness`, `battle_tune`); and the user-locked pacing
+amendments (corrections 14/15) with their measured scorecard (battles
+34–38 → 24.5 avg rounds; cap-hits 62 % → 4.7 %; formation-hold
+22.7 % → 70.0 %).
+
+**Parking lot (out of scope, carried):** per-broadside pre-loaded shot
+types (post-9C review), the `merchant` fourth archetype (S5 — revisit
+only if the tuned θ still under-serves merchant pacing), sandbox preset
+persistence (`user://sandbox/`, S4), Phase-7 economic leftovers,
+NPC-captain recruitment, titles/traits, officer quests, chronicle screen,
+battle terrain (reef/coast tiles), deeper-than-1-ply search, online
+runtime learning.

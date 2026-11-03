@@ -12,16 +12,22 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3),
    `95`-debug-hover (how to read the fleet debug floating window)
-5. Task backlogs: `docs/IMPLEMENT-Phase8.md` (complete — acceptance record
+5. Task backlogs: `docs/IMPLEMENT-Phase9.md` (complete — acceptance record
+   in the doc's W6 block: validator groups 1–12, rebuilds byte-identical,
+   54 suites green, harness + tune reports final, T3 adopted at
+   `ai_level = 1` for aggressive/balanced kinds with the CEM-finalized θ,
+   pacing amendments 14/15, day tick 72 ms ≤ 75 @ the measured fleet
+   count), then `docs/IMPLEMENT-Phase8.md` (complete — acceptance record
    `tools/demo_check_phase8.md`: validator groups 1–12, rebuilds
    byte-identical, 50 suites / 10 071 checks, probe 9 scenarios ALL PASS,
    day tick 68 ms ≤ 75 @ 318 fleets, sim_trade gates 1–10 PASS at the
    +0.30 clamp, save v9), then `docs/IMPLEMENT-Phase7.md` (complete —
    `tools/demo_check_phase7.md`), `docs/IMPLEMENT-Phase6.md` (complete)
-   and Phase1–Phase5 for history. Phase-9 candidates live in
-   `docs/IMPLEMENT-Phase8.md`'s parking lot (NPC-captain recruitment,
-   titles/traits, officer quests, chronicle screen, Phase-7 economic
-   leftovers).
+   and Phase1–Phase5 for history. Phase-9's parking lot lives in
+   `docs/IMPLEMENT-Phase9.md` (per-broadside pre-loaded shot types, the
+   merchant fourth archetype, sandbox preset persistence, Phase-7
+   economic leftovers, NPC-captain recruitment, titles/traits, officer
+   quests, chronicle screen).
 
 ## Hard rules (violations = rework)
 
