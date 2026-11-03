@@ -550,6 +550,38 @@ board}, applies each on `restore()`, and scores
 station deviation, φ8 friendly-blocked line, φ9 expected heading
 alignment. Zero dice — deterministic evaluation.
 
+- **Hard-rule layer (shared with T2 — W5-A pin):** the §4.9a ① surrender
+  gate and ② flee rule apply to BOTH levels (they fire before the dispatch);
+  T3 ranks the remaining candidates ③+.
+- **The search leaves no trace:** every candidate is applied on the live sim
+  and undone by `restore()`, which restores `rng.state` too (§4.12.1) — a
+  cannon/board candidate's dice draws happen inside the candidate and are
+  rolled back, so the post-search state is byte-identical to the
+  pre-search state (snapshot equality includes the stream).
+- **Normative φ feature table (W5-A master pin — the concrete formulas;
+  "friendly" = the deciding ship's side, "enemy" = the opposing side; every
+  total runs over LIVING ships; a side is *loaded* when `round ≥
+  reload_side` and the side carries ≥ 1 cannon; all arithmetic is
+  deterministic integers, divisions truncate):**
+
+  | # | Feature | Formula |
+  |---|---|---|
+  | φ1 | durability diff | `(friendly total durability − enemy total durability) / 20` (integer division), evaluated AFTER the candidate |
+  | φ2 | cannon diff | `(friendly total cannons − enemy total cannons) / 4` (integer division) |
+  | φ3 | reload diff | `(friendly loaded side-count − enemy loaded side-count)` (each ship contributes 0..2) |
+  | φ4 | arc fit | `(friendly loaded sides whose arcs contain a living enemy within Chebyshev 3) − (enemy loaded sides whose arcs contain a living friend within 3)` |
+  | φ5 | rake exposure | `(friendly ships sitting in an enemy's rake position) − (enemy ships in a friend's rake position)` — rake = bearing bucket ∈ {0°, 180°} vs the TARGET's heading8; the θ weight is negative, so exposure hurts |
+  | φ6 | flagship danger | `(my flagship at ≤ 25% durability ? 1 : 0) + (my flagship inside some enemy loaded arc within range ? 1 : 0) − (the enemy flagship's same two terms)` |
+  | φ7 | station deviation | `Chebyshev(pos_after, order.station)` when a station exists (engage/wear/form/close orders), else 0 |
+  | φ8 | friendly-blocked line | the count of friendly pairs (a, b) where b is alive, within Chebyshev 3 of a, and b sits exactly on a's heading-ray (the broadside lane blocked) |
+  | φ9 | heading alignment | `4 − min(bucket_distance(heading_after, bearing to the nearest enemy), 4)` (0..4, higher = better) |
+
+  Score = Σ θ[i] × φ[i]. The candidate action set pairs every surviving
+  velocity with steer/hold, cannon per loaded side (each side's §4.11.8-best
+  target: rake pool → profile `focus`), the first legal ram target
+  (§4.11.8 pin 4's gates), and the first legal board target (the §4.6a hook
+  + §4.11.8 pin 4 board gate). The cannon candidate's shot type derives
+  from the §4.4b rule at application time (never enumerated).
 - **θ:** one integer 9-array per archetype — `THETA_AGGRESSIVE /
   THETA_BALANCED / THETA_CAUTIOUS` consts in
   `scripts/combat/ai_search.gd`. The doc-first prior is
