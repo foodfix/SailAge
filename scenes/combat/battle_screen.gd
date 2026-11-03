@@ -1561,17 +1561,21 @@ func _bind_formation() -> void:
 ## through the camera functions. Drawing (not child Controls) keeps the free
 ## camera cheap — no per-tile nodes to move.
 func _on_world_draw() -> void:
+	# Every call draws on `_grid_view`, the item whose `draw` signal fired —
+	# an unqualified `draw_*` binds to `self` (this root Control), which is
+	# not inside its own draw window, so the engine rejects it with
+	# "Drawing is only allowed …" per call (and nothing renders).
 	var sea_tl := world_to_screen(Vector2.ZERO, _cam_pos, _cam_zoom)
 	var sea_size := WORLD_PX * _cam_zoom
 	# Open sea (§4.8 SEA); the panel background shows outside the world.
-	draw_rect(Rect2(sea_tl, sea_size), PaletteLib.SEA)
+	_grid_view.draw_rect(Rect2(sea_tl, sea_size), PaletteLib.SEA)
 	var line := PaletteLib.PANEL_LINE
 	for x in range(1, GRID_W):
 		var px := world_to_screen(Vector2(x * TILE_PX, 0), _cam_pos, _cam_zoom)
-		draw_rect(Rect2(px, Vector2(1.0, sea_size.y)), line, true)
+		_grid_view.draw_rect(Rect2(px, Vector2(1.0, sea_size.y)), line, true)
 	for y in range(1, GRID_H):
 		var px := world_to_screen(Vector2(0, y * TILE_PX), _cam_pos, _cam_zoom)
-		draw_rect(Rect2(px, Vector2(sea_size.x, 1.0)), line, true)
+		_grid_view.draw_rect(Rect2(px, Vector2(sea_size.x, 1.0)), line, true)
 	if sim == null:
 		return
 	var font := ThemeDB.fallback_font
@@ -1593,17 +1597,17 @@ func _on_world_draw() -> void:
 				and _unit_key(flagship_unit) == _unit_key(unit)
 			letter = TOKEN_FLAGSHIP if flagship else TOKEN_PLAYER
 			outline = PaletteLib.ACCENT if flagship else Color.BLACK
-			draw_rect(rect, PaletteLib.TEXT)
+			_grid_view.draw_rect(rect, PaletteLib.TEXT)
 		else:
 			letter = TOKEN_ENEMY
 			outline = PaletteLib.TEXT
-			draw_rect(rect, _enemy_dot_color())
-		draw_rect(rect, outline, false, 1.0)
+			_grid_view.draw_rect(rect, _enemy_dot_color())
+		_grid_view.draw_rect(rect, outline, false, 1.0)
 		var font_size := maxi(8, int(round(12.0 * _cam_zoom)))
 		if font != null:
 			var text_size := font.get_string_size(letter,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-			draw_string(font, center
+			_grid_view.draw_string(font, center
 				+ Vector2(-text_size.x * 0.5, text_size.y * 0.25),
 				letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
 	# The acting unit wears a 2px accent frame (§4.8 focus outline).
@@ -1613,7 +1617,8 @@ func _on_world_draw() -> void:
 			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5,
 			_cam_pos, _cam_zoom)
 		var half := TOKEN_PX * _cam_zoom * 0.5 + 2.0
-		draw_rect(Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0),
+		_grid_view.draw_rect(
+			Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0),
 			PaletteLib.ACCENT, false, 2.0)
 
 
@@ -1628,9 +1633,11 @@ func _enemy_dot_color() -> Color:
 ## The 192×120 minimap (§4.7.1, §4.8 pins): ship dots, the viewport frame,
 ## the wind arrow (ACCENT, the battle's locked `wind_dir`), the current arrow
 ## (COAST_SEA, only while the locked current has strength), and — W4 — the
-## formation anchor lines stub.
+## formation anchor lines stub. Every call draws on `_minimap`, the item
+## whose `draw` signal fired (an unqualified `draw_*` binds to `self`, which
+## is not inside its own draw window — see `_on_world_draw`).
 func _on_minimap_draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, MINIMAP_SIZE), PaletteLib.PANEL_BG)
+	_minimap.draw_rect(Rect2(Vector2.ZERO, MINIMAP_SIZE), PaletteLib.PANEL_BG)
 	if sim == null:
 		return
 	# Ship dots: player = TEXT, enemy = BAD / the navy owner's Nation.color.
@@ -1643,21 +1650,24 @@ func _on_minimap_draw() -> void:
 		var color := PaletteLib.TEXT \
 			if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER \
 			else _enemy_dot_color()
-		draw_rect(Rect2(center - Vector2(2, 2), Vector2(4, 4)), color, true)
+		_minimap.draw_rect(Rect2(center - Vector2(2, 2), Vector2(4, 4)),
+			color, true)
 	# The viewport frame (§4.8 pin: ACCENT).
 	var world_rect := Rect2(
 		_cam_pos - VIEW_SIZE * 0.5 / _cam_zoom, VIEW_SIZE / _cam_zoom)
 	var frame_pos := minimap_map(world_rect.position)
 	var frame_end := minimap_map(world_rect.end)
-	draw_rect(Rect2(frame_pos, frame_end - frame_pos), PaletteLib.ACCENT,
-		false, 1.0)
+	_minimap.draw_rect(Rect2(frame_pos, frame_end - frame_pos),
+		PaletteLib.ACCENT, false, 1.0)
 	# The wind arrow (§4.8 pin: ACCENT) — rotated per the wind-FROM token.
+	# The arrow's segments are computed as pure data and drawn here, in the
+	# one handler (never on another item, never outside the draw window).
 	var center := MINIMAP_SIZE * 0.5
 	var wind_index := SailingSimLib.heading_index(str(sim.wind_dir))
 	if wind_index >= 0:
-		_draw_minimap_arrow(center,
-			Vector2(BattleSimLib.HEADING_RAYS[wind_index]), 22.0, 2.0,
-			PaletteLib.ACCENT)
+		for segment in _minimap_arrow_segments(center,
+				Vector2(BattleSimLib.HEADING_RAYS[wind_index]), 22.0):
+			_minimap.draw_line(segment[0], segment[1], PaletteLib.ACCENT, 2.0)
 	# The current arrow (§4.8 pin: COAST_SEA) — only while strength > 0; it
 	# points along the flow-TO token.
 	var current: Dictionary = sim.current
@@ -1665,9 +1675,10 @@ func _on_minimap_draw() -> void:
 	var current_index := SailingSimLib.heading_index(
 		str(current.get("dir", ""))) if current is Dictionary else -1
 	if strength > 0 and current_index >= 0:
-		_draw_minimap_arrow(center,
-			Vector2(BattleSimLib.HEADING_RAYS[current_index]), 14.0, 1.5,
-			PaletteLib.COAST_SEA)
+		for segment in _minimap_arrow_segments(center,
+				Vector2(BattleSimLib.HEADING_RAYS[current_index]), 14.0):
+			_minimap.draw_line(segment[0], segment[1],
+				PaletteLib.COAST_SEA, 1.5)
 	# W4 (§4.7.1/§4.8): the formation anchor line — the anchor cell centre
 	# plus a 6-cell heading ray, PANEL_LINE per the §4.8 pin, drawn only
 	# while the §4.9b fleet layer is active on a line formation.
@@ -1679,20 +1690,23 @@ func _on_minimap_draw() -> void:
 		var heading: int = int(anchor.get("heading8", BattleSimLib.HEADING_EAST))
 		if heading >= 0 and heading < BattleSimLib.HEADING_RAYS.size():
 			var ray := Vector2(BattleSimLib.HEADING_RAYS[heading]).normalized()
-			draw_line(anchor_center,
+			_minimap.draw_line(anchor_center,
 				anchor_center + ray
 					* (float(FORMATION_ANCHOR_CELLS) * TILE_PX * MINIMAP_SCALE),
 				PaletteLib.PANEL_LINE, 1.5)
 
 
-func _draw_minimap_arrow(from: Vector2, direction: Vector2, length: float,
-		width: float, color: Color) -> void:
+## Pure arrow geometry (no drawing): the three segments of a minimap arrow —
+## shaft `from → tip`, then the two head strokes at ±150° off the direction.
+func _minimap_arrow_segments(from: Vector2, direction: Vector2,
+		length: float) -> Array:
 	var dir := direction.normalized()
 	var tip := from + dir * length
-	draw_line(from, tip, color, width)
+	var segments: Array = [[from, tip]]
 	for side in [-1.0, 1.0]:
 		var head := dir.rotated(side * PI * 0.8333) * mini(length * 0.3, 6.0)
-		draw_line(tip, tip + head, color, width)
+		segments.append([tip, tip + head])
+	return segments
 
 
 func _on_minimap_gui_input(event: InputEvent) -> void:
@@ -1786,9 +1800,11 @@ func _bind_stats() -> void:
 	_target_label.text = _target_text(unit)
 
 
-## §4.7.1 per-side reload pips: a loaded side shows one `#` pip per cannon; a
-## reloading side shows `.` pips plus the rounds still to wait (§4.4a —
-## "that side may fire again only when `round ≥ reload_side`").
+## §4.7.1 per-side reload pips: a loaded side shows one filled pip (`●`) per
+## cannon; a reloading side shows hollow pips (`○`) plus the rounds still to
+## wait in `(N)` form (§4.4a — "that side may fire again only when
+## `round ≥ reload_side`"). Example: `Port ●●` loaded, `Starboard ○○ (2)`
+## reloading.
 func _reload_pips(unit: Dictionary, side: String) -> String:
 	var key := "reload_port" if side == BattleSimLib.BROADSIDE_PORT \
 		else "reload_starboard"
@@ -1796,8 +1812,8 @@ func _reload_pips(unit: Dictionary, side: String) -> String:
 	var ready_at := int(unit.get(key, 1))
 	var round_no := int(sim.round_number())
 	if round_no >= ready_at:
-		return "#".repeat(total)
-	return "%s %d" % [".".repeat(total), ready_at - round_no]
+		return "●".repeat(total)
+	return "%s (%d)" % ["○".repeat(total), ready_at - round_no]
 
 
 func _bind_actions() -> void:
@@ -1820,8 +1836,8 @@ func _bind_actions() -> void:
 ## §4.7.1 shot selector: the four §4.4b shot types; gate-locked states grayed
 ## with `battle.shot.locked` {value} (chain 25 / armor-piercing 50, the
 ## `skill_gates` data via the engine's gate accessors); grape disabled unless
-## the intended target is at Chebyshev range 1. The selected entry carries a
-## `>` marker and rides the cannon decision.
+## the intended target is at Chebyshev range 1. The selection rides the
+## cannon decision (no text marker — buttons `1`–`4` re-pick, §4.3).
 func _bind_shots() -> void:
 	var unit := selected_unit()
 	var target: Dictionary = _resolve_target(unit, "cannon") \
@@ -1835,7 +1851,7 @@ func _bind_shots() -> void:
 		if button == null:
 			continue
 		var label := "%d %s" % [index + 1, _t("battle.shot.%s" % shot)]
-		button.text = ("> " + label) if shot == _selected_shot else label
+		button.text = label
 		button.set_meta("index", index)
 		var tooltip := ""
 		if shot == BattleSimLib.CHAIN_SHOT \
