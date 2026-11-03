@@ -243,10 +243,9 @@ immunity are retired with the marker system (§4.11.11.1).
   `|vx|, |vy| ≤ battle_max_speed` satisfying the constraints above,
   enumerated in **(y, x) lexicographic order** — the enumeration order is
   the deterministic tie-break everywhere (§4.11.8, decision 13). The bound
-  is ≤ 49 candidates at `battle_max_speed ≤ 3` (decision 13's pin);
-  correction 3's speed-24 tier (`battle_max_speed = 4`) grows the box to
-  9×9 = 81 candidates — the enumeration rule, not the 49 figure, is the
-  normative part.
+  is the derived box `(2 × battle_max_speed + 1)²` per tier — 49 at speed 3,
+  81 at speed 4, **121 at the correction-15 speed-5 tier** — the
+  enumeration rule, not any absolute figure, is the normative part.
 
 ### 4.4 Cannon (Phase 9 broadsides)
 
@@ -554,7 +553,8 @@ pure deterministic, zero RNG.
 
 `ai_level = 1` enumerates, on a `snapshot()`, every legal velocity
 (`legal_velocities` — the §4.3a Chebyshev box in (y, x) lexicographic order;
-≤ 81 candidates at the `battle_max_speed = 4` tier, §4.3a's derived bound)
+≤ 121 candidates at the correction-15 `battle_max_speed = 5` tier, §4.3a's
+derived bound)
 × the action set {hold, best-target cannon per side, legal ram, legal
 board}, applies each on `restore()`, and scores
 `score = θ · φ` over NINE features: φ1 durability diff, φ2 cannon diff,
