@@ -1,0 +1,55 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/ui_shared/captain_view.gd" id="1_captainview"]
+
+[node name="CaptainView" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_captainview")
+
+[node name="Body" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="Nation" type="Label" parent="Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="LevelUp" type="Label" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="CardScroll" type="ScrollContainer" parent="Body"]
+custom_minimum_size = Vector2(0, 280)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="ReputationHeader" type="Label" parent="Body"]
+layout_mode = 2
+
+[node name="ReputationRows" type="GridContainer" parent="Body"]
+layout_mode = 2
+columns = 2
+
+[node name="GatesHeader" type="Label" parent="Body"]
+layout_mode = 2
+
+[node name="GateScroll" type="ScrollContainer" parent="Body"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="GateRows" type="VBoxContainer" parent="Body/GateScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4

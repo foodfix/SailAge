@@ -59,7 +59,7 @@ size_flags_horizontal = 3
 text = "-"
 vertical_alignment = 1
 
-[node name="IntelButton" type="MenuButton" parent="TopRow"]
+[node name="IntelButton" type="Button" parent="TopRow"]
 custom_minimum_size = Vector2(96, 32)
 layout_mode = 2
 text = "Intel"

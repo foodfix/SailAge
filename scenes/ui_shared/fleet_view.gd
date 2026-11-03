@@ -1,38 +1,29 @@
-class_name FleetPanel
+class_name FleetView
 extends Control
-## Fleet / cargo panel — docs/40-SHIPS-AND-FLEET.md §4.4 (flagship + promotion),
-## §6 (capacity guard), §7; docs/20-WORLD-AND-SAILING.md §4.10 (provisions and
-## water are cargo; jettison is per stack and frees capacity immediately);
-## docs/80-UI-UX.md §4.7 (confirm dialogs) and §4.8 (palette, 32px rows).
+## The 船队 view — the retired S15 fleet/cargo panel's body
+## (docs/80-UI-UX.md §4.5.1), embedded as the intel window's 船队 tab since the
+## 2026-11-03 amendment. Every render/action rule carries over unchanged:
 ##
 ## **Every rule lives in [Fleet]**: this scene only renders `GameState.fleet`
 ## and delegates — no cargo maths, cap or invariant is duplicated here. That is
-## what makes `tools/test_fleet.gd` meaningful proof for the panel too.
-##
-## Parent-agnostic modal, same contract as [CharacterPanel]: a host calls
-## [method attach_to] in its `_ready` and can then [method open] it. While open
-## it joins the `modal_overlay` group and consumes input (§6 "modals consume
-## all input"), so the host's movement/keys cannot act underneath it.
+## what makes `tools/test_fleet.gd` meaningful proof for the view too.
 ##
 ## Port vs sea: promotion and jettison are port actions (§4.4), so at sea the
-## whole panel is **read-only** — every action button is disabled and states its
-## `ui.reason` tooltip. The panel still renders the fleet, which is the point
+## whole view is **read-only** — every action button is disabled and states its
+## `ui.reason` tooltip. The view still renders the fleet, which is the point
 ## of showing it at sea.
 ##
-## All text goes through `ui_strings.json` and is re-bound on
-## `EventBus.locale_changed` (§6); rows also re-bind on `fleet_changed`.
-##
-## Palette is preloaded rather than referenced through its global class name so
-## the scene also runs before the editor has written its class cache.
+## Embeddable view contract: the intel window instantiates this scene and calls
+## [method rebuild] when its tab becomes active; the view also refreshes itself
+## on the EventBus signals while visible.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-## Days of supply + effective speed (docs/20-* §4.4, §4.10). The panel renders
+## Days of supply + effective speed (docs/20-* §4.4, §4.10). The view renders
 ## the sim's numbers; it never recomputes either formula.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const ConfirmLib := preload("res://scenes/ui_shared/confirm_dialog.gd")
 
-const SCENE_PATH := "res://scenes/ui_shared/fleet_panel.tscn"
-const DIM_ALPHA := 0.4
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
 
@@ -43,7 +34,7 @@ const BAR_H := 8.0
 const BAR_GOOD_ABOVE := 0.6
 const BAR_WARN_ABOVE := 0.25
 
-## Keys requested for the next `ui_strings.json` merge (the panel must never
+## Keys requested for the next `ui_strings.json` merge (the view must never
 ## print a raw "<key>", so each has a composed fallback below).
 const COUNT_KEY := "fleet.count"
 const STACK_KEY := "fleet.stack"
@@ -62,73 +53,18 @@ var _pending: Dictionary = {}
 ## Guards rebuild re-entry from `fleet_changed`.
 var _rebuilding := false
 
-@onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _summary: Label = $Center/Panel/Margin/Body/Summary
-@onready var _mode_note: Label = $Center/Panel/Margin/Body/ModeNote
-@onready var _rows_box: VBoxContainer = \
-	$Center/Panel/Margin/Body/Scroll/Rows
-@onready var _totals: VBoxContainer = $Center/Panel/Margin/Body/Totals
-@onready var _ships_header: Label = $Center/Panel/Margin/Body/ShipsHeader
-@onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
-@onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
+@onready var _summary: Label = $Body/Summary
+@onready var _mode_note: Label = $Body/ModeNote
+@onready var _rows_box: VBoxContainer = $Body/Scroll/Rows
+@onready var _totals: VBoxContainer = $Body/Totals
+@onready var _ships_header: Label = $Body/ShipsHeader
 @onready var _confirm: Control = $ConfirmDialog
 
 
-## Installs a panel under `parent` (idempotent) and returns it, following the
-## [CharacterPanel] convention: a `Control` host gets it as a child; a
-## `Node2D` host (the world map) gets it inside a `CanvasLayer` so it neither
-## inherits the camera transform nor collapses to a zero-size rect.
-static func attach_to(parent: Node) -> Control:
-	var existing := _find_panel(parent)
-	if existing != null:
-		return existing
-	var scene: PackedScene = load(SCENE_PATH)
-	if scene == null:
-		push_error("FleetPanel.attach_to: missing %s" % SCENE_PATH)
-		return null
-	var panel := scene.instantiate()
-	panel.name = "FleetPanel"
-	if parent is Control:
-		parent.add_child(panel)
-	else:
-		var layer := parent.get_node_or_null("FleetPanelLayer") as CanvasLayer
-		if layer == null:
-			layer = CanvasLayer.new()
-			layer.name = "FleetPanelLayer"
-			# Above the host screen's own canvas so the modal dims everything.
-			layer.layer = 100
-			parent.add_child(layer)
-		layer.add_child(panel)
-	return panel
-
-
-static func _find_panel(parent: Node) -> Control:
-	var direct := parent.get_node_or_null("FleetPanel")
-	if direct is Control:
-		return direct
-	var layer := parent.get_node_or_null("FleetPanelLayer")
-	if layer != null:
-		var nested := layer.get_node_or_null("FleetPanel")
-		if nested is Control:
-			return nested
-	return null
-
-
 func _ready() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
 	_summary.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_mode_note.add_theme_color_override("font_color", PaletteLib.WARN)
 	_ships_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_close_button.pressed.connect(close)
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
 
@@ -137,83 +73,12 @@ func _ready() -> void:
 	EventBus.gold_changed.connect(_on_gold_changed)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	# `F` toggles the panel, same pattern as the character panel's `C` (the key
-	# is the T18 addition to docs/80 §4.3 — see the task report).
-	if event.is_action_pressed("toggle_fleet") and not _confirm.is_open():
-		# A HUD dialog or another modal owns the screen first (§6 "modals
-		# consume all input"): never stack this panel on top of one.
-		if not visible and _other_modal_open():
-			return
-		get_viewport().set_input_as_handled()
-		toggle()
-		return
-	if not visible:
-		return
-	if event.is_action_pressed("back") and not _confirm.is_open():
-		get_viewport().set_input_as_handled()
-		close()
-		return
-	# Modal behaviour (docs/80-* §6): swallow everything else so the host's
-	# keyboard/mouse handling cannot act underneath the panel.
-	get_viewport().set_input_as_handled()
+## True while this view is the intel window's active tab.
+func is_active() -> bool:
+	return is_visible_in_tree()
 
 
-## True while any *other* modal is up (a HUD dialog, the confirm, S14…).
-func _other_modal_open() -> bool:
-	for node in get_tree().get_nodes_in_group(MODAL_GROUP):
-		if node == self or not (node is CanvasItem):
-			continue
-		if (node as CanvasItem).is_visible_in_tree():
-			return true
-	# S14 (and any panel with the same contract) is a Control modal that does
-	# not join `modal_overlay`; hosts look it up by name, so do the same.
-	var parent := get_parent()
-	if parent != null:
-		for sibling in parent.get_children():
-			if sibling == self or not (sibling is CanvasItem):
-				continue
-			if sibling.has_method("is_open") and sibling.is_open():
-				return true
-	return false
-
-
-# --- Public API ------------------------------------------------------------
-
-func toggle() -> void:
-	if visible:
-		close()
-	else:
-		open()
-
-
-func open() -> void:
-	visible = true
-	add_to_group(MODAL_GROUP)
-	rebuild()
-	_close_button.grab_focus()
-
-
-func close() -> void:
-	visible = false
-	remove_from_group(MODAL_GROUP)
-	_pending = {}
-	# A pending jettison confirm dies with the panel: never leave a modal
-	# hovering over a hidden owner (§6 "modals consume all input").
-	if _confirm != null and _confirm.is_open():
-		_confirm.cancel()
-
-
-func is_open() -> bool:
-	return visible
-
-
-## True while the jettison confirmation or the panel itself is on screen.
-func has_modal() -> bool:
-	return visible or _confirm.is_open()
-
-
-## True when the panel is only displaying (at sea): neither promotion nor
+## True when the view is only displaying (at sea): neither promotion nor
 ## jettison is a sea action (docs/40 §4.4, §6).
 func is_read_only() -> bool:
 	return not FleetLib.at_port()
@@ -263,7 +128,6 @@ func rebuild() -> void:
 # --- Header ----------------------------------------------------------------
 
 func _bind_header() -> void:
-	_title.text = I18n.t_key("fleet.title")
 	var count := "%d/%d" % [GameState.fleet.size(), FleetLib.FLEET_MAX]
 	var count_text := _fmt_or(
 		COUNT_KEY, {"count": GameState.fleet.size(), "max": FleetLib.FLEET_MAX}, count
@@ -282,11 +146,10 @@ func _bind_header() -> void:
 	_summary.text += " · " + _hud_line()
 	_mode_note.visible = is_read_only()
 	_mode_note.text = _read_only_note()
-	_close_button.text = I18n.t_key("ui.close")
 
 
 ## The day / gold / morale figures the HUD top bar shows (`80-*` §4.5), built
-## from the same three `ui_strings` keys so the panel can never disagree. The
+## from the same three `ui_strings` keys so the view can never disagree. The
 ## day carries the wall-clock time (`20-*` §4.3 amended; `world.day_time`).
 func _hud_line() -> String:
 	return " · ".join([
@@ -722,6 +585,19 @@ func _on_jettison_cancelled() -> void:
 	_pending = {}
 
 
+## True while the jettison confirmation is on screen (the intel window reads
+## this before closing — §6 "modals consume all input").
+func has_dialog() -> bool:
+	return _confirm != null and _confirm.is_open()
+
+
+## Cancels a pending jettison confirmation (the window closing under it — §6).
+func cancel_dialog() -> void:
+	if _confirm != null and _confirm.is_open():
+		_confirm.cancel()
+	_pending = {}
+
+
 func _rebuild_deferred() -> void:
 	call_deferred("rebuild")
 
@@ -729,19 +605,19 @@ func _rebuild_deferred() -> void:
 # --- Binding helpers -------------------------------------------------------
 
 func _on_locale_changed(_locale: String) -> void:
-	if visible:
+	if is_active():
 		rebuild()
 
 
 func _on_fleet_changed() -> void:
-	if visible:
+	if is_active():
 		_rebuild_deferred()
 
 
 func _on_gold_changed(_value: int) -> void:
-	# Gold does not affect this panel, but a load (gold + fleet + port) may:
+	# Gold does not affect this view, but a load (gold + fleet + port) may:
 	# refresh so the read-only state follows `current_port` (§4.6).
-	if visible:
+	if is_active():
 		_rebuild_deferred()
 
 
@@ -757,7 +633,7 @@ func _exit_tree() -> void:
 # --- Rendering helpers -----------------------------------------------------
 
 ## `key` when `ui_strings.json` has it, else `fallback` (a localised or numeric
-## string) — the panel must never print a raw "<key>" (§6).
+## string) — the view must never print a raw "<key>" (§6).
 func _fmt_or(key: String, values: Dictionary, fallback: String) -> String:
 	if DataLoader.ui_strings.has(key):
 		return I18n.fmt(key, values)
@@ -822,14 +698,6 @@ func _bar_color(ratio: float) -> Color:
 	if ratio > BAR_WARN_ABOVE:
 		return PaletteLib.WARN
 	return PaletteLib.BAD
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 ## Removes and frees every child immediately so a rebuild never shows a mix of

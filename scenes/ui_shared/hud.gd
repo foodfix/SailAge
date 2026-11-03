@@ -35,18 +35,14 @@ const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
-## §4.12.2 (W6-A): the character button's alloc_pending badge reads the
-## persisted counter (amended 2026-11-03: the badge rides the §4.5 intel
-## button — the top-bar character button was removed as an intel-menu
-## duplicate; the menu's 船长 item opens the same S14 panel).
+## §4.12.2 (W6-A): the alloc_pending badge reads the persisted counter
+## (amended 2026-11-03: the badge rides the §4.5 intel button — the top-bar
+## character button was removed as an intel duplicate; the window's 船长 tab
+## is the S14 path).
 const CharacterLib := preload("res://scripts/player/character.gd")
-const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
-## §4.5 intel menu (§4.2 amendment, 2026-11-03): the dropdown opens the same
-## shared modals the hosts attach — S15 fleet panel, S18 officers panel and
-## the S17 chart (S14 already rides CharacterPanelLib above).
-const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
-const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
-const ChartScreenLib := preload("res://scenes/world/chart_screen.gd")
+## §4.5 intel window (§4.2 amendment, 2026-11-03): the HUD button opens the
+## one dedicated modal hosting the five information surfaces.
+const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 
 ## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
 ## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
@@ -78,20 +74,6 @@ const CURRENT_ARROW_OFFSET := Vector2(104, 12)
 const CURRENT_CAPTION_OFFSET := Vector2(120, 0)
 ## Compass-arrow placeholder size in px (drawn, no texture — §4.8).
 const ARROW_LENGTH := 14.0
-
-## §4.5 intel dropdown item ids, in display order (§4.2 amendment):
-## captain → S14, officers → S18, fleet → S15, chart → S17, 委托 → S14 on
-## the quests tab.
-const INTEL_CAPTAIN := 0
-const INTEL_OFFICERS := 1
-const INTEL_FLEET := 2
-const INTEL_CHART := 3
-const INTEL_QUESTS := 4
-## The `ui_strings` key each intel item renders (§4.4; all five exist — the
-## menu adds no per-item strings beyond `ui.intel` itself).
-const INTEL_ITEM_KEYS: Array[String] = [
-	"char.title", "officers.title", "fleet.title", "chart.title", "char.quests",
-]
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
@@ -131,7 +113,7 @@ signal explore_requested
 ## §4.12.2 (W6-A, amended 2026-11-03): the alloc_pending badge now rides the
 ## §4.5 intel button (the 船长 entry is the S14 path since the top-bar
 ## character button's removal).
-@onready var _intel_button: MenuButton = $TopRow/IntelButton
+@onready var _intel_button: Button = $TopRow/IntelButton
 @onready var _char_badge: Control = $TopRow/IntelButton/CharBadge
 @onready var _char_badge_count: Label = \
 	$TopRow/IntelButton/CharBadge/BadgeCount
@@ -219,15 +201,13 @@ func _ready() -> void:
 	_explore_button.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
 	_explore_button.pressed.connect(_on_explore_pressed)
 	# §4.12.2 (W6-A, amended 2026-11-03): the alloc badge rides the intel
-	# button; §4.5's 船长 item is the S14 path. Item labels rebind on every
-	# open (`about_to_popup`), so a locale toggle needs no popup-level
-	# bookkeeping beyond the button text itself.
+	# button; §4.5: the button opens the dedicated 情报 window (the dropdown
+	# became a full window — the five surfaces live on its tabs; C/O/F are
+	# the window's own keys).
 	_intel_button.text = I18n.t_key("ui.intel")
 	_intel_button.tooltip_text = I18n.t_key("ui.intel")
 	_intel_button.custom_minimum_size.y = 32
-	_intel_button.about_to_popup.connect(_on_intel_about_to_popup)
-	_intel_button.get_popup().index_pressed.connect(_on_intel_index_pressed)
-	_rebind_intel_menu()
+	_intel_button.pressed.connect(_on_intel_button_pressed)
 	_char_badge.visible = false
 	_apply_alloc_badge()
 	_apply_minimap_rect()
@@ -279,14 +259,11 @@ func _apply_alloc_badge() -> void:
 	_char_badge.tooltip_text = I18n.t_key("char.points_pending")
 
 
-## The node the shared modals attach to: the host screen's root. On S4 the
+## The node the intel window attaches to: the host screen's root. On S4 the
 ## HUD's parent **is** that root (the port screen Control); on S3 it is the
-## `HUDLayer` CanvasLayer one level under the world root, and the hosts attach
-## their panels to the world root. Every `attach_to` is idempotent **per
-## parent**, so the lookup must land on the same node the host used or S14/
-## S15/S18 would be instantiated twice. `current_scene` is that root in both
-## production scenes; the parent is the fallback for a HUD instanced deeper
-## (test harnesses).
+## `HUDLayer` CanvasLayer one level under the world root. `current_scene` is
+## that root in both production scenes; the parent is the fallback for a HUD
+## instanced deeper (test harnesses).
 func _panel_host() -> Node:
 	var tree := get_tree()
 	if tree != null and tree.current_scene != null:
@@ -295,159 +272,25 @@ func _panel_host() -> Node:
 	return parent if parent != null else self
 
 
-# --- Intel menu (docs/80-* §4.5, §4.2 amendment 2026-11-03) -----------------
+# --- Intel window (docs/80-* §4.5, §4.2 amendment 2026-11-03) -----------------
 
-## The shared S17 chart instance. Both production hosts instance it as a
-## direct child of the HUD's parent (`HUDLayer` on S3, the port root on S4),
-## so the sibling lookup finds the one instance; the `attach_to` fallback
-## only serves a host that builds its UI in code (§4.6 hosting seam).
-func _intel_chart() -> Control:
-	var parent := get_parent()
-	if parent != null:
-		var chart := parent.get_node_or_null("ChartScreen")
-		if chart is Control:
-			return chart
-	var tree := get_tree()
-	if tree != null and tree.current_scene != null:
-		var chart := tree.current_scene.get_node_or_null("ChartScreen")
-		if chart is Control:
-			return chart
-	return ChartScreenLib.attach_to(parent if parent != null else self)
+## The intel button: opens/closes the dedicated 情报 window (§4.5). The window
+## attaches itself to the host screen's root (idempotent, the modal
+## convention) and remembers its last tab; C / O / F are the window's keys.
+func _on_intel_button_pressed() -> void:
+	var window := IntelWindowLib.attach_to(_panel_host())
+	if window != null and window.has_method("toggle"):
+		window.call("toggle")
 
 
-## True when a modal owns the screen: a HUD dialog, any visible
-## `modal_overlay` member (S15/S18/S17 join the group while open) — a dropdown
-## press under a modal is ignored (docs/80-* §6 "modals consume all input").
-func _intel_blocked() -> bool:
-	if has_modal():
-		return true
-	for node in get_tree().get_nodes_in_group("modal_overlay"):
-		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
-			return true
-	return false
-
-
-## (Re)fills the popup: one entry per [constant INTEL_ITEM_KEYS], item index
-## == entry id. Called from `_ready` and on every open so a locale toggle is
-## picked up without extra signal plumbing.
-func _rebind_intel_menu() -> void:
-	var popup := _intel_button.get_popup()
-	if popup == null:
-		return
-	popup.clear()
-	for key in INTEL_ITEM_KEYS:
-		popup.add_item(I18n.t_key(key))
-
-
-func _on_intel_about_to_popup() -> void:
-	_rebind_intel_menu()
-
-
-## Dispatches one dropdown entry to the same open/toggle path its hotkey uses
-## (§4.2 amendment: the menu is the mouse path to C / O / F / Tab). Closing
-## the surface that is already open is that modal's own Esc edge and is always
-## allowed; *opening* anything is refused while another modal owns the screen
-## (docs/80-* §6).
-func _on_intel_index_pressed(index: int) -> void:
-	match index:
-		INTEL_CAPTAIN:
-			_intel_toggle_panel("character")
-		INTEL_OFFICERS:
-			_intel_toggle_panel("officers")
-		INTEL_FLEET:
-			_intel_toggle_panel("fleet")
-		INTEL_CHART:
-			_intel_toggle_chart()
-		INTEL_QUESTS:
-			_intel_open_quests()
-
-
-## One dropdown entry toggling a panel modal (`"character"` → S14,
-## `"officers"` → S18, anything else → S15). The lookup uses the same
-## parent-agnostic paths the panels themselves use, so the entry always lands
-## on the host's one shared instance.
-func _intel_toggle_panel(kind: String) -> void:
-	var host := _panel_host()
-	var panel: Control = null
-	match kind:
-		"character":
-			panel = CharacterPanelLib._find_panel(host)
-		"officers":
-			panel = OfficersPanelLib._find_panel(host)
-		_:
-			panel = FleetPanelLib._find_panel(host)
-	if panel != null and panel.has_method("is_open") \
-			and bool(panel.call("is_open")):
-		if panel.has_method("close"):
-			panel.call("close")
-		return
-	if _intel_blocked():
-		return
-	match kind:
-		"character":
-			var character := CharacterPanelLib.attach_to(host)
-			if character != null and character.has_method("open"):
-				character.call("open")
-		"officers":
-			var officers := OfficersPanelLib.attach_to(host, host)
-			if officers != null and officers.has_method("open_on"):
-				officers.call("open_on", host)
-		_:
-			var fleet := FleetPanelLib.attach_to(host)
-			if fleet != null and fleet.has_method("open"):
-				fleet.call("open")
-
-
-## The 海图 entry: S17 toggle (`Tab`); closing an open chart never needs the
-## modal guard (the chart is the modal then).
-func _intel_toggle_chart() -> void:
-	var chart := _intel_chart()
-	if chart == null or not chart.has_method("toggle_chart"):
-		return
-	if chart.has_method("is_open") and bool(chart.call("is_open")):
-		chart.call("close_chart")
-		return
-	if _intel_blocked():
-		return
-	chart.call("open_chart")
-
-
-## The 委托 entry: S14 on the 委托 tab (§4.12.3). Switching the tab of an
-## already-open S14 is the panel's own tab row and is always allowed; opening
-## S14 fresh is a modal open (blocked under another modal, §6). The tab
-## choice is not persisted (§4.5).
-func _intel_open_quests() -> void:
-	var host := _panel_host()
-	var panel: Control = CharacterPanelLib.attach_to(host)
-	if panel == null:
-		return
-	if panel.has_method("select_tab"):
-		panel.call("select_tab", CharacterPanelLib.TAB_QUESTS)
-	if panel.has_method("is_open") and bool(panel.call("is_open")):
-		return
-	if _intel_blocked():
-		return
-	if panel.has_method("open"):
-		panel.call("open")
+## The attached intel window (tests / hosts), or null.
+func intel_window() -> Control:
+	return IntelWindowLib._find_window(_panel_host())
 
 
 ## The intel button node (test hook).
-func intel_button() -> MenuButton:
+func intel_button() -> Button:
 	return _intel_button
-
-
-## The five intel item labels in display order (test hook — the popup is a
-## native sub-window headless suites never open).
-func intel_menu_texts() -> Array:
-	var out: Array = []
-	for key in INTEL_ITEM_KEYS:
-		out.append(I18n.t_key(key))
-	return out
-
-
-## Activates intel dropdown item `index` (test hook for the dispatch path).
-func press_intel_item(index: int) -> void:
-	_on_intel_index_pressed(index)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1045,8 +888,8 @@ func _on_locale_changed(_locale: String) -> void:
 	if _explore_button.visible:
 		set_explore_available(true)
 	# §4.12.2 (W6-A, amended 2026-11-03): the badge tooltip re-binds through
-	# `_apply_alloc_badge`; §4.5: the button label re-binds here; the popup
-	# item labels re-bind on the next open (`_on_intel_about_to_popup`).
+	# `_apply_alloc_badge`; §4.5: the button label re-binds here. The window's
+	# own tabs/views re-bind through their locale handlers.
 	_intel_button.text = I18n.t_key("ui.intel")
 	_intel_button.tooltip_text = I18n.t_key("ui.intel")
 	_apply_alloc_badge()

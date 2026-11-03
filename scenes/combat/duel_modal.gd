@@ -305,7 +305,7 @@ func _on_locale_changed(_locale: String) -> void:
 
 ## `key`'s localised text when `ui_strings.json` carries it, else `fallback`
 ## (names/numbers only, so no untranslated prose is ever invented) — the
-## `fleet_panel._fmt_or` convention that keeps a pending key from printing a
+## `fleet_view._fmt_or` convention that keeps a pending key from printing a
 ## raw `<key>` (§6).
 func _or(key: String, fallback: String) -> String:
 	if key.is_empty() or not DataLoader.ui_strings.has(key):

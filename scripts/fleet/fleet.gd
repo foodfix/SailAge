@@ -193,7 +193,7 @@ static func notify_changed() -> void:
 
 # --- Fleet panel actions (T18; docs/40 §4.4, §6; docs/20 §4.10) -------------
 #
-# The panel (`scenes/ui_shared/fleet_panel.gd`) is pure UI: every rule below is
+# The panel (`scenes/ui_shared/fleet_view.gd`) is pure UI: every rule below is
 # the single implementation, and `SaveSystem` calls [method normalize_all] after
 # deserialization (the T17‖T18 interface pin).
 

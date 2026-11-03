@@ -1224,7 +1224,7 @@ func _test_provisions_gate() -> void:
 	await get_tree().process_frame
 
 
-# --- 9. The officers panel entry points (S18) -----------------------------
+# --- 9. The officers roster entry points (the §4.5 intel window) ------------
 
 func _test_officers_panel_entry() -> void:
 	var host := Control.new()
@@ -1236,62 +1236,66 @@ func _test_officers_panel_entry() -> void:
 	await get_tree().process_frame
 
 	var panel = hub.officers_panel()
-	_check(panel != null, "the hub attaches the S18 officers panel")
+	_check(panel != null,
+		"the hub attaches the intel window with the officers roster")
 	if panel == null:
 		host.queue_free()
 		return
-	_check(not panel.is_open(), "the officers panel starts closed")
+	var window = hub.get_node_or_null("IntelWindow")
+	_check(window != null and not window.is_open(),
+		"the intel window starts closed")
 
-	# `O` on S4 (§4.3).
+	# `O` on S4 (§4.3) — the real input chain lands on the window.
 	var key := InputEventAction.new()
 	key.action = "toggle_officers"
 	key.pressed = true
 	hub._unhandled_input(key)
 	await get_tree().process_frame
-	_check(panel.is_open(), "`O` opens the officers panel (S18, §4.3)")
-	_check(hub.has_modal(), "the hub knows the officers panel is a modal")
+	_check(window.is_open() and window.active_tab() == "officers",
+		"`O` opens the intel window on the 官员 tab (§4.3)")
+	_check(hub.has_modal(), "the hub knows the intel window is a modal")
 	_check(panel.officer_ids() == ["off_mateus_alvares"],
-		"the panel lists the employed officer (%s)" % str(panel.officer_ids()))
-	# While the panel is up the hub defers (a modal owns input first, §6), so the
-	# toggle lands on the panel itself — exactly what the real input chain does.
-	panel._unhandled_input(key)
+		"the roster lists the employed officer (%s)" % str(panel.officer_ids()))
+	# The `O` toggle lands on the window itself — exactly what the real input
+	# chain does (a modal owns input first, §6).
+	hub.toggle_officers_panel()
 	await get_tree().process_frame
-	_check(not panel.is_open(), "`O` closes it again (§4.3 toggle)")
-	_check(not hub.has_modal(), "a closed panel is no longer a modal")
+	_check(not window.is_open(), "`O` closes it again (§4.3 toggle)")
+	_check(not hub.has_modal(), "a closed window is no longer a modal")
 
 	# Amended 2026-11-03 (docs/80-* §4.6.2/§4.5): the footer `Fleet ·
-	# Officers` buttons were removed as §4.5-intel-menu duplicates. S18's
-	# entries are the intel menu's 官员 item, the `O` key (exercised above)
-	# and S14's Officers button; the hub pins the absence and the
-	# facility column staying untouched (no "officers" row ever existed).
+	# Officers` buttons were removed as intel duplicates. The entries are the
+	# intel window's 官员 tab and the `O` key; the hub pins the absence and
+	# the facility column staying untouched (no "officers" row ever existed).
 	_check(not hub.has_method("officers_row"),
 		"the removed footer accessor is gone (officers_row)")
 	_check(hub.get_node_or_null("Layout/VBox/Footer/Officers") == null,
 		"the port hub footer no longer carries an Officers button")
 	_check(hub.get_node_or_null("Layout/VBox/Footer/Fleet") == null,
-		"…nor a Fleet button (both live in the §4.5 intel menu)")
+		"…nor a Fleet button (both live in the §4.5 intel window)")
 	_check(not hub.facility_row_ids().has("officers"),
 		"the facility column never enters an officers row (§4.1 order)")
-	# The open path the menu and the key share still opens the panel.
+	# The shared open path opens the window on the 官员 tab.
 	hub.open_officers_panel()
 	await get_tree().process_frame
-	_check(panel.is_open(), "open_officers_panel() opens S18 (the shared path)")
-	panel.close()
+	_check(window.is_open() and window.active_tab() == "officers",
+		"open_officers_panel() opens the 官员 tab (the shared path)")
+	hub.toggle_officers_panel()
 
-	# Esc is behind the modal rule: it closes the panel, never Set Sail.
-	panel.open()
+	# Esc is behind the modal rule: it closes the window, never Set Sail.
+	window.open_tab("officers")
 	await get_tree().process_frame
 	var esc := InputEventAction.new()
 	esc.action = "back"
 	esc.pressed = true
 	hub._unhandled_input(esc)
 	await get_tree().process_frame
-	_check(panel.is_open(),
-		"Esc behind the open officers panel does not reach S4's Set Sail edge")
+	_check(window.is_open(),
+		"Esc behind the open window does not reach S4's Set Sail edge")
 	_check(GameState.current_port == "lisbon",
 		"…so the fleet stays docked (current_port %s)"
 		% str(GameState.current_port))
-	panel.close()
+	window.close()
 
 	hub.queue_free()
 	host.queue_free()

@@ -251,7 +251,7 @@ are never enumerated in code or docs.
   12).
 - **Allocation** happens on the player's own card (attribute tab): toast +
   badge on the 情报 intel button (amended 2026-11-03, `80-*` §4.12.2 — the
-  character-button duplicate was removed in favour of the intel menu),
+  character-button duplicate was removed in favour of the intel window),
   then per-attribute `+` steppers (enabled
   iff `alloc_pending > 0`), draft → confirm / cancel-rollback; each point
   raises one attribute by 1, clamp **[1, 100]** — an attribute at 100

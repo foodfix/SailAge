@@ -1,0 +1,104 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/ui_shared/officer_roster_view.gd" id="1_rosterview"]
+[ext_resource type="PackedScene" path="res://scenes/ui_shared/confirm_dialog.tscn" id="2_confirm"]
+
+[node name="OfficerRosterView" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_rosterview")
+
+[node name="Body" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="Slots" type="Label" parent="Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="ModeNote" type="Label" parent="Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="Result" type="Label" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="Controls" type="HBoxContainer" parent="Body"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Spacer" type="Control" parent="Body/Controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AttributesToggle" type="Button" parent="Body/Controls"]
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "Attributes"
+
+[node name="SkillsToggle" type="Button" parent="Body/Controls"]
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+toggle_mode = true
+text = "Skills"
+
+[node name="TableScroll" type="ScrollContainer" parent="Body"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Table" type="VBoxContainer" parent="Body/TableScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="TableEmpty" type="Label" parent="Body"]
+layout_mode = 2
+
+[node name="TableEmptyHint" type="Label" parent="Body"]
+layout_mode = 2
+
+[node name="Detail" type="VBoxContainer" parent="Body"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DetailTop" type="HBoxContainer" parent="Body/Detail"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DetailBack" type="Button" parent="Body/Detail/DetailTop"]
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "Back"
+
+[node name="DetailSpacer" type="Control" parent="Body/Detail/DetailTop"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DetailCardScroll" type="ScrollContainer" parent="Body/Detail"]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="DetailLine" type="Label" parent="Body/Detail"]
+layout_mode = 2
+
+[node name="DetailActions" type="HBoxContainer" parent="Body/Detail"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ConfirmDialog" parent="." instance=ExtResource("2_confirm")]

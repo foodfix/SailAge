@@ -35,6 +35,7 @@ RPG segment (§4.14), and the Phase-8 `ui_strings` family inventory
 | `scenes/ui_shared/dialog_box.tscn` | modal message dialog |
 | `scenes/ui_shared/confirm_dialog.tscn` | modal yes/no dialog |
 | `scenes/ui_shared/hud.tscn` | shared HUD (world + port) |
+| `scenes/ui_shared/intel_window.tscn` | the 情报 window (§4.5) hosting `captain_view` / `officer_roster_view` / `fleet_view` + the 委托 list + the S17 launcher |
 | `scenes/world/chart_screen.tscn` | full-screen Chart (S17, §4.6) |
 | `scenes/ui/character_card.tscn` | unified character card — renders any Person (player / officer / NPC captain; §4.12) |
 | `scenes/world/fleet_picker.tscn` | right-click fleet verb picker (§4.10.1) |
@@ -69,13 +70,14 @@ RPG segment (§4.14), and the Phase-8 `ui_strings` family inventory
 | S11 | Duel | `scenes/combat/duel_modal.tscn` (modal over S10) | 2 |
 | S12 | Guild | `guild_screen.tscn` | 3 |
 | S13 | Palace | `palace_screen.tscn` | 3 |
-| S14 | Character/status panel | `ui_shared/character_panel.tscn` (modal over S3/S4) | 1 |
-| S15 | Fleet/cargo panel | `ui_shared/fleet_panel.tscn` (modal over S3/S4) | 1 |
+| S14 | ~~Character/status panel~~ **retired 2026-11-03** — the 船长 page lives on as the intel window's 船长 tab (`captain_view`, §4.12) | — | 1→ |
+| S15 | ~~Fleet/cargo panel~~ **retired 2026-11-03** — the fleet body lives on as the intel window's 船队 tab (`fleet_view`, §4.5.1) | — | 1→ |
 | S16 | Ending / retirement | `ui_shared/ending_screen.tscn` (root scene, from S13) | 3 |
 | S17 | Chart | `scenes/world/chart_screen.tscn` (full-screen whole-world chart, §4.6) | 4 |
-| S18 | Officers | `scenes/port/officers_panel.tscn` (officer roster + details, §4.6.2) | 5 |
+| S18 | ~~Officers panel~~ **retired 2026-11-03** — redesigned into the intel window's 官员 tab (table + detail, §4.6.2) | — | 5→ |
 | S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over **S1 and S4**: the sea-traffic density dial + return-to-menu action, §4.6.3) | 5 |
 | S20 | Creation (出身 + 自由点数) | `scenes/title/creation_screen.tscn` (two-step flow, §4.13) | 8 |
+| — | **Intel window** | `scenes/ui_shared/intel_window.tscn` (modal over **S3/S4**; hosts the 船长/官员/船队/海图/委托 tabs — the §4.5 dropdown became a full window, 2026-11-03) | — |
 
 Phase 8 adds no further S-numbers: `fleet_picker`, `hail_modal`,
 `character_card`, the dossier panel and `autopilot_hud` are
@@ -99,14 +101,11 @@ S3 ──Tab──► S17 ──Esc/Tab──► back (S3)
 S4 ──Tab──► S17 ──Esc/Tab──► back (S4)   (amended 2026-11-01)
 S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
-S3/S4 ──Status──► S14 (modal)
-S3/S4 ──Fleet──► S15 (modal; read-only at sea)
-S4 ──Officers──► S18 (modal; read-only at sea) — entries: intel menu 官员,
-        `O`, S14's Officers button (footer button removed, 2026-11-03)
-S3/S4 ──情报 intel menu──► S14 / S18 / S15 / S17 / S14-委托 tab (added
-        2026-11-03, §4.5) — the same modals the C / O / F / Tab keys open;
-        the dropdown is the mouse path, Commissions opens S14 on the quests
-        tab
+S3/S4 ──C / 情报 button / F / O──► the intel window (modal, §4.5) on the
+        船长 / 官员 / 船队 tab (amended 2026-11-03 — the S14/S15/S18 modals
+        retired into it; the remembered tab is the mouse path's landing tab)
+S3/S4 ──intel window 海图 tab──► S17 (launcher closes the window first;
+        Tab still opens S17 directly)
 S1 ──Settings──► S19 (modal; pre-game density dial, §4.6.3) ──Esc/Close──► S1
 S4 ──Settings──► S19 (modal; density dial + return-to-menu, §4.6.3) ──Esc──► S4
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
@@ -138,10 +137,10 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S3 | `Space` | **Step mode:** wait one day at sea — the full daily ledger (`advance_clock(1.0)`: provisions, wages, weather reroll, morale; `20-*` §4.17). **Helm mode:** stop the fleet; pressed again while stopped, wait one day |
 | S3 | `[` / `]` | cycle sail trim `furled → reefed → normal → full` (persisted `world.sail_trim`; speed/storm-damage effects per `20-*` §4.17) |
 | S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`); cancels Helm mode |
-| S3/S4 | `C` | open/close character panel (S14) |
-| S3/S4 | `F` | open/close fleet/cargo panel (S15) |
+| S3/S4 | `C` | open/close the intel window on the 船长 tab (§4.5; pressed again on the active tab it closes, another key switches — amended 2026-11-03) |
+| S3/S4 | `F` | open/close the intel window on the 船队 tab (§4.5) |
 | S3/S4 | `Tab` | open the Chart (S17, §4.6) — from the port hub too (amended 2026-11-01) |
-| S3/S4 | click 情报 (top bar, right) | the **intel dropdown** (§4.5, added 2026-11-03): 船长 Captain (`char.title`) · 官员 Officers (`officers.title`) · 船队 Fleet (`fleet.title`) · 海图 Chart (`chart.title`) · 委托 Commissions (`char.quests`) — the mouse path to the same screens as C / O / F / Tab; a press under a modal is ignored (§6) |
+| S3/S4 | click 情报 (top bar, right) | open the **intel window** (§4.5, amended 2026-11-03 — the dropdown became a full window): 船长 Captain (`char.title`) · 官员 Officers (`officers.title`) · 船队 Fleet (`fleet.title`) · 海图 Chart (`chart.title`) · 委托 Commissions (`char.quests`) tabs; the window remembers its last tab |
 | S3 | `Esc` | close the Chart when it is open (otherwise no-op on S3) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
@@ -165,7 +164,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S17 | `Tab` / `Esc` | toggle back to the screen it was opened over (S3/S4; the Chart never mutates state) |
 | S12/S13 | `Esc` | back to S4 (same edge as Back) |
 | S4 | `ESC` | opens the provisioning prompt (§4.6.1) — the same edge as Set Sail |
-| S4 | `O` | open/close the officers panel (S18, §4.6.2) |
+| S4 | `O` | open/close the intel window on the 官员 tab (§4.6.2, amended 2026-11-03) |
 | S4 | `Space` | wait one hour (`advance_port_hours(1)`, `20-*` §4.3; amended 2026-11-02) — hub only, never behind a modal |
 | S19 | `Esc` | close settings, back to its host (S1 or S4; same edge as Close) |
 | provisioning | `Enter` | sail (disabled with a stated reason when gated, `20-*` §4.11.2) |
@@ -204,7 +203,11 @@ modes regardless of trim (`20-*` §4.17).
   (§4.7.15), and the Phase-8 families `char.*` / `skill.*` / `gate.*` /
   `hail.*` / `interact.*` / `dossier.*` / `captain.table.*` /
   `officer.post.*` / `advice.*` / `creation.*` / `sail.autopilot.*`
-  plus the personality/appearance part keys (§4.15).
+  plus the personality/appearance part keys, and the 2026-11-03 intel
+  window keys `intel.*` (`intel.hint`, `intel.chart.note`,
+  `intel.open_chart`, `intel.officers.name`, `intel.officers.wage`;
+  the tab labels reuse the existing `char.title` / `officers.title` /
+  `fleet.title` / `chart.title` / `char.quests` keys) (§4.15).
 - Event/system strings also live here (`world.mutiny.title`,
   `world.desertion`, `inn.odd_job.offer`, `world.ship_lost`…).
 - **Port-hours keys (amended 2026-11-02, `30-*` §4.1b):** `port.facility.closed`
@@ -250,26 +253,29 @@ Layout (1280×720; tile viewport is the space below the top bar):
   §4.8 — yellow < 40, red < 20), current area label (nearest known port
   within 16 tiles, else `world.open_sea`). **No language control** (amended
   2026-10-31: the locale lives only in S19, §4.6.3).
-- **Intel menu (added 2026-11-03, §4.2):** a `MenuButton` at the top bar's
-  **right end**, labelled `ui.intel` (情报 / Intel), present on **S3 and S4**
-  (one shared `hud.tscn` serves both, so the button exists in port and at sea
-  alike). The dropdown lists exactly five entries, in this order, each opening
-  the same modal its hotkey opens — never a duplicate instance:
-  船长 (`char.title`) → S14 toggle (`C`); 官员 (`officers.title`) → S18
-  toggle (`O`; the panel's own Phase-8 sea rules apply — talk/gift/train
-  usable, appoint/Dismiss port-only); 船队 (`fleet.title`) → S15 toggle
-  (`F`); 海图 (`chart.title`) → S17 toggle (`Tab`); 委托 (`char.quests`) →
-  S14 opened on the 委托 tab (§4.12.3; the tab choice is not persisted).
-  Item labels rebind on open and on `locale_changed` (§4.4). Toggling the
-  surface that is already open is that modal's own Esc edge and always works;
-  opening any entry is ignored while another modal is on screen (§6). The HUD
-  only *opens* the shared modal instances the hosts attached — it never
-  mutates state (docs/90-* §7 "HUD only reads").
+- **Intel window (amended 2026-11-03, §4.2):** a plain `Button` at the top
+  bar's **right end**, labelled `ui.intel` (情报 / Intel), present on **S3
+  and S4** (one shared `hud.tscn` serves both, so the button exists in port
+  and at sea alike). The press opens the **one dedicated 情报 modal** — the
+  morning's dropdown became a full window (the §4.1 inventory row) — whose
+  five tabs host the information surfaces, in this order:
+  船长 (`char.title`) → the captain view (the retired S14 single page, §4.12);
+  官员 (`officers.title`) → the officers roster table + detail (the retired
+  S18, §4.6.2; the sea rules apply — talk/gift/train usable anywhere,
+  appoint/Dismiss port-only); 船队 (`fleet.title`) → the fleet view (the
+  retired S15 body, §4.5.1); 海图 (`chart.title`) → a launcher that closes
+  the window and toggles the fullscreen S17 (`Tab`); 委托 (`char.quests`) →
+  the active-quest list (§4.7.3, migrated from the retired S14 tab).
+  Tab labels rebind on `locale_changed` (§4.4); the window remembers its last
+  tab for the button's next open (session-only). Keys (§4.3): `C`/`O`/`F`
+  open the window on their tab — pressed again on the active tab the window
+  closes, a different key switches tabs in place; `Esc` closes; opening on a
+  key is ignored while another modal is on screen (§6). The HUD button only
+  *opens* the shared window instance the hosts attached — it never mutates
+  state (docs/90-* §7 "HUD only reads").
   **Supersedes the surface duplicates (amended 2026-11-03):** the top-bar
   船长 character button is removed — its §4.12.2 alloc badge rides the intel
-  button, whose 船长 item opens the same S14 — and S4's footer
-  `Fleet · Officers` buttons are removed (§4.6.2); the hotkeys
-  `C` / `O` / `F` / `Tab` are unchanged.
+  button — and S4's footer `Fleet · Officers` buttons are removed (§4.6.2).
 - Bottom bar (formats amended 2026-11-02; conventions per `10-*` §3.1,
   `20-*` §4.3, `40-*` §4.4 speed units):
   - **`补给 {amount}（{days}天）` / `Provisions {amount} ({days} days)`** and
@@ -314,10 +320,10 @@ Layout (1280×720; tile viewport is the space below the top bar):
 - S4 (port) HUD: same top/bottom bars, viewport replaced by the port menu;
   the bar contents are identical so stats are always visible.
 
-### 4.5.1 Fleet/cargo panel (S15)
+### 4.5.1 The fleet view (the intel window's 船队 tab; the S15 body)
 
-Modal over S3/S4 (`ui_shared/fleet_panel.tscn`, 880px wide, 40% dim, `F` to
-toggle). It is the fleet-management surface the fleet panel of `40-*` §4.4 and
+Embedded in the intel window's 船队 tab (`ui_shared/fleet_view.gd`, the
+retired S15 body — `F` opens the window there; amended 2026-11-03). It is the fleet-management surface the fleet panel of `40-*` §4.4 and
 the supplies jettison of `20-*` §4.10 refer to.
 
 ```
@@ -493,65 +499,43 @@ completed purchase still charges its §4.1b hour.
 - `ESC` closes the prompt back to S4 (it does **not** sail) — the standard
   "Esc steps back one edge" rule (`§4.2`).
 
-### 4.6.2 Officers panel (S18, Phase 5 polish)
+### 4.6.2 Officers roster (the intel window's 官员 tab; amended 2026-11-03)
 
-A dedicated roster screen, opened from **the 情报 intel menu's 官员 item,
-the `O` key, or S14's Officers button**
-(and from the character panel, `C`) — the Phase-5 officer **summary** in S14's
-right column is, since Phase 8 (2026-11-02), the 官员与岗位 tab (§4.12.3);
-this panel is the detail view.
+The officers roster lives as the **官员 tab of the §4.5 intel window** (the
+retired S18 modal redesigned into it, 2026-11-03). Entries: the `O` key and
+the 官员 tab itself (the intel menu's item and S14's Officers button retired
+with their surfaces; the former footer row `Fleet · Officers` was removed as
+an intel duplicate, so the S4 footer keeps only `Set Sail · Settings`).
 
-**Entry point (amended 2026-11-03):** S18 is a **modal over S4**, opened by
-the intel menu's 官员 item (§4.5), the `O` key, or S14's Officers button.
-The former footer row (`Fleet · Officers`) is **removed as an intel-menu
-duplicate**: the §4.5 menu is the single mouse path to both panels, so the
-S4 footer keeps only `Set Sail · Settings`. (The original "entry point
-(locked)" rule — footer modals row, not the facility list — is superseded
-by the §4.5 menu; the facility column remains reserved for rows that leave
-S4 for another screen, §4.2.)
+**Table form:** one row per employed officer (`player.officers` → the
+officer roster, `50-*`; sorted by id), with the fixed columns **姓名 name ·
+岗位 post (current post, or idle) · 忠诚 loyalty (§4.5.4) · 日薪 wage** plus
+a switchable stat block — the toggle buttons **属性 / 技能** flip the
+columns between the five §4.12 attributes and the eight player skills +
+the three officer-only skills (medicine/carpentry/cooking). The header row
+names each column; an empty roster renders the `char.no_officers` empty
+state with the tavern hint (§4.4).
 
-```
-+--------------------------------------------------------------+
-| 官员 / Officers           3 / 3 · wages 88g/day   [Close]     |
-+--------------------------------------------------------------+
-| 马特乌斯·阿尔瓦雷斯  Mateus Álvares        [领航员 Navigator]  |
-|   统率 10  航海术 14  战斗 6  导航 16      日薪 30g            |
-|   效果: 侦察半径 +0 · 航行加成 +0%                             |
-|   雇佣于: 里斯本         [解雇 Dismiss]                       |
-+--------------------------------------------------------------+
-| 迭戈·费尔南德斯  Diego Fernández         [水手长 Boatswain]   |
-| ...                                                          |
-+--------------------------------------------------------------+
-| 空位 3/3 · 在酒馆招募新官员                                    |
-+--------------------------------------------------------------+
-```
+**Detail page:** clicking a row opens it (a back button returns to the
+table): the full §4.12 officer card, the post · wage · recruit-port line,
+and the actions — the **four actions** talk / gift / train / appoint
+(`50-*` formulas) plus `Dismiss` (confirm dialog; frees the slot and stops
+the wage from the next day tick). The Phase-5 four-stat line
+(统率/航海术/战斗/导航) and its derived-effect text stay retired with the
+old model.
 
-(Phase-5 wireframe kept for layout reference — Phase 8 replaces the
-per-officer stat line with the §4.12 card bars and adds the post column
-and the four action buttons.)
-
-- **Rows (Phase 8, amended 2026-11-02):** one per employed officer
-  (`player.officers` → the officer roster, `50-*`), rendered with the
-  §4.12 character-card component — the Person model's attribute/skill
-  bars, the **native role** tag, the **post column** (current post, or
-  idle; a prereq-failing post renders prereq-gray + its `gate.*` reason),
-  loyalty, `wage_daily`, the recruit port — plus the **four actions**
-  talk / gift / train / appoint (`50-*` formulas; §4.12.3) and
-  `Dismiss` (confirm dialog; frees the slot and stops the wage from the
-  next day tick). The Phase-5 four-stat line (统率/航海术/战斗/导航) and
-  its derived-effect text are retired with the old model.
 - **Header:** `n / OFFICER_MAX` (**12** since Phase 8, `50-*`; the
   Phase-5 cap was 3) and the total daily wage bill — the number
   that shows up in `20-*` §4.5 ledger step 2.
 - **Port/sea availability (Phase 8):** `appoint` and `Dismiss` are port
   actions (fleet composition changes dock-side, the §4.5.1 promotion
   rule); `talk` / `gift` / `train` work anywhere, each with its own
-  cooldown shown on the row.
+  cooldown shown on the button.
 - **Empty state:** `char.no_officers` plus the tavern hint (`§4.4` is where
   they are hired).
 - **At sea (Phase 8):** `appoint` / `Dismiss` are disabled at sea with
   their reason (port actions, the §4.5.1 promotion rule); the
-  talk / gift / train rows stay usable.
+  talk / gift / train buttons stay usable.
 - No textures; 32px rows (§4.8).
 
 #### 4.6.3 Settings: S1 title entry + S19 settings modal (Phase 5, amended)
@@ -992,11 +976,12 @@ the quest/UI) plus `Buy — 100g` (`tavern.rumor.buy`). Disabled reasons:
 `tavern.rumor.bought`, `tavern.rumor.no_gold`; empty state
 `tavern.rumor.none`.
 
-**Character panel `Quests` tab (S14, Phase 3).** A third tab after the stats
-column shows `char.quests`: one row per active quest with type tag, objective,
-destination (`quest.dest`, always naming the port even if unknown), days left
-(`quest.days_left`), and a `quest.abandon` button that fails it (same −5 rep
-path). Above the rows: `quest.slots` = `n / max` (max 3, or 4 at viscount,
+**The intel window's 委托 tab (§4.5, migrated from the retired S14 tab,
+2026-11-03).** The tab shows `char.quests`: one row per active quest with type
+tag, objective, destination (`quest.dest`, always naming the port even if
+unknown), days left (`quest.days_left`), and a `quest.abandon` button that
+fails it (same −5 rep path). Above the rows: `quest.slots` = `n / max`
+(max 3, or 4 at viscount,
 `70-*` §4.9.2).
 
 ### 4.7.4 Phase-3 `ui_strings.json` inventory (S12/S13/S16)
@@ -1750,7 +1735,8 @@ A **card-external** information layer, opened from any captain entry
   open-dossier action.
 - Strings: `dossier.*` (§4.15).
 
-### 4.12 The unified character card, allocation & the S14 rework
+### 4.12 The unified character card, allocation & the captain view
+      (the retired S14 rework, absorbed into the §4.5 intel window)
 
 #### 4.12.1 `scenes/ui/character_card.tscn` (locked layout)
 
@@ -1811,20 +1797,24 @@ card's attribute tab** at leisure:
 - **skills never allocate** (usage growth + paid training only, `50-*`);
 - points are **deferrable forever** — the badge persists until spent.
 
-#### 4.12.3 Character panel (S14) three tabs + the appointment flow
+#### 4.12.3 The captain view (the intel window's 船长 tab) + the appointment flow
 
-The person side of S14 reorganizes into **three tabs** (Phase 8):
+The retired S14 tabbed panel collapsed into this **single scrollable page**
+(amended 2026-11-03; the person tabs showed the same card on both, and the
+duplication is gone by merging them):
 
-| Tab | Shows |
+| Section | Shows |
 |---|---|
-| **属性 Attributes** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, and the player's **effective-values split** |
-| **技能 Skills + gates** | the eight skill bars with their usage counters, and every locked feature rendered from `data/skill_gates.json` — the one `gate.*` reason renderer (grayed row + threshold + reason) shared by the whole UI |
-| **官员与岗位 Officers & posts** | the officer roster (the §4.6.2 rows with their four actions) and the post table |
+| **§4.12 player card** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, the player's **effective-values split**, then the eight skill bars with their usage counters — ONE card instance, one render |
+| **声望 Reputation** | the six-nation table (`50-*` §4.6) |
+| **未解锁 Locked gates** | every locked feature rendered from `data/skill_gates.json` — the one `gate.*` reason renderer (grayed row + threshold + reason) shared by the whole UI |
 
-The Phase-3 委托 Quests tab is unchanged and keeps its place beside the
-three person tabs.
+The 官员 roster moved to the intel window's 官员 tab (§4.6.2) and the
+Phase-3 委托 Quests list to the 委托 tab (§4.7.3) — the 2026-11-03 intel
+window amendment removed both from the captain page because the window
+hosts them.
 
-**Officer actions (S18 rows; formulas `50-*`):** `talk` (loyalty +1,
+**Officer actions (the 官员 tab's detail page; formulas `50-*`):** `talk` (loyalty +1,
 10-day cooldown), `gift` (200g → loyalty +5; +8 贪婪 / +3 忠厚, 10-day
 cooldown), `train` (the paid-training formula), `appoint` (the post
 table). The **post column** renders prereq-gray + reason through the
@@ -1832,10 +1822,11 @@ same data-driven gates renderer (`officer_posts.json` prereqs ship their
 `gate.*` reasons in the `skill_gates.json` shape). `appoint` / `Dismiss`
 are port actions; `talk` / `gift` / `train` work anywhere (§4.6.2).
 
-**Fleet-panel captain rows (S15):** every non-flagship ship row gains a
+**Fleet-view captain rows (the 船队 tab):** every non-flagship ship row gains a
 **"captain: ___"** line naming its appointed captain (or the
 `officer.post.no_captain` state — the captain-less penalties of `40-*` /
-`50-*` apply), with the appoint shortcut into the S18 post table.
+`50-*` apply), with the appoint shortcut into the 官员 tab's post table
+(§4.6.2).
 
 ### 4.13 Creation screen (S20, Phase 8)
 
@@ -2003,7 +1994,9 @@ Notes pinning the set exactly:
 
 ## 7. Acceptance Criteria
 
-- [ ] Every Phase-1 screen (S1–S9, S14) exists and navigates only along §4.2.
+- [ ] Every Phase-1 screen (S1–S9) exists and navigates only along §4.2; the
+      S14/S15/S18 surfaces live on as the §4.5 intel window's tabs
+      (amended 2026-11-03).
 - [ ] Every Phase-3 screen (S12, S13, S16) exists and navigates only along
       §4.2; the guild/palace hubs open from S4's facility rows and Esc returns.
 - [ ] S17 (Chart) opens with `Tab` from S3, closes with `Esc`/`Tab`, renders

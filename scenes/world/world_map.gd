@@ -19,9 +19,8 @@ const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
-## T18: fleet/cargo panel (read-only at sea, docs/40 §4.4).
-const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
+## The §4.5 intel window (the S14/S15/S18 modals retired into it, 2026-11-03).
+const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 const GameOverScene := preload("res://scenes/ui_shared/gameover_screen.tscn")
 ## Phase 5 task J: the living NPC fleet ecology (docs/60-* §4.1, §4.11.11).
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
@@ -320,10 +319,10 @@ func _ready() -> void:
 	# frame inside the pinned budget.
 	OceanLayersLib.instance()
 
-	# S14 character panel: parent-agnostic modal that owns `C`/Esc (docs/80-* §4.3).
-	CharacterPanelLib.attach_to(self)
-	# T18 fleet/cargo panel: same modal contract, `F`; read-only at sea (§4.4).
-	FleetPanelLib.attach_to(self)
+	# S14 船长 view + fleet view + officers roster: the §4.5 intel window
+	# hosts all three (the 2026-11-03 amendment retired the standalone S14/
+	# S15/S18 modals). Parent-agnostic modal; owns `C`/`O`/`F`/Esc.
+	IntelWindowLib.attach_to(self)
 
 	# T9 signals: day-tick dialogs (weather damage → mutiny → desertion →
 	# greeting, §4.7), the mutiny choice and the S9 game-over overlay.
@@ -2748,14 +2747,12 @@ func _modal_open() -> bool:
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
 		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
 			return true
-	# The S14 character panel is a Control, not a dialog (T16 owns it).
-	var panel := get_node_or_null("CharacterPanelLayer/CharacterPanel")
-	if panel != null and panel.has_method("is_open") and panel.is_open():
-		return true
-	# The T18 fleet panel is the same kind of Control modal (read-only at sea).
-	var fleet_panel := get_node_or_null("FleetPanelLayer/FleetPanel")
-	if fleet_panel != null and fleet_panel.has_method("has_modal") \
-			and fleet_panel.has_modal():
+	# The §4.5 intel window is a Control modal (it joined `modal_overlay`
+	# while open, so the group walk above already covers it; the name probe
+	# keeps a host that attaches inside a CanvasLayer working).
+	var window := get_node_or_null("IntelWindowLayer/IntelWindow")
+	if window != null and window.has_method("has_modal") \
+			and window.has_modal():
 		return true
 	return false
 

@@ -13,7 +13,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const CardLib := preload("res://scenes/ui/character_card.gd")
 const CardScene := preload("res://scenes/ui/character_card.tscn")
 const DossierLib := preload("res://scenes/ui/dossier_panel.gd")
-const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
+## The officers roster view (the retired S18 body, embedded in the intel
+## window since 2026-11-03).
+const RosterScene := preload("res://scenes/ui_shared/officer_roster_view.tscn")
 const PickerScene := preload("res://scenes/world/fleet_picker.tscn")
 const TavernScene := preload("res://scenes/port/tavern_screen.tscn")
 const HudScene := preload("res://scenes/ui_shared/hud.tscn")
@@ -354,13 +356,17 @@ func _test_allocation_flow() -> void:
 func _test_officer_actions_and_posts() -> void:
 	_make_run(0, 10000)
 	CharacterLib.recruit(MATEUS)
-	var panel: Control = OfficersPanelLib.attach_to(self, self)
-	panel.open()
-	_check(panel.is_open() and panel.officer_ids() == [MATEUS],
+	var panel: Control = RosterScene.instantiate()
+	add_child(panel)
+	panel.rebuild()
+	_check(panel.officer_ids() == [MATEUS],
 		"S18 lists the employed officer")
-	var card: Control = panel.row_widget(MATEUS)["card"]
+	# Click the row → the detail page (the table itself is card-free now).
+	panel.open_detail(MATEUS)
+	var card: Control = panel.get_node(
+		"Body/Detail/DetailCardScroll/DetailCard")
 	_check(card != null and (card.rendered_data() as Dictionary).has("skills"),
-		"the officer row renders the §4.12 card (compact)")
+		"the detail page renders the §4.12 officer card (full)")
 	# Talk: +1 loyalty, then the cooldown grays the row's button.
 	var actions: Dictionary = panel.action_buttons(MATEUS)
 	_check(actions.has("talk") and actions.has("gift")
@@ -418,8 +424,7 @@ func _test_officer_actions_and_posts() -> void:
 	_check(not (pilot["button"] as Button).disabled
 		and str(pilot["reason"]).is_empty(),
 		"an appointable row carries no reason (Mateus passes navigation ≥ 20)")
-	panel.close()
-	_check(not panel.is_open(), "the panel closes")
+	panel.queue_free()
 	_drop(panel)
 
 
@@ -429,9 +434,11 @@ func _test_captain_seat_rows() -> void:
 	_make_run(0, 100000)
 	CharacterLib.recruit(MATEUS)
 	GameState.fleet.append(FleetLib.new_ship("caravel", 15))
-	var panel: Control = OfficersPanelLib.attach_to(self, self)
-	panel.open()
+	var panel: Control = RosterScene.instantiate()
+	add_child(panel)
+	panel.rebuild()
 	# Mateus (seamanship 18) fails the captain prereq: the seat grays with it.
+	panel.open_detail(MATEUS)
 	var appoint: Button = panel.action_buttons(MATEUS)["appoint"]
 	appoint.pressed.emit()
 	var rows: Array = panel.appoint_dialog().rows()
@@ -444,7 +451,7 @@ func _test_captain_seat_rows() -> void:
 	_check((seat["button"] as Button).disabled
 		and str(seat["reason"]).contains("25"),
 		"the failing captain seat grays with its seamanship ≥ 25 reason")
-	panel.close()
+	panel.queue_free()
 	_drop(panel)
 
 	# An eligible officer takes the seat; the next dialog shows the occupancy.
@@ -479,8 +486,10 @@ func _test_captain_seat_rows() -> void:
 	_check(not SkillsLib.appoint(eligible2, "captain", "caravel"),
 		"the model refuses a second captain on the same ship (§4.5.2)")
 	CharacterLib.recruit(eligible2)
-	panel = OfficersPanelLib.attach_to(self, self)
-	panel.open()
+	panel = RosterScene.instantiate()
+	add_child(panel)
+	panel.rebuild()
+	panel.open_detail(eligible2)
 	appoint = panel.action_buttons(eligible2)["appoint"]
 	appoint.pressed.emit()
 	rows = panel.appoint_dialog().rows()
@@ -490,7 +499,7 @@ func _test_captain_seat_rows() -> void:
 			_check(str(row["reason"]).contains(
 				I18n.t(DataLoader.get_officer(eligible)["name"])),
 				"an occupied seat names its holder (%s)" % str(row["reason"]))
-	panel.close()
+	panel.queue_free()
 	_drop(panel)
 
 
@@ -552,14 +561,17 @@ func _test_three_entry_card_identity() -> void:
 		"the recruit dialog renders the §4.12 officer card")
 	CharacterLib.recruit(MATEUS)
 	tavern.close_recruit_dialog()
-	var panel: Control = OfficersPanelLib.attach_to(self, self)
-	panel.open()
-	var row_card: Control = panel.row_widget(MATEUS)["card"]
+	var panel: Control = RosterScene.instantiate()
+	add_child(panel)
+	panel.rebuild()
+	panel.open_detail(MATEUS)
+	var row_card: Control = panel.get_node(
+		"Body/Detail/DetailCardScroll/DetailCard")
 	_check(str(row_card.rendered_data()["person_id"]) == MATEUS,
-		"the S18 row renders the same officer card data")
+		"the S18 detail renders the same officer card data")
 	_check(_data_only(row_card.rendered_data()) == recruit_data,
 		"the same OFFICER's card is identical from the recruit dialog and S18")
-	panel.close()
+	panel.queue_free()
 	_drop(panel)
 	_drop(tavern)
 
@@ -640,38 +652,38 @@ func _test_dossier_tiers() -> void:
 	_drop(dossier)
 
 
-# --- 9. The S14 three-tab rework (§4.12.3) -----------------------------------
+# --- 9. The captain view (§4.12 amended 2026-11-03: merged single page) -----
 
 func _test_s14_tabs() -> void:
 	_make_run(2)
 	CharacterLib.recruit(MATEUS)
 	SkillsLib.appoint(MATEUS, "pilot")
-	var panel_script := load("res://scenes/ui_shared/character_panel.gd")
-	var s14: Control = panel_script.attach_to(self)
-	s14.open()
-	_check(s14.is_open(), "S14 opens (the C/Esc contract unchanged)")
-	_check(s14.active_tab() == "attributes", "the attributes tab is default")
-	var card: Control = s14.get_node(
-		"Center/Panel/Margin/Body/AttributesPanel/CardHost/CardScroll/PlayerCard")
-	_check(card != null, "the player card hosts on the attributes tab")
+	var view_script := load("res://scenes/ui_shared/captain_view.gd")
+	var view: Control = (load("res://scenes/ui_shared/captain_view.tscn")
+		as PackedScene).instantiate()
+	add_child(view)
+	view.refresh()
+	var card: Control = view.player_card()
+	_check(card != null and card.visible,
+		"the captain view renders the player card (the merged single page)")
 	_check(card.section("Allocation") != null,
-		"the attributes tab carries the allocation steppers (§4.12.2)")
-	# Stage a draft, then switch to the skills tab: the same card instance
-	# moves and the draft survives the refresh.
+		"the page carries the allocation steppers (§4.12.2)")
+	_check(card.section("Skills") != null,
+		"the SAME page also carries the skill bars — no attribute/skill "
+		+ "duplication from the retired tab split (§4.12 amendment)")
+	# Stage a draft, then refresh: the draft survives the rebuild (§4.12.2).
 	var luck_plus: Button = card.section("Attributes/Attr_luck/Plus")
 	luck_plus.pressed.emit()
-	s14.select_tab("skills")
-	_check(s14.active_tab() == "skills", "the skills tab selects")
-	var moved: Control = s14.get_node(
-		"Center/Panel/Margin/Body/SkillsPanel/CardScroll/PlayerCard")
-	_check(moved == card,
-		"the SAME card instance feeds both person tabs (identical data)")
-	_check(moved.alloc_draft() == {"luck": 1},
-		"an in-progress draft survives the tab switch (§4.12.2)")
-	var gates: Container = s14.get_node(
-		"Center/Panel/Margin/Body/SkillsPanel/Scroll/Rows")
+	_check(card.alloc_draft() == {"luck": 1}, "the stepper stages the draft")
+	view.refresh()
+	_check(view.player_card().alloc_draft() == {"luck": 1},
+		"an in-progress draft survives the view refresh (§4.12.2)")
+	var reputation: Container = view.get_node("Body/ReputationRows")
+	_check(reputation.get_child_count() == DataLoader.nations_list.size() * 2,
+		"the reputation table renders all six nations")
+	var gates: Container = view.get_node("Body/GateScroll/GateRows")
 	_check(gates.get_child_count() == DataLoader.skill_gates_list.size(),
-		"the skills tab renders every skill_gates row (§4.12.3)")
+		"the page renders every skill_gates row (§4.12.3)")
 	var first_gate: Control = gates.get_child(0)
 	_check(first_gate.get_node("Reason") != null,
 		"each gate row renders its reason line (the shared renderer)")
@@ -680,22 +692,23 @@ func _test_s14_tabs() -> void:
 		and gate_name.text == I18n.t(DataLoader.skill_gates_list[0]["name"]),
 		"the gate row renders the localized name, never the raw feature_id "
 		+ "(%s)" % (gate_name.text if gate_name != null else "-"))
-	s14.select_tab("officers")
-	var roster: Container = s14.get_node(
-		"Center/Panel/Margin/Body/OfficersTabPanel/Scroll/Rows")
-	_check(roster.get_child_count() == 1,
-		"the officers tab lists the employed officer")
-	var officer_row: Control = roster.get_child(0)
-	_check(officer_row.get_node("Post") != null,
-		"the officers tab carries the post column (§4.12.3)")
-	_check((officer_row.get_node("Post") as Label).text
-		== I18n.t_key("officer.post.pilot"),
-		"the post column names the current post")
-	s14.select_tab("quests")
-	_check(s14.active_tab() == "quests", "the Phase-3 quests tab is kept")
-	s14.close()
-	_check(not s14.is_open(), "S14 closes")
-	s14.queue_free()
+	view.queue_free()
+
+	# The officers roster: the table lists the employed officer with the post
+	# column (the retired S14 officers tab merged into the intel window).
+	var roster: Control = RosterScene.instantiate()
+	add_child(roster)
+	roster.rebuild()
+	_check(roster.officer_ids() == [MATEUS],
+		"the roster lists the employed officer")
+	var officer_row: Control = roster.get_node(
+		"Body/TableScroll/Table/Officer_%s" % MATEUS)
+	officer_row.call("_on_row_pressed", MATEUS)
+	_check(officer_row != null
+		and (officer_row.get_node("Line/Post") as Label).text
+			== I18n.t_key("officer.post.pilot"),
+		"the post column names the current post (§4.12.3)")
+	roster.queue_free()
 
 
 # --- 10. The HUD badge (§4.12.2, amended 2026-11-03) ------------------------
@@ -722,18 +735,17 @@ func _test_hud_badge() -> void:
 	GameState.player["alloc_pending"] = 0
 	hud._apply_alloc_badge()
 	_check(not badge.visible, "the badge clears when pending hits 0")
-	# The intel menu's 船长 item opens (and toggles) the S14 panel on the host
-	# the HUD resolves (`_panel_host()` — the scene root, where the host's own
-	# `C` attach also lands; idempotent reuse, §4.5).
-	hud.press_intel_item(hud.INTEL_CAPTAIN)
-	var panel: Node = hud._panel_host().get_node_or_null(
-		"CharacterPanelLayer/CharacterPanel")
-	_check(panel != null and panel.is_open(),
-		"the intel 船长 item opens the S14 panel (§4.12.2)")
-	hud.press_intel_item(hud.INTEL_CAPTAIN)
-	_check(not panel.is_open(), "the item toggles the panel closed")
+	# The intel button opens the dedicated window on the host the HUD resolves
+	# (`_panel_host()` — the scene root; the window attach is idempotent, §4.5).
+	hud.intel_button().pressed.emit()
+	var window: Node = hud.intel_window()
+	_check(window != null and window.is_open(),
+		"the intel button opens the intel window (§4.12.2)")
+	hud.intel_button().pressed.emit()
+	_check(not window.is_open(), "the button toggles the window closed")
 	_check(hud.get_node_or_null("TopRow/CharacterButton") == null,
 		"the top-bar character button is removed (§4.5 amendment)")
+	window.queue_free()
 	_drop(hud)
 	_drop(host)
 

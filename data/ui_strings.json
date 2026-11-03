@@ -60,6 +60,26 @@
     "zh": "情报",
     "en": "Intel"
   },
+  "intel.hint": {
+    "zh": "Esc 关闭 · C/O/F 切到 船长/官员/船队",
+    "en": "Esc closes · C/O/F switch to Captain/Officers/Fleet"
+  },
+  "intel.chart.note": {
+    "zh": "海图是全屏视图:探索海域、已知港口、风与洋流图层。",
+    "en": "The chart is a fullscreen view: explored waters, known ports, wind and current layers."
+  },
+  "intel.open_chart": {
+    "zh": "打开海图 (Tab)",
+    "en": "Open the chart (Tab)"
+  },
+  "intel.officers.name": {
+    "zh": "姓名",
+    "en": "Name"
+  },
+  "intel.officers.wage": {
+    "zh": "日薪",
+    "en": "Wage"
+  },
   "ui.saved": {
     "zh": "已保存。",
     "en": "Game saved."

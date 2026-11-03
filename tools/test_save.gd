@@ -919,16 +919,16 @@ func _test_slot_dialog() -> void:
 		modal_check.queue_free()
 	_detach_hud()
 
-	# The S14 character panel is modal but not in `modal_overlay`: F5 must not
-	# open a save dialog underneath it either.
+	# The §4.5 intel window is modal but joins `modal_overlay` only while
+	# open: F5 must not open a save dialog underneath it either.
 	_make_rich_run()
-	var panel_script := load("res://scenes/ui_shared/character_panel.gd")
+	var panel_script := load("res://scenes/ui_shared/intel_window.gd")
 	var panel: Control = panel_script.attach_to(self)
 	panel.toggle()
-	_check(panel.is_open(), "the S14 panel is open")
-	_check(SaveSystem._modal_open(), "the open character panel counts as a modal")
+	_check(panel.is_open(), "the intel window is open")
+	_check(SaveSystem._modal_open(), "the open intel window counts as a modal")
 	SaveSystem._unhandled_input(_key_event("quick_save"))
-	_check(_confirm_dialogs().is_empty(), "F5 is ignored behind the character panel")
+	_check(_confirm_dialogs().is_empty(), "F5 is ignored behind the intel window")
 	panel.close()
 	remove_child(panel)
 	panel.queue_free()

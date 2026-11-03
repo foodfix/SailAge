@@ -23,8 +23,8 @@ extends Node
 
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
-const FleetPanelScene := preload("res://scenes/ui_shared/fleet_panel.tscn")
-const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
+const FleetViewScene := preload("res://scenes/ui_shared/fleet_view.tscn")
+const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 const PortScreenScene := preload("res://scenes/port/port_screen.tscn")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 
@@ -458,22 +458,20 @@ func _test_panel() -> void:
 	GameState.fleet[0]["durability"] = 45  # half-damaged → WARN bar
 	GameState.gold = 5000
 
-	var panel: Control = FleetPanelScene.instantiate()
+	var panel: Control = FleetViewScene.instantiate()
 	add_child(panel)
 	await get_tree().process_frame
 
-	_check(panel.has_method("attach_to"), "the panel offers attach_to() (host hook)")
-	_check(panel.has_method("has_modal") and panel.has_method("is_read_only"),
-		"the panel exposes has_modal()/is_read_only() for hosts")
+	_check(panel.has_method("rebuild"), "the view offers rebuild() (tab hook)")
+	_check(panel.has_method("has_dialog") and panel.has_method("is_read_only"),
+		"the view exposes has_dialog()/is_read_only() for the window")
 
-	panel.open()
+	panel.rebuild()
 	await get_tree().process_frame
-	_check(panel.is_open(), "open() shows the panel")
-	_check(get_tree().get_nodes_in_group("modal_overlay").has(panel),
-		"an open panel joins modal_overlay (§6)")
-	_check(panel.has_modal(), "has_modal() is true while open")
+	_check(panel.is_active(),
+		"the standalone view is active (a tab child of the intel window)")
 
-	var rows: VBoxContainer = panel.get_node("Center/Panel/Margin/Body/Scroll/Rows")
+	var rows: VBoxContainer = panel.get_node("Body/Scroll/Rows")
 	_check(rows.get_child_count() == 2,
 		"one row per hull in GameState.fleet (got %d)" % rows.get_child_count())
 
@@ -538,11 +536,11 @@ func _test_panel() -> void:
 	_check(str(GameState.fleet[0]["ship_type_id"]) == "latin",
 		"the panel promoted fleet[1] to fleet[0] (got %s)"
 		% str(GameState.fleet[0]["ship_type_id"]))
-	_check(panel.get_node("Center/Panel/Margin/Body/Scroll/Rows").get_child_count() == 2,
+	_check(panel.get_node("Body/Scroll/Rows").get_child_count() == 2,
 		"the panel rebuilt after promotion")
 
 	# Header: fleet count n/5 + fleet_free.
-	var summary: Label = panel.get_node("Center/Panel/Margin/Body/Summary")
+	var summary: Label = panel.get_node("Body/Summary")
 	_check(summary.text.contains("/%d" % FleetLib.FLEET_MAX),
 		"the header shows the n/5 fleet count: %s" % summary.text)
 	_check(summary.text.contains(str(FleetLib.fleet_free())),
@@ -558,7 +556,7 @@ func _test_panel() -> void:
 	_check(jettison != null, "the wine stack has its own Jettison button")
 	jettison.pressed.emit()
 	await get_tree().process_frame
-	_check(panel.has_modal(), "jettison opens a confirm (§4.7)")
+	_check(panel.has_dialog(), "jettison opens a confirm (§4.7)")
 	_check(FleetLib.held("wine") == 40,
 		"nothing is dropped before the player confirms")
 	var confirm: Control = panel.get_node("ConfirmDialog")
@@ -597,7 +595,7 @@ func _test_panel() -> void:
 		"Jettison is disabled at sea")
 	_check(not sea_jettison.tooltip_text.is_empty(),
 		"a disabled Jettison states a reason tooltip (%s)" % sea_jettison.tooltip_text)
-	var mode_note: Label = panel.get_node("Center/Panel/Margin/Body/ModeNote")
+	var mode_note: Label = panel.get_node("Body/ModeNote")
 	_check(mode_note.visible and not mode_note.text.is_empty(),
 		"the panel explains the at-sea read-only mode (%s)" % mode_note.text)
 	# The click cannot act even if it somehow fires.
@@ -613,7 +611,7 @@ func _test_panel() -> void:
 	await get_tree().process_frame
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	var title: Label = panel.get_node("Center/Panel/Margin/Body/Title")
+	var title: Label = panel.get_node("Body/Title")
 	_check(title.text == I18n.t_key("fleet.title") and title.text == "船队",
 		"the panel title rebinds on locale_changed (%s)" % title.text)
 	var zh_promote: Button = panel.promote_button(1)
@@ -622,7 +620,7 @@ func _test_panel() -> void:
 		% ("-" if zh_promote == null else zh_promote.text))
 	I18n.set_locale("en")
 	await get_tree().process_frame
-	_check(panel.get_node("Center/Panel/Margin/Body/Title").text == I18n.t_key("fleet.title"),
+	_check(panel.get_node("Body/Title").text == I18n.t_key("fleet.title"),
 		"the panel returns to en cleanly")
 
 	# No raw "<key>" anywhere in the rendered panel (§6), and no unsubstituted
@@ -641,7 +639,7 @@ func _test_panel() -> void:
 	GameState.fleet = [{"ship_type_id": "caravel", "cargo": null}, "junk", null]
 	panel.rebuild()
 	await get_tree().process_frame
-	_check(panel.get_node("Center/Panel/Margin/Body/Scroll/Rows").get_child_count() == 3,
+	_check(panel.get_node("Body/Scroll/Rows").get_child_count() == 3,
 		"the panel renders a corrupted fleet without crashing (3 rows)")
 	_check(panel.row_widget(1).is_empty() == false,
 		"a non-dictionary fleet entry still gets a row widget")
@@ -649,46 +647,24 @@ func _test_panel() -> void:
 	# §4.1 shape and would log on every repaint otherwise.
 	_make_fleet(["caravel", "latin"])
 
-	# Esc closes the panel (S4's back edge stays Set Sail).
-	var esc := InputEventAction.new()
-	esc.action = "back"
-	esc.pressed = true
-	panel._unhandled_input(esc)
-	_check(not panel.is_open(), "Esc closes the fleet panel")
-	_check(not get_tree().get_nodes_in_group("modal_overlay").has(panel),
-		"a closed panel leaves modal_overlay")
-	# Closing while a jettison confirm is up must take the confirm with it.
+	# Closing while a jettison confirm is up must take the confirm with it —
+	# the window's close cancels the view's pending confirm (§6).
 	GameState.fleet[0]["cargo"] = {"wine": 5}
-	panel.open()
+	var window: Control = IntelWindowLib.attach_to(panel.get_parent()
+		if panel.get_parent() != null else panel)
+	window.open_tab("fleet")
 	await get_tree().process_frame
 	(panel.jettison_button(0, "cargo", "wine") as Button).pressed.emit()
 	await get_tree().process_frame
 	_check((panel.get_node("ConfirmDialog") as Control).is_open(),
-		"the confirm is up before the panel closes")
-	panel.close()
+		"the confirm is up before the window closes")
+	_check(window.has_modal(), "the window knows a nested dialog is up")
+	window.close()
 	await get_tree().process_frame
 	_check(not (panel.get_node("ConfirmDialog") as Control).is_open(),
-		"closing the panel dismisses its pending confirm")
-	_check(not panel.has_modal(), "no modal is left behind by close()")
-
-	# `F` toggles it, like `C` for S14 (docs/80 §4.3).
-	var fleet_key := InputEventAction.new()
-	fleet_key.action = "toggle_fleet"
-	fleet_key.pressed = true
-	panel._unhandled_input(fleet_key)
-	_check(panel.is_open(), "the toggle_fleet action opens the panel")
-	panel._unhandled_input(fleet_key)
-	_check(not panel.is_open(), "the toggle_fleet action closes the panel again")
-
-	# F must not stack the panel on top of another open modal (§6).
-	var blocker := ColorRect.new()
-	blocker.size = Vector2(1, 1)
-	add_child(blocker)
-	blocker.add_to_group("modal_overlay")
-	panel._unhandled_input(fleet_key)
-	_check(not panel.is_open(), "F cannot open the panel behind another modal")
-	blocker.queue_free()
-	panel.queue_free()
+		"closing the window dismisses the view's pending confirm")
+	_check(not window.has_modal(), "no modal is left behind by close()")
+	window.queue_free()
 	await get_tree().process_frame
 
 	# --- Attach + open from the port hub (S4) ---------------------------
@@ -707,20 +683,21 @@ func _test_panel() -> void:
 		"the port hub footer no longer carries a Fleet row (§4.5 amendment)")
 	var attached: Control = hub.open_fleet_panel()
 	await get_tree().process_frame
-	_check(attached != null and attached.is_open(),
-		"open_fleet_panel() opens the fleet panel over S4")
-	_check(hub.has_modal(), "the port hub knows the panel is a modal")
-	# The `F` action reaches the panel through the real input chain
+	var hub_window: Control = IntelWindowLib._find_window(hub)
+	_check(attached != null and hub_window != null and hub_window.is_open(),
+		"open_fleet_panel() opens the intel window's 船队 tab over S4")
+	_check(hub.has_modal(), "the port hub knows the window is a modal")
+	# The `F` action reaches the window through the real input chain
 	# (`push_input` → `_unhandled_input`), not just a direct call.
-	attached.close()
+	hub_window.close()
 	await get_tree().process_frame
 	var key := InputEventAction.new()
 	key.action = "toggle_fleet"
 	key.pressed = true
 	get_viewport().push_input(key)
 	await get_tree().process_frame
-	_check(attached.is_open(),
-		"the toggle_fleet action opens the panel from the port hub")
+	_check(hub_window.is_open() and hub_window.active_tab() == "fleet",
+		"the toggle_fleet action opens the window on the 船队 tab")
 	# Esc while the panel is up closes the panel, not the harbour (§4.3).
 	var hub_esc := InputEventAction.new()
 	hub_esc.action = "back"
@@ -730,14 +707,14 @@ func _test_panel() -> void:
 	_check(GameState.current_port == "lisbon",
 		"Esc behind the fleet panel does not leave harbour (current_port %s)"
 		% str(GameState.current_port))
-	# Locale toggle: the footer row is gone, so the rebind contract lives on
-	# the panel itself (the panel relabels through its own locale handler).
+	# Locale toggle: the rebind contract lives on the view (its own handler,
+	# active while the window shows the tab).
 	I18n.set_locale("zh")
 	await get_tree().process_frame
-	_check(attached.is_open(),
-		"the fleet panel stays open across a locale toggle (its own rebind)")
+	_check(hub_window.is_open(),
+		"the intel window stays open across a locale toggle")
 	I18n.set_locale("en")
-	attached.close()
+	hub_window.close()
 	await get_tree().process_frame
 	hub.queue_free()
 	await get_tree().process_frame
@@ -749,21 +726,24 @@ func _test_panel() -> void:
 		var world: Node = world_scene.instantiate()
 		add_child(world)
 		await get_tree().process_frame
-		var sea_panel: Control = world.get_node_or_null("FleetPanelLayer/FleetPanel")
-		_check(sea_panel != null,
-			"the world map attaches the fleet panel (S3 → S15)")
-		if sea_panel != null:
+		var sea_window: Control = world.get_node_or_null(
+			"IntelWindowLayer/IntelWindow")
+		_check(sea_window != null,
+			"the world map attaches the intel window (S3 → §4.5)")
+		if sea_window != null:
 			GameState.current_port = null
-			sea_panel.open()
+			sea_window.open_tab("fleet")
 			await get_tree().process_frame
-			_check(sea_panel.is_read_only(),
-				"the at-sea panel is read-only (§4.4, §6)")
+			var sea_panel: Control = world.get_node_or_null(
+				"IntelWindowLayer/IntelWindow/Center/Panel/Margin/Body/Content/FleetView")
+			_check(sea_panel != null and sea_panel.is_read_only(),
+				"the at-sea fleet view is read-only (§4.4, §6)")
 			_check(world.has_method("_modal_open") and world._modal_open(),
-				"an open fleet panel freezes world-map input (§6)")
-			sea_panel.close()
+				"an open intel window freezes world-map input (§6)")
+			sea_window.close()
 			await get_tree().process_frame
 			_check(not world._modal_open(),
-				"closing the panel unfreezes the world map")
+				"closing the window unfreezes the world map")
 		world.queue_free()
 		await get_tree().process_frame
 
@@ -806,14 +786,14 @@ func _test_stat_block() -> void:
 	GameState.gold = 5000
 	GameState.current_port = "lisbon"
 
-	var panel: Control = FleetPanelScene.instantiate()
+	var panel: Control = FleetViewScene.instantiate()
 	add_child(panel)
 	await get_tree().process_frame
-	panel.open()
+	panel.rebuild()
 	await get_tree().process_frame
 
 	var rows: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Scroll/Rows"
+		"Body/Scroll/Rows"
 	)
 	_check(rows.get_child_count() == 2,
 		"one row per hull; the totals row lives outside the list (got %d)"
@@ -895,7 +875,7 @@ func _test_stat_block() -> void:
 
 	# The fleet totals row: pooled supplies, combined days, effective speed.
 	var totals: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Totals"
+		"Body/Totals"
 	)
 	_check(totals.get_child_count() == 2,
 		"the totals row renders a title line and a supplies line")
@@ -934,15 +914,15 @@ func _test_stat_block() -> void:
 	I18n.set_locale("zh")
 	await get_tree().process_frame
 	var zh_rows: VBoxContainer = panel.get_node(
-		"Center/Panel/Margin/Body/Scroll/Rows"
+		"Body/Scroll/Rows"
 	)
 	_check((zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text
 		== I18n.fmt("fleet.stat.crew", {"crew": 15, "max": 45}),
 		"the crew line rebinds to zh (%s)"
 		% (zh_rows.get_child(0).get_node("Stats/CrewLine/Crew") as Label).text)
-	_check((panel.get_node("Center/Panel/Margin/Body/Totals/TitleRow/Title")
+	_check((panel.get_node("Body/Totals/TitleRow/Title")
 		as Label).text == "船队合计", "the totals title rebinds to zh (%s)"
-		% (panel.get_node("Center/Panel/Margin/Body/Totals/TitleRow/Title")
+		% (panel.get_node("Body/Totals/TitleRow/Title")
 			as Label).text)
 	I18n.set_locale("en")
 	await get_tree().process_frame
@@ -960,10 +940,10 @@ func _test_stat_block() -> void:
 	GameState.fleet = [{"ship_type_id": "caravel", "cargo": null}, "junk", null]
 	panel.rebuild()
 	await get_tree().process_frame
-	_check(panel.get_node("Center/Panel/Margin/Body/Scroll/Rows")
+	_check(panel.get_node("Body/Scroll/Rows")
 		.get_child_count() == 3,
 		"the stat block renders a corrupted fleet without crashing")
-	_check(panel.get_node("Center/Panel/Margin/Body/Totals")
+	_check(panel.get_node("Body/Totals")
 		.get_child_count() == 2,
 		"the totals row still renders for a corrupted fleet")
 

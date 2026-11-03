@@ -42,15 +42,13 @@ const BountyLib := preload("res://scripts/quests/bounty.gd")
 ## The sailing gate + days-of-supply formula live in the sim (`20-*` §4.10,
 ## §4.11.2); S4 only asks.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
-const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
-## T18: the fleet/cargo panel is a parent-agnostic modal, like S14; the port hub
-## and the world map attach it and offer a row / the `F` key.
-const FleetPanelLib := preload("res://scenes/ui_shared/fleet_panel.gd")
+## The §4.5 intel window hosts the 船长/官员/船队 views (the S14/S15/S18
+## modals retired into it, 2026-11-03); the `C`/`O`/`F` keys and the hub's
+## open_* methods land on its tabs.
+const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 ## Phase-5: the Set-Sail provisioning prompt (docs/80-* §4.6.1). A modal over
 ## S4, opened by the Set Sail button **and** by `ESC` (§4.3, `20-*` §4.11.2).
 const ProvisionsLib := preload("res://scenes/port/provisions_dialog.gd")
-## Phase-5: the officers roster panel (S18, docs/80-* §4.6.2).
-const OfficersPanelLib := preload("res://scenes/port/officers_panel.gd")
 ## Phase-5: the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic
 ## density dial, opened from this hub's footer row.
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
@@ -184,14 +182,10 @@ func _ready() -> void:
 	_port_id = _read_current_port()
 	_bind()
 
-	# S14 over S4 (docs/80-* §4.3 "S3/S4 | C"). Parent-agnostic modal.
-	CharacterPanelLib.attach_to(self)
-	# T18: the fleet/cargo panel (same modal contract; `F`, or the Fleet button).
-	FleetPanelLib.attach_to(self)
-	# Phase-5: the Set-Sail provisioning prompt (§4.6.1) and the S18 officers
-	# roster (§4.6.2) — both modals over S4, both parent-agnostic.
+	# The §4.5 intel window over S4 (docs/80-* §4.3 "S3/S4 | C/O/F"). The
+	# Set-Sail provisioning prompt (§4.6.1) stays its own modal.
 	ProvisionsLib.attach_to(self, self)
-	OfficersPanelLib.attach_to(self, self)
+	IntelWindowLib.attach_to(self)
 	SettingsPanelLib.attach_to(self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -252,16 +246,14 @@ func has_modal() -> bool:
 	for node in get_tree().get_nodes_in_group("modal_overlay"):
 		if node is CanvasItem and (node as CanvasItem).is_visible_in_tree():
 			return true
-	for panel_name in ["ProvisionsDialog", "OfficersPanel", "SettingsPanel"]:
+	for panel_name in ["ProvisionsDialog", "SettingsPanel"]:
 		var extra := get_node_or_null(panel_name)
 		if extra != null and extra.has_method("has_modal") and extra.has_modal():
 			return true
-	var panel := get_node_or_null("CharacterPanel")
-	if panel != null and panel.has_method("is_open") and panel.is_open():
-		return true
-	var fleet_panel := get_node_or_null("FleetPanel")
-	if fleet_panel != null and fleet_panel.has_method("has_modal") \
-			and fleet_panel.has_modal():
+	# The §4.5 intel window is a Control modal (in the group while open; the
+	# name probe keeps a CanvasLayer-attached window working).
+	var window := get_node_or_null("IntelWindow")
+	if window != null and window.has_method("has_modal") and window.has_modal():
 		return true
 	return false
 
@@ -426,21 +418,22 @@ func open_facility(facility_id: String) -> bool:
 	return true
 
 
-## Opens the T18 fleet/cargo panel (promote + jettison, docs/40 §4.4/§6). The
-## panel is a modal over S4, same contract as the S14 character panel.
-## Returns the panel (null only if `fleet_panel.tscn` failed to load).
+## Opens the intel window's 船队 tab (promote + jettison, docs/40 §4.4/§6 —
+## the S15 modal retired into the §4.5 window, 2026-11-03). Returns the fleet
+## view (null only if the window scene failed to load).
 func open_fleet_panel() -> Control:
-	var panel := get_node_or_null("FleetPanel")
-	if panel == null:
-		panel = FleetPanelLib.attach_to(self)
-	if panel != null and panel.has_method("open"):
-		panel.open()
-	return panel
+	var window := IntelWindowLib.attach_to(self)
+	if window != null and window.has_method("open_tab"):
+		window.call("open_tab", "fleet")
+	return fleet_panel()
 
 
-## The attached fleet panel (tests / hosts), or null.
+## The fleet view inside the intel window (tests / hosts), or null.
 func fleet_panel() -> Control:
-	return get_node_or_null("FleetPanel")
+	var window := IntelWindowLib._find_window(self)
+	if window == null:
+		return null
+	return window.get_node_or_null("Center/Panel/Margin/Body/Content/FleetView")
 
 
 ## Opens the Set-Sail provisioning prompt (docs/80-* §4.6.1) — the S4 → S3 edge.
@@ -464,31 +457,34 @@ func provisions_dialog() -> Control:
 	return get_node_or_null("ProvisionsDialog")
 
 
-## Opens the S18 officers panel (docs/80-* §4.6.2, amended 2026-11-03).
-## The `O` key, the §4.5 intel menu's 官员 item and S14's Officers button
-## all reach the panel through this method (the footer button was removed
-## as a menu duplicate).
+## Opens the intel window's 官员 tab (docs/80-* §4.6.2, amended 2026-11-03 —
+## the S18 modal retired into the §4.5 window). The `O` key and the window's
+## 官员 tab both reach the roster through this method. Returns the roster view.
 func open_officers_panel() -> Control:
-	var panel := get_node_or_null("OfficersPanel")
-	if panel == null:
-		panel = OfficersPanelLib.attach_to(self, self)
-	if panel != null and panel.has_method("open"):
-		panel.open_on(self)
-	return panel
+	var window := IntelWindowLib.attach_to(self)
+	if window != null and window.has_method("open_tab"):
+		window.call("open_tab", "officers")
+	return officers_panel()
 
 
-## `O` on S4 toggles the officers panel (§4.3).
+## `O` on S4 toggles the intel window at the 官员 tab (§4.3).
 func toggle_officers_panel() -> void:
-	var panel := get_node_or_null("OfficersPanel")
-	if panel != null and panel.has_method("is_open") and panel.is_open():
-		panel.close()
+	var window := IntelWindowLib._find_window(self)
+	if window != null and window.has_method("is_open") 			and window.is_open() \
+			and window.has_method("active_tab") \
+			and window.active_tab() == "officers":
+		window.close()
 		return
 	open_officers_panel()
 
 
-## The attached officers panel (tests / hosts), or null.
+## The officers roster view inside the intel window (tests / hosts), or null.
 func officers_panel() -> Control:
-	return get_node_or_null("OfficersPanel")
+	var window := IntelWindowLib._find_window(self)
+	if window == null:
+		return null
+	return window.get_node_or_null(
+		"Center/Panel/Margin/Body/Content/OfficerRosterView")
 
 
 ## Opens the S19 settings modal (docs/80-* §4.6.3) — the sea-traffic density

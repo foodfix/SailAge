@@ -182,7 +182,7 @@ static func _current_scene() -> Node:
 
 
 ## Instances `duel_modal.tscn` under `host`, following the modal convention of
-## `scenes/ui_shared/fleet_panel.gd`: a `Control` host gets the modal as a
+## `scenes/ui_shared/fleet_view.gd`: a `Control` host gets the modal as a
 ## child; any other host (the S10 screen's `Node2D` world, a `CanvasLayer`
 ## consumer) gets it inside a dedicated `CanvasLayer` so it neither inherits a
 ## camera transform nor collapses to a zero-size rect.

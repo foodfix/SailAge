@@ -1,158 +1,105 @@
+class_name OfficerRosterView
 extends Control
-## Officers panel (S18, the roster detail view) — docs/80-UI-UX.md §4.6.2
-## (Phase-8 amendment) and §4.12.3; docs/50-* §4.5.
+## The 官员 view — docs/80-UI-UX.md §4.6.2 (amended 2026-11-03: the retired S18
+## modal redesigned into this table + detail view, embedded as the intel
+## window's 官员 tab).
 ##
-## One row per employed officer, sorted by id. The Phase-5 four-stat line and
-## its derived-effect text are RETIRED with the old model (§4.6.2): each row
-## renders the §4.12 character-card component in compact mode (attribute /
-## skill bars, native-role tag, loyalty + current post in the relation block)
-## plus the post column, `wage_daily`, the recruit port, the **four actions**
-## talk / gift / train / appoint and `Dismiss`:
-##   * talk  — loyalty +1, 10-day cooldown (`SkillsLib.talk`);
-##   * gift  — 200g → +5 / greedy +8 / honest +3, 10-day cooldown
-##     (`SkillsLib.gift`);
-##   * train — the §4.3.4 paid-training formula against the officer's native
-##     main skill, cap 60, fee from `SkillsLib.training_price` (the player's
-##     level and INT own the fee);
-##   * appoint — the post table (`data/officer_posts.json`), port-only,
-##     prereq-gray with its `gate.requires` reason; the captain seat carries
-##     a ship picker row per escort ship beyond the flagship;
-##   * Dismiss — port-only, confirm dialog (the shared one-shot funnel).
+## **Table form:** one row per employed officer, sorted by id, with the fixed
+## columns name / post / loyalty / wage plus a switchable stat block — the
+## §4.12.3 five attribute columns or the eight player skills + the three
+## officer-only skills (medicine/carpentry/cooking), toggled by the
+## 属性/技能 buttons. Clicking a row opens the **detail page**: the full §4.12
+## officer card, the post · wage · recruit-port line and the actions —
+## 交谈 / 赠礼 / 训练 / 任命 / 解雇 (the §4.6.2 action set, logic unchanged).
 ##
-## `appoint` / `Dismiss` are port actions (§4.5.1 promotion rule) and render
-## disabled at sea with `officers.readonly_sea`; talk / gift / train work
-## anywhere, each with its own cooldown shown on the row.
+## Port vs sea: appoint and Dismiss are port actions (§4.6.2); talk / gift /
+## train work anywhere, each with its cooldown shown on the buttons.
 ##
-## Every rule lives in `scripts/player/skills.gd` / `character.gd` — the
-## roster, OFFICER_MAX, the wage bill, the loyalty actions, the appointments.
-## Nothing here invents a number.
-##
-## Palette is preloaded rather than referenced through its global class name so
-## the scene also runs before the editor has written its class cache.
+## Embeddable view contract: the intel window instantiates this scene and calls
+## [method rebuild] when its tab becomes active; the view also refreshes itself
+## on the EventBus signals while visible.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
-## The §4.12 card component (compact officer rows).
+## The §4.12 unified card (the detail page renders the full officer card).
 const CardLib := preload("res://scenes/ui/character_card.gd")
 
-const SCENE_PATH := "res://scenes/port/officers_panel.tscn"
-const DIM_ALPHA := 0.4
-## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
-
-## ui_strings keys this panel needs that the shared table does not carry yet
-## (the W5-C `FALLBACK_STRINGS` pattern — W6-D owns the residual merge).
-## `char.attr.*` is the card's §4.2 attribute-name family, shared here for
-## the `gate.requires` lines on prereqs that read an attribute (courage).
+## The residual merge fallback (W5-C pattern) — every key here also exists in
+## `ui_strings.json` today; the table only guards a stray regression.
 const FALLBACK_STRINGS := {
-	"officer.post.occupied": {
-		"zh": "在岗:{name}",
-		"en": "In post: {name}",
-	},
-	"officer.post.to_idle": {
-		"zh": "卸任(回闲置)",
-		"en": "Unassign (to idle)",
-	},
-	"char.attr.constitution": {"zh": "体魄", "en": "Constitution"},
-	"char.attr.intellect": {"zh": "悟性", "en": "Intellect"},
-	"char.attr.charisma": {"zh": "魅力", "en": "Charisma"},
-	"char.attr.courage": {"zh": "胆识", "en": "Courage"},
-	"char.attr.luck": {"zh": "运气", "en": "Luck"},
+	"officer.post.occupied": {"zh": "在岗:{name}", "en": "In post: {name}"},
+	"officer.post.to_idle": {"zh": "卸任(回闲置)", "en": "Unassign (to idle)"},
 }
+## The detail card's bounded viewport (the §4.12.1 sizing convention).
+const DETAIL_CARD_H := 300.0
+## Column widths (px) — the §4.8 sizing grid, 13px cell font.
+const COL_NAME_W := 200.0
+const COL_POST_W := 150.0
+const COL_LOYALTY_W := 80.0
+const COL_WAGE_W := 110.0
+const COL_STAT_W := 78.0
+const COL_DISMISS_W := 120.0
+const COL_ACTION_W := 120.0
+const CELL_FONT_SIZE := 13
 
-## Column widths, on the §4.8 8px grid.
-const COL_DISMISS_W := 140
+## The table's stat block: the §4.12.3 attributes or the skills
+## (8 player skills + the 3 officer-only ones).
+const MODE_ATTRIBUTES := "attributes"
+const MODE_SKILLS := "skills"
 
-## Emitted after a successful dismissal (tests / hosts).
+## Emitted after a dismissal (tests / hosts).
 signal officer_dismissed(officer_id: String)
-## The node whose `set_sail()`/facility list can open this panel again.
-var host: Node = null
 
-## One widget bundle per officer row, in display order (`officer_id` included),
-## so tests can walk exactly what is on screen.
-var _rows: Array = []
-## The officer awaiting dismissal confirmation (`""` = none).
+## `"table"` or `"detail"`.
+var _mode: String = "table"
+## The stat block the table currently shows.
+var _stat_mode: String = MODE_ATTRIBUTES
+## The officer the detail page shows (`""` = none).
+var _detail_officer: String = ""
+## The pending dismissal id (between the button press and the confirm).
 var _pending_dismiss: String = ""
-## The officer the appoint dialog is working for (`""` = closed).
-var _pending_appoint: String = ""
-## The appoint dialog (code-built over the panel chrome, {}-row pattern).
+## The appoint dialog (the §4.12.3 post table), when open.
 var _appoint_dialog: Control = null
 ## The last action's feedback line ("" = hidden).
 var _result_text: String = ""
+## One widget bundle per table row (test hooks keep the S18 names).
+var _rows: Array = []
 
-@onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
-@onready var _title: Label = $Center/Panel/Margin/Body/Title
-@onready var _slots: Label = $Center/Panel/Margin/Body/Slots
-@onready var _mode_note: Label = $Center/Panel/Margin/Body/ModeNote
-@onready var _result: Label = $Center/Panel/Margin/Body/Result
-@onready var _rows_box: VBoxContainer = $Center/Panel/Margin/Body/Scroll/Rows
-@onready var _empty: Label = $Center/Panel/Margin/Body/Empty
-@onready var _empty_hint: Label = $Center/Panel/Margin/Body/EmptyHint
-@onready var _close_button: Button = $Center/Panel/Margin/Body/Footer/Close
-@onready var _hint: Label = $Center/Panel/Margin/Body/Footer/Hint
+@onready var _slots: Label = $Body/Slots
+@onready var _mode_note: Label = $Body/ModeNote
+@onready var _result: Label = $Body/Result
+@onready var _attributes_toggle: Button = $Body/Controls/AttributesToggle
+@onready var _skills_toggle: Button = $Body/Controls/SkillsToggle
+@onready var _table_scroll: ScrollContainer = $Body/TableScroll
+@onready var _table: VBoxContainer = $Body/TableScroll/Table
+@onready var _table_empty: Label = $Body/TableEmpty
+@onready var _table_empty_hint: Label = $Body/TableEmptyHint
+@onready var _detail: VBoxContainer = $Body/Detail
+@onready var _detail_back: Button = $Body/Detail/DetailTop/DetailBack
+@onready var _detail_card_scroll: ScrollContainer = $Body/Detail/DetailCardScroll
+@onready var _detail_line: Label = $Body/Detail/DetailLine
+@onready var _detail_actions: HBoxContainer = $Body/Detail/DetailActions
 @onready var _confirm: Control = $ConfirmDialog
 
-
-## Installs a panel under `parent` (idempotent) and returns it, following the
-## [FleetPanel]/[CharacterPanel] convention (a `Control` host gets it directly, a
-## `Node2D` host gets it inside a `CanvasLayer`).
-static func attach_to(parent: Node, panel_host: Node = null) -> Control:
-	var existing := _find_panel(parent)
-	if existing != null:
-		if panel_host != null:
-			existing.host = panel_host
-		return existing
-	var scene: PackedScene = load(SCENE_PATH)
-	if scene == null:
-		push_error("OfficersPanel.attach_to: missing %s" % SCENE_PATH)
-		return null
-	var panel := scene.instantiate()
-	panel.name = "OfficersPanel"
-	if panel_host != null:
-		panel.host = panel_host
-	if parent is Control:
-		parent.add_child(panel)
-	else:
-		var layer := parent.get_node_or_null("OfficersLayer") as CanvasLayer
-		if layer == null:
-			layer = CanvasLayer.new()
-			layer.name = "OfficersLayer"
-			layer.layer = 100
-			parent.add_child(layer)
-		layer.add_child(panel)
-	return panel
-
-
-static func _find_panel(parent: Node) -> Control:
-	var direct := parent.get_node_or_null("OfficersPanel")
-	if direct is Control:
-		return direct
-	var layer := parent.get_node_or_null("OfficersLayer")
-	if layer != null:
-		var nested := layer.get_node_or_null("OfficersPanel")
-		if nested is Control:
-			return nested
-	return null
+## The detail page's card + action widgets (rebuilt per open officer).
+var _detail_card: Control = null
+var _detail_action_map: Dictionary = {}
+var _detail_dismiss: Button = null
 
 
 func _ready() -> void:
-	visible = false
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
 	_slots.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_mode_note.add_theme_color_override("font_color", PaletteLib.WARN)
 	_result.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_result.visible = false
-	_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_empty_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
-	_close_button.pressed.connect(close)
+	_table_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_table_empty_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_detail_back.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
+	_detail_back.pressed.connect(_on_detail_back)
+	_attributes_toggle.pressed.connect(func() -> void: set_stat_mode(MODE_ATTRIBUTES))
+	_skills_toggle.pressed.connect(func() -> void: set_stat_mode(MODE_SKILLS))
 	_confirm.confirmed.connect(_on_dismiss_confirmed)
 	_confirm.cancelled.connect(_on_dismiss_cancelled)
 
@@ -160,59 +107,13 @@ func _ready() -> void:
 	EventBus.gold_changed.connect(_on_data_changed)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not visible:
-		return
-	if _confirm.is_open() or (_appoint_dialog != null
-			and _appoint_dialog.is_open()):
-		return
-	# `O` toggles the panel (§4.3 "S4 | O | open/close the officers panel").
-	if event.is_action_pressed("toggle_officers"):
-		get_viewport().set_input_as_handled()
-		close()
-		return
-	if event.is_action_pressed("back"):
-		get_viewport().set_input_as_handled()
-		close()
-		return
-	# Modal behaviour (§6 "modals consume all input").
-	get_viewport().set_input_as_handled()
+## True while this view is the intel window's active tab.
+func is_active() -> bool:
+	return is_visible_in_tree()
 
 
-# --- Public API ------------------------------------------------------------
-
-func open_on(panel_host: Node = null) -> void:
-	if panel_host != null:
-		host = panel_host
-	open()
-
-
-func open() -> void:
-	if GameState.player.is_empty():
-		# No run in progress (editor / title): an empty roster is not worth a
-		# modal of its own.
-		return
-	visible = true
-	add_to_group(MODAL_GROUP)
-	rebuild()
-	_close_button.grab_focus()
-
-
-func close() -> void:
-	visible = false
-	remove_from_group(MODAL_GROUP)
-	_pending_dismiss = ""
-	_close_appoint_dialog()
-	if _confirm != null and _confirm.is_open():
-		_confirm.cancel()
-
-
-func is_open() -> bool:
-	return visible
-
-
-func has_modal() -> bool:
-	return visible or (_confirm != null and _confirm.is_open()) \
+func has_dialog() -> bool:
+	return (_confirm != null and _confirm.is_open()) \
 		or (_appoint_dialog != null and _appoint_dialog.is_open())
 
 
@@ -221,6 +122,26 @@ func has_modal() -> bool:
 func is_read_only() -> bool:
 	var port = GameState.current_port
 	return not (port is String and not (port as String).is_empty())
+
+
+## The stat block the table shows (`"attributes"` | `"skills"`).
+func stat_mode() -> String:
+	return _stat_mode
+
+
+## Switches the table's stat block (§4.6.2 amendment: the 属性/技能 toggle).
+func set_stat_mode(mode: String) -> void:
+	if mode != MODE_ATTRIBUTES and mode != MODE_SKILLS:
+		return
+	_stat_mode = mode
+	_bind_toggles()
+	if is_active() and _mode == "table":
+		rebuild()
+
+
+## The officer the detail page currently shows (`""` = table view).
+func detail_officer() -> String:
+	return _detail_officer
 
 
 ## The officer ids currently rendered, in display order (§4.6.2: sorted by id).
@@ -244,17 +165,16 @@ func rows() -> Array:
 	return _rows.duplicate()
 
 
-## The Dismiss button of `officer_id` (null when not rendered).
-func dismiss_button(officer_id: String) -> Button:
-	var entry := row_widget(officer_id)
-	return entry.get("dismiss", null)
+## The Dismiss button of `officer_id` — on the detail page (the table rows open
+## the detail instead of carrying actions).
+func dismiss_button(_officer_id: String = "") -> Button:
+	return _detail_dismiss if _mode == "detail" else null
 
 
-## The four action buttons of `officer_id`
+## The four action buttons of the open detail page
 ## (`{"talk": …, "gift": …, "train": …, "appoint": …}`).
-func action_buttons(officer_id: String) -> Dictionary:
-	var entry := row_widget(officer_id)
-	return entry.get("actions", {})
+func action_buttons(_officer_id: String = "") -> Dictionary:
+	return _detail_action_map.duplicate() if _mode == "detail" else {}
 
 
 ## Total daily wage bill (`Σ wage_daily × wage_mult`, the §4.5 ledger step 2).
@@ -263,7 +183,7 @@ func total_wage() -> int:
 
 
 ## The `ui_strings` key explaining why `officer_id` cannot be dismissed, or `""`
-## when it can. The single reason S18 states is the at-sea rule (§4.6.2).
+## when it can. The one reason this view states is the at-sea rule (§4.6.2).
 func dismiss_block_reason(_officer_id: String = "") -> String:
 	return "officers.readonly_sea" if is_read_only() else ""
 
@@ -273,10 +193,15 @@ func result_text() -> String:
 	return _result_text
 
 
-## Rebuilds the roster from live state. Called on open, on a locale change and
-## after a dismissal.
+## Rebuilds the view from live state. Called when the tab becomes active, on a
+## locale change and after a dismissal. Guarded against re-entry: the action
+## handlers rebuild inside their own signals.
+var _rebuilding := false
+
 func rebuild() -> void:
-	_title.text = I18n.t_key("officers.title")
+	if _rebuilding:
+		return
+	_rebuilding = true
 	_slots.text = I18n.fmt("officers.slots", {
 		"used": CharacterLib.officer_count(),
 		"max": CharacterLib.OFFICER_MAX,
@@ -286,10 +211,43 @@ func rebuild() -> void:
 	_mode_note.text = I18n.t_key("officers.readonly_sea") if is_read_only() else ""
 	_result.visible = not _result_text.is_empty()
 	_result.text = _result_text
-	_close_button.text = I18n.t_key("ui.close")
+	_bind_toggles()
+	if _mode == "detail" and not _detail_officer.is_empty() \
+			and CharacterLib.employed_officers().has(_detail_officer):
+		_build_detail(_detail_officer)
+	else:
+		_mode = "table"
+		_detail_officer = ""
+		_build_table()
+	_rebuilding = false
 
-	_clear(_rows_box)
+
+## The 属性/技能 toggle buttons: pressed states + localized labels (§4.3 lists).
+func _bind_toggles() -> void:
+	_attributes_toggle.text = I18n.t_key("char.stats")
+	_skills_toggle.text = I18n.t_key("char.card.skills")
+	_attributes_toggle.button_pressed = _stat_mode == MODE_ATTRIBUTES
+	_skills_toggle.button_pressed = _stat_mode == MODE_SKILLS
+	for pair in [[MODE_ATTRIBUTES, _attributes_toggle],
+			[MODE_SKILLS, _skills_toggle]]:
+		var button: Button = pair[1]
+		button.add_theme_color_override("font_color",
+			PaletteLib.ACCENT if _stat_mode == str(pair[0]) else PaletteLib.TEXT)
+
+
+# --- The table --------------------------------------------------------------
+
+func _build_table() -> void:
+	_table.visible = true
+	_table_scroll.visible = true
+	_table_empty.visible = false
+	_table_empty_hint.visible = false
+	_detail.visible = false
+	_clear(_table)
 	_rows.clear()
+
+	_add_table_header()
+
 	var officer_ids: Array = CharacterLib.employed_officers().duplicate()
 	# §4.6.2: "one per employed officer, sorted by `id`".
 	officer_ids.sort_custom(func(a, b) -> bool: return str(a) < str(b))
@@ -297,94 +255,197 @@ func rebuild() -> void:
 		var officer: Dictionary = DataLoader.get_officer(str(officer_id))
 		if officer.is_empty():
 			# A dismissed/unknown id in `player.officers` must not crash the
-			# roster; the character panel skips it the same way (gotcha 5).
+			# roster; the retired S14 summary skipped it the same way (gotcha 5).
 			continue
-		_rows_box.add_child(_build_row(str(officer_id), officer))
+		_table.add_child(_build_row(str(officer_id), officer))
 
 	var empty := _rows.is_empty()
-	_empty.visible = empty
-	_empty.text = I18n.t_key("char.no_officers")
-	_empty_hint.visible = empty
-	_empty_hint.text = I18n.t_key("officers.empty_hint")
+	_table.visible = not empty
+	_table_scroll.visible = not empty
+	_table_empty.visible = empty
+	_table_empty.text = I18n.t_key("char.no_officers")
+	_table_empty_hint.visible = empty
+	_table_empty_hint.text = I18n.t_key("officers.empty_hint")
 
 
-# --- Row construction ------------------------------------------------------
+## The table's header row: the fixed columns + the active stat block's names.
+func _add_table_header() -> void:
+	var header := HBoxContainer.new()
+	header.name = "Header"
+	header.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	_cell(header, I18n.t_key("intel.officers.name"), COL_NAME_W, PaletteLib.ACCENT)
+	header.get_child(0).name = "NameHeader"
+	_cell(header, I18n.t_key("officer.post.idle").rstrip(" ·"), COL_POST_W,
+		PaletteLib.ACCENT)
+	header.get_child(1).name = "PostHeader"
+	_cell(header, I18n.fmt("char.card.loyalty", {"amount": ""}).strip_edges(),
+		COL_LOYALTY_W, PaletteLib.ACCENT)
+	header.get_child(2).name = "LoyaltyHeader"
+	_cell(header, I18n.t_key("intel.officers.wage"),
+		COL_WAGE_W, PaletteLib.ACCENT)
+	header.get_child(3).name = "WageHeader"
+	var stat_keys: Array = _stat_keys()
+	for key in stat_keys:
+		_cell(header, I18n.t_key("skill.%s" % str(key))
+			if _stat_mode == MODE_SKILLS
+			else I18n.t_key("char.attr.%s" % str(key)),
+			COL_STAT_W, PaletteLib.ACCENT)
+		header.get_child(header.get_child_count() - 1).name = "Stat_%s" % str(key)
+	_table.add_child(header)
 
-## One officer row (§4.6.2 Phase-8 shape): the compact §4.12 card (attribute /
-## skill bars, native-role tag, loyalty + post relation line) and, beneath it,
-## the post column + wage + recruit port line and the four actions + Dismiss.
+
+## The stat ids the table shows in the active mode.
+func _stat_keys() -> Array:
+	if _stat_mode == MODE_ATTRIBUTES:
+		return Array(CharacterLib.ATTRIBUTES, TYPE_STRING, "", "")
+	return Array(SkillsLib.KEYS, TYPE_STRING, "", "") \
+		+ Array(SkillsLib.OFFICER_KEYS, TYPE_STRING, "", "")
+
+
+## One officer table row: a flat clickable row Control (the full-width HBox of
+## cells lives inside it) — clicking (or Enter/Space on the focused row) opens
+## the detail page (§4.6.2). The row Control is named at construction and the
+## caller adds it to the table exactly once.
 func _build_row(officer_id: String, officer: Dictionary) -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Officer_%s" % officer_id
-	box.add_theme_constant_override("separation", 4)
+	var widgets: Dictionary = {"officer_id": officer_id, "cells": {}}
+	var row := Control.new()
+	row.name = "Officer_%s" % officer_id
+	row.custom_minimum_size.y = float(PaletteLib.ROW_H)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.focus_mode = Control.FOCUS_ALL
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
 
-	# The §4.12 card, compact.
-	var card: Control = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
-	card.name = "Card"
-	box.add_child(card)
-	card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
-		CardLib.KIND_OFFICER, officer_id, {"compact": true}))
-
-	# Post column + wage + recruit port (§4.6.2 row data).
 	var line := HBoxContainer.new()
-	line.name = "PostLine"
+	line.name = "Line"
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	line.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-	var post := _label(_post_text(officer_id), PaletteLib.ACCENT)
-	post.name = "Post"
-	post.custom_minimum_size.x = 220.0
-	line.add_child(post)
-	var wage := _label(I18n.fmt("tavern.wage", {
+	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.add_child(line)
+	row.gui_input.connect(_on_row_gui_input.bind(officer_id))
+
+	var name_cell := _cell(line, I18n.t(officer.get("name", {})),
+		COL_NAME_W, PaletteLib.TEXT)
+	name_cell.name = "Name"
+	var post_cell := _cell(line, _post_text(officer_id), COL_POST_W,
+		PaletteLib.ACCENT)
+	post_cell.name = "Post"
+	var loyalty := SkillsLib.loyalty(officer_id)
+	var loyalty_cell := _cell(line, str(loyalty), COL_LOYALTY_W,
+		PaletteLib.GOOD if loyalty >= 80
+		else (PaletteLib.WARN if loyalty < 30 else PaletteLib.TEXT))
+	loyalty_cell.name = "Loyalty"
+	widgets["cells"]["loyalty"] = loyalty_cell
+	var wage_cell := _cell(line, I18n.fmt("tavern.wage", {
 		"price": int(round(int(officer.get("wage_daily", 0))
 			* _wage_mult(officer_id))),
-	}), PaletteLib.PANEL_LINE)
-	wage.name = "Wage"
-	wage.custom_minimum_size.x = 160.0
-	line.add_child(wage)
-	var recruited := _label(I18n.fmt("officers.recruited_at", {
-		"port": recruit_port_name(officer),
-	}), PaletteLib.PANEL_LINE)
-	recruited.name = "RecruitedAt"
-	recruited.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.add_child(recruited)
-	box.add_child(line)
+	}), COL_WAGE_W, PaletteLib.PANEL_LINE)
+	wage_cell.name = "Wage"
+	widgets["cells"]["wage"] = wage_cell
+	for key in _stat_keys():
+		var value := int((officer.get("skills", {}) as Dictionary).get(str(key), 0)) \
+			if _stat_mode == MODE_SKILLS \
+			else int((officer.get("attributes", {}) as Dictionary).get(str(key), 0))
+		var cell := _cell(line, str(value), COL_STAT_W, PaletteLib.TEXT)
+		cell.name = "Stat_%s" % str(key)
+		widgets["cells"][str(key)] = cell
 
-	# The four actions + Dismiss (§4.6.2 / §4.12.3).
-	var actions := HBoxContainer.new()
-	actions.name = "Actions"
-	actions.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-	var action_map := {}
-	action_map["talk"] = _action_button(actions, officer_id, "talk",
-		_talk_blocked_reason(officer_id))
-	action_map["gift"] = _action_button(actions, officer_id, "gift",
-		_gift_blocked_reason(officer_id))
-	action_map["train"] = _action_button(actions, officer_id, "train",
-		_train_blocked_reason(officer_id))
-	action_map["appoint"] = _action_button(actions, officer_id, "appoint",
-		I18n.t_key("officers.readonly_sea") if is_read_only() else "")
-	var dismiss := Button.new()
-	dismiss.name = "Dismiss_%s" % officer_id
-	dismiss.text = I18n.t_key("officers.dismiss")
-	dismiss.custom_minimum_size = Vector2(float(COL_DISMISS_W),
+	# The add lives at the CALL SITE (`_build_table`); `_build_row` only
+	# builds and returns the row — a second add here would trip the engine's
+	# re-parent check (the "already has a parent" noise).
+	_rows.append(widgets)
+	return row
+
+
+## The row's click/keyboard activation → the detail page (§4.6.2).
+func _on_row_gui_input(event: InputEvent, officer_id: String) -> void:
+	var clicked: bool = event is InputEventMouseButton \
+		and event.button_index == MOUSE_BUTTON_LEFT and event.pressed
+	var keyed: bool = event is InputEventKey and event.pressed \
+		and (event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER \
+			or event.keycode == KEY_SPACE)
+	if clicked or keyed:
+		_on_row_pressed(officer_id)
+
+
+## One table cell: a 13px label with a fixed width (the §4.8 sizing grid).
+func _cell(parent: Container, text: String, width: float, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size.x = width
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_font_size_override("font_size", CELL_FONT_SIZE)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(label)
+	return label
+
+
+# --- The detail page --------------------------------------------------------
+
+func _on_row_pressed(officer_id: String) -> void:
+	_detail_officer = officer_id
+	_mode = "detail"
+	rebuild()
+
+
+func _on_detail_back() -> void:
+	_mode = "table"
+	_detail_officer = ""
+	rebuild()
+
+
+func _build_detail(officer_id: String) -> void:
+	_table.visible = false
+	_table_scroll.visible = false
+	_table_empty.visible = false
+	_table_empty_hint.visible = false
+	_detail.visible = true
+	_detail_back.text = I18n.t_key("ui.back")
+	_detail_back.grab_focus()
+
+	# The full §4.12 officer card (not the compact table row).
+	if _detail_card != null:
+		_detail_card.queue_free()
+	var card: Control = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
+	card.name = "DetailCard"
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail_card_scroll.add_child(card)
+	_detail_card = card
+	card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
+		CardLib.KIND_OFFICER, officer_id, {}))
+
+	var officer: Dictionary = DataLoader.get_officer(officer_id)
+	_detail_line.name = "DetailLine"
+	_detail_line.text = "%s · %s · %s" % [
+		_post_text(officer_id),
+		I18n.fmt("tavern.wage", {
+			"price": int(round(int(officer.get("wage_daily", 0))
+				* _wage_mult(officer_id))),
+		}),
+		I18n.fmt("officers.recruited_at", {"port": recruit_port_name(officer)}),
+	]
+
+	_clear(_detail_actions)
+	_detail_action_map = {}
+	_detail_action_map["talk"] = _action_button(_detail_actions, officer_id,
+		"talk", _talk_blocked_reason(officer_id))
+	_detail_action_map["gift"] = _action_button(_detail_actions, officer_id,
+		"gift", _gift_blocked_reason(officer_id))
+	_detail_action_map["train"] = _action_button(_detail_actions, officer_id,
+		"train", _train_blocked_reason(officer_id))
+	_detail_action_map["appoint"] = _action_button(_detail_actions, officer_id,
+		"appoint", I18n.t_key("officers.readonly_sea") if is_read_only() else "")
+	_detail_dismiss = Button.new()
+	_detail_dismiss.name = "Dismiss_%s" % officer_id
+	_detail_dismiss.text = I18n.t_key("officers.dismiss")
+	_detail_dismiss.custom_minimum_size = Vector2(float(COL_DISMISS_W),
 		PaletteLib.BUTTON_H)
 	var reason_key := dismiss_block_reason(officer_id)
-	dismiss.disabled = not reason_key.is_empty()
-	dismiss.tooltip_text = "" if reason_key.is_empty() \
+	_detail_dismiss.disabled = not reason_key.is_empty()
+	_detail_dismiss.tooltip_text = "" if reason_key.is_empty() \
 		else I18n.t_key(reason_key)
-	dismiss.pressed.connect(_on_dismiss_pressed.bind(officer_id))
-	actions.add_child(dismiss)
-	box.add_child(actions)
-
-	_rows.append({
-		"officer_id": officer_id,
-		"node": box,
-		"card": card,
-		"post": post,
-		"wage": wage,
-		"recruited": recruited,
-		"actions": action_map,
-		"dismiss": dismiss,
-	})
-	return box
+	_detail_dismiss.pressed.connect(_on_dismiss_pressed.bind(officer_id))
+	_detail_actions.add_child(_detail_dismiss)
 
 
 func _action_button(parent: Container, officer_id: String, action: String,
@@ -392,7 +453,7 @@ func _action_button(parent: Container, officer_id: String, action: String,
 	var button := Button.new()
 	button.name = "%s_%s" % [action.capitalize(), officer_id]
 	button.text = I18n.t_key("char.action.%s" % action)
-	button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
+	button.custom_minimum_size = Vector2(float(COL_ACTION_W), PaletteLib.BUTTON_H)
 	button.disabled = not reason_text.is_empty()
 	button.tooltip_text = reason_text
 	match action:
@@ -407,6 +468,21 @@ func _action_button(parent: Container, officer_id: String, action: String,
 	parent.add_child(button)
 	return button
 
+
+## Re-renders the open detail page in place (post/loyalty/cooldowns/gold moved).
+func refresh_row(officer_id: String) -> void:
+	if _mode == "detail" and _detail_officer == officer_id:
+		_build_detail(officer_id)
+	elif _mode == "table":
+		_build_table()
+	_slots.text = I18n.fmt("officers.slots", {
+		"used": CharacterLib.officer_count(),
+		"max": CharacterLib.OFFICER_MAX,
+		"wage": total_wage(),
+	})
+
+
+# --- Post / wage data (the retired S18 row data, unchanged) -----------------
 
 ## The post column's text: the current post's name (with its ship for a
 ## captain seat) or the idle state (§4.6.2).
@@ -506,9 +582,9 @@ func _on_gift_pressed(officer_id: String) -> void:
 ## `SkillsLib.training_price` (the player's level and INT own it — identical
 ## for the player's own skills), charged from the player gold; the +1 lands
 ## on the loaded officer card capped at the training cap 60 (the same
-## canon-with-growth write the §4.3.2 growth clock performs). NOTE for the
-## report: `SkillsLib` carries no officer-side train function yet — this
-## funnel implements the locked formula inline until a model home lands.
+## canon-with-growth write the §4.3.2 growth clock performs). NOTE: `SkillsLib`
+## carries no officer-side train function — this funnel implements the locked
+## formula inline until a model home lands.
 func _on_train_pressed(officer_id: String) -> void:
 	if not _train_blocked_reason(officer_id).is_empty():
 		return
@@ -536,41 +612,6 @@ func _set_result(text: String) -> void:
 	_result.text = text
 
 
-## Re-renders one officer row in place (post/loyalty/cooldowns/gold moved).
-func refresh_row(officer_id: String) -> void:
-	var entry := row_widget(officer_id)
-	if entry.is_empty():
-		return
-	var post: Label = entry["post"]
-	post.text = _post_text(officer_id)
-	var officer: Dictionary = DataLoader.get_officer(officer_id)
-	var wage: Label = entry["wage"]
-	wage.text = I18n.fmt("tavern.wage", {
-		"price": int(round(int(officer.get("wage_daily", 0))
-			* _wage_mult(officer_id))),
-	})
-	var card: Control = entry["card"]
-	card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
-		CardLib.KIND_OFFICER, officer_id, {"compact": true}))
-	var actions: Dictionary = entry["actions"]
-	for pair in [["talk", _talk_blocked_reason(officer_id)],
-			["gift", _gift_blocked_reason(officer_id)],
-			["train", _train_blocked_reason(officer_id)],
-			["appoint", I18n.t_key("officers.readonly_sea")
-				if is_read_only() else ""]]:
-		var button: Button = actions.get(str(pair[0]), null)
-		if button == null:
-			continue
-		var reason := str(pair[1])
-		button.disabled = not reason.is_empty()
-		button.tooltip_text = reason
-	_slots.text = I18n.fmt("officers.slots", {
-		"used": CharacterLib.officer_count(),
-		"max": CharacterLib.OFFICER_MAX,
-		"wage": total_wage(),
-	})
-
-
 # --- The appoint dialog (§4.12.3 post table, prereq-gray + reasons) --------
 
 ## Opens the post table for `officer_id`: one row per flagship post, then one
@@ -579,10 +620,10 @@ func refresh_row(officer_id: String) -> void:
 ## `gate.requires` reason, or the occupancy line when another officer holds
 ## the seat — plus the unassign row (always allowed).
 func _open_appoint_dialog(officer_id: String) -> void:
-	_pending_appoint = officer_id
 	if _appoint_dialog != null:
 		_appoint_dialog.queue_free()
-	_appoint_dialog = _make_dialog_shell()
+	_appoint_dialog = AppointDialog.new()
+	_appoint_dialog.roster_view = self
 	add_child(_appoint_dialog)
 	_appoint_dialog.open(officer_id)
 
@@ -591,19 +632,10 @@ func _close_appoint_dialog() -> void:
 	if _appoint_dialog != null:
 		_appoint_dialog.queue_free()
 	_appoint_dialog = null
-	_pending_appoint = ""
 
 
 func appoint_dialog() -> Control:
 	return _appoint_dialog
-
-
-## The code-built dialog shell (the confirm-dialog chrome pattern, one
-## action per dialog — §4.7).
-func _make_dialog_shell() -> Control:
-	var dialog := AppointDialog.new()
-	dialog.officers_panel = self
-	return dialog
 
 
 ## The appoint dialog's data read (the tests walk the rows through this).
@@ -639,6 +671,10 @@ func _on_dismiss_confirmed() -> void:
 	if CharacterLib.dismiss(officer_id):
 		officer_dismissed.emit(officer_id)
 		_result_text = ""
+		# The detail page of a dismissed officer is gone — back to the table.
+		if _detail_officer == officer_id:
+			_mode = "table"
+			_detail_officer = ""
 		rebuild()
 
 
@@ -649,19 +685,11 @@ func _on_dismiss_cancelled() -> void:
 # --- Helpers ---------------------------------------------------------------
 
 ## `ui_strings` key first, the panel's fallback table second (the W5-C
-## `_inform_text` pattern — the residual merge is W6-D's).
+## `_inform_text` pattern).
 static func _t(key: String) -> String:
 	if DataLoader.ui_strings.has(key):
 		return I18n.t_key(key)
 	return I18n.t(FALLBACK_STRINGS.get(key, {}))
-
-
-## `_t` plus `{name}` substitution for a fallback key (the I18n.fmt shape).
-static func _fmt(key: String, values: Dictionary = {}) -> String:
-	var text := _t(key)
-	for name in values:
-		text = text.replace("{%s}" % name, str(values[name]))
-	return text
 
 
 func _label(text: String, color: Color) -> Label:
@@ -672,27 +700,24 @@ func _label(text: String, color: Color) -> Label:
 	return label
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
-
-
 func _clear(container: Node) -> void:
+	# Immediate `free()` (not queue_free): this view's rebuild never runs
+	# inside one of its own row signals (the actions rebuild the DETAIL page,
+	# whose widgets are replaced wholesale), so the queued-free ghost of a
+	# removed row would trip Godot's add_child re-parent check on the next
+	# same-frame rebuild.
 	for child in container.get_children():
 		container.remove_child(child)
-		child.queue_free()
+		child.free()
 
 
 func _on_locale_changed(_locale: String) -> void:
-	if visible:
+	if is_active():
 		rebuild()
 
 
 func _on_data_changed(_value: int = 0) -> void:
-	if visible:
+	if is_active():
 		rebuild()
 
 
@@ -703,7 +728,7 @@ func _exit_tree() -> void:
 		EventBus.gold_changed.disconnect(_on_data_changed)
 
 
-# --- The appoint dialog (inner class; the panel owns every rule above) ------
+# --- The appoint dialog (inner class; the view owns every rule above) -------
 
 ## The post-table modal: dim + panel + one row per appointable seat, each
 ## grayed with its reason when blocked. Data comes straight from
@@ -714,15 +739,19 @@ class AppointDialog:
 
 	const DIM_ALPHA := 0.4
 	const MODAL_GROUP := "modal_overlay"
+	const COL_DISMISS_W := 140.0
 	# Inner classes see autoloads and global classes but NOT the outer
 	# script's consts — the preloads are re-declared here.
 	const PaletteLib := preload("res://scripts/palette.gd")
 	const CharacterLib := preload("res://scripts/player/character.gd")
 	const SkillsLib := preload("res://scripts/player/skills.gd")
 
-	var officers_panel: Control = null
+	## `FALLBACK_STRINGS` lives on the outer script; the dialog reads it
+	## through the view instance (inner classes cannot see outer consts).
+	var roster_view: Control = null
 	var _open := false
 	var _dialog_rows: Array = []
+	var _officer_id := ""
 	var _dim: ColorRect
 	var _panel: PanelContainer
 	var _title: Label
@@ -786,14 +815,15 @@ class AppointDialog:
 		_close.pressed.connect(close)
 		footer.add_child(_close)
 
-	func open(officer_id: String) -> void:
-		var officer: Dictionary = DataLoader.get_officer(officer_id)
-		var name := I18n.t(officer.get("name", {}))
-		_title.text = "%s · %s" % [name, I18n.t_key("char.action.appoint")]
+	func open(id: String) -> void:
+		_officer_id = id
+		var officer: Dictionary = DataLoader.get_officer(id)
+		var officer_name := I18n.t(officer.get("name", {}))
+		_title.text = "%s · %s" % [officer_name, I18n.t_key("char.action.appoint")]
 		_open = true
 		visible = true
 		add_to_group(MODAL_GROUP)
-		_rebuild(officer_id)
+		_rebuild(id)
 		_close.grab_focus()
 
 	func close() -> void:
@@ -818,22 +848,29 @@ class AppointDialog:
 			return
 		get_viewport().set_input_as_handled()
 
-	func _rebuild(officer_id: String) -> void:
+	## The outer view's `_t` (inner classes cannot call outer statics by
+	## bare name; going through the instance keeps the one fallback table).
+	func _t(key: String) -> String:
+		if roster_view != null:
+			return roster_view._t(key)
+		return I18n.t_key(key)
+
+	func _rebuild(id: String) -> void:
 		for child in _rows_box.get_children():
 			_rows_box.remove_child(child)
 			child.queue_free()
 		_dialog_rows.clear()
 
 		# The unassign row first (always allowed — §4.5.2).
-		var state: Dictionary = GameState.officer_states.get(officer_id, {})
+		var state: Dictionary = GameState.officer_states.get(id, {})
 		if not str(state.get("post_id", "")).is_empty():
-			_add_post_row(officer_id, "officer.post.to_idle", {}, "", "")
+			_add_post_row(id, "officer.post.to_idle", {}, "", "")
 
 		# The flagship posts, in the data file's order (§4.5.2).
 		for post in DataLoader.officer_posts_list:
 			if str(post.get("slot_type", "")) != "flagship":
 				continue
-			_add_post_row(officer_id, "officer.post.%s"
+			_add_post_row(id, "officer.post.%s"
 				% str(post.get("post_id", "")), post.get("prereq", {}),
 				str(post.get("post_id", "")), "")
 
@@ -844,19 +881,19 @@ class AppointDialog:
 			var ship = GameState.fleet[index]
 			if not (ship is Dictionary):
 				continue
-			_add_post_row(officer_id, "officer.post.captain",
+			_add_post_row(id, "officer.post.captain",
 				DataLoader.get_officer_post("captain").get("prereq", {}),
 				"captain", str(ship.get("ship_type_id", "")))
 
-	func _add_post_row(officer_id: String, label_key: String, prereq: Dictionary,
+	func _add_post_row(id: String, label_key: String, prereq: Dictionary,
 			post_id: String, ship_id: String) -> void:
 		var row := HBoxContainer.new()
 		row.name = "PostRow_%s_%s" % [post_id, ship_id]
 		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		var reason := _blocked_reason(officer_id, post_id, ship_id, prereq)
+		var reason := _blocked_reason(id, post_id, ship_id, prereq)
 		var text := Label.new()
 		text.name = "Label"
-		text.text = officers_panel._t(label_key) \
+		text.text = _t(label_key) \
 			+ (" · %s" % ship_id if not ship_id.is_empty() else "")
 		text.add_theme_color_override("font_color",
 			PaletteLib.TEXT if reason.is_empty() else PaletteLib.PANEL_LINE)
@@ -870,12 +907,12 @@ class AppointDialog:
 		row.add_child(reason_label)
 		var button := Button.new()
 		button.name = "Appoint"
-		button.text = officers_panel._t("officer.post.to_idle") \
+		button.text = _t("officer.post.to_idle") \
 			if post_id.is_empty() else I18n.t_key("char.action.appoint")
-		button.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
+		button.custom_minimum_size = Vector2(COL_DISMISS_W, PaletteLib.BUTTON_H)
 		button.disabled = not reason.is_empty()
 		button.pressed.connect(func() -> void:
-			_do_appoint(officer_id, post_id, ship_id))
+			_do_appoint(id, post_id, ship_id))
 		row.add_child(button)
 		_rows_box.add_child(row)
 		_dialog_rows.append({
@@ -887,11 +924,11 @@ class AppointDialog:
 		})
 
 	## The row's block reason: "" when appointable, else the localized line.
-	func _blocked_reason(officer_id: String, post_id: String, ship_id: String,
+	func _blocked_reason(id: String, post_id: String, ship_id: String,
 			prereq: Dictionary) -> String:
 		if post_id.is_empty():
 			return ""  # Unassign is always allowed (§4.5.2).
-		var officer: Dictionary = DataLoader.get_officer(officer_id)
+		var officer: Dictionary = DataLoader.get_officer(id)
 		var failed: Array[String] = []
 		for req_key in prereq:
 			var value := int((officer.get("skills", {}) as Dictionary)
@@ -900,16 +937,16 @@ class AppointDialog:
 					.get(str(req_key), 0)))
 			if value < int(prereq[req_key]):
 				failed.append(I18n.fmt("gate.requires", {
-					"stat": officers_panel._t("char.attr.%s" % str(req_key))
+					"stat": _t("char.attr.%s" % str(req_key))
 						if str(req_key) in CharacterLib.ATTRIBUTES
-						else officers_panel._t("skill.%s" % str(req_key)),
+						else _t("skill.%s" % str(req_key)),
 					"n": int(prereq[req_key]),
 				}))
 		if not failed.is_empty():
 			return " · ".join(failed)
 		# Occupancy: one person per flagship seat, one captain per ship.
 		for other_id in GameState.player.get("officers", []):
-			if str(other_id) == officer_id:
+			if str(other_id) == id:
 				continue
 			var other: Dictionary = GameState.officer_states.get(
 				str(other_id), {})
@@ -919,14 +956,14 @@ class AppointDialog:
 					or str(other.get("ship_id", "")) == ship_id:
 				var other_officer: Dictionary = DataLoader.get_officer(
 					str(other_id))
-				return officers_panel._fmt("officer.post.occupied", {"name":
-					I18n.t(other_officer.get("name", {}))})
+				return _t("officer.post.occupied").replace(
+					"{name}", I18n.t(other_officer.get("name", {})))
 		return ""
 
-	func _do_appoint(officer_id: String, post_id: String, ship_id: String) -> void:
-		if not SkillsLib.appoint(officer_id, post_id, ship_id):
+	func _do_appoint(id: String, post_id: String, ship_id: String) -> void:
+		if not SkillsLib.appoint(id, post_id, ship_id):
 			return
-		if officers_panel != null:
-			officers_panel.refresh_row(officer_id)
-			officers_panel.rebuild()
+		if roster_view != null:
+			roster_view.refresh_row(id)
+			roster_view.rebuild()
 		close()

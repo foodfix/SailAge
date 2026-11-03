@@ -65,7 +65,7 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
-const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
+const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 ## Task L (docs/80-* §4.7.8): the "merchant captains in port" rows.
 const NpcIntelLib := preload("res://scripts/world/npc_intel.gd")
 ## Phase-8 W5-C (docs/30-* §4.8): the captain-intel rows read the captains'
@@ -337,7 +337,7 @@ func _ready() -> void:
 	_refresh_intel()
 
 	# S14 over S5, the same modal the port hub offers (docs/80 §4.3).
-	CharacterPanelLib.attach_to(self)
+	IntelWindowLib.attach_to(self)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.gold_changed.connect(_on_gold_changed)

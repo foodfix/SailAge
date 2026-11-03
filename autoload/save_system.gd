@@ -1754,7 +1754,7 @@ func _modal_open() -> bool:
 	var scene := tree.current_scene
 	if scene == null:
 		return false
-	for path in ["CharacterPanel", "CharacterPanelLayer/CharacterPanel"]:
+	for path in ["IntelWindow", "IntelWindowLayer/IntelWindow"]:
 		var panel := scene.get_node_or_null(path)
 		if panel != null and panel.has_method("is_open") and panel.is_open():
 			return true
