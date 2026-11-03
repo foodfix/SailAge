@@ -29,9 +29,11 @@ extends RefCounted
 ##     `encounters.gd` funnel it replaces), not per ship and not at battle end.
 ##     [method apply] therefore has no negative consequence to charge, and
 ##     applying an outcome twice cannot repeat one.
-##   * **Boarding morale** — the §4.8 `morale_bonus` the engine reports in the
-##     outcome (+5 after a won boarding duel); the aftermath application below
-##     is its one consumer (§4.12.4 keeps the engine `GameState`-free).
+##   * **Side morale** — the §4.8a `morale_delta` the engine reports in the
+##     outcome (the player side's §4.8a net event delta; the Phase-8 flat
+##     boarding +5 `morale_bonus` is absorbed into the §4.8a event table and
+##     retired); the aftermath application below is its one consumer
+##     (§4.12.4 keeps the engine `GameState`-free).
 ##
 ## **Idempotency.** [method apply] marks the outcome dictionary it was handed
 ## with `rewards_applied: true` and returns early on every later call for the
@@ -60,10 +62,11 @@ extends RefCounted
 ##     outcome's pre-computed XP once, floored, on the player's level
 ##     (`Character.current_level()`), on top of the unchanged per-kill/round
 ##     bases ([method xp_for] stays the raw engine formula).
-##   * **Boarding morale** (§4.8): the outcome's `morale_bonus` (the W3-C
-##     engine field, +5 after a won boarding duel) moves `GameState.morale`,
+##   * **Side morale** (§4.8a, Phase 9): the outcome's `morale_delta` (the
+##     engine's player-side §4.8a net event delta) moves `GameState.morale`,
 ##     clamped 0–100, exactly once — under the same `rewards_applied`
-##     idempotency marker as gold/XP/rep.
+##     idempotency marker as gold/XP/rep. (The Phase-8 `morale_bonus` +5 is
+##     retired; the §4.8a events already priced boarding inside the delta.)
 ##   * **Captain lifecycle hooks** (§4.11.15, `scripts/world/captains.gd`):
 ##     [method apply_captain_lifecycle] turns an outcome that carries a
 ##     `captain_id` into `Captains.defeat` (victory; `crushed` = the fleet was
@@ -135,7 +138,7 @@ const DROP_SOLD_BACK_KEY := "drop_sold_back"
 ##
 ## `outcome` is the §4.12.2 block (after `BattleResult.apply`, so fleet effects
 ## have already happened — the lifecycle hooks below read BattleResult's report
-## fields). Read for `salvage_gold`, `xp`, `rep_deltas`, `morale_bonus`,
+## fields). Read for `salvage_gold`, `xp`, `rep_deltas`, `morale_delta`,
 ## `captain_id` and `flagship_duel_lost`; the only write is the idempotency
 ## marker `rewards_applied` (§4.12.3: "the screen may call it once, tests may
 ## call twice").
@@ -154,8 +157,9 @@ const DROP_SOLD_BACK_KEY := "drop_sold_back"
 ##                 `outcome.rep_deltas`, which is what the after-action dialog
 ##                 prints (§4.12.2).
 ##   `morale`      the morale points `GameState.morale` moved for the outcome's
-##                 `morale_bonus` (§4.8 boarding-victory +5; clamped 0–100, so
-##                 a gain at 98 reports +2)
+##                 `morale_delta` (§4.8a writeback — the §4.8a event table's
+##                 net player-side delta; clamped 0–100, so a gain at 98
+##                 reports +2)
 ##   `captain_lifecycle`  [method apply_captain_lifecycle]'s report (the
 ##                 §4.11.15 hooks; all-false/zero without a `captain_id`)
 ##
@@ -187,13 +191,15 @@ static func apply(outcome: Dictionary) -> Dictionary:
 			+ "reputation were not applied")
 		return applied
 	var deltas := _apply_reputation(outcome.get("rep_deltas", {}))
-	# §4.8 boarding-victory morale: the engine reported `morale_bonus` (+5
-	# after a won boarding duel) and never touches `GameState` (§4.12.1) — this
-	# aftermath application is its one consumer.
-	var morale_bonus := maxi(int(outcome.get("morale_bonus", 0)), 0)
+	# §4.8a side-morale writeback: the engine reported the player side's NET
+	# event delta (`morale_delta`, §4.12.2) and never touches `GameState`
+	# (§4.12.1) — this aftermath application is its one consumer, replacing
+	# the retired Phase-8 flat `morale_bonus` +5 (the §4.8a event table
+	# already priced boarding wins/losses inside the delta).
+	var morale_delta := int(outcome.get("morale_delta", 0))
 	var morale_before := int(GameState.morale)
-	if morale_bonus > 0:
-		GameState.morale = clampi(morale_before + morale_bonus, 0, 100)
+	if morale_delta != 0:
+		GameState.morale = clampi(morale_before + morale_delta, 0, 100)
 	applied[MORALE_KEY] = int(GameState.morale) - morale_before
 	# §4.11.10 Phase 8: the battle XP total ×(1 + level/20), floored once, on
 	# the level held *before* the award.

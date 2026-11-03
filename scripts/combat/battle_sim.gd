@@ -209,17 +209,48 @@ const LEGACY_FALLBACK_PER_TIER := 10
 
 ## `clamp(25 − floor(courage / 10), 10, 40)` percent, drawn from the battle's
 ## §4.11.1 stream ([method roll_surrender]); a failed roll re-rolls on the
-## ship's next turn. The W4 morale model widens it by the §4.8a modifier —
-## the hook is the `courage_mod` parameter, W3 passes 0.
+## ship's next turn. The Phase-9 morale model widens it by the §4.8a modifier
+## ([method morale_surrender_bonus]) — the hooks are the `courage_mod` and
+## `morale` parameters, W3 callers pass 0 / the default.
 const SURRENDER_CHANCE_BASE := 25
 const SURRENDER_CHANCE_MIN := 10
 const SURRENDER_CHANCE_MAX := 40
 const SURRENDER_COURAGE_DIVISOR := 10
+## §4.7/§4.8a: the roll chance gains `+ floor((20 − morale) / 2)` pp on top of
+## the clamped base (base ceiling 40 + 10 = 50% at morale 0).
+const SURRENDER_MORALE_DIVISOR := 2
 
-# --- Boarding morale (§4.8 as of Phase 8 — W4-A re-pins onto the §4.8a table)
+# --- Side morale (docs/60-* §4.8a; decision 9, corrections 5/6) -------------
 
-## A won boarding duel books +5 into the outcome block (`morale_bonus`) for
-## the §4.12.4 consumers. The engine never touches `GameState`.
+## One morale value per side, 0–100 ([method side_morale]).
+const MORALE_MIN := 0
+const MORALE_MAX := 100
+## §4.8a event table (both sides). The flagship-sunk −30 is TOTAL: it REPLACES
+## the friendly-sunk −15 on that event (correction 5) — the side loses exactly
+## 30, never 45.
+const MORALE_EVENT_FRIENDLY_SUNK := -15
+const MORALE_EVENT_CAPTURED := -20
+const MORALE_EVENT_FLAGSHIP_SUNK := -30
+const MORALE_EVENT_RAKED := -5
+const MORALE_EVENT_BOARDING_WIN := 10
+const MORALE_EVENT_BOARDING_LOSS := -10
+## §4.8a gates: side morale ≤ 20 (with durability ≤ 25%) opens the §4.7
+## surrender roll; side morale ≤ 10 strikes EVERY living AI ship at its next
+## turn with NO roll (AI-side only — player ships never auto-strike).
+const MORALE_SURRENDER_GATE := 20
+const MORALE_INSTANT_STRIKE := 10
+## §4.8a AI start: `clamp(40 + flagship-captain courage, 20, 90)` — courage
+## from the enemy flagship's captain card; the legacy no-card fallback is
+## `10 + 10 × tier` (correction 6, [method _ship_or_card_courage]).
+const ENEMY_MORALE_COURAGE_BASE := 40
+const ENEMY_MORALE_FLOOR := 20
+const ENEMY_MORALE_CEILING := 90
+
+## RETIRED Phase-8 number (§4.8 boarding-victory +5): the flat bonus is
+## absorbed into the §4.8a event table (boarding win +10 / loss −10) and the
+## outcome key `morale_bonus` is gone (§4.12.2 carries `morale_delta` now).
+## Kept only so the §5 reference in `tools/test_battle_economy.gd` compiles
+## until that suite's re-pin; no live code path reads it.
 const BOARDING_MORALE_BONUS := 5
 
 # --- Stall & cap (docs/60-* §4.11.9/§4.11.10; decision 12, correction 12) ---
@@ -314,9 +345,16 @@ var _surrendered_enemy := 0
 var _sunk_player: Array = []
 var _lost_player: Array = []
 var _player_last_cause := ""
-## §4.8 boarding-victory morale: 5 after a won boarding duel, else 0. Consumed
-## from the outcome block (`morale_bonus`) by the §4.12.4 flow.
-var _boarding_morale_bonus := 0
+## §4.8a side morale (Phase 9): one value per side, 0–100. The starts are
+## fixed once in [method _init] — the player at config `player_morale` (or
+## `GameState.morale`, read defensively), the AI at config `enemy_morale` (or
+## `clamp(40 + flagship-captain courage, 20, 90)`, correction 6); the running
+## values move through [method _morale_event], clamped after every event.
+## Both ride the snapshot (§4.12.1).
+var _player_morale := 70
+var _enemy_morale := 50
+var _player_morale_start := 70
+var _enemy_morale_start := 50
 var _log: Array = []
 
 
@@ -327,8 +365,12 @@ var _log: Array = []
 ## `GameState.world["wind_dir"]`), optional `current`
 ## (`{dir: <flow-TO token>, strength: 0..3}`; default = the decoded,
 ## reversal-applied contact-tile current regardless of the world's
-## `current_mode`, correction 1) and optional `player_stats` (the S21 seam).
-## All three battle conditions LOCK here and never change mid-battle (§4.2).
+## `current_mode`, correction 1), optional `player_stats` (the S21 seam) and
+## the §4.8a optional morale starts `player_morale` / `enemy_morale` (int
+## 0–100; the defaults are `GameState.morale` read defensively and
+## `clamp(40 + flagship-captain courage, 20, 90)` — the W4 sandbox passes
+## both from its fixture). All three battle conditions LOCK here and never
+## change mid-battle (§4.2).
 ##
 ## Optional `rng`: a `RandomNumberGenerator` the caller has **already used** to
 ## compose the enemy fleet (the §4.11.1 "duel rolls draw from the same stream,
@@ -363,6 +405,19 @@ func _init(config: Dictionary) -> void:
 	var stats_override = config.get("player_stats", null)
 	_player_stats_override = (stats_override as Dictionary).duplicate(true) \
 		if stats_override is Dictionary else {}
+	# §4.8a side-morale starts (Phase 9): optional config keys first (the S21
+	# seam — the sandbox hands both from its fixture), else the doc defaults.
+	# Starts clamp into 0..100 once, so `morale_delta` (§4.12.2) is exactly
+	# `clamp(end, 0, 100) − start` and the §4.12.4 writeback
+	# `GameState.morale = clamp(old + delta, 0, 100)` cannot leave the band.
+	_player_morale_start = clampi(
+		int(config.get("player_morale", _default_player_morale())),
+		MORALE_MIN, MORALE_MAX)
+	_player_morale = _player_morale_start
+	_enemy_morale_start = clampi(
+		int(config.get("enemy_morale", _default_enemy_morale())),
+		MORALE_MIN, MORALE_MAX)
+	_enemy_morale = _enemy_morale_start
 	var shared = config.get("rng", null)
 	if shared is RandomNumberGenerator:
 		rng = shared
@@ -751,7 +806,7 @@ func outcome() -> Dictionary:
 		"salvage_gold": _salvage_gold(),
 		"xp": xp,
 		"rep_deltas": _rep_deltas(),
-		"morale_bonus": _boarding_morale_bonus,
+		"morale_delta": morale_delta_for(SIDE_PLAYER),
 		"cargo_overflow_lost": 0,
 	}
 
@@ -1319,6 +1374,10 @@ func cannon(unit: Dictionary, target: Dictionary, side: String = "",
 	elif shot_type == CHAIN_SHOT:
 		# §4.4b: chain also slows — +2 cap-debuff turns (§4.3a).
 		target["speed_debuff_turns"] = int(target.get("speed_debuff_turns", 0)) + CHAIN_DEBUFF_TURNS
+	if rake > 1.0:
+		# §4.8a event: the side suffering a rake volley −5 (both sides; the
+		# rake flag is the §4.4 ×1.25 bearing test, any shot type).
+		_morale_event(str(target.get("side", "")), MORALE_EVENT_RAKED)
 	result["sunk"] = sunk
 	if damage > 0 or crew_kill > 0:
 		_round_had_damage = true
@@ -1456,8 +1515,9 @@ static func vel_length(vel: Vector2i) -> float:
 ## removes the enemy ship (`captured_enemy`), a player loss removes the
 ## player's ship (`lost_player`, §4.11.7). The winning side's crew pays the
 ## §4.11.5 boarding casualty `floor(crew × 0.2)`, clamped at 0 (crew 0 still
-## sails, §4.6a). A player win also books the §4.8 boarding-victory morale +5
-## into the outcome block (`morale_bonus`).
+## sails, §4.6a). The §4.8a boarding events book afterwards: the WINNER's
+## side +10, the loser −10 (the Phase-8 flat +5 `morale_bonus` is absorbed
+## into the event table and retired).
 func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var result := {"ok": false, "duel": {}, "captured": {}, "lost": {}, "log": {}}
 	if _over or _action_taken or not is_acting(unit) or not can_board(unit, target):
@@ -1493,12 +1553,17 @@ func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	if player_won:
 		_capture(enemy_unit)
 		result["captured"] = enemy_unit["ship"].duplicate(true)
-		# §4.8: a won boarding duel raises fleet morale +5 (the engine never
-		# touches `GameState` — the §4.12.4 consumer applies `morale_bonus`).
-		_boarding_morale_bonus = BOARDING_MORALE_BONUS
+		# §4.8a events: the boarding WINNER's side +10, the loser −10 (both
+		# sides; the capture itself books the separate −20 event in
+		# [method _capture]). The engine never touches `GameState` — the
+		# §4.12.4 consumer applies the net `morale_delta` once.
+		_morale_event(SIDE_PLAYER, MORALE_EVENT_BOARDING_WIN)
+		_morale_event(SIDE_ENEMY, MORALE_EVENT_BOARDING_LOSS)
 	else:
 		_capture(player_unit)
 		result["lost"] = player_unit["ship"].duplicate(true)
+		_morale_event(SIDE_ENEMY, MORALE_EVENT_BOARDING_WIN)
+		_morale_event(SIDE_PLAYER, MORALE_EVENT_BOARDING_LOSS)
 	result["ok"] = true
 	result["log"] = _make_log("board", unit, target, {
 		"won": player_won, "player_wins": int(duel.get("player_wins", 0)),
@@ -1592,7 +1657,15 @@ func captain_charisma(unit: Dictionary) -> int:
 func captain_courage(unit: Dictionary) -> int:
 	if not (unit is Dictionary) or unit.side != SIDE_ENEMY:
 		return 0
-	var ship: Dictionary = unit.get("ship", {})
+	return _ship_or_card_courage(unit.get("ship", {}))
+
+
+## The §4.7 courage behind an ENEMY ship instance: the ship-carried
+## `captain_courage` key (the W4-B compose seam) wins, else the fleet's canon
+## card, else the doc-pinned `10 + 10 × tier` legacy fallback (correction 6).
+## One implementation shared by [method captain_courage] and the §4.8a AI
+## morale start ([method _default_enemy_morale] reads the enemy flagship).
+func _ship_or_card_courage(ship: Dictionary) -> int:
 	if ship is Dictionary and ship.has("captain_courage"):
 		return int(ship["captain_courage"])
 	if not _fleet_captain_card.is_empty():
@@ -1602,23 +1675,101 @@ func captain_courage(unit: Dictionary) -> int:
 
 ## §4.7 surrender chance in percent for an EFFECTIVE courage:
 ## `clamp(25 − floor(courage / 10), 10, 40)`. `courage_mod` is the W3-B
-## profile hook (§4.9a) — W3 callers pass 0; W4 adds the morale modifier.
+## profile hook (§4.9a) — W3 callers pass 0.
 static func surrender_chance_for_courage(courage: int) -> int:
 	return clampi(
 		SURRENDER_CHANCE_BASE - int(floor(float(maxi(courage, 0)) / SURRENDER_COURAGE_DIVISOR)),
 		SURRENDER_CHANCE_MIN, SURRENDER_CHANCE_MAX)
 
 
+## §4.7/§4.8a surrender-roll widening: `+ floor((20 − morale) / 2)` percentage
+## points on TOP of the clamped base (the base keeps its clamp — the effective
+## ceiling is 50% at morale 0). A negative `morale` (the compat default)
+## adds nothing, so a W3 caller stays byte-identical.
+static func morale_surrender_bonus(morale: int) -> int:
+	if morale < 0:
+		return 0
+	return int(floor(float(maxi(MORALE_SURRENDER_GATE - morale, 0))
+		/ float(SURRENDER_MORALE_DIVISOR)))
+
+
 ## [method surrender_chance_for_courage] for the captain behind `unit`, with
-## the profile's `courage_mod` folded into the effective courage (§4.7).
-func surrender_chance(unit: Dictionary, courage_mod: int = 0) -> int:
-	return surrender_chance_for_courage(captain_courage(unit) + courage_mod)
+## the profile's `courage_mod` folded into the effective courage (§4.7) and —
+## when the caller passes the side morale (the T2 surrender site, §4.9a) — the
+## §4.8a morale modifier added on top.
+func surrender_chance(unit: Dictionary, courage_mod: int = 0, morale: int = -1) -> int:
+	return surrender_chance_for_courage(captain_courage(unit) + courage_mod) \
+		+ morale_surrender_bonus(morale)
 
 
 ## Draws the §4.7 surrender roll from the battle's single §4.11.1 stream
 ## (deterministic per seed). A failed roll re-rolls on the ship's next turn.
-func roll_surrender(unit: Dictionary, courage_mod: int = 0) -> bool:
-	return rng.randf() * 100.0 < float(surrender_chance(unit, courage_mod))
+## `morale` is the side morale (§4.8a); the default keeps W3 callers intact.
+func roll_surrender(unit: Dictionary, courage_mod: int = 0, morale: int = -1) -> bool:
+	return rng.randf() * 100.0 < float(surrender_chance(unit, courage_mod, morale))
+
+
+# --- Side morale (docs/60-* §4.8a; decision 9, corrections 5/6) -------------
+
+## The §4.8a side morale for `side` (`"player"` / `"enemy"`), 0–100. THE seam
+## the fleet layer (§4.9a/§4.9b morale readings), the S10 HUD (the player
+## warning — player ships never auto-strike) and the tests read.
+func side_morale(side: String) -> int:
+	return clampi(_enemy_morale if side == SIDE_ENEMY else _player_morale,
+		MORALE_MIN, MORALE_MAX)
+
+
+## The §4.8a writeback delta for `side` (end − start); the outcome block's
+## `morale_delta` (§4.12.2) is this value for the player side. Starts were
+## clamped in [method _init] and every event clamps, so this is exactly
+## `clamp(end, 0, 100) − start`.
+func morale_delta_for(side: String) -> int:
+	var start := _enemy_morale_start if side == SIDE_ENEMY else _player_morale_start
+	return side_morale(side) - start
+
+
+## §4.8a player start default: `GameState.morale`, read defensively (0 when
+## the autoload property is absent), clamped 0–100.
+static func _default_player_morale() -> int:
+	var value: Variant = GameState.get("morale")
+	if value is int or value is float:
+		return clampi(int(value), MORALE_MIN, MORALE_MAX)
+	return MORALE_MIN
+
+
+## §4.8a AI start default: `clamp(40 + flagship-captain courage, 20, 90)` —
+## courage from the enemy flagship's captain card; the legacy no-card fleet
+## falls back to `10 + 10 × tier` (correction 6).
+func _default_enemy_morale() -> int:
+	var flagship: Dictionary = _enemy_ships[0] \
+		if not _enemy_ships.is_empty() and _enemy_ships[0] is Dictionary else {}
+	return clampi(ENEMY_MORALE_COURAGE_BASE + _ship_or_card_courage(flagship),
+		ENEMY_MORALE_FLOOR, ENEMY_MORALE_CEILING)
+
+
+## Applies one §4.8a event-table delta to `side` and clamps to 0..100 after
+## it (§4.8a: both morales clamp after every event). Unknown sides are
+## ignored (defensive).
+func _morale_event(side: String, delta: int) -> void:
+	if side == SIDE_PLAYER:
+		_player_morale = clampi(_player_morale + delta, MORALE_MIN, MORALE_MAX)
+	elif side == SIDE_ENEMY:
+		_enemy_morale = clampi(_enemy_morale + delta, MORALE_MIN, MORALE_MAX)
+
+
+## True when `unit` is the flagship of its side for the §4.8a flagship-sunk
+## event, judged at the moment of sinking (callers evaluate BEFORE the
+## removal). The player flagship is the game-rule fleet[0] — [method
+## _flagship_index], which §4.6/§4.11.7 succession keeps on the next living
+## ship. The enemy flagship is the deployed fleet index 0: its §4.9b successor
+## takes the battle ANCHOR only ("takes the anchor AND inherits the state
+## machine"), never the flagship identity — the −30 event fires once per
+## enemy flagship lost, the §4.8a friendly-sunk −15 prices every other hull.
+func _is_side_flagship(unit: Dictionary) -> bool:
+	var index := int(unit.get("index", -1))
+	if str(unit.get("side", "")) == SIDE_PLAYER:
+		return index == _flagship_index
+	return index == 0
 
 
 # --- Hold / menu seams -----------------------------------------------------
@@ -1724,6 +1875,18 @@ func _call_policy(policy: Callable, unit: Dictionary):
 ## rule 2 pick, shot by §4.4b for an enemy actor, round for a player actor
 ## unless the S10 selector passed them as the optional extra keys).
 func _apply_decision(unit: Dictionary, decision) -> void:
+	# §4.7 side collapse (§4.8a, correction 5): the ENGINE owns the ≤ 10
+	# strike — at side morale ≤ 10 every living AI ship strikes colours at
+	# its next turn with NO roll, resolved exactly as the §4.7 surrender
+	# ([method _ai_surrender], the capture gate included). It fires ahead of
+	# whatever decision the policy produced, so it holds regardless of the AI
+	# level/policy. PLAYER ships NEVER auto-strike — low player morale is a
+	# HUD warning only ([method side_morale] is the screen's read, §4.8a).
+	if str(unit.get("side", "")) == SIDE_ENEMY \
+			and bool(unit.get("alive", false)) \
+			and side_morale(SIDE_ENEMY) <= MORALE_INSTANT_STRIKE:
+		_ai_surrender(unit)
+		return
 	var action := "hold"
 	var target = {}
 	if decision is Dictionary:
@@ -1780,23 +1943,23 @@ func _ai_surrender(unit: Dictionary) -> void:
 
 # --- Snapshot / restore (§4.12.1; the T3 search + tests consume it) --------
 #
-# A flat `Array[int]` of ALL mutable state, EXACTLY invertible:
+# A flat `Array[int]` of ALL mutable state, EXACTLY invertible, APPEND-ONLY
+# (new fields only ever join at the end so older fixtures keep their layout):
 #   [0]                unit count n
 #   per unit (13):     pos.x, pos.y, vel.x, vel.y, heading8, durability, crew,
 #                      reload_port, reload_starboard, speed_debuff_turns,
 #                      alive, captain_rating, cannon_rating
-#   scalars (21):      round, cursor, action_taken, moved_this_turn,
+#   scalars (23):      round, cursor, action_taken, moved_this_turn,
 #                      round_had_damage, round_had_boarding, stall_rounds,
 #                      last_min_distance, flagship_index, over, result_idx,
-#                      cause_idx, boarding_morale_bonus, surrendered_enemy,
-#                      log count, sunk_enemy count, sunk_by_player count,
-#                      captured count, sunk_player count, lost_player count,
-#                      rng.state
-# (The W4-A side-morale values append to the scalar block — owned by that
-# wave, §4.8a.)
+#                      cause_idx, [retired morale_bonus slot — always 0],
+#                      surrendered_enemy, log count, sunk_enemy count,
+#                      sunk_by_player count, captured count, sunk_player
+#                      count, lost_player count, rng.state,
+#                      player_morale, enemy_morale (§4.8a — W4-A appended)
 
 const _SNAPSHOT_UNIT_FIELDS := 13
-const _SNAPSHOT_SCALARS := 21
+const _SNAPSHOT_SCALARS := 23
 
 
 func snapshot() -> Array[int]:
@@ -1830,7 +1993,10 @@ func snapshot() -> Array[int]:
 	out.append(1 if _over else 0)
 	out.append(RESULT_VALUES.find(_result))
 	out.append(_cause_index())
-	out.append(_boarding_morale_bonus)
+	# Retired §4.8 slot: `morale_bonus` left the outcome block in W4-A (§4.8a
+	# absorbed it); the position is kept as a 0 placeholder so the layout
+	# stays append-only for W3-era consumers.
+	out.append(0)
 	out.append(_surrendered_enemy)
 	out.append(_log.size())
 	out.append(_sunk_enemy.size())
@@ -1839,6 +2005,9 @@ func snapshot() -> Array[int]:
 	out.append(_sunk_player.size())
 	out.append(_lost_player.size())
 	out.append(rng.state)
+	# §4.8a side morales (appended in W4-A; §4.12.1 "both side morales").
+	out.append(_player_morale)
+	out.append(_enemy_morale)
 	return out
 
 
@@ -1886,7 +2055,7 @@ func restore(arr: Array[int]) -> void:
 	_result = RESULT_VALUES[result_idx] if result_idx >= 0 \
 		and result_idx < RESULT_VALUES.size() else RESULT_UNFINISHED
 	_player_last_cause = ["", "sunk", "captured"][clampi(int(arr[i + 11]), 0, 2)]
-	_boarding_morale_bonus = int(arr[i + 12])
+	# i + 12: the retired `morale_bonus` placeholder — written 0, not read.
 	_surrendered_enemy = int(arr[i + 13])
 	_log.resize(int(arr[i + 14]))
 	_sunk_enemy.resize(int(arr[i + 15]))
@@ -1895,6 +2064,9 @@ func restore(arr: Array[int]) -> void:
 	_sunk_player.resize(int(arr[i + 18]))
 	_lost_player.resize(int(arr[i + 19]))
 	rng.state = int(arr[i + 20])
+	# §4.8a side morales — the exact inverse of the snapshot append.
+	_player_morale = int(arr[i + 21])
+	_enemy_morale = int(arr[i + 22])
 
 
 func _cause_index() -> int:
@@ -2265,10 +2437,16 @@ func _min_pair_distance() -> int:
 
 # --- Damage / removal internals (§4.11.5, §4.11.7) ------------------------
 
-## Removes a sunk ship immediately; cargo is lost (§4.7).
+## Removes a sunk ship immediately; cargo is lost (§4.7). The §4.8a events
+## book here: friendly ship sunk −15, or −30 TOTAL when the hull was the
+## side's flagship (evaluated BEFORE the removal — the flagship is who it was
+## at the moment of sinking; the −30 replaces, never adds to, the −15,
+## correction 5).
 func _sink(unit: Dictionary, by_side: String, _cause: String) -> void:
 	if not bool(unit.get("alive", false)):
 		return
+	var flagship_sunk := _is_side_flagship(unit)
+	var side := str(unit.get("side", ""))
 	unit["alive"] = false
 	unit["ship"]["durability"] = 0
 	var ship_type_id := str(unit["ship"].get("ship_type_id", ""))
@@ -2280,11 +2458,15 @@ func _sink(unit: Dictionary, by_side: String, _cause: String) -> void:
 		_sunk_player.append(ship_type_id)
 		_player_last_cause = "sunk"
 		_promote_player_flagship()
+	_morale_event(side, MORALE_EVENT_FLAGSHIP_SUNK if flagship_sunk
+		else MORALE_EVENT_FRIENDLY_SUNK)
 
 
 ## Removes a captured ship (duel win/loss, AI surrender). The instance is
 ## reported intact — battle-worn crew and durability — and the §4.11.7
-## 25%-durability/crew-0 transform is the application seam's (task C).
+## 25%-durability/crew-0 transform is the application seam's (task C). The
+## §4.8a captured event books here: ship captured −20, the captured hull's
+## own side (both sides).
 func _capture(unit: Dictionary) -> void:
 	if not bool(unit.get("alive", false)):
 		return
@@ -2296,6 +2478,7 @@ func _capture(unit: Dictionary) -> void:
 		_lost_player.append(unit["ship"].duplicate(true))
 		_player_last_cause = "captured"
 		_promote_player_flagship()
+	_morale_event(str(unit.get("side", "")), MORALE_EVENT_CAPTURED)
 
 
 ## The player flagship's fleet index (`fleet[0]`, §4.6/§4.11.7). Advanced to
