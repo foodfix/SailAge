@@ -537,7 +537,8 @@ pure deterministic, zero RNG.
 ### 4.9c T3 one-ply lookahead (Phase 9)
 
 `ai_level = 1` enumerates, on a `snapshot()`, every legal velocity
-(`legal_velocities` — Chebyshev box, ≤ 49 candidates, (y, x) lexicographic)
+(`legal_velocities` — the §4.3a Chebyshev box in (y, x) lexicographic order;
+≤ 81 candidates at the `battle_max_speed = 4` tier, §4.3a's derived bound)
 × the action set {hold, best-target cannon per side, legal ram, legal
 board}, applies each on `restore()`, and scores
 `score = θ · φ` over NINE features: φ1 durability diff, φ2 cannon diff,
@@ -1592,8 +1593,10 @@ run_to_completion(policy: Callable, max_rounds: int = 40) -> Dictionary
 | `current` | `Dictionary` | *optional* (Phase 9) — `{dir: <8-token flow-TO id>, strength: 0..3}`, the decoded, reversal-applied current at the contact tile; strength 0 = no current; default = the decoded contact tile regardless of the world's `current_mode` (correction 1) |
 
 `unit` is a plain dict with at least `side` (`"player"`/`"enemy"`), `index`,
-`ship` (the instance), `cell` (`Vector2i`), `mp`, `reload_until_round`,
-`alive`.
+`ship` (the instance), and the §4.3a state — `pos` (`Vector2i`), `vel`
+(`Vector2i`), `heading8`, `reload_port`, `reload_starboard`,
+`speed_debuff_turns`, `crew` — plus `alive`. (The Phase-2 `cell` / `mp` /
+`reload_until_round` triple is retired, §4.3a.)
 
 Additional additive seams pinned during implementation (they were missing from
 the first draft of this table and are now part of the contract):
