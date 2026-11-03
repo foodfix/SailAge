@@ -1099,12 +1099,16 @@ func _ensure_fleet_orders() -> void:
 			_fc_state = seeded if seeded is Dictionary else {}
 		else:
 			_fc_state = {}
-	# The §4.9b view: the engine's units, the round, and the battle kind.
+	# The §4.9b view: the engine's units, the round, the battle kind, and the
+	# enemy side morale (W4 master integration — B's commander reads
+	# `view["side_morale"]` for the ≤ 20 break rule; guarded for pre-A sims).
 	var view := {
 		"units": sim.units(),
 		"round": round_no,
 		"enemy_kind": str(encounter.get("kind", "pirate")),
 	}
+	if sim.has_method("side_morale"):
+		view["side_morale"] = int(sim.side_morale("enemy"))
 	var orders = _fleet_commander.call("generate_orders",
 		view, _enemy_profile, _fc_state)
 	_fc_orders = orders if orders is Array else []
