@@ -13,7 +13,10 @@
       "speed": 16,
       "crew_min": 8,
       "crew_max": 20,
-      "armament_slots": 2
+      "armament_slots": 2,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 90
     },
     {
       "id": "sloop",
@@ -27,7 +30,10 @@
       "speed": 20,
       "crew_min": 10,
       "crew_max": 30,
-      "armament_slots": 4
+      "armament_slots": 4,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 90
     },
     {
       "id": "caravel",
@@ -41,7 +47,10 @@
       "speed": 20,
       "crew_min": 15,
       "crew_max": 45,
-      "armament_slots": 6
+      "armament_slots": 6,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "galley",
@@ -55,7 +64,10 @@
       "speed": 24,
       "crew_min": 40,
       "crew_max": 120,
-      "armament_slots": 4
+      "armament_slots": 4,
+      "battle_max_speed": 4,
+      "battle_accel": 2,
+      "battle_turn_rate": 90
     },
     {
       "id": "brigantine",
@@ -69,7 +81,10 @@
       "speed": 24,
       "crew_min": 20,
       "crew_max": 60,
-      "armament_slots": 10
+      "armament_slots": 10,
+      "battle_max_speed": 4,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "nao",
@@ -83,7 +98,10 @@
       "speed": 16,
       "crew_min": 25,
       "crew_max": 80,
-      "armament_slots": 10
+      "armament_slots": 10,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "carrack",
@@ -97,7 +115,10 @@
       "speed": 16,
       "crew_min": 30,
       "crew_max": 100,
-      "armament_slots": 16
+      "armament_slots": 16,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "galleon",
@@ -111,7 +132,10 @@
       "speed": 20,
       "crew_min": 40,
       "crew_max": 150,
-      "armament_slots": 24
+      "armament_slots": 24,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "galiot",
@@ -125,7 +149,10 @@
       "speed": 16,
       "crew_min": 15,
       "crew_max": 40,
-      "armament_slots": 2
+      "armament_slots": 2,
+      "battle_max_speed": 2,
+      "battle_accel": 2,
+      "battle_turn_rate": 90
     },
     {
       "id": "galleass",
@@ -139,7 +166,10 @@
       "speed": 16,
       "crew_min": 60,
       "crew_max": 160,
-      "armament_slots": 6
+      "armament_slots": 6,
+      "battle_max_speed": 2,
+      "battle_accel": 2,
+      "battle_turn_rate": 45
     },
     {
       "id": "fluyt",
@@ -153,7 +183,10 @@
       "speed": 16,
       "crew_min": 12,
       "crew_max": 30,
-      "armament_slots": 2
+      "armament_slots": 2,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "junk",
@@ -167,7 +200,10 @@
       "speed": 16,
       "crew_min": 20,
       "crew_max": 60,
-      "armament_slots": 3
+      "armament_slots": 3,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "dhow",
@@ -181,7 +217,10 @@
       "speed": 20,
       "crew_min": 10,
       "crew_max": 30,
-      "armament_slots": 2
+      "armament_slots": 2,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 90
     },
     {
       "id": "pinnace",
@@ -195,7 +234,10 @@
       "speed": 16,
       "crew_min": 8,
       "crew_max": 20,
-      "armament_slots": 2
+      "armament_slots": 2,
+      "battle_max_speed": 2,
+      "battle_accel": 1,
+      "battle_turn_rate": 90
     },
     {
       "id": "caravela_redonda",
@@ -209,7 +251,10 @@
       "speed": 20,
       "crew_min": 15,
       "crew_max": 40,
-      "armament_slots": 3
+      "armament_slots": 3,
+      "battle_max_speed": 3,
+      "battle_accel": 1,
+      "battle_turn_rate": 45
     },
     {
       "id": "xebec",
@@ -223,7 +268,10 @@
       "speed": 24,
       "crew_min": 25,
       "crew_max": 80,
-      "armament_slots": 4
+      "armament_slots": 4,
+      "battle_max_speed": 4,
+      "battle_accel": 1,
+      "battle_turn_rate": 90
     }
   ]
 }
