@@ -7,6 +7,7 @@
 **Status (2026-11-03): W1 launched** — slots A/B/C/D running in parallel
 worktrees (branches `phase9/phase9-docs-{schema,battle,ai,ui}`), merge
 order A → B → C → D; gate runs on `main` after each merge.
+
 **W1 status (2026-11-03): ✅ complete** — slots A (`9f4b118`) → B
 (`20cee38`) → C (`e0feee9`) → D (`a7c0b47`) merged in order on `main`;
 `validate_data.py` exit 0 after each merge and at the gate; every new
@@ -24,6 +25,29 @@ drops the old proximity clause (decision 9 owns the gate); W1-B's §7
 checklist staleness (16×10/MP rows) is Phase-2 history — the Phase-9
 acceptance block lands with W6.
 
+**W2 status (2026-11-03): ✅ complete** — slots A (`7860d43`) → B
+(`f019391`) → C (`0e0ae12`) → staged D (`3879bfb`) merged in order on
+`main`; the staged-protocol red (group 7 `unexpected ai_profiles`) showed
+at the A/B merges exactly as designed and D's amendment turned the gate
+green: `validate_data.py` exit 0, groups 1–12 (group 3 now pins the three
+ship_types battle fields incl. the 16→2/20→3/24→4 mapping and the 7+9
+turn-rate partition; group 7 pins `ai_profiles` nine kinds × nine keys
+with the full §4.10 locked-value table, 26/26 negative probes). Sandbox
+suite green on main: `test_battle_sandbox` ALL PASS (93 checks — clamps,
+`player_stats` override/fallback, export→import→re-export byte-identity,
+S21→S10 run determinism, **zero-write audit**, normal-path guard);
+regression spots green: `test_battle_screen` 123, `test_battle` 276,
+`test_tournament` 145. ui_strings 899 → 987 keys, zh/en parity green.
+Master micro-integrations at the gate (ledger): `10-*` §7.12 amended with
+the master-authorized `{family}.{value}` label keys (formation ×4,
+kind ×9, archetype ×3, ai_level ×2, dir ×9 — the selectors must never
+render raw ids; weather reuses `world.weather.*`); C's sandbox-mode
+after-action **suppresses the `battle_finished` broadcast** (S3's listener
+removes fleets — emitting would breach decision 15; normal battles
+unchanged, guard-tested); C's compose stream seeds from the resolved
+seed deterministically (stream-continuity unpinned by the docs — noted
+for W5-C's full-field pass); the sandbox enemy-captain field edits enemy
+row 0's `captain_id` (no enemy-level schema key exists).
 ## Goal
 
 Replace the Phase-2 MP-grid battle (16×10, 360° cannon, skip-a-turn reload)

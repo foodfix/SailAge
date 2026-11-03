@@ -2286,6 +2286,16 @@ group 7's `ai_profiles` — §8, §8.2 item 14).
 
 Every key not annotated above is a plain label (no placeholder). Notes:
 
+- **Value-label sub-keys (W2 gate amendment, master-authorized):** the
+  S21 selectors must never render raw ids, so the wave also ships the
+  `{family}.{value}` labels — `battle.formation.{line_ahead, column,
+  screen, swarm}` (4), `sandbox.kind.{pirate, navy, patrol, privateer,
+  treasure, trader, coaster, courier, tournament}` (9),
+  `sandbox.archetype.{aggressive, balanced, cautious}` (3),
+  `sandbox.ai_level.{t2, t3}` (2), `sandbox.dir.{N, NE, E, SE, S, SW, W,
+  NW, VAR}` (9; shared by the wind-direction and current-direction
+  selectors). Weather labels reuse the existing `world.weather.*` keys.
+  With these, the families total 88 new keys (899 → 987).
 - attribute labels reuse the existing `char.attr.*` keys — no new attribute
   strings;
 - equipment item names come from `data/equipment.json` — never duplicated
