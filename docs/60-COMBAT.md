@@ -33,6 +33,13 @@ picker / hail / intercept interaction layer (§4.11.15; screens per
 `80-*` §4.10), and the Phase-5 named-pirate respawn machinery is
 retired for the captain return queue (§4.11.11.4 amended, §4.11.15).
 
+**Phase 9 (naval-combat realism & AI, 2026-11-03).** Phase 9 replaces the
+MP-grid battle with the velocity-physics layer (§4.2–§4.6a pins) and adds
+side-level morale (§4.8a), the profile-driven enemy AI with the
+fleet-command layer (§4.9a–§4.9c), the T3 lookahead ceiling (`ai_level`),
+the S10 rebuild and the S21 zero-write sandbox (§4.12.4, `80-*` §4.7.16);
+the aftermath/economy rules (§4.11.10) keep their shape.
+
 ## 2. Artifacts
 
 | Path | Contents |
@@ -234,28 +241,156 @@ immunity are retired with the marker system (§4.11.11.1).
   (`50-*` §4.3 gains `+2 per battle round survived`? — locked: +10 XP per
   enemy ship neutralized, +5 per round survived). **Phase 8:** the total
   is ×(1 + level / 20), floored once (§4.11.10).
-- **Boarding-victory morale (Phase 8):** a won boarding duel (§4.6) raises
-  fleet morale +5.
+- **Boarding-victory morale (repinned Phase 9):** a boarding duel's morale
+  effect is the §4.8a event table — boarding win **+10** / boarding loss
+  **−10**. The Phase-8 flat +5 is absorbed into that table and retired.
 - Reputation: defeating pirates +2 with the two nearest ports' nations;
   attacking/sinking navy ships applies `70-*` piracy deltas — **Phase 8
   adds −20 fame** when the attacked fleet was not hostile (§4.11.10).
 - Return: world map at contact tile; the hostile marker despawns; spawn
   immunity 3 days (Phase-2 rule; retired in Phase 5, §4.11.11.1).
 
-### 4.9 Enemy AI (deterministic priority list, top-down first match)
+### 4.8a Side morale (Phase 9)
 
-1. If durability < 25% max and any player ship within 3 → surrender (§4.7).
-2. If cannons ≥ 1, loaded, and a player ship in range → fire at the
-   lowest-durability target.
-3. If own cannons > total player cannons and orthogonally adjacent to the
-   player flagship → board.
-4. If orthogonally adjacent to a player ship and weaker guns → ram.
-5. Move toward the nearest player ship, spending full MP (path: greedy
-   Chebyshev reduction, avoid occupied tiles).
-6. Hold.
+One morale value **per side** (not per ship), range 0–100:
+
+- **Start.** Player side starts at `GameState.morale`. AI side starts at
+  `clamp(40 + flagship-captain courage, 20, 90)` — `courage` read from the
+  enemy flagship's captain card (`50-*` Person model); a legacy fleet
+  without a card falls back to `10 + 10 × tier` (the same legacy fallback
+  as gunnery — correction 6).
+- **Events (both sides):**
+
+  | Event | Delta |
+  |---|---|
+  | Friendly ship sunk | **−15** |
+  | Ship captured | **−20** |
+  | **Flagship sunk** | **−30 TOTAL** — replaces, never adds to, the friendly-sunk −15 on that event (correction 5) |
+  | Side suffering a rake volley | **−5** |
+  | Boarding win (§4.6) | **+10** |
+  | Boarding loss (§4.6) | **−10** |
+
+- **Gates.** Side morale ≤ 20 **and** ship durability ≤ 25% ⇒ the §4.7
+  surrender roll, widened by `+ floor((20 − morale) / 2)` pp. Side
+  morale ≤ 10 ⇒ **every living AI ship strikes colours at its next turn,
+  no roll** — AI-side ONLY: player ships never auto-strike (§4.7), and low
+  player morale is a HUD warning only (correction 5).
+- **Writeback.** The outcome block carries `morale_delta` (§4.12.2); the
+  caller applies `GameState.morale = clamp(start + delta, 0, 100)` through
+  the §4.12.4 sequence — the old direct +5 write of §4.8 is retired.
+  Tournament bouts participate normally.
+- Both sides' morale values ride `snapshot()` / `restore()` (§4.12.1).
+
+### 4.9 Enemy AI — the two-level ramp (Phase 9)
+
+The enemy AI is a two-level ramp: **T2 deterministic greedy** (§4.9a) and
+**T3 one-ply lookahead** (§4.9c), both consuming the per-kind profile
+(§4.9a) and — for multi-ship AI fleets — the fleet-command orders (§4.9b);
+`ai_level ∈ {0, 1}` selects per battle kind. The Phase-2 six-rule priority
+list that stood here is **retired** — its semantics live on verbatim in
+§4.9a's T2 priority list.
 
 Seeded RNG (§4.11.1: one stream per battle, seeded from save state + contact
 tile + day) makes AI and duel rolls reproducible for tests.
+
+### 4.9a Profiles & the T2 priority list (Phase 9)
+
+- **The profile block.** `data/npc_config.json` `ai_profiles` — nine kinds
+  × nine keys (schema + value table pinned in `10-*` §4.10). The six live
+  T2 keys are `archetype / aggression / preferred_range /
+  flee_below_hp_pct / focus / courage_mod`; `formation` feeds §4.9b;
+  `ai_level` feeds §4.9c.
+- **Lookup rule (correction 8).** Row = `ai_profiles[kind]`; a `hunter`
+  battle reads the `navy` row (mirrors `NpcFleets.composition_kind`); the
+  `coaster` row is forward-compat + sandbox-only (coasters are
+  intimidate-only, never battle — §4.1.1).
+- **T2 priority list** (verbatim semantics; deterministic; top-down first
+  match) — per AI ship per turn:
+  1. **Surrender roll** (§4.7 — gate widened by morale; effective courage
+     = card courage + `courage_mod`).
+  2. **Flee** — ship hp% < `flee_below_hp_pct`, or `aggression < 25`, or
+     side morale ≤ 20 (the pre-fleet-layer reading): take the first legal
+     velocity strictly increasing Chebyshev to the nearest player ship
+     (ties §4.11.8); hold when none.
+  3. **Fire** — a loaded side's arc contains a target: fire (focus target
+     per §4.11.8, rake preference, shot type by the §4.4b rule).
+  4. **Kite** — both sides reloading: hold/steer to keep Chebyshev ≈
+     `preferred_range` (§4.11.8 tie-breaks).
+  5. **Board** — hook legal (§4.6a) AND (own crew + duel rating > target's
+     OR target hp% ≤ 25). **Ram** — `floor(‖vel‖) ≥ 2` AND own cannons +
+     duel rating > target's. **Close** — otherwise steer toward the
+     nearest player ship, decelerating to `‖vel‖ ≤ 1` at Chebyshev ≤ 2 so
+     the hook window opens. **Hold** — last resort.
+
+  All tie-breaks are pinned in §4.11.8.
+
+### 4.9b Fleet-command layer (Phase 9)
+
+Per round, for every AI ship, the fleet commander emits an **order
+five-tuple** `{station: Vector2i, desired_heading8: int,
+desired_speed_band: [lo, hi], assigned_target: unit, discipline: bool}` —
+pure deterministic, zero RNG.
+
+**State machine** `form → close → engage → wear → break`, per formation:
+`line_ahead` runs all five states; `column` = form/close/engage; `screen`
+= flagship-radius-3 screen + free fire; `swarm` = target assignment only.
+
+| State | Behavior | Exit |
+|---|---|---|
+| `form` | each ship sails to its formation slot (1-cell intervals along the reciprocal of the flagship heading8; column = lateral spacing) | every living ship within station deviation ≤ 2, or after 3 rounds (bail-out to `close`) |
+| `close` | column cruise toward the enemy, `desired_speed_band` = full | nearest enemy Chebyshev ≤ 5 → `engage` |
+| `engage` | hold broadside-on (`desired_heading8` = perpendicular to the enemy bearing ±90° bucket), attack the **assigned** target, `discipline = true` (off-station candidates are hard-removed from the candidate set) | enemy bearing vs the queue heading buckets 0°/180° → `wear`; side morale ≤ 20 → `break` |
+| `wear` | the whole column turns ≤ `turn_rate` per round toward the new heading, LOCKED until every ship is within ±1 bucket | every ship within ±1 bucket → `engage` |
+| `break` | dissolve to swarm (target assignment kept) | terminal for the battle |
+
+- **Hysteresis:** every state holds ≥ 2 rounds before a non-forced
+  transition; `wear` cannot be interrupted.
+- **Anchor & succession:** anchor = flagship pos + heading8; when the
+  flagship sinks, the lowest living fleet index takes the anchor AND
+  inherits the state machine.
+- **Target assignment:** in `engage`, targets distribute round-robin over
+  the enemy by the profile `focus` ordering; at `aggression ≥ 80` the
+  whole fleet focus-fires the focus-top target.
+- Side morale ≤ 20 ⇒ `break` (the §4.9a flee rule covers single-ship /
+  side morale before this layer engages).
+- Implementation lands as `scripts/combat/fleet_commander.gd`
+  (RefCounted, pure) — interface pinned in §4.12.3.
+
+### 4.9c T3 one-ply lookahead (Phase 9)
+
+`ai_level = 1` enumerates, on a `snapshot()`, every legal velocity
+(`legal_velocities` — Chebyshev box, ≤ 49 candidates, (y, x) lexicographic)
+× the action set {hold, best-target cannon per side, legal ram, legal
+board}, applies each on `restore()`, and scores
+`score = θ · φ` over NINE features: φ1 durability diff, φ2 cannon diff,
+φ3 reload diff, φ4 arc fit, φ5 rake exposure, φ6 flagship danger, φ7
+station deviation, φ8 friendly-blocked line, φ9 expected heading
+alignment. Zero dice — deterministic evaluation.
+
+- **θ:** one integer 9-array per archetype — `THETA_AGGRESSIVE /
+  THETA_BALANCED / THETA_CAUTIOUS` consts in
+  `scripts/combat/ai_search.gd`. The doc-first prior is
+  `{10, 4, 2, 3, −5, −6, −2, −4, 2}` for all three; final integers come
+  from the offline CEM run (`tools/battle_tune.py`) through the named
+  master θ-finalization task (correction 11) — the doc is amended first,
+  then the consts sync. Ties resolve by enumeration order (same seed ⇒
+  same decision).
+- **Shot type** stays rule-derived (§4.4b) OUTSIDE the enumeration.
+- `discipline = true` removes off-station velocity candidates from the
+  enumeration outright.
+- **Per-kind `ai_level`** (pinned in `10-*` §4.10):
+  pirate/privateer/navy/patrol/tournament = 1;
+  treasure/trader/coaster/courier = 0.
+- **Archetype → θ mapping:** pirate/privateer → aggressive;
+  patrol/navy/tournament → balanced; treasure/trader/coaster/courier →
+  cautious.
+- **Performance pin:** avg ≤ 30 ms per decision; fallback on breach:
+  pre-screen velocity candidates by φ9, halving the set.
+- **Adoption gate** (recorded in `IMPLEMENT-Phase9.md`, not here): T3 vs
+  T2 ≥ +10 pp win rate, 100% legal-action rate, the perf pin met —
+  otherwise `ai_level = 0` content ships.
+- Implementation lands as `scripts/combat/ai_search.gd` — interface
+  pinned in §4.12.3.
 
 ### 4.10 Player retreat
 
@@ -1194,7 +1329,7 @@ cannon(unit, target) -> Dictionary          # {ok, damage, sunk, log}
 ram(unit, target) -> Dictionary
 board(unit, target) -> Dictionary           # {ok, duel, ...} (duel via §4.12.1.2)
 hold(unit) -> Dictionary
-run_to_completion(policy: Callable, max_rounds: int = 30) -> Dictionary
+run_to_completion(policy: Callable, max_rounds: int = 40) -> Dictionary
 ```
 
 `config` keys (all required unless marked):
@@ -1210,6 +1345,9 @@ run_to_completion(policy: Callable, max_rounds: int = 30) -> Dictionary
 | `contact` | `Vector2i` | world tile at contact |
 | `weather` | `String` | `20-*` §4.7 value (`storm` halves cannon damage) |
 | `seed` | `int` | *optional*; overrides the §4.11.1 formula (tests) |
+| `player_stats` | `Dictionary` | *optional* (Phase 9) — `{attributes?: {constitution, intellect, charisma, courage, luck}, skills?: {…}, equipment?: {weapon, armor}}`; when present, the player reads (`player_attribute` / `player_effective_skill` / `player_duel_base`) take the override, falling back to `GameState` per key (the S21 seam, §4.12.4); absent ⇒ behavior byte-identical to today |
+| `wind_dir` | `String` | *optional* (Phase 9) — the 8-token wind-FROM id at contact (default = `GameState.world["wind_dir"]`); locked for the battle |
+| `current` | `Dictionary` | *optional* (Phase 9) — `{dir: <8-token flow-TO id>, strength: 0..3}`, the decoded, reversal-applied current at the contact tile; strength 0 = no current; default = the decoded contact tile regardless of the world's `current_mode` (correction 1) |
 
 `unit` is a plain dict with at least `side` (`"player"`/`"enemy"`), `index`,
 `ship` (the instance), `cell` (`Vector2i`), `mp`, `reload_until_round`,
@@ -1226,7 +1364,17 @@ BattleSim.flagship_index() -> int       # -1 when the player has no ships left
 BattleSim.is_acting(unit) -> bool       # unit is the current actor
 BattleSim.retreat() -> Dictionary       # §4.11.9 `retreat` outcome
 BattleSim.offer_surrender() -> Dictionary  # §4.11.7 player surrender
+BattleSim.legal_velocities(unit: Dictionary) -> Array[Vector2i]  # §4.3a enumeration
+BattleSim.apply_velocity(unit: Dictionary, vel: Vector2i) -> bool  # validate → clamp → integrate → sweep
+BattleSim.snapshot() -> Array[int]      # flat mutable-state array (below)
+BattleSim.restore(arr: Array[int]) -> void  # exact inverse of snapshot()
 ```
+
+Phase-9 API pins: `run_to_completion`'s round-cap default is **40**
+(correction 12). `snapshot()` is a flat mutable-state array — pos/vel/
+heading8/durability/crew/per-side reload + speed-debuff/alive/**both side
+morales** (§4.8a)/cursor scalars/`rng.state`; `restore(arr)` is its exact
+inverse and is shared by the T3 search (§4.9c) and the tests.
 
 `config` also accepts an optional `rng` (`RandomNumberGenerator`) so a caller
 can hand over the **same** stream it used for `AiFleet.compose_enemy`, which
@@ -1240,9 +1388,13 @@ AiFleet.compose_enemy(kind: String, day: int, rng: RandomNumberGenerator) -> Arr
 AiFleet.decide(sim: BattleSim, unit: Dictionary) -> Dictionary
 ```
 
-`decide` returns `{action, target, cell}` where `action` ∈
+`decide` returns `{action, target, cell, vel}` (Phase 9) where `action` ∈
 `cannon|ram|board|move|hold|surrender`; `target` is a unit dict or `{}`;
-`cell` is the destination for `move`. The priority order is §4.9 exactly.
+`vel` is the chosen velocity for `move`; `cell = pos + vel` is **derived**,
+never authored. The cannon **shot type is NOT in the dict** — it is derived
+at execution (§4.4b for AI, the S10 selector for the player). The T2
+priority order is §4.9a exactly; `ai_level = 1` routes the decision through
+§4.9c.
 
 ##### 4.12.1.2 Duel resolution (single implementation)
 
@@ -1274,6 +1426,7 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
   "lost_player": [],
   "salvage_gold": 150,
   "xp": 65,
+  "morale_delta": 0,
   "rep_deltas": {"portugal": 2, "spain": 2},
   "cargo_overflow_lost": 0
 }
@@ -1284,12 +1437,16 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
   capture rule consumes them). A ship that **surrendered** also appears in
   `captured_enemy` (§4.11.7 "resolved exactly as a duel win"), and
   `surrendered_enemy` is the dialog-wording count only — never add the two.
+- `morale_delta` (int, Phase 9) is the §4.8a side-morale writeback: the
+  caller applies it to `GameState.morale` in the §4.12.4 sequence —
+  skipped entirely in the sandbox branch (§4.12.4).
 - `salvage_gold`, `xp`, `rep_deltas` are the **pre-computed** §4.11.10 numbers;
   applying them is `BattleRewards.apply()` (§4.12.3). `rep_deltas` holds only
   pirate `+2` entries — the navy `−20` is charged once at battle start by
   whoever initiated the battle (§4.11.10), never here.
 - `result` ∈ `victory` \| `defeat_sunk` \| `defeat_captured` \| `retreat` \|
-  `surrender`.
+  `surrender` \| `stall` — `stall` (Phase 9) is the mutual-disengage
+  outcome (§4.11.9 row).
 
 #### 4.12.3 The application seams
 
@@ -1298,7 +1455,12 @@ view, per §4.11.6. The battle's `board` action and the S11 modal both call
 | `scripts/combat/battle_result.gd` (`class_name BattleResult`) | C | `apply(sim_outcome: Dictionary, enemy_units: Array, player_fleet_ref: Array) -> Dictionary` — fleet-only effects: captures join the fleet (§4.11.7) or are looted+scuttled, lost player ships are removed, flagship promotion, `gameover.captured`/`sunk` emission; returns the outcome with `cargo_overflow_lost` filled in. **Sunk player hulls leave the fleet too:** it removes both the `lost_player` instances and the `sunk_player` hull ids, because §4.7 makes this the only fleet mutator in a battle |
 | `scripts/combat/duel.gd` (`class_name Duel`) | C | `start(config: Dictionary) -> Dictionary` — `config` = `{player_base, defender_base, seed, rng?, host?, ship_name, attacker_name, defender_name}`; runs `BattleSim.resolve_duel` and (in a scene tree, unless headless) presents `duel_modal.tscn`; returns **exactly** the `resolve_duel` dict (so it stays byte-comparable to a direct call) |
 | `scripts/combat/battle_rewards.gd` (`class_name BattleRewards`) | G | `apply(outcome: Dictionary) -> Dictionary` — adds `salvage_gold`, awards `xp` through `Character.award_xp`, applies `rep_deltas` through `Character.add_reputation`; returns what it applied |
+| `scripts/combat/fleet_commander.gd` (`class_name FleetCommander`) | W4-B | `generate_orders(view: Dictionary, profile: Dictionary, state: Dictionary) -> Array` — pure per-round order five-tuples (§4.9b); RefCounted, zero RNG |
+| `scripts/combat/ai_search.gd` (`class_name AiSearch`) | W5-A | `decide(sim, unit, theta: Array) -> Dictionary` — the T3 enumeration (§4.9c) — plus the three `THETA_AGGRESSIVE / THETA_BALANCED / THETA_CAUTIOUS` const arrays; zero dice, ties by enumeration order |
 | `scripts/world/npc_fleets.gd` (`class_name NpcFleets`) | J (core); K (auto-resolve/wreck methods), L (aliveness schedulers) extend the same file | the API block below — task J implements it exactly |
+
+These two Phase-9 rows pin the **names + purity contract + zero-RNG
+semantics**; their owning waves may refine the exact signatures.
 
 `npc_fleets.gd` — pure `RefCounted`, never touches the battle grid
 (replaces the retired `Encounters` row of the Phase-2 table):
@@ -1405,6 +1567,15 @@ reached through the guards above, so D never edits a sibling's file:
 5. `GameState.set_world_tile(contact)`; emit `EventBus.battle_finished(outcome)`;
    show the after-action dialog; route to S3 unless a `gameover.*` fired.
 
+**Sandbox zero-write branch (Phase 9, decision 15).** When
+`encounter.sandbox == true`, steps 2/3/4 are **skipped entirely** — no
+`BattleResult.apply`, no `BattleRewards.apply`, no `NpcFleets` mutation, no
+world routing, no phase-3 hooks. The after-action dialog renders
+**read-only** (existing dialog controls; the outcome block's
+`morale_delta` may be displayed but is never applied), then the scene
+routes back to S21 with its configuration kept (`80-*` §4.7.16). NOTHING
+writes `GameState` / `NpcFleets` — audited by test.
+
 `BattleSim` itself never touches `GameState`. `BattleResult` touches only
 `GameState.fleet` (+ emits `gameover.*`/`fleet_changed`). `BattleRewards`
 touches only `gold`, `player.xp` and `player.reputation`.
@@ -1469,6 +1640,10 @@ Phase 8 adds the `hail.*` / `interact.*` / `gate.*` families for the
 picker verbs, the hail modal and the locked-reason renderer — inventoried
 in `80-*` §4.15; battle-side consumers use those keys and never invent
 new `battle.*` / `duel.*` ones.
+
+Phase 9 adds the `battle.*` / `sandbox.*` families (the S10 rebuild and
+the S21 editor) — inventoried in `10-*` §7.12; battle-side consumers use
+those keys and never invent others.
 
 ## 5. Data Examples
 
