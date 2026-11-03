@@ -41,6 +41,11 @@ extends RefCounted
 ## `.godot/global_script_class_cache.cfg` yet.
 
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
+## The §4.9c T3 one-ply lookahead (W5-A) — the `ai_level = 1` dispatch target.
+## ai_search.gd reaches THIS file's helpers through a lazy `load()` (its
+## `_ai_fleet_lib()`), so the pair never closes a cyclic-preload loop at
+## parse time: the const-preload arrow points one way only.
+const AiSearchLib := preload("res://scripts/combat/ai_search.gd")
 
 ## §4.11.3 step 2: the locked hull order (`§4.1 "latin…brigantine"`).
 const HULL_IDS: Array[String] = ["latin", "sloop", "caravel", "brigantine"]
@@ -339,6 +344,17 @@ static func decide(sim: BattleSimLib, unit: Dictionary,
 			if _chebyshev(_landing(sim, unit, origin, vel), nearest_cell) > distance:
 				return {"action": "move", "target": {}, "vel": vel}
 		return hold
+
+	# ②→T3 §4.9c dispatch: `ai_level = 1` ranks the remaining candidates ③+
+	# with the one-ply search — θ from the profile `archetype` (§4.9c
+	# mapping), the §4.9b order consumed inside the search (discipline
+	# removal + the φ7 station term; the empty order is the free T3). The
+	# hard-rule layer above (① surrender roll, ② flee) is level-agnostic:
+	# it fired BEFORE this dispatch for both levels (the §4.9c amendment).
+	if int(profile.get("ai_level", 0)) == 1:
+		return AiSearchLib.decide(sim, unit,
+			AiSearchLib.theta_for(str(profile.get("archetype", "balanced"))),
+			order)
 
 	# ③ §4.11.8 pin 2 fire: rake preference → profile focus → loaded side
 	#    with more cannons (tie → port); the shot type is the §4.4b rule's.
