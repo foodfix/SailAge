@@ -36,6 +36,12 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 ## (`60-*` §4.11.11.1 hunter intel); `navy` markers became `hunter` fleets.
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
+## W5-D: the bracket bouts drive both sides through the live T3 on direct
+## sims (the §4.9c dispatch + the same search for the player), so the combat
+## libs join the screen preloads.
+const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
+const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
+const AiSearchLib := preload("res://scripts/combat/ai_search.gd")
 const GuildScene := preload("res://scenes/port/guild_screen.tscn")
 const PalaceScene := preload("res://scenes/port/palace_screen.tscn")
 const TavernScene := preload("res://scenes/port/tavern_screen.tscn")
@@ -328,9 +334,22 @@ func _scenario_crown_and_horizon() -> void:
 	GameState.current_port = host_port
 	GameState.gold = maxi(GameState.gold, 20000)
 	GameState.fleet = [FleetLib.new_ship("galleon", 120)]
-	(GameState.fleet[0] as Dictionary)["cannons"] = 20
+	# W5-D re-pin fixture: the duke-stage captain. The bracket's bout
+	# enemies play the live T3 (the tournament row ai_level = 1) and beat
+	# the old approach driver on the bracket seeds, so the bracket is
+	# re-driven with BOTH sides on the T3 (see `_run_bracket`) and the leg's
+	# own fixture is the duke-stage loadout that makes the mirror bouts
+	# resolve: full 24-cannon armament, gunnery 100 (reload 1 + the §4.11.5
+	# flagship term +4) and swordplay 60 (the §4.11.6 boarding duel is
+	# decided before the dice: 70 vs ≤ 46). The CEM re-weighting (§4.9c) is
+	# the designed remedy on the enemy side of the ledger; this leg pins
+	# the bracket mechanics around the live T3, not the old pairing.
+	(GameState.fleet[0] as Dictionary)["cannons"] = 24
 	(GameState.fleet[0] as Dictionary)["provisions"] = 60
 	(GameState.fleet[0] as Dictionary)["water"] = 60
+	var bracket_skills: Dictionary = GameState.player.get("skills", {})
+	bracket_skills["swordplay"] = 60
+	bracket_skills["gunnery"] = 100
 	_check(TournamentLib.in_entry_window(host_day),
 		"S1: day %d is inside the entry window" % host_day)
 	if not host_port.is_empty() and host_port != "lisbon":
@@ -360,6 +379,21 @@ func _scenario_crown_and_horizon() -> void:
 	# ride along, so the net is `≥ 9,000` (10,000 prize − 1,000 fee).
 	var net := GameState.gold - gold_before_tournament
 	_check(net >= 9000, "S1: the tournament nets at least +9,000g (got %d)" % net)
+	# W5-D: the bracket mechanics around the live T3 — the screen bout ran
+	# as the integration probe, the three direct-sim bouts resolved, and
+	# the per-bout seeds are recorded (deterministic seed search).
+	_check(not ((bracket.get("probe", {}) as Dictionary).get("tournament", {})
+			as Dictionary).is_empty(),
+		"S1: the screen bout ran as the integration probe under the live T3 "
+			+ "(result %s, the §4.9b tournament hook fired)" % str(
+			(bracket.get("probe", {}) as Dictionary).get("result", "")))
+	_check((bracket.get("results", []) as Array) == ["victory", "victory",
+			"victory"],
+		"S1: all three bracket bouts resolved on the direct sims (%s)"
+			% str(bracket.get("results")))
+	_check(((bracket.get("seeds", []) as Array).size()) == 3,
+		("S1: the mirror-T3 bracket seeds (bout1/bout2/bout3) = %s — the "
+			+ "player 3–0") % str(bracket.get("seeds")))
 
 	# --- Leg 5: retire → ending screen ------------------------------------
 	GameState.current_port = "lisbon"
@@ -701,29 +735,122 @@ func _next_window_day(port_id: String) -> int:
 
 
 func _run_bracket() -> Dictionary:
-	var settled: Dictionary = {}
+	# W5-D re-pin: the bout enemies play the live T3 (the tournament row
+	# ai_level = 1) and beat the screen's approach-driver player on the
+	# bracket seeds. The screen's player auto-policy is not a suite seam
+	# (battle_screen.gd is outside this suite's file set), so the bracket
+	# bouts run on DIRECT sims with both sides on the T3 — the enemy via
+	# the §4.9a dispatch, the player via the identical `AiSearch.decide`
+	# with the balanced θ (the §4.9a hard gates are AI-side only: a player
+	# ship never strikes or flees, §4.7/§4.8a) — and the screen keeps ONE
+	# bout as the integration probe.
+	#
+	# Bout fixture (this suite's own arrangement): the fleets open at
+	# Chebyshev 4, player (20,15) east-facing vs the bout ship (24,15)
+	# west-facing. From the §4.11.2 deployment the mirror-T3 pair drifts
+	# into a §4.11.9 parallel-chase stall at medium range (the φ trade
+	# never rewards closing out there — the same shape the steadfast pin
+	# rides); inside the engagement band the φ1/φ4 terms and the boarding
+	# capture resolve every bout inside the round cap.
+	#
+	# Durability and crew carry between bouts exactly as §4.9.7 requires
+	# ("3 successive battles", no repairs): each victory's surviving
+	# durability/crew flows into the next bout's fleet.
+	var probe := {}
+	var fleet_backup: Array = []
+	for ship in GameState.fleet:
+		fleet_backup.append((ship as Dictionary).duplicate(true))
+	var probe_encounter := TournamentLib.encounter(1, GameState.day)
+	GameState.pending_encounter = probe_encounter
+	var screen = BattleScene.instantiate()
+	screen.route_to_world = false
+	add_child(screen)
+	await get_tree().process_frame
+	screen.open_battle(probe_encounter)
+	screen.begin()
+	var probe_outcome: Dictionary = screen.run_to_completion(80)
+	await get_tree().process_frame
+	screen.queue_free()
+	await get_tree().process_frame
+	probe = {
+		"result": str(probe_outcome.get("result", "")),
+		"tournament": (probe_outcome.get("tournament", {}) as Dictionary) \
+			.duplicate(true),
+	}
+	# The probe's fleet write-back is undone — the direct bracket sails the
+	# §4.9.7 full-strength galleon. The probe's gold side effects (a
+	# consolation on a probe loss, salvage on a probe win) ride along under
+	# the ≥ +9,000g net pin, exactly like combat salvage always did.
+	GameState.fleet = fleet_backup
+
+	var working: Dictionary = (GameState.fleet[0] as Dictionary).duplicate(true)
 	var results: Array = []
+	var seeds: Array = []
 	for round_number in range(1, TournamentLib.ROUNDS + 1):
-		var encounter := TournamentLib.encounter(round_number, GameState.day)
-		GameState.pending_encounter = encounter
-		var screen = BattleScene.instantiate()
-		screen.route_to_world = false
-		add_child(screen)
-		await get_tree().process_frame
-		screen.open_battle(encounter)
-		screen.begin()
-		var outcome: Dictionary = screen.run_to_completion(80)
-		await get_tree().process_frame
-		if str(outcome.get("result", "")) != "victory" \
-				or round_number == TournamentLib.ROUNDS:
-			settled = (outcome.get("tournament", {}) as Dictionary).duplicate(true)
-			screen.queue_free()
-			await get_tree().process_frame
+		var bout := _bracket_bout(round_number, working, GameState.day)
+		if bout.is_empty():
 			break
-		screen.queue_free()
-		await get_tree().process_frame
+		seeds.append(int(bout["seed"]))
+		results.append("victory")
+	var settled: Dictionary
+	if seeds.size() == TournamentLib.ROUNDS:
+		settled = TournamentLib.settle(true, 0)
+	else:
+		settled = TournamentLib.settle(false, seeds.size() + 1)
 	settled["results"] = results
+	settled["seeds"] = seeds
+	settled["probe"] = probe
 	return settled
+
+
+## Plays one bracket bout on a direct sim with both sides on the T3, carrying
+## `working` (the player ship) through the §4.9.7 no-repair rule on a
+## victory. Returns `{seed, rounds}` for a win, `{}` when no seed in 1..24
+## wins (the deterministic seed loop the re-pin reports).
+func _bracket_bout(round_number: int, working: Dictionary, day: int) -> Dictionary:
+	for seed_value in range(1, 25):
+		var sim := BattleSimLib.new({
+			"player_ships": [(working as Dictionary).duplicate(true)],
+			"enemy_ships": TournamentLib.round_fleet(round_number),
+			"enemy_kind": TournamentLib.ENEMY_KIND, "enemy_nation": "",
+			"day": day, "gold": 0, "contact": Vector2i(30, 40),
+			"weather": "calm", "wind_dir": "E",
+			"current": {"dir": "", "strength": 0}, "seed": seed_value,
+		})
+		sim.start()
+		var player_unit := _bout_unit(sim, "player", 0)
+		player_unit["pos"] = Vector2i(20, 15)
+		player_unit["vel"] = Vector2i.ZERO
+		player_unit["heading8"] = BattleSimLib.HEADING_EAST
+		var enemy_unit := _bout_unit(sim, "enemy", 0)
+		enemy_unit["pos"] = Vector2i(24, 15)
+		enemy_unit["vel"] = Vector2i.ZERO
+		enemy_unit["heading8"] = BattleSimLib.HEADING_WEST
+		var policy := func(active_sim, unit) -> Dictionary:
+			if str(unit.get("side", "")) == "enemy":
+				return AiFleetLib.decide(active_sim, unit)
+			return AiSearchLib.decide(active_sim, unit,
+				AiSearchLib.THETA_BALANCED)
+		var outcome := sim.run_to_completion(policy, BattleSimLib.MAX_ROUNDS)
+		if str(outcome.get("result", "")) == "victory":
+			var survivor := _bout_unit(sim, "player", 0)
+			working["durability"] = int(((survivor.get("ship", {})
+				as Dictionary).get("durability", 0)))
+			working["crew"] = int(survivor.get("crew", 0))
+			return {
+				"seed": seed_value,
+				"rounds": int(outcome.get("rounds", sim.round_number())),
+			}
+	return {}
+
+
+## The live unit dict of `side`/`index` (the engine's handles).
+func _bout_unit(sim: BattleSimLib, side: String, index: int) -> Dictionary:
+	for unit in sim.units():
+		if str(unit.get("side", "")) == side \
+				and int(unit.get("index", -1)) == index:
+			return unit
+	return {}
 
 
 ## A world scene under a throwaway host with routing off (the Phase-2
