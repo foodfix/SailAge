@@ -3,7 +3,10 @@
   "ship_types": [
     {
       "id": "latin",
-      "name": {"zh": "拉丁帆船", "en": "Latin"},
+      "name": {
+        "zh": "拉丁帆船",
+        "en": "Latin"
+      },
       "class": "sail",
       "role": "coastal",
       "tier": 1,
@@ -14,13 +17,16 @@
       "crew_min": 8,
       "crew_max": 20,
       "armament_slots": 2,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 90
     },
     {
       "id": "sloop",
-      "name": {"zh": "单桅纵帆船", "en": "Sloop"},
+      "name": {
+        "zh": "单桅纵帆船",
+        "en": "Sloop"
+      },
       "class": "sail",
       "role": "coastal",
       "tier": 1,
@@ -31,13 +37,16 @@
       "crew_min": 10,
       "crew_max": 30,
       "armament_slots": 4,
-      "battle_max_speed": 3,
+      "battle_max_speed": 4,
       "battle_accel": 1,
       "battle_turn_rate": 90
     },
     {
       "id": "caravel",
-      "name": {"zh": "卡拉维尔帆船", "en": "Caravel"},
+      "name": {
+        "zh": "卡拉维尔帆船",
+        "en": "Caravel"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 2,
@@ -48,13 +57,16 @@
       "crew_min": 15,
       "crew_max": 45,
       "armament_slots": 6,
-      "battle_max_speed": 3,
+      "battle_max_speed": 4,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "galley",
-      "name": {"zh": "桨帆船", "en": "Galley"},
+      "name": {
+        "zh": "桨帆船",
+        "en": "Galley"
+      },
       "class": "oar",
       "role": "war",
       "tier": 2,
@@ -65,13 +77,16 @@
       "crew_min": 40,
       "crew_max": 120,
       "armament_slots": 4,
-      "battle_max_speed": 4,
+      "battle_max_speed": 5,
       "battle_accel": 2,
       "battle_turn_rate": 90
     },
     {
       "id": "brigantine",
-      "name": {"zh": "双桅帆船", "en": "Brigantine"},
+      "name": {
+        "zh": "双桅帆船",
+        "en": "Brigantine"
+      },
       "class": "sail",
       "role": "war",
       "tier": 2,
@@ -82,13 +97,16 @@
       "crew_min": 20,
       "crew_max": 60,
       "armament_slots": 10,
-      "battle_max_speed": 4,
+      "battle_max_speed": 5,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "nao",
-      "name": {"zh": "瑙船", "en": "Nao"},
+      "name": {
+        "zh": "瑙船",
+        "en": "Nao"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 3,
@@ -99,13 +117,16 @@
       "crew_min": 25,
       "crew_max": 80,
       "armament_slots": 10,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "carrack",
-      "name": {"zh": "卡拉克帆船", "en": "Carrack"},
+      "name": {
+        "zh": "卡拉克帆船",
+        "en": "Carrack"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 3,
@@ -116,13 +137,16 @@
       "crew_min": 30,
       "crew_max": 100,
       "armament_slots": 16,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "galleon",
-      "name": {"zh": "盖伦帆船", "en": "Galleon"},
+      "name": {
+        "zh": "盖伦帆船",
+        "en": "Galleon"
+      },
       "class": "hybrid",
       "role": "war",
       "tier": 3,
@@ -133,13 +157,16 @@
       "crew_min": 40,
       "crew_max": 150,
       "armament_slots": 24,
-      "battle_max_speed": 3,
+      "battle_max_speed": 4,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "galiot",
-      "name": {"zh": "小型桨帆船", "en": "Galiot"},
+      "name": {
+        "zh": "小型桨帆船",
+        "en": "Galiot"
+      },
       "class": "oar",
       "role": "war",
       "tier": 1,
@@ -150,13 +177,16 @@
       "crew_min": 15,
       "crew_max": 40,
       "armament_slots": 2,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 2,
       "battle_turn_rate": 90
     },
     {
       "id": "galleass",
-      "name": {"zh": "加莱赛战船", "en": "Galleass"},
+      "name": {
+        "zh": "加莱赛战船",
+        "en": "Galleass"
+      },
       "class": "oar",
       "role": "war",
       "tier": 3,
@@ -167,13 +197,16 @@
       "crew_min": 60,
       "crew_max": 160,
       "armament_slots": 6,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 2,
       "battle_turn_rate": 45
     },
     {
       "id": "fluyt",
-      "name": {"zh": "弗鲁特商船", "en": "Fluyt"},
+      "name": {
+        "zh": "弗鲁特商船",
+        "en": "Fluyt"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 2,
@@ -184,13 +217,16 @@
       "crew_min": 12,
       "crew_max": 30,
       "armament_slots": 2,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "junk",
-      "name": {"zh": "福船", "en": "Junk"},
+      "name": {
+        "zh": "福船",
+        "en": "Junk"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 2,
@@ -201,13 +237,16 @@
       "crew_min": 20,
       "crew_max": 60,
       "armament_slots": 3,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "dhow",
-      "name": {"zh": "单桅三角帆船", "en": "Dhow"},
+      "name": {
+        "zh": "单桅三角帆船",
+        "en": "Dhow"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 2,
@@ -218,13 +257,16 @@
       "crew_min": 10,
       "crew_max": 30,
       "armament_slots": 2,
-      "battle_max_speed": 3,
+      "battle_max_speed": 4,
       "battle_accel": 1,
       "battle_turn_rate": 90
     },
     {
       "id": "pinnace",
-      "name": {"zh": "平底船", "en": "Pinnace"},
+      "name": {
+        "zh": "平底船",
+        "en": "Pinnace"
+      },
       "class": "sail",
       "role": "coastal",
       "tier": 1,
@@ -235,13 +277,16 @@
       "crew_min": 8,
       "crew_max": 20,
       "armament_slots": 2,
-      "battle_max_speed": 2,
+      "battle_max_speed": 3,
       "battle_accel": 1,
       "battle_turn_rate": 90
     },
     {
       "id": "caravela_redonda",
-      "name": {"zh": "卡拉维拉方形帆船", "en": "Caravela Redonda"},
+      "name": {
+        "zh": "卡拉维拉方形帆船",
+        "en": "Caravela Redonda"
+      },
       "class": "sail",
       "role": "trade",
       "tier": 2,
@@ -252,13 +297,16 @@
       "crew_min": 15,
       "crew_max": 40,
       "armament_slots": 3,
-      "battle_max_speed": 3,
+      "battle_max_speed": 4,
       "battle_accel": 1,
       "battle_turn_rate": 45
     },
     {
       "id": "xebec",
-      "name": {"zh": "小型三桅船", "en": "Xebec"},
+      "name": {
+        "zh": "小型三桅船",
+        "en": "Xebec"
+      },
       "class": "hybrid",
       "role": "war",
       "tier": 2,
@@ -269,7 +317,7 @@
       "crew_min": 25,
       "crew_max": 80,
       "armament_slots": 4,
-      "battle_max_speed": 4,
+      "battle_max_speed": 5,
       "battle_accel": 1,
       "battle_turn_rate": 90
     }

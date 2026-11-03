@@ -1184,9 +1184,12 @@ func _ai_fleet_takes_order() -> bool:
 ## post-B arity against the pre-B script.
 func _ai_decide(unit: Dictionary) -> Dictionary:
 	var order := _fleet_order_for(unit)
+	# §4.9c (W5-C bounce): the folded battle profile rides the call so the
+	# fixture's ai_level/archetype overrides reach the dispatch — the plain
+	# `decide` re-derives the row from `enemy_kind` and would ignore them.
 	if not order.is_empty() and _ai_fleet_takes_order():
-		return _ai_fleet_script.decide(sim, unit, order)
-	return AiFleetLib.decide(sim, unit)
+		return _ai_fleet_script.decide(sim, unit, order, _enemy_profile)
+	return AiFleetLib.decide(sim, unit, {}, _enemy_profile)
 
 
 ## The §4.7.1/§4.9b anchor-line datum for the minimap and the formation

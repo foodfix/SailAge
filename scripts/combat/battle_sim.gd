@@ -51,19 +51,22 @@ const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 const GRID_WIDTH := 48
 const GRID_HEIGHT := 30
-## §4.2 bands: player ships start at x ≤ 5, enemy ships at x ≥ 42; a band
-## overflow (more than 5 ships) continues the in-band scan.
-const PLAYER_BAND_MAX_X := 5
-const ENEMY_BAND_MIN_X := 42
-## §4.11.2 concrete tiles, indexed by fleet index (0 = flagship).
+## §4.2 bands (correction 15): player ships start at x ≤ 12, enemy ships at
+## x ≥ 35; a band overflow (more than 5 ships) continues the in-band scan.
+const PLAYER_BAND_MAX_X := 12
+const ENEMY_BAND_MIN_X := 35
+## §4.11.2 concrete tiles (correction 15: the tournament-proven 27-cell
+## closing start is THE start), indexed by fleet index (0 = flagship).
 const PLAYER_DEPLOYMENT: Array = [
-	Vector2i(2, 15), Vector2i(2, 14), Vector2i(2, 16), Vector2i(2, 13), Vector2i(2, 17),
+	Vector2i(10, 15), Vector2i(10, 14), Vector2i(10, 16), Vector2i(10, 13), Vector2i(10, 17),
 ]
 const ENEMY_DEPLOYMENT: Array = [
-	Vector2i(45, 15), Vector2i(45, 14), Vector2i(45, 16), Vector2i(45, 13), Vector2i(45, 17),
+	Vector2i(37, 15), Vector2i(37, 14), Vector2i(37, 16), Vector2i(37, 13), Vector2i(37, 17),
 ]
 ## §4.11.2 tournament variant (single bout): pinned cells and initial
 ## velocities — 27 cells apart, the bout opens already under way.
+## Correction 15: standard battles open the SAME way, so the variant key is
+## accepted and maps to the identical start (schema forward-compat).
 const TOURNAMENT_DEPLOYMENT := "tournament"
 const TOURNAMENT_PLAYER_CELL := Vector2i(10, 15)
 const TOURNAMENT_ENEMY_CELL := Vector2i(37, 15)
@@ -158,8 +161,8 @@ const BOARDING_CREW_LOSS_FRACTION := 0.2
 
 # --- Reload (docs/60-* §4.4a; decision 5) -----------------------------------
 
-## `reload_turns = clamp(3 − floor(gunnery / 50), 1, 3) + (crew_ratio < 0.5 ? 1 : 0)`.
-const RELOAD_BASE_TURNS := 3
+## `reload_turns = clamp(2 − floor(gunnery / 50), 1, 2) + (crew_ratio < 0.5 ? 1 : 0)` (§4.4a correction 14).
+const RELOAD_BASE_TURNS := 2
 const RELOAD_MIN_TURNS := 1
 const RELOAD_GUNNERY_DIVISOR := 50
 const RELOAD_LOW_CREW_RATIO := 0.5
@@ -1211,7 +1214,7 @@ func combat_rating(unit: Dictionary) -> int:
 	return int(unit.get("cannon_rating", 0))
 
 
-## §4.4a reload turns: `clamp(3 − floor(gunnery / 50), 1, 3) +
+## §4.4a reload turns (correction 14): `clamp(2 − floor(gunnery / 50), 1, 2) +
 ## (crew_ratio < 0.5 ? 1 : 0)`, `crew_ratio = crew / crew_min`.
 func reload_turns_of(unit: Dictionary) -> int:
 	var turns := clampi(RELOAD_BASE_TURNS
@@ -2160,15 +2163,15 @@ static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 
 func _make_unit(side: String, index: int, ship: Dictionary, cell: Vector2i,
 		tournament: bool) -> Dictionary:
+	# §4.11.2 correction 15: EVERY battle opens with the closing start — the
+	# flagship already sails toward the enemy (vel (±1, 0)), extras deploy
+	# at rest through the band scan. The `tournament` key maps to the same
+	# start (schema forward-compat).
 	var initial_vel := Vector2i.ZERO
 	var heading := HEADING_EAST if side == SIDE_PLAYER else HEADING_WEST
-	if tournament:
-		# §4.11.2 tournament variant: pinned initial velocities — the player
-		# bout ship already sails east, the enemy west (single bout; extras,
-		# should a fixture carry them, deploy through the band scan at rest).
-		if index == 0:
-			initial_vel = TOURNAMENT_PLAYER_VEL if side == SIDE_PLAYER \
-				else TOURNAMENT_ENEMY_VEL
+	if index == 0:
+		initial_vel = TOURNAMENT_PLAYER_VEL if side == SIDE_PLAYER \
+			else TOURNAMENT_ENEMY_VEL
 	var unit := {
 		"side": side,
 		"index": index,

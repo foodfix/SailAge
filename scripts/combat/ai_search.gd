@@ -256,16 +256,26 @@ static func _fire_target_for_side(sim, unit: Dictionary, side: String,
 	if fireable.is_empty():
 		return {}
 	var pool: Array = raked if not raked.is_empty() else fireable
-	# §4.9b engage assignment (W5 master bounce): a discipline order with an
-	# `assigned_target ≥ 0` restricts the fire pool to that ship (§4.9b —
-	# the assignment constrains the GUNS at both levels); dead/absent ⇒ the
-	# free ranking fallback, exactly like the T2 consumer.
+	# §4.9b engage assignment (W5 master bounce): an `assigned_target ≥ 0`
+	# restricts the fire pool to that ship. DEAD/absent ⇒ the free-ranking
+	# fallback (the T2 consumer's exact rule); ALIVE but not fireable on
+	# this side ⇒ the pool is EMPTY ⇒ hold fire — the same semantics on
+	# both levels (unified W5-D gate; the old fall-through to the pool's
+	# best target contradicted the pin).
 	var assigned := int(fleet_order_target)
 	if assigned >= 0:
+		var assigned_foe: Dictionary = {}
+		for foe in foes:
+			if int(foe.get("index", -1)) == assigned and bool(foe.get("alive", false)):
+				assigned_foe = foe
+				break
+		if assigned_foe.is_empty():
+			return fleet._focus_target(profile, unit, pool, sim)
 		var pinned: Array = pool.filter(func(foe) -> bool:
 			return int(foe.get("index", -1)) == assigned)
-		if not pinned.is_empty():
-			pool = pinned
+		if pinned.is_empty():
+			return {}
+		pool = pinned
 	return fleet._focus_target(profile, unit, pool, sim)
 
 

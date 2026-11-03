@@ -421,7 +421,7 @@ BATTLE_TURN_RATE_45_IDS = (
 )
 # Phase 9 (10-* §4.3, correction 3): `battle_max_speed` derives from the
 # §6.1 speed tier by this exact mapping (validator bound 2..4).
-BATTLE_MAX_SPEED_BY_SPEED = {16: 2, 20: 3, 24: 4}
+BATTLE_MAX_SPEED_BY_SPEED = {16: 3, 20: 4, 24: 5}  # correction 15 (2026-11-04)
 
 # id: (zh, en, color, start_port_id, start_ship_type_id, start_gold,
 #      start_reputation, capital_port_id)  -- section 7.4
@@ -1465,7 +1465,7 @@ def _schema_ship_types(items: list) -> None:
         # 16→2 / 20→3 / 24→4 (correction 3); consumed by the battle cap_eff
         # clamp (60-* §4.3a).
         _require_int(entity["battle_max_speed"], f"{path}.battle_max_speed",
-                     "ship_types.json", 2, 4)
+                     "ship_types.json", 3, 5)
         expected_battle_speed = BATTLE_MAX_SPEED_BY_SPEED[entity["speed"]]
         if entity["battle_max_speed"] != expected_battle_speed:
             fail(

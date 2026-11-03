@@ -258,7 +258,7 @@ static func _roll_cargo(ship: Dictionary, rng: RandomNumberGenerator) -> Diction
 ## constrains candidate sets and targets INSIDE the unchanged list — the
 ## empty order reproduces the free T2 exactly.
 static func decide(sim: BattleSimLib, unit: Dictionary,
-		order: Dictionary = {}) -> Dictionary:
+		order: Dictionary = {}, profile_override: Dictionary = {}) -> Dictionary:
 	var hold := {"action": "hold", "target": {}, "vel": Vector2i.ZERO}
 	if sim == null or not (unit is Dictionary) or not bool(unit.get("alive", false)):
 		return hold
@@ -266,7 +266,13 @@ static func decide(sim: BattleSimLib, unit: Dictionary,
 	if player_ships.is_empty():
 		return hold
 
+	# The §4.9a row (§4.10 lookup, correction 8) — a caller-side
+	# `profile_override` (the S21 ai_level/archetype seam, W5-C) merges over
+	# it key-by-key so the sandbox overrides reach every consumer below (the
+	# T3 dispatch, `courage_mod`, the flee gates).
 	var profile := profile_for(str(sim.enemy_kind))
+	if not profile_override.is_empty():
+		profile = profile.merged(profile_override, true)
 	var courage_mod := int(profile.get("courage_mod", 0))
 	var own_ship: Dictionary = unit.get("ship", {})
 	var max_durability := sim.effective_max_durability(own_ship)
