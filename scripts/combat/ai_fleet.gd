@@ -22,6 +22,17 @@ extends RefCounted
 ## without a sweep preview: the §4.3a sweep can only shorten a move, never
 ## lengthen it.
 ##
+## W4-B order consumption (§4.9b): [method decide] takes an optional `order`
+## — the `FleetCommander` five-tuple (+ phase rider, see
+## `fleet_commander.gd`) for this ship this round. Orders are FEED-FORWARD
+## CONSTRAINTS inside the unchanged priority list, never a replacement for
+## it: `discipline` hard-removes off-station velocity candidates before any
+## objective ranking, form/close/engage/wear phases steer toward the order's
+## `station` (engage/wear holding the `desired_heading8` bucket first),
+## screen orders keep the §4.9b flagship-radius-3 screen, and an
+## `assigned_target ≥ 0` restricts the §4.11.8 fire ranking to that player
+## ship. The EMPTY order is the free T2, byte-for-byte.
+##
 ## Every formula that already exists in `battle_sim.gd` is called, never
 ## copied: the AI asks the sim for velocity legality, per-side arc/range
 ## checks, the §4.4b shot rule and the §4.7 surrender roll. The sim is
@@ -62,6 +73,21 @@ const CLOSE_DECELERATION_RANGE := 2    # close clause: "Chebyshev ≤ 2"
 const HOOK_SPEED_MAX := 1              # the §4.6a hook window: ‖vel‖ ≤ 1
 const RAM_SPEED_MIN := 2               # ram clause: floor(‖vel‖) ≥ 2
 const BOARD_DURABILITY_PERCENT := 25   # board clause: "target hp% ≤ 25"
+
+## W4-B pins. The §4.9a pre-fleet-layer morale flee threshold ("side morale
+## ≤ 20"), read through the defensive W4-A seam (`_side_morale` — no
+## reading before that merge ⇒ the gate keeps its W3 shape); the §4.9b
+## flagship screen radius; the engage focus-fire aggression; and the
+## §4.9b phase vocabulary the order rider carries (steering-mode dispatch).
+const SIDE_MORALE_FLEE := 20
+const SCREEN_RADIUS := 3
+const FOCUS_FIRE_AGGRESSION := 80
+const HEADING_HOLD_BUCKETS := 1        # "holds the desired_heading8 bucket (±1)"
+const ORDER_PHASE_FORM := "form"
+const ORDER_PHASE_CLOSE := "close"
+const ORDER_PHASE_ENGAGE := "engage"
+const ORDER_PHASE_WEAR := "wear"
+const ORDER_PHASE_SCREEN := "screen"
 
 ## Correction-8 lookup: a `hunter` battle reads the `navy` row (mirrors
 ## `NpcFleets.composition_kind`). `coaster` never battles — the row is
@@ -221,7 +247,13 @@ static func _roll_cargo(ship: Dictionary, rng: RandomNumberGenerator) -> Diction
 ## ② flee ③ fire ④ kite ⑤ board ≥ ram ⑥ close ⑦ hold. Returns the
 ## §4.12.1.1 decision dict (`cell` derived by the executor, never authored).
 ## Deterministic and pure — the only RNG is the sim's own §4.7 roll stream.
-static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
+##
+## W4-B: `order` (optional, default empty) is the §4.9b five-tuple + phase
+## rider from `FleetCommander.generate_orders` for this ship this round. It
+## constrains candidate sets and targets INSIDE the unchanged list — the
+## empty order reproduces the free T2 exactly.
+static func decide(sim: BattleSimLib, unit: Dictionary,
+		order: Dictionary = {}) -> Dictionary:
 	var hold := {"action": "hold", "target": {}, "vel": Vector2i.ZERO}
 	if sim == null or not (unit is Dictionary) or not bool(unit.get("alive", false)):
 		return hold
@@ -239,12 +271,36 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 	var distance := int(nearest["distance"])
 	var legal: Array = sim.legal_velocities(unit)
 
+	# W4-B order decode. The empty order leaves every constraint inert:
+	# phase "", station NO_CELL, assigned −1, discipline false — the free T2.
+	var has_order := not order.is_empty()
+	var phase := str(order.get("phase", ""))
+	var station := BattleSimLib.to_cell(order.get("station", BattleSimLib.NO_CELL))
+	var assigned := int(order.get("assigned_target", -1)) if has_order else -1
+	var discipline := has_order and bool(order.get("discipline", false))
+	var band_lo := 0
+	var band_hi := 0
+	var band_ok := false
+	var band = order.get("desired_speed_band", null)
+	if has_order and band is Array and (band as Array).size() >= 2:
+		band_lo = int(band[0])
+		band_hi = int(band[1])
+		band_ok = true
+	# §4.9b hard constraint: `discipline` removes off-station candidates —
+	# picks whose §4.3a landing WORSENS the Chebyshev deviation to the
+	# station — from the consideration set before every objective ranking
+	# (hold-in-place landings survive; the ship never willingly drifts).
+	var considered: Array = legal
+	if discipline and station != BattleSimLib.NO_CELL:
+		considered = legal.filter(func(vel): return _keeps_station(sim, unit, origin, vel, station))
+
 	# ① §4.7 surrender roll: below the durability gate with a player ship
 	#    within 3 (the W3-era trigger). The chance is the sim's §4.7
 	#    `surrender_chance(unit, courage_mod)` — the profile `courage_mod`
 	#    folded into the effective courage (§4.9a) — and the roll is drawn
 	#    from the battle's §4.11.1 stream; a failed roll re-rolls next turn.
-	#    W4: gate widens to side morale ≤ 20 (§4.7/§4.8a).
+	#    Orders never touch this priority (the §4.9b layer constrains
+	#    maneuvers and targets, not the §4.7 gate).
 	if max_durability > 0 \
 			and int(own_ship.get("durability", 0)) * 100 \
 				< SURRENDER_DURABILITY_PERCENT * max_durability \
@@ -252,36 +308,67 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 		if sim.roll_surrender(unit, courage_mod):
 			return {"action": "surrender", "target": {}, "vel": Vector2i.ZERO}
 
-	# ② §4.9a flee: hp% below the profile gate, or aggression < 25. The first
+	# ② §4.9a flee: hp% below the profile gate, or aggression < 25, or —
+	#    the §4.9a pre-fleet-layer widening — side morale ≤ 20 through the
+	#    defensive W4-A seam: before the sim exposes `side_morale` there is
+	#    no reading (-1) and the gate is exactly the W3 pair above
+	#    (merge-order guard; the threshold pins at 20 either way). The first
 	#    legal velocity strictly increasing the Chebyshev distance to the
 	#    nearest player ship, judged on the sweep's landing cell (§4.11.8
 	#    pin 5 + the landing ruling); hold when none — a cornered fleer does
-	#    not fall through to the guns.
-	#    W4: gate widens to side morale ≤ 20 (§4.8a, the pre-fleet-layer reading).
+	#    not fall through to the guns. Discipline-filtered candidates apply
+	#    (the order constrains the consideration set).
 	var flee_hp := int(profile.get("flee_below_hp_pct", 0))
 	var wants_flee := max_durability > 0 \
 		and int(own_ship.get("durability", 0)) * 100 < flee_hp * max_durability
 	if int(profile.get("aggression", 0)) < FLEE_AGGRESSION_MAX:
 		wants_flee = true
+	if not wants_flee:
+		var morale := _side_morale(sim)
+		if morale >= 0 and morale <= SIDE_MORALE_FLEE:
+			wants_flee = true
 	if wants_flee:
-		for vel in legal:
+		for vel in considered:
 			if _chebyshev(_landing(sim, unit, origin, vel), nearest_cell) > distance:
 				return {"action": "move", "target": {}, "vel": vel}
 		return hold
 
 	# ③ §4.11.8 pin 2 fire: rake preference → profile focus → loaded side
 	#    with more cannons (tie → port); the shot type is the §4.4b rule's.
-	var fire := _fire_decision(sim, unit, profile, player_ships)
+	#    W4-B: `assigned_target ≥ 0` restricts the ranking to that player
+	#    ship (free ranking only when the assignment is dead/absent).
+	var fire := _fire_decision(sim, unit, profile, player_ships, assigned)
 	if not fire.is_empty():
 		return fire
 
+	# ③½ §4.9b engage/wear steering: develop the broadside bucket. While
+	#    the ship is outside the desired_heading8 ±1 window the maneuver
+	#    outranks the remaining priorities (objective: minimal heading gap,
+	#    then keep the enemy in a fireable arc, then station deviation —
+	#    first-best by enumeration, landing-cell judged); once inside the
+	#    window the list resumes below.
+	if has_order and (phase == ORDER_PHASE_ENGAGE or phase == ORDER_PHASE_WEAR):
+		var desired := posmod(int(order.get("desired_heading8", 0)),
+			BattleSimLib.HEADING_RAYS.size())
+		if BattleSimLib.bucket_distance(
+				posmod(int(unit.get("heading8", 0)),
+					BattleSimLib.HEADING_RAYS.size()), desired) \
+				> HEADING_HOLD_BUCKETS:
+			var turn := _heading_hold_step(sim, unit, considered, station,
+				desired, nearest_cell)
+			if turn != BattleSimLib.NO_CELL:
+				return {"action": "move", "target": {}, "vel": turn}
+
 	# ④ §4.9a kite: both broadside reload windows active → steer so the
 	#    resulting Chebyshev distance (pos + vel) meets the profile
-	#    `preferred_range` (§4.11.8 pin 3).
+	#    `preferred_range` (§4.11.8 pin 3). Ordered engage/wear ships yield
+	#    this step to ③½ (the queue holds its heading, it does not kite).
 	var round_no := sim.round_number()
 	if round_no < int(unit.get("reload_port", 1)) \
-			and round_no < int(unit.get("reload_starboard", 1)):
-		var kite := _kite_step(sim, unit, legal, nearest,
+			and round_no < int(unit.get("reload_starboard", 1)) \
+			and not (has_order and (phase == ORDER_PHASE_ENGAGE
+				or phase == ORDER_PHASE_WEAR)):
+		var kite := _kite_step(sim, unit, considered, nearest,
 			int(profile.get("preferred_range", 0)))
 		if kite != BattleSimLib.NO_CELL:
 			return {"action": "move", "target": {}, "vel": kite}
@@ -292,18 +379,42 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 	#    target's — delivered either as the adjacent-action ram or as the
 	#    first legal velocity whose §4.3a sweep enters the target (the sweep
 	#    IS the §4.5 ram; authoring it as a move keeps the executor from
-	#    re-striking a ram survivor).
+	#    re-striking a ram survivor). Discipline-filtered candidates apply
+	#    to the sweep leg; fire assignments do not restrict these targets
+	#    (the §4.9b pin constrains the guns, not the grappling parties).
 	var boarding := _boarding_target(sim, unit, player_ships)
 	if not boarding.is_empty():
 		return {"action": "board", "target": boarding, "vel": Vector2i.ZERO}
-	var ram_move := _ram_decision(sim, unit, legal, player_ships)
+	var ram_move := _ram_decision(sim, unit, considered, player_ships)
 	if not ram_move.is_empty():
 		return ram_move
+
+	# ⑥ §4.9b-ordered steering: form/close/engage/wear close onto the
+	#    order's `station` (speed band as a first-stage preference);
+	#    screen orders close on the nearest enemy while preferring
+	#    landings inside the flagship's Chebyshev SCREEN_RADIUS. An ordered
+	#    ship with no surviving candidate holds — it never falls back to
+	#    the free close (that would breach the constraint). Swarm/break
+	#    orders carry the assignment only: free steering continues below.
+	var phase_is_ordered := has_order and station != BattleSimLib.NO_CELL \
+		and (phase == ORDER_PHASE_FORM or phase == ORDER_PHASE_CLOSE
+			or phase == ORDER_PHASE_ENGAGE or phase == ORDER_PHASE_WEAR
+			or phase == ORDER_PHASE_SCREEN)
+	if phase_is_ordered:
+		var ordered := BattleSimLib.NO_CELL
+		if phase == ORDER_PHASE_SCREEN:
+			ordered = _screen_close_step(sim, unit, considered, station, nearest)
+		else:
+			ordered = _station_step(sim, unit, considered, station,
+				band_lo, band_hi, band_ok)
+		if ordered != BattleSimLib.NO_CELL:
+			return {"action": "move", "target": {}, "vel": ordered}
+		return hold
 
 	# ⑥ §4.9a close: the first legal velocity minimizing the resulting
 	#    Chebyshev distance to the nearest player ship (enumeration order is
 	#    the tie-break), decelerating to ‖vel‖ ≤ 1 at Chebyshev ≤ 2 so the
-	#    §4.6a hook window opens.
+	#    §4.6a hook window opens. Also the swarm/break-order steering leg.
 	var step := _close_step(sim, unit, legal, nearest)
 	if step != BattleSimLib.NO_CELL:
 		return {"action": "move", "target": {}, "vel": step}
@@ -318,8 +429,13 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 ## first and only a strictly larger count replaces it). The shot type comes
 ## from `sim.ai_shot_type` — the §4.4b rule, never a second copy. `{}` when
 ## no loaded side has a target in arc and range.
+##
+## W4-B: `assigned ≥ 0` restricts the candidate pool to that player fleet
+## index (§4.9b engage assignment — a loaded side without a fireable angle
+## onto the assigned ship holds fire). An assignment that is dead/absent
+## from `player_ships` falls back to the free ranking.
 static func _fire_decision(sim: BattleSimLib, unit: Dictionary,
-		profile: Dictionary, player_ships: Array) -> Dictionary:
+		profile: Dictionary, player_ships: Array, assigned: int = -1) -> Dictionary:
 	var origin := sim.unit_cell(unit)
 	var pairs: Array = []  # {target, side, rake} — target-major, port first
 	for target in player_ships:
@@ -330,6 +446,14 @@ static func _fire_decision(sim: BattleSimLib, unit: Dictionary,
 				pairs.append({"target": target, "side": side, "rake": rake})
 	if pairs.is_empty():
 		return {}
+	if assigned >= 0:
+		var restricted := pairs.filter(func(pair: Dictionary) -> bool:
+			return int(pair["target"].index) == assigned)
+		if not restricted.is_empty():
+			pairs = restricted
+		elif _has_fleet_index(player_ships, assigned):
+			return {}  # assigned and alive, but no fireable geometry: hold fire
+		# dead/absent assignment → free ranking (the §4.9b fallback)
 	# Rake preference: raked volleys confine the candidate pool when any exist.
 	var raked := pairs.filter(func(pair: Dictionary) -> bool: return bool(pair["rake"]))
 	var pool: Array = raked if not raked.is_empty() else pairs
@@ -517,6 +641,143 @@ static func _close_step(sim: BattleSimLib, unit: Dictionary, legal: Array,
 			best = vel
 			best_distance = current
 	return best
+
+
+## W4-B — the defensive §4.8a side-morale seam (§4.9a pre-fleet-layer pin):
+## the reading exists only once the sim exposes `side_morale`; before that
+## merge-order point this yields −1 ("no reading") and every morale gate
+## keeps its W3 shape. Numeric-only acceptance — a malformed reading is no
+## reading.
+static func _side_morale(sim: BattleSimLib) -> int:
+	if sim == null or not sim.has_method("side_morale"):
+		return -1
+	var reading = sim.side_morale(BattleSimLib.SIDE_ENEMY)
+	if reading is int or reading is float:
+		return int(reading)
+	return -1
+
+
+## W4-B §4.9b discipline test for one candidate: its §4.3a landing cell must
+## not WORSEN the Chebyshev deviation to the station (landing-cell judged —
+## the §4.11.8 pin 1 discipline).
+static func _keeps_station(sim: BattleSimLib, unit: Dictionary,
+		origin: Vector2i, vel: Vector2i, station: Vector2i) -> bool:
+	return _chebyshev(_landing(sim, unit, origin, vel), station) \
+		<= _chebyshev(origin, station)
+
+
+## W4-B §4.9b engage/wear steering step: the first candidate achieving the
+## best lexicographic objective (§4.11.8 pin 1 — enumeration is the
+## tie-break): ① heading-bucket gap to `desired` (a (0,0) pick keeps the
+## current heading), ② arc penalty — 0 when the landing cell + landing
+## heading keep the nearest enemy in a fireable broadside arc, ③ station
+## deviation (skipped without a station). All landings judged through
+## `_landing` — the §4.11.8 landing discipline.
+static func _heading_hold_step(sim: BattleSimLib, unit: Dictionary,
+		candidates: Array, station: Vector2i, desired: int,
+		enemy_cell: Vector2i) -> Vector2i:
+	if candidates.is_empty():
+		return BattleSimLib.NO_CELL
+	var origin := sim.unit_cell(unit)
+	var current := posmod(int(unit.get("heading8", 0)),
+		BattleSimLib.HEADING_RAYS.size())
+	var best := BattleSimLib.NO_CELL
+	var best_gap := 0
+	var best_arc := 0
+	var best_dev := 0
+	for vel in candidates:
+		var landing := _landing(sim, unit, origin, vel)
+		var heading := current if vel == Vector2i.ZERO \
+			else posmod(BattleSimLib.heading8_of(vel),
+				BattleSimLib.HEADING_RAYS.size())
+		var gap := BattleSimLib.bucket_distance(heading, desired)
+		var arc := 0 if _bearing_in_arc(landing, heading, enemy_cell) else 1
+		var dev := 0
+		if station != BattleSimLib.NO_CELL:
+			dev = _chebyshev(landing, station)
+		if best == BattleSimLib.NO_CELL or gap < best_gap \
+				or (gap == best_gap and arc < best_arc) \
+				or (gap == best_gap and arc == best_arc and dev < best_dev):
+			best = vel
+			best_gap = gap
+			best_arc = arc
+			best_dev = dev
+	return best
+
+
+## Whether a ship at `from` facing `heading` has `to` in a fireable
+## broadside arc: the §4.4 arcs are the sim's SIGNED counterclockwise steps
+## off the heading — port {1,2,3} ∪ starboard {5,6,7} — i.e. neither
+## dead-ahead (0) nor dead-astern (4).
+static func _bearing_in_arc(from: Vector2i, heading: int, to: Vector2i) -> bool:
+	if from == to:
+		return false
+	var bearing := posmod(BattleSimLib.heading8_of(to - from), 8)
+	var steps := posmod(bearing - posmod(heading, 8), 8)
+	return steps != 0 and steps != 4
+
+
+## W4-B §4.9b ordered ⑥: the first candidate minimizing the landing-cell
+## Chebyshev distance to the order's `station`, preferring in-band
+## magnitudes (`desired_speed_band`) as a first-stage pool — a preference,
+## never a filter (an empty in-band pool falls back to all candidates, so
+## the band can only steer, never strand). No §4.9a hook deceleration —
+## stations are not hook windows.
+static func _station_step(sim: BattleSimLib, unit: Dictionary,
+		candidates: Array, station: Vector2i, band_lo: int, band_hi: int,
+		band_ok: bool) -> Vector2i:
+	if candidates.is_empty():
+		return BattleSimLib.NO_CELL
+	var pool := candidates
+	if band_ok:
+		var in_band := candidates.filter(func(vel: Vector2i) -> bool:
+			var magnitude := BattleSimLib.vel_length(vel)
+			return magnitude >= float(band_lo) and magnitude <= float(band_hi))
+		if not in_band.is_empty():
+			pool = in_band
+	var origin := sim.unit_cell(unit)
+	var best := BattleSimLib.NO_CELL
+	var best_distance := 0
+	for vel in pool:
+		var distance := _chebyshev(_landing(sim, unit, origin, vel), station)
+		if best == BattleSimLib.NO_CELL or distance < best_distance:
+			best = vel
+			best_distance = distance
+	return best
+
+
+## W4-B §4.9b screen ⑥: close on the nearest enemy while preferring
+## landings within the §4.9b flagship screen radius (Chebyshev
+## [constant SCREEN_RADIUS] of `station` — the anchor the order carries).
+## Objective: (outside-radius penalty, resulting distance to the enemy),
+## first-best by enumeration. `NO_CELL` only when no candidate exists.
+static func _screen_close_step(sim: BattleSimLib, unit: Dictionary,
+		candidates: Array, station: Vector2i, nearest: Dictionary) -> Vector2i:
+	if candidates.is_empty():
+		return BattleSimLib.NO_CELL
+	var origin := sim.unit_cell(unit)
+	var target_cell: Vector2i = sim.unit_cell(nearest["unit"])
+	var best := BattleSimLib.NO_CELL
+	var best_outside := 0
+	var best_distance := 0
+	for vel in candidates:
+		var landing := _landing(sim, unit, origin, vel)
+		var outside := 0 if _chebyshev(landing, station) <= SCREEN_RADIUS else 1
+		var distance := _chebyshev(landing, target_cell)
+		if best == BattleSimLib.NO_CELL or outside < best_outside \
+				or (outside == best_outside and distance < best_distance):
+			best = vel
+			best_outside = outside
+			best_distance = distance
+	return best
+
+
+## Whether `player_ships` (living, fleet-index order) carries `index`.
+static func _has_fleet_index(player_ships: Array, index: int) -> bool:
+	for ship in player_ships:
+		if int(ship.get("index", -1)) == index:
+			return true
+	return false
 
 
 ## §4.11.8 rule 2's weakest fallback: lowest current durability, ties to the
