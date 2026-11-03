@@ -1,0 +1,3413 @@
+{
+ "build_seed": 20261104,
+ "counts": {
+  "train": 64,
+  "validate": 64
+ },
+ "kind_bands": {
+  "coaster": [
+   1,
+   3
+  ],
+  "courier": [
+   1,
+   3
+  ],
+  "navy": [
+   2,
+   4
+  ],
+  "patrol": [
+   2,
+   4
+  ],
+  "pirate": [
+   1,
+   3
+  ],
+  "privateer": [
+   2,
+   4
+  ],
+  "tournament": [
+   1,
+   3
+  ],
+  "trader": [
+   1,
+   3
+  ],
+  "treasure": [
+   4,
+   6
+  ]
+ },
+ "notes": [
+  "FROZEN table (IMPLEMENT-Phase9 decision 16, W5-B): built once by",
+  "`python3 tools/battle_tune.py --build-seeds` with",
+  "random.Random(20261104); a rebuild must be byte-identical (asserted).",
+  "The enemy_count field is the band sample; the runner's actual",
+  "compose_enemy count is asserted against kind_bands instead.",
+  "current.dir is an extension beyond the slot spec's strength field:",
+  "without it the \u00a74.3a current modifier never bites at strength > 0."
+ ],
+ "sample_order": [
+  "day",
+  "contact.x",
+  "contact.y",
+  "weather",
+  "wind_dir",
+  "current.dir",
+  "current.strength",
+  "enemy_count[balanced,aggressive,cautious]"
+ ],
+ "schema": "sailage.battle_tune_seeds/1",
+ "seed_formula": "seed_i = 2718281 + index * 8191",
+ "seeds": [
+  {
+   "contact": [
+    2705,
+    1558
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 108,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 6
+   },
+   "index": 0,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 2718281,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    3807,
+    1578
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 3
+   },
+   "day": 38,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 1,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 2726472,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    2445,
+    911
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 3
+   },
+   "day": 147,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 2,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 2734663,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    1546,
+    1744
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 161,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 3,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 2742854,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    157,
+    1479
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 1
+   },
+   "day": 253,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 6
+   },
+   "index": 4,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 2751045,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3827,
+    951
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 0
+   },
+   "day": 7,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 5,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 2759236,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1208,
+    60
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 223,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 6,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 2767427,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    3448,
+    1025
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 0
+   },
+   "day": 160,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 7,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 2775618,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    805,
+    550
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 0
+   },
+   "day": 195,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 4
+   },
+   "index": 8,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 2783809,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    1995,
+    1280
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 0
+   },
+   "day": 160,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 9,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 2792000,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    71,
+    1279
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 0
+   },
+   "day": 86,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 10,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 2800191,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    1404,
+    82
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 0
+   },
+   "day": 157,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 11,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 2808382,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    2216,
+    1975
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 3
+   },
+   "day": 239,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 12,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 2816573,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    604,
+    145
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 215,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 13,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 2824764,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    1663,
+    986
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 2
+   },
+   "day": 179,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 14,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 2832955,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    849,
+    831
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 1
+   },
+   "day": 101,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 15,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 2841146,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3991,
+    743
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 0
+   },
+   "day": 38,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 5
+   },
+   "index": 16,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 2849337,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    3343,
+    833
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 1
+   },
+   "day": 123,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 17,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 2857528,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    1295,
+    154
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 2
+   },
+   "day": 4,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 18,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 2865719,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    283,
+    2107
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 89,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 19,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 2873910,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    527,
+    718
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 0
+   },
+   "day": 29,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 20,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 2882101,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    649,
+    964
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 3
+   },
+   "day": 1,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 21,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 2890292,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    3124,
+    1053
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 3
+   },
+   "day": 159,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 22,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 2898483,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    97,
+    256
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 122,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 2
+   },
+   "index": 23,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 2906674,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    2057,
+    54
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 29,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 4
+   },
+   "index": 24,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 2914865,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3811,
+    561
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 179,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 25,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 2923056,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    795,
+    333
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 51,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 26,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 2931247,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3310,
+    701
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 145,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 27,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 2939438,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    199,
+    1596
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 2
+   },
+   "day": 83,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 4
+   },
+   "index": 28,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 2947629,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    353,
+    1348
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 3
+   },
+   "day": 90,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 1,
+    "cautious": 1
+   },
+   "index": 29,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 2955820,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    681,
+    1779
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 3
+   },
+   "day": 245,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 30,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 2964011,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    1231,
+    833
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 228,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 31,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 2972202,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    2484,
+    894
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 67,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 6
+   },
+   "index": 32,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 2980393,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    3048,
+    432
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 1
+   },
+   "day": 191,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 33,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 2988584,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    2280,
+    1513
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 0
+   },
+   "day": 187,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 34,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 2996775,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3217,
+    869
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 0
+   },
+   "day": 51,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 35,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3004966,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    2648,
+    1997
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 29,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 4
+   },
+   "index": 36,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3013157,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    1779,
+    1728
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 1
+   },
+   "day": 287,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 37,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3021348,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3895,
+    1884
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 3
+   },
+   "day": 297,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 38,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3029539,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    3937,
+    1824
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 3
+   },
+   "day": 187,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 39,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3037730,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    803,
+    1020
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 1
+   },
+   "day": 292,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 40,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3045921,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    839,
+    1127
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 2
+   },
+   "day": 13,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 41,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3054112,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3022,
+    529
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 84,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 42,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3062303,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    2510,
+    288
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 280,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 43,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3070494,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1514,
+    1278
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 3
+   },
+   "day": 213,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 1,
+    "cautious": 5
+   },
+   "index": 44,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3078685,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    2996,
+    587
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 153,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 45,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3086876,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    343,
+    2029
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 2
+   },
+   "day": 284,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 46,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3095067,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    658,
+    400
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 3
+   },
+   "day": 53,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 47,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3103258,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3980,
+    1746
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 142,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 4
+   },
+   "index": 48,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3111449,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    1628,
+    764
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 0
+   },
+   "day": 129,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 49,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3119640,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    3442,
+    1586
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 1
+   },
+   "day": 30,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 50,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3127831,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3839,
+    138
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 3
+   },
+   "day": 127,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 51,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3136022,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    343,
+    1080
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 55,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 4,
+    "cautious": 6
+   },
+   "index": 52,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3144213,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    3044,
+    1848
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 2
+   },
+   "day": 42,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 53,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3152404,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    2645,
+    1421
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 41,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 54,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3160595,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    2398,
+    550
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 3
+   },
+   "day": 219,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 55,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3168786,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    3470,
+    1507
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 1
+   },
+   "day": 205,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 4
+   },
+   "index": 56,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3176977,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    1110,
+    1862
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 2
+   },
+   "day": 164,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 1
+   },
+   "index": 57,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3185168,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    536,
+    422
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 0
+   },
+   "day": 150,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 58,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3193359,
+   "train": true,
+   "weather": "calm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    4163,
+    1652
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 1
+   },
+   "day": 278,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 59,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3201550,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    1265,
+    1181
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 3
+   },
+   "day": 239,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 4
+   },
+   "index": 60,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3209741,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    3549,
+    1982
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 2
+   },
+   "day": 254,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 61,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3217932,
+   "train": true,
+   "weather": "fair",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    1894,
+    1680
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 3
+   },
+   "day": 147,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 62,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3226123,
+   "train": true,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    1319,
+    1862
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 2
+   },
+   "day": 167,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 63,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3234314,
+   "train": true,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    1734,
+    72
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 0
+   },
+   "day": 31,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 64,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3242505,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    1355,
+    235
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 33,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 65,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3250696,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    1618,
+    1447
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 0
+   },
+   "day": 14,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 66,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3258887,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    400,
+    1878
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 0
+   },
+   "day": 26,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 67,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3267078,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    2527,
+    689
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 240,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 5
+   },
+   "index": 68,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3275269,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    500,
+    944
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 3
+   },
+   "day": 129,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 69,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3283460,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    3522,
+    471
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 238,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 70,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3291651,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    3981,
+    1222
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 57,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 71,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3299842,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    1003,
+    104
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 1
+   },
+   "day": 140,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 4,
+    "cautious": 6
+   },
+   "index": 72,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3308033,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    3421,
+    1210
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 0
+   },
+   "day": 120,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 73,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3316224,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    779,
+    1675
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 2
+   },
+   "day": 296,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 74,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3324415,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    555,
+    1236
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 1
+   },
+   "day": 120,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 75,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3332606,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    1784,
+    42
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 1
+   },
+   "day": 235,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 5
+   },
+   "index": 76,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3340797,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3229,
+    1774
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 1
+   },
+   "day": 84,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 77,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3348988,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    2171,
+    2037
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 0
+   },
+   "day": 186,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 78,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3357179,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    503,
+    1095
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 271,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 79,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3365370,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    426,
+    1975
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 3
+   },
+   "day": 1,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 1,
+    "cautious": 5
+   },
+   "index": 80,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3373561,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    3482,
+    861
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 150,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 81,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3381752,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1631,
+    1579
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 2
+   },
+   "day": 253,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 3
+   },
+   "index": 82,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3389943,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    506,
+    256
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 3
+   },
+   "day": 61,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 83,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3398134,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "S"
+  },
+  {
+   "contact": [
+    541,
+    236
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 122,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 6
+   },
+   "index": 84,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3406325,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    4144,
+    1177
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 1
+   },
+   "day": 47,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 85,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3414516,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3122,
+    706
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 0
+   },
+   "day": 94,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 86,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3422707,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    1930,
+    1815
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 3
+   },
+   "day": 24,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 87,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3430898,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    1156,
+    163
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 98,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 2,
+    "cautious": 6
+   },
+   "index": 88,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3439089,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1412,
+    487
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 247,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 89,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3447280,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    1984,
+    1204
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 0
+   },
+   "day": 173,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 90,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3455471,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    819,
+    1478
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 3
+   },
+   "day": 10,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 91,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3463662,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    2880,
+    1473
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 147,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 5
+   },
+   "index": 92,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3471853,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    3592,
+    412
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 0
+   },
+   "day": 56,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 93,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3480044,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    1020,
+    696
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 1
+   },
+   "day": 79,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 94,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3488235,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3034,
+    1785
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 0
+   },
+   "day": 205,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 95,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3496426,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    3149,
+    687
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 2
+   },
+   "day": 144,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 4
+   },
+   "index": 96,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3504617,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    392,
+    857
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 1
+   },
+   "day": 53,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 97,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3512808,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1695,
+    1027
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 160,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 98,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3520999,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    3557,
+    753
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 3
+   },
+   "day": 42,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 1
+   },
+   "index": 99,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3529190,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    2639,
+    859
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 284,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 100,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3537381,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    639,
+    650
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 96,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 101,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3545572,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    1674,
+    679
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 2
+   },
+   "day": 114,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 102,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3553763,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    777,
+    71
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 114,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 103,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3561954,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    1502,
+    1529
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 104,
+   "enemy_count": {
+    "aggressive": 1,
+    "balanced": 1,
+    "cautious": 5
+   },
+   "index": 104,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3570145,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    2029,
+    1281
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 1
+   },
+   "day": 28,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 4,
+    "cautious": 2
+   },
+   "index": 105,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3578336,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    2309,
+    330
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 294,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 106,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3586527,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    2602,
+    1419
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 0
+   },
+   "day": 75,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 107,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3594718,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    4014,
+    264
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 2
+   },
+   "day": 69,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 6
+   },
+   "index": 108,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3602909,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    3652,
+    1623
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 1
+   },
+   "day": 196,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 109,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3611100,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "SE"
+  },
+  {
+   "contact": [
+    4039,
+    1986
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 3
+   },
+   "day": 37,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 3
+   },
+   "index": 110,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3619291,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    103,
+    1327
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 3
+   },
+   "day": 102,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 111,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3627482,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "W"
+  },
+  {
+   "contact": [
+    1609,
+    1690
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 3
+   },
+   "day": 156,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 4,
+    "cautious": 4
+   },
+   "index": 112,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3635673,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    1701,
+    958
+   ],
+   "current": {
+    "dir": "SW",
+    "strength": 0
+   },
+   "day": 169,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 113,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3643864,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    916,
+    1913
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 1
+   },
+   "day": 172,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 114,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3652055,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    1225,
+    384
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 215,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 115,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3660246,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "N"
+  },
+  {
+   "contact": [
+    2169,
+    1477
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 0
+   },
+   "day": 36,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 4
+   },
+   "index": 116,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "treasure"
+   },
+   "seed": 3668437,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    3446,
+    1981
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 0
+   },
+   "day": 68,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 117,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "trader"
+   },
+   "seed": 3676628,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "NE"
+  },
+  {
+   "contact": [
+    2257,
+    1518
+   ],
+   "current": {
+    "dir": "N",
+    "strength": 1
+   },
+   "day": 17,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 2,
+    "cautious": 3
+   },
+   "index": 118,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "coaster"
+   },
+   "seed": 3684819,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    713,
+    1273
+   ],
+   "current": {
+    "dir": "NW",
+    "strength": 1
+   },
+   "day": 168,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 119,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "courier"
+   },
+   "seed": 3693010,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    2148,
+    1580
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 3
+   },
+   "day": 52,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 5
+   },
+   "index": 120,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "treasure"
+   },
+   "seed": 3701201,
+   "train": false,
+   "weather": "strong",
+   "wind_dir": "E"
+  },
+  {
+   "contact": [
+    794,
+    957
+   ],
+   "current": {
+    "dir": "NE",
+    "strength": 2
+   },
+   "day": 100,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 3
+   },
+   "index": 121,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "trader"
+   },
+   "seed": 3709392,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    901,
+    624
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 0
+   },
+   "day": 240,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 2,
+    "cautious": 2
+   },
+   "index": 122,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "tournament",
+    "cautious": "coaster"
+   },
+   "seed": 3717583,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    2070,
+    1936
+   ],
+   "current": {
+    "dir": "E",
+    "strength": 2
+   },
+   "day": 68,
+   "enemy_count": {
+    "aggressive": 4,
+    "balanced": 2,
+    "cautious": 1
+   },
+   "index": 123,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "navy",
+    "cautious": "courier"
+   },
+   "seed": 3725774,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    3958,
+    493
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 203,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 6
+   },
+   "index": 124,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "patrol",
+    "cautious": "treasure"
+   },
+   "seed": 3733965,
+   "train": false,
+   "weather": "storm",
+   "wind_dir": "SW"
+  },
+  {
+   "contact": [
+    856,
+    1278
+   ],
+   "current": {
+    "dir": "S",
+    "strength": 0
+   },
+   "day": 160,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 1,
+    "cautious": 1
+   },
+   "index": 125,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "tournament",
+    "cautious": "trader"
+   },
+   "seed": 3742156,
+   "train": false,
+   "weather": "calm",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    3298,
+    1263
+   ],
+   "current": {
+    "dir": "W",
+    "strength": 0
+   },
+   "day": 159,
+   "enemy_count": {
+    "aggressive": 3,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 126,
+   "kinds": {
+    "aggressive": "pirate",
+    "balanced": "navy",
+    "cautious": "coaster"
+   },
+   "seed": 3750347,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "NW"
+  },
+  {
+   "contact": [
+    379,
+    1132
+   ],
+   "current": {
+    "dir": "SE",
+    "strength": 3
+   },
+   "day": 85,
+   "enemy_count": {
+    "aggressive": 2,
+    "balanced": 3,
+    "cautious": 2
+   },
+   "index": 127,
+   "kinds": {
+    "aggressive": "privateer",
+    "balanced": "patrol",
+    "cautious": "courier"
+   },
+   "seed": 3758538,
+   "train": false,
+   "weather": "fair",
+   "wind_dir": "S"
+  }
+ ],
+ "stage_kinds": {
+  "aggressive": [
+   "pirate",
+   "privateer"
+  ],
+  "balanced": [
+   "navy",
+   "patrol",
+   "tournament"
+  ],
+  "cautious": [
+   "treasure",
+   "trader",
+   "coaster",
+   "courier"
+  ]
+ }
+}
