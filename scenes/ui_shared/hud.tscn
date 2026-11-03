@@ -91,6 +91,12 @@ size_flags_horizontal = 3
 text = "-"
 vertical_alignment = 1
 
+[node name="IntelButton" type="MenuButton" parent="TopRow"]
+custom_minimum_size = Vector2(96, 32)
+layout_mode = 2
+text = "Intel"
+tooltip_text = "Intel"
+
 [node name="BottomBar" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 12

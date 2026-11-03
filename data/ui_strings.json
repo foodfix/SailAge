@@ -56,6 +56,10 @@
     "zh": "中文 / EN",
     "en": "中文 / EN"
   },
+  "ui.intel": {
+    "zh": "情报",
+    "en": "Intel"
+  },
   "ui.saved": {
     "zh": "已保存。",
     "en": "Game saved."

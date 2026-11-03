@@ -102,6 +102,10 @@ S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
 S4 ──Officers──► S18 (modal; read-only at sea)
+S3/S4 ──情报 intel menu──► S14 / S18 / S15 / S17 / S14-委托 tab (added
+        2026-11-03, §4.5) — the same modals the C / O / F / Tab keys open;
+        the dropdown is the mouse path, Commissions opens S14 on the quests
+        tab
 S1 ──Settings──► S19 (modal; pre-game density dial, §4.6.3) ──Esc/Close──► S1
 S4 ──Settings──► S19 (modal; density dial + return-to-menu, §4.6.3) ──Esc──► S4
 S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) ──► S10
@@ -136,6 +140,7 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S3/S4 | `C` | open/close character panel (S14) |
 | S3/S4 | `F` | open/close fleet/cargo panel (S15) |
 | S3/S4 | `Tab` | open the Chart (S17, §4.6) — from the port hub too (amended 2026-11-01) |
+| S3/S4 | click 情报 (top bar, right) | the **intel dropdown** (§4.5, added 2026-11-03): 船长 Captain (`char.title`) · 官员 Officers (`officers.title`) · 船队 Fleet (`fleet.title`) · 海图 Chart (`chart.title`) · 委托 Commissions (`char.quests`) — the mouse path to the same screens as C / O / F / Tab; a press under a modal is ignored (§6) |
 | S3 | `Esc` | close the Chart when it is open (otherwise no-op on S3) |
 | dialogs | `Enter`/`Y` confirm, `N`/`Esc` cancel | confirm dialogs |
 | lists | mouse wheel / ↑↓ + Enter | scroll & activate focused row |
@@ -224,7 +229,7 @@ Layout (1280×720; tile viewport is the space below the top bar):
 
 ```
 +------------------------------------------------------------------+
-| Day 12 08:30 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]  top bar 40px
+| Day 12 08:30 · Year 1 · Month 1   7,830g   Morale 72 (Good)   [里斯本 · Lisbon area]   [情报 Intel]   top bar 40px
 +------------------------------------------------------------------+
 | [minimap 256×192]                                   (viewport)   |
 |  explored tiles only                                             |
@@ -244,6 +249,21 @@ Layout (1280×720; tile viewport is the space below the top bar):
   §4.8 — yellow < 40, red < 20), current area label (nearest known port
   within 16 tiles, else `world.open_sea`). **No language control** (amended
   2026-10-31: the locale lives only in S19, §4.6.3).
+- **Intel menu (added 2026-11-03, §4.2):** a `MenuButton` at the top bar's
+  **right end**, labelled `ui.intel` (情报 / Intel), present on **S3 and S4**
+  (one shared `hud.tscn` serves both, so the button exists in port and at sea
+  alike). The dropdown lists exactly five entries, in this order, each opening
+  the same modal its hotkey opens — never a duplicate instance:
+  船长 (`char.title`) → S14 toggle (`C`); 官员 (`officers.title`) → S18
+  toggle (`O`; the panel's own Phase-8 sea rules apply — talk/gift/train
+  usable, appoint/Dismiss port-only); 船队 (`fleet.title`) → S15 toggle
+  (`F`); 海图 (`chart.title`) → S17 toggle (`Tab`); 委托 (`char.quests`) →
+  S14 opened on the 委托 tab (§4.12.3; the tab choice is not persisted).
+  Item labels rebind on open and on `locale_changed` (§4.4). Toggling the
+  surface that is already open is that modal's own Esc edge and always works;
+  opening any entry is ignored while another modal is on screen (§6). The HUD
+  only *opens* the shared modal instances the hosts attached — it never
+  mutates state (docs/90-* §7 "HUD only reads").
 - Bottom bar (formats amended 2026-11-02; conventions per `10-*` §3.1,
   `20-*` §4.3, `40-*` §4.4 speed units):
   - **`补给 {amount}（{days}天）` / `Provisions {amount} ({days} days)`** and
