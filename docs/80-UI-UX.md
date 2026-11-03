@@ -1733,6 +1733,18 @@ intro preview) — acceptance-pinned.
 recruit dialog (officers); picker inspect / captain's-table row / bounty
 row / hail modal / battle intro preview (NPC — §4.7.1).
 
+**Sizing (2026-11-03 amendment, the collapsed-strip fix):** the card's
+inner scroll is a scrollable axis, which hides the content height from
+parent containers — every host that did not hand the card an explicit
+height got a ~32px empty bordered strip (S18 rows, the tavern recruit
+dialog, the S14 person tabs). The card therefore **publishes the rendered
+content height as its inner scroll's minimum size** after each rebuild;
+hosts take the card at its content height and scroll it in their own
+containers (S18 panel scroll, recruit dialog, dossier, picker). The one
+bounded host is S14's person tabs, which wrap the card in a **280px**
+scroll viewport (§4.8 grid, `CardScroll`) so both person tabs stay inside
+the 720px design viewport.
+
 #### 4.12.2 Allocation UX (level-up points, locked flow)
 
 `award_xp` detects the level-up → toast `char.level_up` +

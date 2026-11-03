@@ -51,6 +51,12 @@ const CardLib := preload("res://scenes/ui/character_card.gd")
 const SCENE_PATH := "res://scenes/ui_shared/character_panel.tscn"
 ## Dim strength for modals (docs/80-* §4.7: "dimming the background by 40% black").
 const DIM_ALPHA := 0.4
+## The §4.12 card's bounded viewport on the person tabs (docs/80-* §4.12.1
+## "Sizing", 2026-11-03 amendment): the card publishes its full content
+## height, so the panel wraps it in a scroll instead of growing past the
+## window. 280 keeps BOTH person tabs inside the 720px design viewport
+## (attributes: 280 + reputation table; skills: 280 + the gates scroll).
+const CARD_AREA_H := 280.0
 
 ## Tab ids (docs/80-* §4.12.3; the Phase-3 `quests` id is unchanged).
 const TAB_ATTRIBUTES := "attributes"
@@ -101,6 +107,9 @@ const TAB_QUESTS := "quests"
 var _tab: String = TAB_ATTRIBUTES
 ## The ONE §4.12 card instance (the player entry) shared by the person tabs.
 var _card: Control = null
+## The scroll wrapper that bounds the card on both person tabs (moves with
+## the card; see CARD_AREA_H).
+var _card_scroll: ScrollContainer = null
 
 
 ## Installs a panel under `parent` (idempotent) and returns it. T6/T11 call
@@ -172,11 +181,19 @@ func _ready() -> void:
 	_quests_tab.pressed.connect(select_tab.bind(TAB_QUESTS))
 	_levelup.visible = false
 
-	# The ONE §4.12 card (the player entry, allocation steppers on).
+	# The ONE §4.12 card (the player entry, allocation steppers on), inside
+	# the bounded scroll wrapper (docs/80-* §4.12.1 "Sizing").
 	var card_scene: PackedScene = load(CardLib.SCENE_PATH)
 	_card = card_scene.instantiate()
 	_card.name = "PlayerCard"
-	_card_host.add_child(_card)
+	_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_card_scroll = ScrollContainer.new()
+	_card_scroll.name = "CardScroll"
+	_card_scroll.custom_minimum_size = Vector2(0, CARD_AREA_H)
+	_card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_card_scroll.follow_focus = true
+	_card_scroll.add_child(_card)
+	_card_host.add_child(_card_scroll)
 
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.fleet_changed.connect(_on_data_changed)
@@ -282,19 +299,20 @@ func _refresh() -> void:
 
 	# The §4.12 player card feeds both person tabs; an in-progress allocation
 	# draft survives the rebuild (§4.12.2: the draft is local to the card).
+	# The wrapper moves with the card so both tabs get the bounded viewport.
 	var draft: Dictionary = _card.alloc_draft() if _card != null else {}
 	if _card != null:
 		_card.setup_person(CardLib.KIND_PLAYER, CardLib.card_data(
 			CardLib.KIND_PLAYER, "", {"alloc": true}))
 		_card.restage_draft(draft)
-		var card_parent := _card.get_parent()
-		if card_parent != null:
-			card_parent.remove_child(_card)
+		var wrapper_parent := _card_scroll.get_parent()
+		if wrapper_parent != null:
+			wrapper_parent.remove_child(_card_scroll)
 		if _tab == TAB_SKILLS:
-			_skills_panel.add_child(_card)
-			_skills_panel.move_child(_card, 0)
+			_skills_panel.add_child(_card_scroll)
+			_skills_panel.move_child(_card_scroll, 0)
 		else:
-			_card_host.add_child(_card)
+			_card_host.add_child(_card_scroll)
 
 	_build_reputation(nation_id)
 	_build_gates()

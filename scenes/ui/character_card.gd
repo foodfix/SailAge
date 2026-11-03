@@ -337,7 +337,7 @@ func _rebuild() -> void:
 	_body.add_child(_build_skills(compact))
 	if not compact:
 		var tags := _build_tags()
-		if tags.get_child_count() > 0:
+		if tags != null and tags.get_child_count() > 0:
 			_body.add_child(tags)
 	_body.add_child(_section_header(_t("char.card.relations"),
 		"RelationsHeader"))
@@ -353,6 +353,22 @@ func _rebuild() -> void:
 			# The stepper states recompute against the live pending counter
 			# and the 100 clamp once the box is in the tree.
 			_refresh_allocation()
+	_publish_content_height()
+
+
+## Publishes the rendered content height as the scroll's minimum (docs/80-*
+## §4.12.1 "Sizing", 2026-11-03 amendment). The scroll's vertical axis is
+## scrollable, so without this the card's minimum height is just the
+## MarginContainer's margins and the card collapses to an empty bordered
+## strip in every host that does not hand it an explicit height (S18 rows,
+## the tavern recruit dialog, the S14 hosts — the collapsed-strip bug the
+## Phase-8 play report hit). Width needs no help: the scroll's horizontal
+## mode is disabled, so the content's minimum width already propagates.
+func _publish_content_height() -> void:
+	var scroll := _body.get_parent() as ScrollContainer
+	if scroll == null:
+		return
+	scroll.custom_minimum_size.y = _body.get_combined_minimum_size().y
 
 
 func _build_identity(compact: bool) -> Control:
@@ -508,15 +524,18 @@ func _build_skills(compact: bool) -> Control:
 
 
 ## Personality tags + the appearance sentence (skipped in compact mode and on
-## a card without tags — the player carries neither yet).
+## a card without tags — the player carries neither yet). The box is built
+## lazily so a tagless Person leaks nothing: the pre-fix code allocated the
+## "Tags" VBox unconditionally and dropped it when empty (the orphaned-VBox
+## leak in the Phase-8 exit log — one per tagless full-card render).
 func _build_tags() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Tags"
+	var box: VBoxContainer = null
 	var personality: Array = _data.get("personality", [])
 	if not personality.is_empty():
 		var tags: Array[String] = []
 		for tag in personality:
 			tags.append(_t("char.personality.%s" % str(tag)))
+		box = _tags_box(box)
 		var line := _label(I18n.fmt("char.personality_line",
 			{"tags": " · ".join(tags)}), PaletteLib.TEXT)
 		line.name = "Personality"
@@ -530,10 +549,20 @@ func _build_tags() -> Control:
 				continue
 			parts.append(_t("char.appearance.%s.%s" % [axis, value]))
 		if not parts.is_empty():
+			box = _tags_box(box)
 			var line := _label(I18n.fmt("char.appearance.sentence",
 				{"parts": " · ".join(parts)}), PaletteLib.PANEL_LINE)
 			line.name = "Appearance"
 			box.add_child(line)
+	return box
+
+
+## The lazily-created "Tags" box (null stays null until a line needs it).
+func _tags_box(existing: VBoxContainer) -> VBoxContainer:
+	if existing != null:
+		return existing
+	var box := VBoxContainer.new()
+	box.name = "Tags"
 	return box
 
 

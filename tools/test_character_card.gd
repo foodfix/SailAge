@@ -652,7 +652,7 @@ func _test_s14_tabs() -> void:
 	_check(s14.is_open(), "S14 opens (the C/Esc contract unchanged)")
 	_check(s14.active_tab() == "attributes", "the attributes tab is default")
 	var card: Control = s14.get_node(
-		"Center/Panel/Margin/Body/AttributesPanel/CardHost/PlayerCard")
+		"Center/Panel/Margin/Body/AttributesPanel/CardHost/CardScroll/PlayerCard")
 	_check(card != null, "the player card hosts on the attributes tab")
 	_check(card.section("Allocation") != null,
 		"the attributes tab carries the allocation steppers (§4.12.2)")
@@ -663,7 +663,7 @@ func _test_s14_tabs() -> void:
 	s14.select_tab("skills")
 	_check(s14.active_tab() == "skills", "the skills tab selects")
 	var moved: Control = s14.get_node(
-		"Center/Panel/Margin/Body/SkillsPanel/PlayerCard")
+		"Center/Panel/Margin/Body/SkillsPanel/CardScroll/PlayerCard")
 	_check(moved == card,
 		"the SAME card instance feeds both person tabs (identical data)")
 	_check(moved.alloc_draft() == {"luck": 1},
