@@ -408,6 +408,21 @@ LOCKED_SHIP_TYPES = {
     "xebec": ("小型三桅船", "Xebec", "hybrid", "war", 2, 15000, 60, 60, 24, 25, 80, 4),
 }
 
+# Phase 9 (10-* §4.3 / §8 group 3): the battle turn-rate two-tier hull
+# partition — the 16 locked hulls appear in exactly one tier each.
+# 90° nimble tier: latin, sloop, galiot, pinnace, dhow, xebec, galley;
+# 45° tier: the other nine.
+BATTLE_TURN_RATE_90_IDS = (
+    "latin", "sloop", "galiot", "pinnace", "dhow", "xebec", "galley",
+)
+BATTLE_TURN_RATE_45_IDS = (
+    "caravel", "brigantine", "nao", "carrack", "galleon", "galleass",
+    "fluyt", "junk", "caravela_redonda",
+)
+# Phase 9 (10-* §4.3, correction 3): `battle_max_speed` derives from the
+# §6.1 speed tier by this exact mapping (validator bound 2..4).
+BATTLE_MAX_SPEED_BY_SPEED = {16: 2, 20: 3, 24: 4}
+
 # id: (zh, en, color, start_port_id, start_ship_type_id, start_gold,
 #      start_reputation, capital_port_id)  -- section 7.4
 LOCKED_NATIONS = {
@@ -886,7 +901,9 @@ FLOW_TIER_CAPACITIES = {"staple": 160, "middle": 140, "luxury": 120}
 # normative validator spec section 8.2) --------------------------------------
 
 # npc_config.json: the locked §4.10 key sets. The values are bounds-checked
-# (§8.2 item 1); the key sets themselves are exact.
+# (§8.2 item 1); the key sets themselves are exact. Phase 9 (correction 11):
+# `ai_profiles` joins the envelope as a REQUIRED key from the W2 validator on
+# (§4.10 — the block lands with the W2 data wave, no per-stage key growth).
 NPC_PRESET_KEYS = ("deserted", "low", "normal", "high", "extreme")
 NPC_BUDGET_KEYS = (
     "traders_mult_per_port",
@@ -905,13 +922,44 @@ NPC_FLOW_KEYS = (
     "coaster_trade_units",
 )
 NPC_CONFIG_KEYS = ("version", "presets", "default_preset", "budgets", "flow",
-                   "absolute_cap")
+                   "absolute_cap", "ai_profiles")
 # Phase 7 (correction 15): task N (W4) adds the explicit data line
 # `neutral_coasters_mult` (§2.7 pins := 0.75). The key is allowed (and
 # > 0-bounded) from the W2 validator on; it is NOT yet required — W2's
 # staged/merged data carries no npc_config edit (N owns that file in W4),
 # and the §8.2 negative list pins no missing-key failure.
 NPC_CONFIG_OPTIONAL_KEYS = ("neutral_coasters_mult",)
+# Phase 9 (§4.10 `ai_profiles` / §8.2 item 14; corrections 8+11): the
+# per-kind battle-behavior block. Exactly the 9 kind rows × exactly 9 keys
+# per row, from day one (correction 11 — all nine keys land with the W2
+# data wave even though runtime consumers arrive per stage). `hunter` is
+# NEVER a row: hunter battles enter as kind "navy" (the §4.10 lookup
+# fallback, correction 8); `coaster` is forward-compat + sandbox-only
+# (coasters are intimidate-only, never battle — 60-* §4.1.1) but is
+# shape-checked like every other row.
+NPC_AI_PROFILE_KINDS = ("pirate", "privateer", "patrol", "navy",
+                        "tournament", "treasure", "trader", "coaster",
+                        "courier")
+NPC_AI_PROFILE_KEYS = ("kind", "archetype", "aggression", "preferred_range",
+                       "flee_below_hp_pct", "focus", "courage_mod",
+                       "formation", "ai_level")
+NPC_AI_ARCHETYPES = ("aggressive", "balanced", "cautious")
+NPC_AI_FOCUS = ("weakest", "nearest", "flagship")
+NPC_AI_FORMATIONS = ("line_ahead", "column", "screen", "swarm")
+# §4.10 normative value table (all 9 rows, locked):
+# kind: (archetype, aggression, preferred_range, flee_below_hp_pct, focus,
+#        courage_mod, formation, ai_level)
+LOCKED_AI_PROFILES = {
+    "pirate": ("aggressive", 90, 2, 0, "weakest", 5, "swarm", 1),
+    "privateer": ("aggressive", 80, 2, 10, "weakest", 5, "swarm", 1),
+    "patrol": ("balanced", 70, 3, 15, "nearest", 0, "line_ahead", 1),
+    "navy": ("balanced", 60, 3, 15, "flagship", 0, "line_ahead", 1),
+    "tournament": ("balanced", 60, 3, 0, "weakest", 0, "line_ahead", 1),
+    "treasure": ("cautious", 10, 3, 40, "nearest", -5, "screen", 0),
+    "trader": ("cautious", 5, 3, 50, "nearest", -5, "column", 0),
+    "coaster": ("cautious", 5, 3, 50, "nearest", -5, "column", 0),
+    "courier": ("cautious", 5, 3, 60, "nearest", -5, "column", 0),
+}
 # §4.10: exactly one preset multiplier is 1.0 and `default_preset` names it.
 NEUTRAL_PRESET = "normal"
 # §4.10: hard upper bound on live NPC fleets (group 7 enforces the locked cap).
@@ -1329,6 +1377,38 @@ def _schema_goods(items: list) -> None:
 
 
 def _schema_ship_types(items: list) -> None:
+    # §4.3 partition is static: the two hardcoded tiers must stay disjoint,
+    # cover the 16 locked hulls and name nothing outside the locked set.
+    overlap = sorted(set(BATTLE_TURN_RATE_90_IDS) & set(BATTLE_TURN_RATE_45_IDS))
+    if overlap:
+        fail(
+            "schema",
+            "ship_types.json",
+            f"§4.3 turn-rate tiers overlap: {', '.join(overlap)}",
+            3,
+        )
+    uncovered = sorted(
+        set(LOCKED_SHIP_TYPES) - set(BATTLE_TURN_RATE_90_IDS)
+        - set(BATTLE_TURN_RATE_45_IDS)
+    )
+    if uncovered:
+        fail(
+            "schema",
+            "ship_types.json",
+            f"§4.3 turn-rate tiers leave hulls uncovered: {', '.join(uncovered)}",
+            3,
+        )
+    stray = sorted(
+        (set(BATTLE_TURN_RATE_90_IDS) | set(BATTLE_TURN_RATE_45_IDS))
+        - set(LOCKED_SHIP_TYPES)
+    )
+    if stray:
+        fail(
+            "schema",
+            "ship_types.json",
+            f"§4.3 turn-rate tiers name non-hull ids: {', '.join(stray)}",
+            3,
+        )
     for index, entity in enumerate(items):
         path = f"ship_types[{index}]"
         _require_keys(
@@ -1344,6 +1424,9 @@ def _schema_ship_types(items: list) -> None:
                 "crew_min",
                 "crew_max",
                 "armament_slots",
+                "battle_max_speed",
+                "battle_accel",
+                "battle_turn_rate",
             ),
             path,
             "ship_types.json",
@@ -1375,6 +1458,61 @@ def _schema_ship_types(items: list) -> None:
                 "ship_types.json",
                 f"{path}.speed ({entity['speed']}) is outside the §6.1 locked "
                 "set {16, 20, 24}",
+                3,
+            )
+        # Phase 9 (10-* §4.3 / §8 group 3): the three battle fields.
+        # battle_max_speed: int 2..4 via the exact per-speed mapping
+        # 16→2 / 20→3 / 24→4 (correction 3); consumed by the battle cap_eff
+        # clamp (60-* §4.3a).
+        _require_int(entity["battle_max_speed"], f"{path}.battle_max_speed",
+                     "ship_types.json", 2, 4)
+        expected_battle_speed = BATTLE_MAX_SPEED_BY_SPEED[entity["speed"]]
+        if entity["battle_max_speed"] != expected_battle_speed:
+            fail(
+                "schema",
+                "ship_types.json",
+                f"{path}.battle_max_speed ({entity['battle_max_speed']}) must "
+                f"follow the §4.3 per-speed mapping "
+                f"({entity['speed']}→{expected_battle_speed})",
+                3,
+            )
+        # battle_accel: oar hulls 2, sail/hybrid 1 (§4.3).
+        _require_int(entity["battle_accel"], f"{path}.battle_accel",
+                     "ship_types.json", 1, 2)
+        expected_accel = 2 if entity["class"] == "oar" else 1
+        if entity["battle_accel"] != expected_accel:
+            fail(
+                "schema",
+                "ship_types.json",
+                f"{path}.battle_accel ({entity['battle_accel']}) must be "
+                f"{expected_accel} for class {entity['class']!r} — oar 2, "
+                "sail/hybrid 1 (§4.3)",
+                3,
+            )
+        # battle_turn_rate: the two-tier hull partition (§4.3) — every hull
+        # id appears in exactly one tier (tier disjointness/coverage is
+        # pinned by the const guards at function entry; a hull in BOTH
+        # tiers is that overlap failure).
+        _require_int(entity["battle_turn_rate"], f"{path}.battle_turn_rate",
+                     "ship_types.json", 45, 90)
+        in_90 = entity["id"] in BATTLE_TURN_RATE_90_IDS
+        in_45 = entity["id"] in BATTLE_TURN_RATE_45_IDS
+        if not in_90 and not in_45:
+            fail(
+                "schema",
+                "ship_types.json",
+                f"{path}.id ({entity['id']!r}) is in NEITHER §4.3 turn-rate "
+                "tier",
+                3,
+            )
+        expected_turn = 90 if in_90 else 45
+        if entity["battle_turn_rate"] != expected_turn:
+            fail(
+                "schema",
+                "ship_types.json",
+                f"{path}.battle_turn_rate ({entity['battle_turn_rate']}) must "
+                f"be {expected_turn} for hull {entity['id']!r} — the §4.3 "
+                "two-tier partition",
                 3,
             )
 
@@ -4591,6 +4729,121 @@ def _check_npc_config(config: object) -> None:
                 7,
             )
 
+    # Phase 9 (§4.10 `ai_profiles` / §8.2 item 14; corrections 8+11): the
+    # per-kind battle-behavior block — exact kind set, exact row shape,
+    # enum membership, integer ranges and the locked value table, all from
+    # day one. Presence is guaranteed by the exact-top-level-keys check
+    # above (`ai_profiles` is a required §4.10 key).
+    profiles = config["ai_profiles"]
+    if not isinstance(profiles, dict) or set(profiles) != set(NPC_AI_PROFILE_KINDS):
+        rows = profiles if isinstance(profiles, dict) else {}
+        extra = sorted(set(rows) - set(NPC_AI_PROFILE_KINDS))
+        missing = sorted(set(NPC_AI_PROFILE_KINDS) - set(rows))
+        details = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if extra:
+            details.append(
+                f"unexpected {', '.join(extra)}"
+                + (" — no hunter row may exist (hunter battles enter as "
+                   "kind navy, correction 8)" if "hunter" in extra else "")
+            )
+        fail(
+            "npc-config",
+            label,
+            f"ai_profiles rows must be exactly the §4.10 nine kinds: "
+            f"{'; '.join(details)}",
+            7,
+        )
+
+    for kind in NPC_AI_PROFILE_KINDS:
+        row = profiles[kind]
+        rpath = f"ai_profiles.{kind}"
+        if not isinstance(row, dict) or set(row) != set(NPC_AI_PROFILE_KEYS):
+            keys = set(row) if isinstance(row, dict) else set()
+            missing = [key for key in NPC_AI_PROFILE_KEYS if key not in keys]
+            extra = sorted(keys - set(NPC_AI_PROFILE_KEYS))
+            details = []
+            if missing:
+                details.append(f"missing {', '.join(missing)}")
+            if extra:
+                details.append(f"unexpected {', '.join(extra)}")
+            fail(
+                "npc-config",
+                label,
+                f"{rpath} must carry exactly the §4.10 nine keys "
+                f"({', '.join(NPC_AI_PROFILE_KEYS)}): {'; '.join(details)}",
+                7,
+            )
+        if row["kind"] != kind:
+            fail(
+                "npc-config",
+                label,
+                f"{rpath}.kind ({row['kind']!r}) must mirror the row's map "
+                f"key ({kind!r}) (§8.2 item 14)",
+                7,
+            )
+        if row["archetype"] not in NPC_AI_ARCHETYPES:
+            fail(
+                "npc-config",
+                label,
+                f"{rpath}.archetype must be one of "
+                f"{'|'.join(NPC_AI_ARCHETYPES)} (got {row['archetype']!r}) "
+                "— the T3 θ group selector (§4.10)",
+                7,
+            )
+        if row["focus"] not in NPC_AI_FOCUS:
+            fail(
+                "npc-config",
+                label,
+                f"{rpath}.focus must be one of {'|'.join(NPC_AI_FOCUS)} "
+                f"(got {row['focus']!r}) (§4.10)",
+                7,
+            )
+        if row["formation"] not in NPC_AI_FORMATIONS:
+            fail(
+                "npc-config",
+                label,
+                f"{rpath}.formation must be one of "
+                f"{'|'.join(NPC_AI_FORMATIONS)} (got {row['formation']!r}) "
+                "(§4.10)",
+                7,
+            )
+        for key, low, high in (("aggression", 0, 100),
+                               ("preferred_range", 1, 3),
+                               ("flee_below_hp_pct", 0, 100),
+                               ("courage_mod", -10, 10)):
+            value = row[key]
+            if not is_int(value) or not low <= value <= high:
+                fail(
+                    "npc-config",
+                    label,
+                    f"{rpath}.{key} must be an integer in [{low}, {high}] "
+                    f"(got {value!r}) (§4.10)",
+                    7,
+                )
+        if not is_int(row["ai_level"]) or row["ai_level"] not in (0, 1):
+            fail(
+                "npc-config",
+                label,
+                f"{rpath}.ai_level must be the integer 0 or 1 "
+                f"(got {row['ai_level']!r}) — T2 greedy vs T3 lookahead "
+                "(§4.10)",
+                7,
+            )
+        # §4.10 normative value table, verbatim — the fixture pin makes a
+        # data-wave transcription error impossible to merge.
+        pinned = dict(zip(NPC_AI_PROFILE_KEYS[1:], LOCKED_AI_PROFILES[kind]))
+        for key, expected in pinned.items():
+            if row[key] != expected:
+                fail(
+                    "npc-config",
+                    label,
+                    f"{rpath}.{key} must be the §4.10 locked value "
+                    f"{expected!r} (got {row[key]!r})",
+                    7,
+                )
+
 
 # §8.6 item 1 (W4-B, 2026-11-03): `data/npc_captains.json` is DELETED — the
 # Phase-5 name pools are gone (§7.7); group 11 asserts the file's absence
@@ -5283,7 +5536,8 @@ def check_group7(docs: dict[str, object], verbose: bool) -> None:
             f"PASS group 7 npc & economy data "
             f"({NAMED_PIRATE_COUNT} named pirates (v2 canon cards), "
             f"{len(docs['market_events.json']['market_events'])} event "
-            f"templates, absolute_cap {docs['npc_config.json']['absolute_cap']})"
+            f"templates, absolute_cap {docs['npc_config.json']['absolute_cap']}, "
+            f"ai_profiles {len(docs['npc_config.json']['ai_profiles'])} kinds)"
         )
         print(
             f"INFO group 7 consumption tiers — staples: {', '.join(sorted(staples))}; "
