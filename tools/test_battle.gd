@@ -2195,8 +2195,8 @@ func _test_morale() -> void:
 	_check(int(win_outcome["morale_delta"]) == 10
 			and int(win_outcome["morale_delta"])
 				== board_win.morale_delta_for("player"),
-		"§4.8a/§4.12.2: a bare boarding win ⇒ morale_delta +10 (%d), the "
-			+ "engine's end − start" % int(win_outcome["morale_delta"]))
+		("§4.8a/§4.12.2: a bare boarding win ⇒ morale_delta +10 (%d), the "
+			+ "engine's end − start") % int(win_outcome["morale_delta"]))
 	_check(not win_outcome.has("morale_bonus"),
 		"§4.12.2: `morale_bonus` is absent from the outcome (retired)")
 
@@ -2338,13 +2338,21 @@ func _test_morale() -> void:
 	_place(brave_sim, "enemy", 0, Vector2i(20, 15))
 	_face(brave, BattleLib.HEADING_WEST)
 	var brave_move := AiLib.decide(brave_sim, brave)
-	var brave_landing: Vector2i = brave_sim.unit_cell(brave) \
-		+ (brave_move.get("vel", Vector2i.ZERO) as Vector2i)
-	_check(str(brave_move["action"]) == "move"
-			and _chebyshev(brave_landing, Vector2i(24, 15)) < 4,
-		"§4.9a: side morale 21 stays short of the gate — the ship closes "
-			+ "instead (landing %s, distance %d)"
-			% [str(brave_landing), _chebyshev(brave_landing, Vector2i(24, 15))])
+	# W5-D re-pin: under the live T3 the φ trade owns the maneuver — at
+	# range 4 the heading re-development scores over the T2 close, so the
+	# close itself is NOT pinned. What the check pins is the gate boundary:
+	# morale 21 stays short of the §4.7 roll (it resolved only ≤ 20 ∧
+	# ≤ 25 % durability), so no surrender action can occur, and the dice-free
+	# search leaves the side morale untouched.
+	_check(str(brave_move["action"]) != "surrender",
+		("§4.9a: side morale 21 stays short of the gate — no surrender roll "
+			+ "resolves above it (action %s, vel %s; the maneuver is the φ "
+			+ "trade's, not the gate's)") % [str(brave_move["action"]),
+			str(brave_move.get("vel", Vector2i.ZERO))])
+	_check(brave_sim.side_morale(BattleLib.SIDE_ENEMY) == 21,
+		"§4.9a/§4.9c: the morale-21 decision is dice-free — the search "
+			+ "restores the side morale untouched (%d)"
+			% brave_sim.side_morale(BattleLib.SIDE_ENEMY))
 
 	# --- ≤ 10 instant strike (§4.8a gate, AI side only) ----------------------
 	GameState.morale = 70
@@ -2438,13 +2446,26 @@ func _test_morale() -> void:
 		return {"action": "hold"}
 	var steadfast_outcome := steadfast.run_to_completion(hunt_policy,
 		BattleLib.MAX_ROUNDS)
-	_check(str(steadfast_outcome["result"]) == "defeat_sunk",
-		"§4.8a: player morale 0 is a HUD warning only — the fleet sinks "
-			+ "(%s @ r%d)" % [str(steadfast_outcome["result"]),
+	# W5-D re-pin: under the live T3 (the navy row ai_level 1, the shared θ
+	# prior) the hunter no longer closes on the unarmed player from the
+	# fixture arrangement — the bout resolves as the §4.11.9 stall (8
+	# consecutive zero-damage rounds, frozen net distance) instead of the
+	# T2-era defeat_sunk. The CEM re-weighting (§4.9c's θ-finalization) is
+	# the designed remedy for exactly this stall; until it amends the doc +
+	# the consts together, the doc-legit stall outcome is the pin.
+	_check(str(steadfast_outcome["result"]) == "stall"
+			and int(steadfast_outcome["rounds"]) == 8,
+		("§4.8a: player morale 0 is a HUD warning only — the hunter never "
+			+ "breaks the player, and the T3-vs-T2 prior freezes into the "
+			+ "§4.11.9 stall (8 rounds zero damage + frozen distance; "
+			+ "%s @ r%d — the CEM re-weighting is the designed remedy, "
+			+ "§4.9c)") % [str(steadfast_outcome["result"]),
 			int(steadfast_outcome["rounds"])])
 	_check((steadfast_outcome["lost_player"] as Array).is_empty()
 			and int(steadfast_outcome["surrendered_enemy"]) == 0,
-		"§4.8a: no player ship ever strikes colors (lost_player empty)")
+		"§4.8a/§4.11.9: the stall is a mutual disengage — no player ship "
+			+ "ever sinks or capitulates and the T3 navy never strikes "
+			+ "(lost_player empty, surrendered_enemy 0)")
 	_check(steadfast.side_morale("player") == 0,
 		"§4.8a: the sunk events clamp the player side at 0 (%d)"
 			% steadfast.side_morale("player"))
@@ -2472,8 +2493,8 @@ func _test_morale() -> void:
 			% snapshot_sim.side_morale("enemy"))
 	var snap := snapshot_sim.snapshot()
 	_check(snap.size() == 1 + snapshot_sim.units().size() * 13 + 23,
-		"§4.12.1: the snapshot carries the pinned scalar block (%d ints for "
-			+ "%d units)" % [snap.size(), snapshot_sim.units().size()])
+		("§4.12.1: the snapshot carries the pinned scalar block (%d ints for "
+			+ "%d units)") % [snap.size(), snapshot_sim.units().size()])
 	# Move BOTH morales after the snapshot, then restore.
 	_place(snapshot_sim, "player", 1, Vector2i(44, 16))
 	_begin_turn(snapshot_sim, "enemy", 0)

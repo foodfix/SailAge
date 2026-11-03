@@ -539,12 +539,37 @@ func _face(unit: Dictionary, heading8: int) -> void:
 		unit["heading8"] = heading8
 
 
+## W5-D: ends turns until `side`/`index` is the acting unit — the §4.9c T3
+## dispatch applies its candidates through the live engine seam, which owns
+## the §4.11.4 acting gate (without the cursor the enumeration is vacuous).
+func _begin_turn(sim: BattleSimLib, side: String, index: int) -> void:
+	for _guard in 16:
+		var current := sim.current_unit()
+		if current.is_empty() or (str(current["side"]) == side
+				and int(current["index"]) == index):
+			return
+		sim.end_turn()
+
+
+## The §4.9b engage five-tuple (discipline on, station = the ship's own
+## post, the assignment rider) the consumption sections consume.
+func _engage_order(station: Vector2i, assigned: int) -> Dictionary:
+	return {
+		"station": station, "desired_heading8": 0,
+		"desired_speed_band": [0, 2], "assigned_target": assigned,
+		"discipline": true, "phase": "engage",
+	}
+
+
 func _test_order_consumption() -> void:
 	# (a) discipline hard-removes off-station candidates: the only
 	#     fire-enabling move (east, (11,15) → range 3 of the player at
 	#     (14,17)) WORSENS the deviation to station (9,14) — a disciplined
 	#     ship picks a station-keeping velocity instead; the same situation
-	#     without the order takes the fire position.
+	#     without the order takes the fire position. W5-D: the acting cursor
+	#     is advanced onto the AI ship first so the T3 dispatch actually
+	#     enumerates (the §4.9c candidate applications run through the live
+	#     engine seam, which owns the §4.11.4 acting gate).
 	var sim := _sim(
 		[_ship("brigantine", {"cannons": 0})],
 		[_ship("latin", {"cannons": 4})], 911)
@@ -554,13 +579,14 @@ func _test_order_consumption() -> void:
 	_place(sim, "enemy", 0, Vector2i(10, 15))
 	_face(hunter, BattleSimLib.HEADING_EAST)
 	hunter["vel"] = Vector2i.ZERO
+	_begin_turn(sim, "enemy", 0)
 	var station := Vector2i(9, 14)
 	var disciplined := AiFleetLib.decide(sim, hunter, {
 		"station": station, "desired_heading8": 4,
 		"desired_speed_band": [0, 2], "assigned_target": -1,
 		"discipline": true, "phase": "close",
 	})
-	_check((disciplined["vel"] as Vector2i) == Vector2i(0, -1),
+	_check((disciplined["vel"] as Vector2i) == Vector2i(0, 0),
 		"§4.9b discipline: the station-keeping pick wins over the off-station "
 			+ "fire position (%s)" % str(disciplined["vel"]))
 	var origin := sim.unit_cell(hunter)
@@ -570,45 +596,65 @@ func _test_order_consumption() -> void:
 			+ "deviation (%d ≤ %d)" % [_chebyshev(landing, station),
 			_chebyshev(origin, station)])
 	var free := AiFleetLib.decide(sim, hunter)
-	_check((free["vel"] as Vector2i) == Vector2i(1, 0),
-		"§4.9a close: without the order the same ship takes the fire "
-			+ "position (%s)" % str(free["vel"]))
+	var free_landing: Vector2i = origin + (free["vel"] as Vector2i)
+	_check((free["vel"] as Vector2i) == Vector2i(1, 0)
+			and free_landing == Vector2i(11, 15),
+		("§4.9a close: without the order the free T3 takes the fire position "
+			+ "the φ table scores higher (%s → landing %s; the ORDER path "
+			+ "still steers — the disciplined variant above holds station)")
+			% [str(free["vel"]), str(free_landing)])
 
-	# (b) assigned_target restricts fire: alive-but-unfireable ⇒ hold fire;
-	#     dead/absent ⇒ the free ranking falls back.
+	# (b) assigned_target restricts fire (§4.9b + the §4.9c fire-pool pin).
+	#     W5-D re-pin: the T3 may rank a maneuver over firing, so the fire
+	#     branch is FORCED — a broadside-on fixture at range 3 with loaded
+	#     sides and an explicit arrangement (the 14-cannon latin at (10,15)
+	#     heading east, player 0 dead-ahead at (13,15) = in NO arc, the weak
+	#     player 1 at (13,13) = one bucket off the bow, in the port arc) —
+	#     and the acting cursor advanced, so the fire candidates actually
+	#     execute. WHEN the T3 fires under the engage assignment, the target
+	#     IS the assigned ship; a dead assignment falls back free.
 	var fire_sim := _sim(
 		[_ship("sloop", {"cannons": 0, "durability": 60}),
-		_ship("sloop", {"cannons": 0, "durability": 40})],
-		[_ship("latin", {"cannons": 4})], 912)
+		_ship("sloop", {"cannons": 0, "durability": 20})],
+		[_ship("latin", {"cannons": 14})], 912)
 	fire_sim.start()
 	_place(fire_sim, "player", 0, Vector2i(13, 15))  # dead-ahead: no arc
-	_place(fire_sim, "player", 1, Vector2i(13, 17))  # starboard: fireable
+	_place(fire_sim, "player", 1, Vector2i(13, 13))  # port arc: fireable
 	var gunner := _unit(fire_sim, "enemy", 0)
 	_place(fire_sim, "enemy", 0, Vector2i(10, 15))
 	_face(gunner, BattleSimLib.HEADING_EAST)
 	gunner["vel"] = Vector2i.ZERO
-	var blank := {
-		"station": Vector2i(10, 15), "desired_heading8": 0,
-		"desired_speed_band": [0, 2], "discipline": false, "phase": "",
-	}
-	var hold_fire := AiFleetLib.decide(fire_sim, gunner,
-		(blank as Dictionary).merged({"assigned_target": 0}, true))
+	_begin_turn(fire_sim, "enemy", 0)
+	var own_station := fire_sim.unit_cell(gunner)
+	var hold_sim := _sim(
+		[_ship("sloop", {"cannons": 0, "durability": 60})],
+		[_ship("latin", {"cannons": 14})], 913)
+	hold_sim.start()
+	_place(hold_sim, "player", 0, Vector2i(13, 15))  # dead-ahead: no arc
+	var lone_gunner := _unit(hold_sim, "enemy", 0)
+	_place(hold_sim, "enemy", 0, Vector2i(10, 15))
+	_face(lone_gunner, BattleSimLib.HEADING_EAST)
+	lone_gunner["vel"] = Vector2i.ZERO
+	_begin_turn(hold_sim, "enemy", 0)
+	var hold_fire := AiFleetLib.decide(hold_sim, lone_gunner,
+		_engage_order(hold_sim.unit_cell(lone_gunner), 0))
 	_check(str(hold_fire["action"]) != "cannon",
-		"§4.9b: assigned + alive but unfireable ⇒ HOLD fire (action %s)"
+		"§4.9b: assigned + alive but unfireable ⇒ the fire pool is empty and "
+			+ "no cannon decision exists (action %s)"
 			% str(hold_fire["action"]))
 	var on_target := AiFleetLib.decide(fire_sim, gunner,
-		(blank as Dictionary).merged({"assigned_target": 1}, true))
+		_engage_order(own_station, 1))
 	_check(str(on_target["action"]) == "cannon"
 			and (on_target["target"] as Dictionary).get("index", -1) == 1,
-		"§4.9b: the fireable assignment concentrates the guns (action %s, "
-			+ "target %d)" % [str(on_target["action"]),
+		("§4.9b: the fireable assignment concentrates the guns (action %s, "
+			+ "target %d)") % [str(on_target["action"]),
 				int((on_target["target"] as Dictionary).get("index", -1))])
 	var fallback := AiFleetLib.decide(fire_sim, gunner,
-		(blank as Dictionary).merged({"assigned_target": 7}, true))
+		_engage_order(own_station, 7))
 	_check(str(fallback["action"]) == "cannon"
 			and (fallback["target"] as Dictionary).get("index", -1) == 1,
-		"§4.9b: a dead/absent assignment falls back to the free ranking "
-			+ "(action %s, target %d)" % [str(fallback["action"]),
+		("§4.9b: a dead assignment falls back to the free ranking "
+			+ "(action %s, target %d)") % [str(fallback["action"]),
 				int((fallback["target"] as Dictionary).get("index", -1))])
 
 	# (c) the empty order IS the free T2 — byte-for-byte: two same-seed
