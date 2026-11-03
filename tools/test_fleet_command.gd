@@ -599,15 +599,17 @@ func _test_order_consumption() -> void:
 	var on_target := AiFleetLib.decide(fire_sim, gunner,
 		(blank as Dictionary).merged({"assigned_target": 1}, true))
 	_check(str(on_target["action"]) == "cannon"
-			and int(on_target["target"]["index"]) == 1,
-		"§4.9b: the fireable assignment concentrates the guns (target %d)"
-			% int(on_target["target"]["index"]))
+			and (on_target["target"] as Dictionary).get("index", -1) == 1,
+		"§4.9b: the fireable assignment concentrates the guns (action %s, "
+			+ "target %d)" % [str(on_target["action"]),
+				int((on_target["target"] as Dictionary).get("index", -1))])
 	var fallback := AiFleetLib.decide(fire_sim, gunner,
 		(blank as Dictionary).merged({"assigned_target": 7}, true))
 	_check(str(fallback["action"]) == "cannon"
-			and int(fallback["target"]["index"]) == 1,
+			and (fallback["target"] as Dictionary).get("index", -1) == 1,
 		"§4.9b: a dead/absent assignment falls back to the free ranking "
-			+ "(target %d)" % int(fallback["target"]["index"]))
+			+ "(action %s, target %d)" % [str(fallback["action"]),
+				int((fallback["target"] as Dictionary).get("index", -1))])
 
 	# (c) the empty order IS the free T2 — byte-for-byte: two same-seed
 	#     battles differing only in the `{}` wrapper replay identical logs.

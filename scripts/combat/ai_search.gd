@@ -133,6 +133,9 @@ static func decide(sim, unit: Dictionary, theta: Array[int],
 	var station := BattleSimLib.to_cell(order.get("station", BattleSimLib.NO_CELL))
 	var discipline := has_order and bool(order.get("discipline", false)) \
 		and station != BattleSimLib.NO_CELL
+	# §4.9b engage assignment: `-1`/absent = free ranking (the T2 consumer's
+	# exact fallback semantics).
+	var assigned_target := int(order.get("assigned_target", -1)) if has_order else -1
 	# φ7's station exists for the §4.9b line phases only (form/close/engage/
 	# wear — screen/swarm/break carry no station term).
 	var station_valid := has_order and station != BattleSimLib.NO_CELL \
@@ -181,7 +184,7 @@ static func decide(sim, unit: Dictionary, theta: Array[int],
 			sim.restore(pre)
 			sim.apply_velocity(unit, vel)
 			var target := _fire_target_for_side(sim, unit, side, foes, profile,
-				fleet)
+				fleet, assigned_target)
 			if target.is_empty():
 				continue
 			# §4.4b: the shot type is rule-derived OUTSIDE the enumeration.
@@ -239,7 +242,7 @@ static func _steer_decision(vel: Vector2i) -> Dictionary:
 ## `_focus_target` — the single focus implementation). `{}` when the side has
 ## no fireable target.
 static func _fire_target_for_side(sim, unit: Dictionary, side: String,
-		foes: Array, profile: Dictionary, fleet) -> Dictionary:
+		foes: Array, profile: Dictionary, fleet, fleet_order_target: int = -1) -> Dictionary:
 	var fireable: Array = []
 	var raked: Array = []
 	for foe in foes:
@@ -253,6 +256,16 @@ static func _fire_target_for_side(sim, unit: Dictionary, side: String,
 	if fireable.is_empty():
 		return {}
 	var pool: Array = raked if not raked.is_empty() else fireable
+	# §4.9b engage assignment (W5 master bounce): a discipline order with an
+	# `assigned_target ≥ 0` restricts the fire pool to that ship (§4.9b —
+	# the assignment constrains the GUNS at both levels); dead/absent ⇒ the
+	# free ranking fallback, exactly like the T2 consumer.
+	var assigned := int(fleet_order_target)
+	if assigned >= 0:
+		var pinned: Array = pool.filter(func(foe) -> bool:
+			return int(foe.get("index", -1)) == assigned)
+		if not pinned.is_empty():
+			pool = pinned
 	return fleet._focus_target(profile, unit, pool, sim)
 
 
