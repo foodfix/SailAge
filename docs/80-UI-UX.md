@@ -77,6 +77,7 @@ RPG segment (§4.14), and the Phase-8 `ui_strings` family inventory
 | S18 | ~~Officers panel~~ **retired 2026-11-03** — redesigned into the intel window's 官员 tab (table + detail, §4.6.2) | — | 5→ |
 | S19 | Settings | `scenes/ui_shared/settings_panel.tscn` (modal over **S1 and S4**: the sea-traffic density dial + return-to-menu action, §4.6.3) | 5 |
 | S20 | Creation (出身 + 自由点数) | `scenes/title/creation_screen.tscn` (two-step flow, §4.13) | 8 |
+| S21 | Naval-battle sandbox | `scenes/combat/battle_sandbox.tscn` (zero-write editor, §4.7.16) | 9 |
 | — | **Intel window** | `scenes/ui_shared/intel_window.tscn` (modal over **S3/S4**; hosts the 船长/官员/船队/海图/委托 tabs — the §4.5 dropdown became a full window, 2026-11-03) | — |
 
 Phase 8 adds no further S-numbers: `fleet_picker`, `hail_modal`,
@@ -112,6 +113,9 @@ S3 ──hostile contact / attack──► S10 ──board──► S11 (modal) 
 S10 ──battle ends──► S3 (after-action dialog first)
 S13 ──Retire (Duke)──► S16 ──any key──► S1
 S13 ──tournament entry──► S10 (3 bouts) ──won bout──► S13 ──last bout──► S13
+S1 ──海战──► S21 ──开战──► S10 (fixture encounter, zero-write)
+S10 ──battle ends──► S21 (read-only after-action dialog first, configuration kept)
+S21 ──Esc──► S1
 S3 ──sea death / capture──► S9 ──any key──► S1
 S4–S13 ──run death while ashore (a ledger tick on any port scene, e.g. a
         durability-0 flagship rolling a docked day)──► S9 ──any key──► S1
@@ -124,7 +128,11 @@ S1 ──Quit──► exit
 No cross-links beyond these; Esc = step back one edge where applicable.
 The tournament edge is a detail of the S13 row: a bout's after-action
 `Continue` returns to the host palace (not S3), because the bracket continues
-there and the palace starts the next bout (`70-*` §4.9.7).
+there and the palace starts the next bout (`70-*` §4.9.7). The
+`S10 ──battle ends──► S21` edge is likewise a detail of the S21 row: a
+**sandbox** battle never returns to S3 — its ending is the read-only
+after-action dialog and the editor reopens with the configuration kept
+(§4.7.16); a normal battle still ends at S3.
 
 ### 4.3 Input scheme (keyboard + mouse)
 
@@ -147,7 +155,15 @@ there and the palace starts the next bout (`70-*` §4.9.7).
 | S10 | left-click tile / enemy token | move / default action |
 | S10 | `Tab` | cycle own ships; arrows move the targeting cursor |
 | S10 | `Enter` | confirm the highlighted move/action |
-| S10 | `Esc` | battle menu (Retreat / Surrender / back) |
+| S10 | `Esc` | battle menu (Retreat / Surrender / AI-turn speed switch / back) |
+| S10 | RMB / MMB drag | camera pan; a manual pan pauses the auto-center follow until the acting unit's next turn (§4.7.1) |
+| S10 | mouse wheel | camera zoom 0.6×–1.5×, anchored at the cursor |
+| S10 | viewport edge band | edge scroll — the cursor within 16 px of the screen edge pans the camera at 600 px/s |
+| S10 | `Home` or [fit] | fit the whole 1536×960 battle world in the viewport |
+| S10 | minimap click | jump the camera there (the minimap owns input before the world view) |
+| S10 | press-move ≤ 4 px | a press that moves ≤ 4 px is a click (select/act), more is a drag (pan) |
+| S10 | `1`–`4` | shot-selector buttons 1–4 pick the shot type — round / chain / armor-piercing / grape (gate-locked states disabled, §4.7.1) |
+| S21 | `Esc` | back to S1; panels, buttons and clamps per §4.7.16 |
 | S3 | right-click a fleet inside sighting radius | opens **fleet_picker** (§4.10.1): inspect / talk / attack. Left-click sail-to is unchanged; `attack` keeps the existing funnel (a non-pirate owner = piracy + −20 fame, `70-*` §4.5 + `60-*` §4.11.10; contact rules `60-*` §4.11.11.2); a **coaster** offers no attack verb (intimidate-only, `60-*` §4.1.1); right-click on empty water or land is a no-op |
 | S3 | talk verb at Chebyshev ≤ 2 | opens the **hail modal** (§4.10.2) |
 | S3 | right-click a port harbor tile | the **port context menu** (§4.10.3): dock / 委任航行 appoint voyage |
@@ -900,41 +916,80 @@ chart adds:
 - Corrupt or future-version file → slot line shows `ui.save.invalid` and is
   not selectable (`90-*` §8.2).
 
-#### 4.7.1 S10 battle screen (Phase 2)
+#### 4.7.1 S10 battle screen (Phase 9 rewrite)
 
-Layout, 1280×720, placeholder shapes only (§4.8 palette):
+Phase 9 rebuilds the presentation: the Phase-2 16×10 MP grid becomes a
+48×30 physics world with a free camera, a minimap and overlays. Layout,
+1280×720, placeholder shapes only (§4.8 palette):
 
 ```
 +------------------------------------------------------------------+
-| Battle · Day 12 · Round 3        [weather]      [Esc: menu]       | top 40px
+| Battle · Day 12 · Round 3        [weather]      [Esc: menu]      | top 40px
 +------------------------------------------------------------------+
-| battle grid 16×10 tiles at 48px = 768×480, centered               |
-|  ship tokens: 24×24 squares with a letter (§4.8)                  |
-|  highlight: reachable tiles (ACCENT outline), target tiles (BAD)  |
+| battle world 48×30 tiles @ 32px = 1536×960                       |
+| camera viewport 1280×584 (the bottom bar takes the rest)         | 584px
+|  ship tokens: 24×24 squares with a letter (§4.8)                 |
+|  overlays: reachable vectors · arc fans · side marks · hook ring |
+|                                [minimap 192×120, top-right]      |
 +------------------------------------------------------------------+
-| flagship: durability bar · crew · cannons · reload state           | bottom 96px
-| [Cannon] [Ram] [Board] [Hold] [Retreat] [Surrender]   action menu  |
+| ‖vel‖ · heading8 · port/starboard reload pips · wind · weather   | bottom 96px
+| [1 round] [2 chain] [3 armor-piercing] [4 grape]         [fit]   |
 +------------------------------------------------------------------+
 ```
 
-- **Input:** mouse click a highlighted tile = move; click an enemy token in
-  range = the default action against it (cannon if loaded, else ram/board);
-  the action buttons act on the selected target. Keyboard: `Tab` cycles own
-  ships, arrows move the cursor, `Enter` confirms, `Esc` opens the battle menu
-  (Retreat / Surrender / back). All buttons carry `battle.*` keys.
-- **Presentation:** every action appends one log line (bottom panel, last 3
-  lines visible); no animation is required in Phase 2. Tokens are
-  `ColorRect`s; player ships `TEXT` white, pirate `BAD` red, navy the owning
-  nation's `Nation.color` (§4.8).
-- **Duel modal (S11):** `duel_modal.tscn` is instanced over S10 by the
-  boarding action; it shows both sides' rolls per round (three rows max) and
-  closes with `duel.*` result text. It owns all input while open.
-- **Captain intro preview (Phase 8):** the battle opens with a one-card
-  preview of the opposing flagship captain's §4.12 character card
-  (identified = full reveal), dismissed with any input before the first
-  round.
+- **World & camera.** The battle world is 48×30 tiles at 32 px =
+  1536×960; the camera viewport is 1280×584 (the bottom bar takes the
+  rest of the 1280×720 window). The camera auto-centers on the acting
+  unit until the first manual pan — a manual pan pauses follow until the
+  next unit's turn. Pan with RMB/MMB drag; zoom with the wheel at
+  0.6×–1.5×, anchored at the cursor; edge scroll runs off a 16 px screen
+  band at 600 px/s (§4.3); `Home` or the `[fit]` button fits the whole
+  1536×960 world. All camera math lives as pure functions in
+  `battle_screen.gd` (world↔screen mapping, clamp, zoom anchor, minimap
+  mapping, the 4 px click/drag threshold) with fixed-value assertions in
+  `tools/test_battle_screen.gd`.
+- **Minimap.** 192×120 px (4 px/cell), top-right: the viewport frame,
+  ship dots in the §4.8 pin colors (player/enemy; a navy fleet's dot
+  takes its owner's `Nation.color`), the wind arrow, the current arrow
+  and — Phase 9 W4 — the formation anchor lines
+  (`line_ahead`/`column`). The minimap owns input before the world view;
+  clicking it jumps the camera.
+- **Bottom bar.** `‖vel‖` (1 decimal), the heading8 token, per-side
+  reload pips (port / starboard), the wind direction + weather icon and
+  the `[fit]` button — `battle.*` keys throughout.
+- **Overlays.** the reachable-set velocity vectors for the acting ship
+  (the `legal_velocities` endpoints, `60-*` §4.12.1), the two broadside
+  arc fans (port {45°,90°,135°} / starboard {225°,270°,315°}), the
+  target side indicators, and the hook-highlight ring on hookable
+  targets (the `60-*` §4.6a condition).
+- **Shot selector.** four buttons — round / chain / armor-piercing /
+  grape (`battle.shot.*`) — showing the current side's availability.
+  Gate-locked states render grayed with the required gunnery value
+  (chain 25, armor-piercing 50); grape is disabled beyond range 1.
+  Buttons 1–4 pick the shot type (§4.3).
+- **AI-turn speed switch (battle menu).** 跟随动画 animate / 即时结算
+  instant — whether the AI's turns play out as animation or resolve at
+  once.
+- **Input.** per §4.3: left-click a reachable endpoint / enemy token =
+  move / the default action; `Tab` cycles own ships, arrows move the
+  cursor, `Enter` confirms, `Esc` opens the battle menu (Retreat /
+  Surrender / the AI-turn speed switch / back). Every action appends one
+  log line (bottom panel, last 3 lines visible). All buttons carry
+  `battle.*` keys.
+- **Presentation.** tokens stay placeholder shapes per §4.8 (player
+  ships `TEXT` white, pirate `BAD` red, navy the owning nation's
+  `Nation.color`). The duel modal (S11) presentation is unchanged —
+  `duel_modal.tscn` instanced over S10 shows both sides' rolls per round
+  (three rows max) and closes with `duel.*` result text; it owns all
+  input while open.
+- **Captain intro preview (Phase 8, unchanged):** the battle opens with
+  a one-card preview of the opposing flagship captain's §4.12 character
+  card (identified = full reveal), dismissed with any input before the
+  first round.
 - **After-action:** a `dialog_box`-style modal lists loot gold, captured
-  ships, XP and reputation deltas, then returns to S3 (`60-*` §4.11.10).
+  ships, XP and reputation deltas, then returns to S3 (`60-*` §4.11.10)
+  — except a **sandbox** battle, whose ending is a read-only dialog and
+  returns to S21 with the configuration kept (§4.7.16).
 
 ### 4.7.2 S6 shipyard refit + equipment rows (Phase 2)
 
@@ -1529,6 +1584,67 @@ Notes pinning the set exactly:
 - The role labels 战舰/商船/沿岸 are the §2.2-locked zh texts
   (`40-*` §4.3.1).
 
+#### 4.7.16 S21 naval-battle sandbox (Phase 9)
+
+`scenes/combat/battle_sandbox.tscn` — a full naval-battle editor reached
+from S1 and a **zero-write** surface: nothing it does ever writes the
+save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
+
+- **Entry.** S1 gains the 海战 button (`sandbox.title`) in its button
+  stack, between New Game and Load. `Esc` returns to S1 (§4.2).
+- **Layout (1280×720).** left = the player panel, right = the enemy
+  panel, bottom = the conditions row + `[开战] [随机全部] [导入] [导出]`.
+  Every label comes from the `sandbox.*` family inventoried in `10-*`
+  §7.12.
+- **Player panel.** 1–5 ships, one editable row per ship: ship type (the
+  16 hulls), cannons (0 … `armament_slots`), crew (`crew_min` …
+  `crew_max`), durability (1 … max), the figurehead + sail equipment
+  slots, and the escort captain's canon id (empty = legacy). Beside the
+  ships: the five player attributes (each 0–100; labels reuse
+  `char.attr.*`) and the weapon/armor equipment slots — injected into
+  the battle through the `60-*` §4.12.1 `player_stats` seam — plus the
+  initial morale (0–100).
+- **Enemy panel.** the kind (9 kinds), a one-click `compose_enemy`
+  generation toggle **or** per-ship rows in the same shape as the
+  player's, the captain id (canon / legacy), `ai_level` ∈ {0,1},
+  `archetype`, `formation` and the initial morale. The `ai_level` /
+  `archetype` / `formation` overrides ride the forward-compatible schema
+  below and take effect as their waves land (9C/9D).
+- **Conditions row.** day; seed (`seed_mode` ∈ `fixed|random|auto` —
+  `auto` = the `60-*` §4.11.1 formula); weather
+  (`calm`/`fair`/`strong`/`storm`); `wind_dir` (8 tokens); the current
+  `{dir, strength 0..3}`; the deployment variant (`standard` /
+  `tournament`).
+- **Clamp rules.** every field clamps immediately in the UI layer to the
+  ranges above; an invalid combination never reaches 开战.
+- **Import/export (forward-compatible schema).** `[导出]` copies the FULL
+  configuration JSON to the clipboard; `[导入]` parses clipboard JSON and
+  restores the editors. The schema declares ALL planned fields from day
+  one — weather / wind / current / deployment / morale / `ai_level` /
+  `archetype` / `formation` — so fields the current engine does not yet
+  consume stay dormant in the payload until their wave lands; unknown
+  keys on import are ignored. The canonical export shape (normative):
+
+```json
+{"version": 1, "kind": "sailage_sandbox",
+ "player": {"stats": {"constitution": 10, "intellect": 10, "charisma": 10, "courage": 10, "luck": 10, "weapon": "", "armor": ""}, "morale": 50,
+   "ships": [{"ship_type_id": "brigantine", "cannons": 12, "crew": 30, "durability": 90, "equipment": {"figurehead": "", "sail": ""}, "captain_id": ""}]},
+ "enemy": {"kind": "pirate", "ai_level": 1, "archetype": "aggressive", "formation": "swarm", "morale": 50, "compose": false,
+   "ships": [{"ship_type_id": "sloop", "cannons": 8, "crew": 20, "durability": 60, "equipment": {"figurehead": "", "sail": ""}, "captain_id": ""}]},
+ "conditions": {"day": 1, "seed_mode": "fixed", "seed": 1, "weather": "fair", "wind_dir": "E", "current": {"dir": "E", "strength": 0}, "deployment": "standard"}}
+```
+
+  (`seed_mode` ∈ `fixed|random|auto`; `compose: true` ignores
+  `enemy.ships` and one-click generates.)
+- **Zero-write UX.** a persistent notice (`sandbox.zero_write`) states
+  the sandbox never writes the save. 开战 runs the battle on a **fixture
+  encounter** — `player_ships` / `day` / `gold` / `seed` plus the
+  forward-compat condition keys (`60-*` §4.12.4) — so S10 opens exactly
+  as in a real battle. The ending shows a **READ-ONLY** after-action
+  dialog and returns to S21 with the configuration kept (change one
+  field and re-run). Preset persistence (`user://sandbox/`) is **out of
+  scope** in Phase 9 — clipboard import/export only.
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -1561,6 +1677,15 @@ Notes pinning the set exactly:
 | `TEXT` | `#e8e6df` | primary text |
 | `ACCENT` | `#d9a441` | focus outline, buttons hover |
 | `GOOD`/`WARN`/`BAD` | `#4e9e4e` / `#d9a441` / `#b3341f` | morale tiers, toasts |
+
+- **S10 minimap/overlay pins (Phase 9):** no new constants — the seven
+  battle-view colors bind to the existing palette: player ship dot =
+  `TEXT` `#e8e6df`; enemy ship dot = `BAD` `#b3341f` (a navy fleet's dot
+  takes its owner's `Nation.color`); the minimap's viewport frame =
+  `ACCENT` `#d9a441`; the wind arrow = `ACCENT` `#d9a441`; the current
+  arrow = `COAST_SEA` `#2f6f9e`; the formation anchor lines
+  (`line_ahead`/`column`, W4) = `PANEL_LINE` `#465468`; the
+  hookable-target ring (`60-*` §4.6a) = `GOOD` `#4e9e4e`.
 
 - Sizing grid: 8px base unit; margins 16px; button height 40px; bar heights
   40/32px (§4.5); table row height 32px; dialog width 480px.
