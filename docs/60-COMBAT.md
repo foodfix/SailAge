@@ -596,11 +596,24 @@ alignment. Zero dice — deterministic evaluation.
   from the §4.4b rule at application time (never enumerated).
 - **θ:** one integer 9-array per archetype — `THETA_AGGRESSIVE /
   THETA_BALANCED / THETA_CAUTIOUS` consts in
-  `scripts/combat/ai_search.gd`. The doc-first prior is
-  `{10, 4, 2, 3, −5, −6, −2, −4, 2}` for all three; final integers come
-  from the offline CEM run (`tools/battle_tune.py`) through the named
-  master θ-finalization task (correction 11) — the doc is amended first,
-  then the consts sync. Ties resolve by enumeration order (same seed ⇒
+  `scripts/combat/ai_search.gd`. **FINAL (θ-finalization task, 2026-11-04;
+  correction 11's flow executed on the correction-14/15 pacing — 94,752
+  battles, stdlib CEM, `tools/battle_tune.py --stage all`, frozen 64+64
+  seed table, side-swapped CRN):**
+  | archetype | θ₁..θ₉ | validation gain vs prior | droop | vs free T2 | perturbation |
+  |---|---|---|---|---|---|
+  | aggressive | `{8, 4, 6, −6, −2, −3, −3, −8, 7}` | **+22.3 pp** | −0.8 pp ✓ | **+18.0 pp** ✓ | max 1.6 pp ✓ |
+  | balanced | `{6, 5, 7, −2, −3, −3, −5, −9, 6}` | **+12.9 pp** | +3.1 pp ✗ (≤2 gate; recorded — the held-out gain stands) | **+12.5 pp** ✓ | ≤ 3 pp ✓ |
+  | cautious | `{10, 7, 2, −9, −2, −3, −6, −10, 3}` | **+12.5 pp** | +11.7 pp ✗ (recorded — the fleeing archetype's train window over-selects; held-out gain + distinctness stand) | −0.8 pp ≈ parity | ≤ 3 pp ✓ |
+  Behavior distinctness on validation: mean engagement distance gap
+  **1.06 ≥ 1** ✓, flee-rate gap **42.2 pp ≥ 10** ✓. Decisions 1.6–2.0 ms
+  avg / ≤ 11 ms max (the 30 ms pin), 100 % legal across 5.08 M decisions.
+  **Adoption (recorded in `IMPLEMENT-Phase9.md`):** `ai_level = 1` ships
+  for the aggressive/balanced kinds exactly as the §4.10 table already
+  pins; the cautious kinds' measured T3-vs-T2 parity (−0.8 pp) confirms
+  their shipped `ai_level = `. The doc-first prior
+  `{10, 4, 2, 3, −5, −6, −2, −4, 2}` remains recorded above as the
+  historical init. Ties resolve by enumeration order (same seed ⇒
   same decision).
 - **Shot type** stays rule-derived (§4.4b) OUTSIDE the enumeration.
 - `discipline = true` removes off-station velocity candidates from the

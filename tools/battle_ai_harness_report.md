@@ -70,47 +70,47 @@ Metrics block (parsed back by the later section for the comparison):
 
 ## After (Phase-9 velocity engine)
 
-- recorded: 2026-11-03T16:37:53 (UTC)
+- recorded: 2026-11-03T22:01:11 (UTC)
 - engine: phase9-velocity — the Phase-9 velocity engine (`legal_velocities` / `apply_velocity`, arcs, per-side reload, sweep ram)
 - cap: 40 — the Phase-9 round cap 40 (§4.12.1, correction 12)
 - stall metric: reported by the engine (§4.11.9)
 
 | metric | value |
 |---|---|
-| player-side wins | 36 / 64 |
-| enemy-side wins | 0 / 64 |
-| stall outcomes | 0 |
-| cap-hit | 28 (43.8%) |
-| avg rounds | 34.58 |
-| damage player→enemy | 7542 |
-| damage enemy→player | 4347 |
-| decisions | 8543 |
+| player-side wins | 54 / 64 |
+| enemy-side wins | 5 / 64 |
+| stall outcomes | 2 |
+| cap-hit | 3 (4.7%) |
+| avg rounds | 24.53 |
+| damage player→enemy | 8089 |
+| damage enemy→player | 6474 |
+| decisions | 5882 |
 | legal-action rate | 100.00% |
-| decision timing avg | 0.237 ms |
-| decision timing max | 0.729 ms |
+| decision timing avg | 0.305 ms |
+| decision timing max | 1.018 ms |
 
 Metrics block (parsed back by the later section for the comparison):
 
 ```json
 {
-  "avg_rounds": 34.578125,
-  "cap_hit": 28,
-  "cap_hit_pct": 43.75,
+  "avg_rounds": 24.53125,
+  "cap_hit": 3,
+  "cap_hit_pct": 4.6875,
   "cap_used": 40,
-  "damage_e2p": 4347,
-  "damage_p2e": 7542,
-  "decision_avg_ms": 0.236854032541262,
-  "decision_max_ms": 0.729,
-  "decisions": 8543,
+  "damage_e2p": 6474,
+  "damage_p2e": 8089,
+  "decision_avg_ms": 0.305137198231894,
+  "decision_max_ms": 1.018,
+  "decisions": 5882,
   "engine": "phase9-velocity",
   "illegal": 0,
   "legal_rate": 100.0,
   "seeds": 64,
-  "stall_pct": 0.0,
-  "timestamp": "2026-11-03T16:37:53",
-  "wins_enemy": 0,
-  "wins_player": 36,
-  "wins_stall": 0
+  "stall_pct": 3.125,
+  "timestamp": "2026-11-03T22:01:11",
+  "wins_enemy": 5,
+  "wins_player": 54,
+  "wins_stall": 2
 }
 ```
 
@@ -120,84 +120,57 @@ Band: avg rounds 12–25 · cap-hit < 10% · stall < 5% · legal-action 100% · 
 
 | metric | before | after | band verdict |
 |---|---|---|---|
-| player-side wins | 58 | 36 | — |
-| enemy-side wins | 6 | 0 | — |
-| avg rounds | 12.42 | 34.58 | BREACH |
-| cap-hit % | 0.0% | 43.8% | BREACH |
-| stall % | 0.0% | 0.0% | PASS |
-| damage player→enemy | 10640 | 7542 | — |
-| damage enemy→player | 5648 | 4347 | — |
+| player-side wins | 58 | 54 | — |
+| enemy-side wins | 6 | 5 | — |
+| avg rounds | 12.42 | 24.53 | PASS |
+| cap-hit % | 0.0% | 4.7% | PASS |
+| stall % | 0.0% | 3.1% | PASS |
+| damage player→enemy | 10640 | 8089 | — |
+| damage enemy→player | 5648 | 6474 | — |
 | legal-action rate | 100.00% | 100.00% | PASS |
-| decision avg ms | 0.130 | 0.237 | PASS |
-| decision max ms | 0.539 | 0.729 | — |
+| decision avg ms | 0.130 | 0.305 | PASS |
+| decision max ms | 0.539 | 1.018 | — |
 
-## Breach analysis (recorded per the W3 instruction — no gameplay numbers tuned)
-
-Breaches: avg rounds 34.58 outside 12–25; cap-hit 43.8% ≥ 10%.
-
-Measured mechanism (W3-A, 2026-11-03) — a **harness-driver artifact**,
-not an engine defect (the engine-level probe verified `cap_eff` wind
-tables, integer-bucket heading, sweep stops and the snapshot round-trip
-directly):
-
-- The pinned mirror policy is ① fire / ② first strictly-reducing
-  velocity / ③ hold. After the approach (~round 20 from 43 cells at
-  cap 2 into the wind vs cap 4 running), the fleets meet nose-to-nose:
-  every closing velocity is sweep-blocked (the §4.3a sweep stops at the
-  occupied cell ⇒ prior cell ⇒ no strict reduction), a broadside turn
-  never reduces Chebyshev, and a dead-ahead bearing sits in NEITHER arc
-  (§4.4) — so both sides hold their approach heading and no loaded
-  broadside ever bears. The battle runs to the cap frozen.
-- The MP baseline never froze: `legal_moves` let the same greedy rule
-  sidestep (diagonal MP steps reduced distance while opening the
-  bearing) and its 360° cannon had no arcs to satisfy.
-- Damage does flow whenever drift geometry opens an arc (25/64 battles
-  resolve — the stronger player side wins every resolved one), so the
-  volley stack, per-side reload and crew casualties all exercise.
-- W3-B's T2 priority list (close / broadside-on / kite steering with
-  the §4.11.8 tie-breaks) owns exactly this geometry. Master options:
-  amend the harness policy with a turn-to-broadside fallback, or accept
-  the breach as the stand-in driver's artifact and re-run the harness
-  once T2 drives the enemy side.
+No band breach — all health-band rows PASS.
 
 ## W4: navy line_ahead (FleetCommander) vs pirate swarm
 
-- recorded: 2026-11-03T16:37:54 (UTC)
+- recorded: 2026-11-03T22:01:14 (UTC)
 - fixture: enemy side = the navy fleet (`AiFleet.compose_enemy("navy", day=30, rng)`, 2–4 hulls, the navy row's `line_ahead`) driven by `AiFleet.decide` THROUGH the §4.9b FleetCommander — `FleetCommander.initial_state` at battle start (anchor = flagship pos + heading8), per-round `generate_orders` on the live sim view (`{units, round, enemy_kind, side_morale}`), each five-tuple consumed by `AiFleet.decide(sim, unit, order)`; player side = the pinned mirror greedy (2 brigantines), unchanged. Seeds[0..15] of the pinned table, weather `fair`, contact (100, 100), cap 40.
 - formation-hold metric: over every round the commander's phase is engage or form, the round HOLDS when every living navy ship sits within the §4.9b station-deviation 2 of the order station just issued (read off the orders at issue time).
 
 | metric | value |
 |---|---|
 | seeds | 16 |
-| navy wins | 0 / 16 |
-| player wins | 0 / 16 |
-| stall outcomes | 9 |
-| cap-hit | 7 |
-| avg rounds | 37.25 |
-| navy winrate | 0.0% |
-| navy surrender count | 0 |
-| formation-hold rounds (engage/form) | 273 |
-| formation-hold % | 22.7% |
+| navy wins | 3 / 16 |
+| player wins | 4 / 16 |
+| stall outcomes | 5 |
+| cap-hit | 4 |
+| avg rounds | 31.38 |
+| navy winrate | 18.8% |
+| navy surrender count | 6 |
+| formation-hold rounds (engage/form) | 287 |
+| formation-hold % | 70.0% |
 
 W4 band: formation-hold ≥ 60% is the design expectation (the phase doc's "line formation never forms" risk); rounds and winrate are recorded, not gated — no tuning against the band.
 
-Verdict: formation-hold 22.7% vs ≥ 60% → WATCH.
+Verdict: formation-hold 70.0% vs ≥ 60% → PASS.
 
 Metrics block:
 
 ```json
 {
-  "avg_rounds": 37.25,
-  "cap_hit": 7,
+  "avg_rounds": 31.375,
+  "cap_hit": 4,
   "cap_used": 40,
-  "formation_hold_pct": 22.7106227106227,
-  "formation_rounds": 273,
-  "navy_surrenders": 0,
-  "navy_winrate_pct": 0.0,
-  "navy_wins": 0,
-  "player_wins": 0,
+  "formation_hold_pct": 70.0348432055749,
+  "formation_rounds": 287,
+  "navy_surrenders": 6,
+  "navy_winrate_pct": 18.75,
+  "navy_wins": 3,
+  "player_wins": 4,
   "seeds": 16,
-  "stalls": 9,
-  "timestamp": "2026-11-03T16:37:54"
+  "stalls": 5,
+  "timestamp": "2026-11-03T22:01:14"
 }
 ```

@@ -2528,24 +2528,20 @@ func _test_morale() -> void:
 		return {"action": "hold", "vel": Vector2i.ZERO}
 	var steadfast_outcome := steadfast.run_to_completion(hunt_policy,
 		BattleLib.MAX_ROUNDS)
-	# W5-D re-pin, correction-15 re-measured: under the live T3 (the navy row
-	# ai_level 1, the shared θ prior) the hunter does not press the unarmed
-	# player — the bout resolves as the §4.11.9 stall instead of a
-	# defeat_sunk. The stall still needs its 8 consecutive zero-damage
-	# rounds, but the correction-15 tier raise (latin bms 4 → 5) widens the
-	# T3's legal-velocity set, so the wander-off dance takes 6 firing rounds
-	# before the quiet freeze — the stall lands at round 14, not the W5-D-era
-	# 8. The CEM re-weighting (§4.9c's θ-finalization) is the designed remedy
-	# for exactly this stall; until it amends the doc + the consts together,
-	# the doc-legit stall outcome is the pin.
-	_check(str(steadfast_outcome["result"]) == "stall"
-			and int(steadfast_outcome["rounds"]) == 14,
-		("§4.8a: player morale 0 is a HUD warning only — the hunter never "
-			+ "breaks the player, and the T3-vs-T2 prior freezes into the "
-			+ "§4.11.9 stall (8 consecutive quiet rounds; the correction-15 "
-			+ "tier raise lands the freeze at r14, was r8 on bms 4; "
-			+ "%s @ r%d — the CEM re-weighting is the designed remedy, "
-			+ "§4.9c)") % [str(steadfast_outcome["result"]),
+	# W5 θ-finalization re-pin: under the FINALIZED aggressive θ (the CEM
+	# re-weighting — the designed remedy for exactly the stall this fixture
+	# used to pin) the hunter now PRESSES the unarmed player and the bout
+	# resolves as a defeat_sunk. The §4.8a semantic is the pin, not the
+	# outcome: player morale 0 never capitulates — every loss is a sinking
+	# (lost_player stays empty: sunk hulls are not captures), the navy never
+	# strikes a surrender out of a 0-morale side.
+	_check(str(steadfast_outcome["result"]) == "defeat_sunk"
+			and int(steadfast_outcome["rounds"]) == 9,
+		("§4.8a: player morale 0 is a HUD warning only — the finalized "
+			+ "aggressive θ presses the hunt and resolves the bout "
+			+ "(%s @ r%d; the W5-D-era stall was the prior θ's "
+			+ "oscillation, §4.9c's θ-finalization remedy)")
+			% [str(steadfast_outcome["result"]),
 			int(steadfast_outcome["rounds"])])
 	_check((steadfast_outcome["lost_player"] as Array).is_empty()
 			and int(steadfast_outcome["surrendered_enemy"]) == 0,

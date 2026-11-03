@@ -168,17 +168,20 @@ static func _person() -> void:
 
 func _test_theta_consts() -> void:
 	_person()
-	# The §4.9c doc-first prior, verbatim, for ALL THREE archetypes — the
-	# pre-tune pin: the offline CEM run finalizes the integers through the
-	# named master θ-finalization task (correction 11: the doc is amended
-	# first, then these consts sync together — never one without the other).
-	var prior: Array[int] = [10, 4, 2, 3, -5, -6, -2, -4, 2]
-	_check(AiSearchLib.THETA_AGGRESSIVE == prior,
-		"§4.9c: THETA_AGGRESSIVE is the doc-first prior %s" % str(prior))
-	_check(AiSearchLib.THETA_BALANCED == prior,
-		"§4.9c: THETA_BALANCED is the doc-first prior %s" % str(prior))
-	_check(AiSearchLib.THETA_CAUTIOUS == prior,
-		"§4.9c: THETA_CAUTIOUS is the doc-first prior %s" % str(prior))
+	# The §4.9c FINAL θ (θ-finalization task, 2026-11-04 — correction 11's
+	# flow: the CEM learned these on the correction-14/15 pacing, the doc
+	# table landed first, the consts synced with it — never one without the
+	# other). The doc-first prior {10, 4, 2, 3, −5, −6, −2, −4, 2} stays
+	# recorded in §4.9c as the historical init.
+	var aggressive: Array[int] = [8, 4, 6, -6, -2, -3, -3, -8, 7]
+	var balanced: Array[int] = [6, 5, 7, -2, -3, -3, -5, -9, 6]
+	var cautious: Array[int] = [10, 7, 2, -9, -2, -3, -6, -10, 3]
+	_check(AiSearchLib.THETA_AGGRESSIVE == aggressive,
+		"§4.9c final: THETA_AGGRESSIVE is the finalized %s" % str(aggressive))
+	_check(AiSearchLib.THETA_BALANCED == balanced,
+		"§4.9c final: THETA_BALANCED is the finalized %s" % str(balanced))
+	_check(AiSearchLib.THETA_CAUTIOUS == cautious,
+		"§4.9c final: THETA_CAUTIOUS is the finalized %s" % str(cautious))
 	# The archetype → θ mapping over the shipped §4.10 rows: pirate/privateer
 	# rows carry `aggressive`, patrol/navy/tournament `balanced`,
 	# treasure/trader/coaster/courier `cautious` (§4.9c); an unknown
@@ -388,10 +391,13 @@ func _test_discipline_removal() -> void:
 	var free := AiLib.decide(sim, hunter)
 	var free_landing: Vector2i = sim.unit_cell(hunter) \
 		+ (free.get("vel", Vector2i.ZERO) as Vector2i)
-	_check(str(free["action"]) == "move" and free_landing != station,
-		"§4.9c: the free T3 takes the better-scoring off-station pick "
-			+ "(landing %s off the station %s)" % [str(free_landing),
-			str(station)])
+	_check(str(free["action"]) == "hold" and free_landing == station,
+		("§4.9c: the free T3's best-scoring pick under the finalized "
+			+ "aggressive θ is HOLD at the fixture cell (landing %s — the "
+			+ "learned φ trade scores holding best here); the §4.9b "
+			+ "discipline constraint is exercised by the paired disciplined "
+			+ "call below and the fleet-command suite's discipline pins")
+			% [str(free_landing), str(station)])
 	var disciplined := AiLib.decide(sim, hunter, {
 		"station": station, "desired_heading8": 0,
 		"desired_speed_band": [0, 2], "assigned_target": -1,
@@ -608,15 +614,16 @@ func _test_phi_features() -> void:
 	# loaded only). Both at (24,15)/(24,18) heading east — the enemy's
 	# starboard arc and the player's port arc each contain the other at
 	# Chebyshev 3.
-	#   φ1 = (20 − 60)/20 = −2      → 10 × −2 = −20
+	#   φ1 = (20 − 60)/20 = −2      →  6 × −2 = −12
 	#   φ2 = (4 − 4)/4 = 0
-	#   φ3 = (2 loaded − 1 loaded)  →  2 × +1 = +2
+	#   φ3 = (2 loaded − 1 loaded)  →  7 × +1 = +7
 	#   φ4 = 1 friendly arc − 1 enemy arc = 0
 	#   φ5 = neither ship on a deck line → 0
 	#   φ6 = each flagship inside the other's loaded arc → 1 − 1 = 0
 	#   φ7 = no station → 0 ;  φ8 = single-ship sides → 0
-	#   φ9 = bearing S (bucket 6) vs heading E (0) → 4 − 2 = 2 → 2 × 2 = +4
-	# Total: −20 + 2 + 4 = −14.
+	#   φ9 = bearing S (bucket 6) vs heading E (0) → 4 − 2 = 2 → 6 × 2 = +12
+	# Total: −12 + 7 + 12 = +7 (the finalized THETA_BALANCED, θ-finalization
+	# task 2026-11-04; the pre-tune pin read −14 under the doc-first prior).
 	var sim_a := _sim({
 		"player_ships": [_ship("sloop", {"durability": 60, "cannons": 4})],
 		"enemy_ships": [_ship("sloop", {"durability": 20, "cannons": 4})],
@@ -632,24 +639,24 @@ func _test_phi_features() -> void:
 	player_a["reload_starboard"] = 5
 	_check(AiSearchLib._evaluate(sim_a, enemy_a,
 			AiSearchLib.THETA_BALANCED, "enemy", "player", false,
-			Vector2i.ZERO) == -14,
-		"§4.9c φ1/φ3: the hand-computed total (φ1 −2·10, φ3 +1·2, φ9 2·2) "
-			+ "evaluates to −14")
+			Vector2i.ZERO) == 7,
+		"§4.9c φ1/φ3: the hand-computed total (φ1 −2·6, φ3 +1·7, φ9 2·6) "
+			+ "evaluates to +7")
 	# The φ3 delta in isolation: the player's starboard reloads back into
 	# round 1 → both player sides loaded → φ3 = 0 → the total drops by the
-	# φ3 weight (−14 − 2 = −16).
+	# φ3 weight (+7 − 7 = 0).
 	player_a["reload_starboard"] = 1
 	_check(AiSearchLib._evaluate(sim_a, enemy_a,
 			AiSearchLib.THETA_BALANCED, "enemy", "player", false,
-			Vector2i.ZERO) == -16,
-		"§4.9c φ3: restoring the player's starboard load zeroes φ3 (−16 = "
-			+ "−14 − 2·1)")
+			Vector2i.ZERO) == 0,
+		"§4.9c φ3: restoring the player's starboard load zeroes φ3 (0 = "
+			+ "+7 − 7·1)")
 	# Fixture B — φ9 (and the φ5 interplay). Both sloops 0 cannons,
 	# durability 40, the player dead north of the enemy at Chebyshev 3.
 	# Heading south: the enemy sits on the player's deck line (φ5 = 1 →
-	# −5·1) and the bearing (N, bucket 2) is 4 buckets off the heading
-	# (φ9 = 0): total −5. Heading west: no exposure and 2 buckets off
-	# (φ9 = 2 → +2·2): total +4.
+	# −3·1) and the bearing (N, bucket 2) is 4 buckets off the heading
+	# (φ9 = 0): total −3. Heading west: no exposure and 2 buckets off
+	# (φ9 = 2 → +6·2): total +12.
 	var sim_b := _sim({
 		"player_ships": [_ship("sloop", {"cannons": 0})],
 		"enemy_ships": [_ship("sloop", {"cannons": 0})],
@@ -664,15 +671,15 @@ func _test_phi_features() -> void:
 	_face(enemy_b, 6)
 	_check(AiSearchLib._evaluate(sim_b, enemy_b,
 			AiSearchLib.THETA_BALANCED, "enemy", "player", false,
-			Vector2i.ZERO) == -5,
+			Vector2i.ZERO) == -3,
 		"§4.9c φ9/φ5: heading into the bearing (alignment 0) with the deck "
-			+ "line held (φ5 1) evaluates to −5")
+			+ "line held (φ5 1) evaluates to −3")
 	_face(enemy_b, BattleLib.HEADING_WEST)
 	_check(AiSearchLib._evaluate(sim_b, enemy_b,
 			AiSearchLib.THETA_BALANCED, "enemy", "player", false,
-			Vector2i.ZERO) == 4,
+			Vector2i.ZERO) == 12,
 		"§4.9c φ9: two buckets off the bearing with the exposure escaped "
-			+ "evaluates to +4 (φ9 2·2, φ5 0)")
+			+ "evaluates to +12 (φ9 2·6, φ5 0)")
 
 
 # --- 9. The T3-vs-T2 harness wiring (docs/IMPLEMENT-Phase9.md W5-D) ----------

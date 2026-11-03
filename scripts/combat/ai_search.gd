@@ -54,9 +54,9 @@ static func _ai_fleet_lib():
 ## W5-B) finalizes the integers through the named master θ-finalization task
 ## (correction 11: the doc is amended first, then these consts sync) — these
 ## consts are the runtime's ONLY θ source. Position i weights feature φ(i+1).
-const THETA_AGGRESSIVE: Array[int] = [10, 4, 2, 3, -5, -6, -2, -4, 2]
-const THETA_BALANCED: Array[int] = [10, 4, 2, 3, -5, -6, -2, -4, 2]
-const THETA_CAUTIOUS: Array[int] = [10, 4, 2, 3, -5, -6, -2, -4, 2]
+const THETA_AGGRESSIVE: Array[int] = [8, 4, 6, -6, -2, -3, -3, -8, 7]
+const THETA_BALANCED: Array[int] = [6, 5, 7, -2, -3, -3, -5, -9, 6]
+const THETA_CAUTIOUS: Array[int] = [10, 7, 2, -9, -2, -3, -6, -10, 3]
 
 ## §4.9c archetype → θ mapping: pirate/privateer rows carry `aggressive`,
 ## patrol/navy/tournament `balanced`, treasure/trader/coaster/courier
