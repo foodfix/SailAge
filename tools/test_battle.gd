@@ -2384,6 +2384,37 @@ func _test_morale() -> void:
 		"§4.12.1: the snapshot layout stays append-only (units + the scalar "
 			+ "block of %d slots incl. the retired one + the two morales)" % 23)
 
+	# The captured −20 books on an AI SURRENDER too (§4.8a event table; the
+	# W4-D bounce-back fixed `_ai_surrender` routing through `_capture`):
+	# side morale 20 (≤ the gate), the hull at ≤ 25 % — the first seed whose
+	# §4.7 roll succeeds resolves as a surrender, and the enemy side drops
+	# exactly 20 (no clamp interference from 20 − 20).
+	var surrender_morale := -1
+	for probe_seed in range(1, 41):
+		var probe := _sim({
+			"player_ships": [_ship("brigantine", {"cannons": 0})],
+			"enemy_ships": [_ship("latin", {"cannons": 4, "durability": 10})],
+			"enemy_morale": 20, "seed": probe_seed,
+		})
+		probe.start()
+		# The player ship parks far away; the T2 roll fires on the AI turn.
+		var probe_policy := func(active_sim, active_unit) -> Dictionary:
+			if str(active_unit["side"]) == "enemy":
+				return AiLib.decide(active_sim, active_unit)
+			return {"action": "hold", "vel": Vector2i.ZERO}
+		var probe_outcome := probe.run_to_completion(probe_policy,
+			BattleLib.MAX_ROUNDS)
+		if int(probe_outcome["surrendered_enemy"]) == 1:
+			surrender_morale = probe.side_morale(BattleLib.SIDE_ENEMY)
+			_check(probe.side_morale(BattleLib.SIDE_ENEMY) == 0
+					and (probe_outcome["captured_enemy"] as Array).size() == 1,
+				"§4.8a: an AI surrender books the captured −20 (side morale "
+					+ "20 → %d, seed %d)" % [surrender_morale, probe_seed])
+			break
+	_check(surrender_morale == 0,
+		"§4.8a: the surrender −20 probe resolved within the seed sweep "
+			+ "(end morale %d)" % surrender_morale)
+
 	# …and the PLAYER side never auto-strikes: morale 0 through a lost
 	# battle resolves every loss as a sinking, never a capitulation. The
 	# hunter is the real T2 on the navy row (kites at preferred_range 3,

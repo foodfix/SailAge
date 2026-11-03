@@ -294,18 +294,25 @@ static func decide(sim: BattleSimLib, unit: Dictionary,
 	if discipline and station != BattleSimLib.NO_CELL:
 		considered = legal.filter(func(vel): return _keeps_station(sim, unit, origin, vel, station))
 
-	# ① §4.7 surrender roll: below the durability gate with a player ship
-	#    within 3 (the W3-era trigger). The chance is the sim's §4.7
-	#    `surrender_chance(unit, courage_mod)` — the profile `courage_mod`
-	#    folded into the effective courage (§4.9a) — and the roll is drawn
-	#    from the battle's §4.11.1 stream; a failed roll re-rolls next turn.
+	# ① §4.7/§4.8a surrender roll: SIDE morale ≤ 20 (the W4-A seam, the
+	#    proximity clause retired by decision 9/§4.7's W1 pin) AND the ship
+	#    at ≤ 25 % max durability. The chance is the sim's §4.7
+	#    `surrender_chance(unit, courage_mod, morale)` — the profile
+	#    `courage_mod` folded into the effective courage (§4.9a) plus the
+	#    `+ floor((20 − morale) / 2)` pp morale modifier — and the roll is
+	#    drawn from the battle's §4.11.1 stream; a failed roll re-rolls next
+	#    turn. The defensive seam (no `side_morale` ⇒ −1) keeps the
+	#    merge-order fallback exactly the durability half of the gate.
 	#    Orders never touch this priority (the §4.9b layer constrains
 	#    maneuvers and targets, not the §4.7 gate).
+	var side_morale := -1
+	if sim.has_method("side_morale"):
+		side_morale = int(sim.side_morale(BattleSimLib.SIDE_ENEMY))
 	if max_durability > 0 \
 			and int(own_ship.get("durability", 0)) * 100 \
-				< SURRENDER_DURABILITY_PERCENT * max_durability \
-			and distance <= SURRENDER_PLAYER_RANGE:
-		if sim.roll_surrender(unit, courage_mod):
+				<= SURRENDER_DURABILITY_PERCENT * max_durability \
+			and (side_morale < 0 or side_morale <= BattleSimLib.MORALE_SURRENDER_GATE):
+		if sim.roll_surrender(unit, courage_mod, side_morale):
 			return {"action": "surrender", "target": {}, "vel": Vector2i.ZERO}
 
 	# ② §4.9a flee: hp% below the profile gate, or aggression < 25, or —

@@ -1935,8 +1935,10 @@ func _ai_surrender(unit: Dictionary) -> void:
 	_action_taken = true
 	_surrendered_enemy += 1
 	unit["ship"]["crew"] = int(unit.get("crew", 0))
-	_captured_enemy.append(unit["ship"].duplicate(true))
-	unit["alive"] = false
+	# §4.8a: a surrendered ship IS a captured ship — the removal routes
+	# through `_capture` so the enemy side books the captured −20 event
+	# (W4-D bounce-back fix; the hand-rolled removal here skipped it).
+	_capture(unit)
 	_log.append(_make_log("surrender_enemy", unit, {}, {}))
 	_check_over()
 
