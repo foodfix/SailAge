@@ -1,61 +1,111 @@
 class_name BattleSim
 extends RefCounted
-## Turn engine for grid sea battles (docs/60-COMBAT.md §4.2–§4.7, §4.11.4–§4.11.9).
+## Turn engine for grid sea battles — the Phase-9 velocity-physics model
+## (docs/60-COMBAT.md §4.2–§4.7, §4.3a/§4.4a/§4.4b/§4.6a, §4.11.2–§4.11.12,
+## §4.12.1/§4.12.1.1).
 ##
 ## Pure logic, no node references (docs/90-ARCHITECTURE.md §4). The engine
 ## **never mutates `GameState`**: it deep-copies the ship instances handed to
 ## [method _init] and owns every battle-local field itself (units, RNG, log,
 ## outcome tallies). Reading the player's Person-model values (swordplay /
 ## courage / charisma / effective gunnery, §4.4/§4.11.5/§4.11.6) and the worn
-## equipment is the only GameState access.
+## equipment is the only GameState access; the §4.12.1 battle-condition lock
+## (`wind_dir` / `current`) is read once at construction when the config omits
+## it (defaults documented on [method _init]).
 ##
-## Interface: every method/signature pinned in docs/60-* §4.12.1, plus the
-## seams a caller needs that the pin leaves implicit:
+## Model (§4.3a): every ship carries `pos` / `vel` (Vector2i), `heading8`,
+## `reload_port` / `reload_starboard`, `speed_debuff_turns` and `crew`. A turn
+## is three phases — pick a legal velocity, integrate it as a Bresenham sweep
+## (the first occupied cell stops the ship: enemy ⇒ ram, friend/out-of-bounds
+## ⇒ stop at the prior cell), then at most one action (cannon naming the
+## side / ram / board / hold). The MP-era `cell` / `mp` / `mp_debuff` triple
+## and `battle_mp` are retired (§4.3 historical note).
+##
+## Interface: every method/signature pinned in docs/60-* §4.12.1 (plus the
+## §4.12.1 additions `legal_velocities` / `apply_velocity` / `snapshot` /
+## `restore`), and the seams a caller needs that the pin leaves implicit:
 ##   * [method units] / [method living_units] — the AI (§4.12.1.1) and S10
 ##     must enumerate tokens;
-##   * [method combat_rating] / [method effective_speed] /
-##     [method effective_max_durability] — the §4.11.5/§4.11.12 numbers;
+##   * [method combat_rating] / [method effective_max_durability] /
+##     [method gunnery_of] — the §4.11.5/§4.11.12 numbers;
 ##   * [method seed_value] — the §4.11.1 seed actually used (tests/audit);
 ##   * [method retreat] / [method offer_surrender] — the two menu-only
 ##     outcomes of §4.11.9/§4.11.7 (they are not per-unit actions);
-##   * [method log_lines] — the structured log of §4.11.4 "damage order".
+##   * [method log_lines] — the structured log of §4.11.4 "damage order";
+##   * [method ai_shot_type] — the §4.4b deterministic AI shot rule, shared
+##     by the decision executor and the W3-B T2 AI (never a second copy).
 ##
 ## One implementation of every formula lives here; `ai_fleet.gd`, the S10
-## screen and the S11 modal all call into this file instead of copying numbers.
+## screen and the S11 modal all call into this file instead of copying
+## numbers.
 
 const CharacterLib := preload("res://scripts/player/character.gd")
+## Wind/current tables and the month calendar (20-* §4.4/§4.7/§4.15). One-way
+## preload — the sailing module never loads combat.
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+## The decoded contact-tile current (`currents.png`, reversal at lookup,
+## §6.5) — the §4.2 battle-condition lock default.
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 
 # --- Grid & deployment (docs/60-* §4.2, §4.11.2) ---------------------------
 
-const GRID_WIDTH := 16
-const GRID_HEIGHT := 10
-## §4.2 bands: player ships start at x ≤ 2, enemy ships at x ≥ 13.
-const PLAYER_BAND_MAX_X := 2
-const ENEMY_BAND_MIN_X := 13
+const GRID_WIDTH := 48
+const GRID_HEIGHT := 30
+## §4.2 bands: player ships start at x ≤ 5, enemy ships at x ≥ 42; a band
+## overflow (more than 5 ships) continues the in-band scan.
+const PLAYER_BAND_MAX_X := 5
+const ENEMY_BAND_MIN_X := 42
 ## §4.11.2 concrete tiles, indexed by fleet index (0 = flagship).
 const PLAYER_DEPLOYMENT: Array = [
-	Vector2i(1, 4), Vector2i(1, 5), Vector2i(1, 3), Vector2i(1, 6), Vector2i(1, 2),
+	Vector2i(2, 15), Vector2i(2, 14), Vector2i(2, 16), Vector2i(2, 13), Vector2i(2, 17),
 ]
 const ENEMY_DEPLOYMENT: Array = [
-	Vector2i(14, 4), Vector2i(14, 5), Vector2i(14, 3), Vector2i(14, 6), Vector2i(14, 2),
+	Vector2i(45, 15), Vector2i(45, 14), Vector2i(45, 16), Vector2i(45, 13), Vector2i(45, 17),
 ]
+## §4.11.2 tournament variant (single bout): pinned cells and initial
+## velocities — 27 cells apart, the bout opens already under way.
+const TOURNAMENT_DEPLOYMENT := "tournament"
+const TOURNAMENT_PLAYER_CELL := Vector2i(10, 15)
+const TOURNAMENT_ENEMY_CELL := Vector2i(37, 15)
+const TOURNAMENT_PLAYER_VEL := Vector2i(1, 0)
+const TOURNAMENT_ENEMY_VEL := Vector2i(-1, 0)
 ## "No destination cell" marker for non-move decisions / queries.
 const NO_CELL := Vector2i(-1, -1)
+
+# --- heading8 (docs/60-* §4.3a, decision 1) --------------------------------
+#
+# heading8 ∈ 0..7 buckets a velocity's direction at the 22.5° boundaries:
+# bucket = the nearest 45° of atan2(−vy, vx) — 0 = east (+x), increasing
+# counterclockwise in the mathematical frame (screen y-down: (1,−1) = NE,
+# (0,−1) = N …). Derived from vel via INTEGER dot comparisons against the
+# eight compass rays — never atan2 (decision 1: portable, deterministic).
+# `vel = (0,0)` keeps the last heading.
+const HEADING_RAYS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1), Vector2i(-1, -1),
+	Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+]
+## The 8-compass token of each bucket (the `20-*` §4.4 id set) — the bridge
+## to `SailingSimLib.angle_between_dirs` for the wind/current tables.
+const HEADING_TOKENS: Array[String] = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"]
+## Player deployment faces east, enemy faces west (§4.11.2).
+const HEADING_EAST := 0
+const HEADING_WEST := 4
 
 # --- Sides -----------------------------------------------------------------
 
 const SIDE_PLAYER := "player"
 const SIDE_ENEMY := "enemy"
 
-# --- Movement (docs/60-* §4.3, §4.11.4) ------------------------------------
+# --- Velocity & cap (docs/60-* §4.3a; decision 2, corrections 1–3) ----------
 
-const MP_ORTHOGONAL := 1
-const MP_DIAGONAL := 2
-## The eight neighbour offsets; diagonals cost [constant MP_DIAGONAL].
-const DIRECTIONS: Array = [
-	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0),
-	Vector2i(1, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(-1, -1),
-]
+## The broadside arcs (§4.4): relative-bearing bucket steps (×45°,
+## counterclockwise from the attacker's heading8).
+const ARC_PORT_STEPS: Array[int] = [1, 2, 3]      # 45° / 90° / 135°
+const ARC_STARBOARD_STEPS: Array[int] = [5, 6, 7]  # 225° / 270° / 315°
+const BROADSIDE_PORT := "port"
+const BROADSIDE_STARBOARD := "starboard"
+## §4.4 broadside split at battle start (decision 3): port = floor(n / 2).
+const BROADSIDE_SPLIT_DIVISOR := 2.0
 
 # --- Cannon (docs/60-* §4.4, §4.11.5) --------------------------------------
 
@@ -64,48 +114,70 @@ const CANNON_RANGE_MAX := 3
 ## range_factor at range 1 / 2 / 3 (§4.4).
 const CANNON_RANGE_FACTOR := {1: 1.0, 2: 0.75, 3: 0.5}
 const CANNON_BASE_MULTIPLIER := 2
-## §4.2 / §4.11.5: storm weather scales cannon damage.
+## §4.2 / §4.11.5 weather damage multipliers: storm ×0.75, strong ×0.9.
 const STORM_CANNON_MULTIPLIER := 0.75
+const STRONG_CANNON_MULTIPLIER := 0.9
 const STORM_WEATHER := "storm"
-## §4.11.4: firing in round N blocks round N+1 (sets `round + 2`).
-const RELOAD_ROUNDS := 2
-## §4.11.5 Phase-8 `bonus`: `floor(combat_rating / 10)` for captain-card ships
-## (the rating is the card cannon rating, §4.11.5 — see [method combat_rating]).
-const COMBAT_BONUS_DIVISOR := 10
+const STRONG_WEATHER := "strong"
+## §4.4 rake (纵射): ×1.25 when the target's bearing bucket relative to the
+## TARGET's own heading8 ∈ {0°, 180°}.
+const RAKE_MULTIPLIER := 1.25
 
-# --- Shot types & gunnery (Phase 8, docs/60-* §4.4, §4.11.5) ----------------
+# --- Shot types & gunnery (§4.4b; the Phase-8 gates stay in data) -----------
 
-## Round shot is the Phase-2 volley (no gate, no multiplier); the two Phase-8
-## types unlock at gunnery thresholds read from `data/skill_gates.json`.
 const ROUND_SHOT := "round"
 const CHAIN_SHOT := "chain"
 const ARMOR_PIERCING_SHOT := "armor_piercing"
-## §4.4 chain shot: the volley's damage ×0.75 and the target loses 1 MP for
-## 2 rounds (the debuff resolves at the target's per-turn MP refresh).
+## §4.4b grape: NO gate, range 1 only — hull floor(same-range round × 0.5)
+## plus the crew kill floor(same-range round × 0.5), which IS the volley's
+## casualty term (§4.11.5, replaces the /20 divisor for that volley).
+const GRAPE_SHOT := "grape"
+const GRAPE_HALF := 0.5
 const CHAIN_DAMAGE_MULTIPLIER := 0.75
-const CHAIN_MP_DEBUFF := 1
-const CHAIN_MP_DEBUFF_TURNS := 2
-## §4.4 armor-piercing: the volley's damage ×1.25, ignoring the target's
-## `armor` equipment modifiers (none exists in the volley path today — the
-## clause is honoured by construction; see [method do_cannon]).
+const CHAIN_DEBUFF_TURNS := 2
 const ARMOR_PIERCING_DAMAGE_MULTIPLIER := 1.25
 ## §4.4 flagship damage term: `+ floor(effective_gunnery / 25)`.
 const GUNNERY_BONUS_DIVISOR := 25
-## §4.4 / IMPLEMENT-Phase8 §2.2 gate thresholds. The data row
+## §4.11.5 captain-card `bonus`: `floor(combat_rating / 10)` (the card cannon
+## rating, see [method combat_rating]).
+const COMBAT_BONUS_DIVISOR := 10
+## §4.4 / skill_gates thresholds. The data row
 ## (`data/skill_gates.json` `shot.chain` / `shot.armor_piercing`) wins; these
 ## stand in only while the gates file is unreadable (defensive default).
 const DEFAULT_CHAIN_GATE := 25
 const DEFAULT_ARMOR_PIERCING_GATE := 50
 
-# --- Ram (docs/60-* §4.5, §4.11.5) ----------------------------------------
+# --- Crew casualties (§4.11.5, correction 7) --------------------------------
+
+## Standard volley `crew −= floor(damage / 20)`; rake volley `/ 10`; clamped
+## at 0. A grape volley's casualty is its dedicated crew kill instead.
+const CREW_CASUALTY_DIVISOR := 20
+const CREW_CASUALTY_RAKE_DIVISOR := 10
+## Boarding winner `crew −= floor(crew × 0.2)` (§4.6a/§4.11.6); clamped at 0.
+const BOARDING_CREW_LOSS_FRACTION := 0.2
+
+# --- Reload (docs/60-* §4.4a; decision 5) -----------------------------------
+
+## `reload_turns = clamp(3 − floor(gunnery / 50), 1, 3) + (crew_ratio < 0.5 ? 1 : 0)`.
+const RELOAD_BASE_TURNS := 3
+const RELOAD_MIN_TURNS := 1
+const RELOAD_GUNNERY_DIVISOR := 50
+const RELOAD_LOW_CREW_RATIO := 0.5
+const RELOAD_LOW_CREW_BONUS := 1
+
+# --- Ram (docs/60-* §4.5, §4.11.5; decision 7) -----------------------------
 
 const RAM_TARGET_FRACTION := 0.25
 const RAM_ATTACKER_FRACTION := 0.10
-## §4.5 galley identity rule (oar/hybrid attackers).
+const RAM_SPEED_STEP := 0.25
+## §4.5 bow/stern approach (bearing bucket ∈ {0°, 180°} vs the TARGET's
+## heading8) ×1.15.
+const RAM_BOW_STERN_MULTIPLIER := 1.15
+## §4.5 galley identity rule (oar/hybrid attackers, folded into mult).
 const OAR_RAM_MULTIPLIER := 1.25
 const OAR_SHIP_CLASSES: Array[String] = ["oar", "hybrid"]
 
-# --- Duel (docs/60-* §4.6, §4.11.6) ---------------------------------------
+# --- Duel (docs/60-* §4.6, §4.11.6) — unchanged ----------------------------
 
 const DUEL_WINS_NEEDED := 3
 const DUEL_MAX_ROUNDS := 5
@@ -113,11 +185,11 @@ const DUEL_ROUND_MAX_ROLL := 20
 const DUEL_CREW_DIVISOR := 5
 const DUEL_CREW_CAP := 20
 ## §4.11.5/§4.11.6 legacy stand-in (`5 + fleet tier`) for fleets without a
-## captain canon card — the Phase-2/5 formula, kept byte-identical until the
-## fleet source carries `captain_id` (W4-B, IMPLEMENT-Phase8 §2.3).
+## captain canon card — kept byte-identical to Phase 2/8 until the fleet
+## source carries per-ship canon ratings (W4-B).
 const CAPTAIN_RATING_BASE := 5
-## §4.6 "fleet tier": pirate tier 1, navy tier 2, and Phase-3 tournament bouts
-## tier 2 as well (`60-*` §4.11.7.1 — the only code change that seam needs).
+## §4.6 "fleet tier": pirate tier 1, navy tier 2, Phase-3 tournament bouts
+## tier 2 as well (`60-*` §4.11.7.1).
 const FLEET_TIER := {"pirate": 1, "navy": 2, "tournament": 2}
 ## §4.11.6 Phase-8 duel terms: attacker `+ floor(courage / 20)`, the defender
 ## adds `+ floor(charisma / 20)`; card cannon term `+ floor(gunnery / 25)`.
@@ -125,28 +197,41 @@ const DUEL_COURAGE_DIVISOR := 20
 const DEFENDER_CHARISMA_DIVISOR := 20
 const CARD_CANNON_DIVISOR := 25
 
-# --- AI surrender roll (Phase 8, docs/60-* §4.7) ----------------------------
+# --- §4.4a / §4.7 legacy fallbacks (decision 5, correction 6) ---------------
+#
+## A fleet without canon cards reads `10 + 10 × tier` for BOTH the gunnery
+## gate source (§4.4a) and the surrender courage (§4.7) — the doc-pinned
+## legacy fallback family.
+const LEGACY_FALLBACK_BASE := 10
+const LEGACY_FALLBACK_PER_TIER := 10
+
+# --- AI surrender roll (§4.7; the W3 gate stays per the Phase-8 trigger) ----
 
 ## `clamp(25 − floor(courage / 10), 10, 40)` percent, drawn from the battle's
 ## §4.11.1 stream ([method roll_surrender]); a failed roll re-rolls on the
-## ship's next turn (§4.9 rule 1 falls through).
+## ship's next turn. The W4 morale model widens it by the §4.8a modifier —
+## the hook is the `courage_mod` parameter, W3 passes 0.
 const SURRENDER_CHANCE_BASE := 25
 const SURRENDER_CHANCE_MIN := 10
 const SURRENDER_CHANCE_MAX := 40
 const SURRENDER_COURAGE_DIVISOR := 10
-## Fleets without a canon card (the legacy pool shape) have no captain courage:
-## the roll uses the card template's main-attribute band centre at that tier,
-## `10 + 3 × tier` (tier 1 → 13 → 24%, tier 2 → 16 → 24%) — deterministic, and
-## noted in the W3-C report; W4-B's canon fleets replace it with the real card.
-const LEGACY_COURAGE_BASE := 10
-const LEGACY_COURAGE_PER_TIER := 3
 
-# --- Boarding morale (Phase 8, docs/60-* §4.8) ------------------------------
+# --- Boarding morale (§4.8 as of Phase 8 — W4-A re-pins onto the §4.8a table)
 
-## A won boarding duel (§4.6) raises fleet morale +5. The engine never touches
-## `GameState`, so the +5 rides the outcome block as `morale_bonus` for the
-## §4.12.4 consumers to apply (see the W3-C report).
+## A won boarding duel books +5 into the outcome block (`morale_bonus`) for
+## the §4.12.4 consumers. The engine never touches `GameState`.
 const BOARDING_MORALE_BONUS := 5
+
+# --- Stall & cap (docs/60-* §4.11.9/§4.11.10; decision 12, correction 12) ---
+
+## 8 consecutive rounds with zero damage and zero boarding and a net
+## player↔enemy Chebyshev change ≤ 2 ⇒ outcome `stall`; any damage or
+## boarding resets the counter.
+const STALL_ROUNDS := 8
+const STALL_DISTANCE_DELTA := 2
+## §4.11.10: the round cap re-pins to 40 (the `run_to_completion` default,
+## correction 12).
+const MAX_ROUNDS := 40
 
 # --- Outcome (docs/60-* §4.11.9, §4.11.10) --------------------------------
 
@@ -155,19 +240,22 @@ const RESULT_DEFEAT_SUNK := "defeat_sunk"
 const RESULT_DEFEAT_CAPTURED := "defeat_captured"
 const RESULT_RETREAT := "retreat"
 const RESULT_SURRENDER := "surrender"
+## §4.11.9 stall row: the mutual-disengage outcome (after-apply semantics are
+## the caller's — W4/apply-side; the engine only reports).
+const RESULT_STALL := "stall"
 const RESULT_UNFINISHED := ""
 const RESULT_VALUES: Array[String] = [
 	RESULT_VICTORY, RESULT_DEFEAT_SUNK, RESULT_DEFEAT_CAPTURED,
-	RESULT_RETREAT, RESULT_SURRENDER,
+	RESULT_RETREAT, RESULT_SURRENDER, RESULT_STALL,
 ]
 const XP_PER_ENEMY_NEUTRALIZED := 10
 const XP_PER_ROUND := 5
 const PIRATE_REP_GAIN := 2
 ## §4.11.10: the navy piracy penalty. Pinned here with the other reward
 ## numbers, but **never applied by this engine**: it is charged once at battle
-## start by whoever initiated the navy battle (the S3 piracy funnel, `world_map.gd`;\n## historically `encounters.gd`
-## `PIRACY_REPUTATION` / `world_map.gd._charge_navy_piracy`), so it must not
-## appear in an outcome block (see [method _rep_deltas]).
+## start by whoever initiated the navy battle (the S3 piracy funnel,
+## `world_map.gd`), so it must not appear in an outcome block (see
+## [method _rep_deltas]).
 const NAVY_REP_PENALTY := -20
 const SALVAGE_FRACTION := 0.05
 const NEAREST_PORT_COUNT := 2
@@ -180,6 +268,15 @@ var day := 0
 var gold := 0
 var contact := Vector2i.ZERO
 var weather := "calm"
+## §4.2 battle-condition lock: the 8-token wind-FROM id, locked at battle
+## start (§4.12.1 config key, default = `GameState.world["wind_dir"]`).
+var wind_dir := "E"
+## §4.2/§4.12.1: the decoded, reversal-applied contact-tile current
+## (`{dir: <flow-TO token>, strength: 0..3}`), locked for the battle
+## regardless of the world's `current_mode` (correction 1). strength 0 = none.
+var current := {"dir": "", "strength": 0}
+## §4.11.2 deployment variant: "" (the §4.11.2 table) or "tournament".
+var deployment := ""
 ## Optional caller-supplied id (§4.12.2 `encounter_id`), "" when not given.
 var encounter_id := ""
 ## One stream per battle (§4.11.1); duels draw from it (§4.11.6).
@@ -193,6 +290,7 @@ var _order: Array = []
 var _round := 1
 var _current := -1
 var _action_taken := false
+var _moved_this_turn := false
 var _started := false
 var _over := false
 var _result := RESULT_UNFINISHED
@@ -201,6 +299,12 @@ var _flagship_index := 0
 ## `captain_id` / `captain` field. Empty for legacy fleets (no card — the
 ## `5 + tier` fallback prices their ships) and when no field was handed over.
 var _fleet_captain_card: Dictionary = {}
+
+# Stall detection state (§4.11.9).
+var _stall_rounds := 0
+var _last_min_distance := -1
+var _round_had_damage := false
+var _round_had_boarding := false
 
 # Outcome tallies (§4.12.2).
 var _sunk_enemy: Array = []
@@ -217,17 +321,19 @@ var _log: Array = []
 
 
 ## §4.12.1 config keys: `player_ships`, `enemy_ships`, `enemy_kind`,
-## `enemy_nation`, `day`, `gold`, `contact`, `weather`, optional `seed` and
-## optional `encounter_id`. Ship instances are deep-copied so the caller's
-## `GameState.fleet` can never be touched by a battle.
+## `enemy_nation`, `day`, `gold`, `contact`, `weather`, optional `seed`,
+## optional `encounter_id`, optional `deployment` ("" | "tournament",
+## §4.11.2), optional `wind_dir` (the 8-token wind-FROM id; default =
+## `GameState.world["wind_dir"]`), optional `current`
+## (`{dir: <flow-TO token>, strength: 0..3}`; default = the decoded,
+## reversal-applied contact-tile current regardless of the world's
+## `current_mode`, correction 1) and optional `player_stats` (the S21 seam).
+## All three battle conditions LOCK here and never change mid-battle (§4.2).
 ##
 ## Optional `rng`: a `RandomNumberGenerator` the caller has **already used** to
 ## compose the enemy fleet (the §4.11.1 "duel rolls draw from the same stream,
 ## after deployment and enemy composition" rule). When absent the sim seeds a
-## fresh stream from `seed` (or the §4.11.1 formula). The §4.12.1 config table
-## lists no key for that hand-off, so it is added here as an optional extra —
-## `seed` alone stays sufficient for every test that does not audit the
-## composition/duel continuity.
+## fresh stream from `seed` (or the §4.11.1 formula).
 func _init(config: Dictionary) -> void:
 	_player_ships = _copy_ships(config.get("player_ships", []))
 	_enemy_ships = _copy_ships(config.get("enemy_ships", []))
@@ -237,14 +343,23 @@ func _init(config: Dictionary) -> void:
 	gold = int(config.get("gold", 0))
 	contact = to_cell(config.get("contact", Vector2i.ZERO))
 	weather = str(config.get("weather", "calm"))
+	deployment = str(config.get("deployment", ""))
 	encounter_id = str(config.get("encounter_id", ""))
+	wind_dir = str(config.get("wind_dir", _default_wind_dir()))
+	if SailingSimLib.heading_index(wind_dir) < 0:
+		wind_dir = "E"
+	var current_config = config.get("current", null)
+	current = (current_config as Dictionary).duplicate(true) \
+		if current_config is Dictionary else _default_current()
+	current["dir"] = str(current.get("dir", ""))
+	current["strength"] = clampi(int(current.get("strength", 0)), 0, 3)
 	_fleet_captain_card = _resolve_fleet_captain_card(config)
 	# Phase-9 S21 seam (60-* §4.12.1): the optional `player_stats` override is
 	# read HERE, once per constructed sim — present → the static holder carries
 	# it; absent → the holder is cleared so `player_attribute` /
 	# `player_effective_skill` / `player_duel_base` read GameState exactly as
 	# before (the normal battle path never passes the key and stays
-	# byte-identical). **W3's rewrite must preserve this seam.**
+	# byte-identical). **Preserved through the W3 rewrite.**
 	var stats_override = config.get("player_stats", null)
 	_player_stats_override = (stats_override as Dictionary).duplicate(true) \
 		if stats_override is Dictionary else {}
@@ -255,6 +370,31 @@ func _init(config: Dictionary) -> void:
 	else:
 		_seed = int(config.get("seed", battle_seed_formula(day, contact, gold, _player_ships.size())))
 		rng.seed = _seed
+
+
+## The 8-token wind-FROM default (§4.12.1): the world's locked direction.
+static func _default_wind_dir() -> String:
+	var world = GameState.get("world")
+	if world is Dictionary:
+		var value = (world as Dictionary).get("wind_dir", "E")
+		if value is String and SailingSimLib.heading_index(value) >= 0:
+			return value
+	return "E"
+
+
+## The decoded current default (§4.12.1, correction 1): the contact tile's
+## current vector from `currents.png` (the reversal is `current_at`'s own
+## lookup-time rule, §6.5), read regardless of the world's `current_mode`.
+## No current (or an undecoded ocean — headless tools) ⇒ strength 0.
+func _default_current() -> Dictionary:
+	var decoded: Dictionary = OceanLayersLib.instance().current_at(
+		contact, SailingSimLib.month_for(day))
+	if decoded.is_empty():
+		return {"dir": "", "strength": 0}
+	return {
+		"dir": str(decoded.get("dir", "")),
+		"strength": clampi(int(decoded.get("strength", 0)), 0, 3),
+	}
 
 
 # --- §4.11.1 seed ----------------------------------------------------------
@@ -272,26 +412,21 @@ func seed_value() -> int:
 	return _seed
 
 
-# --- Person-model accessors (Phase 8; the W3-A merge notes) -----------------
+# --- Person-model accessors (preserved through the W3 rewrite) --------------
 #
-# The player's numbers live on the Person model (`50-*` §4.2/§4.3): slot A's
-# `Character.attribute(key)` / `Skills.effective_skill(key)`. Those functions
-# are consumed **defensively** so this file also parses and runs in a worktree
-# that predates slot A's rework: when `scripts/player/skills.gd` exists (it is
-# loaded lazily, never preloaded) and defines the API, the module call wins;
-# otherwise the raw player-block keys (`attributes` / `skills`) are read with
-# 0 defaults. At the master merge the module path takes over, including the
-# in-post officer contribution inside `effective_skill` — which is why the
-# flagship gunnery term below MUST go through it (an in-post gunner feeds the
-# cannon damage, `50-*` §4.5.3).
+# The player's numbers live on the Person model (`50-*` §4.2/§4.3). Those
+# functions are consumed **defensively** so this file also parses and runs in
+# a tree that predates the module rework: when `scripts/player/skills.gd`
+# exists (loaded lazily, never preloaded) and defines the API, the module call
+# wins; otherwise the raw player-block keys (`attributes` / `skills`) are read
+# with 0 defaults. The in-post officer contribution inside `effective_skill`
+# is why the flagship gunnery term MUST go through it (an in-post gunner feeds
+# the cannon damage, `50-*` §4.5.3).
 
 const SKILLS_LIB_PATH := "res://scripts/player/skills.gd"
 
-## Lazily resolved `skills.gd` script (null until slot A's file exists).
 static var _skills_lib = null
 static var _skills_lib_probed := false
-## Standalone fallback caches (fresh-checkout runs before slot A's loader edit):
-## `data/captains.json` indexed by id, and the `skill_gates` rows.
 static var _captains_file_cache = null
 static var _skill_gates_file_cache = null
 
@@ -324,9 +459,6 @@ static func _script_defines(lib, method_name: String) -> bool:
 # sim and a normal battle (which never passes the key) stays byte-identical.
 # Every accessor falls back to the GameState path PER KEY for anything the
 # override does not carry.
-#
-# **W3's rewrite of this file MUST preserve this seam** (the §4.12.1 config
-# table's `player_stats` row; the comment travels with the code).
 
 static var _player_stats_override: Dictionary = {}
 
@@ -335,7 +467,6 @@ static var _player_stats_override: Dictionary = {}
 ## 0 default stands in while the rework is unmerged. 0 without a loaded run.
 static func player_attribute(key: String) -> int:
 	# Phase-9 S21 seam (§4.12.1): per-key override first, GameState fallback.
-	# W3's rewrite must preserve this branch.
 	var override = _player_stats_override.get("attributes", null)
 	if override is Dictionary and (override as Dictionary).has(key):
 		return int((override as Dictionary)[key])
@@ -356,7 +487,6 @@ static func player_attribute(key: String) -> int:
 ## stands in while the module is unmerged (no officer term on that path).
 static func player_effective_skill(key: String) -> int:
 	# Phase-9 S21 seam (§4.12.1): per-key override first, GameState fallback.
-	# W3's rewrite must preserve this branch.
 	var override = _player_stats_override.get("skills", null)
 	if override is Dictionary and (override as Dictionary).has(key):
 		return int((override as Dictionary)[key])
@@ -372,18 +502,12 @@ static func player_effective_skill(key: String) -> int:
 	return 0
 
 
-# --- Captain canon (docs/60-* §4.11.5; IMPLEMENT-Phase8 §2.4) ---------------
+# --- Captain canon (docs/60-* §4.11.5; IMPLEMENT-Phase8 §2.4) — preserved ---
 
-## Test seam (consulted first): suites inject canon-card doubles here and
-## restore afterwards — the seam works identically before and after slot A's
-## `DataLoader.captains` edit merges.
 static var _captains_test_doubles: Dictionary = {}
 
 
-## The canon card for `captain_id`, or {} when absent. Reads
-## `DataLoader.captains` once slot A's loader edit merges (dictionary keyed by
-## id); before that, `data/captains.json` is read once through `FileAccess`
-## into a static cache so the suites run standalone.
+## The canon card for `captain_id`, or {} when absent.
 static func captain_canon_card(captain_id: String) -> Dictionary:
 	if captain_id.is_empty():
 		return {}
@@ -414,9 +538,7 @@ static func _captains_file_index() -> Dictionary:
 	return out
 
 
-## §4.11.5 card duel rating: `swordplay + floor(courage / 20)`. Same formula
-## for an officers.json v2 record (the escort-captain branch — the v2 officer
-## card carries the same `skills` / `attributes` blocks).
+## §4.11.5 card duel rating: `swordplay + floor(courage / 20)`.
 static func card_duel_rating(card: Dictionary) -> int:
 	var skills: Dictionary = card.get("skills", {}) if card.get("skills", {}) is Dictionary else {}
 	var attributes: Dictionary = card.get("attributes", {}) if card.get("attributes", {}) is Dictionary else {}
@@ -443,11 +565,8 @@ static func card_courage(card: Dictionary) -> int:
 	return int(attributes.get("courage", 0))
 
 
-## Resolves the config's fleet-captain field into a canon card. Supports both
-## save shapes: the Phase-8 `captain_id` string / `captain: {id}` (canon
-## lookup), and the legacy `captain: {pool_id, name_index}` pool shape — which
-## yields {} (no card), so the §4.11.5 `5 + tier` fallback prices the fleet
-## until W4-B flips the fleet source to canon ids.
+## Resolves the config's fleet-captain field into a canon card (both save
+## shapes; the legacy pool shape yields {} — the fallbacks price the fleet).
 static func _resolve_fleet_captain_card(config: Dictionary) -> Dictionary:
 	var captain_id := str(config.get("captain_id", ""))
 	if captain_id.is_empty():
@@ -476,7 +595,6 @@ static func _gate_threshold(rows, feature_id: String, fallback: int) -> int:
 		return fallback
 	if rows is Dictionary:
 		var table: Dictionary = rows
-		# Envelope shape (the raw file) vs a keyed-by-feature-id shape.
 		if not table.has(feature_id) and table.has("skill_gates"):
 			var inner = table.get("skill_gates")
 			return _gate_threshold(inner, feature_id, fallback) if inner is Array else fallback
@@ -495,23 +613,23 @@ static func _skill_gates_file_index():
 	var file := FileAccess.open("res://data/skill_gates.json", FileAccess.READ)
 	if file != null:
 		parsed = JSON.parse_string(file.get_as_text())
-	# The envelope's row array (keep the raw shape; _gate_threshold walks it).
 	_skill_gates_file_cache = parsed.get("skill_gates", []) if parsed is Dictionary else []
 	return _skill_gates_file_cache
 
 
-## §4.4 chain-shot gate: gunnery ≥ the `shot.chain` threshold (25 in data).
+## §4.4b chain-shot gate: gunnery ≥ the `shot.chain` threshold (25 in data).
 static func chain_shot_gate() -> int:
 	return skill_gate_threshold("shot.chain", DEFAULT_CHAIN_GATE)
 
 
-## §4.4 armor-piercing gate: gunnery ≥ the `shot.armor_piercing` threshold (50).
+## §4.4b armor-piercing gate: gunnery ≥ the `shot.armor_piercing` threshold (50).
 static func armor_piercing_gate() -> int:
 	return skill_gate_threshold("shot.armor_piercing", DEFAULT_ARMOR_PIERCING_GATE)
 
 
-## §4.4: true when the player's effective gunnery clears the shot's gate
-## (round shot is always unlocked).
+## §4.4b gate read against the PLAYER's effective gunnery — the S10 selector's
+## disable-state read. The volley path itself gates per-unit through
+## [method gunnery_of] (the §4.4a gunnery source), not here.
 static func shot_unlocked(shot_type: String) -> bool:
 	match shot_type:
 		CHAIN_SHOT:
@@ -529,21 +647,29 @@ func start() -> void:
 		return
 	_started = true
 	_units.clear()
+	var tournament := deployment == TOURNAMENT_DEPLOYMENT
 	for index in _player_ships.size():
 		_units.append(_make_unit(SIDE_PLAYER, index, _player_ships[index],
-			_deploy_cell(SIDE_PLAYER, index)))
+			_deploy_cell(SIDE_PLAYER, index), tournament))
 	for index in _enemy_ships.size():
 		_units.append(_make_unit(SIDE_ENEMY, index, _enemy_ships[index],
-			_deploy_cell(SIDE_ENEMY, index)))
+			_deploy_cell(SIDE_ENEMY, index), tournament))
 	_price_captain_ratings()
+	_price_broadside_split()
+	_price_gunnery()
 	_round = 1
 	_current = -1
 	_action_taken = false
+	_moved_this_turn = false
+	_stall_rounds = 0
+	_round_had_damage = false
+	_round_had_boarding = false
+	_last_min_distance = _min_pair_distance()
 	_flagship_index = _lowest_living_index(SIDE_PLAYER)
 	_check_over()
 	if _over:
 		return
-	_build_order()
+	_build_order()  # ONCE at battle start (§4.3/§4.11.4) — never re-sorted.
 	_advance()
 
 
@@ -565,21 +691,29 @@ func current_unit() -> Dictionary:
 
 
 ## True when `unit` is the ship whose turn it is (§4.3 "each round, every
-## living ship acts once"). A not-yet-started battle has no cursor, so
-## configuration-time calls are allowed and only the action budget is enforced.
+## living ship acts once in initiative order"). A not-yet-started battle has
+## no cursor, so configuration-time calls are allowed and only the once-per-
+## turn budgets (movement, action) are enforced.
 func is_acting(unit: Dictionary) -> bool:
 	if not _started:
 		return true
-	var current := current_unit()
-	return not current.is_empty() and is_same(current, unit)
+	var acting := current_unit()
+	return not acting.is_empty() and is_same(acting, unit)
 
 
 ## Ends the acting unit's turn; advances to the next living unit in initiative
-## order, rolling into the next round (§4.11.4). Dead units are skipped.
+## order, rolling into the next round (§4.11.4). Dead units skip their slot.
+## The chain-shot cap debuff counts the turn that just ended (§4.3a: the
+## debuff applies "while speed_debuff_turns > 0" — it must cover the fired-
+## upon ship's next TWO turns for `+2`, so it decrements at turn END).
 func end_turn() -> void:
 	if _over:
 		return
+	var acting := current_unit()
+	if not acting.is_empty() and int(acting.get("speed_debuff_turns", 0)) > 0:
+		acting["speed_debuff_turns"] = int(acting["speed_debuff_turns"]) - 1
 	_action_taken = false
+	_moved_this_turn = false
 	_check_over()
 	if _over:
 		return
@@ -640,91 +774,376 @@ func living_units(side: String) -> Array:
 	return out
 
 
-# --- Grid / movement (docs/60-* §4.2, §4.11.4) ----------------------------
+# --- Grid / movement (docs/60-* §4.2, §4.3a, §4.11.4) ----------------------
 
 func unit_cell(unit: Dictionary) -> Vector2i:
+	if unit.has("pos"):
+		return to_cell(unit["pos"])
+	# Compat read for stale fixtures that still author `cell`.
 	return to_cell(unit.get("cell", NO_CELL))
 
 
-## Every tile the unit can reach with its remaining MP, in `(y, x)` order.
-## Orthogonal steps cost 1, diagonal 2; a diagonal is legal only when both
-## orthogonal corner tiles are inside the grid (§4.11.4); occupied tiles are
-## never entered.
-func legal_moves(unit: Dictionary) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	if not (unit is Dictionary) or not bool(unit.get("alive", false)):
-		return out
-	var start := unit_cell(unit)
-	var reach := _reachable(unit)
-	var cells: Array = []
-	for cell in reach:
-		if cell == start:
-			continue
-		cells.append(cell)
-	cells.sort_custom(func(a, b) -> bool:
-		if a.y != b.y:
-			return a.y < b.y
-		return a.x < b.x)
-	for cell in cells:
-		out.append(cell)
-	return out
+## The per-hull Phase-9 movement fields (W2 `data/ship_types.json`):
+## `battle_max_speed` (the Chebyshev velocity box), `battle_accel`
+## (the magnitude-delta budget), `battle_turn_rate` (the heading-bucket
+## turn budget in degrees).
+func battle_max_speed(unit: Dictionary) -> int:
+	return maxi(1, int(_ship_type_of(unit).get("battle_max_speed", 2)))
 
 
-## Applies a legal move, spending the cheapest path cost (§4.11.4). Returns
-## false (state untouched) for an illegal/occupied/out-of-grid destination or
-## after the unit's one action has already been spent.
-func move_to(unit: Dictionary, cell: Vector2i) -> bool:
-	if _over or _action_taken or not is_acting(unit):
-		return false
-	if not (unit is Dictionary) or not bool(unit.get("alive", false)):
-		return false
-	if cell.x < 0 or cell.y < 0 or cell.x >= GRID_WIDTH or cell.y >= GRID_HEIGHT:
-		return false
-	if cell == unit_cell(unit):
-		return false
-	var reach := _reachable(unit)
-	if not reach.has(cell):
-		return false
-	unit["mp"] = int(unit.get("mp", 0)) - int(reach[cell])
-	unit["cell"] = cell
-	return true
+func battle_accel(unit: Dictionary) -> int:
+	return maxi(1, int(_ship_type_of(unit).get("battle_accel", 1)))
 
 
-## `MP = battle_mp(ShipType.speed) + sail speed delta` (§4.2, §4.11.4,
-## §4.11.12). The Phase-4 halving is documented in §4.2: world speeds doubled
-## when a tile became 10 nm, but the 16×10 battle grid did not grow, so battle
-## MP stays exactly the Phase-2 value and the sail delta is added afterwards.
-func effective_speed(unit: Dictionary) -> int:
-	var ship = unit.get("ship", {})
+func battle_turn_rate(unit: Dictionary) -> int:
+	return maxi(45, int(_ship_type_of(unit).get("battle_turn_rate", 45)))
+
+
+func _ship_type_of(unit: Dictionary) -> Dictionary:
+	var ship: Dictionary = unit.get("ship", {})
+	if not (ship is Dictionary):
+		return {}
+	return DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
+
+
+## The ship's class (§4.3a cap tables; `sail` as the defensive fallback).
+func ship_class_of(unit: Dictionary) -> String:
+	return str(_ship_type_of(unit).get("class", "sail"))
+
+
+## §4.11.4 initiative key, built ONCE: descending
+## `ShipType.speed + sail_speed_delta` (correction 2, §4.11.12).
+func initiative_key(unit: Dictionary) -> int:
+	var ship: Dictionary = unit.get("ship", {})
 	if not (ship is Dictionary):
 		return 0
 	var ship_type: Dictionary = DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
-	return battle_mp(int(ship_type.get("speed", 0))) \
-		+ equipment_modifier(ship, "sail", "speed")
+	return int(ship_type.get("speed", 0)) + equipment_modifier(ship, "sail", "speed")
 
 
-## §4.2 Phase-6 pin: `battle_mp(speed) = speed / 4` (integer division).
-## `{16→4, 20→5, 24→6}` reproduces every Phase-2/4 MP budget exactly (the
-## Phase-4 pin `÷2` preserved the pacing once; the Phase-6 doubling to 5 nm
-## tiles repeats it), so the doubled world speeds leave battle balance alone.
-static func battle_mp(speed: int) -> int:
-	return maxi(0, speed) / 4
+## §4.3a: every integer velocity in the Chebyshev box `|vx|, |vy| ≤
+## battle_max_speed` satisfying, in the §4.11.4 order: bucket angle to the old
+## velocity ≤ `battle_turn_rate` (skipped from standstill — any direction is
+## legal, magnitude ≤ accel), magnitude delta ≤ `battle_accel`, `‖vel‖ ≤
+## cap_eff`. `vel = (0,0)` (hold position) reads only the magnitude-delta
+## constraint. Enumerated in **(y, x) lexicographic order** — the enumeration
+## order is the deterministic tie-break everywhere (§4.11.8, decision 13).
+func legal_velocities(unit: Dictionary) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if not (unit is Dictionary) or not bool(unit.get("alive", false)):
+		return out
+	var max_speed := battle_max_speed(unit)
+	var accel := float(battle_accel(unit))
+	var cap := float(cap_eff(unit))
+	var old_vel: Vector2i = unit.get("vel", Vector2i.ZERO)
+	var old_heading := int(unit.get("heading8", HEADING_EAST))
+	var old_mag := vel_length(old_vel)
+	for vy in range(-max_speed, max_speed + 1):
+		for vx in range(-max_speed, max_speed + 1):
+			var vel := Vector2i(vx, vy)
+			var mag := vel_length(Vector2i(vx, vy))
+			# Hold position: only the magnitude-delta constraint reads.
+			if vel == Vector2i.ZERO:
+				if absf(mag - old_mag) <= accel:
+					out.append(vel)
+				continue
+			# Heading-bucket angle (skipped from standstill, §4.3a).
+			if old_vel != Vector2i.ZERO:
+				var steps := bucket_distance(heading8_of(vel), old_heading)
+				if steps * 45 > battle_turn_rate(unit):
+					continue
+			if absf(mag - old_mag) > accel:
+				continue
+			if mag > cap:
+				continue
+			out.append(vel)
+	return out
 
 
-## §4.11.12: base durability + figurehead durability delta. Used for ram
-## damage (§4.11.5) and as the current-durability cap.
-func effective_max_durability(ship: Dictionary) -> int:
-	var ship_type: Dictionary = DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
-	return int(ship_type.get("durability", 0)) + equipment_modifier(ship, "figurehead", "durability")
+## §4.12.1 `apply_velocity`: validate (the §4.11.4 order — angle, magnitude
+## delta; the CAP leg clamps instead of rejecting) → clamp the magnitude
+## overshoot along the chosen direction (component floor) → integrate as the
+## Bresenham sweep (§4.3a: the first occupied cell stops the ship —
+## enemy-occupied ⇒ the §4.5 sweep ram, friend/out-of-bounds ⇒ stop at the
+## PRIOR cell, zero damage). `vel = (0,0)` keeps the last heading. Returns
+## false (state untouched) on any illegal pick or once the turn's movement is
+## spent — movement happens exactly once per turn (§4.3).
+func apply_velocity(unit: Dictionary, vel: Vector2i) -> bool:
+	if _over or _moved_this_turn:
+		return false
+	if not (unit is Dictionary) or not bool(unit.get("alive", false)):
+		return false
+	if not is_acting(unit):
+		return false
+	if absi(vel.x) > battle_max_speed(unit) or absi(vel.y) > battle_max_speed(unit):
+		return false
+	var old_vel: Vector2i = unit.get("vel", Vector2i.ZERO)
+	var old_mag := vel_length(old_vel)
+	# ① heading-bucket angle (skipped from standstill and for a (0,0) pick).
+	if vel != Vector2i.ZERO and old_vel != Vector2i.ZERO:
+		var steps := bucket_distance(heading8_of(vel), int(unit.get("heading8", HEADING_EAST)))
+		if steps * 45 > battle_turn_rate(unit):
+			return false
+	# ② magnitude delta.
+	var mag := vel_length(vel)
+	if absf(mag - old_mag) > float(battle_accel(unit)):
+		return false
+	# ③ cap — the overshoot clamps along the chosen direction (component
+	#    floor, §4.3a).
+	var applied := vel
+	if mag > float(cap_eff(unit)) and mag > 0.0:
+		var scale := float(cap_eff(unit)) / mag
+		applied = Vector2i(int(floor(float(vel.x) * scale)),
+			int(floor(float(vel.y) * scale)))
+	_moved_this_turn = true
+	if applied != Vector2i.ZERO:
+		_sweep(unit, applied)
+		# The committed velocity sets the heading (§4.3a).
+		unit["heading8"] = heading8_of(applied)
+	# The new velocity IS the unit's state (§4.3a) — a (0,0) pick keeps the
+	# last heading and holds position.
+	unit["vel"] = applied
+	return true
 
 
-## §4.11.5 combat rating (Phase 8): the ship's captain-card **cannon rating** —
-## `duel rating + floor(gunnery / 25)` from its captain's card, priced **once**
-## at battle start ([method _price_captain_ratings]) and stored on the unit.
-## AI ships price from the fleet's canon card; player escorts from their
-## appointed captain officer's officers.json v2 card; a captain-less escort
-## stays 0. The player flagship is not a captain-card ship — its §4.11.5 bonus
-## is the §4.4 gunnery term ([method cannon_bonus]), so its rating is 0.
+## §4.3a `cap_eff` (decision 2, corrections 1–3):
+## `clamp(floor(battle_max_speed × wind_factor(weather, class) ×
+## direction_factor(heading8, wind_dir, class)) ± current_mod − debuff,
+## 0, battle_max_speed) + sail_speed_delta` — the current modifier rides
+## inside the clamp, the chain-shot debuff floors at 1 (`max(1, base − 1)`),
+## and the sail delta applies after the clamp, unclamped back
+## (§4.11.12, correction 2). `heading8` is the ship's CURRENT heading.
+func cap_eff(unit: Dictionary) -> int:
+	var max_speed := battle_max_speed(unit)
+	var ship_class := ship_class_of(unit)
+	var wind := SailingSimLib.wind_factor(weather, ship_class)
+	var direction := _direction_factor(unit)
+	var mod := _current_mod(unit)
+	var cap := clampi(int(floor(float(max_speed) * wind * direction)) + mod,
+		0, max_speed)
+	if int(unit.get("speed_debuff_turns", 0)) > 0:
+		cap = maxi(1, cap - 1)
+	var ship: Dictionary = unit.get("ship", {})
+	var sail_delta := 0
+	if ship is Dictionary:
+		sail_delta = equipment_modifier(ship, "sail", "speed")
+	return cap + sail_delta
+
+
+## §4.3a direction_factor: identity 1.0 in calm weather (the world rule,
+## `20-*` §4.7.1); otherwise the `20-*` §4.4 table read at the bucket angle
+## between the ship's heading8 and the locked wind-FROM direction, the
+## ship's own class column, `sail` as the fallback for an unknown class.
+func _direction_factor(unit: Dictionary) -> float:
+	if weather == "calm":
+		return 1.0
+	var bucket := _heading_wind_bucket(unit)
+	if bucket < 0:
+		return 1.0
+	var table: Dictionary = SailingSimLib.DIRECTION_FACTORS.get(bucket, {})
+	var ship_class := ship_class_of(unit)
+	return float(table.get(ship_class, table.get("sail", 1.0)))
+
+
+## The bucket angle (degrees) between `unit`'s heading8 and the wind-FROM
+## direction; −1 when either id is unknown.
+func _heading_wind_bucket(unit: Dictionary) -> int:
+	var token := _heading_token(int(unit.get("heading8", HEADING_EAST)))
+	return SailingSimLib.angle_between_dirs(token, wind_dir)
+
+
+## The bucket angle (degrees) between `unit`'s heading8 and the locked
+## current's flow-TO direction; −1 when the token is unknown/absent.
+func _heading_current_bucket(unit: Dictionary) -> int:
+	var flow := str(current.get("dir", ""))
+	if flow.is_empty() or SailingSimLib.heading_index(flow) < 0:
+		return -1
+	var token := _heading_token(int(unit.get("heading8", HEADING_EAST)))
+	return SailingSimLib.angle_between_dirs(token, flow)
+
+
+## §4.3a current modifier (correction 1): relative bucket between the ship's
+## heading8 and the current's flow direction — bucket ∈ {0°, 45°} with
+## strength ≥ 2 → +1; bucket ∈ {135°, 180°} with strength = 3 → −1; strength
+## 0 (no current) never modifies.
+func _current_mod(unit: Dictionary) -> int:
+	var strength := int(current.get("strength", 0))
+	if strength <= 0:
+		return 0
+	var bucket := _heading_current_bucket(unit)
+	if bucket < 0:
+		return 0
+	if bucket in [0, 45] and strength >= 2:
+		return 1
+	if bucket in [135, 180] and strength == 3:
+		return -1
+	return 0
+
+
+static func _heading_token(heading8: int) -> String:
+	var index := posmod(heading8, HEADING_TOKENS.size())
+	return HEADING_TOKENS[index]
+
+
+## §4.3a: `heading8` derives from `vel` via integer dot comparisons against
+## the eight compass rays (decision 1 — never `atan2`). Integer nearest-ray:
+## maximize cos² = dot²/|ray|² over the rays with a positive dot; an axis ray
+## scores 2·dot², a diagonal dot² (|diag|² = 2). Ties are impossible — a
+## 22.5° boundary has an irrational slope, so no nonzero integer vector
+## equidistances two rays. (0,0) has no heading: callers keep the last one.
+static func heading8_of(vel: Vector2i) -> int:
+	if vel == Vector2i.ZERO:
+		return HEADING_EAST
+	var best := HEADING_EAST
+	var best_score := -1
+	for bucket in HEADING_RAYS.size():
+		var ray := HEADING_RAYS[bucket]
+		var dot := vel.x * ray.x + vel.y * ray.y
+		if dot <= 0:
+			continue
+		var axis := ray.x == 0 or ray.y == 0
+		var score := 2 * dot * dot if axis else dot * dot
+		if score > best_score:
+			best_score = score
+			best = bucket
+	return best
+
+
+## The heading-bucket distance between two buckets in 45° steps (0..4).
+static func bucket_distance(a: int, b: int) -> int:
+	var diff := absi(posmod(a, 8) - posmod(b, 8)) % 8
+	return mini(diff, 8 - diff)
+
+
+## §4.3a sweep integration: the Bresenham walk cell by cell along `applied`;
+## the FIRST occupied cell stops the ship — enemy-occupied ⇒ the §4.5 sweep
+## ram, friend-occupied or out-of-bounds ⇒ stop at the PRIOR cell (zero
+## damage, no partial entry; §4.11.4 "a ship may never enter or pass through
+## an occupied cell").
+func _sweep(unit: Dictionary, applied: Vector2i) -> void:
+	var target: Vector2i = unit_cell(unit) + applied
+	var prior := unit_cell(unit)
+	for cell in _bresenham_cells(prior, target):
+		if not in_grid(cell):
+			unit["pos"] = prior
+			return
+		var occupant := _living_unit_at(cell, unit)
+		if not occupant.is_empty():
+			unit["pos"] = prior
+			if str(occupant.get("side", "")) != str(unit.get("side", "")):
+				# Sweep ram (§4.5): the impact speed is the APPLIED velocity.
+				_resolve_ram(unit, occupant, vel_length(applied))
+			return
+		unit["pos"] = cell
+		prior = cell
+
+
+## The Bresenham cells strictly after `from`, up to and including `to`.
+static func _bresenham_cells(from: Vector2i, to: Vector2i) -> Array:
+	var cells: Array = []
+	var dx := absi(to.x - from.x)
+	var dy := -absi(to.y - from.y)
+	var sx := 1 if to.x >= from.x else -1
+	var sy := 1 if to.y >= from.y else -1
+	var err := dx + dy
+	var cursor := from
+	while cursor != to:
+		var e2 := 2 * err
+		if e2 >= dy:
+			err += dy
+			cursor.x += sx
+		if e2 <= dx:
+			err += dx
+			cursor.y += sy
+		cells.append(Vector2i(cursor.x, cursor.y))
+	return cells
+
+
+## The living unit on `cell` other than `exclude` ({} when free).
+func _living_unit_at(cell: Vector2i, exclude) -> Dictionary:
+	for other in _units:
+		if is_same(other, exclude) or not bool(other.get("alive", false)):
+			continue
+		if unit_cell(other) == cell:
+			return other
+	return {}
+
+
+# --- Cannon (docs/60-* §4.4, §4.4a, §4.4b, §4.11.5) ------------------------
+
+## The per-unit gunnery source (§4.4a/§4.11.5, priced once at battle start —
+## [method _price_gunnery]): the player flagship's `effective_gunnery` (the
+## §4.4 term, through `player_effective_skill` so an in-post gunner feeds it),
+## a captain-card ship's card `skills.gunnery`, a legacy fleet's
+## `10 + 10 × tier` fallback.
+func gunnery_of(unit: Dictionary) -> int:
+	return int(unit.get("gunnery", 0))
+
+
+## The side's cannon count (`cannons_port` / `cannons_starboard`, priced once
+## at battle start — §4.4 broadside split, decision 3).
+func side_cannons(unit: Dictionary, side: String) -> int:
+	var key := "cannons_port" if side == BROADSIDE_PORT else "cannons_starboard"
+	return maxi(0, int(unit.get(key, 0)))
+
+
+## §4.4: true when the NAMED side (`"port"` / `"starboard"`) can fire at
+## `target`: the side's arc contains the target (bearing bucket relative to
+## the ATTACKER's heading8 ∈ {45°,90°,135°} port / {225°,270°,315°}
+## starboard — a dead-ahead/dead-astern target sits in neither arc), Chebyshev
+## range 1..3, the side loaded (`round ≥ reload_side`) and the side has ≥ 1
+## cannon. `side == ""` (compat read) asks whether EITHER side can.
+func can_cannon(unit, target, side: String = "") -> bool:
+	if not (unit is Dictionary) or not (target is Dictionary):
+		return false
+	if not bool(unit.get("alive", false)) or not bool(target.get("alive", false)):
+		return false
+	if unit.side == target.side:
+		return false
+	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
+	if distance < CANNON_RANGE_MIN or distance > CANNON_RANGE_MAX:
+		return false
+	if side == BROADSIDE_PORT or side == BROADSIDE_STARBOARD:
+		return _side_can_fire(unit, target, side, distance)
+	return _side_can_fire(unit, target, BROADSIDE_PORT, distance) \
+		or _side_can_fire(unit, target, BROADSIDE_STARBOARD, distance)
+
+
+func _side_can_fire(unit: Dictionary, target: Dictionary, side: String,
+		distance: int) -> bool:
+	if _round < int(unit.get(_reload_key(side), 1)):
+		return false
+	if side_cannons(unit, side) < 1:
+		return false
+	var bearing := heading8_of(unit_cell(target) - unit_cell(unit))
+	var steps := bucket_distance(bearing, int(unit.get("heading8", HEADING_EAST)))
+	var arc := ARC_PORT_STEPS if side == BROADSIDE_PORT else ARC_STARBOARD_STEPS
+	return steps in arc
+
+
+func _reload_key(side: String) -> String:
+	return "reload_port" if side == BROADSIDE_PORT else "reload_starboard"
+
+
+## §4.4 flagship gunnery term alone: `floor(effective_gunnery / 25)` — the
+## static form (UI previews, tests) of the flagship branch of
+## [method cannon_bonus]. Goes through `player_effective_skill`, so an
+## in-post gunner officer feeds the damage (`50-*` §4.5.3).
+static func cannon_bonus_flagship() -> int:
+	return int(floor(float(player_effective_skill("gunnery")) / GUNNERY_BONUS_DIVISOR))
+
+
+## §4.11.5 `bonus`: `floor(effective_gunnery / 25)` for the player flagship
+## and `floor(combat_rating / 10)` for every captain-card ship.
+func cannon_bonus(unit: Dictionary) -> int:
+	if unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index:
+		return cannon_bonus_flagship()
+	return int(floor(float(combat_rating(unit)) / COMBAT_BONUS_DIVISOR))
+
+
+## §4.11.5 combat rating (Phase 8): the ship's captain-card **cannon rating**,
+## priced once at battle start and stored on the unit. The player flagship is
+## not a captain-card ship — its §4.11.5 bonus is the §4.4 gunnery term.
 func combat_rating(unit: Dictionary) -> int:
 	if not (unit is Dictionary):
 		return 0
@@ -733,125 +1152,205 @@ func combat_rating(unit: Dictionary) -> int:
 	return int(unit.get("cannon_rating", 0))
 
 
-# --- Cannon (docs/60-* §4.4, §4.11.5) --------------------------------------
-
-func can_cannon(unit, target) -> bool:
-	if not (unit is Dictionary) or not (target is Dictionary):
-		return false
-	if not bool(unit.get("alive", false)) or not bool(target.get("alive", false)):
-		return false
-	if unit.side == target.side:
-		return false
-	var ship = unit.get("ship", {})
-	if not (ship is Dictionary) or int(ship.get("cannons", 0)) < 1:
-		return false
-	if _round < int(unit.get("reload_until_round", 1)):
-		return false
-	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
-	return distance >= CANNON_RANGE_MIN and distance <= CANNON_RANGE_MAX
+## §4.4a reload turns: `clamp(3 − floor(gunnery / 50), 1, 3) +
+## (crew_ratio < 0.5 ? 1 : 0)`, `crew_ratio = crew / crew_min`.
+func reload_turns_of(unit: Dictionary) -> int:
+	var turns := clampi(RELOAD_BASE_TURNS
+		- int(floor(float(gunnery_of(unit)) / float(RELOAD_GUNNERY_DIVISOR))),
+		RELOAD_MIN_TURNS, RELOAD_BASE_TURNS)
+	var ship: Dictionary = unit.get("ship", {})
+	var crew_min := int(DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
+		.get("crew_min", 0)) if ship is Dictionary else 0
+	var ratio := float(unit.get("crew", 0)) / float(maxi(crew_min, 1))
+	if ratio < RELOAD_LOW_CREW_RATIO:
+		turns += RELOAD_LOW_CREW_BONUS
+	return turns
 
 
-## §4.4 flagship gunnery term alone: `floor(effective_gunnery / 25)` — the
-## static form (UI previews, tests) of the flagship branch of
-## [method cannon_bonus]. Goes through `player_effective_skill`, so an in-post
-## gunner officer feeds the damage (`50-*` §4.5.3).
-static func cannon_bonus_flagship() -> int:
-	return int(floor(float(player_effective_skill("gunnery")) / GUNNERY_BONUS_DIVISOR))
-
-
-## §4.11.5 `bonus`: `floor(effective_gunnery / 25)` for the player flagship
-## (§4.4 — through `player_effective_skill`, so an in-post gunner feeds the
-## damage) and `floor(combat_rating / 10)` for every captain-card ship.
-func cannon_bonus(unit: Dictionary) -> int:
-	if unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index:
-		return cannon_bonus_flagship()
-	return int(floor(float(combat_rating(unit)) / COMBAT_BONUS_DIVISOR))
-
-
-## `base = floor(cannons × 2 × range_factor) + [method cannon_bonus]`;
-## storm weather applies `floor(base × 0.75)` (§4.11.5).
-func cannon_damage(unit: Dictionary, target: Dictionary) -> int:
+## §4.4 damage preview for a named side (the stack WITHOUT the shot term —
+## round shot). Static-only inputs, so it answers for unstarted sims too.
+func cannon_damage(unit: Dictionary, target: Dictionary, side: String) -> int:
 	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
 	var factor := float(CANNON_RANGE_FACTOR.get(distance, 0.0))
-	var cannons := int(unit.get("ship", {}).get("cannons", 0))
-	var base := int(floor(float(cannons) * CANNON_BASE_MULTIPLIER * factor))
-	base += cannon_bonus(unit)
+	var base := float(side_cannons(unit, side)) * CANNON_BASE_MULTIPLIER * factor
+	base += float(cannon_bonus(unit))
+	var product := base * _weather_damage_mult() * 1.0
+	if _is_rake_on(target, unit):
+		product *= RAKE_MULTIPLIER
+	return int(floor(product))
+
+
+## The §4.2 weather damage multiplier: storm ×0.75, strong ×0.9, else ×1.0.
+func _weather_damage_mult() -> float:
 	if weather == STORM_WEATHER:
-		return int(floor(float(base) * STORM_CANNON_MULTIPLIER))
-	return base
+		return STORM_CANNON_MULTIPLIER
+	if weather == STRONG_WEATHER:
+		return STRONG_CANNON_MULTIPLIER
+	return 1.0
 
 
-## Fires one volley of round shot. Returns `{ok, damage, sunk, log}` (§4.12.1).
-## Sets `reload_until_round = round + 2` so the next turn cannot fire (§4.11.4).
-func cannon(unit: Dictionary, target: Dictionary) -> Dictionary:
-	return _fire_volley(unit, target, ROUND_SHOT, 1.0)
+## §4.4 rake: true when the bearing bucket from TARGET to ATTACKER, relative
+## to the TARGET's own heading8, ∈ {0°, 180°} — the shot runs the target's
+## deck line.
+func _is_rake_on(target: Dictionary, attacker: Dictionary) -> bool:
+	var bearing := heading8_of(unit_cell(attacker) - unit_cell(target))
+	var steps := bucket_distance(bearing, int(target.get("heading8", HEADING_EAST)))
+	return steps == 0 or steps == 4
 
 
-## §4.4 Phase-8 shot types, exposed as the sim-level action (the S10 buttons
-## are W6): `ROUND_SHOT` (the default, = [method cannon]), `CHAIN_SHOT` —
-## unlock at gunnery ≥ the `shot.chain` gate, damage ×0.75 and the target
-## loses 1 MP at each of its next 2 turn refreshes — and
-## `ARMOR_PIERCING_SHOT` — unlock at the `shot.armor_piercing` gate, damage
-## ×1.25 ignoring the target's `armor` equipment modifiers. The volley path
-## carries no armor term today (§4.11.12 gives ships only figurehead/sail
-## slots), so "ignoring armor" is honoured by construction; the multiplier is
-## applied to the §4.11.5 damage (bonus and storm terms included), floored once.
-## A gated-but-locked shot returns `ok: false` with `locked`/`gate` fields and
-## spends no turn; the special types are player-flagship actions (§4.4 pins
-## gunnery to the flagship — the AI fires round shot only).
-func do_cannon(unit: Dictionary, target: Dictionary, shot_type: String = ROUND_SHOT) -> Dictionary:
-	match shot_type:
-		CHAIN_SHOT:
-			return _fire_volley(unit, target, CHAIN_SHOT, CHAIN_DAMAGE_MULTIPLIER)
-		ARMOR_PIERCING_SHOT:
-			return _fire_volley(unit, target, ARMOR_PIERCING_SHOT,
-				ARMOR_PIERCING_DAMAGE_MULTIPLIER)
-		_:
-			return _fire_volley(unit, target, ROUND_SHOT, 1.0)
+## §4.4b deterministic AI shot rule (T2/T3 shared; evaluated in order; always
+## OUTSIDE any T3 enumeration — decisions 4/13):
+##   1. target `floor(‖vel‖) ≥ 2` AND its current velocity strictly increases
+##      its Chebyshev distance to the attacker → chain (gunnery ≥ 25);
+##   2. (orthogonally adjacent or Chebyshev ≤ 2) AND own crew + duel rating >
+##      target crew + target duel rating → grape — which is range 1 only, so
+##      beyond range 1 the rule falls through (grape could not resolve);
+##   3. the target is a player-side ship whose `equipment.armor` slot is
+##      non-empty → armor-piercing (gunnery ≥ 50);
+##   4. otherwise → round.
+func ai_shot_type(attacker: Dictionary, target: Dictionary) -> String:
+	var distance := _chebyshev(unit_cell(attacker), unit_cell(target))
+	# 1. chain on a fleeing fast target.
+	if _vel_floor(target) >= 2:
+		var projected: Vector2i = unit_cell(target) + (target.get("vel", Vector2i.ZERO) as Vector2i)
+		var current_distance := _chebyshev(unit_cell(attacker), unit_cell(target))
+		if _chebyshev(unit_cell(attacker), projected) > current_distance \
+				and gunnery_of(attacker) >= chain_shot_gate():
+			return CHAIN_SHOT
+	# 2. grape in the close-quarters window.
+	var own_rating := int(attacker.get("crew", 0)) + int(attacker.get("captain_rating", 0))
+	var target_rating := int(target.get("crew", 0)) + int(target.get("captain_rating", 0))
+	if distance <= 2 and own_rating > target_rating:
+		if distance == CANNON_RANGE_MIN:
+			return GRAPE_SHOT
+		# Grape is range 1 only (§4.4b) — beyond it the volley could not
+		# resolve, so the rule continues down the list.
+	# 3. armor-piercing into a plated player ship.
+	if str(target.get("side", "")) == SIDE_PLAYER:
+		var ship: Dictionary = target.get("ship", {})
+		var equipment = ship.get("equipment", {}) if ship is Dictionary else {}
+		if equipment is Dictionary and not str(equipment.get("armor", "")).is_empty() \
+				and gunnery_of(attacker) >= armor_piercing_gate():
+			return ARMOR_PIERCING_SHOT
+	return ROUND_SHOT
 
 
-func _fire_volley(unit: Dictionary, target: Dictionary, shot_type: String,
-		multiplier: float) -> Dictionary:
+## §4.4 broadside volley: `side` ∈ "port"/"starboard" — `""` = round shot from
+## the §4.11.8 pick (a rake volley beats a non-rake, then the side with more
+## cannons, tie → port) — and `shot_type` per §4.4b (default round). The
+## multipliers multiply and exactly ONE
+## floor lands at the end, after the weather term: damage =
+## `floor((side_cannons × 2 × range_factor + bonus) × weather × shot × rake)`.
+## After the volley the side reloads: `reload_side = round + reload_turns`
+## (§4.4a). Grape swaps the hull damage for its §4.4b halved pair and the
+## crew kill IS the volley's casualty term (§4.11.5).
+func cannon(unit: Dictionary, target: Dictionary, side: String = "",
+		shot_type: String = ROUND_SHOT) -> Dictionary:
 	var result := {"ok": false, "damage": 0, "sunk": false, "log": {}}
-	if _over or _action_taken or not is_acting(unit) or not can_cannon(unit, target):
+	if _over or _action_taken or not is_acting(unit):
 		return result
-	if shot_type != ROUND_SHOT:
-		if not (unit.side == SIDE_PLAYER and int(unit.index) == _flagship_index):
-			return result
-		if not shot_unlocked(shot_type):
-			result["locked"] = true
-			result["gate"] = chain_shot_gate() if shot_type == CHAIN_SHOT \
-				else armor_piercing_gate()
-			result["shot"] = shot_type
+	if not (target is Dictionary) or target.is_empty() or not can_cannon(unit, target, side):
+		return result
+	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
+	if shot_type == GRAPE_SHOT and distance != CANNON_RANGE_MIN:
+		# §4.4b: grape is range 1 ONLY — not a lock, a range gate.
+		result["range"] = distance
+		result["shot"] = GRAPE_SHOT
+		return result
+	if (shot_type == CHAIN_SHOT or shot_type == ARMOR_PIERCING_SHOT) \
+			and gunnery_of(unit) < (chain_shot_gate() if shot_type == CHAIN_SHOT
+				else armor_piercing_gate()):
+		result["locked"] = true
+		result["gate"] = chain_shot_gate() if shot_type == CHAIN_SHOT \
+			else armor_piercing_gate()
+		result["shot"] = shot_type
+		return result
+	var resolved_side := side
+	if resolved_side != BROADSIDE_PORT and resolved_side != BROADSIDE_STARBOARD:
+		resolved_side = _pick_broadside_side(unit, target)
+		if resolved_side.is_empty():
 			return result
 	_action_taken = true
 	result["ok"] = true
-	var damage := cannon_damage(unit, target)
-	if multiplier != 1.0:
-		damage = int(floor(float(damage) * multiplier))
+	# The §4.4 stack — one floor at the end, after the weather term.
+	var factor := float(CANNON_RANGE_FACTOR.get(distance, 0.0))
+	var base := float(side_cannons(unit, resolved_side)) * CANNON_BASE_MULTIPLIER * factor
+	base += float(cannon_bonus(unit))
+	var weather_mult := _weather_damage_mult()
+	var rake := RAKE_MULTIPLIER if _is_rake_on(target, unit) else 1.0
+	var round_damage := int(floor(base * weather_mult * rake))
+	var damage := round_damage
+	var crew_kill := 0
+	match shot_type:
+		CHAIN_SHOT:
+			damage = int(floor(base * weather_mult * CHAIN_DAMAGE_MULTIPLIER * rake))
+		ARMOR_PIERCING_SHOT:
+			damage = int(floor(base * weather_mult * ARMOR_PIERCING_DAMAGE_MULTIPLIER * rake))
+		GRAPE_SHOT:
+			damage = int(floor(float(round_damage) * GRAPE_HALF))
+			# §4.4b/§4.11.5: the grape kill IS the volley's casualty term —
+			# it replaces the /20 (and /10 rake) divisor rule for that volley.
+			crew_kill = int(floor(float(round_damage) * GRAPE_HALF))
+		_:
+			shot_type = ROUND_SHOT
+	# §4.11.5 crew casualties: rake /10, standard /20. Clamped at 0.
+	if shot_type != GRAPE_SHOT:
+		crew_kill = damage / (CREW_CASUALTY_RAKE_DIVISOR if rake > 1.0
+			else CREW_CASUALTY_DIVISOR)
+	crew_kill = maxi(crew_kill, 0)
+	# The named side reloads (§4.4a).
+	unit[_reload_key(resolved_side)] = _round + reload_turns_of(unit)
+	result["side"] = resolved_side
+	result["shot"] = shot_type
+	result["rake"] = rake > 1.0
+	result["crew_kill"] = crew_kill
 	result["damage"] = damage
-	unit["reload_until_round"] = _round + RELOAD_ROUNDS
 	var ship: Dictionary = target["ship"]
 	ship["durability"] = int(ship.get("durability", 0)) - damage
+	var crew := maxi(int(target.get("crew", 0)) - crew_kill, 0)
+	target["crew"] = crew
 	var sunk := int(ship["durability"]) <= 0
 	if sunk:
 		_sink(target, str(unit.get("side", "")), "cannon")
-	if shot_type == CHAIN_SHOT and not sunk:
-		target["mp_debuff_turns"] = int(target.get("mp_debuff_turns", 0)) + CHAIN_MP_DEBUFF_TURNS
+	elif shot_type == CHAIN_SHOT:
+		# §4.4b: chain also slows — +2 cap-debuff turns (§4.3a).
+		target["speed_debuff_turns"] = int(target.get("speed_debuff_turns", 0)) + CHAIN_DEBUFF_TURNS
 	result["sunk"] = sunk
-	if shot_type != ROUND_SHOT:
-		result["shot"] = shot_type
+	if damage > 0 or crew_kill > 0:
+		_round_had_damage = true
 	result["log"] = _make_log("cannon", unit, target, {
-		"damage": damage, "sunk": sunk, "range": _chebyshev(unit_cell(unit), unit_cell(target)),
-		"shot": shot_type,
+		"damage": damage, "sunk": sunk, "range": distance,
+		"shot": shot_type, "side": resolved_side, "rake": rake > 1.0,
+		"crew_kill": crew_kill,
 	})
 	_check_over()
 	return result
 
 
+## §4.11.8 rule 2's side pick among the fireable sides: a rake-position volley
+## beats a non-rake, then the loaded side with more cannons, tie → port.
+func _pick_broadside_side(unit: Dictionary, target: Dictionary) -> String:
+	var distance := _chebyshev(unit_cell(unit), unit_cell(target))
+	var best := ""
+	var best_rake := false
+	var best_cannons := -1
+	for side in [BROADSIDE_PORT, BROADSIDE_STARBOARD]:
+		if not _side_can_fire(unit, target, side, distance):
+			continue
+		var rake := _is_rake_on(target, unit)
+		var cannons := side_cannons(unit, side)
+		if best.is_empty() or (rake and not best_rake) \
+				or (rake == best_rake and cannons > best_cannons):
+			best = side
+			best_rake = rake
+			best_cannons = cannons
+	return best
+
+
 # --- Ram (docs/60-* §4.5, §4.11.5) ----------------------------------------
 
-## True when the ships are orthogonally adjacent (Manhattan distance 1).
+## True for an orthogonally adjacent living enemy (the §4.5 action ram; the
+## sweep ram is triggered by [method _sweep] instead).
 func can_ram(unit, target) -> bool:
 	if not (unit is Dictionary) or not (target is Dictionary):
 		return false
@@ -862,8 +1361,9 @@ func can_ram(unit, target) -> bool:
 	return _manhattan(unit_cell(unit), unit_cell(target)) == 1
 
 
-## Rams an orthogonally adjacent ship: both take damage; the attacker resolves
-## last (§4.11.5, §6 "both ships sink" edge case).
+## §4.5 action ram against an orthogonally adjacent enemy: both take damage;
+## the attacker resolves last (§4.11.5). The impact speed is the attacker's
+## CURRENT velocity (§4.5 mult).
 func ram(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var result := {
 		"ok": false, "damage": 0, "attacker_damage": 0,
@@ -872,53 +1372,97 @@ func ram(unit: Dictionary, target: Dictionary) -> Dictionary:
 	if _over or _action_taken or not is_acting(unit) or not can_ram(unit, target):
 		return result
 	_action_taken = true
-	var attacker_max := effective_max_durability(unit["ship"])
-	var target_damage := int(floor(float(attacker_max) * RAM_TARGET_FRACTION))
-	var attacker_damage := int(floor(float(attacker_max) * RAM_ATTACKER_FRACTION))
-	var ship_type: Dictionary = DataLoader.get_ship_type(str(unit["ship"].get("ship_type_id", "")))
-	if str(ship_type.get("class", "")) in OAR_SHIP_CLASSES:
-		target_damage = int(floor(float(target_damage) * OAR_RAM_MULTIPLIER))
-	result["damage"] = target_damage
-	result["attacker_damage"] = attacker_damage
+	result["ok"] = true
+	var speed := vel_length(unit.get("vel", Vector2i.ZERO))
+	var applied := _resolve_ram(unit, target, speed)
+	result["damage"] = applied["damage"]
+	result["attacker_damage"] = applied["attacker_damage"]
+	result["sunk"] = applied["sunk"]
+	result["attacker_sunk"] = applied["attacker_sunk"]
+	result["log"] = applied["log"]
+	return result
 
+
+## The §4.5 ram resolution shared by the action ram and the sweep entry:
+## `mult = (1 + 0.25 × (floor(‖vel‖) − 1)) × (bow/stern approach ? 1.15 : 1)`
+## with an oar/hybrid attacker's ×1.25 folded in before the floors;
+## target `floor(att_max_dur × 0.25 × mult)`, self `floor(att_max_dur × 0.10 ×
+## mult)` (the attacker's EFFECTIVE max durability, §4.11.12). Target first,
+## attacker last.
+func _resolve_ram(attacker: Dictionary, target: Dictionary, speed: float) -> Dictionary:
+	var att_max := effective_max_durability(attacker["ship"])
+	var mult: float = 1.0 + RAM_SPEED_STEP * (floor(maxf(speed, 0.0)) - 1.0)
+	# Bow/stern approach: the bearing attacker→target along the TARGET's
+	# heading axis (bucket distance 0° or 180°).
+	var bearing := heading8_of(unit_cell(target) - unit_cell(attacker))
+	if bucket_distance(bearing, int(target.get("heading8", HEADING_EAST))) in [0, 4]:
+		mult *= RAM_BOW_STERN_MULTIPLIER
+	if ship_class_of(attacker) in OAR_SHIP_CLASSES:
+		mult *= OAR_RAM_MULTIPLIER
+	var target_damage := int(floor(float(att_max) * RAM_TARGET_FRACTION * mult))
+	var attacker_damage := int(floor(float(att_max) * RAM_ATTACKER_FRACTION * mult))
 	# Target first, then the attacker (§4.11.5 "attacker resolves last").
 	var target_ship: Dictionary = target["ship"]
 	target_ship["durability"] = int(target_ship.get("durability", 0)) - target_damage
 	var target_sunk := int(target_ship["durability"]) <= 0
 	if target_sunk:
-		_sink(target, str(unit.get("side", "")), "ram")
-	var attacker_ship: Dictionary = unit["ship"]
+		_sink(target, str(attacker.get("side", "")), "ram")
+	var attacker_ship: Dictionary = attacker["ship"]
 	attacker_ship["durability"] = int(attacker_ship.get("durability", 0)) - attacker_damage
 	var attacker_sunk := int(attacker_ship["durability"]) <= 0
 	if attacker_sunk:
-		_sink(unit, str(target.get("side", "")), "ram")
-	result["sunk"] = target_sunk
-	result["attacker_sunk"] = attacker_sunk
-	result["log"] = _make_log("ram", unit, target, {
+		_sink(attacker, str(target.get("side", "")), "ram")
+	if target_damage > 0 or attacker_damage > 0:
+		_round_had_damage = true
+	return {
 		"damage": target_damage, "attacker_damage": attacker_damage,
 		"sunk": target_sunk, "attacker_sunk": attacker_sunk,
-	})
-	_check_over()
-	return result
+		"log": _make_log("ram", attacker, target, {
+			"damage": target_damage, "attacker_damage": attacker_damage,
+			"sunk": target_sunk, "attacker_sunk": attacker_sunk,
+		}),
+	}
 
 
-# --- Boarding & duel (docs/60-* §4.6, §4.11.6) ----------------------------
+# --- Boarding & duel (docs/60-* §4.6, §4.6a, §4.11.6) ----------------------
 
-## True for an orthogonally adjacent enemy ship (§4.6).
+## §4.6a hook condition (decision 8): orthogonal adjacency + BOTH ships at
+## `floor(‖vel‖) ≤ 1` + weather ≠ storm (storm forbids hooking outright,
+## §4.2).
 func can_board(unit, target) -> bool:
-	return can_ram(unit, target)
+	if not can_ram(unit, target):
+		return false
+	if weather == STORM_WEATHER:
+		return false
+	return _vel_floor(unit) <= 1 and _vel_floor(target) <= 1
 
 
-## Resolves a boarding attempt through [method resolve_duel] — the single duel
-## implementation (§4.12.1.2). The loser is captured: a player win removes the
-## enemy ship (`captured_enemy`), a player loss removes the player's ship
-## (`lost_player`, §4.11.7). A player win also books the §4.8 boarding-victory
-## morale +5 into the outcome block (`morale_bonus`).
+static func _vel_floor(unit: Dictionary) -> int:
+	return int(floor(vel_length(unit.get("vel", Vector2i.ZERO))))
+
+
+## ‖vel‖ as a float (the §4.3a magnitude — the only float use in the model).
+static func vel_length(vel: Vector2i) -> float:
+	return float(Vector2(vel.x, vel.y).length())
+
+
+## Resolves a boarding attempt: the hook sets BOTH ships' `vel = 0`
+## (correction 7), the duel runs through [method resolve_duel] — the single
+## duel implementation (§4.12.1.2) — and the loser is captured: a player win
+## removes the enemy ship (`captured_enemy`), a player loss removes the
+## player's ship (`lost_player`, §4.11.7). The winning side's crew pays the
+## §4.11.5 boarding casualty `floor(crew × 0.2)`, clamped at 0 (crew 0 still
+## sails, §4.6a). A player win also books the §4.8 boarding-victory morale +5
+## into the outcome block (`morale_bonus`).
 func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var result := {"ok": false, "duel": {}, "captured": {}, "lost": {}, "log": {}}
 	if _over or _action_taken or not is_acting(unit) or not can_board(unit, target):
 		return result
 	_action_taken = true
+	# §4.6a: the hook succeeds — both ships' velocity zeroes.
+	unit["vel"] = Vector2i.ZERO
+	target["vel"] = Vector2i.ZERO
+	_round_had_boarding = true
 	var enemy_unit: Dictionary = target if target.side == SIDE_ENEMY else unit
 	var player_unit: Dictionary = target if target.side == SIDE_PLAYER else unit
 	# §4.11.6 bases: the player rolls swordplay + courage + equipment; the
@@ -929,7 +1473,7 @@ func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 	var player_defends: bool = str(target.get("side", "")) == SIDE_PLAYER
 	var player_base := player_duel_base()
 	var defender_base := defender_duel_base(
-		int(enemy_unit["ship"].get("crew", 0)),
+		int(enemy_unit.get("crew", 0)),
 		int(enemy_unit.get("captain_rating", CAPTAIN_RATING_BASE)))
 	if player_defends:
 		player_base += defender_charisma_bonus(player_attribute("charisma"))
@@ -937,19 +1481,23 @@ func board(unit: Dictionary, target: Dictionary) -> Dictionary:
 		defender_base += defender_charisma_bonus(captain_charisma(enemy_unit))
 	var duel := resolve_duel(player_base, defender_base, rng)
 	result["duel"] = duel
-	if str(duel.get("result", "")) == "capture":
+	var player_won := str(duel.get("result", "")) == "capture"
+	var winner := player_unit if player_won else enemy_unit
+	# §4.11.5 boarding casualty on the winner, clamped at 0 (§4.6a).
+	winner["crew"] = maxi(int(winner.get("crew", 0))
+		- int(floor(float(winner.get("crew", 0)) * BOARDING_CREW_LOSS_FRACTION)), 0)
+	if player_won:
 		_capture(enemy_unit)
 		result["captured"] = enemy_unit["ship"].duplicate(true)
-		# §4.8: a won boarding duel raises fleet morale +5. The engine never
-		# touches `GameState` — the §4.12.4 consumer applies `morale_bonus`.
+		# §4.8: a won boarding duel raises fleet morale +5 (the engine never
+		# touches `GameState` — the §4.12.4 consumer applies `morale_bonus`).
 		_boarding_morale_bonus = BOARDING_MORALE_BONUS
 	else:
 		_capture(player_unit)
 		result["lost"] = player_unit["ship"].duplicate(true)
 	result["ok"] = true
-	var won := str(duel.get("result", "")) == "capture"
 	result["log"] = _make_log("board", unit, target, {
-		"won": won, "player_wins": int(duel.get("player_wins", 0)),
+		"won": player_won, "player_wins": int(duel.get("player_wins", 0)),
 		"defender_wins": int(duel.get("defender_wins", 0)),
 	})
 	_check_over()
@@ -1005,13 +1553,12 @@ static func defender_charisma_bonus(charisma: int) -> int:
 
 
 ## §4.11.6 player base: swordplay + floor(courage / 20) + the sum of `combat`
-## modifiers on worn weapon/armor equipment (§4.11.12). The Phase-2
-## effective-`combat` term is retired (Phase 8, 2026-11-02).
+## modifiers on worn weapon/armor equipment (§4.11.12).
 static func player_duel_base() -> int:
 	var base := player_effective_skill("swordplay") \
 		+ int(floor(float(player_attribute("courage")) / DUEL_COURAGE_DIVISOR))
 	# Phase-9 S21 seam (§4.12.1): the override's `equipment` wins when present,
-	# else the worn GameState equipment. W3's rewrite must preserve this.
+	# else the worn GameState equipment. Preserved through the W3 rewrite.
 	var equipment = _player_stats_override.get("equipment", null)
 	if not (equipment is Dictionary):
 		var player: Dictionary = GameState.player
@@ -1035,9 +1582,9 @@ func captain_charisma(unit: Dictionary) -> int:
 
 
 ## §4.7: the captain courage behind `unit` — the fleet's canon card, or, for a
-## legacy fleet without a card, the tier-sourced `10 + 3 × tier` (the card
-## template's main-attribute band centre at that tier; deterministic). Player
-## ships never surrender, so their courage is never asked for.
+## legacy fleet without a card, the doc-pinned `10 + 10 × tier` fallback
+## (correction 6). The W4-B courage_mod (the §4.9a profile) adds on the roll
+## site, never here.
 func captain_courage(unit: Dictionary) -> int:
 	if not (unit is Dictionary) or unit.side != SIDE_ENEMY:
 		return 0
@@ -1046,32 +1593,33 @@ func captain_courage(unit: Dictionary) -> int:
 		return int(ship["captain_courage"])
 	if not _fleet_captain_card.is_empty():
 		return card_courage(_fleet_captain_card)
-	return LEGACY_COURAGE_BASE + LEGACY_COURAGE_PER_TIER * int(FLEET_TIER.get(enemy_kind, 1))
+	return LEGACY_FALLBACK_BASE + LEGACY_FALLBACK_PER_TIER * int(FLEET_TIER.get(enemy_kind, 1))
 
 
-## §4.7 Phase-8 surrender chance in percent for a captain courage:
-## `clamp(25 − floor(courage / 10), 10, 40)`.
+## §4.7 surrender chance in percent for an EFFECTIVE courage:
+## `clamp(25 − floor(courage / 10), 10, 40)`. `courage_mod` is the W3-B
+## profile hook (§4.9a) — W3 callers pass 0; W4 adds the morale modifier.
 static func surrender_chance_for_courage(courage: int) -> int:
 	return clampi(
 		SURRENDER_CHANCE_BASE - int(floor(float(maxi(courage, 0)) / SURRENDER_COURAGE_DIVISOR)),
 		SURRENDER_CHANCE_MIN, SURRENDER_CHANCE_MAX)
 
 
-## [method surrender_chance_for_courage] for the captain behind `unit`.
-func surrender_chance(unit: Dictionary) -> int:
-	return surrender_chance_for_courage(captain_courage(unit))
+## [method surrender_chance_for_courage] for the captain behind `unit`, with
+## the profile's `courage_mod` folded into the effective courage (§4.7).
+func surrender_chance(unit: Dictionary, courage_mod: int = 0) -> int:
+	return surrender_chance_for_courage(captain_courage(unit) + courage_mod)
 
 
 ## Draws the §4.7 surrender roll from the battle's single §4.11.1 stream
-## (deterministic per seed). `AiFleet.decide` rule 1 calls this; a failed roll
-## re-rolls on the ship's next turn (§4.9 rule 1 falls through).
-func roll_surrender(unit: Dictionary) -> bool:
-	return rng.randf() * 100.0 < float(surrender_chance(unit))
+## (deterministic per seed). A failed roll re-rolls on the ship's next turn.
+func roll_surrender(unit: Dictionary, courage_mod: int = 0) -> bool:
+	return rng.randf() * 100.0 < float(surrender_chance(unit, courage_mod))
 
 
 # --- Hold / menu seams -----------------------------------------------------
 
-## Spends the turn's action doing nothing (§4.9 rule 6, §4.4 "hold").
+## Spends the turn's action doing nothing (§4.3 phase ③ "hold").
 func hold(unit: Dictionary) -> Dictionary:
 	var result := {"ok": false, "log": {}}
 	if _over or _action_taken or not is_acting(unit):
@@ -1115,7 +1663,7 @@ func offer_surrender() -> Dictionary:
 
 ## The structured log of every resolved action (§4.11.4 "damage order"). Each
 ## entry is `{kind, key, values}`: `key` is the `ui_strings.json` key the HUD
-## renders (task G), `values` carries the numbers — never player-facing text.
+## renders, `values` carries the numbers — never player-facing text.
 func log_lines() -> Array:
 	return _log.duplicate(true)
 
@@ -1123,9 +1671,11 @@ func log_lines() -> Array:
 # --- Headless driver (§4.11.3 handoff / tests) ----------------------------
 
 ## Applies `policy(sim)` (or `policy(sim, unit)`) then [method end_turn] until
-## [method is_over] or the round cap. Returns the outcome block when the battle
-## finished, else `{result: "", rounds: <current>, "over": false}`.
-func run_to_completion(policy: Callable, max_rounds: int = 30) -> Dictionary:
+## [method is_over] or the round cap — **40** in Phase 9 (§4.12.1, correction
+## 12; the §4.11.10 XP per-round term is bounded by it). Returns the outcome
+## block when the battle finished, else `{result: "", rounds: <current>,
+## "over": false}`.
+func run_to_completion(policy: Callable, max_rounds: int = MAX_ROUNDS) -> Dictionary:
 	if not _started:
 		start()
 	if not policy.is_valid():
@@ -1161,23 +1711,44 @@ func _call_policy(policy: Callable, unit: Dictionary):
 	return policy.call(self, unit)
 
 
+## §4.12.1.1 decision dict: `{action, target, cell(derived, informational),
+## vel}` — `action` ∈ cannon|ram|board|move|hold|surrender. The three-phase
+## turn (§4.3): the decision's `vel` (when carried) moves the ship FIRST —
+## movement happens exactly once — then the action resolves. `cell` is
+## derived (`pos + vel`), never authored. The cannon `side` / `shot` are NOT
+## in the pinned dict shape: the executor derives them (side by the §4.11.8
+## rule 2 pick, shot by §4.4b for an enemy actor, round for a player actor
+## unless the S10 selector passed them as the optional extra keys).
 func _apply_decision(unit: Dictionary, decision) -> void:
 	var action := "hold"
 	var target = {}
-	var cell := NO_CELL
 	if decision is Dictionary:
 		action = str(decision.get("action", "hold"))
 		target = decision.get("target", {})
-		cell = to_cell(decision.get("cell", NO_CELL))
+		if not (target is Dictionary):
+			target = {}
+		var vel = decision.get("vel", null)
+		if vel is Vector2i:
+			apply_velocity(unit, vel)
+		elif vel is Vector2:
+			apply_velocity(unit, Vector2i(int(vel.x), int(vel.y)))
 	match action:
 		"cannon":
-			cannon(unit, target if target is Dictionary else {})
+			var side := str(decision.get("side", ""))
+			var shot := str(decision.get("shot", ""))
+			if shot.is_empty():
+				shot = ai_shot_type(unit, target) \
+					if str(unit.get("side", "")) == SIDE_ENEMY else ROUND_SHOT
+			cannon(unit, target, side, shot)
 		"ram":
 			ram(unit, target if target is Dictionary else {})
 		"board":
 			board(unit, target if target is Dictionary else {})
 		"move":
-			move_to(unit, cell)
+			# The velocity above WAS the move; a decision without a usable
+			# vel degenerates to a hold (the authored `cell` is retired).
+			if not _moved_this_turn:
+				hold(unit)
 		"surrender":
 			# `surrender` is the AI's own §4.7 capitulation; a *player*-side
 			# policy asking for it is the §4.11.7 menu action instead.
@@ -1196,10 +1767,138 @@ func _ai_surrender(unit: Dictionary) -> void:
 		return
 	_action_taken = true
 	_surrendered_enemy += 1
+	unit["ship"]["crew"] = int(unit.get("crew", 0))
 	_captured_enemy.append(unit["ship"].duplicate(true))
 	unit["alive"] = false
 	_log.append(_make_log("surrender_enemy", unit, {}, {}))
 	_check_over()
+
+
+# --- Snapshot / restore (§4.12.1; the T3 search + tests consume it) --------
+#
+# A flat `Array[int]` of ALL mutable state, EXACTLY invertible:
+#   [0]                unit count n
+#   per unit (13):     pos.x, pos.y, vel.x, vel.y, heading8, durability, crew,
+#                      reload_port, reload_starboard, speed_debuff_turns,
+#                      alive, captain_rating, cannon_rating
+#   scalars (21):      round, cursor, action_taken, moved_this_turn,
+#                      round_had_damage, round_had_boarding, stall_rounds,
+#                      last_min_distance, flagship_index, over, result_idx,
+#                      cause_idx, boarding_morale_bonus, surrendered_enemy,
+#                      log count, sunk_enemy count, sunk_by_player count,
+#                      captured count, sunk_player count, lost_player count,
+#                      rng.state
+# (The W4-A side-morale values append to the scalar block — owned by that
+# wave, §4.8a.)
+
+const _SNAPSHOT_UNIT_FIELDS := 13
+const _SNAPSHOT_SCALARS := 21
+
+
+func snapshot() -> Array[int]:
+	var out: Array[int] = []
+	out.append(_units.size())
+	for unit in _units:
+		var ship: Dictionary = unit.get("ship", {})
+		out.append(int(unit_cell(unit).x))
+		out.append(int(unit_cell(unit).y))
+		var vel: Vector2i = unit.get("vel", Vector2i.ZERO)
+		out.append(vel.x)
+		out.append(vel.y)
+		out.append(int(unit.get("heading8", HEADING_EAST)))
+		out.append(int(ship.get("durability", 0)) if ship is Dictionary else 0)
+		out.append(int(unit.get("crew", 0)))
+		out.append(int(unit.get("reload_port", 1)))
+		out.append(int(unit.get("reload_starboard", 1)))
+		out.append(int(unit.get("speed_debuff_turns", 0)))
+		out.append(1 if bool(unit.get("alive", false)) else 0)
+		out.append(int(unit.get("captain_rating", 0)))
+		out.append(int(unit.get("cannon_rating", 0)))
+	out.append(_round)
+	out.append(_current)
+	out.append(1 if _action_taken else 0)
+	out.append(1 if _moved_this_turn else 0)
+	out.append(1 if _round_had_damage else 0)
+	out.append(1 if _round_had_boarding else 0)
+	out.append(_stall_rounds)
+	out.append(_last_min_distance)
+	out.append(_flagship_index)
+	out.append(1 if _over else 0)
+	out.append(RESULT_VALUES.find(_result))
+	out.append(_cause_index())
+	out.append(_boarding_morale_bonus)
+	out.append(_surrendered_enemy)
+	out.append(_log.size())
+	out.append(_sunk_enemy.size())
+	out.append(_sunk_enemy_by_player.size())
+	out.append(_captured_enemy.size())
+	out.append(_sunk_player.size())
+	out.append(_lost_player.size())
+	out.append(rng.state)
+	return out
+
+
+## The exact inverse of [method snapshot]: byte-exact state restoration.
+## A size mismatch is rejected with an error and leaves the state untouched.
+func restore(arr: Array[int]) -> void:
+	if arr.size() < 1:
+		push_error("BattleSim.restore: empty snapshot")
+		return
+	var n := int(arr[0])
+	if arr.size() != 1 + n * _SNAPSHOT_UNIT_FIELDS + _SNAPSHOT_SCALARS:
+		push_error("BattleSim.restore: size mismatch (%d units ⇒ expected %d ints, got %d)"
+			% [n, 1 + n * _SNAPSHOT_UNIT_FIELDS + _SNAPSHOT_SCALARS, arr.size()])
+		return
+	if n != _units.size():
+		push_error("BattleSim.restore: unit count changed since the snapshot")
+		return
+	var i := 1
+	for unit in _units:
+		var ship: Dictionary = unit.get("ship", {})
+		unit["pos"] = Vector2i(int(arr[i]), int(arr[i + 1]))
+		unit["vel"] = Vector2i(int(arr[i + 2]), int(arr[i + 3]))
+		unit["heading8"] = int(arr[i + 4])
+		if ship is Dictionary:
+			ship["durability"] = int(arr[i + 5])
+		unit["crew"] = int(arr[i + 6])
+		unit["reload_port"] = int(arr[i + 7])
+		unit["reload_starboard"] = int(arr[i + 8])
+		unit["speed_debuff_turns"] = int(arr[i + 9])
+		unit["alive"] = int(arr[i + 10]) == 1
+		unit["captain_rating"] = int(arr[i + 11])
+		unit["cannon_rating"] = int(arr[i + 12])
+		i += _SNAPSHOT_UNIT_FIELDS
+	_round = int(arr[i])
+	_current = int(arr[i + 1])
+	_action_taken = int(arr[i + 2]) == 1
+	_moved_this_turn = int(arr[i + 3]) == 1
+	_round_had_damage = int(arr[i + 4]) == 1
+	_round_had_boarding = int(arr[i + 5]) == 1
+	_stall_rounds = int(arr[i + 6])
+	_last_min_distance = int(arr[i + 7])
+	_flagship_index = int(arr[i + 8])
+	_over = int(arr[i + 9]) == 1
+	var result_idx := int(arr[i + 10])
+	_result = RESULT_VALUES[result_idx] if result_idx >= 0 \
+		and result_idx < RESULT_VALUES.size() else RESULT_UNFINISHED
+	_player_last_cause = ["", "sunk", "captured"][clampi(int(arr[i + 11]), 0, 2)]
+	_boarding_morale_bonus = int(arr[i + 12])
+	_surrendered_enemy = int(arr[i + 13])
+	_log.resize(int(arr[i + 14]))
+	_sunk_enemy.resize(int(arr[i + 15]))
+	_sunk_enemy_by_player.resize(int(arr[i + 16]))
+	_captured_enemy.resize(int(arr[i + 17]))
+	_sunk_player.resize(int(arr[i + 18]))
+	_lost_player.resize(int(arr[i + 19]))
+	rng.state = int(arr[i + 20])
+
+
+func _cause_index() -> int:
+	if _player_last_cause == "sunk":
+		return 1
+	if _player_last_cause == "captured":
+		return 2
+	return 0
 
 
 # --- Equipment helpers (docs/60-* §4.11.12) -------------------------------
@@ -1228,6 +1927,13 @@ static func equipment_item_modifier(equipment_id: String, stat: String) -> int:
 	return int(modifiers.get(stat, 0))
 
 
+## §4.11.12: base durability + figurehead durability delta. Used for ram
+## damage (§4.11.5) and as the current-durability cap.
+func effective_max_durability(ship: Dictionary) -> int:
+	var ship_type: Dictionary = DataLoader.get_ship_type(str(ship.get("ship_type_id", "")))
+	return int(ship_type.get("durability", 0)) + equipment_modifier(ship, "figurehead", "durability")
+
+
 # --- Grid helpers ----------------------------------------------------------
 
 static func in_grid(cell: Vector2i) -> bool:
@@ -1251,9 +1957,9 @@ static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 
 
 ## Chebyshev distance with longitude wrap (`20-*` §4.1: x taken mod width —
-## 4320 at the Phase-6 grid). The
-## battle grid itself does not wrap, but port distances from a world contact
-## tile do — a contact at x = 4318 is 2 tiles from a port at x = 0.
+## 4320 at the Phase-6 grid). The battle grid itself does not wrap, but port
+## distances from a world contact tile do — a contact at x = 4318 is 2 tiles
+## from a port at x = 0.
 static func _world_chebyshev(a: Vector2i, b: Vector2i) -> int:
 	var width := _world_width()
 	var dx := absi(a.x - b.x) % maxi(width, 1)
@@ -1274,27 +1980,50 @@ static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 
 # --- Turn / initiative internals (§4.11.4) --------------------------------
 
-func _make_unit(side: String, index: int, ship: Dictionary, cell: Vector2i) -> Dictionary:
-	return {
+func _make_unit(side: String, index: int, ship: Dictionary, cell: Vector2i,
+		tournament: bool) -> Dictionary:
+	var initial_vel := Vector2i.ZERO
+	var heading := HEADING_EAST if side == SIDE_PLAYER else HEADING_WEST
+	if tournament:
+		# §4.11.2 tournament variant: pinned initial velocities — the player
+		# bout ship already sails east, the enemy west (single bout; extras,
+		# should a fixture carry them, deploy through the band scan at rest).
+		if index == 0:
+			initial_vel = TOURNAMENT_PLAYER_VEL if side == SIDE_PLAYER \
+				else TOURNAMENT_ENEMY_VEL
+	var unit := {
 		"side": side,
 		"index": index,
 		"ship": ship,
-		"cell": cell,
-		"mp": 0,
-		"reload_until_round": 1,
+		"pos": cell,
+		"vel": initial_vel,
+		"heading8": heading,
+		"reload_port": 1,
+		"reload_starboard": 1,
+		"speed_debuff_turns": 0,
+		"crew": maxi(int(ship.get("crew", 0)), 0),
 		"alive": true,
 		"captain_rating": 0,
 		"cannon_rating": 0,
-		"mp_debuff_turns": 0,
+		"gunnery": 0,
+		"cannons_port": 0,
+		"cannons_starboard": 0,
 	}
+	if initial_vel != Vector2i.ZERO:
+		# §4.11.2 tournament: the pinned velocity sets the heading.
+		unit["heading8"] = heading8_of(initial_vel)
+	return unit
 
 
 func _deploy_cell(side: String, index: int) -> Vector2i:
 	var table := PLAYER_DEPLOYMENT if side == SIDE_PLAYER else ENEMY_DEPLOYMENT
+	if deployment == TOURNAMENT_DEPLOYMENT:
+		if index == 0:
+			return TOURNAMENT_PLAYER_CELL if side == SIDE_PLAYER \
+				else TOURNAMENT_ENEMY_CELL
 	if index < table.size():
 		return table[index]
-	# Beyond the pinned table (cannot happen with FLEET_MAX = 5 / navy max 4):
-	# keep the "one ship per tile" invariant by scanning the band.
+	# §4.2 band overflow (more than 5 ships): continue the in-band scan.
 	var band: Array = []
 	if side == SIDE_PLAYER:
 		for x in PLAYER_BAND_MAX_X + 1:
@@ -1304,15 +2033,62 @@ func _deploy_cell(side: String, index: int) -> Vector2i:
 		for x in range(ENEMY_BAND_MIN_X, GRID_WIDTH):
 			for y in GRID_HEIGHT:
 				band.append(Vector2i(x, y))
-	for cell in band:
+	for scan_cell in band:
 		var used := false
 		for unit in _units:
-			if unit_cell(unit) == cell:
+			if unit_cell(unit) == scan_cell:
 				used = true
 				break
 		if not used:
-			return cell
+			return scan_cell
 	return NO_CELL
+
+
+## §4.4 broadside split (decision 3): `port = floor(n / 2)`, starboard the
+## rest — derived from the ship's TOTAL cannons at battle start and stored on
+## the unit; the total stays on the ship instance for the outcome/rewards
+## blocks (decision 14). A ship-carried `cannons_port`/`cannons_starboard`
+## pair (the W3-B compose seam) wins when it sums to the total.
+func _price_broadside_split() -> void:
+	for unit in _units:
+		var ship: Dictionary = unit["ship"]
+		var total := maxi(int(ship.get("cannons", 0)), 0)
+		var port := int(floor(float(total) / BROADSIDE_SPLIT_DIVISOR))
+		var starboard := total - port
+		if ship.has("cannons_port") and ship.has("cannons_starboard") \
+				and int(ship["cannons_port"]) + int(ship["cannons_starboard"]) == total:
+			port = int(ship["cannons_port"])
+			starboard = int(ship["cannons_starboard"])
+		unit["cannons_port"] = port
+		unit["cannons_starboard"] = starboard
+
+
+## §4.4a gunnery source, priced once at battle start: the player flagship's
+## effective gunnery, a captain-card ship's card `skills.gunnery`, the legacy
+## `10 + 10 × tier` fallback for a card-less enemy fleet (correction 6's
+## fallback family), 0 for a captain-less player escort.
+func _price_gunnery() -> void:
+	for unit in _units:
+		unit["gunnery"] = _gunnery_source(unit)
+
+
+func _gunnery_source(unit: Dictionary) -> int:
+	if unit.side == SIDE_PLAYER:
+		if int(unit.index) == _flagship_index:
+			return player_effective_skill("gunnery")
+		var officer: Dictionary = _escort_captain_officer(unit)
+		if not officer.is_empty():
+			var skills = officer.get("skills", {})
+			return int(skills.get("gunnery", 0)) if skills is Dictionary else 0
+		return 0
+	var ship: Dictionary = unit["ship"]
+	if ship.has("gunnery"):
+		return int(ship["gunnery"])
+	if not _fleet_captain_card.is_empty():
+		var card_skills = _fleet_captain_card.get("skills", {})
+		return int(card_skills.get("gunnery", 0)) if card_skills is Dictionary else 0
+	return LEGACY_FALLBACK_BASE \
+		+ LEGACY_FALLBACK_PER_TIER * int(FLEET_TIER.get(enemy_kind, 1))
 
 
 ## §4.11.5 / §4.11.11.2: each ship's captain-card ratings are priced **once**
@@ -1362,12 +2138,7 @@ func _price_captain_ratings() -> void:
 
 
 ## The appointed captain officer of a player escort ship (§4.11.5 escort
-## branch), as an officers.json v2 record, or {} when the ship is captain-less
-## (the §4.5.2 captain-less rule). Battle ships carry no ids, so the officer is
-## resolved from the ship's own `captain_officer_id` when the fleet block
-## stores one, then from `officer_states` (post "captain" + `ship_id`) — read
-## defensively: the v9 `officer_states` block arrives with W4/W6, and its
-## absence simply leaves the escort captain-less.
+## branch), as an officers.json v2 record, or {} when the ship is captain-less.
 static func _escort_captain_officer(unit: Dictionary) -> Dictionary:
 	var ship: Dictionary = unit.get("ship", {})
 	if not (ship is Dictionary):
@@ -1396,6 +2167,10 @@ static func _officer_state_captain_for(ship_id: String) -> String:
 	return ""
 
 
+## §4.11.4: the initiative order is built ONCE at battle start — descending
+## `ShipType.speed + sail_speed_delta` (correction 2), ties player-before-
+## enemy, then ascending fleet index. A unit destroyed before its slot is
+## skipped and never acts; the list is never re-sorted mid-battle (§4.3).
 func _build_order() -> void:
 	_order = []
 	for unit in _units:
@@ -1404,92 +2179,84 @@ func _build_order() -> void:
 	_order.sort_custom(func(a, b) -> bool: return _initiative_before(a, b))
 
 
-## §4.11.4: descending effective speed, player before enemy on a tie, then
-## ascending fleet index.
 func _initiative_before(a: Dictionary, b: Dictionary) -> bool:
-	var speed_a := effective_speed(a)
-	var speed_b := effective_speed(b)
-	if speed_a != speed_b:
-		return speed_a > speed_b
+	var key_a := initiative_key(a)
+	var key_b := initiative_key(b)
+	if key_a != key_b:
+		return key_a > key_b
 	if a.side != b.side:
 		return a.side == SIDE_PLAYER
 	return int(a.index) < int(b.index)
 
 
+## Advances to the next living unit; at the wrap the completed round is
+## evaluated for stall (§4.11.9) and the round counter steps. No re-sort —
+## the order is the once-built initiative list.
 func _advance() -> void:
 	var guard := 0
-	while true:
+	var limit := _order.size() + 2
+	while guard <= limit:
 		guard += 1
-		if guard > GRID_WIDTH * GRID_HEIGHT * 4:
-			return
 		_current += 1
 		if _current >= _order.size():
-			_round += 1
-			_build_order()
-			_current = 0
-			if _order.is_empty():
-				_check_over()
+			_evaluate_stall()
+			if _over:
 				return
+			_round += 1
+			_current = -1
+			_round_had_damage = false
+			_round_had_boarding = false
+			continue
 		var unit = _order[_current] if _current < _order.size() else null
 		if unit is Dictionary and bool(unit.get("alive", false)):
-			unit["mp"] = effective_speed(unit)
-			# §4.4 chain shot: the target loses 1 MP at each of the debuff's
-			# remaining turn refreshes (2 when the shot landed).
-			var debuff_turns := int(unit.get("mp_debuff_turns", 0))
-			if debuff_turns > 0:
-				unit["mp_debuff_turns"] = debuff_turns - 1
-				unit["mp"] = maxi(0, int(unit["mp"]) - CHAIN_MP_DEBUFF)
 			_action_taken = false
+			_moved_this_turn = false
 			return
 
 
-func _reachable(unit: Dictionary) -> Dictionary:
-	var start := unit_cell(unit)
-	var capacity := int(unit.get("mp", 0))
-	var best := {start: 0}
-	if capacity <= 0:
-		return best
-	var occupied := _occupied_cells(unit)
-	var frontier: Array = [start]
-	while not frontier.is_empty():
-		var pick := 0
-		for index in range(1, frontier.size()):
-			if int(best[frontier[index]]) < int(best[frontier[pick]]):
-				pick = index
-		var cell: Vector2i = frontier[pick]
-		frontier.remove_at(pick)
-		var cost := int(best[cell])
-		for direction in DIRECTIONS:
-			var next: Vector2i = cell + (direction as Vector2i)
-			if not in_grid(next):
-				continue
-			var diagonal: bool = direction.x != 0 and direction.y != 0
-			if diagonal:
-				# §4.11.4: both orthogonal corner tiles must be inside the grid.
-				if not in_grid(cell + Vector2i(direction.x, 0)):
-					continue
-				if not in_grid(cell + Vector2i(0, direction.y)):
-					continue
-			if occupied.has(next):
-				continue
-			var step: int = MP_DIAGONAL if diagonal else MP_ORTHOGONAL
-			var next_cost := cost + step
-			if next_cost > capacity:
-				continue
-			if not best.has(next) or next_cost < int(best[next]):
-				best[next] = next_cost
-				frontier.append(next)
+## §4.11.9 stall detection (decision 12): 8 consecutive rounds with zero
+## damage AND zero boarding AND a net player↔enemy Chebyshev change ≤ 2 ⇒
+## outcome `stall`. The three conjuncts scope the whole 8-round window (§4.11.9
+## wording), so "net" is the CUMULATIVE change across the zero-activity
+## streak: the anchor is the minimum-pair Chebyshev at the streak's start, and
+## a net drift past ±2 breaks the streak the same way damage does. Any damage
+## or boarding resets the counter (and re-anchors). The distance is the
+## minimum Chebyshev across living player↔enemy pairs at round end.
+func _evaluate_stall() -> void:
+	var distance := _min_pair_distance()
+	if distance < 0:
+		return
+	if _round_had_damage or _round_had_boarding:
+		_stall_rounds = 0
+		_last_min_distance = distance
+		return
+	_stall_rounds += 1
+	if _stall_rounds == 1:
+		# Fresh streak: this round's distance anchors the window.
+		_last_min_distance = distance
+	elif _last_min_distance >= 0 \
+			and absi(_last_min_distance - distance) > STALL_DISTANCE_DELTA:
+		# The window's net change breached the ≤ 2 pin — the streak fails and
+		# restarts from here (the anchor moves with it).
+		_stall_rounds = 0
+		_last_min_distance = distance
+	if _stall_rounds >= STALL_ROUNDS:
+		_result = RESULT_STALL
+		_over = true
+
+
+## The minimum Chebyshev distance across living player↔enemy pairs (−1 when
+## either side has no living ship).
+func _min_pair_distance() -> int:
+	var players := living_units(SIDE_PLAYER)
+	var enemies := living_units(SIDE_ENEMY)
+	if players.is_empty() or enemies.is_empty():
+		return -1
+	var best := 1 << 30
+	for player in players:
+		for enemy in enemies:
+			best = mini(best, _chebyshev(unit_cell(player), unit_cell(enemy)))
 	return best
-
-
-## Every tile occupied by a living ship other than `unit`'s own cell.
-func _occupied_cells(unit: Dictionary) -> Dictionary:
-	var cells := {}
-	for other in _units:
-		if other == unit or not bool(other.get("alive", false)):
-			continue
-		cells[unit_cell(other)] = true
-	return cells
 
 
 # --- Damage / removal internals (§4.11.5, §4.11.7) ------------------------
@@ -1512,12 +2279,13 @@ func _sink(unit: Dictionary, by_side: String, _cause: String) -> void:
 
 
 ## Removes a captured ship (duel win/loss, AI surrender). The instance is
-## reported intact; the §4.11.7 25%-durability/crew-0 transform is the
-## application seam's (task C).
+## reported intact — battle-worn crew and durability — and the §4.11.7
+## 25%-durability/crew-0 transform is the application seam's (task C).
 func _capture(unit: Dictionary) -> void:
 	if not bool(unit.get("alive", false)):
 		return
 	unit["alive"] = false
+	unit["ship"]["crew"] = int(unit.get("crew", 0))
 	if unit.side == SIDE_ENEMY:
 		_captured_enemy.append(unit["ship"].duplicate(true))
 	else:
@@ -1597,14 +2365,8 @@ func _rep_deltas() -> Dictionary:
 
 
 ## Nations of the two nearest ports (Chebyshev from the contact tile; ties by
-## port id ascending; a nation credited once).
-##
-## §4.11.10 picks **two ports** first and credits their nations, then drops a
-## duplicate: "A nation appearing twice is credited once" only describes a
-## selection that can produce the same nation twice, so a contact whose two
-## nearest ports share a nation credits that nation once and stops there (it
-## does not reach for a third port). `BattleRewards.nearest_nations` mirrors
-## this rule and `tools/test_battle_economy.gd` asserts the two agree.
+## port id ascending; a nation credited once). §4.11.10 picks **two ports**
+## first and credits their nations, then drops a duplicate.
 func _nearest_port_nations() -> Array:
 	var ports: Array = []
 	DataLoader.ensure_map()
