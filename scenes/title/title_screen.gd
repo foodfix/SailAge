@@ -19,6 +19,9 @@ extends Control
 const PaletteLib := preload("res://scripts/palette.gd")
 
 const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
+## Phase-9 S21 edge (decision 15, `80-*` §4.7.16): the 海战 button sits
+## between New Game and Load and routes to the zero-write sandbox editor.
+const SANDBOX_SCENE := "res://scenes/combat/battle_sandbox.tscn"
 ## Phase-5 S19 settings modal, pre-game mount (docs/80-* §4.6.3 amended:
 ## density lives here, not on S2).
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
@@ -30,6 +33,7 @@ const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 @onready var _phase_tag: Label = $Center/Stack/PhaseTag
 @onready var _buttons: VBoxContainer = $Center/Stack/Buttons
 @onready var _new_game_button: Button = $Center/Stack/Buttons/NewGame
+@onready var _sandbox_button: Button = $Center/Stack/Buttons/Sandbox
 @onready var _load_button: Button = $Center/Stack/Buttons/Load
 @onready var _settings_button: Button = $Center/Stack/Buttons/Settings
 @onready var _quit_button: Button = $Center/Stack/Buttons/Quit
@@ -39,6 +43,8 @@ const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 ## `PortScreen.route_to_world` convention): with `false` the intent is still
 ## captured in [member last_route] but the scene does not swap.
 var route_to_nationality: bool = true
+## Same convention for the S21 sandbox edge (Phase 9).
+var route_to_sandbox: bool = true
 ## Last path this screen asked to route to (tests read it).
 var last_route: String = ""
 
@@ -51,11 +57,12 @@ func _ready() -> void:
 	_subtitle.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_phase_tag.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_data_error.add_theme_color_override("font_color", PaletteLib.BAD)
-	for button in [_new_game_button, _load_button, _settings_button,
-			_quit_button]:
+	for button in [_new_game_button, _sandbox_button, _load_button,
+			_settings_button, _quit_button]:
 		button.custom_minimum_size = Vector2(280, PaletteLib.BUTTON_H)
 
 	_new_game_button.pressed.connect(open_new_game)
+	_sandbox_button.pressed.connect(open_sandbox)
 	_load_button.pressed.connect(open_load_dialog)
 	_settings_button.pressed.connect(open_settings_panel)
 	_quit_button.pressed.connect(_on_quit)
@@ -72,6 +79,19 @@ func open_new_game() -> bool:
 	last_route = NATIONALITY_SCENE
 	if route_to_nationality:
 		GameState.change_scene(NATIONALITY_SCENE)
+	return true
+
+
+## Opens the S21 naval-battle sandbox (S1 → S21, Phase 9 decision 15,
+## docs/80-* §4.7.16 — the 海战 button between New Game and Load). Same
+## guard/route convention as [method open_new_game].
+func open_sandbox() -> bool:
+	if not ResourceLoader.exists(SANDBOX_SCENE):
+		push_error("TitleScreen: %s is missing" % SANDBOX_SCENE)
+		return false
+	last_route = SANDBOX_SCENE
+	if route_to_sandbox:
+		get_tree().change_scene_to_file(SANDBOX_SCENE)
 	return true
 
 
@@ -110,6 +130,11 @@ func _bind() -> void:
 	# `title.*` keys (docs/80-* §4.4); the title text itself is the brand name.
 	_subtitle.text = I18n.t_key("title.subtitle")
 	_new_game_button.text = I18n.t_key("title.new_game")
+	# Phase-9 `sandbox.title` (the `10-*` §7.12 inventory — W2-B authors the
+	# value): read defensively so this screen renders before the strings wave
+	# merges, the `_reason_text` convention. No invented player-facing text.
+	_sandbox_button.text = I18n.t_key("sandbox.title") \
+		if DataLoader.ui_strings.has("sandbox.title") else "sandbox.title"
 	_load_button.text = I18n.t_key("title.load_game")
 	_settings_button.text = I18n.t_key("settings.title")
 	_quit_button.text = I18n.t_key("title.quit")
