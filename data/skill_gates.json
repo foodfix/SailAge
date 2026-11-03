@@ -3,84 +3,98 @@
   "skill_gates": [
     {
       "feature_id": "sail.autopilot",
+      "name": {"zh": "委任航行", "en": "Appointed voyage"},
       "stat_or_skill": "navigation",
       "threshold": 40,
       "reason": {"zh": "委任航行需要领航员在岗,且航海 ≥ 40。", "en": "An appointed voyage needs a pilot in post with navigation ≥ 40."}
     },
     {
       "feature_id": "sail.night",
+      "name": {"zh": "夜航", "en": "Night sailing"},
       "stat_or_skill": "navigation",
       "threshold": 40,
       "reason": {"zh": "夜间(22:00–06:00)航速减半,航海 ≥ 40 可解除。", "en": "Sailing at night (22:00–06:00) halves speed; navigation ≥ 40 lifts the slow."}
     },
     {
       "feature_id": "repair.foul_weather",
+      "name": {"zh": "恶劣天气修帆", "en": "Foul-weather sail repair"},
       "stat_or_skill": "seamanship",
       "threshold": 60,
       "reason": {"zh": "恶劣天气下修帆需要操船 ≥ 60。", "en": "Sail repair in foul weather requires seamanship ≥ 60."}
     },
     {
       "feature_id": "repair.at_sea",
+      "name": {"zh": "海上小修", "en": "Minor repair at sea"},
       "stat_or_skill": "carpentry",
       "threshold": 60,
       "reason": {"zh": "海上小修需要修造 ≥ 60。", "en": "Minor repair at sea requires carpentry ≥ 60."}
     },
     {
       "feature_id": "shot.chain",
+      "name": {"zh": "链弹", "en": "Chain shot"},
       "stat_or_skill": "gunnery",
       "threshold": 25,
       "reason": {"zh": "链弹需要炮术 ≥ 25。", "en": "Chain shot requires gunnery ≥ 25."}
     },
     {
       "feature_id": "shot.armor_piercing",
+      "name": {"zh": "穿甲弹", "en": "Armor-piercing shot"},
       "stat_or_skill": "gunnery",
       "threshold": 50,
       "reason": {"zh": "穿甲弹需要炮术 ≥ 50。", "en": "Armor-piercing shot requires gunnery ≥ 50."}
     },
     {
       "feature_id": "duel.ladder.rank2",
+      "name": {"zh": "比武擂台·第2阶", "en": "Duel ladder · rank 2"},
       "stat_or_skill": "swordplay",
       "threshold": 30,
       "reason": {"zh": "比武擂台第 2 阶需要剑术 ≥ 30。", "en": "Duel ladder rank 2 requires swordplay ≥ 30."}
     },
     {
       "feature_id": "duel.ladder.rank3",
+      "name": {"zh": "比武擂台·第3阶", "en": "Duel ladder · rank 3"},
       "stat_or_skill": "swordplay",
       "threshold": 60,
       "reason": {"zh": "比武擂台第 3 阶需要剑术 ≥ 60。", "en": "Duel ladder rank 3 requires swordplay ≥ 60."}
     },
     {
       "feature_id": "market.profit_arrows",
+      "name": {"zh": "利润箭头", "en": "Profit arrows"},
       "stat_or_skill": "appraisal",
       "threshold": 30,
       "reason": {"zh": "行情涨跌箭头需要鉴定 ≥ 30。", "en": "Profit arrows require appraisal ≥ 30."}
     },
     {
       "feature_id": "market.other_port_memory",
+      "name": {"zh": "异港比价记忆", "en": "Other-port price memory"},
       "stat_or_skill": "appraisal",
       "threshold": 60,
       "reason": {"zh": "跨港比价记忆需要鉴定 ≥ 60。", "en": "Other-port price memory requires appraisal ≥ 60."}
     },
     {
       "feature_id": "permit.home_discount",
+      "name": {"zh": "本国免税证折扣", "en": "Home-permit discount"},
       "stat_or_skill": "negotiation",
       "threshold": 40,
       "reason": {"zh": "本国免税证 95 折优惠需要交涉 ≥ 40。", "en": "The 95% home-permit price requires negotiation ≥ 40."}
     },
     {
       "feature_id": "permit.foreign_discount",
+      "name": {"zh": "涉外免税证折扣", "en": "Foreign-permit discount"},
       "stat_or_skill": "negotiation",
       "threshold": 70,
       "reason": {"zh": "涉外免税证 90 折优惠需要交涉 ≥ 70。", "en": "The 90% foreign-permit price requires negotiation ≥ 70."}
     },
     {
       "feature_id": "chart.reef_annotations",
+      "name": {"zh": "海图暗礁注记", "en": "Chart reef annotations"},
       "stat_or_skill": "cartography",
       "threshold": 30,
       "reason": {"zh": "海图暗礁标注需要制图 ≥ 30。", "en": "Reef annotations on charts require cartography ≥ 30."}
     },
     {
       "feature_id": "bounty.pinpoint",
+      "name": {"zh": "悬赏精确揭示", "en": "Bounty pinpoint"},
       "stat_or_skill": "rumour",
       "threshold": 40,
       "reason": {"zh": "半价锁定赏金目标需要打探 ≥ 40。", "en": "Half-price bounty pinpoint requires rumour ≥ 40."}

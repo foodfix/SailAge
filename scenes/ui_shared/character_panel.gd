@@ -393,7 +393,9 @@ func _build_gate_row(gate: Dictionary) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Gate_%s" % feature
 	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-	var name_label := _make_label(feature)
+	# §4.20 (amended 2026-11-03): each gate row carries its own bilingual
+	# display `name`; the raw `feature_id` never reaches the label.
+	var name_label := _make_label(I18n.t(gate.get("name", {})))
 	name_label.name = "Feature"
 	name_label.custom_minimum_size.x = 200.0
 	name_label.add_theme_color_override("font_color",

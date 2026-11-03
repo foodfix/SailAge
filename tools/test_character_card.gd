@@ -675,6 +675,11 @@ func _test_s14_tabs() -> void:
 	var first_gate: Control = gates.get_child(0)
 	_check(first_gate.get_node("Reason") != null,
 		"each gate row renders its reason line (the shared renderer)")
+	var gate_name: Label = first_gate.get_node("Feature")
+	_check(gate_name != null \
+		and gate_name.text == I18n.t(DataLoader.skill_gates_list[0]["name"]),
+		"the gate row renders the localized name, never the raw feature_id "
+		+ "(%s)" % (gate_name.text if gate_name != null else "-"))
 	s14.select_tab("officers")
 	var roster: Container = s14.get_node(
 		"Center/Panel/Margin/Body/OfficersTabPanel/Scroll/Rows")

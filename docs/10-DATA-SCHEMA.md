@@ -1199,6 +1199,7 @@ data with one renderer (`80-*`):
 | Field | Type | Rule |
 |---|---|---|
 | `feature_id` | id | unique; names the gated feature as `<system>.<feature>` (e.g. `sail.autopilot`) |
+| `name` | L10nString | the gate's display name in the skills view (amended 2026-11-03 — the raw `feature_id` never reaches a label) |
 | `stat_or_skill` | id | one of the 5 attributes or the 11 skills (§4.5) |
 | `threshold` | int | 1–99; the feature unlocks at `stat ≥ threshold` |
 | `reason` | L10nString | the locked, player-visible "why locked" line |
@@ -1216,6 +1217,7 @@ The **appointed-voyage gate** ships as:
   "skill_gates": [
     {
       "feature_id": "sail.autopilot",
+      "name": {"zh": "委任航行", "en": "Appointed voyage"},
       "stat_or_skill": "navigation",
       "threshold": 40,
       "reason": {"zh": "委任航行需要舵手在位,且航海 ≥ 40。", "en": "An appointed voyage needs a pilot in post with navigation ≥ 40."}

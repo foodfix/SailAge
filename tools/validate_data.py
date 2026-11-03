@@ -325,9 +325,9 @@ L10N_FIELDS = {
     # §4.14: lanes carry no display strings (ids, numeric waypoints, id lists);
     # the walker's locale-key heuristic still guards any stray zh/en object.
     "lanes": (),
-    # Phase 8 (§4.20–4.22): the gate "why locked" line, the post description
-    # and the background card strings.
-    "skill_gates": ("reason",),
+    # Phase 8 (§4.20–4.22): the gate display name + "why locked" line, the
+    # post description and the background card strings.
+    "skill_gates": ("name", "reason"),
     "officer_posts": ("desc",),
     "backgrounds": ("name", "bio"),
 }
@@ -1667,12 +1667,14 @@ def _schema_skill_gates(items: list) -> None:
     seen: set[str] = set()
     for index, entity in enumerate(items):
         path = f"skill_gates[{index}]"
-        if set(entity) != {"feature_id", "stat_or_skill", "threshold", "reason"}:
+        if set(entity) != {"feature_id", "name", "stat_or_skill",
+                           "threshold", "reason"}:
             fail(
                 "schema",
                 label,
                 f"{path} must be an object with exactly keys "
-                "feature_id,stat_or_skill,threshold,reason (section 4.20)",
+                "feature_id,name,stat_or_skill,threshold,reason "
+                "(section 4.20)",
                 3,
             )
         feature_id = entity["feature_id"]
