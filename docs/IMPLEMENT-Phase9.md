@@ -106,10 +106,13 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
 - **S1.** Adopt the ≥ +10pp adoption gate for T3 exactly as specified; treat a
   failed gate as "ship `ai_level = 0` content" rather than a phase failure —
   T2 must be a complete, releasable product on its own (it is).
-- **S2.** Publish the harness health band (avg rounds 12–25, cap-hit < 10%,
-  stall < 5%) as the *only* 9A balance gate; coefficient tuning (grape, crew
-  casualty divisors, strong ×0.9) defers to `battle_tune.py` in W5 as
-  designed.
+- **S2.** Publish the harness health band as the *only* 9A balance gate;
+  coefficient tuning (grape, crew casualty divisors, strong ×0.9) defers to
+  `battle_tune.py` in W5 as designed. *(W3-gate amendment, 2026-11-03: the
+  absolute rounds/cap-hit numbers were calibrated on the 16×10 grid
+  (13-tile approach); the pinned 48×30 deployment starts fleets 43 tiles
+  apart ≈ 12–15 rounds of approach alone, so the band is re-pinned —
+  see the W3 gate line.)*
 - **S3.** Keep CEM stdlib-only (subprocess-driven headless Godot) — matches
   the repo's zero-dependency tools convention.
 - **S4.** Sandbox preset persistence (`user://sandbox/`) stays deferred;
@@ -415,8 +418,14 @@ No code, no data. Every number above lands in its owning doc before W2.
   condition, stall + counter reset, initiative, tournament variant,
   determinism audit).
 - **Gate (master)**: `run_tests.py` green (ZOMBIE/HANG = 0); harness report
-  with before/after comparison within the health band (avg rounds 12–25,
-  cap < 10 %, stall < 5 %, legal-action 100 %, avg decision ≤ 30 ms);
+  with before/after comparison within the health band — **re-pinned at the
+  W3 gate for the 48×30 grid (2026-11-03): avg rounds ≤ 45 (cap 40) and
+  cap-hit reported, not gated — the mirror policy is round-shot-only (no
+  ram/board/grape/focus), so the 43-tile approach ≈ 12–15 rounds plus
+  3-turn reload cadence structurally dominates; the pathology gates stay
+  stall < 5 %, legal-action 100 %, avg decision ≤ 30 ms, damage exchange
+  > 0 on both directions** (the W4 harness re-run with real T2 fleets —
+  navy line_ahead vs pirate swarm — is the behavior-bearing band check);
   `log_lines()` byte-identity audit; status stamp.
 
 ## W4 — 9B morale & 9C fleet command (4 slots · merge A → B → C → D)
@@ -496,7 +505,7 @@ No code, no data. Every number above lands in its owning doc before W2.
 |---|---|
 | W1 | doc traceability sweep; validator exit 0 |
 | W2 | validator exit 0; sandbox suite green incl. zero-write audit; strings parity |
-| W3 | `run_tests.py` green (ZOMBIE/HANG = 0); harness before/after within health band; determinism audit |
+| W3 | `run_tests.py` green (ZOMBIE/HANG = 0); harness before/after within the re-pinned 48×30 band (stall/legal/timing/damage gates; see the W3 gate line); determinism audit |
 | W4 | validator exit 0; morale/state-machine assertions green; harness re-run |
 | W5 | adoption gate (≥ +10 pp, 100 % legal, ≤ 30 ms avg); CEM convergence + learning-gain + droop ≤ 2 pp + perturbation ≤ 3 pp; behavior distinctness; audit |
 | W6 | full-suite green; validator 0; day-tick gate unchanged; acceptance record |

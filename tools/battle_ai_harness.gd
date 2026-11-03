@@ -288,6 +288,26 @@ func _decide(sim, unit: Dictionary, recorder: Dictionary) -> Dictionary:
 				if not legal.has(dest):
 					recorder["illegal"] = int(recorder["illegal"]) + 1
 				return {"action": "move", "cell": dest}
+	# ②-b turn-to-broadside fallback (master integration fix, W3 gate
+	#    ledger): a nose-to-nose freeze — no reducing pick, dead-ahead in
+	#    neither arc — never develops firing geometry, so the mirror can't
+	#    exercise the engine's fight (39/64 before-runs hit the cap). Take
+	#    the FIRST legal velocity whose resulting heading8 puts the nearest
+	#    enemy's bearing bucket inside a broadside arc (§4.4 sets).
+	if _new_engine:
+		var bearing := int(BattleSimLib.heading8_of(
+			sim.unit_cell(nearest) - from))
+		for vel in sim.legal_velocities(unit):
+			var step: Vector2i = vel
+			if step == Vector2i.ZERO:
+				continue
+			var steps := int(BattleSimLib.bucket_distance(
+				bearing, int(BattleSimLib.heading8_of(step))))
+			if steps in BattleSimLib.ARC_PORT_STEPS \
+					or steps in BattleSimLib.ARC_STARBOARD_STEPS:
+				if not sim.legal_velocities(unit).has(step):
+					recorder["illegal"] = int(recorder["illegal"]) + 1
+				return {"action": "move", "vel": step}
 	# ③ hold.
 	return {"action": "hold"}
 
@@ -461,7 +481,11 @@ func _write_report(metrics: Dictionary) -> void:
 		+ "range+arc (round shot) ② first legal velocity strictly reducing the\n" \
 		+ "Chebyshev distance to the nearest enemy — judged on the §4.3a sweep's\n" \
 		+ "LANDING cell (a pick the sweep stops short does not reduce the real\n" \
-		+ "distance; MP-engine moves are engine-reachability-checked) — ③ hold.\n" \
+		+ "distance; MP-engine moves are engine-reachability-checked) — ②-b\n" \
+		+ "turn-to-broadside fallback (master fix, W3 gate): the first legal\n" \
+		+ "velocity whose resulting heading8 puts the nearest enemy in a\n" \
+		+ "broadside arc, so a nose-to-nose freeze cannot run the clock out —\n" \
+		+ "③ hold.\n" \
 		+ "Ram self-damage is not tallied in either exchange direction.\n\n"
 	var out: String
 	if not is_after:

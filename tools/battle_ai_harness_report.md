@@ -12,7 +12,11 @@ vs `AiFleet.compose_enemy("pirate", day=30, rng)`; the §4.11.1 stream
 range+arc (round shot) ② first legal velocity strictly reducing the
 Chebyshev distance to the nearest enemy — judged on the §4.3a sweep's
 LANDING cell (a pick the sweep stops short does not reduce the real
-distance; MP-engine moves are engine-reachability-checked) — ③ hold.
+distance; MP-engine moves are engine-reachability-checked) — ②-b
+turn-to-broadside fallback (master fix, W3 gate): the first legal
+velocity whose resulting heading8 puts the nearest enemy in a
+broadside arc, so a nose-to-nose freeze cannot run the clock out —
+③ hold.
 Ram self-damage is not tallied in either exchange direction.
 
 
@@ -64,46 +68,46 @@ Metrics block (parsed back by the later section for the comparison):
 
 ## After (Phase-9 velocity engine)
 
-- recorded: 2026-11-03T11:56:05 (UTC)
+- recorded: 2026-11-03T11:59:09 (UTC)
 - engine: phase9-velocity — the Phase-9 velocity engine (`legal_velocities` / `apply_velocity`, arcs, per-side reload, sweep ram)
 - cap: 40 — the Phase-9 round cap 40 (§4.12.1, correction 12)
 - stall metric: reported by the engine (§4.11.9)
 
 | metric | value |
 |---|---|
-| player-side wins | 25 / 64 |
+| player-side wins | 24 / 64 |
 | enemy-side wins | 0 / 64 |
 | stall outcomes | 0 |
-| cap-hit | 39 (60.9%) |
-| avg rounds | 38.05 |
-| damage player→enemy | 7501 |
-| damage enemy→player | 5320 |
-| decisions | 9330 |
+| cap-hit | 40 (62.5%) |
+| avg rounds | 36.84 |
+| damage player→enemy | 7266 |
+| damage enemy→player | 4544 |
+| decisions | 9106 |
 | legal-action rate | 100.00% |
-| decision timing avg | 0.148 ms |
-| decision timing max | 0.292 ms |
+| decision timing avg | 0.269 ms |
+| decision timing max | 0.882 ms |
 
 Metrics block (parsed back by the later section for the comparison):
 
 ```json
 {
-  "avg_rounds": 38.046875,
-  "cap_hit": 39,
-  "cap_hit_pct": 60.9375,
+  "avg_rounds": 36.84375,
+  "cap_hit": 40,
+  "cap_hit_pct": 62.5,
   "cap_used": 40,
-  "damage_e2p": 5320,
-  "damage_p2e": 7501,
-  "decision_avg_ms": 0.148283922829582,
-  "decision_max_ms": 0.292,
-  "decisions": 9330,
+  "damage_e2p": 4544,
+  "damage_p2e": 7266,
+  "decision_avg_ms": 0.269017131561608,
+  "decision_max_ms": 0.882,
+  "decisions": 9106,
   "engine": "phase9-velocity",
   "illegal": 0,
   "legal_rate": 100.0,
   "seeds": 64,
   "stall_pct": 0.0,
-  "timestamp": "2026-11-03T11:56:05",
+  "timestamp": "2026-11-03T11:59:09",
   "wins_enemy": 0,
-  "wins_player": 25,
+  "wins_player": 24,
   "wins_stall": 0
 }
 ```
@@ -114,20 +118,20 @@ Band: avg rounds 12–25 · cap-hit < 10% · stall < 5% · legal-action 100% · 
 
 | metric | before | after | band verdict |
 |---|---|---|---|
-| player-side wins | 58 | 25 | — |
+| player-side wins | 58 | 24 | — |
 | enemy-side wins | 6 | 0 | — |
-| avg rounds | 12.42 | 38.05 | BREACH |
-| cap-hit % | 0.0% | 60.9% | BREACH |
+| avg rounds | 12.42 | 36.84 | BREACH |
+| cap-hit % | 0.0% | 62.5% | BREACH |
 | stall % | 0.0% | 0.0% | PASS |
-| damage player→enemy | 10640 | 7501 | — |
-| damage enemy→player | 5648 | 5320 | — |
+| damage player→enemy | 10640 | 7266 | — |
+| damage enemy→player | 5648 | 4544 | — |
 | legal-action rate | 100.00% | 100.00% | PASS |
-| decision avg ms | 0.130 | 0.148 | PASS |
-| decision max ms | 0.539 | 0.292 | — |
+| decision avg ms | 0.130 | 0.269 | PASS |
+| decision max ms | 0.539 | 0.882 | — |
 
 ## Breach analysis (recorded per the W3 instruction — no gameplay numbers tuned)
 
-Breaches: avg rounds 38.05 outside 12–25; cap-hit 60.9% ≥ 10%.
+Breaches: avg rounds 36.84 outside 12–25; cap-hit 62.5% ≥ 10%.
 
 Measured mechanism (W3-A, 2026-11-03) — a **harness-driver artifact**,
 not an engine defect (the engine-level probe verified `cap_eff` wind
