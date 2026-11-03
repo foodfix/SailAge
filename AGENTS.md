@@ -12,7 +12,14 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3),
    `95`-debug-hover (how to read the fleet debug floating window)
-5. Task backlogs: `docs/IMPLEMENT-Phase9.md` (complete — acceptance record
+5. Task backlogs: `docs/IMPLEMENT-Phase10.md` (planned — UI element kit &
+   generated pixel art; execution protocol: ≤ 4 background sub-agents per
+   wave, one worktree + branch each, master merges A → B → C → D with
+   validator + suite gates; reviewed 2026-11-04 against the live tree and
+   corrected: no audio-phase prerequisite (audio is future work), validator
+   **group 13**, 7 role badges, 61 tier-3 pool, S3/S13 corrections,
+   append-only `palette.gd` restructure, node v24.16.0), then
+   `docs/IMPLEMENT-Phase9.md` (complete — acceptance record
    in the doc's W6 block: validator groups 1–12, rebuilds byte-identical,
    54 suites green, harness + tune reports final, T3 adopted at
    `ai_level = 1` for aggressive/balanced kinds with the CEM-finalized θ,
@@ -77,6 +84,7 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 - Design questions discovered during a task are answered in the owning
   system doc first (`docs/00-OVERVIEW.md` §13), then the task proceeds.
 - Doc short-hands: `20-*` = `docs/20-WORLD-AND-SAILING.md`, etc.
+- **Git:** always `git push` after every `git commit`.
 - **Test discipline — no overkill tests:** tests verify contracts directly.
   Assert the constant, the closed form, or the pinned formula; never
   re-derive a known result by Monte Carlo, seeded-trial sweeps, brute-force
