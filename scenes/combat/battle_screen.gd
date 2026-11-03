@@ -2501,12 +2501,60 @@ func _player_auto_action(unit: Dictionary) -> void:
 	if _act_best(unit):
 		return
 	var vel := _approach_velocity(unit)
+	if vel == BattleSimLib.NO_CELL:
+		# W3 bounce-back: under inertia an overshooting ship has no
+		# Chebyshev/Manhattan-improving pick for several rounds — come about
+		# instead (turn toward the nearest enemy) so a headless driver cannot
+		# freeze a winnable battle into a §4.11.9 stall.
+		vel = _come_about_velocity(unit)
 	if vel != BattleSimLib.NO_CELL and sim.apply_velocity(unit, vel):
 		unit = selected_unit()
 		if unit.is_empty() or _act_best(unit):
 			return
 	# Nothing to shoot, nothing to board: pass the turn.
 	perform_action("hold")
+
+
+## The legal velocity whose resulting heading nearest aligns with the bearing
+## to the nearest enemy (unsigned bucket steps, ties = the smaller landing
+## Chebyshev, then enumeration order). Deliberately NO "must not lose
+## ground" filter: a ship carrying velocity v turning 45° projects further
+## from an abeam-behind target EVERY time — requiring a non-increase at
+## high v freezes the ship pointing away forever (the bout-1 stall). A
+## come-about accepts the temporary increase. NO_CELL when no velocity
+## qualifies.
+func _come_about_velocity(unit: Dictionary) -> Vector2i:
+	var enemies: Array = sim.living_units(BattleSimLib.SIDE_ENEMY)
+	if enemies.is_empty():
+		return BattleSimLib.NO_CELL
+	var nearest_cell: Vector2i = sim.unit_cell(enemies[0])
+	var best_chebyshev := _distance(sim.unit_cell(unit), nearest_cell)
+	for enemy in enemies:
+		var distance := _distance(sim.unit_cell(unit), sim.unit_cell(enemy))
+		if distance < best_chebyshev:
+			best_chebyshev = distance
+			nearest_cell = sim.unit_cell(enemy)
+	var from: Vector2i = sim.unit_cell(unit)
+	var bearing := int(BattleSimLib.heading8_of(nearest_cell - from))
+	var best_vel := BattleSimLib.NO_CELL
+	var best_steps := 9
+	var best_landing := 1 << 30
+	for vel in sim.legal_velocities(unit):
+		var step: Vector2i = vel
+		if step == Vector2i.ZERO:
+			continue
+		var endpoint: Vector2i = from + step
+		if not BattleSimLib.in_grid(endpoint):
+			continue
+		var steps := mini(int(BattleSimLib.bucket_distance(
+			int(BattleSimLib.heading8_of(step)), bearing)), 4)
+		var landing := _distance(endpoint, nearest_cell)
+		if steps < best_steps or (steps == best_steps
+				and landing < best_landing):
+			best_steps = steps
+			best_landing = landing
+			best_vel = step
+	return best_vel
 
 
 ## Performs the first legal action for `unit` (cannon → board → ram). Returns

@@ -670,7 +670,10 @@ func _player_decision(sim, unit: Dictionary, mode: String) -> Dictionary:
 				continue
 			var new_bearing := int(BattleSimLib.heading8_of(target_cell - landing))
 			var new_heading := int(BattleSimLib.heading8_of(step))
-			var steps := int(BattleSimLib.bucket_distance(new_bearing, new_heading))
+			# §4.4 arcs are SIGNED counterclockwise steps (the engine's
+			# W3 bounce-back resolution) — the unsigned bucket_distance can
+			# never reach the starboard set and mislabels port bearings.
+			var steps := (new_bearing - new_heading + 8) % 8
 			if steps in BattleSimLib.ARC_PORT_STEPS \
 					or steps in BattleSimLib.ARC_STARBOARD_STEPS:
 				return {"action": "move", "vel": step}
@@ -696,6 +699,29 @@ func _player_decision(sim, unit: Dictionary, mode: String) -> Dictionary:
 			close_found = true
 	if close_found:
 		return {"action": "move", "vel": close_pick}
+	# Come-about (W3 bounce-back): under inertia a ship that overshot the
+	# target has NO Manhattan-improving pick for several rounds (the MP
+	# engine's cell reachability never had this hole) — turn toward the
+	# target instead: the first legal velocity whose resulting heading is
+	# nearest the target bearing (unsigned bucket steps, ties = enumeration
+	# order), never increasing the Manhattan distance.
+	var bearing := int(BattleSimLib.heading8_of(target_cell - from))
+	var turn_pick := Vector2i.ZERO
+	var turn_best := 9
+	for vel in sim.legal_velocities(unit):
+		var step: Vector2i = vel
+		if step == Vector2i.ZERO:
+			continue
+		var landing := _landing(sim, unit, step)
+		if landing == from or _manhattan(landing, target_cell) > best:
+			continue
+		var new_heading := int(BattleSimLib.heading8_of(step))
+		var steps := mini(int(BattleSimLib.bucket_distance(new_heading, bearing)), 4)
+		if steps < turn_best:
+			turn_best = steps
+			turn_pick = step
+	if turn_pick != Vector2i.ZERO:
+		return {"action": "move", "vel": turn_pick}
 	return {"action": "hold"}
 
 

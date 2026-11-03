@@ -714,7 +714,6 @@ func _run_bracket() -> Dictionary:
 		screen.begin()
 		var outcome: Dictionary = screen.run_to_completion(80)
 		await get_tree().process_frame
-		results.append(str(outcome.get("result", "")))
 		if str(outcome.get("result", "")) != "victory" \
 				or round_number == TournamentLib.ROUNDS:
 			settled = (outcome.get("tournament", {}) as Dictionary).duplicate(true)

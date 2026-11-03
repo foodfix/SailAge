@@ -458,7 +458,7 @@ func _test_return_queue() -> void:
 	_check(int(state.get("tier_now", -1)) == 2,
 		"an uncrushed defeat preserves tier_now (got %d)"
 		% int(state.get("tier_now", -1)))
-	_check(not _captains.call("is_spawnable", id),
+	_check(not _captains.call("is_spawnable", id, 100),
 		"a returning captain is not spawnable")
 	# Ticks before the return day change nothing; the return day activates.
 	_captains.call("day_tick", 101)
@@ -470,7 +470,7 @@ func _test_return_queue() -> void:
 		"day_tick(160) returns the captain to 'active' under its own name")
 	_check(int(_state(id).get("tier_now", -1)) == 2,
 		"the return preserves tier_now (drift applied only at defeat/win)")
-	_check(_captains.call("is_spawnable", id),
+	_check(_captains.call("is_spawnable", id, 100),
 		"the returned captain is spawnable again")
 
 
@@ -613,20 +613,20 @@ func _test_deployment() -> void:
 	var used := {}
 	var card := _card("pirate", 2, used)
 	var id := str(card.get("id", ""))
-	_check(_captains.call("is_spawnable", id),
+	_check(_captains.call("is_spawnable", id, 100),
 		"an active, undeployed captain is spawnable")
 	_captains.call("deploy", id)
 	_check(_captains.call("is_deployed", id), "deploy marks the captain deployed")
-	_check(not _captains.call("is_spawnable", id),
+	_check(not _captains.call("is_spawnable", id, 100),
 		"a deployed captain is not spawnable (the draw skips it)")
 	_captains.call("release", id)
 	_check(not _captains.call("is_deployed", id), "release clears the deployment")
-	_check(_captains.call("is_spawnable", id),
+	_check(_captains.call("is_spawnable", id, 100),
 		"a released captain is spawnable again")
 	# A defeated (returning) captain is unspawnable regardless of deployment.
 	_captains.call("defeat", id, 30, false)
 	_captains.call("release", id)
-	_check(not _captains.call("is_spawnable", id),
+	_check(not _captains.call("is_spawnable", id, 100),
 		"a released but returning captain stays unspawnable")
 
 
@@ -776,16 +776,23 @@ func _player_policy(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 			best = distance
 			nearest = enemy
 	var target_cell := sim.unit_cell(nearest)
-	var destination := BattleSimLib.NO_CELL
+	# Phase-9 velocity API (W3 bounce-back): first legal velocity (the
+	# engine's (y, x) enumeration order) minimizing the resulting Chebyshev
+	# distance — the retired `legal_moves` cell walk, same objective.
+	var destination := Vector2i.ZERO
 	var best_distance := best
-	for cell in sim.legal_moves(unit):
-		var distance := maxi(absi(cell.x - target_cell.x), absi(cell.y - target_cell.y))
+	for vel in sim.legal_velocities(unit):
+		if vel == Vector2i.ZERO:
+			continue
+		var landing := origin + vel
+		var distance := maxi(absi(landing.x - target_cell.x),
+			absi(landing.y - target_cell.y))
 		if distance < best_distance:
 			best_distance = distance
-			destination = cell
-	if destination != BattleSimLib.NO_CELL:
-		return {"action": "move", "target": {}, "cell": destination}
-	return {"action": "hold", "target": {}, "cell": BattleSimLib.NO_CELL}
+			destination = vel
+	if destination != Vector2i.ZERO:
+		return {"action": "move", "target": {}, "vel": destination}
+	return {"action": "hold", "target": {}, "vel": Vector2i.ZERO}
 
 
 # --- 10. The NpcFleets integration (§4.11.11.4 captain identity) --------------
@@ -862,7 +869,7 @@ func _test_ecology_integration() -> void:
 		"the removal funnel releases the captain's deployment")
 	_check(str(_state(doomed_id).get("status", "")) == "active",
 		"a plain removal leaves the captain active (no defeat booked)")
-	_check(_captains.call("is_spawnable", doomed_id),
+	_check(_captains.call("is_spawnable", doomed_id, 100),
 		"the released captain is immediately spawnable again")
 	# The battle seam books the queue: defeat at day 40 → return_day 100.
 	_captains.call("defeat", doomed_id, 40, false)
@@ -871,10 +878,10 @@ func _test_ecology_integration() -> void:
 	_check(int(_state(doomed_id).get("return_day", -1)) == 100,
 		"the battle seam books return_day = day + 60 (40 → 100, got %d)"
 		% int(_state(doomed_id).get("return_day", -1)))
-	_check(not _captains.call("is_spawnable", doomed_id),
+	_check(not _captains.call("is_spawnable", doomed_id, 100),
 		"the booked captain is not spawnable while returning")
 	_captains.call("day_tick", 100)
-	_check(_captains.call("is_spawnable", doomed_id),
+	_check(_captains.call("is_spawnable", doomed_id, 100),
 		"the returned captain re-enters the draw at its return day")
 
 

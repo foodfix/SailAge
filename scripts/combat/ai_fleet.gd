@@ -17,7 +17,8 @@ extends RefCounted
 ## (§4.10, lookup correction 8). Every velocity choice enumerates
 ## `BattleSimLib.legal_velocities(unit)` in its (y, x) lexicographic order and
 ## takes the FIRST candidate achieving the objective (§4.11.8 pin 1 — the
-## enumeration IS the tie-break). Distance math is judged on `pos + vel`
+## enumeration IS the tie-break). Distance math is judged on the §4.3a
+## sweep's LANDING cell (master W3-gate ruling — a pick the sweep stops does
 ## without a sweep preview: the §4.3a sweep can only shorten a move, never
 ## lengthen it.
 ##
@@ -253,8 +254,9 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 
 	# ② §4.9a flee: hp% below the profile gate, or aggression < 25. The first
 	#    legal velocity strictly increasing the Chebyshev distance to the
-	#    nearest player ship, judged on `pos + vel` (§4.11.8 pin 5); hold when
-	#    none — a cornered fleer does not fall through to the guns.
+	#    nearest player ship, judged on the sweep's landing cell (§4.11.8
+	#    pin 5 + the landing ruling); hold when none — a cornered fleer does
+	#    not fall through to the guns.
 	#    W4: gate widens to side morale ≤ 20 (§4.8a, the pre-fleet-layer reading).
 	var flee_hp := int(profile.get("flee_below_hp_pct", 0))
 	var wants_flee := max_durability > 0 \
@@ -263,7 +265,7 @@ static func decide(sim: BattleSimLib, unit: Dictionary) -> Dictionary:
 		wants_flee = true
 	if wants_flee:
 		for vel in legal:
-			if _chebyshev(origin + vel, nearest_cell) > distance:
+			if _chebyshev(_landing(sim, unit, origin, vel), nearest_cell) > distance:
 				return {"action": "move", "target": {}, "vel": vel}
 		return hold
 
@@ -384,10 +386,36 @@ static func _focus_target(profile: Dictionary, unit: Dictionary,
 	return _lowest_durability(candidates)
 
 
+## The cell the §4.3a sweep actually reaches for `vel` from `origin`: the
+## Bresenham walk (the engine's own `_bresenham_cells`, so the preview is
+## exact) stops at the first out-of-grid or occupied cell and the ship stays
+## at the PRIOR cell in both cases. Every §4.9a velocity pick is judged on
+## this landing cell (master W3-gate ruling, ledgered into §4.11.8): a pick
+## the sweep stops does not close, flee, kite, or open distance — without
+## this a cornered ship "sails" through the map edge every round (pos + vel
+## reads a landing the sweep eats) and freezes the battle into a stall.
+static func _landing(sim: BattleSimLib, unit: Dictionary, origin: Vector2i,
+		vel: Vector2i) -> Vector2i:
+	var target := origin + vel
+	if target == origin:
+		return origin
+	var occupied := {}
+	for other in sim.units():
+		if other == unit or not bool(other.get("alive", false)):
+			continue
+		occupied[sim.unit_cell(other)] = true
+	var prior := origin
+	for cell in BattleSimLib._bresenham_cells(origin, target):
+		if not BattleSimLib.in_grid(cell) or occupied.has(cell):
+			return prior
+		prior = cell
+	return prior
+
+
 ## §4.11.8 pin 3 kite step: the FIRST legal velocity whose resulting Chebyshev
-## distance (pos + vel) to the nearest player ship equals `preferred_range`;
-## if none achieves it exactly, the first minimizing `|distance −
-## preferred_range|`. `NO_CELL` when no velocity exists at all.
+## distance (the §4.3a sweep's landing cell) to the nearest player ship equals
+## `preferred_range`; if none achieves it exactly, the first minimizing
+## `|distance − preferred_range|`. `NO_CELL` when no velocity exists at all.
 static func _kite_step(sim: BattleSimLib, unit: Dictionary, legal: Array,
 		nearest: Dictionary, preferred_range: int) -> Vector2i:
 	if legal.is_empty():
@@ -397,7 +425,8 @@ static func _kite_step(sim: BattleSimLib, unit: Dictionary, legal: Array,
 	var best := BattleSimLib.NO_CELL
 	var best_gap := 0
 	for vel in legal:
-		var gap := absi(_chebyshev(origin + vel, target_cell) - preferred_range)
+		var gap := absi(_chebyshev(_landing(sim, unit, origin, vel), target_cell)
+			- preferred_range)
 		if best == BattleSimLib.NO_CELL or gap < best_gap:
 			best = vel
 			best_gap = gap
@@ -463,9 +492,9 @@ static func _ram_decision(sim: BattleSimLib, unit: Dictionary, legal: Array,
 
 
 ## §4.9a close step: the first legal velocity minimizing the resulting
-## Chebyshev distance (pos + vel) to the nearest player ship (§4.11.8 pin 1 —
-## enumeration order is the tie-break). At Chebyshev ≤ 2 the §4.9a
-## deceleration takes precedence: the first `‖vel‖ ≤ 1` pick that does not
+## Chebyshev distance (the sweep's landing cell) to the nearest player ship
+## (§4.11.8 pin 1 — enumeration order is the tie-break). At Chebyshev ≤ 2 the
+## §4.9a deceleration takes precedence: the first `‖vel‖ ≤ 1` pick that does not
 ## increase the distance, so the §4.6a hook window opens. `NO_CELL` when no
 ## velocity exists at all.
 static func _close_step(sim: BattleSimLib, unit: Dictionary, legal: Array,
@@ -478,12 +507,12 @@ static func _close_step(sim: BattleSimLib, unit: Dictionary, legal: Array,
 	if distance <= CLOSE_DECELERATION_RANGE:
 		for vel in legal:
 			if BattleSimLib.vel_length(vel) <= float(HOOK_SPEED_MAX) \
-					and _chebyshev(origin + vel, target_cell) <= distance:
+					and _chebyshev(_landing(sim, unit, origin, vel), target_cell) <= distance:
 				return vel
 	var best := BattleSimLib.NO_CELL
 	var best_distance := 0
 	for vel in legal:
-		var current := _chebyshev(origin + vel, target_cell)
+		var current := _chebyshev(_landing(sim, unit, origin, vel), target_cell)
 		if best == BattleSimLib.NO_CELL or current < best_distance:
 			best = vel
 			best_distance = current

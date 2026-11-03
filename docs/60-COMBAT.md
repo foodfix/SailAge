@@ -787,7 +787,12 @@ because the bracket never repairs between battles.
 1. **Enumeration is the tie-break.** Every velocity choice enumerates
    `legal_velocities(unit)` in its (y, x) lexicographic order (§4.3a) and
    takes the **FIRST** candidate achieving the best objective; ties never
-   reorder.
+   reorder. Every §4.9a distance judgment — close, flee, kite, open distance
+   — is evaluated on the **§4.3a sweep's landing cell** (W3 gate amendment,
+   2026-11-03): a pick the sweep stops short (out-of-grid or occupied cell)
+   does not close, flee, kite, or open any distance — judging on
+   `pos + vel` lets a cornered ship sail through the map edge every round
+   and freeze the battle into a §4.11.9 stall.
 2. **Fire:** a rake-position volley beats a non-rake on the same side
    availability; then the profile `focus` picks the target — `weakest` =
    lowest current durability (ties → lower fleet index), `nearest` =
