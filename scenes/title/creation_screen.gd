@@ -505,6 +505,7 @@ func _pct(value: float) -> String:
 # --- Flow --------------------------------------------------------------------
 
 func _show_step() -> void:
+	_back_button.text = I18n.t_key("ui.back")
 	_step_background.visible = _step == 1
 	_step_points.visible = _step == 2
 	if _step == 1:
