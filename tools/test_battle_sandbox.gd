@@ -34,6 +34,15 @@ extends Node
 ##      no label clipped, no control past its panel edge, one header per
 ##      panel, the compose checkbox beside its label, the fleet buttons
 ##      directly under the rows scroll.
+##  11  W5-C the ai_level/archetype true-override emission (at-default keys
+##      stay out of the fixture; off-row keys ride) + the S10 screen fold
+##      into `_enemy_profile` + the same-ai_level replay determinism + the
+##      level-sensitivity evidence (the row's ai_level flips the same-seed
+##      battle);
+##  12  W5-C the whole-field round-trip fuzz — export → import → re-export
+##      byte-identical with EVERY §4.7.16 field group surviving (named
+##      drifts), the three seed modes, and the export's positive field
+##      coverage.
 
 const SandboxLib := preload("res://scenes/combat/battle_sandbox.gd")
 const SandboxScene := preload("res://scenes/combat/battle_sandbox.tscn")
@@ -81,6 +90,8 @@ func _ready() -> void:
 	await _test_title_and_restore()
 	await _test_randomize_fuzz()
 	await _test_layout_geometry()
+	await _test_profile_overrides()
+	await _test_full_field_roundtrip()
 	_report()
 
 
@@ -890,6 +901,278 @@ func _ctrl_path(control: Control, root: Control) -> String:
 		name = "%s/%s" % [parent.name, name]
 		parent = parent.get_parent()
 	return name
+
+
+# --- 11. W5-C: the ai_level/archetype overrides become effective ------------
+
+func _test_profile_overrides() -> void:
+	_fixture_run_state()
+	var sandbox = await _new_sandbox()
+	if sandbox == null:
+		return
+
+	# The at-default fixture stays byte-harmless (the true-override
+	# emission): the §4.7.16 fixture is pirate AT the §4.10 row's own values
+	# (ai_level 1 / aggressive / swarm), so NONE of the three profile keys
+	# rides the encounter — the W2-C dormant-key audit keeps its meaning.
+	_check(sandbox.import_json(FIXTURE_JSON),
+		"the §4.7.16 fixture imports (the W5-C emission pins)")
+	var plain_encounter: Dictionary = sandbox.build_encounter()
+	var leaked: Array[String] = []
+	for key in ["ai_level", "archetype", "formation"]:
+		if plain_encounter.has(key):
+			leaked.append(key)
+	_check(leaked.is_empty(),
+		"at the §4.10 row defaults none of ai_level/archetype/formation "
+		+ "rides the fixture (the byte-harmless audit stays meaningful)"
+		+ ("" if leaked.is_empty() else " — leaked: " + ", ".join(leaked)))
+
+	# Off the row defaults each key rides — and only that key.
+	sandbox._select_option(sandbox.ai_level_option(), 0)
+	sandbox._select_option(sandbox.archetype_option(), "cautious")
+	var override_encounter: Dictionary = sandbox.build_encounter()
+	_check(int(override_encounter.get("ai_level", -1)) == 0,
+		"ai_level 0 ≠ the pirate row's 1 rides the fixture (the W5-C "
+		+ "true-override emission)")
+	_check(str(override_encounter.get("archetype", "")) == "cautious",
+		"archetype cautious ≠ the pirate row's aggressive rides the fixture")
+	_check(not override_encounter.has("formation"),
+		"the formation key stays out while the editor holds the row's swarm "
+		+ "(per-key override granularity)")
+	_check(JSON.stringify(override_encounter) == JSON.stringify(
+			sandbox.build_encounter()),
+		"the override fixture builds byte-identically twice (determinism)")
+
+	# The kind switch re-syncs the selectors to the row: a trader at its row
+	# defaults (0/cautious/column) emits nothing again — the sync RESTORES
+	# the at-default editor state.
+	sandbox._select_option(sandbox.kind_option(), "trader")
+	sandbox._apply_kind_profile("trader")
+	var trader_encounter: Dictionary = sandbox.build_encounter()
+	_check(not trader_encounter.has("ai_level")
+			and not trader_encounter.has("archetype")
+			and not trader_encounter.has("formation"),
+		"the trader kind re-sync (row 0/cautious/column) drops every profile "
+		+ "key out of the fixture")
+	sandbox._select_option(sandbox.ai_level_option(), 1)
+	var trader_t3: Dictionary = sandbox.build_encounter()
+	_check(int(trader_t3.get("ai_level", -1)) == 1
+			and not trader_t3.has("archetype"),
+		"a trader fixture with ai_level 1 rides the override (the row says 0)")
+
+	# The S10 screen fold (§4.7.16/§4.9c — the W4 formation-fold pattern):
+	# the fixture keys land in the battle's §4.9a profile row.
+	var keyed_screen = await _new_screen_with_encounter(override_encounter)
+	_check(keyed_screen != null and keyed_screen.sim != null,
+		"the override fixture opens in S10")
+	_check(int(keyed_screen._enemy_profile.get("ai_level", -1)) == 0
+			and str(keyed_screen._enemy_profile.get("archetype", ""))
+				== "cautious",
+		"the fixture ai_level/archetype fold into the battle's profile row "
+		+ "(the W4 formation-fold pattern)")
+	var plain_screen = await _new_screen_with_encounter(plain_encounter)
+	_check(int(plain_screen._enemy_profile.get("ai_level", -1)) == 1
+			and str(plain_screen._enemy_profile.get("archetype", ""))
+				== "aggressive",
+		"without the fixture keys the battle profile keeps the §4.10 row "
+		+ "(pirate: 1/aggressive)")
+
+	# The same-ai_level determinism contract under the new keys: a fixture
+	# CARRYING ai_level/archetype replays byte-identically.
+	var keyed_outcome: Dictionary = keyed_screen.run_to_completion()
+	var keyed_log: String = JSON.stringify(keyed_screen.sim.log_lines())
+	_check(not keyed_outcome.is_empty()
+			and str(keyed_outcome.get("result", "")) != "",
+		"the override fixture battle completes (%s in %d rounds)" % [
+			str(keyed_outcome.get("result", "")),
+			int(keyed_outcome.get("rounds", 0))])
+	var replay_screen = await _new_screen_with_encounter(override_encounter)
+	var replay_outcome: Dictionary = replay_screen.run_to_completion()
+	_check(JSON.stringify(replay_screen.sim.log_lines()) == keyed_log,
+		"the override fixture replays byte-identical log_lines (the "
+		+ "same-ai_level determinism contract under the W5-C keys)")
+	_check(JSON.stringify(replay_outcome) == JSON.stringify(keyed_outcome),
+		"the override fixture replays a byte-identical outcome block")
+
+	# The dispatch is LEVEL-SENSITIVE — the evidence the fixture seam feeds.
+	# With the fixture carrying NO ai_level key, flipping the pirate ROW's
+	# ai_level for one run (the save/mutate/restore pattern of
+	# test_world_e2e; suites are separate Godot processes) flips the same
+	# seed: profile 1 = the T3 one-ply search, 0 = the T2 greedy. The
+	# diverging pair at seed 4242 is deterministic.
+	var plain_outcome: Dictionary = plain_screen.run_to_completion()
+	var t3_log: String = JSON.stringify(plain_screen.sim.log_lines())
+	var profiles: Dictionary = DataLoader.npc_config["ai_profiles"]
+	var row_ai_level: int = int((profiles["pirate"] as Dictionary)["ai_level"])
+	(profiles["pirate"] as Dictionary)["ai_level"] = 0
+	var t2_screen = await _new_screen_with_encounter(plain_encounter)
+	var t2_outcome: Dictionary = t2_screen.run_to_completion()
+	var t2_log: String = JSON.stringify(t2_screen.sim.log_lines())
+	(profiles["pirate"] as Dictionary)["ai_level"] = row_ai_level
+	_check(int((profiles["pirate"] as Dictionary)["ai_level"]) == row_ai_level,
+		"the §4.10 data row was restored after the level-sensitivity probe")
+	_check(t2_log != t3_log,
+		("the ai_level dispatch flips the engine: the same seed at profile "
+		+ "ai_level 1 (T3, %d rounds) vs 0 (T2, %d rounds) diverges — the "
+		+ "fixture override steers this seam once a decide-side consumer "
+		+ "lands (W5-A dispatch reads profile_for(enemy_kind), not the "
+		+ "folded profile; reported to the master)") % [
+			int(plain_outcome.get("rounds", 0)),
+			int(t2_outcome.get("rounds", 0))])
+
+	keyed_screen.queue_free()
+	replay_screen.queue_free()
+	plain_screen.queue_free()
+	t2_screen.queue_free()
+	sandbox.queue_free()
+	await get_tree().process_frame
+
+
+# --- 12. W5-C: the whole-field round-trip fuzz -------------------------------
+
+func _test_full_field_roundtrip() -> void:
+	SandboxLib.last_config = {}
+	_fixture_run_state()
+	var sandbox = await _new_sandbox()
+	if sandbox == null:
+		return
+	# 16 seeded 随机全部 rolls across compose on/off — after each roll:
+	# export → import → re-export byte-identical AND every §4.7.16 field
+	# group survives (the W4 pattern widened to NAME the drifted group:
+	# player stats block, per-ship rows incl. equipment + captain, enemy
+	# block incl. kind/ai_level/archetype/formation/morale, conditions incl.
+	# seed modes/weather/wind/current/deployment).
+	var details: Array[String] = []
+	var rolls := 16
+	for attempt in rolls:
+		var player_count := 1 + (attempt * 3 + 1) % 5
+		var enemy_count := 1 + (attempt * 9 + 2) % 5
+		var compose := attempt % 2 == 1
+		if not _apply_prestate(sandbox, player_count, enemy_count, compose):
+			details.append("roll %d: prestate refused" % attempt)
+			continue
+		sandbox.randomize_all(601003 + attempt * 4001)
+		var first: Dictionary = sandbox.export_config()
+		var problems: Array[String] = []
+		if not sandbox.import_json(JSON.stringify(first)):
+			problems.append("the roll's export refuses to re-import")
+		else:
+			problems.append_array(_field_group_drift(
+				first, sandbox.export_config(), ""))
+		if problems.is_empty() \
+				and sandbox.export_json() != JSON.stringify(first):
+			problems.append("byte drift")
+		if not problems.is_empty():
+			details.append("roll %d (pre %d/%d compose %s): %s" % [
+				attempt, player_count, enemy_count, compose,
+				"; ".join(problems)])
+	_check(details.is_empty(),
+		"16 seeded rolls across compose on/off: export → import → re-export "
+		+ "byte-identical with EVERY field group surviving (player stats / "
+		+ "ship rows incl. equipment + captain / enemy block incl. "
+		+ "kind+ai_level+archetype+formation+morale / conditions)"
+		+ ("" if details.is_empty() else " — " + "; ".join(details)))
+
+	# The three seed modes round-trip (the conditions group incl. seed
+	# modes); the seed editor shows only for `fixed`.
+	var mode_problems: Array[String] = []
+	for mode in ["fixed", "random", "auto"]:
+		sandbox.randomize_all(707017)
+		sandbox._select_option(sandbox.seed_mode_option(), mode)
+		var first: String = sandbox.export_json()
+		if not sandbox.import_json(first) or sandbox.export_json() != first:
+			mode_problems.append("%s: byte drift" % mode)
+		if sandbox.seed_spin().visible != (mode == "fixed"):
+			mode_problems.append("%s: seed spin visibility wrong" % mode)
+	_check(mode_problems.is_empty(),
+		"seed modes fixed/random/auto each round-trip byte-identically, the "
+		+ "seed editor visible only for fixed"
+		+ ("" if mode_problems.is_empty() else " — " + ", ".join(mode_problems)))
+
+	# Positive coverage: the export DECLARES every §4.7.16 field (not just
+	# "nothing drifted" — the leaf paths must exist).
+	sandbox.randomize_all(808081)
+	var config: Dictionary = sandbox.export_config()
+	var paths: Array[String] = []
+	_export_leaf_paths(config, "", paths)
+	var missing: Array[String] = []
+	for required in [
+			"player.stats.constitution", "player.stats.intellect",
+			"player.stats.charisma", "player.stats.courage",
+			"player.stats.luck", "player.stats.weapon", "player.stats.armor",
+			"player.morale",
+			"player.ships[0].ship_type_id", "player.ships[0].cannons",
+			"player.ships[0].crew", "player.ships[0].durability",
+			"player.ships[0].equipment.figurehead",
+			"player.ships[0].equipment.sail", "player.ships[0].captain_id",
+			"enemy.kind", "enemy.ai_level", "enemy.archetype",
+			"enemy.formation", "enemy.morale", "enemy.compose",
+			"enemy.ships[0].ship_type_id", "enemy.ships[0].cannons",
+			"enemy.ships[0].crew", "enemy.ships[0].durability",
+			"enemy.ships[0].equipment.figurehead",
+			"enemy.ships[0].equipment.sail", "enemy.ships[0].captain_id",
+			"conditions.day", "conditions.seed_mode", "conditions.seed",
+			"conditions.weather", "conditions.wind_dir",
+			"conditions.current.dir", "conditions.current.strength",
+			"conditions.deployment"]:
+		if not paths.has(required):
+			missing.append(required)
+	_check(missing.is_empty(),
+		"the export declares every §4.7.16 field (stats/morale/ship rows "
+		+ "with equipment + captain/enemy kind+ai_level+archetype+formation"
+		+ "+morale/conditions incl. seed+weather+wind+current+deployment)"
+		+ ("" if missing.is_empty() else " — missing: " + ", ".join(missing)))
+	sandbox.queue_free()
+	await get_tree().process_frame
+
+
+## Whole-field drift walk (the W5-C widening of the round-trip check):
+## names every §4.7.16 field that changed between two export dicts
+## ("enemy.ai_level 1 → 0"). Empty = identical.
+func _field_group_drift(before, after, path: String) -> Array[String]:
+	var problems: Array[String] = []
+	if before is Dictionary and after is Dictionary:
+		for key in before:
+			var child := ("%s.%s" % [path, key]) if not path.is_empty() \
+				else str(key)
+			if not (after as Dictionary).has(key):
+				problems.append("%s dropped" % child)
+			else:
+				problems.append_array(_field_group_drift(
+					before[key], after[key], child))
+		for key in after:
+			if not (before as Dictionary).has(key):
+				var child := ("%s.%s" % [path, key]) if not path.is_empty() \
+					else str(key)
+				problems.append("%s appeared" % child)
+		return problems
+	if before is Array and after is Array:
+		if (before as Array).size() != (after as Array).size():
+			problems.append("%s: %d rows → %d rows" % [path,
+				(before as Array).size(), (after as Array).size()])
+		else:
+			for index in (before as Array).size():
+				problems.append_array(_field_group_drift(
+					before[index], after[index], "%s[%d]" % [path, index]))
+		return problems
+	if before != after:
+		problems.append("%s: %s → %s" % [path, str(before), str(after)])
+	return problems
+
+
+## Every leaf path of a JSON-shaped config ("player.stats.courage",
+## "player.ships[0].captain_id") — the positive-coverage walk.
+func _export_leaf_paths(value, prefix: String, out: Array[String]) -> void:
+	if value is Dictionary:
+		for key in value:
+			var child := ("%s.%s" % [prefix, key]) if not prefix.is_empty() \
+				else str(key)
+			_export_leaf_paths(value[key], child, out)
+	elif value is Array:
+		for index in (value as Array).size():
+			_export_leaf_paths(value[index], "%s[%d]" % [prefix, index], out)
+	else:
+		out.append(prefix)
 
 
 # --- Helpers ----------------------------------------------------------------

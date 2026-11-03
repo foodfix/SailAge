@@ -1038,10 +1038,11 @@ func run_ai_turn() -> Dictionary:
 # --- §4.9b fleet dispatch (W4; the guarded FleetCommander caller) -----------
 
 ## One-time setup at [method open_battle]: builds the battle's §4.9a profile
-## row (with the S21 `formation` override folded in) and lazily loads
-## `fleet_commander.gd` — the `battle_result.gd` guard pattern (§4.12.3), so
-## a pre-B tree simply leaves [_member _fleet_commander] null and the AI runs
-## exactly as before (one warning per battle, the guard convention).
+## row (with the S21 `formation` / `ai_level` / `archetype` overrides folded
+## in) and lazily loads `fleet_commander.gd` — the `battle_result.gd` guard
+## pattern (§4.12.3), so a pre-B tree simply leaves [_member _fleet_commander]
+## null and the AI runs exactly as before (one warning per battle, the guard
+## convention).
 func _setup_fleet_commander() -> void:
 	_fc_state = {}
 	_fc_round = -1
@@ -1060,6 +1061,15 @@ func _setup_fleet_commander() -> void:
 	if formation_override is String \
 			and not (formation_override as String).is_empty():
 		_enemy_profile["formation"] = formation_override
+	# §4.7.16/§4.9c (W5-C): the ai_level/archetype overrides fold the same
+	# guarded way (the fixture carries the keys only off the row defaults).
+	var ai_level_override = encounter.get("ai_level", null)
+	if ai_level_override != null:
+		_enemy_profile["ai_level"] = int(ai_level_override)
+	var archetype_override = encounter.get("archetype", null)
+	if archetype_override is String \
+			and not (archetype_override as String).is_empty():
+		_enemy_profile["archetype"] = archetype_override
 	var module = ResourceLoader.load(FLEET_COMMANDER_PATH) \
 		if ResourceLoader.exists(FLEET_COMMANDER_PATH) else null
 	if module == null or not module.has_method("generate_orders") \
