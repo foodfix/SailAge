@@ -68,46 +68,46 @@ Metrics block (parsed back by the later section for the comparison):
 
 ## After (Phase-9 velocity engine)
 
-- recorded: 2026-11-03T12:26:43 (UTC)
+- recorded: 2026-11-03T14:27:18 (UTC)
 - engine: phase9-velocity — the Phase-9 velocity engine (`legal_velocities` / `apply_velocity`, arcs, per-side reload, sweep ram)
 - cap: 40 — the Phase-9 round cap 40 (§4.12.1, correction 12)
 - stall metric: reported by the engine (§4.11.9)
 
 | metric | value |
 |---|---|
-| player-side wins | 24 / 64 |
+| player-side wins | 26 / 64 |
 | enemy-side wins | 0 / 64 |
 | stall outcomes | 0 |
-| cap-hit | 40 (62.5%) |
-| avg rounds | 36.84 |
-| damage player→enemy | 7266 |
-| damage enemy→player | 4544 |
-| decisions | 9106 |
+| cap-hit | 38 (59.4%) |
+| avg rounds | 36.39 |
+| damage player→enemy | 7995 |
+| damage enemy→player | 4553 |
+| decisions | 8853 |
 | legal-action rate | 100.00% |
-| decision timing avg | 0.233 ms |
-| decision timing max | 0.869 ms |
+| decision timing avg | 0.219 ms |
+| decision timing max | 0.569 ms |
 
 Metrics block (parsed back by the later section for the comparison):
 
 ```json
 {
-  "avg_rounds": 36.84375,
-  "cap_hit": 40,
-  "cap_hit_pct": 62.5,
+  "avg_rounds": 36.390625,
+  "cap_hit": 38,
+  "cap_hit_pct": 59.375,
   "cap_used": 40,
-  "damage_e2p": 4544,
-  "damage_p2e": 7266,
-  "decision_avg_ms": 0.232796068526246,
-  "decision_max_ms": 0.869,
-  "decisions": 9106,
+  "damage_e2p": 4553,
+  "damage_p2e": 7995,
+  "decision_avg_ms": 0.219429345984412,
+  "decision_max_ms": 0.569,
+  "decisions": 8853,
   "engine": "phase9-velocity",
   "illegal": 0,
   "legal_rate": 100.0,
   "seeds": 64,
   "stall_pct": 0.0,
-  "timestamp": "2026-11-03T12:26:43",
+  "timestamp": "2026-11-03T14:27:18",
   "wins_enemy": 0,
-  "wins_player": 24,
+  "wins_player": 26,
   "wins_stall": 0
 }
 ```
@@ -118,20 +118,20 @@ Band: avg rounds 12–25 · cap-hit < 10% · stall < 5% · legal-action 100% · 
 
 | metric | before | after | band verdict |
 |---|---|---|---|
-| player-side wins | 58 | 24 | — |
+| player-side wins | 58 | 26 | — |
 | enemy-side wins | 6 | 0 | — |
-| avg rounds | 12.42 | 36.84 | BREACH |
-| cap-hit % | 0.0% | 62.5% | BREACH |
+| avg rounds | 12.42 | 36.39 | BREACH |
+| cap-hit % | 0.0% | 59.4% | BREACH |
 | stall % | 0.0% | 0.0% | PASS |
-| damage player→enemy | 10640 | 7266 | — |
-| damage enemy→player | 5648 | 4544 | — |
+| damage player→enemy | 10640 | 7995 | — |
+| damage enemy→player | 5648 | 4553 | — |
 | legal-action rate | 100.00% | 100.00% | PASS |
-| decision avg ms | 0.130 | 0.233 | PASS |
-| decision max ms | 0.539 | 0.869 | — |
+| decision avg ms | 0.130 | 0.219 | PASS |
+| decision max ms | 0.539 | 0.569 | — |
 
 ## Breach analysis (recorded per the W3 instruction — no gameplay numbers tuned)
 
-Breaches: avg rounds 36.84 outside 12–25; cap-hit 62.5% ≥ 10%.
+Breaches: avg rounds 36.39 outside 12–25; cap-hit 59.4% ≥ 10%.
 
 Measured mechanism (W3-A, 2026-11-03) — a **harness-driver artifact**,
 not an engine defect (the engine-level probe verified `cap_eff` wind

@@ -48,6 +48,50 @@ unchanged, guard-tested); C's compose stream seeds from the resolved
 seed deterministically (stream-continuity unpinned by the docs — noted
 for W5-C's full-field pass); the sandbox enemy-captain field edits enemy
 row 0's `captain_id` (no enemy-level schema key exists).
+**W3 status (2026-11-03): ✅ complete** — slots A (`cbeda50`, alone first
+per the wave-internal serialization) → B (`9beeab1`) → C (`084eace`) → D
+(`f5a9248`) merged; final gate on `main` (`9a598d7`): **`run_tests.py`
+52/52 suites green, ZOMBIE/HANG = 0** (test_battle 247, battle_economy 150,
+phase2_acceptance 125, tournament 157, battle_screen 163, captain_lifecycle
+78, phase3_acceptance 102, sandbox 93); harness on the final engine: stall
+0.0 %, legal-action 100 %, avg decision 0.219 ms ≤ 30 ms, damage flowing
+both directions — the re-pinned 48×30 band reads PASS; `log_lines()`
+byte-identity pinned by test_battle's determinism checks; validator exit 0.
+**W3-A deliverable:** the velocity-physics `battle_sim.gd` (48×30, §4.3a
+state, initiative-once, broadsides + four shots + §4.4a reload, sweep ram,
+hook, stall, round cap 40, `snapshot()/restore`, wind/current config keys,
+`player_stats` seam preserved) + `interactions.gd` injecting wind_dir/
+weather/current + `tools/battle_ai_harness.gd/.tscn` with the correction-13
+before-section. **W3-B deliverable:** the §4.9a T2 greedy rewrite +
+`profile_for` (correction-8 lookup) + the compose-side broadside split.
+**W3-C deliverable:** the S10 rebuild (48×30 world, camera pure functions
+asserted in-suite, minimap, overlays, shot selector, AI-speed switch) with
+the sandbox branch preserved. **W3-D deliverable:** the four-suite re-pin +
+the fixed-situation coverage (247-check battle suite).
+**Gate bounce-backs (master, ledgered):** the broadside arc fix —
+`_side_can_fire` compared an unsigned bucket distance (0..4) against the
+signed ccw arc step sets, so starboard could never fire and non-axial
+bearings answered port (found by D's doc-normative checks; one-line signed
+`(bearing − heading + 8) % 8` fix); the **landing ruling** — every §4.9a
+velocity pick is judged on the sweep's landing cell (a cornered T2 ship
+"sailed" through the map edge on `pos + vel` readings and froze bout 1
+into a stall; §4.11.8 pin 1 amended + `ai_fleet._landing` via the engine's
+own Bresenham); the **ram-vel ruling** — adjacent-action ram decisions omit
+`vel` so the retained closing velocity prices the §4.5 impact; the
+**come-about fixes** — both headless drivers (the screen's
+`_player_auto_action` and the acceptance suite's close branch) gained a
+turn-toward-bearing fallback, because under inertia an overshooting ship
+has no improving pick for several rounds (the MP engine's cell
+reachability never exposed this); captain_lifecycle adapted to the
+velocity API (pre-existing `is_spawnable` arity break noted — the
+post-Phase-8-gate UI commits changed the signature outside Phase 9);
+`60-*` §4.3a calm-identity parenthetical amended (the "cap 0" example
+contradicted the normative calm rule). Harness policy amended once with a
+turn-to-broadside fallback (master integration fix) and the health band
+re-pinned for the 48×30 grid (see the W3 gate line). Process note: slot D
+committed its re-pin directly to `main` instead of its branch (content
+exclusively its file set; recorded, no divergence).
+
 ## Goal
 
 Replace the Phase-2 MP-grid battle (16×10, 360° cannon, skip-a-turn reload)
