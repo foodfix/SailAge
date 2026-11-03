@@ -4,6 +4,10 @@
 > (authored 2026-11-03; its §0 decisions were user-locked the same day).
 > Reviewed against the live tree on 2026-11-03; corrections below.
 
+**Status (2026-11-03): W1 launched** — slots A/B/C/D running in parallel
+worktrees (branches `phase9/phase9-docs-{schema,battle,ai,ui}`), merge
+order A → B → C → D; gate runs on `main` after each merge.
+
 ## Goal
 
 Replace the Phase-2 MP-grid battle (16×10, 360° cannon, skip-a-turn reload)
