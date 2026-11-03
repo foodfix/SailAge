@@ -8,8 +8,9 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+clip_contents = true
 script = ExtResource("1_rosterview")
 
 [node name="Body" type="VBoxContainer" parent="."]
@@ -17,8 +18,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+grow_horizontal = 1
+grow_vertical = 1
 theme_override_constants/separation = 8
 
 [node name="Slots" type="Label" parent="Body"]
@@ -58,11 +59,11 @@ text = "Skills"
 [node name="TableScroll" type="ScrollContainer" parent="Body"]
 layout_mode = 2
 size_flags_vertical = 3
-horizontal_scroll_mode = 0
+horizontal_scroll_mode = 2
 
 [node name="Table" type="VBoxContainer" parent="Body/TableScroll"]
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_horizontal = 0
 theme_override_constants/separation = 4
 
 [node name="TableEmpty" type="Label" parent="Body"]
@@ -74,6 +75,7 @@ layout_mode = 2
 [node name="Detail" type="VBoxContainer" parent="Body"]
 visible = false
 layout_mode = 2
+size_flags_vertical = 3
 theme_override_constants/separation = 8
 
 [node name="DetailTop" type="HBoxContainer" parent="Body/Detail"]
@@ -90,9 +92,9 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="DetailCardScroll" type="ScrollContainer" parent="Body/Detail"]
-custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
-horizontal_scroll_mode = 0
+size_flags_vertical = 3
+horizontal_scroll_mode = 2
 
 [node name="DetailLine" type="Label" parent="Body/Detail"]
 layout_mode = 2

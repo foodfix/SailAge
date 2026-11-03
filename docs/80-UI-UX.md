@@ -258,16 +258,21 @@ Layout (1280×720; tile viewport is the space below the top bar):
   and S4** (one shared `hud.tscn` serves both, so the button exists in port
   and at sea alike). The press opens the **one dedicated 情报 modal** — the
   morning's dropdown became a full window (the §4.1 inventory row) — whose
-  five tabs host the information surfaces, in this order:
+  six tabs host the information surfaces, in this order:
   船长 (`char.title`) → the captain view (the retired S14 single page, §4.12);
-  官员 (`officers.title`) → the officers roster table + detail (the retired
-  S18, §4.6.2; the sea rules apply — talk/gift/train usable anywhere,
-  appoint/Dismiss port-only); 船队 (`fleet.title`) → the fleet view (the
-  retired S15 body, §4.5.1); 海图 (`chart.title`) → a launcher that closes
-  the window and toggles the fullscreen S17 (`Tab`); 委托 (`char.quests`) →
-  the active-quest list (§4.7.3, migrated from the retired S14 tab).
+  声望 (`char.reputation`) → the six-nation reputation table (split out of
+  the 船长 page, 2026-11-03); 官员 (`officers.title`) → the officers roster
+  table + detail (the retired S18, §4.6.2; the sea rules apply —
+  talk/gift/train usable anywhere, appoint/Dismiss port-only); 船队
+  (`fleet.title`) → the fleet view (the retired S15 body, §4.5.1); 海图
+  (`chart.title`) → **enters the fullscreen S17 immediately** (amended
+  2026-11-03: the tab is not a page with a launcher button but a direct
+  entry — pressing it closes this window and opens the chart); 委托
+  (`char.quests`) → the active-quest list (§4.7.3, migrated from the
+  retired S14 tab).
   Tab labels rebind on `locale_changed` (§4.4); the window remembers its last
-  tab for the button's next open (session-only). Keys (§4.3): `C`/`O`/`F`
+  tab for the button's next open (session-only; the 海图 entry is never
+  remembered — it is an action, not a page). Keys (§4.3): `C`/`O`/`F`
   open the window on their tab — pressed again on the active tab the window
   closes, a different key switches tabs in place; `Esc` closes; opening on a
   key is ignored while another modal is on screen (§6). The HUD button only
@@ -517,10 +522,19 @@ names each column; an empty roster renders the `char.no_officers` empty
 state with the tavern hint (§4.4).
 
 **Detail page:** clicking a row opens it (a back button returns to the
-table): the full §4.12 officer card, the post · wage · recruit-port line,
-and the actions — the **four actions** talk / gift / train / appoint
+table): the §4.12 officer card, the post · wage · recruit-port line, and the
+actions — the **four actions** talk / gift / train / appoint
 (`50-*` formulas) plus `Dismiss` (confirm dialog; frees the slot and stops
-the wage from the next day tick). The Phase-5 four-stat line
+the wage from the next day tick).
+
+**The detail card omits the stat blocks (amended 2026-11-03):** the table
+already shows every attribute and skill (the 属性/技能 column toggle), so
+repeating them on the detail page only scrolled the real content off screen.
+The detail card therefore renders **identity → personality/appearance →
+relations → career** and skips the attribute and skill sections entirely —
+it occupies no space at all for them (they are not built empty, they are not
+built). The `50-*` numbers stay reachable through the table's own columns and
+the rows' hover explanations. The Phase-5 four-stat line
 (统率/航海术/战斗/导航) and its derived-effect text stay retired with the
 old model.
 
@@ -1746,9 +1760,18 @@ identical structure from every entry:
 - **Portrait:** a color block composed from the appearance tags
   (`{face, beard, eyes, …}` — §4.8 palette, placeholder-first).
 - **Identity row:** name / flag color block / role / tier badge / level.
-- **Five attribute bars** (体魄 / 悟性 / 魅力 / 胆识 / 运气, 1–100) and
-  **skill bars** for the Person's skills — the signature skill
-  highlighted, a 0-value skill grayed as unlearned.
+- **Attributes and skills side by side (amended 2026-11-03):** the five
+  attribute bars (体魄 / 悟性 / 魅力 / 胆识 / 运气, 1–100) sit in the **left
+  column** and the skill bars in the **right column** of one two-column
+  block, so the card reads in half the height. The signature skill is
+  highlighted; a 0-value skill is grayed as unlearned. Player cards still
+  show the usage counter beside each skill; officer cards show nothing there
+  (usage counters are player-only, `50-*` §4.3.3).
+- **Hover explanations (amended 2026-11-03):** every attribute row and every
+  skill row carries a `tooltip_text` explaining what the stat feeds, read
+  from `char.attr.<key>.desc` / `skill.<key>.desc` in `ui_strings.json`
+  (`50-*` §4.2.1 and §4.3.1/§4.3.2 verbatim). The card never prints the
+  explanation inline — the bar label stays one word.
 - **Personality tags** and the **appearance sentence** assembled from the
   part keys (`char.personality.*`, `char.appearance.*`, §4.15).
 - **Relation block:** officer = loyalty + native role / current post;
@@ -1765,6 +1788,14 @@ shows every number; familiarity gates only the dossier career log
 (picker inspect, captain's-table row, bounty row, hail modal, battle
 intro preview) — acceptance-pinned.
 
+**The stat-block opt-out (amended 2026-11-03):** a host that already shows
+the attributes and skills elsewhere passes `stat_blocks: false` to
+`card_data`. The one such host is the officers detail page (§4.6.2), whose
+table owns the attribute/skill columns. The opt-out is a **rendering**
+option only — `card_data` still carries the numbers, and every other entry
+keeps the identical full card (the identity pin above is scoped to the
+entries that render the stat blocks).
+
 **Entries (locked set):** panel header (player); officer row / tavern
 recruit dialog (officers); picker inspect / captain's-table row / bounty
 row / hail modal / battle intro preview (NPC — §4.7.1).
@@ -1776,10 +1807,10 @@ height got a ~32px empty bordered strip (S18 rows, the tavern recruit
 dialog, the S14 person tabs). The card therefore **publishes the rendered
 content height as its inner scroll's minimum size** after each rebuild;
 hosts take the card at its content height and scroll it in their own
-containers (S18 panel scroll, recruit dialog, dossier, picker). The one
-bounded host is S14's person tabs, which wrap the card in a **280px**
-scroll viewport (§4.8 grid, `CardScroll`) so both person tabs stay inside
-the 720px design viewport.
+containers (S18 panel scroll, recruit dialog, dossier, picker). No host
+wraps the card in a second scroll (amended 2026-11-03): the intel window's
+views each own **one** page scroll, so a card inside them scrolls with the
+whole page.
 
 #### 4.12.2 Allocation UX (level-up points, locked flow)
 
@@ -1806,13 +1837,20 @@ duplication is gone by merging them):
 | Section | Shows |
 |---|---|
 | **§4.12 player card** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, the player's **effective-values split**, then the eight skill bars with their usage counters — ONE card instance, one render |
-| **声望 Reputation** | the six-nation table (`50-*` §4.6) |
-| **未解锁 Locked gates** | every locked feature rendered from `data/skill_gates.json` — the one `gate.*` reason renderer (grayed row + threshold + reason) shared by the whole UI |
+| **未解锁 Locked gates** | every locked feature rendered from `data/skill_gates.json` — one **compact row per gate** (name + requirement + the current value), with the **reason as a hover tooltip** rather than an inline paragraph (amended 2026-11-03: fourteen inline reason paragraphs buried the list) |
 
-The 官员 roster moved to the intel window's 官员 tab (§4.6.2) and the
-Phase-3 委托 Quests list to the 委托 tab (§4.7.3) — the 2026-11-03 intel
-window amendment removed both from the captain page because the window
-hosts them.
+The 声望 reputation table moved to its own 声望 tab and the 官员 roster to
+the 官员 tab (§4.6.2), the Phase-3 委托 list to the 委托 tab (§4.7.3) — the
+2026-11-03 intel window amendment removed them from the captain page because
+the window hosts them.
+
+**Gate row (amended 2026-11-03):** each row is
+`<gate name> · <skill> ≥ <threshold> · <current>/<threshold>` with the row
+grayed while locked and good-tinted once unlocked; hovering the row states
+the gate's `reason` (localized) plus, when unlocked, the line's current
+value. The threshold and the current value are both on the row, so the player
+never has to hover to learn *how close* they are — the tooltip only carries
+the *why*.
 
 **Officer actions (the 官员 tab's detail page; formulas `50-*`):** `talk` (loyalty +1,
 10-day cooldown), `gift` (200g → loyalty +5; +8 贪婪 / +3 忠厚, 10-day

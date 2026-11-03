@@ -7,8 +7,9 @@ extends Node
 ## Exits 0 when every check passes, 1 otherwise. The §4.5 intel button opens
 ## the ONE dedicated modal hosting the five surfaces — 船长 (the retired S14
 ## single page: card + reputation + gates) · 官员 (the retired S18, now a
-## table + detail) · 船队 (the retired S15 body) · 海图 (a launcher for the
-## fullscreen S17) · 委托 (the quest list migrated from S14). Covers: the
+## table + detail) · 船队 (the retired S15 body) · 海图 (a direct entry into
+## the fullscreen S17) · 委托 (the quest list migrated from S14), plus the
+## 声望 tab (the six-nation table split out of the captain page). Covers: the
 ## button wiring, the five-tab order and localized labels (§4.4), tab
 ## switching + the remembered tab, the C/O/F key mapping (same tab closes,
 ## another key switches, §6 refusal under another modal, Esc closes), the
@@ -66,7 +67,7 @@ func _ready() -> void:
 
 	var _sections: Array = [
 		["_test_button_presence"], ["_test_tabs_and_labels"],
-		["_test_captain_tab"], ["_test_quests_tab"],
+		["_test_captain_tab"], ["_test_reputation_tab"], ["_test_quests_tab"],
 		["_test_fleet_tab"], ["_test_officers_table"],
 		["_test_officers_detail"], ["_test_chart_tab"],
 		["_test_key_mapping"], ["_test_blocked_under_modal"],
@@ -111,6 +112,7 @@ func _test_tabs_and_labels() -> void:
 	_window.open_tab(IntelWindowLib.TAB_CAPTAIN)
 	var order: Array = [
 		["char.title", _window.get_node("Center/Panel/Margin/Body/Tabs/CaptainTab")],
+		["char.reputation", _window.get_node("Center/Panel/Margin/Body/Tabs/ReputationTab")],
 		["officers.title", _window.get_node("Center/Panel/Margin/Body/Tabs/OfficersTab")],
 		["fleet.title", _window.get_node("Center/Panel/Margin/Body/Tabs/FleetTab")],
 		["chart.title", _window.get_node("Center/Panel/Margin/Body/Tabs/ChartTab")],
@@ -154,22 +156,43 @@ func _test_captain_tab() -> void:
 	view.refresh()
 	_check(card.alloc_draft() == draft_before,
 		"an in-progress allocation draft survives the view refresh")
-	var reputation: Container = view.get_node("Body/ReputationRows")
-	_check(reputation.get_child_count()
-		== DataLoader.nations_list.size() * 2,
-		"the reputation table renders all six nations (%d cells)"
-		% reputation.get_child_count())
-	var gates: Container = view.get_node("Body/GateScroll/GateRows")
+	var gates: Container = view.get_node("Body/Page/Sections/GateRows")
 	_check(gates.get_child_count() == DataLoader.skill_gates_list.size(),
 		"the gates table renders every skill_gates row (%d)"
 		% gates.get_child_count())
 	var first_gate: Control = gates.get_child(0)
-	_check((first_gate.get_node("Feature") as Label).text
+	_check((first_gate.get_node("Top/Feature") as Label).text
 		== I18n.t(DataLoader.skill_gates_list[0]["name"]),
 		"the gate row shows the localized name (§4.20)")
 	_check((first_gate.get_node("Reason") as Label).text
 		== I18n.t(DataLoader.skill_gates_list[0]["reason"]),
 		"the gate row shows its reason line")
+	_window.close()
+
+
+## The 声望 tab (amended 2026-11-03): the six-nation table split out of the
+## 船长 page into its own tab, so the captain page holds only the card + gates.
+func _test_reputation_tab() -> void:
+	_window.open_tab(IntelWindowLib.TAB_REPUTATION)
+	var view: Control = _window.get_node(
+		"Center/Panel/Margin/Body/Content/ReputationView")
+	_check(view.visible, "the 声望 tab shows the reputation view")
+	_check(view.row_count() == DataLoader.nations_list.size() * 2,
+		"the reputation table renders all six nations (%d cells)"
+		% view.row_count())
+	# Every nation appears — none hidden (docs/50-* §6).
+	var found := 0
+	for nation in DataLoader.nations_list:
+		if view.get_node_or_null(
+				"Body/Page/Sections/Rows/Rep_%s" % str(nation.get("id", ""))) != null:
+			found += 1
+	_check(found == DataLoader.nations_list.size(),
+		"no nation row is hidden (%d/%d)" % [found, DataLoader.nations_list.size()])
+	# The captain page no longer carries the table (the split is real).
+	var captain: Control = _window.get_node(
+		"Center/Panel/Margin/Body/Content/CaptainView")
+	_check(captain.get_node_or_null("Body/Page/Sections/ReputationRows") == null,
+		"the 船长 page no longer duplicates the reputation table")
 	_window.close()
 
 
@@ -291,23 +314,23 @@ func _test_officers_detail() -> void:
 	CharacterLib.dismiss(hire_id)
 
 
-## The 海图 tab: a launcher that closes the window and toggles the fullscreen
-## S17 (one chart instance; one open + one close per suite).
+## The 海图 tab is a direct entry (amended 2026-11-03): pressing it closes the
+## window and enters the fullscreen S17 — no launcher page in between (one
+## chart instance; one open + one close per suite).
 func _test_chart_tab() -> void:
 	var chart: Control = ChartScreenLib.attach_to(_host)
 	_check(not chart.is_open(), "fixture: the chart starts closed")
-	_window.open_tab(IntelWindowLib.TAB_CHART)
-	var note: Label = _window.get_node(
-		"Center/Panel/Margin/Body/Content/ChartBox/ChartNote")
-	_check(note.text == I18n.t_key("intel.chart.note"),
-		"the chart tab shows its note")
-	var open_button: Button = _window.get_node(
-		"Center/Panel/Margin/Body/Content/ChartBox/OpenChart")
-	_check(open_button.text == I18n.t_key("intel.open_chart"),
-		"the launcher reads intel.open_chart")
-	open_button.pressed.emit()
+	_window.open_tab(IntelWindowLib.TAB_CAPTAIN)
+	_check(_window.has_node(
+		"Center/Panel/Margin/Body/Content/ChartBox") == false,
+		"the chart launcher page is gone (the tab is an action)")
+	var tab: Button = _window.get_node(
+		"Center/Panel/Margin/Body/Tabs/ChartTab")
+	tab.pressed.emit()
 	_check(chart.is_open() and not _window.is_open(),
-		"the launcher opens S17 and closes the window")
+		"pressing the 海图 tab enters S17 directly and closes the window")
+	_check(_window.active_tab() != IntelWindowLib.TAB_CHART,
+		"海图 never becomes the remembered tab (it is an action)")
 	chart.call("close_chart")
 	_check(not chart.is_open(), "the chart closes (one open+close per suite)")
 

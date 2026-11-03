@@ -3531,5 +3531,69 @@
   "debug.info.circuit": {
     "zh": "巡逻航线",
     "en": "Circuit"
+  },
+  "char.attr.constitution.desc": {
+    "zh": "体魄：决定坏血病的恶化底线（7 + 体魄/10 天），并减轻撞击自伤与风暴日的士气损失。任命船医后由船医的医术接管坏血病底线。",
+    "en": "Constitution sets the scurvy game-over threshold (7 + CON/10 days) and softens ramming self-damage and storm-day morale decay. A surgeon in post takes over the scurvy line with medicine."
+  },
+  "char.attr.intellect.desc": {
+    "zh": "悟性：降低付费训练的费用，并影响打探情报的准确度层级与海图揭示的精度加成。",
+    "en": "Intellect lowers the paid-training fee and raises rumour accuracy tiers and the chart-reveal precision bonus."
+  },
+  "char.attr.charisma.desc": {
+    "zh": "魅力：降低哗变与逃亡风险，提升忠诚增长倍率，并压低官员签约费、打探价格与悬赏锁定费。",
+    "en": "Charisma reduces desertion and mutiny risk, raises the loyalty-gain multiplier, and lowers officer signing fees, rumour prices and bounty pinpoint costs."
+  },
+  "char.attr.courage.desc": {
+    "zh": "胆识：提升决斗攻击力与风暴中的航速保持，并增加接舷胜利后的士气奖励。",
+    "en": "Courage adds to duel attack, keeps more speed in storms, and raises the morale bonus after a boarding victory."
+  },
+  "char.attr.luck.desc": {
+    "zh": "运气：降低风暴发生概率与风暴伤害，并影响战斗中的名品掉落判定。",
+    "en": "Luck lowers storm chance and storm damage, and improves named-item drop rolls in battle."
+  },
+  "skill.seamanship.desc": {
+    "zh": "操船：提升舰队航速（每点 /300，上限 +30%）；≥ 60 可在恶劣天气下修帆。每 30 个海上日 +1。",
+    "en": "Seamanship raises fleet speed (skill/300, capped at +30%); at 60+ you can repair sails in foul weather. Grows +1 per 30 sea-days."
+  },
+  "skill.navigation.desc": {
+    "zh": "航海：扩大港口发现半径（48 + 航海/12）；≥ 40 免除夜间航行减速。每 30 个海上日 +1。",
+    "en": "Navigation widens the port sighting radius (48 + skill/12); at 40+ night sailing costs no extra speed. Grows +1 per 30 sea-days."
+  },
+  "skill.swordplay.desc": {
+    "zh": "剑术：决定决斗攻击值；≥ 30 / ≥ 60 解锁比武擂台的第 2 / 3 阶。每个决斗回合 +1。",
+    "en": "Swordplay sets duel attack; 30+ / 60+ unlock duel-ladder ranks 2 / 3. Grows +1 per duel round."
+  },
+  "skill.gunnery.desc": {
+    "zh": "炮术：提升炮击命中与伤害（+炮术/25）；≥ 25 解锁链弹，≥ 50 解锁穿甲弹。每 10 次开炮 +1。",
+    "en": "Gunnery adds to cannon hit and damage (+skill/25); 25+ unlocks chain shot, 50+ armor-piercing shot. Grows +1 per 10 cannon shots."
+  },
+  "skill.appraisal.desc": {
+    "zh": "鉴定：增加价格记忆条目（鉴定/10）；≥ 30 显示利润箭头，≥ 60 记住异港行情。每 20 笔获利交易 +1。",
+    "en": "Appraisal adds price-memory entries (skill/10); 30+ shows profit arrows, 60+ remembers other-port prices. Grows +1 per 20 profitable trades."
+  },
+  "skill.negotiation.desc": {
+    "zh": "交涉：降低关税（−交涉/10%，上限 −5%）；≥ 40 本国免税证 95 折，≥ 70 涉外免税证 9 折。每 15 笔交易 +1。",
+    "en": "Negotiation cuts tariffs (−skill/10%, capped at −5%); 40+ gives 95% home permits, 70+ gives 90% foreign permits. Grows +1 per 15 trades."
+  },
+  "skill.cartography.desc": {
+    "zh": "制图：扩大发现半径（36 + 制图/15）并提升海图揭示（+1 + 制图/25）；≥ 30 标注暗礁。每 5 次探索 +1。",
+    "en": "Cartography widens discovery radius (36 + skill/15) and chart reveal (+1 + skill/25); 30+ annotates reefs. Grows +1 per 5 Explores."
+  },
+  "skill.rumour.desc": {
+    "zh": "打探：提升情报准确度层级；≥ 40 可半价锁定悬赏目标。每 10 次打探购买或悬赏查看 +1。",
+    "en": "Rumour raises rumour accuracy tiers; 40+ pinpoints bounty targets at half price. Grows +1 per 10 rumour buys or bounty views."
+  },
+  "skill.medicine.desc": {
+    "zh": "医术（官员）：在船医岗位时接管坏血病底线（7 + 医术/10）。船医岗位要求 ≥ 20。每 90 个在岗海上日 +1。",
+    "en": "Medicine (officers): as surgeon, owns the scurvy threshold (7 + medicine/10). The surgeon post requires 20+. Grows +1 per 90 in-post sea-days."
+  },
+  "skill.carpentry.desc": {
+    "zh": "修造（官员）：降低修理费用（−修造/20%）；≥ 60 可在海上小修。修造岗位要求 ≥ 20。每 90 个在岗海上日 +1。",
+    "en": "Carpentry (officers): cuts repair fees (−skill/20%); 60+ allows minor repair at sea. The carpenter post requires 20+. Grows +1 per 90 in-post sea-days."
+  },
+  "skill.cooking.desc": {
+    "zh": "烹饪（官员）：降低每日士气损耗（−烹饪/25）。厨师岗位要求 ≥ 20。每 90 个在岗海上日 +1。",
+    "en": "Cooking (officers): reduces daily morale decay (−skill/25). The cook post requires 20+. Grows +1 per 90 in-post sea-days."
   }
 }

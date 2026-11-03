@@ -144,6 +144,12 @@ func detail_officer() -> String:
 	return _detail_officer
 
 
+## Opens the detail page for `officer_id` (the row-click path; the window and
+## the tests call this directly).
+func open_detail(officer_id: String) -> void:
+	_on_row_pressed(officer_id)
+
+
 ## The officer ids currently rendered, in display order (§4.6.2: sorted by id).
 func officer_ids() -> Array:
 	var out: Array = []
@@ -290,7 +296,10 @@ func _add_table_header() -> void:
 			if _stat_mode == MODE_SKILLS
 			else I18n.t_key("char.attr.%s" % str(key)),
 			COL_STAT_W, PaletteLib.ACCENT)
-		header.get_child(header.get_child_count() - 1).name = "Stat_%s" % str(key)
+		var head: Label = header.get_child(header.get_child_count() - 1)
+		head.name = "Stat_%s" % str(key)
+		head.tooltip_text = _stat_desc(str(key))
+		head.mouse_filter = Control.MOUSE_FILTER_STOP
 	_table.add_child(header)
 
 
@@ -347,6 +356,10 @@ func _build_row(officer_id: String, officer: Dictionary) -> Control:
 			else int((officer.get("attributes", {}) as Dictionary).get(str(key), 0))
 		var cell := _cell(line, str(value), COL_STAT_W, PaletteLib.TEXT)
 		cell.name = "Stat_%s" % str(key)
+		# The table is the only place these numbers appear (the detail card
+		# omits the stat blocks), so each column carries the same hover
+		# explanation the card's rows use (§4.12.1 amended).
+		cell.tooltip_text = _stat_desc(str(key))
 		widgets["cells"][str(key)] = cell
 
 	# The add lives at the CALL SITE (`_build_table`); `_build_row` only
@@ -365,6 +378,17 @@ func _on_row_gui_input(event: InputEvent, officer_id: String) -> void:
 			or event.keycode == KEY_SPACE)
 	if clicked or keyed:
 		_on_row_pressed(officer_id)
+
+
+## The hover explanation for a stat id (`char.attr.<key>.desc` /
+## `skill.<key>.desc`; amended 2026-11-03). Empty when absent, so a missing
+## string degrades to "no tooltip" rather than to a raw "<key>".
+func _stat_desc(key: String) -> String:
+	var ui_key := "char.attr.%s.desc" % key \
+		if key in CharacterLib.ATTRIBUTES else "skill.%s.desc" % key
+	if not DataLoader.ui_strings.has(ui_key):
+		return ""
+	return I18n.t_key(ui_key)
 
 
 ## One table cell: a 13px label with a fixed width (the §4.8 sizing grid).
@@ -403,7 +427,9 @@ func _build_detail(officer_id: String) -> void:
 	_detail_back.text = I18n.t_key("ui.back")
 	_detail_back.grab_focus()
 
-	# The full §4.12 officer card (not the compact table row).
+	# The §4.12 officer card (amended 2026-11-03: the stat blocks are omitted
+	# here — the table above already owns the attribute/skill columns, and
+	# repeating them pushed the actions below the fold).
 	if _detail_card != null:
 		_detail_card.queue_free()
 	var card: Control = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
@@ -412,7 +438,7 @@ func _build_detail(officer_id: String) -> void:
 	_detail_card_scroll.add_child(card)
 	_detail_card = card
 	card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
-		CardLib.KIND_OFFICER, officer_id, {}))
+		CardLib.KIND_OFFICER, officer_id, {"stat_blocks": false}))
 
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	_detail_line.name = "DetailLine"

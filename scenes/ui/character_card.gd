@@ -102,6 +102,7 @@ static func card_data(kind: String, person_id: String,
 		"person_id": person_id,
 		"compact": bool(options.get("compact", false)),
 		"alloc": bool(options.get("alloc", false)),
+		"stat_blocks": bool(options.get("stat_blocks", true)),
 		"name": "",
 		"nation_id": "",
 		"role_id": "",
@@ -330,11 +331,24 @@ func _rebuild() -> void:
 	var compact := bool(_data.get("compact", false))
 
 	_body.add_child(_build_identity(compact))
-	_body.add_child(_section_header(_t("char.card.attributes"),
-		"AttributesHeader"))
-	_body.add_child(_build_attributes(compact))
-	_body.add_child(_section_header(_t("char.card.skills"), "SkillsHeader"))
-	_body.add_child(_build_skills(compact))
+	if not bool(_data.get("stat_blocks", true)):
+		# The officers detail page (amended 2026-11-03): the table already
+		# shows every attribute and skill, so the detail card omits the blocks
+		# entirely rather than rendering them empty.
+		pass
+	elif compact:
+		# Compact hosts (the officers table row) keep the plain stacked form;
+		# the table itself owns the column layout.
+		_body.add_child(_section_header(_t("char.card.attributes"),
+			"AttributesHeader"))
+		_body.add_child(_build_attributes(compact))
+		_body.add_child(_section_header(_t("char.card.skills"),
+			"SkillsHeader"))
+		_body.add_child(_build_skills(compact))
+	else:
+		# Attributes on the left, skills on the right (amended 2026-11-03):
+		# one two-column block halves the card height.
+		_body.add_child(_build_stat_columns())
 	if not compact:
 		var tags := _build_tags()
 		if tags != null and tags.get_child_count() > 0:
@@ -437,8 +451,37 @@ func _nation_color() -> Color:
 		else PaletteLib.PORT_NEUTRAL
 
 
+## The two-column stat block: attributes left, skills right (amended
+## 2026-11-03 — the stacked form ran the card to 1151px, which is what pushed
+## the intel window past the screen). Each column keeps its own section header
+## so the grouping stays obvious.
+func _build_stat_columns() -> Control:
+	var columns := HBoxContainer.new()
+	columns.name = "StatColumns"
+	columns.add_theme_constant_override("separation", PaletteLib.MARGIN)
+
+	var left := VBoxContainer.new()
+	left.name = "AttributeColumn"
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_theme_constant_override("separation", 4)
+	left.add_child(_section_header(_t("char.card.attributes"),
+		"AttributesHeader"))
+	left.add_child(_build_attributes(false))
+	columns.add_child(left)
+
+	var right := VBoxContainer.new()
+	right.name = "SkillColumn"
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 4)
+	right.add_child(_section_header(_t("char.card.skills"), "SkillsHeader"))
+	right.add_child(_build_skills(false))
+	columns.add_child(right)
+	return columns
+
+
 ## The five attribute bars (1–100), each row `Attr_<key>` with
 ## Name / Bar / Value (+ the §4.12.2 `Plus` stepper on the player card).
+## Every row explains what the attribute feeds on hover (amended 2026-11-03).
 func _build_attributes(compact: bool) -> Control:
 	var box := VBoxContainer.new()
 	box.name = "Attributes"
@@ -452,9 +495,12 @@ func _build_attributes(compact: bool) -> Control:
 		var row := HBoxContainer.new()
 		row.name = "Attr_%s" % key
 		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		# Hover explanation (`50-*` §4.2.1 verbatim, in ui_strings).
+		row.tooltip_text = _desc("char.attr.%s.desc" % key)
 		var name_label := _label(_t("char.attr.%s" % key), PaletteLib.TEXT)
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
+		name_label.tooltip_text = row.tooltip_text
 		row.add_child(name_label)
 		row.add_child(_bar(value, CharacterLib.ATTR_MAX, PaletteLib.SEA,
 			"Bar", bar_w))
@@ -494,10 +540,13 @@ func _build_skills(compact: bool) -> Control:
 		var row := HBoxContainer.new()
 		row.name = "Skill_%s" % key_name
 		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		# Hover explanation (`50-*` §4.3.1/§4.3.2 verbatim, in ui_strings).
+		row.tooltip_text = _desc("skill.%s.desc" % key_name)
 		var name_label := _label(_t("skill.%s" % key_name),
 			PaletteLib.PANEL_LINE if (unlearned or grayed) else PaletteLib.TEXT)
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
+		name_label.tooltip_text = row.tooltip_text
 		row.add_child(name_label)
 		var color := PaletteLib.PANEL_LINE
 		if not unlearned:
@@ -798,7 +847,7 @@ func _refresh_allocation() -> void:
 	for key in _draft:
 		spent += maxi(0, int(_draft[key]))
 	for key in CharacterLib.ATTRIBUTES:
-		var row := _body.get_node_or_null("Attributes/Attr_%s" % key)
+		var row := _attribute_row(str(key))
 		if row == null:
 			continue
 		var key_name := str(key)
@@ -825,6 +874,18 @@ func _refresh_allocation() -> void:
 
 # --- Widget helpers ---------------------------------------------------------
 
+## The attribute row node, wherever the layout puts it (amended 2026-11-03:
+## the full card nests it under `StatColumns/AttributeColumn`, the compact card
+## keeps it at the top level). Null when the card has no attribute block
+## (the officers detail page).
+func _attribute_row(key: String) -> Node:
+	for path in ["StatColumns/AttributeColumn/Attributes/Attr_%s" % key,
+			"Attributes/Attr_%s" % key]:
+		var row := _body.get_node_or_null(path)
+		if row != null:
+			return row
+	return null
+
 ## `ui_strings` key first, the card's fallback table second (the W5-C
 ## `_inform_text` pattern — the residual merge is W6-D's).
 static func _t(key: String) -> String:
@@ -839,6 +900,15 @@ static func _fmt(key: String, values: Dictionary = {}) -> String:
 	for name in values:
 		text = text.replace("{%s}" % name, str(values[name]))
 	return text
+
+
+## The hover explanation for a stat id (`char.attr.<key>.desc` /
+## `skill.<key>.desc`, amended 2026-11-03). Empty when the key is absent, so a
+## missing string degrades to "no tooltip" rather than to a raw "<key>".
+static func _desc(key: String) -> String:
+	if not DataLoader.ui_strings.has(key):
+		return ""
+	return I18n.t_key(key)
 
 
 func _tier_badge(tier: int) -> Control:

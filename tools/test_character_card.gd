@@ -180,11 +180,11 @@ func _test_card_sections_per_kind() -> void:
 		"the flag block renders the nation color")
 	_check(player.section("Identity/Portrait") != null,
 		"the portrait is a color block (placeholder art, §4.8)")
-	_check(player.section("Attributes/Attr_constitution") != null
-		and player.section("Attributes/Attr_luck") != null,
+	_check(player.section("StatColumns/AttributeColumn/Attributes/Attr_constitution") != null
+		and player.section("StatColumns/AttributeColumn/Attributes/Attr_luck") != null,
 		"the five attribute bars render (values 1–100)")
-	_check(player.section("Skills/Skill_navigation") != null
-		and player.section("Skills/Skill_medicine") != null,
+	_check(player.section("StatColumns/SkillColumn/Skills/Skill_navigation") != null
+		and player.section("StatColumns/SkillColumn/Skills/Skill_medicine") != null,
 		"the skill bars render incl. the grayed officer skills")
 	_check(player.section("Relations") != null
 		and player.section("Career/Xp") != null,
@@ -194,15 +194,15 @@ func _test_card_sections_per_kind() -> void:
 	_check(player.section("Allocation") != null
 		and player.section("Allocation/Buttons/Confirm") != null,
 		"the allocation footer renders with alloc data set (§4.12.2)")
-	_check(player.section("Attributes/Attr_constitution/Plus") != null,
+	_check(player.section("StatColumns/AttributeColumn/Attributes/Attr_constitution/Plus") != null,
 		"the per-attribute + stepper renders (enabled iff pending > 0)")
-	var skill_plus: Node = player.section("Skills/Skill_navigation/Plus")
+	var skill_plus: Node = player.section("StatColumns/SkillColumn/Skills/Skill_navigation/Plus")
 	_check(skill_plus == null, "skills never allocate (§4.12.2)")
 	_unmount_card(player)
 
 	_make_run()
 	var officer := _mount_card(CardLib.KIND_OFFICER, MATEUS)
-	_check(officer.section("Skills").get_child_count() == 11,
+	_check(officer.section("StatColumns/SkillColumn/Skills").get_child_count() == 11,
 		"the officer card shows all 11 skill bars")
 	_check(officer.section("Tags/Personality") != null,
 		"the officer card renders the personality tags")
@@ -218,7 +218,7 @@ func _test_card_sections_per_kind() -> void:
 	_unmount_card(officer)
 
 	var npc := _mount_card(CardLib.KIND_NPC, CAPTAIN)
-	_check(npc.section("Skills").get_child_count() == 8,
+	_check(npc.section("StatColumns/SkillColumn/Skills").get_child_count() == 8,
 		"the NPC card shows the 8 skills")
 	_check(npc.section("Identity/TierBadge") != null,
 		"the tier badge renders on the NPC card")
@@ -239,7 +239,7 @@ func _test_identify_is_full_reveal() -> void:
 	CaptainsLib.ensure(CAPTAIN)
 	# An UNMET-tier captain (familiarity 0): every card number renders anyway.
 	var npc := _mount_card(CardLib.KIND_NPC, CAPTAIN)
-	var skills_box: Container = npc.section("Skills")
+	var skills_box: Container = npc.section("StatColumns/SkillColumn/Skills")
 	for child in skills_box.get_children():
 		var value: String = (child.get_node("Value") as Label).text
 		_check(not value.begins_with("<") and not value.contains("??"),
@@ -303,15 +303,15 @@ func _test_player_split_math() -> void:
 func _test_allocation_flow() -> void:
 	_make_run(4)
 	var player := _mount_card(CardLib.KIND_PLAYER, "", {"alloc": true})
-	var luck_plus: Button = player.section("Attributes/Attr_luck/Plus")
-	var con_plus: Button = player.section("Attributes/Attr_constitution/Plus")
+	var luck_plus: Button = player.section("StatColumns/AttributeColumn/Attributes/Attr_luck/Plus")
+	var con_plus: Button = player.section("StatColumns/AttributeColumn/Attributes/Attr_constitution/Plus")
 	_check(not luck_plus.disabled, "steppers enable iff alloc_pending > 0")
 	luck_plus.pressed.emit()
 	luck_plus.pressed.emit()
 	_check(player.alloc_draft() == {"luck": 2},
 		"the local draft gains one point per press (%s)"
 		% str(player.alloc_draft()))
-	var luck_value: Label = player.section("Attributes/Attr_luck/Value")
+	var luck_value: Label = player.section("StatColumns/AttributeColumn/Attributes/Attr_luck/Value")
 	_check(luck_value.text == "12 +2",
 		"the row shows the drafted value with its delta (%s)" % luck_value.text)
 	# Cancel rolls the draft back; live state untouched.
@@ -335,7 +335,7 @@ func _test_allocation_flow() -> void:
 	GameState.player["attributes"]["constitution"] = 100
 	player.setup_person(CardLib.KIND_PLAYER, CardLib.card_data(
 		CardLib.KIND_PLAYER, "", {"alloc": true}))
-	var con_plus2: Button = player.section("Attributes/Attr_constitution/Plus")
+	var con_plus2: Button = player.section("StatColumns/AttributeColumn/Attributes/Attr_constitution/Plus")
 	_check(con_plus2.disabled,
 		"an attribute at 100 disables its stepper (the clamp)")
 	_check(con_plus2.tooltip_text == I18n.t_key("creation.cap_reached"),
@@ -346,7 +346,7 @@ func _test_allocation_flow() -> void:
 	GameState.player["alloc_pending"] = 0
 	player.setup_person(CardLib.KIND_PLAYER, CardLib.card_data(
 		CardLib.KIND_PLAYER, "", {"alloc": true}))
-	var luck_plus2: Button = player.section("Attributes/Attr_luck/Plus")
+	var luck_plus2: Button = player.section("StatColumns/AttributeColumn/Attributes/Attr_luck/Plus")
 	_check(luck_plus2.disabled, "pending 0 disables the steppers (deferrable)")
 	_unmount_card(player)
 
@@ -569,8 +569,15 @@ func _test_three_entry_card_identity() -> void:
 		"Body/Detail/DetailCardScroll/DetailCard")
 	_check(str(row_card.rendered_data()["person_id"]) == MATEUS,
 		"the S18 detail renders the same officer card data")
-	_check(_data_only(row_card.rendered_data()) == recruit_data,
-		"the same OFFICER's card is identical from the recruit dialog and S18")
+	# The data stays identical; the S18 detail page renders with
+	# `stat_blocks: false` because its table already owns the columns
+	# (§4.12.1 amended 2026-11-03 — a rendering option, not a data fork).
+	var detail_data := _data_only(row_card.rendered_data())
+	recruit_data.erase("stat_blocks")
+	detail_data.erase("stat_blocks")
+	_check(detail_data == recruit_data,
+		"the same OFFICER's card data is identical from the recruit dialog "
+		+ "and S18 (the detail only opts out of the stat blocks)")
 	panel.queue_free()
 	_drop(panel)
 	_drop(tavern)
@@ -668,25 +675,32 @@ func _test_s14_tabs() -> void:
 		"the captain view renders the player card (the merged single page)")
 	_check(card.section("Allocation") != null,
 		"the page carries the allocation steppers (§4.12.2)")
-	_check(card.section("Skills") != null,
+	_check(card.section("StatColumns/SkillColumn/Skills") != null,
 		"the SAME page also carries the skill bars — no attribute/skill "
 		+ "duplication from the retired tab split (§4.12 amendment)")
+	_check(card.section("StatColumns/AttributeColumn/Attributes") != null
+		and card.section("StatColumns/SkillColumn/Skills") != null,
+		"attributes and skills sit side by side in one two-column block "
+		+ "(§4.12.1 amended 2026-11-03)")
 	# Stage a draft, then refresh: the draft survives the rebuild (§4.12.2).
-	var luck_plus: Button = card.section("Attributes/Attr_luck/Plus")
+	var luck_plus: Button = card.section(
+		"StatColumns/AttributeColumn/Attributes/Attr_luck/Plus")
 	luck_plus.pressed.emit()
 	_check(card.alloc_draft() == {"luck": 1}, "the stepper stages the draft")
 	view.refresh()
 	_check(view.player_card().alloc_draft() == {"luck": 1},
 		"an in-progress draft survives the view refresh (§4.12.2)")
-	var reputation: Container = view.get_node("Body/ReputationRows")
-	_check(reputation.get_child_count() == DataLoader.nations_list.size() * 2,
-		"the reputation table renders all six nations")
-	var gates: Container = view.get_node("Body/GateScroll/GateRows")
+	_check(view.get_node_or_null(
+		"Body/Page/Sections/ReputationRows") == null,
+		"the reputation table moved to its own 声望 tab (§4.5 amended)")
+	var gates: Container = view.get_node("Body/Page/Sections/GateRows")
 	_check(gates.get_child_count() == DataLoader.skill_gates_list.size(),
 		"the page renders every skill_gates row (§4.12.3)")
 	var first_gate: Control = gates.get_child(0)
-	_check(first_gate.get_node("Reason") != null,
-		"each gate row renders its reason line (the shared renderer)")
+	_check(not first_gate.tooltip_text.is_empty(),
+		"each gate row states its reason on hover (§4.12.3 amended)")
+	_check(first_gate.get_node("Progress") != null,
+		"each gate row shows the current/threshold progress")
 	var gate_name: Label = first_gate.get_node("Feature")
 	_check(gate_name != null \
 		and gate_name.text == I18n.t(DataLoader.skill_gates_list[0]["name"]),

@@ -1,0 +1,45 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/ui_shared/reputation_view.gd" id="1_repview"]
+
+[node name="ReputationView" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+clip_contents = true
+script = ExtResource("1_repview")
+
+[node name="Body" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 1
+grow_vertical = 1
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Body"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="Page" type="ScrollContainer" parent="Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 2
+
+[node name="Sections" type="VBoxContainer" parent="Body/Page"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Rows" type="GridContainer" parent="Body/Page/Sections"]
+layout_mode = 2
+columns = 2
+
+[node name="Hint" type="Label" parent="Body/Page/Sections"]
+layout_mode = 2
+autowrap_mode = 3

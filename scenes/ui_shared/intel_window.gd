@@ -37,6 +37,7 @@ const MODAL_GROUP := "modal_overlay"
 
 ## Tab ids (docs/80-* §4.5; `char.quests` keeps its id from the retired S14).
 const TAB_CAPTAIN := "captain"
+const TAB_REPUTATION := "reputation"
 const TAB_OFFICERS := "officers"
 const TAB_FLEET := "fleet"
 const TAB_CHART := "chart"
@@ -47,21 +48,18 @@ const TAB_QUESTS := "quests"
 @onready var _title: Label = $Center/Panel/Margin/Body/TitleRow/Title
 @onready var _close_button: Button = $Center/Panel/Margin/Body/TitleRow/Close
 @onready var _captain_tab: Button = $Center/Panel/Margin/Body/Tabs/CaptainTab
+@onready var _reputation_tab: Button = $Center/Panel/Margin/Body/Tabs/ReputationTab
 @onready var _officers_tab: Button = $Center/Panel/Margin/Body/Tabs/OfficersTab
 @onready var _fleet_tab: Button = $Center/Panel/Margin/Body/Tabs/FleetTab
 @onready var _chart_tab: Button = $Center/Panel/Margin/Body/Tabs/ChartTab
 @onready var _quests_tab: Button = $Center/Panel/Margin/Body/Tabs/QuestsTab
 @onready var _captain_view: Control = \
 	$Center/Panel/Margin/Body/Content/CaptainView
+@onready var _reputation_view: Control = \
+	$Center/Panel/Margin/Body/Content/ReputationView
 @onready var _officers_view: Control = \
 	$Center/Panel/Margin/Body/Content/OfficerRosterView
 @onready var _fleet_view: Control = $Center/Panel/Margin/Body/Content/FleetView
-@onready var _chart_box: VBoxContainer = \
-	$Center/Panel/Margin/Body/Content/ChartBox
-@onready var _chart_note: Label = \
-	$Center/Panel/Margin/Body/Content/ChartBox/ChartNote
-@onready var _open_chart: Button = \
-	$Center/Panel/Margin/Body/Content/ChartBox/OpenChart
 @onready var _quests_box: VBoxContainer = \
 	$Center/Panel/Margin/Body/Content/QuestsBox
 @onready var _quest_slots: Label = \
@@ -122,18 +120,19 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
 	_panel.add_theme_stylebox_override("panel", _panel_style())
-	for label in [_title, _chart_note, _quest_slots]:
+	for label in [_title, _quest_slots]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_quest_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_close_button.pressed.connect(close)
-	_open_chart.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-	_open_chart.pressed.connect(_on_open_chart_pressed)
 	_captain_tab.pressed.connect(select_tab.bind(TAB_CAPTAIN))
+	_reputation_tab.pressed.connect(select_tab.bind(TAB_REPUTATION))
 	_officers_tab.pressed.connect(select_tab.bind(TAB_OFFICERS))
 	_fleet_tab.pressed.connect(select_tab.bind(TAB_FLEET))
-	_chart_tab.pressed.connect(select_tab.bind(TAB_CHART))
+	# 海图 is an ACTION tab (amended 2026-11-03): pressing it closes this
+	# window and enters the fullscreen chart directly — it is not a page.
+	_chart_tab.pressed.connect(_on_chart_tab_pressed)
 	_quests_tab.pressed.connect(select_tab.bind(TAB_QUESTS))
 
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -219,10 +218,16 @@ func open_tab(tab: String) -> void:
 		# No run in progress (title/editor): an empty window is worse than a
 		# no-op, exactly like the retired panels' open() guard.
 		return
-	if tab in [TAB_CAPTAIN, TAB_OFFICERS, TAB_FLEET, TAB_CHART, TAB_QUESTS]:
+	if tab in [TAB_CAPTAIN, TAB_REPUTATION, TAB_OFFICERS, TAB_FLEET,
+			TAB_CHART, TAB_QUESTS]:
 		_tab = tab
 	visible = true
 	add_to_group(MODAL_GROUP)
+	# 海图 in the whitelist is on purpose: `select_tab` treats it as the action
+	# (it closes the window and enters S17), so `open_tab(TAB_CHART)` must not
+	# first remember it as a page.
+	if _tab == TAB_CHART:
+		_tab = TAB_CAPTAIN
 	select_tab(_tab)
 	_close_button.grab_focus()
 
@@ -261,14 +266,20 @@ func active_tab() -> String:
 
 
 ## Switches tabs (§4.5). Unknown ids are ignored; the choice is session-only.
+## 海图 is not a page (amended 2026-11-03): it is an ACTION that closes this
+## window and enters the fullscreen chart, so it never becomes the active tab.
 func select_tab(tab: String) -> void:
-	if tab not in [TAB_CAPTAIN, TAB_OFFICERS, TAB_FLEET, TAB_CHART, TAB_QUESTS]:
+	if tab == TAB_CHART:
+		_on_chart_tab_pressed()
+		return
+	if tab not in [TAB_CAPTAIN, TAB_REPUTATION, TAB_OFFICERS, TAB_FLEET,
+			TAB_QUESTS]:
 		return
 	_tab = tab
 	_captain_view.visible = tab == TAB_CAPTAIN
+	_reputation_view.visible = tab == TAB_REPUTATION
 	_officers_view.visible = tab == TAB_OFFICERS
 	_fleet_view.visible = tab == TAB_FLEET
-	_chart_box.visible = tab == TAB_CHART
 	_quests_box.visible = tab == TAB_QUESTS
 	_bind_tabs()
 	if visible:
@@ -281,20 +292,19 @@ func _refresh() -> void:
 	_title.text = I18n.t_key("ui.intel")
 	_hint.text = I18n.t_key("intel.hint")
 	_close_button.text = I18n.t_key("ui.close")
-	_chart_note.text = I18n.t_key("intel.chart.note")
-	_open_chart.text = I18n.t_key("intel.open_chart")
 	match _tab:
 		TAB_CAPTAIN:
 			if _captain_view.has_method("refresh"):
 				_captain_view.call("refresh")
+		TAB_REPUTATION:
+			if _reputation_view.has_method("refresh"):
+				_reputation_view.call("refresh")
 		TAB_OFFICERS:
 			if _officers_view.has_method("rebuild"):
 				_officers_view.call("rebuild")
 		TAB_FLEET:
 			if _fleet_view.has_method("rebuild"):
 				_fleet_view.call("rebuild")
-		TAB_CHART:
-			pass
 		TAB_QUESTS:
 			_build_quests()
 
@@ -302,6 +312,7 @@ func _refresh() -> void:
 func _bind_tabs() -> void:
 	for pair in [
 		[TAB_CAPTAIN, _captain_tab, "char.title"],
+		[TAB_REPUTATION, _reputation_tab, "char.reputation"],
 		[TAB_OFFICERS, _officers_tab, "officers.title"],
 		[TAB_FLEET, _fleet_tab, "fleet.title"],
 		[TAB_CHART, _chart_tab, "chart.title"],
@@ -309,16 +320,18 @@ func _bind_tabs() -> void:
 	]:
 		var button: Button = pair[1]
 		button.text = I18n.t_key(str(pair[2]))
-		var active: bool = _tab == str(pair[0])
+		# 海图 is an action, never "active" (§4.5 amended).
+		var active: bool = _tab == str(pair[0]) and str(pair[0]) != TAB_CHART
 		button.button_pressed = active
 		button.add_theme_color_override(
 			"font_color", PaletteLib.ACCENT if active else PaletteLib.TEXT
 		)
 
 
-## The 海图 tab's launcher: closes this window (the chart is a fullscreen
-## modal of its own, §4.6 — never stacked) and toggles S17.
-func _on_open_chart_pressed() -> void:
+## The 海图 entry: closes this window (the chart is a fullscreen modal of its
+## own, §4.6 — never stacked) and enters S17. Amended 2026-11-03: the tab is a
+## direct entry, not a launcher page.
+func _on_chart_tab_pressed() -> void:
 	var chart := _find_chart()
 	if chart == null or not chart.has_method("toggle_chart"):
 		return
@@ -457,8 +470,6 @@ func _on_locale_changed(_locale: String) -> void:
 	_title.text = I18n.t_key("ui.intel")
 	_hint.text = I18n.t_key("intel.hint")
 	_close_button.text = I18n.t_key("ui.close")
-	_chart_note.text = I18n.t_key("intel.chart.note")
-	_open_chart.text = I18n.t_key("intel.open_chart")
 	_bind_tabs()
 	# Rebuild the content while open so a locale toggle mid-window is instant
 	# (§6).
