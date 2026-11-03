@@ -693,7 +693,7 @@ func _test_s14_tabs() -> void:
 	s14.queue_free()
 
 
-# --- 10. The HUD badge (§4.12.2) ---------------------------------------------
+# --- 10. The HUD badge (§4.12.2, amended 2026-11-03) ------------------------
 
 func _test_hud_badge() -> void:
 	_make_run(0)
@@ -702,10 +702,11 @@ func _test_hud_badge() -> void:
 	add_child(host)
 	var hud: Control = HudScene.instantiate()
 	host.add_child(hud)
-	var badge: Control = hud.get_node(
-		"TopRow/CharacterButton/CharBadge")
+	# The badge rides the §4.5 intel button since the top-bar character
+	# button's removal (the menu's 船长 item is the S14 path).
+	var badge: Control = hud.get_node("TopRow/IntelButton/CharBadge")
 	var count: Label = hud.get_node(
-		"TopRow/CharacterButton/CharBadge/BadgeCount")
+		"TopRow/IntelButton/CharBadge/BadgeCount")
 	_check(not badge.visible, "pending 0 hides the badge")
 	GameState.player["alloc_pending"] = 3
 	hud._apply_alloc_badge()
@@ -716,14 +717,18 @@ func _test_hud_badge() -> void:
 	GameState.player["alloc_pending"] = 0
 	hud._apply_alloc_badge()
 	_check(not badge.visible, "the badge clears when pending hits 0")
-	# The character button opens (and toggles) the S14 panel on the host.
-	var button: Button = hud.get_node("TopRow/CharacterButton")
-	button.pressed.emit()
-	var panel := host.get_node_or_null("CharacterPanel")
+	# The intel menu's 船长 item opens (and toggles) the S14 panel on the host
+	# the HUD resolves (`_panel_host()` — the scene root, where the host's own
+	# `C` attach also lands; idempotent reuse, §4.5).
+	hud.press_intel_item(hud.INTEL_CAPTAIN)
+	var panel: Node = hud._panel_host().get_node_or_null(
+		"CharacterPanelLayer/CharacterPanel")
 	_check(panel != null and panel.is_open(),
-		"the character button opens the S14 panel (§4.12.2)")
-	button.pressed.emit()
-	_check(not panel.is_open(), "the button toggles the panel closed")
+		"the intel 船长 item opens the S14 panel (§4.12.2)")
+	hud.press_intel_item(hud.INTEL_CAPTAIN)
+	_check(not panel.is_open(), "the item toggles the panel closed")
+	_check(hud.get_node_or_null("TopRow/CharacterButton") == null,
+		"the top-bar character button is removed (§4.5 amendment)")
 	_drop(hud)
 	_drop(host)
 

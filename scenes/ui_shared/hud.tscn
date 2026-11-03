@@ -53,12 +53,19 @@ layout_mode = 2
 text = "Morale -"
 vertical_alignment = 1
 
-[node name="CharacterButton" type="Button" parent="TopRow"]
-custom_minimum_size = Vector2(110, 32)
+[node name="Area" type="Label" parent="TopRow"]
 layout_mode = 2
-text = "Captain (C)"
+size_flags_horizontal = 3
+text = "-"
+vertical_alignment = 1
 
-[node name="CharBadge" type="PanelContainer" parent="TopRow/CharacterButton"]
+[node name="IntelButton" type="MenuButton" parent="TopRow"]
+custom_minimum_size = Vector2(96, 32)
+layout_mode = 2
+text = "Intel"
+tooltip_text = "Intel"
+
+[node name="CharBadge" type="PanelContainer" parent="TopRow/IntelButton"]
 visible = false
 layout_mode = 1
 anchors_preset = 1
@@ -72,30 +79,18 @@ grow_horizontal = 0
 mouse_filter = 2
 tooltip_text = "Points to allocate"
 
-[node name="BadgeDot" type="ColorRect" parent="TopRow/CharacterButton/CharBadge"]
+[node name="BadgeDot" type="ColorRect" parent="TopRow/IntelButton/CharBadge"]
 layout_mode = 2
 mouse_filter = 2
 color = Color(0.701961, 0.203922, 0.121569, 1)
 
-[node name="BadgeCount" type="Label" parent="TopRow/CharacterButton/CharBadge"]
+[node name="BadgeCount" type="Label" parent="TopRow/IntelButton/CharBadge"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 12
 text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
-
-[node name="Area" type="Label" parent="TopRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "-"
-vertical_alignment = 1
-
-[node name="IntelButton" type="MenuButton" parent="TopRow"]
-custom_minimum_size = Vector2(96, 32)
-layout_mode = 2
-text = "Intel"
-tooltip_text = "Intel"
 
 [node name="BottomBar" type="ColorRect" parent="."]
 layout_mode = 1

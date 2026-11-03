@@ -27,7 +27,9 @@ extends Node
 ##     common target, hold cap ⌊(free+P+W)/2⌋, piecewise purse cap), buy-only
 ##     plans running at once, discard-bearing plans confirm-first, the
 ##     disabled no-op reason and the zh rebind;
-##  10 the S18 officers panel opens from the `O` key and the footer row.
+##  10 the S18 officers panel opens from the `O` key and the shared open
+##     path (the §4.5 intel menu's 官员 item — the footer button was removed
+##     2026-11-03).
 
 const PortScene := preload("res://scenes/port/port_screen.tscn")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -1257,30 +1259,24 @@ func _test_officers_panel_entry() -> void:
 	_check(not panel.is_open(), "`O` closes it again (§4.3 toggle)")
 	_check(not hub.has_modal(), "a closed panel is no longer a modal")
 
-	# The footer button beside Fleet (docs/80-* §4.6.2 "entry point (locked)"):
-	# S18 is a modal over S4, so it belongs with the footer modals, not in the
-	# facility column (which is reserved for rows that leave S4 for a screen).
-	var row: Button = hub.officers_row()
-	_check(row != null, "S4's footer carries an Officers button")
-	if row != null:
-		_check(row.text == I18n.t_key("officers.title"),
-			"the Officers button is localised (%s)" % row.text)
-		_check(not row.has_meta("facility_id"),
-			"the Officers button is not a facility (no facility_id meta)")
-		_check(not hub.facility_row_ids().has("officers"),
-			"…so it never enters facility_row_ids (§4.1 order is untouched)")
-		var fleet_button: Button = hub.get_node("Layout/VBox/Footer/Fleet")
-		_check(row.get_parent() == fleet_button.get_parent(),
-			"the Officers button shares the footer with Fleet")
-		_check(row.get_index() == fleet_button.get_index() + 1,
-			"…and sits immediately after it (%d vs %d)"
-			% [row.get_index(), fleet_button.get_index()])
-		_check(row.custom_minimum_size.y == 40.0,
-			"the Officers button uses the 40px button height (§4.8)")
-		row.pressed.emit()
-		await get_tree().process_frame
-		_check(panel.is_open(), "the footer Officers button opens the panel")
-		panel.close()
+	# Amended 2026-11-03 (docs/80-* §4.6.2/§4.5): the footer `Fleet ·
+	# Officers` buttons were removed as §4.5-intel-menu duplicates. S18's
+	# entries are the intel menu's 官员 item, the `O` key (exercised above)
+	# and S14's Officers button; the hub pins the absence and the
+	# facility column staying untouched (no "officers" row ever existed).
+	_check(not hub.has_method("officers_row"),
+		"the removed footer accessor is gone (officers_row)")
+	_check(hub.get_node_or_null("Layout/VBox/Footer/Officers") == null,
+		"the port hub footer no longer carries an Officers button")
+	_check(hub.get_node_or_null("Layout/VBox/Footer/Fleet") == null,
+		"…nor a Fleet button (both live in the §4.5 intel menu)")
+	_check(not hub.facility_row_ids().has("officers"),
+		"the facility column never enters an officers row (§4.1 order)")
+	# The open path the menu and the key share still opens the panel.
+	hub.open_officers_panel()
+	await get_tree().process_frame
+	_check(panel.is_open(), "open_officers_panel() opens S18 (the shared path)")
+	panel.close()
 
 	# Esc is behind the modal rule: it closes the panel, never Set Sail.
 	panel.open()

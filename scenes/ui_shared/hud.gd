@@ -36,7 +36,9 @@ const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const DialogBoxScene := preload("res://scenes/ui_shared/dialog_box.tscn")
 const ConfirmScene := preload("res://scenes/ui_shared/confirm_dialog.tscn")
 ## §4.12.2 (W6-A): the character button's alloc_pending badge reads the
-## persisted counter; the button itself opens the S14 panel on the host.
+## persisted counter (amended 2026-11-03: the badge rides the §4.5 intel
+## button — the top-bar character button was removed as an intel-menu
+## duplicate; the menu's 船长 item opens the same S14 panel).
 const CharacterLib := preload("res://scripts/player/character.gd")
 const CharacterPanelLib := preload("res://scenes/ui_shared/character_panel.gd")
 ## §4.5 intel menu (§4.2 amendment, 2026-11-03): the dropdown opens the same
@@ -126,14 +128,13 @@ signal explore_requested
 @onready var _trim_chip: Label = $BottomRow/TrimChip
 @onready var _wind_label: Label = $WindLabel
 @onready var _current_label: Label = $CurrentLabel
-## §4.12.2 (W6-A): the character button + its alloc_pending badge.
-@onready var _character_button: Button = $TopRow/CharacterButton
-@onready var _char_badge: Control = $TopRow/CharacterButton/CharBadge
-@onready var _char_badge_count: Label = \
-	$TopRow/CharacterButton/CharBadge/BadgeCount
-## §4.5 intel menu: the top-right 情报 MenuButton (S3 + S4; its dropdown
-## opens the five information surfaces — see [method _on_intel_index_pressed]).
+## §4.12.2 (W6-A, amended 2026-11-03): the alloc_pending badge now rides the
+## §4.5 intel button (the 船长 entry is the S14 path since the top-bar
+## character button's removal).
 @onready var _intel_button: MenuButton = $TopRow/IntelButton
+@onready var _char_badge: Control = $TopRow/IntelButton/CharBadge
+@onready var _char_badge_count: Label = \
+	$TopRow/IntelButton/CharBadge/BadgeCount
 
 ## The badge's last shown count (the per-frame diff only touches the label on
 ## change — see [_process]).
@@ -217,22 +218,18 @@ func _ready() -> void:
 	_explore_button.text = I18n.t_key("discovery.explore")
 	_explore_button.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
 	_explore_button.pressed.connect(_on_explore_pressed)
-	# §4.12.2 (W6-A): the character button opens the S14 panel on the host
-	# (the same attach the host's own `C` key uses — attach_to is idempotent).
-	_character_button.text = "%s (C)" % I18n.t_key("char.title")
-	_character_button.custom_minimum_size.y = 32
-	_character_button.pressed.connect(_on_character_pressed)
-	_char_badge.visible = false
-	_apply_alloc_badge()
-	# §4.5 intel menu (§4.2 amendment): the top-right 情报 button. Item labels
-	# rebind on every open (`about_to_popup`), so a locale toggle needs no
-	# popup-level bookkeeping beyond the button text itself.
+	# §4.12.2 (W6-A, amended 2026-11-03): the alloc badge rides the intel
+	# button; §4.5's 船长 item is the S14 path. Item labels rebind on every
+	# open (`about_to_popup`), so a locale toggle needs no popup-level
+	# bookkeeping beyond the button text itself.
 	_intel_button.text = I18n.t_key("ui.intel")
 	_intel_button.tooltip_text = I18n.t_key("ui.intel")
 	_intel_button.custom_minimum_size.y = 32
 	_intel_button.about_to_popup.connect(_on_intel_about_to_popup)
 	_intel_button.get_popup().index_pressed.connect(_on_intel_index_pressed)
 	_rebind_intel_menu()
+	_char_badge.visible = false
+	_apply_alloc_badge()
 	_apply_minimap_rect()
 
 	# The only update path for the bars (docs/80-* §7 acceptance).
@@ -268,7 +265,8 @@ func _on_process_frame() -> void:
 		_apply_alloc_badge()
 
 
-## The badge: a dot + count on the character button, visible iff pending > 0;
+## The badge: a dot + count on the intel button (§4.12.2, amended 2026-11-03),
+## visible iff pending > 0;
 ## it clears when the pending counter hits 0 (spent).
 func _apply_alloc_badge() -> void:
 	if _char_badge == null or _char_badge_count == null:
@@ -295,14 +293,6 @@ func _panel_host() -> Node:
 		return tree.current_scene
 	var parent := get_parent()
 	return parent if parent != null else self
-
-
-## The character button: attaches the S14 panel to the HUD's host screen
-## (idempotent — the host's own `C` attach is reused) and toggles it.
-func _on_character_pressed() -> void:
-	var panel := CharacterPanelLib.attach_to(_panel_host())
-	if panel != null and panel.has_method("toggle"):
-		panel.call("toggle")
 
 
 # --- Intel menu (docs/80-* §4.5, §4.2 amendment 2026-11-03) -----------------
@@ -1054,13 +1044,12 @@ func _on_locale_changed(_locale: String) -> void:
 	# The Phase-3 Explore affordance re-binds with the rest of the HUD.
 	if _explore_button.visible:
 		set_explore_available(true)
-	# §4.12.2 (W6-A): the character button + badge tooltip re-bind too.
-	_character_button.text = "%s (C)" % I18n.t_key("char.title")
-	_apply_alloc_badge()
-	# §4.5 intel menu: the button label re-binds here; the popup item labels
-	# re-bind on the next open (`_on_intel_about_to_popup`).
+	# §4.12.2 (W6-A, amended 2026-11-03): the badge tooltip re-binds through
+	# `_apply_alloc_badge`; §4.5: the button label re-binds here; the popup
+	# item labels re-bind on the next open (`_on_intel_about_to_popup`).
 	_intel_button.text = I18n.t_key("ui.intel")
 	_intel_button.tooltip_text = I18n.t_key("ui.intel")
+	_apply_alloc_badge()
 	# The mutiny dialog re-binds its own labels on the same signal; re-apply the
 	# formatted Pay price (with `{gold}` filled) after it, next idle frame.
 	if _mutiny_dialog != null:

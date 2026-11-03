@@ -101,7 +101,8 @@ S4 ──facility──► S5/S6/S7/S8/S12/S13 ──Back/Esc──► S4
 S4 ──Save──► (slot dialog)
 S3/S4 ──Status──► S14 (modal)
 S3/S4 ──Fleet──► S15 (modal; read-only at sea)
-S4 ──Officers──► S18 (modal; read-only at sea)
+S4 ──Officers──► S18 (modal; read-only at sea) — entries: intel menu 官员,
+        `O`, S14's Officers button (footer button removed, 2026-11-03)
 S3/S4 ──情报 intel menu──► S14 / S18 / S15 / S17 / S14-委托 tab (added
         2026-11-03, §4.5) — the same modals the C / O / F / Tab keys open;
         the dropdown is the mouse path, Commissions opens S14 on the quests
@@ -264,6 +265,11 @@ Layout (1280×720; tile viewport is the space below the top bar):
   opening any entry is ignored while another modal is on screen (§6). The HUD
   only *opens* the shared modal instances the hosts attached — it never
   mutates state (docs/90-* §7 "HUD only reads").
+  **Supersedes the surface duplicates (amended 2026-11-03):** the top-bar
+  船长 character button is removed — its §4.12.2 alloc badge rides the intel
+  button, whose 船长 item opens the same S14 — and S4's footer
+  `Fleet · Officers` buttons are removed (§4.6.2); the hotkeys
+  `C` / `O` / `F` / `Tab` are unchanged.
 - Bottom bar (formats amended 2026-11-02; conventions per `10-*` §3.1,
   `20-*` §4.3, `40-*` §4.4 speed units):
   - **`补给 {amount}（{days}天）` / `Provisions {amount} ({days} days)`** and
@@ -489,16 +495,20 @@ completed purchase still charges its §4.1b hour.
 
 ### 4.6.2 Officers panel (S18, Phase 5 polish)
 
-A dedicated roster screen, opened from **S4's footer, beside the Fleet button**
+A dedicated roster screen, opened from **the 情报 intel menu's 官员 item,
+the `O` key, or S14's Officers button**
 (and from the character panel, `C`) — the Phase-5 officer **summary** in S14's
 right column is, since Phase 8 (2026-11-02), the 官员与岗位 tab (§4.12.3);
 this panel is the detail view.
 
-**Entry point (locked):** S18 is a **modal over S4**, like S15, so it belongs
-with the footer modal buttons (`Save · Set Sail · Fleet · Officers`), **not** in
-the facility list. The facility column is reserved for rows that leave S4 for
-another screen (`§4.2`); a full-width roster row dangling under 公会/王宫 read
-as a seventh facility and was removed.
+**Entry point (amended 2026-11-03):** S18 is a **modal over S4**, opened by
+the intel menu's 官员 item (§4.5), the `O` key, or S14's Officers button.
+The former footer row (`Fleet · Officers`) is **removed as an intel-menu
+duplicate**: the §4.5 menu is the single mouse path to both panels, so the
+S4 footer keeps only `Set Sail · Settings`. (The original "entry point
+(locked)" rule — footer modals row, not the facility list — is superseded
+by the §4.5 menu; the facility column remains reserved for rows that leave
+S4 for another screen, §4.2.)
 
 ```
 +--------------------------------------------------------------+
@@ -557,8 +567,9 @@ nationality card grid again.
 
 **S19 `scenes/ui_shared/settings_panel.tscn`** — a **modal** opened from two
 hosts: the **S1 title screen** (pre-game) and the **S4 port hub** footer
-(mid-run, beside `Save · Set Sail · Fleet · Officers`, §4.6.2's entry-point
-rule). One panel, two mounts.
+(mid-run, beside `Set Sail` — the §4.6.2 amendment removed the footer
+`Fleet · Officers` duplicates in favour of the §4.5 intel menu). One panel,
+two mounts.
 
 ```
 +--------------------------------------------------------------+
@@ -614,7 +625,9 @@ rule). One panel, two mounts.
 - **Save lives here too (amended 2026-10-31):** the S4 mount's `Save` action
   replaces the retired S4 footer row: it opens the same 3-slot dialog
   (§4.7), offered only while docked (`SaveSystem.can_save_here()`). The
-  footer keeps `Set Sail · Fleet · Officers · Settings`; the per-screen
+  footer keeps `Set Sail · Settings` (amended 2026-11-03 — the
+  `Fleet · Officers` duplicates moved into the §4.5 intel menu); the
+  per-screen
   `Esc 返回` hint labels are removed (the Esc bindings themselves stay).
 - **Return to main menu (amended 2026-10-31):** the **S4-hosted** panel shows
   a `Return to main menu` action below the locale row. It is **confirm-first**
@@ -1785,8 +1798,11 @@ the 720px design viewport.
 #### 4.12.2 Allocation UX (level-up points, locked flow)
 
 `award_xp` detects the level-up → toast `char.level_up` +
-`alloc_pending += 2` (**persisted**, save v9) → a badge on the character
-button (`char.points_pending`). The player allocates on **their own
+`alloc_pending += 2` (**persisted**, save v9) → a badge on the **情报 intel
+button** (`char.points_pending`; amended 2026-11-03 — the badge rode the
+retired top-bar character button, and moves with the 船长 entry into the
+§4.5 menu, whose button is the top bar's only remaining right-side
+affordance). The player allocates on **their own
 card's attribute tab** at leisure:
 
 - per-attribute `+` stepper (enabled iff `alloc_pending > 0`) → the rows

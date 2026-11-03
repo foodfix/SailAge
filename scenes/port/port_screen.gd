@@ -123,8 +123,6 @@ signal rebound
 @onready var _facility_heading: Label = $Layout/VBox/Facilities/Heading
 @onready var _facility_rows: VBoxContainer = $Layout/VBox/Facilities/Rows
 @onready var _set_sail_button: Button = $Layout/VBox/Footer/SetSail
-@onready var _fleet_button: Button = $Layout/VBox/Footer/Fleet
-@onready var _officers_button: Button = $Layout/VBox/Footer/Officers
 @onready var _settings_button: Button = $Layout/VBox/Footer/Settings
 
 
@@ -167,16 +165,12 @@ func _ready() -> void:
 	_port_name.add_theme_font_size_override("font_size", 32)
 	_set_sail_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_set_sail_button.pressed.connect(_on_set_sail_pressed)
-	# T18: one footer row that opens the fleet/cargo panel (docs/20 §4.10).
-	_fleet_button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_fleet_button.pressed.connect(open_fleet_panel)
-	# Phase-5: the S18 officers roster is a modal over S4 like the fleet panel,
-	# so it sits in the same footer row (docs/80-* §4.6.2 "entry point (locked)").
-	_officers_button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_officers_button.pressed.connect(open_officers_panel)
-	# Phase-5: the S19 settings modal joins the same footer modal row
-	# (docs/80-* §4.6.3: "a Settings button in the footer beside
-	# Save · Set Sail · Fleet · Officers").
+	# Amended 2026-11-03 (docs/80-* §4.6.2/§4.5): the footer `Fleet ·
+	# Officers` buttons were removed as §4.5-intel-menu duplicates — the menu's
+	# 船队/官员 items and the `F`/`O` keys open the same panels. The panels'
+	# open/toggle methods below remain the shared entry points.
+	# Phase-5: the S19 settings modal joins the footer row
+	# (docs/80-* §4.6.3).
 	_settings_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_settings_button.pressed.connect(open_settings_panel)
 
@@ -470,8 +464,10 @@ func provisions_dialog() -> Control:
 	return get_node_or_null("ProvisionsDialog")
 
 
-## Opens the S18 officers panel (docs/80-* §4.6.2). The `O` key, the footer
-## `Officers` button and the character panel's button all call this.
+## Opens the S18 officers panel (docs/80-* §4.6.2, amended 2026-11-03).
+## The `O` key, the §4.5 intel menu's 官员 item and S14's Officers button
+## all reach the panel through this method (the footer button was removed
+## as a menu duplicate).
 func open_officers_panel() -> Control:
 	var panel := get_node_or_null("OfficersPanel")
 	if panel == null:
@@ -513,15 +509,9 @@ func settings_panel() -> Control:
 
 
 ## The S4 footer button that opens the S19 settings modal (§4.6.3). Always
-## present (the footer is built by the scene, not per-port), like `Fleet`.
+## present (the footer is built by the scene, not per-port).
 func settings_row() -> Button:
 	return _settings_button
-
-
-## The S4 footer button that opens the S18 officers roster (§4.6.2). Always
-## present (the footer is built by the scene, not per-port), like `Fleet`.
-func officers_row() -> Button:
-	return _officers_button
 
 
 ## Why the fleet may not leave port, as a `ui_strings.json` key (`""` = may
@@ -618,19 +608,15 @@ func _bind() -> void:
 			"day": GameState.day,
 		})
 	_set_sail_button.text = I18n.t_key("port.set_sail")
-	_fleet_button.text = I18n.t_key("fleet.title")
-	_officers_button.text = I18n.t_key("officers.title")
 	_facility_heading.text = I18n.t_key("port.facilities")
 
 	# docs/80-* §4.6 amended: the Save row moved into the S19 settings panel
-	# (its Save action opens the same 3-slot dialog); the footer keeps
-	# Set Sail · Fleet · Officers · Settings.
+	# (its Save action opens the same 3-slot dialog); amended 2026-11-03:
+	# the footer keeps Set Sail · Settings only (§4.6.2 — Fleet/Officers live
+	# in the §4.5 intel menu + the F/O keys).
 	# Nothing to leave when not docked (standalone load): the button stays
 	# visible for layout but disabled, so no input can start a bogus route.
 	_set_sail_button.disabled = port.is_empty()
-	# Same rule as Set Sail: no run docked (standalone load) means no roster to
-	# show, so the footer button greys out instead of opening an empty panel.
-	_officers_button.disabled = port.is_empty()
 	# Same rule for the S19 settings modal: the density dial applies to a live
 	# run's ecology, so it greys out when the scene opened standalone.
 	_settings_button.text = I18n.t_key("settings.title")

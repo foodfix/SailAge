@@ -700,47 +700,45 @@ func _test_panel() -> void:
 	await get_tree().process_frame
 	_check(hub.has_method("open_fleet_panel"),
 		"port_screen exposes open_fleet_panel() (the T18 hook)")
-	var footer_button: Button = hub.get_node_or_null("Layout/VBox/Footer/Fleet")
-	_check(footer_button != null, "the port hub footer has a Fleet row")
-	if footer_button != null:
-		_check(footer_button.text == I18n.t_key("fleet.title"),
-			"the Fleet row is localised (%s)" % footer_button.text)
-		_check(footer_button.custom_minimum_size.y == 40.0,
-			"the Fleet row uses the 40px button height (§4.8)")
-		footer_button.pressed.emit()
-		await get_tree().process_frame
-		var attached: Control = hub.fleet_panel()
-		_check(attached != null and attached.is_open(),
-			"the Fleet row opens the fleet panel over S4")
-		_check(hub.has_modal(), "the port hub knows the panel is a modal")
-		# The `F` action reaches the panel through the real input chain
-		# (`push_input` → `_unhandled_input`), not just a direct call.
-		attached.close()
-		await get_tree().process_frame
-		var key := InputEventAction.new()
-		key.action = "toggle_fleet"
-		key.pressed = true
-		get_viewport().push_input(key)
-		await get_tree().process_frame
-		_check(attached.is_open(),
-			"the toggle_fleet action opens the panel from the port hub")
-		# Esc while the panel is up closes the panel, not the harbour (§4.3).
-		var hub_esc := InputEventAction.new()
-		hub_esc.action = "back"
-		hub_esc.pressed = true
-		hub._unhandled_input(hub_esc)
-		await get_tree().process_frame
-		_check(GameState.current_port == "lisbon",
-			"Esc behind the fleet panel does not leave harbour (current_port %s)"
-			% str(GameState.current_port))
-		if attached != null:
-			I18n.set_locale("zh")
-			await get_tree().process_frame
-			_check(footer_button.text == I18n.t_key("fleet.title"),
-				"the Fleet row rebinds on locale_changed (%s)" % footer_button.text)
-			I18n.set_locale("en")
-			attached.close()
-			await get_tree().process_frame
+	# Amended 2026-11-03 (docs/80-* §4.6.2/§4.5): the footer `Fleet · Officers`
+	# buttons were removed as intel-menu duplicates — the §4.5 menu's 船队 item
+	# and the `F` key open the same panel. The hub pins the absence.
+	_check(hub.get_node_or_null("Layout/VBox/Footer/Fleet") == null,
+		"the port hub footer no longer carries a Fleet row (§4.5 amendment)")
+	var attached: Control = hub.open_fleet_panel()
+	await get_tree().process_frame
+	_check(attached != null and attached.is_open(),
+		"open_fleet_panel() opens the fleet panel over S4")
+	_check(hub.has_modal(), "the port hub knows the panel is a modal")
+	# The `F` action reaches the panel through the real input chain
+	# (`push_input` → `_unhandled_input`), not just a direct call.
+	attached.close()
+	await get_tree().process_frame
+	var key := InputEventAction.new()
+	key.action = "toggle_fleet"
+	key.pressed = true
+	get_viewport().push_input(key)
+	await get_tree().process_frame
+	_check(attached.is_open(),
+		"the toggle_fleet action opens the panel from the port hub")
+	# Esc while the panel is up closes the panel, not the harbour (§4.3).
+	var hub_esc := InputEventAction.new()
+	hub_esc.action = "back"
+	hub_esc.pressed = true
+	hub._unhandled_input(hub_esc)
+	await get_tree().process_frame
+	_check(GameState.current_port == "lisbon",
+		"Esc behind the fleet panel does not leave harbour (current_port %s)"
+		% str(GameState.current_port))
+	# Locale toggle: the footer row is gone, so the rebind contract lives on
+	# the panel itself (the panel relabels through its own locale handler).
+	I18n.set_locale("zh")
+	await get_tree().process_frame
+	_check(attached.is_open(),
+		"the fleet panel stays open across a locale toggle (its own rebind)")
+	I18n.set_locale("en")
+	attached.close()
+	await get_tree().process_frame
 	hub.queue_free()
 	await get_tree().process_frame
 	GameState.current_port = null
