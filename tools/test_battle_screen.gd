@@ -54,10 +54,10 @@ const BATTLE_RESULT_PATH := "res://scripts/combat/battle_result.gd"
 const BATTLE_REWARDS_PATH := "res://scripts/combat/battle_rewards.gd"
 ## §4.11.2 deployment tiles (the table this screen must reproduce, 48×30).
 const PLAYER_CELLS: Array = [
-	Vector2i(2, 15), Vector2i(2, 14), Vector2i(2, 16), Vector2i(2, 13), Vector2i(2, 17),
+	Vector2i(10, 15), Vector2i(10, 14), Vector2i(10, 16), Vector2i(10, 13), Vector2i(10, 17),
 ]
 const ENEMY_CELLS: Array = [
-	Vector2i(45, 15), Vector2i(45, 14), Vector2i(45, 16), Vector2i(45, 13), Vector2i(45, 17),
+	Vector2i(37, 15), Vector2i(37, 14), Vector2i(37, 16), Vector2i(37, 13), Vector2i(37, 17),
 ]
 
 var _failures: Array[String] = []
@@ -401,8 +401,10 @@ func _test_velocity_pick() -> void:
 		"highlighted_cells() is the pos+vel endpoint set of legal_velocities()")
 	_check(not endpoints.is_empty(), "the opener has reachable vectors")
 
-	# Clicking a vector's endpoint cell applies that velocity (§4.3).
-	var destination: Vector2i = Vector2i(3, 15)  # the endpoint of vel (1,0)
+	# Clicking a vector's endpoint cell applies that velocity (§4.3). The
+	# correction-15 flagship opens at (10,15) already under way — the
+	# (1,0) endpoint rides one cell east of it.
+	var destination: Vector2i = Vector2i(11, 15)  # the endpoint of vel (1,0)
 	var before_cell: Vector2i = screen.sim.unit_cell(unit)
 	screen.click_cell(destination)
 	await get_tree().process_frame
@@ -477,7 +479,7 @@ func _test_velocity_pick() -> void:
 	screen.open_battle(_pirate_encounter(1, "latin"))
 	await get_tree().process_frame
 	unit = screen.selected_unit()
-	_place(screen.sim, "enemy", 0, Vector2i(2, 12))  # port-arc bearing, range 3
+	_place(screen.sim, "enemy", 0, Vector2i(10, 12))  # port-arc bearing, range 3
 	screen._bind()
 	var enemy_cell: Vector2i = screen.sim.unit_cell(_unit(screen, "enemy", 0))
 	var enemy_durability: int = int(_unit(screen, "enemy", 0)["ship"]["durability"])
@@ -571,7 +573,7 @@ func _test_shot_selector() -> void:
 	# The selected shot rides the cannon decision (§4.12.1.1 `shot`).
 	screen._unhandled_input(_key(KEY_2))
 	var unit: Dictionary = screen.selected_unit()
-	_place(screen.sim, "enemy", 0, Vector2i(2, 13))  # port arc, range 2
+	_place(screen.sim, "enemy", 0, Vector2i(10, 13))  # port arc, range 2
 	screen._bind()
 	var result: Dictionary = screen.perform_action("cannon",
 		_unit(screen, "enemy", 0))
@@ -587,7 +589,7 @@ func _test_shot_selector() -> void:
 	screen.set_ai_speed(true)
 	screen.open_battle(_pirate_encounter(1, "latin"))
 	await get_tree().process_frame
-	_place(screen.sim, "enemy", 0, Vector2i(2, 14))  # port arc, range 1
+	_place(screen.sim, "enemy", 0, Vector2i(10, 14))  # port arc, range 1
 	screen._bind()
 	_check(not (screen._shot_buttons[BattleLib.GRAPE_SHOT] as Button).disabled,
 		"grape enables at Chebyshev range 1 (§4.4b)")
@@ -685,8 +687,15 @@ func _test_full_battle() -> void:
 		guard += 1
 		var unit: Dictionary = screen.selected_unit()
 		if unit.is_empty():
-			# The AI's turn: let the screen play it, then look again.
+			# The AI's turn: let the screen play it, then look again. A ship
+			# dying in the round's last slot leaves the cursor EMPTY with the
+			# battle still open — the engine's own driver resolves that
+			# transient with one end_turn() ("re-checks and advances",
+			# §4.12.1); the fixture drives the same seam when the screen's
+			# pump exposes it.
 			screen._pump_enemy_turns()
+			if not screen.is_over() and screen.sim.current_unit().is_empty():
+				screen.sim.end_turn()
 			await get_tree().process_frame
 			continue
 		screen.select_unit(unit)
@@ -701,6 +710,13 @@ func _test_full_battle() -> void:
 				continue
 		screen.action_button("hold").pressed.emit()
 	await get_tree().process_frame
+	# If the engine resolved through the fixture's empty-cursor end_turn
+	# fallback, the screen has not observed the transition yet — run the
+	# completion hook exactly as the screen's own run_to_completion does
+	# when it observes is_over() after a driven step (§4.7.1 after-action).
+	if screen.is_over() and screen.last_outcome.is_empty():
+		screen._finish_battle()
+		await get_tree().process_frame
 
 	_check(screen.is_over(), "the UI-driven battle reaches is_over() (%d steps)" % guard)
 	var outcome: Dictionary = screen.last_outcome

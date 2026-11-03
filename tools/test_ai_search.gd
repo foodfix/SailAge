@@ -226,10 +226,25 @@ func _expected_archetype(kind: String) -> String:
 func _test_candidate_bound() -> void:
 	_person()
 	# §4.3a: `legal_velocities` enumerates the Chebyshev box
-	# (2·battle_max_speed + 1)² — 49 at the tier-3 hulls, 81 at tier 4 —
-	# filtered by the §4.3a legality order; §4.9c pairs it with the action
-	# set {steer/hold, cannon per loaded side ≤ 2, ram, board} — ≤ 5
-	# candidates per velocity, so the T3 candidate set stays ≤ 5 × 81 = 405.
+	# (2·battle_max_speed + 1)² — 49 at the correction-15 tier-3 hulls (speed
+	# 16), 81 at tier 4 (speed 20), 121 at tier 5 (speed 24) — filtered by
+	# the §4.3a legality order; §4.9c pairs it with the action set
+	# {steer/hold, cannon per loaded side ≤ 2, ram, board} — ≤ 5 candidates
+	# per velocity, so the T3 candidate set stays ≤ 5 × 121 = 605 at the top
+	# tier.
+	var lat := _sim({
+		"player_ships": [_ship("latin")],
+		"enemy_ships": [_ship("sloop", {"cannons": 0})], "seed": 5,
+	})
+	lat.start()
+	var latin := _unit(lat, "player", 0)
+	latin["vel"] = Vector2i(2, 0)
+	latin["heading8"] = BattleLib.HEADING_EAST
+	_check(lat.battle_max_speed(latin) == 3
+			and lat.legal_velocities(latin).size() <= 49,
+		"§4.3a: the tier-3 hull's velocity enumeration stays inside the "
+			+ "Chebyshev box (max_speed %d, %d ≤ (2·3+1)² = 49)"
+			% [lat.battle_max_speed(latin), lat.legal_velocities(latin).size()])
 	var slo := _sim({
 		"player_ships": [_ship("sloop")],
 		"enemy_ships": [_ship("latin", {"cannons": 0})], "seed": 5,
@@ -238,10 +253,10 @@ func _test_candidate_bound() -> void:
 	var sloop := _unit(slo, "player", 0)
 	sloop["vel"] = Vector2i(3, 0)
 	sloop["heading8"] = BattleLib.HEADING_EAST
-	_check(slo.battle_max_speed(sloop) == 3
-			and slo.legal_velocities(sloop).size() <= 49,
-		"§4.3a: the tier-3 hull's velocity enumeration stays inside the "
-			+ "Chebyshev box (max_speed %d, %d ≤ (2·3+1)² = 49)"
+	_check(slo.battle_max_speed(sloop) == 4
+			and slo.legal_velocities(sloop).size() <= 81,
+		"§4.3a: the tier-4 hull's velocity enumeration stays inside the "
+			+ "Chebyshev box (max_speed %d, %d ≤ (2·4+1)² = 81)"
 			% [slo.battle_max_speed(sloop), slo.legal_velocities(sloop).size()])
 	var big := _sim({
 		"player_ships": [_ship("brigantine")],
@@ -251,13 +266,13 @@ func _test_candidate_bound() -> void:
 	var brig := _unit(big, "player", 0)
 	brig["vel"] = Vector2i(4, 0)
 	brig["heading8"] = BattleLib.HEADING_EAST
-	_check(big.battle_max_speed(brig) == 4
-			and big.legal_velocities(brig).size() <= 81,
-		"§4.3a/§4.9c: the tier-4 hull's enumeration stays ≤ (2·4+1)² = 81 "
-			+ "(%d candidates × ≤ 5 actions = ≤ 405)"
+	_check(big.battle_max_speed(brig) == 5
+			and big.legal_velocities(brig).size() <= 121,
+		"§4.3a/§4.9c: the tier-5 hull's enumeration stays ≤ (2·5+1)² = 121 "
+			+ "(%d candidates × ≤ 5 actions = ≤ 605)"
 			% big.legal_velocities(brig).size())
 	_check(big.legal_velocities(_unit(big, "enemy", 0)).size() <= 49,
-		"§4.3a: a tier-2 hull's box is bounded by (2·2+1)² = 25 (%d)"
+		"§4.3a: a tier-3 hull's box is bounded by (2·3+1)² = 49 (%d)"
 			% big.legal_velocities(_unit(big, "enemy", 0)).size())
 
 

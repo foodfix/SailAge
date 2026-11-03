@@ -28,7 +28,7 @@ extends Node
 ##      boundaries, (0,0) keeps the last heading;
 ##   5  §4.4 broadside arcs {45,90,135}/{225,270,315} + the floor(n/2)
 ##      split with the retained total;
-##   6  §4.4a reload: gunnery 0/50/100 → 3/2/1, the legacy 10+10×tier
+##   6  §4.4a reload: gunnery 0/50/100 → 2/1/1, the legacy 10+10×tier
 ##      fallback, low-crew +1, per-side independence
 ##      (`reload_side = round + reload_turns`);
 ##   7  §4.11.5 crew casualties: /20 standard, /10 rake, boarding winner
@@ -174,9 +174,11 @@ func _unit(sim: BattleLib, side: String, index: int) -> Dictionary:
 
 
 ## Repositions / re-states a unit. Fixtures need close-quarters setups:
-## §4.11.2 deployment deliberately opens every battle 43 tiles apart ("every
-## battle opens with an approach phase"), so the fixed situations build the
-## arrangement explicitly instead of sailing for twenty rounds first.
+## §4.11.2 correction 15 opens every battle 27 tiles apart already under way
+## (the closing start), so the fixed situations build the arrangement
+## explicitly instead of sailing for a dozen rounds first. A re-placed unit
+## keeps its state otherwise — pin a `vel = (0,0)` policy hold when the
+## fixture's arrangement must stay frozen.
 func _place(sim: BattleLib, side: String, index: int, cell: Vector2i) -> void:
 	var unit := _unit(sim, side, index)
 	if not unit.is_empty():
@@ -292,20 +294,20 @@ func _test_grid_and_deployment() -> void:
 	_check(BattleLib.GRID_WIDTH == 48 and BattleLib.GRID_HEIGHT == 30,
 		"§4.2: the grid is 48×30 (%d×%d)"
 			% [BattleLib.GRID_WIDTH, BattleLib.GRID_HEIGHT])
-	_check(BattleLib.PLAYER_BAND_MAX_X == 5 and BattleLib.ENEMY_BAND_MIN_X == 42,
-		"§4.2: player band x ≤ 5, enemy band x ≥ 42 (%d/%d)"
+	_check(BattleLib.PLAYER_BAND_MAX_X == 12 and BattleLib.ENEMY_BAND_MIN_X == 35,
+		"§4.2: player band x ≤ 12, enemy band x ≥ 35 (%d/%d)"
 			% [BattleLib.PLAYER_BAND_MAX_X, BattleLib.ENEMY_BAND_MIN_X])
 	_check(BattleLib.PLAYER_DEPLOYMENT.size() == TABLE_ROWS
 			and BattleLib.ENEMY_DEPLOYMENT.size() == TABLE_ROWS,
 		"§4.11.2: the table has one row per fleet slot (%d)" % TABLE_ROWS)
 
-	# The pinned table, verbatim (§4.11.2 — flagship centred, extras
-	# alternate below/above).
+	# The pinned table, verbatim (§4.11.2 correction 15 — flagship centred,
+	# extras alternate below/above; the tournament-proven closing start).
 	var player_table := [
-		Vector2i(2, 15), Vector2i(2, 14), Vector2i(2, 16), Vector2i(2, 13), Vector2i(2, 17),
+		Vector2i(10, 15), Vector2i(10, 14), Vector2i(10, 16), Vector2i(10, 13), Vector2i(10, 17),
 	]
 	var enemy_table := [
-		Vector2i(45, 15), Vector2i(45, 14), Vector2i(45, 16), Vector2i(45, 13), Vector2i(45, 17),
+		Vector2i(37, 15), Vector2i(37, 14), Vector2i(37, 16), Vector2i(37, 13), Vector2i(37, 17),
 	]
 	var player_cells: Array = []
 	for cell in BattleLib.PLAYER_DEPLOYMENT:
@@ -342,31 +344,45 @@ func _test_grid_and_deployment() -> void:
 		for cell in placed:
 			distinct[cell] = true
 		_check(table_ok, "%d ships/side: every unit sits on its §4.11.2 tile" % count)
-		_check(band_ok, "%d ships/side: player band x ≤ 5, enemy band x ≥ 42 (§4.2)" % count)
+		_check(band_ok, "%d ships/side: player band x ≤ 12, enemy band x ≥ 35 (§4.2)" % count)
 		_check(distinct.size() == placed.size(),
 			"%d ships/side: no two units share a cell (%d distinct of %d)"
 				% [count, distinct.size(), placed.size()])
 		_check(sim.units().size() == count * 2,
 			"%d ships/side: the engine holds %d units" % [count, count * 2])
 
-	# The bands open 43 cells apart (§4.11.2 "open 43 cells apart").
-	_check(BattleLib.ENEMY_DEPLOYMENT[0].x - BattleLib.PLAYER_DEPLOYMENT[0].x == 43,
-		"§4.11.2: the flagship bands open 43 cells apart")
+	# The bands open 27 cells apart (§4.11.2 correction 15 "open 27 cells
+	# apart" — the tournament-proven closing start is THE start).
+	_check(BattleLib.ENEMY_DEPLOYMENT[0].x - BattleLib.PLAYER_DEPLOYMENT[0].x == 27,
+		"§4.11.2: the flagship bands open 27 cells apart")
 
-	# Normal start: vel (0,0) with heading8 east / west (§4.11.2).
-	var rest := _sim({"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")]})
-	rest.start()
-	var rest_p := _unit(rest, "player", 0)
-	var rest_e := _unit(rest, "enemy", 0)
-	_check((rest_p["vel"] as Vector2i) == Vector2i.ZERO
-			and (rest_e["vel"] as Vector2i) == Vector2i.ZERO,
-		"§4.11.2: deployment starts every ship at vel (0,0)")
-	_check(int(rest_p["heading8"]) == BattleLib.HEADING_EAST
-			and int(rest_e["heading8"]) == BattleLib.HEADING_WEST,
+	# Correction 15 closing start: the flagships open ALREADY MOVING —
+	# vel (1,0) player / (−1,0) enemy, heading east / west; extras deploy at
+	# rest through the band scan (§4.11.2).
+	var closing := _sim({
+		"player_ships": [_ship("sloop"), _ship("sloop")],
+		"enemy_ships": [_ship("latin"), _ship("latin")],
+	})
+	closing.start()
+	var close_p := _unit(closing, "player", 0)
+	var close_e := _unit(closing, "enemy", 0)
+	var close_px := _unit(closing, "player", 1)
+	var close_ex := _unit(closing, "enemy", 1)
+	_check((close_p["vel"] as Vector2i) == Vector2i(1, 0)
+			and (close_e["vel"] as Vector2i) == Vector2i(-1, 0)
+			and (close_px["vel"] as Vector2i) == Vector2i.ZERO
+			and (close_ex["vel"] as Vector2i) == Vector2i.ZERO,
+		"§4.11.2 correction 15: the flagships open with the closing velocities "
+			+ "(1,0)/(−1,0), extras at rest (%s/%s | %s/%s)"
+			% [str(close_p["vel"]), str(close_e["vel"]),
+			str(close_px["vel"]), str(close_ex["vel"])])
+	_check(int(close_p["heading8"]) == BattleLib.HEADING_EAST
+			and int(close_e["heading8"]) == BattleLib.HEADING_WEST,
 		"§4.11.2: player faces east (%d), enemy west (%d)"
-			% [int(rest_p["heading8"]), int(rest_e["heading8"])])
-	_check(rest_p["vel"] == Vector2i.ZERO and rest_e["vel"] == Vector2i.ZERO,
-		"§4.11.2: the standstill rule governs the first velocity pick")
+			% [int(close_p["heading8"]), int(close_e["heading8"])])
+	_check((close_p["vel"] as Vector2i) == BattleLib.TOURNAMENT_PLAYER_VEL
+			and (close_e["vel"] as Vector2i) == BattleLib.TOURNAMENT_ENEMY_VEL,
+		"§4.11.2: the closing start IS the tournament start (same pinned velocities)")
 
 	# Band overflow (more than 5 ships): the 6th continues the in-band scan.
 	var overflow := _sim({
@@ -394,8 +410,9 @@ func _test_grid_and_deployment() -> void:
 		"§4.2: the overflow scan never double-books a cell (%d units)"
 			% all_cells.size())
 
-	# Tournament variant (§4.11.2): pinned cells + pinned initial velocities,
-	# selected by the §4.12.1 config key `deployment: "tournament"`.
+	# Tournament variant (§4.11.2): the variant distinction is RETIRED
+	# (correction 15) — the §4.12.1 config key `deployment: "tournament"` is
+	# still accepted but maps to the SAME closing start every battle uses.
 	var tour := _sim({
 		"player_ships": [_ship("brigantine")],
 		"enemy_ships": [_ship("brigantine")],
@@ -421,6 +438,21 @@ func _test_grid_and_deployment() -> void:
 			% [int(tour_p["heading8"]), int(tour_e["heading8"])])
 	_check(BattleLib.TOURNAMENT_ENEMY_CELL.x - BattleLib.TOURNAMENT_PLAYER_CELL.x == 27,
 		"§4.11.2: the tournament cells sit 27 apart")
+	# Correction 15: the key maps to the same start as a standard battle —
+	# cells AND velocities identical, no variant distinction left.
+	var plain := _sim({
+		"player_ships": [_ship("brigantine")],
+		"enemy_ships": [_ship("brigantine")],
+	})
+	plain.start()
+	var plain_p := _unit(plain, "player", 0)
+	var plain_e := _unit(plain, "enemy", 0)
+	_check(plain.unit_cell(plain_p) == tour.unit_cell(tour_p)
+			and plain.unit_cell(plain_e) == tour.unit_cell(tour_e)
+			and (plain_p["vel"] as Vector2i) == (tour_p["vel"] as Vector2i)
+			and (plain_e["vel"] as Vector2i) == (tour_e["vel"] as Vector2i),
+		"§4.11.2 correction 15: the tournament key maps to the SAME closing "
+			+ "start as standard — the variant distinction is retired")
 	# Extras (should a fixture carry them) deploy through the band scan at rest.
 	var tour_full := _sim({
 		"player_ships": [_ship("brigantine"), _ship("sloop")],
@@ -437,8 +469,9 @@ func _test_grid_and_deployment() -> void:
 
 func _test_velocity_legality() -> void:
 	_person()
-	# Brigantine: bms 4, accel 1, turn_rate 45 (data/ship_types.json, §4.3a
-	# class constants). Calm wind E, heading east → cap floor(4 × 0.8) = 3.
+	# Brigantine: bms 5, accel 1, turn_rate 45 (data/ship_types.json after
+	# correction 15, §4.3a class constants). Calm wind E, heading east →
+	# cap floor(5 × 0.8 × 1.0) = 4 (the calm direction identity).
 	var sim := _sim({
 		"player_ships": [_ship("brigantine")],
 		"enemy_ships": [_ship("latin")],
@@ -446,16 +479,16 @@ func _test_velocity_legality() -> void:
 	})
 	sim.start()
 	var brig := _unit(sim, "player", 0)
-	_check(sim.battle_max_speed(brig) == 4 and sim.battle_accel(brig) == 1
+	_check(sim.battle_max_speed(brig) == 5 and sim.battle_accel(brig) == 1
 			and sim.battle_turn_rate(brig) == 45,
-		"§4.3a: brigantine bms 4 / accel 1 / turn 45 (%d/%d/%d)"
+		"§4.3a: brigantine bms 5 / accel 1 / turn 45 (%d/%d/%d)"
 			% [sim.battle_max_speed(brig), sim.battle_accel(brig),
 			sim.battle_turn_rate(brig)])
 	brig["vel"] = Vector2i(1, 0)
 	_face(brig, BattleLib.HEADING_EAST)
 	var legal: Array = sim.legal_velocities(brig)
 	_check(_as_vec2i_array(legal).has(Vector2i(2, 0)),
-		"§4.3a: (2,0) legal — bucket 0 ≤ 45, |Δmag| 1 ≤ accel 1, mag 2 ≤ cap 3")
+		"§4.3a: (2,0) legal — bucket 0 ≤ 45, |Δmag| 1 ≤ accel 1, mag 2 ≤ cap 4")
 	_check(_as_vec2i_array(legal).has(Vector2i(1, -1)),
 		"§4.3a: (1,−1) legal — bucket NE = 45° exactly at the turn rate")
 	_check(not _as_vec2i_array(legal).has(Vector2i(0, -1)),
@@ -467,9 +500,19 @@ func _test_velocity_legality() -> void:
 	_check(not _as_vec2i_array(legal).has(Vector2i(3, 0)),
 		"§4.3a: (3,0) illegal — |Δmag| 2 > accel 1")
 	_check(not _as_vec2i_array(legal).has(Vector2i(4, 0)),
-		"§4.3a: (4,0) illegal — mag 4 > cap_eff 3 (cap leg; calm sail ×0.8)")
+		"§4.3a: (4,0) illegal from (1,0) — |Δmag| 3 > accel 1 (magnitude-delta leg)")
 	_check(_as_vec2i_array(legal).has(Vector2i.ZERO),
 		"§4.3a: vel (0,0) is legal whenever the magnitude delta holds")
+	# The cap leg in isolation: at mag 4 = cap only the mag-5 box corner
+	# exceeds cap_eff 4 — the magnitude delta is 1, so the CAP leg decides
+	# (calm sail ×0.8 floors 5 × 0.8 = 4).
+	brig["vel"] = Vector2i(4, 0)
+	_face(brig, BattleLib.HEADING_EAST)
+	var capped: Array = sim.legal_velocities(brig)
+	_check(_as_vec2i_array(capped).has(Vector2i(4, 0)),
+		"§4.3a: mag 4 = cap_eff floor(5 × 0.8) = 4 is legal (calm sail ×0.8)")
+	_check(not _as_vec2i_array(capped).has(Vector2i(5, 0)),
+		"§4.3a: (5,0) illegal — mag 5 > cap_eff 4 (cap leg; calm sail ×0.8)")
 
 	# The turn-rate tiers: a galley turns 90° per round (§4.3a class table).
 	var oar_sim := _sim({
@@ -515,16 +558,16 @@ func _test_velocity_legality() -> void:
 	})
 	becalmed.start()
 	var latin := _unit(becalmed, "player", 0)
-	_check(becalmed.cap_eff(latin) == 1,
-		"§4.3a: calm identity — the latin's cap is floor(2 × 0.8) = 1 facing "
+	_check(becalmed.cap_eff(latin) == 2,
+		"§4.3a: calm identity — the latin's cap is floor(3 × 0.8) = 2 facing "
 			+ "east AND west (%d)" % becalmed.cap_eff(latin))
 	_face(latin, BattleLib.HEADING_WEST)
-	_check(becalmed.cap_eff(latin) == 1,
+	_check(becalmed.cap_eff(latin) == 2,
 		"§4.3a: …and %d facing west (no direction effect in calm)"
 			% becalmed.cap_eff(latin))
 
 	# Enumeration: (y, x) lexicographic, inside the Chebyshev box (§4.3a).
-	# Galley, storm (oar ×1.0 everywhere → cap 4), standstill, accel 2:
+	# Galley, storm (oar ×1.0 everywhere → cap 5), standstill, accel 2:
 	# exactly the mag ≤ 2 box vectors, in (y, x) order.
 	var full: Array = oar_sim.legal_velocities(galley)
 	galley["vel"] = Vector2i.ZERO
@@ -549,16 +592,33 @@ func _test_velocity_legality() -> void:
 	var sloop_legal: Array = sloop_sim.legal_velocities(sloop)
 	var in_box := true
 	for vel in sloop_legal:
-		if absi((vel as Vector2i).x) > 3 or absi((vel as Vector2i).y) > 3:
+		if absi((vel as Vector2i).x) > 4 or absi((vel as Vector2i).y) > 4:
 			in_box = false
-	_check(in_box and sloop_legal.size() <= 49,
-		"§4.3a: bms 3 → every candidate in the 7×7 box, ≤ 49 candidates (%d)"
+	_check(in_box and sloop_legal.size() <= 81,
+		"§4.3a: bms 4 → every candidate in the 9×9 box, ≤ 81 candidates (%d)"
 			% sloop_legal.size())
-	_check(oar_sim.legal_velocities(galley).size() <= 81,
-		"§4.3a: bms 4 → ≤ 81 candidates (correction 3's 9×9 box)")
+	# The latin stays on the lowest correction-15 tier (16 → 3): the 7×7 box.
+	var latin_box_sim := _sim({
+		"player_ships": [_ship("latin")],
+		"enemy_ships": [_ship("sloop")],
+		"weather": "storm", "wind_dir": "E",
+	})
+	latin_box_sim.start()
+	var latin_box := _unit(latin_box_sim, "player", 0)
+	var latin_legal: Array = latin_box_sim.legal_velocities(latin_box)
+	var latin_in_box := true
+	for vel in latin_legal:
+		if absi((vel as Vector2i).x) > 3 or absi((vel as Vector2i).y) > 3:
+			latin_in_box = false
+	_check(latin_in_box and latin_legal.size() <= 49,
+		"§4.3a: bms 3 → every candidate in the 7×7 box, ≤ 49 candidates (%d)"
+			% latin_legal.size())
+	_check(oar_sim.legal_velocities(galley).size() <= 121,
+		"§4.3a: bms 5 → ≤ 121 candidates (correction 15's 11×11 box)")
 
 	# Overshoot clamp: a cap overshoot clamps ALONG ITS OWN DIRECTION
-	# (component floor), then sweeps (§4.3a).
+	# (component floor), then sweeps (§4.3a). Calm brigantine cap 4: from
+	# mag 4 the (5,0) pick has |Δmag| 1 ≤ accel and clamps back to (4,0).
 	sim = _sim({
 		"player_ships": [_ship("brigantine")],
 		"enemy_ships": [_ship("latin")],
@@ -567,16 +627,16 @@ func _test_velocity_legality() -> void:
 	sim.start()
 	brig = _unit(sim, "player", 0)
 	_place(sim, "player", 0, Vector2i(10, 15))
-	brig["vel"] = Vector2i(3, 0)
+	brig["vel"] = Vector2i(4, 0)
 	_face(brig, BattleLib.HEADING_EAST)
 	_begin_turn(sim, "player", 0)
-	_check(sim.apply_velocity(brig, Vector2i(4, 0)),
+	_check(sim.apply_velocity(brig, Vector2i(5, 0)),
 		"§4.3a: an overshooting pick is clamped, not rejected")
-	_check((brig["vel"] as Vector2i) == Vector2i(3, 0),
-		"§4.3a: the overshoot clamps along its own direction to cap 3 (%s)"
+	_check((brig["vel"] as Vector2i) == Vector2i(4, 0),
+		"§4.3a: the overshoot clamps along its own direction to cap 4 (%s)"
 			% str(brig["vel"]))
-	_check(sim.unit_cell(brig) == Vector2i(13, 15),
-		"§4.3a: the clamped velocity sweeps 3 cells (%s)" % str(sim.unit_cell(brig)))
+	_check(sim.unit_cell(brig) == Vector2i(14, 15),
+		"§4.3a: the clamped velocity sweeps 4 cells (%s)" % str(sim.unit_cell(brig)))
 	_check(not sim.apply_velocity(brig, Vector2i(1, 0)),
 		"§4.3a: movement happens exactly once per turn")
 
@@ -628,20 +688,20 @@ func _test_cap_eff() -> void:
 	# sail 1.30, hybrid 1.10, oar 1.00 — the 20-* §4.4 180° row).
 	var cases := [
 		# [weather, ship, heading bucket, expected cap]
-		["calm", "sloop", BattleLib.HEADING_EAST, 2],    # floor(3 × .8 × 1)
-		["fair", "sloop", BattleLib.HEADING_EAST, 1],    # floor(3 × 1 × .5)
-		["strong", "sloop", BattleLib.HEADING_EAST, 1],  # floor(3 × 1.25 × .5)
-		["storm", "sloop", BattleLib.HEADING_EAST, 2],   # floor(3 × 1.5 × .5)
-		["calm", "sloop", BattleLib.HEADING_WEST, 2],    # calm identity ×1.0
-		["fair", "sloop", BattleLib.HEADING_WEST, 3],    # floor(3 × 1 × 1.3) = 3
-		["strong", "sloop", BattleLib.HEADING_WEST, 3],  # floor(4.875) = 4 → clamp 3
-		["storm", "sloop", BattleLib.HEADING_WEST, 3],   # floor(5.85)=5 → clamp 3
-		["calm", "galley", BattleLib.HEADING_EAST, 4],   # oar 1.0 everywhere
-		["storm", "galley", BattleLib.HEADING_EAST, 4],
-		["calm", "galleon", BattleLib.HEADING_EAST, 3],  # calm identity: floor(3 × 1 × 1.0)
-		["fair", "galleon", BattleLib.HEADING_EAST, 2],  # floor(3 × .85)
-		["storm", "galleon", BattleLib.HEADING_EAST, 3], # floor(3 × 1.2 × .85)
-		["storm", "galleon", BattleLib.HEADING_WEST, 3], # floor(3 × 1.2 × 1.1) → clamp 3
+		["calm", "sloop", BattleLib.HEADING_EAST, 3],    # floor(4 × .8 × 1)
+		["fair", "sloop", BattleLib.HEADING_EAST, 2],    # floor(4 × 1 × .5)
+		["strong", "sloop", BattleLib.HEADING_EAST, 2],  # floor(4 × 1.25 × .5)
+		["storm", "sloop", BattleLib.HEADING_EAST, 3],   # floor(4 × 1.5 × .5)
+		["calm", "sloop", BattleLib.HEADING_WEST, 3],    # calm identity ×1.0
+		["fair", "sloop", BattleLib.HEADING_WEST, 4],    # floor(4 × 1 × 1.3) = 5 → clamp 4
+		["strong", "sloop", BattleLib.HEADING_WEST, 4],  # floor(6.5) = 6 → clamp 4
+		["storm", "sloop", BattleLib.HEADING_WEST, 4],   # floor(7.8)=7 → clamp 4
+		["calm", "galley", BattleLib.HEADING_EAST, 5],   # oar 1.0 everywhere
+		["storm", "galley", BattleLib.HEADING_EAST, 5],
+		["calm", "galleon", BattleLib.HEADING_EAST, 4],  # calm identity: floor(4 × 1 × 1.0)
+		["fair", "galleon", BattleLib.HEADING_EAST, 3],  # floor(4 × .85)
+		["storm", "galleon", BattleLib.HEADING_EAST, 4], # floor(4 × 1.2 × .85)
+		["storm", "galleon", BattleLib.HEADING_WEST, 4], # floor(4 × 1.2 × 1.1) → clamp 4
 	]
 	for case in cases:
 		var sim := _sim({
@@ -661,15 +721,15 @@ func _test_cap_eff() -> void:
 	# bucket {135°,180°} ∧ strength 3 → −1; strength 0 never modifies.
 	var current_cases := [
 		# [current dir, strength, heading bucket, expected mod-bearing cap]
-		["E", 2, BattleLib.HEADING_EAST, 3],    # bucket 0, +1 → clamp(2+1,0,3)
-		["E", 3, BattleLib.HEADING_EAST, 3],    # bucket 0, +1 (clamp at bms)
-		["E", 1, BattleLib.HEADING_EAST, 2],    # strength < 2 → no mod
-		["E", 2, 1, 3],                          # bucket 45 (NE vs E), +1
-		["E", 3, BattleLib.HEADING_WEST, 1],    # bucket 180, strength 3 → −1
-		["E", 2, BattleLib.HEADING_WEST, 2],    # bucket 180, strength 2 → no mod
-		["E", 3, 2, 2],                          # bucket 90 (N vs E) → no mod
-		["E", 3, 3, 1],                          # bucket 135 (NW vs E), −1
-		["E", 0, BattleLib.HEADING_EAST, 2],    # strength 0 never modifies
+		["E", 2, BattleLib.HEADING_EAST, 4],    # bucket 0, +1 → clamp(3+1,0,4)
+		["E", 3, BattleLib.HEADING_EAST, 4],    # bucket 0, +1 (clamp at bms)
+		["E", 1, BattleLib.HEADING_EAST, 3],    # strength < 2 → no mod
+		["E", 2, 1, 4],                          # bucket 45 (NE vs E), +1
+		["E", 3, BattleLib.HEADING_WEST, 2],    # bucket 180, strength 3 → −1
+		["E", 2, BattleLib.HEADING_WEST, 3],    # bucket 180, strength 2 → no mod
+		["E", 3, 2, 3],                          # bucket 90 (N vs E) → no mod
+		["E", 3, 3, 2],                          # bucket 135 (NW vs E), −1
+		["E", 0, BattleLib.HEADING_EAST, 3],    # strength 0 never modifies
 	]
 	for case in current_cases:
 		var sim := _sim({
@@ -699,10 +759,12 @@ func _test_cap_eff() -> void:
 	floor_sim.start()
 	var floored := _unit(floor_sim, "player", 0)
 	_face(floored, BattleLib.HEADING_WEST)
-	_check(floor_sim.cap_eff(floored) == 3, "§4.3a: the pre-debuff cap is 3")
+	_check(floor_sim.cap_eff(floored) == 4,
+		"§4.3a: the pre-debuff cap is floor(4 × 1 × 1.3) → clamp 4 (%d)"
+			% floor_sim.cap_eff(floored))
 	floored["speed_debuff_turns"] = 2
-	_check(floor_sim.cap_eff(floored) == 2,
-		"§4.3a: the chain debuff subtracts 1 (3 → %d)" % floor_sim.cap_eff(floored))
+	_check(floor_sim.cap_eff(floored) == 3,
+		"§4.3a: the chain debuff subtracts 1 (4 → %d)" % floor_sim.cap_eff(floored))
 	var zero_sim := _sim({
 		"player_ships": [_ship("latin")],
 		"enemy_ships": [_ship("sloop")],
@@ -713,12 +775,12 @@ func _test_cap_eff() -> void:
 	_face(zeroed, BattleLib.HEADING_EAST)
 	zeroed["speed_debuff_turns"] = 2
 	_check(zero_sim.cap_eff(zeroed) == 1,
-		"§4.3a: the debuff floors at 1 — max(1, 0 − 1) = 1 (%d)"
+		"§4.3a: the debuff floors at 1 — floor(3 × 0.8) − 1 = 1 (%d)"
 			% zero_sim.cap_eff(zeroed))
 	zeroed["speed_debuff_turns"] = 0
-	_check(zero_sim.cap_eff(zeroed) == 1,
+	_check(zero_sim.cap_eff(zeroed) == 2,
 		"§4.3a: without the debuff the cap returns to the calm-identity floor "
-			+ "floor(2 × 0.8) = 1 (%d)" % zero_sim.cap_eff(zeroed))
+			+ "floor(3 × 0.8) = 2 (%d)" % zero_sim.cap_eff(zeroed))
 
 	# The sail delta applies AFTER the clamp and is not clamped back
 	# (§4.3a correction 2 / §4.11.12).
@@ -737,9 +799,9 @@ func _test_cap_eff() -> void:
 	sail_sim.start()
 	var sailor := _unit(sail_sim, "player", 0)
 	_face(sailor, BattleLib.HEADING_EAST)
-	_check(sail_sim.cap_eff(sailor) == 3,
+	_check(sail_sim.cap_eff(sailor) == 4,
 		"§4.3a/§4.11.12: the sail delta rides AFTER the clamp, unclamped back "
-			+ "— 1 + 2 = 3 > battle_max_speed 2 (%d)" % sail_sim.cap_eff(sailor))
+			+ "— 2 + 2 = 4 > battle_max_speed 3 (%d)" % sail_sim.cap_eff(sailor))
 	if existed:
 		DataLoader.equipment[sail_id] = previous
 	else:
@@ -848,8 +910,9 @@ func _test_arcs() -> void:
 # --- 6. Reload (§4.4a, decision 5; §4.11.4 per-side pin) --------------------
 
 func _test_reload() -> void:
-	# Gunnery 0 / 50 / 100 → reload 3 / 2 / 1 (clamp(3 − floor(g/50), 1, 3)).
-	for gunnery in [[0, 3], [50, 2], [100, 1], [49, 3]]:
+	# Gunnery 0 / 50 / 100 → reload 2 / 1 / 1 (clamp(2 − floor(g/50), 1, 2),
+	# correction 14).
+	for gunnery in [[0, 2], [50, 1], [100, 1], [49, 2]]:
 		_person(0, int(gunnery[0]))
 		var sim := _sim({
 			"player_ships": [_ship("brigantine", {"cannons": 10})],
@@ -869,16 +932,16 @@ func _test_reload() -> void:
 	})
 	low_sim.start()
 	var short := _unit(low_sim, "player", 0)
-	_check(low_sim.reload_turns_of(short) == 4,
-		"§4.4a: crew 4/10 (ratio 0.4 < 0.5) adds +1 → 4 turns (%d)"
+	_check(low_sim.reload_turns_of(short) == 3,
+		"§4.4a: crew 4/10 (ratio 0.4 < 0.5) adds +1 → 3 turns (%d)"
 			% low_sim.reload_turns_of(short))
 	var half_sim := _sim({
 		"player_ships": [_ship("sloop", {"crew": 5, "cannons": 4})],
 		"enemy_ships": [_ship("latin")],
 	})
 	half_sim.start()
-	_check(half_sim.reload_turns_of(_unit(half_sim, "player", 0)) == 3,
-		"§4.4a: ratio exactly 0.5 is not low crew → 3 turns (%d)"
+	_check(half_sim.reload_turns_of(_unit(half_sim, "player", 0)) == 2,
+		"§4.4a: ratio exactly 0.5 is not low crew → 2 turns (%d)"
 			% half_sim.reload_turns_of(_unit(half_sim, "player", 0)))
 
 	# The legacy fallback family prices the gunnery source: 10 + 10 × tier
@@ -935,21 +998,21 @@ func _test_reload() -> void:
 	var volley := sim.cannon(gunner, port_target, "port")
 	_check(bool(volley["ok"]) and str(volley["side"]) == "port",
 		"§4.4a: the named-side volley resolves")
-	_check(int(gunner["reload_port"]) == 4 and int(gunner["reload_starboard"]) == 1,
-		"§4.4a: reload_port = round 1 + 3 turns = 4; starboard untouched (%d/%d)"
+	_check(int(gunner["reload_port"]) == 3 and int(gunner["reload_starboard"]) == 1,
+		"§4.4a: reload_port = round 1 + 2 turns = 3; starboard untouched (%d/%d)"
 			% [int(gunner["reload_port"]), int(gunner["reload_starboard"])])
 	sim.end_turn()   # spend the brig's fired turn
 	_begin_turn(sim, "player", 0)   # walk the two enemy slots into round 2
 	_check(sim.round_number() == 2, "§4.4a: the fixture reaches round 2")
 	_check(not sim.can_cannon(gunner, port_target, "port"),
-		"§4.4a: round 2 < reload_port 4 — the port side cannot fire")
+		"§4.4a: round 2 < reload_port 3 — the port side cannot fire")
 	_check(sim.can_cannon(gunner, star_target, "starboard"),
 		"§4.4a: the starboard side reloaded independently (round 2 ≥ 1)")
 	var star_volley := sim.cannon(gunner, star_target, "starboard")
 	_check(bool(star_volley["ok"]),
 		"§4.4a: the independent starboard volley fires")
-	_check(int(gunner["reload_port"]) == 4 and int(gunner["reload_starboard"]) == 5,
-		"§4.4a: reload_starboard = round 2 + 3 = 5 while port stays 4 (%d/%d)"
+	_check(int(gunner["reload_port"]) == 3 and int(gunner["reload_starboard"]) == 4,
+		"§4.4a: reload_starboard = round 2 + 2 = 4 while port stays 3 (%d/%d)"
 			% [int(gunner["reload_port"]), int(gunner["reload_starboard"])])
 
 
@@ -1047,7 +1110,7 @@ func _test_grape() -> void:
 	_check(int(target["ship"]["durability"]) == 55 and int(target["crew"]) == 5,
 		"§4.4b: the volley applies hull 5 and crew 5 (%d dur / %d crew)"
 			% [int(target["ship"]["durability"]), int(target["crew"])])
-	_check(int(gunner["reload_port"]) == 4,
+	_check(int(gunner["reload_port"]) == 3,
 		"§4.4a: the grape volley reloads its side like any other (%d)"
 			% int(gunner["reload_port"]))
 
@@ -1820,7 +1883,7 @@ func _test_economy_pins() -> void:
 	sim.start()
 	var gunner := _unit(sim, "player", 0)
 	var wreck := _unit(sim, "enemy", 0)
-	_place(sim, "enemy", 0, Vector2i(3, 14))
+	_place(sim, "enemy", 0, Vector2i(11, 14))
 	_begin_turn(sim, "player", 0)
 	_check(bool(sim.cannon(gunner, wreck, "port")["sunk"]),
 		"§4.11.10: the fixture sinks the sloop with one volley")
@@ -1851,7 +1914,7 @@ func _test_economy_pins() -> void:
 	})
 	navy.start()
 	var navy_gunner := _unit(navy, "player", 0)
-	_place(navy, "enemy", 0, Vector2i(3, 14))
+	_place(navy, "enemy", 0, Vector2i(11, 14))
 	_begin_turn(navy, "player", 0)
 	navy.cannon(navy_gunner, _unit(navy, "enemy", 0), "port")
 	_check((navy.outcome()["rep_deltas"] as Dictionary).is_empty(),
@@ -2049,7 +2112,7 @@ func _test_morale() -> void:
 		"enemy_ships": [_ship("latin"), _ship("latin", {"durability": 1})],
 	})
 	sunk_enemy.start()
-	_place(sunk_enemy, "enemy", 1, Vector2i(3, 14))
+	_place(sunk_enemy, "enemy", 1, Vector2i(11, 14))
 	_begin_turn(sunk_enemy, "player", 0)
 	_volley(sunk_enemy, _unit(sunk_enemy, "player", 0),
 		_unit(sunk_enemy, "enemy", 1), "port")
@@ -2064,7 +2127,7 @@ func _test_morale() -> void:
 		"enemy_ships": [_ship("latin", {"cannons": 6})],
 	})
 	sunk_player.start()
-	_place(sunk_player, "player", 1, Vector2i(44, 16))
+	_place(sunk_player, "player", 1, Vector2i(36, 16))   # SW of (37,15) → enemy port arc
 	_begin_turn(sunk_player, "enemy", 0)
 	_volley(sunk_player, _unit(sunk_player, "enemy", 0),
 		_unit(sunk_player, "player", 1), "port")
@@ -2082,7 +2145,7 @@ func _test_morale() -> void:
 		"enemy_morale": 100,
 	})
 	flagship_enemy.start()
-	_place(flagship_enemy, "enemy", 0, Vector2i(3, 14))
+	_place(flagship_enemy, "enemy", 0, Vector2i(11, 14))
 	_begin_turn(flagship_enemy, "player", 0)
 	_volley(flagship_enemy, _unit(flagship_enemy, "player", 0),
 		_unit(flagship_enemy, "enemy", 0), "port")
@@ -2104,9 +2167,9 @@ func _test_morale() -> void:
 		"player_morale": 90,
 	})
 	flagship_player.start()
-	_place(flagship_player, "player", 0, Vector2i(44, 16))
-	_place(flagship_player, "player", 1, Vector2i(44, 14))
-	_place(flagship_player, "player", 2, Vector2i(44, 13))
+	_place(flagship_player, "player", 0, Vector2i(36, 16))   # SW → enemy port arc
+	_place(flagship_player, "player", 1, Vector2i(38, 14))   # NE → enemy starboard arc
+	_place(flagship_player, "player", 2, Vector2i(38, 13))   # N → enemy starboard arc
 	_begin_turn(flagship_player, "enemy", 0)
 	_volley(flagship_player, _unit(flagship_player, "enemy", 0),
 		_unit(flagship_player, "player", 0), "port")
@@ -2171,7 +2234,7 @@ func _test_morale() -> void:
 		"enemy_morale": 60, "seed": 2,
 	})
 	board_win.start()
-	_place(board_win, "enemy", 0, Vector2i(3, 15))
+	_place(board_win, "enemy", 0, Vector2i(11, 15))
 	_begin_turn(board_win, "player", 0)
 	var won_board := board_win.board(_unit(board_win, "player", 0),
 		_unit(board_win, "enemy", 0))
@@ -2188,8 +2251,12 @@ func _test_morale() -> void:
 		"§4.8a: side_morale() reads both sides mid-battle after events")
 	# A bare boarding win (nothing else happened player-side) writes
 	# `morale_delta` +10 into the outcome; `morale_bonus` is RETIRED.
+	# (The quiet policy pins vel (0,0) for both sides — under the correction-15
+	# closing start a plain hold would RETAIN the (±1,0) closing velocities,
+	# the two survivors would close and ram, and the "bare" arithmetic would
+	# pick up sunk events. The frozen arrangement keeps the win bare.)
 	var quiet_policy := func(_active_sim, _unit) -> Dictionary:
-		return {"action": "hold"}
+		return {"action": "hold", "vel": Vector2i.ZERO}
 	var win_outcome := board_win.run_to_completion(quiet_policy,
 		BattleLib.MAX_ROUNDS)
 	_check(int(win_outcome["morale_delta"]) == 10
@@ -2208,7 +2275,7 @@ func _test_morale() -> void:
 		"enemy_morale": 60, "seed": 2,
 	})
 	board_loss.start()
-	_place(board_loss, "enemy", 0, Vector2i(3, 15))
+	_place(board_loss, "enemy", 0, Vector2i(11, 15))
 	_begin_turn(board_loss, "player", 0)
 	var lost_board := board_loss.board(_unit(board_loss, "player", 0),
 		_unit(board_loss, "enemy", 0))
@@ -2232,7 +2299,7 @@ func _test_morale() -> void:
 		"player_morale": 95, "seed": 2,
 	})
 	ceiling_clamp.start()
-	_place(ceiling_clamp, "enemy", 0, Vector2i(3, 15))
+	_place(ceiling_clamp, "enemy", 0, Vector2i(11, 15))
 	_begin_turn(ceiling_clamp, "player", 0)
 	ceiling_clamp.board(_unit(ceiling_clamp, "player", 0),
 		_unit(ceiling_clamp, "enemy", 0))
@@ -2255,8 +2322,8 @@ func _test_morale() -> void:
 		"player_morale": 3,
 	})
 	floor_clamp.start()
-	_place(floor_clamp, "player", 1, Vector2i(44, 16))
-	_place(floor_clamp, "player", 2, Vector2i(44, 14))
+	_place(floor_clamp, "player", 1, Vector2i(36, 16))   # SW → enemy port arc
+	_place(floor_clamp, "player", 2, Vector2i(37, 16))   # S → enemy port arc
 	_begin_turn(floor_clamp, "enemy", 0)
 	_volley(floor_clamp, _unit(floor_clamp, "enemy", 0),
 		_unit(floor_clamp, "player", 1), "port")
@@ -2438,26 +2505,45 @@ func _test_morale() -> void:
 		"enemy_nation": "spain",
 	})
 	steadfast.start()
+	# The closing start sails every holding ship on its retained (±1,0) and
+	# moves the flagship anchor from (2,15) to (10,15) — the W5-D stall pin
+	# was captured on the frozen west-edge arrangement, where the T3's
+	# landing-cell evaluation reads the west edge as a stop. The repair
+	# transplants that arrangement verbatim: players at (2,15)/(2,14) and
+	# enemies at (8,15)/(8,14), every ship pinned at rest (the player policy
+	# holds vel (0,0); the flagship's closing (1,0)/(−1,0) are zeroed
+	# post-deployment). Enemy turns stay T3-driven (§4.3a: a (0,0) pick is
+	# legal whenever the magnitude delta holds).
+	_place(steadfast, "player", 0, Vector2i(2, 15))
+	_place(steadfast, "player", 1, Vector2i(2, 14))
 	_place(steadfast, "enemy", 0, Vector2i(8, 15))
 	_place(steadfast, "enemy", 1, Vector2i(8, 14))
+	(_unit(steadfast, "player", 0))["vel"] = Vector2i.ZERO
+	(_unit(steadfast, "player", 1))["vel"] = Vector2i.ZERO
+	(_unit(steadfast, "enemy", 0))["vel"] = Vector2i.ZERO
+	(_unit(steadfast, "enemy", 1))["vel"] = Vector2i.ZERO
 	var hunt_policy := func(active_sim, unit) -> Dictionary:
 		if str(unit.get("side", "")) == "enemy":
 			return AiLib.decide(active_sim, unit)
-		return {"action": "hold"}
+		return {"action": "hold", "vel": Vector2i.ZERO}
 	var steadfast_outcome := steadfast.run_to_completion(hunt_policy,
 		BattleLib.MAX_ROUNDS)
-	# W5-D re-pin: under the live T3 (the navy row ai_level 1, the shared θ
-	# prior) the hunter no longer closes on the unarmed player from the
-	# fixture arrangement — the bout resolves as the §4.11.9 stall (8
-	# consecutive zero-damage rounds, frozen net distance) instead of the
-	# T2-era defeat_sunk. The CEM re-weighting (§4.9c's θ-finalization) is
-	# the designed remedy for exactly this stall; until it amends the doc +
-	# the consts together, the doc-legit stall outcome is the pin.
+	# W5-D re-pin, correction-15 re-measured: under the live T3 (the navy row
+	# ai_level 1, the shared θ prior) the hunter does not press the unarmed
+	# player — the bout resolves as the §4.11.9 stall instead of a
+	# defeat_sunk. The stall still needs its 8 consecutive zero-damage
+	# rounds, but the correction-15 tier raise (latin bms 4 → 5) widens the
+	# T3's legal-velocity set, so the wander-off dance takes 6 firing rounds
+	# before the quiet freeze — the stall lands at round 14, not the W5-D-era
+	# 8. The CEM re-weighting (§4.9c's θ-finalization) is the designed remedy
+	# for exactly this stall; until it amends the doc + the consts together,
+	# the doc-legit stall outcome is the pin.
 	_check(str(steadfast_outcome["result"]) == "stall"
-			and int(steadfast_outcome["rounds"]) == 8,
+			and int(steadfast_outcome["rounds"]) == 14,
 		("§4.8a: player morale 0 is a HUD warning only — the hunter never "
 			+ "breaks the player, and the T3-vs-T2 prior freezes into the "
-			+ "§4.11.9 stall (8 rounds zero damage + frozen distance; "
+			+ "§4.11.9 stall (8 consecutive quiet rounds; the correction-15 "
+			+ "tier raise lands the freeze at r14, was r8 on bms 4; "
 			+ "%s @ r%d — the CEM re-weighting is the designed remedy, "
 			+ "§4.9c)") % [str(steadfast_outcome["result"]),
 			int(steadfast_outcome["rounds"])])
@@ -2484,7 +2570,7 @@ func _test_morale() -> void:
 		"player_morale": 80, "enemy_morale": 40,
 	})
 	snapshot_sim.start()
-	_place(snapshot_sim, "enemy", 1, Vector2i(3, 14))
+	_place(snapshot_sim, "enemy", 1, Vector2i(11, 14))
 	_begin_turn(snapshot_sim, "player", 0)
 	_volley(snapshot_sim, _unit(snapshot_sim, "player", 0),
 		_unit(snapshot_sim, "enemy", 1), "port")
@@ -2496,7 +2582,7 @@ func _test_morale() -> void:
 		("§4.12.1: the snapshot carries the pinned scalar block (%d ints for "
 			+ "%d units)") % [snap.size(), snapshot_sim.units().size()])
 	# Move BOTH morales after the snapshot, then restore.
-	_place(snapshot_sim, "player", 1, Vector2i(44, 16))
+	_place(snapshot_sim, "player", 1, Vector2i(36, 16))   # SW of (37,15) → enemy port arc
 	_begin_turn(snapshot_sim, "enemy", 0)
 	_volley(snapshot_sim, _unit(snapshot_sim, "enemy", 0),
 		_unit(snapshot_sim, "player", 1), "port")

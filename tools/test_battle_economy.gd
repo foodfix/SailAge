@@ -239,7 +239,7 @@ func _test_nearest_nations() -> void:
 	pirate.start()
 	var gunner := _unit(pirate, "player", 0)
 	var wreck := _unit(pirate, "enemy", 0)
-	_place(pirate, "enemy", 0, Vector2i(3, 14))
+	_place(pirate, "enemy", 0, Vector2i(11, 14))
 	_check(bool(pirate.cannon(gunner, wreck)["sunk"]), "the sloop sinks to one volley")
 	var outcome := pirate.outcome()
 	var expected := {}
@@ -344,7 +344,7 @@ func _test_apply() -> void:
 	})
 	navy.start()
 	var navy_gunner := _unit(navy, "player", 0)
-	_place(navy, "enemy", 0, Vector2i(3, 14))
+	_place(navy, "enemy", 0, Vector2i(11, 14))
 	_check(bool(navy.cannon(navy_gunner, _unit(navy, "enemy", 0))["sunk"]),
 		"the navy sloop sinks to one volley")
 	var navy_outcome := navy.outcome()
@@ -806,7 +806,7 @@ func _test_outcome_morale_carried() -> void:
 	sim.start()
 	var boarder := _unit(sim, "player", 0)
 	var target := _unit(sim, "enemy", 0)
-	_place(sim, "enemy", 0, Vector2i(3, 15))   # ORTHOGONAL adjacency (§4.6a)
+	_place(sim, "enemy", 0, Vector2i(11, 15))   # ORTHOGONAL adjacency (§4.6a)
 	var boarding: Dictionary = sim.board(boarder, target)
 	_check(bool(boarding["ok"]) and str(boarding["duel"]["result"]) == "capture",
 		"the seeded boarding capture resolves (seed 2)")
