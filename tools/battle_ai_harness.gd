@@ -6,14 +6,34 @@ extends Node
 ##
 ##   godot --headless res://tools/battle_ai_harness.tscn
 ##
-## Runs 64 fixed seeds (seed_i = 1000003 + i × 7919, i in 0..63 — the formula
-## is the pin, do not regenerate the table) of a symmetric deterministic
-## greedy mirror policy driving BOTH sides, on a player fleet of 2 brigantines
-## vs `AiFleet.compose_enemy("pirate", day=30)` composed on the §4.11.1
-## hand-off stream (the same `rng` object seeds the composition and the sim,
-## so composition → duel continuity holds, §4.12.1 optional `rng` key).
+## Two sections run per invocation (the W4-D extension):
 ##
-## The policy is ENGINE-AGNOSTIC: it probes the sim API once
+##   1. the pinned 64-seed MIRROR set (seed_i = 1000003 + i × 7919, i in
+##      0..63 — the formula is the pin, do not regenerate the table) of a
+##      symmetric deterministic greedy mirror policy driving BOTH sides, on
+##      a player fleet of 2 brigantines vs `AiFleet.compose_enemy("pirate",
+##      day=30)` composed on the §4.11.1 hand-off stream (the same `rng`
+##      object seeds the composition and the sim, so composition → duel
+##      continuity holds, §4.12.1 optional `rng` key).
+##
+##   2. the W4 navy-vs-pirate section over seeds[0..15] of the same table:
+##      the ENEMY side is the navy fleet (`AiFleet.compose_enemy("navy",
+##      day=30, rng)` — the navy row's `line_ahead`) driven by
+##      `AiFleet.decide` THROUGH the §4.9b FleetCommander layer: a
+##      `FleetCommander.initial_state` seeded at battle start (anchor =
+##      flagship pos + heading8), per-round `generate_orders` on the live
+##      sim view (`{units, round, enemy_kind, side_morale:
+##      sim.side_morale("enemy")}` — threaded when the W4-A seam exists),
+##      each five-tuple consumed by `AiFleet.decide(sim, unit, order)`;
+##      the player side stays the mirror greedy. Metrics: rounds, navy
+##      winrate, formation-hold % (the fraction of engage/form rounds where
+##      every living navy ship is within the §4.9b station-deviation 2 of
+##      the order station just issued), navy surrender count. The design
+##      expectation — formation-hold ≥ 60 % (the phase doc's "line
+##      formation never forms" risk) — is RECORDED in the report, never
+##      tuned against.
+##
+## The mirror policy is ENGINE-AGNOSTIC: it probes the sim API once
 ## (`legal_velocities` present ⇒ the Phase-9 velocity engine, else the
 ## Phase-2/8 MP engine) and drives either through `run_to_completion`:
 ##   ① if a loaded cannon side has an enemy target in range+arc → fire it
@@ -38,10 +58,12 @@ extends Node
 ## the health-band reading (avg rounds 12–25, cap-hit < 10 %, stall < 5 %,
 ## legal-action 100 %, avg decision ≤ 30 ms). Each section carries its
 ## metrics as a ```json fence so the later run can parse the earlier one
-## back for the comparison table.
+## back for the comparison table. The W4 section is regenerated fresh every
+## run and appended after the comparison.
 
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
+const FleetCommanderLib := preload("res://scripts/combat/fleet_commander.gd")
 
 # --- Pinned harness constants ----------------------------------------------
 
@@ -59,6 +81,13 @@ const NEW_CAP := 40
 const REPORT_PATH := "res://tools/battle_ai_harness_report.md"
 const SECTION_BEFORE := "## Before (Phase-8 MP engine)"
 const SECTION_AFTER := "## After (Phase-9 velocity engine)"
+
+## The W4 navy-vs-pirate section (the D-slot extension): 16 seeds, the
+## formation-hold design expectation, the §4.9b station-deviation radius.
+const SECTION_W4 := "## W4: navy line_ahead (FleetCommander) vs pirate swarm"
+const W4_SEED_COUNT := 16
+const W4_FORMATION_HOLD_TARGET := 60.0
+const W4_STATION_DEVIATION := 2
 
 ## The fixture battle: player 2 brigantines (full `armament_slots` cannons,
 ## `crew_min` crew, max durability) vs the composed pirate fleet at day 30.
@@ -110,7 +139,23 @@ func _ready() -> void:
 			% float(metrics["legal_rate"]))
 	_check(int(metrics["cap_used"]) == _cap,
 		"cap used matches the engine probe (%d)" % _cap)
-	_write_report(metrics)
+	# --- W4 section: navy line_ahead (FleetCommander) vs pirate swarm ------
+	var w4_records: Array = []
+	for index in W4_SEED_COUNT:
+		w4_records.append(_run_w4_seed(index))
+	var w4_metrics := _aggregate_w4(w4_records)
+	_print_w4_summary(w4_metrics)
+	_check(w4_records.size() == W4_SEED_COUNT,
+		"w4: all %d navy-vs-pirate seeds produced a record (%d)"
+			% [W4_SEED_COUNT, w4_records.size()])
+	_check(int(w4_metrics["player_wins"]) + int(w4_metrics["navy_wins"]) \
+		+ int(w4_metrics["stalls"]) + int(w4_metrics["cap_hit"])
+		== W4_SEED_COUNT,
+		"w4: winner tally sums to the seed count (%d)" % W4_SEED_COUNT)
+	_check(int(w4_metrics["formation_rounds"]) > 0,
+		"w4: formation-hold measured over %d engage/form rounds"
+			% int(w4_metrics["formation_rounds"]))
+	_write_report(metrics, w4_metrics)
 	_check(FileAccess.file_exists(REPORT_PATH),
 		"report written to %s" % REPORT_PATH)
 	_report()
@@ -388,6 +433,236 @@ func _determinism_audit() -> void:
 			% [str(first["result"]), int(first["rounds"])])
 
 
+# --- W4 section: navy line_ahead (FleetCommander) vs pirate swarm -----------
+#
+# The D-slot extension: the ENEMY side is the navy fleet driven by the real
+# T2 THROUGH the §4.9b FleetCommander; the player side stays the pinned
+# mirror greedy. Per-round the commander's `generate_orders` runs ONCE on
+# the live sim view (orders cached per round — the §4.9b layer is per-round,
+# not per-ship), the formation-hold bookkeeping reads the orders at issue
+# time, and each navy ship consumes its five-tuple via `AiFleet.decide`.
+
+var _w4_state: Dictionary = {}      # the commander's per-battle state
+var _w4_profile: Dictionary = {}    # the navy row (§4.10)
+var _w4_orders: Array = []          # this round's five-tuples
+var _w4_orders_round := -1
+var _w4_hold_rounds := 0            # engage/form rounds seen
+var _w4_hold_hits := 0              # …where every ship sat on its station
+
+
+func _run_w4_seed(index: int) -> Dictionary:
+	var seed_i := seed_at(index)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_i
+	var navy: Array = AiFleetLib.compose_enemy("navy", DAY, rng)
+	var sim := BattleSimLib.new({
+		"player_ships": [_brigantine(), _brigantine()],
+		"enemy_ships": navy,
+		"enemy_kind": "navy",
+		"enemy_nation": "spain",
+		"day": DAY,
+		"gold": GOLD,
+		"contact": CONTACT,
+		"weather": FIXTURE_WEATHER,
+		"seed": seed_i,
+		"rng": rng,
+	})
+	_w4_profile = AiFleetLib.profile_for("navy")
+	_w4_orders = []
+	_w4_orders_round = -1
+	_w4_hold_rounds = 0
+	_w4_hold_hits = 0
+	var recorder := {
+		"seed": seed_i,
+		"damage_p2e": 0, "damage_e2p": 0,
+		"decisions": 0, "illegal": 0,
+		"usec_total": 0, "usec_max": 0,
+	}
+	_recorder = recorder
+	sim.start()
+	var flagship: Dictionary = {}
+	for unit in sim.units():
+		if str(unit.get("side", "")) == "enemy" \
+				and int(unit.get("index", -1)) == 0:
+			flagship = unit
+			break
+	# §4.9b: the anchor = flagship pos + heading8 at battle start.
+	_w4_state = FleetCommanderLib.initial_state(
+		str(_w4_profile.get("formation", "line_ahead")),
+		sim.unit_cell(flagship), int(flagship.get("heading8", 4)))
+	var policy := Callable(self, "_w4_policy")
+	var outcome := sim.run_to_completion(policy, _cap)
+	return {
+		"seed": seed_i,
+		"result": str(outcome.get("result", "")),
+		"over": bool(outcome.get("over", true)),
+		"rounds": int(outcome.get("rounds", sim.round_number())),
+		"navy_surrenders": int(outcome.get("surrendered_enemy", 0)),
+		"hold_rounds": _w4_hold_rounds,
+		"hold_hits": _w4_hold_hits,
+	}
+
+
+func _w4_policy(sim, unit) -> Dictionary:
+	if str(unit.get("side", "")) == "enemy":
+		return _w4_enemy_decision(sim, unit)
+	return _decide(sim, unit, _recorder)
+
+
+## One generate_orders per round (on the live sim view, the W4-A
+## `side_morale` threaded when the seam exists), then this ship's order
+## consumed by the unchanged T2 (§4.9b + §4.12.1.1).
+func _w4_enemy_decision(sim, unit: Dictionary) -> Dictionary:
+	var round_no: int = sim.round_number()
+	if round_no != _w4_orders_round:
+		_w4_orders_round = round_no
+		var view := {
+			"units": sim.units(),
+			"round": round_no,
+			"enemy_kind": str(sim.enemy_kind),
+		}
+		if sim.has_method("side_morale"):
+			view["side_morale"] = sim.side_morale("enemy")
+		_w4_orders = FleetCommanderLib.generate_orders(view, _w4_profile,
+			_w4_state)
+		_record_formation_hold(sim, _w4_orders)
+	for entry in _w4_orders:
+		if entry is Dictionary \
+				and int(entry.get("index", -1)) == int(unit.get("index", -1)):
+			return AiFleetLib.decide(sim, unit, entry.get("order", {}))
+	return AiFleetLib.decide(sim, unit)
+
+
+## Formation-hold bookkeeping: while the commander's phase is engage or
+## form, the round counts — and holds when EVERY living navy ship sits
+## within the §4.9b station-deviation 2 of the order station just issued.
+func _record_formation_hold(sim, orders: Array) -> void:
+	if orders.is_empty():
+		return
+	var phase := str((orders[0] as Dictionary).get("order", {}).get("phase", ""))
+	if phase != "engage" and phase != "form":
+		return
+	_w4_hold_rounds += 1
+	var cells := {}
+	for unit in sim.units():
+		if bool(unit.get("alive", false)):
+			cells[int(unit.get("index", -1))] = sim.unit_cell(unit)
+	for entry in orders:
+		var order: Dictionary = entry.get("order", {})
+		var index := int(entry.get("index", -1))
+		if not cells.has(index):
+			continue
+		var station: Vector2i = BattleSimLib.to_cell(
+			order.get("station", BattleSimLib.NO_CELL))
+		if _chebyshev(cells[index], station) > W4_STATION_DEVIATION:
+			return
+	_w4_hold_hits += 1
+
+
+func _aggregate_w4(records: Array) -> Dictionary:
+	var player_wins := 0
+	var navy_wins := 0
+	var stalls := 0
+	var cap_hits := 0
+	var rounds_total := 0
+	var surrenders := 0
+	var hold_rounds := 0
+	var hold_hits := 0
+	for record in records:
+		var result := str(record["result"])
+		if result in ["defeat_sunk", "defeat_captured"]:
+			navy_wins += 1
+		elif result == "victory":
+			player_wins += 1
+		elif result == "stall":
+			stalls += 1
+		if not bool(record["over"]):
+			cap_hits += 1
+		rounds_total += int(record["rounds"])
+		surrenders += int(record["navy_surrenders"])
+		hold_rounds += int(record["hold_rounds"])
+		hold_hits += int(record["hold_hits"])
+	var count := maxi(records.size(), 1)
+	return {
+		"seeds": records.size(),
+		"cap_used": _cap,
+		"player_wins": player_wins,
+		"navy_wins": navy_wins,
+		"stalls": stalls,
+		"cap_hit": cap_hits,
+		"avg_rounds": float(rounds_total) / float(count),
+		"navy_winrate_pct": 100.0 * float(navy_wins) / float(count),
+		"navy_surrenders": surrenders,
+		"formation_rounds": hold_rounds,
+		"formation_hold_pct": 100.0 * float(hold_hits) / float(maxi(hold_rounds, 1)),
+		"timestamp": Time.get_datetime_string_from_system(true),
+	}
+
+
+func _print_w4_summary(metrics: Dictionary) -> void:
+	print("")
+	print("== battle_ai_harness W4 (navy line_ahead vs pirate swarm) ==")
+	print("seeds %d · navy wins %d · player wins %d · stall %d · cap-hit %d"
+		% [int(metrics["seeds"]), int(metrics["navy_wins"]),
+		int(metrics["player_wins"]), int(metrics["stalls"]),
+		int(metrics["cap_hit"])])
+	print("avg rounds %.2f · navy surrenders %d · formation-hold %.1f%% over %d engage/form rounds"
+		% [float(metrics["avg_rounds"]), int(metrics["navy_surrenders"]),
+		float(metrics["formation_hold_pct"]), int(metrics["formation_rounds"])])
+
+
+func _w4_section_markdown(metrics: Dictionary) -> String:
+	var hold := float(metrics["formation_hold_pct"])
+	var verdict := "PASS" if hold >= W4_FORMATION_HOLD_TARGET else "WATCH"
+	var lines: Array[String] = []
+	lines.append_array([
+		SECTION_W4,
+		"",
+		"- recorded: %s (UTC)" % str(metrics["timestamp"]),
+		"- fixture: enemy side = the navy fleet (`AiFleet.compose_enemy(\"navy\", day=%d, rng)`, 2–4 hulls," % DAY
+			+ " the navy row's `line_ahead`) driven by `AiFleet.decide` THROUGH the §4.9b FleetCommander —"
+			+ " `FleetCommander.initial_state` at battle start (anchor = flagship pos + heading8),"
+			+ " per-round `generate_orders` on the live sim view (`{units, round, enemy_kind, side_morale}`),"
+			+ " each five-tuple consumed by `AiFleet.decide(sim, unit, order)`;"
+			+ " player side = the pinned mirror greedy (2 brigantines), unchanged."
+			+ " Seeds[0..15] of the pinned table, weather `fair`, contact (100, 100), cap %d." % int(metrics.get("cap_used", _cap)),
+		"- formation-hold metric: over every round the commander's phase is"
+			+ " engage or form, the round HOLDS when every living navy ship"
+			+ " sits within the §4.9b station-deviation %d of the order"
+			% W4_STATION_DEVIATION
+			+ " station just issued (read off the orders at issue time).",
+		"",
+		"| metric | value |",
+		"|---|---|",
+		"| seeds | %d |" % int(metrics["seeds"]),
+		"| navy wins | %d / %d |" % [int(metrics["navy_wins"]), int(metrics["seeds"])],
+		"| player wins | %d / %d |" % [int(metrics["player_wins"]), int(metrics["seeds"])],
+		"| stall outcomes | %d |" % int(metrics["stalls"]),
+		"| cap-hit | %d |" % int(metrics["cap_hit"]),
+		"| avg rounds | %.2f |" % float(metrics["avg_rounds"]),
+		"| navy winrate | %.1f%% |" % float(metrics["navy_winrate_pct"]),
+		"| navy surrender count | %d |" % int(metrics["navy_surrenders"]),
+		"| formation-hold rounds (engage/form) | %d |" % int(metrics["formation_rounds"]),
+		"| formation-hold %% | %.1f%% |" % hold,
+		"",
+		"W4 band: formation-hold ≥ %.0f%% is the design expectation (the"
+			% W4_FORMATION_HOLD_TARGET
+			+ " phase doc's \"line formation never forms\" risk); rounds and"
+			+ " winrate are recorded, not gated — no tuning against the band.",
+		"",
+		"Verdict: formation-hold %.1f%% vs ≥ %.0f%% → %s."
+			% [hold, W4_FORMATION_HOLD_TARGET, verdict],
+		"",
+		"Metrics block:",
+		"",
+		"```json",
+		JSON.stringify(metrics, "  "),
+		"```",
+		"",
+	])
+	return "\n".join(lines)
+
+
 # --- Aggregation ------------------------------------------------------------
 
 func _aggregate(records: Array) -> Dictionary:
@@ -465,7 +740,7 @@ func _print_summary(metrics: Dictionary) -> void:
 
 # --- Report ----------------------------------------------------------------
 
-func _write_report(metrics: Dictionary) -> void:
+func _write_report(metrics: Dictionary, w4_metrics: Dictionary = {}) -> void:
 	var is_after := _new_engine
 	var existing := ""
 	if FileAccess.file_exists(REPORT_PATH):
@@ -486,7 +761,9 @@ func _write_report(metrics: Dictionary) -> void:
 		+ "velocity whose resulting heading8 puts the nearest enemy in a\n" \
 		+ "broadside arc, so a nose-to-nose freeze cannot run the clock out —\n" \
 		+ "③ hold.\n" \
-		+ "Ram self-damage is not tallied in either exchange direction.\n\n"
+		+ "Ram self-damage is not tallied in either exchange direction.\n" \
+		+ "A W4 section (navy line_ahead via the FleetCommander vs pirate\n" \
+		+ "swarm, seeds[0..15]) is regenerated after the comparison.\n\n"
 	var out: String
 	if not is_after:
 		# Before starts the file: header + this section (any stale After
@@ -494,13 +771,18 @@ func _write_report(metrics: Dictionary) -> void:
 		out = head + _section_markdown(metrics, false)
 	else:
 		# After rebuilds the whole file: header + the Before section
-		# (regenerated from the parsed metrics block) + this section.
+		# (regenerated from the parsed metrics block) + this section + the
+		# comparison + the W4 navy-vs-pirate section (fresh every run).
 		var before := _normalize_metrics(_parse_before_metrics(existing))
 		var parts: Array[String] = [head]
 		if not before.is_empty():
 			parts.append(_section_markdown(before, false))
 		parts.append(_section_markdown(metrics, true))
 		parts.append(_comparison_markdown(before, metrics).strip_edges())
+		if not w4_metrics.is_empty():
+			parts.append("")
+			parts.append(_w4_section_markdown(
+				_normalize_w4_metrics(w4_metrics)))
 		out = "\n".join(parts)
 	var file := FileAccess.open(REPORT_PATH, FileAccess.WRITE)
 	file.store_string(out)
@@ -514,6 +796,16 @@ static func _normalize_metrics(metrics: Dictionary) -> Dictionary:
 		return metrics
 	for key in ["wins_player", "wins_enemy", "wins_stall", "cap_hit", "cap_used",
 			"seeds", "damage_p2e", "damage_e2p", "decisions", "illegal"]:
+		metrics[key] = int(metrics.get(key, 0))
+	return metrics
+
+
+## The W4 section's `%d` count fields (same float round-trip concern).
+static func _normalize_w4_metrics(metrics: Dictionary) -> Dictionary:
+	if metrics.is_empty():
+		return metrics
+	for key in ["seeds", "player_wins", "navy_wins", "stalls", "cap_hit",
+			"navy_surrenders", "formation_rounds", "cap_used"]:
 		metrics[key] = int(metrics.get(key, 0))
 	return metrics
 
