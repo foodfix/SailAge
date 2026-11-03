@@ -35,7 +35,7 @@ extends Node
 ##   S1b  a sweep-ram kill       → the §4.5 ram resolves through the sweep
 ##   S2  win by boarding+capture → the §4.6a hook zeroes both velocities; the
 ##                                 captured hull joins at 25% durability with
-##                                 crew 0 and cargo intact; morale_bonus +5
+##                                 crew 0 and cargo intact; morale_delta +10 (§4.8a)
 ##   S2b a second capture on a full fleet → looted + scuttled, overflow named
 ##   S3  retreat                 → result `retreat`, no XP/gold/rep, fleet kept
 ##   S3b player surrender        → §4.11.7: the pirates take the hold only
@@ -282,9 +282,14 @@ func _scenario_boarding_capture() -> void:
 		"S2: the boarded hull is captured (%d captured)" % captured.size())
 	_check(_as_array(outcome.get("sunk_enemy", [])).is_empty(),
 		"S2: nothing was sunk — the win came from the duel, not gunfire")
-	_check(int(outcome.get("morale_bonus", -1)) == 5,
-		"S2: §4.8 — the won boarding books morale_bonus +5 into the outcome (%d)"
-			% int(outcome.get("morale_bonus", -1)))
+	# §4.8a (W4 re-pin): the boarding +5 flat is retired — a won boarding
+	# books the BOARDING WIN +10 event, so a bare boarding win (nothing else
+	# happening to the player side) yields `morale_delta == +10`; the
+	# `morale_bonus` outcome key is gone.
+	_check(int(outcome.get("morale_bonus", -1)) == -1
+			and int(outcome.get("morale_delta", -1)) == 10,
+		"S2: §4.8a — the won boarding books morale_delta +10 (the §4.8 flat "
+			+ "+5 is retired) (delta %d)" % int(outcome.get("morale_delta", -1)))
 	_check(int(outcome.get("xp", -1)) == BattleRewardsLib.xp_for(
 			captured.size(), int(outcome.get("rounds", 0))),
 		"S2: XP = 10 × %d captured + 5 × %d rounds = %d (got %d)"
