@@ -66,51 +66,33 @@ size_flags_horizontal = 3
 text = "-"
 vertical_alignment = 1
 
-[node name="GridArea" type="Control" parent="."]
+[node name="GridView" type="Control" parent="."]
 layout_mode = 0
-offset_left = 256.0
-offset_top = 56.0
-offset_right = 1024.0
-offset_bottom = 536.0
-mouse_filter = 1
-
-[node name="Sea" type="ColorRect" parent="GridArea"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+offset_left = 0.0
+offset_top = 40.0
+offset_right = 1280.0
+offset_bottom = 624.0
 mouse_filter = 2
-color = Color(0.0862745, 0.266667, 0.431373, 1)
+clip_contents = true
 
-[node name="Cells" type="Control" parent="GridArea"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Overlay" type="Control" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 40.0
+offset_right = 1280.0
+offset_bottom = 624.0
 mouse_filter = 2
-
-[node name="Tokens" type="Control" parent="GridArea"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="Overlay" type="Control" parent="GridArea"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
+clip_contents = true
 script = ExtResource("2_overlay")
+
+[node name="Minimap" type="Control" parent="."]
+layout_mode = 0
+offset_left = 1080.0
+offset_top = 48.0
+offset_right = 1272.0
+offset_bottom = 168.0
+mouse_filter = 0
+clip_contents = true
 
 [node name="BottomPanel" type="ColorRect" parent="."]
 layout_mode = 1
@@ -118,7 +100,7 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -168.0
+offset_top = -96.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
@@ -132,134 +114,161 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
 
-[node name="VBox" type="VBoxContainer" parent="BottomPanel/Margin"]
+[node name="Columns" type="HBoxContainer" parent="BottomPanel/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="LeftCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="StatsRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/LeftCol"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Speed" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Heading" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="ReloadPort" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="ReloadStarboard" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Wind" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="WeatherLabel" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "-"
+vertical_alignment = 1
+
+[node name="Fit" type="Button" parent="BottomPanel/Margin/Columns/LeftCol/StatsRow"]
+custom_minimum_size = Vector2(72, 22)
+layout_mode = 2
+text = "Fit"
+
+[node name="Log" type="VBoxContainer" parent="BottomPanel/Margin/Columns/LeftCol"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 1
+
+[node name="Line0" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="Line1" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="Line2" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
+layout_mode = 2
+text = ""
+clip_text = true
+
+[node name="RightCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 
-[node name="StatsRow" type="HBoxContainer" parent="BottomPanel/Margin/VBox"]
-custom_minimum_size = Vector2(0, 24)
+[node name="ActionRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/RightCol"]
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 24
+theme_override_constants/separation = 8
 
-[node name="Flagship" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
-custom_minimum_size = Vector2(260, 0)
+[node name="Cannon" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
+custom_minimum_size = Vector2(104, 40)
 layout_mode = 2
-text = "-"
-vertical_alignment = 1
+text = "Cannon"
+metadata/action_id = "cannon"
 
-[node name="DurabilityBar" type="Control" parent="BottomPanel/Margin/VBox/StatsRow"]
-custom_minimum_size = Vector2(160, 12)
+[node name="Ram" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
+custom_minimum_size = Vector2(88, 40)
 layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
+text = "Ram"
+metadata/action_id = "ram"
 
-[node name="Bg" type="ColorRect" parent="BottomPanel/Margin/VBox/StatsRow/DurabilityBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-color = Color(0.27451, 0.329412, 0.407843, 1)
-
-[node name="Fill" type="ColorRect" parent="BottomPanel/Margin/VBox/StatsRow/DurabilityBar"]
-layout_mode = 0
-offset_right = 120.0
-offset_bottom = 12.0
-mouse_filter = 2
-color = Color(0.305882, 0.619608, 0.305882, 1)
-
-[node name="Durability" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+[node name="Board" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
+custom_minimum_size = Vector2(88, 40)
 layout_mode = 2
-text = "-"
-vertical_alignment = 1
+text = "Board"
+metadata/action_id = "board"
 
-[node name="Crew" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+[node name="Hold" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
+custom_minimum_size = Vector2(88, 40)
 layout_mode = 2
-text = "-"
-vertical_alignment = 1
+text = "Hold"
+metadata/action_id = "hold"
 
-[node name="Cannons" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
-layout_mode = 2
-text = "-"
-vertical_alignment = 1
-
-[node name="Reload" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
-layout_mode = 2
-text = ""
-vertical_alignment = 1
-
-[node name="Target" type="Label" parent="BottomPanel/Margin/VBox/StatsRow"]
+[node name="Target" type="Label" parent="BottomPanel/Margin/Columns/RightCol/ActionRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "-"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="Actions" type="HBoxContainer" parent="BottomPanel/Margin/VBox"]
+[node name="ShotRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/RightCol"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 
-[node name="Cannon" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+[node name="ShotRound" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
 custom_minimum_size = Vector2(120, 40)
 layout_mode = 2
-text = "Cannon"
+text = "1 Round"
+metadata/shot_id = "round"
 
-[node name="Ram" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+[node name="ShotChain" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
 custom_minimum_size = Vector2(120, 40)
 layout_mode = 2
-text = "Ram"
+text = "2 Chain"
+metadata/shot_id = "chain"
 
-[node name="Board" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+[node name="ShotArmorPiercing" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
 custom_minimum_size = Vector2(120, 40)
 layout_mode = 2
-text = "Board"
+text = "3 AP"
+metadata/shot_id = "armor_piercing"
 
-[node name="Hold" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
+[node name="ShotGrape" type="Button" parent="BottomPanel/Margin/Columns/RightCol/ShotRow"]
 custom_minimum_size = Vector2(120, 40)
 layout_mode = 2
-text = "Hold"
-
-[node name="Retreat" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
-text = "Retreat"
-
-[node name="Surrender" type="Button" parent="BottomPanel/Margin/VBox/Actions"]
-custom_minimum_size = Vector2(120, 40)
-layout_mode = 2
-text = "Surrender"
-
-[node name="Log" type="VBoxContainer" parent="BottomPanel/Margin/VBox"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-theme_override_constants/separation = 2
-
-[node name="Line0" type="Label" parent="BottomPanel/Margin/VBox/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
-
-[node name="Line1" type="Label" parent="BottomPanel/Margin/VBox/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
-
-[node name="Line2" type="Label" parent="BottomPanel/Margin/VBox/Log"]
-layout_mode = 2
-text = ""
-clip_text = true
+text = "4 Grape"
+metadata/shot_id = "grape"
 
 [node name="AfterAction" type="Control" parent="."]
 visible = false
@@ -375,6 +384,16 @@ text = "Retreat"
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "Surrender"
+
+[node name="AiAnimate" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Animate turns"
+
+[node name="AiInstant" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Instant turns"
 
 [node name="Back" type="Button" parent="BattleMenu/Center/Panel/Margin/Body"]
 custom_minimum_size = Vector2(0, 40)
