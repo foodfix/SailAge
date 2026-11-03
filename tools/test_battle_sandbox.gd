@@ -24,7 +24,16 @@ extends Node
 ##   7  normal-path guard — a NON-sandbox battle still routes through
 ##      BattleResult/BattleRewards (outcome carries applied `rewards`), while
 ##      the sandbox outcome never does;
-##   8  the S1 海战 button and the S10 → S21 configuration restore.
+##   8  the S1 海战 button and the S10 → S21 configuration restore;
+##   9  随机全部 determinism/fuzz — seeded handler calls across varied
+##      pre-states always leave 1..5 ships per side, every field inside its
+##      clamp, the enemy panel rows present AND visible (the "enemy
+##      sometimes empty" defect), and the export→import→export round trip
+##      byte-identical;
+##  10  layout regression — over the live control rects (both locales):
+##      no label clipped, no control past its panel edge, one header per
+##      panel, the compose checkbox beside its label, the fleet buttons
+##      directly under the rows scroll.
 
 const SandboxLib := preload("res://scenes/combat/battle_sandbox.gd")
 const SandboxScene := preload("res://scenes/combat/battle_sandbox.tscn")
@@ -59,6 +68,10 @@ var _checks := 0
 
 
 func _ready() -> void:
+	# SANDBOX_SHOT=1 (windowed run): layout-eyeball captures, then quit.
+	if OS.get_environment("SANDBOX_SHOT") == "1":
+		await _screenshot_smoke()
+		return
 	await _test_sandbox_boot()
 	await _test_clamps()
 	await _test_player_stats_seam()
@@ -66,6 +79,8 @@ func _ready() -> void:
 	await _test_sandbox_run_and_zero_write()
 	await _test_normal_path_guard()
 	await _test_title_and_restore()
+	await _test_randomize_fuzz()
+	await _test_layout_geometry()
 	_report()
 
 
@@ -545,7 +560,367 @@ func _test_title_and_restore() -> void:
 	await get_tree().process_frame
 
 
+# --- 9. 随机全部 determinism / the empty-enemy regression -------------------
+
+func _test_randomize_fuzz() -> void:
+	# Boot from the doc-example defaults (test 5 left a kept configuration in
+	# the static), en locale (the longest labels), a live fixture GameState.
+	SandboxLib.last_config = {}
+	_fixture_run_state()
+	var sandbox = await _new_sandbox()
+	if sandbox == null:
+		return
+	# 24 scripted rolls — the handler is called DIRECTLY (no UI simulation)
+	# with a pinned seed per roll, across varied pre-states: fleet sizes
+	# 1..5 on both sides, compose ON every third state (the reported defect's
+	# setup). After every roll: 1..5 ships per side, every field inside its
+	# clamp, both sides' ship rows present AND visible in the tree, and the
+	# export → import → export round trip byte-identical.
+	var details: Array[String] = []
+	var rolls := 24
+	for attempt in rolls:
+		var player_count := 1 + (attempt * 7) % 5
+		var enemy_count := 1 + (attempt * 11 + 3) % 5
+		var compose := attempt % 3 == 1
+		if not _apply_prestate(sandbox, player_count, enemy_count, compose):
+			details.append("roll %d: prestate %d/%d compose %s refused"
+				% [attempt, player_count, enemy_count, compose])
+			continue
+		sandbox.randomize_all(913000 + attempt * 7919)
+		var problems := _randomize_invariant_problems(sandbox)
+		var first: String = sandbox.export_json()
+		if not sandbox.import_json(first):
+			problems.append("the roll's export refuses to re-import")
+		elif sandbox.export_json() != first:
+			problems.append("export → import → export drifted")
+		if not problems.is_empty():
+			details.append("roll %d (pre %d/%d compose %s): %s" % [
+				attempt, player_count, enemy_count, compose,
+				"; ".join(problems)])
+	_check(details.is_empty(),
+		"24 seeded 随机全部 rolls across varied pre-states: both sides 1..5 "
+		+ "ships, every field inside its clamp, ship rows present + visible, "
+		+ "round trip byte-identical"
+		+ ("" if details.is_empty() else " — " + "; ".join(details)))
+
+	# The reported defect, pinned explicitly: compose ON hides the enemy rows
+	# scroll (the defect setup), and the roll must restore the panel.
+	if not _apply_prestate(sandbox, 1, 3, true):
+		_check(false, "the compose-ON prestate imports")
+	else:
+		_check(sandbox.compose_check().button_pressed
+				and not sandbox.rows_scroll("enemy").visible,
+			"prestate: compose ON hides the enemy ship rows scroll (the "
+			+ "defect's setup)")
+		sandbox.randomize_all(4242)
+		var rows: int = sandbox.enemy_rows().size()
+		var pinned_text: String = ("随机全部 after a compose-ON state: compose "
+			+ "OFF and the enemy panel's ship rows visible again (%d rows) "
+			+ "— the 'enemy sometimes empty' defect is pinned") % rows
+		_check(not sandbox.compose_check().button_pressed
+				and sandbox.rows_scroll("enemy").visible
+				and rows >= 1 and rows <= 5
+				and sandbox.rows_box("enemy").get_child_count() == rows
+				and (sandbox.rows_box("enemy").get_child(0) as Control)
+					.is_visible_in_tree(),
+			pinned_text)
+
+	# The randomized export must re-import byte-identical into a FRESH editor
+	# (the nested `equipment` slots of the normative schema are restored).
+	sandbox.randomize_all(90210)
+	var exported: String = sandbox.export_json()
+	var fresh = await _new_sandbox()
+	_check(fresh.import_json(exported) and fresh.export_json() == exported,
+		"a randomized export re-imports byte-identical into a FRESH editor "
+		+ "(nested equipment slots restored)")
+	fresh.queue_free()
+	sandbox.queue_free()
+	await get_tree().process_frame
+
+
+## Builds a fuzz pre-state: `player_count` / `enemy_count` ship rows and the
+## compose toggle, applied through the import seam (the production state
+## path). Returns false if the crafted payload refuses.
+func _apply_prestate(sandbox, player_count: int, enemy_count: int,
+		compose: bool) -> bool:
+	var config = JSON.parse_string(sandbox.export_json())
+	if not (config is Dictionary):
+		return false
+	for side_def in [["player", player_count], ["enemy", enemy_count]]:
+		var block: Dictionary = config[side_def[0]]
+		var ships: Array = block["ships"]
+		while ships.size() > side_def[1]:
+			ships.pop_back()
+		while ships.size() < side_def[1]:
+			ships.append((ships[0] as Dictionary).duplicate(true))
+		block["ships"] = ships
+	(config["enemy"] as Dictionary)["compose"] = compose
+	return sandbox.import_json(JSON.stringify(config))
+
+
+## The post-roll invariant set (§4.7.16): 1..5 ships per side, every field
+## inside its clamp, compose OFF, and both sides' ship rows present AND
+## visible in the node tree. Returns human-readable problems (empty = clean).
+func _randomize_invariant_problems(sandbox) -> Array[String]:
+	var problems: Array[String] = []
+	for side in ["player", "enemy"]:
+		var rows: Array = sandbox.ship_rows(side)
+		if rows.size() < 1 or rows.size() > 5:
+			problems.append("%s side has %d ships (clamp 1..5)"
+				% [side, rows.size()])
+		var box: VBoxContainer = sandbox.rows_box(side)
+		if box.get_child_count() != rows.size():
+			problems.append("%s rows_box holds %d of %d rows"
+				% [side, box.get_child_count(), rows.size()])
+		if not sandbox.rows_scroll(side).visible:
+			problems.append("%s rows scroll hidden" % side)
+		for index in rows.size():
+			var row: Dictionary = rows[index]
+			if not (row["root"] as Control).is_visible_in_tree():
+				problems.append("%s ship %d row node not visible"
+					% [side, index])
+			var state: Dictionary = sandbox._read_row(row)
+			var hull: Dictionary = DataLoader.get_ship_type(
+				state["ship_type_id"])
+			if hull.is_empty():
+				problems.append("%s ship %d: unknown hull '%s'"
+					% [side, index, state["ship_type_id"]])
+				continue
+			if int(state["cannons"]) < 0 \
+					or int(state["cannons"]) > int(hull["armament_slots"]):
+				problems.append("%s ship %d: cannons %d outside 0..%d"
+					% [side, index, int(state["cannons"]),
+					int(hull["armament_slots"])])
+			if int(state["crew"]) < int(hull["crew_min"]) \
+					or int(state["crew"]) > int(hull["crew_max"]):
+				problems.append("%s ship %d: crew %d outside %d..%d"
+					% [side, index, int(state["crew"]),
+					int(hull["crew_min"]), int(hull["crew_max"])])
+			if int(state["durability"]) < 1 \
+					or int(state["durability"]) > int(hull["durability"]):
+				problems.append("%s ship %d: durability %d outside 1..%d"
+					% [side, index, int(state["durability"]),
+					int(hull["durability"])])
+	if sandbox.compose_check().button_pressed:
+		problems.append("compose rolled ON (the mode is not a die roll)")
+	if int(sandbox.day_spin().value) < 1:
+		problems.append("day %d below 1" % int(sandbox.day_spin().value))
+	var strength: int = int(sandbox.current_strength_spin().value)
+	if strength < 0 or strength > 3:
+		problems.append("current strength %d outside 0..3" % strength)
+	for key in ["constitution", "intellect", "charisma", "courage", "luck"]:
+		var spin: SpinBox = sandbox.attribute_spin(key)
+		if int(spin.value) < 0 or int(spin.value) > 100:
+			problems.append("attribute %s %d outside 0..100"
+				% [key, int(spin.value)])
+	for spin in [sandbox.player_morale_spin(), sandbox.enemy_morale_spin()]:
+		if int(spin.value) < 0 or int(spin.value) > 100:
+			problems.append("morale %d outside 0..100" % int(spin.value))
+	var seed_value: int = int(sandbox.seed_spin().value)
+	if seed_value < 0 or seed_value > 999999999:
+		problems.append("seed %d outside 0..999999999" % seed_value)
+	return problems
+
+
+# --- 10. Layout regression — nothing clips, nothing overflows ---------------
+
+func _test_layout_geometry() -> void:
+	# The label strings are locale-dependent (EN is the longest form), so the
+	# audit runs for BOTH locales with the fleet at its worst case (5v5).
+	for locale in ["en", "zh"]:
+		GameState.locale = locale
+		SandboxLib.last_config = {}
+		var sandbox = await _new_sandbox()
+		if sandbox == null:
+			return
+		while sandbox.player_rows().size() < 5:
+			sandbox.add_ship_row("player")
+		while sandbox.enemy_rows().size() < 5:
+			sandbox.add_ship_row("enemy")
+		await get_tree().process_frame
+		await get_tree().process_frame
+
+		var problems := _layout_problems(sandbox)
+		var layout_note: String = "" if problems.is_empty() \
+			else " — " + "; ".join(problems)
+		var layout_text: String = "[%s] layout rects: no label clipped, no " \
+			+ "control past its panel edge, ship rows fit their scroll's width"
+		_check(problems.is_empty(), (layout_text % locale) + layout_note)
+
+		# One header per panel — the panel content builds no second title row.
+		for side_def in [["player", sandbox.player_header(),
+				sandbox.player_panel()], ["enemy", sandbox.enemy_header(),
+				sandbox.enemy_panel()]]:
+			var header: Label = side_def[1]
+			var count := 0
+			for control in _panel_controls(side_def[2]):
+				if control is Label and control.text == header.text:
+					count += 1
+			_check(count == 1,
+				"[%s] the %s panel shows exactly ONE '%s' header (found %d)"
+					% [locale, side_def[0], header.text, count])
+
+		# The compose checkbox sits directly beside its label (same line,
+		# adjacent — not detached at the far edge).
+		var compose_text: String = I18n.t_key("sandbox.enemy.compose")
+		var compose_label: Label = null
+		for control in _panel_controls(sandbox.enemy_panel()):
+			if control is Label and control.text == compose_text:
+				compose_label = control
+		var check: Control = sandbox.compose_check()
+		var beside := compose_label != null \
+			and absf(check.global_position.y - compose_label.global_position.y) < 8.0 \
+			and check.global_position.x >= compose_label.global_position.x \
+			and absf(check.global_position.x
+				- (compose_label.global_position.x + compose_label.size.x)) <= 12.0
+		var beside_note: String = "" if beside \
+			else " (label at %.0f, checkbox at %.0f)" % [
+				compose_label.global_position.x if compose_label != null
+					else -1.0, check.global_position.x]
+		_check(beside,
+			"[%s] the compose checkbox sits directly beside its label"
+			% locale + beside_note)
+
+		# The fleet Add/Remove buttons sit directly under the rows scroll
+		# (no dead band between the rows and the buttons).
+		for side in ["player", "enemy"]:
+			var scroll: ScrollContainer = sandbox.rows_scroll(side)
+			var add: Button = sandbox.player_add_button() if side == "player" \
+				else sandbox.enemy_add_button()
+			var gap: float = add.global_position.y \
+				- (scroll.global_position.y + scroll.size.y)
+			var gap_ok := add.global_position.x >= scroll.global_position.x \
+				and gap >= -1.0 and gap <= 12.0
+			var gap_note: String = "" if gap_ok else " (gap %.0f px)" % gap
+			var gap_text: String = "[%s] the %s Add ship button sits " \
+				+ "directly under the rows area"
+			_check(gap_ok, (gap_text % [locale, side]) + gap_note)
+
+		# The three §4.7.16 regions stay inside the 1280×720 design surface.
+		var in_screen := true
+		for region in [sandbox.player_panel(), sandbox.enemy_panel(),
+				sandbox.conditions_panel()]:
+			if region.global_position.x < 0.0 or region.global_position.y < 0.0 \
+					or region.global_position.x + region.size.x > 1280.0 \
+					or region.global_position.y + region.size.y > 720.0:
+				in_screen = false
+		_check(in_screen,
+			"[%s] the three §4.7.16 regions stay inside the 1280×720 surface"
+			% locale)
+
+		sandbox.queue_free()
+		await get_tree().process_frame
+	GameState.locale = "en"
+
+
+## Every descendant Control of `root` (excluding `root` itself), pre-order.
+func _panel_controls(root: Control) -> Array:
+	var out: Array = []
+	for child in root.get_children():
+		if child is Control:
+			out.append(child)
+			out.append_array(_panel_controls(child))
+	return out
+
+
+## True when any ancestor of `control` is a ScrollContainer — those children
+## are intentionally clipped (the rows scroll vertically); their WIDTH fit is
+## pinned separately via the rows-box assertion below.
+func _inside_a_scroll(control: Control) -> bool:
+	var parent = control.get_parent()
+	while parent is Control:
+		if parent is ScrollContainer:
+			return true
+		parent = parent.get_parent()
+	return false
+
+
+## The geometric layout audit over the live control rects: every non-scroll
+## descendant must stay inside its panel's right/bottom edge, no label may
+## set clip_text, and each side's rows column must fit its scroll's width
+## (horizontal scrolling is disabled, so a too-wide row would clip).
+func _layout_problems(sandbox) -> Array[String]:
+	var problems: Array[String] = []
+	var regions: Array = [
+		{"name": "player panel", "panel": sandbox.player_panel(),
+			"right": 1280.0, "bottom": 720.0},
+		{"name": "enemy panel", "panel": sandbox.enemy_panel(),
+			"right": 1280.0, "bottom": 720.0},
+		{"name": "conditions", "panel": sandbox.conditions_panel(),
+			"right": 1280.0, "bottom": 720.0},
+		{"name": "screen", "panel": sandbox, "right": 1280.0, "bottom": 720.0},
+	]
+	for region in regions:
+		var panel: Control = region["panel"]
+		var limit_right: float = region["right"] if panel == sandbox \
+			else panel.global_position.x + panel.size.x
+		var limit_bottom: float = region["bottom"] if panel == sandbox \
+			else panel.global_position.y + panel.size.y
+		for control in _panel_controls(panel):
+			if control == panel or _inside_a_scroll(control):
+				continue
+			var right: float = control.global_position.x + control.size.x
+			var bottom: float = control.global_position.y + control.size.y
+			if right > limit_right + 1.0:
+				problems.append("%s: %s overflows the right edge by %.0fpx"
+					% [region["name"], _ctrl_path(control, panel),
+					right - limit_right])
+			if bottom > limit_bottom + 1.0:
+				problems.append("%s: %s overflows the bottom edge by %.0fpx"
+					% [region["name"], _ctrl_path(control, panel),
+					bottom - limit_bottom])
+			if control is Label and (control as Label).clip_text:
+				problems.append("%s: %s sets clip_text (labels never clip)"
+					% [region["name"], _ctrl_path(control, panel)])
+	for side in ["player", "enemy"]:
+		var scroll: ScrollContainer = sandbox.rows_scroll(side)
+		var box: VBoxContainer = sandbox.rows_box(side)
+		if box.size.x > scroll.size.x + 1.0:
+			problems.append("%s ship rows are wider (%.0f) than their scroll "
+				+ ("(%.0f) — horizontal clip"
+				% [side, box.size.x, scroll.size.x]))
+	return problems
+
+
+## A short readable name for a control relative to its panel.
+func _ctrl_path(control: Control, root: Control) -> String:
+	var name: String = control.name
+	var parent = control.get_parent()
+	while parent is Control and parent != root:
+		name = "%s/%s" % [parent.name, name]
+		parent = parent.get_parent()
+	return name
+
+
 # --- Helpers ----------------------------------------------------------------
+
+## SANDBOX_SHOT=1 (windowed, NOT headless): boots the sandbox, saves PNGs of
+## both locales plus a compose-ON state to SHOT_DIR (default /tmp/opencode)
+## for eyeballing the layout, then quits. Never runs in the suite.
+func _screenshot_smoke() -> void:
+	var dir := OS.get_environment("SHOT_DIR")
+	if dir.is_empty():
+		dir = "/tmp/opencode"
+	SandboxLib.last_config = {}
+	for locale in ["en", "zh"]:
+		GameState.locale = locale
+		var sandbox = await _new_sandbox()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		get_viewport().get_texture().get_image() \
+			.save_png("%s/sandbox_%s.png" % [dir, locale])
+		if locale == "en":
+			var composed: Dictionary = JSON.parse_string(sandbox.export_json())
+			(composed["enemy"] as Dictionary)["compose"] = true
+			sandbox.import_json(JSON.stringify(composed))
+			await get_tree().process_frame
+			await get_tree().process_frame
+			get_viewport().get_texture().get_image() \
+				.save_png("%s/sandbox_compose.png" % dir)
+		sandbox.queue_free()
+		await get_tree().process_frame
+	GameState.locale = "en"
+	get_tree().quit(0)
 
 func _new_sandbox():
 	var sandbox = SandboxScene.instantiate()
