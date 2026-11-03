@@ -17,16 +17,18 @@ extends Node
 ##   4b haul valuation (Phase 8): ×`clamp(1 + (appraisal + negotiation)/400,
 ##     1.0, 1.5)` (§4.8/§4.11.10);
 ##   4c battle XP multiplier (Phase 8): ×(1 + level/20), floored once;
-##   4d boarding morale: the outcome's `morale_bonus` moves GameState.morale
-##     once, clamped (§4.8);
+##   4d boarding morale (repinned Phase 9): the outcome's `morale_delta` (the
+##     §4.8a side-morale writeback) moves GameState.morale once, both ways,
+##     clamped (§4.8a);
 ##   4e the capture officer gate (Phase 8): ≥ 1 idle officer joins the prize,
 ##     otherwise loot-convert + scuttle with the failed gate named
 ##     (§4.11.7/§4.11.15);
 ##   4f the captain lifecycle hooks (Phase 8) (§4.11.15);
 ##   4g the piracy-fame extension hook (Phase 8) (§4.11.10/§4.11.15);
 ##   4h the 4 named-pirate `drop`s on the v2 `named_pirates.json` (§4.11.13);
-##   5 outcome morale carried: a won boarding duel books `morale_bonus` 5
-##     into the §4.12.2 block (§4.8);
+##   5 outcome morale carried (repinned Phase 9): a won boarding duel where
+##     nothing else happened yields `morale_delta` +10 in the §4.12.2 block,
+##     and `morale_bonus` is gone (§4.8a);
 ##   6 engine agreement: `BattleSim.outcome()`'s `salvage_gold`/`xp` are the
 ##     `BattleRewards` formulas over seeded pirate and navy battles driven
 ##     with an inline policy;
@@ -448,38 +450,55 @@ func _test_battle_xp_multiplier() -> void:
 		+ " = %d XP)" % CharacterLib.current_xp())
 
 
-# --- 4d. Boarding morale (Phase 8: §4.8) -----------------------------------
+# --- 4d. Side-morale writeback (repinned Phase 9: §4.8a) --------------------
 
 func _test_boarding_morale() -> void:
 	_make_run()
 	GameState.morale = 70
-	# The engine field exists; without a won boarding it is 0 and morale
-	# never moves.
-	var outcome := _outcome({"xp": 0, "morale_bonus": 5})
+	# The §4.8a writeback: the engine's player-side NET event delta moves
+	# fleet morale once (the Phase-8 flat +5 `morale_bonus` is retired —
+	# `apply` reads `morale_delta` and nothing else).
+	var outcome := _outcome({"xp": 0, "morale_delta": 10})
 	var applied := RewardsLib.apply(outcome)
-	_check(GameState.morale == 75,
-		"a won boarding's morale_bonus +5 moves fleet morale (70 → %d)"
+	_check(GameState.morale == 80,
+		"a boarding win's morale_delta +10 moves fleet morale (70 → %d)"
 		% GameState.morale)
-	_check(int(applied["morale"]) == 5,
+	_check(int(applied["morale"]) == 10,
 		"apply() reports the morale it applied (%d)" % int(applied["morale"]))
 	# Idempotent: the replay is a no-op under the same rewards_applied marker.
 	var replay := RewardsLib.apply(outcome)
-	_check(GameState.morale == 75 and int(replay["morale"]) == 0,
-		"a replayed block cannot double the morale (70+5 stays %d)"
+	_check(GameState.morale == 80 and int(replay["morale"]) == 0,
+		"a replayed block cannot double the morale (70+10 stays %d)"
 		% GameState.morale)
 	_make_run()
 	GameState.morale = 98
-	var clamped := RewardsLib.apply(_outcome({"morale_bonus": 5}))
+	var clamped := RewardsLib.apply(_outcome({"morale_delta": 10}))
 	_check(GameState.morale == 100,
 		"the morale gain clamps at 100 (98 → %d)" % GameState.morale)
 	_check(int(clamped["morale"]) == 2,
-		"the clamped step is reported as applied (+2, not +5) (%d)"
+		"the clamped step is reported as applied (+2, not +10) (%d)"
 		% int(clamped["morale"]))
-	# No boarding, no bonus: morale_bonus 0 leaves morale untouched.
+	# A loss side drains morale: −15 events can push the fleet below its
+	# start, floored at 0 (the §4.8a event table prices both directions).
 	_make_run()
 	GameState.morale = 70
-	RewardsLib.apply(_outcome({"morale_bonus": 0}))
-	_check(GameState.morale == 70, "morale_bonus 0 leaves morale untouched")
+	RewardsLib.apply(_outcome({"morale_delta": -15}))
+	_check(GameState.morale == 55,
+		"a negative morale_delta drains fleet morale (70 → %d)"
+		% GameState.morale)
+	_make_run()
+	GameState.morale = 5
+	var floored := RewardsLib.apply(_outcome({"morale_delta": -15}))
+	_check(GameState.morale == 0,
+		"the morale loss floors at 0 (5 → %d)" % GameState.morale)
+	_check(int(floored["morale"]) == -5,
+		"the floored step is reported as applied (−5, not −15) (%d)"
+		% int(floored["morale"]))
+	# No events, no writeback: morale_delta 0 leaves morale untouched.
+	_make_run()
+	GameState.morale = 70
+	RewardsLib.apply(_outcome({"morale_delta": 0}))
+	_check(GameState.morale == 70, "morale_delta 0 leaves morale untouched")
 
 
 # --- 4e. The capture officer gate (Phase 8: §4.11.7/§4.11.15) --------------
@@ -767,11 +786,13 @@ func _test_named_drops_canon() -> void:
 			"%s is equipped into its %s slot (%s)" % [drop_id, slot, carried])
 
 
-# --- 5. Outcome morale carried (§4.8 → §4.12.2) ----------------------------
+# --- 5. Outcome morale carried (§4.8a → §4.12.2; repinned Phase 9) ----------
 
 func _test_outcome_morale_carried() -> void:
-	# A won boarding duel books the §4.8 morale bonus INTO the outcome block
-	# — the engine never touches GameState (the §4.12.4 consumer applies it).
+	# A won boarding duel where nothing else happened yields the §4.8a
+	# `morale_delta` +10 INTO the outcome block — the engine never touches
+	# GameState (the §4.12.4 consumer applies it once). The Phase-8 flat +5
+	# `morale_bonus` is retired: the key is absent.
 	_make_run()
 	# §4.11.6 bases: swordplay 12 (+0 courage) vs min(floor(10/5), 20) + 6 = 8
 	# — seed 2 decides 3–1 for the player (the §4.11.6 scripted capture).
@@ -790,13 +811,15 @@ func _test_outcome_morale_carried() -> void:
 	_check(bool(boarding["ok"]) and str(boarding["duel"]["result"]) == "capture",
 		"the seeded boarding capture resolves (seed 2)")
 	var outcome := sim.outcome()
-	_check(int(outcome["morale_bonus"]) == BattleLib.BOARDING_MORALE_BONUS,
-		"§4.8: the won boarding books morale_bonus %d into the outcome (%d)"
-			% [BattleLib.BOARDING_MORALE_BONUS, int(outcome["morale_bonus"])])
-	# …and the §4.12.3 apply moves fleet morale by exactly that bonus once.
+	_check(int(outcome["morale_delta"]) == 10,
+		"§4.8a: the bare boarding win books morale_delta +10 into the "
+			+ "outcome (%d)" % int(outcome["morale_delta"]))
+	_check(not outcome.has("morale_bonus"),
+		"§4.8a: `morale_bonus` is gone from the outcome block (retired)")
+	# …and the §4.12.3 apply moves fleet morale by exactly that delta once.
 	var applied := RewardsLib.apply(outcome)
-	_check(GameState.morale == 75 and int(applied["morale"]) == 5,
-		"the carried bonus moves fleet morale 70 → %d once (applied %d)"
+	_check(GameState.morale == 80 and int(applied["morale"]) == 10,
+		"the carried delta moves fleet morale 70 → %d once (applied %d)"
 			% [GameState.morale, int(applied["morale"])])
 
 
@@ -906,7 +929,7 @@ func _test_reward_pipeline() -> void:
 	_check(rep_ok, "reputation moved by exactly the outcome deltas")
 	_check(int(applied["gold"]) == int(outcome.get("salvage_gold", 0))
 			and int(applied["xp"]) == expected_xp
-			and int(applied["morale"]) == int(outcome.get("morale_bonus", 0)),
+			and int(applied["morale"]) == int(outcome.get("morale_delta", 0)),
 		"the applied report records what BattleRewards credited (gold %d, xp %d, "
 			+ "morale %d)" % [int(applied["gold"]), int(applied["xp"]),
 			int(applied["morale"])])
@@ -1177,7 +1200,7 @@ func _outcome(fields: Dictionary) -> Dictionary:
 		"sunk_enemy": [], "captured_enemy": [], "surrendered_enemy": 0,
 		"sunk_player": [], "lost_player": [],
 		"salvage_gold": 0, "xp": 0, "rep_deltas": {},
-		"morale_bonus": 0,
+		"morale_delta": 0,
 		"cargo_overflow_lost": 0,
 	}
 	outcome.merge(fields, true)

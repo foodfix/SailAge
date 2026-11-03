@@ -18,6 +18,8 @@ velocity whose resulting heading8 puts the nearest enemy in a
 broadside arc, so a nose-to-nose freeze cannot run the clock out —
 ③ hold.
 Ram self-damage is not tallied in either exchange direction.
+A W4 section (navy line_ahead via the FleetCommander vs pirate
+swarm, seeds[0..15]) is regenerated after the comparison.
 
 
 ## Before (Phase-8 MP engine)
@@ -68,46 +70,46 @@ Metrics block (parsed back by the later section for the comparison):
 
 ## After (Phase-9 velocity engine)
 
-- recorded: 2026-11-03T14:27:18 (UTC)
+- recorded: 2026-11-03T16:37:53 (UTC)
 - engine: phase9-velocity — the Phase-9 velocity engine (`legal_velocities` / `apply_velocity`, arcs, per-side reload, sweep ram)
 - cap: 40 — the Phase-9 round cap 40 (§4.12.1, correction 12)
 - stall metric: reported by the engine (§4.11.9)
 
 | metric | value |
 |---|---|
-| player-side wins | 26 / 64 |
+| player-side wins | 36 / 64 |
 | enemy-side wins | 0 / 64 |
 | stall outcomes | 0 |
-| cap-hit | 38 (59.4%) |
-| avg rounds | 36.39 |
-| damage player→enemy | 7995 |
-| damage enemy→player | 4553 |
-| decisions | 8853 |
+| cap-hit | 28 (43.8%) |
+| avg rounds | 34.58 |
+| damage player→enemy | 7542 |
+| damage enemy→player | 4347 |
+| decisions | 8543 |
 | legal-action rate | 100.00% |
-| decision timing avg | 0.219 ms |
-| decision timing max | 0.569 ms |
+| decision timing avg | 0.237 ms |
+| decision timing max | 0.729 ms |
 
 Metrics block (parsed back by the later section for the comparison):
 
 ```json
 {
-  "avg_rounds": 36.390625,
-  "cap_hit": 38,
-  "cap_hit_pct": 59.375,
+  "avg_rounds": 34.578125,
+  "cap_hit": 28,
+  "cap_hit_pct": 43.75,
   "cap_used": 40,
-  "damage_e2p": 4553,
-  "damage_p2e": 7995,
-  "decision_avg_ms": 0.219429345984412,
-  "decision_max_ms": 0.569,
-  "decisions": 8853,
+  "damage_e2p": 4347,
+  "damage_p2e": 7542,
+  "decision_avg_ms": 0.236854032541262,
+  "decision_max_ms": 0.729,
+  "decisions": 8543,
   "engine": "phase9-velocity",
   "illegal": 0,
   "legal_rate": 100.0,
   "seeds": 64,
   "stall_pct": 0.0,
-  "timestamp": "2026-11-03T14:27:18",
+  "timestamp": "2026-11-03T16:37:53",
   "wins_enemy": 0,
-  "wins_player": 26,
+  "wins_player": 36,
   "wins_stall": 0
 }
 ```
@@ -118,20 +120,20 @@ Band: avg rounds 12–25 · cap-hit < 10% · stall < 5% · legal-action 100% · 
 
 | metric | before | after | band verdict |
 |---|---|---|---|
-| player-side wins | 58 | 26 | — |
+| player-side wins | 58 | 36 | — |
 | enemy-side wins | 6 | 0 | — |
-| avg rounds | 12.42 | 36.39 | BREACH |
-| cap-hit % | 0.0% | 59.4% | BREACH |
+| avg rounds | 12.42 | 34.58 | BREACH |
+| cap-hit % | 0.0% | 43.8% | BREACH |
 | stall % | 0.0% | 0.0% | PASS |
-| damage player→enemy | 10640 | 7995 | — |
-| damage enemy→player | 5648 | 4553 | — |
+| damage player→enemy | 10640 | 7542 | — |
+| damage enemy→player | 5648 | 4347 | — |
 | legal-action rate | 100.00% | 100.00% | PASS |
-| decision avg ms | 0.130 | 0.219 | PASS |
-| decision max ms | 0.539 | 0.569 | — |
+| decision avg ms | 0.130 | 0.237 | PASS |
+| decision max ms | 0.539 | 0.729 | — |
 
 ## Breach analysis (recorded per the W3 instruction — no gameplay numbers tuned)
 
-Breaches: avg rounds 36.39 outside 12–25; cap-hit 59.4% ≥ 10%.
+Breaches: avg rounds 34.58 outside 12–25; cap-hit 43.8% ≥ 10%.
 
 Measured mechanism (W3-A, 2026-11-03) — a **harness-driver artifact**,
 not an engine defect (the engine-level probe verified `cap_eff` wind
@@ -157,3 +159,45 @@ directly):
   amend the harness policy with a turn-to-broadside fallback, or accept
   the breach as the stand-in driver's artifact and re-run the harness
   once T2 drives the enemy side.
+
+## W4: navy line_ahead (FleetCommander) vs pirate swarm
+
+- recorded: 2026-11-03T16:37:54 (UTC)
+- fixture: enemy side = the navy fleet (`AiFleet.compose_enemy("navy", day=30, rng)`, 2–4 hulls, the navy row's `line_ahead`) driven by `AiFleet.decide` THROUGH the §4.9b FleetCommander — `FleetCommander.initial_state` at battle start (anchor = flagship pos + heading8), per-round `generate_orders` on the live sim view (`{units, round, enemy_kind, side_morale}`), each five-tuple consumed by `AiFleet.decide(sim, unit, order)`; player side = the pinned mirror greedy (2 brigantines), unchanged. Seeds[0..15] of the pinned table, weather `fair`, contact (100, 100), cap 40.
+- formation-hold metric: over every round the commander's phase is engage or form, the round HOLDS when every living navy ship sits within the §4.9b station-deviation 2 of the order station just issued (read off the orders at issue time).
+
+| metric | value |
+|---|---|
+| seeds | 16 |
+| navy wins | 0 / 16 |
+| player wins | 0 / 16 |
+| stall outcomes | 9 |
+| cap-hit | 7 |
+| avg rounds | 37.25 |
+| navy winrate | 0.0% |
+| navy surrender count | 0 |
+| formation-hold rounds (engage/form) | 273 |
+| formation-hold % | 22.7% |
+
+W4 band: formation-hold ≥ 60% is the design expectation (the phase doc's "line formation never forms" risk); rounds and winrate are recorded, not gated — no tuning against the band.
+
+Verdict: formation-hold 22.7% vs ≥ 60% → WATCH.
+
+Metrics block:
+
+```json
+{
+  "avg_rounds": 37.25,
+  "cap_hit": 7,
+  "cap_used": 40,
+  "formation_hold_pct": 22.7106227106227,
+  "formation_rounds": 273,
+  "navy_surrenders": 0,
+  "navy_winrate_pct": 0.0,
+  "navy_wins": 0,
+  "player_wins": 0,
+  "seeds": 16,
+  "stalls": 9,
+  "timestamp": "2026-11-03T16:37:54"
+}
+```

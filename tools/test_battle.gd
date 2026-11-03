@@ -8,14 +8,14 @@ extends Node
 ##
 ## Exits 0 when every check passes, 1 otherwise.
 ##
-## The suite drives `scripts/combat/battle_sim.gd` DIRECTLY (the merged W3-A
-## engine) with its own inline policy callables — it never calls
-## `AiFleet.decide` (W3-B seam: B's T2 rewrite is in flight on another
-## branch; everything AI-shaped here is expressed as a local policy stub).
+## The suite drives `scripts/combat/battle_sim.gd` DIRECTLY with its own
+## inline policy callables; the W4-D morale section may also call the merged
+## `AiFleet.decide` for the §4.9a morale-gate seams (the W3-D note about B's
+## rewrite being in flight is retired — the base carries B now).
 ## Every check pins a doc number: the constant or closed form is asserted,
 ## never re-derived.
 ##
-## Sections (the W3-D slot list):
+## Sections (the W3-D slot list + the W4-D morale additions):
 ##   1  grid + §4.11.2 deployment: 48×30, the six pinned cells per side,
 ##      band overflow scan, the tournament variant cells/velocities;
 ##   2  §4.3a velocity legality: angle / magnitude-delta / cap order,
@@ -56,7 +56,15 @@ extends Node
 ##  17  §4.11.10 economy pins carried over (salvage, XP, rep, the 40-round
 ##      cap, the menu outcomes);
 ##  18  §4.11.3 compose_enemy (slim — W3-B will derive the broadside split;
-##      these composition pins hold under both).
+##      these composition pins hold under both);
+##  19  §4.8a side morale (W4-D): the start formulas (GameState.morale /
+##      enemy_morale key / the captain-card formula + legacy fallback),
+##      the event table on both sides (friendly sunk, captured, flagship
+##      sunk −30 TOTAL with the dynamic-player flagship reading, rake,
+##      boarding win/loss and the combined loss), the 0/100 clamps, the
+##      surrender-roll widening + gate constants, the ≤ 10 instant strike
+##      (AI only — the player never strikes), the outcome `morale_delta`
+##      (with `morale_bonus` retired), and the §4.8a snapshot slots.
 
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
@@ -89,6 +97,7 @@ func _ready() -> void:
 	_test_duel_bases()
 	_test_economy_pins()
 	_test_compose_enemy()
+	_test_morale()
 	_report()
 
 
@@ -1962,6 +1971,505 @@ func _test_compose_enemy() -> void:
 		"§4.11.3: the pirate budget is 20 + floor(day/30)")
 	_check(AiLib.cannon_budget("navy", 0) == 30 and AiLib.cannon_budget("navy", 90) == 33,
 		"§4.11.3: the navy budget is 30 + floor(day/30)")
+
+
+# --- 19. Side morale (§4.8a, §4.7 — the W4-D additions) ---------------------
+
+## Books one §4.8a event-table row through a real volley: fires `gunner` at
+## `target` on the acting unit's turn and returns the volley result.
+func _volley(sim: BattleLib, gunner: Dictionary, target: Dictionary,
+		side: String) -> Dictionary:
+	return sim.cannon(gunner, target, side)
+
+
+func _test_morale() -> void:
+	_person(10)
+
+	# --- Starts (§4.8a start bullets) ---------------------------------------
+	GameState.morale = 55
+	var default_start := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")]})
+	_check(default_start.side_morale("player") == 55,
+		"§4.8a: the player side starts at GameState.morale (55 → %d)"
+			% default_start.side_morale("player"))
+	var overridden := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")],
+		"enemy_morale": 33})
+	_check(overridden.side_morale("enemy") == 33,
+		"§4.12.1/§4.8a: the `enemy_morale` config key overrides the AI start "
+			+ "(%d)" % overridden.side_morale("enemy"))
+
+	# §4.8a formula: clamp(40 + flagship-captain courage, 20, 90) from a canon
+	# card (the test-double seam `captain_canon_card` already carries).
+	var double_id := "cap_morale_probe"
+	var double_existed: bool = BattleLib._captains_test_doubles.has(double_id)
+	var double_previous = BattleLib._captains_test_doubles.get(double_id, null)
+	BattleLib._captains_test_doubles[double_id] = {
+		"id": double_id, "attributes": {"courage": 25},
+	}
+	var carded := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")],
+		"captain": double_id})
+	_check(carded.side_morale("enemy") == 65,
+		"§4.8a: the AI start is clamp(40 + card courage 25, 20, 90) = %d"
+			% carded.side_morale("enemy"))
+	BattleLib._captains_test_doubles[double_id] = {
+		"id": double_id, "attributes": {"courage": 50},
+	}
+	var ceiling := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")],
+		"captain": double_id})
+	_check(ceiling.side_morale("enemy") == 90,
+		"§4.8a: the courage formula clamps at the 90 ceiling (%d)"
+			% ceiling.side_morale("enemy"))
+	if double_existed:
+		BattleLib._captains_test_doubles[double_id] = double_previous
+	else:
+		BattleLib._captains_test_doubles.erase(double_id)
+
+	# The legacy no-card fallback: 40 + (10 + 10 × tier) — pirate tier 1,
+	# navy tier 2 (correction 6's fallback family).
+	var legacy_pirate := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")]})
+	_check(legacy_pirate.side_morale("enemy") == 60,
+		"§4.8a: the legacy pirate fallback starts at 40 + 10 + 10×1 = %d"
+			% legacy_pirate.side_morale("enemy"))
+	var legacy_navy := _sim({
+		"player_ships": [_ship("sloop")], "enemy_ships": [_ship("latin")],
+		"enemy_kind": "navy"})
+	_check(legacy_navy.side_morale("enemy") == 70,
+		"§4.8a: the legacy navy fallback starts at 40 + 10 + 10×2 = %d"
+			% legacy_navy.side_morale("enemy"))
+
+	# --- Event table (§4.8a, both sides) ------------------------------------
+	# Friendly ship sunk −15 (the ENEMY side): a non-flagship hull sinks.
+	GameState.morale = 70
+	var sunk_enemy := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 6})],
+		"enemy_ships": [_ship("latin"), _ship("latin", {"durability": 1})],
+	})
+	sunk_enemy.start()
+	_place(sunk_enemy, "enemy", 1, Vector2i(3, 14))
+	_begin_turn(sunk_enemy, "player", 0)
+	_volley(sunk_enemy, _unit(sunk_enemy, "player", 0),
+		_unit(sunk_enemy, "enemy", 1), "port")
+	_check(sunk_enemy.side_morale("enemy") == 45
+			and sunk_enemy.side_morale("player") == 70,
+		"§4.8a: friendly sunk −15 (enemy 60 → %d; the victor's side unmoved)"
+			% sunk_enemy.side_morale("enemy"))
+
+	# …and on the PLAYER side: an enemy flagship volley sinks player index 1.
+	var sunk_player := _sim({
+		"player_ships": [_ship("brigantine"), _ship("sloop", {"durability": 1})],
+		"enemy_ships": [_ship("latin", {"cannons": 6})],
+	})
+	sunk_player.start()
+	_place(sunk_player, "player", 1, Vector2i(44, 16))
+	_begin_turn(sunk_player, "enemy", 0)
+	_volley(sunk_player, _unit(sunk_player, "enemy", 0),
+		_unit(sunk_player, "player", 1), "port")
+	_check(sunk_player.side_morale("player") == 55
+			and sunk_player.side_morale("enemy") == 60,
+		"§4.8a: friendly sunk −15 on the player side too (70 → %d)"
+			% sunk_player.side_morale("player"))
+
+	# Flagship sunk −30 TOTAL (correction 5): sinking the enemy flagship
+	# FIRST hull books exactly −30, never −45 (the −15 is replaced).
+	GameState.morale = 70
+	var flagship_enemy := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 6})],
+		"enemy_ships": [_ship("latin", {"durability": 1}), _ship("latin")],
+		"enemy_morale": 100,
+	})
+	flagship_enemy.start()
+	_place(flagship_enemy, "enemy", 0, Vector2i(3, 14))
+	_begin_turn(flagship_enemy, "player", 0)
+	_volley(flagship_enemy, _unit(flagship_enemy, "player", 0),
+		_unit(flagship_enemy, "enemy", 0), "port")
+	_check(flagship_enemy.side_morale("enemy") == 70,
+		"§4.8a: flagship sunk −30 TOTAL — enemy 100 → %d (not 85, not 55)"
+			% flagship_enemy.side_morale("enemy"))
+
+	# The PLAYER flagship is the DYNAMIC game-rule flagship: its sinking
+	# books −30, the §4.11.7 successor's later loss books −30 AGAIN (the
+	# master ruling — the enemy side's −30 fires once per fleet, the
+	# player's follows the promoted flagship).
+	var flagship_player := _sim({
+		"player_ships": [
+			_ship("sloop", {"durability": 1}),
+			_ship("sloop", {"durability": 1}),
+			_ship("sloop"),
+		],
+		"enemy_ships": [_ship("latin", {"cannons": 6})],
+		"player_morale": 90,
+	})
+	flagship_player.start()
+	_place(flagship_player, "player", 0, Vector2i(44, 16))
+	_place(flagship_player, "player", 1, Vector2i(44, 14))
+	_place(flagship_player, "player", 2, Vector2i(44, 13))
+	_begin_turn(flagship_player, "enemy", 0)
+	_volley(flagship_player, _unit(flagship_player, "enemy", 0),
+		_unit(flagship_player, "player", 0), "port")
+	flagship_player.end_turn()  # the first volley spent this turn's action
+	_begin_turn(flagship_player, "enemy", 0)
+	_volley(flagship_player, _unit(flagship_player, "enemy", 0),
+		_unit(flagship_player, "player", 1), "starboard")
+	_check(flagship_player.flagship_index() == 2
+			and flagship_player.side_morale("player") == 30,
+		"§4.8a: the successor's loss is ALSO −30 (the dynamic-player "
+			+ "flagship reading; 60 → %d, flagship → %d)"
+			% [flagship_player.side_morale("player"),
+			flagship_player.flagship_index()])
+
+	# Rake volley −5, non-sinking, BOTH sides in one battle: the player
+	# flagship rakes the enemy down its deck line; the enemy rakes the
+	# player escort back across the same geometry (§4.4 rake bearing).
+	GameState.morale = 70
+	var raked := _sim({
+		"player_ships": [
+			_ship("brigantine", {"cannons": 6}),
+			_ship("caravel", {"cannons": 0}),
+		],
+		"enemy_ships": [_ship("caravel", {"cannons": 6})],
+		"player_morale": 100, "enemy_morale": 100,
+	})
+	raked.start()
+	var rake_gunner := _unit(raked, "player", 0)
+	_place(raked, "player", 0, Vector2i(44, 14))
+	_face(rake_gunner, BattleLib.HEADING_EAST)
+	var rake_target := _unit(raked, "enemy", 0)
+	_place(raked, "enemy", 0, Vector2i(45, 15))
+	_face(rake_target, 3)  # NW — the player's shot runs its deck line
+	_place(raked, "player", 1, Vector2i(44, 15))
+	_face(_unit(raked, "player", 1), BattleLib.HEADING_EAST)
+	_begin_turn(raked, "player", 0)
+	var player_rake := _volley(raked, rake_gunner, rake_target, "starboard")
+	_check(bool(player_rake["ok"]) and bool(player_rake["rake"])
+			and not bool(player_rake["sunk"])
+			and raked.side_morale("enemy") == 95,
+		"§4.8a: a non-sinking rake volley books −5 on the suffering side "
+			+ "(enemy 100 → %d)" % raked.side_morale("enemy"))
+	_begin_turn(raked, "enemy", 0)
+	var enemy_rake := _volley(raked, rake_target,
+		_unit(raked, "player", 1), "port")
+	_check(bool(enemy_rake["ok"]) and bool(enemy_rake["rake"])
+			and not bool(enemy_rake["sunk"])
+			and raked.side_morale("player") == 95,
+		"§4.8a: the rake event fires on the player side too (100 → %d)"
+			% raked.side_morale("player"))
+
+	# Boarding win +10 / loss −10, plus the combined loser case: the loser
+	# of a boarding ALSO loses the captured hull (−10 −20 = −30, §4.8a).
+	_person(12)
+	GameState.morale = 70
+	var board_win := _sim({
+		"player_ships": [_ship("brigantine", {"crew": 60, "cannons": 0})],
+		"enemy_ships": [
+			_ship("sloop", {"crew": 10, "cannons": 0}),
+			_ship("latin", {"cannons": 0}),
+		],
+		"enemy_morale": 60, "seed": 2,
+	})
+	board_win.start()
+	_place(board_win, "enemy", 0, Vector2i(3, 15))
+	_begin_turn(board_win, "player", 0)
+	var won_board := board_win.board(_unit(board_win, "player", 0),
+		_unit(board_win, "enemy", 0))
+	_check(bool(won_board["ok"]) and str(won_board["duel"]["result"]) == "capture",
+		"§4.11.6: the seeded boarding capture resolves (seed 2)")
+	_check(board_win.side_morale("player") == 80,
+		"§4.8a: boarding win +10 on the winner's side (70 → %d)"
+			% board_win.side_morale("player"))
+	_check(board_win.side_morale("enemy") == 30,
+		"§4.8a: the loser side books boarding loss −10 + captured −20 = −30 "
+			+ "(60 → %d; the −20 is `_capture`'s event)" % board_win.side_morale("enemy"))
+	_check(board_win.side_morale("player") == 80
+			and board_win.side_morale("enemy") == 30,
+		"§4.8a: side_morale() reads both sides mid-battle after events")
+	# A bare boarding win (nothing else happened player-side) writes
+	# `morale_delta` +10 into the outcome; `morale_bonus` is RETIRED.
+	var quiet_policy := func(_active_sim, _unit) -> Dictionary:
+		return {"action": "hold"}
+	var win_outcome := board_win.run_to_completion(quiet_policy,
+		BattleLib.MAX_ROUNDS)
+	_check(int(win_outcome["morale_delta"]) == 10
+			and int(win_outcome["morale_delta"])
+				== board_win.morale_delta_for("player"),
+		"§4.8a/§4.12.2: a bare boarding win ⇒ morale_delta +10 (%d), the "
+			+ "engine's end − start" % int(win_outcome["morale_delta"]))
+	_check(not win_outcome.has("morale_bonus"),
+		"§4.12.2: `morale_bonus` is absent from the outcome (retired)")
+
+	_person(0)
+	GameState.morale = 70
+	var board_loss := _sim({
+		"player_ships": [_ship("brigantine", {"crew": 10, "cannons": 0})],
+		"enemy_ships": [_ship("sloop", {"crew": 60, "cannons": 0})],
+		"enemy_morale": 60, "seed": 2,
+	})
+	board_loss.start()
+	_place(board_loss, "enemy", 0, Vector2i(3, 15))
+	_begin_turn(board_loss, "player", 0)
+	var lost_board := board_loss.board(_unit(board_loss, "player", 0),
+		_unit(board_loss, "enemy", 0))
+	_check(bool(lost_board["ok"]) and str(lost_board["duel"]["result"]) == "defeat",
+		"§4.11.6: the seeded boarding defeat resolves (bases 0 vs 18, seed 2)")
+	_check(board_loss.side_morale("player") == 40,
+		"§4.8a: the combined loss case — boarding loss −10 + captured −20 "
+			+ "= −30 for the loser (70 → %d)" % board_loss.side_morale("player"))
+	_check(board_loss.side_morale("enemy") == 70,
+		"§4.8a: the boarding winner's side books +10 (60 → %d)"
+			% board_loss.side_morale("enemy"))
+	_check((board_loss.outcome()["lost_player"] as Array).size() == 1,
+		"§4.11.7: the boarding loser is captured (the fleet-loss report)")
+
+	# --- Clamps (§4.8a range 0–100, clamped after every event) ---------------
+	_person(12)
+	GameState.morale = 70
+	var ceiling_clamp := _sim({
+		"player_ships": [_ship("brigantine", {"crew": 60, "cannons": 0})],
+		"enemy_ships": [_ship("sloop", {"crew": 10, "cannons": 0})],
+		"player_morale": 95, "seed": 2,
+	})
+	ceiling_clamp.start()
+	_place(ceiling_clamp, "enemy", 0, Vector2i(3, 15))
+	_begin_turn(ceiling_clamp, "player", 0)
+	ceiling_clamp.board(_unit(ceiling_clamp, "player", 0),
+		_unit(ceiling_clamp, "enemy", 0))
+	_check(ceiling_clamp.side_morale("player") == 100,
+		"§4.8a: a start of 95 + the +10 win clamps at 100 (%d)"
+			% ceiling_clamp.side_morale("player"))
+	var clamped_outcome := ceiling_clamp.outcome()
+	_check(int(clamped_outcome["morale_delta"]) == 5,
+		"§4.8a: morale_delta is the CLAMPED writeback delta (95 → 100 ⇒ +5, "
+			+ "got %d)" % int(clamped_outcome["morale_delta"]))
+
+	GameState.morale = 70
+	var floor_clamp := _sim({
+		"player_ships": [
+			_ship("brigantine"),
+			_ship("sloop", {"durability": 1}),
+			_ship("sloop", {"durability": 1}),
+		],
+		"enemy_ships": [_ship("latin", {"cannons": 6})],
+		"player_morale": 3,
+	})
+	floor_clamp.start()
+	_place(floor_clamp, "player", 1, Vector2i(44, 16))
+	_place(floor_clamp, "player", 2, Vector2i(44, 14))
+	_begin_turn(floor_clamp, "enemy", 0)
+	_volley(floor_clamp, _unit(floor_clamp, "enemy", 0),
+		_unit(floor_clamp, "player", 1), "port")
+	_check(floor_clamp.side_morale("player") == 0,
+		"§4.8a: a start of 3 − 15 floors at 0 (%d)"
+			% floor_clamp.side_morale("player"))
+	floor_clamp.end_turn()  # the first volley spent this turn's action
+	_begin_turn(floor_clamp, "enemy", 0)
+	_volley(floor_clamp, _unit(floor_clamp, "enemy", 0),
+		_unit(floor_clamp, "player", 2), "port")
+	_check(floor_clamp.side_morale("player") == 0
+			and floor_clamp.morale_delta_for("player") == -3,
+		"§4.8a: repeated losses stay floored at 0; the writeback delta is "
+			+ "end − start (−3, got %d)" % floor_clamp.morale_delta_for("player"))
+
+	# --- Gates (§4.7/§4.8a) --------------------------------------------------
+	_check(BattleLib.MORALE_SURRENDER_GATE == 20
+			and BattleLib.MORALE_INSTANT_STRIKE == 10,
+		"§4.8a: the gate constants pin at 20 (surrender roll) and 10 "
+			+ "(instant strike)")
+	_check(BattleLib.morale_surrender_bonus(10) == 5,
+		"§4.8a: morale_surrender_bonus(10) == 5")
+	_check(BattleLib.morale_surrender_bonus(20) == 0
+			and BattleLib.morale_surrender_bonus(21) == 0,
+		"§4.8a: the widening stops at the gate — morale 20 and 21 add 0")
+	_check(BattleLib.morale_surrender_bonus(0) == 10
+			and BattleLib.morale_surrender_bonus(-1) == 0,
+		"§4.8a: morale 0 widens +10 pp (the 50% ceiling); the compat "
+			+ "default (−1) adds nothing")
+	# The chance closed form: base clamp over the EFFECTIVE courage
+	# (card courage + courage_mod) + the morale modifier.
+	var courage_sim := _sim({
+		"player_ships": [_ship("sloop")],
+		"enemy_ships": [_ship("latin", {"captain_courage": 30})],
+	})
+	courage_sim.start()
+	var timid := _unit(courage_sim, "enemy", 0)
+	_check(courage_sim.surrender_chance(timid) == 22,
+		"§4.7: chance = clamp(25 − floor(courage 30/10), 10, 40) = %d"
+			% courage_sim.surrender_chance(timid))
+	_check(courage_sim.surrender_chance(timid, 5, 10) == 27,
+		"§4.7/§4.8a: effective courage 35 + morale 10 ⇒ 22 + 5 = %d"
+			% courage_sim.surrender_chance(timid, 5, 10))
+	_check(courage_sim.surrender_chance(timid, 5, 21) == 22,
+		"§4.7/§4.8a: morale above the gate adds no widening (%d)"
+			% courage_sim.surrender_chance(timid, 5, 21))
+	_check(courage_sim.surrender_chance(timid, 5, 0) == 32,
+		"§4.7/§4.8a: morale 0 adds the full +10 pp (22 + 10 = %d)"
+			% courage_sim.surrender_chance(timid, 5, 0))
+
+	# The T2 morale gate at 20 as shipped (the §4.9a pre-fleet-layer flee
+	# seam): a healthy AI ship at side morale 20 breaks off and flees; at
+	# 21 it does not — the gate boundary the fleet layer rides on.
+	var flee_sim := _sim({
+		"player_ships": [_ship("sloop", {"cannons": 0})],
+		"enemy_ships": [_ship("latin", {"cannons": 4})],
+		"enemy_morale": 20,
+	})
+	flee_sim.start()
+	_place(flee_sim, "player", 0, Vector2i(24, 15))
+	var fleer := _unit(flee_sim, "enemy", 0)
+	_place(flee_sim, "enemy", 0, Vector2i(20, 15))
+	_face(fleer, BattleLib.HEADING_WEST)
+	var flee_move := AiLib.decide(flee_sim, fleer)
+	var flee_landing: Vector2i = flee_sim.unit_cell(fleer) \
+		+ (flee_move.get("vel", Vector2i.ZERO) as Vector2i)
+	_check(str(flee_move["action"]) == "move"
+			and _chebyshev(flee_landing, Vector2i(24, 15)) > 4,
+		"§4.9a: side morale 20 ⇒ the T2 ship flees (landing %s, distance %d)"
+			% [str(flee_landing), _chebyshev(flee_landing, Vector2i(24, 15))])
+	var brave_sim := _sim({
+		"player_ships": [_ship("sloop", {"cannons": 0})],
+		"enemy_ships": [_ship("latin", {"cannons": 4})],
+		"enemy_morale": 21,
+	})
+	brave_sim.start()
+	_place(brave_sim, "player", 0, Vector2i(24, 15))
+	var brave := _unit(brave_sim, "enemy", 0)
+	_place(brave_sim, "enemy", 0, Vector2i(20, 15))
+	_face(brave, BattleLib.HEADING_WEST)
+	var brave_move := AiLib.decide(brave_sim, brave)
+	var brave_landing: Vector2i = brave_sim.unit_cell(brave) \
+		+ (brave_move.get("vel", Vector2i.ZERO) as Vector2i)
+	_check(str(brave_move["action"]) == "move"
+			and _chebyshev(brave_landing, Vector2i(24, 15)) < 4,
+		"§4.9a: side morale 21 stays short of the gate — the ship closes "
+			+ "instead (landing %s, distance %d)"
+			% [str(brave_landing), _chebyshev(brave_landing, Vector2i(24, 15))])
+
+	# --- ≤ 10 instant strike (§4.8a gate, AI side only) ----------------------
+	GameState.morale = 70
+	var collapse := _sim({
+		"player_ships": [_ship("brigantine", {"cannons": 0})],
+		"enemy_ships": [_ship("latin", {"cannons": 4}),
+			_ship("latin", {"cannons": 4})],
+		"enemy_morale": 10,
+	})
+	collapse.start()
+	var strike_unit := {}
+	for _guard in 16:
+		strike_unit = collapse.current_unit()
+		if strike_unit.is_empty():
+			break
+		if str(strike_unit["side"]) == "enemy":
+			break
+		collapse.end_turn()
+	_check(not strike_unit.is_empty()
+			and str(strike_unit["side"]) == "enemy",
+		"§4.8a: the fixture reaches an AI ship's turn (side morale 10)")
+	var before_strike := collapse.snapshot()
+	var rng_before_strike: int = collapse.rng.state
+	var collapse_policy := func(_active_sim, _unit) -> Dictionary:
+		return {"action": "hold"}
+	var collapse_outcome := collapse.run_to_completion(collapse_policy,
+		BattleLib.MAX_ROUNDS)
+	_check(str(collapse_outcome["result"]) == "victory"
+			and int(collapse_outcome["surrendered_enemy"]) == 2
+			and (collapse_outcome["captured_enemy"] as Array).size() == 2,
+		"§4.8a: side morale ≤ 10 — every living AI ship strikes at its next "
+			+ "turn (%d surrendered)" % int(collapse_outcome["surrendered_enemy"]))
+	_check(collapse.rng.state == rng_before_strike,
+		"§4.8a: the strike rolls NO dice — the §4.11.1 stream is untouched "
+			+ "across the strike turns")
+	_check(before_strike.size() == 1 + collapse.units().size() * 13 + 23,
+		"§4.12.1: the snapshot layout stays append-only (units + the scalar "
+			+ "block of %d slots incl. the retired one + the two morales)" % 23)
+
+	# …and the PLAYER side never auto-strikes: morale 0 through a lost
+	# battle resolves every loss as a sinking, never a capitulation. The
+	# hunter is the real T2 on the navy row (kites at preferred_range 3,
+	# so no boarding capture can pollute the loss report).
+	var steadfast := _sim({
+		"player_ships": [
+			_ship("sloop", {"cannons": 0, "crew": 30}),
+			_ship("sloop", {"cannons": 0, "crew": 30}),
+		],
+		"enemy_ships": [_ship("latin", {"cannons": 14}),
+			_ship("latin", {"cannons": 14})],
+		"player_morale": 0, "enemy_kind": "navy",
+		"enemy_nation": "spain",
+	})
+	steadfast.start()
+	_place(steadfast, "enemy", 0, Vector2i(8, 15))
+	_place(steadfast, "enemy", 1, Vector2i(8, 14))
+	var hunt_policy := func(active_sim, unit) -> Dictionary:
+		if str(unit.get("side", "")) == "enemy":
+			return AiLib.decide(active_sim, unit)
+		return {"action": "hold"}
+	var steadfast_outcome := steadfast.run_to_completion(hunt_policy,
+		BattleLib.MAX_ROUNDS)
+	_check(str(steadfast_outcome["result"]) == "defeat_sunk",
+		"§4.8a: player morale 0 is a HUD warning only — the fleet sinks "
+			+ "(%s @ r%d)" % [str(steadfast_outcome["result"]),
+			int(steadfast_outcome["rounds"])])
+	_check((steadfast_outcome["lost_player"] as Array).is_empty()
+			and int(steadfast_outcome["surrendered_enemy"]) == 0,
+		"§4.8a: no player ship ever strikes colors (lost_player empty)")
+	_check(steadfast.side_morale("player") == 0,
+		"§4.8a: the sunk events clamp the player side at 0 (%d)"
+			% steadfast.side_morale("player"))
+
+	# --- Snapshot (§4.12.1 — both morales ride, append-only layout) ----------
+	GameState.morale = 70
+	var snapshot_sim := _sim({
+		"player_ships": [
+			_ship("brigantine", {"cannons": 6}),
+			_ship("sloop", {"durability": 1}),
+		],
+		"enemy_ships": [
+			_ship("latin", {"cannons": 6}),
+			_ship("latin", {"durability": 1}),
+		],
+		"player_morale": 80, "enemy_morale": 40,
+	})
+	snapshot_sim.start()
+	_place(snapshot_sim, "enemy", 1, Vector2i(3, 14))
+	_begin_turn(snapshot_sim, "player", 0)
+	_volley(snapshot_sim, _unit(snapshot_sim, "player", 0),
+		_unit(snapshot_sim, "enemy", 1), "port")
+	_check(snapshot_sim.side_morale("enemy") == 25,
+		"§4.8a: the fixture books one event (enemy 40 → %d)"
+			% snapshot_sim.side_morale("enemy"))
+	var snap := snapshot_sim.snapshot()
+	_check(snap.size() == 1 + snapshot_sim.units().size() * 13 + 23,
+		"§4.12.1: the snapshot carries the pinned scalar block (%d ints for "
+			+ "%d units)" % [snap.size(), snapshot_sim.units().size()])
+	# Move BOTH morales after the snapshot, then restore.
+	_place(snapshot_sim, "player", 1, Vector2i(44, 16))
+	_begin_turn(snapshot_sim, "enemy", 0)
+	_volley(snapshot_sim, _unit(snapshot_sim, "enemy", 0),
+		_unit(snapshot_sim, "player", 1), "port")
+	_check(snapshot_sim.side_morale("player") == 65,
+		"§4.8a: the fixture books a player-side event too (80 → %d)"
+			% snapshot_sim.side_morale("player"))
+	snapshot_sim.restore(snap)
+	_check(snapshot_sim.side_morale("player") == 80
+			and snapshot_sim.side_morale("enemy") == 25,
+		"§4.12.1: restore() brings BOTH side morales back (80/%d)"
+			% snapshot_sim.side_morale("enemy"))
+	var restored := snapshot_sim.snapshot()
+	_check(restored.size() == snap.size() and _ints_equal(restored, snap),
+		"§4.12.1: the snapshot round-trip is byte-exact (the placeholder "
+			+ "scalar + the morale slots included)")
+
+
+## Array[int] equality (the snapshot round-trip's byte-exact form).
+func _ints_equal(a: Array[int], b: Array[int]) -> bool:
+	if a.size() != b.size():
+		return false
+	for index in a.size():
+		if a[index] != b[index]:
+			return false
+	return true
 
 
 # --- Harness ----------------------------------------------------------------
