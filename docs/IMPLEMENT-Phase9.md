@@ -138,6 +138,72 @@ scroll, so the ~50 % of 随机全部 rolls that toggled compose ON hid the
 whole enemy side (compose toggle now never rolls + the block moved out;
 panel/row re-layout with zero clipped labels, rect-asserted both
 locales); `80-*` §4.7.16 amended with the editor-presentation pins.
+**W5 status (2026-11-04): ✅ complete — θ finalized, T3 adopted.** Slots
+A (`24e59bc`, alone first) → B (`b450341`+`e0d2c02`) → C (`1009d34`) → D
+(`f2ea870`) merged, interleaved with the **user-locked pacing amendments**
+(corrections 14/15: reload base 3→2; deployment unified on the
+tournament-proven 27-cell closing start; `battle_max_speed` tiers
+16→3/20→4/24→5) and their cross-suite re-pin pass
+(`phase9/pacing-repins`). Final gate on `main`: **`run_tests.py` 54/54
+suites green, ZOMBIE/HANG = 0** (test_ai_search NEW 40; battle 302;
+fleet_command 54; economy 154; phase2 125; phase3 105; tournament 157;
+battle_screen 201; sandbox 130; captain_lifecycle 83).
+**W5-A:** `ai_search.gd` (T3 one-ply on `snapshot()/restore()`, dice-free —
+search leaves zero trace; the nine φ features landed doc-first with the
+master-pinned formulas; discipline removal; tie-by-enumeration) + the
+`ai_level` dispatch in `AiFleet.decide` (shared hard gates ① ② stay
+pre-search at both levels) + the assigned_target fire-pool restriction
+(bounce; later unified to the T2 hold-fire semantics — see W5-D).
+**W5-B:** `tools/battle_tune.py` — stdlib CEM, subprocess headless Godot
+runner, frozen 64+64 seed table (byte-identical rebuild asserted),
+side-swapped CRN, resume-safe state, full CLI; measured 0.16 s/battle,
+~26 battles/s wall. **W5-C:** the sandbox `ai_level`/`archetype`
+overrides effective (the fixture emits off-default keys; the screen folds
+them into the battle profile) + whole-field round-trip fuzz + audit
+re-runs. **W5-D:** `test_ai_search.gd` (θ consts, dice-free, discipline,
+assignment, hard gates at both levels, φ hand-computes, harness wiring,
+adoption arithmetic) + the T3-delta re-pins (the steadfast pin rode
+stall@14 → re-pinned twice, finally defeat_sunk@9 under the finalized θ)
++ the bracket re-pin (Chebyshev-2 closing start, golden-dragon duke
+loadout, 3–0 on seed 1 ×3).
+**θ-finalization (the named master task, correction 11):** the first
+full CEM ran on the PRE-pacing engine — its report (and both gate fails:
+validation droop +9.4/+16.0/+9.8 pp; distinctness distance gap 0.84)
+was **invalidated by corrections 14/15** and superseded; the full CEM
+RE-RAN on the final pacing (**94,752 battles, ran == expected, 0 illegal,
+5.08 M decisions, reproducible ✓**): learning gain **+22.3 / +12.9 /
++12.5 pp** (≥ +5 ✓×3), perturbation **≤ 1.6 pp** (≤ 3 ✓×3), distinctness
+**distance gap 1.06 ≥ 1 ✓ + flee gap 42.2 pp ≥ 10 ✓**; validation droop
+**−0.8 / +3.1 / +11.7 pp** vs the ≤ 2 gate — aggressive passes, balanced
+marginal, cautious fails (the fleeing archetype's train window
+over-selects; recorded, not blocking — the held-out gains and
+distinctness stand). **Final θ (§4.9c amended first, `THETA_*` consts
+synced, `test_ai_search` re-pinned):** aggressive
+`{8, 4, 6, −6, −2, −3, −3, −8, 7}` · balanced
+`{6, 5, 7, −2, −3, −3, −5, −9, 6}` · cautious
+`{10, 7, 2, −9, −2, −3, −6, −10, 3}`.
+**ADOPTION DECISION (the W5 gate):** T3 vs free T2 on the 64 validation
+seeds (side-swapped): aggressive **+18.0 pp**, balanced **+12.5 pp** —
+both ≥ +10 pp at 100 % legal-action and 1.6–2.0 ms avg / ≤ 11.1 ms max
+decisions (≤ 30 ms pin) ⇒ **T3 ships (`ai_level = 1`) for the
+aggressive/balanced kinds** exactly as the §4.10 table pins; cautious
+measured **−0.8 pp ≈ parity** ⇒ the cautious kinds **stay
+`ai_level = 0`** — the shipped table confirmed, nothing to change.
+**Pacing scorecard (the user's fun brief, measured on the final
+engine):** mirror battles 34–38 → **24.53 avg rounds**, cap-hit
+**4.7 %**, stall 3.1 % — the ORIGINAL 12–25 health band passes again;
+navy-vs-pirate formation-hold 22.7 % → **70.0 %**, navy resolution
+0/16 → 3 wins + 6 surrenders. **W5 master bounces (ledgered):** the
+`profile_override` seam (`decide` 4th param + the screen passing the
+folded battle profile — C found the fixture overrides had no consumer);
+the T3 fire-pool hold-fire unification (alive-but-unfireable assignment
+⇒ no fire, T2's semantics); `_pump_enemy_turns` covers the empty-cursor
+transient (`run_to_completion`'s documented path); the bracket
+Chebyshev-2 + golden-dragon fixture. Process notes: W5-C's
+`deployment`-field finding superseded by correction 15 (dormant
+emission is correct-by-design); W5-D's file set extended to
+`test_fleet_command.gd`/`test_phase3_acceptance.gd` (both unowned, both
+D-lineage).
 
 ## Goal
 
