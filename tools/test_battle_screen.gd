@@ -28,7 +28,14 @@ extends Node
 ##     AI-speed switch buttons);
 ##   9 the after-action dialog: outcome numbers + both locales, no `<key>`;
 ##  10 the §4.12.4 guard behaviour when a sibling module is absent.
+##  11 W4 — the §4.7.1 side-morale bars (guarded 100/100 pre-A seam, the
+##     ≤ 20 WARN tier), the formation label + anchor-line seam (inactive
+##     pre-B), the §4.9b fleet-dispatch guard (one AI turn without
+##     fleet_commander.gd, exactly one warning), the fixture morale/
+##     formation keys are byte-harmless pre-A, and the `battle.log.strike` /
+##     `battle.log.surrender_enemy` surfacing through the generic pipeline.
 
+const PaletteLib := preload("res://scripts/palette.gd")
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
 const AiLib := preload("res://scripts/combat/ai_fleet.gd")
 const SailingLib := preload("res://scripts/world/sailing_sim.gd")
@@ -64,6 +71,7 @@ func _ready() -> void:
 	await _test_retreat_and_surrender()
 	await _test_after_action()
 	await _test_guards()
+	await _test_w4_morale_and_dispatch()
 	_report()
 
 
@@ -941,6 +949,135 @@ func _test_guards() -> void:
 	_check(screen.last_outcome.has("cargo_overflow_lost"),
 		"the outcome keeps the §4.12.2 shape without BattleResult")
 	await _free_screen(screen)
+
+
+# --- 11. W4: morale bars, formation display, §4.9b dispatch guard ----------
+
+func _test_w4_morale_and_dispatch() -> void:
+	# The §4.7.1 W4 HUD: bar presence + the guarded 100/100 pre-A seam.
+	_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
+	var screen = await _new_screen()
+	if screen == null:
+		return
+	screen.route_to_world = false
+	_check(screen.get_node_or_null("TopBar/MoraleBox") != null,
+		"W4: the morale bar block exists in the §4.7.1 top area")
+	_check(screen.morale_label("player") != null
+			and screen.morale_label("enemy") != null,
+		"W4: both side-morale labels exist (player left, enemy right)")
+	_check(screen.morale_fill("player") != null
+			and screen.morale_fill("enemy") != null
+			and screen.morale_track("player") != null,
+		"W4: both side-morale bars (fill + track) exist")
+	_check(screen.formation_label() != null,
+		"W4: the formation label node exists near the minimap (§4.7.1)")
+
+	screen.open_battle(_pirate_encounter(2, "brigantine"))
+	await get_tree().process_frame
+
+	# GUARDED SEAM: the sim lacks `side_morale` on this base (pre-A merge),
+	# so the bars render 100/100 — the missing-seam reading, never a guess.
+	_check(not screen.sim.has_method("side_morale"),
+		"W4 guard precondition: the engine lacks side_morale here (pre-A)")
+	_check(screen.side_morale_shown("player") == 100
+			and screen.side_morale_shown("enemy") == 100,
+		"W4 guarded fallback: without side_morale both bars read 100/100")
+	var player_label: Label = screen.morale_label("player")
+	var enemy_label: Label = screen.morale_label("enemy")
+	_check(player_label.text == "%s 100" % screen._t("battle.morale")
+			and enemy_label.text == "%s 100" % screen._t("battle.morale"),
+		"the morale labels read battle.morale + the value (%s / %s)"
+			% [player_label.text, enemy_label.text])
+	var fill: ColorRect = screen.morale_fill("player")
+	var track: ColorRect = screen.morale_track("player")
+	_check(is_equal_approx(fill.size.x, track.size.x)
+			and fill.color.is_equal_approx(PaletteLib.GOOD),
+		"the fill is value/100 of the track in the GOOD tier at 100")
+
+	# The ≤ 20 tier is the §4.8a HUD-warning pin (display only) — exercised
+	# directly here because a pre-A sim cannot produce a real low value.
+	screen._set_morale_fill(fill, track, 15)
+	_check(fill.color.is_equal_approx(PaletteLib.WARN)
+			and is_equal_approx(fill.size.x, track.size.x * 0.15),
+		"a side at/below the §4.8a gate (15 ≤ 20) fills WARN at value/100 "
+			+ "(display only — player ships never auto-strike)")
+	screen._set_morale_fill(fill, track, 100)
+
+	# The §4.9b seams are dormant pre-B: no commander, empty anchor datum,
+	# the formation label hidden.
+	_check(not screen.fleet_commander_active(),
+		"W4 pre-B: no fleet-commander instance (the layer stays dormant)")
+	_check(screen.formation_anchor_line().is_empty(),
+		"W4 pre-B: the anchor-line datum is empty (the guarded seam)")
+	_check(not screen.formation_label().visible,
+		"W4 pre-B: the formation label hides (nothing to label)")
+
+	# The dispatch guard: one full AI turn with fleet_commander.gd absent —
+	# the §4.9a decide runs exactly as before, one warning for the module.
+	var decision: Dictionary = screen.run_ai_turn()
+	_check(decision.has("action"),
+		"W4 guard: run_ai_turn returns a §4.12.1.1 decision without "
+			+ "FleetCommander (%s)" % str(decision.get("action")))
+	_check(screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH) == 1,
+		"W4 guard: exactly one warning for the absent fleet_commander.gd "
+			+ "(got %d)" % screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH))
+	await _free_screen(screen)
+
+	# The S21 fixture keys are byte-harmless pre-A: two identical SANDBOX
+	# fixtures — the only path the keys ever ride — differing only in
+	# player_morale / enemy_morale / formation play byte-identical battles
+	# (sandbox battles skip the aftermath, so no shared-GameState drift).
+	_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
+	var plain_fixture := {
+		"sandbox": true, "id": "sandbox", "kind": "pirate", "nation_id": "",
+		"day": 9, "gold": 0, "weather": "calm", "seed": 4242,
+		"player_ships": [_ship("caravel", {"cannons": 4, "crew": 15})],
+		"enemy_ships": [_ship("latin")],
+	}
+	var plain = await _new_screen_with_encounter(plain_fixture)
+	if plain == null:
+		return
+	var keyed_fixture := plain_fixture.duplicate(true)
+	keyed_fixture["player_morale"] = 13
+	keyed_fixture["enemy_morale"] = 87
+	keyed_fixture["formation"] = "column"  # ≠ the pirate row's swarm
+	var keyed = await _new_screen_with_encounter(keyed_fixture)
+	var outcome_plain: Dictionary = plain.run_to_completion(20)
+	var outcome_keyed: Dictionary = keyed.run_to_completion(20)
+	_check(JSON.stringify(plain.sim.log_lines())
+			== JSON.stringify(keyed.sim.log_lines()),
+		"the morale/formation fixture keys are byte-harmless pre-A "
+			+ "(identical sim logs)")
+	_check(JSON.stringify(outcome_plain) == JSON.stringify(outcome_keyed),
+		"the morale/formation fixture keys are byte-harmless pre-A "
+			+ "(identical outcomes, result %s)" % str(outcome_keyed.get("result")))
+	_check(str(keyed._enemy_profile.get("formation", "")) == "column",
+		"the fixture formation override folds into the battle's profile row "
+			+ "(%s)" % str(keyed._enemy_profile.get("formation")))
+	_check(str(plain._enemy_profile.get("formation", "")) == "swarm",
+		"without the override the profile keeps the §4.10 row's formation "
+			+ "(%s)" % str(plain._enemy_profile.get("formation")))
+	# The formation display is gated on the fleet LAYER, not just the profile:
+	# a column-profile battle pre-B still shows nothing.
+	_check(not keyed.formation_label().visible
+			and keyed.formation_anchor_line().is_empty(),
+		"the formation display stays fleet-layer-gated pre-B "
+			+ "(profile alone never lights it)")
+	# log.strike surfacing (§4.8a presentation, task item 5): the generic
+	# pipeline already renders the engine's strike / surrender_enemy kinds —
+	# nothing new added here.
+	var rendered: Array = []
+	keyed._present(rendered, {"kind": "strike",
+		"values": {"side": "enemy", "unit": 0}})
+	keyed._present(rendered, {"kind": "surrender_enemy",
+		"values": {"side": "enemy", "unit": 0}})
+	_check(rendered.size() == 2
+			and str((rendered[0] as Dictionary).get("key")) == "battle.log.strike"
+			and str((rendered[1] as Dictionary).get("key")) == "battle.log.surrender_enemy",
+		"the pipeline renders strike → battle.log.strike and surrender_enemy "
+			+ "→ battle.log.surrender_enemy (keys consumed, none invented)")
+	await _free_screen(plain)
+	await _free_screen(keyed)
 
 
 # --- Fixtures --------------------------------------------------------------
