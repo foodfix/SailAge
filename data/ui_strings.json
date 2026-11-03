@@ -2828,22 +2828,6 @@
     "zh": "事迹",
     "en": "Career"
   },
-  "char.card.effective": {
-    "zh": "生效值",
-    "en": "Effective value"
-  },
-  "char.card.officer_part": {
-    "zh": "官员贡献 +{amount}",
-    "en": "Officer adds +{amount}"
-  },
-  "char.card.native_part": {
-    "zh": "忠诚 ≥ 80:本职 +5",
-    "en": "Loyalty ≥ 80: native +5"
-  },
-  "char.card.without_officer": {
-    "zh": "若无此官员:{amount}",
-    "en": "Without this officer: {amount}"
-  },
   "char.personality_line": {
     "zh": "性情:{tags}",
     "en": "Personality: {tags}"
@@ -3595,5 +3579,21 @@
   "skill.cooking.desc": {
     "zh": "烹饪（官员）：降低每日士气损耗（−烹饪/25）。厨师岗位要求 ≥ 20。每 90 个在岗海上日 +1。",
     "en": "Cooking (officers): reduces daily morale decay (−skill/25). The cook post requires 20+. Grows +1 per 90 in-post sea-days."
+  },
+  "char.card.tip.base": {
+    "zh": "基础 {base}",
+    "en": "Base {base}"
+  },
+  "char.card.tip.officer": {
+    "zh": "官员贡献 {amount}",
+    "en": "Officer {amount}"
+  },
+  "char.card.tip.effective": {
+    "zh": "生效 {total}",
+    "en": "Effective {total}"
+  },
+  "gate.unlocked": {
+    "zh": "已解锁",
+    "en": "Unlocked"
   }
 }

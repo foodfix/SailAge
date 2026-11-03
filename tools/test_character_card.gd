@@ -189,8 +189,15 @@ func _test_card_sections_per_kind() -> void:
 	_check(player.section("Relations") != null
 		and player.section("Career/Xp") != null,
 		"the relation and career blocks render")
-	_check(player.section("Effective/Eff_navigation") != null,
-		"the player card renders the effective-values split (§4.12.1)")
+	# The standalone 生效值 block is retired (amended 2026-11-03): the skill
+	# row shows the effective value and the tooltip carries the split + gates.
+	_check(player.section("Effective") == null,
+		"the effective-values block is gone (§4.12.1 amended: it folded into "
+		+ "the skill rows)")
+	var nav_row: Control = player.section(
+		"StatColumns/SkillColumn/Skills/Skill_navigation")
+	_check(nav_row != null and not nav_row.tooltip_text.is_empty(),
+		"the skill row carries the value split + gates on hover")
 	_check(player.section("Allocation") != null
 		and player.section("Allocation/Buttons/Confirm") != null,
 		"the allocation footer renders with alloc data set (§4.12.2)")
@@ -364,7 +371,7 @@ func _test_officer_actions_and_posts() -> void:
 	# Click the row → the detail page (the table itself is card-free now).
 	panel.open_detail(MATEUS)
 	var card: Control = panel.get_node(
-		"Body/Detail/DetailCardScroll/DetailCard")
+		"Body/Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
 	_check(card != null and (card.rendered_data() as Dictionary).has("skills"),
 		"the detail page renders the §4.12 officer card (full)")
 	# Talk: +1 loyalty, then the cooldown grays the row's button.
@@ -566,7 +573,7 @@ func _test_three_entry_card_identity() -> void:
 	panel.rebuild()
 	panel.open_detail(MATEUS)
 	var row_card: Control = panel.get_node(
-		"Body/Detail/DetailCardScroll/DetailCard")
+		"Body/Detail/DetailScroll/DetailPage/DetailCardHost/DetailCard")
 	_check(str(row_card.rendered_data()["person_id"]) == MATEUS,
 		"the S18 detail renders the same officer card data")
 	# The data stays identical; the S18 detail page renders with
@@ -693,19 +700,30 @@ func _test_s14_tabs() -> void:
 	_check(view.get_node_or_null(
 		"Body/Page/Sections/ReputationRows") == null,
 		"the reputation table moved to its own 声望 tab (§4.5 amended)")
-	var gates: Container = view.get_node("Body/Page/Sections/GateRows")
-	_check(gates.get_child_count() == DataLoader.skill_gates_list.size(),
-		"the page renders every skill_gates row (§4.12.3)")
-	var first_gate: Control = gates.get_child(0)
-	_check(not first_gate.tooltip_text.is_empty(),
-		"each gate row states its reason on hover (§4.12.3 amended)")
-	_check(first_gate.get_node("Progress") != null,
-		"each gate row shows the current/threshold progress")
-	var gate_name: Label = first_gate.get_node("Feature")
-	_check(gate_name != null \
-		and gate_name.text == I18n.t(DataLoader.skill_gates_list[0]["name"]),
-		"the gate row renders the localized name, never the raw feature_id "
-		+ "(%s)" % (gate_name.text if gate_name != null else "-"))
+	# The 未解锁 list is retired (amended 2026-11-03): all fourteen gates live
+	# in the tooltip of the player card's skill row that owns them.
+	_check(view.get_node_or_null("Body/Page/Sections/GateRows") == null,
+		"the standalone 未解锁 list is gone (§4.12.3 amended)")
+	var gates_card: Control = view.player_card()
+	var found: Array[String] = []
+	for gate in DataLoader.skill_gates_list:
+		var key := str(gate["stat_or_skill"])
+		var row: Control = gates_card.section(
+			"StatColumns/SkillColumn/Skills/Skill_%s" % key)
+		if row == null:
+			continue
+		if row.tooltip_text.contains(I18n.t(gate["name"])):
+			found.append(str(gate["feature_id"]))
+	_check(found.size() == DataLoader.skill_gates_list.size(),
+		"every skill_gates row reaches the player through a skill-row tooltip "
+		+ "(%d/%d)" % [found.size(), DataLoader.skill_gates_list.size()])
+	# The one gate on the officer-only skill: the row's value IS the in-post
+	# contribution (0 while the post is vacant).
+	var carpentry: Control = gates_card.section(
+		"StatColumns/SkillColumn/Skills/Skill_carpentry")
+	_check(carpentry != null
+		and (carpentry.get_node("Value") as Label).text == "0",
+		"the carpentry row shows the in-post contribution (0, post vacant)")
 	view.queue_free()
 
 	# The officers roster: the table lists the employed officer with the post

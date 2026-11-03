@@ -32,8 +32,12 @@ const FALLBACK_STRINGS := {
 	"officer.post.occupied": {"zh": "在岗:{name}", "en": "In post: {name}"},
 	"officer.post.to_idle": {"zh": "卸任(回闲置)", "en": "Unassign (to idle)"},
 }
-## The detail card's bounded viewport (the §4.12.1 sizing convention).
-const DETAIL_CARD_H := 300.0
+## The detail page's chrome is fixed (amended 2026-11-03): `返回` and the
+## action bar never scroll, only the card column between them does — the old
+## bounded 300px card viewport pushed the actions below the fold, and a single
+## whole-page scroll made them scroll away. The view root's own `clip_contents`
+## is compensated by the 1 BASE_UNIT `Body` inset (§4.6.2 amended).
+const DETAIL_PAGE_PAD := 8.0
 ## Column widths (px) — the §4.8 sizing grid, 13px cell font.
 const COL_NAME_W := 200.0
 const COL_POST_W := 150.0
@@ -70,6 +74,7 @@ var _rows: Array = []
 @onready var _slots: Label = $Body/Slots
 @onready var _mode_note: Label = $Body/ModeNote
 @onready var _result: Label = $Body/Result
+@onready var _controls: Container = $Body/Controls
 @onready var _attributes_toggle: Button = $Body/Controls/AttributesToggle
 @onready var _skills_toggle: Button = $Body/Controls/SkillsToggle
 @onready var _table_scroll: ScrollContainer = $Body/TableScroll
@@ -77,9 +82,10 @@ var _rows: Array = []
 @onready var _table_empty: Label = $Body/TableEmpty
 @onready var _table_empty_hint: Label = $Body/TableEmptyHint
 @onready var _detail: VBoxContainer = $Body/Detail
-@onready var _detail_back: Button = $Body/Detail/DetailTop/DetailBack
-@onready var _detail_card_scroll: ScrollContainer = $Body/Detail/DetailCardScroll
-@onready var _detail_line: Label = $Body/Detail/DetailLine
+@onready var _detail_back: Button = $Body/Detail/DetailActions/DetailBack
+@onready var _detail_scroll: ScrollContainer = $Body/Detail/DetailScroll
+@onready var _detail_card_host: Container = $Body/Detail/DetailScroll/DetailPage/DetailCardHost
+@onready var _detail_line: Label = $Body/Detail/DetailScroll/DetailPage/DetailLine
 @onready var _detail_actions: HBoxContainer = $Body/Detail/DetailActions
 @onready var _confirm: Control = $ConfirmDialog
 
@@ -248,6 +254,7 @@ func _build_table() -> void:
 	_table_scroll.visible = true
 	_table_empty.visible = false
 	_table_empty_hint.visible = false
+	_controls.visible = true
 	_detail.visible = false
 	_clear(_table)
 	_rows.clear()
@@ -383,6 +390,11 @@ func _on_row_gui_input(event: InputEvent, officer_id: String) -> void:
 ## The hover explanation for a stat id (`char.attr.<key>.desc` /
 ## `skill.<key>.desc`; amended 2026-11-03). Empty when absent, so a missing
 ## string degrades to "no tooltip" rather than to a raw "<key>".
+##
+## The gates are NOT listed here: a cell shows the officer's own value while a
+## gate's current value is the player's effective skill (§4.12.3 amended —
+## the fourteen gates all live on the player card's skill rows, including the
+## officer-only carpentry row, whose value IS the in-post contribution).
 func _stat_desc(key: String) -> String:
 	var ui_key := "char.attr.%s.desc" % key \
 		if key in CharacterLib.ATTRIBUTES else "skill.%s.desc" % key
@@ -423,22 +435,25 @@ func _build_detail(officer_id: String) -> void:
 	_table_scroll.visible = false
 	_table_empty.visible = false
 	_table_empty_hint.visible = false
+	# The 属性/技能 toggle belongs to the TABLE (amended 2026-11-03): on the
+	# detail page it burned a 36px row above 返回 and read as a stat block
+	# that had failed to hide.
+	_controls.visible = false
 	_detail.visible = true
 	_detail_back.text = I18n.t_key("ui.back")
-	_detail_back.grab_focus()
 
-	# The §4.12 officer card (amended 2026-11-03: the stat blocks are omitted
-	# here — the table above already owns the attribute/skill columns, and
-	# repeating them pushed the actions below the fold).
+	# The full §4.12 officer card (re-amended 2026-11-03: the stat blocks are
+	# rendered here after all — the table is hidden on this page, so omitting
+	# them left the attributes and skills with no surface at all).
 	if _detail_card != null:
 		_detail_card.queue_free()
 	var card: Control = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
 	card.name = "DetailCard"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_detail_card_scroll.add_child(card)
+	_detail_card_host.add_child(card)
 	_detail_card = card
 	card.setup_person(CardLib.KIND_OFFICER, CardLib.card_data(
-		CardLib.KIND_OFFICER, officer_id, {"stat_blocks": false}))
+		CardLib.KIND_OFFICER, officer_id, {}))
 
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	_detail_line.name = "DetailLine"
@@ -451,7 +466,9 @@ func _build_detail(officer_id: String) -> void:
 		I18n.fmt("officers.recruited_at", {"port": recruit_port_name(officer)}),
 	]
 
-	_clear(_detail_actions)
+	# The 返回 button is scene-owned and stays last (§4.6.2 re-amended); only
+	# the per-officer action buttons are rebuilt here.
+	_clear_actions()
 	_detail_action_map = {}
 	_detail_action_map["talk"] = _action_button(_detail_actions, officer_id,
 		"talk", _talk_blocked_reason(officer_id))
@@ -472,6 +489,8 @@ func _build_detail(officer_id: String) -> void:
 		else I18n.t_key(reason_key)
 	_detail_dismiss.pressed.connect(_on_dismiss_pressed.bind(officer_id))
 	_detail_actions.add_child(_detail_dismiss)
+	# 返回 is the last entry (it is scene-owned, so the rebuild keeps it).
+	_detail_actions.move_child(_detail_back, _detail_actions.get_child_count() - 1)
 
 
 func _action_button(parent: Container, officer_id: String, action: String,
@@ -724,6 +743,22 @@ func _label(text: String, color: Color) -> Label:
 	label.add_theme_color_override("font_color", color)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
+
+
+## Removes the per-officer action buttons but keeps the scene-owned 返回.
+##
+## `remove_child` first, then `queue_free` (amended 2026-11-03): an action
+## button's own `pressed` handler rebuilds this row, so the button being
+## cleared is still emitting when we get here — `free()` on a locked object
+## is refused ("Attempted to free a locked object"), the old buttons survive
+## and the row doubles up. Detaching drops it from the layout immediately and
+## the deferred delete runs once the signal is done.
+func _clear_actions() -> void:
+	for child in _detail_actions.get_children():
+		if child == _detail_back:
+			continue
+		_detail_actions.remove_child(child)
+		child.queue_free()
 
 
 func _clear(container: Node) -> void:

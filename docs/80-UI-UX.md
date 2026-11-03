@@ -527,16 +527,33 @@ actions — the **four actions** talk / gift / train / appoint
 (`50-*` formulas) plus `Dismiss` (confirm dialog; frees the slot and stops
 the wage from the next day tick).
 
-**The detail card omits the stat blocks (amended 2026-11-03):** the table
-already shows every attribute and skill (the 属性/技能 column toggle), so
-repeating them on the detail page only scrolled the real content off screen.
-The detail card therefore renders **identity → personality/appearance →
-relations → career** and skips the attribute and skill sections entirely —
-it occupies no space at all for them (they are not built empty, they are not
-built). The `50-*` numbers stay reachable through the table's own columns and
-the rows' hover explanations. The Phase-5 four-stat line
+**The detail card keeps the stat blocks (re-amended 2026-11-03):** the
+earlier same-day amendment dropped them on the grounds that the table owns
+the columns — but the table is **hidden** while the detail page is open, so
+the numbers had nowhere to live and the card showed only identity,
+personality, relations and career. The officer detail card therefore renders
+the full §4.12 card again: **attributes and skills side by side**, exactly
+like every other entry. The page's single scroll (§4.12.1 "Sizing") carries
+the height, so nothing is pushed off screen. The Phase-5 four-stat line
 (统率/航海术/战斗/导航) and its derived-effect text stay retired with the
 old model.
+
+**The detail page's layout (re-amended 2026-11-03):** the 属性/技能 toggle
+belongs to the **table**, so it is hidden while the detail page is open. The
+page keeps **no separate top bar**: `返回` is the **last entry of the action
+row**, after `解雇`, so the card starts at the top of the page and the row
+reads 交谈 · 赠礼 · 训练 · 任命 · 解雇 · 返回. The card sits directly in the
+page column and publishes its content height (§4.12.1 "Sizing"); the card
+column is the one scrolling region, while the action row stays fixed at the
+bottom so the actions never scroll out of reach.
+
+**The views do not clip a focus ring (amended 2026-11-03):** the embedded
+views use `clip_contents` to stop an over-tall page painting over the tab
+row (§4.5), but at `x = 0` the clip also shaved the 2px focus ring of the
+leftmost control — the 返回 button's left border was visibly missing while
+its right border was intact. The views therefore inset their body by one
+`BASE_UNIT` (the same 8px the intel panel's own margin uses), so focus rings
+have room on every side.
 
 - **Header:** `n / OFFICER_MAX` (**12** since Phase 8, `50-*`; the
   Phase-5 cap was 3) and the total daily wage bill — the number
@@ -1657,6 +1674,17 @@ are built from role × stance × skills and render as rows with their terms
 inline; a gated option is grayed with its `gate.*` reason. The modal owns
 all input while open (§4.7 modal rule).
 
+**Modals are hosted on the interaction `CanvasLayer` (amended 2026-11-03):**
+`world_map` is a `Node2D` whose map canvas sits at `z_index 10`, so a modal
+added as its plain child rendered *behind* the water — `visible`, in the
+tree, full-rect, and invisible on screen. Every at-sea interaction modal
+(the hail, the message dialog, the fleet picker) is therefore added to the
+one `InteractLayer` (`CanvasLayer`, layer 3) the world scene already owns.
+The talk verb was dead in play for exactly this reason while
+`test_interactions` stayed green: that suite called `_on_picker_verb`
+directly and asserted the modal's `visible` flag, never that the modal was
+on a canvas above the map.
+
 - **问讯 ask rumours** — a rumour line; **stance ≥ +2** appends one free
   route/market intel (the same intel shape the captain's table points
   at).
@@ -1743,6 +1771,12 @@ A **card-external** information layer, opened from any captain entry
   month variants** (`10-*` lane variants). Below a tier, its log section
   renders locked with the reason (`dossier.locked.*`).
 - **Card numbers are never gated** — identify = full reveal (§4.12).
+- **The picker's inspect view has no separate dossier button (amended
+  2026-11-03):** the card rendered there **is** the dossier's card section,
+  and the picker header already names the captain, so a `档案:<name>`
+  button beneath it repeated the title and duplicated the card. The
+  dossier's own entries (captain's table row, bounty row, hail) keep their
+  links (§4.11.3 above).
 - **Stance ≥ +2** adds the captain's current tier + status (在航 at sea /
   归队中 returning) to the panel header.
 - **Bounty board links to dossiers:** every palace bounty row gains an
@@ -1767,20 +1801,47 @@ identical structure from every entry:
   highlighted; a 0-value skill is grayed as unlearned. Player cards still
   show the usage counter beside each skill; officer cards show nothing there
   (usage counters are player-only, `50-*` §4.3.3).
+- **The skill row shows the EFFECTIVE value (amended 2026-11-03):** on the
+  player card a skill row's number is `effective skill = player skill + the
+  one in-post officer's true value` (`50-*` §4.5.3), and the bar fills to
+  that same value — the card never asks the player to add two numbers in
+  their head. The row keeps its existing width (name · bar · value · usage
+  counter): the split lives in the tooltip, the row carries the answer.
+  Officer and NPC cards have no contribution model, so their rows show the
+  plain stored value. The three officer-only rows (medicine / carpentry /
+  cooking) show the in-post contribution — 0 while the post is vacant —
+  which is exactly the read `SailingSim.effective_carpentry` uses for the
+  at-sea repair gate (`40-*` §4.5); their gray label still marks them as
+  skills the player does not train.
 - **Hover explanations (amended 2026-11-03):** every attribute row and every
   skill row carries a `tooltip_text` explaining what the stat feeds, read
   from `char.attr.<key>.desc` / `skill.<key>.desc` in `ui_strings.json`
   (`50-*` §4.2.1 and §4.3.1/§4.3.2 verbatim). The card never prints the
-  explanation inline — the bar label stays one word.
+  explanation inline — the bar label stays one word. **A player skill row's
+  tooltip also carries its numbers and its gates** (§4.12.3 amended): the
+  base value, the in-post officer's contribution with their name, the
+  effective total, then every `skill_gates.json` row whose `stat_or_skill`
+  is that skill with its threshold and its 已解锁 / 未解锁 state. That is
+  why the captain page needs no separate effective-values block and no
+  separate locked-gate list — the row answers "what is it", "why is it that
+  big" and "what does it unlock" in one place.
+- **The stepper and the bar never eat the hover (amended 2026-11-03):** the
+  bar is a `ProgressBar`, which defaults to `MOUSE_FILTER_STOP`; left alone
+  it swallowed the whole row's hover and the row's tooltip only appeared
+  over the one-word label. Every non-interactive child of a stat row is
+  therefore `MOUSE_FILTER_IGNORE` and carries the row's tooltip, and the
+  allocation `+` stepper keeps its own tooltip (the clamp note at the cap).
 - **Personality tags** and the **appearance sentence** assembled from the
   part keys (`char.personality.*`, `char.appearance.*`, §4.15).
 - **Relation block:** officer = loyalty + native role / current post;
   NPC captain = stance + familiarity.
 - **Career block:** player = XP / level; NPC captain = wins / defeats /
   return day.
-- **Player-card extra — the effective-values split:** base value +
-  officer contribution + the native +5, with the "without this officer"
-  diff (`50-*`; the successor of S18's pre-Phase-8 derived-effect line).
+- **The effective-values block is retired (amended 2026-11-03):** the
+  standalone 生效值 split that used to follow the skill list folded into the
+  skill rows and their tooltips (above). The `card_data` `effective` array
+  stays — it is the read seam the rows and the tests consume — but the card
+  no longer renders a second copy of it.
 
 **IDENTIFY = FULL REVEAL (locked):** an identified NPC captain's card
 shows every number; familiarity gates only the dossier career log
@@ -1836,21 +1897,52 @@ duplication is gone by merging them):
 
 | Section | Shows |
 |---|---|
-| **§4.12 player card** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, the player's **effective-values split**, then the eight skill bars with their usage counters — ONE card instance, one render |
-| **未解锁 Locked gates** | every locked feature rendered from `data/skill_gates.json` — one **compact row per gate** (name + requirement + the current value), with the **reason as a hover tooltip** rather than an inline paragraph (amended 2026-11-03: fourteen inline reason paragraphs buried the list) |
+| **§4.12 player card** | the five attribute bars, level / XP, the §4.12.2 allocation steppers, and the eight skill bars with their usage counters — ONE card instance, one render. The skill rows carry the **effective value** (base + in-post contribution) and their tooltips carry the base / contribution / total / gates split, so the page needs no separate 生效值 block (§4.12.1 amended) |
 
 The 声望 reputation table moved to its own 声望 tab and the 官员 roster to
 the 官员 tab (§4.6.2), the Phase-3 委托 list to the 委托 tab (§4.7.3) — the
 2026-11-03 intel window amendment removed them from the captain page because
 the window hosts them.
 
-**Gate row (amended 2026-11-03):** each row is
-`<gate name> · <skill> ≥ <threshold> · <current>/<threshold>` with the row
-grayed while locked and good-tinted once unlocked; hovering the row states
-the gate's `reason` (localized) plus, when unlocked, the line's current
-value. The threshold and the current value are both on the row, so the player
-never has to hover to learn *how close* they are — the tooltip only carries
-the *why*.
+**The 未解锁 Locked list is retired (amended 2026-11-03):** the fourteen
+gate rows used to sit in their own section under the card, duplicating what
+the skill rows now answer on hover. Every gate still reaches the player —
+each one is listed, with its threshold, the current value and its
+已解锁 / 未解锁 state, in the tooltip of the skill row it belongs to
+(`data/skill_gates.json` stays the single source; `50-*` §4.3.5). The gate
+data is not filtered or thinned: a row lists all of its gates.
+
+**Skill-row tooltip, exact shape (§4.12.3 amended 2026-11-03):**
+
+```
+操船
+基础 5 · 官员贡献 +30 (马特乌斯) · 生效 35
+恶劣天气修帆 · 需操船 ≥ 60 · 未解锁 (35/60)
+海上小修 · 需修造 ≥ 60 · 未解锁 (35/60)
+```
+
+The first line is the value split (`char.card.tip.base` /
+`char.card.tip.officer` / `char.card.tip.effective`); the contribution part
+is omitted when no post contributes. Each following line is one gate whose
+`stat_or_skill` is this skill: its localized `name` · `gate.requires` · the
+`gate.unlocked` / `gate.locked` state · `current/threshold`. A skill with no
+gates simply ends after the split — the tooltip never pads with an empty
+section.
+
+**Every gate has exactly one home (amended 2026-11-03):** a gate renders on
+the tooltip of the card row that owns its `stat_or_skill`, and **all
+fourteen** land on the player card's eleven skill rows — so retiring the
+separate list hides none of them. Thirteen key on the eight player skills
+(navigation ×2, gunnery ×2, swordplay ×2, appraisal ×2, negotiation ×2,
+seamanship, cartography, rumour). The fourteenth, `repair.at_sea`
+(修造 ≥ 60), keys on the **officer-only** carpentry skill: the player owns
+no carpenter level, so that row's value is the in-post officer's
+contribution (the same `effective skill` read `SailingSim.effective_carpentry`
+uses, `40-*` §4.5) — 0 while the post is vacant, the carpenter's true value
+while filled. The three officer-only rows (medicine / carpentry / cooking)
+therefore show their effective value like every other skill row; the gray
+label still marks them as skills the player does not train. `data/skill_gates.json`
+stays the single source for all fourteen; nothing is filtered by hand.
 
 **Officer actions (the 官员 tab's detail page; formulas `50-*`):** `talk` (loyalty +1,
 10-day cooldown), `gift` (200g → loyalty +5; +8 贪婪 / +3 忠厚, 10-day

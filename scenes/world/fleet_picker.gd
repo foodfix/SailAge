@@ -28,9 +28,8 @@ const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 ## picker renders what `Interactions` computes.
 const InteractionsLib := preload("res://scripts/world/interactions.gd")
 ## §4.12.1 (W6-A): the inspect verb renders the unified character card (the
-## NPC entry) in place; the dossier is one more click (§4.11.3).
+## NPC entry) in place — that card IS the dossier's card section (§4.11.3).
 const CardLib := preload("res://scenes/ui/character_card.gd")
-const DossierPanelLib := preload("res://scenes/ui/dossier_panel.gd")
 
 ## Emitted when a fleet row's verb button is pressed.
 signal verb_chosen(verb: String, fleet: Dictionary)
@@ -201,8 +200,8 @@ func _rebuild() -> void:
 
 
 ## The inspect verb's card view (§4.12.1, the NPC entry): the unified card,
-## identified = full reveal, plus the dossier entry (§4.11.3) and the way
-## back to the pick list. No state is touched here (the §4.12 card-identity
+## identified = full reveal, and the way back to the pick list. No state is
+## touched here (the §4.12 card-identity
 ## pin compares this card's data against the dossier's — a side effect here
 ## would break it).
 func _rebuild_card() -> void:
@@ -223,12 +222,11 @@ func _rebuild_card() -> void:
 	_rows.add_child(_card)
 	_card.setup_person(CardLib.KIND_NPC, CardLib.card_data(
 		CardLib.KIND_NPC, captain_id))
-	# The dossier entry (§4.11.3: opened from any captain entry).
-	var dossier := _verb_button(I18n.fmt("dossier.title",
-		{"name": InteractionsLib.display_name(_card_fleet)}))
-	dossier.pressed.connect(func() -> void:
-		DossierPanelLib.open_for(captain_id, get_parent()))
-	_rows.add_child(_wrap_row(dossier))
+	# No separate dossier button (amended 2026-11-03): the card above IS the
+	# dossier's card section, and the header already names the captain, so a
+	# `档案:<name>` button under it only repeated what was on screen. The
+	# dossier's own entry points (§4.11.3: captain's table, bounty row, hail)
+	# are unchanged.
 	_rows.add_child(_wrap_row(_back_button()))
 
 

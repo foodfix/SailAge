@@ -2265,7 +2265,14 @@ func _open_hail(fleet: Dictionary) -> void:
 	# W5-B hookup (the master's 2-line dispatch): the modal renders the
 	# option rows and applies outcomes through HailOptions.resolve; a failed
 	# intimidation opens the normal encounter after the modal closes.
-	var modal := HailModalLib.open_for(fleet)
+	#
+	# The host MUST be the interaction CanvasLayer (amended 2026-11-03):
+	# `world_map` is a Node2D whose map canvas draws at `z_index 10`, so a
+	# modal parented to the scene root rendered behind the water — visible,
+	# in the tree, full-rect, and invisible on screen (the talk verb looked
+	# dead). Every at-sea modal lives on this layer (the message dialog and
+	# the fleet picker already do).
+	var modal := HailModalLib.open_for(fleet, _interact_layer_ensure())
 	if modal != null:
 		modal.hostile_encounter_requested.connect(_open_encounter)
 

@@ -8,16 +8,15 @@ extends Control
 ## both — the duplication is gone by merging the tabs):
 ##   * nation · day line + the level-up banner (§4.12.2);
 ##   * the §4.12 player card — attribute bars and skill bars side by side, the
-##     level/XP line, the §4.12.2 allocation steppers and the effective-values
-##     split (one card instance, one render);
-##   * every locked feature from `data/skill_gates.json` — one compact row per
-##     gate (name · requirement · current/threshold) whose `reason` is a hover
-##     tooltip rather than an inline paragraph (amended 2026-11-03: fourteen
-##     reason paragraphs buried the list).
+##     level/XP line and the §4.12.2 allocation steppers (one card instance,
+##     one render). Skill rows show the EFFECTIVE value and their tooltips
+##     carry the base / officer / total split plus each gate (§4.12.1/§4.12.3
+##     amended 2026-11-03), which retired both the 生效值 block and the
+##     未解锁 list this page used to carry.
 ##
 ## The six-nation reputation table moved to its own 声望 tab
 ## ([ReputationView], §4.5) — it was the third block on this page and pushed
-## the gate list off screen.
+## the content off screen.
 ##
 ## Embeddable view contract: the intel window instantiates this scene and calls
 ## [method refresh] when its tab becomes active; the view also refreshes itself
@@ -27,22 +26,20 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
-const SkillsLib := preload("res://scripts/player/skills.gd")
+## The §4.12 card owns the skill descriptions and the gate tooltips.
 ## The clock text in the nation line (`20-*` §4.3 amended).
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 ## The §4.12 unified card (the player entry).
 const CardLib := preload("res://scenes/ui/character_card.gd")
 
 ## Layout contract (amended 2026-11-03, the intel-window fit fix): the page is
-## ONE vertical scroll (`Body/Page`) holding the card and the gate rows.
+## ONE vertical scroll (`Body/Page`) holding the card.
 ## Nested scrolls were dropped — the card publishes its full content height
 ## (`80-*` §4.12.1), so the page scroll owns the whole page and nothing can
 ## grow upward past the tab row.
 @onready var _nation: Label = $Body/Nation
 @onready var _levelup: Label = $Body/LevelUp
 @onready var _card_host: Container = $Body/Page/Sections/CardHost
-@onready var _gates_header: Label = $Body/Page/Sections/GatesHeader
-@onready var _gate_rows: VBoxContainer = $Body/Page/Sections/GateRows
 
 ## The ONE §4.12 card instance (the player entry).
 var _card: Control = null
@@ -52,7 +49,6 @@ func _ready() -> void:
 	for label in [_nation, _levelup]:
 		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_levelup.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_gates_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_levelup.visible = false
 
 	# The ONE §4.12 card (the player entry, allocation steppers on), inside
@@ -90,8 +86,6 @@ func refresh() -> void:
 			CardLib.KIND_PLAYER, "", {"alloc": true}))
 		_card.restage_draft(draft)
 
-	_build_gates()
-
 	_levelup.visible = CharacterLib.pending_levelup
 	if _levelup.visible:
 		_levelup.text = I18n.fmt("char.level_up", {
@@ -109,78 +103,6 @@ func is_active() -> bool:
 ## The player card instance (test hook — the §4.12.2 draft pins drive it).
 func player_card() -> Control:
 	return _card
-
-
-# --- Gates (§4.12.3's locked-feature renderer) ------------------------------
-
-## Every `data/skill_gates.json` row as one compact line (§4.12.3 amended
-## 2026-11-03): name · requirement · current/threshold, grayed while locked and
-## good-tinted once the effective stat/skill reaches the threshold. The
-## `reason` is the row's hover tooltip.
-func _build_gates() -> void:
-	_gates_header.text = I18n.t_key("gate.locked")
-	_clear(_gate_rows)
-	for gate in DataLoader.skill_gates_list:
-		_gate_rows.add_child(_build_gate_row(gate))
-
-
-func _build_gate_row(gate: Dictionary) -> Control:
-	var feature := str(gate.get("feature_id", ""))
-	var stat := str(gate.get("stat_or_skill", ""))
-	var threshold := int(gate.get("threshold", 0))
-	var current := CharacterLib.attribute(stat) if stat in CharacterLib.ATTRIBUTES \
-		else SkillsLib.effective_skill(stat)
-	var locked := current < threshold
-
-	var row := HBoxContainer.new()
-	row.name = "Gate_%s" % feature
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-
-	# §4.20 (amended 2026-11-03): each gate row carries its own bilingual
-	# display `name`; the raw `feature_id` never reaches the label.
-	var name_label := _make_label(I18n.t(gate.get("name", {})))
-	name_label.name = "Feature"
-	name_label.custom_minimum_size.x = 180.0
-	name_label.add_theme_color_override("font_color",
-		PaletteLib.PANEL_LINE if locked else PaletteLib.GOOD)
-	row.add_child(name_label)
-
-	var requires := _make_label(I18n.fmt("gate.requires", {
-		"stat": _stat_name(stat), "n": threshold,
-	}))
-	requires.name = "Requires"
-	requires.custom_minimum_size.x = 200.0
-	requires.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	row.add_child(requires)
-
-	# The progress cell: how close the player already is. The threshold and the
-	# current value both live on the row, so the tooltip only carries the "why"
-	# (§4.12.3 amended).
-	var progress := _make_label("%d/%d" % [current, threshold])
-	progress.name = "Progress"
-	progress.custom_minimum_size.x = 80.0
-	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	progress.add_theme_color_override("font_color",
-		PaletteLib.GOOD if not locked else PaletteLib.WARN)
-	row.add_child(progress)
-
-	# Hover text: the reason, plus the current value once unlocked.
-	var tooltip := I18n.t(gate.get("reason", {}))
-	if not locked:
-		tooltip = "%s\n%s" % [tooltip, I18n.fmt("gate.requires", {
-			"stat": _stat_name(stat), "n": threshold})]
-	row.tooltip_text = tooltip
-	for child in row.get_children():
-		if child is Control:
-			(child as Control).tooltip_text = tooltip
-	return row
-
-
-## The localized name of an attribute or skill id (`char.attr.*` / `skill.*`).
-static func _stat_name(stat: String) -> String:
-	if stat in CharacterLib.ATTRIBUTES:
-		return I18n.t_key("char.attr.%s" % stat)
-	return I18n.t_key("skill.%s" % stat)
 
 
 # --- Helpers ----------------------------------------------------------------

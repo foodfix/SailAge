@@ -491,18 +491,39 @@ func _test_world_dispatch() -> void:
 	world._on_picker_verb("talk", near)
 	# W5 master hookup: the real hail modal opens (the W5-B module), not the
 	# placeholder message dialog.
+	# The modal lives on the world's InteractLayer (CanvasLayer 3), so the
+	# search walks the layer, not just the scene root (amended 2026-11-03).
 	var modal: Node = null
-	for child in world.get_children():
-		if child.is_in_group("modal_overlay"):
-			modal = child
-			break
-	if modal == null:
-		for child in world.get_tree().current_scene.get_children():
+	var modal_layer: Node = world.get_node_or_null("InteractLayer")
+	var search: Array = []
+	if modal_layer != null:
+		search.append(modal_layer)
+	search.append(world)
+	if world.get_tree().current_scene != null:
+		search.append(world.get_tree().current_scene)
+	for root in search:
+		for child in (root as Node).get_children():
 			if child.is_in_group("modal_overlay"):
 				modal = child
 				break
+		if modal != null:
+			break
 	_check(modal != null,
 		"talk within range opens the hail modal (the W5-B module, master hookup)")
+	# The modal must live on the interaction CanvasLayer (amended 2026-11-03):
+	# `world_map` is a Node2D whose map canvas draws at z_index 10, so a hail
+	# parented to the scene root was visible=true, in the tree, full-rect —
+	# and invisible on screen. The talk verb looked dead in play while this
+	# suite stayed green, because the check above only asserted existence.
+	if modal != null:
+		var hail_host := (modal as Node).get_parent()
+		_check(hail_host is CanvasLayer,
+			"the hail is hosted on a CanvasLayer, not the Node2D world "
+			+ "(otherwise the map paints over it; host=%s)"
+			% (hail_host.get_class() if hail_host != null else "<none>"))
+		_check(hail_host == world.get_node_or_null("InteractLayer"),
+			"the hail rides the world's InteractLayer (the message dialog's "
+			+ "layer, layer 3)")
 	if modal != null:
 		modal.call("close")
 		modal.queue_free()

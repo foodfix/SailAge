@@ -18,6 +18,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
 grow_horizontal = 1
 grow_vertical = 1
 theme_override_constants/separation = 8
@@ -59,7 +63,7 @@ text = "Skills"
 [node name="TableScroll" type="ScrollContainer" parent="Body"]
 layout_mode = 2
 size_flags_vertical = 3
-horizontal_scroll_mode = 2
+horizontal_scroll_mode = 1
 
 [node name="Table" type="VBoxContainer" parent="Body/TableScroll"]
 layout_mode = 2
@@ -78,29 +82,30 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="DetailTop" type="HBoxContainer" parent="Body/Detail"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="DetailBack" type="Button" parent="Body/Detail/DetailTop"]
-custom_minimum_size = Vector2(120, 36)
-layout_mode = 2
-text = "Back"
-
-[node name="DetailSpacer" type="Control" parent="Body/Detail/DetailTop"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="DetailCardScroll" type="ScrollContainer" parent="Body/Detail"]
+[node name="DetailScroll" type="ScrollContainer" parent="Body/Detail"]
 layout_mode = 2
 size_flags_vertical = 3
-horizontal_scroll_mode = 2
+horizontal_scroll_mode = 1
 
-[node name="DetailLine" type="Label" parent="Body/Detail"]
+[node name="DetailPage" type="VBoxContainer" parent="Body/Detail/DetailScroll"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="DetailLine" type="Label" parent="Body/Detail/DetailScroll/DetailPage"]
+layout_mode = 2
+
+[node name="DetailCardHost" type="MarginContainer" parent="Body/Detail/DetailScroll/DetailPage"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="DetailActions" type="HBoxContainer" parent="Body/Detail"]
 layout_mode = 2
 theme_override_constants/separation = 8
+
+[node name="DetailBack" type="Button" parent="Body/Detail/DetailActions"]
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "Back"
 
 [node name="ConfirmDialog" parent="." instance=ExtResource("2_confirm")]

@@ -156,17 +156,15 @@ func _test_captain_tab() -> void:
 	view.refresh()
 	_check(card.alloc_draft() == draft_before,
 		"an in-progress allocation draft survives the view refresh")
-	var gates: Container = view.get_node("Body/Page/Sections/GateRows")
-	_check(gates.get_child_count() == DataLoader.skill_gates_list.size(),
-		"the gates table renders every skill_gates row (%d)"
-		% gates.get_child_count())
-	var first_gate: Control = gates.get_child(0)
-	_check((first_gate.get_node("Top/Feature") as Label).text
-		== I18n.t(DataLoader.skill_gates_list[0]["name"]),
-		"the gate row shows the localized name (§4.20)")
-	_check((first_gate.get_node("Reason") as Label).text
-		== I18n.t(DataLoader.skill_gates_list[0]["reason"]),
-		"the gate row shows its reason line")
+	# The 未解锁 list folded into the skill rows' tooltips (2026-11-03).
+	_check(view.get_node_or_null("Body/Page/Sections/GateRows") == null,
+		"the captain page no longer carries a separate 未解锁 list")
+	var nav: Control = card.section(
+		"StatColumns/SkillColumn/Skills/Skill_navigation")
+	_check(nav != null and nav.tooltip_text.contains(
+		I18n.t(DataLoader.skill_gates_list[0]["name"])),
+		"the navigation row names its gates on hover (%s)"
+		% DataLoader.skill_gates_list[0]["name"]["en"])
 	_window.close()
 
 
@@ -306,7 +304,7 @@ func _test_officers_detail() -> void:
 	_check(view.dismiss_button(hire_id) is Button,
 		"the detail page carries the dismiss action")
 	# Back returns to the table.
-	view.get_node("Body/Detail/DetailTop/DetailBack").pressed.emit()
+	view.get_node("Body/Detail/DetailPage/DetailTop/DetailBack").pressed.emit()
 	_check(view.detail_officer() == "" and not view.get_node("Body/Detail").visible,
 		"back returns to the table")
 	_window.close()

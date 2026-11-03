@@ -358,15 +358,15 @@ func _rebuild() -> void:
 	_body.add_child(_build_relations())
 	_body.add_child(_section_header(_t("char.card.career"), "CareerHeader"))
 	_body.add_child(_build_career())
-	if str(_data.get("kind", "")) == KIND_PLAYER:
-		_body.add_child(_section_header(_t("char.card.effective"),
-			"EffectiveHeader"))
-		_body.add_child(_build_effective())
-		if bool(_data.get("alloc", false)):
-			_body.add_child(_build_allocation())
-			# The stepper states recompute against the live pending counter
-			# and the 100 clamp once the box is in the tree.
-			_refresh_allocation()
+	if str(_data.get("kind", "")) == KIND_PLAYER \
+			and bool(_data.get("alloc", false)):
+		# The standalone 生效值 block is retired (amended 2026-11-03): the
+		# skill rows now show the effective value and their tooltips carry the
+		# base / officer / total split plus each gate (§4.12.1/§4.12.3).
+		_body.add_child(_build_allocation())
+		# The stepper states recompute against the live pending counter
+		# and the 100 clamp once the box is in the tree.
+		_refresh_allocation()
 	_publish_content_height()
 
 
@@ -496,18 +496,20 @@ func _build_attributes(compact: bool) -> Control:
 		row.name = "Attr_%s" % key
 		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 		# Hover explanation (`50-*` §4.2.1 verbatim, in ui_strings).
-		row.tooltip_text = _desc("char.attr.%s.desc" % key)
+		var tooltip := wrap_tip(_desc("char.attr.%s.desc" % key))
+		row.tooltip_text = tooltip
 		var name_label := _label(_t("char.attr.%s" % key), PaletteLib.TEXT)
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
-		name_label.tooltip_text = row.tooltip_text
+		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
 		row.add_child(_bar(value, CharacterLib.ATTR_MAX, PaletteLib.SEA,
-			"Bar", bar_w))
+			"Bar", bar_w, tooltip))
 		var value_label := _label(str(value), PaletteLib.TEXT)
 		value_label.name = "Value"
 		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value_label.tooltip_text = tooltip
 		row.add_child(value_label)
 		if with_alloc:
 			var plus := Button.new()
@@ -523,6 +525,13 @@ func _build_attributes(compact: bool) -> Control:
 ## The skill bars (0–100): the signature/main skill highlighted, a 0 skill
 ## grayed as unlearned; the player's three officer-only skills render
 ## grayed-labelled. Each row is `Skill_<key>` with Name / Bar / Value.
+##
+## **The player row shows the effecte value (amended 2026-11-03):**
+## `effective = stored + the one in-post officer's contribution`
+## (`50-*` §4.5.3) — the same read `SkillsLib.effective_skill` performs, so
+## the number on the row is the number the pipelines consume. The split
+## (base · officer · effective) and every gate keyed on the skill live in the
+## row's tooltip instead of two extra page sections (§4.12.3).
 func _build_skills(compact: bool) -> Control:
 	var box := VBoxContainer.new()
 	box.name = "Skills"
@@ -533,30 +542,54 @@ func _build_skills(compact: bool) -> Control:
 	var bar_w := BAR_COMPACT_W if compact else BAR_W
 	for key in _data.get("skill_keys", []):
 		var key_name := str(key)
-		var value := int(skills.get(key_name, 0))
-		var unlearned := value <= 0
-		var grayed: bool = key_name in (_data.get("grayed_skill_keys", [])
-			as Array)
+		var stored := int(skills.get(key_name, 0))
 		var row := HBoxContainer.new()
 		row.name = "Skill_%s" % key_name
 		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		# Hover explanation (`50-*` §4.3.1/§4.3.2 verbatim, in ui_strings).
-		row.tooltip_text = _desc("skill.%s.desc" % key_name)
+
+		# The value the row shows: the effective value on the player card
+		# (stored + in-post officer), the plain stored value elsewhere.
+		var value := stored
+		var officer_add := 0
+		var holder := ""
+		if kind == KIND_PLAYER:
+			officer_add = SkillsLib.officer_contribution(key_name)
+			value = stored + officer_add
+			holder = _post_holder_name(key_name)
+		var unlearned := value <= 0
+		var grayed: bool = key_name in (_data.get("grayed_skill_keys", [])
+			as Array)
+
+		# Hover explanation (`50-*` §4.3.1/§4.3.2 verbatim, in ui_strings),
+		# plus the player's value split and this skill's gates (§4.12.3).
+		var tooltip := _desc("skill.%s.desc" % key_name)
+		if kind == KIND_PLAYER:
+			var split := _value_split_tip(stored, officer_add, holder)
+			var gates := _gates_tip(key_name, value)
+			var extra: Array[String] = [split]
+			if not gates.is_empty():
+				extra.append(gates)
+			tooltip = "\n".join(extra) if tooltip.is_empty() \
+				else "%s\n%s" % [tooltip, "\n".join(extra)]
+		tooltip = wrap_tip(tooltip)
+		row.tooltip_text = tooltip
 		var name_label := _label(_t("skill.%s" % key_name),
 			PaletteLib.PANEL_LINE if (unlearned or grayed) else PaletteLib.TEXT)
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
-		name_label.tooltip_text = row.tooltip_text
+		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
 		var color := PaletteLib.PANEL_LINE
 		if not unlearned:
 			color = PaletteLib.ACCENT if key_name == signature else PaletteLib.SEA
-		row.add_child(_bar(value, SkillsLib.SKILL_MAX, color, "Bar", bar_w))
+		row.add_child(_bar(value, SkillsLib.SKILL_MAX, color, "Bar", bar_w,
+			tooltip))
 		var value_label := _label(str(value),
 			PaletteLib.PANEL_LINE if unlearned else PaletteLib.TEXT)
 		value_label.name = "Value"
 		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value_label.tooltip_text = tooltip
 		row.add_child(value_label)
 		if kind == KIND_PLAYER and not grayed:
 			# §4.3.3 the usage counter beside the growth bar (the §4.12.3
@@ -567,9 +600,110 @@ func _build_skills(compact: bool) -> Control:
 			}), PaletteLib.PANEL_LINE)
 			uses.name = "Uses"
 			uses.custom_minimum_size.x = 96.0
+			uses.tooltip_text = tooltip
 			row.add_child(uses)
 		box.add_child(row)
 	return box
+
+
+## The first line of a player skill row's tooltip: the value split
+## (`基础 5 · 官员贡献 +30 (马特乌斯) · 生效 35`, §4.12.1 amended). The officer
+## part is omitted when no post contributes.
+static func _value_split_tip(stored: int, officer_add: int,
+		holder: String) -> String:
+	var parts: Array[String] = [I18n.fmt("char.card.tip.base", {"base": stored})]
+	if officer_add != 0:
+		var part := I18n.fmt("char.card.tip.officer", {"amount": officer_add})
+		if not holder.is_empty():
+			part += " (%s)" % holder
+		parts.append(part)
+	parts.append(I18n.fmt("char.card.tip.effective",
+		{"total": stored + officer_add}))
+	return " · ".join(parts)
+
+
+## This skill's gates, one line each (`<name> · 需 <skill> ≥ <n> ·
+## 已解锁/未解锁 (<current>/<threshold>)`, §4.12.3 amended). Empty when the
+## skill has none, so the tooltip never pads with an empty section.
+static func _gates_tip(key_name: String, current: int) -> String:
+	var lines: Array[String] = []
+	for gate in DataLoader.skill_gates_list:
+		if str(gate.get("stat_or_skill", "")) != key_name:
+			continue
+		var threshold := int(gate.get("threshold", 0))
+		lines.append("%s · %s · %s (%d/%d)" % [
+			I18n.t(gate.get("name", {})),
+			I18n.fmt("gate.requires", {
+				"stat": _t("skill.%s" % key_name), "n": threshold}),
+			I18n.t_key("gate.unlocked" if current >= threshold
+				else "gate.locked"),
+			current, threshold,
+		])
+	return "\n".join(lines)
+
+
+## The name of the officer holding the post that feeds `key_name` (`""` when
+## the post is vacant or the skill has no post).
+static func _post_holder_name(key_name: String) -> String:
+	for post_id in SkillsLib.POST_SKILL:
+		if str(SkillsLib.POST_SKILL[post_id]) != key_name:
+			continue
+		var holder := SkillsLib.post_holder(str(post_id))
+		if holder.is_empty():
+			return ""
+		return I18n.t(DataLoader.get_officer(holder).get("name", {}))
+	return ""
+
+
+## Tooltip wrap width in display columns (a CJK glyph counts 2). The engine's
+## own tooltip is a plain `Label` with autowrap OFF, so a long single line runs
+## off the right edge of the screen — the UI wraps the text itself (§4.12.1
+## amended 2026-11-03).
+const TIP_COLUMNS := 56
+
+
+## Wraps `text` to TIP_COLUMNS, honouring the caller's own line breaks (the
+## value split / each gate keeps its own line).
+static func wrap_tip(text: String) -> String:
+	if text.is_empty():
+		return ""
+	var rows: Array[String] = []
+	for line in text.split("\n"):
+		rows.append_array(_wrap_line(line))
+	return "\n".join(rows)
+
+
+static func _wrap_line(line: String) -> Array[String]:
+	var rows: Array[String] = []
+	var current := ""
+	var width := 0
+	var last_space := -1
+	for index in line.length():
+		var ch := line[index]
+		var w := 2 if ch.unicode_at(0) > 0x2E7F else 1
+		if width + w > TIP_COLUMNS and not current.is_empty():
+			if last_space > 0:
+				rows.append(current.substr(0, last_space))
+				current = current.substr(last_space + 1)
+				last_space = -1
+			else:
+				rows.append(current)
+				current = ""
+			width = _tip_width(current)
+		current += ch
+		width += w
+		if ch == " ":
+			last_space = current.length() - 1
+	if not current.is_empty():
+		rows.append(current)
+	return rows
+
+
+static func _tip_width(text: String) -> int:
+	var width := 0
+	for index in text.length():
+		width += 2 if text[index].unicode_at(0) > 0x2E7F else 1
+	return width
 
 
 ## Personality tags + the appearance sentence (skipped in compact mode and on
@@ -689,53 +823,6 @@ func _build_career() -> Control:
 			box.add_child(returning)
 	else:
 		box.add_child(_label("-", PaletteLib.PANEL_LINE))
-	return box
-
-
-## The player card's effective-values split (§4.12.1): one row per skill —
-## base, the in-post officer's contribution (with their name), the native
-## signature tag, the effective total and the "without this officer" value
-## (the rows ARE the diff, §4.12.1 "on demand").
-func _build_effective() -> Control:
-	var box := VBoxContainer.new()
-	box.name = "Effective"
-	box.add_theme_constant_override("separation", 4)
-	for row_data in _data.get("effective", []):
-		var entry: Dictionary = row_data
-		var key := str(entry.get("key", ""))
-		var row := HBoxContainer.new()
-		row.name = "Eff_%s" % key
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		var name_label := _label(_t("skill.%s" % key), PaletteLib.TEXT)
-		name_label.name = "Name"
-		name_label.custom_minimum_size.x = 96.0
-		row.add_child(name_label)
-		var parts: Array[String] = []
-		var add := int(entry.get("officer_add", 0))
-		if add > 0:
-			var part := I18n.fmt("char.card.officer_part", {"amount": add})
-			if not str(entry.get("holder", "")).is_empty():
-				part += " (%s)" % str(entry.get("holder", ""))
-			parts.append(part)
-		if bool(entry.get("native", false)):
-			parts.append(_t("char.card.native_part"))
-		var detail := _label(" · ".join(parts) if not parts.is_empty() else "-",
-			PaletteLib.PANEL_LINE)
-		detail.name = "Parts"
-		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(detail)
-		var total := _label(str(int(entry.get("total", 0))), PaletteLib.ACCENT)
-		total.name = "Total"
-		total.custom_minimum_size.x = 40.0
-		total.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(total)
-		var without := _label(I18n.fmt("char.card.without_officer",
-			{"amount": int(entry.get("without", 0))}), PaletteLib.PANEL_LINE)
-		without.name = "Without"
-		without.custom_minimum_size.x = 160.0
-		without.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(without)
-		box.add_child(row)
 	return box
 
 
@@ -931,8 +1018,12 @@ func _tier_badge(tier: int) -> Control:
 	return badge
 
 
+## One value bar. `tip` is the owning row's tooltip: the bar is
+## `MOUSE_FILTER_IGNORE` and carries the same text (amended 2026-11-03 — a
+## `ProgressBar` defaults to `MOUSE_FILTER_STOP` and swallowed the whole row's
+## hover, so the row's tooltip only appeared over the one-word label).
 func _bar(value: int, max_value: int, color: Color, bar_name: String,
-		width: float) -> Control:
+		width: float, tip: String = "") -> Control:
 	var bar := ProgressBar.new()
 	bar.name = bar_name
 	bar.min_value = 0
@@ -941,6 +1032,8 @@ func _bar(value: int, max_value: int, color: Color, bar_name: String,
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(width, BAR_H)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.tooltip_text = tip
 	var background := StyleBoxFlat.new()
 	background.bg_color = PaletteLib.PANEL_LINE
 	var fill := StyleBoxFlat.new()
