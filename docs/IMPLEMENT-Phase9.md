@@ -7,6 +7,22 @@
 **Status (2026-11-03): W1 launched** — slots A/B/C/D running in parallel
 worktrees (branches `phase9/phase9-docs-{schema,battle,ai,ui}`), merge
 order A → B → C → D; gate runs on `main` after each merge.
+**W1 status (2026-11-03): ✅ complete** — slots A (`9f4b118`) → B
+(`20cee38`) → C (`e0feee9`) → D (`a7c0b47`) merged in order on `main`;
+`validate_data.py` exit 0 after each merge and at the gate; every new
+section exists and every cross-doc citation resolves (`60-*` §4.3a/§4.4a/
+§4.4b/§4.6a/§4.8a/§4.9a–c, `80-*` §4.7.16, `10-*` §7.12/§4.10 `ai_profiles`).
+Master micro-integrations at the gate (ledger): §4.9c candidate bound
+re-pinned to the correction-3 derived box (≤ 81 at `battle_max_speed = 4`;
+the (y,x) enumeration order stays the normative tie-break — decision 13's
+"≤ 49" predated correction 3); §4.12.1 `unit`-dict fields refreshed to the
+§4.3a state; `10-*` §2 Artifacts rows name the Phase-9 additions. Master
+adjudications folded into the docs: grape's crew kill **is** the volley's
+casualty term (decision 4's ×0.5 pin, not additive with the /20 rule);
+deployment starts `vel = (0,0)` (standstill rule); the §4.7 surrender gate
+drops the old proximity clause (decision 9 owns the gate); W1-B's §7
+checklist staleness (16×10/MP rows) is Phase-2 history — the Phase-9
+acceptance block lands with W6.
 
 ## Goal
 

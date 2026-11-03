@@ -55,13 +55,13 @@ are fully specified here; each data file ships when its owning phase lands.
 |---|---|---|
 | `data/nations.json` | Nation list (incl. `rivals`) | this doc |
 | `data/goods.json` | Good list — 40 entries with `staple`/`specialty`/`exclusive`/`flow` since Phase 7 (§4.2, §7.2) | this doc |
-| `data/ship_types.json` | ShipType list — 16 entries with `role`/`tier` since Phase 7 (§4.3, §7.3) | this doc |
+| `data/ship_types.json` | ShipType list — 16 entries with `role`/`tier` since Phase 7; Phase 9 adds the three battle fields `battle_max_speed`/`battle_accel`/`battle_turn_rate` (§4.3, §7.3) | this doc |
 | `data/ports.json` | Port list — the 100 locked sovereign ports plus the Phase-6 neutral tier (§7.1) in one envelope; `lat`/`lon` are the geographic truth; Phase 7 adds `band`/`protected`/`dev`/`sphere` and the per-port `shipyard`/`equipment_stock` stock lists (§4.4) | this doc |
 | `data/officers.json` | Officer roster — **v2**: 96 entries (24 legend + 72 regular) in the person-card shape (§4.5); built artifact of `tools/build_captains.py`, never hand-edited | this doc |
 | `data/discoveries.json` | Discovery list; `lat`/`lon` are the geographic truth | this doc / `70-*` |
 | `data/quests.json` | Quest templates | this doc / `70-*` |
 | `data/equipment.json` | Equipment list — 24 entries with `tier`/`rare` since Phase 7 (§4.6, §7.9) | this doc / `60-*` |
-| `data/npc_config.json` | Density-dial config: presets, budgets, flow, `absolute_cap` (§4.10) | this doc / `80-*` |
+| `data/npc_config.json` | Density-dial config: presets, budgets, flow, `absolute_cap`, plus the Phase-9 `ai_profiles` nine-key block (§4.10) | this doc / `80-*` |
 | `data/captains.json` | Named-captain canon — the closed roster covering the extreme density preset (§4.11); tool-built, never hand-edited | this doc / `60-*` |
 | `data/captain_name_parts.json` | The canon builder's authored source: per-nation name parts + personality pools + appearance vocabulary (§4.11.1) | this doc |
 | `data/named_pirates.json` | The 4 named pirates as **v2 full captain cards**, each with its rare-equipment `drop` (§4.12, §7.8) | this doc / `60-*` / `70-*` |
