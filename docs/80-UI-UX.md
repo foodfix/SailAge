@@ -1617,6 +1617,15 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   `tournament`).
 - **Clamp rules.** every field clamps immediately in the UI layer to the
   ranges above; an invalid combination never reaches 开战.
+- **Editor presentation (W4 gate amendment, 2026-11-04, from the S21 UI-fix
+  pass):** `随机全部` randomizes every editor field within its clamps and
+  NEVER rolls the compose mode (composing stays an explicit user choice —
+  the mode toggle only ever hides the per-ship rows + fleet buttons, never
+  the enemy editors block); equipment dropdowns show the authored
+  localized item `name`s (the `shipyard_screen` convention — metadata
+  stays the id); each ship editor renders as a compact multi-line block
+  (type/captain, cannons/crew/durability, then full-width figurehead and
+  sail lines) so no label clips and every control stays inside its panel.
 - **Import/export (forward-compatible schema).** `[导出]` copies the FULL
   configuration JSON to the clipboard; `[导入]` parses clipboard JSON and
   restores the editors. The schema declares ALL planned fields from day
