@@ -48,26 +48,6 @@ const STEPPER_BUTTON_SIZE := Vector2(44, 28)
 ## zh+en shape as the JSON so the residual merge is a copy-paste; resolved by
 ## [method _t_key]. Reported to the W6 orchestrator ledger.
 const FALLBACK_STRINGS := {
-	"attr.constitution": {
-		"zh": "体魄",
-		"en": "Constitution",
-	},
-	"attr.intellect": {
-		"zh": "悟性",
-		"en": "Intellect",
-	},
-	"attr.charisma": {
-		"zh": "魅力",
-		"en": "Charisma",
-	},
-	"attr.courage": {
-		"zh": "胆识",
-		"en": "Courage",
-	},
-	"attr.luck": {
-		"zh": "运气",
-		"en": "Luck",
-	},
 	"creation.next": {
 		"zh": "下一步",
 		"en": "Next",
@@ -575,14 +555,14 @@ func _route(path: String) -> void:
 
 # --- Helpers -----------------------------------------------------------------
 
-## The attribute/skill display name: `skill.*` keys exist for the eight
-## skills; the five attribute names are in [constant FALLBACK_STRINGS] until
-## W6-D merges them (`attr.*` family, reported).
+## The attribute/skill display name: the five attribute names live in the
+## unified `char.attr.*` family (the W7 unify — the duplicate `attr.*` keys
+## D authored stay as inert duplicates), the eight skills in `skill.*`.
 func _stat_name(key: String) -> String:
 	if key.is_empty():
 		return ""
 	if key in CharacterLib.ATTRIBUTES:
-		return _t_key("attr.%s" % key)
+		return _t_key("char.attr.%s" % key)
 	return I18n.t_key("skill.%s" % key)
 
 

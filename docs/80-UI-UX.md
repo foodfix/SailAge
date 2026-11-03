@@ -1946,6 +1946,9 @@ Notes pinning the set exactly:
       overlay + known ports + fleet marker, and mutates no state.
 - [ ] Input table §4.3 fully implemented; Esc always steps back.
 - [ ] HUD bars (§4.5) show live values driven by `EventBus`, not polling the
+      game state (the Phase-8 `alloc_pending` badge, §4.12.2, is the one
+      sanctioned per-frame diff — a `process_frame` connection that touches
+      the label only on change, no `_process` defined; amended 2026-11-03).
       scene tree.
 - [ ] Locale toggle switches 100% of visible text on the current screen
       without a scene reload glitch (manual spot-check list in
