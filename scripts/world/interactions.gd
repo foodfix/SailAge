@@ -21,6 +21,9 @@ extends RefCounted
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CaptainsLib := preload("res://scripts/world/captains.gd")
+## The contact-tile current decode for the §4.2 battle-condition handoff
+## (Phase-9 W3-A). One-way preload.
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 ## The pilot-post read for the `sail.autopilot` gate (20-* §4.19). One-way
 ## preload — `skills.gd` never loads this file back.
 const SkillsLib := preload("res://scripts/player/skills.gd")
@@ -181,6 +184,16 @@ static func intercept_cancel_reason(order: Dictionary) -> String:
 ## fleet's own seeded composition (a fleet-carried `ships` override — a
 ## fixture/K seam — is honored verbatim), and `contact` = the player's
 ## current tile (where the battle returns the fleet, §4.11.11.3).
+##
+## Phase-9 W3-A (§4.2 battle-condition lock): the dict also carries the three
+## locked battle conditions — `wind_dir` (the world's 8-token wind-FROM id),
+## `weather` (the engine id; battle_screen reads the same world value today —
+## carried here so the handoff is self-describing), and `current` (the
+## decoded, reversal-applied contact-tile current via `OceanLayers.current_at`
+## — the lookup-time reversal, `npc_fleets.gd` pattern — shaped
+## `{dir, strength}`, strength 0 when the tile has none). The sim config
+## defaults (§4.12.1) read the same sources when the keys are absent, so the
+## values agree for both this handoff and the sandbox fixtures.
 static func attack_encounter(fleet: Dictionary) -> Dictionary:
 	var encounter := fleet.duplicate(true)
 	encounter["kind"] = NpcFleetsLib.composition_kind(
@@ -193,6 +206,15 @@ static func attack_encounter(fleet: Dictionary) -> Dictionary:
 	encounter["contact"] = {
 		"x": GameState.world_tile().x, "y": GameState.world_tile().y,
 	}
+	encounter["wind_dir"] = str(GameState.world.get("wind_dir", "E"))
+	encounter["weather"] = str(GameState.world.get("weather", "calm"))
+	# The decoded contact-tile current (reversal applied at lookup, §6.5),
+	# regardless of the world's `current_mode` (60-* §4.2, correction 1).
+	var decoded: Dictionary = OceanLayersLib.instance().current_at(
+		GameState.world_tile(), SailingSimLib.month_for(int(GameState.day)))
+	encounter["current"] = {"dir": "", "strength": 0} if decoded.is_empty() \
+		else {"dir": str(decoded.get("dir", "")),
+			"strength": clampi(int(decoded.get("strength", 0)), 0, 3)}
 	return encounter
 
 
