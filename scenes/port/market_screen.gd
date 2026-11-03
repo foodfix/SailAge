@@ -12,6 +12,15 @@ extends Control
 ## price, gate ≥ 60) — rendered as bare ↑/↓ glyphs in their own cell; the
 ## engine's [method TradeEngine.profit_arrow] / [method
 ## TradeEngine.memory_arrow] own the gates, this screen only renders.
+## 2026-11-03 (market polish, docs/30 §4.8): the ★ 特产 rows sort first
+## behind a thin PANEL_LINE divider, the badge lives in a fixed reserved
+## slot so every good name aligns; the table's columns come from one
+## [constant COL_SPECS] table shared by header and rows (the two lists had
+## drifted — the column-misalignment bug); the selected-row info strip
+## shows the walked totals via the engine's `buy_cost` / `sell_gain` plus
+## the tax lines; clicking a row selects it; Enter submits the Buy side;
+## a successful trade clears the quantity; locked 专营货 rows gray every
+## cell and take no quantity input.
 ##
 ## Everything the screen shows comes from data:
 ##   * the goods table iterates [method TradeEngine.goods_rows] (L's merged,
@@ -39,9 +48,9 @@ extends Control
 ## §4.6.1): provisions and water are survival, not commerce, and are bought at
 ## the Set-Sail provisioning prompt (`scenes/port/provisions_dialog.tscn`) — the
 ## single supply purchase point. The supplies row that used to live here was
-## removed with the prompt's introduction; `market.provisions` / `market.water`
-## / `market.supplies` are no longer reachable from this screen (see the task
-## report for the key inventory).
+## removed with the prompt's introduction; the stale `market.price` /
+## `market.supplies` / `market.provisions` / `market.water` keys were
+## dropped from `ui_strings.json` with it (2026-11-03 dead-key sweep).
 ##
 ## The screen holds no state of its own beyond the per-row quantity field: on
 ## every `gold_changed` / `fleet_changed` the rows are re-read, so a trade
@@ -69,12 +78,19 @@ const PORT_SCENE := "res://scenes/port/port_screen.tscn"
 const TOAST_SECONDS := 2.5
 ## Quantity presets, in the §4.4 order 1 / 10 / 100 (+ Max).
 const QTY_PRESETS: Array[int] = [1, 10, 100]
-## Widths of the table's fixed columns (docs/80 §4.8 8px grid). The quantity
-## picker is the numeric field plus the four preset buttons. Phase 5 adds
-## the stock / trend / marginal-price columns (docs/80 §4.7.7): the old
-## buy/sell price cell **is** the marginal (next-tranche) price now that
-## every trade reprices per 10-unit tranche (docs/30 §4.4), so the price
-## column shows it under the `market.stock.marginal` caption.
+## The trade table's column definitions — the **single source** for the
+## header captions and the row cells alike (docs/80 §4.8 8px grid). The
+## old two independently-maintained lists drifted (the ★ badge slot and
+## the qty-picker's inner separations were never counted on the header) —
+## the 2026-11-03 column-misalignment bug; both builders now iterate
+## [constant COL_SPECS], so the child order cannot diverge again. Each
+## entry: `[cell key, header ui_strings key suffix ("" = no caption),
+## width px, alignment]`. Composite widths are computed from the same
+## constants the row builder uses:
+const CELL_SEP := 4
+## The ★ 特产 badge slot (docs/80 §4.7.11): reserved on **every** row —
+## blank on non-produce rows — so every good name starts at the same x.
+const COL_BADGE_W := 56
 const COL_NAME_W := 160
 const COL_STOCK_W := 56
 const COL_TREND_W := 96
@@ -82,13 +98,28 @@ const COL_TREND_W := 96
 ## arrows — one narrow cell between Trend and Marginal. Bare ↑/↓ glyphs
 ## (locale-independent symbols; the §4.7.15 inventory pins no string keys).
 const COL_ARROW_W := 40
-const COL_MARGINAL_W := 132
+const COL_MARGINAL_W := 160
 const COL_HAVE_W := 70
 const COL_QTY_W := 72
 const COL_PRESET_W := 40
 const COL_MAX_W := 56
 const COL_BUTTON_W := 88
-const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W
+## The qty picker cell: the field + 1/10/100 + Max with the four inner gaps.
+const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W \
+	+ 4 * CELL_SEP
+## The Good cell: the reserved badge slot, the gap, then the name.
+const COL_GOOD_TOTAL_W := COL_BADGE_W + CELL_SEP + COL_NAME_W
+const COL_SPECS: Array = [
+	["good", "good", COL_GOOD_TOTAL_W, HORIZONTAL_ALIGNMENT_LEFT],
+	["stock", "stock.header", COL_STOCK_W, HORIZONTAL_ALIGNMENT_RIGHT],
+	["trend", "stock.trend", COL_TREND_W, HORIZONTAL_ALIGNMENT_LEFT],
+	["arrows", "", COL_ARROW_W, HORIZONTAL_ALIGNMENT_LEFT],
+	["marginal", "stock.marginal", COL_MARGINAL_W, HORIZONTAL_ALIGNMENT_RIGHT],
+	["you_have", "you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
+	["qty", "qty", COL_QTY_TOTAL_W, HORIZONTAL_ALIGNMENT_CENTER],
+	["buy", "buy", COL_BUTTON_W, HORIZONTAL_ALIGNMENT_CENTER],
+	["sell", "sell", COL_BUTTON_W, HORIZONTAL_ALIGNMENT_CENTER],
+]
 ## Task L's allegiance module (docs/80-* §4.9 contract) — loaded through the
 ## guard helpers, never hard-referenced (it may not exist yet).
 const ALLEGIANCE_PATH := "res://scripts/port/allegiance.gd"
@@ -187,11 +218,19 @@ var _payloads: Dictionary = {}
 ## player touched — docs/30 §4.8: the tax lines accompany a trade dialog).
 var _selected_good: String = ""
 ## Phase 7 widgets built in code (the captains-section pattern): the
-## `特产:` header above the table, the header tariff badge, and the tax-line
-## strip below the goods table.
+## `特产:` header above the table, the header tariff badge, and the
+## selected-row info strip below the goods table.
 var _specialty_header: Label = null
 var _tax_badge: Label = null
-var _tax_lines: Label = null
+var _info_strip: Label = null
+## Per-section render caches: the captains section rebuilds only when its
+## docked-fleet fingerprint moves, the intel section only when its rows'
+## data moves — the seeded sighting rolls are visit-stable (docs/80 §4.7.8),
+## so a rebuild on every `gold_changed` bought nothing but churn (and, on
+## the captains side, re-accrued `sightings()` familiarity). A locale
+## change resets both to force a re-render.
+var _captains_key: String = ""
+var _intel_key: String = ""
 
 
 # --- Guarded Allegiance reads (docs/80-* §4.9) ------------------------------
@@ -288,7 +327,7 @@ func _ready() -> void:
 	_cache_port_lists()
 	_build_specialty_header()
 	_build_tax_badge()
-	_build_tax_lines()
+	_build_info_strip()
 	_build()
 	_bind()
 	_refresh()
@@ -334,7 +373,8 @@ func port_id() -> String:
 	return _port_id
 
 
-## The goods table's rows, in display order (docs/30 §4.7: `base_price` asc).
+## The goods table's rows, in display order (docs/30 §4.8: ★ 特产 rows
+## first, then the rest, each group by `base_price` ascending).
 func row_goods_ids() -> Array:
 	return _rows.keys()
 
@@ -473,11 +513,15 @@ static func _engine_goods_rows(port_id: String) -> Array:
 	return TradeEngineLib.goods_rows(port_id)
 
 
-## Builds the fixed column header and one row per **listed** good, keeping the
-## engine's `base_price` order. Called once from `_ready`; a locale change
-## only re-binds the labels ([method _bind]) because no row content changes
-## with locale. There is **no** supplies row: provisions and water are bought
-## in the Set-Sail prompt (docs/20-* §4.10).
+## Builds the fixed column header and one row per **listed** good in the
+## §4.8 display order — ★ 特产 rows first, then the rest, each group by
+## `base_price` ascending (ties by id; the engine's `goods_rows` keeps its
+## pure `base_price` order, this screen reorders for display only). A thin
+## divider separates the specialty group from the remaining rows. Called
+## once from `_ready`; a locale change only re-binds the labels
+## ([method _bind]) because no row content changes with locale. There is
+## **no** supplies row: provisions and water are bought in the Set-Sail
+## prompt (docs/20-* §4.10).
 func _build() -> void:
 	_build_column_header()
 	for child in _goods_rows.get_children():
@@ -485,181 +529,205 @@ func _build() -> void:
 		child.queue_free()
 	_rows.clear()
 	_payloads.clear()
+	var listed: Array = []
 	for good in _engine_goods_rows(_port_id):
 		var good_id := str(good.get("id", ""))
 		if good_id.is_empty() or not _is_listed(good_id):
 			continue  # unlisted goods never render (docs/30 §4.2)
+		listed.append(good)
+	listed.sort_custom(_display_order)
+	var produce_rows := 0
+	var rest_rows := 0
+	for good in listed:
+		var good_id := str(good.get("id", ""))
 		_payloads[good_id] = good
+		if _is_own_produce(good_id):
+			produce_rows += 1
+		else:
+			if produce_rows > 0 and rest_rows == 0:
+				_goods_rows.add_child(_make_group_divider())
+			rest_rows += 1
 		_rows[good_id] = _build_good_row(good_id)
+
+
+## The §4.8 display order (2026-11-03 amendment): ★ 特产 rows before the
+## rest; within each group `base_price` ascending, ties by id.
+func _display_order(a: Dictionary, b: Dictionary) -> bool:
+	var a_id := str(a.get("id", ""))
+	var b_id := str(b.get("id", ""))
+	var a_produce := _is_own_produce(a_id)
+	var b_produce := _is_own_produce(b_id)
+	if a_produce != b_produce:
+		return a_produce
+	var price_a := int(a.get("base_price", 0))
+	var price_b := int(b.get("base_price", 0))
+	if price_a != price_b:
+		return price_a < price_b
+	return a_id < b_id
+
+
+## The thin `PANEL_LINE` divider between the ★ 特产 group and the remaining
+## rows (docs/30 §4.8). Lives inside GoodsRows, so a rebuild clears it with
+## the rows; it owns no `_rows` entry and takes no clicks.
+func _make_group_divider() -> ColorRect:
+	var divider := ColorRect.new()
+	divider.name = "SpecialtyDivider"
+	divider.color = PaletteLib.PANEL_LINE
+	divider.custom_minimum_size = Vector2(0, 2)
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return divider
 
 
 func _build_column_header() -> void:
 	for child in _column_header.get_children():
 		_column_header.remove_child(child)
 		child.queue_free()
-	# [node-name suffix, ui_strings key, width, alignment] — the keys are the
-	# §4.7.9 captions (`market.` + key); node names stay dot-free. The
-	# Phase-8 arrows cell carries no caption (bare glyphs, no string keys).
-	for spec in [
-		["good", "good", COL_NAME_W, HORIZONTAL_ALIGNMENT_LEFT],
-		["stock", "stock.header", COL_STOCK_W, HORIZONTAL_ALIGNMENT_RIGHT],
-		["trend", "stock.trend", COL_TREND_W, HORIZONTAL_ALIGNMENT_LEFT],
-		["arrows", "", COL_ARROW_W, HORIZONTAL_ALIGNMENT_LEFT],
-		["marginal", "stock.marginal", COL_MARGINAL_W,
-				HORIZONTAL_ALIGNMENT_RIGHT],
-		["you_have", "you_have", COL_HAVE_W, HORIZONTAL_ALIGNMENT_RIGHT],
-		["qty", "qty", COL_QTY_TOTAL_W, HORIZONTAL_ALIGNMENT_CENTER],
-	]:
+	# One label per [constant COL_SPECS] entry — the row cells are built
+	# from the same table, so a caption and its cell cannot drift apart.
+	# The Phase-8 arrows cell carries no caption (bare glyphs, no keys).
+	for spec in COL_SPECS:
 		var label := Label.new()
 		label.name = "Col_%s" % str(spec[0])
 		if not str(spec[1]).is_empty():
 			label.set_meta("text_key", "market.%s" % str(spec[1]))
 		label.custom_minimum_size = Vector2(float(spec[2]), float(PaletteLib.ROW_H))
 		label.horizontal_alignment = int(spec[3])
-		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-		_column_header.add_child(label)
-	# Buy + Sell column caption, split over the two button widths.
-	for key in ["buy", "sell"]:
-		var label := Label.new()
-		label.name = "Col_%s" % key
-		label.set_meta("text_key", "market.%s" % key)
-		label.custom_minimum_size = Vector2(float(COL_BUTTON_W), float(PaletteLib.ROW_H))
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.clip_text = true
 		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 		_column_header.add_child(label)
 
 
-## One table row: Good | Stock | Trend | Marginal | You have | Qty picker |
-## [Buy][Sell] (docs/30 §4.8 + docs/80 §4.7.7). Every widget's text is
-## filled later by [method _refresh].
+## One table row, built cell-for-cell in [constant COL_SPECS] order —
+## Good (reserved badge slot + name) | Stock | Trend | Arrows | Marginal |
+## You have | Qty picker | [Buy][Sell] (docs/30 §4.8 + docs/80 §4.7.7).
+## Every widget's text is filled later by [method _refresh].
 func _build_good_row(good_id: String) -> Dictionary:
 	var row := HBoxContainer.new()
 	row.name = "Row_%s" % good_id
 	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
 	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	row.set_meta("good_id", good_id)
+	# Clicking anywhere on the row selects it (docs/30 §4.8 info strip).
+	# PASS, so the row's own buttons and field still get their clicks.
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.gui_input.connect(_on_row_gui_input.bind(good_id))
 
-	var name_cell := HBoxContainer.new()
-	name_cell.name = "NameCell"
-	name_cell.add_theme_constant_override("separation", 4)
-	# The ★ 特产 badge (docs/80 §4.7.11): present only on `port.produces`
-	# rows; text is bound per locale in [method _bind].
-	var badge_label := Label.new()
-	badge_label.name = "Badge"
-	badge_label.custom_minimum_size.x = 56
-	badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	name_cell.add_child(badge_label)
-	var name_label := Label.new()
-	name_label.name = "Name"
-	name_label.custom_minimum_size.x = float(COL_NAME_W)
-	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	name_cell.add_child(name_label)
+	var refs := {"node": row, "qty_buttons": {}}
+	for spec in COL_SPECS:
+		match str(spec[0]):
+			"good":
+				var name_cell := HBoxContainer.new()
+				name_cell.name = "NameCell"
+				name_cell.mouse_filter = Control.MOUSE_FILTER_PASS
+				name_cell.add_theme_constant_override("separation", CELL_SEP)
+				# The ★ 特产 badge (docs/80 §4.7.11): a fixed reserved slot
+				# on **every** row — produce rows render the badge, the rest
+				# keep the empty slot — so the good names align; text is
+				# bound per locale in [method _bind].
+				var badge_label := Label.new()
+				badge_label.name = "Badge"
+				badge_label.custom_minimum_size.x = float(COL_BADGE_W)
+				badge_label.clip_text = true
+				badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				badge_label.add_theme_color_override("font_color",
+					PaletteLib.ACCENT)
+				name_cell.add_child(badge_label)
+				var name_label := Label.new()
+				name_label.name = "Name"
+				name_label.custom_minimum_size.x = float(COL_NAME_W)
+				name_label.clip_text = true
+				name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+				name_cell.add_child(name_label)
+				row.add_child(name_cell)
+				refs["name_cell"] = name_cell
+				refs["badge"] = badge_label
+				refs["name"] = name_label
+			"arrows":
+				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the
+				# profit arrow (GOOD: ↓ buy-cheap / ↑ sell-dear vs
+				# base_price) and the other-port memory arrow (ACCENT: the
+				# remembered foreign price). Both stay empty below gates.
+				var arrows_box := HBoxContainer.new()
+				arrows_box.name = "Arrows"
+				arrows_box.mouse_filter = Control.MOUSE_FILTER_PASS
+				arrows_box.custom_minimum_size.x = float(COL_ARROW_W)
+				arrows_box.add_theme_constant_override("separation", 2)
+				var profit_arrow_label := Label.new()
+				profit_arrow_label.name = "ProfitArrow"
+				profit_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				profit_arrow_label.add_theme_color_override("font_color",
+					PaletteLib.GOOD)
+				var memory_arrow_label := Label.new()
+				memory_arrow_label.name = "MemoryArrow"
+				memory_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				memory_arrow_label.add_theme_color_override("font_color",
+					PaletteLib.ACCENT)
+				arrows_box.add_child(profit_arrow_label)
+				arrows_box.add_child(memory_arrow_label)
+				row.add_child(arrows_box)
+				refs["arrows"] = arrows_box
+				refs["profit_arrow"] = profit_arrow_label
+				refs["memory_arrow"] = memory_arrow_label
+			"qty":
+				# Quantity picker (docs/30 §4.4): 1 / 10 / 100 / Max buttons
+				# plus direct numeric entry (digits only, live-clamped,
+				# empty = invalid). Enter submits the Buy side when allowed.
+				var qty_box := HBoxContainer.new()
+				qty_box.name = "QtyPicker"
+				qty_box.mouse_filter = Control.MOUSE_FILTER_PASS
+				qty_box.add_theme_constant_override("separation", CELL_SEP)
+				var qty_field := LineEdit.new()
+				qty_field.name = "Qty"
+				qty_field.custom_minimum_size = Vector2(float(COL_QTY_W),
+					float(PaletteLib.ROW_H))
+				qty_field.max_length = 6
+				qty_field.placeholder_text = "0"
+				qty_box.add_child(qty_field)
+				for preset in QTY_PRESETS:
+					var button := _make_row_button(
+						"Qty%d" % preset, str(preset), COL_PRESET_W)
+					button.pressed.connect(_on_qty_preset.bind(good_id, preset))
+					qty_box.add_child(button)
+					refs["qty_buttons"][str(preset)] = button
+				var max_button := _make_row_button(
+					"QtyMax", I18n.t_key("market.max"), COL_MAX_W)
+				max_button.pressed.connect(_on_qty_preset.bind(good_id, -1))
+				qty_box.add_child(max_button)
+				refs["qty_buttons"]["max"] = max_button
+				row.add_child(qty_box)
+				refs["qty"] = qty_field
+				qty_field.text_changed.connect(
+					_on_qty_text_changed.bind(good_id))
+				qty_field.text_submitted.connect(
+					_on_qty_submitted.bind(good_id))
+			"buy", "sell":
+				var is_buy := str(spec[0]) == "buy"
+				var key := "Buy" if is_buy else "Sell"
+				var trade_button := _make_row_button(key, "", COL_BUTTON_W)
+				var handler := _on_buy if is_buy else _on_sell
+				trade_button.pressed.connect(handler.bind(good_id))
+				row.add_child(trade_button)
+				refs[key.to_lower()] = trade_button
+			_:
+				# A plain fixed-width cell (Stock / Trend / Marginal / You
+				# have): the caption's width and alignment from the same
+				# spec, clip_text so a wide value can never push the row's
+				# remaining columns off their captions.
+				var spec_key := str(spec[0])
+				var cell := Label.new()
+				cell.name = "Have" if spec_key == "you_have" \
+					else spec_key.capitalize()
+				cell.custom_minimum_size.x = float(spec[2])
+				cell.horizontal_alignment = int(spec[3])
+				cell.clip_text = true
+				cell.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				cell.add_theme_color_override("font_color", PaletteLib.TEXT)
+				row.add_child(cell)
+				refs["have" if spec_key == "you_have" else spec_key] = cell
 
-	var stock_label := Label.new()
-	stock_label.name = "Stock"
-	stock_label.custom_minimum_size.x = float(COL_STOCK_W)
-	stock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	stock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stock_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-
-	# §4.7.7: one drift glyph — ▲ refilling (stock under rest, GOOD) or
-	# ▼ draining (stock over rest, BAD); blank at rest. No forecast shown.
-	var trend_label := Label.new()
-	trend_label.name = "Trend"
-	trend_label.custom_minimum_size.x = float(COL_TREND_W)
-	trend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-
-	# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the profit arrow
-	# (GOOD: ↓ buy-cheap / ↑ sell-dear vs base_price) and the other-port
-	# memory arrow (ACCENT: local price vs the remembered foreign price).
-	# Both stay empty below their gates.
-	var arrows_box := HBoxContainer.new()
-	arrows_box.name = "Arrows"
-	arrows_box.custom_minimum_size.x = float(COL_ARROW_W)
-	arrows_box.add_theme_constant_override("separation", 2)
-	var profit_arrow_label := Label.new()
-	profit_arrow_label.name = "ProfitArrow"
-	profit_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	profit_arrow_label.add_theme_color_override("font_color", PaletteLib.GOOD)
-	var memory_arrow_label := Label.new()
-	memory_arrow_label.name = "MemoryArrow"
-	memory_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	memory_arrow_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	arrows_box.add_child(profit_arrow_label)
-	arrows_box.add_child(memory_arrow_label)
-
-	var marginal_label := Label.new()
-	marginal_label.name = "Marginal"
-	marginal_label.custom_minimum_size.x = float(COL_MARGINAL_W)
-	marginal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	marginal_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	marginal_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-
-	var have_label := Label.new()
-	have_label.name = "Have"
-	have_label.custom_minimum_size.x = float(COL_HAVE_W)
-	have_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	have_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	have_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-
-	# Quantity picker (docs/30 §4.4): 1 / 10 / 100 / Max buttons plus direct
-	# numeric entry (digits only, live-clamped, empty = invalid).
-	var qty_box := HBoxContainer.new()
-	qty_box.name = "QtyPicker"
-	qty_box.add_theme_constant_override("separation", 4)
-	var qty_field := LineEdit.new()
-	qty_field.name = "Qty"
-	qty_field.custom_minimum_size = Vector2(float(COL_QTY_W), float(PaletteLib.ROW_H))
-	qty_field.max_length = 6
-	qty_field.placeholder_text = "0"
-	qty_box.add_child(qty_field)
-	var qty_buttons: Dictionary = {}
-	for preset in QTY_PRESETS:
-		var button := _make_row_button("Qty%d" % preset, str(preset), COL_PRESET_W)
-		button.pressed.connect(_on_qty_preset.bind(good_id, preset))
-		qty_box.add_child(button)
-		qty_buttons[str(preset)] = button
-	var max_button := _make_row_button("QtyMax", I18n.t_key("market.max"), COL_MAX_W)
-	max_button.pressed.connect(_on_qty_preset.bind(good_id, -1))
-	qty_box.add_child(max_button)
-	qty_buttons["max"] = max_button
-
-	var buy_button := _make_row_button("Buy", "", COL_BUTTON_W)
-	buy_button.pressed.connect(_on_buy.bind(good_id))
-	var sell_button := _make_row_button("Sell", "", COL_BUTTON_W)
-	sell_button.pressed.connect(_on_sell.bind(good_id))
-
-	row.add_child(name_cell)
-	row.add_child(stock_label)
-	row.add_child(trend_label)
-	row.add_child(arrows_box)
-	row.add_child(marginal_label)
-	row.add_child(have_label)
-	row.add_child(qty_box)
-	row.add_child(buy_button)
-	row.add_child(sell_button)
 	_goods_rows.add_child(row)
-
-	qty_field.text_changed.connect(_on_qty_text_changed.bind(good_id))
-	return {
-		"node": row,
-		"name_cell": name_cell,
-		"badge": badge_label,
-		"name": name_label,
-		"stock": stock_label,
-		"trend": trend_label,
-		"arrows": arrows_box,
-		"profit_arrow": profit_arrow_label,
-		"memory_arrow": memory_arrow_label,
-		"marginal": marginal_label,
-		"have": have_label,
-		"qty": qty_field,
-		"qty_buttons": qty_buttons,
-		"buy": buy_button,
-		"sell": sell_button,
-	}
+	return refs
 
 
 func _make_row_button(node_name: String, text: String, width: int) -> Button:
@@ -694,19 +762,6 @@ func _build_tax_badge() -> void:
 	header.move_child(_tax_badge, _back_button.get_index())
 
 
-## The per-side tax lines (docs/30 §4.10: "separate displayed line") — a
-## strip below the goods table showing the selected row's `market.tax.buy_line`
-## / `market.tax.sell_line` from the engine payload. Hidden until a payload
-## carries tax fields (pre-L payloads have none) and until a row is selected.
-func _build_tax_lines() -> void:
-	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
-	_tax_lines = Label.new()
-	_tax_lines.name = "TaxLines"
-	_tax_lines.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_tax_lines.visible = false
-	table.add_child(_tax_lines)
-
-
 # --- Binding ---------------------------------------------------------------
 
 func _read_current_port() -> String:
@@ -734,11 +789,12 @@ func _bind() -> void:
 		var refs: Dictionary = _rows[good_id]
 		var good: Dictionary = DataLoader.get_good(good_id)
 		(refs["name"] as Label).text = I18n.t(good.get("name", {}))
-		# ★ 特产 badge: produces members only (docs/80 §4.7.11).
+		# ★ 特产 badge: a fixed reserved slot on every row (docs/80 §4.7.11,
+		# 2026-11-03) — produces members render the badge, the rest keep the
+		# empty slot so every good name starts at the same x.
 		var badge: Label = refs["badge"]
-		badge.visible = _is_own_produce(good_id)
 		badge.text = ("%s %s" % ["★", I18n.t_key("market.specialty.badge")]) \
-			if badge.visible else ""
+			if _is_own_produce(good_id) else ""
 		(refs["buy"] as Button).text = I18n.t_key("market.buy")
 		(refs["sell"] as Button).text = I18n.t_key("market.sell")
 		((refs["qty_buttons"] as Dictionary)["max"] as Button).text = \
@@ -746,9 +802,10 @@ func _bind() -> void:
 	_refresh_specialty_header()
 
 
-## The `特产: <names>` header — up to 3 of the port's produces
-## (docs/30 §4.8 wireframe, `market.specialty.header`). Hidden at a port
-## that produces nothing and when no port is docked.
+## The `特产: <names>` header — up to 3 of the port's produces, plus the
+## `market.specialty.more` suffix when there are more (docs/30 §4.8,
+## `market.specialty.header`). Hidden at a port that produces nothing and
+## when no port is docked.
 func _refresh_specialty_header() -> void:
 	if _specialty_header == null:
 		return
@@ -759,9 +816,13 @@ func _refresh_specialty_header() -> void:
 	if names.is_empty():
 		_specialty_header.text = ""
 		return
-	_specialty_header.text = I18n.fmt("market.specialty.header", {
+	var text := I18n.fmt("market.specialty.header", {
 		"names": ", ".join(names),
 	})
+	if _produces.size() > 3:
+		text += " (%s)" % I18n.fmt("market.specialty.more",
+			{"count": _produces.size() - 3})
+	_specialty_header.text = text
 
 
 ## The specialty header's current text (the suite's seam, captains-pattern).
@@ -778,7 +839,7 @@ func _refresh() -> void:
 	EconomyLib.ensure_event_overrides()
 	_refresh_header()
 	_refresh_rows()
-	_refresh_tax_lines()
+	_refresh_info_strip()
 	_refresh_investment()
 	_refresh_captains()
 	_refresh_intel()
@@ -840,7 +901,22 @@ func tax_badge_state() -> Dictionary:
 	}
 
 
-# --- Tax lines (docs/30 §4.10, docs/80 §4.7.11) -----------------------------
+# --- Selected-row info strip (docs/30 §4.8, docs/80 §4.7.11) -----------------
+
+## The strip below the goods table (built once, the captains-section
+## pattern): the selected row's walked totals (`market.total.buy` /
+## `market.total.sell`, the §4.4 `buy_cost` / `sell_gain` queries) with the
+## per-side tax lines (`market.tax.buy_line` / `market.tax.sell_line`,
+## §4.10) beneath. Hidden until a row is selected and one of the lines
+## applies.
+func _build_info_strip() -> void:
+	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
+	_info_strip = Label.new()
+	_info_strip.name = "InfoStrip"
+	_info_strip.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_info_strip.visible = false
+	table.add_child(_info_strip)
+
 
 ## The two tax lines for `good_id`'s engine payload: `market.tax.buy_line` /
 ## `market.tax.sell_line` from `tax_buy` / `tax_sell` (rate from `tax_mille`,
@@ -869,13 +945,51 @@ func tax_line_texts(good_id: String) -> Array:
 	return out
 
 
-func _refresh_tax_lines() -> void:
-	if _tax_lines == null:
+## The walked-total lines for the selected row (docs/30 §4.8, 2026-11-03):
+## a `market.total.buy` line when the Buy side is enabled for the typed
+## quantity, a `market.total.sell` line when the Sell side is — both when
+## both are. The engine's read-only §4.4 walk sums (`buy_cost` /
+## `sell_gain`) are the only source; the screen never recomputes prices.
+func total_line_texts(good_id: String) -> Array:
+	var qty := row_qty(good_id)
+	if qty <= 0 or _port_id.is_empty():
+		return []
+	var refs: Dictionary = _rows.get(good_id, {})
+	if refs.is_empty():
+		return []
+	var good: Dictionary = DataLoader.get_good(good_id)
+	var out: Array = []
+	if not (refs["buy"] as Button).disabled:
+		out.append(I18n.fmt("market.total.buy", {
+			"qty": qty,
+			"name": I18n.t(good.get("name", {})),
+			"gold": format_thousands(
+				TradeEngineLib.buy_cost(_port_id, good_id, qty)),
+		}))
+	if not (refs["sell"] as Button).disabled:
+		out.append(I18n.fmt("market.total.sell", {
+			"qty": qty,
+			"name": I18n.t(good.get("name", {})),
+			"gold": format_thousands(
+				TradeEngineLib.sell_gain(_port_id, good_id, qty)),
+		}))
+	return out
+
+
+func _refresh_info_strip() -> void:
+	if _info_strip == null:
 		return
-	var texts := tax_line_texts(_selected_good) \
-		if not _selected_good.is_empty() else []
-	_tax_lines.visible = not texts.is_empty()
-	_tax_lines.text = "\n".join(PackedStringArray(texts))
+	var lines: Array = []
+	if not _selected_good.is_empty():
+		lines.append_array(total_line_texts(_selected_good))
+		lines.append_array(tax_line_texts(_selected_good))
+	_info_strip.visible = not lines.is_empty()
+	_info_strip.text = "\n".join(PackedStringArray(lines))
+
+
+## The info strip's current text (the suite's seam, captains-pattern).
+func info_strip_text() -> String:
+	return _info_strip.text if _info_strip != null else ""
 
 
 func _refresh_rows() -> void:
@@ -983,14 +1097,20 @@ func _apply_row_limits(good_id: String) -> void:
 	var qty := _parse_qty(field.text)
 
 	# 专营货 rows (docs/80 §4.7.11): grayed with the lock note until the
-	# port is aligned to the player at dev ≥ 2 — both buttons disabled.
+	# port is aligned to the player at dev ≥ 2 — the whole row is inert
+	# (docs/30 §4.8, 2026-11-03): both buttons and the quantity picker are
+	# disabled, so typing on a locked row means nothing.
 	if _is_exclusive(good_id) and not _exclusive_unlocked():
 		var lock_note := I18n.t_key("market.exclusive.locked")
 		_set_button_state(refs["buy"] as Button, false, lock_note)
 		_set_button_state(refs["sell"] as Button, false, lock_note)
 		_set_row_grayed(refs, true)
+		field.editable = false
+		for key in refs["qty_buttons"]:
+			(refs["qty_buttons"] as Dictionary)[key].disabled = true
 		return
 	_set_row_grayed(refs, false)
+	field.editable = true
 
 	var buy_button: Button = refs["buy"]
 	var buy_reason := _buy_reason(good_id, qty, buy_max)
@@ -1001,12 +1121,27 @@ func _apply_row_limits(good_id: String) -> void:
 	_set_button_state(sell_button, sell_reason.is_empty(), sell_reason)
 
 
-## The exclusive lock's visual state: the name and marginal cells gray to
-## PANEL_LINE while the row is gated (docs/80 §4.7.11 "grayed exclusive rows").
+## The exclusive lock's visual state: the whole row's text cells gray to
+## PANEL_LINE while the row is gated (docs/80 §4.7.11 "grayed exclusive
+## rows"). Restoring re-derives each cell's color — the trend glyph keeps
+## its GOOD/BAD flow colors (re-read from the cell's own text).
 func _set_row_grayed(refs: Dictionary, grayed: bool) -> void:
 	var color := PaletteLib.PANEL_LINE if grayed else PaletteLib.TEXT
-	for key in ["name", "marginal"]:
+	for key in ["name", "stock", "marginal", "have"]:
 		(refs[key] as Label).add_theme_color_override("font_color", color)
+	var trend: Label = refs["trend"]
+	trend.add_theme_color_override("font_color",
+		color if grayed else _trend_color(trend.text))
+
+
+## The flow-trend glyph's color for its current text (GOOD refilling, BAD
+## draining, TEXT blank — the `_refresh_stock_cells` rule).
+func _trend_color(text: String) -> Color:
+	if text == I18n.t_key("market.stock.trend_up"):
+		return PaletteLib.GOOD
+	if text == I18n.t_key("market.stock.trend_down"):
+		return PaletteLib.BAD
+	return PaletteLib.TEXT
 
 
 ## Physical ceiling of a goods row's quantity field: the pooled free hold plus
@@ -1155,10 +1290,21 @@ func _build_captains_section() -> void:
 
 
 ## Re-reads the docked traders sighted at this port's market (the seeded
-## 60/40 + 75% rolls live in `npc_intel.gd`; this only renders).
+## 60/40 + 75% rolls live in `npc_intel.gd`; this only renders). The rebuild
+## fingerprints the docked fleet set (pure reads) and re-runs — labels and
+## the one-familiarity-per-row `sightings()` accrual — only when the fleets
+## or the day moved; a `gold_changed` churn does neither. A locale change
+## resets [member _captains_key] to force a re-render.
 func _refresh_captains() -> void:
 	if _captains_box == null:
 		return
+	var fleet_ids := PackedStringArray()
+	for fleet in NpcIntelLib.docked_fleets(_port_id):
+		fleet_ids.append(str(fleet.get("id", "")))
+	var key := "%s#%d#%s" % [_port_id, int(GameState.day), ",".join(fleet_ids)]
+	if key == _captains_key:
+		return
+	_captains_key = key
 	for child in _captains_box.get_children():
 		_captains_box.remove_child(child)
 		child.queue_free()
@@ -1231,39 +1377,45 @@ func _build_intel_section() -> void:
 ## effect so re-opening the market never double-charges). Stance ≥ +2 rows
 ## carry the free next-lane hint; the rows are read-only intel (viewing them
 ## changes no state).
+## Re-renders only when the rows' **data changed**: recomputed from pure
+## reads (docked fleets, presence, stance), fingerprinted into the section
+## key, and the labels rebuild only when the fingerprint moves (a stance
+## shift re-renders; a `gold_changed` churn does not).
 func _refresh_intel() -> void:
 	if _intel_box == null:
 		return
+	_intel_rows = []
+	if not _port_id.is_empty() and not GameState.player.is_empty():
+		var seen: Dictionary = {}
+		for fleet in NpcIntelLib.docked_fleets(_port_id):
+			if not NpcIntelLib.is_present(fleet, _port_id):
+				continue
+			var captain_id := str(fleet.get("captain_id", ""))
+			if captain_id.is_empty() or seen.has(captain_id):
+				continue
+			seen[captain_id] = true
+			var canon := CaptainsLib.captain(captain_id)
+			var dest_port := str(fleet.get("dest_port_id", ""))
+			var dest_name := I18n.t(DataLoader.get_port(dest_port).get("name", {})) \
+				if not dest_port.is_empty() else "-"
+			var stance := CaptainsLib.stance(captain_id)
+			_intel_rows.append({
+				"captain_id": captain_id,
+				"name": I18n.t(canon.get("name", {})),
+				"role": str(fleet.get("role", "")),
+				"nation_id": str(fleet.get("nation_id", "")),
+				"stance": stance,
+				"free": stance >= INTEL_FREE_STANCE,
+				"dest_port_id": dest_port,
+				"dest_port_name": dest_name,
+			})
+	var key := "%s#%s" % [_port_id, str(_intel_rows)]
+	if key == _intel_key:
+		return
+	_intel_key = key
 	for child in _intel_box.get_children():
 		_intel_box.remove_child(child)
 		child.queue_free()
-	_intel_rows = []
-	if _port_id.is_empty() or GameState.player.is_empty():
-		_intel_header.visible = false
-		return
-	var seen: Dictionary = {}
-	for fleet in NpcIntelLib.docked_fleets(_port_id):
-		if not NpcIntelLib.is_present(fleet, _port_id):
-			continue
-		var captain_id := str(fleet.get("captain_id", ""))
-		if captain_id.is_empty() or seen.has(captain_id):
-			continue
-		seen[captain_id] = true
-		var canon := CaptainsLib.captain(captain_id)
-		var dest_port := str(fleet.get("dest_port_id", ""))
-		var dest_name := I18n.t(DataLoader.get_port(dest_port).get("name", {})) \
-			if not dest_port.is_empty() else "-"
-		var stance := CaptainsLib.stance(captain_id)
-		_intel_rows.append({
-			"captain_id": captain_id,
-			"name": I18n.t(canon.get("name", {})),
-			"role": str(fleet.get("role", "")),
-			"nation_id": str(fleet.get("nation_id", "")),
-			"stance": stance,
-			"free": stance >= INTEL_FREE_STANCE,
-			"dest_port_id": dest_port,
-			"dest_port_name": dest_name,
-		})
 	if _intel_rows.is_empty():
 		_intel_header.visible = false
 		return
@@ -1302,7 +1454,7 @@ func _on_qty_changed(good_id: String, text: String) -> void:
 	var ceiling := _qty_ceiling(TradeEngineLib.sell_max(good_id))
 	_set_field_text(field, _sanitize(text, ceiling))
 	_apply_row_limits(good_id)
-	_refresh_tax_lines()
+	_refresh_info_strip()
 
 
 ## `1 / 10 / 100 / Max` presets. The single picker serves both Buy and Sell, so
@@ -1322,7 +1474,39 @@ func _on_qty_preset(good_id: String, preset: int) -> void:
 	var value := ceiling if preset < 0 else mini(preset, ceiling)
 	_set_field_text(refs["qty"] as LineEdit, "" if value <= 0 else str(value))
 	_apply_row_limits(good_id)
-	_refresh_tax_lines()
+	_refresh_info_strip()
+
+
+## Clicking anywhere on a row selects it (docs/30 §4.8, 2026-11-03): the
+## info strip's totals and tax lines follow the selection. The row's filter
+## is PASS and its buttons/field consume their own clicks, so this fires
+## only on the row's empty space.
+func _on_row_gui_input(event: InputEvent, good_id: String) -> void:
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index \
+				== MOUSE_BUTTON_LEFT:
+		select_good(good_id)
+
+
+## Selects `good_id` as the info strip's subject (the click path and the
+## suite's seam). Unknown ids are ignored.
+func select_good(good_id: String) -> void:
+	if not _rows.has(good_id):
+		return
+	_selected_good = good_id
+	_refresh_info_strip()
+
+
+## Enter in the quantity field submits the **Buy** side (docs/30 §4.4,
+## 2026-11-03) — exactly like pressing the Buy button; a disabled Buy means
+## a no-op (§6 "no dialog spam").
+func _on_qty_submitted(_text: String, good_id: String) -> void:
+	var refs: Dictionary = _rows.get(good_id, {})
+	if refs.is_empty():
+		return
+	var buy: Button = refs["buy"]
+	if not buy.disabled:
+		_on_buy(good_id)
 
 
 func _on_buy(good_id: String) -> void:
@@ -1331,6 +1515,13 @@ func _on_buy(good_id: String) -> void:
 		return
 	if TradeEngineLib.buy(_port_id, good_id, qty):
 		var good: Dictionary = DataLoader.get_good(good_id)
+		# docs/30 §4.4 (2026-11-03): the trade is booked — the field clears
+		# so a repeated click can never repeat it. The engine's gold/fleet
+		# emissions fired *inside* buy() (before this clear), so the row's
+		# own states re-apply here; the strip drops the stale totals.
+		_set_field_text(_rows[good_id]["qty"] as LineEdit, "")
+		_apply_row_limits(good_id)
+		_refresh_info_strip()
 		_show_toast(I18n.fmt("market.traded", {
 			"qty": qty, "name": I18n.t(good.get("name", {})),
 		}))
@@ -1343,6 +1534,10 @@ func _on_sell(good_id: String) -> void:
 		return
 	if TradeEngineLib.sell(_port_id, good_id, qty):
 		var good: Dictionary = DataLoader.get_good(good_id)
+		# Same clear-after-success rule as the buy side (docs/30 §4.4).
+		_set_field_text(_rows[good_id]["qty"] as LineEdit, "")
+		_apply_row_limits(good_id)
+		_refresh_info_strip()
 		_show_toast(I18n.fmt("market.traded", {
 			"qty": qty, "name": I18n.t(good.get("name", {})),
 		}))
@@ -1374,6 +1569,10 @@ func _on_market_changed(port_id: String) -> void:
 
 
 func _on_locale_changed(_locale: String) -> void:
+	# The cached captain/intel sections carry localized text — drop their
+	# (port, day) caches so _refresh re-renders them in the new locale.
+	_captains_key = ""
+	_intel_key = ""
 	_bind()
 	_refresh()
 

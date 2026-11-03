@@ -1138,7 +1138,7 @@ The market table (wireframe `30-*` §4.8) gains three columns; rows stay
 +------------------------------------------------------------------------+
 | 商品 Good | 存货 Stock | 走势 Trend | 边际价 Marginal | 持有 | 买/卖     |
 |------------------------------------------------------------------------|
-| 葡萄酒    | 87         | ▲ 回升     | 1,020‰ → 96g    | 30   | [买] [卖] |
+| 葡萄酒    | 87         | ▲ 回升     | 21金 / 16金      | 30   | [买] [卖] |
 +------------------------------------------------------------------------+
 ```
 
@@ -1149,7 +1149,9 @@ The market table (wireframe `30-*` §4.8) gains three columns; rows stay
 - **Marginal price** — the **marginal (next-tranche) price** (`30-*` §4.4):
   buying and selling reprice per 10-unit tranche, and the column always
   shows the price the *next* tranche would trade at, never the average; the
-  ledger sums tranches exactly.
+  ledger sums tranches exactly. (Format amendment, 2026-11-03: the cell
+  renders the next-tranche **buy / sell pair**, `买价金 / 卖价金` — the
+  §4.8 wireframe's marginal column matches the implementation.)
 - Strings: `market.stock.*` (§4.7.9).
 
 #### 4.7.8 Captain sighting surfaces (Phase 5)
@@ -1317,8 +1319,20 @@ surfaces. Rows stay 32px, palette-only (§4.8); every new string is
   **unlisted goods never render**; the Phase-≤6 "20 rows everywhere"
   behavior is gone.
 - **★ 特产 badge + header:** rows for `port.produces` members carry the
-  ★ badge (`market.specialty.badge`); a header line above the table names
-  **up to 3** of them (`market.specialty.header`, `特产:{names}`).
+  ★ badge (`market.specialty.badge`) in a **fixed reserved slot** at the
+  Good column's left — present on **every** row (blank on non-produce
+  rows), so all good names align on one column (2026-11-03 amendment);
+  a header line above the table names **up to 3** of them
+  (`market.specialty.header`, `特产:{names}`) and appends
+  `market.specialty.more` (`另有 {count} 种`) when there are more. The
+  specialty group is separated from the remaining rows by a thin
+  `PANEL_LINE` divider, and rows render **produces-first** (`30-*` §4.8).
+- **Selected-row info strip (2026-11-03):** clicking anywhere on a row —
+  or typing a quantity — selects it; the strip below the table shows the
+  selected row's walked totals (`market.total.buy` / `market.total.sell`,
+  the §4.4 `buy_cost` / `sell_gain` queries) with the tax lines
+  (below) beneath. Inert rows (locked exclusives, empty quantity) keep
+  the totals off.
 - **不收购 rows (flow-economy market direction):** a producing port never
   buys its own produced goods — those rows' Sell button is disabled with
   the reason `market.not_bought` (`30-*` §4.2).
@@ -1417,6 +1431,9 @@ placeholders matched per key (validator-enforced).
 |---|---|---|
 | `market.specialty.badge` | 特产 | Specialty |
 | `market.specialty.header` | 特产:{names} | Specialties: {names} |
+| `market.specialty.more` | 另有 {count} 种 | +{count} more |
+| `market.total.buy` | 买入 {qty} {name} 共 {gold} 金 | Buy {qty} {name}: {gold}g |
+| `market.total.sell` | 卖出 {qty} {name} 得 {gold} 金 | Sell {qty} {name}: {gold}g |
 | `market.not_bought` | 不收购 | Not bought here |
 | `market.tax.badge.in_sphere` | 势力内 5% | In sphere 5% |
 | `market.tax.badge.exempt` | 免税 | Tax-free |

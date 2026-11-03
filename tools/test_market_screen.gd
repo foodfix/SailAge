@@ -39,6 +39,11 @@ const UI_STRING_SEED := {
 	"market.specialty.badge": {"zh": "特产", "en": "Specialty"},
 	"market.specialty.header": {"zh": "特产:{names}",
 		"en": "Specialties: {names}"},
+	"market.specialty.more": {"zh": "另有 {count} 种", "en": "+{count} more"},
+	"market.total.buy": {"zh": "买入 {qty} {name} 共 {gold} 金",
+		"en": "Buy {qty} {name}: {gold}g"},
+	"market.total.sell": {"zh": "卖出 {qty} {name} 得 {gold} 金",
+		"en": "Sell {qty} {name}: {gold}g"},
 	"market.not_bought": {"zh": "不收购", "en": "Not bought here"},
 	"market.tax.badge.in_sphere": {"zh": "势力内 5%", "en": "In sphere 5%"},
 	"market.tax.badge.exempt": {"zh": "免税", "en": "Tax-free"},
@@ -108,10 +113,12 @@ func _ready() -> void:
 	_test_string_seeds()
 	_test_listing_rule()
 	_test_specialty_badge_and_header()
+	_test_alignment_and_order()
 	_test_not_bought_rows()
 	_test_exclusive_rows()
 	_test_tax_badge_states()
 	_test_tax_lines()
+	_test_info_strip_interactions()
 	_test_invest_states()
 	_test_invest_button_states_reachable()
 	_test_telegraph_rows()
@@ -131,6 +138,7 @@ func _scripts_loaded() -> bool:
 		"row_goods_ids", "row", "row_qty", "type_qty", "press_qty_preset",
 		"press_buy", "press_sell", "press_invest", "refresh",
 		"tax_badge_key", "tax_badge_state", "tax_line_texts",
+		"total_line_texts", "info_strip_text", "select_good",
 		"specialty_header_text", "row_arrows",
 	], ["route_to_port"]) and ok
 	var tavern: Variant = ResourceLoader.load(TAVERN_SCREEN_PATH)
@@ -310,16 +318,26 @@ func _test_listing_rule() -> void:
 			missing += 1
 	_check(missing == 0,
 		"no unlisted good renders at lisbon (violations: %d)" % missing)
-	# Rows keep the engine's base_price ascending order (docs/30 §4.7).
-	var sorted := true
-	for index in range(1, rows.size()):
-		var previous := int(DataLoader.get_good(str(rows[index - 1]))
-			.get("base_price", 0))
-		var current := int(DataLoader.get_good(str(rows[index]))
-			.get("base_price", 0))
-		if current < previous:
-			sorted = false
-	_check(sorted, "the filtered rows stay sorted by base_price ascending")
+	# Display order (docs/30 §4.8, 2026-11-03): ★ produces rows first, then
+	# the rest, each group by `base_price` ascending (ties by id).
+	var produces: Array = DataLoader.get_port("lisbon").get("produces", [])
+	var ok_order := true
+	var produce_last := -1
+	var rest_last := -1
+	var seen_rest := false
+	for good_id in rows:
+		var price := int(DataLoader.get_good(str(good_id)).get("base_price", 0))
+		if produces.has(str(good_id)):
+			if seen_rest or price < produce_last:
+				ok_order = false
+			produce_last = price
+		else:
+			seen_rest = true
+			if price < rest_last:
+				ok_order = false
+			rest_last = price
+	_check(ok_order,
+		"rows render produces-first, each group base_price ascending")
 	_drop(screen)
 
 	# A second port lists a different set (the rule is per-port data).
@@ -334,6 +352,12 @@ func _test_listing_rule() -> void:
 		"quanzhou lists its specialties")
 	_check(not quanzhou_rows.has("gems"),
 		"a good quanzhou does not list does not render there")
+	# The §4.8 display order holds here too: the first row is a produce.
+	var quanzhou_produces: Array = DataLoader.get_port("quanzhou") \
+		.get("produces", [])
+	_check(quanzhou_produces.has(str(quanzhou_rows.front())),
+		"the first row at a specialty port is one of its produces (%s)"
+			% str(quanzhou_rows.front()))
 	_drop(screen2)
 
 
@@ -347,9 +371,15 @@ func _test_specialty_badge_and_header() -> void:
 		var badge: Label = screen.row(produced)["badge"]
 		_check(badge.visible and badge.text == badge_text,
 			"%s row carries the ★ badge (%s)" % [produced, badge.text])
+	# The badge slot is **reserved on every row** (docs/80 §4.7.11,
+	# 2026-11-03): a demand-only row keeps the slot with an empty text, so
+	# all good names start at the same x.
 	var demand_badge: Label = screen.row("wheat")["badge"]
-	_check(not demand_badge.visible,
-		"a demand-only row carries no ★ badge")
+	_check(demand_badge.visible and demand_badge.text == "",
+		"a demand-only row keeps the reserved empty badge slot")
+	_check(int(demand_badge.custom_minimum_size.x) == 56
+		and int((screen.row("wine")["badge"] as Label).custom_minimum_size.x) == 56,
+		"the badge slot is 56px on every row")
 	var expected := I18n.fmt("market.specialty.header", {"names": ", ".join([
 		I18n.t(DataLoader.get_good("wine").get("name", {})),
 		I18n.t(DataLoader.get_good("salt").get("name", {})),
@@ -388,7 +418,180 @@ func _test_specialty_badge_and_header() -> void:
 				named += 1
 		_check(named == 3,
 			"the header caps at 3 produces at %s (named %d)" % [many_port, named])
+		# And appends the `market.specialty.more` suffix (docs/30 §4.8,
+		# 2026-11-03): `特产: A, B, C (另有 N 种)`.
+		var produces: Array = DataLoader.get_port(many_port).get("produces", [])
+		var names3: Array[String] = []
+		for member in produces.slice(0, 3):
+			names3.append(I18n.t(
+				DataLoader.get_good(str(member)).get("name", {})))
+		var expected_with_more := "%s (%s)" % [
+			I18n.fmt("market.specialty.header", {"names": ", ".join(names3)}),
+			I18n.fmt("market.specialty.more", {"count": produces.size() - 3}),
+		]
+		_check(header == expected_with_more,
+			"the >3 header appends the +N suffix (%s)" % header)
 		_drop(screen3)
+
+
+# --- §4.8 column alignment + specialty group (2026-11-03) --------------------
+
+## The single-source column contract: header captions and row cells come
+## from one COL_SPECS table, so each caption spans exactly its cells — the
+## two widths that once drifted are pinned in closed form — and every good
+## name starts at the same x behind the reserved badge slot.
+func _test_alignment_and_order() -> void:
+	_make_run("lisbon")
+	var screen := _instantiate_market()
+	var header := screen.get_node(
+		"Layout/VBox/TableFrame/Margin/Table/ColumnHeader")
+	var col_good: Label = header.get_node("Col_good")
+	_check(int(col_good.custom_minimum_size.x) == 56 + 4 + 160,
+		"the Good caption spans the badge slot + gap + name width (220, got %d)"
+			% int(col_good.custom_minimum_size.x))
+	var col_qty: Label = header.get_node("Col_qty")
+	_check(int(col_qty.custom_minimum_size.x) == 72 + 3 * 40 + 56 + 4 * 4,
+		"the Qty caption spans the picker widgets + their gaps (264, got %d)"
+			% int(col_qty.custom_minimum_size.x))
+	# The thin divider between the produces group and the rest sits exactly
+	# after the produce rows (lisbon produces 2: wine, salt).
+	var rows_box: VBoxContainer = screen.get_node(
+		"Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows")
+	_check(rows_box.get_child(2).name == "SpecialtyDivider",
+		"the divider sits between the specialty group and the rest (%s)"
+			% str(rows_box.get_child(2).name))
+	# A demand-only port row renders no divider before the first produce...
+	# (lisbon HAS produces; a produce-less port shows none) — check wheat's
+	# row index is past the divider, i.e. the group order is produces-first.
+	var wheat_index := 3
+	for index in rows_box.get_child_count():
+		var child := rows_box.get_child(index)
+		if child.name == "Row_wheat":
+			wheat_index = index
+	_check(wheat_index > 2, "wheat (a demand good) renders after the divider")
+	_drop(screen)
+
+	# Name-column alignment: after one layout frame every row's Name label
+	# shares the same x (the badge slot never collapses).
+	_make_run("lisbon")
+	var screen2 := _instantiate_market()
+	await get_tree().process_frame
+	var name_x := -1.0
+	var aligned := true
+	for good_id in screen2.row_goods_ids():
+		var label: Label = screen2.row(str(good_id))["name"]
+		if name_x < 0.0:
+			name_x = label.position.x
+		elif absf(label.position.x - name_x) > 0.5:
+			aligned = false
+	_check(aligned and name_x > 0.0,
+		"every good name aligns at x=%.1f behind the reserved badge slot"
+			% name_x)
+	_drop(screen2)
+
+
+# --- §4.8 selected-row info strip + interactions (2026-11-03) ----------------
+
+## The info strip's walked totals (engine `buy_cost` / `sell_gain` are the
+## only source), row-click selection, Enter-submits-Buy, and the
+## clear-after-success rule.
+func _test_info_strip_interactions() -> void:
+	# Both sides legal → both totals (a demanded good held aboard).
+	_make_run("lisbon", 10000)
+	var screen := _instantiate_market()
+	FleetLib.add_goods("wheat", 10)
+	EventBus.fleet_changed.emit()
+	screen.type_qty("wheat", "10")
+	var lines: PackedStringArray = screen.info_strip_text().split("\n")
+	var expected_buy := I18n.fmt("market.total.buy", {
+		"qty": 10, "name": I18n.t(DataLoader.get_good("wheat").get("name", {})),
+		"gold": MarketScreenLib.format_thousands(
+			TradeEngineLib.buy_cost("lisbon", "wheat", 10)),
+	})
+	var expected_sell := I18n.fmt("market.total.sell", {
+		"qty": 10, "name": I18n.t(DataLoader.get_good("wheat").get("name", {})),
+		"gold": MarketScreenLib.format_thousands(
+			TradeEngineLib.sell_gain("lisbon", "wheat", 10)),
+	})
+	_check(lines.size() == 2 and str(lines[0]) == expected_buy
+		and str(lines[1]) == expected_sell,
+		"a two-sided row shows both walked totals (%s)"
+			% screen.info_strip_text())
+	# The totals are the engine's walked sums (buy_cost / sell_gain are the
+	# only source — their tranche arithmetic is engine-suite territory).
+	# A sell of a held good prices via sell_gain.
+	_check(TradeEngineLib.sell_gain("lisbon", "wheat", 10) > 0,
+		"sell_gain prices the held demanded good")
+	_drop(screen)
+
+	# Row-click selection moves the strip; a fresh row with no qty keeps it
+	# hidden.
+	_make_run("lisbon", 10000)
+	var screen2 := _instantiate_market()
+	screen2.type_qty("wine", "10")
+	_check(screen2.get_node(
+		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
+		"typing a quantity selects the row and shows the strip")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	(screen2.row("salt")["node"] as Control).gui_input.emit(click)
+	_check(not screen2.get_node(
+		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
+		"clicking another row moves the selection; its empty qty hides the strip")
+	screen2.select_good("wine")
+	_check(screen2.info_strip_text().contains(I18n.t(
+			DataLoader.get_good("wine").get("name", {}))),
+		"select_good re-arms the previous row's totals")
+	# Enter submits the Buy side exactly like the button. The booking is
+	# cost **plus** the §4.10 tariff (composes after all price math).
+	var gold_before := GameState.gold
+	screen2.type_qty("wine", "5")
+	var enter_cost := TradeEngineLib.buy_cost("lisbon", "wine", 5)
+	var enter_debit := enter_cost \
+		+ TradeEngineLib.tax_amount("lisbon", enter_cost)
+	var wine_field: LineEdit = screen2.row("wine")["qty"]
+	wine_field.text_submitted.emit("5")
+	_check(GameState.gold == gold_before - enter_debit,
+		"Enter in the quantity field submits the Buy (−%d)" % enter_debit)
+	_check(screen2.row_qty("wine") == -1,
+		"the quantity field cleared after the successful buy")
+	_check(not screen2.info_strip_text().contains(I18n.fmt(
+			"market.total.buy", {"qty": 5,
+			"name": I18n.t(DataLoader.get_good("wine").get("name", {})),
+			"gold": MarketScreenLib.format_thousands(enter_cost)})),
+		"the totals drop once the field cleared (strip keeps the tax context)")
+	_drop(screen2)
+
+	# The sell side clears too, and a 不收购 row never totals a sell.
+	_make_run("lisbon", 10000)
+	var screen3 := _instantiate_market()
+	FleetLib.add_goods("wine", 10)
+	EventBus.fleet_changed.emit()
+	var held := FleetLib.held("wine")
+	screen3.type_qty("wine", "10")
+	var wine_buy_line := I18n.fmt("market.total.buy", {
+		"qty": 10, "name": I18n.t(DataLoader.get_good("wine").get("name", {})),
+		"gold": MarketScreenLib.format_thousands(
+			TradeEngineLib.buy_cost("lisbon", "wine", 10)),
+	})
+	var sell_lines: PackedStringArray = screen3.info_strip_text().split("\n")
+	_check(sell_lines.size() == 1 and str(sell_lines[0]) == wine_buy_line,
+		"a 不收购 row totals only the buy side (%s)" % screen3.info_strip_text())
+	_check(screen3.press_sell("wine") == false,
+		"the 不收购 sell stays a protected no-op")
+	_check(FleetLib.held("wine") == held, "nothing sold")
+	# Sell path with a sellable good: wheat clears the field on success.
+	FleetLib.add_goods("wheat", 10)
+	EventBus.fleet_changed.emit()
+	screen3.type_qty("wheat", "10")
+	var wheat_held := FleetLib.held("wheat")
+	_check(screen3.press_sell("wheat"), "the wheat sell goes through")
+	_check(FleetLib.held("wheat") == wheat_held - 10,
+		"the sell booked all 10 wheat")
+	_check(screen3.row_qty("wheat") == -1,
+		"the quantity field cleared after the successful sell")
+	_drop(screen3)
 
 
 # --- §4.7.11 不收购 rows ----------------------------------------------------
@@ -443,6 +646,21 @@ func _test_exclusive_rows() -> void:
 		var name_color: Color = (row["name"] as Label).get_theme_color("font_color")
 		_check(name_color == PaletteLib.PANEL_LINE,
 			"%s row is grayed (PANEL_LINE)" % exclusive)
+		# The whole row grays (docs/80 §4.7.11, 2026-11-03) and is inert:
+		# the quantity field and presets take no input either.
+		for cell_key in ["stock", "trend", "marginal", "have"]:
+			_check((row[cell_key] as Label).get_theme_color("font_color")
+				== PaletteLib.PANEL_LINE,
+				"%s row's %s cell is grayed" % [exclusive, cell_key])
+		var field: LineEdit = row["qty"]
+		_check(not field.editable,
+			"%s row takes no quantity input while locked" % exclusive)
+		var presets: Dictionary = row["qty_buttons"]
+		var presets_off := true
+		for key in presets:
+			if not (presets[key] as Button).disabled:
+				presets_off = false
+		_check(presets_off, "%s row's presets are disabled while locked" % exclusive)
 	_check(not screen.press_buy("porcelain"),
 		"press_buy on a locked exclusive row is a protected no-op")
 	# A non-exclusive demanded good is not grayed.
@@ -468,6 +686,8 @@ func _test_exclusive_rows() -> void:
 	_check((screen2.row("porcelain")["name"] as Label)
 		.get_theme_color("font_color") == PaletteLib.TEXT,
 		"the unlocked row is no longer grayed")
+	_check((screen2.row("porcelain")["qty"] as LineEdit).editable,
+		"the unlocked row's quantity field re-arms")
 	_drop(screen2)
 
 	# Foreign alignment keeps the lock even at dev 3.
@@ -567,17 +787,26 @@ func _test_tax_badge_states() -> void:
 func _test_tax_lines() -> void:
 	_make_run("lisbon")
 	var screen := _instantiate_market()
-	# Today's payloads carry no tax fields → no lines, strip hidden even
-	# with a selected row.
+	# Today's payloads carry no tax fields → no tax lines, but the info
+	# strip still shows the walked-total line (docs/30 §4.8, 2026-11-03).
 	screen.type_qty("wine", "10")
 	_check(screen.tax_line_texts("wine").is_empty(),
 		"no tax lines without payload tax fields (pre-L)")
 	var strip: Label = screen.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/TaxLines")
-	_check(not strip.visible, "the tax strip stays hidden pre-L")
+		"Layout/VBox/TableFrame/Margin/Table/InfoStrip")
+	_check(strip.visible and screen.info_strip_text()
+		== I18n.fmt("market.total.buy", {
+			"qty": 10,
+			"name": I18n.t(DataLoader.get_good("wine").get("name", {})),
+			"gold": MarketScreenLib.format_thousands(
+				TradeEngineLib.buy_cost("lisbon", "wine", 10)),
+		}),
+		"pre-L the strip shows exactly the walked buy total (%s)"
+			% screen.info_strip_text())
 	_drop(screen)
 
-	# L's payload shape: tax_buy / tax_sell (+ tax_mille) render both lines.
+	# L's payload shape: tax_buy / tax_sell (+ tax_mille) render both lines
+	# beneath the totals.
 	_make_run("lisbon")
 	var screen2 := _instantiate_market()
 	screen2._payloads["wine"] = {
@@ -591,8 +820,11 @@ func _test_tax_lines() -> void:
 		{"rate": 5, "gold": "24"}), "sell line (%s)" % str(texts[1]))
 	screen2.type_qty("wine", "10")
 	_check(screen2.get_node(
-		"Layout/VBox/TableFrame/Margin/Table/TaxLines").visible,
+		"Layout/VBox/TableFrame/Margin/Table/InfoStrip").visible,
 		"the strip shows once a taxed row is selected")
+	_check(screen2.info_strip_text().contains(str(texts[0])),
+		"the tax lines render beneath the totals (%s)"
+			% screen2.info_strip_text())
 	# Without tax_mille the rate falls back to the guarded tariff; pin it to
 	# 2000 through the seam (with L merged, lisbon's real tariff is 500).
 	var fake := FakeAllegiance.new()

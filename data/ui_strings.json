@@ -384,10 +384,6 @@
     "zh": "货物",
     "en": "Good"
   },
-  "market.price": {
-    "zh": "买价/卖价",
-    "en": "Buy/Sell"
-  },
   "market.you_have": {
     "zh": "持有",
     "en": "You have"
@@ -407,18 +403,6 @@
   "market.max": {
     "zh": "最大",
     "en": "Max"
-  },
-  "market.supplies": {
-    "zh": "补给",
-    "en": "Supplies"
-  },
-  "market.provisions": {
-    "zh": "补给 {price}g",
-    "en": "Provisions {price}g"
-  },
-  "market.water": {
-    "zh": "淡水 {price}g",
-    "en": "Water {price}g"
   },
   "market.invest": {
     "zh": "投资 {amount} 金",
@@ -2559,6 +2543,18 @@
   "market.specialty.header": {
     "zh": "特产:{names}",
     "en": "Specialties: {names}"
+  },
+  "market.specialty.more": {
+    "zh": "另有 {count} 种",
+    "en": "+{count} more"
+  },
+  "market.total.buy": {
+    "zh": "买入 {qty} {name} 共 {gold} 金",
+    "en": "Buy {qty} {name}: {gold}g"
+  },
+  "market.total.sell": {
+    "zh": "卖出 {qty} {name} 得 {gold} 金",
+    "en": "Sell {qty} {name}: {gold}g"
   },
   "market.not_bought": {
     "zh": "不收购",

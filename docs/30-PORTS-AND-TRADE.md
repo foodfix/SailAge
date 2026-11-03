@@ -355,6 +355,18 @@ its capacity) pays `factor_units` 700/750/800 → 21g/22g/24g
   pay and `free_capacity` can hold (`40-*` §capacity) — computed by walking
   tranches, since the marginal price alone no longer decides it.
 - Sell max = held quantity. Partial sells allowed.
+- **Read-only walk sums (2026-11-03).** The engine exposes the exact
+  §4.4 transaction totals to the screen as pure queries with no state
+  change: `buy_cost(port, good, qty)` (the walked cost, also the
+  disabled-Buy price reason) and `sell_gain(port, good, qty)` (its
+  sell-side mirror — the gross walked proceeds before the §4.10 tariff).
+  The §4.8 info strip renders these; the screen never recomputes prices.
+- **After a successful** buy or sell the row's quantity field **clears**
+  (2026-11-03 amendment): the trade is booked, and a repeated click must
+  never repeat it — the next entry re-arms from empty.
+- **Enter in the quantity field** submits the **Buy** side when its
+  button is enabled; when Buy is disabled Enter does nothing (no dialog,
+  §6 "no dialog spam").
 - A stock-moving trade emits `EventBus.market_changed(port_id)` (`90-*`).
 - Transaction errors (insufficient gold/capacity/quantity) show the shared
   error toast (`80-*`) and change nothing. In this screen the "shared error"
@@ -533,31 +545,46 @@ returns here; Set Sail → `20-*` §4.11 exit.
 +------------------------------------------------------------------------------+
 | Market — <Port>       Gold 7,830g · Hold 34/120 · 势力内 5%           [Back] |
 +------------------------------------------------------------------------------+
-| 特产: 小麦, 葡萄酒                                                            |
+| 特产: 小麦, 葡萄酒, 布 (另有 2 种)                                            |
 | Good        | Stock | Trend | Marginal buy/sell | You have | Qty   | [Buy][Sell]|
 | ★ Wheat     |  160  |  ↑    |    8g / —         |    0     | [ 10 ]| [Buy][不收购]|
-| ... listed-goods rows only (produces ∪ demands), scrollable ...              |
+| ... ★ produces group first (fixed badge slot, names aligned) ...             |
+| - - - - - - - - - - - thin group separator - - - - - - - - - - - - - - - -   |
+| ... remaining listed rows (produces ∪ demands), scrollable ...                |
 +------------------------------------------------------------------------------+
-| Supplies: Provisions 2g [  ___ ][Buy]   Water 1g [ ___ ][Buy]                 |
+| 买入 10 葡萄酒 共 214 金 · 买入关税(5%):−10 金  ← selected-row info strip    |
 | [ Invest 500g ]  invested here: 1,500g (−3%)                                  |
 +------------------------------------------------------------------------------+
 ```
 
+The `Supplies:` row is gone — provisions and water are bought at the
+Set-Sail provisioning prompt (`20-*` §4.10 amendment), not here.
+
 Rows are the **per-port listed set** — `port.produces ∪ port.demands`
 only (§4.2); unlisted goods render no row at all (a behavior change from
 the Phase-5/6 all-20-goods market — correction 7). **★** marks
-`port.produces` rows and the `特产:` header line names up to 3 of them
-(`market.specialty.*`); the Sell button is disabled with **不收购** on
+`port.produces` rows: the badge sits in a **fixed reserved slot** at the
+Good column's left on **every** row (produce rows render the ★ 特产
+badge, all other rows keep the empty slot), so every good name aligns on
+one column (2026-11-03 amendment). The `特产:` header line names up to 3
+of them (`market.specialty.header`) and appends `market.specialty.more`
+(`另有 {count} 种` / `+{count} more`) when the port produces more. A thin
+separator divides the specialty group from the remaining rows. The Sell
+button is disabled with **不收购** on
 those rows (§4.2 market direction). Exclusive 专营货 rows render for
 everyone but stay grayed with the lock note until dev ≥ 2 at a port
-aligned to the player's nation (§4.9). **Trend**
+aligned to the player's nation (§4.9) — the whole row is inert there:
+the quantity field and presets are disabled with the buttons. **Trend**
 (`market.stock.trend_up` / `market.stock.trend_down`) shows the §4.2
 flow direction — produced rows rebuild toward capacity, demanded rows
 drain toward 0 (the rest-relative blank state is gone with rest itself).
 The header badge shows the tariff state — 势力内 5% / 免税 / 外国 20% /
 未同盟 20% — and each buy/sell action adds the tax on a **separate
-displayed line** (`market.tax.*`, §4.10). Rows sorted by `base_price`
-ascending. **Stock** (0–200) comes from the §4.2 flow economy;
+displayed line** (`market.tax.*`, §4.10). Rows sort **★ produces first,
+then the remaining listed goods, each group by `base_price` ascending**
+(ties by id — 2026-11-03 amendment; the engine's `goods_rows` keeps its
+pure `base_price` order, the screen reorders for display only).
+**Stock** (0–200) comes from the §4.2 flow economy;
 **Marginal buy/sell** is the next-tranche price (§4.4), the price the
 shown quantity actually starts at (per `80-*` §4.7.7). Buy/Sell disabled
 with tooltip-reason when unaffordable/over capacity/qty 0/不收购. The
@@ -566,6 +593,16 @@ allowance-exhausted (month hint) / diplomacy-blocked
 (`market.invest_gate.*`). Successful trade flashes the gold readout (per
 `80-*` feedback rules) and emits `gold_changed` + `fleet_changed` +
 `market_changed`.
+
+**Selected-row info strip (2026-11-03 amendment).** Clicking anywhere on
+a row selects it (`80-*` feedback: no dialog, the strip updates); typing
+a quantity selects too. The strip below the table shows the selected
+row's **walked total** — `买入 {qty} {name} 共 {gold} 金` when the Buy
+side is enabled, `卖出 {qty} {name} 得 {gold} 金` when the Sell side is
+(or both when both are) — computed by the engine's read-only §4.4 walk
+sums (`buy_cost` / `sell_gain`), never recomputed in the screen; the
+§4.10 tax lines render beneath the totals. An inert (locked exclusive)
+row or an empty quantity leaves the totals off.
 
 **Captain-intel rows (Phase 8, 2026-11-02).** Below the goods rows the
 market screen lists **which known captains currently sail a lane into this

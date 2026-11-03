@@ -404,6 +404,18 @@ static func buy_cost(port_id: String, good_id: String, qty: int) -> int:
 		EconomyLib.plan_trade(port_id, good_id, qty), false)
 
 
+## The sell-side mirror of [method buy_cost] (docs/30 §4.4, 2026-11-03):
+## the exact **gross** walked proceeds of selling `qty` — what
+## [method sell] books before the §4.10 tariff comes off. A pure query
+## (no listing/direction/hold/hour gates: the screen applies those itself
+## before showing the total), so an unpurchasable row still prices.
+static func sell_gain(port_id: String, good_id: String, qty: int) -> int:
+	if qty <= 0:
+		return 0
+	return _walk_total(port_id, good_id,
+		EconomyLib.plan_trade(port_id, good_id, -qty), true)
+
+
 ## Sells `qty` of a held good at the port, walking the §4.4 tranche ladder.
 ##
 ## Pays the exact per-tranche sum (docs/30 §4.4: the summed total is what
