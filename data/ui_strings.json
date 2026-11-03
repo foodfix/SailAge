@@ -3595,5 +3595,357 @@
   "gate.unlocked": {
     "zh": "已解锁",
     "en": "Unlocked"
+  },
+  "battle.fit": {
+    "zh": "全览",
+    "en": "Fit view"
+  },
+  "battle.speed": {
+    "zh": "速度",
+    "en": "Speed"
+  },
+  "battle.heading": {
+    "zh": "航向",
+    "en": "Heading"
+  },
+  "battle.wind": {
+    "zh": "风向",
+    "en": "Wind"
+  },
+  "battle.current": {
+    "zh": "洋流",
+    "en": "Current"
+  },
+  "battle.weather": {
+    "zh": "天气",
+    "en": "Weather"
+  },
+  "battle.reload.port": {
+    "zh": "左舷",
+    "en": "Port"
+  },
+  "battle.reload.starboard": {
+    "zh": "右舷",
+    "en": "Starboard"
+  },
+  "battle.morale": {
+    "zh": "士气",
+    "en": "Morale"
+  },
+  "battle.formation": {
+    "zh": "阵型",
+    "en": "Formation"
+  },
+  "battle.shot.round": {
+    "zh": "实心弹",
+    "en": "Round shot"
+  },
+  "battle.shot.chain": {
+    "zh": "链弹",
+    "en": "Chain shot"
+  },
+  "battle.shot.armor_piercing": {
+    "zh": "穿甲弹",
+    "en": "Armor-piercing"
+  },
+  "battle.shot.grape": {
+    "zh": "葡萄弹",
+    "en": "Grape shot"
+  },
+  "battle.shot.locked": {
+    "zh": "需要炮术 {value}",
+    "en": "Requires gunnery {value}"
+  },
+  "battle.ring.hook": {
+    "zh": "可勾舷",
+    "en": "Hook available"
+  },
+  "battle.ai_speed.animate": {
+    "zh": "跟随动画",
+    "en": "Animate turns"
+  },
+  "battle.ai_speed.instant": {
+    "zh": "即时结算",
+    "en": "Instant turns"
+  },
+  "battle.result.stall": {
+    "zh": "双方脱离接触,战斗陷入僵持。",
+    "en": "Both sides disengaged — the battle stalled."
+  },
+  "battle.log.rake": {
+    "zh": "{attacker} 纵射 {target},造成 {damage} 点伤害。",
+    "en": "{attacker} rakes {target} for {damage} damage."
+  },
+  "battle.log.strike": {
+    "zh": "{ship} 士气崩溃,降旗了。",
+    "en": "{ship}'s morale breaks — she strikes her colours."
+  },
+  "battle.formation.line_ahead": {
+    "zh": "战列线",
+    "en": "Line ahead"
+  },
+  "battle.formation.column": {
+    "zh": "纵队",
+    "en": "Column"
+  },
+  "battle.formation.screen": {
+    "zh": "屏卫",
+    "en": "Screen"
+  },
+  "battle.formation.swarm": {
+    "zh": "蜂群",
+    "en": "Swarm"
+  },
+  "sandbox.title": {
+    "zh": "海战",
+    "en": "Sea battle"
+  },
+  "sandbox.start": {
+    "zh": "开战",
+    "en": "Run battle"
+  },
+  "sandbox.random_all": {
+    "zh": "随机全部",
+    "en": "Randomize all"
+  },
+  "sandbox.import": {
+    "zh": "导入",
+    "en": "Import"
+  },
+  "sandbox.export": {
+    "zh": "导出",
+    "en": "Export"
+  },
+  "sandbox.back": {
+    "zh": "返回标题 (Esc)",
+    "en": "Back to title (Esc)"
+  },
+  "sandbox.player": {
+    "zh": "我方",
+    "en": "Player side"
+  },
+  "sandbox.enemy": {
+    "zh": "敌方",
+    "en": "Enemy side"
+  },
+  "sandbox.ship": {
+    "zh": "舰船 {index}",
+    "en": "Ship {index}"
+  },
+  "sandbox.ship.add": {
+    "zh": "添加舰船",
+    "en": "Add ship"
+  },
+  "sandbox.ship.remove": {
+    "zh": "移除",
+    "en": "Remove"
+  },
+  "sandbox.ship.type": {
+    "zh": "船型",
+    "en": "Ship type"
+  },
+  "sandbox.ship.cannons": {
+    "zh": "火炮",
+    "en": "Cannons"
+  },
+  "sandbox.ship.crew": {
+    "zh": "船员",
+    "en": "Crew"
+  },
+  "sandbox.ship.durability": {
+    "zh": "耐久",
+    "en": "Durability"
+  },
+  "sandbox.ship.figurehead": {
+    "zh": "船首像",
+    "en": "Figurehead"
+  },
+  "sandbox.ship.sail": {
+    "zh": "船帆",
+    "en": "Sail"
+  },
+  "sandbox.ship.captain": {
+    "zh": "船长",
+    "en": "Captain"
+  },
+  "sandbox.enemy.kind": {
+    "zh": "敌方类型",
+    "en": "Enemy kind"
+  },
+  "sandbox.enemy.compose": {
+    "zh": "一键生成",
+    "en": "Compose fleet"
+  },
+  "sandbox.day": {
+    "zh": "天数",
+    "en": "Day"
+  },
+  "sandbox.seed": {
+    "zh": "种子",
+    "en": "Seed"
+  },
+  "sandbox.seed.fixed": {
+    "zh": "固定",
+    "en": "Fixed"
+  },
+  "sandbox.seed.random": {
+    "zh": "随机",
+    "en": "Random"
+  },
+  "sandbox.seed.auto": {
+    "zh": "默认公式",
+    "en": "Formula default"
+  },
+  "sandbox.weather": {
+    "zh": "天气",
+    "en": "Weather"
+  },
+  "sandbox.wind_dir": {
+    "zh": "风向",
+    "en": "Wind direction"
+  },
+  "sandbox.current": {
+    "zh": "洋流",
+    "en": "Current"
+  },
+  "sandbox.deployment": {
+    "zh": "部署",
+    "en": "Deployment"
+  },
+  "sandbox.deployment.standard": {
+    "zh": "标准",
+    "en": "Standard"
+  },
+  "sandbox.deployment.tournament": {
+    "zh": "锦标赛",
+    "en": "Tournament"
+  },
+  "sandbox.morale.player": {
+    "zh": "我方初始士气",
+    "en": "Player initial morale"
+  },
+  "sandbox.morale.enemy": {
+    "zh": "敌方初始士气",
+    "en": "Enemy initial morale"
+  },
+  "sandbox.formation": {
+    "zh": "阵型",
+    "en": "Formation"
+  },
+  "sandbox.ai_level": {
+    "zh": "AI 档",
+    "en": "AI level"
+  },
+  "sandbox.archetype": {
+    "zh": "原型",
+    "en": "Archetype"
+  },
+  "sandbox.import.invalid": {
+    "zh": "配置无法解析。",
+    "en": "The configuration could not be parsed."
+  },
+  "sandbox.import.ok": {
+    "zh": "配置已载入。",
+    "en": "Configuration loaded."
+  },
+  "sandbox.export.ok": {
+    "zh": "配置已复制到剪贴板。",
+    "en": "Configuration copied to the clipboard."
+  },
+  "sandbox.zero_write": {
+    "zh": "沙盒只是演武场,不会写入你的存档。",
+    "en": "The sandbox is a proving ground — nothing writes to your save."
+  },
+  "sandbox.kind.pirate": {
+    "zh": "海盗",
+    "en": "Pirates"
+  },
+  "sandbox.kind.navy": {
+    "zh": "海军",
+    "en": "Navy"
+  },
+  "sandbox.kind.patrol": {
+    "zh": "巡逻队",
+    "en": "Patrol"
+  },
+  "sandbox.kind.privateer": {
+    "zh": "私掠船",
+    "en": "Privateers"
+  },
+  "sandbox.kind.treasure": {
+    "zh": "宝藏船队",
+    "en": "Treasure fleet"
+  },
+  "sandbox.kind.trader": {
+    "zh": "商船队",
+    "en": "Traders"
+  },
+  "sandbox.kind.coaster": {
+    "zh": "沿岸货船",
+    "en": "Coasters"
+  },
+  "sandbox.kind.courier": {
+    "zh": "信使船",
+    "en": "Couriers"
+  },
+  "sandbox.kind.tournament": {
+    "zh": "比武大会",
+    "en": "Tournament"
+  },
+  "sandbox.archetype.aggressive": {
+    "zh": "激进",
+    "en": "Aggressive"
+  },
+  "sandbox.archetype.balanced": {
+    "zh": "平衡",
+    "en": "Balanced"
+  },
+  "sandbox.archetype.cautious": {
+    "zh": "谨慎",
+    "en": "Cautious"
+  },
+  "sandbox.ai_level.t2": {
+    "zh": "贪心 (T2)",
+    "en": "Greedy (T2)"
+  },
+  "sandbox.ai_level.t3": {
+    "zh": "前瞻 (T3)",
+    "en": "Lookahead (T3)"
+  },
+  "sandbox.dir.N": {
+    "zh": "北",
+    "en": "N"
+  },
+  "sandbox.dir.NE": {
+    "zh": "东北",
+    "en": "NE"
+  },
+  "sandbox.dir.E": {
+    "zh": "东",
+    "en": "E"
+  },
+  "sandbox.dir.SE": {
+    "zh": "东南",
+    "en": "SE"
+  },
+  "sandbox.dir.S": {
+    "zh": "南",
+    "en": "S"
+  },
+  "sandbox.dir.SW": {
+    "zh": "西南",
+    "en": "SW"
+  },
+  "sandbox.dir.W": {
+    "zh": "西",
+    "en": "W"
+  },
+  "sandbox.dir.NW": {
+    "zh": "西北",
+    "en": "NW"
+  },
+  "sandbox.dir.VAR": {
+    "zh": "多变",
+    "en": "Variable"
   }
 }
