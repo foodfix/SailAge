@@ -117,47 +117,145 @@ immunity are retired with the marker system (§4.11.11.1).
 
 ### 4.2 Battle grid setup
 
-- Grid: 16×10 square tiles, rendered at 48px (`80-*` sizing); terrain: all
-  sea except a 1-tile `land #` ring option? — locked: open sea, no obstacles
-  in Phase 2 (reef/coast terrain OUT OF SCOPE (phase 3)).
-- Deployment: player ships on the west edge column band (x ≤ 2), enemy on the
-  east band (x ≥ 13), one ship per tile, flagship centered per side.
-- Ship unit = its ship instance: durability, crew, cannons, cargo carried in.
-- Weather (from world state at contact) applies: storm ⇒ all cannon damage
-  ×0.75 and no wind speed effects beyond MP table below.
+- **Grid (Phase 9):** 48×30 cells (`x ∈ 0..47`, `y ∈ 0..29`), rendered at
+  32 px — a 1536×960 world over the 1280×584 viewport (camera / minimap /
+  bottom-bar presentation in `80-*` §4.7.1). Open sea, no obstacles — terrain
+  (reef/coast tiles) stays OUT OF SCOPE (the Phase-2 lock, unchanged).
+- **Deployment bands:** player ships in the west band `x ≤ 5`, enemy ships in
+  the east band `x ≥ 42`, one ship per cell, flagship centred per side. The
+  concrete deployment cells by fleet index 0–4 are pinned in §4.11.2 —
+  player `(2,15) (2,14) (2,16) (2,13) (2,17)`, enemy
+  `(45,15) (45,14) (45,16) (45,13) (45,17)`; a band overflow (more than 5
+  ships) continues the in-band scan.
+- **Tournament variant (single bout):** the player deploys at `(10,15)` and
+  the enemy at `(37,15)` (27 cells apart), with pinned initial velocities
+  `vel = (1,0)` (player) / `vel = (−1,0)` (enemy) — everything else identical.
+- **Ship unit** = its ship instance: durability, crew, cannons, cargo carried
+  in (unchanged).
+- **Battle-condition lock (Phase 9):** `wind_dir` (the 8-token **wind-FROM**
+  id of `20-*` §4.7.1) and `weather` (engine ids `calm|fair|strong|storm`,
+  `20-*` §4.7) lock at battle start and stay constant for the whole battle.
+  The battle also reads the **decoded current vector at the contact tile**
+  (`currents.png`, reversal applied — `20-*` §4.16) **regardless of the
+  world's `current_mode`** (correction 1). All three are injected through the
+  config keys pinned in §4.12.1.
+- **Weather effects (battle):** storm ⇒ all cannon damage ×0.75 **and
+  hooking forbidden** (§4.6a); strong ⇒ cannon damage ×0.9 (Phase-9 pin).
+  Wind speed effects run through the per-class `wind_factor` /
+  `direction_factor` tables consumed by `cap_eff` (§4.3a; `20-*` §4.7 /
+  §4.4).
 
 ### 4.3 Turn structure
 
 - **Rounds:** each round, every living ship acts once in **initiative order**
-  = descending `ShipType.speed`; ties break player-before-enemy, then fleet
-  index. A unit destroyed before its turn skips it.
-- **Per turn:** up to `MOVE` followed by at most 1 action: cannon / ram /
-  board / hold. Actions resolve immediately; animations are Phase-2 polish,
-  non-blocking log lines suffice as placeholder.
-- **Movement points (MP):** `MP = battle_mp(ShipType.speed)` (no crew/wind
-  modifiers in battle — locked simplification). Orthogonal step = 1 MP,
-  diagonal = 2 MP. Unspent MP does not carry over.
-  **`battle_mp` (Phase-6 pin, required because `ShipType.speed` doubled
-  again):** the battle grid is unchanged at 16×10 while world speeds became
-  tiles/day on 5 nm tiles (`20-*` §4.1), so MP is **not** the raw speed. It
-  is the Phase-1 battle value preserved exactly — the same preservation the
-  Phase-4 pin made once already, repeated for the 5 nm grid:
-  `battle_mp(speed) = speed / 4` (integer division), i.e.
-  `{16→4, 20→5, 24→6}`. This reproduces every Phase-2/4 MP budget and
-  initiative tie-break byte-for-byte (latin 4, sloop 5, caravel 5, galley 6,
-  brigantine 6, nao 4, carrack 4, galleon 5) — no battle balance number
-  changes, and a brigantine still cannot cross a 16-wide field in one turn.
-  A sail equipment's `speed` modifier is added **after** the division
-  (`MP = battle_mp(ShipType.speed) + sail_speed_delta`), so `+1` sail still
-  buys exactly the Phase-2 step it bought (latin `4 → 5`).
+  generated **once at battle start**: descending
+  `ShipType.speed + sail_speed_delta` (correction 2, §4.11.12), ties break
+  player-before-enemy, then ascending fleet index. A unit destroyed before
+  its slot is skipped and never acts; the order is never re-sorted
+  mid-battle.
+- **Per turn, three phases in order (mechanics pinned in §4.3a):**
+  1. **Pick a new velocity** — a legal `vel` per the §4.3a constraints.
+  2. **Integrate movement** — `pos += vel` resolved as the Bresenham sweep
+     (§4.3a); an enemy-occupied first cell becomes a ram (§4.5).
+  3. **At most one action:** cannon (naming the side) / ram / board / hold.
+  Actions resolve immediately; non-blocking log lines suffice as the
+  presentation (Phase-2 rule, unchanged).
+- **Historical (Phases 2–8, retired):** movement was MP-based —
+  `MP = battle_mp(ShipType.speed) = speed / 4` (integer division,
+  `{16→4, 20→5, 24→6}`), orthogonal step = 1 MP, diagonal = 2 MP, a sail
+  equipment's `speed` delta added after the division, refreshed to full at
+  each of the ship's turns, unspent MP discarded. **Retired** by the Phase-9
+  velocity model — this note is kept only as the historical record (§4.3a
+  replaces it; `battle_mp` is gone).
 
-### 4.4 Cannon
+### 4.3a Velocity, inertia & sweep (Phase 9)
 
-- Requirement: `cannons ≥ 1` and target within Chebyshev range `1..3`.
-- Arc: none (360° fire — locked simplification; arcs OUT OF SCOPE (phase 3)).
-- Damage: `floor(cannons × 2 × range_factor)`, `range_factor` = 1.0 / 0.75 /
-  0.5 at range 1 / 2 / 3.
-- **Reload:** after firing, that ship cannot fire on its next turn.
+- **Unit state (per ship):** `pos: Vector2i`, `vel: Vector2i`, `heading8`,
+  `reload_port`, `reload_starboard`, `speed_debuff_turns`, `crew` — these
+  replace the retired Phase-2 `cell` / `mp` / `mp_debuff` fields.
+- **Velocity pick legality (enforced in this order, §4.11.4):** the bucket
+  angle between the new velocity and the old velocity is ≤
+  `battle_turn_rate` (heading-bucket sense, 22.5° boundaries); the magnitude
+  delta `|‖new‖ − ‖old‖| ≤ battle_accel`; `‖new‖ ≤ cap_eff`. From `vel = 0`
+  (standstill) **any direction** is legal with magnitude ≤ `battle_accel` —
+  the angle constraint is relaxed, the cap constraint still applies (a
+  becalmed ship cannot start moving). A pick of `vel = (0,0)` is legal
+  whenever the magnitude-delta constraint holds (the angle constraint reads
+  only a non-zero old velocity); `vel = 0` keeps the last heading.
+- **Magnitude & heading:** `‖vel‖ = sqrt(vx² + vy²)` — floating point is
+  used **only** for the magnitude (the existing `floor(float(...))` style).
+  `heading8` derives from `vel` at the 22.5° boundaries via **integer
+  dot/cross comparisons** against the 8 compass rays — never `atan2`,
+  portable and deterministic across runtimes (decision 1).
+- **Overshoot clamp:** a chosen velocity whose magnitude exceeds `cap_eff`
+  clamps **along its own direction** (component floor) to `cap_eff`.
+- **`cap_eff` (decision 2, corrections 1–3):**
+  `cap_eff = clamp(floor(battle_max_speed × wind_factor(weather, class) ×
+  direction_factor(heading8, wind_dir)) ± current_mod − debuff,
+  0, battle_max_speed) + sail_speed_delta`, where `wind_factor` is the
+  per-class weather table of `20-*` §4.7 (oar is 1.0 in every weather;
+  hybrid per its column) and `direction_factor` is the `20-*` §4.4 table
+  read at the **ship's own class column** (the `sail` column stays the
+  fallback for an unknown class). Calm weather ⇒ `direction_factor`
+  identity 1.0 for every class — the world rule of `20-*` §4.7.1. The
+  `+ sail_speed_delta` (correction 2, §4.11.12) applies **after** the clamp
+  and is **not** clamped back into `[0, battle_max_speed]`. `debuff` = 1
+  while `speed_debuff_turns > 0` (chain shot, §4.4b), and the debuff term
+  may never reduce `cap_eff` below 1 (the chain-shot cap floor — a cap of 0
+  remains reachable without the debuff, e.g. a `battle_max_speed` 2 sail
+  hull into a calm wind against the wind:
+  `floor(2 × 0.8 × 0.5)` = 0).
+- **Current modifier (new battle-domain pin, correction 1 — the `20-*` §4.16
+  world rule is multiplicative and is deliberately NOT quoted here):** with
+  `current_mod` keyed off the relative heading8 bucket between the ship's
+  `heading8` and the locked contact-tile current's flow direction — bucket
+  ∈ {0°, 45°} with current strength ≥ 2 → `current_mod = +1`; bucket
+  ∈ {135°, 180°} with strength = 3 → `current_mod = −1`; strength 0 (no
+  current) never modifies. All other bucket/strength combinations modify
+  nothing.
+- **Class constants:** `battle_accel` = 2 for `oar`, 1 for every other
+  class. `battle_turn_rate` = 90° for `latin` / `sloop` / `galiot` /
+  `pinnace` / `dhow` / `xebec` / `galley`; 45° for `caravel` / `brigantine` /
+  `nao` / `carrack` / `galleon` / `galleass` / `fluyt` / `junk` /
+  `caravela_redonda` — 7 + 9: the 16 hulls partition exactly once across the
+  two tiers (schema in `10-*` §4.3; the data fields land in Phase 9 W2).
+- **Sweep integration:** `pos += vel` resolves as a **Bresenham walk** cell
+  by cell along the velocity; the **first occupied cell stops the ship** —
+  enemy-occupied ⇒ ram (§4.5); friend-occupied or out-of-bounds ⇒ stop at
+  the **prior cell** (zero damage, no partial entry).
+- **`legal_velocities(unit)`:** every integer vector in the Chebyshev box
+  `|vx|, |vy| ≤ battle_max_speed` satisfying the constraints above,
+  enumerated in **(y, x) lexicographic order** — the enumeration order is
+  the deterministic tie-break everywhere (§4.11.8, decision 13). The bound
+  is ≤ 49 candidates at `battle_max_speed ≤ 3` (decision 13's pin);
+  correction 3's speed-24 tier (`battle_max_speed = 4`) grows the box to
+  9×9 = 81 candidates — the enumeration rule, not the 49 figure, is the
+  normative part.
+
+### 4.4 Cannon (Phase 9 broadsides)
+
+- **Requirement:** the **named side** (port or starboard) has ≥ 1 loaded
+  cannon (per-side reload, §4.4a) and the target within Chebyshev range
+  `1..3` — `range_factor` 1.0 / 0.75 / 0.5 at range 1 / 2 / 3.
+- **Broadside split (at battle start, decision 3):** `port = floor(n / 2)`,
+  starboard takes the rest; the ship's **total** cannon count is retained for
+  the outcome/rewards blocks (decision 14).
+- **Arcs (relative to the ATTACKER's `heading8`, 8-bucket bearings):**
+  port = {45°, 90°, 135°}, starboard = {225°, 270°, 315°}; the target's
+  bearing bucket selects the side. A target in the 0° or 180° bucket
+  (dead ahead / dead astern of the attacker) sits in **neither** arc and
+  cannot be fired at from that position.
+- **Damage stack (decision 3):**
+  `damage = floor((side_cannons × 2 × range_factor + bonus) × weather ×
+  shot × rake)` — the multipliers multiply and exactly **one** `floor`
+  lands at the end, **after the weather term**: weather = storm ×0.75 /
+  strong ×0.9 / otherwise ×1.0 (§4.2); shot = the §4.4b shot-type
+  multiplier; rake = ×1.25 when the target's bearing bucket **relative to
+  the TARGET's own `heading8`** ∈ {0°, 180°} (纵射 rake — the shot runs the
+  target's deck line).
+- **`bonus` (unchanged, §4.11.5):** the gunnery term —
+  `floor(effective_gunnery / 25)` for the player flagship, the captain-card
+  cannon-rating term for every captain-card ship.
 - **Gunnery (player flagship; Phase 8, 2026-11-02 — replaces the Phase-2
   gunner-officer `effective_combat` bonus, retired with the four-stat
   model):** the flagship's cannon damage and its hit term gain
@@ -168,22 +266,76 @@ immunity are retired with the marker system (§4.11.11.1).
   the damage term is the only consumer of the "hit/damage
   `+floor(skill/25)`" magnitude today — the hit side rides the same
   locked value and is never a second formula.
-- **Chain shot (Phase 8):** unlock at gunnery ≥ 25 (`skill_gates`): the
-  volley's damage × 0.75 and the target ship loses 1 MP for 2 rounds.
-- **Armor-piercing shot (Phase 8):** unlock at gunnery ≥ 50
-  (`skill_gates`): the volley's damage × 1.25, ignoring the target's
-  `armor` equipment modifiers (§4.11.12).
 
-### 4.5 Ram
+### 4.4a Reload (Phase 9 — per side)
 
-- Action against an orthogonally adjacent ship: both take damage —
-  target: `floor(0.25 × attacker_max_durability)`;
-  attacker: `floor(0.10 × attacker_max_durability)`.
-- Oar/hybrid ramming sail: target damage ×1.25 (galley identity rule).
+- **Formula (decision 5, replaces `RELOAD_ROUNDS = 2`):**
+  `reload_turns = clamp(3 − floor(gunnery / 50), 1, 3) +
+  (crew_ratio < 0.5 ? 1 : 0)` with `crew_ratio = crew / crew_min`.
+- **Gunnery source (pinned):** the player flagship uses `effective_gunnery`
+  (the §4.4 term); player escorts and AI captain-card ships use their captain
+  card's `skills.gunnery`; a legacy fleet without cards falls back to
+  `10 + 10 × tier` (the same fallback family as the courage roll, §4.7).
+- **Per side:** the sides reload **independently** — after a side fires,
+  `reload_side = round + reload_turns`; that side may fire again only when
+  `round ≥ reload_side` (the turn-engine pin, §4.11.4).
+- **Historical:** the Phase-2–8 single `RELOAD_ROUNDS = 2`
+  (`reload_until_round` on the ship) is **retired**.
+
+### 4.4b Shot types & the deterministic AI shot rule (Phase 9)
+
+Four shot types; the §4.4 damage stack carries the shot multiplier, and the
+gates read the §4.4a gunnery source:
+
+| Shot | Gate | Effect |
+|---|---|---|
+| round | none (default) | the §4.4 stack as-is (multiplier ×1.0) |
+| chain | gunnery ≥ 25 (`skill_gates`) | damage ×0.75 **and** target `speed_debuff_turns += 2` (the §4.3a cap debuff, chain floor-1 rule included) |
+| armor-piercing | gunnery ≥ 50 (`skill_gates`) | damage ×1.25 and ignores the target's `armor` equipment modifiers (§4.11.12) |
+| grape | **no gate, range 1 only** | hull `floor(same-range round × 0.5)` **plus** crew `floor(same-range round × 0.5)` |
+
+"Same-range round" = the round-shot damage the §4.4 stack produces at that
+range with the same side, bonus and multipliers. Grape's crew kill feeds the
+duel crew term (`min(floor(crew / 5), 20)`, §4.11.6) through the §4.11.5
+casualty rules — the kill **is** the grape volley's casualty term (§4.11.5),
+not an addition to the standard `/20` divisor; grape's hull damage logs
+through the existing `battle.log.cannon` line (no new string).
+
+**Deterministic AI shot rule (T2/T3 shared; evaluated in order; always
+OUTSIDE any T3 enumeration — decisions 4/13):**
+
+1. Target `floor(‖vel‖) ≥ 2` **and** its current velocity strictly increases
+   its Chebyshev distance to the attacker → **chain**.
+2. (Target orthogonally adjacent **or** within Chebyshev ≤ 2) **and** own
+   `crew + duel_rating > target crew + target duel_rating` (each side's own
+   duel rating, §4.11.5) → **grape**.
+3. The target is a player-side ship whose `equipment.armor` slot is
+   non-empty → **armor-piercing** (master pin: AI ships carry no armor slot
+   — ledger-recorded).
+4. Otherwise → **round**.
+
+### 4.5 Ram (Phase 9)
+
+- **Sweep ram:** triggered when the §4.3a sweep enters an **enemy-occupied**
+  cell with `floor(‖vel‖) ≥ 1`. The adjacent-action ram (the §4.3 action
+  against an orthogonally adjacent enemy) is preserved as an action.
+- **Multiplier (decision 7):**
+  `mult = (1 + 0.25 × (floor(‖attacker vel‖) − 1)) ×
+  (attacker approach bearing bucket ∈ {0°, 180°} vs the TARGET's heading8
+  ? 1.15 : 1.0)` — speed builds impact; a bow/stern approach ×1.15.
+- **Damage:** target `floor(att_max_dur × 0.25 × mult)`, self
+  `floor(att_max_dur × 0.10 × mult)`; `att_max_dur` is the **effective** max
+  durability (§4.11.12). An `oar`/`hybrid` attacker multiplies the target
+  damage ×1.25 (the galley identity rule, preserved; folded into the same
+  single floor, §4.11.5).
+- If a ram sinks both ships the attacker resolves **LAST** (§6).
 
 ### 4.6 Boarding & captain duel
 
-- Action against an orthogonally adjacent enemy ship → duel modal (S11).
+- Action against an enemy ship satisfying the **§4.6a hook condition**
+  (orthogonal adjacency + both ships at `floor(‖vel‖) ≤ 1` + weather ≠
+  storm) → hook (both ships' `vel = 0`) → duel modal (S11). The duel itself
+  is §4.11.6, unchanged.
 - **Duel (Phase 8 formula, 2026-11-02):** best-of-5 rounds. Each round both
   sides roll `base + rand(0, 20)`; higher wins the round; tie = no score.
   First to 3 round-wins takes the duel. The player's `base` =
@@ -207,21 +359,47 @@ immunity are retired with the marker system (§4.11.11.1).
   extends `20-*` §4.9 list).
 - Retreat from duel: none — boarding commits.
 
+### 4.6a Hook & board (Phase 9)
+
+- **Hook condition (decision 8):** orthogonal adjacency **+ both ships at
+  `floor(‖vel‖) ≤ 1`** **+ weather ≠ storm** → the hook succeeds and **both
+  ships' `vel = 0`** (correction 7). Storm forbids hooking outright (§4.2).
+- **Duel:** §4.11.6, unchanged. Crew can reach **0 and clamps there**
+  (correction 7) — a 0-crew ship still sails; its **only** penalties are the
+  `crew_ratio < 0.5` reload +1 (§4.4a) and the weakened
+  `min(floor(crew / 5), 20)` duel term (§4.11.6) — nothing more.
+- **Strike semantics:** the boarding **loser strikes** — a **player** loss
+  resolves as §4.11.7 `surrender` (fleet retained, the existing cargo
+  rules), an **AI** loss resolves as **capture** (§4.11.7, the Phase-8
+  idle-officer capture gate included).
+- **Presentation:** S10 shows a highlight ring on hookable targets
+  (`80-*` §4.7.1); AI ships decelerate into the hook window (§4.9a).
+
 ### 4.7 Damage, sinking, surrender
 
 - Durability 0 at battle → ship sinks immediately; cargo lost (no salvage in
   battle, consistent with `40-*` §4.4).
-- **AI surrender (Phase 8 roll):** at its turn, an AI ship below 25% max
-  durability with a player ship within 3 tiles rolls surrender — chance =
-  `clamp(25 − floor(courage / 10), 10, 40)%` (the ship captain's courage;
-  drawn from the §4.11.1 battle stream; a failed roll re-rolls on the
-  ship's next turn). A surrender resolves as a capture as if duel-won, no
-  duel — the Phase-8 idle-officer capture gate included (§4.11.15). (The
-  Phase-2 automatic surrender — the "fixed < 25%" reading — is retired.)
-  Player ships never auto-surrender; the player may offer
-  surrender from the battle menu: battle ends, enemy takes flagship cargo
-  only, ships retained (pirates), or flagship itself (navy with bounty —
-  which clears the bounty, `70-*`).
+- **AI surrender (Phase 8 roll, Phase 9 gate):** at its turn, an AI ship
+  whose **side morale ≤ 20** (the §4.8a morale model) **and** whose
+  durability ≤ 25% max rolls surrender — chance =
+  `clamp(25 − floor(courage / 10), 10, 40)%` **plus
+  `floor((20 − morale) / 2)` percentage points** (the base keeps its clamp;
+  the morale modifier adds on top, so the effective ceiling is 50% at
+  morale 0). **Effective courage** = the ship captain's card courage + the
+  profile `courage_mod` (§4.9a); a legacy fleet without cards falls back to
+  `10 + 10 × tier`. Drawn from the §4.11.1 battle stream; a failed roll
+  re-rolls on the ship's next turn. A surrender resolves as a capture as if
+  duel-won, no duel — the Phase-8 idle-officer capture gate included
+  (§4.11.15). (The Phase-2 automatic surrender — the "fixed < 25%" reading —
+  is retired, and so is the Phase-8 proximity clause "player ship within 3
+  tiles": the Phase-9 gate is exactly morale ≤ 20 ∧ durability ≤ 25% max.)
+- **Side collapse (Phase 9, AI-side only — correction 5):** at side morale
+  ≤ 10 every living AI ship **strikes colors at its next turn with NO
+  roll**, resolved as the §4.7 surrender above. Player ships **never**
+  auto-surrender — low player morale is a HUD warning only; the player may
+  offer surrender from the battle menu: battle ends, enemy takes flagship
+  cargo only, ships retained (pirates), or flagship itself (navy with
+  bounty — which clears the bounty, `70-*`).
 
 ### 4.8 Loot & aftermath
 
@@ -270,6 +448,15 @@ Phase-1 implementation (see `IMPLEMENT-Phase1.md` "Completion record") showed
 that a value left to a task gets invented differently by each task. Every
 number §4.1–§4.10 leaves open is therefore fixed here, before code.
 
+**Phase 9 rewrite (2026-11-03).** The Phase-9 velocity-physics model
+(§4.2–§4.7 with the new §4.3a / §4.4a / §4.4b / §4.6a) moves every battle
+number in this block onto that model, with the pins restated in place:
+deployment (§4.11.2, the 48×30 grid), the turn engine (§4.11.4), damage
+(§4.11.5), the T2 AI tie-breaks (§4.11.8), the end conditions (`stall`,
+§4.11.9), the aftermath (§4.11.10) and the equipment wiring (§4.11.12).
+The MP-era wording they replace is retired with the model (§4.3 historical
+note).
+
 #### 4.11.1 Battle seed
 
 One `RandomNumberGenerator` per battle, seeded with plain integer arithmetic
@@ -285,21 +472,30 @@ are the pre-battle `GameState` values. Duel rolls draw from the *same* stream,
 after deployment and enemy composition, so a given seed reproduces the whole
 battle including the duel round sequence (§6 "Duel RNG audit").
 
-#### 4.11.2 Deployment (concrete tiles)
+#### 4.11.2 Deployment (concrete cells — Phase 9, 48×30)
 
-Grid `x ∈ 0…15`, `y ∈ 0…9`. One ship per tile, no two ever share a cell.
+Grid `x ∈ 0…47`, `y ∈ 0…29` (§4.2). One ship per cell, no two ever share a
+cell.
 
 | Fleet index | Player cell | Enemy cell |
 |---|---|---|
-| 0 (flagship) | (1, 4) | (14, 4) |
-| 1 | (1, 5) | (14, 5) |
-| 2 | (1, 3) | (14, 3) |
-| 3 | (1, 6) | (14, 6) |
-| 4 | (1, 2) | (14, 2) |
+| 0 (flagship) | (2, 15) | (45, 15) |
+| 1 | (2, 14) | (45, 14) |
+| 2 | (2, 16) | (45, 16) |
+| 3 | (2, 13) | (45, 13) |
+| 4 | (2, 17) | (45, 17) |
 
 The flagship is vertically centred; extras alternate below/above it. Both
-bands satisfy §4.2 (`x ≤ 2` / `x ≥ 13`) and start 13 tiles apart, so every
-battle opens with a movement phase.
+bands satisfy §4.2 (`x ≤ 5` / `x ≥ 42`) and open 43 cells apart, so every
+battle opens with an approach phase. Deployment starts every ship at
+`vel = (0, 0)` with heading8 east (player) / west (enemy) — the §4.3a
+standstill rule governs the first velocity pick. A band overflow (more than
+5 ships) continues the in-band scan (§4.2).
+
+**Tournament variant (single bout):** the player deploys at `(10, 15)` and
+the enemy at `(37, 15)` (27 cells apart) with pinned initial velocities
+`vel = (1, 0)` (player) / `vel = (−1, 0)` (enemy); everything else identical
+(§4.2). (The Phase-2 16×10 table this subsection used to pin is retired.)
 
 #### 4.11.3 Enemy fleet composition (seeded, deterministic)
 
@@ -322,29 +518,36 @@ battle opens with a movement phase.
 
 #### 4.11.4 Turn engine rules (pin for `battle_sim.gd`)
 
-- **Round:** build the initiative list at round start from living ships:
-  descending `ShipType.speed` (+ sail-equipment speed delta, §4.11.12), ties
-  player-before-enemy, then ascending fleet index. A unit destroyed before its
-  slot is skipped and never acts.
-- **MP:** `MP = battle_mp(ShipType.speed) + sail_speed_delta` (§4.2/§4.3,
-  Phase-6 pin: integer division by 4, sail delta added after), refreshed to
-  full at the start of each of the ship's turns; unspent MP is discarded.
-  Orthogonal step 1 MP, diagonal 2 MP. A diagonal step is legal only when both
-  orthogonally adjacent corner tiles are inside the grid (no obstacles exist,
-  §4.2).
-- **Occupancy:** a ship may never enter or pass through an occupied tile.
-- **Reload:** firing sets `reload_until_round = round + 2`; a ship may fire
-  only when `round ≥ reload_until_round`. Firing in round 1 therefore blocks
-  round 2 and allows round 3 (§4.4 "cannot fire on its next turn").
-- **One action per turn:** cannon, ram, board or hold, after any movement.
+- **Initiative (built ONCE at battle start):** descending
+  `ShipType.speed + sail_speed_delta` (correction 2, §4.11.12), ties
+  player-before-enemy, then ascending fleet index. A unit destroyed before
+  its slot is skipped and never acts; the list is never re-sorted
+  mid-battle (§4.3).
+- **Three-phase turn (§4.3/§4.3a):** ① pick a new `vel` — legality enforced
+  in this order: bucket angle to the old velocity (≤ `battle_turn_rate`) →
+  magnitude delta (≤ `battle_accel`) → cap (`‖vel‖ ≤ cap_eff`, overshoot
+  clamping along the chosen direction); ② sweep integration — `pos += vel`
+  as the Bresenham walk (§4.3a); ③ at most one action: cannon (naming the
+  side) / ram / board / hold.
+- **Occupancy = the sweep rule:** a ship may never enter or pass through an
+  occupied cell; the **first** occupied cell stops it — enemy-occupied ⇒
+  ram (§4.5), friend-occupied or out-of-bounds ⇒ stop at the prior cell
+  (zero damage, §4.3a).
+- **Reload (per side):** `reload_port` / `reload_starboard`; after a side
+  fires, `reload_side = round + reload_turns` (§4.4a); that side may fire
+  again only when `round ≥ reload_side`. (The Phase-2 single
+  `reload_until_round` / `RELOAD_ROUNDS = 2` pin is retired.)
+- **One action per turn:** cannon, ram, board or hold, after the sweep.
 - **Damage order:** every action resolves immediately; the log line is the
-  only presentation in Phase 2.
+  only presentation in Phase 2 (unchanged).
 
 #### 4.11.5 Damage numbers (pin)
 
-- **Cannon:** `base = floor(cannons × 2 × range_factor) + bonus`; in storm
-  weather `damage = floor(base × 0.75)` (§4.2 "all cannon damage ×0.75"),
-  otherwise `damage = base`.
+- **Cannon (broadside stack, §4.4):**
+  `damage = floor((side_cannons × 2 × range_factor + bonus) × weather ×
+  shot × rake)` — the multipliers (storm ×0.75 / strong ×0.9, the §4.4b
+  shot multiplier, rake ×1.25) multiply the whole product and exactly
+  **one** floor lands at the end, after the weather term.
   **`bonus` (Phase 8, 2026-11-02):** `floor(effective_gunnery / 25)` for
   the player flagship (the §4.4 gunnery term) and `floor(combat_rating /
   10)` for every captain-card ship (AI ships and appointed player
@@ -355,10 +558,18 @@ battle opens with a movement phase.
   escort's cannon rating stays 0. (This replaces the Phase-2 reading —
   the player's effective `combat` stat, `0` for escorts, `5 + fleet
   tier` for AI ships.)
-- **Ram:** `target = floor(0.25 × attacker_max_durability)`,
-  `attacker = floor(0.10 × attacker_max_durability)`; if the attacker's
-  `ShipType.class` is `oar` or `hybrid` then
-  `target = floor(target × 1.25)` (§4.5, galley identity rule).
+- **Crew casualties (Phase 9, per volley, clamped at 0 — correction 7):**
+  standard volley `crew −= floor(damage / 20)`; rake volley
+  `crew −= floor(damage / 10)`; a grape volley's casualty is its dedicated
+  §4.4b crew kill, `floor(same-range round × 0.5)` (it is the volley's
+  term, not an addition to the `/20` divisor); boarding winner
+  `crew −= floor(crew × 0.2)` (§4.6a/§4.11.6). The losses feed the
+  §4.11.6 duel crew term `min(floor(crew / 5), 20)`.
+- **Ram (§4.5, Phase 9):**
+  `mult = (1 + 0.25 × (floor(‖attacker vel‖) − 1)) × (bow/stern approach
+  ×1.15 else ×1.0)`; `target = floor(att_max_dur × 0.25 × mult)` — an
+  `oar`/`hybrid` attacker's ×1.25 folds into the same single floor —
+  `attacker = floor(att_max_dur × 0.10 × mult)`.
   `attacker_max_durability` is the **effective** max from §4.11.12.
 - **Sinking:** `durability ≤ 0` → the ship is removed immediately and its
   cargo is lost (no salvage while the battle runs). A ram that sinks both
@@ -431,16 +642,30 @@ brigantine, carrack, galleon), crew `crew_min`, durability max, cannons
 `armament_slots`; the player's fleet durability carries between rounds
 because the bracket never repairs between battles.
 
-#### 4.11.8 AI decision pins (§4.9)
+#### 4.11.8 AI decision pins (Phase 9 — T2 tie-breaks)
 
-- Rule 2 ("lowest-durability target"): lowest current durability, ties to the
-  lower fleet index.
-- Rule 3/4 comparisons use **current cannon counts** (`ship.cannons`), summed
-  over living player ships for the "total player cannons" term.
-- Rule 5 pathing: greedy Chebyshev reduction; among reachable tiles prefer the
-  one minimising `max(|dx|, |dy|)` to the nearest player ship, then
-  minimising `|dx| + |dy|`, then the lowest `(y, x)` cell. If no tile improves
-  the distance, spend nothing and hold.
+1. **Enumeration is the tie-break.** Every velocity choice enumerates
+   `legal_velocities(unit)` in its (y, x) lexicographic order (§4.3a) and
+   takes the **FIRST** candidate achieving the best objective; ties never
+   reorder.
+2. **Fire:** a rake-position volley beats a non-rake on the same side
+   availability; then the profile `focus` picks the target — `weakest` =
+   lowest current durability (ties → lower fleet index), `nearest` =
+   minimum Chebyshev (ties → lower fleet index), `flagship` = player index
+   0 (falls back to `weakest` while the flagship is sunk). Side choice:
+   prefer the loaded side with more cannons, tie → port. The shot type is
+   the §4.4b rule's output (never an enumerated dimension).
+3. **Kite:** the first velocity whose resulting Chebyshev distance to the
+   relevant target equals `preferred_range`; if none achieves it exactly,
+   the first minimizing `|distance − preferred_range|`.
+4. **Board** when hook-legal (§4.6a) **and** (own crew + duel rating > the
+   target's **or** target durability ≤ 25% max). **Ram** when
+   `floor(‖vel‖) ≥ 2` **and** own cannons + duel rating > the target's.
+5. **Flee** (profile `flee_below_hp_pct` exceeded, or aggression < 25, or
+   side morale ≤ 20 pre-fleet-layer): the first velocity strictly
+   increasing Chebyshev to the nearest player ship; if none, hold.
+6. **Surrender roll first:** the §4.7 roll resolves at the unit's turn
+   start, before any other rule (§4.7 numbers).
 
 #### 4.11.9 Battle end conditions (pin)
 
@@ -451,6 +676,11 @@ because the bracket never repairs between battles.
 | `defeat_captured` | the player's last ship is captured (duel loss or navy surrender) → `gameover.captured` |
 | `retreat` | `battle.retreat` chosen |
 | `surrender` | player surrender chosen (§4.11.7) |
+| `stall` | the stall counter reaches 8 (§4.11.10 aftermath) |
+
+**Stall detection (Phase 9, decision 12):** 8 consecutive rounds with zero
+damage **and** zero boarding **and** a net player↔enemy Chebyshev change
+≤ 2 ⇒ outcome `stall`; any damage or boarding resets the counter.
 
 #### 4.11.10 Rewards & aftermath (pin)
 
@@ -461,7 +691,16 @@ because the bracket never repairs between battles.
 - **Battle XP** (awarded to `player.xp` via `Character.award_xp`):
   `+10` per enemy ship neutralised (sunk/captured/surrendered) and `+5` per
   round the battle lasted. **Phase 8:** the total is ×(1 + level / 20),
-  floored once — integer XP.
+  floored once — integer XP. The per-survived-round term is unchanged in
+  Phase 9 and simply bounded by the round cap **40** (was 30; the
+  §4.12.1 API default re-pins with it, correction 12).
+- **`stall` aftermath (Phase 9, correction 4).** Outcome `stall`
+  (§4.11.9) is a **mutual disengage**: the fleet returns to the contact
+  tile with **no retreat back-step** (differs from §4.10), the enemy fleet
+  is **not removed** and gets **+1 day pursuit cooldown** (the §4.10
+  mirror), and the awards above still apply for what happened before the
+  stall — loot/XP/rep earned so far are kept, nothing further. Tournaments
+  treat a `stall` as a bracket loss like any non-victory (§4.11.7.1).
 - **Reputation:**
   - Pirates defeated (any outcome except retreat) → `+2` with each of the
     **two nearest ports' nations** measured by Chebyshev distance from the
@@ -991,8 +1230,11 @@ Perf gates (measured in tools suites — tasks J/M):
   `ship.equipment = {"figurehead": "", "sail": ""}`.
 - **Duel:** the player's roll adds the sum of every `combat` modifier across
   the two worn player items.
-- **Battle:** `sail` adds its `speed` modifier to that ship's MP and to its
-  initiative value; `figurehead` adds its `durability` modifier to that ship's
+- **Battle (Phase 9, correction 2):** `sail` adds its `speed` modifier to
+  that ship's **`cap_eff`** — after the §4.3a clamp, and **not** clamped
+  back into `[0, battle_max_speed]` — **and** to its initiative sort key
+  (§4.11.4); the Phases-2–8 MP wording is retired with the MP model (§4.3
+  historical note). `figurehead` adds its `durability` modifier to that ship's
   **effective max durability**, which is the base for ram damage (§4.11.5) and
   the cap for its current durability.
 - **Purchase:** shipyard, §4.3 refit row plus an equipment list (§4.11.13).
