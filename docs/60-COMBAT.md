@@ -128,15 +128,20 @@ immunity are retired with the marker system (§4.11.11.1).
   32 px — a 1536×960 world over the 1280×584 viewport (camera / minimap /
   bottom-bar presentation in `80-*` §4.7.1). Open sea, no obstacles — terrain
   (reef/coast tiles) stays OUT OF SCOPE (the Phase-2 lock, unchanged).
-- **Deployment bands:** player ships in the west band `x ≤ 5`, enemy ships in
-  the east band `x ≥ 42`, one ship per cell, flagship centred per side. The
+- **Deployment bands (W5 pacing correction 15 — the tournament-proven start
+  is now THE start):** player ships in the west band `x ≤ 12`, enemy ships in
+  the east band `x ≥ 35`, one ship per cell, flagship centred per side. The
   concrete deployment cells by fleet index 0–4 are pinned in §4.11.2 —
-  player `(2,15) (2,14) (2,16) (2,13) (2,17)`, enemy
-  `(45,15) (45,14) (45,16) (45,13) (45,17)`; a band overflow (more than 5
-  ships) continues the in-band scan.
-- **Tournament variant (single bout):** the player deploys at `(10,15)` and
-  the enemy at `(37,15)` (27 cells apart), with pinned initial velocities
-  `vel = (1,0)` (player) / `vel = (−1,0)` (enemy) — everything else identical.
+  player `(10,15) (10,14) (10,16) (10,13) (10,17)`, enemy
+  `(37,15) (37,14) (37,16) (37,13) (37,17)` (27 cells apart), with pinned
+  initial velocities `vel = (1,0)` (player) / `vel = (−1,0)` (enemy). A band
+  overflow (more than 5 ships) continues the in-band scan. *(User-locked
+  pacing amendment, 2026-11-04: the 43-cell gap cost 12–15 rounds of pure
+  approach — the tournament variant had already proven the 27-cell +
+  closing-velocity start resolves bouts in 10–13 rounds, so standard
+  battles adopt it and the variant distinction retires; the sandbox
+  `deployment` field stays for schema forward-compat and maps to the same
+  start.)*
 - **Ship unit** = its ship instance: durability, crew, cannons, cargo carried
   in (unchanged).
 - **Battle-condition lock (Phase 9):** `wind_dir` (the 8-token **wind-FROM**
@@ -651,30 +656,28 @@ are the pre-battle `GameState` values. Duel rolls draw from the *same* stream,
 after deployment and enemy composition, so a given seed reproduces the whole
 battle including the duel round sequence (§6 "Duel RNG audit").
 
-#### 4.11.2 Deployment (concrete cells — Phase 9, 48×30)
+#### 4.11.2 Deployment (concrete cells — Phase 9, 48×30, correction 15)
 
 Grid `x ∈ 0…47`, `y ∈ 0…29` (§4.2). One ship per cell, no two ever share a
 cell.
 
 | Fleet index | Player cell | Enemy cell |
 |---|---|---|
-| 0 (flagship) | (2, 15) | (45, 15) |
-| 1 | (2, 14) | (45, 14) |
-| 2 | (2, 16) | (45, 16) |
-| 3 | (2, 13) | (45, 13) |
-| 4 | (2, 17) | (45, 17) |
+| 0 (flagship) | (10, 15) | (37, 15) |
+| 1 | (10, 14) | (37, 14) |
+| 2 | (10, 16) | (37, 16) |
+| 3 | (10, 13) | (37, 13) |
+| 4 | (10, 17) | (37, 17) |
 
 The flagship is vertically centred; extras alternate below/above it. Both
-bands satisfy §4.2 (`x ≤ 5` / `x ≥ 42`) and open 43 cells apart, so every
-battle opens with an approach phase. Deployment starts every ship at
-`vel = (0, 0)` with heading8 east (player) / west (enemy) — the §4.3a
-standstill rule governs the first velocity pick. A band overflow (more than
-5 ships) continues the in-band scan (§4.2).
-
-**Tournament variant (single bout):** the player deploys at `(10, 15)` and
-the enemy at `(37, 15)` (27 cells apart) with pinned initial velocities
-`vel = (1, 0)` (player) / `vel = (−1, 0)` (enemy); everything else identical
-(§4.2). (The Phase-2 16×10 table this subsection used to pin is retired.)
+bands satisfy §4.2 (`x ≤ 12` / `x ≥ 35`) and open **27 cells apart** with
+pinned initial velocities `vel = (1, 0)` (player) / `vel = (−1, 0)` (enemy)
+and heading8 east (player) / west (enemy) — the closing start the
+tournament variant proven-played; the variant distinction is retired
+(correction 15, the sandbox `deployment` field maps to the same start).
+A band overflow (more than 5 ships) continues the in-band scan (§4.2).
+(The Phase-2 16×10 table this subsection used to pin, and the Phase-9
+43-cell version correction 15 replaces, are both retired.)
 
 #### 4.11.3 Enemy fleet composition (seeded, deterministic)
 

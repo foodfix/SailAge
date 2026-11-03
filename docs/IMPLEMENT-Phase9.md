@@ -192,6 +192,7 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
 | 12 | Round cap re-pin mentions the engine only | `battle_sim.gd` API `run_to_completion(policy, max_rounds: int = 30)` exposes the old cap as a default | §4.12.1 API default re-pinned to 40 in the docs wave (W1-B) |
 | 13 | Harness baseline is a 9E0 deliverable but harness is a 9A tool | Baseline must be captured on the **old** engine before the rewrite | W3-A runs harness on the old engine **at slot start**, writes the before-section of the report, then rewrites — 9E0 keeps its scope (skeleton, zero-write, seam) without a timing hazard |
 | 14 | §4.4a reload base cycle 3 turns (user-locked §0, 2026-11-03) | Live measurement (W3/W4 harnesses + the user's play read): a 3–4-round fire cycle on the 43-tile deployment makes combat outlast the approach — battles average 34–38 rounds with 44–62 % cap hits | **User-locked pacing amendment (2026-11-04): the base cycle halves** — `reload_turns = clamp(2 − floor(gunnery / 50), 1, 2) + low-crew` (2 below 50 gunnery, 1 at 50+, low crew +1). Lands with the W5 merge (sim const + test re-pins + harness re-run); the CEM tune learns the new pacing |
+| 15 | Deployment 43 cells apart, speed tiers 16→2/20→3/24→4, `vel = (0,0)` starts (user-locked §0/correction 3, 2026-11-03) | Same pacing read as correction 14: the approach alone costs 12–15 rounds; the tournament variant had already proven the 27-cell closing start resolves bouts in 10–13 rounds | **User-locked pacing amendment (2026-11-04):** (a) standard battles adopt the tournament start — bands x ≤ 12 / x ≥ 35, cells (10,…) vs (37,…), initial `vel = (±1, 0)`, heading E/W; the variant distinction retires (the sandbox `deployment` field stays, mapping to the same start); (b) `battle_max_speed` tiers rise one step — `16→3 / 20→4 / 24→5` (validator bound 3..5). Lands with the W5 merge (sim consts + `ship_types.json` + validator mapping + test re-pins); ram's velocity-scaled multiplier and the chain-shot cap floor read the new tiers automatically |
 
 ### Non-blocking suggestions (for the docs-review pass)
 
@@ -227,7 +228,8 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
    clamps along direction (component floor).
 2. **`cap_eff`** = `clamp(floor(battle_max_speed × wind_factor(weather, class)
    × direction_factor(heading8, wind_dir)) ± current_mod − debuff, 0,
-   battle_max_speed) + sail_speed_delta` (corrections 1–3); calm ⇒
+   battle_max_speed) + sail_speed_delta` (corrections 1–3; correction 15
+   raises the tiers one step — 16→3 / 20→4 / 24→5); calm ⇒
    direction identity (world rule). `battle_accel`: oar 2, else 1.
    `battle_turn_rate`: 90° for latin/sloop/galiot/pinnace/dhow/xebec/galley,
    45° for caravel/brigantine/nao/carrack/galleon/galleass/fluyt/junk/
@@ -288,8 +290,11 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
     candidates is a hard constraint; target assignment round-robin by profile
     `focus`, full focus-fire when `aggression ≥ 80`.
 11. **Grid/camera/UI**: 48×30 @ 32 px world (1536×960) over a 1280×584
-    viewport; player band x ≤ 5, enemy band x ≥ 42; deployment cells
-    (2,15)(2,14)(2,16)(2,13)(2,17) vs (45,…); **tournament variant** — single
+    viewport; deployment per correction 15 — bands x ≤ 12 / x ≥ 35, cells
+    (10,15)(10,14)(10,16)(10,13)(10,17) vs (37,…), both kinds open 27
+    cells apart with closing `vel` (±1,0) (the tournament start unified as
+    THE start; the sandbox `deployment` field stays for schema
+    forward-compat); **tournament bouts** — single
     bouts at (10,15) vs (37,15) (27 apart), initial `vel` (1,0)/(−1,0),
     everything else identical. Camera: RMB/MMB drag, 16 px edge scroll at
     600 px/s, wheel zoom 0.6–1.5× anchored, auto-center until manual pan,
