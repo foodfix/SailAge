@@ -975,24 +975,31 @@ func _test_w4_morale_and_dispatch() -> void:
 	screen.open_battle(_pirate_encounter(2, "brigantine"))
 	await get_tree().process_frame
 
-	# GUARDED SEAM: the sim lacks `side_morale` on this base (pre-A merge),
-	# so the bars render 100/100 — the missing-seam reading, never a guess.
-	_check(not screen.sim.has_method("side_morale"),
-		"W4 guard precondition: the engine lacks side_morale here (pre-A)")
-	_check(screen.side_morale_shown("player") == 100
-			and screen.side_morale_shown("enemy") == 100,
-		"W4 guarded fallback: without side_morale both bars read 100/100")
+	# MERGED SEAM (W3-A + W4-A are in): the sim carries `side_morale`, so the
+	# bars render the REAL side values — the guarded 100/100 fallback only
+	# existed on the pre-A base (the guard-era pins are superseded here).
+	_check(screen.sim.has_method("side_morale"),
+		"W4 merged precondition: the engine carries side_morale")
+	var shown_p: int = screen.side_morale_shown("player")
+	var shown_e: int = screen.side_morale_shown("enemy")
+	_check(shown_p == int(screen.sim.side_morale("player"))
+			and shown_e == int(screen.sim.side_morale("enemy")),
+		"W4 merged: the bars read the sim's real side morales (%d/%d)"
+			% [shown_p, shown_e])
 	var player_label: Label = screen.morale_label("player")
 	var enemy_label: Label = screen.morale_label("enemy")
-	_check(player_label.text == "%s 100" % screen._t("battle.morale")
-			and enemy_label.text == "%s 100" % screen._t("battle.morale"),
+	_check(player_label.text == "%s %d" % [screen._t("battle.morale"), shown_p]
+			and enemy_label.text == "%s %d" % [screen._t("battle.morale"), shown_e],
 		"the morale labels read battle.morale + the value (%s / %s)"
 			% [player_label.text, enemy_label.text])
 	var fill: ColorRect = screen.morale_fill("player")
 	var track: ColorRect = screen.morale_track("player")
-	_check(is_equal_approx(fill.size.x, track.size.x)
-			and fill.color.is_equal_approx(PaletteLib.GOOD),
-		"the fill is value/100 of the track in the GOOD tier at 100")
+	var expected_tier: Color = PaletteLib.WARN if shown_p <= 20 \
+		else PaletteLib.GOOD
+	_check(is_equal_approx(fill.size.x, track.size.x * float(shown_p) / 100.0)
+			and fill.color.is_equal_approx(expected_tier),
+		"the fill is value/100 of the track in the %s tier at %d"
+			% [("WARN" if shown_p <= 20 else "GOOD"), shown_p])
 
 	# The ≤ 20 tier is the §4.8a HUD-warning pin (display only) — exercised
 	# directly here because a pre-A sim cannot produce a real low value.
@@ -1003,24 +1010,25 @@ func _test_w4_morale_and_dispatch() -> void:
 			+ "(display only — player ships never auto-strike)")
 	screen._set_morale_fill(fill, track, 100)
 
-	# The §4.9b seams are dormant pre-B: no commander, empty anchor datum,
-	# the formation label hidden.
-	_check(not screen.fleet_commander_active(),
-		"W4 pre-B: no fleet-commander instance (the layer stays dormant)")
+	# The §4.9b layer is MERGED (W4-B): the commander instantiates, but the
+	# display stays LAYER × FORMATION gated — a pirate (swarm row) never
+	# shows an anchor line or label even with the commander live.
+	_check(screen.fleet_commander_active(),
+		"W4 merged: the fleet-commander instance is live (post-B)")
 	_check(screen.formation_anchor_line().is_empty(),
-		"W4 pre-B: the anchor-line datum is empty (the guarded seam)")
+		"W4 merged: a swarm-profile battle keeps the anchor-line datum empty")
 	_check(not screen.formation_label().visible,
-		"W4 pre-B: the formation label hides (nothing to label)")
+		"W4 merged: the formation label stays hidden for non-line formations")
 
-	# The dispatch guard: one full AI turn with fleet_commander.gd absent —
-	# the §4.9a decide runs exactly as before, one warning for the module.
+	# The dispatch path: one full AI turn WITH the commander — the §4.12.1.1
+	# decision still returns, and the absent-module warning never fired.
 	var decision: Dictionary = screen.run_ai_turn()
 	_check(decision.has("action"),
-		"W4 guard: run_ai_turn returns a §4.12.1.1 decision without "
-			+ "FleetCommander (%s)" % str(decision.get("action")))
-	_check(screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH) == 1,
-		"W4 guard: exactly one warning for the absent fleet_commander.gd "
-			+ "(got %d)" % screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH))
+		"W4 merged: run_ai_turn returns a §4.12.1.1 decision with the "
+			+ "commander live (%s)" % str(decision.get("action")))
+	_check(screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH) == 0,
+		"W4 merged: no absent-module warning (got %d)"
+			% screen.warning_count(ScreenLib.FLEET_COMMANDER_PATH))
 	await _free_screen(screen)
 
 	# The S21 fixture keys are byte-harmless pre-A: two identical SANDBOX
@@ -1042,27 +1050,34 @@ func _test_w4_morale_and_dispatch() -> void:
 	keyed_fixture["enemy_morale"] = 87
 	keyed_fixture["formation"] = "column"  # ≠ the pirate row's swarm
 	var keyed = await _new_screen_with_encounter(keyed_fixture)
-	var outcome_plain: Dictionary = plain.run_to_completion(20)
-	var outcome_keyed: Dictionary = keyed.run_to_completion(20)
-	_check(JSON.stringify(plain.sim.log_lines())
-			== JSON.stringify(keyed.sim.log_lines()),
-		"the morale/formation fixture keys are byte-harmless pre-A "
-			+ "(identical sim logs)")
-	_check(JSON.stringify(outcome_plain) == JSON.stringify(outcome_keyed),
-		"the morale/formation fixture keys are byte-harmless pre-A "
-			+ "(identical outcomes, result %s)" % str(outcome_keyed.get("result")))
+	# MERGED: the keys TAKE EFFECT — the fixture morale values ride the
+	# §4.12.1 config (the byte-harmless pre-A pin is superseded: with the
+	# keys live, different morale fixtures legitimately diverge).
+	_check(int(keyed.sim.side_morale("enemy")) == 87
+			and int(keyed.sim.side_morale("player")) == 13,
+		"the fixture morale keys reach the sim config (%d/%d)"
+			% [int(keyed.sim.side_morale("player")),
+				int(keyed.sim.side_morale("enemy"))])
 	_check(str(keyed._enemy_profile.get("formation", "")) == "column",
 		"the fixture formation override folds into the battle's profile row "
 			+ "(%s)" % str(keyed._enemy_profile.get("formation")))
 	_check(str(plain._enemy_profile.get("formation", "")) == "swarm",
 		"without the override the profile keeps the §4.10 row's formation "
 			+ "(%s)" % str(plain._enemy_profile.get("formation")))
-	# The formation display is gated on the fleet LAYER, not just the profile:
-	# a column-profile battle pre-B still shows nothing.
-	_check(not keyed.formation_label().visible
-			and keyed.formation_anchor_line().is_empty(),
-		"the formation display stays fleet-layer-gated pre-B "
-			+ "(profile alone never lights it)")
+	# The formation display is gated on the fleet LAYER × a line formation ×
+	# a LIVE battle (`sim.is_over()` clears the datum): fire the round-start
+	# dispatch seam directly (run_ai_turn would no-op on the player-first
+	# turn), then the column datum must be live while the swarm-profile
+	# plain battle keeps it empty.
+	keyed._ensure_fleet_orders()
+	var keyed_line: Dictionary = keyed.formation_anchor_line()
+	_check(not keyed_line.is_empty()
+			and str(keyed_line.get("formation", "")) == "column",
+		"the column-profile battle carries a live anchor-ray datum (%s)"
+			% str(keyed_line))
+	_check(plain.formation_anchor_line().is_empty(),
+		"the swarm-profile battle keeps the datum empty")
+	var outcome_keyed: Dictionary = keyed.run_to_completion(20)
 	# log.strike surfacing (§4.8a presentation, task item 5): the generic
 	# pipeline already renders the engine's strike / surrender_enemy kinds —
 	# nothing new added here.
