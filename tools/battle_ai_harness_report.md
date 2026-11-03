@@ -68,7 +68,7 @@ Metrics block (parsed back by the later section for the comparison):
 
 ## After (Phase-9 velocity engine)
 
-- recorded: 2026-11-03T11:59:09 (UTC)
+- recorded: 2026-11-03T12:26:43 (UTC)
 - engine: phase9-velocity — the Phase-9 velocity engine (`legal_velocities` / `apply_velocity`, arcs, per-side reload, sweep ram)
 - cap: 40 — the Phase-9 round cap 40 (§4.12.1, correction 12)
 - stall metric: reported by the engine (§4.11.9)
@@ -84,8 +84,8 @@ Metrics block (parsed back by the later section for the comparison):
 | damage enemy→player | 4544 |
 | decisions | 9106 |
 | legal-action rate | 100.00% |
-| decision timing avg | 0.269 ms |
-| decision timing max | 0.882 ms |
+| decision timing avg | 0.233 ms |
+| decision timing max | 0.869 ms |
 
 Metrics block (parsed back by the later section for the comparison):
 
@@ -97,15 +97,15 @@ Metrics block (parsed back by the later section for the comparison):
   "cap_used": 40,
   "damage_e2p": 4544,
   "damage_p2e": 7266,
-  "decision_avg_ms": 0.269017131561608,
-  "decision_max_ms": 0.882,
+  "decision_avg_ms": 0.232796068526246,
+  "decision_max_ms": 0.869,
   "decisions": 9106,
   "engine": "phase9-velocity",
   "illegal": 0,
   "legal_rate": 100.0,
   "seeds": 64,
   "stall_pct": 0.0,
-  "timestamp": "2026-11-03T11:59:09",
+  "timestamp": "2026-11-03T12:26:43",
   "wins_enemy": 0,
   "wins_player": 24,
   "wins_stall": 0
@@ -126,8 +126,8 @@ Band: avg rounds 12–25 · cap-hit < 10% · stall < 5% · legal-action 100% · 
 | damage player→enemy | 10640 | 7266 | — |
 | damage enemy→player | 5648 | 4544 | — |
 | legal-action rate | 100.00% | 100.00% | PASS |
-| decision avg ms | 0.130 | 0.269 | PASS |
-| decision max ms | 0.539 | 0.882 | — |
+| decision avg ms | 0.130 | 0.233 | PASS |
+| decision max ms | 0.539 | 0.869 | — |
 
 ## Breach analysis (recorded per the W3 instruction — no gameplay numbers tuned)
 
