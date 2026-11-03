@@ -191,6 +191,7 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
 | 11 | Data keys grow per stage (`formation` at 9C, `ai_level` at 9D); θ lands via per-slot edits | Three data/validator passes for dormant keys; the sandbox already proves the forward-compat schema pattern | **All nine profile keys land in the W2 data wave** (validator checks shape from day one; runtime consumers arrive per stage). θ finalization is a **named master task** after the last wave (doc amend + const sync + test re-run), not slot side-effects |
 | 12 | Round cap re-pin mentions the engine only | `battle_sim.gd` API `run_to_completion(policy, max_rounds: int = 30)` exposes the old cap as a default | §4.12.1 API default re-pinned to 40 in the docs wave (W1-B) |
 | 13 | Harness baseline is a 9E0 deliverable but harness is a 9A tool | Baseline must be captured on the **old** engine before the rewrite | W3-A runs harness on the old engine **at slot start**, writes the before-section of the report, then rewrites — 9E0 keeps its scope (skeleton, zero-write, seam) without a timing hazard |
+| 14 | §4.4a reload base cycle 3 turns (user-locked §0, 2026-11-03) | Live measurement (W3/W4 harnesses + the user's play read): a 3–4-round fire cycle on the 43-tile deployment makes combat outlast the approach — battles average 34–38 rounds with 44–62 % cap hits | **User-locked pacing amendment (2026-11-04): the base cycle halves** — `reload_turns = clamp(2 − floor(gunnery / 50), 1, 2) + low-crew` (2 below 50 gunnery, 1 at 50+, low crew +1). Lands with the W5 merge (sim const + test re-pins + harness re-run); the CEM tune learns the new pacing |
 
 ### Non-blocking suggestions (for the docs-review pass)
 
@@ -246,7 +247,7 @@ folded into the decision record; none invalidates the structure (9E0 → 9A →
    rules, feeds the duel term). AI picks by the deterministic §4.4b rule —
    always **outside** the T3 search enumeration.
 5. **Reload** (replaces `RELOAD_ROUNDS = 2`):
-   `reload_turns = clamp(3 − floor(gunnery / 50), 1, 3) + (crew_ratio < 0.5 ?
+   `reload_turns = clamp(2 − floor(gunnery / 50), 1, 2) + (crew_ratio < 0.5 ?
    1 : 0)`; flagship uses `effective_gunnery`, escorts their captain card's
    `skills.gunnery`, AI canon cards likewise, legacy fleets `10 + 10 × tier`;
    `crew_ratio = crew / crew_min`; sides reload independently

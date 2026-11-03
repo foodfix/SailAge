@@ -280,9 +280,16 @@ immunity are retired with the marker system (§4.11.11.1).
 
 ### 4.4a Reload (Phase 9 — per side)
 
-- **Formula (decision 5, replaces `RELOAD_ROUNDS = 2`):**
-  `reload_turns = clamp(3 − floor(gunnery / 50), 1, 3) +
-  (crew_ratio < 0.5 ? 1 : 0)` with `crew_ratio = crew / crew_min`.
+- **Formula (decision 5 as amended by the W5 pacing correction 14 — replaces
+  `RELOAD_ROUNDS = 2`):**
+  `reload_turns = clamp(2 − floor(gunnery / 50), 1, 2) +
+  (crew_ratio < 0.5 ? 1 : 0)` with `crew_ratio = crew / crew_min` —
+  **2 turns below 50 gunnery, 1 turn at 50+** (a hull at full gunnery fires
+  every round), low crew adds a turn. *(User-locked pacing amendment,
+  2026-11-04: the source-plan `3 − gunnery/50` clamp left a typical hull
+  firing every 3–4 rounds — on the 43-tile deployment that made combat
+  outlast the approach; the fun-first ruling halves the base cycle while
+  keeping the gunnery perk.)*
 - **Gunnery source (pinned):** the player flagship uses `effective_gunnery`
   (the §4.4 term); player escorts and AI captain-card ships use their captain
   card's `skills.gunnery`; a legacy fleet without cards falls back to
