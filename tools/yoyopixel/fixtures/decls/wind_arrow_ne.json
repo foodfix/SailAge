@@ -1,0 +1,21 @@
+{
+  "id": "wind_arrow_ne",
+  "file": "expected/wind_arrow_ne.png",
+  "mode": "string-map",
+  "width": 7,
+  "height": 7,
+  "png": "indexed",
+  "palette": {
+    "a": "#e8e0d0",
+    ".": "transparent"
+  },
+  "rows": [
+    "...a...",
+    "..aaa..",
+    ".aaaaa.",
+    "aaaaaaa",
+    "...a...",
+    "...a...",
+    "...a..."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "chest_8",
+  "file": "expected/chest_8.png",
+  "mode": "string-map",
+  "png": "rgba",
+  "palette": {
+    "B": "#8b4513",
+    "L": "#cd853f",
+    "G": "#d4af37",
+    "D": "#5c2d00"
+  },
+  "rows": [
+    "........",
+    ".BBBBBB.",
+    "BLLLLLLD",
+    "BLGGGLLB",
+    "BBBBBBBB",
+    "BLLLLLLD",
+    "BLLLLLLD",
+    "BDDDDDDB"
+  ]
+}

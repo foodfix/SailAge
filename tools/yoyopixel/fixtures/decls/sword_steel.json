@@ -1,0 +1,41 @@
+{
+  "id": "sword_steel",
+  "file": "expected/sword_steel.png",
+  "mode": "template",
+  "scale": 2,
+  "png": "indexed",
+  "background": "#c0c0b8",
+  "grid": [
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    "..M..",
+    ".MMM.",
+    "GGGGG",
+    "..W..",
+    "..W..",
+    "..W..",
+    "..W..",
+    ".GgG."
+  ],
+  "materials": {
+    "M": "metal",
+    "G": "gold",
+    "g": "gem",
+    "W": { "type": "wood_dark" }
+  },
+  "colors": {
+    "M": "#485868",
+    "G": "#b08020",
+    "g": "#c83030",
+    "W": "#4a2810"
+  }
+}
