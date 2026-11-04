@@ -22,6 +22,16 @@ extends Control
 ## ledger (weather damage → mutiny → desertion → greeting) are shown one at a
 ## time in fixed order. T9/T10 call [method show_dialogs]; results are
 ## delivered by each dialog's own signals (docs/90-* §7).
+##
+## **Phase-10 W4-B sweep** (§4.9 no-per-screen-styling): this file carries no
+## per-screen styling calls — chrome comes from the shared theme
+## (`ui_theme.gd`, applied at startup), semantic *state* colors (morale/supply
+## tiers, storm, trim highlight, the Explore hint) ride `modulate` (the same
+## state-tint channel `UiKit.button`'s press flash uses), secondary text uses
+## the theme's `Dim` Label variation, icons/arrows resolve through the
+## `UiKit.icon_texture` registry (W3 ids; a miss keeps the drawn/text
+## placeholder — §4.8, §4.9 "icon params"), and the toast fade reads the
+## §4.7.17 constants pinned on the kit.
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -43,6 +53,10 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 ## §4.5 intel window (§4.2 amendment, 2026-11-03): the HUD button opens the
 ## one dedicated modal hosting the five information surfaces.
 const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
+## Phase-10 kit seams (§4.9): the icon registry (resource icons + the
+## wind/current arrow sprites) and the §4.7.17 toast-fade constants.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiMotionLib := preload("res://scripts/ui_motion.gd")
 
 ## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
 ## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
@@ -74,6 +88,11 @@ const CURRENT_ARROW_OFFSET := Vector2(104, 12)
 const CURRENT_CAPTION_OFFSET := Vector2(120, 0)
 ## Compass-arrow placeholder size in px (drawn, no texture — §4.8).
 const ARROW_LENGTH := 14.0
+## The wind/current arrow *sprites* are 32×32 (§4.8.8: icons render 1× inline);
+## the drawn fallback below keeps its own pinned ARROW_LENGTH geometry.
+const ARROW_SPRITE_PX := 32
+## Resource icons ride their 32px bar rows flush (§4.8.8: 1× inline).
+const RESOURCE_ICON_PX := 32
 
 ## Emitted when the last queued dialog has been dismissed.
 signal dialogs_finished
@@ -161,6 +180,8 @@ var _mutiny_dialog = null
 var _mutiny_offer: Dictionary = {}
 ## Toast generation counter so a replaced toast does not hide its successor.
 var _toast_generation := 0
+## The toast's pending fade tween (§4.7.17; killed when a newer toast lands).
+var _toast_fade: Tween = null
 ## Storm-flash tween (created/destroyed by [_apply_weather]).
 var _weather_tween: Tween = null
 ## The weather value currently rendered ("calm"|"fair"|"strong"|"storm"), so a
@@ -182,20 +203,24 @@ var _calendar_displayed: Dictionary = {"year": 0, "month": 0}
 func _ready() -> void:
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_bar.color = PaletteLib.PANEL_BG
-	for label in [
-		_day_label, _gold_label, _morale_label, _area_label, _provisions_label,
-		_water_label, _crew_label, _cargo_label, _speed_label, _weather_label,
-		_calendar_label, _wind_label, _current_label,
-	]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# §4.9: label ink is the theme's (Label = TEXT); no per-screen overrides.
+	# The minimap caption is secondary text → the theme's `Dim` variation.
+	_minimap_title.theme_type_variation = "Dim"
 	_toast.visible = false
-	_toast_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_toast.add_theme_stylebox_override("panel", _toast_style())
+	# §4.9 sweep: the toast panel keeps the scene node (the funnel's test
+	# seam) and picks up the theme's PanelContainer stylebox; the label's
+	# ink is the theme's TEXT.
+	# §4.8.8 resource icons (W3 ids) beside their readouts — a registry miss
+	# keeps the text-only readout (§4.9 icon params). The HUD renders no
+	# durability readout, so that icon id has no slot here.
+	_attach_resource_icon("coin", _gold_label)
+	_attach_resource_icon("morale", _morale_label)
+	_attach_resource_icon("provisions", _provisions_label)
+	_attach_resource_icon("crew", _crew_label)
 	# The bars/minimap swallow clicks so a click on the HUD never steps the
 	# fleet; the root stays IGNORE so the rest of the map receives clicks.
 	_minimap.mouse_filter = Control.MOUSE_FILTER_STOP
-	_minimap_title.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_explore_hint.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	_explore_hint.modulate = PaletteLib.ACCENT
 	_explore_hint.text = I18n.t_key("discovery.something_near")
 	_explore_button.text = I18n.t_key("discovery.explore")
 	_explore_button.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
@@ -243,6 +268,26 @@ func _ready() -> void:
 func _on_process_frame() -> void:
 	if _alloc_pending_shown != CharacterLib.alloc_pending():
 		_apply_alloc_badge()
+
+
+## §4.8.8: one 32px icon inline before a readout label, inserted in the same
+## bar row (HBox). Registry miss ⇒ nothing is added — the text-only readout
+## is the fallback (§4.9 icon params; the registry fills at the W4 merges).
+func _attach_resource_icon(icon_id: String, label: Control) -> void:
+	var tex := UiKitLib.icon_texture(icon_id)
+	if tex == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "Icon_%s" % icon_id
+	icon.texture = tex
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.custom_minimum_size = Vector2(RESOURCE_ICON_PX, RESOURCE_ICON_PX)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := label.get_parent() as Container
+	row.add_child(icon)
+	row.move_child(icon, label.get_index())
 
 
 ## The badge: a dot + count on the intel button (§4.12.2, amended 2026-11-03),
@@ -442,16 +487,33 @@ func has_modal() -> bool:
 	return _dialog != null or not _dialog_queue.is_empty()
 
 
-## Transient bottom-center toast (2.5s, max one; docs/80-* §4.7).
+## Transient bottom-center toast (2.5s, max one; docs/80-* §4.7). The
+## §4.7.17 fade pair rides the kit's pinned constants through `UiMotion`
+## (fade-in 100 ms on show, fade-out 150 ms before hide; motion off ⇒
+## instant). The funnel stays the one owner of S3/S4 toasts — max-1-visible
+## (the generation counter) and the 2.5 s lifetime are unchanged.
 func toast_text(text: String) -> void:
 	_toast_generation += 1
 	var generation := _toast_generation
 	_toast_label.text = text
 	_toast.visible = true
+	# A fade-out still running for the replaced toast must not fight this
+	# fade-in (the tween is per-HUD, guarded like the kit's flash meta).
+	if _toast_fade != null and _toast_fade.is_valid():
+		_toast_fade.kill()
+	_toast_fade = UiMotionLib.fade(_toast, _toast.modulate.a, 1.0,
+		UiKitLib.TOAST_FADE_IN_MS)
 	await get_tree().create_timer(TOAST_SECONDS).timeout
 	# A newer toast replaced this one; leave it alone.
-	if generation == _toast_generation:
-		_toast.visible = false
+	if generation != _toast_generation:
+		return
+	_toast_fade = UiMotionLib.fade(_toast, _toast.modulate.a, 0.0,
+		UiKitLib.TOAST_FADE_OUT_MS)
+	if _toast_fade != null:
+		await _toast_fade.finished
+		if generation != _toast_generation:
+			return  # replaced mid-fade-out: the newer toast owns the panel
+	_toast.visible = false
 
 
 ## Toast from a ui_strings key. Returns false (and shows nothing) when the key
@@ -555,12 +617,10 @@ func _refresh_top() -> void:
 			I18n.fmt("world.morale", {"amount": GameState.morale}),
 			I18n.t_key("world.morale.%s" % morale_tier(GameState.morale)),
 		]
-		_morale_label.add_theme_color_override(
-			"font_color", morale_color(GameState.morale)
-		)
+		_morale_label.modulate = morale_color(GameState.morale)
 	else:
 		_morale_label.text = I18n.fmt("world.morale", {"amount": "-"})
-		_morale_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_morale_label.modulate = Color.WHITE
 
 	_area_label.text = _area_text()
 
@@ -570,8 +630,8 @@ func _refresh_bottom() -> void:
 	if not has_game:
 		_provisions_label.text = supply_line("provisions", "-", "-")
 		_water_label.text = supply_line("water", "-", "-")
-		_provisions_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-		_water_label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		_provisions_label.modulate = Color.WHITE
+		_water_label.modulate = Color.WHITE
 		_crew_label.text = I18n.fmt("world.crew", {"crew": "-", "max": "-"})
 		_cargo_label.text = I18n.fmt(
 			"world.cargo", {"amount": "-", "capacity": "-"}
@@ -588,12 +648,8 @@ func _refresh_bottom() -> void:
 		"water", FleetLib.supplies("water"), water_days
 	)
 	# §4.5 amended: the same §4.6.1 days tiers the provisioning prompt uses.
-	_provisions_label.add_theme_color_override(
-		"font_color", supply_days_color(provisions_days)
-	)
-	_water_label.add_theme_color_override(
-		"font_color", supply_days_color(water_days)
-	)
+	_provisions_label.modulate = supply_days_color(provisions_days)
+	_water_label.modulate = supply_days_color(water_days)
 	var crew_max := 0
 	var used := 0
 	for ship in GameState.fleet:
@@ -621,10 +677,10 @@ func _apply_weather(weather: String) -> void:
 	_displayed_weather = weather
 	_weather_label.text = I18n.t_key("world.weather.%s" % weather)
 	# §4.5: in storm the weather glyph flashes (0.5s cycle); otherwise steady.
-	_weather_label.add_theme_color_override(
-		"font_color",
-		PaletteLib.BAD if weather == "storm" else PaletteLib.TEXT
-	)
+	# The warning tint rides `modulate` (the sweep's state-color channel) —
+	# the storm flash tween animates only `modulate:a`, so the tint survives.
+	_weather_label.modulate = PaletteLib.BAD if weather == "storm" \
+		else Color.WHITE
 	if weather == "storm":
 		_start_storm_flash()
 	else:
@@ -752,10 +808,9 @@ func _refresh_trim_chip() -> void:
 	_trim_chip.text = _fmt_key("world.trim.chip", {
 		"state": _t_key("world.trim.%s" % _trim_state_displayed),
 	})
-	_trim_chip.add_theme_color_override("font_color",
-		PaletteLib.ACCENT
-		if _trim_state_displayed != SailingSimLib.DEFAULT_TRIM
-		else PaletteLib.TEXT)
+	_trim_chip.modulate = PaletteLib.ACCENT \
+		if _trim_state_displayed != SailingSimLib.DEFAULT_TRIM \
+		else Color.WHITE
 
 
 ## Bearing the wind arrow is drawn at (degrees clockwise from N; N=0, E=90…).
@@ -804,8 +859,9 @@ static func _compass_bearing(dir_id: String) -> float:
 	return float(index) * 45.0
 
 
-## Draws one placeholder compass arrow (§4.8: drawn shapes, no textures): a
-## shaft with a V head pointing along the 8-dir id's bearing.
+## Draws one placeholder compass arrow — the registry-miss fallback (§4.8.10:
+## the sprites replace it when `wind_arrow_`/`current_arrow_{dir}` resolve):
+## a shaft with a V head pointing along the 8-dir id's bearing.
 func _draw_compass_arrow(centre: Vector2, dir_id: String, color: Color) -> void:
 	var bearing := _compass_bearing(dir_id)
 	if bearing < 0.0:
@@ -1095,15 +1151,42 @@ func _draw() -> void:
 
 	draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
 
-	# Phase-6 §2.9 arrows (placeholder drawn shapes): the wind arrow beside
-	# the weather glyph, and the current arrow — only on a current tile.
-	_draw_compass_arrow(
-		_weather_label.position + WIND_ARROW_OFFSET,
-		_wind_dir_displayed, PaletteLib.TEXT)
+	# Phase-6 §2.9 arrows + Phase-10 sprite swap (§4.8.10): the HUD arrows
+	# use the `wind_arrow_{dir}` / `current_arrow_{dir}` registry ids (lower
+	# 8-dir ids per the §4.8.6 table); a registry miss keeps the drawn
+	# placeholder exactly as before — wind `TEXT`, current `ACCENT`. The
+	# current arrow renders only while the fleet stands on a current tile.
+	var wind_centre := _weather_label.position + WIND_ARROW_OFFSET
+	var wind_sprite := _arrow_sprite("wind_arrow_", _wind_dir_displayed)
+	if wind_sprite != null:
+		draw_texture_rect(wind_sprite, _arrow_sprite_rect(wind_centre), false)
+	else:
+		_draw_compass_arrow(wind_centre, _wind_dir_displayed, PaletteLib.TEXT)
 	if current_arrow_visible():
-		_draw_compass_arrow(
-			_minimap_title.position + CURRENT_ARROW_OFFSET,
-			str(_current_displayed.get("dir", "")), PaletteLib.ACCENT)
+		var current_centre := _minimap_title.position + CURRENT_ARROW_OFFSET
+		var current_dir := str(_current_displayed.get("dir", ""))
+		var current_sprite := _arrow_sprite("current_arrow_", current_dir)
+		if current_sprite != null:
+			draw_texture_rect(current_sprite,
+				_arrow_sprite_rect(current_centre), false)
+		else:
+			_draw_compass_arrow(current_centre, current_dir, PaletteLib.ACCENT)
+
+
+## The arrow sprite for a drawn-fallback dir id (`""` when the dir is outside
+## the 8-dir domain or the registry has no texture yet — §4.8.10 pins the
+## ids; the registry fills at the W4 merges).
+func _arrow_sprite(prefix: String, dir_id: String) -> Texture2D:
+	var index := SailingSimLib.heading_index(dir_id)
+	if index < 0:
+		return null
+	return UiKitLib.icon_texture("%s%s" % [prefix, dir_id.to_lower()])
+
+
+## Screen rect centred on the drawn-fallback anchor for a 32px sprite.
+func _arrow_sprite_rect(centre: Vector2) -> Rect2:
+	var size := Vector2(ARROW_SPRITE_PX, ARROW_SPRITE_PX)
+	return Rect2(centre - size * 0.5, size)
 
 
 ## Screen offset (inside the box) of a 2×2 marker centred on `cell`, or
@@ -1277,12 +1360,3 @@ func _close_dialog() -> void:
 	_dialog.queue_free()
 	_dialog = null
 	_show_next_dialog()
-
-
-func _toast_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	style.set_content_margin_all(PaletteLib.BASE_UNIT)
-	return style

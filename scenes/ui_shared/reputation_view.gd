@@ -22,8 +22,10 @@ const CharacterLib := preload("res://scripts/player/character.gd")
 
 
 func _ready() -> void:
-	_title.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9 sweep (W4-B): the title keeps its ACCENT mark via `modulate`;
+	# secondary hint text uses the theme's `Dim` variation.
+	_title.modulate = PaletteLib.ACCENT
+	_hint.theme_type_variation = "Dim"
 	EventBus.locale_changed.connect(_on_locale_changed)
 	EventBus.port_entered.connect(_on_port_entered)
 
@@ -47,17 +49,16 @@ func refresh() -> void:
 		var value := CharacterLib.reputation(other_id)
 		var name_label := _make_label(I18n.t(nation.get("name", {})))
 		name_label.name = "Rep_%s" % other_id
+		# The player's own nation keeps its ACCENT mark (§4.9 sweep:
+		# state tint via `modulate`).
 		if other_id == nation_id:
-			name_label.add_theme_color_override("font_color", PaletteLib.ACCENT)
+			name_label.modulate = PaletteLib.ACCENT
 		var value_label := _make_label(format_signed(value))
 		value_label.name = "Value_%s" % other_id
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		value_label.custom_minimum_size.x = 96
-		value_label.add_theme_color_override(
-			"font_color",
-			PaletteLib.GOOD if value > 0
-			else (PaletteLib.BAD if value < 0 else PaletteLib.TEXT)
-		)
+		value_label.modulate = PaletteLib.GOOD if value > 0 \
+			else (PaletteLib.BAD if value < 0 else Color.WHITE)
 		_rows.add_child(name_label)
 		_rows.add_child(value_label)
 
@@ -70,7 +71,7 @@ func row_count() -> int:
 func _make_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# Ink is the theme's TEXT (§4.9 sweep); rows add `modulate` state tints.
 	return label
 
 

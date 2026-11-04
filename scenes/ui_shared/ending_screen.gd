@@ -44,11 +44,11 @@ var summary: Dictionary = {}
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	for label in [_title, _subtitle]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_subtitle.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9 sweep (W4-B): the panel chrome is the theme's PanelContainer
+	# stylebox (the scene's local stylebox resource is gone); the subtitle is
+	# secondary text → the `Dim` variation. The title's 32px is the
+	# scene's own pin (`ending_screen.tscn`).
+	_subtitle.theme_type_variation = "Dim"
 	_continue.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_continue.pressed.connect(continue_to_title)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -144,7 +144,7 @@ func _add_row(key: String, values: Dictionary) -> void:
 	var label := Label.new()
 	label.name = "Row_%s" % key.replace(".", "_")
 	label.text = I18n.fmt(key, values)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# Ink is the theme's TEXT (§4.9 sweep).
 	_rows.add_child(label)
 
 
@@ -294,8 +294,10 @@ func _add_rpg_row(row_name: String, text: String, dim := false) -> void:
 	var label := Label.new()
 	label.name = row_name
 	label.text = text
-	label.add_theme_color_override(
-		"font_color", PaletteLib.PANEL_LINE if dim else PaletteLib.TEXT)
+	# §4.9 sweep: dim rows are the theme's `Dim` variation; otherwise the
+	# theme's TEXT ink.
+	if dim:
+		label.theme_type_variation = "Dim"
 	_rpg_rows.add_child(label)
 
 
@@ -311,12 +313,6 @@ func _clear() -> void:
 		child.queue_free()
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 func _on_locale_changed(_locale: String) -> void:

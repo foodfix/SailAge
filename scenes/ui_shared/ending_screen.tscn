@@ -1,14 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scenes/ui_shared/ending_screen.gd" id="1_ending"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.109804, 0.133333, 0.188235, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.27451, 0.329412, 0.407843, 1)
 
 [node name="EndingScreen" type="Control"]
 layout_mode = 3

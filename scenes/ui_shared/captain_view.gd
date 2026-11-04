@@ -46,9 +46,9 @@ var _card: Control = null
 
 
 func _ready() -> void:
-	for label in [_nation, _levelup]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_levelup.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	# §4.9 sweep (W4-B): ink is the theme's TEXT; the level-up banner keeps
+	# its ACCENT highlight via `modulate`.
+	_levelup.modulate = PaletteLib.ACCENT
 	_levelup.visible = false
 
 	# The ONE §4.12 card (the player entry, allocation steppers on), inside
@@ -110,7 +110,7 @@ func player_card() -> Control:
 func _make_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# Ink is the theme's TEXT (§4.9 sweep).
 	return label
 
 

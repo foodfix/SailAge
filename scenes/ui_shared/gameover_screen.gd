@@ -50,11 +50,10 @@ var _leaving := false
 
 func _ready() -> void:
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_reason.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_title.add_theme_font_size_override("font_size", 48)
+	# §4.9 sweep (W4-B): panel chrome + button ink from the theme; the reason
+	# line keeps its ACCENT tint via `modulate`. The title's 48px is the
+	# scene's own pin (`gameover_screen.tscn`).
+	_reason.modulate = PaletteLib.ACCENT
 	_hint.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_hint.pressed.connect(func() -> void: return_to_title())
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -132,9 +131,3 @@ func _on_locale_changed(_locale: String) -> void:
 	_bind()
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style

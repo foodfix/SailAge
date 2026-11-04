@@ -1346,15 +1346,15 @@ func _test_hud_signal_only() -> void:
 		I18n.fmt("world.morale", {"amount": 35}),
 		I18n.t_key("world.morale.dangerous"),
 	], "morale 35 reads Dangerous (%s)" % morale_label.text)
-	_check(morale_label.get_theme_color("font_color") == PaletteLib.WARN,
+	_check(morale_label.modulate == PaletteLib.WARN,
 		"morale 35 is tier-colored WARN")
 	GameState.morale = 10
 	EventBus.fleet_changed.emit()
-	_check(morale_label.get_theme_color("font_color") == PaletteLib.BAD,
+	_check(morale_label.modulate == PaletteLib.BAD,
 		"morale 10 is tier-colored BAD")
 	GameState.morale = 70
 	EventBus.fleet_changed.emit()
-	_check(morale_label.get_theme_color("font_color") == PaletteLib.GOOD,
+	_check(morale_label.modulate == PaletteLib.GOOD,
 		"morale 70 is tier-colored GOOD")
 
 	# Bottom bar formats (`80-*` §4.5 amended): supplies carry amount + days,
@@ -1378,12 +1378,12 @@ func _test_hud_signal_only() -> void:
 	ship["provisions"] = 0
 	ship["water"] = 0
 	EventBus.fleet_changed.emit()
-	_check((provisions_bar.get_theme_color("font_color") == PaletteLib.BAD),
+	_check((provisions_bar.modulate == PaletteLib.BAD),
 		"0 days of provisions is tier-colored BAD")
 	ship["provisions"] = 45
 	ship["water"] = 45
 	EventBus.fleet_changed.emit()
-	_check((provisions_bar.get_theme_color("font_color") == PaletteLib.GOOD),
+	_check((provisions_bar.modulate == PaletteLib.GOOD),
 		"15 days of provisions is tier-colored GOOD")
 
 	# Area label: nearest known port within 16 tiles, else world.open_sea.
@@ -1422,7 +1422,7 @@ func _test_hud_signal_only() -> void:
 	EventBus.day_advanced.emit(GameState.day)
 	_check(weather_label.text == I18n.t_key("world.weather.storm"),
 		"weather label follows the storm roll (%s)" % weather_label.text)
-	_check(weather_label.get_theme_color("font_color") == PaletteLib.BAD,
+	_check(weather_label.modulate == PaletteLib.BAD,
 		"storm weather glyph is warning-colored")
 	_check(weather_label.modulate.a <= 1.0 and hud._weather_tween != null,
 		"storm glyph starts its 0.5s flash tween")

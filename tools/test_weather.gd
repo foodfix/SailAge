@@ -891,7 +891,7 @@ func _test_hud_weather() -> void:
 	EventBus.day_advanced.emit(GameState.day)
 	_check(weather_label.text == I18n.t_key("world.weather.storm"),
 		"storm renders the world.weather.storm string (%s)" % weather_label.text)
-	_check(weather_label.get_theme_color("font_color") == PaletteLib.BAD,
+	_check(weather_label.modulate == PaletteLib.BAD,
 		"the storm glyph is warning-coloured")
 	_check(hud.is_storm_flashing(), "the storm glyph starts flashing")
 	_check(is_equal_approx(HudLib.STORM_FLASH_CYCLE_SECONDS, 0.5),

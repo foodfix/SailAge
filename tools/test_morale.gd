@@ -1194,7 +1194,7 @@ func _test_hud_morale_tiers() -> void:
 		], "morale %d reads %s (%s)" % [value, tier, label.text])
 		_check(HudLib.morale_tier(value) == tier,
 			"morale_tier(%d) == %s (got %s)" % [value, tier, HudLib.morale_tier(value)])
-		_check(label.get_theme_color("font_color") == row[2],
+		_check(label.modulate == row[2],
 			"morale %d is %s-colored" % [value, tier])
 
 	# The §4.5 rule in words: yellow < 40, red < 20.

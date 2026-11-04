@@ -119,11 +119,11 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	for label in [_title, _quest_slots]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_quest_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9 sweep (W4-B): panel + tab chrome come from the theme; secondary
+	# text uses the `Dim` variation. The active tab keeps its ACCENT mark via
+	# `modulate` (see [_bind_tabs]).
+	_quest_empty.theme_type_variation = "Dim"
+	_hint.theme_type_variation = "Dim"
 	_close_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_close_button.pressed.connect(close)
 	_captain_tab.pressed.connect(select_tab.bind(TAB_CAPTAIN))
@@ -323,9 +323,9 @@ func _bind_tabs() -> void:
 		# 海图 is an action, never "active" (§4.5 amended).
 		var active: bool = _tab == str(pair[0]) and str(pair[0]) != TAB_CHART
 		button.button_pressed = active
-		button.add_theme_color_override(
-			"font_color", PaletteLib.ACCENT if active else PaletteLib.TEXT
-		)
+		# The active-tab ACCENT mark rides `modulate` (§4.9 sweep): WHITE
+		# leaves the theme's Button ink untouched.
+		button.modulate = PaletteLib.ACCENT if active else Color.WHITE
 
 
 ## The 海图 entry: closes this window (the chart is a fullscreen modal of its
@@ -375,15 +375,13 @@ func _build_quests() -> void:
 func _build_quest_row(quest: Dictionary) -> Control:
 	var row := VBoxContainer.new()
 	row.name = "Quest_%s" % str(quest.get("instance_id", ""))
-	row.add_theme_constant_override("separation", 4)
 
 	var top := HBoxContainer.new()
 	top.name = "Top"
-	top.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var tag := _make_label(I18n.t_key(QuestGenLib.type_key(quest)))
 	tag.name = "Tag"
 	tag.custom_minimum_size.x = 120
-	tag.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	tag.modulate = PaletteLib.ACCENT
 	top.add_child(tag)
 	var objective := _make_label(QuestGenLib.objective_text(quest))
 	objective.name = "Objective"
@@ -394,13 +392,12 @@ func _build_quest_row(quest: Dictionary) -> Control:
 	}))
 	days.name = "Days"
 	days.custom_minimum_size.x = 140
-	days.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	days.theme_type_variation = "Dim"
 	top.add_child(days)
 	row.add_child(top)
 
 	var bottom := HBoxContainer.new()
 	bottom.name = "Bottom"
-	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	# `quest.dest` always names the port, even when the player has never been
 	# there (docs/80-* §4.7.3).
 	var destination := _make_label(I18n.fmt("quest.dest", {
@@ -408,7 +405,7 @@ func _build_quest_row(quest: Dictionary) -> Control:
 	}))
 	destination.name = "Destination"
 	destination.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	destination.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	destination.theme_type_variation = "Dim"
 	bottom.add_child(destination)
 	var abandon := Button.new()
 	abandon.name = "Abandon"
@@ -445,7 +442,8 @@ func abandon_quest(quest: Dictionary) -> bool:
 func _make_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# Ink is the theme's TEXT (§4.9 sweep); callers add `Dim`/`modulate` for
+	# secondary/state text.
 	return label
 
 
@@ -453,14 +451,6 @@ func _clear(container: Node) -> void:
 	for child in container.get_children():
 		container.remove_child(child)
 		child.queue_free()
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 func _on_locale_changed(_locale: String) -> void:
