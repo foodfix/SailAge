@@ -885,19 +885,24 @@ def icon_skull() -> Canvas:
 
 
 def icon_crown() -> Canvas:
-    """Ornate five-point crown, UW2 restraint (batch-1 review): five tapered
-    teardrop spires (2px shaft widening to a 4px belly), a thin band (1px
-    ACCENT_HI top edge / ACCENT face / ACCENT_LO base), bead dots between the
-    points, and a single cross-sparkle on the center gem only."""
+    """Ornate five-point crown, round-3: five tapered teardrop spires (lit
+    ACCENT_HI tip bead under the outlined apex, 3px ACCENT shaft widening
+    to a 4px belly scaled with the spire height) rising from the restored
+    full band — 1px ACCENT_HI top edge, 2px ACCENT face, 1px ACCENT_LO
+    bottom edge plus an ACCENT_LO shadow row under it — with ACCENT_HI
+    bead dots seated into the band face at the valley positions, and the
+    single ICON_HI cross-sparkle gem on the tall center spire."""
     c = Canvas(32, 32)
 
     def spire(cx: int, apex_y: int, shaft: tuple[int, int],
               belly_x0: int, belly_x1: int, belly_y: int) -> None:
-        # tapered teardrop: lit tip bead, 3px shaft (1px gold core after the
-        # outline erosion), 4px belly whose length scales with the height
+        # tapered teardrop: apex tip (the outline erosion turns it into the
+        # point cap), 3px shaft with a lit ACCENT_HI bead just under the
+        # tip, 4px belly whose length scales with the height
         c.put(cx, apex_y, "A")                  # tip bead (center column)
         for y in range(apex_y + 1, belly_y):
             c.hline(shaft[0], shaft[1], y, "a")
+        c.put(cx, apex_y + 1, "A")              # lit bead survives erosion
         for y in range(belly_y, 21):
             c.hline(belly_x0, belly_x1, y, "a")
 
@@ -906,16 +911,20 @@ def icon_crown() -> Canvas:
     spire(10, 10, (9, 11), 9, 12, 15)       # inner pair
     spire(21, 10, (20, 22), 19, 22, 15)
     spire(15, 7, (14, 16), 14, 17, 14)      # tall center
-    # bead dots between the points, set into the band face
+    # band: 1px ACCENT_HI top edge / 2px ACCENT face / 1px ACCENT_LO bottom
+    # edge, with an ACCENT_LO shadow row under the band
+    c.hline(4, 27, 21, "A")
+    c.hline(4, 27, 22, "a")
+    c.hline(4, 27, 23, "a")
+    c.hline(4, 27, 24, "l")
+    c.hline(4, 27, 25, "l")
+    # bead dots between the points, seated into the band face at the
+    # valleys (drawn after the band so the face does not overwrite them)
     for bx in (8, 13, 18, 23):
-        c.put(bx, 22, "h")
+        c.put(bx, 22, "A")
     # center gem + the only cross-sparkle
     c.vline(15, 11, 13, "h")
     _sparkle(c, 15, 10, "h")
-    # band: 1px ACCENT_HI top edge / ACCENT face / ACCENT_LO base
-    c.hline(4, 27, 21, "A")
-    c.hline(4, 27, 22, "a")
-    c.hline(4, 27, 23, "l")
     c.outline()
     return c
 
@@ -1351,25 +1360,47 @@ def good_cotton_cloth() -> Canvas:
 
 
 def good_silk() -> Canvas:
-    """Silk bolt, UW2 restraint (batch-1 review): a neat folded bolt — three
-    clean horizontal folds (COAST_SEA body, one ICON_HI sheen line per fold,
-    an ICON_BG_LO shadow line under each), a gold trim along the wrap edge
-    with a small tassel, one ICON_HI sparkle on the fold crest.  No diagonal
-    streaks, no roll spiral."""
+    """Silk bolt, UW2 goods classic (round-3): a side-lying roll.  The end
+    face is a small spiral — concentric COAST_SEA fabric rings separated by
+    a thin ICON_BG_LO groove, an ICON_HI glint pixel over an ACCENT_HI
+    center bead — with a 1px ACCENT trim line wrapping the roll end.  The
+    bolt body runs horizontally as two stacked fabric runs (COAST_SEA base,
+    one ICON_HI sheen line along each run's top edge, an ICON_BG_LO shade
+    under each); the outer end drapes down with an ICON_MID diagonal fold
+    corner and an ACCENT tassel (knot + three short strands).  One ICON_HI
+    cross-sparkle sits on the upper sheen line — the spiral and the
+    horizontal fabric are the two 16px readability anchors."""
     c = Canvas(32, 32)
-    c.rect(5, 11, 24, 24, "c")                  # bolt body (COAST_SEA)
-    # three folds: ICON_HI sheen on each crest, ICON_BG_LO shadow under each
-    for crest, shadow in ((12, 15), (16, 19), (20, 23)):
-        c.hline(6, 23, crest, "h")
-        c.hline(6, 23, shadow, "B")
-    # gold trim along the wrap edge (the bolt's left end)
-    c.vline(6, 12, 23, "a")
-    # one ICON_HI sparkle on the top fold's crest
-    _sparkle(c, 20, 13, "h")
-    # small tassel hanging off the wrap edge
-    c.put(6, 25, "a")                           # cord
-    c.put(6, 26, "A")                           # knot
-    c.put(5, 27, "a"); c.put(6, 27, "l"); c.put(7, 27, "a")
+    # roll end face: COAST_SEA disc, one thin ICON_BG_LO groove ring around
+    # the center (two fabric rings + the rim, with the ACCENT_HI bead eye)
+    c.disc(25, 16, 5, "c")
+    c.ring(25, 16, 3, 1, "B")
+    # bolt body: two stacked fabric runs, x5..22, y13..20 (row 13 is the
+    # silhouette cap the outline erosion claims; sheens sit one row in)
+    c.rect(5, 13, 22, 16, "c")
+    c.hline(5, 22, 14, "h")                     # run 1 sheen
+    c.hline(5, 22, 16, "B")                     # run 1 underside
+    c.hline(5, 22, 17, "h")                     # run 2 sheen
+    c.rect(5, 18, 22, 19, "c")
+    c.hline(5, 22, 20, "B")                     # run 2 underside
+    # soft end-drape at the outer end: hangs 3px, diagonal fold corner
+    c.hline(5, 11, 21, "c")
+    c.hline(5, 10, 22, "c")
+    c.hline(5, 9, 23, "c")                      # sacrificial outline fringe
+    c.put(10, 21, "m")                          # ICON_MID fold corner
+    c.put(9, 22, "m")
+    # gold trim wrapping the roll end (full roll height at the junction)
+    c.vline(22, 12, 21, "a")
+    # spiral center: ACCENT_HI bead + ICON_HI glint at the center-top
+    c.put(25, 16, "A")
+    c.put(25, 15, "h")
+    # tassel: ACCENT knot + three short strands off the drape corner
+    c.hline(5, 7, 24, "a")                      # knot seat (erodes to outline)
+    c.hline(5, 7, 25, "a")
+    c.hline(5, 7, 26, "a")
+    c.hline(5, 7, 27, "a")                      # sacrificial outline fringe
+    # one ICON_HI cross-sparkle on the upper sheen line
+    _sparkle(c, 10, 14, "h")
     c.outline()
     return c
 
