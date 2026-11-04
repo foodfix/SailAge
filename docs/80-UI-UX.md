@@ -144,6 +144,7 @@ after-action dialog and the editor reopens with the configuration kept
 | S3 | arrows / numpad 1–9 | **Step mode:** step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move. **Helm mode:** set the helm heading (persisted `world.heading`); the fleet then auto-sails that heading per `20-*` §4.2 — a new direction key re-steers |
 | S3 | `Space` | **Step mode:** wait one day at sea — the full daily ledger (`advance_clock(1.0)`: provisions, wages, weather reroll, morale; `20-*` §4.17). **Helm mode:** stop the fleet; pressed again while stopped, wait one day |
 | S3 | `[` / `]` | cycle sail trim `furled → reefed → normal → full` (persisted `world.sail_trim`; speed/storm-damage effects per `20-*` §4.17) |
+| S3 | `Z` | toggle the world camera zoom — exactly two levels, 1.0 near (64 px tiles) ⇄ 0.5 wide (32 px effective); session-local, persisted nowhere (the §4.8 world zoom-out amendment, key pinned per the 613ddbf round) |
 | S3 | left-click any visible water tile | **click-to-sail**: path there (A*, `20-*` §4.2) and walk it; a click on land/ice is rejected (`world.move_blocked`); cancels Helm mode |
 | S3/S4 | `C` | open/close the intel window on the 船长 tab (§4.5; pressed again on the active tab it closes, another key switches — amended 2026-11-03) |
 | S3/S4 | `F` | open/close the intel window on the 船队 tab (§4.5) |
