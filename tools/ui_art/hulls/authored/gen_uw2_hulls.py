@@ -24,9 +24,15 @@ View convention (80-* §4.8.6, amended 2026-11-04):
 UW2 craft rules (80-* §4.8.2): <= 3 tones per material — wood H/W/L, sail
 s/S/z, ink K (gunports, windows, rigging only); one specular arc per sail;
 strong silhouette; light from NW; crisp pixels, sparse dither, no noisy
-fills.  The authored maps are outline-less — the governor applies the 1px
-HULL_INK silhouette outline (8-neighborhood), so stays run at exactly 45°
-wherever they cross open sky (a shallower slope smears under the outline).
+fills.  Pennant scheme (80-* §4.8 hull block, amended 2026-11-04): the
+masthead pennants draw the authoring-only SOURCE hex `p` (#b3191f — the
+governor remaps it to the owner's PENNANT_* hex; wood/sail/ink are
+owner-invariant).  HULL_GOLD (`g`, #d9a441) trims the tier-3 hull's sheer
+lines — hull top rail + castle/forecastle rails in e/w/diagonals, taffrail
+in n/s (sloop, tier 1, gets no gold).  The authored maps are outline-less —
+the governor applies the 1px HULL_INK silhouette outline (8-neighborhood),
+so stays run at exactly 45° wherever they cross open sky (a shallower slope
+smears under the outline).
 
 Stdlib only.  Deterministic, byte-stable: `--check` regenerates into a temp
 dir and byte-compares the committed docs; `--ascii <dir>` prints the authored
@@ -51,7 +57,11 @@ PALETTE = {
     "L": "#5e4720",  # WOOD_LO  — plank seams, bilge, keel, shadow edges
     "s": "#f7f5ee",  # SAIL_HI  — the one specular arc per sail
     "S": "#e8e6df",  # SAIL     — sail body
-    "z": "#c2beb2",  # SAIL_LO  — seams, leeches, pennant, shadow edges
+    "z": "#c2beb2",  # SAIL_LO  — seams, leeches, shadow edges
+    "p": "#b3191f",  # pennant SOURCE hex (authoring-only intermediate; the
+                     # governor remaps it to the owner's PENNANT_* hex per
+                     # the §4.8.4 amended hull block — never shipped as-is)
+    "g": "#d9a441",  # HULL_GOLD — t3 trim (sheer/taffrail lines; galleon only)
 }
 
 DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
@@ -221,9 +231,16 @@ def lateen(g: Grid, x_aft: int, y_aft: int, x_fwd: int, y_fwd: int,
 
 
 def pennant(g: Grid, x_tip: int, y: int, length: int, sign: int) -> None:
-    """Masthead pennant (SAIL_LO), streaming aft (`sign` -1 = toward stern)."""
+    """Masthead pennant, drawn in the pennant SOURCE hex (`p`) — the governor
+    remaps it to the owner's PENNANT_* hex (§4.8.4 amended hull block).
+    Streams aft (`sign` -1 = toward stern)."""
     for i in range(length):
-        g.put(x_tip + sign * i, y, "z")
+        g.put(x_tip + sign * i, y, "p")
+
+
+def gold_trim(g: Grid, x0: int, x1: int, y: int) -> None:
+    """1px HULL_GOLD trim line (tier-3 sheer/taffrail only)."""
+    g.hline(x0, x1, y, "g")
 
 
 def stay45(g: Grid, x: int, y: int, steps: int, sx: int, sy: int) -> None:
@@ -381,6 +398,11 @@ def galleon_e() -> Grid:
     lateen(g, 4, 10, 10, 7, base=12)                         # mizzen lateen
     pennant(g, 12, 4, 3, -1)
     pennant(g, 18, 5, 2, -1)
+    # HULL_GOLD tier-3 trim: sheer line along the hull top rail + castle and
+    # forecastle rails (the tier-2 roof keeps its lit wood edge)
+    gold_trim(g, 3, 26, 19)      # hull top rail
+    gold_trim(g, 2, 9, 17)       # stern-castle tier-1 rail
+    gold_trim(g, 22, 25, 17)     # forecastle rail
     return g
 
 
@@ -393,6 +415,7 @@ def galleon_n() -> Grid:
     square_sail(g, 10, 20, 10, 6, seams=(12, 15, 18))        # main
     spanker(g, 8, 15, 15, 10)                                # mizzen lateen, port side
     transom(g, 9, 21, 17, windows=(12, 15, 18))
+    gold_trim(g, 9, 21, 17)                                  # taffrail line
     return g
 
 
@@ -406,6 +429,8 @@ def galleon_s() -> Grid:
     forecastle(g, 11, 18, 16)
     g.put(12, 17, "K")
     g.put(17, 17, "K")
+    gold_trim(g, 10, 19, 18)                                 # hull top rail (sheer)
+    gold_trim(g, 11, 18, 16)                                 # forecastle rail
     jib(g, 14, 7, 20, 22)
     g.line(16, 16, 21, 22, "W")                              # bowsprit, down-screen
     g.put(21, 22, "H")
@@ -432,6 +457,9 @@ def galleon_ne() -> Grid:
     g.line(25, 8, 27, 6, "W")                                # bowsprit
     g.put(27, 6, "H")
     stay45(g, 19, 5, 4, 1, 1)                                # forestay → stem
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 17)                                   # castle rail
     return g
 
 
@@ -454,6 +482,9 @@ def galleon_se() -> Grid:
     g.put(24, 21, "H")                                       # stem head
     g.line(25, 22, 27, 24, "W")                              # bowsprit, down-right
     g.put(27, 24, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 9)                                    # castle rail
     return g
 
 

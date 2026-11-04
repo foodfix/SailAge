@@ -8330,13 +8330,16 @@ BLOCK_ICON = frozenset({
     "#b3341f", "#d4573c", "#2f6f9e", "#9a9a9a", "#1a8c4e", "#b3191f",
     "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
 })
+# Amended §4.8 hull block (2026-11-04, the shared-hull pennant scheme): 16
+# distinct hexes — ink, wood ×3, sail ×3, HULL_GOLD, 9 PENNANT_* owner values.
+# Wood/sail/ink/gold are owner-invariant; the owner rides ONLY the masthead
+# pennant (the authored source hex #b3191f remaps to the owner's pennant and
+# is itself the spain pennant value). The retired owner HI/BASE/LO ramp hexes
+# are NO LONGER allowed in shipped hull pixels.
 BLOCK_HULL = frozenset({
     "#101010", "#8f6d3a", "#7a5c2e", "#5e4720", "#f7f5ee", "#e8e6df",
-    "#c2beb2", "#ffffff", "#a7a6a1", "#21af62", "#1a8c4e", "#136538",
-    "#e01f27", "#b3191f", "#811216", "#315eb3", "#274b8f", "#1c3667",
-    "#ff9a26", "#d97b1e", "#9c5916", "#854cc1", "#6a3d9a", "#4c2c6f",
-    "#fbcb31", "#c9a227", "#91751c", "#c1c1c1", "#9a9a9a", "#6f6f6f",
-    "#e04127", "#b3341f", "#812516",
+    "#c2beb2", "#d9a441", "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e",
+    "#6a3d9a", "#c9a227", "#9a9a9a", "#b3341f",
 })
 BLOCK_FX = frozenset({
     "#26262c", "#8a929c", "#c6ccd4", "#555c66", "#dff0f4", "#9fc4d4",
@@ -8458,6 +8461,18 @@ G13_FACILITY_TOKENS = (
 G13_TOKEN_OWNERS_EXTRA = ("player", "neutral", "pirate")
 # Tier footprint bands (80-* §4.8.7, long-axis px on the 32x32 canvas).
 G13_TIER_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
+
+# §4.8 hull block, amended 2026-11-04 (the shared-hull pennant scheme): the
+# owner rides ONLY the masthead pennant — the authored maps carry the source
+# hex below and the governor remaps it to the owner's pennant value; wood/
+# sail/ink/gold are owner-invariant.  Spain's pennant equals the source hex
+# (the legal identity remap).
+G13_PENNANT_SOURCE = "#b3191f"
+G13_PENNANTS = {
+    "player": "#d9a441", "portugal": "#1a8c4e", "spain": "#b3191f",
+    "england": "#274b8f", "holland": "#d97b1e", "ottoman": "#6a3d9a",
+    "italy": "#c9a227", "neutral": "#9a9a9a", "pirate": "#b3341f",
+}
 
 # §6.6 shore codes: indices 1-8 = n, ne, e, se, s, sw, w, nw (compass order,
 # also the priority order), x wrap-aware, y out of range = non-land.
@@ -8959,10 +8974,14 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
     """§8.8 item 6: the full 16x9x8 grid (+ facility tokens) declared —
     either as 1 158 per-id declarations, or via slot B's hull-doc registry
     shape; the governor expands owners × dirs onto assets/ui/tokens/.
-    Hull-doc shape (§8.8 item 5/6 amendment, 2026-11-04): the amended UW2
-    docs author ALL EIGHT direction maps and carry no derive entries (a
-    side-view ship does not rotate losslessly — 80-* §4.8.6); legacy docs
-    on the n/ne + pinned-derive shape are accepted until re-authored."""
+    Coverage semantics (amended hull block, 2026-11-04): owner variants are
+    the PENNANT REMAP of one shared authored map — wood/sail/ink are
+    owner-invariant, the authored source hex never survives a remap (the
+    artifact-level check is _g13_check_pennants).  Hull-doc shape (§8.8
+    item 5/6 amendment): the amended UW2 docs author ALL EIGHT direction
+    maps and carry no derive entries (a side-view ship does not rotate
+    losslessly — 80-* §4.8.6); legacy docs on the n/ne + pinned-derive shape
+    are accepted until re-authored."""
     owners = [n["id"] for n in nations] + list(G13_TOKEN_OWNERS_EXTRA)
     fac_got = {sid for sid in decls if sid.startswith("facility_")}
     if fac_got != set(G13_FACILITY_TOKENS):
@@ -9002,7 +9021,7 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
     if set(rdoc.get("owners") or []) != set(owners):
         fail("hull-inventory", str(rpath),
              "registry owners != nations ∪ {player, neutral, pirate} "
-             "(§8.8 item 6)", 13)
+             "(§8.8 item 6, pennant remap coverage)", 13)
     if rdoc.get("path_template") != \
             "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png":
         fail("hull-inventory", str(rpath),
@@ -9020,7 +9039,10 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
     for ship_id, (doc, path) in sorted(docs.items()):
         maps = doc.get("maps") or {}
         if set(maps) == uw2_dirs:
-            # Amended UW2 shape: all eight directions authored, no derive.
+            # Amended UW2 shape: all eight directions authored, no derive;
+            # owner coverage is the pennant remap (wood/sail/ink are
+            # owner-invariant) — the artifact-level pennant-presence check
+            # runs in the governor and on the shipped grid below.
             deriv = doc.get("derive")
             if deriv is not None:
                 fail("hull-doc", path.name, f"{ship_id}: an 8-map hull doc "
@@ -9073,6 +9095,37 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
             fail("hull-footprint", sprite.decl["file"],
                  f"long axis {extent}px outside the tier-{tier_of[ship_id]} "
                  f"band {lo}-{hi} (80-* §4.8.7)", 13)
+
+
+def _g13_check_pennants(sprites: dict, uw2_ships: set) -> None:
+    """§8.8 item 6 (amended hull block, pennant remap coverage): every owner
+    variant of an amended-shape (8-map) hull carries its PENNANT_* hex, and
+    the authored source hex survives the remap only on the spain variant
+    (identity).  Legacy-shape docs carry no pennant yet — exempt pending
+    re-authoring."""
+    for sprite_id, sprite in sorted(sprites.items()):
+        if not sprite_id.startswith("hull_"):
+            continue
+        parts = sprite_id.split("_")
+        if len(parts) != 4:
+            continue
+        _, ship_id, owner, _dir = parts
+        pennant = G13_PENNANTS.get(owner)
+        if pennant is None:
+            continue  # facility tokens carry no pennant
+        if ship_id not in uw2_ships:
+            continue  # legacy-shape docs: pennant coverage pending re-authoring
+        hexes = {px for row in sprite.pixels for px in row if px is not None}
+        if pennant not in hexes:
+            fail("hull-pennant", sprite.decl["file"],
+                 f"the {owner} pennant hex {pennant} is missing — owner "
+                 "coverage is the masthead-pennant remap (§8.8 item 6, "
+                 "amended hull block)", 13)
+        if G13_PENNANT_SOURCE in hexes and pennant != G13_PENNANT_SOURCE:
+            fail("hull-pennant", sprite.decl["file"],
+                 f"the authored pennant source hex {G13_PENNANT_SOURCE} "
+                 f"survived the remap on a {owner} variant (§8.8 item 6)",
+                 13)
 
 
 def _g13_check_shore_strips(sprites: dict) -> None:
@@ -9383,6 +9436,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                          for decl, _p in decls.values()
                          if isinstance(decl, dict) and decl.get("maps")
                          and set(decl["maps"]) == set(G13_DIR_IDS)}
+            hull_uw2_ships = uw2_ships  # for the pennant-coverage check
             entries_h: list = []
             hull_pin = {"e": ("n", "rot_cw"), "s": ("n", "rot_180"),
                         "w": ("n", "rot_ccw"), "nw": ("ne", "mirror_x"),
@@ -9474,6 +9528,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 _g13_check_terrain_rings(class_name, decls, sprites)
             elif class_name == "hulls":
                 _g13_check_footprints(sprites, ship_types)
+                _g13_check_pennants(sprites, hull_uw2_ships)
             elif class_name == "shore":
                 _g13_check_shore_strips(sprites)
 
