@@ -801,7 +801,8 @@ func _apply_card_labels(button: Button) -> void:
 	name_label.theme_type_variation = "" if not button.disabled else "Dim"
 	status_label.text = _status_text(status_key, facility_id)
 	status_label.theme_type_variation = \
-		"Good" if status_key == "port.facility.open_now" else "CardStatus"
+		"CardStatusGood" if status_key == "port.facility.open_now" \
+		else "CardStatusDim"
 
 
 ## Re-labels every rendered card from its stored keys, keeping the status
