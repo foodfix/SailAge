@@ -280,6 +280,50 @@
     "zh": "航速",
     "en": "Speed"
   },
+  "ui.kit.gallery.title": {
+    "zh": "控件陈列室",
+    "en": "Widget Gallery"
+  },
+  "ui.kit.gallery.theme_active": {
+    "zh": "主题已应用。",
+    "en": "Theme applied."
+  },
+  "ui.kit.gallery.theme_missing": {
+    "zh": "主题未应用（W2-B 合并后生效）。",
+    "en": "Theme not applied (activates when W2-B merges)."
+  },
+  "ui.kit.gallery.buttons": {
+    "zh": "按钮",
+    "en": "Buttons"
+  },
+  "ui.kit.gallery.rows": {
+    "zh": "行",
+    "en": "Rows"
+  },
+  "ui.kit.gallery.footer": {
+    "zh": "页脚",
+    "en": "Footer"
+  },
+  "ui.kit.gallery.value_bars": {
+    "zh": "数值条",
+    "en": "Value bars"
+  },
+  "ui.kit.gallery.field_rows": {
+    "zh": "字段行",
+    "en": "Field rows"
+  },
+  "ui.kit.gallery.toast": {
+    "zh": "提示浮窗",
+    "en": "Toast"
+  },
+  "ui.kit.gallery.fire_toast": {
+    "zh": "弹出提示",
+    "en": "Show toast"
+  },
+  "ui.kit.gallery.toast_shown": {
+    "zh": "这是一条提示浮窗。",
+    "en": "This is a toast."
+  },
   "world.open_sea": {
     "zh": "外海",
     "en": "Open sea"
