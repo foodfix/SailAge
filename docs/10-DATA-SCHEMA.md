@@ -2798,21 +2798,28 @@ checks:
    size-tier cap — 16×16 → 12; 32×32 → 20; 48px+ → 25 (the skill's
    tiers, `80-*` §4.8). Caps, not quotas — under is fine; exceeding
    fails naming the sprite and both counts.
-5. **8-direction transform relations.** For every directional family —
-   hulls and arrows (authored bases `n`, `ne`) and shore strips
-   (authored `n` + one corner) — each derived direction must be the
-   pixel-exact lossless transform (90° rotations / mirrors) of its
-   authored base map under the pinned heading8→dir-id table (`80-*`
-   §4.8). A mismatched derived sprite fails naming it.
-6. **Hull remap coverage.** The 9 owner tint ramps — the 6 nations of
-   `data/nations.json` + player + neutral + pirate — each map onto every
-   hull's neutral authored map; `hull_{ship_type_id}_{owner}_{dir}.png`
-   exists for the full 16 × 9 × 8 = 1 152 grid, and the owner set equals
-   `nations ∪ {player, neutral, pirate}` exactly.
-7. **Footprint bands.** Per hull, the long-axis extent in px lies in its
-   tier band — tier 1: 14–18, tier 2: 20–26, tier 3: 26–30
-   (`ship_types.tier` partitions the 16 hulls 4 / 8 / 4). A hull outside
-   its band fails naming it and the measured extent.
+ 5. **8-direction transform relations.** For the **derivation families** —
+    arrows (authored bases `n`, `ne`) and shore strips (authored `n` + one
+    corner) — each derived direction must be the pixel-exact lossless
+    transform (90° rotations / mirrors) of its authored base map under the
+    pinned heading8→dir-id table (`80-*` §4.8). A mismatched derived sprite
+    fails naming it. **Hulls are exempt (amended 2026-11-04, user
+    direction): hull tokens are UW2-style side/3-quarter sailing views
+    (`80-*` §4.8.6 amendment) — a side-view ship does not rotate
+    losslessly, so all eight hull directions are authored maps and no
+    derive entries exist for hulls; this check does not apply to them.**
+ 6. **Hull coverage.** The 9 owner tint ramps — the 6 nations of
+    `data/nations.json` + player + neutral + pirate — each map onto every
+    hull's authored maps; `hull_{ship_type_id}_{owner}_{dir}.png` exists
+    for the full 16 × 9 × 8 = 1 152 grid, and the owner set equals
+    `nations ∪ {player, neutral, pirate}` exactly. Hull docs declare
+    **eight authored maps** (one per direction; no derive table).
+ 7. **Footprint bands.** Per hull, the long-axis extent in px **on the
+    side view (`e`/`w` — the profile shows the ship's length)** lies in
+    its tier band — tier 1: 14–18, tier 2: 20–26, tier 3: 26–30
+    (`ship_types.tier` partitions the 16 hulls 4 / 8 / 4); the
+    stern/bow views (`n`/`s`) show the beam and are canvas-fit only. A
+    hull outside its band fails naming it and the measured extent.
 8. **Seam checks.** All variants of one terrain kind share a
    byte-identical, wrap-continuous outer 1px ring (interiors vary
    freely); `sea_pattern.png` and the nine-patch edge tiles are

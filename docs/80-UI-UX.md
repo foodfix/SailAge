@@ -1743,10 +1743,13 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    assembly, atlases, `contact_sheet.png`, validator glue). Rebuilds are
    byte-identical (double-run fixtures).
 2. **Style guide.** uniform 1px outline on tokens (tool-applied; authored
-   maps are outline-less); shading = highlight + base + shadow, texture
-   hints at 32px, dither gradients at 48px+; light from NW;
-   silhouette-first, readable at 1:1; top-down for tokens, front-facing
-   for icons; one dither family for terrain. **Seam rules:** all variants
+   maps are outline-less); shading = highlight + base + shadow with ONE
+   specular cluster per key material, textures hinted, dithering used
+   sparingly and only at tone transitions — the aesthetic target is
+   **UW2 (大航海时代2) refinement**: strong silhouette, ≤ 3 tones per
+   material, crisp deliberate pixels, no noisy fills; light from NW;
+   **hull tokens are side/3-quarter sailing views (non top-down — item 6
+   amendment)**; icons are front-facing. One dither family for terrain. **Seam rules:** all variants
    of a terrain kind share a byte-identical, wrap-continuous outer 1px
    ring (it may carry dither); interiors vary freely; dither density
    ≤ 30%; `sea_pattern.png` and the nine-patch edge tiles are torus-safe
@@ -1925,13 +1928,26 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
 
    Sprite ids: `hull_{ship_type_id}_{owner}_{dir}` and
    `wind_arrow_{dir}` / `current_arrow_{dir}`, with `{dir}` ∈ the eight
-   ids above (the arrow sets author `n` + `ne` and derive the rest
-   losslessly — A.2 of `IMPLEMENT-Phase10.md`).
-7. **Tier footprint bands (final values).** long-axis px: tier 1
-   (latin, sloop, galiot, pinnace) **14–18**; tier 2 (caravel, galley,
-   brigantine, fluyt, junk, dhow, caravela_redonda, xebec) **20–26**;
-   tier 3 (nao, carrack, galleon, galleass) **26–30** — on the 32×32
-   canvas; the validator checks the long axis.
+   ids above. **View convention (amended 2026-11-04, user direction —
+   supersedes the W1 "top-down for tokens" rule): hull tokens are
+   UW2-style side/3-quarter sailing views, NOT top-down deck views.**
+   The `e`/`w` pair shows the full **side profile** (hull side, masts,
+   sails, rigging); `n`/`s` show the **stern/bow view** (sails from
+   behind, narrow hull); the four diagonals are **3/4 views**. Because a
+   side-view ship does not rotate losslessly, **all eight hull
+   directions are authored maps** (rig fragments composed per direction
+   by the authoring tool) — the lossless-derivation scheme below remains
+   for the arrow sets and the shore strips only. The wood→owner remap
+   contract is unchanged (author on the wood trio, remap per owner;
+   sails/ink owner-invariant).
+7. **Tier footprint bands (final values).** long-axis px **on the side
+   view (`e`/`w`)**: tier 1 (latin, sloop, galiot, pinnace) **14–18**;
+   tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
+   caravela_redonda, xebec) **20–26**; tier 3 (nao, carrack, galleon,
+   galleass) **26–30** — on the 32×32 canvas; the validator checks the
+   long axis there. The stern/bow views (`n`/`s`) show the beam and are
+   unbanded (canvas-fit only); the diagonals are the honest 3/4 views
+   and unbanded likewise.
 8. **Icon sizes & display.** semantic icons render 1× (32 px) inline,
    flush full-cell in 32px rows; 2× (64 px) allowed for hero contexts,
    nearest only; chrome tiles 16×16 assembled into 48×48 nine-patch
