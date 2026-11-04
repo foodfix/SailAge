@@ -17,6 +17,9 @@ extends Control
 ## the scene also runs before the editor has written Godot's global-class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 shared theme (docs/80-UI-UX.md §4.9). Preloaded like PaletteLib so
+## the scene also runs before Godot's global-class cache exists.
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
 
 const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
 ## Phase-9 S21 edge (decision 15, `80-*` §4.7.16): the 海战 button sits
@@ -50,6 +53,13 @@ var last_route: String = ""
 
 
 func _ready() -> void:
+	# Phase-10 §4.9 (docs/80-UI-UX.md): the shared theme applies ONCE at
+	# startup to the root window and cascades to every control. Guarded —
+	# headless direct-boot suites have no window and apply
+	# `UiTheme.build_theme()` themselves (the documented direct-boot pattern).
+	# Per-control styling below retires in the W4-D sweep (§4.9 rule).
+	if get_window() != null:
+		get_window().theme = UiThemeLib.build_theme()
 	_background.color = PaletteLib.PANEL_BG
 	_stack.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	_buttons.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
