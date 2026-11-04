@@ -1,13 +1,13 @@
 {
   "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the 5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md §9.2",
   "counts": {
-    "accepted_base": 63,
-    "accepted_derived": 36,
+    "accepted_base": 62,
+    "accepted_derived": 35,
     "candidates": 80,
-    "fallback_files": 261,
-    "rejected": 17,
+    "fallback_files": 279,
+    "rejected": 18,
     "revoked_stale": 2,
-    "shipped_files": 891
+    "shipped_files": 873
   },
   "derived": {
     "hull_brigantine_england_ne.png": {
@@ -1280,11 +1280,6 @@
       "flip": "h",
       "job": "hull_pinnace_ne"
     },
-    "hull_pinnace_england_se.png": {
-      "derived_from": "hull_pinnace_england_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
-    },
     "hull_pinnace_holland_e.png": {
       "derived_from": "hull_pinnace_holland_w.png",
       "flip": "h",
@@ -1294,11 +1289,6 @@
       "derived_from": "hull_pinnace_holland_nw.png",
       "flip": "h",
       "job": "hull_pinnace_ne"
-    },
-    "hull_pinnace_holland_se.png": {
-      "derived_from": "hull_pinnace_holland_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
     },
     "hull_pinnace_italy_e.png": {
       "derived_from": "hull_pinnace_italy_w.png",
@@ -1310,11 +1300,6 @@
       "flip": "h",
       "job": "hull_pinnace_ne"
     },
-    "hull_pinnace_italy_se.png": {
-      "derived_from": "hull_pinnace_italy_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
-    },
     "hull_pinnace_neutral_e.png": {
       "derived_from": "hull_pinnace_neutral_w.png",
       "flip": "h",
@@ -1324,11 +1309,6 @@
       "derived_from": "hull_pinnace_neutral_nw.png",
       "flip": "h",
       "job": "hull_pinnace_ne"
-    },
-    "hull_pinnace_neutral_se.png": {
-      "derived_from": "hull_pinnace_neutral_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
     },
     "hull_pinnace_ottoman_e.png": {
       "derived_from": "hull_pinnace_ottoman_w.png",
@@ -1340,11 +1320,6 @@
       "flip": "h",
       "job": "hull_pinnace_ne"
     },
-    "hull_pinnace_ottoman_se.png": {
-      "derived_from": "hull_pinnace_ottoman_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
-    },
     "hull_pinnace_pirate_e.png": {
       "derived_from": "hull_pinnace_pirate_w.png",
       "flip": "h",
@@ -1354,11 +1329,6 @@
       "derived_from": "hull_pinnace_pirate_nw.png",
       "flip": "h",
       "job": "hull_pinnace_ne"
-    },
-    "hull_pinnace_pirate_se.png": {
-      "derived_from": "hull_pinnace_pirate_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
     },
     "hull_pinnace_player_e.png": {
       "derived_from": "hull_pinnace_player_w.png",
@@ -1370,11 +1340,6 @@
       "flip": "h",
       "job": "hull_pinnace_ne"
     },
-    "hull_pinnace_player_se.png": {
-      "derived_from": "hull_pinnace_player_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
-    },
     "hull_pinnace_portugal_e.png": {
       "derived_from": "hull_pinnace_portugal_w.png",
       "flip": "h",
@@ -1385,11 +1350,6 @@
       "flip": "h",
       "job": "hull_pinnace_ne"
     },
-    "hull_pinnace_portugal_se.png": {
-      "derived_from": "hull_pinnace_portugal_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
-    },
     "hull_pinnace_spain_e.png": {
       "derived_from": "hull_pinnace_spain_w.png",
       "flip": "h",
@@ -1399,11 +1359,6 @@
       "derived_from": "hull_pinnace_spain_nw.png",
       "flip": "h",
       "job": "hull_pinnace_ne"
-    },
-    "hull_pinnace_spain_se.png": {
-      "derived_from": "hull_pinnace_spain_sw.png",
-      "flip": "h",
-      "job": "hull_pinnace_se"
     },
     "hull_sloop_england_e.png": {
       "derived_from": "hull_sloop_england_w.png",
@@ -1715,6 +1670,11 @@
     },
     {
       "detail": "2 pennant-source px in the masthead region < 3",
+      "job": "hull_pinnace_sw",
+      "reason": "masthead"
+    },
+    {
+      "detail": "2 pennant-source px in the masthead region < 3",
       "job": "hull_xebec_w",
       "reason": "masthead"
     }
@@ -2018,25 +1978,19 @@
       "accepted_at": "2026-11-04",
       "job": "hull_pinnace_n",
       "seed": 41066,
-      "snapped_sha": "d701d1e8f0c46156916e63ed09d672e30d9b9e2e29f148d458547b8625ce5ef2"
+      "snapped_sha": "8fcb7e10eb844fd00a7be28b09e121947092b71829581ed0a5370a491bf84a2c"
     },
     "hull_pinnace_nw": {
       "accepted_at": "2026-11-04",
       "job": "hull_pinnace_nw",
-      "seed": 1109,
-      "snapped_sha": "d3f153f6de77d05fd50d90ec93f7c16713d282ca14dcb0468a1eebe0a8334d82"
+      "seed": 41069,
+      "snapped_sha": "57ae5de789b8d972e8f13345a746a0f53ec04b139d3a942e5081757c1fa958ce"
     },
     "hull_pinnace_s": {
       "accepted_at": "2026-11-04",
       "job": "hull_pinnace_s",
       "seed": 41067,
       "snapped_sha": "aba84b5e17ff1b41ada01eb0abff50c427f0d15e0d0158f7a714f4d8e61ab7bd"
-    },
-    "hull_pinnace_sw": {
-      "accepted_at": "2026-11-04",
-      "job": "hull_pinnace_sw",
-      "seed": 1111,
-      "snapped_sha": "af9ce4638ea7b39dbaf5b5ab9e486456d3eef11f1bee69491884cb4f8e360850"
     },
     "hull_pinnace_w": {
       "accepted_at": "2026-11-04",
