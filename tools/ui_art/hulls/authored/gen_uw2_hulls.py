@@ -6,8 +6,10 @@ Emits the per-hull authoring docs consumed by the W3-B governor
 maps is composed here — a side-view ship does not rotate losslessly, so the
 docs carry `maps` × 8 (n, ne, e, se, s, sw, w, nw) and NO derive entries.
 
-  tools/ui_art/hulls/authored/galleon.json   tier 3 — 3 masts, big stern castle
-  tools/ui_art/hulls/authored/sloop.json     tier 1 — 1 mast, lateen rig
+  tier 1 (14–18): latin, sloop, galiot, pinnace
+  tier 2 (20–26): caravel, galley, brigantine, fluyt, junk, dhow,
+                  caravela_redonda, xebec
+  tier 3 (26–30): nao, carrack, galleon, galleass (HULL_GOLD trim)
 
 View convention (80-* §4.8.6, amended 2026-11-04):
   e/w  full side profile (hull side, gunports, masts, wind-bellied sails,
@@ -27,9 +29,9 @@ strong silhouette; light from NW; crisp pixels, sparse dither, no noisy
 fills.  Pennant scheme (80-* §4.8 hull block, amended 2026-11-04): the
 masthead pennants draw the authoring-only SOURCE hex `p` (#b3191f — the
 governor remaps it to the owner's PENNANT_* hex; wood/sail/ink are
-owner-invariant).  HULL_GOLD (`g`, #d9a441) trims the tier-3 hull's sheer
+owner-invariant).  HULL_GOLD (`g`, #d9a441) trims the tier-3 hulls' sheer
 lines — hull top rail + castle/forecastle rails in e/w/diagonals, taffrail
-in n/s (sloop, tier 1, gets no gold).  The authored maps are outline-less —
+in n/s (tier 1/2 hulls get no gold).  The authored maps are outline-less —
 the governor applies the 1px HULL_INK silhouette outline (8-neighborhood),
 so stays run at exactly 45° wherever they cross open sky (a shallower slope
 smears under the outline).
@@ -259,6 +261,59 @@ def stem_sprit(g: Grid, x_stem: int, y_stem: int, segs: int) -> None:
     g.put(x_stem + segs, y_stem - segs, "H")   # lit sprit tip
 
 
+def oar_bank(g: Grid, xs, y: int) -> None:
+    """Oar bank (galiot/pinnace/galley/galleass): 1px HULL_INK marks along
+    the waterline — one dot per rowing station (80-* §4.8.2 ink budget:
+    rigging-class pixels)."""
+    for x in xs:
+        g.put(x, y, "K")
+
+
+def fat_hull(g: Grid, x0: int, x1: int, deck: int,
+             ports: tuple[int, ...] = ()) -> None:
+    """Fluyt side profile: deep rounded belly (7 rows + keel), blunt vertical
+    stern post, two plank seam rows (hulls >= 20px carry seams, §4.8.2)."""
+    for i, ch in enumerate(("H", "W", "L", "W", "L", "W", "L")):
+        g.hline(x0, x1, deck + i, ch)
+    for y in range(deck + 1, deck + 6):
+        g.put(x0, y, "L")                      # blunt stern post
+    for x in ports:
+        g.put(x, deck + 3, "K")                # gundeck row
+    g.hline(x0 + 2, x1 - 2, deck + 7, "L")     # rounded belly keel
+
+
+def batten_sail(g: Grid, x0: int, x1: int, y0: int, rows: int,
+                battens: tuple[int, ...]) -> None:
+    """Junk full-batten sail: a segmented rectangle — SAIL panels divided by
+    full-width SAIL_LO batten lines, SAIL_HI top edge (the one specular)."""
+    y1 = y0 + rows - 1
+    g.hline(x0, x1, y0, "s")
+    for y in range(y0 + 1, y1):
+        g.hline(x0, x1, y, "S")
+    for y in battens:
+        if y0 < y < y1:
+            g.hline(x0, x1, y, "z")
+    g.hline(x0, x1, y1, "z")
+
+
+def gaff_sail(g: Grid, x_mast: int, x_peak: int, y_mast: int, y_peak: int,
+              y_boom: int) -> None:
+    """Fore-and-aft spanker (side views): gaff spar rising aft-up to a lit
+    peak, horizontal boom, sail sheeted between — s crown on the peak half,
+    S body, z foot.  `x_peak` < `x_mast` (bow right)."""
+    g.line(x_mast, y_mast, x_peak, y_peak, "W")    # the gaff spar
+    g.put(x_peak, y_peak, "H")                     # lit peak
+    g.hline(x_peak, x_mast, y_boom, "W")           # boom
+    mid = (x_peak + x_mast) // 2
+    for x in range(x_peak, x_mast + 1):
+        top = y_peak + (x - x_peak) * (y_mast - y_peak) // (x_mast - x_peak)
+        g.put(x, top + 1, "s" if x <= mid else "S")
+        for yy in range(top + 2, y_boom):
+            g.put(x, yy, "S")
+        if y_boom - 1 > top + 1:
+            g.put(x, y_boom - 1, "z")
+
+
 # ---- stern view (n) fragments ---------------------------------------------
 
 
@@ -370,6 +425,13 @@ def diag_sail(g: Grid, x0: int, x1: int, y0: int, rows: int,
     """Foreshortened square sail on a partial yard (3/4 view)."""
     yard(g, x0, x1, y0)
     square_sail(g, x0 + 1, x1 - 1, y0 + 1, rows, seams)
+
+
+def diag_batten_sail(g: Grid, x0: int, x1: int, y0: int, rows: int,
+                     battens: tuple[int, ...]) -> None:
+    """Foreshortened junk sail on a partial yard (3/4 view)."""
+    yard(g, x0, x1, y0)
+    batten_sail(g, x0 + 1, x1 - 1, y0 + 1, rows, battens)
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +662,1545 @@ def sloop_maps() -> dict[str, Grid]:
 
 
 # ---------------------------------------------------------------------------
+# Latin — tier 1: 1 mast, BIG lateen (the triangle dominates), 14–18 band
+# ---------------------------------------------------------------------------
+
+
+def latin_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 15 -> outlined 17."""
+    g = Grid()
+    hull_side(g, 7, 18, 19, tall=False)                      # y19..23
+    mast(g, 12, 6, 17)
+    stay45(g, 13, 7, 8, 1, 1)                                # forestay -> sprit tip
+    g.put(19, 17, "H")                                       # stem head
+    g.put(19, 18, "W")
+    g.put(20, 16, "W")                                       # bowsprit
+    g.put(21, 15, "H")
+    lateen(g, 7, 13, 19, 6, base=15)                         # the big triangle
+    pennant(g, 11, 5, 2, -1)
+    return g
+
+
+def latin_n() -> Grid:
+    """Stern view: narrow transom, the big lateen seen from astern."""
+    g = Grid()
+    mast(g, 14, 6, 16)
+    pennant(g, 13, 5, 2, -1)
+    spanker(g, 10, 14, 16, 8)                                # lateen, big
+    transom(g, 11, 18, 17, windows=(13, 16))
+    return g
+
+
+def latin_s() -> Grid:
+    """Bow view: bowsprit down-screen, the lateen edge-on as a wide sliver."""
+    g = Grid()
+    mast(g, 13, 6, 14)
+    pennant(g, 12, 5, 2, -1)
+    edge_on_sail(g, 9, 12, 7, 14)                            # wide lateen sliver
+    bow_hull(g, 9, 17, 17)
+    g.hline(10, 16, 16, "H")                                 # foredeck rail
+    g.put(11, 18, "K")
+    g.put(15, 18, "K")
+    g.line(15, 16, 18, 19, "W")                              # bowsprit, down-screen
+    g.put(18, 19, "H")
+    return g
+
+
+def latin_ne() -> Grid:
+    """3/4 view, bow up-right: the lateen dominates the short hull."""
+    g = Grid()
+    rail = diag_hull(g, 9, 17, 19, -5, body=1)
+    diag_ports(g, rail, (14,))
+    mast(g, 13, 8, 14)
+    pennant(g, 12, 7, 2, -1)
+    lateen(g, 9, 12, 17, 7, base=14)                         # big
+    g.put(18, 12, "H")                                       # stem head
+    g.line(19, 11, 21, 9, "W")                               # bowsprit
+    g.put(21, 9, "H")
+    stay45(g, 14, 9, 4, 1, 1)                                # forestay -> stem
+    return g
+
+
+def latin_se() -> Grid:
+    """3/4 view, bow down-right, the lateen hanging off the slanted yard."""
+    g = Grid()
+    rail = diag_hull(g, 9, 13, 19, 5, body=1)
+    diag_ports(g, rail, (14,))
+    mast(g, 13, 7, 14)
+    pennant(g, 12, 6, 2, -1)
+    lateen(g, 9, 8, 17, 12, base=14)
+    g.put(20, 19, "H")                                       # stem head
+    g.line(21, 20, 22, 21, "W")                              # bowsprit
+    g.put(22, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Galiot — tier 1: compact hull, small lateen, 4-station oar bank
+# ---------------------------------------------------------------------------
+
+
+def galiot_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 14 -> outlined 16."""
+    g = Grid()
+    hull_side(g, 8, 19, 19, tall=False)                      # y19..23
+    oar_bank(g, (9, 12, 15, 18), 22)                         # waterline dots
+    mast(g, 13, 7, 17)
+    g.put(20, 17, "H")                                       # stem head
+    g.put(20, 18, "W")
+    g.put(21, 16, "H")                                       # short bowsprit
+    lateen(g, 10, 12, 18, 8, base=14)                        # small lateen
+    pennant(g, 12, 6, 2, -1)
+    return g
+
+
+def galiot_n() -> Grid:
+    """Stern view: narrow transom, oar blades showing either side."""
+    g = Grid()
+    mast(g, 15, 8, 16)
+    pennant(g, 14, 7, 2, -1)
+    spanker(g, 12, 13, 17, 9)                                # small lateen
+    oar_bank(g, (10, 21), 21)                                # blades out
+    oar_bank(g, (10, 21), 22)
+    transom(g, 12, 19, 17, windows=(14, 17))
+    return g
+
+
+def galiot_s() -> Grid:
+    """Bow view: stub mast, small sliver, oar tips flanking the hull."""
+    g = Grid()
+    mast(g, 13, 9, 14)
+    pennant(g, 12, 8, 2, -1)
+    edge_on_sail(g, 10, 12, 10, 13)
+    bow_hull(g, 10, 17, 17)
+    g.hline(11, 16, 16, "H")                                 # foredeck rail
+    oar_bank(g, (7, 19), 20)                                 # tips out
+    oar_bank(g, (7, 19), 22)
+    return g
+
+
+def galiot_ne() -> Grid:
+    """3/4 view, bow up-right: oar dots under the diagonal rail."""
+    g = Grid()
+    rail = diag_hull(g, 9, 16, 19, -4, body=1)
+    for x in (11, 14, 17):                                   # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 13, 8, 14)
+    pennant(g, 12, 7, 2, -1)
+    lateen(g, 10, 10, 16, 7, base=12)                        # small lateen
+    g.put(18, 11, "H")                                       # stem head
+    g.line(19, 10, 20, 9, "W")                               # bowsprit
+    g.put(20, 9, "H")
+    return g
+
+
+def galiot_se() -> Grid:
+    """3/4 view, bow down-right, small lateen on the slanted yard."""
+    g = Grid()
+    rail = diag_hull(g, 9, 14, 19, 4, body=1)
+    for x in (11, 14, 17):                                   # oar dots
+        g.put(x, rail[x] + 2, "K")
+    g.put(9, 12, "H")                                        # stub aft deck
+    g.put(9, 13, "W")
+    mast(g, 13, 8, 14)
+    pennant(g, 12, 7, 2, -1)
+    lateen(g, 10, 9, 16, 12, base=13)
+    g.put(20, 18, "H")                                       # stem head
+    g.line(21, 19, 22, 20, "W")                              # bowsprit
+    g.put(22, 20, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Pinnace — tier 1: oars ONLY, no sail; two banks; mast stub w/ pennant
+# ---------------------------------------------------------------------------
+
+
+def pinnace_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 13 -> outlined 15."""
+    g = Grid()
+    hull_side(g, 8, 19, 19, tall=False)                      # y19..23
+    oar_bank(g, (9, 12, 15, 18), 21)                         # upper bank
+    oar_bank(g, (11, 14, 17), 22)                            # lower bank, staggered
+    mast(g, 13, 12, 17)                                      # stub, no sail
+    pennant(g, 12, 11, 2, -1)
+    g.put(20, 17, "H")                                       # stem head
+    g.put(20, 18, "W")
+    return g
+
+
+def pinnace_n() -> Grid:
+    """Stern view: naked hull, oar blades out on both sides."""
+    g = Grid()
+    mast(g, 15, 12, 16)                                      # stub
+    pennant(g, 14, 11, 2, -1)
+    oar_bank(g, (9, 22), 20)                                 # upper bank tips
+    oar_bank(g, (9, 22), 22)                                 # lower bank tips
+    transom(g, 12, 19, 17, windows=(14, 17))
+    return g
+
+
+def pinnace_s() -> Grid:
+    """Bow view: no canvas at all — hull, stub mast, oar tips flanking."""
+    g = Grid()
+    mast(g, 14, 12, 15)                                      # stub
+    pennant(g, 13, 11, 2, -1)
+    bow_hull(g, 11, 18, 17)
+    g.hline(12, 17, 16, "H")                                 # foredeck rail
+    oar_bank(g, (8, 23), 19)                                 # upper bank tips
+    oar_bank(g, (8, 23), 21)                                 # lower bank tips
+    return g
+
+
+def pinnace_ne() -> Grid:
+    """3/4 view, bow up-right: two staggered oar-dot banks on the diagonal."""
+    g = Grid()
+    rail = diag_hull(g, 10, 16, 19, -3, body=1)
+    for x in (12, 15, 18):                                   # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 14, 10, 14)                                      # stub
+    pennant(g, 13, 9, 2, -1)
+    g.put(20, 12, "H")                                       # stem head
+    g.line(21, 11, 22, 10, "W")                              # bowsprit
+    g.put(22, 10, "H")
+    return g
+
+
+def pinnace_se() -> Grid:
+    """3/4 view, bow down-right: stub mast, oar dots, no canvas."""
+    g = Grid()
+    rail = diag_hull(g, 10, 15, 19, 3, body=1)
+    for x in (12, 15, 18):                                   # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 14, 10, 14)                                      # stub
+    pennant(g, 13, 9, 2, -1)
+    g.put(20, 19, "H")                                       # stem head
+    g.line(21, 20, 22, 21, "W")                              # bowsprit
+    g.put(22, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Caravel — tier 2: 2 lateens, rounded high-prow hull, 20–26 band
+# ---------------------------------------------------------------------------
+
+
+def caravel_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 23 -> outlined 25."""
+    g = Grid()
+    hull_side(g, 4, 23, 19, ports=(8, 13, 18), tall=True)    # y19..25
+    g.put(24, 16, "H")                                       # high rounded prow
+    g.put(24, 17, "W")
+    g.put(24, 18, "W")
+    g.put(25, 15, "W")                                       # bowsprit
+    g.put(26, 14, "H")
+    mast(g, 9, 8, 17)                                        # aft
+    mast(g, 17, 7, 17)                                       # fwd
+    lateen(g, 5, 13, 13, 9, base=16)                         # aft lateen
+    lateen(g, 13, 11, 22, 7, base=15)                        # fwd lateen
+    pennant(g, 8, 7, 2, -1)
+    pennant(g, 16, 6, 2, -1)
+    return g
+
+
+def caravel_n() -> Grid:
+    """Stern view: transom + the two lateens stacked from astern."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 2, -1)
+    spanker(g, 11, 8, 17, 5)                                 # fwd lateen, high
+    spanker(g, 9, 13, 17, 9)                                 # aft lateen, big
+    transom(g, 10, 21, 17, windows=(12, 15, 18))
+    return g
+
+
+def caravel_s() -> Grid:
+    """Bow view: high prow stem post, two lateen slivers, bowsprit down."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 2, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # aft lateen sliver
+    edge_on_sail(g, 17, 19, 9, 13)                           # fwd lateen sliver
+    bow_hull(g, 10, 20, 18)
+    g.hline(11, 19, 16, "H")                                 # foredeck rail
+    g.put(15, 15, "W")                                       # rising stem post
+    g.put(15, 14, "H")
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def caravel_ne() -> Grid:
+    """3/4 view, bow up-right: two staggered lateens, high-prow stem."""
+    g = Grid()
+    rail = diag_hull(g, 6, 17, 23, -7)
+    diag_ports(g, rail, (10, 14, 18))
+    g.hline(6, 7, 15, "H")                                   # raised aft deck
+    g.hline(6, 7, 16, "W")
+    mast(g, 10, 9, 15)
+    mast(g, 17, 7, 15)
+    pennant(g, 9, 8, 2, -1)
+    pennant(g, 16, 6, 2, -1)
+    lateen(g, 7, 12, 13, 8, base=15)
+    lateen(g, 14, 10, 21, 6, base=14)
+    g.put(24, 9, "H")                                        # high stem head
+    g.line(25, 8, 26, 7, "W")                                # bowsprit
+    g.put(26, 7, "H")
+    return g
+
+
+def caravel_se() -> Grid:
+    """3/4 view, bow down-right: the lateens hanging from slanted yards."""
+    g = Grid()
+    rail = diag_hull(g, 6, 12, 23, 7)
+    diag_ports(g, rail, (10, 14, 18))
+    g.hline(6, 7, 10, "H")                                   # raised aft deck
+    g.hline(6, 7, 11, "W")
+    mast(g, 10, 8, 14)
+    mast(g, 17, 6, 15)
+    pennant(g, 9, 7, 2, -1)
+    pennant(g, 16, 5, 2, -1)
+    lateen(g, 7, 8, 13, 11, base=14)
+    lateen(g, 14, 7, 21, 11, base=13)
+    g.put(24, 19, "H")                                       # high stem head
+    g.line(25, 20, 26, 21, "W")                              # bowsprit
+    g.put(26, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Galley — tier 2: LONG low hull, 7 oar stations, lateen + small topsail
+# ---------------------------------------------------------------------------
+
+
+def galley_e() -> Grid:
+    """Side profile, bow right — the longest tier-2 hull.  Authored x-extent
+    24 -> outlined 26 (band top)."""
+    g = Grid()
+    hull_side(g, 3, 25, 19, tall=False)                      # y19..23, LOW
+    oar_bank(g, (5, 8, 11, 14, 17, 20, 23), 22)              # 7 stations
+    mast(g, 16, 5, 17)
+    yard(g, 12, 20, 7)                                       # topsail yard
+    square_sail(g, 13, 19, 8, 2, seams=())                   # small topsail
+    lateen(g, 8, 14, 22, 8, base=15)                         # the lateen
+    pennant(g, 15, 4, 3, -1)
+    g.put(26, 17, "H")                                       # stem head
+    g.put(26, 18, "W")
+    return g
+
+
+def galley_n() -> Grid:
+    """Stern view: long low hull — beam ~10, oar blades out, lateen+topsail."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    square_sail(g, 12, 17, 7, 2, seams=())                   # topsail
+    spanker(g, 9, 13, 17, 8)                                 # the lateen
+    oar_bank(g, (9, 22), 21)                                 # blades out
+    oar_bank(g, (9, 22), 22)
+    transom(g, 11, 20, 17, windows=(13, 16, 18))
+    return g
+
+
+def galley_s() -> Grid:
+    """Bow view: wide low hull, one lateen sliver, oar tips flanking."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 2, -1)
+    edge_on_sail(g, 13, 17, 8, 14)                           # lateen sliver
+    bow_hull(g, 10, 21, 18)
+    g.hline(11, 20, 16, "H")                                 # foredeck rail
+    oar_bank(g, (8, 23), 19)                                 # tips out
+    oar_bank(g, (8, 23), 21)
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def galley_ne() -> Grid:
+    """3/4 view, bow up-right: the long diagonal, oar dots, lateen+topsail."""
+    g = Grid()
+    rail = diag_hull(g, 4, 19, 25, -6, body=1)
+    for x in (7, 10, 13, 16, 19, 22):                        # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 14, 7, 15)
+    pennant(g, 13, 6, 2, -1)
+    yard(g, 12, 17, 8)                                       # topsail yard
+    square_sail(g, 13, 16, 9, 2, seams=())                   # small topsail
+    lateen(g, 9, 12, 20, 7, base=15)
+    g.put(26, 12, "H")                                       # stem head
+    g.line(27, 11, 28, 10, "W")                              # bowsprit
+    g.put(28, 10, "H")
+    return g
+
+
+def galley_se() -> Grid:
+    """3/4 view, bow down-right: lateen + topsail hanging, oar dots."""
+    g = Grid()
+    rail = diag_hull(g, 4, 12, 25, 6, body=1)
+    for x in (7, 10, 13, 16, 19, 22):                        # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 14, 8, 15)
+    pennant(g, 13, 7, 2, -1)
+    yard(g, 12, 17, 8)                                       # topsail yard
+    square_sail(g, 13, 16, 9, 2, seams=())                   # small topsail
+    lateen(g, 9, 9, 20, 13, base=14)
+    g.put(26, 19, "H")                                       # stem head
+    g.line(27, 20, 28, 21, "W")                              # bowsprit
+    g.put(28, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Brigantine — tier 2: 2 square sails (fore) + fore-and-aft spanker (main)
+# ---------------------------------------------------------------------------
+
+
+def brigantine_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 23 -> outlined 25."""
+    g = Grid()
+    hull_side(g, 4, 23, 19, ports=(7, 12, 17, 21), tall=True)   # y19..25
+    mast(g, 9, 8, 17)                                        # fore: 2 squares
+    yard(g, 6, 12, 10)
+    square_sail(g, 7, 11, 11, 3, seams=(9,))
+    yard(g, 6, 12, 14)
+    square_sail(g, 7, 11, 15, 2, seams=(9,))
+    mast(g, 16, 7, 17)                                       # main: spanker
+    gaff_sail(g, 16, 12, 9, 7, 13)
+    pennant(g, 8, 7, 2, -1)
+    pennant(g, 15, 6, 2, -1)
+    g.put(24, 17, "H")                                       # stem head
+    g.put(24, 18, "W")
+    g.put(25, 16, "W")                                       # bowsprit
+    g.put(26, 15, "H")
+    return g
+
+
+def brigantine_n() -> Grid:
+    """Stern view: squares stacked high, the spanker swung out below."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 2, -1)
+    square_sail(g, 11, 17, 7, 3, seams=(14,))                # fore squares
+    spanker(g, 8, 14, 15, 9)                                 # main spanker
+    transom(g, 10, 21, 17, windows=(12, 15, 18))
+    return g
+
+
+def brigantine_s() -> Grid:
+    """Bow view: two edge-on squares, jib, bowsprit down-screen."""
+    g = Grid()
+    mast(g, 14, 6, 15)
+    pennant(g, 13, 5, 2, -1)
+    edge_on_sail(g, 11, 13, 8, 15)                           # fore sliver
+    edge_on_sail(g, 16, 18, 9, 14)                           # main sliver
+    bow_hull(g, 10, 20, 18)
+    g.hline(11, 19, 16, "H")                                 # foredeck rail
+    g.put(12, 17, "K")
+    g.put(17, 17, "K")
+    jib(g, 14, 7, 19, 20)
+    g.line(16, 16, 20, 20, "W")                              # bowsprit, down-screen
+    g.put(20, 20, "H")
+    return g
+
+
+def brigantine_ne() -> Grid:
+    """3/4 view, bow up-right: fore squares foreshortened, spanker aback."""
+    g = Grid()
+    rail = diag_hull(g, 5, 18, 23, -7)
+    diag_ports(g, rail, (9, 13, 17))
+    mast(g, 9, 9, 15)                                        # fore
+    diag_sail(g, 6, 11, 10, 2, seams=(8,))
+    diag_sail(g, 6, 11, 13, 2, seams=(8,))
+    mast(g, 16, 7, 15)                                       # main
+    gaff_sail(g, 16, 12, 9, 7, 13)
+    pennant(g, 8, 8, 2, -1)
+    pennant(g, 15, 6, 2, -1)
+    g.put(24, 10, "H")                                       # stem head
+    g.line(25, 9, 26, 8, "W")                                # bowsprit
+    g.put(26, 8, "H")
+    stay45(g, 17, 8, 4, 1, 1)                                # forestay -> stem
+    return g
+
+
+def brigantine_se() -> Grid:
+    """3/4 view, bow down-right: sails still hang on the down-heading."""
+    g = Grid()
+    rail = diag_hull(g, 5, 12, 23, 7)
+    diag_ports(g, rail, (9, 13, 17))
+    mast(g, 9, 9, 14)                                        # fore
+    diag_sail(g, 6, 11, 10, 2, seams=(8,))
+    diag_sail(g, 6, 11, 13, 2, seams=(8,))
+    mast(g, 16, 7, 15)                                       # main
+    gaff_sail(g, 16, 12, 9, 7, 12)
+    pennant(g, 8, 8, 2, -1)
+    pennant(g, 15, 6, 2, -1)
+    g.put(24, 20, "H")                                       # stem head
+    g.line(25, 21, 26, 22, "W")                              # bowsprit
+    g.put(26, 22, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Fluyt — tier 2: FAT beam (widest), 3 square sails, blunt stern
+# ---------------------------------------------------------------------------
+
+
+def fluyt_e() -> Grid:
+    """Side profile, bow right — the fat belly is the signature.
+    Authored x-extent 23 -> outlined 25."""
+    g = Grid()
+    fat_hull(g, 5, 24, 19, ports=(9, 14, 19))                # y19..26, FAT
+    g.hline(5, 8, 17, "H")                                   # high round stern
+    g.hline(5, 8, 18, "W")
+    mast(g, 9, 7, 17)                                        # aft
+    mast(g, 15, 6, 17)                                       # main
+    mast(g, 21, 7, 16)                                       # fwd
+    crow_nest(g, 14, 16, 7)
+    yard(g, 7, 11, 9)
+    square_sail(g, 8, 10, 10, 3, seams=(9,))
+    yard(g, 11, 19, 8)
+    square_sail(g, 12, 18, 9, 4, seams=(13, 17))
+    yard(g, 18, 24, 9)
+    square_sail(g, 19, 23, 10, 3, seams=(21,))
+    stay45(g, 22, 7, 5, 1, 1)                                # forestay -> sprit
+    g.put(25, 17, "H")                                       # stem head
+    g.put(25, 18, "W")
+    g.put(26, 16, "W")                                       # bowsprit
+    g.put(27, 15, "H")
+    pennant(g, 8, 6, 2, -1)
+    pennant(g, 14, 5, 3, -1)
+    pennant(g, 20, 6, 2, -1)
+    return g
+
+
+def fluyt_n() -> Grid:
+    """Stern view: the FAT beam — the widest transom in tier 2."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    square_sail(g, 12, 18, 7, 2, seams=())                   # fore, highest
+    square_sail(g, 10, 20, 9, 3, seams=(13, 17))
+    square_sail(g, 8, 22, 12, 3, seams=(11, 15, 19))         # main
+    transom(g, 9, 22, 17, windows=(11, 14, 17, 20))          # FAT 14px beam
+    return g
+
+
+def fluyt_s() -> Grid:
+    """Bow view: widest bow hull, three slivers, jib, bowsprit down."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 2, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # aft sliver
+    edge_on_sail(g, 18, 20, 9, 13)                           # fwd sliver
+    bow_hull(g, 9, 22, 18)                                   # FAT 14px beam
+    g.hline(10, 21, 16, "H")                                 # foredeck rail
+    g.put(12, 17, "K")
+    g.put(19, 17, "K")
+    jib(g, 15, 7, 20, 20)
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def fluyt_ne() -> Grid:
+    """3/4 view, bow up-right: deep diagonal belly, three partial yards."""
+    g = Grid()
+    rail = diag_hull(g, 6, 17, 23, -6, body=2)
+    for x in range(7, 23):                                   # belly row
+        g.put(x, rail[x] + 3, "L")
+    g.hline(6, 8, 13, "H")                                   # high round stern
+    g.hline(6, 8, 14, "W")
+    mast(g, 10, 9, 15)
+    mast(g, 15, 7, 15)
+    mast(g, 20, 8, 14)
+    pennant(g, 9, 8, 2, -1)
+    pennant(g, 14, 6, 3, -1)
+    pennant(g, 19, 7, 2, -1)
+    diag_sail(g, 8, 12, 10, 2, seams=(10,))
+    diag_sail(g, 12, 18, 8, 3, seams=(14, 16))
+    diag_sail(g, 18, 22, 9, 2, seams=(20,))
+    g.put(24, 10, "H")                                       # stem head
+    g.line(25, 9, 26, 8, "W")                                # bowsprit
+    g.put(26, 8, "H")
+    stay45(g, 21, 8, 4, 1, 1)                                # forestay -> stem
+    return g
+
+
+def fluyt_se() -> Grid:
+    """3/4 view, bow down-right: belly hangs honest, sails stacked."""
+    g = Grid()
+    rail = diag_hull(g, 6, 12, 23, 6, body=2)
+    for x in range(7, 23):                                   # belly row
+        g.put(x, rail[x] + 3, "L")
+    g.hline(6, 8, 9, "H")                                    # high round stern
+    g.hline(6, 8, 10, "W")
+    mast(g, 10, 8, 14)
+    mast(g, 15, 7, 15)
+    mast(g, 20, 8, 14)
+    pennant(g, 9, 7, 2, -1)
+    pennant(g, 14, 6, 3, -1)
+    pennant(g, 19, 7, 2, -1)
+    diag_sail(g, 8, 12, 9, 2, seams=(10,))
+    diag_sail(g, 12, 18, 8, 3, seams=(14, 16))
+    diag_sail(g, 18, 22, 10, 2, seams=(20,))
+    g.put(24, 19, "H")                                       # stem head
+    g.line(25, 20, 26, 21, "W")                              # bowsprit
+    g.put(26, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Junk — tier 2: 3 full-batten sails, fan-tail stern
+# ---------------------------------------------------------------------------
+
+
+def junk_e() -> Grid:
+    """Side profile, bow right — battens segment every sail, stern fans up.
+    Authored x-extent 23 -> outlined 25."""
+    g = Grid()
+    hull_side(g, 6, 23, 19, tall=True)                       # y19..25
+    g.put(4, 16, "H")                                        # fan-tail peak
+    g.hline(4, 5, 17, "H")
+    g.hline(4, 6, 18, "W")
+    mast(g, 10, 7, 17)                                       # aft
+    mast(g, 15, 6, 17)                                       # main
+    mast(g, 20, 7, 17)                                       # fwd
+    batten_sail(g, 8, 12, 9, 5, battens=(11,))               # aft sail
+    batten_sail(g, 13, 17, 7, 6, battens=(9, 11))            # main sail
+    batten_sail(g, 18, 22, 10, 4, battens=())                # fwd sail
+    pennant(g, 9, 6, 2, -1)
+    pennant(g, 14, 5, 3, -1)
+    pennant(g, 19, 6, 2, -1)
+    g.put(24, 17, "H")                                       # stem head
+    g.put(24, 18, "W")
+    g.put(25, 16, "W")                                       # bowsprit
+    g.put(26, 15, "H")
+    return g
+
+
+def junk_n() -> Grid:
+    """Stern view: fan-tail flare, the battened sails stacked."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    batten_sail(g, 12, 18, 7, 3, battens=())                 # fwd, highest
+    batten_sail(g, 10, 20, 10, 5, battens=(12, 14))          # main
+    batten_sail(g, 8, 22, 15, 2, battens=())                 # aft
+    g.hline(8, 23, 16, "H")                                  # fan-tail flare
+    transom(g, 9, 22, 17, windows=(11, 15, 19))
+    return g
+
+
+def junk_s() -> Grid:
+    """Bow view: three edge-on battened slivers, bowsprit down, no jib."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 2, -1)
+    edge_on_sail(g, 10, 12, 7, 14)                           # aft sliver
+    edge_on_sail(g, 18, 20, 8, 13)                           # fwd sliver
+    bow_hull(g, 10, 21, 18)
+    g.hline(11, 20, 16, "H")                                 # foredeck rail
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def junk_ne() -> Grid:
+    """3/4 view, bow up-right: battens on the partial yards, fan stern."""
+    g = Grid()
+    rail = diag_hull(g, 5, 18, 23, -7, body=2)
+    g.put(5, 12, "H")                                        # fan-tail peak
+    g.hline(5, 6, 13, "H")
+    g.hline(5, 7, 14, "W")
+    mast(g, 10, 8, 15)
+    mast(g, 15, 6, 15)
+    mast(g, 20, 8, 14)
+    pennant(g, 9, 7, 2, -1)
+    pennant(g, 14, 5, 3, -1)
+    pennant(g, 19, 7, 2, -1)
+    diag_batten_sail(g, 8, 12, 9, 3, battens=())
+    diag_batten_sail(g, 12, 18, 7, 4, battens=(9,))
+    diag_batten_sail(g, 18, 22, 9, 3, battens=())
+    g.put(24, 10, "H")                                       # stem head
+    g.line(25, 9, 26, 8, "W")                                # bowsprit
+    g.put(26, 8, "H")
+    return g
+
+
+def junk_se() -> Grid:
+    """3/4 view, bow down-right: battened sails on the down-heading."""
+    g = Grid()
+    rail = diag_hull(g, 5, 12, 23, 7, body=2)
+    g.hline(5, 6, 10, "H")                                   # fan-tail peak
+    g.hline(5, 7, 11, "H")
+    mast(g, 10, 8, 14)
+    mast(g, 15, 7, 15)
+    mast(g, 20, 8, 14)
+    pennant(g, 9, 7, 2, -1)
+    pennant(g, 14, 6, 3, -1)
+    pennant(g, 19, 7, 2, -1)
+    diag_batten_sail(g, 8, 12, 9, 3, battens=())
+    diag_batten_sail(g, 12, 18, 8, 4, battens=(10,))
+    diag_batten_sail(g, 18, 22, 10, 3, battens=())
+    g.put(24, 19, "H")                                       # stem head
+    g.line(25, 20, 26, 21, "W")                              # bowsprit
+    g.put(26, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Dhow — tier 2: slim, 1 BIG lateen, sharp prow
+# ---------------------------------------------------------------------------
+
+
+def dhow_e() -> Grid:
+    """Side profile, bow right — sharp rising prow.  Authored x-extent
+    21 -> outlined 23."""
+    g = Grid()
+    hull_side(g, 5, 22, 19, tall=False)                      # y19..23, slim
+    g.put(23, 16, "H")                                       # sharp prow
+    g.put(23, 17, "W")
+    g.put(23, 18, "W")
+    g.put(24, 15, "W")                                       # bowsprit
+    g.put(25, 14, "H")
+    mast(g, 13, 5, 17)
+    lateen(g, 6, 14, 22, 5, base=15)                         # THE big lateen
+    pennant(g, 12, 4, 2, -1)
+    return g
+
+
+def dhow_n() -> Grid:
+    """Stern view: narrow transom, the big lateen from astern."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 2, -1)
+    spanker(g, 8, 14, 17, 8)                                 # big lateen
+    transom(g, 11, 20, 17, windows=(13, 16))
+    return g
+
+
+def dhow_s() -> Grid:
+    """Bow view: one wide lateen sliver, sharp prow point, bowsprit down."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 2, -1)
+    edge_on_sail(g, 12, 18, 8, 15)                           # one wide sliver
+    bow_hull(g, 11, 20, 18)
+    g.hline(12, 19, 16, "H")                                 # foredeck rail
+    g.put(15, 15, "H")                                       # prow point
+    g.line(17, 16, 20, 19, "W")                              # bowsprit, down-screen
+    g.put(20, 19, "H")
+    return g
+
+
+def dhow_ne() -> Grid:
+    """3/4 view, bow up-right: the big lateen over the slim diagonal."""
+    g = Grid()
+    rail = diag_hull(g, 8, 17, 21, -5, body=1)
+    diag_ports(g, rail, (15,))
+    mast(g, 14, 7, 14)
+    pennant(g, 13, 6, 2, -1)
+    lateen(g, 9, 12, 19, 6, base=15)                         # big
+    g.put(22, 11, "H")                                       # sharp stem head
+    g.line(23, 10, 25, 8, "W")                               # bowsprit
+    g.put(25, 8, "H")
+    stay45(g, 15, 8, 4, 1, 1)                                # forestay -> stem
+    return g
+
+
+def dhow_se() -> Grid:
+    """3/4 view, bow down-right: the lateen hangs off the slanted yard."""
+    g = Grid()
+    rail = diag_hull(g, 8, 13, 21, 5, body=1)
+    diag_ports(g, rail, (15,))
+    mast(g, 14, 7, 14)
+    pennant(g, 13, 6, 2, -1)
+    lateen(g, 9, 7, 19, 12, base=14)
+    g.put(22, 19, "H")                                       # sharp stem head
+    g.line(23, 20, 25, 22, "W")                              # bowsprit
+    g.put(25, 22, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Caravela redonda — tier 2: roundish hull, 2 squares + 1 lateen (3 masts)
+# ---------------------------------------------------------------------------
+
+
+def caravela_redonda_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 23 -> outlined 25."""
+    g = Grid()
+    hull_side(g, 4, 23, 19, ports=(8, 13, 18), tall=True)    # y19..25
+    g.hline(4, 5, 17, "H")                                   # raised aft deck
+    g.hline(4, 5, 18, "W")
+    mast(g, 8, 8, 17)                                        # fore square
+    mast(g, 14, 7, 17)                                       # main square
+    mast(g, 19, 8, 17)                                       # mizzen lateen
+    yard(g, 5, 11, 10)
+    square_sail(g, 6, 10, 11, 3, seams=(8,))
+    yard(g, 11, 17, 9)
+    square_sail(g, 12, 16, 10, 4, seams=(13, 16))
+    lateen(g, 16, 12, 23, 8, base=15)
+    pennant(g, 7, 7, 2, -1)
+    pennant(g, 13, 6, 2, -1)
+    pennant(g, 18, 7, 2, -1)
+    forecastle(g, 21, 23, 16)
+    g.put(24, 17, "H")                                       # stem head
+    g.put(24, 18, "W")
+    g.put(25, 16, "W")                                       # bowsprit
+    g.put(26, 15, "H")
+    return g
+
+
+def caravela_redonda_n() -> Grid:
+    """Stern view: squares stacked, mizzen lateen swung out below."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 2, -1)
+    square_sail(g, 11, 17, 7, 2, seams=())                   # fore
+    square_sail(g, 9, 19, 9, 3, seams=(12, 16))              # main
+    spanker(g, 6, 13, 13, 9)                                 # mizzen lateen
+    transom(g, 10, 21, 17, windows=(12, 15, 18))
+    return g
+
+
+def caravela_redonda_s() -> Grid:
+    """Bow view: square slivers + lateen, jib, bowsprit down-screen."""
+    g = Grid()
+    mast(g, 14, 6, 15)
+    pennant(g, 13, 5, 2, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # fore sliver
+    edge_on_sail(g, 16, 18, 9, 13)                           # main sliver
+    bow_hull(g, 10, 20, 18)
+    g.hline(11, 19, 16, "H")                                 # foredeck rail
+    jib(g, 14, 7, 19, 20)
+    g.line(16, 16, 20, 20, "W")                              # bowsprit, down-screen
+    g.put(20, 20, "H")
+    return g
+
+
+def caravela_redonda_ne() -> Grid:
+    """3/4 view, bow up-right: 2 foreshortened squares + lateen mizzen."""
+    g = Grid()
+    rail = diag_hull(g, 5, 18, 23, -7, body=2)
+    diag_ports(g, rail, (9, 13, 17))
+    g.hline(5, 7, 14, "H")                                   # raised aft deck
+    g.hline(5, 7, 15, "W")
+    mast(g, 9, 9, 15)
+    mast(g, 15, 7, 15)
+    pennant(g, 8, 8, 2, -1)
+    pennant(g, 14, 6, 2, -1)
+    diag_sail(g, 6, 11, 10, 3, seams=(8,))
+    diag_sail(g, 12, 18, 8, 3, seams=(14, 16))
+    lateen(g, 17, 11, 22, 8, base=13)                        # mizzen lateen
+    g.put(24, 10, "H")                                       # stem head
+    g.line(25, 9, 26, 8, "W")                                # bowsprit
+    g.put(26, 8, "H")
+    return g
+
+
+def caravela_redonda_se() -> Grid:
+    """3/4 view, bow down-right: squares + lateen hanging honest."""
+    g = Grid()
+    rail = diag_hull(g, 5, 12, 23, 7, body=2)
+    diag_ports(g, rail, (9, 13, 17))
+    g.hline(5, 7, 10, "H")                                   # raised aft deck
+    g.hline(5, 7, 11, "W")
+    mast(g, 9, 9, 14)
+    mast(g, 15, 7, 15)
+    pennant(g, 8, 8, 2, -1)
+    pennant(g, 14, 6, 2, -1)
+    diag_sail(g, 6, 11, 10, 3, seams=(8,))
+    diag_sail(g, 12, 18, 9, 3, seams=(14, 16))
+    lateen(g, 17, 8, 22, 12, base=13)                        # mizzen lateen
+    g.put(24, 20, "H")                                       # stem head
+    g.line(25, 21, 26, 22, "W")                              # bowsprit
+    g.put(26, 22, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Xebec — tier 2: narrow, 3 lateens on 3 masts (the signature overlap)
+# ---------------------------------------------------------------------------
+
+
+def xebec_e() -> Grid:
+    """Side profile, bow right — three overlapping lateen yards.
+    Authored x-extent 22 -> outlined 24."""
+    g = Grid()
+    hull_side(g, 4, 23, 19, tall=False)                      # y19..23, narrow
+    mast(g, 8, 8, 16)                                        # aft
+    mast(g, 13, 7, 16)                                       # mid
+    mast(g, 18, 8, 16)                                       # fwd
+    lateen(g, 5, 13, 12, 9, base=15)                         # aft lateen
+    lateen(g, 10, 12, 17, 8, base=15)                        # mid lateen
+    lateen(g, 15, 11, 22, 7, base=14)                        # fwd lateen
+    pennant(g, 7, 7, 2, -1)
+    pennant(g, 12, 6, 2, -1)
+    pennant(g, 17, 7, 2, -1)
+    g.put(24, 16, "H")                                       # stem head
+    g.put(24, 17, "W")
+    g.put(25, 15, "H")                                       # short bowsprit
+    return g
+
+
+def xebec_n() -> Grid:
+    """Stern view: narrow transom, the three lateens stacked."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    spanker(g, 11, 8, 17, 5)                                 # fwd lateen, high
+    spanker(g, 9, 11, 16, 7)                                 # mid lateen
+    spanker(g, 7, 14, 15, 9)                                 # aft lateen
+    transom(g, 11, 20, 17, windows=(13, 16))
+    return g
+
+
+def xebec_s() -> Grid:
+    """Bow view: three lateen slivers across the beam, bowsprit down."""
+    g = Grid()
+    edge_on_sail(g, 9, 11, 8, 13)                            # aft sliver
+    edge_on_sail(g, 13, 15, 9, 14)                           # mid sliver
+    edge_on_sail(g, 17, 19, 10, 13)                          # fwd sliver
+    mast(g, 14, 6, 15)
+    pennant(g, 13, 5, 3, -1)
+    bow_hull(g, 11, 20, 18)
+    g.hline(12, 19, 16, "H")                                 # foredeck rail
+    g.line(16, 16, 20, 20, "W")                              # bowsprit, down-screen
+    g.put(20, 20, "H")
+    return g
+
+
+def xebec_ne() -> Grid:
+    """3/4 view, bow up-right: the three lateen yards staggering uphill."""
+    g = Grid()
+    rail = diag_hull(g, 4, 19, 23, -6, body=1)
+    mast(g, 8, 9, 17)
+    mast(g, 13, 7, 15)
+    mast(g, 18, 8, 14)
+    pennant(g, 7, 8, 2, -1)
+    pennant(g, 12, 6, 2, -1)
+    pennant(g, 17, 7, 2, -1)
+    lateen(g, 5, 13, 11, 9, base=15)
+    lateen(g, 10, 12, 17, 8, base=15)
+    lateen(g, 15, 11, 21, 7, base=14)
+    g.put(24, 12, "H")                                       # stem head
+    g.line(25, 11, 26, 10, "W")                              # bowsprit
+    g.put(26, 10, "H")
+    return g
+
+
+def xebec_se() -> Grid:
+    """3/4 view, bow down-right: the three yards slanting downhill."""
+    g = Grid()
+    rail = diag_hull(g, 4, 12, 23, 6, body=1)
+    mast(g, 8, 9, 12)
+    mast(g, 13, 8, 14)
+    mast(g, 18, 9, 15)
+    pennant(g, 7, 8, 2, -1)
+    pennant(g, 12, 7, 2, -1)
+    pennant(g, 17, 8, 2, -1)
+    lateen(g, 5, 8, 11, 12, base=14)
+    lateen(g, 10, 7, 17, 12, base=14)
+    lateen(g, 15, 8, 21, 12, base=13)
+    g.put(24, 19, "H")                                       # stem head
+    g.line(25, 20, 26, 21, "W")                              # bowsprit
+    g.put(26, 21, "H")
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Nao — tier 3: 3 square sails, big fore/aft castles, HULL_GOLD trim
+# ---------------------------------------------------------------------------
+
+
+def nao_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 28 -> outlined 30."""
+    g = Grid()
+    hull_side(g, 2, 24, 19, ports=(5, 9, 13, 17, 21), tall=True)   # y19..25
+    mast(g, 8, 7, 15)                                        # mizzen (behind castle)
+    stern_castle(g, 2, 7, 13, windows2=(3, 5), windows1=(3, 5))
+    lantern(g, 1, 12)
+    forecastle(g, 20, 24, 16)                                # big fore castle
+    mast(g, 19, 6, 18)                                       # fore
+    mast(g, 13, 5, 18)                                       # main
+    crow_nest(g, 11, 15, 7)
+    crow_nest(g, 18, 20, 8)
+    stay45(g, 20, 7, 8, 1, 1)                                # forestay -> sprit
+    stem_sprit(g, 25, 17, 3)
+    yard(g, 5, 11, 9)
+    square_sail(g, 6, 10, 10, 3, seams=(8,))                 # mizzen square
+    yard(g, 8, 18, 8)
+    square_sail(g, 9, 17, 9, 4, seams=(11, 15))              # main square
+    yard(g, 15, 23, 9)
+    square_sail(g, 16, 22, 10, 4, seams=(18, 21))            # fore square
+    pennant(g, 7, 6, 2, -1)
+    pennant(g, 12, 4, 3, -1)
+    pennant(g, 18, 5, 2, -1)
+    # HULL_GOLD tier-3 trim: sheer line + castle/forecastle rails
+    gold_trim(g, 2, 24, 19)
+    gold_trim(g, 1, 8, 17)
+    gold_trim(g, 20, 24, 16)
+    return g
+
+
+def nao_n() -> Grid:
+    """Stern view sailing away: the big aft castle IS the transom."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    square_sail(g, 12, 18, 7, 2, seams=())                   # fore, highest
+    square_sail(g, 10, 20, 9, 3, seams=(13, 17))
+    square_sail(g, 8, 22, 12, 4, seams=(11, 15, 19))         # main
+    transom(g, 8, 23, 17, windows=(10, 13, 16, 19, 22))      # wide castle face
+    gold_trim(g, 8, 23, 17)                                  # taffrail line
+    return g
+
+
+def nao_s() -> Grid:
+    """Bow view approaching: big fore castle, jib, edge-on squares."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 3, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # aft sliver
+    edge_on_sail(g, 17, 19, 9, 13)                           # fore sliver
+    bow_hull(g, 9, 22, 18)
+    g.hline(10, 21, 15, "H")                                 # fore castle, 2 rows
+    g.hline(10, 21, 16, "W")
+    g.put(12, 17, "K")
+    g.put(19, 17, "K")
+    gold_trim(g, 10, 21, 15)                                 # castle rail
+    gold_trim(g, 9, 22, 18)                                  # hull top rail
+    jib(g, 15, 7, 21, 21)
+    g.line(17, 16, 22, 21, "W")                              # bowsprit, down-screen
+    g.put(22, 21, "H")
+    return g
+
+
+def nao_ne() -> Grid:
+    """3/4 view, bow up-right: castles fore/aft, three partial yards."""
+    g = Grid()
+    rail = diag_hull(g, 4, 19, 23, -9)
+    diag_ports(g, rail, (8, 12, 16))
+    mast(g, 8, 10, 16)
+    g.hline(4, 6, 17, "H")                                   # aft castle block
+    g.hline(4, 6, 18, "W")
+    g.put(5, 18, "K")
+    lantern(g, 3, 16)
+    mast(g, 13, 6, 14)
+    mast(g, 18, 5, 11)
+    g.hline(21, 23, 12, "H")                                 # fore castle block
+    g.hline(21, 23, 13, "W")
+    pennant(g, 7, 9, 2, -1)
+    pennant(g, 12, 5, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    diag_sail(g, 5, 10, 10, 2, seams=(7,))                   # mizzen square
+    diag_sail(g, 11, 15, 7, 3, seams=(13,))
+    diag_sail(g, 16, 20, 6, 3, seams=(18,))
+    g.put(24, 9, "H")                                        # stem head
+    g.line(25, 8, 27, 6, "W")                                # bowsprit
+    g.put(27, 6, "H")
+    stay45(g, 19, 5, 4, 1, 1)                                # forestay -> stem
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 17)                                   # aft castle rail
+    gold_trim(g, 21, 23, 12)                                 # fore castle rail
+    return g
+
+
+def nao_se() -> Grid:
+    """3/4 view, bow down-right: honest down-heading, sails still hang."""
+    g = Grid()
+    rail = diag_hull(g, 4, 11, 23, 9)
+    diag_ports(g, rail, (8, 12, 16))
+    mast(g, 8, 4, 12)
+    g.hline(4, 6, 9, "H")                                    # aft castle block
+    g.hline(4, 6, 10, "W")
+    g.put(5, 10, "K")
+    lantern(g, 3, 8)
+    mast(g, 13, 4, 14)
+    mast(g, 18, 5, 17)
+    g.hline(21, 23, 17, "H")                                 # fore castle block
+    g.hline(21, 23, 18, "W")
+    pennant(g, 7, 3, 2, -1)
+    pennant(g, 12, 3, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    diag_sail(g, 5, 10, 5, 2, seams=(7,))                    # mizzen square
+    diag_sail(g, 11, 15, 6, 3, seams=(13,))
+    diag_sail(g, 16, 20, 7, 3, seams=(18,))
+    g.put(24, 21, "H")                                       # stem head
+    g.line(25, 22, 27, 24, "W")                              # bowsprit, down-right
+    g.put(27, 24, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 9)                                    # aft castle rail
+    gold_trim(g, 21, 23, 17)                                 # fore castle rail
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Carrack — tier 3: 2 squares + lateen, HIGH stern castle (taller than
+# the galleon's), HULL_GOLD trim
+# ---------------------------------------------------------------------------
+
+
+def carrack_e() -> Grid:
+    """Side profile, bow right.  Authored x-extent 28 -> outlined 30."""
+    g = Grid()
+    hull_side(g, 2, 25, 19, ports=(5, 9, 13, 17, 21), tall=True)   # y19..25
+    mast(g, 9, 7, 13)                                        # mizzen (behind castle)
+    g.hline(2, 8, 11, "H")                                   # HIGH castle roof
+    g.hline(2, 8, 12, "W")
+    for x in (3, 5, 7):
+        g.put(x, 12, "K")
+    g.hline(2, 8, 13, "W")
+    g.hline(1, 9, 14, "L")                                   # roof overhang
+    g.hline(1, 9, 15, "H")                                   # tier rail
+    g.hline(1, 9, 16, "W")
+    for x in (2, 4, 6, 8):
+        g.put(x, 16, "K")
+    g.hline(1, 9, 17, "W")
+    g.hline(1, 9, 18, "L")
+    lantern(g, 1, 10)
+    mast(g, 14, 4, 18)                                       # main
+    mast(g, 20, 5, 18)                                       # fore
+    crow_nest(g, 12, 16, 6)
+    stay45(g, 21, 6, 5, 1, 1)                                # forestay -> sprit
+    stem_sprit(g, 26, 17, 2)
+    yard(g, 9, 19, 7)
+    square_sail(g, 10, 18, 8, 5, seams=(12, 16))             # main square
+    yard(g, 16, 24, 8)
+    square_sail(g, 17, 23, 9, 4, seams=(19, 22))             # fore square
+    lateen(g, 4, 11, 11, 8, base=14)                         # mizzen lateen
+    pennant(g, 8, 6, 2, -1)
+    pennant(g, 13, 3, 3, -1)
+    pennant(g, 19, 4, 2, -1)
+    forecastle(g, 22, 25, 17)
+    # HULL_GOLD tier-3 trim: sheer line + castle tier rail + fore rail
+    gold_trim(g, 2, 25, 19)
+    gold_trim(g, 1, 9, 15)
+    gold_trim(g, 22, 25, 17)
+    return g
+
+
+def carrack_n() -> Grid:
+    """Stern view sailing away: the HIGH castle roofline above the transom."""
+    g = Grid()
+    mast(g, 15, 5, 16)
+    pennant(g, 14, 4, 3, -1)
+    square_sail(g, 11, 17, 7, 3, seams=(14,))                # fore, highest
+    square_sail(g, 9, 19, 10, 4, seams=(12, 16))             # main
+    spanker(g, 6, 15, 13, 10)                                # mizzen lateen
+    g.hline(9, 22, 15, "H")                                  # castle roof
+    transom(g, 9, 22, 16, windows=(11, 15, 19))              # tall castle face
+    gold_trim(g, 9, 22, 16)                                  # taffrail line
+    return g
+
+
+def carrack_s() -> Grid:
+    """Bow view approaching: jib, edge-on squares, hull gold rails."""
+    g = Grid()
+    mast(g, 15, 5, 15)
+    pennant(g, 14, 4, 3, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # aft sliver
+    edge_on_sail(g, 17, 19, 9, 13)                           # fore sliver
+    bow_hull(g, 9, 22, 18)
+    g.hline(10, 21, 16, "H")                                 # foredeck rail
+    g.put(12, 17, "K")
+    g.put(19, 17, "K")
+    gold_trim(g, 10, 21, 16)                                 # foredeck rail
+    gold_trim(g, 9, 22, 18)                                  # hull top rail
+    jib(g, 15, 6, 20, 20)
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def carrack_ne() -> Grid:
+    """3/4 view, bow up-right: the high castle block, square+lateen rig."""
+    g = Grid()
+    rail = diag_hull(g, 4, 19, 23, -9)
+    diag_ports(g, rail, (8, 12, 16))
+    mast(g, 8, 10, 16)                                       # mizzen
+    g.hline(4, 6, 14, "H")                                   # HIGH castle block
+    g.hline(4, 6, 15, "W")
+    g.hline(4, 6, 16, "W")
+    g.put(5, 16, "K")
+    lantern(g, 3, 13)
+    mast(g, 13, 5, 14)                                       # main square
+    mast(g, 18, 5, 11)                                       # fore square
+    pennant(g, 7, 9, 2, -1)
+    pennant(g, 12, 4, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    diag_sail(g, 11, 15, 6, 3, seams=(13,))
+    diag_sail(g, 16, 20, 6, 3, seams=(18,))
+    lateen(g, 5, 13, 10, 9, base=16)                         # mizzen lateen
+    g.put(24, 9, "H")                                        # stem head
+    g.line(25, 8, 27, 6, "W")                                # bowsprit
+    g.put(27, 6, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 14)                                   # castle rail
+    return g
+
+
+def carrack_se() -> Grid:
+    """3/4 view, bow down-right: high castle, sails hang on the slope."""
+    g = Grid()
+    rail = diag_hull(g, 4, 11, 23, 9)
+    diag_ports(g, rail, (8, 12, 16))
+    mast(g, 8, 4, 12)                                        # mizzen
+    g.hline(4, 6, 8, "H")                                    # HIGH castle block
+    g.hline(4, 6, 9, "W")
+    g.hline(4, 6, 10, "W")
+    g.put(5, 10, "K")
+    lantern(g, 3, 7)
+    mast(g, 13, 4, 14)                                       # main square
+    mast(g, 18, 5, 17)                                       # fore square
+    pennant(g, 7, 3, 2, -1)
+    pennant(g, 12, 3, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    diag_sail(g, 11, 15, 6, 3, seams=(13,))
+    diag_sail(g, 16, 20, 7, 3, seams=(18,))
+    lateen(g, 5, 8, 10, 11, base=12)                         # mizzen lateen
+    g.put(24, 21, "H")                                       # stem head
+    g.line(25, 22, 27, 24, "W")                              # bowsprit, down-right
+    g.put(27, 24, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 4, 6, 8)                                    # castle rail
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Galleass — tier 3: 9 oar stations + 3 lateens, the LONGEST hull
+# ---------------------------------------------------------------------------
+
+
+def galleass_e() -> Grid:
+    """Side profile, bow right — hull 25px, the longest in the game.
+    Authored x-extent 28 -> outlined 30 (band top)."""
+    g = Grid()
+    hull_side(g, 2, 26, 19, tall=True)                       # y19..25
+    oar_bank(g, (4, 6, 9, 11, 14, 16, 19, 21, 24), 24)       # 9 stations
+    stern_castle(g, 2, 6, 13, windows2=(3, 5), windows1=(3, 5))
+    mast(g, 8, 7, 15)                                        # aft lateen mast
+    mast(g, 14, 6, 18)                                       # main lateen mast
+    mast(g, 20, 7, 18)                                       # fwd lateen mast
+    lateen(g, 4, 11, 11, 8, base=15)                         # aft lateen
+    lateen(g, 10, 10, 17, 7, base=15)                        # main lateen
+    lateen(g, 16, 9, 23, 6, base=14)                         # fwd lateen
+    forecastle(g, 22, 26, 17)
+    stem_sprit(g, 27, 17, 1)
+    pennant(g, 7, 6, 2, -1)
+    pennant(g, 13, 5, 3, -1)
+    pennant(g, 19, 6, 2, -1)
+    # HULL_GOLD tier-3 trim: sheer line + castle/forecastle rails
+    gold_trim(g, 2, 26, 19)
+    gold_trim(g, 1, 7, 17)
+    gold_trim(g, 22, 26, 17)
+    return g
+
+
+def galleass_n() -> Grid:
+    """Stern view sailing away: three lateens stacked, oar blades out."""
+    g = Grid()
+    mast(g, 15, 6, 16)
+    pennant(g, 14, 5, 3, -1)
+    spanker(g, 11, 8, 17, 5)                                 # fwd lateen, high
+    spanker(g, 9, 11, 17, 7)                                 # main lateen
+    spanker(g, 7, 14, 16, 9)                                 # aft lateen
+    oar_bank(g, (7, 24), 21)                                 # blades out
+    oar_bank(g, (7, 24), 22)
+    transom(g, 9, 22, 17, windows=(11, 14, 17, 20))
+    gold_trim(g, 9, 22, 17)                                  # taffrail line
+    return g
+
+
+def galleass_s() -> Grid:
+    """Bow view approaching: lateen slivers, oar tips flanking the bow."""
+    g = Grid()
+    mast(g, 15, 6, 15)
+    pennant(g, 14, 5, 3, -1)
+    edge_on_sail(g, 10, 12, 8, 14)                           # aft sliver
+    edge_on_sail(g, 17, 19, 9, 13)                           # fwd sliver
+    bow_hull(g, 9, 22, 18)
+    g.hline(10, 21, 16, "H")                                 # foredeck rail
+    gold_trim(g, 10, 21, 16)                                 # foredeck rail
+    gold_trim(g, 9, 22, 18)                                  # hull top rail
+    oar_bank(g, (6, 25), 19)                                 # tips out
+    oar_bank(g, (6, 25), 21)
+    g.line(17, 16, 21, 20, "W")                              # bowsprit, down-screen
+    g.put(21, 20, "H")
+    return g
+
+
+def galleass_ne() -> Grid:
+    """3/4 view, bow up-right: oar dots down the diagonal, 3 lateens."""
+    g = Grid()
+    rail = diag_hull(g, 3, 20, 24, -9)
+    for x in (6, 9, 12, 15, 18, 21):                         # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 8, 9, 15)
+    g.hline(3, 5, 16, "H")                                   # aft castle block
+    g.hline(3, 5, 17, "W")
+    g.put(4, 17, "K")
+    mast(g, 13, 6, 14)
+    mast(g, 18, 5, 12)
+    pennant(g, 7, 8, 2, -1)
+    pennant(g, 12, 5, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    lateen(g, 5, 13, 11, 9, base=16)                         # aft lateen
+    lateen(g, 10, 11, 17, 8, base=15)                        # main lateen
+    lateen(g, 15, 10, 21, 7, base=13)                        # fwd lateen
+    g.put(25, 10, "H")                                       # stem head
+    g.line(26, 9, 27, 8, "W")                                # bowsprit
+    g.put(27, 8, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 3, 5, 16)                                   # castle rail
+    return g
+
+
+def galleass_se() -> Grid:
+    """3/4 view, bow down-right: lateens hang, oar dots ride the slope."""
+    g = Grid()
+    rail = diag_hull(g, 3, 11, 24, 9)
+    for x in (6, 9, 12, 15, 18, 21):                         # oar dots
+        g.put(x, rail[x] + 2, "K")
+    mast(g, 8, 4, 12)
+    g.hline(3, 5, 8, "H")                                    # aft castle block
+    g.hline(3, 5, 9, "W")
+    g.put(4, 9, "K")
+    mast(g, 13, 4, 14)
+    mast(g, 18, 5, 16)
+    pennant(g, 7, 3, 2, -1)
+    pennant(g, 12, 3, 3, -1)
+    pennant(g, 17, 4, 2, -1)
+    lateen(g, 5, 7, 11, 11, base=13)                         # aft lateen
+    lateen(g, 10, 6, 17, 12, base=13)                        # main lateen
+    lateen(g, 15, 7, 21, 12, base=12)                        # fwd lateen
+    g.put(25, 21, "H")                                       # stem head
+    g.line(26, 22, 27, 23, "W")                              # bowsprit, down-right
+    g.put(27, 23, "H")
+    for x, y in rail.items():                                # HULL_GOLD sheer line
+        g.put(x, y, "g")
+    gold_trim(g, 3, 5, 8)                                    # castle rail
+    return g
+
+
+def latin_maps() -> dict[str, Grid]:
+    ne = latin_ne()
+    se = latin_se()
+    return {
+        "e": latin_e(),
+        "w": latin_e().mirror_x(),   # opposite tack, own authored map
+        "n": latin_n(),
+        "s": latin_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def galiot_maps() -> dict[str, Grid]:
+    ne = galiot_ne()
+    se = galiot_se()
+    return {
+        "e": galiot_e(),
+        "w": galiot_e().mirror_x(),  # opposite tack, own authored map
+        "n": galiot_n(),
+        "s": galiot_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def pinnace_maps() -> dict[str, Grid]:
+    ne = pinnace_ne()
+    se = pinnace_se()
+    return {
+        "e": pinnace_e(),
+        "w": pinnace_e().mirror_x(),  # opposite tack, own authored map
+        "n": pinnace_n(),
+        "s": pinnace_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def caravel_maps() -> dict[str, Grid]:
+    ne = caravel_ne()
+    se = caravel_se()
+    return {
+        "e": caravel_e(),
+        "w": caravel_e().mirror_x(),  # opposite tack, own authored map
+        "n": caravel_n(),
+        "s": caravel_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def galley_maps() -> dict[str, Grid]:
+    ne = galley_ne()
+    se = galley_se()
+    return {
+        "e": galley_e(),
+        "w": galley_e().mirror_x(),  # opposite tack, own authored map
+        "n": galley_n(),
+        "s": galley_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def brigantine_maps() -> dict[str, Grid]:
+    ne = brigantine_ne()
+    se = brigantine_se()
+    return {
+        "e": brigantine_e(),
+        "w": brigantine_e().mirror_x(),  # opposite tack, own authored map
+        "n": brigantine_n(),
+        "s": brigantine_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def fluyt_maps() -> dict[str, Grid]:
+    ne = fluyt_ne()
+    se = fluyt_se()
+    return {
+        "e": fluyt_e(),
+        "w": fluyt_e().mirror_x(),   # opposite tack, own authored map
+        "n": fluyt_n(),
+        "s": fluyt_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def junk_maps() -> dict[str, Grid]:
+    ne = junk_ne()
+    se = junk_se()
+    return {
+        "e": junk_e(),
+        "w": junk_e().mirror_x(),    # opposite tack, own authored map
+        "n": junk_n(),
+        "s": junk_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def dhow_maps() -> dict[str, Grid]:
+    ne = dhow_ne()
+    se = dhow_se()
+    return {
+        "e": dhow_e(),
+        "w": dhow_e().mirror_x(),    # opposite tack, own authored map
+        "n": dhow_n(),
+        "s": dhow_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def caravela_redonda_maps() -> dict[str, Grid]:
+    ne = caravela_redonda_ne()
+    se = caravela_redonda_se()
+    return {
+        "e": caravela_redonda_e(),
+        "w": caravela_redonda_e().mirror_x(),  # opposite tack, authored map
+        "n": caravela_redonda_n(),
+        "s": caravela_redonda_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def xebec_maps() -> dict[str, Grid]:
+    ne = xebec_ne()
+    se = xebec_se()
+    return {
+        "e": xebec_e(),
+        "w": xebec_e().mirror_x(),   # opposite tack, own authored map
+        "n": xebec_n(),
+        "s": xebec_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def nao_maps() -> dict[str, Grid]:
+    ne = nao_ne()
+    se = nao_se()
+    return {
+        "e": nao_e(),
+        "w": nao_e().mirror_x(),     # opposite tack, own authored map
+        "n": nao_n(),
+        "s": nao_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def carrack_maps() -> dict[str, Grid]:
+    ne = carrack_ne()
+    se = carrack_se()
+    return {
+        "e": carrack_e(),
+        "w": carrack_e().mirror_x(),  # opposite tack, own authored map
+        "n": carrack_n(),
+        "s": carrack_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+def galleass_maps() -> dict[str, Grid]:
+    ne = galleass_ne()
+    se = galleass_se()
+    return {
+        "e": galleass_e(),
+        "w": galleass_e().mirror_x(),  # opposite tack, own authored map
+        "n": galleass_n(),
+        "s": galleass_s(),
+        "ne": ne,
+        "nw": ne.mirror_x(),
+        "se": se,
+        "sw": se.mirror_x(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Doc emission
 # ---------------------------------------------------------------------------
 
@@ -622,6 +2223,141 @@ HULLS = {
                 "all eight directions authored, no derive",
         "rig": "1 mast, lateen main, stub aft deck, short bowsprit, jib (s)",
         "maps_fn": sloop_maps,
+    },
+    "latin": {
+        "tier": 1,
+        "band": (14, 18),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "1 mast, the BIG lateen triangle dominates the small hull",
+        "maps_fn": latin_maps,
+    },
+    "galiot": {
+        "tier": 1,
+        "band": (14, 18),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "compact hull, small lateen, 4-station oar bank (1px ink dots "
+               "on the waterline)",
+        "maps_fn": galiot_maps,
+    },
+    "pinnace": {
+        "tier": 1,
+        "band": (14, 18),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "oars ONLY — two staggered 1px ink banks, no sail; mast stub "
+               "carries the pennant",
+        "maps_fn": pinnace_maps,
+    },
+    "caravel": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "2 masts, 2 lateens, rounded high-prow hull",
+        "maps_fn": caravel_maps,
+    },
+    "galley": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "LONG low hull, 7 oar stations (1px ink dots), 1 lateen + "
+               "small square topsail",
+        "maps_fn": galley_maps,
+    },
+    "brigantine": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "fore mast 2 square sails, main mast fore-and-aft spanker "
+               "(gaff + boom)",
+        "maps_fn": brigantine_maps,
+    },
+    "fluyt": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "FAT belly hull (widest tier-2 beam), blunt stern, 3 square "
+               "sails",
+        "maps_fn": fluyt_maps,
+    },
+    "junk": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "3 masts, 3 full-batten sails (SAIL panels divided by SAIL_LO "
+               "batten lines), fan-tail stern",
+        "maps_fn": junk_maps,
+    },
+    "dhow": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "slim hull, sharp prow, 1 big lateen",
+        "maps_fn": dhow_maps,
+    },
+    "caravela_redonda": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "roundish hull, 3 masts: 2 square sails + mizzen lateen",
+        "maps_fn": caravela_redonda_maps,
+    },
+    "xebec": {
+        "tier": 2,
+        "band": (20, 26),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "narrow hull, 3 lateens on 3 masts (overlapping yards)",
+        "maps_fn": xebec_maps,
+    },
+    "nao": {
+        "tier": 3,
+        "band": (26, 30),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "3 square sails, big fore AND aft castles, crow's nests, "
+               "5 gunports (HULL_GOLD trim)",
+        "maps_fn": nao_maps,
+    },
+    "carrack": {
+        "tier": 3,
+        "band": (26, 30),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "2 square sails + mizzen lateen, HIGH stern castle (taller "
+               "than the galleon's) (HULL_GOLD trim)",
+        "maps_fn": carrack_maps,
+    },
+    "galleass": {
+        "tier": 3,
+        "band": (26, 30),
+        "view": "UW2 side/3-quarter sailing views (80-* §4.8.6 amendment): "
+                "e/w full side profile, n stern, s bow, diagonals 3/4 — "
+                "all eight directions authored, no derive",
+        "rig": "hybrid: 9 oar stations (1px ink dots) + 3 lateens, the "
+               "longest hull (HULL_GOLD trim)",
+        "maps_fn": galleass_maps,
     },
 }
 
@@ -685,10 +2421,10 @@ def run_check() -> int:
                 print(f"CHECK-FAIL drift: {committed} (re-run differs; "
                       "regenerate and commit)")
                 failures += 1
-    # Ownership note: this tool owns exactly the docs it emits (galleon,
-    # sloop — the UW2-re-authored hulls).  The other 14 authored/*.json are
-    # legacy n/ne docs owned by their own passes and are none of its
-    # business, so there is no stale-doc scan here.
+    # Ownership note: this tool owns exactly the docs it emits — all SIXTEEN
+    # hull docs, re-authored UW2 style ×8 dirs (the galleon/sloop samples
+    # first, then the 14-hull rollout).  No other files under authored/ are
+    # its business, so there is no stale-doc scan here.
     if failures:
         print(f"gen_uw2_hulls --check: {failures} file(s) drifted")
         return 1
