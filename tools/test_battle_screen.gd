@@ -42,6 +42,16 @@ extends Node
 ##     `#####` run; the shot buttons carry no `>` prefix; and a draw-call
 ##     source audit proves every `draw_*` in the two handlers targets the
 ##     item whose `draw` signal fired (zero "Drawing is only allowed" calls).
+##  13 Phase-10 W5-A: the §4.7.17 FX layer — the pinned timing constants,
+##     the §4.8.6 heading8→dir / owner / hull-sprite mapping, the battle
+##     water layer (the shared `WaterLayer` build, 48×30 stamped cells, the
+##     ONE S3/S10 material), the sequencer's event mapping (cannon →
+##     volley→flight→impact/splash + sink; ram → impact+smoke; board/hold →
+##     nothing), instant mode (queue never fills, `busy()` false, no timers
+##     or tweens anywhere in the layer — the source audit), the animate vs
+##     instant LOG byte-identity on one fixture, the formation icon seam
+##     (registry hit ⇒ icon, miss ⇒ label-only), and the after-action
+##     portrait slot (canon captain ⇒ bust row; no captain ⇒ text-only).
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const BattleLib := preload("res://scripts/combat/battle_sim.gd")
@@ -49,6 +59,13 @@ const AiLib := preload("res://scripts/combat/ai_fleet.gd")
 const SailingLib := preload("res://scripts/world/sailing_sim.gd")
 const ScreenLib := preload("res://scenes/combat/battle_screen.gd")
 const ScreenScene := preload("res://scenes/combat/battle_screen.tscn")
+## Phase-10 W5-A: the fx layer's own script (the pinned timing constants +
+## the pure event mapping the section-13 checks read) and the shared water
+## builder (the S10/S3 one-material seam).
+const FxLib := preload("res://scenes/combat/battle_fx_layer.gd")
+const WaterLayerLib := preload("res://scripts/world/water_layer.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const PortraitComposerLib := preload("res://scripts/ui/portrait_composer.gd")
 
 const BATTLE_RESULT_PATH := "res://scripts/combat/battle_result.gd"
 const BATTLE_REWARDS_PATH := "res://scripts/combat/battle_rewards.gd"
@@ -81,6 +98,7 @@ func _ready() -> void:
 	await _test_guards()
 	await _test_w4_morale_and_dispatch()
 	await _test_ui_presentation_pins()
+	await _test_phase10_fx_layer()
 	_report()
 
 
@@ -1259,6 +1277,288 @@ func _test_ui_presentation_pins() -> void:
 		"the minimap arrow helper is pure geometry (no draw calls)")
 	_check(not _body_has_draw_call(lines, "_queue_redraw"),
 		"_queue_redraw only queues (no direct draw calls)")
+
+
+# --- 13. Phase-10 W5-A: the §4.7.17 FX layer + battle water + tokens --------
+
+func _test_phase10_fx_layer() -> void:
+	# (a) The §4.7.17 timing table is pinned as named constants (flight 300 /
+	# splash 400 / impact 300 / smoke 500 / sink 600 / per-event pause 150).
+	_check(FxLib.FLIGHT_MS == 300 and FxLib.SPLASH_MS == 400 \
+			and FxLib.IMPACT_MS == 300 and FxLib.SMOKE_MS == 500 \
+			and FxLib.SINK_MS == 600 and FxLib.PAUSE_MS == 150,
+		"the §4.7.17 battle-FX timings are the pinned constants (300/400/"
+			+ "300/500/600/150)")
+	_check(FxLib.MOVE_MS == FxLib.PAUSE_MS,
+		"the move presentation rides the pinned per-event pause (no "
+			+ "separate duration invented)")
+
+	# (b) The §4.8.6 heading8 → dir-id table, exactly the ArrowField order.
+	var dir_table: Array[String] = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]
+	var table_ok := true
+	for bucket in 8:
+		if ScreenLib.heading_dir_id(bucket) != dir_table[bucket]:
+			table_ok = false
+	_check(table_ok and ScreenLib.heading_dir_id(9) == "",
+		"heading_dir_id covers every §4.8.6 bucket in order (e ne n nw w sw "
+			+ "s se) and refuses out-of-range")
+
+	# (c) The owner + sprite-id mapping (W5-A pin: player = white livery,
+	# pirates pirate, a nation fleet its nation id, the rest neutral).
+	_check(ScreenLib.owner_id_for_side("player", "pirate", "") == "player",
+		"the player side renders owner id `player` (the white livery)")
+	_check(ScreenLib.owner_id_for_side("enemy", "pirate", "") == "pirate"
+			and ScreenLib.owner_id_for_side("enemy", "navy", "spain") == "spain"
+			and ScreenLib.owner_id_for_side("enemy", "navy", "") == "neutral"
+			and ScreenLib.owner_id_for_side("enemy", "tournament", "")
+				== "neutral",
+		"enemy owner ids: pirate → pirate, navy+nation → the nation, the "
+			+ "rest → neutral")
+	_check(ScreenLib.hull_sprite_id("caravel", "player", 0)
+			== "hull_caravel_player_e"
+			and ScreenLib.hull_sprite_id("sloop", "pirate", 1)
+				== "hull_sloop_pirate_ne"
+			and ScreenLib.hull_sprite_id("galleon", "england", 7)
+				== "hull_galleon_england_se",
+		"the sprite id is hull_{type}_{owner}_{dir} per §4.8.6")
+	_check(ScreenLib.hull_sprite_id("", "player", 0) == "",
+		"a type-less hull maps to no sprite id (the placeholder fallback)")
+
+	# (d) The battle water: the shared WaterLayer build, every one of the
+	# 48×30 cells stamped with the flat sea column, and the ONE cached
+	# material S3's chunks carry (§4.7.17 "S10 battle water reuses the same
+	# shader"; the gate is UiMotion at build time, never the battle switch).
+	_make_run([_ship("caravel", {"cannons": 4, "crew": 15})])
+	var screen = await _new_screen()
+	if screen == null:
+		return
+	screen.route_to_world = false
+	var water: TileMapLayer = screen.water_layer()
+	_check(water != null and water is TileMapLayer
+			and water.get_parent() == screen,
+		"the battle water layer exists (the shared TileMapLayer build)")
+	_check(water.tile_set != null
+			and water.get_used_cells().size()
+				== ScreenLib.GRID_W * ScreenLib.GRID_H,
+		"every battle cell (%d×%d) is stamped on the water layer"
+			% [ScreenLib.GRID_W, ScreenLib.GRID_H])
+	var sea_column := int(WaterLayerLib.KIND_COLUMNS["sea"])
+	_check(water.get_cell_source_id(Vector2i.ZERO) >= 0 \
+			and water.get_cell_atlas_coords(Vector2i.ZERO)
+				== Vector2i(sea_column, 0),
+		"cell (0,0) carries the flat sea fill (the §4.8.5 water kind)")
+	_check(water.material != null
+			and water.material == WaterLayerLib.build_material(),
+		"the battle water carries the ONE cached S3/S10 shader material")
+
+	# (e) The fx layer node + the no-timers/no-tweens source audit (§5 Motion
+	# pin: "the battle FX sequencer in instant mode produces no timers" —
+	# this layer never creates one in ANY mode, by construction).
+	var fx: Control = screen.fx_layer()
+	_check(fx != null and fx.get_parent() == screen
+			and fx.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and fx.clip_contents,
+		"the fx layer sits over the world view, mouse-transparent, clipped")
+	var fx_src := FileAccess.get_file_as_string(
+		"res://scenes/combat/battle_fx_layer.gd")
+	_check(not fx_src.is_empty(),
+		"the battle_fx_layer.gd source is readable for the audit")
+	_check(not fx_src.contains("create_tween") \
+			and not fx_src.contains("create_timer"),
+		"the fx layer source has no create_tween/create_timer (instant mode "
+			+ "produces no timers by construction)")
+
+	# (f) The sequencer's event mapping (pure `map_entry`).
+	var snap := {
+		"player:0": {"cell": Vector2i(10, 15),
+			"sprite_id": "hull_caravel_player_e"},
+		"enemy:0": {"cell": Vector2i(13, 15),
+			"sprite_id": "hull_sloop_pirate_w"},
+	}
+	var cannon_events: Array = FxLib.map_entry({
+		"kind": "cannon",
+		"values": {"side": "player", "unit": 0, "target_side": "enemy",
+			"target": 0, "damage": 7, "sunk": false},
+	}, snap)
+	_check(cannon_events.size() == 3
+			and str(cannon_events[0]["kind"]) == "volley"
+			and cannon_events[0]["cell"] == Vector2i(10, 15)
+			and str(cannon_events[1]["kind"]) == "flight"
+			and cannon_events[1]["from"] == Vector2i(10, 15)
+			and cannon_events[1]["to"] == Vector2i(13, 15)
+			and str(cannon_events[2]["kind"]) == "impact",
+		"a damaging volley maps volley → flight → impact (move→volley→"
+			+ "flight→impact chain)")
+	var splash_events: Array = FxLib.map_entry({
+		"kind": "cannon",
+		"values": {"side": "player", "unit": 0, "target_side": "enemy",
+			"target": 0, "damage": 0, "sunk": false},
+	}, snap)
+	_check(splash_events.size() == 3
+			and str(splash_events[2]["kind"]) == "splash",
+		"a bloodless volley splashes short (the splash frame set)")
+	var sunk_events: Array = FxLib.map_entry({
+		"kind": "cannon",
+		"values": {"side": "player", "unit": 0, "target_side": "enemy",
+			"target": 0, "damage": 9, "sunk": true},
+	}, snap)
+	_check(sunk_events.size() == 4
+			and str(sunk_events[3]["kind"]) == "sink"
+			and str(sunk_events[3]["sprite_id"]) == "hull_sloop_pirate_w",
+		"a sinking volley appends the sink fade carrying the hull sprite id")
+	var ram_events: Array = FxLib.map_entry({
+		"kind": "ram",
+		"values": {"side": "player", "unit": 0, "target_side": "enemy",
+			"target": 0, "damage": 5, "attacker_damage": 2, "sunk": true,
+			"attacker_sunk": true},
+	}, snap)
+	_check(ram_events.size() == 4
+			and str(ram_events[0]["kind"]) == "impact"
+			and str(ram_events[1]["kind"]) == "smoke"
+			and str(ram_events[2]["kind"]) == "sink"
+			and str(ram_events[3]["kind"]) == "sink"
+			and ram_events[2]["cell"] == Vector2i(13, 15)
+			and ram_events[3]["cell"] == Vector2i(10, 15),
+		"a mutual ram maps impact → smoke at the target, then both sinks "
+			+ "(the attacker resolves last, §4.5)")
+	_check(FxLib.map_entry({"kind": "board", "values": {
+			"side": "player", "unit": 0, "target_side": "enemy",
+			"target": 0}}, snap).is_empty()
+			and FxLib.map_entry({"kind": "hold", "values": {
+				"side": "player", "unit": 0}}, snap).is_empty(),
+		"board (S11 owns it) and hold map to no fx events")
+
+	# (g) Instant mode: the switch (or UiMotion off) resolves immediately —
+	# the sequencer never queues, never goes busy.
+	screen.set_ai_speed(true)
+	screen.open_battle(_pirate_encounter(2, "brigantine"))
+	await get_tree().process_frame
+	if not screen.sim.current_unit().is_empty() \
+			and str(screen.sim.current_unit().get("side", "")) == "enemy":
+		screen.run_ai_turn()
+	screen._bind()
+	_check(not bool(fx.busy()),
+		"instant mode: the sequencer is never busy (events resolve at once)")
+	_check(Vector2.ZERO == fx.move_offset_for("player:0"),
+		"instant mode: no token slide offset (the token sits where the sim "
+			+ "says)")
+	await _free_screen(screen)
+
+	# (h) The animate vs instant LOG byte-identity (the W5 gate): one
+	# fixture, two screens, the only difference the AI-speed switch — the
+	# engine's structured log must be identical.
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	var screen_instant = await _new_screen()
+	screen_instant.route_to_world = false
+	screen_instant.set_ai_speed(true)
+	screen_instant.open_battle(_pirate_encounter(3))
+	var logs_instant: Array = []
+	screen_instant.run_to_completion(20)
+	logs_instant = screen_instant.engine_log()
+	await _free_screen(screen_instant)
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	var screen_animate = await _new_screen()
+	screen_animate.route_to_world = false
+	screen_animate.set_ai_speed(false)
+	screen_animate.open_battle(_pirate_encounter(3))
+	screen_animate.run_to_completion(20)
+	var logs_animate: Array = screen_animate.engine_log()
+	_check(not logs_instant.is_empty()
+			and str(logs_instant) == str(logs_animate),
+		"the animate and instant runs log byte-identically on one fixture "
+			+ "(%d engine entries)" % logs_instant.size())
+	# The animate screen's sequencer holds queued presentation — none of it
+	# may have touched the engine log it was built from.
+	_check(str(screen_animate.engine_log()) == str(logs_instant),
+		"the fx queue never mutates the engine log it observes")
+	await _free_screen(screen_animate)
+
+	# (i) The formation icon seam (§4.8 `formation_*` via the registry; a
+	# miss keeps the label-only rendering). The W4 keyed-fixture pattern
+	# activates the line-formation display.
+	UiKitLib.clear_textures()
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	var keyed = await _new_screen()
+	keyed.route_to_world = false
+	keyed.set_ai_speed(true)
+	var formation_fixture := _pirate_encounter(2, "brigantine")
+	formation_fixture["formation"] = "column"
+	keyed.open_battle(formation_fixture)
+	await get_tree().process_frame
+	# run_ai_turn would no-op on a player-first initiative slot — the
+	# round-start dispatch seam fires directly (the section-11 pattern).
+	keyed._ensure_fleet_orders()
+	keyed._bind()
+	var icon: TextureRect = keyed.formation_icon()
+	_check(icon != null,
+		"the formation icon node exists beside the §4.7.1 label")
+	_check(icon != null and not icon.visible,
+		"a registry miss keeps the label-only formation display")
+	var seeded_tex := ImageTexture.create_from_image(
+		Image.create_empty(4, 4, false, Image.FORMAT_RGBA8))
+	UiKitLib.register_textures({"formation_column": seeded_tex})
+	keyed._bind()
+	_check(icon.visible and icon.texture == seeded_tex,
+		"a registry hit shows the formation_column icon beside the label")
+	UiKitLib.clear_textures()
+	await _free_screen(keyed)
+
+	# (j) The after-action portrait slot (§4.9): a captain whose bust
+	# resolves ⇒ the bust row; no captain ⇒ exactly the text-only dialog.
+	# The suite rides the composer's documented override seam (a temp-dir
+	# PNG read through `Image.load_from_file`), so the check is independent
+	# of the texture-import cache a fresh checkout has not built.
+	var captain_id: String = str(DataLoader.captains_list[0]["id"])
+	var override_dir := "user://w5a_test_overrides"
+	var fixture_dir := DirAccess.open("user://")
+	if fixture_dir != null and not fixture_dir.dir_exists("w5a_test_overrides"):
+		fixture_dir.make_dir("w5a_test_overrides")
+	var bust_image := Image.create(72, 96, false, Image.FORMAT_RGBA8)
+	bust_image.fill(Color("1a2b3c"))
+	bust_image.save_png("%s/portrait_%s.png" % [override_dir, captain_id])
+	var production_override_dir: String = PortraitComposerLib._override_dir
+	PortraitComposerLib._override_dir = override_dir
+	PortraitComposerLib._clear_cache_for_tests()
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	var portrait_screen = await _new_screen()
+	portrait_screen.route_to_world = false
+	portrait_screen.set_ai_speed(true)
+	var captain_fixture := _pirate_encounter(1, "sloop")
+	captain_fixture["captain_id"] = captain_id
+	portrait_screen.open_battle(captain_fixture)
+	await get_tree().process_frame
+	portrait_screen.sim.retreat()
+	portrait_screen._finish_battle()
+	await get_tree().process_frame
+	var dialog: Control = portrait_screen.after_action_dialog()
+	var row: Control = dialog.get_node_or_null(
+		"Center/Panel/Margin/Body/Lines/PortraitRow")
+	_check(row != null and row.get_node_or_null("Portrait") != null
+			and (row.get_node("Portrait") as TextureRect).texture != null,
+		"the after-action dialog shows the opposing flagship captain's "
+			+ "bust beside the outcome text")
+	var portrait_lines: Array = portrait_screen.after_action_lines()
+	_check(portrait_lines.size() >= 2
+			and str(portrait_lines[1]) == portrait_screen._t(
+				"battle.result.retreat"),
+		"the nested result line is still collected in visual order (%s)"
+			% str(portrait_lines[1]))
+	await _free_screen(portrait_screen)
+	PortraitComposerLib._override_dir = production_override_dir
+	PortraitComposerLib._clear_cache_for_tests()
+	_make_run([_ship("brigantine", {"cannons": 10, "crew": 20})])
+	var plain_screen = await _new_screen()
+	plain_screen.route_to_world = false
+	plain_screen.set_ai_speed(true)
+	plain_screen.open_battle(_pirate_encounter(1, "sloop"))
+	await get_tree().process_frame
+	plain_screen.sim.retreat()
+	plain_screen._finish_battle()
+	await get_tree().process_frame
+	_check(plain_screen.after_action_dialog().get_node_or_null(
+			"Center/Panel/Margin/Body/Lines/PortraitRow") == null,
+		"without a captain the dialog stays exactly text-only")
+	await _free_screen(plain_screen)
 
 
 ## The body lines of one top-level `func` (source-audit helper).

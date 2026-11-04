@@ -55,6 +55,19 @@ extends Control
 ## engine log kind outside the `battle.*` inventory is simply not rendered
 ## rather than inventing `ui_strings` keys.
 ##
+## **Phase-10 W5-A.** The §4.7.17 presentation layer lives here and in
+## `battle_fx_layer.gd` (the sequencer node): the battle sea is the shared
+## animated-water builder (`WaterLayer`, §4.7.17 — one material with S3, the
+## gate is `UiMotion.enabled` ONLY, never the battle animate switch), tokens
+## render `hull_{type}_{owner}_{dir}` sprites from `heading8` (§4.8.6) with
+## the letter badges kept as runtime overlays (§4.8.5) and the placeholder
+## squares as the registry-miss fallback, the formation label gains the
+## `formation_*` icon beside it, the after-action dialog carries the
+## opposing flagship captain's bust, and the FX sequencer plays the pinned
+## move → volley → flight → impact chain gated by the battle animate/instant
+## switch (instant ⇒ every duration 0, no timers — the logs stay
+## byte-identical; presentation only).
+##
 ## **Test / headless contract.** [method open_battle] sets up and does *not*
 ## run; [method run_to_completion] drives the whole battle and returns
 ## [member last_outcome]. `route_to_world` is the `port_screen.route_to_world`
@@ -73,6 +86,15 @@ const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const CardLib := preload("res://scenes/ui/character_card.gd")
 ## The preview reads the canon captain card through the W4-A module.
 const CaptainsLib := preload("res://scripts/world/captains.gd")
+## Phase-10 W5-A: the §4.7.17 battle water rides the shared animated-sea
+## builder (the ONE material S3 and S10 share); hull tokens resolve through
+## the §4.9 icon registry; the after-action portrait runs on the W4-D
+## composer (on main — direct use, the hail-modal contract).
+const WaterLayerLib := preload("res://scripts/world/water_layer.gd")
+const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiMotionLib := preload("res://scripts/ui_motion.gd")
+const PortraitComposerLib := preload("res://scripts/ui/portrait_composer.gd")
 
 ## ui_strings keys the preview needs that the shared table does not carry yet
 ## (the W5-C `FALLBACK_STRINGS` pattern — W6-D owns the residual merge).
@@ -171,6 +193,60 @@ const SHOT_IDS: Array[String] = [
 	BattleSimLib.ROUND_SHOT, BattleSimLib.CHAIN_SHOT,
 	BattleSimLib.ARMOR_PIERCING_SHOT, BattleSimLib.GRAPE_SHOT,
 ]
+
+
+# --- §4.8.6 hull-token mapping (Phase-10 W5-A; pure statics) ------------------
+
+## The §4.8.6 dir id of a `heading8` bucket — the ArrowField table (bucket 0
+## = east, increasing counterclockwise; screen y-down) pinned as the ONE
+## source for every `hull_{type}_{owner}_{dir}` sprite id. "" out of range.
+static func heading_dir_id(heading8: int) -> String:
+	return ArrowFieldLib.dir_id_of_bucket(heading8)
+
+
+## The sprite owner id of a battle side (the W5-A pin): the player fleet
+## renders `player` (the white livery, matching W4-C's S3 pin); an enemy
+## renders its fleet owner — the nation id when the encounter carries one
+## (navy and the nation-roled fleets), `pirate` for the pirate kind,
+## `neutral` otherwise. vel = 0 keeps the last heading per `60-*` §4.3a, so
+## the dir always reads the unit's stored `heading8`.
+static func owner_id_for_side(side: String, kind: String,
+		nation_id: String) -> String:
+	if side == BattleSimLib.SIDE_PLAYER:
+		return "player"
+	if not nation_id.is_empty():
+		return nation_id
+	if kind == "pirate":
+		return "pirate"
+	return "neutral"
+
+
+## The §4.8 token sprite id `hull_{ship_type_id}_{owner}_{dir}`; "" when the
+## hull has no type (the placeholder-square fallback then renders).
+static func hull_sprite_id(ship_type_id: String, owner: String,
+		heading8: int) -> String:
+	if ship_type_id.is_empty() or owner.is_empty():
+		return ""
+	return "hull_%s_%s_%s" % [ship_type_id, owner, heading_dir_id(heading8)]
+
+
+## This battle's enemy owner id (the encounter's kind/nation are fixed at
+## open time, so the value is constant for the whole battle).
+func _enemy_owner_id() -> String:
+	return owner_id_for_side(BattleSimLib.SIDE_ENEMY,
+		str(encounter.get("kind", "pirate")),
+		str(encounter.get("nation_id", "")))
+
+
+## The §4.8.6 sprite id of a battle unit (the fx layer's snapshot mapper).
+func _unit_sprite_id(unit: Dictionary) -> String:
+	var ship: Dictionary = unit.get("ship", {}) \
+		if unit.get("ship", {}) is Dictionary else {}
+	var side := str(unit.get("side", ""))
+	var owner := "player" if side == BattleSimLib.SIDE_PLAYER \
+		else _enemy_owner_id()
+	return hull_sprite_id(str(ship.get("ship_type_id", "")), owner,
+		int(unit.get("heading8", 0)))
 
 ## Emitted when a battle sets up (tests observe the engine without a swap).
 signal battle_opened(encounter: Dictionary)
@@ -292,6 +368,12 @@ var _morale_enemy_track: ColorRect = null
 var _morale_player_fill: ColorRect = null
 var _morale_enemy_fill: ColorRect = null
 var _formation_label: Label = null
+## Phase-10 W5-A: the §4.8 formation icon beside the label (registry-miss ⇒
+## hidden — the text-only label is the fallback rendering).
+var _formation_icon: TextureRect = null
+## Phase-10 W5-A: the §4.7.17 animated battle water (the shared
+## `WaterLayer` builder; flat sea tiles under the S3-shared shader material).
+var _water_layer: TileMapLayer = null
 
 @onready var _background: ColorRect = $Background
 @onready var _top_bar: ColorRect = $TopBar
@@ -302,6 +384,9 @@ var _formation_label: Label = null
 @onready var _weather: Label = $TopRow/Weather
 @onready var _grid_view: Control = $GridView
 @onready var _overlay: Control = $Overlay
+## Phase-10 W5-A: the §4.7.17 FX sequencer node (scenes/combat/battle_fx_layer.gd;
+## wired by the scene, like the grid overlay — no script preload cycle).
+@onready var _fx: Control = $FxLayer
 @onready var _minimap: Control = $Minimap
 @onready var _speed: Label = \
 	$BottomPanel/Margin/Columns/LeftCol/StatsRow/Speed
@@ -357,26 +442,18 @@ func _show_captain_preview(captain_id: String) -> void:
 	if canon.is_empty():
 		return
 	var data := CardLib.card_data(CardLib.KIND_NPC, captain_id)
-	var preview := PanelContainer.new()
+	# §4.9 sweep (W5-A): the preview rides the kit frame atom (theme panel
+	# chrome + the 16px margin); the atom's header label is child 0 of the
+	# frame's VBox (the W2-C pinned layout), re-titled here because the text
+	# carries `{name}` values the atom's key-only resolver cannot format.
+	var preview := UiKitLib.frame("battle.title")
 	preview.name = "CaptainPreview"
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.ACCENT
-	style.set_border_width_all(2)
-	preview.add_theme_stylebox_override("panel", style)
-	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(side, PaletteLib.MARGIN)
-	preview.add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	margin.add_child(box)
-	var title := Label.new()
-	title.name = "Title"
-	title.text = I18n.fmt("dossier.title", {"name": str(data.get("name", ""))})
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	box.add_child(title)
+	var header := ((preview.get_child(0) as VBoxContainer)
+		.get_child(0) as Label)
+	var box: VBoxContainer = preview.get_meta(UiKitLib.META_BODY)
+	header.name = "Title"
+	header.text = I18n.fmt("dossier.title", {"name": str(data.get("name", ""))})
+	header.theme_type_variation = "Accent"
 	var detail := Label.new()
 	detail.name = "Detail"
 	var role := str(data.get("role_key", "char.none"))
@@ -385,7 +462,6 @@ func _show_captain_preview(captain_id: String) -> void:
 		int(data.get("tier", 1))])
 	parts.append(I18n.fmt("char.level", {"level": int(data.get("level", 1))}))
 	detail.text = " · ".join(parts)
-	detail.add_theme_color_override("font_color", PaletteLib.TEXT)
 	box.add_child(detail)
 	var ratings := Label.new()
 	ratings.name = "Ratings"
@@ -395,7 +471,7 @@ func _show_captain_preview(captain_id: String) -> void:
 		_t("battle.preview.cannon", {
 			"amount": BattleSimLib.card_cannon_rating(canon)}),
 	]
-	ratings.add_theme_color_override("font_color", PaletteLib.WARN)
+	ratings.theme_type_variation = "Warn"
 	box.add_child(ratings)
 	preview.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	preview.position = Vector2((VIEW_SIZE.x - 320.0) * 0.5, TOP_BAR_H + 8.0)
@@ -416,9 +492,16 @@ func _dismiss_captain_preview() -> void:
 func _ready() -> void:
 	_style()
 	_build_morale_hud()
+	_build_battle_water()
+	# Phase-10 W5-A: the fx layer's snapshot mapper is this screen's §4.8.6
+	# hull-sprite id builder (the sink ghost needs the sunk hull's sprite).
+	if _fx != null and _fx.has_method("set_mapper"):
+		_fx.set_mapper(_unit_sprite_id)
 	# §4.7.1: the battle opens fitted to the whole 1536×960 world.
 	_cam_zoom = fit_zoom()
 	_cam_pos = clamp_cam(WORLD_PX * 0.5, _cam_zoom)
+	_sync_world_node(_water_layer)
+	_sync_world_node(_fx)
 	_grid_view.draw.connect(_on_world_draw)
 	_minimap.draw.connect(_on_minimap_draw)
 	_minimap.gui_input.connect(_on_minimap_gui_input)
@@ -590,6 +673,9 @@ func open_battle(in_encounter: Dictionary = {}) -> void:
 	_selected_shot = BattleSimLib.ROUND_SHOT
 	_cursor = BattleSimLib.NO_CELL
 	_cursor_visible = false
+	# Phase-10 W5-A: the §4.7.17 sequencer forgets the previous battle.
+	if _fx != null and _fx.has_method("reset"):
+		_fx.reset()
 
 	# §4.11.2: deployment is the engine's, from the player's live fleet and the
 	# encounter's seeded enemy composition.
@@ -864,6 +950,14 @@ func ai_instant_mode() -> bool:
 	return _ai_instant
 
 
+## The §4.7.17 effective instant gate for the FX sequencer: the battle's
+## animate/instant switch **or** the global `UiMotion` gate (motion off ⇒
+## every duration 0). The sea animation does NOT follow this — the water
+## layer's gate is `UiMotion.enabled` alone (the W5-A ledger note).
+func _fx_instant() -> bool:
+	return _ai_instant or not UiMotionLib.enabled
+
+
 # --- W4 accessors (tests / hosts) -------------------------------------------
 
 ## The §4.7.1 W4 morale label of `side` (`player`/`enemy`), null before
@@ -895,6 +989,22 @@ func side_morale_shown(side: String) -> int:
 ## a line formation).
 func formation_label() -> Label:
 	return _formation_label
+
+
+## The Phase-10 W5-A formation icon beside the label (`formation_*` via the
+## §4.9 registry; hidden on a registry miss — the label-only fallback).
+func formation_icon() -> TextureRect:
+	return _formation_icon
+
+
+## The §4.7.17 animated battle water layer (the shared `WaterLayer` build).
+func water_layer() -> TileMapLayer:
+	return _water_layer
+
+
+## The §4.7.17 FX sequencer node (`battle_fx_layer.gd`).
+func fx_layer() -> Control:
+	return _fx
 
 
 ## True while this battle's §4.9b fleet layer is live (a loaded
@@ -961,14 +1071,21 @@ func after_action_dialog() -> Control:
 
 ## Every player-facing line the after-action dialog currently shows, title and
 ## button included — the "no raw `<key>` in either locale" check walks this.
+## The walk is depth-first over `_after_lines` so the §4.9 portrait row's
+## nested result line (W5-A) is collected in visual order like the rest.
 func after_action_lines() -> Array[String]:
 	var out: Array[String] = []
 	out.append(_after_title.text)
-	for child in _after_lines.get_children():
-		if child is Label:
-			out.append((child as Label).text)
+	_collect_labels(_after_lines, out)
 	out.append(_after_continue.text)
 	return out
+
+
+func _collect_labels(root: Node, out: Array[String]) -> void:
+	for child in root.get_children():
+		if child is Label:
+			out.append((child as Label).text)
+		_collect_labels(child, out)
 
 
 ## True once [member last_outcome] holds a finished §4.11.9 block.
@@ -1345,16 +1462,28 @@ func _pump_enemy_turns() -> void:
 
 
 ## §4.7.1 animate mode: one stepped AI turn per frame (the instant switch
-## short-circuits this loop entirely).
+## short-circuits this loop entirely). The §4.7.17 sequencer paces the step:
+## while its presentation of the previous turn is still running, the next AI
+## turn waits — the sim's call sequence is unchanged (one `run_ai_turn()` at
+## a time), only the wall-clock spacing follows the FX. Instant mode never
+## waits (the sequencer is idle by construction there).
 func _process(delta: float) -> void:
 	if sim == null or sim.is_over() or has_modal():
 		return
 	if not _ai_instant:
 		var unit: Dictionary = sim.current_unit()
 		if not unit.is_empty() and str(unit.get("side", "")) == BattleSimLib.SIDE_ENEMY:
-			run_ai_turn()
-			if sim.is_over():
-				return
+			var sequencer_busy: bool = _fx != null \
+				and _fx.has_method("busy") and bool(_fx.busy())
+			if not sequencer_busy:
+				run_ai_turn()
+				if sim.is_over():
+					return
+	# The §4.7.17 token slide: while a move event animates, the world tokens
+	# re-draw each frame to carry the interpolation offset.
+	if _fx != null and _fx.has_method("needs_world_redraw") \
+			and bool(_fx.needs_world_redraw()):
+		_grid_view.queue_redraw()
 	# Edge scroll (§4.3) runs only for the production scene, so a headless
 	# suite's mouse at (0,0) never drifts the camera mid-assertion.
 	if is_active_scene():
@@ -1410,27 +1539,20 @@ func _board(unit: Dictionary, target: Dictionary) -> Dictionary:
 # --- World rendering (docs/80-* §4.7.1, §4.8) -------------------------------
 
 func _style() -> void:
+	# §4.9 sweep (W5-A): the bars/panels/labels ride the theme (Label TEXT,
+	# PanelContainer chrome); the two semantic inks are the ledgered theme
+	# variations — Dim (= PANEL_LINE) for the top-bar weather readout,
+	# Accent for the ‖vel‖ readout. Per-screen font sizes retired.
 	_background.color = PaletteLib.PANEL_BG
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_panel.color = PaletteLib.PANEL_BG
-	for label in [_title, _day, _round, _speed, _heading, _reload_port,
-			_reload_starboard, _wind, _weather_label, _target_label]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_weather.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_speed.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_title.add_theme_font_size_override("font_size", 20)
-	_after_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_after_title.add_theme_font_size_override("font_size", 24)
-	_menu_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_menu_title.add_theme_font_size_override("font_size", 24)
-	for label in _log_labels:
-		(label as Label).add_theme_color_override("font_color", PaletteLib.TEXT)
-		(label as Label).add_theme_font_size_override("font_size", 11)
+	_weather.theme_type_variation = "Dim"
+	_speed.theme_type_variation = "Accent"
+	# The log lines' 11px ink is load-bearing for the §4.7.1 96px bottom bar
+	# (three lines + the stats row must fit); it lives on the labels in
+	# battle_screen.tscn (`theme_override_font_sizes` — the scene-file
+	# channel, the same one that carries the container margins there).
 	_after_continue.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
-	($AfterAction/Center/Panel as PanelContainer).add_theme_stylebox_override(
-		"panel", _panel_style())
-	($BattleMenu/Center/Panel as PanelContainer).add_theme_stylebox_override(
-		"panel", _panel_style())
 
 
 func _wire_action_buttons() -> void:
@@ -1449,6 +1571,42 @@ func _wire_action_buttons() -> void:
 			_shot_buttons[str(button.get_meta("shot_id"))] = button
 
 
+# --- §4.7.17 animated battle water (Phase-10 W5-A) ---------------------------
+
+## The 48×30 battle sea on the SHARED animated-water builder (§4.7.17 "S10
+## battle water reuses the same shader"): `WaterLayer.build_layer` stamps the
+## two flat water fills and attaches the ONE cached `ShaderMaterial` S3's
+## chunks carry (800 ms scroll, ×0.82 darkening). The gate is
+## `UiMotion.enabled` read once at build time — the GLOBAL motion gate, never
+## the battle animate/instant switch (that switch governs the FX sequencer's
+## durations only; the W5-A ledger note). A missing shader/mask/registry id
+## renders the locked palette fill exactly as the pre-Phase-10 sea did.
+func _build_battle_water() -> void:
+	_water_layer = WaterLayerLib.build_layer(int(TILE_PX))
+	_water_layer.name = "BattleWater"
+	# The battle world is open water: every cell stamps the flat sea fill.
+	if _water_layer.tile_set != null:
+		var source := _water_layer.tile_set.get_next_source_id() - 1
+		var column := int(WaterLayerLib.KIND_COLUMNS["sea"])
+		for y in GRID_H:
+			for x in GRID_W:
+				_water_layer.set_cell(Vector2i(x, y), source,
+					Vector2i(column, 0))
+	add_child(_water_layer)
+	# Above the background, under every HUD/token canvas item.
+	move_child(_water_layer, 1)
+
+
+## Keeps a world-space canvas item (the water layer, the fx layer) in the
+## camera's screen transform: the world's top-left at the projected origin,
+## scaled by the zoom — the same mapping the world draw applies by hand.
+func _sync_world_node(node: CanvasItem) -> void:
+	if node == null:
+		return
+	node.position = world_to_screen(Vector2.ZERO, _cam_pos, _cam_zoom)
+	node.scale = Vector2.ONE * _cam_zoom
+
+
 # --- W4 HUD (docs/80-* §4.7.1 top-area morale bars + formation label) -------
 
 ## Builds the §4.7.1 W4 additions in code (palette shapes only, §4.8): the
@@ -1459,7 +1617,6 @@ func _wire_action_buttons() -> void:
 func _build_morale_hud() -> void:
 	var box := HBoxContainer.new()
 	box.name = "MoraleBox"
-	box.add_theme_constant_override("separation", 16)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side_def in [
 		{
@@ -1475,13 +1632,13 @@ func _build_morale_hud() -> void:
 	]:
 		var column := VBoxContainer.new()
 		column.name = str(side_def["column"])
-		column.add_theme_constant_override("separation", 2)
 		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# The §4.8.1-pinned 12px status-line variation (theme-owned size +
+		# TEXT ink — the per-screen override channel is retired).
 		var label := Label.new()
 		label.name = str(side_def["label"])
 		label.text = _t("battle.morale")
-		label.add_theme_font_size_override("font_size", 12)
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		label.theme_type_variation = "CardStatus"
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		column.add_child(label)
 		var track := ColorRect.new()
@@ -1507,17 +1664,34 @@ func _build_morale_hud() -> void:
 	_top_bar.add_child(box)
 	box.position = Vector2(VIEW_SIZE.x - 224.0, 4.0)
 
-	# The formation label sits directly under the 192×120 minimap
-	# (§4.7.1 "near the minimap"); hidden until a line formation's fleet
-	# layer is active (§4.8 pins the anchor lines to line_ahead/column).
+	# The formation display sits directly under the 192×120 minimap
+	# (§4.7.1 "near the minimap"): the §4.8 `formation_*` icon beside the
+	# label, hidden until a line formation's fleet layer is active (§4.8
+	# pins the anchor lines to line_ahead/column). A registry miss hides the
+	# icon — the label-only rendering is the fallback.
+	var formation_box := HBoxContainer.new()
+	formation_box.name = "FormationBox"
+	formation_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	formation_box.position = Vector2(1080, 170)
+	formation_box.size = Vector2(192, 36)
+	_formation_icon = TextureRect.new()
+	_formation_icon.name = "FormationIcon"
+	_formation_icon.custom_minimum_size = Vector2(32, 32)
+	_formation_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_formation_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_formation_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_formation_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_formation_icon.visible = false
+	formation_box.add_child(_formation_icon)
 	_formation_label = Label.new()
 	_formation_label.name = "FormationLabel"
-	_formation_label.add_theme_font_size_override("font_size", 12)
-	_formation_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_formation_label.position = Vector2(1080, 172)
-	_formation_label.size = Vector2(192, 18)
+	_formation_label.theme_type_variation = "CardStatus"
+	_formation_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_formation_label.size_flags_vertical = Control.SIZE_FILL
+	_formation_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_formation_label.visible = false
-	add_child(_formation_label)
+	formation_box.add_child(_formation_label)
+	add_child(formation_box)
 
 
 ## One side's §4.8a morale. GUARDED SEAM (W4-A): when the engine lacks
@@ -1561,73 +1735,111 @@ func _bind_morale() -> void:
 	_set_morale_fill(_morale_enemy_fill, _morale_enemy_track, enemy_value)
 
 
-## §4.7.1 W4: the formation label — `battle.formation` + the
-## `battle.formation.<value>` label, shown only while the §4.9b fleet layer
-## is active on a line formation (§4.8's `line_ahead`/`column` pin); hidden
-## otherwise (no display, no key invented, for `screen`/`swarm`).
+## §4.7.1 W4: the formation label + §4.8 formation icon — `battle.formation`
+## + the `battle.formation.<value>` label with the §4.8 `formation_*` icon
+## beside it, shown only while the §4.9b fleet layer is active on a line
+## formation (§4.8's `line_ahead`/`column` pin); hidden otherwise (no
+## display, no key invented, for `screen`/`swarm`). A registry miss keeps
+## the label-only rendering (the §4.9 fallback).
 func _bind_formation() -> void:
 	if _formation_label == null:
 		return
 	var anchor := formation_anchor_line()
 	if anchor.is_empty():
 		_formation_label.visible = false
+		if _formation_icon != null:
+			_formation_icon.visible = false
 		return
+	var formation := str(anchor.get("formation", ""))
 	_formation_label.visible = true
 	_formation_label.text = "%s %s" % [
 		_t("battle.formation"),
-		I18n.t_key("battle.formation.%s" % str(anchor.get("formation", ""))),
+		I18n.t_key("battle.formation.%s" % formation),
 	]
+	if _formation_icon != null:
+		var texture := UiKitLib.icon_texture("formation_%s" % formation)
+		_formation_icon.texture = texture
+		_formation_icon.visible = texture != null
 
 
-## One custom-draw pass for the whole world view (§4.7.1 "placeholder shapes",
-## §4.8): the sea, the 48×30 grid lines and the 24×24 lettered tokens, all
-## through the camera functions. Drawing (not child Controls) keeps the free
-## camera cheap — no per-tile nodes to move.
+## One custom-draw pass for the whole world view (§4.7.1, §4.8): the grid
+## lines and the unit tokens, all through the camera functions. The sea
+## itself is the §4.7.17 water TileMapLayer (the shared builder — see
+## [_method _build_battle_water]); drawing the tokens/lines (not child
+## Controls) keeps the free camera cheap.
 func _on_world_draw() -> void:
 	# Every call draws on `_grid_view`, the item whose `draw` signal fired —
 	# an unqualified `draw_*` binds to `self` (this root Control), which is
 	# not inside its own draw window, so the engine rejects it with
 	# "Drawing is only allowed …" per call (and nothing renders).
-	var sea_tl := world_to_screen(Vector2.ZERO, _cam_pos, _cam_zoom)
-	var sea_size := WORLD_PX * _cam_zoom
-	# Open sea (§4.8 SEA); the panel background shows outside the world.
-	_grid_view.draw_rect(Rect2(sea_tl, sea_size), PaletteLib.SEA)
+	# The camera transform of the two world-space layers is refreshed here
+	# so a draw triggered by any path still renders the current camera.
+	_sync_world_node(_water_layer)
+	_sync_world_node(_fx)
 	var line := PaletteLib.PANEL_LINE
 	for x in range(1, GRID_W):
 		var px := world_to_screen(Vector2(x * TILE_PX, 0), _cam_pos, _cam_zoom)
-		_grid_view.draw_rect(Rect2(px, Vector2(1.0, sea_size.y)), line, true)
+		_grid_view.draw_rect(Rect2(px, Vector2(1.0, WORLD_PX.y * _cam_zoom)), line, true)
 	for y in range(1, GRID_H):
 		var px := world_to_screen(Vector2(0, y * TILE_PX), _cam_pos, _cam_zoom)
-		_grid_view.draw_rect(Rect2(px, Vector2(sea_size.x, 1.0)), line, true)
+		_grid_view.draw_rect(Rect2(px, Vector2(WORLD_PX.x * _cam_zoom, 1.0)), line, true)
 	if sim == null:
 		return
 	var font := ThemeDB.fallback_font
 	var acting: Dictionary = sim.current_unit()
+	var owner := _enemy_owner_id()
 	for unit in sim.units():
 		if not bool(unit.get("alive", false)):
 			continue
 		var cell: Vector2i = sim.unit_cell(unit)
+		# The §4.7.17 sequencer's token slide (ZERO when idle/instant).
+		var slide := Vector2.ZERO
+		if _fx != null and _fx.has_method("move_offset_for"):
+			slide = _fx.move_offset_for(_unit_key(unit))
 		var center := world_to_screen(
 			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5,
-			_cam_pos, _cam_zoom)
-		var half := TOKEN_PX * _cam_zoom * 0.5
-		var rect := Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0)
+			_cam_pos, _cam_zoom) + slide
 		var letter := TOKEN_PLAYER
-		var outline := Color.BLACK
+		var flagship_unit: Dictionary = sim.flagship_unit()
+		var flagship: bool = not flagship_unit.is_empty() \
+			and _unit_key(flagship_unit) == _unit_key(unit)
 		if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER:
-			var flagship_unit: Dictionary = sim.flagship_unit()
-			var flagship: bool = not flagship_unit.is_empty() \
-				and _unit_key(flagship_unit) == _unit_key(unit)
 			letter = TOKEN_FLAGSHIP if flagship else TOKEN_PLAYER
-			outline = PaletteLib.ACCENT if flagship else Color.BLACK
-			_grid_view.draw_rect(rect, PaletteLib.TEXT)
 		else:
 			letter = TOKEN_ENEMY
-			outline = PaletteLib.TEXT
-			_grid_view.draw_rect(rect, _enemy_dot_color())
-		_grid_view.draw_rect(rect, outline, false, 1.0)
-		var font_size := maxi(8, int(round(12.0 * _cam_zoom)))
+		# §4.8.6 hull token: `hull_{type}_{owner}_{dir}` from the unit's
+		# `heading8` (vel = 0 keeps the last heading, `60-*` §4.3a), resolved
+		# through the §4.9 registry. A registry miss keeps the Phase-1
+		# placeholder square (the fallback path never goes away).
+		var sprite_id := hull_sprite_id(
+			str((unit.get("ship", {}) as Dictionary).get("ship_type_id", "")),
+			owner if str(unit.get("side", "")) != BattleSimLib.SIDE_PLAYER
+			else "player", int(unit.get("heading8", 0)))
+		var texture := UiKitLib.icon_texture(sprite_id) \
+			if not sprite_id.is_empty() else null
+		if texture != null:
+			# The 32×32 token sprite carries its own designed footprint
+			# (§4.8.7 bands); it draws over the full tile.
+			var size := TILE_PX * _cam_zoom
+			_grid_view.draw_texture_rect(texture,
+				Rect2(center - Vector2(size, size) * 0.5,
+					Vector2(size, size)), false)
+		else:
+			var half := TOKEN_PX * _cam_zoom * 0.5
+			var rect := Rect2(center - Vector2(half, half),
+				Vector2(half, half) * 2.0)
+			var outline := Color.BLACK
+			if str(unit.get("side", "")) == BattleSimLib.SIDE_PLAYER:
+				outline = PaletteLib.ACCENT if flagship else Color.BLACK
+				_grid_view.draw_rect(rect, PaletteLib.TEXT)
+			else:
+				outline = PaletteLib.TEXT
+				_grid_view.draw_rect(rect, _enemy_dot_color())
+			_grid_view.draw_rect(rect, outline, false, 1.0)
+		# §4.8.5: the identification letter stays a runtime OVERLAY badge on
+		# top of the token sprite — never baked into the PNG.
 		if font != null:
+			var font_size := maxi(8, int(round(12.0 * _cam_zoom)))
 			var text_size := font.get_string_size(letter,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 			_grid_view.draw_string(font, center
@@ -1636,9 +1848,12 @@ func _on_world_draw() -> void:
 	# The acting unit wears a 2px accent frame (§4.8 focus outline).
 	if not acting.is_empty() and bool(acting.get("alive", false)):
 		var cell: Vector2i = sim.unit_cell(acting)
+		var slide := Vector2.ZERO
+		if _fx != null and _fx.has_method("move_offset_for"):
+			slide = _fx.move_offset_for(_unit_key(acting))
 		var center := world_to_screen(
 			Vector2(cell) * TILE_PX + Vector2(TILE_PX, TILE_PX) * 0.5,
-			_cam_pos, _cam_zoom)
+			_cam_pos, _cam_zoom) + slide
 		var half := TOKEN_PX * _cam_zoom * 0.5 + 2.0
 		_grid_view.draw_rect(
 			Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0),
@@ -1758,6 +1973,10 @@ func _queue_redraw() -> void:
 func _bind() -> void:
 	if sim == null:
 		return
+	# Phase-10 W5-A: the fx sequencer observes the engine's event stream
+	# (log entries + position diffs — read-only) before anything repaints.
+	if _fx != null and _fx.has_method("observe"):
+		_fx.observe(sim, _fx_instant())
 	_title.text = _t("battle.title")
 	_day.text = I18n.fmt("world.day", {"day": int(sim.day)})
 	_round.text = _t("battle.round", {"round": int(sim.round_number())})
@@ -1793,6 +2012,9 @@ func _sync_camera() -> void:
 			+ Vector2(TILE_PX, TILE_PX) * 0.5
 		_cam_pos = clamp_cam(center, _cam_zoom)
 	_overlay.set_camera(_cam_pos, _cam_zoom)
+	# The two world-space layers ride the same camera transform.
+	_sync_world_node(_water_layer)
+	_sync_world_node(_fx)
 
 
 func _bind_stats() -> void:
@@ -2596,24 +2818,64 @@ func _emit_finished() -> void:
 
 ## §4.12.4 step 5: the `battle.after.*` dialog, rebuilt **only** from the
 ## outcome block — no number is computed here (§4.11.10 values arrive
-## pre-computed by the engine / tasks C and G).
+## pre-computed by the engine / tasks C and G). Phase-10 W5-A: the opposing
+## flagship captain's bust rides beside the result line (the §4.9 portrait
+## slot; null ⇒ exactly the text-only dialog).
 func _show_after_action() -> void:
 	_after_title.text = _t("battle.after.title")
 	for child in _after_lines.get_children():
 		_after_lines.remove_child(child)
 		child.queue_free()
-	for text in _after_action_texts():
+	var bust := _after_action_portrait()
+	var texts := _after_action_texts()
+	for index in texts.size():
 		var label := Label.new()
-		label.text = text
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+		label.text = texts[index] as String
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.custom_minimum_size.x = 600
+		if index == 0 and bust != null:
+			# The §4.9 portrait slot: the 72×96 bust (§4.8.8, nearest) beside
+			# the result line — the outcome text wraps into the row's rest.
+			var row := HBoxContainer.new()
+			row.name = "PortraitRow"
+			var rect := TextureRect.new()
+			rect.name = "Portrait"
+			rect.texture = bust
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			rect.custom_minimum_size = Vector2(
+				float(PortraitComposerLib.CANVAS_W),
+				float(PortraitComposerLib.CANVAS_H))
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(rect)
+			label.custom_minimum_size.x = 0
+			label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			label.size_flags_vertical = Control.SIZE_FILL
+			row.add_child(label)
+			_after_lines.add_child(row)
+			continue
 		_after_lines.add_child(label)
 	_after_continue.text = I18n.t_key("ui.ok")
 	_after_action.visible = true
 	if not _after_action.is_in_group("modal_overlay"):
 		_after_action.add_to_group("modal_overlay")
 	_after_continue.grab_focus()
+
+
+## The after-action portrait slot (Phase-10 decision 10): the W4-D composer's
+## bust of the opposing flagship captain (`encounter.captain_id` → the canon
+## card; the override-wins ladder inside). EVERY miss — no id, unknown
+## captain, missing part sheets — returns null and the dialog stays exactly
+## text-only. Never crashes, never invents a placeholder of its own.
+func _after_action_portrait() -> Texture2D:
+	var captain_id := str(encounter.get("captain_id", ""))
+	if captain_id.is_empty():
+		return null
+	var person: Dictionary = CaptainsLib.captain(captain_id)
+	if person.is_empty():
+		return null
+	return PortraitComposerLib.portrait_texture(person)
 
 
 ## The `battle.after.*` lines in wireframe order: loot gold, XP, captures,
@@ -2953,14 +3215,6 @@ func _on_locale_changed(_locale: String) -> void:
 		var captain_id := str(encounter.get("captain_id", ""))
 		if not captain_id.is_empty():
 			_show_captain_preview(captain_id)
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 # --- Player auto policy (the headless driver of run_to_completion) ---------
