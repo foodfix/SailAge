@@ -1,0 +1,496 @@
+{
+ "version": 1,
+ "generated_by": "phase10/w3-d-fx-portraits (Phase-10 W3-D art-pass slot), authored 2026-11-04 from data/captains.json (the 24 legend:true captains - the 4 named pirates of data/named_pirates.json are among them), data/nations.json and data/discoveries.json; prompts in English per decision 10",
+ "note": "Model-pass prompt manifest. Consumption is a FUTURE phase: nothing in-game and nothing in build_ui_art.py renders from this file today. The future model pass feeds each entry's style_preamble + subject to an image model, then ingests via build_ui_art.py --import (crop to 3:4, palette-quantize BEFORE nearest-downscale, outline pass, alpha threshold), writing the class:'portrait_override' targets under assets/ui/overrides/ (an override file always wins over the procedural bust) and the class:'discovery_reveal' targets under assets/ui/discoveries/.",
+ "style_preamble": "Pixel art asset, crisp 1px dark outline around every form, flat cel shading with a single NW top-left light source, nearest-neighbor aesthetic, readable at 1x. Fully transparent background; a single subject centered. No text, no gradients, no anti-aliasing, no watermark, no frame. Setting: the Age of Sail, 16th-17th century (Mediterranean-Atlantic world). Canvas per class: portrait overrides 72x96 (3:4 vertical bust, front-facing, head and shoulders); discovery reveals 64x64. Palette discipline - use ONLY these hexes. Portrait overrides (portrait palette block): #101010 #f0d0b0 #d9a878 #a87a52 #1a1a1e #6b4a2a #b9bcc0 #e8e6df #d9b98a #2e2014 #8a929c #a87a28 #9cc4dc #d9a441 #465468 #2f6f9e #4e9e4e #b3341f #1a8c4e #b3191f #274b8f #d97b1e #6a3d9a #c9a227. Discovery reveals (icon palette block): #1c2230 #121724 #465468 #5e7086 #232c3e #e8e6df #f7f5ee #d9a441 #f0c46a #a87a28 #4e9e4e #74c26e #b3341f #d4573c #2f6f9e #9a9a9a #1a8c4e #b3191f #274b8f #d97b1e #6a3d9a #c9a227.",
+ "portraits": [
+  {
+   "id": "cap_leg_coaster_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_coaster_01.png",
+   "subject": "Afonso Roque, coaster captain of Portugal — weathered face, grey_streaked hair, full beard, dark eyes; wearing a slate-grey working coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_coaster_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_coaster_02.png",
+   "subject": "Cornelis van Aker, coaster captain of Holland — round face, brown hair, stubble beard, pale_blue eyes; wearing a slate-grey working coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_courier_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_courier_01.png",
+   "subject": "Beltrán de Oviedo, courier captain of Spain — lean face, brown hair, clean beard, dark eyes; wearing a sea-blue courier's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_courier_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_courier_02.png",
+   "subject": "İskender Pazarlı, courier captain of Ottoman — round face, black hair, full beard, dark eyes; wearing a sea-blue courier's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_courier_03",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_courier_03.png",
+   "subject": "Vasco Esteves, courier captain of Portugal — weathered face, brown hair, stubble beard, hazel eyes; wearing a sea-blue courier's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_hunter_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_hunter_01.png",
+   "subject": "Gonzalo Saravia, hunter captain of Spain — lean face, black hair, clean beard, dark eyes; wearing a hunter-green hunting coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_hunter_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_hunter_02.png",
+   "subject": "Selim Karabulut, hunter captain of Ottoman — scarred face, black hair, full beard, dark eyes; wearing a hunter-green hunting coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_hunter_03",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_hunter_03.png",
+   "subject": "Ambrose Hallowes, hunter captain of England — weathered face, brown hair, stubble beard, pale_blue eyes; wearing a hunter-green hunting coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_patrol_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_patrol_01.png",
+   "subject": "Henry Collingwood, patrol captain of England — weathered face, brown hair, stubble beard, grey eyes; wearing a navy patrol coat with a sash in England colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_patrol_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_patrol_02.png",
+   "subject": "Serdar Tokay, patrol captain of Ottoman — scarred face, black hair, full beard, dark eyes; wearing a navy patrol coat with a sash in Ottoman colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_patrol_03",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_patrol_03.png",
+   "subject": "Sancho de Otálora, patrol captain of Spain — lean face, black hair, clean beard, dark eyes; wearing a navy patrol coat with a sash in Spain colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_patrol_04",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_patrol_04.png",
+   "subject": "Nicolò Delfino, patrol captain of Italy — lean face, black hair, clean beard, hazel eyes; wearing a navy patrol coat with a sash in Italy colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_privateer_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_privateer_01.png",
+   "subject": "Martin Cardale, privateer captain of England — scarred face, brown hair, forked beard, grey eyes; wearing a privateer's coat with a sash in England colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_privateer_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_privateer_02.png",
+   "subject": "Reynier Prooijen, privateer captain of Holland — lean face, sun_bleached hair, clean beard, pale_blue eyes; wearing a privateer's coat with a sash in Holland colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_privateer_03",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_privateer_03.png",
+   "subject": "Duarte Mendonça, privateer captain of Portugal — scarred face, black hair, stubble beard, hazel eyes; wearing a privateer's coat with a sash in Portugal colors. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_trader_01",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_trader_01.png",
+   "subject": "João da Fonseca, trader captain of Portugal — round face, brown hair, stubble beard, hazel eyes; wearing a gold-trimmed merchant's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_trader_02",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_trader_02.png",
+   "subject": "Álvaro de la Peña, trader captain of Spain — lean face, black hair, full beard, dark eyes; wearing a gold-trimmed merchant's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_trader_03",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_trader_03.png",
+   "subject": "Pieter van der Veken, trader captain of Holland — lean face, sun_bleached hair, clean beard, pale_blue eyes; wearing a gold-trimmed merchant's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_trader_04",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_trader_04.png",
+   "subject": "Lorenzo Vendramin, trader captain of Italy — lean face, black hair, clean beard, dark eyes; wearing a gold-trimmed merchant's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "cap_leg_trader_05",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_cap_leg_trader_05.png",
+   "subject": "Walter Selwyn, trader captain of England — weathered face, brown hair, stubble beard, grey eyes; wearing a gold-trimmed merchant's coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "pirate_edward_bloodhand",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_pirate_edward_bloodhand.png",
+   "subject": "Edward the Bloodhand, pirate captain under no flag — scarred face, brown hair, full beard, grey eyes; wearing a dark-red pirate coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "pirate_limahong_thousand_sails",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_pirate_limahong_thousand_sails.png",
+   "subject": "Limahong of the Thousand Sails, pirate captain under no flag — weathered face, black hair, stubble beard, dark eyes; wearing a dark-red pirate coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "pirate_murad_red_sail",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_pirate_murad_red_sail.png",
+   "subject": "Murad the Red Sail, pirate captain under no flag — scarred face, black hair, forked beard, dark eyes; wearing a dark-red pirate coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  },
+  {
+   "id": "pirate_redbeard_khair",
+   "canvas": "72x96",
+   "width": 72,
+   "height": 96,
+   "class": "portrait_override",
+   "target": "assets/ui/overrides/portrait_pirate_redbeard_khair.png",
+   "subject": "Khair ad-Din Redbeard, pirate captain under no flag — scarred face, grey_streaked hair, full beard, dark eyes; wearing a dark-red pirate coat. Front-facing 3:4 bust, head and shoulders, transparent background."
+  }
+ ],
+ "discoveries": [
+  {
+   "id": "disc_aksum_obelisks",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_aksum_obelisks.png",
+   "subject": "Obelisks of Aksum (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_amazon_mouth",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_amazon_mouth.png",
+   "subject": "Mouth of the Amazon (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_andes_peaks",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_andes_peaks.png",
+   "subject": "Andean Snowpeaks (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_angkor",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_angkor.png",
+   "subject": "Angkor (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_atlas_cedars",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_atlas_cedars.png",
+   "subject": "Cedars of the Atlas (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_azores_whales",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_azores_whales.png",
+   "subject": "Azores Whales (creature) — a legendary sea creature encounter. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_babylon",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_babylon.png",
+   "subject": "Babylon (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_borobudur",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_borobudur.png",
+   "subject": "Borobudur (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_cape_horn",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_cape_horn.png",
+   "subject": "Cape Horn (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_caribbean_reef",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_caribbean_reef.png",
+   "subject": "Caribbean Reef (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_el_dorado",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_el_dorado.png",
+   "subject": "El Dorado (relic) — a salvaged relic of the Age of Sail. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_great_wall",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_great_wall.png",
+   "subject": "The Great Wall (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_great_zimbabwe",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_great_zimbabwe.png",
+   "subject": "Great Zimbabwe (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_iguazu",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_iguazu.png",
+   "subject": "Iguazu Falls (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_jebel_musa",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_jebel_musa.png",
+   "subject": "Jebel Musa (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_kilimanjaro",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_kilimanjaro.png",
+   "subject": "Kilimanjaro (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_mohenjo_daro",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_mohenjo_daro.png",
+   "subject": "Mohenjo-daro (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_nile_cataracts",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_nile_cataracts.png",
+   "subject": "First Cataract of the Nile (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_patagonia",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_patagonia.png",
+   "subject": "Patagonian Waste (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_persepolis",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_persepolis.png",
+   "subject": "Persepolis (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_petra",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_petra.png",
+   "subject": "Petra (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_red_sea_corals",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_red_sea_corals.png",
+   "subject": "Red Sea Coral Gardens (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_sargasso",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_sargasso.png",
+   "subject": "Sargasso Sea (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_silk_road_relic",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_silk_road_relic.png",
+   "subject": "Golden Buddha of the Silk Road (relic) — a salvaged relic of the Age of Sail. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_solomon_ring",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_solomon_ring.png",
+   "subject": "Seal of Solomon (relic) — a salvaged relic of the Age of Sail. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_table_mountain",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_table_mountain.png",
+   "subject": "Table Mountain (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_terracotta",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_terracotta.png",
+   "subject": "Terracotta Army (relic) — a salvaged relic of the Age of Sail. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_timbuktu",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_timbuktu.png",
+   "subject": "Timbuktu (ruins) — an ancient ruin site swallowed by the ages. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_victoria_falls",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_victoria_falls.png",
+   "subject": "Victoria Falls (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  },
+  {
+   "id": "disc_zanzibar_cloves",
+   "canvas": "64x64",
+   "width": 64,
+   "height": 64,
+   "class": "discovery_reveal",
+   "target": "assets/ui/discoveries/disc_zanzibar_cloves.png",
+   "subject": "Zanzibar Clove Groves (natural) — a natural wonder of the known world. Single subject centered, emblem-style illustration, transparent background."
+  }
+ ]
+}

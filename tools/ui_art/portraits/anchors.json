@@ -1,0 +1,22 @@
+{
+ "version": 1,
+ "note": "Shared pixel anchors for all 25 portrait part sheets (72x96, 3:4 bust, front-facing, light from NW). Every part rasterizes against these coordinates — that is the composer contract (fixed appearance dict -> fixed part list, W4-D): parts are pixel-compatible because they are generated from the same anchors, never re-measured.",
+ "canvas": {"w": 72, "h": 96},
+ "head": {"cx": 36, "cy": 35, "rx": 13, "ry": 19, "dilate": 1},
+ "eye_line": {"top_dy": 0, "dx": 4, "half_w": 1, "rows": 2},
+ "brow_dy": -2,
+ "hairline_dy": -7,
+ "hairline_slope": 0.18,
+ "sideburn_dx": 10,
+ "beard_band_dy": 8,
+ "mustache": {"top_dy": 6, "bot_dy": 7, "half_w": 5},
+ "jaw_line_y": 49,
+ "neck": {"x1": 32, "x2": 40, "y1": 50, "y2": 63},
+ "shoulder_line_y": 64,
+ "torso": {"x1_top": 22, "x2_top": 49, "x1_bot": 12, "x2_bot": 59, "y1": 64, "y2": 95},
+ "coat": {"x1_top": 19, "x2_top": 52, "x1_bot": 10, "x2_bot": 61, "y1": 64, "y2": 95,
+          "v_apex_y": 71, "v_half_w_top": 3},
+ "sash": {"origin_x": 24, "origin_y": 70, "band_half_w": 1},
+ "skin_ramp": {"band_lo": 0.35, "band_hi": 0.65,
+               "q": "(x-cx)/rx + (y-cy)/ry; q < -band_hi -> SKIN_HI, q > band_hi -> SKIN_LO, dithered bands between"}
+}
