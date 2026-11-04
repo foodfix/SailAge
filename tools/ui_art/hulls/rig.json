@@ -1,0 +1,81 @@
+{
+ "id": "hull-rig-library",
+ "class": "hulls",
+ "doc": "Hull rig fragment/style library — decision 9.2 'style lives in the tool' (docs/IMPLEMENT-Phase10.md). This file pins the fragment vocabulary the authored maps were drawn with, the shared palette keys, the tier bands and the per-hull rig table, so a style fix is a data edit + rebuild, never a PNG hand-edit. Shading rule everywhere: light from NW (80-* §4.8.2) — NW-facing edges take the HI step, SE-facing the LO step; silhouette-first, readable at 1:1; authored maps are outline-less (the governor applies the 1px #101010 token outline).",
+ "palette_keys": {
+  "_doc": "chars used by every authored string-map; hexes = the §4.8.4 hull block (scripts/palette.gd hull-block constants). Block membership is per-class: hull tokens + facility tokens check against the hull block only.",
+  "H": { "hex": "#8f6d3a", "constant": "WOOD_HI",          "use": "wood highlight (NW rim, castle decks)" },
+  "W": { "hex": "#7a5c2e", "constant": "WOOD",             "use": "wood base (hull body, counters, boards)" },
+  "L": { "hex": "#5e4720", "constant": "WOOD_LO",          "use": "wood shadow (SE rim), oar blades" },
+  "s": { "hex": "#f7f5ee", "constant": "SAIL_HI",          "use": "sail highlight (top/port edge)" },
+  "S": { "hex": "#e8e6df", "constant": "SAIL",             "use": "sail base" },
+  "z": { "hex": "#c2beb2", "constant": "SAIL_LO",          "use": "sail shadow (bottom/starboard edge, battens)" },
+  "K": { "hex": "#101010", "constant": "HULL_INK",         "use": "masts, yards, keel/deck line, sign brackets (owner-invariant like the sails)" },
+  "G": { "hex": "#c1c1c1", "constant": "HULL_NEUTRAL_HI",  "use": "stone highlight (facility tokens only)" },
+  "g": { "hex": "#9a9a9a", "constant": "HULL_NEUTRAL",     "use": "stone base (facility tokens only)" },
+  "d": { "hex": "#6f6f6f", "constant": "HULL_NEUTRAL_LO",  "use": "stone shadow (facility tokens only)" },
+  "w": { "hex": "#ffffff", "constant": "HULL_PLAYER_HI",   "use": "specular glint (facility tokens only)" }
+ },
+ "remap": {
+  "_doc": "owner variants substitute ONLY the three wood steps; sails and ink are owner-invariant (§4.8.4 hull block: 'only the 3 wood steps remap'). Sources here are the authored values; targets are the 9 owner triples (§4.8.4 table, mirrored in scripts/palette.gd).",
+  "sources": { "HI": "#8f6d3a", "BASE": "#7a5c2e", "LO": "#5e4720" },
+  "targets": {
+   "player":   { "HI": "#ffffff", "BASE": "#e8e6df", "LO": "#a7a6a1" },
+   "portugal": { "HI": "#21af62", "BASE": "#1a8c4e", "LO": "#136538" },
+   "spain":    { "HI": "#e01f27", "BASE": "#b3191f", "LO": "#811216" },
+   "england":  { "HI": "#315eb3", "BASE": "#274b8f", "LO": "#1c3667" },
+   "holland":  { "HI": "#ff9a26", "BASE": "#d97b1e", "LO": "#9c5916" },
+   "ottoman":  { "HI": "#854cc1", "BASE": "#6a3d9a", "LO": "#4c2c6f" },
+   "italy":    { "HI": "#fbcb31", "BASE": "#c9a227", "LO": "#91751c" },
+   "neutral":  { "HI": "#c1c1c1", "BASE": "#9a9a9a", "LO": "#6f6f6f" },
+   "pirate":   { "HI": "#e04127", "BASE": "#b3341f", "LO": "#812516" }
+  }
+ },
+ "tier_bands": {
+  "_doc": "long-axis px on the 32x32 canvas (§4.8.7 final values; validator checks the n token, the canonical orientation lists/rosters use)",
+  "1": [14, 18],
+  "2": [20, 26],
+  "3": [26, 30]
+ },
+ "beam_fraction": {
+  "guide": [0.40, 0.50],
+  "note": "galley-family hulls (galiot, pinnace, galley, galleass, xebec) run deliberately slim (~33-40%): oar banks and lateen rigs read narrow; judged acceptable against the silhouette-first rule at W3 authoring."
+ },
+ "fragments": {
+  "hull_body": {
+   "shape": "tapered elongated hull; bow_len ≈ 22% and stern_len ≈ 18% of length; transom ≈ 72% of max beam; bow tip half-width 0.6 px (pointy) unless beak",
+   "shading": "NW rim WOOD_HI, SE rim WOOD_LO, interior WOOD"
+  },
+  "keel_line": { "px": 1, "color": "K", "rule": "center deck line from bow_len+1 to stern taper, hidden under sails" },
+  "mast": { "px": "1x2", "color": "K", "position": "stem fraction of length (rig table)" },
+  "yard": { "px": 1, "color": "K", "rule": "spar at the mast row, sail-width wide, sail hangs aft of it" },
+  "square_sail": { "shape": "rectangle sw x sh (rows aft of mast)", "shading": "top+port edge SAIL_HI, bottom+starboard edge SAIL_LO" },
+  "junk_battens": { "rule": "square sail with alternating SAIL_LO rows (full-batten), top edge SAIL_HI" },
+  "lateen": { "shape": "triangle, apex at the mast, widening aft (sw x th)", "shading": "port half SAIL_HI, starboard half SAIL_LO" },
+  "oar_row": { "px": "1x2 per blade", "color": "L", "rule": "blades flank the hull (2px off the side), stations every `step` rows between the fractions" },
+  "stern_castle": { "color": "H", "rule": "raised deck block (fore and/or aft) with a 1px K leading edge; hw = block half-width" },
+  "beak": { "rule": "galleon bow profile rises as t^1.7 — a beaked entry within the same length" }
+ },
+ "footprint_semantics": {
+  "long_axis": "n-token opaque bbox max dimension on the final outlined file (rotations/mirrors preserve bbox max, so this covers the whole 8-dir family)",
+  "note": "the ne map is the honest 45° rotation of the n ship; its bbox max under-reads the physical length by ~1/√2, so it is canvas-fit checked (≤30 px) but not banded — pinning this reading here so the governor, the manifests and group 13 measure the same thing"
+ },
+ "hulls": {
+  "latin":            { "tier": 1, "length": 15, "beam": 7,  "rig": "1 mast, big lateen triangle" },
+  "sloop":            { "tier": 1, "length": 15, "beam": 7,  "rig": "1 mast, small square sail" },
+  "galiot":           { "tier": 1, "length": 15, "beam": 5,  "rig": "oar banks + small lateen" },
+  "pinnace":          { "tier": 1, "length": 15, "beam": 5,  "rig": "tiny, oars only, no sail" },
+  "caravel":          { "tier": 2, "length": 23, "beam": 10, "rig": "2 masts, 2 lateen triangles" },
+  "galley":           { "tier": 2, "length": 23, "beam": 9,  "rig": "long, 7 oar stations + 1 lateen" },
+  "brigantine":       { "tier": 2, "length": 23, "beam": 10, "rig": "2 masts, 2 square sails" },
+  "fluyt":            { "tier": 2, "length": 23, "beam": 11, "rig": "fat beam, 3 square sails" },
+  "junk":             { "tier": 2, "length": 23, "beam": 10, "rig": "3 masts, 3 full-batten segmented sails" },
+  "dhow":             { "tier": 2, "length": 23, "beam": 8,  "rig": "slim, 1 big lateen" },
+  "caravela_redonda": { "tier": 2, "length": 23, "beam": 11, "rig": "roundish hull, 2 square + 1 lateen (3 masts)" },
+  "xebec":            { "tier": 2, "length": 23, "beam": 9,  "rig": "narrow, 3 lateens" },
+  "nao":              { "tier": 3, "length": 27, "beam": 12, "rig": "big 3-mast carrack-like: 3 square sails + forecastle + aftcastle" },
+  "carrack":          { "tier": 3, "length": 27, "beam": 12, "rig": "2 square + 1 lateen, high stern castle only" },
+  "galleon":          { "tier": 3, "length": 27, "beam": 12, "rig": "3 square sails, beaked bow, aft castle" },
+  "galleass":         { "tier": 3, "length": 27, "beam": 9,  "rig": "hybrid: 9 oar stations + 3 lateens, longest hull" }
+ }
+}

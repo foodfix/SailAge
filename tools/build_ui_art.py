@@ -1,0 +1,1088 @@
+#!/usr/bin/env python3
+"""build_ui_art.py — the Phase-10 UI-art pipeline governor (sole writer: W3-B).
+
+Walks the declarative sprite manifests under ``tools/ui_art/<class>/`` (sorted),
+renders them through the vendored YoYoPixel engine (``tools/yoyopixel/render.js``,
+node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
+
+1. 8-direction lossless derivations   — declarations carrying
+   ``"derive": {"from": <sprite id>, "op": rot_cw|rot_ccw|rot_180|mirror_x|
+   mirror_y|mirror_xy}`` are produced from their base sprite's rendered PNG
+   (rot_cw = 90° clockwise on screen: new(x, y) = old(y, H-1-x), index math
+   self-verified against a fixture on every run).
+2. Owner remaps (hulls) — each authored hull map is baked into the 9 owner
+   variants (6 nations + player + neutral + pirate, docs/IMPLEMENT-Phase10.md
+   review-verified) by substituting exactly the three wood steps
+   (WOOD_HI/WOOD/WOOD_LO -> HULL_{owner}_HI/HULL_{owner}/HULL_{owner}_LO,
+   80-* §4.8.4 hull block; sails and HULL_INK are owner-invariant).
+3. Auto-outline (tokens) — 1 px #101010 outline around the silhouette of
+   hull + facility tokens (8-neighborhood); authored maps are outline-less.
+4. Seam-ring verification (terrain class) — variants of a terrain kind must
+   share a byte-identical outer 1 px ring; ``sea_pattern.png`` must be
+   torus-safe (80-* §4.8.2 seam rules).  Verify only, never alters.
+5. Nine-patch assembly (chrome class) — ``assets/ui/chrome/ninepatch_
+   {panel,button,button_focus,field,bar}.png`` (48×48) from the 16×16 chrome
+   tiles: corners at the four corners, edges tile-repeat along the sides,
+   fill in the 16×16 center (48 = 16 + 16 + 16, so margins are exactly one
+   tile).  Bar sheet layout (pinned): rows 16..31 form the horizontal midline
+   band the kit's value_bar samples — left cap tile at x 0..15, line tile
+   tiled x 16..31, right cap tile at x 32..47; the rest transparent.
+6. Hull footprint check — per hull, the family long axis (n-token opaque
+   bbox max dimension, final outlined file) must sit in its tier band
+   (t1 14–18, t2 20–26, t3 26–30 px, 80-* §4.8.7).
+7. Hull color audit — every final token's hexes ⊆ the hull palette block and
+   ≤ the 32 px color budget (20, §4.8.3).
+
+CLI:
+    python3 tools/build_ui_art.py                 # full build into assets/ui/
+    python3 tools/build_ui_art.py --check         # rebuild into a temp dir and
+                                                  # byte-compare vs assets/ui/
+                                                  # (§8.8 double-run/hand-edit
+                                                  # detector, group 13 item 2)
+    python3 tools/build_ui_art.py --contact-sheet # emit tools/contact_sheet.png
+                                                  # (labeled montage + seam
+                                                  # montage; decision 9.4)
+
+Manifest contract (per class dir, ``*.json`` sorted):
+* renderable declaration: ``{"id", "file", "rows"+"palette"}`` (string-map) or
+  ``{"id", "file", "grid"+"materials"}`` (template); a file may also hold an
+  array of them or ``{"sprites": [...]}`` — passed to render.js as-is;
+  optional ``"outline": true`` opts the sprite into the token outline pass.
+* derive-only declaration: ``{"id", "file", "derive": {"from", "op"}}`` —
+  post-pass transform of the referenced base sprite (resolved by id across
+  classes; chains allowed, cycles rejected).
+* hull authoring doc (hulls class): ``{"id": "hull_<ship_type>", "tier",
+  "maps": {"n": {...}, "ne": {...}}, "derive": [...]}`` — registry-driven
+  pipeline; ``"file"``-less, rendered into a transient staging dir because the
+  wood-colored authored map is a pipeline intermediate, never a shipped file
+  (§4.8.4: every owner variant incl. neutral is a remap target).
+* auxiliary docs (no ``id``): ``rig.json`` (style library) and
+  ``hulls.json`` (registry) in the hulls class; ignored elsewhere.
+
+Missing classes are fine (staged activation): a class dir that does not exist
+or holds no manifests is reported skipped.  Deterministic: sorted walks, no
+timestamps, no dict-order dependence — two runs are byte-identical (gated by
+``--check``).  Stdlib only.  The ``--import <dir>`` AI-ingestion path of
+decision 10 is future work and intentionally not implemented here.
+
+Pinned references: docs/80-UI-UX.md §4.8 (style guide, palette blocks,
+heading8→dir table §4.8.6, footprint bands §4.8.7); docs/10-DATA-SCHEMA.md
+§8.8 (group-13 normative spec); docs/IMPLEMENT-Phase10.md decisions 5/9.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+ENGINE = ROOT / "tools" / "yoyopixel" / "render.js"
+MANIFESTS = ROOT / "tools" / "ui_art"
+SHIP_TYPES = ROOT / "data" / "ship_types.json"
+NODE_PIN = "v24.16.0"  # docs/IMPLEMENT-Phase10.md correction 10 (§8.8: >= pin; we refuse drift like fixture_check.py)
+CLASS_DIRS = ["chrome", "fx", "hulls", "icons", "portraits", "terrain"]  # sorted walk order (§4.8.1)
+TOKENS_DIR = "assets/ui/tokens"
+STAGING = "build/ui_art_staging"  # transient, removed after every run
+
+# ---- hull palette block (80-* §4.8.4; scripts/palette.gd hull-block constants) ----
+
+HULL_INK = "#101010"          # HULL_INK — token outline, tool-applied
+WOOD_HI = "#8f6d3a"           # WOOD_HI — authored-neutral wood highlight
+WOOD = "#7a5c2e"              # WOOD — authored-neutral wood base
+WOOD_LO = "#5e4720"           # WOOD_LO — authored-neutral wood shadow
+SAIL_HI = "#f7f5ee"           # SAIL_HI
+SAIL = "#e8e6df"              # SAIL (= TEXT)
+SAIL_LO = "#c2beb2"           # SAIL_LO
+# owner ramp triples (HI, BASE, LO) — §4.8.4 owner table (values = palette.gd
+# HULL_{OWNER}[_HI|_LO]; owner bases == nations.json colors + player TEXT,
+# neutral #9a9a9a, pirate #b3341f)
+OWNER_RAMPS = {
+    "player":   ("#ffffff", "#e8e6df", "#a7a6a1"),
+    "portugal": ("#21af62", "#1a8c4e", "#136538"),
+    "spain":    ("#e01f27", "#b3191f", "#811216"),
+    "england":  ("#315eb3", "#274b8f", "#1c3667"),
+    "holland":  ("#ff9a26", "#d97b1e", "#9c5916"),
+    "ottoman":  ("#854cc1", "#6a3d9a", "#4c2c6f"),
+    "italy":    ("#fbcb31", "#c9a227", "#91751c"),
+    "neutral":  ("#c1c1c1", "#9a9a9a", "#6f6f6f"),
+    "pirate":   ("#e04127", "#b3341f", "#812516"),
+}
+OWNER_ORDER = ["player", "portugal", "spain", "england", "holland",
+               "ottoman", "italy", "neutral", "pirate"]
+HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in
+         {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO}
+         | {c for ramp in OWNER_RAMPS.values() for c in ramp}}
+HULL_BLOCK = set(HEXES)  # membership audit set (33 distinct values, §4.8.4)
+REMAP_SOURCES = (WOOD_HI, WOOD, WOOD_LO)
+
+# footprint bands (80-* §4.8.7 final values, ship_types.tier partition 4/8/4)
+FOOTPRINT_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
+COLOR_BUDGET_32 = 20  # §4.8.3: 32x32 -> 12-20 cap
+CANVAS = 32
+
+DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
+# pinned heading8->dir derivation table (80-* §4.8.6; also pinned in
+# tools/ui_art/hulls/hulls.json + every authored/*.json — drift is a FAIL)
+PINNED_DERIVE = {
+    "e":  ("n", "rot_cw"),
+    "s":  ("n", "rot_180"),
+    "w":  ("n", "rot_ccw"),
+    "nw": ("ne", "mirror_x"),
+    "se": ("ne", "mirror_y"),
+    "sw": ("ne", "rot_180"),
+}
+DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
+
+# nine-patch assembly spec (A.1 of IMPLEMENT-Phase10.md; step 5 above)
+NINEPATCH_SETS = ("panel", "button", "button_focus", "field")
+BAR_PARTS = ("cap_left", "cap_right", "line")
+SHEET = 48   # 16px margins -> exactly one 16px middle tile (§4.8.8)
+TILE = 16
+
+
+def fail(msg: str) -> None:
+    print(f"build_ui_art: FAIL: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+# ======================================================================
+# minimal PNG codec (stdlib) — decode indexed (type 3) + RGBA (type 6),
+# encode indexed with scan-order palette + tRNS (mirrors render.js)
+# ======================================================================
+
+_PNG_SIG = b"\x89PNG\r\n\x1a\n"
+_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+def _paeth(a: int, b: int, c: int) -> int:
+    p = a + b - c
+    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+    return a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+
+
+def decode_png(data: bytes):
+    """-> (w, h, pixels) with pixels = list of (r, g, b, a) row-major."""
+    if data[:8] != _PNG_SIG:
+        fail("PNG decode: bad signature")
+    pos, idat, plte, trns, header = 8, [], None, None, None
+    while pos + 8 <= len(data):
+        (length,), ctype = struct.unpack(">I", data[pos:pos + 4]), data[pos + 4:pos + 8]
+        chunk = data[pos + 8:pos + 8 + length]
+        pos += 12 + length
+        if ctype == b"IHDR":
+            header = chunk
+        elif ctype == b"PLTE":
+            plte = chunk
+        elif ctype == b"tRNS":
+            trns = chunk
+        elif ctype == b"IDAT":
+            idat.append(chunk)
+        elif ctype == b"IEND":
+            break
+    if header is None or len(header) != 13:
+        fail("PNG decode: missing IHDR")
+    w, h, depth, ctype, comp, filt, inter = struct.unpack(">IIBBBBB", header)
+    if depth != 8 or comp != 0 or filt != 0 or inter != 0:
+        fail(f"PNG decode: unsupported IHDR (depth={depth} interlace={inter})")
+    if ctype not in (3, 6):
+        fail(f"PNG decode: unsupported color type {ctype}")
+    raw = zlib.decompress(b"".join(idat))
+    bpp = _CHANNELS[ctype]
+    stride = w * bpp
+    if len(raw) != (stride + 1) * h:
+        fail("PNG decode: IDAT size mismatch")
+    out = bytearray(stride * h)
+    prev = bytearray(stride)
+    for r in range(h):
+        off = r * (stride + 1)
+        ftype, line = raw[off], bytearray(raw[off + 1:off + 1 + stride])
+        if ftype == 1:
+            for i in range(bpp, stride):
+                line[i] = (line[i] + line[i - bpp]) & 0xFF
+        elif ftype == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 0xFF
+        elif ftype == 3:
+            for i in range(stride):
+                left = line[i - bpp] if i >= bpp else 0
+                line[i] = (line[i] + ((left + prev[i]) >> 1)) & 0xFF
+        elif ftype == 4:
+            for i in range(stride):
+                left = line[i - bpp] if i >= bpp else 0
+                ul = prev[i - bpp] if i >= bpp else 0
+                line[i] = (line[i] + _paeth(left, prev[i], ul)) & 0xFF
+        elif ftype != 0:
+            fail(f"PNG decode: unknown filter {ftype}")
+        out[r * stride:(r + 1) * stride] = line
+        prev = line
+    px = []
+    if ctype == 6:
+        for i in range(0, len(out), 4):
+            px.append((out[i], out[i + 1], out[i + 2], out[i + 3]))
+    else:
+        if plte is None:
+            fail("PNG decode: indexed PNG without PLTE")
+        for idx in out:
+            r, g, b = plte[idx * 3:idx * 3 + 3]
+            a = trns[idx] if (trns is not None and idx < len(trns)) else 255
+            px.append((r, g, b, a))
+    return w, h, px
+
+
+def encode_png_indexed(w: int, h: int, px) -> bytes:
+    """Indexed PNG (color type 3, filter 0), scan-order palette + per-entry
+    tRNS alpha — the same layout render.js emits; >256 colors -> RGBA."""
+    pal, idx = {}, bytearray()
+    for p in px:
+        if p not in pal:
+            if len(pal) > 255:
+                return _encode_png_rgba(w, h, px)
+            pal[p] = len(pal)
+        idx.append(pal[p])
+    raw = bytearray()
+    for r in range(h):
+        raw.append(0)
+        raw += idx[r * w:(r + 1) * w]
+    plte = b"".join(bytes(c[:3]) for c in pal)
+    trns = bytes(c[3] for c in pal)
+    has_alpha = any(c[3] != 255 for c in pal)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 3, 0, 0, 0)
+
+    def chunk(ctype: bytes, body: bytes) -> bytes:
+        return (struct.pack(">I", len(body)) + ctype + body
+                + struct.pack(">I", zlib.crc32(ctype + body) & 0xFFFFFFFF))
+
+    out = [_PNG_SIG, chunk(b"IHDR", ihdr), chunk(b"PLTE", plte)]
+    if has_alpha:
+        out.append(chunk(b"tRNS", trns))
+    out.append(chunk(b"IDAT", zlib.compress(bytes(raw), 9)))
+    out.append(chunk(b"IEND", b""))
+    return b"".join(out)
+
+
+def _encode_png_rgba(w: int, h: int, px) -> bytes:
+    raw = bytearray()
+    for r in range(h):
+        raw.append(0)
+        for p in px[r * w:(r + 1) * w]:
+            raw += bytes(p)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+
+    def chunk(ctype: bytes, body: bytes) -> bytes:
+        return (struct.pack(">I", len(body)) + ctype + body
+                + struct.pack(">I", zlib.crc32(ctype + body) & 0xFFFFFFFF))
+
+    return b"".join([_PNG_SIG, chunk(b"IHDR", ihdr),
+                     chunk(b"IDAT", zlib.compress(bytes(raw), 9)),
+                     chunk(b"IEND", b"")])
+
+
+# ======================================================================
+# lossless pixel transforms + outline + remap
+# ======================================================================
+
+def _transform(w, h, px, op):
+    # All ops are image ops on screen (y-down, x/y = col/row in the NEW image).
+    # rot_cw: 90° clockwise — new(x, y) = old(y, H-1-x) (prompt-pinned formula,
+    # verified against a fixture by _verify_transforms on every run).
+    if op == "rot_cw":
+        nw, nh = h, w
+        return nw, nh, [px[(h - 1 - x) * w + y] for y in range(nh) for x in range(nw)]
+    if op == "rot_ccw":
+        nw, nh = h, w
+        return nw, nh, [px[x * w + (w - 1 - y)] for y in range(nh) for x in range(nw)]
+    if op == "rot_180":
+        return w, h, [px[(w - 1 - x) + (h - 1 - y) * w] for y in range(h) for x in range(w)]
+    if op == "mirror_x":
+        return w, h, [px[(w - 1 - x) + y * w] for y in range(h) for x in range(w)]
+    if op == "mirror_y":
+        return w, h, [px[x + (h - 1 - y) * w] for y in range(h) for x in range(w)]
+    if op == "mirror_xy":
+        return w, h, [px[(w - 1 - x) + (h - 1 - y) * w] for y in range(h) for x in range(w)]
+    fail(f"unknown derive op {op!r}")
+
+
+def _verify_transforms() -> None:
+    """Self-test the index math on a 3x2 fixture (runs every invocation)."""
+    w, h = 3, 2
+    px = [((x + 1) * 10, (y + 1) * 10, 0, 255) for y in range(h) for x in range(w)]
+    cw = _transform(w, h, px, "rot_cw")
+    assert cw[0] == 2 and cw[1] == 3, "rot_cw dims"
+    assert cw[2][0] == px[3] and cw[2][2] == px[4] and cw[2][5] == px[2], \
+        "rot_cw: old top-left must land at new top-right (bow east on screen)"
+    ccw = _transform(w, h, px, "rot_ccw")
+    assert ccw[2][0] == px[2] and ccw[2][5] == px[3], "rot_ccw"
+    r180 = _transform(w, h, px, "rot_180")
+    assert r180[2][5] == px[0] and r180[2][0] == px[5], "rot_180"
+    mx = _transform(w, h, px, "mirror_x")
+    assert mx[2][0] == px[2] and mx[2][2] == px[0], "mirror_x"
+    my = _transform(w, h, px, "mirror_y")
+    assert my[2][0] == px[3] and my[2][3] == px[0], "mirror_y"
+    assert _transform(w, h, px, "mirror_xy")[2] == r180[2], "mirror_xy==rot_180"
+
+
+def apply_outline(w, h, px, ink_rgba):
+    """1px silhouette outline (8-neighborhood): transparent pixels adjacent to
+    opaque ones take the ink; canvas border clamps.  80-* §4.8.2."""
+    opaque = [p[3] != 0 for p in px]
+    out = list(px)
+    for y in range(h):
+        for x in range(w):
+            i = x + y * w
+            if opaque[i]:
+                continue
+            touch = False
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    xx, yy = x + dx, y + dy
+                    if 0 <= xx < w and 0 <= yy < h and opaque[xx + yy * w]:
+                        touch = True
+                        break
+                if touch:
+                    break
+            if touch:
+                out[i] = ink_rgba
+    return out
+
+
+def apply_remap(w, h, px, table):
+    """Exact hex substitution (sources -> targets); returns leftover check."""
+    out, leftovers = [], set()
+    for p in px:
+        hexv = "#%02x%02x%02x" % p[:3]
+        q = (table[hexv] + (p[3],)) if hexv in table else p
+        out.append(q)
+        qh = "#%02x%02x%02x" % q[:3]
+        if qh in REMAP_SOURCES:
+            leftovers.add(qh)
+    return out, leftovers
+
+
+def bbox_of(px, w, h):
+    xs, ys = [], []
+    for y in range(h):
+        for x in range(w):
+            if px[x + y * w][3] != 0:
+                xs.append(x)
+                ys.append(y)
+    if not xs:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+# ======================================================================
+# manifest loading
+# ======================================================================
+
+class Manifests:
+    def __init__(self):
+        self.classes = {}   # class -> list of parsed files: (path, kind, payload)
+        self.renders = {}   # id -> decl (renderable, any class)
+        self.derives = []   # derive-only decls
+        self.outlines = set()  # ids opted into the outline pass
+        self.hull_docs = {}    # ship_type -> authoring doc
+        self.aux = {}          # (class, stem) -> dict
+        self.render_files = []  # manifest json paths to hand to render.js
+
+    def load(self):
+        for cls in CLASS_DIRS:
+            cdir = MANIFESTS / cls
+            if not cdir.is_dir():
+                self.classes[cls] = None
+                continue
+            files = sorted(cdir.rglob("*.json"))
+            if not files:
+                self.classes[cls] = None
+                continue
+            entries = []
+            for path in files:
+                doc = json.loads(path.read_text())
+                kind = self._absorb(cls, path, doc)
+                entries.append((path, kind))
+            self.classes[cls] = entries
+
+    def _absorb(self, cls, path, doc):
+        if isinstance(doc, list):
+            items = doc
+        elif isinstance(doc, dict) and isinstance(doc.get("sprites"), list):
+            items = doc["sprites"]
+        else:
+            items = [doc]
+        for decl in items:
+            if not isinstance(decl, dict):
+                fail(f"{path}: entry is not an object")
+            sid = decl.get("id")
+            if "maps" in decl:  # hull authoring doc (registry-driven)
+                if cls != "hulls":
+                    fail(f"{path}: 'maps' docs are hulls-class only")
+                if not sid:
+                    fail(f"{path}: hull doc missing 'id'")
+                self.hull_docs[decl.get("ship_type", sid)] = (path, decl)
+                return "hull-doc"
+            has_render = "rows" in decl or "grid" in decl
+            d = decl.get("derive")
+            is_derive = (isinstance(d, dict) and d.get("op") in DERIVE_OPS
+                         and isinstance(d.get("from"), str) and "file" in decl)
+            if has_render and is_derive:
+                fail(f"{path}: {sid!r} cannot carry both render content and 'derive'")
+            if has_render:
+                if not sid or "file" not in decl:
+                    fail(f"{path}: renderable {sid!r} needs 'id' and 'file'")
+                if sid in self.renders:
+                    fail(f"{path}: duplicate sprite id {sid!r}")
+                self.renders[sid] = decl
+                if decl.get("outline"):
+                    self.outlines.add(sid)
+                if path not in self.render_files:
+                    self.render_files.append(path)
+                return "render" if len(items) == 1 else "multi"
+            if is_derive:
+                if not sid:
+                    fail(f"{path}: derive decl missing 'id'")
+                if sid in self.renders:
+                    fail(f"{path}: duplicate sprite id {sid!r}")
+                self.renders[sid] = decl
+                self.derives.append(sid)
+                if decl.get("outline"):
+                    self.outlines.add(sid)
+                if path not in self.render_files:
+                    self.render_files.append(path)
+                return "derive" if len(items) == 1 else "multi"
+            if len(items) == 1 and not isinstance(doc, list):
+                # auxiliary doc (rig.json style library, hulls.json registry,
+                # future class-level notes) — no render semantics
+                self.aux[(cls, path.stem)] = decl
+                return "aux"
+            fail(f"{path}: entry {sid!r} has neither rows/grid nor a valid derive")
+        return "multi"
+
+
+# ======================================================================
+# pipeline stages
+# ======================================================================
+
+def run_node(manifest_files, outroot: Path):
+    if not manifest_files:
+        return 0
+    if shutil.which("node") is None:
+        fail("node not found on PATH (pinned v24.16.0)")
+    ver = subprocess.run(["node", "--version"], capture_output=True, text=True)
+    if ver.returncode != 0:
+        fail(f"node --version failed: {ver.stderr.strip()}")
+    if ver.stdout.strip() != NODE_PIN:
+        fail(f"node {ver.stdout.strip()} != pinned {NODE_PIN} "
+             "(byte-identity holds only under the pinned runtime)")
+    args = ["node", str(ENGINE)] + [str(p) for p in manifest_files]
+    r = subprocess.run(args, cwd=outroot, capture_output=True, text=True)
+    if r.returncode != 0:
+        fail(f"render.js failed (exit {r.returncode}):\n{r.stderr.strip()}")
+    return len(manifest_files)
+
+
+def write_png(path: Path, w, h, px) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encode_png_indexed(w, h, px))
+
+
+def read_png(path: Path):
+    if not path.is_file():
+        fail(f"expected sprite missing: {path}")
+    return decode_png(path.read_bytes())
+
+
+def parse_hex(h):
+    if (not isinstance(h, str) or len(h) != 7 or h[0] != "#"
+            or any(c not in "0123456789abcdefABCDEF" for c in h[1:])):
+        fail(f"bad hex {h!r}")
+    return HEXES[h.lower()]
+
+
+def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
+    reg = m.aux.get(("hulls", "hulls"))
+    rig = m.aux.get(("hulls", "rig"))
+    if reg is None:
+        fail("tools/ui_art/hulls/hulls.json registry missing")
+    if reg.get("path_template") != f"{TOKENS_DIR}/hull_{{ship_type}}_{{owner}}_{{dir}}.png":
+        fail("hulls.json: unexpected path_template (governor contract drift)")
+    if list(reg.get("owners", [])) != OWNER_ORDER:
+        fail("hulls.json: owners != pinned 9-owner set (§4.8.4)")
+    derive = reg.get("derive", {})
+    pinned = {d: PINNED_DERIVE[d] for d in derive if not d.startswith("_")}
+    for d, spec in derive.items():
+        if d.startswith("_"):
+            continue
+        if PINNED_DERIVE.get(d) != (spec.get("from"), spec.get("op")):
+            fail(f"hulls.json: derive['{d}'] drifts from the pinned heading8 table (§4.8.6)")
+    if set(pinned) != set(PINNED_DERIVE):
+        fail("hulls.json: derive table incomplete vs pinned §4.8.6 table")
+    bands = {int(k): tuple(v) for k, v in
+             reg.get("footprint", {}).get("bands", {}).items()}
+    if bands != FOOTPRINT_BANDS:
+        fail(f"hulls.json: footprint bands {bands} != pinned §4.8.7 {FOOTPRINT_BANDS}")
+    if rig is not None:
+        remap = rig.get("remap", {})
+        if remap.get("sources") != {"HI": WOOD_HI, "BASE": WOOD, "LO": WOOD_LO}:
+            fail("rig.json: remap sources drift from the pinned wood steps")
+        for owner, t in remap.get("targets", {}).items():
+            if tuple(t[k] for k in ("HI", "BASE", "LO")) != OWNER_RAMPS[owner]:
+                fail(f"rig.json: remap target for {owner} drifts from §4.8.4")
+
+    ship_types = json.loads(SHIP_TYPES.read_text())
+    roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
+    tiers = {s["id"]: int(s["tier"]) for s in roster}
+
+    decl_paths = []
+    staging.mkdir(parents=True, exist_ok=True)
+    for ship, (path, doc) in sorted(m.hull_docs.items()):
+        if ship not in tiers:
+            fail(f"{path}: ship_type {ship!r} not in data/ship_types.json")
+        if doc.get("tier") != tiers[ship]:
+            fail(f"{path}: tier {doc.get('tier')} != ship_types.tier {tiers[ship]} for {ship}")
+        maps = doc.get("maps", {})
+        for d in ("n", "ne"):
+            md = maps.get(d)
+            if not isinstance(md, dict) or "rows" not in md:
+                fail(f"{path}: maps['{d}'] missing rows")
+            decl = dict(md)
+            decl["file"] = f"{STAGING}/{ship}.{d}.png"
+            dp = staging / "decls" / f"{ship}.{d}.json"
+            dp.parent.mkdir(parents=True, exist_ok=True)
+            dp.write_text(json.dumps(decl))
+            decl_paths.append(dp)
+        deriv = doc.get("derive")
+        got = {e.get("dir"): (e.get("from"), e.get("op")) for e in (deriv or [])}
+        if got != PINNED_DERIVE:
+            fail(f"{path}: derive table {got} != pinned §4.8.6 table")
+
+    run_node(decl_paths, outroot)
+
+    ink = HEXES[HULL_INK] + (255,)
+    counts = {"rendered": 0, "derived": 0, "outlined": 0, "tokens": 0}
+    for ship, (path, doc) in sorted(m.hull_docs.items()):
+        tier = int(doc["tier"])
+        lo, hi = FOOTPRINT_BANDS[tier]
+        staged = {}
+        for d in DIR_ORDER:
+            base = "n" if d in ("n", "e", "s", "w") else "ne"
+            if d in ("n", "ne"):
+                w, h, px = read_png(staging / f"{ship}.{d}.png")
+            else:
+                src_d, op = PINNED_DERIVE[d]
+                w, h, bpx = read_png(staging / f"{ship}.{src_d}.png")
+                w, h, px = _transform(w, h, bpx, op)
+                write_png(staging / f"{ship}.{d}.png", w, h, px)
+                counts["derived"] += 1
+            px = apply_outline(w, h, px, ink)
+            write_png(staging / f"{ship}.{d}.png", w, h, px)
+            counts["outlined"] += 1
+            staged[d] = (w, h, px)
+
+        # footprint: family long axis = n-token bbox max dim (final file);
+        # ne must fit the canvas (see rig.json footprint_semantics)
+        wn, hn, pn = staged["n"]
+        we, he, pe = staged["ne"]
+        bb_n, bb_e = bbox_of(pn, wn, hn), bbox_of(pe, we, he)
+        long_axis = max(bb_n[2] - bb_n[0] + 1, bb_n[3] - bb_n[1] + 1)
+        ne_max = max(bb_e[2] - bb_e[0] + 1, bb_e[3] - bb_e[1] + 1)
+        if not (lo <= long_axis <= hi):
+            fail(f"hull {ship}: long axis {long_axis}px outside tier-{tier} band {lo}-{hi} (§4.8.7)")
+        if ne_max + 2 > CANVAS:
+            fail(f"hull {ship}: ne footprint {ne_max}px + outline exceeds {CANVAS}px canvas")
+        report.setdefault("footprints", []).append(
+            (ship, tier, long_axis, ne_max, (lo, hi)))
+
+        for owner in OWNER_ORDER:
+            table = {s: HEXES[t] for s, t in
+                     zip(REMAP_SOURCES, OWNER_RAMPS[owner])}
+            for d in DIR_ORDER:
+                w, h, px = staged[d]
+                out, leftovers = apply_remap(w, h, px, table)
+                if leftovers:
+                    fail(f"hull {ship}/{owner}/{d}: wood hexes survived the remap: {sorted(leftovers)}")
+                colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
+                off = sorted(c for c in colors if c not in HULL_BLOCK)
+                if off:
+                    fail(f"hull {ship}/{owner}/{d}: hexes outside the hull block (§4.8.4): {off}")
+                if len(colors) > COLOR_BUDGET_32:
+                    fail(f"hull {ship}/{owner}/{d}: {len(colors)} colors > budget {COLOR_BUDGET_32} (§4.8.3)")
+                dest = outroot / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
+                write_png(dest, w, h, out)
+                counts["tokens"] += 1
+        counts["rendered"] += 2
+    return counts
+
+
+def run_generic_passes(m: Manifests, outroot: Path, report: dict):
+    counts = {"rendered": 0, "derived": 0, "outlined": 0}
+    counts["rendered"] = run_node(m.render_files, outroot)
+    memo = {}
+
+    def pixels_of(sid, seen=()):
+        if sid in memo:
+            return memo[sid]
+        if sid in seen:
+            fail(f"derive cycle at {sid!r}")
+        decl = m.renders[sid]
+        d = decl.get("derive")
+        if d is None:
+            w, h, px = read_png(outroot / decl["file"])
+        else:
+            if d["from"] not in m.renders:
+                fail(f"derive {sid!r}: base id {d['from']!r} not found in any manifest")
+            w, h, bpx = pixels_of(d["from"], seen + (sid,))
+            w, h, px = _transform(w, h, bpx, d["op"])
+            write_png(outroot / decl["file"], w, h, px)
+            counts["derived"] += 1
+        memo[sid] = (w, h, px)
+        return w, h, px
+
+    for sid in sorted(m.renders):
+        pixels_of(sid)
+    for sid in sorted(m.outlines):
+        w, h, px = pixels_of(sid)
+        px = apply_outline(w, h, px, HEXES[HULL_INK] + (255,))
+        write_png(outroot / m.renders[sid]["file"], w, h, px)
+        counts["outlined"] += 1
+    return counts
+
+
+def run_seam_ring(m: Manifests, outroot: Path, report: dict):
+    """Verify (never alter): variants of a terrain kind share a byte-identical
+    outer 1px ring; sea_pattern is torus-safe (80-* §4.8.2)."""
+    adir = outroot / "assets/ui"
+    if not adir.is_dir():
+        return
+    groups = {}
+    for p in sorted(adir.rglob("*.png")):
+        mo = re.fullmatch(r"terrain_([a-z_]+)_(\d+)\.png", p.name)
+        if mo:
+            groups.setdefault(mo.group(1), []).append(p)
+        elif p.name == "sea_pattern.png":
+            report["sea_pattern"] = p
+    for kind, files in sorted(groups.items()):
+        if len(files) < 2:
+            continue
+        rings = []
+        for p in files:
+            w, h, px = read_png(p)
+            ring = tuple(px[:w]) + tuple(px[(h - 1) * w:h * w]) \
+                + tuple(px[y * w] for y in range(h)) + tuple(px[y * w + w - 1] for y in range(h))
+            rings.append((p, ring))
+        base_p, base = rings[0]
+        for p, ring in rings[1:]:
+            if ring != base:
+                fail(f"seam ring mismatch for terrain kind '{kind}': {p.name} vs {base_p.name} (§4.8.2)")
+        report.setdefault("seam_kinds", []).append((kind, len(files)))
+    pat = report.get("sea_pattern")
+    if pat is not None:
+        w, h, px = read_png(pat)
+        row0 = tuple(px[:w])
+        rowl = tuple(px[(h - 1) * w:h * w])
+        col0 = tuple(px[y * w] for y in range(h))
+        colr = tuple(px[y * w + w - 1] for y in range(h))
+        if row0 != rowl or col0 != colr:
+            fail(f"{pat.name}: not torus-safe along its repeating axes (§4.8.2)")
+        report["seam_kinds"] = report.get("seam_kinds", []) + [("sea_pattern", 1)]
+
+
+def find_tile(adir: Path, name: str) -> Path | None:
+    for prefix in ("", "tile_"):
+        p = adir / f"{prefix}{name}.png"
+        if p.is_file():
+            return p
+    return None
+
+
+def run_ninepatch(m: Manifests, outroot: Path, report: dict):
+    """Assemble the 48x48 sheets from A's 16x16 chrome tiles (step 5)."""
+    adir = outroot / "assets/ui/chrome"
+    if not adir.is_dir():
+        return "skipped (no chrome output)"
+    made = 0
+    for s in NINEPATCH_SETS:
+        tiles = {}
+        for part in ("corner", "edge", "fill"):
+            p = find_tile(adir, f"{s}_{part}")
+            if p is None:
+                tiles = None
+                break
+            tiles[part] = read_png(p)
+        if tiles is None:
+            report.setdefault("ninepatch_notes", []).append(
+                f"{s}: tiles missing (expected chrome_{s}_{{corner,edge,fill}}.png)")
+            continue
+        for img in tiles.values():
+            if img[0] != TILE or img[1] != TILE:
+                fail(f"ninepatch {s}: chrome tiles must be {TILE}x{TILE} (§4.8.8)")
+        sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
+        pos = {(0, 0): "corner", (SHEET - TILE, 0): "corner",
+               (0, SHEET - TILE): "corner", (SHEET - TILE, SHEET - TILE): "corner",
+               (TILE, 0): "edge", (TILE, SHEET - TILE): "edge",
+               (0, TILE): "edge", (SHEET - TILE, TILE): "edge",
+               (TILE, TILE): "fill"}
+        for (dx, dy), part in pos.items():
+            _, _, px = tiles[part]
+            for r in range(TILE):
+                for c in range(TILE):
+                    sheet[(dx + c) + (dy + r) * SHEET] = px[c + r * TILE]
+        write_png(outroot / f"assets/ui/chrome/ninepatch_{s}.png", SHEET, SHEET, sheet)
+        made += 1
+    caps = {}
+    for part in BAR_PARTS:
+        p = find_tile(adir, f"bar_{part}")
+        if p is None:
+            caps = None
+            break
+        caps[part] = read_png(p)
+    if caps is not None:
+        sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
+
+        def blit(img, dx, dy, repeat_to=0):
+            _, _, px = img
+            w = img[0]
+            x = 0
+            while x < repeat_to:
+                for r in range(img[1]):
+                    for c in range(w):
+                        sheet[(dx + x + c) + (dy + r) * SHEET] = px[c + r * w]
+                x += w
+        # bar sheet: caps at the far ends of the horizontal midline band
+        # (rows 16..31), line tile tiled between — the kit's value_bar
+        # samples this 48x16 band (step 5 comment in the docstring).
+        blit(caps["cap_left"], 0, TILE)
+        blit(caps["line"], TILE, TILE, repeat_to=SHEET - 2 * TILE)
+        blit(caps["cap_right"], SHEET - TILE, TILE)
+        write_png(outroot / "assets/ui/chrome/ninepatch_bar.png", SHEET, SHEET, sheet)
+        made += 1
+    elif NINEPATCH_SETS and made:
+        report.setdefault("ninepatch_notes", []).append(
+            "bar: tiles missing (expected chrome bar_{cap_left,cap_right,line}.png)")
+    return f"{made} sheets"
+
+
+# ======================================================================
+# contact sheet (decision 9.4) — stdlib compose + 3x5 bitmap font
+# ======================================================================
+
+FONT = {
+    "A": [2, 5, 7, 5, 5], "B": [6, 5, 6, 5, 6], "C": [3, 4, 4, 4, 3],
+    "D": [6, 5, 5, 5, 6], "E": [7, 4, 6, 4, 7], "F": [7, 4, 6, 4, 4],
+    "G": [3, 4, 5, 5, 3], "H": [5, 5, 7, 5, 5], "I": [7, 2, 2, 2, 7],
+    "J": [1, 1, 1, 5, 2], "K": [5, 5, 6, 5, 5], "L": [4, 4, 4, 4, 7],
+    "M": [5, 7, 5, 5, 5], "N": [6, 5, 5, 5, 5], "O": [2, 5, 5, 5, 2],
+    "P": [6, 5, 6, 4, 4], "Q": [2, 5, 5, 6, 3], "R": [6, 5, 6, 5, 5],
+    "S": [3, 4, 2, 1, 6], "T": [7, 2, 2, 2, 2], "U": [5, 5, 5, 5, 7],
+    "V": [5, 5, 5, 5, 2], "W": [5, 5, 5, 7, 5], "X": [5, 5, 2, 5, 5],
+    "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7],
+    "0": [7, 5, 5, 5, 7], "1": [2, 6, 2, 2, 7], "2": [6, 1, 2, 4, 7],
+    "3": [6, 1, 2, 1, 6], "4": [5, 5, 7, 1, 1], "5": [7, 4, 6, 1, 6],
+    "6": [3, 4, 7, 5, 7], "7": [7, 1, 2, 2, 2], "8": [7, 5, 7, 5, 7],
+    "9": [7, 5, 7, 1, 6],
+    "-": [0, 0, 7, 0, 0], ".": [0, 0, 0, 0, 2], "_": [0, 0, 0, 0, 7],
+    ":": [0, 2, 0, 2, 0], "/": [1, 1, 2, 4, 4], "(": [1, 2, 2, 2, 1],
+    ")": [4, 2, 2, 2, 4], " ": [0, 0, 0, 0, 0],
+}
+BG = (0x1C, 0x22, 0x30, 255)     # PANEL_BG
+FG = (0xE8, 0xE6, 0xDF, 255)     # TEXT
+GRID = (0x46, 0x54, 0x68, 255)   # PANEL_LINE
+ACC = (0xD9, 0xA4, 0x41, 255)    # ACCENT
+
+
+class Sheet:
+    def __init__(self, w, h):
+        self.w, self.h = w, h
+        self.px = [BG] * (w * h)
+
+    def blit(self, w, h, px, dx, dy):
+        for r in range(h):
+            if not (0 <= dy + r < self.h):
+                continue
+            for c in range(w):
+                if 0 <= dx + c < self.w:
+                    p = px[c + r * w]
+                    if p[3]:
+                        self.px[(dx + c) + (dy + r) * self.w] = p[:3] + (255,)
+
+    def text(self, s, dx, dy, color=FG, scale=1):
+        for i, ch in enumerate(s):
+            glyph = FONT.get(ch.upper(), FONT[" "])
+            for gr in range(5):
+                bits = glyph[gr]
+                for gc in range(3):
+                    if bits & (4 >> gc):
+                        for sr in range(scale):
+                            for sc in range(scale):
+                                self.blit(1, 1, [color], dx + (i * 4 + gc) * scale + sc,
+                                          dy + gr * scale + sr)
+
+    def hline(self, dy, color=GRID):
+        for c in range(self.w):
+            self.px[c + dy * self.w] = color
+
+
+def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
+    adir = outroot / "assets/ui"
+
+    def img(rel):
+        p = adir / rel
+        return read_png(p) if p.is_file() else None
+
+    sections = []  # (title, list_of_(w,h,px,dx offsets handled inline))
+    # hulls grid: 16 hulls x 9 owners, canonical dir 'n'
+    reg = m.aux.get(("hulls", "hulls.json"), {})
+    ships = list(reg.get("hulls", sorted(m.hull_docs)))
+    owners = OWNER_ORDER
+    cw, ch = CANVAS + 2, CANVAS + 2
+    grid_w = 8 * 3 * 2 + 8 + len(ships) * cw
+    rows_h = 8 + len(ships) * ch
+    hull_grid = Sheet(grid_w, rows_h)
+    hull_grid.text("HULLS X OWNERS (DIR N)", 0, 0, ACC)
+    for j, o in enumerate(owners):
+        hull_grid.text(o.upper()[:3], (16 * 3) + 8 + j * cw + 8, 10, GRID)
+    for i, s in enumerate(ships):
+        hull_grid.text(s.upper(), 0, 24 + i * ch + 10)
+        for j, o in enumerate(owners):
+            im = img(f"tokens/hull_{s}_{o}_n.png")
+            if im:
+                hull_grid.blit(im[0], im[1], im[2], 8 * 3 * 2 + 8 + j * cw, 24 + i * ch)
+            hull_grid.px[(8 * 3 * 2 + 4 + j * cw) + (24 + i * ch) * grid_w] = GRID
+    sections.append(("HULL TOKENS - 16 SHIPS X 9 OWNERS (CANONICAL N)", [hull_grid]))
+
+    dirs_strip = Sheet(8 * (CANVAS + 4) + 24 * 4, CANVAS + 22)
+    dirs_strip.text("8-DIR FAMILY (GALLEON, NEUTRAL)", 0, 0, ACC)
+    for k, d in enumerate(DIR_ORDER):
+        dirs_strip.text(d.upper(), k * (CANVAS + 4) + 8, 10, GRID)
+        im = img(f"tokens/hull_galleon_neutral_{d}.png")
+        if im:
+            dirs_strip.blit(im[0], im[1], im[2], k * (CANVAS + 4) + 8, 18)
+    sections.append(("HEADING8 FAMILY (DERIVED LOSSLESSLY - §4.8.6)", [dirs_strip]))
+
+    facs = Sheet(6 * (CANVAS + 6) + 40 * 4, CANVAS + 22)
+    facs.text("FACILITY TOKENS", 0, 0, ACC)
+    for k, name in enumerate(["market", "shipyard", "tavern", "inn", "guild", "palace"]):
+        facs.text(name.upper(), k * (CANVAS + 6) + 8, 10, GRID)
+        im = img(f"tokens/facility_{name}.png")
+        if im:
+            facs.blit(im[0], im[1], im[2], k * (CANVAS + 6) + 8, 18)
+    sections.append(("FACILITY TOKENS (TOKEN CLASS - OUTLINED)", [facs]))
+
+    for cls, label in (("chrome", "CHROME TILES + NINE-PATCH SHEETS"),
+                       ("icons", "SEMANTIC ICONS"),
+                       ("terrain", "TERRAIN + SHORE"),
+                       ("fx", "FX FRAMES"),
+                       ("portraits", "PORTRAIT SHEETS")):
+        files = sorted((adir / cls).rglob("*.png")) if (adir / cls).is_dir() else []
+        if not files:
+            sections.append((label + " - (ABSENT: STAGED)", []))
+            continue
+        if cls == "chrome":
+            sheets = [f for f in files if f.name.startswith("ninepatch_")]
+            tiles = [f for f in files if f not in sheets]
+            row = Sheet(min(len(tiles), 30) * 34 + 6 * 52 + 8, 54)
+            x = 4
+            for t in tiles[:30]:
+                im = read_png(t)
+                for sy in range(2):
+                    for sx in range(2):
+                        row.blit(im[0], im[1], im[2], x + sx * im[0], 10 + sy * im[1])
+                x += im[0] * 2 + 2
+            x += 8
+            for t in sheets[:6]:
+                im = read_png(t)
+                row.blit(im[0], im[1], im[2], x, 3)
+                x += im[0] + 4
+            sections.append((label, [row]))
+        else:
+            per = 20 if cls == "icons" else 10
+            chunks = [files[i:i + per] for i in range(0, len(files), per)]
+            out_rows = []
+            for chunk in chunks:
+                row = Sheet(min(len(chunk), per) * 36 + 8, 42)
+                for k, t in enumerate(chunk[:per]):
+                    im = read_png(t)
+                    row.blit(im[0], im[1], im[2], k * 36 + 4, 5)
+                out_rows.append(row)
+            sections.append((label + f" ({len(files)} FILES, FIRST {min(len(files), per * 5)})", out_rows))
+
+    seam_rows = []
+    terrain_files = sorted((adir / "terrain").rglob("terrain_*_*.png")) if (adir / "terrain").is_dir() else []
+    kinds = {}
+    for t in terrain_files:
+        parts = t.stem.split("_")
+        kinds.setdefault("_".join(parts[1:-1]), []).append(t)
+    for kind, fs in sorted(kinds.items()):
+        for f in fs[:4]:
+            im = read_png(f)
+            tile = Sheet(CANVAS * 3, CANVAS * 3)
+            for ty in range(3):
+                for tx in range(3):
+                    tile.blit(im[0], im[1], im[2], tx * CANVAS, ty * CANVAS)
+            seam_rows.append(tile)
+        break  # one kind sampled keeps the sheet bounded
+    pat = adir / "terrain" / "sea_pattern.png"
+    if pat.is_file():
+        im = read_png(pat)
+        p2 = Sheet(im[0] * 2, im[1] * 2)
+        for ty in range(2):
+            for tx in range(2):
+                p2.blit(im[0], im[1], im[2], tx * im[0], ty * im[1])
+        seam_rows.append(p2)
+    sea = adir / "terrain" / "terrain_sea_0.png"
+    land = None
+    for f in terrain_files:
+        if "land" in f.name:
+            land = f
+            break
+    if land is not None and sea.is_file():
+        mock = Sheet(CANVAS * 3, CANVAS * 3)
+        sim = read_png(sea)
+        lim = read_png(land)
+        for ty in range(3):
+            for tx in range(3):
+                mock.blit(sim[0], sim[1], sim[2], tx * CANVAS, ty * CANVAS)
+        dirs = ["nw", "n", "ne", "w", "e", "sw", "s", "se"]
+        pos = [(0, 0), (1, 0), (2, 0), (0, 1), (2, 1), (0, 2), (1, 2), (2, 2)]
+        for d, (tx, ty) in zip(dirs, pos):
+            sp = adir / "terrain" / f"shore_{d}.png"
+            if sp.is_file():
+                sim2 = read_png(sp)
+                mock.blit(sim2[0], sim2[1], sim2[2], tx * CANVAS, ty * CANVAS)
+            elif (tx, ty) != (1, 1):
+                mock.blit(lim[0], lim[1], lim[2], tx * CANVAS, ty * CANVAS)
+        mock.blit(lim[0], lim[1], lim[2], CANVAS, CANVAS)
+        seam_rows.append(mock)
+    if seam_rows:
+        sections.append(("SEAM MONTAGE - 3X3 TILE, SEA PATTERN 2X2, SHORE CORNER MOCK", seam_rows))
+    else:
+        sections.append(("SEAM MONTAGE - (ABSENT: STAGED)", []))
+
+    width = 900
+    total_h = 30 + sum(18 + sum(s.h + 6 for s in rows) for _, rows in sections) + 10
+    sheet = Sheet(width, total_h)
+    sheet.text("SAILAGE UI ART KIT - GENERATED BY TOOLS/BUILD_UI_ART.PH (W3-B)", 8, 8, ACC, 2)
+    y = 30
+    for title, rows in sections:
+        sheet.text(title, 8, y, FG)
+        y += 14
+        for srow in rows:
+            sheet.hline(y, GRID)
+            sheet.blit(srow.w, srow.h, srow.px, 4, y + 2)
+            y += srow.h + 6
+    return ROOT / "tools" / "contact_sheet.png", sheet
+
+
+# ======================================================================
+# build / check / main
+# ======================================================================
+
+def build_into(outroot: Path) -> tuple[Manifests, dict]:
+    _verify_transforms()
+    m = Manifests()
+    m.load()
+    report = {}
+    (outroot / STAGING).mkdir(parents=True, exist_ok=True)
+    try:
+        if m.classes.get("hulls") is not None:
+            if not m.hull_docs:
+                fail("tools/ui_art/hulls/ has manifests but no hull authoring docs")
+            report["hulls"] = run_hull_pipeline(m, outroot, outroot / STAGING, report)
+        counts = run_generic_passes(m, outroot, report)
+        report["generic"] = counts
+        if m.classes.get("terrain") is not None:
+            run_seam_ring(m, outroot, report)
+        if m.classes.get("chrome") is not None:
+            report["ninepatch"] = run_ninepatch(m, outroot, report)
+    finally:
+        shutil.rmtree(outroot / STAGING, ignore_errors=True)
+    return m, report
+
+
+def summary(m: Manifests, report: dict, outroot: Path) -> None:
+    print(f"build_ui_art: output root {outroot}")
+    for cls in CLASS_DIRS:
+        entries = m.classes.get(cls)
+        state = "skipped (no manifests)" if entries is None else f"{len(entries)} manifest file(s)"
+        print(f"  class {cls:10s} {state}")
+    h = report.get("hulls", {})
+    g = report.get("generic", {})
+    print(f"  rendered(render.js): hull maps {h.get('rendered', 0)}, "
+          f"generic {g.get('rendered', 0)}; derived {h.get('derived', 0) + g.get('derived', 0)}; "
+          f"outlined {h.get('outlined', 0) + g.get('outlined', 0)}; "
+          f"hull tokens written {h.get('tokens', 0)} (16 x 9 x 8 = 1152 expected)")
+    for ship, tier, la, ne, band in report.get("footprints", []):
+        print(f"  footprint {ship:18s} t{tier}  long-axis {la}px  ne {ne}px  band {band[0]}-{band[1]}  OK")
+    for kind, n in report.get("seam_kinds", []):
+        print(f"  seam ring '{kind}': {n} variant(s) byte-identical outer ring")
+    for note in report.get("ninepatch_notes", []):
+        print(f"  ninepatch note: {note}")
+    print(f"  ninepatch sheets: {report.get('ninepatch', 'skipped (no chrome output)')}")
+
+
+def run_check() -> None:
+    committed = ROOT / "assets/ui"
+    if not committed.is_dir():
+        fail("--check: assets/ui/ does not exist in the committed tree; run a full build first")
+    with tempfile.TemporaryDirectory(prefix="ui_art_check.") as td:
+        m, _ = build_into(Path(td))
+        got = sorted(p for p in (Path(td) / "assets/ui").rglob("*") if p.is_file())
+        want = sorted(p for p in committed.rglob("*") if p.is_file())
+        got_rel = {str(p.relative_to(Path(td) / "assets/ui")): p for p in got}
+        want_rel = {str(p.relative_to(committed)): p for p in want}
+        diffs = []
+        for rel in sorted(set(got_rel) - set(want_rel)):
+            diffs.append(f"EXTRA in rebuild: {rel}")
+        for rel in sorted(set(want_rel) - set(got_rel)):
+            diffs.append(f"MISSING from rebuild: {rel}")
+        for rel in sorted(set(got_rel) & set(want_rel)):
+            if got_rel[rel].read_bytes() != want_rel[rel].read_bytes():
+                diffs.append(f"BYTE DIFF: {rel}")
+        if diffs:
+            print(f"build_ui_art: --check FAILED ({len(diffs)} diffs, first 20):", file=sys.stderr)
+            for d in diffs[:20]:
+                print(f"  {d}", file=sys.stderr)
+            sys.exit(1)
+        print(f"build_ui_art: --check OK — {len(got_rel)} files byte-identical double run "
+              "(§8.8 group-13 item 2)")
+
+
+def run_contact_sheet() -> None:
+    with tempfile.TemporaryDirectory(prefix="ui_art_sheet.") as td:
+        m, _ = build_into(Path(td))
+        result = build_contact_sheet(Path(td), m)
+        dest, sheet = result
+        dest.write_bytes(encode_png_indexed(sheet.w, sheet.h, sheet.px))
+        print(f"build_ui_art: contact sheet -> {dest} ({sheet.w}x{sheet.h})")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Phase-10 UI art governor (docs/IMPLEMENT-Phase10.md decision 5/9, 80-* §4.8)")
+    ap.add_argument("--check", action="store_true",
+                    help="rebuild into a temp dir and byte-compare against assets/ui/ (§8.8)")
+    ap.add_argument("--contact-sheet", action="store_true",
+                    help="emit tools/contact_sheet.png (decision 9.4 review gate)")
+    args = ap.parse_args()
+    if args.check:
+        run_check()
+        return
+    if args.contact_sheet:
+        run_contact_sheet()
+        return
+    m, report = build_into(ROOT)
+    summary(m, report, ROOT)
+    tokens = report.get("hulls", {}).get("tokens", 0)
+    if m.classes.get("hulls") is not None and tokens != 16 * 9 * 8:
+        fail(f"hull token count {tokens} != 1152")
+
+
+if __name__ == "__main__":
+    main()
