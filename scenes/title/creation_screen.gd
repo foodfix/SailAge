@@ -40,6 +40,17 @@ const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
 const BACKGROUNDS_PER_ROW := 3
 const CARD_SIZE := Vector2(360, 208)
 const STEPPER_BUTTON_SIZE := Vector2(44, 28)
+## The must-spend hint's reserved cell width (the en string's measured width,
+## rounded up). The StepPoints column is size-flag SHRINK_CENTER — its rect
+## is its own minimum width, re-centered inside the layout on every change —
+## so ANY state-dependent width inside it re-centers the whole block on the
+## points-remaining ↔ all-spent flip, steppers included. The hint is the only
+## such width (it empties when points run out; zh measured 192px, en 335px,
+## masked by the 616px Columns width only by a 65–208px margin). `clip_text`
+## drops the label's intrinsic minimum width to 1px in this release, so the
+## cell — and the block — stay constant under any locale, string edit or font
+## metric. Production fix, 2026-11-04 playthrough report.
+const SPEND_HINT_MIN_W := 344.0
 ## The creation extremes are the closed §4.1 step-4 forms; the constants live
 ## on the model (`50-*`), and this UI only clamps the steppers against them.
 
@@ -184,6 +195,10 @@ func _build_card(background: Dictionary) -> Button:
 	var card := Button.new()
 	card.name = "Card_%s" % background_id
 	card.toggle_mode = true
+	# §4.9 texture-mode mapping: a toggle card's selected state rides the
+	# `Toggle` variation's pressed cell (the focus sheet ×TOGGLE_MODULATE —
+	# the persistent ACCENT ring), not the momentary press dimming.
+	card.theme_type_variation = "Toggle"
 	card.custom_minimum_size = CARD_SIZE
 	card.pressed.connect(_on_card_pressed.bind(background_id))
 
@@ -297,6 +312,11 @@ func _build_points_step() -> void:
 	_spend_hint = Label.new()
 	_spend_hint.name = "SpendHint"
 	_spend_hint.theme_type_variation = "Dim"
+	# The pinned cell (see SPEND_HINT_MIN_W): the hint's width can never feed
+	# the block's minimum width, so the stepper rows stay pixel-stable across
+	# the points-remaining ↔ all-spent flip.
+	_spend_hint.clip_text = true
+	_spend_hint.custom_minimum_size = Vector2(SPEND_HINT_MIN_W, 0)
 	spread_row.add_child(_spend_hint)
 
 	var preview_box := VBoxContainer.new()
