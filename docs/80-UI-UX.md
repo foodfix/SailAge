@@ -1939,11 +1939,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    UW2-style side/3-quarter sailing views, NOT top-down deck views.**
    The `e`/`w` pair shows the full **side profile** (hull side, masts,
    sails, rigging); `n`/`s` show the **stern/bow view** (sails from
-   behind, narrow hull); the four diagonals are **3/4 views**. Because a
-   side-view ship does not rotate losslessly, **all eight hull
-   directions are authored maps** (rig fragments composed per direction
-   by the authoring tool) — the lossless-derivation scheme below remains
-   for the arrow sets and the shore strips only. The wood→owner remap
+   behind, narrow hull); the four diagonals are **3/4 views with the
+   standard perspective cheat (amended 2026-11-04, user feedback on the
+   first 8-dir strip: honest 45° projections collapse the ship into a
+   sliver)**: a diagonal keeps a THICK hull band (≥ 4–6 px wide, deck +
+   gunwale readable), sails at ~70–80 % of the side view's sail size,
+   and overall canvas presence comparable to the side profile — the
+   heading reads from the ~30° diagonal run of the hull and yards, never
+   from foreshortening the ship away. Because a side-view ship does not
+   rotate losslessly, **all eight hull directions are authored maps**
+   (rig fragments composed per direction by the authoring tool) — the
+   lossless-derivation scheme below remains for the arrow sets and the
+   shore strips only. The wood→owner remap
    contract is unchanged (author on the wood trio, remap per owner;
    sails/ink owner-invariant).
 7. **Tier footprint bands (final values).** long-axis px **on the side
@@ -1952,7 +1959,8 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    caravela_redonda, xebec) **20–26**; tier 3 (nao, carrack, galleon,
    galleass) **26–30** — on the 32×32 canvas; the validator checks the
    long axis there. The stern/bow views (`n`/`s`) show the beam and are
-   unbanded (canvas-fit only); the diagonals are the honest 3/4 views
+   unbanded (canvas-fit only); the diagonals are the 3/4 views (with the
+   §4.8.6 perspective cheat — full presence, not foreshortened slivers)
    and unbanded likewise.
 8. **Icon sizes & display.** semantic icons render 1× (32 px) inline,
    flush full-cell in 32px rows; 2× (64 px) allowed for hero contexts,
