@@ -24,6 +24,12 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const HailOptionsLib := preload("res://scripts/world/hail_options.gd")
+## The W4-D portrait contract seam (§4.11.3 composer): the modal guard-loads
+## the composer and asks it for the hailed captain's bust; the script is
+## absent on bases before D merges (or answers null) ⇒ the text-only rows.
+const PortraitComposerPath := "res://scripts/ui/portrait_composer.gd"
+## The §4.8.8 portrait footprint (3:4 bust).
+const PORTRAIT_SIZE := Vector2(72, 96)
 
 ## Emitted when the modal closes (OK button or Esc).
 signal closed
@@ -70,9 +76,8 @@ var _open := false
 
 func _ready() -> void:
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 18)
+	# Phase-10 sweep: the panel/title chrome retired to the theme (§4.9
+	# Panel + Label rows).
 	_scroll.custom_minimum_size = Vector2(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN, 0)
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -178,6 +183,12 @@ func _refresh() -> void:
 func _show_options() -> void:
 	_title.text = I18n.fmt("hail.title", {"name": HailOptionsLib.display_name(_fleet)})
 	_clear(_content)
+	# §4.10.2 (Phase 10): the guarded portrait slot — the W4-D composer's
+	# bust of the hailed captain when it resolves; null ⇒ text-only rows
+	# (exactly today's layout).
+	var portrait := _portrait_texture()
+	if portrait != null:
+		_content.add_child(_portrait_row(portrait))
 	for option in HailOptionsLib.options_for(_fleet):
 		_add_option_row(option)
 	if str(_fleet.get("role", "")) == "coaster":
@@ -185,15 +196,47 @@ func _show_options() -> void:
 	_ok_button.text = I18n.t_key("ui.close")
 
 
+## The W4-D contract seam: `ResourceLoader.exists` → load →
+## `portrait_texture(person)`; every miss (no captain, no composer script,
+## no composer method, a null/failed texture) ⇒ null — the text-only row.
+func _portrait_texture() -> Texture2D:
+	var captain_id := str(_fleet.get("captain_id", ""))
+	if captain_id.is_empty():
+		return null
+	var person: Dictionary = DataLoader.get_captain(captain_id)
+	if person.is_empty():
+		return null
+	if not ResourceLoader.exists(PortraitComposerPath):
+		return null
+	var composer = load(PortraitComposerPath)
+	if composer == null or not (composer as Object).has_method("portrait_texture"):
+		return null
+	var texture = composer.call("portrait_texture", person)
+	return texture if texture is Texture2D else null
+
+
+## The portrait illustration row: the 72×96 bust at the top of the options.
+func _portrait_row(texture: Texture2D) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "PortraitRow"
+	var rect := TextureRect.new()
+	rect.name = "Portrait"
+	rect.texture = texture
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.custom_minimum_size = PORTRAIT_SIZE
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(rect)
+	return row
+
+
 func _add_option_row(option: Dictionary) -> void:
 	var option_id := str(option.get("id", ""))
 	var row := VBoxContainer.new()
 	row.name = "Row_%s" % option_id
-	row.add_theme_constant_override("separation", 2)
 
 	var line := HBoxContainer.new()
 	line.name = "Line"
-	line.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 
 	var button := Button.new()
 	button.name = "Action_%s" % option_id
@@ -243,7 +286,6 @@ func _add_supply_stepper(line: HBoxContainer) -> void:
 
 	var qty := Label.new()
 	qty.name = "Qty"
-	qty.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	qty.custom_minimum_size = Vector2(56, PaletteLib.ROW_H)
 	qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	line.add_child(qty)
@@ -257,7 +299,6 @@ func _add_supply_stepper(line: HBoxContainer) -> void:
 
 	var cost := Label.new()
 	cost.name = "Cost"
-	cost.add_theme_color_override("font_color", PaletteLib.TEXT)
 	cost.custom_minimum_size = Vector2(96, PaletteLib.ROW_H)
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	line.add_child(cost)
@@ -299,7 +340,6 @@ func _show_results(payload: Dictionary) -> void:
 			else {})
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
 		label.custom_minimum_size.x = float(
 			PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
 		_content.add_child(label)
@@ -311,7 +351,8 @@ func _add_terms_label(text: String, row: Container = null) -> void:
 	label.name = "Terms"
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# Secondary terms text carries the theme's Dim variation (§4.9).
+	label.theme_type_variation = "Dim"
 	label.custom_minimum_size.x = float(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
 	if row == null:
 		_content.add_child(label)
@@ -351,14 +392,6 @@ func _clear(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
 		child.queue_free()
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 func _on_locale_changed(_locale: String) -> void:

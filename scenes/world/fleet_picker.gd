@@ -73,10 +73,9 @@ var _card: Control = null
 
 func _ready() -> void:
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 20)
-	_status.add_theme_color_override("font_color", PaletteLib.WARN)
+	# Phase-10 sweep: the panel/title/status styling retired to the theme
+	# (§4.9 Panel + Label rows — the window theme styles every Control here;
+	# the gate reason reads in the theme's default ink).
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.custom_minimum_size.x = float(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -290,7 +289,6 @@ func _rebuild_port() -> void:
 
 func _build_fleet_row(fleet: Dictionary) -> Control:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
 	# Flag color (§4.10.1): the nation's color — the §4.5.2 marker rule is
 	# the established placeholder (pirate red, the nationless coaster grey).
 	var flag := ColorRect.new()
@@ -299,15 +297,13 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 		str(fleet.get("nation_id", "")))
 	flag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(flag)
-	# Role icon (§4.5.2 marker letter) in a bordered tile.
+	# Role icon (§4.5.2 marker letter) in a bordered tile — the theme's
+	# PanelContainer style (§4.9 Panel row) owns the chrome.
 	var role_tile := PanelContainer.new()
 	role_tile.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
 	role_tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	role_tile.add_theme_stylebox_override("panel", _icon_style())
 	var letter := Label.new()
 	letter.text = NpcFleetsLib.marker_letter(str(fleet.get("role", "")))
-	letter.add_theme_font_size_override("font_size", 14)
-	letter.add_theme_color_override("font_color", PaletteLib.TEXT)
 	letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	role_tile.add_child(letter)
@@ -319,7 +315,6 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 		"name": InteractionsLib.display_name(fleet),
 		"tier": NpcFleetsLib.captain_tier_of(fleet),
 	})
-	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(name_label)
@@ -355,16 +350,14 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 
 
 func _tier_badge(tier: int) -> Control:
-	# Placeholder tier badge: the tier numeral on a palette color (1 grey /
-	# 2 amber / 3 red — no textures, §4.8).
+	# Tier badge: the tier numeral on the theme's panel chrome (§4.9) — the
+	# per-tier placeholder backgrounds retired with the Phase-10 sweep; the
+	# numeral is the encoding (§4.10.1 "tier badge").
 	var badge := PanelContainer.new()
 	badge.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.add_theme_stylebox_override("panel", _badge_style(tier))
 	var label := Label.new()
 	label.text = str(tier)
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_child(label)
@@ -373,7 +366,6 @@ func _tier_badge(tier: int) -> Control:
 
 func _wrap_row(button: Button) -> Control:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(button)
 	return row
@@ -402,27 +394,3 @@ func _first_button() -> Button:
 func _on_locale_changed(_locale: String) -> void:
 	if visible:
 		_rebuild()
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
-
-
-func _icon_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1)
-	return style
-
-
-func _badge_style(tier: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_LINE if tier <= 1 \
-		else (PaletteLib.WARN if tier == 2 else PaletteLib.BAD)
-	style.set_border_width_all(0)
-	return style

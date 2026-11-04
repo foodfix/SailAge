@@ -53,6 +53,13 @@ const AutopilotHudScene := preload("res://scenes/world/autopilot_hud.tscn")
 ## The right-click interaction menu (fleet picker + port context, 80-*
 ## §4.10.1/§4.10.3) — instanced once into a modal layer on first use.
 const PickerScene := preload("res://scenes/world/fleet_picker.tscn")
+## Phase 10 (§3/§4.8.9/§4.8.10): the pure arrow-field sampler, the discovery
+## lookup (site cells + categories) and the W3 texture registry — the
+## directional player token, the world markers and the drawn-arrow fallbacks
+## all resolve through the registry with flat fallbacks.
+const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 
 ## The single shipped map id (docs/90-* §9.1). Map switching is retired with
 ## the dual-map pipeline: `world.map_id` is always this value, so the scene
@@ -267,6 +274,33 @@ var _glide_enabled := true
 ## already decodes in `_ready`).
 var _ocean_warmed := false
 
+# --- Phase 10: player token, arrow field, world markers (§4.8.9/§4.8.10/§3) --
+
+## The S3 player fleet token (§4.8.9): the 8-dir directional sprite
+## `hull_{flagship_type}_player_{dir}` when the registry resolves it, else the
+## §4.5 white square fallback (`.tscn` node + code-built outline). The dir id
+## follows the fleet's movement heading (`world.heading`, guard-read); at rest
+## the last heading persists.
+var _token_sprite: TextureRect = null
+## Last dir id the token was built for (skips a registry re-probe per step).
+var _token_dir := ""
+## Last flagship ship type the token was built for (a refit re-resolves).
+var _token_ship_type := ""
+
+## The arrow field (§4.8.10): `W` wind / `C` current, session-local, default
+## OFF; re-sampled on month rollover and whenever the camera's tile moves.
+var _wind_field_on := false
+var _current_field_on := false
+var _arrow_layer: Control = null
+var _arrow_samples: Array = []
+var _arrow_month := 0
+var _arrow_camera_tile := Vector2i(-2, -2)
+
+## World markers (§3): discovery id → marker node. Discovery markers render
+## `GameState.discoveries_found` sites ONLY (undiscovered sites never
+## render); wrecks keep their Phase-5 [_wreck_nodes] table.
+var _discovery_nodes: Dictionary = {}
+
 
 func _ready() -> void:
 	_loader = MapLoaderLib.new()
@@ -291,11 +325,18 @@ func _ready() -> void:
 	_ensure_world_state()
 	_fleet_cell = _read_state_cell()
 	_place_marker()
+	# Phase 10 (§4.8.9): the S3 player token — the 8-dir hull sprite when the
+	# registry resolves it, the white-square fallback otherwise.
+	_player_token_init()
 
 	_camera.zoom = Vector2.ONE
 	_camera.make_current()
 	_update_camera()
 	_loader.refresh_port_overlay(DataLoader.ports, DataLoader.nations)
+
+	# Phase 10 (§4.8.10): the arrow field's draw layer (world-anchored; the
+	# samples carry the toggles' state, W/C default OFF).
+	_arrow_layer_init()
 
 	# Phase 8 (master micro-ledger): the appointed-voyage HUD bar — a lazy
 	# instance under the HUD layer; it reads the appointment and renders
@@ -329,6 +370,10 @@ func _ready() -> void:
 	EventBus.day_advanced.connect(_on_day_advanced)
 	EventBus.game_over.connect(_on_game_over)
 	EventBus.fleet_changed.connect(_on_fleet_changed)
+	# Phase 10 (§3): a discovery found surfaces its site marker + the dialog's
+	# category illustration slot id.
+	if EventBus.has_signal("discovery_found"):
+		EventBus.discovery_found.connect(_on_discovery_found)
 	if _hud != null:
 		_hud.mutiny_choice.connect(_on_mutiny_choice)
 		_hud.dialogs_finished.connect(_on_dialogs_finished)
@@ -386,6 +431,8 @@ func _process(delta: float) -> void:
 		return
 	_tick_ocean_warmup()
 	_update_camera()
+	# Phase 10 (§4.8.10): the arrow field follows the camera's tile window.
+	_tick_arrow_field_camera()
 	# Hold-to-repeat / click-to-sail / helm cadence (docs/20-* §4.2, tasks H+G).
 	_tick_movement(delta)
 	# Interpolated rendering (§2.6): render-only, after the logic tick.
@@ -403,9 +450,25 @@ func _tick_ocean_warmup() -> void:
 	_ocean_warmed = true
 	OceanLayersLib.instance().current_at(
 		_fleet_cell, SailingSimLib.month_for(GameState.day))
+	# Phase 10 (§6.6): the shore raster decodes on the same warm-up tick —
+	# the ~9.3 M-pixel pass must never land on the boot frame's budget —
+	# and re-stamps the foam into the chunks the boot already built.
+	_loader.warm_shore_overlay()
 	# The decode just landed: repaint the HUD's current arrow, which stayed
 	# hidden while the currents raster was still warming.
 	_refresh_hud_indicators()
+
+
+# Phase 10 (§4.8.10): the arrow-field keys run in `_input`, ABOVE every
+# `_unhandled_input` consumer — while the current field is on, the `C`
+# press toggles the field and the §4.5 intel `C` is shadowed (the same
+# shadow convention as the chart's `C`); with the field off `C` is
+# unchanged (the intel window keeps its own handler). `O`/`F`/the intel
+# button always open the window — they are never touched here.
+## The `_input` stage of the arrow-field keys (§4.8.10): consuming here hides
+## the event from every `_unhandled_input` handler, which IS the shadow.
+func _input(event: InputEvent) -> void:
+	_tick_arrow_field_input(event)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -629,6 +692,9 @@ func helm_steer(action: String) -> bool:
 	# A course change starts a fresh interval on the new heading.
 	_helm_since_step = 0.0
 	_helm_stepping = true
+	# The heading persists in `GameState.world["heading"]` (§4.2/§2.6); the
+	# §4.8.9 token follows it immediately (at rest the fleet faces its course).
+	_refresh_player_token()
 	return true
 
 
@@ -862,6 +928,11 @@ func explore_here() -> Array:
 		entries.append({
 			"kind": "discovery", "key": "discovery.found",
 			"values": {"name": I18n.t(discovery.get("name", {}))},
+			# §3 discovery-moment surfacing: the category marker icon as the
+			# dialog's illustration slot (`marker_discovery_{category}` —
+			# the renderer's flat fallback is the W4 contract; a host that
+			# ignores the key shows the text-only row).
+			"icon_id": "marker_discovery_%s" % str(discovery.get("category", "")),
 		})
 	if entries.is_empty():
 		if _hud != null and _hud.has_method("toast_key"):
@@ -1776,20 +1847,20 @@ func _sync_marker_nodes() -> void:
 			_marker_nodes[id] = square
 			var letter := Label.new()
 			letter.name = "Letter"
-			letter.add_theme_font_size_override("font_size",
-				int(_cell_pixels * 0.5))
-			letter.add_theme_color_override("font_color",
-				PaletteLib.TEXT)
+			# The §4.5.2 letter rides the theme (default TEXT, default size);
+			# the Phase-10 sweep retired the per-node overrides.
 			square.add_child(letter)
 			var count := Label.new()
 			count.name = "Count"
-			count.add_theme_font_size_override("font_size",
-				int(_cell_pixels * 0.45))
-			count.add_theme_color_override("font_color", PaletteLib.TEXT)
 			square.add_child(count)
 		var role := str(marker.get("role", ""))
 		square.color = NpcFleetsLib.marker_color(
 			role, str(marker.get("nation_id", "")))
+		# §3 (A.4): a treasure fleet wears the `marker_treasure` token when the
+		# registry resolves it — the role letter rides on top (§4.8.5 overlay
+		# rule); otherwise the §4.5.2 coloured square stands alone (the LOD
+		# pin: world-map NPC fleets stay coloured squares without the art).
+		_sync_marker_token(square, role)
 		var letter_node: Label = square.get_node_or_null("Letter")
 		var text := str(marker.get("letter", ""))
 		if letter_node != null:
@@ -1832,10 +1903,12 @@ func _sync_marker_nodes() -> void:
 		if stall_node == null:
 			stall_node = Label.new()
 			stall_node.name = "Stall"
-			stall_node.add_theme_font_size_override("font_size",
-				int(_cell_pixels * 0.4))
-			stall_node.add_theme_color_override("font_color",
-				PaletteLib.BAD)
+			# The §4.5.2 diagnostic pin: a BAD-coloured state letter — canvas
+			# marker art, kept via LabelSettings (the theme has no BAD label
+			# slot and the sweep keeps per-node theme overrides out).
+			var stall_settings := LabelSettings.new()
+			stall_settings.font_color = PaletteLib.BAD
+			stall_node.label_settings = stall_settings
 			stall_node.position = Vector2(0.0, 0.0)
 			square.add_child(stall_node)
 		stall_node.text = stall_letter
@@ -1852,6 +1925,36 @@ func _sync_marker_nodes() -> void:
 		dead.queue_free()
 	_sync_wake_layer()
 	_sync_wreck_nodes()
+	# Phase 10 (§3): the discovery site markers ride the same pass — the
+	# discovered-only set, never a re-simulation of the hunt.
+	_sync_discovery_markers()
+
+
+## The treasure fleet's §3 marker token: the `marker_treasure` sprite drawn
+## over the marker square (covering it) when the registry resolves the id and
+## the fleet's role is `treasure`; hidden otherwise (the §4.5.2 square rule).
+func _sync_marker_token(square: ColorRect, role: String) -> void:
+	var token: TextureRect = square.get_node_or_null("TokenSprite")
+	var texture := UiKitLib.icon_texture("marker_treasure") \
+		if role == NpcFleetsLib.TREASURE else null
+	if texture == null:
+		if token != null:
+			token.visible = false
+		return
+	if token == null:
+		token = TextureRect.new()
+		token.name = "TokenSprite"
+		token.stretch_mode = TextureRect.STRETCH_SCALE
+		token.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		token.size = Vector2(_cell_pixels, _cell_pixels)
+		token.position = (square.size - Vector2(_cell_pixels, _cell_pixels)) * 0.5
+		token.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		square.add_child(token)
+		# Beneath the letter/count overlays — the §4.8.5 rule: identification
+		# letters stay badges drawn ON TOP of the token sprite.
+		square.move_child(token, 0)
+	token.texture = texture
+	token.visible = true
 
 
 ## Ensures the wake layer exists and repaints it from the last marker pass.
@@ -1890,9 +1993,11 @@ func _draw_wakes() -> void:
 				at + Vector2(unit * 0.25, 0.0), color, 1.0)
 
 
-## Redraws the wreck × glyphs (docs/80-* §4.5.2, task K): an `ACCENT` × in a
-## 2×2-tile box centred on the wreck tile. Placeholder palette art only; the
-## data comes from `NpcFleets.wrecks()` and nothing re-simulates here.
+## Redraws the wreck markers (docs/80-* §4.5.2, task K): the §3 `marker_wreck`
+## sprite in the 2×2-tile box centred on the wreck tile when the registry
+## resolves it, else the Phase-5 placeholder — an `ACCENT` × glyph (the pinned
+## render, kept via LabelSettings as canvas art, not theme chrome). The data
+## comes from `NpcFleets.wrecks()` and nothing re-simulates here.
 func _sync_wreck_nodes() -> void:
 	if _loader == null or not _is_loaded():
 		return
@@ -1907,33 +2012,39 @@ func _sync_wreck_nodes() -> void:
 		if id.is_empty():
 			continue
 		live[id] = true
-		var glyph: Label = _wreck_nodes.get(id, null)
+		var glyph: Control = _wreck_nodes.get(id, null)
 		if glyph == null:
-			glyph = Label.new()
-			glyph.name = "Wreck_%s" % id
-			glyph.text = "×"
-			glyph.add_theme_color_override("font_color", PaletteLib.ACCENT)
-			glyph.add_theme_font_size_override("font_size",
-				int(float(_cell_pixels) * 1.2))
-			glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			glyph.z_index = 8
-			_marker_root.add_child(glyph)
+			var texture := UiKitLib.icon_texture("marker_wreck")
+			if texture != null:
+				glyph = _world_marker_node("Wreck_%s" % id, "marker_wreck")
+			else:
+				glyph = Label.new()
+				glyph.name = "Wreck_%s" % id
+				(glyph as Label).text = "×"
+				var settings := LabelSettings.new()
+				settings.font_color = PaletteLib.ACCENT
+				settings.font_size = int(float(_cell_pixels) * 1.2)
+				(glyph as Label).label_settings = settings
+				glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				glyph.z_index = 8
+				_marker_root.add_child(glyph)
 			_wreck_nodes[id] = glyph
 		_place_wreck_glyph(glyph, NpcFleetsLib.position_of(wreck))
 	for id in _wreck_nodes.keys():
 		if live.has(id):
 			continue
-		var gone: Label = _wreck_nodes[id]
+		var gone: Control = _wreck_nodes[id]
 		_wreck_nodes.erase(id)
 		gone.queue_free()
 
 
-## Centers a 2×2-tile × glyph box on the wreck tile.
-func _place_wreck_glyph(glyph: Label, cell: Vector2i) -> void:
+## Centers a 2×2-tile marker box (sprite or × glyph) on the wreck tile.
+func _place_wreck_glyph(glyph: Control, cell: Vector2i) -> void:
 	var box := Vector2(float(_cell_pixels) * 2.0, float(_cell_pixels) * 2.0)
 	glyph.size = box
-	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if glyph is Label:
+		(glyph as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		(glyph as Label).vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	glyph.position = Vector2(cell) * float(_cell_pixels) \
 		+ (Vector2(float(_cell_pixels), float(_cell_pixels)) - box) * 0.5
 
@@ -2035,6 +2146,327 @@ func _tick_npc_glides(delta: float) -> void:
 		var t := float(glide["played"]) - float(index)
 		square.position = (points[index] as Vector2).lerp(
 			points[index + 1] as Vector2, clampf(t, 0.0, 1.0))
+
+
+# --- Phase 10: player token (§4.8.9), arrow field (§4.8.10), markers (§3) ---
+
+## Builds the player token's two faces under FleetMarker (once): the code-built
+## square fallback (the §4.5 white square with the black outline — the old
+## scene-file panel styling retired with the Phase-10 chrome sweep) and the
+## directional sprite slot. Both stay until [_refresh_player_token] picks.
+func _player_token_init() -> void:
+	if _token_sprite != null:
+		return
+	var square := get_node_or_null("FleetMarker/Square") as Control
+	if square != null:
+		var outline := ColorRect.new()
+		outline.name = "Outline"
+		outline.color = Color.BLACK
+		outline.size = Vector2(_cell_pixels * 0.75, _cell_pixels * 0.75)
+		outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		square.add_child(outline)
+		var fill := ColorRect.new()
+		fill.name = "Fill"
+		fill.color = Color.WHITE
+		fill.position = Vector2.ONE * (outline.size.x - _cell_pixels * 0.625) * 0.5
+		fill.size = Vector2.ONE * _cell_pixels * 0.625
+		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		square.add_child(fill)
+	var holder := Control.new()
+	holder.name = "Token"
+	holder.size = Vector2(_cell_pixels, _cell_pixels)
+	holder.position = Vector2.ONE * _cell_pixels * -0.5
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.visible = false
+	var sprite := TextureRect.new()
+	sprite.name = "Sprite"
+	sprite.stretch_mode = TextureRect.STRETCH_SCALE
+	sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sprite.size = Vector2(_cell_pixels, _cell_pixels)
+	sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(sprite)
+	_token_sprite = sprite
+	get_node("FleetMarker").add_child(holder)
+	_refresh_player_token()
+
+
+## The §4.8.9 token pick: `hull_{flagship_ship_type}_player_{dir}` with the
+## dir id of the fleet's movement heading (`world.heading`, guard-read; at
+## rest the last heading persists — it IS the stored heading). A missing id,
+## a run before a fleet exists or an unknown heading keeps the square.
+func _refresh_player_token() -> void:
+	var marker := get_node_or_null("FleetMarker")
+	if marker == null or _token_sprite == null:
+		return
+	var ship_type := ""
+	if _has_game():
+		var flagship: Dictionary = FleetLib.flagship()
+		ship_type = str(flagship.get("ship_type_id", ""))
+	var heading := str(GameState.world.get("heading", ""))
+	var dir_id := ArrowFieldLib.dir_id_of_heading(heading)
+	var texture: Texture2D = null
+	if not ship_type.is_empty() and not dir_id.is_empty():
+		texture = UiKitLib.icon_texture(
+			"hull_%s_player_%s" % [ship_type, dir_id])
+	_token_ship_type = ship_type
+	_token_dir = dir_id if texture != null else _token_dir
+	_token_sprite.texture = texture
+	_token_sprite.get_parent().visible = texture != null
+	var square := marker.get_node_or_null("Square") as Control
+	if square != null:
+		square.visible = texture == null
+
+
+## The arrow field's draw layer: a world-anchored Control under the map
+## (above the chunks, below the fleet markers at z 9).
+func _arrow_layer_init() -> void:
+	if _arrow_layer != null:
+		return
+	_arrow_layer = Control.new()
+	_arrow_layer.name = "ArrowField"
+	_arrow_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_arrow_layer.z_index = 4
+	_arrow_layer.draw.connect(_draw_arrow_field)
+	add_child(_arrow_layer)
+
+
+## `true` while the §4.8.10 wind field is on (session-local, default OFF).
+func wind_field_on() -> bool:
+	return _wind_field_on
+
+
+## `true` while the §4.8.10 current field is on (session-local, default OFF).
+func current_field_on() -> bool:
+	return _current_field_on
+
+
+## The `W` toggle (§4.8.10): session-local wind field, default off.
+func toggle_wind_field() -> void:
+	_wind_field_on = not _wind_field_on
+	_resample_arrow_field()
+
+
+## The `C` toggle (§4.8.10): session-local current field, default off. While
+## the field is ON the key is consumed in `_input` and the §4.5 intel `C` is
+## shadowed; with the field off `C` is unchanged (the intel window's key).
+func toggle_current_field() -> void:
+	_current_field_on = not _current_field_on
+	_resample_arrow_field()
+
+
+## The last sampled month (0 before the first sample) — the month-rollover
+## re-sample read seam.
+func arrow_field_month() -> int:
+	return _arrow_month
+
+
+## The live samples (the draw source; the suite's determinism seam).
+func arrow_field_samples() -> Array:
+	return _arrow_samples.duplicate()
+
+
+## The `_input`-stage key handler (§4.8.10): `W` toggles the wind field;
+## `C` toggles the current field ONLY while it is on (that consume is the
+## intel shadow). Both give way to modals (the chart owns `W`/`C` while it is
+## open) and to a dead run.
+func _tick_arrow_field_input(event: InputEvent) -> void:
+	if not _is_loaded() or _modal_open() or game_over_open():
+		return
+	if not (event is InputEventKey) or not (event as InputEventKey).pressed \
+			or (event as InputEventKey).echo:
+		return
+	var key := event as InputEventKey
+	var code := key.physical_keycode if key.physical_keycode != KEY_NONE \
+		else key.keycode
+	if code == KEY_W:
+		get_viewport().set_input_as_handled()
+		toggle_wind_field()
+	elif code == KEY_C and _current_field_on:
+		get_viewport().set_input_as_handled()
+		toggle_current_field()
+
+
+## Re-samples the field for whatever is on (§4.8.10): stride-4 lattice over
+## the camera window + apron, water cells only, the live calendar month.
+func _resample_arrow_field() -> void:
+	if _arrow_layer == null or _loader == null or not _is_loaded():
+		return
+	_arrow_month = SailingSimLib.month_for(maxi(int(GameState.day), 1))
+	_arrow_samples = []
+	if _wind_field_on or _current_field_on:
+		var ocean = OceanLayersLib.instance()
+		var view := get_viewport_rect().size / float(_cell_pixels)
+		_arrow_samples = ArrowFieldLib.sample(
+			_camera_tile(), Vector2i(int(ceil(view.x)), int(ceil(view.y))),
+			_arrow_month, ocean,
+			func(cell: Vector2i) -> bool: return _loader.is_passable(cell),
+			_loader.width, _loader.height)
+	_arrow_camera_tile = _camera_tile()
+	_arrow_layer.queue_redraw()
+
+
+## The camera's tile — the window the field is sampled over.
+func _camera_tile() -> Vector2i:
+	return Vector2i(
+		int(floor(_camera.position.x / float(_cell_pixels))),
+		int(floor(_camera.position.y / float(_cell_pixels))))
+
+
+## Camera-follow check (per frame, an integer compare): the lattice is
+## world-anchored, so the sample re-runs only when the camera crosses a
+## stride boundary — never per pan pixel.
+func _tick_arrow_field_camera() -> void:
+	if _arrow_layer == null:
+		return
+	var tile := _camera_tile()
+	if tile == _arrow_camera_tile:
+		return
+	_resample_arrow_field()
+
+
+## Draws the samples (§4.8.10): `wind_arrow_{dir}` / `current_arrow_{dir}`
+## through the registry; the drawn-arrow fallback pins wind `TEXT` / current
+## `COAST_SEA`; a `VAR` wind cell keeps the chart's hollow amber diamond.
+func _draw_arrow_field() -> void:
+	if _arrow_layer == null:
+		return
+	for entry in _arrow_samples:
+		var cell: Vector2i = entry["cell"]
+		var at := Vector2(cell) * float(_cell_pixels) \
+			+ Vector2.ONE * float(_cell_pixels) * 0.5
+		var dir_id := str(entry.get("dir_id", ""))
+		var texture: Texture2D = null
+		if not dir_id.is_empty():
+			texture = UiKitLib.icon_texture(
+				"%s_arrow_%s" % [str(entry.get("kind", "")), dir_id])
+		var half := float(_cell_pixels) * 0.5
+		if texture != null:
+			_arrow_layer.draw_texture_rect(texture,
+				Rect2(at - Vector2.ONE * half, Vector2.ONE * _cell_pixels),
+				false)
+			continue
+		if bool(entry.get("variable", false)):
+			_draw_var_diamond(at, half * 0.6)
+			continue
+		var color := PaletteLib.TEXT if str(entry.get("kind", "")) == "wind" \
+			else PaletteLib.COAST_SEA
+		var dir := _compass_vector(dir_id)
+		if dir == Vector2.ZERO:
+			continue
+		_draw_field_arrow(at, dir, half, color)
+
+
+## The chart's drawn arrow (§4.6 style): shaft along `dir`, V head at the tip.
+func _draw_field_arrow(at: Vector2, dir: Vector2, length_px: float,
+		color: Color) -> void:
+	var tip := at + dir * (length_px * 0.5)
+	var tail := at - dir * (length_px * 0.5)
+	_arrow_layer.draw_line(tail, tip, color, 1.5)
+	_arrow_layer.draw_line(tip, tip + dir.rotated(PI * 0.75) * (length_px * 0.3),
+		color, 1.5)
+	_arrow_layer.draw_line(tip,
+		tip + dir.rotated(-PI * 0.75) * (length_px * 0.3), color, 1.5)
+
+
+## The `VAR` glyph: a hollow amber diamond (the chart's distinctive shape).
+func _draw_var_diamond(at: Vector2, r: float) -> void:
+	var points := PackedVector2Array([
+		at + Vector2(0, -r), at + Vector2(r, 0),
+		at + Vector2(0, r), at + Vector2(-r, 0), at + Vector2(0, -r),
+	])
+	_arrow_layer.draw_polyline(points, PaletteLib.WARN, 1.5, false)
+
+
+## Tile-space unit vector of a §4.8.6 dir id (zero outside the domain).
+func _compass_vector(dir_id: String) -> Vector2:
+	var bucket := ArrowFieldLib.DIR_IDS.find(dir_id)
+	if bucket < 0:
+		return Vector2.ZERO
+	var token := ArrowFieldLib.dir_id_of_bucket(bucket)
+	var index := SailingSimLib.COMPASS_DIRS.find(token)
+	if index < 0:
+		return Vector2.ZERO
+	var delta: Vector2i = SailingSimLib.COMPASS_DELTAS[index]
+	return Vector2(delta)
+
+
+## Month rollover (§4.8.10): the day tick re-samples the field so a month
+## boundary flips the prevailing arrows without a toggle. Reads the live
+## month against the sampled one — idempotent.
+func _on_day_advanced_arrow_field() -> void:
+	if not (_wind_field_on or _current_field_on):
+		return
+	var month := SailingSimLib.month_for(maxi(int(GameState.day), 1))
+	if month != _arrow_month:
+		_resample_arrow_field()
+
+
+## A discovery was found: its site marker surfaces (§3, discovered-only).
+func _on_discovery_found(_discovery_id: String) -> void:
+	_sync_discovery_markers()
+
+
+## Builds the discovery site markers (§3): one node per id in
+## `GameState.discoveries_found` at the discovery's tile — the
+## `marker_discovery_{category}` sprite when the registry resolves it, else a
+## small ACCENT square (the flat fallback). Undiscovered sites never render.
+func _sync_discovery_markers() -> void:
+	if _loader == null or not _is_loaded() or _marker_root == null:
+		return
+	var live: Dictionary = {}
+	if _has_game():
+		for discovery_id in GameState.discoveries_found:
+			var id := str(discovery_id)
+			if id.is_empty() or live.has(id):
+				continue
+			var discovery: Dictionary = DataLoader.get_discovery(id)
+			if discovery.is_empty():
+				continue
+			live[id] = true
+			var node: Control = _discovery_nodes.get(id, null)
+			if node == null:
+				node = _world_marker_node("Discovery_%s" % id,
+					"marker_discovery_%s" % str(discovery.get("category", "")))
+				_discovery_nodes[id] = node
+			node.position = Vector2(
+				DiscoveryLib.position_of_entry(discovery)) * float(_cell_pixels)
+	for id in _discovery_nodes.keys():
+		if live.has(id):
+			continue
+		var gone: Control = _discovery_nodes[id]
+		_discovery_nodes.erase(id)
+		gone.queue_free()
+
+
+## One static world-marker node (§3 "like port markers"): the registry sprite
+## at tile size when the id resolves, else a small ACCENT square. The node is
+## parented under the fleet-marker root (z 8, above the map, below markers).
+func _world_marker_node(node_name: String, sprite_id: String) -> Control:
+	var holder := Control.new()
+	holder.name = node_name
+	holder.size = Vector2(_cell_pixels, _cell_pixels)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var texture := UiKitLib.icon_texture(sprite_id)
+	if texture != null:
+		var sprite := TextureRect.new()
+		sprite.texture = texture
+		sprite.stretch_mode = TextureRect.STRETCH_SCALE
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.size = Vector2(_cell_pixels, _cell_pixels)
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.add_child(sprite)
+	else:
+		var square := ColorRect.new()
+		var side := float(_cell_pixels) * 0.375
+		square.color = PaletteLib.ACCENT
+		square.size = Vector2(side, side)
+		square.position = (Vector2(_cell_pixels, _cell_pixels)
+			- Vector2(side, side)) * 0.5
+		square.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.add_child(square)
+	holder.z_index = 8
+	_marker_root.add_child(holder)
+	return holder
 
 
 # --- Phase 8 W5-A: the right-click interaction layer (80-* §4.10) -----------
@@ -2609,6 +3041,8 @@ func port_route_target() -> String:
 ## then appends the sim's own entries (mutiny, ship lost, …) which step 6 sorted
 ## into `last_day_dialogs`, and finally the arrival greeting.
 func _on_day_advanced(_new_day: int) -> void:
+	# Phase 10 (§4.8.10): a month rollover re-samples the arrow field.
+	_on_day_advanced_arrow_field()
 	if not _has_game():
 		return
 	# Phase 8 §2.5: drain the officer advice queue (the sea-day rolls fired
@@ -2805,6 +3239,8 @@ func _place_marker() -> void:
 	# (docking, a battle restore, a save load) never animate (§2.6).
 	_glide_duration = 0.0
 	_fleet_marker.position = _marker_px(_fleet_cell)
+	# §4.8.9: the token faces the persisted heading after every snap too.
+	_refresh_player_token()
 
 
 ## The on-screen pixel centre of `cell`.
@@ -2827,6 +3263,9 @@ func _step_render_seconds() -> float:
 ## the minimap and saves all keep reading tile positions. A non-positive
 ## duration or a disabled seam snaps instead.
 func _glide_marker_to(to_cell: Vector2i, duration: float) -> void:
+	# §4.8.9: the token's dir id comes from the heading the step carried —
+	# a per-step re-probe is a registry dictionary lookup, never an asset load.
+	_refresh_player_token()
 	if not _glide_enabled or duration <= 0.0:
 		_glide_duration = 0.0
 		_fleet_marker.position = _marker_px(to_cell)
@@ -3030,5 +3469,7 @@ func _show_error(reason: String) -> void:
 	if i18n != null and i18n.has_method("fmt"):
 		text = i18n.fmt("title.data_error", {"reason": detail})
 	_error_label.text = text
-	_error_label.add_theme_color_override("font_color", PaletteLib.BAD)
+	# The sweep retired the per-node override: the error line reads in the
+	# theme's Label color (the BAD ink was a Phase-1 placeholder choice, not
+	# a §4.8 pin).
 	_error_layer.visible = true

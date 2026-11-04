@@ -1002,22 +1002,26 @@ func _test_port_entry() -> void:
 		SEA_BESIDE_LISBON + Vector2i(radius + 1, 0)),
 		"tiles outside the sighting radius stay unexplored")
 
-	# Fleet marker: 24×24 white square with a black outline (docs/80-* §4.8).
+	# Fleet marker: 24×24 white square with a black outline (docs/80-* §4.8;
+	# Phase-10 §4.8.9: the square is the flat fallback — the registry's
+	# `hull_{type}_player_{dir}` token replaces it when it resolves).
 	var square: Control = world.get_node("FleetMarker/Square")
 	_check(square.size == Vector2(24, 24),
 		"fleet marker is 24×24 (got %s)" % str(square.size))
 	_check(is_equal_approx(square.position.x, -12.0) and
 		is_equal_approx(square.position.y, -12.0),
 		"marker square is centered on its tile (%s)" % str(square.position))
-	var style = square.get_theme_stylebox("panel")
-	_check(style is StyleBoxFlat, "marker square uses a StyleBoxFlat")
-	if style is StyleBoxFlat:
-		_check((style as StyleBoxFlat).bg_color == Color.WHITE,
-			"marker fill is white")
-		_check((style as StyleBoxFlat).border_color == Color.BLACK,
-			"marker outline is black")
-		_check((style as StyleBoxFlat).border_width_left == 2,
-			"marker outline is 2px")
+	var outline: ColorRect = square.get_node_or_null("Outline")
+	var fill: ColorRect = square.get_node_or_null("Fill")
+	_check(outline != null and fill != null,
+		"marker fallback square is the code-built outline + fill pair")
+	if outline != null and fill != null:
+		_check(fill.color == Color.WHITE, "marker fill is white")
+		_check(outline.color == Color.BLACK, "marker outline is black")
+		_check(outline.size == Vector2(24, 24) and fill.size == Vector2(20, 20),
+			"marker outline is 2px (%s over %s)" % [str(outline.size),
+			str(fill.size)])
+	_check(square.visible, "the registry is empty in suites ⇒ square fallback")
 	_clear_dialogs(world)
 	host.queue_free()
 
