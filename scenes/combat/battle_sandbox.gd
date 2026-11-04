@@ -32,18 +32,22 @@ extends Control
 ## `battle_screen._reason_text` convention) — no player-facing string is
 ## invented here.
 ##
-## The whole editor is built in `_ready` from palette shapes + the default
-## font (`80-*` §4.8); the `.tscn` carries the root node only. The three
-## §4.7.16 regions (player panel / enemy panel / conditions strip) are plain
-## `Panel` controls at fixed 1280×720 geometry; their CONTENT is
-## container-driven — a MarginContainer → VBox column (one header, the fixed
-## editors block, the ship-rows scroll, the add/remove buttons) — so the rows
-## keep the 32 px grid and no label clips or control overflows. Field labels
-## are never `clip_text`ed: each column floor (the `LABEL_W*` constants) fits
-## the longest localized string, and the layout regression test pins the
-## live control rects for both locales.
+## The whole editor is built in `_ready`; the `.tscn` carries the root node
+## only. Phase-10 W5-B sweep (80-* §4.9): the side panels are the kit `frame`
+## atom, the fleet/action buttons the kit `button` atom, panel chrome and
+## semantic text colors ride the shared theme (Label variations
+## `Accent`/`Warn`/`Dim`) — this file carries NO per-screen styling (the
+## sweep-guard audit `tools/test_ui_styling_audit.gd` pins that). The three
+## §4.7.16 regions (player panel / enemy panel / conditions strip) sit at
+## fixed 1280×720 geometry; their CONTENT is container-driven (one header,
+## the fixed editors block, the ship-rows scroll, the add/remove buttons) so
+## the rows keep the 32 px grid and no label clips or control overflows.
+## Field labels are never `clip_text`ed: each column floor (the `LABEL_W*`
+## constants) fits the longest localized string, and the layout regression
+## test pins the live control rects for both locales.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -152,8 +156,8 @@ var _title: Label
 var _zero_write: Label
 var _back_hint: Label
 var _toast: Label
-var _player_panel: Panel
-var _enemy_panel: Panel
+var _player_panel: Control
+var _enemy_panel: Control
 var _player_header: Label
 var _enemy_header: Label
 var _player_box: VBoxContainer
@@ -218,59 +222,50 @@ func _build_static_widgets() -> void:
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_background)
 
+	# §4.9 Label row: TEXT is the theme default — the title needs no styling.
 	_title = Label.new()
 	_title.name = "Title"
 	_title.text = _t("sandbox.title")
-	_title.add_theme_font_size_override("font_size", 26)
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_title.position = Vector2(16, 8)
 	_title.size = Vector2(640, 32)
 	add_child(_title)
 
-	# The persistent zero-write notice (§4.7.16) — always visible.
+	# The persistent zero-write notice (§4.7.16) — always visible; the WARN
+	# tint rides the theme's `Warn` Label variation (§4.9 sweep).
 	_zero_write = Label.new()
 	_zero_write.name = "ZeroWrite"
 	_zero_write.text = _t("sandbox.zero_write")
-	_zero_write.add_theme_font_size_override("font_size", 14)
-	_zero_write.add_theme_color_override("font_color", PaletteLib.WARN)
+	_zero_write.theme_type_variation = "Warn"
 	_zero_write.position = Vector2(16, 42)
 	_zero_write.size = Vector2(900, 20)
 	add_child(_zero_write)
 
-	# `Esc` → S1 (§4.2); the corner hint names the edge.
+	# `Esc` → S1 (§4.2); the corner hint names the edge. Secondary text rides
+	# the theme's `Dim` variation; the box is sized for the default font
+	# (the per-screen font-size overrides retired with the §4.9 sweep).
 	_back_hint = Label.new()
 	_back_hint.name = "BackHint"
 	_back_hint.text = "Esc · %s" % _t("sandbox.back")
-	_back_hint.add_theme_font_size_override("font_size", 14)
-	_back_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_back_hint.position = Vector2(1080, 12)
-	_back_hint.size = Vector2(184, 20)
+	_back_hint.theme_type_variation = "Dim"
+	_back_hint.position = Vector2(1000, 12)
+	_back_hint.size = Vector2(264, 20)
 	_back_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_back_hint)
 
 	_toast = Label.new()
 	_toast.name = "Toast"
 	_toast.visible = false
-	_toast.add_theme_font_size_override("font_size", 14)
-	_toast.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_toast.position = Vector2(340, 696)
 	_toast.size = Vector2(600, 22)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_toast)
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
-
-
 func _build_panels() -> void:
 	# The §4.7.16 regions: left = the player panel, right = the enemy panel —
-	# plain Panels at fixed geometry, each carrying a container column so the
-	# rows keep the 32 px grid and nothing overflows the panel edges.
+	# kit frames at fixed geometry (§4.9 sweep), each carrying a container
+	# column so the rows keep the 32 px grid and nothing overflows the panel
+	# edges.
 	var player := _panel_column("PlayerPanel", "sandbox.player",
 		Vector2(16, 68), Vector2(612, 480))
 	_player_panel = player["panel"]
@@ -310,37 +305,23 @@ func _build_panels() -> void:
 	_enemy_box.add_child(_side_buttons_row(_enemy_add, _enemy_remove))
 
 
-## One side panel: a plain `Panel` at `at` × `panel_size` carrying a
-## MarginContainer → VBox column whose first child is the ONE header label
-## (title only — the panel content builds no second title row). Returns
-## `{panel, box, header}`.
+## One side panel: the kit `frame` atom (§4.9 — titled PanelContainer with
+## the 16px-margin body; the atom carries the margins the old hand-built
+## MarginContainer set) at `at` × `panel_size`; the header is the frame's own
+## first row carrying the theme's `Accent` variation. Returns
+## `{panel, box, header}` (`box` = the kit body column, `frame.meta["body"]`).
 func _panel_column(panel_name: String, title_key: String, at: Vector2,
 		panel_size: Vector2) -> Dictionary:
-	var panel := Panel.new()
+	var panel := UiKitLib.frame(title_key)
 	panel.name = panel_name
 	panel.position = at
 	panel.size = panel_size
-	panel.add_theme_stylebox_override("panel", _panel_style())
 	add_child(panel)
-	var margin := MarginContainer.new()
-	margin.name = "Margin"
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", PaletteLib.MARGIN)
-	margin.add_theme_constant_override("margin_right", PaletteLib.MARGIN)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.name = "Box"
-	box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-	margin.add_child(box)
-	var header := Label.new()
+	var header: Label = (panel.get_child(0) as Container).get_child(0) as Label
 	header.name = "Header"
-	header.text = _t(title_key)
-	header.add_theme_font_size_override("font_size", 18)
-	header.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	header.custom_minimum_size = Vector2(0, 24)
-	box.add_child(header)
+	header.theme_type_variation = "Accent"
+	var box: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
+	box.name = "Box"
 	return {"panel": panel, "box": box, "header": header}
 
 
@@ -361,15 +342,14 @@ func _rows_scroll(scroll_name: String) -> ScrollContainer:
 func _rows_box() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.name = "Rows"
-	box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return box
 
 
-## An Add/Remove fleet button (`sandbox.ship.add` / `.remove`).
+## An Add/Remove fleet button (`sandbox.ship.add` / `.remove`) — the kit
+## `button` atom (§4.9) at the 160px column width.
 func _fleet_button(key: String) -> Button:
-	var button := Button.new()
-	button.text = _t(key)
+	var button := UiKitLib.button(key)
 	button.custom_minimum_size = Vector2(160, float(PaletteLib.BUTTON_H))
 	return button
 
@@ -378,20 +358,18 @@ func _fleet_button(key: String) -> Button:
 func _side_buttons_row(add: Button, remove: Button) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "FleetButtons"
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	row.add_child(add)
 	row.add_child(remove)
 	return row
 
 
-## A field label on the 32 px row grid. Labels are NEVER clipped
-## (`clip_text` stays off — the text grows the label), so `min_width` is a
-## column floor that lines the field column up; pick it ≥ the longest
-## localized string (the `LABEL_W*` constants).
+## A field label on the 32 px row grid (TEXT is the theme's Label default,
+## §4.9). Labels are NEVER clipped (`clip_text` stays off — the text grows
+## the label), so `min_width` is a column floor that lines the field column
+## up; pick it ≥ the longest localized string (the `LABEL_W*` constants).
 func _field_label(text: String, min_width := 0) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.custom_minimum_size = Vector2(min_width, float(PaletteLib.ROW_H))
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
@@ -494,10 +472,8 @@ func _hull_row(hull_id: String) -> Dictionary:
 func _make_ship_row(side: String) -> Dictionary:
 	var root := VBoxContainer.new()
 	root.name = "%sShip%d" % [side.capitalize(), ship_rows(side).size()]
-	root.add_theme_constant_override("separation", 0)
 
 	var line1 := HBoxContainer.new()
-	line1.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	var header := _field_label("", ROW_HEADER_W)
 	line1.add_child(header)
 	var type := _option(130)
@@ -517,7 +493,6 @@ func _make_ship_row(side: String) -> Dictionary:
 	root.add_child(line1)
 
 	var line2 := HBoxContainer.new()
-	line2.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	var cannons := _spin(0, 0, 0, 80)
 	var crew := _spin(0, 0, 0, 80)
 	var durability := _spin(1, 1, 1, 80)
@@ -531,7 +506,6 @@ func _make_ship_row(side: String) -> Dictionary:
 	root.add_child(line2)
 
 	var line3 := HBoxContainer.new()
-	line3.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	var figurehead := _option(130)
 	_fill_equipment_option(figurehead, "figurehead")
 	line3.add_child(_field_label(_t("shipyard.slot.figurehead"), LABEL_W_MID))
@@ -540,7 +514,6 @@ func _make_ship_row(side: String) -> Dictionary:
 	root.add_child(line3)
 
 	var line4 := HBoxContainer.new()
-	line4.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	var sail := _option(130)
 	_fill_equipment_option(sail, "sail")
 	line4.add_child(_field_label(_t("shipyard.slot.sail"), LABEL_W_SHORT))
@@ -604,15 +577,12 @@ func _clamp_row(row: Dictionary) -> void:
 func _build_player_stats_block() -> void:
 	var block := VBoxContainer.new()
 	block.name = "PlayerStats"
-	block.add_theme_constant_override("separation", 0)
 
 	# The five attributes: a 4-column grid (label + spin, twice per line) so
 	# all five pairs fit the 580 px panel width — no label shrinks or clips.
 	var attrs_grid := GridContainer.new()
 	attrs_grid.name = "Attributes"
 	attrs_grid.columns = 4
-	attrs_grid.add_theme_constant_override("h_separation", PaletteLib.BASE_UNIT)
-	attrs_grid.add_theme_constant_override("v_separation", 0)
 	for key in ATTRIBUTES:
 		attrs_grid.add_child(
 			_field_label(_t("char.attr.%s" % key), LABEL_W_ATTR))
@@ -622,7 +592,6 @@ func _build_player_stats_block() -> void:
 	block.add_child(attrs_grid)
 
 	var gear_row := HBoxContainer.new()
-	gear_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	_weapon_option = _option(150)
 	_armor_option = _option(150)
 	_fill_equipment_option(_weapon_option, "weapon")
@@ -634,7 +603,6 @@ func _build_player_stats_block() -> void:
 	block.add_child(gear_row)
 
 	var morale_row := HBoxContainer.new()
-	morale_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	morale_row.add_child(_field_label(_t("sandbox.morale.player"), LABEL_W))
 	_player_morale_spin = _spin(MORALE_MIN, MORALE_MAX, 50, 100)
 	morale_row.add_child(_player_morale_spin)
@@ -655,11 +623,9 @@ func _build_player_stats_block() -> void:
 func _build_enemy_options() -> void:
 	var block := VBoxContainer.new()
 	block.name = "EnemyOptions"
-	block.add_theme_constant_override("separation", 0)
 
 	# Kind + the compose toggle — the checkbox sits DIRECTLY beside its label.
 	var kind_row := HBoxContainer.new()
-	kind_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	_kind_option = _option(140)
 	_fill_option(_kind_option, KINDS, "sandbox.kind")
 	_kind_option.item_selected.connect(func(_index: int) -> void:
@@ -674,7 +640,6 @@ func _build_enemy_options() -> void:
 	block.add_child(kind_row)
 
 	var captain_row := HBoxContainer.new()
-	captain_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	captain_row.add_child(
 		_field_label(_t("sandbox.ship.captain"), LABEL_W_STD))
 	_enemy_captain_edit = LineEdit.new()
@@ -685,7 +650,6 @@ func _build_enemy_options() -> void:
 	block.add_child(captain_row)
 
 	var ai_row := HBoxContainer.new()
-	ai_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	_ai_level_option = _option(120)
 	_ai_level_option.add_item(_t_id("sandbox.ai_level", "t2"))
 	_ai_level_option.set_item_metadata(0, 0)
@@ -701,7 +665,6 @@ func _build_enemy_options() -> void:
 	block.add_child(ai_row)
 
 	var morale_row := HBoxContainer.new()
-	morale_row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	_formation_option = _option(140)
 	_fill_option(_formation_option, FORMATIONS, "battle.formation")
 	morale_row.add_child(_field_label(_t("sandbox.morale.enemy"), LABEL_W))
@@ -772,32 +735,23 @@ func _profile_default(kind: String) -> Dictionary:
 ## The bottom strip (§4.7.16): the conditions grid — two label+control pairs
 ## per line, three lines, every label unclipped — plus the four action
 ## buttons at its right end (the conditions row and 开战/随机全部/导入/导出
-## share the strip).
+## share the strip). The strip's panel chrome is the theme's (§4.9
+## PanelContainer row); its content joins the panel directly (the
+## chart-screen convention).
 func _build_conditions_row() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "ConditionsPanel"
 	panel.position = Vector2(16, 556)
 	panel.size = Vector2(1248, 152)
-	panel.add_theme_stylebox_override("panel", _panel_style())
 	_conditions_panel = panel
 	add_child(panel)
-	var margin := MarginContainer.new()
-	margin.name = "Margin"
-	margin.add_theme_constant_override("margin_left", PaletteLib.MARGIN)
-	margin.add_theme_constant_override("margin_right", PaletteLib.MARGIN)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	panel.add_child(margin)
 	var strip := HBoxContainer.new()
 	strip.name = "Strip"
-	strip.add_theme_constant_override("separation", PaletteLib.MARGIN)
-	margin.add_child(strip)
+	panel.add_child(strip)
 
 	var grid := GridContainer.new()
 	grid.name = "Conditions"
 	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", PaletteLib.BASE_UNIT)
-	grid.add_theme_constant_override("v_separation", 0)
 	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 	_day_spin = _spin(DAY_MIN, 9999, 1, 90)
@@ -812,7 +766,6 @@ func _build_conditions_row() -> void:
 	_seed_mode_option.item_selected.connect(func(_index: int) -> void:
 		_seed_spin.visible = str(_option_value(_seed_mode_option)) == "fixed")
 	var seed_box := HBoxContainer.new()
-	seed_box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	seed_box.add_child(_seed_mode_option)
 	seed_box.add_child(_seed_spin)
 	grid.add_child(seed_box)
@@ -830,7 +783,6 @@ func _build_conditions_row() -> void:
 	_fill_option(_current_dir_option, CURRENT_DIRS, "sandbox.dir")
 	_current_strength_spin = _spin(0, CURRENT_STRENGTH_MAX, 0, 90)
 	var current_box := HBoxContainer.new()
-	current_box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	current_box.add_child(_current_dir_option)
 	current_box.add_child(_current_strength_spin)
 	grid.add_child(_field_label(_t("sandbox.current"), LABEL_W_STD))
@@ -853,17 +805,11 @@ func _build_conditions_row() -> void:
 	var buttons := GridContainer.new()
 	buttons.name = "Actions"
 	buttons.columns = 2
-	buttons.add_theme_constant_override("h_separation", PaletteLib.BASE_UNIT)
-	buttons.add_theme_constant_override("v_separation", PaletteLib.BASE_UNIT)
 	buttons.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_start_button = Button.new()
-	_start_button.text = _t("sandbox.start")
-	_random_all_button = Button.new()
-	_random_all_button.text = _t("sandbox.random_all")
-	_import_button = Button.new()
-	_import_button.text = _t("sandbox.import")
-	_export_button = Button.new()
-	_export_button.text = _t("sandbox.export")
+	_start_button = UiKitLib.button("sandbox.start")
+	_random_all_button = UiKitLib.button("sandbox.random_all")
+	_import_button = UiKitLib.button("sandbox.import")
+	_export_button = UiKitLib.button("sandbox.export")
 	for button in [_start_button, _random_all_button, _import_button,
 			_export_button]:
 		button.custom_minimum_size = Vector2(120, float(PaletteLib.BUTTON_H))
@@ -1490,11 +1436,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # --- Accessors (tests / hosts) ----------------------------------------------
 
-func player_panel() -> Panel:
+func player_panel() -> Control:
 	return _player_panel
 
 
-func enemy_panel() -> Panel:
+func enemy_panel() -> Control:
 	return _enemy_panel
 
 

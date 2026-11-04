@@ -1,12 +1,15 @@
 class_name DuelModal
 extends Control
 ## S11 captain-duel modal (docs/80-UI-UX.md §4.1 S11, §4.7.1 "Duel modal",
-## §4.8 palette/sizing; docs/60-COMBAT.md §4.6, §4.11.6, §4.12.1.2,
+## §4.9 theme & kit; docs/60-COMBAT.md §4.6, §4.11.6, §4.12.1.2,
 ## §4.12.5; docs/90-ARCHITECTURE.md §5.1).
 ##
-## A modal over S10: 40% black dim, a 480px panel in palette colours, and
-## `ColorRect`/`Label`/`Button` only (no textures, no animation — §4.7.1
-## "all input while open", test-friendly without waiting on a tween).
+## A modal over S10: 40% black dim, a 480px panel on the shared theme's
+## panel chrome (§4.9 — the per-screen stylebox retired with the W5-B
+## sweep), and `ColorRect`/`Label`/`Button` only (no textures, no
+## animation — §4.7.1 "all input while open", test-friendly without waiting
+## on a tween). Semantic text colors ride the theme's Label variations
+## (`Accent`/`Dim`/`Good`/`Bad`/`Warn`) — no per-screen styling here.
 ##
 ## Contents:
 ##   * both captains (name + duel base) in the header;
@@ -82,11 +85,11 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_committed.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9 sweep (W5-B): the panel chrome is the theme's PanelContainer row;
+	# the semantic text colors ride theme Label variations — the title and
+	# the roll cells read the default TEXT.
+	_header.theme_type_variation = "Accent"
+	_committed.theme_type_variation = "Dim"
 	_acknowledge.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_acknowledge.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -214,14 +217,13 @@ func _bind_rounds() -> void:
 			and rolls[index] is Dictionary else {}
 		var row := HBoxContainer.new()
 		row.name = "Round_%d" % (index + 1)
-		row.add_theme_constant_override("separation", 8)
-		var number := _cell(str(index + 1), PaletteLib.PANEL_LINE, COL_ROUND_W)
+		var number := _cell(str(index + 1), "Dim", COL_ROUND_W)
 		var player := _cell(
-			_named_roll(attacker, roll.get("player", "-")), PaletteLib.TEXT, COL_ROLL_W)
+			_named_roll(attacker, roll.get("player", "-")), "", COL_ROLL_W)
 		var defender := _cell(
-			_named_roll(defender_name, roll.get("defender", "-")), PaletteLib.TEXT, COL_ROLL_W)
+			_named_roll(defender_name, roll.get("defender", "-")), "", COL_ROLL_W)
 		var verdict_label := _cell(
-			_verdict_text(verdict), _verdict_color(verdict), COL_VERDICT_W)
+			_verdict_text(verdict), _verdict_variation(verdict), COL_VERDICT_W)
 		for label in [number, player, defender, verdict_label]:
 			row.add_child(label)
 		_rounds.add_child(row)
@@ -239,8 +241,8 @@ static func _named_roll(name: String, roll) -> String:
 func _bind_result() -> void:
 	var result := str(_outcome.get("result", ""))
 	var key := str(RESULT_KEYS.get(result, ""))
-	_result.add_theme_color_override(
-		"font_color", PaletteLib.GOOD if result == "capture" else PaletteLib.BAD)
+	# Semantic line color: the theme's `Good`/`Bad` Label variations (§4.9).
+	_result.theme_type_variation = "Good" if result == "capture" else "Bad"
 	# Fallback when `duel.result.*` is not merged yet: the scoreline ("3-1"),
 	# a localised-neutral pair of numbers that still says who won.
 	var score := "%d-%d" % [
@@ -265,14 +267,16 @@ static func _verdict_fallback(verdict: String) -> String:
 			return "0"
 
 
-func _verdict_color(verdict: String) -> Color:
+## The round verdict's theme Label variation (§4.9 sweep): win → `Good`,
+## loss → `Bad`, everything else → `Warn` (the neutral tie reads ACCENT).
+func _verdict_variation(verdict: String) -> String:
 	match verdict:
 		"win":
-			return PaletteLib.GOOD
+			return "Good"
 		"loss":
-			return PaletteLib.BAD
+			return "Bad"
 		_:
-			return PaletteLib.WARN
+			return "Warn"
 
 
 # --- Emission --------------------------------------------------------------
@@ -313,22 +317,17 @@ func _or(key: String, fallback: String) -> String:
 	return I18n.t_key(key)
 
 
-func _cell(text: String, color: Color, width: float) -> Label:
+## One fixed-width round cell. `variation` is a theme Label variation name
+## (§4.9 — "" = the default TEXT label). A long captain name must never
+## widen the 480px panel (§4.8): each cell stays at its column width and
+## trims instead of growing the modal.
+func _cell(text: String, variation: String, width: float) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
+	if not variation.is_empty():
+		label.theme_type_variation = variation
 	label.custom_minimum_size.x = width
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# A long captain name must never widen the 480px panel (§4.8): each cell
-	# stays at its column width and trims instead of growing the modal.
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	return label
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
