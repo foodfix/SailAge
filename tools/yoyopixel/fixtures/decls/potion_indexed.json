@@ -1,0 +1,29 @@
+{
+  "id": "potion_indexed",
+  "file": "expected/potion_indexed.png",
+  "mode": "template",
+  "scale": 2,
+  "png": "indexed",
+  "grid": [
+    "..cc..",
+    "..kk..",
+    ".GGGG.",
+    "GLLLLG",
+    "GLLLLG",
+    "GLLLLG",
+    "GLLLLG",
+    ".GGGG."
+  ],
+  "materials": {
+    "c": "cork",
+    "k": "cork",
+    "G": { "type": "glass", "alpha": 200 },
+    "L": "liquid"
+  },
+  "colors": {
+    "c": "#907050",
+    "k": "#907050",
+    "G": "#6888a0",
+    "L": "#2848a0"
+  }
+}
