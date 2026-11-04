@@ -287,7 +287,9 @@ var _token_dir := ""
 ## Last flagship ship type the token was built for (a refit re-resolves).
 var _token_ship_type := ""
 
-## The arrow field (§4.8.10): `W` wind / `C` current, session-local, default
+## The arrow field (§4.8.10, amended 2026-11-04): `W` always toggles the
+## wind field; `C` toggles the current field whenever either field is on
+## (both off ⇒ `C` is the §4.5 intel window's key). Session-local, default
 ## OFF; re-sampled on month rollover and whenever the camera's tile moves.
 var _wind_field_on := false
 var _current_field_on := false
@@ -459,10 +461,11 @@ func _tick_ocean_warmup() -> void:
 	_refresh_hud_indicators()
 
 
-# Phase 10 (§4.8.10): the arrow-field keys run in `_input`, ABOVE every
-# `_unhandled_input` consumer — while the current field is on, the `C`
-# press toggles the field and the §4.5 intel `C` is shadowed (the same
-# shadow convention as the chart's `C`); with the field off `C` is
+# Phase 10 (§4.8.10, amended 2026-11-04): the arrow-field keys run in
+# `_input`, ABOVE every `_unhandled_input` consumer — `W` always toggles
+# the wind field; `C` toggles the current field whenever EITHER field is
+# on (the §4.5 intel `C` is shadowed while field mode is active — the same
+# shadow convention as the chart's `C`); with both fields off `C` is
 # unchanged (the intel window keeps its own handler). `O`/`F`/the intel
 # button always open the window — they are never touched here.
 ## The `_input` stage of the arrow-field keys (§4.8.10): consuming here hides
@@ -2240,15 +2243,19 @@ func current_field_on() -> bool:
 	return _current_field_on
 
 
-## The `W` toggle (§4.8.10): session-local wind field, default off.
+## The `W` toggle (§4.8.10, amended 2026-11-04): session-local wind field,
+## default off; ALWAYS toggles — `W` has no other meaning on S3.
 func toggle_wind_field() -> void:
 	_wind_field_on = not _wind_field_on
 	_resample_arrow_field()
 
 
-## The `C` toggle (§4.8.10): session-local current field, default off. While
-## the field is ON the key is consumed in `_input` and the §4.5 intel `C` is
-## shadowed; with the field off `C` is unchanged (the intel window's key).
+## The `C` toggle (§4.8.10, amended 2026-11-04): session-local current field,
+## default off. Whenever EITHER arrow field is on the key is consumed in
+## `_input` (the §4.5 intel `C` is shadowed while field mode is active) and
+## toggles the current field — including ON while only the wind field runs
+## (the amended reachability). With both fields off `C` is unchanged (the
+## intel window's key).
 func toggle_current_field() -> void:
 	_current_field_on = not _current_field_on
 	_resample_arrow_field()
@@ -2265,10 +2272,12 @@ func arrow_field_samples() -> Array:
 	return _arrow_samples.duplicate()
 
 
-## The `_input`-stage key handler (§4.8.10): `W` toggles the wind field;
-## `C` toggles the current field ONLY while it is on (that consume is the
-## intel shadow). Both give way to modals (the chart owns `W`/`C` while it is
-## open) and to a dead run.
+## The `_input`-stage key handler (§4.8.10 amended 2026-11-04): `W` always
+## toggles the wind field; `C` toggles the current field whenever EITHER
+## field is on (wind-only ⇒ C turns the current field ON — the amended
+## reachability; that consume is the intel shadow). With both fields off,
+## `C` is not consumed (the §4.5 intel window answers). Both keys give way
+## to modals (the chart owns `W`/`C` while it is open) and to a dead run.
 func _tick_arrow_field_input(event: InputEvent) -> void:
 	if not _is_loaded() or _modal_open() or game_over_open():
 		return
@@ -2281,7 +2290,7 @@ func _tick_arrow_field_input(event: InputEvent) -> void:
 	if code == KEY_W:
 		get_viewport().set_input_as_handled()
 		toggle_wind_field()
-	elif code == KEY_C and _current_field_on:
+	elif code == KEY_C and (_wind_field_on or _current_field_on):
 		get_viewport().set_input_as_handled()
 		toggle_current_field()
 
