@@ -2013,7 +2013,21 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      priority-ordered pairs) driving per-pair overlay atlases; the
      LUT is pinned in the terrain suite. The current 8-context
      probe sheets stand as method validation, superseded by this
-     set.
+     set. **Soft edges (amended 2026-11-05, user direction):** every
+     transition tile's border band is a **2-stage checkerboard
+     dither gradient** of the two terrains' palette colors (dense
+     interleave at the boundary ~50%, thinning to ~10–15% at the
+     band's far edge) — never a smooth gradient and never a hard
+     1px line. The generation instruction carries it ("the boundary
+     dissolves through a 2–4 px checkerboard dither of both terrain
+     palettes, chunky pixels, NO smooth gradients"); snap+quantize
+     converges residual blur into dither. Validator consequence:
+     transition tiles' palette membership is the UNION of both
+     terrains' blocks (dither interleave legal), anything outside
+     still rejected — pinned with the LUT in the terrain suite.
+     Geometry stays the blob set's job; softness lives only in the
+     edge bands (same-kind interiors stay pure). Optional later
+     extension: one extra wide-band tile per edge (2-tile gradient).
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
