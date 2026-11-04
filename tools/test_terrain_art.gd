@@ -14,7 +14,7 @@ extends Node
 ##   * the §6.6 shore overlay decode (the shipped raster, the Lisbon berth
 ##     `e` code, wrap-aware lookup, water-only codes on a sampled strip);
 ##   * the §4.7.17 water layer: flat tiles for both water kinds, the shared
-##     material's pinned params (period 800 ms, darkening ×0.82) and the
+##     material's pinned params (period 800 ms, darkening ×0.70) and the
 ##     `UiMotion` gate (off ⇒ `u_motion` 0), the S10 reuse seam;
 ##   * the §4.8.6 dir-id table (every bucket covered; token + vector forms);
 ##   * the arrow field's deterministic sampling against a fixture decode
@@ -201,7 +201,7 @@ func _test_water_layer() -> void:
 			"the scroll period is the pinned 800 ms")
 		_check(is_equal_approx(float(material.get_shader_parameter(
 			"u_darken")), WaterLayerLib.SEA_DARKEN),
-			"the darkening is the pinned ×0.82")
+			"the darkening is the pinned ×0.70 (b674492)")
 		# UiMotion is OFF in this suite (direct-boot): frozen at offset 0.
 		_check(is_equal_approx(float(material.get_shader_parameter(
 			"u_motion")), 0.0),
@@ -227,7 +227,7 @@ func _test_water_layer() -> void:
 		"index 1 maps to the coastal_sea column")
 	_check(WaterLayerLib.column_for_index(loader, 2) == -1,
 		"land renders on the terrain layer, never on water")
-	_check(WaterLayerLib.SEA_DARKEN == 0.82
+	_check(WaterLayerLib.SEA_DARKEN == 0.70
 		and WaterLayerLib.SCROLL_PERIOD_MS == 800,
 		"the §4.7.17 pins stay on the shared builder")
 
@@ -606,17 +606,23 @@ func _test_populated_registry() -> void:
 	_check(not land.is_empty(), "the populated atlas resolves the land row")
 	if not land.is_empty():
 		var land_row := int(land["row"])
+		# The loader builds at its own render pin (64 px on the world path,
+		# the §4.8 64-canvas amendment — the atlas cells carry the shipped
+		# 64-canvas terrain art).
+		var tile_px: int = loader.tile_size_px
+		_check(tile_px == 64,
+			"the terrain atlas builds at the 64 px world tile (got %d)" % tile_px)
 		var terrain_atlas := (loader._tile_set.get_source(
 			loader._tile_set.get_source_id(0)) as TileSetAtlasSource
 			).texture.get_image()
 		for variant in int(land["variants"]):
-			var cell := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
+			var cell := Image.create_empty(tile_px, tile_px, false, Image.FORMAT_RGBA8)
 			cell.blit_rect(terrain_atlas,
-				Rect2i(variant * 32, land_row * 32, 32, 32),
+				Rect2i(variant * tile_px, land_row * tile_px, tile_px, tile_px),
 				Vector2i.ZERO)
 			var opaque := false
-			for py in 32:
-				for px in 32:
+			for py in tile_px:
+				for px in tile_px:
 					if cell.get_pixel(px, py).a > 0.0:
 						opaque = true
 						break
@@ -626,14 +632,14 @@ func _test_populated_registry() -> void:
 				"populated registry: the land variant %d cell is non-empty"
 				% variant)
 			if variant <= 2:
-				_check(cell.get_pixel(16, 16).is_equal_approx(PaletteLib.LAND),
+				_check(cell.get_pixel(tile_px / 2, tile_px / 2).is_equal_approx(PaletteLib.LAND),
 					"populated registry: land variant %d center is Palette.LAND (%s)"
-					% [variant, cell.get_pixel(16, 16)])
+					% [variant, cell.get_pixel(tile_px / 2, tile_px / 2)])
 			else:
-				_check(cell.get_pixel(16, 16).is_equal_approx(
+				_check(cell.get_pixel(tile_px / 2, tile_px / 2).is_equal_approx(
 					PaletteLib.LAND_HI),
 					"populated registry: land variant 3 center is Palette.LAND_HI (%s)"
-					% cell.get_pixel(16, 16))
+					% cell.get_pixel(tile_px / 2, tile_px / 2))
 	# The coast-foam water variants (the r3 continuous-coast model): with the
 	# registry populated and the §6.6 dirs supplied, `build_tile_set` composes
 	# the `shore_{dir}` strips INTO the water atlas (2 flat fills + 16
@@ -663,6 +669,71 @@ func _test_populated_registry() -> void:
 		"populated registry: water_coords(no edges, sea) picks the plain sea fill")
 	_check(WaterLayerLib.water_coords(15, 0) == Vector2i(32, 0),
 		"populated registry: water_coords(all edges, sea) picks the full-band variant")
+	# (1b, sea_fix_r4 hard gate) The 16 foam variants at the SHIPPED 64
+	# canvas, per-bit: each masked edge carries foam pixels in its outer
+	# band, every UNMASKED edge band is foam-free, and every foam pixel
+	# (opaque AND not the cell's own fill — the strips' coastal-tone band
+	# reads as fill on the coastal kind, foam/tone alike sit only on masked
+	# edges) lies inside the union of the masked edge bands. A misplaced
+	# strip set, a bit-order shuffle or an over-wide band all go red here.
+	var set64 := WaterLayerLib.build_tile_set(64, MapLoaderLib.SHORE_DIRS)
+	var src64 := (set64.get_source(set64.get_source_id(0)) as TileSetAtlasSource)
+	var atlas64 := src64.texture.get_image()
+	var band := 16  # foam + tone live within the outer quarter-tile band
+	for mask in 16:
+		for kind_index in 2:
+			var col := 2 + mask * 2 + kind_index
+			var fill := PaletteLib.COAST_SEA if kind_index == 1 \
+				else PaletteLib.SEA
+			var is_foam := func(p: Color) -> bool:
+				return p.a > 0.0 and not p.is_equal_approx(fill)
+			# per-edge CORE band scan (the middle of each edge, corners
+			# excluded): a masked edge carries foam in its core; an unmasked
+			# edge's core is foam-free. Corner regions are excluded because
+			# a masked edge's strip legitimately runs the full width — the
+			# union scan below pins those pixels to masked bands anyway.
+			var core_ranges := {
+				0: [0, band, band, 64 - band],          # north core
+				1: [band, 64 - band, 64 - band, 64],    # east core
+				2: [64 - band, 64, band, 64 - band],    # south core
+				3: [band, 64 - band, 0, band],          # west core
+			}
+			for edge in 4:
+				var r: Array = core_ranges[edge]
+				var count := 0
+				for py in range(r[0], r[1]):
+					for pxx in range(r[2], r[3]):
+						if is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
+							count += 1
+				var want := (mask & (1 << edge)) != 0
+				_check((count > 0) == want,
+					"64-canvas variant mask %d (kind %d, column %d): %s edge %s (%d foam px)"
+					% [mask, kind_index, col,
+					["north", "east", "south", "west"][edge],
+					"carries the foam" if want else "is foam-free", count])
+			# union scan: every foam pixel sits inside the masked bands
+			var outside := false
+			for py in 64:
+				for pxx in 64:
+					if not is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
+						continue
+					var in_n := py < band and (mask & 1) != 0
+					var in_s := py >= 64 - band and (mask & 4) != 0
+					var in_w := pxx < band and (mask & 8) != 0
+					var in_e := pxx >= 64 - band and (mask & 2) != 0
+					if not (in_n or in_s or in_w or in_e):
+						outside = true
+						break
+				if outside:
+					break
+			_check(not outside,
+				"64-canvas variant mask %d (kind %d): all foam pixels sit in the masked edge bands"
+				% [mask, kind_index])
+			# the interior stays the cell's own fill (foam hugs edges only)
+			_check(atlas64.get_pixel(col * 64 + 32, 32)
+				.is_equal_approx(fill),
+				"64-canvas variant mask %d (kind %d): the interior keeps the fill"
+				% [mask, kind_index])
 	# The port marker: the overlay renders the registry texture DIRECTLY (a
 	# TextureRect, no atlas blit) — pin that the marker texture decodes
 	# non-empty through the same RGBA8 guard.
@@ -700,7 +771,7 @@ func _test_populated_registry() -> void:
 ## orthogonal codes, zero codes, pure-diagonal cells and the x wrap pass
 ## through unchanged. (2) the animated-sea material: `u_mask` bound to a
 ## valid ImageTexture (the 64×64 §4.8.8 pattern), `u_period` == 0.8,
-## `u_darken` == 0.82, `u_motion` == 1.0 with UiMotion enabled / 0.0 frozen,
+## `u_darken` == 0.70 (b674492), `u_motion` == 1.0 with UiMotion enabled / 0.0 frozen,
 ## and the shader source never re-samples TEXTURE (Godot 4's COLOR arrives
 ## already carrying the tile pixel — a re-sample multiplied the sea to SEA²,
 ## the "uniform dark water" production report).
@@ -780,6 +851,51 @@ func _test_shore_strips_and_material() -> void:
 		"foam mask: the y-out-of-range probe counts as non-blocker (§6.6)")
 	_check(fixture._shore_foam_mask(Vector2i(4, 3)) == 10,
 		"foam mask: east and west land light both side edges (bits 1+3)")
+	# (sea_fix_r4 hard gate) The bay-mouth geometry from the user report: a
+	# water cell with land N/E/W, open sea S, land on BOTH mouth diagonals
+	# (SW+SE) — the sea-facing south edge must stay foam-FREE (the old
+	# bridge closed the waterway into a white line), while the three true
+	# land edges foam.
+	var bay = MapLoaderLib.new()
+	bay.width = 5
+	bay.height = 5
+	bay.legend_tiles = fixture.legend_tiles
+	var bay_indices := PackedByteArray()
+	bay_indices.resize(5 * 5)
+	for y in 5:
+		for x in 5:
+			bay_indices[y * 5 + x] = 0
+	# land ring: the immediate N/E/W neighbours + both mouth diagonals
+	# (SW/SE) below the cell — open waterway south.
+	for land in [Vector2i(2, 1), Vector2i(3, 2), Vector2i(1, 2),
+			Vector2i(1, 3), Vector2i(3, 3)]:
+		bay_indices[land.y * 5 + land.x] = 2
+	bay.indices = bay_indices
+	# the bay cell (2,2): land N/E/W, SW+SE land, open S.
+	var bay_mask := bay._shore_foam_mask(Vector2i(2, 2))
+	_check(bay_mask == 11,
+		"foam mask: the 3-land-side bay (N/E/W land, open S, land mouth "
+		+ "diagonals) foams exactly the three land edges (got %d, want 11)"
+		% bay_mask)
+	_check((bay_mask & 4) == 0,
+		"foam mask: the bay mouth's sea-facing edge stays foam-free (the "
+		+ "narrowed bridge never lights an edge whose perpendicular flank is land)")
+	# the pure corner connector still bridges: land only at two diagonals of
+	# one edge, all four orthogonals water — the r3 connector case survives.
+	var channel = MapLoaderLib.new()
+	channel.width = 4
+	channel.height = 4
+	channel.legend_tiles = fixture.legend_tiles
+	var ch_indices := PackedByteArray()
+	ch_indices.resize(4 * 4)
+	for y in 4:
+		for x in 4:
+			ch_indices[y * 4 + x] = 0
+	ch_indices[0 * 4 + 1] = 2  # NW of cell (2,1)
+	ch_indices[0 * 4 + 3] = 2  # NE of cell (2,1)
+	channel.indices = ch_indices
+	_check(channel._shore_foam_mask(Vector2i(2, 1)) == 1,
+		"foam mask: the NW+NE connector across all-water flanks still bridges the north edge")
 	# (2) The animated-sea material: params + the motion gate both ways + the
 	# shader-source tripwire for the SEA² double-multiply regression.
 	WaterLayerLib._material_attempted = false
@@ -799,8 +915,14 @@ func _test_shore_strips_and_material() -> void:
 			"u_mask is the 64×64 §4.8.8 dither pattern")
 	_check(running.get_shader_parameter("u_period") == 0.8,
 		"u_period is the pinned 0.8 s")
-	_check(running.get_shader_parameter("u_darken") == 0.82,
-		"u_darken is the pinned ×0.82")
+	_check(running.get_shader_parameter("u_darken") == 0.70,
+		"u_darken is the pinned ×0.70 (b674492)")
+	# §4.8 64-canvas amendment (1664ba9): the mask param is the WORLD-space
+	# tile — 128 px at the 64 px world tile, keeping the ~2-tile dither
+	# period (the 64×64 texture itself is unchanged, §4.8.8).
+	_check(is_equal_approx(float(running.get_shader_parameter("u_mask_px")),
+		WaterLayerLib.MASK_SIZE_PX) and WaterLayerLib.MASK_SIZE_PX == 128.0,
+		"u_mask_px is the 128 px world-space tile (64-canvas amendment)")
 	var shader_code: String = running.shader.code if running != null else ""
 	_check(not shader_code.contains("texture(TEXTURE"),
 		"the sea shader never re-samples TEXTURE (COLOR already carries the tile pixel — a re-sample rendered the sea at SEA²)")

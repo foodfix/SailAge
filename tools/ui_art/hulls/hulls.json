@@ -27,8 +27,8 @@
  ],
  "outline": { "hex": "#101010", "px": 1, "rule": "8-neighborhood: transparent pixels adjacent (8-way) to opaque ones take HULL_INK" },
  "footprint": {
-  "_doc": "§4.8.7 amendment 2026-11-04: the long axis is measured on the side view (e/w — the profile shows the ship's length), on the final (outlined) file; the stern/bow views (n/s) show the beam and the diagonals are the honest 3/4 views — all unbanded, canvas-fit only (bbox + 2px outline ≤ 32)",
-  "bands": { "1": [14, 18], "2": [20, 26], "3": [26, 30] }
+  "_doc": "§4.8.7 amendment 2026-11-04, 64-canvas values (amendment 1664ba9): the long axis is measured on the side view (e/w — the profile shows the ship's length), on the final outlined 64×64 canvas (×2 of the retired 32-canvas bands); the stern/bow views (n/s) show the beam and the diagonals are the honest 3/4 views — all unbanded, canvas-fit only (bbox + outline ≤ 64)",
+  "bands": { "1": [28, 36], "2": [40, 52], "3": [52, 60] }
  },
  "hulls": [
   "latin",

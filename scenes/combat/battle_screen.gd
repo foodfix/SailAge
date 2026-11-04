@@ -503,6 +503,10 @@ func _ready() -> void:
 	_sync_world_node(_water_layer)
 	_sync_world_node(_fx)
 	_grid_view.draw.connect(_on_world_draw)
+	# §4.8 64-canvas amendment: the hull tokens are 64×64 canvases drawn at
+	# 0.5 scale (32 px on the 32 px battle tile) — nearest filtering keeps
+	# the ÷2 downsample pixel-exact (each 2×2 texel block maps to one px).
+	_grid_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_minimap.draw.connect(_on_minimap_draw)
 	_minimap.gui_input.connect(_on_minimap_gui_input)
 	_wire_action_buttons()
@@ -1823,8 +1827,10 @@ func _on_world_draw() -> void:
 		var texture := UiKitLib.icon_texture(sprite_id) \
 			if not sprite_id.is_empty() else null
 		if texture != null:
-			# The 32×32 token sprite carries its own designed footprint
-			# (§4.8.7 bands); it draws over the full tile.
+			# The 64×64 token canvas (the §4.8 64-canvas amendment) draws at
+			# 0.5 scale — 32 px on the 32 px battle tile; its designed
+			# footprint (§4.8.7 bands) halves with it. Nearest filtering is
+			# pinned on the grid view (see `_ready`).
 			var size := TILE_PX * _cam_zoom
 			_grid_view.draw_texture_rect(texture,
 				Rect2(center - Vector2(size, size) * 0.5,

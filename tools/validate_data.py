@@ -8462,8 +8462,14 @@ G13_FACILITY_TOKENS = (
     "facility_inn", "facility_guild", "facility_palace",
 )
 G13_TOKEN_OWNERS_EXTRA = ("player", "neutral", "pirate")
-# Tier footprint bands (80-* §4.8.7, long-axis px on the 32x32 canvas).
-G13_TIER_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
+# Tier footprint bands (80-* §4.8.7, long-axis px on the 64x64 canvas —
+# the §4.8 64-canvas amendment 1664ba9; ×2 of the retired 32-canvas values).
+G13_TIER_BANDS = {1: (28, 36), 2: (40, 52), 3: (52, 60)}
+# The §4.8 64-canvas amendment (1664ba9): the shipped canvas for hull tokens
+# and the terrain class is 64×64 — the exact ×2 nearest upscale of the
+# authored 32-grid (the authored manifests REMAIN the 32-grid source of
+# truth); a source already authored at 64 (sea_pattern) ships 1:1.
+G13_CANVAS_64 = 64
 
 # §4.8 hull block, amended 2026-11-04 (the shared-hull pennant scheme): the
 # owner rides ONLY the masthead pennant — the authored maps carry the source
@@ -8871,11 +8877,28 @@ def _g13_decode_artifact(decl: dict, path: Path) -> _G13Sprite:
         fail("art-artifact", decl["file"],
              f"does not decode: {exc} (the hand-edit probe rejects any "
              "byte-level drift — §8.8 item 2)", 13)
-    if width != decl.get("width") or height != decl.get("height"):
+    expect_w, expect_h = _g13_expected_size(decl)
+    if width != expect_w or height != expect_h:
         fail("art-size", decl["file"],
              f"artifact is {width}x{height}, manifest declares "
-             f"{decl.get('width')}x{decl.get('height')}", 13)
+             f"{decl.get('width')}x{decl.get('height')} (shipped canvas "
+             f"{expect_w}x{expect_h})", 13)
     return _G13Sprite(decl, path, width, height, pixels)
+
+
+def _g13_expected_size(decl: dict) -> tuple[int, int]:
+    """The shipped-canvas size of a declared sprite. The §4.8 64-canvas
+    amendment (1664ba9): terrain-class artifacts render at the 64 canvas —
+    the exact ×2 nearest upscale of a declared 32-grid (a declaration
+    already authored at 64 ships 1:1); every other class ships its declared
+    size (hull tokens declare the 64 canvas directly via the registry
+    expansion)."""
+    width = int(decl.get("width", 0))
+    height = int(decl.get("height", 0))
+    if str(decl.get("class", "")) == "terrain" \
+            and max(width, height) < G13_CANVAS_64:
+        return width * 2, height * 2
+    return width, height
 
 
 def _g13_check_pixels(class_name: str, sprite: _G13Sprite, block: frozenset) -> None:
@@ -9455,18 +9478,18 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                     sid_n = f"hull_{ship['id']}_{nation['id']}_n"
                     sid_ne = f"hull_{ship['id']}_{nation['id']}_ne"
                     entries_h.append(
-                        (sid_n, {"id": sid_n, "width": 32, "height": 32,
+                        (sid_n, {"id": sid_n, "width": 64, "height": 64,
                                  "file": tmpl.format(
                                      ship_type=ship["id"], owner=nation["id"],
                                      dir="n")}))
                     entries_h.append(
-                        (sid_ne, {"id": sid_ne, "width": 32, "height": 32,
+                        (sid_ne, {"id": sid_ne, "width": 64, "height": 64,
                                   "file": tmpl.format(
                                       ship_type=ship["id"], owner=nation["id"],
                                       dir="ne")}))
                     for dir_id, (base_dir, op) in hull_pin.items():
                         sid = f"hull_{ship['id']}_{nation['id']}_{dir_id}"
-                        decl_c = {"id": sid, "width": 32, "height": 32,
+                        decl_c = {"id": sid, "width": 64, "height": 64,
                                   "file": tmpl.format(
                                       ship_type=ship["id"],
                                       owner=nation["id"], dir=dir_id)}
@@ -9753,31 +9776,32 @@ def _g13_run_probes() -> None:
             "broken-transform", "art-transform",
             lambda: _g13_manifest_then_pixels(icons_dir, block)))
 
-        # (4) Out-of-band footprint: a tier-1 hull 12px long on the side view
-        # (band 14-18; §4.8.7 amendment — the band is measured on e/w).
+        # (4) Out-of-band footprint: a tier-1 hull 24px long on the side view
+        # of the 64 canvas (band 28-36; §4.8.7 amendment — the band is
+        # measured on e/w; 64-canvas values per amendment 1664ba9).
         hull_dir = root / "tools" / "ui_art" / "hulls"
         hull_dir.mkdir(parents=True)
         hull_assets = root / "assets" / "ui" / "tokens"
         hull_assets.mkdir(parents=True)
-        hull_rows = [""] * 32
-        for y in range(32):
-            hull_rows[y] = "." * 32
-        for x in range(10, 22):  # 12px side-view long axis: below the band
-            hull_rows[15] = hull_rows[15][:x] + "xx" + hull_rows[15][x + 2:]
+        hull_rows = [""] * 64
+        for y in range(64):
+            hull_rows[y] = "." * 64
+        for x in range(20, 44):  # 24px side-view long axis: below the band
+            hull_rows[31] = hull_rows[31][:x] + "xx" + hull_rows[31][x + 2:]
         hull_decl = {
             "id": "hull_sloop_player_e",
             "file": "assets/ui/tokens/hull_sloop_player_e.png",
-            "width": 32, "height": 32,
+            "width": 64, "height": 64,
             "mode": "string-map", "png": "indexed",
             "palette": flat, "rows": hull_rows,
         }
         # (not "hulls.json" — that name is the aux-doc registry, skipped by
         # the loader; the probe fixture uses a plain declaration filename)
         (hull_dir / "probe_hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
-        _g13_write_rgba_png(hull_assets / "hull_sloop_player_e.png", 32, 32,
+        _g13_write_rgba_png(hull_assets / "hull_sloop_player_e.png", 64, 64,
                             lambda x, y: (
                                 (232, 230, 223, 255)
-                                if 10 <= x < 22 and 15 <= y < 17
+                                if 20 <= x < 44 and 31 <= y < 33
                                 else (0, 0, 0, 0)))
         ship_types = [{"id": "sloop", "tier": 1}]
 

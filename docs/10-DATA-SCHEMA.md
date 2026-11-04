@@ -2819,10 +2819,22 @@ checks:
     **eight authored maps** (one per direction; no derive table).
  7. **Footprint bands.** Per hull, the long-axis extent in px **on the
     side view (`e`/`w` — the profile shows the ship's length)** lies in
-    its tier band — tier 1: 14–18, tier 2: 20–26, tier 3: 26–30
-    (`ship_types.tier` partitions the 16 hulls 4 / 8 / 4); the
-    stern/bow views (`n`/`s`) show the beam and are canvas-fit only. A
-    hull outside its band fails naming it and the measured extent.
+    its tier band — tier 1: 28–36, tier 2: 40–52, tier 3: 52–60
+    (the §4.8 64-canvas model-pass upgrade, amendment 1664ba9: the bands
+    are measured on the 64×64 token canvas, ×2 of the retired 32-canvas
+    values 14–18/20–26/26–30; `ship_types.tier` partitions the 16 hulls
+    4 / 8 / 4); the stern/bow views (`n`/`s`) show the beam and are
+    canvas-fit only. A hull outside its band fails naming it and the
+    measured extent.
+
+**64-canvas artifacts (amendment 1664ba9).** Hull tokens and the terrain
+class (terrain tiles, shore strips, port markers) ship as 64×64 canvases —
+the exact ×2 nearest upscale of the authored 32-grid renders (the authored
+manifests REMAIN the 32-grid source of truth; nothing is hand-drawn at 64);
+`sea_pattern.png` is authored at 64 and ships 1:1. The validator decodes the
+shipped canvas: terrain-class artifacts must be the declared grid ×2, hull
+tokens declare the 64 canvas directly; ids and filenames are unchanged.
+Inline icons keep the native 32 px art (`80-*` §4.8.8).
 8. **Seam checks.** All variants of one terrain kind share a
    byte-identical, wrap-continuous outer 1px ring (interiors vary
    freely); `sea_pattern.png` and the nine-patch edge tiles are
