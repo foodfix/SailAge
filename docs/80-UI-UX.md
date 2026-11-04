@@ -1932,6 +1932,16 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    walnut). The ninepatch sheets are the single switch: re-authoring
    them reskins every panel/button in the game.
 
+   **Skin coverage (amended 2026-11-05, user direction — UW2 style
+   everywhere):** texture mode routes EVERY window/panel/HUD surface
+   through the skin vocabulary — custom-drawn screens (HUD status
+   bars, port screens, chart, fleet picker, hail modal, intel,
+   creation, settings) use the nine-patch panel/button/field/bar
+   components or the walnut/bevel/brass palette drawing; bare navy
+   flat fills are the reduced-graphics fallback only. Layout pins
+   (32px rows, timings, content) are unchanged — this is a surface
+   treatment sweep, not a layout redesign.
+
    **The 64-canvas model-pass upgrade (amended 2026-11-04, user
    direction — hull tokens, icons and terrain tiles all move to
    64×64, with the model pass as the primary art pipeline and the
