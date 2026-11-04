@@ -54,12 +54,11 @@ var _buttons: Array[Button] = []
 func _ready() -> void:
 	visible = false
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
+	# §4.9 sweep (W4-B): panel chrome from the theme; the prompt is secondary
+	# text → the `Dim` variation. The title's 28px is the scene's own pin
+	# (`save_slot_dialog.tscn`).
 	_panel.custom_minimum_size.x = float(DIALOG_W)
-	for label in [_title, _prompt]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_prompt.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_title.add_theme_font_size_override("font_size", 28)
+	_prompt.theme_type_variation = "Dim"
 	_cancel_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_cancel_button.pressed.connect(cancel)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -235,9 +234,3 @@ func _nation_name(nation_id: String) -> String:
 	return I18n.t(nation.get("name", {}))
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style

@@ -23,6 +23,9 @@ const FleetLib := preload("res://scripts/fleet/fleet.gd")
 ## the sim's numbers; it never recomputes either formula.
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const ConfirmLib := preload("res://scenes/ui_shared/confirm_dialog.gd")
+## §4.9 icon registry (W4-B): fleet rows resolve the static-n hull token
+## `hull_{ship_type_id}_{owner}_n` through it; a miss keeps the text-only row.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 
 ## Group every open modal joins (docs/90-* §11).
 const MODAL_GROUP := "modal_overlay"
@@ -33,6 +36,8 @@ const BAR_H := 8.0
 ## Bar colour thresholds, the §4.8 GOOD/WARN/BAD placeholders (same as S6).
 const BAR_GOOD_ABOVE := 0.6
 const BAR_WARN_ABOVE := 0.25
+## Hull token cell (§4.8.8: tokens are 32×32, rendered 1× inline).
+const HULL_TOKEN_PX := 32
 
 ## Keys requested for the next `ui_strings.json` merge (the view must never
 ## print a raw "<key>", so each has a composed fallback below).
@@ -62,9 +67,11 @@ var _rebuilding := false
 
 
 func _ready() -> void:
-	_summary.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_mode_note.add_theme_color_override("font_color", PaletteLib.WARN)
-	_ships_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	# §4.9 sweep (W4-B): header/highlight ink rides `modulate` (WHITE leaves
+	# the theme's TEXT untouched); the at-sea banner keeps its WARN tint.
+	_summary.modulate = PaletteLib.ACCENT
+	_mode_note.modulate = PaletteLib.WARN
+	_ships_header.modulate = PaletteLib.ACCENT
 	_confirm.confirmed.connect(_on_jettison_confirmed)
 	_confirm.cancelled.connect(_on_jettison_cancelled)
 
@@ -203,7 +210,6 @@ func _bind_totals() -> void:
 	var title_row := HBoxContainer.new()
 	title_row.name = "TitleRow"
 	title_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	title_row.add_theme_constant_override("separation", 12)
 	title_row.add_child(title)
 	var speed := _label(I18n.fmt("world.speed", {
 		"speed": SailingSimLib.speed_knots_text(),
@@ -216,7 +222,6 @@ func _bind_totals() -> void:
 	var supplies_row := HBoxContainer.new()
 	supplies_row.name = "Supplies"
 	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	supplies_row.add_theme_constant_override("separation", 12)
 	var crew := FleetLib.total_crew()
 	var days := SailingSimLib.fleet_supply_days()
 	for kind in FleetLib.SUPPLY_KINDS:
@@ -251,7 +256,6 @@ func _add_row(index: int, ship) -> void:
 	var widgets: Dictionary = {"index": index, "promote": null, "jettison": []}
 	var box := VBoxContainer.new()
 	box.name = "Ship_%d" % index
-	box.add_theme_constant_override("separation", 2)
 
 	var data: Dictionary = ship if ship is Dictionary else {}
 
@@ -259,7 +263,11 @@ func _add_row(index: int, ship) -> void:
 	var top := HBoxContainer.new()
 	top.name = "Top"
 	top.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	top.add_theme_constant_override("separation", 12)
+	# §4.8.9: list/roster rows use the static-n hull token; a registry miss
+	# keeps the text-only row (§4.9 icon params).
+	var token := _hull_token_icon(data)
+	if token != null:
+		top.add_child(token)
 	var name_label := _label(_ship_title(index, data), PaletteLib.TEXT)
 	name_label.name = "Name"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -283,11 +291,9 @@ func _add_row(index: int, ship) -> void:
 	# VBox of three named 32px lines: `DurabilityLine`, `CrewLine`, `SpeedLine`.
 	var stats := VBoxContainer.new()
 	stats.name = "Stats"
-	stats.add_theme_constant_override("separation", 0)
 	var durability_line := HBoxContainer.new()
 	durability_line.name = "DurabilityLine"
 	durability_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	durability_line.add_theme_constant_override("separation", 12)
 	var max_durability := FleetLib.ship_stat(data, "durability")
 	var durability := int(data.get("durability", 0))
 	var ratio := float(durability) / float(max_durability) if max_durability > 0 else 0.0
@@ -329,7 +335,6 @@ func _add_row(index: int, ship) -> void:
 	var crew_line := HBoxContainer.new()
 	crew_line.name = "CrewLine"
 	crew_line.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	crew_line.add_theme_constant_override("separation", 12)
 	var crew := _label(
 		I18n.fmt("fleet.stat.crew", {
 			"crew": int(data.get("crew", 0)),
@@ -376,7 +381,6 @@ func _add_row(index: int, ship) -> void:
 	var supplies_row := HBoxContainer.new()
 	supplies_row.name = "Supplies"
 	supplies_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	supplies_row.add_theme_constant_override("separation", 12)
 	for kind in FleetLib.SUPPLY_KINDS:
 		_add_stack(supplies_row, widgets, index, kind, str(kind), "", int(data.get(kind, 0)))
 	box.add_child(supplies_row)
@@ -402,7 +406,6 @@ func _add_row(index: int, ship) -> void:
 			var cargo_row := HBoxContainer.new()
 			cargo_row.name = "Cargo_%s" % str(good_id)
 			cargo_row.custom_minimum_size.y = float(PaletteLib.ROW_H)
-			cargo_row.add_theme_constant_override("separation", 12)
 			var good: Dictionary = DataLoader.get_good(str(good_id))
 			var good_name := I18n.t(good.get("name", {})) if not good.is_empty() \
 				else str(good_id)
@@ -654,9 +657,36 @@ func _reason_text(key: String) -> String:
 func _label(text: String, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
+	# §4.9 sweep: ink is the theme's TEXT; a non-TEXT palette color is a
+	# state tint and rides `modulate` (WHITE leaves the theme ink alone).
+	label.modulate = Color.WHITE if color == PaletteLib.TEXT else color
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
+
+
+## The row's hull token (W4-B, §4.8/§4.5.1): the static-n
+## `hull_{ship_type_id}_{owner}_n` sprite through the §4.9 registry —
+## owner guard-read per ship with the player fleet as the default (this view
+## renders only the player's fleet). A registry miss (the registry fills at
+## the W4 merges) returns null and the row keeps its text-only layout.
+func _hull_token_icon(ship: Dictionary) -> TextureRect:
+	var ship_type_id := str(ship.get("ship_type_id", ""))
+	if ship_type_id.is_empty():
+		return null
+	var owner_id := str(ship.get("owner_id", "player"))
+	var tex := UiKitLib.icon_texture(
+		"hull_%s_%s_n" % [ship_type_id, owner_id])
+	if tex == null:
+		return null
+	var icon := TextureRect.new()
+	icon.name = "HullToken"
+	icon.texture = tex
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.custom_minimum_size = Vector2(HULL_TOKEN_PX, HULL_TOKEN_PX)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return icon
 
 
 func _row_button(text: String) -> Button:

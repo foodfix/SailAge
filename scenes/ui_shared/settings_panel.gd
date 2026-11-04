@@ -183,19 +183,18 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_density_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_input_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_input_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_current_mode_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_current_mode_current.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_debug_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_debug_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_locale_row.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# §4.9 sweep (W4-B): the panel chrome is the theme's PanelContainer
+	# stylebox; row labels are secondary text → the theme's `Dim` variation;
+	# the live-value lines keep their ACCENT highlight through `modulate`.
+	# The title's 32px is the scene's own pin (`settings_panel.tscn`).
+	# NO new rows here (§3: settings keeps exactly the Phase-5/6 rows —
+	# audio is future work).
+	for label in [_density_label, _hint, _input_label, _current_mode_label,
+			_debug_label, _debug_hint]:
+		label.theme_type_variation = "Dim"
+	_current.modulate = PaletteLib.ACCENT
+	_input_current.modulate = PaletteLib.ACCENT
+	_current_mode_current.modulate = PaletteLib.ACCENT
 	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_close_button.pressed.connect(close)
 	_locale_button.pressed.connect(I18n.toggle_locale)
@@ -570,9 +569,3 @@ func _confirm_return_to_menu() -> void:
 
 # --- Helpers ----------------------------------------------------------------
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style

@@ -41,8 +41,9 @@ func _ready() -> void:
 	# screen with no message would be a bug, so the constructor paths are the
 	# only way in.
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_message.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# §4.9 sweep (W4-B): the panel chrome is the theme's PanelContainer
+	# stylebox and the message ink is the theme's TEXT — no per-screen
+	# styling left here.
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	# Wrapping needs a fixed text width; the panel is 480px with 16px margins.
 	_message.custom_minimum_size.x = float(PaletteLib.DIALOG_W - 2 * PaletteLib.MARGIN)
@@ -120,11 +121,3 @@ func _bind() -> void:
 func _on_locale_changed(_locale: String) -> void:
 	if not _source.is_empty():
 		_bind()
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style

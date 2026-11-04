@@ -96,12 +96,14 @@ var _detail_dismiss: Button = null
 
 
 func _ready() -> void:
-	_slots.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_mode_note.add_theme_color_override("font_color", PaletteLib.WARN)
-	_result.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	# §4.9 sweep (W4-B): highlight/warning ink rides `modulate`; secondary
+	# text (the empty-table lines) uses the theme's `Dim` variation.
+	_slots.modulate = PaletteLib.ACCENT
+	_mode_note.modulate = PaletteLib.WARN
+	_result.modulate = PaletteLib.ACCENT
 	_result.visible = false
-	_table_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_table_empty_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_table_empty.theme_type_variation = "Dim"
+	_table_empty_hint.theme_type_variation = "Dim"
 	_detail_back.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_detail_back.pressed.connect(_on_detail_back)
 	_attributes_toggle.pressed.connect(func() -> void: set_stat_mode(MODE_ATTRIBUTES))
@@ -243,8 +245,10 @@ func _bind_toggles() -> void:
 	for pair in [[MODE_ATTRIBUTES, _attributes_toggle],
 			[MODE_SKILLS, _skills_toggle]]:
 		var button: Button = pair[1]
-		button.add_theme_color_override("font_color",
-			PaletteLib.ACCENT if _stat_mode == str(pair[0]) else PaletteLib.TEXT)
+		# The active-toggle ACCENT mark rides `modulate` (§4.9 sweep); WHITE
+		# leaves the theme's Button ink untouched.
+		button.modulate = PaletteLib.ACCENT \
+			if _stat_mode == str(pair[0]) else Color.WHITE
 
 
 # --- The table --------------------------------------------------------------
@@ -285,7 +289,6 @@ func _build_table() -> void:
 func _add_table_header() -> void:
 	var header := HBoxContainer.new()
 	header.name = "Header"
-	header.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	_cell(header, I18n.t_key("intel.officers.name"), COL_NAME_W, PaletteLib.ACCENT)
 	header.get_child(0).name = "NameHeader"
 	_cell(header, I18n.t_key("officer.post.idle").rstrip(" ·"), COL_POST_W,
@@ -334,7 +337,6 @@ func _build_row(officer_id: String, officer: Dictionary) -> Control:
 	var line := HBoxContainer.new()
 	line.name = "Line"
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.add_child(line)
 	row.gui_input.connect(_on_row_gui_input.bind(officer_id))
@@ -404,16 +406,27 @@ func _stat_desc(key: String) -> String:
 
 
 ## One table cell: a 13px label with a fixed width (the §4.8 sizing grid).
+## §4.9 sweep: the pinned cell size rides `LabelSettings`; a non-TEXT color
+## is a state tint via `modulate`.
 func _cell(parent: Container, text: String, width: float, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.custom_minimum_size.x = width
-	label.add_theme_color_override("font_color", color)
-	label.add_theme_font_size_override("font_size", CELL_FONT_SIZE)
+	label.label_settings = _cell_settings()
+	label.modulate = Color.WHITE if color == PaletteLib.TEXT else color
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(label)
 	return label
+
+
+## The pinned cell size (§4.8 sizing grid, 13px) as a per-label resource —
+## the theme stays the only styling path for colors/boxes (W4-B).
+static func _cell_settings() -> LabelSettings:
+	var settings := LabelSettings.new()
+	settings.font_size = CELL_FONT_SIZE
+	settings.font_color = PaletteLib.TEXT
+	return settings
 
 
 # --- The detail page --------------------------------------------------------
@@ -740,7 +753,9 @@ static func _t(key: String) -> String:
 func _label(text: String, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
+	# §4.9 sweep: ink is the theme's TEXT; a non-TEXT palette color is a
+	# state tint and rides `modulate`.
+	label.modulate = Color.WHITE if color == PaletteLib.TEXT else color
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
 
@@ -806,6 +821,7 @@ class AppointDialog:
 	const PaletteLib := preload("res://scripts/palette.gd")
 	const CharacterLib := preload("res://scripts/player/character.gd")
 	const SkillsLib := preload("res://scripts/player/skills.gd")
+	const UiKitLib := preload("res://scripts/ui_kit.gd")
 
 	## `FALLBACK_STRINGS` lives on the outer script; the dialog reads it
 	## through the view instance (inner classes cannot see outer consts).
@@ -831,30 +847,17 @@ class AppointDialog:
 		center.name = "Center"
 		center.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(center)
-		_panel = PanelContainer.new()
+		# §4.9 sweep (W4-B): the panel is the kit's `frame` atom — titled
+		# PanelContainer with the 16px-margin body (the atom carries the
+		# margins the old hand-built MarginContainer set). `frame.meta["body"]`
+		# is the kit's documented body accessor; the header is the frame's
+		# first row (the kit builds header → margin → body).
+		_panel = UiKitLib.frame("char.action.appoint")
 		_panel.name = "Panel"
 		_panel.custom_minimum_size = Vector2(720, 0)
-		var style := StyleBoxFlat.new()
-		style.bg_color = PaletteLib.PANEL_BG
-		style.border_color = PaletteLib.PANEL_LINE
-		style.set_border_width_all(2)
-		_panel.add_theme_stylebox_override("panel", style)
+		_title = (_panel.get_child(0) as Container).get_child(0) as Label
 		center.add_child(_panel)
-		var margin := MarginContainer.new()
-		margin.name = "Margin"
-		for side in ["margin_left", "margin_top", "margin_right",
-				"margin_bottom"]:
-			margin.add_theme_constant_override(side, PaletteLib.MARGIN)
-		_panel.add_child(margin)
-		var body := VBoxContainer.new()
-		body.name = "Body"
-		body.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		margin.add_child(body)
-		_title = Label.new()
-		_title.name = "Title"
-		_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-		_title.add_theme_font_size_override("font_size", 20)
-		body.add_child(_title)
+		var body: VBoxContainer = _panel.get_meta(UiKitLib.META_BODY)
 		var scroll := ScrollContainer.new()
 		scroll.name = "Scroll"
 		scroll.custom_minimum_size = Vector2(0, 360)
@@ -863,18 +866,13 @@ class AppointDialog:
 		_rows_box = VBoxContainer.new()
 		_rows_box.name = "Rows"
 		_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_rows_box.add_theme_constant_override("separation", 4)
 		scroll.add_child(_rows_box)
-		var footer := HBoxContainer.new()
-		footer.name = "Footer"
-		footer.alignment = BoxContainer.ALIGNMENT_END
-		body.add_child(footer)
 		_close = Button.new()
 		_close.name = "Close"
 		_close.text = I18n.t_key("ui.close")
 		_close.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 		_close.pressed.connect(close)
-		footer.add_child(_close)
+		body.add_child(UiKitLib.footer([_close]))
 
 	func open(id: String) -> void:
 		_officer_id = id
@@ -950,20 +948,21 @@ class AppointDialog:
 			post_id: String, ship_id: String) -> void:
 		var row := HBoxContainer.new()
 		row.name = "PostRow_%s_%s" % [post_id, ship_id]
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 		var reason := _blocked_reason(id, post_id, ship_id, prereq)
 		var text := Label.new()
 		text.name = "Label"
 		text.text = _t(label_key) \
 			+ (" · %s" % ship_id if not ship_id.is_empty() else "")
-		text.add_theme_color_override("font_color",
-			PaletteLib.TEXT if reason.is_empty() else PaletteLib.PANEL_LINE)
+		# §4.9 sweep: blocked rows read as secondary text (the theme's `Dim`
+		# variation); appointable rows keep the theme's TEXT ink.
+		if not reason.is_empty():
+			text.theme_type_variation = "Dim"
 		text.custom_minimum_size.x = 260.0
 		row.add_child(text)
 		var reason_label := Label.new()
 		reason_label.name = "Reason"
 		reason_label.text = reason
-		reason_label.add_theme_color_override("font_color", PaletteLib.WARN)
+		reason_label.modulate = PaletteLib.WARN
 		reason_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(reason_label)
 		var button := Button.new()
