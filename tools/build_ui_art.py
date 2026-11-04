@@ -88,7 +88,8 @@ ENGINE = ROOT / "tools" / "yoyopixel" / "render.js"
 MANIFESTS = ROOT / "tools" / "ui_art"
 SHIP_TYPES = ROOT / "data" / "ship_types.json"
 NODE_PIN = "v24.16.0"  # docs/IMPLEMENT-Phase10.md correction 10 (§8.8: >= pin; we refuse drift like fixture_check.py)
-CLASS_DIRS = ["chrome", "fx", "hulls", "icons", "portraits", "terrain"]  # sorted walk order (§4.8.1)
+CLASS_DIRS = ["chrome", "fx", "hulls", "icons", "markers", "portraits",
+              "terrain"]  # sorted walk order (§4.8.1; markers = A.4 follow-up)
 TOKENS_DIR = "assets/ui/tokens"
 STAGING = "build/ui_art_staging"  # transient, removed after every run
 
@@ -907,6 +908,7 @@ def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
 
     for cls, label in (("chrome", "CHROME TILES + NINE-PATCH SHEETS"),
                        ("icons", "SEMANTIC ICONS"),
+                       ("markers", "WORLD MARKERS (A.4)"),
                        ("terrain", "TERRAIN + SHORE"),
                        ("fx", "FX FRAMES"),
                        ("portraits", "PORTRAIT SHEETS")):
