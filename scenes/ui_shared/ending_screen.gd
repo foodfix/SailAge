@@ -28,7 +28,7 @@ const RPG_NEMESIS_SLOTS := 3
 ## A veteran needs ≥ 90 sea-days served (docs/70-* §4.7).
 const RPG_VETERAN_SEA_DAYS := 90
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _panel: PanelContainer = $Center/Panel
 @onready var _title: Label = $Center/Panel/Margin/Body/Title
 @onready var _subtitle: Label = $Center/Panel/Margin/Body/Subtitle
@@ -43,7 +43,6 @@ var summary: Dictionary = {}
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# §4.9 sweep (W4-B): the panel chrome is the theme's PanelContainer
 	# stylebox (the scene's local stylebox resource is gone); the subtitle is
 	# secondary text → the `Dim` variation. The title's 32px is the

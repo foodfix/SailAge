@@ -22,7 +22,7 @@ const CREATION_SCENE := "res://scenes/title/creation_screen.tscn"
 const NATIONS_PER_ROW := 3
 const CARD_SIZE := Vector2(360, 208)
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _title: Label = $Layout/Header/Title
 @onready var _prompt: Label = $Layout/Header/Prompt
 @onready var _grid: GridContainer = $Layout/Cards
@@ -48,7 +48,6 @@ var route_sink: Callable = Callable()
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# §4.9: secondary text reads through the theme's `Dim` variation; the
 	# title renders the theme's default Label (TEXT). No per-screen overrides.
 	_prompt.theme_type_variation = "Dim"

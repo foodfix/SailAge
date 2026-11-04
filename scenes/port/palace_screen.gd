@@ -113,7 +113,7 @@ signal title_granted_here(nation_id: String, rank: String)
 signal retired_here
 signal tournament_started(round_number: int)
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _hud: Control = get_node_or_null("HUD")
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _rep: Label = $Layout/VBox/Header/Rep
@@ -180,7 +180,6 @@ var last_inform_text: String = ""
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the palace too.
 	GameOverHostLib.attach_to(self)

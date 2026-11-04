@@ -50,7 +50,7 @@ signal back_requested
 signal quest_accepted(instance: Dictionary)
 signal discovery_reported(block: Dictionary)
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _hud: Control = get_node_or_null("HUD")
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _gold: Label = $Layout/VBox/Header/Gold
@@ -74,7 +74,6 @@ var _reports: Array = []
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the guild too.
 	GameOverHostLib.attach_to(self)

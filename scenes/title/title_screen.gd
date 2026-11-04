@@ -32,7 +32,7 @@ const SANDBOX_SCENE := "res://scenes/combat/battle_sandbox.tscn"
 ## density lives here, not on S2).
 const SettingsPanelLib := preload("res://scenes/ui_shared/settings_panel.gd")
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _stack: VBoxContainer = $Center/Stack
 @onready var _title: Label = $Center/Stack/GameTitle
 @onready var _subtitle: Label = $Center/Stack/Subtitle
@@ -67,7 +67,6 @@ func _ready() -> void:
 	# map ONCE — icons, tokens, terrain/shore, FX and portrait sheets resolve
 	# from here on (headless-safe: missing dirs/files skip silently).
 	TextureRegistryLib.ensure_registered()
-	_background.color = PaletteLib.PANEL_BG
 	# §4.9 Label row: the secondary lines read through the theme's `Dim`
 	# variation (PANEL_LINE) — no per-screen color overrides remain here.
 	_subtitle.theme_type_variation = "Dim"

@@ -65,7 +65,7 @@ signal message_shown(key: String)
 ## Emitted right before the S8 → S4 route.
 signal left_inn
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _hud: Control = $HUD
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _morale_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Morale
@@ -98,7 +98,6 @@ var _captain_rows: Array = []
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): rest rolls ledger days
 	# while this screen is up — the game-over screen must rise over the inn too.
 	GameOverHostLib.attach_to(self)

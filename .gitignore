@@ -23,3 +23,7 @@ __pycache__/
 
 # thenoise/ComfyUI raw model output — never committed (90-* §9.2)
 tools/ui_art/model_raw/
+
+# skin-sweep review captures: engine-import sidecars on review rasters are
+# tool artifacts, never committed (same rule as /tools/contact_sheet.png.import)
+/art_review/*.import

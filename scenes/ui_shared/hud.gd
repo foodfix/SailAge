@@ -57,6 +57,9 @@ const IntelWindowLib := preload("res://scenes/ui_shared/intel_window.gd")
 ## wind/current arrow sprites) and the §4.7.17 toast-fade constants.
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const UiMotionLib := preload("res://scripts/ui_motion.gd")
+## §4.8 Skin coverage (amended 2026-11-05): the texture-mode seam the
+## minimap frame reads (walnut+gold frame vs the navy fallback frame).
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
 
 ## docs/80-* §4.5 / §20-* §4.12: the minimap box is 256×192 px showing a
 ## **wrap-aware 128×96-tile crop** around the fleet at 2 px/tile.
@@ -201,8 +204,11 @@ var _calendar_displayed: Dictionary = {"year": 0, "month": 0}
 
 
 func _ready() -> void:
-	_top_bar.color = PaletteLib.PANEL_BG
-	_bottom_bar.color = PaletteLib.PANEL_BG
+	# §4.8 Skin coverage (amended 2026-11-05): the status bars render the
+	# walnut band vocabulary at bar scale (texture mode) or the pinned navy
+	# flat fills (reduced-graphics fallback) — `UiKit.route_band`.
+	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
+	UiKitLib.route_band(_bottom_bar, UiKitLib.BAND_EDGE_TOP)
 	# §4.9: label ink is the theme's (Label = TEXT); no per-screen overrides.
 	# The minimap caption is secondary text → the theme's `Dim` variation.
 	_minimap_title.theme_type_variation = "Dim"
@@ -859,6 +865,17 @@ static func _compass_bearing(dir_id: String) -> float:
 	return float(index) * 45.0
 
 
+## The minimap frame (§4.8 Skin coverage, amended 2026-11-05): navy
+## `PANEL_LINE` in the reduced-graphics fallback; dark walnut outline plus an
+## ACCENT gold hairline just inside it in texture mode.
+func _draw_minimap_frame(rect: Rect2) -> void:
+	if UiThemeLib.texture_mode():
+		draw_rect(rect, PaletteLib.PANEL_WOOD_LO, false, 2.0)
+		draw_rect(rect.grow(-2.0), PaletteLib.ACCENT, false, 1.0)
+	else:
+		draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
+
+
 ## Draws one placeholder compass arrow — the registry-miss fallback (§4.8.10:
 ## the sprites replace it when `wind_arrow_`/`current_arrow_{dir}` resolve):
 ## a shaft with a V head pointing along the 8-dir id's bearing.
@@ -1123,7 +1140,7 @@ func _draw() -> void:
 	var rect := Rect2(_minimap.position, _minimap.size)
 	draw_rect(rect, PaletteLib.PANEL_BG, true)
 	if _minimap_texture == null:
-		draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
+		_draw_minimap_frame(rect)
 		return
 	# 1 screen pixel per image pixel: the image already is 2 px/tile.
 	draw_texture_rect(_minimap_texture, rect, false)
@@ -1149,7 +1166,10 @@ func _draw() -> void:
 		* float(MINIMAP_PX_PER_TILE)
 	draw_rect(Rect2(rect.position + centre, dot), Color.WHITE, true)
 
-	draw_rect(rect, PaletteLib.PANEL_LINE, false, 2.0)
+	# §4.8 Skin coverage: the sea chart wears the skin frame (see
+	# [_draw_minimap_frame]; the fog fill itself stays the pinned `PANEL_BG`,
+	# the Chart-identical rule).
+	_draw_minimap_frame(rect)
 
 	# Phase-6 §2.9 arrows + Phase-10 sprite swap (§4.8.10): the HUD arrows
 	# use the `wind_arrow_{dir}` / `current_arrow_{dir}` registry ids (lower

@@ -114,7 +114,7 @@ signal sailed
 ## locale change, state change).
 signal rebound
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _hud: Control = $HUD
 @onready var _port_name: Label = $Layout/VBox/Header/TitleRow/PortName
 @onready var _nation_swatch: ColorRect = $Layout/VBox/Header/TitleRow/NationSwatch
@@ -154,7 +154,6 @@ var _rows_signature: String = ""
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the hub too.
 	GameOverHostLib.attach_to(self)

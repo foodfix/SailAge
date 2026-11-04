@@ -375,7 +375,7 @@ var _formation_icon: TextureRect = null
 ## `WaterLayer` builder; flat sea tiles under the S3-shared shader material).
 var _water_layer: TileMapLayer = null
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _top_bar: ColorRect = $TopBar
 @onready var _bottom_panel: ColorRect = $BottomPanel
 @onready var _title: Label = $TopRow/Title
@@ -1547,9 +1547,13 @@ func _style() -> void:
 	# PanelContainer chrome); the two semantic inks are the ledgered theme
 	# variations — Dim (= PANEL_LINE) for the top-bar weather readout,
 	# Accent for the ‖vel‖ readout. Per-screen font sizes retired.
-	_background.color = PaletteLib.PANEL_BG
-	_top_bar.color = PaletteLib.PANEL_BG
-	_bottom_panel.color = PaletteLib.PANEL_BG
+	# §4.8 Skin coverage (amended 2026-11-05): the top bar and the 96px
+	# bottom panel render the walnut band vocabulary at bar scale
+	# (`UiKit.route_band`); the full-screen Background is a theme-styled
+	# Panel (nine-patch walnut, navy flat fallback). The pinned navy fills
+	# remain the reduced-graphics fallback.
+	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
+	UiKitLib.route_band(_bottom_panel, UiKitLib.BAND_EDGE_TOP)
 	_weather.theme_type_variation = "Dim"
 	_speed.theme_type_variation = "Accent"
 	# The log lines' 11px ink is load-bearing for the §4.7.1 96px bottom bar
