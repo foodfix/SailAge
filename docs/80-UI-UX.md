@@ -1986,6 +1986,27 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      are drift-free by construction; the flipped light direction on
      mirrored pairs is an accepted trade (UW2 does the same). The
      deterministic fallback keeps its 8 authored maps unchanged.
+
+     **Terrain blob program (amended 2026-11-05, user direction — the
+     48-tile auto-tile standard):** terrain transitions adopt the
+     Standard 48-Tile Auto-Tile Set per terrain PAIR (center 1,
+     single edges 4, outer corners 4, inner corners 4, mixed
+     edges/corners/strips/endpoints 37, base 1). Pairs, in layering
+     priority order (higher kind draws its transition tiles over the
+     lower): hills-over-land, mountains-over-land, ice-over-land,
+     ice-over-sea, reef-over-sea — sea↔land keeps the §6.6 shore
+     foam system. Art: the context-sheet method at **3×3
+     neighborhoods** (each patch shows the center tile with its
+     exact 8-neighbour context; crop the centre 64px) — 25 patches
+     per 1024 sheet, 2 sheets per pair, ~20 `/edit` calls total;
+     crops write back into `tools/ui_art/terrain/` manifests as
+     committed tool-owned artifacts; uniform fill/base tiles get a
+     torus blend at the snap grid. Runtime: `map_loader` gains a
+     256→48 blob-mask LUT (per cell, 8-neighbour same-kind bits,
+     priority-ordered pairs) driving per-pair overlay atlases; the
+     LUT is pinned in the terrain suite. The current 8-context
+     probe sheets stand as method validation, superseded by this
+     set.
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
