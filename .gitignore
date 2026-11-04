@@ -20,3 +20,6 @@ __pycache__/
 /data/maps/*.import
 /tools/contact_sheet.png.import
 /tools/yoyopixel/**/*.import
+
+# thenoise/ComfyUI raw model output — never committed (90-* §9.2)
+tools/ui_art/model_raw/
