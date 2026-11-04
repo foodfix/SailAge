@@ -10,11 +10,13 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    mirror_y|mirror_xy}`` are produced from their base sprite's rendered PNG
    (rot_cw = 90° clockwise on screen: new(x, y) = old(y, H-1-x), index math
    self-verified against a fixture on every run).
-2. Owner remaps (hulls) — each authored hull map is baked into the 9 owner
-   variants (6 nations + player + neutral + pirate, docs/IMPLEMENT-Phase10.md
-   review-verified) by substituting exactly the three wood steps
-   (WOOD_HI/WOOD/WOOD_LO -> HULL_{owner}_HI/HULL_{owner}/HULL_{owner}_LO,
-   80-* §4.8.4 hull block; sails and HULL_INK are owner-invariant).
+2. Owner remap (hulls, §4.8.4 amended 2026-11-04 — the shared-hull pennant
+   scheme) — every owner draws the SAME authored map; the owner is encoded
+   ONLY by the masthead pennant: the authored maps carry the authoring-only
+   source hex ``#b3191f`` and the governor substitutes it with the owner's
+   ``PENNANT_*`` hex (player gold ``#d9a441`` = HULL_GOLD, nations = their
+   colors, neutral grey, pirate red; spain is the legal identity remap).
+   Wood/sail/ink and the t3 HULL_GOLD trim are owner-invariant.
 3. Auto-outline (tokens) — 1 px #101010 outline around the silhouette of
    hull + facility tokens (8-neighborhood); authored maps are outline-less.
 4. Seam-ring verification (terrain class) — variants of a terrain kind must
@@ -99,36 +101,45 @@ CLASS_DIRS = ["chrome", "fx", "hulls", "icons", "markers", "portraits",
 TOKENS_DIR = "assets/ui/tokens"
 STAGING = "build/ui_art_staging"  # transient, removed after every run
 
-# ---- hull palette block (80-* §4.8.4; scripts/palette.gd hull-block constants) ----
+# ---- hull palette block (80-* §4.8.4, amended 2026-11-04: the shared-hull
+# pennant scheme; scripts/palette.gd hull-block constants) ----
 
 HULL_INK = "#101010"          # HULL_INK — token outline, tool-applied
-WOOD_HI = "#8f6d3a"           # WOOD_HI — authored-neutral wood highlight
-WOOD = "#7a5c2e"              # WOOD — authored-neutral wood base
-WOOD_LO = "#5e4720"           # WOOD_LO — authored-neutral wood shadow
+WOOD_HI = "#8f6d3a"           # WOOD_HI — shared wood highlight (owner-invariant)
+WOOD = "#7a5c2e"              # WOOD — shared wood base (owner-invariant)
+WOOD_LO = "#5e4720"           # WOOD_LO — shared wood shadow (owner-invariant)
 SAIL_HI = "#f7f5ee"           # SAIL_HI
 SAIL = "#e8e6df"              # SAIL (= TEXT)
 SAIL_LO = "#c2beb2"           # SAIL_LO
-# owner ramp triples (HI, BASE, LO) — §4.8.4 owner table (values = palette.gd
-# HULL_{OWNER}[_HI|_LO]; owner bases == nations.json colors + player TEXT,
-# neutral #9a9a9a, pirate #b3341f)
-OWNER_RAMPS = {
-    "player":   ("#ffffff", "#e8e6df", "#a7a6a1"),
-    "portugal": ("#21af62", "#1a8c4e", "#136538"),
-    "spain":    ("#e01f27", "#b3191f", "#811216"),
-    "england":  ("#315eb3", "#274b8f", "#1c3667"),
-    "holland":  ("#ff9a26", "#d97b1e", "#9c5916"),
-    "ottoman":  ("#854cc1", "#6a3d9a", "#4c2c6f"),
-    "italy":    ("#fbcb31", "#c9a227", "#91751c"),
-    "neutral":  ("#c1c1c1", "#9a9a9a", "#6f6f6f"),
-    "pirate":   ("#e04127", "#b3341f", "#812516"),
+HULL_GOLD = "#d9a441"         # HULL_GOLD — t3 trim line; player pennant value
+# pennant remap (§4.8.4 amended): the authored maps carry the authoring-only
+# SOURCE hex at every masthead pennant; the governor substitutes it with the
+# owner's PENNANT_* hex — the ONLY owner-variant pixel.  Wood/sail/ink (and
+# the t3 gold) are owner-invariant.  Spain is an identity remap (its pennant
+# value equals the source hex).
+PENNANT_SOURCE = "#b3191f"
+PENNANTS = {
+    "player":   "#d9a441",   # PENNANT_PLAYER (= HULL_GOLD)
+    "portugal": "#1a8c4e",   # PENNANT_PORTUGAL
+    "spain":    "#b3191f",   # PENNANT_SPAIN (identity remap of the source)
+    "england":  "#274b8f",   # PENNANT_ENGLAND
+    "holland":  "#d97b1e",   # PENNANT_HOLLAND
+    "ottoman":  "#6a3d9a",   # PENNANT_OTTOMAN
+    "italy":    "#c9a227",   # PENNANT_ITALY
+    "neutral":  "#9a9a9a",   # PENNANT_NEUTRAL
+    "pirate":   "#b3341f",   # PENNANT_PIRATE
 }
 OWNER_ORDER = ["player", "portugal", "spain", "england", "holland",
                "ottoman", "italy", "neutral", "pirate"]
 HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in
-         {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO}
-         | {c for ramp in OWNER_RAMPS.values() for c in ramp}}
-HULL_BLOCK = set(HEXES)  # membership audit set (33 distinct values, §4.8.4)
-REMAP_SOURCES = (WOOD_HI, WOOD, WOOD_LO)
+         {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO, HULL_GOLD,
+          PENNANT_SOURCE}
+         | set(PENNANTS.values())}
+# shipped-pixel membership audit set — the amended hull block exactly (16
+# distinct values: ink, wood ×3, sail ×3, gold, 9 pennants; the retired
+# owner-ramp hexes are no longer allowed in shipped hull pixels, §4.8.4)
+HULL_BLOCK = {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO,
+              HULL_GOLD} | set(PENNANTS.values())
 
 # footprint bands (80-* §4.8.7 final values, ship_types.tier partition 4/8/4)
 FOOTPRINT_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
@@ -371,15 +382,18 @@ def apply_outline(w, h, px, ink_rgba):
     return out
 
 
-def apply_remap(w, h, px, table):
-    """Exact hex substitution (sources -> targets); returns leftover check."""
+def apply_remap(w, h, px, table, watch=frozenset()):
+    """Exact hex substitution (sources -> targets).  A source whose target is
+    a DIFFERENT hex must never survive the substitution (identity remaps are
+    legal — e.g. the pennant source for spain) — such survivors are reported
+    in `leftovers`."""
     out, leftovers = [], set()
     for p in px:
         hexv = "#%02x%02x%02x" % p[:3]
         q = (table[hexv] + (p[3],)) if hexv in table else p
         out.append(q)
         qh = "#%02x%02x%02x" % q[:3]
-        if qh in REMAP_SOURCES:
+        if qh in watch:
             leftovers.add(qh)
     return out, leftovers
 
@@ -545,12 +559,13 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
     if bands != FOOTPRINT_BANDS:
         fail(f"hulls.json: footprint bands {bands} != pinned §4.8.7 {FOOTPRINT_BANDS}")
     if rig is not None:
-        remap = rig.get("remap", {})
-        if remap.get("sources") != {"HI": WOOD_HI, "BASE": WOOD, "LO": WOOD_LO}:
-            fail("rig.json: remap sources drift from the pinned wood steps")
-        for owner, t in remap.get("targets", {}).items():
-            if tuple(t[k] for k in ("HI", "BASE", "LO")) != OWNER_RAMPS[owner]:
-                fail(f"rig.json: remap target for {owner} drifts from §4.8.4")
+        pennants = rig.get("pennants", {})
+        if pennants.get("source") != PENNANT_SOURCE:
+            fail("rig.json: pennant source drifts from the pinned authored "
+                 "source hex (§4.8.4 amended)")
+        if pennants.get("targets") != PENNANTS:
+            fail("rig.json: pennant targets drift from the §4.8.4 amended "
+                 "owner table")
 
     ship_types = json.loads(SHIP_TYPES.read_text())
     roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
@@ -654,14 +669,26 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
             (ship, tier, side[0], side[1], (lo, hi)))
 
         for owner in OWNER_ORDER:
-            table = {s: HEXES[t] for s, t in
-                     zip(REMAP_SOURCES, OWNER_RAMPS[owner])}
+            # Pennant remap (§4.8.4 amended): the ONLY owner-variant pixel —
+            # wood/sail/ink/gold pass through untouched; spain's remap is the
+            # legal identity (its pennant value equals the source hex).
+            table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
+            watch = frozenset(s for s, t in table.items()
+                              if "#%02x%02x%02x" % t[:3] != s)
             for d in DIR_ORDER:
                 w, h, px = staged[d]
-                out, leftovers = apply_remap(w, h, px, table)
+                out, leftovers = apply_remap(w, h, px, table, watch)
                 if leftovers:
-                    fail(f"hull {ship}/{owner}/{d}: wood hexes survived the remap: {sorted(leftovers)}")
+                    fail(f"hull {ship}/{owner}/{d}: the pennant source hex "
+                         f"survived the remap: {sorted(leftovers)}")
                 colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
+                if shape == "uw2" and PENNANTS[owner] not in colors:
+                    fail(f"hull {ship}/{owner}/{d}: the owner pennant hex "
+                         f"{PENNANTS[owner]} is missing — every variant of "
+                         "an amended-shape hull must carry its remapped "
+                         "masthead pennant (§8.8 item 6, pennant remap "
+                         "coverage; legacy-shape docs are exempt pending "
+                         "re-authoring)")
                 off = sorted(c for c in colors if c not in HULL_BLOCK)
                 if off:
                     fail(f"hull {ship}/{owner}/{d}: hexes outside the hull block (§4.8.4): {off}")

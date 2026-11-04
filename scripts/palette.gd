@@ -120,10 +120,14 @@ const FLAG_OTTOMAN := Color("#6a3d9a")
 const FLAG_ITALY := Color("#c9a227")
 
 # --- Hull block (docs/80-UI-UX.md §4.8) -------------------------------------
-# Authored-neutral map is wood + sail + ink; owner variants derive via remap
-# tables from it — only the 3 wood steps remap (sail and ink are
-# owner-invariant). Owner ramp rule per §4.8: HI = per-channel
-# round(min(ch × 1.25, 255)), LO = per-channel round(ch × 0.72).
+# Amended 2026-11-04 (the shared-hull pennant scheme): every owner draws the
+# SAME authored map in the shared wood/sail/ink palette below; the owner is
+# encoded ONLY by the masthead pennant (the authored source hex #b3191f
+# remaps to the owner's PENNANT_* hex — see the appended block at the end of
+# this section).  The per-owner HI/BASE/LO ramps that follow are retired
+# pipeline history and stay pinned (append-only).
+# Historical ramp rule (retired): HI = per-channel round(min(ch × 1.25, 255)),
+# LO = per-channel round(ch × 0.72).
 
 ## Token outline (all owners, tool-applied 1px).
 const HULL_INK := Color("#101010")
@@ -194,6 +198,36 @@ const HULL_PIRATE_HI := Color("#e04127")
 const HULL_PIRATE := Color("#b3341f")
 ## Pirate hull ramp — shadow.
 const HULL_PIRATE_LO := Color("#812516")
+
+# Amended §4.8 hull block (2026-11-04, user direction — the shared-hull
+# pennant scheme): every owner draws the SAME authored map in the shared
+# wood/sail/ink palette; the owner is encoded ONLY by the masthead pennant
+# (the authored maps carry the authoring-only source hex #b3191f and the
+# tool remaps it to the owner's PENNANT_* hex).  Wood/sail/ink are
+# owner-invariant — the owner ramps above are retired from the pipeline and
+# stay as pinned history (append-only: never delete or rename).
+
+## Tier-3 trim line (1px sheer/taffrail, gilded-warship look); doubles as
+## the player pennant value.
+const HULL_GOLD := Color("#d9a441")
+## Masthead pennant, player (= HULL_GOLD).
+const PENNANT_PLAYER := Color("#d9a441")
+## Masthead pennant, portugal.
+const PENNANT_PORTUGAL := Color("#1a8c4e")
+## Masthead pennant, spain (= the authored source hex value).
+const PENNANT_SPAIN := Color("#b3191f")
+## Masthead pennant, england.
+const PENNANT_ENGLAND := Color("#274b8f")
+## Masthead pennant, holland.
+const PENNANT_HOLLAND := Color("#d97b1e")
+## Masthead pennant, ottoman.
+const PENNANT_OTTOMAN := Color("#6a3d9a")
+## Masthead pennant, italy.
+const PENNANT_ITALY := Color("#c9a227")
+## Masthead pennant, neutral.
+const PENNANT_NEUTRAL := Color("#9a9a9a")
+## Masthead pennant, pirate.
+const PENNANT_PIRATE := Color("#b3341f")
 
 # --- FX block (docs/80-UI-UX.md §4.8) ---------------------------------------
 

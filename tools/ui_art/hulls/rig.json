@@ -3,36 +3,33 @@
  "class": "hulls",
  "doc": "Hull rig fragment/style library — decision 9.2 'style lives in the tool' (docs/IMPLEMENT-Phase10.md). This file pins the fragment vocabulary the authored maps were drawn with, the shared palette keys, the tier bands and the per-hull rig table, so a style fix is a data edit + rebuild, never a PNG hand-edit. Shading rule everywhere: light from NW (80-* §4.8.2) — NW-facing edges take the HI step, SE-facing the LO step; silhouette-first, readable at 1:1; authored maps are outline-less (the governor applies the 1px #101010 token outline).",
  "palette_keys": {
-  "_doc": "chars used by every authored string-map; hexes = the §4.8.4 hull block (scripts/palette.gd hull-block constants). Block membership is per-class: hull tokens + facility tokens check against the hull block only.",
-  "H": { "hex": "#8f6d3a", "constant": "WOOD_HI",          "use": "wood highlight (NW rim, castle decks)" },
-  "W": { "hex": "#7a5c2e", "constant": "WOOD",             "use": "wood base (hull body, counters, boards)" },
-  "L": { "hex": "#5e4720", "constant": "WOOD_LO",          "use": "wood shadow (SE rim), oar blades" },
-  "s": { "hex": "#f7f5ee", "constant": "SAIL_HI",          "use": "sail highlight (top/port edge)" },
+  "_doc": "chars used by every authored string-map; hexes = the §4.8.4 hull block, amended 2026-11-04 (scripts/palette.gd hull-block constants). Block membership is per-class: hull tokens + facility tokens check against the hull block only; hull DOCS are exempt while carrying the pennant source hex (an authoring-only intermediate).",
+  "H": { "hex": "#8f6d3a", "constant": "WOOD_HI",          "use": "wood highlight (NW rim, castle decks; owner-invariant)" },
+  "W": { "hex": "#7a5c2e", "constant": "WOOD",             "use": "wood base (hull body, counters, boards; owner-invariant)" },
+  "L": { "hex": "#5e4720", "constant": "WOOD_LO",          "use": "wood shadow (SE rim), plank seams, facility stone shadow (palace)" },
+  "s": { "hex": "#f7f5ee", "constant": "SAIL_HI",          "use": "sail highlight (top/port edge), facility stone highlight (palace)" },
   "S": { "hex": "#e8e6df", "constant": "SAIL",             "use": "sail base" },
   "z": { "hex": "#c2beb2", "constant": "SAIL_LO",          "use": "sail shadow (bottom/starboard edge, battens)" },
-  "K": { "hex": "#101010", "constant": "HULL_INK",         "use": "masts, yards, keel/deck line, sign brackets (owner-invariant like the sails)" },
-  "G": { "hex": "#c1c1c1", "constant": "HULL_NEUTRAL_HI",  "use": "stone highlight (facility tokens only)" },
-  "g": { "hex": "#9a9a9a", "constant": "HULL_NEUTRAL",     "use": "stone base (facility tokens only)" },
-  "d": { "hex": "#6f6f6f", "constant": "HULL_NEUTRAL_LO",  "use": "stone shadow (facility tokens only)" },
-  "w": { "hex": "#ffffff", "constant": "HULL_PLAYER_HI",   "use": "specular glint (facility tokens only)" }
+  "K": { "hex": "#101010", "constant": "HULL_INK",         "use": "gunports, gallery windows, rigging stays (owner-invariant like the sails)" },
+  "g": { "hex": "#9a9a9a", "constant": "HULL_NEUTRAL",     "use": "stone base (facility tokens only)" }
  },
- "remap": {
-  "_doc": "owner variants substitute ONLY the three wood steps; sails and ink are owner-invariant (§4.8.4 hull block: 'only the 3 wood steps remap'). Sources here are the authored values; targets are the 9 owner triples (§4.8.4 table, mirrored in scripts/palette.gd).",
-  "sources": { "HI": "#8f6d3a", "BASE": "#7a5c2e", "LO": "#5e4720" },
+ "pennants": {
+  "_doc": "amended §4.8.4 hull block — the shared-hull pennant scheme: the authored maps draw the SOURCE hex at every masthead pennant; the governor remaps it to the owner's pennant (the only owner-variant pixel). Wood/sail/ink and the t3 HULL_GOLD trim are owner-invariant; spain is the legal identity remap. The retired owner HI/BASE/LO ramps are gone from the pipeline (their palette.gd constants remain, append-only history).",
+  "source": "#b3191f",
   "targets": {
-   "player":   { "HI": "#ffffff", "BASE": "#e8e6df", "LO": "#a7a6a1" },
-   "portugal": { "HI": "#21af62", "BASE": "#1a8c4e", "LO": "#136538" },
-   "spain":    { "HI": "#e01f27", "BASE": "#b3191f", "LO": "#811216" },
-   "england":  { "HI": "#315eb3", "BASE": "#274b8f", "LO": "#1c3667" },
-   "holland":  { "HI": "#ff9a26", "BASE": "#d97b1e", "LO": "#9c5916" },
-   "ottoman":  { "HI": "#854cc1", "BASE": "#6a3d9a", "LO": "#4c2c6f" },
-   "italy":    { "HI": "#fbcb31", "BASE": "#c9a227", "LO": "#91751c" },
-   "neutral":  { "HI": "#c1c1c1", "BASE": "#9a9a9a", "LO": "#6f6f6f" },
-   "pirate":   { "HI": "#e04127", "BASE": "#b3341f", "LO": "#812516" }
+   "player":   "#d9a441",
+   "portugal": "#1a8c4e",
+   "spain":    "#b3191f",
+   "england":  "#274b8f",
+   "holland":  "#d97b1e",
+   "ottoman":  "#6a3d9a",
+   "italy":    "#c9a227",
+   "neutral":  "#9a9a9a",
+   "pirate":   "#b3341f"
   }
  },
  "tier_bands": {
-  "_doc": "long-axis px on the 32x32 canvas (§4.8.7 final values; validator checks the n token, the canonical orientation lists/rosters use)",
+  "_doc": "long-axis px on the side view e/w (§4.8.7 final values, amended 2026-11-04: the profile shows the ship's length; n/s/diagonals are beam/3/4 views, canvas-fit only)",
   "1": [14, 18],
   "2": [20, 26],
   "3": [26, 30]
@@ -57,7 +54,7 @@
   "beak": { "rule": "galleon bow profile rises as t^1.7 — a beaked entry within the same length" }
  },
  "footprint_semantics": {
-  "long_axis": "n-token opaque bbox max dimension on the final outlined file (rotations/mirrors preserve bbox max, so this covers the whole 8-dir family)",
+  "long_axis": "side-view (e/w) opaque bbox x-extent on the final outlined file — all eight directions are authored maps now, so the band is measured where the ship's length actually shows (§4.8.7 amendment)",
   "note": "the ne map is the honest 45° rotation of the n ship; its bbox max under-reads the physical length by ~1/√2, so it is canvas-fit checked (≤30 px) but not banded — pinning this reading here so the governor, the manifests and group 13 measure the same thing"
  },
  "hulls": {
