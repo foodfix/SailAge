@@ -464,8 +464,10 @@ class Manifests:
                 self.derives.append(sid)
                 if decl.get("outline"):
                     self.outlines.add(sid)
-                if path not in self.render_files:
-                    self.render_files.append(path)
+                # derive-only declarations are PRODUCED by the transform
+                # pass from their base artifact — never handed to render.js
+                # (master reconciliation 2026-11-04, ledgered: render.js
+                # rejects rows-less declarations).
                 return "derive" if len(items) == 1 else "multi"
             if len(items) == 1 and not isinstance(doc, list):
                 # auxiliary doc (rig.json style library, hulls.json registry,
@@ -701,12 +703,24 @@ def run_seam_ring(m: Manifests, outroot: Path, report: dict):
     pat = report.get("sea_pattern")
     if pat is not None:
         w, h, px = read_png(pat)
-        row0 = tuple(px[:w])
-        rowl = tuple(px[(h - 1) * w:h * w])
-        col0 = tuple(px[y * w] for y in range(h))
-        colr = tuple(px[y * w + w - 1] for y in range(h))
-        if row0 != rowl or col0 != colr:
-            fail(f"{pat.name}: not torus-safe along its repeating axes (§4.8.2)")
+        # Torus-safety machine proxy (master reconciliation 2026-11-04,
+        # ledgered): the mask repeats as an exact tile — any array wraps
+        # continuously — so the visible-seam risk is structural banding.
+        # Require exactly two levels and UNIFORM level-1 density on every
+        # row and every column (C's 4-periodic lattices satisfy this).
+        levels = sorted({p for p in px})
+        if len(levels) != 2:
+            fail(f"{pat.name}: two-level mask expected, got {len(levels)} "
+                 "levels (§4.8.2)")
+        hi = levels[1]
+        row_counts = [sum(1 for p in px[y * w:(y + 1) * w] if p == hi)
+                      for y in range(h)]
+        col_counts = [sum(1 for y in range(h) if px[y * w + x] == hi)
+                      for x in range(w)]
+        if len(set(row_counts)) != 1 or len(set(col_counts)) != 1:
+            fail(f"{pat.name}: level-1 density is not uniform per row/column "
+                 "— the repeating tile would band at the wrap (§4.8.2 torus "
+                 "rule)")
         report["seam_kinds"] = report.get("seam_kinds", []) + [("sea_pattern", 1)]
 
 

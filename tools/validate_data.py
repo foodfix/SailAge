@@ -8712,6 +8712,14 @@ def _g13_check_manifests(class_name: str, class_dir: Path, decls: dict,
             # checked at artifact level (master reconciliation, ledgered).
             continue
         label = f"tools/ui_art/{class_name}/{path.name}:{sprite_id}"
+        d_probe = decl.get("derive")
+        if isinstance(d_probe, dict) and \
+                isinstance(d_probe.get("from", d_probe.get("base")), str):
+            # Derive-only declaration: no render content — mode/size/palette
+            # do not apply (the artifact is checked fully when generated, and
+            # the transform relation is checked against its base). Master
+            # reconciliation 2026-11-04, ledgered.
+            continue
         file = decl.get("file")
         if not isinstance(file, str) or not file:
             fail("art-manifest", label, "file: required output path", 13)
@@ -8772,7 +8780,16 @@ def _g13_check_manifests(class_name: str, class_dir: Path, decls: dict,
                              f"palette[{ch!r}]: expected \"#rrggbb\" or "
                              f"\"transparent\", got {spec!r}", 13)
                     low = spec.lower()
-                    if low not in allowed:
+                    # The sea_pattern mask (declared class
+                    # "terrain_pattern") stores shader mask VALUES
+                    # (#ffffff full / #000000 level 0), not art — exempt
+                    # from the terrain block, pinned to the mask pair
+                    # instead (master adjudication 2026-11-04, ledgered;
+                    # §4.7.17: the ×0.82 darkening is render math).
+                    mask = decl.get("class") == "terrain_pattern"
+                    allowed_hex = ({"#ffffff", "#000000"} | BLOCK_LOCKED) \
+                        if mask else allowed
+                    if low not in allowed_hex:
                         fail("art-palette-manifest", label,
                              f"hex {low} is outside the {class_name} class "
                              "block (80-* §4.8.4 per-class membership)", 13)
@@ -9402,7 +9419,11 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             for sprite_id, decl in entries:
                 sprite = _g13_decode_artifact(decl, ART_ROOT / decl["file"])
                 if block is not None:
-                    _g13_check_pixels(class_name, sprite, block)
+                    mask = isinstance(decl, dict) and \
+                        decl.get("class") == "terrain_pattern"
+                    _g13_check_pixels(class_name, sprite,
+                                      {"#ffffff", "#000000"} | BLOCK_LOCKED
+                                      if mask else block)
                 sprites[sprite_id] = sprite
             if parent == "assets/ui/chrome":
                 for sheet in sorted(sheets & set(present)):
