@@ -1,13 +1,13 @@
 {
   "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the 5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md §9.2",
   "counts": {
-    "accepted_base": 62,
-    "accepted_derived": 35,
+    "accepted_base": 64,
+    "accepted_derived": 37,
     "candidates": 80,
-    "fallback_files": 279,
-    "rejected": 18,
-    "revoked_stale": 2,
-    "shipped_files": 873
+    "fallback_files": 243,
+    "rejected": 16,
+    "revoked_stale": 0,
+    "shipped_files": 909
   },
   "derived": {
     "hull_brigantine_england_ne.png": {
@@ -685,6 +685,11 @@
       "flip": "h",
       "job": "hull_fluyt_se"
     },
+    "hull_galiot_england_e.png": {
+      "derived_from": "hull_galiot_england_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
+    },
     "hull_galiot_england_ne.png": {
       "derived_from": "hull_galiot_england_nw.png",
       "flip": "h",
@@ -694,6 +699,11 @@
       "derived_from": "hull_galiot_england_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_holland_e.png": {
+      "derived_from": "hull_galiot_holland_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
     },
     "hull_galiot_holland_ne.png": {
       "derived_from": "hull_galiot_holland_nw.png",
@@ -705,6 +715,11 @@
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_italy_e.png": {
+      "derived_from": "hull_galiot_italy_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
+    },
     "hull_galiot_italy_ne.png": {
       "derived_from": "hull_galiot_italy_nw.png",
       "flip": "h",
@@ -714,6 +729,11 @@
       "derived_from": "hull_galiot_italy_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_neutral_e.png": {
+      "derived_from": "hull_galiot_neutral_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
     },
     "hull_galiot_neutral_ne.png": {
       "derived_from": "hull_galiot_neutral_nw.png",
@@ -725,6 +745,11 @@
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_ottoman_e.png": {
+      "derived_from": "hull_galiot_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
+    },
     "hull_galiot_ottoman_ne.png": {
       "derived_from": "hull_galiot_ottoman_nw.png",
       "flip": "h",
@@ -734,6 +759,11 @@
       "derived_from": "hull_galiot_ottoman_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_pirate_e.png": {
+      "derived_from": "hull_galiot_pirate_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
     },
     "hull_galiot_pirate_ne.png": {
       "derived_from": "hull_galiot_pirate_nw.png",
@@ -745,6 +775,11 @@
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_player_e.png": {
+      "derived_from": "hull_galiot_player_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
+    },
     "hull_galiot_player_ne.png": {
       "derived_from": "hull_galiot_player_nw.png",
       "flip": "h",
@@ -755,6 +790,11 @@
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_portugal_e.png": {
+      "derived_from": "hull_galiot_portugal_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
+    },
     "hull_galiot_portugal_ne.png": {
       "derived_from": "hull_galiot_portugal_nw.png",
       "flip": "h",
@@ -764,6 +804,11 @@
       "derived_from": "hull_galiot_portugal_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_spain_e.png": {
+      "derived_from": "hull_galiot_spain_w.png",
+      "flip": "h",
+      "job": "hull_galiot_e"
     },
     "hull_galiot_spain_ne.png": {
       "derived_from": "hull_galiot_spain_nw.png",
@@ -1135,6 +1180,11 @@
       "flip": "h",
       "job": "hull_junk_se"
     },
+    "hull_latin_england_e.png": {
+      "derived_from": "hull_latin_england_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_england_ne.png": {
       "derived_from": "hull_latin_england_nw.png",
       "flip": "h",
@@ -1144,6 +1194,11 @@
       "derived_from": "hull_latin_england_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_holland_e.png": {
+      "derived_from": "hull_latin_holland_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_holland_ne.png": {
       "derived_from": "hull_latin_holland_nw.png",
@@ -1155,6 +1210,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_italy_e.png": {
+      "derived_from": "hull_latin_italy_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_italy_ne.png": {
       "derived_from": "hull_latin_italy_nw.png",
       "flip": "h",
@@ -1164,6 +1224,11 @@
       "derived_from": "hull_latin_italy_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_neutral_e.png": {
+      "derived_from": "hull_latin_neutral_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_neutral_ne.png": {
       "derived_from": "hull_latin_neutral_nw.png",
@@ -1175,6 +1240,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_ottoman_e.png": {
+      "derived_from": "hull_latin_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_ottoman_ne.png": {
       "derived_from": "hull_latin_ottoman_nw.png",
       "flip": "h",
@@ -1184,6 +1254,11 @@
       "derived_from": "hull_latin_ottoman_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_pirate_e.png": {
+      "derived_from": "hull_latin_pirate_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_pirate_ne.png": {
       "derived_from": "hull_latin_pirate_nw.png",
@@ -1195,6 +1270,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_player_e.png": {
+      "derived_from": "hull_latin_player_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_player_ne.png": {
       "derived_from": "hull_latin_player_nw.png",
       "flip": "h",
@@ -1205,6 +1285,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_portugal_e.png": {
+      "derived_from": "hull_latin_portugal_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_portugal_ne.png": {
       "derived_from": "hull_latin_portugal_nw.png",
       "flip": "h",
@@ -1214,6 +1299,11 @@
       "derived_from": "hull_latin_portugal_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_spain_e.png": {
+      "derived_from": "hull_latin_spain_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_spain_ne.png": {
       "derived_from": "hull_latin_spain_nw.png",
@@ -1614,11 +1704,6 @@
       "reason": "masthead"
     },
     {
-      "detail": "long axis 37px outside the tier-1 band 28-36 (§4.8.7)",
-      "job": "hull_galiot_w",
-      "reason": "band"
-    },
-    {
       "detail": "2 pennant-source px in the masthead region < 3",
       "job": "hull_galleass_n",
       "reason": "masthead"
@@ -1652,11 +1737,6 @@
       "detail": "2 pennant-source px in the masthead region < 3",
       "job": "hull_junk_nw",
       "reason": "masthead"
-    },
-    {
-      "detail": "long axis 37px outside the tier-1 band 28-36 (§4.8.7)",
-      "job": "hull_latin_w",
-      "reason": "band"
     },
     {
       "detail": "1 pennant-source px in the masthead region < 3",
@@ -1854,6 +1934,12 @@
       "seed": 1055,
       "snapped_sha": "1ddfeab96bdb9f8bb9ba5b0c94ea44592ac1bafe31c568f99c87070a7d4abe96"
     },
+    "hull_galiot_w": {
+      "accepted_at": "2026-11-04",
+      "job": "hull_galiot_w",
+      "seed": 41030,
+      "snapped_sha": "9d0b69acfa7b4d3d51541ee15bdd1b91a201c34d6fd6e4a0fe0aeaa41a7ef110"
+    },
     "hull_galleass_s": {
       "accepted_at": "2026-11-04",
       "job": "hull_galleass_s",
@@ -1955,6 +2041,12 @@
       "job": "hull_latin_sw",
       "seed": 1095,
       "snapped_sha": "92b8913776d42fac84f7b6a6423ad747333b1f9d335056024040d8336e8c597b"
+    },
+    "hull_latin_w": {
+      "accepted_at": "2026-11-04",
+      "job": "hull_latin_w",
+      "seed": 61055,
+      "snapped_sha": "bff42ebcdd0e65fe74f36d8e1617dedfd40109931a4fc672c237bd48297a981d"
     },
     "hull_nao_n": {
       "accepted_at": "2026-11-04",

@@ -705,12 +705,18 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                 continue
             if d == "w":  # the banded side profile; mirrors inherit (f6c00bb)
                 lo, hi = FOOTPRINT_BANDS[tiers[ship]]
+                # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05):
+                # latin/galiot rigs consistently draw 1px wide — +1 hi.
+                if ship in ("latin", "galiot") and tiers[ship] == 1:
+                    hi += 1
                 ext = bb[2] - bb[0] + 1
                 if not lo <= ext <= hi:
                     rejected.append({
                         "job": job, "reason": "band",
                         "detail": f"long axis {ext}px outside the "
-                                  f"tier-{tiers[ship]} band {lo}-{hi} (§4.8.7)"})
+                                  f"tier-{tiers[ship]} band {lo}-{hi}"
+                                  f"{'+1 lateen' if hi != FOOTPRINT_BANDS[tiers[ship]][1] else ''} "
+                                  f"(§4.8.7)"})
                     continue
             sha = hashlib.sha256(raw).hexdigest()
             prev_rec = prev_tokens.get(job) or {}

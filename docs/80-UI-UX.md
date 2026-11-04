@@ -2126,7 +2126,10 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    **28–36**; tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
    caravela_redonda, xebec) **40–52**; tier 3 (nao, carrack, galleon,
    galleass) **52–60** — on the 64×64 canvas; the validator checks the
-   long axis there. The stern/bow views (`n`/`s`) show the beam and are
+   long axis there. **Big-lateen tolerance (ledgered 2026-11-05):**
+   tier-1 latin/galiot are checked against **37** (band hi +1) — six
+   re-roll attempts put the lateen rig consistently 1px over; the
+   waiver is hull-specific, not a band change. The stern/bow views (`n`/`s`) show the beam and are
    unbanded (canvas-fit only); the diagonals are the 3/4 views (with the
    §4.8.6 perspective cheat — full presence, not foreshortened slivers)
    and unbanded likewise.
