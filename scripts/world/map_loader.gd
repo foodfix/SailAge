@@ -1003,7 +1003,7 @@ func _terrain_kind_image(kind: String, variant: int, fallback: Color) -> Image:
 	var texture := UiKitLib.icon_texture(
 		"terrain_%s_%d" % [kind, variant])
 	if texture != null:
-		var pixels := texture.get_image()
+		var pixels := WaterLayerLib._to_rgba8(texture.get_image())
 		if pixels != null:
 			image.blit_rect(pixels, Rect2i(0, 0, tile_size_px, tile_size_px),
 				Vector2i.ZERO)
@@ -1032,26 +1032,30 @@ func _ensure_shore_tile_set() -> void:
 		if UiKitLib.icon_texture(SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1]) \
 				!= null:
 			resolved.append(code)
+	# Compose the atlas FULLY before the texture is created — the same
+	# compose-then-create pattern as `_ensure_tile_set` and the water builder
+	# (a create-empty + `ImageTexture.update` round-trip reads back empty
+	# through `get_image()` and is the one pattern the sibling builders
+	# avoid).
 	var image := Image.create_empty(
 		maxi(resolved.size(), 1) * tile_size_px, tile_size_px, false,
 		Image.FORMAT_RGBA8)
-	var source := TileSetAtlasSource.new()
-	var texture := ImageTexture.create_from_image(image)
-	source.texture = texture
-	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
 	_shore_columns = {}
 	for column in resolved.size():
 		var code := int(resolved[column])
 		var pixels: Texture2D = UiKitLib.icon_texture(
 			SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1])
-		var strip := pixels.get_image()
+		var strip := WaterLayerLib._to_rgba8(pixels.get_image())
 		if strip == null:
 			continue
 		image.blit_rect(strip, Rect2i(0, 0, tile_size_px, tile_size_px),
 			Vector2i(column * tile_size_px, 0))
-		source.create_tile(Vector2i(column, 0))
 		_shore_columns[code] = column
-	texture.update(image)
+	var source := TileSetAtlasSource.new()
+	source.texture = ImageTexture.create_from_image(image)
+	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
+	for code in _shore_columns:
+		source.create_tile(Vector2i(int(_shore_columns[code]), 0))
 	_shore_tile_set = TileSet.new()
 	_shore_tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
 	_shore_source_id = _shore_tile_set.add_source(source)
