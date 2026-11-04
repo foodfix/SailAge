@@ -129,6 +129,15 @@ COLOR_BUDGET_32 = 20  # §4.8.3: 32x32 -> 12-20 cap
 CANVAS = 32
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
+
+
+def derive_base_of(spec: dict) -> str | None:
+    """The derive source id — "from" (hulls/arrows scheme) or "base"
+    (terrain/shore scheme); master reconciliation 2026-11-04, ledgered."""
+    v = spec.get("from")
+    if v is None:
+        v = spec.get("base")
+    return v
 # pinned heading8->dir derivation table (80-* §4.8.6; also pinned in
 # tools/ui_art/hulls/hulls.json + every authored/*.json — drift is a FAIL)
 PINNED_DERIVE = {
@@ -143,7 +152,7 @@ DIR_ORDER = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]  # §4.8.6 bucket order
 
 # nine-patch assembly spec (A.1 of IMPLEMENT-Phase10.md; step 5 above)
 NINEPATCH_SETS = ("panel", "button", "button_focus", "field")
-BAR_PARTS = ("cap_left", "cap_right", "line")
+BAR_PARTS = ("left", "right", "line")  # A.1 chrome ids: bar_left/bar_right/bar_line (master reconciliation)
 SHEET = 48   # 16px margins -> exactly one 16px middle tile (§4.8.8)
 TILE = 16
 
@@ -432,7 +441,7 @@ class Manifests:
             has_render = "rows" in decl or "grid" in decl
             d = decl.get("derive")
             is_derive = (isinstance(d, dict) and d.get("op") in DERIVE_OPS
-                         and isinstance(d.get("from"), str) and "file" in decl)
+                         and isinstance(derive_base_of(d), str) and "file" in decl)
             if has_render and is_derive:
                 fail(f"{path}: {sid!r} cannot carry both render content and 'derive'")
             if has_render:
@@ -521,7 +530,7 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
     for d, spec in derive.items():
         if d.startswith("_"):
             continue
-        if PINNED_DERIVE.get(d) != (spec.get("from"), spec.get("op")):
+        if PINNED_DERIVE.get(d) != (derive_base_of(spec), spec.get("op")):
             fail(f"hulls.json: derive['{d}'] drifts from the pinned heading8 table (§4.8.6)")
     if set(pinned) != set(PINNED_DERIVE):
         fail("hulls.json: derive table incomplete vs pinned §4.8.6 table")
@@ -560,7 +569,7 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
             dp.write_text(json.dumps(decl))
             decl_paths.append(dp)
         deriv = doc.get("derive")
-        got = {e.get("dir"): (e.get("from"), e.get("op")) for e in (deriv or [])}
+        got = {e.get("dir"): (derive_base_of(e), e.get("op")) for e in (deriv or [])}
         if got != PINNED_DERIVE:
             fail(f"{path}: derive table {got} != pinned §4.8.6 table")
 
@@ -572,16 +581,22 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
         tier = int(doc["tier"])
         lo, hi = FOOTPRINT_BANDS[tier]
         staged = {}
+        raw = {}  # unoutlined pixels per dir — derivations must source RAW
+        # pixels, never the outlined staging files (master reconciliation
+        # 2026-11-04, ledgered: outline-before-derive broke §8.8 item 5
+        # relations because outline(staging) was re-read as a derive base
+        # depending on DIR_ORDER).
+        for d in ("n", "ne"):
+            w, h, px = read_png(staging / f"{ship}.{d}.png")
+            raw[d] = (w, h, px)
         for d in DIR_ORDER:
-            base = "n" if d in ("n", "e", "s", "w") else "ne"
-            if d in ("n", "ne"):
-                w, h, px = read_png(staging / f"{ship}.{d}.png")
+            if d in raw:
+                w, h, px = raw[d]
             else:
                 src_d, op = PINNED_DERIVE[d]
-                w, h, bpx = read_png(staging / f"{ship}.{src_d}.png")
+                w, h, bpx = raw[src_d]
                 w, h, px = _transform(w, h, bpx, op)
-                write_png(staging / f"{ship}.{d}.png", w, h, px)
-                counts["derived"] += 1
+                raw[d] = (w, h, px)
             px = apply_outline(w, h, px, ink)
             write_png(staging / f"{ship}.{d}.png", w, h, px)
             counts["outlined"] += 1
@@ -637,9 +652,9 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict):
         if d is None:
             w, h, px = read_png(outroot / decl["file"])
         else:
-            if d["from"] not in m.renders:
+            if derive_base_of(d) not in m.renders:
                 fail(f"derive {sid!r}: base id {d['from']!r} not found in any manifest")
-            w, h, bpx = pixels_of(d["from"], seen + (sid,))
+            w, h, bpx = pixels_of(derive_base_of(d), seen + (sid,))
             w, h, px = _transform(w, h, bpx, d["op"])
             write_png(outroot / decl["file"], w, h, px)
             counts["derived"] += 1
@@ -759,14 +774,14 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
         # bar sheet: caps at the far ends of the horizontal midline band
         # (rows 16..31), line tile tiled between — the kit's value_bar
         # samples this 48x16 band (step 5 comment in the docstring).
-        blit(caps["cap_left"], 0, TILE)
+        blit(caps["left"], 0, TILE)
         blit(caps["line"], TILE, TILE, repeat_to=SHEET - 2 * TILE)
-        blit(caps["cap_right"], SHEET - TILE, TILE)
+        blit(caps["right"], SHEET - TILE, TILE)
         write_png(outroot / "assets/ui/chrome/ninepatch_bar.png", SHEET, SHEET, sheet)
         made += 1
     elif NINEPATCH_SETS and made:
         report.setdefault("ninepatch_notes", []).append(
-            "bar: tiles missing (expected chrome bar_{cap_left,cap_right,line}.png)")
+            "bar: tiles missing (expected chrome bar_{left,right,line}.png)")
     return f"{made} sheets"
 
 

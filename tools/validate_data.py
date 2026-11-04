@@ -8373,6 +8373,11 @@ G13_CAP_16 = 12
 G13_CAP_32 = 20
 G13_CAP_48 = 25
 
+# Aux authoring docs that live inside class dirs but are inputs, not render
+# declarations (master reconciliation 2026-11-04, ledgered): the hull rig
+# library + authoring index (slot B) and the portrait anchors (slot D).
+G13_AUX_DOCS = frozenset({"rig.json", "hulls.json", "anchors.json"})
+
 
 def _g13_cap(width: int, height: int) -> int:
     side = max(width, height)
@@ -8632,7 +8637,11 @@ def _g13_load_class(class_dir: Path) -> dict:
     """Parse one class's manifests (render.js tolerance: one object, an
     array, or {"sprites": [...]})."""
     decls: dict[str, tuple[dict, Path]] = {}
-    paths = sorted(class_dir.glob("*.json"))
+    paths = sorted(class_dir.rglob("*.json"))
+    # Aux authoring docs (rig library, per-hull authoring index, portrait
+    # anchors) are inputs, not render declarations — master reconciliation
+    # 2026-11-04, ledgered (B/D own them; the governor skips them too).
+    paths = [p for p in paths if p.name not in G13_AUX_DOCS]
     if not paths:
         fail("art-manifest", str(class_dir),
              "manifest dir holds no .json declarations (a class dir exists, "
@@ -8696,6 +8705,12 @@ def _g13_check_manifests(class_name: str, class_dir: Path, decls: dict,
     seen_files: dict[str, str] = {}
     allowed = block | BLOCK_LOCKED
     for sprite_id, (decl, path) in sorted(decls.items()):
+        if isinstance(decl, dict) and (decl.get("maps")
+                                       or decl.get("id") == "hulls-registry"):
+            # Hull authoring doc / registry: no direct artifact — the wood
+            # intermediate is never shipped; the expanded owner grid is
+            # checked at artifact level (master reconciliation, ledgered).
+            continue
         label = f"tools/ui_art/{class_name}/{path.name}:{sprite_id}"
         file = decl.get("file")
         if not isinstance(file, str) or not file:
@@ -8851,10 +8866,12 @@ def _g13_check_relations(class_name: str, decls: dict,
     """§8.8 item 5: every derived sprite is the pixel-exact transform of its
     authored base (transparent/opaque pattern compared)."""
     for sprite_id, (decl, _path) in sorted(decls.items()):
-        derive = decl.get("derive")
-        if not derive:
+        derive = decl.get("derive") if isinstance(decl, dict) else None
+        if not isinstance(derive, dict):
             continue
-        base_id = derive["from"]
+        base_id = derive.get("from", derive.get("base"))
+        if not isinstance(base_id, str):
+            continue
         if sprite_id not in sprites or base_id not in sprites:
             continue  # staged: both artifacts required for the relation
         got = sprites[sprite_id].rows_hash()
@@ -8922,21 +8939,76 @@ def _g13_ring_pixels(sprite: _G13Sprite) -> list:
 
 
 def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
-    """§8.8 item 6: the full 16x9x8 grid (+ facility tokens) declared."""
+    """§8.8 item 6: the full 16x9x8 grid (+ facility tokens) declared —
+    either as 1 158 per-id declarations, or via slot B's hull-doc registry
+    shape (authored n/ne maps + the six pinned derive ops per hull; the
+    governor expands owners × dirs onto assets/ui/tokens/). Master
+    reconciliation 2026-11-04, ledgered."""
     owners = [n["id"] for n in nations] + list(G13_TOKEN_OWNERS_EXTRA)
-    expected = set(G13_FACILITY_TOKENS)
-    for ship in ship_types:
-        for owner in owners:
-            for dir_id in G13_DIR_IDS:
-                expected.add(f"hull_{ship['id']}_{owner}_{dir_id}")
-    got = set(decls)
-    if got != expected:
-        missing = sorted(expected - got)[:6]
-        extra = sorted(got - expected)[:6]
+    fac_got = {sid for sid in decls if sid.startswith("facility_")}
+    if fac_got != set(G13_FACILITY_TOKENS):
         fail("hull-inventory", "tools/ui_art/hulls/",
-             f"declared ids != the ship_types × owners × dirs grid + "
-             f"facility tokens (missing {missing}…, extra {extra}…; "
-             "§8.8 item 6)", 13)
+             f"facility tokens declared {sorted(fac_got)[:6]}… != the pinned "
+             f"{sorted(G13_FACILITY_TOKENS)}", 13)
+    registry = None
+    docs: dict[str, tuple[dict, Path]] = {}
+    for sid, (decl, path) in decls.items():
+        if not isinstance(decl, dict):
+            continue
+        if decl.get("maps") and decl.get("ship_type"):
+            docs[decl["ship_type"]] = (decl, path)
+    registry_path = Path("tools/ui_art/hulls/hulls.json")
+    if registry_path.is_file():
+        try:
+            registry = (json.loads(registry_path.read_text()), registry_path)
+        except (OSError, ValueError) as exc:
+            fail("hull-inventory", str(registry_path),
+                 f"cannot parse the hull registry: {exc}", 13)
+    if registry is None:
+        # Per-id shape: the literal §8.8 grid declared directly.
+        expected = set()
+        for ship in ship_types:
+            for owner in owners:
+                for dir_id in G13_DIR_IDS:
+                    expected.add(f"hull_{ship['id']}_{owner}_{dir_id}")
+        got = set(decls) - set(G13_FACILITY_TOKENS)
+        if got != expected:
+            missing = sorted(expected - got)[:6]
+            extra = sorted(got - expected)[:6]
+            fail("hull-inventory", "tools/ui_art/hulls/",
+                 f"declared ids != the ship_types × owners × dirs grid "
+                 f"(missing {missing}…, extra {extra}…; §8.8 item 6)", 13)
+        return
+    rdoc, rpath = registry
+    if set(rdoc.get("owners") or []) != set(owners):
+        fail("hull-inventory", str(rpath),
+             "registry owners != nations ∪ {player, neutral, pirate} "
+             "(§8.8 item 6)", 13)
+    if rdoc.get("path_template") != \
+            "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png":
+        fail("hull-inventory", str(rpath),
+             "registry path_template != the pinned hull token path", 13)
+    ship_ids = {s["id"] for s in ship_types}
+    if set(docs) != ship_ids:
+        fail("hull-inventory", "tools/ui_art/hulls/authored/",
+             f"hull docs != ship_types (missing "
+             f"{sorted(ship_ids - set(docs))[:6]}…, extra "
+             f"{sorted(set(docs) - ship_ids)[:6]}…)", 13)
+    pin = {("e", "n", "rot_cw"), ("s", "n", "rot_180"),
+           ("w", "n", "rot_ccw"), ("nw", "ne", "mirror_x"),
+           ("se", "ne", "mirror_y"), ("sw", "ne", "rot_180")}
+    for ship_id, (doc, path) in sorted(docs.items()):
+        maps = doc.get("maps") or {}
+        if set(maps) != {"n", "ne"}:
+            fail("hull-doc", path.name, f"{ship_id}: authored maps must be "
+                 "exactly n + ne (A.3: 2 authored maps per hull)", 13)
+        got = set()
+        for entry in doc.get("derive") or []:
+            base = entry.get("from", entry.get("base"))
+            got.add((entry.get("dir"), base, entry.get("op")))
+        if got != pin:
+            fail("hull-doc", path.name, f"{ship_id}: derive set != the "
+                 f"§4.8.6 pinned ops (got {sorted(got)[:6]}…)", 13)
 
 
 def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
@@ -9254,9 +9326,59 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
 
         # Artifacts: strict per-directory inventory once anything exists.
         declared: dict[str, list] = {}
-        for sprite_id, (decl, _path) in decls.items():
-            parent = str(Path(decl["file"]).parent)
-            declared.setdefault(parent, []).append((sprite_id, decl))
+        check_decls = dict(decls)
+        if class_name == "hulls":
+            # Registry shape: the artifact grid is the registry's
+            # path_template expanded over ship_types × owners × dirs, plus
+            # the facility declarations (master reconciliation, ledgered).
+            # Synthetic declarations carry the §4.8.6 derive provenance so
+            # the transform-relation check covers the derived 6/8 of each
+            # owner family.
+            rdecl = next((d for d, _p in decls.values()
+                          if isinstance(d, dict)
+                          and d.get("id") == "hulls-registry"), None)
+            tmpl = (rdecl or {}).get(
+                "path_template",
+                "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
+            entries_h: list = []
+            hull_pin = {"e": ("n", "rot_cw"), "s": ("n", "rot_180"),
+                        "w": ("n", "rot_ccw"), "nw": ("ne", "mirror_x"),
+                        "se": ("ne", "mirror_y"), "sw": ("ne", "rot_180")}
+            for ship in ship_types:
+                for nation in nations + [{"id": o} for o in
+                                         G13_TOKEN_OWNERS_EXTRA]:
+                    sid_n = f"hull_{ship['id']}_{nation['id']}_n"
+                    sid_ne = f"hull_{ship['id']}_{nation['id']}_ne"
+                    entries_h.append(
+                        (sid_n, {"id": sid_n, "width": 32, "height": 32,
+                                 "file": tmpl.format(
+                                     ship_type=ship["id"], owner=nation["id"],
+                                     dir="n")}))
+                    entries_h.append(
+                        (sid_ne, {"id": sid_ne, "width": 32, "height": 32,
+                                  "file": tmpl.format(
+                                      ship_type=ship["id"], owner=nation["id"],
+                                      dir="ne")}))
+                    for dir_id, (base_dir, op) in hull_pin.items():
+                        sid = f"hull_{ship['id']}_{nation['id']}_{dir_id}"
+                        entries_h.append(
+                            (sid, {"id": sid, "width": 32, "height": 32,
+                                   "file": tmpl.format(
+                                       ship_type=ship["id"],
+                                       owner=nation["id"], dir=dir_id),
+                                   "derive": {"from": (sid_n if base_dir == "n"
+                                                       else sid_ne),
+                                              "op": op}}))
+            for sid, (decl_c, _p) in decls.items():
+                if sid.startswith("facility_"):
+                    entries_h.append((sid, decl_c))
+            declared.setdefault("assets/ui/tokens", entries_h)
+            for sid, decl_c in entries_h:
+                check_decls.setdefault(sid, (decl_c, None))
+        else:
+            for sprite_id, (decl, _path) in decls.items():
+                parent = str(Path(decl["file"]).parent)
+                declared.setdefault(parent, []).append((sprite_id, decl))
         sprites: dict[str, _G13Sprite] = {}
         for parent, entries in sorted(declared.items()):
             dir_path = ART_ROOT / parent
@@ -9296,7 +9418,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                              "48x48 with 16px margins (§4.8.8)", 13)
         sprite_cache[class_name] = sprites
         if sprites:
-            _g13_check_relations(class_name, decls, sprites)
+            _g13_check_relations(class_name, check_decls, sprites)
             if class_name == "chrome":
                 _g13_check_chrome_seams(sprites)
             elif class_name == "terrain":
@@ -9536,7 +9658,9 @@ def _g13_run_probes() -> None:
             "mode": "string-map", "png": "indexed",
             "palette": flat, "rows": hull_rows,
         }
-        (hull_dir / "hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
+        # (not "hulls.json" — that name is the aux-doc registry, skipped by
+        # the loader; the probe fixture uses a plain declaration filename)
+        (hull_dir / "probe_hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
         _g13_write_rgba_png(hull_assets / "hull_sloop_player_n.png", 32, 32,
                             lambda x, y: (
                                 (232, 230, 223, 255)
