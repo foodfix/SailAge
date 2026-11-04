@@ -217,7 +217,9 @@ var _busy: bool = false
 
 
 func _ready() -> void:
-	$Background.color = PaletteLib.PANEL_BG
+	# §4.8 Skin coverage (amended 2026-11-05): the background is a
+	# theme-styled Panel — the nine-patch walnut frame in texture mode, the
+	# pinned navy flat panel in the reduced-graphics fallback. No paint call.
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the tavern too.
 	GameOverHostLib.attach_to(self)

@@ -51,6 +51,90 @@ static var _textures: Dictionary = {}
 # headless suites/boot never depend on Godot's global class cache).
 const PaletteLib := preload("res://scripts/palette.gd")
 const MotionLib := preload("res://scripts/ui_motion.gd")
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
+
+# --- §4.8 skin routing: chrome bands (amended 2026-11-05) ---------------------
+
+## Band inner-edge selectors for [method route_band]: the edge that faces the
+## content (a top bar's gold line sits at its bottom edge, a bottom bar's at
+## its top edge).
+const BAND_EDGE_TOP := 0
+const BAND_EDGE_BOTTOM := 1
+
+## Name prefix of the generated band-chrome strips (idempotent re-routing
+## replaces exactly these children).
+const SKIN_STRIP_PREFIX := "SkinStrip_"
+
+# --- Atom: chrome band routing (§4.8 Skin coverage, amended 2026-11-05) ------
+
+## Routes one chrome band — a HUD/chart/battle status-bar `ColorRect` —
+## through the §4.8 band vocabulary **at bar scale**: a 32/40px bar cannot
+## carry the 16px-margin nine-patch, so the band paints the sheet's frame
+## language with 1px anchor-tracked ColorRect strips — `PANEL_WOOD` fill,
+## `PANEL_WOOD_LO` dark outer edge, `PANEL_WOOD_HI` bevel line and an
+## `ACCENT` gold hairline flush with the inner (content-side) edge. Strips
+## anchor to the band's edges, so a window resize moves them with it; they
+## ignore the mouse (the band keeps its own click-swallowing filter).
+##
+## Reduced-graphics fallback: the band keeps the pinned `PANEL_BG` navy fill
+## and no strips — exactly the pre-sweep look (every flat-mode pin intact).
+## Idempotent: a previously routed band's strips are replaced.
+##
+## `gold_edge` is [constant BAND_EDGE_TOP] or [constant BAND_EDGE_BOTTOM] —
+## the band's content-facing edge.
+static func route_band(bar: ColorRect, gold_edge: int) -> void:
+	if bar == null:
+		push_error("UiKit.route_band: null band")
+		return
+	_clear_skin_strips(bar)
+	bar.color = UiThemeLib.surface_fill()
+	if not UiThemeLib.texture_mode():
+		return
+	var outer_edge := BAND_EDGE_BOTTOM if gold_edge == BAND_EDGE_TOP \
+		else BAND_EDGE_TOP
+	_skin_strip(bar, "Outer", PaletteLib.PANEL_WOOD_LO, outer_edge, 0)
+	_skin_strip(bar, "Bevel", PaletteLib.PANEL_WOOD_HI, gold_edge, 1)
+	_skin_strip(bar, "Gold", PaletteLib.ACCENT, gold_edge, 0)
+
+
+## Removes this kit's previously generated strips from `host` (idempotence).
+static func _clear_skin_strips(host: Control) -> void:
+	for child in host.get_children():
+		if child is Control and str(child.name).begins_with(SKIN_STRIP_PREFIX):
+			(child as Control).queue_free()
+
+
+## One 1px chrome strip: full-width along `host`, anchored `depth` pixels
+## inside `edge`. Left/right offsets track the host's width through the
+## 0/1 anchors; the strip is a plain ColorRect (mouse IGNORE).
+static func _skin_strip(host: Control, suffix: String, color: Color,
+		edge: int, depth: int) -> void:
+	var strip := ColorRect.new()
+	strip.name = "%s%s" % [SKIN_STRIP_PREFIX, suffix]
+	strip.color = color
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if edge == BAND_EDGE_BOTTOM:
+		strip.anchor_left = 0.0
+		strip.anchor_right = 1.0
+		strip.anchor_top = 1.0
+		strip.anchor_bottom = 1.0
+		strip.offset_left = 0
+		strip.offset_right = 0
+		strip.offset_top = -1 - depth
+		strip.offset_bottom = -depth
+	else:
+		strip.anchor_left = 0.0
+		strip.anchor_right = 1.0
+		strip.anchor_top = 0.0
+		strip.anchor_bottom = 0.0
+		strip.offset_left = 0
+		strip.offset_right = 0
+		strip.offset_top = depth
+		strip.offset_bottom = depth + 1
+	host.add_child(strip)
+	# Content always draws over the chrome strips.
+	host.move_child(strip, 0)
+
 
 # --- Atom: button -----------------------------------------------------------
 

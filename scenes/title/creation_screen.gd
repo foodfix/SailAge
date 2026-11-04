@@ -100,7 +100,7 @@ var _skill_header: Label = null
 var _spend_hint: Label = null
 var _preview_labels: Dictionary = {}
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _title: Label = $Layout/Header/Title
 @onready var _prompt: Label = $Layout/Header/Prompt
 @onready var _step_background: GridContainer = $Layout/StepBackground
@@ -110,7 +110,6 @@ var _preview_labels: Dictionary = {}
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# §4.9: the prompt line reads through the theme's `Dim` variation; the
 	# title renders the theme's default Label (TEXT). No per-screen overrides.
 	_prompt.theme_type_variation = "Dim"

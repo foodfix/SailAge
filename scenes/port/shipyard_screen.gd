@@ -126,7 +126,7 @@ var _normalizing_points := false
 ## Set while [method rebuild] runs so `fleet_changed` cannot re-enter it.
 var _rebuilding := false
 
-@onready var _background: ColorRect = $Background
+@onready var _background: Panel = $Background
 @onready var _hud: Control = $HUD
 @onready var _title: Label = $Layout/VBox/Header/Title
 @onready var _gold_label: Label = $Layout/VBox/Header/Gold
@@ -141,7 +141,6 @@ var _rebuilding := false
 
 
 func _ready() -> void:
-	_background.color = PaletteLib.PANEL_BG
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the shipyard too.
 	GameOverHostLib.attach_to(self)

@@ -71,6 +71,10 @@ extends Control
 ## written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## §4.8 Skin coverage (amended 2026-11-05): the chart bars route through the
+## shared kit's band vocabulary (the no-per-screen-styling channel, §4.9).
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
 const ChartViewLib := preload("res://scripts/world/chart_view.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -286,8 +290,12 @@ func _ready() -> void:
 	# an opaque full-rect *child* ColorRect would render above everything the
 	# root draws and mask the whole map (the z-order rule that shipped the
 	# chart blind — see the scene's node order).
-	_top_bar.color = PaletteLib.PANEL_BG
-	_bottom_bar.color = PaletteLib.PANEL_BG
+	# §4.8 Skin coverage (amended 2026-11-05): the chart's top/bottom bars
+	# render the walnut band vocabulary at bar scale (`UiKit.route_band`) —
+	# the pinned navy fills remain the reduced-graphics fallback. The map
+	# canvas itself is painted by the root [_draw] (chart-content pins).
+	UiKitLib.route_band(_top_bar, UiKitLib.BAND_EDGE_BOTTOM)
+	UiKitLib.route_band(_bottom_bar, UiKitLib.BAND_EDGE_TOP)
 	# Phase-10 sweep: the debug panel/title/legend chrome retired to the
 	# theme (§4.9 Panel + Label rows); secondary legend text carries the
 	# theme's Dim variation.
@@ -1971,7 +1979,15 @@ func _draw() -> void:
 		# into the view rect — zoom stretches it nearest-neighbour (§4.6).
 		draw_texture_rect(_texture, view_rect, false,
 			Color(1, 1, 1, EXPLORED_ALPHA))
-	draw_rect(view_rect, PaletteLib.PANEL_LINE, false, 2.0)
+	# §4.8 Skin coverage: the chart's map frame — navy `PANEL_LINE` in the
+	# reduced-graphics fallback; dark walnut outline + ACCENT gold hairline
+	# in texture mode (the unknown-tile `PANEL_BG` canvas is chart content,
+	# unchanged).
+	if UiThemeLib.texture_mode():
+		draw_rect(view_rect, PaletteLib.PANEL_WOOD_LO, false, 2.0)
+		draw_rect(view_rect.grow(-2.0), PaletteLib.ACCENT, false, 1.0)
+	else:
+		draw_rect(view_rect, PaletteLib.PANEL_LINE, false, 2.0)
 
 	# Ice tint (the `I` layer; explored-only in player mode).
 	if _ice_texture != null:

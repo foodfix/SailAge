@@ -48,6 +48,7 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiThemeLib := preload("res://scripts/ui_theme.gd")
 const BattleSimLib := preload("res://scripts/combat/battle_sim.gd")
 const AiFleetLib := preload("res://scripts/combat/ai_fleet.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
@@ -218,7 +219,9 @@ func _ready() -> void:
 func _build_static_widgets() -> void:
 	_background = ColorRect.new()
 	_background.name = "Background"
-	_background.color = PaletteLib.PANEL_BG
+	# §4.8 Skin coverage (amended 2026-11-05): walnut in texture mode, the
+	# pinned navy flat fill in the reduced-graphics fallback.
+	_background.color = UiThemeLib.surface_fill()
 	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_background)
 

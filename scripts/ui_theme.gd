@@ -85,6 +85,34 @@ static func build_theme(use_textures: bool = true) -> Theme:
 	return theme
 
 
+# --- §4.8 Skin-coverage routing seams (amended 2026-11-05) --------------------
+#
+# The skin-coverage amendment routes EVERY window/panel/HUD surface through
+# the skin vocabulary in texture mode; bare navy flat fills are the
+# reduced-graphics fallback only. Custom-drawn screens need two read seams
+# for that switch (the stylebox channels themselves stay in this file):
+
+## Cached tri-state for [method texture_mode] (-1 unknown, 0 flat, 1 textured).
+static var _texture_mode_cache: int = -1
+
+
+## True when the nine-patch chrome sheets are present (texture mode ON —
+## the shipped default). A missing panel sheet ⇒ the reduced-graphics flat
+## fallback, and every routed surface keeps its pinned navy flat look.
+static func texture_mode() -> bool:
+	if _texture_mode_cache < 0:
+		_texture_mode_cache = \
+			1 if ResourceLoader.exists(SHEET_PATHS["panel"]) else 0
+	return _texture_mode_cache == 1
+
+
+## The chrome fill for plain ColorRect surfaces (§4.8 band vocabulary):
+## the walnut `PANEL_WOOD` in texture mode, the pinned `PANEL_BG` navy in
+## the reduced-graphics fallback (flat-mode pins intact).
+static func surface_fill() -> Color:
+	return PaletteLib.PANEL_WOOD if texture_mode() else PaletteLib.PANEL_BG
+
+
 # --- Nine-patch sheet variants (§4.9 layering rule) ---------------------------
 
 ## 48x48 sheets assembled by the governor from the 16x16 tiles, 16px margins

@@ -310,11 +310,16 @@ func _build_fleet_row(fleet: Dictionary) -> Control:
 	row.add_child(role_tile)
 	# Identified name + tier badge (§4.10.1): the canon captain's name —
 	# every Phase-8 captain carries one — or the unidentified fallback line.
+	# The name rides a fixed-width clipped column (§4.6.1 class fix: a long
+	# captain name must not widen the menu — the window is pinned by the
+	# scene's `custom_minimum_size`).
 	var name_label := Label.new()
 	name_label.text = I18n.fmt("interact.pick.row", {
 		"name": InteractionsLib.display_name(fleet),
 		"tier": NpcFleetsLib.captain_tier_of(fleet),
 	})
+	name_label.custom_minimum_size.x = 160.0
+	name_label.clip_text = true
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(name_label)
