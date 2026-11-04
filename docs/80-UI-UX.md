@@ -1805,6 +1805,9 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    | `#1c2230` | `PANEL_BG` | icon recess/background fill |
    | `#121724` | `ICON_BG_LO` | recess shadow step |
    | `#465468` | `PANEL_LINE` | icon outline / mid grey |
+   | `#2e2014` | `PANEL_WOOD` | UW2 chrome skin: panel/button walnut fill |
+   | `#6a4e28` | `PANEL_WOOD_HI` | UW2 chrome skin: bevel light (TL) / brass trim base |
+   | `#14100a` | `PANEL_WOOD_LO` | UW2 chrome skin: bevel shadow (BR) / frame dark line |
    | `#5e7086` | `ICON_LINE_HI` | lit-outline step |
    | `#232c3e` | `ICON_MID` | metal/wood mid-tone base |
    | `#e8e6df` | `TEXT` | light ink / lit surface; **wind arrows** |
@@ -1915,6 +1918,16 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    nation's `CLOTH_{nation}` (they read national — distinguished by the
    role badge, not the cloth), pirate `CLOTH_BAD`, hunter `CLOTH_GOOD`,
    player `CLOTH_PLAYER` (`#e8e6df`) with `CLOTH_ACCENT` trim.
+
+   **UW2 chrome skin (amended 2026-11-04, user direction — full
+   option B):** the five nine-patch sheets render the UW2 wood/brass
+   menu look — dark-walnut fills (`PANEL_WOOD`) framed by beveled wood
+   (light bevel top/left `PANEL_WOOD_HI`, shadow bottom/right
+   `PANEL_WOOD_LO`), brass corner rosettes and a thin gold inner line
+   (`ACCENT`/`ACCENT_HI`). The flat fallback keeps the navy constants —
+   it is the reduced-graphics mode; font colors are unchanged (cream on
+   walnut). The ninepatch sheets are the single switch: re-authoring
+   them reskins every panel/button in the game.
 
 5. **Hull-letter overlay rule.** identification letters stay as overlay
    badges drawn on top of the token sprite at runtime — never baked into
