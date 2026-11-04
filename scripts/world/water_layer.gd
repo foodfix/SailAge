@@ -58,13 +58,34 @@ static func fallback_color(kind: String) -> Color:
 	return PaletteLib.SEA if kind == "sea" else PaletteLib.COAST_SEA
 
 
+## Production-format guard for registry-sourced images (the 2026-11-04 grey-
+## void fix): `UiKit.icon_texture` textures are imported CompressedTexture2Ds
+## whose `get_image()` carries the SOURCE PNG's channel layout — the §4.8 art
+## family ships palette-mode PNGs, which decode as FORMAT_RGB8, and other
+## import presets can decode VRAM-compressed. `Image.blit_rect`/`blend_rect`
+## require the destination canvas format exactly (FORMAT_RGBA8 for every
+## composed atlas in S3/S10), so every registry image passes through here
+## before a blit: decompress when needed, then convert. Returns `null` for
+## null input or a failed decompress (the caller keeps the flat fallback,
+## §4.9). Shared by `map_loader.gd`'s terrain + shore atlases through its
+## existing preload of this script, so the two atlas builders cannot drift.
+static func _to_rgba8(img: Image) -> Image:
+	if img == null:
+		return null
+	if img.is_compressed() and img.decompress() != OK:
+		return null
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	return img
+
+
 ## One 32×32 flat fill for the atlas: the registry texture's pixels when the
 ## id resolves, else the palette fill (the pre-Phase-10 look).
 static func _kind_image(kind: String, tile_px: int) -> Image:
 	var image := Image.create_empty(tile_px, tile_px, false, Image.FORMAT_RGBA8)
 	var texture := UiKitLib.icon_texture(sprite_id(kind))
 	if texture != null:
-		var pixels := texture.get_image()
+		var pixels := _to_rgba8(texture.get_image())
 		if pixels != null:
 			image.blit_rect(pixels, Rect2i(0, 0, tile_px, tile_px),
 				Vector2i.ZERO)

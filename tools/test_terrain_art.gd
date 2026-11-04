@@ -24,7 +24,18 @@ extends Node
 ##     on, shadowing the intel `C`; both-off `C` is the intel's), and the
 ##     month-rollover re-sample;
 ##   * the world markers: every discovery category resolves as an id,
-##     discovered-only visibility, the wreck/treasure registry fallbacks.
+##     discovered-only visibility, the wreck/treasure registry fallbacks;
+##   * the PRODUCTION texture path (the 2026-11-04 grey-void regression): the
+##     registry POPULATED first (as `title_screen` does at boot), then the
+##     water tile set + terrain atlas + shore overlay rebuild through the
+##     registry textures with real pixel content pinned (center pixel == the
+##     locked §4.8 palette hex; foam/marker cells non-empty). The earlier
+##     groups keep the empty-registry fallback coverage — this one runs last.
+##
+## Prerequisite: a fresh checkout needs the compiled import cache — run
+## `godot --headless --import` once before this suite, else the texture
+## `load()`s return null, the registry stays empty and the populated-registry
+## section fails its first check by design.
 ##
 ## No overkill: one world boot re-fixtured across the groups; the shore
 ## raster's full-grid correctness is the validator's (group 13), the suite
@@ -39,6 +50,7 @@ const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
+const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
 const WorldScene := preload("res://scenes/world/world_map.tscn")
 
 ## Lisbon's harbor pair (the persisted §6.1 table; the W3-C shore record:
@@ -61,6 +73,7 @@ func _ready() -> void:
 	_test_arrow_field_fixture()
 	_test_arrow_field_world()
 	_test_world_markers()
+	_test_populated_registry()
 	UiKitLib.clear_textures()
 	_report()
 
@@ -512,3 +525,152 @@ func _test_world_markers() -> void:
 		if cat != "natural":
 			break
 	world.queue_free()
+
+
+# --- Production texture path (populated registry) -------------------------------
+## The production sea/terrain path. `title_screen` populates the W3 texture
+## registry at boot, so every atlas blit resolves a registry texture — an
+## imported CompressedTexture2D whose `get_image()` carries the SOURCE PNG's
+## channel layout (the §4.8 art family ships palette-mode PNGs, which decode
+## as FORMAT_RGB8, and other import presets can decode VRAM-compressed).
+## `Image.blit_rect`/`blend_rect` need the canvas format exactly, so every
+## registry image must pass through `WaterLayerLib._to_rgba8` (decompress when
+## needed, then convert to RGBA8) before a blit — without it the blit errors
+## per chunk spawn and the world renders as a grey void (the 2026-11-04
+## production report). The earlier groups run with an EMPTY registry (the flat
+## fallback), so this section re-builds the three atlases + the port marker
+## decode with the registry POPULATED and pins real pixel content. Zero blit
+## errors is implied by completion; the pixel pins are the pre-fix
+## discriminator (a failed blit leaves the cells fully transparent).
+##
+## The suite reaches the shared guard through a late-bound shim (below), not a
+## direct static reference: static calls are compile-checked, and a tree
+## without the helper must still PARSE so the pre-fix red run fails on the
+## pixel pins + the production blit errors, not on a missing-symbol parse
+## error.
+## The late-bound shim: an instance call resolves the script's static helper
+## and, on a tree without it, fails at RUNTIME (null + a console error)
+## instead of blocking the parse.
+func _rgba8(img: Image) -> Image:
+	var shim: RefCounted = WaterLayerLib.new()
+	return shim.call("_to_rgba8", img)
+
+
+func _test_populated_registry() -> void:
+	TextureRegistryLib.ensure_registered()
+	_check(TextureRegistryLib.registered_count > 0,
+		"the texture registry populated (%d ids; 0 ⇒ run `godot --headless --import` first)"
+		% TextureRegistryLib.registered_count)
+	if TextureRegistryLib.registered_count == 0:
+		return
+	# The shared guard's contract: null passes through; an RGB8 image and a
+	# compressed image both come out RGBA8.
+	_check(_rgba8(null) == null,
+		"the RGBA8 guard passes null through as null")
+	var rgb := Image.create_empty(2, 2, false, Image.FORMAT_RGB8)
+	_check(_rgba8(rgb) != null
+		and rgb.get_format() == Image.FORMAT_RGBA8,
+		"the RGBA8 guard converts an RGB8 image to RGBA8")
+	var packed := Image.create_empty(4, 4, false, Image.FORMAT_RGBA8)
+	if packed.compress(Image.COMPRESS_S3TC) == OK:
+		_check(packed.is_compressed(),
+			"the probe image compressed (the guard's decompress branch)")
+		_check(_rgba8(packed) != null
+			and not packed.is_compressed()
+			and packed.get_format() == Image.FORMAT_RGBA8,
+			"the RGBA8 guard decompresses a compressed image to RGBA8")
+	else:
+		print("NOTE  S3TC compression unavailable headless — the guard's decompress branch is covered only by the imported-texture path")
+	# The reported production stack (build_layer → build_tile_set →
+	# _kind_image): both water cells resolve registry art whose center pixel
+	# is the locked §4.8.5 flat fill.
+	var tile_set := WaterLayerLib.build_tile_set(32)
+	var source := tile_set.get_source(tile_set.get_source_id(0)) \
+		as TileSetAtlasSource
+	var atlas := source.texture.get_image()
+	_check(atlas.get_pixel(16, 16).is_equal_approx(PaletteLib.SEA),
+		"populated registry: the sea cell's center pixel is Palette.SEA (%s)"
+		% atlas.get_pixel(16, 16))
+	_check(atlas.get_pixel(32 + 16, 16).is_equal_approx(PaletteLib.COAST_SEA),
+		"populated registry: the coastal_sea cell's center pixel is Palette.COAST_SEA (%s)"
+		% atlas.get_pixel(32 + 16, 16))
+	# The terrain atlas (`_ensure_tile_set` → `_terrain_kind_image`): all four
+	# land variants carry real terrain art — variants 0–2 the LAND fill,
+	# variant 3 the LAND_HI highlight (§4.8 generated-terrain family).
+	var loader = MapLoaderLib.new()
+	_check(loader.load_map("res://data/maps/world.png", DataLoader.map_legend),
+		"the world map loads for the populated atlas (%s)" % loader.last_error)
+	loader._ensure_tile_set()
+	var land: Dictionary = loader._terrain_cells.get(2, {})
+	_check(not land.is_empty(), "the populated atlas resolves the land row")
+	if not land.is_empty():
+		var land_row := int(land["row"])
+		var terrain_atlas := (loader._tile_set.get_source(
+			loader._tile_set.get_source_id(0)) as TileSetAtlasSource
+			).texture.get_image()
+		for variant in int(land["variants"]):
+			var cell := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
+			cell.blit_rect(terrain_atlas,
+				Rect2i(variant * 32, land_row * 32, 32, 32),
+				Vector2i.ZERO)
+			var opaque := false
+			for py in 32:
+				for px in 32:
+					if cell.get_pixel(px, py).a > 0.0:
+						opaque = true
+						break
+				if opaque:
+					break
+			_check(opaque,
+				"populated registry: the land variant %d cell is non-empty"
+				% variant)
+			if variant <= 2:
+				_check(cell.get_pixel(16, 16).is_equal_approx(PaletteLib.LAND),
+					"populated registry: land variant %d center is Palette.LAND (%s)"
+					% [variant, cell.get_pixel(16, 16)])
+			else:
+				_check(cell.get_pixel(16, 16).is_equal_approx(
+					PaletteLib.LAND_HI),
+					"populated registry: land variant 3 center is Palette.LAND_HI (%s)"
+					% cell.get_pixel(16, 16))
+	# The shore overlay atlas (`_ensure_shore_tile_set`): the resolved strips
+	# stamp real foam pixels (the strips are edge-loaded — the center is
+	# transparent, so the pin is a non-empty cell).
+	loader._ensure_shore_tile_set()
+	_check(not loader._shore_columns.is_empty(),
+		"populated registry: the shore strips resolve (%d codes)"
+		% loader._shore_columns.size())
+	if loader._shore_columns.has(3):
+		var shore_atlas := (loader._shore_tile_set.get_source(
+			loader._shore_tile_set.get_source_id(0)) as TileSetAtlasSource
+			).texture.get_image()
+		var column := int(loader._shore_columns[3])
+		var foam := false
+		for py in 32:
+			for px in 32:
+				if shore_atlas.get_pixel(column * 32 + px, py).a > 0.0:
+					foam = true
+					break
+			if foam:
+				break
+		_check(foam,
+			"populated registry: the shore `e` strip cell (code 3) is non-empty")
+	# The port marker: the overlay renders the registry texture DIRECTLY (a
+	# TextureRect, no atlas blit) — pin that the marker texture decodes
+	# non-empty through the same RGBA8 guard.
+	var marker_texture := UiKitLib.icon_texture("terrain_port_neutral")
+	_check(marker_texture != null,
+		"populated registry: the neutral port marker id resolves")
+	if marker_texture != null:
+		var marker := _rgba8(marker_texture.get_image())
+		var marks := false
+		if marker != null:
+			for py in marker.get_height():
+				for px in marker.get_width():
+					if marker.get_pixel(px, py).a > 0.0:
+						marks = true
+						break
+				if marks:
+					break
+		_check(marks,
+			"populated registry: the port marker texture decodes non-empty through the RGBA8 guard")
