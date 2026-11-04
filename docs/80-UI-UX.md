@@ -2086,6 +2086,20 @@ visibly jumped at every opening/closing hour.)
 
 ### 4.9 Shared theme & widget kit (Phase 10)
 
+**Texture-mode state mapping (amended 2026-11-04, user feedback: the
+first texture theme reused one sheet for normal/hover/pressed, leaving
+hover and toggle-selection invisible).** When the nine-patch sheets are
+active, states resolve per sheet with `StyleBoxTexture.modulate_color`:
+**normal** = `ninepatch_button`; **hover** = `ninepatch_button_focus`
+(the ACCENT ring); **pressed (momentary click)** = `ninepatch_button`
+modulated ×0.82; **toggle-pressed (a held/selected card, e.g. the S2
+nationality cards)** = `ninepatch_button_focus` modulated ×0.88
+(distinct from plain hover); **disabled** = `ninepatch_button`
+modulated ×0.45 (+ the `PANEL_LINE` disabled text). Keyboard focus =
+`ninepatch_button_focus` (as hover — acceptable). Panel/LineEdit
+variants have no states and keep their single sheet. All modulate
+factors are named constants in `ui_theme.gd`.
+
 **Application point.** `scripts/ui_theme.gd` `build_theme() -> Theme`
 applies once at startup to the root window (`get_window().theme` in
 `title_screen._ready()` — S1 is the locked main scene) and cascades to
