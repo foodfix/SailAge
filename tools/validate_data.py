@@ -8958,9 +8958,11 @@ def _g13_ring_pixels(sprite: _G13Sprite) -> list:
 def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
     """§8.8 item 6: the full 16x9x8 grid (+ facility tokens) declared —
     either as 1 158 per-id declarations, or via slot B's hull-doc registry
-    shape (authored n/ne maps + the six pinned derive ops per hull; the
-    governor expands owners × dirs onto assets/ui/tokens/). Master
-    reconciliation 2026-11-04, ledgered."""
+    shape; the governor expands owners × dirs onto assets/ui/tokens/.
+    Hull-doc shape (§8.8 item 5/6 amendment, 2026-11-04): the amended UW2
+    docs author ALL EIGHT direction maps and carry no derive entries (a
+    side-view ship does not rotate losslessly — 80-* §4.8.6); legacy docs
+    on the n/ne + pinned-derive shape are accepted until re-authored."""
     owners = [n["id"] for n in nations] + list(G13_TOKEN_OWNERS_EXTRA)
     fac_got = {sid for sid in decls if sid.startswith("facility_")}
     if fac_got != set(G13_FACILITY_TOKENS):
@@ -9014,25 +9016,38 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
     pin = {("e", "n", "rot_cw"), ("s", "n", "rot_180"),
            ("w", "n", "rot_ccw"), ("nw", "ne", "mirror_x"),
            ("se", "ne", "mirror_y"), ("sw", "ne", "rot_180")}
+    uw2_dirs = set(G13_DIR_IDS)
     for ship_id, (doc, path) in sorted(docs.items()):
         maps = doc.get("maps") or {}
-        if set(maps) != {"n", "ne"}:
-            fail("hull-doc", path.name, f"{ship_id}: authored maps must be "
-                 "exactly n + ne (A.3: 2 authored maps per hull)", 13)
-        got = set()
-        for entry in doc.get("derive") or []:
-            base = entry.get("from", entry.get("base"))
-            got.add((entry.get("dir"), base, entry.get("op")))
-        if got != pin:
-            fail("hull-doc", path.name, f"{ship_id}: derive set != the "
-                 f"§4.8.6 pinned ops (got {sorted(got)[:6]}…)", 13)
+        if set(maps) == uw2_dirs:
+            # Amended UW2 shape: all eight directions authored, no derive.
+            deriv = doc.get("derive")
+            if deriv is not None:
+                fail("hull-doc", path.name, f"{ship_id}: an 8-map hull doc "
+                     "must not carry derive entries (§4.8.6 amendment: all "
+                     "eight hull directions are authored maps)", 13)
+        elif set(maps) == {"n", "ne"}:
+            # Legacy shape: two authored maps + the pinned six-op derive.
+            got = set()
+            for entry in doc.get("derive") or []:
+                base = entry.get("from", entry.get("base"))
+                got.add((entry.get("dir"), base, entry.get("op")))
+            if got != pin:
+                fail("hull-doc", path.name, f"{ship_id}: derive set != the "
+                     f"§4.8.6 pinned ops (got {sorted(got)[:6]}…)", 13)
+        else:
+            fail("hull-doc", path.name, f"{ship_id}: authored maps "
+                 f"{sorted(set(maps))[:8]}… are neither the amended 8-dir "
+                 "UW2 set nor the legacy n + ne set (80-* §4.8.6 "
+                 "amendment / A.3)", 13)
 
 
 def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
-    """§8.8 item 7: the long-axis extent lies in the tier band. The long
-    axis is directly measurable on the cardinal directions (the diagonal
-    sprites' rotated extents are the tool's lossless transforms of the same
-    authored art, so the band is checked there)."""
+    """§8.8 item 7 (§4.8.7 amendment, 2026-11-04): the long-axis extent is
+    measured on the SIDE VIEW (e/w — the profile shows the ship's length)
+    and lies in the tier band; the stern/bow views (n/s) show the beam and
+    the diagonals are the honest 3/4 views — both unbanded (canvas-fit
+    only, left to the governor's canvas check)."""
     tier_of = {s["id"]: s["tier"] for s in ship_types}
     for sprite_id, sprite in sorted(sprites.items()):
         if not sprite_id.startswith("hull_"):
@@ -9041,7 +9056,7 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
         if len(parts) != 4:
             continue
         _, ship_id, _owner, dir_id = parts
-        if dir_id not in ("n", "s", "e", "w"):
+        if dir_id not in ("e", "w"):
             continue
         band = G13_TIER_BANDS.get(tier_of.get(ship_id))
         if band is None:
@@ -9052,9 +9067,7 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
             fail("hull-footprint", sprite.decl["file"],
                  "sprite is fully transparent", 13)
         xs = [p[0] for p in opaque]
-        ys = [p[1] for p in opaque]
-        extent = (max(ys) - min(ys) + 1) if dir_id in ("n", "s") else \
-            (max(xs) - min(xs) + 1)
+        extent = max(xs) - min(xs) + 1
         lo, hi = band
         if not lo <= extent <= hi:
             fail("hull-footprint", sprite.decl["file"],
@@ -9356,13 +9369,20 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             # the facility declarations (master reconciliation, ledgered).
             # Synthetic declarations carry the §4.8.6 derive provenance so
             # the transform-relation check covers the derived 6/8 of each
-            # owner family.
+            # owner family — for LEGACY n/ne docs only.  The §8.8 item 5/6
+            # amendment (2026-11-04) exempts hulls authored on the amended
+            # UW2 8-map shape: all eight directions are authored maps, no
+            # lossless relation exists to check (80-* §4.8.6).
             rdecl = next((d for d, _p in decls.values()
                           if isinstance(d, dict)
                           and d.get("id") == "hulls-registry"), None)
             tmpl = (rdecl or {}).get(
                 "path_template",
                 "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
+            uw2_ships = {decl.get("ship_type")
+                         for decl, _p in decls.values()
+                         if isinstance(decl, dict) and decl.get("maps")
+                         and set(decl["maps"]) == set(G13_DIR_IDS)}
             entries_h: list = []
             hull_pin = {"e": ("n", "rot_cw"), "s": ("n", "rot_180"),
                         "w": ("n", "rot_ccw"), "nw": ("ne", "mirror_x"),
@@ -9384,14 +9404,16 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                                       dir="ne")}))
                     for dir_id, (base_dir, op) in hull_pin.items():
                         sid = f"hull_{ship['id']}_{nation['id']}_{dir_id}"
-                        entries_h.append(
-                            (sid, {"id": sid, "width": 32, "height": 32,
-                                   "file": tmpl.format(
-                                       ship_type=ship["id"],
-                                       owner=nation["id"], dir=dir_id),
-                                   "derive": {"from": (sid_n if base_dir == "n"
-                                                       else sid_ne),
-                                              "op": op}}))
+                        decl_c = {"id": sid, "width": 32, "height": 32,
+                                  "file": tmpl.format(
+                                      ship_type=ship["id"],
+                                      owner=nation["id"], dir=dir_id)}
+                        if ship["id"] not in uw2_ships:
+                            decl_c["derive"] = {
+                                "from": (sid_n if base_dir == "n"
+                                         else sid_ne),
+                                "op": op}
+                        entries_h.append((sid, decl_c))
             for sid, (decl_c, _p) in decls.items():
                 if sid.startswith("facility_"):
                     entries_h.append((sid, decl_c))
@@ -9668,7 +9690,8 @@ def _g13_run_probes() -> None:
             "broken-transform", "art-transform",
             lambda: _g13_manifest_then_pixels(icons_dir, block)))
 
-        # (4) Out-of-band footprint: a tier-1 hull 12px long (band 14-18).
+        # (4) Out-of-band footprint: a tier-1 hull 12px long on the side view
+        # (band 14-18; §4.8.7 amendment — the band is measured on e/w).
         hull_dir = root / "tools" / "ui_art" / "hulls"
         hull_dir.mkdir(parents=True)
         hull_assets = root / "assets" / "ui" / "tokens"
@@ -9676,11 +9699,11 @@ def _g13_run_probes() -> None:
         hull_rows = [""] * 32
         for y in range(32):
             hull_rows[y] = "." * 32
-        for y in range(10, 22):  # 12px long axis: below the tier-1 band
-            hull_rows[y] = "." * 15 + "xx" + "." * 15
+        for x in range(10, 22):  # 12px side-view long axis: below the band
+            hull_rows[15] = hull_rows[15][:x] + "xx" + hull_rows[15][x + 2:]
         hull_decl = {
-            "id": "hull_sloop_player_n",
-            "file": "assets/ui/tokens/hull_sloop_player_n.png",
+            "id": "hull_sloop_player_e",
+            "file": "assets/ui/tokens/hull_sloop_player_e.png",
             "width": 32, "height": 32,
             "mode": "string-map", "png": "indexed",
             "palette": flat, "rows": hull_rows,
@@ -9688,10 +9711,10 @@ def _g13_run_probes() -> None:
         # (not "hulls.json" — that name is the aux-doc registry, skipped by
         # the loader; the probe fixture uses a plain declaration filename)
         (hull_dir / "probe_hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
-        _g13_write_rgba_png(hull_assets / "hull_sloop_player_n.png", 32, 32,
+        _g13_write_rgba_png(hull_assets / "hull_sloop_player_e.png", 32, 32,
                             lambda x, y: (
                                 (232, 230, 223, 255)
-                                if 15 <= x < 17 and 10 <= y < 22
+                                if 10 <= x < 22 and 15 <= y < 17
                                 else (0, 0, 0, 0)))
         ship_types = [{"id": "sloop", "tier": 1}]
 

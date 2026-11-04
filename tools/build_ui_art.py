@@ -27,9 +27,11 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    tile).  Bar sheet layout (pinned): rows 16..31 form the horizontal midline
    band the kit's value_bar samples — left cap tile at x 0..15, line tile
    tiled x 16..31, right cap tile at x 32..47; the rest transparent.
-6. Hull footprint check — per hull, the family long axis (n-token opaque
-   bbox max dimension, final outlined file) must sit in its tier band
-   (t1 14–18, t2 20–26, t3 26–30 px, 80-* §4.8.7).
+6. Hull footprint check — per hull, the §4.8.7 band is measured on the side
+   view (e/w long axis, the profile that shows the ship's length; final
+   outlined file): t1 14–18, t2 20–26, t3 26–30 px.  The stern/bow views
+   (n/s) show the beam and the diagonals are 3/4 views — both unbanded,
+   canvas-fit only (bbox + 2px outline ≤ 32).
 7. Hull color audit — every final token's hexes ⊆ the hull palette block and
    ≤ the 32 px color budget (20, §4.8.3).
 
@@ -52,10 +54,14 @@ Manifest contract (per class dir, ``*.json`` sorted):
   post-pass transform of the referenced base sprite (resolved by id across
   classes; chains allowed, cycles rejected).
 * hull authoring doc (hulls class): ``{"id": "hull_<ship_type>", "tier",
-  "maps": {"n": {...}, "ne": {...}}, "derive": [...]}`` — registry-driven
-  pipeline; ``"file"``-less, rendered into a transient staging dir because the
-  wood-colored authored map is a pipeline intermediate, never a shipped file
-  (§4.8.4: every owner variant incl. neutral is a remap target).
+  "maps": {...}}`` — registry-driven pipeline; the amended UW2 shape
+  (80-* §4.8.6, 2026-11-04) authors ALL EIGHT direction maps (a side-view
+  ship does not rotate losslessly) and carries no derive entries; legacy
+  docs with ``maps: {n, ne}`` + the pinned six-op derive table keep the
+  derivation path until re-authored.  ``"file"``-less, rendered into a
+  transient staging dir because the wood-colored authored map is a pipeline
+  intermediate, never a shipped file (§4.8.4: every owner variant incl.
+  neutral is a remap target).
 * auxiliary docs (no ``id``): ``rig.json`` (style library) and
   ``hulls.json`` (registry) in the hulls class; ignored elsewhere.
 
@@ -528,15 +534,12 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
         fail("hulls.json: unexpected path_template (governor contract drift)")
     if list(reg.get("owners", [])) != OWNER_ORDER:
         fail("hulls.json: owners != pinned 9-owner set (§4.8.4)")
-    derive = reg.get("derive", {})
-    pinned = {d: PINNED_DERIVE[d] for d in derive if not d.startswith("_")}
-    for d, spec in derive.items():
-        if d.startswith("_"):
-            continue
-        if PINNED_DERIVE.get(d) != (derive_base_of(spec), spec.get("op")):
-            fail(f"hulls.json: derive['{d}'] drifts from the pinned heading8 table (§4.8.6)")
-    if set(pinned) != set(PINNED_DERIVE):
-        fail("hulls.json: derive table incomplete vs pinned §4.8.6 table")
+    if list(reg.get("authored_dirs", [])) != DIR_ORDER:
+        fail(f"hulls.json: authored_dirs != the pinned §4.8.6 dir set {DIR_ORDER} "
+             "(UW2 amendment: all eight hull directions are authored maps)")
+    if "derive" in reg:
+        fail("hulls.json: carries a derive table — the §4.8.6 amendment "
+             "removes hull derivation (all eight dirs authored per hull)")
     bands = {int(k): tuple(v) for k, v in
              reg.get("footprint", {}).get("bands", {}).items()}
     if bands != FOOTPRINT_BANDS:
@@ -555,26 +558,40 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
 
     decl_paths = []
     staging.mkdir(parents=True, exist_ok=True)
+    shapes = {}
     for ship, (path, doc) in sorted(m.hull_docs.items()):
         if ship not in tiers:
             fail(f"{path}: ship_type {ship!r} not in data/ship_types.json")
         if doc.get("tier") != tiers[ship]:
             fail(f"{path}: tier {doc.get('tier')} != ship_types.tier {tiers[ship]} for {ship}")
         maps = doc.get("maps", {})
-        for d in ("n", "ne"):
-            md = maps.get(d)
-            if not isinstance(md, dict) or "rows" not in md:
-                fail(f"{path}: maps['{d}'] missing rows")
+        dirs = {d for d, md in maps.items()
+                if isinstance(md, dict) and "rows" in md}
+        if dirs == set(DIR_ORDER):
+            # Amended UW2 shape: every direction is an authored map.
+            if doc.get("derive") is not None:
+                fail(f"{path}: 8-map hull doc must not carry derive entries "
+                     "(§4.8.6 amendment)")
+            shapes[ship] = "uw2"
+        elif dirs == {"n", "ne"}:
+            # Legacy shape: two authored maps + the pinned six-op derive.
+            deriv = doc.get("derive")
+            got = {e.get("dir"): (derive_base_of(e), e.get("op"))
+                   for e in (deriv or [])}
+            if got != PINNED_DERIVE:
+                fail(f"{path}: derive table {got} != pinned §4.8.6 table")
+            shapes[ship] = "legacy"
+        else:
+            fail(f"{path}: hull doc maps {sorted(dirs)} are neither the amended "
+                 f"8-dir set {sorted(DIR_ORDER)} nor the legacy n/ne set")
+        for d in sorted(dirs):
+            md = maps[d]
             decl = dict(md)
             decl["file"] = f"{STAGING}/{ship}.{d}.png"
             dp = staging / "decls" / f"{ship}.{d}.json"
             dp.parent.mkdir(parents=True, exist_ok=True)
             dp.write_text(json.dumps(decl))
             decl_paths.append(dp)
-        deriv = doc.get("derive")
-        got = {e.get("dir"): (derive_base_of(e), e.get("op")) for e in (deriv or [])}
-        if got != PINNED_DERIVE:
-            fail(f"{path}: derive table {got} != pinned §4.8.6 table")
 
     run_node(decl_paths, outroot)
 
@@ -583,15 +600,19 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
     for ship, (path, doc) in sorted(m.hull_docs.items()):
         tier = int(doc["tier"])
         lo, hi = FOOTPRINT_BANDS[tier]
-        staged = {}
-        raw = {}  # unoutlined pixels per dir — derivations must source RAW
-        # pixels, never the outlined staging files (master reconciliation
+        shape = shapes[ship]
+        raw = {}  # unoutlined pixels per dir — legacy derivations must source
+        # RAW pixels, never the outlined staging files (master reconciliation
         # 2026-11-04, ledgered: outline-before-derive broke §8.8 item 5
         # relations because outline(staging) was re-read as a derive base
         # depending on DIR_ORDER).
-        for d in ("n", "ne"):
+        authored = sorted(d for d in doc.get("maps", {})
+                          if isinstance(doc["maps"][d], dict)
+                          and "rows" in doc["maps"][d])
+        for d in authored:
             w, h, px = read_png(staging / f"{ship}.{d}.png")
             raw[d] = (w, h, px)
+        staged = {}
         for d in DIR_ORDER:
             if d in raw:
                 w, h, px = raw[d]
@@ -600,24 +621,37 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
                 w, h, bpx = raw[src_d]
                 w, h, px = _transform(w, h, bpx, op)
                 raw[d] = (w, h, px)
+                counts["derived"] += 1
             px = apply_outline(w, h, px, ink)
             write_png(staging / f"{ship}.{d}.png", w, h, px)
             counts["outlined"] += 1
             staged[d] = (w, h, px)
+        counts["rendered"] += len(authored)
 
-        # footprint: family long axis = n-token bbox max dim (final file);
-        # ne must fit the canvas (see rig.json footprint_semantics)
-        wn, hn, pn = staged["n"]
-        we, he, pe = staged["ne"]
-        bb_n, bb_e = bbox_of(pn, wn, hn), bbox_of(pe, we, he)
-        long_axis = max(bb_n[2] - bb_n[0] + 1, bb_n[3] - bb_n[1] + 1)
-        ne_max = max(bb_e[2] - bb_e[0] + 1, bb_e[3] - bb_e[1] + 1)
-        if not (lo <= long_axis <= hi):
-            fail(f"hull {ship}: long axis {long_axis}px outside tier-{tier} band {lo}-{hi} (§4.8.7)")
-        if ne_max + 2 > CANVAS:
-            fail(f"hull {ship}: ne footprint {ne_max}px + outline exceeds {CANVAS}px canvas")
+        # footprint (§4.8.7 amendment): the band is measured on the side view
+        # (e/w long axis — the profile that shows the ship's length); n/s
+        # (beam views) and the diagonals are canvas-fit only.
+        side = []
+        for d in ("e", "w"):
+            wd, hd, pd = staged[d]
+            bb = bbox_of(pd, wd, hd)
+            ext = bb[2] - bb[0] + 1
+            side.append(ext)
+            if not (lo <= ext <= hi):
+                fail(f"hull {ship}: {d} long axis {ext}px outside tier-{tier} "
+                     f"band {lo}-{hi} (§4.8.7)")
+            if ext + 2 > CANVAS:
+                fail(f"hull {ship}: {d} footprint {ext}px + outline exceeds "
+                     f"{CANVAS}px canvas")
+        for d in ("n", "s", "ne", "nw", "se", "sw"):
+            wd, hd, pd = staged[d]
+            bb = bbox_of(pd, wd, hd)
+            fit = max(bb[2] - bb[0] + 1, bb[3] - bb[1] + 1)
+            if fit + 2 > CANVAS:
+                fail(f"hull {ship}: {d} footprint {fit}px + outline exceeds "
+                     f"{CANVAS}px canvas")
         report.setdefault("footprints", []).append(
-            (ship, tier, long_axis, ne_max, (lo, hi)))
+            (ship, tier, side[0], side[1], (lo, hi)))
 
         for owner in OWNER_ORDER:
             table = {s: HEXES[t] for s, t in
@@ -636,7 +670,6 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
                 dest = outroot / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
                 write_png(dest, w, h, out)
                 counts["tokens"] += 1
-        counts["rendered"] += 2
     return counts
 
 
@@ -1050,8 +1083,9 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
           f"generic {g.get('rendered', 0)}; derived {h.get('derived', 0) + g.get('derived', 0)}; "
           f"outlined {h.get('outlined', 0) + g.get('outlined', 0)}; "
           f"hull tokens written {h.get('tokens', 0)} (16 x 9 x 8 = 1152 expected)")
-    for ship, tier, la, ne, band in report.get("footprints", []):
-        print(f"  footprint {ship:18s} t{tier}  long-axis {la}px  ne {ne}px  band {band[0]}-{band[1]}  OK")
+    for ship, tier, e_ext, w_ext, band in report.get("footprints", []):
+        print(f"  footprint {ship:18s} t{tier}  e {e_ext}px  w {w_ext}px  "
+              f"band {band[0]}-{band[1]}  OK")
     for kind, n in report.get("seam_kinds", []):
         print(f"  seam ring '{kind}': {n} variant(s) byte-identical outer ring")
     for note in report.get("ninepatch_notes", []):

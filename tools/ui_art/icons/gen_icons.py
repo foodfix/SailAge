@@ -885,55 +885,37 @@ def icon_skull() -> Canvas:
 
 
 def icon_crown() -> Canvas:
-    """Ornate five-point crown: spade spires with cross-sparkle gems, a
-    triple-ramp band (ACCENT_HI/ACCENT/ACCENT_LO) with diagonal dither
-    transitions, bead dots between the points and an emboss baseline."""
+    """Ornate five-point crown, UW2 restraint (batch-1 review): five tapered
+    teardrop spires (2px shaft widening to a 4px belly), a thin band (1px
+    ACCENT_HI top edge / ACCENT face / ACCENT_LO base), bead dots between the
+    points, and a single cross-sparkle on the center gem only."""
     c = Canvas(32, 32)
-    # five spade spires: outer pair, inner pair, tall center (2px apex)
-    for cx in (6, 25):
-        c.put(cx, 13, "a")
-        for y in range(14, 17):
-            c.hline(cx - 1, cx + 1, y, "a")
-        for y in range(17, 20):
-            c.hline(cx - 2, cx + 2, y, "a")
-        c.hline(cx - 1, cx + 1, 20, "a")
-    for cx in (11, 20):
-        c.put(cx, 10, "a")
-        for y in range(11, 14):
-            c.hline(cx - 1, cx + 1, y, "a")
-        for y in range(14, 20):
-            c.hline(cx - 2, cx + 2, y, "a")
-        c.hline(cx - 1, cx + 1, 20, "a")
-    c.hline(15, 16, 7, "a")
-    for y in (8, 9):
-        c.hline(14, 17, y, "a")
-    for y in range(10, 20):
-        c.hline(13, 18, y, "a")
-    c.hline(14, 17, 20, "a")
-    # valley notches between the spire bellies
-    for vx in (8, 13, 18, 23):
-        c.put(vx, 19, ".")
-    # cross-sparkle gems on the spires
-    for y in range(9, 13):
-        c.put(15, y, "h"); c.put(16, y, "h")
-    for x in range(14, 18):
-        c.put(x, 10, "h")
-    _sparkle(c, 11, 14, "h")
-    _sparkle(c, 20, 14, "h")
-    _sparkle(c, 6, 17, "h")
-    _sparkle(c, 25, 17, "h")
-    # band: ACCENT_HI top edge -> ACCENT -> ACCENT_LO, diagonal dither steps
+
+    def spire(cx: int, apex_y: int, shaft: tuple[int, int],
+              belly_x0: int, belly_x1: int, belly_y: int) -> None:
+        # tapered teardrop: lit tip bead, 3px shaft (1px gold core after the
+        # outline erosion), 4px belly whose length scales with the height
+        c.put(cx, apex_y, "A")                  # tip bead (center column)
+        for y in range(apex_y + 1, belly_y):
+            c.hline(shaft[0], shaft[1], y, "a")
+        for y in range(belly_y, 21):
+            c.hline(belly_x0, belly_x1, y, "a")
+
+    spire(6, 13, (5, 7), 4, 7, 17)          # outer pair
+    spire(25, 13, (24, 26), 24, 27, 17)
+    spire(10, 10, (9, 11), 9, 12, 15)       # inner pair
+    spire(21, 10, (20, 22), 19, 22, 15)
+    spire(15, 7, (14, 16), 14, 17, 14)      # tall center
+    # bead dots between the points, set into the band face
+    for bx in (8, 13, 18, 23):
+        c.put(bx, 22, "h")
+    # center gem + the only cross-sparkle
+    c.vline(15, 11, 13, "h")
+    _sparkle(c, 15, 10, "h")
+    # band: 1px ACCENT_HI top edge / ACCENT face / ACCENT_LO base
     c.hline(4, 27, 21, "A")
     c.hline(4, 27, 22, "a")
-    _checker(c, 4, 22, 27, 22, "A", phase=1)     # HI transition
-    c.hline(4, 27, 23, "a")
-    c.hline(4, 27, 24, "a")
-    _checker(c, 4, 24, 27, 24, "l", phase=0)     # LO transition
-    c.hline(4, 27, 25, "l")                      # emboss baseline
-    c.hline(4, 27, 26, "l")
-    # bead dots between the points
-    for bx in (9, 13, 18, 22):
-        c.put(bx, 21, "h")
+    c.hline(4, 27, 23, "l")
     c.outline()
     return c
 
@@ -1369,40 +1351,25 @@ def good_cotton_cloth() -> Canvas:
 
 
 def good_silk() -> Canvas:
-    """Silk bolt: three-fold roll with diagonal fold lines and dithered
-    ICON_HI sheen bands, gold trim along the edges, hanging tassel."""
+    """Silk bolt, UW2 restraint (batch-1 review): a neat folded bolt — three
+    clean horizontal folds (COAST_SEA body, one ICON_HI sheen line per fold,
+    an ICON_BG_LO shadow line under each), a gold trim along the wrap edge
+    with a small tassel, one ICON_HI sparkle on the fold crest.  No diagonal
+    streaks, no roll spiral."""
     c = Canvas(32, 32)
-    c.rect(4, 11, 21, 24, "c")                  # bolt body
-    c.disc(23, 17, 5, "c")                      # roll end
-    # fold faces: diagonal fold line + 2px dithered sheen band, period 7
-    for y in range(11, 25):
-        for x in range(4, 22):
-            v = (x + y) % 7
-            if v == 0:
-                c.put(x, y, "O")
-            elif v == 1 and (x + y) % 2 == 0:
-                c.put(x, y, "h")
-            elif v == 2 and (x + y) % 2 == 1:
-                c.put(x, y, "h")
-    # roll spiral + NW glint + SE shade
-    c.ring(23, 17, 4, 1, "O")
-    c.ring(23, 17, 2, 1, "O")
-    c.put(23, 17, "O")
-    c.put(20, 13, "h"); c.put(21, 14, "h")
-    for y in range(12, 23):
-        for x in range(19, 29):
-            if (x - 23) ** 2 + (y - 17) ** 2 <= 30:
-                if (x - 23) + (y - 17) >= 3:
-                    c.put(x, y, "B")
-    # gold trim lines along the bolt edges
-    c.hline(4, 21, 12, "a")
-    c.hline(4, 21, 23, "a")
-    # hanging tassel: knot + fringed fan
-    c.rect(4, 25, 5, 26, "A")
-    c.hline(3, 6, 27, "A")
-    for x in range(3, 7):
-        c.vline(x, 28, 29, "a" if x % 2 == 1 else "l")
-    c.put(3, 29, "A"); c.put(5, 29, "A")        # fringe tips
+    c.rect(5, 11, 24, 24, "c")                  # bolt body (COAST_SEA)
+    # three folds: ICON_HI sheen on each crest, ICON_BG_LO shadow under each
+    for crest, shadow in ((12, 15), (16, 19), (20, 23)):
+        c.hline(6, 23, crest, "h")
+        c.hline(6, 23, shadow, "B")
+    # gold trim along the wrap edge (the bolt's left end)
+    c.vline(6, 12, 23, "a")
+    # one ICON_HI sparkle on the top fold's crest
+    _sparkle(c, 20, 13, "h")
+    # small tassel hanging off the wrap edge
+    c.put(6, 25, "a")                           # cord
+    c.put(6, 26, "A")                           # knot
+    c.put(5, 27, "a"); c.put(6, 27, "l"); c.put(7, 27, "a")
     c.outline()
     return c
 
