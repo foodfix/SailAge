@@ -14,9 +14,13 @@ extends Node
 ## `build_theme(true)` against the governor-assembled nine-patch sheets and
 ## pins the StyleBoxTexture config (48x48 region, 16px texture margins) plus
 ## pixel-exact sheet samples at the stylebox's corner/edge/center layout
-## anchors (border PANEL_LINE at the corner frame + all four sides, PANEL_BG
-## center, ACCENT focus ring, transparent only at the authored outer
-## rounding). It requires the committed sheets AND their import cache: run
+## anchors — since the UW2 chrome reskin (§4.8 amended 2026-11-04) those are
+## the wood/brass hexes: frame outline `PANEL_WOOD_LO` (+ bevel
+## `PANEL_WOOD_HI`) at the corner frame and all four side centers, `PANEL_WOOD`
+## center, the gold inner line `ACCENT` at its pinned inset (panel), the gold
+## perimeter + `ACCENT_HI` rosette (button_focus), the `ACCENT_LO` recess lip
+## (field), and transparent only at the authored outer rounding. It requires
+## the committed sheets AND their import cache: run
 ## `godot --headless --import` once in a fresh worktree; when
 ## `assets/ui/chrome/ninepatch_button.png` is absent or unimported the
 ## section is skipped with an informational line (fresh checkouts keep the
@@ -336,8 +340,11 @@ func _test_button_min_height() -> void:
 
 const SHEET_BUTTON_PATH := "res://assets/ui/chrome/ninepatch_button.png"
 
-# Chrome hexes (palette): border PANEL_LINE / focus ACCENT, fill PANEL_BG
-# (the sheets' center hex), the edge tiles' inner shade row ICON_BG_LO.
+# UW2 chrome-skin sheet hexes (§4.8 amended 2026-11-04, palette constants):
+# frame outline PANEL_WOOD_LO, bevel PANEL_WOOD_HI, walnut fill PANEL_WOOD,
+# gold trim ACCENT (rosette center ACCENT_HI, rosette base ACCENT_LO); the
+# field sheet is the recess — PANEL_WOOD_LO frame, ACCENT_LO lip, ICON_BG_LO
+# interior. The flat fallback above keeps the navy pins — untouched.
 
 
 func _test_texture_mode() -> void:
@@ -349,16 +356,57 @@ func _test_texture_mode() -> void:
 		return
 	var ttheme := UiThemeLib.build_theme(true)
 	_texture_boxes(ttheme)
-	for sheet_id in UiThemeLib.SHEET_PATHS:
+	var specs := _sheet_specs()
+	for sheet_id: String in UiThemeLib.SHEET_PATHS:
 		var tex := load(UiThemeLib.SHEET_PATHS[sheet_id]) as Texture2D
 		if tex == null:
 			_check(false, "texture mode: %s sheet loads (import cache present)"
 				% sheet_id)
 			continue
-		var border: Color = PaletteLib.ACCENT \
-			if sheet_id == "button_focus" else PaletteLib.PANEL_LINE
-		_texture_sheet_pixels(tex, sheet_id, border,
-			1 if sheet_id == "field" else 2, sheet_id == "button_focus")
+		_texture_sheet_pixels(tex, sheet_id, specs[sheet_id])
+
+
+## Per-sheet anchor spec mirroring the governor's SKIN_PINS
+## (tools/build_ui_art.py §4.8 amended): `outline` is the hex the frame's
+## outermost px carries on all four sides, `bevel` the px just inside it,
+## `fill` the sheet center, `gold` the per-sheet trim anchors [x, y, hex,
+## label].
+func _sheet_specs() -> Dictionary:
+	return {
+		"panel": {
+			"outline": PaletteLib.PANEL_WOOD_LO,
+			"bevel": PaletteLib.PANEL_WOOD_HI,
+			"fill": PaletteLib.PANEL_WOOD,
+			"gold": [
+				[24, 3, PaletteLib.ACCENT, "gold inner line (inset 3px)"],
+				[3, 3, PaletteLib.ACCENT_HI, "brass rosette center"],
+				[2, 2, PaletteLib.ACCENT_LO, "brass rosette base"],
+			],
+		},
+		"button": {
+			"outline": PaletteLib.PANEL_WOOD_HI,
+			"bevel": PaletteLib.PANEL_WOOD,
+			"fill": PaletteLib.PANEL_WOOD,
+			"gold": [
+				[4, 15, PaletteLib.ACCENT, "corner-only gold inner tick"],
+			],
+		},
+		"button_focus": {
+			"outline": PaletteLib.ACCENT,
+			"bevel": PaletteLib.PANEL_WOOD,
+			"fill": PaletteLib.PANEL_WOOD,
+			"gold": [
+				[3, 3, PaletteLib.ACCENT_HI, "gold rosette center"],
+				[4, 15, PaletteLib.ACCENT, "corner-only gold inner tick"],
+			],
+		},
+		"field": {
+			"outline": PaletteLib.PANEL_WOOD_LO,
+			"bevel": PaletteLib.ACCENT_LO,
+			"fill": PaletteLib.ICON_BG_LO,
+			"gold": [],
+		},
+	}
 
 
 ## StyleBoxTexture config pins on the texture-mode theme.
@@ -490,48 +538,52 @@ func _texture_states(ttheme: Theme) -> void:
 		+ "(%s under disable)" % str(plain_min))
 
 
-## Pixel-exact sheet samples at the nine-patch layout anchors. `border_px` is
-## the sheet family's authored border width (button/panel/button_focus carry
-## a 2px border + ICON_BG_LO shade row; field is the 1px inset).
-func _texture_sheet_pixels(tex: Texture2D, sheet_id: String, border: Color,
-		border_px: int, focus: bool) -> void:
+## Pixel-exact sheet samples at the nine-patch layout anchors. `spec` carries
+## the sheet family's UW2 chrome-skin hexes (§4.8 amended 2026-11-04): the
+## frame outline the outermost px carries on all four sides, the bevel/lip
+## line just inside it, the center fill, and the per-sheet gold trim anchors.
+func _texture_sheet_pixels(tex: Texture2D, sheet_id: String,
+		spec: Dictionary) -> void:
 	var img := tex.get_image()
 	_check(img != null and img.get_width() == 48 and img.get_height() == 48,
 		"texture mode: %s sheet image is 48x48" % sheet_id)
 	if img == null:
 		return
-	_check(_px_is(img, 4, 0, border) and _px_is(img, 0, 4, border),
-		"texture mode: %s corner frame == border hex (past the authored outer rounding)"
+	var outline: Color = spec["outline"]
+	var bevel: Color = spec["bevel"]
+	var fill: Color = spec["fill"]
+	_check(_px_is(img, 4, 0, outline) and _px_is(img, 0, 4, outline),
+		"texture mode: %s corner frame == outline hex (past the authored outer rounding)"
 		% sheet_id)
-	_check(_px_is(img, 24, 24, PaletteLib.PANEL_BG),
-		"texture mode: %s sheet center == PANEL_BG fill" % sheet_id)
+	_check(_px_is(img, 24, 24, fill),
+		"texture mode: %s sheet center == fill" % sheet_id)
 	# Side orientations — the load-bearing traps: every side must carry the
-	# border on its OUTER px (a sheet blitted from un-oriented tiles puts
-	# fill there and the border mid-strip instead).
-	_check(_px_is(img, 24, 0, border) and _px_is(img, 0, 24, border)
-		and _px_is(img, 47, 24, border) and _px_is(img, 24, 47, border),
-		"texture mode: %s all four side centers == border on the outer px (oriented)"
+	# frame on its OUTER px (a sheet blitted from un-oriented tiles puts
+	# fill there and the frame mid-strip instead).
+	_check(_px_is(img, 24, 0, outline) and _px_is(img, 0, 24, outline)
+		and _px_is(img, 47, 24, outline) and _px_is(img, 24, 47, outline),
+		"texture mode: %s all four side centers == outline on the outer px (oriented)"
 		% sheet_id)
-	# The px just inside the border: border again for the 2px families, fill
-	# for the 1px field (no bleed) — and the shade row 2px families carry.
-	var inside: Color = border if border_px == 2 else PaletteLib.PANEL_BG
-	_check(_px_is(img, 24, 1, inside) and _px_is(img, 1, 24, inside)
-		and _px_is(img, 46, 24, inside) and _px_is(img, 24, 46, inside),
-		"texture mode: %s px inside the border == %s (%dpx authored border)"
-		% [sheet_id, "border" if border_px == 2 else "fill", border_px])
-	if border_px == 2:
-		_check(_px_is(img, 24, 2, PaletteLib.ICON_BG_LO),
-			"texture mode: %s inner shade row == ICON_BG_LO (edge authored design)"
-			% sheet_id)
+	# The px just inside the frame: the bevel/lip line on all four sides (the
+	# mirrored assembly keeps it symmetric around the sheet).
+	_check(_px_is(img, 24, 1, bevel) and _px_is(img, 1, 24, bevel)
+		and _px_is(img, 46, 24, bevel) and _px_is(img, 24, 46, bevel),
+		"texture mode: %s px inside the frame == the bevel/lip line (authored design)"
+		% sheet_id)
+	# Per-sheet UW2 trim anchors: the gold inner line at its pinned inset,
+	# the corner rosettes, the button corner ticks.
+	for anchor: Array in spec["gold"]:
+		_check(_px_is(img, anchor[0], anchor[1], anchor[2]),
+			"texture mode: %s %s == gold trim anchor" % [sheet_id, anchor[3]])
 	# Transparency ONLY at the authored outer corner rounding (the source
 	# corner tiles' own transparent pixels) — content areas opaque.
 	_check(img.get_pixel(0, 0).a < 0.01 and img.get_pixel(47, 0).a < 0.01
 		and img.get_pixel(0, 47).a < 0.01 and img.get_pixel(47, 47).a < 0.01,
 		"texture mode: %s transparent only at the authored outer rounding"
 		% sheet_id)
-	_check(_px_is(img, 8, 24, PaletteLib.PANEL_BG)
-		and _px_is(img, 24, 8, PaletteLib.PANEL_BG),
-		"texture mode: %s content areas opaque fill (no border bleed)"
+	_check(_px_is(img, 8, 24, fill)
+		and _px_is(img, 24, 8, fill),
+		"texture mode: %s content areas opaque fill (no frame bleed)"
 		% sheet_id)
 
 

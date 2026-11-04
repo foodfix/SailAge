@@ -118,6 +118,13 @@ const FLAG_HOLLAND := Color("#d97b1e")
 const FLAG_OTTOMAN := Color("#6a3d9a")
 ## Flag fill, italy.
 const FLAG_ITALY := Color("#c9a227")
+## UW2 chrome skin (80-* §4.8 amended 2026-11-04, user direction — full
+## option B): panel/button walnut fill for the nine-patch chrome tiles.
+const PANEL_WOOD := Color("#2e2014")
+## UW2 chrome skin: bevel light (top/left) / brass trim base.
+const PANEL_WOOD_HI := Color("#6a4e28")
+## UW2 chrome skin: bevel shadow (bottom/right) / frame dark line.
+const PANEL_WOOD_LO := Color("#14100a")
 
 # --- Hull block (docs/80-UI-UX.md §4.8) -------------------------------------
 # Amended 2026-11-04 (the shared-hull pennant scheme): every owner draws the

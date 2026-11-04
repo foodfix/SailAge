@@ -9,26 +9,28 @@
       "png": "indexed",
       "palette": {
         ".": "transparent",
-        "a": "#d9a441",
-        "b": "#1c2230"
+        "A": "#d9a441",
+        "T": "#f0c46a",
+        "D": "#a87a28",
+        "W": "#2e2014"
       },
       "rows": [
-        "....aaaaaaaaaaaa",
-        "..aaaaaaaaaaaaaa",
-        ".aaabbbbbbbbbbbb",
-        ".aabbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb",
-        "aabbbbbbbbbbbbbb"
+        ".AAAAAAAAAAAAAAA",
+        "AWDTDWWWWWWWWWWA",
+        "AWTTTWWWWWWWWWWA",
+        "AWDTDWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWWWWWWWWWWWWWWA",
+        "AWAAAAAAAAAAAAAA"
       ]
     },
     {
@@ -39,27 +41,26 @@
       "mode": "string-map",
       "png": "indexed",
       "palette": {
-        "B": "#121724",
-        "a": "#d9a441",
-        "b": "#1c2230"
+        "A": "#d9a441",
+        "W": "#2e2014"
       },
       "rows": [
-        "aaaaaaaaaaaaaaaa",
-        "aaaaaaaaaaaaaaaa",
-        "BBBBBBBBBBBBBBBB",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb"
+        "AAAAAAAAAAAAAAAA",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW"
       ]
     },
     {
@@ -70,25 +71,26 @@
       "mode": "string-map",
       "png": "indexed",
       "palette": {
-        "b": "#1c2230"
+        "W": "#2e2014",
+        "h": "#6a4e28"
       },
       "rows": [
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb",
-        "bbbbbbbbbbbbbbbb"
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWhWWWWWWWWWW",
+        "WWWWWWWhWWWWWWWW",
+        "WWWWWWWWWhWWWWWW",
+        "WWWWWWWWWWWhWWWW",
+        "WWWWWWWWWWWWWhWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWhWWWWWWWWWWWWW",
+        "WWWhWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW"
       ]
     }
   ]

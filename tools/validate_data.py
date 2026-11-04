@@ -8329,6 +8329,9 @@ BLOCK_ICON = frozenset({
     "#f7f5ee", "#d9a441", "#f0c46a", "#a87a28", "#4e9e4e", "#74c26e",
     "#b3341f", "#d4573c", "#2f6f9e", "#9a9a9a", "#1a8c4e", "#b3191f",
     "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
+    "#2e2014", "#6a4e28", "#14100a",  # UW2 chrome skin (§4.8 amended
+    # 2026-11-04, ledgered): walnut fill + bevel wood for the nine-patch
+    # chrome tiles (PANEL_WOOD / PANEL_WOOD_HI / PANEL_WOOD_LO)
 })
 # Amended §4.8 hull block (2026-11-04, the shared-hull pennant scheme): 16
 # distinct hexes — ink, wood ×3, sail ×3, HULL_GOLD, 9 PENNANT_* owner values.
