@@ -2029,6 +2029,20 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      Geometry stays the blob set's job; softness lives only in the
      edge bands (same-kind interiors stay pure). Optional later
      extension: one extra wide-band tile per edge (2-tile gradient).
+
+     **Coast foam language (amended 2026-11-05, r5 — the white
+     outline line failed user acceptance three times):** shore foam
+     is NO longer a uniform thin white line along the coast. The
+     baked water variants carry, per land-facing edge: a **shore
+     wash band** (6–10px of the water tone mixed toward
+     COAST_SEA/FOAM, fading into open water — the UW2 light-shallow
+     read) plus **irregular white foam speckle clusters** (2–5px
+     dashes/speckles, scattered along the land edge with varying
+     density, hugging the boundary on the water side). Same-kind
+     interiors and open edges stay clean; the speckles follow the
+     coastline path continuously (no gaps, no floating segments) —
+     verified on synthetic staircase/channel/pocket fixtures and the
+     real coast.
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
