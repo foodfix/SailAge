@@ -68,8 +68,8 @@ const DEFAULT_VIEW_TILES := Vector2i(40, 23)
 ## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
 const MEMORY_PER_CELL_BYTES := 16
 ## Layers per chunk since the Phase-10 art pass (§9.2): terrain + water +
-## shore overlay — the same multiplier the memory estimate applies.
-const LAYERS_PER_CHUNK := 3
+## water layer — the same multiplier the memory estimate applies.
+const LAYERS_PER_CHUNK := 2
 ## A port this close to the seam is also drawn on the other side of it
 ## (§9 step 5: `x = 0` also shows at `x = 4320` and vice versa).
 const SEAM_MARGIN := 8
@@ -104,8 +104,8 @@ var palette_chars: Dictionary = _default_palette()
 const SHORE_PNG := "res://data/maps/world_shore.png"
 ## §6.6 code order (index 1..8): n, ne, e, se, s, sw, w, nw.
 const SHORE_DIRS: Array[String] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
-## Shore overlay sprite ids: `shore_{dir}.png` (A.6) through the registry.
-const SHORE_SPRITE_PREFIX := "shore_"
+## Supplied to `WaterLayerLib.build_layer` so the water atlas gains the
+## coast-foam variants (`shore_{dir}` strips composed over the kind fills).
 
 ## A.5 locked variant counts per terrain kind; the variant pick is the cell
 ## hash `(x·31 + y·17) % variants` over the WRAPPED tile x (§9.2 / §4.8 —
@@ -141,13 +141,11 @@ var _water_columns: Dictionary = {}
 var _water_material: ShaderMaterial = null
 var _water_tile_set: TileSet = null
 var _water_source_id := -1
-## The shore overlay's TileSet (one strip per decoded code that resolved a
-## registry texture) and its `{code → atlas column}` map.
-var _shore_tile_set: TileSet = null
-var _shore_source_id := -1
-var _shore_columns: Dictionary = {}
 var _chunks_root: Node2D = null
 var _chunks: Dictionary = {}
+## The per-chunk coast-foam masks (world-static — computed once per chunk
+## spawn, cached until the chunk is freed).
+var _foam_cache: Dictionary = {}
 var _port_overlay: Node2D = null
 var _port_nodes: Dictionary = {}
 var _last_center := Vector2i(-1, -1)
@@ -407,11 +405,10 @@ func _reset_caches() -> void:
 	_water_material = null
 	_water_tile_set = null
 	_water_source_id = -1
-	_shore_tile_set = null
-	_shore_source_id = -1
-	_shore_columns = {}
+	_blocker_by_index = PackedByteArray()
 	_chunks_root = null
 	_chunks = {}
+	_foam_cache = {}
 	_port_overlay = null
 	_port_nodes = {}
 	_last_center = Vector2i(-1, -1)
@@ -1021,81 +1018,59 @@ func water_material() -> ShaderMaterial:
 	return _water_material
 
 
-## The shore overlay TileSet: one 32×32 cell per §6.6 code whose
-## `shore_{dir}` strip resolves in the registry; unresolved codes render
-## nothing (the overlay is cosmetic, §6.6).
-func _ensure_shore_tile_set() -> void:
-	if _shore_tile_set != null:
-		return
-	var resolved: Array = []
-	for code in range(1, SHORE_DIRS.size() + 1):
-		if UiKitLib.icon_texture(SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1]) \
-				!= null:
-			resolved.append(code)
-	# Compose the atlas FULLY before the texture is created — the same
-	# compose-then-create pattern as `_ensure_tile_set` and the water builder
-	# (a create-empty + `ImageTexture.update` round-trip reads back empty
-	# through `get_image()` and is the one pattern the sibling builders
-	# avoid).
-	var image := Image.create_empty(
-		maxi(resolved.size(), 1) * tile_size_px, tile_size_px, false,
-		Image.FORMAT_RGBA8)
-	_shore_columns = {}
-	for column in resolved.size():
-		var code := int(resolved[column])
-		var pixels: Texture2D = UiKitLib.icon_texture(
-			SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1])
-		var strip := WaterLayerLib._to_rgba8(pixels.get_image())
-		if strip == null:
-			continue
-		image.blit_rect(strip, Rect2i(0, 0, tile_size_px, tile_size_px),
-			Vector2i(column * tile_size_px, 0))
-		_shore_columns[code] = column
-	var source := TileSetAtlasSource.new()
-	source.texture = ImageTexture.create_from_image(image)
-	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
-	for code in _shore_columns:
-		source.create_tile(Vector2i(int(_shore_columns[code]), 0))
-	_shore_tile_set = TileSet.new()
-	_shore_tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
-	_shore_source_id = _shore_tile_set.add_source(source)
+## Blocker flags per palette index (the §6.6 builder's rule: land, reef and
+## ice block; the two water kinds and unknown indices do not) — computed once
+## per loader so the foam-mask probes are raw byte reads instead of legend
+## dictionary walks (the boot-budget regression the first r3 cut hit).
+var _blocker_by_index := PackedByteArray()
+
+func _blocker_table() -> PackedByteArray:
+	if _blocker_by_index.is_empty():
+		_blocker_by_index.resize(PALETTE_CHARS.length())
+		for index in PALETTE_CHARS.length():
+			_blocker_by_index[index] = 0 if WaterLayerLib.KIND_COLUMNS.has(
+				kind_of_index(index)) else 1
+	return _blocker_by_index
 
 
-## The §6.6 stamp refinement (the 2026-11-04 foam-tick fix): the raster keeps
-## ONE code per water tile — the FIRST qualifying §6.6 direction, and the
-## compass priority runs n > ne > e > … — so a cape-step tile whose land
-## contact is diagonal AND orthogonal renders the DIAGONAL strip (`shore_ne`
-## paints its full top + right edges): the top band faces open water (the
-## perpendicular foam ticks in the Seville screenshot) and reads as T/L/cross
-## shapes along the coast. The overlay is cosmetic (§6.6), so the stamp
-## refines the choice: when the raster code is diagonal but an ORTHOGONAL
-## neighbour is a blocker in this loader's own decode, the ORTHOGONAL strip
-## for the first blocking direction in the §6.6 compass order (n, e, s, w)
-## stamps instead — the band hugs the true land edge and the coast line stays
-## continuous. Pure-diagonal tiles keep the raster's strip (the corner foam),
-## orthogonal and zero codes pass through unchanged, and the raster remains
-## the data source — this reads [member indices], never the artifact.
-## Cost: ≤ 4 byte reads per coded water cell at chunk spawn / warm — zero
-## per-frame work.
-func _shore_stamp_code(cell: Vector2i, code: int) -> int:
-	if code == 0 or (code % 2) == 1:
-		return code  # no edge, or already orthogonal (n/e/s/w = 1/3/5/7)
-	# The §6.6 compass order filtered to the orthogonal directions, each with
-	# its grid offset (y down, x wrap-aware like the builder).
-	var probes: Array = [
-		[1, Vector2i(0, -1)], [3, Vector2i(1, 0)],
-		[5, Vector2i(0, 1)], [7, Vector2i(-1, 0)],
-	]
-	for entry in probes:
-		var dir: Vector2i = entry[1]
-		var probe_x := posmod(cell.x + dir.x, width)
-		var probe_y := cell.y + dir.y
+## The §6.6 coast-foam EDGE MASK (the r3 "continuous coast" model, replacing
+## r2's single-code refinement): bits 0..3 = the N/E/S/W edges that carry
+## foam. An edge lights when its ORTHOGONAL neighbour is a blocker in this
+## loader's own decode — plus the INLET BRIDGE: a diagonal-pair rule where a
+## tile between two land fingers (NW+NE, NE+SE, SW+SE, NW+SW blockers around
+## a water orthogonal) foams that edge too, so the coast line reads
+## CONTINUOUS across jagged steps and narrow inlets (the r2 single-code
+## stamping left exactly those connector tiles bare — the "scattered
+## T/L/+ fragments" report). Pure-diagonal corner contacts paint nothing
+## (no water-facing bands); x is wrap-aware, y-out-of-range counts
+## non-blocker (the builder's §6.6 rule). Cost: ≤ 8 byte reads per water
+## cell at chunk spawn / warm — zero per-frame work.
+func _shore_foam_mask(cell: Vector2i) -> int:
+	var blockers := _blocker_table()
+	var blocks := func(offset: Vector2i) -> bool:
+		var probe_x := posmod(cell.x + offset.x, width)
+		var probe_y := cell.y + offset.y
 		if probe_y < 0 or probe_y >= height:
-			continue  # the builder counts y-out-of-range as non-blocker (§6.6)
-		var kind := kind_of_index(int(indices[probe_y * width + probe_x]))
-		if not WaterLayerLib.KIND_COLUMNS.has(kind):
-			return int(entry[0])
-	return code
+			return false  # the builder counts y-out-of-range as non-blocker
+		return blockers[indices[probe_y * width + probe_x]] == 1
+	var n: bool = blocks.call(Vector2i(0, -1))
+	var e: bool = blocks.call(Vector2i(1, 0))
+	var s: bool = blocks.call(Vector2i(0, 1))
+	var w: bool = blocks.call(Vector2i(-1, 0))
+	var ne: bool = blocks.call(Vector2i(1, -1))
+	var se: bool = blocks.call(Vector2i(1, 1))
+	var sw: bool = blocks.call(Vector2i(-1, 1))
+	var nw: bool = blocks.call(Vector2i(-1, -1))
+	var mask := 0
+	if n or (nw and ne):
+		mask |= 1
+	if e or (ne and se):
+		mask |= 2
+	if s or (sw and se):
+		mask |= 4
+	if w or (nw and sw):
+		mask |= 8
+	return mask
 
 
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
@@ -1132,6 +1107,7 @@ func update_chunks(center_cell: Vector2i, view_tiles: Vector2i = DEFAULT_VIEW_TI
 			continue
 		var stale: Node = _chunks[key]
 		_chunks.erase(key)
+		_foam_cache.erase(key)
 		if is_instance_valid(stale):
 			stale.queue_free()
 	for key in wanted:
@@ -1160,29 +1136,41 @@ static func _floor_div(value: int, divisor: int) -> int:
 
 
 func _spawn_chunk(key: Vector2i) -> TileMapLayer:
-	_ensure_shore_tile_set()
 	var layer := TileMapLayer.new()
 	layer.name = "Chunk_%d_%d" % [key.x, key.y]
 	layer.tile_set = _tile_set
 	layer.position = Vector2(
 		key.x * CHUNK_TILES * tile_size_px, key.y * CHUNK_TILES * tile_size_px
 	)
-	# The animated water layer (§9.2/§4.7.17): flat sea/coastal_sea tiles under
-	# the shared shader material, one child layer per chunk. Water and terrain
+	# The animated water layer (§9.2/§4.7.17): sea/coastal_sea tiles — plus
+	# the coast-foam VARIANTS for §6.6-coded cells (the foam is baked into
+	# the water tiles, so no separate overlay layer exists) — under the
+	# shared shader material, one child layer per chunk. Water and terrain
 	# never share a cell, so the child's draw order under the terrain parent
-	# is invisible; the shore overlay is the second child — foam always above
-	# the water it rims. The layers carry no extra z: the chunk's position and
+	# is invisible. The layers carry no extra z: the chunk's position and
 	# the port overlay's z 2 stay the only ordering surfaces.
-	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px)
+	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px,
+		SHORE_DIRS)
 	if water_material() != null:
 		water.material = water_material()
 	water.name = "Water"
-	var shore: TileMapLayer = TileMapLayer.new()
-	shore.name = "ShoreOverlay"
-	shore.tile_set = _shore_tile_set
 	var water_source := _water_source_id_of(water)
 	var base_x := key.x * CHUNK_TILES
 	var base_y := key.y * CHUNK_TILES
+	# The foam masks are world-static: compute the chunk's 128×128 mask once
+	# and cache it until the chunk is freed (camera pans re-spawn chunks).
+	if not _foam_cache.has(key):
+		var masks := PackedByteArray()
+		masks.resize(CHUNK_TILES * CHUNK_TILES)
+		for j in CHUNK_TILES:
+			var y := base_y + j
+			if y < 0 or y >= height:
+				continue
+			for i in CHUNK_TILES:
+				masks[j * CHUNK_TILES + i] = _shore_foam_mask(
+					Vector2i(base_x + i, y))
+		_foam_cache[key] = masks
+	var foam_masks: PackedByteArray = _foam_cache[key]
 	for j in CHUNK_TILES:
 		var y := base_y + j
 		if y < 0 or y >= height:
@@ -1193,15 +1181,14 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 			var column: int = _water_columns.get(value, -1)
 			if column >= 0:
 				# A water kind (§4.8.5: flat fills on the water layer); the
-				# §6.6 foam codes exist on WATER tiles only, so the shore
-				# lookup rides this branch.
+				# §6.6 coast foam exists on WATER tiles only, so the stamp
+				# rides this branch. `water_coords` picks the kind's plain
+				# fill when the raster has not decoded yet (§9 boot budget —
+				# [method warm_shore_overlay] re-stamps foam later) or the
+				# tile carries no foam edge.
 				water.set_cell(Vector2i(i, j), water_source,
-					Vector2i(column, 0))
-				var code := _shore_stamp_code(Vector2i(x, y),
-					shore_code_at(Vector2i(x, y)))
-				if code > 0 and _shore_columns.has(code):
-					shore.set_cell(Vector2i(i, j), _shore_source_id,
-						Vector2i(int(_shore_columns[code]), 0))
+					WaterLayerLib.water_coords(
+						int(foam_masks[j * CHUNK_TILES + i]), column))
 				continue
 			var terrain: Dictionary = _terrain_cells.get(value, {})
 			if terrain.is_empty():
@@ -1214,48 +1201,58 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 			layer.set_cell(Vector2i(i, j), _atlas_source_id,
 				Vector2i(variant, int(terrain["row"])))
 	layer.add_child(water)
-	layer.add_child(shore)
 	_chunks_root.add_child(layer)
 	# The shore raster decodes OFF the boot frame (the §9 boot budget): the
 	# world scene warms it on its frame-2 tick, which then re-stamps every
-	# live chunk. Until then the overlay is simply absent (cosmetic, §6.6).
+	# live chunk's water foam. Until then coded cells simply show the plain
+	# fills (cosmetic, §6.6).
 	if not shore_codes.is_empty():
-		_fill_shore_cells(shore, base_x, base_y)
+		_fill_water_cells(water, base_x, base_y)
 	return layer
 
 
-## Re-stamps the shore overlay into every live chunk — the deferred-decode
-## path ([method warm_shore_overlay]; the §6.6 overlay is cosmetic, so chunks
+## Re-stamps the water cells of every live chunk — the deferred-decode path
+## ([method warm_shore_overlay]; the §6.6 coast foam is cosmetic, so chunks
 ## built before the decode simply gain their foam now).
 func warm_shore_overlay() -> void:
 	_ensure_shore_decode()
-	_ensure_shore_tile_set()
 	if shore_codes.is_empty() or _chunks.is_empty():
 		return
 	for key in _chunks:
 		var chunk: Node = _chunks[key]
-		var shore := chunk.get_node_or_null("ShoreOverlay") as TileMapLayer
-		if shore == null:
+		var water := chunk.get_node_or_null("Water") as TileMapLayer
+		if water == null:
 			continue
-		_fill_shore_cells(shore, key.x * CHUNK_TILES, key.y * CHUNK_TILES)
+		_fill_water_cells(water, key.x * CHUNK_TILES, key.y * CHUNK_TILES)
 
 
-## Stamps the §6.6 foam cells of one chunk rect into `shore` (codes only on
-## water tiles; tiles whose strip id the registry lacks render nothing).
-func _fill_shore_cells(shore: TileMapLayer, base_x: int, base_y: int) -> void:
-	if _shore_tile_set == null or _shore_columns.is_empty():
+## Stamps the water cells (plain fill or coast-foam variant) of one chunk
+## rect into `water` (codes only on water tiles; the variant pick refines
+## diagonals to blocking orthogonals and falls back to the plain fill when
+## the variant set is absent).
+func _fill_water_cells(water: TileMapLayer, base_x: int, base_y: int) -> void:
+	if water == null or water.tile_set == null:
 		return
+	var water_source := _water_source_id_of(water)
+	if water_source < 0:
+		return
+	var key := Vector2i(base_x / CHUNK_TILES, base_y / CHUNK_TILES)
+	if not _foam_cache.has(key):
+		return  # spawn already stamped the cached masks
+	var foam_masks: PackedByteArray = _foam_cache[key]
 	for j in CHUNK_TILES:
 		var y := base_y + j
 		if y < 0 or y >= height:
 			continue
 		for i in CHUNK_TILES:
-			var code := _shore_stamp_code(Vector2i(base_x + i, y),
-				shore_code_at(Vector2i(base_x + i, y)))
-			if code <= 0 or not _shore_columns.has(code):
+			var x := base_x + i
+			var value := int(indices[y * width + posmod(x, width)])
+			var column: int = _water_columns.get(value, -1)
+			if column < 0:
 				continue
-			shore.set_cell(Vector2i(i, j), _shore_source_id,
-				Vector2i(int(_shore_columns[code]), 0))
+			water.set_cell(Vector2i(i, j), water_source,
+				WaterLayerLib.water_coords(
+					int(foam_masks[j * CHUNK_TILES + i]), column))
 
 
 ## The atlas source id of a water layer built by [constant WaterLayerLib]

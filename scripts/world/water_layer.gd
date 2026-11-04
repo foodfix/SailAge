@@ -44,8 +44,20 @@ const SEA_DARKEN := 0.82
 const MASK_SIZE_PX := 64.0
 
 ## Atlas column of each water kind in the built TileSet (the §6.3 index
-## order: 0 = `~` sea, 1 = `.` coastal sea).
+## order: 0 = `~` sea, 1 = `.` coastal sea). Coast-foam variant cells follow
+## from column 2 (see [method build_tile_set]).
 const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
+
+## The registry id prefix of the §6.6/A.6 foam strips (`shore_{dir}`), baked
+## into the coast-foam water variants at tile-set build time.
+const STRIP_ID_PREFIX := "shore_"
+
+## The coast-foam variant dirs resolved by the LAST `build_tile_set` call
+## (all 8 strips present ⇒ true). The stamp side reads it so a registry-empty
+## fallback (or the S10 open-sea grid, which passes no dirs) stamps plain
+## fills. Reset on every build — all build sites in a process pass the same
+## table, so the value is stable per chunk ring.
+static var foam_ready := false
 
 
 ## The sprite id of a water kind (`terrain_{kind}_0`, A.5 "flat fills").
@@ -94,29 +106,93 @@ static func _kind_image(kind: String, tile_px: int) -> Image:
 	return image
 
 
-## The water TileSet: one atlas source, one flat tile per water kind at
-## column `KIND_COLUMNS[kind]`.
-static func build_tile_set(tile_px: int) -> TileSet:
+## The water TileSet: one atlas source, the two flat tiles per water kind at
+## columns `KIND_COLUMNS[kind]`, then — when `shore_dirs` is supplied AND all
+## 8 `shore_{dir}` strips resolve in the registry — the 16 COAST-FOAM
+## VARIANTS (the r3 "continuous coast" model): variant column
+## `2 + mask * 2 + kind` (mask bits 0..3 = N/E/S/W foam edge) composes the
+## tile's own kind fill with the union of the land-facing edge strips
+## alpha-blended over it, so the foam renders as light bands CONNECTED
+## across staircase steps and narrow inlets — the §6.6 single-code edge
+## lines this replaces read as scattered T/L/+ fragments on jagged coasts.
+## Without the dirs (the S10 open-sea grid) or without the strips (registry
+## empty, §4.9) the atlas stays exactly the two flat fills.
+static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 	var kinds: Array = KIND_COLUMNS.keys()
 	kinds.sort_custom(func(a: String, b: String) -> bool:
 		return int(KIND_COLUMNS[a]) < int(KIND_COLUMNS[b]))
-	var width := KIND_COLUMNS.size()
-	var image := Image.create_empty(width * tile_px, tile_px, false,
+	var columns := 2 + 16 * 2
+	var image := Image.create_empty(columns * tile_px, tile_px, false,
 		Image.FORMAT_RGBA8)
 	for kind in kinds:
 		image.blit_rect(_kind_image(kind, tile_px),
 			Rect2i(0, 0, tile_px, tile_px),
 			Vector2i(int(KIND_COLUMNS[kind]) * tile_px, 0))
-	var texture := ImageTexture.create_from_image(image)
+	foam_ready = false
+	var strips: Array[Image] = []
+	for dir_index in shore_dirs.size():
+		var strip_tex := UiKitLib.icon_texture(
+			STRIP_ID_PREFIX + str(shore_dirs[dir_index]))
+		var strip: Image = _to_rgba8(strip_tex.get_image()) \
+			if strip_tex != null else null
+		strips.append(strip)
+	# the 4 edge bits map to the §6.6 dirs n/e/s/w = strip indices 0/2/4/6
+	var bit_strip := [0, 2, 4, 6]
+	var all_resolved := strips.size() == 8
+	for strip in strips:
+		if strip == null:
+			all_resolved = false
 	var tile_set := TileSet.new()
 	tile_set.tile_size = Vector2i(tile_px, tile_px)
-	var source := TileSetAtlasSource.new()
-	source.texture = texture
-	source.texture_region_size = Vector2i(tile_px, tile_px)
-	for kind in kinds:
-		source.create_tile(Vector2i(int(KIND_COLUMNS[kind]), 0))
-	tile_set.add_source(source)
+	if all_resolved:
+		foam_ready = true
+		var tiles_to_create: Array[Vector2i] = []
+		for kind in kinds:
+			tiles_to_create.append(Vector2i(int(KIND_COLUMNS[kind]), 0))
+		for mask in 16:
+			for kind_index in kinds.size():
+				var column := 2 + mask * 2 + kind_index
+				var cell := _kind_image(str(kinds[kind_index]), tile_px)
+				for bit in 4:
+					if (mask & (1 << bit)) != 0:
+						cell.blend_rect(strips[bit_strip[bit]],
+							Rect2i(0, 0, tile_px, tile_px), Vector2i.ZERO)
+				image.blit_rect(cell, Rect2i(0, 0, tile_px, tile_px),
+					Vector2i(column * tile_px, 0))
+				tiles_to_create.append(Vector2i(column, 0))
+		# compose-then-create: the atlas image is FULLY composed before the
+		# texture exists (the r2 lesson — a create-empty + `update` round-trip
+		# reads back empty through `get_image()`), and tiles register after
+		# texture + region size, exactly like the terrain atlas builder
+		var source := TileSetAtlasSource.new()
+		source.texture = ImageTexture.create_from_image(image)
+		source.texture_region_size = Vector2i(tile_px, tile_px)
+		for coords in tiles_to_create:
+			source.create_tile(coords)
+		tile_set.add_source(source)
+	else:
+		# the fallback atlas still needs its single source (the two flat
+		# fills already blitted above); `foam_ready` stays false so the
+		# stamp side falls back to the plain columns
+		var source := TileSetAtlasSource.new()
+		source.texture = ImageTexture.create_from_image(image)
+		source.texture_region_size = Vector2i(tile_px, tile_px)
+		for kind in kinds:
+			source.create_tile(Vector2i(int(KIND_COLUMNS[kind]), 0))
+		tile_set.add_source(source)
 	return tile_set
+
+
+## The atlas coords a water tile stamps: its kind's plain fill column, or the
+## coast-foam variant for `mask` (bits 0..3 = N/E/S/W foam edge — the REFINED
+## mask, see `map_loader._shore_foam_mask`) when the variant set resolved.
+## Plain fills fall back everywhere else — battle grids and registry-empty
+## runs never see foam cells.
+static func water_coords(mask: int, kind_column: int) -> Vector2i:
+	if mask <= 0 or not foam_ready:
+		return Vector2i(kind_column, 0)
+	var kind_offset := 1 if kind_column != int(KIND_COLUMNS["sea"]) else 0
+	return Vector2i(2 + mask * 2 + kind_offset, 0)
 
 
 ## The animated-sea `ShaderMaterial` (§4.7.17) — the params are the pinned
@@ -176,15 +252,18 @@ static func _load_mask() -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
-## The battle/world water layer: flat tiles + the shared material (when the
-## animation assets exist). The tile set is built fresh per call (each layer
-## owns its tiles); the MATERIAL is built once per process and shared, so S3's
-## chunk layers and S10's battle layer all carry the same params and a gate
-## value that can never disagree (§4.7.17: one shader, one set of pins).
-static func build_layer(tile_px: int) -> TileMapLayer:
+## The battle/world water layer: flat tiles (+ coast-foam variants when
+## `shore_dirs` is supplied and the strips resolve) + the shared material
+## (when the animation assets exist). The tile set is built fresh per call
+## (each layer owns its tiles); the MATERIAL is built once per process and
+## shared, so S3's chunk layers and S10's battle layer all carry the same
+## params and a gate value that can never disagree (§4.7.17: one shader, one
+## set of pins). The S10 open-sea grid passes no dirs — its atlas stays the
+## two flat fills.
+static func build_layer(tile_px: int, shore_dirs: Array = []) -> TileMapLayer:
 	var layer := TileMapLayer.new()
 	layer.name = "Water"
-	layer.tile_set = build_tile_set(tile_px)
+	layer.tile_set = build_tile_set(tile_px, shore_dirs)
 	var material := build_material()
 	if material != null:
 		layer.material = material
