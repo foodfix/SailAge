@@ -52,7 +52,16 @@ layout_mode = 2
 follow_focus = true
 horizontal_scroll_mode = 0
 
-[node name="Message" type="Label" parent="Center/Panel/Margin/Body/Scroll"]
+[node name="IconRow" type="HBoxContainer" parent="Center/Panel/Margin/Body/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Icon" type="TextureRect" parent="Center/Panel/Margin/Body/Scroll/IconRow"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Message" type="Label" parent="Center/Panel/Margin/Body/Scroll/IconRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "-"
