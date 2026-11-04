@@ -858,3 +858,60 @@ _Waves ledger entries are appended here by the master as merges land
   `assets/ui/*.import` sidecars; **user contact-sheet review: APPROVED**
   (no veto items). Full `tools/run_tests.py` **56/56 GREEN (284.1s)**
   with textures live. W4 (sweep, non-combat) launches next.
+
+### W4 — sweep, non-combat (2026-11-04) — COMPLETE
+
+- **A** `phase10/w4-a-port` @ `0868dc2` + follow-ups `7ef828d`/`d9bf3d9`
+  (master), merged → 179 sites → 0 across 8 files; icons (`good_*`,
+  trends, `eq_*`, facility tokens, `trophy`, `role_*` badges, `scroll`),
+  atoms (frame/button kinds/footer/value_bar+auto_tier/toast), 21
+  targeted suites GREEN. **Master adjudications:** (1) doc-pinned
+  tier/accent TEXT colors ride NEW theme Label variations `Accent`/
+  `Warn`/`Good`/`Bad` + `CardStatus`/`CardStatusGood`/`CardStatusDim`
+  (12px §4.8.1 status line) — `theme_type_variation` is a plain
+  property, gate-compliant; sites flipped by A's continuation.
+- **B** `phase10/w4-b-shared` @ `51a6713` + follow-up `cb8de9f`, merged
+  → 115 sites → 0 across 13 files; HUD resource icons, **wind/current
+  arrow sprite swap** (null ⇒ drawn fallback), **toast fade 100/150 ms
+  at the `toast_text` funnel** via UiMotion, fleet rows `hull_*_n`
+  tokens, dialogs/ending/gameover kit; S19 restyled, **no new rows**;
+  17 suites GREEN. Follow-up: `dialog_box` consumes W4-C's optional
+  `icon_id` (32px beside the message; inert without). Escalation
+  accepted: poster/sighting surfaces live in A/C/D files; officers
+  carry no role (decision 10 parking lot).
+- **C** `phase10/w4-c-world` @ `abe7fea` + follow-up `85c086b`, merged
+  → map_loader terrain art (data-driven legend kinds, variant hash
+  `(x·31+y·17)%n`, wrapped), **dedicated water layer** +
+  `sea_water.gdshader` (`u_period` 0.8 s, `u_darken` 0.82, `u_motion`
+  gate, TIME-driven — zero per-frame CPU) in shared `water_layer.gd`
+  (the S10 reuse seam), **shore overlay** from `world_shore.png`
+  (data-byte decode, frame-2 warm-up keeps the 3 000 ms boot budget),
+  port markers → `terrain_port_{owner}` sprites, S3 directional player
+  token (`hull_{type}_player_{dir}`), **arrow_field.gd** (pure; §4.8.6
+  table; stride-4 lattice) + W/C keys, world markers discovered-only,
+  hail portrait slot (guarded), chart chrome sweep. New
+  `tools/test_terrain_art` (98 → **109 checks**). **Master doc
+  amendment:** §4.8.10's original C-key pin made the current field
+  unreachable — amended (C toggles current while either field is on;
+  full matrix suite-pinned). Marker sprites: **the A.4 row was
+  assigned to no W3 slot** — master follow-up `30a9173` authored the 6
+  manifests (terrain block, ≤ 5 colors), governor `CLASS_DIRS` +
+  contact-sheet walk gained the class; `assets/ui/markers/` committed
+  (1 374 files byte-identical).
+- **D** `phase10/w4-d-title-ui` @ `bc45ada`, merged → **portrait
+  composer** (`compose_image`/`portrait_texture`, override-wins ladder,
+  HAIR_BROWN→hair + sash→nation swaps, deterministic cache; 48-check
+  suite incl. the 4×4×4×4 domain + override fixture) + **texture
+  registry bootstrap** (`texture_registry.gd`, 1 348 ids, called from
+  `title_screen._ready()`) + title/ui sweep (81 sites → 0) + portrait
+  slots on the character card/dossier. Adjudications: per-screen font
+  sizes retire to theme defaults (§4.9 rule); Godot 4 container
+  separations are theme constants only (`theme_override_constants`
+  channel).
+- **Gate:** full `tools/run_tests.py` — first run 57/58 with one flaky
+  red, **immediate re-run 58/58 GREEN (294.1s)**; validator exit 0
+  (groups 1–13); **day-tick 74 ms ≤ 75** (PROFILE day_tick_avg_ms);
+  styling grep: only `ui_theme.gd`/`ui_kit.gd` + the three W5 combat
+  files (their sweep is W5's scope); allowlist still empty. `build_ui_art
+  --check` byte-identical at 1 374 files. W5 (combat + FX) launches
+  next.
