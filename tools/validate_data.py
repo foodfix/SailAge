@@ -9388,7 +9388,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
     class_dirs = {}
     if UI_ART_DIR.is_dir():
         class_dirs = {p.name: p for p in sorted(UI_ART_DIR.iterdir())
-                      if p.is_dir()}
+                      if p.is_dir() and p.name != "model_raw"}
+        # `model_raw/` is the model-pass cache (90-* §9.2: gitignored,
+        # never committed) — runtime state, not an art class.
     sprite_cache: dict[str, dict] = {}
     manifest_counts: dict[str, int] = {}
     for class_name, class_dir in sorted(class_dirs.items()):
