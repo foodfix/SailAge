@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/combat/battle_screen.gd" id="1_screen"]
 [ext_resource type="Script" path="res://scenes/combat/battle_grid_overlay.gd" id="2_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/ui_shared/confirm_dialog.tscn" id="3_confirm"]
+[ext_resource type="Script" path="res://scenes/combat/battle_fx_layer.gd" id="4_fx"]
 
 [node name="BattleScreen" type="Control"]
 layout_mode = 3
@@ -84,6 +85,16 @@ offset_bottom = 624.0
 mouse_filter = 2
 clip_contents = true
 script = ExtResource("2_overlay")
+
+[node name="FxLayer" type="Control" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 40.0
+offset_right = 1280.0
+offset_bottom = 624.0
+mouse_filter = 2
+clip_contents = true
+script = ExtResource("4_fx")
 
 [node name="Minimap" type="Control" parent="."]
 layout_mode = 0
@@ -187,16 +198,19 @@ theme_override_constants/separation = 1
 layout_mode = 2
 text = ""
 clip_text = true
+theme_override_font_sizes/font_size = 11
 
 [node name="Line1" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
 layout_mode = 2
 text = ""
 clip_text = true
+theme_override_font_sizes/font_size = 11
 
 [node name="Line2" type="Label" parent="BottomPanel/Margin/Columns/LeftCol/Log"]
 layout_mode = 2
 text = ""
 clip_text = true
+theme_override_font_sizes/font_size = 11
 
 [node name="RightCol" type="VBoxContainer" parent="BottomPanel/Margin/Columns"]
 layout_mode = 2
