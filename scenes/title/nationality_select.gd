@@ -49,17 +49,18 @@ var route_sink: Callable = Callable()
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_prompt.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9: secondary text reads through the theme's `Dim` variation; the
+	# title renders the theme's default Label (TEXT). No per-screen overrides.
+	_prompt.theme_type_variation = "Dim"
+	_world_label.theme_type_variation = "Dim"
 	_grid.columns = NATIONS_PER_ROW
-	_grid.add_theme_constant_override("h_separation", PaletteLib.MARGIN)
-	_grid.add_theme_constant_override("v_separation", PaletteLib.MARGIN)
+	_grid.set("theme_override_constants/h_separation", PaletteLib.MARGIN)
+	_grid.set("theme_override_constants/v_separation", PaletteLib.MARGIN)
 	for button in [_back_button, _confirm_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 
 	_back_button.pressed.connect(_on_back)
 	_confirm_button.pressed.connect(confirm_selection)
-	_world_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	EventBus.locale_changed.connect(_on_locale_changed)
 
 	if not DataLoader.nations_list.is_empty():
@@ -115,7 +116,7 @@ func _build_card(nation: Dictionary) -> Button:
 	box.offset_top = PaletteLib.MARGIN
 	box.offset_right = -PaletteLib.MARGIN
 	box.offset_bottom = -PaletteLib.MARGIN
-	box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	card.add_child(box)
 
 	# Head row: 24×24 flag token inline with the nation name (docs/80-* §4.8),
@@ -123,7 +124,7 @@ func _build_card(nation: Dictionary) -> Button:
 	var head := HBoxContainer.new()
 	head.name = "Head"
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	head.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	box.add_child(head)
 
 	var flag := ColorRect.new()
@@ -137,19 +138,16 @@ func _build_card(nation: Dictionary) -> Button:
 	var name_label := Label.new()
 	name_label.name = "NationName"
 	name_label.text = I18n.t(nation.get("name", {}))
-	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	name_label.add_theme_font_size_override("font_size", 24)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(name_label)
 
-	# Two lines at font size 12; grows if a locale wraps to a third line.
+	# Two lines at the theme's default font; grows if a locale wraps to a
+	# third line.
 	var desc := Label.new()
 	desc.name = "Description"
 	desc.text = I18n.t(nation.get("description", {}))
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.custom_minimum_size = Vector2(328, 40)
-	desc.add_theme_color_override("font_color", PaletteLib.TEXT)
-	desc.add_theme_font_size_override("font_size", 12)
 	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(desc)
 
@@ -157,8 +155,6 @@ func _build_card(nation: Dictionary) -> Button:
 	package.name = "StartPackage"
 	package.text = _package_text(nation)
 	package.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	package.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	package.add_theme_font_size_override("font_size", 12)
 	package.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(package)
 
@@ -189,12 +185,10 @@ func _on_card_pressed(nation_id: String) -> void:
 
 
 func _refresh_selection() -> void:
+	# The §4.9 sweep: selection reads through the unified pressed state
+	# (the theme styles toggle buttons' pressed bg) — no font-color overrides.
 	for card in _cards:
 		card.button_pressed = card.name == "Card_%s" % _selected_id
-		card.add_theme_color_override(
-			"font_color",
-			PaletteLib.ACCENT if card.button_pressed else PaletteLib.TEXT
-		)
 
 
 func _on_back() -> void:

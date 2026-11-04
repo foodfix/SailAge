@@ -100,16 +100,17 @@ var _preview_labels: Dictionary = {}
 
 func _ready() -> void:
 	_background.color = PaletteLib.PANEL_BG
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_prompt.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9: the prompt line reads through the theme's `Dim` variation; the
+	# title renders the theme's default Label (TEXT). No per-screen overrides.
+	_prompt.theme_type_variation = "Dim"
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_prompt.custom_minimum_size = Vector2(0, 24)
 	_step_background.columns = BACKGROUNDS_PER_ROW
-	_step_background.add_theme_constant_override(
-		"h_separation", PaletteLib.MARGIN)
-	_step_background.add_theme_constant_override(
-		"v_separation", PaletteLib.MARGIN)
+	_step_background.set("theme_override_constants/h_separation",
+		PaletteLib.MARGIN)
+	_step_background.set("theme_override_constants/v_separation",
+		PaletteLib.MARGIN)
 	for button in [_back_button, _confirm_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 
@@ -194,14 +195,12 @@ func _build_card(background: Dictionary) -> Button:
 	box.offset_top = PaletteLib.MARGIN
 	box.offset_right = -PaletteLib.MARGIN
 	box.offset_bottom = -PaletteLib.MARGIN
-	box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	card.add_child(box)
 
 	var name_label := Label.new()
 	name_label.name = "BackgroundName"
 	name_label.text = I18n.t(background.get("name", {}))
-	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	name_label.add_theme_font_size_override("font_size", 18)
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(name_label)
 
@@ -210,8 +209,6 @@ func _build_card(background: Dictionary) -> Button:
 	bio.text = I18n.t(background.get("bio", {}))
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bio.custom_minimum_size = Vector2(CARD_SIZE.x - 2 * PaletteLib.MARGIN, 56)
-	bio.add_theme_color_override("font_color", PaletteLib.TEXT)
-	bio.add_theme_font_size_override("font_size", 12)
 	bio.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(bio)
 
@@ -219,8 +216,6 @@ func _build_card(background: Dictionary) -> Button:
 	bonus.name = "Bonus"
 	bonus.text = _bonus_line(background)
 	bonus.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	bonus.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	bonus.add_theme_font_size_override("font_size", 12)
 	bonus.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(bonus)
 
@@ -248,12 +243,10 @@ func _on_card_pressed(background_id: String) -> void:
 
 
 func _refresh_selection() -> void:
+	# The §4.9 sweep: selection reads through the unified pressed state
+	# (the theme styles toggle buttons' pressed bg) — no font-color overrides.
 	for card in _cards:
 		card.button_pressed = card.name == "Card_%s" % _background_id
-		card.add_theme_color_override(
-			"font_color",
-			PaletteLib.ACCENT if card.button_pressed else PaletteLib.TEXT
-		)
 
 
 # --- Step ② free points (docs/50-* §4.1 step 2, docs/80-* §4.13) -------------
@@ -268,34 +261,32 @@ func _build_points_step() -> void:
 
 	var columns := HBoxContainer.new()
 	columns.name = "Columns"
-	columns.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	columns.set("theme_override_constants/separation", PaletteLib.MARGIN)
 	_step_points.add_child(columns)
 
 	var attr_box := VBoxContainer.new()
 	attr_box.name = "Attributes"
-	attr_box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	attr_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	columns.add_child(attr_box)
 	_attr_header = Label.new()
 	_attr_header.name = "AttrHeader"
-	_attr_header.add_theme_color_override("font_color", PaletteLib.TEXT)
 	attr_box.add_child(_attr_header)
 	for key in CharacterLib.ATTRIBUTES:
 		_build_stepper_row(attr_box, key, true)
 
 	var skill_box := VBoxContainer.new()
 	skill_box.name = "Skills"
-	skill_box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	skill_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	columns.add_child(skill_box)
 	_skill_header = Label.new()
 	_skill_header.name = "SkillHeader"
-	_skill_header.add_theme_color_override("font_color", PaletteLib.TEXT)
 	skill_box.add_child(_skill_header)
 	for key in SkillsLib.KEYS:
 		_build_stepper_row(skill_box, key, false)
 
 	var spread_row := HBoxContainer.new()
 	spread_row.name = "SpreadRow"
-	spread_row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	spread_row.set("theme_override_constants/separation", PaletteLib.MARGIN)
 	_step_points.add_child(spread_row)
 	var spread := Button.new()
 	spread.name = "Spread"
@@ -305,17 +296,17 @@ func _build_points_step() -> void:
 	spread_row.add_child(spread)
 	_spend_hint = Label.new()
 	_spend_hint.name = "SpendHint"
-	_spend_hint.add_theme_color_override("font_color", PaletteLib.WARN)
+	_spend_hint.theme_type_variation = "Dim"
 	spread_row.add_child(_spend_hint)
 
 	var preview_box := VBoxContainer.new()
 	preview_box.name = "Preview"
-	preview_box.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	preview_box.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	_step_points.add_child(preview_box)
 	for line_key in ["sighting", "speed", "duel"]:
 		var label := Label.new()
 		label.name = "Preview_%s" % line_key
-		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		label.theme_type_variation = "Dim"
 		preview_box.add_child(label)
 		_preview_labels[line_key] = label
 
@@ -323,21 +314,19 @@ func _build_points_step() -> void:
 func _build_stepper_row(parent: Control, key: String, is_attr: bool) -> void:
 	var row := HBoxContainer.new()
 	row.name = "Row_%s" % key
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+	row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 	parent.add_child(row)
 
 	var name_label := Label.new()
 	name_label.name = "StatName"
 	name_label.text = _stat_name(key)
 	name_label.custom_minimum_size = Vector2(140, 0)
-	name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	row.add_child(name_label)
 
 	var value_label := Label.new()
 	value_label.name = "StatValue"
 	value_label.custom_minimum_size = Vector2(48, 0)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	row.add_child(value_label)
 
 	var sub := Button.new()
