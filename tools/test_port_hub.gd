@@ -729,14 +729,18 @@ func _test_provisions_prompt() -> void:
 	_check(get_tree().get_nodes_in_group("modal_overlay").has(prompt),
 		"the open prompt joins modal_overlay (§6)")
 
-	# --- the readout, tier-coloured (§4.8 GOOD ≥ 10) ----------------------
+	# --- the readout, tier bar (§4.8 GOOD ≥ 10; §4.9 kit value_bar) -------
 	var days_label: Label = prompt.get_node(
 		"Center/Panel/Margin/Body/DaysRow/Days"
 	)
 	_check(days_label.text == I18n.fmt("port.sail.days", {"days": 15}),
 		"the readout uses port.sail.days with {days} (%s)" % days_label.text)
-	_check(days_label.get_theme_color("font_color") == Color("#4e9e4e"),
-		"15 days is GOOD green (§4.8)")
+	var good_bar: ProgressBar = prompt.days_bar()
+	_check(good_bar != null and good_bar.value == 10 and good_bar.max_value == 10,
+		"15 safe days fill the readout bar (saturated at the GOOD boundary)")
+	_check(good_bar != null and good_bar.get_theme_stylebox("fill") != null \
+		and good_bar.get_theme_stylebox("fill").bg_color == Color("#4e9e4e"),
+		"15 days is the GOOD-green tier (§4.8)")
 	_check(prompt.days_of_supply() == 15,
 		"days_of_supply() agrees with the label (%d)" % prompt.days_of_supply())
 
@@ -1206,8 +1210,8 @@ func _test_provisions_gate() -> void:
 		"port.sail.short_warning", {"days": 5}),
 		"a small but non-zero readout shows port.sail.short_warning (%s)"
 		% short.text)
-	_check(days_label.get_theme_color("font_color") == Color("#d9a441"),
-		"5 days is WARN amber (§4.8)")
+	_check(prompt.days_bar().get_theme_stylebox("fill").bg_color
+		== Color("#d9a441"), "5 days is the WARN-amber tier (§4.8)")
 	# BAD ≤ 2.
 	GameState.fleet[0]["provisions"] = 6
 	GameState.fleet[0]["water"] = 6
@@ -1215,8 +1219,8 @@ func _test_provisions_gate() -> void:
 	await get_tree().process_frame
 	_check(prompt.days_of_supply() == 2, "6 / 3 = 2 days (got %d)"
 		% prompt.days_of_supply())
-	_check(days_label.get_theme_color("font_color") == Color("#b3341f"),
-		"2 days is BAD red (§4.8)")
+	_check(prompt.days_bar().get_theme_stylebox("fill").bg_color
+		== Color("#b3341f"), "2 days is the BAD-red tier (§4.8)")
 
 	prompt.close()
 	hub.queue_free()

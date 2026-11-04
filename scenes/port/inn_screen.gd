@@ -21,6 +21,10 @@ extends Control
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const InnEngineLib := preload("res://scripts/port/inn_engine.gd")
+## Phase-10 sweep (§4.9): the status box renders morale through the kit's
+## value_bar atom (tier via the doc-pinned §4.8 morale thresholds), and the
+## scene chrome retires to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
 ## The clock text in the day label (`20-*` §4.3 amended).
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -44,6 +48,15 @@ const TALK_FALLBACK_STRINGS := {
 	},
 }
 
+## §4.8 morale tiers for the kit value_bar (docs/80-* §4.8: yellow < 40,
+## red < 20 — the same thresholds `UiKit.auto_tier` takes).
+const MORALE_GOOD_MIN := 40
+const MORALE_WARN_MIN := 20
+
+## The morale value_bar next to the status line (built once in `_ready`,
+## re-tiered in `_bind`). Null-safe until it is built.
+var _morale_bar: ProgressBar = null
+
 ## Emitted when the odd-job button's state machine re-evaluates (`eligible` is
 ## the new value). Tests observe it instead of reaching into the widgets.
 signal odd_job_state_changed(eligible: bool)
@@ -55,7 +68,6 @@ signal left_inn
 @onready var _background: ColorRect = $Background
 @onready var _hud: Control = $HUD
 @onready var _title: Label = $Layout/VBox/Header/Title
-@onready var _status_panel: PanelContainer = $Layout/VBox/Status
 @onready var _morale_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Morale
 @onready var _gold_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Gold
 @onready var _day_label: Label = $Layout/VBox/Status/Margin/StatusVBox/Day
@@ -90,12 +102,11 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): rest rolls ledger days
 	# while this screen is up — the game-over screen must rise over the inn too.
 	GameOverHostLib.attach_to(self)
-	for label in [_title, _morale_label, _gold_label, _day_label]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_rest_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_odd_job_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_status_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_font_size_override("font_size", 32)
+	# Phase-10 sweep: label colors retire to the theme (TEXT is the theme
+	# default; secondary hints carry the `Dim` variation) and the status box
+	# renders the themed PanelContainer chrome — the hand-built box is gone.
+	_rest_hint.theme_type_variation = "Dim"
+	_odd_job_hint.theme_type_variation = "Dim"
 	for button in [_rest_button, _odd_job_button, _back_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_rest_button.pressed.connect(_on_rest_pressed)
@@ -188,9 +199,9 @@ func _bind() -> void:
 		I18n.fmt("inn.morale", {"amount": GameState.morale}),
 		I18n.t_key("world.morale.%s" % HudLib.morale_tier(GameState.morale)),
 	]
-	_morale_label.add_theme_color_override(
-		"font_color", HudLib.morale_color(GameState.morale)
-	)
+	# The tier color rides the kit value_bar (§4.8 morale thresholds); the
+	# label itself stays on the theme's TEXT.
+	_refresh_morale_bar()
 	_gold_label.text = I18n.fmt(
 		"ui.gold_amount", {"gold": HudLib.format_thousands(GameState.gold)}
 	)
@@ -203,6 +214,20 @@ func _bind() -> void:
 	_bind_captains()
 
 	_back_button.text = I18n.t_key("ui.back")
+
+
+## Re-tiered kit value_bar beside the morale line (§4.9: the atom bakes the
+## tier into its fill at build time, so a changed morale rebuilds it).
+func _refresh_morale_bar() -> void:
+	var parent := _morale_label.get_parent()
+	if _morale_bar != null and is_instance_valid(_morale_bar):
+		parent.remove_child(_morale_bar)
+		_morale_bar.queue_free()
+	var tier := UiKitLib.auto_tier(GameState.morale, MORALE_GOOD_MIN,
+		MORALE_WARN_MIN)
+	_morale_bar = UiKitLib.value_bar(GameState.morale, 100, tier)
+	parent.add_child(_morale_bar)
+	parent.move_child(_morale_bar, _morale_label.get_index() + 1)
 
 
 func _bind_rest() -> void:
@@ -265,11 +290,9 @@ func _build_captains_section() -> void:
 	var footer_index := footer.get_index()
 	_captains_header = Label.new()
 	_captains_header.name = "CaptainsHeader"
-	_captains_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	layout.add_child(_captains_header)
 	_captains_box = VBoxContainer.new()
 	_captains_box.name = "CaptainsRows"
-	_captains_box.add_theme_constant_override("separation", 2)
 	layout.add_child(_captains_box)
 	layout.move_child(_captains_header, footer_index)
 	layout.move_child(_captains_box, footer_index + 1)
@@ -302,24 +325,34 @@ func _bind_captains() -> void:
 		var empty := Label.new()
 		empty.name = "Empty"
 		empty.text = "-"
-		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
 		return
 	for entry in _captain_rows:
 		var row := HBoxContainer.new()
 		row.name = "Captain_%s" % str(entry["id"])
-		row.add_theme_constant_override("separation", PaletteLib.MARGIN)
 		var text := Label.new()
 		text.name = "Text"
 		text.text = "%s · %s" % [str(entry["name"]),
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		text.add_theme_color_override("font_color", PaletteLib.TEXT)
 		row.add_child(text)
+		# §4.8 role badges (§4.9 icon params): the sighting row carries the
+		# captain's role badge; an absent id renders nothing (the flat
+		# fallback — the registry fills at W4-D).
+		var badge := UiKitLib.icon_texture("role_%s" % str(entry["role"]))
+		if badge != null:
+			var icon := TextureRect.new()
+			icon.name = "RoleBadge"
+			icon.texture = badge
+			icon.custom_minimum_size = Vector2(32, 32)
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			row.add_child(icon)
+			row.move_child(icon, 0)
 		# Phase-8 W5-C (docs/80-* §4.11.1): the 受限谈话 limited-talk verb —
 		# +1 extra familiarity for one sighted captain, once per port visit.
-		var talk := Button.new()
+		var talk := UiKitLib.button("interact.verb.talk")
 		talk.name = "Talk"
-		talk.text = I18n.t_key("interact.verb.talk")
 		talk.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 		var captain_id := str(entry.get("captain_id", ""))
 		if not InnEngineLib.can_talk(port_id):
@@ -380,14 +413,6 @@ func _port_name() -> String:
 		return "-"
 	var port := DataLoader.get_port(value)
 	return I18n.t(port.get("name", {})) if not port.is_empty() else "-"
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 # --- Actions ---------------------------------------------------------------

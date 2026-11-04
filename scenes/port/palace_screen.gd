@@ -24,6 +24,13 @@ extends Control
 ## today's engine AND the upgraded one.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): the bounty-board/inform rows carry the §4.8
+## `role_{role}` badges through the kit registry (an absent id renders
+## nothing — the flat fallback; the registry fills at W4-D), the S13
+## commendation dialog gains the `trophy` icon (correction 4), the private
+## toast adopts the kit toast atom, and the hand-built row-button chrome and
+## per-screen colors retire to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
 const FameLib := preload("res://scripts/player/fame.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
@@ -125,8 +132,8 @@ signal tournament_started(round_number: int)
 @onready var _tournament_button: Button = $Layout/VBox/Rows/TournamentRow/Action
 @onready var _retire_button: Button = $Layout/VBox/Rows/RetireRow/Retire
 @onready var _confirm: Control = $ConfirmDialog
-@onready var _toast: Label = $Layout/VBox/Toast
-@onready var _toast_timer: Timer = $ToastTimer
+## The §4.7.13 commendation dialog (message + OK chrome, `dialog_box.tscn`).
+@onready var _commend: Control = $CommendDialog
 ## Phase-7 permit section (§4.7.13): header + one row per applicable kind.
 @onready var _permit_header: Label = $Layout/VBox/Rows/PermitHeader
 @onready var _permit_rows: Dictionary = {
@@ -143,8 +150,6 @@ signal tournament_started(round_number: int)
 		"buy": $Layout/VBox/Rows/PermitForeignRow/Action,
 	},
 }
-## The §4.7.13 commendation dialog (message + OK chrome, `dialog_box.tscn`).
-@onready var _commend: Control = $CommendDialog
 ## Ids behind the open commendation, so a locale change recomposes the text.
 var _commend_info: Dictionary = {}
 
@@ -179,20 +184,13 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the palace too.
 	GameOverHostLib.attach_to(self)
-	for label in [_title, _title_row, _title_next, _mission_label, _repair_label,
-			_bounty_label, _tournament_label, _toast]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	for label in [_fame, _title_next]:
-		label.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	for label in [_rep]:
-		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_title.add_theme_font_size_override("font_size", 32)
+	# Phase-10 sweep: label colors retire to the shared theme — TEXT is the
+	# theme's Label default and the rep line carries the `Dim` variation
+	# (the former per-screen ACCENT/PANEL_LINE overrides).
+	_rep.theme_type_variation = "Dim"
 	for button in [_back_button, _ceremony, _mission_button, _repair_button,
 			_bounty_button, _tournament_button, _retire_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_toast.visible = false
-	_toast_timer.one_shot = true
-	_toast_timer.timeout.connect(func() -> void: _toast.visible = false)
 	# S13 keeps the §4.5 bars but not the sea viewport, exactly like S4/S6/S8
 	# (docs/80-* §4.5): the chart would otherwise cover the palace rows.
 	if _hud != null:
@@ -432,7 +430,6 @@ func _report_tournament(outcome: Dictionary) -> void:
 			"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
 			"fame": int(outcome.get("fame", 0)),
 		})
-		_tournament_label.add_theme_color_override("font_color", PaletteLib.GOOD)
 		return
 	_show_toast("tournament.lost", {
 		"round": int(outcome.get("round_reached", 1)),
@@ -440,7 +437,6 @@ func _report_tournament(outcome: Dictionary) -> void:
 	_tournament_label.text = I18n.fmt("tournament.consolation", {
 		"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
 	})
-	_tournament_label.add_theme_color_override("font_color", PaletteLib.WARN)
 
 
 # --- Rendering -----------------------------------------------------------
@@ -600,11 +596,9 @@ func _build_bounty_board() -> void:
 	var footer_index := footer.get_index()
 	_board_header = Label.new()
 	_board_header.name = "BountyBoardHeader"
-	_board_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	layout.add_child(_board_header)
 	_board_box = VBoxContainer.new()
 	_board_box.name = "BountyBoardRows"
-	_board_box.add_theme_constant_override("separation", 2)
 	layout.add_child(_board_box)
 	layout.move_child(_board_header, footer_index)
 	layout.move_child(_board_box, footer_index + 1)
@@ -637,29 +631,46 @@ func _bind_bounty_board() -> void:
 		var empty := Label.new()
 		empty.name = "Empty"
 		empty.text = "-"
-		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		empty.theme_type_variation = "Dim"
 		_board_box.add_child(empty)
 		return
 	for entry in _hunter_rows:
 		var row := HBoxContainer.new()
 		row.name = "Hunter_%s" % str(entry["id"])
-		row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+		# §4.8 role badge on the sighting row (the flat fallback renders
+		# nothing until the registry fills at W4-D).
+		_attach_role_badge(row, str(entry["role"]))
 		var text := Label.new()
 		text.name = "Text"
 		text.text = "%s · %s" % [str(entry["name"]),
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		text.add_theme_color_override("font_color", PaletteLib.TEXT)
 		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(text)
-		var dossier := Button.new()
+		var dossier := UiKitLib.button("dossier.open_from_bounty")
 		dossier.name = "Dossier"
-		dossier.text = I18n.t_key("dossier.open_from_bounty")
 		dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-		_style_row_button(dossier)
 		dossier.pressed.connect(_open_dossier.bind(
 			str(entry.get("captain_id", ""))))
 		row.add_child(dossier)
 		_board_box.add_child(row)
+
+
+## Prepends the §4.8 `role_{role}` badge to a board/inform row; an absent id
+## or an unknown role adds nothing (the flat fallback).
+func _attach_role_badge(row: HBoxContainer, role: String) -> void:
+	if role.is_empty():
+		return
+	var texture := UiKitLib.icon_texture("role_%s" % role)
+	if texture == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "RoleBadge"
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row.add_child(icon)
+	row.move_child(icon, 0)
 
 
 # --- Inform on pirates + the dossier entry (§4.11.1/§4.11.3, Phase-8 W5-C) --
@@ -670,21 +681,6 @@ func _inform_text(key: String) -> String:
 	if DataLoader.ui_strings.has(key):
 		return I18n.t_key(key)
 	return I18n.t(INFORM_FALLBACK_STRINGS.get(key, {}))
-
-
-## One flat row button's chrome (the code-built sections have no scene
-## stylebox; the shared tavern-button look keeps the board readable).
-func _style_row_button(button: Button) -> void:
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = PaletteLib.PANEL_BG
-	normal.border_color = PaletteLib.PANEL_LINE
-	normal.set_border_width_all(2)
-	normal.set_content_margin_all(PaletteLib.BASE_UNIT)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.border_color = PaletteLib.ACCENT
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("focus", hover)
 
 
 ## The inform rows currently rendered (`{id, captain_id, name, tier,
@@ -705,11 +701,9 @@ func _build_inform_section() -> void:
 	var layout: Node = _board_box.get_parent()
 	_inform_header = Label.new()
 	_inform_header.name = "InformHeader"
-	_inform_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	layout.add_child(_inform_header)
 	_inform_box = VBoxContainer.new()
 	_inform_box.name = "InformRows"
-	_inform_box.add_theme_constant_override("separation", 2)
 	layout.add_child(_inform_box)
 	layout.move_child(_inform_header, _board_box.get_index() + 1)
 	layout.move_child(_inform_box, _inform_header.get_index() + 1)
@@ -751,16 +745,17 @@ func _bind_inform_rows() -> void:
 		var line := Label.new()
 		line.name = "InformText_%s" % str(fleet_id)
 		line.text = str(_informed[fleet_id])
-		line.add_theme_color_override("font_color", PaletteLib.ACCENT)
 		_inform_box.add_child(line)
 
 
-## One inform row: the wanted caption (the §4.7.8 poster title), the fixed
-## 500g inform action, and the dossier entry.
+## One inform row: the wanted caption (the §4.7.8 poster title) with the
+## captain's §4.8 role badge, the fixed 500g inform action, and the dossier
+## entry.
 func _build_inform_row(row: Dictionary) -> Control:
 	var box := HBoxContainer.new()
 	box.name = "Inform_%s" % str(row["id"])
-	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	_attach_role_badge(box, str(CaptainsLib.captain(
+		str(row.get("captain_id", ""))).get("role", "")))
 
 	var text := Label.new()
 	text.name = "Text"
@@ -768,7 +763,6 @@ func _build_inform_row(row: Dictionary) -> Control:
 		"name": str(row.get("name", "")),
 		"tier": int(row.get("tier", 1)),
 	})
-	text.add_theme_color_override("font_color", PaletteLib.BAD)
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(text)
 
@@ -776,7 +770,6 @@ func _build_inform_row(row: Dictionary) -> Control:
 	inform.name = "Inform"
 	inform.text = _inform_text("palace.inform.action")
 	inform.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
-	_style_row_button(inform)
 	if not PalaceEngineLib.can_inform(_port_id):
 		inform.disabled = true
 		inform.tooltip_text = I18n.t_key("captain.reveal.no_gold")
@@ -784,11 +777,9 @@ func _build_inform_row(row: Dictionary) -> Control:
 		inform.pressed.connect(inform_on.bind(str(row.get("id", ""))))
 	box.add_child(inform)
 
-	var dossier := Button.new()
+	var dossier := UiKitLib.button("dossier.open_from_bounty")
 	dossier.name = "Dossier"
-	dossier.text = I18n.t_key("dossier.open_from_bounty")
 	dossier.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-	_style_row_button(dossier)
 	dossier.pressed.connect(_open_dossier.bind(str(row.get("captain_id", ""))))
 	box.add_child(dossier)
 	return box
@@ -1063,7 +1054,31 @@ func _check_commendation() -> void:
 		return
 	_commend_info = info
 	_commend.open_text(_commend_message())
+	_attach_commend_trophy()
 	_set_commend_button()
+
+
+## The S13 commendation's §4.8 `trophy` icon (correction 4): a 32px mark
+## beside the title block, inserted into the shared dialog's body above the
+## message (the same reach-in pattern `_set_commend_button` uses — the
+## dialog scene itself is W4-B's). An absent registry id adds nothing
+## (the flat fallback).
+func _attach_commend_trophy() -> void:
+	var body := _commend.get_node_or_null(
+		"Center/Panel/Margin/Body") as VBoxContainer
+	if body == null or body.get_node_or_null("CommendTrophy") != null:
+		return
+	var texture := UiKitLib.icon_texture("trophy")
+	if texture == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "CommendTrophy"
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	body.add_child(icon)
+	body.move_child(icon, 0)
 
 
 ## The pending commendation through the seam, engine shape first: task L's
@@ -1171,10 +1186,7 @@ func _set_enabled(button: Button, enabled: bool, reason_key: String) -> void:
 func _show_toast(key: String, values: Dictionary = {}) -> void:
 	if not DataLoader.ui_strings.has(key):
 		return
-	_toast.text = I18n.fmt(key, values)
-	_toast.add_theme_color_override("font_color", PaletteLib.GOOD)
-	_toast.visible = true
-	_toast_timer.start(2.5)
+	UiKitLib.toast(self, I18n.fmt(key, values))
 
 
 func _on_locale_changed(_locale: String) -> void:

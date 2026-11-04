@@ -62,6 +62,13 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): the goods rows carry the generated `good_{id}`
+## icons and the `trend_up` / `trend_down` / `event_demand` marks through the
+## kit's texture registry (an absent id renders nothing — the flat fallback;
+## the registry fills at W4-D), the private trade toast adopts the kit toast
+## atom, and every per-screen color/chrome override retires to the theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiMotionLib := preload("res://scripts/ui_motion.gd")
 const EconomyLib := preload("res://scripts/port/economy.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
@@ -74,8 +81,6 @@ const CaptainsLib := preload("res://scripts/world/captains.gd")
 const GameOverHostLib := preload("res://scenes/ui_shared/game_over_host.gd")
 
 const PORT_SCENE := "res://scenes/port/port_screen.tscn"
-## docs/80 §4.7: toasts are transient (2.5s).
-const TOAST_SECONDS := 2.5
 ## Quantity presets, in the §4.4 order 1 / 10 / 100 (+ Max).
 const QTY_PRESETS: Array[int] = [1, 10, 100]
 ## The trade table's column definitions — the **single source** for the
@@ -90,8 +95,12 @@ const QTY_PRESETS: Array[int] = [1, 10, 100]
 const CELL_SEP := 4
 ## The ★ 特产 badge slot (docs/80 §4.7.11): reserved on **every** row —
 ## blank on non-produce rows — so every good name starts at the same x.
+## The good's `good_{id}` icon (§4.8) rides between the badge slot and the
+## name; the Good cell's total width is unchanged (the name gives the 32px
+## icon slot its room).
 const COL_BADGE_W := 56
-const COL_NAME_W := 160
+const COL_GOOD_ICON_W := 32
+const COL_NAME_W := 124
 const COL_STOCK_W := 56
 const COL_TREND_W := 96
 ## Phase 8 (docs/30 §4.2): the appraisal-gated profit / other-port memory
@@ -107,8 +116,10 @@ const COL_BUTTON_W := 88
 ## The qty picker cell: the field + 1/10/100 + Max with the four inner gaps.
 const COL_QTY_TOTAL_W := COL_QTY_W + 3 * COL_PRESET_W + COL_MAX_W \
 	+ 4 * CELL_SEP
-## The Good cell: the reserved badge slot, the gap, then the name.
-const COL_GOOD_TOTAL_W := COL_BADGE_W + CELL_SEP + COL_NAME_W
+## The Good cell: the reserved badge slot, the gap, the good icon, the gap,
+## then the name.
+const COL_GOOD_TOTAL_W := COL_BADGE_W + CELL_SEP + COL_GOOD_ICON_W \
+	+ CELL_SEP + COL_NAME_W
 const COL_SPECS: Array = [
 	["good", "good", COL_GOOD_TOTAL_W, HORIZONTAL_ALIGNMENT_LEFT],
 	["stock", "stock.header", COL_STOCK_W, HORIZONTAL_ALIGNMENT_RIGHT],
@@ -175,7 +186,6 @@ signal traded(kind: String, good_id: String, qty: int)
 	$Layout/VBox/TableFrame/Margin/Table/GoodsScroll/GoodsRows
 @onready var _invest_button: Button = $Layout/VBox/Footer/Invest
 @onready var _invest_status: Label = $Layout/VBox/Footer/InvestStatus
-@onready var _toast: Label = $Toast
 
 ## Routing switch for headless tests (the `GameState.new_game(..., route)`
 ## convention): with `false`, [method go_back] runs the whole transition and
@@ -190,8 +200,6 @@ var _rows: Dictionary = {}
 ## True while a `text_changed` handler rewrites its own LineEdit, so the
 ## rewrite does not re-enter the sanitiser.
 var _sanitizing := false
-## Toast generation so a replaced toast does not hide its successor.
-var _toast_generation := 0
 ## Gold-flash tween (created/destroyed by [_flash_gold]).
 var _gold_tween: Tween = null
 ## Task L (§4.7.8): the "merchant captains in port" section (code-built under
@@ -310,16 +318,14 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the market too.
 	GameOverHostLib.attach_to(self)
-	for label in [_title, _gold, _hold, _invest_status, _toast]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_invest_status.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_table_frame.add_theme_stylebox_override("panel", _panel_style())
+	# Phase-10 sweep: label colors retire to the shared theme (TEXT is the
+	# theme's Label default; secondary status lines carry the `Dim`
+	# variation) and the trade table renders the themed PanelContainer chrome.
+	_invest_status.theme_type_variation = "Dim"
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_invest_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
 	_invest_button.pressed.connect(_on_invest_pressed)
-	_toast.visible = false
 	_goods_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_goods_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
@@ -593,7 +599,8 @@ func _build_column_header() -> void:
 		label.custom_minimum_size = Vector2(float(spec[2]), float(PaletteLib.ROW_H))
 		label.horizontal_alignment = int(spec[3])
 		label.clip_text = true
-		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		# Secondary caption color: the theme's `Dim` variation.
+		label.theme_type_variation = "Dim"
 		_column_header.add_child(label)
 
 
@@ -605,7 +612,6 @@ func _build_good_row(good_id: String) -> Dictionary:
 	var row := HBoxContainer.new()
 	row.name = "Row_%s" % good_id
 	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	row.set_meta("good_id", good_id)
 	# Clicking anywhere on the row selects it (docs/30 §4.8 info strip).
 	# PASS, so the row's own buttons and field still get their clicks.
@@ -619,7 +625,6 @@ func _build_good_row(good_id: String) -> Dictionary:
 				var name_cell := HBoxContainer.new()
 				name_cell.name = "NameCell"
 				name_cell.mouse_filter = Control.MOUSE_FILTER_PASS
-				name_cell.add_theme_constant_override("separation", CELL_SEP)
 				# The ★ 特产 badge (docs/80 §4.7.11): a fixed reserved slot
 				# on **every** row — produce rows render the badge, the rest
 				# keep the empty slot — so the good names align; text is
@@ -629,46 +634,76 @@ func _build_good_row(good_id: String) -> Dictionary:
 				badge_label.custom_minimum_size.x = float(COL_BADGE_W)
 				badge_label.clip_text = true
 				badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				badge_label.add_theme_color_override("font_color",
-					PaletteLib.ACCENT)
 				name_cell.add_child(badge_label)
+				# The good's §4.8 icon (`good_{id}`): 32px inline in the
+				# 32px row while the registry carries the id; absent ⇒ the
+				# slot collapses (the flat fallback, zero layout shift).
+				var good_icon := TextureRect.new()
+				good_icon.name = "GoodIcon"
+				good_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				good_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				good_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				var good_tex := UiKitLib.icon_texture("good_%s" % good_id)
+				if good_tex != null:
+					good_icon.texture = good_tex
+					good_icon.custom_minimum_size = Vector2(
+						float(COL_GOOD_ICON_W), float(PaletteLib.ROW_H))
+				name_cell.add_child(good_icon)
 				var name_label := Label.new()
 				name_label.name = "Name"
 				name_label.custom_minimum_size.x = float(COL_NAME_W)
 				name_label.clip_text = true
 				name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				name_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 				name_cell.add_child(name_label)
 				row.add_child(name_cell)
 				refs["name_cell"] = name_cell
 				refs["badge"] = badge_label
 				refs["name"] = name_label
 			"arrows":
-				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the
-				# profit arrow (GOOD: ↓ buy-cheap / ↑ sell-dear vs
-				# base_price) and the other-port memory arrow (ACCENT: the
-				# remembered foreign price). Both stay empty below gates.
+				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — bare
+				# ↑/↓ glyphs (the former per-screen GOOD/ACCENT tints retire
+				# to the theme TEXT; flagged in the W4-A sweep report).
 				var arrows_box := HBoxContainer.new()
 				arrows_box.name = "Arrows"
 				arrows_box.mouse_filter = Control.MOUSE_FILTER_PASS
 				arrows_box.custom_minimum_size.x = float(COL_ARROW_W)
-				arrows_box.add_theme_constant_override("separation", 2)
 				var profit_arrow_label := Label.new()
 				profit_arrow_label.name = "ProfitArrow"
 				profit_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				profit_arrow_label.add_theme_color_override("font_color",
-					PaletteLib.GOOD)
 				var memory_arrow_label := Label.new()
 				memory_arrow_label.name = "MemoryArrow"
 				memory_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				memory_arrow_label.add_theme_color_override("font_color",
-					PaletteLib.ACCENT)
 				arrows_box.add_child(profit_arrow_label)
 				arrows_box.add_child(memory_arrow_label)
 				row.add_child(arrows_box)
 				refs["arrows"] = arrows_box
 				refs["profit_arrow"] = profit_arrow_label
 				refs["memory_arrow"] = memory_arrow_label
+			"trend":
+				# The §4.7.7 flow-trend cell: the §4.8 trend mark
+				# (`trend_up` / `trend_down` /, on a demand-event surge,
+				# `event_demand`) beside the localized glyph line — the mark
+				# is bound per refresh in [method _refresh_stock_cells]; an
+				# absent id keeps the text-only cell.
+				var trend_box := HBoxContainer.new()
+				trend_box.name = "TrendCell"
+				trend_box.mouse_filter = Control.MOUSE_FILTER_PASS
+				trend_box.custom_minimum_size.x = float(COL_TREND_W)
+				var trend_icon := TextureRect.new()
+				trend_icon.name = "TrendMark"
+				trend_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				trend_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				trend_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				trend_box.add_child(trend_icon)
+				var trend_label := Label.new()
+				trend_label.name = "Trend"
+				trend_label.clip_text = true
+				trend_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				trend_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				trend_box.add_child(trend_label)
+				row.add_child(trend_box)
+				refs["trend_icon"] = trend_icon
+				refs["trend"] = trend_label
 			"qty":
 				# Quantity picker (docs/30 §4.4): 1 / 10 / 100 / Max buttons
 				# plus direct numeric entry (digits only, live-clamped,
@@ -676,7 +711,6 @@ func _build_good_row(good_id: String) -> Dictionary:
 				var qty_box := HBoxContainer.new()
 				qty_box.name = "QtyPicker"
 				qty_box.mouse_filter = Control.MOUSE_FILTER_PASS
-				qty_box.add_theme_constant_override("separation", CELL_SEP)
 				var qty_field := LineEdit.new()
 				qty_field.name = "Qty"
 				qty_field.custom_minimum_size = Vector2(float(COL_QTY_W),
@@ -710,9 +744,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 				row.add_child(trade_button)
 				refs[key.to_lower()] = trade_button
 			_:
-				# A plain fixed-width cell (Stock / Trend / Marginal / You
-				# have): the caption's width and alignment from the same
-				# spec, clip_text so a wide value can never push the row's
+				# A plain fixed-width cell (Stock / Marginal / You have):
+				# the caption's width and alignment from the same spec,
+				# clip_text so a wide value can never push the row's
 				# remaining columns off their captions.
 				var spec_key := str(spec[0])
 				var cell := Label.new()
@@ -722,7 +756,6 @@ func _build_good_row(good_id: String) -> Dictionary:
 				cell.horizontal_alignment = int(spec[3])
 				cell.clip_text = true
 				cell.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-				cell.add_theme_color_override("font_color", PaletteLib.TEXT)
 				row.add_child(cell)
 				refs["have" if spec_key == "you_have" else spec_key] = cell
 
@@ -745,7 +778,6 @@ func _build_specialty_header() -> void:
 	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
 	_specialty_header = Label.new()
 	_specialty_header.name = "SpecialtyHeader"
-	_specialty_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	table.add_child(_specialty_header)
 	table.move_child(_specialty_header, 0)
 
@@ -886,10 +918,8 @@ func _refresh_tax_badge() -> void:
 	var key := tax_badge_key(_tariff_mille(), _effective_alignment(),
 		_player_nation())
 	_tax_badge.text = I18n.t_key(key)
-	# Cheaper trade reads ACCENT; the 20% walls read BAD (docs/80 §4.8 palette).
-	_tax_badge.add_theme_color_override("font_color",
-		PaletteLib.ACCENT if key != "market.tax.badge.foreign"
-				and key != "market.tax.badge.unallied" else PaletteLib.BAD)
+	# The former per-screen ACCENT/BAD tints retire to the theme TEXT
+	# (flagged in the W4-A sweep report — no theme atom expresses them).
 
 
 ## The header badge's current key + text (the suite's seam).
@@ -913,7 +943,7 @@ func _build_info_strip() -> void:
 	var table: VBoxContainer = $Layout/VBox/TableFrame/Margin/Table
 	_info_strip = Label.new()
 	_info_strip.name = "InfoStrip"
-	_info_strip.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	_info_strip.theme_type_variation = "Dim"
 	_info_strip.visible = false
 	table.add_child(_info_strip)
 
@@ -1049,25 +1079,38 @@ func row_arrows(good_id: String) -> Dictionary:
 
 ## Stock cell (0–200) and the one-glyph trend against the **effective**
 ## rest (override-aware, docs/30 §4.5): ▲ refilling below rest, ▼ draining
-## above it, blank exactly at rest (docs/80 §4.7.7 — no forecast).
+## above it, blank exactly at rest (docs/80 §4.7.7 — no forecast). The §4.8
+## trend mark rides beside the glyph — `event_demand` while a demand-event
+## surge covers the port-good, else `trend_up` / `trend_down`; an absent id
+## renders nothing (the flat fallback).
 func _refresh_stock_cells(good_id: String, refs: Dictionary) -> void:
 	var stock_label: Label = refs["stock"]
 	var trend_label: Label = refs["trend"]
+	var trend_icon: TextureRect = refs["trend_icon"]
+	var mark := ""
 	if _port_id.is_empty():
 		stock_label.text = "-"
 		trend_label.text = ""
-		return
-	var stock := EconomyLib.stock_of(_port_id, good_id)
-	var rest := EconomyLib.effective_rest(_port_id, good_id)
-	stock_label.text = str(stock)
-	if stock < rest:
-		trend_label.text = I18n.t_key("market.stock.trend_up")
-		trend_label.add_theme_color_override("font_color", PaletteLib.GOOD)
-	elif stock > rest:
-		trend_label.text = I18n.t_key("market.stock.trend_down")
-		trend_label.add_theme_color_override("font_color", PaletteLib.BAD)
 	else:
-		trend_label.text = ""
+		var stock := EconomyLib.stock_of(_port_id, good_id)
+		var rest := EconomyLib.effective_rest(_port_id, good_id)
+		stock_label.text = str(stock)
+		if EconomyLib.consumption_surged(_port_id, good_id):
+			mark = "event_demand"
+			trend_label.text = I18n.t_key("market.stock.trend_up")
+		elif stock < rest:
+			mark = "trend_up"
+			trend_label.text = I18n.t_key("market.stock.trend_up")
+		elif stock > rest:
+			mark = "trend_down"
+			trend_label.text = I18n.t_key("market.stock.trend_down")
+		else:
+			trend_label.text = ""
+	var texture := UiKitLib.icon_texture(mark) if not mark.is_empty() else null
+	trend_icon.texture = texture
+	trend_icon.visible = texture != null
+	trend_icon.custom_minimum_size = Vector2(32, 32) if texture != null \
+		else Vector2(0, 0)
 
 
 ## Re-applies the quantity ceiling and the §4.7/§6 disabled-with-reason rules
@@ -1121,27 +1164,15 @@ func _apply_row_limits(good_id: String) -> void:
 	_set_button_state(sell_button, sell_reason.is_empty(), sell_reason)
 
 
-## The exclusive lock's visual state: the whole row's text cells gray to
-## PANEL_LINE while the row is gated (docs/80 §4.7.11 "grayed exclusive
-## rows"). Restoring re-derives each cell's color — the trend glyph keeps
-## its GOOD/BAD flow colors (re-read from the cell's own text).
+## The exclusive lock's visual state: the whole row's text cells dim to the
+## theme's `Dim` variation while the row is gated (docs/80 §4.7.11 "grayed
+## exclusive rows"); restoring clears the variation (the trend mark — not
+## the label — carries the flow color once art is live).
 func _set_row_grayed(refs: Dictionary, grayed: bool) -> void:
-	var color := PaletteLib.PANEL_LINE if grayed else PaletteLib.TEXT
+	var variation := "Dim" if grayed else ""
 	for key in ["name", "stock", "marginal", "have"]:
-		(refs[key] as Label).add_theme_color_override("font_color", color)
-	var trend: Label = refs["trend"]
-	trend.add_theme_color_override("font_color",
-		color if grayed else _trend_color(trend.text))
-
-
-## The flow-trend glyph's color for its current text (GOOD refilling, BAD
-## draining, TEXT blank — the `_refresh_stock_cells` rule).
-func _trend_color(text: String) -> Color:
-	if text == I18n.t_key("market.stock.trend_up"):
-		return PaletteLib.GOOD
-	if text == I18n.t_key("market.stock.trend_down"):
-		return PaletteLib.BAD
-	return PaletteLib.TEXT
+		(refs[key] as Label).theme_type_variation = variation
+	(refs["trend"] as Label).theme_type_variation = variation
 
 
 ## Physical ceiling of a goods row's quantity field: the pooled free hold plus
@@ -1281,11 +1312,9 @@ func _build_captains_section() -> void:
 	var layout: VBoxContainer = $Layout/VBox
 	_captains_header = Label.new()
 	_captains_header.name = "CaptainsHeader"
-	_captains_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	layout.add_child(_captains_header)
 	_captains_box = VBoxContainer.new()
 	_captains_box.name = "CaptainsRows"
-	_captains_box.add_theme_constant_override("separation", 2)
 	layout.add_child(_captains_box)
 
 
@@ -1328,16 +1357,38 @@ func _refresh_captains() -> void:
 		var empty := Label.new()
 		empty.name = "Empty"
 		empty.text = "-"
-		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		empty.theme_type_variation = "Dim"
 		_captains_box.add_child(empty)
 		return
 	for entry in _captain_rows:
-		var row := Label.new()
+		var row := HBoxContainer.new()
 		row.name = "Captain_%s" % str(entry["id"])
-		row.text = "%s · %s" % [str(entry["name"]),
+		# §4.8 role badge on the sighting row (the flat fallback renders
+		# nothing until the registry fills at W4-D).
+		_attach_role_badge(row, str(entry["role"]))
+		var label := Label.new()
+		label.text = "%s · %s" % [str(entry["name"]),
 			I18n.t_key("captain.role.%s" % str(entry["role"]))]
-		row.add_theme_color_override("font_color", PaletteLib.TEXT)
+		row.add_child(label)
 		_captains_box.add_child(row)
+
+
+## Prepends the §4.8 `role_{role}` badge to a sighting row (32px inline in
+## the row); an absent id adds nothing (the flat fallback).
+func _attach_role_badge(row: HBoxContainer, role: String) -> void:
+	if role.is_empty():
+		return
+	var texture := UiKitLib.icon_texture("role_%s" % role)
+	if texture == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "RoleBadge"
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row.add_child(icon)
+	row.move_child(icon, 0)
 
 
 # --- Captain-intel rows (docs/30-* §4.8, Phase 8 W5-C) -----------------------
@@ -1363,11 +1414,9 @@ func _build_intel_section() -> void:
 	var layout: VBoxContainer = $Layout/VBox
 	_intel_header = Label.new()
 	_intel_header.name = "IntelHeader"
-	_intel_header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	layout.add_child(_intel_header)
 	_intel_box = VBoxContainer.new()
 	_intel_box.name = "IntelRows"
-	_intel_box.add_theme_constant_override("separation", 2)
 	layout.add_child(_intel_box)
 
 
@@ -1427,12 +1476,13 @@ func _refresh_intel() -> void:
 		if bool(row["free"]):
 			line += " · %s" % _intel_text("market.intel.free")\
 				.replace("{port}", str(row["dest_port_name"]))
+		var box := HBoxContainer.new()
+		box.name = "Intel_%s" % str(row["captain_id"])
+		_attach_role_badge(box, str(row["role"]))
 		var label := Label.new()
-		label.name = "Intel_%s" % str(row["captain_id"])
 		label.text = line
-		label.add_theme_color_override("font_color",
-			PaletteLib.ACCENT if bool(row["free"]) else PaletteLib.TEXT)
-		_intel_box.add_child(label)
+		box.add_child(label)
+		_intel_box.add_child(box)
 
 
 # --- Interaction -----------------------------------------------------------
@@ -1617,35 +1667,31 @@ static func _parse_qty(text: String) -> int:
 	return int(text)
 
 
-## Transient bottom-center toast (docs/80 §4.7: 2.5s, max one visible).
-## The coroutine may outlive the screen (Back/Esc frees it), so the resume path
-## checks instance validity before touching the label.
+## Transient bottom-center toast (docs/80 §4.7: 2.5s, max one visible)
+## through the kit toast atom (§4.9) — the atom owns the lifetime, the
+## §4.7.17 fades and the max-1 rule, and guards every access against a
+## screen freed mid-toast.
 func _show_toast(text: String) -> void:
-	_toast_generation += 1
-	var generation := _toast_generation
-	_toast.text = text
-	_toast.visible = true
-	await get_tree().create_timer(TOAST_SECONDS).timeout
-	if not is_instance_valid(_toast) or not is_inside_tree():
-		return
-	if generation == _toast_generation:
-		_toast.visible = false
+	UiKitLib.toast(self, text)
 
 
 ## Successful trade feedback (docs/30 §4.7 "flashes the gold readout"): the
-## label brightens to ACCENT and fades back. Purely visual — no state read.
+## label lifts toward the kit's §4.7.17 flash tint and settles back. Purely
+## visual (modulate only — never layout), gated by `UiMotion` so instant
+## mode sets the end state immediately.
 func _flash_gold() -> void:
 	if _gold == null:
 		return
-	_gold.add_theme_color_override("font_color", PaletteLib.ACCENT)
+	var tint := Color.WHITE.lerp(PaletteLib.ACCENT, UiKitLib.FLASH_LERP)
 	if _gold_tween != null and _gold_tween.is_valid():
 		_gold_tween.kill()
+	_gold.modulate = tint
+	if not UiMotionLib.enabled:
+		_gold.modulate = Color.WHITE
+		return
 	_gold_tween = create_tween()
-	_gold_tween.tween_interval(0.35)
-	_gold_tween.tween_callback(func() -> void:
-		if is_instance_valid(_gold):
-			_gold.add_theme_color_override("font_color", PaletteLib.TEXT)
-	)
+	_gold_tween.tween_interval(UiMotionLib.dur(350))
+	_gold_tween.tween_property(_gold, "modulate", Color.WHITE, 0.0)
 
 
 ## `1,234` — grouping for gold amounts (the L10nString supplies the unit).
@@ -1659,14 +1705,6 @@ static func format_thousands(value: int) -> String:
 		if count % 3 == 0 and index > 0:
 			out = "," + out
 	return ("-" if value < 0 else "") + out
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 func _exit_tree() -> void:

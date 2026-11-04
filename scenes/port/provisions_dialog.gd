@@ -40,6 +40,11 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): the days-of-supply readout gains the kit's
+## value_bar atom (tier via the doc-pinned §4.6.1 GOOD ≥ 10 / WARN 3–9
+## thresholds) and the destructive actions adopt the kit button atom's
+## Danger kind; panel chrome retires to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const TradeEngineLib := preload("res://scripts/port/trade_engine.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
@@ -60,9 +65,13 @@ const MODAL_GROUP := "modal_overlay"
 
 ## `[- 10 +]` stepper step (docs/80-* §4.6.1: "steps of 10").
 const STEP := 10
-## Days-of-supply tiers (docs/80-* §4.6.1: GOOD ≥ 10, WARN 3–9, BAD ≤ 2).
+## Days-of-supply tiers (docs/80-* §4.6.1: GOOD ≥ 10, WARN 3–9, BAD ≤ 2) —
+## the readout's value_bar re-tiers through `UiKit.auto_tier` with them.
 const DAYS_GOOD_MIN := 10
 const DAYS_WARN_MIN := 3
+## The readout bar saturates at the §4.6.1 GOOD boundary: at 10+ safe days
+## the bar is full (no number beyond the locked formula is invented).
+const DAYS_BAR_MAX := DAYS_GOOD_MIN
 ## `short_warning` shows below this many days (the WARN band and worse).
 const SHORT_WARNING_BELOW := DAYS_GOOD_MIN
 
@@ -94,8 +103,11 @@ var _rows: Dictionary = {}
 ## so the one shared confirm (§4.7) serves both destructive paths.
 var _pending: Dictionary = {}
 
+## The days readout's tier bar (built lazily in [_refresh_days], inserted
+## right under the DaysRow — a suite/host seam, like [method fill_button]).
+var _days_bar: ProgressBar = null
+
 @onready var _dim: ColorRect = $Dim
-@onready var _panel: PanelContainer = $Center/Panel
 @onready var _title: Label = $Center/Panel/Margin/Body/Title
 @onready var _header: Label = $Center/Panel/Margin/Body/Header
 @onready var _crew: Label = $Center/Panel/Margin/Body/Table/Crew
@@ -161,15 +173,10 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_header.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_crew.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_hold.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_short.add_theme_color_override("font_color", PaletteLib.WARN)
-	_hint.add_theme_color_override("font_color", PaletteLib.BAD)
-	_gate_reason.add_theme_color_override("font_color", PaletteLib.BAD)
+	# Phase-10 sweep: the panel renders the themed PanelContainer chrome and
+	# label colors retire to the theme (TEXT default; secondary lines `Dim`).
+	_header.theme_type_variation = "Dim"
+	_hold.theme_type_variation = "Dim"
 	_sail_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	_stay_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	_fill_button.custom_minimum_size = Vector2(float(COL_BUY_W),
@@ -560,9 +567,8 @@ func _build_row(kind: String) -> Dictionary:
 	var row := HBoxContainer.new()
 	row.name = "Supply_%s" % kind
 	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 
-	var label := _label("", PaletteLib.TEXT)
+	var label := _label("")
 	label.name = "Stat"
 	label.custom_minimum_size.x = float(COL_KIND_W)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -572,7 +578,7 @@ func _build_row(kind: String) -> Dictionary:
 	minus.pressed.connect(step.bind(kind, -1))
 	row.add_child(minus)
 
-	var qty := _label("", PaletteLib.ACCENT)
+	var qty := _label("")
 	qty.name = "Qty"
 	qty.custom_minimum_size = Vector2(float(COL_STEP_W), float(PaletteLib.ROW_H))
 	qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -589,7 +595,7 @@ func _build_row(kind: String) -> Dictionary:
 	buy.pressed.connect(_on_buy_pressed.bind(kind))
 	row.add_child(buy)
 
-	var jettison := Button.new()
+	var jettison := UiKitLib.button(JETTISON_KEY, "danger")
 	jettison.name = "Jettison_%s" % kind
 	jettison.custom_minimum_size = Vector2(float(COL_STEP_W) * 2,
 		float(PaletteLib.BUTTON_H))
@@ -716,26 +722,38 @@ func _buy_block_reason(kind: String, qty: int) -> String:
 	return ""
 
 
-## The locked §4.10 readout, shown large and tier-coloured
-## (GOOD ≥ 10 / WARN 3–9 / BAD ≤ 2, `80-*` §4.8).
+## The locked §4.10 readout, shown large with its tier bar
+## (GOOD ≥ 10 / WARN 3–9 / BAD ≤ 2, `80-*` §4.8 — the bar re-tiers through
+## `UiKit.auto_tier` and saturates at the §4.6.1 GOOD boundary).
 func _refresh_days() -> void:
 	var days := days_of_supply()
 	if days <= 0:
 		_days.text = I18n.t_key("port.sail.days_zero")
 	else:
 		_days.text = I18n.fmt("port.sail.days", {"days": days})
-	_days.add_theme_color_override("font_color", _days_color(days))
+	_refresh_days_bar(days)
 	_short.visible = days > 0 and days < SHORT_WARNING_BELOW
 	if _short.visible:
 		_short.text = I18n.fmt("port.sail.short_warning", {"days": days})
 
 
-static func _days_color(days: int) -> Color:
-	if days >= DAYS_GOOD_MIN:
-		return PaletteLib.GOOD
-	if days >= DAYS_WARN_MIN:
-		return PaletteLib.WARN
-	return PaletteLib.BAD
+## The kit atom bakes the tier into its fill at build time, so a changed
+## readout rebuilds the bar (the same discipline the inn's morale bar uses).
+func _refresh_days_bar(days: int) -> void:
+	var body := _days.get_parent().get_parent()
+	if _days_bar != null and is_instance_valid(_days_bar):
+		body.remove_child(_days_bar)
+		_days_bar.queue_free()
+	var tier := UiKitLib.auto_tier(days, DAYS_GOOD_MIN, DAYS_WARN_MIN)
+	_days_bar = UiKitLib.value_bar(mini(days, DAYS_BAR_MAX), DAYS_BAR_MAX, tier)
+	_days_bar.size_flags_horizontal = Control.SIZE_FILL
+	body.add_child(_days_bar)
+	body.move_child(_days_bar, _days.get_parent().get_index() + 1)
+
+
+## The readout's tier bar (tests / hosts).
+func days_bar() -> ProgressBar:
+	return _days_bar
 
 
 ## The gate (§4.11.2, locked): the Set Sail button carries the reason inline so
@@ -778,17 +796,14 @@ func _build_cargo_row(ship_index: int, good_id: String, qty: int) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Cargo_%s_%d" % [good_id, ship_index]
 	row.custom_minimum_size = Vector2(0, float(PaletteLib.ROW_H))
-	row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
 	var good: Dictionary = DataLoader.get_good(good_id)
 	var good_name := I18n.t(good.get("name", {})) if not good.is_empty() else good_id
-	var label := _label(I18n.fmt("fleet.stack", {"name": good_name, "qty": qty}),
-		PaletteLib.TEXT)
+	var label := _label(I18n.fmt("fleet.stack", {"name": good_name, "qty": qty}))
 	label.name = "Stack"
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
-	var button := Button.new()
+	var button := UiKitLib.button("fleet.jettison", "danger")
 	button.name = "Jettison_%s_%d" % [good_id, ship_index]
-	button.text = I18n.t_key("fleet.jettison")
 	button.custom_minimum_size = Vector2(float(COL_JETTISON_W), float(PaletteLib.ROW_H))
 	var reason := "" if FleetLib.at_port() else I18n.t_key("fleet.port_only")
 	button.disabled = not reason.is_empty()
@@ -933,20 +948,11 @@ func _fleet_crew_max() -> int:
 	return total
 
 
-func _label(text: String, color: Color) -> Label:
+func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 ## `1,234` — grouping for gold amounts (the L10nString supplies the unit).

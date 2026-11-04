@@ -446,8 +446,9 @@ func _test_alignment_and_order() -> void:
 	var header := screen.get_node(
 		"Layout/VBox/TableFrame/Margin/Table/ColumnHeader")
 	var col_good: Label = header.get_node("Col_good")
-	_check(int(col_good.custom_minimum_size.x) == 56 + 4 + 160,
-		"the Good caption spans the badge slot + gap + name width (220, got %d)"
+	_check(int(col_good.custom_minimum_size.x)
+			== 56 + 4 + 32 + 4 + 124,
+		"the Good caption spans the badge slot + gap + icon slot + gap + name width (220, got %d)"
 			% int(col_good.custom_minimum_size.x))
 	var col_qty: Label = header.get_node("Col_qty")
 	_check(int(col_qty.custom_minimum_size.x) == 72 + 3 * 40 + 56 + 4 * 4,
@@ -643,14 +644,13 @@ func _test_exclusive_rows() -> void:
 		var lock_note := I18n.t_key("market.exclusive.locked")
 		_check(buy.tooltip_text == lock_note and sell.tooltip_text == lock_note,
 			"%s rows show the lock note (%s)" % [exclusive, buy.tooltip_text])
-		var name_color: Color = (row["name"] as Label).get_theme_color("font_color")
-		_check(name_color == PaletteLib.PANEL_LINE,
-			"%s row is grayed (PANEL_LINE)" % exclusive)
+		var name_label: Label = row["name"]
+		_check(name_label.theme_type_variation == "Dim",
+			"%s row is grayed (the Dim variation)" % exclusive)
 		# The whole row grays (docs/80 §4.7.11, 2026-11-03) and is inert:
 		# the quantity field and presets take no input either.
 		for cell_key in ["stock", "trend", "marginal", "have"]:
-			_check((row[cell_key] as Label).get_theme_color("font_color")
-				== PaletteLib.PANEL_LINE,
+			_check((row[cell_key] as Label).theme_type_variation == "Dim",
 				"%s row's %s cell is grayed" % [exclusive, cell_key])
 		var field: LineEdit = row["qty"]
 		_check(not field.editable,
@@ -668,8 +668,8 @@ func _test_exclusive_rows() -> void:
 	screen.type_qty("wheat", "10")
 	_check(not (wheat_row["buy"] as Button).disabled,
 		"a non-exclusive row is unaffected by the exclusive gate")
-	_check((wheat_row["name"] as Label).get_theme_color("font_color")
-		== PaletteLib.TEXT, "a non-exclusive row stays TEXT-colored")
+	_check((wheat_row["name"] as Label).theme_type_variation == "",
+		"a non-exclusive row stays on the theme's TEXT default")
 	_drop(screen)
 
 	# dev ≥ 2 + effective alignment == player nation unlocks the rows.
@@ -684,7 +684,7 @@ func _test_exclusive_rows() -> void:
 	_check(not porcelain_buy.disabled,
 		"dev 3 + own alignment unlocks the exclusive Buy")
 	_check((screen2.row("porcelain")["name"] as Label)
-		.get_theme_color("font_color") == PaletteLib.TEXT,
+		.theme_type_variation == "",
 		"the unlocked row is no longer grayed")
 	_check((screen2.row("porcelain")["qty"] as LineEdit).editable,
 		"the unlocked row's quantity field re-arms")
