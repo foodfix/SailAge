@@ -2808,10 +2808,13 @@ checks:
     (`80-*` §4.8.6 amendment) — a side-view ship does not rotate
     losslessly, so all eight hull directions are authored maps and no
     derive entries exist for hulls; this check does not apply to them.**
- 6. **Hull coverage.** The 9 owner tint ramps — the 6 nations of
-    `data/nations.json` + player + neutral + pirate — each map onto every
-    hull's authored maps; `hull_{ship_type_id}_{owner}_{dir}.png` exists
-    for the full 16 × 9 × 8 = 1 152 grid, and the owner set equals
+ 6. **Hull coverage.** The 9 owner **pennant remaps** — the 6 nations of
+    `data/nations.json` + player + neutral + pirate — each map the
+    authored pennant source hex onto its `PENNANT_*` hex on every one of
+    the hull's authored maps (wood/sail/ink are owner-invariant; `80-*`
+    §4.8 hull block, the shared-hull pennant scheme); the authored source
+    hex never survives a remap; `hull_{ship_type_id}_{owner}_{dir}.png`
+    exists for the full 16 × 9 × 8 = 1 152 grid, and the owner set equals
     `nations ∪ {player, neutral, pirate}` exactly. Hull docs declare
     **eight authored maps** (one per direction; no derive table).
  7. **Footprint bands.** Per hull, the long-axis extent in px **on the

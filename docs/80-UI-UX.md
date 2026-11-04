@@ -1828,35 +1828,41 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    Goods-category color mapping (A.2 motif families; no new hexes): food
    `GOOD`, material `ACCENT_LO`, textile `COAST_SEA`, luxury `ACCENT`.
 
-   **`hull` block** (hull tokens + facility tokens). Shared steps: the
-   authored-neutral map is wood + sail + ink; owner variants derive via
-   remap tables from it — the owner triples below are the remap targets
-   (only the 3 wood steps remap; sail and ink are owner-invariant). Ramp
-   rule: HI = per-channel round(min(ch × 1.25, 255)), LO = per-channel
-   round(ch × 0.72); the tool computes them from the owner base and the
-   table is the pinned result.
+   **`hull` block** (hull tokens + facility tokens; **amended 2026-11-04,
+   user direction — the shared-hull pennant scheme**): every owner draws
+   the SAME authored map in the shared wood/sail/ink palette below; the
+   owner is encoded by the **masthead pennant** — the authored maps carry
+   one authoring-only pennant source hex (`#b3191f`; an intermediate,
+   never shipped — hull-doc manifests are exempt from membership checks),
+   and the tool remaps it to the owner's pennant hex per owner. Wood,
+   sail and ink are owner-invariant (no owner ramp). `HULL_GOLD` trims
+   the tier-3 hulls (1px sheer/sterncastle line — gilded-warship look);
+   it doubles as the player's pennant value.
 
    | Hex | Name | Use |
    |---|---|---|
-   | `#101010` | `HULL_INK` | token outline (all owners, tool-applied 1px) |
-   | `#8f6d3a` | `WOOD_HI` | authored-neutral wood highlight |
-   | `#7a5c2e` | `WOOD` | authored-neutral wood base |
-   | `#5e4720` | `WOOD_LO` | authored-neutral wood shadow |
-   | `#f7f5ee` | `SAIL_HI` | sail highlight |
-   | `#e8e6df` | `SAIL` (= `TEXT`) | sail base; also the player hull base |
-   | `#c2beb2` | `SAIL_LO` | sail shadow |
+   | `#101010` | `HULL_INK` | token outline + rigging/gunports (all owners, tool-applied 1px outline) |
+   | `#8f6d3a` | `WOOD_HI` | shared wood highlight |
+   | `#7a5c2e` | `WOOD` | shared wood base |
+   | `#5e4720` | `WOOD_LO` | shared wood shadow / plank seams |
+   | `#f7f5ee` | `SAIL_HI` | sail highlight + specular arcs |
+   | `#e8e6df` | `SAIL` (= `TEXT`) | sail base |
+   | `#c2beb2` | `SAIL_LO` | sail shadow / seams / leeches |
+   | `#d9a441` | `HULL_GOLD` | t3 trim line; player pennant value |
+   | `#d9a441` | `PENNANT_PLAYER` | masthead pennant, player |
+   | `#1a8c4e` | `PENNANT_PORTUGAL` | masthead pennant, portugal |
+   | `#b3191f` | `PENNANT_SPAIN` | masthead pennant, spain |
+   | `#274b8f` | `PENNANT_ENGLAND` | masthead pennant, england |
+   | `#d97b1e` | `PENNANT_HOLLAND` | masthead pennant, holland |
+   | `#6a3d9a` | `PENNANT_OTTOMAN` | masthead pennant, ottoman |
+   | `#c9a227` | `PENNANT_ITALY` | masthead pennant, italy |
+   | `#9a9a9a` | `PENNANT_NEUTRAL` | masthead pennant, neutral |
+   | `#b3341f` | `PENNANT_PIRATE` | masthead pennant, pirate |
 
-   | Owner | HI | BASE | LO |
-   |---|---|---|---|
-   | player | `#ffffff` | `#e8e6df` (`TEXT`) | `#a7a6a1` |
-   | portugal | `#21af62` | `#1a8c4e` | `#136538` |
-   | spain | `#e01f27` | `#b3191f` | `#811216` |
-   | england | `#315eb3` | `#274b8f` | `#1c3667` |
-   | holland | `#ff9a26` | `#d97b1e` | `#9c5916` |
-   | ottoman | `#854cc1` | `#6a3d9a` | `#4c2c6f` |
-   | italy | `#fbcb31` | `#c9a227` | `#91751c` |
-   | neutral | `#c1c1c1` | `#9a9a9a` | `#6f6f6f` |
-   | pirate | `#e04127` | `#b3341f` | `#812516` |
+   Pennant hexes equal the nation `color` values (`10-*` §7.4) plus
+   player gold, neutral grey, pirate red. (The retired owner triples —
+   HI/BASE/LO ramps per owner — remain as pinned constants in
+   `palette.gd` history; they are no longer used by the hull pipeline.)
 
    Owner base hexes are exactly `nations.json` `color` values (6 nations)
    plus player `TEXT` `#e8e6df`, neutral `#9a9a9a`, pirate `#b3341f`.
