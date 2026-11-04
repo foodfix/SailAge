@@ -11,7 +11,12 @@ module, five allegiance/permit/treasury GameState fields, the month-tick
 ordering pin (§5.4), and save v7 (§8). Phase 8 (characters/careers/encounters)
 adds the person-model scripts (`player/skills.gd`, `world/captains.gd`,
 `world/interactions.gd`, `world/hail_options.gd`, `world/autopilot.gd`), the
-officer/captain state blocks on GameState (§5.4), and save v9 (§8).
+officer/captain state blocks on GameState (§5.4), and save v9 (§8). Phase 10
+(UI element kit & generated pixel art) adds the `class_name` statics
+`ui_theme.gd`/`ui_kit.gd`/`ui_motion.gd`, `ui/portrait_composer.gd`,
+`world/arrow_field.gd`, the generated-art artifacts under `assets/ui/`
+(`80-*` §4.8/§4.9) and the terrain-art/overlay rendering of §9.2 — no
+autoload, no new signal, no save-format change.
 
 ## 2. Artifacts
 
@@ -87,6 +92,7 @@ SailAge/
 │   ├── world/interactions.gd   # Phase 8: targeting/fleet attribution/verb dispatch (60-*)
 │   ├── world/hail_options.gd   # Phase 8: role × stance × skill hail-option builder (80-*)
 │   ├── world/autopilot.gd      # Phase 8: appointed voyage — route + interrupts (20-*)
+│   ├── world/arrow_field.gd    # Phase 10: S3 wind/current arrow-field sampler, pure (80-* §4.8 arrow-field spec)
 │   ├── combat/battle_sim.gd      # Phase 2: battle turn engine, pure (60-* §4.12.1)
 │   ├── combat/ai_fleet.gd        # Phase 2: enemy composition + AI decisions (60-* §4.12.1.1)
 │   ├── combat/fleet_commander.gd # Phase 9 W4: per-round fleet order five-tuples, pure (60-* §4.9b)
@@ -102,7 +108,11 @@ SailAge/
 │   ├── player/character.gd     # stats, XP, officers
 │   ├── player/skills.gd        # Phase 8: skill values, usage counters, gates, training (50-*)
 │   ├── player/fame.gd          # Phase 3: fame + title ladder (70-* §4.9.2)
-│   └── fleet/fleet.gd          # fleet composition, cargo maths
+│   ├── fleet/fleet.gd          # fleet composition, cargo maths
+│   ├── ui_theme.gd             # Phase 10: build_theme() — one code-built Theme from palette constants (80-* §4.9); applied at startup, no .tres, no autoload
+│   ├── ui_kit.gd               # Phase 10: the six widget atoms, static factory (80-* §4.9)
+│   ├── ui_motion.gd            # Phase 10: the UiMotion motion-gate static (80-* §4.7.17 timings)
+│   └── ui/portrait_composer.gd # Phase 10: 72×96 procedural busts from a captain's `appearance` + role cloth; override file wins (80-* §4.8)
 ├── data/                        # contract owner: 10-DATA-SCHEMA.md
 │   ├── wind_regions.json        # Phase 6: prevailing-wind regions (10-* §4.16)
 │   ├── ocean_currents.json      # Phase 6: ocean-current systems (10-* §4.17)
@@ -116,7 +126,9 @@ SailAge/
 │   ├── maps/world.png           # generated, tool-owned (§9)
 │   ├── maps/wind_regions.png    # Phase 6: baked wind lookup, tool-owned (10-* §6.5)
 │   ├── maps/currents.png        # Phase 6: baked current lookup, tool-owned (10-* §6.5)
+│   ├── maps/world_shore.png     # Phase 10: shore-edge lookup raster, tool-owned (10-* §6.6)
 │   └── trade_routes_built.json  # generated, tool-owned (Phase 5; 10-* §4.14)
+├── assets/ui/                   # Phase 10: generated UI art PNGs — indexed, nearest-neighbor import, tool-owned, never hand-edited (80-* §4.8)
 └── tools/
     ├── validate_data.py
     ├── build_world.py           # Natural Earth → data/maps/world.png (Phase 4)
@@ -130,7 +142,12 @@ SailAge/
     ├── battle_ai_harness.gd     # Phase 9 W3: 64-seed mirror self-play harness (+ .tscn)
     ├── battle_ai_harness_report.md  # generated, tool-owned — never hand-edited
     ├── battle_tune.py           # Phase 9 W5: offline CEM θ learning, stdlib-only
-    └── battle_tune_report.md    # generated, tool-owned — never hand-edited
+    ├── battle_tune_report.md    # generated, tool-owned — never hand-edited
+    ├── build_ui_art.py          # Phase 10: the art governor — manifests → engine renders → transforms/remaps/seams/nine-patch/atlases/contact sheet; --check byte-compare
+    ├── build_shore.py           # Phase 10: world.png → data/maps/world_shore.png (10-* §6.6); --check byte-compare
+    ├── art_prompts.json         # Phase 10: model-pass prompt manifest (24 legend + 4 named pirates + 30 discoveries)
+    ├── ui_art/<class>/          # Phase 10: declarative sprite manifests (chrome/icons/hulls/terrain/fx/portraits)
+    └── yoyopixel/               # Phase 10: vendored YoYoPixel skill + LICENSE + extracted engine core + node render.js (MIT, © 2026 SbName; node pinned v24.16.0; zero npm deps)
 ```
 
 Rules:
@@ -767,6 +784,37 @@ tie-breaking to the smallest `(y, x)`, skipping any candidate with no
 orthogonally adjacent `#` shore tile (`20-*` §4.11.1) — and the validator
 compares both halves of the pair against the builder's report; a disagreement
 is a build failure, never a quiet divergence.
+
+#### 9.2 Terrain art & overlay layers (Phase 10)
+
+Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
+`10-*` §6.6); the loading pipeline above is otherwise unchanged:
+
+- `map_loader.gd` gains terrain-art rendering: legend kinds render as
+  generated terrain tiles with the variant picked by cell hash
+  `(x·31+y·17)%n`, a shore overlay TileMap layer consumes
+  `data/maps/world_shore.png` (`10-*` §6.6), and a dedicated water layer
+  draws `sea`/`coastal_sea` flat tiles driven by the animated-sea shader
+  (`80-*` §4.7.17) — the battle scene reuses the same water shader via a
+  shared script. Port markers render as `terrain_port_{owner}` sprites
+  from the same overlay family. Chart + minimap stay flat raster (pinned,
+  `80-*` §4.8).
+- **AI-ingestion path** (future model pass): `build_ui_art.py --import <dir>`
+  crops portraits to 3:4, palette-quantizes **before** nearest-downscale,
+  applies the outline pass + alpha threshold, then writes — raw model
+  output is never committed (`80-*` §4.8).
+- **Portrait resolution ladder:** the override file (`portrait_{id}.png`)
+  wins; otherwise the procedural composer
+  (`scripts/ui/portrait_composer.gd`) composes the 72×96 bust from the
+  captain's `appearance` + role cloth. The override-wins seam is the only
+  hook a future runtime-generation client needs (deferred — Phase-10
+  parking lot).
+- **Why `project.godot` stays unchanged:** `ui_theme.gd`/`ui_kit.gd`/
+  `ui_motion.gd` are `class_name` statics, not autoloads; the theme
+  applies at `title_screen._ready()` (`get_window().theme`, `80-*` §4.9);
+  no new EventBus signals (the §5.1 table is unchanged); the save format
+  is untouched — `SAVE_VERSION` stays 9 (§8.2), Phase 10 adds no saved
+  state.
 
 ## 10. "Add Content = Data-Only" Rule
 

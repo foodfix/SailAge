@@ -53,10 +53,12 @@ All player-facing strings exist in Chinese and English (see i18n rule, §9).
 | 7 | Trade Empires | Flow economy over 40 goods (`staple`/`specialty`/`exclusive` flags, per-port listing rule), 16 ships with `role`/`tier` + per-port shipyard stock, 24 equipment items with rare named-pirate drops, development-gated hardware, allegiance tug-of-war (protected vs contestable ports, per-nation ledgers, monthly seeded NPC counter-investment, nation treasuries), unified 5%/20% tariff + two tax permits, fame/commendation tie-ins, nationless coasters at every neutral port, `tools/sim_trade.py` gates 1–10, save v7 | ✅ complete — `docs/IMPLEMENT-Phase7.md` (acceptance record `tools/demo_check_phase7.md`) |
 | 8 | Characters, Careers & Encounters | Unified Person model (5 attributes + skills) shared by player/officers/NPC captains, officer posts & 96-officer roster, named-captain canon with defeat→return-queue lifecycle, people interactions (inspect/talk/attack/gifts/appointments/hail/dossier), appointed voyage (navigator-gated auto-sailing), two-step new-game creation, save v9 | ✅ complete — `docs/IMPLEMENT-Phase8.md` (acceptance record `tools/demo_check_phase8.md`) |
 | 9 | Naval-Combat Realism & AI | Velocity-physics battle layer (integer velocity vectors with inertia, heading8 8-bucket arcs, port/starboard broadsides with independent reload, wind/current/weather speed caps, four shot types, sweep ramming, hook-and-board with crew casualties), side-level morale & surrender, fleet-command layer (per-round order five-tuples, form→close→engage→wear→break state machine, hysteresis, anchor succession), AI ramp (T1 profiles → T2 deterministic greedy → T3 one-ply lookahead shipped ceiling, `ai_level ∈ {0,1}`), S10 presentation rebuild (48×30 battle world, camera, minimap, overlays), S21 naval-battle sandbox off S1 (zero-write) | See `docs/IMPLEMENT-Phase9.md` |
+| 10 | UI Element Kit & Pixel Art | One code-built Theme + six widget atoms, full de-duplication sweep of every screen (484 styling call sites retired), first-party tool-generated pixel art (`tools/build_ui_art.py` + vendored YoYoPixel engine: chrome nine-patch, 129 icons, 1 152 directional hull tokens + facility tokens, terrain/shore tiles, FX frames, portrait part sheets + 28 prompted overrides), animated sea + battle FX + UI motion, S3 arrow field & world markers, procedural portraits for all 1 275 NPC captains + the player | See `docs/IMPLEMENT-Phase10.md` |
 
 Out of scope entirely: multiplayer, accounts, online services,
-platform-specific builds beyond desktop, real art production, audio design
-beyond a placeholder note.
+platform-specific builds beyond desktop, audio design beyond a placeholder
+note, and real (hand-authored or external) art production — tool-generated
+first-party pixel art is Phase 10's scope (`docs/IMPLEMENT-Phase10.md`).
 
 ## 6. Locked Decisions
 
@@ -306,6 +308,12 @@ Used in docs, data files, and UI strings. New terms must be added here first.
 | 前瞻 | Lookahead | The T3 one-ply search over legal velocities × actions on a `snapshot()/restore()` cycle (`60-*` §4.9c) |
 | 沙盒 | Sandbox | S21, the zero-write naval-battle editor launched from S1 (`80-*` §4.7.16) |
 | 僵持 | Stall | The `stall` outcome: 8 consecutive rounds with zero damage, zero boarding and no closure (`60-*` §4.11.9) |
+| 主题 | Theme | The code-built app-wide Theme from `scripts/ui_theme.gd`, applied at startup; no `.tres` (`80-*` §4.9, Phase 10) |
+| 控件 | Atom | A `ui_kit` widget factory — one of the six shared control builders (`80-*` §4.9, Phase 10) |
+| 样式盒 | Stylebox | A Control's style box — bg/border/radius; theme-owned (`80-*` §4.9, Phase 10) |
+| 焦点框 | Focus ring | The 2px ACCENT keyboard-focus outline (`80-*` §4.9, Phase 10) |
+| 像素画 | Pixel art | Tool-generated indexed PNG art under `assets/ui/` (`80-*` §4.8, Phase 10) |
+| 令牌 | Token | A 32px directional sprite for ships/facilities/markers (`80-*` §4.8, Phase 10) |
 
 ## 13. Edge Cases & Fail States (doc-set level)
 
