@@ -153,6 +153,26 @@ CANVAS = 32
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
 
+# ---- icon palette block (80-* §4.8: chrome tiles + A.2 semantic icons) ----
+# The three UW2 chrome-skin wood hexes appended 2026-11-04 (§4.8 amended,
+# user direction — full option B, ledgered; mirrored in scripts/palette.gd
+# and tools/validate_data.py BLOCK_ICON).
+PANEL_WOOD = "#2e2014"        # PANEL_WOOD    — walnut fill
+PANEL_WOOD_HI = "#6a4e28"     # PANEL_WOOD_HI — bevel light (TL) / trim base
+PANEL_WOOD_LO = "#14100a"     # PANEL_WOOD_LO — bevel shadow (BR) / dark line
+ICON_BG_LO = "#121724"        # ICON_BG_LO    — field recess interior
+ACCENT = "#d9a441"            # ACCENT        — gold inner line / perimeter
+ACCENT_HI = "#f0c46a"         # ACCENT_HI     — rosette center
+ACCENT_LO = "#a87a28"         # ACCENT_LO     — rosette base / field lip
+ICON_BLOCK = {
+    "#1c2230", "#121724", "#465468", "#2e2014", "#6a4e28", "#14100a",
+    "#5e7086", "#232c3e", "#e8e6df", "#f7f5ee", "#d9a441", "#f0c46a",
+    "#a87a28", "#4e9e4e", "#74c26e", "#b3341f", "#d4573c", "#2f6f9e",
+    "#9a9a9a", "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a",
+    "#c9a227",
+}
+CHROME_COLOR_CAP = 8  # per-tile distinct-color discipline (§4.8.3 16px tier)
+
 
 def derive_base_of(spec: dict) -> str | None:
     """The derive source id — "from" (hulls/arrows scheme) or "base"
@@ -846,6 +866,55 @@ def _cell_pixels(sheet, dx, dy):
             for y in range(TILE) for x in range(TILE)]
 
 
+def _hex_px(h: str):
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
+
+
+# UW2 chrome-skin semantic pins (80-* §4.8 amended 2026-11-04, ledgered):
+# per sheet, the explicit anchor hexes the assembled 48x48 must carry. Rule 3
+# below pins frame POSITIONS tile-derivatively; these pin the SKIN's colors —
+# a re-author that loses the gold inner line, the bevel line or a rosette
+# fails the build. Anchors sit in the top-left cell / top edge cell (their
+# mirrors cover the rest of the sheet by rule 1).
+SKIN_PINS = {
+    "panel": [
+        (24, 0, PANEL_WOOD_LO, "frame dark outline"),
+        (24, 1, PANEL_WOOD_HI, "bevel light line"),
+        (24, 3, ACCENT, "gold inner line (inset 3px)"),
+        (3, 3, ACCENT_HI, "brass rosette center"),
+        (2, 2, ACCENT_LO, "brass rosette base"),
+    ],
+    "button": [
+        (24, 0, PANEL_WOOD_HI, "raised-block bevel light (top)"),
+        (24, 1, PANEL_WOOD, "walnut fill under the bevel"),
+        (4, 15, ACCENT, "corner-only gold inner tick"),
+    ],
+    "button_focus": [
+        (24, 0, ACCENT, "full gold perimeter (selected/hover ring)"),
+        (24, 1, PANEL_WOOD, "walnut fill under the ring"),
+        (3, 3, ACCENT_HI, "gold rosette center"),
+        (4, 15, ACCENT, "corner-only gold inner tick"),
+    ],
+    "field": [
+        (24, 0, PANEL_WOOD_LO, "recess frame"),
+        (24, 1, ACCENT_LO, "recess inner lip"),
+    ],
+}
+
+
+def _audit_chrome_tile(label: str, w, h, px) -> None:
+    """Chrome tile color audit (§4.8.4 membership + the per-tile color
+    discipline; parity with the hull color audit, step 7)."""
+    colors = {("#%02x%02x%02x" % p[:3]) for p in px if p[3]}
+    off = sorted(c for c in colors if c not in ICON_BLOCK)
+    if off:
+        fail(f"ninepatch: chrome tile {label} hexes outside the icon block "
+             f"(§4.8.4): {off}")
+    if len(colors) > CHROME_COLOR_CAP:
+        fail(f"ninepatch: chrome tile {label} carries {len(colors)} distinct "
+             f"colors > the {CHROME_COLOR_CAP} per-tile cap")
+
+
 def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
     """Pixel-exact self-verification of one assembled sheet — any mismatch
     is a build FAIL (§4.8.8; makes the misaligned-sheet class of bug
@@ -899,6 +968,13 @@ def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
         elif got != want:
             fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
                  f"!= {want}")
+    # 4. UW2 chrome-skin semantic pins (§4.8 amended 2026-11-04, ledgered):
+    #    the skin's own colors at their pinned anchors.
+    for x, y, hexs, what in SKIN_PINS.get(name, []):
+        got = sheet[x + y * SHEET]
+        if got != _hex_px(hexs):
+            fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
+                 f"!= {_hex_px(hexs)}")
 
 
 def _verify_bar_sheet(caps, sheet) -> None:
@@ -944,6 +1020,8 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
         for img in tiles.values():
             if img[0] != TILE or img[1] != TILE:
                 fail(f"ninepatch {s}: chrome tiles must be {TILE}x{TILE} (§4.8.8)")
+        for part, img in tiles.items():
+            _audit_chrome_tile(f"{s}_{part}", img[0], img[1], img[2])
         sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
         for (dx, dy), (part, op) in FRAME_OPS.items():
             _, _, px = tiles[part]
@@ -963,6 +1041,8 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
             break
         caps[part] = read_png(p)
     if caps is not None:
+        for part, img in caps.items():
+            _audit_chrome_tile(f"bar_{part}", img[0], img[1], img[2])
         sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
 
         def blit(img, dx, dy, repeat_to=0):

@@ -9,25 +9,28 @@
       "png": "indexed",
       "palette": {
         ".": "transparent",
-        "o": "#465468"
+        "L": "#14100a",
+        "A": "#d9a441",
+        "T": "#f0c46a",
+        "D": "#a87a28"
       },
       "rows": [
-        "....oooooooooooo",
-        "..oooooooooooooo",
-        ".ooooooooooooooo",
-        ".ooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        ".ooooooooooooooo",
-        ".ooooooooooooooo",
-        "..oooooooooooooo",
-        "....oooooooooooo"
+        "....LLLLLLLLLLLL",
+        "..LTTTTTTTTTTTTT",
+        ".LAAAAAAAAAAAAAA",
+        ".LAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        "LAAAAAAAAAAAAAAA",
+        ".LAAAAAAAAAAAAAA",
+        ".LAAAAAAAAAAAAAA",
+        "..LDDDDDDDDDDDDD",
+        "....LLLLLLLLLLLL"
       ]
     },
     {
@@ -39,25 +42,28 @@
       "png": "indexed",
       "palette": {
         ".": "transparent",
-        "o": "#465468"
+        "L": "#14100a",
+        "A": "#d9a441",
+        "T": "#f0c46a",
+        "D": "#a87a28"
       },
       "rows": [
-        "oooooooooooo....",
-        "oooooooooooooo..",
-        "ooooooooooooooo.",
-        "ooooooooooooooo.",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "oooooooooooooooo",
-        "ooooooooooooooo.",
-        "ooooooooooooooo.",
-        "oooooooooooooo..",
-        "oooooooooooo...."
+        "LLLLLLLLLLLL....",
+        "TTTTTTTTTTTTTL..",
+        "AAAAAAAAAAAAAAL.",
+        "AAAAAAAAAAAAAAL.",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAAL",
+        "AAAAAAAAAAAAAAL.",
+        "AAAAAAAAAAAAAAL.",
+        "DDDDDDDDDDDDDL..",
+        "LLLLLLLLLLLL...."
       ]
     },
     {
@@ -68,25 +74,26 @@
       "mode": "string-map",
       "png": "indexed",
       "palette": {
-        "m": "#232c3e"
+        "A": "#d9a441",
+        "T": "#f0c46a"
       },
       "rows": [
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm",
-        "mmmmmmmmmmmmmmmm"
+        "TTTTTTTTTTTTTTTT",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "AAAAAAAAAAAAAAAA",
+        "TTTTTTTTTTTTTTTT"
       ]
     }
   ]
