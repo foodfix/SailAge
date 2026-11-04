@@ -799,7 +799,14 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   shared script. Port markers render as `terrain_port_{owner}` sprites
   from the same overlay family. Chart + minimap stay flat raster (pinned,
   `80-*` §4.8).
-- **AI-ingestion path** (future model pass): `build_ui_art.py --import <dir>`
+- **AI-ingestion path** (model pass — ACTIVE since the 2026-11-04
+  64-canvas upgrade, 80-* §4.8): `build_ui_art.py --import <dir>`
+  ingests TheNoise `/edit` outputs (draft-as-reference restyle):
+  snap-downsample to the 64 logical grid, quantize to the family
+  palette block, enforce pennant source + footprint bands, then emit
+  tokens as tool-owned artifacts; raw model output stays uncommitted
+  (cache under `tools/ui_art/model_raw/`, gitignored). After any art
+  rebuild run
   crops portraits to 3:4, palette-quantizes **before** nearest-downscale,
   applies the outline pass + alpha threshold, then writes — raw model
   output is never committed (`80-*` §4.8).

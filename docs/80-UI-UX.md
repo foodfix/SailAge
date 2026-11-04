@@ -1929,7 +1929,34 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    (`ACCENT`/`ACCENT_HI`). The flat fallback keeps the navy constants —
    it is the reduced-graphics mode; font colors are unchanged (cream on
    walnut). The ninepatch sheets are the single switch: re-authoring
-   them reskins every panel/button in the game. **Stretch-safety
+   them reskins every panel/button in the game.
+
+   **The 64-canvas model-pass upgrade (amended 2026-11-04, user
+   direction — hull tokens, icons and terrain tiles all move to
+   64×64, with the model pass as the primary art pipeline and the
+   string-map generators as the deterministic fallback):**
+   - **Canvas.** hull tokens 64×64; semantic icons 64×64 (hero
+     display); terrain tiles 64×64. The authored string-map manifests
+     REMAIN the 32-grid source of truth; the build derives the
+     fallback 64 art by exact ×2 nearest upscale (never hand-drawn at
+     64).
+   - **Render rules.** the world map renders terrain at
+     `tile_size_px = 64` (view radius halves accordingly; the battle
+     grid stays 48×30 @ 32 px); the world fleet token renders 1:1
+     (64 px); battle-grid fleet tokens render at 0.5 scale (32 px on
+     the 32 px battle tile); icons inline keep the 32 art, hero
+     contexts show the 64 canvas.
+   - **Ingestion contract (TheNoise, `POST /edit` on 127.0.0.1:8001,
+     qwen_image21).** draft export (the 64 fallback upscaled to the
+     API reference size) → `/edit` with the direction-specific
+     restyle instruction → snap-downsample to the 64 logical grid
+     (majority vote per logical pixel) → palette quantization to the
+     family block → pennant-source presence + footprint-band checks →
+     owner remap. Raw model output is **never committed**; the
+     ingested tokens are tool-owned artifacts audited by group 13
+     exactly like the generated ones. Regeneration is cheap
+     (~40 s/asset): every family can be re-run through the model
+     wholesale. **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
    `StyleBoxTexture` with default `axis_stretch_*` = STRETCH — the
@@ -1994,7 +2021,7 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    reference screenshots — applies to every hull, every direction):**
    1. **Sails dominate the sprite** — total sail canvas ≥ half the
       sprite's height; the masthead reaches near the canvas top edge and
-      the hull sits near the bottom edge (fill the 32×32; the band still
+      the hull sits near the bottom edge (fill the 64×64; the band still
       binds the side view's length).
    2. **Stack course + topsail per mast** — two vertically stacked
       sails per mast (course below, topsail above), so a 3-mast ship
@@ -2021,18 +2048,21 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
       bands (pass-through pennant values). The sprite fills its canvas
       (side views: hull to the bottom edge, masthead to the top edge).
       `SAIL_SH` and `DECK` join the hull block for this.
-7. **Tier footprint bands (final values).** long-axis px **on the side
-   view (`e`/`w`)**: tier 1 (latin, sloop, galiot, pinnace) **14–18**;
-   tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
-   caravela_redonda, xebec) **20–26**; tier 3 (nao, carrack, galleon,
-   galleass) **26–30** — on the 32×32 canvas; the validator checks the
+7. **Tier footprint bands (final values, 64 canvas — 2026-11-04
+   upgrade, ×2 of the retired 32-canvas values).** long-axis px **on
+   the side view (`e`/`w`)**: tier 1 (latin, sloop, galiot, pinnace)
+   **28–36**; tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
+   caravela_redonda, xebec) **40–52**; tier 3 (nao, carrack, galleon,
+   galleass) **52–60** — on the 64×64 canvas; the validator checks the
    long axis there. The stern/bow views (`n`/`s`) show the beam and are
    unbanded (canvas-fit only); the diagonals are the 3/4 views (with the
    §4.8.6 perspective cheat — full presence, not foreshortened slivers)
    and unbanded likewise.
-8. **Icon sizes & display.** semantic icons render 1× (32 px) inline,
-   flush full-cell in 32px rows; 2× (64 px) allowed for hero contexts,
-   nearest only; chrome tiles 16×16 assembled into 48×48 nine-patch
+8. **Icon sizes & display (amended 2026-11-04, 64-canvas upgrade).**
+   semantic icons keep the native 32 px art inline — flush full-cell in
+   32px rows, zero regression; the 64×64 canvas serves hero contexts
+   (port/fleet/shipyard cards) at 1:1, nearest only; chrome tiles 16×16
+   assembled into 48×48 nine-patch
    sheets (16px margins, edge tiles in tile-repeat mode — frames render
    at any size at runtime); FX cannonball/smoke 16×16, splash/impact
    32×32; portraits 72×96 (3:4 bust); discoveries 64×64;
