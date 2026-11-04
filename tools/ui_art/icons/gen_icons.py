@@ -364,7 +364,31 @@ def chrome_declarations() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Icons (A.2, 32x32). One author function per sprite; sparse marks carry no
 # outline, object icons get the 1px PANEL_LINE silhouette outline.
+# Ornate-sample helpers (post-Phase-10 sample batch): sparkle stamps and
+# checker dither fills — deterministic, palette-block-bound like everything
+# above (no new hexes; helpers only rearrange the icon block).
 # ---------------------------------------------------------------------------
+
+
+def _sparkle(c: Canvas, cx: int, cy: int, ch: str, wide: bool = False) -> None:
+    """Cross-sparkle stamp: a 3x3 plus, `wide` stretches the arms to 4px."""
+    c.put(cx, cy, ch)
+    c.put(cx, cy - 1, ch)
+    c.put(cx, cy + 1, ch)
+    c.put(cx - 1, cy, ch)
+    c.put(cx + 1, cy, ch)
+    if wide:
+        c.put(cx - 2, cy, ch)
+        c.put(cx + 2, cy, ch)
+
+
+def _checker(c: Canvas, x0: int, y0: int, x1: int, y1: int, ch: str,
+             phase: int = 0) -> None:
+    """50% checkerboard dither fill on the (x+y+phase)-even pixels."""
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if (x + y + phase) % 2 == 0:
+                c.put(x, y, ch)
 
 
 def _arrow_n(ch: str) -> Canvas:
@@ -495,18 +519,37 @@ def icon_durability() -> Canvas:
 
 
 def icon_compass() -> Canvas:
+    """Engraved compass: solid brass bezel (ACCENT_HI edge, ACCENT_LO bore)
+    with rivet dots, an 8-point rose with lit/shadow facets, a red needle
+    tip and a dithered glass-glare band across the face."""
     c = Canvas(32, 32)
-    c.ring(16, 16, 13, 2, "o")
-    c.disc(16, 16, 11, "b")
-    c.ring(16, 16, 11, 1, "B")
-    c.put(16, 6, "O")
-    c.put(26, 16, "O")
-    c.put(6, 16, "O")
-    c.put(16, 26, "O")
-    c.tri((16, 7), (13, 16), (19, 16), "A")
-    c.tri((13, 16), (19, 16), (16, 25), "t")
+    c.disc(16, 16, 13, "a")                     # brass bezel body
+    c.disc(16, 16, 10, "b")                     # face recess
+    c.ring(16, 16, 13, 1, "A")                  # bezel outer edge
+    c.ring(16, 16, 11, 1, "l")                  # bezel bore edge
+    for rx, ry in ((8, 7), (24, 7), (8, 25), (24, 25)):
+        c.put(rx, ry, "l")                      # rivet dots
+    # 8-point rose: long cardinal points, short diagonal points
+    for d in range(3, 10):
+        c.put(16, 16 - d, "m"); c.put(15, 16 - d, "h")   # N (W facet lit)
+        c.put(16 + d, 16, "m"); c.put(16 + d, 15, "h")   # E (N facet lit)
+        c.put(16, 16 + d, "m"); c.put(15, 16 + d, "h")   # S (W facet lit)
+        c.put(16 - d, 16, "m"); c.put(16 - d, 15, "h")   # W (N facet lit)
+    for d in range(3, 7):
+        c.put(16 + d, 16 - d, "m"); c.put(15 + d, 16 - d, "h")   # NE
+        c.put(16 + d, 16 + d, "m"); c.put(15 + d, 16 + d, "h")   # SE
+        c.put(16 - d, 16 + d, "m"); c.put(16 - d, 15 + d, "h")   # SW
+        c.put(16 - d, 16 - d, "m"); c.put(16 - d, 15 - d, "h")   # NW
+    c.rect(15, 7, 16, 8, "r")                   # red needle tip (north)
+    # glass glare: 2px diagonal band at 50% dither over the face
+    for y in range(32):
+        for x in range(32):
+            if x - y in (-8, -7) and (x + y) % 2 == 0:
+                if (x - 16) ** 2 + (y - 16) ** 2 <= 100:
+                    c.put(x, y, "h")
+    # hub
     c.disc(16, 16, 2, "o")
-    c.put(10, 9, "h")
+    c.put(15, 15, "O"); c.put(16, 15, "O")
     c.outline()
     return c
 
@@ -675,18 +718,53 @@ def icon_surrender_flag() -> Canvas:
 
 
 def icon_chest() -> Canvas:
+    """Gilded chest: plank rows with lit edges, riveted gold banding, an
+    engraved keyhole plate and a spilled coin stack with glints."""
     c = Canvas(32, 32)
-    for y in range(8, 14):
-        shrink = 13 - y
-        c.rect(6 + shrink // 3, y, 25 - shrink // 3, y, "m")
-    c.rect(6, 14, 25, 27, "m")
-    c.rect(15, 8, 16, 27, "a")
-    c.rect(14, 17, 17, 21, "A")
-    c.put(15, 19, "m")
-    c.put(15, 20, "m")
-    c.hline(6, 25, 13, "o")
-    c.hline(6, 25, 27, "l")
-    c.put(9, 9, "O")
+    # lid dome (y8..12) — ICON_MID with NW lit rim + SE shadow rim
+    for y, (x0, x1) in enumerate(((11, 20), (9, 22), (8, 23), (7, 24), (6, 25)),
+                                 start=8):
+        c.hline(x0, x1, y, "m")
+        c.put(x0, y, "O")
+        c.put(x1, y, "B")
+    c.hline(11, 20, 8, "O")                     # lit crown of the dome
+    # gold band wrapping the lid base + rivets
+    c.hline(5, 26, 13, "a"); c.put(5, 13, "A"); c.put(26, 13, "l")
+    c.hline(5, 26, 14, "a"); c.put(5, 14, "A"); c.put(26, 14, "l")
+    for rx in (7, 11, 20, 24):
+        c.put(rx, 14, "A")                      # rivet dots
+    # body planks: seams + lit bevels + contact shadow under the band
+    c.hline(5, 26, 15, "B")
+    c.hline(6, 14, 16, "O")                     # plank 1 lit bevel (NW half)
+    c.hline(5, 26, 17, "m")
+    c.hline(5, 26, 18, "B")                     # seam
+    c.hline(6, 14, 19, "O")                     # plank 2 lit bevel
+    c.hline(5, 26, 20, "m")
+    c.hline(5, 26, 21, "m")
+    c.hline(5, 26, 22, "B")                     # seam
+    c.hline(6, 14, 23, "O")                     # plank 3 lit bevel
+    c.hline(5, 26, 24, "m")
+    c.hline(5, 26, 25, "m")
+    c.hline(5, 26, 26, "m")
+    c.hline(5, 26, 27, "B")                     # base shadow
+    c.vline(5, 16, 26, "O")                     # lit rail
+    c.vline(26, 16, 26, "B")                    # shadow rail
+    # vertical straps over the band and body
+    for sx in (9, 22):
+        c.vline(sx, 13, 27, "A")
+        c.vline(sx + 1, 13, 27, "a")
+    # lock plate + keyhole + radiating engraving strokes
+    c.rect(14, 15, 18, 21, "a")
+    c.vline(14, 15, 21, "A")
+    c.rect(15, 17, 17, 18, "B")                 # keyhole eye
+    c.vline(16, 19, 20, "B")                    # stem
+    c.put(15, 20, "B"); c.put(17, 20, "B")      # flare
+    for tx, ty in ((12, 16), (12, 20), (20, 16), (20, 20), (13, 23), (19, 23)):
+        c.put(tx, ty, "l")                      # engraving ticks
+    # coin spill, front right: ACCENT_HI stacks + ICON_HI glints
+    c.rect(21, 25, 22, 26, "A"); c.put(21, 25, "h"); c.put(22, 26, "l")
+    c.rect(24, 23, 25, 24, "A"); c.put(24, 23, "h"); c.put(25, 24, "l")
+    c.rect(19, 26, 20, 27, "A"); c.put(19, 26, "h"); c.put(20, 27, "l")
     c.outline()
     return c
 
@@ -807,21 +885,55 @@ def icon_skull() -> Canvas:
 
 
 def icon_crown() -> Canvas:
+    """Ornate five-point crown: spade spires with cross-sparkle gems, a
+    triple-ramp band (ACCENT_HI/ACCENT/ACCENT_LO) with diagonal dither
+    transitions, bead dots between the points and an emboss baseline."""
     c = Canvas(32, 32)
-    c.rect(7, 21, 24, 26, "a")
-    c.tri((6, 21), (12, 21), (9, 11), "a")
-    c.tri((13, 21), (19, 21), (16, 8), "a")
-    c.tri((20, 21), (26, 21), (23, 11), "a")
-    c.line(9, 11, 6, 21, "A", 1)
-    c.line(16, 8, 13, 21, "A", 1)
-    c.line(23, 11, 20, 21, "A", 1)
-    c.put(9, 11, "h")
-    c.put(16, 8, "h")
-    c.put(23, 11, "h")
-    c.put(16, 23, "r")
-    c.put(11, 23, "h")
-    c.put(21, 23, "h")
-    c.hline(7, 24, 26, "l")
+    # five spade spires: outer pair, inner pair, tall center (2px apex)
+    for cx in (6, 25):
+        c.put(cx, 13, "a")
+        for y in range(14, 17):
+            c.hline(cx - 1, cx + 1, y, "a")
+        for y in range(17, 20):
+            c.hline(cx - 2, cx + 2, y, "a")
+        c.hline(cx - 1, cx + 1, 20, "a")
+    for cx in (11, 20):
+        c.put(cx, 10, "a")
+        for y in range(11, 14):
+            c.hline(cx - 1, cx + 1, y, "a")
+        for y in range(14, 20):
+            c.hline(cx - 2, cx + 2, y, "a")
+        c.hline(cx - 1, cx + 1, 20, "a")
+    c.hline(15, 16, 7, "a")
+    for y in (8, 9):
+        c.hline(14, 17, y, "a")
+    for y in range(10, 20):
+        c.hline(13, 18, y, "a")
+    c.hline(14, 17, 20, "a")
+    # valley notches between the spire bellies
+    for vx in (8, 13, 18, 23):
+        c.put(vx, 19, ".")
+    # cross-sparkle gems on the spires
+    for y in range(9, 13):
+        c.put(15, y, "h"); c.put(16, y, "h")
+    for x in range(14, 18):
+        c.put(x, 10, "h")
+    _sparkle(c, 11, 14, "h")
+    _sparkle(c, 20, 14, "h")
+    _sparkle(c, 6, 17, "h")
+    _sparkle(c, 25, 17, "h")
+    # band: ACCENT_HI top edge -> ACCENT -> ACCENT_LO, diagonal dither steps
+    c.hline(4, 27, 21, "A")
+    c.hline(4, 27, 22, "a")
+    _checker(c, 4, 22, 27, 22, "A", phase=1)     # HI transition
+    c.hline(4, 27, 23, "a")
+    c.hline(4, 27, 24, "a")
+    _checker(c, 4, 24, 27, 24, "l", phase=0)     # LO transition
+    c.hline(4, 27, 25, "l")                      # emboss baseline
+    c.hline(4, 27, 26, "l")
+    # bead dots between the points
+    for bx in (9, 13, 18, 22):
+        c.put(bx, 21, "h")
     c.outline()
     return c
 
@@ -1257,9 +1369,41 @@ def good_cotton_cloth() -> Canvas:
 
 
 def good_silk() -> Canvas:
-    c = _bolt("c", "O")
-    c.hline(8, 20, 15, "t")
-    c.hline(8, 20, 20, "t")
+    """Silk bolt: three-fold roll with diagonal fold lines and dithered
+    ICON_HI sheen bands, gold trim along the edges, hanging tassel."""
+    c = Canvas(32, 32)
+    c.rect(4, 11, 21, 24, "c")                  # bolt body
+    c.disc(23, 17, 5, "c")                      # roll end
+    # fold faces: diagonal fold line + 2px dithered sheen band, period 7
+    for y in range(11, 25):
+        for x in range(4, 22):
+            v = (x + y) % 7
+            if v == 0:
+                c.put(x, y, "O")
+            elif v == 1 and (x + y) % 2 == 0:
+                c.put(x, y, "h")
+            elif v == 2 and (x + y) % 2 == 1:
+                c.put(x, y, "h")
+    # roll spiral + NW glint + SE shade
+    c.ring(23, 17, 4, 1, "O")
+    c.ring(23, 17, 2, 1, "O")
+    c.put(23, 17, "O")
+    c.put(20, 13, "h"); c.put(21, 14, "h")
+    for y in range(12, 23):
+        for x in range(19, 29):
+            if (x - 23) ** 2 + (y - 17) ** 2 <= 30:
+                if (x - 23) + (y - 17) >= 3:
+                    c.put(x, y, "B")
+    # gold trim lines along the bolt edges
+    c.hline(4, 21, 12, "a")
+    c.hline(4, 21, 23, "a")
+    # hanging tassel: knot + fringed fan
+    c.rect(4, 25, 5, 26, "A")
+    c.hline(3, 6, 27, "A")
+    for x in range(3, 7):
+        c.vline(x, 28, 29, "a" if x % 2 == 1 else "l")
+    c.put(3, 29, "A"); c.put(5, 29, "A")        # fringe tips
+    c.outline()
     return c
 
 
@@ -1375,15 +1519,32 @@ def good_porcelain() -> Canvas:
 
 
 def good_pearls() -> Canvas:
+    """Pearl strand: an arc of nine 3px pearls (NW glint, ICON_MID core,
+    ICON_BG_LO bottom shade) strung on an ink thread with a tiny gold bow
+    clasp at the apex.  Sparse-marks family: no silhouette outline."""
     c = Canvas(32, 32)
-    for i, (cx, cy) in enumerate(((8, 24), (12, 20), (16, 16), (20, 12),
-                                  (24, 8))):
-        c.disc(cx, cy, 2, "h")
-        c.put(cx - 1, cy - 1, "t")
-    c.disc(26, 6, 1, "a")
-    c.put(5, 25, "a")
-    c.put(6, 26, "a")
-    c.outline()
+    import math
+    pts = []
+    for i in range(9):
+        ang = math.radians(210 + i * 15)
+        x = round(16 + 14 * math.cos(ang))
+        y = round(21 + 14 * math.sin(ang))
+        pts.append((x, y))
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        c.line(x0, y0, x1, y1, "o")             # the string
+    # tiny ACCENT bow clasp at the apex
+    c.tri((15, 4), (12, 3), (15, 6), "a")
+    c.tri((17, 4), (20, 3), (17, 6), "a")
+    c.put(12, 3, "l"); c.put(20, 3, "l")        # wing tips
+    c.rect(15, 5, 16, 5, "A")                   # knot
+    # pearls: 3x3, NW glint / ICON_MID core / ICON_BG_LO bottom shade
+    bead = (("h", "h", "O"),
+            ("h", "m", "B"),
+            ("O", "B", "B"))
+    for x, y in pts:
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                c.put(x + dx, y + dy, bead[dy + 1][dx + 1])
     return c
 
 
@@ -1591,15 +1752,47 @@ def eq_angel_figurehead() -> Canvas:
 
 
 def eq_golden_dragon_figurehead() -> Canvas:
+    """Gilt dragon head: profile skull with lit snout ridge and dark mouth,
+    a flowing flame mane (gold mass, oxide seams, bright spines), horns
+    swept back over the mane, a scale-hatched neck and scroll volutes."""
     c = Canvas(32, 32)
-    c.line(7, 27, 14, 17, "m", 3)
-    c.disc(18, 10, 3, "a")
-    c.put(17, 8, "A")
-    c.put(18, 7, "A")
-    c.put(19, 8, "A")
-    c.put(22, 10, "l")
-    c.tri((15, 12), (9, 9), (14, 17), "A")
-    c.put(16, 13, "l")
+    # flame mane: solid gold mass left of the skull, wavy leading edge,
+    # oxide seam lines + bright spines suggest separate tongues
+    edge = {4: 11, 5: 10, 6: 8, 7: 7, 8: 7, 9: 6, 10: 7, 11: 7, 12: 8,
+            13: 9, 14: 10}
+    for y, x0 in edge.items():
+        c.hline(x0, 16, y, "a")
+    for y in (5, 8, 11):
+        c.hline(8, 15, y, "A")                  # bright spines
+    for y in (6, 9, 12):
+        _checker(c, edge[y] + 1, y, 13, y, "l")  # oxide seams (dithered)
+    for y in (4, 7, 10, 13):
+        c.hline(edge[y], 16, y, "a")
+        _checker(c, edge[y], y, 12, y, "l")     # dither toward the tips
+    # skull + snout profile
+    c.rect(17, 8, 27, 14, "a")
+    c.hline(18, 26, 9, "A")                     # crown ridge
+    c.rect(24, 10, 29, 12, "a")
+    c.hline(25, 29, 11, "A")                    # snout highlight ridge
+    c.put(29, 12, "l")                          # nostril shade
+    c.rect(25, 13, 28, 13, "B")                 # mouth
+    c.put(26, 13, "h"); c.put(28, 13, "h")      # fangs
+    # horns swept back over the mane
+    c.line(17, 8, 13, 4, "A", 2)
+    c.line(21, 8, 18, 4, "A", 2)
+    # cross-sparkle eye
+    _sparkle(c, 21, 11, "h")
+    # neck post with scale hatching
+    c.rect(11, 15, 17, 22, "a")
+    c.vline(12, 15, 22, "A")
+    for ty, xs in ((16, (13, 15)), (18, (14, 16)), (20, (13, 15)),
+                   (22, (14, 16))):
+        for tx in xs:
+            c.put(tx, ty, "l")                  # scale ticks
+    # scroll-work volutes
+    c.disc(10, 25, 4, "a"); c.put(10, 25, ".")
+    c.put(8, 23, "l"); c.put(12, 25, "l")       # curl shading
+    c.disc(17, 28, 3, "a"); c.put(17, 28, ".")
     c.outline()
     return c
 
