@@ -1552,6 +1552,11 @@ func _style() -> void:
 	# (three lines + the stats row must fit); it lives on the labels in
 	# battle_screen.tscn (`theme_override_font_sizes` — the scene-file
 	# channel, the same one that carries the container margins there).
+	# W5-A follow-up (bar budget): the bar's minimum is consumed exactly by
+	# the shot selector's two 40px rows (40 + 8 + 40 + the Margin's 2+2
+	# verticals = 92 ≤ 96, with the LeftCol's stats row + 3 log lines at
+	# 2 + 31 + 2 + 50 + 2 = 87), so even the §4.9 40px button floor on the
+	# [fit] button keeps the bar at 96 (2 + 40 + 2 + 50 + 2 = 96).
 	_after_continue.custom_minimum_size.y = float(PaletteLib.BUTTON_H)
 
 
