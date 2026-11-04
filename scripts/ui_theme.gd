@@ -52,6 +52,14 @@ const GROOVE_PAD := 4
 ## Fully transparent color — Quiet normal/hover bg + scrollbar trough
 ## (§4.9 state matrix: "transparent").
 const TRANSPARENT := Color(0, 0, 0, 0)
+## §4.9 texture-mode state mapping (amended 2026-11-04, user feedback):
+## momentary click = the button sheet dimmed ×0.82; toggle-pressed (a
+## held/selected card, e.g. the S2 nationality cards) = the focus sheet
+## dimmed ×0.88; disabled = the button sheet dimmed ×0.45. RGB multiply
+## on the per-state StyleBoxTexture `modulate_color`, alpha kept at 1.
+const PRESS_MODULATE := 0.82
+const TOGGLE_MODULATE := 0.88
+const DISABLED_MODULATE := 0.45
 
 
 ## Builds the shared Theme per §4.9. Deterministic and side-effect free.
@@ -106,8 +114,11 @@ static func _load_sheets() -> Dictionary:
 
 ## A nine-patch stylebox over one sheet (texture margins 16, draw region
 ## full — the default region_rect — and the flat box's content margins, so
-## a textured button measures exactly like its flat fallback).
-static func _texture_box(tex: Texture2D, pad: int = 0) -> StyleBoxTexture:
+## a textured button measures exactly like its flat fallback). `factor`
+## is the §4.9 texture-mode state dimming: an RGB multiply on
+## `modulate_color` (alpha kept at 1) that never changes measured margins.
+static func _texture_box(tex: Texture2D, pad: int = 0,
+		factor: float = 1.0) -> StyleBoxTexture:
 	var sb := StyleBoxTexture.new()
 	sb.texture = tex
 	sb.texture_margin_left = SHEET_MARGIN
@@ -115,6 +126,7 @@ static func _texture_box(tex: Texture2D, pad: int = 0) -> StyleBoxTexture:
 	sb.texture_margin_right = SHEET_MARGIN
 	sb.texture_margin_bottom = SHEET_MARGIN
 	sb.set_content_margin_all(pad)
+	sb.modulate_color = Color(factor, factor, factor, 1.0)
 	return sb
 
 
@@ -155,17 +167,34 @@ static func _focus_ring(accent: Color) -> StyleBoxFlat:
 
 
 static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
-	# §4.9 Button row + state matrix. The W3 texture variant swaps the three
-	# state boxes to the ninepatch_button sheet (modulate unchanged); the
-	# variations keep their flat boxes — the sheet family has no Danger/Quiet
-	# variants, and their identity IS the colored border.
+	# §4.9 Button row + state matrix, with the amended 2026-11-04 texture-mode
+	# state mapping: normal = button sheet (unmodulated); hover = focus sheet
+	# (the ACCENT ring, ×1.0); momentary pressed = button sheet ×PRESS_MODULATE;
+	# disabled = button sheet ×DISABLED_MODULATE (+ the PANEL_LINE disabled
+	# text); keyboard focus = focus sheet. Every state box keeps the CONTENT_PAD
+	# margins, so a state flip can never change a button's measured size.
+	# The variations keep their flat boxes — the sheet family has no
+	# Danger/Quiet variants, and their identity IS the colored border.
 	var normal_box: StyleBox = null
 	var hover_box: StyleBox = null
 	var pressed_box: StyleBox = null
+	var disabled_box: StyleBox = null
+	var hover_pressed_box: StyleBox = null
 	if sheets.has("button"):
 		normal_box = _texture_box(sheets["button"], CONTENT_PAD)
-		hover_box = normal_box
-		pressed_box = normal_box
+		pressed_box = _texture_box(sheets["button"], CONTENT_PAD,
+			PRESS_MODULATE)
+		disabled_box = _texture_box(sheets["button"], CONTENT_PAD,
+			DISABLED_MODULATE)
+		# Pressed under the mouse draws the pressed cell too (the matrix has
+		# no separate hover∩pressed cell).
+		hover_pressed_box = pressed_box
+		if sheets.has("button_focus"):
+			hover_box = _texture_box(sheets["button_focus"], CONTENT_PAD)
+		else:
+			# Focus-sheet absent ⇒ hover keeps the plain sheet (the W3
+			# fallback rule: absent id ⇒ flat/nearest fallback, no crash).
+			hover_box = normal_box
 	else:
 		normal_box = _button_box(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE)
 		hover_box = _button_box(PaletteLib.PANEL_BG, PaletteLib.ACCENT)
@@ -173,6 +202,13 @@ static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
 	theme.set_stylebox("normal", "Button", normal_box)
 	theme.set_stylebox("hover", "Button", hover_box)
 	theme.set_stylebox("pressed", "Button", pressed_box)
+	if disabled_box != null:
+		# §4.9 texture-mode mapping: disabled = button sheet ×0.45. Without
+		# sheets the engine default disabled box stays (the flat matrix pins
+		# only the disabled TEXT color).
+		theme.set_stylebox("disabled", "Button", disabled_box)
+	if hover_pressed_box != null:
+		theme.set_stylebox("hover_pressed", "Button", hover_pressed_box)
 	# Keyboard focus: the ACCENT ring — flat draw_center-off ring, or the
 	# button_focus sheet's ACCENT border ring (its fill ships transparent).
 	if sheets.has("button_focus"):
@@ -190,6 +226,19 @@ static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
 	theme.set_color("font_disabled_color", "Button", PaletteLib.PANEL_LINE)
 
 	# Theme variations (§4.9 state matrix; Godot 4 `Theme.set_type_variation`).
+	# `Toggle` carries the amended texture-mode mapping's toggle-pressed cell:
+	# a held/selected card (the S2 nationality cards, the S20 background
+	# cards) shows the focus sheet ×TOGGLE_MODULATE — a persistent ACCENT
+	# ring, distinct from plain hover (the same sheet at ×1.0) and from the
+	# momentary ×0.82 press. normal/hover/focus/disabled resolve through the
+	# Button variation base at runtime; without the focus sheet the variation
+	# registers nothing and resolves everything through Button.
+	if sheets.has("button_focus"):
+		theme.set_type_variation("Toggle", "Button")
+		theme.set_stylebox("pressed", "Toggle",
+			_texture_box(sheets["button_focus"], CONTENT_PAD, TOGGLE_MODULATE))
+		theme.set_stylebox("hover_pressed", "Toggle",
+			_texture_box(sheets["button_focus"], CONTENT_PAD, TOGGLE_MODULATE))
 	# `Primary` re-pins the same ACCENT slots as the default Button — it is
 	# registered anyway so kit kind selection (default/primary/danger) is
 	# uniform. Pressed/disabled resolve through the variation base.

@@ -105,6 +105,10 @@ func _build_card(nation: Dictionary) -> Button:
 	var card := Button.new()
 	card.name = "Card_%s" % nation_id
 	card.toggle_mode = true
+	# §4.9 texture-mode mapping: a toggle card's selected state rides the
+	# `Toggle` variation's pressed cell (the focus sheet ×TOGGLE_MODULATE —
+	# the persistent ACCENT ring), not the momentary press dimming.
+	card.theme_type_variation = "Toggle"
 	card.custom_minimum_size = CARD_SIZE
 	card.pressed.connect(_on_card_pressed.bind(nation_id))
 

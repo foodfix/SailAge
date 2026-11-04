@@ -381,9 +381,9 @@ func _texture_boxes(ttheme: Theme) -> void:
 		% UiThemeLib.SHEET_MARGIN)
 	_check(normal.content_margin_left == UiThemeLib.CONTENT_PAD,
 		"texture mode: Button content margin == CONTENT_PAD (flat parity)")
-	_check(ttheme.get_stylebox("hover", "Button") == normal
-		and ttheme.get_stylebox("pressed", "Button") == normal,
-		"texture mode: Button hover/pressed share the sheet box (§4.9)")
+	# §4.9 texture-mode state mapping (amended 2026-11-04): hover/pressed/
+	# disabled resolve per sheet + modulate factor — see `_texture_states`.
+	_texture_states(ttheme)
 	var focus := ttheme.get_stylebox("focus", "Button") as StyleBoxTexture
 	_check(focus != null and focus.texture != null,
 		"texture mode: Button focus is the button_focus sheet box")
@@ -399,6 +399,95 @@ func _texture_boxes(ttheme: Theme) -> void:
 	var field_te := ttheme.get_stylebox("normal", "TextEdit") as StyleBoxTexture
 	_check(field_te != null and field_te.texture == field.texture,
 		"texture mode: TextEdit samples the same field sheet")
+
+
+## §4.9 texture-mode state mapping (amended 2026-11-04, user feedback: the
+## first texture theme reused one sheet for normal/hover/pressed, leaving
+## hover and toggle-selection invisible): normal = button sheet unmodulated;
+## hover = focus sheet (ACCENT ring) ×1.0; momentary pressed = button sheet
+## ×PRESS_MODULATE; disabled = button sheet ×DISABLED_MODULATE; keyboard
+## focus = focus sheet; toggle-pressed (held/selected card) = focus sheet
+## ×TOGGLE_MODULATE via the `Toggle` variation. Every state box carries the
+## CONTENT_PAD margins so a state flip can never change measured sizes.
+func _texture_states(ttheme: Theme) -> void:
+	_check(UiThemeLib.PRESS_MODULATE == 0.82
+		and UiThemeLib.TOGGLE_MODULATE == 0.88
+		and UiThemeLib.DISABLED_MODULATE == 0.45,
+		"texture mode: state modulate factors are the named constants "
+		+ "(0.82 / 0.88 / 0.45)")
+	var normal := ttheme.get_stylebox("normal", "Button") as StyleBoxTexture
+	var hover := ttheme.get_stylebox("hover", "Button") as StyleBoxTexture
+	var pressed := ttheme.get_stylebox("pressed", "Button") as StyleBoxTexture
+	var disabled := ttheme.get_stylebox("disabled", "Button") as StyleBoxTexture
+	var focus := ttheme.get_stylebox("focus", "Button") as StyleBoxTexture
+	_check(normal != null and normal.modulate_color == Color(1, 1, 1, 1),
+		"texture mode: Button normal stays unmodulated on the button sheet")
+	_check(hover != null and hover.texture == focus.texture
+		and hover.modulate_color == Color(1, 1, 1, 1),
+		"texture mode: Button hover is the focus sheet (ACCENT ring) at ×1.0")
+	_check(pressed != null and pressed.texture == normal.texture
+		and pressed.modulate_color == Color(UiThemeLib.PRESS_MODULATE,
+			UiThemeLib.PRESS_MODULATE, UiThemeLib.PRESS_MODULATE, 1.0),
+		"texture mode: Button pressed is the button sheet ×PRESS_MODULATE")
+	_check(disabled != null and disabled.texture == normal.texture
+		and disabled.modulate_color == Color(UiThemeLib.DISABLED_MODULATE,
+			UiThemeLib.DISABLED_MODULATE, UiThemeLib.DISABLED_MODULATE, 1.0),
+		"texture mode: Button disabled is the button sheet ×DISABLED_MODULATE")
+	_check(focus != null and focus.texture == hover.texture,
+		"texture mode: Button keyboard focus is the focus sheet (as hover)")
+	# Flat parity on every state box: a state flip must not change measured
+	# margins (the pixel-stable steppers contract, test_creation).
+	var margins_ok := true
+	for state_box: StyleBoxTexture in [hover, pressed, disabled]:
+		if state_box.content_margin_left != UiThemeLib.CONTENT_PAD \
+				or state_box.content_margin_top != UiThemeLib.CONTENT_PAD:
+			margins_ok = false
+	_check(margins_ok,
+		"texture mode: hover/pressed/disabled boxes keep the CONTENT_PAD "
+		+ "margins (state flips are size-neutral)")
+	# The `Toggle` variation (held/selected cards): pressed + hover_pressed =
+	# focus sheet ×TOGGLE_MODULATE; everything else resolves through Button.
+	_check(ttheme.get_type_variation_base("Toggle") == "Button",
+		"texture mode: Toggle is registered as a Button variation")
+	var t_pressed := ttheme.get_stylebox("pressed", "Toggle") as StyleBoxTexture
+	var t_hover_pressed := ttheme.get_stylebox(
+		"hover_pressed", "Toggle") as StyleBoxTexture
+	_check(t_pressed != null and t_pressed.texture == focus.texture
+		and t_pressed.modulate_color == Color(UiThemeLib.TOGGLE_MODULATE,
+			UiThemeLib.TOGGLE_MODULATE, UiThemeLib.TOGGLE_MODULATE, 1.0),
+		"texture mode: Toggle pressed is the focus sheet ×TOGGLE_MODULATE "
+		+ "(distinct from hover ×1.0 and press ×0.82)")
+	_check(t_hover_pressed != null
+		and t_hover_pressed.modulate_color == t_pressed.modulate_color,
+		"texture mode: a selected card under the mouse keeps the toggle dim")
+	# Control-level resolution (the direct-boot pattern): real buttons report
+	# the state boxes the theme would draw — a plain Button the momentary
+	# press, a toggle card the selected ring, and the shared slots through
+	# the variation base.
+	var plain := Button.new()
+	plain.text = "plain"
+	plain.theme = ttheme
+	_host.add_child(plain)
+	var card := Button.new()
+	card.text = "card"
+	card.toggle_mode = true
+	card.theme_type_variation = "Toggle"
+	card.theme = ttheme
+	_host.add_child(card)
+	_check(plain.get_theme_stylebox("pressed") == pressed,
+		"texture mode: a plain Button resolves the momentary press box")
+	_check(card.get_theme_stylebox("pressed") == t_pressed,
+		"texture mode: a toggle card resolves the selected-card ring box")
+	_check(card.get_theme_stylebox("normal") == normal
+		and card.get_theme_stylebox("disabled") == disabled
+		and card.get_theme_stylebox("hover") == hover,
+		"texture mode: Toggle resolves normal/hover/disabled through Button")
+	# Minimum size is state-independent (disabled box margins == normal's).
+	var plain_min: Vector2 = plain.get_combined_minimum_size()
+	plain.disabled = true
+	_check(plain.get_combined_minimum_size() == plain_min,
+		"texture mode: a Button's minimum size is state-independent "
+		+ "(%s under disable)" % str(plain_min))
 
 
 ## Pixel-exact sheet samples at the nine-patch layout anchors. `border_px` is

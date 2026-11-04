@@ -26,6 +26,7 @@ func _ready() -> void:
 	await _test_steppers_and_counters()
 	await _test_spread_evenly()
 	await _test_must_spend_all()
+	await _test_stepper_pixel_stability()
 	await _test_extremes()
 	await _test_preview()
 	await _test_confirm_new_game()
@@ -273,6 +274,73 @@ func _test_must_spend_all() -> void:
 		as Label).text.is_empty(), "the hint returns with the un-spent point")
 	screen.queue_free()
 	await get_tree().process_frame
+
+
+# --- 6b. Pixel-stable steppers (production fix, 2026-11-04 playthrough) ------
+#
+# The user report: "the UI layout somehow changes after i click Spread
+# evenly" — every stepper row shifted left ~50px once points ran out. Root
+# cause: StepPoints is size-flag SHRINK_CENTER (its rect is its own minimum
+# width, re-centered inside the layout on every change), and the only
+# state-dependent width inside it was the must-spend SpendHint label (it
+# empties when points run out; zh 192px / en 335px). The fix pins the hint
+# cell (`SPEND_HINT_MIN_W` + clip_text, whose intrinsic minimum width is 1px
+# in this release), so the block's minimum width is the Columns width in
+# EVERY state and the ± buttons can never move. These pins hold the contract:
+# every stepper button keeps its exact rect across (a) the spread flip —
+# every − flips disabled→enabled, every + enabled→disabled, the hint
+# empties — and (b) a manual − flip, in both locales.
+
+func _test_stepper_pixel_stability() -> void:
+	for locale in ["zh", "en"]:
+		I18n.set_locale(locale)
+		var screen: Control = await _open_points("portugal")
+		await get_tree().process_frame
+		var points: Control = screen.get_node("Layout/StepPoints")
+		var columns: Control = points.get_node("Columns")
+		var buttons: Array = columns.find_children("Sub", "Button", true, false)
+		buttons.append_array(columns.find_children("Add", "Button", true, false))
+		_check(buttons.size() == 26,
+			"%s: all 26 stepper buttons (13 rows × ±) are under observation"
+			% locale)
+		# (a) The user action: spread evenly — the full enable-state flip.
+		var rects := _stepper_rects(buttons)
+		var columns_min: float = columns.get_combined_minimum_size().x
+		screen._on_spread()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var moved := _moved_buttons(buttons, rects)
+		_check(moved.is_empty(), "%s: every stepper button holds its pixel rect through the spread flip (%s)" % [locale, str(moved.slice(0, 3))])
+		var after_min: float = (points as Control).get_combined_minimum_size().x
+		_check(is_equal_approx(after_min, columns_min), "%s: StepPoints min width is Columns-pinned across the flip (%f px → %f px)" % [locale, columns_min, after_min])
+		_check((points.get_node("SpreadRow/SpendHint") as Label).get_combined_minimum_size().x <= 344.0, "%s: the must-spend hint cell stays at/below its pinned width in both states" % locale)
+		# (b) A manual flip: − on a spent row re-disables it and re-arms the
+		# row's + — still no movement.
+		rects = _stepper_rects(buttons)
+		(points.get_node("Columns/Attributes/Row_constitution/Sub")
+			as Button).pressed.emit()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		moved = _moved_buttons(buttons, rects)
+		_check(moved.is_empty(), "%s: every stepper button holds its pixel rect through a manual − flip (%s)" % [locale, str(moved.slice(0, 3))])
+		screen.queue_free()
+		await get_tree().process_frame
+	I18n.set_locale("en")
+
+
+func _stepper_rects(buttons: Array) -> Dictionary:
+	var out := {}
+	for button in buttons:
+		out[button] = (button as Control).get_global_rect()
+	return out
+
+
+func _moved_buttons(buttons: Array, rects: Dictionary) -> Array[String]:
+	var moved: Array[String] = []
+	for button in buttons:
+		if not ((button as Control).get_global_rect() == rects[button]):
+			moved.append(str((button as Node).get_path()))
+	return moved
 
 
 # --- 7. The creation extremes 21 / 13 (docs/50-* §4.1 step 4, normative) ----
