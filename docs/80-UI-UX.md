@@ -1696,7 +1696,7 @@ minimap stay flat raster — pinned):
 | Water kinds animated | `sea`, `coastal_sea` (flat tiles on a dedicated water TileMap layer) |
 | Scroll driver | canvas-item shader scrolling `sea_pattern.png` (64×64 two-level torus-safe dither mask) |
 | Scroll period | 800 ms |
-| Darkening factor | ×0.82 (render math, not asset color) |
+| Darkening factor | ×0.70 (render math, not asset color — amended 2026-11-04, r4: the r2–r3 value ×0.82 was **imperceptible in real gameplay**, Δ 4–20 RGB units read as flat fills; ×0.70 gives a clearly visible two-level shimmer while staying shader-only) |
 | `UiMotion` off | frozen at scroll offset 0 |
 | Per-frame CPU | zero (shader-only; no cell swapping) |
 | S10 battle water | reuses the same shader |
