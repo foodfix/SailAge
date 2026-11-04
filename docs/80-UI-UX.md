@@ -1975,7 +1975,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      ingested tokens are tool-owned artifacts audited by group 13
      exactly like the generated ones. Regeneration is cheap
      (~40 s/asset): every family can be re-run through the model
-     wholesale. **Stretch-safety
+     wholesale. **Five-direction generation, mirror-derived rest
+     (amended 2026-11-05, user direction — consistency over
+     shading):** the model pass generates only the **5 base
+     directions n, s, w, sw, nw**; `e` is the exact horizontal
+     mirror of `w`, `ne` of `nw`, `se` of `sw` (derived at
+     ingestion, before the pennant remap; long axis and band
+     membership are mirror-invariant). n/s stay separate bases
+     (stern vs bow are genuinely different views). Mirrored pairs
+     are drift-free by construction; the flipped light direction on
+     mirrored pairs is an accepted trade (UW2 does the same). The
+     deterministic fallback keeps its 8 authored maps unchanged.
+     **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
    `StyleBoxTexture` with default `axis_stretch_*` = STRETCH — the
