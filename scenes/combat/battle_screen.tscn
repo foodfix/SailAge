@@ -126,9 +126,9 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 4
-theme_override_constants/margin_top = 4
+theme_override_constants/margin_top = 2
 theme_override_constants/margin_right = 4
-theme_override_constants/margin_bottom = 4
+theme_override_constants/margin_bottom = 2
 
 [node name="Columns" type="HBoxContainer" parent="BottomPanel/Margin"]
 layout_mode = 2
@@ -139,7 +139,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 2
 
 [node name="StatsRow" type="HBoxContainer" parent="BottomPanel/Margin/Columns/LeftCol"]
 custom_minimum_size = Vector2(0, 24)
