@@ -9210,6 +9210,12 @@ def _g13_check_art_prompts(doc: object, legend_ids: list, pirate_ids: list,
         if isinstance(doc.get(key), list):
             entries = doc[key]
             break
+    if entries is None and (isinstance(doc.get("portraits"), list)
+                            or isinstance(doc.get("discoveries"), list)):
+        # Per-class arrays shape (slot D's manifest) — master reconciliation
+        # 2026-11-04, ledgered.
+        entries = [e for e in (doc.get("portraits") or [])
+                   + (doc.get("discoveries") or []) if isinstance(e, dict)]
     if entries is None:
         fail("art-prompts", label,
              "no prompt entry list (expected a \"prompts\" array)", 13)

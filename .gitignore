@@ -12,3 +12,11 @@ __pycache__/
 
 # Kilo Code local plans / scratch (user-local, not part of the repo)
 .kilo/plans/
+
+# Godot auto-import sidecars on non-game-texture rasters: the data/ map
+# rasters are loaded via load_png_from_buffer (no import pipeline, 90-* §9),
+# the contact sheet and engine fixtures are tool artifacts — never imported
+# (Phase-10 master reconciliation, 2026-11-04).
+/data/maps/*.import
+/tools/contact_sheet.png.import
+/tools/yoyopixel/**/*.import

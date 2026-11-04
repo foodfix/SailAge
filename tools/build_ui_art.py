@@ -1063,8 +1063,13 @@ def run_check() -> None:
         fail("--check: assets/ui/ does not exist in the committed tree; run a full build first")
     with tempfile.TemporaryDirectory(prefix="ui_art_check.") as td:
         m, _ = build_into(Path(td))
-        got = sorted(p for p in (Path(td) / "assets/ui").rglob("*") if p.is_file())
-        want = sorted(p for p in committed.rglob("*") if p.is_file())
+        # The pipeline owns PNGs; Godot's .import sidecars are committed by
+        # the master --import pass and carry no rebuild semantics (master
+        # reconciliation 2026-11-04, ledgered).
+        got = sorted(p for p in (Path(td) / "assets/ui").rglob("*")
+                     if p.is_file() and p.suffix == ".png")
+        want = sorted(p for p in committed.rglob("*")
+                      if p.is_file() and p.suffix == ".png")
         got_rel = {str(p.relative_to(Path(td) / "assets/ui")): p for p in got}
         want_rel = {str(p.relative_to(committed)): p for p in want}
         diffs = []
