@@ -1851,6 +1851,8 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    | `#f7f5ee` | `SAIL_HI` | sail highlight + specular arcs |
    | `#e8e6df` | `SAIL` (= `TEXT`) | sail base |
    | `#c2beb2` | `SAIL_LO` | sail shadow / seams / leeches |
+   | `#a8a496` | `SAIL_SH` | deep sail shade — the billow's dark flank (UW2 craft bar, 2026-11-04) |
+   | `#9a6a3a` | `DECK` | warm deck-plank tone for the oblique deck planes |
    | `#d9a441` | `HULL_GOLD` | t3 trim line; player pennant value |
    | `#d9a441` | `PENNANT_PLAYER` | masthead pennant, player |
    | `#1a8c4e` | `PENNANT_PORTUGAL` | masthead pennant, portugal |
@@ -1997,6 +1999,17 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
       stay dense (≈ 1 port per 4 px of hull length).
    5. `HULL_GOLD` runs the full sheer on tier 3 (not just the castle
       rails).
+   6. **The UW2 craft bar (amended 2026-11-04, second user reference
+      round — the billow test):** sails are **billowed**: sail edges
+      bulge in arcs beyond the yard line (never straight), the interior
+      carries curved shade bands that FOLLOW the bulge (`SAIL_LO` bands
+      flanked by `SAIL_SH` on the dark flank, one `SAIL_HI` crest along
+      the lit bulge), and a straight-edged sail fails review. Hulls are
+      **dense** — no empty interior: multi-strake planking, castle/cabin
+      faces with 1px lit-window dots, gunport frames, decorative wale
+      bands (pass-through pennant values). The sprite fills its canvas
+      (side views: hull to the bottom edge, masthead to the top edge).
+      `SAIL_SH` and `DECK` join the hull block for this.
 7. **Tier footprint bands (final values).** long-axis px **on the side
    view (`e`/`w`)**: tier 1 (latin, sloop, galiot, pinnace) **14–18**;
    tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
