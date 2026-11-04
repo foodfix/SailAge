@@ -1654,6 +1654,62 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   field and re-run). Preset persistence (`user://sandbox/`) is **out of
   scope** in Phase 9 — clipboard import/export only.
 
+#### 4.7.17 FX / UI-motion / animated-sea timing tables (Phase 10 — final values, W1 pins)
+
+Every animation duration is pinned here and implemented as a named code
+constant; the gate is the **`UiMotion` static** (`scripts/ui_motion.gd`,
+W2-C): off ⇒ the duration is 0 (instant). Default on; headless suites run
+with it off. Animation is presentation-only — it never touches sim, logs
+or determinism; instant-mode battle logs stay byte-identical.
+
+**Battle FX** — presentation-only FX layer in `battle_screen.gd`
+(`60-*` §4.3a sim; screen §4.7.1); the event sequencer queues
+move → volley → flight → impact:
+
+| Effect | Duration |
+|---|---|
+| Cannonball parabolic flight tween | 300 ms |
+| Splash frame set | 400 ms |
+| Impact frame set | 300 ms |
+| Smoke frame set | 500 ms |
+| Sink fade | 600 ms |
+| Per-event pause (sequencer) | 150 ms |
+| Instant mode (`UiMotion` off) | every duration = 0 |
+
+**UI transitions** (opacity/modulate only — no layout animation):
+
+| Transition | Duration | Site |
+|---|---|---|
+| Toast fade-in | 100 ms | the HUD `toast_text` funnel + the kit toast atom (§4.9) adopted by private modal toasts |
+| Toast fade-out | 150 ms | the same two sites |
+| Button press flash | 100 ms | `ui_kit.button()` |
+| Focus / hover / dialog open | instant (no duration) | theme states (§4.9) |
+
+The two toast constants are pinned **once**, in this table — the HUD
+funnel and the kit atom both read them; no site redefines its own.
+
+**Animated sea** (S3 world water + S10 battle water; the Chart and the
+minimap stay flat raster — pinned):
+
+| Property | Value |
+|---|---|
+| Water kinds animated | `sea`, `coastal_sea` (flat tiles on a dedicated water TileMap layer) |
+| Scroll driver | canvas-item shader scrolling `sea_pattern.png` (64×64 two-level torus-safe dither mask) |
+| Scroll period | 800 ms |
+| Darkening factor | ×0.82 (render math, not asset color) |
+| `UiMotion` off | frozen at scroll offset 0 |
+| Per-frame CPU | zero (shader-only; no cell swapping) |
+| S10 battle water | reuses the same shader |
+
+#### 4.7.18 Phase-10 `ui_strings.json` inventory (reserved)
+
+The `ui.kit.*` namespace is the only Phase-10 key family, written once by
+W2-C (the sole `ui_strings.json` writer for the phase); sweep slots
+(W4/W5) reuse existing keys only — a genuinely missing key escalates to
+the master ledger, which appends it on `main`. This section is finalized
+(or amended to the staged set) at W6; no key list exists beyond that rule
+yet.
+
 ### 4.7 Dialog & text conventions
 
 - All dialogs are modal instances of `dialog_box.tscn` (message + OK) or
@@ -1663,13 +1719,244 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
   greeting shows 3 dialogs in fixed order, never simultaneously).
 - Numeric entry fields: digits only, live-clamped to the valid range, empty =
   invalid (dependent buttons disabled).
-- Toasts: transient (2.5s), bottom-center, max 1 visible (new replaces old).
+- Toasts: transient (2.5s), bottom-center, max 1 visible (new replaces
+  old). **Fade (Phase 10):** toasts fade in 100 ms and fade out 150 ms,
+  gated by the `UiMotion` static (off ⇒ instant); applied at the HUD
+  `toast_text` funnel and via the kit toast atom (§4.9) adopted by the
+  private modal toasts. The constants are pinned once (§4.7.17).
 - Text speed: instant (no typewriter effect in Phase 1).
 
-### 4.8 Placeholder art & palette
+### 4.8 Generated art & palette *(Phase 10 — rewrites the Phase-1 "Placeholder art & palette" section, 2026-11-04; the locked palette, sizing grid, S10 minimap pins and §4.8.1 below are unchanged)*
 
-- Everything is `ColorRect`/`Polygon2D`/`Label` with default Godot font; the
-  **only** textures allowed in Phase 1 are none (no imports).
+1. **Generated-art rule.** `tools/build_ui_art.py` is the only art
+   source; everything under `assets/ui/` is tool-owned output (indexed
+   PNGs, nearest-neighbor import, `.import` files committed), never
+   hand-edited — the same family rule as `data/maps/world.png`. Authored
+   inputs live as declarative manifests under `tools/ui_art/<class>/`;
+   style fixes edit the manifests / rig fragments / this style guide and
+   rebuild — never a single PNG. The engine core is vendored from YoYoPixel
+   (MIT, © 2026 SbName) driven by node `render.js` (node pinned
+   **v24.16.0**, zero npm deps); Python is the pipeline governor
+   (8-direction transforms, owner remap tables, seam rings, nine-patch
+   assembly, atlases, `contact_sheet.png`, validator glue). Rebuilds are
+   byte-identical (double-run fixtures).
+2. **Style guide.** uniform 1px outline on tokens (tool-applied; authored
+   maps are outline-less); shading = highlight + base + shadow, texture
+   hints at 32px, dither gradients at 48px+; light from NW;
+   silhouette-first, readable at 1:1; top-down for tokens, front-facing
+   for icons; one dither family for terrain. **Seam rules:** all variants
+   of a terrain kind share a byte-identical, wrap-continuous outer 1px
+   ring (it may carry dither); interiors vary freely; dither density
+   ≤ 30%; `sea_pattern.png` and the nine-patch edge tiles are torus-safe
+   along their repeating axis; shore strips carry foam only on the
+   land-facing band (transparent elsewhere), the foam thickness shared
+   with the corner tiles. Engine seamlessness comes from TileMap chunk
+   batching + nearest filtering + integer placement — no runtime
+   stitching.
+3. **Color budgets = size tiers (caps, not quotas).** 16×16 → 8–12;
+   32×32 → 12–20; 48px+ → 15–25.
+4. **Palette blocks** (full hex tables — every sprite hex must belong to
+   exactly one block: a sprite checks against its own class's block only,
+   group 13 enforcing per-sprite hexes ⊆ class block; where several
+   blocks pin the same value — e.g. `TEXT` in the icon/hull/portrait
+   tables — each block owns its own entry, and no sprite draws across
+   blocks). `scripts/palette.gd` mirrors the blocks as named constants
+   (W2-A appends them, append-only — no renames of existing constants).
+   Class → block mapping: chrome tiles and all A.2 semantic icons (A.2
+   of `IMPLEMENT-Phase10.md`) → `icon`; terrain kinds, port markers and
+   shore strips → `terrain`; hull tokens and facility tokens → `hull`;
+   FX frames → `fx`; portrait part sheets → `portrait`.
+
+   **`terrain` block** (water kinds are flat single-color fills — the
+   animation is the shader's, §4.7.17):
+
+   | Hex | Name | Use |
+   |---|---|---|
+   | `#16446e` | `SEA` | open-sea tile fill (existing locked) |
+   | `#2f6f9e` | `COAST_SEA` | coastal-sea tile fill (existing locked) |
+   | `#7a5c2e` | `LAND` | land tile base (existing locked) |
+   | `#8f6d3a` | `LAND_HI` | land highlight / dither light step |
+   | `#5e4720` | `LAND_LO` | land shadow / dither dark step |
+   | `#3d3d3d` | `REEF` | reef tile base (existing locked) |
+   | `#565656` | `REEF_HI` | reef highlight / dither step |
+   | `#c9d6df` | `ICE` | polar-ice tile base (existing locked) |
+   | `#e4eef4` | `ICE_HI` | ice highlight / dither light step |
+   | `#9fb4c4` | `ICE_LO` | ice shadow / dither dark step |
+   | `#dff0f4` | `FOAM` | shore-strip foam band (land-facing band only) |
+   | `#101010` | `PORT_INK` | port-marker silhouette ink/outline |
+   | `#1a8c4e` | `PORT_PORTUGAL` | port-marker fill, portugal (`10-*` §7.4) |
+   | `#b3191f` | `PORT_SPAIN` | port-marker fill, spain |
+   | `#274b8f` | `PORT_ENGLAND` | port-marker fill, england |
+   | `#d97b1e` | `PORT_HOLLAND` | port-marker fill, holland |
+   | `#6a3d9a` | `PORT_OTTOMAN` | port-marker fill, ottoman |
+   | `#c9a227` | `PORT_ITALY` | port-marker fill, italy |
+   | `#9a9a9a` | `PORT_NEUTRAL` | neutral-port marker fill (existing locked) |
+
+   **`icon` block** (chrome tiles + every A.2 semantic icon; greys and
+   accents aligned to the chrome hexes, plus the 32px shading ramp):
+
+   | Hex | Name | Use |
+   |---|---|---|
+   | `#1c2230` | `PANEL_BG` | icon recess/background fill |
+   | `#121724` | `ICON_BG_LO` | recess shadow step |
+   | `#465468` | `PANEL_LINE` | icon outline / mid grey |
+   | `#5e7086` | `ICON_LINE_HI` | lit-outline step |
+   | `#232c3e` | `ICON_MID` | metal/wood mid-tone base |
+   | `#e8e6df` | `TEXT` | light ink / lit surface; **wind arrows** |
+   | `#f7f5ee` | `ICON_HI` | specular highlight step |
+   | `#d9a441` | `ACCENT` (= `WARN`) | gold accent; **`event_demand`**; coin metal |
+   | `#f0c46a` | `ACCENT_HI` | gold highlight step |
+   | `#a87a28` | `ACCENT_LO` | gold shadow step |
+   | `#4e9e4e` | `GOOD` | **`trend_up`**; positive marks |
+   | `#74c26e` | `GOOD_HI` | good highlight step |
+   | `#b3341f` | `BAD` | **`trend_down`**; danger marks |
+   | `#d4573c` | `BAD_HI` | bad highlight step |
+   | `#2f6f9e` | `COAST_SEA` | **current arrows**; water/glass motif |
+   | `#9a9a9a` | `ICON_NEUTRAL` | neutral-flag fill |
+   | `#1a8c4e` | `FLAG_PORTUGAL` | flag fill |
+   | `#b3191f` | `FLAG_SPAIN` | flag fill |
+   | `#274b8f` | `FLAG_ENGLAND` | flag fill |
+   | `#d97b1e` | `FLAG_HOLLAND` | flag fill |
+   | `#6a3d9a` | `FLAG_OTTOMAN` | flag fill |
+   | `#c9a227` | `FLAG_ITALY` | flag fill |
+
+   Goods-category color mapping (A.2 motif families; no new hexes): food
+   `GOOD`, material `ACCENT_LO`, textile `COAST_SEA`, luxury `ACCENT`.
+
+   **`hull` block** (hull tokens + facility tokens). Shared steps: the
+   authored-neutral map is wood + sail + ink; owner variants derive via
+   remap tables from it — the owner triples below are the remap targets
+   (only the 3 wood steps remap; sail and ink are owner-invariant). Ramp
+   rule: HI = per-channel round(min(ch × 1.25, 255)), LO = per-channel
+   round(ch × 0.72); the tool computes them from the owner base and the
+   table is the pinned result.
+
+   | Hex | Name | Use |
+   |---|---|---|
+   | `#101010` | `HULL_INK` | token outline (all owners, tool-applied 1px) |
+   | `#8f6d3a` | `WOOD_HI` | authored-neutral wood highlight |
+   | `#7a5c2e` | `WOOD` | authored-neutral wood base |
+   | `#5e4720` | `WOOD_LO` | authored-neutral wood shadow |
+   | `#f7f5ee` | `SAIL_HI` | sail highlight |
+   | `#e8e6df` | `SAIL` (= `TEXT`) | sail base; also the player hull base |
+   | `#c2beb2` | `SAIL_LO` | sail shadow |
+
+   | Owner | HI | BASE | LO |
+   |---|---|---|---|
+   | player | `#ffffff` | `#e8e6df` (`TEXT`) | `#a7a6a1` |
+   | portugal | `#21af62` | `#1a8c4e` | `#136538` |
+   | spain | `#e01f27` | `#b3191f` | `#811216` |
+   | england | `#315eb3` | `#274b8f` | `#1c3667` |
+   | holland | `#ff9a26` | `#d97b1e` | `#9c5916` |
+   | ottoman | `#854cc1` | `#6a3d9a` | `#4c2c6f` |
+   | italy | `#fbcb31` | `#c9a227` | `#91751c` |
+   | neutral | `#c1c1c1` | `#9a9a9a` | `#6f6f6f` |
+   | pirate | `#e04127` | `#b3341f` | `#812516` |
+
+   Owner base hexes are exactly `nations.json` `color` values (6 nations)
+   plus player `TEXT` `#e8e6df`, neutral `#9a9a9a`, pirate `#b3341f`.
+
+   **`fx` block** (≤ 12):
+
+   | Hex | Name | Use |
+   |---|---|---|
+   | `#26262c` | `FX_BALL` | cannonball body |
+   | `#8a929c` | `FX_SMOKE` | smoke base |
+   | `#c6ccd4` | `FX_SMOKE_L` | smoke highlight frames |
+   | `#555c66` | `FX_SMOKE_D` | smoke shadow frames |
+   | `#dff0f4` | `FX_FOAM` | splash foam (same value as terrain `FOAM`) |
+   | `#9fc4d4` | `FX_SPLASH_D` | splash water shadow |
+   | `#7a2d16` | `FX_IMPACT_D` | impact scorch ink |
+   | `#ff8c2a` | `FX_FIRE` | impact fire |
+   | `#ffd23e` | `FX_SPARK` | fire spark highlight |
+
+   **`portrait` block** (72×96 part sheets; 16–24 hexes — 24 pinned):
+
+   | Hex | Name | Use |
+   |---|---|---|
+   | `#101010` | `INK` | portrait outline |
+   | `#f0d0b0` | `SKIN_HI` | skin highlight |
+   | `#d9a878` | `SKIN` | skin base |
+   | `#a87a52` | `SKIN_LO` | skin shadow |
+   | `#1a1a1e` | `HAIR_BLACK` | hair: black |
+   | `#6b4a2a` | `HAIR_BROWN` | hair: brown |
+   | `#b9bcc0` | `HAIR_GREY` | hair: grey_streaked base |
+   | `#e8e6df` | `HAIR_STREAK` / `CLOTH_PLAYER` | grey_streaked strands; player cloth base |
+   | `#d9b98a` | `HAIR_BLEACHED` | hair: sun_bleached |
+   | `#2e2014` | `EYE_DARK` | eyes: dark |
+   | `#8a929c` | `EYE_GREY` | eyes: grey |
+   | `#a87a28` | `EYE_HAZEL` | eyes: hazel |
+   | `#9cc4dc` | `EYE_PALE_BLUE` | eyes: pale_blue |
+   | `#d9a441` | `CLOTH_ACCENT` | cloth: trader; player trim |
+   | `#465468` | `CLOTH_LINE` | cloth: coaster |
+   | `#2f6f9e` | `CLOTH_SEA` | cloth: courier |
+   | `#4e9e4e` | `CLOTH_GOOD` | cloth: hunter |
+   | `#b3341f` | `CLOTH_BAD` | cloth: pirate |
+   | `#1a8c4e` | `CLOTH_PORTUGAL` | cloth: patrol/privateer, owner portugal |
+   | `#b3191f` | `CLOTH_SPAIN` | cloth: patrol/privateer, owner spain |
+   | `#274b8f` | `CLOTH_ENGLAND` | cloth: patrol/privateer, owner england |
+   | `#d97b1e` | `CLOTH_HOLLAND` | cloth: patrol/privateer, owner holland |
+   | `#6a3d9a` | `CLOTH_OTTOMAN` | cloth: patrol/privateer, owner ottoman |
+   | `#c9a227` | `CLOTH_ITALY` | cloth: patrol/privateer, owner italy |
+
+   Cloth per role (7 roles + player): trader `CLOTH_ACCENT`, coaster
+   `CLOTH_LINE`, courier `CLOTH_SEA`, patrol + privateer the owner
+   nation's `CLOTH_{nation}` (they read national — distinguished by the
+   role badge, not the cloth), pirate `CLOTH_BAD`, hunter `CLOTH_GOOD`,
+   player `CLOTH_PLAYER` (`#e8e6df`) with `CLOTH_ACCENT` trim.
+
+5. **Hull-letter overlay rule.** identification letters stay as overlay
+   badges drawn on top of the token sprite at runtime — never baked into
+   the PNG (the authored maps are letter-less). The fleet letter badge
+   renders in the world/HUD overlay layer above the `hull_*` sprite
+   (replacing the §4.5.2 square's inline letter); S10 unit badges draw
+   the same way over their tokens.
+6. **heading8 → dir-id table.** `60-*` §4.3a buckets a velocity's
+   heading at the 22.5° boundaries — bucket 0 = east (+x), increasing
+   counterclockwise in the mathematical frame (screen y-down:
+   `(1,−1)` = NE, `(0,−1)` = N …). The sprite dir ids follow that bucket
+   order exactly:
+
+   | heading8 bucket | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+   |---|---|---|---|---|---|---|---|---|
+   | dir id | `e` | `ne` | `n` | `nw` | `w` | `sw` | `s` | `se` |
+
+   Sprite ids: `hull_{ship_type_id}_{owner}_{dir}` and
+   `wind_arrow_{dir}` / `current_arrow_{dir}`, with `{dir}` ∈ the eight
+   ids above (the arrow sets author `n` + `ne` and derive the rest
+   losslessly — A.2 of `IMPLEMENT-Phase10.md`).
+7. **Tier footprint bands (final values).** long-axis px: tier 1
+   (latin, sloop, galiot, pinnace) **14–18**; tier 2 (caravel, galley,
+   brigantine, fluyt, junk, dhow, caravela_redonda, xebec) **20–26**;
+   tier 3 (nao, carrack, galleon, galleass) **26–30** — on the 32×32
+   canvas; the validator checks the long axis.
+8. **Icon sizes & display.** semantic icons render 1× (32 px) inline,
+   flush full-cell in 32px rows; 2× (64 px) allowed for hero contexts,
+   nearest only; chrome tiles 16×16 assembled into 48×48 nine-patch
+   sheets (16px margins, edge tiles in tile-repeat mode — frames render
+   at any size at runtime); FX cannonball/smoke 16×16, splash/impact
+   32×32; portraits 72×96 (3:4 bust); discoveries 64×64;
+   `sea_pattern.png` 64×64.
+9. **LOD pins.** world-map NPC fleets stay colored squares (§4.5.2); S10
+   minimap dots unchanged; chart + minimap stay flat raster; the S3
+   player fleet token becomes the 8-dir directional sprite
+   (`hull_{type}_{owner}_{dir}`; lists/rosters use static `n`). The
+   Phase-1 "ship/token colored square" rule of this section is retired
+   by this rewrite.
+10. **S3 arrow-field spec.** pure sampler `scripts/world/arrow_field.gd`:
+    stride 4×4 tiles over the visible window + apron, water cells only;
+    wind arrow = the month's `prevailing_for(cell, month)` (the Phase-6
+    wind-region raster, `10-*` §6.5); current arrow = the decoded,
+    reversal-applied current vector (`20-*` §4.16) → 8-bucket per the
+    table above; colors wind `TEXT` / current `COAST_SEA` (the sprite
+    pins). Toggled by `W`/`C` keys on S3 (session-local, default off,
+    mirroring the chart's toggles, §4.3) and re-sampled on month change.
+    The HUD's existing wind/current arrows (§4.5) swap to the same
+    sprite ids. While the current field is on, the S3 `C` press toggles
+    the field and the §4.5 intel `C` is shadowed (the same shadow
+    convention as the chart's `C`, §4.3); with the field off, `C` is
+    unchanged, and `O`/`F`/the intel button always open the window.
+
 - Locked palette (hex):
 
 | Name | Color | Use |
@@ -1698,8 +1985,6 @@ save, `GameState`, `NpcFleets`, the phase-3 hooks or world routing.
 
 - Sizing grid: 8px base unit; margins 16px; button height 40px; bar heights
   40/32px (§4.5); table row height 32px; dialog width 480px.
-- Ship/tokens: colored 24×24 squares with a letter; player fleet white square
-  with black outline.
 - **Audio (placeholder note):** silence in Phase 1; hook method
   `EventBus.play_sfx(name)` exists as a no-op; free-asset replacement pass is
   a Phase-3 task.
@@ -1735,6 +2020,80 @@ visibly jumped at every opening/closing hour.)
   entry gate (`port_screen._facility_available`) refuses it; the Space wait
   (`30-*` §4.3) re-enables it on the next crossing hour. Routing, gating and
   the rebuild signature never move — only the rendering is fixed.
+
+### 4.9 Shared theme & widget kit (Phase 10)
+
+**Application point.** `scripts/ui_theme.gd` `build_theme() -> Theme`
+applies once at startup to the root window (`get_window().theme` in
+`title_screen._ready()` — S1 is the locked main scene) and cascades to
+every control. No `.tres`. Headless suites that boot scenes directly
+apply `build_theme()` themselves (the direct-boot pattern is documented
+in the test docstring). `project.godot` stays unchanged — no new
+autoload: both `ui_theme.gd` and `ui_kit.gd` are `class_name` statics.
+Motion gating is the `UiMotion` static (§4.7.17).
+
+**Pinned numbers** (each row = a named constant in `ui_theme.gd`; all
+hexes resolve to existing `palette.gd` constants):
+
+| Control | Pins |
+|---|---|
+| Button | normal bg `PANEL_BG` + 2px border `PANEL_LINE`; hover border `ACCENT`; pressed bg `PANEL_LINE`; disabled text `PANEL_LINE`; keyboard focus = extra 2px `ACCENT` ring |
+| V/HScrollBar | trough transparent; 8px grabber `PANEL_LINE`, hover/pressed `ACCENT`; min grabber 24px |
+| Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px (nine-patch sheets layered at W3; flat StyleBoxFlat remains the fallback when a texture id is absent) |
+| LineEdit / TextEdit | bg `PANEL_BG`, border `PANEL_LINE`, focus border `ACCENT` |
+| Slider (S19) | grabber `ACCENT`, groove `PANEL_LINE` |
+| Tooltip | bg `PANEL_BG`, text `TEXT`, radius 4px, 8px padding |
+| Label | `TEXT`; `Dim` variation `PANEL_LINE` for secondary row text |
+
+**State matrix** ("—" = the control class has no such state; the theme
+defines nothing for it):
+
+| Control \ state | normal | hover | pressed | disabled | focused |
+|---|---|---|---|---|---|
+| Button | bg `PANEL_BG` / border `PANEL_LINE` | border `ACCENT` | bg `PANEL_LINE` | text `PANEL_LINE` | extra 2px `ACCENT` ring |
+| Button · Primary | Button row, border/accent slots `ACCENT` | border `ACCENT` | bg `PANEL_LINE` | text `PANEL_LINE` | 2px `ACCENT` ring |
+| Button · Danger | Button row, border/accent slots `BAD` | border `BAD` | bg `PANEL_LINE` | text `PANEL_LINE` | 2px `BAD` ring |
+| Button · Quiet | transparent bg, no border | Button hover/pressed cells | bg `PANEL_LINE` | text `PANEL_LINE` | 2px `ACCENT` ring |
+| ScrollBar (V/H) | trough transparent / grabber `PANEL_LINE` | grabber `ACCENT` | grabber `ACCENT` | grabber `PANEL_LINE` | grabber `ACCENT` |
+| Panel / PanelContainer | `PANEL_BG` + 2px `PANEL_LINE`, radius 4px | — | — | — | — |
+| LineEdit / TextEdit | bg `PANEL_BG` / border `PANEL_LINE` | border `PANEL_LINE` | — | text `PANEL_LINE` | border `ACCENT` |
+| Slider | grabber `ACCENT` / groove `PANEL_LINE` | grabber `ACCENT` | grabber `ACCENT` | grabber `PANEL_LINE` | grabber `ACCENT` |
+| Tooltip | bg `PANEL_BG` / text `TEXT`, radius 4px, 8px pad | — | — | — | — |
+| Label | `TEXT` | — | — | `Dim` (`PANEL_LINE`) | — |
+
+**Atom contracts** (`scripts/ui_kit.gd`, static factory — six atoms plus
+the toast atom):
+
+| Atom | Contract |
+|---|---|
+| `button(text_key, kind, icon_id = "")` | `kind` ∈ default/primary/danger; min height 40px; optional icon id; press flash per §4.7.17 |
+| `frame(title_key)` | titled PanelContainer: header + 16px-margin VBox |
+| `row(cols, height = 32)` | horizontal row of `cols` cells |
+| `footer(buttons)` | right-aligned button row |
+| `value_bar(value, max, tier)` | GOOD/WARN/BAD colors by tier |
+| `field_row(label_key, control)` | label + control on one 32px row |
+| `toast(...)` | kit toast atom for private modal toasts (fade per §4.7.17) |
+
+Labels resolve through `I18n.t_key`; screens keep their
+`locale_changed` re-render pattern.
+
+**No-per-screen-styling rule + allowlist.** `add_theme_*`, local
+`StyleBoxFlat` and `StyleBoxTexture` may appear only in
+`{scripts/ui_theme.gd, scripts/ui_kit.gd}` ∪ the allowlist table below.
+The sweep is mechanical across every screen (484 call sites / 26 files
+at review — the count itself is never pinned, the rule is); no screen
+redesign; visible diffs are limited to unified hover/pressed/focus
+states, on-palette scrollbars and the generated art. The allowlist
+starts EMPTY and gains entries only by master-ledger adjudication.
+
+| File | Reason | Expiry |
+|---|---|---|
+| *(empty)* | entries added only by master-ledger adjudication | — |
+
+**Icon params.** kit atoms and screens reference sprite ids —
+`good_{id}`, `eq_{id}`, `role_{id}`, `facility_{id}`, and the `ui` icons
+per the A.2 inventory of `IMPLEMENT-Phase10.md` — resolved through the
+W3 texture registry; an absent id ⇒ flat fallback (no crash).
 
 ### 4.16 W3/W4 symbol contracts (Phase 7 — the launch condition; §4.9 before Phase 10)
 
