@@ -140,6 +140,8 @@ Read in this order. Each doc follows the Doc Template (§10).
 | — | `docs/IMPLEMENT-Phase6.md` | Phase-6 task backlog + completion record | 6 |
 | — | `docs/IMPLEMENT-Phase7.md` | Phase-7 task backlog + wave plan | 7 |
 | — | `docs/IMPLEMENT-Phase8.md` | Phase-8 task backlog + wave plan + completion record | 8 |
+| — | `docs/IMPLEMENT-Phase9.md` | Phase-9 task backlog + wave plan + completion record | 9 |
+| — | `docs/IMPLEMENT-Phase10.md` | Phase-10 task backlog + wave plan (UI kit & pixel art) | 10 |
 
 Repo root `AGENTS.md` points agents at this file and restates the i18n and
 placeholder-art rules.

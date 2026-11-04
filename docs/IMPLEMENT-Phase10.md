@@ -677,4 +677,58 @@ portrait sheets + 1 raster (`world_shore.png`).**
 ## Status log
 
 _Waves ledger entries are appended here by the master as merges land
-(Phase-9 convention). Nothing launched yet._
+(Phase-9 convention)._
+
+### W1 — docs (2026-11-04) — COMPLETE
+
+- **Master pre-wave adjudication** (`6bb60f5`): the Phase-10 pin of §4.9
+  (theme & kit) collided with the live tree's §4.9 (Phase-7 W3/W4 symbol
+  contracts). Resolved in the owning doc: contracts renumbered
+  **§4.9 → §4.16** in `80-*` (heading + §1 cite) with a full reference
+  sweep (`docs/60-*` 1 hit; code comments in `game_state.gd`,
+  `allegiance.gd`, `shipyard_engine.gd`, `npc_fleets.gd`, `npc_intel.gd`,
+  `sailing_sim.gd`, `market_screen.gd`, `test_allegiance/test_shipyard/
+  test_market_screen/test_trade`). `§4.9` is now unambiguous.
+- **A** `phase10/w1-a-80` @ `a65344f`, merged → validator exit 0.
+  `80-*`: §4.7 toast-fade amendment; **§4.7.17** timing tables (final
+  pins: flight 300 / splash 400 / impact 300 / smoke 500 / sink 600 /
+  event pause 150 ms; toast 100/150 ms; press flash 100 ms; sea period
+  800 ms, darkening ×0.82); **§4.7.18** reserved; **§4.8 rewrite**
+  (generated-art rule, style guide, budgets 12/20/25 caps, dither ≤ 30%,
+  seam rules, heading8→dir table, footprint bands 14–18 / 20–26 / 26–30,
+  icon display rules, LOD pins, S3 arrow-field spec); **§4.9 theme & kit**
+  (every stylebox constant, state matrix, six atom contracts, allowlist
+  starts empty). Palette blocks pinned: terrain 19, icon 22, hull 33
+  distinct (7 shared steps + 9 owner triples), fx 9, portrait 24.
+  Adjudications (master-accepted): (a) S3 `C`-key shadow convention for
+  the current-arrow field (field on ⇒ `C` toggles the field, intel `C`
+  shadowed; mirrors the S17 chart shadow); (b) block membership is
+  **per-class** — group 13 checks a sprite only against its class block
+  (value reuse across blocks allowed); (c) terrain block carries the 6
+  nation hexes + `PORT_NEUTRAL` + `PORT_INK` + `FOAM` (terrain-class
+  sprites need them); (d) goods category→color map pinned food `GOOD` /
+  material `ACCENT_LO` / textile `COAST_SEA` / luxury `ACCENT`; (e) class
+  assignments: chrome tiles → `icon` block, facility tokens → `hull`
+  block; (f) the Phase-1 "24×24 ship squares" bullet retired (player
+  token becomes the 8-dir sprite; NPC squares persist via §4.5.2).
+- **B** `phase10/w1-b-schema` @ `8b744d1`, merged → validator exit 0.
+  `10-*`: §6.3 generated-artifact family amendment (`.import` scope split:
+  map rasters stay import-free data — decision 5 verbatim); **§6.6**
+  `world_shore.png` spec (indices 1–8 = `n…nw`, priority = compass order,
+  wrap-aware, land/reef/ice ⇒ 0); §8 preamble group-13 row; **§8.8
+  group-13 normative spec** — 10 checks + 6 negative probes, counts
+  reconciled at machine scope (never hard-pinned). Adjudications:
+  token class = 1 152 hulls **plus** 6 facility tokens; terrain class =
+  13 tiles + `sea_pattern.png`; §6.6 heading carries the `*(Phase 10)*`
+  suffix convention.
+- **C** `phase10/w1-c-arch` @ `00d412e`, merged → validator exit 0.
+  `90-*`: §1 Phase-10 sentence, §4 tree (10 new entries incl.
+  `ui_motion.gd`), **§9.2** terrain-art/overlay + `--import` ingestion +
+  portrait ladder + `project.godot`-unchanged notes. `00-*`: §5 Phase-10
+  row + out-of-scope clarification; §12 glossary +6 terms.
+  `LICENSE-NOTES.md`: YoYoPixel MIT entry (© 2026 SbName, no URL).
+  Master follow-up on `main`: §8 doc map gained the missing Phase-9 row
+  plus the Phase-10 row.
+- **Gate:** cross-doc refs resolve (§4.7.17/§4.7.18/§4.8/§4.9/§4.16,
+  §6.6, §8.8, §9.2, §5 row, glossary rows all verified present);
+  `validate_data.py` exit 0 after every merge. No code touched.
