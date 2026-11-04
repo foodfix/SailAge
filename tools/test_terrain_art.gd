@@ -19,8 +19,10 @@ extends Node
 ##   * the §4.8.6 dir-id table (every bucket covered; token + vector forms);
 ##   * the arrow field's deterministic sampling against a fixture decode
 ##     (stride-4 lattice, water cells only, wind/current/VAR entries);
-##   * the S3 `W`/`C` fields default OFF, toggle, and re-sample on month
-##     rollover;
+##   * the S3 `W`/`C` fields default OFF, the amended §4.8.10 key matrix
+##     (`W` always toggles wind; `C` toggles current while either field is
+##     on, shadowing the intel `C`; both-off `C` is the intel's), and the
+##     month-rollover re-sample;
 ##   * the world markers: every discovery category resolves as an id,
 ##     discovered-only visibility, the wreck/treasure registry fallbacks.
 ##
@@ -325,10 +327,19 @@ func _test_arrow_field_world() -> void:
 	world.route_to_port = false
 	world.route_to_battle = false
 	add_child(world)
+	var map = DataLoader.map
 	_check(not world.wind_field_on() and not world.current_field_on(),
 		"W/C fields default OFF (§4.8.10, session-local)")
 	_check(world.arrow_field_samples().is_empty(),
 		"no samples before the first toggle")
+	# --- The amended §4.8.10 key matrix (2026-11-04 adjudication) -----------
+	# Both fields off: `C` is NOT consumed by the world — the §4.5 intel
+	# window keeps its key (existing behavior; the window itself is W4-B's).
+	_check(not _feed_field_key(world, KEY_C),
+		"both fields off ⇒ `C` is not consumed (the intel window answers)")
+	_check(not world.wind_field_on() and not world.current_field_on(),
+		"the untouched `C` left both fields off")
+	# `W` always toggles the wind field: on …
 	world.toggle_wind_field()
 	_check(world.wind_field_on() and not world.current_field_on(),
 		"`W` turns the wind field on alone")
@@ -340,7 +351,6 @@ func _test_arrow_field_world() -> void:
 		"the field samples the live calendar month")
 	var stride_ok := true
 	var water_ok := true
-	var map = DataLoader.map
 	for entry in wind_samples:
 		var cell: Vector2i = entry["cell"]
 		if cell.x % ArrowFieldLib.STRIDE != 0 or cell.y % ArrowFieldLib.STRIDE != 0:
@@ -356,35 +366,90 @@ func _test_arrow_field_world() -> void:
 		if ArrowFieldLib.DIR_IDS.find(str(entry["dir_id"])) < 0:
 			wind_ids = false
 	_check(wind_ids, "wind dir ids are §4.8.6 ids (or the VAR mark)")
-	# The current field needs the currents decode; the world scene warms it on
-	# frame 1 — force it here (the one expensive decode, shared with test_chart).
+	# … and the amended reachability: wind-only + `C` turns the CURRENT field
+	# on (shadowed — consumed, no intel). The currents decode is forced first
+	# (the one expensive decode; the world scene warms it on frame 1).
 	var ocean = OceanLayersLib.instance()
 	_check(ocean.decode_ok, "the wind raster decoded for the suite")
 	if not ocean.currents_decoded:
 		ocean.current_at(map.port_cell("lisbon"),
 			SailingSimLib.month_for(GameState.day))
-	world.toggle_current_field()
+	_check(_feed_field_key(world, KEY_C),
+		"wind-only ⇒ `C` is consumed (the intel `C` is shadowed)")
 	_check(world.wind_field_on() and world.current_field_on(),
-		"`C` adds the current field alongside the wind field")
+		"wind-on + `C` turns the current field ON (amended reachability)")
 	_check(world.arrow_field_samples().size() >= wind_samples.size(),
 		"the combined field carries at least the wind entries")
+	# The current layer's entries are data-dependent (the Portuguese coast
+	# window may own no current tiles): whenever the decode is healthy and
+	# entries exist, their dir ids must be §4.8.6 ids; absence near Lisbon
+	# is a NOTE, not a failure (the real current data is test_ocean's pin).
+	var currents: Array = world.arrow_field_samples().filter(func(e: Dictionary) -> bool:
+		return e["kind"] == "current")
+	var current_ids := true
+	for entry in currents:
+		if ArrowFieldLib.DIR_IDS.find(str(entry["dir_id"])) < 0:
+			current_ids = false
+	_check(current_ids, "current dir ids are §4.8.6 ids")
+	if currents.is_empty() and ocean.currents_ok:
+		print("NOTE  the Lisbon window owns no current tiles (entries data-dependent)")
+	# current-on + `C` ⇒ current off (wind unaffected); `C` again re-arms it.
+	_check(_feed_field_key(world, KEY_C) and not world.current_field_on()
+		and world.wind_field_on(),
+		"current-on + `C` turns the current field OFF (wind stays on)")
+	_check(_feed_field_key(world, KEY_C) and world.current_field_on(),
+		"`C` re-arms the current field while the wind field runs")
+	# `W` always toggles the wind field — even with the current field on.
+	_check(_feed_field_key(world, KEY_W) and not world.wind_field_on()
+		and world.current_field_on(),
+		"`W` toggles the wind field off and never touches the current field")
+	# wind-off + current-on + `C` ⇒ current off (both off again).
+	_check(_feed_field_key(world, KEY_C) and not world.current_field_on()
+		and not world.wind_field_on(),
+		"current-on + `C` (wind off) returns to both-off")
+	# And the round trip is stable: both-off `C` is the intel's again.
+	_check(not _feed_field_key(world, KEY_C),
+		"back at both-off, `C` is the intel window's key again")
 	# Month rollover re-samples (§4.8.10): with a field on, crossing a month
 	# boundary flips the sampled month on the next sample (any phase shift
 	# past 30 days is guaranteed to cross one).
+	world.toggle_wind_field()
 	var month_before: int = world.arrow_field_month()
 	GameState.day += 40
 	_check(SailingSimLib.month_for(GameState.day) != month_before,
 		"the shifted fixture day really crossed a month boundary")
-	world.toggle_current_field()  # C off — and the re-sample reads the new month
+	_check(_feed_field_key(world, KEY_W),
+		"`W` re-toggles the wind field (and re-samples)")
 	var drifted: int = world.arrow_field_month()
 	_check(drifted != month_before,
 		"a month rollover re-samples the field (sampled month %d)" % drifted)
-	_check(not world.current_field_on(),
-		"`C` toggled the current field off (field-off C is the intel's)")
-	world.toggle_wind_field()
-	_check(not world.wind_field_on(), "`W` toggles the wind field off")
+	# The round trip closes: the re-toggle left wind off, one more `W` turns
+	# it back on, the last one off — `W` always toggles, to both ends.
+	_check(_feed_field_key(world, KEY_W) and world.wind_field_on(),
+		"`W` turns the wind field back on (always-toggle)")
+	_check(_feed_field_key(world, KEY_W) and not world.wind_field_on(),
+		"`W` toggles the wind field off (final state both-off)")
+	_check(not world.wind_field_on() and not world.current_field_on(),
+		"the fixture leaves both fields off")
 	GameState.day -= 40
 	world.queue_free()
+
+
+## Feeds one raw field key through the world's `_input`-stage handler and
+## reports whether the world CONSUMED it (the consume is the intel shadow).
+## The viewport's handled flag is per-pushed-event, so each feed first pushes
+## a benign key (nothing on S3 listens to F13) to reset it deterministically.
+func _feed_field_key(world, code: int) -> bool:
+	var reset := InputEventKey.new()
+	reset.physical_keycode = KEY_F13
+	reset.pressed = true
+	get_viewport().push_input(reset)
+	var event := InputEventKey.new()
+	event.physical_keycode = code
+	event.pressed = true
+	world._tick_arrow_field_input(event)
+	var consumed := get_viewport().is_input_handled()
+	return consumed
 
 
 # --- World markers (§3) ---------------------------------------------------------
