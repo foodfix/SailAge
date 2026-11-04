@@ -150,6 +150,10 @@ const SAIL_HI := Color("#f7f5ee")
 const SAIL := Color("#e8e6df")
 ## Sail shadow.
 const SAIL_LO := Color("#c2beb2")
+## Deep sail shade — the billow's dark flank (UW2 craft bar, 2026-11-04).
+const SAIL_SH := Color("#a8a496")
+## Warm deck-plank tone for the oblique deck planes (UW2 craft bar, 2026-11-04).
+const DECK := Color("#9a6a3a")
 
 ## Player hull ramp — highlight.
 const HULL_PLAYER_HI := Color("#ffffff")

@@ -10,6 +10,8 @@
   "s": { "hex": "#f7f5ee", "constant": "SAIL_HI",          "use": "sail highlight (top/port edge), facility stone highlight (palace)" },
   "S": { "hex": "#e8e6df", "constant": "SAIL",             "use": "sail base" },
   "z": { "hex": "#c2beb2", "constant": "SAIL_LO",          "use": "sail shadow (bottom/starboard edge, battens)" },
+  "d": { "hex": "#a8a496", "constant": "SAIL_SH",          "use": "deep sail shade — the billow's dark flank (UW2 craft bar)" },
+  "D": { "hex": "#9a6a3a", "constant": "DECK",             "use": "warm deck-plank tone for the oblique deck planes (UW2 craft bar)" },
   "K": { "hex": "#101010", "constant": "HULL_INK",         "use": "gunports, gallery windows, rigging stays (owner-invariant like the sails)" },
   "g": { "hex": "#9a9a9a", "constant": "HULL_NEUTRAL",     "use": "stone base (facility tokens only)" }
  },

@@ -81,6 +81,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import tempfile
 from pathlib import Path
@@ -95,9 +96,11 @@ PALETTE = {
     "H": "#8f6d3a",  # WOOD_HI  — lit rails, strakes, mast tops (light NW)
     "W": "#7a5c2e",  # WOOD     — hull/plank base, masts, yards
     "L": "#5e4720",  # WOOD_LO  — plank seams, bilge, keel, shadow edges
-    "s": "#f7f5ee",  # SAIL_HI  — the one specular arc per sail
+    "s": "#f7f5ee",  # SAIL_HI  — the specular crest / waterline foam line
     "S": "#e8e6df",  # SAIL     — sail body
-    "z": "#c2beb2",  # SAIL_LO  — seams, folds/leeches, shadow edges
+    "z": "#c2beb2",  # SAIL_LO  — folds, leeches, shadow edges
+    "d": "#a8a496",  # SAIL_SH  — the billow's dark flank (craft bar item 6)
+    "D": "#9a6a3a",  # DECK     — oblique deck-plank tone (craft bar item 6)
     "p": "#b3191f",  # pennant SOURCE hex (authoring-only intermediate; the
                      # governor remaps it to the owner's PENNANT_* hex per
                      # the §4.8.4 amended hull block — never shipped as-is;
@@ -187,24 +190,23 @@ class Grid:
 
 def hull_side(g: Grid, x0: int, x1: int, deck: int, ports: tuple[int, ...] = (),
               tall: bool = True) -> None:
-    """OBLIQUE side-profile hull (§4.8.6 second amendment): lit rail, two
-    freeboard rows, plank seam, the 1px waterline foam line at 60 % of the
-    rail→keel span, the darkened submerged rows (WOOD_LO via the shade rule)
-    and the keel taper.  Gunports punch the gundeck row above the waterline."""
-    if tall:                                   # rows deck..deck+6 (t2/t3)
-        prof = [("H", 0), ("W", 1), ("W", 2), ("L", 3)]
-        wl = deck + WL_TALL
-    else:                                      # rows deck..deck+5 (t1)
-        prof = [("H", 0), ("W", 1), ("W", 2)]
-        wl = deck + WL_SLIM
+    """OBLIQUE side-profile hull, DENSE (craft bar item 6): lit rail, wood
+    strake, SAIL_LO strake seam, DECK-tone lit wale, the 1px waterline foam
+    line at 60 % of the rail→keel span, the darkened submerged rows and the
+    keel taper at the bottom edge.  Gunports carry 1px HULL_HI frames."""
+    prof = [("H", 0), ("W", 1), ("z", 2), ("D", 3)]   # rail + 3 strake rows
+    wl = deck + WL_TALL
     for ch, off in prof:
         g.hline(x0, x1, deck + off, ch)
     g.hline(x0, x1, wl, WATERLINE_HEX)         # the foam waterline
-    for y in range(wl + 1, deck + (6 if tall else 5)):
+    for y in range(wl + 1, deck + 6):
         g.hline(x0, x1, y, WATERLINE_SHADE["L"])   # submerged: darkened wood
     for x in ports:
-        g.put(x, deck + 2, "K")                # gundeck row (above waterline)
-    g.hline(x0 + 2, x1 - 2, deck + (6 if tall else 5), "L")   # keel taper
+        g.put(x, deck + 2, "K")                # gunport
+        g.put(x - 1, deck + 2, "H")            # 1px lit frame, both flanks
+        g.put(x + 1, deck + 2, "H")
+    g.hline(x0, x1, deck + 6, "L")            # submerged bilge row
+    g.hline(x0 + 2, x1 - 2, deck + 7, "L")     # keel taper at the bottom edge
 
 
 def shade_below(g: Grid, x0: int, x1: int, y: int) -> None:
@@ -218,18 +220,21 @@ def shade_below(g: Grid, x0: int, x1: int, y: int) -> None:
 
 
 def stern_castle(g: Grid, x0: int, x1: int, top: int,
-                 windows2: tuple[int, ...], windows1: tuple[int, ...]) -> None:
-    """Two-tier aft castle: upper tier, roof step, stern-gallery windows."""
+                 windows2: tuple[int, ...], windows1: tuple[int, ...],
+                 win_hex: str = "s") -> None:
+    """Two-tier aft castle — DENSE (craft bar item 6): upper tier, roof step,
+    stern-gallery faces with 1px LIT-window dots (t3 castles pass the gold
+    hex; smaller hulls the SAIL_HI stand-in)."""
     g.hline(x0, x1, top, "H")                  # tier-2 roof (lit)
     g.hline(x0, x1, top + 1, "W")
     for x in windows2:
-        g.put(x, top + 1, "K")
+        g.put(x, top + 1, win_hex)
     g.hline(x0, x1, top + 2, "W")
     g.hline(x0 - 1, x1 + 1, top + 3, "L")      # tier-1 roof overhang
     g.hline(x0 - 1, x1 + 1, top + 4, "H")      # tier-1 rail
     g.hline(x0 - 1, x1 + 1, top + 5, "W")
     for x in windows1:
-        g.put(x, top + 5, "K")
+        g.put(x, top + 5, win_hex)
 
 
 def lantern(g: Grid, x: int, y: int) -> None:
@@ -265,29 +270,82 @@ def yard(g: Grid, x0: int, x1: int, y: int) -> None:
     g.put(x1, y, "H")
 
 
+def _billow_bands(tt: float, big: bool) -> str:
+    """Craft-bar band painter (§4.8.2 item 6): given the sheared across-sail
+    coordinate tt in [0,1], return the tone.  The DARK bands carry the
+    billow read (SAIL_HI vs SAIL is a near-invisible step at 1:1): a wide
+    SAIL_SH lee flank, curved SAIL_LO fold bands, the SAIL_HI crest sitting
+    between body and folds on the lit bulge (NW-of-center — doubles as the
+    specular on big sails).  Small sails compress to four zones."""
+    if big:
+        if tt >= 0.68:
+            return "d"                     # wide dark lee flank
+        if tt >= 0.56:
+            return "z"                     # lee fold band
+        if tt >= 0.44:
+            return "S"
+        if tt >= 0.30:
+            return "s"                     # HI crest, NW-of-center
+        if tt >= 0.16:
+            return "S"
+        return "z"                         # luff fold + leech edge
+    if tt >= 0.62:
+        return "d"
+    if tt >= 0.42:
+        return "s"
+    if tt >= 0.16:
+        return "S"
+    return "z"
+
+
 def square_sail(g: Grid, x0: int, x1: int, y0: int, rows: int,
                 seams: tuple[int, ...] = (), folds: tuple[int, ...] = ()) -> None:
-    """Wind-bellied square sail: SAIL_HI top arc (the one specular), S body,
-    SAIL_LO vertical seams + SAIL_LO horizontal fold/band lines (§4.8.2 item
-    3), SAIL_LO leech + center belly bulge."""
-    y1 = y0 + rows - 1
-    g.hline(x0, x1, y0, "s")
-    for y in range(y0 + 1, y1):
-        g.hline(x0, x1, y, "z" if y in folds else "S")
-        for x in seams:
-            g.put(x, y, "z")
-    g.hline(x0, x1, y1, "z")
-    mid = (x0 + x1) // 2
-    g.hline(mid - 1, mid + 1, y1 + 1, "z")     # wind belly
+    """BILLLOWED square sail (craft bar item 6): the leeches bulge in arcs
+    beyond the yard tips (1-2px, widest at the belly), the foot sags in a
+    shallow arc (center 1-2px lower than the corners), and the interior
+    carries curved shade bands that follow the bulge — sheared per row so
+    the bands bow with the canvas.  The `seams`/`folds` params are kept for
+    call compatibility; the curved bands supersede them."""
+    w = x1 - x0
+    big = w >= 8
+    belly = 2 if rows >= 5 else 1           # foot sag: center 1-2px lower
+    boot = 2 if w >= 10 else (1 if w >= 6 else 0)
+    R = rows + belly
+    x0e = x0 - boot                          # bulged extents
+    span = w + 2 * boot
+    for r in range(1, R + 1):
+        y = y0 + r
+        # leech arc: widest at the belly, tapering toward yard and foot
+        extra = round(boot * math.sin(math.pi * r / (R + 1)))
+        for x in range(x0 - extra, x1 + extra + 1):
+            sag = (round(belly * math.sin(math.pi * (x - x0) / w))
+                   if 0 <= x - x0 <= w else 0)
+            if y > y0 + rows + sag:          # below the sagging foot arc
+                continue
+            # shear: bands bow with the canvas (slightly decelerating curve)
+            shear = 0.35 * r - 0.02 * r * r
+            tt = (x + shear - x0e) / span
+            g.put(x, y, _billow_bands(tt, big))
+    # foot shadow: the bottom-most painted pixel of every column
+    for x in range(x0e, x0e + span):
+        for y in range(y0 + R, y0, -1):
+            if g.g[y][x] in "sSzd":
+                g.put(x, y, "z")
+                break
+    if not big:                              # small sails: top specular arc
+        g.hline(x0, x1, y0 + 1, "s")
 
 
 def lateen(g: Grid, x_aft: int, y_aft: int, x_fwd: int, y_fwd: int,
-           base: int) -> None:
-    """Lateen sail under a slanted yard peaking toward the bow: S body with
-    the one specular arc near the yard peak, z foot; widest aft of the yard
-    mid, tapering to the peak.  Call after the hull/masts (sail is in front)."""
+           base: int, skirt: bool = True) -> None:
+    """BILLLOWED lateen sail (craft bar item 6): the sloping foot sags in an
+    arc below the nominal base (widest aft of the yard mid), the aft leech
+    bulges in a 1-2px skirt arc beyond the yard butt (skirt=False when the
+    hull leaves no room for the bulge), and the interior shade bands run
+    parallel to the slanted yard/foot — z leech, S body, s HI crest along
+    the lit bulge, S, z fold, d SH dark flank toward the peak; the foot row
+    takes z.  Call after the hull/masts (sail is in front)."""
     d = x_fwd - x_aft
-    mid = x_aft + d // 2
     for x in range(x_aft, x_fwd + 1):
         t = (x - x_aft) * (y_fwd - y_aft)
         y = y_aft + (t + d // 2) // d
@@ -296,14 +354,45 @@ def lateen(g: Grid, x_aft: int, y_aft: int, x_fwd: int, y_fwd: int,
             g.put(x, y, "H")                   # lit yard peak
         if x == x_aft:
             continue
+        # billowed foot: deep arc, sagging below the nominal base
+        sag = round(2.4 * math.sin(math.pi * (x - x_aft) / d))
         top = y + 1
-        bot = base if x <= mid else base - (x - mid)
+        if x <= x_aft + d // 2:
+            bot = base + sag - 1
+        else:
+            bot = base - (x - x_aft - d // 2) + sag // 2
         bot = max(bot, top)
-        g.put(x, top, "s" if x > mid else "S")  # specular near the peak only
-        for yy in range(top + 1, bot):
-            g.put(x, yy, "S")
-        if bot > top:
-            g.put(x, bot, "z")
+        for yy in range(top, bot + 1):
+            # bands shear with depth: constant-u lines run parallel to the
+            # slanted yard, curving with the sagging foot
+            u = (x - x_aft + (yy - y) * 0.9) / d
+            if u >= 0.80:
+                c = "d"                        # dark flank toward the peak
+            elif u >= 0.62:
+                c = "z"                        # fold
+            elif u >= 0.46:
+                c = "S"
+            elif u >= 0.28:
+                c = "s"                        # HI crest
+            elif u >= 0.10:
+                c = "S"
+            else:
+                c = "z"                        # aft leech
+            if yy == bot:
+                c = "z"                        # foot shadow
+            g.put(x, yy, c)
+    # curved aft-leech skirt: 1-2px bulge beyond the yard butt at mid-depth
+    if skirt:
+        for k in (1, 2):
+            xs = x_aft - k
+            y_top = y_aft + 1 + 2 * k
+            y_bot = base - k - 1
+            if y_bot <= y_top:
+                continue
+            g.put(xs, y_top, "z")
+            for yy in range(y_top + 1, y_bot):
+                g.put(xs, yy, "S")
+            g.put(xs, y_bot, "z")
 
 
 def pennant(g: Grid, x_tip: int, y: int, length: int, sign: int) -> None:
@@ -371,30 +460,36 @@ def oar_bank(g: Grid, xs, y: int) -> None:
 
 def fat_hull(g: Grid, x0: int, x1: int, deck: int,
              ports: tuple[int, ...] = ()) -> None:
-    """Fluyt oblique profile: deep rounded belly, blunt vertical stern post,
-    two plank seam rows, the waterline foam line + darkened submerged rows
-    (§4.8.6 second amendment; hulls >= 20px carry seams)."""
-    for i, ch in enumerate(("H", "W", "W", "L")):      # rail + freeboard
+    """Fluyt oblique profile — DENSE (craft bar item 6): rounded belly,
+    blunt vertical stern post, SAIL_LO strake seam + DECK lit wale, the
+    waterline foam line + darkened submerged rows, keel at the bottom edge.
+    Gunports carry 1px lit frames."""
+    for i, ch in enumerate(("H", "W", "z", "D")):      # rail + strake rows
         g.hline(x0, x1, deck + i, ch)
-    g.hline(x0, x1, deck + 2, "L")                     # plank seam row
     for y in range(deck + 1, deck + 4):
         g.put(x0, y, "L")                      # blunt stern post
     for x in ports:
-        g.put(x, deck + 2, "K")                # gundeck row
+        g.put(x, deck + 2, "K")                # gunport
+        g.put(x - 1, deck + 2, "H")            # 1px lit frame, both flanks
+        g.put(x + 1, deck + 2, "H")
     g.hline(x0, x1, deck + WL_FAT, WATERLINE_HEX)      # foam waterline
     for y in range(deck + WL_FAT + 1, deck + 6):
         g.hline(x0, x1, y, WATERLINE_SHADE["L"])       # submerged belly
-    g.hline(x0 + 2, x1 - 2, deck + 6, "L")     # rounded belly keel
+    g.hline(x0, x1, deck + 6, "L")             # submerged bilge row
+    g.hline(x0 + 2, x1 - 2, deck + 7, "L")     # rounded belly keel
 
 
 def deck_strip(g: Grid, x0: int, x1: int, y0: int, hatches: tuple[int, ...] = (),
                partners: tuple[int, ...] = ()) -> None:
-    """OBLIQUE deck plane (§4.8.6 second amendment): a 3px band read from
-    above — lit far gunwale edge, deck plane carrying 2px HULL_INK hatch
-    rectangles + mast partner blocks, shadowed near bulwark edge."""
+    """OBLIQUE deck plane (§4.8.6 second amendment + craft bar item 6): a
+    3px band read from above — lit far gunwale edge, the DECK-plank plane
+    carrying plank-seam ticks, 2px HULL_INK hatch rectangles and mast
+    partner blocks, shadowed near bulwark edge."""
     g.hline(x0, x1, y0, "H")
-    g.hline(x0, x1, y0 + 1, "W")
+    g.hline(x0, x1, y0 + 1, "D")               # DECK plank plane
     g.hline(x0, x1, y0 + 2, "L")
+    for x in range(x0 + 2, x1 - 1, 3):         # plank-seam ticks
+        g.put(x, y0 + 1, "L")
     for x in hatches:                          # 2px hatch rectangle
         g.put(x, y0 + 1, "K")
         g.put(x + 1, y0 + 1, "K")
@@ -404,13 +499,16 @@ def deck_strip(g: Grid, x0: int, x1: int, y0: int, hatches: tuple[int, ...] = ()
 
 
 def aft_deck(g: Grid, x0: int, x1: int, y0: int, cabin: tuple[int, int] = (),
-             hatches: tuple[int, ...] = (), partners: tuple[int, ...] = ()) -> None:
+             hatches: tuple[int, ...] = (), partners: tuple[int, ...] = (),
+             win_hex: str = "s") -> None:
     """Stern-view deck plane extending toward the viewer (§4.8.6 second
-    amendment): the deck strip plus a raised cabin top block."""
+    amendment + craft bar item 6): the deck strip plus a raised cabin top
+    block with a 1px lit-window dot."""
     deck_strip(g, x0, x1, y0, hatches, partners)
     if cabin:
         g.hline(cabin[0], cabin[1], y0, "H")       # cabin roof (lit)
         g.hline(cabin[0], cabin[1], y0 + 1, "W")   # cabin face
+        g.put((cabin[0] + cabin[1]) // 2, y0 + 1, win_hex)  # lit window dot
 
 
 def fore_deck(g: Grid, x0: int, x1: int, y0: int, windlass: tuple[int, ...] = (),
@@ -425,16 +523,31 @@ def fore_deck(g: Grid, x0: int, x1: int, y0: int, windlass: tuple[int, ...] = ()
 
 def batten_sail(g: Grid, x0: int, x1: int, y0: int, rows: int,
                 battens: tuple[int, ...] = (), seams: tuple[int, ...] = ()) -> None:
-    """Junk full-batten sail: a segmented rectangle — SAIL panels divided by
-    full-width SAIL_LO batten lines, SAIL_HI top edge (the one specular),
-    optional SAIL_LO seam columns."""
+    """Junk full-batten sail — billowed within its stiff segmented frame
+    (craft bar item 6): vertical shade bands (SAIL_LO luff, S body, SAIL_HI
+    crest, SAIL_SH dark lee flank) with the full-width SAIL_LO batten lines
+    dividing the panels and a 1px center foot sag."""
     y1 = y0 + rows - 1
     g.hline(x0, x1, y0, "s")
     for y in range(y0 + 1, y1):
-        g.hline(x0, x1, y, "z" if y in battens else "S")
+        for x in range(x0, x1 + 1):
+            tt = (x + 0.25 * (y - y0) - x0) / (x1 - x0)
+            if tt >= 0.72:
+                c = "d"                        # dark lee flank
+            elif tt >= 0.48:
+                c = "s"                        # HI crest
+            elif tt >= 0.16:
+                c = "S"
+            else:
+                c = "z"                        # luff edge
+            g.put(x, y, c)
         for x in seams:
             g.put(x, y, "z")
+        for y_b in battens:
+            if y == y_b:
+                g.hline(x0, x1, y, "z")        # full-width batten line
     g.hline(x0, x1, y1, "z")
+    g.put((x0 + x1) // 2, y1 + 1, "z")         # center foot sag
 
 
 def gaff_sail(g: Grid, x_mast: int, x_peak: int, y_mast: int, y_peak: int,
@@ -458,16 +571,19 @@ def gaff_sail(g: Grid, x_mast: int, x_peak: int, y_mast: int, y_peak: int,
 # ---- stern view (n) fragments ---------------------------------------------
 
 
-def transom(g: Grid, x0: int, x1: int, deck: int, windows: tuple[int, ...]) -> None:
-    """Stern seen from astern (oblique, §4.8.6 second amendment): gallery
-    rail + trim, windows, tuck taper, the waterline foam line at 60 % of the
-    rail→tuck span, darkened submerged rows below."""
+def transom(g: Grid, x0: int, x1: int, deck: int, windows: tuple[int, ...],
+            win_hex: str = "s") -> None:
+    """Stern seen from astern (oblique + craft bar item 6): gallery rail +
+    trim, LIT-window dots, plank-strake ticks, tuck taper, the waterline
+    foam line at 60 % of the rail→tuck span, darkened submerged rows."""
     g.hline(x0, x1, deck, "H")
     g.hline(x0, x1, deck + 1, "H")
     g.hline(x0, x1, deck + 2, "W")
     for x in windows:
-        g.put(x, deck + 2, "K")
+        g.put(x, deck + 2, win_hex)            # lit gallery windows
     g.hline(x0, x1, deck + 3, "W")
+    for x in range(x0 + 1, x1, 3):             # strake ticks on the face
+        g.put(x, deck + 3, "z")
     g.hline(x0, x1, deck + WL_TRANSOM, WATERLINE_HEX)   # foam waterline
     g.hline(x0, x1, deck + WL_TRANSOM + 1, "L")         # submerged gallery face
     shade_below(g, x0, x1, deck + WL_TRANSOM)           # darkened below
@@ -502,13 +618,22 @@ def spanker(g: Grid, x0: int, y0: int, x1: int, y1: int) -> None:
 
 def edge_on_sail(g: Grid, x0: int, x1: int, y0: int, y1: int,
                  folds: tuple[int, ...] = ()) -> None:
-    """Square sails seen edge-on from dead ahead: a narrow sliver at FULL rig
-    height, lit top, SAIL_LO fold bands + shadowed trailing edge (light NW)."""
+    """Square sails seen edge-on from dead ahead — a narrow sliver at FULL
+    rig height with the billow read: lit luff column, body with SAIL_LO
+    fold breaks, SAIL_SH dark lee edge, shadowed foot with a 1px center sag
+    (light NW)."""
     g.hline(x0, x1, y0, "s")
     for y in range(y0 + 1, y1):
-        g.hline(x0, x1, y, "z" if y in folds else "S")
-        g.put(x1, y, "z")
+        for x in range(x0, x1 + 1):
+            if x == x1:
+                c = "d"                        # dark lee edge
+            elif x == x0:
+                c = "s"                        # lit luff column
+            else:
+                c = "z" if y in folds else "S"
+            g.put(x, y, c)
     g.hline(x0, x1, y1, "z")
+    g.put((x0 + x1) // 2, y1 + 1, "z")         # center foot sag
 
 
 def jib(g: Grid, x_mast: int, y_top: int, x_tip: int, y_tip: int) -> None:
@@ -535,6 +660,8 @@ def bow_hull(g: Grid, x0: int, x1: int, deck: int) -> None:
     g.hline(x0, x1, deck, "H")
     g.hline(x0, x1, deck + 1, "W")
     g.hline(x0, x1, deck + 2, "W")
+    for x in range(x0 + 1, x1, 3):             # strake ticks
+        g.put(x, deck + 2, "z")
     g.hline(x0, x1, deck + 3, "L")
     g.hline(x0, x1, deck + WL_BOW, WATERLINE_HEX)       # foam waterline
     shade_below(g, x0, x1, deck + WL_BOW)               # darkened below
@@ -588,29 +715,28 @@ def diag_waterline(g: Grid, rail: dict, off: int = WL_DIAG) -> None:
 
 def diag_stack(g: Grid, x0: int, y0: int, x1: int, y1: int, rows: int,
                seams: tuple[int, ...] = (), folds: tuple[int, ...] = ()) -> None:
-    """Stacked square sail on a ~30° slanted yard (3/4 view): the yard runs
-    parallel to the hull diagonal; the sail hangs as a slanted mass at
-    ~70-80 % of the side view's sail size — s arc on the peak half of row 1,
-    S body, z fold bands parallel to the yard, z seam columns, z foot."""
+    """Stacked square sail on a ~30° slanted yard (3/4 view), BILLLOWED
+    (craft bar item 6): the yard runs parallel to the hull diagonal and the
+    sail hangs as a bellied mass — SAIL_LO luff, S body, SAIL_HI crest
+    NW-of-center, SAIL_LO fold, SAIL_SH dark lee flank — sheared so the
+    bands follow the bulge, foot row shadowed."""
     span = x1 - x0
     g.line(x0, y0, x1, y1, "W")                # the slanted yard
     g.put(x0, y0, "H")                         # lit butt
     g.put(x1, y1, "H")                         # lit peak (up-hill end)
-    mid = (x0 + x1) // 2
+    big = span >= 6
     for x in range(x0, x1 + 1):
         yt = y0 + ((x - x0) * (y1 - y0) + span // 2) // span
-        for r in range(1, rows + 1):
-            if r == rows:
-                ch = "z"                       # foot
-            elif r in folds:
-                ch = "z"                       # fold band, parallel to yard
-            elif r == 1:
-                ch = "s" if x > mid else "S"   # specular near the peak half
-            else:
-                ch = "S"
-            if x in seams and 1 < r < rows:
-                ch = "z"
-            g.put(x, yt + r, ch)
+        sag = 1 if min(x - x0, x1 - x0) >= span // 3 else 0   # mid columns sag
+        depth = rows + sag
+        for r in range(1, depth + 1):
+            tt = (x + 0.30 * r - x0) / span
+            c = _billow_bands(tt, big)
+            if x in seams and 1 < r < depth:
+                c = "z"
+            if r == depth:
+                c = "z"                        # foot shadow
+            g.put(x, yt + r, c)
 
 
 # ---------------------------------------------------------------------------
@@ -624,7 +750,7 @@ def galleon_e() -> Grid:
     hull_side(g, 3, 26, 19, ports=(5, 9, 13, 17, 21, 24))    # y19..25, dense ports
     deck_strip(g, 3, 26, 16, hatches=(10, 15), partners=(7, 13, 19))  # oblique deck
     mast(g, 7, 7, 15)                                        # mizzen (behind castle)
-    stern_castle(g, 3, 8, 13, windows2=(4, 6), windows1=(4, 6))
+    stern_castle(g, 3, 8, 13, windows2=(4, 6), windows1=(4, 6), win_hex="g")
     lantern(g, 2, 12)
     forecastle(g, 22, 25, 17)
     mast(g, 19, 6, 18)                                       # fore
@@ -662,7 +788,7 @@ def galleon_n() -> Grid:
     spanker(g, 8, 12, 15, 8)                                 # mizzen, tall
     aft_deck(g, 9, 22, 16, cabin=(9, 12), hatches=(14,),
              partners=(15,))                                 # aft deck + cabin top
-    transom(g, 9, 22, 19, windows=(11, 14, 17, 20))          # beam ~14 (50 %)
+    transom(g, 9, 22, 19, windows=(11, 14, 17, 20), win_hex="g")  # beam ~14 (50 %)
     gold_trim(g, 9, 22, 19)                                  # taffrail line
     return g
 
@@ -782,7 +908,7 @@ def sloop_e() -> Grid:
     g.put(19, 19, "W")
     g.put(20, 17, "W")                                       # bowsprit
     g.put(21, 16, "H")
-    lateen(g, 7, 14, 19, 5, base=15)                         # BIG lateen (rule 1)
+    lateen(g, 7, 11, 19, 5, base=15, skirt=False)            # BIG lateen (rule 1)
     pennant(g, 11, 3, 2, -1)
     emblem_roundel(g, 12, 13)                                # trade hull
     return g
@@ -881,7 +1007,7 @@ def latin_e() -> Grid:
     g.put(19, 19, "W")
     g.put(20, 17, "W")                                       # bowsprit
     g.put(21, 16, "H")
-    lateen(g, 7, 15, 19, 4, base=15)                         # the big triangle
+    lateen(g, 7, 12, 19, 4, base=15, skirt=False)            # the big triangle
     pennant(g, 11, 3, 2, -1)
     emblem_roundel(g, 12, 13)                                # trade hull
     return g
@@ -975,7 +1101,7 @@ def galiot_e() -> Grid:
     g.put(20, 18, "H")                                       # stem head
     g.put(20, 19, "W")
     g.put(21, 17, "H")                                       # short bowsprit
-    lateen(g, 10, 13, 17, 5, base=15)                        # small lateen, scaled up
+    lateen(g, 10, 12, 17, 5, base=15)                        # small lateen, scaled up
     pennant(g, 12, 4, 2, -1)
     emblem_roundel(g, 13, 12)                                # trade hull
     return g
@@ -1163,8 +1289,8 @@ def caravel_e() -> Grid:
     stripe(g, 4, 23, 20, "q")                                # gunwale stripe
     mast(g, 9, 5, 17)                                        # aft
     mast(g, 17, 4, 17)                                       # fwd
-    lateen(g, 5, 14, 13, 5, base=15)                         # aft lateen, scaled up
-    lateen(g, 13, 12, 22, 4, base=15)                        # fwd lateen, scaled up
+    lateen(g, 5, 12, 13, 5, base=15)                         # aft lateen, scaled up
+    lateen(g, 13, 11, 22, 4, base=15)                        # fwd lateen, scaled up
     pennant(g, 8, 4, 2, -1)
     pennant(g, 16, 3, 2, -1)
     emblem_roundel(g, 17, 10)                                # trade hull, fwd lateen
@@ -1275,7 +1401,7 @@ def galley_e() -> Grid:
     mast(g, 16, 4, 17)
     yard(g, 12, 20, 6)                                       # topsail yard
     square_sail(g, 13, 19, 7, 3, seams=(16,), folds=(8,))    # square topsail
-    lateen(g, 8, 15, 23, 5, base=15)                         # the BIG lateen
+    lateen(g, 8, 12, 23, 5, base=15)                         # the BIG lateen
     pennant(g, 15, 3, 3, -1)
     emblem_cross(g, 15, 12)                                  # war hull, on the lateen
     g.put(26, 18, "H")                                       # stem head
@@ -1496,6 +1622,7 @@ def fluyt_e() -> Grid:
     deck_strip(g, 5, 24, 16, hatches=(12,), partners=(9, 15, 21))  # oblique deck
     g.hline(5, 8, 17, "H")                                   # high round stern
     g.hline(5, 8, 18, "W")
+    g.put(6, 18, "s")                                # stern cabin window
     stripe(g, 5, 24, 20, "u")                                # gunwale stripe
     mast(g, 9, 5, 17)                                        # aft
     mast(g, 15, 4, 17)                                       # main
@@ -1784,7 +1911,7 @@ def dhow_e() -> Grid:
     g.put(25, 14, "H")
     stripe(g, 5, 22, 20, "q")                                # gunwale stripe
     mast(g, 13, 4, 17)
-    lateen(g, 6, 15, 22, 4, base=15)                         # THE big lateen
+    lateen(g, 6, 12, 22, 4, base=15)                         # THE big lateen
     pennant(g, 12, 3, 2, -1)
     emblem_roundel(g, 13, 12)                                # trade hull
     return g
@@ -2017,9 +2144,9 @@ def xebec_e() -> Grid:
     mast(g, 8, 5, 17)                                        # aft
     mast(g, 13, 4, 17)                                       # mid
     mast(g, 18, 5, 17)                                       # fwd
-    lateen(g, 5, 15, 12, 4, base=15)                         # aft lateen, scaled up
-    lateen(g, 10, 14, 17, 4, base=15)                        # mid lateen, scaled up
-    lateen(g, 15, 13, 22, 4, base=14)                        # fwd lateen, scaled up
+    lateen(g, 5, 12, 12, 4, base=15)                         # aft lateen, scaled up
+    lateen(g, 10, 11, 17, 4, base=15)                        # mid lateen, scaled up
+    lateen(g, 15, 11, 22, 4, base=14)                        # fwd lateen, scaled up
     pennant(g, 7, 4, 2, -1)
     pennant(g, 12, 3, 2, -1)
     pennant(g, 17, 4, 2, -1)
@@ -2129,7 +2256,7 @@ def nao_e() -> Grid:
     deck_strip(g, 2, 24, 16, hatches=(10,), partners=(8, 13, 19))  # oblique deck
     mast(g, 8, 6, 15)                                        # mizzen (behind castle)
     square_sail(g, 6, 10, 13, 3, seams=(8,))                 # mizzen course (castle covers)
-    stern_castle(g, 2, 7, 13, windows2=(3, 5), windows1=(3, 5))
+    stern_castle(g, 2, 7, 13, windows2=(3, 5), windows1=(3, 5), win_hex="g")
     lantern(g, 1, 12)
     yard(g, 5, 11, 8)                                        # mizzen topsail yard
     square_sail(g, 6, 10, 9, 3, seams=(8,), folds=(10,))     # mizzen topsail
@@ -2171,7 +2298,7 @@ def nao_n() -> Grid:
     square_sail(g, 8, 22, 13, 3, seams=(11, 15, 19), folds=(14,))  # main course
     aft_deck(g, 8, 23, 16, cabin=(8, 11), hatches=(13,),
              partners=(15,))                                 # aft deck + cabin top
-    transom(g, 8, 23, 19, windows=(10, 13, 16, 19, 22))      # wide castle face
+    transom(g, 8, 23, 19, windows=(10, 13, 16, 19, 22), win_hex="g")  # wide castle face
     gold_trim(g, 8, 23, 19)                                  # taffrail line
     return g
 
@@ -2297,13 +2424,13 @@ def carrack_e() -> Grid:
     g.hline(2, 8, 11, "H")                                   # HIGH castle roof
     g.hline(2, 8, 12, "W")
     for x in (3, 5, 7):
-        g.put(x, 12, "K")
+        g.put(x, 12, "g")
     g.hline(2, 8, 13, "W")
     g.hline(1, 9, 14, "L")                                   # roof overhang
     g.hline(1, 9, 15, "H")                                   # tier rail
     g.hline(1, 9, 16, "W")
     for x in (2, 4, 6, 8):
-        g.put(x, 16, "K")
+        g.put(x, 16, "g")
     g.hline(1, 9, 17, "W")
     g.hline(1, 9, 18, "L")
     lantern(g, 1, 10)
@@ -2348,7 +2475,7 @@ def carrack_n() -> Grid:
     g.put(13, 16, "K")
     g.put(18, 16, "K")
     g.put(19, 16, "K")                               # deck hatches on the roof
-    transom(g, 9, 22, 17, windows=(11, 15, 19))              # tall castle face
+    transom(g, 9, 22, 17, windows=(11, 15, 19), win_hex="g")  # tall castle face
     gold_trim(g, 9, 22, 17)                                  # taffrail line
     return g
 
@@ -2463,13 +2590,13 @@ def galleass_e() -> Grid:
     hull_side(g, 2, 26, 19, tall=True)                       # y19..25
     deck_strip(g, 2, 26, 16, hatches=(10,), partners=(8, 14, 20))  # oblique deck
     oar_bank(g, (4, 6, 9, 11, 14, 16, 19, 21, 24), 23)       # 9 stations, waterline
-    stern_castle(g, 2, 6, 13, windows2=(3, 5), windows1=(3, 5))
+    stern_castle(g, 2, 6, 13, windows2=(3, 5), windows1=(3, 5), win_hex="g")
     mast(g, 8, 6, 15)                                        # aft lateen mast
     mast(g, 14, 4, 17)                                       # main lateen mast
     mast(g, 20, 5, 17)                                       # fwd lateen mast
-    lateen(g, 4, 13, 12, 4, base=15)                         # aft lateen, scaled up
-    lateen(g, 10, 12, 17, 4, base=15)                        # main lateen, scaled up
-    lateen(g, 16, 11, 23, 4, base=14)                        # fwd lateen, scaled up
+    lateen(g, 4, 11, 12, 4, base=15)                         # aft lateen, scaled up
+    lateen(g, 10, 10, 17, 4, base=15)                        # main lateen, scaled up
+    lateen(g, 16, 10, 23, 4, base=14)                        # fwd lateen, scaled up
     forecastle(g, 22, 26, 17)
     stem_sprit(g, 27, 17, 1)
     pennant(g, 7, 5, 2, -1)
@@ -2495,7 +2622,7 @@ def galleass_n() -> Grid:
              partners=(15,))                                 # aft deck + cabin top
     oar_bank(g, (7, 24), 22)                                 # blades at the waterline
     oar_bank(g, (7, 24), 23)
-    transom(g, 9, 22, 19, windows=(11, 14, 17, 20))          # beam ~14
+    transom(g, 9, 22, 19, windows=(11, 14, 17, 20), win_hex="g")  # beam ~14
     gold_trim(g, 9, 22, 19)                                  # taffrail line
     return g
 
