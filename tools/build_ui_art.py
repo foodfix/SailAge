@@ -175,6 +175,13 @@ ICON_BLOCK = {
     "#c9a227",
 }
 CHROME_COLOR_CAP = 8  # per-tile distinct-color discipline (§4.8.3 16px tier)
+# Stretch-safety (80-* §4.8 UW2 chrome-skin note, amended 2026-11-04, master
+# adjudication): the runtime StyleBoxTexture STRETCHes the nine-patch center
+# and every edge span, so fill tiles and edge-tile interiors must stay FLAT
+# (any interior texel smears into a large block at panel scale; the
+# mirror-only FRAME_OPS make one edge tile serve all four sides, so edge
+# interiors must be flat in both axes). Grain lives ONLY in the corner
+# tiles — they never stretch.
 
 
 def derive_base_of(spec: dict) -> str | None:

@@ -345,6 +345,11 @@ const SHEET_BUTTON_PATH := "res://assets/ui/chrome/ninepatch_button.png"
 # gold trim ACCENT (rosette center ACCENT_HI, rosette base ACCENT_LO); the
 # field sheet is the recess — PANEL_WOOD_LO frame, ACCENT_LO lip, ICON_BG_LO
 # interior. The flat fallback above keeps the navy pins — untouched.
+# Stretch-safety (§4.8 amended 2026-11-04, master adjudication): the
+# styleboxes STRETCH the center and edge spans, so fill/edge interiors are
+# authored flat — grain lives only in the never-stretched corner tiles; the
+# pins below therefore sample frame/trim/rosette anchors and the uniform
+# fill, never interior grain.
 
 
 func _test_texture_mode() -> void:
