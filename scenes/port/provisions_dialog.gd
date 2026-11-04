@@ -173,10 +173,14 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	# Phase-10 sweep: the panel renders the themed PanelContainer chrome and
-	# label colors retire to the theme (TEXT default; secondary lines `Dim`).
+	# Phase-10 sweep: the panel renders the themed PanelContainer chrome;
+	# secondary lines carry the `Dim` variation and the doc-pinned warning
+	# tints the master-added `Warn`/`Bad` variations (§4.9).
 	_header.theme_type_variation = "Dim"
 	_hold.theme_type_variation = "Dim"
+	_short.theme_type_variation = "Warn"
+	_hint.theme_type_variation = "Bad"
+	_gate_reason.theme_type_variation = "Bad"
 	_sail_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	_stay_button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
 	_fill_button.custom_minimum_size = Vector2(float(COL_BUY_W),
