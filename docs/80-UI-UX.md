@@ -1695,8 +1695,9 @@ minimap stay flat raster — pinned):
 | Property | Value |
 |---|---|
 | Water kinds animated | `sea`, `coastal_sea` (flat tiles on a dedicated water TileMap layer) |
-| Scroll driver | canvas-item shader scrolling `sea_pattern.png` (64×64 two-level torus-safe dither mask) |
+| Scroll driver | canvas-item shader scrolling `sea_pattern.png` (64×64 **torus-safe organic wave-crest mask** — amended 2026-11-05, r5: the r1–r4 diagonal-stripe mask is **self-similar under its own scroll direction**, so translation read as a static hatch and the animation stayed invisible no matter the contrast; the mask is now irregular crest clusters in the UW2 manner) |
 | Scroll period | 800 ms |
+| Tones | three-level (amended 2026-11-05, r5): base SEA · dark SEA×0.70 (mask field) · **crest accents** — sparse FOAM-tinted pixels riding the cluster edges (shader `mix` toward FOAM #dff0f4 on the crest level), which is what makes the drift human-visible |
 | Darkening factor | ×0.70 (render math, not asset color — amended 2026-11-04, r4: the r2–r3 value ×0.82 was **imperceptible in real gameplay**, Δ 4–20 RGB units read as flat fills; ×0.70 gives a clearly visible two-level shimmer while staying shader-only) |
 | `UiMotion` off | frozen at scroll offset 0 |
 | Per-frame CPU | zero (shader-only; no cell swapping) |
