@@ -1946,6 +1946,14 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      (64 px); battle-grid fleet tokens render at 0.5 scale (32 px on
      the 32 px battle tile); icons inline keep the 32 art, hero
      contexts show the 64 canvas.
+   - **World zoom-out (amended 2026-11-04, user direction).** the
+     world camera has exactly two zoom levels: **1.0** (near — 64 px
+     tiles, 20×12 view) and **0.5** (wide — 32 px effective, the
+     pre-upgrade 40×23 view; exact integer halving keeps every pixel
+     crisp, no fractional zoom). One key toggles (a free key per the
+     §4.2 keybind table); chunk spawning follows the effective view
+     radius so the wide view never shows void. Battle/ports/UI zoom
+     unaffected.
    - **Ingestion contract (TheNoise, `POST /edit` on 127.0.0.1:8001,
      qwen_image21).** draft export (the 64 fallback upscaled to the
      API reference size) → `/edit` with the direction-specific
