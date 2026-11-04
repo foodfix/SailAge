@@ -634,28 +634,35 @@ func _test_populated_registry() -> void:
 					PaletteLib.LAND_HI),
 					"populated registry: land variant 3 center is Palette.LAND_HI (%s)"
 					% cell.get_pixel(16, 16))
-	# The shore overlay atlas (`_ensure_shore_tile_set`): the resolved strips
-	# stamp real foam pixels (the strips are edge-loaded — the center is
-	# transparent, so the pin is a non-empty cell).
-	loader._ensure_shore_tile_set()
-	_check(not loader._shore_columns.is_empty(),
-		"populated registry: the shore strips resolve (%d codes)"
-		% loader._shore_columns.size())
-	if loader._shore_columns.has(3):
-		var shore_atlas := (loader._shore_tile_set.get_source(
-			loader._shore_tile_set.get_source_id(0)) as TileSetAtlasSource
-			).texture.get_image()
-		var column := int(loader._shore_columns[3])
-		var foam := false
-		for py in 32:
-			for px in 32:
-				if shore_atlas.get_pixel(column * 32 + px, py).a > 0.0:
-					foam = true
-					break
-			if foam:
-				break
-		_check(foam,
-			"populated registry: the shore `e` strip cell (code 3) is non-empty")
+	# The coast-foam water variants (the r3 continuous-coast model): with the
+	# registry populated and the §6.6 dirs supplied, `build_tile_set` composes
+	# the `shore_{dir}` strips INTO the water atlas (2 flat fills + 16
+	# mask-variant cells = 34 columns), and `water_coords` picks them.
+	var foam_set := WaterLayerLib.build_tile_set(32, MapLoaderLib.SHORE_DIRS)
+	var foam_source := (foam_set.get_source(foam_set.get_source_id(0))
+		as TileSetAtlasSource)
+	_check(foam_source.get_tiles_count() == 2 + 16 * 2,
+		"populated registry: the water atlas gains the 16 mask-variant cells (%d tiles)"
+		% foam_source.get_tiles_count())
+	var foam_atlas := foam_source.texture.get_image()
+	# cell for the E-edge mask (2) on the coastal fill = column 2+2*2+1 = 7:
+	# center stays the coastal fill (foam hugs the edges), the RIGHT edge
+	# midpoint carries foam, the west midpoint stays fill.
+	var e_cell := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
+	e_cell.blit_rect(foam_atlas, Rect2i(7 * 32, 0, 32, 32), Vector2i.ZERO)
+	_check(e_cell.get_pixel(16, 16).is_equal_approx(PaletteLib.COAST_SEA),
+		"populated registry: the coast-foam `e` cell keeps the coastal fill at center (%s)"
+		% e_cell.get_pixel(16, 16))
+	_check(not e_cell.get_pixel(30, 16).is_equal_approx(PaletteLib.COAST_SEA),
+		"populated registry: the coast-foam `e` cell carries foam on its east edge")
+	_check(e_cell.get_pixel(1, 16).is_equal_approx(PaletteLib.COAST_SEA),
+		"populated registry: the coast-foam `e` cell leaves the west edge clear")
+	_check(WaterLayerLib.water_coords(2, 1) == Vector2i(7, 0),
+		"populated registry: water_coords(E mask, coastal) picks the foam column 7")
+	_check(WaterLayerLib.water_coords(0, 0) == Vector2i(0, 0),
+		"populated registry: water_coords(no edges, sea) picks the plain sea fill")
+	_check(WaterLayerLib.water_coords(15, 0) == Vector2i(32, 0),
+		"populated registry: water_coords(all edges, sea) picks the full-band variant")
 	# The port marker: the overlay renders the registry texture DIRECTLY (a
 	# TextureRect, no atlas blit) — pin that the marker texture decodes
 	# non-empty through the same RGBA8 guard.
@@ -678,16 +685,18 @@ func _test_populated_registry() -> void:
 
 
 # --- Shore strip mapping + the animated-sea material (populated registry) -------
-## The 2026-11-04 production defects, pinned: (1) the shore overlay's code→
-## strip mapping — `_shore_columns` must be the §6.6 identity (code c →
-## column c-1; an index shuffle stamps the WRONG strip) and every atlas cell
-## must carry its strip's foam on the LAND-FACING edge (pixel-sampled: foam
-## `#dff0f4` at the edge midpoint, transparent at the opposite midpoint — the
-## corner stubs at the ±0..2 rows/cols are deliberately not sampled); and
-## `_shore_stamp_code`'s refinement — a diagonal raster code (2/4/6/8) yields
-## to the first ORTHOGONAL direction whose neighbour is a blocker in the
-## loader's own decode (a cape-step tile with land at ne AND e must stamp
-## `e`, not the `ne` strip whose top band faces open water), while
+## The 2026-11-04 production defects, pinned: (1) the coast-foam variant
+## mapping — with the registry populated and the §6.6 dirs supplied, the
+## WATER atlas gains the foam variants (a strip baked into each kind fill)
+## and `water_coords(code, kind_column)` picks variant column
+## `2 + (code-1)*2 + kind` — an index shuffle stamps the WRONG strip — and
+## every foam cell carries its strip's foam on the LAND-FACING edge
+## (pixel-sampled: foam at the edge midpoint, clear at the opposite midpoint
+## — the corner stubs at the ±0..2 rows/cols are deliberately not sampled);
+## and `_shore_stamp_code`'s refinement — a diagonal raster code (2/4/6/8)
+## yields to the first ORTHOGONAL direction whose neighbour is a blocker in
+## the loader's own decode (a cape-step tile with land at ne AND e must
+## stamp `e`, not the `ne` variant whose top band faces open water), while
 ## orthogonal codes, zero codes, pure-diagonal cells and the x wrap pass
 ## through unchanged. (2) the animated-sea material: `u_mask` bound to a
 ## valid ImageTexture (the 64×64 §4.8.8 pattern), `u_period` == 0.8,
@@ -700,40 +709,45 @@ func _test_shore_strips_and_material() -> void:
 	var loader = MapLoaderLib.new()
 	_check(loader.load_map("res://data/maps/world.png", DataLoader.map_legend),
 		"the world map loads for the shore-strip group (%s)" % loader.last_error)
-	loader._ensure_shore_tile_set()
-	# (1a) The §6.6 identity mapping: code c → atlas column c-1, all 8 resolve.
-	var expected_columns := {}
-	for code in range(1, MapLoaderLib.SHORE_DIRS.size() + 1):
-		expected_columns[code] = code - 1
-	_check(loader._shore_columns == expected_columns,
-		"shore mapping: the code → column table is the §6.6 identity %s"
-		% loader._shore_columns)
-	# (1b) Pixel-sample each atlas cell: foam sits on the land-facing edge
-	# midpoints (t = (16,1), b = (16,30), l = (1,16), r = (30,16)) and the
-	# opposite midpoints stay transparent. Corner stubs (±0..2 rows/cols)
-	# are corner continuation, deliberately unsampled.
-	var source := (loader._shore_tile_set.get_source(
-		loader._shore_tile_set.get_source_id(0)) as TileSetAtlasSource)
-	var atlas := source.texture.get_image()
+	var tile_set := WaterLayerLib.build_tile_set(32, MapLoaderLib.SHORE_DIRS)
+	var source := (tile_set.get_source(tile_set.get_source_id(0))
+		as TileSetAtlasSource)
+	# (1a) The mask→variant geometry: mask m on kind k lives at column
+	# 2 + m*2 + k (no shuffle), and every foam cell carries foam exactly on
+	# its set-edge midpoints (t = (16,1), b = (16,30), l = (1,16),
+	# r = (30,16)); corner stubs (±0..2 rows/cols) are unsampled.
 	var foam_edges := {
-		1: ["t"], 2: ["t", "r"], 3: ["r"], 4: ["b", "r"],
-		5: ["b"], 6: ["b", "l"], 7: ["l"], 8: ["t", "l"],
+		1: ["t"], 2: ["r"], 4: ["b"], 8: ["l"],
+		3: ["t", "r"], 6: ["b", "l"], 12: ["b", "r"], 15: ["t", "b", "l", "r"],
 	}
 	var midpoints := {"t": Vector2i(16, 1), "b": Vector2i(16, 30),
 		"l": Vector2i(1, 16), "r": Vector2i(30, 16)}
-	for code in foam_edges:
-		var column := int(loader._shore_columns[code])
-		var want: Array = foam_edges[code]
-		for edge in ["t", "b", "l", "r"]:
-			var pos: Vector2i = midpoints[edge]
-			var opaque := atlas.get_pixel(column * 32 + pos.x, pos.y).a > 0.0
-			_check(opaque == (edge in want),
-				"shore strip `%s` (code %d, column %d): edge `%s` %s" % [
-					MapLoaderLib.SHORE_DIRS[code - 1], code, column, edge,
-					"carries the foam" if edge in want else "is clear"])
-	# (1c) The stamp refinement fixture: a synthetic legend decode, land at
-	# chosen cells, every rule of `_shore_stamp_code` pinned directly.
-	# Land (index 2 = `#`) at (1,2), (3,1) and (5,3) in a 6×4 water grid.
+	var atlas := source.texture.get_image()
+	for mask: int in foam_edges:
+		var want: Array = foam_edges[mask]
+		for kind_index in 2:
+			var column := 2 + mask * 2 + kind_index
+			var coords := WaterLayerLib.water_coords(mask, kind_index)
+			_check(coords == Vector2i(column, 0),
+				"coast-foam mapping: water_coords(mask %d, kind %d) = column %d"
+				% [mask, kind_index, column])
+			# the cell's own kind fill — foam midpoints differ from it,
+			# unset-edge midpoints equal it (the fill is opaque everywhere)
+			var fill := PaletteLib.COAST_SEA if kind_index == 1 \
+				else PaletteLib.SEA
+			for edge in ["t", "b", "l", "r"]:
+				var pos: Vector2i = midpoints[edge]
+				var pixel := atlas.get_pixel(column * 32 + pos.x, pos.y)
+				var is_foam := not pixel.is_equal_approx(fill)
+				var should := ((1 << ["t", "r", "b", "l"].find(edge))
+					& mask) != 0
+				_check(is_foam == should,
+					"coast-foam cell mask %d (kind %d, column %d): edge `%s` %s" % [
+						mask, kind_index, column, edge,
+						"carries the foam" if should else "is the fill"])
+	# (1c) The foam-mask fixture: a synthetic legend decode, land at chosen
+	# cells, every rule of `_shore_foam_mask` pinned directly.
+	# Land (index 2 = `#`) at (1,2), (3,1), (5,3) and (3,3) in a 6×4 grid.
 	var fixture = MapLoaderLib.new()
 	fixture.width = 6
 	fixture.height = 4
@@ -747,26 +761,25 @@ func _test_shore_strips_and_material() -> void:
 	for y in 4:
 		for x in 6:
 			indices[y * 6 + x] = 2 if Vector2i(x, y) in [
-				Vector2i(1, 2), Vector2i(3, 1), Vector2i(5, 3)] else 0
+				Vector2i(1, 2), Vector2i(3, 1), Vector2i(5, 3),
+				Vector2i(3, 3)] else 0
 	fixture.indices = indices
-	_check(fixture._shore_stamp_code(Vector2i(2, 1), 2) == 3,
-		"stamp refinement: cape-step code 2 (ne) with land EAST stamps `e` (3)")
-	_check(fixture._shore_stamp_code(Vector2i(1, 3), 2) == 1,
-		"stamp refinement: diagonal code 2 with land NORTH stamps `n` (1)")
-	_check(fixture._shore_stamp_code(Vector2i(1, 1), 4) == 5,
-		"stamp refinement: diagonal code 4 (se) with land SOUTH stamps `s` (5)")
-	_check(fixture._shore_stamp_code(Vector2i(0, 3), 6) == 7,
-		"stamp refinement: diagonal code 6 (sw) with x-WRAPPED west land stamps `w` (7)")
-	_check(fixture._shore_stamp_code(Vector2i(0, 1), 2) == 2,
-		"stamp refinement: a pure-diagonal tile keeps the raster strip")
-	_check(fixture._shore_stamp_code(Vector2i(2, 3), 8) == 8,
-		"stamp refinement: the y-out-of-range probe counts as non-blocker (§6.6)")
-	_check(fixture._shore_stamp_code(Vector2i(1, 1), 3) == 3,
-		"stamp refinement: an orthogonal code (3) passes through unchanged")
-	_check(fixture._shore_stamp_code(Vector2i(4, 2), 0) == 0,
-		"stamp refinement: a zero code never stamps")
-	_check(fixture._shore_stamp_code(Vector2i(3, 2), 2) == 1,
-		"stamp refinement: the §6.6 compass order holds — north blocks before east")
+	_check(fixture._shore_foam_mask(Vector2i(2, 1)) == 2,
+		"foam mask: land EAST lights the east edge (bit 1)")
+	_check(fixture._shore_foam_mask(Vector2i(1, 1)) == 4,
+		"foam mask: land SOUTH lights the south edge (bit 2)")
+	_check(fixture._shore_foam_mask(Vector2i(0, 3)) == 8,
+		"foam mask: x wraps — land at x 5 blocks from the west (bit 3)")
+	_check(fixture._shore_foam_mask(Vector2i(3, 2)) == 5,
+		"foam mask: land north AND south light both edges (bits 0+2)")
+	_check(fixture._shore_foam_mask(Vector2i(4, 2)) == 12,
+		"foam mask: the SW+SE bridge lights the south edge AND NW+SW the west (bits 2+3)")
+	_check(fixture._shore_foam_mask(Vector2i(2, 2)) == 10,
+		"foam mask: the NE+SE inlet bridge lights the east edge (bit 1) + west land (bit 3)")
+	_check(fixture._shore_foam_mask(Vector2i(4, 0)) == 0,
+		"foam mask: the y-out-of-range probe counts as non-blocker (§6.6)")
+	_check(fixture._shore_foam_mask(Vector2i(4, 3)) == 10,
+		"foam mask: east and west land light both side edges (bits 1+3)")
 	# (2) The animated-sea material: params + the motion gate both ways + the
 	# shader-source tripwire for the SEA² double-multiply regression.
 	WaterLayerLib._material_attempted = false
