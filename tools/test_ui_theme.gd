@@ -10,6 +10,18 @@ extends Node
 ## themed values through it. Assertions are theme values only, never
 ## rendering.
 ##
+## **Texture mode** (W3 layering; §4.9): a dedicated section builds
+## `build_theme(true)` against the governor-assembled nine-patch sheets and
+## pins the StyleBoxTexture config (48x48 region, 16px texture margins) plus
+## pixel-exact sheet samples at the stylebox's corner/edge/center layout
+## anchors (border PANEL_LINE at the corner frame + all four sides, PANEL_BG
+## center, ACCENT focus ring, transparent only at the authored outer
+## rounding). It requires the committed sheets AND their import cache: run
+## `godot --headless --import` once in a fresh worktree; when
+## `assets/ui/chrome/ninepatch_button.png` is absent or unimported the
+## section is skipped with an informational line (fresh checkouts keep the
+## flat fallback).
+##
 ##   godot --headless --path . res://tools/test_ui_theme.tscn
 ##
 ## Exits 0 when every check passes, 1 otherwise.
@@ -43,6 +55,7 @@ func _ready() -> void:
 	_test_labels()
 	_test_scope_guard()
 	_test_button_min_height()
+	_test_texture_mode()
 	_report()
 
 
@@ -308,3 +321,131 @@ func _test_button_min_height() -> void:
 	_check(min_size.y >= PaletteLib.BUTTON_H,
 		"themed Button honors the %dpx floor (got %s)"
 		% [PaletteLib.BUTTON_H, min_size.y])
+
+
+# --- Texture mode: the nine-patch sheets (§4.9 W3 layering) --------------------
+#
+# Requires the committed sheets + their import cache (`godot --headless
+# --import` once in a fresh worktree); skipped with an informational line
+# when `assets/ui/chrome/ninepatch_button.png` is absent or unimported.
+# The sheet pixels themselves are sampled at the stylebox's nine-patch
+# layout anchors — these pins are LOAD-BEARING: the 04373ef sheets were
+# assembled from un-oriented chrome tiles (TL corner / top edge blitted into
+# every cell) and every themed Button rendered as scattered corner-bracket
+# fragments; every trap below fails on such a misaligned sheet.
+
+const SHEET_BUTTON_PATH := "res://assets/ui/chrome/ninepatch_button.png"
+
+# Chrome hexes (palette): border PANEL_LINE / focus ACCENT, fill PANEL_BG
+# (the sheets' center hex), the edge tiles' inner shade row ICON_BG_LO.
+
+
+func _test_texture_mode() -> void:
+	var probe := load(SHEET_BUTTON_PATH) as Texture2D
+	if probe == null:
+		print("INFO  texture-mode section skipped: %s absent or unimported"
+			% SHEET_BUTTON_PATH
+			+ " — run `godot --headless --import` once in a fresh worktree")
+		return
+	var ttheme := UiThemeLib.build_theme(true)
+	_texture_boxes(ttheme)
+	for sheet_id in UiThemeLib.SHEET_PATHS:
+		var tex := load(UiThemeLib.SHEET_PATHS[sheet_id]) as Texture2D
+		if tex == null:
+			_check(false, "texture mode: %s sheet loads (import cache present)"
+				% sheet_id)
+			continue
+		var border: Color = PaletteLib.ACCENT \
+			if sheet_id == "button_focus" else PaletteLib.PANEL_LINE
+		_texture_sheet_pixels(tex, sheet_id, border,
+			1 if sheet_id == "field" else 2, sheet_id == "button_focus")
+
+
+## StyleBoxTexture config pins on the texture-mode theme.
+func _texture_boxes(ttheme: Theme) -> void:
+	var normal := ttheme.get_stylebox("normal", "Button") as StyleBoxTexture
+	_check(normal != null, "texture mode: Button normal is a StyleBoxTexture")
+	if normal == null:
+		return
+	var tex := normal.texture as Texture2D
+	_check(tex != null and tex.get_width() == 48 and tex.get_height() == 48,
+		"texture mode: Button sheet texture region is 48x48 (got %s)"
+		% (tex.get_size() if tex != null else Vector2.ZERO))
+	_check(normal.region_rect == Rect2(),
+		"texture mode: Button region_rect default (full texture)")
+	_check(normal.texture_margin_left == UiThemeLib.SHEET_MARGIN
+		and normal.texture_margin_top == UiThemeLib.SHEET_MARGIN
+		and normal.texture_margin_right == UiThemeLib.SHEET_MARGIN
+		and normal.texture_margin_bottom == UiThemeLib.SHEET_MARGIN,
+		"texture mode: Button texture margins == %d on all sides"
+		% UiThemeLib.SHEET_MARGIN)
+	_check(normal.content_margin_left == UiThemeLib.CONTENT_PAD,
+		"texture mode: Button content margin == CONTENT_PAD (flat parity)")
+	_check(ttheme.get_stylebox("hover", "Button") == normal
+		and ttheme.get_stylebox("pressed", "Button") == normal,
+		"texture mode: Button hover/pressed share the sheet box (§4.9)")
+	var focus := ttheme.get_stylebox("focus", "Button") as StyleBoxTexture
+	_check(focus != null and focus.texture != null,
+		"texture mode: Button focus is the button_focus sheet box")
+	var panel := ttheme.get_stylebox("panel", "Panel") as StyleBoxTexture
+	_check(panel != null and panel.texture != null,
+		"texture mode: Panel panel is a StyleBoxTexture")
+	var panel_c := ttheme.get_stylebox("panel", "PanelContainer") as StyleBoxTexture
+	_check(panel_c != null and panel_c == panel,
+		"texture mode: PanelContainer shares the Panel sheet box")
+	var field := ttheme.get_stylebox("normal", "LineEdit") as StyleBoxTexture
+	_check(field != null and field.texture != null,
+		"texture mode: LineEdit normal is the field sheet box")
+	var field_te := ttheme.get_stylebox("normal", "TextEdit") as StyleBoxTexture
+	_check(field_te != null and field_te.texture == field.texture,
+		"texture mode: TextEdit samples the same field sheet")
+
+
+## Pixel-exact sheet samples at the nine-patch layout anchors. `border_px` is
+## the sheet family's authored border width (button/panel/button_focus carry
+## a 2px border + ICON_BG_LO shade row; field is the 1px inset).
+func _texture_sheet_pixels(tex: Texture2D, sheet_id: String, border: Color,
+		border_px: int, focus: bool) -> void:
+	var img := tex.get_image()
+	_check(img != null and img.get_width() == 48 and img.get_height() == 48,
+		"texture mode: %s sheet image is 48x48" % sheet_id)
+	if img == null:
+		return
+	_check(_px_is(img, 4, 0, border) and _px_is(img, 0, 4, border),
+		"texture mode: %s corner frame == border hex (past the authored outer rounding)"
+		% sheet_id)
+	_check(_px_is(img, 24, 24, PaletteLib.PANEL_BG),
+		"texture mode: %s sheet center == PANEL_BG fill" % sheet_id)
+	# Side orientations — the load-bearing traps: every side must carry the
+	# border on its OUTER px (a sheet blitted from un-oriented tiles puts
+	# fill there and the border mid-strip instead).
+	_check(_px_is(img, 24, 0, border) and _px_is(img, 0, 24, border)
+		and _px_is(img, 47, 24, border) and _px_is(img, 24, 47, border),
+		"texture mode: %s all four side centers == border on the outer px (oriented)"
+		% sheet_id)
+	# The px just inside the border: border again for the 2px families, fill
+	# for the 1px field (no bleed) — and the shade row 2px families carry.
+	var inside: Color = border if border_px == 2 else PaletteLib.PANEL_BG
+	_check(_px_is(img, 24, 1, inside) and _px_is(img, 1, 24, inside)
+		and _px_is(img, 46, 24, inside) and _px_is(img, 24, 46, inside),
+		"texture mode: %s px inside the border == %s (%dpx authored border)"
+		% [sheet_id, "border" if border_px == 2 else "fill", border_px])
+	if border_px == 2:
+		_check(_px_is(img, 24, 2, PaletteLib.ICON_BG_LO),
+			"texture mode: %s inner shade row == ICON_BG_LO (edge authored design)"
+			% sheet_id)
+	# Transparency ONLY at the authored outer corner rounding (the source
+	# corner tiles' own transparent pixels) — content areas opaque.
+	_check(img.get_pixel(0, 0).a < 0.01 and img.get_pixel(47, 0).a < 0.01
+		and img.get_pixel(0, 47).a < 0.01 and img.get_pixel(47, 47).a < 0.01,
+		"texture mode: %s transparent only at the authored outer rounding"
+		% sheet_id)
+	_check(_px_is(img, 8, 24, PaletteLib.PANEL_BG)
+		and _px_is(img, 24, 8, PaletteLib.PANEL_BG),
+		"texture mode: %s content areas opaque fill (no border bleed)"
+		% sheet_id)
+
+
+## Exact 8-bit pixel compare (the sheets import lossless: compress/mode=0).
+func _px_is(img: Image, x: int, y: int, want: Color) -> bool:
+	return img.get_pixel(x, y).is_equal_approx(want)

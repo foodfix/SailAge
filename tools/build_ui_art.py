@@ -24,11 +24,16 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    torus-safe (80-* §4.8.2 seam rules).  Verify only, never alters.
 5. Nine-patch assembly (chrome class) — ``assets/ui/chrome/ninepatch_
    {panel,button,button_focus,field,bar}.png`` (48×48) from the 16×16 chrome
-   tiles: corners at the four corners, edges tile-repeat along the sides,
-   fill in the 16×16 center (48 = 16 + 16 + 16, so margins are exactly one
-   tile).  Bar sheet layout (pinned): rows 16..31 form the horizontal midline
-   band the kit's value_bar samples — left cap tile at x 0..15, line tile
-   tiled x 16..31, right cap tile at x 32..47; the rest transparent.
+   tiles: the tiles are authored as the TOP-LEFT corner / TOP edge, so every
+   frame cell carries the orientation-matched lossless transform of them
+   (mirror_x/mirror_y/mirror_xy corners, rot_ccw/rot_cw left/right,
+   mirror_y bottom — blitting raw tiles everywhere misaligned the sheet and
+   broke every themed Button), fill in the 16×16 center (48 = 16 + 16 + 16,
+   so margins are exactly one tile); every sheet is pixel-exact
+   self-verified at assembly (build FAIL on any mismatch).  Bar sheet layout
+   (pinned): rows 16..31 form the horizontal midline band the kit's
+   value_bar samples — left cap tile at x 0..15, line tile tiled x 16..31,
+   right cap tile at x 32..47; the rest transparent.
 6. Hull footprint check — per hull, the §4.8.7 band is measured on the side
    view (e/w long axis, the profile that shows the ship's length; final
    outlined file): t1 14–18, t2 20–26, t3 26–30 px.  The stern/bow views
@@ -793,8 +798,133 @@ def find_tile(adir: Path, name: str) -> Path | None:
     return None
 
 
+def _oriented_px(px, op):
+    """Independent orientation math for the nine-patch self-verify: new(x, y)
+    for a square TILExTILE tile.  Deliberately a re-derivation, NOT a
+    ``_transform`` call — a regression there must not be able to confirm its
+    own output (``_verify_transforms`` pins ``_transform`` separately)."""
+    if op is None:
+        return list(px)
+    if op == "mirror_x":
+        f = lambda x, y: px[(TILE - 1 - x) + y * TILE]
+    elif op == "mirror_y":
+        f = lambda x, y: px[x + (TILE - 1 - y) * TILE]
+    elif op == "mirror_xy":
+        f = lambda x, y: px[(TILE - 1 - x) + (TILE - 1 - y) * TILE]
+    elif op == "rot_ccw":
+        f = lambda x, y: px[(TILE - 1 - y) + x * TILE]
+    elif op == "rot_cw":
+        f = lambda x, y: px[y + (TILE - 1 - x) * TILE]
+    else:
+        fail(f"ninepatch self-verify: unknown orientation {op!r}")
+    return [f(x, y) for y in range(TILE) for x in range(TILE)]
+
+
+# per-position cell -> (source part, orientation op).  The chrome tiles are
+# authored as the TOP-LEFT corner / TOP edge only; every other frame cell is
+# a lossless orientation of those (2026-11-04 chrome fix: blitting the raw
+# TL tiles into all nine cells put TL-shaped corners and horizontal border
+# lines into the TR/BL/BR and left/right/bottom cells — the assembled sheet
+# sampled broken regions and every themed Button rendered as scattered
+# corner-bracket fragments).
+FRAME_OPS = {
+    (0, 0): ("corner", None),                              # TL — as authored
+    (SHEET - TILE, 0): ("corner", "mirror_x"),             # TR
+    (0, SHEET - TILE): ("corner", "mirror_y"),             # BL
+    (SHEET - TILE, SHEET - TILE): ("corner", "mirror_xy"),  # BR
+    (TILE, 0): ("edge", None),                             # top — as authored
+    (TILE, SHEET - TILE): ("edge", "mirror_y"),            # bottom
+    (0, TILE): ("edge", "rot_ccw"),                        # left — border col 0
+    (SHEET - TILE, TILE): ("edge", "rot_cw"),              # right — border col 15
+    (TILE, TILE): ("fill", None),                          # center
+}
+
+
+def _cell_pixels(sheet, dx, dy):
+    """A 16x16 cell of `sheet` at tile offset (dx, dy), row-major."""
+    return [sheet[(dx + x) + (dy + y) * SHEET]
+            for y in range(TILE) for x in range(TILE)]
+
+
+def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
+    """Pixel-exact self-verification of one assembled sheet — any mismatch
+    is a build FAIL (§4.8.8; makes the misaligned-sheet class of bug
+    impossible to ship: the committed 04373ef sheets failed rules 1, 3)."""
+    # 1. every 16x16 cell byte-equals the oriented source tile.
+    for (dx, dy), (part, op) in FRAME_OPS.items():
+        want = _oriented_px(tiles[part][2], op)
+        got = _cell_pixels(sheet, dx, dy)
+        for i, (g, w) in enumerate(zip(got, want)):
+            if g != w:
+                x, y = i % TILE, i // TILE
+                fail(f"ninepatch {name}: self-verify — cell ({dx},{dy}) pixel "
+                     f"({dx + x},{dy + y}) = {g} != oriented {part}"
+                     f"{' ' + op if op else ''} {w}")
+    # 2. content areas (edge + fill cells) fully opaque — transparent pixels
+    #    live ONLY in the corner cells, exactly where the corner tiles carry
+    #    the authored outer rounding.
+    for (dx, dy), (part, _) in FRAME_OPS.items():
+        if part == "corner":
+            continue
+        for y in range(TILE):
+            for x in range(TILE):
+                if sheet[(dx + x) + (dy + y) * SHEET][3] != 255:
+                    fail(f"ninepatch {name}: self-verify — transparent pixel "
+                         f"in the {part} cell at ({dx + x},{dy + y}) "
+                         "(content areas must be opaque)")
+    # 3. semantic frame pins, tile-derived (orientation traps — a sheet
+    #    assembled from un-oriented tiles fails every one of these):
+    #    border hex on all four side centers + the corner frame anchors,
+    #    fill hex at the sheet center, transparent outer rounding at the
+    #    far corners.
+    border = tiles["edge"][2][0]      # top edge tile (0,0)
+    fill = tiles["fill"][2][0]        # fill tile (0,0)
+    for x, y, want, what in [
+            (TILE + 8, 0, border, "top side center"),
+            (0, TILE + 8, border, "left side center (border column)"),
+            (SHEET - 1, TILE + 8, border, "right side center (border column)"),
+            (TILE + 8, SHEET - 1, border, "bottom side center"),
+            (4, 0, border, "TL frame (past the authored rounding)"),
+            (0, 4, border, "TL frame (past the authored rounding)"),
+            (TILE + 8, TILE + 8, fill, "sheet center"),
+            (SHEET - 1, 0, None, "TR outer rounding"),
+            (0, SHEET - 1, None, "BL outer rounding"),
+            (SHEET - 1, SHEET - 1, None, "BR outer rounding"),
+    ]:
+        got = sheet[x + y * SHEET]
+        if want is None:
+            if got[3] != 0:
+                fail(f"ninepatch {name}: self-verify — ({x},{y}) must be the "
+                     "transparent outer rounding (authored corner design)")
+        elif got != want:
+            fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
+                 f"!= {want}")
+
+
+def _verify_bar_sheet(caps, sheet) -> None:
+    """Pixel-exact self-verification of the bar sheet: caps byte-exact at
+    x 0 / x 32 of the rows 16..31 band, the line tile between, everything
+    outside the band transparent (the committed 04373ef bar sheet failed
+    the cap rules — `blit` never drew them)."""
+    for dx, part in ((0, "left"), (SHEET - TILE, "right")):
+        if _cell_pixels(sheet, dx, TILE) != list(caps[part][2]):
+            fail(f"ninepatch bar: self-verify — {part} cap cell at ({dx},"
+                 f"{TILE}) is not the byte-exact bar_{part} tile")
+    if _cell_pixels(sheet, TILE, TILE) != list(caps["line"][2]):
+        fail("ninepatch bar: self-verify — the line band at (16,16) is not "
+             "the byte-exact bar_line tile")
+    for y in range(SHEET):
+        if TILE <= y < 2 * TILE:
+            continue
+        for x in range(SHEET):
+            if sheet[x + y * SHEET][3] != 0:
+                fail(f"ninepatch bar: self-verify — non-transparent pixel "
+                     f"({x},{y}) outside the rows {TILE}..{2 * TILE - 1} band")
+
+
 def run_ninepatch(m: Manifests, outroot: Path, report: dict):
-    """Assemble the 48x48 sheets from A's 16x16 chrome tiles (step 5)."""
+    """Assemble the 48x48 sheets from A's 16x16 chrome tiles (step 5) and
+    self-verify every sheet pixel-exactly (build FAIL on any mismatch)."""
     adir = outroot / "assets/ui/chrome"
     if not adir.is_dir():
         return "skipped (no chrome output)"
@@ -815,16 +945,14 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
             if img[0] != TILE or img[1] != TILE:
                 fail(f"ninepatch {s}: chrome tiles must be {TILE}x{TILE} (§4.8.8)")
         sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
-        pos = {(0, 0): "corner", (SHEET - TILE, 0): "corner",
-               (0, SHEET - TILE): "corner", (SHEET - TILE, SHEET - TILE): "corner",
-               (TILE, 0): "edge", (TILE, SHEET - TILE): "edge",
-               (0, TILE): "edge", (SHEET - TILE, TILE): "edge",
-               (TILE, TILE): "fill"}
-        for (dx, dy), part in pos.items():
+        for (dx, dy), (part, op) in FRAME_OPS.items():
             _, _, px = tiles[part]
+            if op is not None:
+                _, _, px = _transform(TILE, TILE, px, op)
             for r in range(TILE):
                 for c in range(TILE):
                     sheet[(dx + c) + (dy + r) * SHEET] = px[c + r * TILE]
+        _verify_ninepatch_sheet(s, tiles, sheet)
         write_png(outroot / f"assets/ui/chrome/ninepatch_{s}.png", SHEET, SHEET, sheet)
         made += 1
     caps = {}
@@ -838,13 +966,18 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
         sheet = [(0, 0, 0, 0)] * (SHEET * SHEET)
 
         def blit(img, dx, dy, repeat_to=0):
+            # repeat_to = total px width to fill (0 = single blit).  The old
+            # `while x < repeat_to` loop treated the single-shot default as
+            # "draw nothing" and silently dropped both bar caps.
             _, _, px = img
             w = img[0]
             x = 0
-            while x < repeat_to:
+            while True:
                 for r in range(img[1]):
                     for c in range(w):
                         sheet[(dx + x + c) + (dy + r) * SHEET] = px[c + r * w]
+                if repeat_to == 0 or x + w >= repeat_to:
+                    break
                 x += w
         # bar sheet: caps at the far ends of the horizontal midline band
         # (rows 16..31), line tile tiled between — the kit's value_bar
@@ -852,12 +985,13 @@ def run_ninepatch(m: Manifests, outroot: Path, report: dict):
         blit(caps["left"], 0, TILE)
         blit(caps["line"], TILE, TILE, repeat_to=SHEET - 2 * TILE)
         blit(caps["right"], SHEET - TILE, TILE)
+        _verify_bar_sheet(caps, sheet)
         write_png(outroot / "assets/ui/chrome/ninepatch_bar.png", SHEET, SHEET, sheet)
         made += 1
     elif NINEPATCH_SETS and made:
         report.setdefault("ninepatch_notes", []).append(
             "bar: tiles missing (expected chrome bar_{left,right,line}.png)")
-    return f"{made} sheets"
+    return f"{made} sheets (self-verified pixel-exact)"
 
 
 # ======================================================================
