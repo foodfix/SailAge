@@ -114,6 +114,7 @@ import tempfile
 import zlib
 from collections import deque
 from pathlib import Path
+import hashlib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -8483,6 +8484,18 @@ G13_PENNANTS = {
     "italy": "#c9a227", "neutral": "#9a9a9a", "pirate": "#b3341f",
 }
 
+# §4.8 model-pass ship ingestion (90-* §9.2 AI-ingestion path; the committed
+# provenance ledger + the 5-direction generation amendment f6c00bb — the
+# model only ever generates the BASE dirs, e/ne/se are mirror-derived at
+# ingestion).  The ingested tokens are audited exactly like the generated
+# ones (canvas/band/block/pennant above) plus the ledger contract here.
+G13_INGEST_VERSION = 1
+G13_INGEST_LEDGER = UI_ART_DIR / "ingest_ledger.json"
+G13_INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")
+G13_INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # exact h-flips
+G13_MASTHEAD_MIN_PX = 3      # §4.8 ingestion contract: ≥3 source px
+G13_MASTHEAD_TOP_FRAC = 0.45  # in the top 45% of the opaque bbox
+
 # §6.6 shore codes: indices 1-8 = n, ne, e, se, s, sw, w, nw (compass order,
 # also the priority order), x wrap-aware, y out of range = non-land.
 G13_SHORE_CODE_DELTAS = (
@@ -9157,6 +9170,205 @@ def _g13_check_pennants(sprites: dict, uw2_ships: set) -> None:
                  13)
 
 
+def _g13_ingest_sprite(path: Path, label: str) -> _G13Sprite:
+    """Decode a shipped token file for the ingest audit (64×64 pin)."""
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        fail("art-ingest", label, f"cannot read token: {exc}", 13)
+    try:
+        width, height, pixels = decode_ui_png(data)
+    except PngFormatError as exc:
+        fail("art-ingest", label, f"token does not decode: {exc}", 13)
+    if (width, height) != (G13_CANVAS_64, G13_CANVAS_64):
+        fail("art-ingest", label,
+             f"token is {width}x{height}, the shipped canvas is "
+             f"{G13_CANVAS_64}x{G13_CANVAS_64}", 13)
+    return _G13Sprite({"file": str(path)}, path, width, height, pixels)
+
+
+def _g13_masthead_count(sprite: _G13Sprite) -> int:
+    """Pennant-source px in the masthead region (top 45% of the opaque
+    bbox) — mirrors the governor's ingestion gate (a bottom-hull red blob
+    is not a pennant)."""
+    opaque = [(x, y) for y, row in enumerate(sprite.pixels)
+              for x, px in enumerate(row) if px is not None]
+    if not opaque:
+        return 0
+    x0 = min(p[0] for p in opaque)
+    x1 = max(p[0] for p in opaque)
+    y0 = min(p[1] for p in opaque)
+    y1 = max(p[1] for p in opaque)
+    cut = y0 + int(G13_MASTHEAD_TOP_FRAC * (y1 - y0 + 1) + 0.5)
+    n = 0
+    for y in range(y0, min(cut, y1 + 1)):
+        for x in range(x0, x1 + 1):
+            if sprite.pixels[y][x] == G13_PENNANT_SOURCE:
+                n += 1
+    return n
+
+
+def _g13_check_flip_pair(derived: Path, base: Path, label: str) -> None:
+    """f6c00bb: the derived token is the EXACT horizontal flip of its base
+    (same owner), alpha included — drift-proof mirror pairs."""
+    d = _g13_ingest_sprite(derived, label)
+    b = _g13_ingest_sprite(base, str(base))
+    for y in range(d.h):
+        drow, brow = d.pixels[y], b.pixels[y]
+        for x in range(d.w):
+            if drow[x] != brow[d.w - 1 - x]:
+                fail("art-ingest", label,
+                     f"derived token is not the exact h-flip of its base "
+                     f"at ({x},{y}) (f6c00bb)", 13)
+
+
+def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool) -> None:
+    """80-* §4.8 ingestion contract (90-* §9.2 AI-ingestion path; the
+    committed provenance ledger + the 5-direction amendment f6c00bb): the
+    ledger is coherent with the shipped token grid — every base token
+    names a real ship/base dir, carries a sha-256 + date, and its 9 owner
+    files ship; derived entries are exact h-flips of their base (same
+    owner) and never mix with fallback inside a mirror group; the spain
+    variant of every ingested base still shows the masthead source (≥3 px
+    in the top 45% of the bbox — the pennant remap hit a real masthead);
+    the ledger sha matches the snapped source where the gitignored cache
+    exists locally (90-* §9.2: sources are never committed).  Canvas,
+    block membership and the §4.8.7 band on the ingested files ride the
+    generic hull artifact checks above (they decode ALL shipped tokens)."""
+    if not G13_INGEST_LEDGER.is_file():
+        print("INFO group 13 tools/ui_art/ingest_ledger.json not present — "
+              "model-pass ingestion staged (build_ui_art --import-ships)")
+        return
+    try:
+        doc = json.loads(G13_INGEST_LEDGER.read_text())
+    except (OSError, ValueError) as exc:
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             f"cannot parse: {exc}", 13)
+    if doc.get("version") != G13_INGEST_VERSION:
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             f"version {doc.get('version')!r} != {G13_INGEST_VERSION}", 13)
+    tokens = doc.get("tokens") or {}
+    derived = doc.get("derived") or {}
+    rejected = doc.get("rejected") or []
+    counts = doc.get("counts") or {}
+    ship_types = docs["ship_types.json"]["ship_types"]
+    ship_ids = {s["id"] for s in ship_types}
+    nations = [n["id"] for n in docs["nations.json"]["nations"]]
+    owners = set(nations) | set(G13_TOKEN_OWNERS_EXTRA)
+
+    # counts coherence (the header numbers ARE the maps below them)
+    derived_job_ids = {rec.get("job") for rec in derived.values()}
+    if (counts.get("accepted_base") != len(tokens)
+            or counts.get("accepted_derived") != len(derived_job_ids)
+            or counts.get("rejected") != len(rejected)):
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             "counts drift from the tokens/derived/rejected maps", 13)
+
+    # base token records: real ship × base dir, sha-256 + ISO date, and
+    # the complete 9-owner file set on the shipped grid
+    for tid, rec in sorted(tokens.items()):
+        if not isinstance(tid, str) or not tid.startswith("hull_") \
+                or tid.count("_") < 2:
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"bad token id {tid!r}", 13)
+        ship, d = tid[len("hull_"):].rsplit("_", 1)
+        if ship not in ship_ids or d not in G13_INGEST_BASE_DIRS:
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"token {tid!r} is not a real ship's BASE dir "
+                 f"(f6c00bb bases {G13_INGEST_BASE_DIRS})", 13)
+        if rec.get("job") != tid:
+            fail("art-ingest", tid, "token record's job != its key", 13)
+        sha = rec.get("snapped_sha")
+        if (not isinstance(sha, str) or len(sha) != 64
+                or any(c not in "0123456789abcdef" for c in sha)):
+            fail("art-ingest", tid,
+                 f"snapped_sha {sha!r} is not a sha-256 hex digest", 13)
+        seed = rec.get("seed")
+        if seed is not None and not is_int(seed):
+            fail("art-ingest", tid, f"seed {seed!r} is neither an int nor null", 13)
+        at = rec.get("accepted_at")
+        if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
+            fail("art-ingest", tid,
+                 f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
+        for owner in sorted(owners):
+            p = ASSETS_UI / "tokens" / f"hull_{ship}_{owner}_{d}.png"
+            if not p.is_file():
+                fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                     "ingested base token file missing from the shipped grid",
+                     13)
+
+    # derived records: exact h-flips, base-referenced, group-coherent
+    tokens_dir = ASSETS_UI / "tokens"
+    flip_pairs = 0
+    for fid, rec in sorted(derived.items()):
+        if not isinstance(fid, str) or not fid.startswith("hull_") \
+                or not fid.endswith(".png"):
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"bad derived file id {fid!r}", 13)
+        ship, owner, d = fid[len("hull_"):-len(".png")].rsplit("_", 2)
+        if ship not in ship_ids or owner not in owners:
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"derived file {fid!r} is not a real ship/owner pair", 13)
+        base_d = G13_INGEST_DERIVED.get(d)
+        if base_d is None:
+            fail("art-ingest", fid,
+                 f"dir {d!r} is not mirror-derived (f6c00bb derives "
+                 "e/ne/se from w/nw/sw)", 13)
+        if rec.get("flip") != "h":
+            fail("art-ingest", fid,
+                 f"flip {rec.get('flip')!r} != 'h' (f6c00bb)", 13)
+        if rec.get("derived_from") != f"hull_{ship}_{owner}_{base_d}.png":
+            fail("art-ingest", fid,
+                 f"derived_from {rec.get('derived_from')!r} != the base's "
+                 f"same-owner file hull_{ship}_{owner}_{base_d}.png", 13)
+        if f"hull_{ship}_{base_d}" not in tokens:
+            fail("art-ingest", fid,
+                 "mirror-group mixing: a derived entry without its base "
+                 "token entry (a rejected base falls BOTH dirs back)", 13)
+        dp = tokens_dir / fid
+        bp = tokens_dir / rec["derived_from"]
+        if not dp.is_file() or not bp.is_file():
+            fail("art-ingest", fid,
+                 "derived or base token file missing from the shipped grid", 13)
+        _g13_check_flip_pair(dp, bp, fid)
+        flip_pairs += 1
+
+    # spain variants keep the pennant SOURCE hex (identity remap) — the
+    # masthead gate re-proven on the committed artifacts, base dirs only
+    for tid in sorted(tokens):
+        ship, d = tid[len("hull_"):].rsplit("_", 1)
+        f = tokens_dir / f"hull_{ship}_spain_{d}.png"
+        n = _g13_masthead_count(_g13_ingest_sprite(f, str(f)))
+        if n < G13_MASTHEAD_MIN_PX:
+            fail("art-ingest", str(f.relative_to(ART_ROOT)),
+                 f"{n} pennant-source px in the masthead region < "
+                 f"{G13_MASTHEAD_MIN_PX} — the ingested token's pennant is "
+                 "not a masthead (§4.8 ingestion contract)", 13)
+
+    # snapped-source sha provenance where the gitignored cache exists
+    cache = UI_ART_DIR / "model_raw" / "snapped"
+    found = 0
+    for tid, rec in sorted(tokens.items()):
+        sp = cache / f"{tid}.png"
+        if not sp.is_file():
+            continue
+        found += 1
+        if hashlib.sha256(sp.read_bytes()).hexdigest() != rec.get("snapped_sha"):
+            fail("art-ingest", f"tools/ui_art/model_raw/snapped/{tid}.png",
+                 "ledger snapped_sha drifts from the local snapped source — "
+                 "re-run build_ui_art --import-ships", 13)
+    if found < len(tokens):
+        print(f"INFO group 13 ingest: {len(tokens) - found}/{len(tokens)} "
+              "snapped source(s) absent from the local gitignored model_raw "
+              "cache (90-* §9.2) — sha provenance rides the committed ledger")
+
+    if verbose:
+        print(f"INFO group 13 ingest: {len(tokens)} base tokens + "
+              f"{len(derived)} derived files audited "
+              f"({flip_pairs} flip pairs, {len(rejected)} rejections "
+              f"recorded; {found} sha(s) verified against the local cache)")
+
+
 def _g13_check_shore_strips(sprites: dict) -> None:
     """§8.8 item 8 (shore part): foam lives only on the land-facing band and
     the thickness is shared with the corner tiles."""
@@ -9600,6 +9812,8 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
     else:
         print("INFO group 13 tools/art_prompts.json not present — prompt "
               "coverage staged (slot D deliverable)")
+
+    _g13_check_ingest_ledger(docs, verbose)
 
     _g13_rebuild_fixtures(verbose)
 
