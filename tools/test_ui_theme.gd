@@ -24,7 +24,9 @@ var _host: Control
 
 
 func _ready() -> void:
-	_theme = UiThemeLib.build_theme()
+	# §4.9: the suite pins the flat fallback; texture variants are covered
+	# by the W3 gate boot.
+	_theme = UiThemeLib.build_theme(false)
 	# Direct-boot: no window headless — the theme lives on a host control and
 	# themed lookups run through it (§4.9 application point).
 	_host = Control.new()

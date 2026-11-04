@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SailAge data validator.
 
-Implements check groups 1-12 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
+Implements check groups 1-13 of docs/10-DATA-SCHEMA.md section 8. Group 6 is
 the generated world-map artifact check (section 8.1): it decodes
 ``data/maps/world.png`` with a stdlib PNG reader, recomputes every harbor tile
 independently from ``lat``/``lon`` and compares it with
@@ -34,7 +34,18 @@ RPG-data check (section 8.7): the officers v2 roster quotas (bands, specialty
 coverage, captain-qualified, recruit ports, native-role personality pools),
 the §4.20 skill gates, the §4.21 officer posts with their locked prereqs and
 advice strings, the §4.22 backgrounds, and the §7.11 ui_strings Phase-8
-family presence.
+family presence. Group 13 is the Phase-10 generated-art check (section
+8.8): the ``tools/ui_art/<class>/`` manifests vs the ``assets/ui/``
+artifacts (inventory equality, shape/size, palette-block membership, color
+budgets, 8-direction transform relations, chrome seam torus rules, terrain
+rings, hull remap grid + tier footprint bands, shore-strip foam bands), the
+``data/maps/world_shore.png`` §6.6 integrity, the ``art_prompts.json``
+coverage, and the byte-identical ``build_ui_art.py`` / ``build_shore.py``
+rebuilds. The class checks are staged: a contract class with no manifests is
+skipped with an informational note; artifacts are checked only where they
+exist. Group 13 ends with its six negative probes (off-palette pixel,
+corrupted artifact, broken transform relation, out-of-band footprint,
+invalid shore code, seam violation) proven red against temp fixtures.
 
 Usage (from the repo root):
 
@@ -63,6 +74,8 @@ Exit codes:
         quota coverage / name uniqueness)
     12  RPG-data failure (officers v2 quotas / skill_gates / officer_posts /
         backgrounds / ui_strings Phase-8 families)
+    13  generated-art failure (assets/ui manifests+artifacts / world_shore.png
+        / art_prompts.json / group-13 probe harness)
 
 On the first failure a single line is printed to stdout:
 
@@ -8292,6 +8305,1328 @@ def check_group12(docs: dict[str, object], verbose: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Check group 13 — Generated UI art & shore raster (docs section 8.8)
+# ---------------------------------------------------------------------------
+
+ART_ROOT = DATA_DIR.parent  # staged-sim protocol: the tree the data/ lives in
+ASSETS_UI = ART_ROOT / "assets" / "ui"
+UI_ART_DIR = ART_ROOT / "tools" / "ui_art"
+WORLD_SHORE_PNG = DATA_DIR / "maps" / "world_shore.png"
+ART_PROMPTS_JSON = ART_ROOT / "tools" / "art_prompts.json"
+
+# The §4.8.4 palette blocks, transcribed from docs/80-UI-UX.md §4.8 (and
+# double-checked against scripts/palette.gd's block constants). Membership is
+# per-class (W1 adjudication b): a sprite checks against its own class's
+# block only; the §4.8 locked table joins every class's allowed set.
+BLOCK_TERRAIN = frozenset({
+    "#16446e", "#2f6f9e", "#7a5c2e", "#8f6d3a", "#5e4720", "#3d3d3d",
+    "#565656", "#c9d6df", "#e4eef4", "#9fb4c4", "#dff0f4", "#101010",
+    "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
+    "#9a9a9a",
+})
+BLOCK_ICON = frozenset({
+    "#1c2230", "#121724", "#465468", "#5e7086", "#232c3e", "#e8e6df",
+    "#f7f5ee", "#d9a441", "#f0c46a", "#a87a28", "#4e9e4e", "#74c26e",
+    "#b3341f", "#d4573c", "#2f6f9e", "#9a9a9a", "#1a8c4e", "#b3191f",
+    "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
+})
+BLOCK_HULL = frozenset({
+    "#101010", "#8f6d3a", "#7a5c2e", "#5e4720", "#f7f5ee", "#e8e6df",
+    "#c2beb2", "#ffffff", "#a7a6a1", "#21af62", "#1a8c4e", "#136538",
+    "#e01f27", "#b3191f", "#811216", "#315eb3", "#274b8f", "#1c3667",
+    "#ff9a26", "#d97b1e", "#9c5916", "#854cc1", "#6a3d9a", "#4c2c6f",
+    "#fbcb31", "#c9a227", "#91751c", "#c1c1c1", "#9a9a9a", "#6f6f6f",
+    "#e04127", "#b3341f", "#812516",
+})
+BLOCK_FX = frozenset({
+    "#26262c", "#8a929c", "#c6ccd4", "#555c66", "#dff0f4", "#9fc4d4",
+    "#7a2d16", "#ff8c2a", "#ffd23e",
+})
+BLOCK_PORTRAIT = frozenset({
+    "#101010", "#f0d0b0", "#d9a878", "#a87a52", "#1a1a1e", "#6b4a2a",
+    "#b9bcc0", "#e8e6df", "#d9b98a", "#2e2014", "#8a929c", "#a87a28",
+    "#9cc4dc", "#d9a441", "#465468", "#2f6f9e", "#4e9e4e", "#b3341f",
+    "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227",
+})
+# §4.8's locked palette table (the "chrome hexes already in §4.8's locked
+# table" clause of §8.8 item 3).
+BLOCK_LOCKED = frozenset({
+    "#16446e", "#2f6f9e", "#7a5c2e", "#3d3d3d", "#c9d6df", "#9a9a9a",
+    "#1c2230", "#465468", "#e8e6df", "#d9a441", "#4e9e4e", "#b3341f",
+})
+
+# Class → block (80-* §4.8.4 class→block mapping; world markers join the
+# terrain block like the port markers they render beside).
+CLASS_BLOCK = {
+    "chrome": BLOCK_ICON,
+    "icons": BLOCK_ICON,
+    "hulls": BLOCK_HULL,
+    "terrain": BLOCK_TERRAIN,
+    "shore": BLOCK_TERRAIN,
+    "markers": BLOCK_TERRAIN,
+    "fx": BLOCK_FX,
+    "portraits": BLOCK_PORTRAIT,
+}
+
+# Color budgets = the skill's size tiers (80-* §4.8.3: caps, not quotas).
+G13_CAP_16 = 12
+G13_CAP_32 = 20
+G13_CAP_48 = 25
+
+
+def _g13_cap(width: int, height: int) -> int:
+    side = max(width, height)
+    if side <= 16:
+        return G13_CAP_16
+    if side <= 32:
+        return G13_CAP_32
+    return G13_CAP_48
+
+
+# 8-direction transform ops (the pinned lossless set; identical index math
+# to the manifest generator's — compared pixel-exact against artifacts).
+def _g13_mirror_x(px, w, h):
+    return [row[::-1] for row in px]
+
+
+def _g13_mirror_y(px, w, h):
+    return px[::-1]
+
+
+def _g13_rot_180(px, w, h):
+    return [row[::-1] for row in px[::-1]]
+
+
+def _g13_rot_cw(px, w, h):
+    n = len(px)
+    return ["".join(px[n - 1 - x][y] for x in range(n)) for y in range(n)]
+
+
+def _g13_rot_ccw(px, w, h):
+    n = len(px)
+    return ["".join(px[x][n - 1 - y] for x in range(n)) for y in range(n)]
+
+
+def _g13_rot180_mirror_x(px, w, h):
+    return _g13_mirror_x(_g13_rot_180(px, w, h), w, h)
+
+
+G13_DERIVE_OPS = {
+    "mirror_x": _g13_mirror_x,
+    "mirror_y": _g13_mirror_y,
+    "rot_180": _g13_rot_180,
+    "rot_cw": _g13_rot_cw,
+    "rot_ccw": _g13_rot_ccw,
+    "rot180_mirror_x": _g13_rot180_mirror_x,
+}
+
+# Contract id inventories (80-* §4.8.6 heading8 table + A.1/A.2 of
+# IMPLEMENT-Phase10.md). Data-driven families (goods/equipment/flags/hulls)
+# join these from the data files at machine scope.
+G13_DIR_IDS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+G13_CHROME_TILES = tuple(
+    f"{stem}_{tile}"
+    for stem in ("panel", "button", "button_focus", "field")
+    for tile in ("corner", "edge", "fill")
+) + ("bar_left", "bar_right", "bar_line")
+G13_CHROME_SHEETS = tuple(
+    f"ninepatch_{stem}.png"
+    for stem in ("panel", "button", "button_focus", "field", "bar")
+)
+G13_ICON_PINNED = (
+    "coin", "crew", "provisions", "morale", "durability",
+    "compass", "calm", "fair", "strong", "storm",
+    "cannon", "shot_round", "shot_chain", "shot_armor_piercing",
+    "shot_grape", "hook", "ram", "surrender_flag",
+    "chest", "scroll", "hammer", "bell",
+    "anchor", "hourglass", "save", "skull", "crown",
+    "trophy", "trend_up", "trend_down", "event_demand",
+    "role_trader", "role_coaster", "role_courier", "role_patrol",
+    "role_privateer", "role_pirate", "role_hunter",
+    "formation_line_ahead", "formation_column", "formation_screen",
+    "formation_swarm",
+)
+G13_FACILITY_TOKENS = (
+    "facility_market", "facility_shipyard", "facility_tavern",
+    "facility_inn", "facility_guild", "facility_palace",
+)
+G13_TOKEN_OWNERS_EXTRA = ("player", "neutral", "pirate")
+# Tier footprint bands (80-* §4.8.7, long-axis px on the 32x32 canvas).
+G13_TIER_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
+
+# §6.6 shore codes: indices 1-8 = n, ne, e, se, s, sw, w, nw (compass order,
+# also the priority order), x wrap-aware, y out of range = non-land.
+G13_SHORE_CODE_DELTAS = (
+    (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1),
+)
+SHORE_WATER_CHARS = "~."
+SHORE_HARD_CHARS = "#^I"
+
+
+class _G13Sprite:
+    """Decoded artifact pixels (RGBA hex per pixel, None = transparent)."""
+
+    __slots__ = ("decl", "path", "w", "h", "pixels")
+
+    def __init__(self, decl, path, w, h, pixels):
+        self.decl = decl
+        self.path = path
+        self.w = w
+        self.h = h
+        self.pixels = pixels  # list of rows of hex-or-None
+
+    def rows_hash(self):
+        """Pixel rows as opaque-char rows ('.' = transparent) — the form the
+        transform ops work on (alpha itself is not part of the relation)."""
+        return ["".join("." if p is None else "x" for p in row)
+                for row in self.pixels]
+
+
+def decode_ui_png(data: bytes) -> tuple[int, int, list[list]]:
+    """Decode a PNG written by render.js (indexed PLTE/tRNS or RGBA) into
+    per-pixel "#rrggbb"/None rows. Raises PngFormatError structurally.
+
+    Group 13's extension of the world-map reader: colour types 3 (with the
+    per-entry-alpha tRNS) and 6, 8-bit, non-interlaced.
+    """
+    if not data.startswith(_PNG_SIGNATURE):
+        raise PngFormatError("not a PNG (bad signature)")
+    total = len(data)
+    pos = len(_PNG_SIGNATURE)
+    header = None
+    palette = None
+    trns = None
+    idat = bytearray()
+    saw_iend = False
+    while pos < total:
+        if pos + 8 > total:
+            raise PngFormatError("truncated chunk header")
+        chunk_length = struct.unpack(">I", data[pos:pos + 4])[0]
+        tag = data[pos + 4:pos + 8]
+        if pos + 12 + chunk_length > total:
+            raise PngFormatError(f"truncated {tag!r} chunk")
+        payload = data[pos + 8:pos + 8 + chunk_length]
+        crc = struct.unpack(">I",
+                            data[pos + 8 + chunk_length:pos + 12 + chunk_length])[0]
+        if crc != (zlib.crc32(tag + payload) & 0xFFFFFFFF):
+            raise PngFormatError(f"bad CRC in chunk {tag!r}")
+        pos += 12 + chunk_length
+        if tag == b"IHDR":
+            header = struct.unpack(">IIBBBBB", payload)
+        elif tag == b"PLTE":
+            palette = payload
+        elif tag == b"tRNS":
+            trns = payload
+        elif tag == b"IDAT":
+            idat += payload
+        elif tag == b"IEND":
+            saw_iend = True
+            break
+    if header is None:
+        raise PngFormatError("no IHDR chunk")
+    if not saw_iend:
+        raise PngFormatError("no IEND chunk (truncated file)")
+    width, height, depth, colour, compression, filter_method, interlace = header
+    if depth != 8:
+        raise PngFormatError(f"bit depth is {depth}, expected 8")
+    if compression != 0 or filter_method != 0:
+        raise PngFormatError(
+            f"unsupported PNG compression/filter method "
+            f"{compression}/{filter_method}")
+    if interlace != 0:
+        raise PngFormatError(f"interlaced PNG not supported (interlace {interlace})")
+    if width == 0 or height == 0:
+        raise PngFormatError(f"zero image dimension {width}x{height}")
+    if colour == 3:
+        if palette is None:
+            raise PngFormatError("no PLTE chunk (an indexed PNG needs a palette)")
+        samples = 1
+    elif colour == 6:
+        samples = 4
+    else:
+        raise PngFormatError(
+            f"unsupported colour type {colour} (group 13 reads indexed "
+            "type-3 and RGBA type-6 PNGs only)")
+    if not idat:
+        raise PngFormatError("no IDAT chunk (image data is empty)")
+    try:
+        raw = zlib.decompress(bytes(idat))
+    except zlib.error as exc:
+        raise PngFormatError(f"IDAT stream does not inflate: {exc}") from exc
+    stride = width * samples
+    if len(raw) != (stride + 1) * height:
+        raise PngFormatError(
+            f"IDAT inflates to {len(raw)} bytes, expected {(stride + 1) * height}")
+    lines = []
+    prev = bytes(stride)
+    pos = 0
+    for _ in range(height):
+        filter_type = raw[pos]
+        pos += 1
+        line = bytearray(raw[pos:pos + stride])
+        pos += stride
+        if filter_type == 0:
+            pass
+        elif filter_type == 1:  # Sub
+            for i in range(samples, stride):
+                line[i] = (line[i] + line[i - samples]) & 0xFF
+        elif filter_type == 2:  # Up
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 0xFF
+        elif filter_type == 3:  # Average
+            for i in range(stride):
+                left = line[i - samples] if i >= samples else 0
+                line[i] = (line[i] + ((left + prev[i]) >> 1)) & 0xFF
+        elif filter_type == 4:  # Paeth
+            for i in range(stride):
+                left = line[i - samples] if i >= samples else 0
+                up = prev[i]
+                up_left = prev[i - samples] if i >= samples else 0
+                p = left + up - up_left
+                pa, pb, pc = abs(p - left), abs(p - up), abs(p - up_left)
+                if pa <= pb and pa <= pc:
+                    predictor = left
+                elif pb <= pc:
+                    predictor = up
+                else:
+                    predictor = up_left
+                line[i] = (line[i] + predictor) & 0xFF
+        else:
+            raise PngFormatError(
+                f"row uses undefined PNG filter type {filter_type}")
+        lines.append(bytes(line))
+        prev = line
+    pixels: list[list] = []
+    if colour == 3:
+        entries = len(palette) // 3
+        alphas = None
+        if trns is not None and len(trns) > 0:
+            alphas = trns
+        for line in lines:
+            row: list = []
+            for idx in line:
+                if idx >= entries:
+                    raise PngFormatError(
+                        f"palette index {idx} used but PLTE holds {entries}")
+                alpha = 255
+                if alphas is not None and idx < len(alphas):
+                    alpha = alphas[idx]
+                if alpha == 0:
+                    row.append(None)
+                else:
+                    row.append("#%02x%02x%02x" % (
+                        palette[idx * 3], palette[idx * 3 + 1],
+                        palette[idx * 3 + 2]))
+            pixels.append(row)
+    else:
+        for line in lines:
+            row = []
+            for x in range(width):
+                r, g, b, a = line[x * 4:x * 4 + 4]
+                row.append(None if a == 0 else "#%02x%02x%02x" % (r, g, b))
+            pixels.append(row)
+    return width, height, pixels
+
+
+def _g13_load_class(class_dir: Path) -> dict:
+    """Parse one class's manifests (render.js tolerance: one object, an
+    array, or {"sprites": [...]})."""
+    decls: dict[str, tuple[dict, Path]] = {}
+    paths = sorted(class_dir.glob("*.json"))
+    if not paths:
+        fail("art-manifest", str(class_dir),
+             "manifest dir holds no .json declarations (a class dir exists, "
+             "so its manifests must too)", 13)
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            fail("art-manifest", path.name, f"cannot parse manifest: {exc}", 13)
+        if isinstance(doc, list):
+            items = doc
+        elif isinstance(doc, dict) and isinstance(doc.get("sprites"), list):
+            items = doc["sprites"]
+        elif isinstance(doc, dict):
+            items = [doc]
+        else:
+            fail("art-manifest", path.name,
+                 "manifest must be a declaration object, an array, or "
+                 '{"sprites": [...]}`, got '
+                 + type(doc).__name__, 13)
+        if isinstance(doc, list):
+            items = doc
+        elif isinstance(doc, dict) and isinstance(doc.get("sprites"), list):
+            items = doc["sprites"]
+        elif isinstance(doc, dict):
+            items = [doc]
+        else:
+            fail("art-manifest", path.name,
+                 "manifest must be a declaration object, an array, or "
+                 '{"sprites": [...]}`, got '
+                 + type(doc).__name__, 13)
+        for decl in items:
+            sprite_id = decl.get("id") if isinstance(decl, dict) else None
+            if not isinstance(sprite_id, str) or not sprite_id:
+                fail("art-manifest", path.name,
+                     "declaration without a non-empty string id", 13)
+            if sprite_id in decls:
+                fail("art-manifest", path.name,
+                     f"duplicate sprite id {sprite_id!r} (also in "
+                     f"{decls[sprite_id][1].name})", 13)
+            decls[sprite_id] = (decl, path)
+    return decls
+
+
+def _g13_decl_rows(decl: dict) -> list[str] | None:
+    rows = decl.get("rows")
+    if rows is None:
+        return None
+    if (not isinstance(rows, list) or not rows
+            or any(not isinstance(r, str) for r in rows)
+            or len({len(r) for r in rows}) != 1):
+        fail("art-manifest", decl.get("id", "?"),
+             "rows must be an array of equal-length strings", 13)
+    return rows
+
+
+def _g13_check_manifests(class_name: str, class_dir: Path, decls: dict,
+                         block: frozenset) -> None:
+    """Manifest-level checks: shape, output path, declared size, palette
+    membership (string-maps carry exact hexes), budgets, derive refs."""
+    seen_files: dict[str, str] = {}
+    allowed = block | BLOCK_LOCKED
+    for sprite_id, (decl, path) in sorted(decls.items()):
+        label = f"tools/ui_art/{class_name}/{path.name}:{sprite_id}"
+        file = decl.get("file")
+        if not isinstance(file, str) or not file:
+            fail("art-manifest", label, "file: required output path", 13)
+        parts = file.split("/")
+        if (file.startswith("/") or ".." in parts
+                or not file.startswith("assets/ui/")):
+            fail("art-manifest", label,
+                 f"file {file!r} must be a repo-root-relative path under "
+                 "assets/ui/", 13)
+        if file in seen_files and seen_files[file] != sprite_id:
+            fail("art-manifest", label,
+                 f"output file {file!r} also declared by "
+                 f"{seen_files[file]!r}", 13)
+        seen_files[file] = sprite_id
+        mode = decl.get("mode")
+        if mode not in ("string-map", "template"):
+            fail("art-manifest", label,
+                 f"mode must be \"string-map\" or \"template\", got {mode!r}",
+                 13)
+        width = decl.get("width")
+        height = decl.get("height")
+        if not (isinstance(width, int) and isinstance(height, int)
+                and width > 0 and height > 0):
+            fail("art-manifest", label,
+                 "width/height: required positive ints (the A.x contract "
+                 "pins every sprite's canvas)", 13)
+        rows = _g13_decl_rows(decl)
+        if mode == "string-map":
+            if rows is None:
+                if "derive" not in decl:
+                    fail("art-manifest", label,
+                         "string-map declaration without rows (and without "
+                         "a derive reference)", 13)
+            else:
+                if len(rows) != height or len(rows[0]) != width:
+                    fail("art-manifest", label,
+                         f"rows are {len(rows[0])}x{len(rows)}, declared "
+                         f"{width}x{height}", 13)
+                palette = decl.get("palette")
+                if not isinstance(palette, dict) or not palette:
+                    fail("art-manifest", label,
+                         "palette: required char→hex object", 13)
+                used: set[str] = set()
+                for row in rows:
+                    for ch in row:
+                        used.add(ch)
+                missing = used - set(palette) - {"."}
+                if missing:
+                    fail("art-manifest", label,
+                         f"row chars {sorted(missing)} missing from palette",
+                         13)
+                for ch, spec in sorted(palette.items()):
+                    if spec == "transparent":
+                        continue
+                    if (not isinstance(spec, str) or len(spec) != 7
+                            or not spec.startswith("#")):
+                        fail("art-manifest", label,
+                             f"palette[{ch!r}]: expected \"#rrggbb\" or "
+                             f"\"transparent\", got {spec!r}", 13)
+                    low = spec.lower()
+                    if low not in allowed:
+                        fail("art-palette-manifest", label,
+                             f"hex {low} is outside the {class_name} class "
+                             "block (80-* §4.8.4 per-class membership)", 13)
+                    palette[ch] = low
+                opaque = {low for ch, low in palette.items()
+                          if low != "transparent" and ch in used}
+                cap = _g13_cap(width, height)
+                if len(opaque) > cap:
+                    fail("art-budget-manifest", label,
+                         f"{len(opaque)} distinct declared colors > the "
+                         f"{cap} cap for {width}x{height} (§8.8 item 4)", 13)
+        else:
+            grid = decl.get("grid")
+            if not isinstance(grid, list) or not grid:
+                fail("art-manifest", label,
+                     "template declaration requires a non-empty grid", 13)
+            if not isinstance(decl.get("materials"), dict):
+                fail("art-manifest", label,
+                     "template declaration requires a materials object", 13)
+            scale = decl.get("scale", 1)
+            if (not isinstance(scale, int) or scale < 1
+                    or len(grid[0]) * scale != width or len(grid) * scale != height):
+                fail("art-manifest", label,
+                     f"declared {width}x{height} != grid {len(grid[0])}x"
+                     f"{len(grid)} x scale {scale}", 13)
+        derive = decl.get("derive")
+        if derive is not None:
+            if (not isinstance(derive, dict)
+                    or derive.get("op") not in G13_DERIVE_OPS
+                    or not isinstance(derive.get("from"), str)):
+                fail("art-manifest", label,
+                     f"derive must be {{\"from\", \"op\"}} with op in "
+                     f"{sorted(G13_DERIVE_OPS)}, got {derive!r}", 13)
+            base_id = derive["from"]
+            if base_id not in decls:
+                fail("art-manifest", label,
+                     f"derive.from {base_id!r} is not declared in this "
+                     "class", 13)
+            base_rows = _g13_decl_rows(decls[base_id][0])
+            if base_rows is not None and rows is not None:
+                expect = G13_DERIVE_OPS[derive["op"]](base_rows, width, height)
+                if expect != rows:
+                    fail("art-manifest", label,
+                         f"rows are not {derive['op']}({base_id!r}) — the "
+                         "declared transform must match the emitted rows",
+                         13)
+
+
+def _g13_decode_artifact(decl: dict, path: Path) -> _G13Sprite:
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        fail("art-artifact", f"assets/ui (via {decl['file']})",
+             f"cannot read declared artifact: {exc}", 13)
+    try:
+        width, height, pixels = decode_ui_png(data)
+    except PngFormatError as exc:
+        fail("art-artifact", decl["file"],
+             f"does not decode: {exc} (the hand-edit probe rejects any "
+             "byte-level drift — §8.8 item 2)", 13)
+    if width != decl.get("width") or height != decl.get("height"):
+        fail("art-size", decl["file"],
+             f"artifact is {width}x{height}, manifest declares "
+             f"{decl.get('width')}x{decl.get('height')}", 13)
+    return _G13Sprite(decl, path, width, height, pixels)
+
+
+def _g13_check_pixels(class_name: str, sprite: _G13Sprite, block: frozenset) -> None:
+    """§8.8 items 3–4 on a decoded artifact: block membership + budget."""
+    allowed = block | BLOCK_LOCKED
+    seen: dict[str, int] = {}
+    for row in sprite.pixels:
+        for px in row:
+            if px is None:
+                continue
+            seen[px] = seen.get(px, 0) + 1
+    off = sorted(set(seen) - allowed)
+    if off:
+        fail("art-palette", sprite.decl["file"],
+             f"off-block hex(es) {off} — the {class_name} class checks "
+             "against its own §4.8.4 block only", 13)
+    cap = _g13_cap(sprite.w, sprite.h)
+    if len(seen) > cap:
+        fail("art-budget", sprite.decl["file"],
+             f"{len(seen)} distinct colors > the {cap} cap for "
+             f"{sprite.w}x{sprite.h} (§8.8 item 4)", 13)
+
+
+def _g13_check_relations(class_name: str, decls: dict,
+                         sprites: dict) -> None:
+    """§8.8 item 5: every derived sprite is the pixel-exact transform of its
+    authored base (transparent/opaque pattern compared)."""
+    for sprite_id, (decl, _path) in sorted(decls.items()):
+        derive = decl.get("derive")
+        if not derive:
+            continue
+        base_id = derive["from"]
+        if sprite_id not in sprites or base_id not in sprites:
+            continue  # staged: both artifacts required for the relation
+        got = sprites[sprite_id].rows_hash()
+        base = sprites[base_id]
+        expect = G13_DERIVE_OPS[derive["op"]](base.rows_hash(), base.w, base.h)
+        if got != expect:
+            fail("art-transform", sprites[sprite_id].decl["file"],
+                 f"is not {derive['op']}({base_id}) pixel-exact (§8.8 item 5)",
+                 13)
+
+
+def _g13_check_chrome_seams(sprites: dict) -> None:
+    """§8.8 item 8 (chrome part): edge tiles are torus-safe along the
+    horizontal repeat axis (column 0 == column 15 pattern); bar_line also
+    wraps vertically (row 0 == row 15). Corners do not repeat."""
+    for sprite_id, sprite in sorted(sprites.items()):
+        if sprite_id.endswith("_edge"):
+            col0 = [row[0] for row in sprite.pixels]
+            col15 = [row[sprite.w - 1] for row in sprite.pixels]
+            if col0 != col15:
+                fail("art-seam", sprite.decl["file"],
+                     "edge tile is not torus-safe: column 0 != column "
+                     f"{sprite.w - 1} (80-* §4.8 seam rule)", 13)
+        if sprite_id == "bar_line":
+            if sprite.pixels[0] != sprite.pixels[sprite.h - 1]:
+                fail("art-seam", sprite.decl["file"],
+                     "bar_line is not torus-safe: row 0 != row "
+                     f"{sprite.h - 1}", 13)
+
+
+def _g13_check_terrain_rings(class_name: str, decls: dict,
+                             sprites: dict) -> None:
+    """§8.8 item 8 (terrain part): variants of one kind share a
+    byte-identical outer 1px ring."""
+    kinds: dict[str, list[_G13Sprite]] = {}
+    for sprite_id, sprite in sorted(sprites.items()):
+        parts = sprite_id.split("_")
+        if len(parts) >= 3 and parts[0] == "terrain":
+            kinds.setdefault("_".join(parts[1:-1]), []).append(sprite)
+    for kind, group in sorted(kinds.items()):
+        if len(group) < 2:
+            continue
+        first = group[0]
+        for other in group[1:]:
+            if other.w != first.w or other.h != first.h:
+                fail("art-seam", other.decl["file"],
+                     f"terrain kind {kind}: variant size {other.w}x{other.h} "
+                     f"!= {first.w}x{first.h}", 13)
+            ring = _g13_ring_pixels(first)
+            if _g13_ring_pixels(other) != ring:
+                fail("art-seam", other.decl["file"],
+                     f"terrain kind {kind}: variants do not share the "
+                     "byte-identical wrap-continuous outer 1px ring "
+                     "(80-* §4.8 seam rule)", 13)
+
+
+def _g13_ring_pixels(sprite: _G13Sprite) -> list:
+    """The outer 1px ring as an ordered list (wrap-continuous walk)."""
+    w, h = sprite.w, sprite.h
+    ring = list(sprite.pixels[0])
+    ring += [row[w - 1] for row in sprite.pixels[1:h - 1]]
+    ring += sprite.pixels[h - 1][::-1]
+    ring += [row[0] for row in sprite.pixels[h - 2:0:-1]]
+    return ring
+
+
+def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
+    """§8.8 item 6: the full 16x9x8 grid (+ facility tokens) declared."""
+    owners = [n["id"] for n in nations] + list(G13_TOKEN_OWNERS_EXTRA)
+    expected = set(G13_FACILITY_TOKENS)
+    for ship in ship_types:
+        for owner in owners:
+            for dir_id in G13_DIR_IDS:
+                expected.add(f"hull_{ship['id']}_{owner}_{dir_id}")
+    got = set(decls)
+    if got != expected:
+        missing = sorted(expected - got)[:6]
+        extra = sorted(got - expected)[:6]
+        fail("hull-inventory", "tools/ui_art/hulls/",
+             f"declared ids != the ship_types × owners × dirs grid + "
+             f"facility tokens (missing {missing}…, extra {extra}…; "
+             "§8.8 item 6)", 13)
+
+
+def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
+    """§8.8 item 7: the long-axis extent lies in the tier band. The long
+    axis is directly measurable on the cardinal directions (the diagonal
+    sprites' rotated extents are the tool's lossless transforms of the same
+    authored art, so the band is checked there)."""
+    tier_of = {s["id"]: s["tier"] for s in ship_types}
+    for sprite_id, sprite in sorted(sprites.items()):
+        if not sprite_id.startswith("hull_"):
+            continue
+        parts = sprite_id.split("_")
+        if len(parts) != 4:
+            continue
+        _, ship_id, _owner, dir_id = parts
+        if dir_id not in ("n", "s", "e", "w"):
+            continue
+        band = G13_TIER_BANDS.get(tier_of.get(ship_id))
+        if band is None:
+            continue
+        opaque = [(x, y) for y, row in enumerate(sprite.pixels)
+                  for x, px in enumerate(row) if px is not None]
+        if not opaque:
+            fail("hull-footprint", sprite.decl["file"],
+                 "sprite is fully transparent", 13)
+        xs = [p[0] for p in opaque]
+        ys = [p[1] for p in opaque]
+        extent = (max(ys) - min(ys) + 1) if dir_id in ("n", "s") else \
+            (max(xs) - min(xs) + 1)
+        lo, hi = band
+        if not lo <= extent <= hi:
+            fail("hull-footprint", sprite.decl["file"],
+                 f"long axis {extent}px outside the tier-{tier_of[ship_id]} "
+                 f"band {lo}-{hi} (80-* §4.8.7)", 13)
+
+
+def _g13_check_shore_strips(sprites: dict) -> None:
+    """§8.8 item 8 (shore part): foam lives only on the land-facing band and
+    the thickness is shared with the corner tiles."""
+    bands: dict[str, int] = {}
+    boxes: dict[str, tuple] = {}
+    for sprite_id, sprite in sorted(sprites.items()):
+        if not sprite_id.startswith("shore_"):
+            continue
+        dir_id = sprite_id[len("shore_"):]
+        if dir_id not in G13_DIR_IDS:
+            continue
+        opaque = [(x, y) for y, row in enumerate(sprite.pixels)
+                  for x, px in enumerate(row) if px is not None]
+        if not opaque:
+            fail("art-seam", sprite.decl["file"], "strip is fully transparent", 13)
+        xs = [p[0] for p in opaque]
+        ys = [p[1] for p in opaque]
+        boxes[dir_id] = (min(xs), min(ys), max(xs), max(ys))
+        if dir_id in ("n", "s"):
+            bands[dir_id] = (max(ys) - min(ys) + 1) if dir_id == "n" else \
+                (sprite.h - min(ys))
+        elif dir_id in ("w", "e"):
+            bands[dir_id] = (max(xs) + 1) if dir_id == "w" else \
+                (sprite.w - min(xs))
+    if not bands:
+        return
+    thickness = max(bands.values())
+    for dir_id, band in bands.items():
+        if band != thickness:
+            fail("art-seam", f"shore_{dir_id}",
+                 f"foam band {band}px != the shared thickness {thickness}px "
+                 "(80-* §4.8: thickness shared with the corner tiles)", 13)
+    for dir_id, (x0, y0, x1, y1) in boxes.items():
+        sprite = sprites[f"shore_{dir_id}"]
+        for y, row in enumerate(sprite.pixels):
+            for x, px in enumerate(row):
+                if px is None:
+                    continue
+                facing = {
+                    "n": y < thickness,
+                    "s": y >= sprite.h - thickness,
+                    "w": x < thickness,
+                    "e": x >= sprite.w - thickness,
+                    "ne": y < thickness or x >= sprite.w - thickness,
+                    "nw": y < thickness or x < thickness,
+                    "se": y >= sprite.h - thickness or x >= sprite.w - thickness,
+                    "sw": y >= sprite.h - thickness or x < thickness,
+                }[dir_id]
+                if not facing:
+                    fail("art-seam", sprite.decl["file"],
+                         f"foam pixel at ({x}, {y}) sits outside the "
+                         f"{dir_id}-facing band (transparent elsewhere, "
+                         "80-* §4.8)", 13)
+
+
+def _g13_check_shore_raster(shore_path: Path, world: "WorldGrid") -> None:
+    """§8.8 item 9: §6.6 integrity, re-derived independently from world.png
+    (the validator's half of the cross-implementation check)."""
+    label = "data/maps/world_shore.png"
+    try:
+        data = shore_path.read_bytes()
+    except OSError as exc:
+        fail("shore-raster", label, f"cannot read: {exc}", 13)
+    try:
+        width, height, indices = decode_indexed_png(data)
+    except PngFormatError as exc:
+        fail("shore-raster", label, f"does not decode: {exc}", 13)
+    if width != world.width or height != world.height:
+        fail("shore-raster", label,
+             f"raster is {width}x{height}, world.png is {world.width}x"
+             f"{world.height} (§6.6: one index per §6.1 tile)", 13)
+    hard = set(SHORE_HARD_CHARS)
+    water = set(SHORE_WATER_CHARS)
+    w = width
+    for y in range(height):
+        base = y * w
+        world_row = world.indices[base:base + w]
+        shore_row = indices[base:base + w]
+        for x in range(w):
+            code = shore_row[x]
+            kind = WORLD_PALETTE_CHARS[world_row[x]] \
+                if world_row[x] < len(WORLD_PALETTE_CHARS) else "?"
+            if code > 8:
+                fail("shore-raster", label,
+                     f"palette index {code} at ({x}, {y}) is outside the "
+                     "§6.6 domain 0-8", 13)
+            if kind in hard:
+                if code != 0:
+                    fail("shore-raster", label,
+                         f"land/reef/ice cell ({x}, {y}) carries code "
+                         f"{code} (§6.6: hard tiles are always 0)", 13)
+                continue
+            if code:
+                dx, dy = G13_SHORE_CODE_DELTAS[code - 1]
+                nx = (x + dx) % w
+                ny = y + dy
+                if not (0 <= ny < height):
+                    fail("shore-raster", label,
+                         f"cell ({x}, {y}) codes direction {code} toward a "
+                         "y-out-of-range neighbour (§6.6: that yields no "
+                         "code)", 13)
+                nkind = WORLD_PALETTE_CHARS[
+                    world.indices[ny * w + nx]] \
+                    if world.indices[ny * w + nx] < len(WORLD_PALETTE_CHARS) \
+                    else "?"
+                if kind not in water:
+                    fail("shore-raster", label,
+                         f"non-water cell ({x}, {y}, kind {kind!r}) carries "
+                         f"code {code} (§6.6 codes water only)", 13)
+                if nkind not in hard:
+                    fail("shore-raster", label,
+                         f"cell ({x}, {y}) codes direction {code} but its "
+                         f"neighbour ({nx}, {ny}) is {nkind!r} — codes must "
+                         "point at land/reef/ice (§6.6)", 13)
+            elif kind in water:
+                # completeness: an uncoded water cell next to hard ground
+                # must carry the highest-priority qualifying code.
+                for priority, (dx, dy) in enumerate(G13_SHORE_CODE_DELTAS,
+                                                    start=1):
+                    nx = (x + dx) % w
+                    ny = y + dy
+                    if 0 <= ny < height:
+                        nidx = world.indices[ny * w + nx]
+                        nkind = WORLD_PALETTE_CHARS[nidx] \
+                            if nidx < len(WORLD_PALETTE_CHARS) else "?"
+                        if nkind in hard:
+                            fail("shore-raster", label,
+                                 f"water cell ({x}, {y}) borders hard ground "
+                                 f"toward priority-{priority} but carries no "
+                                 "code (§6.6 completeness)", 13)
+
+
+def _g13_check_art_prompts(doc: object, legend_ids: list, pirate_ids: list,
+                           discovery_ids: list) -> None:
+    """§8.8 item 10: exactly the 24 legend captains + 4 named pirates + 30
+    discoveries, one shared style_preamble, per-class canvas dimensions."""
+    label = "tools/art_prompts.json"
+    if not isinstance(doc, dict):
+        fail("art-prompts", label, "top level must be an object", 13)
+    preamble = doc.get("style_preamble")
+    if not isinstance(preamble, str) or not preamble.strip():
+        fail("art-prompts", label,
+             "missing the shared style_preamble (§8.8 item 10)", 13)
+    entries = None
+    for key in ("prompts", "assets", "entries"):
+        if isinstance(doc.get(key), list):
+            entries = doc[key]
+            break
+    if entries is None:
+        fail("art-prompts", label,
+             "no prompt entry list (expected a \"prompts\" array)", 13)
+    expected = {}
+    for sprite_id in legend_ids + pirate_ids:
+        expected[sprite_id] = (72, 96)
+    for sprite_id in discovery_ids:
+        expected[sprite_id] = (64, 64)
+    got: dict[str, tuple[int, int]] = {}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            fail("art-prompts", label, f"entry {index} is not an object", 13)
+        sprite_id = entry.get("id")
+        if not isinstance(sprite_id, str) or not sprite_id:
+            fail("art-prompts", label, f"entry {index} has no id", 13)
+        canvas = entry.get("canvas")
+        if isinstance(canvas, (list, tuple)) and len(canvas) == 2:
+            dims = (canvas[0], canvas[1])
+        else:
+            dims = (entry.get("width"), entry.get("height"))
+        if not all(isinstance(v, int) and v > 0 for v in dims):
+            fail("art-prompts", label,
+                 f"{sprite_id}: canvas dimensions missing (portraits 72x96, "
+                 "discoveries 64x64)", 13)
+        if sprite_id in got:
+            fail("art-prompts", label, f"duplicate prompt id {sprite_id!r}", 13)
+        got[sprite_id] = dims
+    if got != expected:
+        missing = sorted(set(expected) - set(got))[:6]
+        extra = sorted(set(got) - set(expected))[:6]
+        fail("art-prompts", label,
+             f"prompt ids != the 24 legend captains + 4 named pirates + 30 "
+             f"discoveries (missing {missing}…, extra {extra}…; §8.8 item "
+             "10)", 13)
+    for sprite_id, dims in got.items():
+        if dims != expected[sprite_id]:
+            fail("art-prompts", label,
+                 f"{sprite_id}: canvas {dims[0]}x{dims[1]} != the class pin "
+                 f"{expected[sprite_id][0]}x{expected[sprite_id][1]}", 13)
+
+
+def _g13_rebuild_fixtures(verbose: bool) -> None:
+    """§8.8 item 2 / fixture-command shape: the builders' own --check modes,
+    run only where the scripts exist (staged)."""
+    import subprocess
+
+    for script, artifact_label, what in (
+        ("tools/build_ui_art.py", "assets/ui", "generated UI art"),
+        ("tools/build_shore.py", "data/maps/world_shore.png",
+         "shore raster"),
+    ):
+        path = ART_ROOT / script
+        if not path.is_file():
+            print(f"INFO group 13 {script} not present — rebuild-equality "
+                  f"for {what} is staged (slot B/C deliverable)")
+            continue
+        try:
+            result = subprocess.run(
+                [sys.executable, str(path), "--check"],
+                capture_output=True, text=True, cwd=str(ART_ROOT),
+                timeout=900,
+            )
+        except subprocess.TimeoutExpired:
+            fail("art-rebuild", artifact_label,
+                 f"{script} --check exceeded the 900s budget", 13)
+        if verbose and result.stdout:
+            for line in result.stdout.strip().splitlines()[-4:]:
+                print(f"INFO group 13 {line}")
+        if result.returncode != 0:
+            tail = (result.stderr or result.stdout or "").strip().splitlines()
+            detail = tail[-1] if tail else f"exit {result.returncode}"
+            fail("art-rebuild", artifact_label,
+                 f"rebuild drift: {detail} ({script} --check exited "
+                 f"{result.returncode}; §8.8 item 2 — the double-run is the "
+                 "hand-edit detector, regenerate, never hand-edit)", 13)
+
+
+def check_group13(docs: dict[str, object], verbose: bool) -> None:
+    """Generated UI art & shore raster: docs/10-DATA-SCHEMA.md section 8.8.
+
+    Staged activation: a contract class without manifests is skipped with an
+    informational note; manifests are checked wherever they exist; artifacts
+    wherever they exist. Ends with the six negative probes (always run).
+    """
+    goods = docs["goods.json"]["goods"]
+    equipment = docs["equipment.json"]["equipment"]
+    nations = docs["nations.json"]["nations"]
+    ship_types = docs["ship_types.json"]["ship_types"]
+
+    icon_expected = set(G13_ICON_PINNED)
+    icon_expected |= {f"wind_arrow_{d}" for d in G13_DIR_IDS}
+    icon_expected |= {f"current_arrow_{d}" for d in G13_DIR_IDS}
+    icon_expected |= {f"flag_{n['id']}" for n in nations}
+    icon_expected |= {f"flag_neutral"}
+    icon_expected |= {f"good_{g['id']}" for g in goods}
+    icon_expected |= {e["id"] for e in equipment}
+
+    class_dirs = {}
+    if UI_ART_DIR.is_dir():
+        class_dirs = {p.name: p for p in sorted(UI_ART_DIR.iterdir())
+                      if p.is_dir()}
+    sprite_cache: dict[str, dict] = {}
+    manifest_counts: dict[str, int] = {}
+    for class_name, class_dir in sorted(class_dirs.items()):
+        decls = _g13_load_class(class_dir)
+        manifest_counts[class_name] = len(decls)
+        block = CLASS_BLOCK.get(class_name)
+        if block is None:
+            print(f"INFO group 13 class {class_name!r}: no pinned palette "
+                  "block — structural checks only")
+        else:
+            _g13_check_manifests(class_name, class_dir, decls, block)
+
+        # Contract reconciliation where the doc pins the inventory.
+        if class_name == "chrome":
+            got = set(decls)
+            if got != set(G13_CHROME_TILES):
+                fail("chrome-inventory", "tools/ui_art/chrome/",
+                     f"manifest ids != the 15 A.1 tiles (missing "
+                     f"{sorted(set(G13_CHROME_TILES) - got)[:6]}…, extra "
+                     f"{sorted(got - set(G13_CHROME_TILES))[:6]}…)", 13)
+        elif class_name == "icons":
+            got = set(decls)
+            if got != icon_expected:
+                fail("icons-inventory", "tools/ui_art/icons/",
+                     f"manifest ids != the A.2 contract (missing "
+                     f"{sorted(icon_expected - got)[:6]}…, extra "
+                     f"{sorted(got - icon_expected)[:6]}…)", 13)
+        elif class_name == "hulls":
+            _g13_check_hull_grid(decls, ship_types, nations)
+
+        # Artifacts: strict per-directory inventory once anything exists.
+        declared: dict[str, list] = {}
+        for sprite_id, (decl, _path) in decls.items():
+            parent = str(Path(decl["file"]).parent)
+            declared.setdefault(parent, []).append((sprite_id, decl))
+        sprites: dict[str, _G13Sprite] = {}
+        for parent, entries in sorted(declared.items()):
+            dir_path = ART_ROOT / parent
+            present = sorted(p.name for p in dir_path.glob("*.png")) \
+                if dir_path.is_dir() else []
+            sheets = set()
+            if parent == "assets/ui/chrome":
+                sheets = set(G13_CHROME_SHEETS)
+            if not present:
+                print(f"INFO group 13 {parent}: artifacts not generated yet "
+                      f"({len(entries)} declared sprites staged)")
+                continue
+            expected_names = {Path(decl["file"]).name
+                              for _sid, decl in entries}
+            missing = sorted(set(expected_names) - set(present))
+            extra = sorted(set(present) - set(expected_names) - sheets)
+            if missing or extra:
+                fail("art-inventory", parent,
+                     f"artifact set != manifest ids (missing {missing[:6]}…, "
+                     f"extra/undeclared {extra[:6]}…; §8.8 item 1)", 13)
+            for sprite_id, decl in entries:
+                sprite = _g13_decode_artifact(decl, ART_ROOT / decl["file"])
+                if block is not None:
+                    _g13_check_pixels(class_name, sprite, block)
+                sprites[sprite_id] = sprite
+            if parent == "assets/ui/chrome":
+                for sheet in sorted(sheets & set(present)):
+                    data = (dir_path / sheet).read_bytes()
+                    try:
+                        width, height, _px = decode_ui_png(data)
+                    except PngFormatError as exc:
+                        fail("art-artifact", f"{parent}/{sheet}",
+                             f"assembled sheet does not decode: {exc}", 13)
+                    if (width, height) != (48, 48):
+                        fail("art-size", f"{parent}/{sheet}",
+                             f"nine-patch sheet is {width}x{height}, pinned "
+                             "48x48 with 16px margins (§4.8.8)", 13)
+        sprite_cache[class_name] = sprites
+        if sprites:
+            _g13_check_relations(class_name, decls, sprites)
+            if class_name == "chrome":
+                _g13_check_chrome_seams(sprites)
+            elif class_name == "terrain":
+                _g13_check_terrain_rings(class_name, decls, sprites)
+            elif class_name == "hulls":
+                _g13_check_footprints(sprites, ship_types)
+            elif class_name == "shore":
+                _g13_check_shore_strips(sprites)
+
+    # Staged classes with artifacts but no manifests yet cannot exist (the
+    # artifacts are generated FROM the manifests), so any file outside the
+    # manifest-backed directories is noted, not failed.
+    backed_dirs = {f"assets/ui/{name}" for name in class_dirs}
+    if ASSETS_UI.is_dir():
+        for png in sorted(ASSETS_UI.rglob("*.png")):
+            parent = str(png.parent.relative_to(ART_ROOT))
+            if parent not in backed_dirs:
+                print(f"INFO group 13 {png.relative_to(ART_ROOT)}: outside "
+                      "the manifest-backed classes (staged)")
+
+    if WORLD_SHORE_PNG.is_file():
+        world = _load_world_grid(ART_ROOT / "data" / "maps" / "world.png",
+                                 "data/maps/world.png")
+        _g13_check_shore_raster(WORLD_SHORE_PNG, world)
+    else:
+        print("INFO group 13 data/maps/world_shore.png not present — §6.6 "
+              "integrity staged (slot C deliverable)")
+
+    if ART_PROMPTS_JSON.is_file():
+        try:
+            prompts_doc = json.loads(ART_PROMPTS_JSON.read_text())
+        except (OSError, ValueError) as exc:
+            fail("art-prompts", "tools/art_prompts.json",
+                 f"cannot parse: {exc}", 13)
+        captains = docs.get("captains.json", {}).get("captains", [])
+        pirates = docs.get("named_pirates.json", {}).get("named_pirates", [])
+        discoveries = docs.get("discoveries.json", {}).get("discoveries", [])
+        _g13_check_art_prompts(
+            prompts_doc,
+            [c["id"] for c in captains if c.get("legend") is True],
+            [p["id"] for p in pirates],
+            [d["id"] for d in discoveries],
+        )
+    else:
+        print("INFO group 13 tools/art_prompts.json not present — prompt "
+              "coverage staged (slot D deliverable)")
+
+    _g13_rebuild_fixtures(verbose)
+
+    if verbose:
+        counts = ", ".join(f"{name} {manifest_counts[name]}"
+                           for name in sorted(manifest_counts)) or "none"
+        arts = sum(len(s) for s in sprite_cache.values())
+        print(f"PASS group 13 generated art ({counts}; {arts} artifacts "
+              "decoded + budget/membership/relations/seams)")
+
+    # §8.8 negative probes — proven red, every run, on temp fixtures.
+    _g13_run_probes()
+
+
+# --- group-13 negative probes (§8.8, six, red-then-discard) ------------------
+
+
+def _g13_expect_failure(case: str, needle: str, action) -> bool:
+    try:
+        action()
+    except CheckFailure as exc:
+        if needle not in f"{exc.check_id} {exc.details}".lower():
+            print(f"FAIL g13-probe {case}: failed with the wrong message "
+                  f"({exc.check_id} {exc.details})")
+            return False
+        print(f"PASS g13-probe {case}: rejected ({exc.check_id})")
+        return True
+    print(f"FAIL g13-probe {case}: mutation passed validation (must go red)")
+    return False
+
+
+def _g13_write_rgba_png(path: Path, width: int, height: int,
+                        pixel_fn) -> None:
+    """Tiny RGBA (colour type 6) writer for probe fixtures."""
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (struct.pack(">I", len(payload)) + tag + payload
+                + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF))
+
+    raw = bytearray()
+    for y in range(height):
+        raw.append(0)
+        for x in range(width):
+            raw += bytes(pixel_fn(x, y))
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    path.write_bytes(
+        _PNG_SIGNATURE + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 6)) + chunk(b"IEND", b""))
+
+
+_G13_PROBE_BLOCK = BLOCK_ICON
+_G13_PROBE_GOOD_HEX = "#e8e6df"  # TEXT — in the icon block
+_G13_PROBE_BAD_HEX = "#123456"   # in no block
+
+
+def _g13_run_probes() -> None:
+    """The §8.8 probe set: every mutation must fail group 13, named.
+
+    The probes run against temp fixtures through the same check functions
+    the real tree uses — never against committed data — and discard their
+    temps on exit. Baseline first (a negative that fails for the wrong
+    reason proves nothing)."""
+    results: list[bool] = []
+    with tempfile.TemporaryDirectory(prefix="g13_probes_") as tmp:
+        root = Path(tmp)
+        icons_dir = root / "tools" / "ui_art" / "probeicons"
+        icons_dir.mkdir(parents=True)
+        assets_dir = root / "assets" / "ui" / "probeicons"
+        assets_dir.mkdir(parents=True)
+
+        def decl(sprite_id, rows, palette, derive=None):
+            d = {
+                "id": sprite_id,
+                "file": f"assets/ui/probeicons/{sprite_id}.png",
+                "width": 8, "height": 8,
+                "mode": "string-map", "png": "indexed",
+                "palette": palette, "rows": rows,
+            }
+            if rows is None:
+                del d["rows"]
+            if derive:
+                d["derive"] = derive
+            return d
+
+        def write_manifest(decls):
+            (icons_dir / "probe.json").write_text(
+                json.dumps({"sprites": decls}))
+
+        def render_probe_png(name, rows, palette_map):
+            def px(x, y):
+                ch = rows[y][x]
+                spec = palette_map[ch]
+                if spec == "transparent":
+                    return (0, 0, 0, 0)
+                return (int(spec[1:3], 16), int(spec[3:5], 16),
+                        int(spec[5:7], 16), 255)
+            _g13_write_rgba_png(assets_dir / f"{name}.png", 8, 8, px)
+
+        base_rows = ["........",
+                    ".xxxxxx.",
+                    ".xxxxxx.",
+                    ".xxxxxx.",
+                    ".xxxxxx.",
+                    ".xxxxxx.",
+                    ".xxxxxx.",
+                    "........"]
+        flat = {".": "transparent", "x": _G13_PROBE_GOOD_HEX}
+
+        # Baseline: the unmutated fixture tree validates green.
+        write_manifest([decl("probe_base", base_rows, flat)])
+        render_probe_png("probe_base", base_rows, flat)
+        block = _G13_PROBE_BLOCK
+
+        def baseline_ok():
+            decls = _g13_load_class(icons_dir)
+            _g13_check_manifests("probeicons", icons_dir, decls, block)
+            sprites = {}
+            for sid, (d, _p) in decls.items():
+                sprite = _g13_decode_artifact(d, root / d["file"])
+                _g13_check_pixels("probeicons", sprite, block)
+                sprites[sid] = sprite
+            _g13_check_relations("probeicons", decls, sprites)
+            _g13_check_chrome_seams(sprites)
+        try:
+            baseline_ok()
+            print("PASS g13-probe baseline: the unmutated fixture tree "
+                  "validates green")
+            results.append(True)
+        except CheckFailure as exc:
+            print(f"FAIL g13-probe baseline: fixture tree is already red: "
+                  f"{exc.details}")
+            results.append(False)
+
+        # (1) Off-palette pixel: the artifact carries one hex outside every
+        # §4.8 block while the manifest stays clean — the decoded-pixel
+        # membership check is what must go red.
+        off_rows = [row for row in base_rows]
+        off_rows[3] = ".xxzxxx."
+        off_palette = {".": "transparent", "x": _G13_PROBE_GOOD_HEX,
+                       "z": _G13_PROBE_BAD_HEX}
+        write_manifest([decl("probe_off", base_rows, flat)])
+        render_probe_png("probe_off", off_rows, off_palette)
+        results.append(_g13_expect_failure(
+            "off-palette", "art-palette",
+            lambda: _g13_manifest_then_pixels(icons_dir, block)))
+
+        # (2) Hand-edited artifact (byte-flip probe): a corrupted IDAT must
+        # be rejected at the artifact layer. (The full rebuild-equality
+        # detector is build_ui_art.py --check at the wave gate.)
+        write_manifest([decl("probe_base", base_rows, flat)])
+        good_png = (assets_dir / "probe_base.png").read_bytes()
+        idat_at = good_png.find(b"IDAT")
+        corrupt = bytearray(good_png)
+        corrupt[idat_at + 8 + 4] ^= 0xFF
+        (assets_dir / "probe_base.png").write_bytes(bytes(corrupt))
+        results.append(_g13_expect_failure(
+            "hand-edited-artifact", "art-artifact",
+            lambda: _g13_manifest_then_pixels(icons_dir, block)))
+
+        # (3) Broken transform relation: the derived sprite's artifact is
+        # not mirror_x(base) (derive-only declaration, governor-style — the
+        # artifact-level relation is what must go red).
+        mirror_rows = [row[::-1] for row in base_rows]
+        tampered = [list(r) for r in mirror_rows]
+        tampered[2][6] = "."
+        tampered = ["".join(r) for r in tampered]
+        write_manifest([
+            decl("probe_base", base_rows, flat),
+            decl("probe_derived", None, flat,
+                 derive={"from": "probe_base", "op": "mirror_x"}),
+        ])
+        render_probe_png("probe_base", base_rows, flat)
+        render_probe_png("probe_derived", tampered, flat)
+        results.append(_g13_expect_failure(
+            "broken-transform", "art-transform",
+            lambda: _g13_manifest_then_pixels(icons_dir, block)))
+
+        # (4) Out-of-band footprint: a tier-1 hull 12px long (band 14-18).
+        hull_dir = root / "tools" / "ui_art" / "hulls"
+        hull_dir.mkdir(parents=True)
+        hull_assets = root / "assets" / "ui" / "tokens"
+        hull_assets.mkdir(parents=True)
+        hull_rows = [""] * 32
+        for y in range(32):
+            hull_rows[y] = "." * 32
+        for y in range(10, 22):  # 12px long axis: below the tier-1 band
+            hull_rows[y] = "." * 15 + "xx" + "." * 15
+        hull_decl = {
+            "id": "hull_sloop_player_n",
+            "file": "assets/ui/tokens/hull_sloop_player_n.png",
+            "width": 32, "height": 32,
+            "mode": "string-map", "png": "indexed",
+            "palette": flat, "rows": hull_rows,
+        }
+        (hull_dir / "hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
+        _g13_write_rgba_png(hull_assets / "hull_sloop_player_n.png", 32, 32,
+                            lambda x, y: (
+                                (232, 230, 223, 255)
+                                if 15 <= x < 17 and 10 <= y < 22
+                                else (0, 0, 0, 0)))
+        ship_types = [{"id": "sloop", "tier": 1}]
+
+        def footprint_check():
+            hull_decls = _g13_load_class(hull_dir)
+            _g13_check_manifests("hulls", hull_dir, hull_decls, BLOCK_HULL)
+            sprites = {}
+            for sid, (d, _p) in hull_decls.items():
+                sprite = _g13_decode_artifact(d, root / d["file"])
+                sprites[sid] = sprite
+            _g13_check_footprints(sprites, ship_types)
+        results.append(_g13_expect_failure(
+            "out-of-band-footprint", "hull-footprint", footprint_check))
+
+        # (5) Invalid shore code: a coded hard (land) cell — §6.6 says 0.
+        shore_w = shore_h = 8
+        world_indices = bytearray(shore_w * shore_h)
+        for y in range(shore_h):
+            for x in range(shore_w):
+                world_indices[y * shore_w + x] = 2 if x == 0 else 0  # col 0 land
+        shore_indices = bytearray(shore_w * shore_h)
+        shore_indices[3 * shore_w + 0] = 3  # land cell with a code: invalid
+        world_grid = WorldGrid(shore_w, shore_h, world_indices)
+        shore_path = root / "world_shore.png"
+        shore_path.write_bytes(_encode_indexed_png(
+            shore_w, shore_h, shore_indices, palette_entries=9))
+
+        def shore_check():
+            _g13_check_shore_raster(shore_path, world_grid)
+        results.append(_g13_expect_failure(
+            "invalid-shore-code", "shore-raster", shore_check))
+
+        # (5b) An unknown palette index (9) fails the §6.6 domain too.
+        shore_indices2 = bytearray(shore_w * shore_h)
+        shore_indices2[1 * shore_w + 4] = 9
+        shore_path.write_bytes(_encode_indexed_png(
+            shore_w, shore_h, shore_indices2, palette_entries=10))
+        results.append(_g13_expect_failure(
+            "invalid-shore-index", "shore-raster", shore_check))
+
+        # (6) Seam violation: a chrome edge tile with column 0 != column 15.
+        bad_edge = []
+        for y in range(8):
+            inner = "x" if y in (2, 3) else "."
+            bad_edge.append("z" + "." * 6 + inner)  # col 0 fixed, col 7 varies
+        bad_palette = {".": "transparent", "x": _G13_PROBE_GOOD_HEX,
+                       "z": _G13_PROBE_GOOD_HEX}
+        edge_decl = decl("panel_edge", bad_edge, bad_palette)
+        write_manifest([edge_decl])
+        render_probe_png("panel_edge", bad_edge, bad_palette)
+
+        def seam_check():
+            edge_decls = _g13_load_class(icons_dir)
+            _g13_check_manifests("probeicons", icons_dir, edge_decls, block)
+            sprites = {}
+            for sid, (d, _p) in edge_decls.items():
+                sprite = _g13_decode_artifact(d, root / d["file"])
+                sprites[sid] = sprite
+            _g13_check_chrome_seams(sprites)
+        results.append(_g13_expect_failure(
+            "seam-violation", "art-seam", seam_check))
+
+    if not all(results):
+        fail("g13-probes", "tools/validate_data.py",
+             "negative-probe harness: "
+             f"{results.count(False)} of {len(results)} cases did not go "
+             "red as required (§8.8 probe set)", 13)
+
+
+def _g13_manifest_then_pixels(icons_dir: Path, block: frozenset) -> None:
+    """Manifest checks + artifact checks for the probe fixture class."""
+    decls = _g13_load_class(icons_dir)
+    _g13_check_manifests("probeicons", icons_dir, decls, block)
+    sprites = {}
+    for sid, (d, _p) in decls.items():
+        sprite = _g13_decode_artifact(d, _g13_probe_root(icons_dir) / d["file"])
+        _g13_check_pixels("probeicons", sprite, block)
+        sprites[sid] = sprite
+    _g13_check_relations("probeicons", decls, sprites)
+
+
+def _g13_probe_root(icons_dir: Path) -> Path:
+    return icons_dir.parents[2]  # <tmp>/tools/ui_art/<class> → <tmp>
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -8364,6 +9699,7 @@ def main(argv: list[str]) -> int:
         ("10", check_group10),
         ("11", check_group11),
         ("12", check_group12),
+        ("13", check_group13),
     )
 
     for group_id, check in groups:
