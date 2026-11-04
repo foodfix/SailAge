@@ -35,6 +35,12 @@ extends Control
 ## `gold_changed` / `fleet_changed` so a transaction repaints immediately.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): durability bars render through the kit's value_bar
+## atom (tier via the S6 thresholds below), hull cards reuse the kit frame's
+## padded-panel chrome, equipment rows carry the `eq_{id}` icons through the
+## kit registry (an absent id renders nothing — the flat fallback), and the
+## hand-built panels/buttons retire to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const FleetLib := preload("res://scripts/fleet/fleet.gd")
 const ShipyardLib := preload("res://scripts/port/shipyard_engine.gd")
 const HudLib := preload("res://scenes/ui_shared/hud.gd")
@@ -87,9 +93,9 @@ const SLOT_LABEL_FALLBACKS := {
 
 ## Durability bar geometry (docs/80-* §4.8: 8px base unit).
 const BAR_W := 120.0
-const BAR_H := 8.0
-## Bar colour thresholds, reusing the §4.8 GOOD/WARN/BAD placeholders: a hull
-## above 60% is GOOD, above 25% WARN, anything lower BAD.
+## Bar tier thresholds, reusing the §4.8 GOOD/WARN/BAD placeholders: a hull
+## above 60% is GOOD, above 25% WARN, anything lower BAD (`UiKit.auto_tier`
+## takes the absolute floors derived from these ratios).
 const BAR_GOOD_ABOVE := 0.6
 const BAR_WARN_ABOVE := 0.25
 ## "Nothing to repair" tooltip. New key requested for the next merge; until it
@@ -139,15 +145,11 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the shipyard too.
 	GameOverHostLib.attach_to(self)
-	_title.add_theme_font_size_override("font_size", 32)
-	for label in [_title, _gold_label, _catalog_title, _fleet_title]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
+	# Phase-10 sweep: label colors retire to the shared theme; the catalog and
+	# fleet panels render the themed PanelContainer chrome (the hand-built
+	# boxes are gone; the scene file keeps the 32px title / 20px headings).
 	_back_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_back_button.pressed.connect(go_back)
-	_catalog_title.add_theme_font_size_override("font_size", 20)
-	_fleet_title.add_theme_font_size_override("font_size", 20)
-	_panel_style($Layout/VBox/Body/CatalogPanel)
-	_panel_style($Layout/VBox/Body/FleetPanel)
 
 	# S6 keeps the §4.5 bars but not the sea viewport/minimap (same as S4).
 	_hud.set_minimap_visible(false)
@@ -287,15 +289,14 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 	var card := VBoxContainer.new()
 	card.name = "Catalog_%s" % ship_type_id
 	card.custom_minimum_size.y = float(PaletteLib.ROW_H)
-	card.add_theme_constant_override("separation", 4)
 
 	var row := HBoxContainer.new()
 	row.name = "Top"
-	row.add_theme_constant_override("separation", 12)
 
-	var name_color := PaletteLib.TEXT if state == ShipyardLib.ROW_AVAILABLE \
-		else PaletteLib.PANEL_LINE
-	var name_label := _label(I18n.t(ship_type.get("name", {})), name_color)
+	# §4.7.12 row states: available rows read the theme TEXT; gray rows the
+	# `Dim` variation (the former per-screen PANEL_LINE override).
+	var name_label := _label(I18n.t(ship_type.get("name", {})),
+		state != ShipyardLib.ROW_AVAILABLE)
 	name_label.name = "Name"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.tooltip_text = name_label.text
@@ -303,21 +304,20 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 
 	# 40-* §4.3.1: every row carries its role label (战舰/商船/沿岸 via
 	# `shipyard.role.*`; the raw enum until the keys merge, never "<key>").
-	var role_label := _label(_role_label(ship_type), PaletteLib.PANEL_LINE)
+	var role_label := _label(_role_label(ship_type), true)
 	role_label.name = "Role"
 	role_label.tooltip_text = role_label.text
 	row.add_child(role_label)
 
 	var price := _label(
 		I18n.fmt("shipyard.price", {"price": HudLib.format_thousands(
-			ShipyardLib.buy_price(ship_type_id))}),
-		PaletteLib.ACCENT
+			ShipyardLib.buy_price(ship_type_id))})
 	)
 	price.name = "Price"
 	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(price)
 
-	var buy := _row_button(I18n.t_key("shipyard.buy"))
+	var buy := UiKitLib.button("shipyard.buy", "primary")
 	buy.name = "Buy_%s" % ship_type_id
 	buy.custom_minimum_size.x = 72
 	var reason := ShipyardLib.buy_block_reason(ship_type_id)
@@ -332,14 +332,14 @@ func _add_catalog_row(ship_type: Dictionary) -> void:
 
 	card.add_child(row)
 
-	var stats := _label(_catalog_stats(ship_type), PaletteLib.PANEL_LINE)
+	var stats := _label(_catalog_stats(ship_type), true)
 	stats.name = "Stats"
 	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats.tooltip_text = _catalog_stats(ship_type)
 	card.add_child(stats)
 
 	if state != ShipyardLib.ROW_AVAILABLE:
-		var note := _label(note_text, PaletteLib.WARN)
+		var note := _label(note_text, true)
 		note.name = "Note"
 		note.visible = not note_text.is_empty()
 		card.add_child(note)
@@ -446,25 +446,22 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 		"repair": null, "refit": null, "refit_note": null, "points": null,
 		"preview": null, "cannons": null, "refit_sellback": null, "equip": {}}
 
-	var panel := PanelContainer.new()
+	# Phase-10 sweep: the hull card reuses the kit frame's padded-panel
+	# chrome (titled panel + margin body); the per-card header line stays
+	# hidden — the identity line below is the card's real first row.
+	var panel := UiKitLib.frame("fleet.title")
 	panel.name = "Fleet_%d" % index
-	_panel_style(panel)
-	var margin := MarginContainer.new()
-	margin.name = "Margin"
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, 8)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
+	var frame_box := panel.get_child(0) as VBoxContainer
+	var frame_header := frame_box.get_child(0) as Control
+	frame_header.visible = false
+	var box: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
 	box.name = "Box"
-	box.add_theme_constant_override("separation", 8)
-	margin.add_child(box)
 
 	# --- line 1: identity + promote/sell -----------------------------------
 	var top := HBoxContainer.new()
 	top.name = "Top"
-	top.add_theme_constant_override("separation", 12)
 
-	var name_label := _label(_ship_title(index, ship), PaletteLib.TEXT)
+	var name_label := _label(_ship_title(index, ship))
 	name_label.name = "Name"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(name_label)
@@ -502,18 +499,15 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# --- line 2: durability bar, durability, crew -------------------------
 	var stats_row := HBoxContainer.new()
 	stats_row.name = "Stats"
-	stats_row.add_theme_constant_override("separation", 12)
 
 	var max_durability: int = ShipyardLib.ship_max_durability(index)
 	var durability := int(ship.get("durability", 0))
-	var ratio := float(durability) / float(max_durability) if max_durability > 0 else 0.0
-	stats_row.add_child(_durability_bar(ratio))
+	stats_row.add_child(_durability_bar(durability, max_durability))
 
 	var durability_label := _label(
 		I18n.fmt("shipyard.durability", {
 			"durability": "%d/%d" % [durability, max_durability],
-		}),
-		PaletteLib.TEXT
+		})
 	)
 	durability_label.name = "Durability"
 	durability_label.custom_minimum_size.x = 110
@@ -523,8 +517,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 		I18n.fmt("shipyard.crew_stat", {
 			"crew": int(ship.get("crew", 0)),
 			"max": FleetLib.ship_stat(ship, "crew_max"),
-		}),
-		PaletteLib.PANEL_LINE
+		}), true
 	)
 	crew_label.name = "Crew"
 	crew_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -535,9 +528,8 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# --- line 3: repair picker -------------------------------------------
 	var bottom := HBoxContainer.new()
 	bottom.name = "Actions"
-	bottom.add_theme_constant_override("separation", 8)
 
-	var repair_label := _label(I18n.t_key("shipyard.repair_points"), PaletteLib.TEXT)
+	var repair_label := _label(I18n.t_key("shipyard.repair_points"))
 	repair_label.name = "RepairLabel"
 	bottom.add_child(repair_label)
 
@@ -565,7 +557,7 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	max_button.pressed.connect(_on_points_step_pressed.bind(index, -1))
 	bottom.add_child(max_button)
 
-	var preview := _label("", PaletteLib.PANEL_LINE)
+	var preview := _label("", true)
 	preview.name = "Preview"
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(preview)
@@ -584,10 +576,9 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# shown for the current count. Every number comes from the engine.
 	var refit_row := HBoxContainer.new()
 	refit_row.name = "RefitRow"
-	refit_row.add_theme_constant_override("separation", 8)
 
 	var cannons_label := _label(
-		_fmt_or(CANNONS_LABEL_KEY, {}, CANNONS_LABEL_FALLBACK_KEY), PaletteLib.TEXT
+		_fmt_or(CANNONS_LABEL_KEY, {}, CANNONS_LABEL_FALLBACK_KEY)
 	)
 	cannons_label.name = "CannonsLabel"
 	refit_row.add_child(cannons_label)
@@ -617,13 +608,13 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 
 	# Two notes: live cost preview (left, expands) and the sell-back of the
 	# cannons already aboard (right, fixed), as §4.7.2 asks.
-	var refit_note := _label("", PaletteLib.PANEL_LINE)
+	var refit_note := _label("", true)
 	refit_note.name = "RefitNote_%d" % index
 	refit_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	refit_row.add_child(refit_note)
 	widgets["refit_note"] = refit_note
 
-	var sellback_note := _label("", PaletteLib.PANEL_LINE)
+	var sellback_note := _label("", true)
 	sellback_note.name = "RefitSellback_%d" % index
 	refit_row.add_child(sellback_note)
 	widgets["refit_sellback"] = sellback_note
@@ -636,7 +627,6 @@ func _add_fleet_row(index: int, ship: Dictionary) -> void:
 	# render identically (§4.7.2).
 	var equip_box := VBoxContainer.new()
 	equip_box.name = "EquipRows"
-	equip_box.add_theme_constant_override("separation", 4)
 	widgets["equip"] = {}
 	for slot in ShipyardLib.SHIP_SLOTS:
 		(widgets["equip"] as Dictionary)[slot] = \
@@ -704,10 +694,10 @@ func _refresh_repair(index: int) -> void:
 	preview.text = I18n.fmt("shipyard.repair_cost", {
 		"amount": ShipyardLib.repair_cost(index, requested),
 	})
-	preview.add_theme_color_override(
-		"font_color",
-		PaletteLib.TEXT if reason.is_empty() else PaletteLib.BAD
-	)
+	# The former per-screen TEXT/BAD tints retire to the theme: a legal
+	# request reads TEXT, a refused one the `Dim` variation (the disabled
+	# button and its tooltip carry the reason itself).
+	preview.theme_type_variation = "" if reason.is_empty() else "Dim"
 	repair.disabled = not reason.is_empty()
 	repair.tooltip_text = _reason_text(reason) if not reason.is_empty() \
 		else preview.text
@@ -783,10 +773,8 @@ func _refresh_refit(index: int) -> void:
 	note.text = _fmt_or(CANNONS_COST_KEY, {
 		"amount": ShipyardLib.refit_cost(requested),
 	}, CANNONS_COST_FALLBACK_KEY)
-	note.add_theme_color_override(
-		"font_color",
-		PaletteLib.TEXT if requested > 0 and requested <= cap else PaletteLib.PANEL_LINE
-	)
+	note.theme_type_variation = \
+		"" if requested > 0 and requested <= cap else "Dim"
 	var reason: String = ShipyardLib.refit_block_reason(index, requested)
 	refit.disabled = not reason.is_empty()
 	refit.tooltip_text = _reason_text(reason) if not reason.is_empty() else note.text
@@ -845,21 +833,19 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 	# 1280×720.
 	var card := VBoxContainer.new()
 	card.name = "Equip_%s_%s" % [slot, "player" if ship_index < 0 else str(ship_index)]
-	card.add_theme_constant_override("separation", 2)
 
 	var row := HBoxContainer.new()
 	row.name = "Worn"
-	row.add_theme_constant_override("separation", 8)
 
 	var worn_id := _worn_equipment(slot, ship_index)
-	var heading := _label(_slot_label(slot), PaletteLib.TEXT)
+	var heading := _label(_slot_label(slot))
 	heading.name = "Slot"
 	heading.custom_minimum_size.x = 90
 	row.add_child(heading)
 
 	var worn := _label(
 		_equipment_name(worn_id) if not worn_id.is_empty() else I18n.t_key("ui.empty"),
-		PaletteLib.ACCENT if not worn_id.is_empty() else PaletteLib.PANEL_LINE
+		worn_id.is_empty()
 	)
 	worn.name = "ItemName"
 	worn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -879,7 +865,6 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 
 	var buy_row := HBoxContainer.new()
 	buy_row.name = "Buy"
-	buy_row.add_theme_constant_override("separation", 8)
 	var buttons: Dictionary = {}
 	var port := _port_id()
 	for item in ShipyardLib.equipment_list(slot):
@@ -889,6 +874,11 @@ func _add_equipment_row(parent: Node, slot: String, ship_index: int) -> Dictiona
 			_equipment_name(equipment_id),
 			I18n.fmt("shipyard.price", {"price": HudLib.format_thousands(price)}),
 		])
+		# §4.8 equipment icons (`eq_{id}`) through the kit registry — an
+		# absent id leaves the text-only button (the flat fallback).
+		var icon := UiKitLib.icon_texture("eq_%s" % equipment_id)
+		if icon != null:
+			buy.icon = icon
 		buy.name = "Buy_%s_%s" % [equipment_id,
 			"player" if ship_index < 0 else str(ship_index)]
 		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1108,10 +1098,13 @@ func _fmt_or(key: String, values: Dictionary, fallback_key: String) -> String:
 	return I18n.fmt(fallback_key, values)
 
 
-func _label(text: String, color: Color) -> Label:
+## A row label. `dim = true` carries the theme's `Dim` variation (the
+## secondary-line color); plain labels read the theme TEXT default.
+func _label(text: String, dim: bool = false) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
+	if dim:
+		label.theme_type_variation = "Dim"
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
 
@@ -1123,42 +1116,17 @@ func _row_button(text: String) -> Button:
 	return button
 
 
-## Durability bar placeholder (§4.8: ColorRect only, no textures): a full-width
-## background with a fractional-anchored fill, tier-coloured from the palette.
-func _durability_bar(ratio: float) -> Control:
-	var bar := Control.new()
-	bar.custom_minimum_size = Vector2(BAR_W, BAR_H)
+## Durability through the kit's value_bar atom (§4.9): GOOD above 60%,
+## WARN above 25%, BAD below — the S6 thresholds expressed as absolute
+## `UiKit.auto_tier` floors (strictly-above semantics preserved).
+func _durability_bar(durability: int, max_durability: int) -> Control:
+	var good_floor := int(max_durability * BAR_GOOD_ABOVE) + 1
+	var warn_floor := int(max_durability * BAR_WARN_ABOVE) + 1
+	var tier := UiKitLib.auto_tier(durability, good_floor, warn_floor)
+	var bar := UiKitLib.value_bar(durability, maxi(max_durability, 1), tier)
+	bar.custom_minimum_size = Vector2(BAR_W, 0.0)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-	var background := ColorRect.new()
-	background.color = PaletteLib.PANEL_LINE
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bar.add_child(background)
-
-	var fill := ColorRect.new()
-	fill.color = _bar_color(ratio)
-	fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fill.anchor_right = clampf(ratio, 0.0, 1.0)
-	fill.offset_right = 0.0
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar.add_child(fill)
 	return bar
-
-
-func _bar_color(ratio: float) -> Color:
-	if ratio > BAR_GOOD_ABOVE:
-		return PaletteLib.GOOD
-	if ratio > BAR_WARN_ABOVE:
-		return PaletteLib.WARN
-	return PaletteLib.BAD
-
-
-func _panel_style(panel: PanelContainer) -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1)
-	panel.add_theme_stylebox_override("panel", style)
 
 
 ## Removes and frees every child immediately so a rebuild never shows a mix of

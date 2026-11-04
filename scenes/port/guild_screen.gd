@@ -18,6 +18,10 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): styling retires to the shared theme/kit — buttons
+## come from the kit atom, secondary text from the theme's `Dim` variation,
+## and the private toast from the kit toast atom (§4.7.17 fades).
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const QuestGenLib := preload("res://scripts/quests/quest_gen.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
 const PalaceEngineLib := preload("res://scripts/port/palace_engine.gd")
@@ -60,8 +64,6 @@ signal discovery_reported(block: Dictionary)
 @onready var _reports_heading: Label = $Layout/VBox/Reports/Heading
 @onready var _reports_rows: VBoxContainer = $Layout/VBox/Reports/Scroll/Rows
 @onready var _reports_empty: Label = $Layout/VBox/Reports/Empty
-@onready var _toast: Label = $Layout/VBox/Toast
-@onready var _toast_timer: Timer = $ToastTimer
 
 ## Port id read at open time ("" when launched standalone from the editor).
 var _port_id: String = ""
@@ -76,16 +78,9 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the guild too.
 	GameOverHostLib.attach_to(self)
-	for label in [_title, _gold, _fame, _offers_heading, _offers_hint,
-			_announce, _reports_heading, _toast]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_fame.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_offers_hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_announce.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_title.add_theme_font_size_override("font_size", 32)
-	_toast.visible = false
-	_toast_timer.one_shot = true
-	_toast_timer.timeout.connect(func() -> void: _toast.visible = false)
+	# Phase-10 sweep: label colors retire to the theme — TEXT is the theme's
+	# Label default, secondary lines carry the `Dim` variation.
+	_offers_hint.theme_type_variation = "Dim"
 	# S12 keeps the §4.5 bars but not the sea viewport (docs/80-* §4.5: port
 	# screens replace it with their menu). Without this the 256×192 chart and
 	# its weather/title captions draw over the guild list.
@@ -279,14 +274,11 @@ func _bind_offers() -> void:
 func _build_offer_row(offer: Dictionary, index: int) -> Control:
 	var row := VBoxContainer.new()
 	row.name = "Offer_%d" % index
-	row.add_theme_constant_override("separation", 4)
 
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var tag := _make_label(I18n.t_key(str(TYPE_KEYS.get(
 		str(offer.get("type", "")), "ui.not_available"))), "Tag")
 	tag.custom_minimum_size.x = 96
-	tag.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	top.add_child(tag)
 	var line := _make_label(_objective_text(offer), "Objective")
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -295,20 +287,17 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 		"days": int(offer.get("expiry_days", 0)),
 	}), "Days")
 	days.custom_minimum_size.x = 120
-	days.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	days.theme_type_variation = "Dim"
 	top.add_child(days)
 	row.add_child(top)
 
 	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var reward := _make_label(_reward_text(offer), "Reward")
 	reward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	reward.add_theme_color_override("font_color", PaletteLib.GOOD)
 	bottom.add_child(reward)
 	var reason := QuestGenLib.accept_block_reason(offer)
-	var accept := Button.new()
+	var accept := UiKitLib.button("quest.accept", "primary")
 	accept.name = "Accept"
-	accept.text = I18n.t_key("quest.accept")
 	accept.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 	accept.disabled = not reason.is_empty()
 	if not reason.is_empty():
@@ -316,9 +305,8 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 	accept.pressed.connect(func() -> void: accept_offer(index))
 	bottom.add_child(accept)
 	if str(offer.get("type", "")) == "exploration":
-		var hint := Button.new()
+		var hint := UiKitLib.button("quest.hint")
 		hint.name = "Hint"
-		hint.text = I18n.t_key("quest.hint")
 		hint.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 		hint.disabled = true
 		hint.tooltip_text = I18n.t(_hint_text(offer))
@@ -368,7 +356,6 @@ func _build_report_row(discovery_id: String) -> Control:
 	var discovery: Dictionary = DataLoader.get_discovery(discovery_id)
 	var row := HBoxContainer.new()
 	row.name = "Report_%s" % discovery_id
-	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var name_label := _make_label(I18n.t(discovery.get("name", {})), "Name")
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
@@ -377,11 +364,9 @@ func _build_report_row(discovery_id: String) -> Control:
 		"fame": int(discovery.get("fame", 0)),
 	}), "Reward")
 	reward.custom_minimum_size.x = 240
-	reward.add_theme_color_override("font_color", PaletteLib.GOOD)
 	row.add_child(reward)
-	var button := Button.new()
+	var button := UiKitLib.button("guild.report.action", "primary")
 	button.name = "Report"
-	button.text = I18n.t_key("guild.report.action")
 	button.custom_minimum_size = Vector2(140, PaletteLib.BUTTON_H)
 	button.pressed.connect(func() -> void: report_discovery(discovery_id))
 	row.add_child(button)
@@ -402,7 +387,6 @@ func _make_label(text: String, node_name: String = "") -> Label:
 	label.text = text
 	if not node_name.is_empty():
 		label.name = node_name
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	return label
 
 
@@ -422,13 +406,14 @@ func _clear(container: Node) -> void:
 		child.queue_free()
 
 
+## Transient feedback through the kit toast atom (§4.9/§4.7: bottom-center,
+## max 1 visible, the §4.7.17 fades; the atom owns its own lifecycle, so the
+## scene's retired toast label/timer are no longer touched). Missing keys
+## show nothing so a not-yet-merged key never spams errors.
 func _show_toast(key: String, values: Dictionary = {}) -> void:
 	if not DataLoader.ui_strings.has(key):
 		return
-	_toast.text = I18n.fmt(key, values)
-	_toast.add_theme_color_override("font_color", PaletteLib.GOOD)
-	_toast.visible = true
-	_toast_timer.start(2.5)
+	UiKitLib.toast(self, I18n.fmt(key, values))
 
 
 func _on_locale_changed(_locale: String) -> void:

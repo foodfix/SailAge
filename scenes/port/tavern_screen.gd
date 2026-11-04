@@ -34,6 +34,13 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): sighting/poster/rumor rows carry the §4.8
+## `role_{role}` / `scroll` icons through the kit registry (an absent id
+## renders nothing — the flat fallback; the registry fills at W4-D), morale
+## renders through the kit value_bar atom (§4.8 thresholds), the private
+## toast adopts the kit toast atom, and the hand-built button chrome and
+## per-screen colors retire to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const TavernEngineLib := preload("res://scripts/port/tavern_engine.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const DiscoveryLib := preload("res://scripts/world/discovery.gd")
@@ -63,8 +70,10 @@ const TAB_CREW := "crew"
 const TAB_OFFICERS := "officers"
 const TAB_RUMORS := "rumors"
 
-## How long the transient action toast stays up (docs/80-* §4.7: 2.5s).
-const TOAST_SECONDS := 2.5
+## §4.8 morale tiers for the kit value_bar (docs/80-* §4.8: yellow < 40,
+## red < 20 — the same thresholds `UiKit.auto_tier` takes).
+const MORALE_GOOD_MIN := 40
+const MORALE_WARN_MIN := 20
 
 ## ui_strings keys this screen needs that the shared table does not carry yet
 ## (T4 owns `data/ui_strings.json`; T14 must not edit it). Same zh+en shape as
@@ -149,8 +158,9 @@ signal back_requested
 @onready var _roster: VBoxContainer = \
 	$Layout/VBox/Body/OfficersPanel/RosterScroll/Roster
 @onready var _officer_reason: Label = $Layout/VBox/Body/OfficersPanel/Reason
-@onready var _toast: Label = $Layout/VBox/Toast
-@onready var _toast_timer: Timer = $ToastTimer
+## The morale value_bar next to the crew count (built in `_bind`, the same
+## discipline as the inn's).
+var _morale_bar: ProgressBar = null
 
 ## Currently shown tab ([constant TAB_CREW] / [constant TAB_OFFICERS]).
 var _tab: String = TAB_CREW
@@ -211,27 +221,18 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the tavern too.
 	GameOverHostLib.attach_to(self)
-	for label in [
-		_title, _gold, _crew_count, _morale, _per_head, _reason, _min_note,
-		_roster_header, _officer_reason, _toast, _rumor_price,
-		_rumor_empty, _rumor_tournament,
-	]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_per_head.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_rumor_price.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_min_note.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_rumor_empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_title.add_theme_font_size_override("font_size", 32)
-	_toast.visible = false
-	_toast_timer.timeout.connect(_on_toast_timeout)
-	_toast_timer.one_shot = true
+	# Phase-10 sweep: label colors retire to the shared theme (TEXT is the
+	# theme's Label default; secondary notes carry the `Dim` variation), the
+	# tab buttons and row buttons render the themed states (the hand-built
+	# chrome is gone), and the scene file keeps the 32px title / headings.
+	_min_note.theme_type_variation = "Dim"
+	_rumor_empty.theme_type_variation = "Dim"
 
 	for button in [
 		_back_button, _crew_tab, _officers_tab, _rumors_tab, _hire_1, _hire_10,
 		_fill, _fire_1, _fire_10, _down_to_min,
 	]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
-		_style_button(button)
 
 	_back_button.pressed.connect(go_back)
 	_crew_tab.pressed.connect(select_tab.bind(TAB_CREW))
@@ -402,16 +403,12 @@ func _bind_header() -> void:
 	_crew_tab.text = I18n.t_key("tavern.crew_tab")
 	_officers_tab.text = I18n.t_key("tavern.officers_tab")
 	_rumors_tab.text = I18n.t_key("tavern.rumor_tab")
-	# Active tab is accent-colored and held down; the inactive one stays
-	# neutral (toggle buttons, so only one reads as "current").
+	# Active tab: the toggle's pressed state (the theme's unified pressed
+	# stylebox) marks the current tab — the former per-screen ACCENT tint
+	# retires with the sweep.
 	for pair in [[TAB_CREW, _crew_tab], [TAB_OFFICERS, _officers_tab],
 			[TAB_RUMORS, _rumors_tab]]:
-		var active: bool = _tab == str(pair[0])
-		var button: Button = pair[1]
-		button.button_pressed = active
-		button.add_theme_color_override(
-			"font_color", PaletteLib.ACCENT if active else PaletteLib.TEXT
-		)
+		(pair[1] as Button).button_pressed = _tab == str(pair[0])
 
 
 # --- Crew tab (docs/30-* §4.5) --------------------------------------------
@@ -427,9 +424,9 @@ func _bind_crew() -> void:
 		I18n.fmt("world.morale", {"amount": GameState.morale}),
 		I18n.t_key("world.morale.%s" % HudLib.morale_tier(GameState.morale)),
 	]
-	_morale.add_theme_color_override(
-		"font_color", HudLib.morale_color(GameState.morale)
-	)
+	# The tier color rides the kit value_bar (§4.8 morale thresholds); the
+	# label itself stays on the theme's TEXT.
+	_refresh_morale_bar()
 	_per_head.text = I18n.fmt(
 		"tavern.per_head", {"price": TavernEngineLib.per_head()}
 	)
@@ -527,7 +524,6 @@ func _build_recruitable_row(officer_id: String) -> Control:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	var row := HBoxContainer.new()
 	row.name = "Officer_%s" % officer_id
-	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
 
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -537,7 +533,7 @@ func _build_recruitable_row(officer_id: String) -> Control:
 		I18n.t_key(role_key),
 		I18n.fmt("tavern.wage", {"price": int(officer.get("wage_daily", 0))}),
 	], "Role")
-	subtitle.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	subtitle.theme_type_variation = "Dim"
 	info.add_child(subtitle)
 	var stats: Dictionary = officer.get("stats", {})
 	info.add_child(_make_label(I18n.fmt("tavern.stats", {
@@ -549,7 +545,7 @@ func _build_recruitable_row(officer_id: String) -> Control:
 	var bio := _make_label(I18n.t(officer.get("bio", {})), "Bio")
 	bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bio.custom_minimum_size.x = 560
-	bio.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	bio.theme_type_variation = "Dim"
 	info.add_child(bio)
 	row.add_child(info)
 
@@ -559,13 +555,9 @@ func _build_recruitable_row(officer_id: String) -> Control:
 		"tavern.signing_cost",
 		{"amount": CharacterLib.recruit_cost(officer_id)},
 	), "Cost")
-	cost.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	action.add_child(cost)
-	var button := Button.new()
+	var button := UiKitLib.button("tavern.recruit")
 	button.name = "Recruit"
-	button.text = I18n.t_key("tavern.recruit")
-	button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_style_button(button)
 	button.disabled = not CharacterLib.can_recruit(officer_id)
 	if button.disabled:
 		if CharacterLib.officer_count() >= CharacterLib.OFFICER_MAX:
@@ -581,11 +573,8 @@ func _build_recruitable_row(officer_id: String) -> Control:
 	# §4.12.1 (W6-A): the recruit dialog — the §4.12 officer card view (the
 	# officer entry); the signing itself stays on the row's Recruit button,
 	# the dialog re-offers the same shared recruit path.
-	var card_button := Button.new()
+	var card_button := UiKitLib.button("interact.verb.inspect")
 	card_button.name = "Card"
-	card_button.text = I18n.t_key("interact.verb.inspect")
-	card_button.custom_minimum_size.y = PaletteLib.BUTTON_H
-	_style_button(card_button)
 	card_button.pressed.connect(open_recruit_dialog.bind(officer_id))
 	action.add_child(card_button)
 	row.add_child(action)
@@ -638,7 +627,6 @@ func _build_roster_row(officer_id: String) -> Control:
 	var officer: Dictionary = DataLoader.get_officer(officer_id)
 	var row := HBoxContainer.new()
 	row.name = "Employed_%s" % officer_id
-	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
 
 	var name_label := _make_label(I18n.t(officer.get("name", {})), "Name")
 	name_label.custom_minimum_size.x = 260
@@ -646,7 +634,7 @@ func _build_roster_row(officer_id: String) -> Control:
 	var role_key := str(ROLE_KEYS.get(str(officer.get("role", "")), "char.none"))
 	var role_label := _make_label(I18n.t_key(role_key), "Role")
 	role_label.custom_minimum_size.x = 120
-	role_label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	role_label.theme_type_variation = "Dim"
 	row.add_child(role_label)
 	var wage := _make_label(I18n.fmt(
 		"tavern.wage", {"price": int(officer.get("wage_daily", 0))}
@@ -654,11 +642,9 @@ func _build_roster_row(officer_id: String) -> Control:
 	wage.custom_minimum_size.x = 160
 	row.add_child(wage)
 
-	var button := Button.new()
+	var button := UiKitLib.button("tavern.dismiss", "danger")
 	button.name = "Dismiss"
-	button.text = I18n.t_key("tavern.dismiss")
 	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
-	_style_button(button)
 	button.pressed.connect(dismiss_officer.bind(officer_id))
 	row.add_child(button)
 	return row
@@ -692,7 +678,6 @@ func _bind_rumors() -> void:
 	var blocked := str(tournament_status.get("blocked", ""))
 	if blocked == "tournament.not_host" or blocked == "tournament.closed":
 		_rumor_tournament.text += " — %s" % I18n.t_key(blocked)
-	_rumor_tournament.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_rumor_price.text = I18n.fmt(
 		"tavern.rumor.price", {"gold": DiscoveryLib.HINT_PRICE}
 	)
@@ -734,7 +719,6 @@ func _bind_aliveness_rows() -> void:
 	if not captains.is_empty() or not NpcIntelLib.gone_ashore(_port_id).is_empty():
 		var header := _make_label(_t_key("captain.section.tavern"),
 			"CaptainsHeader")
-		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 		_rumor_rows.add_child(header)
 		for entry in captains:
 			var row_text := "%s · %s" % [str(entry.get("name", "")),
@@ -753,7 +737,7 @@ func _bind_aliveness_rows() -> void:
 				{"name": str(entry.get("name", ""))})
 			_rumor_texts.append(ashore)
 			var label := _make_label(ashore, "CaptainAshore")
-			label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+			label.theme_type_variation = "Dim"
 			_rumor_rows.add_child(label)
 	# Wanted posters within Chebyshev 40 (§4.7.8) — each row carries its own
 	# `captain.poster.title` line, so no extra section header is invented.
@@ -791,24 +775,29 @@ func _rumor_text(row: Dictionary) -> String:
 	return ""
 
 
-## One wanted poster (§4.7.8): title (name + tier), last-known position hint,
-## reward hint, and the one "buy a round — 20g" reveal action.
+## One wanted poster (§4.7.8): title (name + tier) with the captain's §4.8
+## role badge, last-known position hint, reward hint, and the one
+## "buy a round — 20g" reveal action.
 func _build_poster_row(poster: Dictionary) -> Control:
 	var id := str(poster.get("id", ""))
 	var row := VBoxContainer.new()
 	row.name = "Poster_%s" % id
-	row.add_theme_constant_override("separation", 2)
 
+	var title_row := HBoxContainer.new()
+	title_row.name = "TitleRow"
+	# §4.8 role badge (the poster payload carries no role — resolve it from
+	# the canon card; an unknown captain renders the flat fallback: no icon).
+	var canon: Dictionary = CaptainsLib.captain(str(poster.get("captain_id", "")))
+	_attach_role_badge(title_row, str(canon.get("role", "")))
 	var title := _make_label(I18n.fmt("captain.poster.title", {
 		"name": str(poster.get("name", "")),
 		"tier": int(poster.get("tier", 1)),
 	}), "Title")
-	title.add_theme_color_override("font_color", PaletteLib.BAD)
-	row.add_child(title)
+	title_row.add_child(title)
+	row.add_child(title_row)
 
 	var bottom := HBoxContainer.new()
 	bottom.name = "Bottom"
-	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var hint := _make_label("%s · %s" % [
 		I18n.fmt("captain.poster.hint", {
 			"port": str(poster.get("nearest_port_name", ""))}),
@@ -816,14 +805,12 @@ func _build_poster_row(poster: Dictionary) -> Control:
 			"gold": int(poster.get("reward_gold", 0))}),
 	], "Hint")
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hint.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	hint.theme_type_variation = "Dim"
 	bottom.add_child(hint)
 
-	var button := Button.new()
+	var button := UiKitLib.button("captain.reveal.buy")
 	button.name = "Reveal"
-	button.text = I18n.t_key("captain.reveal.buy")
 	button.custom_minimum_size = Vector2(220, PaletteLib.BUTTON_H)
-	_style_button(button)
 	if _revealed.has(id):
 		# §4.7.8: one action per poster — the position is already known.
 		button.disabled = true
@@ -870,7 +857,6 @@ func _bind_investment_row(row: Dictionary) -> void:
 	if _invest_rows.is_empty():
 		var header := _make_label(I18n.t_key("tavern.invest.header"),
 			"InvestHeader")
-		header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 		_rumor_rows.add_child(header)
 	var text := I18n.fmt("tavern.invest.row", {
 		"nation": str(row.get("nation_name", "-")),
@@ -910,24 +896,23 @@ func rumor_texts() -> Array:
 
 # --- Phase-8 W5-C: row verbs, the captains' table, sparring (§4.11) ---------
 
-## One tavern sighting row as an interactive HBox: the §4.7.8 text plus the
-## 交好 befriend verb (stance +1, once per captain per port-visit day — the
-## hail rule). Disabled rows gray-render with their `hail.befriend.used` term.
+## One tavern sighting row as an interactive HBox: the §4.7.8 text with the
+## captain's §4.8 role badge plus the 交好 befriend verb (stance +1, once per
+## captain per port-visit day — the hail rule). Disabled rows gray-render
+## with their `hail.befriend.used` term.
 func _build_captain_row(row: Dictionary, row_text: String) -> Control:
 	var box := HBoxContainer.new()
 	box.name = "Captain_%s" % str(row["id"])
-	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	_attach_role_badge(box, str(row.get("role", "")))
 
 	var text := _make_label(row_text, "Text")
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(text)
 
-	var button := Button.new()
+	var button := UiKitLib.button("hail.option.befriend")
 	button.name = "Befriend"
-	button.text = I18n.t_key("hail.option.befriend")
 	button.tooltip_text = I18n.t_key("hail.befriend.terms")
 	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
-	_style_button(button)
 	var captain_id := str(row.get("captain_id", ""))
 	if not TavernEngineLib.can_befriend(captain_id, _port_id):
 		button.disabled = true
@@ -956,10 +941,8 @@ func _build_table_and_spar_sections() -> void:
 	var scroll: Control = $Layout/VBox/Body/RumorsPanel/Scroll
 	_table_box = VBoxContainer.new()
 	_table_box.name = "CaptainsTable"
-	_table_box.add_theme_constant_override("separation", 4)
 	_spar_box = VBoxContainer.new()
 	_spar_box.name = "SparRow"
-	_spar_box.add_theme_constant_override("separation", 4)
 	panel.add_child(_table_box)
 	panel.add_child(_spar_box)
 	panel.move_child(_table_box, scroll.get_index() + 1)
@@ -1014,23 +997,23 @@ func _bind_table() -> void:
 	_table_rows = []
 	last_inspect_text = ""
 	var header := _make_label(I18n.t_key("captain.table.title"), "TableHeader")
-	header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_table_box.add_child(header)
 	_table_rows = _port_sighting_rows()
 	if _table_rows.is_empty():
 		var empty := _make_label(I18n.t_key("captain.table.empty"), "Empty")
-		empty.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+		empty.theme_type_variation = "Dim"
 		_table_box.add_child(empty)
 		return
 	for row in _table_rows:
 		_table_box.add_child(_build_table_row(row))
 
 
-## One captains'-table row: the index text plus the inspect verb.
+## One captains'-table row: the §4.8 role badge, the index text and the
+## inspect verb.
 func _build_table_row(row: Dictionary) -> Control:
 	var box := HBoxContainer.new()
 	box.name = "TableRow_%s" % str(row["captain_id"])
-	box.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	_attach_role_badge(box, str(row.get("role", "")))
 
 	var facility_key := "port.%s" % str(row.get("facility", ""))
 	var facility_name := I18n.t_key(facility_key)
@@ -1046,11 +1029,9 @@ func _build_table_row(row: Dictionary) -> Control:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 
-	var button := Button.new()
+	var button := UiKitLib.button("interact.verb.inspect")
 	button.name = "Inspect"
-	button.text = I18n.t_key("interact.verb.inspect")
 	button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
-	_style_button(button)
 	button.pressed.connect(func() -> void: inspect_captain(
 		str(row.get("captain_id", ""))))
 	box.add_child(button)
@@ -1074,7 +1055,6 @@ func inspect_captain(captain_id: String) -> String:
 	# The summary rides under the rows as the placeholder detail line.
 	if _table_box != null:
 		var detail := _make_label(summary, "InspectSummary")
-		detail.add_theme_color_override("font_color", PaletteLib.ACCENT)
 		_table_box.add_child(detail)
 	return summary
 
@@ -1129,9 +1109,6 @@ func _append_spar_result(result: Dictionary) -> void:
 	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
 		if bool(result.get("won", false)) else int(result.get("stake", 0))
 	var line := _make_label(_fmt(key, {"gold": gold}), "SparResult")
-	line.add_theme_color_override(
-		"font_color", PaletteLib.GOOD if bool(result.get("won", false))
-		else PaletteLib.WARN)
 	_spar_box.add_child(line)
 
 
@@ -1143,7 +1120,6 @@ func _bind_spar() -> void:
 		return
 	_clear(_spar_box)
 	var header := _make_label(_t_key("tavern.spar.title"), "SparHeader")
-	header.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	_spar_box.add_child(header)
 
 	var chance := TavernEngineLib.spar_win_chance(
@@ -1157,19 +1133,16 @@ func _bind_spar() -> void:
 
 	var row := HBoxContainer.new()
 	row.name = "SparControls"
-	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
 	var down := Button.new()
 	down.name = "StakeDown"
 	down.text = "−"
 	down.custom_minimum_size = Vector2(56, PaletteLib.BUTTON_H)
-	_style_button(down)
 	down.pressed.connect(spar_stake_step.bind(-1))
 	row.add_child(down)
 	var up := Button.new()
 	up.name = "StakeUp"
 	up.text = "+"
 	up.custom_minimum_size = Vector2(56, PaletteLib.BUTTON_H)
-	_style_button(up)
 	up.pressed.connect(spar_stake_step.bind(1))
 	row.add_child(up)
 	var bet := Button.new()
@@ -1180,7 +1153,6 @@ func _bind_spar() -> void:
 		"pct": int(round(chance * 100.0)),
 	})
 	bet.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
-	_style_button(bet)
 	if not TavernEngineLib.can_spar(_spar_stake):
 		bet.disabled = true
 		bet.tooltip_text = I18n.t_key("captain.reveal.no_gold")
@@ -1200,7 +1172,6 @@ func _build_rumor_row(discovery_id: String) -> Control:
 	var hinted := DiscoveryLib.is_hinted(discovery_id)
 	var row := VBoxContainer.new()
 	row.name = "Rumor_%s" % discovery_id
-	row.add_theme_constant_override("separation", 4)
 
 	var hint := _make_label(I18n.t(DiscoveryLib.hint_text(discovery_id)), "Hint")
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1208,22 +1179,21 @@ func _build_rumor_row(discovery_id: String) -> Control:
 
 	var bottom := HBoxContainer.new()
 	bottom.name = "Bottom"
-	bottom.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	# The §4.8 `scroll` icon marks the purchasable rumor (a natural slot at
+	# the row's head; an absent id renders nothing — the flat fallback).
+	_attach_scroll_badge(bottom)
 	# The 100g buys the *location*: the name appears only once hinted
 	# (docs/80-* §4.7.3).
 	var name_label := _make_label(
 		I18n.t(discovery.get("name", {})) if hinted else "?", "Name"
 	)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_label.add_theme_color_override(
-		"font_color", PaletteLib.ACCENT if hinted else PaletteLib.PANEL_LINE
-	)
+	name_label.theme_type_variation = "" if hinted else "Dim"
 	bottom.add_child(name_label)
 
-	var button := Button.new()
+	var button := UiKitLib.button("tavern.rumor.buy")
 	button.name = "Buy"
 	button.custom_minimum_size = Vector2(200, PaletteLib.BUTTON_H)
-	_style_button(button)
 	button.tooltip_text = I18n.fmt(
 		"tavern.rumor.price", {"gold": DiscoveryLib.HINT_PRICE}
 	)
@@ -1231,15 +1201,47 @@ func _build_rumor_row(discovery_id: String) -> Control:
 		button.text = I18n.t_key("tavern.rumor.bought")
 		button.disabled = true
 	elif GameState.gold < DiscoveryLib.HINT_PRICE:
-		button.text = I18n.t_key("tavern.rumor.buy")
 		button.disabled = true
 		button.tooltip_text = I18n.t_key("tavern.rumor.no_gold")
 	else:
-		button.text = I18n.t_key("tavern.rumor.buy")
 		button.pressed.connect(func() -> void: buy_rumor(discovery_id))
 	bottom.add_child(button)
 	row.add_child(bottom)
 	return row
+
+
+## Prepends the §4.8 `scroll` icon to a rumor row head; an absent id adds
+## nothing (the flat fallback — the registry fills at W4-D).
+func _attach_scroll_badge(row: HBoxContainer) -> void:
+	var texture := UiKitLib.icon_texture("scroll")
+	if texture == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "ScrollBadge"
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row.add_child(icon)
+	row.move_child(icon, 0)
+
+
+## Prepends the §4.8 `role_{role}` badge to a sighting/poster row; an absent
+## id or an unknown role adds nothing (the flat fallback).
+func _attach_role_badge(row: HBoxContainer, role: String) -> void:
+	if role.is_empty():
+		return
+	var texture := UiKitLib.icon_texture("role_%s" % role)
+	if texture == null:
+		return
+	var icon := TextureRect.new()
+	icon.name = "RoleBadge"
+	icon.texture = texture
+	icon.custom_minimum_size = Vector2(32, 32)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row.add_child(icon)
+	row.move_child(icon, 0)
 
 
 # --- Button handlers -------------------------------------------------------
@@ -1306,7 +1308,6 @@ func _make_label(text: String, node_name: String = "") -> Label:
 	label.text = text
 	if not node_name.is_empty():
 		label.name = node_name
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	return label
 
 
@@ -1316,36 +1317,28 @@ func _clear(container: Node) -> void:
 		child.queue_free()
 
 
-func _style_button(button: Button) -> void:
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = PaletteLib.PANEL_BG
-	normal.border_color = PaletteLib.PANEL_LINE
-	normal.set_border_width_all(2)
-	normal.set_content_margin_all(PaletteLib.BASE_UNIT)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.border_color = PaletteLib.ACCENT
-	var pressed := normal.duplicate() as StyleBoxFlat
-	pressed.bg_color = PaletteLib.ACCENT
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("focus", hover)
-	button.add_theme_stylebox_override("pressed", pressed)
+## Re-tiered kit value_bar beside the morale line (§4.9: the atom bakes the
+## tier into its fill at build time, so a changed morale rebuilds it).
+func _refresh_morale_bar() -> void:
+	var parent := _morale.get_parent()
+	if _morale_bar != null and is_instance_valid(_morale_bar):
+		parent.remove_child(_morale_bar)
+		_morale_bar.queue_free()
+	var tier := UiKitLib.auto_tier(GameState.morale, MORALE_GOOD_MIN,
+		MORALE_WARN_MIN)
+	_morale_bar = UiKitLib.value_bar(GameState.morale, 100, tier)
+	parent.add_child(_morale_bar)
+	parent.move_child(_morale_bar, _morale.get_index() + 1)
 
 
-## Transient action feedback (docs/80-* §4.7). Missing keys show nothing so a
-## not-yet-merged key never spams errors. Uses a one-shot Timer child rather
-## than a coroutine so a scene freed mid-toast cannot resume on a dead node.
+## Transient action feedback (docs/80-* §4.7) through the kit toast atom
+## (§4.9/§4.7.17: bottom-center, max 1 visible, the pinned fades; the atom
+## owns its lifecycle). Missing keys show nothing so a not-yet-merged key
+## never spams errors.
 func _show_toast(key: String, values: Dictionary = {}) -> void:
 	if not DataLoader.ui_strings.has(key):
 		return
-	_toast.text = I18n.fmt(key, values)
-	_toast.add_theme_color_override("font_color", PaletteLib.GOOD)
-	_toast.visible = true
-	_toast_timer.start(TOAST_SECONDS)
-
-
-func _on_toast_timeout() -> void:
-	_toast.visible = false
+	UiKitLib.toast(self, I18n.fmt(key, values))
 
 
 func _on_gold_changed(_new_gold: int) -> void:
@@ -1387,6 +1380,7 @@ class RecruitDialog:
 	# script's consts — the preloads are re-declared here (the cold class
 	# cache stays harmless: the preloads win over `Palette`/`Character`).
 	const PaletteLib := preload("res://scripts/palette.gd")
+	const UiKitLib := preload("res://scripts/ui_kit.gd")
 	const CharacterLib := preload("res://scripts/player/character.gd")
 	const CardLib := preload("res://scenes/ui/character_card.gd")
 
@@ -1409,28 +1403,17 @@ class RecruitDialog:
 		var center := CenterContainer.new()
 		center.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(center)
-		var panel := PanelContainer.new()
+		# Phase-10 sweep: the dialog reuses the kit frame's chrome (titled
+		# panel + margin body); the frame's header label doubles as the
+		# officer-name title (its text is bound in [method open]).
+		var panel := UiKitLib.frame("tavern.crew_tab")
 		panel.custom_minimum_size = Vector2(520, 0)
-		var style := StyleBoxFlat.new()
-		style.bg_color = PaletteLib.PANEL_BG
-		style.border_color = PaletteLib.PANEL_LINE
-		style.set_border_width_all(2)
-		panel.add_theme_stylebox_override("panel", style)
 		center.add_child(panel)
-		var margin := MarginContainer.new()
-		for side in ["margin_left", "margin_top", "margin_right",
-				"margin_bottom"]:
-			margin.add_theme_constant_override(side, PaletteLib.MARGIN)
-		panel.add_child(margin)
-		var body := VBoxContainer.new()
-		body.name = "Body"
-		body.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-		margin.add_child(body)
-		_title = Label.new()
+		var frame_box := panel.get_child(0) as VBoxContainer
+		_title = frame_box.get_child(0) as Label
 		_title.name = "Title"
-		_title.add_theme_font_size_override("font_size", 20)
-		_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-		body.add_child(_title)
+		var body: VBoxContainer = panel.get_meta(UiKitLib.META_BODY)
+		body.name = "Body"
 		var scroll := ScrollContainer.new()
 		scroll.custom_minimum_size = Vector2(0, 380)
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1439,22 +1422,15 @@ class RecruitDialog:
 		_card = (load(CardLib.SCENE_PATH) as PackedScene).instantiate()
 		_card.name = "Card"
 		scroll.add_child(_card)
-		var footer := HBoxContainer.new()
-		footer.alignment = BoxContainer.ALIGNMENT_END
-		footer.add_theme_constant_override("separation", PaletteLib.MARGIN)
-		body.add_child(footer)
-		_recruit = Button.new()
+		_recruit = UiKitLib.button("tavern.recruit")
 		_recruit.name = "Recruit"
-		_recruit.text = I18n.t_key("tavern.recruit")
 		_recruit.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H)
 		_recruit.pressed.connect(_on_recruit_pressed)
-		footer.add_child(_recruit)
-		_close = Button.new()
+		_close = UiKitLib.button("ui.close", "quiet")
 		_close.name = "Close"
-		_close.text = I18n.t_key("ui.close")
 		_close.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 		_close.pressed.connect(close)
-		footer.add_child(_close)
+		body.add_child(UiKitLib.footer([_recruit, _close]))
 
 	## Opens on `officer_id`, rendering the §4.12 officer card.
 	func open(officer_id: String) -> void:

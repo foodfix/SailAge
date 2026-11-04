@@ -38,6 +38,11 @@ extends Control
 ## the scene also runs before the editor has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 sweep (§4.9): the §4.8.1 facility cards carry the generated
+## `facility_{id}` token icons through the kit's texture registry (an absent
+## id renders nothing — the flat fallback; the registry fills at W4-D), and
+## label colors retire to the shared theme.
+const UiKitLib := preload("res://scripts/ui_kit.gd")
 const BountyLib := preload("res://scripts/quests/bounty.gd")
 ## The sailing gate + days-of-supply formula live in the sim (`20-*` §4.10,
 ## §4.11.2); S4 only asks.
@@ -97,8 +102,6 @@ const FACILITY_STUB_KEY := "port.stub.phase3"
 ## the same two-column, left-aligned grid slot, whatever its open/closed
 ## state — the state lives in the card's status line + disabled flag only.
 const FACILITY_CARD_SIZE := Vector2(320, 64)
-## The status line's font size (docs/80-* §4.8.1).
-const FACILITY_STATUS_FONT_SIZE := 12
 
 ## Emitted when a facility row (or anything else) asks for a facility screen;
 ## [method open_facility] emits it before deciding, so a test or a future stub
@@ -155,12 +158,13 @@ func _ready() -> void:
 	# Full-scene S9 (80-* §4.2 amendment, 2026-11-02): a run can die on any
 	# ledger tick ashore — the game-over screen must rise over the hub too.
 	GameOverHostLib.attach_to(self)
-	for label in [_port_name, _nation_name, _greeting, _day_greeting, _facility_heading]:
-		label.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_greeting.add_theme_color_override("font_color", PaletteLib.ACCENT)
-	_day_greeting.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_facility_heading.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_port_name.add_theme_font_size_override("font_size", 32)
+	# Phase-10 sweep: label colors retire to the shared theme — TEXT is the
+	# theme's Label default; the two secondary banner lines carry the `Dim`
+	# variation (the former per-screen PANEL_LINE overrides). The greeting's
+	# former per-screen ACCENT tint retires with the rest (no theme atom
+	# expresses it; flagged in the W4-A sweep report for master adjudication).
+	_day_greeting.theme_type_variation = "Dim"
+	_facility_heading.theme_type_variation = "Dim"
 	_set_sail_button.custom_minimum_size.y = PaletteLib.BUTTON_H
 	_set_sail_button.pressed.connect(_on_set_sail_pressed)
 	# Amended 2026-11-03 (docs/80-* §4.6.2/§4.5): the footer `Fleet ·
@@ -316,10 +320,13 @@ func add_facility_row(facility_id: String, text_key: String, enabled: bool = tru
 
 ## A facility card Button (docs/80-* §4.8.1), not yet parented: a 320×64
 ## Button whose surface is covered by a mouse-transparent, centered VBox
-## holding the facility-name label over the 12px status line (Godot Button
-## text is single-line, so the two lines live in child labels, referenced
-## through the button's `name_label`/`status_label` metas). Name/status text
-## and colors are applied by [method _apply_card_labels].
+## holding the §4.8.1 facility-token icon beside the facility-name label over
+## the status line (Godot Button text is single-line, so the lines live in
+## child labels, referenced through the button's `name_label`/`status_label`
+## metas). The token icon rides the kit registry (`facility_{id}`); an absent
+## id renders nothing and the card keeps its §4.8.1 two-line layout — the
+## flat fallback, no crash. Name/status texts are applied by
+## [method _apply_card_labels].
 func _make_facility_button(facility_id: String, text_key: String,
 		enabled: bool) -> Button:
 	var button := Button.new()
@@ -339,19 +346,32 @@ func _make_facility_button(facility_id: String, text_key: String,
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	card.alignment = BoxContainer.ALIGNMENT_CENTER
-	card.add_theme_constant_override("separation", 2)
 	button.add_child(card)
+	# The name row: the generated facility token (32px, scaled into the
+	# 320×64 card) beside the name label — mouse-transparent like the rest.
+	var name_row := HBoxContainer.new()
+	name_row.name = "NameRow"
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	card.add_child(name_row)
+	var token := UiKitLib.icon_texture("facility_%s" % facility_id)
+	if token != null:
+		var icon := TextureRect.new()
+		icon.name = "Token"
+		icon.texture = token
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon.custom_minimum_size = Vector2(32, 32)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		name_row.add_child(icon)
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(name_label)
+	name_row.add_child(name_label)
 	var status_label := Label.new()
 	status_label.name = "Status"
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size",
-		FACILITY_STATUS_FONT_SIZE)
 	card.add_child(status_label)
 	button.set_meta("name_label", name_label)
 	button.set_meta("status_label", status_label)
@@ -726,7 +746,6 @@ func _sync_facility_rows(port: Dictionary) -> void:
 		if pair == null or pair.get_child_count() >= 2:
 			pair = HBoxContainer.new()
 			pair.name = "Pair_%d" % _facility_rows.get_child_count()
-			pair.add_theme_constant_override("separation", 8)
 			_facility_rows.add_child(pair)
 		pair.add_child(button)
 		button.set_meta("status_key", status_key)
@@ -764,11 +783,12 @@ func _status_text(status_key: String, facility_id: String) -> String:
 	return I18n.t_key(status_key)
 
 
-## Applies the §4.8.1 card labels for `button`: the facility name (`TEXT`
-## when enabled, `PANEL_LINE` when disabled) over the status line (`GOOD`
-## for the open-now key, `PANEL_LINE` otherwise). Used by the card build and
-## every locale rebind; the labels and keys are read from the button's own
-## metas so any card (including extension-point rows) rebinds.
+## Applies the §4.8.1 card labels for `button`: the facility name (theme
+## TEXT when enabled, the `Dim` variation when disabled) over the status
+## line (the former per-screen GOOD/PANEL_LINE tints retire to the theme —
+## open keeps TEXT, every closed/stub state dims). Used by the card build
+## and every locale rebind; the labels and keys are read from the button's
+## own metas so any card (including extension-point rows) rebinds.
 func _apply_card_labels(button: Button) -> void:
 	var name_label := button.get_meta("name_label") as Label
 	var status_label := button.get_meta("status_label") as Label
@@ -777,12 +797,10 @@ func _apply_card_labels(button: Button) -> void:
 	var status_key := str(button.get_meta("status_key", FACILITY_STUB_KEY))
 	var facility_id := str(button.get_meta("facility_id"))
 	name_label.text = I18n.t_key(str(button.get_meta("text_key")))
-	name_label.add_theme_color_override("font_color",
-		PaletteLib.TEXT if not button.disabled else PaletteLib.PANEL_LINE)
+	name_label.theme_type_variation = "" if not button.disabled else "Dim"
 	status_label.text = _status_text(status_key, facility_id)
-	status_label.add_theme_color_override("font_color",
-		PaletteLib.GOOD if status_key == "port.facility.open_now"
-		else PaletteLib.PANEL_LINE)
+	status_label.theme_type_variation = \
+		"" if status_key == "port.facility.open_now" else "Dim"
 
 
 ## Re-labels every rendered card from its stored keys, keeping the status
