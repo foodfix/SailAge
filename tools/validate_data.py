@@ -8338,8 +8338,8 @@ BLOCK_ICON = frozenset({
 # are NO LONGER allowed in shipped hull pixels.
 BLOCK_HULL = frozenset({
     "#101010", "#8f6d3a", "#7a5c2e", "#5e4720", "#f7f5ee", "#e8e6df",
-    "#c2beb2", "#d9a441", "#1a8c4e", "#b3191f", "#274b8f", "#d97b1e",
-    "#6a3d9a", "#c9a227", "#9a9a9a", "#b3341f",
+    "#c2beb2", "#a8a496", "#9a6a3a", "#d9a441", "#1a8c4e", "#b3191f",
+    "#274b8f", "#d97b1e", "#6a3d9a", "#c9a227", "#9a9a9a", "#b3341f",
 })
 BLOCK_FX = frozenset({
     "#26262c", "#8a929c", "#c6ccd4", "#555c66", "#dff0f4", "#9fc4d4",

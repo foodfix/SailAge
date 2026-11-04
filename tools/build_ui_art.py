@@ -116,6 +116,8 @@ WOOD_LO = "#5e4720"           # WOOD_LO — shared wood shadow (owner-invariant)
 SAIL_HI = "#f7f5ee"           # SAIL_HI
 SAIL = "#e8e6df"              # SAIL (= TEXT)
 SAIL_LO = "#c2beb2"           # SAIL_LO
+SAIL_SH = "#a8a496"           # SAIL_SH — the billow's dark flank (craft bar)
+DECK = "#9a6a3a"              # DECK — oblique deck-plank tone (craft bar)
 HULL_GOLD = "#d9a441"         # HULL_GOLD — t3 trim line; player pennant value
 # pennant remap (§4.8.4 amended): the authored maps carry the authoring-only
 # SOURCE hex at every masthead pennant; the governor substitutes it with the
@@ -137,14 +139,15 @@ PENNANTS = {
 OWNER_ORDER = ["player", "portugal", "spain", "england", "holland",
                "ottoman", "italy", "neutral", "pirate"]
 HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in
-         {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO, HULL_GOLD,
-          PENNANT_SOURCE}
+         {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO, SAIL_SH,
+          DECK, HULL_GOLD, PENNANT_SOURCE}
          | set(PENNANTS.values())}
-# shipped-pixel membership audit set — the amended hull block exactly (16
-# distinct values: ink, wood ×3, sail ×3, gold, 9 pennants; the retired
-# owner-ramp hexes are no longer allowed in shipped hull pixels, §4.8.4)
+# shipped-pixel membership audit set — the amended hull block exactly (18
+# distinct values: ink, wood ×3, sail ×4, deck, gold, 9 pennants; the
+# retired owner-ramp hexes are no longer allowed in shipped hull pixels,
+# §4.8.4 + the §4.8.2 craft bar)
 HULL_BLOCK = {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO,
-              HULL_GOLD} | set(PENNANTS.values())
+              SAIL_SH, DECK, HULL_GOLD} | set(PENNANTS.values())
 
 # footprint bands (80-* §4.8.7 final values, ship_types.tier partition 4/8/4)
 FOOTPRINT_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
