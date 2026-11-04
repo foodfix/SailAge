@@ -42,7 +42,29 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    canvas-fit only (bbox + outline ≤ 64).
 7. Hull color audit — every final token's hexes ⊆ the hull palette block and
    ≤ the authored-grid color budget (20, §4.8.3).
-8. 64-canvas fallback (§4.8 64-canvas amendment 1664ba9) — hull tokens and
+9. Model-pass ship ingestion (``--import-ships <snapped_dir>`` — the §4.8
+   ingestion contract, ACTIVE; the 90-* §9.2 AI-ingestion path): the
+   snap-downsampled model outputs (64-grid RGBA, gitignored under
+   ``tools/ui_art/model_raw/snapped/``) are formally ingested — per 64-grid
+   BASE token (n, s, w, sw, nw — the 5-direction generation amendment
+   f6c00bb; the model only ever generates those five): quantize every
+   opaque px to the 18-hex hull block (nearest, deterministic tie-break),
+   snap any px within Δ≤40 channel-sum of the pennant source ``#b3191f``
+   to exactly ``#b3191f`` (so the ×9 remap hits), require ≥3 source-red px
+   in the top 45% of the bbox (masthead), and band-gate the ``w`` base
+   (the side profile) on the §4.8.7 tier band.  ``e``/``ne``/``se`` are
+   derived at ingestion as exact ``mirror_x`` flips of ``w``/``nw``/``sw``
+   BEFORE the pennant remap (the remap is color-level, mirror-invariant);
+   a missing/rejected base falls its whole mirror group back to the
+   generator (no mixing inside a pair).  Accepted tokens replace the
+   ×2-upscale generator art as the PRIMARY shipped token (override ladder:
+   ingested preferred, fallback only for gaps, per-file presence); the
+   provenance ledger ``tools/ui_art/ingest_ledger.json`` is committed
+   (per base token: job, seed, snapped sha, acceptance date; per derived
+   file: base reference + flip).  Out-of-band / masthead-less tokens are
+   REJECTED (reported, never committed) — a later re-roll lands via a
+   simple re-run.
+10. 64-canvas fallback (§4.8 64-canvas amendment 1664ba9) — hull tokens and
    the terrain class (terrain tiles + shore strips + port markers) ship as
    64×64 canvases: the exact ×2 nearest upscale of the authored 32-grid
    renders (never hand-drawn at 64); transparency preserved; ids/filenames
@@ -81,18 +103,22 @@ Manifest contract (per class dir, ``*.json`` sorted):
 
 Missing classes are fine (staged activation): a class dir that does not exist
 or holds no manifests is reported skipped.  Deterministic: sorted walks, no
-timestamps, no dict-order dependence — two runs are byte-identical (gated by
-``--check``).  Stdlib only.  The ``--import <dir>`` AI-ingestion path of
-decision 10 is future work and intentionally not implemented here.
+dict-order dependence — two runs are byte-identical (gated by ``--check``);
+the ingested tokens enter that contract through the ladder (the committed
+ingested PNGs are the expected bytes; the ledger sha pins their source).
+Stdlib only.
 
 Pinned references: docs/80-UI-UX.md §4.8 (style guide, palette blocks,
-heading8→dir table §4.8.6, footprint bands §4.8.7); docs/10-DATA-SCHEMA.md
-§8.8 (group-13 normative spec); docs/IMPLEMENT-Phase10.md decisions 5/9.
+heading8→dir table §4.8.6, footprint bands §4.8.7, ingestion contract +
+5-direction amendment f6c00bb); docs/10-DATA-SCHEMA.md §8.8 (group-13
+normative spec); docs/90-ARCHITECTURE.md §9.2 (AI-ingestion path);
+docs/IMPLEMENT-Phase10.md decisions 5/9.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -100,6 +126,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 from pathlib import Path
 
@@ -166,6 +193,20 @@ COLOR_BUDGET_32 = 20  # §4.8.3: authored-grid (32×32) -> 12-20 cap; the 64
 CANVAS = 64  # the shipped token canvas (§4.8 64-canvas amendment)
 AUTHORED_GRID = 32  # the authored string-map grid the 64 canvas upscales
 TERRAIN_OUT_PREFIX = "assets/ui/terrain/"  # terrain class output dir
+
+# ---- model-pass ship ingestion (--import-ships; 90-* §9.2 AI-ingestion
+# path, 80-* §4.8 ingestion contract + the 5-direction amendment f6c00bb).
+# The snapped sources live gitignored in tools/ui_art/model_raw/snapped/
+# (never committed); the ingest ledger is committed provenance. ----
+INGEST_LEDGER = MANIFESTS / "ingest_ledger.json"   # committed provenance
+INGEST_VERSION = 1
+PENNANT_SNAP_RADIUS = 40   # channel-sum Δ to the pennant source that snaps
+MASTHEAD_MIN_PX = 3        # ≥3 source-red px in the masthead region
+MASTHEAD_TOP_FRAC = 0.45   # masthead region = top 45% of the token bbox
+INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")  # the model's 5 base dirs
+INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # derived: mirror_x flip
+INGEST_INGESTED_BUDGET = 25  # 64-canvas per-sprite cap (§4.8.3 48px tier;
+# the quantized token draws from an 18-hex block, so this is belt-and-braces)
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
 
@@ -479,6 +520,320 @@ def upscale_nearest(w, h, px, factor):
 
 
 # ======================================================================
+# model-pass ship ingestion (--import-ships) — the §4.8 ingestion contract
+# ======================================================================
+
+_QUANT_ORDER = sorted(HULL_BLOCK)  # deterministic nearest-color tie-break
+
+
+def _hex_dist(rgb_a, rgb_b):
+    """Channel-sum distance (the §4.8 ingestion metric: Δ per channel,
+    summed)."""
+    return (abs(rgb_a[0] - rgb_b[0]) + abs(rgb_a[1] - rgb_b[1])
+            + abs(rgb_a[2] - rgb_b[2]))
+
+
+def _quantize_hull_hex(rgb):
+    """Nearest 18-hex hull block hex (first-min over the sorted block —
+    deterministic)."""
+    best_hex, best_d = None, None
+    for hx in _QUANT_ORDER:
+        d = _hex_dist(rgb, HEXES[hx])
+        if best_d is None or d < best_d:
+            best_hex, best_d = hx, d
+    return best_hex
+
+
+def _pennant_snap(hexv):
+    """The pennant-source snap: any px within Δ≤40 channel-sum of the
+    authored source hex lands EXACTLY on it (so the ×9 owner remap hits;
+    covers the model's near-miss reds incl. the pirate hex, Δ=27)."""
+    if _hex_dist(HEXES[hexv], HEXES[PENNANT_SOURCE]) <= PENNANT_SNAP_RADIUS:
+        return PENNANT_SOURCE
+    return hexv
+
+
+def _quantize_token(w, h, px):
+    """Formal quantize: every opaque px to the hull block (+ pennant snap);
+    transparent px pass through as fully transparent."""
+    out = []
+    for p in px:
+        if p[3] == 0:
+            out.append((0, 0, 0, 0))
+        else:
+            qh = _pennant_snap(_quantize_hull_hex(p[:3]))
+            out.append(HEXES[qh] + (255,))
+    return out
+
+
+def _masthead_count(px, w, h):
+    """Opaque bbox + the count of pennant-source px in the masthead region
+    (top MASTHEAD_TOP_FRAC of the bbox — the sail/masthead zone; the hull
+    sits near the canvas bottom, so a bottom-hull red blob is not a
+    pennant)."""
+    bb = bbox_of(px, w, h)
+    if bb is None:
+        return None, 0
+    x0, y0, x1, y1 = bb
+    cut = y0 + int(MASTHEAD_TOP_FRAC * (y1 - y0 + 1) + 0.5)  # exclusive row
+    n = 0
+    for y in range(y0, min(cut, y1 + 1)):
+        for x in range(x0, x1 + 1):
+            if "#%02x%02x%02x" % px[x + y * w][:3] == PENNANT_SOURCE:
+                n += 1
+    return bb, n
+
+
+def _parse_token_id(tid):
+    """``hull_{ship}_{dir}`` → (ship, dir); ship ids may carry underscores
+    (caravela_redonda), the dir is the last segment."""
+    if not tid.startswith("hull_") or tid.count("_") < 2:
+        fail(f"ingest ledger: bad token id {tid!r}")
+    ship, d = tid[len("hull_"):].rsplit("_", 1)
+    return ship, d
+
+
+def _parse_file_id(fid):
+    """``hull_{ship}_{owner}_{dir}.png`` → (ship, owner, dir)."""
+    if not fid.startswith("hull_") or not fid.endswith(".png"):
+        fail(f"ingest ledger: bad shipped-file id {fid!r}")
+    ship, owner, d = fid[len("hull_"):-len(".png")].rsplit("_", 2)
+    return ship, owner, d
+
+
+def resolve_ingest_overrides(root: Path = ROOT):
+    """The override ladder (80-* §4.8: the ingested tokens are the PRIMARY
+    art, the ×2-upscale generator is the fallback): a ledger entry whose
+    committed token file exists serves that shipped file from the
+    committed ingested artifact; every other id falls through to the
+    generator.  Returns {(ship, owner, dir): committed path}."""
+    if not INGEST_LEDGER.is_file():
+        return {}
+    try:
+        doc = json.loads(INGEST_LEDGER.read_text())
+    except ValueError as exc:
+        fail(f"{INGEST_LEDGER}: not valid JSON ({exc}) — fix or delete it")
+    if int(doc.get("version", 0)) != INGEST_VERSION:
+        fail(f"{INGEST_LEDGER}: version {doc.get('version')!r} != "
+             f"{INGEST_VERSION}")
+    out = {}
+
+    def add(ship, owner, d):
+        p = root / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
+        if p.is_file():
+            out[(ship, owner, d)] = p
+
+    for tid in (doc.get("tokens") or {}):
+        ship, d = _parse_token_id(tid)
+        for owner in OWNER_ORDER:
+            add(ship, owner, d)
+    for fid in (doc.get("derived") or {}):
+        ship, owner, d = _parse_file_id(fid)
+        add(ship, owner, d)
+    return out
+
+
+def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
+    """The formal model-pass ingestion (90-* §9.2, 80-* §4.8 + f6c00bb).
+
+    Per snapped 64-grid BASE token (n/s/w/sw/nw): decode → formal quantize
+    (block nearest + pennant snap) → masthead presence (≥3 source px in
+    the top 45% of the bbox) → band gate on the ``w`` base → accept.
+    Derived dirs (e/ne/se) are exact mirror_x flips of their accepted
+    base, taken BEFORE the pennant remap.  Accepted tokens are remapped
+    ×9 and written as the primary shipped token files; a rejected or
+    missing base silently falls its whole mirror group back to the
+    generator (the build's ladder fills the gaps).  Writes the committed
+    provenance ledger; revokes (deletes) previously ingested files whose
+    entry did not survive this run so assets and ledger stay exactly
+    coherent.  Returns the report fragment."""
+    ship_types = json.loads(SHIP_TYPES.read_text())
+    roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
+    tiers = {s["id"]: int(s["tier"]) for s in roster}
+    tokens_dir = outroot / TOKENS_DIR
+
+    prev_tokens, prev_derived = {}, {}
+    if INGEST_LEDGER.is_file():
+        try:
+            prev = json.loads(INGEST_LEDGER.read_text())
+        except ValueError as exc:
+            fail(f"{INGEST_LEDGER}: not valid JSON ({exc}) — fix or delete it")
+        if int(prev.get("version", 0)) != INGEST_VERSION:
+            fail(f"{INGEST_LEDGER}: version {prev.get('version')!r} != "
+                 f"{INGEST_VERSION}")
+        prev_tokens = prev.get("tokens") or {}
+        prev_derived = prev.get("derived") or {}
+
+    prog = {}
+    pj = snapped_dir.parent / "progress.json"
+    if pj.is_file():
+        try:
+            prog = json.loads(pj.read_text()).get("jobs") or {}
+        except ValueError:
+            prog = {}  # provenance seed stays null; ingestion proceeds
+
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    candidates = []      # base jobs actually present in the snapped dir
+    accepted = {}        # token id -> (w, h, px) in source form (post-snap)
+    led_tokens = {}      # token id -> provenance record
+    rejected = []
+    for ship in sorted(tiers):
+        for d in INGEST_BASE_DIRS:
+            job = f"hull_{ship}_{d}"
+            sp = snapped_dir / f"{job}.png"
+            if not sp.is_file():
+                continue  # not generated (yet) — a gap, not a rejection
+            candidates.append(job)
+            raw = sp.read_bytes()
+            try:
+                w, h, px = decode_png(raw)
+            except Exception as exc:  # a concurrent re-roll may be mid-write;
+                # reject-and-report, the next re-run picks the file up
+                rejected.append({"job": job, "reason": "decode",
+                                 "detail": f"snapped PNG does not decode: {exc}"})
+                continue
+            if (w, h) != (CANVAS, CANVAS):
+                rejected.append({"job": job, "reason": "canvas",
+                                 "detail": f"{w}x{h} != {CANVAS}x{CANVAS}"})
+                continue
+            px = _quantize_token(w, h, px)
+            bb, n = _masthead_count(px, w, h)
+            if n < MASTHEAD_MIN_PX:
+                rejected.append({"job": job, "reason": "masthead",
+                                 "detail": f"{n} pennant-source px in the "
+                                           f"masthead region < {MASTHEAD_MIN_PX}"})
+                continue
+            if d == "w":  # the banded side profile; mirrors inherit (f6c00bb)
+                lo, hi = FOOTPRINT_BANDS[tiers[ship]]
+                ext = bb[2] - bb[0] + 1
+                if not lo <= ext <= hi:
+                    rejected.append({
+                        "job": job, "reason": "band",
+                        "detail": f"long axis {ext}px outside the "
+                                  f"tier-{tiers[ship]} band {lo}-{hi} (§4.8.7)"})
+                    continue
+            sha = hashlib.sha256(raw).hexdigest()
+            prev_rec = prev_tokens.get(job) or {}
+            accepted_at = (prev_rec.get("accepted_at")
+                           if prev_rec.get("snapped_sha") == sha else None)
+            led_tokens[job] = {"job": job,
+                               "seed": (prog.get(job) or {}).get("seed"),
+                               "snapped_sha": sha,
+                               "accepted_at": accepted_at or today}
+            accepted[job] = (w, h, px)
+
+    # Derived dirs (f6c00bb): exact mirror_x flips of the accepted base,
+    # taken BEFORE the pennant remap (the remap is color-level, so the
+    # order is contract, not necessity — the flip must not re-quantize).
+    derived_ids = {}     # derived token id -> base token id
+    for ship in sorted(tiers):
+        for dd, base_d in sorted(INGEST_DERIVED.items()):
+            base_job = f"hull_{ship}_{base_d}"
+            if base_job not in accepted:
+                continue  # whole mirror group falls back (no mixing)
+            bw, bh, bpx = accepted[base_job]
+            derived_ids[f"hull_{ship}_{dd}"] = base_job
+            accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx, "mirror_x")
+
+    # Write the accepted tokens: the pennant ×9 remap, exactly as on the
+    # fallback tokens (the ONLY owner-variant pixel; spain is the legal
+    # identity remap).
+    written = 0
+    for job in sorted(accepted):
+        ship, d = _parse_token_id(job)
+        w, h, px = accepted[job]
+        for owner in OWNER_ORDER:
+            table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
+            watch = frozenset(s for s, t in table.items()
+                              if "#%02x%02x%02x" % t[:3] != s)
+            out, leftovers = apply_remap(w, h, px, table, watch)
+            if leftovers:
+                fail(f"ingest {job}/{owner}: the pennant source survived "
+                     f"the remap: {sorted(leftovers)}")
+            colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
+            if PENNANTS[owner] not in colors:
+                fail(f"ingest {job}/{owner}: the owner pennant hex "
+                     f"{PENNANTS[owner]} is missing after the remap")
+            off = sorted(c for c in colors if c not in HULL_BLOCK)
+            if off:
+                fail(f"ingest {job}/{owner}: hexes outside the hull block: {off}")
+            if len(colors) > INGEST_INGESTED_BUDGET:
+                fail(f"ingest {job}/{owner}: {len(colors)} colors > budget "
+                     f"{INGEST_INGESTED_BUDGET} (§4.8.3)")
+            write_png(tokens_dir / f"hull_{ship}_{owner}_{d}.png", w, h, out)
+            written += 1
+
+    # Provenance revocation: committed ingested files whose entry did not
+    # survive this run (source rejected / changed beyond the gates) are
+    # removed so the ladder falls those ids back to the generator THIS run
+    # (assets == generator ∪ ingested(ledger), exactly).
+    def revoke(ship, d):
+        for owner in OWNER_ORDER:
+            (tokens_dir / f"hull_{ship}_{owner}_{d}.png").unlink(missing_ok=True)
+
+    live_ids = set(accepted)
+    stale_ids = set()
+    for tid in sorted(prev_tokens):
+        if tid not in live_ids:
+            stale_ids.add(tid)
+    for fid in sorted(prev_derived):
+        ship, _owner, d = _parse_file_id(fid)
+        tid = f"hull_{ship}_{d}"
+        if tid not in live_ids:
+            stale_ids.add(tid)
+    for tid in sorted(stale_ids):
+        ship, d = _parse_token_id(tid)
+        revoke(ship, d)
+    revoked = len(stale_ids)
+
+    # Derived provenance records (per shipped file, keyed by file name).
+    led_derived = {}
+    for tid, base_job in sorted(derived_ids.items()):
+        ds_ship, dd = _parse_token_id(tid)
+        base_ship, base_d = _parse_token_id(base_job)
+        for owner in OWNER_ORDER:
+            led_derived[f"hull_{ds_ship}_{owner}_{dd}.png"] = {
+                "job": tid,
+                "derived_from": f"hull_{base_ship}_{owner}_{base_d}.png",
+                "flip": "h",
+            }
+
+    doc = {
+        "version": INGEST_VERSION,
+        "generated_by": "tools/build_ui_art.py --import-ships",
+        "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the "
+                    "5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md "
+                    "§9.2",
+        "counts": {
+            "candidates": len(candidates),
+            "accepted_base": len(led_tokens),
+            "accepted_derived": len(derived_ids),
+            "rejected": len(rejected),
+            "revoked_stale": revoked,
+            "shipped_files": written,
+            "fallback_files": len(tiers) * len(OWNER_ORDER) * len(DIR_ORDER)
+                              - written,
+        },
+        "rejected": rejected,
+        "tokens": led_tokens,
+        "derived": led_derived,
+    }
+    INGEST_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    INGEST_LEDGER.write_text(json.dumps(doc, indent=2, ensure_ascii=False,
+                                        sort_keys=True) + "\n")
+
+    report["ingest"] = {
+        "candidates": len(candidates),
+        "accepted_base": len(led_tokens),
+        "accepted_derived": len(derived_ids),
+        "rejected": rejected,
+        "revoked": revoked,
+        "files": written,
+    }
+    return report["ingest"]
+
+
+# ======================================================================
 # manifest loading
 # ======================================================================
 
@@ -607,7 +962,8 @@ def parse_hex(h):
     return HEXES[h.lower()]
 
 
-def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
+def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
+                      ingest_files: dict | None = None):
     reg = m.aux.get(("hulls", "hulls"))
     rig = m.aux.get(("hulls", "rig"))
     if reg is None:
@@ -679,7 +1035,8 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
     run_node(decl_paths, outroot)
 
     ink = HEXES[HULL_INK] + (255,)
-    counts = {"rendered": 0, "derived": 0, "outlined": 0, "tokens": 0}
+    counts = {"rendered": 0, "derived": 0, "outlined": 0, "tokens": 0,
+              "tokens_ingested": 0}
     for ship, (path, doc) in sorted(m.hull_docs.items()):
         tier = int(doc["tier"])
         lo, hi = FOOTPRINT_BANDS[tier]
@@ -774,7 +1131,19 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
                 if len(colors) > COLOR_BUDGET_32:
                     fail(f"hull {ship}/{owner}/{d}: {len(colors)} colors > budget {COLOR_BUDGET_32} (§4.8.3)")
                 # The shipped 64×64 canvas: ×2 of the remapped authored grid.
+                # Override ladder (§4.8 ingestion contract): an ingested
+                # token (ledger entry + committed file) is the PRIMARY art —
+                # the generator's file is written ONLY for the gaps
+                # (per-file presence; a rejected/missing model token
+                # silently falls back).  The fallback render + gates above
+                # still run so generator art stays validated either way.
                 dest = outroot / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
+                override = (ingest_files or {}).get((ship, owner, d))
+                if override is not None and override.is_file():
+                    if override != dest:
+                        shutil.copyfile(override, dest)
+                    counts["tokens_ingested"] += 1
+                    continue
                 write_png(dest, *upscale_nearest(w, h, out,
                                                  CANVAS // AUTHORED_GRID))
                 counts["tokens"] += 1
@@ -1408,7 +1777,7 @@ def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
 # build / check / main
 # ======================================================================
 
-def build_into(outroot: Path) -> tuple[Manifests, dict]:
+def build_into(outroot: Path, ingest_files: dict | None = None) -> tuple[Manifests, dict]:
     _verify_transforms()
     m = Manifests()
     m.load()
@@ -1418,7 +1787,8 @@ def build_into(outroot: Path) -> tuple[Manifests, dict]:
         if m.classes.get("hulls") is not None:
             if not m.hull_docs:
                 fail("tools/ui_art/hulls/ has manifests but no hull authoring docs")
-            report["hulls"] = run_hull_pipeline(m, outroot, outroot / STAGING, report)
+            report["hulls"] = run_hull_pipeline(m, outroot, outroot / STAGING,
+                                                report, ingest_files)
         counts = run_generic_passes(m, outroot, report)
         report["generic"] = counts
         if m.classes.get("terrain") is not None:
@@ -1438,10 +1808,20 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
         print(f"  class {cls:10s} {state}")
     h = report.get("hulls", {})
     g = report.get("generic", {})
+    ing = report.get("ingest")
+    if ing is not None:
+        print(f"  ingest: candidates {ing['candidates']}, accepted base "
+              f"{ing['accepted_base']} + derived {ing['accepted_derived']}, "
+              f"rejected {len(ing['rejected'])}, revoked stale {ing['revoked']}, "
+              f"{ing['files']} shipped file(s) written from the model pass")
+        for r in ing["rejected"]:
+            print(f"    REJECT {r['job']}: {r['reason']} — {r['detail']}")
     print(f"  rendered(render.js): hull maps {h.get('rendered', 0)}, "
           f"generic {g.get('rendered', 0)}; derived {h.get('derived', 0) + g.get('derived', 0)}; "
           f"outlined {h.get('outlined', 0) + g.get('outlined', 0)}; "
-          f"hull tokens written {h.get('tokens', 0)} (16 x 9 x 8 = 1152 expected)")
+          f"hull tokens written {h.get('tokens', 0)} generator + "
+          f"{h.get('tokens_ingested', 0)} ingested "
+          f"(16 x 9 x 8 = 1152 expected)")
     for ship, tier, e_ext, w_ext, band in report.get("footprints", []):
         print(f"  footprint {ship:18s} t{tier}  e {e_ext}px  w {w_ext}px  "
               f"band {band[0]}-{band[1]}  OK (64 canvas)")
@@ -1461,8 +1841,12 @@ def run_check() -> None:
     committed = ROOT / "assets/ui"
     if not committed.is_dir():
         fail("--check: assets/ui/ does not exist in the committed tree; run a full build first")
+    # The override ladder participates in the byte-compare: committed
+    # ingested tokens are the expected bytes (the ledger pins their source
+    # sha; the group-13 audit re-derives the provenance), generator art is
+    # rebuilt and compared as before.
     with tempfile.TemporaryDirectory(prefix="ui_art_check.") as td:
-        m, _ = build_into(Path(td))
+        m, _ = build_into(Path(td), resolve_ingest_overrides())
         # The pipeline owns PNGs; Godot's .import sidecars are committed by
         # the master --import pass and carry no rebuild semantics (master
         # reconciliation 2026-11-04, ledgered).
@@ -1491,11 +1875,30 @@ def run_check() -> None:
 
 def run_contact_sheet() -> None:
     with tempfile.TemporaryDirectory(prefix="ui_art_sheet.") as td:
-        m, _ = build_into(Path(td))
+        m, _ = build_into(Path(td), resolve_ingest_overrides())
         result = build_contact_sheet(Path(td), m)
         dest, sheet = result
         dest.write_bytes(encode_png_indexed(sheet.w, sheet.h, sheet.px))
         print(f"build_ui_art: contact sheet -> {dest} ({sheet.w}x{sheet.h})")
+
+
+def run_import_mode(snapped_dir: Path) -> None:
+    """--import-ships: ingest whatever the model pass has accepted NOW,
+    then run the full build so the ladder falls the remaining ids back to
+    the generator (re-runs pick up late re-rolls with the same command)."""
+    if not snapped_dir.is_dir():
+        fail(f"--import-ships: snapped dir not found: {snapped_dir}")
+    report = {}
+    ingest = run_ship_ingest(snapped_dir, ROOT, report)
+    m, report = build_into(ROOT, resolve_ingest_overrides())
+    report["ingest"] = ingest
+    summary(m, report, ROOT)
+    counts = report.get("hulls", {})
+    total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)
+    if m.classes.get("hulls") is not None and total != 16 * 9 * 8:
+        fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
+             f"+ ingested {counts.get('tokens_ingested', 0)}) != 1152")
+    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 
 def main() -> None:
@@ -1504,18 +1907,32 @@ def main() -> None:
                     help="rebuild into a temp dir and byte-compare against assets/ui/ (§8.8)")
     ap.add_argument("--contact-sheet", action="store_true",
                     help="emit tools/contact_sheet.png (decision 9.4 review gate)")
+    ap.add_argument("--import-ships", metavar="SNAPPED_DIR",
+                    help="ingest the model-pass snapped ship tokens (64-grid "
+                         "RGBA) from SNAPPED_DIR — formal quantize, pennant "
+                         "snap, masthead + band gates, mirror-derived e/ne/se "
+                         "(f6c00bb), committed provenance ledger; accepted "
+                         "tokens are the primary art, the generator fills "
+                         "the gaps (§4.8 ingestion contract)")
     args = ap.parse_args()
+    if args.check and args.import_ships:
+        fail("--check and --import-ships are mutually exclusive modes")
     if args.check:
         run_check()
         return
     if args.contact_sheet:
         run_contact_sheet()
         return
-    m, report = build_into(ROOT)
+    if args.import_ships:
+        run_import_mode(Path(args.import_ships))
+        return
+    m, report = build_into(ROOT, resolve_ingest_overrides())
     summary(m, report, ROOT)
-    tokens = report.get("hulls", {}).get("tokens", 0)
-    if m.classes.get("hulls") is not None and tokens != 16 * 9 * 8:
-        fail(f"hull token count {tokens} != 1152")
+    counts = report.get("hulls", {})
+    total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)
+    if m.classes.get("hulls") is not None and total != 16 * 9 * 8:
+        fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
+             f"+ ingested {counts.get('tokens_ingested', 0)}) != 1152")
 
 
 if __name__ == "__main__":

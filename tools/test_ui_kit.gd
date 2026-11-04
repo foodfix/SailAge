@@ -38,6 +38,7 @@ func _ready() -> void:
 	_test_field_row_i18n()
 	_test_toast_atom()
 	_test_icon_registry()
+	_test_ingested_token_flips()
 	await _test_gallery_boot()
 	_report()
 
@@ -304,6 +305,78 @@ func _test_icon_registry() -> void:
 	UiKitLib.clear_textures()
 	_check(UiKitLib.icon_texture("kit_test_icon") == null,
 		"clear_textures empties the registry")
+
+
+# --- §4.8 model-pass ingestion: the mirror-derived token pin (f6c00bb) -------
+
+func _load_token_png(rel_path: String) -> Image:
+	if not FileAccess.file_exists(rel_path):
+		return null
+	var img := Image.new()
+	if img.load_png_from_buffer(FileAccess.get_file_as_bytes(rel_path)) != OK:
+		return null
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	return img
+
+
+func _is_exact_h_flip(derived: Image, base: Image) -> bool:
+	if derived.get_width() != base.get_width() \
+			or derived.get_height() != base.get_height():
+		return false
+	var dd := derived.get_data()
+	var bd := base.get_data()
+	var w := derived.get_width()
+	var h := derived.get_height()
+	for y in range(h):
+		for x in range(w):
+			var di := (y * w + x) * 4
+			var bi := (y * w + (w - 1 - x)) * 4
+			for c in range(4):
+				if dd[di + c] != bd[bi + c]:
+					return false
+	return true
+
+
+func _test_ingested_token_flips() -> void:
+	# 80-* §4.8 (the 5-direction amendment f6c00bb): every ledger-derived
+	# token file (e/ne/se) is the EXACT h-flip of its base (w/nw/sw, same
+	# owner) — the drift-free mirror-pair pin, data-driven from the
+	# committed provenance ledger; passes staged when the ledger is absent.
+	var ledger_path := "res://tools/ui_art/ingest_ledger.json"
+	if not FileAccess.file_exists(ledger_path):
+		_check(true, "ingest ledger staged (no --import-ships run yet)")
+		return
+	var doc_v: Variant = JSON.parse_string(FileAccess.get_file_as_string(ledger_path))
+	if typeof(doc_v) != TYPE_DICTIONARY:
+		_check(false, "the ingest ledger parses to an object")
+		return
+	var derived_v: Variant = doc_v.get("derived", {})
+	if typeof(derived_v) != TYPE_DICTIONARY:
+		_check(false, "the ingest ledger carries a derived map")
+		return
+	var derived: Dictionary = derived_v
+	var pairs := 0
+	var all_flip := true
+	for fid_v in derived.keys():
+		var fid := String(fid_v)
+		var rec_v: Variant = derived[fid_v]
+		if typeof(rec_v) != TYPE_DICTIONARY:
+			all_flip = false
+			continue
+		var rec: Dictionary = rec_v
+		var img_d := _load_token_png("res://assets/ui/tokens/" + fid)
+		var img_b := _load_token_png(
+			"res://assets/ui/tokens/" + String(rec.get("derived_from", "")))
+		if img_d == null or img_b == null:
+			_check(false, "derived+base token files load: " + fid)
+			all_flip = false
+			continue
+		pairs += 1
+		if not _is_exact_h_flip(img_d, img_b):
+			all_flip = false
+	_check(all_flip and pairs > 0,
+		"derived tokens are the exact h-flip of their base (%d pairs, f6c00bb)" % pairs)
 
 
 # --- One gallery headless boot ------------------------------------------------
