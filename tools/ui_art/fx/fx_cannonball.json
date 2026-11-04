@@ -1,0 +1,34 @@
+{
+ "comment": "cannonball, all four shot types reuse; tweened in-game (flight 300 ms per 80-* 4.7.17). Instant mode renders this single frame.",
+ "file": "assets/ui/fx/fx_cannonball.png",
+ "height": 16,
+ "id": "fx_cannonball",
+ "mode": "string-map",
+ "palette": {
+  ".": "transparent",
+  "B": "#26262c",
+  "D": "#555c66",
+  "L": "#c6ccd4",
+  "M": "#8a929c"
+ },
+ "png": "rgba",
+ "rows": [
+  "................",
+  "................",
+  "................",
+  ".....DDDDDD.....",
+  "....DBBBBBBB....",
+  "...DBLLBBBBBB...",
+  "...DBLMBBBBBB...",
+  "...DBBBBBBBBB...",
+  "...DBBBBBBBBB...",
+  "...DBBBBBBBBB...",
+  "...DBBBBBBBBB...",
+  "....BBBBBBBB....",
+  ".....BBBBBB.....",
+  "................",
+  "................",
+  "................"
+ ],
+ "width": 16
+}
