@@ -788,3 +788,73 @@ _Waves ledger entries are appended here by the master as merges land
 - **Wave gate:** full `tools/run_tests.py` **56/56 GREEN (284.1s)**;
   `validate_data.py` exit 0 (groups 1–12); zh/en parity green (group 2).
   Merge order A → B → C → D held; W3 launches next (art pass).
+
+### W3 — art pass (2026-11-04) — COMPLETE (user review: APPROVED)
+
+- **A** `phase10/w3-a-icons` @ `45db66b`, merged → validator 0 (groups
+  1–13 staged) + `test_ui_theme`/`test_ui_kit`/`test_demo_loop` GREEN.
+  Chrome 15 + icons 129 manifests (19 files; committed generator
+  `gen_icons.py`, byte-stable `--check`); **validator group 13** (§8.8
+  items 1–10 + 8 verified-red negative probes; staged activation);
+  nine-patch `StyleBoxTexture` variants in `ui_theme.gd`
+  (`use_textures := true` default, flat fallback; `test_ui_theme` pinned
+  to `build_theme(false)`). Adjudications: icons authored as
+  **string-maps** (engine template noise/shading provably breaks §8.8.3–4
+  membership+budget — a template-mode switch needs a §8.8 doc amendment
+  first); goods sprites `good_{id}` / equipment raw `eq_*` ids; focus
+  sheet = ACCENT ring, transparent fill; Primary/Danger/Quiet stay flat
+  in texture mode; footprint bands checked on cardinals; England cross =
+  FLAG_SPAIN red, ottoman field = pinned purple.
+- **B** `phase10/w3-b-hulls` @ `89ecd5b`, merged → full build + `--check`
+  byte-identity ×3; footprints t1 17 / t2 25 / t3 29 (in-band).
+  `build_ui_art.py` governor (render via render.js, node ==v24.16.0
+  enforced, 8-dir derivations, 9-owner wood-step remaps, 1px HULL_INK
+  outline, seam-ring verify, nine-patch assembly incl. the pinned bar
+  layout, footprint audit, `--check`, `--contact-sheet` with a first-party
+  3×5 font) + rig fragments (`rig.json`) + 16 hulls × 2 authored maps +
+  6 facility tokens. Adjudications: authored maps are literal string-maps
+  (remap contract needs exact WOOD_* hexes; fragment vocabulary pinned as
+  data in rig.json); footprint semantics = n-token bbox max (ne is
+  canvas-fit only); beam ~33–40% for galley family; contact-sheet
+  capability governor-owned, artifact master-committed; `--import`
+  AI-ingestion deferred (future work, docstring note).
+- **C** `phase10/w3-c-terrain` @ `23148df`, merged → `build_shore.py
+  --check` ×2 byte-identical; `world_shore.png` committed (82 139 coded
+  cells; full-grid naive §6.6 recompute = 0/9 331 200 mismatches; Lisbon
+  berth = `e`). Terrain 16 (4 land + reef + 2 ice + 2 water + 7 ports) +
+  `sea_pattern.png` + shore 8 (2 authored + 6 derive); torus dither
+  lattices (HI (3x+5y+p)%16, LO (5x+3y+7+p)%16), shared byte-identical
+  rings, densities 6.2–11.8% ≤ 30%.
+- **D** `phase10/w3-d-fx-portraits` @ `e8a270f`, merged → compose_check
+  ALL GREEN (36 declarations render, pixel-level block purity, 4 legend
+  busts compose). FX 11 (string-maps, exact fx-block hexes), portrait
+  sheets 25 (72×96 RGBA, `anchors.json` + generator + composer stack
+  **base→face→eyes→beard→hair→cloth**), `art_prompts.json` (24 legend +
+  30 discoveries; the 4 named pirates ⊆ the 24). W4-D composer
+  contracts pinned: beards render `HAIR_BROWN` → composer palette-swaps
+  to the captain's hair hex; patrol/privateer sash = CLOTH_ACCENT cells
+  → composer re-tints to the owner nation's CLOTH hex; paths
+  `assets/ui/fx/`, `assets/ui/portraits/`.
+- **Master merge reconciliations** (`06e4627`, post-C commit, `5cde265`):
+  governor derives from **RAW** pixels (outline-before-derive broke
+  §8.8.5 relations via staging re-reads); bar tile names `bar_left/
+  right/line`; derive key alias `from`/`base`; validator aux-doc skip
+  (`rig.json`/`hulls.json`/`anchors.json`) + recursive manifest glob +
+  registry-shape hull grid (docs + pinned derive ops + synthetic token
+  decls for artifact checks); derive-only decls skip render.js and
+  manifest mode/size; `sea_pattern` mask-hex exemption (`class:
+  terrain_pattern`, `#ffffff`/`#000000`); torus proxy = uniform dither
+  density (exact-tile wrap; edge-equality not required); art_prompts
+  per-class arrays accepted; `--check` compares PNGs only; .uid
+  normalization; `.gitignore` for non-game-texture `.import` spillover.
+  Note: the C-reconciliation commit (`eaeb432`, `git add -A`) swept the
+  mid-wave `assets/ui` build into history early — the artifacts were the
+  verified byte-identical build output; the D-class PNGs landed in the
+  gate commit.
+- **Gate:** full build = **1 368 PNGs**, `--check` byte-identical double
+  run; validator **groups 1–13 exit 0** (all classes live: inventories,
+  budgets, membership, transform relations, footprints, seams, shore
+  raster, prompts); `godot --headless --import` pass committed the
+  `assets/ui/*.import` sidecars; **user contact-sheet review: APPROVED**
+  (no veto items). Full `tools/run_tests.py` **56/56 GREEN (284.1s)**
+  with textures live. W4 (sweep, non-combat) launches next.
