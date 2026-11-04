@@ -1991,11 +1991,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      48-tile auto-tile standard):** terrain transitions adopt the
      Standard 48-Tile Auto-Tile Set per terrain PAIR (center 1,
      single edges 4, outer corners 4, inner corners 4, mixed
-     edges/corners/strips/endpoints 37, base 1). Pairs, in layering
-     priority order (higher kind draws its transition tiles over the
-     lower): hills-over-land, mountains-over-land, ice-over-land,
-     ice-over-sea, reef-over-sea — sea↔land keeps the §6.6 shore
-     foam system. Art: the context-sheet method at **3×3
+     edges/corners/strips/endpoints 37, base 1). Pairs over the five
+     real kinds (`data/map_legend.json`: sea, coastal_sea, land,
+     reef, polar_ice), in layering priority order (higher kind draws
+     its transition tiles over the lower): polar_ice-over-land,
+     polar_ice-over-coastal_sea, reef-over-sea, reef-over-coastal_sea,
+     land-over-sea — land↔coastal_sea keeps the §6.6 shore foam
+     system. (Correction 2026-11-05: the first draft of this
+     amendment named hills/mountains — no such kinds exist in the
+     legend; the generated hills/mountains art demonstrated the
+     method and remains available if new kinds are ever added, which
+     would require a map_legend + build_world + palette-policy
+     amendment first.) Art: the context-sheet method at **3×3
      neighborhoods** (each patch shows the center tile with its
      exact 8-neighbour context; crop the centre 64px) — 25 patches
      per 1024 sheet, 2 sheets per pair, ~20 `/edit` calls total;
