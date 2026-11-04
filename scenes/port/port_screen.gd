@@ -160,9 +160,9 @@ func _ready() -> void:
 	GameOverHostLib.attach_to(self)
 	# Phase-10 sweep: label colors retire to the shared theme — TEXT is the
 	# theme's Label default; the two secondary banner lines carry the `Dim`
-	# variation (the former per-screen PANEL_LINE overrides). The greeting's
-	# former per-screen ACCENT tint retires with the rest (no theme atom
-	# expresses it; flagged in the W4-A sweep report for master adjudication).
+	# variation and the greeting the master-added `Accent` variation
+	# (the §4.9 doc-pinned ACCENT tint, restored theme-owned).
+	_greeting.theme_type_variation = "Accent"
 	_day_greeting.theme_type_variation = "Dim"
 	_facility_heading.theme_type_variation = "Dim"
 	_set_sail_button.custom_minimum_size.y = PaletteLib.BUTTON_H
@@ -785,10 +785,11 @@ func _status_text(status_key: String, facility_id: String) -> String:
 
 ## Applies the §4.8.1 card labels for `button`: the facility name (theme
 ## TEXT when enabled, the `Dim` variation when disabled) over the status
-## line (the former per-screen GOOD/PANEL_LINE tints retire to the theme —
-## open keeps TEXT, every closed/stub state dims). Used by the card build
-## and every locale rebind; the labels and keys are read from the button's
-## own metas so any card (including extension-point rows) rebinds.
+## line — an open card carries the master-added `Good` variation (the
+## §4.8.1 GOOD color), every closed/stub/bounty card the `CardStatus`
+## variation (the §4.8.1 12px size). Used by the card build and every
+## locale rebind; the labels and keys are read from the button's own metas
+## so any card (including extension-point rows) rebinds.
 func _apply_card_labels(button: Button) -> void:
 	var name_label := button.get_meta("name_label") as Label
 	var status_label := button.get_meta("status_label") as Label
@@ -800,7 +801,7 @@ func _apply_card_labels(button: Button) -> void:
 	name_label.theme_type_variation = "" if not button.disabled else "Dim"
 	status_label.text = _status_text(status_key, facility_id)
 	status_label.theme_type_variation = \
-		"" if status_key == "port.facility.open_now" else "Dim"
+		"Good" if status_key == "port.facility.open_now" else "CardStatus"
 
 
 ## Re-labels every rendered card from its stored keys, keeping the status

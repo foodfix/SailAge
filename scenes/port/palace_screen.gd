@@ -185,9 +185,10 @@ func _ready() -> void:
 	# ledger tick ashore — the game-over screen must rise over the palace too.
 	GameOverHostLib.attach_to(self)
 	# Phase-10 sweep: label colors retire to the shared theme — TEXT is the
-	# theme's Label default and the rep line carries the `Dim` variation
-	# (the former per-screen ACCENT/PANEL_LINE overrides).
+	# theme's Label default, the rep line carries the `Dim` variation and
+	# the fame readout the master-added `Accent` variation (§4.9).
 	_rep.theme_type_variation = "Dim"
+	_fame.theme_type_variation = "Accent"
 	for button in [_back_button, _ceremony, _mission_button, _repair_button,
 			_bounty_button, _tournament_button, _retire_button]:
 		button.custom_minimum_size.y = PaletteLib.BUTTON_H
@@ -430,6 +431,9 @@ func _report_tournament(outcome: Dictionary) -> void:
 			"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
 			"fame": int(outcome.get("fame", 0)),
 		})
+		# The outcome's §4.8 tier tint rides the theme's `Good` / `Warn`
+		# variations.
+		_tournament_label.theme_type_variation = "Good"
 		return
 	_show_toast("tournament.lost", {
 		"round": int(outcome.get("round_reached", 1)),
@@ -437,6 +441,7 @@ func _report_tournament(outcome: Dictionary) -> void:
 	_tournament_label.text = I18n.fmt("tournament.consolation", {
 		"gold": HudLib.format_thousands(int(outcome.get("gold", 0))),
 	})
+	_tournament_label.theme_type_variation = "Warn"
 
 
 # --- Rendering -----------------------------------------------------------
@@ -763,6 +768,9 @@ func _build_inform_row(row: Dictionary) -> Control:
 		"name": str(row.get("name", "")),
 		"tier": int(row.get("tier", 1)),
 	})
+	# The §4.8 danger tint marks a wanted poster (the theme's `Bad`
+	# variation).
+	text.theme_type_variation = "Bad"
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(text)
 

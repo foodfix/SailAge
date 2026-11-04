@@ -279,6 +279,8 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 	var tag := _make_label(I18n.t_key(str(TYPE_KEYS.get(
 		str(offer.get("type", "")), "ui.not_available"))), "Tag")
 	tag.custom_minimum_size.x = 96
+	# The §4.8 ACCENT tag tint rides the theme's `Accent` variation.
+	tag.theme_type_variation = "Accent"
 	top.add_child(tag)
 	var line := _make_label(_objective_text(offer), "Objective")
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -294,6 +296,8 @@ func _build_offer_row(offer: Dictionary, index: int) -> Control:
 	var bottom := HBoxContainer.new()
 	var reward := _make_label(_reward_text(offer), "Reward")
 	reward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The §4.8 GOOD reward tint rides the theme's `Good` variation.
+	reward.theme_type_variation = "Good"
 	bottom.add_child(reward)
 	var reason := QuestGenLib.accept_block_reason(offer)
 	var accept := UiKitLib.button("quest.accept", "primary")
@@ -364,6 +368,8 @@ func _build_report_row(discovery_id: String) -> Control:
 		"fame": int(discovery.get("fame", 0)),
 	}), "Reward")
 	reward.custom_minimum_size.x = 240
+	# The §4.8 GOOD reward tint rides the theme's `Good` variation.
+	reward.theme_type_variation = "Good"
 	row.add_child(reward)
 	var button := UiKitLib.button("guild.report.action", "primary")
 	button.name = "Report"

@@ -634,6 +634,9 @@ func _build_good_row(good_id: String) -> Dictionary:
 				badge_label.custom_minimum_size.x = float(COL_BADGE_W)
 				badge_label.clip_text = true
 				badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				# The §4.8 ACCENT badge tint rides the theme's `Accent`
+				# variation.
+				badge_label.theme_type_variation = "Accent"
 				name_cell.add_child(badge_label)
 				# The good's §4.8 icon (`good_{id}`): 32px inline in the
 				# 32px row while the registry carries the id; absent ⇒ the
@@ -660,9 +663,11 @@ func _build_good_row(good_id: String) -> Dictionary:
 				refs["badge"] = badge_label
 				refs["name"] = name_label
 			"arrows":
-				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — bare
-				# ↑/↓ glyphs (the former per-screen GOOD/ACCENT tints retire
-				# to the theme TEXT; flagged in the W4-A sweep report).
+				# Phase 8 (docs/30 §4.2): the appraisal-gated arrows — the
+				# profit arrow (↓ buy-cheap / ↑ sell-dear vs base_price)
+				# carries the §4.8 GOOD tint and the other-port memory
+				# arrow the ACCENT tint, both via the theme's `Good` /
+				# `Accent` variations. Both stay empty below gates.
 				var arrows_box := HBoxContainer.new()
 				arrows_box.name = "Arrows"
 				arrows_box.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -670,9 +675,11 @@ func _build_good_row(good_id: String) -> Dictionary:
 				var profit_arrow_label := Label.new()
 				profit_arrow_label.name = "ProfitArrow"
 				profit_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				profit_arrow_label.theme_type_variation = "Good"
 				var memory_arrow_label := Label.new()
 				memory_arrow_label.name = "MemoryArrow"
 				memory_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				memory_arrow_label.theme_type_variation = "Accent"
 				arrows_box.add_child(profit_arrow_label)
 				arrows_box.add_child(memory_arrow_label)
 				row.add_child(arrows_box)
@@ -918,8 +925,11 @@ func _refresh_tax_badge() -> void:
 	var key := tax_badge_key(_tariff_mille(), _effective_alignment(),
 		_player_nation())
 	_tax_badge.text = I18n.t_key(key)
-	# The former per-screen ACCENT/BAD tints retire to the theme TEXT
-	# (flagged in the W4-A sweep report — no theme atom expresses them).
+	# §4.8: cheaper trade reads ACCENT, the 20% walls read BAD — via the
+	# theme's `Accent` / `Bad` variations.
+	_tax_badge.theme_type_variation = \
+		"Accent" if key != "market.tax.badge.foreign" \
+			and key != "market.tax.badge.unallied" else "Bad"
 
 
 ## The header badge's current key + text (the suite's seam).
@@ -1481,6 +1491,9 @@ func _refresh_intel() -> void:
 		_attach_role_badge(box, str(row["role"]))
 		var label := Label.new()
 		label.text = line
+		# The §4.8 ACCENT tint marks the free next-lane hint (the theme's
+		# `Accent` variation); plain rows read the theme TEXT default.
+		label.theme_type_variation = "Accent" if bool(row["free"]) else ""
 		box.add_child(label)
 		_intel_box.add_child(box)
 

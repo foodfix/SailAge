@@ -222,11 +222,14 @@ func _ready() -> void:
 	# ledger tick ashore — the game-over screen must rise over the tavern too.
 	GameOverHostLib.attach_to(self)
 	# Phase-10 sweep: label colors retire to the shared theme (TEXT is the
-	# theme's Label default; secondary notes carry the `Dim` variation), the
+	# theme's Label default; secondary notes carry the `Dim` variation and
+	# the doc-pinned ACCENT tints the master-added `Accent` variation), the
 	# tab buttons and row buttons render the themed states (the hand-built
 	# chrome is gone), and the scene file keeps the 32px title / headings.
 	_min_note.theme_type_variation = "Dim"
 	_rumor_empty.theme_type_variation = "Dim"
+	_per_head.theme_type_variation = "Accent"
+	_rumor_price.theme_type_variation = "Accent"
 
 	for button in [
 		_back_button, _crew_tab, _officers_tab, _rumors_tab, _hire_1, _hire_10,
@@ -793,6 +796,9 @@ func _build_poster_row(poster: Dictionary) -> Control:
 		"name": str(poster.get("name", "")),
 		"tier": int(poster.get("tier", 1)),
 	}), "Title")
+	# The §4.8 danger tint marks a wanted poster (the theme's `Bad`
+	# variation).
+	title.theme_type_variation = "Bad"
 	title_row.add_child(title)
 	row.add_child(title_row)
 
@@ -1109,6 +1115,10 @@ func _append_spar_result(result: Dictionary) -> void:
 	var gold := TavernEngineLib.spar_pot(int(result.get("stake", 0))) \
 		if bool(result.get("won", false)) else int(result.get("stake", 0))
 	var line := _make_label(_fmt(key, {"gold": gold}), "SparResult")
+	# The bout outcome's §4.8 tier tint rides the theme's `Good` / `Warn`
+	# variations.
+	line.theme_type_variation = "Good" if bool(result.get("won", false)) \
+		else "Warn"
 	_spar_box.add_child(line)
 
 
