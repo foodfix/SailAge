@@ -1,7 +1,7 @@
 {
  "id": "hulls-registry",
  "class": "hulls",
- "doc": "Hull-token registry (W3-B). The governor (tools/build_ui_art.py) renders the two authored maps per hull into staging, derives the other six directions with the pinned lossless ops below, applies the 1px HULL_INK outline, then bakes the 9 owner variants via the wood-step remap table. Contract: docs/80-UI-UX.md §4.8 (heading8→dir table §4.8.6, tier footprint bands §4.8.7, hull block §4.8.4) and docs/10-DATA-SCHEMA.md §8.8 group 13.",
+ "doc": "Hull-token registry (W3-B; UW2 amendment 2026-11-04). The governor (tools/build_ui_art.py) renders EVERY authored map of a hull into staging — all eight directions are authored maps per the §4.8.6 amendment (a side-view ship does not rotate losslessly; docs authored on the amended shape carry maps × 8 and no derive entries; legacy n/ne + derive docs keep the pinned-op path until re-authored) — then applies the 1px HULL_INK outline and bakes the 9 owner variants via the wood-step remap table. Contract: docs/80-UI-UX.md §4.8 (heading8→dir table §4.8.6, tier footprint bands §4.8.7, hull block §4.8.4) and docs/10-DATA-SCHEMA.md §8.8 group 13.",
  "owners": [
   "player",
   "portugal",
@@ -15,19 +15,19 @@
  ],
  "path_template": "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png",
  "staging": "authored maps render into a transient staging dir (they are outline-less wood-colored intermediates; the wood-colored map itself is not a shipped file — every owner variant, neutral included, is a remap target per §4.8.4 hull block)",
- "authored_dirs": ["n", "ne"],
- "derive": {
-  "_doc": "op semantics verified on screen (y-down): rot_cw of a north-facing sprite points the bow east. Pinned identically in every authored/*.json so group 13 re-checks the same relations.",
-  "e":  { "from": "n",  "op": "rot_cw" },
-  "s":  { "from": "n",  "op": "rot_180" },
-  "w":  { "from": "n",  "op": "rot_ccw" },
-  "nw": { "from": "ne", "op": "mirror_x" },
-  "se": { "from": "ne", "op": "mirror_y" },
-  "sw": { "from": "ne", "op": "rot_180" }
- },
+ "authored_dirs": [
+  "e",
+  "ne",
+  "n",
+  "nw",
+  "w",
+  "sw",
+  "s",
+  "se"
+ ],
  "outline": { "hex": "#101010", "px": 1, "rule": "8-neighborhood: transparent pixels adjacent (8-way) to opaque ones take HULL_INK" },
  "footprint": {
-  "_doc": "long axis = n-token opaque bbox max dimension, measured on the final (outlined) file; tier bands per 80-* §4.8.7 (ship_types.tier partition 4/8/4, review-verified)",
+  "_doc": "§4.8.7 amendment 2026-11-04: the long axis is measured on the side view (e/w — the profile shows the ship's length), on the final (outlined) file; the stern/bow views (n/s) show the beam and the diagonals are the honest 3/4 views — all unbanded, canvas-fit only (bbox + 2px outline ≤ 32)",
   "bands": { "1": [14, 18], "2": [20, 26], "3": [26, 30] }
  },
  "hulls": [
