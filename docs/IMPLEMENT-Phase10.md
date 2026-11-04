@@ -732,3 +732,59 @@ _Waves ledger entries are appended here by the master as merges land
 - **Gate:** cross-doc refs resolve (§4.7.17/§4.7.18/§4.8/§4.9/§4.16,
   §6.6, §8.8, §9.2, §5 row, glossary rows all verified present);
   `validate_data.py` exit 0 after every merge. No code touched.
+
+### W2 — theme + kit + gallery + engine bring-up (2026-11-04) — COMPLETE
+
+- **A** `phase10/w2-a-palette` @ `8b4edb9`, merged → validator 0 +
+  `test_chart`/`test_demo_loop` GREEN. `scripts/palette.gd` append-only
+  (223 insertions, 0 deletions): +96 block constants — terrain 13, icon
+  15, hull 34 (7 shared + 9 owner ramps × 3), fx 9, portrait 25
+  (`PORTRAIT_INK` prefix = ledger adjudication; ramp rule HI ×1.25 /
+  LO ×0.72 in the block header). Master-pinned constant-name scheme
+  (A/B/C prompts carried it): `HULL_{owner}[_HI|_LO]`,
+  `CLOTH_*`/`SKIN_*`/`HAIR_*`/`EYE_*` per §4.8 tables.
+- **B** `phase10/w2-b-theme` @ `76bb1b5`, merged → validator 0 +
+  `test_ui_theme` (79 checks)/`test_demo_loop`/`test_creation` GREEN.
+  `scripts/ui_theme.gd` `UiTheme.build_theme()` — full §4.9 table +
+  state matrix; variations `Primary`/`Danger`/`Quiet` (Button),
+  `Dim` (Label); `title_screen._ready()` applies to the root window
+  (guarded `get_window()`). Adjudications: (1) `StyleBox.min_size`
+  does not exist in Godot 4.7 — scrollbar thickness/min-length ride
+  **stylebox content margins** (VScrollBar measures exactly (8, 24),
+  suite-pinned); (2) the button 40px floor is control-level
+  (`custom_minimum_size.y`, kit atom + title already set it) — theme
+  pads 8/8; absorbing 40px into margins would render ~63px buttons;
+  (3) variation reads are control-level; suites assert via
+  `get_type_variation_base`; (4) only B's own two `.uid` sidecars
+  committed (scan spillover discarded); (5) title uses the repo's
+  `UiThemeLib` preload convention.
+- **C** `phase10/w2-c-kit` @ `500e741`, merged → validator 0 +
+  `test_ui_kit` (54 checks)/`test_ui_theme`/`test_demo_loop` GREEN.
+  `scripts/ui_motion.gd` (`UiMotion.enabled` default on; `dur`/`fade`/
+  `freeze_shader`/`run_shader`), `scripts/ui_kit.gd` (six atoms +
+  `toast` + icon registry, `meta["body"]`/`meta["cells"]` conventions),
+  `tools/widget_gallery.tscn` (master adjudication: gallery lives in
+  `tools/` beside the harness scenes — §4 tree line to be added at the
+  W6 doc finalization), `ui.kit.*` keys ×11 (sole-writer rule held;
+  gallery reuses existing `ui.*` keys per §4.7.18), `test_ui_kit`.
+  Adjudications: thresholds stay doc-owned in callers (supply 10/3
+  §4.6.1, morale 40/20 §4.8) and are pinned through `UiKit.auto_tier`;
+  toast max-1 is a synchronous `free()` with `is_instance_valid`
+  guards; fresh-worktree boots use `preload` consts, `class_name`
+  declarations kept for the W4+ contract.
+- **D** `phase10/w2-d-engine` @ `c1d9e89`, merged → validator 0 +
+  `tools/yoyopixel/fixture_check.py` GREEN (5 fixtures, run1 == run2 ==
+  committed, node v24.16.0). Vendored `pixelart-skill.md` + `LICENSE` +
+  authored `VENDORED.md`/`render.md`; `render.js` = verbatim
+  transcription of engine-v3.html's pixel-math (`PB`, `blit/blitA`,
+  `shade`, 15 `MAT_SHADERS`, `renderSprite` 3-pass) + first-party PNG
+  encoder (stdlib zlib; indexed PLTE+tRNS per-entry alpha + RGBA).
+  Declared deviations (all ledger-recorded, all documented in-tree):
+  browser canvas writer → stdlib PNG encoder; material iteration
+  **sorted** (byte-identity requires it; verified on a permuted
+  declaration); demo `SPRITES`/scene builders not vendored;
+  `background` post-fills transparent pixels; string-map mode renders
+  flat exact colors (chrome/marks usage).
+- **Wave gate:** full `tools/run_tests.py` **56/56 GREEN (284.1s)**;
+  `validate_data.py` exit 0 (groups 1–12); zh/en parity green (group 2).
+  Merge order A → B → C → D held; W3 launches next (art pass).
