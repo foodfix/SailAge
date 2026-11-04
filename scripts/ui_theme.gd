@@ -363,3 +363,9 @@ static func _setup_labels(theme: Theme) -> void:
 	# size — the per-screen font-size override channel is retired).
 	theme.set_type_variation("CardStatus", "Label")
 	theme.set_font_size("font_size", "CardStatus", 12)
+	theme.set_type_variation("CardStatusGood", "Label")
+	theme.set_font_size("font_size", "CardStatusGood", 12)
+	theme.set_color("font_color", "CardStatusGood", PaletteLib.GOOD)
+	theme.set_type_variation("CardStatusDim", "Label")
+	theme.set_font_size("font_size", "CardStatusDim", 12)
+	theme.set_color("font_color", "CardStatusDim", PaletteLib.PANEL_LINE)
