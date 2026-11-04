@@ -1012,3 +1012,23 @@ Additive except one removal; all new tags are 40-good ids:
   Shark Bay coast in-era.
 - Protected ports carry an empty sphere (never AI-investable).
 
+---
+
+## Scope: tools/yoyopixel/ (vendored YoYoPixel pixel-art engine)
+
+- **YoYoPixel, © 2026 SbName, MIT License.** Vendored under
+  `tools/yoyopixel/` (Phase 10) are `pixelart-skill.md`, the upstream
+  `LICENSE` (MIT, © 2026 SbName), and the extracted engine core (the
+  pixel-math script from `engine-v3.html`) wrapped as the node renderer
+  `render.js`.
+- **Provenance verified against the source clone at `~/repo/yoyopixel`**
+  (`pixelart-skill.md`, `engine-v3.html`, `LICENSE`). The engine is
+  adopted by vendored re-extraction, never by live reference — the same
+  first-party rule as every other section of this file.
+- **Zero npm dependencies; node runtime pinned v24.16.0.** The renderer
+  reads JSON sprite declarations and writes PNGs with node stdlib zlib
+  only; nothing is fetched at build time.
+- **The MIT full text ships alongside in `tools/yoyopixel/LICENSE`.**
+  No URLs are cited (the convention of this file's Phase-5 section):
+  title, author, year, and license above identify the work.
+
