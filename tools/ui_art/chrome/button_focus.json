@@ -71,24 +71,23 @@
       "mode": "string-map",
       "png": "indexed",
       "palette": {
-        "W": "#2e2014",
-        "h": "#6a4e28"
+        "W": "#2e2014"
       },
       "rows": [
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
-        "WWWWWhWWWWWWWWWW",
-        "WWWWWWWhWWWWWWWW",
-        "WWWWWWWWWhWWWWWW",
-        "WWWWWWWWWWWhWWWW",
-        "WWWWWWWWWWWWWhWW",
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
-        "WWhWWWWWWWWWWWWW",
-        "WWWhWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
+        "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW",
         "WWWWWWWWWWWWWWWW"
       ]

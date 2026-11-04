@@ -71,20 +71,19 @@
       "mode": "string-map",
       "png": "indexed",
       "palette": {
-        "N": "#121724",
-        "W": "#2e2014"
+        "N": "#121724"
       },
       "rows": [
         "NNNNNNNNNNNNNNNN",
         "NNNNNNNNNNNNNNNN",
         "NNNNNNNNNNNNNNNN",
-        "NNWNNNNNNNNNNNNN",
-        "NNNWNNNNNNNNNNNN",
-        "NNNNWNNNNNNNNNNN",
-        "NNNNNWNNNNNNNNNN",
-        "NNNNNNWNNNNNNNNN",
-        "NNNNNNNWNNNNNNNN",
-        "NNNNNNNNWNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
+        "NNNNNNNNNNNNNNNN",
         "NNNNNNNNNNNNNNNN",
         "NNNNNNNNNNNNNNNN",
         "NNNNNNNNNNNNNNNN",

@@ -1929,7 +1929,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    (`ACCENT`/`ACCENT_HI`). The flat fallback keeps the navy constants —
    it is the reduced-graphics mode; font colors are unchanged (cream on
    walnut). The ninepatch sheets are the single switch: re-authoring
-   them reskins every panel/button in the game.
+   them reskins every panel/button in the game. **Stretch-safety
+   constraint (amended 2026-11-04, master adjudication after the sample
+   review):** the runtime skin draws the sheets through
+   `StyleBoxTexture` with default `axis_stretch_*` = STRETCH — the
+   nine-patch center and every edge span are scaled, not tiled, so
+   interior dither smears into large blocks at panel scale. Grain and
+   dither therefore live ONLY in the corner tiles (they never stretch);
+   fill tiles and edge-tile interiors are flat. Edge interiors must be
+   flat in BOTH axes: the assembly's mirror-only `FRAME_OPS` derive the
+   bottom/left/right sides from the one authored top edge tile, so any
+   per-row-safe pattern there becomes per-column variance (vertical
+   smears) on the derived sides.
 
 5. **Hull-letter overlay rule.** identification letters stay as overlay
    badges drawn on top of the token sprite at runtime — never baked into
