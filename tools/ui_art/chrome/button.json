@@ -10,26 +10,25 @@
       "palette": {
         ".": "transparent",
         "H": "#6a4e28",
-        "W": "#2e2014",
-        "A": "#d9a441"
+        "W": "#2e2014"
       },
       "rows": [
         ".HHHHHHHHHHHHHHH",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWWWWWWWWWWWWWWA",
-        "HWAAAAAAAAAAAAAA"
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW",
+        "HWWWWWWWWWWWWWWW"
       ]
     },
     {

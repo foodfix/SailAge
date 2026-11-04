@@ -392,9 +392,7 @@ func _sheet_specs() -> Dictionary:
 			"outline": PaletteLib.PANEL_WOOD_HI,
 			"bevel": PaletteLib.PANEL_WOOD,
 			"fill": PaletteLib.PANEL_WOOD,
-			"gold": [
-				[4, 15, PaletteLib.ACCENT, "corner-only gold inner tick"],
-			],
+			"gold": [],
 		},
 		"button_focus": {
 			"outline": PaletteLib.ACCENT,
@@ -402,7 +400,6 @@ func _sheet_specs() -> Dictionary:
 			"fill": PaletteLib.PANEL_WOOD,
 			"gold": [
 				[3, 3, PaletteLib.ACCENT_HI, "gold rosette center"],
-				[4, 15, PaletteLib.ACCENT, "corner-only gold inner tick"],
 			],
 		},
 		"field": {

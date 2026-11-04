@@ -880,6 +880,48 @@ def _hex_px(h: str):
     return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) + (255,)
 
 
+# Gold-pixel map (rule 5 below; the title-screen bracket regression,
+# 2026-11-04): under margin-16 nine-patch slicing a corner tile's INNER 1px
+# is the band boundary mid-edge of every control — the button corner tiles
+# used to carry a 14px gold "tick" there and every menu button rendered
+# crisp ⊢-brackets at ~1/3 and ~2/3 of its height. Gold may exist only
+# where the design pins it: NOWHERE on `button`; perimeter + corner
+# rosettes on `button_focus`; the inset trim + rosettes on `panel`; the
+# lip inset on `field`.
+GOLD_FAMILY = {ACCENT, ACCENT_HI, ACCENT_LO}
+
+
+def _in_rosette(x, y):
+    return ((2 <= x <= 4) or (43 <= x <= 45)) \
+        and ((2 <= y <= 4) or (43 <= y <= 45))
+
+
+def _gold_allowed(name, x, y):
+    if name == "button":
+        return False
+    if name == "field":
+        return x in (1, 46) or y in (1, 46)
+    if name == "panel":
+        return x in (3, 44) or y in (3, 44) or _in_rosette(x, y)
+    return x in (0, 47) or y in (0, 47) or _in_rosette(x, y)  # button_focus
+
+
+def _verify_gold_map(name, sheet) -> None:
+    gold = [(x, y) for y in range(SHEET) for x in range(SHEET)
+            if sheet[x + y * SHEET][3]
+            and ("#%02x%02x%02x" % sheet[x + y * SHEET][:3]) in GOLD_FAMILY]
+    bad = [(x, y) for x, y in gold if not _gold_allowed(name, x, y)]
+    if bad:
+        fail(f"ninepatch {name}: self-verify — gold pixel(s) outside the "
+             f"pinned gold map (mid-edge bracket class): {bad[:8]}")
+    if name != "button" and not gold:
+        fail(f"ninepatch {name}: self-verify — the sheet lost its gold "
+             "trim/rosette/lip pixels entirely (gold map)")
+    if name == "button" and gold:
+        fail(f"ninepatch {name}: self-verify — the plain button sheet must "
+             f"carry no gold at all, found {len(gold)} px (gold map)")
+
+
 # UW2 chrome-skin semantic pins (80-* §4.8 amended 2026-11-04, ledgered):
 # per sheet, the explicit anchor hexes the assembled 48x48 must carry. Rule 3
 # below pins frame POSITIONS tile-derivatively; these pin the SKIN's colors —
@@ -897,13 +939,11 @@ SKIN_PINS = {
     "button": [
         (24, 0, PANEL_WOOD_HI, "raised-block bevel light (top)"),
         (24, 1, PANEL_WOOD, "walnut fill under the bevel"),
-        (4, 15, ACCENT, "corner-only gold inner tick"),
     ],
     "button_focus": [
         (24, 0, ACCENT, "full gold perimeter (selected/hover ring)"),
         (24, 1, PANEL_WOOD, "walnut fill under the ring"),
         (3, 3, ACCENT_HI, "gold rosette center"),
-        (4, 15, ACCENT, "corner-only gold inner tick"),
     ],
     "field": [
         (24, 0, PANEL_WOOD_LO, "recess frame"),
@@ -985,6 +1025,8 @@ def _verify_ninepatch_sheet(name, tiles, sheet) -> None:
         if got != _hex_px(hexs):
             fail(f"ninepatch {name}: self-verify — {what} ({x},{y}) = {got} "
                  f"!= {_hex_px(hexs)}")
+    # 5. gold-pixel map (see GOLD_FAMILY above).
+    _verify_gold_map(name, sheet)
 
 
 def _verify_bar_sheet(caps, sheet) -> None:
