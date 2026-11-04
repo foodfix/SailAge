@@ -43,16 +43,18 @@ uniform float u_darken = 0.82;
 uniform float u_mask_px = 64.0;
 
 void fragment() {
-	// The tile's own flat fill (SEA or COAST_SEA — the atlas pixel under UV).
-	vec4 base = texture(TEXTURE, UV);
+	// GODOT 4 canvas_item semantics: COLOR at fragment entry ALREADY carries
+	// the tile pixel (vertex color × TEXTURE) — verified by suite pin. The
+	// 2026-11-04 production bug re-sampled TEXTURE here and multiplied again,
+	// rendering the sea at SEA² with the mask pattern crushed into it (the
+	// "uniform dark water" report). Apply ONLY the §4.7.17 two-level shade:
+	// the mask's red channel picks the level, the scroll lives in the UV
+	// offset, and COLOR's own rgb/a pass through.
 	// TIME-based scroll, advanced entirely on the GPU: one full mask wrap
 	// every u_period seconds along u_scroll_dir, frozen when u_motion is 0.
 	float phase = TIME / max(u_period, 0.001);
 	vec2 offset_px = u_motion * phase * u_scroll_dir * u_mask_px;
 	vec2 mask_uv = (VERTEX + offset_px) / max(u_mask_px, 0.001);
 	float level = texture(u_mask, mask_uv).r;
-	float shade = mix(1.0, u_darken, step(0.5, level));
-	// COLOR arrives as the vertex modulate; keep the default multiply and
-	// swap the texture color for the darkened base.
-	COLOR = COLOR * vec4(base.rgb * shade, base.a);
+	COLOR.rgb *= mix(1.0, u_darken, step(0.5, level));
 }
