@@ -1956,9 +1956,31 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    rotate losslessly, **all eight hull directions are authored maps**
    (rig fragments composed per direction by the authoring tool) — the
    lossless-derivation scheme below remains for the arrow sets and the
-   shore strips only. The wood→owner remap
-   contract is unchanged (author on the wood trio, remap per owner;
-   sails/ink owner-invariant).
+   shore strips only. The owner encoding is the **pennant scheme**
+   (§4.8.4 hull block, amended 2026-11-04): every owner draws the same
+   shared map (wood/sail/ink owner-invariant) and the tool remaps the
+   authoring-only pennant source hex to the owner's `PENNANT_*` hex.
+
+   **UW2 silhouette richness (amended 2026-11-04, user direction with
+   reference screenshots — applies to every hull, every direction):**
+   1. **Sails dominate the sprite** — total sail canvas ≥ half the
+      sprite's height; the masthead reaches near the canvas top edge and
+      the hull sits near the bottom edge (fill the 32×32; the band still
+      binds the side view's length).
+   2. **Stack course + topsail per mast** — two vertically stacked
+      sails per mast (course below, topsail above), so a 3-mast ship
+      shows six sail masses before jibs/spankers.
+   3. **Sail detailing** — 2–3 `SAIL_LO` fold/band lines per sail and
+      one `SAIL_HI` specular arc; **national emblems/crosses are drawn
+      in the pennant source hex** so the pennant remap colorizes them
+      per owner (a Spain ship carries the red cross, England the blue —
+      same authored map, owner-colored emblems).
+   4. **Hull stripes** — decorative sheer/gunwale stripes may use the
+      pass-through pennant values (non-source `PENNANT_*` values pass
+      the remap untouched), giving UW2's striped gunwales; gunport rows
+      stay dense (≈ 1 port per 4 px of hull length).
+   5. `HULL_GOLD` runs the full sheer on tier 3 (not just the castle
+      rails).
 7. **Tier footprint bands (final values).** long-axis px **on the side
    view (`e`/`w`)**: tier 1 (latin, sloop, galiot, pinnace) **14–18**;
    tier 2 (caravel, galley, brigantine, fluyt, junk, dhow,
