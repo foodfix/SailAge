@@ -8660,6 +8660,9 @@ def _g13_load_class(class_dir: Path) -> dict:
     # anchors) are inputs, not render declarations — master reconciliation
     # 2026-11-04, ledgered (B/D own them; the governor skips them too).
     paths = [p for p in paths if p.name not in G13_AUX_DOCS]
+    # The model-pass cache (90-* §9.2: gitignored, never committed) holds
+    # runtime state (progress.json) + raw model output — not manifests.
+    paths = [p for p in paths if "model_raw" not in p.relative_to(class_dir).parts]
     if not paths:
         fail("art-manifest", str(class_dir),
              "manifest dir holds no .json declarations (a class dir exists, "
