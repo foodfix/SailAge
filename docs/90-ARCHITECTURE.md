@@ -809,6 +809,11 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   captain's `appearance` + role cloth. The override-wins seam is the only
   hook a future runtime-generation client needs (deferred — Phase-10
   parking lot).
+- **Regenerated-art refresh:** after any `assets/ui/` rebuild, run
+  `godot --headless --import` once before launching the game — a plain
+  game launch reuses the stale `.godot/imported` cache and renders the
+  old textures (the 2026-11-04 "buttons still broken after the fix"
+  report was exactly this).
 - **Why `project.godot` stays unchanged:** `ui_theme.gd`/`ui_kit.gd`/
   `ui_motion.gd` are `class_name` statics, not autoloads; the theme
   applies at `title_screen._ready()` (`get_window().theme`, `80-*` §4.9);
