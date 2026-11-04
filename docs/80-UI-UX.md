@@ -1938,8 +1938,14 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    supersedes the W1 "top-down for tokens" rule): hull tokens are
    UW2-style side/3-quarter sailing views, NOT top-down deck views.**
    The `e`/`w` pair shows the full **side profile** (hull side, masts,
-   sails, rigging); `n`/`s` show the **stern/bow view** (sails from
-   behind, narrow hull); the four diagonals are **3/4 views with the
+   sails, rigging); `n`/`s` show the **stern/bow view** with the same
+   perspective cheat as the diagonals (amended 2026-11-04, user
+   feedback: the first stern views shrank the whole ship): **mast and
+   sail HEIGHT stay identical to the side view** — turning the ship
+   never shrinks its masts — the hull reads at beam width (~40–60 % of
+   the side view's length), and the sails from astern/bow read as
+   full-height shapes at that width (a stern lateen is a tall triangle,
+   a square rig a tall rectangle); the four diagonals are **3/4 views with the
    standard perspective cheat (amended 2026-11-04, user feedback on the
    first 8-dir strip: honest 45° projections collapse the ship into a
    sliver)**: a diagonal keeps a THICK hull band (≥ 4–6 px wide, deck +
