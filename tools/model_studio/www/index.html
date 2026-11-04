@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SailAge Model Studio</title>
+<link rel="stylesheet" href="/studio.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>SailAge Model Studio <span class="sub">:8010 · local re-roll bench</span></h1>
+    <div class="chips">
+      <span id="worker-chip" class="chip idle">worker: idle</span>
+      <span id="queue-chip" class="chip">queue: 0</span>
+      <span id="counts-chip" class="chip">—</span>
+    </div>
+  </div>
+  <div class="actions">
+    <button id="reroll-flagged" class="danger" title="Queue every job with band OVER or pennant ✗">Re-roll ALL flagged (<span id="flagged-n">0</span>)</button>
+    <span id="current-line" class="current"></span>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-f="all">All</button>
+  <button class="tab" data-f="hull">Ships</button>
+  <button class="tab" data-f="icon">Icons</button>
+  <button class="tab" data-f="terrain">Terrain</button>
+  <button class="tab" data-f="flagged">Flagged (<span id="flagged-n2">0</span>)</button>
+</nav>
+
+<main id="grid"></main>
+
+<footer>
+  <span>draft | raw | snapped · studio cache: <code>model_raw/studio/</code> (gitignored) · canonical store is read-only</span>
+</footer>
+
+<script src="/studio.js"></script>
+</body>
+</html>
