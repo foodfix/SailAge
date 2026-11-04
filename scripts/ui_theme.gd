@@ -346,3 +346,20 @@ static func _setup_labels(theme: Theme) -> void:
 	theme.set_color("font_color", "Label", PaletteLib.TEXT)
 	theme.set_type_variation("Dim", "Label")
 	theme.set_color("font_color", "Dim", PaletteLib.PANEL_LINE)
+	# Semantic Label variations (Phase-10 W4 master adjudication, ledgered):
+	# the doc-pinned tier/accent TEXT colors (80-* §4.8.1 status lines, the
+	# §4.5/§4.6.1 tier-colored readouts, market/§4.7 accent marks) ride
+	# theme_type_variation assignments — a plain property, gate-compliant
+	# (no add_theme_* override). WARN == ACCENT by hex (palette).
+	theme.set_type_variation("Accent", "Label")
+	theme.set_color("font_color", "Accent", PaletteLib.ACCENT)
+	theme.set_type_variation("Warn", "Label")
+	theme.set_color("font_color", "Warn", PaletteLib.WARN)
+	theme.set_type_variation("Good", "Label")
+	theme.set_color("font_color", "Good", PaletteLib.GOOD)
+	theme.set_type_variation("Bad", "Label")
+	theme.set_color("font_color", "Bad", PaletteLib.BAD)
+	# §4.8.1: the S4 facility card's pinned 12px status line (theme-owned
+	# size — the per-screen font-size override channel is retired).
+	theme.set_type_variation("CardStatus", "Label")
+	theme.set_font_size("font_size", "CardStatus", 12)
