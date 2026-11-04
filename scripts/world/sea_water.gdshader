@@ -12,7 +12,8 @@
 //     lives ON THE GPU: no `_process`, no cell swapping, zero per-frame CPU
 //     (§4.7.17 "Per-frame CPU: zero").
 //   * Mask    — `u_mask`'s red channel is the two-level dither: level 1
-//     darkens the base by `u_darken` (×0.82, §4.7.17), level 0 keeps it.
+//     darkens the base by `u_darken` (×0.70, §4.7.17 amended b674492),
+//     level 0 keeps it.
 //   * Gate    — `u_motion` is driven by `UiMotion.freeze_shader/run_shader`
 //     (§4.7.17: motion off ⇒ frozen at scroll offset 0; the shader keeps its
 //     own timebase, `UiMotion` never touches it).
@@ -36,9 +37,9 @@ uniform float u_period = 0.8;
 uniform vec2 u_scroll_dir = vec2(1.0, 0.0);
 // Animated-sea gate: 1.0 scrolls, 0.0 freezes at scroll offset 0 (§4.7.17).
 uniform float u_motion = 1.0;
-// Darkening factor applied on the mask's dark level (§4.7.17: ×0.82 —
-// render math, not an asset color).
-uniform float u_darken = 0.82;
+// Darkening factor applied on the mask's dark level (§4.7.17 amended
+// ×0.70, b674492 — render math, not an asset color).
+uniform float u_darken = 0.70;
 // The mask's tile size in layer-local pixels (the 64×64 pattern, §4.8.8).
 uniform float u_mask_px = 64.0;
 

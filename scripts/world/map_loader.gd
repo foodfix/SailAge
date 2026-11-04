@@ -61,9 +61,10 @@ const CHUNK_TILES := 128
 const MAX_LIVE_CHUNKS := 24
 ## One chunk ring beyond the viewport, so a camera nudge never shows void.
 const CHUNK_MARGIN := 1
-## 1280×720 at `TILE_SIZE_PX` = 32 → 40×23 tiles. The scene passes its own
-## value; this default keeps [method update_chunks] usable stand-alone.
-const DEFAULT_VIEW_TILES := Vector2i(40, 23)
+## 1280×720 at the world `WORLD_TILE_PX` = 64 → 20×12 tiles (the §4.8
+## 64-canvas amendment). The scene passes its own zoom-aware value; this
+## default keeps [method update_chunks] usable stand-alone.
+const DEFAULT_VIEW_TILES := Vector2i(20, 12)
 ## Rough per-cell footprint of a TileMapLayer cell (quadrant + cell data); only
 ## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
 const MEMORY_PER_CELL_BYTES := 16
@@ -80,8 +81,14 @@ const WORLD_PNG := "res://data/maps/world.png"
 
 var width: int = 0
 var height: int = 0
-## Rendering size of one cell (docs/10-* §6.1: 32 px).
-var tile_size_px: int = 32
+## Rendering size of one cell. The WORLD map path pins **64 px** (the §4.8
+## 64-canvas model-pass upgrade, amendment 1664ba9): the shipped legend's
+## `tile_size_px` (32) stays the data-file value, the render size is this
+## loader pin — one zoom level down (0.5) shows 32 px effective tiles.
+## Synthetic grids ([method from_indices]) keep their own per-map px (32
+## stays legal per-map).
+const WORLD_TILE_PX := 64
+var tile_size_px: int = WORLD_TILE_PX
 
 ## One palette index per tile, row-major (`width * height` bytes, §9 step 3).
 var indices := PackedByteArray()
@@ -292,7 +299,11 @@ func load_png_buffer(bytes: PackedByteArray, label: String, legend: Dictionary) 
 
 	width = expected_width
 	height = expected_height
-	tile_size_px = int(legend.get("tile_size_px", 32))
+	# The WORLD map path renders at the pinned 64 px canvas (§4.8 64-canvas
+	# amendment 1664ba9) — the legend's `tile_size_px` stays the data-file
+	# contract (32), never the render size. `from_indices` grids keep their
+	# own px (32 stays legal per-map for synthetic fixtures).
+	tile_size_px = WORLD_TILE_PX
 	legend_tiles = tiles
 	indices = out
 	last_error = ""
@@ -935,11 +946,12 @@ func build_tilemap(parent: Node2D, ports: Dictionary = {}, nations: Dictionary =
 
 
 ## One in-memory atlas shared by every chunk — the §9.2 terrain art: one row
-## per non-water legend kind (`land`, `reef`, `polar_ice`), one 32×32 cell
-## per variant. Each cell is the registry sprite `terrain_{kind}_{variant}`
-## when it resolves, else the flat palette fill (§4.9 "an absent id ⇒ flat
-## fallback"). The water kinds (`sea` / `coastal_sea`) are NOT in this atlas:
-## they are flat tiles on the animated water layer (§4.7.17).
+## per non-water legend kind (`land`, `reef`, `polar_ice`), one `tile_size_px`
+## cell per variant (64 on the world path, the §4.8 64-canvas amendment). Each
+## cell is the registry sprite `terrain_{kind}_{variant}` when it resolves,
+## else the flat palette fill (§4.9 "an absent id ⇒ flat fallback"). The water
+## kinds (`sea` / `coastal_sea`) are NOT in this atlas: they are flat tiles on
+## the animated water layer (§4.7.17).
 func _ensure_tile_set() -> void:
 	if _tile_set != null:
 		return
@@ -1036,15 +1048,18 @@ func _blocker_table() -> PackedByteArray:
 ## The §6.6 coast-foam EDGE MASK (the r3 "continuous coast" model, replacing
 ## r2's single-code refinement): bits 0..3 = the N/E/S/W edges that carry
 ## foam. An edge lights when its ORTHOGONAL neighbour is a blocker in this
-## loader's own decode — plus the INLET BRIDGE: a diagonal-pair rule where a
-## tile between two land fingers (NW+NE, NE+SE, SW+SE, NW+SW blockers around
-## a water orthogonal) foams that edge too, so the coast line reads
-## CONTINUOUS across jagged steps and narrow inlets (the r2 single-code
-## stamping left exactly those connector tiles bare — the "scattered
-## T/L/+ fragments" report). Pure-diagonal corner contacts paint nothing
-## (no water-facing bands); x is wrap-aware, y-out-of-range counts
-## non-blocker (the builder's §6.6 rule). Cost: ≤ 8 byte reads per water
-## cell at chunk spawn / warm — zero per-frame work.
+## loader's own decode — plus the INLET BRIDGE, NARROWED (the 2026-11-04
+## user report, sea_fix_r4): a diagonal-pair rule where a tile sits BETWEEN
+## two land fingers (NW+NE, NE+SE, SW+SE, NW+SW blockers) foams that edge
+## ONLY when BOTH orthogonals perpendicular to the edge are water — the
+## pure corner-to-corner connector across an open cell. A bay-mouth cell
+## (one land side, its flanks land, the waterway side open) must NOT bridge
+## the open edge: the sea-facing band would close the waterway into a
+## white line (exactly the Cadiz report). Pure-diagonal corner contacts
+## with a land flank paint nothing (no water-facing bands); x is
+## wrap-aware, y-out-of-range counts non-blocker (the builder's §6.6 rule).
+## Cost: ≤ 8 byte reads per water cell at chunk spawn / warm — zero
+## per-frame work.
 func _shore_foam_mask(cell: Vector2i) -> int:
 	var blockers := _blocker_table()
 	var blocks := func(offset: Vector2i) -> bool:
@@ -1061,14 +1076,19 @@ func _shore_foam_mask(cell: Vector2i) -> int:
 	var se: bool = blocks.call(Vector2i(1, 1))
 	var sw: bool = blocks.call(Vector2i(-1, 1))
 	var nw: bool = blocks.call(Vector2i(-1, -1))
+	# The bridge gate: both orthogonals PERPENDICULAR to the bridged edge
+	# are water (N/S edges ⟂ E/W water; E/W edges ⟂ N/S water) — the cell
+	# is open flanks water, pinched corner-to-corner by two land fingers.
+	var ew_water := not e and not w
+	var ns_water := not n and not s
 	var mask := 0
-	if n or (nw and ne):
+	if n or (nw and ne and ew_water):
 		mask |= 1
-	if e or (ne and se):
+	if e or (ne and se and ns_water):
 		mask |= 2
-	if s or (sw and se):
+	if s or (sw and se and ew_water):
 		mask |= 4
-	if w or (nw and sw):
+	if w or (nw and sw and ns_water):
 		mask |= 8
 	return mask
 
@@ -1188,7 +1208,8 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 				# tile carries no foam edge.
 				water.set_cell(Vector2i(i, j), water_source,
 					WaterLayerLib.water_coords(
-						int(foam_masks[j * CHUNK_TILES + i]), column))
+						int(foam_masks[j * CHUNK_TILES + i]), column,
+						tile_size_px))
 				continue
 			var terrain: Dictionary = _terrain_cells.get(value, {})
 			if terrain.is_empty():
@@ -1236,6 +1257,7 @@ func _fill_water_cells(water: TileMapLayer, base_x: int, base_y: int) -> void:
 	var water_source := _water_source_id_of(water)
 	if water_source < 0:
 		return
+	var tile_px: int = water.tile_set.tile_size.x
 	var key := Vector2i(base_x / CHUNK_TILES, base_y / CHUNK_TILES)
 	if not _foam_cache.has(key):
 		return  # spawn already stamped the cached masks
@@ -1252,7 +1274,8 @@ func _fill_water_cells(water: TileMapLayer, base_x: int, base_y: int) -> void:
 				continue
 			water.set_cell(Vector2i(i, j), water_source,
 				WaterLayerLib.water_coords(
-					int(foam_masks[j * CHUNK_TILES + i]), column))
+					int(foam_masks[j * CHUNK_TILES + i]), column,
+					tile_px))
 
 
 ## The atlas source id of a water layer built by [constant WaterLayerLib]

@@ -110,7 +110,10 @@ const BASE_SIGHTING_RADIUS := SailingSimLib.SIGHTING_RADIUS
 
 var _loader = null
 var _map_pixels := Vector2.ZERO
-var _cell_pixels := 32
+## Screen px per world tile — the loader's render pin (64 on the world path,
+## the §4.8 64-canvas amendment). The default mirrors the loader pin so the
+## declaration carries no hardcoded 32.
+var _cell_pixels := MapLoaderLib.WORLD_TILE_PX
 ## The "WorldChunks" root built by the loader (docs/90-* §9 step 4); null when
 ## the map failed to load.
 var _chunks_root: Node2D = null
@@ -297,6 +300,15 @@ var _arrow_layer: Control = null
 var _arrow_samples: Array = []
 var _arrow_month := 0
 var _arrow_camera_tile := Vector2i(-2, -2)
+
+## World zoom-out (§4.8 as amended 2026-11-04, commit 613ddbf): exactly two
+## camera levels — 1.0 near (64 px tiles, 20×12 view) and 0.5 wide (32 px
+## effective, the pre-upgrade 40×23 view). Integer halving keeps pixels
+## crisp; no fractional zoom. Session-local, default near, persisted nowhere
+## (the same convention as the wind/current field toggles).
+const ZOOM_NEAR := 1.0
+const ZOOM_WIDE := 0.5
+var _zoom_wide := false
 
 ## World markers (§3): discovery id → marker node. Discovery markers render
 ## `GameState.discoveries_found` sites ONLY (undiscovered sites never
@@ -539,6 +551,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		get_viewport().set_input_as_handled()
 		cycle_trim(false)
+		return
+
+	# §4.8 world zoom-out (amended 2026-11-04, commit 613ddbf): `Z` toggles
+	# the two camera levels — 1.0 near / 0.5 wide (the §4.3 keybind row).
+	if event.is_action_pressed("world_zoom"):
+		if _modal_open():
+			return
+		get_viewport().set_input_as_handled()
+		toggle_world_zoom()
 		return
 
 	for action in MOVE_ACTIONS:
@@ -981,7 +1002,8 @@ func map_pixels() -> Vector2:
 
 
 ## World-space rect the camera shows. Its **x is unbounded** (the world wraps
-## east–west, so a fleet near the seam shows content past `width * 32` that is
+## east–west, so a fleet near the seam shows content past `width * tile_px`
+## that is
 ## the wrapped world); its y is clamped inside the grid. Tests that need the
 ## "no void" property intersect x with the map width, which is the seam rule.
 func visible_world_rect() -> Rect2:
@@ -2162,6 +2184,12 @@ func _player_token_init() -> void:
 		return
 	var square := get_node_or_null("FleetMarker/Square") as Control
 	if square != null:
+		# The fallback square re-derives its rect from the cell px (the
+		# §4.8 64-canvas amendment — the .tscn offsets are the retired 32-era
+		# geometry): 0.75 tile, centered on the marker anchor.
+		var square_side := _cell_pixels * 0.75
+		square.size = Vector2(square_side, square_side)
+		square.position = Vector2.ONE * square_side * -0.5
 		var outline := ColorRect.new()
 		outline.name = "Outline"
 		outline.color = Color.BLACK
@@ -2304,7 +2332,10 @@ func _resample_arrow_field() -> void:
 	_arrow_samples = []
 	if _wind_field_on or _current_field_on:
 		var ocean = OceanLayersLib.instance()
-		var view := get_viewport_rect().size / float(_cell_pixels)
+		# Zoom-aware: the lattice covers the camera's visible window (40×23
+		# tiles at the wide 0.5 level, §4.8 zoom-out amendment).
+		var view := get_viewport_rect().size \
+			/ (_camera.zoom.x * float(_cell_pixels))
 		_arrow_samples = ArrowFieldLib.sample(
 			_camera_tile(), Vector2i(int(ceil(view.x)), int(ceil(view.y))),
 			_arrow_month, ocean,
@@ -3335,6 +3366,30 @@ func _update_camera() -> void:
 	_update_chunks()
 
 
+## The §4.8 world zoom-out toggle (amended 2026-11-04, commit 613ddbf):
+## near 1.0 ⇄ wide 0.5. The camera scales the world (and the 64-canvas
+## fleet token) naturally — no counter-scaling anywhere; the chunk spawn
+## follows the effective view so the wide 40×23 window never shows void.
+## Session-local: nothing is persisted.
+func toggle_world_zoom() -> void:
+	_zoom_wide = not _zoom_wide
+	_camera.zoom = Vector2.ONE * (ZOOM_WIDE if _zoom_wide else ZOOM_NEAR)
+	_update_camera()
+	# The arrow lattice is world-anchored over the visible window — re-sample
+	# so the wide view's doubled window stays covered (fields off ⇒ no-op).
+	_resample_arrow_field()
+
+
+## The active camera zoom level (1.0 near / 0.5 wide) — the suite's read seam.
+func world_zoom() -> float:
+	return _camera.zoom.x
+
+
+## `true` while the wide (0.5) level is active.
+func world_zoom_wide() -> bool:
+	return _zoom_wide
+
+
 ## The camera centre for the fleet's tile.
 func _camera_target() -> Vector2:
 	# Cell coordinates name a tile; the camera aims at that tile's center.
@@ -3354,12 +3409,15 @@ func _clamp_to_map(target: Vector2) -> Vector2:
 	return out
 
 
-## Spawns/frees chunks around the camera. The viewport size is converted to
-## tiles so the loader's 24-chunk ring covers the whole 1280×720 view.
+## Spawns/frees chunks around the camera. The zoom-aware viewport size is
+## converted to tiles so the loader's 24-chunk ring covers the whole visible
+## view — 20×12 at the near 1.0 level, 40×23 at the wide 0.5 level (the
+## §4.8 64-canvas zoom-out amendment; +2 tiles of apron both ways).
 func _update_chunks() -> void:
 	if _loader == null or _chunks_root == null:
 		return
-	var view := get_viewport_rect().size / float(_cell_pixels)
+	var view := get_viewport_rect().size \
+		/ (_camera.zoom.x * float(_cell_pixels))
 	var view_tiles := Vector2i(int(ceil(view.x)) + 2, int(ceil(view.y)) + 2)
 	var center := _camera.position / float(_cell_pixels)
 	_loader.update_chunks(

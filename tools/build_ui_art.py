@@ -36,11 +36,18 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    right cap tile at x 32..47; the rest transparent.
 6. Hull footprint check — per hull, the §4.8.7 band is measured on the side
    view (e/w long axis, the profile that shows the ship's length; final
-   outlined file): t1 14–18, t2 20–26, t3 26–30 px.  The stern/bow views
-   (n/s) show the beam and the diagonals are 3/4 views — both unbanded,
-   canvas-fit only (bbox + 2px outline ≤ 32).
+   outlined file): t1 28–36, t2 40–52, t3 52–60 px on the 64 canvas
+   (amendment 1664ba9 — ×2 of the retired 32-canvas values).  The stern/bow
+   views (n/s) show the beam and the diagonals are 3/4 views — both unbanded,
+   canvas-fit only (bbox + outline ≤ 64).
 7. Hull color audit — every final token's hexes ⊆ the hull palette block and
-   ≤ the 32 px color budget (20, §4.8.3).
+   ≤ the authored-grid color budget (20, §4.8.3).
+8. 64-canvas fallback (§4.8 64-canvas amendment 1664ba9) — hull tokens and
+   the terrain class (terrain tiles + shore strips + port markers) ship as
+   64×64 canvases: the exact ×2 nearest upscale of the authored 32-grid
+   renders (never hand-drawn at 64); transparency preserved; ids/filenames
+   unchanged. A source already authored at 64 (`sea_pattern.png`) passes
+   through at 1:1.
 
 CLI:
     python3 tools/build_ui_art.py                 # full build into assets/ui/
@@ -149,10 +156,16 @@ HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in
 HULL_BLOCK = {HULL_INK, WOOD_HI, WOOD, WOOD_LO, SAIL_HI, SAIL, SAIL_LO,
               SAIL_SH, DECK, HULL_GOLD} | set(PENNANTS.values())
 
-# footprint bands (80-* §4.8.7 final values, ship_types.tier partition 4/8/4)
-FOOTPRINT_BANDS = {1: (14, 18), 2: (20, 26), 3: (26, 30)}
-COLOR_BUDGET_32 = 20  # §4.8.3: 32x32 -> 12-20 cap
-CANVAS = 32
+# footprint bands (80-* §4.8.7 final values, ship_types.tier partition 4/8/4;
+# the §4.8 64-canvas amendment 1664ba9 — ×2 of the retired 32-canvas bands,
+# measured on the final outlined 64×64 token canvas)
+FOOTPRINT_BANDS = {1: (28, 36), 2: (40, 52), 3: (52, 60)}
+COLOR_BUDGET_32 = 20  # §4.8.3: authored-grid (32×32) -> 12-20 cap; the 64
+# canvas ships the same pixels ×2, so the authored-grid budget stays the
+# binding cap (the validator's 64-canvas tier cap of 25 is looser)
+CANVAS = 64  # the shipped token canvas (§4.8 64-canvas amendment)
+AUTHORED_GRID = 32  # the authored string-map grid the 64 canvas upscales
+TERRAIN_OUT_PREFIX = "assets/ui/terrain/"  # terrain class output dir
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
 
@@ -445,6 +458,26 @@ def bbox_of(px, w, h):
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def upscale_nearest(w, h, px, factor):
+    """Exact ×factor nearest upscale (§4.8 64-canvas fallback, amendment
+    1664ba9): every source pixel becomes a factor×factor block; alpha and
+    hexes pass through untouched — the deterministic fallback art, never
+    hand-drawn at 64."""
+    if factor <= 1:
+        return w, h, px
+    out = [None] * (w * h * factor * factor)
+    i = 0
+    for y in range(h):
+        row = px[y * w:(y + 1) * w]
+        block = []
+        for p in row:
+            block.extend([p] * factor)
+        for _ in range(factor):
+            out[i:i + len(block)] = block
+            i += len(block)
+    return w * factor, h * factor, out
+
+
 # ======================================================================
 # manifest loading
 # ======================================================================
@@ -678,23 +711,32 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
             staged[d] = (w, h, px)
         counts["rendered"] += len(authored)
 
-        # footprint (§4.8.7 amendment): the band is measured on the side view
-        # (e/w long axis — the profile that shows the ship's length); n/s
-        # (beam views) and the diagonals are canvas-fit only.
+        # The §4.8 64-canvas fallback (amendment 1664ba9): the shipped token
+        # canvas is the exact ×2 nearest upscale of the outlined authored
+        # 32-grid render — ids/filenames unchanged, transparency preserved.
+        staged64 = {}
+        for d in DIR_ORDER:
+            wd, hd, pd = staged[d]
+            staged64[d] = upscale_nearest(wd, hd, pd, CANVAS // AUTHORED_GRID)
+
+        # footprint (§4.8.7 amendment + the 64-canvas upgrade): the band is
+        # measured on the side view (e/w long axis — the profile that shows
+        # the ship's length) of the final 64×64 canvas; n/s (beam views) and
+        # the diagonals are canvas-fit only.
         side = []
         for d in ("e", "w"):
-            wd, hd, pd = staged[d]
+            wd, hd, pd = staged64[d]
             bb = bbox_of(pd, wd, hd)
             ext = bb[2] - bb[0] + 1
             side.append(ext)
             if not (lo <= ext <= hi):
                 fail(f"hull {ship}: {d} long axis {ext}px outside tier-{tier} "
-                     f"band {lo}-{hi} (§4.8.7)")
+                     f"band {lo}-{hi} on the {CANVAS}px canvas (§4.8.7)")
             if ext + 2 > CANVAS:
                 fail(f"hull {ship}: {d} footprint {ext}px + outline exceeds "
                      f"{CANVAS}px canvas")
         for d in ("n", "s", "ne", "nw", "se", "sw"):
-            wd, hd, pd = staged[d]
+            wd, hd, pd = staged64[d]
             bb = bbox_of(pd, wd, hd)
             fit = max(bb[2] - bb[0] + 1, bb[3] - bb[1] + 1)
             if fit + 2 > CANVAS:
@@ -706,7 +748,9 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
         for owner in OWNER_ORDER:
             # Pennant remap (§4.8.4 amended): the ONLY owner-variant pixel —
             # wood/sail/ink/gold pass through untouched; spain's remap is the
-            # legal identity (its pennant value equals the source hex).
+            # legal identity (its pennant value equals the source hex). The
+            # remap runs on the authored grid; the ×2 upscale commutes with
+            # the per-hex substitution, so the shipped 64 canvas carries it.
             table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
             watch = frozenset(s for s, t in table.items()
                               if "#%02x%02x%02x" % t[:3] != s)
@@ -729,8 +773,10 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict):
                     fail(f"hull {ship}/{owner}/{d}: hexes outside the hull block (§4.8.4): {off}")
                 if len(colors) > COLOR_BUDGET_32:
                     fail(f"hull {ship}/{owner}/{d}: {len(colors)} colors > budget {COLOR_BUDGET_32} (§4.8.3)")
+                # The shipped 64×64 canvas: ×2 of the remapped authored grid.
                 dest = outroot / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
-                write_png(dest, w, h, out)
+                write_png(dest, *upscale_nearest(w, h, out,
+                                                 CANVAS // AUTHORED_GRID))
                 counts["tokens"] += 1
     return counts
 
@@ -766,6 +812,26 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict):
         px = apply_outline(w, h, px, HEXES[HULL_INK] + (255,))
         write_png(outroot / m.renders[sid]["file"], w, h, px)
         counts["outlined"] += 1
+    # §4.8 64-canvas fallback (amendment 1664ba9): the terrain class ships
+    # 64×64 canvases — the exact ×2 nearest upscale of the authored 32-grid
+    # render (terrain tiles, shore strips, port markers; a source already
+    # authored at 64 — sea_pattern — passes through at 1:1). Same ids and
+    # filenames; runs before the seam-ring verify so the ring reads the
+    # shipped canvases.
+    for sid in sorted(m.renders):
+        decl = m.renders[sid]
+        if not str(decl.get("file", "")).startswith(TERRAIN_OUT_PREFIX):
+            continue
+        w, h, px = read_png(outroot / decl["file"])
+        side = max(w, h)
+        if side >= CANVAS:
+            continue
+        if CANVAS % side != 0:
+            fail(f"{decl['file']}: authored grid {w}x{h} cannot reach the "
+                 f"{CANVAS}px canvas by an integer nearest factor (§4.8 "
+                 "64-canvas amendment)")
+        write_png(outroot / decl["file"],
+                  *upscale_nearest(w, h, px, CANVAS // side))
     return counts
 
 
@@ -1336,7 +1402,12 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
           f"hull tokens written {h.get('tokens', 0)} (16 x 9 x 8 = 1152 expected)")
     for ship, tier, e_ext, w_ext, band in report.get("footprints", []):
         print(f"  footprint {ship:18s} t{tier}  e {e_ext}px  w {w_ext}px  "
-              f"band {band[0]}-{band[1]}  OK")
+              f"band {band[0]}-{band[1]}  OK (64 canvas)")
+    print(f"  footprint bands (64 canvas, §4.8.7 amendment 1664ba9): "
+          f"t1 {FOOTPRINT_BANDS[1][0]}-{FOOTPRINT_BANDS[1][1]}, "
+          f"t2 {FOOTPRINT_BANDS[2][0]}-{FOOTPRINT_BANDS[2][1]}, "
+          f"t3 {FOOTPRINT_BANDS[3][0]}-{FOOTPRINT_BANDS[3][1]} — "
+          f"{len(report.get('footprints', []))} hulls in band")
     for kind, n in report.get("seam_kinds", []):
         print(f"  seam ring '{kind}': {n} variant(s) byte-identical outer ring")
     for note in report.get("ninepatch_notes", []):

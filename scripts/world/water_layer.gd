@@ -8,7 +8,7 @@ extends RefCounted
 ## A water layer is a `TileMapLayer` whose cells are the two FLAT water fills
 ## (`terrain_sea_0` / `terrain_coastal_sea_0`, §4.8.5) carrying a
 ## `ShaderMaterial` built from `sea_water.gdshader`. The shader scrolls the
-## dither mask on the GPU (§4.7.17: period 800 ms, darkening ×0.82, motion
+## dither mask on the GPU (§4.7.17: period 800 ms, darkening ×0.70, motion
 ## gate `u_motion` from `UiMotion`) — once the cells are stamped there is no
 ## per-frame CPU and no cell swapping; camera movement re-stamps cells at the
 ## existing chunk cadence exactly like the terrain chunks do.
@@ -37,11 +37,16 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const SHADER_PATH := "res://scripts/world/sea_water.gdshader"
 const MASK_PATH := "res://assets/ui/terrain/sea_pattern.png"
 
-## §4.7.17 pinned numbers.
+## §4.7.17 pinned numbers. The darkening is the amended ×0.70 (b674492,
+## user report: ×0.82's ΔRGB ≈ 4–20 units is imperceptible in real gameplay —
+## the two-level tones must read as clearly different water).
 const SCROLL_PERIOD_MS := 800
-const SEA_DARKEN := 0.82
-## §4.8.8: the mask is a 64×64 tile.
-const MASK_SIZE_PX := 64.0
+const SEA_DARKEN := 0.70
+## §4.8.8: the mask is a 64×64 tile (the texture's own size — unchanged).
+## The shader param is the mask's WORLD-space tile: 128 px since the §4.8
+## 64-canvas amendment (1664ba9) — at the 64 px world tile the dither keeps
+## its ~2-tile world period (each 64-texel mask texel now spans 2 world px).
+const MASK_SIZE_PX := 128.0
 
 ## Atlas column of each water kind in the built TileSet (the §6.3 index
 ## order: 0 = `~` sea, 1 = `.` coastal sea). Coast-foam variant cells follow
@@ -52,12 +57,13 @@ const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 ## into the coast-foam water variants at tile-set build time.
 const STRIP_ID_PREFIX := "shore_"
 
-## The coast-foam variant dirs resolved by the LAST `build_tile_set` call
-## (all 8 strips present ⇒ true). The stamp side reads it so a registry-empty
-## fallback (or the S10 open-sea grid, which passes no dirs) stamps plain
-## fills. Reset on every build — all build sites in a process pass the same
-## table, so the value is stable per chunk ring.
+## The coast-foam readiness of the LAST `build_tile_set` call, per tile px
+## (all 8 strips present ⇒ true). The stamp side reads the flag for its OWN
+## tile px — never a last-build-wins global (the S10 open-sea grid builds
+## its 32 px set without dirs; a global flag would flip the world's 64 px
+## foam off under it — the cache made that ordering hazard real).
 static var foam_ready := false
+static var _foam_ready_by_px: Dictionary = {}
 
 
 ## The sprite id of a water kind (`terrain_{kind}_0`, A.5 "flat fills").
@@ -91,8 +97,8 @@ static func _to_rgba8(img: Image) -> Image:
 	return img
 
 
-## One 32×32 flat fill for the atlas: the registry texture's pixels when the
-## id resolves, else the palette fill (the pre-Phase-10 look).
+## One flat fill for the atlas at `tile_px`: the registry texture's pixels
+## when the id resolves, else the palette fill (the pre-Phase-10 look).
 static func _kind_image(kind: String, tile_px: int) -> Image:
 	var image := Image.create_empty(tile_px, tile_px, false, Image.FORMAT_RGBA8)
 	var texture := UiKitLib.icon_texture(sprite_id(kind))
@@ -129,12 +135,20 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 			Rect2i(0, 0, tile_px, tile_px),
 			Vector2i(int(KIND_COLUMNS[kind]) * tile_px, 0))
 	foam_ready = false
+	_foam_ready_by_px[tile_px] = false
 	var strips: Array[Image] = []
 	for dir_index in shore_dirs.size():
 		var strip_tex := UiKitLib.icon_texture(
 			STRIP_ID_PREFIX + str(shore_dirs[dir_index]))
 		var strip: Image = _to_rgba8(strip_tex.get_image()) \
 			if strip_tex != null else null
+		if strip != null and (strip.get_width() != tile_px
+				or strip.get_height() != tile_px):
+			# The shipped strips are 64-canvas art (§4.8 64-canvas
+			# amendment 1664ba9); a smaller per-map tile (the battle grid's
+			# 32) takes the exact nearest downscale so the foam band lands
+			# on the same edge fraction — never a top-left crop.
+			strip.resize(tile_px, tile_px, Image.INTERPOLATE_NEAREST)
 		strips.append(strip)
 	# the 4 edge bits map to the §6.6 dirs n/e/s/w = strip indices 0/2/4/6
 	var bit_strip := [0, 2, 4, 6]
@@ -146,6 +160,7 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 	tile_set.tile_size = Vector2i(tile_px, tile_px)
 	if all_resolved:
 		foam_ready = true
+		_foam_ready_by_px[tile_px] = true
 		var tiles_to_create: Array[Vector2i] = []
 		for kind in kinds:
 			tiles_to_create.append(Vector2i(int(KIND_COLUMNS[kind]), 0))
@@ -188,8 +203,12 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 ## mask, see `map_loader._shore_foam_mask`) when the variant set resolved.
 ## Plain fills fall back everywhere else — battle grids and registry-empty
 ## runs never see foam cells.
-static func water_coords(mask: int, kind_column: int) -> Vector2i:
-	if mask <= 0 or not foam_ready:
+static func water_coords(mask: int, kind_column: int,
+		tile_px: int = -1) -> Vector2i:
+	var ready := foam_ready
+	if tile_px >= 0 and _foam_ready_by_px.has(tile_px):
+		ready = _foam_ready_by_px[tile_px]
+	if mask <= 0 or not ready:
 		return Vector2i(kind_column, 0)
 	var kind_offset := 1 if kind_column != int(KIND_COLUMNS["sea"]) else 0
 	return Vector2i(2 + mask * 2 + kind_offset, 0)
@@ -260,10 +279,21 @@ static func _load_mask() -> Texture2D:
 ## params and a gate value that can never disagree (§4.7.17: one shader, one
 ## set of pins). The S10 open-sea grid passes no dirs — its atlas stays the
 ## two flat fills.
+## The water TileSets built this process, keyed by `tile_px` — every chunk
+## layer (and the S10 battle layer at its own px) shares ONE set per px, the
+## same caching convention as [method build_material]'s material. The foam
+## bake composes 34 cells and fetches + decompresses 8 registry strips per
+## build; rebuilding it per chunk spawn paid that on every boot chunk (the
+## 64-canvas boot-budget regression — TileSets are resources and share
+## safely across TileMapLayers).
+static var _tile_set_cache: Dictionary = {}
+
 static func build_layer(tile_px: int, shore_dirs: Array = []) -> TileMapLayer:
 	var layer := TileMapLayer.new()
 	layer.name = "Water"
-	layer.tile_set = build_tile_set(tile_px, shore_dirs)
+	if not _tile_set_cache.has(tile_px):
+		_tile_set_cache[tile_px] = build_tile_set(tile_px, shore_dirs)
+	layer.tile_set = _tile_set_cache[tile_px]
 	var material := build_material()
 	if material != null:
 		layer.material = material
