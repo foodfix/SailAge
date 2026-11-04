@@ -1,0 +1,93 @@
+{
+  "sprites": [
+    {
+      "id": "bar_left",
+      "file": "assets/ui/chrome/bar_left.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        ".": "transparent",
+        "o": "#465468"
+      },
+      "rows": [
+        "....oooooooooooo",
+        "..oooooooooooooo",
+        ".ooooooooooooooo",
+        ".ooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        ".ooooooooooooooo",
+        ".ooooooooooooooo",
+        "..oooooooooooooo",
+        "....oooooooooooo"
+      ]
+    },
+    {
+      "id": "bar_right",
+      "file": "assets/ui/chrome/bar_right.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        ".": "transparent",
+        "o": "#465468"
+      },
+      "rows": [
+        "oooooooooooo....",
+        "oooooooooooooo..",
+        "ooooooooooooooo.",
+        "ooooooooooooooo.",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "oooooooooooooooo",
+        "ooooooooooooooo.",
+        "ooooooooooooooo.",
+        "oooooooooooooo..",
+        "oooooooooooo...."
+      ]
+    },
+    {
+      "id": "bar_line",
+      "file": "assets/ui/chrome/bar_line.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        "m": "#232c3e"
+      },
+      "rows": [
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmm"
+      ]
+    }
+  ]
+}

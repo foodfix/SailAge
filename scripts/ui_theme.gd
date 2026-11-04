@@ -55,16 +55,67 @@ const TRANSPARENT := Color(0, 0, 0, 0)
 
 
 ## Builds the shared Theme per §4.9. Deterministic and side-effect free.
-static func build_theme() -> Theme:
+##
+## `use_textures` (§4.9: "nine-patch sheets layered at W3; flat StyleBoxFlat
+## remains the fallback when a texture id is absent"): when true, the
+## assembled nine-patch sheets under `assets/ui/chrome/` replace the flat
+## styleboxes they were generated from — per sheet, only where the file
+## exists (headless suites and fresh checkouts carry no `assets/ui/`, so the
+## flat fallback is what they keep getting). The bar sheet belongs to the
+## kit's value_bar, not to this theme. Default true; `test_ui_theme` pins
+## the flat fallback by building with `false`.
+static func build_theme(use_textures: bool = true) -> Theme:
 	var theme := Theme.new()
-	_setup_button(theme)
+	var sheets := _load_sheets() if use_textures else {}
+	_setup_button(theme, sheets)
 	_setup_scrollbars(theme)
-	_setup_panels(theme)
-	_setup_fields(theme)
+	_setup_panels(theme, sheets)
+	_setup_fields(theme, sheets)
 	_setup_sliders(theme)
 	_setup_tooltips(theme)
 	_setup_labels(theme)
 	return theme
+
+
+# --- Nine-patch sheet variants (§4.9 layering rule) ---------------------------
+
+## 48x48 sheets assembled by the governor from the 16x16 tiles, 16px margins
+## (80-* §4.8.8); the stylebox stretches the center and repeats the edges.
+const SHEET_MARGIN := 16
+const SHEET_PATHS := {
+	"panel": "res://assets/ui/chrome/ninepatch_panel.png",
+	"button": "res://assets/ui/chrome/ninepatch_button.png",
+	"button_focus": "res://assets/ui/chrome/ninepatch_button_focus.png",
+	"field": "res://assets/ui/chrome/ninepatch_field.png",
+}
+
+
+## Resolves every sheet id that exists AND loads (an absent file ⇒ the id
+## stays out of the map and every consumer keeps its flat stylebox).
+static func _load_sheets() -> Dictionary:
+	var sheets := {}
+	for key in SHEET_PATHS:
+		var path: String = SHEET_PATHS[key]
+		if not ResourceLoader.exists(path):
+			continue
+		var tex := load(path) as Texture2D
+		if tex != null:
+			sheets[key] = tex
+	return sheets
+
+
+## A nine-patch stylebox over one sheet (texture margins 16, draw region
+## full — the default region_rect — and the flat box's content margins, so
+## a textured button measures exactly like its flat fallback).
+static func _texture_box(tex: Texture2D, pad: int = 0) -> StyleBoxTexture:
+	var sb := StyleBoxTexture.new()
+	sb.texture = tex
+	sb.texture_margin_left = SHEET_MARGIN
+	sb.texture_margin_top = SHEET_MARGIN
+	sb.texture_margin_right = SHEET_MARGIN
+	sb.texture_margin_bottom = SHEET_MARGIN
+	sb.set_content_margin_all(pad)
+	return sb
 
 
 # --- Shared stylebox builders -------------------------------------------------
@@ -103,15 +154,32 @@ static func _focus_ring(accent: Color) -> StyleBoxFlat:
 	return sb
 
 
-static func _setup_button(theme: Theme) -> void:
-	# §4.9 Button row + state matrix.
-	theme.set_stylebox("normal", "Button",
-		_button_box(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE))
-	theme.set_stylebox("hover", "Button",
-		_button_box(PaletteLib.PANEL_BG, PaletteLib.ACCENT))
-	theme.set_stylebox("pressed", "Button",
-		_button_box(PaletteLib.PANEL_LINE, PaletteLib.PANEL_LINE))
-	theme.set_stylebox("focus", "Button", _focus_ring(PaletteLib.ACCENT))
+static func _setup_button(theme: Theme, sheets: Dictionary = {}) -> void:
+	# §4.9 Button row + state matrix. The W3 texture variant swaps the three
+	# state boxes to the ninepatch_button sheet (modulate unchanged); the
+	# variations keep their flat boxes — the sheet family has no Danger/Quiet
+	# variants, and their identity IS the colored border.
+	var normal_box: StyleBox = null
+	var hover_box: StyleBox = null
+	var pressed_box: StyleBox = null
+	if sheets.has("button"):
+		normal_box = _texture_box(sheets["button"], CONTENT_PAD)
+		hover_box = normal_box
+		pressed_box = normal_box
+	else:
+		normal_box = _button_box(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE)
+		hover_box = _button_box(PaletteLib.PANEL_BG, PaletteLib.ACCENT)
+		pressed_box = _button_box(PaletteLib.PANEL_LINE, PaletteLib.PANEL_LINE)
+	theme.set_stylebox("normal", "Button", normal_box)
+	theme.set_stylebox("hover", "Button", hover_box)
+	theme.set_stylebox("pressed", "Button", pressed_box)
+	# Keyboard focus: the ACCENT ring — flat draw_center-off ring, or the
+	# button_focus sheet's ACCENT border ring (its fill ships transparent).
+	if sheets.has("button_focus"):
+		theme.set_stylebox("focus", "Button",
+			_texture_box(sheets["button_focus"]))
+	else:
+		theme.set_stylebox("focus", "Button", _focus_ring(PaletteLib.ACCENT))
 	# Text stays TEXT through every interactive state; disabled text is
 	# PANEL_LINE (the state matrix's disabled cell).
 	theme.set_color("font_color", "Button", PaletteLib.TEXT)
@@ -196,24 +264,36 @@ static func _panel_box() -> StyleBoxFlat:
 	return sb
 
 
-static func _setup_panels(theme: Theme) -> void:
+static func _setup_panels(theme: Theme, sheets: Dictionary = {}) -> void:
 	# §4.9 Panel/PanelContainer row: PANEL_BG + 2px PANEL_LINE, radius 4
 	# (nine-patch sheets layer over this flat fallback at W3).
-	theme.set_stylebox("panel", "Panel", _panel_box())
-	theme.set_stylebox("panel", "PanelContainer", _panel_box())
+	var panel_box: StyleBox = null
+	if sheets.has("panel"):
+		panel_box = _texture_box(sheets["panel"])
+	else:
+		panel_box = _panel_box()
+	theme.set_stylebox("panel", "Panel", panel_box)
+	theme.set_stylebox("panel", "PanelContainer", panel_box)
 
 
 # --- LineEdit / TextEdit -------------------------------------------------------
 
-static func _setup_fields(theme: Theme) -> void:
+static func _setup_fields(theme: Theme, sheets: Dictionary = {}) -> void:
 	# §4.9 LineEdit/TextEdit row: bg PANEL_BG, border PANEL_LINE (the 1px
-	# inset look), focus border ACCENT; text + caret TEXT. The state matrix's
-	# disabled cell (text PANEL_LINE) maps to this release's uneditable-text
-	# color, and the read_only box mirrors normal so the field stays on
-	# palette.
+	# inset look), focus border ACCENT; text + caret TEXT. The W3 texture
+	# variant swaps the normal box to ninepatch_field (focus/read_only keep
+	# their flat boxes — the sheet family pins no ACCENT variant). The state
+	# matrix's disabled cell (text PANEL_LINE) maps to this release's
+	# uneditable-text color, and the read_only box mirrors normal so the
+	# field stays on palette.
 	for type_name in ["LineEdit", "TextEdit"]:
-		var normal := _flat(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE, FIELD_BORDER_W)
-		normal.set_content_margin_all(FIELD_PAD)
+		var normal: StyleBox
+		if sheets.has("field"):
+			normal = _texture_box(sheets["field"], FIELD_PAD)
+		else:
+			normal = _flat(PaletteLib.PANEL_BG, PaletteLib.PANEL_LINE,
+				FIELD_BORDER_W)
+			normal.set_content_margin_all(FIELD_PAD)
 		theme.set_stylebox("normal", type_name, normal)
 		var focus := _flat(PaletteLib.PANEL_BG, PaletteLib.ACCENT, FIELD_BORDER_W)
 		focus.set_content_margin_all(FIELD_PAD)

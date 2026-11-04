@@ -1,0 +1,95 @@
+{
+  "sprites": [
+    {
+      "id": "button_focus_corner",
+      "file": "assets/ui/chrome/button_focus_corner.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        ".": "transparent",
+        "a": "#d9a441",
+        "b": "#1c2230"
+      },
+      "rows": [
+        "....aaaaaaaaaaaa",
+        "..aaaaaaaaaaaaaa",
+        ".aaabbbbbbbbbbbb",
+        ".aabbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb",
+        "aabbbbbbbbbbbbbb"
+      ]
+    },
+    {
+      "id": "button_focus_edge",
+      "file": "assets/ui/chrome/button_focus_edge.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        "B": "#121724",
+        "a": "#d9a441",
+        "b": "#1c2230"
+      },
+      "rows": [
+        "aaaaaaaaaaaaaaaa",
+        "aaaaaaaaaaaaaaaa",
+        "BBBBBBBBBBBBBBBB",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb"
+      ]
+    },
+    {
+      "id": "button_focus_fill",
+      "file": "assets/ui/chrome/button_focus_fill.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        "b": "#1c2230"
+      },
+      "rows": [
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb"
+      ]
+    }
+  ]
+}

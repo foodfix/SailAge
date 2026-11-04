@@ -1,0 +1,94 @@
+{
+  "sprites": [
+    {
+      "id": "field_corner",
+      "file": "assets/ui/chrome/field_corner.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        ".": "transparent",
+        "b": "#1c2230",
+        "o": "#465468"
+      },
+      "rows": [
+        "....oooooooooooo",
+        "..oobbbbbbbbbbbb",
+        ".ooobbbbbbbbbbbb",
+        ".oobbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb",
+        "obbbbbbbbbbbbbbb"
+      ]
+    },
+    {
+      "id": "field_edge",
+      "file": "assets/ui/chrome/field_edge.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        "b": "#1c2230",
+        "o": "#465468"
+      },
+      "rows": [
+        "oooooooooooooooo",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb"
+      ]
+    },
+    {
+      "id": "field_fill",
+      "file": "assets/ui/chrome/field_fill.png",
+      "width": 16,
+      "height": 16,
+      "mode": "string-map",
+      "png": "indexed",
+      "palette": {
+        "b": "#1c2230"
+      },
+      "rows": [
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbb"
+      ]
+    }
+  ]
+}
