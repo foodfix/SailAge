@@ -1951,11 +1951,14 @@ yet.
     table above; colors wind `TEXT` / current `COAST_SEA` (the sprite
     pins). Toggled by `W`/`C` keys on S3 (session-local, default off,
     mirroring the chart's toggles, §4.3) and re-sampled on month change.
+    **Key semantics (amended 2026-11-04, W4-C adjudication — the original
+    pin made the current field unreachable):** `W` always toggles the
+    wind field; `C` toggles the current field **whenever either arrow
+    field is on** (the intel `C` is shadowed while field mode is active);
+    with both fields off, `C` is unchanged (the §4.5 intel window), and
+    `O`/`F`/the intel button always open the window.
     The HUD's existing wind/current arrows (§4.5) swap to the same
-    sprite ids. While the current field is on, the S3 `C` press toggles
-    the field and the §4.5 intel `C` is shadowed (the same shadow
-    convention as the chart's `C`, §4.3); with the field off, `C` is
-    unchanged, and `O`/`F`/the intel button always open the window.
+    sprite ids.
 
 - Locked palette (hex):
 
