@@ -374,8 +374,10 @@ func _test_texture_registry() -> void:
 			"registry resolves %s — %s" % [id, probes[id]])
 	# The override family registers when its dir exists; it does not in this
 	# tree, and the missing dir is skipped silently (headless-safe contract).
-	_check(UiKitLib.icon_texture("marker_wreck") == null,
-		"a missing class dir (markers/) skips silently — absent id ⇒ null")
+	# markers/ landed with the W3 follow-up (master commit 72d4ffe) — the
+	# registry now carries them (master fix, ledgered; the W5-A escalation).
+	_check(UiKitLib.icon_texture("marker_wreck") != null,
+		"markers/ registered since the W3 follow-up — marker ids resolve")
 	_check(UiKitLib.icon_texture("registry_absent_probe") == null,
 		"an unregistered id still resolves to null (the flat fallback)")
 	# Idempotent: the second call is a no-op; the deterministic sorted walks
