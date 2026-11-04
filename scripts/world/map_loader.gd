@@ -1061,6 +1061,43 @@ func _ensure_shore_tile_set() -> void:
 	_shore_source_id = _shore_tile_set.add_source(source)
 
 
+## The §6.6 stamp refinement (the 2026-11-04 foam-tick fix): the raster keeps
+## ONE code per water tile — the FIRST qualifying §6.6 direction, and the
+## compass priority runs n > ne > e > … — so a cape-step tile whose land
+## contact is diagonal AND orthogonal renders the DIAGONAL strip (`shore_ne`
+## paints its full top + right edges): the top band faces open water (the
+## perpendicular foam ticks in the Seville screenshot) and reads as T/L/cross
+## shapes along the coast. The overlay is cosmetic (§6.6), so the stamp
+## refines the choice: when the raster code is diagonal but an ORTHOGONAL
+## neighbour is a blocker in this loader's own decode, the ORTHOGONAL strip
+## for the first blocking direction in the §6.6 compass order (n, e, s, w)
+## stamps instead — the band hugs the true land edge and the coast line stays
+## continuous. Pure-diagonal tiles keep the raster's strip (the corner foam),
+## orthogonal and zero codes pass through unchanged, and the raster remains
+## the data source — this reads [member indices], never the artifact.
+## Cost: ≤ 4 byte reads per coded water cell at chunk spawn / warm — zero
+## per-frame work.
+func _shore_stamp_code(cell: Vector2i, code: int) -> int:
+	if code == 0 or (code % 2) == 1:
+		return code  # no edge, or already orthogonal (n/e/s/w = 1/3/5/7)
+	# The §6.6 compass order filtered to the orthogonal directions, each with
+	# its grid offset (y down, x wrap-aware like the builder).
+	var probes: Array = [
+		[1, Vector2i(0, -1)], [3, Vector2i(1, 0)],
+		[5, Vector2i(0, 1)], [7, Vector2i(-1, 0)],
+	]
+	for entry in probes:
+		var dir: Vector2i = entry[1]
+		var probe_x := posmod(cell.x + dir.x, width)
+		var probe_y := cell.y + dir.y
+		if probe_y < 0 or probe_y >= height:
+			continue  # the builder counts y-out-of-range as non-blocker (§6.6)
+		var kind := kind_of_index(int(indices[probe_y * width + probe_x]))
+		if not WaterLayerLib.KIND_COLUMNS.has(kind):
+			return int(entry[0])
+	return code
+
+
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
 ## chunk ring. `center_cell` is in **unbounded** world cells: sampling wraps per
 ## tile (`x mod width`), so `x = 4320` shows `x = 0` and no seam can show void.
@@ -1160,7 +1197,8 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 				# lookup rides this branch.
 				water.set_cell(Vector2i(i, j), water_source,
 					Vector2i(column, 0))
-				var code := shore_code_at(Vector2i(x, y))
+				var code := _shore_stamp_code(Vector2i(x, y),
+					shore_code_at(Vector2i(x, y)))
 				if code > 0 and _shore_columns.has(code):
 					shore.set_cell(Vector2i(i, j), _shore_source_id,
 						Vector2i(int(_shore_columns[code]), 0))
@@ -1212,7 +1250,8 @@ func _fill_shore_cells(shore: TileMapLayer, base_x: int, base_y: int) -> void:
 		if y < 0 or y >= height:
 			continue
 		for i in CHUNK_TILES:
-			var code := shore_code_at(Vector2i(base_x + i, y))
+			var code := _shore_stamp_code(Vector2i(base_x + i, y),
+				shore_code_at(Vector2i(base_x + i, y)))
 			if code <= 0 or not _shore_columns.has(code):
 				continue
 			shore.set_cell(Vector2i(i, j), _shore_source_id,
