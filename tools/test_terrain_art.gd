@@ -1,0 +1,449 @@
+extends Node
+## Phase-10 W4-C acceptance tests (docs/IMPLEMENT-Phase10.md §3 + §5 "Terrain
+## wiring" / "Arrow field" / "World markers"; docs/80-UI-UX.md §4.8.5–§4.8.10;
+## docs/90-ARCHITECTURE.md §9.2; docs/10-DATA-SCHEMA.md §6.6).
+## Headless scene test:
+##
+##   godot --headless res://tools/test_terrain_art.tscn
+##
+## Exits 0 when every check passes, 1 otherwise. Covers:
+##   * the §9.2 terrain variant hash `(x·31 + y·17) % variants` (fixed cells →
+##     fixed ids, seam-stable over the WRAPPED column);
+##   * the terrain atlas resolves every legend kind + variant (registry empty
+##     in suites ⇒ the flat palette fallback cells);
+##   * the §6.6 shore overlay decode (the shipped raster, the Lisbon berth
+##     `e` code, wrap-aware lookup, water-only codes on a sampled strip);
+##   * the §4.7.17 water layer: flat tiles for both water kinds, the shared
+##     material's pinned params (period 800 ms, darkening ×0.82) and the
+##     `UiMotion` gate (off ⇒ `u_motion` 0), the S10 reuse seam;
+##   * the §4.8.6 dir-id table (every bucket covered; token + vector forms);
+##   * the arrow field's deterministic sampling against a fixture decode
+##     (stride-4 lattice, water cells only, wind/current/VAR entries);
+##   * the S3 `W`/`C` fields default OFF, toggle, and re-sample on month
+##     rollover;
+##   * the world markers: every discovery category resolves as an id,
+##     discovered-only visibility, the wreck/treasure registry fallbacks.
+##
+## No overkill: one world boot re-fixtured across the groups; the shore
+## raster's full-grid correctness is the validator's (group 13), the suite
+## pins only the decode seam and named cells.
+
+const MapLoaderLib := preload("res://scripts/world/map_loader.gd")
+const WaterLayerLib := preload("res://scripts/world/water_layer.gd")
+const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const UiMotionLib := preload("res://scripts/ui_motion.gd")
+const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
+const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
+const DiscoveryLib := preload("res://scripts/world/discovery.gd")
+const PaletteLib := preload("res://scripts/palette.gd")
+const WorldScene := preload("res://scenes/world/world_map.tscn")
+
+## Lisbon's harbor pair (the persisted §6.1 table; the W3-C shore record:
+## the berth tile codes `e` — the shore sits due east of it).
+const LISBON_BERTH := Vector2i(2050, 615)
+## An open-Atlantic tile far from any coast (code 0) and its wrap twin.
+const OPEN_SEA := Vector2i(1000, 1080)
+
+var _failures: Array[String] = []
+var _checks := 0
+
+
+func _ready() -> void:
+	UiMotionLib.enabled = false  # the direct-boot pattern (§4.7.17)
+	_test_variant_hash()
+	_test_terrain_atlas()
+	_test_shore_overlay()
+	_test_water_layer()
+	_test_dir_table()
+	_test_arrow_field_fixture()
+	_test_arrow_field_world()
+	_test_world_markers()
+	UiKitLib.clear_textures()
+	_report()
+
+
+# --- Harness ----------------------------------------------------------------
+
+func _check(condition: bool, message: String) -> bool:
+	_checks += 1
+	if not condition:
+		_failures.append(message)
+		print("FAIL  %s" % message)
+	return condition
+
+
+func _report() -> void:
+	if _failures.is_empty():
+		print("ALL PASS (%d checks)" % _checks)
+		get_tree().quit(0)
+	else:
+		print("%d checks FAILED" % _failures.size())
+		for failure in _failures:
+			print("  - %s" % failure)
+		get_tree().quit(1)
+
+
+# --- §9.2 terrain variant hash ----------------------------------------------
+
+func _test_variant_hash() -> void:
+	_check(MapLoaderLib.terrain_variant_index(0, 0, 4) == 0,
+		"variant hash at (0,0) is 0")
+	_check(MapLoaderLib.terrain_variant_index(1, 0, 4) == 31 % 4,
+		"variant hash is (x·31 + y·17) % n at (1,0)")
+	_check(MapLoaderLib.terrain_variant_index(3, 5, 4)
+		== (3 * 31 + 5 * 17) % 4, "variant hash at (3,5) matches the pin")
+	_check(MapLoaderLib.terrain_variant_index(2113, 1474, 4)
+		== MapLoaderLib.terrain_variant_index(2113 + 4320, 1474, 4),
+		"the WRAPPED column picks the same variant across the seam")
+	_check(MapLoaderLib.terrain_variant_index(-1, 2, 4)
+		== MapLoaderLib.terrain_variant_index(4319, 2, 4),
+		"negative chunk-side x folds onto the wrapped answer")
+	_check(MapLoaderLib.terrain_variant_index(7, 11, 1) == 0,
+		"a single-variant kind always picks 0")
+	_check(int(MapLoaderLib.TERRAIN_VARIANTS.get("land", 0)) == 4
+		and int(MapLoaderLib.TERRAIN_VARIANTS.get("reef", 0)) == 1
+		and int(MapLoaderLib.TERRAIN_VARIANTS.get("polar_ice", 0)) == 2,
+		"the locked A.5 variant counts are land 4 / reef 1 / polar_ice 2")
+
+
+# --- Terrain atlas: every legend kind + variant resolves --------------------
+
+func _test_terrain_atlas() -> void:
+	var loader = MapLoaderLib.new()
+	_check(loader.load_map("res://data/maps/world.png", DataLoader.map_legend),
+		"the world map loads (%s)" % loader.last_error)
+	loader._ensure_tile_set()
+	_check(loader._terrain_cells.size() == 3,
+		"three terrain-art kinds resolve from the legend (land/reef/polar_ice)")
+	for index in [2, 3, 4]:
+		var entry: Dictionary = loader._terrain_cells.get(index, {})
+		_check(not entry.is_empty(),
+			"palette index %d resolves its legend kind (%s)" % [index,
+			loader.kind_of_index(index)])
+	_check(loader.kind_of_index(0) == "sea" and loader.kind_of_index(1) == "coastal_sea",
+		"the water kinds stay data-driven off the legend")
+	_check(WaterLayerLib.KIND_COLUMNS.has("sea")
+		and WaterLayerLib.KIND_COLUMNS.has("coastal_sea"),
+		"the water layer owns exactly the two flat water kinds")
+	_check(WaterLayerLib.sprite_id("sea") == "terrain_sea_0"
+		and WaterLayerLib.sprite_id("coastal_sea") == "terrain_coastal_sea_0",
+		"water sprite ids are the §4.8.5 flat fills")
+
+
+# --- §6.6 shore overlay ------------------------------------------------------
+
+func _test_shore_overlay() -> void:
+	var loader = MapLoaderLib.new()
+	_check(loader.load_map("res://data/maps/world.png", DataLoader.map_legend),
+		"the map loads for the shore decode (%s)" % loader.last_error)
+	loader._ensure_shore_decode()
+	_check(loader.shore_codes.size() == loader.width * loader.height,
+		"the shore decode covers the whole locked grid")
+	_check(loader.shore_code_at(LISBON_BERTH) == 3,
+		"Lisbon's berth codes `e` (§6.6 index 3; the shore sits due east)")
+	_check(loader.shore_code_at(OPEN_SEA) == 0,
+		"open water carries no edge code")
+	_check(loader.shore_code_at(Vector2i(-1, OPEN_SEA.y))
+		== loader.shore_code_at(Vector2i(loader.width - 1, OPEN_SEA.y)),
+		"shore lookups wrap on x")
+	_check(loader.shore_code_at(Vector2i(5, -1)) == 0
+		and loader.shore_code_at(Vector2i(5, loader.height)) == 0,
+		"out-of-range y reads 0 (cosmetic, never an error)")
+	for code in range(1, MapLoaderLib.SHORE_DIRS.size() + 1):
+		_check(not MapLoaderLib.SHORE_DIRS[code - 1].is_empty(),
+			"shore dir table covers code %d" % code)
+	# The §6.6 invariant on a sampled strip: codes sit on WATER tiles only.
+	var water_only := true
+	for y in range(LISBON_BERTH.y - 4, LISBON_BERTH.y + 5):
+		for x in range(LISBON_BERTH.x - 4, LISBON_BERTH.x + 5):
+			if loader.shore_code_at(Vector2i(x, y)) > 0 \
+					and not loader.is_passable_xy(x, y):
+				water_only = false
+	_check(water_only,
+		"sampled strip: coded cells are water tiles only (§6.6)")
+
+
+# --- §4.7.17 water layer ------------------------------------------------------
+
+func _test_water_layer() -> void:
+	var tile_set := WaterLayerLib.build_tile_set(32)
+	_check(tile_set != null and tile_set.get_next_source_id() == 1,
+		"the water TileSet carries exactly one atlas source")
+	var source := tile_set.get_source(tile_set.get_source_id(0)) \
+		as TileSetAtlasSource
+	_check(source != null and source.get_tiles_count() == 2,
+		"the water atlas carries the two flat fills (sea + coastal_sea)")
+	var material := WaterLayerLib.build_material()
+	_check(material != null, "the sea shader material builds")
+	if material != null:
+		_check(material.shader != null
+			and material.shader.resource_path == WaterLayerLib.SHADER_PATH,
+			"the material is the shared sea_water.gdshader")
+		_check(is_equal_approx(float(material.get_shader_parameter(
+			"u_period")), WaterLayerLib.SCROLL_PERIOD_MS / 1000.0),
+			"the scroll period is the pinned 800 ms")
+		_check(is_equal_approx(float(material.get_shader_parameter(
+			"u_darken")), WaterLayerLib.SEA_DARKEN),
+			"the darkening is the pinned ×0.82")
+		# UiMotion is OFF in this suite (direct-boot): frozen at offset 0.
+		_check(is_equal_approx(float(material.get_shader_parameter(
+			"u_motion")), 0.0),
+			"UiMotion off builds the layer frozen (u_motion 0)")
+		UiMotionLib.enabled = true
+		var running := WaterLayerLib.build_material()
+		# The cache: the gate was applied at build time (motion off), so the
+		# shared instance stays the frozen one until a consumer re-gates it.
+		_check(running == material,
+			"the material builds once per process (the S10/S3 shared seam)")
+		UiMotionLib.enabled = false
+	var layer := WaterLayerLib.build_layer(32)
+	_check(layer != null and layer.tile_set != null,
+		"build_layer returns a TileMapLayer with the water TileSet")
+	_check(layer.material == material,
+		"the built layer carries the shared material")
+	# The kind mapping is data-driven off the loader legend.
+	var loader = MapLoaderLib.new()
+	loader.load_map("res://data/maps/world.png", DataLoader.map_legend)
+	_check(WaterLayerLib.column_for_index(loader, 0) == 0,
+		"index 0 maps to the sea column")
+	_check(WaterLayerLib.column_for_index(loader, 1) == 1,
+		"index 1 maps to the coastal_sea column")
+	_check(WaterLayerLib.column_for_index(loader, 2) == -1,
+		"land renders on the terrain layer, never on water")
+	_check(WaterLayerLib.SEA_DARKEN == 0.82
+		and WaterLayerLib.SCROLL_PERIOD_MS == 800,
+		"the §4.7.17 pins stay on the shared builder")
+
+
+# --- §4.8.6 heading8 → dir table ----------------------------------------------
+
+func _test_dir_table() -> void:
+	var expected: Array[String] = ["e", "ne", "n", "nw", "w", "sw", "s", "se"]
+	_check(ArrowFieldLib.DIR_IDS == expected,
+		"the dir ids follow the §4.8.6 bucket order (bucket 0 = east)")
+	for bucket in expected.size():
+		_check(ArrowFieldLib.dir_id_of_bucket(bucket) == expected[bucket],
+			"bucket %d maps to `%s`" % [bucket, expected[bucket]])
+	_check(ArrowFieldLib.dir_id_of_compass("E") == "e"
+		and ArrowFieldLib.dir_id_of_compass("N") == "n"
+		and ArrowFieldLib.dir_id_of_compass("SE") == "se",
+		"compass tokens map through the same table")
+	_check(ArrowFieldLib.dir_id_of_compass("VAR") == ""
+		and ArrowFieldLib.dir_id_of_heading("X") == "",
+		"outside the §4.4 domain the dir id is empty")
+	_check(ArrowFieldLib.bucket_of_vector(Vector2(10, 0)) == 0,
+		"(+x) buckets 0 (east)")
+	_check(ArrowFieldLib.bucket_of_vector(Vector2(1, -4)) == 2,
+		"(0,−y) buckets 2 (north, screen y-down)")
+	_check(ArrowFieldLib.bucket_of_vector(Vector2(2, -2)) == 1,
+		"(+x,−y) buckets 1 (NE)")
+	_check(ArrowFieldLib.bucket_of_vector(Vector2(-2, 2)) == 5,
+		"(−x,+y) buckets 5 (SW)")
+	_check(ArrowFieldLib.bucket_of_vector(Vector2.ZERO) == -1,
+		"the zero vector has no bucket (the caller keeps the last)")
+
+
+# --- Arrow field vs a fixture decode -------------------------------------------
+
+## A minimal deterministic `OceanLayers` stand-in: region A prevails W,
+## region B is VAR; one eastward current of strength 2, one zero-strength.
+class FixtureOcean:
+	var decode_ok := true
+	var currents_decoded := true
+	var currents_ok := true
+
+	func prevailing_for(_cell: Vector2i, _month: int) -> String:
+		return "W" if _cell.x < 8 else "VAR"
+
+	func current_vector_at(cell: Vector2i, _month: int) -> Vector2:
+		return Vector2(2, 0) if cell.y == 0 else Vector2.ZERO
+
+
+func _test_arrow_field_fixture() -> void:
+	var ocean := FixtureOcean.new()
+	var is_water := func(_cell: Vector2i) -> bool: return true
+	var samples := ArrowFieldLib.sample(Vector2i(8, 4), Vector2i(16, 8), 4,
+		ocean, is_water, 16, 8)
+	_check(not samples.is_empty(), "the fixture samples a non-empty field")
+	# Determinism: the same query twice, byte-identical.
+	var again := ArrowFieldLib.sample(Vector2i(8, 4), Vector2i(16, 8), 4,
+		ocean, is_water, 16, 8)
+	_check(samples == again, "sampling is deterministic for a fixed decode")
+	# The lattice is stride-4 world-anchored.
+	var stride_ok := true
+	for entry in samples:
+		var cell: Vector2i = entry["cell"]
+		if cell.x % ArrowFieldLib.STRIDE != 0 or cell.y % ArrowFieldLib.STRIDE != 0:
+			stride_ok = false
+	_check(stride_ok, "every sampled cell sits on the stride-4 lattice")
+	# Wind entries: W west of x 8, VAR beyond; dirs follow the table.
+	var winds := samples.filter(func(e: Dictionary) -> bool:
+		return e["kind"] == "wind")
+	var w_west := winds.filter(func(e: Dictionary) -> bool:
+		return (e["cell"] as Vector2i).x < 8)
+	var w_var := winds.filter(func(e: Dictionary) -> bool:
+		return (e["cell"] as Vector2i).x >= 8)
+	_check(not w_west.is_empty() and w_west.all(func(e: Dictionary) -> bool:
+		return e["dir_id"] == "w" and not e["variable"]),
+		"a `W` region samples the `w` dir id")
+	_check(not w_var.is_empty() and w_var.all(func(e: Dictionary) -> bool:
+		return e["variable"] and e["dir_id"] == ""),
+		"a VAR region marks `variable` with no dir id")
+	# Current entries: the eastward jet on row 0 buckets 0 (east), strength
+	# rows without a vector sample nothing.
+	var currents := samples.filter(func(e: Dictionary) -> bool:
+		return e["kind"] == "current")
+	_check(not currents.is_empty() and currents.all(func(e: Dictionary) -> bool:
+		return (e["cell"] as Vector2i).y == 0 and e["dir_id"] == "e"),
+		"the fixture jet buckets east; zero-vector rows sample no arrow")
+	# Water-only: a false predicate yields an empty field.
+	var dry := ArrowFieldLib.sample(Vector2i(8, 4), Vector2i(16, 8), 4,
+		ocean, func(_cell: Vector2i) -> bool: return false, 16, 8)
+	_check(dry.is_empty(), "land cells sample nothing (water cells only)")
+	# Degenerate grids sample nothing (never crash).
+	_check(ArrowFieldLib.sample(Vector2i(0, 0), Vector2i(16, 8), 4,
+		ocean, is_water, 0, 8).is_empty(),
+		"a zero-width grid samples empty")
+	# Sorting: (y, x, kind) order — the deterministic draw source.
+	var sorted_ok := true
+	var prev_key := Vector3i(-1, -1, -1)
+	for entry in samples:
+		var cell: Vector2i = entry["cell"]
+		var kind_rank := 0 if entry["kind"] == "current" else 1
+		var key := Vector3i(cell.y, cell.x, kind_rank)
+		if prev_key != Vector3i(-1, -1, -1) and key < prev_key:
+			sorted_ok = false
+		prev_key = key
+	_check(sorted_ok, "samples sort by (y, x, kind) deterministically")
+
+
+# --- Arrow field on the real world scene (W/C state machine) -------------------
+
+func _test_arrow_field_world() -> void:
+	var world = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	_check(not world.wind_field_on() and not world.current_field_on(),
+		"W/C fields default OFF (§4.8.10, session-local)")
+	_check(world.arrow_field_samples().is_empty(),
+		"no samples before the first toggle")
+	world.toggle_wind_field()
+	_check(world.wind_field_on() and not world.current_field_on(),
+		"`W` turns the wind field on alone")
+	var wind_samples: Array = world.arrow_field_samples()
+	_check(not wind_samples.is_empty(),
+		"the wind field sampled the visible window (%d cells)" % wind_samples.size())
+	_check(world.arrow_field_month()
+		== SailingSimLib.month_for(maxi(int(GameState.day), 1)),
+		"the field samples the live calendar month")
+	var stride_ok := true
+	var water_ok := true
+	var map = DataLoader.map
+	for entry in wind_samples:
+		var cell: Vector2i = entry["cell"]
+		if cell.x % ArrowFieldLib.STRIDE != 0 or cell.y % ArrowFieldLib.STRIDE != 0:
+			stride_ok = false
+		if not map.is_passable(cell):
+			water_ok = false
+	_check(stride_ok, "world samples sit on the stride-4 lattice")
+	_check(water_ok, "world samples are passable water cells only")
+	var wind_ids := true
+	for entry in wind_samples:
+		if entry["variable"]:
+			continue
+		if ArrowFieldLib.DIR_IDS.find(str(entry["dir_id"])) < 0:
+			wind_ids = false
+	_check(wind_ids, "wind dir ids are §4.8.6 ids (or the VAR mark)")
+	# The current field needs the currents decode; the world scene warms it on
+	# frame 1 — force it here (the one expensive decode, shared with test_chart).
+	var ocean = OceanLayersLib.instance()
+	_check(ocean.decode_ok, "the wind raster decoded for the suite")
+	if not ocean.currents_decoded:
+		ocean.current_at(map.port_cell("lisbon"),
+			SailingSimLib.month_for(GameState.day))
+	world.toggle_current_field()
+	_check(world.wind_field_on() and world.current_field_on(),
+		"`C` adds the current field alongside the wind field")
+	_check(world.arrow_field_samples().size() >= wind_samples.size(),
+		"the combined field carries at least the wind entries")
+	# Month rollover re-samples (§4.8.10): with a field on, crossing a month
+	# boundary flips the sampled month on the next sample (any phase shift
+	# past 30 days is guaranteed to cross one).
+	var month_before: int = world.arrow_field_month()
+	GameState.day += 40
+	_check(SailingSimLib.month_for(GameState.day) != month_before,
+		"the shifted fixture day really crossed a month boundary")
+	world.toggle_current_field()  # C off — and the re-sample reads the new month
+	var drifted: int = world.arrow_field_month()
+	_check(drifted != month_before,
+		"a month rollover re-samples the field (sampled month %d)" % drifted)
+	_check(not world.current_field_on(),
+		"`C` toggled the current field off (field-off C is the intel's)")
+	world.toggle_wind_field()
+	_check(not world.wind_field_on(), "`W` toggles the wind field off")
+	GameState.day -= 40
+	world.queue_free()
+
+
+# --- World markers (§3) ---------------------------------------------------------
+
+func _test_world_markers() -> void:
+	var world = WorldScene.instantiate()
+	world.route_to_port = false
+	world.route_to_battle = false
+	add_child(world)
+	var map = DataLoader.map
+	# The §6.6 decode rides the scene's frame-2 warm-up; the suite forces it
+	# (the boot budget keeps it off the first frame — test_world_map's pin).
+	world._loader.warm_shore_overlay()
+	_check(map != null and map.shore_codes.size() > 0,
+		"the world boot decoded the shore overlay")
+	# The categories cover all 30 discoveries (§3 / A.4).
+	var categories := {}
+	for entry in DataLoader.discoveries_list:
+		categories[str((entry as Dictionary).get("category", ""))] = true
+	_check(categories.has("natural") and categories.has("ruins")
+		and categories.has("relic") and categories.has("creature"),
+		"the four discovery categories are all present in the data")
+	# Discovered-only: none found ⇒ no marker nodes.
+	GameState.new_game("portugal", false)
+	GameState.discoveries_found.clear()
+	world.sync_from_state()
+	_check(world._discovery_nodes.is_empty(),
+		"zero discovered sites ⇒ zero discovery markers")
+	# One found discovery surfaces exactly one node at its tile.
+	var discovery: Dictionary = DataLoader.discoveries_list[0]
+	var discovery_id := str(discovery.get("id", ""))
+	var category := str(discovery.get("category", ""))
+	GameState.discoveries_found.append(discovery_id)
+	world._sync_discovery_markers()
+	_check(world._discovery_nodes.size() == 1,
+		"one discovered site renders exactly one marker")
+	var node: Control = world._discovery_nodes.get(discovery_id, null)
+	_check(node != null, "the marker node exists for the found id")
+	if node != null:
+		var expected: Vector2 = Vector2(DiscoveryLib.position_of_entry(discovery)) \
+			* float(map.tile_size_px)
+		_check(node.position == expected,
+			"the marker sits on the discovery's tile (§3 like port markers)")
+		var sprite := node.get_child(0) as Control
+		_check(sprite != null,
+			"the marker carries its sprite (registry empty ⇒ fallback square)")
+	_check(UiKitLib.icon_texture("marker_discovery_%s" % category) == null,
+		"the registry is empty in suites (fallback path exercised)")
+	# Undiscovered again ⇒ the marker disappears (discovered-only).
+	GameState.discoveries_found.clear()
+	world._sync_discovery_markers()
+	_check(world._discovery_nodes.is_empty(),
+		"clearing the found set removes the markers (undiscovered never renders)")
+	# A second category resolves its own id form.
+	for entry in DataLoader.discoveries_list:
+		var cat := str((entry as Dictionary).get("category", ""))
+		_check(["natural", "ruins", "relic", "creature"].has(cat)
+			and not cat.is_empty(),
+			"category `%s` resolves a marker_discovery_* id" % cat)
+		if cat != "natural":
+			break
+	world.queue_free()

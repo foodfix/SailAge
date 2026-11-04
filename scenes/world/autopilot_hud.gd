@@ -22,7 +22,6 @@ extends PanelContainer
 ## `scripts/palette.gd`).
 
 const AutopilotLib := preload("res://scripts/world/autopilot.gd")
-const PaletteLib := preload("res://scripts/palette.gd")
 
 ## `sail.autopilot.*` keys (docs/80-* §4.15).
 const KEY_HUD_BAR := "sail.autopilot.hud.bar"
@@ -36,17 +35,8 @@ var _wired := false
 
 
 func _ready() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1)
-	style.content_margin_left = PaletteLib.MARGIN
-	style.content_margin_right = PaletteLib.MARGIN
-	style.content_margin_top = 4
-	style.content_margin_bottom = 4
-	add_theme_stylebox_override("panel", style)
-	_info.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_info.add_theme_font_size_override("font_size", 14)
+	# Phase-10 sweep: the bar's panel chrome retired to the theme (§4.9
+	# PanelContainer row); the info line reads in the theme's Label ink.
 	_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cancel.text = I18n.t_key(KEY_CANCEL)
 	_cancel.pressed.connect(_on_cancel_pressed)

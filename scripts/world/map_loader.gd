@@ -32,6 +32,11 @@ extends RefCounted
 ## this script also runs before Godot has written its class cache.
 
 const PaletteLib := preload("res://scripts/palette.gd")
+## Phase-10 art pass (docs/90-* §9.2): terrain sprites resolve through the W3
+## texture registry (`UiKit.icon_texture`), the animated water layer through
+## the shared builder (`80-*` §4.7.17).
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const WaterLayerLib := preload("res://scripts/world/water_layer.gd")
 
 # --- Locked constants (docs/10-* §6.1–§6.3) --------------------------------
 
@@ -62,6 +67,9 @@ const DEFAULT_VIEW_TILES := Vector2i(40, 23)
 ## Rough per-cell footprint of a TileMapLayer cell (quadrant + cell data); only
 ## used by [method live_chunk_bytes_estimate] for the < 50 MB debug assert.
 const MEMORY_PER_CELL_BYTES := 16
+## Layers per chunk since the Phase-10 art pass (§9.2): terrain + water +
+## shore overlay — the same multiplier the memory estimate applies.
+const LAYERS_PER_CHUNK := 3
 ## A port this close to the seam is also drawn on the other side of it
 ## (§9 step 5: `x = 0` also shows at `x = 4320` and vice versa).
 const SEAM_MARGIN := 8
@@ -85,6 +93,67 @@ var legend_tiles: Dictionary = {}
 ## than re-typed so a synthetic [method from_indices] map uses the same indices
 ## the shipped artifact does.
 var palette_chars: Dictionary = _default_palette()
+
+# --- Terrain art & overlay layers (docs/90-* §9.2, docs/10-* §6.6) ----------
+
+## §6.6: the shore-edge raster (water→land boundary codes, 1 px = 1 tile,
+## indices 1–8 = the §6.5 compass order = the priority order; 0 = no edge).
+## Data, not an imported texture — same `FileAccess` + decode pattern as
+## `world.png`; decoded once per process (static-shared: the raster is
+## immutable session data, exactly like the §6.5 ocean rasters).
+const SHORE_PNG := "res://data/maps/world_shore.png"
+## §6.6 code order (index 1..8): n, ne, e, se, s, sw, w, nw.
+const SHORE_DIRS: Array[String] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
+## Shore overlay sprite ids: `shore_{dir}.png` (A.6) through the registry.
+const SHORE_SPRITE_PREFIX := "shore_"
+
+## A.5 locked variant counts per terrain kind; the variant pick is the cell
+## hash `(x·31 + y·17) % variants` over the WRAPPED tile x (§9.2 / §4.8 —
+## the same tile must pick the same variant everywhere it is drawn, seam
+## included). A legend kind outside this table renders one flat fallback.
+const TERRAIN_VARIANTS := {"land": 4, "reef": 1, "polar_ice": 2}
+const VARIANT_HASH_X := 31
+const VARIANT_HASH_Y := 17
+
+## One decode of `world_shore.png` per (grid size × process): the raster is
+## immutable session data, so the static share keeps the suite's many world
+## boots from re-paying the ~9.3 M-pixel pass; a synthetic grid (a different
+## size) simply carries no shore codes and never poisons the real decode.
+static var _shore_shared: PackedByteArray = PackedByteArray()
+static var _shore_shared_size := Vector2i.ZERO
+static var _shore_shared_error := ""
+
+var shore_codes: PackedByteArray = PackedByteArray()
+
+# --- Rendering state -------------------------------------------------------
+
+var _tile_set: TileSet = null
+var _atlas_source_id := -1
+## `{palette_index → {row, variants, kind}}` for the terrain-art kinds
+## (indices ≥ 2); water indices render on the water layer instead.
+var _terrain_cells: Dictionary = {}
+## `{palette_index → water column}` for the two flat water kinds, precomputed
+## off the legend so the chunk fill stays a dictionary probe (§9.2).
+var _water_columns: Dictionary = {}
+## The animated water layer's shared material — ONE instance across every
+## chunk layer, exposed for S10's battle water (`80-*` §4.7.17: S10 reuses
+## the same shader through the shared `water_layer.gd` builder).
+var _water_material: ShaderMaterial = null
+var _water_tile_set: TileSet = null
+var _water_source_id := -1
+## The shore overlay's TileSet (one strip per decoded code that resolved a
+## registry texture) and its `{code → atlas column}` map.
+var _shore_tile_set: TileSet = null
+var _shore_source_id := -1
+var _shore_columns: Dictionary = {}
+var _chunks_root: Node2D = null
+var _chunks: Dictionary = {}
+var _port_overlay: Node2D = null
+var _port_nodes: Dictionary = {}
+var _last_center := Vector2i(-1, -1)
+var _last_view := Vector2i(-1, -1)
+## Known-port ids the overlay was last built for (skips a rebuild per step).
+var _overlay_known: Array = []
 
 
 static func _default_palette() -> Dictionary:
@@ -112,19 +181,6 @@ var _shore_ready := false
 ## `Vector2i(x mod width, y) → port_id`, the inverse of [member _shore_tiles].
 var _shore_at: Dictionary = {}
 var _shore_at_ready := false
-
-# --- Rendering state -------------------------------------------------------
-
-var _tile_set: TileSet = null
-var _atlas_source_id := -1
-var _chunks_root: Node2D = null
-var _chunks: Dictionary = {}
-var _port_overlay: Node2D = null
-var _port_nodes: Dictionary = {}
-var _last_center := Vector2i(-1, -1)
-var _last_view := Vector2i(-1, -1)
-## Known-port ids the overlay was last built for (skips a rebuild per step).
-var _overlay_known: Array = []
 
 
 # --- Loading ---------------------------------------------------------------
@@ -346,6 +402,14 @@ func _reset_caches() -> void:
 	_shore_at_ready = false
 	_tile_set = null
 	_atlas_source_id = -1
+	_terrain_cells = {}
+	_water_columns = {}
+	_water_material = null
+	_water_tile_set = null
+	_water_source_id = -1
+	_shore_tile_set = null
+	_shore_source_id = -1
+	_shore_columns = {}
 	_chunks_root = null
 	_chunks = {}
 	_port_overlay = null
@@ -403,6 +467,131 @@ func terrain_kind(cell: Vector2i) -> String:
 		if kind is String:
 			return kind
 	return ""
+
+
+## The legend kind of a palette index (`index_xy`'s value domain), or ""
+## when the index is out of range or the legend names no kind for it — the
+## data-driven source for the terrain/water sprite ids (§9.2).
+func kind_of_index(index: int) -> String:
+	if index < 0 or index >= PALETTE_CHARS.length():
+		return ""
+	for ch in palette_chars:
+		if int(palette_chars[ch]) == index:
+			var def = legend_tiles.get(str(ch), null)
+			if def is Dictionary:
+				var kind = (def as Dictionary).get("kind", "")
+				return kind if kind is String else ""
+			return ""
+	return ""
+
+
+## The §9.2 cell-hash variant pick: `(x·31 + y·17) % variants`. `x` is the
+## WRAPPED tile column (the same world tile picks the same variant in every
+## chunk it is drawn in, seam copies included); `posmod` keeps negative
+## chunk-side coordinates on the same answer.
+static func terrain_variant_index(x: int, y: int, variants: int) -> int:
+	if variants <= 0:
+		return 0
+	return posmod(x * VARIANT_HASH_X + y * VARIANT_HASH_Y, variants)
+
+
+## The shore-edge code at `cell` (§6.6: 0 = no edge, 1..8 = the
+## `SHORE_DIRS` compass order), x wrap-aware. Always 0 before the raster
+## decodes, for a synthetic grid that is not the shore raster's locked size,
+## or out of bounds — the overlay is cosmetic and never blocks a load.
+func shore_code_at(cell: Vector2i) -> int:
+	if shore_codes.is_empty() or width <= 0 or height <= 0:
+		return 0
+	if cell.y < 0 or cell.y >= height:
+		return 0
+	return int(shore_codes[cell.y * width + posmod(cell.x, width)])
+
+
+## Decodes `data/maps/world_shore.png` (§6.6) into [member shore_codes] —
+## once per process (the raster is immutable session data; the static share
+## keeps the suite's many world boots from re-paying the ~9.3 M-pixel pass).
+## Same artifact rules as `world.png`: indexed colour (type 3), 8-bit,
+## non-interlaced, exactly this loader's grid, palette indices ⊆ 0–8.
+## Any violation leaves the overlay empty (cosmetic only) with the reason on
+## the console — never a failed map load.
+func _ensure_shore_decode() -> void:
+	var size := Vector2i(width, height)
+	if _shore_shared_size != size:
+		_shore_shared_size = size
+		_shore_shared = _decode_shore_raster()
+	shore_codes = _shore_shared
+	if not _shore_shared_error.is_empty():
+		push_error("MapLoader: shore overlay disabled (%s)"
+			% _shore_shared_error)
+
+
+## The static decode behind [method _ensure_shore_decode]. Empty (with
+## `_shore_shared_error` set) on any artifact violation; a grid-size mismatch
+## is a silent skip — a synthetic test grid simply carries no shore codes.
+func _decode_shore_raster() -> PackedByteArray:
+	_shore_shared_error = ""
+	if width <= 0 or height <= 0:
+		return PackedByteArray()
+	if not FileAccess.file_exists(SHORE_PNG):
+		return PackedByteArray()
+	var bytes := FileAccess.get_file_as_bytes(SHORE_PNG)
+	if bytes.is_empty():
+		return PackedByteArray()
+	var header := _read_png_header(bytes)
+	if header.is_empty():
+		_shore_shared_error = "not a PNG or the IHDR chunk is truncated"
+		return PackedByteArray()
+	if int(header.get("width", 0)) != width \
+			or int(header.get("height", 0)) != height:
+		# A loader over another grid (a synthetic fixture) has no shore data;
+		# the shipped pair is size-checked by validator group 13.
+		return PackedByteArray()
+	if int(header.get("colour_type", -1)) != 3:
+		_shore_shared_error = "not an indexed-colour PNG (§6.6)"
+		return PackedByteArray()
+	if int(header.get("bit_depth", -1)) != 8:
+		_shore_shared_error = "indexed bit depth is not 8"
+		return PackedByteArray()
+	if int(header.get("interlace", 0)) != 0:
+		_shore_shared_error = "interlaced PNGs are not supported"
+		return PackedByteArray()
+	var palette: PackedByteArray = header.get("palette", PackedByteArray())
+	if palette.size() < 3:
+		_shore_shared_error = "no PLTE chunk"
+		return PackedByteArray()
+	var image := Image.new()
+	if image.load_png_from_buffer(bytes) != OK:
+		_shore_shared_error = "Image.load_png_from_buffer rejected the raster"
+		return PackedByteArray()
+	var colour_to_index := {}
+	for index in palette.size() / 3:
+		var key := (palette[index * 3] << 16) | (palette[index * 3 + 1] << 8) \
+			| palette[index * 3 + 2]
+		if not colour_to_index.has(key):
+			colour_to_index[key] = index
+	var data := image.get_data()
+	var bpp := 3 if image.get_format() == Image.FORMAT_RGB8 else 4
+	var count := width * height
+	var out := PackedByteArray()
+	out.resize(count)
+	var max_index := SHORE_DIRS.size()
+	for pixel in count:
+		var offset := pixel * bpp
+		var key := (data[offset] << 16) | (data[offset + 1] << 8) \
+			| data[offset + 2]
+		var value: int = colour_to_index.get(key, -1)
+		if value < 0:
+			_shore_shared_error = "pixel (%d,%d) colour #%06x is not in the PLTE" % [
+				pixel % width, pixel / width, key,
+			]
+			return PackedByteArray()
+		if value > max_index:
+			_shore_shared_error = "palette index %d at tile (%d,%d) is outside the §6.6 0-8 set" % [
+				value, pixel % width, pixel / width,
+			]
+			return PackedByteArray()
+		out[pixel] = value
+	return out
 
 
 ## `{kind: tile_count}` census over the whole grid (debug/tests only: it walks
@@ -748,8 +937,12 @@ func build_tilemap(parent: Node2D, ports: Dictionary = {}, nations: Dictionary =
 	return _chunks_root
 
 
-## One in-memory atlas shared by every chunk: five 32×32 palette squares
-## (§6.3 order, colors from `80-*` §4.8 via `scripts/palette.gd`).
+## One in-memory atlas shared by every chunk — the §9.2 terrain art: one row
+## per non-water legend kind (`land`, `reef`, `polar_ice`), one 32×32 cell
+## per variant. Each cell is the registry sprite `terrain_{kind}_{variant}`
+## when it resolves, else the flat palette fill (§4.9 "an absent id ⇒ flat
+## fallback"). The water kinds (`sea` / `coastal_sea`) are NOT in this atlas:
+## they are flat tiles on the animated water layer (§4.7.17).
 func _ensure_tile_set() -> void:
 	if _tile_set != null:
 		return
@@ -757,21 +950,111 @@ func _ensure_tile_set() -> void:
 		PaletteLib.SEA, PaletteLib.COAST_SEA, PaletteLib.LAND,
 		PaletteLib.REEF, PaletteLib.ICE,
 	]
-	var image := Image.create_empty(colors.size() * tile_size_px, tile_size_px,
-		false, Image.FORMAT_RGBA8)
-	for index in colors.size():
-		image.fill_rect(
-			Rect2i(index * tile_size_px, 0, tile_size_px, tile_size_px), colors[index]
-		)
+	# Terrain kinds in palette-index order from the loaded legend (§9.2:
+	# "legend kinds render as generated terrain tiles"); water kinds record
+	# their water-layer column instead; an index whose legend kind is
+	# unknown is skipped entirely.
+	var rows: Array = []
+	_water_columns = {}
+	for index in range(0, colors.size()):
+		var kind := kind_of_index(index)
+		if WaterLayerLib.KIND_COLUMNS.has(kind):
+			_water_columns[index] = int(WaterLayerLib.KIND_COLUMNS[kind])
+			continue
+		if index < 2 or kind.is_empty():
+			continue
+		rows.append({
+			"index": index,
+			"kind": kind,
+			"row": rows.size(),
+			"variants": int(TERRAIN_VARIANTS.get(kind, 1)),
+		})
+	var max_variants := 1
+	for entry in rows:
+		max_variants = maxi(max_variants, int(entry["variants"]))
+	var image := Image.create_empty(max_variants * tile_size_px,
+		rows.size() * tile_size_px, false, Image.FORMAT_RGBA8)
+	for entry in rows:
+		var row := int(entry["row"])
+		var variants := int(entry["variants"])
+		for variant in variants:
+			var tile_image := _terrain_kind_image(str(entry["kind"]), variant,
+				colors[int(entry["index"])])
+			image.blit_rect(tile_image, Rect2i(0, 0, tile_size_px, tile_size_px),
+				Vector2i(variant * tile_size_px, row * tile_size_px))
+		_terrain_cells[int(entry["index"])] = entry
 	var texture := ImageTexture.create_from_image(image)
 	_tile_set = TileSet.new()
 	_tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
 	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
-	for index in colors.size():
-		source.create_tile(Vector2i(index, 0))
+	for entry in rows:
+		for variant in int(entry["variants"]):
+			source.create_tile(Vector2i(variant, int(entry["row"])))
 	_atlas_source_id = _tile_set.add_source(source)
+
+
+## One terrain-variant cell image: the registry sprite's pixels when the id
+## resolves, else the flat palette fill (the pre-Phase-10 look, §4.9).
+func _terrain_kind_image(kind: String, variant: int, fallback: Color) -> Image:
+	var image := Image.create_empty(tile_size_px, tile_size_px, false,
+		Image.FORMAT_RGBA8)
+	var texture := UiKitLib.icon_texture(
+		"terrain_%s_%d" % [kind, variant])
+	if texture != null:
+		var pixels := texture.get_image()
+		if pixels != null:
+			image.blit_rect(pixels, Rect2i(0, 0, tile_size_px, tile_size_px),
+				Vector2i.ZERO)
+			return image
+	image.fill(fallback)
+	return image
+
+
+## The animated water layer's ONE shared material (§4.7.17) — exposed so S10's
+## battle water (W5-A) reuses the same builder output; `null` when the shader
+## or the mask is missing (flat fills, no animation).
+func water_material() -> ShaderMaterial:
+	if _water_material == null:
+		_water_material = WaterLayerLib.build_material()
+	return _water_material
+
+
+## The shore overlay TileSet: one 32×32 cell per §6.6 code whose
+## `shore_{dir}` strip resolves in the registry; unresolved codes render
+## nothing (the overlay is cosmetic, §6.6).
+func _ensure_shore_tile_set() -> void:
+	if _shore_tile_set != null:
+		return
+	var resolved: Array = []
+	for code in range(1, SHORE_DIRS.size() + 1):
+		if UiKitLib.icon_texture(SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1]) \
+				!= null:
+			resolved.append(code)
+	var image := Image.create_empty(
+		maxi(resolved.size(), 1) * tile_size_px, tile_size_px, false,
+		Image.FORMAT_RGBA8)
+	var source := TileSetAtlasSource.new()
+	var texture := ImageTexture.create_from_image(image)
+	source.texture = texture
+	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
+	_shore_columns = {}
+	for column in resolved.size():
+		var code := int(resolved[column])
+		var pixels: Texture2D = UiKitLib.icon_texture(
+			SHORE_SPRITE_PREFIX + SHORE_DIRS[code - 1])
+		var strip := pixels.get_image()
+		if strip == null:
+			continue
+		image.blit_rect(strip, Rect2i(0, 0, tile_size_px, tile_size_px),
+			Vector2i(column * tile_size_px, 0))
+		source.create_tile(Vector2i(column, 0))
+		_shore_columns[code] = column
+	texture.update(image)
+	_shore_tile_set = TileSet.new()
+	_shore_tile_set.tile_size = Vector2i(tile_size_px, tile_size_px)
+	_shore_source_id = _shore_tile_set.add_source(source)
 
 
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
@@ -836,12 +1119,27 @@ static func _floor_div(value: int, divisor: int) -> int:
 
 
 func _spawn_chunk(key: Vector2i) -> TileMapLayer:
+	_ensure_shore_tile_set()
 	var layer := TileMapLayer.new()
 	layer.name = "Chunk_%d_%d" % [key.x, key.y]
 	layer.tile_set = _tile_set
 	layer.position = Vector2(
 		key.x * CHUNK_TILES * tile_size_px, key.y * CHUNK_TILES * tile_size_px
 	)
+	# The animated water layer (§9.2/§4.7.17): flat sea/coastal_sea tiles under
+	# the shared shader material, one child layer per chunk. Water and terrain
+	# never share a cell, so the child's draw order under the terrain parent
+	# is invisible; the shore overlay is the second child — foam always above
+	# the water it rims. The layers carry no extra z: the chunk's position and
+	# the port overlay's z 2 stay the only ordering surfaces.
+	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px)
+	if water_material() != null:
+		water.material = water_material()
+	water.name = "Water"
+	var shore: TileMapLayer = TileMapLayer.new()
+	shore.name = "ShoreOverlay"
+	shore.tile_set = _shore_tile_set
+	var water_source := _water_source_id_of(water)
 	var base_x := key.x * CHUNK_TILES
 	var base_y := key.y * CHUNK_TILES
 	for j in CHUNK_TILES:
@@ -851,9 +1149,77 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 		for i in CHUNK_TILES:
 			var x := base_x + i
 			var value := int(indices[y * width + posmod(x, width)])
-			layer.set_cell(Vector2i(i, j), _atlas_source_id, Vector2i(value, 0))
+			var column: int = _water_columns.get(value, -1)
+			if column >= 0:
+				# A water kind (§4.8.5: flat fills on the water layer); the
+				# §6.6 foam codes exist on WATER tiles only, so the shore
+				# lookup rides this branch.
+				water.set_cell(Vector2i(i, j), water_source,
+					Vector2i(column, 0))
+				var code := shore_code_at(Vector2i(x, y))
+				if code > 0 and _shore_columns.has(code):
+					shore.set_cell(Vector2i(i, j), _shore_source_id,
+						Vector2i(int(_shore_columns[code]), 0))
+				continue
+			var terrain: Dictionary = _terrain_cells.get(value, {})
+			if terrain.is_empty():
+				continue
+			# Terrain art: the variant is the §9.2 cell hash over the WRAPPED
+			# tile column — the same tile picks the same variant everywhere,
+			# seam copies included.
+			var variant := terrain_variant_index(posmod(x, width), y,
+				int(terrain["variants"]))
+			layer.set_cell(Vector2i(i, j), _atlas_source_id,
+				Vector2i(variant, int(terrain["row"])))
+	layer.add_child(water)
+	layer.add_child(shore)
 	_chunks_root.add_child(layer)
+	# The shore raster decodes OFF the boot frame (the §9 boot budget): the
+	# world scene warms it on its frame-2 tick, which then re-stamps every
+	# live chunk. Until then the overlay is simply absent (cosmetic, §6.6).
+	if not shore_codes.is_empty():
+		_fill_shore_cells(shore, base_x, base_y)
 	return layer
+
+
+## Re-stamps the shore overlay into every live chunk — the deferred-decode
+## path ([method warm_shore_overlay]; the §6.6 overlay is cosmetic, so chunks
+## built before the decode simply gain their foam now).
+func warm_shore_overlay() -> void:
+	_ensure_shore_decode()
+	_ensure_shore_tile_set()
+	if shore_codes.is_empty() or _chunks.is_empty():
+		return
+	for key in _chunks:
+		var chunk: Node = _chunks[key]
+		var shore := chunk.get_node_or_null("ShoreOverlay") as TileMapLayer
+		if shore == null:
+			continue
+		_fill_shore_cells(shore, key.x * CHUNK_TILES, key.y * CHUNK_TILES)
+
+
+## Stamps the §6.6 foam cells of one chunk rect into `shore` (codes only on
+## water tiles; tiles whose strip id the registry lacks render nothing).
+func _fill_shore_cells(shore: TileMapLayer, base_x: int, base_y: int) -> void:
+	if _shore_tile_set == null or _shore_columns.is_empty():
+		return
+	for j in CHUNK_TILES:
+		var y := base_y + j
+		if y < 0 or y >= height:
+			continue
+		for i in CHUNK_TILES:
+			var code := shore_code_at(Vector2i(base_x + i, y))
+			if code <= 0 or not _shore_columns.has(code):
+				continue
+			shore.set_cell(Vector2i(i, j), _shore_source_id,
+				Vector2i(int(_shore_columns[code]), 0))
+
+
+## The atlas source id of a water layer built by [constant WaterLayerLib]
+## (its TileSet carries exactly one source, added first ⇒ id 0).
+static func _water_source_id_of(water: TileMapLayer) -> int:
+	return water.tile_set.get_next_source_id() - 1 \
+		if water.tile_set != null else -1
 
 
 ## Live chunk count (the §9 debug assert: ≤ 24).
@@ -861,9 +1227,11 @@ func live_chunk_count() -> int:
 	return _chunks.size()
 
 
-## Rough memory of the live chunk cell data (< 50 MB per §9).
+## Rough memory of the live chunk cell data (< 50 MB per §9; the estimate
+## covers all [constant LAYERS_PER_CHUNK] layers a chunk now carries).
 func live_chunk_bytes_estimate() -> int:
-	return _chunks.size() * CHUNK_TILES * CHUNK_TILES * MEMORY_PER_CELL_BYTES
+	return _chunks.size() * CHUNK_TILES * CHUNK_TILES * MEMORY_PER_CELL_BYTES \
+		* LAYERS_PER_CHUNK
 
 
 ## True when the live chunks cover every tile under `rect` (world pixels). The
@@ -1019,11 +1387,15 @@ func _nation_colour(nation_id: String, nations: Dictionary) -> Color:
 	return PaletteLib.ACCENT
 
 
-## The port's map node, anchored on its **shore** tile: a 0.6-tile nation square
-## plus the English name's initial, and a small berth marker on the adjacent sea
-## tile so the pair reads at a glance (placeholder art, `80-*` §4.8: plain shapes
-## + the default font, no textures). The holder sits at the shore tile's origin;
-## the berth marker is positioned relative to it, so a seam offset carries both.
+## The port's map node, anchored on its **shore** tile: the `terrain_port_{owner}`
+## marker sprite (§9.2: "port markers render as `terrain_port_{owner}` sprites
+## from the same overlay family"; owner = the port's `nation_id`, the neutral
+## tier ⇒ `terrain_port_neutral`) filling the tile, with the English name's
+## initial on top, plus a small berth marker on the adjacent sea tile so the
+## pair reads at a glance. A port whose marker id is not in the registry keeps
+## the placeholder nation-coloured square (§4.9 flat fallback). The holder sits
+## at the shore tile's origin; the berth marker is positioned relative to it,
+## so a seam offset carries both.
 func _build_port_node(key: String, shore: Vector2i, berth: Vector2i,
 		port: Dictionary, colour: Color) -> Control:
 	var origin := Vector2(shore) * float(tile_size_px)
@@ -1038,12 +1410,28 @@ func _build_port_node(key: String, shore: Vector2i, berth: Vector2i,
 	holder.set_meta("colour", colour)
 	var offset := int(str(key).get_slice("@", 1))
 	holder.set_meta("offset", offset)
-	var square := ColorRect.new()
-	square.name = "Square"
-	var side := int(round(tile_size_px * 0.6))
-	square.size = Vector2(side, side)
-	square.position = (Vector2(tile_size_px, tile_size_px) - square.size) * 0.5
-	square.color = colour
+	var owner_id := str(port.get("nation_id", ""))
+	if owner_id.is_empty():
+		owner_id = "neutral"
+	var marker_sprite := UiKitLib.icon_texture("terrain_port_%s" % owner_id)
+	var square: Control
+	if marker_sprite != null:
+		var sprite := TextureRect.new()
+		sprite.name = "Square"
+		sprite.texture = marker_sprite
+		sprite.stretch_mode = TextureRect.STRETCH_SCALE
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		square = sprite
+	else:
+		# Placeholder fallback: the 0.6-tile nation square (palette only).
+		var rect := ColorRect.new()
+		rect.name = "Square"
+		var side := int(round(tile_size_px * 0.6))
+		rect.size = Vector2(side, side)
+		rect.position = (Vector2(tile_size_px, tile_size_px) - rect.size) * 0.5
+		rect.color = colour
+		square = rect
 	square.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(square)
 	# The berth marker: a small filled dot on the sea tile next to the square
@@ -1067,8 +1455,6 @@ func _build_port_node(key: String, shore: Vector2i, berth: Vector2i,
 	label.size = Vector2(tile_size_px, tile_size_px)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(label)
 	_port_overlay.add_child(holder)

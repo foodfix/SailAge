@@ -288,18 +288,13 @@ func _ready() -> void:
 	# chart blind — see the scene's node order).
 	_top_bar.color = PaletteLib.PANEL_BG
 	_bottom_bar.color = PaletteLib.PANEL_BG
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(PaletteLib.PANEL_BG, 0.92)
-	panel_style.border_color = PaletteLib.PANEL_LINE
-	panel_style.set_border_width_all(1)
-	panel_style.set_content_margin_all(PaletteLib.MARGIN * 0.5)
-	_debug_panel.add_theme_stylebox_override("panel", panel_style)
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 24)
+	# Phase-10 sweep: the debug panel/title/legend chrome retired to the
+	# theme (§4.9 Panel + Label rows); secondary legend text carries the
+	# theme's Dim variation.
+	for label in _legend_labels():
+		label.theme_type_variation = "Dim"
 	_close.custom_minimum_size = Vector2(240, PaletteLib.BUTTON_H)
 	_close.pressed.connect(close_chart)
-	for label in _legend_labels():
-		label.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
 	visible = false
 	# Bars follow the viewport (a window resize moves/rescales the world image).
 	resized.connect(_relayout)
@@ -1167,11 +1162,9 @@ func _display_leg(id: String) -> String:
 ## The floating hover window (unified-movement amendment): a bordered
 ## panel at the cursor, mouse-transparent, clipped to the viewport.
 ## §4.6 (amended 2026-11-02): fleet reports pre-wrap at field boundaries
-## to `min(HOVER_WINDOW_MAX_W, viewport width × 0.5)` px and read at a
-## dedicated 13 px font (smaller than the default 16 — stacked reports
-## must stay compact).
+## to `min(HOVER_WINDOW_MAX_W, viewport width × 0.5)` px. Phase 10: the
+## panel chrome and font retired to the theme (§4.9).
 const HOVER_WINDOW_MAX_W := 560.0
-const HOVER_WINDOW_FONT_SIZE := 13
 var _hover_window: PanelContainer = null
 var _hover_window_label: Label = null
 
@@ -1181,21 +1174,11 @@ func _ensure_hover_window() -> void:
 		return
 	_hover_window = PanelContainer.new()
 	_hover_window.name = "HoverWindow"
+	# The hover window's panel chrome is the theme's (§4.9 Panel row).
 	_hover_window.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hover_window.z_index = 100
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1.0)
-	style.content_margin_left = 6.0
-	style.content_margin_right = 6.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
-	_hover_window.add_theme_stylebox_override("panel", style)
 	_hover_window_label = Label.new()
 	_hover_window_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hover_window_label.add_theme_font_size_override("font_size",
-		HOVER_WINDOW_FONT_SIZE)
 	_hover_window.add_child(_hover_window_label)
 	add_child(_hover_window)
 	_hover_window.visible = false
@@ -1231,8 +1214,7 @@ func _show_hover_window(text: String, at: Vector2) -> void:
 ## of the viewport — the world stays visible behind it).
 const PORT_PANEL_W := 440.0
 const PORT_PANEL_H_RATIO := 0.62
-const PORT_PANEL_FONT_SIZE := 13
-## The fold width minus the stylebox margins and the scrollbar slack.
+## The fold width minus the theme stylebox margins and the scrollbar slack.
 const PORT_PANEL_FOLD_W := PORT_PANEL_W - 36.0
 
 ## The payload cache (port_id → payload), rebuilt per `_rebuild` — stocks
@@ -1542,12 +1524,7 @@ func _ensure_port_panel() -> void:
 		return
 	_port_panel = PanelContainer.new()
 	_port_panel.name = "PortPanel"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(PaletteLib.PANEL_BG, 0.94)
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1.0)
-	style.set_content_margin_all(6.0)
-	_port_panel.add_theme_stylebox_override("panel", style)
+	# The panel chrome is the theme's (§4.9 PanelContainer row).
 	var scroll := ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1555,9 +1532,6 @@ func _ensure_port_panel() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_port_panel_label = Label.new()
 	_port_panel_label.name = "Report"
-	_port_panel_label.add_theme_font_size_override("font_size",
-		PORT_PANEL_FONT_SIZE)
-	_port_panel_label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	# The hover-window discipline: autowrap stays OFF — the fold is done in
 	# `_fold_text` with the panel's own font, so no Label wrap minimum can
 	# ever drive the panel's geometry.
@@ -1643,26 +1617,17 @@ func _ensure_appoint_panel() -> void:
 		return
 	_appoint_panel = PanelContainer.new()
 	_appoint_panel.name = "AppointPanel"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(PaletteLib.PANEL_BG, 0.94)
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(1.0)
-	style.set_content_margin_all(8.0)
-	_appoint_panel.add_theme_stylebox_override("panel", style)
+	# The panel chrome is the theme's (§4.9 PanelContainer row); the name/
+	# status lines read in the theme's Label ink (the gate-reason WARN tint
+	# retired with the Phase-10 sweep — the reason text is the signal).
 	var box := VBoxContainer.new()
 	box.name = "Rows"
-	box.add_theme_constant_override("separation", 6)
 	_appoint_name = Label.new()
-	_appoint_name.add_theme_font_size_override("font_size", 16)
-	_appoint_name.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_appoint_name.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_appoint_status = Label.new()
-	_appoint_status.add_theme_font_size_override("font_size", 13)
-	_appoint_status.add_theme_color_override("font_color", PaletteLib.WARN)
 	_appoint_status.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_appoint_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
 	_appoint_button = Button.new()
 	_appoint_button.text = I18n.t_key(KEY_APPOINT)
 	_appoint_button.custom_minimum_size = Vector2(160, PaletteLib.BUTTON_H * 0.7)
@@ -1728,8 +1693,6 @@ func _refresh_appoint_panel() -> void:
 		var steps := AutopilotLib.route()
 		var days := ceili(AutopilotLib.eta_days(steps)) \
 				if not steps.is_empty() else 0
-		_appoint_status.add_theme_color_override("font_color",
-			PaletteLib.TEXT)
 		_appoint_status.text = I18n.fmt(KEY_APPOINT_HUD_BAR,
 			{"port": I18n.t(port.get("name", {})) if not port.is_empty()
 				else _appoint_port, "days": days})
@@ -1738,15 +1701,12 @@ func _refresh_appoint_panel() -> void:
 	if not bool(verdict.get("ok", false)):
 		_appoint_button.disabled = true
 		if not reason.is_empty():
-			_appoint_status.add_theme_color_override("font_color",
-				PaletteLib.WARN)
 			_appoint_status.text = I18n.fmt(KEY_APPOINT_GATED,
 				{"reason": reason})
 		else:
 			_appoint_status.text = ""
 		return
 	_appoint_button.disabled = false
-	_appoint_status.add_theme_color_override("font_color", PaletteLib.TEXT)
 	_appoint_status.text = ""
 
 
@@ -2454,11 +2414,10 @@ static func _is_string_key(text: String) -> bool:
 		or text.begins_with("world.")
 
 
-## A section header row (accent, no value).
+## A section header row (accent dot absent; the theme ink — the ACCENT tint
+## retired with the sweep).
 func _panel_section(text_key: String) -> Dictionary:
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", PaletteLib.ACCENT)
 	label.text = I18n.t_key(text_key)
 	_debug_rows.add_child(label)
 	return {"label": label, "value": label, "swatch": null, "box": null,
@@ -2466,10 +2425,10 @@ func _panel_section(text_key: String) -> Dictionary:
 
 
 ## A label + state-dot row (the dot is `ACCENT` when the row's thing is on).
-## An empty key makes a value-only row (the hover tooltip).
+## An empty key makes a value-only row (the hover tooltip). The label carries
+## the theme ink; the state value reads as secondary text (the Dim variation).
 func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 	var box := HBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
 	var dot := ColorRect.new()
 	dot.custom_minimum_size = Vector2(8, 8)
 	dot.color = PaletteLib.PANEL_LINE
@@ -2478,8 +2437,6 @@ func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 	if with_dot:
 		box.add_child(dot)
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if _is_string_key(text_key):
@@ -2487,8 +2444,7 @@ func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 	var value := Label.new()
-	value.add_theme_font_size_override("font_size", 12)
-	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	value.theme_type_variation = "Dim"
 	value.clip_text = true
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(value)
@@ -2501,7 +2457,6 @@ func _panel_row(text_key: String, with_dot: bool) -> Dictionary:
 ## is either a data literal (lane id, role letter) or an i18n key.
 func _panel_swatch_row(text: String, color: Color) -> Dictionary:
 	var box := HBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
 	var swatch := ColorRect.new()
 	swatch.custom_minimum_size = Vector2(8, 8)
 	swatch.color = color
@@ -2509,8 +2464,6 @@ func _panel_swatch_row(text: String, color: Color) -> Dictionary:
 	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(swatch)
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if _is_string_key(text):
@@ -2520,8 +2473,7 @@ func _panel_swatch_row(text: String, color: Color) -> Dictionary:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(label)
 	var value := Label.new()
-	value.add_theme_font_size_override("font_size", 12)
-	value.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	value.theme_type_variation = "Dim"
 	value.clip_text = true
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(value)
