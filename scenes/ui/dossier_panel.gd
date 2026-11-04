@@ -23,7 +23,13 @@ extends Control
 ## fleet (gone ashore / returning) renders "-" for the fleet-sourced rows.
 ##
 ## Owns all input while open (§6); Esc closes; joins the `modal_overlay`
-## group (docs/90-* §11). Placeholder art only (§4.8).
+## group (docs/90-* §11).
+##
+## Portrait slot (Phase-10 decision 10, W4-D): the dossier's portrait is the
+## embedded §4.12 card's Identity slot — the composer bust (override file
+## wins) rendered by `character_card.gd` above the career log. This panel
+## styles nothing itself (§4.9 no-per-screen-styling rule; labels are theme
+## TEXT / the `Dim` variation).
 
 const PaletteLib := preload("res://scripts/palette.gd")
 const CaptainsLib := preload("res://scripts/world/captains.gd")
@@ -140,10 +146,10 @@ func _ready() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_dim.color = Color(0, 0, 0, DIM_ALPHA)
-	_panel.add_theme_stylebox_override("panel", _panel_style())
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_title.add_theme_font_size_override("font_size", 20)
-	_header.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
+	# §4.9 (W4-D sweep): the PanelContainer chrome + Label colors are the
+	# theme's; the header reads through the `Dim` variation. Nothing here
+	# is styled per-screen any more.
+	_header.theme_type_variation = "Dim"
 	_close_button.custom_minimum_size = Vector2(120, PaletteLib.BUTTON_H)
 	_close_button.pressed.connect(close)
 	EventBus.locale_changed.connect(_on_locale_changed)
@@ -170,12 +176,12 @@ func _refresh() -> void:
 	var familiarity := CaptainsLib.familiarity(_captain_id)
 	var tier := CaptainsLib.familiarity_tier(_captain_id)
 	var familiarity_line := _label("%s: %d" % [
-		I18n.t_key("dossier.familiarity"), familiarity], PaletteLib.ACCENT)
+		I18n.t_key("dossier.familiarity"), familiarity])
 	familiarity_line.name = "Familiarity"
 	_content.add_child(familiarity_line)
 	if tier > 0:
-		var tier_name := _label(I18n.t_key("dossier.tier.%d"
-			% CardLib.TIER_NAME_NUMBERS[tier - 1]), PaletteLib.PANEL_LINE)
+		var tier_name := _dim_label(I18n.t_key("dossier.tier.%d"
+			% CardLib.TIER_NAME_NUMBERS[tier - 1]))
 		tier_name.name = "TierName"
 		_content.add_child(tier_name)
 
@@ -212,19 +218,19 @@ func _header_parts(canon: Dictionary) -> Array[String]:
 func _log_section(section: Dictionary, tier: int) -> Control:
 	var row := VBoxContainer.new()
 	row.name = "Log_%d" % int(section["gate"])
-	row.add_theme_constant_override("separation", 2)
+	row.set("theme_override_constants/separation", 2)
 	var unlocked: bool = tier >= int(section["gate"])
-	var label := _label(I18n.t_key(str(section["key"])),
-		PaletteLib.TEXT if unlocked else PaletteLib.PANEL_LINE)
+	var label := _label(I18n.t_key(str(section["key"]))) if unlocked \
+		else _dim_label(I18n.t_key(str(section["key"])))
 	label.name = "Label"
 	row.add_child(label)
 	if unlocked:
-		var data_line := _label(_log_data(str(section["key"])), PaletteLib.TEXT)
+		var data_line := _label(_log_data(str(section["key"])))
 		data_line.name = "Data"
 		row.add_child(data_line)
 	else:
-		var locked := _label(I18n.fmt("dossier.locked.tier",
-			{"tier": int(section["threshold"])}), PaletteLib.PANEL_LINE)
+		var locked := _dim_label(I18n.fmt("dossier.locked.tier",
+			{"tier": int(section["threshold"])}))
 		locked.name = "Locked"
 		row.add_child(locked)
 	return row
@@ -298,13 +304,20 @@ func _fleet_of_captain() -> Dictionary:
 	return {}
 
 
-func _label(text: String, color: Color) -> Label:
+## §4.9 Label row (W4-D sweep): the theme renders Labels in TEXT — the plain
+## label sets nothing; secondary text reads through the `Dim` variation.
+func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.custom_minimum_size.x = float(PaletteLib.DIALOG_W
 		- 2 * PaletteLib.MARGIN)
+	return label
+
+
+func _dim_label(text: String) -> Label:
+	var label := _label(text)
+	label.theme_type_variation = "Dim"
 	return label
 
 
@@ -312,14 +325,6 @@ func _clear(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
 		child.queue_free()
-
-
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
 
 
 func _on_locale_changed(_locale: String) -> void:

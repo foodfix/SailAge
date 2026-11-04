@@ -20,6 +20,9 @@ const PaletteLib := preload("res://scripts/palette.gd")
 ## Phase-10 shared theme (docs/80-UI-UX.md §4.9). Preloaded like PaletteLib so
 ## the scene also runs before Godot's global-class cache exists.
 const UiThemeLib := preload("res://scripts/ui_theme.gd")
+## Phase-10 W4-D texture registry (decision 10): the one-time `assets/ui/`
+## bootstrap feeding `UiKit`'s id → texture map.
+const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
 
 const NATIONALITY_SCENE := "res://scenes/title/nationality_select.tscn"
 ## Phase-9 S21 edge (decision 15, `80-*` §4.7.16): the 海战 button sits
@@ -57,19 +60,18 @@ func _ready() -> void:
 	# startup to the root window and cascades to every control. Guarded —
 	# headless direct-boot suites have no window and apply
 	# `UiTheme.build_theme()` themselves (the documented direct-boot pattern).
-	# Per-control styling below retires in the W4-D sweep (§4.9 rule).
 	if get_window() != null:
 		get_window().theme = UiThemeLib.build_theme()
+	# Phase-10 W4-D (decision 10 / §4.9 icon params): right after the theme
+	# application point, the texture registry populates UiKit's id → texture
+	# map ONCE — icons, tokens, terrain/shore, FX and portrait sheets resolve
+	# from here on (headless-safe: missing dirs/files skip silently).
+	TextureRegistryLib.ensure_registered()
 	_background.color = PaletteLib.PANEL_BG
-	_stack.add_theme_constant_override("separation", PaletteLib.MARGIN)
-	_buttons.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
-	_title.add_theme_color_override("font_color", PaletteLib.TEXT)
-	_subtitle.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_phase_tag.add_theme_color_override("font_color", PaletteLib.PANEL_LINE)
-	_data_error.add_theme_color_override("font_color", PaletteLib.BAD)
-	for button in [_new_game_button, _sandbox_button, _load_button,
-			_settings_button, _quit_button]:
-		button.custom_minimum_size = Vector2(280, PaletteLib.BUTTON_H)
+	# §4.9 Label row: the secondary lines read through the theme's `Dim`
+	# variation (PANEL_LINE) — no per-screen color overrides remain here.
+	_subtitle.theme_type_variation = "Dim"
+	_phase_tag.theme_type_variation = "Dim"
 
 	_new_game_button.pressed.connect(open_new_game)
 	_sandbox_button.pressed.connect(open_sandbox)

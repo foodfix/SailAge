@@ -17,9 +17,13 @@ extends PanelContainer
 ## draft, confirm commits through `Character.allocate`, cancel rolls back, a
 ## single attribute clamps at 100, no second confirm, skills never allocate).
 ##
-## Placeholder art only (§4.8): the portrait is a palette color block derived
-## from the appearance tags (deterministic hash → palette constant) + the
-## name's initial; every bar is a palette-styled ProgressBar.
+## Portraits (Phase-10 decision 10, W4-D): the Identity slot renders the
+## procedural 72×96 bust from `PortraitComposer` (override file wins,
+## appearance-tag composition otherwise; the player card passes role
+## "player"). The §4.8 placeholder color block + name initial stays as the
+## fallback when even `pp_base` is missing. Bars are the §4.9 kit atom
+## (`UiKit.value_bar`); labels are theme TEXT / the `Dim` variation — the
+## card styles nothing itself (§4.9 no-per-screen-styling rule).
 ##
 ## `FALLBACK_STRINGS` is the W5-C pattern: keys the card needs that the shared
 ## `data/ui_strings.json` does not carry yet (W6-D owns the residual merge —
@@ -32,6 +36,11 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const CharacterLib := preload("res://scripts/player/character.gd")
 const SkillsLib := preload("res://scripts/player/skills.gd")
 const CaptainsLib := preload("res://scripts/world/captains.gd")
+## Phase-10 kit atoms (§4.9) — the value_bar adoption (W4-D sweep).
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+## Phase-10 W4-D portrait ladder (decision 10): override file wins, else the
+## procedural 72×96 bust composed from the appearance axes.
+const PortraitComposerLib := preload("res://scripts/ui/portrait_composer.gd")
 
 const SCENE_PATH := "res://scenes/ui/character_card.tscn"
 
@@ -55,12 +64,14 @@ const FALLBACK_STRINGS := {
 	"char.card.return_day": {"zh": "归队日:第 {day} 天", "en": "Returns on day {day}"},
 }
 
-## Attribute / skill bar geometry (the §4.8 8px grid).
+## Attribute / skill bar geometry (the §4.8 8px grid). Bar height is the
+## §4.9 kit atom's own (UiKit.BAR_H) since the W4-D sweep.
 const BAR_W := 160.0
 const BAR_COMPACT_W := 96.0
-const BAR_H := 12.0
-## Portrait block (§4.8: placeholder color block + default font).
-const PORTRAIT_SIZE := 64.0
+## Portrait slot (§4.8/decision 10): the composer bust is 72×96 (3:4 bust);
+## the placeholder color block + initial stays as the null-size fallback.
+const PORTRAIT_SIZE := Vector2(72, 96)
+const PORTRAIT_FALLBACK := 64.0
 ## The deterministic portrait palette (§4.8 constants only — no new colors).
 const PORTRAIT_COLORS: Array[Color] = [
 	PaletteLib.SEA, PaletteLib.COAST_SEA, PaletteLib.LAND, PaletteLib.ACCENT,
@@ -317,7 +328,8 @@ func restage_draft(draft: Dictionary) -> void:
 
 
 func _ready() -> void:
-	add_theme_stylebox_override("panel", _panel_style())
+	# §4.9 (W4-D sweep): the PanelContainer chrome is the theme's — the
+	# per-card stylebox retired with the rest of the per-screen styling.
 	if not _data.is_empty():
 		_rebuild()
 
@@ -388,24 +400,13 @@ func _publish_content_height() -> void:
 func _build_identity(compact: bool) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Identity"
-	row.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	# Box separations ride the theme_override_constants channel — the same
+	# scene-file pin the .tscn shells carry (the §4.9 sweep retires the
+	# per-screen theme-override API from screen code; box layout constants
+	# are not styles).
+	row.set("theme_override_constants/separation", PaletteLib.MARGIN)
 	if not compact:
-		# Portrait: palette block from the appearance tags + the name initial.
-		var portrait := PanelContainer.new()
-		portrait.name = "Portrait"
-		portrait.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
-		var style := StyleBoxFlat.new()
-		style.bg_color = _data.get("portrait_color", PaletteLib.PANEL_LINE)
-		portrait.add_theme_stylebox_override("panel", style)
-		var initial := Label.new()
-		initial.name = "Initial"
-		initial.text = str(_data.get("name", " ")).substr(0, 1)
-		initial.add_theme_font_size_override("font_size", 28)
-		initial.add_theme_color_override("font_color", PaletteLib.TEXT)
-		initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		portrait.add_child(initial)
-		row.add_child(portrait)
+		row.add_child(_build_portrait())
 	# Flag block: the nation's color (the §4.10.1 flag rule, placeholder block).
 	var flag := ColorRect.new()
 	flag.name = "Flag"
@@ -417,15 +418,14 @@ func _build_identity(compact: bool) -> Control:
 	var names := VBoxContainer.new()
 	names.name = "Names"
 	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var name_label := _label(str(_data.get("name", "")), PaletteLib.TEXT)
+	var name_label := _label(str(_data.get("name", "")))
 	name_label.name = "Name"
-	name_label.add_theme_font_size_override("font_size", 20)
 	names.add_child(name_label)
 	var detail: Array[String] = []
 	var role := _t(str(_data.get("role_key", "char.none")))
 	if not role.begins_with("<"):
 		detail.append(role)
-	var detail_label := _label(" · ".join(detail), PaletteLib.PANEL_LINE)
+	var detail_label := _dim_label(" · ".join(detail))
 	detail_label.name = "Role"
 	names.add_child(detail_label)
 	row.add_child(names)
@@ -436,12 +436,53 @@ func _build_identity(compact: bool) -> Control:
 		row.add_child(_tier_badge(int(_data.get("tier", 1))))
 	if kind == KIND_PLAYER or kind == KIND_NPC:
 		var level := _label(I18n.fmt("char.level",
-			{"level": int(_data.get("level", 1))}), PaletteLib.ACCENT)
+			{"level": int(_data.get("level", 1))}))
 		level.name = "Level"
 		level.custom_minimum_size.x = 96.0
 		level.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(level)
 	return row
+
+
+## The portrait slot (Phase-10 decision 10, W4-D): the ladder's procedural
+## rung — `PortraitComposer.portrait_texture` (override file wins) — at the
+## 72×96 bust size, nearest filtering per §4.8.8. When even `pp_base` is
+## missing the placeholder color block + name initial takes over (the
+## §4.8 placeholder rule, same node name either way — hosts and suites read
+## `Identity/Portrait`).
+func _build_portrait() -> Control:
+	var person := {
+		"id": str(_data.get("person_id", "")),
+		"appearance": _data.get("appearance", {}),
+		# The player block carries no role/canon cloth — the card composes
+		# the §4.8 "player" cloth rung; NPCs pass their canon role (an
+		# officer's main_skill is not a cloth id — that layer just skips).
+		"role": "player" if str(_data.get("kind", "")) == KIND_PLAYER \
+			else str(_data.get("role_id", "")),
+		"nation_id": str(_data.get("nation_id", "")),
+	}
+	var bust := PortraitComposerLib.portrait_texture(person)
+	if bust != null:
+		var rect := TextureRect.new()
+		rect.name = "Portrait"
+		rect.texture = bust
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		rect.custom_minimum_size = PORTRAIT_SIZE
+		return rect
+	var block := ColorRect.new()
+	block.name = "Portrait"
+	block.color = _data.get("portrait_color", PaletteLib.PANEL_LINE)
+	block.custom_minimum_size = Vector2(PORTRAIT_FALLBACK, PORTRAIT_FALLBACK)
+	var initial := Label.new()
+	initial.name = "Initial"
+	initial.text = str(_data.get("name", " ")).substr(0, 1)
+	initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	initial.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	initial.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	block.add_child(initial)
+	return block
 
 
 func _nation_color() -> Color:
@@ -458,12 +499,12 @@ func _nation_color() -> Color:
 func _build_stat_columns() -> Control:
 	var columns := HBoxContainer.new()
 	columns.name = "StatColumns"
-	columns.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	columns.set("theme_override_constants/separation", PaletteLib.MARGIN)
 
 	var left := VBoxContainer.new()
 	left.name = "AttributeColumn"
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_theme_constant_override("separation", 4)
+	left.set("theme_override_constants/separation", 4)
 	left.add_child(_section_header(_t("char.card.attributes"),
 		"AttributesHeader"))
 	left.add_child(_build_attributes(false))
@@ -472,7 +513,7 @@ func _build_stat_columns() -> Control:
 	var right := VBoxContainer.new()
 	right.name = "SkillColumn"
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 4)
+	right.set("theme_override_constants/separation", 4)
 	right.add_child(_section_header(_t("char.card.skills"), "SkillsHeader"))
 	right.add_child(_build_skills(false))
 	columns.add_child(right)
@@ -485,7 +526,7 @@ func _build_stat_columns() -> Control:
 func _build_attributes(compact: bool) -> Control:
 	var box := VBoxContainer.new()
 	box.name = "Attributes"
-	box.add_theme_constant_override("separation", 4)
+	box.set("theme_override_constants/separation", 4)
 	var kind := str(_data.get("kind", ""))
 	var with_alloc: bool = kind == KIND_PLAYER and bool(_data.get("alloc", false))
 	var attributes: Dictionary = _data.get("attributes", {})
@@ -494,18 +535,18 @@ func _build_attributes(compact: bool) -> Control:
 		var value := int(attributes.get(key, CharacterLib.BASE_ATTRIBUTE))
 		var row := HBoxContainer.new()
 		row.name = "Attr_%s" % key
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 		# Hover explanation (`50-*` §4.2.1 verbatim, in ui_strings).
 		var tooltip := wrap_tip(_desc("char.attr.%s.desc" % key))
 		row.tooltip_text = tooltip
-		var name_label := _label(_t("char.attr.%s" % key), PaletteLib.TEXT)
+		var name_label := _label(_t("char.attr.%s" % key))
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
 		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
-		row.add_child(_bar(value, CharacterLib.ATTR_MAX, PaletteLib.SEA,
+		row.add_child(_bar(value, CharacterLib.ATTR_MAX, "good",
 			"Bar", bar_w, tooltip))
-		var value_label := _label(str(value), PaletteLib.TEXT)
+		var value_label := _label(str(value))
 		value_label.name = "Value"
 		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -535,7 +576,7 @@ func _build_attributes(compact: bool) -> Control:
 func _build_skills(compact: bool) -> Control:
 	var box := VBoxContainer.new()
 	box.name = "Skills"
-	box.add_theme_constant_override("separation", 4)
+	box.set("theme_override_constants/separation", 4)
 	var kind := str(_data.get("kind", ""))
 	var signature := str(_data.get("main_skill", ""))
 	var skills: Dictionary = _data.get("skills", {})
@@ -545,7 +586,7 @@ func _build_skills(compact: bool) -> Control:
 		var stored := int(skills.get(key_name, 0))
 		var row := HBoxContainer.new()
 		row.name = "Skill_%s" % key_name
-		row.add_theme_constant_override("separation", PaletteLib.BASE_UNIT)
+		row.set("theme_override_constants/separation", PaletteLib.BASE_UNIT)
 
 		# The value the row shows: the effective value on the player card
 		# (stored + in-post officer), the plain stored value elsewhere.
@@ -573,19 +614,22 @@ func _build_skills(compact: bool) -> Control:
 				else "%s\n%s" % [tooltip, "\n".join(extra)]
 		tooltip = wrap_tip(tooltip)
 		row.tooltip_text = tooltip
-		var name_label := _label(_t("skill.%s" % key_name),
-			PaletteLib.PANEL_LINE if (unlearned or grayed) else PaletteLib.TEXT)
+		var learned := not (unlearned or grayed)
+		var name_label := _label(_t("skill.%s" % key_name)) if learned \
+			else _dim_label(_t("skill.%s" % key_name))
 		name_label.name = "Name"
 		name_label.custom_minimum_size.x = 96.0
 		name_label.tooltip_text = tooltip
 		row.add_child(name_label)
-		var color := PaletteLib.PANEL_LINE
-		if not unlearned:
-			color = PaletteLib.ACCENT if key_name == signature else PaletteLib.SEA
-		row.add_child(_bar(value, SkillsLib.SKILL_MAX, color, "Bar", bar_w,
+		# §4.9 atom tiers (W4-D sweep): the signature highlight keeps the
+		# accent hex through "warn" (WARN == ACCENT), everything else reads
+		# the kit's "good" fill (an unlearned 0-value row shows no fill).
+		var tier := "warn" if (not unlearned and key_name == signature) \
+			else "good"
+		row.add_child(_bar(value, SkillsLib.SKILL_MAX, tier, "Bar", bar_w,
 			tooltip))
-		var value_label := _label(str(value),
-			PaletteLib.PANEL_LINE if unlearned else PaletteLib.TEXT)
+		var value_label := _label(str(value)) if not unlearned \
+			else _dim_label(str(value))
 		value_label.name = "Value"
 		value_label.custom_minimum_size.x = 40.0
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -594,10 +638,10 @@ func _build_skills(compact: bool) -> Control:
 		if kind == KIND_PLAYER and not grayed:
 			# §4.3.3 the usage counter beside the growth bar (the §4.12.3
 			# skills tab reuses the card's rows).
-			var uses := _label(I18n.fmt("skill.uses", {
+			var uses := _dim_label(I18n.fmt("skill.uses", {
 				"count": int(SkillsLib.counters().get(key_name, 0)),
 				"need": SkillsLib.growth_threshold(key_name),
-			}), PaletteLib.PANEL_LINE)
+			}))
 			uses.name = "Uses"
 			uses.custom_minimum_size.x = 96.0
 			uses.tooltip_text = tooltip
@@ -720,7 +764,7 @@ func _build_tags() -> Control:
 			tags.append(_t("char.personality.%s" % str(tag)))
 		box = _tags_box(box)
 		var line := _label(I18n.fmt("char.personality_line",
-			{"tags": " · ".join(tags)}), PaletteLib.TEXT)
+			{"tags": " · ".join(tags)}))
 		line.name = "Personality"
 		box.add_child(line)
 	var appearance: Dictionary = _data.get("appearance", {})
@@ -733,8 +777,8 @@ func _build_tags() -> Control:
 			parts.append(_t("char.appearance.%s.%s" % [axis, value]))
 		if not parts.is_empty():
 			box = _tags_box(box)
-			var line := _label(I18n.fmt("char.appearance.sentence",
-				{"parts": " · ".join(parts)}), PaletteLib.PANEL_LINE)
+			var line := _dim_label(I18n.fmt("char.appearance.sentence",
+				{"parts": " · ".join(parts)}))
 			line.name = "Appearance"
 			box.add_child(line)
 	return box
@@ -757,7 +801,7 @@ func _build_relations() -> Control:
 	var kind := str(_data.get("kind", ""))
 	if kind == KIND_OFFICER:
 		var loyalty := _label(_fmt("char.card.loyalty",
-			{"amount": int(_data.get("loyalty", 0))}), PaletteLib.TEXT)
+			{"amount": int(_data.get("loyalty", 0))}))
 		loyalty.name = "Loyalty"
 		box.add_child(loyalty)
 		var post_id := str(_data.get("post_id", ""))
@@ -765,7 +809,7 @@ func _build_relations() -> Control:
 			_t(str(_data.get("role_key", "char.none"))),
 			I18n.t_key("officer.post.%s" % post_id)
 			if not post_id.is_empty() else I18n.t_key("officer.post.idle"),
-		], PaletteLib.TEXT)
+		])
 		post_line.name = "Post"
 		box.add_child(post_line)
 	elif kind == KIND_NPC:
@@ -774,18 +818,17 @@ func _build_relations() -> Control:
 			int(_data.get("stance", 0)),
 			I18n.t_key("dossier.familiarity"),
 			int(_data.get("familiarity", 0)),
-		], PaletteLib.TEXT)
+		])
 		relations.name = "Stance"
 		box.add_child(relations)
 		var tier := CaptainsLib.familiarity_tier(str(_data.get("person_id", "")))
 		if tier > 0:
-			var tier_label := _label(I18n.t_key(
-				"dossier.tier.%d" % TIER_NAME_NUMBERS[tier - 1]),
-				PaletteLib.PANEL_LINE)
+			var tier_label := _dim_label(I18n.t_key(
+				"dossier.tier.%d" % TIER_NAME_NUMBERS[tier - 1]))
 			tier_label.name = "FamiliarityTier"
 			box.add_child(tier_label)
 	else:
-		box.add_child(_label("-", PaletteLib.PANEL_LINE))
+		box.add_child(_dim_label("-"))
 	return box
 
 
@@ -796,33 +839,32 @@ func _build_career() -> Control:
 	box.name = "Career"
 	var kind := str(_data.get("kind", ""))
 	if kind == KIND_PLAYER:
-		var xp := _label(I18n.fmt("char.xp", {"xp": int(_data.get("xp", 0))}),
-			PaletteLib.TEXT)
+		var xp := _label(I18n.fmt("char.xp", {"xp": int(_data.get("xp", 0))}))
 		xp.name = "Xp"
 		box.add_child(xp)
 		var next_xp := int(_data.get("next_xp", -1))
 		if next_xp >= 0:
-			var next_label := _label(I18n.fmt("char.next_level", {"xp": next_xp}),
-				PaletteLib.PANEL_LINE)
+			var next_label := _dim_label(I18n.fmt("char.next_level",
+				{"xp": next_xp}))
 			next_label.name = "Next"
 			box.add_child(next_label)
 	elif kind == KIND_NPC:
 		var record := _label("%s · %s" % [
 			_fmt("char.card.wins", {"amount": int(_data.get("wins", 0))}),
 			_fmt("char.card.defeats", {"amount": int(_data.get("defeats", 0))}),
-		], PaletteLib.TEXT)
+		])
 		record.name = "Record"
 		box.add_child(record)
 		if str(_data.get("status", "")) == CaptainsLib.STATUS_RETURNING:
-			var returning := _label("%s · %s" % [
+			var returning := _dim_label("%s · %s" % [
 				I18n.t_key("dossier.status.returning"),
 				_fmt("char.card.return_day",
 					{"day": int(_data.get("return_day", 0))}),
-			], PaletteLib.WARN)
+			])
 			returning.name = "Returning"
 			box.add_child(returning)
 	else:
-		box.add_child(_label("-", PaletteLib.PANEL_LINE))
+		box.add_child(_dim_label("-"))
 	return box
 
 
@@ -833,22 +875,21 @@ func _build_career() -> Control:
 func _build_allocation() -> Control:
 	var box := VBoxContainer.new()
 	box.name = "Allocation"
-	box.add_theme_constant_override("separation", 4)
+	box.set("theme_override_constants/separation", 4)
 	var pending := _label("%s: %d" % [I18n.t_key("char.points_pending"),
-		CharacterLib.alloc_pending()], PaletteLib.ACCENT)
+		CharacterLib.alloc_pending()])
 	pending.name = "Pending"
 	box.add_child(pending)
-	var left := _label(I18n.fmt("creation.points.left", {"count": _left()}),
-		PaletteLib.TEXT)
+	var left := _label(I18n.fmt("creation.points.left", {"count": _left()}))
 	left.name = "Left"
 	box.add_child(left)
-	var clamp_note := _label("", PaletteLib.WARN)
+	var clamp_note := _dim_label("")
 	clamp_note.name = "ClampNote"
 	clamp_note.visible = false
 	box.add_child(clamp_note)
 	var buttons := HBoxContainer.new()
 	buttons.name = "Buttons"
-	buttons.add_theme_constant_override("separation", PaletteLib.MARGIN)
+	buttons.set("theme_override_constants/separation", PaletteLib.MARGIN)
 	var confirm := Button.new()
 	confirm.name = "Confirm"
 	confirm.text = I18n.t_key("ui.confirm")
@@ -943,8 +984,6 @@ func _refresh_allocation() -> void:
 		var value_label := row.get_node("Value") as Label
 		value_label.text = str(base + delta) if delta == 0 \
 			else "%d %+d" % [base + delta, delta]
-		value_label.add_theme_color_override("font_color",
-			PaletteLib.ACCENT if delta > 0 else PaletteLib.TEXT)
 		var plus := row.get_node_or_null("Plus") as Button
 		if plus == null:
 			continue
@@ -999,67 +1038,56 @@ static func _desc(key: String) -> String:
 
 
 func _tier_badge(tier: int) -> Control:
-	# The fleet picker's badge palette (1 grey / 2 amber / 3 red — §4.8).
-	var badge := PanelContainer.new()
+	# The fleet picker's badge palette (1 grey / 2 amber / 3 red — §4.8), as
+	# a placeholder color block (W4-D sweep: no per-screen stylebox).
+	var badge := ColorRect.new()
 	badge.name = "TierBadge"
 	badge.custom_minimum_size = Vector2(PaletteLib.ROW_H, PaletteLib.ROW_H)
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_LINE if tier <= 1 \
+	badge.color = PaletteLib.PANEL_LINE if tier <= 1 \
 		else (PaletteLib.WARN if tier == 2 else PaletteLib.BAD)
-	badge.add_theme_stylebox_override("panel", style)
 	var label := Label.new()
 	label.text = str(tier)
-	label.add_theme_font_size_override("font_size", 14)
-	label.add_theme_color_override("font_color", PaletteLib.TEXT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	badge.add_child(label)
 	return badge
 
 
-## One value bar. `tip` is the owning row's tooltip: the bar is
-## `MOUSE_FILTER_IGNORE` and carries the same text (amended 2026-11-03 — a
-## `ProgressBar` defaults to `MOUSE_FILTER_STOP` and swallowed the whole row's
-## hover, so the row's tooltip only appeared over the one-word label).
-func _bar(value: int, max_value: int, color: Color, bar_name: String,
+## One value bar: the §4.9 kit atom (W4-D sweep — the kit owns the trough,
+## border and GOOD/WARN/BAD tier fill; `tier` ∈ good/warn/bad). `tip` is the
+## owning row's tooltip: the bar is `MOUSE_FILTER_IGNORE` and carries the
+## same text (a ProgressBar defaults to `MOUSE_FILTER_STOP` and swallowed
+## the whole row's hover, so the row's tooltip only appeared over the one-
+## word label).
+func _bar(value: int, max_value: int, tier: String, bar_name: String,
 		width: float, tip: String = "") -> Control:
-	var bar := ProgressBar.new()
+	var bar := UiKitLib.value_bar(value, max_value, tier)
 	bar.name = bar_name
-	bar.min_value = 0
-	bar.max_value = max_value
-	bar.value = clampi(value, 0, max_value)
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(width, BAR_H)
+	bar.custom_minimum_size.x = width
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.tooltip_text = tip
-	var background := StyleBoxFlat.new()
-	background.bg_color = PaletteLib.PANEL_LINE
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = color
-	bar.add_theme_stylebox_override("background", background)
-	bar.add_theme_stylebox_override("fill", fill)
 	return bar
 
 
 func _section_header(text: String, header_name: String) -> Label:
-	var header := _label(text, PaletteLib.ACCENT)
+	var header := _label(text)
 	header.name = header_name
-	header.add_theme_font_size_override("font_size", 16)
 	return header
 
 
-func _label(text: String, color: Color) -> Label:
+## §4.9 Label row: the theme renders Labels in TEXT — the plain label sets
+## nothing; secondary text reads through the `Dim` variation.
+func _label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_color_override("font_color", color)
 	return label
 
 
-func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PaletteLib.PANEL_BG
-	style.border_color = PaletteLib.PANEL_LINE
-	style.set_border_width_all(2)
-	return style
+func _dim_label(text: String) -> Label:
+	var label := _label(text)
+	label.theme_type_variation = "Dim"
+	return label

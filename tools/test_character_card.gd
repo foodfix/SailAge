@@ -179,7 +179,13 @@ func _test_card_sections_per_kind() -> void:
 	_check(player.section("Identity/Flag") != null,
 		"the flag block renders the nation color")
 	_check(player.section("Identity/Portrait") != null,
-		"the portrait is a color block (placeholder art, §4.8)")
+		"the portrait slot renders the composer bust (§4.8/decision 10)")
+	var player_portrait: Control = player.section("Identity/Portrait")
+	_check(player_portrait is TextureRect
+		and (player_portrait as TextureRect).texture != null,
+		"the player card passes role \"player\" and composes the player bust")
+	_check(player.section("Identity/TierBadge") == null,
+		"the player card carries no tier badge")
 	_check(player.section("StatColumns/AttributeColumn/Attributes/Attr_constitution") != null
 		and player.section("StatColumns/AttributeColumn/Attributes/Attr_luck") != null,
 		"the five attribute bars render (values 1–100)")
@@ -229,6 +235,14 @@ func _test_card_sections_per_kind() -> void:
 		"the NPC card shows the 8 skills")
 	_check(npc.section("Identity/TierBadge") != null,
 		"the tier badge renders on the NPC card")
+	# The W4-D portrait slot: the NPC card feeds the composer ladder (a
+	# 72×96 texture when the part sheets exist; the placeholder block is
+	# the null fallback — same node name either way).
+	var npc_portrait: Control = npc.section("Identity/Portrait")
+	_check(npc_portrait is TextureRect
+		and (npc_portrait as TextureRect).texture != null
+		and (npc_portrait as TextureRect).texture.get_width() == 72,
+		"the NPC portrait slot consumed the composer texture (72 wide)")
 	_check(npc.section("Relations/Stance") != null,
 		"the NPC relation block renders stance + familiarity")
 	_check(npc.section("Career/Record") != null,
@@ -611,6 +625,12 @@ func _test_dossier_tiers() -> void:
 		"opening the dossier marks it seen (§4.11.3)")
 	var rows := _log_rows(dossier)
 	_check(rows.size() == 3, "the career log carries the three sections")
+	# The W4-D dossier portrait slot: the embedded §4.12 card's Identity
+	# portrait (the composer bust — decision 10's dossier slot).
+	var dossier_card: Control = dossier.card_widget()
+	_check(dossier_card != null
+		and dossier_card.section("Identity/Portrait") is TextureRect,
+		"the dossier's portrait slot is the embedded card's composer bust")
 	for gate in [1, 2, 3]:
 		var row: Control = rows["Log_%d" % gate]
 		_check(row.get_node_or_null("Locked") != null
