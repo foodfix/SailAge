@@ -1701,14 +1701,16 @@ minimap stay flat raster — pinned):
 | Per-frame CPU | zero (shader-only; no cell swapping) |
 | S10 battle water | reuses the same shader |
 
-#### 4.7.18 Phase-10 `ui_strings.json` inventory (reserved)
+#### 4.7.18 Phase-10 `ui_strings.json` inventory (finalized 2026-11-04, W6)
 
 The `ui.kit.*` namespace is the only Phase-10 key family, written once by
 W2-C (the sole `ui_strings.json` writer for the phase); sweep slots
 (W4/W5) reuse existing keys only — a genuinely missing key escalates to
-the master ledger, which appends it on `main`. This section is finalized
-(or amended to the staged set) at W6; no key list exists beyond that rule
-yet.
+the master ledger, which appends it on `main`. **Final inventory: exactly
+the 11 W2-staged keys** `ui.kit.gallery.{title, theme_active,
+theme_missing, buttons, rows, footer, value_bars, field_rows, toast,
+fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
+(zero escalations were required), so the staged set IS the final set.
 
 ### 4.7 Dialog & text conventions
 

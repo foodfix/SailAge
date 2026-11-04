@@ -915,3 +915,63 @@ _Waves ledger entries are appended here by the master as merges land
   files (their sweep is W5's scope); allowlist still empty. `build_ui_art
   --check` byte-identical at 1 374 files. W5 (combat + FX) launches
   next.
+
+### W5 — combat + FX (2026-11-04) — COMPLETE
+
+- **A** `phase10/w5-a-battle` @ `fc810e0` + follow-up `39d5009`, merged
+  → 26 sites → 0; the **FX layer** (`battle_fx_layer.gd` —
+  timer/tween-free `_process` sequencer, camera-free world-px drawing,
+  read-only drain of the existing sim stream): volley smoke 500 →
+  parabolic flight 300 (`FLIGHT_PEAK_PX = 24.0`, proposal constant) →
+  impact 300 (`damage > 0`) else splash 400 → sink fade 600; ram =
+  impact→smoke→sinks; moves ride the 150 ms pause; per-event pause
+  150 ms; **instant ⇒ every duration 0, queue never fills, no timers
+  (source-audited), logs byte-identical** (animate-vs-instant fixture
+  pin). Battle sea = the shared `WaterLayer` (one cached S3/S10
+  material; the sea gate is `UiMotion` only — ledgered). Hull tokens
+  `hull_{type}_{owner}_{dir}` via the §4.8.6 table (player white
+  livery / pirate / nation / neutral), letter badges runtime overlays,
+  placeholder fallback; `formation_*` icons; after-action portrait via
+  the composer (null ⇒ text-only). `test_battle_screen` 201 → **230
+  checks**. Follow-up: the escalated [fit] overflow was a measurement
+  error (no live defect) — the bar's zero-slack risk removed instead
+  (4–9px slack; forced-40px scenario exact-fit).
+- **B** `phase10/w5-b-sandbox` @ `cf85102`, merged → 58 sites → 0
+  (sandbox 48, duel 10; zero-write audit intact, 130 checks); **zero
+  suite edits needed**. Delivered **`tools/test_ui_styling_audit`**
+  (§5 sweep guard: the three tokens across scenes/scripts/autoload +
+  `.tscn` StyleBox sub_resources / `theme_override_styles/`, allowed =
+  {ui_theme.gd, ui_kit.gd} ∪ the empty §4.9 allowlist, walk-integrity
+  checks, staged-expectation docstring) — **fully GREEN on main** after
+  A's merge: the §4.9 rule is machine-enforced, allowlist empty.
+  Ledger note: a pre-existing benign SCRIPT ERROR at `test_duel.gd:778`
+  reproduces on the pristine base (untouched modules, suite exits 0).
+- **Gate:** battle family (4 suites) + `test_tournament` GREEN;
+  full `tools/run_tests.py` **59/59 GREEN (294.1s)** incl. the audit;
+  validator exit 0 (groups 1–13). Composer-suite marker pin updated on
+  main (markers registered since the W3 follow-up — W5-A escalation).
+  Markers `.import` sidecars committed (master import pass).
+
+### W6 — acceptance (2026-11-04) — COMPLETE
+
+- Full `tools/run_tests.py`: **59/59 GREEN** (58 + `test_ui_styling_audit`;
+  294.1s wall). `python3 tools/validate_data.py`: **exit 0, groups
+  1–13**.
+- Byte-identical rebuild: `build_ui_art.py --check` — **1 374 files,
+  zero diffs** (double run); `build_shore.py --check` — byte-identical
+  (sha256 `ffac0c19…`); **no hand-authored PNG under `assets/ui/`** (the
+  rebuild-diff clean is the detector, §8.8 item 2).
+- Grep bounds: `test_ui_styling_audit` GREEN — `add_theme_stylebox_
+  override` / `StyleBoxFlat` / `StyleBoxTexture` appear only in
+  {`ui_theme.gd`, `ui_kit.gd`}; the §4.9 allowlist remains **empty**.
+- Day-tick gate: **72 ms avg ≤ 75** (PROFILE day_tick_avg_ms; worst
+  frame 85 ms) at the measured fleet count; no per-frame CPU in the sea
+  layer (TIME-driven shader, W4-C).
+- §4.7.18 finalized: exactly the 11 W2-staged `ui.kit.gallery.*` keys;
+  the sweep needed none beyond them (zero escalations).
+- User contact-sheet review (W3 gate): **APPROVED**, no veto items.
+- AGENTS.md gains the Phase-10 line + the new parking lot (§7 of this
+  doc: officer portraits (96), tier-3 promotion (61), the runtime
+  ComfyUI-style generation plan, discovery reveal pics ×30 (model pass
+  via `art_prompts.json`), sail-state hull variants, named-pirate ship
+  variant, world-map wake, animations beyond the pinned set).

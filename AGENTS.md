@@ -12,8 +12,13 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
 4. System docs as needed: `20`-world/sailing, `30`-ports/trade, `40`-ships,
    `50`-character, `80`-UI/UX, `60`-combat (P2), `70`-quests/endgame (P3),
    `95`-debug-hover (how to read the fleet debug floating window)
-5. Task backlogs: `docs/IMPLEMENT-Phase10.md` (planned — UI element kit &
-   generated pixel art; execution protocol: ≤ 4 background sub-agents per
+5. Task backlogs: `docs/IMPLEMENT-Phase10.md` (**complete** — UI element
+   kit & generated pixel art; acceptance record in the doc's W6 block:
+   validator groups 1–13, `build_ui_art`/`build_shore` rebuilds
+   byte-identical (1 374 + shore raster), 59 suites green incl. the
+   `test_ui_styling_audit` sweep guard (allowlist empty), user
+   contact-sheet review APPROVED, day tick 72 ms ≤ 75 @ the measured
+   fleet count; execution protocol: ≤ 4 background sub-agents per
    wave, one worktree + branch each, master merges A → B → C → D with
    validator + suite gates; reviewed 2026-11-04 against the live tree and
    corrected: no audio-phase prerequisite (audio is future work), validator
@@ -30,7 +35,13 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
    day tick 68 ms ≤ 75 @ 318 fleets, sim_trade gates 1–10 PASS at the
    +0.30 clamp, save v9), then `docs/IMPLEMENT-Phase7.md` (complete —
    `tools/demo_check_phase7.md`), `docs/IMPLEMENT-Phase6.md` (complete)
-   and Phase1–Phase5 for history. Phase-9's parking lot lives in
+   and Phase1–Phase5 for history. Phase-10's parking lot lives in
+   `docs/IMPLEMENT-Phase10.md` §7 (officer portraits (96), tier-3
+   promotion (61 manifest edits), the runtime ComfyUI-style portrait
+   generation plan + `user://portraits/` cache + offline-lock amendment,
+   discovery reveal pics ×30 (model pass via `tools/art_prompts.json`),
+   sail-state hull variants, named-pirate ship variant, world-map wake,
+   animations beyond the pinned set). Phase-9's parking lot lives in
    `docs/IMPLEMENT-Phase9.md` (per-broadside pre-loaded shot types, the
    merchant fourth archetype, sandbox preset persistence, Phase-7
    economic leftovers, NPC-captain recruitment, titles/traits, officer
