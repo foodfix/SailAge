@@ -1937,10 +1937,13 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    ids above. **View convention (amended 2026-11-04, user direction —
    supersedes the W1 "top-down for tokens" rule): hull tokens are
    UW2-style side/3-quarter sailing views, NOT top-down deck views.**
-   The `e`/`w` pair shows the full **side profile** (hull side, masts,
-   sails, rigging); `n`/`s` show the **stern/bow view** with the same
-   perspective cheat as the diagonals (amended 2026-11-04, user
-   feedback: the first stern views shrank the whole ship): **mast and
+   The `e`/`w` pair and `n`/`s` are **oblique elevated (~45°) sailing
+   views, NOT flat side elevations** (amended 2026-11-04, second user
+   direction): the hull shows a visible **waterline** — below it a
+   submerged hull portion in darkened wood tones, above it the freeboard
+   with the deck plane read from above; the waterline sits ~60 % down
+   the hull and the view shows the deck at ~45° elevation
+   (`n`/`s` previously shrank the whole ship): **mast and
    sail HEIGHT stay identical to the side view** — turning the ship
    never shrinks its masts — the hull reads at beam width (~40–60 % of
    the side view's length), and the sails from astern/bow read as
