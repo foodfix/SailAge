@@ -1,0 +1,59 @@
+{
+ "id": "hulls-registry",
+ "class": "hulls",
+ "doc": "Hull-token registry (W3-B). The governor (tools/build_ui_art.py) renders the two authored maps per hull into staging, derives the other six directions with the pinned lossless ops below, applies the 1px HULL_INK outline, then bakes the 9 owner variants via the wood-step remap table. Contract: docs/80-UI-UX.md §4.8 (heading8→dir table §4.8.6, tier footprint bands §4.8.7, hull block §4.8.4) and docs/10-DATA-SCHEMA.md §8.8 group 13.",
+ "owners": [
+  "player",
+  "portugal",
+  "spain",
+  "england",
+  "holland",
+  "ottoman",
+  "italy",
+  "neutral",
+  "pirate"
+ ],
+ "path_template": "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png",
+ "staging": "authored maps render into a transient staging dir (they are outline-less wood-colored intermediates; the wood-colored map itself is not a shipped file — every owner variant, neutral included, is a remap target per §4.8.4 hull block)",
+ "authored_dirs": ["n", "ne"],
+ "derive": {
+  "_doc": "op semantics verified on screen (y-down): rot_cw of a north-facing sprite points the bow east. Pinned identically in every authored/*.json so group 13 re-checks the same relations.",
+  "e":  { "from": "n",  "op": "rot_cw" },
+  "s":  { "from": "n",  "op": "rot_180" },
+  "w":  { "from": "n",  "op": "rot_ccw" },
+  "nw": { "from": "ne", "op": "mirror_x" },
+  "se": { "from": "ne", "op": "mirror_y" },
+  "sw": { "from": "ne", "op": "rot_180" }
+ },
+ "outline": { "hex": "#101010", "px": 1, "rule": "8-neighborhood: transparent pixels adjacent (8-way) to opaque ones take HULL_INK" },
+ "footprint": {
+  "_doc": "long axis = n-token opaque bbox max dimension, measured on the final (outlined) file; tier bands per 80-* §4.8.7 (ship_types.tier partition 4/8/4, review-verified)",
+  "bands": { "1": [14, 18], "2": [20, 26], "3": [26, 30] }
+ },
+ "hulls": [
+  "latin",
+  "sloop",
+  "galiot",
+  "pinnace",
+  "caravel",
+  "galley",
+  "brigantine",
+  "fluyt",
+  "junk",
+  "dhow",
+  "caravela_redonda",
+  "xebec",
+  "nao",
+  "carrack",
+  "galleon",
+  "galleass"
+ ],
+ "facilities": [
+  "facility_market",
+  "facility_shipyard",
+  "facility_tavern",
+  "facility_inn",
+  "facility_guild",
+  "facility_palace"
+ ]
+}
