@@ -1,0 +1,13 @@
+{
+  "id": "shore_e",
+  "class": "terrain",
+  "kind": "shore",
+  "file": "assets/ui/terrain/shore_e.png",
+  "derive": {
+    "base": "shore_n",
+    "op": "rot_cw"
+  },
+  "width": 32,
+  "height": 32,
+  "derive_note": "derived, not authored — the governor (build_ui_art.py) applies the lossless transform of the base's pixels (same op table as the hull scheme); group 13 item 5 re-checks each relation pixel-exactly"
+}
