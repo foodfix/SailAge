@@ -1538,6 +1538,53 @@ func _test_dialogs() -> void:
 	_check(box.message_text() == I18n.fmt("world.desertion", {"count": 3}),
 		"dialog_box rebinds on locale_changed (%s)" % box.message_text())
 	I18n.set_locale("en")
+	# W4-C discovery illustration slot (§4.8.8, §4.9 registry): the optional
+	# entry `icon_id` renders the 32px icon beside the message when the
+	# registry resolves it, and yields the wrap width by that cell; without
+	# the key (or on a registry miss) the dialog is exactly the text-only one.
+	var kit := preload("res://scripts/ui_kit.gd")
+	var img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	var marker_tex := ImageTexture.create_from_image(img)
+	kit.register_textures({"kit_test_marker": marker_tex})
+	var iconed = DialogScene.instantiate()
+	host.add_child(iconed)
+	iconed.open_key("world.desertion", {"count": 3}, "kit_test_marker")
+	var icon: TextureRect = iconed.get_node(
+		"Center/Panel/Margin/Body/Scroll/IconRow/Icon")
+	_check(icon.visible and icon.texture == marker_tex,
+		"an entry icon_id with a registered texture shows the illustration")
+	_check(is_equal_approx(icon.size.x, 32.0) or is_equal_approx(
+			icon.custom_minimum_size.x, 32.0),
+		"the illustration rides the 32px inline cell (§4.8.8)")
+	_check((iconed.get_node(
+			"Center/Panel/Margin/Body/Scroll/IconRow/Message")
+		as Label).custom_minimum_size.x == 448.0 - 36.0,
+		"the message wrap width yields the icon cell while it shows")
+	iconed.close()
+	iconed.queue_free()
+	var plain = DialogScene.instantiate()
+	host.add_child(plain)
+	plain.open_key("world.desertion", {"count": 3})
+	_check(not (plain.get_node(
+			"Center/Panel/Margin/Body/Scroll/IconRow/Icon")
+		as TextureRect).visible,
+		"no icon_id keeps the text-only dialog")
+	_check((plain.get_node(
+			"Center/Panel/Margin/Body/Scroll/IconRow/Message")
+		as Label).custom_minimum_size.x == 448.0,
+		"the text-only dialog keeps the full wrap width")
+	plain.close()
+	plain.queue_free()
+	var miss = DialogScene.instantiate()
+	host.add_child(miss)
+	miss.open_key("world.desertion", {"count": 3}, "kit_absent_marker")
+	_check(not (miss.get_node(
+			"Center/Panel/Margin/Body/Scroll/IconRow/Icon")
+		as TextureRect).visible,
+		"an unresolved icon_id keeps the text-only dialog (flat fallback)")
+	miss.close()
+	miss.queue_free()
+	kit.clear_textures()
 	var esc := InputEventAction.new()
 	esc.action = "back"
 	esc.pressed = true

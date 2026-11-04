@@ -1303,7 +1303,10 @@ func _show_next_dialog() -> void:
 	_modal_host.add_child(dialog)
 	_dialog = dialog
 	dialog.closed.connect(_on_dialog_closed)
-	dialog.open_key(str(entry.get("key", "")), entry.get("values", {}))
+	# The optional §4.8 illustration slot id rides the entry (the W4-C
+	# discovery contract); absent ⇒ "" ⇒ the text-only dialog.
+	dialog.open_key(str(entry.get("key", "")), entry.get("values", {}),
+		str(entry.get("icon_id", "")))
 
 
 ## §4.8.3 mutiny modal: one message (`world.mutiny.text`) with the two
