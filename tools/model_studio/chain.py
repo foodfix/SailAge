@@ -622,8 +622,8 @@ def load_driver(repo: str) -> dict:
         with open(path, "r", encoding="utf-8") as fh:
             src = fh.read()
         tree = ast.parse(src, filename=path)
-        consts: dict = {}
-        overrides_node = None
+        consts: dict = {}       # wanted constants (the returned driver)
+        assign_order: list = []  # (name, value_node) in module order
         for node in tree.body:
             targets = []
             if isinstance(node, ast.Assign):
@@ -633,27 +633,42 @@ def load_driver(repo: str) -> dict:
                                                                 ast.Name):
                 targets = [node.target]
             for t in targets:
-                if t.id in _LITERAL_NAMES:
-                    consts[t.id] = ast.literal_eval(node.value)
-                elif t.id == "ICON_PROMPT_OVERRIDES":
-                    overrides_node = node.value
+                assign_order.append((t.id, node.value))
+        # The driver evolves (latest drift: STYLE/ICON_STYLE reference a new
+        # CHROMA_BG constant). Collect EVERY module-level constant into the
+        # namespace (literal_eval first, then an AST-gated eval against the
+        # constants collected so far — string concatenations only, no
+        # calls/attributes/subscripts); the driver is the wanted subset.
+        # Two passes so later-defined dependencies resolve too.
+        def try_assign(name, value_node):
+            if name in consts:
+                return
+            try:
+                consts[name] = ast.literal_eval(value_node)
+                return
+            except (ValueError, TypeError, MemoryError):
+                pass
+            for n in ast.walk(value_node):  # eval-safety gate
+                ok = isinstance(n, (ast.Constant, ast.BinOp, ast.Add,
+                                    ast.Load, ast.Dict, ast.Tuple,
+                                    ast.List))
+                ok = ok or (isinstance(n, ast.Name) and n.id in consts)
+                if not ok:
+                    return  # unsupported syntax — leave unresolved
+            try:
+                consts[name] = eval(  # noqa: S307 — gated above
+                    compile(ast.Expression(value_node), path, "eval"),
+                    {"__builtins__": {}}, dict(consts))
+            except Exception:  # noqa: BLE001 — unresolved this pass
+                pass
+        for _pass in (1, 2):
+            for name, value_node in assign_order:
+                try_assign(name, value_node)
         missing = [n for n in _LITERAL_NAMES if n not in consts]
-        if missing or overrides_node is None:
-            raise RuntimeError(
-                f"constants missing: {missing} "
-                f"(overrides found: {overrides_node is not None})")
-        for node in ast.walk(overrides_node):  # eval-safety gate
-            ok = isinstance(node, (ast.Constant, ast.BinOp, ast.Add,
-                                   ast.Load, ast.Dict, ast.Tuple, ast.List))
-            ok = ok or (isinstance(node, ast.Name)
-                        and node.id == "ICON_STYLE")
-            if not ok:
-                raise RuntimeError(
-                    f"ICON_PROMPT_OVERRIDES holds unsupported syntax "
-                    f"{type(node).__name__}")
-        consts["ICON_PROMPT_OVERRIDES"] = eval(  # noqa: S307 — gated above
-            compile(ast.Expression(overrides_node), path, "eval"),
-            {"__builtins__": {}}, {"ICON_STYLE": consts["ICON_STYLE"]})
+        missing += (["ICON_PROMPT_OVERRIDES"]
+                    if "ICON_PROMPT_OVERRIDES" not in consts else [])
+        if missing:
+            raise RuntimeError(f"constants unresolved: {missing}")
         # sanity: the keys default_prompt needs must exist
         for probe in ("POSE", "RIG", "COMPACT", "STYLE", "ICON_STYLE",
                       "TIER"):
@@ -698,6 +713,21 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     raise KeyError(job_id)
 
 
+def _hull_prompt_from(d: dict, ship: str, direction: str,
+                      stated_px: int | None) -> str:
+    """The driver's hull_prompt wording (byte-identical template) built
+    from a constants dict — used by default_prompt and reconstruction."""
+    pose = d["POSE"][direction]
+    rig = d["RIG"][ship]
+    prompt = (f"Redraw this input sprite. Keep the exact same "
+              f"silhouette, mast count, sail layout, proportions and "
+              f"{pose}. Rig: {rig}. {d['COMPACT']} ")
+    if stated_px:
+        prompt += (f"Ship length about {stated_px} px of the 512 canvas "
+                   f"including bowsprit. ")
+    return prompt + d["STYLE"]
+
+
 def default_prompt(job_id: str, repo: str) -> str:
     """Canonical driver prompt, reconstructed from parsed constants.
     Guaranteed non-empty: any reconstruction failure falls back to the
@@ -706,11 +736,7 @@ def default_prompt(job_id: str, repo: str) -> str:
     fam, subject, direction = parse_job(job_id)
     try:
         if fam == "hull":
-            pose = d["POSE"][direction]
-            rig = d["RIG"][subject]
-            prompt = (f"Redraw this input sprite. Keep the exact same "
-                      f"silhouette, mast count, sail layout, proportions "
-                      f"and {pose}. Rig: {rig}. {d['COMPACT']} {d['STYLE']}")
+            prompt = _hull_prompt_from(d, subject, direction, None)
             if prompt.strip():
                 return prompt
         elif fam == "icon":
@@ -746,6 +772,43 @@ def default_prompt(job_id: str, repo: str) -> str:
     return TERRAIN_PROMPT_TMPL.format(
         texture=TERRAIN_TEXTURES.get(subject, "rich 16-bit terrain "
                                      "textures matching the reference"))
+
+
+def reconstruct_original(job_id: str, repo: str, rec: dict | None = None):
+    """Rebuild the ACTUAL prompt that produced the job's canonical
+    (pre-studio) image — the user's edit base. Applies the re-roll round's
+    documented calibration from the driver's progress record: label
+    'tightened-band' adds the kept `stated_px` clause; 'tightened-identity'
+    and plain runs use the plain builders; icons use ICON_PROMPT_OVERRIDES;
+    terrain uses the per-sheet clause. Returns (prompt, source) with source
+    'reconstructed' (parsed driver wording) or 'default' (embedded
+    fallback wording). Never raises, never empty."""
+    d = load_driver(repo)
+    fam, subject, direction = parse_job(job_id)
+
+    def build(dd: dict) -> str:
+        if fam == "hull":
+            stated_px = None
+            if rec and rec.get("prompt") == "tightened-band":
+                stated_px = rec.get("stated_px")
+            return _hull_prompt_from(dd, subject, direction, stated_px)
+        if fam == "icon":
+            ov = dd["ICON_PROMPT_OVERRIDES"].get(subject)
+            return (ov or f"Redraw this input sprite. Keep the exact same "
+                          f"silhouette and recognizability. "
+                          f"{dd['ICON_STYLE']}")
+        return TERRAIN_PROMPT_TMPL.format(texture=TERRAIN_TEXTURES[subject])
+
+    try:
+        prompt = build(d)
+        if prompt.strip():
+            return prompt, ("reconstructed"
+                            if _DRIVER_SOURCE == "parsed" else "default")
+    except Exception as exc:  # noqa: BLE001 — embedded fallback below
+        print(f"[studio-chain] original reconstruction failed for {job_id} "
+              f"({type(exc).__name__}: {exc}); embedded fallback",
+              flush=True)
+    return build(EMBEDDED_DRIVER), "default"
 
 
 def canonical_seed(job_id: str, repo: str) -> int | None:
