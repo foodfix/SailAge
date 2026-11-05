@@ -1292,7 +1292,7 @@ def hull_sheet_prompt(ship, stated_px=None):
         "them into the sprites; leave the sixth cell empty. " + scale
         + (f"Ship length about {stated_px} px within each 512 px cell. "
            if stated_px else "")
-        f"Rig: {rig}. {COMPACT} {scale}"
+        + f"Rig: {rig}. {COMPACT} "
         "Render every cell as crisp limited-palette pixel art in the "
         "style of early-90s 16-bit sailing games: billowed canvas sails "
         "with curved highlight and shadow bands following the bulge, "
