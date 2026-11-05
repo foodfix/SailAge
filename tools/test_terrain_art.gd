@@ -33,9 +33,12 @@ extends Node
 ##   * the PRODUCTION texture path (the 2026-11-04 grey-void regression): the
 ##     registry POPULATED first (as `title_screen` does at boot), then the
 ##     water tile set + terrain atlas + shore overlay rebuild through the
-##     registry textures with real pixel content pinned (center pixel == the
-##     locked §4.8 palette hex; foam/marker cells non-empty). The earlier
-##     groups keep the empty-registry fallback coverage — this one runs last.
+##     registry textures with real pixel content pinned (the 2026-11-05
+##     ingest retarget: land cells ramp-membership + the authored phase-0
+##     ring — structural pins that hold for the generator fallback AND the
+##     ingested model plains crops, §4.8 override ladder; foam/marker cells
+##     non-empty). The earlier groups keep the empty-registry fallback
+##     coverage — this one runs last.
 ##   * the r5 coast foam language + the DEFECT C stub fix: the 16 variant
 ##     cells' OPEN edges are foam-free across their FULL length (corner
 ##     stubs respect the mask — the 1-cell waterway white-ring regression),
@@ -898,15 +901,50 @@ func _test_populated_registry() -> void:
 			_check(opaque,
 				"populated registry: the land variant %d cell is non-empty"
 				% variant)
-			if variant <= 2:
-				_check(cell.get_pixel(tile_px / 2, tile_px / 2).is_equal_approx(PaletteLib.LAND),
-					"populated registry: land variant %d center is Palette.LAND (%s)"
-					% [variant, cell.get_pixel(tile_px / 2, tile_px / 2)])
-			else:
-				_check(cell.get_pixel(tile_px / 2, tile_px / 2).is_equal_approx(
-					PaletteLib.LAND_HI),
-					"populated registry: land variant 3 center is Palette.LAND_HI (%s)"
-					% cell.get_pixel(tile_px / 2, tile_px / 2))
+			# 2026-11-05 icon/terrain ingest retarget: the center-hex pins
+			# asserted the GENERATOR's dither bytes (variants 0–2 LAND,
+			# 3 LAND_HI) — the ingested model plains crops draw the same
+			# kind's ramp freely (§4.8.2 dither family).  The structural
+			# pins that hold for BOTH art sources (generator fallback and
+			# ingested primary, the §4.8 override ladder):
+			#   1. every opaque pixel stays in the land kind's pinned
+			#      3-step ramp {LAND, LAND_HI, LAND_LO};
+			#   2. the outer 1px ring is the authored phase-0 lattice
+			#      (HI iff (3(x/2)+5(y/2)) % 16 == 3 on the 64 canvas —
+			#      the byte-identical, torus-continuous ring of §4.8.2;
+			#      the ×2 upscale of the authored ring is exactly this).
+			var off_ramp := 0
+			for py in tile_px:
+				for px in tile_px:
+					var c := cell.get_pixel(px, py)
+					if c.a <= 0.0:
+						continue
+					var in_ramp := c.is_equal_approx(PaletteLib.LAND) \
+						or c.is_equal_approx(PaletteLib.LAND_HI) \
+						or c.is_equal_approx(PaletteLib.LAND_LO)
+					if not in_ramp:
+						off_ramp += 1
+			_check(off_ramp == 0,
+				"populated registry: land variant %d pixels stay in the land ramp (%d off)"
+				% [variant, off_ramp])
+			var off_ring := 0
+			for x in tile_px:
+				for y in [0, tile_px - 1]:
+					var want := PaletteLib.LAND_HI \
+						if (3 * (x / 2) + 5 * (y / 2)) % 16 == 3 \
+						else PaletteLib.LAND
+					if not cell.get_pixel(x, y).is_equal_approx(want):
+						off_ring += 1
+			for y in range(1, tile_px - 1):
+				for x in [0, tile_px - 1]:
+					var want := PaletteLib.LAND_HI \
+						if (3 * (x / 2) + 5 * (y / 2)) % 16 == 3 \
+						else PaletteLib.LAND
+					if not cell.get_pixel(x, y).is_equal_approx(want):
+						off_ring += 1
+			_check(off_ring == 0,
+				"populated registry: land variant %d carries the authored phase-0 ring (%d off)"
+				% [variant, off_ring])
 	# The coast-foam water variants (the r3 continuous-coast model): with the
 	# registry populated and the §6.6 dirs supplied, `build_tile_set` composes
 	# the `shore_{dir}` strips INTO the water atlas (2 flat fills + 16

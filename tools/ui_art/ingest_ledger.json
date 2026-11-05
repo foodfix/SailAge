@@ -1,13 +1,25 @@
 {
-  "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the 5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md §9.2",
+  "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the 5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md §9.2; icons: 64-grid re-quantize to the icon block + exact 2:1 nearest halving to the 32px inline art; terrain: plains_uniform 64px interior crops on the land ramp with the authored phase-0 ring",
   "counts": {
     "accepted_base": 77,
     "accepted_derived": 45,
     "candidates": 80,
     "fallback_files": 54,
+    "icons": {
+      "accepted": 32,
+      "candidates": 32,
+      "files": 32,
+      "hero_64": 0,
+      "rejected": 0
+    },
     "rejected": 3,
     "revoked_stale": 0,
-    "shipped_files": 1098
+    "shipped_files": 1098,
+    "terrain": {
+      "accepted": 4,
+      "candidates": 4,
+      "files": 4
+    }
   },
   "derived": {
     "hull_brigantine_england_e.png": {
@@ -2037,6 +2049,234 @@
     }
   },
   "generated_by": "tools/build_ui_art.py --import-ships",
+  "icons": {
+    "anchor": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_anchor",
+      "seed": 2087,
+      "snapped_sha": "78f71d532f85100ded09e06b5114041a1088b9d665561c4bdaebbd6e781dde4b",
+      "source": "snapped"
+    },
+    "bell": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_bell",
+      "seed": 4242,
+      "snapped_sha": "e3b2570b09b0ec558f551cdcca88569d40e69ac5f723843d8ecdb59b1b3c2234",
+      "source": "studio/snapped"
+    },
+    "calm": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_calm",
+      "seed": 2106,
+      "snapped_sha": "806e5011f59a033f35b27daed8b38d889d7d34f4f182f0ce751a9f594366e556",
+      "source": "snapped"
+    },
+    "cannon": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_cannon",
+      "seed": 2101,
+      "snapped_sha": "5bea1308c00ee78518c90bf790badb2eda04c9092111553ea122bae8dd5fe4da",
+      "source": "snapped"
+    },
+    "chest": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_chest",
+      "seed": 2097,
+      "snapped_sha": "26f1e2c300946dd9782b30a92162d3a7c1b8ffba51f6c59c9fe1bfd38bf6072a",
+      "source": "snapped"
+    },
+    "coin": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_coin",
+      "seed": 2092,
+      "snapped_sha": "07998fdb73e50ef0b9b9617db5614aef540b741c27270ca4a7e756349f364377",
+      "source": "snapped"
+    },
+    "compass": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_compass",
+      "seed": 2105,
+      "snapped_sha": "b606e4b8cb6e022e56728f04675421e6462143958d73f41f8773a82b591b0e81",
+      "source": "snapped"
+    },
+    "crew": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_crew",
+      "seed": 2093,
+      "snapped_sha": "f262d444870a050c22ae9fe550e6a478dde0a71c3b5d107900e6487050cd7428",
+      "source": "snapped"
+    },
+    "crown": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_crown",
+      "seed": 2088,
+      "snapped_sha": "ad2bf6df39e55f0419cb1b0c01910a9ac23045bdcee91f26b63fa75cabc1292d",
+      "source": "snapped"
+    },
+    "durability": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_durability",
+      "seed": 2096,
+      "snapped_sha": "51042129a22d1cc45cd473b7e6e6a6853bbac530eb30ef697de5e8251fc0d7a7",
+      "source": "snapped"
+    },
+    "fair": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_fair",
+      "seed": 2107,
+      "snapped_sha": "c0d0dada8f6c8789e53fa8848d5d2349bca3df1b8d598280877fa6b2a2136a4d",
+      "source": "snapped"
+    },
+    "good_dried_fish": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_dried_fish",
+      "seed": 2115,
+      "snapped_sha": "570ef883c6ce7bfb1b6f9f073b6e3bad2520e1f7d4725cf202aeb6f9972f031d",
+      "source": "snapped"
+    },
+    "good_iron": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_iron",
+      "seed": 2117,
+      "snapped_sha": "a93ec14ce9bbd11cf9d22a3e06ebc239f505301490d7be1217ca4ade02f3b8fb",
+      "source": "snapped"
+    },
+    "good_salt": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_salt",
+      "seed": 2114,
+      "snapped_sha": "fe89f8ba96f24eeadc90831f0978ad8c498ba9f99a8aed2b4a8c993c2f55daf8",
+      "source": "snapped"
+    },
+    "good_silk": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_silk",
+      "seed": 2111,
+      "snapped_sha": "82870ca4422a16022621141c1e54a26747556b34d1f214892c943a1f17d0b744",
+      "source": "snapped"
+    },
+    "good_spices": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_spices",
+      "seed": 2112,
+      "snapped_sha": "430ec74aba114fd0e8f9535cb0c6ceed459d78abcf8aadb278791ced13551328",
+      "source": "snapped"
+    },
+    "good_timber": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_timber",
+      "seed": 2116,
+      "snapped_sha": "67725c355c3652caf4bc7b9eff293296b32851d569f2061fd743896cd811f859",
+      "source": "snapped"
+    },
+    "good_wheat": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_wheat",
+      "seed": 2110,
+      "snapped_sha": "3947558fa392f85b644a95060db23cd66314686292b0c9cbe3d456fb0ae4c9a7",
+      "source": "snapped"
+    },
+    "good_wine": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_good_wine",
+      "seed": 2113,
+      "snapped_sha": "b20cdb4e40669e7e956a616197e153cd35bc6480d5c19f5e60c70b3ed3a76eef",
+      "source": "snapped"
+    },
+    "hammer": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_hammer",
+      "seed": 2099,
+      "snapped_sha": "9e0ef627d6d39af645290a03d51f13627bdf100cc2289fbf074a1a5be07cdf16",
+      "source": "snapped"
+    },
+    "hook": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_hook",
+      "seed": 777,
+      "snapped_sha": "81f52cf2a2596bb8e227b627bf2e950d0e6cdb9a2468df8f3bdeacebc4154171",
+      "source": "studio/snapped"
+    },
+    "hourglass": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_hourglass",
+      "seed": 2090,
+      "snapped_sha": "d8578beadc91a358a6f7beaf420cd65ff9094bd1c973371dd5673dc3294eb11b",
+      "source": "snapped"
+    },
+    "morale": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_morale",
+      "seed": 2095,
+      "snapped_sha": "074990a767780f8d29a3d492da162b3ea02c8dea1ff09da0767a7bbf1fde406b",
+      "source": "snapped"
+    },
+    "provisions": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_provisions",
+      "seed": 2094,
+      "snapped_sha": "2c4f416db33e04bcbaf99fd01b2db1953dade5c05ba649ec58c48f7a50e62a53",
+      "source": "snapped"
+    },
+    "ram": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_ram",
+      "seed": 2103,
+      "snapped_sha": "2f645f36bdf5ca48f80db767f0bb39f0aa522a081dc2e0c1e7702145a630dc7d",
+      "source": "snapped"
+    },
+    "save": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_save",
+      "seed": 2091,
+      "snapped_sha": "337fc3707f7833b2318277610e611d47baa49960a5272c223c992c2dcb216a11",
+      "source": "snapped"
+    },
+    "scroll": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_scroll",
+      "seed": 2098,
+      "snapped_sha": "3ab54672e0216fd02903855fcc24efd8a8b8162774c424ea964a58b725fa3d4a",
+      "source": "snapped"
+    },
+    "skull": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_skull",
+      "seed": 2089,
+      "snapped_sha": "ae492c811e3b9125974705170a66db07f3a5e05b9c3bfdc9238d678e45cca459",
+      "source": "snapped"
+    },
+    "storm": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_storm",
+      "seed": 2109,
+      "snapped_sha": "33fb5aba02c3bc8d2e7c84f86ea9330f55a04439b57f86f89b3cd71fff602760",
+      "source": "snapped"
+    },
+    "strong": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_strong",
+      "seed": 2108,
+      "snapped_sha": "c157d6316aac1eee3c6d4bd640504a6f9d9e595f4731bc3b713df7c1491cefde",
+      "source": "snapped"
+    },
+    "surrender_flag": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_surrender_flag",
+      "seed": 2104,
+      "snapped_sha": "af39c7d11e2f620451f2bf6e1981b23446503f990af263cbd7ff9f5b5a801b27",
+      "source": "snapped"
+    },
+    "trophy": {
+      "accepted_at": "2026-11-05",
+      "job": "icon_trophy",
+      "seed": 2118,
+      "snapped_sha": "2f35c162aa504bb41ddddb4242ff4abfe714ad7469e285d51de6a09572deea9f",
+      "source": "snapped"
+    }
+  },
+  "icons_generated_by": "tools/build_ui_art.py --import-icons",
+  "icons_rejected": [],
   "rejected": [
     {
       "detail": "long axis 46px outside the tier-3 band 52-60 (§4.8.7)",
@@ -2054,6 +2294,66 @@
       "reason": "masthead"
     }
   ],
+  "terrain": {
+    "terrain_land_0.png": {
+      "accepted_at": "2026-11-05",
+      "crop": [
+        96,
+        96
+      ],
+      "job": "terrain_plains_uniform",
+      "patch": [
+        0,
+        0
+      ],
+      "seed": 1134,
+      "sheet_sha": "e6a348b59d74332170af62195b440859ee29e367d426fe60dffba47855715f9e"
+    },
+    "terrain_land_1.png": {
+      "accepted_at": "2026-11-05",
+      "crop": [
+        352,
+        96
+      ],
+      "job": "terrain_plains_uniform",
+      "patch": [
+        1,
+        0
+      ],
+      "seed": 1134,
+      "sheet_sha": "e6a348b59d74332170af62195b440859ee29e367d426fe60dffba47855715f9e"
+    },
+    "terrain_land_2.png": {
+      "accepted_at": "2026-11-05",
+      "crop": [
+        608,
+        96
+      ],
+      "job": "terrain_plains_uniform",
+      "patch": [
+        2,
+        0
+      ],
+      "seed": 1134,
+      "sheet_sha": "e6a348b59d74332170af62195b440859ee29e367d426fe60dffba47855715f9e"
+    },
+    "terrain_land_3.png": {
+      "accepted_at": "2026-11-05",
+      "crop": [
+        864,
+        96
+      ],
+      "job": "terrain_plains_uniform",
+      "patch": [
+        3,
+        0
+      ],
+      "seed": 1134,
+      "sheet_sha": "e6a348b59d74332170af62195b440859ee29e367d426fe60dffba47855715f9e"
+    }
+  },
+  "terrain_generated_by": "tools/build_ui_art.py --import-terrain",
+  "terrain_rejected": [],
   "tokens": {
     "hull_brigantine_n": {
       "accepted_at": "2026-11-05",
@@ -2518,5 +2818,5 @@
       "snapped_sha": "fa1a050be3de4557c999982b61db05d3b2387a371849b9fdc7807827c8d235f9"
     }
   },
-  "version": 1
+  "version": 2
 }
