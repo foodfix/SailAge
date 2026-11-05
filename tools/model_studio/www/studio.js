@@ -23,7 +23,7 @@ async function api(path, opts) {
 }
 
 function thumbURL(job, kind) {
-  const t = job.thumbs[kind];
+  const t = (job.thumbs || {})[kind];
   if (!t) return null;
   return `/thumb/${kind}/${job.id}.png?v=${t.v}`;
 }
@@ -75,7 +75,7 @@ function statusHTML(job, current, queue) {
       const extra = [];
       if (job.seconds != null) extra.push(`${job.seconds}s`);
       if (job.seed != null) extra.push(`seed ${job.seed}`);
-      if (m.band) extra.push(`${m.band.long_axis_px}px ∈ [${m.band.band.join(",")}]? ${m.band.in_band ? "yes" : "NO"}`);
+      if (m.band && m.band.band) extra.push(`${m.band.long_axis_px != null ? m.band.long_axis_px + "px" : "?"} ∈ [${(m.band.band || []).join(",")}]? ${m.band.in_band ? "yes" : "NO"}`);
       if (job.status === "done") return { cls: "done", text: `done · ${extra.join(" · ")}` };
       if (job.status === "band-fail") return { cls: "band-fail", text: `band-fail · ${extra.join(" · ")}` };
       if (job.status === "error") return { cls: "error", text: `error: ${job.error || "?"}` };
@@ -94,9 +94,23 @@ function metricsLine(job) {
   if (!m) return "";
   const bits = [];
   if (m.opaque_pct != null) bits.push(`opaque ${m.opaque_pct}%`);
-  if (m.bbox) bits.push(`bbox [${m.bbox.join(",")}]`);
+  if (m.bbox && Array.isArray(m.bbox)) bits.push(`bbox [${m.bbox.join(",")}]`);
   if (m.pennant_red_px != null) bits.push(`red ${m.pennant_red_px}px`);
   return bits.join(" · ");
+}
+
+function headHTML(job) {
+  // single source for the card head — buildCard and updateCard share it,
+  // so a stale element reference can never come back
+  const label = job.label || job.id;
+  const acc = job.accepted;
+  return `<span class="jid">${job.id}</span>
+    <span class="lbl">${label}</span>
+    ${job.mirror_of ? `<span class="badge mirror" title="mirror-derived at ingestion (doc f6c00bb)">⇄ mirror of ${job.mirror_of}</span>` : ""}
+    ${bandBadge(job)}
+    ${pennantBadge(job)}
+    <span class="badge acc" style="${acc ? "" : "display:none"}"
+      title="${acc ? "accepted " + (acc.at || "") + " (" + (acc.source || "?") + ")" : ""}">★ accepted</span>`;
 }
 
 function buildCard(job) {
@@ -105,13 +119,7 @@ function buildCard(job) {
   root.dataset.job = job.id;
   const head = document.createElement("div");
   head.className = "card-head";
-  head.innerHTML = `
-    <span class="jid">${job.id}</span>
-    <span class="lbl">${job.label}</span>
-    ${job.mirror_of ? `<span class="badge mirror" title="mirror-derived at ingestion (doc f6c00bb)">⇄ mirror of ${job.mirror_of}</span>` : ""}
-    ${bandBadge(job)}
-    ${pennantBadge(job)}
-    <span class="badge acc" style="display:none">★ accepted</span>`;
+  head.innerHTML = headHTML(job);
   const thumbs = document.createElement("div");
   thumbs.className = "thumbs";
   const mk = (kind, cap) => {
@@ -163,7 +171,7 @@ function buildCard(job) {
   $(".orig", controls).addEventListener("click", () => restoreOriginal(job.id));
   grid.appendChild(root);
   return { root, els: {
-    ta, srcTag, status, metrics, seed: $(".seed", controls),
+    head, ta, srcTag, status, metrics, seed: $(".seed", controls),
   }, data: job };
 }
 
@@ -255,43 +263,67 @@ function visible(job) {
   return job.family === filter;
 }
 
+function errorCard(jobId, err) {
+  // a card that failed to build renders as an isolated error card —
+  // ONE bad job must never abort the loop (the all-images-broken bug)
+  const root = document.createElement("div");
+  root.className = "card error-card";
+  root.dataset.job = jobId;
+  root.innerHTML = `<div class="card-head"><span class="jid">${jobId}</span></div>
+    <div class="status error">⚠ this job failed to render: ${String((err && err.message) || err)}</div>`;
+  grid.appendChild(root);
+  cards.set(jobId, { root, error: true, els: {}, data: { id: jobId } });
+}
+
 function render() {
   const seen = new Set();
   for (const job of jobsData) {
     if (!visible(job)) continue;
     seen.add(job.id);
-    if (!cards.has(job.id)) cards.set(job.id, buildCard(job));
-    updateCard(job);
+    try {
+      const existing = cards.get(job.id);
+      if (!existing || existing.error || existing.root.removed) {
+        if (existing) existing.root.remove();
+        cards.set(job.id, buildCard(job));
+      }
+    } catch (e) {
+      console.error("card build failed for", job.id, e);
+      const old = cards.get(job.id);
+      if (old && old.root && !old.root.removed) old.root.remove();
+      errorCard(job.id, e);
+      continue;
+    }
+    try {
+      updateCard(job);
+    } catch (e) {
+      console.error("card update failed for", job.id, e);
+      // replace with an error card rather than leaving a half-updated one
+      const old = cards.get(job.id);
+      if (old && old.root && !old.root.removed) old.root.remove();
+      errorCard(job.id, e);
+    }
   }
   for (const [id, card] of cards) {
-    if (!seen.has(id)) { card.root.remove(); cards.delete(id); }
+    if (!seen.has(id)) { try { card.root.remove(); } catch (e) {} cards.delete(id); }
   }
 }
 
 function updateCard(job) {
   const card = cards.get(job.id);
-  if (!card) return;
+  if (!card || card.error) return;
   const { root, els } = card;
   const current = window._status && window._status.current;
   const queue = (window._status && window._status.queue) || [];
+  const thumbs = job.thumbs || {};
   root.classList.toggle("flagged", !!job.flagged);
   root.classList.toggle("accepted", !!job.accepted);
   root.classList.toggle("running", !!(current && current.job === job.id));
-  // badges: simplest correct refresh — rebuild head minus textarea impact
-  const keep = els.head.querySelector(".jid").textContent;
-  els.head.innerHTML = `
-    <span class="jid">${keep}</span>
-    <span class="lbl">${job.label}</span>
-    ${job.mirror_of ? `<span class="badge mirror">⇄ mirror of ${job.mirror_of}</span>` : ""}
-    ${bandBadge(job)}
-    ${pennantBadge(job)}
-    <span class="badge acc" style="${job.accepted ? "" : "display:none"}"
-      title="${job.accepted ? "accepted " + job.accepted.at + " (" + job.accepted.source + ")" : ""}">★ accepted</span>`;
+  els.head.innerHTML = headHTML(job);
   // thumbs + captions (mirror note when serving the flipped base dir)
   const caps = CAPTIONS[job.family] || CAPTIONS.hull;
   for (const kind of ["draft", "raw", "snapped"]) {
     const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
-    const t = job.thumbs[kind];
+    const t = thumbs[kind];
     const url = thumbURL(job, kind);
     $(".cap", d).textContent =
       caps[kind] + (t && t.mirrored ? ` (⇄ ${t.mirrored})` : "");
@@ -351,7 +383,10 @@ async function refreshStatus() {
       const verb = st.current.type === "ingest" ? "ingesting into the game build" : "generating";
       line.textContent = `${st.current.job} — ${verb} (${st.current.stage}) ${s}s`;
       const card = cards.get(st.current.job);
-      if (card) updateCard(cardsData(st.current.job));
+      if (card) {
+        try { updateCard(cardsData(st.current.job)); }
+        catch (e) { console.error("current-card update failed", e); }
+      }
     } else {
       line.textContent = "";
       if (lastCurrent) refreshJobs();  // a job just finished -> pull results
