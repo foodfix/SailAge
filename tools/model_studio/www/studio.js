@@ -12,6 +12,7 @@ const CAPTIONS = {
   hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   sheet: { draft: "draft sheet (5 views)", raw: "raw sheet", snapped: "w crop 64" },
   icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
+  iconsheet: { draft: "sheet draft (group)", raw: "generated sheet", snapped: "first icon crop 64" },
   terrain: { draft: "draft sheet", raw: "raw sheet", snapped: "sheet (no snap)" },
 };
 
@@ -268,6 +269,7 @@ function visible(job) {
   if (filter === "flagged") return job.flagged;
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
+  if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
   if (filter === "hull") return job.family === "hull" || job.family === "sheet";
   return job.family === filter;
 }
@@ -373,9 +375,13 @@ function updateCard(job) {
 async function refreshJobs() {
   try {
     const data = await api("/api/jobs");
+    // icon group sheets lead the list (user: groups are the primary unit;
+    // individual icons stay below as fine-tune cards)
+    data.jobs.sort((a, b) =>
+      ((a.family === "iconsheet" ? 0 : 1) - (b.family === "iconsheet" ? 0 : 1)));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
+      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;

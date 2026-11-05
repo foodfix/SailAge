@@ -850,6 +850,149 @@ SHEET_SCALE_CLAUSE = {
     "nao": "This hull fills about 85% of its cell. ",
 }
 
+# ---- icon group sheets (the driver's icon_group_definitions shape) ----
+ICON_GROUP_SHEET_DOC = "icons get the per-hull treatment: one sheet per family"
+ICON_SHEET_COLS = 4       # ICON_SHEET_DIRS
+ICON_SHEET_TILE = 384
+ICON_SHEET_GAP = 48
+ICON_SHEET_LABEL_H = 36
+ICON_SHEET_MARGIN = 48
+ICON_GROUP_STYLE = {
+    "goods_staples": "everyday trade commodities, warm rustic palette",
+    "goods_crafts": "manufactured wares and crafts, earthy palette",
+    "goods_luxury": "luxury and precious goods, rich golds and jewels",
+    "weapons_armor": "steel and bronze weapons and armour, cold grey "
+                     "metal with leather",
+    "figureheads_sails": "ship equipment: carved figureheads and rolled "
+                         "sail cloth, carved wood and canvas",
+    "battle": "naval combat munitions, dark iron and powder",
+    "heraldry_tactics": "heraldic flags and tactical glyphs, bold "
+                        "nation colours",
+    "ship_life": "shipboard life and status glyphs, warm wood and brass",
+    "weather_trends": "weather omens and market trend glyphs, cool "
+                      "blues with gold accents",
+    "roles_economy": "professions and administration glyphs, brass and "
+                     "parchment",
+    "currents": "sea current direction arrows, deep blue flow",
+    "winds": "wind direction arrows, pale sky blue flow",
+}
+ICON_CELL_WORDS = {
+    "good_dried_fish": "a golden-brown dried fish with clear head and tail",
+    "good_salt": "a white salt mound pile",
+    "good_wheat": "golden wheat sheaves tied with string",
+    "shot_round": "a round cannonball",
+    "shot_chain": "a chain shot (two balls linked by a chain)",
+    "shot_armor_piercing": "a pointed armour-piercing bolt",
+    "shot_grape": "a grape shot cluster of small balls",
+    "eq_lucky_charm": "a small lucky charm amulet",
+    "save": "a retro floppy disk",
+    "compass": "a magnetic compass with needle rose",
+    "crew": "a sailor head-and-shoulders with round cap",
+    "strong": "double upward strength chevrons",
+}
+
+
+def icon_cell_words(dd: dict, icon_id: str) -> str:
+    """The driver's icon_cell_words: curated map, else prefix-strip +
+    underscore->space."""
+    words = (dd.get("ICON_CELL_WORDS") or {}).get(icon_id) \
+        or ICON_CELL_WORDS.get(icon_id)
+    if words:
+        return words
+    words = icon_id
+    for prefix in ("good_", "eq_", "flag_", "role_", "formation_",
+                   "current_arrow_", "wind_arrow_", "shot_"):
+        if words.startswith(prefix):
+            words = words[len(prefix):]
+            break
+    return words.replace("_", " ")
+
+
+def icon_group_definitions(repo: str) -> list[tuple[str, list[str]]]:
+    """All manifest icon ids grouped into the 12 families — the driver's
+    icon_group_definitions replicated (read-only manifest glob)."""
+    icons_dir = os.path.join(repo, "tools", "ui_art", "icons")
+    by_manifest: dict[str, list[str]] = {}
+    if os.path.isdir(icons_dir):
+        for path in sorted(os.listdir(icons_dir)):
+            if not path.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(icons_dir, path),
+                          encoding="utf-8") as fh:
+                    doc = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            sprites = doc if isinstance(doc, list) else doc.get("sprites", [])
+            by_manifest[path] = [s["id"] for s in sprites]
+    if not by_manifest:
+        return []
+    goods = by_manifest.get("goods.json", [])
+    eq = by_manifest.get("equipment.json", [])
+    sail_prefixes = ("eq_mermaid", "eq_eagle", "eq_dragon", "eq_albatross",
+                     "eq_angel", "eq_golden", "eq_cotton", "eq_matting",
+                     "eq_storm", "eq_flemish", "eq_brocade", "eq_red")
+    weapons = [i for i in eq if not i.startswith(sail_prefixes)]
+    rigging = [i for i in eq if i.startswith(sail_prefixes)]
+
+    def man(name: str) -> list[str]:
+        return by_manifest.get(name, [])
+
+    return [
+        ("goods_staples", goods[:13]),
+        ("goods_crafts", goods[13:27]),
+        ("goods_luxury", goods[27:]),
+        ("weapons_armor", weapons),
+        ("figureheads_sails", rigging),
+        ("battle", man("battle.json")),
+        ("heraldry_tactics", man("flags.json") + man("formations.json")
+         + man("trophy.json")),
+        ("ship_life", man("hud.json") + man("meta.json")),
+        ("weather_trends", man("weather.json") + man("trends.json")),
+        ("roles_economy", man("roles.json") + man("economy.json")),
+        ("currents", man("arrows_current.json")),
+        ("winds", man("arrows_wind.json")),
+    ]
+
+
+def icon_sheet_layout(count: int):
+    """(w, h), [(x0, y0, x1, y1) per icon in reading order] — the driver's
+    icon_sheet_layout (4 columns, 384px tiles)."""
+    cols = ICON_SHEET_COLS
+    rows = (count + cols - 1) // cols
+    tile, gap, label_h, margin = (ICON_SHEET_TILE, ICON_SHEET_GAP,
+                                  ICON_SHEET_LABEL_H, ICON_SHEET_MARGIN)
+    w = margin * 2 + cols * tile + (cols - 1) * gap
+    h = margin + rows * (label_h + tile + gap) + gap
+    boxes = []
+    for i in range(count):
+        r, c = divmod(i, cols)
+        x = margin + c * (tile + gap)
+        y = margin + r * (label_h + tile + gap) + label_h
+        boxes.append((x, y, x + tile, y + tile))
+    return (w, h), boxes
+
+
+def icon_sheet_prompt_from(dd: dict, group: str, ids: list[str]) -> str:
+    """The driver's icon_sheet_prompt wording from a constants dict."""
+    style = (dd.get("ICON_GROUP_STYLE") or ICON_GROUP_STYLE).get(
+        group, "consistent 16-bit game icons")
+    cells = "; ".join(f"cell {i + 1} ({icon_cell_words(dd, iid)})"
+                      for i, iid in enumerate(ids))
+    return (
+        "Redraw this input sprite sheet. Every cell contains one icon of "
+        "the same icon family — redraw ALL of them in one consistent "
+        f"style: {style}. "
+        f"Cells in reading order: {cells}. "
+        "Each icon: bold silhouette, thick 1px dark outline, flat "
+        "limited palette, chunky pixels, readable at 32 px, centered in "
+        "its cell, " + (dd.get("CHROMA_BG") or "a solid flat chroma-key "
+                        "green background (#00ff00)") + ". The small text "
+        "labels above the cells are pre-printed — do NOT draw them into "
+        "the sprites. Keep the grid positions and the thin dark "
+        "dividers; one icon per cell, do not merge, move or add icons. "
+        "No water, no scenery, no extra text, no frame.")
+
 
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
     """(family, subject, dir) for all three shapes the store has used:
@@ -866,6 +1009,10 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
         if ship and direction in EMBEDDED_DRIVER["DIRS"]:
             return "hull", ship, direction
         return "sheet", rest, None  # hull_<ship> — the sheet progress key
+    if job_id.startswith("iconsheet_"):
+        return "iconsheet", job_id[len("iconsheet_"):], None
+    if job_id.startswith("icons_"):
+        return "iconsheet", job_id[len("icons_"):], None
     if job_id.startswith("icon_"):
         return "icon", job_id[len("icon_"):], None
     if job_id.startswith("terrain_"):
@@ -914,6 +1061,13 @@ def default_prompt(job_id: str, repo: str) -> str:
             prompt = sheet_prompt_from(d, subject)
             if prompt.strip():
                 return prompt
+        elif fam == "iconsheet":
+            groups = dict(icon_group_definitions(repo))
+            ids = groups.get(subject)
+            if ids:
+                prompt = icon_sheet_prompt_from(d, subject, ids)
+                if prompt.strip():
+                    return prompt
         elif fam == "icon":
             prompt = d["ICON_PROMPT_OVERRIDES"].get(subject)
             if not prompt:
@@ -949,6 +1103,17 @@ def default_prompt(job_id: str, repo: str) -> str:
             "CHROMA_BG": "a solid flat chroma-key green background "
                          "(#00ff00)",
         }, subject)
+    if fam == "iconsheet":
+        return (f"Redraw this input sprite sheet. Every cell contains one "
+                f"icon of the same icon family — redraw ALL of them in one "
+                f"consistent style: "
+                f"{(e.get('ICON_GROUP_STYLE') or ICON_GROUP_STYLE).get(subject, 'consistent 16-bit game icons')}. "
+                f"Each icon: bold silhouette, thick 1px dark outline, flat "
+                f"limited palette, chunky pixels, readable at 32 px, "
+                f"centered in its cell, on a solid flat chroma-key green "
+                f"background (#00ff00). Keep the grid positions and the "
+                f"thin dark dividers. No water, no scenery, no extra text, "
+                f"no frame.")
     if fam == "icon":
         return (e["ICON_PROMPT_OVERRIDES"].get(subject)
                 or f"Redraw this input sprite. Keep the exact same "
@@ -983,6 +1148,14 @@ def reconstruct_original(job_id: str, repo: str, rec: dict | None = None):
             return _hull_prompt_from(dd, subject, direction, stated_px)
         if fam == "sheet":
             return sheet_prompt_from(dd, subject)
+        if fam == "iconsheet":
+            groups = dict(icon_group_definitions(repo))
+            ids = groups.get(subject) or []
+            if ids:
+                return icon_sheet_prompt_from(dd, subject, ids)
+            return (f"Redraw this input sprite sheet: every cell one icon "
+                    f"of the same family, consistent style. No water, no "
+                    f"scenery, no extra text, no frame.")
         if fam == "icon":
             ov = dd["ICON_PROMPT_OVERRIDES"].get(subject)
             return (ov or f"Redraw this input sprite. Keep the exact same "
@@ -1040,6 +1213,105 @@ def random_seed() -> int:
 # ------------------------------------------------------------------ runner --
 
 
+def _cell_green(c: str) -> bool:
+    """The driver's green-kill mask test for cell masks (g>=150, r<=110,
+    b<=110 — chroma green only; darker model greens survive)."""
+    r, g, b = _hex_rgb(c)
+    return g >= 150 and r <= 110 and b <= 110
+
+
+def _aligned_iou(mask_a, mask_b) -> float:
+    """The driver's aligned-IoU: normalise each mask's point set to its
+    bbox top-left, then intersection over union."""
+    sets = []
+    for m in (mask_a, mask_b):
+        pts = [(x, y) for y in range(len(m)) for x in range(len(m[0]))
+               if m[y][x]]
+        if not pts:
+            return 0.0
+        x0 = min(p[0] for p in pts)
+        y0 = min(p[1] for p in pts)
+        sets.append({(x - x0, y - y0) for x, y in pts})
+    inter = len(sets[0] & sets[1])
+    union = len(sets[0] | sets[1])
+    return inter / max(1, union)
+
+
+def _run_icon_sheet(job_id: str, subject: str, rec: dict, px, gen_size,
+                    stage) -> dict:
+    """Per-group icon sheet: the driver's run_icon_sheet_job chain —
+    layout, 384px clamped windows, 64px green-killed cell masks vs 32px
+    draft masks, aligned-IoU greedy assignment (the model may move icons),
+    then per icon: crop -> rembg -> key -> snap -> CANONICAL per-icon
+    writes (snapped/icon_<id>.png + debg) plus studio copies."""
+    groups = icon_group_definitions(REPO)
+    ids = next((ids for g, ids in groups if g == subject), None)
+    if not ids:
+        raise RuntimeError(f"unknown icon group {subject!r} (no ids)")
+    w, h = gen_size
+    rec["gen_size"] = [w, h]
+    size, boxes = icon_sheet_layout(len(ids))
+    if (w, h) != size:
+        rec["drift"] = round(w / size[0], 3)
+        px = _resize_nearest(px, w, h, size[0], size[1])
+    atomic_write(studio_path("gen", job_id), encode_png(size[0], size[1], px))
+    windows = []
+    for (bx0, by0, bx1, by1) in boxes:
+        ccx, ccy = (bx0 + bx1) / 2, (by0 + by1) / 2
+        wx0 = max(0, min(size[0] - 384, int(ccx - 192)))
+        wy0 = max(0, min(size[1] - 384, int(ccy - 192)))
+        windows.append((wx0, wy0, wx0 + 384, wy0 + 384))
+    cell_masks = []
+    for (wx0, wy0, wx1, wy1) in windows:
+        c = crop_rows(px, wx0, wy0, wx1, wy1)
+        cw, ch = wx1 - wx0, wy1 - wy0
+        if (cw, ch) != (64, 64):
+            c = _resize_nearest(c, cw, ch, 64, 64)
+        cell_masks.append([[1 if cc is not None and not _cell_green(cc)
+                            else 0 for cc in row] for row in c])
+    draft_masks = {}
+    for icon_id in ids:
+        tok_path = os.path.join(REPO, "assets", "ui", "icons",
+                                f"{icon_id}.png")
+        with open(tok_path, "rb") as fh:
+            _, _, tpx = decode_rgba(fh.read())
+        draft_masks[icon_id] = [[1 if cc is not None else 0
+                                 for cc in row] for row in tpx]
+
+    assignment = {}
+    used = set()
+    pairs = []
+    for ci, mask in enumerate(cell_masks):
+        for ii, icon_id in enumerate(ids):
+            pairs.append((_aligned_iou(mask, draft_masks[icon_id]), ci, ii))
+    for score, ci, ii in sorted(pairs, key=lambda p: -p[0]):
+        if ci in used or ii in used:
+            continue
+        assignment[ids[ii]] = ci
+        used.add(ci)
+        used.add(ii)
+    rec["assignment"] = {iid: list(windows[ci])
+                         for iid, ci in assignment.items()}
+    block = sorted(_VD.BLOCK_ICON)
+    results = {}
+    for icon_id in sorted(assignment):
+        ci = assignment[icon_id]
+        wx0, wy0, wx1, wy1 = windows[ci]
+        cell = crop_rows(px, wx0, wy0, wx1, wy1)
+        cell_png = encode_png(wx1 - wx0, wy1 - wy0, cell)
+        stage(f"rembg icon_{icon_id}")
+        debg = key_green_bytes(rembg(cell_png, f"icon_{icon_id}"))
+        atomic_write(canonical_path("debg", f"icon_{icon_id}"), debg)
+        stage(f"snap icon_{icon_id}")
+        grid, metrics = snap(debg, block, band=None, pennant_snap=False)
+        png = encode_png(64, 64, grid)
+        atomic_write(canonical_path("snapped", f"icon_{icon_id}"), png)
+        atomic_write(studio_path("snapped", f"icon_{icon_id}"), png)
+        results[icon_id] = {"metrics": metrics}
+    rec["results"] = results
+    return rec
+
+
 def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
     """One studio generation. Writes studio/{gen,snapped,debg}/<job>.png and
     returns a record (metrics, sizes, seconds). Terrain: gen only."""
@@ -1063,6 +1335,12 @@ def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
             px = _resize_nearest(px, w, h, 1024, 512)
         atomic_write(studio_path("gen", job_id), encode_png(len(px[0]),
                                                            len(px), px))
+        rec["seconds"] = round(time.time() - t0, 1)
+        return rec
+
+    if fam == "iconsheet":
+        w, h, px = decode_rgba(gen)
+        rec.update(_run_icon_sheet(job_id, subject, rec, px, (w, h), stage))
         rec["seconds"] = round(time.time() - t0, 1)
         return rec
 
