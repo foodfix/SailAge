@@ -141,6 +141,7 @@ after-action dialog and the editor reopens with the configuration kept
 | Any | `Esc` | back / close modal; on S1: no-op |
 | Any | `F5` | quick-save (allowed only in port; elsewhere shows toast `ui.cant_save_here`) |
 | Any | `F9` | quick-load to slot 1 (confirm dialog) |
+| S3 | `F10` | **session capture** (amended 2026-11-05, Phase-10 acceptance round): save the live viewport to `user://screenshots/world_<ticks>.png` and print the absolute path. Deliberately NOT gated on modals — evidence must work with any UI on screen; needs a loaded run, echo ignored. S10 pairs it with `battle_<ticks>.png` |
 | S3 | arrows / numpad 1–9 | **Step mode:** step one tile (8-directional per `20-*` §4.2); **hold to repeat** at ~8 tiles/s after a 0.25 s delay, each held step a normal move. **Helm mode:** set the helm heading (persisted `world.heading`); the fleet then auto-sails that heading per `20-*` §4.2 — a new direction key re-steers |
 | S3 | `Space` | **Step mode:** wait one day at sea — the full daily ledger (`advance_clock(1.0)`: provisions, wages, weather reroll, morale; `20-*` §4.17). **Helm mode:** stop the fleet; pressed again while stopped, wait one day |
 | S3 | `[` / `]` | cycle sail trim `furled → reefed → normal → full` (persisted `world.sail_trim`; speed/storm-damage effects per `20-*` §4.17) |
@@ -157,6 +158,7 @@ after-action dialog and the editor reopens with the configuration kept
 | S10 | `Tab` | cycle own ships; arrows move the targeting cursor |
 | S10 | `Enter` | confirm the highlighted move/action |
 | S10 | `Esc` | battle menu (Retreat / Surrender / AI-turn speed switch / back) |
+| S10 | `F10` | **session capture** (capture amendment 2026-11-05): save the live battle viewport to `user://screenshots/battle_<ticks>.png` and print the absolute path — `_input`-stage, so it fires even under the after-action dialog / menu / confirm modals |
 | S10 | RMB / MMB drag | camera pan; a manual pan pauses the auto-center follow until the acting unit's next turn (§4.7.1) |
 | S10 | mouse wheel | camera zoom 0.6×–1.5×, anchored at the cursor |
 | S10 | viewport edge band | edge scroll — the cursor within 16 px of the screen edge pans the camera at 600 px/s |

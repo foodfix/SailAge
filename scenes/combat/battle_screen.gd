@@ -2307,6 +2307,35 @@ func _apply_engine_decision(unit: Dictionary, decision: Dictionary) -> void:
 
 # --- Input (docs/80-* §4.3 S10 rows, §4.7.1) --------------------------------
 
+## The `F10` session capture rides the `_input` stage (docs/80-* §4.3 keybind
+## row, capture amendment 2026-11-05) so it fires even while the after-action
+## dialog, confirm or menu owns input — the capture is acceptance evidence
+## and must work with any UI on screen. Echo events ignored.
+func _input(event: InputEvent) -> void:
+	if sim == null:
+		return
+	if not (event is InputEventKey) or not (event as InputEventKey).pressed \
+			or (event as InputEventKey).echo:
+		return
+	var key := event as InputEventKey
+	var code := key.physical_keycode if key.physical_keycode != KEY_NONE \
+		else key.keycode
+	if code == KEY_F10:
+		_capture_session_screenshot()
+
+
+## Waits for the current frame to finish drawing, then dumps the battle
+## viewport to `user://screenshots/battle_<ticks>.png`; prints the absolute
+## path (the acceptance-report seam).
+func _capture_session_screenshot() -> void:
+	await RenderingServer.frame_post_draw
+	var dir := OS.get_user_data_dir() + "/screenshots"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := "%s/battle_%d.png" % [dir, Time.get_ticks_msec()]
+	get_viewport().get_texture().get_image().save_png(path)
+	print("CAPTURE saved: ", path)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if sim == null:
 		return
