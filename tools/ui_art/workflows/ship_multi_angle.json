@@ -1,0 +1,791 @@
+{
+  "25": {
+    "inputs": {
+      "image": "brigantine_side.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Ship Side View (w, green bg)"
+    }
+  },
+  "36": {
+    "inputs": {
+      "filename_prefix": "sailage/angles/nw",
+      "images": [
+        "65:37:89",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image - nw (bow top-left)"
+    }
+  },
+  "38": {
+    "inputs": {
+      "filename_prefix": "sailage/angles/n",
+      "images": [
+        "65:39:98",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image - n (astern)"
+    }
+  },
+  "45": {
+    "inputs": {
+      "filename_prefix": "sailage/angles/sw",
+      "images": [
+        "65:46:134",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image - sw (bow bottom-left)"
+    }
+  },
+  "47": {
+    "inputs": {
+      "filename_prefix": "sailage/angles/s",
+      "images": [
+        "65:40:107",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image - s (bow)"
+    }
+  },
+  "68": {
+    "inputs": {
+      "value": "Rotate the camera 90 degrees to look at the ship directly from ASTERN: the square transom stern-castle faces the viewer head-on, symmetric, the ship sails AWAY upward, no bowsprit visible, billowed sails seen from behind. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt n (astern)"
+    }
+  },
+  "69": {
+    "inputs": {
+      "value": "Rotate the camera 45 degrees to the left into a three-quarter diagonal view: the bow points to the TOP-LEFT corner, the sails billow toward the stern at the BOTTOM-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt nw (bow top-left)"
+    }
+  },
+  "72": {
+    "inputs": {
+      "value": "Rotate the camera 90 degrees the other way to look at the ship directly from the BOW: the bowsprit points straight down toward the viewer at the bottom center, symmetric bow shape, the stern-castle hidden behind the sails. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt s (bow)"
+    }
+  },
+  "73": {
+    "inputs": {
+      "value": "Rotate the camera 45 degrees to the right into a three-quarter diagonal view: the bow points to the BOTTOM-LEFT corner, the sails billow toward the stern at the TOP-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt sw (bow bottom-left)"
+    }
+  },
+  "48:9": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "48:10": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_bf16.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "48:12": {
+    "inputs": {
+      "unet_name": "qwen_image_2.1_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "48:26": {
+    "inputs": {
+      "lora_name": "angles_v2_full_qwen21_multiple_angles_v2_qwen21_multiple_angles_v2_000001500.safetensors",
+      "strength_model": 1,
+      "model": [
+        "48:12",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "65:37:85": {
+    "inputs": {
+      "strength": 1,
+      "pre_cfg": false,
+      "model": [
+        "65:37:86",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG归一化"
+    }
+  },
+  "65:37:86": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "48:26",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "采样算法（AuraFlow）"
+    }
+  },
+  "65:37:87": {
+    "inputs": {
+      "pixels": [
+        "65:37:91",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "65:37:88": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:37:91",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:37:89": {
+    "inputs": {
+      "samples": [
+        "65:37:90",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "65:37:90": {
+    "inputs": {
+      "seed": 91003,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65:37:85",
+        0
+      ],
+      "positive": [
+        "65:37:93",
+        0
+      ],
+      "negative": [
+        "65:37:88",
+        0
+      ],
+      "latent_image": [
+        "65:37:87",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "65:37:91": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "65:37:92": {
+    "inputs": {
+      "images": [
+        "65:37:89",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "65:37:93": {
+    "inputs": {
+      "prompt": [
+        "69",
+        0
+      ],
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:37:91",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:39:94": {
+    "inputs": {
+      "strength": 1,
+      "pre_cfg": false,
+      "model": [
+        "65:39:95",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG归一化"
+    }
+  },
+  "65:39:95": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "48:26",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "采样算法（AuraFlow）"
+    }
+  },
+  "65:39:96": {
+    "inputs": {
+      "pixels": [
+        "65:39:100",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "65:39:97": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:39:100",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:39:98": {
+    "inputs": {
+      "samples": [
+        "65:39:99",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "65:39:99": {
+    "inputs": {
+      "seed": 91001,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65:39:94",
+        0
+      ],
+      "positive": [
+        "65:39:102",
+        0
+      ],
+      "negative": [
+        "65:39:97",
+        0
+      ],
+      "latent_image": [
+        "65:39:96",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "65:39:100": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "65:39:101": {
+    "inputs": {
+      "images": [
+        "65:39:98",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "65:39:102": {
+    "inputs": {
+      "prompt": [
+        "68",
+        0
+      ],
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:39:100",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:46:130": {
+    "inputs": {
+      "strength": 1,
+      "pre_cfg": false,
+      "model": [
+        "65:46:131",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG归一化"
+    }
+  },
+  "65:46:131": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "48:26",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "采样算法（AuraFlow）"
+    }
+  },
+  "65:46:132": {
+    "inputs": {
+      "pixels": [
+        "65:46:135",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "65:46:133": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:46:135",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:46:134": {
+    "inputs": {
+      "samples": [
+        "65:46:138",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "65:46:135": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "65:46:136": {
+    "inputs": {
+      "images": [
+        "65:46:134",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "65:46:137": {
+    "inputs": {
+      "prompt": [
+        "73",
+        0
+      ],
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:46:135",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:46:138": {
+    "inputs": {
+      "seed": 91004,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65:46:130",
+        0
+      ],
+      "positive": [
+        "65:46:137",
+        0
+      ],
+      "negative": [
+        "65:46:133",
+        0
+      ],
+      "latent_image": [
+        "65:46:132",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "65:40:103": {
+    "inputs": {
+      "strength": 1,
+      "pre_cfg": false,
+      "model": [
+        "65:40:104",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG归一化"
+    }
+  },
+  "65:40:104": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "48:26",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "采样算法（AuraFlow）"
+    }
+  },
+  "65:40:105": {
+    "inputs": {
+      "pixels": [
+        "65:40:109",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "65:40:106": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:40:109",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "65:40:107": {
+    "inputs": {
+      "samples": [
+        "65:40:108",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "65:40:108": {
+    "inputs": {
+      "seed": 91002,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65:40:103",
+        0
+      ],
+      "positive": [
+        "65:40:111",
+        0
+      ],
+      "negative": [
+        "65:40:106",
+        0
+      ],
+      "latent_image": [
+        "65:40:105",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "65:40:109": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "65:40:110": {
+    "inputs": {
+      "images": [
+        "65:40:107",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "65:40:111": {
+    "inputs": {
+      "prompt": [
+        "72",
+        0
+      ],
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:40:109",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  }
+}
