@@ -1935,7 +1935,17 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    walnut). The ninepatch sheets are the single switch: re-authoring
    them reskins every panel/button in the game.
 
-   **Skin coverage (amended 2026-11-05, user direction — UW2 style
+   **NPC world-fleet tokens (amended 2026-11-05, user direction —
+   UW2 ships-in-sight):** world-map NPC fleets render the same 8-dir
+   hull tokens as the player (the flagship's ship type, the fleet's
+   movement heading, the owner's `PENNANT_*` remap — pirate fleets
+   carry the pirate pennant). The §4.5.2 letter-marker squares are
+   demoted to a small role chip overlaid on the token corner (role
+   letter + role color, ~6px) so trader/patrol/pirate stays readable
+   at a glance; the bare square remains the fallback when no token
+   resolves. Player-vs-NPC distinction: the player keeps the fleet
+   marker/square; NPCs show ship + role chip only.
+      **Skin coverage (amended 2026-11-05, user direction — UW2 style   **Skin coverage (amended 2026-11-05, user direction — UW2 style
    everywhere):** texture mode routes EVERY window/panel/HUD surface
    through the skin vocabulary — custom-drawn screens (HUD status
    bars, port screens, chart, fleet picker, hail modal, intel,
