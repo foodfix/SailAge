@@ -482,8 +482,41 @@ func _tick_ocean_warmup() -> void:
 # button always open the window — they are never touched here.
 ## The `_input` stage of the arrow-field keys (§4.8.10): consuming here hides
 ## the event from every `_unhandled_input` handler, which IS the shadow.
+## The `F10` session capture rides the same stage so it fires even while a
+## modal owns input (§4.3 keybind row, capture-amendment 2026-11-05).
 func _input(event: InputEvent) -> void:
+	_tick_capture_input(event)
 	_tick_arrow_field_input(event)
+
+
+# --- Session capture (F10) — acceptance evidence (2026-11-05 round) --------
+
+## The `F10` capture handler (§4.3 keybind row, capture amendment): saves the
+## live viewport to `user://screenshots/world_<ticks>.png`. Deliberately NOT
+## gated on modals or game-over — the capture is acceptance evidence and must
+## work with any UI on screen. Only requires a loaded run; ignores echo.
+func _tick_capture_input(event: InputEvent) -> void:
+	if not _is_loaded():
+		return
+	if not (event is InputEventKey) or not (event as InputEventKey).pressed \
+			or (event as InputEventKey).echo:
+		return
+	var key := event as InputEventKey
+	var code := key.physical_keycode if key.physical_keycode != KEY_NONE \
+		else key.keycode
+	if code == KEY_F10:
+		_capture_session_screenshot("world")
+
+
+## Waits for the current frame to finish drawing, then dumps the viewport
+## image; prints the absolute path (the acceptance-report seam).
+func _capture_session_screenshot(prefix: String) -> void:
+	await RenderingServer.frame_post_draw
+	var dir := OS.get_user_data_dir() + "/screenshots"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := "%s/%s_%d.png" % [dir, prefix, Time.get_ticks_msec()]
+	get_viewport().get_texture().get_image().save_png(path)
+	print("CAPTURE saved: ", path)
 
 
 func _unhandled_input(event: InputEvent) -> void:
