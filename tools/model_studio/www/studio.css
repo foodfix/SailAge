@@ -114,6 +114,7 @@ textarea.dirty { border-color: var(--gold); }
 
 .status { font-size: 11px; color: var(--dim); min-height: 15px; }
 .status.done { color: #9fd49f; }
+.status.ingame { color: var(--gold-hi); }
 .status.band-fail { color: #ffb0a0; }
 .status.error { color: #ffb0a0; }
 .status.generating, .status.queued { color: var(--gold-hi); }
