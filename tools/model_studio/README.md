@@ -130,13 +130,15 @@ and `/api/jobs` → `warnings` — the API always answers valid JSON.
 - **Legacy** `hull_<ship>_<dir>` — per-dir jobs; e/ne/se are mirror
   displays (⇄ badge, flip-served thumbs when their files are pruned).
   When a hull has a sheet job, its leftover per-direction jobs are marked
-  `superseded: true` (with `superseded_by: sheet_<hull>`): they stay
+  `superseded: true` (with `superseded_by: sheet_<hull>`); the same
+  treatment applies to individual `icon_<id>` jobs covered by an icon
+  group sheet (`superseded_by: iconsheet_<group>`). Superseded jobs stay
   listed in `/api/jobs` for transparency, render **read-only** (no
-  Re-roll/Accept, note: "re-roll the sheet card instead") and only in the
-  collapsed **Legacy** tab — hidden from All/Ships/Flagged, skipped by
-  Re-roll ALL flagged, and refused (409) at the reroll/accept API so the
-  retired per-dir path can never shadow the sheet pipeline's canonical
-  outputs.
+  Re-roll/Accept, a "superseded by … — re-roll the … card instead" note)
+  and only in the collapsed **Legacy** tab — hidden from
+  All/Ships/Icons/Flagged, skipped by Re-roll ALL flagged, and refused
+  (409) at the reroll/accept API so retired paths can never shadow the
+  sheet/group pipelines' canonical outputs.
 - **Per-hull sheets** `sheet_<hull>` (draft name; progress/ledger key
   `hull_<hull>`) — one 1792×1152 5-cell sheet per /edit (w/n/s/sw/nw
   512² cells + legend). The card shows the sheet draft, the generated

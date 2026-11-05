@@ -509,23 +509,38 @@ class Studio:
                                    add["original_prompt_source"])
                 self.save_state(st)
             log(f"backfilled original prompts for {len(missing)} job(s)")
+        # supersede marker: when a hull has a sheet job, its legacy
+        # per-direction jobs are retired (re-rolling them would run the
+        # retired per-dir path and shadow the sheet pipeline's canonical
+        # outputs) — same for individual icon jobs covered by an icon
+        # GROUP sheet. Listed with the marker for transparency; the UI
+        # hides them from re-rollable tabs and the API refuses
+        # re-roll/accept.
+        sheet_subjects = {j["subject"] for j in jobs
+                          if j["family"] == "sheet" and j.get("subject")}
+        icon_group_of = {}
+        for group, ids in self._icon_groups().items():
+            for iid in ids:
+                icon_group_of.setdefault(iid, group)
+        for j in jobs:
+            if j["family"] == "hull" and j.get("subject") in sheet_subjects:
+                j["superseded"] = True
+                j["superseded_by"] = f"sheet_{j['subject']}"
+                j["superseded_note"] = "re-roll the sheet card instead"
+            elif j["family"] == "icon" and j.get("subject") in icon_group_of:
+                j["superseded"] = True
+                j["superseded_by"] = f"iconsheet_{icon_group_of[j['subject']]}"
+                j["superseded_note"] = "re-roll the icon sheet card instead"
         counts = {f: sum(1 for j in jobs if j["family"] == f)
                   for f in FAMILIES}
         counts["ingame"] = sum(1 for j in jobs
                                if (j.get("ingest") or {}).get("state")
                                == "in-game")
         counts["legacy"] = sum(1 for j in jobs if j.get("superseded"))
-        # supersede marker: when a hull has a sheet job, its legacy
-        # per-direction jobs are retired (re-rolling them would run the
-        # retired per-dir path and shadow the sheet pipeline's canonical
-        # outputs). Listed with the marker for transparency; the UI hides
-        # them from re-rollable tabs and the API refuses re-roll/accept.
-        sheet_subjects = {j["subject"] for j in jobs
-                          if j["family"] == "sheet" and j.get("subject")}
-        for j in jobs:
-            if j["family"] == "hull" and j.get("subject") in sheet_subjects:
-                j["superseded"] = True
-                j["superseded_by"] = f"sheet_{j['subject']}"
+        counts["legacy_hull"] = sum(1 for j in jobs if j.get("superseded")
+                                    and j["family"] == "hull")
+        counts["legacy_icon"] = sum(1 for j in jobs if j.get("superseded")
+                                    and j["family"] == "icon")
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
         return jobs, counts, flagged_ids
 
@@ -1015,14 +1030,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _supersede_guard(self, job_id: str) -> bool:
         """True (and answers 409) when the job is a superseded legacy
-        per-direction card — re-roll/accept would run the retired path and
-        shadow the sheet pipeline's canonical outputs."""
+        card (per-direction hull or individual icon) — re-roll/accept
+        would run the retired path and shadow the sheet/group pipeline's
+        canonical outputs."""
         jobs, _c, _f = self.studio.registry()
         me = next((j for j in jobs if j["id"] == job_id), None)
         if me and me.get("superseded"):
+            tail = ("re-roll the group card instead"
+                    if str(me.get("superseded_by", "")).startswith(
+                        "iconsheet_")
+                    else "re-roll the sheet card instead")
             self._json(409, {
-                "error": f"{job_id} is superseded by {me.get('superseded_by')} "
-                         f"— re-roll the sheet card instead",
+                "error": f"{job_id} is superseded by "
+                         f"{me.get('superseded_by')} — {tail}",
                 "superseded_by": me.get("superseded_by"),
             })
             return True

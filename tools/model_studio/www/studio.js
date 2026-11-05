@@ -164,8 +164,6 @@ function buildCard(job) {
   const supNote = document.createElement("div");
   supNote.className = "superseded-note";
   supNote.style.display = "none";
-  supNote.textContent =
-    "superseded — re-roll the sheet card instead (this per-direction path is retired)";
   const status = document.createElement("div");
   status.className = "status";
   const metrics = document.createElement("div");
@@ -333,6 +331,9 @@ function updateCard(job) {
   root.classList.toggle("superseded", sup);
   els.controls.style.display = sup ? "none" : "";
   els.supNote.style.display = sup ? "" : "none";
+  els.supNote.textContent = sup
+    ? `superseded by ${job.superseded_by || "a sheet card"} — ${job.superseded_note || "re-roll the sheet card instead"}`
+    : "";
   els.ta.readOnly = sup;
   els.head.innerHTML = headHTML(job);
   // thumbs + captions (mirror note when serving the flipped base dir)
@@ -381,7 +382,7 @@ async function refreshJobs() {
       ((a.family === "iconsheet" ? 0 : 1) - (b.family === "iconsheet" ? 0 : 1)));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
+      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0} (${data.counts.legacy_hull || 0} hull + ${data.counts.legacy_icon || 0} icon)`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;
