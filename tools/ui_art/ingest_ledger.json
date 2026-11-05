@@ -843,40 +843,80 @@
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_holland_ne.png": {
+      "derived_from": "hull_galiot_holland_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
+    },
     "hull_galiot_holland_se.png": {
       "derived_from": "hull_galiot_holland_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_italy_ne.png": {
+      "derived_from": "hull_galiot_italy_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
     },
     "hull_galiot_italy_se.png": {
       "derived_from": "hull_galiot_italy_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_neutral_ne.png": {
+      "derived_from": "hull_galiot_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
+    },
     "hull_galiot_neutral_se.png": {
       "derived_from": "hull_galiot_neutral_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_ottoman_ne.png": {
+      "derived_from": "hull_galiot_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
     },
     "hull_galiot_ottoman_se.png": {
       "derived_from": "hull_galiot_ottoman_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_pirate_ne.png": {
+      "derived_from": "hull_galiot_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
+    },
     "hull_galiot_pirate_se.png": {
       "derived_from": "hull_galiot_pirate_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_player_ne.png": {
+      "derived_from": "hull_galiot_player_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
     },
     "hull_galiot_player_se.png": {
       "derived_from": "hull_galiot_player_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
     },
+    "hull_galiot_portugal_ne.png": {
+      "derived_from": "hull_galiot_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
+    },
     "hull_galiot_portugal_se.png": {
       "derived_from": "hull_galiot_portugal_sw.png",
       "flip": "h",
       "job": "hull_galiot_se"
+    },
+    "hull_galiot_spain_ne.png": {
+      "derived_from": "hull_galiot_spain_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
     },
     "hull_galiot_spain_se.png": {
       "derived_from": "hull_galiot_spain_sw.png",
@@ -2533,7 +2573,7 @@
       "seed": 2031,
       "snapped_sha": "a502ff108b6e774fdba37ebed102b0dbbb1c643ff2f3165728f1fec593253514"
     },
-    "hull_galiot_s": {
+    "hull_galiot_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galiot_nw",
       "pennant": "auto-painted",
@@ -2659,7 +2699,7 @@
       "seed": 61045,
       "snapped_sha": "223ec6c8666665af54e610453dde50b67927b59913ec9fa9668e9ec2c7dff479"
     },
-    "hull_galleass_n": {
+    "hull_junk_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_junk_n",
       "pennant": "auto-painted",
