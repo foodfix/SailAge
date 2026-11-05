@@ -9608,9 +9608,12 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
 
     # counts coherence (the header numbers ARE the maps below them)
     derived_job_ids = {rec.get("job") for rec in derived.values()}
+    painted = sum(1 for rec in tokens.values()
+                  if rec.get("pennant") == "auto-painted")
     if (counts.get("accepted_base") != len(tokens)
             or counts.get("accepted_derived") != len(derived_job_ids)
-            or counts.get("rejected") != len(rejected)):
+            or counts.get("rejected") != len(rejected)
+            or counts.get("pennant_auto_painted") != painted):
         fail("art-ingest", "tools/ui_art/ingest_ledger.json",
              "counts drift from the tokens/derived/rejected maps", 13)
 
@@ -9636,6 +9639,16 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         seed = rec.get("seed")
         if seed is not None and not is_int(seed):
             fail("art-ingest", tid, f"seed {seed!r} is neither an int nor null", 13)
+        # pennant provenance (master adjudication 2026-11-05): "model" kept
+        # the model's own pennant (>=3 source px at the gate); "auto-painted"
+        # carries the deterministic flag composite.  BOTH pass the same
+        # committed-artifact re-proof below (the spain variant's >=3 exact
+        # source px in the top 45% of the bbox), and derivation flips carry
+        # painted flags (paint precedes derivation — flip equality holds).
+        if rec.get("pennant") not in ("model", "auto-painted"):
+            fail("art-ingest", tid,
+                 f"pennant {rec.get('pennant')!r} is neither 'model' nor "
+                 "'auto-painted'", 13)
         at = rec.get("accepted_at")
         if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
             fail("art-ingest", tid,
@@ -9716,7 +9729,8 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         print(f"INFO group 13 ingest: {len(tokens)} base tokens + "
               f"{len(derived)} derived files audited "
               f"({flip_pairs} flip pairs, {len(rejected)} rejections "
-              f"recorded; {found} sha(s) verified against the local cache)")
+              f"recorded, {painted} pennant auto-painted; {found} sha(s) "
+              f"verified against the local cache)")
 
     # The icon + terrain families (ledger v2, 2026-11-05): staged-safe —
     # a tree whose ingest has not run yet carries no sections and the
