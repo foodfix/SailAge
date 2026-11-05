@@ -107,7 +107,20 @@ artifact (no rembg/snap).
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
-## Job shapes (legacy + per-hull sheets — driver-drift tolerant)
+## Job shapes (legacy + sheets + icon groups — driver-drift tolerant)
+
+- **Icon group sheets** `iconsheet_<group>` (progress key `icons_<group>`;
+  12 families of 8–14 icons): the card shows the sheet draft, the
+  generated sheet, and the group's **first icon crop** as the snapped
+  representative; they lead the Icons tab. **Re-roll** regenerates the
+  whole group through chain.py's ported driver chain — layout → 384px
+  clamped windows → green-killed 64px cell masks vs 32px draft masks →
+  aligned-IoU greedy assignment (the model may move icons) → per-icon
+  rembg + key + snap → **canonical `model_raw/snapped/icon_<id>.png`
+  writes** (+ studio copies + debg). **Accept** records the group and
+  triggers one `--import-icons <raw>/snapped <studio>/snapped` run (later
+  dirs win per id, so studio re-roll crops win); per-icon in-game /
+  rejected reasons surface in the card's status line.
 
 The store has carried two ship-job shapes; the registry supports both and
 **never raises**: an unparseable/unknown draft id is skipped (or degraded

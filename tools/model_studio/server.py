@@ -50,7 +50,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 MIRROR_OF = {"e": "w", "ne": "nw", "se": "sw"}  # doc f6c00bb: mirror-derived
-FAMILIES = ("hull", "sheet", "icon", "terrain")
+FAMILIES = ("hull", "sheet", "icon", "iconsheet", "terrain")
 STORES = ("prompts.json", "state.json", "accepted.json")
 
 
@@ -69,6 +69,8 @@ class Studio:
         self.qcond = threading.Condition(self.lock)
         self._thumb_cache: "OrderedDict[str, bytes]" = OrderedDict()
         self.last_warnings: list[str] = []   # registry skip/degrade notes
+        self._icon_groups_cache: dict[str, list[str]] = {}
+        self._icon_groups_at: float = 0.0
         self.load_driver()
 
     # -- paths ----------------------------------------------------------
@@ -195,6 +197,77 @@ class Studio:
             "thumbs": thumbs,
         }
 
+    def _icon_groups(self) -> dict[str, list[str]]:
+        """Group -> icon ids (chain's replication of the driver's
+        icon_group_definitions), cached 60 s (manifests drift mid-flight)."""
+        now = time.time()
+        if self._icon_groups_at and now - self._icon_groups_at < 60:
+            return self._icon_groups_cache
+        try:
+            self._icon_groups_cache = dict(chain.icon_group_definitions(
+                self.repo))
+        except Exception as exc:  # noqa: BLE001 — degraded listing
+            log(f"icon group definitions failed: {exc}")
+            self._icon_groups_cache = {}
+        self._icon_groups_at = now
+        return self._icon_groups_cache
+
+    def _iconsheet_entry(self, job_id, subject, prog, prompts, state,
+                         accepted, seed_map):
+        """Icon GROUP sheet card (12 families). Progress/ledger key is
+        `icons_<group>`; the driver (and the studio chain) write per-icon
+        canonical snapped files, so the snapped thumb shows the group's
+        first icon crop."""
+        prog_key = f"icons_{subject}"
+        canon = prog.get(prog_key, {}) or {}
+        studio_rec = state.get(job_id, {}) or {}
+        ids = self._icon_groups().get(subject) or []
+        n = len(ids) or len(canon.get("ids") or [])
+        thumbs = {}
+        for kind in ("draft", "raw", "snapped"):
+            for path, _mirrored in self.thumb_candidates(kind, job_id):
+                if os.path.isfile(path):
+                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000)}
+                    break
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt"))
+        if stored_original:
+            original_prompt = stored_original
+            original_source = (studio_rec.get("original_prompt_source")
+                               or "exact")
+        else:
+            original_prompt, original_source = chain.reconstruct_original(
+                job_id, self.repo, rec=canon or None)
+        eff_prompt = prompts.get(job_id) or original_prompt
+        return {
+            "id": job_id,
+            "family": "iconsheet",
+            "subject": subject,
+            "dir": None,
+            "tier": None,
+            "label": f"ICON SHEET · {subject} · {n} icons",
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", canon.get("seed")),
+            "canonical_seed": seed_map.get(job_id),
+            "status": studio_rec.get("status", canon.get("status")),
+            "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
+            "metrics": None,
+            "seconds": studio_rec.get("seconds", canon.get("seconds")),
+            "error": studio_rec.get("error"),
+            "thumbs": thumbs,
+        }
+
     def thumb_candidates(self, kind: str, job_id: str):
         """Ordered (path, mirrored_base) candidates for one thumb slot.
         `mirrored_base` set => serve that file horizontally flipped (the
@@ -204,6 +277,23 @@ class Studio:
         artifact). Never 404 on a listed job's thumbs."""
         fam, subject, direction = chain.parse_job(job_id)
         raw, st = self.raw(), self.studio()
+        if fam == "iconsheet":
+            # group card: draft = sheet draft, raw = generated sheet,
+            # snapped = the group's first icon crop (representative)
+            first = (self._icon_groups().get(subject) or [""])[0]
+            out = []
+            if kind == "draft":
+                out.append((os.path.join(raw, "drafts", job_id + ".png"),
+                            None))
+            elif kind == "raw":
+                out.append((os.path.join(st, "gen", job_id + ".png"), None))
+                out.append((os.path.join(raw, "gen", job_id + ".png"), None))
+            elif kind == "snapped" and first:
+                out.append((os.path.join(st, "snapped",
+                                         f"icon_{first}.png"), None))
+                out.append((os.path.join(raw, "snapped",
+                                         f"icon_{first}.png"), None))
+            return out
         if fam == "sheet":
             # sheet card: draft = the 5-cell reference sheet, raw = the
             # generated sheet, snapped = the band-gated w crop (the
@@ -445,6 +535,9 @@ class Studio:
         if fam == "sheet":
             return self._sheet_entry(job_id, subject, prog, prompts, state,
                                      accepted, seed_map)
+        if fam == "iconsheet":
+            return self._iconsheet_entry(job_id, subject, prog, prompts,
+                                         state, accepted, seed_map)
         canon = prog.get(job_id, {})
         studio_rec = state.get(job_id, {})
         metrics = studio_rec.get("metrics") or canon.get("metrics")
@@ -606,9 +699,22 @@ class Studio:
                                         "started_at": time.strftime(
                                             "%H:%M:%S")})
         t0 = time.time()
-        cmd = [sys.executable, os.path.join(self.repo, "tools",
-                                            "build_ui_art.py"),
-               "--import-ships", os.path.join(self.raw(), "snapped")]
+        try:
+            fam_probe = chain.parse_job(job_id)[0]
+        except KeyError:
+            fam_probe = ""
+        if fam_probe == "iconsheet":
+            # --import-icons: multiple source dirs, later dirs win per id —
+            # the studio reroll crops land in studio/snapped and win over
+            # the batch round's canonical snaps
+            cmd = [sys.executable, os.path.join(self.repo, "tools",
+                                                "build_ui_art.py"),
+                   "--import-icons", os.path.join(self.raw(), "snapped"),
+                   os.path.join(self.studio(), "snapped")]
+        else:
+            cmd = [sys.executable, os.path.join(self.repo, "tools",
+                                                "build_ui_art.py"),
+                   "--import-ships", os.path.join(self.raw(), "snapped")]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   timeout=self.INGEST_TIMEOUT_S,
@@ -620,15 +726,19 @@ class Studio:
                 os.path.join(self.repo, "tools", "ui_art",
                              "ingest_ledger.json"), {})
             tokens = ledger.get("tokens") or {}
+            icons_led = ledger.get("icons") or {}
             fam, subject, direction = chain.parse_job(job_id)
-            if fam == "sheet":
+            ids: list[str] = []
+            gate_job, via = job_id, ""
+            if fam == "iconsheet":
+                ids = self.studio._icon_groups().get(subject) or []
+            elif fam == "sheet":
                 gate_job = f"hull_{subject}_w"   # the banded base cell
                 via = " (via w base cell)"
-            else:
+            elif direction and MIRROR_OF.get(direction):
                 base_dir = MIRROR_OF.get(direction)
-                gate_job = (f"hull_{subject}_{base_dir}" if base_dir
-                            else job_id)
-                via = f" (via {base_dir} base)" if base_dir else ""
+                gate_job = f"hull_{subject}_{base_dir}"
+                via = f" (via {base_dir} base)"
             tail = out.strip()[-700:]
             if proc.returncode != 0:
                 ing = {"state": "error", "exit_code": proc.returncode,
@@ -636,6 +746,39 @@ class Studio:
                                  f"{tail[-300:]}",
                        "log_tail": tail,
                        "seconds": round(time.time() - t0, 1)}
+            elif fam == "iconsheet":
+                # per-icon gate results (ledger section `icons{}` per id)
+                per_icon, rejected_n, ok_n = {}, 0, 0
+                for iid in ids:
+                    rid = f"icon_{iid}"
+                    if rid in rejects:
+                        rsn, dtl = rejects[rid]
+                        per_icon[iid] = f"rejected: {rsn} — {dtl}"
+                        rejected_n += 1
+                    elif rid in icons_led:
+                        per_icon[iid] = "in game"
+                        ok_n += 1
+                    else:
+                        per_icon[iid] = "not ingested"
+                if rejected_n:
+                    first = "; ".join(v for v in per_icon.values()
+                                      if v.startswith("rejected"))[:300]
+                    ing = {"state": "rejected", "exit_code": 0,
+                           "reason": f"{rejected_n}/{len(ids)} icons "
+                                     f"rejected: {first}",
+                           "per_icon": per_icon, "log_tail": tail,
+                           "seconds": round(time.time() - t0, 1)}
+                elif ids and ok_n == len(ids):
+                    ing = {"state": "in-game", "exit_code": 0,
+                           "reason": f"all {ok_n} icons ingested",
+                           "per_icon": per_icon, "log_tail": tail,
+                           "seconds": round(time.time() - t0, 1)}
+                else:
+                    ing = {"state": "error", "exit_code": proc.returncode,
+                           "reason": "no icons ingested and no REJECT "
+                                     "lines — unexpected ingest output",
+                           "per_icon": per_icon, "log_tail": tail,
+                           "seconds": round(time.time() - t0, 1)}
             elif gate_job in rejects:
                 reason, detail = rejects[gate_job]
                 ing = {"state": "rejected", "exit_code": 0,
@@ -932,7 +1075,7 @@ class Handler(BaseHTTPRequestHandler):
             acc = self.studio.accepted()
             source = ("studio" if os.path.isfile(
                 chain.studio_path("snapped", job_id)) else "canonical")
-            ingest_state = ("queued" if fam in ("hull", "sheet")
+            ingest_state = ("queued" if fam in ("hull", "sheet", "iconsheet")
                             else "game-flow-pending")
             acc[job_id] = {
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1004,8 +1147,19 @@ class Handler(BaseHTTPRequestHandler):
                 rec["ingest"] = {"state": "queued",
                                  "queued_at": acc[job_id]["at"]}
                 self.studio.save_state(st_)
+            elif fam == "iconsheet":
+                # the studio chain writes per-icon canonical snapped files
+                # at generation time; accept = record the group + one
+                # --import-icons run over both source dirs
+                ids = self.studio._icon_groups().get(subject) or []
+                acc[job_id]["group_ids"] = ids
+                st_ = self.studio.state()
+                rec = st_.setdefault("jobs", {}).setdefault(job_id, {})
+                rec["ingest"] = {"state": "queued",
+                                 "queued_at": acc[job_id]["at"]}
+                self.studio.save_state(st_)
             self.studio.save_accepted(acc)
-        if fam in ("hull", "sheet"):
+        if fam in ("hull", "sheet", "iconsheet"):
             self.studio.enqueue_ingest(job_id)
         log(f"accepted {job_id} ({source}, ingest={ingest_state})")
         self._json(200, {"ok": True, "job": job_id, "accepted":
@@ -1014,8 +1168,8 @@ class Handler(BaseHTTPRequestHandler):
                          "note": ("restart the game to see it — the token "
                                   "runtime loads data artifacts, no import "
                                   "refresh needed"
-                                  if fam in ("hull", "sheet") else
-                                  "accepted (game flow pending)")})
+                                  if fam in ("hull", "sheet", "iconsheet")
+                                  else "accepted (game flow pending)")})
 
 
 class StudioHTTPServer(ThreadingHTTPServer):
