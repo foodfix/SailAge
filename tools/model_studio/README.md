@@ -107,6 +107,36 @@ artifact (no rembg/snap).
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
+## Accept → in game (一键进游戏)
+
+**Accept** on a ship job now flows straight into the game build:
+
+1. The accepted snapped PNG (`studio/snapped/<job>.png`, falling back to
+   the canonical store file) is atomically copied to
+   `model_raw/snapped/<job>.png` — the stable ingestion-input path.
+2. The worker (same FIFO as generation) runs
+   `python3 <repo>/tools/build_ui_art.py --import-ships <repo>/tools/ui_art/model_raw/snapped`
+   — the idempotent full-ladder re-run (~1–2 min). Gate rejections are
+   non-fatal fallbacks: band out-of-range / masthead missing / pennant
+   snap failures come back as `REJECT <job>: <reason> — <detail>` lines.
+3. The card status walks **queued for ingest → ingesting… → in game ✓**
+   or **REJECTED: <reason>**; the result (state, reason, ledger sha,
+   log tail) is stored per job in `studio/state.json` (`ingest` key) and
+   mirrored into `accepted.json`. e/ne/se accepts resolve through their
+   `w`/`nw`/`sw` base (the ingestion gates the base; mirrors derive).
+4. Header/filter chip **In game (n)** lists accepted+ingested jobs.
+5. Icon/terrain accepts record acceptance only — tagged
+   **accepted (game flow pending)** until their ingestion surfaces land.
+
+Restart note: the token runtime loads data artifacts (no `godot --import`
+needed after a token replace) — restart the game to see accepted art.
+The studio never shells out to godot itself.
+
+**Coordination caution**: the batch per-hull refactor writes the same
+canonical `model_raw/snapped/` paths — avoid accepting a job while a
+batch re-roll is writing that same job's file (the single-file atomic
+copy tolerates it; the next ingest run picks up whichever bytes won).
+
 ## Notes
 
 - Canonical prompts are reconstructed from `tools/model_pass.py` by AST

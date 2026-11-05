@@ -30,9 +30,12 @@ Launch:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -272,7 +275,8 @@ class Studio:
                     "prompt": chain.default_prompt(job_id, self.repo),
                     "custom_prompt": job_id in prompts, "seed": None,
                     "canonical_seed": seed_map.get(job_id), "status": None,
-                    "status_source": "canonical", "metrics": None,
+                    "status_source": "canonical", "ingest": None,
+                    "metrics": None,
                     "seconds": None, "error": None, "thumbs": {},
                 })
         # backfill: persist each legacy job's original prompt ONCE, so the
@@ -304,6 +308,9 @@ class Studio:
             log(f"backfilled original prompts for {len(missing)} job(s)")
         counts = {f: sum(1 for j in jobs if j["family"] == f)
                   for f in FAMILIES}
+        counts["ingame"] = sum(1 for j in jobs
+                               if (j.get("ingest") or {}).get("state")
+                               == "in-game")
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
         return jobs, counts, flagged_ids
 
@@ -403,6 +410,7 @@ class Studio:
             "canonical_seed": seed_map.get(job_id),
             "status": studio_rec.get("status", canon.get("status")),
             "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
             "metrics": metrics,
             "seconds": studio_rec.get("seconds", canon.get("seconds")),
             "error": studio_rec.get("error"),
@@ -421,11 +429,111 @@ class Studio:
                 prompts = self.prompts()
                 prompts[job_id] = prompt
                 self.save_prompts(prompts)
-            self.queue.append({"job": job_id, "seed": seed})
+            self.queue.append({"type": "generate", "job": job_id,
+                               "seed": seed})
             pos = len(self.queue)
             self.qcond.notify_all()
         log(f"queued {job_id} (position {pos})")
         return pos
+
+    def enqueue_ingest(self, job_id: str) -> int:
+        """Queue the accept→ingest build run (worker FIFO, shared with
+        generation — one heavy job at a time)."""
+        with self.lock:
+            self.queue.append({"type": "ingest", "job": job_id})
+            pos = len(self.queue)
+            self.qcond.notify_all()
+        log(f"queued ingest {job_id} (position {pos})")
+        return pos
+
+    def _set_ingest_state(self, job_id: str, ing: dict) -> None:
+        with self.lock:
+            st = self.state()
+            rec = st.setdefault("jobs", {}).setdefault(job_id, {})
+            rec["ingest"] = ing
+            self.save_state(st)
+            acc = self.accepted()
+            if job_id in acc:
+                acc[job_id]["ingest"] = ing.get("state")
+                if ing.get("accepted_at"):
+                    acc[job_id]["accepted_at"] = ing["accepted_at"]
+                self.save_accepted(acc)
+
+    INGEST_TIMEOUT_S = 420   # the full ladder is ~1–2 min; margin for cold runs
+    REJECT_RE = re.compile(r"^\s*REJECT (\S+): (\S+) — (.*)$", re.M)
+
+    def _ingest_order(self, order: dict) -> None:
+        """Accept→game: the canonical snapped dir is the ingestion input;
+        run build_ui_art --import-ships (idempotent full-ladder re-run) and
+        surface in-game ✓ / REJECTED:<reason> per job."""
+        job_id = order["job"]
+        with self.lock:
+            self.current = {"type": "ingest", "job": job_id,
+                            "stage": "build-ladder",
+                            "started_epoch": time.time()}
+        log(f"ingesting {job_id} -> build_ui_art --import-ships")
+        self._set_ingest_state(job_id, {"state": "running",
+                                        "started_at": time.strftime(
+                                            "%H:%M:%S")})
+        t0 = time.time()
+        cmd = [sys.executable, os.path.join(self.repo, "tools",
+                                            "build_ui_art.py"),
+               "--import-ships", os.path.join(self.raw(), "snapped")]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=self.INGEST_TIMEOUT_S,
+                                  cwd=self.repo)
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            rejects = {m.group(1): (m.group(2), m.group(3).strip())
+                       for m in self.REJECT_RE.finditer(out)}
+            ledger = self._read_json(
+                os.path.join(self.repo, "tools", "ui_art",
+                             "ingest_ledger.json"), {})
+            tokens = ledger.get("tokens") or {}
+            fam, subject, direction = chain.parse_job(job_id)
+            base_dir = MIRROR_OF.get(direction)
+            gate_job = (f"hull_{subject}_{base_dir}" if base_dir
+                        else job_id)
+            via = f" (via {base_dir} base)" if base_dir else ""
+            tail = out.strip()[-700:]
+            if proc.returncode != 0:
+                ing = {"state": "error", "exit_code": proc.returncode,
+                       "reason": f"build failed (exit {proc.returncode}): "
+                                 f"{tail[-300:]}",
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+            elif gate_job in rejects:
+                reason, detail = rejects[gate_job]
+                ing = {"state": "rejected", "exit_code": 0,
+                       "reason": f"{reason}{via}", "detail": detail,
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+            elif gate_job in tokens:
+                tok = tokens[gate_job]
+                ing = {"state": "in-game", "exit_code": 0,
+                       "accepted_at": tok.get("accepted_at"),
+                       "snapped_sha": tok.get("snapped_sha"),
+                       "via": via or None, "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+            else:
+                ing = {"state": "error", "exit_code": proc.returncode,
+                       "reason": "no ledger entry and no REJECT line — "
+                                 "unexpected ingest output",
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+        except subprocess.TimeoutExpired:
+            ing = {"state": "error",
+                   "reason": f"build timed out after "
+                             f"{self.INGEST_TIMEOUT_S}s"}
+        except Exception as exc:  # noqa: BLE001 — surface in the UI
+            ing = {"state": "error",
+                   "reason": f"{type(exc).__name__}: {exc}"}
+        ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._set_ingest_state(job_id, ing)
+        with self.lock:
+            self.current = None
+        log(f"ingest {job_id}: {ing['state']}"
+            + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
 
     def _worker(self) -> None:
         while True:
@@ -433,18 +541,26 @@ class Studio:
                 while not self.queue:
                     self.qcond.wait()
                 order = self.queue.pop(0)
-                job_id = order["job"]
-                prompt = self.prompts().get(job_id)
-                if not prompt:
-                    st = self.state().get("jobs", {}).get(job_id) or {}
-                    prompt = (st.get("original_prompt")
-                              or st.get("prompt"))  # exact original wins
-                if not prompt:
-                    prompt = chain.default_prompt(job_id, self.repo)
-                seed = order["seed"] if order["seed"] is not None \
-                    else chain.random_seed()
-                self.current = {"job": job_id, "prompt": prompt,
-                                "seed": seed, "stage": "starting",
+            if order.get("type") == "ingest":
+                self._ingest_order(order)
+                continue
+            self._generate_order(order)
+
+    def _generate_order(self, order: dict) -> None:
+            job_id = order["job"]
+            prompt = self.prompts().get(job_id)
+            if not prompt:
+                st = self.state().get("jobs", {}).get(job_id) or {}
+                prompt = (st.get("original_prompt")
+                          or st.get("prompt"))  # exact original wins
+            if not prompt:
+                prompt = chain.default_prompt(job_id, self.repo)
+            seed = order["seed"] if order["seed"] is not None \
+                else chain.random_seed()
+            with self.lock:
+                self.current = {"type": "generate", "job": job_id,
+                                "prompt": prompt, "seed": seed,
+                                "stage": "starting",
                                 "started_epoch": time.time()}
             log(f"generating {job_id} seed={seed} prompt={prompt!r}")
             rec = {"prompt": prompt, "original_prompt": prompt,
@@ -646,22 +762,61 @@ class Handler(BaseHTTPRequestHandler):
         if not self._job_ok(job_id):
             self._json(404, {"error": f"unknown job {job_id!r}"})
             return
-        st = None
+        fam, subject, direction = chain.parse_job(job_id)
         with self.studio.lock:
             st = self.studio.state().get("jobs", {}).get(job_id)
             acc = self.studio.accepted()
             source = ("studio" if os.path.isfile(
-                chain.studio_path("gen", job_id)) else "canonical")
+                chain.studio_path("snapped", job_id)) else "canonical")
+            ingest_state = "queued" if fam == "hull" \
+                else "game-flow-pending"
             acc[job_id] = {
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "source": source,
                 "seed": (st or {}).get("seed"),
                 "prompt": (st or {}).get("prompt"),
+                "ingest": ingest_state,
             }
+            # Accept = 一键进游戏: the canonical snapped file is the
+            # ingestion input — atomically place the accepted art there.
+            # (Icon/terrain ingestion surfaces land later; acceptance only.)
+            if fam == "hull":
+                studio_snap = chain.studio_path("snapped", job_id)
+                canon_snap = chain.canonical_path("snapped", job_id)
+                src = studio_snap if os.path.isfile(studio_snap) \
+                    else canon_snap
+                copied = False
+                if os.path.isfile(src) and \
+                        os.path.abspath(src) != os.path.abspath(canon_snap):
+                    os.makedirs(os.path.dirname(canon_snap), exist_ok=True)
+                    tmp = canon_snap + ".ingest-tmp"
+                    shutil.copyfile(src, tmp)
+                    with open(tmp, "rb") as fh:
+                        os.fsync(fh.fileno())
+                    os.replace(tmp, canon_snap)  # atomic on same fs
+                    copied = True
+                if os.path.isfile(canon_snap):
+                    with open(canon_snap, "rb") as fh:
+                        acc[job_id]["snap_sha"] = hashlib.sha256(
+                            fh.read()).hexdigest()
+                acc[job_id]["snap_copied"] = copied
+                st_ = self.studio.state()
+                rec = st_.setdefault("jobs", {}).setdefault(job_id, {})
+                rec["ingest"] = {"state": "queued",
+                                 "queued_at": acc[job_id]["at"]}
+                self.studio.save_state(st_)
             self.studio.save_accepted(acc)
-        log(f"accepted {job_id} ({source})")
+        if fam == "hull":
+            self.studio.enqueue_ingest(job_id)
+        log(f"accepted {job_id} ({source}, ingest={ingest_state})")
         self._json(200, {"ok": True, "job": job_id, "accepted":
-                         acc[job_id]})
+                         acc[job_id],
+                         "ingest": {"state": ingest_state},
+                         "note": ("restart the game to see it — the token "
+                                  "runtime loads data artifacts, no import "
+                                  "refresh needed"
+                                  if fam == "hull" else
+                                  "accepted (game flow pending)")})
 
 
 class StudioHTTPServer(ThreadingHTTPServer):

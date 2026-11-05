@@ -46,9 +46,26 @@ function pennantBadge(job) {
 
 function statusHTML(job, current, queue) {
   const el = job => {
+    // accept→ingest state supersedes the generation status
+    const ing = job.ingest;
+    if (ing && ing.state) {
+      if (ing.state === "queued")
+        return { cls: "queued", text: "queued for ingest" };
+      if (ing.state === "running")
+        return { cls: "generating", text: "ingesting…" };
+      if (ing.state === "in-game")
+        return { cls: "ingame", text: `in game ✓${ing.accepted_at ? " " + ing.accepted_at : ""} — restart the game to see it` };
+      if (ing.state === "rejected")
+        return { cls: "band-fail", text: `REJECTED: ${ing.reason || "?"}${ing.detail ? " — " + ing.detail : ""}` };
+      if (ing.state === "game-flow-pending")
+        return { cls: "queued", text: "accepted (game flow pending)" };
+      if (ing.state === "error")
+        return { cls: "error", text: `ingest error: ${ing.reason || "?"}` };
+    }
     if (current && current.job === job.id) {
       const s = Math.max(0, Math.round(Date.now() / 1000 - current.started_epoch));
-      return { cls: "generating", text: `generating ${s}s… (${current.stage})` };
+      const verb = current.type === "ingest" ? "ingesting" : "generating";
+      return { cls: "generating", text: `${verb} ${s}s… (${current.stage})` };
     }
     const qi = queue.indexOf(job.id);
     if (qi >= 0) return { cls: "queued", text: `queued (#${qi + 1})` };
@@ -231,6 +248,7 @@ document.querySelectorAll(".tab").forEach(btn => {
 
 function visible(job) {
   if (filter === "flagged") return job.flagged;
+  if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
   return job.family === filter;
 }
@@ -309,9 +327,10 @@ async function refreshJobs() {
     const data = await api("/api/jobs");
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.hull} · icons ${data.counts.icon} · terrain ${data.counts.terrain} — flagged ${data.flagged.length}`;
+      `ships ${data.counts.hull} · icons ${data.counts.icon} · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
+    $("#ingame-n").textContent = data.counts.ingame || 0;
     render();
   } catch (e) { console.error(e); }
 }
@@ -327,7 +346,8 @@ async function refreshStatus() {
     const line = $("#current-line");
     if (st.current) {
       const s = Math.max(0, Math.round(Date.now() / 1000 - st.current.started_epoch));
-      line.textContent = `${st.current.job} — ${st.current.stage} ${s}s · seed ${st.current.seed}`;
+      const verb = st.current.type === "ingest" ? "ingesting into the game build" : "generating";
+      line.textContent = `${st.current.job} — ${verb} (${st.current.stage}) ${s}s`;
       const card = cards.get(st.current.job);
       if (card) updateCard(cardsData(st.current.job));
     } else {
