@@ -817,6 +817,11 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   hook a future runtime-generation client needs (deferred — Phase-10
   parking lot).
 - **Regenerated-art refresh:** after any `assets/ui/` rebuild, run
+  (data artifacts) — `assets/ui/tokens/` joined the raw-bytes family
+  (2026-11-05): tokens load via `load_png_from_buffer` at runtime, so
+  replacing token files needs **no import refresh** — restart the game
+  and the new art renders (the model-studio accept→ingest flow relies
+  on this). Every other regenerated texture still needs
   `godot --headless --import` once before launching the game — a plain
   game launch reuses the stale `.godot/imported` cache and renders the
   old textures (the 2026-11-04 "buttons still broken after the fix"
