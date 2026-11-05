@@ -768,11 +768,16 @@ func _test_eight_direction_stepping() -> void:
 		var back: Vector2i = before
 		_check(world.try_step(back), "%s: return step succeeds" % action)
 
-	# Click-to-step mapping: the tile under the cursor is `floor(px / 32)`.
-	_check(world._cell_at(Vector2(OPEN_CELL) * 32.0 + Vector2(16, 16)) == OPEN_CELL,
+	# Click-to-step mapping: the tile under the cursor is
+	# `floor(px / _cell_pixels)` — the px fixtures derive from the live cell px
+	# (the §4.8 64-canvas amendment; a future scale change flows through).
+	var cell_px := float(world._cell_pixels)
+	_check(world._cell_at(Vector2(OPEN_CELL) * cell_px
+		+ Vector2.ONE * cell_px * 0.5) == OPEN_CELL,
 		"click maps pixel → the tile under the cursor")
-	_check(world._cell_at(Vector2(OPEN_CELL + Vector2i(1, 0)) * 32.0 + Vector2(4, 4))
-		== OPEN_CELL + Vector2i(1, 0), "click on an adjacent tile maps to it")
+	_check(world._cell_at(Vector2(OPEN_CELL + Vector2i(1, 0)) * cell_px
+		+ Vector2.ONE * cell_px * 0.125) == OPEN_CELL + Vector2i(1, 0),
+		"click on an adjacent tile maps to it")
 	_clear_dialogs(world)
 	_check(world.try_step(OPEN_CELL + Vector2i(1, 0)),
 		"click-to-step path (try_step) moves east")
@@ -1002,14 +1007,20 @@ func _test_port_entry() -> void:
 		SEA_BESIDE_LISBON + Vector2i(radius + 1, 0)),
 		"tiles outside the sighting radius stay unexplored")
 
-	# Fleet marker: 24×24 white square with a black outline (docs/80-* §4.8;
-	# Phase-10 §4.8.9: the square is the flat fallback — the registry's
-	# `hull_{type}_player_{dir}` token replaces it when it resolves).
+	# Fleet marker: a 0.75-cell white square with a black outline (docs/80-*
+	# §4.8 64-canvas amendment; Phase-10 §4.8.9: the square is the flat
+	# fallback — the registry's `hull_{type}_player_{dir}` token replaces it
+	# when it resolves). Dimensions derive from the live cell px — the scene
+	# re-derives the retired 32-era .tscn offsets from `_cell_pixels`.
+	var marker_cell := float(world._cell_pixels)
+	var marker_side := marker_cell * 0.75
 	var square: Control = world.get_node("FleetMarker/Square")
-	_check(square.size == Vector2(24, 24),
-		"fleet marker is 24×24 (got %s)" % str(square.size))
-	_check(is_equal_approx(square.position.x, -12.0) and
-		is_equal_approx(square.position.y, -12.0),
+	_check(is_equal_approx(square.size.x, marker_side)
+		and is_equal_approx(square.size.y, marker_side),
+		"fleet marker is the 0.75-cell square (%.0f px, got %s)"
+		% [marker_side, str(square.size)])
+	_check(is_equal_approx(square.position.x, -marker_side * 0.5) and
+		is_equal_approx(square.position.y, -marker_side * 0.5),
 		"marker square is centered on its tile (%s)" % str(square.position))
 	var outline: ColorRect = square.get_node_or_null("Outline")
 	var fill: ColorRect = square.get_node_or_null("Fill")
@@ -1018,9 +1029,10 @@ func _test_port_entry() -> void:
 	if outline != null and fill != null:
 		_check(fill.color == Color.WHITE, "marker fill is white")
 		_check(outline.color == Color.BLACK, "marker outline is black")
-		_check(outline.size == Vector2(24, 24) and fill.size == Vector2(20, 20),
-			"marker outline is 2px (%s over %s)" % [str(outline.size),
-			str(fill.size)])
+		_check(is_equal_approx(outline.size.x, marker_side)
+			and is_equal_approx(fill.size.x, marker_cell * 0.625),
+			"marker outline is the 1/16-cell border around the fill (%.0f over %.0f)"
+			% [outline.size.x, fill.size.x])
 	_check(square.visible, "the registry is empty in suites ⇒ square fallback")
 	_clear_dialogs(world)
 	host.queue_free()
@@ -1272,18 +1284,20 @@ func _test_camera_clamp() -> void:
 			% [str(corner), str(visible)])
 
 	# Mid-map: the camera centers exactly on the fleet tile (x is not clamped).
+	# Tile-center px derive from the live cell px (64-canvas amendment).
+	var tile_px := float(world._cell_pixels)
 	GameState.world["position"] = {"x": 2160, "y": 1080}
 	world.sync_from_state()
 	var center: Vector2 = world.get_node("Camera2D").position
-	_check(is_equal_approx(center.x, 2160.0 * 32.0 + 16.0)
-		and is_equal_approx(center.y, 1080.0 * 32.0 + 16.0),
+	_check(is_equal_approx(center.x, 2160.0 * tile_px + tile_px * 0.5)
+		and is_equal_approx(center.y, 1080.0 * tile_px + tile_px * 0.5),
 		"camera centers on the fleet tile mid-map (%s)" % str(center))
 	# At the west seam the camera stays on the fleet (x not clamped): a fleet at
 	# x = 2 shows x = 2159..2, which is the wrapped world.
 	GameState.world["position"] = {"x": 2, "y": 1080}
 	world.sync_from_state()
 	var seam_center: Vector2 = world.get_node("Camera2D").position
-	_check(is_equal_approx(seam_center.x, 2.0 * 32.0 + 16.0),
+	_check(is_equal_approx(seam_center.x, 2.0 * tile_px + tile_px * 0.5),
 		"camera is not x-clamped at the seam (got %.1f, fleet x=2)"
 		% seam_center.x)
 	_check(is_equal_approx(world.get_node("Camera2D").zoom.x, 1.0),
@@ -1672,7 +1686,8 @@ func _test_sail_path_module() -> void:
 	# the click budget.
 	_check(long_ms < SailPathLib.BUDGET_MS * 3.0,
 		("the longest real sea route computes in %.1f ms (< %.0f ms, the "
-			+ "Phase-6 full-stage envelope)" % [long_ms, SailPathLib.BUDGET_MS * 3.0]))
+			+ "Phase-6 full-stage envelope)")
+			% [long_ms, SailPathLib.BUDGET_MS * 3.0])
 	print("NOTE  longest real sea route measured %.1f ms for %d tiles" % [
 		long_ms, _path_length(long_path)])
 
