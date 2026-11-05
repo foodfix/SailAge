@@ -358,6 +358,18 @@ ICON_INLINE_CAP = 20             # §4.8.3 32px tier color cap
 ICON_HERO_NOTE = ("hero 64 variants deferred — no 64px icon display "
                   "surface yet (80-* §4.8 render rules: icons inline keep "
                   "the 32 art)")
+# ---- arrow-family ingest policy (fix 2026-11-05): the wind_arrow_*/
+# current_arrow_* families are derivation-only (§8.8 item 5) — e/s/w are
+# rot_cw/rot_180/rot_ccw of the n icon and nw/se/sw mirror/rot of ne, so
+# model output for those ids must NEVER reach the assets files (an
+# independently generated e breaks the transform pin).  The exclusion set
+# is read straight from the manifests (any icon decl carrying a derive op
+# — auto-extends to future derivation-only families).  The n/ne BASES may
+# ingest (the intended refresh path: the build re-derives the siblings
+# from the new source) but only when they verifiably point the right way;
+# a poor base skips the whole family for the round (generated art stays).
+ICON_ARROW_FAMILY_PREFIXES = ("wind_arrow_", "current_arrow_")
+ICON_ARROW_BASE_DIRS = ("n", "ne")
 
 # ---- model-pass terrain ingestion (--import-terrain; 80-* §4.8 + the
 # terrain blob program's uniform-fill rule: the model plains_uniform
@@ -1138,7 +1150,8 @@ INGEST_CONTRACT = ("docs/80-UI-UX.md §4.8 ingestion contract + the "
 # verbatim across a family's re-run — the studio accept→ingest flow
 # re-runs --import-ships and must never revoke the icon/terrain families)
 _SHIP_SECTIONS = ("generated_by", "rejected", "tokens", "derived")
-_ICON_SECTIONS = ("icons_generated_by", "icons_rejected", "icons")
+_ICON_SECTIONS = ("icons_generated_by", "icons_rejected", "icons_skipped",
+                  "icons")
 _TERRAIN_SECTIONS = ("terrain_generated_by", "terrain_rejected", "terrain",
                      "terrain_note")
 
@@ -1249,6 +1262,99 @@ def _icon_source_key(d: Path) -> str:
     return ""  # unreachable — fail() exits
 
 
+def _derive_only_icon_ids() -> set:
+    """The derivation-only icon ids, read straight from the manifests
+    (§8.8 item 5): any icon declaration carrying a derive op is
+    build-derived — model output never writes those assets files.  Today
+    that is the wind/current arrow families' 6 derived dirs each; the
+    manifest scan auto-extends to any future derivation-only family."""
+    out = set()
+    icon_dir = MANIFESTS / "icons"
+    if not icon_dir.is_dir():
+        return out
+    for mf in sorted(icon_dir.glob("*.json")):
+        try:
+            doc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        items = doc if isinstance(doc, list) else doc.get("sprites", [doc])
+        for d in items:
+            if isinstance(d, dict) and d.get("derive") and d.get("id"):
+                out.add(d["id"])
+    return out
+
+
+def _arrow_base_dir(iid):
+    """(family prefix, dir) when the id is an arrow-family BASE candidate
+    (n/ne — the derivable source icons); None for everything else."""
+    for prefix in ICON_ARROW_FAMILY_PREFIXES:
+        if iid.startswith(prefix):
+            d = iid[len(prefix):]
+            if d in ICON_ARROW_BASE_DIRS:
+                return prefix, d
+    return None
+
+
+def _arrow_points_north(px, w, h):
+    """True when the 64-grid arrow reads as a NORTH arrow: taller than
+    wide, and the head (the widest band) at the top — the derivation
+    family's n base must point north or every rotated sibling (e/s/w) is
+    mislabeled."""
+    bb = bbox_of(px, w, h)
+    if bb is None:
+        return False
+    x0, y0, x1, y1 = bb
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    if bh <= bw:
+        return False
+
+    def band_width(y_lo, y_hi):
+        pts = [x for y in range(max(0, y_lo), min(h, y_hi))
+               for x in range(w) if px[x + y * w][3]]
+        return (max(pts) - min(pts) + 1) if pts else 0
+
+    third = max(1, bh // 3)
+    return band_width(y0, y0 + third) > band_width(y1 + 1 - third, y1 + 1)
+
+
+def _arrow_points_northeast(px, w, h):
+    """True when the arrow reads as a NORTH-EAST arrow: the tip touches
+    the top-right corner region (the topmost opaque row's center-x sits
+    in the right half of the bbox and the rightmost opaque column's
+    center-y in the top half)."""
+    bb = bbox_of(px, w, h)
+    if bb is None:
+        return False
+    x0, y0, x1, y1 = bb
+    top = [x for x in range(w) if px[x + y0 * w][3]]
+    right = [y for y in range(h) if px[x1 + y * w][3]]
+    if not top or not right:
+        return False
+    return ((min(top) + max(top)) / 2 > (x0 + x1) / 2
+            and (min(right) + max(right)) / 2 < (y0 + y1) / 2)
+
+
+def _arrow_base_quality(sp: Path, iid: str):
+    """Admission check for an arrow-family BASE (n/ne): decodes to the
+    64 canvas and verifiably points the declared way.  Returns
+    (ok, skip reason)."""
+    try:
+        w, h, px = decode_png(sp.read_bytes())
+    except Exception as exc:
+        return False, f"the {iid} base does not decode: {exc}"
+    if (w, h) != (CANVAS, CANVAS):
+        return False, (f"the {iid} base is {w}x{h}, not the "
+                       f"{CANVAS}px canvas")
+    d = iid.rsplit("_", 1)[1]
+    ok = (_arrow_points_north(px, w, h) if d == "n"
+          else _arrow_points_northeast(px, w, h))
+    if not ok:
+        return False, (f"the model's {d.upper()} base does not read as a "
+                       f"{d.upper()}-pointing arrow — the whole family "
+                       "keeps its generated art this round")
+    return True, ""
+
+
 def run_icon_ingest(source_dirs, report: dict) -> dict:
     """The formal model-pass icon ingestion (80-* §4.8 64-canvas
     amendment): per snapped 64-grid icon, re-quantize to the icon block
@@ -1256,10 +1362,18 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     icons), halve 64→32 (exact 2:1 nearest), gate on the §4.8.3 32px
     color cap, and write assets/ui/icons/<id>.png as the PRIMARY inline
     art (per-file override ladder: the string-map generator fills any
-    gap).  Ledger section `icons{}` per id {job, seed, source,
-    snapped_sha, accepted_at}; accepted ids absent from the source dirs
-    keep their previous entries (multi-dir runs merge; a later dir wins
-    per id).  Returns the report fragment."""
+    gap).  Derivation-only ids (manifest derive ops — the wind/current
+    arrow families' e/s/w/nw/se/sw) are NEVER ingested: the build derives
+    them from their n/ne sources, and an independently generated sibling
+    breaks the §8.8 item 5 transform pin — skipped with a ledger note.
+    The arrow n/ne BASES may ingest (the refresh path: the build
+    re-derives the siblings from the new source) but only when they
+    verifiably point the declared way; a poor base skips the whole family
+    for the round (generated art stays).  Ledger section `icons{}` per id
+    {job, seed, source, snapped_sha, accepted_at} + `icons_skipped{}`;
+    accepted ids absent from the source dirs keep their previous entries
+    (multi-dir runs merge; a later dir wins per id).  Returns the report
+    fragment."""
     candidates: dict[str, tuple[Path, str]] = {}
     for d in source_dirs:
         src_rel = _icon_source_key(d)
@@ -1270,10 +1384,41 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
     prev = _read_ledger("--import-icons")
     prev_icons = prev.get("icons") or {}
     today = time.strftime("%Y-%m-%d", time.gmtime())
-    led, rejected, written = {}, [], 0
+    led, rejected, skipped, written = {}, [], [], 0
+    derive_only = _derive_only_icon_ids()
+    # Arrow-family admission: the n/ne bases must verifiably point the
+    # declared way before ANY member of the family may ingest; a poor
+    # base skips the whole family for the round (generated art stays).
+    arrow_family_skip: dict[str, str] = {}
+    for prefix in ICON_ARROW_FAMILY_PREFIXES:
+        bases = sorted(iid for iid in candidates
+                       if iid.startswith(prefix)
+                       and iid[len(prefix):] in ICON_ARROW_BASE_DIRS
+                       and iid not in derive_only)
+        for iid in bases:
+            ok, why = _arrow_base_quality(candidates[iid][0], iid)
+            if not ok:
+                arrow_family_skip[prefix] = why
+                break
     for iid in sorted(candidates):
         sp, src_rel = candidates[iid]
         job = f"{ICON_INGEST_PREFIX}{iid}"
+        if iid in derive_only:
+            skipped.append({"job": job,
+                            "reason": "derivation-only family",
+                            "detail": f"{iid} is build-derived from its "
+                                      "n/ne source (§8.8 item 5 manifest "
+                                      "derive op) — never ingested"})
+            print(f"  icon {iid}: SKIPPED — derivation-only family "
+                  "(the build derives it)")
+            continue
+        fam = _arrow_base_dir(iid)
+        if fam is not None and fam[0] in arrow_family_skip:
+            skipped.append({"job": job,
+                            "reason": "arrow family kept generated",
+                            "detail": arrow_family_skip[fam[0]]})
+            print(f"  icon {iid}: SKIPPED — {arrow_family_skip[fam[0]]}")
+            continue
         raw = sp.read_bytes()
         if raw[:8] != _PNG_SIG:
             rejected.append({"job": job, "reason": "decode",
@@ -1320,16 +1465,19 @@ def run_icon_ingest(source_dirs, report: dict) -> dict:
             revoked += 1
     counts = {"icons": {"candidates": len(candidates),
                         "accepted": len(led), "rejected": len(rejected),
+                        "skipped": len(skipped),
                         "files": written, "hero_64": 0}}
     _write_ledger(prev, "icons", {
         "counts": counts,
         "icons_generated_by": "tools/build_ui_art.py --import-icons",
         "icons_rejected": rejected,
+        "icons_skipped": skipped,
         "icons": led,
     })
     report["icons_ingest"] = {
         "candidates": len(candidates), "accepted": len(led),
-        "rejected": rejected, "files": written, "revoked": revoked,
+        "rejected": rejected, "skipped": skipped, "files": written,
+        "revoked": revoked,
         "hero_64": "skipped — " + ICON_HERO_NOTE,
     }
     return report["icons_ingest"]

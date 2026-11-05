@@ -6,11 +6,12 @@
     "candidates": 80,
     "fallback_files": 54,
     "icons": {
-      "accepted": 129,
+      "accepted": 113,
       "candidates": 129,
-      "files": 129,
+      "files": 113,
       "hero_64": 0,
-      "rejected": 0
+      "rejected": 0,
+      "skipped": 16
     },
     "pennant_auto_painted": 20,
     "rejected": 3,
@@ -2114,62 +2115,6 @@
       "snapped_sha": "9a480bd11ec44535397cbbf6d3558344b36ec3a7a2ac605ac9728c99d6d5e92d",
       "source": "snapped"
     },
-    "current_arrow_e": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_e",
-      "seed": null,
-      "snapped_sha": "a78a453a48fe5926118e2db72202318def51ba4a49e0d7e77c4c258b8f85e74e",
-      "source": "snapped"
-    },
-    "current_arrow_n": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_n",
-      "seed": null,
-      "snapped_sha": "f21b284ad6afb6c35274af70ad3c780d1d2463ce515363c43d482f1fb5d5e70e",
-      "source": "snapped"
-    },
-    "current_arrow_ne": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_ne",
-      "seed": null,
-      "snapped_sha": "bd8cb0da885dc1feb7f230082d5a2bc46e152345214653e6e107df0c4c98c96c",
-      "source": "snapped"
-    },
-    "current_arrow_nw": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_nw",
-      "seed": null,
-      "snapped_sha": "075b88e792aff5f8b165f5114c2b1f93ea3ac1d35fef6507737b2aa098962e88",
-      "source": "snapped"
-    },
-    "current_arrow_s": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_s",
-      "seed": null,
-      "snapped_sha": "96dae0c50447992a0413d0751d028e573e4adbd4a4624b316a7ffe051ad36bef",
-      "source": "snapped"
-    },
-    "current_arrow_se": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_se",
-      "seed": null,
-      "snapped_sha": "68ac1200b39f5b6fd250a852dae34ea5fff3e92fd898533c597ef07823bc816a",
-      "source": "snapped"
-    },
-    "current_arrow_sw": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_sw",
-      "seed": null,
-      "snapped_sha": "3ca8ffba0c74802c6b3e92ff8be4c2eb91c65c12669a342c56ca11f1438c9ca0",
-      "source": "snapped"
-    },
-    "current_arrow_w": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_current_arrow_w",
-      "seed": null,
-      "snapped_sha": "f563803b6237c08152221ef8d15e0e83c4b5e1d4cd9644e472fdf60f0d55f9a5",
-      "source": "snapped"
-    },
     "durability": {
       "accepted_at": "2026-11-05",
       "job": "icon_durability",
@@ -2897,66 +2842,92 @@
       "seed": 2118,
       "snapped_sha": "afce02c4759c135481b03261053123b7e5af20d8f65e2f0a540318271626125b",
       "source": "snapped"
-    },
-    "wind_arrow_e": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_e",
-      "seed": null,
-      "snapped_sha": "e8f952513d716c165c6b78d765d64d85fb70821d5eb99cf3cce7dd1c51254542",
-      "source": "snapped"
-    },
-    "wind_arrow_n": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_n",
-      "seed": null,
-      "snapped_sha": "26fe05a2a255a4ae836360554077e27e22746ee43638aac80d8e6c9bb204aff0",
-      "source": "snapped"
-    },
-    "wind_arrow_ne": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_ne",
-      "seed": null,
-      "snapped_sha": "398ee95ba74edfdce7dd4d7fa360e89658271b8d65eb9ba56685483e4a0300bd",
-      "source": "snapped"
-    },
-    "wind_arrow_nw": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_nw",
-      "seed": null,
-      "snapped_sha": "26ade21e5a469f2e3357bf64727c7b19f61c4d5feae03d31836b0db8f642bfdc",
-      "source": "snapped"
-    },
-    "wind_arrow_s": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_s",
-      "seed": null,
-      "snapped_sha": "e45337fa79324e7a101e43b169eadb2418a968f8a5454ccb787c833d4f727c0f",
-      "source": "snapped"
-    },
-    "wind_arrow_se": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_se",
-      "seed": null,
-      "snapped_sha": "7efac2386733523fc2655fdc89e925d6e992c499b5504eaf9ca86f7f02cc63cf",
-      "source": "snapped"
-    },
-    "wind_arrow_sw": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_sw",
-      "seed": null,
-      "snapped_sha": "bf67d1ca5289241d7bb62c4d0adb93a3de50f7c9c4049604c720cc13e7bacf9d",
-      "source": "snapped"
-    },
-    "wind_arrow_w": {
-      "accepted_at": "2026-11-05",
-      "job": "icon_wind_arrow_w",
-      "seed": null,
-      "snapped_sha": "854abc5a8c1c869dca95f9f300c9abdc6b53c0059718966803de6b50c096a908",
-      "source": "snapped"
     }
   },
   "icons_generated_by": "tools/build_ui_art.py --import-icons",
   "icons_rejected": [],
+  "icons_skipped": [
+    {
+      "detail": "current_arrow_e is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_e",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "job": "icon_current_arrow_n",
+      "reason": "arrow family kept generated"
+    },
+    {
+      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "job": "icon_current_arrow_ne",
+      "reason": "arrow family kept generated"
+    },
+    {
+      "detail": "current_arrow_nw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_nw",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "current_arrow_s is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_s",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "current_arrow_se is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_se",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "current_arrow_sw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_sw",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "current_arrow_w is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_current_arrow_w",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "wind_arrow_e is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_e",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "job": "icon_wind_arrow_n",
+      "reason": "arrow family kept generated"
+    },
+    {
+      "detail": "the model's N base does not read as a N-pointing arrow — the whole family keeps its generated art this round",
+      "job": "icon_wind_arrow_ne",
+      "reason": "arrow family kept generated"
+    },
+    {
+      "detail": "wind_arrow_nw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_nw",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "wind_arrow_s is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_s",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "wind_arrow_se is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_se",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "wind_arrow_sw is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_sw",
+      "reason": "derivation-only family"
+    },
+    {
+      "detail": "wind_arrow_w is build-derived from its n/ne source (§8.8 item 5 manifest derive op) — never ingested",
+      "job": "icon_wind_arrow_w",
+      "reason": "derivation-only family"
+    }
+  ],
   "rejected": [
     {
       "detail": "long axis 46px outside the tier-1 band 28-37+1 lateen (§4.8.7)",
