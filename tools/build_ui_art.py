@@ -64,6 +64,39 @@ node pinned v24.16.0, zero npm deps), then applies the Python post-passes:
    file: base reference + flip).  Out-of-band / masthead-less tokens are
    REJECTED (reported, never committed) — a later re-roll lands via a
    simple re-run.
+9b. Model-pass icon ingestion (``--import-icons <src_dir>...`` — the §4.8
+   64-canvas amendment, 2026-11-05): per snapped 64-grid icon, re-quantize
+   to the 25-hex icon block (the studio ship snaps quantize to the hull
+   block — never trusted for icons; the formal re-quantize is provably a
+   no-op on icon-block-clean sources and a hard gate on anything else),
+   then halve 64→32 (EXACT 2:1 nearest, origin-anchored: out(x, y) =
+   src(2x, 2y) — the inline UI displays 32px and the halving stays crisp
+   on the 64-grid), gate on the §4.8.3 32px color cap (20), and write
+   ``assets/ui/icons/<id>.png`` as the PRIMARY inline art — same ids,
+   same files as the generator (per-file override ladder).  The ledger
+   section ``icons{}`` records per id {job, seed, source dir, snapped
+   sha, acceptance date}; the 64px hero variants are DEFERRED (no display
+   surface; ledger counts record the skip).  Later source dirs win per
+   id — pass ``model_raw/snapped`` plus ``model_raw/studio/snapped`` to
+   fold the studio re-rolls in.
+9c. Model-pass terrain ingestion (``--import-terrain <gen_dir>``): the
+   model ``terrain_plains_uniform`` sheet (1024×512, a 4×2 grid of
+   256px seamless-by-design patches) crops to the 4 uniform 64px land
+   variants (one crop per top-row patch, clean-interior offset ≥ 96px
+   from every patch edge), tone-ranked onto the authored land family's
+   distribution (brightest 6% → LAND_HI, darkest 6% → LAND_LO, middle →
+   LAND base — nearest-hex quantization would fill the tile ~90% HI and
+   turn the pinned base-dominant ring into a visible lattice grid), then
+   stamped with the authored phase-0 outer ring (the byte-identical ring
+   the ×2-upscale fallback ships — the §4.8.2 seam rule and the manifest
+   ``ring`` note survive the swap).  Written as
+   ``assets/ui/terrain/terrain_land_0..3.png`` (per-file override
+   ladder); the ledger section ``terrain{}`` records per file {job,
+   seed, sheet sha, patch, crop origin, acceptance date}.  The
+   ``terrain_rocky_uniform`` sheet is HELD for the blob wave (it
+   quantizes darker/flatter than plains at 1:1; plains is the directed
+   deliverable — a non-default ``--terrain-sheet`` remains an explicit,
+   ledgered override).
 10. 64-canvas fallback (§4.8 64-canvas amendment 1664ba9) — hull tokens and
    the terrain class (terrain tiles + shore strips + port markers) ship as
    64×64 canvases: the exact ×2 nearest upscale of the authored 32-grid
@@ -194,12 +227,16 @@ CANVAS = 64  # the shipped token canvas (§4.8 64-canvas amendment)
 AUTHORED_GRID = 32  # the authored string-map grid the 64 canvas upscales
 TERRAIN_OUT_PREFIX = "assets/ui/terrain/"  # terrain class output dir
 
-# ---- model-pass ship ingestion (--import-ships; 90-* §9.2 AI-ingestion
-# path, 80-* §4.8 ingestion contract + the 5-direction amendment f6c00bb).
-# The snapped sources live gitignored in tools/ui_art/model_raw/snapped/
-# (never committed); the ingest ledger is committed provenance. ----
+# ---- model-pass ingestion (--import-ships / --import-icons /
+# --import-terrain; 90-* §9.2 AI-ingestion path, 80-* §4.8 ingestion
+# contract + the 5-direction amendment f6c00bb + the 2026-11-05
+# icons/terrain extension).  The snapped/generated sources live gitignored
+# under tools/ui_art/model_raw/ (never committed); the ingest ledger is
+# committed provenance. ----
 INGEST_LEDGER = MANIFESTS / "ingest_ledger.json"   # committed provenance
-INGEST_VERSION = 1
+# v2 (2026-11-05): the ledger gains the icons{} + terrain{} families
+# (additive; every family's ingest preserves the other families' sections).
+INGEST_VERSION = 2
 PENNANT_SNAP_RADIUS = 40   # channel-sum Δ to the pennant source that snaps
 MASTHEAD_MIN_PX = 3        # ≥3 source-red px in the masthead region
 MASTHEAD_TOP_FRAC = 0.45   # masthead region = top 45% of the token bbox
@@ -207,6 +244,66 @@ INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")  # the model's 5 base dirs
 INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # derived: mirror_x flip
 INGEST_INGESTED_BUDGET = 25  # 64-canvas per-sprite cap (§4.8.3 48px tier;
 # the quantized token draws from an 18-hex block, so this is belt-and-braces)
+
+# ---- model-pass icon ingestion (--import-icons; 80-* §4.8 64-canvas
+# amendment: semantic icons are generated on the 64 canvas by the model
+# pass, the INLINE UI displays the 32 art — the ingest re-quantizes the
+# snapped 64-grid RGBA to the ICON block and halves 64→32 (exact 2:1
+# nearest, origin-anchored).  The committed assets/ui/icons/<id>.png is
+# the primary art; the string-map generator is the per-file fallback
+# (the same override ladder as the hull tokens).  64 hero variants are
+# DEFERRED — no 64px icon display surface exists yet (ledger counts
+# record the skip). ----
+ICON_INGEST_PREFIX = "icon_"
+ICON_INGEST_SOURCES = ("snapped", "studio/snapped")  # canonical cache dirs
+# (precedence order; later CLI dirs win per id)
+ICON_SOURCE_DIR_KEY = "source"   # ledger record: the cache dir of the sha
+ICON_ALPHA_THRESHOLD = 128       # snap alpha is binary; the threshold only
+# guards a partial-alpha re-roll (below → transparent, else opaque)
+ICON_INLINE = 32                 # the inline UI canvas (§4.8 render rules)
+ICON_INLINE_CAP = 20             # §4.8.3 32px tier color cap
+ICON_HERO_NOTE = ("hero 64 variants deferred — no 64px icon display "
+                  "surface yet (80-* §4.8 render rules: icons inline keep "
+                  "the 32 art)")
+
+# ---- model-pass terrain ingestion (--import-terrain; 80-* §4.8 + the
+# terrain blob program's uniform-fill rule: the model plains_uniform
+# sheet (1024×512, a 4×2 grid of 256px seamless-by-design patches) crops
+# to 4 uniform 64px land variants.  Crops quantize to the land kind's
+# pinned 3-step ramp (§4.8.2 dither family — the variant stays
+# plains-toned and in-block) and carry the authored phase-0 outer ring
+# (the byte-identical ring the ×2-upscale fallback carries — §4.8.2 seam
+# rule + the manifest `ring` note).  The rocky_uniform sheet is HELD for
+# the blob wave unless it reads as a clean plains texture at 1:1. ----
+TERRAIN_SHEET_JOB = "terrain_plains_uniform"
+TERRAIN_SHEET_FILE = "terrain_plains_uniform.png"
+TERRAIN_SHEET_W = 1024          # the gen sheet canvas
+TERRAIN_SHEET_H = 512
+TERRAIN_PATCH = 256             # 4×2 patch grid of 256px patches
+TERRAIN_VARIANTS = 4            # the A.5 locked land variant count
+TERRAIN_CROP_INSET = 96         # clean-interior offset inside a patch
+# (the crop sits ≥ 96px from every patch edge — the sheets are seamless
+# by design; any residual patch-border artifact stays out of the crops)
+LAND_BASE = "#7a5c2e"           # LAND — the kind's pinned base step
+LAND_HI = "#8f6d3a"             # LAND_HI — highlight / dither light step
+LAND_LO = "#5e4720"             # LAND_LO — shadow / dither dark step
+LAND_RAMP = (LAND_BASE, LAND_HI, LAND_LO)  # the land kind's only steps
+RING_LATTICE = (3, 5, 16, 3)    # authored phase-0 ring: HI iff
+# (3x + 5y) % 16 == 3 on the 32-grid (manifest `ring` notes; 32 % 16 == 0
+# keeps it torus-continuous), mapped to the 64 canvas by x//2 / y//2 —
+# exactly the ring the ×2-upscale fallback ships.
+LAND_TONE_HI_FRAC = 0.06   # the authored land family's measured tone
+LAND_TONE_LO_FRAC = 0.06   # distribution (generator land variants: ~88%
+# base / ~6% HI / ~6% LO).  The model plains crop is tone-ranked onto
+# THAT distribution — brightest 6% → LAND_HI, darkest 6% → LAND_LO,
+# middle → LAND base — instead of nearest-hex quantization: the raw crop
+# tone (#a0742c class) sits nearest LAND_HI, so nearest quantization
+# fills the tile ~90% HI and the pinned base-dominant ring reads as a
+# dark lattice grid on the tiled map (measured 2026-11-05).  Ranking the
+# crop onto the family's own tone stats keeps the model's spatial
+# structure (debris speckles, mottling) and makes the ring statistically
+# indistinguishable from the interior — the seam disappears the same way
+# it does in the generator art.  Ties break by index (deterministic).
 
 DERIVE_OPS = ("rot_cw", "rot_ccw", "rot_180", "mirror_x", "mirror_y", "mirror_xy")
 
@@ -308,7 +405,7 @@ def decode_png(data: bytes):
     w, h, depth, ctype, comp, filt, inter = struct.unpack(">IIBBBBB", header)
     if depth != 8 or comp != 0 or filt != 0 or inter != 0:
         fail(f"PNG decode: unsupported IHDR (depth={depth} interlace={inter})")
-    if ctype not in (3, 6):
+    if ctype not in (3, 6, 2):
         fail(f"PNG decode: unsupported color type {ctype}")
     raw = zlib.decompress(b"".join(idat))
     bpp = _CHANNELS[ctype]
@@ -343,6 +440,11 @@ def decode_png(data: bytes):
     if ctype == 6:
         for i in range(0, len(out), 4):
             px.append((out[i], out[i + 1], out[i + 2], out[i + 3]))
+    elif ctype == 2:
+        # the model-pass gen sheets are opaque RGB — the terrain ingest's
+        # crop source (alpha implied 255)
+        for i in range(0, len(out), 3):
+            px.append((out[i], out[i + 1], out[i + 2], 255))
     else:
         if plte is None:
             fail("PNG decode: indexed PNG without PLTE")
@@ -525,6 +627,11 @@ def upscale_nearest(w, h, px, factor):
 
 _QUANT_ORDER = sorted(HULL_BLOCK)  # deterministic nearest-color tie-break
 
+# the icon/terrain ingest families quantize outside the hull block — their
+# hex tables ride here (ICON_BLOCK / the land ramp)
+_INGEST_HEXES = {h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+                 for h in ICON_BLOCK | set(LAND_RAMP)}
+
 
 def _hex_dist(rgb_a, rgb_b):
     """Channel-sum distance (the §4.8 ingestion metric: Δ per channel,
@@ -633,6 +740,25 @@ def resolve_ingest_overrides(root: Path = ROOT):
     return out
 
 
+def resolve_artifact_overrides(root: Path = ROOT):
+    """The override ladder for the icon + terrain families (80-* §4.8: the
+    ingested art is the PRIMARY shipped artifact, the generator is the
+    per-file fallback): a ledger entry whose committed artifact file
+    exists serves that shipped file from the committed ingested artifact.
+    Returns {"icons": {id: path}, "terrain": {file name: path}}."""
+    out = {"icons": {}, "terrain": {}}
+    doc = _read_ledger("resolve_artifact_overrides")
+    for iid in (doc.get("icons") or {}):
+        p = root / "assets" / "ui" / "icons" / f"{iid}.png"
+        if p.is_file():
+            out["icons"][iid] = p
+    for fname in (doc.get("terrain") or {}):
+        p = root / "assets" / "ui" / "terrain" / fname
+        if p.is_file():
+            out["terrain"][fname] = p
+    return out
+
+
 def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
     """The formal model-pass ingestion (90-* §9.2, 80-* §4.8 + f6c00bb).
 
@@ -653,16 +779,9 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
     tokens_dir = outroot / TOKENS_DIR
 
     prev_tokens, prev_derived = {}, {}
-    if INGEST_LEDGER.is_file():
-        try:
-            prev = json.loads(INGEST_LEDGER.read_text())
-        except ValueError as exc:
-            fail(f"{INGEST_LEDGER}: not valid JSON ({exc}) — fix or delete it")
-        if int(prev.get("version", 0)) != INGEST_VERSION:
-            fail(f"{INGEST_LEDGER}: version {prev.get('version')!r} != "
-                 f"{INGEST_VERSION}")
-        prev_tokens = prev.get("tokens") or {}
-        prev_derived = prev.get("derived") or {}
+    prev = _read_ledger("--import-ships")
+    prev_tokens = prev.get("tokens") or {}
+    prev_derived = prev.get("derived") or {}
 
     prog = {}
     pj = snapped_dir.parent / "progress.json"
@@ -805,11 +924,6 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
             }
 
     doc = {
-        "version": INGEST_VERSION,
-        "generated_by": "tools/build_ui_art.py --import-ships",
-        "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the "
-                    "5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md "
-                    "§9.2",
         "counts": {
             "candidates": len(candidates),
             "accepted_base": len(led_tokens),
@@ -820,13 +934,16 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
             "fallback_files": len(tiers) * len(OWNER_ORDER) * len(DIR_ORDER)
                               - written,
         },
+        "generated_by": "tools/build_ui_art.py --import-ships",
         "rejected": rejected,
         "tokens": led_tokens,
         "derived": led_derived,
     }
-    INGEST_LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    INGEST_LEDGER.write_text(json.dumps(doc, indent=2, ensure_ascii=False,
-                                        sort_keys=True) + "\n")
+    # Read-modify-write: the ships family owns only its sections — the
+    # icons/terrain families' sections (and their counts) pass through
+    # untouched, so the studio accept→ingest flow never revokes them.
+    prev_all = prev
+    _write_ledger(prev_all, "ships", doc)
 
     report["ingest"] = {
         "candidates": len(candidates),
@@ -837,6 +954,349 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
         "files": written,
     }
     return report["ingest"]
+
+
+# ======================================================================
+# model-pass icon + terrain ingestion (--import-icons / --import-terrain)
+# ======================================================================
+
+INGEST_CONTRACT = ("docs/80-UI-UX.md §4.8 ingestion contract + the "
+                   "5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md "
+                   "§9.2; icons: 64-grid re-quantize to the icon block + "
+                   "exact 2:1 nearest halving to the 32px inline art; "
+                   "terrain: plains_uniform 64px interior crops on the "
+                   "land ramp with the authored phase-0 ring")
+
+# the ledger sections each family owns (everything else is preserved
+# verbatim across a family's re-run — the studio accept→ingest flow
+# re-runs --import-ships and must never revoke the icon/terrain families)
+_SHIP_SECTIONS = ("generated_by", "rejected", "tokens", "derived")
+_ICON_SECTIONS = ("icons_generated_by", "icons_rejected", "icons")
+_TERRAIN_SECTIONS = ("terrain_generated_by", "terrain_rejected", "terrain",
+                     "terrain_note")
+
+
+def _read_ledger(where: str) -> dict:
+    """The committed ledger, version-gated (shared by the three families)."""
+    if not INGEST_LEDGER.is_file():
+        return {}
+    try:
+        doc = json.loads(INGEST_LEDGER.read_text())
+    except ValueError as exc:
+        fail(f"{INGEST_LEDGER}: not valid JSON ({exc}) — fix or delete it")
+    if int(doc.get("version", 0)) != INGEST_VERSION:
+        fail(f"{INGEST_LEDGER}: version {doc.get('version')!r} != "
+             f"{INGEST_VERSION}")
+    return doc
+
+
+def _write_ledger(prev: dict, family: str, sections: dict) -> None:
+    """Read-modify-write: the family's sections replace their previous
+    values; every other family's sections pass through untouched; counts
+    merge per family sub-object."""
+    owned = {"ships": _SHIP_SECTIONS, "icons": _ICON_SECTIONS,
+             "terrain": _TERRAIN_SECTIONS}[family]
+    counts = dict(prev.get("counts") or {})
+    counts.update(sections.get("counts", {}))
+    doc = {"version": INGEST_VERSION, "contract": INGEST_CONTRACT,
+           "counts": counts}
+    for key, val in prev.items():
+        if key in ("version", "contract", "counts"):
+            continue
+        if any(key in own for own in
+               (_SHIP_SECTIONS, _ICON_SECTIONS, _TERRAIN_SECTIONS)) \
+                and key not in owned:
+            doc[key] = val  # another family's section — preserve verbatim
+    for key, val in sections.items():
+        if key == "counts":
+            continue
+        doc[key] = val
+    INGEST_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    INGEST_LEDGER.write_text(json.dumps(doc, indent=2, ensure_ascii=False,
+                                        sort_keys=True) + "\n")
+
+
+def _seed_lookup(snapped_dir: Path, job: str):
+    """The provenance seed for a job: the source dir's own state/progress
+    file first (the studio re-roll state), then the model_raw root
+    progress; null when neither records it (provenance rides the sha)."""
+    for cand in (snapped_dir.parent / "state.json",
+                 snapped_dir.parent / "progress.json"):
+        if not cand.is_file():
+            continue
+        try:
+            jobs = json.loads(cand.read_text()).get("jobs") or {}
+        except ValueError:
+            continue
+        if job in jobs:
+            return (jobs[job] or {}).get("seed")
+    return None
+
+
+def _quantize_icon_hex(rgb):
+    """Nearest icon-block hex (first-min over the sorted block — the same
+    deterministic metric as the hull quantize)."""
+    best_hex, best_d = None, None
+    for hx in sorted(ICON_BLOCK):
+        d = _hex_dist(rgb, _INGEST_HEXES[hx])
+        if best_d is None or d < best_d:
+            best_hex, best_d = hx, d
+    return best_hex
+
+
+def _quantize_icon(w, h, px):
+    """Formal icon quantize: opaque px to the icon block; px below the
+    alpha threshold pass through as fully transparent (the snap alpha is
+    binary — the threshold only guards a partial-alpha re-roll)."""
+    out = []
+    for p in px:
+        if p[3] < ICON_ALPHA_THRESHOLD:
+            out.append((0, 0, 0, 0))
+        else:
+            out.append(_INGEST_HEXES[_quantize_icon_hex(p[:3])] + (255,))
+    return out
+
+
+def _halve64(w, h, px):
+    """Exact 2:1 nearest halving, origin-anchored (pinned): out(x, y) =
+    src(2x, 2y) — crisp on the 64-grid, no mixing; alpha rides the sampled
+    pixel.  The validator mirrors this formula for the halving assert."""
+    if w % 2 or h % 2:
+        fail(f"icon halving: {w}x{h} is not an even 64-grid canvas")
+    ow, oh = w // 2, h // 2
+    return ow, oh, [px[(2 * y) * w + (2 * x)] for y in range(oh)
+                    for x in range(ow)]
+
+
+def _icon_source_key(d: Path) -> str:
+    """The pinned cache-dir key for an icon source dir: the dir must sit
+    at any checkout's ``ui_art/model_raw/<pinned>`` — the ledger `source`
+    the validator re-resolves against ITS tree's gitignored cache."""
+    rp = d.resolve().parts
+    for pinned in ICON_INGEST_SOURCES:
+        want = (Path("ui_art") / "model_raw" / pinned).parts
+        if len(rp) >= len(want) and rp[-len(want):] == want:
+            return pinned
+    fail(f"--import-icons: source dir {d} is not a model_raw icon cache "
+         f"dir ({ICON_INGEST_SOURCES} under ui_art/model_raw)")
+    return ""  # unreachable — fail() exits
+
+
+def run_icon_ingest(source_dirs, report: dict) -> dict:
+    """The formal model-pass icon ingestion (80-* §4.8 64-canvas
+    amendment): per snapped 64-grid icon, re-quantize to the icon block
+    (the studio ship snaps quantize to the hull block — never trusted for
+    icons), halve 64→32 (exact 2:1 nearest), gate on the §4.8.3 32px
+    color cap, and write assets/ui/icons/<id>.png as the PRIMARY inline
+    art (per-file override ladder: the string-map generator fills any
+    gap).  Ledger section `icons{}` per id {job, seed, source,
+    snapped_sha, accepted_at}; accepted ids absent from the source dirs
+    keep their previous entries (multi-dir runs merge; a later dir wins
+    per id).  Returns the report fragment."""
+    candidates: dict[str, tuple[Path, str]] = {}
+    for d in source_dirs:
+        src_rel = _icon_source_key(d)
+        for p in sorted(d.glob(f"{ICON_INGEST_PREFIX}*.png")):
+            iid = p.stem[len(ICON_INGEST_PREFIX):]
+            if iid:
+                candidates[iid] = (p, src_rel)
+    prev = _read_ledger("--import-icons")
+    prev_icons = prev.get("icons") or {}
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    led, rejected, written = {}, [], 0
+    for iid in sorted(candidates):
+        sp, src_rel = candidates[iid]
+        job = f"{ICON_INGEST_PREFIX}{iid}"
+        raw = sp.read_bytes()
+        if raw[:8] != _PNG_SIG:
+            rejected.append({"job": job, "reason": "decode",
+                             "detail": "source is not a PNG (bad magic bytes)"})
+            continue
+        try:
+            w, h, px = decode_png(raw)
+        except Exception as exc:
+            rejected.append({"job": job, "reason": "decode",
+                             "detail": f"source does not decode: {exc}"})
+            continue
+        if (w, h) != (CANVAS, CANVAS):
+            rejected.append({"job": job, "reason": "canvas",
+                             "detail": f"{w}x{h} != {CANVAS}x{CANVAS}"})
+            continue
+        q = _quantize_icon(w, h, px)
+        changed = sum(1 for a, b in zip(px, q) if a != b)
+        colors = {("#%02x%02x%02x" % p[:3]) for p in q if p[3]}
+        if len(colors) > ICON_INLINE_CAP:
+            rejected.append({"job": job, "reason": "budget",
+                             "detail": f"{len(colors)} colors > the 32px "
+                                       f"cap {ICON_INLINE_CAP} (§4.8.3)"})
+            continue
+        hw, hh, hpx = _halve64(w, h, q)
+        write_png(ROOT / "assets" / "ui" / "icons" / f"{iid}.png",
+                  hw, hh, hpx)
+        written += 1
+        sha = hashlib.sha256(raw).hexdigest()
+        prev_rec = prev_icons.get(iid) or {}
+        accepted_at = (prev_rec.get("accepted_at")
+                       if prev_rec.get("snapped_sha") == sha else None)
+        led[iid] = {"job": job,
+                    "seed": _seed_lookup(sp.parent, job),
+                    "source": src_rel,
+                    "snapped_sha": sha,
+                    "accepted_at": accepted_at or today}
+        print(f"  icon {iid}: {w}x{h} -> {hw}x{hh}, {len(colors)} colors "
+              f"(re-quantize touched {changed} px), sha {sha[:12]}… OK")
+    revoked = 0
+    for iid in sorted(prev_icons):
+        if iid not in led:
+            (ROOT / "assets" / "ui" / "icons" / f"{iid}.png").unlink(
+                missing_ok=True)
+            revoked += 1
+    counts = {"icons": {"candidates": len(candidates),
+                        "accepted": len(led), "rejected": len(rejected),
+                        "files": written, "hero_64": 0}}
+    _write_ledger(prev, "icons", {
+        "counts": counts,
+        "icons_generated_by": "tools/build_ui_art.py --import-icons",
+        "icons_rejected": rejected,
+        "icons": led,
+    })
+    report["icons_ingest"] = {
+        "candidates": len(candidates), "accepted": len(led),
+        "rejected": rejected, "files": written, "revoked": revoked,
+        "hero_64": "skipped — " + ICON_HERO_NOTE,
+    }
+    return report["icons_ingest"]
+
+
+def _ring_hi_at64(x, y):
+    """The authored phase-0 ring lattice, mapped to the 64 canvas."""
+    a, b, m, r = RING_LATTICE
+    return (a * (x // 2) + b * (y // 2)) % m == r
+
+
+def _stamp_land_ring(w, h, px):
+    """Stamp the authored phase-0 outer ring (the byte-identical ring the
+    ×2-upscale fallback carries): LAND_HI at the lattice positions, LAND
+    base elsewhere — §4.8.2 (variants share the identical ring; 32 % 16
+    == 0 keeps it torus-continuous)."""
+    if (w, h) != (CANVAS, CANVAS):
+        fail(f"ring stamp: {w}x{h} is not the {CANVAS}px canvas")
+    out = list(px)
+    for y in range(h):
+        edge = y in (0, h - 1)
+        for x in range(w):
+            if not (edge or x in (0, w - 1)):
+                continue
+            hexv = LAND_HI if _ring_hi_at64(x, y) else LAND_BASE
+            out[x + y * w] = _INGEST_HEXES[hexv] + (255,)
+    return out
+
+
+def _tone_rank_land_quantize(crop):
+    """Tone-rank the crop onto the authored land family's distribution
+    (LAND_TONE_HI_FRAC / LAND_TONE_LO_FRAC): rank px by channel-sum
+    luminance (ties by index — deterministic), darkest LAND_TONE_LO_FRAC
+    → LAND_LO, brightest LAND_TONE_HI_FRAC → LAND_HI, the middle → LAND
+    base.  See the constant notes above for why nearest-hex quantization
+    is wrong for these crops."""
+    n = len(crop)
+    order = sorted(range(n), key=lambda i: (sum(crop[i][:3]), i))
+    n_lo = round(n * LAND_TONE_LO_FRAC)
+    n_hi = round(n * LAND_TONE_HI_FRAC)
+    out = [None] * n
+    for rank, i in enumerate(order):
+        hx = (LAND_LO if rank < n_lo
+              else (LAND_HI if rank >= n - n_hi else LAND_BASE))
+        out[i] = _INGEST_HEXES[hx] + (255,)
+    return out
+
+
+def run_terrain_ingest(gen_dir: Path, report: dict,
+                       sheet_file: str = TERRAIN_SHEET_FILE) -> dict:
+    """The formal model-pass terrain ingestion (80-* §4.8, the uniform-fill
+    rule): the plains_uniform sheet crops to TERRAIN_VARIANTS uniform
+    64px tiles (one per top-row patch, clean-interior offset ≥ 96px from
+    every patch edge), tone-ranked onto the authored land family's
+    distribution (LAND_TONE_*_FRAC — see that note), then stamped with
+    the authored phase-0 outer ring (the byte-identical ring the
+    ×2-upscale fallback carries — §4.8.2 seam rule + the manifest `ring`
+    note).  Written as ``assets/ui/terrain/terrain_land_0..3.png`` (the
+    per-file override ladder: the ×2-upscale string-map generator remains
+    the fallback).  The ledger section ``terrain{}`` records per file
+    {job, seed, sheet sha, patch, crop origin, acceptance date}.  The
+    ``terrain_rocky_uniform`` sheet is HELD for the blob wave: it
+    quantizes darker/flatter than the plains texture at 1:1 and plains
+    is the directed deliverable (2026-11-05 call, ledgered)."""
+    sp = gen_dir / sheet_file
+    if not sp.is_file():
+        fail(f"--import-terrain: sheet not found: {sp}")
+    raw = sp.read_bytes()
+    if raw[:8] != _PNG_SIG:
+        fail(f"--import-terrain: {sp.name}: not a PNG (bad magic bytes)")
+    w, h, px = decode_png(raw)
+    if (w, h) != (TERRAIN_SHEET_W, TERRAIN_SHEET_H):
+        fail(f"--import-terrain: {sp.name} is {w}x{h}, the pinned gen "
+             f"sheet canvas is {TERRAIN_SHEET_W}x{TERRAIN_SHEET_H}")
+    prev = _read_ledger("--import-terrain")
+    prev_terrain = prev.get("terrain") or {}
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    sha = hashlib.sha256(raw).hexdigest()
+    seed = _seed_lookup(gen_dir, sheet_file[:-len(".png")])
+    led, written = {}, 0
+    for variant in range(TERRAIN_VARIANTS):
+        patch_x, patch_y = variant, 0  # one crop per top-row patch position
+        cx = patch_x * TERRAIN_PATCH + TERRAIN_CROP_INSET
+        cy = patch_y * TERRAIN_PATCH + TERRAIN_CROP_INSET
+        crop = [px[(cy + y) * w + (cx + x)] for y in range(CANVAS)
+                for x in range(CANVAS)]
+        q = _tone_rank_land_quantize(crop)
+        out = _stamp_land_ring(CANVAS, CANVAS, q)
+        colors = {("#%02x%02x%02x" % p[:3]) for p in out}
+        off = sorted(c for c in colors if c not in set(LAND_RAMP))
+        if off:
+            fail(f"terrain ingest variant {variant}: hexes outside the "
+                 f"land ramp: {off}")
+        fname = f"terrain_land_{variant}.png"
+        write_png(ROOT / "assets" / "ui" / "terrain" / fname,
+                  CANVAS, CANVAS, out)
+        led[fname] = {"job": sheet_file[:-len(".png")], "seed": seed,
+                      "sheet_sha": sha, "patch": [patch_x, patch_y],
+                      "crop": [cx, cy], "accepted_at": today}
+        written += 1
+        print(f"  terrain {fname}: crop ({cx},{cy}) 64px from patch "
+              f"({patch_x},{patch_y}), {len(colors)} land-ramp colors, "
+              "phase-0 ring stamped OK")
+    # The whole-family replacement: the 4 land variants crop from ONE
+    # sheet in one pass; a previous ledger entry for a file that did not
+    # survive (never the case today — the family is pinned 0..3) revokes.
+    revoked = 0
+    for fname in sorted(prev_terrain):
+        if fname not in led:
+            (ROOT / "assets" / "ui" / "terrain" / fname).unlink(
+                missing_ok=True)
+            revoked += 1
+    note = prev.get("terrain_note")
+    if sheet_file != TERRAIN_SHEET_FILE:
+        note = (f"{sheet_file} ingested by explicit --terrain-sheet "
+                "override")
+    else:
+        note = None  # the pinned plains run clears any override note
+    counts = {"terrain": {"candidates": TERRAIN_VARIANTS,
+                          "accepted": len(led), "files": written}}
+    sections = {
+        "counts": counts,
+        "terrain_generated_by": "tools/build_ui_art.py --import-terrain",
+        "terrain_rejected": [],
+        "terrain": led,
+    }
+    if note is not None:
+        sections["terrain_note"] = note
+    _write_ledger(prev, "terrain", sections)
+    report["terrain_ingest"] = {
+        "sheet": sheet_file, "sheet_sha": sha, "accepted": len(led),
+        "files": written, "revoked": revoked,
+    }
+    return report["terrain_ingest"]
 
 
 # ======================================================================
@@ -1163,8 +1623,28 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
     return counts
 
 
-def run_generic_passes(m: Manifests, outroot: Path, report: dict):
-    counts = {"rendered": 0, "derived": 0, "outlined": 0}
+def run_generic_passes(m: Manifests, outroot: Path, report: dict,
+                       artifacts: dict | None = None):
+    """Render + derive + outline + the terrain 64-canvas upscale, then the
+    §4.8 override ladder for the icon/terrain families: a ledger entry
+    with a committed ingested artifact replaces the generator's file
+    (per-file presence — the generator still runs and stays validated;
+    the ingested art is the PRIMARY shipped bytes).  Applied before the
+    seam-ring verify so the ring reads the shipped canvases."""
+    counts = {"rendered": 0, "derived": 0, "outlined": 0,
+              "icons_ingested": 0, "terrain_ingested": 0}
+    # The full build writes into the same tree the committed ingested
+    # artifacts live in (override == dest) — the render passes below would
+    # clobber them.  Stash the ingested bytes first; the ladder restores
+    # them after the passes (a temp rebuild copies instead — the override
+    # points at the committed tree, the dest at the temp dir).
+    stash: dict[Path, bytes] = {}
+    for family in (("icons", "icons"), ("terrain", "terrain")):
+        for key, override in sorted(((artifacts or {}).get(family[0]) or {}).items()):
+            dest = (outroot / "assets" / "ui" / family[0] /
+                    (f"{key}.png" if family[0] == "icons" else key))
+            if override == dest and dest.is_file():
+                stash[dest] = dest.read_bytes()
     counts["rendered"] = run_node(m.render_files, outroot)
     memo = {}
 
@@ -1214,6 +1694,33 @@ def run_generic_passes(m: Manifests, outroot: Path, report: dict):
                  "64-canvas amendment)")
         write_png(outroot / decl["file"],
                   *upscale_nearest(w, h, px, CANVAS // side))
+    # The icon/terrain override ladder (§4.8 ingestion contract): the
+    # committed ingested artifacts are the primary bytes.  Applied AFTER
+    # the derive/outline passes — no ingested icon may sit in a derive
+    # chain (the A.2 contract's model icons are all direct renders; a
+    # future derive-base ingest would need the ledger to gate it).
+    icons = (artifacts or {}).get("icons") or {}
+    for iid in sorted(icons):
+        override = icons[iid]
+        dest = outroot / "assets" / "ui" / "icons" / f"{iid}.png"
+        if override.is_file() and override != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(override, dest)
+        elif dest in stash:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(stash[dest])
+        counts["icons_ingested"] += 1
+    terr = (artifacts or {}).get("terrain") or {}
+    for fname in sorted(terr):
+        override = terr[fname]
+        dest = outroot / TERRAIN_OUT_PREFIX / fname
+        if override.is_file() and override != dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(override, dest)
+        elif dest in stash:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(stash[dest])
+        counts["terrain_ingested"] += 1
     return counts
 
 
@@ -1790,7 +2297,8 @@ def build_contact_sheet(outroot: Path, m: Manifests) -> Path:
 # build / check / main
 # ======================================================================
 
-def build_into(outroot: Path, ingest_files: dict | None = None) -> tuple[Manifests, dict]:
+def build_into(outroot: Path, ingest_files: dict | None = None,
+               artifacts: dict | None = None) -> tuple[Manifests, dict]:
     _verify_transforms()
     m = Manifests()
     m.load()
@@ -1802,7 +2310,7 @@ def build_into(outroot: Path, ingest_files: dict | None = None) -> tuple[Manifes
                 fail("tools/ui_art/hulls/ has manifests but no hull authoring docs")
             report["hulls"] = run_hull_pipeline(m, outroot, outroot / STAGING,
                                                 report, ingest_files)
-        counts = run_generic_passes(m, outroot, report)
+        counts = run_generic_passes(m, outroot, report, artifacts)
         report["generic"] = counts
         if m.classes.get("terrain") is not None:
             run_seam_ring(m, outroot, report)
@@ -1829,6 +2337,20 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
               f"{ing['files']} shipped file(s) written from the model pass")
         for r in ing["rejected"]:
             print(f"    REJECT {r['job']}: {r['reason']} — {r['detail']}")
+    for fam, key in (("icon", "icons_ingest"), ("terrain", "terrain_ingest")):
+        fi = report.get(key)
+        if fi is not None:
+            print(f"  {fam} ingest: accepted {fi.get('accepted', 0)}, "
+                  f"rejected {len(fi.get('rejected', []))}, "
+                  f"{fi.get('files', 0)} file(s) written from the model pass")
+            if fam == "icon":
+                print(f"    hero 64: {fi.get('hero_64')}")
+    g = report.get("generic", {})
+    if g.get("icons_ingested") or g.get("terrain_ingested"):
+        print(f"  ladder: {g.get('icons_ingested', 0)} icon(s) + "
+              f"{g.get('terrain_ingested', 0)} terrain variant(s) served "
+              "from the committed ingested artifacts (the generator fills "
+              "the gaps)")
     print(f"  rendered(render.js): hull maps {h.get('rendered', 0)}, "
           f"generic {g.get('rendered', 0)}; derived {h.get('derived', 0) + g.get('derived', 0)}; "
           f"outlined {h.get('outlined', 0) + g.get('outlined', 0)}; "
@@ -1859,7 +2381,8 @@ def run_check() -> None:
     # sha; the group-13 audit re-derives the provenance), generator art is
     # rebuilt and compared as before.
     with tempfile.TemporaryDirectory(prefix="ui_art_check.") as td:
-        m, _ = build_into(Path(td), resolve_ingest_overrides())
+        m, _ = build_into(Path(td), resolve_ingest_overrides(),
+                          resolve_artifact_overrides())
         # The pipeline owns PNGs; Godot's .import sidecars are committed by
         # the master --import pass and carry no rebuild semantics (master
         # reconciliation 2026-11-04, ledgered).
@@ -1888,7 +2411,8 @@ def run_check() -> None:
 
 def run_contact_sheet() -> None:
     with tempfile.TemporaryDirectory(prefix="ui_art_sheet.") as td:
-        m, _ = build_into(Path(td), resolve_ingest_overrides())
+        m, _ = build_into(Path(td), resolve_ingest_overrides(),
+                          resolve_artifact_overrides())
         result = build_contact_sheet(Path(td), m)
         dest, sheet = result
         dest.write_bytes(encode_png_indexed(sheet.w, sheet.h, sheet.px))
@@ -1903,7 +2427,8 @@ def run_import_mode(snapped_dir: Path) -> None:
         fail(f"--import-ships: snapped dir not found: {snapped_dir}")
     report = {}
     ingest = run_ship_ingest(snapped_dir, ROOT, report)
-    m, report = build_into(ROOT, resolve_ingest_overrides())
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
     report["ingest"] = ingest
     summary(m, report, ROOT)
     counts = report.get("hulls", {})
@@ -1911,6 +2436,39 @@ def run_import_mode(snapped_dir: Path) -> None:
     if m.classes.get("hulls") is not None and total != 16 * 9 * 8:
         fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
              f"+ ingested {counts.get('tokens_ingested', 0)}) != 1152")
+    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
+
+
+def run_import_icons_mode(source_dirs: list[Path]) -> None:
+    """--import-icons: the formal icon ingestion (re-quantize to the icon
+    block, exact 2:1 nearest halving to the 32px inline art), then the
+    full build so the ladder lands the committed artifacts.  Later dirs
+    win per id — pass model_raw/snapped plus model_raw/studio/snapped to
+    fold the studio re-rolls in."""
+    for d in source_dirs:
+        if not d.is_dir():
+            fail(f"--import-icons: source dir not found: {d}")
+    report = {}
+    icons = run_icon_ingest(source_dirs, report)
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
+    report["icons_ingest"] = icons
+    summary(m, report, ROOT)
+    print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
+
+
+def run_import_terrain_mode(gen_dir: Path, sheet_file: str) -> None:
+    """--import-terrain: crop the model plains sheet to the 4 uniform land
+    variants (land-ramp quantize + phase-0 ring), then the full build so
+    the ladder lands the committed artifacts."""
+    if not gen_dir.is_dir():
+        fail(f"--import-terrain: gen dir not found: {gen_dir}")
+    report = {}
+    terrain = run_terrain_ingest(gen_dir, report, sheet_file)
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
+    report["terrain_ingest"] = terrain
+    summary(m, report, ROOT)
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 
@@ -1927,9 +2485,31 @@ def main() -> None:
                          "(f6c00bb), committed provenance ledger; accepted "
                          "tokens are the primary art, the generator fills "
                          "the gaps (§4.8 ingestion contract)")
+    ap.add_argument("--import-icons", metavar="SRC_DIR", nargs="+",
+                    help="ingest the model-pass snapped icons (64-grid "
+                         "RGBA) from one or more SRC_DIRs (later dirs win "
+                         "per id) — re-quantize to the icon block, exact "
+                         "2:1 nearest halving to the 32px inline art, "
+                         "committed provenance ledger; the string-map "
+                         "generator is the per-file fallback")
+    ap.add_argument("--import-terrain", metavar="GEN_DIR",
+                    help="crop the model plains_uniform sheet to the 4 "
+                         "uniform land variants (land-ramp quantize, "
+                         "authored phase-0 ring), committed provenance "
+                         "ledger; the ×2-upscale generator remains the "
+                         "fallback")
+    ap.add_argument("--terrain-sheet", metavar="SHEET_PNG",
+                    default=TERRAIN_SHEET_FILE,
+                    help="sheet file name inside --import-terrain's GEN_DIR "
+                         f"(default {TERRAIN_SHEET_FILE}; a non-default "
+                         "sheet is an explicit override — e.g. trying the "
+                         "rocky sheet — and is ledgered as such)")
     args = ap.parse_args()
-    if args.check and args.import_ships:
-        fail("--check and --import-ships are mutually exclusive modes")
+    modes = [args.check, args.contact_sheet, args.import_ships,
+             args.import_icons, args.import_terrain]
+    if sum(1 for m in modes if m) > 1:
+        fail("--check, --contact-sheet, --import-ships, --import-icons and "
+             "--import-terrain are mutually exclusive modes")
     if args.check:
         run_check()
         return
@@ -1939,7 +2519,14 @@ def main() -> None:
     if args.import_ships:
         run_import_mode(Path(args.import_ships))
         return
-    m, report = build_into(ROOT, resolve_ingest_overrides())
+    if args.import_icons:
+        run_import_icons_mode([Path(p) for p in args.import_icons])
+        return
+    if args.import_terrain:
+        run_import_terrain_mode(Path(args.import_terrain), args.terrain_sheet)
+        return
+    m, report = build_into(ROOT, resolve_ingest_overrides(),
+                           resolve_artifact_overrides())
     summary(m, report, ROOT)
     counts = report.get("hulls", {})
     total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)

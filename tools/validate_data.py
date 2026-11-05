@@ -8489,12 +8489,58 @@ G13_PENNANTS = {
 # model only ever generates the BASE dirs, e/ne/se are mirror-derived at
 # ingestion).  The ingested tokens are audited exactly like the generated
 # ones (canvas/band/block/pennant above) plus the ledger contract here.
-G13_INGEST_VERSION = 1
+G13_INGEST_VERSION = 2
 G13_INGEST_LEDGER = UI_ART_DIR / "ingest_ledger.json"
 G13_INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")
 G13_INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # exact h-flips
 G13_MASTHEAD_MIN_PX = 3      # §4.8 ingestion contract: ≥3 source px
 G13_MASTHEAD_TOP_FRAC = 0.45  # in the top 45% of the opaque bbox
+
+# The icon + terrain ingest families (2026-11-05, ledger v2): the model
+# icons re-quantize to the icon block and halve 64→32 (EXACT 2:1 nearest,
+# origin-anchored out(x, y) = src(2x, 2y) — the validator re-derives the
+# halving from the gitignored snapped source and byte-compares); the
+# terrain land variants crop from the model plains sheet onto the land
+# ramp with the authored phase-0 ring (the validator re-derives the whole
+# file from the gitignored sheet).  Sources stay gitignored — provenance
+# rides the committed ledger sha when the cache is absent (90-* §9.2).
+G13_ICON_CACHE_DIRS = ("snapped", "studio/snapped")
+G13_ICON_INLINE = 32
+G13_ICON_CAP_32 = 20
+G13_TERRAIN_CACHE_SUBDIR = "gen"
+G13_TERRAIN_VARIANTS = 4
+G13_TERRAIN_SHEET = (1024, 512)
+G13_TERRAIN_PATCH = 256
+G13_TERRAIN_CROP_INSET = 96
+G13_LAND_RAMP = ("#7a5c2e", "#8f6d3a", "#5e4720")  # LAND / LAND_HI / LAND_LO
+
+
+def _g13_nearest_hex(hexv: str, block) -> str:
+    """First-min nearest over the sorted block (the deterministic ingest
+    metric — mirrors the governor's quantizers). ``hexv`` is a #rrggbb
+    string (the decode_ui_png artifact form)."""
+    rgb = tuple(int(hexv[i:i + 2], 16) for i in (1, 3, 5))
+    best, best_d = None, None
+    for hx in sorted(block):
+        hv = tuple(int(hx[i:i + 2], 16) for i in (1, 3, 5))
+        d = sum(abs(a - b) for a, b in zip(rgb, hv))
+        if best_d is None or d < best_d:
+            best, best_d = hx, d
+    return best
+
+
+def _g13_halve64(pixels) -> list[list[str]]:
+    """The exact 2:1 nearest halving of a 64-grid hex matrix (out(x, y) =
+    src(2x, 2y)) — the pinned inline-icon derivation."""
+    return [row[::2] for row in pixels[::2]]
+
+
+def _g13_land_ring_hex(x: int, y: int) -> str:
+    """The authored phase-0 ring lattice, mapped to the 64 canvas: HI iff
+    (3(x//2) + 5(y//2)) % 16 == 3 (the manifest `ring` notes; the ×2
+    upscale of the authored ring is byte-identical to this)."""
+    return G13_LAND_RAMP[1] if (3 * (x // 2) + 5 * (y // 2)) % 16 == 3 \
+        else G13_LAND_RAMP[0]
 
 # §6.6 shore codes: indices 1-8 = n, ne, e, se, s, sw, w, nw (compass order,
 # also the priority order), x wrap-aware, y out of range = non-land.
@@ -8585,10 +8631,14 @@ def decode_ui_png(data: bytes) -> tuple[int, int, list[list]]:
         samples = 1
     elif colour == 6:
         samples = 4
+    elif colour == 2:
+        # the model-pass gen sheets (the terrain ingest's crop source) are
+        # opaque RGB — group 13 re-derives the crops from them
+        samples = 3
     else:
         raise PngFormatError(
             f"unsupported colour type {colour} (group 13 reads indexed "
-            "type-3 and RGBA type-6 PNGs only)")
+            "type-3, RGB type-2 and RGBA type-6 PNGs only)")
     if not idat:
         raise PngFormatError("no IDAT chunk (image data is empty)")
     try:
@@ -8663,9 +8713,14 @@ def decode_ui_png(data: bytes) -> tuple[int, int, list[list]]:
     else:
         for line in lines:
             row = []
-            for x in range(width):
-                r, g, b, a = line[x * 4:x * 4 + 4]
-                row.append(None if a == 0 else "#%02x%02x%02x" % (r, g, b))
+            if colour == 2:
+                for x in range(width):
+                    r, g, b = line[x * 3:x * 3 + 3]
+                    row.append("#%02x%02x%02x" % (r, g, b))
+            else:
+                for x in range(width):
+                    r, g, b, a = line[x * 4:x * 4 + 4]
+                    row.append(None if a == 0 else "#%02x%02x%02x" % (r, g, b))
             pixels.append(row)
     return width, height, pixels
 
@@ -9226,7 +9281,264 @@ def _g13_check_flip_pair(derived: Path, base: Path, label: str) -> None:
                      f"at ({x},{y}) (f6c00bb)", 13)
 
 
-def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool) -> None:
+def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
+    """The icon ingest family (ledger v2): every `icons{}` record names a
+    contract icon, carries sha-256 + seed + source dir + date, its 32px
+    file ships, and the file is the EXACT re-quantize + 2:1 halving of
+    its snapped source where the gitignored cache exists (the halving
+    assert rides the sha chain: sha matches → re-quantize + halve →
+    byte-compare).  Returns the number of sources re-derived locally."""
+    icons = doc.get("icons") or {}
+    rejected = doc.get("icons_rejected") or []
+    ci = doc.get("counts", {}).get("icons") or {}
+    if not isinstance(icons, dict):
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             "icons section must be an object", 13)
+    if (ci.get("accepted") != len(icons)
+            or ci.get("rejected") != len(rejected)
+            or ci.get("files") != len(icons)):
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             "counts.icons drifts from the icons/icons_rejected maps", 13)
+    verified = 0
+    for iid, rec in sorted(icons.items()):
+        if iid not in icon_ids:
+            fail("art-ingest", f"icons.{iid}",
+                 "ingested icon id is outside the A.2 contract", 13)
+        if rec.get("job") != f"icon_{iid}":
+            fail("art-ingest", f"icons.{iid}",
+                 f"job {rec.get('job')!r} != 'icon_{iid}'", 13)
+        sha = rec.get("snapped_sha")
+        if (not isinstance(sha, str) or len(sha) != 64
+                or any(c not in "0123456789abcdef" for c in sha)):
+            fail("art-ingest", f"icons.{iid}",
+                 f"snapped_sha {sha!r} is not a sha-256 hex digest", 13)
+        seed = rec.get("seed")
+        if seed is not None and not is_int(seed):
+            fail("art-ingest", f"icons.{iid}",
+                 f"seed {seed!r} is neither an int nor null", 13)
+        at = rec.get("accepted_at")
+        if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
+            fail("art-ingest", f"icons.{iid}",
+                 f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
+        src = rec.get("source")
+        if src not in G13_ICON_CACHE_DIRS:
+            fail("art-ingest", f"icons.{iid}",
+                 f"source {src!r} is not a pinned icon cache dir "
+                 f"({G13_ICON_CACHE_DIRS})", 13)
+        p = ASSETS_UI / "icons" / f"{iid}.png"
+        if not p.is_file():
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 "ingested icon file missing from the shipped grid "
+                 "(the override ladder commits ledger + file together)", 13)
+        # the shipped artifact: 32×32, block member, within the 32px cap
+        try:
+            data = p.read_bytes()
+            w, h, px = decode_ui_png(data)
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"ingested icon does not decode: {exc}", 13)
+        if (w, h) != (G13_ICON_INLINE, G13_ICON_INLINE):
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"ingested icon is {w}x{h}, the inline canvas is "
+                 f"{G13_ICON_INLINE}x{G13_ICON_INLINE}", 13)
+        got = {c for row in px for c in row if c is not None}
+        off = sorted(got - (BLOCK_ICON | BLOCK_LOCKED))
+        if off:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"off-block hex(es) {off} — the icon class checks against "
+                 "the §4.8.4 icon block", 13)
+        if len(got) > G13_ICON_CAP_32:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"{len(got)} distinct colors > the 32px cap "
+                 f"{G13_ICON_CAP_32} (§4.8.3)", 13)
+        # the halving assert, re-derived from the gitignored source
+        sp = UI_ART_DIR / "model_raw" / src / f"icon_{iid}.png"
+        if not sp.is_file():
+            continue
+        verified += 1
+        if hashlib.sha256(sp.read_bytes()).hexdigest() != sha:
+            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+                 "ledger snapped_sha drifts from the local snapped source — "
+                 "re-run build_ui_art --import-icons", 13)
+        try:
+            sw, sh, spx = decode_ui_png(sp.read_bytes())
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+                 f"snapped source does not decode: {exc}", 13)
+        if (sw, sh) != (64, 64):
+            fail("art-ingest", f"tools/ui_art/model_raw/{src}/icon_{iid}.png",
+                 f"snapped source is {sw}x{sh}, the model icon grid is "
+                 "64x64", 13)
+        q = [[None if c is None else _g13_nearest_hex(c, BLOCK_ICON)
+              for c in row] for row in spx]
+        want = _g13_halve64(q)
+        if px != want:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 "is not the exact re-quantize + 2:1 nearest halving of its "
+                 "snapped source — re-run build_ui_art --import-icons", 13)
+    return verified
+
+
+def _g13_check_ingest_terrain_family(doc: dict) -> int:
+    """The terrain ingest family (ledger v2): every `terrain{}` key is one
+    of the 4 live land variants, its 64px file ships on the terrain block
+    with the authored phase-0 ring (the seam contract survives the swap),
+    and the file is the EXACT crop + ramp quantize + ring stamp of the
+    gitignored plains sheet where the cache exists."""
+    terrain = doc.get("terrain") or {}
+    rejected = doc.get("terrain_rejected") or []
+    ct = doc.get("counts", {}).get("terrain") or {}
+    if not isinstance(terrain, dict):
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             "terrain section must be an object", 13)
+    if (ct.get("accepted") != len(terrain)
+            or ct.get("rejected", 0) != len(rejected)
+            or ct.get("files") != len(terrain)):
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             "counts.terrain drifts from the terrain map", 13)
+    verified = 0
+    for fname, rec in sorted(terrain.items()):
+        mo = re.fullmatch(r"terrain_land_([0-3])\.png", fname)
+        if mo is None:
+            fail("art-ingest", f"terrain.{fname}",
+                 "key is not one of the 4 live land variants "
+                 "terrain_land_0..3.png (the rocky sheet stays held for "
+                 "the blob wave — amending this pin is a doc amendment "
+                 "first)", 13)
+        variant = int(mo.group(1))
+        sha = rec.get("sheet_sha")
+        if (not isinstance(sha, str) or len(sha) != 64
+                or any(c not in "0123456789abcdef" for c in sha)):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"sheet_sha {sha!r} is not a sha-256 hex digest", 13)
+        seed = rec.get("seed")
+        if seed is not None and not is_int(seed):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"seed {seed!r} is neither an int nor null", 13)
+        at = rec.get("accepted_at")
+        if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
+        job = rec.get("job")
+        if not isinstance(job, str) or not job.startswith("terrain_"):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"job {job!r} is not a terrain_* gen job", 13)
+        patch = rec.get("patch")
+        crop = rec.get("crop")
+        if (not isinstance(patch, list) or len(patch) != 2
+                or not all(is_int(v) and 0 <= v for v in patch)):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"patch {patch!r} is not a [px, py] pair", 13)
+        if (not isinstance(crop, list) or len(crop) != 2
+                or not all(is_int(v) and 0 <= v for v in crop)
+                or crop[0] + 64 > G13_TERRAIN_SHEET[0]
+                or crop[1] + 64 > G13_TERRAIN_SHEET[1]):
+            fail("art-ingest", f"terrain.{fname}",
+                 f"crop {crop!r} does not fit the pinned 1024x512 sheet", 13)
+        expect_crop = [patch[0] * G13_TERRAIN_PATCH + G13_TERRAIN_CROP_INSET,
+                       patch[1] * G13_TERRAIN_PATCH + G13_TERRAIN_CROP_INSET]
+        if variant >= 4 or crop != expect_crop:
+            fail("art-ingest", f"terrain.{fname}",
+                 f"crop {crop} != the pinned clean-interior crop {expect_crop} "
+                 "of its patch", 13)
+        p = ASSETS_UI / "terrain" / fname
+        if not p.is_file():
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 "ingested terrain file missing from the shipped grid "
+                 "(the override ladder commits ledger + file together)", 13)
+        try:
+            w, h, px = decode_ui_png(p.read_bytes())
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"ingested terrain does not decode: {exc}", 13)
+        if (w, h) != (G13_CANVAS_64, G13_CANVAS_64):
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"ingested terrain is {w}x{h}, the shipped canvas is "
+                 f"{G13_CANVAS_64}x{G13_CANVAS_64}", 13)
+        got = {c for row in px for c in row if c is not None}
+        off = sorted(got - (BLOCK_TERRAIN | BLOCK_LOCKED))
+        if off:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"off-block hex(es) {off} — the terrain class checks "
+                 "against the §4.8.4 terrain block", 13)
+        if len(got) > G13_CAP_48:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 f"{len(got)} distinct colors > the 64px cap "
+                 f"{G13_CAP_48} (§4.8.3)", 13)
+        for x in range(64):
+            for y in (0, 63):
+                if px[y][x] != _g13_land_ring_hex(x, y):
+                    fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                         f"ring grammar mismatch at ({x},{y}) — the ingested "
+                         "variant must carry the authored phase-0 ring "
+                         "(§4.8.2 + the manifest `ring` note)", 13)
+        for y in range(1, 63):
+            for x in (0, 63):
+                if px[y][x] != _g13_land_ring_hex(x, y):
+                    fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                         f"ring grammar mismatch at ({x},{y}) — the "
+                         "ingested variant must carry the authored "
+                         "phase-0 ring (§4.8.2 + the manifest `ring` "
+                         "note)", 13)
+        # the crop assert, re-derived from the gitignored sheet
+        sheet = UI_ART_DIR / "model_raw" / G13_TERRAIN_CACHE_SUBDIR \
+            / f"{job}.png"
+        if not sheet.is_file():
+            continue
+        verified += 1
+        if hashlib.sha256(sheet.read_bytes()).hexdigest() != sha:
+            fail("art-ingest", str(sheet.relative_to(ART_ROOT)),
+                 "ledger sheet_sha drifts from the local gen sheet — "
+                 "re-run build_ui_art --import-terrain", 13)
+        try:
+            sw, sh, spx = decode_ui_png(sheet.read_bytes())
+        except (OSError, PngFormatError) as exc:
+            fail("art-ingest", str(sheet.relative_to(ART_ROOT)),
+                 f"gen sheet does not decode: {exc}", 13)
+        if (sw, sh) != G13_TERRAIN_SHEET:
+            fail("art-ingest", str(sheet.relative_to(ART_ROOT)),
+                 f"gen sheet is {sw}x{sh}, the pinned sheet canvas is "
+                 f"{G13_TERRAIN_SHEET[0]}x{G13_TERRAIN_SHEET[1]}", 13)
+        cx, cy = crop
+        # tone-rank the crop onto the authored land family's distribution
+        # (the governor's _tone_rank_land_quantize, mirrored): rank by
+        # channel-sum luminance, ties by scan index; darkest 6% → LO,
+        # brightest 6% → HI, middle → base.
+        crop_px = []
+        for y in range(64):
+            for x in range(64):
+                crop_px.append(spx[cy + y][cx + x])
+        order = sorted(range(64 * 64),
+                       key=lambda i: (sum(int(v, 16) for v in
+                                          (crop_px[i][1:3],
+                                           crop_px[i][3:5],
+                                           crop_px[i][5:7])), i))
+        n_lo = round(64 * 64 * 0.06)
+        n_hi = round(64 * 64 * 0.06)
+        tones = [None] * (64 * 64)
+        for rank, i in enumerate(order):
+            hx = (G13_LAND_RAMP[2] if rank < n_lo
+                  else (G13_LAND_RAMP[1] if rank >= 64 * 64 - n_hi
+                        else G13_LAND_RAMP[0]))
+            tones[i] = hx
+        want = []
+        for y in range(64):
+            row = []
+            for x in range(64):
+                ring = x in (0, 63) or y in (0, 63)
+                row.append(_g13_land_ring_hex(x, y) if ring
+                           else tones[y * 64 + x])
+            want.append(row)
+        if px != want:
+            fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                 "is not the exact crop + tone-rank land quantize + phase-0 "
+                 "ring stamp of the gen sheet — re-run build_ui_art "
+                 "--import-terrain", 13)
+    return verified
+
+
+def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
+                             icon_ids: set | None = None) -> None:
     """80-* §4.8 ingestion contract (90-* §9.2 AI-ingestion path; the
     committed provenance ledger + the 5-direction amendment f6c00bb): the
     ledger is coherent with the shipped token grid — every base token
@@ -9371,6 +9683,30 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool) -> None:
               f"{len(derived)} derived files audited "
               f"({flip_pairs} flip pairs, {len(rejected)} rejections "
               f"recorded; {found} sha(s) verified against the local cache)")
+
+    # The icon + terrain families (ledger v2, 2026-11-05): staged-safe —
+    # a tree whose ingest has not run yet carries no sections and the
+    # string-map generator art passes the generic artifact checks alone.
+    ids = icon_ids if icon_ids is not None else set()
+    if doc.get("icons") or doc.get("icons_rejected"):
+        n_icon = _g13_check_ingest_icon_family(doc, ids)
+        if verbose:
+            print(f"INFO group 13 ingest icons: {len(doc.get('icons') or {})} "
+                  f"inline 32px icon(s) audited ({n_icon} halving chain(s) "
+                  "re-derived from the local snapped cache)")
+    else:
+        print("INFO group 13 ingest icons: no icons{} section — the icon "
+              "family is staged (build_ui_art --import-icons)")
+    if doc.get("terrain") or doc.get("terrain_rejected"):
+        n_terr = _g13_check_ingest_terrain_family(doc)
+        if verbose:
+            print(f"INFO group 13 ingest terrain: "
+                  f"{len(doc.get('terrain') or {})} land variant(s) audited "
+                  f"({n_terr} crop chain(s) re-derived from the local gen "
+                  "sheet)")
+    else:
+        print("INFO group 13 ingest terrain: no terrain{} section — the "
+              "terrain family is staged (build_ui_art --import-terrain)")
 
 
 def _g13_check_shore_strips(sprites: dict) -> None:
@@ -9817,7 +10153,7 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
         print("INFO group 13 tools/art_prompts.json not present — prompt "
               "coverage staged (slot D deliverable)")
 
-    _g13_check_ingest_ledger(docs, verbose)
+    _g13_check_ingest_ledger(docs, verbose, icon_ids=icon_expected)
 
     _g13_rebuild_fixtures(verbose)
 
