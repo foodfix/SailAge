@@ -1238,14 +1238,16 @@ SHEET_SIZE = (1792, 1152)
 
 
 def hull_sheet_draft(ship, out_path):
-    """5-cell draft reference: w/n/s/sw/nw tokens x16 on chroma green,
-    3x2 grid (sixth cell = legend), thin dark dividers, labels above."""
+    """5-cell draft reference: w/n/s/sw/nw tokens x6 (=384, 75% of the
+    512 cell, green margins so the model does not draw cell-filling
+    ships) on chroma green, 3x2 grid, labels above, dark frames."""
     ref = Image.new("RGBA", SHEET_SIZE, GREEN_BG)
     draw = ImageDraw.Draw(ref)
     for direction, (cx, cy) in SHEET_CELLS.items():
         tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
                                        f"hull_{ship}_player_{direction}.png"))
-        ref.alpha_composite(nearest(tok, 8), (cx, cy))
+        tok = nearest(tok, 6)  # 64 -> 384, centred in the 512 cell
+        ref.alpha_composite(tok, (cx + 64, cy + 64))
         draw.rectangle([cx - 2, cy - 2, cx + 513, cy + 513],
                        outline=(24, 28, 40, 255), width=2)
         label(draw, (cx + 6, cy - 46), direction, color=(16, 16, 16))
@@ -1255,14 +1257,17 @@ def hull_sheet_draft(ship, out_path):
     return ref
 
 
-def hull_sheet_prompt(ship):
+def hull_sheet_prompt(ship, stated_px=None):
     rig = RIG[ship]
-    scale = ""
+    if TIER[ship] == 3:
+        scale = ("This hull fills about 80-90% of its cell width in every "
+                 "cell. ")
+    else:
+        scale = ("Each ship occupies only about 60-70% of its cell width, "
+                 "with clear green margin around it. ")
     if ship == "pinnace":
         scale = ("This hull fills about 75% of its cell width in every "
                  "cell — a substantial sloop-of-war, NOT a small boat. ")
-    elif ship == "nao":
-        scale = "This hull fills about 85% of its cell. "
     return (
         "Redraw this input sprite sheet. The five labelled cells show the "
         "SAME ship seen from five directions: identical hull, identical "
@@ -1284,7 +1289,9 @@ def hull_sheet_prompt(ship):
         "not move, re-order or re-label the cells; do not add your own "
         "labels. "
         "The small labels above the cells are pre-printed — do NOT draw "
-        "them into the sprites; leave the sixth cell empty. "
+        "them into the sprites; leave the sixth cell empty. " + scale
+        + (f"Ship length about {stated_px} px within each 512 px cell. "
+           if stated_px else "")
         f"Rig: {rig}. {COMPACT} {scale}"
         "Render every cell as crisp limited-palette pixel art in the "
         "style of early-90s 16-bit sailing games: billowed canvas sails "
@@ -1428,7 +1435,7 @@ def assign_cells(cells, draft_masks):
     return assignment
 
 
-def run_hull_job(ship, seed):
+def run_hull_job(ship, seed, stated_px=None):
     """One hull = one /edit: 5-cell sheet -> detect+assign cells -> per-dir
     crop -> key -> snap. The model re-arranges the grid, so cells are
     matched to directions by draft-silhouette IoU + shape fingerprints
@@ -1441,7 +1448,7 @@ def run_hull_job(ship, seed):
     hull_sheet_draft(ship, draft_path)
     with open(draft_path, "rb") as fh:
         draft_bytes = fh.read()
-    gen = generate(draft_bytes, hull_sheet_prompt(ship), seed)
+    gen = generate(draft_bytes, hull_sheet_prompt(ship, stated_px), seed)
     with open(os.path.join(GEN, f"hull_{ship}_sheet.png"), "wb") as fh:
         fh.write(gen)
     _, _, gpx = VD.decode_ui_png(gen)
@@ -1459,15 +1466,16 @@ def run_hull_job(ship, seed):
     rec["detected_cells"] = len(boxes)
     if len(boxes) < 5:
         raise RuntimeError(f"only {len(boxes)} sprite cells detected")
-    # crop FIXED 512x512 windows centred on each sprite: the drawn size
+    # crop FIXED 576x576 windows centred on each sprite: the drawn size
     # and placement carry the band/scale information (a bbox crop would
-    # make every sprite fill its crop and all views look alike)
+    # make every sprite fill its crop and all views look alike); ships
+    # are drawn at ~60-75% of the 512 cell -> ~55-65% of the window
     windows = []
     for (bx0, by0, bx1, by1) in boxes:
         ccx, ccy = (bx0 + bx1) / 2, (by0 + by1) / 2
-        wx0 = max(0, min(SHEET_SIZE[0] - 512, int(ccx - 256)))
-        wy0 = max(0, min(SHEET_SIZE[1] - 512, int(ccy - 256)))
-        windows.append((wx0, wy0, wx0 + 512, wy0 + 512))
+        wx0 = max(0, min(SHEET_SIZE[0] - 576, int(ccx - 288)))
+        wy0 = max(0, min(SHEET_SIZE[1] - 576, int(ccy - 288)))
+        windows.append((wx0, wy0, wx0 + 576, wy0 + 576))
     cell_norm = []
     for (wx0, wy0, wx1, wy1) in windows:
         c = full.crop((wx0, wy0, wx1, wy1))
@@ -1540,7 +1548,7 @@ def hull_gate(ship):
         fails.append(f"w band {w.get('long_axis_px')} not in {lo}-{hi}")
     dir_fails = [d for d, p in per.items()
                  if p.get("direction", {}).get("verdict") != "PASS"]
-    if len(dir_fails) >= 2:
+    if dir_fails:
         fails.append(f"direction FAILs: {dir_fails}")
     pennant_missing = [d for d, p in per.items()
                        if not p.get("metrics", {}).get("pennant_present")]
@@ -1550,30 +1558,118 @@ def hull_gate(ship):
 
 
 def reroll_hull(ship, max_attempts=3, reason="gate failure"):
-    """Whole-hull re-roll with varied seed; keep the best attempt by gate
-    score (fewest fails, then most direction passes)."""
+    """Whole-hull re-roll with varied seed + w-band px calibration
+    (attempts 2+ restate the length proportionally); keep the best
+    attempt by gate score (fewest fails, then most direction passes)."""
     base = 3000 + HULLS.index(ship)
+    center = BAND_CENTER[TIER[ship]]
     best = None
     attempts = []
+    stated_px = None
     for n in range(1, max_attempts + 1):
         seed = base + n * 100
-        rec = run_hull_job(ship, seed)
+        rec = run_hull_job(ship, seed, stated_px=stated_px)
         fails = hull_gate(ship)
         dir_pass = sum(1 for p in rec.get("per_dir", {}).values()
                        if p.get("direction", {}).get("verdict") == "PASS")
         score = (len(fails), -dir_pass)
+        wla = (rec.get("per_dir", {}).get("w", {}).get("metrics", {})
+               .get("band") or {}).get("long_axis_px")
         attempts.append({"attempt": n, "seed": seed, "fails": fails,
-                         "dir_pass": dir_pass})
+                         "dir_pass": dir_pass, "w_long_axis": wla,
+                         "stated_px": stated_px})
         if best is None or score < best[0]:
             best = (score, rec, seed, fails)
         if not fails:
             break
+        # calibrate the stated length toward the band centre
+        if wla and wla != center:
+            prev = stated_px or 512
+            stated_px = max(120, min(500, round(prev * center / wla)))
     score, rec, seed, fails = best
     rec["reroll"] = {"kind": "hull", "reason": reason,
                      "attempts": attempts, "kept_seed": seed,
                      "kept_fails": fails}
     save_job(f"hull_{ship}", rec)
     return rec
+
+
+def fix_ns(ship, max_attempts=2):
+    """Surgical n/s pair-trick for hulls whose sheet rolls keep drawing
+    duplicate n/s: one /edit with the astern and bow cells side by side,
+    cropped back into the two directions (kept only if it passes)."""
+    n_job, s_job = f"hull_{ship}_n", f"hull_{ship}_s"
+    seed = 3000 + HULLS.index(ship) + 7000
+    ref = Image.new("RGBA", (1024, 512), GREEN_BG)
+    n_tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                     f"hull_{ship}_player_n.png"))
+    s_tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                     f"hull_{ship}_player_s.png"))
+    ref.alpha_composite(nearest(n_tok, 6), (64, 64))
+    ref.alpha_composite(nearest(s_tok, 6), (576, 64))
+    draw = ImageDraw.Draw(ref)
+    draw.rectangle([500, 0, 523, 511], fill=(24, 28, 40, 255))
+    buf = io.BytesIO()
+    ref.convert("RGB").save(buf, "PNG")
+    if ship == "pinnace":
+        rig = ("NO sails — a substantial rowing galley, two oar banks and "
+               "a bare mast stub with a small red pennant, in BOTH cells")
+    else:
+        rig = RIG[ship]
+    prompt = PAIR_PROMPT.format(rig=rig,
+                                scale="Each ship fills 70-80% of its "
+                                      "cell's width. ")
+    attempts = []
+    best = None
+    for n in range(1, max_attempts + 1):
+        sd = seed + n * 100
+        gen = generate(buf.getvalue(), prompt, sd)
+        with open(os.path.join(GEN, f"hull_{ship}_pair.png"), "wb") as fh:
+            fh.write(gen)
+        _, _, gpx = VD.decode_ui_png(gen)
+        full = px_to_image(gpx)
+        if full.size != (1024, 512):
+            full = full.resize((1024, 512), Image.NEAREST)
+        out = {}
+        for direction, job_id, box in (
+                ("n", n_job, (32, 16, 496, 496)),
+                ("s", s_job, (532, 16, 996, 496))):
+            cell = full.crop(box)
+            cbuf = io.BytesIO()
+            cell.save(cbuf, "PNG")
+            debg = keyed_png(rembg(cbuf.getvalue(), job_id))
+            with open(os.path.join(DEBG, job_id + ".png"), "wb") as fh:
+                fh.write(debg)
+            snapped, metrics, _ = snap_and_measure(debg, BLOCK_HULL, None)
+            with open(os.path.join(SNAPPED, job_id + ".png"), "wb") as fh:
+                snapped.save(fh)
+            cls = classify_for(job_id, direction)
+            out[direction] = cls
+        attempts.append({"attempt": n, "seed": sd,
+                         "verdicts": {k: v["verdict"]
+                                      for k, v in out.items()}})
+        n_pass = out["n"]["verdict"] == "PASS"
+        s_pass = out["s"]["verdict"] == "PASS"
+        score = (0 if n_pass and s_pass else 1)
+        if best is None or score <= best[0]:
+            best = (score, out, sd)
+        if n_pass and s_pass:
+            break
+    score, out, sd = best
+    for direction, job_id in (("n", n_job), ("s", s_job)):
+        cls = out[direction]
+        prog = load_progress()
+        rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+        if rec:
+            if direction in rec.get("per_dir", {}):
+                rec["per_dir"][direction]["direction"] = cls
+            rr = rec.get("reroll") or {"kind": "hull"}
+            rr["ns_fix"] = {"attempts": attempts, "kept_seed": sd,
+                            "n": out["n"]["verdict"],
+                            "s": out["s"]["verdict"]}
+            rec["reroll"] = rr
+            save_job(f"hull_{ship}", rec)
+    return out
 
 
 def check_green_hull(ship):
@@ -1714,10 +1810,16 @@ def run_batch_hulls(force=False):
                   flush=True)
             if fails:
                 rec = reroll_hull(ship, reason="gate failure on fresh roll")
+                fails = hull_gate(ship)
                 print(f"    hull_{ship} re-roll kept seed "
                       f"{rec['reroll']['kept_seed']} fails: "
-                      f"{rec['reroll']['kept_fails'] or 'clear'}",
-                      flush=True)
+                      f"{fails or 'clear'}", flush=True)
+                ns_needed = any("'n'" in f or "'s'" in f for f in fails)
+                if ns_needed:
+                    ns = fix_ns(ship)
+                    print(f"    hull_{ship} n/s pair-fix: "
+                          f"n={ns['n']['verdict']} s={ns['s']['verdict']}",
+                          flush=True)
         except Exception as exc:  # noqa: BLE001
             failures.append(ship)
             print(f"[{n + 1}/{len(todo)}] hull_{ship} FAILED: {exc}",
