@@ -1,10 +1,10 @@
 {
   "contract": "docs/80-UI-UX.md §4.8 ingestion contract + the 5-direction amendment f6c00bb; docs/90-ARCHITECTURE.md §9.2; icons: 64-grid re-quantize to the icon block + exact 2:1 nearest halving to the 32px inline art; terrain: plains_uniform 64px interior crops on the land ramp with the authored phase-0 ring",
   "counts": {
-    "accepted_base": 44,
-    "accepted_derived": 29,
+    "accepted_base": 77,
+    "accepted_derived": 45,
     "candidates": 80,
-    "fallback_files": 495,
+    "fallback_files": 54,
     "icons": {
       "accepted": 32,
       "candidates": 32,
@@ -12,9 +12,10 @@
       "hero_64": 0,
       "rejected": 0
     },
-    "rejected": 36,
-    "revoked_stale": 3,
-    "shipped_files": 657,
+    "pennant_auto_painted": 33,
+    "rejected": 3,
+    "revoked_stale": 0,
+    "shipped_files": 1098,
     "terrain": {
       "accepted": 4,
       "candidates": 4,
@@ -22,6 +23,146 @@
     }
   },
   "derived": {
+    "hull_brigantine_england_e.png": {
+      "derived_from": "hull_brigantine_england_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_england_ne.png": {
+      "derived_from": "hull_brigantine_england_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_england_se.png": {
+      "derived_from": "hull_brigantine_england_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_holland_e.png": {
+      "derived_from": "hull_brigantine_holland_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_holland_ne.png": {
+      "derived_from": "hull_brigantine_holland_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_holland_se.png": {
+      "derived_from": "hull_brigantine_holland_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_italy_e.png": {
+      "derived_from": "hull_brigantine_italy_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_italy_ne.png": {
+      "derived_from": "hull_brigantine_italy_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_italy_se.png": {
+      "derived_from": "hull_brigantine_italy_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_neutral_e.png": {
+      "derived_from": "hull_brigantine_neutral_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_neutral_ne.png": {
+      "derived_from": "hull_brigantine_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_neutral_se.png": {
+      "derived_from": "hull_brigantine_neutral_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_ottoman_e.png": {
+      "derived_from": "hull_brigantine_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_ottoman_ne.png": {
+      "derived_from": "hull_brigantine_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_ottoman_se.png": {
+      "derived_from": "hull_brigantine_ottoman_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_pirate_e.png": {
+      "derived_from": "hull_brigantine_pirate_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_pirate_ne.png": {
+      "derived_from": "hull_brigantine_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_pirate_se.png": {
+      "derived_from": "hull_brigantine_pirate_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_player_e.png": {
+      "derived_from": "hull_brigantine_player_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_player_ne.png": {
+      "derived_from": "hull_brigantine_player_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_player_se.png": {
+      "derived_from": "hull_brigantine_player_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_portugal_e.png": {
+      "derived_from": "hull_brigantine_portugal_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_portugal_ne.png": {
+      "derived_from": "hull_brigantine_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_portugal_se.png": {
+      "derived_from": "hull_brigantine_portugal_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_brigantine_spain_e.png": {
+      "derived_from": "hull_brigantine_spain_w.png",
+      "flip": "h",
+      "job": "hull_brigantine_e"
+    },
+    "hull_brigantine_spain_ne.png": {
+      "derived_from": "hull_brigantine_spain_nw.png",
+      "flip": "h",
+      "job": "hull_brigantine_ne"
+    },
+    "hull_brigantine_spain_se.png": {
+      "derived_from": "hull_brigantine_spain_sw.png",
+      "flip": "h",
+      "job": "hull_brigantine_se"
+    },
+    "hull_caravel_england_e.png": {
+      "derived_from": "hull_caravel_england_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
+    },
     "hull_caravel_england_ne.png": {
       "derived_from": "hull_caravel_england_nw.png",
       "flip": "h",
@@ -31,6 +172,11 @@
       "derived_from": "hull_caravel_england_sw.png",
       "flip": "h",
       "job": "hull_caravel_se"
+    },
+    "hull_caravel_holland_e.png": {
+      "derived_from": "hull_caravel_holland_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
     },
     "hull_caravel_holland_ne.png": {
       "derived_from": "hull_caravel_holland_nw.png",
@@ -42,6 +188,11 @@
       "flip": "h",
       "job": "hull_caravel_se"
     },
+    "hull_caravel_italy_e.png": {
+      "derived_from": "hull_caravel_italy_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
+    },
     "hull_caravel_italy_ne.png": {
       "derived_from": "hull_caravel_italy_nw.png",
       "flip": "h",
@@ -51,6 +202,11 @@
       "derived_from": "hull_caravel_italy_sw.png",
       "flip": "h",
       "job": "hull_caravel_se"
+    },
+    "hull_caravel_neutral_e.png": {
+      "derived_from": "hull_caravel_neutral_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
     },
     "hull_caravel_neutral_ne.png": {
       "derived_from": "hull_caravel_neutral_nw.png",
@@ -62,6 +218,11 @@
       "flip": "h",
       "job": "hull_caravel_se"
     },
+    "hull_caravel_ottoman_e.png": {
+      "derived_from": "hull_caravel_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
+    },
     "hull_caravel_ottoman_ne.png": {
       "derived_from": "hull_caravel_ottoman_nw.png",
       "flip": "h",
@@ -71,6 +232,11 @@
       "derived_from": "hull_caravel_ottoman_sw.png",
       "flip": "h",
       "job": "hull_caravel_se"
+    },
+    "hull_caravel_pirate_e.png": {
+      "derived_from": "hull_caravel_pirate_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
     },
     "hull_caravel_pirate_ne.png": {
       "derived_from": "hull_caravel_pirate_nw.png",
@@ -82,6 +248,11 @@
       "flip": "h",
       "job": "hull_caravel_se"
     },
+    "hull_caravel_player_e.png": {
+      "derived_from": "hull_caravel_player_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
+    },
     "hull_caravel_player_ne.png": {
       "derived_from": "hull_caravel_player_nw.png",
       "flip": "h",
@@ -92,6 +263,11 @@
       "flip": "h",
       "job": "hull_caravel_se"
     },
+    "hull_caravel_portugal_e.png": {
+      "derived_from": "hull_caravel_portugal_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
+    },
     "hull_caravel_portugal_ne.png": {
       "derived_from": "hull_caravel_portugal_nw.png",
       "flip": "h",
@@ -101,6 +277,11 @@
       "derived_from": "hull_caravel_portugal_sw.png",
       "flip": "h",
       "job": "hull_caravel_se"
+    },
+    "hull_caravel_spain_e.png": {
+      "derived_from": "hull_caravel_spain_w.png",
+      "flip": "h",
+      "job": "hull_caravel_e"
     },
     "hull_caravel_spain_ne.png": {
       "derived_from": "hull_caravel_spain_nw.png",
@@ -117,90 +298,275 @@
       "flip": "h",
       "job": "hull_caravela_redonda_e"
     },
+    "hull_caravela_redonda_england_ne.png": {
+      "derived_from": "hull_caravela_redonda_england_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_england_se.png": {
+      "derived_from": "hull_caravela_redonda_england_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
+    },
     "hull_caravela_redonda_holland_e.png": {
       "derived_from": "hull_caravela_redonda_holland_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
+    },
+    "hull_caravela_redonda_holland_ne.png": {
+      "derived_from": "hull_caravela_redonda_holland_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_holland_se.png": {
+      "derived_from": "hull_caravela_redonda_holland_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
     },
     "hull_caravela_redonda_italy_e.png": {
       "derived_from": "hull_caravela_redonda_italy_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
     },
+    "hull_caravela_redonda_italy_ne.png": {
+      "derived_from": "hull_caravela_redonda_italy_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_italy_se.png": {
+      "derived_from": "hull_caravela_redonda_italy_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
+    },
     "hull_caravela_redonda_neutral_e.png": {
       "derived_from": "hull_caravela_redonda_neutral_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
+    },
+    "hull_caravela_redonda_neutral_ne.png": {
+      "derived_from": "hull_caravela_redonda_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_neutral_se.png": {
+      "derived_from": "hull_caravela_redonda_neutral_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
     },
     "hull_caravela_redonda_ottoman_e.png": {
       "derived_from": "hull_caravela_redonda_ottoman_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
     },
+    "hull_caravela_redonda_ottoman_ne.png": {
+      "derived_from": "hull_caravela_redonda_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_ottoman_se.png": {
+      "derived_from": "hull_caravela_redonda_ottoman_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
+    },
     "hull_caravela_redonda_pirate_e.png": {
       "derived_from": "hull_caravela_redonda_pirate_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
+    },
+    "hull_caravela_redonda_pirate_ne.png": {
+      "derived_from": "hull_caravela_redonda_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_pirate_se.png": {
+      "derived_from": "hull_caravela_redonda_pirate_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
     },
     "hull_caravela_redonda_player_e.png": {
       "derived_from": "hull_caravela_redonda_player_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
     },
+    "hull_caravela_redonda_player_ne.png": {
+      "derived_from": "hull_caravela_redonda_player_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_player_se.png": {
+      "derived_from": "hull_caravela_redonda_player_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
+    },
     "hull_caravela_redonda_portugal_e.png": {
       "derived_from": "hull_caravela_redonda_portugal_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
+    },
+    "hull_caravela_redonda_portugal_ne.png": {
+      "derived_from": "hull_caravela_redonda_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_portugal_se.png": {
+      "derived_from": "hull_caravela_redonda_portugal_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
     },
     "hull_caravela_redonda_spain_e.png": {
       "derived_from": "hull_caravela_redonda_spain_w.png",
       "flip": "h",
       "job": "hull_caravela_redonda_e"
     },
+    "hull_caravela_redonda_spain_ne.png": {
+      "derived_from": "hull_caravela_redonda_spain_nw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_ne"
+    },
+    "hull_caravela_redonda_spain_se.png": {
+      "derived_from": "hull_caravela_redonda_spain_sw.png",
+      "flip": "h",
+      "job": "hull_caravela_redonda_se"
+    },
     "hull_carrack_england_e.png": {
       "derived_from": "hull_carrack_england_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
+    },
+    "hull_carrack_england_ne.png": {
+      "derived_from": "hull_carrack_england_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_england_se.png": {
+      "derived_from": "hull_carrack_england_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
     },
     "hull_carrack_holland_e.png": {
       "derived_from": "hull_carrack_holland_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
     },
+    "hull_carrack_holland_ne.png": {
+      "derived_from": "hull_carrack_holland_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_holland_se.png": {
+      "derived_from": "hull_carrack_holland_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
+    },
     "hull_carrack_italy_e.png": {
       "derived_from": "hull_carrack_italy_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
+    },
+    "hull_carrack_italy_ne.png": {
+      "derived_from": "hull_carrack_italy_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_italy_se.png": {
+      "derived_from": "hull_carrack_italy_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
     },
     "hull_carrack_neutral_e.png": {
       "derived_from": "hull_carrack_neutral_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
     },
+    "hull_carrack_neutral_ne.png": {
+      "derived_from": "hull_carrack_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_neutral_se.png": {
+      "derived_from": "hull_carrack_neutral_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
+    },
     "hull_carrack_ottoman_e.png": {
       "derived_from": "hull_carrack_ottoman_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
+    },
+    "hull_carrack_ottoman_ne.png": {
+      "derived_from": "hull_carrack_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_ottoman_se.png": {
+      "derived_from": "hull_carrack_ottoman_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
     },
     "hull_carrack_pirate_e.png": {
       "derived_from": "hull_carrack_pirate_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
     },
+    "hull_carrack_pirate_ne.png": {
+      "derived_from": "hull_carrack_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_pirate_se.png": {
+      "derived_from": "hull_carrack_pirate_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
+    },
     "hull_carrack_player_e.png": {
       "derived_from": "hull_carrack_player_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
+    },
+    "hull_carrack_player_ne.png": {
+      "derived_from": "hull_carrack_player_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_player_se.png": {
+      "derived_from": "hull_carrack_player_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
     },
     "hull_carrack_portugal_e.png": {
       "derived_from": "hull_carrack_portugal_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
     },
+    "hull_carrack_portugal_ne.png": {
+      "derived_from": "hull_carrack_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_portugal_se.png": {
+      "derived_from": "hull_carrack_portugal_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
+    },
     "hull_carrack_spain_e.png": {
       "derived_from": "hull_carrack_spain_w.png",
       "flip": "h",
       "job": "hull_carrack_e"
+    },
+    "hull_carrack_spain_ne.png": {
+      "derived_from": "hull_carrack_spain_nw.png",
+      "flip": "h",
+      "job": "hull_carrack_ne"
+    },
+    "hull_carrack_spain_se.png": {
+      "derived_from": "hull_carrack_spain_sw.png",
+      "flip": "h",
+      "job": "hull_carrack_se"
+    },
+    "hull_dhow_england_e.png": {
+      "derived_from": "hull_dhow_england_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
     },
     "hull_dhow_england_ne.png": {
       "derived_from": "hull_dhow_england_nw.png",
@@ -212,6 +578,11 @@
       "flip": "h",
       "job": "hull_dhow_se"
     },
+    "hull_dhow_holland_e.png": {
+      "derived_from": "hull_dhow_holland_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
+    },
     "hull_dhow_holland_ne.png": {
       "derived_from": "hull_dhow_holland_nw.png",
       "flip": "h",
@@ -221,6 +592,11 @@
       "derived_from": "hull_dhow_holland_sw.png",
       "flip": "h",
       "job": "hull_dhow_se"
+    },
+    "hull_dhow_italy_e.png": {
+      "derived_from": "hull_dhow_italy_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
     },
     "hull_dhow_italy_ne.png": {
       "derived_from": "hull_dhow_italy_nw.png",
@@ -232,6 +608,11 @@
       "flip": "h",
       "job": "hull_dhow_se"
     },
+    "hull_dhow_neutral_e.png": {
+      "derived_from": "hull_dhow_neutral_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
+    },
     "hull_dhow_neutral_ne.png": {
       "derived_from": "hull_dhow_neutral_nw.png",
       "flip": "h",
@@ -241,6 +622,11 @@
       "derived_from": "hull_dhow_neutral_sw.png",
       "flip": "h",
       "job": "hull_dhow_se"
+    },
+    "hull_dhow_ottoman_e.png": {
+      "derived_from": "hull_dhow_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
     },
     "hull_dhow_ottoman_ne.png": {
       "derived_from": "hull_dhow_ottoman_nw.png",
@@ -252,6 +638,11 @@
       "flip": "h",
       "job": "hull_dhow_se"
     },
+    "hull_dhow_pirate_e.png": {
+      "derived_from": "hull_dhow_pirate_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
+    },
     "hull_dhow_pirate_ne.png": {
       "derived_from": "hull_dhow_pirate_nw.png",
       "flip": "h",
@@ -261,6 +652,11 @@
       "derived_from": "hull_dhow_pirate_sw.png",
       "flip": "h",
       "job": "hull_dhow_se"
+    },
+    "hull_dhow_player_e.png": {
+      "derived_from": "hull_dhow_player_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
     },
     "hull_dhow_player_ne.png": {
       "derived_from": "hull_dhow_player_nw.png",
@@ -272,6 +668,11 @@
       "flip": "h",
       "job": "hull_dhow_se"
     },
+    "hull_dhow_portugal_e.png": {
+      "derived_from": "hull_dhow_portugal_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
+    },
     "hull_dhow_portugal_ne.png": {
       "derived_from": "hull_dhow_portugal_nw.png",
       "flip": "h",
@@ -281,6 +682,11 @@
       "derived_from": "hull_dhow_portugal_sw.png",
       "flip": "h",
       "job": "hull_dhow_se"
+    },
+    "hull_dhow_spain_e.png": {
+      "derived_from": "hull_dhow_spain_w.png",
+      "flip": "h",
+      "job": "hull_dhow_e"
     },
     "hull_dhow_spain_ne.png": {
       "derived_from": "hull_dhow_spain_nw.png",
@@ -292,50 +698,145 @@
       "flip": "h",
       "job": "hull_dhow_se"
     },
+    "hull_fluyt_england_e.png": {
+      "derived_from": "hull_fluyt_england_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
+    },
     "hull_fluyt_england_ne.png": {
       "derived_from": "hull_fluyt_england_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
+    },
+    "hull_fluyt_england_se.png": {
+      "derived_from": "hull_fluyt_england_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_holland_e.png": {
+      "derived_from": "hull_fluyt_holland_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
     },
     "hull_fluyt_holland_ne.png": {
       "derived_from": "hull_fluyt_holland_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
     },
+    "hull_fluyt_holland_se.png": {
+      "derived_from": "hull_fluyt_holland_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_italy_e.png": {
+      "derived_from": "hull_fluyt_italy_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
+    },
     "hull_fluyt_italy_ne.png": {
       "derived_from": "hull_fluyt_italy_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
+    },
+    "hull_fluyt_italy_se.png": {
+      "derived_from": "hull_fluyt_italy_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_neutral_e.png": {
+      "derived_from": "hull_fluyt_neutral_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
     },
     "hull_fluyt_neutral_ne.png": {
       "derived_from": "hull_fluyt_neutral_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
     },
+    "hull_fluyt_neutral_se.png": {
+      "derived_from": "hull_fluyt_neutral_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_ottoman_e.png": {
+      "derived_from": "hull_fluyt_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
+    },
     "hull_fluyt_ottoman_ne.png": {
       "derived_from": "hull_fluyt_ottoman_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
+    },
+    "hull_fluyt_ottoman_se.png": {
+      "derived_from": "hull_fluyt_ottoman_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_pirate_e.png": {
+      "derived_from": "hull_fluyt_pirate_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
     },
     "hull_fluyt_pirate_ne.png": {
       "derived_from": "hull_fluyt_pirate_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
     },
+    "hull_fluyt_pirate_se.png": {
+      "derived_from": "hull_fluyt_pirate_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_player_e.png": {
+      "derived_from": "hull_fluyt_player_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
+    },
     "hull_fluyt_player_ne.png": {
       "derived_from": "hull_fluyt_player_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
+    },
+    "hull_fluyt_player_se.png": {
+      "derived_from": "hull_fluyt_player_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_portugal_e.png": {
+      "derived_from": "hull_fluyt_portugal_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
     },
     "hull_fluyt_portugal_ne.png": {
       "derived_from": "hull_fluyt_portugal_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
     },
+    "hull_fluyt_portugal_se.png": {
+      "derived_from": "hull_fluyt_portugal_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_fluyt_spain_e.png": {
+      "derived_from": "hull_fluyt_spain_w.png",
+      "flip": "h",
+      "job": "hull_fluyt_e"
+    },
     "hull_fluyt_spain_ne.png": {
       "derived_from": "hull_fluyt_spain_nw.png",
       "flip": "h",
       "job": "hull_fluyt_ne"
+    },
+    "hull_fluyt_spain_se.png": {
+      "derived_from": "hull_fluyt_spain_sw.png",
+      "flip": "h",
+      "job": "hull_fluyt_se"
+    },
+    "hull_galiot_england_ne.png": {
+      "derived_from": "hull_galiot_england_nw.png",
+      "flip": "h",
+      "job": "hull_galiot_ne"
     },
     "hull_galiot_england_se.png": {
       "derived_from": "hull_galiot_england_sw.png",
@@ -387,6 +888,11 @@
       "flip": "h",
       "job": "hull_galleass_e"
     },
+    "hull_galleass_england_ne.png": {
+      "derived_from": "hull_galleass_england_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
+    },
     "hull_galleass_england_se.png": {
       "derived_from": "hull_galleass_england_sw.png",
       "flip": "h",
@@ -396,6 +902,11 @@
       "derived_from": "hull_galleass_holland_w.png",
       "flip": "h",
       "job": "hull_galleass_e"
+    },
+    "hull_galleass_holland_ne.png": {
+      "derived_from": "hull_galleass_holland_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
     },
     "hull_galleass_holland_se.png": {
       "derived_from": "hull_galleass_holland_sw.png",
@@ -407,6 +918,11 @@
       "flip": "h",
       "job": "hull_galleass_e"
     },
+    "hull_galleass_italy_ne.png": {
+      "derived_from": "hull_galleass_italy_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
+    },
     "hull_galleass_italy_se.png": {
       "derived_from": "hull_galleass_italy_sw.png",
       "flip": "h",
@@ -416,6 +932,11 @@
       "derived_from": "hull_galleass_neutral_w.png",
       "flip": "h",
       "job": "hull_galleass_e"
+    },
+    "hull_galleass_neutral_ne.png": {
+      "derived_from": "hull_galleass_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
     },
     "hull_galleass_neutral_se.png": {
       "derived_from": "hull_galleass_neutral_sw.png",
@@ -427,6 +948,11 @@
       "flip": "h",
       "job": "hull_galleass_e"
     },
+    "hull_galleass_ottoman_ne.png": {
+      "derived_from": "hull_galleass_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
+    },
     "hull_galleass_ottoman_se.png": {
       "derived_from": "hull_galleass_ottoman_sw.png",
       "flip": "h",
@@ -436,6 +962,11 @@
       "derived_from": "hull_galleass_pirate_w.png",
       "flip": "h",
       "job": "hull_galleass_e"
+    },
+    "hull_galleass_pirate_ne.png": {
+      "derived_from": "hull_galleass_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
     },
     "hull_galleass_pirate_se.png": {
       "derived_from": "hull_galleass_pirate_sw.png",
@@ -447,6 +978,11 @@
       "flip": "h",
       "job": "hull_galleass_e"
     },
+    "hull_galleass_player_ne.png": {
+      "derived_from": "hull_galleass_player_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
+    },
     "hull_galleass_player_se.png": {
       "derived_from": "hull_galleass_player_sw.png",
       "flip": "h",
@@ -457,6 +993,11 @@
       "flip": "h",
       "job": "hull_galleass_e"
     },
+    "hull_galleass_portugal_ne.png": {
+      "derived_from": "hull_galleass_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
+    },
     "hull_galleass_portugal_se.png": {
       "derived_from": "hull_galleass_portugal_sw.png",
       "flip": "h",
@@ -466,6 +1007,11 @@
       "derived_from": "hull_galleass_spain_w.png",
       "flip": "h",
       "job": "hull_galleass_e"
+    },
+    "hull_galleass_spain_ne.png": {
+      "derived_from": "hull_galleass_spain_nw.png",
+      "flip": "h",
+      "job": "hull_galleass_ne"
     },
     "hull_galleass_spain_se.png": {
       "derived_from": "hull_galleass_spain_sw.png",
@@ -877,6 +1423,11 @@
       "flip": "h",
       "job": "hull_junk_se"
     },
+    "hull_latin_england_e.png": {
+      "derived_from": "hull_latin_england_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_england_ne.png": {
       "derived_from": "hull_latin_england_nw.png",
       "flip": "h",
@@ -886,6 +1437,11 @@
       "derived_from": "hull_latin_england_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_holland_e.png": {
+      "derived_from": "hull_latin_holland_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_holland_ne.png": {
       "derived_from": "hull_latin_holland_nw.png",
@@ -897,6 +1453,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_italy_e.png": {
+      "derived_from": "hull_latin_italy_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_italy_ne.png": {
       "derived_from": "hull_latin_italy_nw.png",
       "flip": "h",
@@ -906,6 +1467,11 @@
       "derived_from": "hull_latin_italy_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_neutral_e.png": {
+      "derived_from": "hull_latin_neutral_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_neutral_ne.png": {
       "derived_from": "hull_latin_neutral_nw.png",
@@ -917,6 +1483,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_ottoman_e.png": {
+      "derived_from": "hull_latin_ottoman_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_ottoman_ne.png": {
       "derived_from": "hull_latin_ottoman_nw.png",
       "flip": "h",
@@ -926,6 +1497,11 @@
       "derived_from": "hull_latin_ottoman_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_pirate_e.png": {
+      "derived_from": "hull_latin_pirate_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_pirate_ne.png": {
       "derived_from": "hull_latin_pirate_nw.png",
@@ -937,6 +1513,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_player_e.png": {
+      "derived_from": "hull_latin_player_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_player_ne.png": {
       "derived_from": "hull_latin_player_nw.png",
       "flip": "h",
@@ -947,6 +1528,11 @@
       "flip": "h",
       "job": "hull_latin_se"
     },
+    "hull_latin_portugal_e.png": {
+      "derived_from": "hull_latin_portugal_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
+    },
     "hull_latin_portugal_ne.png": {
       "derived_from": "hull_latin_portugal_nw.png",
       "flip": "h",
@@ -956,6 +1542,11 @@
       "derived_from": "hull_latin_portugal_sw.png",
       "flip": "h",
       "job": "hull_latin_se"
+    },
+    "hull_latin_spain_e.png": {
+      "derived_from": "hull_latin_spain_w.png",
+      "flip": "h",
+      "job": "hull_latin_e"
     },
     "hull_latin_spain_ne.png": {
       "derived_from": "hull_latin_spain_nw.png",
@@ -1236,6 +1827,96 @@
       "derived_from": "hull_pinnace_spain_sw.png",
       "flip": "h",
       "job": "hull_pinnace_se"
+    },
+    "hull_sloop_england_ne.png": {
+      "derived_from": "hull_sloop_england_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_england_se.png": {
+      "derived_from": "hull_sloop_england_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_holland_ne.png": {
+      "derived_from": "hull_sloop_holland_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_holland_se.png": {
+      "derived_from": "hull_sloop_holland_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_italy_ne.png": {
+      "derived_from": "hull_sloop_italy_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_italy_se.png": {
+      "derived_from": "hull_sloop_italy_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_neutral_ne.png": {
+      "derived_from": "hull_sloop_neutral_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_neutral_se.png": {
+      "derived_from": "hull_sloop_neutral_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_ottoman_ne.png": {
+      "derived_from": "hull_sloop_ottoman_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_ottoman_se.png": {
+      "derived_from": "hull_sloop_ottoman_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_pirate_ne.png": {
+      "derived_from": "hull_sloop_pirate_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_pirate_se.png": {
+      "derived_from": "hull_sloop_pirate_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_player_ne.png": {
+      "derived_from": "hull_sloop_player_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_player_se.png": {
+      "derived_from": "hull_sloop_player_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_portugal_ne.png": {
+      "derived_from": "hull_sloop_portugal_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_portugal_se.png": {
+      "derived_from": "hull_sloop_portugal_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
+    },
+    "hull_sloop_spain_ne.png": {
+      "derived_from": "hull_sloop_spain_nw.png",
+      "flip": "h",
+      "job": "hull_sloop_ne"
+    },
+    "hull_sloop_spain_se.png": {
+      "derived_from": "hull_sloop_spain_sw.png",
+      "flip": "h",
+      "job": "hull_sloop_se"
     },
     "hull_xebec_england_ne.png": {
       "derived_from": "hull_xebec_england_nw.png",
@@ -1559,179 +2240,14 @@
   "icons_rejected": [],
   "rejected": [
     {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_brigantine_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_brigantine_w",
-      "reason": "masthead"
-    },
-    {
-      "detail": "2 pennant-source px in the masthead region < 3",
-      "job": "hull_brigantine_sw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_brigantine_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravel_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravel_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravel_w",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravela_redonda_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravela_redonda_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_caravela_redonda_sw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "2 pennant-source px in the masthead region < 3",
-      "job": "hull_caravela_redonda_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_carrack_sw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "2 pennant-source px in the masthead region < 3",
-      "job": "hull_carrack_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_dhow_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_dhow_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "2 pennant-source px in the masthead region < 3",
-      "job": "hull_dhow_w",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_fluyt_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "1 pennant-source px in the masthead region < 3",
-      "job": "hull_fluyt_w",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_fluyt_sw",
-      "reason": "masthead"
-    },
-    {
       "detail": "long axis 46px outside the tier-1 band 28-37+1 lateen (§4.8.7)",
       "job": "hull_galiot_w",
       "reason": "band"
     },
     {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galiot_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galleass_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galleon_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galleon_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galley_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_galley_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_junk_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_junk_s",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_latin_w",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_nao_n",
-      "reason": "masthead"
-    },
-    {
       "detail": "long axis 40px outside the tier-1 band 28-37+1 lateen (§4.8.7)",
       "job": "hull_sloop_w",
       "reason": "band"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_sloop_sw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_sloop_nw",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_xebec_n",
-      "reason": "masthead"
-    },
-    {
-      "detail": "0 pennant-source px in the masthead region < 3",
-      "job": "hull_xebec_s",
-      "reason": "masthead"
     },
     {
       "detail": "long axis 19px outside the tier-2 band 40-52 (§4.8.7)",
@@ -1800,267 +2316,542 @@
   "terrain_generated_by": "tools/build_ui_art.py --import-terrain",
   "terrain_rejected": [],
   "tokens": {
+    "hull_brigantine_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_brigantine_n",
+      "pennant": "auto-painted",
+      "seed": 2001,
+      "snapped_sha": "950ff3620166eb317539ebc6e062cfb5b93b1c2e49ab25ad9c9d545f27500a37"
+    },
+    "hull_brigantine_nw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_brigantine_nw",
+      "pennant": "auto-painted",
+      "seed": 2004,
+      "snapped_sha": "d17eca5cb238c1d9903a6a23d9228e0273423e8719f3b8555ceaa92f80ff5ea4"
+    },
     "hull_brigantine_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_brigantine_s",
+      "pennant": "model",
       "seed": 2002,
       "snapped_sha": "76bfb2e010a4b3985f23b38c5f78712529beb864cd83741f46e16c0b2f239a02"
+    },
+    "hull_brigantine_sw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_brigantine_sw",
+      "pennant": "auto-painted",
+      "seed": 2003,
+      "snapped_sha": "5fca68f3e0f9e9524d4fc396d0080f66e40b8215ce17d5b46e01cc62aaac561a"
+    },
+    "hull_brigantine_w": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_brigantine_w",
+      "pennant": "auto-painted",
+      "seed": 2000,
+      "snapped_sha": "66ccae5929113aba5c4300e27d06d7ffae1203262bbe889c46dcee14e3cb4c1d"
+    },
+    "hull_caravel_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravel_n",
+      "pennant": "auto-painted",
+      "seed": 2006,
+      "snapped_sha": "5ae71c8bef5fa4541dceb146ff19735d29e890f6ad004b23c60444fdf8fe1206"
     },
     "hull_caravel_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_caravel_nw",
+      "pennant": "model",
       "seed": 2009,
       "snapped_sha": "fd62bc7bbf4738c6db8bbdd4063f30fe79525147ec54da8da3ca9bc9d0c12242"
+    },
+    "hull_caravel_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravel_s",
+      "pennant": "auto-painted",
+      "seed": 2007,
+      "snapped_sha": "00ac00dd977e8bed98d23639be38082d38cd04b5ea69f968e5f4c18881ac8dce"
     },
     "hull_caravel_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_caravel_sw",
+      "pennant": "model",
       "seed": 2008,
       "snapped_sha": "c271837e94a35afd45435c8851ca7660d8e13d37467cdfdc86965448dd01cc61"
+    },
+    "hull_caravel_w": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravel_w",
+      "pennant": "auto-painted",
+      "seed": 2005,
+      "snapped_sha": "45ec25a75a81b75296fde46154c07604927c9fe3f4c24be4e84d5e7a4e1147ea"
+    },
+    "hull_caravela_redonda_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravela_redonda_n",
+      "pennant": "auto-painted",
+      "seed": 2011,
+      "snapped_sha": "16283df8a8efaf0f9d17d6e8b4aee5352aef224d6b45f2aed35ee0beb2484bd7"
+    },
+    "hull_caravela_redonda_nw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravela_redonda_nw",
+      "pennant": "auto-painted",
+      "seed": 2014,
+      "snapped_sha": "7e7a883a83fe1811e94b3705a7504525d0e9ad350025c8077ca5bfc79cda0ad2"
+    },
+    "hull_caravela_redonda_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravela_redonda_s",
+      "pennant": "auto-painted",
+      "seed": 2012,
+      "snapped_sha": "c4310347932d193df763f4f6867652ea4858fa4fc1a5092595f0ca52560a5e9c"
+    },
+    "hull_caravela_redonda_sw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_caravela_redonda_sw",
+      "pennant": "auto-painted",
+      "seed": 2013,
+      "snapped_sha": "84ff82f8d5a360e580671816b5d333174565783cfae22107ba630429756e0c73"
     },
     "hull_caravela_redonda_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_caravela_redonda_w",
+      "pennant": "model",
       "seed": 2010,
       "snapped_sha": "8104ab8f228147fec09d9c40bce5c474764718fc1a43c5d8d22c3ad3e59b5ecb"
     },
     "hull_carrack_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_carrack_n",
+      "pennant": "model",
       "seed": 2016,
       "snapped_sha": "a6f19a3d0842de73dd1c778ae09c449f10683da454e56aae90896b5897c0f5a0"
+    },
+    "hull_carrack_nw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_carrack_nw",
+      "pennant": "auto-painted",
+      "seed": 2019,
+      "snapped_sha": "1cebb2487f2d147f471bbfbdd23b242b9938f1ed22f028f0f7dddc04359d9813"
     },
     "hull_carrack_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_carrack_s",
+      "pennant": "model",
       "seed": 2017,
       "snapped_sha": "ce6efb4c484fcd90784332efc9b1dfe5c520f813331646be0561c5ad1b392d69"
+    },
+    "hull_carrack_sw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_carrack_sw",
+      "pennant": "auto-painted",
+      "seed": 2018,
+      "snapped_sha": "3ed1934e2e41e00515ca2132d3789333bb207c51953a726a675c300d6547de04"
     },
     "hull_carrack_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_carrack_w",
+      "pennant": "model",
       "seed": 71015,
       "snapped_sha": "7c1cf46382ce85540306b86c887b77a15c199a7e9f5d93f0b97d2a11ba5e9f28"
+    },
+    "hull_dhow_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_dhow_n",
+      "pennant": "auto-painted",
+      "seed": 2021,
+      "snapped_sha": "90fce1215cb51ad42e4f05704e168f7775d37d8879fd47588e79862021f0c45f"
     },
     "hull_dhow_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_dhow_nw",
+      "pennant": "model",
       "seed": 2024,
       "snapped_sha": "9c9e056442cf582de1607e677db5e02567ebd325b822376f2cb65e6ab6249608"
+    },
+    "hull_dhow_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_dhow_s",
+      "pennant": "auto-painted",
+      "seed": 2022,
+      "snapped_sha": "9b9425be3e756d38b8d319d3fef856d998d89f5cefe2596674c875f49ad20b29"
     },
     "hull_dhow_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_dhow_sw",
+      "pennant": "model",
       "seed": 2023,
       "snapped_sha": "6d8398efd9f87b6067948c20144a8c66a91d7f32912481baf265b8e72f49abeb"
+    },
+    "hull_dhow_w": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_dhow_w",
+      "pennant": "auto-painted",
+      "seed": 71020,
+      "snapped_sha": "218d1101fdad284625cc83d9cf9e50c57ca1397bea385b3a8baae60c0ab17776"
+    },
+    "hull_fluyt_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_fluyt_n",
+      "pennant": "auto-painted",
+      "seed": 2026,
+      "snapped_sha": "c919ff5872dfd985c0768315539cd4603077cfc60ffcc98d56f6dd2d299c45cc"
     },
     "hull_fluyt_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_fluyt_nw",
+      "pennant": "model",
       "seed": 2029,
       "snapped_sha": "52531f96b1bc884d6a57109690659a0b0479a3679d070350107aeea5a6e8dd1b"
     },
     "hull_fluyt_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_fluyt_s",
+      "pennant": "model",
       "seed": 2027,
       "snapped_sha": "959fe938d8113f1b60e128ca412cfab8af570b33fe0c2b5310ac52dfa1122616"
+    },
+    "hull_fluyt_sw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_fluyt_sw",
+      "pennant": "auto-painted",
+      "seed": 2028,
+      "snapped_sha": "63a8ee1122362f5853223a6851d0a33b5f7a4e767d7c2d4e9434b66d13d4268e"
+    },
+    "hull_fluyt_w": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_fluyt_w",
+      "pennant": "auto-painted",
+      "seed": 2025,
+      "snapped_sha": "bafe03bc90a7e17c8bdc1c78371289079989cb07e783c4b40c73f97970f60e4a"
     },
     "hull_galiot_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_galiot_n",
+      "pennant": "model",
       "seed": 2031,
       "snapped_sha": "a502ff108b6e774fdba37ebed102b0dbbb1c643ff2f3165728f1fec593253514"
     },
     "hull_galiot_s": {
       "accepted_at": "2026-11-05",
+      "job": "hull_galiot_nw",
+      "pennant": "auto-painted",
+      "seed": 2034,
+      "snapped_sha": "03d6007f187f712428cd5e18b1fe8af068cc80fe0e6d1717294817040c1f5edc"
+    },
+    "hull_galiot_s": {
+      "accepted_at": "2026-11-05",
       "job": "hull_galiot_s",
+      "pennant": "model",
       "seed": 2032,
       "snapped_sha": "dc464a823e8c326aa526ac1a3fa5d66c321635a9fa7ce94d87f5661c8448e78f"
     },
     "hull_galiot_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galiot_sw",
+      "pennant": "model",
       "seed": 2033,
       "snapped_sha": "35f6e2beae7b168c37b08245fc8a0813af5e0ffe5c4266cb30fb68cc16c4f26a"
     },
     "hull_galleass_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleass_n",
+      "pennant": "model",
       "seed": 2036,
       "snapped_sha": "6048a4daef00956fbed7220b703545b996269c65a74cf4962cca6eb23038e335"
+    },
+    "hull_galleass_nw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_galleass_nw",
+      "pennant": "auto-painted",
+      "seed": 2039,
+      "snapped_sha": "9d22ee8c2aaafda4d0bef03ada69170a39b4eb15a92452edc35c2c150ea65cb6"
     },
     "hull_galleass_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleass_s",
+      "pennant": "model",
       "seed": 2037,
       "snapped_sha": "75eeb5166e8f538903e870f9105d21dfcb82addd40949b72ac0ef2bb1a77eb30"
     },
     "hull_galleass_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleass_sw",
+      "pennant": "model",
       "seed": 2038,
       "snapped_sha": "7707d645c9448aa482f4430d79aadc745f4b9e7a4967dc816b2333688cce905e"
     },
     "hull_galleass_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleass_w",
+      "pennant": "model",
       "seed": 2035,
       "snapped_sha": "85b00051118b823875ad0f7b129dc6a68759573638cbac7f8bfb23820de8e169"
+    },
+    "hull_galleon_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_galleon_n",
+      "pennant": "auto-painted",
+      "seed": 2041,
+      "snapped_sha": "669dec55a36c2ccb84652ba8d0fb88a350cb31af48139bf6bc33a67f4a7b6bc1"
     },
     "hull_galleon_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleon_nw",
+      "pennant": "model",
       "seed": 2044,
       "snapped_sha": "ee4b81fcc2249a4aef44a1f7fde6e236cf5fa06daa5c764188cbb5e3ae2d0d37"
+    },
+    "hull_galleon_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_galleon_s",
+      "pennant": "auto-painted",
+      "seed": 2042,
+      "snapped_sha": "adc19a6d43ce47a1320fc063b885755e32cab175b95fd489844e53c6d0280a07"
     },
     "hull_galleon_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleon_sw",
+      "pennant": "model",
       "seed": 2043,
       "snapped_sha": "bfe47833fd672d310a6c7079c6148d5b7da4ec51cc6206f1068276de541ac3b4"
     },
     "hull_galleon_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_galleon_w",
+      "pennant": "model",
       "seed": 61040,
       "snapped_sha": "172f81ee211074a99bce36759b5cfff6806301b5ec738ef96dd1b629d283542b"
+    },
+    "hull_galley_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_galley_n",
+      "pennant": "auto-painted",
+      "seed": 2046,
+      "snapped_sha": "41cf20e58a7d678aef00dfdc6566be043d3577ec8e0810042a4f62d918cb4fe4"
     },
     "hull_galley_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galley_nw",
+      "pennant": "model",
       "seed": 2049,
       "snapped_sha": "4822bdb143cc0ec345d0d9afb5463b8b7f337fa75a08ea5c4060a0c34a266227"
+    },
+    "hull_galley_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_galley_s",
+      "pennant": "auto-painted",
+      "seed": 2047,
+      "snapped_sha": "c8b0aad0e181cb526ff00a9b4fddd5e2866ab0f0ce6f54ca1cb4877e864ff56b"
     },
     "hull_galley_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_galley_sw",
+      "pennant": "model",
       "seed": 2048,
       "snapped_sha": "baac9792a6fcdc7fc0add26a726c4b7f15ca5e597378dcf61cb92755093db777"
     },
     "hull_galley_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_galley_w",
+      "pennant": "model",
       "seed": 61045,
       "snapped_sha": "223ec6c8666665af54e610453dde50b67927b59913ec9fa9668e9ec2c7dff479"
+    },
+    "hull_galleass_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_junk_n",
+      "pennant": "auto-painted",
+      "seed": 2051,
+      "snapped_sha": "bb11371c0976feac88dc9884cadb9b8faf5f7fab712a051169580865924a9b68"
     },
     "hull_junk_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_junk_nw",
+      "pennant": "model",
       "seed": 2054,
       "snapped_sha": "605201c2978d3a849a6ceb9f3a2490244bfb36afe819c48597947e5a7df2e04a"
+    },
+    "hull_junk_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_junk_s",
+      "pennant": "auto-painted",
+      "seed": 2052,
+      "snapped_sha": "ee2e76b9d4646b64729bb2be22100ef5d18b9def109e8c249fb94d2258361012"
     },
     "hull_junk_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_junk_sw",
+      "pennant": "model",
       "seed": 2053,
       "snapped_sha": "b31082e59f6145a7f1f6fc0e24ffe294f9885dbc63ebe4971d078d462db276c5"
     },
     "hull_junk_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_junk_w",
+      "pennant": "model",
       "seed": 2050,
       "snapped_sha": "f77ee1cff9e67762d3f8c32540dc286ae5da85a22071774439e72627fdba5be8"
     },
     "hull_latin_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_latin_n",
+      "pennant": "model",
       "seed": 2056,
       "snapped_sha": "123f2b2e5b33a115d39c6a1648aef7dec5a54ee949cb3ab134ee917019989386"
     },
     "hull_latin_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_latin_nw",
+      "pennant": "model",
       "seed": 2059,
       "snapped_sha": "865d89fe2423f6fa86422dfae15937a50ee70e06276d96883b9cb92b93643946"
     },
     "hull_latin_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_latin_s",
+      "pennant": "model",
       "seed": 2057,
       "snapped_sha": "75eb50f447c35568bb649d9298dea8227bd2f486f7c4a0ac96c352cf61b14b68"
     },
     "hull_latin_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_latin_sw",
+      "pennant": "model",
       "seed": 2058,
       "snapped_sha": "10bf176a24f4df54b2a4ab30623af9f6588f4f5295bb6e6574536e8c208cd6de"
+    },
+    "hull_latin_w": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_latin_w",
+      "pennant": "auto-painted",
+      "seed": 61055,
+      "snapped_sha": "e80c9e83cd412762fbf404b788f5864114181685a23e38ca187e5d1f3a59c9b9"
+    },
+    "hull_nao_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_nao_n",
+      "pennant": "auto-painted",
+      "seed": 2061,
+      "snapped_sha": "31ed25f2a126b0140163b7ae32f6a98a388a7f2a277926654f8cc469272f1a1c"
     },
     "hull_nao_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_nao_nw",
+      "pennant": "model",
       "seed": 2064,
       "snapped_sha": "d97a678679151e6947259e1de7aaf25aae2d70f9de0f2ab51d376c092f285429"
     },
     "hull_nao_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_nao_s",
+      "pennant": "model",
       "seed": 2062,
       "snapped_sha": "cf1aa4ee651013b10a2cc8c7ca2e4b29b692f0ddd31d495d157307ead11f4815"
     },
     "hull_nao_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_nao_sw",
+      "pennant": "model",
       "seed": 2063,
       "snapped_sha": "dd86fc33833dd8b0696a7e64b8beddee19e48cd3df96a2f4c6705e943952dfff"
     },
     "hull_nao_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_nao_w",
+      "pennant": "model",
       "seed": 81060,
       "snapped_sha": "7d9b5f848d7f47af637e4c80fe54d0bbcf4a9150927ef8e72354ea2f8a7532b0"
     },
     "hull_pinnace_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_pinnace_n",
+      "pennant": "model",
       "seed": 2066,
       "snapped_sha": "8e805278cf50a5db61abc4ec6c4e7d8eb8d374a49ecb685585c17817d259f55c"
     },
     "hull_pinnace_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_pinnace_nw",
+      "pennant": "model",
       "seed": 2069,
       "snapped_sha": "e7e39f6d708aa40d7bb5071f883396e48d88c1e0496790d7479599069a9159b5"
     },
     "hull_pinnace_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_pinnace_s",
+      "pennant": "model",
       "seed": 2067,
       "snapped_sha": "4bf0d0b2ccee52a68bb9d58a7c971ec72eabc7ece199d7c36266facb67be509f"
     },
     "hull_pinnace_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_pinnace_sw",
+      "pennant": "model",
       "seed": 2068,
       "snapped_sha": "1a764079862e9cfa6a9c68d2c6230eb1375d02fac6dec4ea613eb9dd2a8f247f"
     },
     "hull_pinnace_w": {
       "accepted_at": "2026-11-05",
       "job": "hull_pinnace_w",
+      "pennant": "model",
       "seed": 81065,
       "snapped_sha": "dbde27d9ff252006496e4a85cfebe76fe80f64b2e1b38996d56681c36bd1b5c7"
     },
     "hull_sloop_n": {
       "accepted_at": "2026-11-05",
       "job": "hull_sloop_n",
+      "pennant": "model",
       "seed": 2071,
       "snapped_sha": "3a87bb2213ffbf13ec72b906efdb595d00251ba732788c2e34a94c857217b3dc"
+    },
+    "hull_sloop_nw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_sloop_nw",
+      "pennant": "auto-painted",
+      "seed": 2074,
+      "snapped_sha": "6974f2b3b2559e7eea5f30189c3b32367cdaf80bf6987710e63f976ea7121e13"
     },
     "hull_sloop_s": {
       "accepted_at": "2026-11-05",
       "job": "hull_sloop_s",
+      "pennant": "model",
       "seed": 2072,
       "snapped_sha": "c98019b2c3918a62ffa888dd78fa075afd8ab6357642b1740c314777e5451a89"
+    },
+    "hull_sloop_sw": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_sloop_sw",
+      "pennant": "auto-painted",
+      "seed": 2073,
+      "snapped_sha": "e0debe3ab0b21f5b38ba15f6062d16d2b4fc97124dc370ab9d13ee897c09109b"
+    },
+    "hull_xebec_n": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_xebec_n",
+      "pennant": "auto-painted",
+      "seed": 2076,
+      "snapped_sha": "6aec81ff1a4c8ebcc36c32e02f6709f561890f7372291e2ded5240ac8b37a37a"
     },
     "hull_xebec_nw": {
       "accepted_at": "2026-11-05",
       "job": "hull_xebec_nw",
+      "pennant": "model",
       "seed": 2079,
       "snapped_sha": "652151cb1a1320e4451078355503c1256fd21f7da824f794233f10ca80225230"
+    },
+    "hull_xebec_s": {
+      "accepted_at": "2026-11-05",
+      "job": "hull_xebec_s",
+      "pennant": "auto-painted",
+      "seed": 2077,
+      "snapped_sha": "3a5a4f7d75d8070adf37678275395ced421f941a5a1ab2e6f45dfbeeb9abae9b"
     },
     "hull_xebec_sw": {
       "accepted_at": "2026-11-05",
       "job": "hull_xebec_sw",
+      "pennant": "model",
       "seed": 2078,
       "snapped_sha": "6b0ce2699d9adacc1a8e65b51209b6194b2e06482be1249bc7d945bbc0441781"
     }
