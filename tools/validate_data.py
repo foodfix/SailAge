@@ -9324,15 +9324,43 @@ def _g13_check_ingest_icon_family(doc: dict, icon_ids: set) -> int:
     byte-compare).  Returns the number of sources re-derived locally."""
     icons = doc.get("icons") or {}
     rejected = doc.get("icons_rejected") or []
+    skipped = doc.get("icons_skipped") or []
     ci = doc.get("counts", {}).get("icons") or {}
     if not isinstance(icons, dict):
         fail("art-ingest", "tools/ui_art/ingest_ledger.json",
              "icons section must be an object", 13)
     if (ci.get("accepted") != len(icons)
             or ci.get("rejected") != len(rejected)
+            or ci.get("skipped") != len(skipped)
             or ci.get("files") != len(icons)):
         fail("art-ingest", "tools/ui_art/ingest_ledger.json",
-             "counts.icons drifts from the icons/icons_rejected maps", 13)
+             "counts.icons drifts from the icons/icons_rejected/"
+             "icons_skipped maps", 13)
+    for note in skipped:
+        if (not isinstance(note, dict) or not note.get("job")
+                or not note.get("reason")):
+            fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+                 f"icons_skipped entry {note!r} needs job + reason", 13)
+    # derivation-only ids (manifest derive ops — the arrow families) must
+    # NEVER appear as ingest records: the build owns those assets files
+    # (§8.8 item 5 — an independently generated sibling breaks the
+    # rot/mirror transform pin)
+    derive_only: set = set()
+    for mf in sorted((UI_ART_DIR / "icons").glob("*.json")):
+        try:
+            mdoc = json.loads(mf.read_text())
+        except (OSError, ValueError):
+            continue
+        mitems = mdoc if isinstance(mdoc, list) else mdoc.get("sprites", [mdoc])
+        for d in mitems:
+            if isinstance(d, dict) and d.get("derive") and d.get("id"):
+                derive_only.add(d["id"])
+    ingested_derive_only = sorted(set(icons) & derive_only)
+    if ingested_derive_only:
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             f"derivation-only icon(s) ingested: {ingested_derive_only[:6]} — "
+             "the build derives them from their n/ne sources (§8.8 item 5)",
+             13)
     verified = 0
     for iid, rec in sorted(icons.items()):
         if iid not in icon_ids:
