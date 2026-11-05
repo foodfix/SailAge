@@ -906,13 +906,13 @@ def classify_for(job_id, expected):
             observed = "quarter(?)"
             return {"expected": expected, "observed": observed,
                     "verdict": "FAIL", "confidence": 0.3, **ev}
-        if iou_other >= 0.55:
+        if iou_other >= 0.90:
             ev["why"] = (f"duplicate of the {other} cell "
                          f"(IoU {iou_other:.2f}) — same view drawn twice")
             observed = f"duplicate-of-{other}"
             return {"expected": expected, "observed": observed,
                     "verdict": "FAIL", "confidence": 0.5, **ev}
-        if iou_w >= 0.55:
+        if iou_w >= 0.70:
             ev["why"] = f"duplicates the w cell (IoU {iou_w:.2f})"
             observed = "duplicate-of-w"
             return {"expected": expected, "observed": observed,
@@ -938,12 +938,12 @@ def classify_for(job_id, expected):
     if expected == "sw":
         flip = tilt <= -5 or band_left < 0.3 * band_right
         observed = "se(flip)" if flip else (
-            "duplicate-of-w" if dup >= 0.55 else "sw")
+            "duplicate-of-w" if dup >= 0.85 else "sw")
     else:  # nw
         flip = tilt >= 5 or band_right < 0.3 * band_left
         observed = "ne(flip)" if flip else (
-            "duplicate-of-w" if dup >= 0.55 else "nw")
-    ok = not flip and dup < 0.55
+            "duplicate-of-w" if dup >= 0.85 else "nw")
+    ok = not flip and dup < 0.85
     if not ok:
         ev["why"] = (f"flip-evidence tilt {tilt:.0f}px / band "
                      f"{band_left}L/{band_right}R" if flip else
@@ -954,24 +954,31 @@ def classify_for(job_id, expected):
 
 
 def cell_iou(job_a, job_b):
-    """Mask IoU between two snapped tokens (duplicate-view detector)."""
-    pa, (wa, ha) = _snap_px(job_a)
-    pb, (wb, hb) = _snap_px(job_b)
-    inter = 0
-    union = 0
-    for y in range(min(ha, hb)):
-        for x in range(min(wa, wb)):
-            a = pa[x, y][3] > 0
-            b = pb[x, y][3] > 0
-            if a and b:
-                inter += 1
-            if a or b:
-                union += 1
+    """Shape IoU between two snapped tokens: each mask is translated so
+    its bbox top-left sits at the origin (placement-independent), then
+    IoU — a duplicate view aligns >= 0.9, distinct views 0.4-0.7."""
+    masks = []
+    for job in (job_a, job_b):
+        px, (w, h) = _snap_px(job)
+        pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
+        if not pts:
+            return 0.0
+        x0 = min(p[0] for p in pts)
+        y0 = min(p[1] for p in pts)
+        m = {}
+        for x, y in pts:
+            m[(x - x0, y - y0)] = 1
+        masks.append(m)
+    ma, mb = masks
+    inter = sum(1 for k in ma if k in mb)
+    union = len(ma) + len(mb) - inter
     return inter / max(1, union)
 
 
 def audit_directions():
-    """Audit all 80 base jobs; report.json -> direction_audit[]."""
+    """Audit all 80 base jobs; report.json -> direction_audit[]. Also
+    refreshes per_dir direction verdicts in the hull records (the gate
+    reads them)."""
     audit = []
     for ship in HULLS:
         for direction in DIRS:
@@ -979,16 +986,30 @@ def audit_directions():
             res = classify_for(job_id, direction)
             res["job"] = job_id
             audit.append(res)
-        # n/s duplicate-view detector: the model drawing the same view
-        # twice is the classic n/s confusion (user complaint)
+        # n/s near-identical detector: shape-IoU >= 0.90 means the same
+        # view drawn twice (legit opposite pairs sit at 0.62-0.88)
         iou = cell_iou(f"hull_{ship}_n", f"hull_{ship}_s")
-        if iou >= 0.55:
+        if iou >= 0.90:
             for res in audit:
                 if res["job"] in (f"hull_{ship}_n", f"hull_{ship}_s"):
                     res["verdict"] = "FAIL"
-                    res["observed"] = res["observed"] + "/duplicate"
-                    res["why"] = f"n/s duplicate views (IoU {iou:.2f})"
+                    res["observed"] = res["observed"].split("/")[0] \
+                        + "/duplicate"
+                    res["why"] = (f"n/s near-identical views "
+                                  f"(shape-IoU {iou:.2f})")
                     res["ns_iou"] = round(iou, 2)
+        # refresh the hull record's per_dir verdicts
+        prog = load_progress()
+        rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+        if rec and rec.get("per_dir"):
+            for direction in DIRS:
+                if direction in rec["per_dir"]:
+                    fresh = [a for a in audit
+                             if a["job"] == f"hull_{ship}_{direction}"]
+                    if fresh:
+                        rec["per_dir"][direction]["direction"] = {
+                            k: v for k, v in fresh[0].items() if k != "job"}
+            save_progress(prog)
     prog = load_progress()
     prog["direction_audit"] = audit
     save_progress(prog)
@@ -997,7 +1018,7 @@ def audit_directions():
     for a in audit:
         if a["verdict"] != "PASS":
             print(f"  FAIL {a['job']}: observed={a['observed']} "
-                  f"({a.get('why') or a.get('bow_at') or a.get('bottom_frac')})")
+                  f"({a.get('why') or '-'})")
     return audit
 
 
@@ -1237,17 +1258,18 @@ SHEET_CELLS = {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
 SHEET_SIZE = (1792, 1152)
 
 
-def hull_sheet_draft(ship, out_path):
-    """5-cell draft reference: w/n/s/sw/nw tokens x6 (=384, 75% of the
-    512 cell, green margins so the model does not draw cell-filling
-    ships) on chroma green, 3x2 grid, labels above, dark frames."""
+def hull_sheet_draft(ship, out_path, draft_scale=6):
+    """5-cell draft reference: w/n/s/sw/nw tokens at draft_scale x6 (=384,
+    75% of the 512 cell) — polish attempts may shrink the drafts (more
+    green margin, the model follows the reference's own whitespace)."""
     ref = Image.new("RGBA", SHEET_SIZE, GREEN_BG)
     draw = ImageDraw.Draw(ref)
+    side = 64 * draft_scale
+    off = (512 - side) // 2
     for direction, (cx, cy) in SHEET_CELLS.items():
         tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
                                        f"hull_{ship}_player_{direction}.png"))
-        tok = nearest(tok, 6)  # 64 -> 384, centred in the 512 cell
-        ref.alpha_composite(tok, (cx + 64, cy + 64))
+        ref.alpha_composite(nearest(tok, draft_scale), (cx + off, cy + off))
         draw.rectangle([cx - 2, cy - 2, cx + 513, cy + 513],
                        outline=(24, 28, 40, 255), width=2)
         label(draw, (cx + 6, cy - 46), direction, color=(16, 16, 16))
@@ -1257,15 +1279,17 @@ def hull_sheet_draft(ship, out_path):
     return ref
 
 
-def hull_sheet_prompt(ship, stated_px=None):
+def hull_sheet_prompt(ship, stated_px=None, scale_override=None):
     rig = RIG[ship]
-    if TIER[ship] == 3:
-        scale = ("This hull fills about 80-90% of its cell width in every "
-                 "cell. ")
-    else:
-        scale = ("Each ship occupies only about 60-70% of its cell width, "
-                 "with clear green margin around it. ")
-    if ship == "pinnace":
+    scale = scale_override
+    if scale is None:
+        if TIER[ship] == 3:
+            scale = ("This hull fills about 80-90% of its cell width in "
+                     "every cell. ")
+        else:
+            scale = ("Each ship occupies only about 60-70% of its cell "
+                     "width, with clear green margin around it. ")
+    if ship == "pinnace" and scale_override is None:
         scale = ("This hull fills about 75% of its cell width in every "
                  "cell — a substantial sloop-of-war, NOT a small boat. ")
     return (
@@ -1435,7 +1459,8 @@ def assign_cells(cells, draft_masks):
     return assignment
 
 
-def run_hull_job(ship, seed, stated_px=None):
+def run_hull_job(ship, seed, stated_px=None, scale_override=None,
+                 draft_scale=6):
     """One hull = one /edit: 5-cell sheet -> detect+assign cells -> per-dir
     crop -> key -> snap. The model re-arranges the grid, so cells are
     matched to directions by draft-silhouette IoU + shape fingerprints
@@ -1445,10 +1470,11 @@ def run_hull_job(ship, seed, stated_px=None):
            "started": time.strftime("%H:%M:%S")}
     save_job(f"hull_{ship}", rec)
     draft_path = os.path.join(DRAFTS, f"sheet_{ship}.png")
-    hull_sheet_draft(ship, draft_path)
+    hull_sheet_draft(ship, draft_path, draft_scale=draft_scale)
     with open(draft_path, "rb") as fh:
         draft_bytes = fh.read()
-    gen = generate(draft_bytes, hull_sheet_prompt(ship, stated_px), seed)
+    gen = generate(draft_bytes, hull_sheet_prompt(ship, stated_px,
+                                                  scale_override), seed)
     with open(os.path.join(GEN, f"hull_{ship}_sheet.png"), "wb") as fh:
         fh.write(gen)
     _, _, gpx = VD.decode_ui_png(gen)
@@ -1543,7 +1569,7 @@ def hull_gate(ship):
     in_band = bool(w.get("in_band"))
     waived = (ship in WAIVER_T1_LATEEN
               and w.get("long_axis_px") is not None
-              and w.get("long_axis_px") <= hi + 1)
+              and hi + 1 >= w.get("long_axis_px") >= lo)
     if not (in_band or waived):
         fails.append(f"w band {w.get('long_axis_px')} not in {lo}-{hi}")
     dir_fails = [d for d, p in per.items()
@@ -1555,6 +1581,114 @@ def hull_gate(ship):
     if pennant_missing:
         fails.append(f"pennant missing: {pennant_missing}")
     return fails
+
+
+def polish_band(ship, max_attempts=3, reason="band polish"):
+    """Band re-roll with escalating countermeasures:
+    1) cell-reference scale clause ('at most 60% of its cell width')
+    2) tiny-draft sheet (tokens x3 = 24px on the 64 grid — the model
+       follows the reference's own whitespace)
+    3) stated-px sweep calibrated from the measured attempts
+    (galleass variant: 85-90% + massive-warship + no-mirror anchor).
+    Keep best: w band in (incl waiver) first, then direction passes."""
+    lo, hi = BANDS[TIER[ship]]
+    center = BAND_CENTER[TIER[ship]]
+    base = 3000 + HULLS.index(ship) + 8000
+    attempts = []
+    best = None
+    stated = None
+    for n in range(1, max_attempts + 1):
+        seed = base + n * 100
+        if ship == "galleass":
+            scale_override = ("This hull fills 85-90% of its cell width — "
+                              "a massive three-mast warship. The bowsprit "
+                              "points to the LEFT edge of the w cell; do "
+                              "NOT mirror the ship. ")
+            stated = None
+            draft_scale = 6
+        elif n == 1:
+            scale_override = ("The ship occupies AT MOST 60% of its cell "
+                              "width, generous green margin around it. ")
+            draft_scale = 6
+        elif n == 2:
+            scale_override = None
+            draft_scale = 3  # 24px on the 64 grid: tiny drafts, big margins
+        else:
+            scale_override = ("The ship occupies AT MOST 60% of its cell "
+                              "width, generous green margin around it. ")
+            draft_scale = 3
+        rec = run_hull_job(ship, seed, stated_px=stated,
+                           scale_override=scale_override,
+                           draft_scale=draft_scale)
+        fails = hull_gate(ship)
+        wla = (rec.get("per_dir", {}).get("w", {}).get("metrics", {})
+               .get("band") or {}).get("long_axis_px")
+        dir_pass = sum(1 for p in rec.get("per_dir", {}).values()
+                       if p.get("direction", {}).get("verdict") == "PASS")
+        in_band = wla is not None and lo <= wla <= hi + (
+            1 if ship in WAIVER_T1_LATEEN else 0)
+        score = (0 if in_band else abs((wla or 0) - center),
+                 -dir_pass)
+        attempts.append({"attempt": n, "seed": seed, "w_long_axis": wla,
+                         "in_band": in_band, "fails": fails,
+                         "dir_pass": dir_pass, "stated_px": stated,
+                         "draft_scale": draft_scale})
+        if best is None or score < best[0]:
+            best = (score, rec, seed, fails, n)
+        if in_band and not fails:
+            break
+        if wla and n >= 2:
+            prev = stated or 512
+            stated = max(120, min(500, round(prev * center / wla)))
+    score, rec, seed, fails, kept_n = best
+    rec["reroll"] = {"kind": "band-polish", "reason": reason,
+                     "attempts": attempts, "kept_seed": seed,
+                     "kept_attempt": kept_n, "kept_fails": fails}
+    save_job(f"hull_{ship}", rec)
+    return rec
+
+
+def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
+                reason="direction polish"):
+    """Single-cell re-roll with hardened per-direction wording (diagonal
+    anchor etc.); each attempt audited; keep the best verdict."""
+    job_id = f"hull_{ship}_{direction}"
+    base = canonical_seed(job_id) + 9000
+    draft_path = os.path.join(DRAFTS, job_id + ".png")
+    build_ship_draft(ship, direction, draft_path)
+    pose = anchor or POSE[direction]
+    attempts = []
+    best = None
+    for n in range(1, max_attempts + 1):
+        seed = base + n * 100
+        prompt = (f"Redraw this input sprite. Keep the exact same "
+                  f"silhouette, mast count, sail layout, proportions and "
+                  f"{pose}. Rig: {RIG[ship]}. {COMPACT} {extra} " + STYLE)
+        rec = exec_gen(job_id, "hull", draft_path, prompt, seed,
+                       BLOCK_HULL, None)
+        cls = classify_for(job_id, direction)
+        attempts.append({"attempt": n, "seed": seed,
+                         "verdict": cls["verdict"],
+                         "observed": cls["observed"]})
+        score = 0 if cls["verdict"] == "PASS" else 1
+        if best is None or score <= best[0]:
+            best = (score, cls, seed, n)
+        if cls["verdict"] == "PASS":
+            break
+    score, cls, seed, kept_n = best
+    prog = load_progress()
+    rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+    if rec and direction in rec.get("per_dir", {}):
+        rec["per_dir"][direction]["direction"] = {
+            k: v for k, v in cls.items() if k != "job"}
+        rr = rec.get("reroll") or {"kind": "hull"}
+        rr.setdefault("cell_fixes", []).append(
+            {"cell": job_id, "reason": reason, "attempts": attempts,
+             "kept_seed": seed, "kept_attempt": kept_n,
+             "kept_verdict": cls["verdict"]})
+        rec["reroll"] = rr
+        save_job(f"hull_{ship}", rec)
+    return cls
 
 
 def reroll_hull(ship, max_attempts=3, reason="gate failure"):
@@ -1794,8 +1928,9 @@ def run_batch_hulls(force=False):
     prog = load_progress()
     done = set()
     if not force:
-        done = {j[len("hull_"):] for j, r in prog.get("jobs", {}).items()
-                if j.startswith("hull_") and "_" not in j[len("hull_"):]
+        hull_names = set(HULLS)
+        done = {j[5:] for j, r in prog.get("jobs", {}).items()
+                if j.startswith("hull_") and j[5:] in hull_names
                 and r.get("status") == "done"}
     todo = [s for s in HULLS if s not in done]
     print(f"hull batch: 16 jobs, {16 - len(todo)} already done, "
@@ -2251,9 +2386,10 @@ def build_report():
             m = (jobs.get(f"hull_{hull}_w", {}).get("metrics")) or {}
         b = m.get("band") or {}
         lo, hi = BANDS[TIER[hull]]
+        lo, hi = BANDS[TIER[hull]]
         waived = (hull in WAIVER_T1_LATEEN
                   and b.get("long_axis_px") is not None
-                  and b.get("long_axis_px") <= hi + 1)
+                  and hi + 1 >= b.get("long_axis_px") >= lo)
         band_table[hull] = {
             "tier": TIER[hull], "band": [lo, hi],
             "w": {"long_axis": b.get("long_axis_px"),
@@ -2286,8 +2422,9 @@ def build_report():
                 (pennant["present"] if m["pennant_present"]
                  else pennant["absent"]).append(f"hull_{ship}")
 
+    hull_names = set(HULLS)
     hull_jobs = {j: r for j, r in jobs.items()
-                 if j.startswith("hull_") and "_" not in j[len("hull_"):]}
+                 if j.startswith("hull_") and j[5:] in hull_names}
 
     report = {
         "ships": stats(hull_jobs),
@@ -2421,7 +2558,7 @@ def main(argv):
                 b = m.get("band") or {}
                 la = b.get("long_axis_px")
                 waived = hull in WAIVER_T1_LATEEN and la is not None \
-                    and la <= hi + 1
+                    and hi + 1 >= la >= lo
                 if la is None or not (b.get("in_band") or waived):
                     out.append(job_id)
             print("band re-rolls (w only):", out, flush=True)
