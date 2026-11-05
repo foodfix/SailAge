@@ -237,6 +237,10 @@ const NPC_GLIDE_BACKLOG_TILES := 8
 const NPC_GLIDE_MAX_LAG_SECONDS := 1.5
 ## A fleet pending more tiles than this skips animation entirely and snaps.
 const NPC_GLIDE_SNAP_TILES := 24
+## The §4.8 NPC role-chip side (amendment 3d2a7d21): the demoted §4.5.2
+## letter square rides the hull token's corner at ~6 px — role color fill,
+## role letter on top, never stretched with the token.
+const NPC_ROLE_CHIP_PX := 6.0
 ## The A* module instance of the last query (`sail_pathing()`), created lazily.
 var _sail = null
 
@@ -1912,18 +1916,32 @@ func _sync_marker_nodes() -> void:
 			count.name = "Count"
 			square.add_child(count)
 		var role := str(marker.get("role", ""))
-		square.color = NpcFleetsLib.marker_color(
+		var role_color := NpcFleetsLib.marker_color(
 			role, str(marker.get("nation_id", "")))
+		# §4.8 NPC world-fleet tokens (amendment 3d2a7d21): a fleet whose
+		# flagship/owner/movement-heading all resolve renders the 8-dir hull
+		# token `hull_{type}_{owner}_{dir}` (the nation's PENNANT_* variant,
+		# pirate fleets → the pirate pennant) instead of the letter square;
+		# the §4.5.2 letter square is demoted to the corner role chip. The
+		# bare square stands only as the fallback (unknown ship type, an
+		# ownerless nation, no heading — docked fleets — or an unresolved
+		# registry id): the §4.5.2 square, exactly as before.
+		var dir_id := ArrowFieldLib.dir_id_of_heading(
+			str(marker.get("heading", "")))
+		var token_texture: Texture2D = null
+		if not dir_id.is_empty():
+			var owner := NpcFleetsLib.marker_owner(
+				role, str(marker.get("nation_id", "")))
+			var ship_type := str(marker.get("ship_type", ""))
+			if not owner.is_empty() and not ship_type.is_empty():
+				token_texture = UiKitLib.icon_texture(
+					"hull_%s_%s_%s" % [ship_type, owner, dir_id])
+		_sync_npc_token(square, token_texture, role_color,
+			str(marker.get("letter", "")))
 		# §3 (A.4): a treasure fleet wears the `marker_treasure` token when the
 		# registry resolves it — the role letter rides on top (§4.8.5 overlay
-		# rule); otherwise the §4.5.2 coloured square stands alone (the LOD
-		# pin: world-map NPC fleets stay coloured squares without the art).
+		# rule); the §4.8 hull token (when it resolved) draws beneath it.
 		_sync_marker_token(square, role)
-		var letter_node: Label = square.get_node_or_null("Letter")
-		var text := str(marker.get("letter", ""))
-		if letter_node != null:
-			letter_node.text = text
-			letter_node.visible = not text.is_empty()
 		# Convoy grouping (§4.11.11.4): members hide behind the leader's
 		# shared escort square; the leader shows the member-count numeral.
 		var leader := str(marker.get("convoy_leader", ""))
@@ -1934,7 +1952,13 @@ func _sync_marker_nodes() -> void:
 		if count_node != null:
 			count_node.text = "×%d" % convoy_count if convoy_count >= 2 else ""
 			count_node.visible = convoy_count >= 2
+			# Beside the drawn face: the square edge in fallback mode, the
+			# hull token's right edge when the §4.8 token stands in.
 			count_node.position = Vector2(square.size.x, 0.0)
+			var hull_token: TextureRect = square.get_node_or_null("HullToken")
+			if hull_token != null and hull_token.visible:
+				count_node.position = Vector2(
+					hull_token.position.x + hull_token.size.x, 0.0)
 		# Diagnostics badge (unified-movement amendment, 80-* §4.5.2): with
 		# the S19 debug row on, a fleet in a suspicious stall state wears a
 		# BAD-coloured state letter (B blocked · C camping · D docked ·
@@ -2013,6 +2037,69 @@ func _sync_marker_token(square: ColorRect, role: String) -> void:
 		square.move_child(token, 0)
 	token.texture = texture
 	token.visible = true
+
+
+## The §4.8 NPC hull token + corner role chip (amendment 3d2a7d21): when
+## `texture` resolves (a fleet with a known flagship type, owner pennant and
+## movement heading) the token draws 1:1 at the cell, centred on the square's
+## anchor, the square fill goes transparent (the root stays visible — the
+## glide pass keeps positioning it), the inline letter hides, and a ~6px
+## role chip (role letter on the role color) pins to the token's top-right
+## corner. `texture == null` is the §4.5.2 fallback: the coloured letter
+## square exactly as before (chip + token hidden). Render-only either way.
+func _sync_npc_token(square: ColorRect, texture: Texture2D,
+		role_color: Color, letter_text: String) -> void:
+	var token: TextureRect = square.get_node_or_null("HullToken")
+	if token == null:
+		token = TextureRect.new()
+		token.name = "HullToken"
+		token.stretch_mode = TextureRect.STRETCH_SCALE
+		token.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		token.size = Vector2(_cell_pixels, _cell_pixels)
+		token.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		square.add_child(token)
+		# Beneath the letter/count/chip overlays — the §4.8.5 overlay rule:
+		# identification letters stay badges drawn ON TOP of the token sprite.
+		square.move_child(token, 0)
+	var chip: ColorRect = square.get_node_or_null("Chip")
+	if chip == null:
+		chip = ColorRect.new()
+		chip.name = "Chip"
+		chip.size = Vector2.ONE * NPC_ROLE_CHIP_PX
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var chip_letter := Label.new()
+		chip_letter.name = "ChipLetter"
+		# Canvas marker art at chip scale — LabelSettings (the stall badge's
+		# precedent; the theme has no chip-sized label slot).
+		var chip_settings := LabelSettings.new()
+		chip_settings.font_size = int(NPC_ROLE_CHIP_PX)
+		chip_letter.label_settings = chip_settings
+		chip_letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.add_child(chip_letter)
+		square.add_child(chip)
+	var letter_node: Label = square.get_node_or_null("Letter")
+	if texture == null:
+		# §4.5.2 fallback: the coloured letter square, unchanged.
+		token.visible = false
+		chip.visible = false
+		square.color = role_color
+		if letter_node != null:
+			letter_node.text = letter_text
+			letter_node.visible = not letter_text.is_empty()
+		return
+	# Token mode: the demoted square keeps only its corner chip.
+	square.color = Color(role_color.r, role_color.g, role_color.b, 0.0)
+	token.texture = texture
+	token.position = (square.size - Vector2(_cell_pixels, _cell_pixels)) * 0.5
+	token.visible = true
+	chip.color = role_color
+	chip.position = token.position \
+		+ Vector2(_cell_pixels - NPC_ROLE_CHIP_PX, 0.0)
+	var chip_letter: Label = chip.get_node("ChipLetter")
+	chip_letter.text = letter_text
+	chip_letter.visible = not letter_text.is_empty()
+	if letter_node != null:
+		letter_node.visible = false
 
 
 ## Ensures the wake layer exists and repaints it from the last marker pass.

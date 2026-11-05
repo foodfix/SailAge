@@ -20,6 +20,9 @@ const PaletteLib := preload("res://scripts/palette.gd")
 const SailingSimLib := preload("res://scripts/world/sailing_sim.gd")
 const OceanLayersLib := preload("res://scripts/world/ocean_layers.gd")
 const NpcFleetsLib := preload("res://scripts/world/npc_fleets.gd")
+const ArrowFieldLib := preload("res://scripts/world/arrow_field.gd")
+const UiKitLib := preload("res://scripts/ui_kit.gd")
+const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
 
 ## docs/10-* §6.1: the locked grid and artifact.
 const WORLD_WIDTH := 4320
@@ -117,6 +120,7 @@ func _ready() -> void:
 	await _test_wait_keys()
 	await _test_interpolation_purity()
 	await _test_npc_path_playback()
+	await _test_npc_hull_tokens()
 	await _test_docking_cost_pin()
 	await _test_ice_surface()
 	await _test_hud_indicators()
@@ -1532,7 +1536,7 @@ func _test_npc_path_playback() -> void:
 	var id_a := str(near_a["id"])
 	var id_b := str(near_b["id"])
 	_check(world._marker_nodes.has(id_a) and world._marker_nodes.has(id_b),
-		"the in-view fleets hold marker squares")
+		"the in-view fleets hold marker nodes")
 	var seg_a: Array[Vector2i] = [
 		HELM_CELL + Vector2i(7, 0), HELM_CELL + Vector2i(8, 0),
 		HELM_CELL + Vector2i(9, 0)]
@@ -1582,6 +1586,134 @@ func _test_npc_path_playback() -> void:
 		and (square_b as ColorRect).position.distance_to(
 			Vector2(seg_b[1]) * tile_px + centre_offset) < 2.0,
 		"the markers rest on their destinations' tile centres")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+# --- NPC hull tokens + role chips (80-* §4.8 amendment 3d2a7d21) -----------
+
+## A sailing NPC fleet renders the 8-dir hull token (`hull_{type}_{owner}_{dir}`
+## — flagship type, nation pennant, movement-heading dir) with the demoted
+## §4.5.2 letter square as a ~6px corner role chip; a fleet whose
+## type/owner/heading does not resolve (docked, legacy data, registry miss)
+## keeps the coloured letter square, exactly as before.
+func _test_npc_hull_tokens() -> void:
+	# The §4.9 registry pass (the title screen's bootstrap): headless suites
+	# must run it or every `icon_texture` misses and the pins below would
+	# only ever see the fallback branch.
+	TextureRegistryLib.ensure_registered()
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	var sim = world.fleet_sim()
+	_check(sim != null, "the token fixture adopts a fleet sim")
+	if sim == null:
+		world.queue_free()
+		await get_tree().process_frame
+		return
+	var fleet: Dictionary = sim.spawn("trader", "portugal", 1)
+	var fallback_fleet: Dictionary = sim.spawn("trader", "spain", 1)
+	var bad_owner: Dictionary = sim.spawn("trader", "england", 1)
+	_check(not fleet.is_empty() and not fallback_fleet.is_empty()
+		and not bad_owner.is_empty(), "the three token fixture fleets spawn")
+	if fleet.is_empty() or fallback_fleet.is_empty() or bad_owner.is_empty():
+		world.queue_free()
+		await get_tree().process_frame
+		return
+	NpcFleetsLib.set_position(fleet, HELM_CELL + Vector2i(4, 0))
+	NpcFleetsLib.set_position(fallback_fleet, HELM_CELL + Vector2i(-4, 0))
+	NpcFleetsLib.set_position(bad_owner, HELM_CELL + Vector2i(0, 4))
+	world._sync_marker_nodes()
+	var entry: Dictionary = {}
+	for marker in world._last_markers:
+		if str((marker as Dictionary).get("id", "")) == str(fleet["id"]):
+			entry = marker
+	_check(not entry.is_empty(), "the token fixture's marker entry reports")
+	if entry.is_empty():
+		world.queue_free()
+		await get_tree().process_frame
+		return
+	# (a) the token's three inputs ride the marker entry, and the owner
+	# resolver pins the pennant families (nation / pirate / neutral).
+	var heading := str(entry.get("heading", ""))
+	var ship_type := str(entry.get("ship_type", ""))
+	_check(not heading.is_empty(),
+		"the lane fleet reports its current movement heading")
+	_check(not ship_type.is_empty(), "the lane fleet reports its flagship type")
+	_check(NpcFleetsLib.marker_owner("trader", "portugal") == "portugal"
+		and NpcFleetsLib.marker_owner("pirate", "") == "pirate"
+		and NpcFleetsLib.marker_owner("coaster", "") == "neutral"
+		and NpcFleetsLib.marker_owner("trader", "atlantis") == "",
+		"the owner resolver maps nation/pirate/neutral (empty for unknown)")
+	# (b) the marker renders the token + corner chip, square demoted.
+	var square: ColorRect = world._marker_nodes.get(str(fleet["id"]))
+	_check(square != null, "the token fleet holds its marker node")
+	var token: TextureRect = square.get_node_or_null("HullToken") \
+		if square != null else null
+	var chip: ColorRect = square.get_node_or_null("Chip") \
+		if square != null else null
+	var want_id := "hull_%s_%s_%s" % [ship_type, NpcFleetsLib.marker_owner(
+			str(entry["role"]), str(entry["nation_id"])),
+		ArrowFieldLib.dir_id_of_heading(heading)]
+	_check(token != null and token.visible and token.texture != null
+		and token.texture == UiKitLib.icon_texture(want_id),
+		"the sailing fleet renders the §4.8 hull token for its heading (%s)"
+			% want_id)
+	_check(chip != null and chip.visible
+		and chip.size == Vector2.ONE * world.NPC_ROLE_CHIP_PX
+		and chip.color == NpcFleetsLib.marker_color(
+			str(entry["role"]), str(entry["nation_id"]))
+		and chip.position.x >= 0.0 and chip.position.y == token.position.y,
+		"the role chip rides the token's top-right corner at ~6px role color")
+	var chip_letter: Label = chip.get_node("ChipLetter") if chip != null else null
+	_check(chip_letter != null and chip_letter.text
+			== NpcFleetsLib.marker_letter(str(entry["role"])),
+		"the chip carries the §4.5.2 role letter")
+	_check(square.color.a == 0.0
+		and not (square.get_node("Letter") as Label).visible,
+		"the §4.5.2 letter square is demoted under the token (transparent)")
+	# (c) heading flip: teleporting the fleet far from its leg re-derives the
+	# heading, and the token follows the new dir on the next sync.
+	var before_id := want_id
+	NpcFleetsLib.set_position(fleet, HELM_CELL + Vector2i(-300, 5))
+	world._sync_marker_nodes()
+	var entry2: Dictionary = {}
+	for marker in world._last_markers:
+		if str((marker as Dictionary).get("id", "")) == str(fleet["id"]):
+			entry2 = marker
+	var heading2 := str(entry2.get("heading", ""))
+	_check(not heading2.is_empty(), "the teleported fleet still reports a heading")
+	var want_id2 := "hull_%s_%s_%s" % [ship_type, NpcFleetsLib.marker_owner(
+			str(entry2["role"]), str(entry2["nation_id"])),
+		ArrowFieldLib.dir_id_of_heading(heading2)]
+	_check(token.texture == UiKitLib.icon_texture(want_id2)
+		and (heading2 == heading or want_id2 != before_id),
+		"the token dir follows the re-derived heading after the teleport")
+	# (d) the square fallback: a fleet whose token cannot resolve — no
+	# heading (docked/idle), an ownerless nation — keeps the §4.5.2 letter
+	# square unchanged (the registry-miss case resolves through the same
+	# null-texture branch).
+	(fallback_fleet["route"] as Dictionary)["legs"] = []
+	((fallback_fleet["ships"] as Array)[0] as Dictionary)["ship_type_id"] = ""
+	bad_owner["nation_id"] = "atlantis"
+	world._sync_marker_nodes()
+	for probe in [["heading-less", str(fallback_fleet["id"]),
+			"trader", "spain"],
+			["ownerless", str(bad_owner["id"]), "trader", "atlantis"]]:
+		var fb: ColorRect = world._marker_nodes.get(str(probe[1]))
+		var fb_token: TextureRect = fb.get_node_or_null("HullToken") \
+			if fb != null else null
+		var fb_chip: ColorRect = fb.get_node_or_null("Chip") \
+			if fb != null else null
+		var fb_letter: Label = fb.get_node_or_null("Letter") \
+			if fb != null else null
+		_check(fb != null and fb_token != null and not fb_token.visible
+			and fb_chip != null and not fb_chip.visible
+			and fb_letter != null and fb_letter.visible
+			and fb_letter.text == NpcFleetsLib.marker_letter(str(probe[2]))
+			and fb.color == NpcFleetsLib.marker_color(
+				str(probe[2]), str(probe[3])),
+			"the %s fleet keeps the §4.5.2 letter square (token+chip hidden)"
+				% str(probe[0]))
 	world.queue_free()
 	await get_tree().process_frame
 

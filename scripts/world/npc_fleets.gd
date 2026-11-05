@@ -1312,6 +1312,12 @@ func markers() -> Array:
 		var events: Array = _fleet_events.get(id, [])
 		var mooring_here := _port_at_cell(position_of(fleet))
 		var here := position_of(fleet)
+		# The §4.8 NPC-token flagship: the fleet's FIRST composed ship (the
+		# same flagship rule `_fleet_base` pins) — the render side turns it
+		# + the owner/dir into the `hull_{type}_{owner}_{dir}` sprite id.
+		var ships := _fleet_ships(fleet)
+		var ship_type := str((ships[0] as Dictionary).get(
+			"ship_type_id", "")) if not ships.is_empty() else ""
 		var dest_txt := str((fleet as Dictionary).get("dest_port_id", ""))
 		var dbg3 := "dest=%s mooring=%s cell=%d,%d ev=" % [
 			dest_txt if not dest_txt.is_empty() else "-",
@@ -1340,6 +1346,7 @@ func markers() -> Array:
 			# instead of parsing the `dbg` string.
 			"dwell": int((fleet as Dictionary).get("dwell_until_day", 0)),
 			"heading": _lane_step_heading(fleet),
+			"ship_type": ship_type,
 			"speed": _lane_pipe(fleet),
 			"dest": str((fleet as Dictionary).get("dest_port_id", "")),
 			"lanes": (fleet.get("route", {}) as Dictionary).get("lanes", []),
@@ -5216,6 +5223,22 @@ static func marker_color(role: String, nation_id: String) -> Color:
 	if not Color.html_is_valid(hex):
 		return PaletteLib.PANEL_LINE
 	return PaletteLib.nation_color(hex)
+
+
+## Token owner id (80-* §4.8 "NPC world-fleet tokens" amendment): the owner
+## segment of the `hull_{type}_{owner}_{dir}` sprite id — pirate fleets carry
+## the pirate pennant variant, the nationless grey coaster the neutral
+## pennant (the marker-color livery pairing), everyone else their nation.
+## "" when no owner family resolves (an unknown nation id) — the caller
+## keeps the §4.5.2 square fallback.
+static func marker_owner(role: String, nation_id: String) -> String:
+	if role == PIRATE:
+		return "pirate"
+	if nation_id.is_empty():
+		return "neutral" if role == COASTER else ""
+	if DataLoader.get_nation(nation_id).is_empty():
+		return ""
+	return nation_id
 
 
 ## The role letter drawn inside the marker square (docs/80-* §4.5.2 "a
