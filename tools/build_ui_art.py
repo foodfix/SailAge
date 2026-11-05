@@ -1147,6 +1147,13 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
                 override = (ingest_files or {}).get((ship, owner, d))
                 if override is not None and override.is_file():
                     if override != dest:
+                        # mkdir FIRST: in a temp rebuild (--check /
+                        # --contact-sheet) the tokens dir may not exist yet —
+                        # if the first iterated file (brigantine/player/e) is
+                        # an ingested override, the copy must not depend on a
+                        # write_png having run before it (the green-round
+                        # FileNotFoundError, 2026-11-05).
+                        dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(override, dest)
                     counts["tokens_ingested"] += 1
                     continue
