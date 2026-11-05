@@ -14,8 +14,13 @@ extends Node
 ##   * the §6.6 shore overlay decode (the shipped raster, the Lisbon berth
 ##     `e` code, wrap-aware lookup, water-only codes on a sampled strip);
 ##   * the §4.7.17 water layer: flat tiles for both water kinds, the shared
-##     material's pinned params (period 800 ms, darkening ×0.70) and the
-##     `UiMotion` gate (off ⇒ `u_motion` 0), the S10 reuse seam;
+##     material's pinned params (period 800 ms, darkening ×0.70, crest mix
+##     0.70 toward FOAM) and the `UiMotion` gate (off ⇒ `u_motion` 0), the
+##     S10 reuse seam;
+##   * the §4.7.17 r5 sea mask + MOTION SELF-SIMILARITY fixtures (the pins
+##     that would have caught r1–r4: no translational period in any
+##     direction; frame A/B crest maps displaced in ≥30% of 8×8 blocks;
+##     Hamming ≥ 0.02 — the retired stripe lattice scored 1.0 / 0% / 0);
 ##   * the §4.8.6 dir-id table (every bucket covered; token + vector forms);
 ##   * the arrow field's deterministic sampling against a fixture decode
 ##     (stride-4 lattice, water cells only, wind/current/VAR entries);
@@ -31,6 +36,11 @@ extends Node
 ##     registry textures with real pixel content pinned (center pixel == the
 ##     locked §4.8 palette hex; foam/marker cells non-empty). The earlier
 ##     groups keep the empty-registry fallback coverage — this one runs last.
+##   * the r5 coast foam language + the DEFECT C stub fix: the 16 variant
+##     cells' OPEN edges are foam-free across their FULL length (corner
+##     stubs respect the mask — the 1-cell waterway white-ring regression),
+##     and the synthetic coastline walk (staircase / pocket / channel) pins
+##     speckle coverage on every land-adjacent tile with no floating foam.
 ##
 ## Prerequisite: a fresh checkout needs the compiled import cache — run
 ## `godot --headless --import` once before this suite, else the texture
@@ -69,11 +79,13 @@ func _ready() -> void:
 	_test_terrain_atlas()
 	_test_shore_overlay()
 	_test_water_layer()
+	_test_sea_mask_and_motion()
 	_test_dir_table()
 	_test_arrow_field_fixture()
 	_test_arrow_field_world()
 	_test_world_markers()
 	_test_populated_registry()
+	_test_shore_continuity()
 	_test_shore_strips_and_material()
 	UiKitLib.clear_textures()
 	_report()
@@ -202,6 +214,16 @@ func _test_water_layer() -> void:
 		_check(is_equal_approx(float(material.get_shader_parameter(
 			"u_darken")), WaterLayerLib.SEA_DARKEN),
 			"the darkening is the pinned ×0.70 (b674492)")
+		# §4.7.17 r5: the crest accent params (FOAM tint + partial mix).
+		var crest_color: Vector3 = material.get_shader_parameter(
+			"u_crest_color")
+		_check(crest_color.x > 0.85 and crest_color.y > 0.90
+			and crest_color.z > 0.90,
+			"the crest tint is the FOAM family (%s)" % str(crest_color))
+		_check(is_equal_approx(float(material.get_shader_parameter(
+			"u_crest_mix")), WaterLayerLib.CREST_MIX),
+			("the crest mix is the pinned CREST_MIX %.2f (§4.7.17 r5 band "
+				+ "0.6–0.75)") % WaterLayerLib.CREST_MIX)
 		# UiMotion is OFF in this suite (direct-boot): frozen at offset 0.
 		_check(is_equal_approx(float(material.get_shader_parameter(
 			"u_motion")), 0.0),
@@ -230,6 +252,251 @@ func _test_water_layer() -> void:
 	_check(WaterLayerLib.SEA_DARKEN == 0.70
 		and WaterLayerLib.SCROLL_PERIOD_MS == 800,
 		"the §4.7.17 pins stay on the shared builder")
+
+
+# --- §4.7.17 r5 sea mask + the MOTION SELF-SIMILARITY fixtures -----------------
+## The r5 acceptance core (2026-11-05). The r1–r4 diagonal-stripe mask was
+## SELF-SIMILAR under translation — a perfect period-4 lattice whose every
+## 8×8 block held exactly 16 field px at every phase — so the 800 ms scroll
+## read as a static hatch no matter the contrast (the user saw no motion in
+## four rounds while the pixel-delta metric passed 46.8%). These fixtures pin
+## the HUMAN-VISIBLE properties instead:
+##   * mask structure — 64×64, two levels, uniform row/column sums (the
+##     builder's torus proxy, §4.8.2), organic dash clusters (max run ≤ 6),
+##     NOT a uniform lattice (8×8 block occupancies vary), coverage 15–25%;
+##   * NO translational period — translate-by-4 normalized correlation < 0.90
+##     in ALL 8 directions (the stripe mask scored 1.0 at (0,±4));
+##   * frame A/B at the REAL scroll (0.4 s = half the pinned period = a
+##     32-texel shift along +x, same camera):
+##       (i)  ≥ 30% of crest px change their local 8×8 block occupancy,
+##       (ii) frame crest maps' Hamming distance ≥ 0.02,
+##       (iii) covered by the 8-direction sweep above.
+## The crest rule mirrored here is the shader's (sea_water.gdshader): a field
+## texel whose 1-texel WEST neighbour is base is a crest texel.
+func _test_sea_mask_and_motion() -> void:
+	var material := WaterLayerLib.build_material()
+	_check(material != null, "the r5 mask group builds the shared material")
+	var mask_tex: Texture2D = material.get_shader_parameter("u_mask") \
+		if material != null else null
+	_check(mask_tex != null, "the mask group reads u_mask")
+	if mask_tex == null:
+		return
+	var m: Image = mask_tex.get_image()
+	_check(m.get_size() == Vector2i(64, 64),
+		"the sea mask is the 64×64 §4.8.8 tile")
+	var field: Array = []
+	for y in 64:
+		var row: Array = []
+		for x in 64:
+			row.append(1 if m.get_pixel(x, y).r >= 0.5 else 0)
+		field.append(row)
+	# structure: two levels, uniform sums (torus proxy), organic runs
+	var colors := {}
+	for y in 64:
+		for x in 64:
+			colors[m.get_pixel(x, y)] = true
+	_check(colors.size() == 2,
+		"the sea mask carries exactly the two mask levels (%d found)" % colors.size())
+	var row_sums := {}
+	var col_sums := {}
+	var total := 0
+	var max_run := 0
+	for y in 64:
+		var rs := 0
+		var run := 0
+		for x in 64:
+			if field[y][x] == 1:
+				rs += 1
+				total += 1
+				run += 1
+				max_run = maxi(max_run, run)
+			else:
+				run = 0
+			col_sums[x] = int(col_sums.get(x, 0)) + field[y][x]
+		row_sums[y] = rs
+	_check(row_sums.values().all(func(v: int) -> bool: return v == 13),
+		"the torus proxy holds: every row carries exactly 13 field px (%s)"
+		% str(row_sums.values()))
+	_check(col_sums.values().all(func(v: int) -> bool: return v == 13),
+		"the torus proxy holds: every column carries exactly 13 field px (%s)"
+		% str(col_sums.values()))
+	var coverage := total / 4096.0
+	_check(coverage >= 0.15 and coverage <= 0.25,
+		"the wave-crest field covers %.1f%% of the mask (r5 band 15–25%%)"
+		% (coverage * 100.0))
+	_check(max_run <= 6,
+		("the field is organic dash clusters — longest run %d px (≤ 6; the " + "retired stripes were unbroken 64 px hatch lines)") % max_run)
+	# NOT a uniform lattice: 8×8 block occupancies must VARY (the r1–r4
+	# lattice held exactly 16 in every block at every phase — zero local
+	# anchoring, which is why the scroll was invisible)
+	var occupancies := {}
+	for by in range(0, 64, 8):
+		for bx in range(0, 64, 8):
+			var s := 0
+			for dy in 8:
+				for dx in 8:
+					s += field[by + dy][bx + dx]
+			occupancies[s] = true
+	_check(occupancies.size() >= 4,
+		("8×8 block occupancies vary across the mask (%d distinct; the retired " + "lattice had exactly one — 16 everywhere)") % occupancies.size())
+	# (iii) NO translational period: translate-by-4 in all 8 directions
+	var dirs := [Vector2i(4, 0), Vector2i(-4, 0), Vector2i(0, 4),
+		Vector2i(0, -4), Vector2i(4, 4), Vector2i(4, -4),
+		Vector2i(-4, 4), Vector2i(-4, -4)]
+	var max_corr := 0.0
+	for d: Vector2i in dirs:
+		var inter := 0
+		for y in 64:
+			for x in 64:
+				if field[y][x] == 1 \
+						and field[(y + d.y + 64) % 64][(x + d.x + 64) % 64] == 1:
+					inter += 1
+		max_corr = maxf(max_corr, inter / float(total))
+	_check(max_corr < 0.90,
+		("translate-by-4 max normalized correlation %.3f < 0.90 in all 8 " + "directions (the stripe mask scored 1.000 at (0,±4))") % max_corr)
+	# --- frame A/B at the real scroll: 0.4 s = half of the pinned 800 ms
+	# period = a 32-texel shift along +x (§4.7.17), same camera.
+	var shift := Vector2i(32, 0)
+	var field_b: Array = []
+	for y in 64:
+		var row: Array = []
+		for x in 64:
+			row.append(field[(y - shift.y + 64) % 64][(x - shift.x + 64) % 64])
+		field_b.append(row)
+	# the shader's crest rule, mirrored: field px with base water 1 OR 2
+	# texels west (the 2px-thick leading edge — survives the zoom-out's
+	# 2:1 halving at every sample phase)
+	var crest_a: Array = []
+	var crest_b: Array = []
+	var crest_count := 0
+	for y in 64:
+		var ra: Array = []
+		var rb: Array = []
+		for x in 64:
+			var w1a: int = field[y][(x - 1 + 64) % 64]
+			var w2a: int = field[y][(x - 2 + 64) % 64]
+			var w1b: int = field_b[y][(x - 1 + 64) % 64]
+			var w2b: int = field_b[y][(x - 2 + 64) % 64]
+			ra.append(field[y][x]
+				if (w1a == 0 or (w1a == 1 and w2a == 0)) else 0)
+			rb.append(field_b[y][x]
+				if (w1b == 0 or (w1b == 1 and w2b == 0)) else 0)
+			crest_count += ra[x]
+		crest_a.append(ra)
+		crest_b.append(rb)
+	_check(crest_count >= 100,
+		"the crest level is populated (%d crest px in frame A; density %.1f%%)"
+		% [crest_count, 100.0 * crest_count / 4096.0])
+	# (i) crest-pixel displacement: ≥ 30% change their 8×8 block occupancy
+	var changed := 0
+	var same := 0
+	for y in 64:
+		for x in 64:
+			if crest_a[y][x] != 1:
+				continue
+			var occ_a := _block_occupancy(crest_a, x, y)
+			var occ_b := _block_occupancy(crest_b, x, y)
+			if occ_a != occ_b:
+				changed += 1
+			else:
+				same += 1
+	var displacement := changed / float(changed + same)
+	_check(displacement >= 0.30,
+		("MOTION (i): %.0f%% of crest px change 8×8 block occupancy between " + "frames (≥ 30%%; the retired lattice scored 0%%)") % (displacement * 100.0))
+	# (ii) frame crest maps Hamming distance
+	var hamming := 0
+	for y in 64:
+		for x in 64:
+			if crest_a[y][x] != crest_b[y][x]:
+				hamming += 1
+	_check(hamming / 4096.0 >= 0.02,
+		"MOTION (ii): frame crest maps Hamming %.3f ≥ 0.02 (%d px differ)"
+		% [hamming / 4096.0, hamming])
+	# --- WIDE-ZOOM (b804d25): the pattern must survive the §4.8 zoom-out's
+	# 2:1 nearest halving. The retired stripes were 1px lines that die at the
+	# wrong sample parity (measured amplitude 6.5 → 0.1, colors 260 → 2).
+	# r5 constraints, pinned here against the SHIPPED mask:
+	#   * every field run is 2–5 px (no 1px-only crests);
+	#   * crest px exist on BOTH row parities of every 16×16 texel region —
+	#     at any camera phase, some crest survives in every region;
+	#   * the crest map at 0.5 keeps ≥ 20% of its 1:1 count at BOTH row
+	#     phases (the geometric ceiling for a halving-proof pattern is 25%:
+	#     each axis keeps 1 of 2 px of any feature that never dies — the
+	#     r1–r4 stripes scored 0%);
+	#   * halved crest density ≥ 2% (absolute visibility floor at wide zoom).
+	var min_run := 64
+	for y2 in 64:
+		var segs: Array = []
+		var x2 := 0
+		while x2 < 64:
+			if field[y2][x2] == 1:
+				var rl := 0
+				var x0 := x2
+				while x2 < 64 and field[y2][x2] == 1:
+					rl += 1
+					x2 += 1
+				segs.append([x0, rl])
+			else:
+				x2 += 1
+		# torus merge: a run crossing the seam is one run
+		if segs.size() > 1 and segs[0][0] == 0 \
+				and segs[-1][0] + segs[-1][1] == 64:
+			var last: Array = segs.pop_back()
+			segs[0][1] += last[1]
+		for seg: Array in segs:
+			min_run = mini(min_run, seg[1])
+	_check(min_run >= 2,
+		("WIDE-ZOOM: no 1px field runs (shortest run %d px — 1px crests die "
+			+ "at the wrong halving parity)") % min_run)
+	var region_fails := 0
+	for col_phase in 2:
+		for row_phase in 2:
+			for by in range(0, 64, 16):
+				for bx in range(0, 64, 16):
+					var cnt := 0
+					for y in range(row_phase, 64, 2):
+						if y < by or y >= by + 16:
+							continue
+						for x in range(col_phase, 64, 2):
+							if x >= bx and x < bx + 16:
+								cnt += crest_a[y][x]
+					if cnt < 1:
+						region_fails += 1
+	_check(region_fails == 0,
+		"WIDE-ZOOM: every 16×16 texel region keeps crest px at ALL 4 halving "
+		+ "phases (%d empty region-phases)" % region_fails)
+	var total_crest := 0
+	var min_surv := 1.0
+	for row_phase in 2:
+		var half := 0
+		for y in range(row_phase, 64, 2):
+			for x in range(0, 64, 2):
+				half += crest_a[y][x]
+		min_surv = minf(min_surv, half / float(crest_count))
+		total_crest = half
+	_check(min_surv >= 0.20,
+		"WIDE-ZOOM: the crest map at 0.5 keeps %.0f%% of its 1:1 count at "
+		+ "BOTH row phases (≥ 20%%; ceiling 25%% — each axis keeps 1 of 2 px "
+		+ "of any feature that never dies; the retired stripes scored 0%%)"
+		% (min_surv * 100.0))
+	_check(total_crest / 4096.0 >= 0.02,
+		"WIDE-ZOOM: halved crest density %.1f%% ≥ 2%% (absolute visibility "
+		+ "floor at the wide zoom)" % (100.0 * total_crest / 4096.0))
+	print(("NOTE  r5 motion evidence: field coverage %.1f%%, crest density "
+		+ "%.1f%%, translate-by-4 corr max %.3f, A/B crest hamming %.3f, "
+		+ "A/B block displacement %.1f%%, halved crest survival %.1f%%")
+		% [coverage * 100.0, 100.0 * crest_count / 4096.0, max_corr,
+		hamming / 4096.0, displacement * 100.0, min_surv * 100.0])
+
+
+## The crest px count in the 8×8 block centred on (x, y) (torus wrap) — the
+## "local occupancy" the motion fixture (i) compares across frames.
+func _block_occupancy(map: Array, x: int, y: int) -> int:
+	var s := 0
+	for dy in range(-4, 4):
+		for dx in range(-4, 4):
+			s += map[(y + dy + 64) % 64][(x + dx + 64) % 64]
+	return s
 
 
 # --- §4.8.6 heading8 → dir table ----------------------------------------------
@@ -652,15 +919,23 @@ func _test_populated_registry() -> void:
 		% foam_source.get_tiles_count())
 	var foam_atlas := foam_source.texture.get_image()
 	# cell for the E-edge mask (2) on the coastal fill = column 2+2*2+1 = 7:
-	# center stays the coastal fill (foam hugs the edges), the RIGHT edge
-	# midpoint carries foam, the west midpoint stays fill.
+	# center stays the coastal fill (foam hugs the edges), the right edge's
+	# band carries the r5 wash + speckles (on the COASTAL kind the wash IS
+	# the fill, so the edge is pinned by its FOAM speckles), the west
+	# midpoint stays fill.
 	var e_cell := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 	e_cell.blit_rect(foam_atlas, Rect2i(7 * 32, 0, 32, 32), Vector2i.ZERO)
 	_check(e_cell.get_pixel(16, 16).is_equal_approx(PaletteLib.COAST_SEA),
 		"populated registry: the coast-foam `e` cell keeps the coastal fill at center (%s)"
 		% e_cell.get_pixel(16, 16))
-	_check(not e_cell.get_pixel(30, 16).is_equal_approx(PaletteLib.COAST_SEA),
-		"populated registry: the coast-foam `e` cell carries foam on its east edge")
+	var e_speckles := 0
+	for py in 32:
+		for pxx in range(26, 32):
+			if e_cell.get_pixel(pxx, py).is_equal_approx(PaletteLib.FOAM):
+				e_speckles += 1
+	_check(e_speckles > 0,
+		("populated registry: the coast-foam `e` cell carries speckles on "
+			+ "its east edge band (%d FOAM px)") % e_speckles)
 	_check(e_cell.get_pixel(1, 16).is_equal_approx(PaletteLib.COAST_SEA),
 		"populated registry: the coast-foam `e` cell leaves the west edge clear")
 	_check(WaterLayerLib.water_coords(2, 1) == Vector2i(7, 0),
@@ -729,6 +1004,60 @@ func _test_populated_registry() -> void:
 			_check(not outside,
 				"64-canvas variant mask %d (kind %d): all foam pixels sit in the masked edge bands"
 				% [mask, kind_index])
+			# (r5 DEFECT C hard gate) OPEN edges are foam-free across their
+			# FULL length INCLUDING both corner cells — the r4 assertion only
+			# covered the core band, and the corner stubs visually closed
+			# 1-cell waterways into a 4th white line. Foam px are the
+			# FOAM-colored speckles/dust; the COAST_SEA shallow wash is the
+			# r5 continuous coast element and deliberately keeps running.
+			for edge in 4:
+				if (mask & (1 << edge)) != 0:
+					continue
+				var bands := [Rect2i(0, 0, 64, 12),
+					Rect2i(52, 0, 12, 64),
+					Rect2i(0, 52, 64, 12),
+					Rect2i(0, 0, 12, 64)]
+				var r: Rect2i = bands[edge]
+				var stray := 0
+				for py in range(r.position.y, r.end.y):
+					for pxx in range(r.position.x, r.end.x):
+						if atlas64.get_pixel(col * 64 + pxx, py) \
+								.is_equal_approx(PaletteLib.FOAM):
+							stray += 1
+				_check(stray == 0,
+					"64-canvas variant mask %d (kind %d): the OPEN %s edge is " + "foam-free across its full length incl. corners (%d stray)"
+					% [mask, kind_index,
+					["north", "east", "south", "west"][edge], stray])
+			# (r5 DEFECT C, the reported case) mask 11 = land N/E/S, open W:
+			# the westmost 8 px column must carry zero foam px — the channel
+			# (r5 DEFECT C, the reported case) land N/E/S with an open west
+			# edge is mask 7 in the §6.6 bit order (N=1, E=2, S=4, W=8; the
+			# r5 brief's "mask 11" label predates the bit map — mask 11 is
+			# N/E/W, open S, gated below as well): the westmost 8 px column
+			# must carry zero foam px — the channel mouth stays visibly OPEN.
+			if mask == 7:
+				var stray_w := 0
+				for py in 64:
+					for pxx in 8:
+						if atlas64.get_pixel(col * 64 + pxx, py) \
+								.is_equal_approx(PaletteLib.FOAM):
+							stray_w += 1
+				_check(stray_w == 0,
+					("64-canvas variant mask 7 (kind %d) — land N/E/S, open W "
+						+ "(the reported 1-cell waterway): the westmost 8 px "
+						+ "column carries zero foam px (%d stray — the white "
+						+ "ring the user reported)") % [kind_index, stray_w])
+			if mask == 11:
+				var stray_s := 0
+				for py in range(56, 64):
+					for pxx in 64:
+						if atlas64.get_pixel(col * 64 + pxx, py) \
+								.is_equal_approx(PaletteLib.FOAM):
+							stray_s += 1
+				_check(stray_s == 0,
+					("64-canvas variant mask 11 (kind %d) — land N/E/W, open "
+						+ "S: the southmost 8 px row carries zero foam px "
+						+ "(%d stray)") % [kind_index, stray_s])
 			# the interior stays the cell's own fill (foam hugs edges only)
 			_check(atlas64.get_pixel(col * 64 + 32, 32)
 				.is_equal_approx(fill),
@@ -753,6 +1082,170 @@ func _test_populated_registry() -> void:
 					break
 		_check(marks,
 			"populated registry: the port marker texture decodes non-empty through the RGBA8 guard")
+
+
+# --- r5 coast foam language: continuity walk + strip structure ------------------
+## The r5 foam language (59d6ec1, 2026-11-05) replaced the uniform white
+## outline line (failed user acceptance x3) with a COAST_SEA shallow wash +
+## hand-authored FOAM speckle clusters. Pinned here:
+##   * the wash is the CONTINUOUS element: every orthogonal strip keeps a
+##     solid COAST_SEA core hugging the land edge, 12 px deep (64 canvas,
+##     the shared §4.8 thickness), running the strip's FULL length;
+##   * speckles are clusters, not a line: FOAM < 50% of each strip's opaque
+##     px, and the retired line scored ~100% of its band;
+##   * SYNTHETIC COASTLINE WALK (staircase / pocket / 1-cell channel): every
+##     land-adjacent water tile's masked-edge band carries speckle coverage
+##     in the SHIPPED atlas (no consecutive uncovered tiles — the coast path
+##     never goes dark), the channel mouth stays open (mask 11/5 west ends
+##     foam-free), and water tiles off the coast stamp no foam at all.
+func _test_shore_continuity() -> void:
+	TextureRegistryLib.ensure_registered()
+	# --- strip structure (the wash language, not a line) --------------------
+	var strips := {}
+	for dir_id in ["n", "e", "s", "w"]:
+		var tex := UiKitLib.icon_texture("shore_%s" % dir_id)
+		_check(tex != null, "the r5 shore strip `%s` resolves" % dir_id)
+		if tex == null:
+			return
+		strips[dir_id] = _rgba8(tex.get_image())
+	var depths := {}
+	for dir_id in strips:
+		var img: Image = strips[dir_id]
+		var opaque := 0
+		var foam := 0
+		var wash := 0
+		var min_v := 64
+		var max_v := -1
+		for y in 64:
+			for x in 64:
+				var p := img.get_pixel(x, y)
+				if p.a <= 0.0:
+					continue
+				opaque += 1
+				var depth := y if dir_id == "n" else (
+					63 - y if dir_id == "s" else (63 - x if dir_id == "e" else x))
+				min_v = mini(min_v, depth)
+				max_v = maxi(max_v, depth)
+				if p.is_equal_approx(PaletteLib.FOAM):
+					foam += 1
+				elif p.is_equal_approx(PaletteLib.COAST_SEA):
+					wash += 1
+		depths[dir_id] = max_v - min_v + 1
+		_check(opaque > 0, "the `%s` strip carries art" % dir_id)
+		_check(depths[dir_id] == 12,
+			"the `%s` wash band is the shared 12 px depth (got %d)"
+			% [dir_id, depths[dir_id]])
+		_check(wash > foam and foam / float(opaque) < 0.5,
+			"the `%s` strip reads wash + speckles, not a line (%d wash px vs " + "%d foam px — the retired line was foam-dominant)"
+			% [dir_id, wash, foam])
+	_check(depths.values().all(func(v: int) -> bool: return v == 12),
+		"all four orthogonal strips share the 12 px band depth (§4.8)")
+	# the wash CORE hugs the land edge: the depth 4..9 slice is wash-dominant
+	# (solid shallow water, speckles only accented on top)
+	for dir_id in strips:
+		var img: Image = strips[dir_id]
+		var slice_opaque := 0
+		var slice_wash := 0
+		for y in 64:
+			for x in 64:
+				if x < 8 or x >= 56:
+					continue
+				var p := img.get_pixel(x, y)
+				if p.a <= 0.0:
+					continue
+				var depth := y if dir_id == "n" else (
+					63 - y if dir_id == "s" else (63 - x if dir_id == "e" else x))
+				if depth < 4 or depth >= 10:
+					continue
+				slice_opaque += 1
+				if p.is_equal_approx(PaletteLib.COAST_SEA):
+					slice_wash += 1
+		_check(slice_opaque > 0
+			and slice_wash / float(slice_opaque) >= 0.6,
+			("the `%s` wash core hugs the land edge (COAST_SEA %d/%d px in the " + "depth 4..9 slice)") % [dir_id, slice_wash, slice_opaque])
+	# --- the synthetic coastline walk ---------------------------------------
+	var atlas64 := WaterLayerLib.build_tile_set(64, MapLoaderLib.SHORE_DIRS)
+	var src64 := (atlas64.get_source(atlas64.get_source_id(0))
+		as TileSetAtlasSource)
+	var coast := src64.texture.get_image()
+	# cell pixel probe: FOAM px count of one edge band of a variant cell.
+	# The band is the 12 px stub zone (STUB_ZONE_PX) — exactly the strip
+	# art's territory; a wider sweep would count the NEIGHBOURING masked
+	# edge's legitimate clusters as mouth foam.
+	var band_foam := func(mask: int, edge: int) -> int:
+		var kind_col := 0  # the sea kind (kind_index 0)
+		var column := 2 + mask * 2 + kind_col
+		var bands := [Rect2i(0, 0, 64, 12), Rect2i(52, 0, 12, 64),
+			Rect2i(0, 52, 64, 12), Rect2i(0, 0, 12, 64)]
+		var r: Rect2i = bands[edge]
+		var count := 0
+		for py in range(r.position.y, r.end.y):
+			for pxx in range(r.position.x, r.end.x):
+				if coast.get_pixel(column * 64 + pxx, py) \
+						.is_equal_approx(PaletteLib.FOAM):
+					count += 1
+		return count
+	# staircase: land tiles step down eastward; the water tiles along the
+	# path must each carry speckles on EVERY masked edge (no dark tiles).
+	var fixture = MapLoaderLib.new()
+	fixture.width = 8
+	fixture.height = 6
+	fixture.legend_tiles = {
+		"~": {"kind": "sea"}, ".": {"kind": "coastal_sea"},
+		"#": {"kind": "land"}, "^": {"kind": "reef"},
+		"I": {"kind": "polar_ice"},
+	}
+	var stairs := [Vector2i(2, 1), Vector2i(3, 1), Vector2i(3, 2),
+		Vector2i(4, 2), Vector2i(4, 3), Vector2i(5, 3)]
+	var indices := PackedByteArray()
+	indices.resize(8 * 6)
+	for y in 6:
+		for x in 8:
+			indices[y * 8 + x] = 2 if Vector2i(x, y) in stairs else 0
+	fixture.indices = indices
+	var walk := [Vector2i(2, 2), Vector2i(3, 3), Vector2i(4, 4), Vector2i(5, 4),
+		Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 1)]  # S/N/W-adjacent path
+	var covered := 0
+	for cell: Vector2i in walk:
+		var mask := fixture._shore_foam_mask(cell)
+		_check(mask != 0,
+			"staircase walk: the land-adjacent tile %s resolves its foam mask"
+			% str(cell))
+		if mask == 0:
+			continue
+		var all_edges_lit := true
+		for edge in 4:
+			if (mask & (1 << edge)) == 0:
+				continue
+			if band_foam.call(mask, edge) == 0:
+				all_edges_lit = false
+		if all_edges_lit:
+			covered += 1
+	_check(covered == walk.size(),
+		"continuity: every walked coast tile carries speckles on each masked " + "edge (%d/%d — no consecutive uncovered tiles, no floating segments)"
+		% [covered, walk.size()])
+	# off-coast water stamps NO foam: a tile with land 2 cells away resolves
+	# mask 0 and the plain fill column.
+	_check(fixture._shore_foam_mask(Vector2i(2, 4)) == 0,
+		"off-coast water resolves mask 0 (foam never floats off the coast)")
+	# pocket + 1-cell-channel variants, probed straight on the shipped atlas
+	# (the per-bit group gates all 16 exhaustively; these pin the reported
+	# user cases by edge — §6.6 bits: N=1, E=2, S=4, W=8): mask 7 = land
+	# N/E/S, open W — the open west mouth stays foam-free, the three land
+	# edges keep speckles (the brief's "mask 11" label = land N/E/W, open
+	# S — asserted too). Mask 5 = land N+S (a 1-cell channel), open ends
+	# E/W — both mouths foam-free, both banks speckled.
+	_check(band_foam.call(7, 3) == 0,
+		"the mask-7 pocket (land N/E/S) keeps its open WEST mouth foam-free")
+	_check(band_foam.call(7, 0) > 0 and band_foam.call(7, 1) > 0
+		and band_foam.call(7, 2) > 0,
+		"the mask-7 pocket keeps speckles on all three land edges")
+	_check(band_foam.call(11, 2) == 0,
+		"the mask-11 pocket (land N/E/W) keeps its open SOUTH mouth foam-free")
+	_check(band_foam.call(5, 1) == 0 and band_foam.call(5, 3) == 0,
+		"the mask-5 channel (land N+S) keeps BOTH mouths foam-free")
+	_check(band_foam.call(5, 0) > 0 and band_foam.call(5, 2) > 0,
+		"the mask-5 channel carries speckles on both banks")
 
 
 # --- Shore strip mapping + the animated-sea material (populated registry) -------
@@ -803,19 +1296,46 @@ func _test_shore_strips_and_material() -> void:
 				"coast-foam mapping: water_coords(mask %d, kind %d) = column %d"
 				% [mask, kind_index, column])
 			# the cell's own kind fill — foam midpoints differ from it,
-			# unset-edge midpoints equal it (the fill is opaque everywhere)
+			# unset-edge midpoints equal it (the fill is opaque everywhere).
+			# r5 foam language: the masked edge carries the COAST_SEA wash
+			# + FOAM speckles. On the SEA kind the wash differs from the
+			# fill, so the midpoint read holds for both tones; on the
+			# COASTAL kind the wash IS the fill, so the masked edge is
+			# pinned by its speckle coverage instead (FOAM px in the edge's
+			# half band).
 			var fill := PaletteLib.COAST_SEA if kind_index == 1 \
 				else PaletteLib.SEA
 			for edge in ["t", "b", "l", "r"]:
 				var pos: Vector2i = midpoints[edge]
 				var pixel := atlas.get_pixel(column * 32 + pos.x, pos.y)
-				var is_foam := not pixel.is_equal_approx(fill)
 				var should := ((1 << ["t", "r", "b", "l"].find(edge))
 					& mask) != 0
-				_check(is_foam == should,
-					"coast-foam cell mask %d (kind %d, column %d): edge `%s` %s" % [
-						mask, kind_index, column, edge,
-						"carries the foam" if should else "is the fill"])
+				if kind_index == 0:
+					var is_foam := not pixel.is_equal_approx(fill)
+					_check(is_foam == should,
+						"coast-foam cell mask %d (kind %d, column %d): edge `%s` %s" % [
+							mask, kind_index, column, edge,
+							"carries the foam" if should else "is the fill"])
+				else:
+					# the edge's 6 px band (32 scale — the stub zone)
+					var half := Rect2i(0, 0, 32, 6) if edge == "t" \
+						else (Rect2i(0, 26, 32, 6) if edge == "b" \
+						else (Rect2i(26, 0, 6, 32) if edge == "r" \
+						else Rect2i(0, 0, 6, 32)))
+					var marks := 0
+					for py in range(half.position.y, half.end.y):
+						for pxx in range(half.position.x, half.end.x):
+							if atlas.get_pixel(column * 32 + pxx, py) \
+									.is_equal_approx(PaletteLib.FOAM):
+								marks += 1
+					if should:
+						_check(marks > 0,
+							("coast-foam cell mask %d (kind %d, column %d): edge `%s` " + "carries speckle clusters (%d FOAM px)") % [
+								mask, kind_index, column, edge, marks])
+					else:
+						_check(marks == 0 and pixel.is_equal_approx(fill),
+							("coast-foam cell mask %d (kind %d, column %d): edge `%s` " + "is the fill, speckles respect the mask") % [
+								mask, kind_index, column, edge])
 	# (1c) The foam-mask fixture: a synthetic legend decode, land at chosen
 	# cells, every rule of `_shore_foam_mask` pinned directly.
 	# Land (index 2 = `#`) at (1,2), (3,1), (5,3) and (3,3) in a 6×4 grid.
@@ -928,6 +1448,8 @@ func _test_shore_strips_and_material() -> void:
 		"the sea shader never re-samples TEXTURE (COLOR already carries the tile pixel — a re-sample rendered the sea at SEA²)")
 	_check(shader_code.contains("COLOR.rgb *= "),
 		"the sea shader applies the two-level shade straight onto COLOR.rgb")
+	_check(shader_code.contains("u_crest_mix"),
+		"the sea shader carries the r5 crest level (mix toward FOAM on the cluster's leading edge)")
 	WaterLayerLib._material_attempted = false
 	WaterLayerLib._material_cache = null
 	UiMotionLib.enabled = false

@@ -42,11 +42,28 @@ const MASK_PATH := "res://assets/ui/terrain/sea_pattern.png"
 ## the two-level tones must read as clearly different water).
 const SCROLL_PERIOD_MS := 800
 const SEA_DARKEN := 0.70
+## §4.7.17 r5 (2026-11-05) crest accent: the partial mix toward FOAM (the r5
+## band is 0.6–0.75; 0.70 pinned here and mirrored in sea_water.gdshader's
+## u_crest_mix default — the two sites must not drift). The crest color is
+## PaletteLib.FOAM (terrain block) — passed to the shader as a param.
+const CREST_MIX := 0.70
 ## §4.8.8: the mask is a 64×64 tile (the texture's own size — unchanged).
 ## The shader param is the mask's WORLD-space tile: 128 px since the §4.8
 ## 64-canvas amendment (1664ba9) — at the 64 px world tile the dither keeps
 ## its ~2-tile world period (each 64-texel mask texel now spans 2 world px).
 const MASK_SIZE_PX := 128.0
+
+## DEFECT C fix (r5, 2026-11-05): a strip's CORNER STUB — its content within
+## this many 64-canvas px of a PERPENDICULAR tile edge — joins the composed
+## variant only when that perpendicular edge is ALSO masked. The value is the
+## shared foam band depth (§4.8: "the foam thickness shared with the corner
+## tiles"): the stub zone is exactly the territory the perpendicular strip's
+## own band would occupy, so an open edge shows no foam there and the variant
+## reads genuinely open (the 1-cell waterway report: stubs used to close it
+## into a 4th white line). FOAM-only trim: the COAST_SEA shallow wash keeps
+## running the full edge (it IS the continuous coast read — r5 foam
+## language, 59d6ec1); the white speckles/dust respect the mask.
+const STUB_ZONE_PX := 12
 
 ## Atlas column of each water kind in the built TileSet (the §6.3 index
 ## order: 0 = `~` sea, 1 = `.` coastal sea). Coast-foam variant cells follow
@@ -156,6 +173,16 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 	for strip in strips:
 		if strip == null:
 			all_resolved = false
+	# DEFECT C fix (r5): per-bit pruned strips. `stub_variants[strip_i]` holds
+	# the 4 prune states of that strip: bit 0 = keep the strip's first end
+	# stub (its "west"/"north" perpendicular end), bit 1 = keep the second
+	# ("east"/"south"). Pruning clears FOAM px in the end zone unless the
+	# variant masks BOTH the strip's own edge and that perpendicular edge.
+	var stub_variants: Array = []
+	if all_resolved:
+		for bit in 4:
+			var strip_img: Image = strips[bit_strip[bit]]
+			stub_variants.append(_stub_variants(strip_img, tile_px, bit))
 	var tile_set := TileSet.new()
 	tile_set.tile_size = Vector2i(tile_px, tile_px)
 	if all_resolved:
@@ -170,7 +197,8 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 				var cell := _kind_image(str(kinds[kind_index]), tile_px)
 				for bit in 4:
 					if (mask & (1 << bit)) != 0:
-						cell.blend_rect(strips[bit_strip[bit]],
+						cell.blend_rect(
+							stub_variants[bit][_stub_state(mask, bit)],
 							Rect2i(0, 0, tile_px, tile_px), Vector2i.ZERO)
 				image.blit_rect(cell, Rect2i(0, 0, tile_px, tile_px),
 					Vector2i(column * tile_px, 0))
@@ -196,6 +224,59 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 			source.create_tile(Vector2i(int(KIND_COLUMNS[kind]), 0))
 		tile_set.add_source(source)
 	return tile_set
+
+
+## The stub prune state of strip `bit` in variant `mask` (DEFECT C rule):
+## bit 0 set = keep the strip's FIRST perpendicular end stub, bit 1 = keep
+## the SECOND. First/second per strip: n,s → west/east; e,w → north/south.
+## A stub is kept only when its perpendicular edge is also in the mask.
+static func _stub_state(mask: int, bit: int) -> int:
+	var keep_first := 0
+	var keep_second := 0
+	match bit:
+		0, 2:  # n / s strips: end stubs reach the W and E edges
+			keep_first = 1 if (mask & 8) != 0 else 0   # west edge (bit 3)
+			keep_second = 2 if (mask & 2) != 0 else 0  # east edge (bit 1)
+		1, 3:  # e / w strips: end stubs reach the N and S edges
+			keep_first = 1 if (mask & 1) != 0 else 0   # north edge (bit 0)
+			keep_second = 2 if (mask & 4) != 0 else 0  # south edge (bit 2)
+	return keep_first | keep_second
+
+
+## The 4 pruned copies of one strip image, indexed by `_stub_state`, for the
+## strip of edge bit `bit` (0=n, 1=e, 2=s, 3=w). State 3 is the strip
+## unchanged. Pruning clears FOAM pixels (the white speckles + dust — NOT
+## the COAST_SEA shallow wash, which stays continuous per the r5 foam
+## language) inside the strip's two perpendicular END zones when the
+## adjacent orthogonal edge is unmasked: n/s strips end at W/E (x zones),
+## e/w strips end at N/S (y zones). `tile_px` scales the §4.8 12 px stub
+## zone (`STUB_ZONE_PX` is pinned on the 64 canvas).
+static func _stub_variants(strip_img: Image, tile_px: int, bit: int) -> Array:
+	var zone := int(tile_px * STUB_ZONE_PX / 64.0)
+	var foam := PaletteLib.FOAM
+	var variants: Array = []
+	for state in 4:
+		if state == 3:
+			variants.append(strip_img)
+			continue
+		var img := Image.new()
+		img.copy_from(strip_img)
+		var ends: Array = []
+		var first := Rect2i(0, 0, zone, tile_px) if bit in [0, 2] \
+			else Rect2i(0, 0, tile_px, zone)
+		var second := Rect2i(tile_px - zone, 0, zone, tile_px) if bit in [0, 2] \
+			else Rect2i(0, tile_px - zone, tile_px, zone)
+		if (state & 1) == 0:
+			ends.append(first)
+		if (state & 2) == 0:
+			ends.append(second)
+		for rect: Rect2i in ends:
+			for y in range(rect.position.y, rect.end.y):
+				for x in range(rect.position.x, rect.end.x):
+					if img.get_pixel(x, y).is_equal_approx(foam):
+						img.set_pixel(x, y, Color(0, 0, 0, 0))
+		variants.append(img)
+	return variants
 
 
 ## The atlas coords a water tile stamps: its kind's plain fill column, or the
@@ -238,6 +319,10 @@ static func build_material() -> ShaderMaterial:
 	material.set_shader_parameter("u_period", SCROLL_PERIOD_MS / 1000.0)
 	material.set_shader_parameter("u_darken", SEA_DARKEN)
 	material.set_shader_parameter("u_mask_px", MASK_SIZE_PX)
+	# §4.7.17 r5 crest accent: FOAM tint + the pinned partial mix.
+	material.set_shader_parameter("u_crest_color",
+		Vector3(PaletteLib.FOAM.r, PaletteLib.FOAM.g, PaletteLib.FOAM.b))
+	material.set_shader_parameter("u_crest_mix", CREST_MIX)
 	# The §4.7.17 gate: off ⇒ frozen at scroll offset 0.
 	if UiMotionLib.enabled:
 		UiMotionLib.run_shader(material)

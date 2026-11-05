@@ -3,11 +3,50 @@
   "class": "terrain",
   "kind": "shore",
   "file": "assets/ui/terrain/shore_nw.png",
-  "derive": {
-    "base": "shore_ne",
-    "op": "mirror_x"
-  },
+  "mode": "string-map",
+  "png": "indexed",
   "width": 32,
   "height": 32,
-  "derive_note": "derived, not authored — the governor (build_ui_art.py) applies the lossless transform of the base's pixels (same op table as the hull scheme); group 13 item 5 re-checks each relation pixel-exactly"
+  "palette": {
+    "F": "#dff0f4",
+    "S": "#2f6f9e"
+  },
+  "rows": [
+    "SSSSSSSSSSFSSFFFSSSSSSSFFFSSFFSS",
+    "SSSSSSSSSSSSSSSSSFFSSSFSSSSFSSFF",
+    "SSSSSSSFSSSSFFSSSSSSSSSSSSSSSSSS",
+    "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+    "SSSS.F.SS...SSS...SS...SSS...SS.",
+    "SFSS.F......F.......F.......F...",
+    "SSSS............................",
+    "SSSSS...........................",
+    "SSSS............................",
+    "FFSS............................",
+    "SSSS.F..........................",
+    "SSSS............................",
+    "SSSS............................",
+    "SSSSS...........................",
+    "SSFS............................",
+    "SSSS............................",
+    "SSSS.F..........................",
+    "SSSS............................",
+    "SSSS............................",
+    "SSSSS...........................",
+    "SFSS............................",
+    "FFSS............................",
+    "SSSS.F..........................",
+    "SSSS............................",
+    "SSSS............................",
+    "SSSSS...........................",
+    "FSSS............................",
+    "SSSS............................",
+    "SSSS.F..........................",
+    "SSSSS...........................",
+    "SSSS............................",
+    "SSSS............................"
+  ],
+  "band": "r5 coast foam language (59d6ec1, 2026-11-05): wash + speckle clusters along BOTH facing edges, shared 12px (64 canvas) band depth with the orthogonal strips; the corner cell is shared wash (§4.8.2 / §8.8-8). The uniform white outline line is retired.",
+  "authored": [
+    "shore_nw"
+  ]
 }
