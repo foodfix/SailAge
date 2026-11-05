@@ -44,7 +44,8 @@ const META_BODY := "body"
 const META_CELLS := "cells"
 
 ## id → Texture2D, populated by `register_textures` (W3-A builds the sheet
-## and registers its ids); `icon_texture` misses ⇒ null (flat fallback).
+## and registers its ids) and by lazy token loads (90-* §9.2 — one id space,
+## one cache); `icon_texture` misses ⇒ null (flat fallback).
 static var _textures: Dictionary = {}
 
 # Repo convention: class scripts are referenced through preload consts (the
@@ -384,6 +385,14 @@ static func _dismiss_toast(panel: Control, host: Control,
 
 # --- Icon registry ----------------------------------------------------------
 
+## The miss resolver (90-* §9.2, token data-artifact family): consulted when
+## `icon_texture` misses the map, so `assets/ui/tokens/` ids load LAZILY —
+## raw file bytes + `Image.load_png_from_buffer`, no `.import` sidecar and
+## no import refresh for a token update. Installed once by
+## `TextureRegistry.ensure_registered` (production never sets it elsewhere).
+static var _token_loader: Callable = Callable()
+
+
 ## Register id → Texture2D pairs (W3-A populates the sheet's ids).
 ## Re-registering an id overwrites it.
 static func register_textures(map: Dictionary) -> void:
@@ -391,10 +400,26 @@ static func register_textures(map: Dictionary) -> void:
 		_textures[id] = map[id]
 
 
-## Resolve an icon id (§4.9 icon params). Absent ⇒ null — the flat
-## fallback; callers must handle null (no crash, no placeholder texture).
+## Install the miss resolver (see `_token_loader`). Passing an invalid
+## Callable disables lazy resolution again (the suite's restore path).
+static func register_token_loader(loader: Callable) -> void:
+	_token_loader = loader
+
+
+## Resolve an icon id (§4.9 icon params). A map hit returns the cached
+## texture; a miss consults the token loader — a resolved token JOINS the
+## one id cache (same id space, second call returns the same texture), a
+## null stays null. Absent ⇒ null — the flat fallback; callers must handle
+## null (no crash, no placeholder texture).
 static func icon_texture(id: String) -> Texture2D:
-	return _textures.get(id, null) as Texture2D
+	if _textures.has(id):
+		return _textures.get(id) as Texture2D
+	if _token_loader.is_valid():
+		var tex := _token_loader.call(id) as Texture2D
+		if tex != null:
+			_textures[id] = tex
+		return tex
+	return null
 
 
 ## Clear the registry (W3-A re-seeds wholesale; tests use it to restore).

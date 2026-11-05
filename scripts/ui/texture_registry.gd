@@ -16,7 +16,16 @@ extends RefCounted
 ## silently, and a `load()` that returns null is skipped silently — the
 ## registry simply carries fewer ids. The `.import` sidecars are committed
 ## (the W3 master `--import` pass), so the textures import as
-## CompressedTexture2D everywhere the repo is checked out.
+## CompressedTexture2D everywhere the repo is checked out — EXCEPT the
+## token family: `assets/ui/tokens/` joined the raw-bytes data-artifact
+## family (2026-11-05, 90-* §9.2 amendment 10acf123 — the `world.png`
+## pattern): the eager pass skips it, and token ids resolve LAZILY through
+## `_load_token_texture` — raw `FileAccess` bytes + `Image.load_png_from_buffer`
+## + `ImageTexture.create_from_image`, no `.import` sidecar needed, so a
+## studio-accepted token reaches the game by file replace + restart (no
+## import refresh). Lazy loads join the ONE id cache (`UiKit._textures`)
+## with the same fallback chain: a missing id resolves null exactly as
+## before (the white-square/flat fallback is the consumers' unchanged rule).
 ##
 ## Idempotent: the static guard makes the second call a no-op. Deterministic:
 ## the dir list is a fixed table, and each dir walk is sorted, so the map is
@@ -41,8 +50,17 @@ const SCAN_DIRS: Array[String] = [
 	"res://assets/ui/overrides",
 ]
 
+## The raw-bytes family's one dir (90-* §9.2): scanned LAZILY, never through
+## the import pipeline. Production points at the committed asset dir; the
+## suite re-points it at a `user://` fixture dir to prove the raw-byte load
+## (and the file-replace→new-art swap) without touching `assets/` — the
+## same seam shape as `PortraitComposer._override_dir`.
+const TOKENS_DIR := "res://assets/ui/tokens"
+static var _token_dir := TOKENS_DIR
+
 static var _registered := false
 ## Ids registered by the last successful pass (the suite/report read seam).
+## Tokens are not in this count — they resolve lazily on first render.
 static var registered_count := 0
 
 
@@ -52,11 +70,34 @@ static func ensure_registered() -> void:
 	if _registered:
 		return
 	_registered = true
+	UiKitLib.register_token_loader(_load_token_texture)
 	var map: Dictionary = {}
 	for dir_path in SCAN_DIRS:
+		if dir_path == TOKENS_DIR:
+			continue  # the raw-bytes family — lazy loads only (§9.2)
 		map.merge(_scan_dir(dir_path), true)
 	UiKitLib.register_textures(map)
 	registered_count = map.size()
+
+
+## One lazy token load (the `UiKit` miss resolver, installed once by
+## [method ensure_registered]): `icon_texture("hull_<ship>_<owner>_<dir>")`
+## lands here when the id misses the map — read `res://assets/ui/tokens/<id>.png`
+## RAW bytes, decode with `Image.load_png_from_buffer`, wrap in an
+## `ImageTexture`. Never `load()`: no `.import` sidecar is consulted or
+## needed, so the decoded pixels are always the file's current bytes (the
+## stale `.godot/imported` cache cannot leak in). Missing or undecodable
+## id ⇒ null — the consumer's fallback chain is unchanged.
+static func _load_token_texture(id: String) -> Texture2D:
+	if id.is_empty():
+		return null
+	var path := "%s/%s.png" % [_token_dir, id]
+	if not FileAccess.file_exists(path):
+		return null
+	var image := Image.new()
+	if image.load_png_from_buffer(FileAccess.get_file_as_bytes(path)) != OK:
+		return null
+	return ImageTexture.create_from_image(image)
 
 
 ## One sorted dir walk → `{stem: Texture2D}`. Missing dir or a null
