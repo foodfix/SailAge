@@ -23,6 +23,7 @@ Usage:
   python3 tools/model_pass.py run ships|terrain|icons [limit]
   python3 tools/model_pass.py job <job_id>          # re-run one job
   python3 tools/model_pass.py sheets [ships|terrain|icons]
+  python3 tools/model_pass.py redraft              # rebuild the 16 hull draft sheets from the author manifests (deterministic, no /edit)
   python3 tools/model_pass.py report
 """
 
@@ -33,6 +34,7 @@ import io
 import json
 import os
 import shutil
+import tempfile
 import sys
 import time
 import uuid
@@ -222,10 +224,12 @@ def nearest(img, factor):
 # ------------------------------------------------------------- draft stage --
 
 
-def build_ship_draft(ship, direction, out_path):
-    # hull asset tokens are 64x64 (icons are 32) -> x8 = 512
-    src = os.path.join(REPO, "assets", "ui", "tokens",
-                       f"hull_{ship}_player_{direction}.png")
+def build_ship_draft(ship, direction, out_path, token_dir=None):
+    # hull asset tokens are 64x64 (icons are 32) -> x8 = 512; the token
+    # source is the DETERMINISTIC generator rebuild (canonical tokens may
+    # carry ingested model art — direction errors must not inherit)
+    src_dir = token_dir or render_deterministic_tokens()
+    src = os.path.join(src_dir, f"hull_{ship}_player_{direction}.png")
     token = token_image(src)
     canvas = Image.new("RGBA", token.size, GREEN_BG)
     canvas.alpha_composite(token)
@@ -453,7 +457,7 @@ def rembg(png_bytes, job_id):
                       timeout=60)
     r.raise_for_status()
     prompt_id = r.json()["prompt_id"]
-    for _ in range(120):
+    for _ in range(300):
         time.sleep(1)
         h = requests.get(f"{COMFY}/history/{prompt_id}", timeout=30).json()
         if prompt_id in h:
@@ -470,7 +474,7 @@ def rembg(png_bytes, job_id):
                 return v.content
             raise RuntimeError(f"rembg history has no output images: "
                                f"{h[prompt_id].get('status')}")
-    raise RuntimeError("rembg timed out after 120 s")
+    raise RuntimeError("rembg timed out after 300 s")
 
 
 def key_green(img, thr=60):
@@ -819,7 +823,10 @@ def hull_prompt(ship, direction, stated_px=None):
 # ------------------------------------------------- direction audit (quant)
 
 def _snap_px(job_id):
-    img = Image.open(os.path.join(SNAPPED, job_id + ".png")).convert("RGBA")
+    p = os.path.join(SNAPPED, job_id + ".png")
+    if not os.path.exists(p):
+        return None, (0, 0)
+    img = Image.open(p).convert("RGBA")
     return img.load(), img.size
 
 
@@ -837,6 +844,11 @@ def classify_for(job_id, expected):
     Ambiguous cells FAIL (the user must never guess).
     """
     px, (w, h) = _snap_px(job_id)
+    if px is None:
+        return {"expected": expected, "observed": "missing(fallback)",
+                "verdict": "FAIL",
+                "why": "token rejected -> deterministic fallback",
+                "confidence": 0}
     pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
     if len(pts) < 24:
         return {"expected": expected, "observed": "ambiguous",
@@ -959,6 +971,8 @@ def cell_iou(job_a, job_b):
     IoU — a duplicate view aligns >= 0.9, distinct views 0.4-0.7."""
     masks = []
     for job in (job_a, job_b):
+        if not os.path.exists(os.path.join(SNAPPED, job + ".png")):
+            return 0.0
         px, (w, h) = _snap_px(job)
         pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
         if not pts:
@@ -975,22 +989,12 @@ def cell_iou(job_a, job_b):
     return inter / max(1, union)
 
 
-def orientation_gate(job_id, expected):
-    """Orientation gate: principal-axis angle of the opaque mass via
-    second-order central moments on a 16x16 coarsened mask (speckle
-    suppression), eccentricity sanity, honest 'unmeasurable' verdicts.
-
-    Coordinate convention: image coords, y DOWN. The angle is the
-    orientation of the dominant mass axis in degrees: 0 = horizontal,
-    +45 = axis from top-left to bottom-right (positive slope),
-    -45 = axis from bottom-left to top-right (negative slope).
-    Expected: w/e ~ 0, n/s ~ +/-90, sw ~ -45 (hull runs bottom-left to
-    top-right), nw ~ +45 (hull runs top-left to bottom-right).
-    Tolerance +/-25 degrees.
-    """
+def _orientation_verdict(pts, w, h, expected):
+    """Pure core of the orientation gate over an opaque-point list.
+    Same math/verdicts as orientation_gate — factored out so the
+    deterministic draft audit (redraft_hull_sheets) can reuse the gate
+    on the draft cells without writing any snapped job artifact."""
     import math
-    px, (w, h) = _snap_px(job_id)
-    pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
     if len(pts) < 0.08 * w * h:
         return {"expected": expected, "measured_angle": None,
                 "verdict": "FAIL", "observed": "unmeasurable",
@@ -1045,6 +1049,29 @@ def orientation_gate(job_id, expected):
     return {"expected": expected, "measured_angle": round(angle, 1),
             "observed": observed, "verdict": "PASS" if ok else "FAIL",
             "confidence": round(min(1.0, 0.4 + ecc), 2), **ev}
+
+
+def orientation_gate(job_id, expected):
+    """Orientation gate: principal-axis angle of the opaque mass via
+    second-order central moments on a 16x16 coarsened mask (speckle
+    suppression), eccentricity sanity, honest 'unmeasurable' verdicts.
+
+    Coordinate convention: image coords, y DOWN. The angle is the
+    orientation of the dominant mass axis in degrees: 0 = horizontal,
+    +45 = axis from top-left to bottom-right (positive slope),
+    -45 = axis from bottom-left to top-right (negative slope).
+    Expected: w/e ~ 0, n/s ~ +/-90, sw ~ -45 (hull runs bottom-left to
+    top-right), nw ~ +45 (hull runs top-left to bottom-right).
+    Tolerance +/-25 degrees.
+    """
+    px, (w, h) = _snap_px(job_id)
+    if px is None:
+        return {"expected": expected, "observed": "missing(fallback)",
+                "verdict": "FAIL",
+                "why": "token rejected -> deterministic fallback",
+                "confidence": 0}
+    pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
+    return _orientation_verdict(pts, w, h, expected)
 
 
 def audit_orientation():
@@ -1447,16 +1474,24 @@ SHEET_CELLS = {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
 SHEET_SIZE = (1792, 1152)
 
 
-def hull_sheet_draft(ship, out_path, draft_scale=6):
+def hull_sheet_draft(ship, out_path, draft_scale=6, token_dir=None):
     """5-cell draft reference: w/n/s/sw/nw tokens at draft_scale x6 (=384,
     75% of the 512 cell) — polish attempts may shrink the drafts (more
-    green margin, the model follows the reference's own whitespace)."""
+    green margin, the model follows the reference's own whitespace).
+
+    token_dir: read the cell tokens from a DETERMINISTIC generator
+    rebuild (build_ui_art.run_hull_pipeline with the ingest ladder
+    disabled) instead of the canonical assets/ui/tokens — canonical
+    tokens may carry ingested model art whose direction errors would
+    inherit circularly through draft -> /edit -> audit (the draft must
+    be the direction ground truth)."""
     ref = Image.new("RGBA", SHEET_SIZE, GREEN_BG)
     draw = ImageDraw.Draw(ref)
     side = 64 * draft_scale
     off = (512 - side) // 2
+    src_dir = token_dir or os.path.join(REPO, "assets", "ui", "tokens")
     for direction, (cx, cy) in SHEET_CELLS.items():
-        tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+        tok = token_image(os.path.join(src_dir,
                                        f"hull_{ship}_player_{direction}.png"))
         ref.alpha_composite(nearest(tok, draft_scale), (cx + off, cy + off))
         draw.rectangle([cx - 2, cy - 2, cx + 513, cy + 513],
@@ -1847,7 +1882,10 @@ def polish_band(ship, max_attempts=3, reason="band polish"):
 def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
                 reason="direction polish", accept="draft"):
     """Single-cell re-roll with hardened per-direction wording (diagonal
-    anchor etc.); each attempt audited; keep the best verdict."""
+    anchor etc.); each attempt audited; keep the best verdict.
+    accept: 'draft' (draft-IoU classifier) | 'orientation' (moment gate)
+    | 'agreement' (deterministic-agreement gate — the direction
+    acceptance)."""
     job_id = f"hull_{ship}_{direction}"
     band = BANDS[TIER[ship]] if direction == "w" else None
     base = canonical_seed(job_id) + 9000
@@ -1865,6 +1903,8 @@ def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
                        BLOCK_HULL, band)
         if accept == "orientation":
             cls = orientation_gate(job_id, direction)
+        elif accept == "agreement":
+            cls = agreement_gate(ship, direction)
         else:
             cls = classify_for(job_id, direction)
         attempts.append({"attempt": n, "seed": seed,
@@ -1879,17 +1919,263 @@ def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
     prog = load_progress()
     rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
     if rec and direction in rec.get("per_dir", {}):
-        slot = "orientation" if accept == "orientation" else "direction"
+        slot = ("orientation" if accept == "orientation"
+                else "direction")
         rec["per_dir"][direction][slot] = {
             k: v for k, v in cls.items() if k != "job"}
         rr = rec.get("reroll") or {"kind": "hull"}
         rr.setdefault("cell_fixes", []).append(
-            {"cell": job_id, "reason": reason, "attempts": attempts,
-             "kept_seed": seed, "kept_attempt": kept_n,
-             "kept_verdict": cls["verdict"]})
+            {"cell": job_id, "accept": accept, "reason": reason,
+             "attempts": attempts, "kept_seed": seed,
+             "kept_attempt": kept_n, "kept_verdict": cls["verdict"]})
         rec["reroll"] = rr
         save_job(f"hull_{ship}", rec)
     return cls
+
+
+# --------------------------------- deterministic agreement gate (root fix)
+
+DET_DIR = os.path.join(RAW, "deterministic")
+
+
+def render_deterministic_tokens(force=False):
+    """Deterministic ground-truth tokens (the agreement-gate reference):
+    build_ui_art.run_hull_pipeline with the ingest ladder OFF, written to
+    model_raw/deterministic/assets/ui/tokens/ (persistent — the gate and
+    audits read these; never canonical snapped)."""
+    from pathlib import Path
+    import build_ui_art as BUA
+    tok_dir = os.path.join(DET_DIR, "assets", "ui", "tokens")
+    marker = os.path.join(tok_dir, "hull_brigantine_player_w.png")
+    if not force and os.path.exists(marker):
+        return tok_dir
+    os.makedirs(SCRATCH, exist_ok=True)
+    td = tempfile.mkdtemp(prefix="det_tokens.", dir=SCRATCH)
+    root = Path(td)
+    staging = Path(os.path.join(td, "build", "ui_art_staging"))
+    staging.mkdir(parents=True)
+    m = BUA.Manifests()
+    m.load()
+    BUA._verify_transforms()
+    BUA.run_hull_pipeline(m, root, staging, {}, None)  # overrides OFF
+    shutil.copytree(os.path.join(td, "assets", "ui", "tokens"), tok_dir,
+                    dirs_exist_ok=True)
+    shutil.rmtree(td, ignore_errors=True)
+    print("deterministic tokens rendered ->", tok_dir, flush=True)
+    return tok_dir
+
+
+def _largest_component_set(mask64):
+    """Largest 4-connected component of a 64x64 bool-grid mask, bbox-
+    translated to the origin, as a point set (shape-IoU input)."""
+    comps = []
+    seen = set()
+    pts = {(x, y) for y in range(64) for x in range(64) if mask64[y][x]}
+    for p in pts:
+        if p in seen:
+            continue
+        stack = [p]
+        seen.add(p)
+        comp = set()
+        while stack:
+            cur = stack.pop()
+            comp.add(cur)
+            x, y = cur
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if (nx, ny) in pts and (nx, ny) not in seen:
+                    seen.add((nx, ny))
+                    stack.append((nx, ny))
+        comps.append(comp)
+    comp = max(comps, key=len) if comps else set()
+    if not comp:
+        return comp
+    x0 = min(x for x, y in comp)
+    y0 = min(y for x, y in comp)
+    return {(x - x0, y - y0) for x, y in comp}
+
+
+def _axis_wrap_diff(a, b):
+    """Signed angular difference between two AXIS orientations in degrees
+    (axis period 180°), normalized to [-90, 90]."""
+    return (a - b + 90) % 180 - 90
+
+
+def agreement_gate(ship, direction):
+    """Deterministic-agreement gate (the non-circular direction
+    acceptance): per generated cell vs the DETERMINISTIC reference cell
+    for that dir — (a) principal-axis agreement within +/-25 deg of the
+    REFERENCE cell's measured angle (reference-relative; if the reference
+    itself measures false-steep against the nominal, the model cell is
+    gated against the DIR's nominal expected instead — the mode is
+    recorded), (b) silhouette IoU of the largest components,
+    bbox-normalized >= 0.55, (c) masthead pennant unchanged."""
+    job_id = f"hull_{ship}_{direction}"
+    model_path = os.path.join(SNAPPED, job_id + ".png")
+    ref = {}
+    if not os.path.exists(model_path):
+        return {"job": job_id, "expected": direction,
+                "verdict": "FAIL", "observed": "missing",
+                "why": "snapped token absent (rejected/fallback)",
+                "fallback": True}
+    tok_dir = render_deterministic_tokens()
+    tok = token_image(os.path.join(tok_dir, f"hull_{ship}_player_"
+                                   f"{direction}.png"))
+    tp = tok.load()
+    ref_pts = [(x, y) for y in range(tok.height) for x in range(tok.width)
+               if tp[x, y][3]]
+    px, (w, h) = _snap_px(job_id)
+    model_pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
+    ref_v = _orientation_verdict(ref_pts, 64, 64, direction)
+    model_v = _orientation_verdict(model_pts, 64, 64, direction)
+    ev = {"ref_angle": ref_v.get("measured_angle"),
+          "model_angle": model_v.get("measured_angle"),
+          "ref_ecc": ref_v.get("eccentricity"),
+          "model_ecc": model_v.get("eccentricity")}
+    if ref_v["verdict"] == "PASS":
+        center_mode = "reference"
+        if model_v.get("measured_angle") is None:
+            ev["why"] = ("model cell unmeasurable "
+                         f"({model_v.get('why', '')})")
+            return {"job": job_id, "expected": direction,
+                    "verdict": "FAIL", "observed": "unmeasurable",
+                    "agreement": False, "center_mode": center_mode,
+                    "confidence": 0, **{k: v for k, v in ev.items()}}
+        diff = _axis_wrap_diff(model_v["measured_angle"],
+                               ref_v["measured_angle"])
+        angle_ok = abs(diff) <= 25
+        ev["angle_diff"] = round(abs(diff), 1)
+    else:
+        center_mode = "nominal (ref false-steep: " \
+                      f"{ref_v.get('measured_angle')}deg)"
+        angle_ok = model_v["verdict"] == "PASS"
+    ev["center_mode"] = center_mode
+
+    model_shape = _largest_component_set(
+        [[1 if px[x, y][3] else 0 for x in range(w)] for y in range(h)])
+    ref_shape = _largest_component_set(
+        [[1 if tp[x, y][3] else 0 for x in range(tok.width)]
+         for y in range(tok.height)])
+    inter = len(model_shape & ref_shape)
+    union = len(model_shape | ref_shape) or 1
+    iou = inter / union
+    shape_ok = iou >= 0.55
+    ev["shape_iou"] = round(iou, 3)
+
+    prog = load_progress()
+    rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+    pennant_ok = bool(rec.get("per_dir", {}).get(direction, {})
+                      .get("metrics", {}).get("pennant_present"))
+    ev["pennant"] = pennant_ok
+
+    ok = angle_ok and shape_ok and pennant_ok
+    return {"job": job_id, "expected": direction,
+            "verdict": "PASS" if ok else "FAIL",
+            "observed": ("agrees" if ok else
+                         ("angle-drift" if not angle_ok else
+                          ("silhouette-drift" if not shape_ok else
+                           "pennant-missing"))),
+            "agreement": ok, **ev}
+
+
+def audit_agreement():
+    """direction_audit[] = deterministic-agreement verdicts over all 80
+    base dirs (the honest audit); refreshes per_dir agreement entries."""
+    audit = []
+    for ship in HULLS:
+        for direction in DIRS:
+            res = agreement_gate(ship, direction)
+            audit.append(res)
+        prog = load_progress()
+        rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+        if rec and rec.get("per_dir"):
+            for direction in DIRS:
+                fresh = [a for a in audit
+                         if a["job"] == f"hull_{ship}_{direction}"]
+                if fresh:
+                    rec["per_dir"][direction]["agreement"] = {
+                        k: v for k, v in fresh[0].items() if k != "job"}
+            save_progress(prog)
+    prog = load_progress()
+    prog["direction_audit"] = audit
+    save_progress(prog)
+    npass = sum(1 for a in audit if a["verdict"] == "PASS")
+    print(f"agreement audit: {npass}/{len(audit)} PASS")
+    for a in audit:
+        if a["verdict"] != "PASS":
+            print(f"  FAIL {a['job']}: {a.get('observed')} "
+                  f"(ref {a.get('ref_angle')}deg model "
+                  f"{a.get('model_angle')}deg iou {a.get('shape_iou')})")
+    return audit
+
+
+def sheet_agreement_audit(audit):
+    """28_direction_audit.png vs the DETERMINISTIC reference: token +
+    ref/model angles + agreement verdict colour, worst-first."""
+    import math
+    order = sorted(
+        audit, key=lambda a: (0 if a["verdict"] == "PASS" else 1,
+                              -(a.get("shape_iou") or 0)))
+    cell, label_h = 256, 30
+    cols = 8
+    rows = (len(order) + cols - 1) // cols
+    img = Image.new("RGBA", (cols * (cell + 6) + 6,
+                             rows * (cell + label_h + 24) + 6), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.load_default(size=13)
+    except TypeError:
+        font = ImageFont.load_default()
+    for i, a in enumerate(order):
+        r, c = divmod(i, cols)
+        x = c * (cell + 6) + 3
+        y = r * (cell + label_h + 24) + 3
+        job = a["job"]
+        draw.text((x + 2, y), job[len("hull_"):], fill=(220, 224, 236),
+                  font=font)
+        y += label_h
+        p = os.path.join(SNAPPED, job + ".png")
+        if os.path.exists(p):
+            tok = Image.open(p).resize((cell, cell), Image.NEAREST)
+            img.alpha_composite(tok, (x, y))
+        else:
+            draw.rectangle([x, y, x + cell - 1, y + cell - 1],
+                           fill=(60, 60, 80, 255))
+            draw.text((x + 90, y + 110), "FALLBACK", fill=(255, 140, 90),
+                      font=font)
+        good = a["verdict"] == "PASS"
+        color = (80, 220, 100) if good else (240, 70, 70)
+        draw.rectangle([x, y, x + cell - 1, y + cell - 1],
+                       outline=color, width=3)
+        txt = (f"ref {a.get('ref_angle'):.0f} model "
+               f"{a.get('model_angle'):.0f} iou {a.get('shape_iou'):.2f}"
+               if a.get("model_angle") is not None
+               and a.get("shape_iou") is not None
+               else "unmeasurable")
+        draw.text((x + 2, y + 2), txt, fill=color, font=font)
+    out = os.path.join(REVIEW, "28_direction_audit.png")
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
+def remove_rejected_cell(ship, direction):
+    """Honest reject: remove the canonical snapped token so --import-ships
+    falls back to the deterministic render for this direction."""
+    p = os.path.join(SNAPPED, f"hull_{ship}_{direction}.png")
+    removed = False
+    if os.path.exists(p):
+        os.remove(p)
+        removed = True
+    prog = load_progress()
+    rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+    if rec:
+        rr = rec.get("reroll") or {"kind": "hull"}
+        rr["fallbacks"] = sorted(set(rr.get("fallbacks", [])
+                                     + [f"hull_{ship}_{direction}"]))
+        rec["reroll"] = rr
+        rec.setdefault("per_dir", {}).setdefault(
+            direction, {})["fallback"] = True
+        save_job(f"hull_{ship}", rec)
+    return removed
 
 
 def reroll_hull(ship, max_attempts=3, reason="gate failure"):
@@ -2118,6 +2404,111 @@ def sheet_hulls():
     out = os.path.join(REVIEW, "29_hull_sheets.png")
     img.convert("RGB").save(out)
     print("wrote", out)
+
+
+def redraft_hull_sheets():
+    """Rebuild ALL 16 hull draft sheets so every direction cell is a
+    DETERMINISTIC GENERATOR render instead of a canonical-token
+    composite: the author manifests are re-rendered through
+    build_ui_art.run_hull_pipeline with the ingest/model override ladder
+    DISABLED (ingest_files=None), and the sheet geometry (1792x1152,
+    five 512px cells, legend cell, #00ff00 background, labels) is kept
+    identical so the /edit cell-cropping math is unchanged.
+
+    Why: the previous drafts composited canonical tokens — earlier
+    generations that may themselves carry direction errors — so the
+    errors inherited circularly (draft -> /edit -> reference-vs-output
+    audit blesses the copy). The deterministic cells are the direction
+    ground truth.
+
+    Runs the existing orientation-gate core over all 80 cells
+    (16 hulls x w/n/s/sw/nw), prints the verdict table, and writes
+    art_review/37_drafts_deterministic.png (4x4 contact sheet).
+    NO /edit call, NO canonical writes, NO ingest ledger change."""
+    from pathlib import Path
+    import tempfile
+    import build_ui_art as BUA
+
+    old_sizes = {}
+    for ship in HULLS:
+        p = os.path.join(DRAFTS, f"sheet_{ship}.png")
+        if os.path.exists(p):
+            with Image.open(p) as im:
+                old_sizes[ship] = im.size
+    os.makedirs(SCRATCH, exist_ok=True)
+    td = tempfile.mkdtemp(prefix="deterministic_tokens.", dir=SCRATCH)
+    rows = []
+    try:
+        root = Path(td)
+        staging = Path(os.path.join(td, "build", "ui_art_staging"))
+        staging.mkdir(parents=True)
+        m = BUA.Manifests()
+        m.load()
+        BUA._verify_transforms()
+        BUA.run_hull_pipeline(m, root, staging, {}, None)  # overrides OFF
+        tok_dir = os.path.join(td, "assets", "ui", "tokens")
+        drift = []
+        for ship in HULLS:
+            out = os.path.join(DRAFTS, f"sheet_{ship}.png")
+            hull_sheet_draft(ship, out, draft_scale=6, token_dir=tok_dir)
+            with Image.open(out) as im:
+                new_size = im.size
+            was = old_sizes.get(ship)
+            geo = "new==old" if was == new_size else \
+                (f"CHANGED was {was[0]}x{was[1]}" if was
+                 else "no previous file")
+            print(f"sheet_{ship}.png {new_size[0]}x{new_size[1]} [{geo}]",
+                  flush=True)
+            for direction in SHEET_DIRS:
+                tok_path = os.path.join(
+                    tok_dir, f"hull_{ship}_player_{direction}.png")
+                tok = token_image(tok_path)
+                px = tok.load()
+                pts = [(x, y) for y in range(tok.height)
+                       for x in range(tok.width) if px[x, y][3]]
+                rows.append((ship, direction, _orientation_verdict(
+                    pts, tok.width, tok.height, direction)))
+                canon = os.path.join(REPO, "assets", "ui", "tokens",
+                                     f"hull_{ship}_player_{direction}.png")
+                if open(tok_path, "rb").read() != open(canon, "rb").read():
+                    drift.append(f"{ship}/{direction}")
+        print()
+        print(f"{'ship':22s} {'dir':3s} {'angle':>7s} {'ecc':>5s} "
+              f"{'observed':16s} verdict")
+        for ship, direction, v in rows:
+            print(f"{ship:22s} {direction:3s} "
+                  f"{str(v.get('measured_angle')):>7s} "
+                  f"{str(v.get('eccentricity')):>5s} "
+                  f"{str(v.get('observed')):16s} {v['verdict']}")
+        n_pass = sum(1 for *_, v in rows if v["verdict"] == "PASS")
+        print(f"\ndraft orientation gate: {n_pass}/{len(rows)} PASS")
+        if drift:
+            print(f"deterministic render differs from the canonical player "
+                  f"token for {len(drift)}/80 cells (ingested model art "
+                  f"present): {', '.join(drift)}")
+        gw, gh = 448, 288  # 1792x1152 / 4
+        cols = 4
+        rws = (len(HULLS) + cols - 1) // cols
+        img = Image.new("RGBA", (cols * (gw + 8) + 8,
+                                 rws * (gh + 26) + 8), SHEET_BG)
+        draw = ImageDraw.Draw(img)
+        for i, ship in enumerate(HULLS):
+            rr, cc = divmod(i, cols)
+            x = cc * (gw + 8) + 4
+            y = rr * (gh + 26) + 4
+            label(draw, (x, y), ship)
+            y += 20
+            g = Image.open(os.path.join(DRAFTS,
+                                        f"sheet_{ship}.png")).convert("RGBA")
+            if g.size != (gw, gh):
+                g = g.resize((gw, gh), Image.NEAREST)
+            img.alpha_composite(g, (x, y))
+        out = os.path.join(REVIEW, "37_drafts_deterministic.png")
+        img.convert("RGB").save(out)
+        print("wrote", out)
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+    return rows
 
 
 def run_batch_hulls(force=False):
@@ -3387,6 +3778,8 @@ def main(argv):
                  for v in results.values())
         print("VALIDATE-GREEN:", "PASS — proceed to mass re-roll" if ok
               else "FAIL — do not mass re-roll", flush=True)
+    elif cmd == "redraft":
+        redraft_hull_sheets()
     elif cmd == "report":
         build_report()
     else:
