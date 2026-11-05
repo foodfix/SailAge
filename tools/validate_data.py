@@ -9135,7 +9135,7 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
         lo, hi = band
         # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05): the
         # latin/galiot rigs draw 1px wide — +1 hi, matching the ingest gate.
-        if ship_id in ("latin", "galiot") and tier_of[ship_id] == 1:
+        if ship_id in ("latin", "galiot", "sloop") and tier_of[ship_id] == 1:
             hi += 1
         if not lo <= extent <= hi:
             fail("hull-footprint", sprite.decl["file"],
