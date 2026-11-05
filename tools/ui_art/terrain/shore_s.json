@@ -3,11 +3,50 @@
   "class": "terrain",
   "kind": "shore",
   "file": "assets/ui/terrain/shore_s.png",
-  "derive": {
-    "base": "shore_n",
-    "op": "rot_180"
-  },
+  "mode": "string-map",
+  "png": "indexed",
   "width": 32,
   "height": 32,
-  "derive_note": "derived, not authored — the governor (build_ui_art.py) applies the lossless transform of the base's pixels (same op table as the hull scheme); group 13 item 5 re-checks each relation pixel-exactly"
+  "palette": {
+    "F": "#dff0f4",
+    "S": "#2f6f9e"
+  },
+  "rows": [
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "...F...F....F........F....F.....",
+    ".S..SS..SSS....SSSSS...SS..SSS..",
+    "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+    "SSSFSSSFFSSSSSSSSSSSSFSSFFFSSSSS",
+    "FFSSSFSSSSSSSSFSSFFSSSSSSSSSSSSS",
+    "SSSSSSSFSFFFSSSSSSSSSSSFFSSSFSSS"
+  ],
+  "band": "r5 coast foam language (59d6ec1, 2026-11-05): land-facing band = 8px COAST_SEA shallow-water wash (rows 0..3 of the authored grid) + 2 chunky fade steps outward (4px S dither, sparse F dust) + hand-authored FOAM speckle clusters (1-3px marks, 2-5px apart) overlapping the wash; transparent elsewhere (§4.8.2 / §8.8-8). The uniform white outline line is retired (user acceptance failed x3).",
+  "authored": [
+    "shore_s"
+  ]
 }
