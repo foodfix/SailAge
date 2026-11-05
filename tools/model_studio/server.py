@@ -177,6 +177,8 @@ class Studio:
                      if wmet.get("band") else None),
             "pennant_ok": pennant_ok,
             "flagged": flagged,
+            "superseded": False,
+            "superseded_by": None,
             "accepted": accepted.get(job_id),
             "prompt": eff_prompt,
             "original_prompt": original_prompt,
@@ -422,6 +424,18 @@ class Studio:
         counts["ingame"] = sum(1 for j in jobs
                                if (j.get("ingest") or {}).get("state")
                                == "in-game")
+        counts["legacy"] = sum(1 for j in jobs if j.get("superseded"))
+        # supersede marker: when a hull has a sheet job, its legacy
+        # per-direction jobs are retired (re-rolling them would run the
+        # retired per-dir path and shadow the sheet pipeline's canonical
+        # outputs). Listed with the marker for transparency; the UI hides
+        # them from re-rollable tabs and the API refuses re-roll/accept.
+        sheet_subjects = {j["subject"] for j in jobs
+                          if j["family"] == "sheet" and j.get("subject")}
+        for j in jobs:
+            if j["family"] == "hull" and j.get("subject") in sheet_subjects:
+                j["superseded"] = True
+                j["superseded_by"] = f"sheet_{j['subject']}"
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
         return jobs, counts, flagged_ids
 
@@ -515,6 +529,8 @@ class Studio:
                      else None),
             "pennant_ok": pennant_ok,
             "flagged": flagged,
+            "superseded": False,
+            "superseded_by": None,
             "accepted": accepted.get(job_id),
             "prompt": eff_prompt,
             "original_prompt": original_prompt,
@@ -854,10 +870,27 @@ class Handler(BaseHTTPRequestHandler):
         return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
             chain.canonical_path("drafts", job_id)))
 
+    def _supersede_guard(self, job_id: str) -> bool:
+        """True (and answers 409) when the job is a superseded legacy
+        per-direction card — re-roll/accept would run the retired path and
+        shadow the sheet pipeline's canonical outputs."""
+        jobs, _c, _f = self.studio.registry()
+        me = next((j for j in jobs if j["id"] == job_id), None)
+        if me and me.get("superseded"):
+            self._json(409, {
+                "error": f"{job_id} is superseded by {me.get('superseded_by')} "
+                         f"— re-roll the sheet card instead",
+                "superseded_by": me.get("superseded_by"),
+            })
+            return True
+        return False
+
     def _reroll(self, data: dict) -> None:
         job_id = data.get("job", "")
         if not self._job_ok(job_id):
             self._json(404, {"error": f"unknown job {job_id!r}"})
+            return
+        if self._supersede_guard(job_id):
             return
         prompt = data.get("prompt")
         seed = data.get("seed")
@@ -890,6 +923,8 @@ class Handler(BaseHTTPRequestHandler):
         job_id = data.get("job", "")
         if not self._job_ok(job_id):
             self._json(404, {"error": f"unknown job {job_id!r}"})
+            return
+        if self._supersede_guard(job_id):
             return
         fam, subject, direction = chain.parse_job(job_id)
         with self.studio.lock:

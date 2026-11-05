@@ -60,6 +60,11 @@ button.small { padding: 3px 10px; font-size: 11px; }
 .card.accepted { border-color: var(--gold); }
 .card.running { border-color: var(--gold-hi); }
 .card.error-card { border-color: var(--bad); background: #2a1a1e; }
+.card.superseded { opacity: .75; }
+.superseded-note {
+  font-size: 11px; color: var(--dim); border: 1px dashed #3a465e;
+  border-radius: 6px; padding: 4px 8px; background: var(--panel-2);
+}
 .card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .card-head .jid { font-weight: 600; font-size: 13px; }
 .card-head .lbl { color: var(--dim); font-size: 11px; }
