@@ -18,26 +18,38 @@ strength 1.0; drop to ~0.8 if hull identity drifts).
 - **Branches** → the 4 base dirs the model must generate (`w` IS the
   input; `e/ne/se` are exact h-flips derived at ingestion, doc f6c00bb):
 
-  | seed  | save prefix (under `output/`) | dir | view |
-  |---|---|---|---|
-  | 91001 | `sailage/angles/n`  | n  | astern, stern-castle head-on |
-  | 91002 | `sailage/angles/s`  | s  | bow, bowsprit at the viewer |
-  | 91003 | `sailage/angles/nw` | nw | bow TOP-LEFT, sails to BOTTOM-RIGHT |
-  | 91004 | `sailage/angles/sw` | sw | bow BOTTOM-LEFT, sails to TOP-RIGHT |
+  | seed  | save prefix (under `output/`) | dir | view | orbit |
+  |---|---|---|---|---|
+  | 91001 | `sailage/angles/n`  | n  | astern, stern-castle head-on | 90° clockwise |
+  | 91002 | `sailage/angles/s`  | s  | bow, bowsprit at the viewer | 90° anticlockwise |
+  | 91003 | `sailage/angles/nw` | nw | bow TOP-LEFT, sails to BOTTOM-RIGHT | 45° clockwise |
+  | 91004 | `sailage/angles/sw` | sw | bow BOTTOM-LEFT, sails to TOP-RIGHT | 45° anticlockwise |
 
   The diagonal/orthogonal wording is verbatim from the game's POSE table
   (`tools/model_pass.py`), so outputs match what the snap/ingest gates
   (band, pennant-in-masthead, palette block) expect.
+
+- **Orbit convention (empirical, brigantine trials 2026-11-05/06):** the
+  input faces WEST (bow LEFT). From that view, the **clockwise** orbit
+  (seen from above, S→W) swings the bow UP — it produces the astern-side
+  family (n, nw); the **anticlockwise** orbit (S→E) swings the bow DOWN —
+  the bow-side family (s, sw). Equivalently: the LoRA's "rotate the
+  camera to the right" ≡ clockwise, "to the left" ≡ anticlockwise for a
+  west-facing subject (both earlier phrasings rendered exactly this way).
+  The orbit word alone decides the family; the POSE corner text only
+  refines it — do not rely on the corner text against the orbit word.
 
 - **Every prompt pins**: same hull/rig/mast count/sail layout/colors,
   mast+sail height unchanged, red pennant at the mainmast top (the G13
   masthead gate), flat `#00ff00` chroma background, no water/scenery/
   text/frame.
 
-- **First-run checks**: (1) diagonal mirror — if a 45° branch renders the
-  bow in the wrong corner, swap the two 45° prompt texts (the dir id is
-  decided by the filename at ingest, not the camera wording); (2) astern/
-  bow mix-up on the 90° pair — likewise swap.
+- **Known render traits (raw output, pre-snap):** backgrounds are green
+  but never exactly `#00ff00` (VAE decode; `n` may carry a soft radial
+  gradient) — the tokenize path's rembg + key_green handles it; `n`/`s`
+  come out slightly painterly versus the flat cel side view — mostly
+  washes out at the 32-grid snap. Do NOT add anti-flat/tilt clauses: the
+  tilt wording distorted the hull (brigantine trial).
 
 Downstream (not yet doc-amended): each accepted angle goes through the
 same snap path as the studio flow (`80-*` §4.8 ingestion contract) to
