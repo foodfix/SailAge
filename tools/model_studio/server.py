@@ -50,7 +50,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 MIRROR_OF = {"e": "w", "ne": "nw", "se": "sw"}  # doc f6c00bb: mirror-derived
-FAMILIES = ("hull", "icon", "terrain")
+FAMILIES = ("hull", "sheet", "icon", "terrain")
 STORES = ("prompts.json", "state.json", "accepted.json")
 
 
@@ -68,6 +68,7 @@ class Studio:
         self.current: dict | None = None     # running job info
         self.qcond = threading.Condition(self.lock)
         self._thumb_cache: "OrderedDict[str, bytes]" = OrderedDict()
+        self.last_warnings: list[str] = []   # registry skip/degrade notes
         self.load_driver()
 
     # -- paths ----------------------------------------------------------
@@ -119,6 +120,79 @@ class Studio:
 
     # -- registry ---------------------------------------------------------
     # -- thumbnails -------------------------------------------------------
+    def _sheet_entry(self, job_id, subject, prog, prompts, state, accepted,
+                     seed_map):
+        """Per-hull 5-cell sheet job card (batch-refactor shape). The
+        progress/ledger key is `hull_<hull>`; the driver crops per-dir
+        snapped files under the legacy canonical paths. The band-gated
+        cell is `w` — the card's band/pennant/flag ride it, and the
+        snapped thumbnail shows the w crop (representative cell)."""
+        prog_key = f"hull_{subject}"
+        canon = prog.get(prog_key, {}) or {}
+        studio_rec = state.get(job_id, {}) or {}
+        try:
+            per_dir = (studio_rec.get("per_dir") or canon.get("per_dir")
+                       or {}) or {}
+            wmet = (per_dir.get("w") or {}).get("metrics") or {}
+        except Exception:  # noqa: BLE001 — progress shape mid-refactor
+            per_dir, wmet = {}, {}
+        try:
+            tier = self.driver["TIER"].get(subject)
+        except Exception:  # noqa: BLE001
+            tier = None
+        in_band = (wmet.get("band") or {}).get("in_band") \
+            if wmet.get("band") else None
+        pennant_ok = wmet.get("pennant_present")
+        flagged = (in_band is False) or (pennant_ok is False)
+
+        thumbs = {}
+        for kind in ("draft", "raw", "snapped"):
+            for path, mirrored in self.thumb_candidates(kind, job_id):
+                if os.path.isfile(path):
+                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000)}
+                    break
+
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt"))
+        if stored_original:
+            original_prompt = stored_original
+            original_source = (studio_rec.get("original_prompt_source")
+                               or "exact")
+        else:
+            original_prompt, original_source = chain.reconstruct_original(
+                job_id, self.repo, rec=canon or None)
+        eff_prompt = prompts.get(job_id) or original_prompt
+        return {
+            "id": job_id,
+            "family": "sheet",
+            "subject": subject,
+            "dir": None,
+            "tier": tier,
+            "label": f"sheet · {subject} · 5 views",
+            "mirror_of": None,
+            "band": ({"band": (wmet.get("band") or {}).get("band"),
+                      "long_axis_px":
+                          (wmet.get("band") or {}).get("long_axis_px"),
+                      "in_band": in_band}
+                     if wmet.get("band") else None),
+            "pennant_ok": pennant_ok,
+            "flagged": flagged,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", canon.get("seed")),
+            "canonical_seed": seed_map.get(job_id),
+            "status": studio_rec.get("status", canon.get("status")),
+            "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
+            "metrics": wmet or None,
+            "seconds": studio_rec.get("seconds", canon.get("seconds")),
+            "error": studio_rec.get("error"),
+            "thumbs": thumbs,
+        }
+
     def thumb_candidates(self, kind: str, job_id: str):
         """Ordered (path, mirrored_base) candidates for one thumb slot.
         `mirrored_base` set => serve that file horizontally flipped (the
@@ -128,6 +202,25 @@ class Studio:
         artifact). Never 404 on a listed job's thumbs."""
         fam, subject, direction = chain.parse_job(job_id)
         raw, st = self.raw(), self.studio()
+        if fam == "sheet":
+            # sheet card: draft = the 5-cell reference sheet, raw = the
+            # generated sheet, snapped = the band-gated w crop (the
+            # representative cell; the other 4 crops live at their legacy
+            # per-dir paths)
+            out = []
+            if kind == "draft":
+                out.append((os.path.join(raw, "drafts", job_id + ".png"),
+                            None))
+            elif kind == "raw":
+                out.append((os.path.join(st, "gen", job_id + ".png"), None))
+                out.append((os.path.join(raw, "gen",
+                                         f"hull_{subject}_sheet.png"), None))
+            elif kind == "snapped":
+                out.append((os.path.join(st, "snapped",
+                                         f"hull_{subject}_w.png"), None))
+                out.append((os.path.join(raw, "snapped",
+                                         f"hull_{subject}_w.png"), None))
+            return out
         mirror_of = MIRROR_OF.get(direction) if fam == "hull" else None
         out = []
         if kind == "draft":
@@ -240,21 +333,26 @@ class Studio:
 
     def registry(self) -> list[dict]:
         """Enumerate jobs from the store's drafts/ and merge canonical +
-        studio state. Rebuilt per /api/jobs call; per-job guard so one bad
-        store file can never 500 the whole endpoint (the empty-grid /
-        empty-textarea failure mode)."""
+        studio state. NEVER raises: per-job guard wraps entry AND fallback
+        construction — an unparseable job id (driver mid-refactor shapes)
+        is skipped with a warning, never a 500."""
+        warnings: list[str] = []
         drafts_dir = os.path.join(self.raw(), "drafts")
         prog = self._read_json(os.path.join(self.raw(), "progress.json"),
                                {}).get("jobs", {})
         report = self._read_json(os.path.join(self.raw(), "report.json"), {})
-        band_tbl = report.get("band_table", {})
         with self.lock:
             prompts = self.prompts()
             state = self.state().get("jobs", {})
             accepted = self.accepted()
         seed_map = self._seed_map()
         jobs = []
-        for fname in sorted(os.listdir(drafts_dir)):
+        try:
+            draft_names = sorted(os.listdir(drafts_dir))
+        except OSError as exc:
+            log(f"drafts dir unreadable: {exc}")
+            draft_names = []
+        for fname in draft_names:
             if not fname.endswith(".png"):
                 continue
             job_id = fname[:-4]
@@ -264,30 +362,43 @@ class Studio:
                 jobs.append(self._job_entry(job_id, prog, report, prompts,
                                             state, accepted, seed_map))
             except Exception as exc:  # noqa: BLE001 — degrade, don't die
-                log(f"registry entry {job_id} failed: "
-                    f"{type(exc).__name__}: {exc}")
-                jobs.append({
-                    "id": job_id, "family": job_id.split("_", 1)[0],
-                    "subject": None, "dir": None, "tier": None,
-                    "label": job_id, "mirror_of": None, "band": None,
-                    "pennant_ok": None, "flagged": False,
-                    "accepted": accepted.get(job_id),
-                    "prompt": chain.default_prompt(job_id, self.repo),
-                    "custom_prompt": job_id in prompts, "seed": None,
-                    "canonical_seed": seed_map.get(job_id), "status": None,
-                    "status_source": "canonical", "ingest": None,
-                    "metrics": None,
-                    "seconds": None, "error": None, "thumbs": {},
-                })
+                reason = f"{type(exc).__name__}: {exc}"
+                # even the fallback card must never raise
+                try:
+                    fallback = {
+                        "id": job_id, "family": job_id.split("_", 1)[0],
+                        "subject": None, "dir": None, "tier": None,
+                        "label": job_id, "mirror_of": None, "band": None,
+                        "pennant_ok": None, "flagged": False,
+                        "accepted": accepted.get(job_id),
+                        "prompt": chain.default_prompt(job_id, self.repo),
+                        "original_prompt": "",
+                        "original_prompt_source": "default",
+                        "custom_prompt": job_id in prompts, "seed": None,
+                        "canonical_seed": seed_map.get(job_id),
+                        "status": None, "status_source": "canonical",
+                        "ingest": None, "metrics": None, "seconds": None,
+                        "error": None, "thumbs": {},
+                    }
+                    jobs.append(fallback)
+                except Exception as exc2:  # noqa: BLE001 — skip + warn
+                    warnings.append(f"{job_id}: {reason} "
+                                    f"(fallback also failed: {exc2})")
+                    log(f"registry SKIP {job_id}: {warnings[-1]}")
+                    continue
+                log(f"registry entry {job_id} degraded: {reason}")
+        self.last_warnings = warnings
         # backfill: persist each legacy job's original prompt ONCE, so the
         # edit base stays stable across driver drift and "↺ original" is
         # byte-identical. Exact originals are already in state.json (written
         # by the worker); reconstructed ones are stored as reconstructed.
         missing = {}
         for j in jobs:
-            if j["original_prompt_source"] == "default":
+            if j.get("original_prompt_source") == "default":
                 continue  # never pin fallback wording; it upgrades once the
                           # driver parses again
+            if not j.get("original_prompt"):
+                continue
             st_rec = state.get(j["id"]) or {}
             if not (st_rec.get("original_prompt")
                     or st_rec.get("prompt")):
@@ -317,6 +428,9 @@ class Studio:
     def _job_entry(self, job_id, prog, report, prompts, state, accepted,
                    seed_map):
         fam, subject, direction = chain.parse_job(job_id)
+        if fam == "sheet":
+            return self._sheet_entry(job_id, subject, prog, prompts, state,
+                                     accepted, seed_map)
         canon = prog.get(job_id, {})
         studio_rec = state.get(job_id, {})
         metrics = studio_rec.get("metrics") or canon.get("metrics")
@@ -491,10 +605,14 @@ class Studio:
                              "ingest_ledger.json"), {})
             tokens = ledger.get("tokens") or {}
             fam, subject, direction = chain.parse_job(job_id)
-            base_dir = MIRROR_OF.get(direction)
-            gate_job = (f"hull_{subject}_{base_dir}" if base_dir
-                        else job_id)
-            via = f" (via {base_dir} base)" if base_dir else ""
+            if fam == "sheet":
+                gate_job = f"hull_{subject}_w"   # the banded base cell
+                via = " (via w base cell)"
+            else:
+                base_dir = MIRROR_OF.get(direction)
+                gate_job = (f"hull_{subject}_{base_dir}" if base_dir
+                            else job_id)
+                via = f" (via {base_dir} base)" if base_dir else ""
             tail = out.strip()[-700:]
             if proc.returncode != 0:
                 ing = {"state": "error", "exit_code": proc.returncode,
@@ -649,14 +767,22 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/favicon.ico":
                 self._send(204, b"", "image/x-icon")
             elif path == "/api/jobs":
-                jobs, counts, flagged = self.studio.registry()
+                try:
+                    jobs, counts, flagged = self.studio.registry()
+                except Exception as exc:  # noqa: BLE001 — never 500
+                    log(f"registry failed (degraded response): "
+                        f"{type(exc).__name__}: {exc}")
+                    jobs, counts, flagged = [], {}, []
+                    self.studio.last_warnings = [f"registry: {exc}"]
                 with self.studio.lock:
                     cur = dict(self.studio.current) if self.studio.current \
                         else None
                     queue = [o["job"] for o in self.studio.queue]
                 self._json(200, {"jobs": jobs, "counts": counts,
                                  "flagged": flagged, "queue": queue,
-                                 "current": cur})
+                                 "current": cur,
+                                 "warnings":
+                                     list(self.studio.last_warnings)})
             elif path == "/api/status":
                 with self.studio.lock:
                     cur = dict(self.studio.current) if self.studio.current \
@@ -665,7 +791,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"worker": "busy" if cur else "idle",
                                  "current": cur, "queue": queue,
                                  "repo": self.studio.repo,
-                                 "driver": chain.driver_status()})
+                                 "driver": chain.driver_status(),
+                                 "registry":
+                                     {"warnings":
+                                      list(self.studio.last_warnings)}})
             elif path.startswith("/thumb/"):
                 self._thumb(path)
             else:
@@ -768,8 +897,8 @@ class Handler(BaseHTTPRequestHandler):
             acc = self.studio.accepted()
             source = ("studio" if os.path.isfile(
                 chain.studio_path("snapped", job_id)) else "canonical")
-            ingest_state = "queued" if fam == "hull" \
-                else "game-flow-pending"
+            ingest_state = ("queued" if fam in ("hull", "sheet")
+                            else "game-flow-pending")
             acc[job_id] = {
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "source": source,
@@ -805,8 +934,43 @@ class Handler(BaseHTTPRequestHandler):
                 rec["ingest"] = {"state": "queued",
                                  "queued_at": acc[job_id]["at"]}
                 self.studio.save_state(st_)
+            elif fam == "sheet":
+                # sheet jobs: the driver crops per-dir snapped files under
+                # the canonical paths itself; the studio's own reroll crops
+                # live at the legacy studio per-dir paths — copy any that
+                # exist (atomic, per file), then one ingest run gates them.
+                copied, copied_n = False, 0
+                sheet_dirs = (self.studio.driver.get("SHEET_DIRS")
+                              or chain.EMBEDDED_DRIVER["SHEET_DIRS"])
+                for dir_ in sheet_dirs:
+                    src = chain.studio_path("snapped",
+                                            f"hull_{subject}_{dir_}")
+                    dst = chain.canonical_path("snapped",
+                                               f"hull_{subject}_{dir_}")
+                    if os.path.isfile(src):
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        tmp = dst + ".ingest-tmp"
+                        shutil.copyfile(src, tmp)
+                        with open(tmp, "rb") as fh:
+                            os.fsync(fh.fileno())
+                        os.replace(tmp, dst)
+                        copied = True
+                        copied_n += 1
+                w_canon = chain.canonical_path("snapped",
+                                               f"hull_{subject}_w")
+                if os.path.isfile(w_canon):
+                    with open(w_canon, "rb") as fh:
+                        acc[job_id]["snap_sha"] = hashlib.sha256(
+                            fh.read()).hexdigest()
+                acc[job_id]["snap_copied"] = copied
+                acc[job_id]["snap_copies"] = copied_n
+                st_ = self.studio.state()
+                rec = st_.setdefault("jobs", {}).setdefault(job_id, {})
+                rec["ingest"] = {"state": "queued",
+                                 "queued_at": acc[job_id]["at"]}
+                self.studio.save_state(st_)
             self.studio.save_accepted(acc)
-        if fam == "hull":
+        if fam in ("hull", "sheet"):
             self.studio.enqueue_ingest(job_id)
         log(f"accepted {job_id} ({source}, ingest={ingest_state})")
         self._json(200, {"ok": True, "job": job_id, "accepted":
@@ -815,7 +979,7 @@ class Handler(BaseHTTPRequestHandler):
                          "note": ("restart the game to see it — the token "
                                   "runtime loads data artifacts, no import "
                                   "refresh needed"
-                                  if fam == "hull" else
+                                  if fam in ("hull", "sheet") else
                                   "accepted (game flow pending)")})
 
 
@@ -841,8 +1005,13 @@ def main(argv=None) -> None:
     Handler.protocol_version = "HTTP/1.1"  # keep-alive; Content-Length always sent
     studio.start_worker()
 
-    jobs, counts, flagged = studio.registry()
-    log(f"registry: {len(jobs)} jobs {counts}; flagged={len(flagged)}")
+    try:
+        jobs, counts, flagged = studio.registry()
+        log(f"registry: {len(jobs)} jobs {counts}; flagged={len(flagged)}; "
+            f"warnings={len(studio.last_warnings)}")
+    except Exception as exc:  # noqa: BLE001 — the API must always come up
+        log(f"boot registry failed (serving degraded): "
+            f"{type(exc).__name__}: {exc}")
     httpd = StudioHTTPServer((args.host, args.port), Handler)
     log(f"listening on http://{args.host}:{args.port} (repo={args.repo})")
     try:
