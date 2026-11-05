@@ -9185,7 +9185,7 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
         if not opaque:
             fail("hull-footprint", sprite.decl["file"],
                  "sprite is fully transparent", 13)
-        xs = [p[0] for p in opaque]
+        xs = [p[0] for p in _g13_content_px(sprite, opaque)]
         extent = max(xs) - min(xs) + 1
         lo, hi = band
         # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05): the
@@ -9196,6 +9196,40 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
             fail("hull-footprint", sprite.decl["file"],
                  f"long axis {extent}px outside the tier-{tier_of[ship_id]} "
                  f"band {lo}-{hi} (80-* §4.8.7)", 13)
+
+
+# Band-measurement reconciliation (2026-11-05, mirrors the governor's
+# BAND_SPECKLE_FLOOR): components below the floor are isolated rembg/snap
+# fragments — excluded from the §4.8.7 long axis so the ingest gate and
+# this audit measure the SAME content bbox (one source of truth).
+G13_BAND_SPECKLE_FLOOR = 4
+
+
+def _g13_content_px(sprite: _G13Sprite, opaque: list) -> list:
+    """Opaque px of every 4-connected component >= the speckle floor."""
+    w, h = sprite.w, sprite.h
+    opaque_set = set(opaque)
+    visited: set = set()
+    keep: list = []
+    for start in opaque:
+        if start in visited:
+            continue
+        stack = [start]
+        visited.add(start)
+        comp = []
+        while stack:
+            pt = stack.pop()
+            comp.append(pt)
+            x, y = pt
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nb = (x + dx, y + dy)
+                if 0 <= nb[0] < w and 0 <= nb[1] < h and nb in opaque_set \
+                        and nb not in visited:
+                    visited.add(nb)
+                    stack.append(nb)
+        if len(comp) >= G13_BAND_SPECKLE_FLOOR:
+            keep.extend(comp)
+    return keep
 
 
 def _g13_check_pennants(sprites: dict, uw2_ships: set) -> None:

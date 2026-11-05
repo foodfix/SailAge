@@ -237,13 +237,30 @@ INGEST_LEDGER = MANIFESTS / "ingest_ledger.json"   # committed provenance
 # v2 (2026-11-05): the ledger gains the icons{} + terrain{} families
 # (additive; every family's ingest preserves the other families' sections).
 INGEST_VERSION = 2
-PENNANT_SNAP_RADIUS = 40   # channel-sum Δ to the pennant source that snaps
+# Calibration reconciliation (2026-11-05, master evidence): the snap
+# radius widens 40 -> 90 channel-sum to match the audit classifier's
+# tolerance ring, GUARDED by strict red-dominance (R > G and R > B) —
+# verified across all 80 candidates: the only in-radius block hex is
+# #b3341f (Δcs 27, already snapped at 40); wood browns sit at Δcs
+# 132-147 (outside any sane radius; the guard keeps the class explicit
+# so a future radius change can never snap wood/pennant-adjacent
+# non-reds).  The masthead gate still requires >=3 EXACT source px —
+# the snap makes them exact by construction, the flag stays honest.
+PENNANT_SNAP_RADIUS = 90   # channel-sum Δ to the pennant source that snaps
 MASTHEAD_MIN_PX = 3        # ≥3 source-red px in the masthead region
 MASTHEAD_TOP_FRAC = 0.45   # masthead region = top 45% of the token bbox
 INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")  # the model's 5 base dirs
 INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # derived: mirror_x flip
 INGEST_INGESTED_BUDGET = 25  # 64-canvas per-sprite cap (§4.8.3 48px tier;
 # the quantized token draws from an 18-hex block, so this is belt-and-braces)
+# Band-measurement reconciliation (2026-11-05): the §4.8.7 long axis is
+# measured on the content bbox — opaque px EXCLUDING connected components
+# below the speckle floor (isolated rembg/snap fragments; the audit
+# classifier's largest-component semantics).  Observed speckles are 1-5 px
+# (galleass 6, junk 1) and never extend the axis; a 4-px cluster is
+# deliberate art.  A single-component sprite measures identically to the
+# full bbox.
+BAND_SPECKLE_FLOOR = 4
 
 # ---- model-pass icon ingestion (--import-icons; 80-* §4.8 64-canvas
 # amendment: semantic icons are generated on the 64 canvas by the model
@@ -652,10 +669,17 @@ def _quantize_hull_hex(rgb):
 
 
 def _pennant_snap(hexv):
-    """The pennant-source snap: any px within Δ≤40 channel-sum of the
-    authored source hex lands EXACTLY on it (so the ×9 owner remap hits;
-    covers the model's near-miss reds incl. the pirate hex, Δ=27)."""
-    if _hex_dist(HEXES[hexv], HEXES[PENNANT_SOURCE]) <= PENNANT_SNAP_RADIUS:
+    """The pennant-source snap (calibration reconciliation 2026-11-05):
+    any QUANTIZED px within Δ≤90 channel-sum of the authored source hex
+    AND strictly red-dominant (R > G and R > B) lands EXACTLY on it (so
+    the ×9 owner remap hits; covers the model's near-miss reds incl. the
+    pirate hex, Δcs 27).  The guard excludes non-red in-radius hexes —
+    wood browns sit at Δcs 132-147 and fail the radius anyway, but the
+    dominance check keeps the snap class red-only should the block or
+    the radius ever move."""
+    rgb = HEXES[hexv]
+    if (rgb[0] > rgb[1] and rgb[0] > rgb[2]
+            and _hex_dist(rgb, HEXES[PENNANT_SOURCE]) <= PENNANT_SNAP_RADIUS):
         return PENNANT_SOURCE
     return hexv
 
@@ -671,6 +695,40 @@ def _quantize_token(w, h, px):
             qh = _pennant_snap(_quantize_hull_hex(p[:3]))
             out.append(HEXES[qh] + (255,))
     return out
+
+
+def _content_bbox(px, w, h):
+    """The band-measurement basis (calibration reconciliation 2026-11-05):
+    the bbox over opaque px EXCLUDING connected components below
+    BAND_SPECKLE_FLOOR (4-connected; isolated rembg/snap fragments — the
+    audit classifier's largest-component semantics).  Returns None for a
+    fully transparent token."""
+    seen = [False] * (w * h)
+    xs, ys = [], []
+    for start in range(w * h):
+        if seen[start] or px[start][3] == 0:
+            continue
+        stack = [start]
+        seen[start] = True
+        comp = []
+        while stack:
+            i = stack.pop()
+            comp.append(i)
+            x, y = i % w, i // w
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                xx, yy = x + dx, y + dy
+                if 0 <= xx < w and 0 <= yy < h:
+                    j = xx + yy * w
+                    if not seen[j] and px[j][3]:
+                        seen[j] = True
+                        stack.append(j)
+        if len(comp) < BAND_SPECKLE_FLOOR:
+            continue
+        xs.extend(i % w for i in comp)
+        ys.extend(i // w for i in comp)
+    if not xs:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def _masthead_count(px, w, h):
@@ -827,9 +885,10 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                 # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05):
                 # latin/galiot rigs consistently draw 1px wide — +1 hi.
                 if ship in ("latin", "galiot", "sloop") and tiers[ship] == 1:
-                    hi += 1
-                ext = bb[2] - bb[0] + 1
-                if not lo <= ext <= hi:
+                    hi += 1                # band = the content bbox (calibration
+                cbb = _content_bbox(px, w, h)  # reconciliation 2026-11-05:
+                ext = cbb[2] - cbb[0] + 1      # speckle-excluded, largest-
+                if not lo <= ext <= hi:        # component semantics
                     rejected.append({
                         "job": job, "reason": "band",
                         "detail": f"long axis {ext}px outside the "
