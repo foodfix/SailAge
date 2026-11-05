@@ -95,6 +95,17 @@ artifact (no rembg/snap).
   each job so one bad store file cannot 500 `/api/jobs` (that 500 was the
   empty-grid / empty-textarea failure mode). Driver source + error are
   visible at `GET /api/status` → `driver`.
+- **Original prompts (user direction: edit from the actual original)**:
+  every generation stores the EXACT prompt in `studio/state.json`
+  (`original_prompt` + `original_prompt_source: "exact"`); legacy batch
+  jobs are backfilled with a faithful **reconstruction** of the driver's
+  actual wording (hull template + the re-roll round's kept `stated_px`
+  calibration from progress.json, ICON_PROMPT_OVERRIDES, terrain
+  per-sheet clauses), tagged `original_prompt_source: "reconstructed"`
+  (or `"default"` if even the fallback wording had to be used — never
+  pinned to state.json so it upgrades when the driver parses again).
+  The textarea pre-fills the original; **↺ original** reverts the box
+  (and clears the saved custom edit) byte-identically.
 
 ## Notes
 

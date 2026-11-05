@@ -275,6 +275,33 @@ class Studio:
                     "status_source": "canonical", "metrics": None,
                     "seconds": None, "error": None, "thumbs": {},
                 })
+        # backfill: persist each legacy job's original prompt ONCE, so the
+        # edit base stays stable across driver drift and "↺ original" is
+        # byte-identical. Exact originals are already in state.json (written
+        # by the worker); reconstructed ones are stored as reconstructed.
+        missing = {}
+        for j in jobs:
+            if j["original_prompt_source"] == "default":
+                continue  # never pin fallback wording; it upgrades once the
+                          # driver parses again
+            st_rec = state.get(j["id"]) or {}
+            if not (st_rec.get("original_prompt")
+                    or st_rec.get("prompt")):
+                missing[j["id"]] = {
+                    "original_prompt": j["original_prompt"],
+                    "original_prompt_source": j["original_prompt_source"],
+                }
+        if missing:
+            with self.lock:
+                st = self.state()
+                for job_id, add in missing.items():
+                    rec = st.setdefault("jobs", {}).setdefault(job_id, {})
+                    rec.setdefault("original_prompt",
+                                   add["original_prompt"])
+                    rec.setdefault("original_prompt_source",
+                                   add["original_prompt_source"])
+                self.save_state(st)
+            log(f"backfilled original prompts for {len(missing)} job(s)")
         counts = {f: sum(1 for j in jobs if j["family"] == f)
                   for f in FAMILIES}
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
@@ -325,8 +352,24 @@ class Studio:
                                     "mirrored": mirrored}
                     break
 
-        eff_prompt = prompts.get(job_id) or chain.default_prompt(
-            job_id, self.repo)
+        # original prompt: EXACT when the studio generated it (worker writes
+        # original_prompt + source "exact"); else the backfilled
+        # reconstruction (source stored with it); legacy state recs that
+        # only carry the old `prompt` field hold the exact wording too
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt"))
+        if stored_original:
+            original_prompt = stored_original
+            if studio_rec.get("original_prompt_source"):
+                original_source = studio_rec["original_prompt_source"]
+            else:
+                # legacy worker recs stored the EXACT sent wording in
+                # `prompt` (original_prompt key did not exist yet)
+                original_source = "exact"
+        else:
+            original_prompt, original_source = chain.reconstruct_original(
+                job_id, self.repo, rec=canon or None)
+        eff_prompt = prompts.get(job_id) or original_prompt
         return {
             "id": job_id,
             "family": fam,
@@ -353,6 +396,8 @@ class Studio:
             "flagged": flagged,
             "accepted": accepted.get(job_id),
             "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
             "custom_prompt": job_id in prompts,
             "seed": studio_rec.get("seed", canon.get("seed")),
             "canonical_seed": seed_map.get(job_id),
@@ -389,15 +434,22 @@ class Studio:
                     self.qcond.wait()
                 order = self.queue.pop(0)
                 job_id = order["job"]
-                prompt = self.prompts().get(job_id) \
-                    or chain.default_prompt(job_id, self.repo)
+                prompt = self.prompts().get(job_id)
+                if not prompt:
+                    st = self.state().get("jobs", {}).get(job_id) or {}
+                    prompt = (st.get("original_prompt")
+                              or st.get("prompt"))  # exact original wins
+                if not prompt:
+                    prompt = chain.default_prompt(job_id, self.repo)
                 seed = order["seed"] if order["seed"] is not None \
                     else chain.random_seed()
                 self.current = {"job": job_id, "prompt": prompt,
                                 "seed": seed, "stage": "starting",
                                 "started_epoch": time.time()}
-            log(f"generating {job_id} seed={seed}")
-            rec = {"prompt": prompt, "seed": seed, "status": "running",
+            log(f"generating {job_id} seed={seed} prompt={prompt!r}")
+            rec = {"prompt": prompt, "original_prompt": prompt,
+                   "original_prompt_source": "exact", "seed": seed,
+                   "status": "running",
                    "started_at": time.strftime("%H:%M:%S")}
             try:
                 def stage(name: str) -> None:

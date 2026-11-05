@@ -113,6 +113,8 @@ function buildCard(job) {
   mk("draft", "draft (read-only)");
   mk("raw", "raw gen");
   mk("snapped", "snapped 64");
+  const taWrap = document.createElement("div");
+  taWrap.className = "ta-wrap";
   const ta = document.createElement("textarea");
   ta.rows = 3;
   ta.spellcheck = false;
@@ -120,9 +122,14 @@ function buildCard(job) {
     ta.dataset.dirty = "1";
     savePrompt(job.id, ta.value);
   });
+  const srcTag = document.createElement("span");
+  srcTag.className = "src-tag";
+  srcTag.title = "fidelity of the pre-filled original prompt";
+  taWrap.append(ta, srcTag);
   const controls = document.createElement("div");
   controls.className = "controls";
   controls.innerHTML = `
+    <button class="orig small" title="Revert the prompt box to the stored original wording">↺ original</button>
     <input class="seed" placeholder="random" inputmode="numeric">
     <button class="reroll">Re-roll</button>
     <button class="accept small">Accept</button>
@@ -131,13 +138,14 @@ function buildCard(job) {
   status.className = "status";
   const metrics = document.createElement("div");
   metrics.className = "metrics";
-  root.append(head, thumbs, ta, controls, status, metrics);
+  root.append(head, thumbs, taWrap, controls, status, metrics);
 
   $(".reroll", controls).addEventListener("click", () => reroll(job.id, ta));
   $(".accept", controls).addEventListener("click", () => accept(job.id));
+  $(".orig", controls).addEventListener("click", () => restoreOriginal(job.id));
   grid.appendChild(root);
   return { root, els: {
-    ta, status, metrics, seed: $(".seed", controls),
+    ta, srcTag, status, metrics, seed: $(".seed", controls),
   }, data: job };
 }
 
@@ -149,6 +157,24 @@ async function savePrompt(jobId, prompt) {
       body: JSON.stringify({ job: jobId, prompt }),
     });
   } catch (e) { console.error("prompt save failed", e); }
+}
+
+async function restoreOriginal(jobId) {
+  const card = cards.get(jobId);
+  if (!card) return;
+  const original = card.data.original_prompt;
+  if (!original) { alert("no original prompt stored yet"); return; }
+  try {
+    // clear the saved custom edit so generation uses the original again
+    await api("/api/prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job: jobId, prompt: "" }),
+    });
+  } catch (e) { console.error("prompt clear failed", e); }
+  card.els.ta.value = original;      // byte-identical to the stored original
+  card.els.ta.dataset.dirty = "";    // let refreshes track the server value
+  refreshSoon();
 }
 
 async function reroll(jobId, ta) {
@@ -261,12 +287,15 @@ function updateCard(job) {
       d.classList.add("missing");
     }
   }
-  // prompt (never stomp user edits; never blank)
+  // prompt (never stomp user edits; never blank) + fidelity tag
   const ta = els.ta;
   if (document.activeElement !== ta && ta.dataset.dirty !== "1"
       && ta.value !== job.prompt) ta.value = job.prompt || "";
   ta.placeholder = job.prompt ? "" : "prompt unavailable — type here";
-  ta.title = job.custom_prompt ? "persisted studio prompt" : "canonical driver prompt";
+  ta.title = job.custom_prompt ? "persisted studio prompt"
+    : `original (${job.original_prompt_source})`;
+  els.srcTag.textContent = job.original_prompt_source || "default";
+  els.srcTag.className = "src-tag " + (job.original_prompt_source || "default");
   const st = statusHTML(job, current, queue);
   els.status.className = `status ${st.cls}`;
   els.status.textContent = st.html;

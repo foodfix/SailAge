@@ -93,6 +93,15 @@ textarea {
 }
 textarea:focus { outline: none; border-color: var(--accent); }
 textarea.dirty { border-color: var(--gold); }
+.ta-wrap { position: relative; }
+.src-tag {
+  position: absolute; top: 4px; right: 6px; font-size: 9px;
+  letter-spacing: .3px; padding: 0 6px; border-radius: 7px;
+  border: 1px solid #3a465e; background: rgba(20, 24, 36, .88);
+  color: var(--dim); pointer-events: none;
+}
+.src-tag.exact { color: var(--gold-hi); border-color: var(--gold); }
+.src-tag.reconstructed { color: #9cc4dc; border-color: #2f6f9e; }
 
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .seed {
