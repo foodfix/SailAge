@@ -8,6 +8,12 @@ let jobsData = [];
 let filter = "all";
 let lastCurrent = null;
 
+const CAPTIONS = {
+  hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
+  icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
+  terrain: { draft: "draft sheet", raw: "raw sheet", snapped: "sheet (no snap)" },
+};
+
 async function api(path, opts) {
   const r = await fetch(path, opts);
   const body = await r.json().catch(() => ({}));
@@ -235,10 +241,14 @@ function updateCard(job) {
     ${pennantBadge(job)}
     <span class="badge acc" style="${job.accepted ? "" : "display:none"}"
       title="${job.accepted ? "accepted " + job.accepted.at + " (" + job.accepted.source + ")" : ""}">★ accepted</span>`;
-  // thumbs
+  // thumbs + captions (mirror note when serving the flipped base dir)
+  const caps = CAPTIONS[job.family] || CAPTIONS.hull;
   for (const kind of ["draft", "raw", "snapped"]) {
     const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
+    const t = job.thumbs[kind];
     const url = thumbURL(job, kind);
+    $(".cap", d).textContent =
+      caps[kind] + (t && t.mirrored ? ` (⇄ ${t.mirrored})` : "");
     if (url) {
       d.classList.remove("missing");
       const img = $("img", d);
@@ -251,10 +261,11 @@ function updateCard(job) {
       d.classList.add("missing");
     }
   }
-  // prompt (never stomp user edits)
+  // prompt (never stomp user edits; never blank)
   const ta = els.ta;
   if (document.activeElement !== ta && ta.dataset.dirty !== "1"
-      && ta.value !== job.prompt) ta.value = job.prompt;
+      && ta.value !== job.prompt) ta.value = job.prompt || "";
+  ta.placeholder = job.prompt ? "" : "prompt unavailable — type here";
   ta.title = job.custom_prompt ? "persisted studio prompt" : "canonical driver prompt";
   const st = statusHTML(job, current, queue);
   els.status.className = `status ${st.cls}`;

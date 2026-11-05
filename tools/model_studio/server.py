@@ -37,6 +37,7 @@ import sys
 import threading
 import time
 import urllib.request
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -63,6 +64,7 @@ class Studio:
         self.queue: list[dict] = []          # pending reroll orders
         self.current: dict | None = None     # running job info
         self.qcond = threading.Condition(self.lock)
+        self._thumb_cache: "OrderedDict[str, bytes]" = OrderedDict()
         self.load_driver()
 
     # -- paths ----------------------------------------------------------
@@ -113,10 +115,131 @@ class Studio:
         self._write_json(self._json_path("accepted.json"), data)
 
     # -- registry ---------------------------------------------------------
+    # -- thumbnails -------------------------------------------------------
+    def thumb_candidates(self, kind: str, job_id: str):
+        """Ordered (path, mirrored_base) candidates for one thumb slot.
+        `mirrored_base` set => serve that file horizontally flipped (the
+        ingestion's mirror_x) when the job's own file is missing — e/ne/se
+        files can disappear whenever the 5-dir canonical round prunes the
+        store; terrain has no snapped artifact (its gen sheet IS the
+        artifact). Never 404 on a listed job's thumbs."""
+        fam, subject, direction = chain.parse_job(job_id)
+        raw, st = self.raw(), self.studio()
+        mirror_of = MIRROR_OF.get(direction) if fam == "hull" else None
+        out = []
+        if kind == "draft":
+            out.append((os.path.join(raw, "drafts", job_id + ".png"), None))
+            if mirror_of:
+                out.append((os.path.join(raw, "drafts",
+                                         f"hull_{subject}_{mirror_of}.png"),
+                            mirror_of))
+        elif kind == "raw":
+            out.append((os.path.join(st, "gen", job_id + ".png"), None))
+            out.append((os.path.join(raw, "gen", job_id + ".png"), None))
+            if mirror_of:
+                out.append((os.path.join(st, "gen",
+                                         f"hull_{subject}_{mirror_of}.png"),
+                            mirror_of))
+                out.append((os.path.join(raw, "gen",
+                                         f"hull_{subject}_{mirror_of}.png"),
+                            mirror_of))
+        elif kind == "snapped":
+            out.append((os.path.join(st, "snapped", job_id + ".png"), None))
+            out.append((os.path.join(raw, "snapped", job_id + ".png"), None))
+            if mirror_of:
+                out.append((os.path.join(st, "snapped",
+                                         f"hull_{subject}_{mirror_of}.png"),
+                            mirror_of))
+                out.append((os.path.join(raw, "snapped",
+                                         f"hull_{subject}_{mirror_of}.png"),
+                            mirror_of))
+            if fam == "terrain":
+                # the normalized 1024x512 gen sheet is the terrain artifact
+                out.append((os.path.join(st, "gen", job_id + ".png"), None))
+                out.append((os.path.join(raw, "gen", job_id + ".png"), None))
+        return out
+
+    def _thumb_cache_get(self, key: str):
+        with self.lock:
+            data = self._thumb_cache.get(key)
+            if data is not None:
+                self._thumb_cache.move_to_end(key)
+            return data
+
+    def _thumb_cache_put(self, key: str, data: bytes) -> None:
+        with self.lock:
+            self._thumb_cache[key] = data
+            while len(self._thumb_cache) > 600:  # bounded; PNG thumbs only
+                self._thumb_cache.popitem(last=False)
+
+    def thumb_bytes(self, kind: str, job_id: str):
+        """(bytes, mirrored_base | None, direct: bool) — flips through the
+        in-memory cache keyed by source path+mtime so browser bursts don't
+        re-decode/re-encode mirrored PNGs."""
+        try:
+            candidates = self.thumb_candidates(kind, job_id)
+        except KeyError:
+            return None, None, False
+        direct_seen = False
+        for path, mirrored in candidates:
+            if not os.path.isfile(path):
+                continue
+            if mirrored is None:
+                direct_seen = True
+            mtime = os.path.getmtime(path)
+            key = f"{path}|{mtime}|{'flip' if mirrored else 'raw'}"
+            data = self._thumb_cache_get(key)
+            if data is None:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+                if mirrored:
+                    try:
+                        data = chain.flip_x(data)
+                    except Exception as exc:  # noqa: BLE001 — next candidate
+                        log(f"flip failed for {path}: {exc}")
+                        continue
+                self._thumb_cache_put(key, data)
+            return data, mirrored, direct_seen
+        return None, None, False
+
+    # -- registry ---------------------------------------------------------
+    def _seed_map(self) -> dict:
+        """canonical seed per job, computed in ONE pass (manifests read
+        once instead of per job). Tolerant to torn manifest reads."""
+        try:
+            d = self.driver
+            icons_dir = os.path.join(self.repo, "tools", "ui_art", "icons")
+            manifests = {}
+            if os.path.isdir(icons_dir):
+                for path in sorted(os.listdir(icons_dir)):
+                    if not path.endswith(".json"):
+                        continue
+                    try:
+                        with open(os.path.join(icons_dir, path),
+                                  encoding="utf-8") as fh:
+                            doc = json.load(fh)
+                    except (OSError, ValueError):
+                        continue
+                    sprites = doc if isinstance(doc, list) \
+                        else doc.get("sprites", [])
+                    for s in sprites:
+                        manifests[s["id"]] = s
+            ids = [i for i in d["ICON_PRIORITY"] if i in manifests]
+            ids += [i for i in sorted(manifests) if i not in set(ids)]
+            order = ([f"hull_{h}_{dr}" for h in d["HULLS"]
+                      for dr in d["DIRS"]]
+                     + [f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
+                     + [f"icon_{i}" for i in ids[:129]])
+            return {job: 1000 + i for i, job in enumerate(order)}
+        except Exception as exc:  # noqa: BLE001 — informational only
+            log(f"seed map failed: {exc}")
+            return {}
+
     def registry(self) -> list[dict]:
         """Enumerate jobs from the store's drafts/ and merge canonical +
-        studio state. Rebuilt per /api/jobs call (cheap; the other agents
-        may rewrite progress/report concurrently)."""
+        studio state. Rebuilt per /api/jobs call; per-job guard so one bad
+        store file can never 500 the whole endpoint (the empty-grid /
+        empty-textarea failure mode)."""
         drafts_dir = os.path.join(self.raw(), "drafts")
         prog = self._read_json(os.path.join(self.raw(), "progress.json"),
                                {}).get("jobs", {})
@@ -126,6 +249,7 @@ class Studio:
             prompts = self.prompts()
             state = self.state().get("jobs", {})
             accepted = self.accepted()
+        seed_map = self._seed_map()
         jobs = []
         for fname in sorted(os.listdir(drafts_dir)):
             if not fname.endswith(".png"):
@@ -133,94 +257,112 @@ class Studio:
             job_id = fname[:-4]
             if not JOB_RE.match(job_id):
                 continue
-            fam, subject, direction = chain.parse_job(job_id)
-            canon = prog.get(job_id, {})
-            studio_rec = state.get(job_id, {})
-            metrics = studio_rec.get("metrics") or canon.get("metrics")
-
-            tier = self.driver["TIER"].get(subject) if fam == "hull" else None
-            band_info, in_band = None, None
-            if fam == "hull" and direction in ("e", "w"):
-                m_band = (metrics or {}).get("band")
-                if m_band:
-                    band_info, in_band = m_band.get("band"), \
-                        m_band.get("in_band")
-                else:
-                    for d in band_tbl.get(subject, {}).get("dirs", []):
-                        if d["dir"] == direction:
-                            band_info = d  # report fallback
-                            in_band = d.get("in_band")
-                            break
-            pennant_ok = None
-            if fam == "hull":
-                if metrics and "pennant_present" in metrics:
-                    pennant_ok = bool(metrics["pennant_present"])
-                else:
-                    pennant_ok = job_id not in report.get("pennant",
-                                                          {}).get(
-                                                              "absent_ids", [])
-            flagged = False
-            if fam == "hull":
-                flagged = ((direction in ("e", "w") and in_band is False)
-                           or pennant_ok is False)
-
-            dirs_for = {
-                "draft": [os.path.join(self.raw(), "drafts")],
-                "raw": [os.path.join(self.studio(), "gen"),
-                        os.path.join(self.raw(), "gen")],
-                "snapped": [os.path.join(self.studio(), "snapped"),
-                            os.path.join(self.raw(), "snapped")],
-            }
-            thumbs = {}
-            for kind, dirs in dirs_for.items():
-                for d in dirs:
-                    p = os.path.join(d, job_id + ".png")
-                    if os.path.exists(p):
-                        thumbs[kind] = {"v": int(os.path.getmtime(p) * 1000)}
-                        break
-
-            eff_prompt = prompts.get(job_id) or chain.default_prompt(
-                job_id, self.repo)
-            jobs.append({
-                "id": job_id,
-                "family": fam,
-                "subject": subject,
-                "dir": direction,
-                "tier": tier,
-                "label": (f"T{tier} · {subject} · {direction}"
-                          if fam == "hull" else
-                          (f"icon · {subject}" if fam == "icon"
-                           else f"terrain · {subject}")),
-                "mirror_of": MIRROR_OF.get(direction) if fam == "hull"
-                else None,
-                "band": ({"band": band_info if isinstance(band_info, list)
-                          else (band_info or {}).get("band"),
-                          "long_axis_px":
-                              metrics.get("band", {}).get("long_axis_px")
-                              if metrics and "band" in metrics
-                              else band_info.get("long_axis")
-                              if isinstance(band_info, dict) else None,
-                          "in_band": in_band}
-                         if fam == "hull" and direction in ("e", "w")
-                         else None),
-                "pennant_ok": pennant_ok,
-                "flagged": flagged,
-                "accepted": accepted.get(job_id),
-                "prompt": eff_prompt,
-                "custom_prompt": job_id in prompts,
-                "seed": studio_rec.get("seed", canon.get("seed")),
-                "canonical_seed": chain.canonical_seed(job_id, self.repo),
-                "status": studio_rec.get("status", canon.get("status")),
-                "status_source": "studio" if studio_rec else "canonical",
-                "metrics": metrics,
-                "seconds": studio_rec.get("seconds", canon.get("seconds")),
-                "error": studio_rec.get("error"),
-                "thumbs": thumbs,
-            })
+            try:
+                jobs.append(self._job_entry(job_id, prog, report, prompts,
+                                            state, accepted, seed_map))
+            except Exception as exc:  # noqa: BLE001 — degrade, don't die
+                log(f"registry entry {job_id} failed: "
+                    f"{type(exc).__name__}: {exc}")
+                jobs.append({
+                    "id": job_id, "family": job_id.split("_", 1)[0],
+                    "subject": None, "dir": None, "tier": None,
+                    "label": job_id, "mirror_of": None, "band": None,
+                    "pennant_ok": None, "flagged": False,
+                    "accepted": accepted.get(job_id),
+                    "prompt": chain.default_prompt(job_id, self.repo),
+                    "custom_prompt": job_id in prompts, "seed": None,
+                    "canonical_seed": seed_map.get(job_id), "status": None,
+                    "status_source": "canonical", "metrics": None,
+                    "seconds": None, "error": None, "thumbs": {},
+                })
         counts = {f: sum(1 for j in jobs if j["family"] == f)
                   for f in FAMILIES}
         flagged_ids = [j["id"] for j in jobs if j["flagged"]]
         return jobs, counts, flagged_ids
+
+    def _job_entry(self, job_id, prog, report, prompts, state, accepted,
+                   seed_map):
+        fam, subject, direction = chain.parse_job(job_id)
+        canon = prog.get(job_id, {})
+        studio_rec = state.get(job_id, {})
+        metrics = studio_rec.get("metrics") or canon.get("metrics")
+        band_tbl = report.get("band_table", {})
+
+        tier = self.driver["TIER"].get(subject) if fam == "hull" else None
+        band_info, in_band = None, None
+        if fam == "hull" and direction in ("e", "w"):
+            m_band = (metrics or {}).get("band")
+            if m_band:
+                band_info, in_band = m_band.get("band"), \
+                    m_band.get("in_band")
+            else:
+                for d in band_tbl.get(subject, {}).get("dirs", []):
+                    if d["dir"] == direction:
+                        band_info = d  # report fallback
+                        in_band = d.get("in_band")
+                        break
+        pennant_ok = None
+        if fam == "hull":
+            if metrics and "pennant_present" in metrics:
+                pennant_ok = bool(metrics["pennant_present"])
+            else:
+                pennant_ok = job_id not in report.get("pennant",
+                                                      {}).get(
+                                                          "absent_ids", [])
+        flagged = False
+        if fam == "hull":
+            flagged = ((direction in ("e", "w") and in_band is False)
+                       or pennant_ok is False)
+
+        thumbs = {}
+        for kind in ("draft", "raw", "snapped"):
+            for path, mirrored in self.thumb_candidates(kind, job_id):
+                if mirrored is None and os.path.isfile(path):
+                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000)}
+                    break
+                if mirrored is not None and os.path.isfile(path):
+                    thumbs[kind] = {"v": int(os.path.getmtime(path) * 1000),
+                                    "mirrored": mirrored}
+                    break
+
+        eff_prompt = prompts.get(job_id) or chain.default_prompt(
+            job_id, self.repo)
+        return {
+            "id": job_id,
+            "family": fam,
+            "subject": subject,
+            "dir": direction,
+            "tier": tier,
+            "label": (f"T{tier} · {subject} · {direction}"
+                      if fam == "hull" else
+                      (f"icon · {subject}" if fam == "icon"
+                       else f"terrain · {subject}")),
+            "mirror_of": MIRROR_OF.get(direction) if fam == "hull"
+            else None,
+            "band": ({"band": band_info if isinstance(band_info, list)
+                      else (band_info or {}).get("band"),
+                      "long_axis_px":
+                          metrics.get("band", {}).get("long_axis_px")
+                          if metrics and "band" in metrics
+                          else band_info.get("long_axis")
+                          if isinstance(band_info, dict) else None,
+                      "in_band": in_band}
+                     if fam == "hull" and direction in ("e", "w")
+                     else None),
+            "pennant_ok": pennant_ok,
+            "flagged": flagged,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", canon.get("seed")),
+            "canonical_seed": seed_map.get(job_id),
+            "status": studio_rec.get("status", canon.get("status")),
+            "status_source": "studio" if studio_rec else "canonical",
+            "metrics": metrics,
+            "seconds": studio_rec.get("seconds", canon.get("seconds")),
+            "error": studio_rec.get("error"),
+            "thumbs": thumbs,
+        }
 
     # -- worker -----------------------------------------------------------
     def start_worker(self) -> None:
@@ -300,7 +442,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def _json(self, code: int, obj) -> None:
         self._send(code, json.dumps(obj, indent=1).encode("utf-8"),
@@ -353,7 +496,8 @@ class Handler(BaseHTTPRequestHandler):
                     queue = [o["job"] for o in self.studio.queue]
                 self._json(200, {"worker": "busy" if cur else "idle",
                                  "current": cur, "queue": queue,
-                                 "repo": self.studio.repo})
+                                 "repo": self.studio.repo,
+                                 "driver": chain.driver_status()})
             elif path.startswith("/thumb/"):
                 self._thumb(path)
             else:
@@ -366,27 +510,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def _thumb(self, path: str) -> None:
         # /thumb/<kind>/<job>.png  (draft | raw | snapped; raw prefers the
-        # studio reroll, snapped falls back to the canonical store)
+        # studio reroll, snapped falls back to the canonical store; a hull
+        # mirror dir (e/ne/se) whose file is gone serves its w/nw/sw base
+        # flipped; terrain snapped falls back to its gen sheet — never 404
+        # on a listed job)
         m = re.match(r"^/thumb/(draft|raw|snapped)/([a-z0-9_]+)\.png$",
                      path)
         if not m:
             self._json(404, {"error": "bad thumb path"})
             return
         kind, job_id = m.group(1), m.group(2)
-        if kind == "draft":
-            candidates = [chain.canonical_path("drafts", job_id)]
-        elif kind == "raw":
-            candidates = [chain.studio_path("gen", job_id),
-                          chain.canonical_path("gen", job_id)]
-        else:
-            candidates = [chain.studio_path("snapped", job_id),
-                          chain.canonical_path("snapped", job_id)]
-        for p in candidates:
-            if os.path.isfile(p):
-                with open(p, "rb") as fh:
-                    self._send(200, fh.read(), "image/png")
-                return
-        self._json(404, {"error": f"no {kind} thumb for {job_id}"})
+        data, mirrored, _direct = self.studio.thumb_bytes(kind, job_id)
+        if data is None:
+            self._json(404, {"error": f"no {kind} thumb for {job_id}"})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        if mirrored:
+            self.send_header("X-Mirrored", mirrored)
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def do_HEAD(self):  # noqa: N802 — headers-only GET (no more 501 pages)
+        self.do_GET()
 
     def do_POST(self):  # noqa: N802 — stdlib naming
         path = urllib.request.urlparse(self.path).path
@@ -463,6 +612,14 @@ class Handler(BaseHTTPRequestHandler):
                          acc[job_id]})
 
 
+class StudioHTTPServer(ThreadingHTTPServer):
+    """daemon_threads (ThreadingHTTPServer default) + a real accept backlog:
+    the TCPServer default of 5 drops connections when a browser bursts ~500
+    <img> requests — the intermittently-broken-thumbnail mechanism."""
+    daemon_threads = True
+    request_queue_size = 128
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="SailAge model studio")
     ap.add_argument("--port", type=int, default=8010)
@@ -474,11 +631,12 @@ def main(argv=None) -> None:
 
     studio = Studio(args.repo)
     Handler.studio = studio
+    Handler.protocol_version = "HTTP/1.1"  # keep-alive; Content-Length always sent
     studio.start_worker()
 
     jobs, counts, flagged = studio.registry()
     log(f"registry: {len(jobs)} jobs {counts}; flagged={len(flagged)}")
-    httpd = ThreadingHTTPServer((args.host, args.port), Handler)
+    httpd = StudioHTTPServer((args.host, args.port), Handler)
     log(f"listening on http://{args.host}:{args.port} (repo={args.repo})")
     try:
         httpd.serve_forever()

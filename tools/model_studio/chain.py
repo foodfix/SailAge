@@ -87,11 +87,32 @@ def init(repo: str) -> None:
     _DRAFTS = os.path.join(RAW, "drafts")
     for sub in ("gen", "snapped", "debg"):
         os.makedirs(os.path.join(STUDIO, sub), exist_ok=True)
+    import types  # noqa: PLC0415 — stdlib
     tools_dir = os.path.join(repo, "tools")
     if tools_dir not in sys.path:
         sys.path.insert(0, tools_dir)
-    import validate_data as _vd_mod  # noqa: PLC0415 — main-repo import
-    _VD = _vd_mod
+    # The studio needs only decode_ui_png + the BLOCK_* palettes from
+    # validate_data — but its module-level import chain grows with the repo
+    # (build_routes -> build_world -> vendored pyshp). Stub any sibling that
+    # fails to import (bounded retries); validate_data only CALLS those
+    # builders from its own main(), never at import time.
+    global validate_data
+    for _attempt in range(8):
+        try:
+            import validate_data as _vd_mod  # noqa: PLC0415
+            validate_data = _vd_mod
+            _VD = _vd_mod
+            break
+        except ModuleNotFoundError as exc:
+            name = exc.name or ""
+            if not name or name in sys.modules:
+                raise
+            print(f"[studio-chain] stubbing unavailable module {name!r} "
+                  f"for validate_data import", flush=True)
+            sys.modules[name] = types.ModuleType(name)
+    else:
+        raise RuntimeError("validate_data import kept failing")
+    _VD = validate_data
 
 
 def studio_path(kind: str, job_id: str) -> str:
@@ -424,6 +445,143 @@ _LITERAL_NAMES = ("HULLS", "DIRS", "TIER", "BANDS", "POSE", "RIG", "COMPACT",
                   "STYLE", "ICON_STYLE", "ICON_PRIORITY", "TERRAIN_KEYS")
 _DRIVER: dict | None = None
 
+# Hard fallback: the master's proven wording, embedded verbatim from
+# tools/model_pass.py (f6c00bb era). Used when the driver file cannot be
+# parsed (torn read while the re-roll round rewrites it) or drifts shape —
+# prompt boxes must NEVER go empty and /api/jobs must NEVER 500 over this.
+EMBEDDED_DRIVER: dict = {
+    "HULLS": ["brigantine", "caravel", "caravela_redonda", "carrack", "dhow",
+              "fluyt", "galiot", "galleass", "galleon", "galley", "junk",
+              "latin", "nao", "pinnace", "sloop", "xebec"],
+    "DIRS": ["e", "w", "n", "s", "ne", "nw", "se", "sw"],
+    "TIER": {"latin": 1, "sloop": 1, "galiot": 1, "pinnace": 1,
+             "caravel": 2, "galley": 2, "brigantine": 2, "fluyt": 2,
+             "junk": 2, "dhow": 2, "caravela_redonda": 2, "xebec": 2,
+             "nao": 3, "carrack": 3, "galleon": 3, "galleass": 3},
+    "BANDS": BANDS,
+    "POSE": {
+        "e": "side-view sailing-right pose",
+        "w": "side-view sailing-left pose (the mirrored view of the "
+             "reference)",
+        "n": ("stern-view sailing-away pose, billowed square sails seen from "
+              "behind, lit stern-castle windows"),
+        "s": "bow-view approaching pose, bowsprit pointing at the viewer",
+        "ne": "three-quarter diagonal view sailing toward the top-right",
+        "nw": "three-quarter diagonal view sailing toward the top-left",
+        "se": "three-quarter diagonal view sailing toward the bottom-right",
+        "sw": "three-quarter diagonal view sailing toward the bottom-left",
+    },
+    "RIG": {
+        "latin": "one mast with a big triangular latin lateen sail "
+                 "dominating the profile",
+        "sloop": "one mast with a big lateen mainsail, short bowsprit, "
+                 "small jib",
+        "galiot": "compact hull, one large lateen sail and a short oar bank "
+                  "visible at the waterline",
+        "pinnace": "small oared boat with two staggered oar banks and a "
+                   "bare mast stub carrying the pennant",
+        "caravel": "two masts with two large triangular lateen sails, "
+                   "rounded high prow",
+        "galley": "long low hull with rows of oars at the waterline, one "
+                  "lateen mainsail plus a small square topsail",
+        "brigantine": "two masts: square course and topsail on the fore "
+                      "mast, fore-and-aft gaff spanker on the main",
+        "fluyt": "fat-bellied hull, blunt stern, three masts with square "
+                 "course and topsail stacks",
+        "junk": "three masts with fully-battened rectangular junk sails, "
+                "fan-tail stern",
+        "dhow": "slim hull with sharp prow and one big triangular lateen "
+                "sail",
+        "caravela_redonda": "roundish hull, three masts: square course and "
+                            "topsail stacks fore and main, lateen mizzen",
+        "xebec": "narrow hull, three masts with large overlapping "
+                 "triangular lateen sails",
+        "nao": "three masts with square course and topsail stacks, tall "
+               "fore and aft castles, crow's nests",
+        "carrack": "three masts with square sails plus a lateen mizzen, "
+                   "very high stern castle",
+        "galleon": "three masts with square sails, high stern castle, "
+                   "crow's nests, beakhead, dense gunports",
+        "galleass": "the longest hull, three lateen-rigged masts and many "
+                    "oar stations at the waterline",
+    },
+    "COMPACT": ("Compact proportions: the whole ship fits within a square "
+                "as wide as it is long, compact hull, the outboard rig "
+                "overhangs the hull minimally."),
+    "STYLE": ("Render it as crisp limited-palette pixel art in the style of "
+              "early-90s 16-bit sailing games: billowed canvas sails with "
+              "curved highlight and shadow bands following the bulge, dense "
+              "wooden hull with visible planking lines, small lit cabin "
+              "windows, gunports, a small red pennant flag at the mainmast "
+              "top, strong 1-pixel dark outline around the whole sprite, "
+              "big chunky pixels, pure white background. No water, no "
+              "scenery, no text, no frame."),
+    "ICON_STYLE": ("redraw as crisp bold 16-bit game icon, same silhouette "
+                   "and recognizability, thick outline, flat colors, "
+                   "centered, white background"),
+    "ICON_PRIORITY": [
+        "anchor", "crown", "skull", "hourglass", "save",
+        "coin", "crew", "provisions", "morale", "durability",
+        "chest", "scroll", "hammer", "bell",
+        "cannon", "hook", "ram", "surrender_flag",
+        "compass", "calm", "fair", "strong", "storm",
+        "good_wheat", "good_silk", "good_spices", "good_wine",
+        "good_salt", "good_dried_fish", "good_timber", "good_iron",
+        "trophy",
+    ],
+    "ICON_PROMPT_OVERRIDES": {
+        "compass": ("Redraw this input sprite. Keep the exact same "
+                    "silhouette and recognizability. It is a magnetic "
+                    "COMPASS: a round brass-rim compass face with a needle "
+                    "rose, N/E/S/W letters on the dial — NOT a ship's "
+                    "wheel, no spokes, no handles. "),
+        "save": ("Redraw this input sprite. Keep the exact same silhouette "
+                 "and recognizability. It is a retro FLOPPY DISK (square "
+                 "plastic disk with a metal shutter slot and a small "
+                 "label) — the game's save glyph, not an inkwell, not a "
+                 "quill. "),
+        "crew": ("Redraw this input sprite. Keep the exact same silhouette "
+                 "and recognizability. It is a SAILOR figure: "
+                 "head-and-shoulders bust wearing a round sailor cap, "
+                 "distinct face — not a generic blob, not a podium. "),
+        "strong": ("Redraw this input sprite. Keep the exact same "
+                   "silhouette and recognizability. It is a STRENGTH "
+                   "glyph: a bold chevron strength arrows motif (double "
+                   "up-chevrons) readable at 32 px — crisp, unambiguous. "),
+        "cannon": ("Redraw this input sprite. Keep the exact same "
+                   "silhouette and recognizability. It is a full BRONZE "
+                   "CANNON on a wooden carriage: long barrel with a muzzle "
+                   "ring plus visible wheels — not just a barrel, not a "
+                   "wheel alone. "),
+        "hook": ("Redraw this input sprite. Keep the exact same silhouette "
+                 "and recognizability. It is a curved GRAPPLING BOAT HOOK: "
+                 "clear hook silhouette with a strong curve and a point, "
+                 "single readable shape. "),
+        "good_iron": ("Redraw this input sprite. Keep the exact same "
+                      "silhouette and recognizability. It is a stack of "
+                      "dark IRON INGOTS (two or three trapezoid metal bars "
+                      "stacked) — not a bench, not a stool. "),
+        "scroll": ("Redraw this input sprite. Keep the exact same "
+                   "silhouette and recognizability. It is a ROLLED "
+                   "PARCHMENT SCROLL: a paper roll with curled ends and a "
+                   "visible written face — not a chalkboard, not a framed "
+                   "board. "),
+        "ram": ("Redraw this input sprite. Keep the exact same silhouette "
+                "and recognizability. It is a SHIP BOW RAM: a reinforced "
+                "bronze beak protruding forward from a short hull segment "
+                "at the waterline — the beak is the dominant feature. "),
+    },
+    "TERRAIN_KEYS": ["hills_plains", "mountains_plains", "ice_plains",
+                     "ice_sea", "reef_sea", "rocky_uniform",
+                     "plains_uniform"],
+}
+# Embedded overrides carry no style tail yet (the parsed driver's overrides
+# end with + ICON_STYLE) — append it so both shapes are identical.
+for _k in EMBEDDED_DRIVER["ICON_PROMPT_OVERRIDES"]:
+    EMBEDDED_DRIVER["ICON_PROMPT_OVERRIDES"][_k] += EMBEDDED_DRIVER["ICON_STYLE"]
+_DRIVER_SOURCE = "embedded-fallback"
+_DRIVER_ERROR: str | None = None
+
 # The driver's terrain texture clauses (function-local, not literal-parseable)
 # — the master's proven wording, embedded verbatim.
 TERRAIN_TEXTURES = {
@@ -451,48 +609,81 @@ TERRAIN_PROMPT_TMPL = ("Redraw this tile sheet. Keep the exact same layout, "
 
 
 def load_driver(repo: str) -> dict:
-    """Parse tools/model_pass.py READ-ONLY (ast). Literal constants via
-    literal_eval; ICON_PROMPT_OVERRIDES (references ICON_STYLE by name) via
-    an AST-validated eval. Raises when the driver's constant surface drifts."""
-    global _DRIVER
-    if _DRIVER is not None:
+    """Parse tools/model_pass.py READ-ONLY (ast). NEVER raises: on a torn
+    read (the driver is untracked and rewritten by the re-roll round) or a
+    shape drift it keeps the last good parse, else the embedded fallback.
+    Literal constants via literal_eval; ICON_PROMPT_OVERRIDES (references
+    ICON_STYLE by name) via an AST-validated eval."""
+    global _DRIVER, _DRIVER_SOURCE, _DRIVER_ERROR
+    if _DRIVER is not None and _DRIVER_SOURCE == "parsed":
         return _DRIVER
     path = os.path.join(repo, "tools", "model_pass.py")
-    with open(path, "r", encoding="utf-8") as fh:
-        src = fh.read()
-    tree = ast.parse(src, filename=path)
-    consts: dict = {}
-    overrides_node = None
-    for node in tree.body:
-        targets = []
-        if isinstance(node, ast.Assign):
-            targets = [t for t in node.targets if isinstance(t, ast.Name)]
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target,
-                                                            ast.Name):
-            targets = [node.target]
-        for t in targets:
-            if t.id in _LITERAL_NAMES:
-                consts[t.id] = ast.literal_eval(node.value)
-            elif t.id == "ICON_PROMPT_OVERRIDES":
-                overrides_node = node.value
-    missing = [n for n in _LITERAL_NAMES if n not in consts]
-    if missing or overrides_node is None:
-        raise RuntimeError(
-            f"model_pass.py constants drifted; missing: {missing} "
-            f"(overrides found: {overrides_node is not None})")
-    for node in ast.walk(overrides_node):  # eval-safety gate
-        ok = isinstance(node, (ast.Constant, ast.BinOp, ast.Add, ast.Load,
-                               ast.Dict, ast.Tuple, ast.List))
-        ok = ok or (isinstance(node, ast.Name) and node.id == "ICON_STYLE")
-        if not ok:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            src = fh.read()
+        tree = ast.parse(src, filename=path)
+        consts: dict = {}
+        overrides_node = None
+        for node in tree.body:
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = [t for t in node.targets
+                           if isinstance(t, ast.Name)]
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target,
+                                                                ast.Name):
+                targets = [node.target]
+            for t in targets:
+                if t.id in _LITERAL_NAMES:
+                    consts[t.id] = ast.literal_eval(node.value)
+                elif t.id == "ICON_PROMPT_OVERRIDES":
+                    overrides_node = node.value
+        missing = [n for n in _LITERAL_NAMES if n not in consts]
+        if missing or overrides_node is None:
             raise RuntimeError(
-                f"ICON_PROMPT_OVERRIDES holds unsupported syntax "
-                f"{type(node).__name__}")
-    consts["ICON_PROMPT_OVERRIDES"] = eval(  # noqa: S307 — AST-gated above
-        compile(ast.Expression(overrides_node), path, "eval"),
-        {"__builtins__": {}}, {"ICON_STYLE": consts["ICON_STYLE"]})
-    _DRIVER = consts
-    return consts
+                f"constants missing: {missing} "
+                f"(overrides found: {overrides_node is not None})")
+        for node in ast.walk(overrides_node):  # eval-safety gate
+            ok = isinstance(node, (ast.Constant, ast.BinOp, ast.Add,
+                                   ast.Load, ast.Dict, ast.Tuple, ast.List))
+            ok = ok or (isinstance(node, ast.Name)
+                        and node.id == "ICON_STYLE")
+            if not ok:
+                raise RuntimeError(
+                    f"ICON_PROMPT_OVERRIDES holds unsupported syntax "
+                    f"{type(node).__name__}")
+        consts["ICON_PROMPT_OVERRIDES"] = eval(  # noqa: S307 — gated above
+            compile(ast.Expression(overrides_node), path, "eval"),
+            {"__builtins__": {}}, {"ICON_STYLE": consts["ICON_STYLE"]})
+        # sanity: the keys default_prompt needs must exist
+        for probe in ("POSE", "RIG", "COMPACT", "STYLE", "ICON_STYLE",
+                      "TIER"):
+            if probe not in consts:
+                raise RuntimeError(f"parsed driver lacks {probe}")
+        _DRIVER = consts
+        _DRIVER_SOURCE = "parsed"
+        _DRIVER_ERROR = None
+    except Exception as exc:  # noqa: BLE001 — fallback, never raise
+        _DRIVER_ERROR = f"{type(exc).__name__}: {exc}"
+        if _DRIVER is None:
+            _DRIVER = EMBEDDED_DRIVER
+            _DRIVER_SOURCE = "embedded-fallback"
+            print(f"[studio-chain] driver parse FAILED ({_DRIVER_ERROR}); "
+                  f"using embedded fallback prompts", flush=True)
+        else:
+            print(f"[studio-chain] driver parse FAILED ({_DRIVER_ERROR}); "
+                  f"keeping last good parse", flush=True)
+    return _DRIVER
+
+
+def driver_status() -> dict:
+    return {"source": _DRIVER_SOURCE, "error": _DRIVER_ERROR}
+
+
+def flip_x(data: bytes) -> bytes:
+    """Horizontal mirror of any readable PNG (indexed 3 / RGB 2 / RGBA 6) —
+    the ingestion's mirror_x for e/ne/se display when their files are gone."""
+    w, h, px = decode_rgba(data)
+    return encode_png(w, h, [list(reversed(row)) for row in px])
 
 
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
@@ -508,44 +699,83 @@ def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
 
 
 def default_prompt(job_id: str, repo: str) -> str:
-    """Canonical driver prompt, reconstructed from parsed constants."""
+    """Canonical driver prompt, reconstructed from parsed constants.
+    Guaranteed non-empty: any reconstruction failure falls back to the
+    embedded proven wording."""
     d = load_driver(repo)
     fam, subject, direction = parse_job(job_id)
+    try:
+        if fam == "hull":
+            pose = d["POSE"][direction]
+            rig = d["RIG"][subject]
+            prompt = (f"Redraw this input sprite. Keep the exact same "
+                      f"silhouette, mast count, sail layout, proportions "
+                      f"and {pose}. Rig: {rig}. {d['COMPACT']} {d['STYLE']}")
+            if prompt.strip():
+                return prompt
+        elif fam == "icon":
+            prompt = d["ICON_PROMPT_OVERRIDES"].get(subject)
+            if not prompt:
+                prompt = (f"Redraw this input sprite. Keep the exact same "
+                          f"silhouette and recognizability. "
+                          f"{d['ICON_STYLE']}")
+            if prompt.strip():
+                return prompt
+        else:
+            prompt = TERRAIN_PROMPT_TMPL.format(
+                texture=TERRAIN_TEXTURES[subject])
+            if prompt.strip():
+                return prompt
+    except Exception as exc:  # noqa: BLE001 — per-job fallback below
+        print(f"[studio-chain] prompt reconstruction failed for {job_id} "
+              f"({type(exc).__name__}: {exc}); embedded fallback",
+              flush=True)
+    # embedded fallback (all keys present by construction)
+    e = EMBEDDED_DRIVER
     if fam == "hull":
-        pose = d["POSE"][direction]
-        rig = d["RIG"][subject]
+        pose = e["POSE"].get(direction) or e["POSE"]["e"]
+        rig = (e["RIG"].get(subject)
+               or f"period-appropriate sailing rig for a {subject}")
         return (f"Redraw this input sprite. Keep the exact same "
                 f"silhouette, mast count, sail layout, proportions and "
-                f"{pose}. Rig: {rig}. {d['COMPACT']} {d['STYLE']}")
+                f"{pose}. Rig: {rig}. {e['COMPACT']} {e['STYLE']}")
     if fam == "icon":
-        return (d["ICON_PROMPT_OVERRIDES"].get(subject)
+        return (e["ICON_PROMPT_OVERRIDES"].get(subject)
                 or f"Redraw this input sprite. Keep the exact same "
-                   f"silhouette and recognizability. {d['ICON_STYLE']}")
-    return TERRAIN_PROMPT_TMPL.format(texture=TERRAIN_TEXTURES[subject])
+                   f"silhouette and recognizability. {e['ICON_STYLE']}")
+    return TERRAIN_PROMPT_TMPL.format(
+        texture=TERRAIN_TEXTURES.get(subject, "rich 16-bit terrain "
+                                     "textures matching the reference"))
 
 
 def canonical_seed(job_id: str, repo: str) -> int | None:
-    """The driver's canonical seed: 1000 + index in its job order."""
-    d = load_driver(repo)
-    icons_dir = os.path.join(repo, "tools", "ui_art", "icons")
-    manifests = {}
-    if os.path.isdir(icons_dir):
-        for path in sorted(os.listdir(icons_dir)):
-            if not path.endswith(".json"):
-                continue
-            with open(os.path.join(icons_dir, path), encoding="utf-8") as fh:
-                doc = json.load(fh)
-            sprites = doc if isinstance(doc, list) else doc.get("sprites", [])
-            for s in sprites:
-                manifests[s["id"]] = s
-    ids = [i for i in d["ICON_PRIORITY"] if i in manifests]
-    ids += [i for i in sorted(manifests) if i not in set(ids)]
-    order = ([f"hull_{h}_{dr}" for h in d["HULLS"] for dr in d["DIRS"]]
-             + [f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
-             + [f"icon_{i}" for i in ids[:129]])
+    """The driver's canonical seed: 1000 + index in its job order.
+    Never raises (manifests may be mid-rewrite); None when unknown."""
     try:
+        d = load_driver(repo)
+        icons_dir = os.path.join(repo, "tools", "ui_art", "icons")
+        manifests = {}
+        if os.path.isdir(icons_dir):
+            for path in sorted(os.listdir(icons_dir)):
+                if not path.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(icons_dir, path),
+                              encoding="utf-8") as fh:
+                        doc = json.load(fh)
+                except (OSError, ValueError):
+                    continue  # torn manifest read
+                sprites = doc if isinstance(doc, list) \
+                    else doc.get("sprites", [])
+                for s in sprites:
+                    manifests[s["id"]] = s
+        ids = [i for i in d["ICON_PRIORITY"] if i in manifests]
+        ids += [i for i in sorted(manifests) if i not in set(ids)]
+        order = ([f"hull_{h}_{dr}" for h in d["HULLS"] for dr in d["DIRS"]]
+                 + [f"terrain_{k}" for k in d["TERRAIN_KEYS"]]
+                 + [f"icon_{i}" for i in ids[:129]])
         return 1000 + order.index(job_id)
-    except ValueError:
+    except Exception:  # noqa: BLE001 — informational value only
         return None
 
 
