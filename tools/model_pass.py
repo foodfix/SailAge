@@ -975,7 +975,196 @@ def cell_iou(job_a, job_b):
     return inter / max(1, union)
 
 
+def orientation_gate(job_id, expected):
+    """Orientation gate: principal-axis angle of the opaque mass via
+    second-order central moments on a 16x16 coarsened mask (speckle
+    suppression), eccentricity sanity, honest 'unmeasurable' verdicts.
+
+    Coordinate convention: image coords, y DOWN. The angle is the
+    orientation of the dominant mass axis in degrees: 0 = horizontal,
+    +45 = axis from top-left to bottom-right (positive slope),
+    -45 = axis from bottom-left to top-right (negative slope).
+    Expected: w/e ~ 0, n/s ~ +/-90, sw ~ -45 (hull runs bottom-left to
+    top-right), nw ~ +45 (hull runs top-left to bottom-right).
+    Tolerance +/-25 degrees.
+    """
+    import math
+    px, (w, h) = _snap_px(job_id)
+    pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
+    if len(pts) < 0.08 * w * h:
+        return {"expected": expected, "measured_angle": None,
+                "verdict": "FAIL", "observed": "unmeasurable",
+                "why": f"opaque {len(pts)} px < 8% of canvas",
+                "confidence": 0}
+    # 16x16 coarsened mass
+    cs = 4
+    coarse = Counter()
+    for x, y in pts:
+        coarse[(min(x // cs, 15), min(y // cs, 15))] += 1
+    mass = [(cx * cs + cs / 2, cy * cs + cs / 2, cnt)
+            for (cx, cy), cnt in coarse.items() if cnt >= 3]
+    tw = sum(m[2] for m in mass)
+    if tw < 12:
+        return {"expected": expected, "measured_angle": None,
+                "verdict": "FAIL", "observed": "unmeasurable",
+                "why": "coarse mass too small", "confidence": 0}
+    mx = sum(m[0] * m[2] for m in mass) / tw
+    my = sum(m[1] * m[2] for m in mass) / tw
+    sxx = sum(m[2] * (m[0] - mx) ** 2 for m in mass) / tw
+    syy = sum(m[2] * (m[1] - my) ** 2 for m in mass) / tw
+    sxy = sum(m[2] * (m[0] - mx) * (m[1] - my) for m in mass) / tw
+    angle = math.degrees(0.5 * math.atan2(2 * sxy, sxx - syy))
+    lam_max = (sxx + syy) / 2 + math.sqrt(
+        ((sxx - syy) / 2) ** 2 + sxy ** 2)
+    lam_min = (sxx + syy) / 2 - math.sqrt(
+        ((sxx - syy) / 2) ** 2 + sxy ** 2)
+    ecc = math.sqrt(max(0.0, 1 - lam_min / lam_max)) if lam_max > 0 else 0
+    ev = {"measured_angle": round(angle, 1), "eccentricity": round(ecc, 2),
+          "coarse_mass": tw}
+    if ecc < 0.15:
+        ev["why"] = f"mass near-isotropic (ecc {ecc:.2f}) — angle unstable"
+        return {"expected": expected, "observed": "unmeasurable",
+                "verdict": "FAIL", "confidence": 0, **ev}
+    a = abs(angle)
+    if expected in ("w", "e"):
+        ok = a <= 25
+        observed = "w" if ok else ("diagonal/vertical" if a > 45
+                                   else "diagonal")
+    elif expected in ("n", "s"):
+        ok = a >= 65
+        observed = expected if ok else ("diagonal" if a > 20
+                                        else "side-view(?)")
+    elif expected == "sw":
+        ok = -70 <= angle <= -20
+        observed = "sw" if ok else ("nw(?)flip" if angle > 20
+                                    else "near-stern(?)")
+    else:  # nw
+        ok = 20 <= angle <= 70
+        observed = "nw" if ok else ("sw(?)flip" if angle < -20
+                                    else "near-stern(?)")
+    return {"expected": expected, "measured_angle": round(angle, 1),
+            "observed": observed, "verdict": "PASS" if ok else "FAIL",
+            "confidence": round(min(1.0, 0.4 + ecc), 2), **ev}
+
+
+def audit_orientation():
+    """orientation_audit[] over all 80 base jobs; also refreshes
+    per_dir orientation verdicts in the hull records."""
+    audit = []
+    for ship in HULLS:
+        for direction in DIRS:
+            job_id = f"hull_{ship}_{direction}"
+            res = orientation_gate(job_id, direction)
+            res["job"] = job_id
+            audit.append(res)
+        prog = load_progress()
+        rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+        if rec and rec.get("per_dir"):
+            for direction in DIRS:
+                fresh = [a for a in audit
+                         if a["job"] == f"hull_{ship}_{direction}"]
+                if fresh:
+                    rec["per_dir"][direction]["orientation"] = {
+                        k: v for k, v in fresh[0].items() if k != "job"}
+            save_progress(prog)
+    prog = load_progress()
+    prog["orientation_audit"] = audit
+    save_progress(prog)
+    npass = sum(1 for a in audit if a["verdict"] == "PASS")
+    print(f"orientation audit: {npass}/{len(audit)} PASS")
+    for a in audit:
+        if a["verdict"] != "PASS":
+            print(f"  FAIL {a['job']}: {a.get('measured_angle')}deg "
+                  f"expected {a['expected']} | {a.get('observed')}")
+    return audit
+
+
+def sheet_orientation_audit(audit):
+    """35_orientation_audit.png: worst-first grid, x4 cells annotated
+    with measured angle + verdict colour."""
+    import math
+    order = sorted(audit, key=lambda a: (
+        0 if a["verdict"] == "PASS" else 1,
+        -abs((a.get("measured_angle") or 0)))
+        if a.get("measured_angle") is not None else (0, 0))
+    cell, label_h = 256, 18
+    cols = 8
+    rows = (len(order) + cols - 1) // cols
+    img = Image.new("RGBA", (cols * (cell + 6) + 6,
+                             rows * (cell + label_h + 6) + 6), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.load_default(size=13)
+    except TypeError:
+        font = ImageFont.load_default()
+    for i, a in enumerate(order):
+        r, c = divmod(i, cols)
+        x = c * (cell + 6) + 3
+        y = r * (cell + label_h + 6) + 3
+        job = a["job"]
+        draw.text((x + 2, y), job[len("hull_"):], fill=(220, 224, 236),
+                  font=font)
+        y += label_h
+        p = os.path.join(SNAPPED, job + ".png")
+        if os.path.exists(p):
+            tok = Image.open(p).resize((cell, cell), Image.NEAREST)
+            img.alpha_composite(tok, (x, y))
+        good = a["verdict"] == "PASS"
+        color = (80, 220, 100) if good else (240, 70, 70)
+        draw.rectangle([x, y, x + cell - 1, y + cell - 1],
+                       outline=color, width=3)
+        ang = a.get("measured_angle")
+        txt = f"{ang:.0f}deg OK" if good else (
+            f"{ang:.0f}deg BAD" if ang is not None else "unmeasurable")
+        draw.text((x + 2, y + 2), txt, fill=color, font=font)
+    out = os.path.join(REVIEW, "35_orientation_audit.png")
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
 def audit_directions():
+    """draft-IoU direction audit (secondary style-fidelity check); the
+    orientation gate is the primary acceptance (see orientation_gate)."""
+    audit = []
+    for ship in HULLS:
+        for direction in DIRS:
+            job_id = f"hull_{ship}_{direction}"
+            res = classify_for(job_id, direction)
+            res["job"] = job_id
+            audit.append(res)
+        # n/s near-identical detector: shape-IoU >= 0.90 means the same
+        # view drawn twice (legit opposite pairs sit at 0.62-0.88)
+        iou = cell_iou(f"hull_{ship}_n", f"hull_{ship}_s")
+        if iou >= 0.90:
+            for res in audit:
+                if res["job"] in (f"hull_{ship}_n", f"hull_{ship}_s"):
+                    res["verdict"] = "FAIL"
+                    res["observed"] = res["observed"].split("/")[0] \
+                        + "/duplicate"
+                    res["why"] = (f"n/s near-identical views "
+                                  f"(shape-IoU {iou:.2f})")
+                    res["ns_iou"] = round(iou, 2)
+        prog = load_progress()
+        rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+        if rec and rec.get("per_dir"):
+            for direction in DIRS:
+                if direction in rec["per_dir"]:
+                    fresh = [a for a in audit
+                             if a["job"] == f"hull_{ship}_{direction}"]
+                    if fresh:
+                        rec["per_dir"][direction]["direction"] = {
+                            k: v for k, v in fresh[0].items() if k != "job"}
+            save_progress(prog)
+    prog = load_progress()
+    prog["direction_audit"] = audit
+    save_progress(prog)
+    npass = sum(1 for a in audit if a["verdict"] == "PASS")
+    print(f"direction audit: {npass}/{len(audit)} PASS")
+    for a in audit:
+        if a["verdict"] != "PASS":
+            print(f"  FAIL {a['job']}: observed={a['observed']} "
+                  f"({a.get('why') or '-'})")
+    return audit
     """Audit all 80 base jobs; report.json -> direction_audit[]. Also
     refreshes per_dir direction verdicts in the hull records (the gate
     reads them)."""
@@ -1572,8 +1761,15 @@ def hull_gate(ship):
               and hi + 1 >= w.get("long_axis_px") >= lo)
     if not (in_band or waived):
         fails.append(f"w band {w.get('long_axis_px')} not in {lo}-{hi}")
-    dir_fails = [d for d, p in per.items()
-                 if p.get("direction", {}).get("verdict") != "PASS"]
+    dir_fails = []
+    for d, p in per.items():
+        orient = p.get("orientation", {}).get("verdict")
+        draft_v = p.get("direction", {}).get("verdict")
+        if orient is not None:
+            if orient != "PASS":
+                dir_fails.append(d)
+        elif draft_v != "PASS":
+            dir_fails.append(d)
     if dir_fails:
         fails.append(f"direction FAILs: {dir_fails}")
     pennant_missing = [d for d, p in per.items()
@@ -1649,10 +1845,11 @@ def polish_band(ship, max_attempts=3, reason="band polish"):
 
 
 def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
-                reason="direction polish"):
+                reason="direction polish", accept="draft"):
     """Single-cell re-roll with hardened per-direction wording (diagonal
     anchor etc.); each attempt audited; keep the best verdict."""
     job_id = f"hull_{ship}_{direction}"
+    band = BANDS[TIER[ship]] if direction == "w" else None
     base = canonical_seed(job_id) + 9000
     draft_path = os.path.join(DRAFTS, job_id + ".png")
     build_ship_draft(ship, direction, draft_path)
@@ -1665,8 +1862,11 @@ def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
                   f"silhouette, mast count, sail layout, proportions and "
                   f"{pose}. Rig: {RIG[ship]}. {COMPACT} {extra} " + STYLE)
         rec = exec_gen(job_id, "hull", draft_path, prompt, seed,
-                       BLOCK_HULL, None)
-        cls = classify_for(job_id, direction)
+                       BLOCK_HULL, band)
+        if accept == "orientation":
+            cls = orientation_gate(job_id, direction)
+        else:
+            cls = classify_for(job_id, direction)
         attempts.append({"attempt": n, "seed": seed,
                          "verdict": cls["verdict"],
                          "observed": cls["observed"]})
@@ -1679,7 +1879,8 @@ def reroll_cell(ship, direction, max_attempts=3, anchor=None, extra="",
     prog = load_progress()
     rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
     if rec and direction in rec.get("per_dir", {}):
-        rec["per_dir"][direction]["direction"] = {
+        slot = "orientation" if accept == "orientation" else "direction"
+        rec["per_dir"][direction][slot] = {
             k: v for k, v in cls.items() if k != "job"}
         rr = rec.get("reroll") or {"kind": "hull"}
         rr.setdefault("cell_fixes", []).append(
@@ -1961,6 +2162,534 @@ def run_batch_hulls(force=False):
                   flush=True)
     print(f"hull batch complete: {len(todo) - len(failures)} ok, "
           f"{len(failures)} failed: {failures}", flush=True)
+
+
+# ------------------------------------------- icon-group jobs (job = group)
+
+ICON_GROUPS_DOC = "icons get the per-hull treatment: one sheet per family"
+
+
+def icon_group_definitions():
+    """All 129 ids from the manifests grouped into 12 families (8-14)."""
+    import glob
+    by_manifest = {}
+    for path in sorted(glob.glob(os.path.join(REPO, "tools", "ui_art",
+                                              "icons", "*.json"))):
+        with open(path) as fh:
+            d = json.load(fh)
+        name = os.path.basename(path)
+        by_manifest[name] = [s["id"] for s in d.get("sprites", [])]
+    goods = by_manifest["goods.json"]
+    eq = by_manifest["equipment.json"]
+    sail_prefixes = ("eq_mermaid", "eq_eagle", "eq_dragon", "eq_albatross",
+                     "eq_angel", "eq_golden", "eq_cotton", "eq_matting",
+                     "eq_storm", "eq_flemish", "eq_brocade", "eq_red")
+    weapons = [i for i in eq if not i.startswith(sail_prefixes)]
+    rigging = [i for i in eq if i.startswith(sail_prefixes)]
+    return [
+        ("goods_staples", goods[:13]),
+        ("goods_crafts", goods[13:27]),
+        ("goods_luxury", goods[27:]),
+        ("weapons_armor", weapons),
+        ("figureheads_sails", rigging),
+        ("battle", by_manifest["battle.json"]),
+        ("heraldry_tactics", by_manifest["flags.json"]
+         + by_manifest["formations.json"] + by_manifest["trophy.json"]),
+        ("ship_life", by_manifest["hud.json"] + by_manifest["meta.json"]),
+        ("weather_trends", by_manifest["weather.json"]
+         + by_manifest["trends.json"]),
+        ("roles_economy", by_manifest["roles.json"]
+         + by_manifest["economy.json"]),
+        ("currents", by_manifest["arrows_current.json"]),
+        ("winds", by_manifest["arrows_wind.json"]),
+    ]
+
+
+ICON_GROUP_STYLE = {
+    "goods_staples": "everyday trade commodities, warm rustic palette",
+    "goods_crafts": "manufactured wares and crafts, earthy palette",
+    "goods_luxury": "luxury and precious goods, rich golds and jewels",
+    "weapons_armor": "steel and bronze weapons and armour, cold grey "
+                     "metal with leather",
+    "figureheads_sails": "ship equipment: carved figureheads and rolled "
+                         "sail cloth, carved wood and canvas",
+    "battle": "naval combat munitions, dark iron and powder",
+    "heraldry_tactics": "heraldic flags and tactical glyphs, bold "
+                        "nation colours",
+    "ship_life": "shipboard life and status glyphs, warm wood and brass",
+    "weather_trends": "weather omens and market trend glyphs, cool "
+                      "blues with gold accents",
+    "roles_economy": "professions and administration glyphs, brass and "
+                     "parchment",
+    "currents": "sea current direction arrows, deep blue flow",
+    "winds": "wind direction arrows, pale sky blue flow",
+}
+
+ICON_CELL_WORDS = {
+    "good_dried_fish": "a golden-brown dried fish with clear head and tail",
+    "good_salt": "a white salt mound pile",
+    "good_wheat": "golden wheat sheaves tied with string",
+    "shot_round": "a round cannonball",
+    "shot_chain": "a chain shot (two balls linked by a chain)",
+    "shot_armor_piercing": "a pointed armour-piercing bolt",
+    "shot_grape": "a grape shot cluster of small balls",
+    "eq_lucky_charm": "a small lucky charm amulet",
+    "save": "a retro floppy disk",
+    "compass": "a magnetic compass with needle rose",
+    "crew": "a sailor head-and-shoulders with round cap",
+    "strong": "double upward strength chevrons",
+}
+
+
+def icon_cell_words(icon_id):
+    if icon_id in ICON_CELL_WORDS:
+        return ICON_CELL_WORDS[icon_id]
+    words = icon_id
+    for prefix in ("good_", "eq_", "flag_", "role_", "formation_",
+                   "current_arrow_", "wind_arrow_", "shot_"):
+        if words.startswith(prefix):
+            words = words[len(prefix):]
+            break
+    return words.replace("_", " ")
+
+
+ICON_SHEET_DIRS = 4  # columns
+
+
+def icon_sheet_layout(count):
+    cols = ICON_SHEET_DIRS
+    rows = (count + cols - 1) // cols
+    tile, gap, label_h, margin = 384, 48, 36, 48
+    w = margin * 2 + cols * tile + (cols - 1) * gap
+    h = margin + rows * (label_h + tile + gap) + gap
+    boxes = []
+    for i in range(count):
+        r, c = divmod(i, cols)
+        x = margin + c * (tile + gap)
+        y = margin + r * (label_h + tile + gap) + label_h
+        boxes.append((x, y, x + tile, y + tile))
+    return (w, h), boxes
+
+
+def icon_sheet_draft(group, ids, out_path):
+    size, boxes = icon_sheet_layout(len(ids))
+    ref = Image.new("RGBA", size, GREEN_BG)
+    draw = ImageDraw.Draw(ref)
+    for i, icon_id in enumerate(ids):
+        x0, y0, x1, y1 = boxes[i]
+        tok = token_image(os.path.join(REPO, "assets", "ui", "icons",
+                                       f"{icon_id}.png"))
+        tok = nearest(tok, 12)  # 32 -> 384
+        ref.alpha_composite(tok, (x0, y0))
+        draw.rectangle([x0 - 2, y0 - 2, x1 + 2, y1 + 2],
+                       outline=(24, 28, 40, 255), width=2)
+        label(draw, (x0 + 6, y0 - 32), icon_cell_words(icon_id),
+              color=(16, 16, 16))
+    ref.convert("RGB").save(out_path)
+    return ref
+
+
+def icon_sheet_prompt(group, ids):
+    style = ICON_GROUP_STYLE.get(group, "consistent 16-bit game icons")
+    cells = "; ".join(
+        f"cell {i + 1} ({icon_cell_words(iid)})"
+        for i, iid in enumerate(ids))
+    return (
+        "Redraw this input sprite sheet. Every cell contains one icon of "
+        "the same icon family — redraw ALL of them in one consistent "
+        f"style: {style}. "
+        f"Cells in reading order: {cells}. "
+        "Each icon: bold silhouette, thick 1px dark outline, flat "
+        "limited palette, chunky pixels, readable at 32 px, centered in "
+        "its cell, " + CHROMA_BG + ". The small text labels above the "
+        "cells are pre-printed — do NOT draw them into the sprites. Keep "
+        "the grid positions and the thin dark dividers; one icon per "
+        "cell, do not merge, move or add icons. No water, no scenery, no "
+        "extra text, no frame.")
+
+
+def run_icon_sheet_job(group, ids, seed):
+    t0 = time.time()
+    job_id = f"icons_{group}"
+    rec = {"group": group, "ids": ids, "seed": seed, "status": "running",
+           "started": time.strftime("%H:%M:%S")}
+    save_job(job_id, rec)
+    draft_path = os.path.join(DRAFTS, f"iconsheet_{group}.png")
+    icon_sheet_draft(group, ids, draft_path)
+    with open(draft_path, "rb") as fh:
+        draft_bytes = fh.read()
+    gen = generate(draft_bytes, icon_sheet_prompt(group, ids), seed)
+    with open(os.path.join(GEN, f"iconsheet_{group}.png"), "wb") as fh:
+        fh.write(gen)
+    _, _, gpx = VD.decode_ui_png(gen)
+    full = px_to_image(gpx)
+    if full.size != icon_sheet_layout(len(ids))[0]:
+        full = full.resize(icon_sheet_layout(len(ids))[0], Image.NEAREST)
+    size, boxes = icon_sheet_layout(len(ids))
+    windows = []
+    for (bx0, by0, bx1, by1) in boxes:
+        ccx, ccy = (bx0 + bx1) / 2, (by0 + by1) / 2
+        half = tile_half = 192
+        wx0 = max(0, min(size[0] - 384, int(ccx - half)))
+        wy0 = max(0, min(size[1] - 384, int(ccy - half)))
+        windows.append((wx0, wy0, wx0 + 384, wy0 + 384))
+    cell_masks = []
+    for (wx0, wy0, wx1, wy1) in windows:
+        c = full.crop((wx0, wy0, wx1, wy1)).resize((64, 64), Image.NEAREST)
+        cp = c.load()
+        cell_masks.append([[1 if cp[x, y][3] and not
+                            (cp[x, y][1] >= 150 and cp[x, y][0] <= 110
+                             and cp[x, y][2] <= 110) else 0
+                            for x in range(64)] for y in range(64)])
+    draft_masks = {}
+    for icon_id in ids:
+        tok = token_image(os.path.join(REPO, "assets", "ui", "icons",
+                                       f"{icon_id}.png"))
+        dp = tok.load()
+        draft_masks[icon_id] = [[1 if dp[x, y][3] else 0
+                                 for x in range(32)] for y in range(32)]
+
+    def aligned_iou(mask_a, mask_b):
+        sets = []
+        for m in (mask_a, mask_b):
+            pts = [(x, y) for y in range(len(m)) for x in range(len(m[0]))
+                   if m[y][x]]
+            if not pts:
+                return 0.0
+            x0 = min(p[0] for p in pts)
+            y0 = min(p[1] for p in pts)
+            sets.append({(x - x0, y - y0) for x, y in pts})
+        inter = len(sets[0] & sets[1])
+        union = len(sets[0] | sets[1])
+        return inter / max(1, union)
+
+    assignment = {}
+    used = set()
+    pairs = []
+    for ci, mask in enumerate(cell_masks):
+        for ii, icon_id in enumerate(ids):
+            pairs.append((aligned_iou(mask, draft_masks[icon_id]), ci, ii))
+    for score, ci, ii in sorted(pairs, key=lambda p: -p[0]):
+        if ci in used or ii in used:
+            continue
+        assignment[ids[ii]] = ci
+        used.add(ci)
+        used.add(ii)
+    rec["assignment"] = {iid: windows[ci] for iid, ci in
+                         assignment.items()}
+    results = {}
+    for icon_id, ci in assignment.items():
+        wx0, wy0, wx1, wy1 = windows[ci]
+        cell = full.crop((wx0, wy0, wx1, wy1))
+        cbuf = io.BytesIO()
+        cell.save(cbuf, "PNG")
+        debg = keyed_png(rembg(cbuf.getvalue(), f"icon_{icon_id}"))
+        with open(os.path.join(DEBG, f"icon_{icon_id}.png"), "wb") as fh:
+            fh.write(debg)
+        snapped, metrics, _ = snap_and_measure(debg, BLOCK_ICON, None)
+        with open(os.path.join(SNAPPED, f"icon_{icon_id}.png"), "wb") as fh:
+            snapped.save(fh)
+        results[icon_id] = {"metrics": metrics}
+    rec["results"] = results
+    rec["status"] = "done"
+    rec["seconds"] = round(time.time() - t0, 1)
+    save_job(job_id, rec)
+    return rec
+
+
+def run_batch_icon_groups(force=False, only=None):
+    os.makedirs(DRAFTS, exist_ok=True)
+    os.makedirs(GEN, exist_ok=True)
+    os.makedirs(DEBG, exist_ok=True)
+    os.makedirs(SNAPPED, exist_ok=True)
+    groups = icon_group_definitions()
+    prog = load_progress()
+    todo = []
+    for gi, (group, ids) in enumerate(groups):
+        if only and group not in only:
+            continue
+        rec = prog.get("jobs", {}).get(f"icons_{group}", {})
+        if not force and rec.get("status") == "done":
+            continue
+        todo.append((group, ids, 4000 + gi))
+    print(f"icon-group batch: {len(todo)} sheets", flush=True)
+    failures = []
+    for n, (group, ids, seed) in enumerate(todo):
+        try:
+            rec = run_icon_sheet_job(group, ids, seed)
+            print(f"[{n + 1}/{len(todo)}] icons_{group} OK "
+                  f"({rec['seconds']}s, {len(ids)} icons)", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(group)
+            save_job(f"icons_{group}", {"group": group, "ids": ids,
+                                        "seed": seed, "status": "failed",
+                                        "error": str(exc)[:400]})
+            print(f"[{n + 1}/{len(todo)}] icons_{group} FAILED: {exc}",
+                  flush=True)
+            continue
+        # cell-detection sanity: every icon got a snapped token
+        missing = [i for i in ids if not os.path.exists(
+            os.path.join(SNAPPED, f"icon_{i}.png"))]
+        if missing:
+            for attempt in (2, 3):
+                seed2 = seed + attempt * 100
+                try:
+                    rec = run_icon_sheet_job(group, ids, seed2)
+                    missing = [i for i in ids if not os.path.exists(
+                        os.path.join(SNAPPED, f"icon_{i}.png"))]
+                    if not missing:
+                        print(f"    icons_{group} re-roll attempt {attempt} "
+                              f"clean", flush=True)
+                        break
+                except Exception as exc:  # noqa: BLE001
+                    print(f"    icons_{group} attempt {attempt} failed: "
+                          f"{exc}", flush=True)
+            if missing:
+                failures.append(group)
+                print(f"    icons_{group} still missing cells: {missing}",
+                      flush=True)
+    print(f"icon-group batch complete; failures: {failures or 'none'}",
+          flush=True)
+
+
+def sheet_icon_groups():
+    """34_icon_groups.png: per-group draft|generated review."""
+    groups = icon_group_definitions()
+    secs = []
+    for group, ids in groups:
+        draft = os.path.join(DRAFTS, f"iconsheet_{group}.png")
+        gen = os.path.join(GEN, f"iconsheet_{group}.png")
+        if os.path.exists(draft) and os.path.exists(gen):
+            secs.append((group, draft, gen))
+    if not secs:
+        print("no icon group sheets yet")
+        return
+    sw, sh = 640, 480  # per section thumb (sheet downscaled)
+    img = Image.new("RGBA", (2 * sw + 24, len(secs) * (sh + 26) + 8),
+                    SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    for i, (group, draft, gen) in enumerate(secs):
+        y = i * (sh + 26) + 4
+        label(draw, (4, y), f"{group}  draft | generated")
+        y += 20
+        d = Image.open(draft).convert("RGBA")
+        d.thumbnail((sw, sh), Image.NEAREST)
+        g = Image.open(gen).convert("RGBA")
+        g.thumbnail((sw, sh), Image.NEAREST)
+        img.alpha_composite(d, (4, y))
+        img.alpha_composite(g, (sw + 16, y))
+    out = os.path.join(REVIEW, "34_icon_groups.png")
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
+def sheet_all_icons():
+    """34b (art_report): all snapped icons in family rows."""
+    groups = icon_group_definitions()
+    cell, label_h = 96, 16
+    try:
+        font = ImageFont.load_default(size=11)
+    except TypeError:
+        font = ImageFont.load_default()
+    width = 8 * (cell + 6) + 120
+    height = sum((len(ids) + 7) // 8 * (cell + label_h + 6) + 24
+                 for _, ids in groups) + 8
+    img = Image.new("RGBA", (width, height), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    y = 4
+    for group, ids in groups:
+        draw.text((4, y), group, fill=(230, 233, 243), font=font)
+        y += 18
+        for i, icon_id in enumerate(ids):
+            r, c = divmod(i, 8)
+            x = 120 + c * (cell + 6)
+            yy = y + r * (cell + label_h + 6)
+            p = os.path.join(SNAPPED, f"icon_{icon_id}.png")
+            if os.path.exists(p):
+                tok = Image.open(p).resize((cell, cell), Image.NEAREST)
+                img.alpha_composite(tok, (x, yy))
+            draw.text((x + 2, yy + cell), icon_id.replace("good_", "")
+                      .replace("eq_", "").replace("_", " ")[:14],
+                      fill=(190, 195, 210), font=font)
+        y += ((len(ids) + 7) // 8) * (cell + label_h + 6) + 6
+    out = os.path.join(REPO, "art_report", "34b_icon_all_129.png")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
+def hungarian_assign(cell_ids, icon_ids, scores):
+    """Optimal 1:1 assignment maximising total score (O(n^3) Hungarian;
+    square matrix — cell count == icon count in every group sheet)."""
+    n = len(cell_ids)
+    if n == 0:
+        return {}
+    INF = float("inf")
+    cost = [[-scores.get((ci, iid), -INF)
+             for iid in icon_ids] for ci in cell_ids]
+    u = [0] * (n + 1)
+    v = [0] * (n + 1)
+    p = [0] * (n + 1)
+    way = [0] * (n + 1)
+    for i in range(1, n + 1):
+        p[0] = i
+        j0 = 0
+        minv = [INF] * (n + 1)
+        used = [False] * (n + 1)
+        while True:
+            used[j0] = True
+            i0 = p[j0]
+            delta = INF
+            j1 = -1
+            for j in range(1, n + 1):
+                if not used[j]:
+                    cur = cost[i0 - 1][j - 1] - u[i0] - v[j]
+                    if cur < minv[j]:
+                        minv[j] = cur
+                        way[j] = j0
+                    if minv[j] < delta:
+                        delta = minv[j]
+                        j1 = j
+            for j in range(n + 1):
+                if used[j]:
+                    u[p[j]] += delta
+                    v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while j0:
+            j1 = way[j0]
+            p[j0] = p[j1]
+            j0 = j1
+    result = {}
+    for j in range(1, n + 1):
+        if p[j]:
+            result[cell_ids[p[j] - 1]] = icon_ids[j - 1]
+    return result
+
+
+def reassign_icon_groups():
+    """Re-assign detected cells to icons using shape-IoU + mean-colour +
+    sheet-position evidence, then re-finish every cell with a DIRECT
+    chroma key (green screen — no rembg needed; the keyed background is
+    already flat chroma green)."""
+    groups = icon_group_definitions()
+    prog = load_progress()
+    changes = 0
+    for group, ids in groups:
+        gen_path = os.path.join(GEN, f"iconsheet_{group}.png")
+        if not os.path.exists(gen_path):
+            continue
+        size, boxes = icon_sheet_layout(len(ids))
+        gen = Image.open(gen_path).convert("RGBA")
+        if gen.size != size:
+            gen = gen.resize(size, Image.NEAREST)
+        windows = []
+        for (bx0, by0, bx1, by1) in boxes:
+            ccx, ccy = (bx0 + bx1) / 2, (by0 + by1) / 2
+            wx0 = max(0, min(size[0] - 384, int(ccx - 192)))
+            wy0 = max(0, min(size[1] - 384, int(ccy - 192)))
+            windows.append((wx0, wy0, wx0 + 384, wy0 + 384))
+        cell_masks, cell_cols = [], []
+        for (wx0, wy0, wx1, wy1) in windows:
+            c = gen.crop((wx0, wy0, wx1, wy1)).resize((64, 64),
+                                                      Image.NEAREST)
+            cp = c.load()
+            mask = [[0] * 64 for _ in range(64)]
+            rs = gs = bs = cnt = 0
+            for y in range(64):
+                for x in range(64):
+                    r, g, b, a = cp[x, y]
+                    if a and not (g >= 150 and r <= 110 and b <= 110):
+                        mask[y][x] = 1
+                        rs += r; gs += g; bs += b; cnt += 1
+            cell_masks.append(mask)
+            cell_cols.append((rs / max(1, cnt), gs / max(1, cnt),
+                              bs / max(1, cnt)))
+        slot_centers = [(48 + (i % 4) * 432 + 192,
+                         84 + (i // 4) * 468 + 192)
+                        for i in range(len(ids))]
+        draft_masks, draft_cols = {}, {}
+        for icon_id in ids:
+            tok = token_image(os.path.join(REPO, "assets", "ui", "icons",
+                                           f"{icon_id}.png"))
+            dp = tok.load()
+            pts = [(x, y) for y in range(32) for x in range(32)
+                   if dp[x, y][3]]
+            if not pts:
+                continue
+            x0 = min(p[0] for p in pts)
+            y0 = min(p[1] for p in pts)
+            m = {(x - x0, y - y0) for x, y in pts}
+            rs = gs = bs = cnt = 0
+            for x, y in pts:
+                r, g, b, a = dp[x, y]
+                if a:
+                    rs += r; gs += g; bs += b; cnt += 1
+            draft_masks[icon_id] = m
+            draft_cols[icon_id] = (rs / cnt, gs / cnt, bs / cnt)
+        scores = {}
+        for ci, (mask, ccol) in enumerate(zip(cell_masks, cell_cols)):
+            pts = [(x, y) for y in range(64) for x in range(64)
+                   if mask[y][x]]
+            if not pts:
+                continue
+            x0 = min(p[0] for p in pts)
+            y0 = min(p[1] for p in pts)
+            cm = {(x - x0, y - y0) for x, y in pts}
+            ccx, ccy = (windows[ci][0] + windows[ci][2]) / 2, \
+                       (windows[ci][1] + windows[ci][3]) / 2
+            slot = min(range(len(slot_centers)),
+                       key=lambda i: (slot_centers[i][0] - ccx) ** 2
+                       + (slot_centers[i][1] - ccy) ** 2)
+            for icon_id in draft_masks:
+                dm = draft_masks[icon_id]
+                dcol = draft_cols[icon_id]
+                if not dm:
+                    continue
+                inter = len(cm & dm)
+                union = len(cm | dm)
+                iou = inter / max(1, union)
+                col = 1 - min(1.0, (sum((ccol[k] - dcol[k]) ** 2
+                                        for k in range(3)) / 3) ** 0.5
+                              / 160)
+                scores[(ci, icon_id)] = iou + 0.9 * col
+        cell_ids = list(range(len(cell_masks)))
+        assignment = hungarian_assign(cell_ids, ids, scores)
+        assignment = {iid: ci for ci, iid in assignment.items()}
+        used_c, used_i = set(), set()
+        old = (prog.get("jobs", {}).get(f"icons_{group}", {})
+               .get("assignment", {}))
+        flipped = [i for i in ids if old.get(i) is not None
+                   and windows[assignment[i]] != tuple(old[i])]
+        prog.setdefault("jobs", {}).setdefault(
+            f"icons_{group}", {})["assignment"] = {
+                i: windows[ci] for i, ci in assignment.items()}
+        save_progress(prog)
+        changes += len(flipped)
+        print(f"{group}: {len(assignment)}/{len(ids)} assigned | "
+              f"windows changed for {len(flipped)}: {flipped}", flush=True)
+        # re-finish every cell with the direct chroma key
+        for icon_id, ci in assignment.items():
+            wx0, wy0, wx1, wy1 = windows[ci]
+            cell = gen.crop((wx0, wy0, wx1, wy1))
+            keyed = key_green(cell)
+            cbuf = io.BytesIO()
+            keyed.save(cbuf, "PNG")
+            debg = cbuf.getvalue()
+            with open(os.path.join(DEBG, f"icon_{icon_id}.png"),
+                      "wb") as fh:
+                fh.write(debg)
+            snapped, metrics, _ = snap_and_measure(debg, BLOCK_ICON, None)
+            with open(os.path.join(SNAPPED, f"icon_{icon_id}.png"),
+                      "wb") as fh:
+                snapped.save(fh)
+    prog = load_progress()
+    prog["icon_reassignment"] = {"cells_changed": changes}
+    save_progress(prog)
+    print(f"reassignment complete; {changes} cells moved", flush=True)
 
 
 def run_job(job_id, seed):
@@ -2366,9 +3095,10 @@ def run_batch(phase, limit=None, force=False):
 def build_report():
     prog = load_progress()
     jobs = prog.get("jobs", {})
-    ship_jobs = {j: r for j, r in jobs.items() if j.startswith("hull_")}
     terrain_jobs = {j: r for j, r in jobs.items() if j.startswith("terrain_")}
     icon_jobs = {j: r for j, r in jobs.items() if j.startswith("icon_")}
+    audit = prog.get("direction_audit", [])
+    orient = prog.get("orientation_audit", [])
 
     def stats(sub):
         ok = [j for j, r in sub.items() if r.get("status") == "done"]
@@ -2443,13 +3173,40 @@ def build_report():
                        "why": a.get("why") or a.get("bow_at")
                        or a.get("bottom_frac")}
                       for a in audit if a.get("verdict") != "PASS"][:24]},
+        "orientation_audit": {
+            "pass": sum(1 for a in orient
+                        if a.get("verdict") == "PASS"),
+            "total": len(orient),
+            "convention": "principal-axis of the 16x16 coarsened opaque "
+                          "mass, image coords y-down: 0 horizontal, "
+                          "+45 top-left->bottom-right, -45 bottom-left->"
+                          "top-right; tolerance +/-25",
+            "fails": [{"job": a.get("job"),
+                       "measured": a.get("measured_angle"),
+                       "expected": a.get("expected"),
+                       "observed": a.get("observed")}
+                      for a in orient if a.get("verdict") != "PASS"]},
+        "icon_groups": {
+            "groups": [{"group": g, "count": len(ids), "ids": ids}
+                       for g, ids in icon_group_definitions()],
+            "sheets": [{"group": r.get("group"), "seed": r.get("seed"),
+                        "status": r.get("status"),
+                        "seconds": r.get("seconds"),
+                        "icons": len(r.get("ids", []))}
+                       for j, r in sorted(jobs.items())
+                       if j.startswith("icons_")],
+            "weak_icon_wording": ["good_dried_fish: golden-brown dried "
+                                  "fish with head and tail",
+                                  "good_salt: white salt mound pile",
+                                  "good_wheat: golden sheaves tied with "
+                                  "string"]},
         "pennant": {"present": len(pennant["present"]),
                     "absent": len(pennant["absent"]),
                     "absent_ids": sorted(pennant["absent"])},
         "rerolls": {
             "hull": [
-                {"job": j, "attempts": r["reroll"]["attempts"],
-                 "kept_seed": r["reroll"]["kept_seed"],
+                {"job": j, "attempts": r["reroll"].get("attempts", []),
+                 "kept_seed": r["reroll"].get("kept_seed"),
                  "kept_fails": r["reroll"].get("kept_fails")}
                 for j, r in sorted(jobs.items())
                 if isinstance(r.get("reroll"), dict)
@@ -2505,6 +3262,11 @@ def main(argv):
         if phase == "hulls":
             run_batch_hulls(force="force" in argv[2:])
             return 0
+        if phase == "icon-groups":
+            only = argv[2].split(",") if len(argv) > 2 \
+                and not argv[2].isdigit() and argv[2] != "force" else None
+            run_batch_icon_groups(force="force" in argv[2:], only=only)
+            return 0
         limit = int(argv[2]) if len(argv) > 2 and argv[2].isdigit() else None
         force = "force" in argv[2:]
         run_batch(phase, limit, force)
@@ -2512,6 +3274,9 @@ def main(argv):
         validate_green_hulls()
     elif cmd == "audit":
         audit = audit_directions()
+        sheet_direction_audit(audit)
+        orient = audit_orientation()
+        sheet_orientation_audit(orient)
         sheet_direction_audit(audit)
     elif cmd == "job":
         os.makedirs(DRAFTS, exist_ok=True)
@@ -2537,6 +3302,9 @@ def main(argv):
                          and r.get("status") == "done"])
         if which in ("hulls", "all"):
             sheet_hulls()
+        if which in ("icon-groups", "all"):
+            sheet_icon_groups()
+            sheet_all_icons()
     elif cmd == "archive-legacy":
         archive_legacy()
     elif cmd == "reroll":
