@@ -439,7 +439,114 @@ def snap(debg_bytes: bytes, block, band=None, pennant_snap=False):
     return grid, metrics
 
 
-# -------------------------------------------------- driver prompt parsing ---
+def key_green_rows(w: int, h: int, rows: list[list], thr: int = 60):
+    """The driver's key_green post-pass, on hex|None rows (binary alpha:
+    None = transparent). Faithful sequence: corner-median reference chroma,
+    border-connected green flood, connectivity-free bright-green kill,
+    despill (G -> max(R, B)) on edge px, 1px alpha erosion."""
+    alpha = [0 if c is None else 255 for row in rows for c in row]
+
+    def rgb(i):
+        c = rows[i // w][i % w]
+        return (0, 0, 0) if c is None else _hex_rgb(c)
+
+    # reference chroma from the four corner patches (median per channel)
+    rs, gs, bs = [], [], []
+    for cx, cy in ((0, 0), (w - 40, 0), (0, h - 40), (w - 40, h - 40)):
+        for y in range(max(0, cy), min(h, cy + 40)):
+            base = y * w
+            for x in range(max(0, cx), min(w, cx + 40)):
+                r, g, b = rgb(base + x)
+                rs.append(r); gs.append(g); bs.append(b)
+    rs.sort(); gs.sort(); bs.sort()
+    ref = (rs[len(rs) // 2], gs[len(gs) // 2], bs[len(bs) // 2])
+
+    def greenish(i):
+        r, g, b = rgb(i)
+        if g < 90:
+            return False
+        strict = (abs(r - ref[0]) <= thr and abs(g - ref[1]) <= thr
+                  and abs(b - ref[2]) <= thr)
+        dominant = g > r + 40 and g > b + 40
+        return strict or dominant
+
+    # border-connected flood fill over green-ish px
+    from collections import deque
+    flood = bytearray(w * h)
+    stack = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            i = y * w + x
+            if not flood[i] and greenish(i):
+                flood[i] = 1
+                stack.append(i)
+    for y in range(h):
+        for x in (0, w - 1):
+            i = y * w + x
+            if not flood[i] and greenish(i):
+                flood[i] = 1
+                stack.append(i)
+    while stack:
+        i = stack.popleft()
+        x, y = i % w, i // w
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < w and 0 <= ny < h:
+                j = ny * w + nx
+                if not flood[j] and greenish(j):
+                    flood[j] = 1
+                    stack.append(j)
+    for i in range(w * h):
+        if flood[i]:
+            alpha[i] = 0
+    # connectivity-free bright-green kill (enclosed chroma pockets)
+    for i in range(w * h):
+        if alpha[i]:
+            r, g, b = rgb(i)
+            if g >= 170 and r <= 100 and b <= 100:
+                alpha[i] = 0
+    # despill: surviving edge px lose the green cast
+    for y in range(h):
+        for x in range(w):
+            i = y * w + x
+            if not alpha[i]:
+                continue
+            r, g, b = rgb(i)
+            if g <= max(r, b):
+                continue
+            edge = (y == 0 or y == h - 1 or x == 0 or x == w - 1
+                    or alpha[y * w + (x + 1 if x + 1 < w else x)] == 0
+                    or alpha[y * w + (x - 1 if x else x)] == 0
+                    or alpha[(y + 1 if y + 1 < h else y) * w + x] == 0
+                    or alpha[(y - 1 if y else y) * w + x] == 0)
+            if edge:
+                rows[y][x] = "#%02x%02x%02x" % (r, max(r, b), b)
+    # 1px alpha erosion: any 4-neighbour transparent -> transparent
+    snap_alpha = list(alpha)
+    for y in range(h):
+        for x in range(w):
+            i = y * w + x
+            if not snap_alpha[i]:
+                continue
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if not (0 <= nx < w and 0 <= ny < h) \
+                        or snap_alpha[ny * w + nx] < 32:
+                    alpha[i] = 0
+                    break
+    return [[None if alpha[y * w + x] == 0 else rows[y][x]
+             for x in range(w)] for y in range(h)]
+
+
+def key_green_bytes(png_bytes: bytes) -> bytes:
+    w, h, rows = decode_rgba(png_bytes)
+    return encode_png(w, h, key_green_rows(w, h, rows))
+
+
+def crop_rows(rows, x0, y0, x1, y1):
+    """Rectangle crop of hex|None rows (exclusive x1/y1)."""
+    return [row[x0:x1] for row in rows[y0:y1]]
+
+
+# ------------------------------------------------------------- driver parse ---
 
 _LITERAL_NAMES = ("HULLS", "DIRS", "TIER", "BANDS", "POSE", "RIG", "COMPACT",
                   "STYLE", "ICON_STYLE", "ICON_PRIORITY", "TERRAIN_KEYS")
@@ -574,6 +681,12 @@ EMBEDDED_DRIVER: dict = {
     "TERRAIN_KEYS": ["hills_plains", "mountains_plains", "ice_plains",
                      "ice_sea", "reef_sea", "rocky_uniform",
                      "plains_uniform"],
+    # per-hull sheet jobs (the batch refactor's shape — embedded so the
+    # studio survives even if these constants vanish again mid-refactor)
+    "SHEET_DIRS": ["w", "n", "s", "sw", "nw"],
+    "SHEET_CELLS": {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
+                    "sw": (64, 640), "nw": (640, 640)},
+    "SHEET_SIZE": (1792, 1152),
 }
 # Embedded overrides carry no style tail yet (the parsed driver's overrides
 # end with + ICON_STYLE) — append it so both shapes are identical.
@@ -701,11 +814,58 @@ def flip_x(data: bytes) -> bytes:
     return encode_png(w, h, [list(reversed(row)) for row in px])
 
 
+# The driver's sheet-prompt template (function-local in model_pass.py,
+# not literal-parseable) — proven wording, embedded verbatim; {rig},
+# {compact}, {scale}, {chroma} are filled from the parsed driver.
+SHEET_PROMPT_TMPL = (
+    "Redraw this input sprite sheet. The five labelled cells show the "
+    "SAME ship seen from five directions: identical hull, identical "
+    "rig, identical materials and colour treatment in every cell; "
+    "only the viewing angle changes. "
+    "Cell w: side view sailing LEFT, the bow with bowsprit at the "
+    "LEFT edge of the cell, stern at the RIGHT edge. "
+    "Cell n: seen from astern — the square transom/stern-castle faces "
+    "the viewer head-on, symmetric, the ship sails away upward, NO "
+    "bowsprit visible. "
+    "Cell s: seen from the bow — the bowsprit toward the viewer, "
+    "transom hidden behind the sails. "
+    "Cells sw and nw: three-quarter views, the bow pointing to the "
+    "BOTTOM-LEFT corner (sw) and the TOP-LEFT corner (nw). "
+    "Cells n and s are opposite views of the same ship: n shows the "
+    "transom, s shows the bowsprit — do not draw the same view twice. "
+    "The small labels above the cells are pre-printed — do NOT draw "
+    "them into the sprites; leave the sixth cell empty. "
+    "Rig: {rig}. {compact} {scale}"
+    "Render every cell as crisp limited-palette pixel art in the "
+    "style of early-90s 16-bit sailing games: billowed canvas sails "
+    "with curved highlight and shadow bands following the bulge, "
+    "dense wooden hull with visible planking lines, small lit cabin "
+    "windows, gunports, a small red pennant flag at the mainmast top, "
+    "strong 1-pixel dark outline around each sprite, big chunky "
+    "pixels, {chroma}. Keep the thin dark dividers. No "
+    "water, no scenery, no extra text, no frame.")
+SHEET_SCALE_CLAUSE = {
+    "pinnace": ("This hull fills about 75% of its cell width in every "
+                "cell — a substantial sloop-of-war, NOT a small boat. "),
+    "nao": "This hull fills about 85% of its cell. ",
+}
+
+
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
-    """(family, subject, dir) — hull_<ship>_<dir> / icon_<id> / terrain_<key>."""
+    """(family, subject, dir) for all three shapes the store has used:
+    - hull_<ship>_<dir>  legacy per-dir jobs (e/ne/se = mirror displays)
+    - sheet_<ship>       per-hull 5-cell sheet jobs (the batch refactor)
+    - hull_<ship>        the sheet jobs' progress/ledger key (same family)
+    - icon_<id> / terrain_<key>
+    Unknown shapes raise KeyError (callers guard per job)."""
+    if job_id.startswith("sheet_"):
+        return "sheet", job_id[len("sheet_"):], None
     if job_id.startswith("hull_"):
-        ship, direction = job_id[len("hull_"):].rsplit("_", 1)
-        return "hull", ship, direction
+        rest = job_id[len("hull_"):]
+        ship, _, direction = rest.rpartition("_")
+        if ship and direction in EMBEDDED_DRIVER["DIRS"]:
+            return "hull", ship, direction
+        return "sheet", rest, None  # hull_<ship> — the sheet progress key
     if job_id.startswith("icon_"):
         return "icon", job_id[len("icon_"):], None
     if job_id.startswith("terrain_"):
@@ -728,15 +888,30 @@ def _hull_prompt_from(d: dict, ship: str, direction: str,
     return prompt + d["STYLE"]
 
 
+def sheet_prompt_from(d: dict, ship: str) -> str:
+    """The driver's hull_sheet_prompt wording from a constants dict."""
+    return SHEET_PROMPT_TMPL.format(
+        rig=d["RIG"][ship], compact=d["COMPACT"],
+        scale=SHEET_SCALE_CLAUSE.get(ship, ""), chroma=d["CHROMA_BG"])
+
+
 def default_prompt(job_id: str, repo: str) -> str:
     """Canonical driver prompt, reconstructed from parsed constants.
-    Guaranteed non-empty: any reconstruction failure falls back to the
-    embedded proven wording."""
+    Guaranteed non-empty: any reconstruction failure — including an
+    unknown job shape — falls back to a generic embedded wording."""
     d = load_driver(repo)
-    fam, subject, direction = parse_job(job_id)
+    try:
+        fam, subject, direction = parse_job(job_id)
+    except KeyError:
+        return (f"Redraw this input sprite. Keep the exact same "
+                f"silhouette and recognizability. {EMBEDDED_DRIVER['ICON_STYLE']}")
     try:
         if fam == "hull":
             prompt = _hull_prompt_from(d, subject, direction, None)
+            if prompt.strip():
+                return prompt
+        elif fam == "sheet":
+            prompt = sheet_prompt_from(d, subject)
             if prompt.strip():
                 return prompt
         elif fam == "icon":
@@ -765,6 +940,15 @@ def default_prompt(job_id: str, repo: str) -> str:
         return (f"Redraw this input sprite. Keep the exact same "
                 f"silhouette, mast count, sail layout, proportions and "
                 f"{pose}. Rig: {rig}. {e['COMPACT']} {e['STYLE']}")
+    if fam == "sheet":
+        return sheet_prompt_from({
+            "RIG": {**e["RIG"],
+                    subject: e["RIG"].get(
+                        subject, f"its period rig, five consistent views")},
+            "COMPACT": e["COMPACT"],
+            "CHROMA_BG": "a solid flat chroma-key green background "
+                         "(#00ff00)",
+        }, subject)
     if fam == "icon":
         return (e["ICON_PROMPT_OVERRIDES"].get(subject)
                 or f"Redraw this input sprite. Keep the exact same "
@@ -784,7 +968,12 @@ def reconstruct_original(job_id: str, repo: str, rec: dict | None = None):
     'reconstructed' (parsed driver wording) or 'default' (embedded
     fallback wording). Never raises, never empty."""
     d = load_driver(repo)
-    fam, subject, direction = parse_job(job_id)
+    try:
+        fam, subject, direction = parse_job(job_id)
+    except KeyError:
+        return (f"Redraw this input sprite. Keep the exact same "
+                f"silhouette and recognizability. "
+                f"{EMBEDDED_DRIVER['ICON_STYLE']}", "default")
 
     def build(dd: dict) -> str:
         if fam == "hull":
@@ -792,6 +981,8 @@ def reconstruct_original(job_id: str, repo: str, rec: dict | None = None):
             if rec and rec.get("prompt") == "tightened-band":
                 stated_px = rec.get("stated_px")
             return _hull_prompt_from(dd, subject, direction, stated_px)
+        if fam == "sheet":
+            return sheet_prompt_from(dd, subject)
         if fam == "icon":
             ov = dd["ICON_PROMPT_OVERRIDES"].get(subject)
             return (ov or f"Redraw this input sprite. Keep the exact same "
@@ -872,6 +1063,51 @@ def run_job(job_id: str, prompt: str, seed: int, on_stage=None) -> dict:
             px = _resize_nearest(px, w, h, 1024, 512)
         atomic_write(studio_path("gen", job_id), encode_png(len(px[0]),
                                                            len(px), px))
+        rec["seconds"] = round(time.time() - t0, 1)
+        return rec
+
+    if fam == "sheet":
+        # per-hull 5-cell sheet: one /edit, then per-dir crop -> rembg ->
+        # key -> snap. Studio crops land at the legacy per-dir studio paths
+        # (hull_<ship>_<dir>.png) so accept's atomic copies point at the
+        # canonical per-dir ingestion inputs. The w cell carries the band.
+        d = load_driver(REPO)
+        sheet_dirs = d.get("SHEET_DIRS") or EMBEDDED_DRIVER["SHEET_DIRS"]
+        cells = d.get("SHEET_CELLS") or EMBEDDED_DRIVER["SHEET_CELLS"]
+        size = d.get("SHEET_SIZE") or EMBEDDED_DRIVER["SHEET_SIZE"]
+        w, h, px = decode_rgba(gen)
+        rec["gen_size"] = [w, h]
+        sx, sy = w / size[0], h / size[1]
+        if abs(sx - round(sx)) > 0.02 or abs(sy - round(sy)) > 0.02:
+            rec["drift"] = round(sx, 3)
+        atomic_write(studio_path("gen", job_id), gen)
+        try:
+            band = BANDS[d["TIER"][subject]]
+        except Exception:  # noqa: BLE001 — tier unknown mid-refactor
+            band = None
+        block = sorted(_VD.BLOCK_HULL)
+        per_dir = {}
+        for direction in sheet_dirs:
+            cx, cy = cells[direction]
+            x0, y0 = int(cx * sx), int(cy * sy)
+            x1, y1 = int((cx + 512) * sx), int((cy + 512) * sy)
+            cell = crop_rows(px, x0, y0, x1, y1)
+            cw, ch = x1 - x0, y1 - y0
+            if (cw, ch) != (512, 512):
+                cell = _resize_nearest(cell, cw, ch, 512, 512)
+            cell_png = encode_png(512, 512, cell)
+            stage(f"rembg {direction}")
+            debg = key_green_bytes(rembg(cell_png, f"{job_id}_{direction}"))
+            dir_job = f"hull_{subject}_{direction}"
+            atomic_write(studio_path("debg", dir_job), debg)
+            stage(f"snap {direction}")
+            grid, metrics = snap(debg, block,
+                                 band=(band if direction == "w" else None),
+                                 pennant_snap=True)
+            atomic_write(studio_path("snapped", dir_job),
+                         encode_png(64, 64, grid))
+            per_dir[direction] = {"metrics": metrics}
+        rec["per_dir"] = per_dir
         rec["seconds"] = round(time.time() - t0, 1)
         return rec
 

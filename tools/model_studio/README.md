@@ -107,6 +107,29 @@ artifact (no rembg/snap).
   The textarea pre-fills the original; **↺ original** reverts the box
   (and clears the saved custom edit) byte-identically.
 
+## Job shapes (legacy + per-hull sheets — driver-drift tolerant)
+
+The store has carried two ship-job shapes; the registry supports both and
+**never raises**: an unparseable/unknown draft id is skipped (or degraded
+to a generic card) and reported in `/api/status` → `registry.warnings`
+and `/api/jobs` → `warnings` — the API always answers valid JSON.
+
+- **Legacy** `hull_<ship>_<dir>` — per-dir jobs; e/ne/se are mirror
+  displays (⇄ badge, flip-served thumbs when their files are pruned).
+- **Per-hull sheets** `sheet_<hull>` (draft name; progress/ledger key
+  `hull_<hull>`) — one 1792×1152 5-cell sheet per /edit (w/n/s/sw/nw
+  512² cells + legend). The card shows the sheet draft, the generated
+  sheet, and the **w crop** as the snapped representative (w is the
+  band-gated base cell; the other 4 crops live at their legacy per-dir
+  paths). Band/pennant/flags ride the w cell. A studio re-roll crops the
+  generated sheet per cell (nearest, driver box math incl. non-integer
+  scale), rembg + chroma-green keys + snaps each into
+  `studio/snapped/hull_<hull>_<dir>.png`; **Accept** atomically copies
+  those crops to the canonical per-dir paths and triggers one ingest run
+  gated on the w base — or, with no studio crops, just records
+  acceptance + the ingest (the batch driver writes the canonical crops
+  itself).
+
 ## Accept → in game (一键进游戏)
 
 **Accept** on a ship job now flows straight into the game build:
