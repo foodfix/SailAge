@@ -18,6 +18,7 @@ extends Node
 const UiKitLib := preload("res://scripts/ui_kit.gd")
 const UiMotionLib := preload("res://scripts/ui_motion.gd")
 const PaletteLib := preload("res://scripts/palette.gd")
+const TextureRegistryLib := preload("res://scripts/ui/texture_registry.gd")
 const GalleryScene := preload("res://tools/widget_gallery.tscn")
 
 var _failures: Array[String] = []
@@ -39,6 +40,7 @@ func _ready() -> void:
 	_test_toast_atom()
 	_test_icon_registry()
 	_test_ingested_token_flips()
+	_test_token_raw_bytes_load()
 	await _test_gallery_boot()
 	_report()
 
@@ -377,6 +379,109 @@ func _test_ingested_token_flips() -> void:
 			all_flip = false
 	_check(all_flip and pairs > 0,
 		"derived tokens are the exact h-flip of their base (%d pairs, f6c00bb)" % pairs)
+
+
+# --- 90-* §9.2 tokens as data artifacts: the raw-byte load path (10acf123) ---
+
+func _images_equal(a: Image, b: Image) -> bool:
+	if a.get_width() != b.get_width() or a.get_height() != b.get_height():
+		return false
+	return a.get_data() == b.get_data()
+
+
+## Back to the suite's untouched state: nothing registered, no loader, the
+## production token dir (the registry is a title-screen concern in
+## production; this suite seeded it only for the token pins above).
+func _restore_no_registry_state() -> void:
+	TextureRegistryLib._reset_for_tests()
+	UiKitLib.clear_textures()
+	UiKitLib.register_token_loader(Callable())
+	TextureRegistryLib._token_dir = TextureRegistryLib.TOKENS_DIR
+
+
+func _test_token_raw_bytes_load() -> void:
+	# 90-* §9.2 (amendment 10acf123): `assets/ui/tokens/` is the DATA
+	# ARTIFACT family — ids resolve lazily through raw file bytes
+	# (FileAccess + Image.load_png_from_buffer + ImageTexture), never the
+	# import pipeline, so a token file replace + restart IS the update.
+	TextureRegistryLib._reset_for_tests()
+	UiKitLib.clear_textures()
+	TextureRegistryLib.ensure_registered()
+	var id := "hull_galleon_player_e"
+	var token_tex := UiKitLib.icon_texture(id)
+	_check(token_tex != null,
+		"a token id resolves through the lazy raw-byte loader")
+	if token_tex == null:
+		_restore_no_registry_state()
+		return
+	_check(token_tex is ImageTexture,
+		"the token texture is a runtime ImageTexture (raw decode, not an imported CompressedTexture2D)")
+	var expected := Image.new()
+	var bytes := FileAccess.get_file_as_bytes(
+		"res://assets/ui/tokens/%s.png" % id)
+	var decoded := expected.load_png_from_buffer(bytes) == OK
+	_check(decoded, "the token file decodes via load_png_from_buffer")
+	if decoded and token_tex.get_image() != null:
+		var got := token_tex.get_image()
+		if got.get_format() != Image.FORMAT_RGBA8:
+			got.convert(Image.FORMAT_RGBA8)
+		if expected.get_format() != Image.FORMAT_RGBA8:
+			expected.convert(Image.FORMAT_RGBA8)
+		_check(_images_equal(got, expected),
+			"the rendered token's pixels are the raw file's bytes (no import cache can leak in)")
+		_check(not got.has_mipmaps(),
+			"the token texture carries no mipmaps (nearest consumers pin TEXTURE_FILTER_NEAREST themselves)")
+	_check(UiKitLib.icon_texture(id) == token_tex,
+		"the second resolve returns the SAME texture (the one id cache)")
+	_check(UiKitLib.icon_texture("kit_absent_icon") == null,
+		"an unknown id stays null under the loader (flat fallback, unchanged)")
+	_check(UiKitLib.icon_texture("") == null, "the empty id stays null")
+	_check(UiKitLib.icon_texture("shore_n") != null,
+		"a chrome-family id still resolves through the import path (no token regression)")
+	_token_swap_pin()
+	_restore_no_registry_state()
+
+
+## The strongest form of the no-import pin: a `user://` fixture dir has no
+## importer and no sidecars ever — load the id from raw bytes, REPLACE the
+## file (the studio-accept swap), resolve fresh, and require the NEW pixels
+## (the restart semantics: the stale imported cache cannot leak in).
+func _token_swap_pin() -> void:
+	var probe_dir := "user://token_raw_probe"
+	var path := "%s/kit_token_probe.png" % probe_dir
+	DirAccess.make_dir_recursive_absolute(probe_dir)
+	_check(not FileAccess.file_exists(path + ".import"),
+		"the fixture carries no .import sidecar — the raw loader needs none")
+	var a := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	a.fill(Color8(200, 30, 30))
+	a.set_pixel(0, 0, Color8(30, 30, 200))
+	a.save_png(path)
+	var production_dir: String = TextureRegistryLib._token_dir
+	TextureRegistryLib._token_dir = probe_dir
+	UiKitLib.clear_textures()
+	var tex_a := UiKitLib.icon_texture("kit_token_probe")
+	_check(tex_a != null and _tex_matches(tex_a, a),
+		"a token id loads from a sidecar-free dir via raw bytes (fixture copy)")
+	# THE swap: overwrite the same file — no import run — then resolve fresh.
+	var b := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	b.fill(Color8(30, 180, 60))
+	b.set_pixel(3, 3, Color8(255, 255, 255))
+	b.save_png(path)
+	UiKitLib.clear_textures()
+	var tex_b := UiKitLib.icon_texture("kit_token_probe")
+	_check(tex_b != null and _tex_matches(tex_b, b),
+		"file replace + fresh resolve = the NEW pixels (no import refresh, §9.2)")
+	TextureRegistryLib._token_dir = production_dir
+	DirAccess.remove_absolute(path)
+
+
+func _tex_matches(tex: Texture2D, expected: Image) -> bool:
+	var got := tex.get_image()
+	if got == null:
+		return false
+	if got.get_format() != Image.FORMAT_RGBA8:
+		got.convert(Image.FORMAT_RGBA8)
+	return _images_equal(got, expected)
 
 
 # --- One gallery headless boot ------------------------------------------------

@@ -16,8 +16,12 @@ __pycache__/
 # Godot auto-import sidecars on non-game-texture rasters: the data/ map
 # rasters are loaded via load_png_from_buffer (no import pipeline, 90-* §9),
 # the contact sheet and engine fixtures are tool artifacts — never imported
-# (Phase-10 master reconciliation, 2026-11-04).
+# (Phase-10 master reconciliation, 2026-11-04). `assets/ui/tokens/` joined
+# the same raw-bytes family (2026-11-05, 90-* §9.2): tokens load via
+# load_png_from_buffer at runtime, so a scan-regenerated sidecar there is
+# local noise — never committed.
 /data/maps/*.import
+/assets/ui/tokens/*.import
 /tools/contact_sheet.png.import
 /tools/yoyopixel/**/*.import
 
