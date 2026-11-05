@@ -48,7 +48,11 @@ strength 1.0; drop to ~0.8 if hull identity drifts).
   planking lines, lit cabin windows, gunports") — added after the
   brigantine trial showed the 90° branches drifting painterly; it raised
   snapped-pixel density on every dir (n 13.4→15.3%, s 10.4→13.3%,
-  nw 16.1→19.5%, sw 17.4→21.5%).
+  nw 16.1→19.5%, sw 17.4→21.5%). A follow-up "flat color fills, no
+  dithering" clause was trialed and kept: neutral on density, slightly
+  cleaner sails; the residual n/s speckle is genuine rigging detail
+  compressing into ~15 pixel columns (the intrinsic floor for dead-on
+  views at 64px), not dithering — accepted 2026-11-06, user review.
 
 - **Known render traits (raw output, pre-snap):** backgrounds are green
   but never exactly `#00ff00` (VAE decode; `n` may carry a soft radial
