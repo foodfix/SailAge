@@ -42,7 +42,13 @@ strength 1.0; drop to ~0.8 if hull identity drifts).
 - **Every prompt pins**: same hull/rig/mast count/sail layout/colors,
   mast+sail height unchanged, red pennant at the mainmast top (the G13
   masthead gate), flat `#00ff00` chroma background, no water/scenery/
-  text/frame.
+  text/frame. **Plus a style clause on all four branches** ("crisp
+  limited-palette pixel art matching the input image's style, strong
+  1-pixel dark outline, big chunky pixels, dense wooden hull with
+  planking lines, lit cabin windows, gunports") — added after the
+  brigantine trial showed the 90° branches drifting painterly; it raised
+  snapped-pixel density on every dir (n 13.4→15.3%, s 10.4→13.3%,
+  nw 16.1→19.5%, sw 17.4→21.5%).
 
 - **Known render traits (raw output, pre-snap):** backgrounds are green
   but never exactly `#00ff00` (VAE decode; `n` may carry a soft radial
