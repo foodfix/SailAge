@@ -160,11 +160,16 @@ function buildCard(job) {
     <button class="reroll">Re-roll</button>
     <button class="accept small">Accept</button>
     <span class="spacer"></span>`;
+  const supNote = document.createElement("div");
+  supNote.className = "superseded-note";
+  supNote.style.display = "none";
+  supNote.textContent =
+    "superseded — re-roll the sheet card instead (this per-direction path is retired)";
   const status = document.createElement("div");
   status.className = "status";
   const metrics = document.createElement("div");
   metrics.className = "metrics";
-  root.append(head, thumbs, taWrap, controls, status, metrics);
+  root.append(head, thumbs, taWrap, controls, supNote, status, metrics);
 
   $(".reroll", controls).addEventListener("click", () => reroll(job.id, ta));
   $(".accept", controls).addEventListener("click", () => accept(job.id));
@@ -172,6 +177,7 @@ function buildCard(job) {
   grid.appendChild(root);
   return { root, els: {
     head, ta, srcTag, status, metrics, seed: $(".seed", controls),
+    controls, supNote,
   }, data: job };
 }
 
@@ -231,7 +237,8 @@ async function accept(jobId) {
 }
 
 $("#reroll-flagged").addEventListener("click", async () => {
-  const flagged = jobsData.filter(j => j.flagged).map(j => j.id);
+  // superseded legacy jobs are never re-rolled (retired path)
+  const flagged = jobsData.filter(j => j.flagged && !j.superseded).map(j => j.id);
   if (!flagged.length) { alert("nothing is flagged"); return; }
   if (!confirm(`Queue ${flagged.length} flagged job(s) for re-roll?\n` +
                flagged.join("\n"))) return;
@@ -256,6 +263,8 @@ document.querySelectorAll(".tab").forEach(btn => {
 });
 
 function visible(job) {
+  if (job.superseded) return filter === "legacy";
+  if (filter === "legacy") return false;
   if (filter === "flagged") return job.flagged;
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
@@ -318,6 +327,11 @@ function updateCard(job) {
   root.classList.toggle("flagged", !!job.flagged);
   root.classList.toggle("accepted", !!job.accepted);
   root.classList.toggle("running", !!(current && current.job === job.id));
+  const sup = !!job.superseded;
+  root.classList.toggle("superseded", sup);
+  els.controls.style.display = sup ? "none" : "";
+  els.supNote.style.display = sup ? "" : "none";
+  els.ta.readOnly = sup;
   els.head.innerHTML = headHTML(job);
   // thumbs + captions (mirror note when serving the flipped base dir)
   const caps = CAPTIONS[job.family] || CAPTIONS.hull;
@@ -361,10 +375,11 @@ async function refreshJobs() {
     const data = await api("/api/jobs");
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0}`;
+      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;
+    $("#legacy-n").textContent = data.counts.legacy || 0;
     render();
   } catch (e) { console.error(e); }
 }
