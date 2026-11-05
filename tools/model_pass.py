@@ -79,16 +79,25 @@ BLOCK_ICON = sorted(VD.BLOCK_ICON)
 SHEET_BG = (0x18, 0x1C, 0x28, 0xFF)  # probe sheet corner px (0x18 0x1c 0x28)
 
 POSE = {
-    "e": "side-view sailing-right pose",
-    "w": "side-view sailing-left pose (the mirrored view of the reference)",
-    "n": ("stern-view sailing-away pose, billowed square sails seen from "
-          "behind, lit stern-castle windows"),
-    "s": "bow-view approaching pose, bowsprit pointing at the viewer",
-    "ne": "three-quarter diagonal view sailing toward the top-right",
-    "nw": "three-quarter diagonal view sailing toward the top-left",
-    "se": "three-quarter diagonal view sailing toward the bottom-right",
-    "sw": "three-quarter diagonal view sailing toward the bottom-left",
+    "w": ("seen exactly from the side, the ship's bow with bowsprit points "
+          "to the LEFT edge, stern at the RIGHT edge"),
+    "n": ("seen directly from ASTERN: the square transom/stern-castle faces "
+          "the viewer head-on, symmetric, the ship sails AWAY upward, NO "
+          "bowsprit visible"),
+    "s": ("seen directly from the BOW: the bowsprit points straight DOWN "
+          "toward the viewer at the bottom, symmetric bow shape, "
+          "stern-castle hidden behind the sails"),
+    "sw": ("three-quarter diagonal view with the bow pointing to the "
+           "BOTTOM-LEFT corner, the sails billow toward the stern at the "
+           "TOP-RIGHT"),
+    "nw": ("three-quarter diagonal view with the bow pointing to the "
+           "TOP-LEFT corner, the sails billow toward the stern at the "
+           "BOTTOM-RIGHT"),
 }
+# lateen t1 waiver: +1 px over band top accepted (rig.json amendment class)
+WAIVER_T1_LATEEN = {"latin", "galiot", "sloop"}
+# direction re-roll round seed offset (deterministic, unused before)
+DIR_SEED_OFFSET = 60000
 RIG = {
     "latin": "one mast with a big triangular latin lateen sail dominating "
              "the profile",
@@ -214,12 +223,13 @@ def nearest(img, factor):
 
 
 def build_ship_draft(ship, direction, out_path):
+    # hull asset tokens are 64x64 (icons are 32) -> x8 = 512
     src = os.path.join(REPO, "assets", "ui", "tokens",
                        f"hull_{ship}_player_{direction}.png")
     token = token_image(src)
-    canvas = Image.new("RGBA", (32, 32), GREEN_BG)
+    canvas = Image.new("RGBA", token.size, GREEN_BG)
     canvas.alpha_composite(token)
-    ref = nearest(nearest(canvas, 2), 8)  # 64-canvas -> 512
+    ref = nearest(canvas, 8)
     ref.convert("RGB").save(out_path)
     return ref
 
@@ -772,30 +782,414 @@ def resolve_prompt(job_id):
 
 
 def hull_prompt(ship, direction, stated_px=None):
-    """Tightened hull prompt: compact clause (+ calibrated px length)."""
+    """Hardened hull prompt: physical-anchor direction wording, compact
+    clause (+ calibrated px length), scale anchors for the fallback trio."""
     pose = POSE[direction]
     rig = RIG[ship]
     if ship == "pinnace":
         # STYLE's "billowed canvas sails" clause drags the model into a
-        # square rig — the pinnace re-roll needs an explicit no-sail prompt
+        # square rig — the pinnace needs an explicit no-sail prompt, plus
+        # a scale anchor (green round drew it canvas-tiny)
         return (f"Redraw this input sprite. Keep the exact same silhouette, "
-                f"proportions and {pose}. Rig: NO sails — a tiny open "
-                f"rowing boat with two staggered oar banks (small oar "
-                f"blades dipping at the waterline on both sides), one "
-                f"short bare mast stub carrying only a small red pennant "
-                f"flag, dense wooden hull with visible planking lines, "
-                f"a few small crew figures rowing, strong 1-pixel dark "
-                f"outline around the whole sprite, big chunky pixels, "
+                f"proportions and {pose}. Rig: NO sails — a substantial "
+                f"vessel, NOT a small boat: a long open rowing galley about "
+                f"500 px long on the 512 canvas, with two staggered "
+                f"oar banks (small oar blades dipping at the waterline on "
+                f"both sides), one short bare mast stub carrying only a "
+                f"small red pennant flag, dense wooden hull with visible "
+                f"planking lines, a few small crew figures rowing, strong "
+                f"1-pixel dark outline around the whole sprite, big chunky "
+                f"pixels, "
                 + CHROMA_BG + ". No large sails, no square rig, "
                 f"no cabins, no gunports. No water, no scenery, no text, "
                 f"no frame.")
     prompt = (f"Redraw this input sprite. Keep the exact same "
               f"silhouette, mast count, sail layout, proportions and "
               f"{pose}. Rig: {rig}. {COMPACT} ")
+    if ship == "nao":
+        prompt += "The ship fills about 85% of the canvas. "
+    elif ship == "sloop":
+        prompt += "The ship fills about 70-80% of the canvas width. "
     if stated_px:
         prompt += (f"Ship length about {stated_px} px of the 512 canvas "
                    f"including bowsprit. ")
     return prompt + STYLE
+
+
+# ------------------------------------------------- direction audit (quant)
+
+def _snap_px(job_id):
+    img = Image.open(os.path.join(SNAPPED, job_id + ".png")).convert("RGBA")
+    return img.load(), img.size
+
+
+def classify_for(job_id, expected):
+    """Quantified facing classifier (hull-band physics, not whole-sprite
+    axis): the hull band = opaque px in the bottom 30% of the sprite.
+
+    - w: hull band spans wide (>=55% bbox width) and the band's bow end
+      (less mass) is LEFT.
+    - n: mirror symmetry (IoU vs x-flip >= 0.45) + wide bottom slab
+      (bottom-row width >= 42% of max width) = transom head-on.
+    - s: mirror symmetry + narrow bottom taper (<= 48%) = bowsprit down.
+    - sw/nw: diagonal principal axis (20-70 deg) + bow mass toward the
+      LEFT half.
+    Ambiguous cells FAIL (the user must never guess).
+    """
+    px, (w, h) = _snap_px(job_id)
+    pts = [(x, y) for y in range(h) for x in range(w) if px[x, y][3]]
+    if len(pts) < 24:
+        return {"expected": expected, "observed": "ambiguous",
+                "verdict": "FAIL", "why": "near-empty snap", "confidence": 0}
+    import math
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    n = len(pts)
+    cx = (x0 + x1) / 2
+    cy = (y0 + y1) / 2
+    roww = Counter(p[1] for p in pts)
+    ev = {"bbox": [bw, bh]}
+
+    # hull band = bottom 30% of the sprite
+    y_band = y1 - 0.30 * (y1 - y0)
+    band = [(x, y) for x, y in pts if y >= y_band]
+    band_xs = [p[0] for p in band] or [cx]
+    band_w = max(band_xs) - min(band_xs) + 1
+    band_ratio = band_w / max(1, bw)
+    band_left = sum(1 for x, y in band if x < cx)
+    band_right = len(band) - band_left
+    ev["band_ratio"] = round(band_ratio, 2)
+    ev["band_lr"] = [band_left, band_right]
+
+    # mirror symmetry about the bbox centre-x
+    inter = 0
+    for x, y in pts:
+        mx = int(round(2 * cx - x))
+        if 0 <= mx < w and px[mx, y][3]:
+            inter += 1
+    sym = inter / max(1, n)
+    ev["symmetry"] = round(sym, 2)
+
+    bottom = max(roww[y] for y in roww if y >= y1 - 5)
+    maxw = max(roww.values())
+    bottom_frac = bottom / max(1, maxw)
+    ev["bottom_frac"] = round(bottom_frac, 2)
+
+    if expected == "w":
+        if band_ratio < 0.55:
+            ev["why"] = (f"hull band narrow ({band_ratio:.2f}) - "
+                         f"not a side view")
+            return {"expected": expected, "observed": "ambiguous",
+                    "verdict": "FAIL", "confidence": 0.2, **ev}
+        bow_left = band_left <= band_right
+        conf = abs(band_left - band_right) / max(1, band_left + band_right)
+        observed = "w" if bow_left else "e(flip)"
+        return {"expected": expected, "observed": observed,
+                "verdict": "PASS" if bow_left else "FAIL",
+                "confidence": round(0.5 + conf, 2), **ev}
+    if expected in ("n", "s"):
+        # authored n and s drafts overlap in silhouette stats (bfrac med
+        # 0.83 vs 0.80) — the transom/bowsprit difference is not a
+        # silhouette fact. Honest audit: symmetric + NOT duplicates of
+        # each other + NOT a copy of the w cell; semantic truth stays
+        # reviewable via the adjacent cells in 29_hull_sheets.png.
+        ship = job_id[len("hull_"):].rsplit("_", 1)[0]
+        other = "s" if expected == "n" else "n"
+        iou_other = cell_iou(job_id, f"hull_{ship}_{other}")
+        iou_w = cell_iou(job_id, f"hull_{ship}_w")
+        ev["iou_other"] = round(iou_other, 2)
+        ev["iou_w"] = round(iou_w, 2)
+        if sym < 0.45:
+            ev["why"] = f"asymmetric ({sym:.2f}) — likely a side/quarter view"
+            observed = "quarter(?)"
+            return {"expected": expected, "observed": observed,
+                    "verdict": "FAIL", "confidence": 0.3, **ev}
+        if iou_other >= 0.55:
+            ev["why"] = (f"duplicate of the {other} cell "
+                         f"(IoU {iou_other:.2f}) — same view drawn twice")
+            observed = f"duplicate-of-{other}"
+            return {"expected": expected, "observed": observed,
+                    "verdict": "FAIL", "confidence": 0.5, **ev}
+        if iou_w >= 0.55:
+            ev["why"] = f"duplicates the w cell (IoU {iou_w:.2f})"
+            observed = "duplicate-of-w"
+            return {"expected": expected, "observed": observed,
+                    "verdict": "FAIL", "confidence": 0.5, **ev}
+        observed = f"{expected}-plausible"
+        return {"expected": expected, "observed": observed,
+                "verdict": "PASS", "confidence": 0.55, **ev}
+    # diagonals sw / nw: mechanical heading signals are weak on 3/4
+    # renders (hull bands sit near-horizontal, sails tower), so the
+    # verdict = no flip evidence + not a duplicate of the w cell (a side
+    # view pasted into a diagonal cell).
+    left_end = [y for x, y in band if x <= x0 + 5]
+    right_end = [y for x, y in band if x >= x1 - 5]
+    if left_end and right_end:
+        tilt = sum(left_end) / len(left_end) - sum(right_end) \
+            / len(right_end)
+    else:
+        tilt = 0.0
+    ev["bow_tilt"] = round(tilt, 1)
+    ship = job_id[len("hull_"):].rsplit("_", 1)[0]
+    dup = cell_iou(job_id, f"hull_{ship}_w")
+    ev["iou_vs_w"] = round(dup, 2)
+    if expected == "sw":
+        flip = tilt <= -5 or band_left < 0.3 * band_right
+        observed = "se(flip)" if flip else (
+            "duplicate-of-w" if dup >= 0.55 else "sw")
+    else:  # nw
+        flip = tilt >= 5 or band_right < 0.3 * band_left
+        observed = "ne(flip)" if flip else (
+            "duplicate-of-w" if dup >= 0.55 else "nw")
+    ok = not flip and dup < 0.55
+    if not ok:
+        ev["why"] = (f"flip-evidence tilt {tilt:.0f}px / band "
+                     f"{band_left}L/{band_right}R" if flip else
+                     f"duplicates the w cell (IoU {dup:.2f})")
+    return {"expected": expected, "observed": observed,
+            "verdict": "PASS" if ok else "FAIL",
+            "confidence": 0.55 if ok else 0.5, **ev}
+
+
+def cell_iou(job_a, job_b):
+    """Mask IoU between two snapped tokens (duplicate-view detector)."""
+    pa, (wa, ha) = _snap_px(job_a)
+    pb, (wb, hb) = _snap_px(job_b)
+    inter = 0
+    union = 0
+    for y in range(min(ha, hb)):
+        for x in range(min(wa, wb)):
+            a = pa[x, y][3] > 0
+            b = pb[x, y][3] > 0
+            if a and b:
+                inter += 1
+            if a or b:
+                union += 1
+    return inter / max(1, union)
+
+
+def audit_directions():
+    """Audit all 80 base jobs; report.json -> direction_audit[]."""
+    audit = []
+    for ship in HULLS:
+        for direction in DIRS:
+            job_id = f"hull_{ship}_{direction}"
+            res = classify_for(job_id, direction)
+            res["job"] = job_id
+            audit.append(res)
+        # n/s duplicate-view detector: the model drawing the same view
+        # twice is the classic n/s confusion (user complaint)
+        iou = cell_iou(f"hull_{ship}_n", f"hull_{ship}_s")
+        if iou >= 0.55:
+            for res in audit:
+                if res["job"] in (f"hull_{ship}_n", f"hull_{ship}_s"):
+                    res["verdict"] = "FAIL"
+                    res["observed"] = res["observed"] + "/duplicate"
+                    res["why"] = f"n/s duplicate views (IoU {iou:.2f})"
+                    res["ns_iou"] = round(iou, 2)
+    prog = load_progress()
+    prog["direction_audit"] = audit
+    save_progress(prog)
+    npass = sum(1 for a in audit if a["verdict"] == "PASS")
+    print(f"direction audit: {npass}/{len(audit)} PASS")
+    for a in audit:
+        if a["verdict"] != "PASS":
+            print(f"  FAIL {a['job']}: observed={a['observed']} "
+                  f"({a.get('why') or a.get('bow_at') or a.get('bottom_frac')})")
+    return audit
+
+
+def dir_failed_jobs(audit):
+    return [a["job"] for a in audit if a["verdict"] != "PASS"]
+
+
+# arrow glyph geometry: unit triangles per direction (image coords, y down)
+ARROW = {
+    "w": [(-1, 0.5), (0.6, -0.5), (0.6, 1.5)],
+    "n": [(0.5, -1), (-0.5, 0.6), (1.5, 0.6)],
+    "s": [(0.5, 1), (-0.5, -0.6), (1.5, -0.6)],
+    "sw": [(-0.7, 0.7), (0.5, -0.3), (-0.3, 0.5)],
+    "nw": [(-0.7, -0.7), (0.5, 0.3), (-0.3, -0.5)],
+}
+
+
+def sheet_direction_audit(audit):
+    """28_direction_audit.png: base jobs at x6, expected-vs-detected arrow
+    glyph beside each cell (green = match, red = mismatch/ambiguous)."""
+    cell = 336           # 64-grid x5 sprite + arrow gutter
+    sprite = 320
+    head = 34
+    cols = len(HULLS)
+    rows = len(DIRS)
+    img = Image.new("RGBA", (96 + cols * cell + 8,
+                             head + rows * (cell + 8) + 8), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    for ci, hull in enumerate(HULLS):
+        label(draw, (96 + ci * cell + 6, 8), hull)
+    by_job = {a["job"]: a for a in audit}
+    for ri, direction in enumerate(DIRS):
+        y0 = head + ri * (cell + 8)
+        label(draw, (6, y0 + 140), direction)
+        for ci, hull in enumerate(HULLS):
+            job_id = f"hull_{hull}_{direction}"
+            x0 = 96 + ci * cell
+            path = os.path.join(SNAPPED, job_id + ".png")
+            if os.path.exists(path):
+                tok = Image.open(path).resize((sprite, sprite),
+                                              Image.NEAREST)
+                img.alpha_composite(tok, (x0 + 8, y0 + 8))
+            a = by_job.get(job_id)
+            if not a:
+                continue
+            good = a["verdict"] == "PASS"
+            observed = a["observed"]
+            key = observed if observed in ARROW else (
+                "w" if "flip" in observed else direction)
+            vec = ARROW.get(key, ARROW[direction])
+            color = (70, 200, 90) if good else (220, 60, 60)
+            ox, oy = x0 + cell - 30, y0 + 26
+            pts = [(ox + vx * 11, oy + vy * 11) for vx, vy in vec]
+            draw.polygon(pts, fill=color)
+            letter = "OK" if good else "X"
+            label(draw, (ox - 6, oy + 22), letter,
+                  color=(140, 240, 150) if good else (255, 120, 120))
+    out = os.path.join(REVIEW, "28_direction_audit.png")
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
+def reroll_direction(job_id, max_attempts=3, reason="direction semantics"):
+    """Direction re-roll: hardened wording, <=3 attempts, each attempt
+    classified; keep the best (PASS preferred, then confidence)."""
+    t0 = time.time()
+    ship, direction = job_id[len("hull_"):].rsplit("_", 1)
+    tier = TIER[ship]
+    band = BANDS[tier] if direction in ("w",) else None
+    base = canonical_seed(job_id) + DIR_SEED_OFFSET
+    draft_path = os.path.join(DRAFTS, job_id + ".png")
+    build_ship_draft(ship, direction, draft_path)
+    attempts = []
+    best = None  # (score, rec, seed)
+    for n in range(1, max_attempts + 1):
+        seed = base + n * 1000
+        tag = f"_d{n}"
+        prompt = hull_prompt(ship, direction)
+        rec = exec_gen(job_id, "hull", draft_path, prompt, seed, BLOCK_HULL,
+                       band, tag=tag)
+        for d in (GEN, DEBG, SNAPPED):  # promote for classification
+            src = os.path.join(d, f"{job_id}{tag}.png")
+            dst = os.path.join(d, job_id + ".png")
+            if os.path.exists(src):
+                shutil.copy(src, dst)
+        cls = classify_for(job_id, direction)
+        score = (0 if cls["verdict"] == "PASS" else
+                 (1 if cls["verdict"] == "PASS*" else 2)) \
+            - min(0.9, cls.get("confidence", 0))
+        attempts.append({"attempt": n, "seed": seed,
+                         "verdict": cls["verdict"],
+                         "observed": cls["observed"],
+                         "confidence": cls.get("confidence", 0),
+                         "band": (rec.get("metrics", {}).get("band") or {})
+                         .get("long_axis_px")})
+        if best is None or score < best[0]:
+            best = (score, rec, seed, cls, n)
+        if cls["verdict"] == "PASS":
+            break
+    score, rec, seed, cls, kept_n = best
+    rec.update({"seed": seed, "status": "done",
+                "seconds": round(time.time() - t0, 1),
+                "direction": cls,
+                "reroll": {"kind": "direction", "reason": reason,
+                           "attempts": attempts, "kept_seed": seed,
+                           "kept_attempt": kept_n,
+                           "verdict": cls["verdict"]}})
+    save_job(job_id, rec)
+    return rec
+
+
+PAIR_PROMPT = (
+    "Two reference cells of the SAME ship, separated by a dark vertical "
+    "divider. LEFT cell: the ship seen directly from ASTERN: the square "
+    "transom/stern-castle faces the viewer head-on, symmetric, the ship "
+    "sails AWAY upward, NO bowsprit visible. RIGHT cell: the same ship "
+    "seen directly from the BOW: the bowsprit points straight DOWN toward "
+    "the viewer at the bottom of the cell, symmetric bow shape, "
+    "stern-castle hidden behind the sails. The two views must be "
+    "mirror-opposites of each other in what they show: the left cell shows "
+    "the stern castle, the right cell shows the bowsprit. Rig: {rig}. "
+    "{scale}Render each cell as crisp limited-palette pixel art in the "
+    "style of early-90s 16-bit sailing games: billowed canvas sails, dense "
+    "wooden hull with visible planking lines, small lit cabin windows, "
+    "strong 1-pixel dark outline around each sprite, big chunky pixels, "
+    + CHROMA_BG + ". Each cell contains the full ship, centered in its "
+    "cell, big enough to fill most of the cell. No water, no scenery, no "
+    "text, no frame.")
+
+
+def pair_n_s(ship, reason="n/s confusable pair"):
+    """Confusable-pair trick: generate the n and s of one hull in a single
+    /edit (left = astern cell, right = bow cell), crop, snap, audit both."""
+    import math
+    n_job, s_job = f"hull_{ship}_n", f"hull_{ship}_s"
+    seed = canonical_seed(n_job) + DIR_SEED_OFFSET
+    ref = Image.new("RGBA", (1024, 512), GREEN_BG)
+    n_tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                     f"hull_{ship}_player_n.png"))
+    s_tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                     f"hull_{ship}_player_s.png"))
+    ref.alpha_composite(nearest(n_tok, 14), (48, 32))
+    ref.alpha_composite(nearest(s_tok, 14), (528, 32))
+    draw = ImageDraw.Draw(ref)
+    draw.rectangle([504, 0, 519, 511], fill=(24, 28, 40, 255))
+    buf = io.BytesIO()
+    ref.convert("RGB").save(buf, "PNG")
+    scale_clause = ""
+    if ship == "pinnace":
+        rig = ("NO sails — a substantial rowing galley about 500 px long, "
+               "two oar banks and a bare mast stub with a small red "
+               "pennant, in BOTH cells")
+        scale_clause = "The boats fill 70-80% of each cell's width. "
+    else:
+        rig = RIG[ship]
+        if ship == "nao":
+            scale_clause = "Each ship fills about 85% of its cell. "
+    prompt = PAIR_PROMPT.format(rig=rig, scale=scale_clause)
+    gen = generate(buf.getvalue(), prompt, seed)
+    with open(os.path.join(GEN, f"hull_{ship}_pair.png"), "wb") as fh:
+        fh.write(gen)
+    _, _, gpx = VD.decode_ui_png(gen)
+    ow, oh = len(gpx[0]), len(gpx)
+    s = ow / 1024.0
+    out = {}
+    for direction, job_id, box in (
+            ("n", n_job, (int(48 * s), int(32 * s), int(496 * s),
+                          int(480 * s))),
+            ("s", s_job, (int(528 * s), int(32 * s), int(976 * s),
+                          int(480 * s)))):
+        crop = px_to_image(gpx)
+        crop = crop.crop(box)
+        if crop.size != (512, 512):
+            crop = crop.resize((512, 512), Image.NEAREST)
+        cbuf = io.BytesIO()
+        crop.save(cbuf, "PNG")
+        debg = keyed_png(rembg(cbuf.getvalue(), job_id))
+        with open(os.path.join(DEBG, job_id + ".png"), "wb") as fh:
+            fh.write(debg)
+        snapped, metrics, drift = snap_and_measure(debg, BLOCK_HULL, None)
+        with open(os.path.join(SNAPPED, job_id + ".png"), "wb") as fh:
+            snapped.save(fh)
+        cls = classify_for(job_id, direction)
+        rec = {"seed": seed, "status": "done", "metrics": metrics,
+               "direction": cls,
+               "reroll": {"kind": "pair", "reason": reason,
+                          "pair_seed": seed, "kept_seed": seed,
+                          "verdict": cls["verdict"]}}
+        save_job(job_id, rec)
+        out[direction] = {"job": job_id, "verdict": cls["verdict"],
+                          "observed": cls["observed"]}
+    return out
 
 
 def exec_gen(job_id, kind, draft_path, prompt, seed, block, band, tag=None):
@@ -831,6 +1225,505 @@ def exec_gen(job_id, kind, draft_path, prompt, seed, block, band, tag=None):
     if drift:
         rec["gen_size"] = list(drift)
     return rec
+
+
+# ------------------------------------------- hull-sheet jobs (job = hull)
+# doc f6c00bb keeps the 5-dir scheme; the TASK granularity is the hull:
+# one 5-cell sheet per /edit for cross-direction style unity.
+
+SHEET_DIRS = ["w", "n", "s", "sw", "nw"]
+SHEET_CELLS = {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
+               "sw": (64, 640), "nw": (640, 640)}   # top-left of each 512px cell
+SHEET_SIZE = (1792, 1152)
+
+
+def hull_sheet_draft(ship, out_path):
+    """5-cell draft reference: w/n/s/sw/nw tokens x16 on chroma green,
+    3x2 grid (sixth cell = legend), thin dark dividers, labels above."""
+    ref = Image.new("RGBA", SHEET_SIZE, GREEN_BG)
+    draw = ImageDraw.Draw(ref)
+    for direction, (cx, cy) in SHEET_CELLS.items():
+        tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                       f"hull_{ship}_player_{direction}.png"))
+        ref.alpha_composite(nearest(tok, 8), (cx, cy))
+        draw.rectangle([cx - 2, cy - 2, cx + 513, cy + 513],
+                       outline=(24, 28, 40, 255), width=2)
+        label(draw, (cx + 6, cy - 46), direction, color=(16, 16, 16))
+    label(draw, (1216 + 6, 594), "same ship", color=(16, 16, 16))
+    label(draw, (1216 + 6, 620), "5 views", color=(16, 16, 16))
+    ref.convert("RGB").save(out_path)
+    return ref
+
+
+def hull_sheet_prompt(ship):
+    rig = RIG[ship]
+    scale = ""
+    if ship == "pinnace":
+        scale = ("This hull fills about 75% of its cell width in every "
+                 "cell — a substantial sloop-of-war, NOT a small boat. ")
+    elif ship == "nao":
+        scale = "This hull fills about 85% of its cell. "
+    return (
+        "Redraw this input sprite sheet. The five labelled cells show the "
+        "SAME ship seen from five directions: identical hull, identical "
+        "rig, identical materials and colour treatment in every cell; "
+        "only the viewing angle changes. "
+        "Cell w: side view sailing LEFT, the bow with bowsprit at the "
+        "LEFT edge of the cell, stern at the RIGHT edge. "
+        "Cell n: seen from astern — the square transom/stern-castle faces "
+        "the viewer head-on, symmetric, the ship sails away upward, NO "
+        "bowsprit visible. "
+        "Cell s: seen from the bow — the bowsprit toward the viewer, "
+        "transom hidden behind the sails. "
+        "Cells sw and nw: three-quarter views, the bow pointing to the "
+        "BOTTOM-LEFT corner (sw) and the TOP-LEFT corner (nw). "
+        "Cells n and s are opposite views of the same ship: n shows the "
+        "transom, s shows the bowsprit — do not draw the same view twice. "
+        "Keep the cells in their exact positions and order: top-left w, "
+        "top-centre n, top-right s, bottom-left sw, bottom-centre nw; do "
+        "not move, re-order or re-label the cells; do not add your own "
+        "labels. "
+        "The small labels above the cells are pre-printed — do NOT draw "
+        "them into the sprites; leave the sixth cell empty. "
+        f"Rig: {rig}. {COMPACT} {scale}"
+        "Render every cell as crisp limited-palette pixel art in the "
+        "style of early-90s 16-bit sailing games: billowed canvas sails "
+        "with curved highlight and shadow bands following the bulge, "
+        "dense wooden hull with visible planking lines, small lit cabin "
+        "windows, gunports, a small red pennant flag at the mainmast top, "
+        "strong 1-pixel dark outline around each sprite, big chunky "
+        "pixels, " + CHROMA_BG + ". Keep the thin dark dividers. No "
+        "water, no scenery, no extra text, no frame.")
+
+
+def detect_sprite_cells(full):
+    """Connected non-chroma-green components >= 3000 px, 5 largest bboxes,
+    shrunk 1px (kills model-drawn cell frames). Returns [(x0,y0,x1,y1)]."""
+    px = full.load()
+    w, h = full.size
+    mask = bytearray(w * h)
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a > 100 and not (g >= 150 and r <= 110 and b <= 110):
+                mask[y * w + x] = 1
+    seen = bytearray(w * h)
+    boxes = []
+    for start in range(w * h):
+        if mask[start] and not seen[start]:
+            stack = [start]
+            seen[start] = 1
+            x0 = x1 = start % w
+            y0 = y1 = start // w
+            area = 0
+            while stack:
+                i = stack.pop()
+                area += 1
+                x, y = i % w, i // w
+                x0, x1 = min(x0, x), max(x1, x)
+                y0, y1 = min(y0, y), max(y1, y)
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1),
+                               (x, y - 1)):
+                    if 0 <= nx < w and 0 <= ny < h:
+                        j = ny * w + nx
+                        if mask[j] and not seen[j]:
+                            seen[j] = 1
+                            stack.append(j)
+            if area >= 3000:
+                boxes.append((x0 + 1, y0 + 1, x1 - 1, y1 - 1, area))
+    boxes.sort(key=lambda b: -b[4])
+    return [(b[0], b[1], b[2], b[3]) for b in boxes[:5]]
+
+
+def cell_shape_metrics(mask):
+    """(symmetry, bottom_frac, band_ratio, tilt, wide?) for a 64x64
+    boolean mask — the direction fingerprint. wide threshold 0.95: side
+    views still tower (sails), aspect ~1.0-1.2."""
+    pts = [(x, y) for y in range(64) for x in range(64) if mask[y][x]]
+    if len(pts) < 24:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    n = len(pts)
+    cx = (x0 + x1) / 2
+    roww = Counter(p[1] for p in pts)
+    band_y = y1 - 0.30 * (y1 - y0)
+    band = [(x, y) for x, y in pts if y >= band_y]
+    band_xs = [p[0] for p in band] or [cx]
+    band_ratio = (max(band_xs) - min(band_xs) + 1) / max(1, bw)
+    band_left = sum(1 for x, y in band if x < cx)
+    band_right = len(band) - band_left
+    inter = 0
+    for x, y in pts:
+        mx = int(round(2 * cx - x))
+        if 0 <= mx < 64 and mask[y][mx]:
+            inter += 1
+    sym = inter / n
+    bottom = max(roww[y] for y in roww if y >= y1 - 5)
+    bottom_frac = bottom / max(1, max(roww.values()))
+    left_end = [y for x, y in band if x <= x0 + 5]
+    right_end = [y for x, y in band if x >= x1 - 5]
+    tilt = (sum(left_end) / len(left_end) - sum(right_end)
+            / len(right_end)) if left_end and right_end else 0.0
+    return {"sym": sym, "bottom_frac": bottom_frac,
+            "band_ratio": band_ratio, "tilt": tilt,
+            "wide": bw >= bh * 0.95, "n_px": n}
+
+
+def assign_cells(cells, draft_masks):
+    """Greedy unique assignment of detected cells to the 5 directions.
+    cells: list of (64x64 mask, centre in sheet coords); draft_masks:
+    {dir: 64x64 mask}. Shape fingerprints dominate; the sheet position
+    acts as a soft tie-break (the model mostly keeps the grid)."""
+    slot_centers = {d: (SHEET_CELLS[d][0] + 256, SHEET_CELLS[d][1] + 256)
+                    for d in SHEET_DIRS}
+    scores = {}
+    for ci, (mask, ccx, ccy) in enumerate(cells):
+        m = cell_shape_metrics(mask)
+        slot = min(slot_centers,
+                   key=lambda d: (slot_centers[d][0] - ccx) ** 2
+                   + (slot_centers[d][1] - ccy) ** 2)
+        for d, dm in draft_masks.items():
+            inter = sum(1 for y in range(64) for x in range(64)
+                        if mask[y][x] and dm[y][x])
+            union = sum(1 for y in range(64) for x in range(64)
+                        if mask[y][x] or dm[y][x])
+            iou = inter / max(1, union)
+            pos = 0.6 if slot == d else 0.0
+            if not m:
+                scores[(ci, d)] = iou + pos
+                continue
+            not_wide = 0 if m["wide"] else 1
+            if d == "w":
+                s = (1.5 * m["band_ratio"] + 1.0 * m["wide"] + pos
+                     + iou * 0.2)
+            elif d == "n":
+                s = (1.2 * min(1, m["sym"])
+                     + 1.5 * min(1, m["bottom_frac"] / 0.5)
+                     + 0.8 * not_wide + pos + iou * 0.2)
+            elif d == "s":
+                s = (1.2 * min(1, m["sym"])
+                     + 3.0 * max(0, 1 - m["bottom_frac"] / 0.5)
+                     + 0.8 * not_wide + pos + iou * 0.2)
+            elif d == "sw":
+                s = (1.2 * max(0, m["tilt"] / 6) + 0.5 * (1 if m["tilt"] > 0
+                                                           else 0)
+                     + 0.3 * not_wide + pos + iou * 0.2)
+            else:  # nw
+                s = (1.2 * max(0, -m["tilt"] / 6) + 0.5 * (1 if m["tilt"] < 0
+                                                           else 0)
+                     + 0.3 * not_wide + pos + iou * 0.2)
+            scores[(ci, d)] = s
+    assignment = {}
+    used_cells = set()
+    used_dirs = set()
+    for (ci, d), s in sorted(scores.items(), key=lambda kv: -kv[1]):
+        if ci in used_cells or d in used_dirs:
+            continue
+        assignment[d] = ci
+        used_cells.add(ci)
+        used_dirs.add(d)
+    return assignment
+
+
+def run_hull_job(ship, seed):
+    """One hull = one /edit: 5-cell sheet -> detect+assign cells -> per-dir
+    crop -> key -> snap. The model re-arranges the grid, so cells are
+    matched to directions by draft-silhouette IoU + shape fingerprints
+    (never by fixed grid position)."""
+    t0 = time.time()
+    rec = {"ship": ship, "seed": seed, "status": "running",
+           "started": time.strftime("%H:%M:%S")}
+    save_job(f"hull_{ship}", rec)
+    draft_path = os.path.join(DRAFTS, f"sheet_{ship}.png")
+    hull_sheet_draft(ship, draft_path)
+    with open(draft_path, "rb") as fh:
+        draft_bytes = fh.read()
+    gen = generate(draft_bytes, hull_sheet_prompt(ship), seed)
+    with open(os.path.join(GEN, f"hull_{ship}_sheet.png"), "wb") as fh:
+        fh.write(gen)
+    _, _, gpx = VD.decode_ui_png(gen)
+    ow, oh = len(gpx[0]), len(gpx)
+    sx, sy = ow / SHEET_SIZE[0], oh / SHEET_SIZE[1]
+    rec["gen_size"] = [ow, oh]
+    if abs(sx - round(sx)) > 0.02 or abs(sy - round(sy)) > 0.02:
+        rec["drift"] = round(sx, 3)
+    full = px_to_image(gpx)
+    if full.size != SHEET_SIZE:
+        full = full.resize(SHEET_SIZE, Image.NEAREST)
+
+    # detect + assign the sprite cells (the model re-arranges the grid)
+    boxes = detect_sprite_cells(full)
+    rec["detected_cells"] = len(boxes)
+    if len(boxes) < 5:
+        raise RuntimeError(f"only {len(boxes)} sprite cells detected")
+    # crop FIXED 512x512 windows centred on each sprite: the drawn size
+    # and placement carry the band/scale information (a bbox crop would
+    # make every sprite fill its crop and all views look alike)
+    windows = []
+    for (bx0, by0, bx1, by1) in boxes:
+        ccx, ccy = (bx0 + bx1) / 2, (by0 + by1) / 2
+        wx0 = max(0, min(SHEET_SIZE[0] - 512, int(ccx - 256)))
+        wy0 = max(0, min(SHEET_SIZE[1] - 512, int(ccy - 256)))
+        windows.append((wx0, wy0, wx0 + 512, wy0 + 512))
+    cell_norm = []
+    for (wx0, wy0, wx1, wy1) in windows:
+        c = full.crop((wx0, wy0, wx1, wy1))
+        c = c.resize((64, 64), Image.NEAREST)
+        cp = c.load()
+        cell_norm.append(([[1 if cp[x, y][3] and not
+                            (cp[x, y][1] >= 150 and cp[x, y][0] <= 110
+                             and cp[x, y][2] <= 110) else 0
+                            for x in range(64)] for y in range(64)],
+                          (wx0 + wx1) / 2, (wy0 + wy1) / 2))
+    draft_masks = {}
+    for direction in SHEET_DIRS:
+        tok = token_image(os.path.join(REPO, "assets", "ui", "tokens",
+                                       f"hull_{ship}_player_{direction}.png"))
+        if tok.size != (64, 64):
+            tok = tok.resize((64, 64), Image.NEAREST)
+        dp = tok.load()
+        draft_masks[direction] = [[1 if dp[x, y][3] else 0
+                                   for x in range(64)] for y in range(64)]
+    assignment = assign_cells(cell_norm, draft_masks)
+    rec["assignment"] = {d: windows[ci] for d, ci in assignment.items()}
+    per_dir = {}
+    band = BANDS[TIER[ship]]
+    # snap ALL five directions first, then classify (the n/s classifier
+    # cross-references the sibling + w snaps)
+    for direction, ci in assignment.items():
+        job_id = f"hull_{ship}_{direction}"
+        wx0, wy0, wx1, wy1 = windows[ci]
+        cell = full.crop((wx0, wy0, wx1, wy1))
+        cbuf = io.BytesIO()
+        cell.save(cbuf, "PNG")
+        debg = keyed_png(rembg(cbuf.getvalue(), job_id))
+        with open(os.path.join(DEBG, job_id + ".png"), "wb") as fh:
+            fh.write(debg)
+        snapped, metrics, _ = snap_and_measure(
+            debg, BLOCK_HULL, band if direction == "w" else None)
+        with open(os.path.join(SNAPPED, job_id + ".png"), "wb") as fh:
+            snapped.save(fh)
+        per_dir[direction] = {"metrics": metrics}
+    for direction in SHEET_DIRS:
+        job_id = f"hull_{ship}_{direction}"
+        cls = classify_for(job_id, direction)
+        per_dir.setdefault(direction, {}).setdefault("metrics", {})
+        per_dir[direction]["direction"] = cls
+    for direction in SHEET_DIRS:  # all 5 dirs present in per_dir
+        per_dir.setdefault(direction, {"metrics": {}, "direction": {
+            "expected": direction, "observed": "missing",
+            "verdict": "FAIL", "why": "cell not detected"}})
+    rec["per_dir"] = per_dir
+    rec["status"] = "done"
+    rec["seconds"] = round(time.time() - t0, 1)
+    save_job(f"hull_{ship}", rec)
+    return rec
+
+
+def hull_gate(ship):
+    """Hull failure test: w band (with lateen waiver), >=2 direction FAILs,
+    or pennant missing in any direction."""
+    prog = load_progress()
+    rec = prog.get("jobs", {}).get(f"hull_{ship}", {})
+    per = rec.get("per_dir", {})
+    fails = []
+    w = per.get("w", {}).get("metrics", {}).get("band") or {}
+    lo, hi = BANDS[TIER[ship]]
+    in_band = bool(w.get("in_band"))
+    waived = (ship in WAIVER_T1_LATEEN
+              and w.get("long_axis_px") is not None
+              and w.get("long_axis_px") <= hi + 1)
+    if not (in_band or waived):
+        fails.append(f"w band {w.get('long_axis_px')} not in {lo}-{hi}")
+    dir_fails = [d for d, p in per.items()
+                 if p.get("direction", {}).get("verdict") != "PASS"]
+    if len(dir_fails) >= 2:
+        fails.append(f"direction FAILs: {dir_fails}")
+    pennant_missing = [d for d, p in per.items()
+                       if not p.get("metrics", {}).get("pennant_present")]
+    if pennant_missing:
+        fails.append(f"pennant missing: {pennant_missing}")
+    return fails
+
+
+def reroll_hull(ship, max_attempts=3, reason="gate failure"):
+    """Whole-hull re-roll with varied seed; keep the best attempt by gate
+    score (fewest fails, then most direction passes)."""
+    base = 3000 + HULLS.index(ship)
+    best = None
+    attempts = []
+    for n in range(1, max_attempts + 1):
+        seed = base + n * 100
+        rec = run_hull_job(ship, seed)
+        fails = hull_gate(ship)
+        dir_pass = sum(1 for p in rec.get("per_dir", {}).values()
+                       if p.get("direction", {}).get("verdict") == "PASS")
+        score = (len(fails), -dir_pass)
+        attempts.append({"attempt": n, "seed": seed, "fails": fails,
+                         "dir_pass": dir_pass})
+        if best is None or score < best[0]:
+            best = (score, rec, seed, fails)
+        if not fails:
+            break
+    score, rec, seed, fails = best
+    rec["reroll"] = {"kind": "hull", "reason": reason,
+                     "attempts": attempts, "kept_seed": seed,
+                     "kept_fails": fails}
+    save_job(f"hull_{ship}", rec)
+    return rec
+
+
+def check_green_hull(ship):
+    """validate-green checks at hull level: chroma-free snaps, ring spread,
+    olive retention (galiot/junk)."""
+    out = {"ship": ship, "dirs": {}}
+    total_green = 0
+    total_olive = 0
+    for direction in SHEET_DIRS:
+        job_id = f"hull_{ship}_{direction}"
+        snap = Image.open(os.path.join(SNAPPED, job_id + ".png")) \
+            .convert("RGBA")
+        px = snap.load()
+        green = 0
+        white_cols = set()
+        occupied = set()
+        for x in range(64):
+            for y in range(64):
+                r, g, b, a = px[x, y]
+                if a == 0:
+                    continue
+                occupied.add(x)
+                if r <= 60 and abs(g - 255) <= 60 and b <= 60:
+                    green += 1
+                boundary = ((x + 1 >= 64 or px[x + 1, y][3] == 0)
+                            or (x - 1 < 0 or px[x - 1, y][3] == 0)
+                            or (y + 1 >= 64 or px[x, y + 1][3] == 0)
+                            or (y - 1 < 0 or px[x, y - 1][3] == 0))
+                if boundary and min(r, g, b) >= 200:
+                    white_cols.add(x)
+        debg = Image.open(os.path.join(DEBG, job_id + ".png")) \
+            .convert("RGBA")
+        dpx = debg.load()
+        dw, dh = debg.size
+        olive = 0
+        for y in range(dh):
+            for x in range(dw):
+                r, g, b, a = dpx[x, y]
+                if a > 200 and g >= 60 and g > r + 40 and g > b + 40 \
+                        and not (g >= 170 and r <= 100 and b <= 100):
+                    olive += 1
+        total_green += green
+        total_olive += olive
+        out["dirs"][direction] = {
+            "green_px": green, "white_cols": len(white_cols),
+            "occupied_cols": len(occupied), "olive": olive}
+    out["green_free"] = total_green == 0
+    out["olive_total"] = total_olive
+    if ship in ("galiot", "junk"):
+        out["band_ok"] = total_olive >= 60
+    else:
+        out["band_ok"] = True
+    return out
+
+
+def validate_green_hulls():
+    jobs = ["galiot", "junk", "latin", "pinnace", "carrack"]
+    results = {}
+    for ship in jobs:
+        seed = 3000 + HULLS.index(ship)
+        run_hull_job(ship, seed)
+        results[ship] = check_green_hull(ship)
+        print(f"{ship}: {json.dumps(results[ship])}", flush=True)
+    ok = all(v["green_free"] and v["band_ok"] for v in results.values())
+    print("VALIDATE-GREEN:", "PASS — proceed to all 16" if ok else "FAIL")
+    return ok
+
+
+def archive_legacy():
+    """Move prior per-direction raws to model_raw/legacy_8dir/ and mark the
+    old progress records legacy."""
+    import glob
+    moved = 0
+    for sub in (DRAFTS, GEN, DEBG, SNAPPED):
+        dst_dir = os.path.join(RAW, "legacy_8dir", os.path.basename(sub))
+        os.makedirs(dst_dir, exist_ok=True)
+        for f in glob.glob(os.path.join(sub, "hull_*.png")):
+            shutil.move(f, os.path.join(dst_dir, os.path.basename(f)))
+            moved += 1
+    prog = load_progress()
+    legacy = 0
+    for j, r in prog.get("jobs", {}).items():
+        if j.startswith("hull_") and "_" in j[len("hull_"):]:
+            r["legacy"] = True
+            legacy += 1
+    save_progress(prog)
+    print(f"archived {moved} raw files; marked {legacy} records legacy")
+
+
+def sheet_hulls():
+    """29_hull_sheets.png: the generated sheets, 4x4 grid downscaled."""
+    gw, gh = 448, 288  # 1792x1152 / 4
+    cols = 4
+    ships = [s for s in HULLS
+             if os.path.exists(os.path.join(GEN, f"hull_{s}_sheet.png"))]
+    rows = (len(ships) + cols - 1) // cols
+    img = Image.new("RGBA", (cols * (gw + 8) + 8,
+                             rows * (gh + 26) + 8), SHEET_BG)
+    draw = ImageDraw.Draw(img)
+    for i, ship in enumerate(ships):
+        rr, cc = divmod(i, cols)
+        x = cc * (gw + 8) + 4
+        y = rr * (gh + 26) + 4
+        label(draw, (x, y), ship)
+        y += 20
+        g = Image.open(os.path.join(GEN, f"hull_{ship}_sheet.png")) \
+            .convert("RGBA")
+        if g.size != (gw, gh):
+            g = g.resize((gw, gh), Image.NEAREST)
+        img.alpha_composite(g, (x, y))
+    out = os.path.join(REVIEW, "29_hull_sheets.png")
+    img.convert("RGB").save(out)
+    print("wrote", out)
+
+
+def run_batch_hulls(force=False):
+    os.makedirs(DRAFTS, exist_ok=True)
+    os.makedirs(GEN, exist_ok=True)
+    os.makedirs(DEBG, exist_ok=True)
+    os.makedirs(SNAPPED, exist_ok=True)
+    os.makedirs(SCRATCH, exist_ok=True)
+    prog = load_progress()
+    done = set()
+    if not force:
+        done = {j[len("hull_"):] for j, r in prog.get("jobs", {}).items()
+                if j.startswith("hull_") and "_" not in j[len("hull_"):]
+                and r.get("status") == "done"}
+    todo = [s for s in HULLS if s not in done]
+    print(f"hull batch: 16 jobs, {16 - len(todo)} already done, "
+          f"running {len(todo)}", flush=True)
+    failures = []
+    for n, ship in enumerate(todo):
+        try:
+            rec = run_hull_job(ship, 3000 + HULLS.index(ship))
+            fails = hull_gate(ship)
+            print(f"[{n + 1}/{len(todo)}] hull_{ship} OK "
+                  f"({rec['seconds']}s) gate: {fails or 'clear'}",
+                  flush=True)
+            if fails:
+                rec = reroll_hull(ship, reason="gate failure on fresh roll")
+                print(f"    hull_{ship} re-roll kept seed "
+                      f"{rec['reroll']['kept_seed']} fails: "
+                      f"{rec['reroll']['kept_fails'] or 'clear'}",
+                      flush=True)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(ship)
+            print(f"[{n + 1}/{len(todo)}] hull_{ship} FAILED: {exc}",
+                  flush=True)
+    print(f"hull batch complete: {len(todo) - len(failures)} ok, "
+          f"{len(failures)} failed: {failures}", flush=True)
 
 
 def run_job(job_id, seed):
@@ -1246,41 +2139,82 @@ def build_report():
         return {"done": len(ok), "failed": len(bad),
                 "failed_ids": sorted(bad)}
 
-    # e/w band summary per hull — 5-dir scheme: the w job carries the band,
-    # e is mirror(w) at ingestion (f6c00bb)
+    # e/w band summary per hull — job unit is the HULL now; the w crop
+    # carries the band, e = mirror(w) at ingestion (f6c00bb)
     band_table = {}
     for hull in HULLS:
-        r = ship_jobs.get(f"hull_{hull}_w", {})
-        m = r.get("metrics", {}) or {}
+        rec = jobs.get(f"hull_{hull}", {}) or {}
+        m = (rec.get("per_dir", {}).get("w", {}).get("metrics")) or {}
+        if not m:
+            m = (jobs.get(f"hull_{hull}_w", {}).get("metrics")) or {}
         b = m.get("band") or {}
-        band_table[hull] = {"tier": TIER[hull],
-                            "band": list(BANDS[TIER[hull]]),
-                            "w": {"long_axis": b.get("long_axis_px"),
-                                  "in_band": b.get("in_band"),
-                                  "seed": r.get("seed")}}
+        lo, hi = BANDS[TIER[hull]]
+        waived = (hull in WAIVER_T1_LATEEN
+                  and b.get("long_axis_px") is not None
+                  and b.get("long_axis_px") <= hi + 1)
+        band_table[hull] = {
+            "tier": TIER[hull], "band": [lo, hi],
+            "w": {"long_axis": b.get("long_axis_px"),
+                  "in_band": bool(b.get("in_band")) or waived,
+                  "waived": waived and not bool(b.get("in_band")),
+                  "seed": rec.get("seed")},
+        }
     in_band_count = sum(1 for v in band_table.values()
                         if v["w"]["in_band"])
     band_total = len(HULLS)
 
+    # direction audit (from progress)
+    audit = prog.get("direction_audit", [])
+    audit_pass = sum(1 for a in audit if a.get("verdict") == "PASS")
+
     pennant = {"present": [], "absent": []}
-    for j, r in ship_jobs.items():
-        m = r.get("metrics", {}) or {}
-        if "pennant_present" in m:
-            (pennant["present"] if m["pennant_present"]
-             else pennant["absent"]).append(j)
+    for ship in HULLS:
+        rec = jobs.get(f"hull_{ship}", {})
+        per = rec.get("per_dir", {})
+        if per:
+            for direction, p in per.items():
+                m = p.get("metrics", {})
+                if "pennant_present" in m:
+                    (pennant["present"] if m["pennant_present"]
+                     else pennant["absent"]).append(
+                        f"hull_{ship}_{direction}")
+        else:  # legacy per-direction record
+            m = rec.get("metrics", {}) or {}
+            if "pennant_present" in m:
+                (pennant["present"] if m["pennant_present"]
+                 else pennant["absent"]).append(f"hull_{ship}")
+
+    hull_jobs = {j: r for j, r in jobs.items()
+                 if j.startswith("hull_") and "_" not in j[len("hull_"):]}
 
     report = {
-        "ships": stats(ship_jobs),
+        "ships": stats(hull_jobs),
+        "ships_cells": sum(len(r.get("per_dir", {}))
+                           for r in hull_jobs.values()),
         "terrain": stats(terrain_jobs),
         "icons": stats(icon_jobs),
         "band_table": band_table,
         "band_summary": {"in_band": in_band_count, "total": band_total,
-                         "note": "w measured per 5-dir scheme (f6c00bb); "
-                                 "e = mirror(w) inherits the band value"},
+                         "note": "w measured per hull-job (f6c00bb); "
+                                 "e = mirror(w) inherits the band value; "
+                                 "lateen waiver {latin,galiot,sloop}+1"},
+        "direction_audit": {
+            "pass": audit_pass, "total": len(audit),
+            "fails": [{"job": a.get("job"), "observed": a.get("observed"),
+                       "why": a.get("why") or a.get("bow_at")
+                       or a.get("bottom_frac")}
+                      for a in audit if a.get("verdict") != "PASS"][:24]},
         "pennant": {"present": len(pennant["present"]),
                     "absent": len(pennant["absent"]),
                     "absent_ids": sorted(pennant["absent"])},
         "rerolls": {
+            "hull": [
+                {"job": j, "attempts": r["reroll"]["attempts"],
+                 "kept_seed": r["reroll"]["kept_seed"],
+                 "kept_fails": r["reroll"].get("kept_fails")}
+                for j, r in sorted(jobs.items())
+                if isinstance(r.get("reroll"), dict)
+                and r["reroll"].get("kind") == "hull"],
             "band": [
                 {"job": j, "attempts": r["reroll"]["attempts"],
                  "kept_seed": r["reroll"]["kept_seed"],
@@ -1329,9 +2263,17 @@ def main(argv):
     cmd = argv[0]
     if cmd == "run":
         phase = argv[1]
+        if phase == "hulls":
+            run_batch_hulls(force="force" in argv[2:])
+            return 0
         limit = int(argv[2]) if len(argv) > 2 and argv[2].isdigit() else None
         force = "force" in argv[2:]
         run_batch(phase, limit, force)
+    elif cmd == "validate-green":
+        validate_green_hulls()
+    elif cmd == "audit":
+        audit = audit_directions()
+        sheet_direction_audit(audit)
     elif cmd == "job":
         os.makedirs(DRAFTS, exist_ok=True)
         os.makedirs(GEN, exist_ok=True)
@@ -1354,11 +2296,16 @@ def main(argv):
             sheet_icons([j for j, r in prog.get("jobs", {}).items()
                          if j.startswith("icon_")
                          and r.get("status") == "done"])
+        if which in ("hulls", "all"):
+            sheet_hulls()
+    elif cmd == "archive-legacy":
+        archive_legacy()
     elif cmd == "reroll":
         mode = argv[1]
         if mode == "bands":
             # 5-dir scheme (f6c00bb): only the w job carries the e/w band —
             # e is mirror(w) at ingestion. Missing/malformed records flag too.
+            # Lateen waiver {latin,galiot,sloop}: +1 over band top accepted.
             prog = load_progress()
             out = []
             for hull in HULLS:
@@ -1366,9 +2313,14 @@ def main(argv):
                 lo, hi = BANDS[tier]
                 job_id = f"hull_{hull}_w"
                 r = prog.get("jobs", {}).get(job_id, {})
-                m = r.get("metrics", {}) or {}
+                m = (r.get("metrics") if "metrics" in r
+                     else r.get("per_dir", {}).get("w", {}).get("metrics")) \
+                    or {}
                 b = m.get("band") or {}
-                if b.get("long_axis_px") is None or not b.get("in_band"):
+                la = b.get("long_axis_px")
+                waived = hull in WAIVER_T1_LATEEN and la is not None \
+                    and la <= hi + 1
+                if la is None or not (b.get("in_band") or waived):
                     out.append(job_id)
             print("band re-rolls (w only):", out, flush=True)
             for job_id in out:
