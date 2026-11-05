@@ -72,6 +72,30 @@ artifact (no rembg/snap).
 - Family tabs (All / Ships / Icons / Terrain / Flagged) and a
   **Re-roll ALL flagged** button (jobs with band OVER or pennant ✗).
 
+## Robustness (hardened after the browser broken-thumb incident)
+
+- **HTTP burst safety**: HTTP/1.1 keep-alive + `request_queue_size = 128`
+  (the stdlib TCP default of 5 dropped connections when a browser fired
+  ~500 `<img>` requests at once — the intermittently-broken-thumbnails
+  mechanism; single curl requests never hit it). `do_HEAD` answers
+  headers-only instead of the stdlib 501 HTML page.
+- **Never-404 thumbs**: a hull mirror dir (`e`/`ne`/`se`) whose file is
+  gone (the 5-dir canonical round can prune them) is served from its
+  `w`/`nw`/`sw` base **horizontally flipped** (the ingestion's mirror_x —
+  exact for the whole snap chain, which is cellwise under column mirror),
+  with an `X-Mirrored: <base>` header and a `(⇄ base)` caption. Terrain
+  `snapped` falls back to its normalized gen sheet (terrain has no
+  rembg/snap). Flipped PNGs go through a bounded in-memory cache keyed by
+  source path + mtime.
+- **Prompts never go empty**: `tools/model_pass.py` is untracked and
+  rewritten by re-roll rounds — a torn or reshaped parse now keeps the
+  last good parse, else falls back to the **embedded** proven-wording
+  constants (all families/dirs/rigs/icon overrides shipped in chain.py).
+  `default_prompt` and `canonical_seed` never raise; `registry()` guards
+  each job so one bad store file cannot 500 `/api/jobs` (that 500 was the
+  empty-grid / empty-textarea failure mode). Driver source + error are
+  visible at `GET /api/status` → `driver`.
+
 ## Notes
 
 - Canonical prompts are reconstructed from `tools/model_pass.py` by AST
