@@ -989,7 +989,7 @@ func _ensure_tile_set() -> void:
 	# (NE-set edges), while 15 (all-land) is the interior. Land row
 	# layout: columns 0..7 are the wang_15 interior (the 8 dihedral
 	# transforms, the hash-variant pool), columns 8..14 the coast tiles
-	# WANG_LAND_INDICES in order (stamped by [method _wang_corner_combo]).
+	# WANG_LAND_INDICES in order (stamped by [method _wang_land_index]).
 	# The legacy flat land variants yield to the painted interior (the
 	# family is the shipped coast art, 80-* §4.8 2026-11-06).
 	var wang_upper := true
@@ -1185,26 +1185,37 @@ func _shore_foam_mask(cell: Vector2i) -> int:
 	return mask
 
 
-## The §4.8 2026-11-06 wang corner combo at a cell: bits NW/NE/SW/SE = 1/2/4/8,
-## each set when the corresponding map pixel (the vertex grid — cell (x,y)
-## spans pixels (x..x+1, y..y+1)) is LAND. Reef/ice are not land for this
-## purpose (§6.2 adjacency rules; their cells keep their own tiles). x is
-## wrap-aware, y out of range reads water (the §6.6 builder's rule) — the
-## vertex row below the bottom edge and above the top edge is open sea.
-func _wang_corner_combo(x: int, y: int) -> int:
-	var combo := 0
-	if _wang_land_at(x, y):
-		combo |= 1
-	if _wang_land_at(x + 1, y):
-		combo |= 2
-	if _wang_land_at(x, y + 1):
-		combo |= 4
-	if _wang_land_at(x + 1, y + 1):
-		combo |= 8
-	return combo
+## The §4.8 2026-11-06 wang index for a LAND cell (the 2026-11-06 evening
+## revision — "N/W coasts have no beach"): a corner of the cell is
+## **water-flanked** when any of its three adjacent map neighbours is not
+## land (corner NW ← N, W, NW; corner NE ← N, E, NE; corner SW ← S, W, SW;
+## corner SE ← S, E, SE). The cell stamps the coast tile whose UPPER
+## corners are exactly the non-flanked ones — index = NW·8 + NE·4 + SW·2 +
+## SE·1 (the ledger ground truth; `wang_index` maps the same bit order).
+## This fixes the vertex-sample frame, which could only see the E/S/SE
+## neighbours: north and west coasts never got their beach tile (wang_3 /
+## wang_5 were dead art), and pure S/E edge cells got a diagonal corner
+## wedge instead of the edge tile. x wraps; y out of range is water (the
+## §6.6 builder's rule). Index 15 = interior (no flanked corner); index 0
+## = every corner flanked (water on opposite sides or 3+ sides — shapes
+## the §6.2 coast cleanup deleted from the built map; the caller falls
+## back to the legacy variant for it). Reef/ice are not land (§6.2
+## adjacency; their cells keep their own tiles).
+func _wang_land_index(x: int, y: int) -> int:
+	var n := not _wang_land_at(x, y - 1)
+	var s := not _wang_land_at(x, y + 1)
+	var w := not _wang_land_at(x - 1, y)
+	var e := not _wang_land_at(x + 1, y)
+	var nw := n or w or not _wang_land_at(x - 1, y - 1)
+	var ne := n or e or not _wang_land_at(x + 1, y - 1)
+	var sw := s or w or not _wang_land_at(x - 1, y + 1)
+	var se := s or e or not _wang_land_at(x + 1, y + 1)
+	return (int(not nw) << 3) + (int(not ne) << 2) \
+		+ (int(not sw) << 1) + int(not se)
 
 
-## One vertex probe of [method _wang_corner_combo] (wrap in x, clamp in y).
+## One land probe of [method _wang_land_index] (wrap in x, clamp in y —
+## off-grid y is water, so an off-grid neighbour reads as not land).
 func _wang_land_at(x: int, y: int) -> bool:
 	if y < 0 or y >= height:
 		return false
@@ -1349,10 +1360,10 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 			# variant pick over the wang interior columns 0..7. When the
 			# wang family is inactive the row carries the legacy variants
 			# and the hash path covers every cell (the fallback contract).
-			var combo := _wang_corner_combo(x, y)
-			if terrain.get("wang_row_base", -1) >= 0 and combo != 15:
+			var index := _wang_land_index(x, y)
+			if terrain.get("wang_row_base", -1) >= 0 and index != 15:
 				var coast_pos: int = WaterLayerLib.WANG_LAND_INDICES.find(
-					WaterLayerLib.wang_index(combo))
+					index)
 				if coast_pos >= 0:
 					layer.set_cell(Vector2i(i, j), _atlas_source_id,
 						Vector2i(int(terrain["wang_row_base"]) + coast_pos,

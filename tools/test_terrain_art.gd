@@ -1261,33 +1261,64 @@ func _test_wang_placement() -> void:
 	_check(WaterLayerLib.WANG_LAND_INDICES.all(
 		func(index: int) -> bool: return index >= 8),
 		"every terrain-owned wang index carries the land cell's own NW bit")
-	# A synthetic grid's corner probes: land = palette index 2 (west half).
+	# The land-cell placement rule (2026-11-06 evening revision): a corner
+	# is water-flanked when any of its three adjacent neighbours is not
+	# land; the cell stamps the tile whose UPPER corners are the
+	# non-flanked ones. Pins: every single-side coast reads its edge tile,
+	# every corner reads its carat, a lone diagonal reads its wedge.
 	var legend: Dictionary = DataLoader.map_legend
 	var grid := PackedByteArray()
-	grid.resize(16)
-	for x in 4:
-		for y in 4:
-			grid[y * 4 + x] = 2 if x < 2 else 0
-	var loader = MapLoaderLib.from_indices(4, 4, grid, legend)
-	_check(loader != null, "the synthetic 4×4 grid loads")
+	grid.resize(36)  # 6×6: land rectangle x1..4, y1..4 in open water
+	for y in 6:
+		for x in 6:
+			grid[y * 6 + x] = 2 if (x >= 1 and x <= 4 and y >= 1 and y <= 4) \
+				else 0
+	var loader = MapLoaderLib.from_indices(6, 6, grid, legend)
+	_check(loader != null, "the synthetic 6×6 grid loads")
 	if loader == null:
 		return
-	_check(loader._wang_corner_combo(1, 0) == 5,
-		"the last land column reads the vertical-coast combo NW+SW = 5")
-	_check(loader._wang_corner_combo(2, 0) == 0,
-		"the first water column reads combo 0 (land is west — never "
-		+ "one of this cell's corners)")
-	_check(loader._wang_corner_combo(1, 2) == 5,
-		"the coast runs vertically: the row-2 land cell reads combo 5 too")
-	_check(loader._wang_corner_combo(2, 2) == 0,
-		"the east water column reads combo 0")
-	_check(loader._wang_corner_combo(1, 3) == 1,
-		"the bottom land row reads NW-only (off-grid south = water)")
-	_check(loader._wang_land_at(-1, 0) == false,
-		"the vertex probe at x = -1 wraps onto x = 3 (water)")
-	_check(loader._wang_land_at(4, 0) == true,
-		"the vertex probe at x = 4 wraps onto x = 0 (land) — the world "
-		+ "is a cylinder in x, the dateline is not a wall")
+	_check(loader._wang_land_index(2, 1) == 3,
+		"the north edge reads wang_3 (water only N — the tile that was "
+		+ "dead art before this revision)")
+	_check(loader._wang_land_index(2, 4) == 12,
+		"the south edge reads wang_12 (water only S)")
+	_check(loader._wang_land_index(1, 2) == 5,
+		"the west edge reads wang_5 (water only W — the other dead tile)")
+	_check(loader._wang_land_index(4, 2) == 10,
+		"the east edge reads wang_10 (water only E)")
+	_check(loader._wang_land_index(1, 1) == 1,
+		"the NW corner carat reads wang_1 (N+W water)")
+	_check(loader._wang_land_index(4, 1) == 2,
+		"the NE corner carat reads wang_2 (N+E water)")
+	_check(loader._wang_land_index(1, 4) == 4,
+		"the SW corner carat reads wang_4 (S+W water)")
+	_check(loader._wang_land_index(4, 4) == 8,
+		"the SE corner carat reads wang_8 (S+E water)")
+	_check(loader._wang_land_index(2, 2) == 15 and
+		loader._wang_land_index(3, 3) == 15,
+		"interior cells read 15 (the dihedral variant pool)")
+	_check(loader._wang_land_at(-1, 2) == false,
+		"the neighbour probe at x = -1 wraps onto x = 5 (water)")
+	_check(loader._wang_land_at(6, 2) == false,
+		"the neighbour probe at x = 6 wraps onto x = 0 (water) — the "
+		+ "world is a cylinder in x, the dateline is not a wall")
+	# A lone diagonal: 5×5 all land but the SW diagonal neighbour of the
+	# centre cell. Water flanks only the SW corner → wang_13.
+	var grid2 := PackedByteArray()
+	grid2.resize(25)
+	for i in 25:
+		grid2[i] = 2
+	grid2[3 * 5 + 1] = 0  # (1,3) is water — the SW neighbour of (2,2)
+	var loader3 = MapLoaderLib.from_indices(5, 5, grid2, legend)
+	_check(loader3 != null and loader3._wang_land_index(2, 2) == 13,
+		"the lone SW diagonal reads wang_13 (concave wedge)")
+	# A 2×2 island: every corner flanked → index 0, which is NOT in
+	# WANG_LAND_INDICES — the stamp falls back to the legacy variant path.
+	# The §6.2 cleanup deleted such cells from the built map, so this is
+	# fallback insurance for synthetic grids only.
+	_check(WaterLayerLib.WANG_LAND_INDICES.find(0) == -1,
+		"index 0 (every corner flanked) is not a coast column — the "
+		+ "variant-hash fallback covers it (§6.2 deleted these shapes)")
 	# The terrain-atlas fixture path: with the land-owned indices
 	# registered, the land row carries wang_row_base 8 (columns 8..14).
 	var loader2 = MapLoaderLib.new()

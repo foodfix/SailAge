@@ -2175,13 +2175,26 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      land corner stamps the wang tile of its corner combo (combo bits
      NW/NE/SW/SE = 1/2/4/8, wang index = NW·8 + NE·4 + SW·2 + SE·1). Layer
      ownership follows the cell's OWN pixel (it is the cell's NW corner
-     vertex): LAND cells own the coast placement — a land cell with any
-     water corner stamps its coast tile (terrain atlas land row, columns
-     8..14 for indices {8..14}); 15 (all-land) is the interior. WATER
-     cells NEVER stamp corner tiles (2026-11-06 user direction, the
-     "ship on land" report): a water pocket/strait cell always renders
-     plain painted water, so narrow passages stay legible as water and
-     the boundary art belongs strictly to the land side. Interior cells
+     vertex): LAND cells own the coast placement, placed by the
+     **water-flanking rule** (2026-11-06 evening revision — "N/W coasts
+     have no beach"): a corner of the land cell is water-flanked when any
+     of its three adjacent map neighbours is water (NW ← N/W/NW, NE ←
+     N/E/NE, SW ← S/W/SW, SE ← S/E/SE), and the cell stamps the coast tile
+     whose UPPER corners are the non-flanked ones — index = NW·8 + NE·4 +
+     SW·2 + SE·1 (terrain atlas land row, columns 8..14). This makes the
+     single-side coasts read their edge tiles (N → wang_3, S → wang_12,
+     W → wang_5, E → wang_10 — the first revision left wang_3/wang_5 dead
+     and stamped diagonal wedges on pure S/E edges), corners read their
+     carats (NW wang_1, NE wang_2, SW wang_4, SE wang_8), lone diagonals
+     read the concave wedges (wang_13 etc.). The §6.2 coast cleanup
+     guarantees no built cell carries water on opposite sides or 3+ sides,
+     so index 0 (all corners flanked) never occurs in the built world;
+     it falls back to the legacy variant path (synthetic-grid insurance).
+     15 (no flanked corner) is the interior. WATER cells NEVER stamp
+     corner tiles (2026-11-06 user direction, the "ship on land" report):
+     a water pocket/strait cell always renders plain painted water, so
+     narrow passages stay legible as water and the boundary art belongs
+     strictly to the land side. Interior cells
      (combo 0 water / 15 land) keep their plain fills — water = wang_0 (the
      SAME painted tile for both water kinds: sea vs coastal_sea is no
      longer two fills but the depth factor below), land = wang_15 through
