@@ -1,15 +1,17 @@
 # SailAge Model Studio
 
 Local web UI so the user can re-roll model-generated art themselves:
-edit a job's prompt, re-roll it against the local model services, inspect
-the snapped result, and accept it.
+edit a job's prompt, re-roll it against the generation backend, inspect
+the result, and accept it into the game build.
 
 - **Server**: `server.py` — stdlib only (`http.server.ThreadingHTTPServer`),
   binds `127.0.0.1:8010`, no auth (local tool). One background worker thread
-  runs generation jobs strictly one at a time (~40 s each) from a FIFO queue.
+  runs generation jobs strictly one at a time from a FIFO queue.
 - **Chain**: `chain.py` — self-contained re-implementation of the validated
   model-pass pipeline (`tools/model_pass.py` is parsed read-only for the
-  canonical prompt wording, never imported).
+  canonical prompt wording, never imported). **Ships** drive
+  `tools/pixellab_pass.py` in-process instead — see "Ship family
+  (pixellab)" below.
 - **Frontend**: `www/` — single-page vanilla HTML/CSS/JS, dark theme.
 
 ## Launch
@@ -25,7 +27,30 @@ Then open <http://127.0.0.1:8010>.
 and the studio cache is written to `<repo>/tools/ui_art/model_raw/studio/`
 (gitignored). The canonical `gen/` and `snapped/` stores are never written.
 
-## Chain (per sprite job)
+## Ship family (pixellab — the §4.8 2026-11-06 ship path)
+
+One card per fleet ship, keyed by label (`px_<label>`; labels with
+ship-as-drawn state — the 16 accepted fleet labels; trial dirs without
+`snapped/` are hidden). Generation = `tools/pixellab_pass.py run_ship`
+**in-process**: one `create-object-pro-flash` call per re-roll with the
+pinned envelope (64×64 native, 8 directions, view "high top-down", no
+style image ever) — description is FREE TEXT (the prompt box; the
+default seeds once from the tool's `_desc` + pinned UW2 style suffix,
+then the user's wording is what ships) and the seed is user-settable
+(blank → the manifest's seed). After the ~100–115 s render the 8
+rotations download into `model_raw/pixellab/<label>/` (raw, gitignored)
+and **snap is a byte-identical passthrough** into `snapped/` — no
+palette quantize, no pennant recolor, no masthead/band gates (all
+retired for this family). The card shows the 8-rotation strip
+(snapped = exactly what ships); Accept stages the WHOLE fleet's
+snapped rotations (a partial stage would revoke the other ships'
+ledger tokens) and runs `build_ui_art --import-ships-pixellab <stage>`
+(raw mode); the in-game gate is the ship's 8 `hull_{ship}_{dir}`
+tokens in the ledger with `pennant: "raw"`. Cost ≈ $0.05 per re-roll.
+The classic `hull_*`/`sheet_*` draft jobs are hidden entirely (user
+direction): their retired local chain is not re-rollable anywhere.
+
+## Chain (per sprite job — icons/terrain legacy families)
 
 1. **draft** — `model_raw/drafts/<job>.png` → base64 → POST
    `http://127.0.0.1:8001/edit` `{"image","prompt","seed"}` (response body
@@ -60,8 +85,16 @@ artifact (no rembg/snap).
 | POST | `/api/prompt` | `{job, prompt}` | persist a prompt edit without queueing (empty → revert to canonical) |
 | POST | `/api/accept` | `{job}` | mark the current result accepted in `accepted.json` |
 | GET | `/thumb/<kind>/<job>.png` | — | `draft` / `raw` / `snapped` thumbnail (`raw`/`snapped` prefer the studio reroll, falling back to the canonical store); cache-busting via `?v=<mtime>` |
+| GET | `/thumb/px/<label>/<dir>.png` | — | pixellab ship strip cell (heading8 dir id); serves the snapped token (what ships), raw rotation fallback |
 
 ## UI
+
+- **Ship cards** (`px_<label>`): an 8-rotation strip in compass order
+  (n ne e se s sw w nw), free-text prompt box (edit base = the pinned
+  descriptor + UW2 style suffix), seed field, Re-roll / Accept, live
+  status incl. the pixellab render stage (`posting`, `render:queued…`,
+  `snapping`), and the object_id/seed provenance from the tool manifest.
+  No band/pennant badges — those gates are retired for the family.
 
 - One card per job: three thumbnails (draft | raw | snapped), band OK/OVER
   badge (e/w hull jobs; bands 28–36/40–52/52–60), pennant ✓/✗ badge,

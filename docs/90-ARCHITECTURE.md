@@ -809,7 +809,12 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   snap-downsample to the 64 logical grid, quantize to the family
   palette block, enforce pennant source + footprint bands, then emit
   tokens as tool-owned artifacts; raw model output stays uncommitted
-  (cache under `tools/ui_art/model_raw/`, gitignored). After any art
+  (cache under `tools/ui_art/model_raw/`, gitignored). **The Model
+  Studio (`tools/model_studio/`) is the user-facing re-roll bench for
+  this path**: ship cards drive `pixellab_pass.py` in-process (free-text
+  description + seed, ship-as-drawn snap passthrough) and Accept runs
+  `build_ui_art --import-ships-pixellab` over the whole fleet stage;
+  icon/terrain cards keep the local chain. After any art
   rebuild run
   crops portraits to 3:4, palette-quantizes **before** nearest-downscale,
   applies the outline pass + alpha threshold, then writes — raw model

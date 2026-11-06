@@ -91,6 +91,13 @@ button.small { padding: 3px 10px; font-size: 11px; }
 .thumb .cap { font-size: 10px; color: var(--dim); margin-top: 2px; }
 .arrow { color: var(--dim); font-size: 16px; }
 
+/* pixellab ship strip: 8 native rotations in compass order */
+.pxstrip { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pxstrip .thumb img {
+  width: 72px; height: 72px;
+}
+.pxstrip .thumb.missing img { visibility: hidden; }
+
 textarea {
   width: 100%; min-height: 64px; resize: vertical;
   background: var(--panel-2); color: var(--ink);

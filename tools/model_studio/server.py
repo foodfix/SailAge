@@ -50,7 +50,7 @@ import chain  # noqa: E402  (model_studio.chain — worktree copy)
 WWW = os.path.join(_HERE, "www")
 JOB_RE = re.compile(r"^[a-z0-9_]+$")
 MIRROR_OF = {"e": "w", "ne": "nw", "se": "sw"}  # doc f6c00bb: mirror-derived
-FAMILIES = ("hull", "sheet", "icon", "iconsheet", "terrain")
+FAMILIES = ("pxship", "hull", "sheet", "icon", "iconsheet", "terrain")
 STORES = ("prompts.json", "state.json", "accepted.json")
 
 
@@ -122,6 +122,78 @@ class Studio:
 
     # -- registry ---------------------------------------------------------
     # -- thumbnails -------------------------------------------------------
+    def _px_entry(self, label, prompts, state, accepted):
+        """One pixellab ship card (the §4.8 2026-11-06 ship family):
+        8 native rotations, ship-as-drawn — no band/pennant gates (all
+        retired). The card's strip thumbs are per-dir (snapped preferred,
+        raw rotation fallback); provenance rides the tool manifest
+        (object_id/seed/description)."""
+        job_id = f"px_{label}"
+        manifest = chain.px_manifest().get(label) or {}
+        studio_rec = state.get(job_id, {}) or {}
+        # per-dir strip thumbs: {dir: mtime-version}; snapped wins over the
+        # raw rotation (the snapped set is what ships)
+        mod = chain._px_mod()
+        rot_to_dir = mod.DIR_MAP  # rotation file stem -> heading8 dir id
+        rotations = []
+        for d in chain.px_dirs(label):
+            v = 0
+            for rot, dir_id in rot_to_dir.items():
+                if dir_id != d:
+                    continue
+                for sub in ("snapped", ""):
+                    p = os.path.join(chain.px_dir(), label, sub,
+                                     f"{rot}.png")
+                    if os.path.isfile(p):
+                        v = int(os.path.getmtime(p) * 1000)
+                        break
+                break
+            rotations.append({"dir": d, "v": v})
+        stored_original = (studio_rec.get("original_prompt")
+                           or studio_rec.get("prompt")
+                           or manifest.get("description"))
+        if stored_original:
+            original_prompt = stored_original
+            original_source = (studio_rec.get("original_prompt_source")
+                               or "manifest")
+        else:
+            original_prompt = chain.px_default_prompt(label)
+            original_source = "canonical"
+        eff_prompt = prompts.get(job_id) or original_prompt
+        return {
+            "id": job_id,
+            "family": "pxship",
+            "subject": label,
+            "ship": chain.px_ship_of(label),
+            "dir": None,
+            "rotations": rotations,
+            "object_id": manifest.get("object_id"),
+            "tier": None,
+            "label": f"{label} · {len(rotations)}/8 rotations · "
+                     f"~$0.05/roll",
+            "mirror_of": None,
+            "band": None,
+            "pennant_ok": None,
+            "flagged": False,
+            "superseded": False,
+            "superseded_by": None,
+            "accepted": accepted.get(job_id),
+            "prompt": eff_prompt,
+            "original_prompt": original_prompt,
+            "original_prompt_source": original_source,
+            "custom_prompt": job_id in prompts,
+            "seed": studio_rec.get("seed", manifest.get("seed")),
+            "canonical_seed": manifest.get("seed"),
+            "status": studio_rec.get("status",
+                                     "canonical" if manifest else None),
+            "status_source": "studio" if studio_rec else "canonical",
+            "ingest": studio_rec.get("ingest"),
+            "metrics": None,
+            "seconds": studio_rec.get("seconds"),
+            "error": studio_rec.get("error"),
+            "thumbs": {},
+        }
+
     def _sheet_entry(self, job_id, subject, prog, prompts, state, accepted,
                      seed_map):
         """Per-hull 5-cell sheet job card (batch-refactor shape). The
@@ -360,6 +432,29 @@ class Studio:
             while len(self._thumb_cache) > 600:  # bounded; PNG thumbs only
                 self._thumb_cache.popitem(last=False)
 
+    def px_dir_thumb(self, label: str, dir_id: str):
+        """(bytes | None) — one strip cell for a pixellab ship: the
+        snapped token preferred, the raw rotation fallback, shared thumb
+        cache (path|mtime key — cache busts itself on re-roll)."""
+        mod = chain._px_mod()
+        rot = next((r for r, d in mod.DIR_MAP.items() if d == dir_id), None)
+        if rot is None:
+            return None
+        base = os.path.join(chain.px_dir(), label)
+        for name in (os.path.join("snapped", f"{dir_id}.png"),
+                     f"{rot}.png"):
+            p = os.path.join(base, name)
+            if not os.path.isfile(p):
+                continue
+            key = f"{p}|{os.path.getmtime(p)}"
+            data = self._thumb_cache_get(key)
+            if data is None:
+                with open(p, "rb") as fh:
+                    data = fh.read()
+                self._thumb_cache_put(key, data)
+            return data
+        return None
+
     def thumb_bytes(self, kind: str, job_id: str):
         """(bytes, mirrored_base | None, direct: bool) — flips through the
         in-memory cache keyed by source path+mtime so browser bursts don't
@@ -439,6 +534,14 @@ class Studio:
             accepted = self.accepted()
         seed_map = self._seed_map()
         jobs = []
+        # The pixellab ship family leads the registry (§4.8 2026-11-06);
+        # fleet labels only (≥1 snapped rotation — trial dirs stay hidden).
+        for label in chain.px_fleet_labels():
+            try:
+                jobs.append(self._px_entry(label, prompts, state, accepted))
+            except Exception as exc:  # noqa: BLE001 — degrade, never die
+                warnings.append(f"px_{label}: {type(exc).__name__}: {exc}")
+                log(f"registry SKIP px_{label}: {warnings[-1]}")
         try:
             draft_names = sorted(os.listdir(drafts_dir))
         except OSError as exc:
@@ -449,6 +552,15 @@ class Studio:
                 continue
             job_id = fname[:-4]
             if not JOB_RE.match(job_id):
+                continue
+            try:
+                fam = chain.parse_job(job_id)[0]
+            except KeyError:
+                fam = None
+            if fam in ("hull", "sheet"):
+                # the classic ship jobs are HIDDEN entirely (user
+                # direction, 2026-11-06): their retired local chain must
+                # not be re-rollable or visible
                 continue
             try:
                 jobs.append(self._job_entry(job_id, prog, report, prompts,
@@ -689,6 +801,13 @@ class Studio:
         """Accept→game: the canonical snapped dir is the ingestion input;
         run build_ui_art --import-ships (idempotent full-ladder re-run) and
         surface in-game ✓ / REJECTED:<reason> per job."""
+        try:
+            fam = chain.parse_job(order["job"])[0]
+        except KeyError:
+            fam = None
+        if fam == "pxship":
+            self._px_ingest_order(order)
+            return
         job_id = order["job"]
         with self.lock:
             self.current = {"type": "ingest", "job": job_id,
@@ -812,6 +931,114 @@ class Studio:
         log(f"ingest {job_id}: {ing['state']}"
             + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
 
+    def _px_ingest_order(self, order: dict) -> None:
+        """Accept→game for a pixellab ship (§4.8 2026-11-06): stage the
+        WHOLE fleet's snapped rotations — a partial stage would revoke
+        every other ship's ledger tokens (run_ship_ingest prunes
+        non-live ids) — then run build_ui_art --import-ships-pixellab
+        <stage> (raw mode). Gate: this ship's 8 hull_{ship}_{dir} tokens
+        in the ledger with pennant 'raw'."""
+        job_id = order["job"]
+        label = job_id[len("px_"):]
+        ship = chain.px_ship_of(label)
+        with self.lock:
+            self.current = {"type": "ingest", "job": job_id,
+                            "stage": "staging",
+                            "started_epoch": time.time()}
+        log(f"ingesting {job_id} -> build_ui_art --import-ships-pixellab")
+        self._set_ingest_state(job_id, {"state": "running",
+                                        "started_at": time.strftime(
+                                            "%H:%M:%S")})
+        t0 = time.time()
+        stage_dir = os.path.join(self.studio(), "px_stage")
+        dir_order = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+        try:
+            staged, missing = 0, []
+            shutil.rmtree(stage_dir, ignore_errors=True)
+            os.makedirs(stage_dir, exist_ok=True)
+            for lab in chain.px_fleet_labels():
+                s = chain.px_ship_of(lab)
+                for d in chain.px_dirs(lab):
+                    src = os.path.join(chain.px_dir(), lab, "snapped",
+                                       f"{d}.png")
+                    if not os.path.isfile(src):
+                        missing.append(f"{lab}/{d}")
+                        continue
+                    shutil.copyfile(
+                        src, os.path.join(stage_dir, f"hull_{s}_{d}.png"))
+                    staged += 1
+            if missing:
+                raise RuntimeError(f"missing snapped rotations: "
+                                   f"{missing[:8]}")
+            with self.lock:
+                if self.current:
+                    self.current["stage"] = "build-ladder"
+            cmd = [sys.executable,
+                   os.path.join(self.repo, "tools", "build_ui_art.py"),
+                   "--import-ships-pixellab", stage_dir]
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=self.INGEST_TIMEOUT_S,
+                                  cwd=self.repo)
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            ledger = self._read_json(
+                os.path.join(self.repo, "tools", "ui_art",
+                             "ingest_ledger.json"), {})
+            tokens = ledger.get("tokens") or {}
+            tail = out.strip()[-700:]
+            if proc.returncode != 0:
+                ing = {"state": "error", "exit_code": proc.returncode,
+                       "reason": f"build failed (exit {proc.returncode}): "
+                                 f"{tail[-300:]}",
+                       "log_tail": tail,
+                       "seconds": round(time.time() - t0, 1)}
+            else:
+                got = [d for d in dir_order
+                       if f"hull_{ship}_{d}" in tokens]
+                raw_ok = all((tokens.get(f"hull_{ship}_{d}") or {})
+                             .get("pennant") == "raw" for d in got)
+                if len(got) == 8 and raw_ok:
+                    ing = {"state": "in-game", "exit_code": 0,
+                           "reason": f"8/8 raw tokens ({staged} staged)",
+                           "accepted_at": (tokens.get(f"hull_{ship}_n")
+                                           or {}).get("accepted_at"),
+                           "log_tail": tail,
+                           "seconds": round(time.time() - t0, 1)}
+                else:
+                    ing = {"state": "error", "exit_code": 0,
+                           "reason": f"only {len(got)}/8 tokens landed "
+                                     f"(pennant raw: {raw_ok})",
+                           "log_tail": tail,
+                           "seconds": round(time.time() - t0, 1)}
+        except subprocess.TimeoutExpired:
+            ing = {"state": "error",
+                   "reason": f"build timed out after "
+                             f"{self.INGEST_TIMEOUT_S}s"}
+        except Exception as exc:  # noqa: BLE001 — surface in the UI
+            ing = {"state": "error",
+                   "reason": f"{type(exc).__name__}: {exc}"}
+        ing["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self._set_ingest_state(job_id, ing)
+        if ing.get("state") == "in-game":
+            # the import re-lands the WHOLE grid — stamp the other ship
+            # cards in-game too (their bytes are unchanged; idempotent)
+            with self.lock:
+                st = self.state()
+                for lab in chain.px_fleet_labels():
+                    other = f"px_{lab}"
+                    if other == job_id:
+                        continue
+                    rec = st.setdefault("jobs", {}).setdefault(other, {})
+                    oing = rec.get("ingest") or {}
+                    if oing.get("state") != "in-game":
+                        rec["ingest"] = {**oing, "state": "in-game",
+                                         "reason": "fleet grid re-import "
+                                                   "(idempotent)"}
+                self.save_state(st)
+        with self.lock:
+            self.current = None
+        log(f"ingest {job_id}: {ing['state']}"
+            + (f" ({ing.get('reason')})" if ing.get("reason") else ""))
+
     def _worker(self) -> None:
         while True:
             with self.lock:
@@ -850,16 +1077,29 @@ class Studio:
                         if self.current and self.current["job"] == job_id:
                             self.current["stage"] = name
 
-                result = chain.run_job(job_id, prompt, seed, on_stage=stage)
-                rec.update(result)
-                fam, subject, direction = chain.parse_job(job_id)
-                metrics = rec.get("metrics") or {}
-                band = metrics.get("band")
-                if fam == "hull" and direction in ("e", "w") and band \
-                        and not band.get("in_band"):
-                    rec["status"] = "band-fail"
+                fam, subject, direction = None, None, None
+                try:
+                    fam, subject, direction = chain.parse_job(job_id)
+                except KeyError:
+                    pass
+                if fam == "pxship":
+                    # pixellab ship family: in-process tool call (the
+                    # description is free text; the envelope stays pinned)
+                    result = chain.px_generate(job_id[len("px_"):], prompt,
+                                               seed, on_stage=stage)
+                    rec.update(result)
+                    rec["status"] = result.get("status", "done")
                 else:
-                    rec["status"] = "done"
+                    result = chain.run_job(job_id, prompt, seed,
+                                           on_stage=stage)
+                    rec.update(result)
+                    metrics = rec.get("metrics") or {}
+                    band = metrics.get("band")
+                    if fam == "hull" and direction in ("e", "w") \
+                            and band and not band.get("in_band"):
+                        rec["status"] = "band-fail"
+                    else:
+                        rec["status"] = "done"
             except Exception as exc:  # noqa: BLE001 — surface in the UI
                 rec["status"] = "error"
                 rec["error"] = f"{type(exc).__name__}: {exc}"
@@ -970,6 +1210,24 @@ class Handler(BaseHTTPRequestHandler):
         # mirror dir (e/ne/se) whose file is gone serves its w/nw/sw base
         # flipped; terrain snapped falls back to its gen sheet — never 404
         # on a listed job)
+        # /thumb/px/<label>/<dir>.png — the pixellab strip: the snapped
+        # token (what ships) preferred, the raw rotation as fallback
+        mp = re.match(r"^/thumb/px/([a-z0-9_]+)/(n|ne|e|se|s|sw|w|nw)\.png$",
+                      path)
+        if mp:
+            data = self.studio.px_dir_thumb(mp.group(1), mp.group(2))
+            if data is None:
+                self._json(404, {"error": f"no px thumb for "
+                                          f"{mp.group(1)}/{mp.group(2)}"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+            return
         m = re.match(r"^/thumb/(draft|raw|snapped)/([a-z0-9_]+)\.png$",
                      path)
         if not m:
@@ -1010,6 +1268,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(500, {"error": str(exc)})
 
     def _job_ok(self, job_id: str) -> bool:
+        if job_id.startswith("px_") and JOB_RE.match(job_id):
+            return chain.px_exists(job_id[len("px_"):])
         return bool(job_id and JOB_RE.match(job_id) and os.path.isfile(
             chain.canonical_path("drafts", job_id)))
 
@@ -1073,10 +1333,17 @@ class Handler(BaseHTTPRequestHandler):
         with self.studio.lock:
             st = self.studio.state().get("jobs", {}).get(job_id)
             acc = self.studio.accepted()
-            source = ("studio" if os.path.isfile(
-                chain.studio_path("snapped", job_id)) else "canonical")
-            ingest_state = ("queued" if fam in ("hull", "sheet", "iconsheet")
-                            else "game-flow-pending")
+            if fam == "pxship":
+                # the pixellab store IS the ingestion input (snapped/ under
+                # the label dir) — nothing to place
+                source = "pixellab"
+                ingest_state = "queued"
+            else:
+                source = ("studio" if os.path.isfile(
+                    chain.studio_path("snapped", job_id)) else "canonical")
+                ingest_state = ("queued" if fam in ("hull", "sheet",
+                                                    "iconsheet")
+                                else "game-flow-pending")
             acc[job_id] = {
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "source": source,
@@ -1158,8 +1425,19 @@ class Handler(BaseHTTPRequestHandler):
                 rec["ingest"] = {"state": "queued",
                                  "queued_at": acc[job_id]["at"]}
                 self.studio.save_state(st_)
+            elif fam == "pxship":
+                # pixellab ships: the store's snapped/ dir IS the ingestion
+                # input — record the label's provenance and queue the raw
+                # import (the whole grid re-lands, idempotent)
+                manifest = chain.px_manifest().get(subject) or {}
+                acc[job_id]["object_id"] = manifest.get("object_id")
+                st_ = self.studio.state()
+                rec = st_.setdefault("jobs", {}).setdefault(job_id, {})
+                rec["ingest"] = {"state": "queued",
+                                 "queued_at": acc[job_id]["at"]}
+                self.studio.save_state(st_)
             self.studio.save_accepted(acc)
-        if fam in ("hull", "sheet", "iconsheet"):
+        if fam in ("hull", "sheet", "iconsheet", "pxship"):
             self.studio.enqueue_ingest(job_id)
         log(f"accepted {job_id} ({source}, ingest={ingest_state})")
         self._json(200, {"ok": True, "job": job_id, "accepted":
@@ -1168,7 +1446,8 @@ class Handler(BaseHTTPRequestHandler):
                          "note": ("restart the game to see it — the token "
                                   "runtime loads data artifacts, no import "
                                   "refresh needed"
-                                  if fam in ("hull", "sheet", "iconsheet")
+                                  if fam in ("hull", "sheet", "iconsheet",
+                                             "pxship")
                                   else "accepted (game flow pending)")})
 
 

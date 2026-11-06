@@ -171,14 +171,21 @@ def _save_rotations(urls: dict, dest_dir: str) -> dict:
     return saved
 
 
-def run_ship(ship: str, label: str | None = None) -> dict:
+def run_ship(ship: str, label: str | None = None, description: str | None = None,
+             seed: int | None = None, poll_status=None) -> dict:
+    """One create-object-pro-flash generation + raw download. The studio
+    (tools/model_studio) calls this in-process with an explicit
+    description (free text, the user's edit) + seed; the CLI keeps the
+    pinned defaults. poll_status, when given, receives each background
+    job status string for the studio's stage ticker. The envelope stays
+    exactly the pinned 5 fields — no style_image, ever (80-* §4.8)."""
     payload = {
-        "description": _desc(ship),
+        "description": description or _desc(ship),
         "name": ship,
         "image_size": {"width": 64, "height": 64},
         "n_directions": 8,
         "view": VIEW,
-        "seed": 91000,
+        "seed": 91000 if seed is None else int(seed),
     }
     print(f"[pixellab {ship}] POST create-object-pro-flash ...", flush=True)
     created = _post("/create-object-pro-flash", payload)
@@ -192,6 +199,11 @@ def run_ship(ship: str, label: str | None = None) -> dict:
     while time.time() < deadline:
         time.sleep(POLL_S)
         job = _get(f"/background-jobs/{job_id}")
+        if poll_status is not None:
+            try:
+                poll_status(str(job.get("status")))
+            except Exception:  # noqa: BLE001 — the ticker must never kill a job
+                pass
         if job.get("status") in ("completed", "failed"):
             break
         print(f"    status={job.get('status')}", flush=True)

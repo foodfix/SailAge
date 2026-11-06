@@ -994,13 +994,142 @@ def icon_sheet_prompt_from(dd: dict, group: str, ids: list[str]) -> str:
         "No water, no scenery, no extra text, no frame.")
 
 
+# ------------------------------------------- pixellab ship family (§4.8) --
+# The studio's ship path drives tools/pixellab_pass.py IN-PROCESS (the tool
+# is the single source of the descriptors + envelope; PIL is lazy inside
+# snap_ship, so the import stays stdlib-only). Ship-as-drawn contract
+# (80-* §4.8 2026-11-06): generation writes the tool's gitignored
+# model_raw/pixellab/<label>/ store; snap is a byte-identical passthrough;
+# NO local-model edit/rembg, NO palette quantize, NO pennant snap, NO
+# masthead/band gates — all retired for this family.
+
+def px_dir() -> str:
+    return os.path.join(RAW, "pixellab")
+
+
+def _px_mod():
+    if "pixellab_pass" in sys.modules:
+        return sys.modules["pixellab_pass"]
+    tools_dir = os.path.join(REPO, "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import pixellab_pass  # noqa: PLC0415
+    return pixellab_pass
+
+
+def px_manifest() -> dict:
+    path = os.path.join(px_dir(), "pixellab.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def px_labels() -> list[str]:
+    """Labels with generation state: a manifest record OR a raw-rotation
+    dir on disk. Sorted — the registry order is byte-stable."""
+    root = px_dir()
+    out = set(px_manifest().keys())
+    try:
+        for name in sorted(os.listdir(root)):
+            if os.path.isdir(os.path.join(root, name)):
+                out.add(name)
+    except OSError:
+        pass
+    return sorted(out)
+
+
+def px_ship_of(label: str) -> str:
+    """The ship_types id a label feeds: the manifest records it; the
+    accepted fleet's trial label falls back to stripping the `_uw2`
+    suffix."""
+    rec = px_manifest().get(label) or {}
+    ship = rec.get("ship")
+    if ship:
+        return str(ship)
+    return label[:-len("_uw2")] if label.endswith("_uw2") else label
+
+
+def px_default_prompt(label: str) -> str:
+    """The pinned per-ship descriptor + shared UW2 style suffix — the
+    free-text edit base. Failure falls back to the manifest's recorded
+    description (what actually produced the accepted art)."""
+    try:
+        mod = _px_mod()
+        p = mod._desc(px_ship_of(label))
+        if p and p.strip():
+            return p.strip()
+    except Exception as exc:  # noqa: BLE001 — manifest fallback below
+        print(f"[studio-chain] px default prompt failed for {label} "
+              f"({type(exc).__name__}: {exc}); manifest fallback",
+              flush=True)
+    rec = px_manifest().get(label) or {}
+    return str(rec.get("description")
+               or f"{px_ship_of(label)} sailing ship")
+
+
+def px_dirs(label: str) -> list[str]:
+    """Heading8 dir ids with a snapped (ship-as-drawn) file, pinned
+    compass order."""
+    snap = os.path.join(px_dir(), label, "snapped")
+    order = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+    try:
+        have = set(os.listdir(snap))
+    except OSError:
+        have = set()
+    return [d for d in order if f"{d}.png" in have]
+
+
+def px_exists(label: str) -> bool:
+    return os.path.isdir(os.path.join(px_dir(), label))
+
+
+def px_fleet_labels() -> list[str]:
+    """Labels with ship-as-drawn state (≥1 snapped rotation) — the
+    ingestible fleet. Trial labels (raw rotations only, no snapped/) are
+    generation history, not fleet members, and never stage."""
+    return [lab for lab in px_labels() if px_dirs(lab)]
+
+
+def px_generate(label: str, description: str, seed: int,
+                on_stage=None) -> dict:
+    """One pixellab ship job: generate (free-text description + seed) ->
+    fetch the 8 rotations -> snap passthrough. ~100-115 s of API time;
+    the studio worker runs jobs serially so that is fine."""
+    t0 = time.time()
+    stage = on_stage or (lambda _s: None)
+    mod = _px_mod()
+    ship = px_ship_of(label)
+    stage("posting")
+    rec = mod.run_ship(ship, label=label, description=description,
+                       seed=seed,
+                       poll_status=lambda s: stage(f"render:{s}"))
+    stage("snapping")
+    mod.snap_ship(label)
+    dirs = px_dirs(label)
+    return {
+        "status": "done" if len(dirs) == 8 else "partial",
+        "object_id": rec.get("object_id"),
+        "seed": seed,
+        "dirs": dirs,
+        "n_dirs": len(dirs),
+        "description": description,
+        "seconds": round(time.time() - t0, 1),
+    }
+
+
 def parse_job(job_id: str) -> tuple[str, str | None, str | None]:
-    """(family, subject, dir) for all three shapes the store has used:
+    """(family, subject, dir) for all shapes the store has used:
+    - px_<label>         pixellab ship jobs (the §4.8 2026-11-06 family)
     - hull_<ship>_<dir>  legacy per-dir jobs (e/ne/se = mirror displays)
     - sheet_<ship>       per-hull 5-cell sheet jobs (the batch refactor)
     - hull_<ship>        the sheet jobs' progress/ledger key (same family)
     - icon_<id> / terrain_<key>
     Unknown shapes raise KeyError (callers guard per job)."""
+    if job_id.startswith("px_"):
+        return "pxship", job_id[len("px_"):], None
     if job_id.startswith("sheet_"):
         return "sheet", job_id[len("sheet_"):], None
     if job_id.startswith("hull_"):
@@ -1046,6 +1175,8 @@ def default_prompt(job_id: str, repo: str) -> str:
     """Canonical driver prompt, reconstructed from parsed constants.
     Guaranteed non-empty: any reconstruction failure — including an
     unknown job shape — falls back to a generic embedded wording."""
+    if job_id.startswith("px_"):
+        return px_default_prompt(job_id[len("px_"):])
     d = load_driver(repo)
     try:
         fam, subject, direction = parse_job(job_id)

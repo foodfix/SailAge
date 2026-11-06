@@ -9,12 +9,17 @@ let filter = "all";
 let lastCurrent = null;
 
 const CAPTIONS = {
+  pxship: { strip: "8 native rotations · ship-as-drawn" },
   hull: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   sheet: { draft: "draft sheet (5 views)", raw: "raw sheet", snapped: "w crop 64" },
   icon: { draft: "draft (read-only)", raw: "raw gen", snapped: "snapped 64" },
   iconsheet: { draft: "sheet draft (group)", raw: "generated sheet", snapped: "first icon crop 64" },
   terrain: { draft: "draft sheet", raw: "raw sheet", snapped: "sheet (no snap)" },
 };
+
+// compass order for the pixellab strip cells
+const PX_DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+const isPx = (job) => job && job.family === "pxship";
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -30,6 +35,7 @@ function thumbURL(job, kind) {
 }
 
 function bandBadge(job) {
+  if (job.family === "pxship") return "";  // no band gates on raw ships
   if (!job.band) return '<span class="badge">band —</span>';
   if (job.band.in_band === true) return '<span class="badge ok">band OK</span>';
   if (job.band.in_band === false) {
@@ -121,25 +127,44 @@ function buildCard(job) {
   const head = document.createElement("div");
   head.className = "card-head";
   head.innerHTML = headHTML(job);
-  const thumbs = document.createElement("div");
-  thumbs.className = "thumbs";
-  const mk = (kind, cap) => {
-    const d = document.createElement("div");
-    d.className = "thumb";
-    d.innerHTML = `<img alt="${kind}"><div class="cap">${cap}</div>`;
-    const img = $("img", d);
-    img.addEventListener("error", () => { d.classList.add("missing"); });
-    d.dataset.kind = kind;
-    thumbs.appendChild(d);
-    if (kind !== "snapped") {
-      const ar = document.createElement("span");
-      ar.className = "arrow"; ar.textContent = "→";
-      thumbs.appendChild(ar);
+  const isPx = job.family === "pxship";
+  let thumbs, strip = null;
+  if (isPx) {
+    // the pixellab ship strip: one cell per heading8 dir (the raw
+    // generation IS the art — no draft/raw/snapped trio, no gates)
+    strip = document.createElement("div");
+    strip.className = "pxstrip";
+    for (const dir of PX_DIRS) {
+      const cell = document.createElement("div");
+      cell.className = "thumb pxcell";
+      cell.dataset.dir = dir;
+      cell.innerHTML = `<img alt="${dir}"><div class="cap">${dir}</div>`;
+      const img = $("img", cell);
+      img.addEventListener("error", () => { cell.classList.add("missing"); });
+      strip.appendChild(cell);
     }
-  };
-  mk("draft", "draft (read-only)");
-  mk("raw", "raw gen");
-  mk("snapped", "snapped 64");
+    thumbs = strip;
+  } else {
+    thumbs = document.createElement("div");
+    thumbs.className = "thumbs";
+    const mk = (kind, cap) => {
+      const d = document.createElement("div");
+      d.className = "thumb";
+      d.innerHTML = `<img alt="${kind}"><div class="cap">${cap}</div>`;
+      const img = $("img", d);
+      img.addEventListener("error", () => { d.classList.add("missing"); });
+      d.dataset.kind = kind;
+      thumbs.appendChild(d);
+      if (kind !== "snapped") {
+        const ar = document.createElement("span");
+        ar.className = "arrow"; ar.textContent = "→";
+        thumbs.appendChild(ar);
+      }
+    };
+    mk("draft", "draft (read-only)");
+    mk("raw", "raw gen");
+    mk("snapped", "snapped 64");
+  }
   const taWrap = document.createElement("div");
   taWrap.className = "ta-wrap";
   const ta = document.createElement("textarea");
@@ -178,7 +203,7 @@ function buildCard(job) {
   grid.appendChild(root);
   return { root, els: {
     head, ta, srcTag, status, metrics, seed: $(".seed", controls),
-    controls, supNote,
+    controls, supNote, strip,
   }, data: job };
 }
 
@@ -270,7 +295,7 @@ function visible(job) {
   if (filter === "ingame") return !!(job.ingest && job.ingest.state === "in-game");
   if (filter === "all") return true;
   if (filter === "icon") return job.family === "icon" || job.family === "iconsheet";
-  if (filter === "hull") return job.family === "hull" || job.family === "sheet";
+  if (filter === "hull") return isPx(job);
   return job.family === filter;
 }
 
@@ -336,23 +361,42 @@ function updateCard(job) {
   els.ta.readOnly = sup;
   els.head.innerHTML = headHTML(job);
   // thumbs + captions (mirror note when serving the flipped base dir)
-  const caps = CAPTIONS[job.family] || CAPTIONS.hull;
-  for (const kind of ["draft", "raw", "snapped"]) {
-    const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
-    const t = thumbs[kind];
-    const url = thumbURL(job, kind);
-    $(".cap", d).textContent =
-      caps[kind] + (t && t.mirrored ? ` (⇄ ${t.mirrored})` : "");
-    if (url) {
-      d.classList.remove("missing");
-      const img = $("img", d);
-      const want = url;
-      if (img.dataset.src !== want) {
-        img.dataset.src = want;
-        img.src = want;
+  if (isPx(job)) {
+    // the pixellab strip: per-dir cells, snapped preferred (what ships)
+    for (const dir of PX_DIRS) {
+      const cell = root.querySelector(`.pxcell[data-dir="${dir}"]`);
+      if (!cell) continue;
+      const r = (job.rotations || []).find(x => x.dir === dir);
+      const url = r && r.v
+        ? `/thumb/px/${job.subject}/${dir}.png?v=${r.v}` : null;
+      if (url) {
+        cell.classList.remove("missing");
+        const img = $("img", cell);
+        if (img.dataset.src !== url) { img.dataset.src = url; img.src = url; }
+      } else {
+        cell.classList.add("missing");
       }
-    } else {
-      d.classList.add("missing");
+    }
+  } else {
+    const caps = CAPTIONS[job.family] || CAPTIONS.hull;
+    for (const kind of ["draft", "raw", "snapped"]) {
+      const d = root.querySelector(`.thumb[data-kind="${kind}"]`);
+      if (!d) continue;
+      const t = thumbs[kind];
+      const url = thumbURL(job, kind);
+      $(".cap", d).textContent =
+        caps[kind] + (t && t.mirrored ? ` (⇄ ${t.mirrored})` : "");
+      if (url) {
+        d.classList.remove("missing");
+        const img = $("img", d);
+        const want = url;
+        if (img.dataset.src !== want) {
+          img.dataset.src = want;
+          img.src = want;
+        }
+      } else {
+        d.classList.add("missing");
+      }
     }
   }
   // prompt (never stomp user edits; never blank) + fidelity tag
@@ -375,13 +419,12 @@ function updateCard(job) {
 async function refreshJobs() {
   try {
     const data = await api("/api/jobs");
-    // icon group sheets lead the list (user: groups are the primary unit;
-    // individual icons stay below as fine-tune cards)
-    data.jobs.sort((a, b) =>
-      ((a.family === "iconsheet" ? 0 : 1) - (b.family === "iconsheet" ? 0 : 1)));
+    // pixellab ships lead the list, then icon group sheets, then the rest
+    const rank = (f) => (f === "pxship" ? 0 : f === "iconsheet" ? 1 : 2);
+    data.jobs.sort((a, b) => rank(a.family) - rank(b.family));
     jobsData = data.jobs;
     $("#counts-chip").textContent =
-      `ships ${data.counts.hull + (data.counts.sheet || 0)} (${data.counts.sheet || 0} sheet) · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
+      `ships ${data.counts.pxship || 0} · icons ${data.counts.icon} + ${data.counts.iconsheet || 0} sheets · terrain ${data.counts.terrain} — flagged ${data.flagged.length} · in game ${data.counts.ingame || 0} · legacy ${data.counts.legacy || 0}`;
     $("#flagged-n").textContent = data.flagged.length;
     $("#flagged-n2").textContent = data.flagged.length;
     $("#ingame-n").textContent = data.counts.ingame || 0;
