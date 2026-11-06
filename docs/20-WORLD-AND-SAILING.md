@@ -95,6 +95,13 @@ the modes differ only in what produces the steps.
   helm; port entry is unchanged — steering into a shore tile docks (§4.11.1)
   and cancels the helm. The heading persists as `world.heading`
   (default `"E"`).
+- **Movement heading (both modes, amended 2026-11-06):** every successful
+  step records its own 8-dir heading into `world.heading` — helm mode's
+  auto-step carries the helm heading as its delta, so the recorded value is
+  identical there; a step key, the hold repeat, click-to-sail and the
+  appointed voyage record the step's delta. A blocked move records nothing.
+  The §4.8.9 fleet token (`80-*`) reads this key, so the token always faces
+  the direction the fleet actually sails (at rest it keeps the last one).
 - **Wait at sea (both modes, any trim):** `Space` holds position and advances
   exactly 1 day via `advance_clock(1.0)` — the full ledger runs (provisions,
   wages, weather re-roll, morale; §4.5). In Step mode `Space` is the wait key;

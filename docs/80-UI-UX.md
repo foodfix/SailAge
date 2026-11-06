@@ -2282,7 +2282,13 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
    player fleet token becomes the 8-dir directional sprite
    (`hull_{type}_{owner}_{dir}`; lists/rosters use static `n`). The
    Phase-1 "ship/token colored square" rule of this section is retired
-   by this rewrite.
+   by this rewrite. **Heading alignment (amended 2026-11-06, user
+   direction):** the player token's dir id is `world.heading`, and every
+   successful step records its own delta there (`20-*` §4.2) — the token
+   always faces the direction the fleet actually sails; the NPC hull
+   tokens re-pick their `hull_{type}_{owner}_{dir}` sprite off the
+   fleet's current lane heading at every marker sync (per player step and
+   on the day tick), so a turning fleet never keeps a stale facing.
 10. **S3 arrow-field spec.** pure sampler `scripts/world/arrow_field.gd`:
     stride 4×4 tiles over the visible window + apron, water cells only;
     wind arrow = the month's `prevailing_for(cell, month)` (the Phase-6

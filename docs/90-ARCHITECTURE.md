@@ -565,7 +565,7 @@ Phase-6 additions (version 6):
 |---|---|---|---|
 | `control_prefs` | object | `{"input_mode": "step", "current_mode": "modifier"}` | Phase-6 input/current modes (`20-*` §4.2/§4.16; S19-only rows, `80-*` §4.6.3) |
 | `world.sail_trim` | string | `"normal"` | `20-*` §4.17 (sail trim) |
-| `world.heading` | string 8-dir id | `"E"` | `20-*` §4.2 (helm heading) |
+| `world.heading` | string 8-dir id | `"E"` | `20-*` §4.2 (last movement heading — every successful step updates it) |
 | `world.wind_dir` | string 8-dir id | `"E"` | `20-*` §4.7 (the daily wind-direction roll, persisted for the current day) |
 
 **No migration; v5 refused (Phase-6 decision 12).** `SAVE_VERSION = 6`,

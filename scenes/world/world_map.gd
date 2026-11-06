@@ -1102,13 +1102,28 @@ func _try_step(target: Vector2i) -> bool:
 	# release the fraction this move just advanced, so every fleet steps
 	# ≈ one tile per player move (idempotent; the day tick's catch-up call
 	# nets zero when this ran). After the tile re-assert, so the accrual's
-	# contact sampling measures against the landed tile.
+	# contact sampling measures against the landed tile. The sync between the
+	# accrual and the playback re-picks the §4.8 NPC hull tokens off the
+	# fleets' fresh movement headings — the day tick's tick → sync → glide
+	# order, so a fleet that just turned at a lane waypoint never sails on
+	# a stale facing.
 	if _has_game() and _fs() != null:
 		_fs().advance_clock()
+		_sync_marker_nodes()
 		_glide_fleet_moves()
 
 	_reject_logged = false
 	_fleet_cell = landed
+	# §4.2/§4.8.9: the step's own 8-dir delta IS the movement heading — every
+	# step source records it (step keys, the hold repeat, the helm auto-step,
+	# click-to-sail, the appointed voyage), so the token always faces the
+	# direction the fleet actually sails. Helm mode is unchanged: the
+	# auto-step carries `world.heading` as its delta, so the write is the
+	# identical value (F's byte-identity pin). A refused move never reaches
+	# this line — a blocked step records nothing.
+	var step_heading := SailingSimLib.heading_of_delta(delta)
+	if not step_heading.is_empty():
+		GameState.world["heading"] = step_heading
 	# §2.6 interpolated rendering: animate over this step's cadence interval.
 	_glide_marker_to(landed, _step_render_seconds())
 	_update_camera()
@@ -1165,8 +1180,13 @@ func _dock_at(target: Vector2i) -> bool:
 	# as the fallback for a target that names no 8-dir step. Deliberately
 	# state-only (like `SailingSim.try_move`), then the berth is re-asserted
 	# so a rejected/otherwise odd berth can never strand the fleet.
+	var heading: String = SailingSimLib.heading_of_delta(_wrapped_delta(target))
+	# §4.2/§4.8.9: the docking move records its heading too — the docked
+	# fleet faces the shore it docked into (`_place_marker` re-picks the
+	# token). Helm mode: identical to the helm heading, as with any step.
+	if not heading.is_empty():
+		GameState.world["heading"] = heading
 	if _has_game():
-		var heading: String = SailingSimLib.heading_of_delta(_wrapped_delta(target))
 		if heading.is_empty():
 			SailingSimLib.advance_clock(SailingSimLib.move_cost())
 		else:
@@ -1180,8 +1200,11 @@ func _dock_at(target: Vector2i) -> bool:
 	# Unified-movement amendment: NPC movement accrues with the clock —
 	# after the berth re-assert, so the accrual's contact sampling measures
 	# against the docked tile (idempotent with the day tick's catch-up).
+	# The sync keeps the §4.8 NPC token dirs fresh, exactly as in
+	# `_try_step` (the day tick's tick → sync → glide order).
 	if _has_game() and _fs() != null:
 		_fs().advance_clock()
+		_sync_marker_nodes()
 		_glide_fleet_moves()
 	_place_marker()
 	_update_camera()

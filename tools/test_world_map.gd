@@ -115,6 +115,7 @@ func _ready() -> void:
 	await _test_explore_action()
 	# Phase-6 task G: the player-facing sailing surface.
 	await _test_helm_mode()
+	await _test_token_heading_follows_steps()
 	await _test_helm_cancels()
 	await _test_trim_keys()
 	await _test_wait_keys()
@@ -1284,6 +1285,34 @@ func _test_helm_mode() -> void:
 		"step mode: the same key steps once and starts the hold (verbatim)")
 	world.release_direction("move_e")
 	world.input_mode_override = ""
+	world.queue_free()
+	await get_tree().process_frame
+
+
+func _test_token_heading_follows_steps() -> void:
+	# §4.8.9 heading alignment (amended 2026-11-06): `world.heading` is the
+	# LAST MOVEMENT heading — a step-mode step records its own delta there
+	# and the token sprite re-picks it (the pre-amendment gap: only
+	# `helm_steer` wrote the key, so outside helm mode the token never
+	# turned off its initial E).
+	TextureRegistryLib.ensure_registered()
+	_make_sea_run(HELM_CELL)
+	var world: Node2D = await _open_world()
+	# Stand at the far end of the W4 helm walk (its tiles are proven-open
+	# water) and step WEST onto the walk's own trail.
+	GameState.set_world_tile(HELM_CELL + Vector2i(10, 0))
+	world.sync_from_state()
+	_check(str(GameState.world["heading"]) == "E",
+		"the fixture starts headed E (got %s)" % str(GameState.world["heading"]))
+	_check(world.press_direction("move_w"),
+		"the step-mode west press steps (the public seam)")
+	_check(str(GameState.world["heading"]) == "W",
+		"a step-mode step records its own delta heading (got %s)"
+			% str(GameState.world["heading"]))
+	_check(world._token_dir == "w",
+		"the player token faces the recorded movement heading (got %s)"
+			% str(world._token_dir))
+	world.release_direction("move_w")
 	world.queue_free()
 	await get_tree().process_frame
 
