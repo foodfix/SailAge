@@ -62,7 +62,7 @@
   },
   "68": {
     "inputs": {
-      "value": "Rotate the camera 90 degrees clockwise around the ship (seen from above) to look at it directly from ASTERN: the square transom stern-castle faces the viewer head-on, symmetric, the ship sails AWAY upward, no bowsprit visible, billowed sails seen from behind. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+      "value": "Rotate the camera 90 degrees clockwise around the ship (seen from 45 degrees above) to look at it directly from ASTERN: the square transom stern-castle faces the viewer head-on, symmetric, the ship sails AWAY upward, no bowsprit visible, billowed sails seen from behind. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -71,7 +71,7 @@
   },
   "69": {
     "inputs": {
-      "value": "Rotate the camera 45 degrees clockwise around the ship (seen from above) into a three-quarter diagonal view: the bow points to the TOP-LEFT corner, the sails billow toward the stern at the BOTTOM-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+      "value": "Rotate the camera 45 degrees clockwise around the ship (seen from 45 degrees above) into a three-quarter diagonal view: the bow points to the TOP-LEFT corner, the sails billow toward the stern at the BOTTOM-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -80,7 +80,7 @@
   },
   "72": {
     "inputs": {
-      "value": "Rotate the camera 90 degrees anticlockwise around the ship (seen from above) to look at it directly from the BOW: the bowsprit points straight down toward the viewer at the bottom center, symmetric bow shape, the stern-castle hidden behind the sails. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+      "value": "Rotate the camera 90 degrees anticlockwise around the ship (seen from 45 degrees above) to look at it directly from the BOW: the bowsprit points straight down toward the viewer at the bottom center, symmetric bow shape, the stern-castle hidden behind the sails. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -89,7 +89,7 @@
   },
   "73": {
     "inputs": {
-      "value": "Rotate the camera 45 degrees anticlockwise around the ship (seen from above) into a three-quarter diagonal view: the bow points to the BOTTOM-LEFT corner, the sails billow toward the stern at the TOP-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+      "value": "Rotate the camera 45 degrees anticlockwise around the ship (seen from 45 degrees above) into a three-quarter diagonal view: the bow points to the BOTTOM-LEFT corner, the sails billow toward the stern at the TOP-RIGHT, thick readable hull band with deck and gunwale, sails at about three quarters of the side view size. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -786,6 +786,190 @@
     "class_type": "TextEncodeQwenImageEditPlus",
     "_meta": {
       "title": "文本编码 Qwen 图像编辑 Plus"
+    }
+  },
+  "74": {
+    "inputs": {
+      "value": "Raise the camera to look at the ship from 45 degrees above, exactly from the side: the bow with bowsprit points to the LEFT edge, the stern at the RIGHT edge, the hull shows a visible waterline about 60% down with the submerged portion in darkened wood tones, the deck plane read from above, oblique elevated sailing view. Render it as crisp limited-palette pixel art matching the input image's style: strong 1-pixel dark outline around the whole sprite, big chunky pixels, flat color fills, no dithering, dense wooden hull with visible planking lines, small lit cabin windows and gunports. Keep the exact same ship: same hull shape, mast count, rig, sail layout, colors and proportions; mast and sail height unchanged. Keep the small red pennant flag at the mainmast top. Plain flat solid chroma-key green background (#00ff00), uniform, no gradient, no shadow on the background, no water, no scenery, no text, no frame."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt w (elevated side)"
+    }
+  },
+  "65:50:141": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale (w)"
+    }
+  },
+  "65:50:142": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:50:141",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Negative (w)"
+    }
+  },
+  "65:50:143": {
+    "inputs": {
+      "prompt": [
+        "74",
+        0
+      ],
+      "clip": [
+        "48:10",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ],
+      "image1": [
+        "65:50:141",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "Positive (w)"
+    }
+  },
+  "65:50:144": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "48:26",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "Sampling (w)"
+    }
+  },
+  "65:50:145": {
+    "inputs": {
+      "strength": 1,
+      "pre_cfg": false,
+      "model": [
+        "65:50:144",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm (w)"
+    }
+  },
+  "65:50:146": {
+    "inputs": {
+      "pixels": [
+        "65:50:141",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEEncode (w)"
+    }
+  },
+  "65:50:147": {
+    "inputs": {
+      "seed": 91000,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65:50:145",
+        0
+      ],
+      "positive": [
+        "65:50:143",
+        0
+      ],
+      "negative": [
+        "65:50:142",
+        0
+      ],
+      "latent_image": [
+        "65:50:146",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (w)"
+    }
+  },
+  "65:50:148": {
+    "inputs": {
+      "samples": [
+        "65:50:147",
+        0
+      ],
+      "vae": [
+        "48:9",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEDecode (w)"
+    }
+  },
+  "65:50:149": {
+    "inputs": {
+      "images": [
+        "65:50:148",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview (w)"
+    }
+  },
+  "65:50:150": {
+    "inputs": {
+      "filename_prefix": "sailage/angles/w",
+      "images": [
+        "65:50:148",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image - w (elevated side)"
     }
   }
 }

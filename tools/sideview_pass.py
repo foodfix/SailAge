@@ -4,15 +4,18 @@
 For every ship type: crop the DETERMINISTIC generator's w cell (the
 direction ground truth produced by `model_pass.py redraft`) out of
 ``model_raw/drafts/sheet_<ship>.png`` as the 512x512 reference, rebuild the
-canonical hull w-pose prompt via ``chain.reconstruct_original`` (kept
-stated_px calibration included), reuse the hull's kept re-roll seed, and
+canonical hull w-pose prompt via ``chain.reconstruct_original``, reuse the
+hull's kept re-roll seed, and
 POST TheNoise ``:8001/edit`` ``{"image","prompt","seed"}`` — the validated
 draft-as-reference restyle (80-* §4.8). The raw ~1MP PNG (flat chroma-key
 green background) is written gitignored to
 ``model_raw/sideviews/<ship>_side.png`` plus a ``sideviews.json`` manifest
 (prompt, seed, source, bytes, size, seconds, corner-green + opaque
 sanity). NO rembg, NO snap: this output is the ComfyUI multi-angle LoRA's
-INPUT, not a token. Raw model output is never committed (90-* §9.2).
+INPUT (the identity anchor), not a token — all five shipped views,
+including the elevated w, are generated downstream by ``angle_pass.py``
+and size-normalized there. Raw model output is never committed
+(90-* §9.2).
 
 Usage:
   python3 tools/sideview_pass.py run [ship ...]   # default: all 16

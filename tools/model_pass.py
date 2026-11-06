@@ -1474,6 +1474,56 @@ SHEET_CELLS = {"w": (64, 64), "n": (640, 64), "s": (1216, 64),
 SHEET_SIZE = (1792, 1152)
 
 
+_DET_TOKEN_DIR = None
+
+
+def deterministic_token_dir():
+    """Deterministic generator tokens (build_ui_art with the ingest ladder
+    OFF) for draft composition — NEVER canonical assets/ui/tokens, whose
+    cells may be ingested model art (direction errors would inherit
+    circularly into draft -> /edit -> audit). Cached per process."""
+    global _DET_TOKEN_DIR
+    if _DET_TOKEN_DIR and os.path.isdir(_DET_TOKEN_DIR):
+        return _DET_TOKEN_DIR
+    from pathlib import Path
+    import build_ui_art as BUA
+    td = tempfile.mkdtemp(prefix="det_tokens.", dir=SCRATCH)
+    staging = Path(td, "build", "ui_art_staging")
+    staging.mkdir(parents=True)
+    m = BUA.Manifests()
+    m.load()
+    BUA._verify_transforms()
+    BUA.run_hull_pipeline(m, Path(td), staging, {}, None)
+    _DET_TOKEN_DIR = os.path.join(td, "assets", "ui", "tokens")
+    return _DET_TOKEN_DIR
+
+
+def verify_sheet_is_deterministic(sheet_path, ship, token_dir):
+    """Fail loudly if a draft sheet's cells are not the deterministic
+    ground truth: the composer pastes each 64-grid token at 75% (384px)
+    centred in its 512 cell, so each cell's CENTRAL 384px must hash equal
+    to the token. Guards against canonical (ingested model art) leaking
+    back into the drafts via a concurrent batch run (the 2026-11-05/06
+    leak: run_hull_job rebuilt drafts from canonical tokens)."""
+    import hashlib
+    from PIL import Image
+    sheet = Image.open(sheet_path)
+    for direction, (cx, cy) in SHEET_CELLS.items():
+        det = token_image(os.path.join(
+            token_dir, f"hull_{ship}_player_{direction}.png"))
+        bg = Image.new("RGBA", det.size, GREEN_BG)
+        bg.alpha_composite(det)  # the sheet is RGB on green — mimic it
+        cell = sheet.crop((cx + 64, cy + 64, cx + 448, cy + 448))
+        a = hashlib.sha1(cell.convert("RGB").resize(
+            (64, 64), Image.NEAREST).tobytes()).hexdigest()
+        b = hashlib.sha1(bg.convert("RGB").resize(
+            (64, 64), Image.NEAREST).tobytes()).hexdigest()
+        if a != b:
+            raise RuntimeError(
+                f"sheet draft {ship}/{direction} is NOT the deterministic "
+                f"render (canonical/model art leaked into the drafts)")
+
+
 def hull_sheet_draft(ship, out_path, draft_scale=6, token_dir=None):
     """5-cell draft reference: w/n/s/sw/nw tokens at draft_scale x6 (=384,
     75% of the 512 cell) — polish attempts may shrink the drafts (more
@@ -1694,7 +1744,10 @@ def run_hull_job(ship, seed, stated_px=None, scale_override=None,
            "started": time.strftime("%H:%M:%S")}
     save_job(f"hull_{ship}", rec)
     draft_path = os.path.join(DRAFTS, f"sheet_{ship}.png")
-    hull_sheet_draft(ship, draft_path, draft_scale=draft_scale)
+    hull_sheet_draft(ship, draft_path, draft_scale=draft_scale,
+                     token_dir=deterministic_token_dir())
+    verify_sheet_is_deterministic(draft_path, ship,
+                                  deterministic_token_dir())
     with open(draft_path, "rb") as fh:
         draft_bytes = fh.read()
     gen = generate(draft_bytes, hull_sheet_prompt(ship, stated_px,
@@ -2451,6 +2504,7 @@ def redraft_hull_sheets():
         for ship in HULLS:
             out = os.path.join(DRAFTS, f"sheet_{ship}.png")
             hull_sheet_draft(ship, out, draft_scale=6, token_dir=tok_dir)
+            verify_sheet_is_deterministic(out, ship, tok_dir)
             with Image.open(out) as im:
                 new_size = im.size
             was = old_sizes.get(ship)
