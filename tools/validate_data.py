@@ -9140,10 +9140,17 @@ def _g13_check_hull_grid(decls: dict, ship_types: list, nations: list) -> None:
         fail("hull-inventory", str(rpath),
              "registry owners != nations ∪ {player, neutral, pirate} "
              "(§8.8 item 6, pennant remap coverage)", 13)
-    if rdoc.get("path_template") != \
-            "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png":
+    raw_grid = _g13_raw_pixellab_ingest()
+    want_tmpl = ("assets/ui/tokens/hull_{ship_type}_{dir}.png" if raw_grid
+                 else "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
+    if rdoc.get("path_template") != want_tmpl:
         fail("hull-inventory", str(rpath),
-             "registry path_template != the pinned hull token path", 13)
+             f"registry path_template != the pinned hull token path "
+             f"({'raw dedupe: shared file + runtime owner fallback' if raw_grid else '9-owner grid'})", 13)
+    if raw_grid and not rdoc.get("owner_variant_rule"):
+        fail("hull-inventory", str(rpath),
+             "the raw-dedupe registry must document owner_variant_rule "
+             "(the runtime owner-id fallback onto the shared file)", 13)
     ship_ids = {s["id"] for s in ship_types}
     if set(docs) != ship_ids:
         fail("hull-inventory", "tools/ui_art/hulls/authored/",
@@ -9671,6 +9678,13 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
             or counts.get("pennant_auto_painted") != painted):
         fail("art-ingest", "tools/ui_art/ingest_ledger.json",
              "counts drift from the tokens/derived/rejected maps", 13)
+    want_shipped = (len(tokens) if _g13_raw_pixellab_ingest()
+                    else len(tokens) * len(owners))
+    if counts.get("shipped_files") != want_shipped:
+        fail("art-ingest", "tools/ui_art/ingest_ledger.json",
+             f"counts.shipped_files {counts.get('shipped_files')} != the "
+             f"shipped grid ({want_shipped}: "
+             f"{'one owner-less file per token — raw dedupe' if _g13_raw_pixellab_ingest() else '9 owners per token'})", 13)
 
     # base token records: real ship × base dir, sha-256 + ISO date, and
     # the complete 9-owner file set on the shipped grid
@@ -9711,12 +9725,20 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         if not isinstance(at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", at):
             fail("art-ingest", tid,
                  f"accepted_at {at!r} is not an ISO date (YYYY-MM-DD)", 13)
-        for owner in sorted(owners):
-            p = ASSETS_UI / "tokens" / f"hull_{ship}_{owner}_{d}.png"
+        if _g13_raw_pixellab_ingest():
+            p = ASSETS_UI / "tokens" / f"hull_{ship}_{d}.png"
             if not p.is_file():
                 fail("art-ingest", str(p.relative_to(ART_ROOT)),
-                     "ingested base token file missing from the shipped grid",
-                     13)
+                     "ingested base token file missing from the shipped "
+                     "grid (raw dedupe: the owner-less file is the one "
+                     "artifact every owner id resolves onto)", 13)
+        else:
+            for owner in sorted(owners):
+                p = ASSETS_UI / "tokens" / f"hull_{ship}_{owner}_{d}.png"
+                if not p.is_file():
+                    fail("art-ingest", str(p.relative_to(ART_ROOT)),
+                         "ingested base token file missing from the shipped grid",
+                         13)
 
     # derived records: exact h-flips, base-referenced, group-coherent
     tokens_dir = ASSETS_UI / "tokens"
@@ -9797,6 +9819,25 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
             fail("art-ingest", str(sp.relative_to(ART_ROOT)),
                  "ledger snapped_sha drifts from the local snapped source — "
                  "re-run the import", 13)
+        if raw_px:
+            # ship-as-drawn artifact re-proof (80-* §4.8 2026-11-06): the
+            # shipped owner-less file decodes to EXACTLY the snapped
+            # source's pixels — any pipeline pixel edit (remap, quantize,
+            # recolor) fails here. Compare PIXELS, not bytes: the import
+            # re-encodes the container by design.
+            tp = ASSETS_UI / "tokens" / f"{tid}.png"
+            if tp.is_file():
+                try:
+                    got = decode_ui_png(tp.read_bytes())
+                    want = decode_ui_png(sp.read_bytes())
+                except (OSError, PngFormatError) as exc:
+                    fail("art-ingest", str(tp.relative_to(ART_ROOT)),
+                         f"does not decode: {exc}", 13)
+                if got != want:
+                    fail("art-ingest", str(tp.relative_to(ART_ROOT)),
+                         "is not pixel-identical to its snapped source — "
+                         "ship-as-drawn forbids pipeline pixel edits "
+                         "(80-* §4.8)", 13)
     if found < len(tokens):
         print(f"INFO group 13 ingest: {len(tokens) - found}/{len(tokens)} "
               "snapped source(s) absent from the local gitignored model_raw "
@@ -10140,8 +10181,22 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             rdecl = next((d for d, _p in decls.values()
                           if isinstance(d, dict)
                           and d.get("id") == "hulls-registry"), None)
-            tmpl = (rdecl or {}).get(
-                "path_template",
+            # hulls.json is an aux doc (skipped by the class loader), so
+            # read the pinned template from the registry file directly —
+            # the mode-aware default only covers a staged tree.
+            reg_tmpl = None
+            reg_file = Path("tools/ui_art/hulls/hulls.json")
+            if rdecl is not None:
+                reg_tmpl = rdecl.get("path_template")
+            elif reg_file.is_file():
+                try:
+                    reg_tmpl = json.loads(reg_file.read_text()).get(
+                        "path_template")
+                except (OSError, ValueError):
+                    reg_tmpl = None
+            tmpl = reg_tmpl or (
+                "assets/ui/tokens/hull_{ship_type}_{dir}.png"
+                if _g13_raw_pixellab_ingest() else
                 "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png")
             uw2_ships = {decl.get("ship_type")
                          for decl, _p in decls.values()
@@ -10152,33 +10207,47 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             hull_pin = {"e": ("n", "rot_cw"), "s": ("n", "rot_180"),
                         "w": ("n", "rot_ccw"), "nw": ("ne", "mirror_x"),
                         "se": ("ne", "mirror_y"), "sw": ("ne", "rot_180")}
-            for ship in ship_types:
-                for nation in nations + [{"id": o} for o in
-                                         G13_TOKEN_OWNERS_EXTRA]:
-                    sid_n = f"hull_{ship['id']}_{nation['id']}_n"
-                    sid_ne = f"hull_{ship['id']}_{nation['id']}_ne"
-                    entries_h.append(
-                        (sid_n, {"id": sid_n, "width": 64, "height": 64,
-                                 "file": tmpl.format(
-                                     ship_type=ship["id"], owner=nation["id"],
-                                     dir="n")}))
-                    entries_h.append(
-                        (sid_ne, {"id": sid_ne, "width": 64, "height": 64,
-                                  "file": tmpl.format(
-                                      ship_type=ship["id"], owner=nation["id"],
-                                      dir="ne")}))
-                    for dir_id, (base_dir, op) in hull_pin.items():
-                        sid = f"hull_{ship['id']}_{nation['id']}_{dir_id}"
-                        decl_c = {"id": sid, "width": 64, "height": 64,
-                                  "file": tmpl.format(
-                                      ship_type=ship["id"],
-                                      owner=nation["id"], dir=dir_id)}
-                        if ship["id"] not in uw2_ships:
-                            decl_c["derive"] = {
-                                "from": (sid_n if base_dir == "n"
-                                         else sid_ne),
-                                "op": op}
-                        entries_h.append((sid, decl_c))
+            raw_dedupe_grid = _g13_raw_pixellab_ingest()
+            if raw_dedupe_grid:
+                # Raw dedupe (80-* §4.8 2026-11-06): the shipped grid is
+                # the owner-less 16 × 8 — the runtime falls owner ids onto
+                # the shared file (registry owner_variant_rule), so the
+                # ×9 owner expansion does not apply.
+                for ship in ship_types:
+                    for dir_id in G13_DIR_IDS:
+                        sid = f"hull_{ship['id']}_{dir_id}"
+                        entries_h.append(
+                            (sid, {"id": sid, "width": 64, "height": 64,
+                                   "file": tmpl.format(
+                                       ship_type=ship["id"], dir=dir_id)}))
+            else:
+                for ship in ship_types:
+                    for nation in nations + [{"id": o} for o in
+                                             G13_TOKEN_OWNERS_EXTRA]:
+                        sid_n = f"hull_{ship['id']}_{nation['id']}_n"
+                        sid_ne = f"hull_{ship['id']}_{nation['id']}_ne"
+                        entries_h.append(
+                            (sid_n, {"id": sid_n, "width": 64, "height": 64,
+                                     "file": tmpl.format(
+                                         ship_type=ship["id"], owner=nation["id"],
+                                         dir="n")}))
+                        entries_h.append(
+                            (sid_ne, {"id": sid_ne, "width": 64, "height": 64,
+                                      "file": tmpl.format(
+                                          ship_type=ship["id"], owner=nation["id"],
+                                          dir="ne")}))
+                        for dir_id, (base_dir, op) in hull_pin.items():
+                            sid = f"hull_{ship['id']}_{nation['id']}_{dir_id}"
+                            decl_c = {"id": sid, "width": 64, "height": 64,
+                                      "file": tmpl.format(
+                                          ship_type=ship["id"],
+                                          owner=nation["id"], dir=dir_id)}
+                            if ship["id"] not in uw2_ships:
+                                decl_c["derive"] = {
+                                    "from": (sid_n if base_dir == "n"
+                                             else sid_ne),
+                                    "op": op}
+                            entries_h.append((sid, decl_c))
             for sid, (decl_c, _p) in decls.items():
                 if sid.startswith("facility_"):
                     entries_h.append((sid, decl_c))

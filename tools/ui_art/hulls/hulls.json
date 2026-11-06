@@ -1,7 +1,7 @@
 {
  "id": "hulls-registry",
  "class": "hulls",
- "doc": "Hull-token registry (W3-B; UW2 amendment 2026-11-04). The governor (tools/build_ui_art.py) renders EVERY authored map of a hull into staging — all eight directions are authored maps per the §4.8.6 amendment (a side-view ship does not rotate losslessly; docs authored on the amended shape carry maps × 8 and no derive entries; legacy n/ne + derive docs keep the pinned-op path until re-authored) — then applies the 1px HULL_INK outline and bakes the 9 owner variants via the wood-step remap table. Contract: docs/80-UI-UX.md §4.8 (heading8→dir table §4.8.6, tier footprint bands §4.8.7, hull block §4.8.4) and docs/10-DATA-SCHEMA.md §8.8 group 13.",
+ "doc": "Hull-token registry (W3-B; UW2 amendment 2026-11-04; raw-dedupe amendment 2026-11-06). The governor (tools/build_ui_art.py) renders EVERY authored map of a hull into staging — all eight directions are authored maps per the §4.8.6 amendment (a side-view ship does not rotate losslessly; docs authored on the amended shape carry maps × 8 and no derive entries; legacy n/ne + derive docs keep the pinned-op path until re-authored) — then applies the 1px HULL_INK outline. Shipped grid: the pixellab raw family is ONE owner-less file per ship × dir (path_template below; the classic ×9 wood-step remap grid is suspended while the ledger is raw — the runtime falls owner ids onto the shared file). Contract: docs/80-UI-UX.md §4.8 (heading8→dir table §4.8.6, hull block §4.8.4) and docs/10-DATA-SCHEMA.md §8.8 group 13.",
  "owners": [
   "player",
   "portugal",
@@ -13,7 +13,8 @@
   "neutral",
   "pirate"
  ],
- "path_template": "assets/ui/tokens/hull_{ship_type}_{owner}_{dir}.png",
+ "path_template": "assets/ui/tokens/hull_{ship_type}_{dir}.png",
+ "owner_variant_rule": "raw dedupe (80-* §4.8 2026-11-06): ONE file per ship × dir; the runtime resolves a hull_{ship_type}_{owner}_{dir} id onto the shared file when the per-owner file is absent (scripts/ui/texture_registry.gd, one shared ImageTexture). Per-owner pennant files return only if a future amendment reinstates them.",
  "staging": "authored maps render into a transient staging dir (they are outline-less wood-colored intermediates; the wood-colored map itself is not a shipped file — every owner variant, neutral included, is a remap target per §4.8.4 hull block)",
  "authored_dirs": [
   "e",

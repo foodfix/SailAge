@@ -27,6 +27,13 @@ extends RefCounted
 ## with the same fallback chain: a missing id resolves null exactly as
 ## before (the white-square/flat fallback is the consumers' unchanged rule).
 ##
+## Owner fallback (80-* §4.8 2026-11-06 raw dedupe): the pixellab hull
+## family ships ONE owner-less file per ship × dir (`hull_<ship>_<dir>.png`);
+## an owner id `hull_<ship>_<owner>_<dir>` whose per-owner file is absent
+## resolves ONTO the shared id through the UiKit map — every owner of a
+## ship references the same ImageTexture (one VRAM copy), and a future
+## per-owner file simply shadows the shared one (the direct path wins).
+##
 ## Idempotent: the static guard makes the second call a no-op. Deterministic:
 ## the dir list is a fixed table, and each dir walk is sorted, so the map is
 ## byte-stable across runs (late ids never overwrite earlier ones — every id
@@ -88,16 +95,29 @@ static func ensure_registered() -> void:
 ## needed, so the decoded pixels are always the file's current bytes (the
 ## stale `.godot/imported` cache cannot leak in). Missing or undecodable
 ## id ⇒ null — the consumer's fallback chain is unchanged.
+##
+## The owner fallback (see the header note) resolves onto the SHARED id
+## through `UiKit.icon_texture`, so the texture is created once and every
+## owner id caches a reference to the same object (`clear_textures` still
+## invalidates all of them together — the file-swap pin keeps holding).
+## A shared id is owner-less, so it always resolves through the direct
+## file branch — no recursion.
 static func _load_token_texture(id: String) -> Texture2D:
 	if id.is_empty():
 		return null
 	var path := "%s/%s.png" % [_token_dir, id]
-	if not FileAccess.file_exists(path):
-		return null
-	var image := Image.new()
-	if image.load_png_from_buffer(FileAccess.get_file_as_bytes(path)) != OK:
-		return null
-	return ImageTexture.create_from_image(image)
+	if FileAccess.file_exists(path):
+		var image := Image.new()
+		if image.load_png_from_buffer(FileAccess.get_file_as_bytes(path)) != OK:
+			return null
+		return ImageTexture.create_from_image(image)
+	if id.begins_with("hull_"):
+		var segs := id.substr(5).rsplit("_", false, 2)
+		if segs.size() == 3:
+			var shared := "hull_%s_%s" % [segs[0], segs[2]]
+			if shared != id:
+				return UiKitLib.icon_texture(shared)
+	return null
 
 
 ## One sorted dir walk → `{stem: Texture2D}`. Missing dir or a null

@@ -856,12 +856,28 @@ def _parse_file_id(fid):
     return ship, owner, d
 
 
+def _ingest_raw_dedupe() -> bool:
+    """True when the committed ledger's last ship ingestion was the
+    PixelLab raw mode (80-* §4.8 2026-11-06): the shipped hull grid is
+    ONE owner-less file per ship × dir (`hull_{ship}_{dir}.png`) and the
+    runtime resolves every owner id onto it (texture_registry owner
+    fallback). False ⇒ the classic 9-owner ×9-remap grid."""
+    if not INGEST_LEDGER.is_file():
+        return False
+    try:
+        doc = json.loads(INGEST_LEDGER.read_text())
+    except ValueError:
+        return False
+    return "pixellab" in str(doc.get("generated_by", ""))
+
+
 def resolve_ingest_overrides(root: Path = ROOT):
     """The override ladder (80-* §4.8: the ingested tokens are the PRIMARY
     art, the ×2-upscale generator is the fallback): a ledger entry whose
     committed token file exists serves that shipped file from the
     committed ingested artifact; every other id falls through to the
-    generator.  Returns {(ship, owner, dir): committed path}."""
+    generator.  Returns {(ship, owner, dir): committed path}; the raw
+    dedupe mode keys the shared owner-less file as (ship, "", dir)."""
     if not INGEST_LEDGER.is_file():
         return {}
     try:
@@ -874,10 +890,17 @@ def resolve_ingest_overrides(root: Path = ROOT):
     out = {}
 
     def add(ship, owner, d):
-        p = root / TOKENS_DIR / f"hull_{ship}_{owner}_{d}.png"
+        name = (f"hull_{ship}_{d}.png" if owner == ""
+                else f"hull_{ship}_{owner}_{d}.png")
+        p = root / TOKENS_DIR / name
         if p.is_file():
             out[(ship, owner, d)] = p
 
+    if _ingest_raw_dedupe():
+        for tid in (doc.get("tokens") or {}):
+            ship, d = _parse_token_id(tid)
+            add(ship, "", d)
+        return out
     for tid in (doc.get("tokens") or {}):
         ship, d = _parse_token_id(tid)
         for owner in OWNER_ORDER:
@@ -1073,46 +1096,68 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
                 accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx,
                                                            "mirror_x")
 
-    # Write the accepted tokens. Classic mode: the pennant ×9 remap (the
-    # ONLY owner-variant pixel; spain is the legal identity remap). RAW
-    # mode (80-* §4.8 2026-11-06, user direction): the model's pixels ship
-    # UNTOUCHED — the SAME token bytes for every owner (the pennant remap
-    # is suspended for this family; owner variants return only if a
-    # future amendment reinstates it).
+    # Write the accepted tokens. Classic mode: the pennant ×9 remap grid
+    # (the ONLY owner-variant pixel; spain is the legal identity remap).
+    # RAW mode (80-* §4.8 2026-11-06, user direction): the model's pixels
+    # ship UNTOUCHED as ONE owner-less file per ship × dir — the runtime
+    # falls every owner id onto it (texture_registry owner fallback), so
+    # 9 owner copies of identical bytes are never written.
     written = 0
     for job in sorted(accepted):
         ship, d = _parse_token_id(job)
         w, h, px = accepted[job]
+        if raw:
+            write_png(tokens_dir / f"hull_{ship}_{d}.png", w, h, px)
+            written += 1
+            continue
         for owner in OWNER_ORDER:
-            if raw:
-                out, leftovers = px, []
-            else:
-                table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
-                watch = frozenset(s for s, t in table.items()
-                                  if "#%02x%02x%02x" % t[:3] != s)
-                out, leftovers = apply_remap(w, h, px, table, watch)
-                if leftovers:
-                    fail(f"ingest {job}/{owner}: the pennant source survived "
-                         f"the remap: {sorted(leftovers)}")
-                colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
-                if PENNANTS[owner] not in colors:
-                    fail(f"ingest {job}/{owner}: the owner pennant hex "
-                         f"{PENNANTS[owner]} is missing after the remap")
-                off = sorted(c for c in colors if c not in HULL_BLOCK)
-                if off:
-                    fail(f"ingest {job}/{owner}: hexes outside the hull "
-                         f"block: {off}")
-                if len(colors) > INGEST_INGESTED_BUDGET:
-                    fail(f"ingest {job}/{owner}: {len(colors)} colors > "
-                         f"budget {INGEST_INGESTED_BUDGET} (§4.8.3)")
+            table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
+            watch = frozenset(s for s, t in table.items()
+                              if "#%02x%02x%02x" % t[:3] != s)
+            out, leftovers = apply_remap(w, h, px, table, watch)
+            if leftovers:
+                fail(f"ingest {job}/{owner}: the pennant source survived "
+                     f"the remap: {sorted(leftovers)}")
+            colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
+            if PENNANTS[owner] not in colors:
+                fail(f"ingest {job}/{owner}: the owner pennant hex "
+                     f"{PENNANTS[owner]} is missing after the remap")
+            off = sorted(c for c in colors if c not in HULL_BLOCK)
+            if off:
+                fail(f"ingest {job}/{owner}: hexes outside the hull "
+                     f"block: {off}")
+            if len(colors) > INGEST_INGESTED_BUDGET:
+                fail(f"ingest {job}/{owner}: {len(colors)} colors > "
+                     f"budget {INGEST_INGESTED_BUDGET} (§4.8.3)")
             write_png(tokens_dir / f"hull_{ship}_{owner}_{d}.png", w, h, out)
             written += 1
+
+    if raw:
+        # Raw-dedupe tree hygiene: this mode owns the owner-LESS names, so
+        # any per-owner grid file left by an earlier classic/raw-remap run
+        # is stale (the runtime resolves owners onto the shared file).
+        pattern = re.compile(
+            r"hull_.+_(%s)_(%s)\.png$" % ("|".join(OWNER_ORDER),
+                                          "|".join(DIR_ORDER)))
+        pruned = 0
+        for f in sorted(tokens_dir.glob("hull_*.png")):
+            if pattern.match(f.name):
+                f.unlink()
+                # the pre-lazy era's .import sidecar (10acf123 made tokens
+                # raw-bytes) — orphaned the moment its PNG goes
+                f.with_name(f.name + ".import").unlink(missing_ok=True)
+                pruned += 1
+        if pruned:
+            print(f"  ingest: pruned {pruned} stale per-owner token "
+                  "file(s) — the raw dedupe grid is ship × dir only")
 
     # Provenance revocation: committed ingested files whose entry did not
     # survive this run (source rejected / changed beyond the gates) are
     # removed so the ladder falls those ids back to the generator THIS run
     # (assets == generator ∪ ingested(ledger), exactly).
     def revoke(ship, d):
+        if raw:
+            (tokens_dir / f"hull_{ship}_{d}.png").unlink(missing_ok=True)
         for owner in OWNER_ORDER:
             (tokens_dir / f"hull_{ship}_{owner}_{d}.png").unlink(missing_ok=True)
 
@@ -1151,7 +1196,8 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
             "rejected": len(rejected),
             "revoked_stale": revoked,
             "shipped_files": written,
-            "fallback_files": len(tiers) * len(OWNER_ORDER) * len(DIR_ORDER)
+            "fallback_files": (len(tiers) * len(DIR_ORDER) if raw else
+                               len(tiers) * len(OWNER_ORDER) * len(DIR_ORDER))
                               - written,
             "pennant_auto_painted": sum(1 for rec in led_tokens.values()
                                         if rec.get("pennant")
@@ -1797,8 +1843,12 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
     rig = m.aux.get(("hulls", "rig"))
     if reg is None:
         fail("tools/ui_art/hulls/hulls.json registry missing")
-    if reg.get("path_template") != f"{TOKENS_DIR}/hull_{{ship_type}}_{{owner}}_{{dir}}.png":
-        fail("hulls.json: unexpected path_template (governor contract drift)")
+    want_tmpl = (f"{TOKENS_DIR}/hull_{{ship_type}}_{{dir}}.png"
+                 if _ingest_raw_dedupe() else
+                 f"{TOKENS_DIR}/hull_{{ship_type}}_{{owner}}_{{dir}}.png")
+    if reg.get("path_template") != want_tmpl:
+        fail(f"hulls.json: path_template {reg.get('path_template')!r} != "
+             f"the pinned {want_tmpl!r} (governor contract drift)")
     if list(reg.get("owners", [])) != OWNER_ORDER:
         fail("hulls.json: owners != pinned 9-owner set (§4.8.4)")
     if list(reg.get("authored_dirs", [])) != DIR_ORDER:
@@ -1930,6 +1980,35 @@ def run_hull_pipeline(m: Manifests, outroot: Path, staging: Path, report: dict,
                      f"{CANVAS}px canvas")
         report.setdefault("footprints", []).append(
             (ship, tier, side[0], side[1], (lo, hi)))
+
+        if _ingest_raw_dedupe():
+            # Raw dedupe (80-* §4.8 2026-11-06): ONE owner-less file per
+            # ship × dir — no pennant remap, the runtime falls every owner
+            # id onto it. The ladder override keys the shared file as
+            # (ship, "", dir).
+            for d in DIR_ORDER:
+                w, h, px = staged[d]
+                dest = outroot / TOKENS_DIR / f"hull_{ship}_{d}.png"
+                override = (ingest_files or {}).get((ship, "", d))
+                if override is not None and override.is_file():
+                    if override != dest:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(override, dest)
+                    counts["tokens_ingested"] += 1
+                    continue
+                colors = {("#%02x%02x%02x" % p[:3])
+                          for p in px if p[3]}
+                off = sorted(c for c in colors if c not in HULL_BLOCK)
+                if off:
+                    fail(f"hull {ship}/{d}: hexes outside the hull block "
+                         f"(§4.8.4): {off}")
+                if len(colors) > COLOR_BUDGET_32:
+                    fail(f"hull {ship}/{d}: {len(colors)} colors > budget "
+                         f"{COLOR_BUDGET_32} (§4.8.3)")
+                write_png(dest, *upscale_nearest(w, h, px,
+                                                 CANVAS // AUTHORED_GRID))
+                counts["tokens"] += 1
+            continue
 
         for owner in OWNER_ORDER:
             # Pennant remap (§4.8.4 amended): the ONLY owner-variant pixel —
@@ -2715,12 +2794,14 @@ def summary(m: Manifests, report: dict, outroot: Path) -> None:
               f"{g.get('terrain_ingested', 0)} terrain variant(s) served "
               "from the committed ingested artifacts (the generator fills "
               "the gaps)")
+    grid_note = ("(16 x 8 shared, owner fallback = 128 expected)"
+                 if _ingest_raw_dedupe() else
+                 "(16 x 9 x 8 = 1152 expected)")
     print(f"  rendered(render.js): hull maps {h.get('rendered', 0)}, "
           f"generic {g.get('rendered', 0)}; derived {h.get('derived', 0) + g.get('derived', 0)}; "
           f"outlined {h.get('outlined', 0) + g.get('outlined', 0)}; "
           f"hull tokens written {h.get('tokens', 0)} generator + "
-          f"{h.get('tokens_ingested', 0)} ingested "
-          f"(16 x 9 x 8 = 1152 expected)")
+          f"{h.get('tokens_ingested', 0)} ingested {grid_note}")
     for ship, tier, e_ext, w_ext, band in report.get("footprints", []):
         print(f"  footprint {ship:18s} t{tier}  e {e_ext}px  w {w_ext}px  "
               f"band {band[0]}-{band[1]}  OK (64 canvas)")
@@ -2800,9 +2881,11 @@ def run_import_mode(snapped_dir: Path, raw: bool = False) -> None:
     summary(m, report, ROOT)
     counts = report.get("hulls", {})
     total = counts.get("tokens", 0) + counts.get("tokens_ingested", 0)
-    if m.classes.get("hulls") is not None and total != 16 * 9 * 8:
+    expected = (16 * 8) if _ingest_raw_dedupe() else (16 * 9 * 8)
+    if m.classes.get("hulls") is not None and total != expected:
         fail(f"hull token count {total} (generator {counts.get('tokens', 0)} "
-             f"+ ingested {counts.get('tokens_ingested', 0)}) != 1152")
+             f"+ ingested {counts.get('tokens_ingested', 0)}) != {expected}"
+             f" ({'raw dedupe: 16 ships x 8 dirs, owner fallback' if _ingest_raw_dedupe() else '16 x 9 owners x 8 dirs'})")
     print(f"build_ui_art: ledger -> {INGEST_LEDGER.relative_to(ROOT)}")
 
 

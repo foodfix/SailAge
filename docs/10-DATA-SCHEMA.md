@@ -2373,7 +2373,7 @@ the code below. All checks run in order.
 | 10 | Ice & lane variants | `ice_regions.json` structure; lane `variants` month coverage + per-variant month-window passability under the ice mask; ice-crossing lanes carry covering variants — normative spec §8.5 |
 | 11 | Captain canon | `npc_captains.json` **absent**; `captains.json` + `officers.json` rebuild determinism (`tools/build_captains.py --check`); canon coverage ≥ the computed extreme-preset total; the artifact `quota_table` matches the roster; name uniqueness across all captains + officers; `named_pirates.json` v2 ≡ its canon copies with the `drop` → rare pin; generated-card formula conformance — normative spec §8.6 |
 | 12 | RPG data | officers v2 shape (96 = 24 + 72, 11 skill keys, wage & main-skill bands, specialty coverage ≥ 10 per skill at ≥ 20, captain-qualified ≥ 12, recruit-port rules); `skill_gates.json` rows incl. `sail.autopilot`; `officer_posts.json` exactly 7 with the locked prereqs; `backgrounds.json` exactly 6 with the key/range rules; ui_strings Phase-8 family presence — normative spec §8.7 |
-| 13 | Generated UI art & shore raster | `assets/ui/` inventory == manifest ids for every contract class (`IMPLEMENT-Phase10.md` A.1–A.7); per-sprite palette-block membership + color budgets; 8-direction transform relations; hull remap coverage (16 × 9 × 8) + tier footprint bands; seam checks; `world_shore.png` integrity (§6.6); `art_prompts.json` coverage; byte-identical `build_ui_art.py` / `build_shore.py` rebuilds — normative spec §8.8 |
+| 13 | Generated UI art & shore raster | `assets/ui/` inventory == manifest ids for every contract class (`IMPLEMENT-Phase10.md` A.1–A.7); per-sprite palette-block membership + color budgets; 8-direction transform relations; hull ingest audit (raw dedupe: 16 × 8 shared grid + provenance ledger, owner ids resolved by the runtime fallback — classic: 16 × 9 × 8 remap coverage); tier footprint bands (waived for the raw family); seam checks; `world_shore.png` integrity (§6.6); `art_prompts.json` coverage; byte-identical `build_ui_art.py` / `build_shore.py` rebuilds — normative spec §8.8 |
 
 ### 8.1 Group 6 — world map, normative spec
 
@@ -2772,8 +2772,12 @@ checks:
    `eq_{id}` × 24 from `data/equipment.json`; role badges 7
    `role_{trader|coaster|courier|patrol|privateer|pirate|hunter}`;
    formations 4; `trophy`; market trend/event 3, A.2); tokens (hulls
-   `hull_{ship_type_id}_{owner}_{dir}` — the full 16 × 9 × 8 = 1 152
-   grid — plus 6 facility tokens, A.3); world markers 6 (A.4); terrain
+   — raw-dedupe amendment 2026-11-06: ONE owner-less file per ship × dir
+   `hull_{ship_type_id}_{dir}` (16 × 8 = 128) + 6 facility tokens; the
+   runtime resolves `hull_{ship_type_id}_{owner}_{dir}` ids onto the
+   shared file (owner fallback, texture_registry), so the classic
+   16 × 9 × 8 = 1 152 owner grid exists only while the ledger is
+   classic, A.3); world markers 6 (A.4); terrain
    13 + `sea_pattern.png` (A.5); shore strips 8 (A.6); FX 11 + portrait
    part sheets 25 (A.7) — the set of files emitted under `assets/ui/`
    equals exactly the manifests' declared ids: none missing, none extra.
@@ -2817,6 +2821,12 @@ checks:
     exists for the full 16 × 9 × 8 = 1 152 grid, and the owner set equals
     `nations ∪ {player, neutral, pirate}` exactly. Hull docs declare
     **eight authored maps** (one per direction; no derive table).
+    **Raw-dedupe amendment (2026-11-06):** while the ingest ledger is the
+    pixellab raw family, the shipped grid is the owner-less
+    16 × 8 = 128 (`hull_{ship_type_id}_{dir}.png`; the registry's
+    `path_template` pins it) and the runtime falls owner ids onto the
+    shared file — the ×9 remap grid, and this item's per-owner coverage,
+    apply only when a future amendment reinstates owner pennants.
  7. **Footprint bands.** Per hull, the long-axis extent in px **on the
     side view (`e`/`w` — the profile shows the ship's length)** lies in
     its tier band — tier 1: 28–36, tier 2: 40–52, tier 3: 52–60

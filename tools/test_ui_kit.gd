@@ -423,11 +423,16 @@ func _test_token_raw_bytes_load() -> void:
 		return
 	_check(token_tex is ImageTexture,
 		"the token texture is a runtime ImageTexture (raw decode, not an imported CompressedTexture2D)")
+	# Raw dedupe (80-* §4.8 2026-11-06): the owner id falls back onto the
+	# SHARED owner-less file — its pixels are the expected bytes, and the
+	# shared id plus every other owner resolve to the SAME texture object
+	# (one VRAM copy per ship × dir).
+	var shared_id := "hull_galleon_e"
 	var expected := Image.new()
 	var bytes := FileAccess.get_file_as_bytes(
-		"res://assets/ui/tokens/%s.png" % id)
+		"res://assets/ui/tokens/%s.png" % shared_id)
 	var decoded := expected.load_png_from_buffer(bytes) == OK
-	_check(decoded, "the token file decodes via load_png_from_buffer")
+	_check(decoded, "the shared owner-less token file decodes via load_png_from_buffer")
 	if decoded and token_tex.get_image() != null:
 		var got := token_tex.get_image()
 		if got.get_format() != Image.FORMAT_RGBA8:
@@ -435,11 +440,15 @@ func _test_token_raw_bytes_load() -> void:
 		if expected.get_format() != Image.FORMAT_RGBA8:
 			expected.convert(Image.FORMAT_RGBA8)
 		_check(_images_equal(got, expected),
-			"the rendered token's pixels are the raw file's bytes (no import cache can leak in)")
+			"the rendered token's pixels are the shared file's bytes (no import cache can leak in)")
 		_check(not got.has_mipmaps(),
 			"the token texture carries no mipmaps (nearest consumers pin TEXTURE_FILTER_NEAREST themselves)")
 	_check(UiKitLib.icon_texture(id) == token_tex,
 		"the second resolve returns the SAME texture (the one id cache)")
+	_check(UiKitLib.icon_texture(shared_id) == token_tex,
+		"the shared owner-less id resolves to the SAME texture (raw-dedupe VRAM pin)")
+	_check(UiKitLib.icon_texture("hull_galleon_pirate_e") == token_tex,
+		"another owner id resolves onto the shared texture (owner fallback, one ImageTexture)")
 	_check(UiKitLib.icon_texture("kit_absent_icon") == null,
 		"an unknown id stays null under the loader (flat fallback, unchanged)")
 	_check(UiKitLib.icon_texture("") == null, "the empty id stays null")

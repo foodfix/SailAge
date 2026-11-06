@@ -2078,7 +2078,18 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      the ×7 pennant remap is suspended for this family (owner color
      identity via pennant is retired until a future amendment
      reinstates it; owner id on the map falls to the fleet-letter
-     badge + minimap pins). Masthead/auto-paint logic does not run
+     badge + minimap pins). **File grid (raw dedupe, same amendment):**
+     identical bytes × 9 owners was pure duplication — the family
+     ships ONE owner-less file per ship × dir
+     (`assets/ui/tokens/hull_{ship}_{dir}.png`, 16 × 8 = 128 files);
+     the runtime resolves an owner id
+     `hull_{ship}_{owner}_{dir}` whose per-owner file is absent onto
+     the shared file through the registry
+     (`scripts/ui/texture_registry.gd`), so all owner ids reference
+     one ImageTexture (one VRAM copy per ship × dir). A per-owner
+     file, when a future amendment returns owner pennants, simply
+     shadows the shared one (direct path wins). Masthead/auto-paint
+     logic does not run
      in this mode; gates = canvas fit. The option-B recolor (top-45%
      dominant red cluster → `PENNANT_SOURCE #b3191f`, Δ≤90) remains
      in git history as the reference implementation.
