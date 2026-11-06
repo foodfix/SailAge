@@ -74,10 +74,10 @@ const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 
 ## §4.8 2026-11-06 — the PixelLab coast family (the vendored wang tileset,
 ## `tools/build_terrain_pixellab.py` output). Registry id prefix of the 16
-## corner tiles; the WATER layer carries its owned indices ({0,1,2,3,8,9,10,11}) as
+## corner tiles; the WATER layer carries its owned indices ({0..7}) as
 ## columns WANG_COLUMN_BASE..+7, stamped on cells with land corners
 ## (upper = land, lower = water; combo bits NW/NE/SW/SE = 1/2/4/8, wang
-## index = SE·1 + SW·2 + NW·4 + NE·8). The painted water ALSO replaces the
+## index = NW·8 + NE·4 + SW·2 + SE·1). The painted water ALSO replaces the
 ## flat fills: [method _kind_image] prefers `terrain_coast_wang_0` (the
 ## pure-water tile) for both water kinds — sea vs coastal_sea is no longer
 ## two fills but the distance shader's deep/shallow factor (§4.8
@@ -87,19 +87,18 @@ const WANG_ID_PREFIX := "terrain_coast_wang_"
 const WANG_COLUMN_BASE := 2 + 16 * 2
 
 ## The wang indices the WATER layer owns: a water cell's own pixel is its
-## NW corner vertex, so its combo never carries the NW bit — the possible
-## indices are {0,1,2,3} (SW/SE corners) plus {8,9,10,11} (NE corners, the
-## east-coast-adjacent cells). Columns WANG_COLUMN_BASE..+7 hold exactly
-## these, in this order. (The terrain atlas owns the NW-upper complement
-## 4..7 + 12..15 — see `map_loader._ensure_tile_set`.)
-const WANG_WATER_INDICES: Array[int] = [0, 1, 2, 3, 8, 9, 10, 11]
+## NW corner vertex, so its combo never carries the NW bit — under the
+## corrected numbering the NW-lower indices are exactly {0..7} (wang_0..7).
+## Columns WANG_COLUMN_BASE..+7 hold them in this order. (The terrain atlas
+## owns the NW-upper complement 8..15 — see `map_loader._ensure_tile_set`.)
+const WANG_WATER_INDICES: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
 
 ## The terrain atlas's land-owned complement (`map_loader._ensure_tile_set`):
 ## a land cell's own pixel is its NW corner vertex, so its index always
-## carries bit 2 — the coast tiles {4,5,6,7} (west/south water corners) and
-## {12,13,14} (NE-set edges); index 15 (all-land) is the interior and stays
-## on the 8-dihedral variant pool (columns 0..7; coast tiles at 8..14).
-const WANG_LAND_INDICES: Array[int] = [4, 5, 6, 7, 12, 13, 14]
+## carries bit 3 — the coast tiles {8..14} (wang_8 = NW-only through
+## wang_14 = NW+NE+SW); index 15 (all-land) is the interior and stays on
+## the 8-dihedral variant pool (columns 0..7; coast tiles at 8..14).
+const WANG_LAND_INDICES: Array[int] = [8, 9, 10, 11, 12, 13, 14]
 
 ## §4.8 2026-11-06 pixel-depth pins (mirrored in sea_water.gdshader's
 ## uniform defaults — the two sites must not drift). The factor is 1.0 at
@@ -135,14 +134,16 @@ const STRIP_ID_PREFIX := "shore_"
 
 
 ## The wang index of a corner combo (§4.8 2026-11-06 placement rule): combo
-## bits NW/NE/SW/SE = 1/2/4/8 (upper = land), wang index bits are the same
-## four corners reordered as NW→bit2, NE→bit3, SW→bit1, SE→bit0 — the
-## PixelLab set's own numbering, pinned from the vendored tileset's
-## `corners` (wang_1 = SE-only, wang_2 = SW-only, wang_4 = NW-only,
-## wang_8 = NE-only). Pure helper, suite-pinned.
+## bits NW/NE/SW/SE = 1/2/4/8 (upper = land), wang index bits reordered as
+## NW→bit3, NE→bit2, SW→bit1, SE→bit0 — the PixelLab set's own numbering,
+## DERIVED FROM THE VENDORED TILESET'S `corners` (wang_8 = NW-only,
+## wang_4 = NE-only, wang_2 = SW-only, wang_1 = SE-only; the 2026-11-06
+## regression swapped NW/NE here — the placement looked mirrored on every
+## east-facing coast until the ledger ground-truth pin caught it).
+## Pure helper, suite-pinned against the ledger.
 static func wang_index(combo: int) -> int:
-	return ((combo & 1) * 4          # NW → index bit 2
-		+ ((combo & 2) * 4)          # NE → index bit 3
+	return ((combo & 1) * 8          # NW → index bit 3
+		+ ((combo & 2) * 2)          # NE → index bit 2
 		+ ((combo & 4) >> 1)         # SW → index bit 1
 		+ ((combo & 8) >> 3))        # SE → index bit 0
 

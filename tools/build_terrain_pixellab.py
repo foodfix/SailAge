@@ -18,8 +18,8 @@ byte-identical (§8.8 double-run detector). The API is never contacted.
 Tile semantics (Wang corner autotiling, PixelLab ``pattern_4x4``/``corners``):
 corner ``upper`` = land, ``lower`` = water. The runtime splits the set by
 owning layer: a cell's own pixel is its NW corner vertex, so water cells
-(NW lower) own indices {0,1,2,3,8,9,10,11} and land cells (NW upper) own
-{4,5,6,7,12,13,14} + 15 as the interior — the runtime maps corner combos
+(NW lower) own indices {0..7} and land cells (NW upper) own
+{8..15} — 15 is the interior (wang_15 dihedrals) — the runtime maps corner combos
 through `WaterLayerLib.wang_index` onto exactly these halves.
 """
 
@@ -226,8 +226,8 @@ def main() -> int:
                  "deliberate pixels ship as drawn (palette/budget waived "
                  "in group 13 via this ledger, the raw-pixellab hull "
                  "precedent). Corner semantics: upper = land, lower = "
-                 "water; water cells own indices {0,1,2,3,8,9,10,11}, "
-                 "land cells {4,5,6,7,12,13,14} + 15 interior."),
+                 "water; water cells own indices {0..7}, "
+                 "land cells own {8..15} (15 = interior)."),
         "tiles": ledger_tiles,
     }
     LEDGER_PATH.write_text(json.dumps(ledger, indent=2, sort_keys=True)

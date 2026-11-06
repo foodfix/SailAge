@@ -2173,11 +2173,11 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      VERTICES — vertex (vx, vy) is `upper` (land) iff the world tile at
      (vx, vy) is `#` (cells span pixels (x..x+1, y..y+1)); a cell with any
      land corner stamps the wang tile of its corner combo (combo bits
-     NW/NE/SW/SE = 1/2/4/8, wang index = NW·4 + NE·8 + SW·2 + SE·1). Layer
+     NW/NE/SW/SE = 1/2/4/8, wang index = NW·8 + NE·4 + SW·2 + SE·1). Layer
      ownership follows the cell's OWN pixel (it is the cell's NW corner
-     vertex): water cells own indices {0,1,2,3,8,9,10,11} (stamped on the
+     vertex): water cells own indices {0..7} (stamped on the
      water layer at columns WANG_COLUMN_BASE..+7 in that order), land cells
-     own {4,5,6,7,12,13,14} (the terrain atlas's land row columns 8..14). Interior cells
+     own {8..14} (the terrain atlas's land row columns 8..14) and 15 as the interior. Interior cells
      (combo 0 water / 15 land) keep their plain fills — water = wang_0 (the
      SAME painted tile for both water kinds: sea vs coastal_sea is no
      longer two fills but the depth factor below), land = wang_15 through

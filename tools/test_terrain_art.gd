@@ -1219,12 +1219,32 @@ func _test_populated_registry() -> void:
 # --- §4.8 2026-11-06 wang placement (the PixelLab coast family) -------------
 
 func _test_wang_placement() -> void:
-	# The combo → wang-index shuffle, pinned from the vendored tileset's
-	# own `corners` (wang_1 = SE-only, wang_2 = SW-only, wang_4 = NW-only,
-	# wang_8 = NE-only — the doc's NW·4 + NE·8 + SW·2 + SE·1).
+	# The combo → wang-index shuffle — pinned against the VENDORED LEDGER
+	# (ground truth), not against this code: each tile's `corners` field
+	# yields its combo; `wang_index` must return the tile's own index.
+	var ledger_path := "res://tools/assets/pixellab_raw/pixellab_coast_ledger.json"
+	var ledger := JSON.parse_string(
+		FileAccess.get_file_as_string(ledger_path)) as Dictionary
+	_check(not ledger.is_empty(), "the pixellab coast ledger parses")
+	if not ledger.is_empty():
+		var tiles: Dictionary = ledger.get("tiles", {})
+		_check(tiles.size() == 16,
+			"the ledger carries all 16 wang tiles (%d)" % tiles.size())
+		for sid in tiles:
+			var rec: Dictionary = tiles[sid]
+			var combo := (1 if str(rec.get("nw")) == "upper" else 0) \
+				+ (2 if str(rec.get("ne")) == "upper" else 0) \
+				+ (4 if str(rec.get("sw")) == "upper" else 0) \
+				+ (8 if str(rec.get("se")) == "upper" else 0)
+			var want_index := int(sid.get_slice("_", 3))
+			var msg := ("ledger ground truth: combo %d → wang_%d (tile %s, corners %s/%s/%s/%s)"
+				% [combo, want_index, sid, rec.get("nw"), rec.get("ne"),
+				rec.get("sw"), rec.get("se")])
+			_check(WaterLayerLib.wang_index(combo) == want_index, msg)
+	# Spot pins (readable forms of the table above).
 	_check(WaterLayerLib.wang_index(0) == 0, "combo 0 (all water) is wang_0")
-	_check(WaterLayerLib.wang_index(1) == 4, "NW-only combo is wang_4")
-	_check(WaterLayerLib.wang_index(2) == 8, "NE-only combo is wang_8")
+	_check(WaterLayerLib.wang_index(1) == 8, "NW-only combo is wang_8")
+	_check(WaterLayerLib.wang_index(2) == 4, "NE-only combo is wang_4")
 	_check(WaterLayerLib.wang_index(4) == 2, "SW-only combo is wang_2")
 	_check(WaterLayerLib.wang_index(8) == 1, "SE-only combo is wang_1")
 	_check(WaterLayerLib.wang_index(15) == 15, "all-land combo is wang_15")
@@ -1232,10 +1252,10 @@ func _test_wang_placement() -> void:
 		"SW+SE combo is wang_3 (the north-coast water tile)")
 	_check(WaterLayerLib.wang_index(3) == 12,
 		"NW+NE combo is wang_12 (the south-coast land tile)")
-	_check(WaterLayerLib.wang_index(5) == 6,
-		"NW+SW combo is wang_6 (the east-coast land tile)")
-	_check(WaterLayerLib.wang_index(10) == 9,
-		"NE+SE combo is wang_9 (the east-coast water tile)")
+	_check(WaterLayerLib.wang_index(5) == 10,
+		"NW+SW combo is wang_10 (the east-coast land tile)")
+	_check(WaterLayerLib.wang_index(10) == 5,
+		"NE+SE combo is wang_5 (the east-coast water tile)")
 	# Water-cell gating: combo 0 is the plain fill; land-owned indices are
 	# never stampable on the water layer.
 	_check(WaterLayerLib.wang_coords(0).x == -1,
@@ -1243,7 +1263,7 @@ func _test_wang_placement() -> void:
 	_check(WaterLayerLib.wang_coords(15).x == -1,
 		"the interior index is not stampable on the water layer")
 	_check(WaterLayerLib.wang_coords(1).x == -1,
-		"combo NW-only (index 4) is terrain-owned — sentinel on water")
+		"combo NW-only (index 8) is terrain-owned — sentinel on water")
 	_check(WaterLayerLib.wang_coords(8) == Vector2i(
 			WaterLayerLib.WANG_COLUMN_BASE + 1, 0),
 		"combo SE-only stamps the wang source at column base+1")
