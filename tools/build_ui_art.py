@@ -992,32 +992,33 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
                 continue
             if not raw:
                 px = _quantize_token(w, h, px)
-            bb, n = _masthead_count(px, w, h)
-            pennant = "model"
-            if n < MASTHEAD_MIN_PX:
-                # Pennant auto-paint (master adjudication 2026-11-05): the
-                # model intermittently omits the masthead pennant — composite
-                # the deterministic flag at the detected mast anchor instead
-                # of re-roll roulette.  Painted BEFORE the (idempotent)
-                # quantize so the flag lands exact-source; the masthead gate
-                # re-checks and must pass.
-                anchor = _mast_anchor(px, w, h)
-                if anchor is None:
-                    rejected.append({"job": job, "reason": "masthead",
-                                     "detail": f"{n} pennant-source px < "
-                                               f"{MASTHEAD_MIN_PX} and no "
-                                               "mast anchor for auto-paint"})
-                    continue
-                px = _paint_pennant(px, w, h, anchor[0], anchor[1], d)
-                px = _quantize_token(w, h, px)
+            pennant = "raw" if raw else "model"
+            if not raw:
                 bb, n = _masthead_count(px, w, h)
                 if n < MASTHEAD_MIN_PX:
-                    rejected.append({"job": job, "reason": "masthead",
-                                     "detail": f"auto-paint landed but {n} "
-                                               f"pennant-source px < "
-                                               f"{MASTHEAD_MIN_PX}"})
-                    continue
-                pennant = "auto-painted"
+                    # Pennant auto-paint (master adjudication 2026-11-05):
+                    # the model intermittently omits the masthead pennant —
+                    # composite the deterministic flag at the detected mast
+                    # anchor instead of re-roll roulette. Painted BEFORE the
+                    # (idempotent) quantize so the flag lands exact-source;
+                    # the masthead gate re-checks and must pass.
+                    anchor = _mast_anchor(px, w, h)
+                    if anchor is None:
+                        rejected.append({"job": job, "reason": "masthead",
+                                         "detail": f"{n} pennant-source px < "
+                                                   f"{MASTHEAD_MIN_PX} and no "
+                                                   "mast anchor for auto-paint"})
+                        continue
+                    px = _paint_pennant(px, w, h, anchor[0], anchor[1], d)
+                    px = _quantize_token(w, h, px)
+                    bb, n = _masthead_count(px, w, h)
+                    if n < MASTHEAD_MIN_PX:
+                        rejected.append({"job": job, "reason": "masthead",
+                                         "detail": f"auto-paint landed but {n} "
+                                                   f"pennant-source px < "
+                                                   f"{MASTHEAD_MIN_PX}"})
+                        continue
+                    pennant = "auto-painted"
             if not raw and d == "w":  # banded side profile; mirrors inherit
                 lo, hi = FOOTPRINT_BANDS[tiers[ship]]
                 # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05):
@@ -1072,26 +1073,31 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
                 accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx,
                                                            "mirror_x")
 
-    # Write the accepted tokens: the pennant ×9 remap, exactly as on the
-    # fallback tokens (the ONLY owner-variant pixel; spain is the legal
-    # identity remap).
+    # Write the accepted tokens. Classic mode: the pennant ×9 remap (the
+    # ONLY owner-variant pixel; spain is the legal identity remap). RAW
+    # mode (80-* §4.8 2026-11-06, user direction): the model's pixels ship
+    # UNTOUCHED — the SAME token bytes for every owner (the pennant remap
+    # is suspended for this family; owner variants return only if a
+    # future amendment reinstates it).
     written = 0
     for job in sorted(accepted):
         ship, d = _parse_token_id(job)
         w, h, px = accepted[job]
         for owner in OWNER_ORDER:
-            table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
-            watch = frozenset(s for s, t in table.items()
-                              if "#%02x%02x%02x" % t[:3] != s)
-            out, leftovers = apply_remap(w, h, px, table, watch)
-            if leftovers:
-                fail(f"ingest {job}/{owner}: the pennant source survived "
-                     f"the remap: {sorted(leftovers)}")
-            colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
-            if PENNANTS[owner] not in colors:
-                fail(f"ingest {job}/{owner}: the owner pennant hex "
-                     f"{PENNANTS[owner]} is missing after the remap")
-            if not raw:  # raw mode: palette lock waived (80-* §4.8 2026-11-06)
+            if raw:
+                out, leftovers = px, []
+            else:
+                table = {PENNANT_SOURCE: HEXES[PENNANTS[owner]]}
+                watch = frozenset(s for s, t in table.items()
+                                  if "#%02x%02x%02x" % t[:3] != s)
+                out, leftovers = apply_remap(w, h, px, table, watch)
+                if leftovers:
+                    fail(f"ingest {job}/{owner}: the pennant source survived "
+                         f"the remap: {sorted(leftovers)}")
+                colors = {("#%02x%02x%02x" % p[:3]) for p in out if p[3]}
+                if PENNANTS[owner] not in colors:
+                    fail(f"ingest {job}/{owner}: the owner pennant hex "
+                         f"{PENNANTS[owner]} is missing after the remap")
                 off = sorted(c for c in colors if c not in HULL_BLOCK)
                 if off:
                     fail(f"ingest {job}/{owner}: hexes outside the hull "

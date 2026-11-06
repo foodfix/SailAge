@@ -9698,13 +9698,12 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         seed = rec.get("seed")
         if seed is not None and not is_int(seed):
             fail("art-ingest", tid, f"seed {seed!r} is neither an int nor null", 13)
-        # pennant provenance (master adjudication 2026-11-05): "model" kept
-        # the model's own pennant (>=3 source px at the gate); "auto-painted"
-        # carries the deterministic flag composite.  BOTH pass the same
-        # committed-artifact re-proof below (the spain variant's >=3 exact
-        # source px in the top 45% of the bbox), and derivation flips carry
-        # painted flags (paint precedes derivation — flip equality holds).
-        if rec.get("pennant") not in ("model", "auto-painted"):
+        # pennant provenance: "model" kept the model's own pennant at the
+        # classic gate; "auto-painted" carries the deterministic flag
+        # composite; "raw" (pixellab ship-as-drawn, 80-* §4.8 2026-11-06)
+        # ships the model's pixels untouched — same token for every owner,
+        # the pennant remap is suspended for this family.
+        if rec.get("pennant") not in ("model", "auto-painted", "raw"):
             fail("art-ingest", tid,
                  f"pennant {rec.get('pennant')!r} is neither 'model' nor "
                  "'auto-painted'", 13)
@@ -9756,16 +9755,20 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
         flip_pairs += 1
 
     # spain variants keep the pennant SOURCE hex (identity remap) — the
-    # masthead gate re-proven on the committed artifacts, base dirs only
-    for tid in sorted(tokens):
-        ship, d = tid[len("hull_"):].rsplit("_", 1)
-        f = tokens_dir / f"hull_{ship}_spain_{d}.png"
-        n = _g13_masthead_count(_g13_ingest_sprite(f, str(f)))
-        if n < G13_MASTHEAD_MIN_PX:
-            fail("art-ingest", str(f.relative_to(ART_ROOT)),
-                 f"{n} pennant-source px in the masthead region < "
-                 f"{G13_MASTHEAD_MIN_PX} — the ingested token's pennant is "
-                 "not a masthead (§4.8 ingestion contract)", 13)
+    # masthead gate re-proven on the committed artifacts, base dirs only.
+    # WAIVED in pixellab raw mode (80-* §4.8 2026-11-06): the model's own
+    # flag ships untouched (no source-hex recolor), same token for all
+    # owners.
+    if not _g13_raw_pixellab_ingest():
+        for tid in sorted(tokens):
+            ship, d = tid[len("hull_"):].rsplit("_", 1)
+            f = tokens_dir / f"hull_{ship}_spain_{d}.png"
+            n = _g13_masthead_count(_g13_ingest_sprite(f, str(f)))
+            if n < G13_MASTHEAD_MIN_PX:
+                fail("art-ingest", str(f.relative_to(ART_ROOT)),
+                     f"{n} pennant-source px in the masthead region < "
+                     f"{G13_MASTHEAD_MIN_PX} — the ingested token's pennant is "
+                     "not a masthead (§4.8 ingestion contract)", 13)
 
     # snapped-source sha provenance where the gitignored cache exists
     # (classic: model_raw/snapped/hull_{ship}_{dir}.png; pixellab raw:
@@ -10239,7 +10242,11 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 _g13_check_terrain_rings(class_name, decls, sprites)
             elif class_name == "hulls":
                 _g13_check_footprints(sprites, ship_types)
-                _g13_check_pennants(sprites, hull_uw2_ships)
+                if not _g13_raw_pixellab_ingest():
+                    # raw pixellab hulls: the model's own flag ships for
+                    # every owner (no remap) — the per-owner pennant hex
+                    # coverage is suspended (80-* §4.8 2026-11-06)
+                    _g13_check_pennants(sprites, hull_uw2_ships)
             elif class_name == "shore":
                 _g13_check_shore_strips(sprites)
 

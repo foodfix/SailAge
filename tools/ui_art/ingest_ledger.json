@@ -13,7 +13,7 @@
       "rejected": 0,
       "skipped": 16
     },
-    "pennant_auto_painted": 7,
+    "pennant_auto_painted": 0,
     "rejected": 0,
     "revoked_stale": 0,
     "shipped_files": 1152,
@@ -967,1538 +967,1538 @@
     "hull_brigantine_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "94e9a1ead3570d95871d52df69c40731b404762faf79437ae440db6ae4ced1bc"
+      "snapped_sha": "fd4338d95a655a66303e10326a75a737c194f89a70477721d77b6040eabaff4f"
     },
     "hull_brigantine_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "9e828be797d1e548e62912163c4d35a1d7065f2f0136abff4c40783cec450ebc"
+      "snapped_sha": "e17c1380759cd1d6877cc5a83b49f04b5b0860e65eb59299adca9a0857980087"
     },
     "hull_brigantine_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7480a730fe70152380923ca39b6bf5407ff4311723a236b5aa276e81ca69223a"
+      "snapped_sha": "0a9e536f0421b0504c042637742911b95a705ed940dcb6ad9c6946ac8cafcad6"
     },
     "hull_brigantine_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7a7890dba3b678b2e6cad12ba6a0f84941adbb4df03482149a9427065c803648"
+      "snapped_sha": "d420003ced7aeb778e85b8f5c564ce01da761c46509cd5e222188e299e719310"
     },
     "hull_brigantine_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "87fea7cd08c70fe0d25a2b580f6435d6b22636e8ae1dbdd05b8060f67810a668"
+      "snapped_sha": "10b4a2ba77edd57885265c135670b113a8c56bb2b83ea1c7c691802ced0aca18"
     },
     "hull_brigantine_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c416761063c47f8cc365310fbb089aed2230d11b7940f342d1fdbe9899670f66"
+      "snapped_sha": "e5ea0f8a9c71c98bc618245a0c14edba5f5580288f868e8447a031af857a44f5"
     },
     "hull_brigantine_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c74b400018785099dad56df8636657467989909b5b6ddce251a22049605ede93"
+      "snapped_sha": "3c1adaeeae840dc0b653bf601aed6890f5c2ed9c8a34ed9f28a8cda7154d8091"
     },
     "hull_brigantine_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_brigantine_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "c30667b198bab1bd",
         "object_id": "d0ccd32d-aa3d-409a-916c-8c94e1e137a5",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "18f3075197d164d265be003a72137f1dab39679c7fa6335db6d6af0179c64ce1"
+      "snapped_sha": "96108db59f3d3734ff7592b7a770f902eac4a8088d4dfae887156cbd36a42f05"
     },
     "hull_caravel_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "4169cd6f4e492eeb5f67e8d0ecc63e5908e8818452fb4eff8b5bcc3d03b0dc80"
+      "snapped_sha": "efc6d57181525e537e5f364126b1cf2408da95952aed1733e20225a3c0b72895"
     },
     "hull_caravel_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "f518ca67461e74eab4b54a6966ad5552cfba7417b272642a5bcdf0b46100e92e"
+      "snapped_sha": "fbbed5ab09dc2418ce03258967d7d9f8ec811bb0876c6ba8cc074cd822fe286a"
     },
     "hull_caravel_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1680ea66549b55d114f7f03bf3090624f8da570eca790e5677b841e53402b701"
+      "snapped_sha": "e9d2b408cab432307623962e8eabf3c38d33ced9b9579d3920826ac8f1c10a44"
     },
     "hull_caravel_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "678d4b0f8236167a0a0aee3a345cf2b34497ed6c73e79bf30471c7129aa1e512"
+      "snapped_sha": "e72b0a9e25fc6cb296dac03351a1040433963063acf65551e749d0d6a6a4d9e8"
     },
     "hull_caravel_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "00dc1ce11b56637c4a82f58f8016c423163a87e6e45d8688dbae4d09595d218c"
+      "snapped_sha": "0b76365f94461abacc28a1e5ee8631579749e54b4c80a7e6883e8b940197a3de"
     },
     "hull_caravel_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "045da62cc6b343eba709596256fd28e120bd7cbdf82be9ea51d7b95f6fe3a8bd"
+      "snapped_sha": "ef386d127cf7ab3d4f5e00a92c4db714f68b01395b5618a915073a4bf13b2d85"
     },
     "hull_caravel_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "04f08da9bed7273cfd1d05209a666ba47f94fe9f41c2a81002ce9fc35f4a55fc"
+      "snapped_sha": "e659020bf3b515b298de23ef526e65efd54bc145c2b9634ff63f83f5de5087c7"
     },
     "hull_caravel_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravel_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "945e808337dffcce",
         "object_id": "ecc81d02-795b-466b-b7f1-8b06f413ba53",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "bee80e296ec448fad7096c41f57fc9652feddc37a1ae32b41b7131d77fa51790"
+      "snapped_sha": "0d1e1dc2bb1e0add1dea54585970a2fd9794cce7b29747b9378caf3a63501f5e"
     },
     "hull_caravela_redonda_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "768d8a50eeb627f1590d7f552efa29007b657210f22da2f2aaed0f8ef575f499"
+      "snapped_sha": "b83279215a771560331fc007d95a297c7861d73701119faf2a07161a0a6fe5d6"
     },
     "hull_caravela_redonda_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "0b0898028a9d32e3789040d9f1581649ff579d840f46f824b1fc5c7d88574984"
+      "snapped_sha": "6d6ad02e6365edbc86ed5c2f4de1e579048ea7a4ab2dda6eb2119c68f01f7cc6"
     },
     "hull_caravela_redonda_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b59c4304032872e35fb1022badd1d7f2c1364e35c1319a64544adae95c57fef6"
+      "snapped_sha": "10fb11ba1da65751d63019aac7b4857ba132a7ab95ebdabc949380b5f3088cce"
     },
     "hull_caravela_redonda_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "353a4cb4cde1302d3ec10a98b181807a42f0097e47f4e35447488009c84b14ba"
+      "snapped_sha": "8076ecce2bd29e6e23d435a1a39dd9d0f72a27c17c60d9438a4b6160637426a2"
     },
     "hull_caravela_redonda_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "a442e79f452bde903a9952f729faeff76ac5a91addc2bcca23ded4f9c31f8c60"
+      "snapped_sha": "6394786ff31af72893a7106628742b2921755ef3ed8e421ba430ae85098cce92"
     },
     "hull_caravela_redonda_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "ba8537a57a929e91c631fa3f212b9f81b20e0bafec458ef983c17425fe29b366"
+      "snapped_sha": "dff3c40ee327fc46bf21831ab7e98499e8848b42eb366be79d3cda6d302b745c"
     },
     "hull_caravela_redonda_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "ff5c8c90620c5d4e142bd405e702534d93b5ca9f8d4eae87f4d91b38b78e6246"
+      "snapped_sha": "ba55393d287b7b9bf422690dbb06d8905111350c9a9fcdce601a5ab78b527c36"
     },
     "hull_caravela_redonda_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_caravela_redonda_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "cfc8ea4243b45426",
         "object_id": "cf18855e-346e-4799-a1c3-58ab8d5edb8b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c6721fc03867a54ffcce2a81d4a18a6bc1da930f9688cd20fd850f5704b5a7d6"
+      "snapped_sha": "a57ba6dd3bb6fd67a7f0c8e81f22331e69af29a0ad188149c52e1902ba67d114"
     },
     "hull_carrack_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "a3e01bec390460d615ef519f3f21d1304cf97208cc9377f8473296fda7b06ab8"
+      "snapped_sha": "0b74ebfad8800ee4cf34c69a9dd5ac2a2868493c7e7b305f36b2b1eff9d20679"
     },
     "hull_carrack_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b3ddfcccdd0e8db065e8f0971b8973cdd2c3fd65cd822507ae3c1b87882ab770"
+      "snapped_sha": "dd0698402e38132f4fc4202024f86298d878ee39b3dddb36cc93b101f4608a4f"
     },
     "hull_carrack_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "15bd580bbf37a881e63523b2fa87b966c0372932eb5f18093cdd49739ce0f27d"
+      "snapped_sha": "cd2ff43b6e73a77edfd23debf4b432005c52f68d6bfacda21253d6055c884258"
     },
     "hull_carrack_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "97adeb6b93ce0d09e6744134539cfe34458e3e3fefe0413ad0c329f2d7c8e0fa"
+      "snapped_sha": "d98f0b36742b548b31b7aab35836a5e3606fa02ce85303482ab8181d815d873b"
     },
     "hull_carrack_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "6161c400a1401c201b2469fb4dedd35304e951c85650f71b9e6a17aff5a85b09"
+      "snapped_sha": "8d1e979154bf21a2712790f73598f09295d4fac30e03b1277fa5e6b97dc8e9dd"
     },
     "hull_carrack_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "562f804f742664ced02abe306682c2246e056d308b4fb2e8b6d3140942371e65"
+      "snapped_sha": "af4a1e76f58f241f7667d09e457077b335dab728846a79515d2e55eb743de2ba"
     },
     "hull_carrack_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "84c7c41df339252aee16d12d101e646f8dbfcd6c187224469677c2ab1dcc9f2b"
+      "snapped_sha": "ef3beac9b1c05c5653a89c524c1db57c8a6a4c7fa7d5fb1243a0d969819b8176"
     },
     "hull_carrack_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_carrack_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "45a88ca84792bea8",
         "object_id": "a9280c76-350b-4e00-aaa2-519e6566b93a",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "587cd672e3f0df35fcb481dfbfe70bad273a355a65ba2aad6001707499bf123a"
+      "snapped_sha": "21539dfaad07047bb628dfaa431fe2744e01142874e0a2d15ad744f93907fc5d"
     },
     "hull_dhow_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_e",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "5eceeab2264c4ebd8b5c6a0a563d740d9043a44d95758b4b555f05b95aac52b6"
+      "snapped_sha": "53a4e5451bc58284f49bb663c86432492a9d495b216e86a56bcd4b5fea84bf8b"
     },
     "hull_dhow_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "d2838ab58beb26275f029b05deb9c7c5df4b094d7bae2bb52ed44be3e6947645"
+      "snapped_sha": "ab62c29d5e174bf173a1a35d323bd8586bf947846e52a62df7c72245e2b0387e"
     },
     "hull_dhow_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "cfcdba5996311baa2129b9f709377acbe658c8693a7fe78068c4b5137bc3943f"
+      "snapped_sha": "0a745cd19edb483ff93a985084daaf278c3bc9fb27bd9b0aeb8023bc761f320b"
     },
     "hull_dhow_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "6f2985b73674363c679b2de6bbf8c8034afe0f723e3b1affbaf538bf8b4fe27c"
+      "snapped_sha": "7880ede3ebd4a3559209d8223f475b00f28ca8560d69147cf65b5760681658f9"
     },
     "hull_dhow_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "56f035e4e97a4bf66ab71c77eae48c64c05df85c341bb0d2f4f3254d985e8650"
+      "snapped_sha": "4aef603fdab998ab9d21f354dd41921a8aa86a73953888c3277c502a18e928df"
     },
     "hull_dhow_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "bec85151fdf624210b8bbcfd40255646549b4dda36db238b3e367ec56f3b9a26"
+      "snapped_sha": "536a2c0b4f5d014ae6284a3c3d2b2f4edcb82b656dca60b0d4cf44e318a6fe6a"
     },
     "hull_dhow_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "3203b96eca9c0a195bec09ce9e40d8b3cf2a6dea7c9c00ea53b19567b0c3c177"
+      "snapped_sha": "20cd365f30216890e655afa8ac175b04fff159e15cbdb3994681b9395f1a3df4"
     },
     "hull_dhow_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_dhow_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "968c7f37a32df284",
         "object_id": "fcbdff33-6f1d-44d2-9ce1-e4c6e9076cee",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b77d5569f6dd8464a4c1dcb0b097de30e5615139333ce14dbdcc79b144bf03ed"
+      "snapped_sha": "ec15d4171d140607d9ecb2e46202af7e214cd4eb2a89ee944f653a00aa93952f"
     },
     "hull_fluyt_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "cbe19712f85ff94cb9b3d0b3dafac8da9c77d702b3d35110f2f7c9e78c405a86"
+      "snapped_sha": "bb238a69f42bbb31b35e8c5be328f2f91d71193b4859970052b2662863434d2d"
     },
     "hull_fluyt_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e1a882f856cd7c43305f3b3bd0ae10dd80878210e7d2d1f950843096f2ed6b10"
+      "snapped_sha": "8c0cbc73276a430297f25becc01e4d4746ad7ad8afcecff9e4e15ca84289fd40"
     },
     "hull_fluyt_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "384a363abadd5cd52a66fbd4e5534be907c44786272edf6ab828b9a529eb8973"
+      "snapped_sha": "75ee655e8a865b68d605254e23671e30942a095e14272b999dc592eb1736c1ea"
     },
     "hull_fluyt_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "671054875602d33caf1c95366de091149ae46dd0f204dbb998eb57adec72e447"
+      "snapped_sha": "e7348821ff02d2d9301d8b971ec124d5fa89e08c577da91a2cbacee0d90d637d"
     },
     "hull_fluyt_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b72a45337cfefb7fb629b29e7e1b92c0b36f157f0862d7ffeb237a825479d853"
+      "snapped_sha": "cc1857226c768200591886deaa307c7298b01837371a40fc744f3419fd19e6ea"
     },
     "hull_fluyt_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7efbca94dc4485d15862207c4c1d54639d015e982a9cd02d8de9b5ec34db8f4f"
+      "snapped_sha": "5086ddaaa46bd483550e03590c1e82c5e323bccd2a0f4cad89e4993625b130aa"
     },
     "hull_fluyt_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c1163dfa581bd1d212c9ca1227b5a3ff4c5ed9c7269cd96b0385f927522bcb84"
+      "snapped_sha": "e09aa826582adb151fcbe8cdc6bb9c6b2fa9cd664b27c951207e5b9cc4cff404"
     },
     "hull_fluyt_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_fluyt_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "e1b00e478fb13af0",
         "object_id": "b5f0abd7-1430-4f1f-8134-07d4af9415de",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "770c28e41ab531a9dd356fc7a43e72fb692a64889891071e409c166d0558358f"
+      "snapped_sha": "dac78a6b2d1521f041b89eed0dcd593837127aef54bb60e4bd38adc6bffd335e"
     },
     "hull_galiot_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "fc4d510db62a3e45745200da841cbc4b3c8cdbc7ee06a8e97f9c35dd0272fe86"
+      "snapped_sha": "45aa83d9b8e7d7dd1adcb776b54e68be2215caffd29f9a702edf3bc0effa9f55"
     },
     "hull_galiot_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "65945f2fc7f7f153f053ad74a9750084fb86162d999858d9d92b172bc4906ed4"
+      "snapped_sha": "0a57f5437b780cb69fbf30c0bd166c6824b23230199e9b78f6ba38bcaf33c04d"
     },
     "hull_galiot_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "46cd888dcad496dfc6e632b8328fbefef7f644a92a10cc3e9fb93c65145603b1"
+      "snapped_sha": "7b51c2a68bd39fe9bcc405a47f1ee8ea35c02b307c348e73f6c4eb83cfd749c9"
     },
     "hull_galiot_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "462524f70b2bef58fed49c5de4d3af5228e22613528791cea448148fb00e0619"
+      "snapped_sha": "5d8577db6fb86e7fff463ad0e0e8496bce0a3c3cc95d4c329d8da21b42480abb"
     },
     "hull_galiot_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "872742f474478dffe5de4362b9fbc0b5dff180608c92051104b4359195d07fee"
+      "snapped_sha": "e3b502bf95d84e0fa33b2810e3fe904a44da6d99f9b92f6090475a02fa4a6095"
     },
     "hull_galiot_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b9323228d67371d7111b92152898461c2f1012b4317b048ad4321d679e34cb1f"
+      "snapped_sha": "a603fc249fb7078323db59543d02c668ef307f6978fbd631b221d25b1c51d341"
     },
     "hull_galiot_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1f9855b6424067b1dd84b512b708e6e3b7bbf2c5eb14fb55777daf06f0fa5bb5"
+      "snapped_sha": "f9ab4c1af99491534c6a7112d522cecd73f3664b0563a0b8e3a7cf642ef69ec0"
     },
     "hull_galiot_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_galiot_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "8facfcfb6575071c",
         "object_id": "69985071-5c44-46dc-8e64-4655eec67314",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "5dc8c5c479868efae41bea78d20ca0330a06f1d218e45286b9d0fc424d8ae78c"
+      "snapped_sha": "b74d2ff0516b46c7c168bb56b499a2e1e97eb2b2f2befba3a1ad0884259d5b87"
     },
     "hull_galleass_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "fc945bf9862648c4a31c72bf03386a2ee00fa3069e546e07964a911ef970642f"
+      "snapped_sha": "f25cd1cf4fd9fc6cd4ccc5a58e4c8f9e95017ee1e858dc003f4bf7f92d4a16ba"
     },
     "hull_galleass_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "82420bdcfddcdd0b4d6c3e9b9938c1e04b4854dfe9402685b8e2ad43513aabbd"
+      "snapped_sha": "93a314858b73980f4e9b7150974bd8ea4c860dac8d0642c63881f6ca8a0bf5ad"
     },
     "hull_galleass_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "0495b55e9d3f838218912fa55417b6a1d68d61dc329f9c6b07bfc1be78b1984f"
+      "snapped_sha": "143c2f8c37b3716ed2aad825139de1aa2cd0b1d35e7bda8e0c7bf2606931a94f"
     },
     "hull_galleass_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "99eb48d2a3303ef60ff8adb9f6525ffac202a0f08e24418b410ccac9c6b2a18a"
+      "snapped_sha": "30682dddb83dbad1da88c42b9e9023b9dc1222bbf6b23e9260da78d92fabe4aa"
     },
     "hull_galleass_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "10ece0d9d603450fb32c5884c20d341ce14ad2d9f7912ee07e28b92429cec1e5"
+      "snapped_sha": "d8f3ca6a2fe837732aaf58632c4fa51c18b01b0c91a3d2f07344ff3d96319727"
     },
     "hull_galleass_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "141b007d7a2f97a428a895f66ed83a2bdda41f1f596baa3372b53aa42af8e24e"
+      "snapped_sha": "d477b1ae6c95abfea6fe3d0148defae43cd1392691a76ab6ca70c5995499f284"
     },
     "hull_galleass_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "bb438983f1fee3ba14c3455a57429a169edeebdb69bf51e9d88bc592d4c08896"
+      "snapped_sha": "7555e9c30f84cc5ba3d9c5005f5157b1a12b44496395cffbef330908dbfd2a55"
     },
     "hull_galleass_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleass_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "9102240deaed9cd5",
         "object_id": "50aebb60-d13d-4761-a96e-9932a9253795",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "21a92fcf1af3cc96024fa1588b2b05c209220855aae5bef8008d891f6b95049b"
+      "snapped_sha": "ee8d18a83fc3795c1f0d9302dd06d77fe86736cbcabbdec79300db0996ca1d03"
     },
     "hull_galleon_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "0283bbbc43e455fd5f853fe1119d5e7d214502f3e73949d8f9305c9d5b563a80"
+      "snapped_sha": "8605b11b8132c2adbf78e53b11f6d27ef33ce383ff5a53110157a37382086379"
     },
     "hull_galleon_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1433b0c2f00a1e7437ab9ac71491fa10994c8ed18bc3385f44f18adf50ce4632"
+      "snapped_sha": "a923e6672788572f24f33a370c015e6b90efcc42b1ebd9aef2b91d07957ed899"
     },
     "hull_galleon_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "32d274d3974cb89b713369c0c66202fc1722e9068d91b2cdb5ce2b50a0e4ad60"
+      "snapped_sha": "b8847d877c1606100cf9de6121fafefc7d5a55ba1609fb07d88d9201eaca7e71"
     },
     "hull_galleon_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "b74627ab4d06719f906bacec4eb97a32aa9ce6cbb49bc9323420dae17e7ced11"
+      "snapped_sha": "8a60e315b6713a89d1d986fa3b9b563703fbf31a4c3dd58239523bbc2c492100"
     },
     "hull_galleon_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7182ac5e724c18bf27209c3bd8282d0e4bd558d18df80e7e7db7ce369b60a84c"
+      "snapped_sha": "83b443fc74719c7b5c7771b62ebcf39de1f782c97ae744db6040ba334aeee749"
     },
     "hull_galleon_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e91c09245e67b8781c102c32f629c3eefe50802b9091b266c636ce8ca86eda93"
+      "snapped_sha": "f6efabe1d36e602e56d7d9d3f2819c7340fa6a528f38c4c8b80755ade2c7b321"
     },
     "hull_galleon_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "32a81fce1dd1349152f580d9985726949d46cca901c089198d541adce164d72d"
+      "snapped_sha": "b59091a950423447b4356f60a35ad6720efe4ff4c818e8b380035542af2961ec"
     },
     "hull_galleon_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_galleon_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "f7c03a237984c382",
         "object_id": "03de73de-b862-4d1e-95b1-4639a25a7841",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "69096927861c98de27a85c82993a77827ffd81e37b212c1cb874c0d59fa8a808"
+      "snapped_sha": "77a1492d376f809bedbde1afdc5d86fcb8fe226dfdf34885880d196b3c07c0ec"
     },
     "hull_galley_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "087f6b862126a72947776982e15ad372aa40429c629bdf96ec63b10456869417"
+      "snapped_sha": "cecc917c0b58ae32e0093645845df249ad6c7ad63915c9495df553fa55b7f9c2"
     },
     "hull_galley_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1f6a2435ab494bfffbd4efc69a296847d520884f7101b0653e34b1f5cd6f941d"
+      "snapped_sha": "c581b76899ed27b8afe3d82f41b0aa2a8a7ac78704dd4514880523b1404eddee"
     },
     "hull_galley_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7604ad825e7aa5c9b8bdc65d697b09273acfaec841536b7cc5bf5de072895c88"
+      "snapped_sha": "361b22fe7b5076958825a332838265c3cf973e4496b4dfdac7b1f035290deaf8"
     },
     "hull_galley_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "fdeb0fc73e2019347916ab6bcb64eecbd097aa9b66bc0991c2cc3d9dbcb6dd91"
+      "snapped_sha": "74acde207325460d1158cbc318791f926d83ffedaeaae0853fe8e14f54f12ad3"
     },
     "hull_galley_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "62b52897e1ee849eaa775f51e4e8b130b7c6836642219e379d1b7ef84b8672ac"
+      "snapped_sha": "1251d3ed48852ff1bb8abf3942bd5085fbaf7c004603c022af173ae309e83cc2"
     },
     "hull_galley_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "427898060c06ccee90242acdf8c4817575625826463d5bf7dfbe56daedcd4528"
+      "snapped_sha": "a3fa5fc36b4c6f2ea4293a053d4823145b113645f9462bf14d21e224bdad77e5"
     },
     "hull_galley_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e30a605ae67d771a2ab46a9800fc0b56b83096c8b0c903ab4f6b62cc10a63737"
+      "snapped_sha": "a437838f22680b9ac8cbac50f7e95ab6397b18ef30f5bc66f3c75f1fb346f239"
     },
     "hull_galley_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_galley_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "61b2b3e70c29851b",
         "object_id": "e98e3d2a-82ba-4942-b66a-f4e735338c62",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "39238718302c6a5e76663bc90ffd13a6b36c0cc740584900d5cf80ad1557d125"
+      "snapped_sha": "8c821ab5f184ba98f4651cc617c80c0f15fc972b383115c49aea653630ceed80"
     },
     "hull_junk_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_e",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "d319bd26ae80bf47111c0cfc47564470df06b21284a2347d8a01853823ffbcb7"
+      "snapped_sha": "0de9b93945b8df69c41b29620cd5e959a505279fd9ab4b106cee3655770c452e"
     },
     "hull_junk_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "5fb6d85fad7ffe8cb331092d5753f34ca5118ad86c9d9766ff110b39f75ea605"
+      "snapped_sha": "377205c6187f0a7ab6f0df151ec45ef127446097de33ad4238630a2d77e68a74"
     },
     "hull_junk_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c79665609b53b1c5798af7e2a2be6460ce1640c3ad22a1d9952152120bbb0967"
+      "snapped_sha": "7ccd3dd9234db976f645d9457e2684b8c896302ae3d96f2e24122ac14524d232"
     },
     "hull_junk_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "f3aa659272c2cc9d1bf4ecbae280a9fe2284ba93d0f99dedb8f9f9c1a62e45f9"
+      "snapped_sha": "c187268ca933406fb3bc4806f97d88eba2dfb399677f88da75a6b6df7cb7ad2b"
     },
     "hull_junk_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "3d665b9b28477213ceaf6e35d0e4000ae8a66f0f09b9aef89037902bf404c982"
+      "snapped_sha": "04c0875b1de22dc5bc9774e580827622354cb3cfda7651aee67f4f2b21f89f3a"
     },
     "hull_junk_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_se",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c60a2b0539e3505c04644905ed0b0f63c2a4620cbf7a72fa91f135ae9d15bcb9"
+      "snapped_sha": "dae4a5f43d46ebe7c821e511eba6b25753d146db7cc3de521eb22ee82dfbbaab"
     },
     "hull_junk_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e3b54d2acb74045068bc2f1d6032f5ea923bd5c7e3bc630466f28fd902cce601"
+      "snapped_sha": "bfac65aa3dce02c8a3c6f3a805a7aa113223a683fafd67225b66c4c518d70b90"
     },
     "hull_junk_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_junk_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "5640c8a4f7bc42e7",
         "object_id": "b92f7f0a-8035-48ff-87a0-5f67f29a634b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "a88126ee2f2fd58dd0071773ed7c1a20d9d4e3056eef9aca9c42bb8424bb394d"
+      "snapped_sha": "a18459ea0735d325de2f2b9d7e3f837ec46d34ba134fe8b37614289094757b2b"
     },
     "hull_latin_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7670bed421c1cc1cf437ba3a0567d19ba118d39efea517939e629f5ee1c3dccb"
+      "snapped_sha": "9fe82f925f4e0a775dcb1c7161819a20a8e04fca8f6972a59d3a5b4bb7a5ca01"
     },
     "hull_latin_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "dd06244cb4322417f0ab39b0d77302c36ad23f863fb05c90d66aefbf72c26762"
+      "snapped_sha": "fae87bfdceea74bf6aea2829422cd85ad06ee6df013ebd75276807b9891cd09b"
     },
     "hull_latin_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "500f051360d62e4d2e3c8aa25d0fdc67fe58f50dbcb42d3d19887e656054e64a"
+      "snapped_sha": "35ffa12f0f2cce835c3f506340f63b7c946eb83da09a2b2ed1c5701c70442459"
     },
     "hull_latin_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "12c89cd5ffb0a0b8ec221b39b2539b3ede0f0c855762208b2db569a61ceef676"
+      "snapped_sha": "fc06ff83cf2ec883aa348d481f840bc34bdbaac1255646badf824dd20d5c6312"
     },
     "hull_latin_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "546dc80353982d93c88729da25a50fa2ce1b44da3b829f535b5bb0c39366c067"
+      "snapped_sha": "f3ce85778bfc9da9bf255d6f9e43ec5d766457f3c54da524d1247948a0db66ee"
     },
     "hull_latin_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e0355d7eab97d96d169aa12cb7743ea5ea36dbf144778dd03d49fcb2190fd333"
+      "snapped_sha": "4218494eeadce0bc299a471c8d07e6b8b009ee15266c2951309fcc7b412d68bf"
     },
     "hull_latin_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "a9dd621d92d341cfbf3db1b419ddc94246136b29c6a72df0960a73c213fbaf49"
+      "snapped_sha": "a4774392a2a177f6680c998d90bfaf450d10320d9247f09003739efbfe1781fd"
     },
     "hull_latin_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_latin_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "bdc3448b8b94dfcc",
         "object_id": "457e8326-e312-48cc-b559-85603d29c149",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "8ce0f3856348df80c10953e060bf9a98f0baebdb8bc4fbe4db8f8eca4c246041"
+      "snapped_sha": "f39d9774130ed797477e7d29540da059f2af6220ded2779d1bb7c24aa7cca15d"
     },
     "hull_nao_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c88d16c71ffa2c543a67cf8fb74e038b146fffe5aa3ef9991be00cbd79442478"
+      "snapped_sha": "7d6a6ab926d749e2ec2dbbf4870df5cd509e0f57164d30a28b279a9da5b1efa8"
     },
     "hull_nao_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c9be3618f45f5ce8fee837de8b58dab3cf294a7862bcb82f249d94b7e02e5ec5"
+      "snapped_sha": "d1b6b09c10060ef61e68dce90bfc0c1924e82dd11a0e4b26e6d23621b8f29392"
     },
     "hull_nao_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "d6bc18a5b36fd98bb5f49a1254bd503bd2553e80008470af4d47e1f8e1bb48a8"
+      "snapped_sha": "2935a0a205e158c3fb6b1866e09e782337bcbe051f344a02d039ed3e1532eda2"
     },
     "hull_nao_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "a49c00576e51ea1ad813d5a693ebdbe0d9c7936a7d9976f315e3ce2135e7ecb0"
+      "snapped_sha": "5296dc53cc3f0599996c88b753e3c560052a461b3cd06c5740b8dc1ebc51e790"
     },
     "hull_nao_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "2f173b49ce6edb1d7fc43cdafb3f2451307675db831492313b5a34b2c10fb508"
+      "snapped_sha": "97a119a4628a5b0b9ca12de24f99fcac29f4839e86ef8d28754fe600ea634d51"
     },
     "hull_nao_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "9622ca8b7744face5b215c546c07f5fde0bc9f394a3bf6bb81e4ed7f80ab5b85"
+      "snapped_sha": "000701fcc1aa1f981e95d2de161d6595868dfe57f49f9bd48d19e3a11eb27303"
     },
     "hull_nao_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "31b7d33bcde1da248f5e3441804925e6fa52fcd60dfae607accd49d5f0fd5c6f"
+      "snapped_sha": "53ff2886ee922603e029327a8743cf91e5d54ab2a4507bf0ec0c7dc6092163d2"
     },
     "hull_nao_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_nao_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "a051c05a5f98104f",
         "object_id": "4d81f9f9-046c-4d80-beff-6636fb93fd9b",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c91004885a62a006923b877e493627845173573ac896b2033fe4d0530bedd733"
+      "snapped_sha": "750d16c6e300d994ca68551c5e40c12eed22faba8182d10c1cd2ab6f1f4f786f"
     },
     "hull_pinnace_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "4c67f5a65618ba2790653ba782d5fe96f460e86b24ed594c8f770d7ff77f201a"
+      "snapped_sha": "fb043027d8d4fc8b7dc775410a184a60e1215fed33cc693f595433e229b4854b"
     },
     "hull_pinnace_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7a0f59959527895db37ba2b3a66dfa9200ea8bc454b42d5ac0a2df1920814dd3"
+      "snapped_sha": "47ecd488d7da9bc196143215b9ae230fdba5a5e01b7c8340d0d88d5d2ca552c1"
     },
     "hull_pinnace_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1cb6396bee4ba51d5f59d2621d3b6f1679a11300df324f4eedc0a56ba04a5ddb"
+      "snapped_sha": "e8bba3098e1bb2da9f806bc29a807fd2e8b408b0050960f1951b0a27c805628a"
     },
     "hull_pinnace_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "7d52cfc6132616a55651faa04adde75e81ba9f4cb4557318fbd07413a394618b"
+      "snapped_sha": "f6368e9cbbbf82f3cd0073e53d6e472db272aacbf4732ca182a7570344300692"
     },
     "hull_pinnace_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "441ac5cc5e72b05a202336e840052b4be655f2e6ff3d722b89203d6386386928"
+      "snapped_sha": "ba4f55011721bde36a8b055152a8c8c3719116e49f26c9980abf42778e3a6153"
     },
     "hull_pinnace_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_se",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "84303705f0689472ab98ab1f415b3ef018c543a41384c74cd6a73f8542debcb3"
+      "snapped_sha": "9c96e63c7fdb9571dbf2b5c9ed017e3ed65af51992152ac69bea93fabe03be1d"
     },
     "hull_pinnace_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "125b3baec67b4ef321b801603a9ede4db6fb367c86c10f6e3f059e589f3b4588"
+      "snapped_sha": "fd0e886a3fdf51c76ab8937319cd4215044afe4c1789855cb711d2f812ff13b9"
     },
     "hull_pinnace_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_pinnace_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "d0b9aba000fe38f2",
         "object_id": "845013e0-09f1-49e2-bf01-e3f4b85f9608",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "1847dedab87b73669bdc45999c3da64ee3a234b854dad16cdbef3c0917c6294f"
+      "snapped_sha": "855eb68e2fc1725f99d4b31fd22b2f3726fa80a1bbd62261df1783288758924e"
     },
     "hull_sloop_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_e",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "11a57806c4735b950bdff6bdca3f944d20cb36be35c788d8820678421a666295"
+      "snapped_sha": "349148c4b515396f9ab2d59cfe5ce97acfba7d4b29fd6e05966cd4dae34f3453"
     },
     "hull_sloop_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "fdcc13937e8c19936b8e7d3aad2c484403de4ef82defa0be3819b18df3a71d58"
+      "snapped_sha": "2bbdfefc8f2334c36dee1b595a9fea1a94cceed2dc7378081f2e259b38933dbc"
     },
     "hull_sloop_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_ne",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "9582344faf704a89ba55784b261191c54c0b33ba03ef020426091f33a9b16614"
+      "snapped_sha": "5f1541ee6c22bea4bbabe4473d0ec1e6aa6d64e65e11385a8dc393f0bb1c2277"
     },
     "hull_sloop_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e72b08eb2fc7e28bfd476f77e1d51c57bcbcdccf3d0fb21d3855fd90d6456a1c"
+      "snapped_sha": "e0edd9632f03d772b4113fbec004ce1b1a42253cecdd63c568b3fae171588aac"
     },
     "hull_sloop_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "d23ef759232080105024f944f7978265e47ed88d2e248fbb362babb073cc563b"
+      "snapped_sha": "e00ec0faa052c1c45bfac0572d0bace30da0316ab60c57fc6b90bb97172cbbec"
     },
     "hull_sloop_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_se",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "cb1757b8ca7f723912ab2abe235e55df12052cd8a46d2d82e57459733be4f51e"
+      "snapped_sha": "d3a417487011eb22f11c0338c1e7f863bdfd303d2690439ece0b56d3a244005f"
     },
     "hull_sloop_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "71727688edeabe9507d07fbd979f52de191c4ad77f30bed7ac49ef13fcc437f1"
+      "snapped_sha": "69547b99eac0a45b002653c66c00d9151a9b02465be2bd423727085462292e1e"
     },
     "hull_sloop_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_sloop_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "aff1a38efb179b47",
         "object_id": "d51fc951-0e77-4874-8340-96f619fc9263",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "0bfc6c359c563a1d108afdef43715b16fbe9ddf2445f5a2391c9115073d224ab"
+      "snapped_sha": "38c991987b3971b1fe91663db846e1dbaa937907c860abf4517bbd5bbb7fcb10"
     },
     "hull_xebec_e": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_e",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "e8955f1af677e7145051647fbced752e9e335020a10361267777757e88929b1f"
+      "snapped_sha": "4b7f91fe7333801bab5f4f128254727fe49b6e6859876d9d25f08068cbc7a9d9"
     },
     "hull_xebec_n": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_n",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "760d1c3b49e26935ae038b39d2267af049898c12aa52e1f72006f46f775262b6"
+      "snapped_sha": "993872e982f86a5493b1463b6fed732df9c11e787c5b333951d114c947d666ea"
     },
     "hull_xebec_ne": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_ne",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "f08b2a2bca392683c70517ab2ae72778d06a31dc5df7dd19639d57b03958160a"
+      "snapped_sha": "f24b9133e84de11cdec4d987af1ea6069dbbeab86cc7b601d354b80810d19ed9"
     },
     "hull_xebec_nw": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_nw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "0c311ee84c0b8dd254c88c8d26f1d38495397a902833ea72c3008ab65f88b52b"
+      "snapped_sha": "3af29bd8c80eb67040694584dadb1a096a8e64d5d4ce2377ba3a31c24dc8bc76"
     },
     "hull_xebec_s": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_s",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "12dfa121e39fb332241e5804d8d55ac79bb309aecdbd4244aea9cd721c1c41bb"
+      "snapped_sha": "57978746b5e9da85ec47017b0c8d58069f93e7066b56fa422f783c6a4321383a"
     },
     "hull_xebec_se": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_se",
-      "pennant": "auto-painted",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "ab5612022b590eed16cfe9e90b6f02c21e11bfe766fb854872bd5be207da247e"
+      "snapped_sha": "d5ed5d71115d0fe321c8cdb4e3a134706d61c8d22b7a96e1be78d5dbb53aee18"
     },
     "hull_xebec_sw": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_sw",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "04c7798cd802b1ac9c3e161e119abaa57a6481deb348a3da4087485cc592aa6e"
+      "snapped_sha": "19cd3cb0bc67d61b9286e808e1cddf9e6b7dbc3b526f7047142b74dccf8280f2"
     },
     "hull_xebec_w": {
       "accepted_at": "2026-11-06",
       "job": "hull_xebec_w",
-      "pennant": "model",
+      "pennant": "raw",
       "pixellab": {
         "description_sha": "23444c692c5047af",
         "object_id": "a2d28638-a3b2-4d72-95ff-a82efd8be86d",
         "seed": 91000
       },
       "seed": 91000,
-      "snapped_sha": "c7fc50c0d9dc86da4b085b88e1589650df073e576b8b7c4046a62502f6f60ab4"
+      "snapped_sha": "2b50cbcc2fc3160d8e6a11f7a4eb8c7e0f2084d395170e9e32023fba411b58fc"
     }
   },
   "version": 2

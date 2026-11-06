@@ -2070,24 +2070,28 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      the "5 base + 3 mirrors" rule is retired for hulls — all 8
      rotations are native (pixellab names map 1:1 to the heading8
      dir ids: north→n, north-east→ne, …, west→w; verified on
-     brigantine trial 5, art_review/63). **Pennant scheme preserved
-     (option B, user direction):** build-time pennant-only recolor
-     — the masthead region (top 45 % of the opaque bbox) dominant
-     red cluster (red-dominant, bright-red guards R≥150/G≤110/B≤110,
-     channel-sum Δ≤90 — mirroring build_ui_art's `_pennant_snap`
-     radius) lands exactly on `PENNANT_SOURCE #b3191f`; every other
-     pixel stays byte-identical to the raw model output; the ×7
-     owner remap is unchanged. Constants: `MASTHEAD_TOP_FRAC 0.45`,
-     `MASTHEAD_MIN_PX 3`, gates = masthead pennant + canvas fit.
+     brigantine trial 5, art_review/63). **Pennant scheme: ship-as-
+     drawn (final, user direction — supersedes the same-day option-B
+     recolor experiment, which was REJECTED: flattening the flag's
+     shading onto one hex looked terrible):** the model's own flag
+     ships untouched and the SAME token bytes ship for every owner —
+     the ×7 pennant remap is suspended for this family (owner color
+     identity via pennant is retired until a future amendment
+     reinstates it; owner id on the map falls to the fleet-letter
+     badge + minimap pins). Masthead/auto-paint logic does not run
+     in this mode; gates = canvas fit. The option-B recolor (top-45%
+     dominant red cluster → `PENNANT_SOURCE #b3191f`, Δ≤90) remains
+     in git history as the reference implementation.
      Raw rotations live gitignored under
      `tools/ui_art/model_raw/pixellab/<label>/` with a manifest
      recording `object_id`/job id/seed/description (re-download
      without re-generation); **raw model output is never committed**
      (§9.2). API key: gitignored `tools/pixellab_config.json`,
-     env `PIXELLAB_API_KEY` overrides. Fleet acceptance flow: per-
+     env `PIXELLAB_API_KEY` overrides. Fleet
+     acceptance flow: per-
      ship user review of the snapped sheets → reject = one seed-
      bumped re-roll (user-capped) → ingest via
-     `build_ui_art --import-ships` (8 native dirs; mirror
+     `build_ui_art --import-ships-pixellab` (8 native dirs; mirror
      derivation skipped for pixellab tokens).
 
      **Terrain blob program (amended 2026-11-05, user direction — the

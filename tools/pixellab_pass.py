@@ -306,17 +306,12 @@ def fetch_ship(ship: str, object_id: str | None = None) -> dict:
     return rec
 
 
-# ---- snap (option B, user direction 2026-11-06): pennant-only recolor.
-# Everything else ships raw 1:1 — no resize, no band gate, no palette
-# quantize (gates = pennant + fit). The masthead's dominant red cluster
-# (incl. its shading variants, channel-sum Δ≤90, mirrors build_ui_art's
-# _pennant_snap radius) lands exactly on PENNANT_SOURCE so the ×7 owner
-# remap hits. Raw rotations are never modified.
-PENNANT_SOURCE = "#b3191f"
-MASTHEAD_TOP_FRAC = 0.45   # masthead region = top 45% of the bbox
-MASTHEAD_MIN_PX = 3        # ≥3 source-red px in the masthead region
-RED_MIN_R = 150            # flag reds are bright; dark maroon rooftops
-RED_MAX_GB = 110           # fail this and stay untouched
+# ---- snap (ship-as-drawn, user direction 2026-11-06): NO pixel edits.
+# The earlier pennant-only recolor (option B) was rejected by the user —
+# flattening the flag's shading looked terrible. The raw rotations copy
+# byte-identical into snapped/ (dir-id names for ingest); the SAME token
+# ships for every owner (the ×7 pennant remap is suspended for this
+# family). Gates: canvas fit only.
 DIR_MAP = {  # pixellab rotation name -> our heading8 dir id
     "north": "n", "north-east": "ne", "north-west": "nw",
     "south": "s", "south-east": "se", "south-west": "sw",
@@ -324,64 +319,32 @@ DIR_MAP = {  # pixellab rotation name -> our heading8 dir id
 }
 
 
-def _pennant_cluster(px, w, h, x0, y0, x1, y1):
-    """Dominant red-dominant color + its px count in the masthead region."""
-    from collections import Counter  # noqa: PLC0415
-    cut = y0 + int(MASTHEAD_TOP_FRAC * (y1 - y0 + 1) + 0.5)
-    cnt = Counter()
-    for y in range(y0, min(cut, y1 + 1)):
-        for x in range(x0, x1 + 1):
-            r, g, b, a = px[x, y]
-            if a > 0 and r >= RED_MIN_R and g <= RED_MAX_GB and b <= RED_MAX_GB \
-                    and r > g and r > b:
-                cnt[(r, g, b)] += 1
-    return cnt.most_common(1)[0] if cnt else (None, 0)
-
-
 def snap_ship(ship: str) -> None:
-    """Pennant-only recolor of the on-disk RAW rotations (never modified)
-    into <ship>/snapped/<dir_id>.png. Gates: pennant px ≥ 3, fit."""
+    """Ship-as-drawn passthrough (user direction 2026-11-06, supersedes
+    the pennant recolor — 'the flag you modified are terrible'): the RAW
+    PixelLab rotations copy BYTE-IDENTICAL into
+    <ship>/snapped/<dir_id>.png for the ingest naming. No pennant
+    recolor, no resize, no quantize — the model's pixels are the shipped
+    pixels, the same token for every owner. Gate: canvas fit only."""
     from PIL import Image  # noqa: PLC0415
     src_dir = os.path.join(OUT_DIR, ship)
     dst_dir = os.path.join(src_dir, "snapped")
     os.makedirs(dst_dir, exist_ok=True)
-    sr = (int(PENNANT_SOURCE[1:3], 16), int(PENNANT_SOURCE[3:5], 16),
-          int(PENNANT_SOURCE[5:7], 16))
-    worst = 999
     for rot, dir_id in DIR_MAP.items():
         path = os.path.join(src_dir, f"{rot}.png")
-        img = Image.open(path).convert("RGBA")
-        px = img.load()
-        w, h = img.size
-        xs, ys = [], []
-        for y in range(h):
-            for x in range(w):
-                if px[x, y][3] > 0:
-                    xs.append(x)
-                    ys.append(y)
-        if not xs:
-            print(f"  {ship}/{rot}: EMPTY — skipped", flush=True)
+        if not os.path.exists(path):
             continue
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-        dom, _cnt = _pennant_cluster(px, w, h, x0, y0, x1, y1)
-        n = 0
-        if dom is not None:
-            cut = y0 + int(MASTHEAD_TOP_FRAC * (y1 - y0 + 1) + 0.5)
-            for y in range(y0, min(cut, y1 + 1)):
-                for x in range(x0, x1 + 1):
-                    r, g, b, a = px[x, y]
-                    if a > 0 and r > g and r > b \
-                            and abs(r - dom[0]) + abs(g - dom[1]) \
-                            + abs(b - dom[2]) <= 90:
-                        px[x, y] = (*sr, 255)
-                        n += 1
-        fit = x0 >= 0 and y0 >= 0 and x1 < w and y1 < h
-        ok = n >= MASTHEAD_MIN_PX and fit
-        worst = min(worst, n)
-        img.save(os.path.join(dst_dir, f"{dir_id}.png"), "PNG")
-        print(f"  {ship}/{rot} -> {dir_id}: pennant_px={n} "
-              f"{'OK' if ok else 'FAIL'} fit={fit}", flush=True)
-    return worst
+        img = Image.open(path)
+        w, h = img.size
+        fit = 0 <= w <= 64 and 0 <= h <= 64
+        # byte-identical copy: the raw file IS the token
+        dst = os.path.join(dst_dir, f"{dir_id}.png")
+        with open(path, "rb") as fh:
+            data = fh.read()
+        with open(dst, "wb") as fh:
+            fh.write(data)
+        print(f"  {ship}/{rot} -> {dir_id}: raw copy "
+              f"{w}x{h} fit={fit}", flush=True)
 
 
 def _pennant_fleet(ships: list[str]) -> None:
