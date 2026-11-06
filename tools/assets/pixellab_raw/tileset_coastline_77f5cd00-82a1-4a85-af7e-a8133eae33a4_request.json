@@ -1,0 +1,18 @@
+{
+  "lower_description": "calm shallow coastal sea, muted slate blue, semi-flat painterly water with sparse 2-3 pixel ripple dabs, 16-bit retro world map ocean tile in the style of Uncharted Waters 2, no wave crests, no foam",
+  "upper_description": "dry earth-brown coastal land, warm ochre shoreline rising to darker umber ground, Mediterranean 16th-century coastline, 16-bit retro world map land tile in the style of Uncharted Waters 2",
+  "transition_description": "narrow wet sand beach with a thin broken foam line, Uncharted Waters 2 style shoreline transition",
+  "mode": "pro",
+  "tile_size": {
+    "width": 64,
+    "height": 64
+  },
+  "view": "high top-down",
+  "transition_size": 0.25,
+  "roundness": 1,
+  "raggedness": 0.35,
+  "boundary_amplitude": 0.15,
+  "boundary_seed": 42,
+  "seed": 20261106,
+  "detail": "highly detailed"
+}

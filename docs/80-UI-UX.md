@@ -2160,6 +2160,61 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      coastline path continuously (no gaps, no floating segments) —
      verified on synthetic staircase/channel/pocket fixtures and the
      real coast.
+     **PixelLab coast program (amended 2026-11-06, user direction — the
+     vendored wang tileset supersedes the land↔sea coast on the world
+     map):** the sea/coastal_sea/land world-map rendering adopts the
+     PixelLab-generated 16-tile Wang corner set (`terrain_coast_wang_0..15`,
+     built by `tools/build_terrain_pixellab.py` from the vendored raw
+     `tools/assets/pixellab_raw/tileset_coastline_*.json` — pro mode, 64px,
+     seed 20261106, Uncharted Waters 2 style, NO palette quantization: the
+     model's deliberate pixels ship as drawn, the 2026-11-06 raw hull
+     ruling). Placement (replaces the land-over-sea blob pair + the §6.6
+     foam variants for land↔sea edges): every cell reads its four corner
+     VERTICES — vertex (vx, vy) is `upper` (land) iff the world tile at
+     (vx, vy) is `#` (cells span pixels (x..x+1, y..y+1)); a cell with any
+     land corner stamps the wang tile of its corner combo (combo bits
+     NW/NE/SW/SE = 1/2/4/8, wang index = NW·4 + NE·8 + SW·2 + SE·1). Layer
+     ownership follows the cell's OWN pixel (it is the cell's NW corner
+     vertex): water cells own indices {0,1,2,3,8,9,10,11} (stamped on the
+     water layer at columns WANG_COLUMN_BASE..+7 in that order), land cells
+     own {4,5,6,7,12,13,14} (the terrain atlas's land row columns 8..14). Interior cells
+     (combo 0 water / 15 land) keep their plain fills — water = wang_0 (the
+     SAME painted tile for both water kinds: sea vs coastal_sea is no
+     longer two fills but the depth factor below), land = wang_15 through
+     its 8 dihedral transforms as the variant pool (the §9.2 cell hash
+     picks among them). Two tiles adjacent across a coast share the same
+     vertex row, so the beach is continuous by construction — the family's
+     seam guarantee is this corner-vertex geometry, NOT the variant ring
+     (the §8.8-8 ring rule is waived for the family via the ledger).
+     Provenance + waiver: the family's ledger is
+     `tools/assets/pixellab_raw/pixellab_coast_ledger.json` (group 13
+     reads it: inventory expansion + palette/budget/ring waiver — the
+     hulls-registry precedent); `build_ui_art --check` copies the
+     committed tiles into the temp rebuild (never regenerates, never
+     contacts the API). **Pixel depth (the user direction "pixel level of
+     darker, not tile level"):** every pure-water pixel darkens by a
+     factor that varies CONTINUOUSLY with its own Euclidean distance to
+     land — factor 1.0 at ≤ **6 tiles** (the §6.2 coastal band), 0.6 at
+     ≥ **10 tiles**, linear between; the factor source is the §6.7
+     distance raster (`data/maps/dist_land.png`, one R8 texel per tile,
+     linearly filtered) sampled by the water shader at the chunk's map
+     origin (§4.7.17 uniforms `u_dist_*`; the S10 battle grid keeps it
+     disabled). No blur pass, no tile-level steps — the continuity is the
+     continuous field itself. Reef, polar ice, ports and the shore-strip
+     system are UNCHANGED this round (their tiles carry the pre-painting
+     sea background — regenerating them against the painted water is the
+     ledgered follow-up); when the wang ids are absent (registry empty,
+     suites) every path falls back to the legacy fills/foam unchanged
+     (§4.9). **Coast foam retired (2026-11-06, user direction):** the r5
+     coast-foam program (shore wash bands + speckle clusters, the §6.6
+     variant columns) is retired from the WORLD path — the world water
+     layer builds without shore dirs, the wang beach carries the baked
+     shore art, and the r5 foam language read as noise over painted
+     water. The machinery stays in `water_layer.gd` as the dormant
+     fallback (build_tile_set with explicit dirs still composes it; the
+     terrain suite pins verify it directly). The §4.7.17 crest FOAM
+     accent is retired with it (`CREST_MIX` 0.70 → 0.0 — the shader
+     block stays, the mix is the off switch).
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through

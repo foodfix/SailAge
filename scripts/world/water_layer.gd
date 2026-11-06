@@ -42,11 +42,13 @@ const MASK_PATH := "res://assets/ui/terrain/sea_pattern.png"
 ## the two-level tones must read as clearly different water).
 const SCROLL_PERIOD_MS := 800
 const SEA_DARKEN := 0.70
-## §4.7.17 r5 (2026-11-05) crest accent: the partial mix toward FOAM (the r5
-## band is 0.6–0.75; 0.70 pinned here and mirrored in sea_water.gdshader's
-## u_crest_mix default — the two sites must not drift). The crest color is
-## PaletteLib.FOAM (terrain block) — passed to the shader as a param.
-const CREST_MIX := 0.70
+## §4.7.17 r5 (2026-11-05) crest accent: the partial mix toward FOAM (the
+## r5 band is 0.6–0.75). RETIRED 2026-11-06 (user direction, with the
+## coast-foam retirement — the painted wang water carries its own ripple
+## art; a FOAM-tinted crest over it read as noise). The shader block
+## stays; this mix is the off switch (the shader's u_crest_mix default
+## 0.70 is overridden here — the two sites must not drift).
+const CREST_MIX := 0.0
 ## §4.8.8: the mask is a 64×64 tile (the texture's own size — unchanged).
 ## The shader param is the mask's WORLD-space tile: 128 px since the §4.8
 ## 64-canvas amendment (1664ba9) — at the 64 px world tile the dither keeps
@@ -70,9 +72,86 @@ const STUB_ZONE_PX := 12
 ## from column 2 (see [method build_tile_set]).
 const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 
+## §4.8 2026-11-06 — the PixelLab coast family (the vendored wang tileset,
+## `tools/build_terrain_pixellab.py` output). Registry id prefix of the 16
+## corner tiles; the WATER layer carries its owned indices ({0,1,2,3,8,9,10,11}) as
+## columns WANG_COLUMN_BASE..+7, stamped on cells with land corners
+## (upper = land, lower = water; combo bits NW/NE/SW/SE = 1/2/4/8, wang
+## index = SE·1 + SW·2 + NW·4 + NE·8). The painted water ALSO replaces the
+## flat fills: [method _kind_image] prefers `terrain_coast_wang_0` (the
+## pure-water tile) for both water kinds — sea vs coastal_sea is no longer
+## two fills but the distance shader's deep/shallow factor (§4.8
+## 2026-11-06 pixel-depth amendment). Missing ids ⇒ the legacy flat fills
+## (§4.9 fallback chain; suites with synthetic grids keep their pins).
+const WANG_ID_PREFIX := "terrain_coast_wang_"
+const WANG_COLUMN_BASE := 2 + 16 * 2
+
+## The wang indices the WATER layer owns: a water cell's own pixel is its
+## NW corner vertex, so its combo never carries the NW bit — the possible
+## indices are {0,1,2,3} (SW/SE corners) plus {8,9,10,11} (NE corners, the
+## east-coast-adjacent cells). Columns WANG_COLUMN_BASE..+7 hold exactly
+## these, in this order. (The terrain atlas owns the NW-upper complement
+## 4..7 + 12..15 — see `map_loader._ensure_tile_set`.)
+const WANG_WATER_INDICES: Array[int] = [0, 1, 2, 3, 8, 9, 10, 11]
+
+## The terrain atlas's land-owned complement (`map_loader._ensure_tile_set`):
+## a land cell's own pixel is its NW corner vertex, so its index always
+## carries bit 2 — the coast tiles {4,5,6,7} (west/south water corners) and
+## {12,13,14} (NE-set edges); index 15 (all-land) is the interior and stays
+## on the 8-dihedral variant pool (columns 0..7; coast tiles at 8..14).
+const WANG_LAND_INDICES: Array[int] = [4, 5, 6, 7, 12, 13, 14]
+
+## §4.8 2026-11-06 pixel-depth pins (mirrored in sea_water.gdshader's
+## uniform defaults — the two sites must not drift). The factor is 1.0 at
+## ≤ BAND tiles from land, DEEP at ≥ FULL tiles, linear between; continuous
+## per pixel (the §6.7 raster is one texel per tile, linearly filtered —
+## the user direction "pixel level of darker, not tile level").
+const DIST_TEXTURE_PATH := "res://data/maps/dist_land.png"
+const DIST_DEEP_FACTOR := 0.6
+const DIST_BAND_TILES := 6.0
+const DIST_FULL_TILES := 10.0
+## §6.7: the raster's tile grid (one texel per tile of `world.png`) and the
+## encode: texel = round(min(d, 16) / 16 * 255) ⇒ d = texel * 16.
+const DIST_MAP_TILES := Vector2(4320, 2160)
+const DIST_ENCODE_MAX_TILES := 16.0
+
+## The wang readiness of the LAST `build_tile_set` call, per tile px (the
+## foam convention: the stamp side reads its OWN tile px's flag).
+static var wang_ready := false
+static var _wang_ready_by_px: Dictionary = {}
+
+## The decoded §6.7 distance texture (one decode per process, cached; null
+## when the artifact is absent — the shader runs with u_dist_enable = 0 and
+## the water renders undarkened, never an error). Held via WeakRef: a
+## strong static Resource ref aborted Godot's teardown at exit (the
+## test_density exit-crash report) — a weak cache dies with the last owner
+## instead.
+static var _dist_texture_ref: WeakRef = null
+static var _dist_attempted := false
+
 ## The registry id prefix of the §6.6/A.6 foam strips (`shore_{dir}`), baked
 ## into the coast-foam water variants at tile-set build time.
 const STRIP_ID_PREFIX := "shore_"
+
+
+## The wang index of a corner combo (§4.8 2026-11-06 placement rule): combo
+## bits NW/NE/SW/SE = 1/2/4/8 (upper = land), wang index bits are the same
+## four corners reordered as NW→bit2, NE→bit3, SW→bit1, SE→bit0 — the
+## PixelLab set's own numbering, pinned from the vendored tileset's
+## `corners` (wang_1 = SE-only, wang_2 = SW-only, wang_4 = NW-only,
+## wang_8 = NE-only). Pure helper, suite-pinned.
+static func wang_index(combo: int) -> int:
+	return ((combo & 1) * 4          # NW → index bit 2
+		+ ((combo & 2) * 4)          # NE → index bit 3
+		+ ((combo & 4) >> 1)         # SW → index bit 1
+		+ ((combo & 8) >> 3))        # SE → index bit 0
+
+
+## True when the combo carries any land corner (the cell straddles the
+## coast and stamps a wang corner tile instead of the plain fill). Suite
+## pins use it to document the water/land ownership split.
+static func wang_is_coastal(combo: int) -> bool:
+	return combo != 0
 
 ## The coast-foam readiness of the LAST `build_tile_set` call, per tile px
 ## (all 8 strips present ⇒ true). The stamp side reads the flag for its OWN
@@ -114,14 +193,24 @@ static func _to_rgba8(img: Image) -> Image:
 	return img
 
 
-## One flat fill for the atlas at `tile_px`: the registry texture's pixels
-## when the id resolves, else the palette fill (the pre-Phase-10 look).
+## One flat fill for the atlas at `tile_px`: the §4.8 2026-11-06 painted
+## water (`terrain_coast_wang_0`, the wang set's pure-water tile) for the
+## water kinds, falling back to the legacy flat fill id and then the locked
+## palette color (§4.9 chain). A 64-canvas source at a smaller `tile_px`
+## (the S10 battle grid's 32) takes the exact nearest downscale — the same
+## convention the foam strips use — so the painted texture never crops.
 static func _kind_image(kind: String, tile_px: int) -> Image:
 	var image := Image.create_empty(tile_px, tile_px, false, Image.FORMAT_RGBA8)
-	var texture := UiKitLib.icon_texture(sprite_id(kind))
+	var texture: Texture2D = null
+	if KIND_COLUMNS.has(kind):
+		texture = UiKitLib.icon_texture(WANG_ID_PREFIX + "0")
+	if texture == null:
+		texture = UiKitLib.icon_texture(sprite_id(kind))
 	if texture != null:
 		var pixels := _to_rgba8(texture.get_image())
 		if pixels != null:
+			if pixels.get_width() != tile_px or pixels.get_height() != tile_px:
+				pixels.resize(tile_px, tile_px, Image.INTERPOLATE_NEAREST)
 			image.blit_rect(pixels, Rect2i(0, 0, tile_px, tile_px),
 				Vector2i.ZERO)
 			return image
@@ -129,22 +218,36 @@ static func _kind_image(kind: String, tile_px: int) -> Image:
 	return image
 
 
-## The water TileSet: one atlas source, the two flat tiles per water kind at
-## columns `KIND_COLUMNS[kind]`, then — when `shore_dirs` is supplied AND all
-## 8 `shore_{dir}` strips resolve in the registry — the 16 COAST-FOAM
-## VARIANTS (the r3 "continuous coast" model): variant column
-## `2 + mask * 2 + kind` (mask bits 0..3 = N/E/S/W foam edge) composes the
-## tile's own kind fill with the union of the land-facing edge strips
-## alpha-blended over it, so the foam renders as light bands CONNECTED
-## across staircase steps and narrow inlets — the §6.6 single-code edge
-## lines this replaces read as scattered T/L/+ fragments on jagged coasts.
-## Without the dirs (the S10 open-sea grid) or without the strips (registry
-## empty, §4.9) the atlas stays exactly the two flat fills.
+## One wang corner tile image at `tile_px` (index 0..15), or null when the
+## id does not resolve — the callers treat any miss as wang-inactive and
+## fall through to the legacy fills (§4.9). A 64 canvas downscales nearest
+## for smaller tile sizes (the battle-grid convention).
+static func _wang_tile_image(index: int, tile_px: int) -> Image:
+	var texture := UiKitLib.icon_texture(WANG_ID_PREFIX + str(index))
+	if texture == null:
+		return null
+	var pixels := _to_rgba8(texture.get_image())
+	if pixels == null:
+		return null
+	if pixels.get_width() != tile_px or pixels.get_height() != tile_px:
+		pixels.resize(tile_px, tile_px, Image.INTERPOLATE_NEAREST)
+	return pixels
+
+
+## The water TileSet: ONE atlas source. Columns 0..1 the two water-kind
+## fills; columns 2..33 the 16 coast-foam mask variants (baked only when
+## `shore_dirs` is supplied AND all 8 `shore_{dir}` strips resolve — the
+## §4.8 2026-11-06 amendment retires that bake from the WORLD path, which
+## now passes no dirs; the machinery stays for the §4.9 fallback and the
+## suites); columns WANG_COLUMN_BASE..+7 the wang corner tiles (baked when
+## the whole water half resolves — §4.8 2026-11-06). Unresolved ranges stay
+## transparent with their readiness flags false (`foam_ready` /
+## `wang_ready` — the stamp side falls back to the plain fills, §4.9).
 static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 	var kinds: Array = KIND_COLUMNS.keys()
 	kinds.sort_custom(func(a: String, b: String) -> bool:
 		return int(KIND_COLUMNS[a]) < int(KIND_COLUMNS[b]))
-	var columns := 2 + 16 * 2
+	var columns := WANG_COLUMN_BASE + WANG_WATER_INDICES.size()
 	var image := Image.create_empty(columns * tile_px, tile_px, false,
 		Image.FORMAT_RGBA8)
 	for kind in kinds:
@@ -175,9 +278,7 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 			all_resolved = false
 	# DEFECT C fix (r5): per-bit pruned strips. `stub_variants[strip_i]` holds
 	# the 4 prune states of that strip: bit 0 = keep the strip's first end
-	# stub (its "west"/"north" perpendicular end), bit 1 = keep the second
-	# ("east"/"south"). Pruning clears FOAM px in the end zone unless the
-	# variant masks BOTH the strip's own edge and that perpendicular edge.
+	# stub (its "west"/"north" perpendicular end), bit 1 = keep the second.
 	var stub_variants: Array = []
 	if all_resolved:
 		for bit in 4:
@@ -185,12 +286,12 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 			stub_variants.append(_stub_variants(strip_img, tile_px, bit))
 	var tile_set := TileSet.new()
 	tile_set.tile_size = Vector2i(tile_px, tile_px)
+	var tiles_to_create: Array[Vector2i] = []
+	for kind in kinds:
+		tiles_to_create.append(Vector2i(int(KIND_COLUMNS[kind]), 0))
 	if all_resolved:
 		foam_ready = true
 		_foam_ready_by_px[tile_px] = true
-		var tiles_to_create: Array[Vector2i] = []
-		for kind in kinds:
-			tiles_to_create.append(Vector2i(int(KIND_COLUMNS[kind]), 0))
 		for mask in 16:
 			for kind_index in kinds.size():
 				var column := 2 + mask * 2 + kind_index
@@ -203,26 +304,37 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 				image.blit_rect(cell, Rect2i(0, 0, tile_px, tile_px),
 					Vector2i(column * tile_px, 0))
 				tiles_to_create.append(Vector2i(column, 0))
-		# compose-then-create: the atlas image is FULLY composed before the
-		# texture exists (the r2 lesson — a create-empty + `update` round-trip
-		# reads back empty through `get_image()`), and tiles register after
-		# texture + region size, exactly like the terrain atlas builder
-		var source := TileSetAtlasSource.new()
-		source.texture = ImageTexture.create_from_image(image)
-		source.texture_region_size = Vector2i(tile_px, tile_px)
-		for coords in tiles_to_create:
-			source.create_tile(coords)
-		tile_set.add_source(source)
-	else:
-		# the fallback atlas still needs its single source (the two flat
-		# fills already blitted above); `foam_ready` stays false so the
-		# stamp side falls back to the plain columns
-		var source := TileSetAtlasSource.new()
-		source.texture = ImageTexture.create_from_image(image)
-		source.texture_region_size = Vector2i(tile_px, tile_px)
-		for kind in kinds:
-			source.create_tile(Vector2i(int(KIND_COLUMNS[kind]), 0))
-		tile_set.add_source(source)
+	# §4.8 2026-11-06 — the wang corner columns, baked when the whole
+	# water half resolves (readiness per tile px, the foam convention: the
+	# S10 battle grid builds its own set and stamps by kind, never by
+	# corner).
+	wang_ready = false
+	_wang_ready_by_px[tile_px] = false
+	var wang_columns := WANG_WATER_INDICES.size()
+	var wang_ok := true
+	for position in wang_columns:
+		var tile_image := _wang_tile_image(WANG_WATER_INDICES[position],
+			tile_px)
+		if tile_image == null:
+			wang_ok = false
+			break
+		image.blit_rect(tile_image, Rect2i(0, 0, tile_px, tile_px),
+			Vector2i((WANG_COLUMN_BASE + position) * tile_px, 0))
+	if wang_ok:
+		wang_ready = true
+		_wang_ready_by_px[tile_px] = true
+		for position in wang_columns:
+			tiles_to_create.append(Vector2i(WANG_COLUMN_BASE + position, 0))
+	# compose-then-create: the atlas image is FULLY composed before the
+	# texture exists (the r2 lesson — a create-empty + `update` round-trip
+	# reads back empty through `get_image()`), and tiles register after
+	# texture + region size, exactly like the terrain atlas builder.
+	var source := TileSetAtlasSource.new()
+	source.texture = ImageTexture.create_from_image(image)
+	source.texture_region_size = Vector2i(tile_px, tile_px)
+	for coords in tiles_to_create:
+		source.create_tile(coords)
+	tile_set.add_source(source)
 	return tile_set
 
 
@@ -293,6 +405,73 @@ static func water_coords(mask: int, kind_column: int,
 		return Vector2i(kind_column, 0)
 	var kind_offset := 1 if kind_column != int(KIND_COLUMNS["sea"]) else 0
 	return Vector2i(2 + mask * 2 + kind_offset, 0)
+
+
+## The wang readiness for `tile_px` (per-px, the foam convention): true when
+## that tile px's last `build_tile_set` resolved the whole wang half.
+static func wang_ready_for_px(tile_px: int) -> bool:
+	return bool(_wang_ready_by_px.get(tile_px, false))
+
+
+## The atlas coords of a water cell's wang corner tile in the wang source
+## (combo ≠ 0 and a water-owned index). Combo 0 (open water) or a
+## land-owned index (never stamped on the water layer) returns the INVALID
+## sentinel (-1, 0) — the caller stamps the plain fill/foam instead. Only
+## meaningful when `wang_ready_for_px` holds.
+static func wang_coords(combo: int) -> Vector2i:
+	var position := WANG_WATER_INDICES.find(wang_index(combo))
+	if combo == 0 or position < 0:
+		return Vector2i(-1, 0)
+	return Vector2i(WANG_COLUMN_BASE + position, 0)
+
+
+## The decoded §6.7 distance texture (§4.8 2026-11-06 pixel-depth amendment)
+## — the world raster's bytes through the DATA-ARTIFACT pattern (the
+## `world.png` contract: raw bytes + `load_png_from_buffer`, no import
+## pipeline). Cached per process; null when absent — the material then runs
+## with `u_dist_enable = 0` (undarkened water, never an error).
+static func load_dist_texture() -> Texture2D:
+	if _dist_attempted and _dist_texture_ref != null:
+		var cached = _dist_texture_ref.get_ref()
+		if cached != null:
+			return cached as Texture2D
+	_dist_attempted = true
+	if not FileAccess.file_exists(DIST_TEXTURE_PATH):
+		return null
+	var bytes := FileAccess.get_file_as_bytes(DIST_TEXTURE_PATH)
+	if bytes.is_empty():
+		return null
+	var image := Image.new()
+	if image.load_png_from_buffer(bytes) != OK:
+		return null
+	var texture := ImageTexture.create_from_image(image)
+	_dist_texture_ref = weakref(texture)
+	return texture
+
+
+## The water material for one WORLD chunk: the shared animated-sea material
+## with the §4.8 pixel-depth amendment layered on — `u_dist_enable` + the
+## chunk's map-pixel origin (each chunk duplicates the cached material; the
+## base cache stays shared with S10, which never enables the distance).
+## `null` when the base material is unavailable (flat tiles, no animation).
+static func build_chunk_material(origin_px: Vector2) -> ShaderMaterial:
+	var base := build_material()
+	if base == null:
+		return null
+	var material := base.duplicate() as ShaderMaterial
+	material.set_shader_parameter("u_dist_origin_px", origin_px)
+	material.set_shader_parameter("u_dist_map_px",
+		DIST_MAP_TILES * 64.0)
+	material.set_shader_parameter("u_dist_enable", 1.0)
+	material.set_shader_parameter("u_dist_deep", DIST_DEEP_FACTOR)
+	material.set_shader_parameter("u_dist_band", DIST_BAND_TILES)
+	material.set_shader_parameter("u_dist_full", DIST_FULL_TILES)
+	var dist_tex := load_dist_texture()
+	if dist_tex != null:
+		material.set_shader_parameter("u_dist_tex", dist_tex)
+	else:
+		material.set_shader_parameter("u_dist_enable", 0.0)
+	return material
 
 
 ## The animated-sea `ShaderMaterial` (§4.7.17) — the params are the pinned

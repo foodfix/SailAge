@@ -1,0 +1,17 @@
+{
+  "lower_description": "deep open ocean, dark navy blue, moody nearly flat water with a few faint swell dabs, 16-bit retro world map sea tile in the style of Uncharted Waters 2, no foam, no land",
+  "upper_description": "shallow coastal sea, muted slate blue, semi-flat water with sparse 2-3 pixel ripple dabs, 16-bit retro world map water tile in the style of Uncharted Waters 2",
+  "transition_description": "gradual water depth change, soft swell between deep and shallow sea, Uncharted Waters 2 style, no foam, no land, no beach",
+  "mode": "standard",
+  "tile_size": {
+    "width": 32,
+    "height": 32
+  },
+  "view": "high top-down",
+  "transition_size": 0.0,
+  "shape_style": "round",
+  "boundary_amplitude": 0.1,
+  "boundary_seed": 7,
+  "seed": 20261107,
+  "detail": "highly detailed"
+}

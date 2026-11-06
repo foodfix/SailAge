@@ -1,0 +1,158 @@
+{
+  "generated_by": "tools/build_terrain_pixellab.py",
+  "note": "80-* \u00a74.8 2026-11-06 terrain family \u2014 the model's deliberate pixels ship as drawn (palette/budget waived in group 13 via this ledger, the raw-pixellab hull precedent). Corner semantics: upper = land, lower = water; water cells own indices {0,1,2,3,8,9,10,11}, land cells {4,5,6,7,12,13,14} + 15 interior.",
+  "pixellab": {
+    "background_job_id": "47b40a28-b0b1-4f8a-88ac-55b0fb649a2d",
+    "mode": "pro",
+    "seed": 20261106,
+    "tile_size": 64,
+    "tileset_id": "77f5cd00-82a1-4a85-af7e-a8133eae33a4"
+  },
+  "source": "tools/assets/pixellab_raw/tileset_coastline_77f5cd00-82a1-4a85-af7e-a8133eae33a4.json",
+  "tiles": {
+    "terrain_coast_wang_0": {
+      "ne": "lower",
+      "nw": "lower",
+      "pixel_id": "be192cbf-b2b7-436a-afae-42e48010b346",
+      "se": "lower",
+      "sha256": "4991bef91d32933dea9a763ba90cfca00983d1337cace1de9fb5fb63c096a26c",
+      "sw": "lower",
+      "wang_index": 0
+    },
+    "terrain_coast_wang_1": {
+      "ne": "lower",
+      "nw": "lower",
+      "pixel_id": "1",
+      "se": "upper",
+      "sha256": "0145012d873652058696570f40c6dbbbe4922340d436dd7bf221435e53d04bc6",
+      "sw": "lower",
+      "wang_index": 1
+    },
+    "terrain_coast_wang_10": {
+      "ne": "lower",
+      "nw": "upper",
+      "pixel_id": "10",
+      "se": "lower",
+      "sha256": "297c4bb4b45bb3ca9b8840536067d72194441d6bbd925ac34a3aa02363b10395",
+      "sw": "upper",
+      "wang_index": 10
+    },
+    "terrain_coast_wang_11": {
+      "ne": "lower",
+      "nw": "upper",
+      "pixel_id": "11",
+      "se": "upper",
+      "sha256": "84d8b7b16138222db90783c27071b44a34412cbf7d1ea4e061b410cac21074b0",
+      "sw": "upper",
+      "wang_index": 11
+    },
+    "terrain_coast_wang_12": {
+      "ne": "upper",
+      "nw": "upper",
+      "pixel_id": "12",
+      "se": "lower",
+      "sha256": "64b4007a920f450cd2d346aac05d370be77c5b017964fdb141edfe53f09b5b22",
+      "sw": "lower",
+      "wang_index": 12
+    },
+    "terrain_coast_wang_13": {
+      "ne": "upper",
+      "nw": "upper",
+      "pixel_id": "13",
+      "se": "upper",
+      "sha256": "1290984ddd32dd558a670de270f9e0a2e4a655c07de0687782c8f1f1c09c7781",
+      "sw": "lower",
+      "wang_index": 13
+    },
+    "terrain_coast_wang_14": {
+      "ne": "upper",
+      "nw": "upper",
+      "pixel_id": "14",
+      "se": "lower",
+      "sha256": "e0b2367209d05f6aea1056d1cd2bef21a09dae38367a50ac4c1b9649f9db64fb",
+      "sw": "upper",
+      "wang_index": 14
+    },
+    "terrain_coast_wang_15": {
+      "ne": "upper",
+      "nw": "upper",
+      "pixel_id": "135d82d5-b192-4d01-88a6-7ae47f3e024f",
+      "se": "upper",
+      "sha256": "1552de814467ba4b914b904f1685f19addf21e7341987b291f23802b772c6dab",
+      "sw": "upper",
+      "wang_index": 15
+    },
+    "terrain_coast_wang_2": {
+      "ne": "lower",
+      "nw": "lower",
+      "pixel_id": "2",
+      "se": "lower",
+      "sha256": "faced46802d67d5c66dc83ed0cff9a58a69b42018d19d2b9ada515c43cf4dbb7",
+      "sw": "upper",
+      "wang_index": 2
+    },
+    "terrain_coast_wang_3": {
+      "ne": "lower",
+      "nw": "lower",
+      "pixel_id": "3",
+      "se": "upper",
+      "sha256": "6217a0a8d5f8ccfb17d2ec4b77db13c5de6dcac745c945db49b8b7dd0ae85eb1",
+      "sw": "upper",
+      "wang_index": 3
+    },
+    "terrain_coast_wang_4": {
+      "ne": "upper",
+      "nw": "lower",
+      "pixel_id": "4",
+      "se": "lower",
+      "sha256": "76ee7ee98b5cea0f7d19e881041c709076f9310c32d5cfc175349a69be237dfe",
+      "sw": "lower",
+      "wang_index": 4
+    },
+    "terrain_coast_wang_5": {
+      "ne": "upper",
+      "nw": "lower",
+      "pixel_id": "5",
+      "se": "upper",
+      "sha256": "1c706f3ce3f8c699d40c15d342c1d5379525b2b4f4024fbecc6f807d73d421f1",
+      "sw": "lower",
+      "wang_index": 5
+    },
+    "terrain_coast_wang_6": {
+      "ne": "upper",
+      "nw": "lower",
+      "pixel_id": "6",
+      "se": "lower",
+      "sha256": "ee48b2b3c6306fdbfa86ad413f8c0aadeabda0fdcb9533dce51fbd9a7bd11172",
+      "sw": "upper",
+      "wang_index": 6
+    },
+    "terrain_coast_wang_7": {
+      "ne": "upper",
+      "nw": "lower",
+      "pixel_id": "7",
+      "se": "upper",
+      "sha256": "c3992126a5e1abd65a21b22b65d0e4e720c493a91a7864e82dcc889ce148e435",
+      "sw": "upper",
+      "wang_index": 7
+    },
+    "terrain_coast_wang_8": {
+      "ne": "lower",
+      "nw": "upper",
+      "pixel_id": "8",
+      "se": "lower",
+      "sha256": "9d48a3a5d8a905a63b7c37a540a8e21d0ffb6989343e1430aa23e4670ab3864a",
+      "sw": "lower",
+      "wang_index": 8
+    },
+    "terrain_coast_wang_9": {
+      "ne": "lower",
+      "nw": "upper",
+      "pixel_id": "9",
+      "se": "upper",
+      "sha256": "805a01867f3239f4cf7f5ac94a871b23ac7b218bdaba779a6f4374837bce2eee",
+      "sw": "lower",
+      "wang_index": 9
+    }
+  }
+}

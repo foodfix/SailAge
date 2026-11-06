@@ -58,6 +58,42 @@ uniform float u_mask_px = 64.0;
 uniform vec3 u_crest_color = vec3(0.8745, 0.9412, 0.9569);
 uniform float u_crest_mix = 0.70;
 
+// ---------------------------------------------------------------------------
+// §4.8 2026-11-06 pixel-depth amendment — per-pixel deep-water darkening.
+//
+// The world water layer multiplies each water pixel by a factor that varies
+// PIXEL BY PIXEL with its continuous distance to land (the user direction
+// that replaced the 2026-11-05 tile-level ramp: "pixel level of darker, not
+// tile level"). The factor source is `data/maps/dist_land.png` (§6.7) — one
+// R8 texel per map tile carrying round(min(d,16)/16*255), decoded as
+// d = texel * 16 (tiles, saturated at 16). Linear filtering between texels
+// makes the field continuous at world scale — no blur pass, no bands; the
+// factor curve itself carries the pinned §4.8 constants:
+//
+//   d ≤ u_dist_band (6 tiles, the §6.2 coastal band)  ⇒ factor 1.0
+//   d ≥ u_dist_full (10 tiles)                        ⇒ factor u_dist_deep (0.6)
+//   between                                           ⇒ linear
+//
+// Only the WORLD water layer enables this (`u_dist_enable`, set together
+// with the layer's chunk origin `u_dist_origin_px` in map pixels — the map
+// raster is a cylinder, so the sampler wraps in x and negative chunk
+// origins land on the correct tile). The S10 battle grid keeps it disabled
+// (its water is not the world raster). VERTEX here is the chunk-local tile
+// pixel, exactly as the scroll mask above assumes; adding the chunk origin
+// gives the map pixel.
+uniform sampler2D u_dist_tex : filter_linear, repeat_enable;
+uniform vec2 u_dist_origin_px = vec2(0.0, 0.0);
+uniform vec2 u_dist_map_px = vec2(276480.0, 138240.0); // 4320×2160 tiles @64
+uniform float u_dist_enable = 0.0;
+uniform float u_dist_deep = 0.6;
+uniform float u_dist_band = 6.0;
+uniform float u_dist_full = 10.0;
+
+// The §6.7 raster bytes → tiles (R = high byte of the 16-bit encode).
+float dist_tiles(vec2 map_px) {
+	return texture(u_dist_tex, map_px / u_dist_map_px).r * 16.0;
+}
+
 void fragment() {
 	// GODOT 4 canvas_item semantics: COLOR at fragment entry ALREADY carries
 	// the tile pixel (vertex color × TEXTURE) — verified by suite pin. The
@@ -88,4 +124,12 @@ void fragment() {
 		+ step(0.5, west1) * (1.0 - step(0.5, west2)));
 	crest = min(crest, 1.0);
 	COLOR.rgb = mix(COLOR.rgb, u_crest_color, u_crest_mix * crest);
+	// §4.8 2026-11-06 pixel-depth darkening — LAST, after the crest tint:
+	// the foam crest is a surface accent and darkens with its water.
+	if (u_dist_enable > 0.5) {
+		float factor = mix(1.0, u_dist_deep,
+			clamp((dist_tiles(VERTEX + u_dist_origin_px) - u_dist_band)
+				/ max(u_dist_full - u_dist_band, 0.001), 0.0, 1.0));
+		COLOR.rgb *= factor;
+	}
 }

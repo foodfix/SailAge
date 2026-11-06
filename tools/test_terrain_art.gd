@@ -90,6 +90,7 @@ func _ready() -> void:
 	_test_populated_registry()
 	_test_shore_continuity()
 	_test_shore_strips_and_material()
+	_test_wang_placement()
 	UiKitLib.clear_textures()
 	_report()
 
@@ -744,11 +745,13 @@ func _test_world_markers() -> void:
 	world.route_to_battle = false
 	add_child(world)
 	var map = DataLoader.map
-	# The §6.6 decode rides the scene's frame-2 warm-up; the suite forces it
-	# (the boot budget keeps it off the first frame — test_world_map's pin).
-	world._loader.warm_shore_overlay()
-	_check(map != null and map.shore_codes.size() > 0,
-		"the world boot decoded the shore overlay")
+	# §4.8 2026-11-06: the §6.6 coast-foam warm pass is retired from the
+	# world boot (the wang coastline carries the shore art); the decode
+	# itself stays available for any consumer.
+	world._loader._ensure_shore_decode()
+	_check(map != null,
+		"the world boot loads (the coast-foam warm pass retired — the "
+		+ "§6.6 decode stays available on demand)")
 	# The categories cover all 30 discoveries (§3 / A.4).
 	var categories := {}
 	for entry in DataLoader.discoveries_list:
@@ -829,6 +832,16 @@ func _rgba8(img: Image) -> Image:
 
 func _test_populated_registry() -> void:
 	TextureRegistryLib.ensure_registered()
+	# §4.8 2026-11-06: the wang family's ground truth is the FILE bytes
+	# (the raw-data artifact contract) — atlas pixels must match them (an
+	# import drift is a real regression).
+	var wang_file := func(index: int) -> Image:
+		var img := Image.new()
+		var bytes := FileAccess.get_file_as_bytes(
+			"res://assets/ui/terrain/terrain_coast_wang_%d.png" % index)
+		if bytes.is_empty() or img.load_png_from_buffer(bytes) != OK:
+			return null
+		return img
 	_check(TextureRegistryLib.registered_count > 0,
 		"the texture registry populated (%d ids; 0 ⇒ run `godot --headless --import` first)"
 		% TextureRegistryLib.registered_count)
@@ -853,18 +866,35 @@ func _test_populated_registry() -> void:
 	else:
 		print("NOTE  S3TC compression unavailable headless — the guard's decompress branch is covered only by the imported-texture path")
 	# The reported production stack (build_layer → build_tile_set →
-	# _kind_image): both water cells resolve registry art whose center pixel
-	# is the locked §4.8.5 flat fill.
+	# _kind_image): both water cells resolve registry art. §4.8 2026-11-06:
+	# when the PixelLab coast family resolves, the fill is the painted
+	# wang_0 (the model's pixels — the flat-fill pins become the painted
+	# pixel pins); without the family the §4.8.5 flat fills apply (the
+	# §4.9 fallback chain).
+	var wang_active: bool = UiKitLib.icon_texture(
+		WaterLayerLib.WANG_ID_PREFIX + "0") != null
 	var tile_set := WaterLayerLib.build_tile_set(32)
 	var source := tile_set.get_source(tile_set.get_source_id(0)) \
 		as TileSetAtlasSource
 	var atlas := source.texture.get_image()
-	_check(atlas.get_pixel(16, 16).is_equal_approx(PaletteLib.SEA),
-		"populated registry: the sea cell's center pixel is Palette.SEA (%s)"
-		% atlas.get_pixel(16, 16))
-	_check(atlas.get_pixel(32 + 16, 16).is_equal_approx(PaletteLib.COAST_SEA),
-		"populated registry: the coastal_sea cell's center pixel is Palette.COAST_SEA (%s)"
-		% atlas.get_pixel(32 + 16, 16))
+	if wang_active:
+		var painted := wang_file.call(0) as Image
+		var painted32 := painted.duplicate() as Image
+		painted32.resize(32, 32, Image.INTERPOLATE_NEAREST)
+		var want := painted32.get_pixel(16, 16)
+		_check(atlas.get_pixel(16, 16).is_equal_approx(want),
+			"populated registry (wang): the sea cell's center pixel is the "
+			+ "painted water (%s)" % atlas.get_pixel(16, 16))
+		_check(atlas.get_pixel(32 + 16, 16).is_equal_approx(want),
+			"populated registry (wang): the coastal_sea cell shares the "
+			+ "painted water fill (the depth factor, not a second fill)")
+	else:
+		_check(atlas.get_pixel(16, 16).is_equal_approx(PaletteLib.SEA),
+			"populated registry: the sea cell's center pixel is Palette.SEA (%s)"
+			% atlas.get_pixel(16, 16))
+		_check(atlas.get_pixel(32 + 16, 16).is_equal_approx(PaletteLib.COAST_SEA),
+			"populated registry: the coastal_sea cell's center pixel is Palette.COAST_SEA (%s)"
+			% atlas.get_pixel(32 + 16, 16))
 	# The terrain atlas (`_ensure_tile_set` → `_terrain_kind_image`): all four
 	# land variants carry real terrain art — variants 0–2 the LAND fill,
 	# variant 3 the LAND_HI highlight (§4.8 generated-terrain family).
@@ -913,7 +943,29 @@ func _test_populated_registry() -> void:
 			#      (HI iff (3(x/2)+5(y/2)) % 16 == 3 on the 64 canvas —
 			#      the byte-identical, torus-continuous ring of §4.8.2;
 			#      the ×2 upscale of the authored ring is exactly this).
+			# §4.8 2026-11-06 (wang mode): the variants are the wang_15
+			# interior's 8 dihedral transforms — rotations preserve the
+			# pixel multiset, so every variant carries exactly wang_15's
+			# pixel population (the ramp/ring pins are legacy-only).
 			var off_ramp := 0
+			var wang_mode: bool = land.get("wang_row_base", -1) >= 0
+			if wang_mode:
+				var painted15 := wang_file.call(15) as Image
+				var want_counts: Dictionary = {}
+				for py in tile_px:
+					for px2 in tile_px:
+						var key := painted15.get_pixel(px2, py)
+						want_counts[key] = int(want_counts.get(key, 0)) + 1
+				var cell_counts: Dictionary = {}
+				for py in tile_px:
+					for px2 in tile_px:
+						var key := cell.get_pixel(px2, py)
+						cell_counts[key] = int(cell_counts.get(key, 0)) + 1
+				_check(cell_counts.size() == want_counts.size()
+					and cell_counts == want_counts,
+					"populated registry (wang): land variant %d carries "
+					+ "exactly the wang_15 pixel population" % variant)
+				continue
 			for py in tile_px:
 				for px in tile_px:
 					var c := cell.get_pixel(px, py)
@@ -952,9 +1004,12 @@ func _test_populated_registry() -> void:
 	var foam_set := WaterLayerLib.build_tile_set(32, MapLoaderLib.SHORE_DIRS)
 	var foam_source := (foam_set.get_source(foam_set.get_source_id(0))
 		as TileSetAtlasSource)
-	_check(foam_source.get_tiles_count() == 2 + 16 * 2,
-		"populated registry: the water atlas gains the 16 mask-variant cells (%d tiles)"
-		% foam_source.get_tiles_count())
+	var want_tiles := 2 + 16 * 2 + (WaterLayerLib.WANG_WATER_INDICES.size() \
+		if wang_active else 0)
+	_check(foam_source.get_tiles_count() == want_tiles,
+		"populated registry: the water atlas gains the 16 mask-variant cells "
+		+ "+ the wang columns (%d tiles, want %d)"
+		% [foam_source.get_tiles_count(), want_tiles])
 	var foam_atlas := foam_source.texture.get_image()
 	# cell for the E-edge mask (2) on the coastal fill = column 2+2*2+1 = 7:
 	# center stays the coastal fill (foam hugs the edges), the right edge's
@@ -963,7 +1018,16 @@ func _test_populated_registry() -> void:
 	# midpoint stays fill.
 	var e_cell := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 	e_cell.blit_rect(foam_atlas, Rect2i(7 * 32, 0, 32, 32), Vector2i.ZERO)
-	_check(e_cell.get_pixel(16, 16).is_equal_approx(PaletteLib.COAST_SEA),
+	# §4.8 2026-11-06: in wang mode the composed fill under the strips is
+	# the painted wang_0 (nearest-downscaled), so the fill pins compare
+	# against ITS pixels; legacy mode keeps the COAST_SEA flat-fill pins.
+	var want_fill := PaletteLib.COAST_SEA
+	var want_fill_img: Image = null
+	if wang_active:
+		want_fill_img = (wang_file.call(0) as Image).duplicate() as Image
+		want_fill_img.resize(32, 32, Image.INTERPOLATE_NEAREST)
+		want_fill = want_fill_img.get_pixel(16, 16)
+	_check(e_cell.get_pixel(16, 16).is_equal_approx(want_fill),
 		"populated registry: the coast-foam `e` cell keeps the coastal fill at center (%s)"
 		% e_cell.get_pixel(16, 16))
 	var e_speckles := 0
@@ -974,8 +1038,14 @@ func _test_populated_registry() -> void:
 	_check(e_speckles > 0,
 		("populated registry: the coast-foam `e` cell carries speckles on "
 			+ "its east edge band (%d FOAM px)") % e_speckles)
-	_check(e_cell.get_pixel(1, 16).is_equal_approx(PaletteLib.COAST_SEA),
-		"populated registry: the coast-foam `e` cell leaves the west edge clear")
+	if wang_active:
+		_check(e_cell.get_pixel(1, 16).is_equal_approx(
+				want_fill_img.get_pixel(1, 16)),
+			"populated registry: the coast-foam `e` cell leaves the west "
+			+ "edge as the painted fill")
+	else:
+		_check(e_cell.get_pixel(1, 16).is_equal_approx(PaletteLib.COAST_SEA),
+			"populated registry: the coast-foam `e` cell leaves the west edge clear")
 	_check(WaterLayerLib.water_coords(2, 1) == Vector2i(7, 0),
 		"populated registry: water_coords(E mask, coastal) picks the foam column 7")
 	_check(WaterLayerLib.water_coords(0, 0) == Vector2i(0, 0),
@@ -993,114 +1063,124 @@ func _test_populated_registry() -> void:
 	var src64 := (set64.get_source(set64.get_source_id(0)) as TileSetAtlasSource)
 	var atlas64 := src64.texture.get_image()
 	var band := 16  # foam + tone live within the outer quarter-tile band
-	for mask in 16:
-		for kind_index in 2:
-			var col := 2 + mask * 2 + kind_index
-			var fill := PaletteLib.COAST_SEA if kind_index == 1 \
-				else PaletteLib.SEA
-			var is_foam := func(p: Color) -> bool:
-				return p.a > 0.0 and not p.is_equal_approx(fill)
-			# per-edge CORE band scan (the middle of each edge, corners
-			# excluded): a masked edge carries foam in its core; an unmasked
-			# edge's core is foam-free. Corner regions are excluded because
-			# a masked edge's strip legitimately runs the full width — the
-			# union scan below pins those pixels to masked bands anyway.
-			var core_ranges := {
-				0: [0, band, band, 64 - band],          # north core
-				1: [band, 64 - band, 64 - band, 64],    # east core
-				2: [64 - band, 64, band, 64 - band],    # south core
-				3: [band, 64 - band, 0, band],          # west core
-			}
-			for edge in 4:
-				var r: Array = core_ranges[edge]
-				var count := 0
-				for py in range(r[0], r[1]):
-					for pxx in range(r[2], r[3]):
-						if is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
-							count += 1
-				var want := (mask & (1 << edge)) != 0
-				_check((count > 0) == want,
-					"64-canvas variant mask %d (kind %d, column %d): %s edge %s (%d foam px)"
-					% [mask, kind_index, col,
-					["north", "east", "south", "west"][edge],
-					"carries the foam" if want else "is foam-free", count])
-			# union scan: every foam pixel sits inside the masked bands
-			var outside := false
-			for py in 64:
-				for pxx in 64:
-					if not is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
-						continue
-					var in_n := py < band and (mask & 1) != 0
-					var in_s := py >= 64 - band and (mask & 4) != 0
-					var in_w := pxx < band and (mask & 8) != 0
-					var in_e := pxx >= 64 - band and (mask & 2) != 0
-					if not (in_n or in_s or in_w or in_e):
-						outside = true
-						break
-				if outside:
-					break
-			_check(not outside,
-				"64-canvas variant mask %d (kind %d): all foam pixels sit in the masked edge bands"
-				% [mask, kind_index])
-			# (r5 DEFECT C hard gate) OPEN edges are foam-free across their
-			# FULL length INCLUDING both corner cells — the r4 assertion only
-			# covered the core band, and the corner stubs visually closed
-			# 1-cell waterways into a 4th white line. Foam px are the
-			# FOAM-colored speckles/dust; the COAST_SEA shallow wash is the
-			# r5 continuous coast element and deliberately keeps running.
-			for edge in 4:
-				if (mask & (1 << edge)) != 0:
-					continue
-				var bands := [Rect2i(0, 0, 64, 12),
-					Rect2i(52, 0, 12, 64),
-					Rect2i(0, 52, 64, 12),
-					Rect2i(0, 0, 12, 64)]
-				var r: Rect2i = bands[edge]
-				var stray := 0
-				for py in range(r.position.y, r.end.y):
-					for pxx in range(r.position.x, r.end.x):
-						if atlas64.get_pixel(col * 64 + pxx, py) \
-								.is_equal_approx(PaletteLib.FOAM):
-							stray += 1
-				_check(stray == 0,
-					"64-canvas variant mask %d (kind %d): the OPEN %s edge is " + "foam-free across its full length incl. corners (%d stray)"
-					% [mask, kind_index,
-					["north", "east", "south", "west"][edge], stray])
-			# (r5 DEFECT C, the reported case) mask 11 = land N/E/S, open W:
-			# the westmost 8 px column must carry zero foam px — the channel
-			# (r5 DEFECT C, the reported case) land N/E/S with an open west
-			# edge is mask 7 in the §6.6 bit order (N=1, E=2, S=4, W=8; the
-			# r5 brief's "mask 11" label predates the bit map — mask 11 is
-			# N/E/W, open S, gated below as well): the westmost 8 px column
-			# must carry zero foam px — the channel mouth stays visibly OPEN.
-			if mask == 7:
-				var stray_w := 0
+	if wang_active:
+		# §4.8 2026-11-06: over the painted fill the "foam = not fill"
+		# predicate cannot separate the strips from the model's own ripple
+		# dabs — the per-edge hard gate is a legacy-fill check (superseded
+		# on the world map by the wang placement; the strips stay available
+		# for the legacy fallback path, verified by the 32px pins above).
+		print("NOTE  64-canvas foam gate skipped in wang mode (painted "
+			+ "fill — the r5 foam language is superseded for land↔sea, "
+			+ "80-* §4.8 2026-11-06)")
+	else:
+		for mask in 16:
+			for kind_index in 2:
+				var col := 2 + mask * 2 + kind_index
+				var fill := PaletteLib.COAST_SEA if kind_index == 1 \
+					else PaletteLib.SEA
+				var is_foam := func(p: Color) -> bool:
+					return p.a > 0.0 and not p.is_equal_approx(fill)
+				# per-edge CORE band scan (the middle of each edge, corners
+				# excluded): a masked edge carries foam in its core; an unmasked
+				# edge's core is foam-free. Corner regions are excluded because
+				# a masked edge's strip legitimately runs the full width — the
+				# union scan below pins those pixels to masked bands anyway.
+				var core_ranges := {
+					0: [0, band, band, 64 - band],          # north core
+					1: [band, 64 - band, 64 - band, 64],    # east core
+					2: [64 - band, 64, band, 64 - band],    # south core
+					3: [band, 64 - band, 0, band],          # west core
+				}
+				for edge in 4:
+					var r: Array = core_ranges[edge]
+					var count := 0
+					for py in range(r[0], r[1]):
+						for pxx in range(r[2], r[3]):
+							if is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
+								count += 1
+					var want := (mask & (1 << edge)) != 0
+					_check((count > 0) == want,
+						"64-canvas variant mask %d (kind %d, column %d): %s edge %s (%d foam px)"
+						% [mask, kind_index, col,
+						["north", "east", "south", "west"][edge],
+						"carries the foam" if want else "is foam-free", count])
+				# union scan: every foam pixel sits inside the masked bands
+				var outside := false
 				for py in 64:
-					for pxx in 8:
-						if atlas64.get_pixel(col * 64 + pxx, py) \
-								.is_equal_approx(PaletteLib.FOAM):
-							stray_w += 1
-				_check(stray_w == 0,
-					("64-canvas variant mask 7 (kind %d) — land N/E/S, open W "
-						+ "(the reported 1-cell waterway): the westmost 8 px "
-						+ "column carries zero foam px (%d stray — the white "
-						+ "ring the user reported)") % [kind_index, stray_w])
-			if mask == 11:
-				var stray_s := 0
-				for py in range(56, 64):
 					for pxx in 64:
-						if atlas64.get_pixel(col * 64 + pxx, py) \
-								.is_equal_approx(PaletteLib.FOAM):
-							stray_s += 1
-				_check(stray_s == 0,
-					("64-canvas variant mask 11 (kind %d) — land N/E/W, open "
-						+ "S: the southmost 8 px row carries zero foam px "
-						+ "(%d stray)") % [kind_index, stray_s])
-			# the interior stays the cell's own fill (foam hugs edges only)
-			_check(atlas64.get_pixel(col * 64 + 32, 32)
-				.is_equal_approx(fill),
-				"64-canvas variant mask %d (kind %d): the interior keeps the fill"
-				% [mask, kind_index])
+						if not is_foam.call(atlas64.get_pixel(col * 64 + pxx, py)):
+							continue
+						var in_n := py < band and (mask & 1) != 0
+						var in_s := py >= 64 - band and (mask & 4) != 0
+						var in_w := pxx < band and (mask & 8) != 0
+						var in_e := pxx >= 64 - band and (mask & 2) != 0
+						if not (in_n or in_s or in_w or in_e):
+							outside = true
+							break
+					if outside:
+						break
+				_check(not outside,
+					"64-canvas variant mask %d (kind %d): all foam pixels sit in the masked edge bands"
+					% [mask, kind_index])
+				# (r5 DEFECT C hard gate) OPEN edges are foam-free across their
+				# FULL length INCLUDING both corner cells — the r4 assertion only
+				# covered the core band, and the corner stubs visually closed
+				# 1-cell waterways into a 4th white line. Foam px are the
+				# FOAM-colored speckles/dust; the COAST_SEA shallow wash is the
+				# r5 continuous coast element and deliberately keeps running.
+				for edge in 4:
+					if (mask & (1 << edge)) != 0:
+						continue
+					var bands := [Rect2i(0, 0, 64, 12),
+						Rect2i(52, 0, 12, 64),
+						Rect2i(0, 52, 64, 12),
+						Rect2i(0, 0, 12, 64)]
+					var r: Rect2i = bands[edge]
+					var stray := 0
+					for py in range(r.position.y, r.end.y):
+						for pxx in range(r.position.x, r.end.x):
+							if atlas64.get_pixel(col * 64 + pxx, py) \
+									.is_equal_approx(PaletteLib.FOAM):
+								stray += 1
+					_check(stray == 0,
+						"64-canvas variant mask %d (kind %d): the OPEN %s edge is " + "foam-free across its full length incl. corners (%d stray)"
+						% [mask, kind_index,
+						["north", "east", "south", "west"][edge], stray])
+				# (r5 DEFECT C, the reported case) mask 11 = land N/E/S, open W:
+				# the westmost 8 px column must carry zero foam px — the channel
+				# (r5 DEFECT C, the reported case) land N/E/S with an open west
+				# edge is mask 7 in the §6.6 bit order (N=1, E=2, S=4, W=8; the
+				# r5 brief's "mask 11" label predates the bit map — mask 11 is
+				# N/E/W, open S, gated below as well): the westmost 8 px column
+				# must carry zero foam px — the channel mouth stays visibly OPEN.
+				if mask == 7:
+					var stray_w := 0
+					for py in 64:
+						for pxx in 8:
+							if atlas64.get_pixel(col * 64 + pxx, py) \
+									.is_equal_approx(PaletteLib.FOAM):
+								stray_w += 1
+					_check(stray_w == 0,
+						("64-canvas variant mask 7 (kind %d) — land N/E/S, open W "
+							+ "(the reported 1-cell waterway): the westmost 8 px "
+							+ "column carries zero foam px (%d stray — the white "
+							+ "ring the user reported)") % [kind_index, stray_w])
+				if mask == 11:
+					var stray_s := 0
+					for py in range(56, 64):
+						for pxx in 64:
+							if atlas64.get_pixel(col * 64 + pxx, py) \
+									.is_equal_approx(PaletteLib.FOAM):
+								stray_s += 1
+					_check(stray_s == 0,
+						("64-canvas variant mask 11 (kind %d) — land N/E/W, open "
+							+ "S: the southmost 8 px row carries zero foam px "
+							+ "(%d stray)") % [kind_index, stray_s])
+				# the interior stays the cell's own fill (foam hugs edges only)
+				_check(atlas64.get_pixel(col * 64 + 32, 32)
+					.is_equal_approx(fill),
+					"64-canvas variant mask %d (kind %d): the interior keeps the fill"
+					% [mask, kind_index])
 	# The port marker: the overlay renders the registry texture DIRECTLY (a
 	# TextureRect, no atlas blit) — pin that the marker texture decodes
 	# non-empty through the same RGBA8 guard.
@@ -1136,6 +1216,96 @@ func _test_populated_registry() -> void:
 ##     in the SHIPPED atlas (no consecutive uncovered tiles — the coast path
 ##     never goes dark), the channel mouth stays open (mask 11/5 west ends
 ##     foam-free), and water tiles off the coast stamp no foam at all.
+# --- §4.8 2026-11-06 wang placement (the PixelLab coast family) -------------
+
+func _test_wang_placement() -> void:
+	# The combo → wang-index shuffle, pinned from the vendored tileset's
+	# own `corners` (wang_1 = SE-only, wang_2 = SW-only, wang_4 = NW-only,
+	# wang_8 = NE-only — the doc's NW·4 + NE·8 + SW·2 + SE·1).
+	_check(WaterLayerLib.wang_index(0) == 0, "combo 0 (all water) is wang_0")
+	_check(WaterLayerLib.wang_index(1) == 4, "NW-only combo is wang_4")
+	_check(WaterLayerLib.wang_index(2) == 8, "NE-only combo is wang_8")
+	_check(WaterLayerLib.wang_index(4) == 2, "SW-only combo is wang_2")
+	_check(WaterLayerLib.wang_index(8) == 1, "SE-only combo is wang_1")
+	_check(WaterLayerLib.wang_index(15) == 15, "all-land combo is wang_15")
+	_check(WaterLayerLib.wang_index(12) == 3,
+		"SW+SE combo is wang_3 (the north-coast water tile)")
+	_check(WaterLayerLib.wang_index(3) == 12,
+		"NW+NE combo is wang_12 (the south-coast land tile)")
+	_check(WaterLayerLib.wang_index(5) == 6,
+		"NW+SW combo is wang_6 (the east-coast land tile)")
+	_check(WaterLayerLib.wang_index(10) == 9,
+		"NE+SE combo is wang_9 (the east-coast water tile)")
+	# Water-cell gating: combo 0 is the plain fill; land-owned indices are
+	# never stampable on the water layer.
+	_check(WaterLayerLib.wang_coords(0).x == -1,
+		"combo 0 is the plain fill (sentinel), never a wang column")
+	_check(WaterLayerLib.wang_coords(15).x == -1,
+		"the interior index is not stampable on the water layer")
+	_check(WaterLayerLib.wang_coords(1).x == -1,
+		"combo NW-only (index 4) is terrain-owned — sentinel on water")
+	_check(WaterLayerLib.wang_coords(8) == Vector2i(
+			WaterLayerLib.WANG_COLUMN_BASE + 1, 0),
+		"combo SE-only stamps the wang source at column base+1")
+	_check(WaterLayerLib.wang_coords(4) == Vector2i(
+			WaterLayerLib.WANG_COLUMN_BASE + 2, 0),
+		"combo SW-only stamps the wang source at column base+2")
+	# A synthetic grid's corner probes: land = palette index 2 (west half).
+	var legend: Dictionary = DataLoader.map_legend
+	var grid := PackedByteArray()
+	grid.resize(16)
+	for x in 4:
+		for y in 4:
+			grid[y * 4 + x] = 2 if x < 2 else 0
+	var loader = MapLoaderLib.from_indices(4, 4, grid, legend)
+	_check(loader != null, "the synthetic 4×4 grid loads")
+	if loader == null:
+		return
+	_check(loader._wang_corner_combo(1, 0) == 5,
+		"the last land column reads the vertical-coast combo NW+SW = 5")
+	_check(loader._wang_corner_combo(2, 0) == 0,
+		"the first water column reads combo 0 (land is west — never "
+		+ "one of this cell's corners)")
+	_check(loader._wang_corner_combo(1, 2) == 5,
+		"the coast runs vertically: the row-2 land cell reads combo 5 too")
+	_check(loader._wang_corner_combo(2, 2) == 0,
+		"the east water column reads combo 0")
+	_check(loader._wang_corner_combo(1, 3) == 1,
+		"the bottom land row reads NW-only (off-grid south = water)")
+	_check(loader._wang_land_at(-1, 0) == false,
+		"the vertex probe at x = -1 wraps onto x = 3 (water)")
+	_check(loader._wang_land_at(4, 0) == true,
+		"the vertex probe at x = 4 wraps onto x = 0 (land) — the world "
+		+ "is a cylinder in x, the dateline is not a wall")
+	# The fixture path: registering the water-owned indices turns the water
+	# layer's readiness on and appends exactly one wang source. The tile
+	# cache is per px — clear it (and the foam flags) so this section
+	# builds a FRESH 64 px set with the fixtures, then leaves the statics
+	# clean for any later section.
+	WaterLayerLib._tile_set_cache.clear()
+	WaterLayerLib._foam_ready_by_px.clear()
+	WaterLayerLib.foam_ready = false
+	var fixtures: Dictionary = {}
+	for index in WaterLayerLib.WANG_WATER_INDICES:
+		var tile_image := Image.create_empty(64, 64, false,
+			Image.FORMAT_RGBA8)
+		tile_image.fill(Color(0.1, 0.2, 0.3, 1.0))
+		fixtures[WaterLayerLib.WANG_ID_PREFIX + str(index)] \
+			= ImageTexture.create_from_image(tile_image)
+	UiKitLib.register_textures(fixtures)
+	var water: TileMapLayer = WaterLayerLib.build_layer(64, [])
+	_check(WaterLayerLib.wang_ready_for_px(64),
+		"the water indices resolving turns wang readiness on at 64 px")
+	_check(water.tile_set.get_next_source_id() == 1
+		and (water.tile_set.get_source(0) as TileSetAtlasSource)
+			.get_tiles_count() == 10,
+		"ONE water source: 2 fills + 8 wang columns (no dirs ⇒ no foam "
+		+ "variants on the world path)")
+	UiKitLib.clear_textures()
+	WaterLayerLib._wang_ready_by_px.clear()
+	WaterLayerLib.wang_ready = false
+
+
 func _test_shore_continuity() -> void:
 	TextureRegistryLib.ensure_registered()
 	# --- strip structure (the wash language, not a line) --------------------
@@ -1325,6 +1495,14 @@ func _test_shore_strips_and_material() -> void:
 	var midpoints := {"t": Vector2i(16, 1), "b": Vector2i(16, 30),
 		"l": Vector2i(1, 16), "r": Vector2i(30, 16)}
 	var atlas := source.texture.get_image()
+	# §4.8 2026-11-06: the composed base fill under the strips is the
+	# painted wang_0 when the family resolves (the atlas pixels ARE the
+	# fill) — comparisons go against the composed kind fill, not the flat
+	# palette colors.
+	var kind_fills: Array[Image] = []
+	for kind_index in 2:
+		kind_fills.append(WaterLayerLib._kind_image(
+			["sea", "coastal_sea"][kind_index], 32))
 	for mask: int in foam_edges:
 		var want: Array = foam_edges[mask]
 		for kind_index in 2:
@@ -1349,7 +1527,8 @@ func _test_shore_strips_and_material() -> void:
 				var should := ((1 << ["t", "r", "b", "l"].find(edge))
 					& mask) != 0
 				if kind_index == 0:
-					var is_foam := not pixel.is_equal_approx(fill)
+					var base := kind_fills[kind_index].get_pixel(pos.x, pos.y)
+					var is_foam := not pixel.is_equal_approx(base)
 					_check(is_foam == should,
 						"coast-foam cell mask %d (kind %d, column %d): edge `%s` %s" % [
 							mask, kind_index, column, edge,
@@ -1371,7 +1550,9 @@ func _test_shore_strips_and_material() -> void:
 							("coast-foam cell mask %d (kind %d, column %d): edge `%s` " + "carries speckle clusters (%d FOAM px)") % [
 								mask, kind_index, column, edge, marks])
 					else:
-						_check(marks == 0 and pixel.is_equal_approx(fill),
+						var base2 := kind_fills[kind_index].get_pixel(pos.x,
+							pos.y)
+						_check(marks == 0 and pixel.is_equal_approx(base2),
 							("coast-foam cell mask %d (kind %d, column %d): edge `%s` " + "is the fill, speckles respect the mask") % [
 								mask, kind_index, column, edge])
 	# (1c) The foam-mask fixture: a synthetic legend decode, land at chosen

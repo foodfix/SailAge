@@ -6642,6 +6642,121 @@ def _check_ocean_determinism(verbose: bool) -> None:
         )
 
 
+def _check_dist_raster(world: WorldGrid) -> int:
+    """§6.7 audit of ``data/maps/dist_land.png`` (the 80-* §4.8 2026-11-06
+    pixel-depth amendment's factor source): the raster decodes as an RGB8
+    4320×2160 PNG whose R/G pair carries ``round(min(d,16)/16*65535)``;
+    land pixels are exactly 0 (a land tile's nearest land is itself);
+    nothing exceeds the saturation encode; and a deterministic probe
+    sample (every 9157th raster pixel) matches the true Euclidean
+    distance to land within the encode precision. The full byte-identical
+    double-run stays a manual/acceptance gate (``tools/build_distance_field.py
+    --check``) — re-running the whole EDT per validation pass would be the
+    expensive-re-derivation the working agreements forbid."""
+    path = DATA_DIR / "maps" / "dist_land.png"
+    if not path.is_file():
+        print("INFO group 9 data/maps/dist_land.png not present — the "
+              "§6.7 distance raster is staged (80-* §4.8 2026-11-06)")
+        return 0
+    width = world.width
+    height = world.height
+    indices = world.indices
+    rgb = _decode_rgb_png(path.read_bytes(), width, height)
+
+    sat_enc = int(round(16.0 / 16.0 * 65535))
+    probes = 0
+    stride = 9157
+    rad = 18
+    for n in range(width * height):
+        if n % stride:
+            continue
+        x = n % width
+        y = n // width
+        enc = (rgb[n * 3] << 8) | rgb[n * 3 + 1]
+        if enc > sat_enc:
+            fail("dist-bounds", "data/maps/dist_land.png",
+                 f"pixel ({x}, {y}) decodes {enc} > saturation "
+                 f"{sat_enc} (§6.7 encode)", 9)
+        # true Euclidean distance via a bounded window scan (the
+        # saturation radius makes an 18-tile window a complete one)
+        d2 = None
+        for ly in range(max(0, y - rad), min(height, y + rad + 1)):
+            dy = ly - y
+            row_base = ly * width
+            for lx in range(max(0, x - rad), min(width, x + rad + 1)):
+                if indices[row_base + lx] == 2:
+                    dx = lx - x
+                    cand = dx * dx + dy * dy
+                    if d2 is None or cand < d2:
+                        d2 = cand
+        true_d = math.sqrt(d2) if d2 is not None else 99.0
+        decoded = enc / 4096.0
+        expect = min(true_d, 16.0)
+        if abs(decoded - expect) > 0.01:
+            fail("dist-probe", "data/maps/dist_land.png",
+                 f"pixel ({x}, {y}): decoded {decoded:.4f} tiles, true "
+                 f"{expect:.4f} (§6.7 sampled probe)", 9)
+        if indices[n] == 2 and enc != 0:
+            fail("dist-land-zero", "data/maps/dist_land.png",
+                 f"land pixel ({x}, {y}) encodes {enc} != 0 (§6.7)", 9)
+        probes += 1
+    return probes
+
+
+def _decode_rgb_png(data: bytes, width: int, height: int) -> bytearray:
+    """Minimal RGB8 PNG decode to raw bytes (the §6.7 raster contract)."""
+    pos = 8
+    idat = b""
+    w = h = bitdepth = colortype = 0
+    while pos < len(data):
+        length = int.from_bytes(data[pos:pos + 4], "big")
+        ctype = data[pos + 4:pos + 8]
+        chunk = data[pos + 8:pos + 8 + length]
+        if ctype == b"IHDR":
+            w = int.from_bytes(chunk[0:4], "big")
+            h = int.from_bytes(chunk[4:8], "big")
+            bitdepth, colortype = chunk[8], chunk[9]
+        elif ctype == b"IDAT":
+            idat += chunk
+        pos += 12 + length
+    if (w, h) != (width, height) or colortype != 2 or bitdepth != 8:
+        raise ValueError(
+            f"dist raster: {w}x{h} colour type {colortype} bit {bitdepth} "
+            "!= the §6.7 RGB8 4320x2160 contract")
+    raw = zlib.decompress(idat)
+    stride = width * 3
+    out = bytearray(width * height * 3)
+    prev = bytearray(stride)
+    pos = 0
+    for y in range(height):
+        f = raw[pos]
+        pos += 1
+        line = bytearray(raw[pos:pos + stride])
+        pos += stride
+        if f == 1:
+            for i in range(3, stride):
+                line[i] = (line[i] + line[i - 3]) & 255
+        elif f == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 255
+        elif f == 3:
+            for i in range(stride):
+                a = line[i - 3] if i >= 3 else 0
+                line[i] = (line[i] + ((a + prev[i]) >> 1)) & 255
+        elif f == 4:
+            for i in range(stride):
+                a = line[i - 3] if i >= 3 else 0
+                b = prev[i]
+                c = prev[i - 3] if i >= 3 else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[i] = (line[i] + pr) & 255
+        out[y * stride:(y + 1) * stride] = line
+        prev = line
+    return out
+
+
 def check_group9(docs: dict[str, object], verbose: bool) -> None:
     """Ocean rasters: docs/10-DATA-SCHEMA.md section 8.4."""
     global _verbose_flag
@@ -6684,6 +6799,8 @@ def check_group9(docs: dict[str, object], verbose: bool) -> None:
         CURRENTS_PNG_LABEL, CURRENTS_PNG, world, CURRENT_INDEX_MAX,
         lambda index: f"current index {index}", current_namer)
 
+    dist_probes = _check_dist_raster(world)
+
     _check_ocean_determinism(verbose)
 
     if verbose:
@@ -6692,6 +6809,12 @@ def check_group9(docs: dict[str, object], verbose: bool) -> None:
             f"over {region_count} regions, currents {currents_painted} "
             "painted tiles, palette bounds ok, water coverage ok, rebuild "
             "byte-identical)"
+        )
+        print(
+            f"PASS group 9 dist raster (data/maps/dist_land.png: decode, "
+            f"bounds, land-zero, {dist_probes} sampled Euclidean probes "
+            "ok — the full byte-identical rebuild is "
+            "tools/build_distance_field.py --check)"
         )
 
 
@@ -8971,6 +9094,24 @@ def _g13_expected_size(decl: dict) -> tuple[int, int]:
     return width, height
 
 
+def _g13_terrain_pixellab_ledger() -> dict:
+    """The PixelLab coast-family ledger (80-* §4.8 2026-11-06): the
+    tools/build_terrain_pixellab.py output beside the vendored tileset.
+    Empty dict when absent or unparseable — the family is then simply not
+    in the inventory (staged, like a class dir with no manifests)."""
+    path = DATA_DIR.parent / "tools" / "assets" / "pixellab_raw" / \
+        "pixellab_coast_ledger.json"
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(doc.get("tiles"), dict) or not doc["tiles"]:
+        return {}
+    return doc
+
+
 def _g13_raw_pixellab_ingest() -> bool:
     """True when the last ship ingestion was the PixelLab raw mode
     (ledger generated_by marker or per-token pixellab provenance;
@@ -9055,9 +9196,16 @@ def _g13_check_chrome_seams(sprites: dict) -> None:
 def _g13_check_terrain_rings(class_name: str, decls: dict,
                              sprites: dict) -> None:
     """§8.8 item 8 (terrain part): variants of one kind share a
-    byte-identical outer 1px ring."""
+    byte-identical outer 1px ring. The PixelLab coast family is exempt —
+    its 16 tiles are DISTINCT corner tiles of one Wang set (upper = land,
+    lower = water), not variants of one kind; their seam guarantee is the
+    shared corner-vertex geometry of the placement rule (80-* §4.8
+    2026-11-06)."""
+    pixellab_ids = set(_g13_terrain_pixellab_ledger().get("tiles", {}))
     kinds: dict[str, list[_G13Sprite]] = {}
     for sprite_id, sprite in sorted(sprites.items()):
+        if sprite_id in pixellab_ids:
+            continue
         parts = sprite_id.split("_")
         if len(parts) >= 3 and parts[0] == "terrain":
             kinds.setdefault("_".join(parts[1:-1]), []).append(sprite)
@@ -10258,6 +10406,26 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             for sprite_id, (decl, _path) in decls.items():
                 parent = str(Path(decl["file"]).parent)
                 declared.setdefault(parent, []).append((sprite_id, decl))
+            # §4.8 2026-11-06 — the PixelLab coast family: the vendored
+            # tileset's tiles enter the terrain inventory through the
+            # build-time ledger (tools/build_terrain_pixellab.py output),
+            # the hulls-registry precedent. Palette/budget/ring checks are
+            # waived for the family (the model's deliberate pixels ship as
+            # drawn — the raw-pixellab hull ruling); its seam guarantee is
+            # the Wang corner-vertex geometry, not the variant ring.
+            coast_ledger = _g13_terrain_pixellab_ledger() \
+                if class_name == "terrain" else None
+            if coast_ledger:
+                entries_c: list = []
+                for sid in sorted(coast_ledger.get("tiles", {})):
+                    decl_c = {"id": sid, "class": "terrain",
+                              "file": f"assets/ui/terrain/{sid}.png",
+                              "width": 64, "height": 64,
+                              "pixellab": coast_ledger["tiles"][sid]}
+                    entries_c.append((sid, decl_c))
+                    check_decls.setdefault(sid, (decl_c, None))
+                terrain_entries = declared.setdefault("assets/ui/terrain", [])
+                terrain_entries.extend(entries_c)
         sprites: dict[str, _G13Sprite] = {}
         for parent, entries in sorted(declared.items()):
             dir_path = ART_ROOT / parent
@@ -10283,6 +10451,9 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 if block is not None:
                     if class_name == "hulls" and _g13_raw_pixellab_ingest():
                         pass  # raw pixellab hulls: palette/budget waived
+                    elif class_name == "terrain" and \
+                            isinstance(decl, dict) and decl.get("pixellab"):
+                        pass  # PixelLab coast family: same raw ruling
                     else:
                         mask = isinstance(decl, dict) and \
                             decl.get("class") == "terrain_pattern"

@@ -2825,9 +2825,32 @@ def run_check() -> None:
     # ingested tokens are the expected bytes (the ledger pins their source
     # sha; the group-13 audit re-derives the provenance), generator art is
     # rebuilt and compared as before.
+    # §4.8 2026-11-06 — the PixelLab coast family joins the same contract
+    # through ITS OWN ledger (tools/assets/pixellab_raw/
+    # pixellab_coast_ledger.json, the tools/build_terrain_pixellab.py
+    # output): the committed tiles are copied into the temp rebuild before
+    # the compare, exactly like the ingested tokens the override ladder
+    # serves. The family is ledger-governed, never generator-produced
+    # (the builder never contacts the API; a rebuild decodes the vendored
+    # bytes byte-identically).
+    coast_tiles = sorted(
+        (ROOT / "tools" / "assets" / "pixellab_raw"
+         / "pixellab_coast_ledger.json").is_file()
+        and json.loads((ROOT / "tools" / "assets" / "pixellab_raw"
+                        / "pixellab_coast_ledger.json").read_text())
+        .get("tiles", {}).keys() or [])
     with tempfile.TemporaryDirectory(prefix="ui_art_check.") as td:
         m, _ = build_into(Path(td), resolve_ingest_overrides(),
                           resolve_artifact_overrides())
+        for sid in coast_tiles:
+            src = committed / "terrain" / f"{sid}.png"
+            if not src.is_file():
+                fail(f"--check: the coast ledger names {sid} but "
+                     "assets/ui/terrain does not ship it; run "
+                     "tools/build_terrain_pixellab.py")
+            dst_dir = Path(td) / "assets" / "ui" / "terrain"
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst_dir / f"{sid}.png")
         # The pipeline owns PNGs; Godot's .import sidecars are committed by
         # the master --import pass and carry no rebuild semantics (master
         # reconciliation 2026-11-04, ledgered).

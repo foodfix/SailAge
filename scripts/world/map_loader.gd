@@ -417,6 +417,7 @@ func _reset_caches() -> void:
 	_water_tile_set = null
 	_water_source_id = -1
 	_blocker_by_index = PackedByteArray()
+	_land_indices = {}
 	_chunks_root = null
 	_chunks = {}
 	_foam_cache = {}
@@ -965,8 +966,11 @@ func _ensure_tile_set() -> void:
 	# unknown is skipped entirely.
 	var rows: Array = []
 	_water_columns = {}
+	_land_indices = {}
 	for index in range(0, colors.size()):
 		var kind := kind_of_index(index)
+		if kind == "land":
+			_land_indices[index] = true
 		if WaterLayerLib.KIND_COLUMNS.has(kind):
 			_water_columns[index] = int(WaterLayerLib.KIND_COLUMNS[kind])
 			continue
@@ -978,19 +982,70 @@ func _ensure_tile_set() -> void:
 			"row": rows.size(),
 			"variants": int(TERRAIN_VARIANTS.get(kind, 1)),
 		})
-	var max_variants := 1
+	# §4.8 2026-11-06 — when the wang upper half resolves, the land row
+	# carries its coast tiles: a land cell's own pixel is its NW corner
+	# vertex, so its wang index always carries bit 2 — the land-owned
+	# indices are {4,5,6,7} (west/south water corners) and {12,13,14}
+	# (NE-set edges), while 15 (all-land) is the interior. Land row
+	# layout: columns 0..7 are the wang_15 interior (the 8 dihedral
+	# transforms, the hash-variant pool), columns 8..14 the coast tiles
+	# WANG_LAND_INDICES in order (stamped by [method _wang_corner_combo]).
+	# The legacy flat land variants yield to the painted interior (the
+	# family is the shipped coast art, 80-* §4.8 2026-11-06).
+	var wang_upper := true
+	for wang_index in WaterLayerLib.WANG_LAND_INDICES:
+		if UiKitLib.icon_texture(
+				WaterLayerLib.WANG_ID_PREFIX + str(wang_index)) == null:
+			wang_upper = false
+			break
+	if wang_upper:
+		for entry in rows:
+			if entry["kind"] == "land":
+				entry["variants"] = 8
+				entry["wang_row_base"] = 8
+			else:
+				entry["wang_row_base"] = -1
+	else:
+		for entry in rows:
+			entry["wang_row_base"] = -1
+	var max_columns := 1
 	for entry in rows:
-		max_variants = maxi(max_variants, int(entry["variants"]))
-	var image := Image.create_empty(max_variants * tile_size_px,
+		var width_cols := int(entry["variants"])
+		if entry.get("wang_row_base", -1) >= 0:
+			width_cols = int(entry["wang_row_base"]) + 7  # columns 8..14
+		max_columns = maxi(max_columns, width_cols)
+	var image := Image.create_empty(max_columns * tile_size_px,
 		rows.size() * tile_size_px, false, Image.FORMAT_RGBA8)
 	for entry in rows:
 		var row := int(entry["row"])
 		var variants := int(entry["variants"])
 		for variant in variants:
-			var tile_image := _terrain_kind_image(str(entry["kind"]), variant,
-				colors[int(entry["index"])])
+			var tile_image: Image
+			if entry.get("wang_row_base", -1) >= 0 and entry["kind"] == "land":
+				tile_image = _wang_interior_image(variant, tile_size_px)
+			else:
+				tile_image = _terrain_kind_image(str(entry["kind"]), variant,
+					colors[int(entry["index"])])
 			image.blit_rect(tile_image, Rect2i(0, 0, tile_size_px, tile_size_px),
 				Vector2i(variant * tile_size_px, row * tile_size_px))
+		if entry.get("wang_row_base", -1) >= 0:
+			for position in WaterLayerLib.WANG_LAND_INDICES.size():
+				var coast := UiKitLib.icon_texture(
+					WaterLayerLib.WANG_ID_PREFIX
+					+ str(WaterLayerLib.WANG_LAND_INDICES[position]))
+				if coast == null:
+					continue
+				var pixels := WaterLayerLib._to_rgba8(coast.get_image())
+				if pixels == null:
+					continue
+				if pixels.get_width() != tile_size_px \
+						or pixels.get_height() != tile_size_px:
+					pixels.resize(tile_size_px, tile_size_px,
+						Image.INTERPOLATE_NEAREST)
+				image.blit_rect(pixels,
+					Rect2i(0, 0, tile_size_px, tile_size_px),
+					Vector2i((8 + position) * tile_size_px,
+						row * tile_size_px))
 		_terrain_cells[int(entry["index"])] = entry
 	var texture := ImageTexture.create_from_image(image)
 	_tile_set = TileSet.new()
@@ -999,9 +1054,46 @@ func _ensure_tile_set() -> void:
 	source.texture = texture
 	source.texture_region_size = Vector2i(tile_size_px, tile_size_px)
 	for entry in rows:
-		for variant in int(entry["variants"]):
+		var columns := int(entry["variants"])
+		if entry.get("wang_row_base", -1) >= 0:
+			columns = int(entry["wang_row_base"]) + 7
+		for variant in columns:
 			source.create_tile(Vector2i(variant, int(entry["row"])))
 	_atlas_source_id = _tile_set.add_source(source)
+
+
+## One wang interior (wang_15, all-land corners) variant for the land row's
+## hash-variant pool: the 8 dihedral transforms of the one painted tile —
+## identity, rotations ×90°, and flips — deterministic order (the §9.2
+## variant hash needs a stable pool). `variant` wraps mod 8.
+func _wang_interior_image(variant: int, tile_px: int) -> Image:
+	var texture := UiKitLib.icon_texture(
+		WaterLayerLib.WANG_ID_PREFIX + "15")
+	var image := Image.create_empty(tile_px, tile_px, false,
+		Image.FORMAT_RGBA8)
+	if texture == null:
+		image.fill(PaletteLib.LAND)
+		return image
+	var pixels := WaterLayerLib._to_rgba8(texture.get_image())
+	if pixels == null:
+		image.fill(PaletteLib.LAND)
+		return image
+	if pixels.get_width() != tile_px or pixels.get_height() != tile_px:
+		pixels.resize(tile_px, tile_px, Image.INTERPOLATE_NEAREST)
+	match variant % 8:
+		1: pixels.rotate_90(CLOCKWISE)
+		2: pixels.rotate_180()
+		3: pixels.rotate_90(COUNTERCLOCKWISE)
+		4: pixels.flip_x()
+		5: pixels.flip_y()
+		6:
+			pixels.flip_x()
+			pixels.rotate_90(CLOCKWISE)
+		7:
+			pixels.flip_y()
+			pixels.rotate_90(CLOCKWISE)
+	image.blit_rect(pixels, Rect2i(0, 0, tile_px, tile_px), Vector2i.ZERO)
+	return image
 
 
 ## One terrain-variant cell image: the registry sprite's pixels when the id
@@ -1093,6 +1185,64 @@ func _shore_foam_mask(cell: Vector2i) -> int:
 	return mask
 
 
+## The §4.8 2026-11-06 wang corner combo at a cell: bits NW/NE/SW/SE = 1/2/4/8,
+## each set when the corresponding map pixel (the vertex grid — cell (x,y)
+## spans pixels (x..x+1, y..y+1)) is LAND. Reef/ice are not land for this
+## purpose (§6.2 adjacency rules; their cells keep their own tiles). x is
+## wrap-aware, y out of range reads water (the §6.6 builder's rule) — the
+## vertex row below the bottom edge and above the top edge is open sea.
+func _wang_corner_combo(x: int, y: int) -> int:
+	var combo := 0
+	if _wang_land_at(x, y):
+		combo |= 1
+	if _wang_land_at(x + 1, y):
+		combo |= 2
+	if _wang_land_at(x, y + 1):
+		combo |= 4
+	if _wang_land_at(x + 1, y + 1):
+		combo |= 8
+	return combo
+
+
+## One vertex probe of [method _wang_corner_combo] (wrap in x, clamp in y).
+func _wang_land_at(x: int, y: int) -> bool:
+	if y < 0 or y >= height:
+		return false
+	# The land-index table fills lazily from THIS loader's legend — the
+	# synthetic-grid path (from_indices) never runs _ensure_tile_set.
+	if _land_indices.is_empty():
+		for index in PALETTE_CHARS.length():
+			if kind_of_index(index) == "land":
+				_land_indices[index] = true
+	var value := int(indices[y * width + posmod(x, width)])
+	return _land_indices.has(value)
+
+
+## The palette indices whose legend kind is `land` (computed once per
+## decode; the wang probes are byte reads off this set's members).
+var _land_indices := {}
+
+
+## Stamps one water cell of a chunk: the §4.8 2026-11-06 wang corner tile
+## when the family resolved AND the cell straddles the coast (combo ≠ 0),
+## else the legacy plain fill / coast-foam variant (which stay the fallback
+## and the battle-grid path). Shared by the spawn and warm paths so the two
+## cannot drift.
+func _stamp_water_cell(water: TileMapLayer, water_source: int, i: int, j: int,
+		x: int, y: int, column: int, foam_mask: int) -> void:
+	var tile_px: int = water.tile_set.tile_size.x
+	if WaterLayerLib.wang_ready_for_px(tile_px):
+		var combo := _wang_corner_combo(x, y)
+		if combo != 0:
+			var coords := WaterLayerLib.wang_coords(combo)
+			if coords.x >= 0:
+				water.set_cell(Vector2i(i, j), water_source, coords)
+				return
+	# Legacy: plain fill or coast-foam variant.
+	water.set_cell(Vector2i(i, j), water_source,
+		WaterLayerLib.water_coords(foam_mask, column, tile_px))
+
+
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
 ## chunk ring. `center_cell` is in **unbounded** world cells: sampling wraps per
 ## tile (`x mod width`), so `x = 4320` shows `x = 0` and no seam can show void.
@@ -1162,35 +1312,27 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 	layer.position = Vector2(
 		key.x * CHUNK_TILES * tile_size_px, key.y * CHUNK_TILES * tile_size_px
 	)
-	# The animated water layer (§9.2/§4.7.17): sea/coastal_sea tiles — plus
-	# the coast-foam VARIANTS for §6.6-coded cells (the foam is baked into
-	# the water tiles, so no separate overlay layer exists) — under the
-	# shared shader material, one child layer per chunk. Water and terrain
-	# never share a cell, so the child's draw order under the terrain parent
-	# is invisible. The layers carry no extra z: the chunk's position and
-	# the port overlay's z 2 stay the only ordering surfaces.
-	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px,
-		SHORE_DIRS)
-	if water_material() != null:
+	# The animated water layer (§9.2/§4.7.17): the §4.8 2026-11-06
+	# amendment retires the coast-foam variant bake from the WORLD path —
+	# the PixelLab wang coastline carries the baked shore art, and the
+	# r5 foam wash/speckles are retired (user direction). No dirs ⇒ no
+	# variant columns; the layers stamp plain painted fills + wang corners.
+	var water: TileMapLayer = WaterLayerLib.build_layer(tile_size_px)
+	# §4.8 2026-11-06 pixel-depth: the WORLD water layer enables the
+	# per-pixel distance darkening (the shared material duplicated per chunk
+	# with this chunk's map-pixel origin; S10's battle layer keeps the base
+	# material with the amendment disabled).
+	var chunk_origin_px := Vector2(key.x * CHUNK_TILES, key.y * CHUNK_TILES) \
+		* tile_size_px
+	var chunk_material := WaterLayerLib.build_chunk_material(chunk_origin_px)
+	if chunk_material != null:
+		water.material = chunk_material
+	elif water_material() != null:
 		water.material = water_material()
 	water.name = "Water"
 	var water_source := _water_source_id_of(water)
 	var base_x := key.x * CHUNK_TILES
 	var base_y := key.y * CHUNK_TILES
-	# The foam masks are world-static: compute the chunk's 128×128 mask once
-	# and cache it until the chunk is freed (camera pans re-spawn chunks).
-	if not _foam_cache.has(key):
-		var masks := PackedByteArray()
-		masks.resize(CHUNK_TILES * CHUNK_TILES)
-		for j in CHUNK_TILES:
-			var y := base_y + j
-			if y < 0 or y >= height:
-				continue
-			for i in CHUNK_TILES:
-				masks[j * CHUNK_TILES + i] = _shore_foam_mask(
-					Vector2i(base_x + i, y))
-		_foam_cache[key] = masks
-	var foam_masks: PackedByteArray = _foam_cache[key]
 	for j in CHUNK_TILES:
 		var y := base_y + j
 		if y < 0 or y >= height:
@@ -1200,82 +1342,57 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 			var value := int(indices[y * width + posmod(x, width)])
 			var column: int = _water_columns.get(value, -1)
 			if column >= 0:
-				# A water kind (§4.8.5: flat fills on the water layer); the
-				# §6.6 coast foam exists on WATER tiles only, so the stamp
-				# rides this branch. `water_coords` picks the kind's plain
-				# fill when the raster has not decoded yet (§9 boot budget —
-				# [method warm_shore_overlay] re-stamps foam later) or the
-				# tile carries no foam edge.
-				water.set_cell(Vector2i(i, j), water_source,
-					WaterLayerLib.water_coords(
-						int(foam_masks[j * CHUNK_TILES + i]), column,
-						tile_size_px))
+				# A water kind: the §4.8 2026-11-06 wang corner tile when
+				# the family resolved and the cell straddles the coast,
+				# else the plain fill (the foam path is retired on the
+				# world map — mask 0).
+				_stamp_water_cell(water, water_source, i, j, x, y, column, 0)
 				continue
 			var terrain: Dictionary = _terrain_cells.get(value, {})
 			if terrain.is_empty():
 				continue
+			var terrain_row := int(terrain["row"])
+			# §4.8 2026-11-06 — a land cell straddling the coast (any water
+			# corner) stamps its wang corner tile (the terrain atlas's land
+			# row columns 8..14); interior land keeps the §9.2 cell-hash
+			# variant pick over the wang interior columns 0..7. When the
+			# wang family is inactive the row carries the legacy variants
+			# and the hash path covers every cell (the fallback contract).
+			var combo := _wang_corner_combo(x, y)
+			if terrain.get("wang_row_base", -1) >= 0 and combo != 15:
+				var coast_pos: int = WaterLayerLib.WANG_LAND_INDICES.find(
+					WaterLayerLib.wang_index(combo))
+				if coast_pos >= 0:
+					layer.set_cell(Vector2i(i, j), _atlas_source_id,
+						Vector2i(int(terrain["wang_row_base"]) + coast_pos,
+							terrain_row))
+					continue
 			# Terrain art: the variant is the §9.2 cell hash over the WRAPPED
 			# tile column — the same tile picks the same variant everywhere,
 			# seam copies included.
 			var variant := terrain_variant_index(posmod(x, width), y,
 				int(terrain["variants"]))
 			layer.set_cell(Vector2i(i, j), _atlas_source_id,
-				Vector2i(variant, int(terrain["row"])))
+				Vector2i(variant, terrain_row))
 	layer.add_child(water)
 	_chunks_root.add_child(layer)
-	# The shore raster decodes OFF the boot frame (the §9 boot budget): the
-	# world scene warms it on its frame-2 tick, which then re-stamps every
-	# live chunk's water foam. Until then coded cells simply show the plain
-	# fills (cosmetic, §6.6).
-	if not shore_codes.is_empty():
-		_fill_water_cells(water, base_x, base_y)
+	# The §6.6 shore-raster decode + coast-foam warm pass are RETIRED on the
+	# world path (§4.8 2026-11-06 — the wang coastline replaces the foam).
+	# `shore_codes` still decodes lazily for any other consumer.
 	return layer
 
 
-## Re-stamps the water cells of every live chunk — the deferred-decode path
-## ([method warm_shore_overlay]; the §6.6 coast foam is cosmetic, so chunks
-## built before the decode simply gain their foam now).
+## Retired on the world path (§4.8 2026-11-06): the wang coastline replaced
+## the r5 coast foam. Kept as a no-op for call-site compatibility (the
+## world scene's frame-2 tick still calls it).
 func warm_shore_overlay() -> void:
-	_ensure_shore_decode()
-	if shore_codes.is_empty() or _chunks.is_empty():
-		return
-	for key in _chunks:
-		var chunk: Node = _chunks[key]
-		var water := chunk.get_node_or_null("Water") as TileMapLayer
-		if water == null:
-			continue
-		_fill_water_cells(water, key.x * CHUNK_TILES, key.y * CHUNK_TILES)
+	return
 
 
-## Stamps the water cells (plain fill or coast-foam variant) of one chunk
-## rect into `water` (codes only on water tiles; the variant pick refines
-## diagonals to blocking orthogonals and falls back to the plain fill when
-## the variant set is absent).
+## Retired on the world path (§4.8 2026-11-06): kept as a no-op for
+## call-site compatibility (suites reference the name).
 func _fill_water_cells(water: TileMapLayer, base_x: int, base_y: int) -> void:
-	if water == null or water.tile_set == null:
-		return
-	var water_source := _water_source_id_of(water)
-	if water_source < 0:
-		return
-	var tile_px: int = water.tile_set.tile_size.x
-	var key := Vector2i(base_x / CHUNK_TILES, base_y / CHUNK_TILES)
-	if not _foam_cache.has(key):
-		return  # spawn already stamped the cached masks
-	var foam_masks: PackedByteArray = _foam_cache[key]
-	for j in CHUNK_TILES:
-		var y := base_y + j
-		if y < 0 or y >= height:
-			continue
-		for i in CHUNK_TILES:
-			var x := base_x + i
-			var value := int(indices[y * width + posmod(x, width)])
-			var column: int = _water_columns.get(value, -1)
-			if column < 0:
-				continue
-			water.set_cell(Vector2i(i, j), water_source,
-				WaterLayerLib.water_coords(
-					int(foam_masks[j * CHUNK_TILES + i]), column,
-					tile_px))
+	return
 
 
 ## The atlas source id of a water layer built by [constant WaterLayerLib]

@@ -70,10 +70,14 @@ Godot 4 + GDScript, desktop-first. Design is fully specified in `docs/` —
   `data/maps/world.png` (indexed PNG, 1 px = 1 tile, 4320 × 2160 at
   12 tiles/degree, palette `~ . # ^ I`; spec in `docs/10-DATA-SCHEMA.md`
   §6.3) and, since Phase 6, the ocean rasters `data/maps/wind_regions.png` +
-  `data/maps/currents.png` (spec in `docs/10-DATA-SCHEMA.md` §6.5).
+  `data/maps/currents.png` (spec in `docs/10-DATA-SCHEMA.md` §6.5) and,
+  since the 2026-11-06 PixelLab terrain amendment, the land-distance
+  raster `data/maps/dist_land.png` (spec in `docs/10-DATA-SCHEMA.md`
+  §6.7 — the water shader's pixel-depth factor source).
   `world.png` is built by `tools/build_world.py` from vendored public-domain
   shorelines plus `tools/map_overrides.json`; the ocean rasters are built by
-  `tools/build_ocean.py` from the ocean JSON sources; ASCII exports are
+  `tools/build_ocean.py` from the ocean JSON sources; `dist_land.png` is
+  built by `tools/build_distance_field.py` from `world.png`; ASCII exports are
   debug outputs of those tools only. `build_world.py` also persists every
   port's berth + shore tiles to `data/maps/harbors.json` (unified-movement
   amendment — the runtime reads the table instead of re-snapping). **Never
