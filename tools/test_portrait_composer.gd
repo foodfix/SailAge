@@ -355,8 +355,13 @@ func _test_texture_registry() -> void:
 	TextureRegistryLib._reset_for_tests()
 	TextureRegistryLib.ensure_registered()
 	var count := TextureRegistryLib.registered_count
-	_check(count > 1200,
-		"the registry registers the generated families (%d ids)" % count)
+	# 10acf123 (2026-11-05): hull tokens joined the raw-bytes lazy family —
+	# they resolve on first render, NOT through the eager registration, so
+	# the eager count is icons+markers+terrain+fx+portraits (~200), not the
+	# 1152-token grid. Token coverage is proven by the lazy probes below.
+	_check(count > 150,
+		"the registry registers the eager generated families (%d ids; " +
+		"tokens lazy since 10acf123)" % count)
 	# One id per family resolves through the kit.
 	var probes := {
 		"coin": "icons (stem id)",

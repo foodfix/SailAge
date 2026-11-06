@@ -8491,6 +8491,8 @@ G13_PENNANTS = {
 # ones (canvas/band/block/pennant above) plus the ledger contract here.
 G13_INGEST_VERSION = 2
 G13_INGEST_LEDGER = UI_ART_DIR / "ingest_ledger.json"
+# PixelLab raw mode (80-* §4.8 2026-11-06): all 8 native rotations
+RAW_INGEST_DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 G13_INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")
 G13_INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # exact h-flips
 G13_MASTHEAD_MIN_PX = 3      # §4.8 ingestion contract: ≥3 source px
@@ -8969,6 +8971,25 @@ def _g13_expected_size(decl: dict) -> tuple[int, int]:
     return width, height
 
 
+def _g13_raw_pixellab_ingest() -> bool:
+    """True when the last ship ingestion was the PixelLab raw mode
+    (ledger generated_by marker or per-token pixellab provenance;
+    80-* §4.8 2026-11-06 — palette/budget checks are waived for that
+    family: the audit is the provenance ledger + fit + pennant)."""
+    ledger = G13_INGEST_LEDGER
+    if not ledger.is_file():
+        return False
+    try:
+        doc = json.loads(ledger.read_text())
+    except ValueError:
+        return False
+    if "pixellab" in str(doc.get("generated_by", "")):
+        return True
+    tokens = doc.get("tokens") or {}
+    return any(isinstance(rec, dict) and rec.get("pixellab")
+               for rec in tokens.values())
+
+
 def _g13_check_pixels(class_name: str, sprite: _G13Sprite, block: frozenset) -> None:
     """§8.8 items 3–4 on a decoded artifact: block membership + budget."""
     allowed = block | BLOCK_LOCKED
@@ -9166,7 +9187,13 @@ def _g13_check_footprints(sprites: dict, ship_types: list) -> None:
     measured on the SIDE VIEW (e/w — the profile shows the ship's length)
     and lies in the tier band; the stern/bow views (n/s) show the beam and
     the diagonals are the honest 3/4 views — both unbanded (canvas-fit
-    only, left to the governor's canvas check)."""
+    only, left to the governor's canvas check).
+    WAIVED for the PixelLab raw family (80-* §4.8 2026-11-06): bands are
+    retired for model tokens — the audit is ledger provenance + fit +
+    masthead pennant; the footprint line stays informational in the
+    governor's build report."""
+    if _g13_raw_pixellab_ingest():
+        return
     tier_of = {s["id"]: s["tier"] for s in ship_types}
     for sprite_id, sprite in sorted(sprites.items()):
         if not sprite_id.startswith("hull_"):
@@ -9653,10 +9680,14 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
             fail("art-ingest", "tools/ui_art/ingest_ledger.json",
                  f"bad token id {tid!r}", 13)
         ship, d = tid[len("hull_"):].rsplit("_", 1)
-        if ship not in ship_ids or d not in G13_INGEST_BASE_DIRS:
+        raw_bases = _g13_raw_pixellab_ingest()
+        allowed_dirs = (RAW_INGEST_DIRS if raw_bases
+                        else G13_INGEST_BASE_DIRS)
+        if ship not in ship_ids or d not in allowed_dirs:
             fail("art-ingest", "tools/ui_art/ingest_ledger.json",
                  f"token {tid!r} is not a real ship's BASE dir "
-                 f"(f6c00bb bases {G13_INGEST_BASE_DIRS})", 13)
+                 f"({'pixellab 8-native' if raw_bases else 'f6c00bb bases'} "
+                 f"{allowed_dirs})", 13)
         if rec.get("job") != tid:
             fail("art-ingest", tid, "token record's job != its key", 13)
         sha = rec.get("snapped_sha")
@@ -9737,17 +9768,32 @@ def _g13_check_ingest_ledger(docs: dict[str, object], verbose: bool,
                  "not a masthead (§4.8 ingestion contract)", 13)
 
     # snapped-source sha provenance where the gitignored cache exists
+    # (classic: model_raw/snapped/hull_{ship}_{dir}.png; pixellab raw:
+    # model_raw/pixellab/<label>/snapped/{dir}.png, 80-* §4.8 2026-11-06)
+    raw_px = _g13_raw_pixellab_ingest()
     cache = UI_ART_DIR / "model_raw" / "snapped"
     found = 0
     for tid, rec in sorted(tokens.items()):
-        sp = cache / f"{tid}.png"
-        if not sp.is_file():
-            continue
+        if raw_px:
+            ship, d = tid[len("hull_"):].rsplit("_", 1)
+            sp = None
+            for cand in (ship, f"{ship}_uw2"):
+                c = UI_ART_DIR / "model_raw" / "pixellab" / cand \
+                    / "snapped" / f"{d}.png"
+                if c.is_file():
+                    sp = c
+                    break
+            if sp is None:
+                continue
+        else:
+            sp = cache / f"{tid}.png"
+            if not sp.is_file():
+                continue
         found += 1
         if hashlib.sha256(sp.read_bytes()).hexdigest() != rec.get("snapped_sha"):
-            fail("art-ingest", f"tools/ui_art/model_raw/snapped/{tid}.png",
+            fail("art-ingest", str(sp.relative_to(ART_ROOT)),
                  "ledger snapped_sha drifts from the local snapped source — "
-                 "re-run build_ui_art --import-ships", 13)
+                 "re-run the import", 13)
     if found < len(tokens):
         print(f"INFO group 13 ingest: {len(tokens) - found}/{len(tokens)} "
               "snapped source(s) absent from the local gitignored model_raw "
@@ -10038,10 +10084,13 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
 
     class_dirs = {}
     if UI_ART_DIR.is_dir():
-        class_dirs = {p.name: p for p in sorted(UI_ART_DIR.iterdir())
-                      if p.is_dir() and p.name != "model_raw"}
         # `model_raw/` is the model-pass cache (90-* §9.2: gitignored,
         # never committed) — runtime state, not an art class.
+        # `workflows/` is ComfyUI API workflow JSON (pipeline infra,
+        # 2026-11-06) — likewise not an art class.
+        class_dirs = {p.name: p for p in sorted(UI_ART_DIR.iterdir())
+                      if p.is_dir()
+                      and p.name not in ("model_raw", "workflows")}
     sprite_cache: dict[str, dict] = {}
     manifest_counts: dict[str, int] = {}
     for class_name, class_dir in sorted(class_dirs.items()):
@@ -10160,11 +10209,14 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
             for sprite_id, decl in entries:
                 sprite = _g13_decode_artifact(decl, ART_ROOT / decl["file"])
                 if block is not None:
-                    mask = isinstance(decl, dict) and \
-                        decl.get("class") == "terrain_pattern"
-                    _g13_check_pixels(class_name, sprite,
-                                      {"#ffffff", "#000000"} | BLOCK_LOCKED
-                                      if mask else block)
+                    if class_name == "hulls" and _g13_raw_pixellab_ingest():
+                        pass  # raw pixellab hulls: palette/budget waived
+                    else:
+                        mask = isinstance(decl, dict) and \
+                            decl.get("class") == "terrain_pattern"
+                        _g13_check_pixels(class_name, sprite,
+                                          {"#ffffff", "#000000"} | BLOCK_LOCKED
+                                          if mask else block)
                 sprites[sprite_id] = sprite
             if parent == "assets/ui/chrome":
                 for sheet in sorted(sheets & set(present)):
@@ -10406,45 +10458,30 @@ def _g13_run_probes() -> None:
             "broken-transform", "art-transform",
             lambda: _g13_manifest_then_pixels(icons_dir, block)))
 
-        # (4) Out-of-band footprint: a tier-1 hull 24px long on the side view
-        # of the 64 canvas (band 28-36; §4.8.7 amendment — the band is
-        # measured on e/w; 64-canvas values per amendment 1664ba9).
-        hull_dir = root / "tools" / "ui_art" / "hulls"
-        hull_dir.mkdir(parents=True)
-        hull_assets = root / "assets" / "ui" / "tokens"
-        hull_assets.mkdir(parents=True)
-        hull_rows = [""] * 64
-        for y in range(64):
-            hull_rows[y] = "." * 64
-        for x in range(20, 44):  # 24px side-view long axis: below the band
-            hull_rows[31] = hull_rows[31][:x] + "xx" + hull_rows[31][x + 2:]
+        # (4) Pennant-remap leak: an owner variant of a hull carrying the
+        # authored PENNANT_SOURCE hex (it may survive ONLY on the spain
+        # variant — the pixellab pipeline's core invariant: option-B
+        # pennant recolor + ×7 owner remap; 80-* §4.8 2026-11-06).
+        # Replaces the retired out-of-band-footprint probe (§4.8.7 bands
+        # are retired for the pixellab family — same amendment).
         hull_decl = {
-            "id": "hull_sloop_player_e",
-            "file": "assets/ui/tokens/hull_sloop_player_e.png",
-            "width": 64, "height": 64,
+            "id": "hull_sloop_england_e",
+            "file": "assets/ui/tokens/hull_sloop_england_e.png",
+            "width": 8, "height": 8,
             "mode": "string-map", "png": "indexed",
-            "palette": flat, "rows": hull_rows,
+            "palette": {".": "transparent", "b3191f": "#b3191f"},
+            "rows": ["........", "..b3191f.", "........"],
         }
-        # (not "hulls.json" — that name is the aux-doc registry, skipped by
-        # the loader; the probe fixture uses a plain declaration filename)
-        (hull_dir / "probe_hulls.json").write_text(json.dumps({"sprites": [hull_decl]}))
-        _g13_write_rgba_png(hull_assets / "hull_sloop_player_e.png", 64, 64,
-                            lambda x, y: (
-                                (232, 230, 223, 255)
-                                if 20 <= x < 44 and 31 <= y < 33
-                                else (0, 0, 0, 0)))
-        ship_types = [{"id": "sloop", "tier": 1}]
+        hull_pixels = [[None] * 8 for _ in range(8)]
+        hull_pixels[1][2] = "#b3191f"  # authored source hex, england owner
 
-        def footprint_check():
-            hull_decls = _g13_load_class(hull_dir)
-            _g13_check_manifests("hulls", hull_dir, hull_decls, BLOCK_HULL)
-            sprites = {}
-            for sid, (d, _p) in hull_decls.items():
-                sprite = _g13_decode_artifact(d, root / d["file"])
-                sprites[sid] = sprite
-            _g13_check_footprints(sprites, ship_types)
+        def pennant_check():
+            sprite = _G13Sprite(hull_decl, Path(hull_decl["file"]), 8, 8,
+                                hull_pixels)
+            _g13_check_pennants({"hull_sloop_england_e": sprite},
+                                {"sloop"})
         results.append(_g13_expect_failure(
-            "out-of-band-footprint", "hull-footprint", footprint_check))
+            "pennant-remap-leak", "hull-pennant", pennant_check))
 
         # (5) Invalid shore code: a coded hard (land) cell — §6.6 says 0.
         shore_w = shore_h = 8

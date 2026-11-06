@@ -2000,6 +2000,96 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      mirrored pairs is an accepted trade (UW2 does the same). The
      deterministic fallback keeps its 8 authored maps unchanged.
 
+     **Pixel-art read for the 64 grid (amended 2026-11-06, user
+     direction — prompt + geometry, no re-rolls; SUPERSEDED for hull
+     tokens same day by the PixelLab backend amendment below — the
+     clause/block-pass mechanism below remains the pinned method for
+     any local-TheNoise asset family):** fine-textured
+     ~1024² model renders lose rigging, windows and gunports in the
+     64-grid majority vote, so the model passes push pixel-art
+     style explicitly, in two pinned parts. (a) **Side-view
+     prompt clause** — the stage-1 TheNoise `/edit` prompt (the
+     reconstructed canonical w-pose prompt) carries this appended
+     clause, verbatim: `Crisp pixel art sprite: big chunky square
+     pixels, flat color fills, strong dark outline around the
+     sprite, limited palette, bold silhouette readable at 64×64
+     size, no thin rigging lines, no fine surface texture, no
+     anti-aliasing, no dithering.` The side view is the ComfyUI
+     identity reference, so all five generated branches inherit
+     the style through their existing "matching the input image's
+     style" clause (the workflow JSON itself is unchanged). (b)
+     **Pre-snap block pass** — in the snap chain, after key-green
+     and BEFORE the resize/pan band normalization, the keyed RGBA
+     render is nearest-downsampled to **256 px** native width
+     (aspect kept) and nearest-upscaled back: a **4-native-px
+     minimum feature size**, so features thinner than that cannot
+     win their grid vote. One global value (like the band
+     normalization factor, not per-ship); the 256 px pin is
+     calibration-tunable by amendment. Both parts are geometric/
+     prompt-side only — the seeds, the band gate and the
+     normalization math are untouched.
+
+     **PixelLab hull backend (amended 2026-11-06, user direction —
+     hull tokens move to the PixelLab API; SUPERSEDES for hulls the
+     local TheNoise+ComfyUI passes, the band/resize normalization,
+     the tier footprint bands and the 5+mirror direction rule):**
+     `tools/pixellab_pass.py` generates hull tokens via
+     `POST /v2/create-object-pro-flash` (build-time SaaS; per-call
+     ~$0.053 at the pinned size). **Envelope, pinned verbatim —
+     exactly five fields, never a style_image (explicit user
+     direction ×2):** `{"description", "image_size": {64, 64},
+     "n_directions": 8, "view": "high top-down", "seed": 91000}`.
+     The description = per-ship identity prefix + the pinned shared
+     suffix. **Identity prefix:** `{Name-en} sailing ship, {rig}`
+     with `{rig}` read from `tools/ui_art/hulls/rig.json` (e.g.
+     brigantine = "Brigantine sailing ship, 2 masts, 2 square
+     sails"); rowed ships carry their oar clause from the same rig
+     string. **Shared style suffix, pinned verbatim (the 16-ship
+     consistency anchor; includes the UW2 style reference — user
+     picked wording):** `wooden sailing ship with dense multi-strake
+     planking bands in several wood tones, dark gunwale, gold trim
+     line along the sheer, gunport row with tiny dark ports, stern
+     cabin with small lit windows, sails billowed with three folded
+     shading bands and one bright highlight arc each, thin dark
+     rigging ropes to bowsprit and hull, small red pennant at the
+     mainmast top, deck planking and deck structures visible from
+     above, retro 16-bit sailing ship sprite in the style of classic
+     1990s naval adventure games like Uncharted Waters 2 / New
+     Horizons, dark 1-pixel silhouette outline, transparent
+     background.` (preceded by the identity prefix, comma-joined).
+     **Ship-as-drawn rule:** tokens ship RAW 1:1 — no resize, no
+     band normalization, no palette quantize; the model's native
+     64×64 deliberate pixels are the shipped pixels. Consequences,
+     all amended here: (a) **§4.8.7 tier footprint bands are
+     retired for the model-token family** (they remain the
+     deterministic fallback's authored standard; tier size identity
+     becomes a review-sheet property, not a gate); (b) the
+     validator's band + palette-block checks are retired for hull
+     tokens — the audit becomes provenance ledger (object id +
+     seed + description hash) + canvas fit + masthead pennant; (c)
+     the "5 base + 3 mirrors" rule is retired for hulls — all 8
+     rotations are native (pixellab names map 1:1 to the heading8
+     dir ids: north→n, north-east→ne, …, west→w; verified on
+     brigantine trial 5, art_review/63). **Pennant scheme preserved
+     (option B, user direction):** build-time pennant-only recolor
+     — the masthead region (top 45 % of the opaque bbox) dominant
+     red cluster (red-dominant, bright-red guards R≥150/G≤110/B≤110,
+     channel-sum Δ≤90 — mirroring build_ui_art's `_pennant_snap`
+     radius) lands exactly on `PENNANT_SOURCE #b3191f`; every other
+     pixel stays byte-identical to the raw model output; the ×7
+     owner remap is unchanged. Constants: `MASTHEAD_TOP_FRAC 0.45`,
+     `MASTHEAD_MIN_PX 3`, gates = masthead pennant + canvas fit.
+     Raw rotations live gitignored under
+     `tools/ui_art/model_raw/pixellab/<label>/` with a manifest
+     recording `object_id`/job id/seed/description (re-download
+     without re-generation); **raw model output is never committed**
+     (§9.2). API key: gitignored `tools/pixellab_config.json`,
+     env `PIXELLAB_API_KEY` overrides. Fleet acceptance flow: per-
+     ship user review of the snapped sheets → reject = one seed-
+     bumped re-roll (user-capped) → ingest via
+     `build_ui_art --import-ships` (8 native dirs; mirror
+     derivation skipped for pixellab tokens).
+
      **Terrain blob program (amended 2026-11-05, user direction — the
      48-tile auto-tile standard):** terrain transitions adopt the
      Standard 48-Tile Auto-Tile Set per terrain PAIR (center 1,

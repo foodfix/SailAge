@@ -42,6 +42,16 @@ MANIFEST = os.path.join(OUT_DIR, "sideviews.json")
 SHEET_CELL_PX = 512
 # EMBEDDED_DRIVER SHEET_CELLS["w"] — top-left of the w cell on the sheet.
 W_CELL_BOX = (64, 64, 64 + SHEET_CELL_PX, 64 + SHEET_CELL_PX)
+# Pixel-art style clause appended verbatim to every stage-1 prompt
+# (80-* §4.8, "Pixel-art read for the 64 grid" amendment, 2026-11-06):
+# fine-textured 1024² renders lose rigging/windows/gunports in the
+# 64-grid majority vote — the side view is the ComfyUI identity
+# reference, so all five branches inherit the style from it.
+PIXEL_ART_CLAUSE = (
+    "Crisp pixel art sprite: big chunky square pixels, flat color "
+    "fills, strong dark outline around the sprite, limited palette, "
+    "bold silhouette readable at 64×64 size, no thin rigging lines, "
+    "no fine surface texture, no anti-aliasing, no dithering.")
 
 
 def _ships() -> list[str]:
@@ -117,6 +127,8 @@ def run(ships: list[str]) -> None:
         rec = _w_record(ship)
         prompt, source = chain.reconstruct_original(
             f"hull_{ship}_w", REPO, rec)
+        prompt = f"{prompt} {PIXEL_ART_CLAUSE}"
+        source = f"{source}+pixel_art_clause(80-*4.8)"
         seed = _seed_for(ship, rec)
         draft = _w_cell_png(ship)
         t0 = time.time()

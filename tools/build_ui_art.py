@@ -251,6 +251,8 @@ MASTHEAD_MIN_PX = 3        # ≥3 source-red px in the masthead region
 MASTHEAD_TOP_FRAC = 0.45   # masthead region = top 45% of the token bbox
 INGEST_BASE_DIRS = ("n", "s", "w", "sw", "nw")  # the model's 5 base dirs
 INGEST_DERIVED = {"e": "w", "ne": "nw", "se": "sw"}  # derived: mirror_x flip
+# PixelLab raw mode (80-* §4.8 2026-11-06): all 8 native rotations
+RAW_INGEST_DIRS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 INGEST_INGESTED_BUDGET = 25  # 64-canvas per-sprite cap (§4.8.3 48px tier;
 # the quantized token draws from an 18-hex block, so this is belt-and-braces)
 # Band-measurement reconciliation (2026-11-05): the §4.8.7 long axis is
@@ -905,7 +907,8 @@ def resolve_artifact_overrides(root: Path = ROOT):
     return out
 
 
-def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
+def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict,
+                    raw: bool = False) -> dict:
     """The formal model-pass ingestion (90-* §9.2, 80-* §4.8 + f6c00bb).
 
     Per snapped 64-grid BASE token (n/s/w/sw/nw): decode → formal quantize
@@ -924,7 +927,15 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
     committed provenance ledger (pennant: "auto-painted" vs "model");
     revokes (deletes) previously ingested files whose entry did not
     survive this run so assets and ledger stay exactly coherent.
-    Returns the report fragment."""
+    Returns the report fragment.
+
+    ``raw=True`` — the PixelLab ship-as-drawn mode (80-* §4.8
+    2026-11-06): all 8 native dirs are bases (no mirror derivation),
+    quantize is SKIPPED (the model's deliberate pixels are the shipped
+    pixels), the band gate is skipped (§4.8.7 retired for this family),
+    the hull-block/budget write checks are waived (palette lock waived),
+    and the ledger records the pixellab manifest provenance (object id,
+    seed, description sha) instead of progress.json."""
     ship_types = json.loads(SHIP_TYPES.read_text())
     roster = ship_types.get("ship_types", ship_types if isinstance(ship_types, list) else [])
     tiers = {s["id"]: int(s["tier"]) for s in roster}
@@ -942,6 +953,18 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
             prog = json.loads(pj.read_text()).get("jobs") or {}
         except ValueError:
             prog = {}  # provenance seed stays null; ingestion proceeds
+    px_manifest = {}
+    if raw:
+        pm = ROOT / "tools" / "ui_art" / "model_raw" / "pixellab" \
+            / "pixellab.json"
+        if pm.is_file():
+            try:
+                px_manifest = {
+                    (rec.get("ship") or label): rec
+                    for label, rec in json.loads(
+                        pm.read_text()).items()}
+            except ValueError:
+                px_manifest = {}
 
     today = time.strftime("%Y-%m-%d", time.gmtime())
     candidates = []      # base jobs actually present in the snapped dir
@@ -949,15 +972,15 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
     led_tokens = {}      # token id -> provenance record
     rejected = []
     for ship in sorted(tiers):
-        for d in INGEST_BASE_DIRS:
+        for d in (RAW_INGEST_DIRS if raw else INGEST_BASE_DIRS):
             job = f"hull_{ship}_{d}"
             sp = snapped_dir / f"{job}.png"
             if not sp.is_file():
                 continue  # not generated (yet) — a gap, not a rejection
             candidates.append(job)
-            raw = sp.read_bytes()
+            raw_bytes = sp.read_bytes()
             try:
-                w, h, px = decode_png(raw)
+                w, h, px = decode_png(raw_bytes)
             except Exception as exc:  # a concurrent re-roll may be mid-write;
                 # reject-and-report, the next re-run picks the file up
                 rejected.append({"job": job, "reason": "decode",
@@ -967,7 +990,8 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                 rejected.append({"job": job, "reason": "canvas",
                                  "detail": f"{w}x{h} != {CANVAS}x{CANVAS}"})
                 continue
-            px = _quantize_token(w, h, px)
+            if not raw:
+                px = _quantize_token(w, h, px)
             bb, n = _masthead_count(px, w, h)
             pennant = "model"
             if n < MASTHEAD_MIN_PX:
@@ -994,7 +1018,7 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                                                f"{MASTHEAD_MIN_PX}"})
                     continue
                 pennant = "auto-painted"
-            if d == "w":  # the banded side profile; mirrors inherit (f6c00bb)
+            if not raw and d == "w":  # banded side profile; mirrors inherit
                 lo, hi = FOOTPRINT_BANDS[tiers[ship]]
                 # big-lateen tolerance (80-* §4.8.7, ledgered 2026-11-05):
                 # latin/galiot rigs consistently draw 1px wide — +1 hi.
@@ -1010,29 +1034,43 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                                   f"{'+1 lateen' if hi != FOOTPRINT_BANDS[tiers[ship]][1] else ''} "
                                   f"(§4.8.7)"})
                     continue
-            sha = hashlib.sha256(raw).hexdigest()
+            sha = hashlib.sha256(raw_bytes).hexdigest()
             prev_rec = prev_tokens.get(job) or {}
             accepted_at = (prev_rec.get("accepted_at")
                            if prev_rec.get("snapped_sha") == sha else None)
-            led_tokens[job] = {"job": job,
-                               "seed": (prog.get(job) or {}).get("seed"),
-                               "snapped_sha": sha,
-                               "accepted_at": accepted_at or today,
-                               "pennant": pennant}
+            led = {"job": job,
+                   "seed": (prog.get(job) or {}).get("seed"),
+                   "snapped_sha": sha,
+                   "accepted_at": accepted_at or today,
+                   "pennant": pennant}
+            if raw:
+                # pixellab provenance (80-* §4.8 2026-11-06): object id +
+                # seed + description sha from the pixellab manifest
+                rec = (px_manifest.get(ship) or {})
+                desc = rec.get("description") or ""
+                led["pixellab"] = {"object_id": rec.get("object_id"),
+                                   "seed": rec.get("seed"),
+                                   "description_sha": hashlib.sha256(
+                                       desc.encode()).hexdigest()[:16]}
+                led["seed"] = rec.get("seed")
+            led_tokens[job] = led
             accepted[job] = (w, h, px)
 
     # Derived dirs (f6c00bb): exact mirror_x flips of the accepted base,
     # taken BEFORE the pennant remap (the remap is color-level, so the
     # order is contract, not necessity — the flip must not re-quantize).
+    # RAW mode skips derivation entirely: all 8 dirs are native bases.
     derived_ids = {}     # derived token id -> base token id
-    for ship in sorted(tiers):
-        for dd, base_d in sorted(INGEST_DERIVED.items()):
-            base_job = f"hull_{ship}_{base_d}"
-            if base_job not in accepted:
-                continue  # whole mirror group falls back (no mixing)
-            bw, bh, bpx = accepted[base_job]
-            derived_ids[f"hull_{ship}_{dd}"] = base_job
-            accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx, "mirror_x")
+    if not raw:
+        for ship in sorted(tiers):
+            for dd, base_d in sorted(INGEST_DERIVED.items()):
+                base_job = f"hull_{ship}_{base_d}"
+                if base_job not in accepted:
+                    continue  # whole mirror group falls back (no mixing)
+                bw, bh, bpx = accepted[base_job]
+                derived_ids[f"hull_{ship}_{dd}"] = base_job
+                accepted[f"hull_{ship}_{dd}"] = _transform(bw, bh, bpx,
+                                                           "mirror_x")
 
     # Write the accepted tokens: the pennant ×9 remap, exactly as on the
     # fallback tokens (the ONLY owner-variant pixel; spain is the legal
@@ -1053,12 +1091,14 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
             if PENNANTS[owner] not in colors:
                 fail(f"ingest {job}/{owner}: the owner pennant hex "
                      f"{PENNANTS[owner]} is missing after the remap")
-            off = sorted(c for c in colors if c not in HULL_BLOCK)
-            if off:
-                fail(f"ingest {job}/{owner}: hexes outside the hull block: {off}")
-            if len(colors) > INGEST_INGESTED_BUDGET:
-                fail(f"ingest {job}/{owner}: {len(colors)} colors > budget "
-                     f"{INGEST_INGESTED_BUDGET} (§4.8.3)")
+            if not raw:  # raw mode: palette lock waived (80-* §4.8 2026-11-06)
+                off = sorted(c for c in colors if c not in HULL_BLOCK)
+                if off:
+                    fail(f"ingest {job}/{owner}: hexes outside the hull "
+                         f"block: {off}")
+                if len(colors) > INGEST_INGESTED_BUDGET:
+                    fail(f"ingest {job}/{owner}: {len(colors)} colors > "
+                         f"budget {INGEST_INGESTED_BUDGET} (§4.8.3)")
             write_png(tokens_dir / f"hull_{ship}_{owner}_{d}.png", w, h, out)
             written += 1
 
@@ -1111,7 +1151,9 @@ def run_ship_ingest(snapped_dir: Path, outroot: Path, report: dict) -> dict:
                                         if rec.get("pennant")
                                         == "auto-painted"),
         },
-        "generated_by": "tools/build_ui_art.py --import-ships",
+        "generated_by": ("tools/build_ui_art.py --import-ships-pixellab"
+                         if raw else
+                         "tools/build_ui_art.py --import-ships"),
         "rejected": rejected,
         "tokens": led_tokens,
         "derived": led_derived,
@@ -2735,14 +2777,17 @@ def run_contact_sheet() -> None:
         print(f"build_ui_art: contact sheet -> {dest} ({sheet.w}x{sheet.h})")
 
 
-def run_import_mode(snapped_dir: Path) -> None:
-    """--import-ships: ingest whatever the model pass has accepted NOW,
-    then run the full build so the ladder falls the remaining ids back to
-    the generator (re-runs pick up late re-rolls with the same command)."""
+def run_import_mode(snapped_dir: Path, raw: bool = False) -> None:
+    """--import-ships / --import-ships-pixellab: ingest whatever the
+    model pass has accepted NOW, then run the full build so the ladder
+    falls the remaining ids back to the generator (re-runs pick up late
+    re-rolls with the same command). raw=True is the PixelLab
+    ship-as-drawn mode (8 native dirs, no quantize/band/palette-lock;
+    80-* §4.8 2026-11-06)."""
     if not snapped_dir.is_dir():
-        fail(f"--import-ships: snapped dir not found: {snapped_dir}")
+        fail(f"import: snapped dir not found: {snapped_dir}")
     report = {}
-    ingest = run_ship_ingest(snapped_dir, ROOT, report)
+    ingest = run_ship_ingest(snapped_dir, ROOT, report, raw=raw)
     m, report = build_into(ROOT, resolve_ingest_overrides(),
                            resolve_artifact_overrides())
     report["ingest"] = ingest
@@ -2801,6 +2846,12 @@ def main() -> None:
                          "(f6c00bb), committed provenance ledger; accepted "
                          "tokens are the primary art, the generator fills "
                          "the gaps (§4.8 ingestion contract)")
+    ap.add_argument("--import-ships-pixellab", metavar="SNAPPED_DIR",
+                    help="ingest PixelLab ship tokens (raw 1:1, 80-* §4.8 "
+                         "2026-11-06): all 8 native dirs, no quantize, no "
+                         "band gate, palette lock waived, pennant-only "
+                         "recolor already applied; committed provenance "
+                         "ledger carries the pixellab manifest object ids")
     ap.add_argument("--import-icons", metavar="SRC_DIR", nargs="+",
                     help="ingest the model-pass snapped icons (64-grid "
                          "RGBA) from one or more SRC_DIRs (later dirs win "
@@ -2822,10 +2873,12 @@ def main() -> None:
                          "rocky sheet — and is ledgered as such)")
     args = ap.parse_args()
     modes = [args.check, args.contact_sheet, args.import_ships,
-             args.import_icons, args.import_terrain]
+             args.import_icons, args.import_terrain,
+             args.import_ships_pixellab]
     if sum(1 for m in modes if m) > 1:
-        fail("--check, --contact-sheet, --import-ships, --import-icons and "
-             "--import-terrain are mutually exclusive modes")
+        fail("--check, --contact-sheet, --import-ships, --import-icons, "
+             "--import-terrain and --import-ships-pixellab are mutually "
+             "exclusive modes")
     if args.check:
         run_check()
         return
@@ -2834,6 +2887,9 @@ def main() -> None:
         return
     if args.import_ships:
         run_import_mode(Path(args.import_ships))
+        return
+    if args.import_ships_pixellab:
+        run_import_mode(Path(args.import_ships_pixellab), raw=True)
         return
     if args.import_icons:
         run_import_icons_mode([Path(p) for p in args.import_icons])

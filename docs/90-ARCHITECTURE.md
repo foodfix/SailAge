@@ -800,7 +800,11 @@ Normative notes for the Phase-10 generated-art pass (`80-*` §4.8/§4.9,
   from the same overlay family. Chart + minimap stay flat raster (pinned,
   `80-*` §4.8).
 - **AI-ingestion path** (model pass — ACTIVE since the 2026-11-04
-  64-canvas upgrade, 80-* §4.8): `build_ui_art.py --import <dir>`
+  64-canvas upgrade, 80-* §4.8; **hull tokens moved to the PixelLab
+  backend 2026-11-06, 80-* §4.8** — raws under
+  `tools/ui_art/model_raw/pixellab/` gitignored, API key in
+  gitignored `tools/pixellab_config.json`, raw model output never
+  committed): `build_ui_art.py --import <dir>`
   ingests TheNoise `/edit` outputs (draft-as-reference restyle):
   snap-downsample to the 64 logical grid, quantize to the family
   palette block, enforce pennant source + footprint bands, then emit

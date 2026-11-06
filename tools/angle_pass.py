@@ -185,13 +185,34 @@ def run(ships: list[str], dirs=None) -> None:
     print(f"[angle] manifest -> {MANIFEST}", flush=True)
 
 
+# Pre-snap block pass (80-* §4.8 "Pixel-art read for the 64 grid"
+# amendment, 2026-11-06): nearest-downsample the keyed render to this
+# native width and back up — a 4-native-px minimum feature size, so
+# features thinner than that cannot win their 64-grid majority vote.
+# One global value (like the band normalization factor, not per-ship);
+# the 256 px pin is calibration-tunable by amendment.
+BLOCK_PASS_NATIVE_PX = 256
+
+
+def _block_pass(img):
+    """Force the minimum feature size geometrically (nearest in, nearest
+    out). Images already at or below the target pass through unchanged."""
+    from PIL import Image  # noqa: PLC0415
+    if img.width <= BLOCK_PASS_NATIVE_PX:
+        return img
+    small_h = max(1, round(img.height * BLOCK_PASS_NATIVE_PX / img.width))
+    small = img.resize((BLOCK_PASS_NATIVE_PX, small_h), Image.NEAREST)
+    return small.resize(img.size, Image.NEAREST)
+
+
 def snap_ship(ship: str) -> None:
     """Trial tokenize (stage 2.5, nothing canonical): per angle output ->
-    chain.rembbg (ComfyUI) -> key_green -> band normalization (resize +
-    pan, ONE factor per ship computed from the w dir so all five views
-    keep identical scale — mast heights stay consistent across dirs) ->
-    chain.snap (512 majority vote -> 64 logical grid -> hull-block
-    quantize + pennant-source snap) ->
+    chain.rembbg (ComfyUI) -> key_green -> BLOCK PASS (nearest 256px
+    down/up, minimum feature size, 80-* §4.8 2026-11-06) -> band
+    normalization (resize + pan, ONE factor per ship computed from the
+    w dir so all five views keep identical scale — mast heights stay
+    consistent across dirs) -> chain.snap (512 majority vote -> 64
+    logical grid -> hull-block quantize + pennant-source snap) ->
     model_raw/angles/<ship>/snapped/<dir>.png (64x64). w is a GENERATED
     view (the workflow's 5th branch, elevated side view); the TheNoise
     side view is only the ComfyUI identity reference. The w dir carries
@@ -234,7 +255,7 @@ def snap_ship(ship: str) -> None:
         debg = chain.key_green_bytes(chain.rembg(raw, f"{ship}_{dir_id}"))
         keyed[dir_id] = debg
         w, h, px = chain.decode_rgba(debg)
-        imgs[dir_id] = px_to_img(w, h, px)
+        imgs[dir_id] = _block_pass(px_to_img(w, h, px))
         boxes[dir_id] = imgs[dir_id].split()[3].getbbox()
     # ONE factor per ship, derived from the w dir: its long axis is
     # scaled to the band midpoint (native px per 64-grid px = size/64).

@@ -358,6 +358,13 @@ func _test_ingested_token_flips() -> void:
 		_check(false, "the ingest ledger carries a derived map")
 		return
 	var derived: Dictionary = derived_v
+	var raw_px: bool = String(doc_v.get("generated_by", "")).contains("pixellab")
+	if raw_px:
+		# 80-* §4.8 (2026-11-06): the pixellab hull family ships all 8
+		# native rotations — no mirror-derived pairs exist by design; the
+		# flip pin applies only to the classic 5+3 ingestion.
+		_check(true, "raw pixellab ingest: 8 native dirs, no derived pairs")
+		return
 	var pairs := 0
 	var all_flip := true
 	for fid_v in derived.keys():

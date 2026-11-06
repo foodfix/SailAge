@@ -28,6 +28,10 @@ __pycache__/
 # thenoise/ComfyUI raw model output — never committed (90-* §9.2)
 tools/ui_art/model_raw/
 
+# PixelLab API config: personal build-time key, never committed
+# (read by tools/pixellab_pass.py; env PIXELLAB_API_KEY overrides)
+/tools/pixellab_config.json
+
 # art review + report captures: model-pass contact sheets and review
 # rasters are tool artifacts, never committed (90-* §9.2); engine-import
 # sidecars on review rasters are likewise never imported
