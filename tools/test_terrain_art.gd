@@ -1256,11 +1256,19 @@ func _test_wang_placement() -> void:
 	_check(WaterLayerLib.wang_index(10) == 5,
 		"NE+SE combo is wang_5 (the east-coast water tile)")
 	# §4.8 2026-11-06 (the "ship on land" report): WATER cells never stamp
-	# corner tiles — the coast indices 8..14 are terrain-owned, and the
-	# water atlas carries no wang columns at all.
+	# corner tiles — the water atlas carries no wang columns at all.
+	# 2026-11-06 evening fix: the water-flanking rule emits ALL indices
+	# 1..14, so the land-owned set must be exactly {1..14} — the old
+	# {8..14} bake left N/W coasts and carats falling back to plain
+	# variants (hard edges, the in-game report).
+	_check(WaterLayerLib.WANG_LAND_INDICES == [1, 2, 3, 4, 5, 6, 7, 8, 9,
+		10, 11, 12, 13, 14],
+		"the terrain-owned coast set is exactly wang_1..wang_14 (the "
+		+ "flanking rule's full emission range)")
 	_check(WaterLayerLib.WANG_LAND_INDICES.all(
-		func(index: int) -> bool: return index >= 8),
-		"every terrain-owned wang index carries the land cell's own NW bit")
+		func(index: int) -> bool: return index >= 1 and index <= 14),
+		"every terrain-owned wang index is in 1..14 (0 = fallback, "
+		+ "15 = interior)")
 	# The land-cell placement rule (2026-11-06 evening revision): a corner
 	# is water-flanked when any of its three adjacent neighbours is not
 	# land; the cell stamps the tile whose UPPER corners are the
@@ -1320,14 +1328,31 @@ func _test_wang_placement() -> void:
 		"index 0 (every corner flanked) is not a coast column — the "
 		+ "variant-hash fallback covers it (§6.2 deleted these shapes)")
 	# The terrain-atlas fixture path: with the land-owned indices
-	# registered, the land row carries wang_row_base 8 (columns 8..14).
+	# registered, the land row carries wang_row_base 8 and the atlas row
+	# spans columns 0..21 (interior pool 0..7 + coast 8..21). The real
+	# map's cells must never need a coast column the atlas lacks: every
+	# flanking index the world can emit is 1..14, all baked.
 	var loader2 = MapLoaderLib.new()
 	_check(loader2.load_map("res://data/maps/world.png",
 		DataLoader.map_legend), "the world map loads for the wang atlas")
 	loader2._ensure_tile_set()
 	var land2: Dictionary = loader2._terrain_cells.get(2, {})
 	_check(not land2.is_empty() and int(land2.get("wang_row_base", -1)) == 8,
-		"the wang-active land row pins its coast columns at 8..14")
+		"the wang-active land row pins its coast columns at 8..21 "
+		+ "(base 8 + 14 indices)")
+	# World-wide membership proof: every land cell's flanking index is a
+	# baked coast column (the synthetic shapes above produce every index
+	# 1..14) — pin the land row itself spans all 22 columns.
+	var land_row: int = int(land2["row"])
+	var source2: TileSetAtlasSource = loader2._tile_set.get_source(
+		loader2._atlas_source_id)
+	var land_row_tiles := 0
+	for col in 22:
+		if source2.has_tile(Vector2i(col, land_row)):
+			land_row_tiles += 1
+	_check(land_row_tiles == 22,
+		"the wang land row spans all 22 columns (interior 0..7 + coast "
+		+ "8..21), got %d" % land_row_tiles)
 
 
 func _test_shore_continuity() -> void:

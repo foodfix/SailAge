@@ -86,12 +86,17 @@ const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 const WANG_ID_PREFIX := "terrain_coast_wang_"
 
 
-## The terrain atlas's land-owned complement (`map_loader._ensure_tile_set`):
-## a land cell's own pixel is its NW corner vertex, so its index always
-## carries bit 3 — the coast tiles {8..14} (wang_8 = NW-only through
-## wang_14 = NW+NE+SW); index 15 (all-land) is the interior and stays on
-## the 8-dihedral variant pool (columns 0..7; coast tiles at 8..14).
-const WANG_LAND_INDICES: Array[int] = [8, 9, 10, 11, 12, 13, 14]
+## The terrain atlas's land-owned coast indices (2026-11-06 evening fix —
+## the flanking rule emits ALL non-interior indices 1..14, not just the
+## vertex-sampler's legacy ≥ 8: the water-flanking rule makes N→3, W→5,
+## carats 1/2/4, concave 7/11/13/14, and those tiles MUST be baked or the
+## cell silently falls back to a plain variant = hard edge). 15 (all-land)
+## is the interior on the 8-dihedral variant pool (columns 0..7); coast
+## tiles sit at columns 8..21 in this order (map_loader._ensure_tile_set).
+## Index 0 (every corner water-flanked) is impossible on the built map
+## (§6.2 cleanup) and is NOT baked — the stamp falls back to the legacy
+## variant path for it.
+const WANG_LAND_INDICES: Array[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 ## §4.8 2026-11-06 pixel-depth pins (mirrored in sea_water.gdshader's
 ## uniform defaults — the two sites must not drift). The factor is 1.0 at

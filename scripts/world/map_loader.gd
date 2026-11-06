@@ -985,11 +985,13 @@ func _ensure_tile_set() -> void:
 	# §4.8 2026-11-06 — when the wang upper half resolves, the land row
 	# carries its coast tiles: a land cell's own pixel is its NW corner
 	# vertex, so its wang index always carries bit 2 — the land-owned
-	# indices are {4,5,6,7} (west/south water corners) and {12,13,14}
-	# (NE-set edges), while 15 (all-land) is the interior. Land row
-	# layout: columns 0..7 are the wang_15 interior (the 8 dihedral
-	# transforms, the hash-variant pool), columns 8..14 the coast tiles
-	# WANG_LAND_INDICES in order (stamped by [method _wang_land_index]).
+	# the water-flanking rule emits every index 1..14 (2026-11-06 evening
+	# fix: the flanking rule's N→3 / W→5 / carats / wedges must ALL be
+	# baked or the cell falls back to a plain variant = hard edge), while
+	# 15 (all-land) is the interior. Land row layout: columns 0..7 are
+	# the wang_15 interior (the 8 dihedral transforms, the hash-variant
+	# pool), columns 8..21 the coast tiles WANG_LAND_INDICES in order
+	# (stamped by [method _wang_land_index]).
 	# The legacy flat land variants yield to the painted interior (the
 	# family is the shipped coast art, 80-* §4.8 2026-11-06).
 	var wang_upper := true
@@ -1012,7 +1014,8 @@ func _ensure_tile_set() -> void:
 	for entry in rows:
 		var width_cols := int(entry["variants"])
 		if entry.get("wang_row_base", -1) >= 0:
-			width_cols = int(entry["wang_row_base"]) + 7  # columns 8..14
+			width_cols = int(entry["wang_row_base"]) \
+				+ WaterLayerLib.WANG_LAND_INDICES.size()  # 8 + 14 = 22 cols
 		max_columns = maxi(max_columns, width_cols)
 	var image := Image.create_empty(max_columns * tile_size_px,
 		rows.size() * tile_size_px, false, Image.FORMAT_RGBA8)
@@ -1056,7 +1059,8 @@ func _ensure_tile_set() -> void:
 	for entry in rows:
 		var columns := int(entry["variants"])
 		if entry.get("wang_row_base", -1) >= 0:
-			columns = int(entry["wang_row_base"]) + 7
+			columns = int(entry["wang_row_base"]) \
+				+ WaterLayerLib.WANG_LAND_INDICES.size()
 		for variant in columns:
 			source.create_tile(Vector2i(variant, int(entry["row"])))
 	_atlas_source_id = _tile_set.add_source(source)
@@ -1356,7 +1360,7 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 			var terrain_row := int(terrain["row"])
 			# §4.8 2026-11-06 — a land cell straddling the coast (any water
 			# corner) stamps its wang corner tile (the terrain atlas's land
-			# row columns 8..14); interior land keeps the §9.2 cell-hash
+			# row columns 8..21); interior land keeps the §9.2 cell-hash
 			# variant pick over the wang interior columns 0..7. When the
 			# wang family is inactive the row carries the legacy variants
 			# and the hash path covers every cell (the fallback contract).

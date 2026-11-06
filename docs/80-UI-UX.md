@@ -2186,7 +2186,11 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      W → wang_5, E → wang_10 — the first revision left wang_3/wang_5 dead
      and stamped diagonal wedges on pure S/E edges), corners read their
      carats (NW wang_1, NE wang_2, SW wang_4, SE wang_8), lone diagonals
-     read the concave wedges (wang_13 etc.). The §6.2 coast cleanup
+     read the concave wedges (wang_13 etc.). The atlas land row therefore
+     bakes ALL fourteen coast indices wang_1..wang_14 at columns 8..21
+     (the first bake carried only the vertex-sampler's {8..14} and left
+     N/W coasts + carats falling back to plain variants — hard edges).
+     The §6.2 coast cleanup
      guarantees no built cell carries water on opposite sides or 3+ sides,
      so index 0 (all corners flanked) never occurs in the built world;
      it falls back to the legacy variant path (synthetic-grid insurance).
