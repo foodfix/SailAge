@@ -517,6 +517,141 @@ def pass_coastal_band(grid: Grid, radius: int = COASTAL_BAND_TILES,
 # --------------------------------------------------------------------------
 # Waterway overrides
 # --------------------------------------------------------------------------
+def _strict_waters(grid: Grid, x: int, y: int) -> tuple[bool, bool, bool, bool]:
+    """The §6.2 strict water test for the coast cleanup. "Water" is EVERY
+    non-land palette — open sea, coastal band, reef and polar ice all
+    render as water to the eye, so all four count (2026-11-06 user
+    direction: the first pass counted only `~`/`.` and left ice-ringed
+    Arctic land looking like 3-side-water islands). x wraps; y off-grid
+    counts as water (the §6.6 rule). Returns (N, S, W, E)."""
+    n = y <= 0 or grid.get(x, y - 1) != LAND
+    s = y >= grid.h - 1 or grid.get(x, y + 1) != LAND
+    w = grid.get(x - 1, y) != LAND
+    e = grid.get(x + 1, y) != LAND
+    return n, s, w, e
+
+
+def strict_violations(grid: Grid) -> list[tuple[int, int]]:
+    """Every land cell the §6.2 cleanup targets under the strict rule:
+    water on 3+ orthogonal sides (tips, single-pixel islands) or on an
+    opposite pair (N+S / E+W — the two opposite beaches no tile paints).
+    Deterministic row-major order; x wraps; y off-grid is water."""
+    out: list[tuple[int, int]] = []
+    for y in range(grid.h):
+        for x in range(grid.w):
+            if grid.get(x, y) != LAND:
+                continue
+            n, s, w, e = _strict_waters(grid, x, y)
+            waters = sum([n, s, w, e])
+            if waters >= 3 or (n and s) or (w and e):
+                out.append((x, y))
+    return out
+
+
+def widen_port_blocks(grid: Grid, ports: list[dict],
+                      pre_snap: dict[str, dict]) -> dict:
+    """Restores every stranded port a violation-free 2×2 land block
+    (2026-11-06: replaces the old port keepout — under the strict rule a
+    keepout would PRESERVE violations, while the §6.1 harbor contract
+    only needs a water berth with an ortho-adjacent land shore inside
+    radius 2, which the block ring always provides).
+
+    The block is placed at the port's PRE-CLEANUP shore location
+    (`pre_snap` = snap_ports result captured before `pass_coast_cleanup`),
+    not at the port tile: the cleanup deleted the port's original island
+    (Hormuz's lay 3-4 cells south of its tile), and a tile-side block
+    there stamped land onto the basra_muscat_india trade lane. Restoring
+    at the historical shore keeps the geometry the routes were built
+    against. Of the four candidate origins around the old shore cell,
+    those covering the old BERTH cell are skipped (the berth must stay
+    water); the fewest-fills block wins, ties broken by smallest (y, x).
+    2×2 is the minimal polyomino with no §6.2 violation: every cell has
+    two ortho land neighbours and its two water sides are adjacent, never
+    opposite. Deletions elsewhere cannot re-violate a block."""
+    filled: list[tuple[int, int]] = []
+    details: list[dict] = []
+    for port in ports:
+        pid = port.get("id", "<no-id>")
+        px, py = grid.tile_of_latlon(port["lat"], port["lon"])
+        pre = pre_snap.get(pid) or {}
+        shore = pre.get("shore_tile") or {"x": px, "y": py}
+        berth = pre.get("harbor_tile")
+        sx, sy = shore["x"], shore["y"]
+        best: tuple[tuple, list] | None = None
+        for oy in (-1, 0):
+            for ox in (-1, 0):
+                cells: list[tuple[int, int]] = []
+                fills = 0
+                skip = False
+                for dy in (0, 1):
+                    for dx in (0, 1):
+                        y = min(max(sy + oy + dy, 0), grid.h - 1)
+                        x = (sx + ox + dx) % grid.w
+                        cells.append((x, y))
+                        if berth and (x, y) == (berth["x"], berth["y"]):
+                            skip = True
+                        if grid.get(x, y) != LAND:
+                            fills += 1
+                if skip:
+                    continue
+                key = (fills, sy + oy, sx + ox)
+                if best is None or key < best[0]:
+                    best = (key, cells)
+        if best is None:
+            # every candidate covered the old berth (degenerate shore ==
+            # berth adjacency): fall back to a port-tile-side block.
+            best = None
+            for oy in (-1, 0):
+                for ox in (-1, 0):
+                    cells: list[tuple[int, int]] = []
+                    for dy in (0, 1):
+                        for dx in (0, 1):
+                            y = min(max(py + oy + dy, 0), grid.h - 1)
+                            x = (px + ox + dx) % grid.w
+                            if (x, y) not in cells:
+                                cells.append((x, y))
+                    key = (py + oy, px + ox)
+                    if best is None or key < best[0]:
+                        best = (key, cells)
+        for x, y in best[1]:
+            if grid.get(x, y) != LAND:
+                grid.set(x, y, LAND)
+                filled.append((x, y))
+        details.append({"id": pid, "block_origin": [best[1][0][0],
+                                                    best[1][0][1]],
+                        "old_shore": [sx, sy]})
+    return {"ports": len(ports), "cells_filled": len(filled),
+            "filled": filled, "details": details}
+
+
+def pass_coast_cleanup(grid: Grid) -> dict:
+    """§6.2 2026-11-06 (user direction, strict rule): delete every land
+    shape the wang placement cannot paint — see [func strict_violations]
+    for the exact mask. "Water" is EVERY non-land palette (`_strict_waters`).
+    Iterated to fixpoint: a deletion can expose a new violation next door
+    (a 1-cell chain unwinds one cell per pass), so scans repeat until one
+    full pass deletes nothing — run until there is nothing left to remove.
+    Deleted cells become open sea; the caller re-runs the exact coastal
+    band afterwards (a `~`→`.` band edit cannot create violations: both
+    count as water). Ports are secured by `widen_port_blocks` beforehand,
+    not by a keepout."""
+    deleted_total = 0
+    iterations = 0
+    per_iteration: list[dict] = []
+    while True:
+        victims = strict_violations(grid)
+        if not victims:
+            break
+        for x, y in victims:
+            grid.set(x, y, SEA)
+        deleted_total += len(victims)
+        iterations += 1
+        per_iteration.append({"iteration": iterations,
+                              "cells_deleted": len(victims)})
+    return {"deleted_total": deleted_total, "iterations": iterations,
+            "per_iteration": per_iteration}
+
+
 def load_overrides(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -1398,6 +1533,49 @@ def build_grid(degrees_per_tile: float, verbose: bool = False) -> tuple[Grid, di
     if verbose:
         print(f"  band refresh after carves: {band_refresh['cells_changed']} "
               f"cells became coastal", file=sys.stderr)
+    # Pass 6: coast cleanup (§6.2 2026-11-06, strict rule): delete the
+    # land shapes the wang placement cannot paint — tips, single-pixel
+    # islands, one-cell strips, ice/reef-ringed cells — to fixpoint, with
+    # NO port keepout (a keepout would preserve violations). Ports that
+    # the cleanup strands (a deleted island shore) get their violation-
+    # free 2×2 block restored AT THE PORT'S PRE-CLEANUP SHORE location —
+    # not at the port tile: Hormuz's island lay 3-4 cells south of its
+    # tile, and a tile-side block stamped land onto the basra_muscat_india
+    # lane (2026-11-06 validator catch). Widening cannot create
+    # violations, so the fixpoint re-run is a verification no-op; the
+    # exact coastal band follows.
+    ports_doc = json.loads(PORTS_PATH.read_text(encoding="utf-8")) \
+        if PORTS_PATH.exists() else {"ports": []}
+    ports_list = ports_doc.get("ports", [])
+    pre_results, _pre_failures = snap_ports(grid, ports_list)
+    pre_snap = {r["id"]: r for r in pre_results}
+    cleanup = pass_coast_cleanup(grid)
+    stranded = [p for p in ports_list
+                if snap_harbor_with_shore(grid, p["lat"], p["lon"]) is None]
+    widening = {"ports": 0, "cells_filled": 0, "details": []}
+    cleanup_after = {"deleted_total": 0, "iterations": 0}
+    if stranded:
+        widening = widen_port_blocks(grid, stranded, pre_snap)
+        cleanup_after = pass_coast_cleanup(grid)
+    band_refresh_cleanup = pass_coastal_band(grid, COASTAL_BAND_TILES,
+                                             exact=True)
+    remaining = strict_violations(grid)
+    # The open-sea mask was memoised during the carve pass — BEFORE the
+    # cleanup deleted the strips that seal basins. A berth in a pocket the
+    # cleanup just opened is on the true ocean now, so the stale mask would
+    # fail assert_harbors_on_ocean with "sealed basin". Drop the cache; the
+    # assert recomputes on the final grid.
+    if getattr(grid, _OPEN_SEA_ATTR, None) is not None:
+        delattr(grid, _OPEN_SEA_ATTR)
+    if verbose:
+        print(f"  coast cleanup: {cleanup['deleted_total']} cells deleted "
+              f"over {cleanup['iterations']} iterations", file=sys.stderr)
+        print(f"  stranded ports widened: {widening['ports']} ports, "
+              f"{widening['cells_filled']} cells filled; post-widen "
+              f"cleanup {cleanup_after['deleted_total']} cells; band "
+              f"refresh {band_refresh_cleanup['cells_changed']} cells; "
+              f"strict violations remaining: {len(remaining)}",
+              file=sys.stderr)
 
 
     elapsed = time.time() - started
@@ -1410,6 +1588,15 @@ def build_grid(degrees_per_tile: float, verbose: bool = False) -> tuple[Grid, di
         "ice": ice,
         "coastal_band": band,
         "coastal_band_refresh": band_refresh,
+        "coast_cleanup": {**cleanup,
+                          "post_widen": cleanup_after,
+                          "strict_violations_remaining": len(remaining),
+                          "strict_violations_example": remaining[:8]},
+        "port_block_widening": {**{k: v for k, v in widening.items()
+                                   if k != "filled"},
+                                "stranded_port_ids": [p.get("id")
+                                                      for p in stranded]},
+        "coastal_band_refresh_cleanup": band_refresh_cleanup,
         "harbor_snap_radius_tiles": HARBOR_SNAP_TILES,
         "lakes_as_land": True,
         "sources": sources,
@@ -1451,6 +1638,24 @@ def build_report(grid: Grid, meta: dict, ports: list[dict],
                 "rows": meta["ice"]["rows"],
             },
             "coastal_band_tiles": meta["coastal_band"]["band_tiles"],
+            "coast_cleanup": {
+                "deleted_cells": meta["coast_cleanup"]["deleted_total"],
+                "iterations": meta["coast_cleanup"]["iterations"],
+                "post_widen_deleted_cells":
+                    meta["coast_cleanup"]["post_widen"]["deleted_total"],
+                "strict_rule": "water = every non-land palette (~ . ^ I); "
+                               "delete land with 3+ water ortho sides or "
+                               "opposite water pairs, to fixpoint",
+                "strict_violations_remaining":
+                    meta["coast_cleanup"]["strict_violations_remaining"],
+                "port_block_widening": {
+                    "ports": meta["port_block_widening"]["ports"],
+                    "cells_filled":
+                        meta["port_block_widening"]["cells_filled"],
+                    "stranded_port_ids":
+                        meta["port_block_widening"]["stranded_port_ids"],
+                },
+            },
             "coastal_band_refresh_cells":
                 meta["coastal_band_refresh"]["cells_changed"],
             "coastal_band_refresh_reverted": meta["coastal_band_refresh"].get(
@@ -1704,6 +1909,16 @@ def cmd_ascii(args, grid: Grid) -> int:
 
 def cmd_build(args) -> int:
     grid, meta = build_grid(args.degrees_per_tile, verbose=args.verbose)
+    cleanup_meta = meta.get("coast_cleanup", {})
+    remaining = cleanup_meta.get("strict_violations_remaining", 0)
+    if remaining:
+        print(
+            f"build_world: coast cleanup left {remaining} strict §6.2 "
+            f"violations (first: "
+            f"{cleanup_meta.get('strict_violations_example', [])}):",
+            file=sys.stderr,
+        )
+        return 1
     ports, ports_source = resolve_build_ports(args.verbose)
     port_results, failures = snap_ports(grid, ports)
     if failures:

@@ -48,7 +48,7 @@ const CORNER_TO := Vector2i(692, 635)
 ## The dominant passable component the artifact reports (> 1 M tiles),
 ## `data/maps/world_report.json#components.over_1000000`; the in-game BFS must
 ## reach exactly this many tiles from Lisbon.
-const DOMINANT_COMPONENT := 4677491
+const DOMINANT_COMPONENT := 4687482
 
 var _failures: Array[String] = []
 var _checks := 0

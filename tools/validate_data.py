@@ -5840,7 +5840,8 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                     8,
                 )
 
-    kinds = {"lane": 0, "capital": 0, "override": 0, "fallback": 0}
+    kinds = {"lane": 0, "capital": 0, "override": 0, "fallback": 0,
+             "completion": 0}
     for port in ports:
         port_id = port["id"]
         spoke = by_port.get(port_id)
@@ -6054,12 +6055,92 @@ def _check_trade_spokes(grid, ports: list, nations: list, lanes: list,
                     f"the A* water path from {harbor} to {tile} (§4.14)",
                     8,
                 )
+        elif kind == "completion":
+            # §4.14 rule 5 (2026-11-06): the connectivity-completion spoke.
+            # Legal even when rule 1 succeeds — that is its purpose (the
+            # strict coast cleanup re-opened walks and moved bridge spokes).
+            # Must end at the named lane waypoint over the A* water path,
+            # carry no override entry, and be LOAD-BEARING: without it the
+            # junction graph is disconnected (a completion spoke that the
+            # graph does not need is a §4.14 rule violation).
+            kinds["completion"] += 1
+            if overrides.get(port_id) is not None:
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' has a completion spoke but an "
+                    f"{OVERRIDES_LABEL} entry is declared — the override "
+                    "takes precedence (§4.14)",
+                    8,
+                )
+            lane_id = spoke.get("lane")
+            wp_index = spoke.get("waypoint_index")
+            if (not isinstance(lane_id, str)
+                    or lane_id not in snapped_by_lane
+                    or not isinstance(wp_index, int)
+                    or not (0 <= wp_index < len(snapped_by_lane[lane_id]))):
+                fail(
+                    "trade-spokes",
+                    label,
+                    f"port '{port_id}' completion spoke names an unknown "
+                    f"lane waypoint ({lane_id!r} #{wp_index!r})",
+                    8,
+                )
+            else:
+                tile = tuple(snapped_by_lane[lane_id][wp_index])
+                if chain_tiles[-1] != tile:
+                    fail(
+                        "trade-spokes",
+                        label,
+                        f"port '{port_id}' completion spoke ends at "
+                        f"{chain_tiles[-1]}, not the named lane waypoint "
+                        f"{tile} ({lane_id} #{wp_index})",
+                        8,
+                    )
+                astar = route_builder.astar_path(grid, harbor, tile)
+                if astar is None or [(x, y) for x, y in astar] != chain_tiles:
+                    fail(
+                        "trade-spokes",
+                        label,
+                        f"port '{port_id}' completion spoke tile_path is "
+                        f"not the A* water path from {harbor} to {tile} "
+                        "(§4.14 rule 5)",
+                        8,
+                    )
+                # load-bearing: rebuild the graph WITHOUT this spoke; the
+                # harbor and the target waypoint must land in different
+                # components (otherwise rule 1 already connects the port
+                # and a completion spoke is spurious).
+                paths_wo: dict = {}
+                for lane_entry in built.get("lanes", []):
+                    paths_wo[f"lane:{lane_entry['id']}"] = [
+                        (t[0], t[1]) for t in lane_entry["tile_path"]]
+                for other in built.get("spokes", []):
+                    if other["port"] != port_id:
+                        paths_wo[f"spoke:{other['port']}"] = [
+                            (t[0], t[1]) for t in other["tile_path"]]
+                nodes2, edges2, t2n = route_builder.build_junction_graph(
+                    paths_wo)
+                if tuple(harbor) in t2n and tile in t2n:
+                    adj2 = route_builder.graph_adjacency(edges2)
+                    seen2 = route_builder.reachable_from(
+                        adj2, t2n[tuple(harbor)])
+                    if t2n[tile] in seen2:
+                        fail(
+                            "trade-spokes",
+                            label,
+                            f"port '{port_id}' completion spoke is not "
+                            "load-bearing — the graph is already connected "
+                            "without it (§4.14 rule 5 fires only on a "
+                            "detached component)",
+                            8,
+                        )
         else:
             fail(
                 "trade-spokes",
                 label,
                 f"port '{port_id}' spoke kind {kind!r} is not lane/capital/"
-                "override/fallback",
+                "override/fallback/completion",
                 8,
             )
 

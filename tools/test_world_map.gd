@@ -49,7 +49,7 @@ const HARBOR_PAIR_MOVED := {
 	"rio_de_janeiro": Vector2i(1640, 1353),
 	"luanda": Vector2i(2318, 1184),
 	"mombasa": Vector2i(2636, 1127),
-	"bombay": Vector2i(3033, 851),
+	"bombay": Vector2i(3034, 853),
 	"malacca": Vector2i(3386, 1052),
 	"patani": Vector2i(3375, 996),
 }

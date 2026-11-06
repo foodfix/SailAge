@@ -793,7 +793,8 @@ def build_spokes(grid: bw.Grid, ports: list[dict], nations: list[dict],
                      for pid in harbors if nation_of[pid]}
 
     records: list[dict] = []
-    counts = {"lane": 0, "capital": 0, "override": 0, "fallback": 0}
+    counts = {"lane": 0, "capital": 0, "override": 0, "fallback": 0,
+              "completion": 0}
     for port in ports:
         port_id = port["id"]
         harbor = harbors[port_id]
@@ -960,6 +961,103 @@ def _override_spoke_path(grid: bw.Grid, harbors, snapped_by_lane,
 # --------------------------------------------------------------------------
 # Junction graph
 # --------------------------------------------------------------------------
+# Spoke attachments pinned by the §8.3 item 7 probes: the completion pass
+# (§4.14 rule 5) must never rewrite these — they are contracts, not
+# incidental resolutions.
+PINNED_SPOKE_PORTS = frozenset((
+    "lima", "valparaiso", "guayaquil", "panama",      # pacific_america_spokes
+    "safi", "elmina", "luanda",                       # west_africa_spokes
+))
+
+
+def complete_connectivity(grid: bw.Grid, paths_by_key: dict,
+                          spoke_records: list[dict],
+                          snapped_by_lane: dict, lane_order: list,
+                          counts: dict, max_passes: int = 10) -> int:
+    """§4.14 rule 5: re-attach detached junction-graph components by
+    rewriting the bridge spoke as resolution kind "completion". Returns
+    the number of completion passes that fired. Raises BuildError when a
+    component cannot be attached by any candidate walk."""
+    passes = 0
+    for _ in range(max_passes):
+        nodes, _edges, tile_to_node = build_junction_graph(paths_by_key)
+        adj = graph_adjacency(_edges)
+        comps = _graph_components(len(nodes), adj)
+        if len(comps) <= 1:
+            return passes
+        comps.sort(key=len, reverse=True)
+        main = comps[0]
+        main_tiles = {nodes[i] for i in main}
+        # lanes anchored in the main component: their waypoint tiles are
+        # legal completion targets.
+        main_lanes = [lane_id for lane_id in lane_order
+                      if tuple(lane_tile(paths_by_key, f"lane:{lane_id}", 0))
+                      in main_tiles]
+        best = None  # (key, port_id, lane_id, wp_index, tile)
+        for key, path in paths_by_key.items():
+            if not key.startswith("spoke:"):
+                continue
+            port_id = key[len("spoke:"):]
+            if port_id in PINNED_SPOKE_PORTS:
+                continue
+            harbor = path[0]
+            node = tile_to_node.get(harbor)
+            if node is None or node in main:
+                continue
+            for rank, lane_id in enumerate(main_lanes):
+                for wp_index, tile in enumerate(snapped_by_lane[lane_id]):
+                    distance = chebyshev_wrap_tiles(grid, harbor, tile)
+                    key = (distance, tile[1], tile[0], rank, wp_index,
+                           port_id)
+                    if best is None or key < best[0]:
+                        best = (key, port_id, lane_id, wp_index, tile)
+        if best is None:
+            raise BuildError(
+                "junction graph has detached components but no spoke/"
+                "waypoint completion candidate exists (§4.14 rule 5)")
+        _key, port_id, lane_id, wp_index, tile = best
+        chain = astar_path(grid, paths_by_key[f"spoke:{port_id}"][0], tile)
+        if chain is None:
+            raise BuildError(
+                f"§4.14 rule 5 completion: no A* water path from port "
+                f"'{port_id}' to {lane_id} waypoint #{wp_index} {tile}")
+        record = next(r for r in spoke_records if r["port"] == port_id)
+        record["kind"] = "completion"
+        record["lane"] = lane_id
+        record["waypoint_index"] = wp_index
+        record["tile_path"] = [[x, y] for x, y in chain]
+        record["distance"] = chebyshev_wrap_tiles(
+            grid, tuple(chain[0]), tile)
+        paths_by_key[f"spoke:{port_id}"] = [(x, y) for x, y in chain]
+        counts["completion"] += 1
+        passes += 1
+    raise BuildError(
+        "§4.14 rule 5 connectivity completion did not converge within "
+        f"{max_passes} passes")
+
+
+def lane_tile(paths_by_key: dict, key: str, index: int) -> tuple:
+    return paths_by_key[key][index]
+
+
+def _graph_components(node_count: int, adj: dict) -> list[set]:
+    seen: set = set()
+    comps: list[set] = []
+    for s in range(node_count):
+        if s in seen:
+            continue
+        comp, stack = set(), [s]
+        while stack:
+            n = stack.pop()
+            if n in comp:
+                continue
+            comp.add(n)
+            seen.add(n)
+            stack.extend(adj.get(n, ()))
+        comps.append(comp)
+    return comps
+
+
 def build_junction_graph(paths_by_key: dict[str, list[tuple[int, int]]]):
     """Extract the runtime routing graph from every tile path.
 
@@ -1055,6 +1153,22 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
     for record in spoke_records:
         paths_by_key[f"spoke:{record['port']}"] = [
             (x, y) for x, y in record["tile_path"]]
+    # §4.14 rule 5 — connectivity completion (2026-11-06): the contract
+    # (§8.3 item 7) is ONE connected junction graph, but rules 1-4 attach
+    # spokes locally and the strict coast cleanup can re-open a walk that
+    # moves a bridge spoke (Canton's override spoke used to bridge the
+    # Pacific cluster to manila_galleon; once rule 1 resolved canton to
+    # canton_country_trade the cluster detached). Completion re-attaches
+    # every detached component: the spoke whose port harbor is closest
+    # (wrapped Chebyshev) to any waypoint tile of a lane in the main
+    # component is re-pathfound there with A* and rewritten as resolution
+    # kind "completion". Deterministic candidate order (chebyshev, y, x,
+    # lane rank, waypoint index, port id); a failed walk tries the next
+    # candidate; one attachment per pass, passes repeated to fixpoint.
+    completion_passes = complete_connectivity(
+        grid, paths_by_key, spoke_records, snapped_by_lane, lane_order,
+        spoke_counts)
+
     nodes, edges, tile_to_node = build_junction_graph(paths_by_key)
 
     # Port harbor tiles -> graph nodes; lane first tiles -> graph nodes.
@@ -1081,8 +1195,11 @@ def build_artifact(grid: bw.Grid, lanes: list[dict], ports: list[dict],
             return False
         return True
 
-    pacific_ports = ("lima", "valparaiso", "guayaquil", "panama")
-    africa_ports = ("safi", "elmina", "luanda")
+    pacific_ports = tuple(k for k in PINNED_SPOKE_PORTS
+                          if k in ("lima", "valparaiso", "guayaquil",
+                                   "panama"))
+    africa_ports = tuple(k for k in PINNED_SPOKE_PORTS
+                         if k in ("safi", "elmina", "luanda"))
     probes = {
         "acapulco_manila_wrap": port_nodes["manila"] in acapulco,
         "hanseatic_reaches_danzig": port_nodes["danzig"] in reachable_from(

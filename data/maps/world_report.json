@@ -30,6 +30,25 @@
       "rows": 601
     },
     "coastal_band_tiles": 6,
+    "coast_cleanup": {
+      "deleted_cells": 8420,
+      "iterations": 7,
+      "post_widen_deleted_cells": 0,
+      "strict_rule": "water = every non-land palette (~ . ^ I); delete land with 3+ water ortho sides or opposite water pairs, to fixpoint",
+      "strict_violations_remaining": 0,
+      "port_block_widening": {
+        "ports": 6,
+        "cells_filled": 24,
+        "stranded_port_ids": [
+          "valetta",
+          "curacao",
+          "amboina",
+          "shuangyu",
+          "nanao",
+          "hormuz"
+        ]
+      }
+    },
     "coastal_band_refresh_cells": 293,
     "coastal_band_refresh_reverted": 10,
     "locked_waterways": [
@@ -88,21 +107,21 @@
     "ports_source": "data/ports.json"
   },
   "tile_counts": {
-    "~": 4313738,
-    ".": 382980,
-    "#": 2038162,
+    "~": 4375096,
+    ".": 330018,
+    "#": 2029766,
     "^": 0,
     "I": 2596320
   },
   "tiles_total": 9331200,
-  "sea_fraction": 0.503335,
+  "sea_fraction": 0.504235,
   "land_fraction": 0.331375,
   "ice_fraction": 0.278241,
   "reef_fraction": 0.0,
   "fractions": {
-    "sea": 0.462292,
-    "coastal_sea": 0.041043,
-    "land_tiles": 0.218424,
+    "sea": 0.468867,
+    "coastal_sea": 0.035367,
+    "land_tiles": 0.217525,
     "reef": 0.0,
     "ice": 0.278241
   },
@@ -110,39 +129,39 @@
     "note": "coastline mask (land fill + lakes pass) sampled before the ice pass overwrites polar land; this is the number the 25-35 % land-fraction sanity gate refers to",
     "tiles": 3092123,
     "fraction": 0.331375,
-    "land_tiles_after_ice": 2038162,
-    "land_tiles_after_ice_fraction": 0.218424
+    "land_tiles_after_ice": 2029766,
+    "land_tiles_after_ice_fraction": 0.217525
   },
   "components": {
     "law": "4-connected passable tiles, wrap-aware in x (== 8-dir with corner-cutting forbidden)",
-    "count": 1754,
-    "passable_tiles": 4696718,
+    "count": 641,
+    "passable_tiles": 4705114,
     "over_2000": [
       {
-        "size": 4677491,
+        "size": 4687482,
         "example_tile": {
           "x": 0,
           "y": 241
         }
       },
       {
-        "size": 8211,
+        "size": 8309,
         "example_tile": {
           "x": 2549,
           "y": 241
         }
       },
       {
-        "size": 3232,
+        "size": 3421,
         "example_tile": {
-          "x": 667,
+          "x": 666,
           "y": 241
         }
       }
     ],
     "over_1000000": [
       {
-        "size": 4677491,
+        "size": 4687482,
         "example_tile": {
           "x": 0,
           "y": 241
@@ -528,11 +547,11 @@
       "lat": 38.12,
       "lon": 13.36,
       "harbor_tile": {
-        "x": 2320,
+        "x": 2319,
         "y": 621
       },
       "shore_tile": {
-        "x": 2320,
+        "x": 2319,
         "y": 622
       },
       "distance": 1
@@ -543,13 +562,13 @@
       "lon": 15.29,
       "harbor_tile": {
         "x": 2343,
-        "y": 634
-      },
-      "shore_tile": {
-        "x": 2343,
         "y": 635
       },
-      "distance": 1
+      "shore_tile": {
+        "x": 2342,
+        "y": 635
+      },
+      "distance": 0
     },
     {
       "id": "cagliari",
@@ -570,14 +589,14 @@
       "lat": 35.9,
       "lon": 14.51,
       "harbor_tile": {
-        "x": 2333,
-        "y": 648
+        "x": 2334,
+        "y": 649
       },
       "shore_tile": {
         "x": 2333,
         "y": 649
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "venice",
@@ -613,11 +632,11 @@
       "lon": 23.64,
       "harbor_tile": {
         "x": 2442,
-        "y": 625
+        "y": 623
       },
       "shore_tile": {
-        "x": 2442,
-        "y": 624
+        "x": 2443,
+        "y": 623
       },
       "distance": 1
     },
@@ -640,11 +659,11 @@
       "lat": 34.67,
       "lon": 33.04,
       "harbor_tile": {
-        "x": 2556,
+        "x": 2555,
         "y": 664
       },
       "shore_tile": {
-        "x": 2556,
+        "x": 2555,
         "y": 663
       },
       "distance": 1
@@ -728,8 +747,8 @@
         "y": 638
       },
       "shore_tile": {
-        "x": 2283,
-        "y": 637
+        "x": 2282,
+        "y": 638
       },
       "distance": 0
     },
@@ -1018,11 +1037,11 @@
       "lat": 40.7,
       "lon": -74.02,
       "harbor_tile": {
-        "x": 1271,
+        "x": 1270,
         "y": 592
       },
       "shore_tile": {
-        "x": 1271,
+        "x": 1270,
         "y": 591
       },
       "distance": 1
@@ -1032,14 +1051,14 @@
       "lat": 37.0,
       "lon": -76.3,
       "harbor_tile": {
-        "x": 1245,
-        "y": 635
+        "x": 1244,
+        "y": 636
       },
       "shore_tile": {
         "x": 1244,
-        "y": 635
+        "y": 637
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "charleston",
@@ -1088,11 +1107,11 @@
       "lat": 12.11,
       "lon": -68.93,
       "harbor_tile": {
-        "x": 1332,
+        "x": 1331,
         "y": 933
       },
       "shore_tile": {
-        "x": 1332,
+        "x": 1331,
         "y": 934
       },
       "distance": 1
@@ -1106,8 +1125,8 @@
         "y": 1008
       },
       "shore_tile": {
-        "x": 1498,
-        "y": 1008
+        "x": 1497,
+        "y": 1009
       },
       "distance": 1
     },
@@ -1270,12 +1289,12 @@
       "lat": 18.92,
       "lon": 72.83,
       "harbor_tile": {
-        "x": 3033,
-        "y": 851
+        "x": 3034,
+        "y": 853
       },
       "shore_tile": {
-        "x": 3033,
-        "y": 852
+        "x": 3035,
+        "y": 853
       },
       "distance": 1
     },
@@ -1284,14 +1303,14 @@
       "lat": 21.1,
       "lon": 72.7,
       "harbor_tile": {
-        "x": 3032,
-        "y": 826
+        "x": 3031,
+        "y": 825
       },
       "shore_tile": {
         "x": 3031,
-        "y": 826
+        "y": 824
       },
-      "distance": 0
+      "distance": 1
     },
     {
       "id": "colombo",
@@ -1368,14 +1387,14 @@
       "lat": 12.79,
       "lon": 45.03,
       "harbor_tile": {
-        "x": 2701,
-        "y": 925
+        "x": 2700,
+        "y": 926
       },
       "shore_tile": {
         "x": 2700,
         "y": 925
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "jiddah",
@@ -1467,11 +1486,11 @@
       "lon": 128.18,
       "harbor_tile": {
         "x": 3697,
-        "y": 1124
+        "y": 1123
       },
       "shore_tile": {
         "x": 3698,
-        "y": 1124
+        "y": 1123
       },
       "distance": 1
     },
@@ -1523,11 +1542,11 @@
       "lon": 129.88,
       "harbor_tile": {
         "x": 3717,
-        "y": 687
+        "y": 686
       },
       "shore_tile": {
-        "x": 3718,
-        "y": 687
+        "x": 3717,
+        "y": 685
       },
       "distance": 1
     },
@@ -1582,8 +1601,8 @@
         "y": 1020
       },
       "shore_tile": {
-        "x": 3540,
-        "y": 1019
+        "x": 3539,
+        "y": 1020
       },
       "distance": 0
     },
@@ -1592,14 +1611,14 @@
       "lat": 0.79,
       "lon": 127.38,
       "harbor_tile": {
-        "x": 3688,
-        "y": 1070
+        "x": 3689,
+        "y": 1068
       },
       "shore_tile": {
-        "x": 3687,
-        "y": 1070
+        "x": 3690,
+        "y": 1068
       },
-      "distance": 0
+      "distance": 2
     },
     {
       "id": "timor",
@@ -1746,28 +1765,28 @@
       "lat": 39.62,
       "lon": 19.92,
       "harbor_tile": {
-        "x": 2399,
-        "y": 604
+        "x": 2398,
+        "y": 603
       },
       "shore_tile": {
-        "x": 2398,
-        "y": 604
+        "x": 2397,
+        "y": 603
       },
-      "distance": 0
+      "distance": 1
     },
     {
       "id": "santa_cruz",
       "lat": 28.47,
       "lon": -16.25,
       "harbor_tile": {
-        "x": 1965,
+        "x": 1964,
         "y": 738
       },
       "shore_tile": {
-        "x": 1965,
-        "y": 737
+        "x": 1963,
+        "y": 738
       },
-      "distance": 0
+      "distance": 1
     },
     {
       "id": "reykjavik",
@@ -1872,14 +1891,14 @@
       "lat": 29.74,
       "lon": 122.22,
       "harbor_tile": {
-        "x": 3625,
-        "y": 722
+        "x": 3626,
+        "y": 723
       },
       "shore_tile": {
         "x": 3625,
         "y": 723
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "nanao",
@@ -1942,14 +1961,14 @@
       "lat": 23.62,
       "lon": 117.13,
       "harbor_tile": {
-        "x": 3564,
+        "x": 3565,
         "y": 796
       },
       "shore_tile": {
         "x": 3565,
-        "y": 796
+        "y": 795
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "qiongzhou",
@@ -1960,8 +1979,8 @@
         "y": 839
       },
       "shore_tile": {
-        "x": 3482,
-        "y": 839
+        "x": 3483,
+        "y": 840
       },
       "distance": 0
     },
@@ -1971,13 +1990,13 @@
       "lon": 109.12,
       "harbor_tile": {
         "x": 3469,
-        "y": 821
-      },
-      "shore_tile": {
-        "x": 3469,
         "y": 822
       },
-      "distance": 1
+      "shore_tile": {
+        "x": 3470,
+        "y": 822
+      },
+      "distance": 0
     },
     {
       "id": "dinghai",
@@ -2040,14 +2059,14 @@
       "lat": 31.1,
       "lon": 130.58,
       "harbor_tile": {
-        "x": 3726,
-        "y": 706
-      },
-      "shore_tile": {
-        "x": 3726,
+        "x": 3725,
         "y": 705
       },
-      "distance": 0
+      "shore_tile": {
+        "x": 3725,
+        "y": 704
+      },
+      "distance": 1
     },
     {
       "id": "hakata",
@@ -2125,13 +2144,13 @@
       "lon": 129.43,
       "harbor_tile": {
         "x": 3713,
-        "y": 654
-      },
-      "shore_tile": {
-        "x": 3713,
         "y": 653
       },
-      "distance": 0
+      "shore_tile": {
+        "x": 3712,
+        "y": 653
+      },
+      "distance": 1
     },
     {
       "id": "hoi_an",
@@ -2152,12 +2171,12 @@
       "lat": -5.85,
       "lon": 105.95,
       "harbor_tile": {
-        "x": 3432,
-        "y": 1150
+        "x": 3431,
+        "y": 1151
       },
       "shore_tile": {
-        "x": 3432,
-        "y": 1151
+        "x": 3431,
+        "y": 1152
       },
       "distance": 1
     },
@@ -2181,13 +2200,13 @@
       "lon": 104.85,
       "harbor_tile": {
         "x": 3418,
-        "y": 1106
+        "y": 1107
       },
       "shore_tile": {
         "x": 3418,
-        "y": 1107
+        "y": 1108
       },
-      "distance": 1
+      "distance": 0
     },
     {
       "id": "gresik",
@@ -2208,14 +2227,14 @@
       "lat": 5.98,
       "lon": 120.98,
       "harbor_tile": {
-        "x": 3610,
-        "y": 1007
-      },
-      "shore_tile": {
-        "x": 3610,
+        "x": 3611,
         "y": 1008
       },
-      "distance": 1
+      "shore_tile": {
+        "x": 3612,
+        "y": 1008
+      },
+      "distance": 0
     },
     {
       "id": "kedah",
@@ -2264,28 +2283,28 @@
       "lat": 21.65,
       "lon": 88.05,
       "harbor_tile": {
-        "x": 3216,
-        "y": 819
+        "x": 3215,
+        "y": 818
       },
       "shore_tile": {
-        "x": 3217,
-        "y": 819
+        "x": 3214,
+        "y": 818
       },
-      "distance": 1
+      "distance": 2
     },
     {
       "id": "syriam",
       "lat": 16.6,
       "lon": 96.28,
       "harbor_tile": {
-        "x": 3316,
-        "y": 882
-      },
-      "shore_tile": {
-        "x": 3316,
+        "x": 3315,
         "y": 881
       },
-      "distance": 2
+      "shore_tile": {
+        "x": 3315,
+        "y": 880
+      },
+      "distance": 1
     },
     {
       "id": "dianga",
@@ -2307,13 +2326,13 @@
       "lon": 72.55,
       "harbor_tile": {
         "x": 3030,
-        "y": 818
-      },
-      "shore_tile": {
-        "x": 3030,
         "y": 819
       },
-      "distance": 1
+      "shore_tile": {
+        "x": 3031,
+        "y": 819
+      },
+      "distance": 0
     },
     {
       "id": "diu",
@@ -2362,11 +2381,11 @@
       "lat": 26.62,
       "lon": 56.43,
       "harbor_tile": {
-        "x": 2836,
+        "x": 2835,
         "y": 758
       },
       "shore_tile": {
-        "x": 2836,
+        "x": 2835,
         "y": 757
       },
       "distance": 2
@@ -2433,13 +2452,13 @@
       "lon": 39.45,
       "harbor_tile": {
         "x": 2633,
-        "y": 891
-      },
-      "shore_tile": {
-        "x": 2633,
         "y": 892
       },
-      "distance": 1
+      "shore_tile": {
+        "x": 2632,
+        "y": 892
+      },
+      "distance": 0
     },
     {
       "id": "zeila",
@@ -2450,8 +2469,8 @@
         "y": 943
       },
       "shore_tile": {
-        "x": 2681,
-        "y": 942
+        "x": 2680,
+        "y": 943
       },
       "distance": 0
     }

@@ -30,30 +30,12 @@
     },
     {
       "kind": "spoke",
-      "port": "bergen",
-      "connect": {
-        "lane": "hanseatic_north",
-        "waypoint_index": 0
-      },
-      "note": "Phase-6 5 nm raster: the Bergen sound pocket has no straight-walk exit past the sound islet; rule-3 spoke pathfound through the archipelago gap"
-    },
-    {
-      "kind": "spoke",
       "port": "brunei",
       "connect": {
         "lane": "manila_galleon",
         "waypoint_index": 30
       },
       "note": "Brunei on the galleon's Borneo-Philippines trade"
-    },
-    {
-      "kind": "spoke",
-      "port": "canton",
-      "connect": {
-        "lane": "manila_galleon",
-        "waypoint_index": 26
-      },
-      "note": "Canton-Manila silk-for-silver trade (the Sino-Spanish run)"
     },
     {
       "kind": "spoke",
@@ -75,33 +57,6 @@
     },
     {
       "kind": "spoke",
-      "port": "hakata",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 61
-      },
-      "note": "Hakata joins the lane at Hirado, the historic Japan terminus of the China run"
-    },
-    {
-      "kind": "spoke",
-      "port": "jambi",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 8
-      },
-      "note": "Phase-6 5 nm raster: Jambi's Batanghari pepper runs downriver and north to the lane's South China Sea leg"
-    },
-    {
-      "kind": "spoke",
-      "port": "lamu",
-      "connect": {
-        "lane": "swahili_coast",
-        "waypoint_index": 30
-      },
-      "note": "Lamu archipelago joins the run north of Mombasa; straight walk clips the coast"
-    },
-    {
-      "kind": "spoke",
       "port": "liujiagang",
       "connect": {
         "lane": "canton_country_trade",
@@ -117,15 +72,6 @@
         "waypoint_index": 93
       },
       "note": "Osaka on the galleon's southern Japan approach"
-    },
-    {
-      "kind": "spoke",
-      "port": "palembang",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 8
-      },
-      "note": "Musi pepper up the Bangka strait to the South China Sea lane"
     },
     {
       "kind": "spoke",
@@ -174,66 +120,12 @@
     },
     {
       "kind": "spoke",
-      "port": "surat",
-      "connect": {
-        "lane": "aden_gujarat_malacca",
-        "waypoint_index": 14
-      },
-      "note": "Phase-6 5 nm raster: the Tapti-mouth pocket sits east of the gulf-head tip; rule-3 spoke pathfound across to the lane's gulf-head station"
-    },
-    {
-      "kind": "spoke",
       "port": "suriname",
       "connect": {
         "lane": "west_indies_flota",
         "waypoint_index": 16
       },
       "note": "Dutch Guiana plantations on the flota track"
-    },
-    {
-      "kind": "spoke",
-      "port": "tunis",
-      "connect": {
-        "lane": "genoa_grain",
-        "waypoint_index": 5
-      },
-      "note": "Phase-6 5 nm raster: the Tunis lagoon pocket has no straight-walk exit; rule-3 spoke pathfound to the lane's Sicily-channel station"
-    },
-    {
-      "kind": "spoke",
-      "port": "wenzhou",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 43
-      },
-      "note": "Phase-6 5 nm raster: Wenzhou roads step out past the Ou river mouth shoals to the lane's Zhejiang leg"
-    },
-    {
-      "kind": "spoke",
-      "port": "yuegang",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 34
-      },
-      "note": "Jiulong-estuary berth steps out past the Xiamen headland to the lane's Fujian leg"
-    },
-    {
-      "kind": "spoke",
-      "port": "zeila",
-      "connect": {
-        "lane": "red_sea_india",
-        "waypoint_index": 7
-      },
-      "note": "Ethiopian trade outlet joins the Red Sea run off the Gulf of Aden"
-    },
-    {
-      "kind": "spoke",
-      "port": "zhelin",
-      "connect": {
-        "lane": "canton_country_trade",
-        "waypoint_index": 32
-      },
-      "note": "Zhelin bay joins the lane's Guangdong headland leg; straight walk clips the point"
     }
   ]
 }

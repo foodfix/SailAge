@@ -1024,6 +1024,26 @@ governance):
   override row is **superseded** (a build error naming the port) exactly
   when rule 1 succeeds for that port; an override whose rule-1 walk fails
   stays legal.
+  **Rule 5 — connectivity completion (2026-11-06 amendment).** After
+  rules 1–4 resolve every spoke, the builder builds the junction graph;
+  if it has more than one component (§8.3 item 7 requires exactly one),
+  the detached component is re-attached: the spoke whose port harbor is
+  closest (wrapped Chebyshev) to any waypoint tile of a lane anchored in
+  the main (largest) component is **re-pathfound there with A\*** and
+  rewritten as resolution kind `"completion"` — its endpoint is the named
+  lane waypoint, its `tile_path` is the A\* water path, and it must be
+  **load-bearing** (without it the graph stays disconnected — the
+  validator rebuilds the graph without the spoke and asserts the split).
+  Spoke attachments pinned by the §8.3 item 7 probes (`lima`,
+  `valparaiso`, `guayaquil`, `panama` → `pacific_america`; `safi`,
+  `elmina`, `luanda` → `west_africa`) are never rewritten. Candidate
+  order is deterministic `(chebyshev, y, x, lane rank, waypoint index,
+  port id)`; a failed walk tries the next candidate; passes repeat to
+  fixpoint (non-convergence is a build error). Motivation: the §6.2 coast
+  cleanup re-opens walks, which legitimately supersedes override spokes —
+  but Canton's override spoke was the one bridge the Pacific cluster
+  (`manila_galleon` / `pacific_america`) had into the world network, and
+  rule 1's local resolution cannot see network-level connectivity.
 - **Determinism:** two consecutive builds produce a **byte-identical**
   `data/trade_routes_built.json` (group 8 re-asserts it). Hand fixes go in
   `tools/route_overrides.json` — plus minimal, per-lane-reported waypoint
@@ -1513,6 +1533,28 @@ orthogonally adjacent tile, which triggers the port-entry flow
   shorelines (`tools/assets/`) plus `tools/map_overrides.json`; never
   hand-edited. ASCII is a debug export only (`build_world.py --ascii`):
   never shipped, never hand-edited, not a data source.
+- **2026-11-06 amendment — the §6.2 coast-cleanup pass (canonical).** After
+  the override carves and before harbor snapping, `build_world.py` runs
+  `pass_coast_cleanup`: every land cell with water on **3 or 4 orthogonal
+  sides**, or on an **opposite pair** (N+S / E+W), is deleted to open sea —
+  iterated to fixpoint (a deletion can expose a new violation next door;
+  the loop runs until a full scan deletes nothing, verified by a strict
+  rescan recorded in `world_report.json#build.coast_cleanup
+  .strict_violations_remaining`, which must be 0 or the build fails).
+  "Water" here is **every non-land palette** (`~ . ^ I`) plus off-grid
+  rows — reef and polar ice render as water, so they count. The shape
+  family this removes (one-cell tips, single-pixel islands, one-cell
+  strips with two opposite beaches, ice-ringed shards) is exactly what no
+  corner-Wang tile can paint (§4.8 in `80-UI-UX.md`). Ports the cleanup
+  strands get a violation-free 2×2 land block **restored at the port's
+  pre-cleanup shore location** (`port_block_widening` in the report) —
+  never at the bare port tile, which once stamped land onto the
+  `basra_muscat_india` lane. Derived artifacts are regenerated in the
+  same change: `dist_land.png` (§6.7), `wind_regions.png` /
+  `currents.png` (§6.5), `world_shore.png` (§6.6), and
+  `trade_routes_built.json` (§4.14 — the cleanup re-opens spoke walks, so
+  superseded §4.14 overrides are removed from `tools/route_overrides.json`
+  by the builder's own invariant).
 - **Companion report:** `data/maps/world_report.json` records build params,
   sea fraction, ice extent, component sizes > 2000 tiles, and the derived
   `harbor_tile {x, y}` (berth) plus `shore_tile {x, y}` per port (validator
@@ -2600,7 +2642,10 @@ Group 8 exits 8. It runs after group 6 (same PNG decoder; sharing
 6. **Port spokes.** Every port of §7.1 (sovereign + neutral) satisfies the
    §4.14 spoke rule (a lane waypoint within the spoke radius, else the
    capital fallback; a neutral port uses the nationless nearest-waypoint
-   fallback). A port with neither is a hard failure naming the port.
+   fallback; §4.14 rule 5 may rewrite one spoke per detached component as
+   a `"completion"` spoke — load-bearing, A\*-pathfound, endpoint on the
+   named lane waypoint). A port with neither is a hard failure naming the
+   port.
 7. **Junction connectivity.** Over the built junction graph every port
    reaches every lane its nation/goods data implies; the named probes are
    asserted: `acapulco` ↔ `manila` across the wrap, `hanseatic_north`
