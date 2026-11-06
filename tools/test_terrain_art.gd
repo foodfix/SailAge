@@ -1004,12 +1004,11 @@ func _test_populated_registry() -> void:
 	var foam_set := WaterLayerLib.build_tile_set(32, MapLoaderLib.SHORE_DIRS)
 	var foam_source := (foam_set.get_source(foam_set.get_source_id(0))
 		as TileSetAtlasSource)
-	var want_tiles := 2 + 16 * 2 + (WaterLayerLib.WANG_WATER_INDICES.size() \
-		if wang_active else 0)
+	var want_tiles := 2 + 16 * 2
 	_check(foam_source.get_tiles_count() == want_tiles,
 		"populated registry: the water atlas gains the 16 mask-variant cells "
-		+ "+ the wang columns (%d tiles, want %d)"
-		% [foam_source.get_tiles_count(), want_tiles])
+		+ "(%d tiles, want %d — no wang columns: boundary art is land-side "
+		+ "only)" % [foam_source.get_tiles_count(), want_tiles])
 	var foam_atlas := foam_source.texture.get_image()
 	# cell for the E-edge mask (2) on the coastal fill = column 2+2*2+1 = 7:
 	# center stays the coastal fill (foam hugs the edges), the right edge's
@@ -1256,20 +1255,12 @@ func _test_wang_placement() -> void:
 		"NW+SW combo is wang_10 (the east-coast land tile)")
 	_check(WaterLayerLib.wang_index(10) == 5,
 		"NE+SE combo is wang_5 (the east-coast water tile)")
-	# Water-cell gating: combo 0 is the plain fill; land-owned indices are
-	# never stampable on the water layer.
-	_check(WaterLayerLib.wang_coords(0).x == -1,
-		"combo 0 is the plain fill (sentinel), never a wang column")
-	_check(WaterLayerLib.wang_coords(15).x == -1,
-		"the interior index is not stampable on the water layer")
-	_check(WaterLayerLib.wang_coords(1).x == -1,
-		"combo NW-only (index 8) is terrain-owned — sentinel on water")
-	_check(WaterLayerLib.wang_coords(8) == Vector2i(
-			WaterLayerLib.WANG_COLUMN_BASE + 1, 0),
-		"combo SE-only stamps the wang source at column base+1")
-	_check(WaterLayerLib.wang_coords(4) == Vector2i(
-			WaterLayerLib.WANG_COLUMN_BASE + 2, 0),
-		"combo SW-only stamps the wang source at column base+2")
+	# §4.8 2026-11-06 (the "ship on land" report): WATER cells never stamp
+	# corner tiles — the coast indices 8..14 are terrain-owned, and the
+	# water atlas carries no wang columns at all.
+	_check(WaterLayerLib.WANG_LAND_INDICES.all(
+		func(index: int) -> bool: return index >= 8),
+		"every terrain-owned wang index carries the land cell's own NW bit")
 	# A synthetic grid's corner probes: land = palette index 2 (west half).
 	var legend: Dictionary = DataLoader.map_legend
 	var grid := PackedByteArray()
@@ -1297,33 +1288,15 @@ func _test_wang_placement() -> void:
 	_check(loader._wang_land_at(4, 0) == true,
 		"the vertex probe at x = 4 wraps onto x = 0 (land) — the world "
 		+ "is a cylinder in x, the dateline is not a wall")
-	# The fixture path: registering the water-owned indices turns the water
-	# layer's readiness on and appends exactly one wang source. The tile
-	# cache is per px — clear it (and the foam flags) so this section
-	# builds a FRESH 64 px set with the fixtures, then leaves the statics
-	# clean for any later section.
-	WaterLayerLib._tile_set_cache.clear()
-	WaterLayerLib._foam_ready_by_px.clear()
-	WaterLayerLib.foam_ready = false
-	var fixtures: Dictionary = {}
-	for index in WaterLayerLib.WANG_WATER_INDICES:
-		var tile_image := Image.create_empty(64, 64, false,
-			Image.FORMAT_RGBA8)
-		tile_image.fill(Color(0.1, 0.2, 0.3, 1.0))
-		fixtures[WaterLayerLib.WANG_ID_PREFIX + str(index)] \
-			= ImageTexture.create_from_image(tile_image)
-	UiKitLib.register_textures(fixtures)
-	var water: TileMapLayer = WaterLayerLib.build_layer(64, [])
-	_check(WaterLayerLib.wang_ready_for_px(64),
-		"the water indices resolving turns wang readiness on at 64 px")
-	_check(water.tile_set.get_next_source_id() == 1
-		and (water.tile_set.get_source(0) as TileSetAtlasSource)
-			.get_tiles_count() == 10,
-		"ONE water source: 2 fills + 8 wang columns (no dirs ⇒ no foam "
-		+ "variants on the world path)")
-	UiKitLib.clear_textures()
-	WaterLayerLib._wang_ready_by_px.clear()
-	WaterLayerLib.wang_ready = false
+	# The terrain-atlas fixture path: with the land-owned indices
+	# registered, the land row carries wang_row_base 8 (columns 8..14).
+	var loader2 = MapLoaderLib.new()
+	_check(loader2.load_map("res://data/maps/world.png",
+		DataLoader.map_legend), "the world map loads for the wang atlas")
+	loader2._ensure_tile_set()
+	var land2: Dictionary = loader2._terrain_cells.get(2, {})
+	_check(not land2.is_empty() and int(land2.get("wang_row_base", -1)) == 8,
+		"the wang-active land row pins its coast columns at 8..14")
 
 
 func _test_shore_continuity() -> void:

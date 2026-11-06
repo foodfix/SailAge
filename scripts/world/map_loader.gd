@@ -1223,24 +1223,15 @@ func _wang_land_at(x: int, y: int) -> bool:
 var _land_indices := {}
 
 
-## Stamps one water cell of a chunk: the §4.8 2026-11-06 wang corner tile
-## when the family resolved AND the cell straddles the coast (combo ≠ 0),
-## else the legacy plain fill / coast-foam variant (which stay the fallback
-## and the battle-grid path). Shared by the spawn and warm paths so the two
-## cannot drift.
+## Stamps one water cell of a chunk: ALWAYS the plain painted fill of its
+## kind (§4.8 2026-11-06 — boundary art belongs to the land side only; a
+## water pocket/strait cell never renders land tones, the "ship on land"
+## report). The wang corner tiles are stamped by the TERRAIN layer's
+## land-cell branch.
 func _stamp_water_cell(water: TileMapLayer, water_source: int, i: int, j: int,
-		x: int, y: int, column: int, foam_mask: int) -> void:
-	var tile_px: int = water.tile_set.tile_size.x
-	if WaterLayerLib.wang_ready_for_px(tile_px):
-		var combo := _wang_corner_combo(x, y)
-		if combo != 0:
-			var coords := WaterLayerLib.wang_coords(combo)
-			if coords.x >= 0:
-				water.set_cell(Vector2i(i, j), water_source, coords)
-				return
-	# Legacy: plain fill or coast-foam variant.
+		column: int) -> void:
 	water.set_cell(Vector2i(i, j), water_source,
-		WaterLayerLib.water_coords(foam_mask, column, tile_px))
+		WaterLayerLib.water_coords(0, column, water.tile_set.tile_size.x))
 
 
 ## Spawns the chunks around `center_cell` and frees everything beyond the one
@@ -1346,7 +1337,7 @@ func _spawn_chunk(key: Vector2i) -> TileMapLayer:
 				# the family resolved and the cell straddles the coast,
 				# else the plain fill (the foam path is retired on the
 				# world map — mask 0).
-				_stamp_water_cell(water, water_source, i, j, x, y, column, 0)
+				_stamp_water_cell(water, water_source, i, j, column)
 				continue
 			var terrain: Dictionary = _terrain_cells.get(value, {})
 			if terrain.is_empty():

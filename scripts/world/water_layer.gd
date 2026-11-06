@@ -75,7 +75,7 @@ const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 ## §4.8 2026-11-06 — the PixelLab coast family (the vendored wang tileset,
 ## `tools/build_terrain_pixellab.py` output). Registry id prefix of the 16
 ## corner tiles; the WATER layer carries its owned indices ({0..7}) as
-## columns WANG_COLUMN_BASE..+7, stamped on cells with land corners
+## land-owned coast tiles; see `map_loader._ensure_tile_set`.
 ## (upper = land, lower = water; combo bits NW/NE/SW/SE = 1/2/4/8, wang
 ## index = NW·8 + NE·4 + SW·2 + SE·1). The painted water ALSO replaces the
 ## flat fills: [method _kind_image] prefers `terrain_coast_wang_0` (the
@@ -84,14 +84,7 @@ const KIND_COLUMNS := {"sea": 0, "coastal_sea": 1}
 ## 2026-11-06 pixel-depth amendment). Missing ids ⇒ the legacy flat fills
 ## (§4.9 fallback chain; suites with synthetic grids keep their pins).
 const WANG_ID_PREFIX := "terrain_coast_wang_"
-const WANG_COLUMN_BASE := 2 + 16 * 2
 
-## The wang indices the WATER layer owns: a water cell's own pixel is its
-## NW corner vertex, so its combo never carries the NW bit — under the
-## corrected numbering the NW-lower indices are exactly {0..7} (wang_0..7).
-## Columns WANG_COLUMN_BASE..+7 hold them in this order. (The terrain atlas
-## owns the NW-upper complement 8..15 — see `map_loader._ensure_tile_set`.)
-const WANG_WATER_INDICES: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
 
 ## The terrain atlas's land-owned complement (`map_loader._ensure_tile_set`):
 ## a land cell's own pixel is its NW corner vertex, so its index always
@@ -114,10 +107,6 @@ const DIST_FULL_TILES := 10.0
 const DIST_MAP_TILES := Vector2(4320, 2160)
 const DIST_ENCODE_MAX_TILES := 16.0
 
-## The wang readiness of the LAST `build_tile_set` call, per tile px (the
-## foam convention: the stamp side reads its OWN tile px's flag).
-static var wang_ready := false
-static var _wang_ready_by_px: Dictionary = {}
 
 ## The decoded §6.7 distance texture (one decode per process, cached; null
 ## when the artifact is absent — the shader runs with u_dist_enable = 0 and
@@ -148,11 +137,6 @@ static func wang_index(combo: int) -> int:
 		+ ((combo & 8) >> 3))        # SE → index bit 0
 
 
-## True when the combo carries any land corner (the cell straddles the
-## coast and stamps a wang corner tile instead of the plain fill). Suite
-## pins use it to document the water/land ownership split.
-static func wang_is_coastal(combo: int) -> bool:
-	return combo != 0
 
 ## The coast-foam readiness of the LAST `build_tile_set` call, per tile px
 ## (all 8 strips present ⇒ true). The stamp side reads the flag for its OWN
@@ -240,15 +224,14 @@ static func _wang_tile_image(index: int, tile_px: int) -> Image:
 ## `shore_dirs` is supplied AND all 8 `shore_{dir}` strips resolve — the
 ## §4.8 2026-11-06 amendment retires that bake from the WORLD path, which
 ## now passes no dirs; the machinery stays for the §4.9 fallback and the
-## suites); columns WANG_COLUMN_BASE..+7 the wang corner tiles (baked when
-## the whole water half resolves — §4.8 2026-11-06). Unresolved ranges stay
-## transparent with their readiness flags false (`foam_ready` /
-## `wang_ready` — the stamp side falls back to the plain fills, §4.9).
+## suites). No wang columns on the water atlas: boundary art belongs to
+## the land side only (§4.8 2026-11-06 — water cells always render plain
+## painted water, the "ship on land" report).
 static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 	var kinds: Array = KIND_COLUMNS.keys()
 	kinds.sort_custom(func(a: String, b: String) -> bool:
 		return int(KIND_COLUMNS[a]) < int(KIND_COLUMNS[b]))
-	var columns := WANG_COLUMN_BASE + WANG_WATER_INDICES.size()
+	var columns := 2 + 16 * 2
 	var image := Image.create_empty(columns * tile_px, tile_px, false,
 		Image.FORMAT_RGBA8)
 	for kind in kinds:
@@ -305,27 +288,6 @@ static func build_tile_set(tile_px: int, shore_dirs: Array = []) -> TileSet:
 				image.blit_rect(cell, Rect2i(0, 0, tile_px, tile_px),
 					Vector2i(column * tile_px, 0))
 				tiles_to_create.append(Vector2i(column, 0))
-	# §4.8 2026-11-06 — the wang corner columns, baked when the whole
-	# water half resolves (readiness per tile px, the foam convention: the
-	# S10 battle grid builds its own set and stamps by kind, never by
-	# corner).
-	wang_ready = false
-	_wang_ready_by_px[tile_px] = false
-	var wang_columns := WANG_WATER_INDICES.size()
-	var wang_ok := true
-	for position in wang_columns:
-		var tile_image := _wang_tile_image(WANG_WATER_INDICES[position],
-			tile_px)
-		if tile_image == null:
-			wang_ok = false
-			break
-		image.blit_rect(tile_image, Rect2i(0, 0, tile_px, tile_px),
-			Vector2i((WANG_COLUMN_BASE + position) * tile_px, 0))
-	if wang_ok:
-		wang_ready = true
-		_wang_ready_by_px[tile_px] = true
-		for position in wang_columns:
-			tiles_to_create.append(Vector2i(WANG_COLUMN_BASE + position, 0))
 	# compose-then-create: the atlas image is FULLY composed before the
 	# texture exists (the r2 lesson — a create-empty + `update` round-trip
 	# reads back empty through `get_image()`), and tiles register after
@@ -407,23 +369,6 @@ static func water_coords(mask: int, kind_column: int,
 	var kind_offset := 1 if kind_column != int(KIND_COLUMNS["sea"]) else 0
 	return Vector2i(2 + mask * 2 + kind_offset, 0)
 
-
-## The wang readiness for `tile_px` (per-px, the foam convention): true when
-## that tile px's last `build_tile_set` resolved the whole wang half.
-static func wang_ready_for_px(tile_px: int) -> bool:
-	return bool(_wang_ready_by_px.get(tile_px, false))
-
-
-## The atlas coords of a water cell's wang corner tile in the wang source
-## (combo ≠ 0 and a water-owned index). Combo 0 (open water) or a
-## land-owned index (never stamped on the water layer) returns the INVALID
-## sentinel (-1, 0) — the caller stamps the plain fill/foam instead. Only
-## meaningful when `wang_ready_for_px` holds.
-static func wang_coords(combo: int) -> Vector2i:
-	var position := WANG_WATER_INDICES.find(wang_index(combo))
-	if combo == 0 or position < 0:
-		return Vector2i(-1, 0)
-	return Vector2i(WANG_COLUMN_BASE + position, 0)
 
 
 ## The decoded §6.7 distance texture (§4.8 2026-11-06 pixel-depth amendment)
