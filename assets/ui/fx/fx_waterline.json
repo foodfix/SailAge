@@ -3,145 +3,97 @@
  "sizes": {
   "32": {
    "anchor_sprite": {
-    "match_rate": 0.776,
+    "match_rate": 1.0,
     "method": "template-match",
     "x": 16,
     "y": 32
    },
    "canvas": {
-    "h": 72,
-    "w": 64
+    "h": 88,
+    "w": 80
    },
    "fps": 8,
    "frame_ms": 125,
    "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_32.png",
-     "frame": {
-      "h": 27,
-      "w": 17
-     },
-     "frames": 8,
-     "offset": {
-      "x": -8,
-      "y": -14
-     },
-     "sha256": "b911e1912fac109d0aa10fe5ddf0d7b3d5b137823139e2f944267c0d801a63a5"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_32.png",
-     "frame": {
-      "h": 14,
-      "w": 20
-     },
-     "frames": 8,
-     "offset": {
-      "x": -10,
-      "y": -14
-     },
-     "sha256": "9634fcff75166aca7cfdea243f748c5b7d845cd1c7360cbd3be9070ac5a65b12"
-    }
-   },
    "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_32.png",
+    "frame": {
+     "h": 63,
+     "w": 45
+    },
+    "frames": 8,
+    "offset": {
+     "x": -22,
+     "y": -34
+    },
+    "sha256": "5549c4eabe693daa62c9d7d901a210fd12fb3f818d28102738123f433447b769"
+   },
    "sprite": "hull_latin"
   },
   "48": {
    "anchor_sprite": {
-    "match_rate": 0.754,
+    "match_rate": 1.0,
     "method": "template-match",
     "x": 25,
     "y": 44
    },
    "canvas": {
-    "h": 68,
-    "w": 38
+    "h": 104,
+    "w": 96
    },
    "fps": 8,
    "frame_ms": 125,
    "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_48.png",
-     "frame": {
-      "h": 38,
-      "w": 32
-     },
-     "frames": 8,
-     "offset": {
-      "x": -16,
-      "y": -16
-     },
-     "sha256": "c18d697e6335dadb12e4fc655b4b6324370cf47dbd8eb457ae9962b20937ea8c"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_48.png",
-     "frame": {
-      "h": 18,
-      "w": 29
-     },
-     "frames": 8,
-     "offset": {
-      "x": -14,
-      "y": -18
-     },
-     "sha256": "12b98974aead7170de60209b7f6b2287c401a54bfd553acca429739f242e2222"
-    }
-   },
    "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_48.png",
+    "frame": {
+     "h": 73,
+     "w": 43
+    },
+    "frames": 8,
+    "offset": {
+     "x": -21,
+     "y": -42
+    },
+    "sha256": "0cc20ccb4f33e423391fae513ff1898e20120fe71cb116b7b5c35db0f1fc8987"
+   },
    "sprite": "hull_caravel"
   },
   "64": {
    "anchor_sprite": {
-    "match_rate": 0.817,
+    "match_rate": 1.0,
     "method": "template-match",
     "x": 32,
     "y": 63
    },
    "canvas": {
-    "h": 92,
-    "w": 54
+    "h": 152,
+    "w": 160
    },
    "fps": 8,
    "frame_ms": 125,
    "frames": 8,
-   "layers": {
-    "back": {
-     "columns": 3,
-     "file": "fx_waterline_back_64.png",
-     "frame": {
-      "h": 64,
-      "w": 34
-     },
-     "frames": 8,
-     "offset": {
-      "x": -17,
-      "y": -40
-     },
-     "sha256": "2259ce973bf14aecb00b32252987708c1e5ec0154d8ea27e36aa34c80b04b896"
-    },
-    "front": {
-     "columns": 3,
-     "file": "fx_waterline_front_64.png",
-     "frame": {
-      "h": 43,
-      "w": 24
-     },
-     "frames": 8,
-     "offset": {
-      "x": -12,
-      "y": -44
-     },
-     "sha256": "8be93d84fa7a5f8075368dcefda43e1ed88f76b05d9da5591e0761b1ecc9a0f6"
-    }
-   },
    "loop": true,
+   "sheet": {
+    "columns": 3,
+    "file": "fx_waterline_64.png",
+    "frame": {
+     "h": 104,
+     "w": 86
+    },
+    "frames": 8,
+    "offset": {
+     "x": -43,
+     "y": -67
+    },
+    "sha256": "db54b3cb8a627a8473a4bcb72a18911db0ec727571b2111f03c0f25d944dd850"
+   },
    "sprite": "hull_galleass"
   }
  },
- "version": 2
+ "version": 3
 }

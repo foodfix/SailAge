@@ -1,26 +1,26 @@
 class_name WaterlineFx
 extends RefCounted
 ## The fleet waterline & wake VFX runtime contract (80-* §4.8 2026-11-07,
-## top-down VFX revision — same day): the committed frame table
+## single-layer revision — same day): the committed frame table
 ## `assets/ui/fx/fx_waterline.json` — written by
-## `build_ui_art --import-fx-pixellab` from the PixelLab v4 pro game packs —
-## drives every fleet token's BACK/FRONT sheet sandwich on the world map.
-## The family is ONE north family per ship SIZE (32/48/64, the tier canvas
-## table); ships rotate at runtime, so the whole sandwich (back → hull →
-## front) rotates together around the token center and only the north
-## family ever exists.
+## `build_ui_art --import-fx-pixellab` from the PixelLab v5 pro game packs —
+## drives every fleet token's wake sheet on the world map. The family is
+## ONE sheet per ship SIZE (32/48/64, the tier canvas table), rendered
+## UNDER the hull; ships rotate at runtime, so the sheet rotates together
+## with the hull around the token center and only the north family ever
+## exists.
 ## Pure lookups and closed-form arithmetic only: no scene nodes, no
 ## re-simulation, no I/O past the one table read (render-only; the day-tick
 ## budget is untouched).
 ##
-## Layer placement (the pack README's `anchor + offset` rule with the
-## anchor resolved into the size's token box at ingest): the layer's
+## Sheet placement (the pack README's `anchor + offset` rule with the
+## anchor resolved into the size's token box at ingest): the sheet's
 ## top-left is `token_box_top_left + (anchor_sprite + clip_offset)` —
-## native scale, no reference rescale (each size's sheets are authored
+## native scale, no reference rescale (each size's sheet is authored
 ## around that size's representative hull: latin 32, caravel 48, galleass
 ## 64). Sheet PNGs are horizontal-ish grids (`columns` per row) cut with
 ## `atlas_region`; ids resolve through the registry's lazy raw-bytes
-## family (`fx_waterline_{layer}_{size}`).
+## family (`fx_waterline_{size}`).
 ##
 ## The size key is the ship's token canvas width (the tier table baked
 ## into the shipped files) — callers pass `texture.get_width()`; no data
@@ -58,8 +58,8 @@ static func has(size: int) -> bool:
 
 
 ## One size's geometry: `{fps, frame_ms, frames, loop, anchor_sprite,
-## layers: {back: {frame, columns, offset}, front: {...}}}` or {} when
-## the size (or the table) is absent — callers hide the fx for that fleet.
+## sheet: {file, frame, columns, offset}}` or {} when the size (or the
+## table) is absent — callers hide the fx for that fleet.
 static func geometry(size: int) -> Dictionary:
 	var d: Variant = table().get("sizes", {}).get(str(size), {})
 	return d if d is Dictionary else {}
@@ -79,12 +79,12 @@ static func frame_at(size: int, t_ms: int) -> int:
 	return int(t_ms / float(frame_ms)) % frames
 
 
-## One sheet cell: frame `i` in the `columns`-per-row grid of `layer`.
-static func atlas_region(size: int, layer: String, frame: int) -> Rect2:
+## One sheet cell: frame `i` in the `columns`-per-row grid.
+static func atlas_region(size: int, frame: int) -> Rect2:
 	var g := geometry(size)
 	if g.is_empty():
 		return Rect2()
-	var clip: Dictionary = g.get("layers", {}).get(layer, {})
+	var clip: Dictionary = g.get("sheet", {})
 	if clip.is_empty():
 		return Rect2()
 	var w := float((clip.get("frame", {}) as Dictionary).get("w", 0.0))
@@ -96,20 +96,20 @@ static func atlas_region(size: int, layer: String, frame: int) -> Rect2:
 		w, h)
 
 
-## The registry id of one layer's sheet (`fx_waterline_{layer}_{size}`).
-static func layer_id(size: int, layer: String) -> String:
-	return "fx_waterline_%s_%d" % [layer, size]
+## The registry id of the sheet (`fx_waterline_{size}`).
+static func sheet_id(size: int) -> String:
+	return "fx_waterline_%d" % size
 
 
-## Box-local top-left of one layer (native scale — the v4 sheets are
+## Box-local top-left of the sheet (native scale — the sheets are
 ## authored per size; no reference rescale): the vector from the size-S
 ## token box's top-left to the sheet frame's top-left. Add the token
 ## box's position to place the rect under a marker/token node.
-static func layer_offset_px(size: int, layer: String) -> Vector2:
+static func sheet_offset_px(size: int) -> Vector2:
 	var g := geometry(size)
 	if g.is_empty():
 		return Vector2.ZERO
-	var clip: Dictionary = g.get("layers", {}).get(layer, {})
+	var clip: Dictionary = g.get("sheet", {})
 	var anchor: Dictionary = g.get("anchor_sprite", {})
 	if clip.is_empty() or anchor.is_empty():
 		return Vector2.ZERO
@@ -120,11 +120,10 @@ static func layer_offset_px(size: int, layer: String) -> Vector2:
 			+ float((clip.get("offset", {}) as Dictionary).get("y", 0.0)))
 
 
-## One layer's on-screen rect size (native scale).
-static func layer_size_px(size: int, layer: String) -> Vector2:
+## The sheet's on-screen rect size (native scale).
+static func sheet_size_px(size: int) -> Vector2:
 	var g := geometry(size)
-	var clip: Dictionary = g.get("layers", {}).get(layer, {}) \
-		if not g.is_empty() else {}
+	var clip: Dictionary = g.get("sheet", {}) if not g.is_empty() else {}
 	var frame: Dictionary = clip.get("frame", {}) if not clip.is_empty() \
 		else {}
 	if frame.is_empty():

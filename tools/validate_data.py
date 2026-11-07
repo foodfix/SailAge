@@ -9222,8 +9222,11 @@ def _g13_check_vfx_family(sprites: dict) -> None:
     ledger ↔ committed sheets (sha256), the committed frame table's
     contract, and each sheet's decode dims against its frame grid.
     v1 (superseded same day): 8 dirs × back/front, anchor in the 64 box.
-    v2 — the top-down revision: ONE north family per ship size
-    {32, 48, 64} × back/front, anchor in the size's token box."""
+    v2 (superseded same day): one north family per ship size
+    {32, 48, 64} × back/front.
+    v3 — the single-layer revision: ONE sheet per size
+    (`fx_waterline_{size}`, everything under the hull), anchor in the
+    size's token box."""
     ledger = _g13_vfx_ledger()
     if not ledger:
         fail("vfx-ledger", "pixellab_vfx_ledger.json",
@@ -9244,8 +9247,12 @@ def _g13_check_vfx_family(sprites: dict) -> None:
     except ValueError as exc:
         fail("vfx-table", "fx_waterline.json",
              f"not valid JSON ({exc})", 13)
+    v3 = int(ledger.get("version", 1)) >= 3
     v2 = int(ledger.get("version", 1)) >= 2
-    if v2 and int(table.get("version", 0)) < 2:
+    if v3 and int(table.get("version", 0)) < 3:
+        fail("vfx-table", "fx_waterline.json",
+             "the v3 (single-layer) ledger needs the v3 frame table", 13)
+    if v2 and not v3 and int(table.get("version", 0)) < 2:
         fail("vfx-table", "fx_waterline.json",
              "the v2 (per-size) ledger needs the v2 per-size frame table", 13)
     ledger_keys = sorted(ledger.get("sizes", {}) if v2
@@ -9255,7 +9262,7 @@ def _g13_check_vfx_family(sprites: dict) -> None:
     if sorted(groups) != ledger_keys:
         fail("vfx-ledger", "fx_waterline.json",
              "table keys != ledger keys", 13)
-    if v2 and sorted(groups) != ["32", "48", "64"]:
+    if v3 and sorted(groups) != ["32", "48", "64"]:
         fail("vfx-ledger", "fx_waterline.json",
              f"expected the 3 sizes 32/48/64, table has {sorted(groups)}", 13)
     if not v2 and len(groups) != 8:
@@ -9276,6 +9283,37 @@ def _g13_check_vfx_family(sprites: dict) -> None:
         if not (0 <= ax <= box and 0 <= ay <= box):
             fail("vfx-anchor", f"fx_waterline[{d}]",
                  f"anchor ({ax},{ay}) outside the {box} box", 13)
+        if v3:
+            # single layer: one sheet record, id fx_waterline_{size}
+            clip = entry.get("sheet", {})
+            sid = f"fx_waterline_{d}"
+            sprite = sprites.get(sid)
+            if sprite is None:
+                fail("vfx-sheet", sid, "sheet missing from the fx class "
+                     "decode", 13)
+                continue
+            fw = int(clip.get("frame", {}).get("w", 0))
+            fh = int(clip.get("frame", {}).get("h", 0))
+            columns = int(clip.get("columns", 0))
+            if fw <= 0 or fh <= 0 or columns <= 0:
+                fail("vfx-sheet", sid, "frame/columns missing", 13)
+                continue
+            rows = (int(entry.get("frames", 0)) + columns - 1) // columns
+            if sprite.w != fw * columns or sprite.h != fh * rows:
+                fail("vfx-sheet", sid,
+                     f"sheet {sprite.w}x{sprite.h} != the "
+                     f"{columns}x{rows} grid of {fw}x{fh} frames", 13)
+            actual = hashlib.sha256((ART_ROOT / "assets" / "ui" / "fx"
+                                     / f"{sid}.png").read_bytes()).hexdigest()
+            if ledger.get("sizes", {}).get(d, {}).get("sheet_sha256") \
+                    != actual:
+                fail("vfx-sheet", sid,
+                     f"sha256 != ledger ({actual[:12]}…)", 13)
+            if not str(ledger.get("sizes", {}).get(d, {})
+                       .get("effect_id", "")):
+                fail("vfx-ledger", f"fx_waterline[{d}]",
+                     "effect_id missing from the provenance ledger", 13)
+            continue
         for layer in ("back", "front"):
             clip = entry.get("layers", {}).get(layer, {})
             sid = f"fx_waterline_{layer}_{d}"
@@ -10677,12 +10715,12 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 terrain_entries = declared.setdefault("assets/ui/terrain", [])
                 terrain_entries.extend(entries_c)
             # §4.8 2026-11-07 — the PixelLab waterline family: the sheets
-            # (v1: 8 dirs × back/front; v2 — the same-day top-down
-            # revision — one north family per ship size 32/48/64 ×
-            # back/front) enter the fx inventory through the build-time
-            # ledger, the coast-family precedent (raw-pixellab ruling —
-            # palette/budget waived; the audit is the dedicated fx ledger
-            # + frame-table contract below).
+            # enter the fx inventory through the build-time ledger, the
+            # coast-family precedent (raw-pixellab ruling — palette/
+            # budget waived; the audit is the dedicated fx ledger +
+            # frame-table contract below). v1: 8 dirs × back/front; v2:
+            # per-size × back/front; v3 — the single-layer revision: one
+            # sheet per size (`fx_waterline_{size}`).
             fx_ledger = _g13_vfx_ledger() if class_name == "fx" else {}
             if fx_ledger:
                 # sheet dims come from the committed frame table (the pinned
@@ -10692,20 +10730,27 @@ def check_group13(docs: dict[str, object], verbose: bool) -> None:
                 fx_table = json.loads(fx_table_path.read_text()) \
                     if fx_table_path.is_file() else {}
                 entries_f: list = []
-                fx_v2 = int(fx_ledger.get("version", 1)) >= 2
+                fx_version = int(fx_ledger.get("version", 1))
+                fx_v2 = fx_version >= 2
+                fx_v3 = fx_version >= 3
                 ledger_group = fx_ledger.get("sizes", {}) if fx_v2 \
                     else fx_ledger.get("dirs", {})
-                table_group = fx_table.get("sizes", {}) if fx_v2 \
+                table_group = fx_table.get("sizes", {}) \
+                    if int(fx_table.get("version", 0)) >= 2 \
                     else fx_table.get("dirs", {})
+                layer_names = ("back", "front") if not fx_v3 \
+                    else ("sheet",)
                 for d in sorted(ledger_group):
                     entry_t = table_group.get(d, {})
                     frames_n = int(entry_t.get("frames", 8))
-                    for layer in ("back", "front"):
-                        clip = entry_t.get("layers", {}).get(layer, {})
+                    for layer in layer_names:
+                        clip = entry_t.get("sheet", {}) if fx_v3 \
+                            else entry_t.get("layers", {}).get(layer, {})
                         fw = int(clip.get("frame", {}).get("w", 0))
                         fh = int(clip.get("frame", {}).get("h", 0))
                         columns = int(clip.get("columns", 3))
-                        sid_f = f"fx_waterline_{layer}_{d}"
+                        sid_f = (f"fx_waterline_{d}" if fx_v3
+                                 else f"fx_waterline_{layer}_{d}")
                         decl_f = {"id": sid_f, "class": "fx",
                                   "file": f"assets/ui/fx/{sid_f}.png",
                                   "width": fw * columns,

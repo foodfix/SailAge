@@ -2491,6 +2491,49 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      clock with per-fleet phase offset, letter-square/docked
      exclusions and the §4.5.2 trail separation are all unchanged;
      battle-screen hulls remain out of scope.
+     **Single-layer revision (amended 2026-11-07, same day, user
+     direction — SUPERSEDES the two-layer sandwich above):** a
+     straight top-down token needs ONE effect, not a sandwich — the
+     whole wake renders UNDER the ship. The family becomes one sheet
+     per size — `fx_waterline_{size}` (size ∈ {32,48,64}),
+     `assets/ui/fx/fx_waterline_{size}.png` — and the frame table
+     goes to **version 3** (per size: canvas, fps, frame_ms, frames,
+     loop, `anchor_sprite`, one `sheet` record; no `layers`). The
+     FRONT layer and its "foam ON the planks / half-submerged"
+     content retire with the oblique view; z ladder: wake −2, hull
+     −1, badges 0. **v5 description of record (pinned verbatim, the
+     natural-language revision — the foam is described, not hexed):**
+     `Waterline VFX for this straight top-down (directly from above)
+     16-bit pixel-art sailing ship sprite, 8-frame looping
+     animation. The ship is sailing north (up on screen). The effect
+     is drawn ONLY of open sea, never over any part of the ship: a
+     foam wake fanning out behind the stern and tapering into dots,
+     small foam scallops hugging both hull sides, a thin foam line
+     at the bow, and gentle ripples spreading around the hull. The
+     effect layer renders under the sprite in the game — the hull
+     silhouette area stays completely clean: no foam, water or
+     spray touching the decks, sails, masts, rigging or the red
+     pennant. STRICTLY FORBIDDEN: circular or elliptical ripple
+     rings or any closed loops around the ship. Pale bluish-white
+     foam over deep blue sea water. Transparent background
+     everywhere the effect is not drawn. Style: crisp 16-bit pixel
+     art, flat color, matching the ship sprite. Calm seas: gentle,
+     slow, subtle. The 8 frames loop seamlessly.` (≈950 chars — the
+     pro quote tier; envelope/inputs unchanged: the representative
+     north tokens, `game_pack: true`, `name:
+     waterline-v5-north-{size}-pro`, raw under
+     `tools/ui_art/model_raw/pixellab_vfx/v5/<size>/`). The ingest
+     copies ONE sheet per size, rewrites the table to v3 and prunes
+     the retired two-layer files; `waterline_fx` drops the layer
+     dimension; visible-while-moving, the shared clock with
+     per-fleet phase offset, letter-square/docked exclusions and
+     the §4.5.2 trail separation are all unchanged; battle-screen
+     hulls remain out of scope. **Acceptance record (2026-11-07,
+     single-layer):** the three v5 sheets generated pro (quotes 10
+     each; effect ids 4e99cce9…/9ec1928c…/3e72491f…; sheets 45×63,
+     43×73, 86×104; anchors template-matched into the size boxes);
+     ingest gates: `--check` byte-identical (257 files), validator
+     groups 1–13 green, 61/61 suites green.
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through

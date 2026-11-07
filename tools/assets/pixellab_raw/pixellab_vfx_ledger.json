@@ -3,44 +3,35 @@
  "sizes": {
   "32": {
    "artist": "pro",
-   "background_job_id": "f626ab6c-45c9-4811-acaf-ad1d9506dfc5",
-   "description_sha256": "4be36076ff736e3179a3828b32cc1ad7ee75d9f37d11736cd5041c5a0eab6a81",
-   "effect_id": "4e99cce9-b3ed-4258-9338-65dbaa2811c0",
-   "name": "waterline-v4-north-32-pro",
+   "background_job_id": "7f8235b5-55b4-4af0-ada9-427fb15d7d88",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "9bc4ba71-e954-407f-b9e5-e0fdc9e9e7e9",
+   "name": "waterline-v5-north-32-pro",
    "quoted_generations": 10,
-   "sheets": {
-    "back": "b911e1912fac109d0aa10fe5ddf0d7b3d5b137823139e2f944267c0d801a63a5",
-    "front": "9634fcff75166aca7cfdea243f748c5b7d845cd1c7360cbd3be9070ac5a65b12"
-   },
+   "sheet_sha256": "5549c4eabe693daa62c9d7d901a210fd12fb3f818d28102738123f433447b769",
    "sprite": "hull_latin"
   },
   "48": {
    "artist": "pro",
-   "background_job_id": "1535813d-6886-467f-9aed-04c471f45960",
-   "description_sha256": "4be36076ff736e3179a3828b32cc1ad7ee75d9f37d11736cd5041c5a0eab6a81",
-   "effect_id": "64882f43-ccaf-40ae-a037-a22a1844b8b4",
-   "name": "waterline-v4-north-48-pro",
+   "background_job_id": "05b0cf26-9810-417b-ad9c-84ff4db5027b",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "9ec1928c-2d8a-46a5-8137-b01dc2c845f6",
+   "name": "waterline-v5-north-48-pro",
    "quoted_generations": 10,
-   "sheets": {
-    "back": "c18d697e6335dadb12e4fc655b4b6324370cf47dbd8eb457ae9962b20937ea8c",
-    "front": "12b98974aead7170de60209b7f6b2287c401a54bfd553acca429739f242e2222"
-   },
+   "sheet_sha256": "0cc20ccb4f33e423391fae513ff1898e20120fe71cb116b7b5c35db0f1fc8987",
    "sprite": "hull_caravel"
   },
   "64": {
    "artist": "pro",
-   "background_job_id": "6f01c89b-ecbc-4ba2-bc8a-7adf13461e81",
-   "description_sha256": "4be36076ff736e3179a3828b32cc1ad7ee75d9f37d11736cd5041c5a0eab6a81",
-   "effect_id": "d860e12e-009d-486a-9159-454f3b6715ff",
-   "name": "waterline-v4-north-64-pro",
+   "background_job_id": "b5fc16fd-aed4-49e9-83d5-831da72da3e4",
+   "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
+   "effect_id": "3e72491f-efb7-4a7e-b1bc-e7d82c281776",
+   "name": "waterline-v5-north-64-pro",
    "quoted_generations": 10,
-   "sheets": {
-    "back": "2259ce973bf14aecb00b32252987708c1e5ec0154d8ea27e36aa34c80b04b896",
-    "front": "8be93d84fa7a5f8075368dcefda43e1ed88f76b05d9da5591e0761b1ecc9a0f6"
-   },
+   "sheet_sha256": "db54b3cb8a627a8473a4bcb72a18911db0ec727571b2111f03c0f25d944dd850",
    "sprite": "hull_galleass"
   }
  },
- "table_sha256": "349f3717ab0aa082023104963d123754dddf59433ec085ebdcb6bdb29285b43c",
- "version": 2
+ "table_sha256": "8d334a460b1573f1df9c2d244b0c0fc3b30f817f4d8d9eaa592e8fceaf240aba",
+ "version": 3
 }

@@ -12,10 +12,12 @@ is never committed (90-* §9.2). The key is read from PIXELLAB_API_KEY or
 the gitignored tools/pixellab_config.json — never stored in files.
 
 Usage:
-  python3 tools/pixellab_vfx_pass.py v4-run [size ...]  # default: 32 48 64
-  python3 tools/pixellab_vfx_pass.py v4-status
-  python3 tools/pixellab_vfx_pass.py v4-fetch <size> …  # re-download, no
+  python3 tools/pixellab_vfx_pass.py v5-run [size ...]  # default: 32 48 64
+  python3 tools/pixellab_vfx_pass.py v5-status
+  python3 tools/pixellab_vfx_pass.py v5-fetch <size> …  # re-download, no
                                                         #  re-generation
+  python3 tools/pixellab_vfx_pass.py v4-run [size ...]  # the retired
+  python3 tools/pixellab_vfx_pass.py v4-status          # two-layer family
 
 Legacy per-dir mode (SUPERSEDED by the v4 top-down revision — kept only
 for history/re-download of the v3 raws):
@@ -37,6 +39,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 API = "https://api.pixellab.ai/v2"
 OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw", "pixellab_vfx")
 V4_OUT_DIR = os.path.join(OUT_DIR, "v4")
+V5_OUT_DIR = os.path.join(OUT_DIR, "v5")
 MANIFEST = os.path.join(OUT_DIR, "pixellab_vfx.json")
 SPRITE_FMT = "assets/ui/tokens/hull_galleass_{}.png"  # the reference hull
 POLL_S, POLL_MAX = 5, 600
@@ -88,6 +91,28 @@ V4_DESCRIPTION = (
     "or the red pennant; transparent background. Style: crisp 16-bit "
     "pixel art, flat color, matching the ship sprite. Calm seas: "
     "gentle, slow, subtle.")
+
+# v5 description of record (80-* §4.8 single-layer revision, 2026-11-07,
+# pinned verbatim — the natural-language revision: the foam is described,
+# not hexed; nothing is asked to go IN FRONT of the sprite, so the
+# effect is wake-only and the pack's behind sheet carries all of it).
+V5_DESCRIPTION = (
+    "Waterline VFX for this straight top-down (directly from above) "
+    "16-bit pixel-art sailing ship sprite, 8-frame looping animation. "
+    "The ship is sailing north (up on screen). The effect is drawn "
+    "ONLY of open sea, never over any part of the ship: a foam wake "
+    "fanning out behind the stern and tapering into dots, small foam "
+    "scallops hugging both hull sides, a thin foam line at the bow, "
+    "and gentle ripples spreading around the hull. The effect layer "
+    "renders under the sprite in the game — the hull silhouette area "
+    "stays completely clean: no foam, water or spray touching the "
+    "decks, sails, masts, rigging or the red pennant. STRICTLY "
+    "FORBIDDEN: circular or elliptical ripple rings or any closed "
+    "loops around the ship. Pale bluish-white foam over deep blue sea "
+    "water. Transparent background everywhere the effect is not "
+    "drawn. Style: crisp 16-bit pixel art, flat color, matching the "
+    "ship sprite. Calm seas: gentle, slow, subtle. The 8 frames loop "
+    "seamlessly.")
 
 
 def _key() -> str:
@@ -364,11 +389,14 @@ def _v4_sprite_path(size: int) -> str:
 
 def run_size(size: int, artist: str = "pro", name: str | None = None,
              desc_path: str | None = None, out_root: str = V4_OUT_DIR,
-             expect_quote: int | None = None) -> dict:
+             expect_quote: int | None = None,
+             default_description: str = V4_DESCRIPTION,
+             default_name_fmt: str = "waterline-v4-north-{size}-pro") -> dict:
     """One POST /v2/vfx + poll + raw download for one ship size (v4:
     north only — the runtime rotation turns the whole sandwich). The
-    envelope stays the pinned four fields + game_pack."""
-    description = V4_DESCRIPTION
+    envelope stays the pinned four fields + game_pack. `default_description`
+    / `default_name_fmt` are the v4/v5 knobs (v5 = the single-layer wake)."""
+    description = default_description
     if desc_path:
         with open(desc_path, encoding="utf-8") as fh:
             description = fh.read()
@@ -376,7 +404,7 @@ def run_size(size: int, artist: str = "pro", name: str | None = None,
               f"sha256={hashlib.sha256(description.encode('utf-8'))
                     .hexdigest()[:16]}…", flush=True)
     sprite_path = _v4_sprite_path(size)
-    payload_name = name or f"waterline-v4-north-{size}-pro"
+    payload_name = name or default_name_fmt.format(size=size)
     with open(sprite_path, "rb") as fh:
         sprite_b64 = base64.b64encode(fh.read()).decode("ascii")
     payload = {
@@ -500,10 +528,11 @@ def main() -> None:
         description="PixelLab waterline VFX pass (80-* §4.8 2026-11-07)")
     ap.add_argument("cmd",
                     choices=("run", "status", "fetch",
-                             "v4-run", "v4-status", "v4-fetch"))
+                             "v4-run", "v4-status", "v4-fetch",
+                             "v5-run", "v5-status", "v5-fetch"))
     ap.add_argument("targets", nargs="*",
                     help=f"dir ids, subset of {DIRS} (legacy) — or ship "
-                         f"sizes, subset of {SIZES} (v4)")
+                         f"sizes, subset of {SIZES} (v4/v5)")
     ap.add_argument("--artist", choices=("lite", "pro"), default=None,
                     help="VFX artist tier (default: lite legacy, pro v4)")
     ap.add_argument("--name", help="effect name "
@@ -514,15 +543,17 @@ def main() -> None:
                          "the pinned constant (v1 or v4)")
     ap.add_argument("--raw", default=None,
                     help=f"raw output root (default: {OUT_DIR} legacy, "
-                         f"{V4_OUT_DIR} v4)")
+                         f"{V4_OUT_DIR} v4, {V5_OUT_DIR} v5)")
     ap.add_argument("--expect-quote", type=int,
                     help="abort BEFORE spending if the POST's quote "
                          "differs (the guard: the quote is in the 202 "
                          "response, checked immediately)")
     args = ap.parse_args()
     v4 = args.cmd.startswith("v4")
-    raw = args.raw or (V4_OUT_DIR if v4 else OUT_DIR)
-    artist = args.artist or ("pro" if v4 else "lite")
+    v5 = args.cmd.startswith("v5")
+    raw = args.raw or (V5_OUT_DIR if v5 else
+                       V4_OUT_DIR if v4 else OUT_DIR)
+    artist = args.artist or ("pro" if (v4 or v5) else "lite")
     if args.cmd == "status":
         m = _load_manifest(raw)
         for d in DIRS:
@@ -537,7 +568,7 @@ def main() -> None:
                       f"canvas={rec.get('canvas')} frames="
                       f"{rec.get('frames')} fps={rec.get('fps')}")
         return
-    if args.cmd == "v4-status":
+    if args.cmd == "v4-status" or args.cmd == "v5-status":
         m = _load_manifest(raw)
         for s in SIZES:
             rec = m.get(str(s))
@@ -553,7 +584,7 @@ def main() -> None:
                       f"{rec.get('frames')} fps={rec.get('fps')} "
                       f"anchor={rec.get('anchor_sprite')}")
         return
-    if args.cmd.startswith("v4"):
+    if args.cmd.startswith("v4") or args.cmd.startswith("v5"):
         want = []
         for t in args.targets:
             if t not in [str(s) for s in SIZES]:
@@ -568,10 +599,16 @@ def main() -> None:
                     run_size(s, artist=artist,
                              name=args.name, desc_path=args.desc_file,
                              out_root=raw, expect_quote=args.expect_quote)
+                elif args.cmd == "v5-run":
+                    run_size(s, artist=artist, name=args.name,
+                             desc_path=args.desc_file, out_root=raw,
+                             expect_quote=args.expect_quote,
+                             default_description=V5_DESCRIPTION,
+                             default_name_fmt="waterline-v5-north-{size}-pro")
                 else:
                     fetch_size(s, out_root=raw)
             except Exception as exc:  # noqa: BLE001 — keep the batch going
-                print(f"[v4 {s}] FAILED: {exc}", flush=True)
+                print(f"[vfx {s}] FAILED: {exc}", flush=True)
                 failed.append(s)
         if failed:
             raise SystemExit(f"failed sizes: {failed}")
