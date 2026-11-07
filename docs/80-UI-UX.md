@@ -2130,24 +2130,55 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      48×48; tier 3 (nao, carrack, galleon, galleass) → 64×64
      (4/8/4 ships; size derived from `tier` in
      `data/ship_types.json` — no new data field). **Identity
-     prefix:** unchanged (`{Name-en} sailing ship, {rig}` from
-     `tools/ui_art/hulls/rig.json`, oar clause included). **Shared
-     style suffix, pinned verbatim (the 16-ship consistency
-     anchor; overhead rewrite of the 2026-11-06 suffix):**
+     prefix:** `{Name-en} sailing ship, {rig}` from
+     `tools/ui_art/hulls/rig.json`, plus per-ship clause
+     insertions and one full variant (the visibility rewrite
+     below). **Shared style suffix, pinned verbatim (the 16-ship
+     consistency anchor; the 2026-11-07 same-day visibility
+     rewrite of the first overhead suffix, user direction — the
+     first wording asked for side-view features a straight
+     bird's-eye view cannot show, so the rewrite keeps only
+     overhead-visible content: multi-strake side planking → deck
+     planking, gunwale/sheer trim → hull rim, the gunport row and
+     the lit cabin windows dropped, the sail billow shading bands
+     + highlight arcs dropped in favor of the flat-panels-over-
+     deck top-down game convention, gold trim dropped outright —
+     it was t3-only in the authored maps yet the first suffix
+     asked all 16 ships for it):**
      `wooden sailing ship seen from directly overhead, straight
      top-down bird's-eye view, hull axis vertical with the bow
-     pointing to the top edge of the canvas, dense multi-strake
-     planking bands in several wood tones, dark gunwale, gold trim
-     line along the sheer, gunport row with tiny dark ports along
-     the hull sides, stern cabin with small lit windows, sails
-     spread under way and clearly visible from above with two
-     shading bands and one bright highlight arc each, thin dark
-     rigging ropes to bowsprit and hull, small red pennant at the
-     mainmast top, retro 16-bit sailing ship sprite in the style
-     of classic 1990s naval adventure games like Uncharted Waters
-     2 / New Horizons, dark 1-pixel silhouette outline,
-     transparent background.` (preceded by the identity prefix,
-     comma-joined). **Ship-as-drawn rule:** tokens ship RAW 1:1 —
+     pointing to the top edge of the canvas, wooden deck planking
+     bands in several warm brown tones between the masts, dark rim
+     along the hull outline, sails drawn as flat pale panels laid
+     over the deck following the rig — wide rectangles for square
+     sails, triangles for lateen sails — the top-down game-sprite
+     convention, masts as small round dots with thin yard lines,
+     thin dark rigging ropes to the bowsprit and hull sides,
+     raised stern cabin roof and deck hatches visible from above,
+     small red pennant streaming from the mainmast top, retro
+     16-bit sailing ship sprite in the style of classic 1990s
+     naval adventure games like Uncharted Waters 2 / New
+     Horizons, dark 1-pixel silhouette outline, transparent
+     background.` (preceded by the identity prefix, comma-
+     joined). **Per-ship clause insertions, pinned verbatim
+     (placed between the rig string and the suffix):** galiot,
+     galley and galleass append `, long oars fanned out along
+     both hull sides` (oars are overhead-visible identity);
+     junk appends `, each sail panel crossed by thin horizontal
+     batten lines`. **Pinnace full variant, pinned verbatim (no
+     mast and no sails — the suffix's sail/mast/rigging/pennant
+     clauses are replaced wholesale; the token carries no
+     pennant-source pixel — fine, the north ingest ships raw with
+     the pennant gate retired):** `Pinnace ship, tiny open rowing
+     craft, oars only, no mast, no sails, wooden boat seen from
+     directly overhead, straight top-down bird's-eye view, hull
+     axis vertical with the bow pointing to the top edge of the
+     canvas, wooden hull interior with rowing benches in warm
+     brown tones, dark rim along the hull outline, long oars
+     fanned out along both hull sides, retro 16-bit game sprite
+     in the style of classic 1990s naval adventure games like
+     Uncharted Waters 2 / New Horizons, dark 1-pixel silhouette
+     outline, transparent background.` **Ship-as-drawn rule:** tokens ship RAW 1:1 —
      no resize, no quantize; the model's native S×S deliberate
      pixels are the shipped pixels; gates = canvas fit (exact
      S×S) + provenance ledger (job id + seed + description hash);
@@ -2210,6 +2241,21 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      each; effect ids d860e12e…/64882f43…/4e99cce9…; canvases
      54×92, 38×68, 64×72; anchors template-matched into the size
      boxes); ingest gates: `--check` byte-identical (270 files),
+     validator groups 1–13 green, 61/61 suites green.
+     **Acceptance record (2026-11-07, visibility rewrite):** the
+     16 north tokens re-rolled against the rewritten suffix at the
+     pinned seed 91000 (4×32², 8×48², 4×64² — every canvas
+     exact); user review verdict "accept all" on the first roll —
+     including the three flagged candidates kept as drawn (nao's
+     model-added sail cross, galleass's full oar fan, carrack's
+     teal midship panels — user direction); the pinnace variant
+     token (rowing craft, no mast/sails/pennant) ingested raw
+     under the retired pennant gate (0 auto-paints). The v5 wake
+     families re-rolled pro around the NEW
+     hull_latin/hull_caravel/hull_galleass (quotes 10 generations
+     each; effect ids 396e7caa…/358943dd…/7279416f…; canvases
+     96×88, 88×88, 128×144; anchors template-match 1.0).
+     Ingest gates: `--check` byte-identical (257 files),
      validator groups 1–13 green, 61/61 suites green.
 
      **Terrain blob program (amended 2026-11-05, user direction — the

@@ -970,208 +970,208 @@
       "job": "hull_brigantine",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "2be6afb3679015da",
-        "job_id": "86c5a8f8-7953-4a21-b471-f32db9f8b10b",
+        "description_sha": "e9259e04ed998fef",
+        "job_id": "69d1d9e6-ae33-487b-acd7-d097c3011421",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "f7c5694039dcd9b553bff980061856a99210f79d4eed7527a9b80448eba2f0bf"
+      "snapped_sha": "8c3a948e2792bcbbeb8ee186757d61f655df7650c5a8a938902add128f7bda06"
     },
     "hull_caravel": {
       "accepted_at": "2026-11-07",
       "job": "hull_caravel",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "63e5c46a621f3974",
-        "job_id": "7830cb80-555b-4a01-826b-8acc164b4d3e",
+        "description_sha": "222602ea40d5697e",
+        "job_id": "84ea1215-0f30-4ebf-bfc3-85c56fe2e518",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "28487b2bd52f71d98dd3589192bd2fd2916129bd35b86bc5343f5392be0841cb"
+      "snapped_sha": "cc0d06eed8096e23ac4b95e8ed76c917866bc7f052bc7fd9cfd631fc70e3d1e3"
     },
     "hull_caravela_redonda": {
       "accepted_at": "2026-11-07",
       "job": "hull_caravela_redonda",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "855109fc39c75756",
-        "job_id": "1c246262-9427-49ea-8ced-29b3b3b8459f",
+        "description_sha": "7018aa13f76461e5",
+        "job_id": "26aae2c1-93af-4164-85f7-339445899e3b",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "883deadb8af8b0c0b1fa28dfc600a92482fa9978520eccb53af9678ec3cb050b"
+      "snapped_sha": "6c20f5342a9156d79cb13d7366fe15e1b7ad67a757282865cf737104f42384ce"
     },
     "hull_carrack": {
       "accepted_at": "2026-11-07",
       "job": "hull_carrack",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "53684a8ca6d0f7a1",
-        "job_id": "86b3aea5-e089-45fc-a2ae-b03db8d80036",
+        "description_sha": "b7feb6f75b2a8f81",
+        "job_id": "019765b7-a367-4c24-a551-846b915375ea",
         "seed": 91000
       },
       "seed": 91000,
       "size": 64,
-      "snapped_sha": "716ac2405a4239055675575861d7bb04aa7bdffbb56fd447ad99d78cad268759"
+      "snapped_sha": "c6304370a1964ab9582d7935ba2694cf1db9d262eefb2320913d5ba740591159"
     },
     "hull_dhow": {
       "accepted_at": "2026-11-07",
       "job": "hull_dhow",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "2caa2663d70e3c0f",
-        "job_id": "1fc58404-159d-49d2-beb7-6acf70f87090",
+        "description_sha": "57efc31931a3e4e5",
+        "job_id": "4ebacb7f-5897-4adb-83d6-e4f0411bb81e",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "e87a968fcb4cc5f151cc0a6f0cf37c3de791ac5c742eee782f9587d12736e3f2"
+      "snapped_sha": "26aaa44a428eca2dc24a641da06bb9b66fadb769d305cecdb3087f45f3a037fa"
     },
     "hull_fluyt": {
       "accepted_at": "2026-11-07",
       "job": "hull_fluyt",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "0fb2ba0b596bcf1d",
-        "job_id": "08f56915-bc84-45b9-a60c-96f83d59ef11",
+        "description_sha": "f7eb35d9aa378f19",
+        "job_id": "64aa3faa-feb6-4a91-8822-ce60e7f66601",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "286703035cb765099ff91abf0c6337bef5549c951392a856589188e8d225aac8"
+      "snapped_sha": "a94921ae8e7a7c036267a9e041f82b6c4aa3d405ca63eaf47dbb0d8b6241def5"
     },
     "hull_galiot": {
       "accepted_at": "2026-11-07",
       "job": "hull_galiot",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "b6b646c91fbb1851",
-        "job_id": "a9f85f73-b5d2-41e8-8098-0620db8941fb",
+        "description_sha": "63305540f57b1663",
+        "job_id": "4c67d147-59a0-4c62-9fdc-bf367c42cf64",
         "seed": 91000
       },
       "seed": 91000,
       "size": 32,
-      "snapped_sha": "32cceff4dde50d141e50409b5140c262bbfebd3db4491c5e4ed055aab373c4d5"
+      "snapped_sha": "423734ad666d7e47c7eafbb7bd725e5f72294e1a329f6c3049987ae0af20860c"
     },
     "hull_galleass": {
       "accepted_at": "2026-11-07",
       "job": "hull_galleass",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "004512891a7be73b",
-        "job_id": "0d3177e0-6146-4be4-bc42-919639aa9769",
+        "description_sha": "39cf79404fd9c435",
+        "job_id": "c7896cc2-4389-4504-9ff6-b664dc76e191",
         "seed": 91000
       },
       "seed": 91000,
       "size": 64,
-      "snapped_sha": "b1f649876352829e55803e179af9e9f9cedb0d64c22ebe0ede17794fb243ca7e"
+      "snapped_sha": "728fa4d4abe63b277a53a4aeeb7cb3f6ab3b5a7e79fbdc4ef86af177b66f5c2a"
     },
     "hull_galleon": {
       "accepted_at": "2026-11-07",
       "job": "hull_galleon",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "2ce0d75f7d30f7ff",
-        "job_id": "6f33b5b3-88fc-4afb-a52b-baffcfa1551d",
-        "seed": 1331379590
+        "description_sha": "7cdcd12ef6fac509",
+        "job_id": "e03f5bfb-4f32-4cf2-8940-156cd74d5097",
+        "seed": 91000
       },
-      "seed": 1331379590,
+      "seed": 91000,
       "size": 64,
-      "snapped_sha": "a9d01cdd9ca3b2d8e96eea511ee2e93ba5b537e62383c747ae37e1f8ea208867"
+      "snapped_sha": "b82472c7032f62670a7af0e905d872463c5e6d0655b0d1639fb7922b18080401"
     },
     "hull_galley": {
       "accepted_at": "2026-11-07",
       "job": "hull_galley",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "793fa1bbee0de6bb",
-        "job_id": "fdf894b5-c8fc-49a6-80c0-31c2ac848b7c",
+        "description_sha": "21af74b71f09f527",
+        "job_id": "aead2677-8001-44bf-b38e-7e2c86b7831d",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "d3f0f296452b19dcedde28de315c838bb72f55e991fe3f53c1e1b62d61161fb7"
+      "snapped_sha": "c850856a98f8319ef57aaafb64746ce1c2064ce91b3b0f12a66025042f005195"
     },
     "hull_junk": {
       "accepted_at": "2026-11-07",
       "job": "hull_junk",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "8564d910a4cd8e73",
-        "job_id": "b7e7eb0d-3568-4813-91e0-8c2fe2fd603e",
+        "description_sha": "54ecc3f8c602a864",
+        "job_id": "f1e4f12e-c505-4d67-b071-90e171ac0b9c",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "f6fab4930df93d3d34bbccc0d0a472b05f9c1994aace6ea33e92f0219384b413"
+      "snapped_sha": "c056d5db1e25ef3e068248703cfd5cf8bde5739312fec32efc5192938f58850e"
     },
     "hull_latin": {
       "accepted_at": "2026-11-07",
       "job": "hull_latin",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "e3b0c44298fc1c14",
-        "job_id": null,
-        "seed": null
+        "description_sha": "c93a70aede39521e",
+        "job_id": "201b7bdc-69d4-459a-9bfd-57bd70ffa486",
+        "seed": 91000
       },
-      "seed": null,
+      "seed": 91000,
       "size": 32,
-      "snapped_sha": "f26fbdbe86ff322afa7b6931b3c471cab04380ecc6dfa0c7a96d5df6d2bcc03b"
+      "snapped_sha": "144b8e3f4fb3b0358aba8ee426cd1a03809f6119e72a26302fcc554e50acad61"
     },
     "hull_nao": {
       "accepted_at": "2026-11-07",
       "job": "hull_nao",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "5ce7d8776ceeba88",
-        "job_id": "f8c12c9c-e438-4a37-ae38-77f25a6a1fb7",
+        "description_sha": "b6397a67f1971b99",
+        "job_id": "24726710-02a4-4f70-9013-06ab1abe91cd",
         "seed": 91000
       },
       "seed": 91000,
       "size": 64,
-      "snapped_sha": "78b64eb689211dfdce3393e069d1a316c7d8185c217fa469df426bf0f1454c63"
+      "snapped_sha": "84f54036e1b291363a46423d4cc7f205191ee846d5e102a0931eb242eca6e5fb"
     },
     "hull_pinnace": {
       "accepted_at": "2026-11-07",
       "job": "hull_pinnace",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "e7a76a48b245668a",
-        "job_id": "bb8c6c58-95d5-4d6f-8c9a-b19294be1b74",
+        "description_sha": "b644be746efa5aad",
+        "job_id": "6b41655f-2e5a-4a9e-ba99-b6497349a572",
         "seed": 91000
       },
       "seed": 91000,
       "size": 32,
-      "snapped_sha": "2de21c8a6ec38f519786e3d5892d3ca4fabec50a81a5928eeae95d4c3d980fa3"
+      "snapped_sha": "79cb9845640a6c8718789f5d3e65501de06802c4817aeb4e7e7b12ed732fc83c"
     },
     "hull_sloop": {
       "accepted_at": "2026-11-07",
       "job": "hull_sloop",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "cbc7c73943369794",
-        "job_id": "5c4996d2-5c57-4bd5-996a-994d82801cb0",
+        "description_sha": "1764a9852c2b7502",
+        "job_id": "94bb9f4f-8bdb-433e-a98e-4bde53b40c55",
         "seed": 91000
       },
       "seed": 91000,
       "size": 32,
-      "snapped_sha": "b05195b804fb427da162490de5971c7862b2f1ddfe4b99c4464371ff7a05d58e"
+      "snapped_sha": "4d878d378f19b052825735e3c74f501564b14d0ea70b98e104157180047f8cdc"
     },
     "hull_xebec": {
       "accepted_at": "2026-11-07",
       "job": "hull_xebec",
       "pennant": "raw",
       "pixellab": {
-        "description_sha": "a02c2ca8610647ca",
-        "job_id": "2fc04b74-17f6-4a9c-a669-31c9ff08866e",
+        "description_sha": "8988f092d66c43d2",
+        "job_id": "b8793572-402b-4a52-846b-532e18c4dff7",
         "seed": 91000
       },
       "seed": 91000,
       "size": 48,
-      "snapped_sha": "389d486f6668dedecd8643eee9f3b5b4162113a7d9d5515b77d6e70fa6d4d12c"
+      "snapped_sha": "42c8bb6de31115566795137805a8a73acc8b8418699a91848b967d9e9e35c842"
     }
   },
   "version": 2

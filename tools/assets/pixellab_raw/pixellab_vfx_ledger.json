@@ -3,35 +3,35 @@
  "sizes": {
   "32": {
    "artist": "pro",
-   "background_job_id": "7f8235b5-55b4-4af0-ada9-427fb15d7d88",
+   "background_job_id": "220bbf16-9aac-4fe8-916c-8b7f8b4fafc7",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "9bc4ba71-e954-407f-b9e5-e0fdc9e9e7e9",
+   "effect_id": "396e7caa-39c7-497a-96e1-06cc2b347700",
    "name": "waterline-v5-north-32-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "5549c4eabe693daa62c9d7d901a210fd12fb3f818d28102738123f433447b769",
+   "sheet_sha256": "85dcafd002b123967f27df4cac79a5315d9aac23ee3884c97c1adf0a52bed6ab",
    "sprite": "hull_latin"
   },
   "48": {
    "artist": "pro",
-   "background_job_id": "05b0cf26-9810-417b-ad9c-84ff4db5027b",
+   "background_job_id": "3f1435fc-7cb2-4b42-9664-c004bc13608b",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "9ec1928c-2d8a-46a5-8137-b01dc2c845f6",
+   "effect_id": "358943dd-ac6d-458d-a17f-abeb2287ca25",
    "name": "waterline-v5-north-48-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "0cc20ccb4f33e423391fae513ff1898e20120fe71cb116b7b5c35db0f1fc8987",
+   "sheet_sha256": "be7630cfcd813ddcfb630f3ca2432e2ad346d4c7d9deeb5a8d475e1ead3a1190",
    "sprite": "hull_caravel"
   },
   "64": {
    "artist": "pro",
-   "background_job_id": "b5fc16fd-aed4-49e9-83d5-831da72da3e4",
+   "background_job_id": "b46217d9-4b93-469e-9961-0571fef2bf63",
    "description_sha256": "09a041f3ac573ba8c872955edd2fdd4033101cf051f8cc849fa27bcd33552c2e",
-   "effect_id": "3e72491f-efb7-4a7e-b1bc-e7d82c281776",
+   "effect_id": "7279416f-05a3-4b25-adec-af4cb450e2be",
    "name": "waterline-v5-north-64-pro",
    "quoted_generations": 10,
-   "sheet_sha256": "db54b3cb8a627a8473a4bcb72a18911db0ec727571b2111f03c0f25d944dd850",
+   "sheet_sha256": "cf84d7a09aab2925d5392d5af6135187f9766ec35a23c9cbf268f9235bf58cd9",
    "sprite": "hull_galleass"
   }
  },
- "table_sha256": "8d334a460b1573f1df9c2d244b0c0fc3b30f817f4d8d9eaa592e8fceaf240aba",
+ "table_sha256": "dfcd69f2e3c8281c7e3cf764d42f7af8ed4199dffbb23592b51890ee91120b16",
  "version": 3
 }

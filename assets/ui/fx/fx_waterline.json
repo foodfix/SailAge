@@ -10,7 +10,7 @@
    },
    "canvas": {
     "h": 88,
-    "w": 80
+    "w": 96
    },
    "fps": 8,
    "frame_ms": 125,
@@ -20,15 +20,15 @@
     "columns": 3,
     "file": "fx_waterline_32.png",
     "frame": {
-     "h": 63,
-     "w": 45
+     "h": 61,
+     "w": 37
     },
     "frames": 8,
     "offset": {
-     "x": -22,
-     "y": -34
+     "x": -18,
+     "y": -33
     },
-    "sha256": "5549c4eabe693daa62c9d7d901a210fd12fb3f818d28102738123f433447b769"
+    "sha256": "85dcafd002b123967f27df4cac79a5315d9aac23ee3884c97c1adf0a52bed6ab"
    },
    "sprite": "hull_latin"
   },
@@ -36,12 +36,12 @@
    "anchor_sprite": {
     "match_rate": 1.0,
     "method": "template-match",
-    "x": 25,
+    "x": 24,
     "y": 44
    },
    "canvas": {
-    "h": 104,
-    "w": 96
+    "h": 88,
+    "w": 88
    },
    "fps": 8,
    "frame_ms": 125,
@@ -51,15 +51,15 @@
     "columns": 3,
     "file": "fx_waterline_48.png",
     "frame": {
-     "h": 73,
-     "w": 43
+     "h": 51,
+     "w": 42
     },
     "frames": 8,
     "offset": {
      "x": -21,
-     "y": -42
+     "y": -27
     },
-    "sha256": "0cc20ccb4f33e423391fae513ff1898e20120fe71cb116b7b5c35db0f1fc8987"
+    "sha256": "be7630cfcd813ddcfb630f3ca2432e2ad346d4c7d9deeb5a8d475e1ead3a1190"
    },
    "sprite": "hull_caravel"
   },
@@ -71,8 +71,8 @@
     "y": 63
    },
    "canvas": {
-    "h": 152,
-    "w": 160
+    "h": 144,
+    "w": 128
    },
    "fps": 8,
    "frame_ms": 125,
@@ -82,15 +82,15 @@
     "columns": 3,
     "file": "fx_waterline_64.png",
     "frame": {
-     "h": 104,
-     "w": 86
+     "h": 99,
+     "w": 78
     },
     "frames": 8,
     "offset": {
-     "x": -43,
-     "y": -67
+     "x": -39,
+     "y": -66
     },
-    "sha256": "db54b3cb8a627a8473a4bcb72a18911db0ec727571b2111f03c0f25d944dd850"
+    "sha256": "cf84d7a09aab2925d5392d5af6135187f9766ec35a23c9cbf268f9235bf58cd9"
    },
    "sprite": "hull_galleass"
   }

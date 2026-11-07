@@ -45,22 +45,61 @@ TOPDOWN_OUT_DIR = os.path.join(REPO, "tools", "ui_art", "model_raw",
                                "pixellab_topdown")
 TOPDOWN_MANIFEST = os.path.join(TOPDOWN_OUT_DIR, "pixellab_topdown.json")
 TOPDOWN_SEED = 91000
-# Shared style suffix, pinned verbatim (overhead rewrite of the 2026-11-06
-# suffix). Identity prefix (name + rig) is prepended, comma-joined.
+# Shared style suffix, pinned verbatim (80-* §4.8, 2026-11-07
+# visibility rewrite of the same-day first overhead suffix — user
+# direction: side-view-only clauses removed because a straight
+# bird's-eye view cannot show them — multi-strake side planking →
+# deck planking, gunwale/sheer trim → hull rim, gunport row and
+# lit cabin windows dropped, sail billow shading dropped in favor
+# of the flat-panels-over-deck top-down game convention; gold trim
+# dropped outright, t3-only in the authored maps). Identity prefix
+# (name + rig) is prepended, comma-joined; per-ship clause
+# insertions (_TOPDOWN_CLAUSES) sit between rig and suffix; the
+# pinnace full variant (_TOPDOWN_VARIANTS) replaces the whole
+# composed description.
 TOPDOWN_SUFFIX = (
     ", wooden sailing ship seen from directly overhead, straight "
     "top-down bird's-eye view, hull axis vertical with the bow "
-    "pointing to the top edge of the canvas, dense multi-strake "
-    "planking bands in several wood tones, dark gunwale, gold trim "
-    "line along the sheer, gunport row with tiny dark ports along "
-    "the hull sides, stern cabin with small lit windows, sails "
-    "spread under way and clearly visible from above with two "
-    "shading bands and one bright highlight arc each, thin dark "
-    "rigging ropes to bowsprit and hull, small red pennant at the "
-    "mainmast top, retro 16-bit sailing ship sprite in the style "
-    "of classic 1990s naval adventure games like Uncharted Waters "
-    "2 / New Horizons, dark 1-pixel silhouette outline, "
-    "transparent background.")
+    "pointing to the top edge of the canvas, wooden deck planking "
+    "bands in several warm brown tones between the masts, dark rim "
+    "along the hull outline, sails drawn as flat pale panels laid "
+    "over the deck following the rig — wide rectangles for square "
+    "sails, triangles for lateen sails — the top-down game-sprite "
+    "convention, masts as small round dots with thin yard lines, "
+    "thin dark rigging ropes to the bowsprit and hull sides, "
+    "raised stern cabin roof and deck hatches visible from above, "
+    "small red pennant streaming from the mainmast top, retro "
+    "16-bit sailing ship sprite in the style of classic 1990s "
+    "naval adventure games like Uncharted Waters 2 / New Horizons, "
+    "dark 1-pixel silhouette outline, transparent background.")
+
+# Per-ship clause insertions, pinned verbatim (80-* §4.8, the
+# 2026-11-07 visibility rewrite) — placed between the rig string
+# and the suffix; oars are overhead-visible identity, junk battens
+# disambiguate the sail panels.
+_TOPDOWN_CLAUSES: dict[str, str] = {
+    "galiot": ", long oars fanned out along both hull sides",
+    "galley": ", long oars fanned out along both hull sides",
+    "galleass": ", long oars fanned out along both hull sides",
+    "junk": ", each sail panel crossed by thin horizontal batten lines",
+}
+
+# Pinnace full variant, pinned verbatim (80-* §4.8, the 2026-11-07
+# visibility rewrite) — no mast and no sails, so the suffix's
+# sail/mast/rigging/pennant clauses are replaced wholesale.
+_TOPDOWN_VARIANTS: dict[str, str] = {
+    "pinnace": (
+        "Pinnace ship, tiny open rowing craft, oars only, no mast, "
+        "no sails, wooden boat seen from directly overhead, straight "
+        "top-down bird's-eye view, hull axis vertical with the bow "
+        "pointing to the top edge of the canvas, wooden hull interior "
+        "with rowing benches in warm brown tones, dark rim along the "
+        "hull outline, long oars fanned out along both hull sides, "
+        "retro 16-bit game sprite in the style of classic 1990s "
+        "naval adventure games like Uncharted Waters 2 / New "
+        "Horizons, dark 1-pixel silhouette outline, transparent "
+        "background."),
+}
 
 # Per-ship visual descriptors (identity payload). Derived from the
 # deterministic manifest rig strings (hulls.json) + §4.8 craft vocabulary.
@@ -123,9 +162,13 @@ def _desc(ship: str) -> str:
 
 
 def _desc_topdown(ship: str) -> str:
-    """Top-down identity: same prefix rule as the 2026-11-06 pass
-    ({Name-en} sailing ship, {rig}) + the pinned overhead suffix. The
-    oblique brigantine trial descriptor does NOT apply here."""
+    """Top-down identity: {Name-en} sailing ship, {rig} (rig.json)
+    + per-ship clause + the pinned overhead suffix (80-* §4.8, the
+    2026-11-07 visibility rewrite). The pinnace full variant
+    replaces the whole composed description. The oblique brigantine
+    trial descriptor does NOT apply here."""
+    if ship in _TOPDOWN_VARIANTS:
+        return _TOPDOWN_VARIANTS[ship]
     with open(os.path.join(REPO, "data", "ship_types.json"),
               encoding="utf-8") as fh:
         types = {s["id"]: s for s in json.load(fh)["ship_types"]}
@@ -138,7 +181,8 @@ def _desc_topdown(ship: str) -> str:
         h = rigs.get(ship, {})
     rig = h.get("rig", "sailing rig")
     name = types.get(ship, {}).get("name", {}).get("en", ship)
-    return f"{name} sailing ship, {rig}{TOPDOWN_SUFFIX}"
+    clause = _TOPDOWN_CLAUSES.get(ship, "")
+    return f"{name} sailing ship, {rig}{clause}{TOPDOWN_SUFFIX}"
 
 
 def _tier_of(ship: str) -> int:
