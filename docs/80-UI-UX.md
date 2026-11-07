@@ -2616,6 +2616,20 @@ fire_toast, toast_shown}` — the sweep needed no key beyond the staged set
      trail separation are all unchanged; battle-screen hulls remain
      out of scope. Group 13 cross-checks the table keys against
      `data/ship_types.json` (16 ships, no gaps, no extras).
+     **Acceptance record (2026-11-08, per-ship):** the 16 v6 sheets
+     generated pro at quotes 10 each (effect ids 7e41bb68…/dcae42ef…/
+     52cd8127…/54a69cb4…/c086a692…/4befa306…/49f578c6…/81962706…/
+     b63845ed…/a662fe8f…/44ccfa87…/e629e08d…/9764bbbf…/4a9a960c…/
+     3bb2e05d…/02b225de… in SHIPS order; canvases 43×68 to 136×132; the
+     nao pack shipped 6 fps ⇒ frame_ms 167, uniform-gated like the
+     rest; anchors 16 × match_rate 1.0 into each ship's OWN token box —
+     caravela_redonda's recomputed after the API hyphenated the
+     underscore in its effect name, and the pass tool's pack lookup now
+     globs `*-game.zip` for that reason). Ingest gates:
+     `--check` byte-identical (270 files), validator groups 1–13 green,
+     61/61 suites green; review contact sheet
+     `tools/ui_art/model_raw/pixellab_vfx/v6/preview/wake_v6_review.png`
+     (per-ship frame 0 under its own token, runtime placement).
      **Stretch-safety
    constraint (amended 2026-11-04, master adjudication after the sample
    review):** the runtime skin draws the sheets through
